@@ -16,7 +16,8 @@
   a brain differ in their reserve time `D`, their heat stage and whether they sweat (section 5).
 - **Rates, not pulses.** Everything a body does between two updates is a rate over the interval. The only pulses are
   its food: one per gene interval, on its day (X42, X55).
-- **Segments** (PR-A2, X55): a long update is the sum of the body's own gene intervals. In each segment the body burns,
+- **Segments** (PR-A2, X55): a long update is the sum of the body's own times (its gene interval for a body with a
+  brain, at most 36 days for a stand, today's cadence). In each segment the body burns,
   grows and starves; at each boundary its young members that reached the copy mass pass to the adult node and its brood
   makes children; a body that takes is visited at its gene's pace for a take-only visit (no brain), and its update's
   month starts a segment at each take. Only the brain runs once an update (G2).
@@ -40,7 +41,7 @@
   about 2.5 to 3 µs (about 1.1 µs on average), a whole stand update about 10 to 10.5 µs at 30 days and about 9 after P3.
   Section 5 of the plan assumed 6 µs (X46).
 - **Gain now** (one thread, instructions of a year): P1.2 with P1.4 island -9 to -11%, globe -4.5 to -5.5%; with P2
-  about -19% and -9%. P1b, an estimate with its sub-steps counted: an animal update -8 to -16% at the gene's pace, the
+  about -18% and -9%. P1b, an estimate with its sub-steps counted: an animal update -8 to -16% at the gene's pace, the
   year -2.5 to -5% and -3 to -6%. G2, which now saves the brain's work and the per-update work but keeps the segments
   and the visits: about 0.6 of the animal node updates' cost, not 0.7 (7).
 
@@ -123,10 +124,11 @@ a sub-step the substances other than the light reaction's product are held, so `
   and its knee with the others is a phase boundary (Blackman 1905, with inhibition).
 - **Upkeep** `U` while `k R >= U`, `k R` while release-limited; the burnings pay it in `Consts::burn` order with the
   shares `pay::plan` gives at the sub-step's start.
-- **Growth** `G`: the allowance while `R` is above the **reserve** `R_res(t) = U (D + Δ - t)`: `D` days of upkeep plus
-  the upkeep of the rest of the interval, which over short updates would come from food not yet taken (X53). On that
-  moving boundary growth takes the income, `G = P`, so over the interval growth spends what short updates spend in
-  total. Before the fuel's form is solved for a sub-step, `G` is set to the least of the allowance and what growth's
+- **Growth** `G`: the allowance while `R` is above the **reserve** `R_res(t) = U (D + t_next - t)`: `D` days of upkeep
+  plus the upkeep until the next food, `t_next` the next segment boundary that brings a pulse (5.1); for a body that
+  takes no food (a stand), `t_next` is the update's end. Over short updates that upkeep would come from food not yet
+  taken (X53). On that moving boundary growth takes the income, `G = P`, so over the interval growth spends what short
+  updates spend in total; a floored eater's next food is a visit about a gene interval away, not the update's end. Before the fuel's form is solved for a sub-step, `G` is set to the least of the allowance and what growth's
   inputs allow over that sub-step (3.2), so the two agree.
 - **Deaths** while release-limited, at `μ(t) = (1 - k R(t) / U) / D` (`SPENT`): the share `1 - e^(-∫μ dt)`.
 
@@ -165,8 +167,9 @@ This is the reactor's kernel at a fixed temperature, not a second reactor.
 
 **How many sub-steps.** A stand: its minerals sit near their level (roots refill what growth takes), its pair of 10 and
 23 near its balance, its matter's bare burning about a thousandth a day; the fuel changes phase in about 10 to 15% of
-the updates (P0: the stock crosses its reserve in 10%, runs low in 0.5 to 1.4%). So about 1.2 sub-steps a stand update
-on average, rarely over 3; P1.2 counts them. An eater: the eaten mineral 23 falls 46% in 9.7 days and 77% in 27 (PR-A),
+the updates (P0: the stock crosses its reserve in 10%, runs low in 0.5 to 1.4%). So about 1.2 sub-steps a segment, and
+a segment's boundary ends a sub-step: about 1.2 sub-steps a stand update at `field_days` 30 (one segment), 2.4 at 60
+(two), 3.6 at 90 (three); P1.2, P2 and G9a count them. An eater: the eaten mineral 23 falls 46% in 9.7 days and 77% in 27 (PR-A),
 mostly at first. Its return is third order, so a sub-step that loses 0.3 at its starting rate keeps about
 `1 / sqrt(1.6)`, 0.79, of the store, not 0.7 (`gone`); it takes about `ln(x0 / x) / 0.236` sub-steps: about 3 at the
 gene's pace (about 9.5 days), about 4 with the fuel's phase changes: about 4 a segment, as each segment starts with its
@@ -270,28 +273,41 @@ its rates are read at the temperature it holds, its own, as for a body with a br
 ### 5.1 Segments: a long update is the sum of the body's own intervals (X55)
 
 PR-A2 (5.2) found that what a long update must keep at the body's own pace is not the body law but the acts that come
-once an update: eating and maturing. So **every month runs in segments of the body's gene interval** (`Consts::interval`
-days; one segment at today's pace):
+once an update: eating and maturing. So **every month runs in segments of the body's own time**, one segment at
+today's pace:
+- **Their length.** A body with a brain: its visits, at its gene's pace (`Consts::interval` days), each bringing its
+  pulse. A stand: equal segments of at most `D` = `reserve_days`, 36 days (`ceil(Δ / D)` of them: one at `field_days`
+  30, two at 60, three at 90). Stands mature and give birth at their 36-day update today; segments of their gene
+  interval (20, 10, 60 days) would do it two to three times as often, a law change that moves the young stands' world.
+  Segments of `D` keep today's cadence at every pace, so P2 and G9a do not make young stands wait longer than today;
+  the one change is P1.2's 30-day floor (every 30 days, not 36), announced with it. It is one rule: a body's segment is
+  its own time `D`, which for a body with a brain is its gene interval.
 - **Inside the update, per segment:** the body burns, grows and starves through the segment (the sub-steps of 3.2; a
   segment boundary ends a sub-step); at each boundary, the young members that have reached the copy mass pass to the
   adult node (`copy::mature`'s `math::Pass`, from the growth through the segment), and the brood that covers children
-  makes them (`copy::copy`'s rule). These are computed in the plan and **booked once at the update's end**: the
-  passers with the stores they had at their boundary and their join day (`nodes::rejoin` counts members from when
-  they came), the children as one litter with their mean birth day. After a boundary the plan runs on the members left.
+  makes them (`copy::copy`'s rule). These are computed in the plan and **booked at the update's end**: the passers
+  with the stores they had at their boundary and their join day (`nodes::rejoin` counts members from when they came);
+  the children of each boundary as one litter, its mutation drawn with that boundary's day as the key (so children made
+  at two boundaries are two draws, as over short updates). Passers and children get the light, rain and temperature
+  marks of their day: the totals interpolated between the parent's marks and the cell's totals now, as the month spreads
+  light evenly, so `nodes::rejoin`'s blend gives them no member-days without that light. After a boundary the plan runs
+  on the members left.
   Stages 0 to 3 run once an update, so a segment costs only its sub-steps and its shares.
 - **Food comes as one pulse per gene interval, on its day** (bodies that take): a body whose brain is floored (G2) is
   still visited at its gene's pace. A **visit** takes only (no brain): with the chance to take of its last decision,
   from what lies on that day, sized by the days to its next visit (today's sizing by the planned interval gives a floored
   node 11% more food a day, PR-A2), its room counting the upkeep paid since the update at the update's rate (`U`, kept
   from the last plan), so it sees its stock as it is used. The take is booked at the visit (ground to body, as today);
-  the body keeps a short row for it until its next update: the day and what it added to the fuel and to growth's inputs
-  (at most `paces` rows, saved). The update's month starts a segment at each row's day with that pulse.
+  the body keeps a short row for it until its next update: the day, every substance the take added and the heat it
+  brought (at most `paces` rows, saved). The update's month removes the later rows from its start and adds each at its
+  day, as a segment's pulse. If a bite took a share of the node in between (`wound`, `thin`), its rows are scaled by the
+  share left, so no store is rebuilt below zero.
 - **Only the brain runs once an update:** the decision, its moves, gifts and learning (G2).
 
 At today's pace (one segment, the take at the update) this is today's order. PR-A2's probe of it (today's body law in
 pieces, takes and maturing at the gene's pace, with the mineral kept): +0.015, +0.011, +0.001 against a seed noise of
 0.023, 0.054, 0.014 at a 30-day floor; at 20 days within the noise on the globe and the region, -0.030 on the island.
-Stands take no food; their maturing and children take the same segments.
+Stands take no food; their maturing and children take segments of `D`.
 
 ### 5.2 Animals (P1b and G2)
 
@@ -304,7 +320,8 @@ its paying, and `soak_again`. What stays of `physics` for them: rain, evaporatio
 0.01 mol of fuel a member-day, PR-A2). **Its law effect at today's pace is accepted** (X56): a balance exact in time
 resolves the stock finer than today's one step per update, and PR-A2 measured what that does to today's eaters (the body
 law in 5-day or 3-day pieces: -0.04 to -0.16 of the members in 2 years); P1b reports it, and the key numbers must stay
-in their ranges.
+in their ranges. The month's reserve `U D` may bind where today's safe minimum did and starve more at today's pace, so
+P1b adds two counters, growth bound by the reserve and growth bound by a safe minimum, reported with that effect.
 
 **G2** floors the brain, not the body (X57): every population node with a brain decides at least every `node_days` 30;
 between its updates it is visited at its gene's pace (5.1). It saves the decisions (37% of an animal update on the
@@ -385,18 +402,20 @@ of updates run one) **about 1.1 µs on average**.
 
 **A whole stand update**, island22: today 18.0 µs (the law 10.6; children, shedding and soaking again 3.3; the sample
 2.3; maturing 1.0; the rest 0.7). After P1.2 with P1.4: about 4.75 + 1.1 + 2.8 + 1.0 + 0.7 = **10 to 10.5 µs**; P3 takes
-about 1.5 µs (site per cell, faces at the update, no ring): **about 9 µs**. At 60 and 90 days the sub-steps and the
-children add about 0.5 to 1 µs an update.
+about 1.5 µs (site per cell, faces at the update, no ring): **about 9 µs**. Each segment boundary of a longer update
+adds a sub-step (about 0.25 µs), its share of maturing (about 0.1 µs; the merge stays once) and, for an adult stand, its
+own litter (about 1 µs, half the stands): about +0.9 µs at 60 days (two segments) and +1.8 µs at 90 (three).
 
 **Per stand and year** (today 10.6 updates of 18.0 µs, 191 µs): P1.2 (`field_days` 30, 12.2 updates of about 10.4 µs):
-about 127 µs (x0.66); P2 (60 days, about 11 µs): about 66 µs (x0.35); P3: about 57 µs; G9a (90 days): about 42 µs.
+about 127 µs (x0.66); P2 (60 days, about 11.3 µs): about 69 µs (x0.36); P3 (about 9.8 µs): about 60 µs; G9a (90 days,
+about 10.7 µs after P3): about 44 µs.
 
 **Gain on one thread** (plant updates are 30.0% of island22's year and 14.7% of globe36's, R2):
 
 | Step | island22 | globe36 | the plan said |
 |---|---|---|---|
 | P1.2 with P1.4 | -9 to -11% | -4.5 to -5.5% | -12% and -8% (P1.1 to P1.4) |
-| P2 | -9 to -10% | -4.5% | -7% and -3% |
+| P2 | -8.5 to -9.5% | -4.5% | -7% and -3% |
 | P3 | -3 to -5% | -2 to -3% | -5% and -3% |
 | P1b (an estimate: an animal update -8 to -16%, below) | -2.5 to -5% | -3 to -6% | about 0 (a law step) |
 
@@ -413,7 +432,7 @@ floor a node updates on 0.30 / 0.31 of the days it did, each update spanning abo
 update keeps: the decision (14.1 / 21.2 µs), stages 0 to 3, the booking and the checks once (about 9.5), the heat
 network once (about 3), the segments' sub-steps (about 3.2 x 4 of them, about 2.9) and their shares of maturing and
 children (about 2.3), and the rest (about 2.6): about 34 / 41 µs. Plus its visits: about 2.2 an update, a take and its
-scheduling, about 3.5 µs each: about 8. So about 42 / 49 µs an update against 107 / 118 for its 3.2 updates at the
+scheduling, about 3.5 µs each (an estimate, as the per-update parts above): about 8. So about 42 / 49 µs an update against 107 / 118 for its 3.2 updates at the
 gene's pace today: the animal node updates cost **x0.39 (island) and x0.42 (globe)**, not x0.30 and x0.31. G2 keeps
 about 87% (island) and 84% (globe) of its earlier estimate. At a 20-day floor (2.1 intervals an update, 0.45 / 0.46 of
 the updates): x0.52 and x0.57. With the floor for young nodes only: about 0.57 of the 30-day saving.
