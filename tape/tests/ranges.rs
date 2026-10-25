@@ -27,7 +27,7 @@
 //!
 //! The steps of Flow are speed settings too (the long step against the short one): small worlds with life, each seed
 //! against itself, keep their climate at the default steps and with the air's step at 6 hours and the physics step at
-//! 3 days, within 0.3 K for a temperature and the year-to-year spread for the others.
+//! 2 days, within 0.3 K for a temperature and the year-to-year spread for the others.
 
 mod common;
 
@@ -278,10 +278,10 @@ fn climate(seed: u64, set: fn(&mut Config)) -> Vec<[f64; CLIMATE.len()]> {
     years
 }
 
-/// The air's step of 6 hours (`air_hours`), short against the air's changes in a day, and a physics step of 3 days
+/// The air's step of 6 hours (`air_hours`), short against the air's changes in a day, and a physics step of 2 days
 /// (`phys_days`).
 const SHORT_AIR_HOURS: u32 = 6;
-const SHORT_PHYS_DAYS: u32 = 3;
+const SHORT_PHYS_DAYS: u32 = 2;
 
 /// The long step against the short one, each seed against itself: at the default steps of Flow (`air_hours`,
 /// `phys_days`, `flow_days`) the mean over the seeds of what the long step moves each of the climate's key numbers

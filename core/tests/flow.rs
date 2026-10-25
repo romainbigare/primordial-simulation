@@ -339,6 +339,24 @@ fn liquid_runs_on_its_own_period_between_steps_of_the_air() {
     assert!(liquid_m3(&w, i) < 0.5 * v0, "{} of {v0} m³ stayed after the liquid step", liquid_m3(&w, i));
 }
 
+/// A liquid step of more than a month counts its own period from the world's start: with `flow_days` 60, liquid poured
+/// on a slope after the first day stays through the first month and runs off at the 60-day step.
+#[test]
+fn a_liquid_step_over_a_month_runs_every_flow_days() {
+    let mut w = worldgen::new_world(3, 16, 16);
+    (w.cfg.air_hours, w.cfg.flow_days) = (80, 60);
+    assert_eq!(w.cfg.validate(), Ok(()));
+    pcore::day(&mut w);
+    let (i, _) = pair(&w);
+    let pores = w.cfg.phys.porosity * loose(&w, i);
+    pour(&mut w, i, 4.0 * pores);
+    let v0 = liquid_m3(&w, i);
+    (1..60).for_each(|_| pcore::day(&mut w));
+    assert!(liquid_m3(&w, i) > 0.5 * v0, "{} of {v0} m³ stayed through the first 59 days", liquid_m3(&w, i));
+    pcore::day(&mut w);
+    assert!(liquid_m3(&w, i) < 0.5 * v0, "{} of {v0} m³ stayed after the 60-day step", liquid_m3(&w, i));
+}
+
 /// Darcy: the pore liquid of a cell flows to a neighbour whose liquid table is lower, at `seep` x the slope x the
 /// thickness it fills x the width, in the time. With `seep` at 0 the neighbour gets none; the flow goes with `seep`,
 /// with the liquid table's slope and with the thickness; pores under their field capacity (`field`, 0.6) give none;

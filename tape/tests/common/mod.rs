@@ -27,6 +27,7 @@ pub fn run(seed: u64, side: usize, years: u64, roster: bool, set: impl Fn(&mut C
 #[allow(dead_code)]
 pub fn run_on(mut w: World, years: u64, roster: bool, set: impl Fn(&mut Config), mut each_year: impl FnMut(u64, &World, &Recorder)) -> (World, Recorder) {
     set(&mut w.cfg);
+    w.cfg.validate().expect("a world `Config::validate` accepts");
     // `ew run` scales the air's heat-absorbing gases by `--absorber` (1), which sets each air node's heat again.
     worldgen::terrain::scale_absorbers(&mut w, 1.0);
     let plan = Schedule::new(Some(LIFE_YEAR), roster, Seeding::default());

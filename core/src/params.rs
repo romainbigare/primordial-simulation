@@ -390,6 +390,9 @@ impl Config {
         let b = self.batch_days;
         require(b > 0 && d.is_multiple_of(b) && self.days_per_month.is_multiple_of(b), || format!("batch_days ({b}) must be at least 1 and divide phys_days ({d}) and days_per_month ({})", self.days_per_month))?;
         require(self.node_days.is_multiple_of(b), || format!("node_days ({}) must be a multiple of batch_days ({b})", self.node_days))?;
+        // A liquid step of more than a month counts its own period from the start (`schedule::days`).
+        let (f, m) = (f, self.days_per_month);
+        require(f <= m || f.is_multiple_of(m), || format!("flow_days ({f}) over a month must be a whole number of months ({m} days)"))?;
         let why = "sample_every must be at least 1 (a sample on one update in that many)";
         require(self.sample_every > 0, || why.into())?;
         let wake = self.wake_share;

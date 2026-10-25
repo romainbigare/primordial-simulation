@@ -34,10 +34,12 @@ pub fn day(w: &mut World) {
 /// A process: its stage, its name (for the debug check) and what it does for the seconds its run stands for.
 type Run = (Stage, &'static str, fn(&mut World, u64));
 
-/// A process that runs every `d` days from the start of each month.
+/// A process that runs every `d` days from the start of each month; one of more than a month counts its own period
+/// from the start of the world, as the slow parts do (`Config::validate` makes it a whole number of months).
 fn days(cfg: &Config, d: u32) -> Every {
     let cal = cfg.calendar();
-    Every { period: d as u64 * cal.day, within: cal.month }
+    let period = d as u64 * cal.day;
+    Every { period, within: period.max(cal.month) }
 }
 
 /// The processes of the world in their fixed order at one time, each on its period counted from the start of the longer

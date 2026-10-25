@@ -139,13 +139,14 @@ fn a_sleeping_node_catches_up_as_an_awake_node_steps() {
 }
 
 /// The default settings pass; a time step of 0, an air step that does not divide the physics step, a batch that does not
-/// divide the physics step or the month, a pace of nodes that is not whole batches, or a dormancy of 1 is refused.
+/// divide the physics step or the month, a liquid step over a month that is not whole months, a pace of nodes that is not whole batches, or a dormancy of 1 is refused.
 #[test]
 fn the_default_settings_pass_and_a_step_off_its_base_or_out_of_step_or_a_dormancy_of_1_is_refused() {
     assert_eq!(Config::default().validate(), Ok(()));
     let dormant = Config { phys: Physics { dormancy: 1.0, ..Default::default() }, ..Default::default() };
     let refused = [
         Config { flow_days: 0, ..Default::default() },
+        Config { flow_days: 45, ..Default::default() },
         Config { air_hours: 0, ..Default::default() },
         Config { air_hours: 480, ..Default::default() },
         Config { phys_days: 0, ..Default::default() },

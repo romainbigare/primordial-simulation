@@ -116,7 +116,7 @@ width over length (Patankar 1980; `flow::land::conduct`): rock spreads a hot spo
 melting point (lowered by solutes, 2.5) until that substance has all frozen or melted, in a long step as in short ones.
 
 ### 1.2 Liquid
-`flow::liquid`, every `flow_days`.
+`flow::liquid`, every `flow_days`: inside a month, counted from the month's start; over a month, counted from the world's start (a whole number of months, `Config::validate`).
 - **Pores first**: the loose ground's pores (`porosity`) fill first, under any soft cover; only liquid above them stands
   and has a head (`flow::land::stand`), the depth bodies and Change read.
 - **Spill levels**: a priority flood over the ground gives each cell its spill level (Barnes, Lehman and Mulla 2014;
