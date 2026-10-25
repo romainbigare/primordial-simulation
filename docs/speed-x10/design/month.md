@@ -20,7 +20,7 @@
   release limit, growth above the reserve, deaths by starving at a rate. The body's other reactions (catalysed and
   bare, with their true orders: the dissolved mineral's return to the solid is third order) run in **sub-steps** by the
   reactor's own kernel: roots and soaking first, then growth (capped by what its inputs hold plus their inflow), then
-  the reactions; a sub-step ends where a store's net change would reach 0.3 of it or the fuel's form changes phase (X42).
+  the reactions; a sub-step ends where a store's net loss would reach 0.3 of it or the fuel's form changes phase (X42).
 - **Bare reactions stay** inside bodies (X43, decided). PR-A's two causes, the eaten mineral that turns solid before
   growth and the body burnt between two updates while growth rebuilds only at the update, are a pulse meeting rates; in
   the sub-steps growth runs beside them.
@@ -66,10 +66,14 @@
 A body's update covers the `Δ` days since its last. It works per member: deaths take a share of every store (`thin`),
 so they do not change what a member holds. Forcing over the interval is an exact total where the world keeps one (light,
 rain, and the ground's temperature: a running total of each cell's ground temperature over time is kept beside
-`w.light`, and a stand keeps its mark as it keeps its light's, so a stand's rates are read at the exact mean of its
-ground's temperature over its interval (one number a cell a flow step, one a stand; a 90-day update centred on the
-summer's peak has its two ends about 2 K below it, so the mean of the ends is not enough). A body with a brain reads its
-rates at its own temperature at the update's start, as today. The air's shares and the ground's liquid are read at the
+`w.light`, with the time of its last addition, and a stand keeps its mark of it as it keeps its light's, so a stand's
+rates are read at the mean of its ground's temperature over its interval: the total's change over the time it covers
+since the mark (exact to one flow step, as the total moves only at flow steps; a 90-day update centred on the summer's
+peak has its two ends about 2 K below it, so the mean of the ends is not enough). The mark is set as `mark` and
+`rained` are: at birth, at worldgen, and at the brain-loss switch. The new number per cell and the new field of `Body`
+come under P1.2's snapshot bump. **Rates read at the mean temperature are not the mean of the rates** (Arrhenius'
+curve is convex): an approximation, which the splitting test's points centred on the summer's peak and the winter's
+low check. A body with a brain reads its rates at its own temperature at the update's start, as today. The air's shares and the ground's liquid are read at the
 start. The card (3.4) holds what the genes fix.
 
 | Kind | What |
@@ -142,19 +146,24 @@ interval's temperature, with the Arrhenius factors of stage 3. In each sub-step,
    integrates a reaction that runs alone on its scarcest input exactly, whatever the length (the third-order return of
    23 too); only its competition with growth and the other reactions is held at the start.
 
-**A sub-step ends** where a store's **net** change (inflow, growth's draw and the reactions together) would reach
-`MONTH_SHARE` = 0.3 of the store at its starting rates, or where the fuel's closed form changes phase (growth starts or
-stops, the release limit begins); at most `MONTH_STEPS` = 16, the last takes what is left (both named `const`s; a counter
-of sub-steps and of those cut by the cap). A store near its level, where roots bring what growth takes, ends no
-sub-step. The fuel's closed form runs inside each sub-step with the other substances held, so its phases stay exact.
+**A sub-step ends** where a store's **net loss** (what growth and the reactions take of it, less its inflow and what
+reactions make of it) would reach `MONTH_SHARE` = 0.3 of the store at its starting rates, or where the fuel's closed form
+changes phase (growth starts or stops, the release limit begins); at most `MONTH_STEPS` = 16, the last takes what is
+left (both named `const`s). As in today's reactor (`far`, `rest`), what a store loses ends a sub-step, never what it
+gains: **a store that only grows ends no sub-step** (the products of the bare reactions that `shed` empties at each
+update, a dry key liquid soaking in), **unless a running rate reads it** (a product that inhibits its reaction, the solid
+10 that feeds reaction 22); then its change is measured against the larger of the store and its level. A counter counts
+the sub-steps, those ended by a growing store that a rate reads, and those cut by the cap. A store near its level, where
+roots bring what growth takes, ends no sub-step. The fuel's closed form runs inside each sub-step with the other substances held, so its phases stay exact.
 This is the reactor's kernel at a fixed temperature, not a second reactor.
 
 **How many sub-steps.** A stand: its minerals sit near their level (roots refill what growth takes), its pair of 10 and
 23 near its balance, its matter's bare burning about a thousandth a day; the fuel changes phase in about 10 to 15% of
 the updates (P0: the stock crosses its reserve in 10%, runs low in 0.5 to 1.4%). So about 1.2 sub-steps a stand update
 on average, rarely over 3; P1.2 counts them. An eater: the eaten mineral 23 falls 46% in 9.7 days and 77% in 27 (PR-A),
-mostly at first; a net change of 0.3 a sub-step takes about `ln(x0 / x) / -ln(0.7)` sub-steps: about 2 at the gene's
-pace (about 9.5 days) and about 4 to 5 at 30 days, with the fuel's phase changes about 2 to 3 and 5 to 6.
+mostly at first. Its return is third order, so a sub-step that loses 0.3 at its starting rate keeps about
+`1 / sqrt(1.6)`, 0.79, of the store, not 0.7 (`gone`); it takes about `ln(x0 / x) / 0.236` sub-steps: about 3 at the
+gene's pace (about 9.5 days) and about 6 at 30 days, with the fuel's phase changes about 4 and about 8.
 
 **Why it answers PR-A.** Today a body's reactor turns its stores through the whole interval and growth acts once, at
 the update: the eaten mineral turns solid and the body is burnt (about 0.04 kg a member a day) with nothing rebuilding
@@ -358,10 +367,10 @@ about 127 µs (x0.66); P2 (60 days, about 11 µs): about 66 µs (x0.35); P3: abo
 **P1b's estimate, with its sub-steps.** An animal update today, island22: 37.9 µs, of it the body's day 18.0. The month
 takes out `settle_upkeep`, the reactor (about 19,000 instructions), `keep_warm` and growth's paying: about 50,000 to
 55,000 instructions. It puts in the plan and the booking (about 20,000 to 25,000, as a stand's without its liquids'
-closed form) and its sub-steps: at the gene's pace about 2 to 3 (3,000 to 4,500 instructions), at 30 days about 5 to 6
-(7,500 to 9,000). So an animal update -8 to -16% at the gene's pace; at G2's 30 days the sub-steps cost about 5,000
+closed form) and its sub-steps: at the gene's pace about 4 (4,000 to 6,000 instructions), at 30 days about 8 (8,000 to
+12,000). So an animal update -8 to -16% at the gene's pace; at G2's 30 days the sub-steps cost about 4,000 to 6,000
 instructions more an update, which G2's count of updates (x0.30) covers many times. P1b counts its sub-steps; if an
-eater needs more than 8 at 30 days, the third-order return gets a looser rule (`gone` already integrates it exactly when
+eater needs more than 10 at 30 days, the third-order return gets a looser rule (`gone` already integrates it exactly when
 it runs alone).
 
 P1.2's kill line (under 7% of island22's year) still has 2 to 4 points of room. On four threads (plan 5.0): the
@@ -373,8 +382,8 @@ plants' rows give about 14 ms less than the plan on the island and 7 on the glob
 |---|---|
 | The splitting test fails (the living body held at the start of 60 to 90 days; Arrhenius' curve over a season) | `MONTH_SHARE` smaller; else P2 or G9a keeps the shorter pace |
 | The stand's law over 5 µs (bare reactions, sub-steps) | P1.2's kill line is 6 µs, where its gain line (7% of island22's year) still holds; section 5 of the plan counts 10 to 10.5 µs a stand update |
-| Sub-steps of a third-order return, a two-way pair, a rate that follows the matter, a product-inhibited fixing | the reactor's own kernel and its orders, rates read at each sub-step's start, ended at a net change of `MONTH_SHARE`; the splitting test, with eaters' pulses of the mineral |
-| More sub-steps than counted (stands over 3, eaters over 8 at 30 days) | the counters of P1.2 and P1b; a looser rule for a reaction `gone` integrates alone; the cost lines of P1.2 (6 µs) and P1b hold the step |
+| Sub-steps of a third-order return, a two-way pair, a rate that follows the matter, a product-inhibited fixing | the reactor's own kernel and its orders, rates read at each sub-step's start, ended at a net loss of `MONTH_SHARE`; the splitting test, with eaters' pulses of the mineral |
+| More sub-steps than counted (stands over 3, eaters over 10 at 30 days) | the counters of P1.2 and P1b; a looser rule for a reaction `gone` integrates alone; the cost lines of P1.2 (6 µs) and P1b hold the step |
 | The heat's path moves the land (PR-M: -0.52 K) | one place sets the heat, after growth; the land reported; fallback for stands: `relax_heat`'s closed form at their own temperature |
 | P1b moves the eaters at today's pace (no dip between updates, deaths by the rate, the reserve with the rest of the interval) | announced as law effects, reported against the references; key numbers out and not accepted: not merged |
 | PR-A2 finds a cause the sub-steps do not answer | 5.2; G2 waits for it or takes the young-only floor (only if the mineral is kept) |
