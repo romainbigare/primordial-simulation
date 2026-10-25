@@ -1,5 +1,8 @@
 # Speed x10, section "gap": what closes the road to 10 times on 4 cores
 
+> **After P1.2** (X62 to X69): G2 is in `lane-a.md` 3 (the brain floored on today's law, `think_days`; no P1b); G3 is
+> dropped (X68, its alternative the measure GB); G9a runs on the day law (`lane-a.md` 2.3).
+>
 > **Note: what the plan kept** (`plan.md` is the single source of the steps; this design keeps its numbering).
 > G0: in R2. Kept: G1, G2 (needs P1b, `animals.md`), G3, G4, G5, G6, G7, G8, G10 (= AIR4), G11, G12 (its clock fix
 > is in R3), G13, G14, G15, G16, GM. **G9: split** into G9a (`field_days` 90) and G9b (compact stands, gated, level 1,

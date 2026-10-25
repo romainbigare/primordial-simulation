@@ -9,8 +9,8 @@ points to. It is written in very simple English, as the owner wants for everythi
 |---|---|
 | The branch of this work | `speed/x10` (pushed). `main` holds the last round as it ended and is **not** changed by this work until the owner merges the branch (X1) |
 | The plan (the single source of the steps) | `docs/speed-x10/plan.md` |
-| The decisions of this round (X1 to X36) | `docs/speed-x10/decisions.md` |
-| The low-level designs | `docs/speed-x10/design/` (`month.md`, the month law after phase P, which replaces parts of `plants.md` and `animals.md`; `plants.md`, `engine.md`, `air.md`, `minds.md`, `gap.md`, `animals.md`); each has a note at its top saying which of its steps are kept, dropped or renamed. Where a design and the plan disagree, the plan wins |
+| The decisions of this round (X1 and on) | `docs/speed-x10/decisions.md` |
+| The low-level designs | `docs/speed-x10/design/` (`lane-a.md`, lane A after P1.2, which replaces `month.md` (not kept) and parts of `plants.md`, `animals.md` and `gap.md`; `plants.md`, `engine.md`, `air.md`, `minds.md`, `gap.md`, `animals.md`); each has a note at its top saying which of its steps are kept, dropped or renamed. Where a design and the plan disagree, the plan wins |
 | The measures of this round | `docs/speed-x10/measures.md` (created by R2; see section 4 here for its state) |
 | What changed and when | `docs/history.md`, section 6 "Speed x10" |
 | The rules | `CLAUDE.md` (already updated by R1 for this round: ceiling 12,000, 64-bit books, the world the same with any number of threads) and `docs/handover.md` (the spec) |
@@ -26,10 +26,10 @@ points to. It is written in very simple English, as the owner wants for everythi
   speed; the three rules for smart bodies hold (individuals stay real; the step length per place; kinds of body code).
   The architect takes all decisions and logs them in `decisions.md`. The owner does not want to be asked for permission
   for each edit.
-- **Expected result (plan section 5):** "likely" about 8.6 to 10.5 times on the island and 11.5 to 14.3 on the globe
-  with every step. 10 times on the island needs every risky step near its good end; on the globe it is likely. The two
-  steps that carry it: **G2** (every population node updates at least every 30 days; needs P1b) and **G14** (physics
-  beside the bodies). Without them, expect about 6 to 7.5 times (island) and 8 to 10 (globe).
+- **Expected result (plan section 5.0, after P1.2):** "likely" about 4.0 to 5.4 times on the island and 5.9 to 8.1 on
+  the globe with every step; 10 times is out of reach with the steps planned. The steps that carry most: **P2.2 and
+  G9a** (stands at 60 and 90 days on today's law, after the probe PR-C2), **G2** (a node decides about every 30 days,
+  its body keeps its gene's pace) and **G14** (physics beside the bodies).
 
 ## 3. What is done (on `speed/x10`)
 

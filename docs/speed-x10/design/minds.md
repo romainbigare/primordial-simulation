@@ -1,5 +1,8 @@
 # Speed x10: minds (the owner's choices 8, 9, 10 and 11)
 
+> **After P1.2** (X67): MI3a and MI3b are dropped; G2 (`lane-a.md` 3) is a habit with the clock as its one wake rule,
+> for nodes; `--full-minds` waits for the first smart kind; MI4 stays gated after G2.
+>
 > **Note: what the plan kept** (`plan.md` is the single source of the steps; this design keeps its old numbering).
 > MI0: in R2 (plus wake causes counted by cause, `others` keyed by lineage, decisions per (cell, lineage, batch)).
 > MI1: kept, lands before E1b.1. **MI3: split** into MI3a (habits, still paying per update; `--full-minds` checked

@@ -1,6 +1,7 @@
 # Speed x10, section "animals": the month law for bodies with a brain (P1b)
 
-> **After phase P, `month.md` replaces** 3.1 to 3.4 (the law, the pulse, the booking, the update) and the two tests of
+> **After P1.2, P1b is dropped (X65)** and `lane-a.md` holds G2 on today's law (X66); the rest of this note is the
+> record. **After phase P, `month.md` replaced** 3.1 to 3.4 (the law, the pulse, the booking, the update) and the two tests of
 > 5: growth runs through the interval beside the body's own reactions (in sub-steps), which answers PR-A's eaten mineral
 > and the adults' burnt body; the reserve covers the rest of the interval and starving is judged on the body's path;
 > PR-A2: a long update eats and matures at the gene's pace in segments, G2 floors the brain only, its fallbacks are 20

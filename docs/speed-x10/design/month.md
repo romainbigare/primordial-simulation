@@ -1,6 +1,11 @@
 # Speed x10, section "month": one month law for every body, after the probes
 
-> **What this file replaces.** It is the design of the month law after phase P (probes PR-M and PR-A,
+> **Not kept (X62).** P1.2 built this law for stands and it cost more than today's law (about 26 µs a stand update
+> against 18; `measures.md` "P1.2", branch `x10/p1.2-not-kept`). `lane-a.md` replaces this file: plants keep today's day
+> law at a longer pace with C2's causes fixed inside it, and G2 floors the brain on today's law. This file stays as the
+> record of the design and its findings (section 1).
+
+> **What this file replaced.** It is the design of the month law after phase P (probes PR-M and PR-A,
 > `measures.md`). Where it differs from `plants.md` or `animals.md`, this file holds; the plan (`plan.md`) holds over
 > all three. **In `plants.md` it replaces:** 2.3 (the stages of the plant month), the month's numbers in 2.4 (the
 > card; the case against a grid table stays), the sample's cost in 2.6, 3 items 1 to 4 (the law changes), 5 tests 1 to 3,
