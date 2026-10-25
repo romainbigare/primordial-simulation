@@ -752,3 +752,112 @@ For E1b.1: the sets are `Life::unbooked` and `Life::unsent`; `Life::mark(k)` is 
 `survey::on_domains`; any new place that runs body code on a domain must mark it (a domain not marked is not booked and
 its outbox is not taken). The per-cell numbers are indexed by the cell's slot in its domain (`Life::cell_slot`), so
 tiles of 4 cells only change the length of the lists.
+### PR-A: what starves animal nodes at a 30-day pace
+
+**How.** Branch `probe/pr-a` (`b5c0c06`, never merged; scripts in `scripts/probe-pr-a/`). Switches are environment variables, all off by default: with none set the
+build gives the same world bit for bit (one year of island22: hash `cb4e04a4c3595a53` with the base build and with the
+probe build). From the bench saves of 52d7f4a (island22 at year 300, globe36 and region24 at year 200), `ew resume` for
+2 years, 4 threads, 5 seeds. `ew resume` keeps the save's seed, so a probe knob (`PROBE_SEED`) sets the world's seed
+after the load: the keyed draws differ from there on (seed 1 is the save's own). So the 5 seeds are 5 samples from one
+start. The animals of these worlds are all of starting kind 1 (the eaters). Measured: eaters' members and mass at the
+end over the start (`root_1_members`, `root_1_kg`), and births less deaths of the 2 years over the start's members.
+
+| Switch | What it does |
+|---|---|
+| floor (`PROBE_FLOOR=30`) | a population node with a brain updates at least every 30 days (as G2 would); `=20` for 20 days |
+| (a) `PROBE_A` | the unpaid share `u` of `settle_upkeep` dies at the rate `u / I_gene` over the days: `1 - e^(-u days / I_gene)` |
+| (b) `PROBE_B` | growth's reserve (`spare` in `copy::grow::convert`) is one gene interval's upkeep, not one update interval's |
+| (c) `PROBE_C` | `away` in `take_body` reads both intervals without the probe's floor (as at the gene's pace) |
+| (d) `PROBE_D` | the movers of one decision: `count x p[d] x min(paces, 1 / sum of the move chances)` |
+| (e), (f) | counters: the days of the updates that make births and maturing; ground takes cut by what lies, body takes cut by what the members reached hold or with the swept share at 1 |
+| (g) `PROBE_G`, found here | a diagnostic: in an animal node the dissolved mineral 23 and its solid 10 do not turn into each other (reactions 22 and 23 of chemistry 0 off in the node's reactor) |
+| (h) `PROBE_H` | a diagnostic: an animal node grows right after its upkeep, before the physics of the time |
+| `PROBE_ONLY=adult` or `young` | the floor holds only for adult nodes, or only for young nodes |
+
+**The runs** (mean of 5 seeds: members at the end over the start ± their sd; mass at the end over the start; births
+less deaths over the start's members). Animal node updates: every 9.3 to 9.7 days at the gene's pace, every 27.3 days
+with the floor (0.35 of them), every 18.8 days with 20 days.
+
+| Run | island22 | globe36 | region24 |
+|---|---|---|---|
+| reference (gene's pace) | 1.017 ±0.011; 1.01; +0.016 | 0.823 ±0.064; 0.85; -0.177 | 1.034 ±0.017; 1.03; +0.030 |
+| floor 30 | 0.705 ±0.003; 0.62; -0.295 | 0.650 ±0.049; 0.60; -0.350 | 0.704 ±0.008; 0.63; -0.296 |
+| floor 30, (a) to (d) | 0.705 ±0.005; 0.62; -0.296 | 0.651 ±0.023; 0.60; -0.349 | 0.705 ±0.005; 0.63; -0.296 |
+| floor 30, (g) | 0.806 ±0.017; 0.75; -0.194 | 0.653 ±0.056; 0.63; -0.347 | 0.848 ±0.008; 0.83; -0.152 |
+| floor 30, (a) to (d) and (g) | 0.808 ±0.007; 0.75; -0.192 | 0.619 ±0.059; 0.60; -0.381 | 0.858 ±0.012; 0.84; -0.143 |
+| floor 20 | 0.814 ±0.007; 0.75; -0.187 | 0.689 ±0.028; 0.69; -0.311 | 0.836 ±0.005; 0.80; -0.165 |
+| floor 20, (g) | 0.888 ±0.018; 0.85; -0.113 | 0.668 ±0.030; 0.70; -0.332 | 0.972 ±0.018; 0.99; -0.030 |
+
+**The members lost by each cause** (members at the end over the start; a switch's line is the run with it less the
+floor's run, so a plus is members it brings back):
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| loss of the 30-day floor (floor less reference) | **-0.312** | **-0.173** | **-0.329** |
+| (a) death of the unpaid share as a rate | -0.002 | +0.008 | -0.001 |
+| (b) growth's reserve by the gene's interval | +0.000 | -0.005 | -0.001 |
+| (c) `away` by the gene's intervals | +0.000 | +0.000 | -0.000 |
+| (d) movers by the paces | +0.002 | -0.024 | +0.000 |
+| (a) to (d) together | -0.001 | +0.001 | +0.001 |
+| (g) the eaten mineral kept for growth | +0.101 | +0.003 | +0.144 |
+| (h) growth before the physics | +0.051 | +0.008 | +0.110 |
+| **left with (a) to (d)** (against the reference) | **-0.313** | **-0.172** | **-0.329** |
+| left with (a) to (d) and (g) | -0.209 | -0.204 | -0.176 |
+| left with (g), floor on adult nodes only | -0.242 | -0.163 | -0.251 |
+| left with (g), floor on young nodes only | +0.032 | +0.023 | +0.034 |
+| seed noise: sd of the reference's 5 seeds | 0.011 | 0.064 | 0.017 |
+| at the gene's pace: (a), (g), (h) against the reference | -0.007, -0.010, -0.018 | +0.007, +0.006, +0.006 | -0.002, +0.011, -0.023 |
+
+**Why (a) to (d) do nothing.**
+- (a): the unpaid share of `settle_upkeep` kills under 1.5% of the members' deaths (island 2.6e3 of 1.7e5 deaths in
+  3 seeds); 97 to 99% of the deaths named "spent" come from `starved` (body lost and not rebuilt). At an update's start
+  a node holds fuel for 180 to 210 days of upkeep (its fuel and its own body matter, both burnt), at either pace.
+- (b): the reserve never limits growth (0 to 1% of matter conversions); the island runs are bit for bit the floor's.
+- (c): eaters take almost all from the ground (body takes are 0.1% of the kg on the island, 0.4% on the region, 5 to 7%
+  on the globe), and their prey are stands (36 days), so `away` is 0 both ways: bit for bit the floor's.
+- (d): which cells the movers reach does not feed or starve the nodes in 2 years.
+
+**What (e) and (f) count.**
+- (e): births come at updates 27 days apart (9.5 at the gene's pace), so a birth is on average about 13.5 days late
+  (4.8 at the gene's pace); young members join their adult node at updates 29.5 days apart (10). A delay alone of about 9
+  days costs under 1% of the members in 2 years (births a year times the delay); the cost is in the adults' cycle, below.
+- (f): ground takes cut by what lies: 34% to 41% of takes (globe 32 to 38%, region 29 to 36%); the food lost to that
+  cut, 23% to 27% of what was asked (27 to 30%, 19 to 22%): about 5% less food. Body takes with the swept share at 1:
+  none on the island and the region, 0.4% to 1.7% on the globe. (f) is small.
+
+**A cause not on the list, (g): the eaten mineral turns solid before growth uses it.** Growth needs the dissolved
+mineral 23 (one per unit of matter, chemistry 0's `build`). An eater gets it by digesting what it eats, at its take at
+the end of an update; growth uses it at its next update, after the physics of the whole interval. In that time the
+body's own reactor turns it into the solid 10 (with a time of about 17 days), which growth cannot use. Island, per
+update: 462 mol at the start, 248 after the physics at 9.7 days (46% lost); 746 mol, then 175 at 27 days (77% lost).
+Growth gets 39% less of it per member-day; 49% of matter conversions (one seed) are then limited by the stores (21% at the gene's
+pace), 70% of those by 23 (globe 57%). (g) brings back a third of the loss on the island, almost half on the region,
+nothing on the globe; at the gene's pace it changes little. Growing before the physics (h) brings back less than (g).
+
+**The rest is in the adult nodes' cycle** (with (g) on, against (g) at the gene's pace): with the floor on young nodes
+only, the eaters keep their members (within the noise); with it on adult nodes only, they lose as much as with the full
+floor. An adult node hovers near its copy mass (`ALLOC`). Its body burns its own matter in the reactor through the
+interval (about 0.04 kg a member a day, 5 to 8 times what the upkeep burns), and growth rebuilds it only at the update. With
+the floor, an adult node is under its copy mass when `copy` runs (no child in that update) in 18% of its member-days
+(7.5% at the gene's pace, island; globe 18% and 7%, region 15% and 5%), and its members' starving deaths per member-day
+are 3 to 4 times as many. Young nodes mature 33 to 40% more slowly per member-day; with the floor on young nodes only they
+mature as slowly, yet adults at the gene's pace make 25 to 50% more children per member-day and make up for it. The root of
+the adults' loss is not found to its end: (h) shows that the order (physics, then growth) is only part of it.
+
+**Verdict: no.** (a) to (d) bring nothing (left: -0.313, -0.172, -0.329 against a seed noise of 0.011, 0.064,
+0.017). The rest is not (f) (about 5% of the food). It is the stores between two updates: (g), the eaten mineral that
+turns solid in the body before growth (a third to a half of the loss on the island and the region), and the adults'
+cycle at a 30-day pace (the rest, about -0.2: children skipped by adults under their copy mass, and their starving),
+the family of (e). A 20-day floor is no safe fallback either (-0.20, -0.13, -0.20; with (g) -0.13, -0.16, -0.06).
+
+**For P1b.** (a) and (b) are law choices, but they do not make the 30-day check pass. P1b's "food is a pulse at the
+interval's start" is not close here, because the stores do not only drain by upkeep: the body's reactor turns them
+through the interval (23 to 10; body matter burnt outside the upkeep). P1b's balance must let growth use the pulse
+through the interval before the reactor turns it, or count the reactor's turnover of growth's inputs and of the body in
+the balance; booking growth after the physics (design 3.4) keeps (g) and the adults' loss. For its 30-day check, rerun
+this branch's script and read its counters (adults under their copy mass at `copy`, 23 left at growth).
+
+**For G2.** Neither 30 nor 20 days passes with today's law and (a) to (d). G2 waits for (g) and the adults' cycle to be
+fixed (P1b or a step of its own), then for this probe again. A floor on young nodes only, with (g) fixed, keeps the
+eaters within the noise and still cuts animal node updates to about 0.6 (mean update 15.8 to 16.1 days, against 9.3 to
+9.7): a possible first G2 if the full floor stays out of reach.
