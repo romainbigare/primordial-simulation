@@ -15,6 +15,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
   the bodies (the survey and the body days), in the parts, and in the tape itself. `alive` is the column `bodies`
   (bodies alive, nodes and individuals). `updates` is the column `updates` (body updates in the year). `core lines`
   are the code lines of `core` (`cargo test --release -p cli --test core_size -- --nocapture`; the ceiling is 9,700, decision S3).
+  The third bench, `region24` (S41), is in the rows from D2.3 on and in section Z.
 
 ## The rows
 
@@ -37,6 +38,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | E2.3, the recorder on the pool, not kept (medians of 7 runs on 4 threads, the saves of the profile after D2; branch `speed/e23-tape-not-kept`) | `7e21f1f` | 1.096 | 146 | 50 | 879 | 3 | 20 | 3,679 | 53,648 | 0.826 | 213 | 52 | 530 | 19 | 12 | 1,648 | 23,373 | 9,689 |
 | E2.3 (1), the booking once per number (the same saves; another history, level 2) | E2.3 (1) | 1.056 | 142 | 51 | 833 | 3 | 26 | 3,634 | 53,515 | 0.795 | 210 | 50 | 505 | 16 | 15 | 1,620 | 23,160 | 9,688 |
 | E2.3 (2), a fast path for gathering (the same saves and history as E2.3 (1)) | E2.3 (2) | 1.111 | 153 | 53 | 872 | 3 | 29 | 3,634 | 53,515 | 0.772 | 210 | 51 | 482 | 16 | 13 | 1,620 | 23,160 | 9,689 |
+| Z1, the final check (benches remade at `60a05eb`, medians of 5 sets on 4 threads; region24 in section Z) | `60a05eb` | 0.614 | 130 | 46 | 421 | 3 | 15 | 2,361 | 32,499 | 0.738 | 189 | 46 | 456 | 33 | 13 | 1,542 | 22,847 | 9,591 |
 
 ### A2: compiler settings
 
@@ -767,6 +769,189 @@ Over the kill line of 2% on island22, under it on globe36 (1.39%), where the bod
 year (kept by S80). The bench row (island22 1.056 -> 1.111 s a year on 4 threads) is within the table's noise of 1 to
 8%; the spot is judged on callgrind. The opening of an update costs more (+23 and +28 million: the air node is taken whole at each opening of a
 domain, also for a serial step that touches it little).
+
+## Z: the final check
+
+At `60a05eb` (the last commit of the work; core 9,591 code lines, ceiling 9,700). The machine has 4 cores and nothing else
+ran during a timed run (checked with `pgrep` before each one). The three benches were remade with this code
+(`scripts/bench.sh --remake`, snapshot version 47; about 12 minutes), so they are other worlds than the baseline's
+(S65): the numbers are compared by what a year costs on each code's own bench, and by the cost of one body update.
+
+### Z1: the benches
+
+Five sets of `scripts/bench.sh` (each bench twice, the lower kept), 4 threads and 1 thread interleaved
+(`RAYON_NUM_THREADS=1`); medians of the five, ms a year (the total is the median of the totals; the range of the
+totals in brackets).
+
+| Threads | Bench | s/yr | flow | change | bodies | parts | tape | alive | updates/yr | busiest domain |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 4 | island22 | 0.614 (0.594 to 0.712) | 130 | 46 | 421 | 3 | 15 | 2,361 | 32,499 | 0.157 |
+| 4 | globe36 | 0.738 (0.691 to 0.873) | 189 | 46 | 456 | 33 | 13 | 1,542 | 22,847 | 0.189 |
+| 4 | region24 | 0.888 (0.847 to 0.945) | 201 | 68 | 582 | 9 | 24 | 4,857 | 52,839 | 0.305 |
+| 1 | island22 | 1.072 (1.071 to 1.171) | 149 | 52 | 857 | 2 | 14 | 2,361 | 32,499 | 0.157 |
+| 1 | globe36 | 1.183 (1.149 to 1.297) | 229 | 54 | 854 | 33 | 13 | 1,542 | 22,847 | 0.189 |
+| 1 | region24 | 1.589 (1.571 to 1.621) | 246 | 87 | 1,220 | 9 | 27 | 4,857 | 52,839 | 0.305 |
+
+**The baseline code in the same hour.** The code of `16e6a4e` (cut from the repository into a scratch folder and built
+there) on the old saves of `~/.cache/ew-bench` (snapshot version 45), with the same bench lines of the script (without
+`region24`, which the baseline has not), three sets, medians:
+
+| Threads | Bench | s/yr | flow | change | bodies | parts | tape | alive | updates/yr |
+|---|---|---|---|---|---|---|---|---|---|
+| 4 | island22 | 0.910 (0.876 to 0.945) | 173 | 52 | 673 | 0 | 12 | 2,744 | 27,762 |
+| 4 | globe36 | 1.490 (1.488 to 1.574) | 262 | 60 | 1,111 | 47 | 15 | 1,955 | 25,626 |
+| 1 | island22 | 0.892 (0.879 to 0.908) | 184 | 71 | 621 | 0 | 13 | 2,744 | 27,762 |
+| 1 | globe36 | 1.598 (1.534 to 1.662) | 317 | 86 | 1,136 | 47 | 15 | 1,955 | 25,626 |
+
+The baseline row of the first table (0.857 and 1.347 s) was taken in another hour; the machine is 6% to 11% slower
+today, so the gain is given against both.
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| a year now, 4 threads (s) | 0.614 | 0.738 | 0.888 |
+| baseline, same hour, 4 threads (s) | 0.910 | 1.490 | |
+| **faster than the baseline, same hour** | **1.48** | **2.02** | |
+| faster than the baseline as recorded (0.857, 1.347) | 1.40 | 1.83 | |
+| the aim (10 times: 0.086 and 0.135 s) | 7.1 times short | 5.5 times short | |
+| the bodies' stage per update, 4 threads (baseline same hour 24.2 and 43.4 µs) | 13.0 µs | 20.0 µs | 11.0 µs |
+| the same, 1 thread (baseline same hour 22.4 and 44.3 µs) | 26.4 µs | 37.4 µs | 23.1 µs |
+| per update, 4 threads, baseline over now | 1.86 | 2.17 | |
+
+**The threads.** The baseline code runs the bodies on one thread, so its year hardly changes with the threads (0.910 and
+0.892 s on the island). Now, 1 thread against 4 threads:
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| gain on the bodies' stage | 2.04 | 1.87 | 2.10 |
+| gain on the whole year | 1.75 | 1.60 | 1.79 |
+| share of the whole year that the threads speed up (Amdahl, from the whole-year gain `g`: `p = (1 - 1/g) / (1 - 1/4)`) | 0.57 | 0.50 | 0.59 |
+| the same year on 8 cores (the same share; arithmetic, not measured) | 2.00 | 1.78 | 2.06 |
+| the same on any number of cores | 2.3 | 2.0 | 2.4 |
+| share of the bodies' stage that stays on one thread (the same arithmetic on its gain) | 32% | 38% | 30% |
+
+On one thread the island is slower than the baseline (1.072 against 0.892 s): its bodies' stage is 857 against 621 ms
+(more updates, 32,499 against 27,762, and 26.4 against 22.4 µs for each: the domains, the faces, the view and the
+outbox cost about 3% together, D2.1b to D2.4b, and the rest is another world). The threads win it back and more.
+
+### Z1: the profile (callgrind, one year, one thread)
+
+`scripts/bench.sh profile` with `RAYON_NUM_THREADS=1`, on the remade saves. The year loads the save and writes one:
+that is 13 to 16% of the instructions and is not part of the simulation. Shares are of `schedule::run_for` (the
+simulation: 6,707, 7,142 and 9,894 million instructions; the whole runs are 7,951, 8,281 and 11,399 million).
+
+| Stage (inclusive) | island22 | globe36 | region24 |
+|---|---|---|---|
+| bodies: the batches (`survey::batch`) | 68.3% | 58.0% | 62.2% |
+| of it: the updates (`survey::update`) | 62.3% | 50.6% | 56.8% |
+| of it: the outboxes applied (`outbox::deliver`) | 3.5% | 5.1% | 3.1% |
+| of it: faces, booking, settling (the rest) | 2.5% | 2.3% | 2.3% |
+| bodies: the survey (`survey::survey`) | 5.8% | 4.2% | 8.5% |
+| Flow: the air (`flow::air`) | 13.6% | 21.9% | 15.3% |
+| Flow: the liquid | 4.0% | 5.3% | 4.4% |
+| Change | 7.1% | 6.8% | 7.8% |
+| parts (Bond's monthly step) | under 0.1% | 2.9% | under 0.1% |
+| the tape's recorder | 1.7% | 1.5% | 1.8% |
+| inside the updates: `body::live::to_growth` (a body's day) | 31.5% | 20.3% | 36.2% |
+| `choose::act` | 11.6% | 17.8% | 3.5% |
+| `copy::copy` (children, `copy::emit` inside) | 8.1% | 5.3% | 6.4% |
+| `copy::grow::grow` | 6.2% | 4.3% | 6.5% |
+| `nodes::add` | 3.5% | 5.1% | 4.3% |
+| `Reactor::react` (Change and the bodies' reactions) | 10.0% | 9.3% | 11.7% |
+| `store::apply` | 4.7% | 5.2% | 5.2% |
+
+The cost of one body update, `survey::batch` inclusive over the updates of the year (32,457, 22,440 and 53,427):
+**141,200, 184,600 and 115,200 instructions**. (D2.6's were 169,753, 203,880 and 152,795 on the benches of D2.5; the
+baseline's `survey::day` was 134,300 and 225,600 on its own worlds.) The worlds are other worlds, so these are not a
+measure of the code's change alone (S65).
+
+Top functions by exclusive instructions (share of the whole run, island22 / globe36 / region24; the compression and
+decompression of the save, `miniz_oxide`, are 7 to 9% of a run and left out): `Reactor::react` 2.10 / 2.03 / 2.55%,
+`pow` 1.54 / 1.23 / 1.76, `memcpy` 1.64 / 2.05 / 1.54, `exp` 1.45 / 1.17 / 1.41, `store::apply` (its inner closure) 1.25 /
+1.58 / 1.41, `expm1` 1.07 / 1.14 / 1.24, `genes::vary` (the gene draw) 1.17 / 0.76 / 1.30, `malloc` 1.05 / 1.12 / 0.96,
+`flow::air::step::step` 0.82 / 1.57 / 0.88. The profile is as flat as at the baseline: no function but the save's
+compression holds over 2.6%.
+
+Where the time goes now, on 4 threads: the bodies are 69% (island22), 62% (globe36) and 66% (region24) of the wall time
+of a year (they were 74% and 75% at the baseline), Flow and Change 29%, 32% and 30%, the parts and the tape the rest. The
+bodies are 58 to 68% of the instructions but cost less wall time than their instructions say, as they are on four threads;
+Flow's air step (14 to 22% of the instructions) runs on threads too, but its ordered passes and the booking of the
+air stay on one. What is left of a year that is not bodies (Flow, Change, parts, tape) is 194, 281 and 302 ms: more than
+twice the whole year of the aim on the island (86 ms) and the globe (135 ms).
+
+### Z1: the cost model (the form of the foundation, plan 5.7)
+
+The cost of one cell and of one body per simulated year, from the benches above (4 threads; "now" is the bench at its
+year; the baseline columns are the baseline's own, from the first table of this file).
+
+| | island22 now | globe36 now | region24 now | island22 baseline | globe36 baseline |
+|---|---|---|---|---|---|
+| cells | 484 | 648 | 768 | 484 | 648 |
+| bodies alive, per cell | 2,361, 4.9 | 1,542, 2.4 | 4,857, 6.3 | 2,744, 5.7 | 1,955, 3.0 |
+| updates a year, per body | 32,499, 13.8 | 22,847, 14.8 | 52,839, 10.9 | 27,762, 10.1 | 25,626, 13.1 |
+| Flow + Change, ms a year (per cell, ms) | 176 (0.36) | 235 (0.36) | 269 (0.35) | 208 (0.43) | 280 (0.43) |
+| the same on 1 thread (per cell) | 201 (0.42) | 283 (0.44) | 333 (0.43) | | |
+| bodies' stage, ms a year | 421 | 456 | 582 | 638 | 1,010 |
+| per update, µs (wall) | 13.0 | 20.0 | 11.0 | 23.0 | 39.4 |
+| per body-year, ms | 0.178 | 0.296 | 0.120 | 0.233 | 0.517 |
+| a settled cell, ms a year (the whole year over the cells) | 1.27 | 1.14 | 1.16 | 1.77 | 2.08 |
+| cells that fit 0.9 s a year, by this model | 709 | 790 | 779 | 508 | 433 |
+
+The model reads a settled year. A run of 1,000 years costs more than its settled year: the mean year of the real runs is
+1.23 times the bench year on the island (0.755 against 0.614 s), 1.15 times on the globe (0.852 against 0.738 s) and 2.07
+times on the refined region (1.839 against 0.888 s; its eaters multiply in the last 100 years). So the model's 790
+cells on the globe are about 650 to 690 in a real run (below).
+
+### Z3: 1,000 years
+
+`ew run --seed 1 --years 1000` with the default `--every 10`, `--frames-every 10`, `--monthly-years 2` (a snapshot, the
+tape so far and a picture every 10 years), one run at a time, nothing else on the machine, 4 threads, the build of
+`60a05eb`. Wall time is the time of the process (start to end, with the writing of snapshots and pictures); "own clock"
+is the sum of the stage clocks that `ew` prints. The "before" times are those of `docs/reports/foundation-l.md` (the
+foundation's final code, one run at a time, the island beside another run).
+
+| Run | Cells | Wall | Own clock | Before | Faster | Mean year | Hash |
+|---|---|---|---|---|---|---|---|
+| island 22 x 22 | 484 | 765 s = 12.8 min | 755.4 s | 25.1 min | 1.97 | 755 ms | `ff6d5114eac40e83` |
+| globe 36 x 18 | 648 | 860 s = 14.3 min | 851.9 s | 36.6 min | 2.55 | 852 ms | `85b93203a4b1b704` |
+| region 24 x 24, 8 x 8 refined | 768 | 1,868 s = 31.1 min | 1,839.2 s | 86 min | 2.76 | 1,839 ms | `888acb075bc1d71a` |
+| globe 40 x 20 | 800 | 1,303 s = 21.7 min | 1,290.1 s | | | 1,290 ms | `83c9254387f060ef` |
+
+All four ran their 1,000 years (none was cut). The books:
+
+| Run | Worst element drift | Worst energy drift | Heat not given | Rounded to zero at year 1,000 |
+|---|---|---|---|---|
+| island 22 x 22 | 4.5e-16 | 2.7e-14 | 0 | 2.6e-2 mol, 0.9 J |
+| globe 36 x 18 | 5.2e-16 | 7.3e-14 | 0 | 1.1e3 mol, 3.1e5 J |
+| region 24 x 24 | 4.1e-16 | 3.2e-14 | 0 | 2.8e-2 mol, 0.9 J |
+| globe 40 x 20 | 5.6e-16 | 7.1e-14 | 0 | 6.9e2 mol, 1.5e5 J |
+
+(The worst of the checks at the 10-year lines of each run; the limit is 1e-12. The foundation's globe 24 x 12 rounded
+9.9e2 mol to zero in its 1,000 years and 0 J; the two globes here also round some J, 3e5 of the order of 1e25 J that
+they hold.)
+
+Bodies (the most in one cell at any 10-year line in brackets) and the climate:
+
+| Run | Bodies at year 10, 100, 500, 1,000 | Land K, year 100 to 1,000 | Ice, % of the area | Absorbing gas, ppm | Light-eaters, kg | Eaters, kg | Land rain, m a year |
+|---|---|---|---|---|---|---|---|
+| island 22 x 22 | 587, 1,464, 2,778, 2,665 (43) | 293.8 to 293.9 | none | 435 to 374 | 3.4e9 to 7.6e9 | 2.2e7 to 2.0e7 | 1.46 to 1.51 |
+| globe 36 x 18 | 569, 1,462, 2,365, 1,755 (623) | 290.8 to 291.0 | 1.2 to 1.4 | 372 to 352 | 7.7e14 to 1.2e15 | 4.0e12 to 5.4e11 | 3.17 to 3.30 |
+| region 24 x 24 | 1,199, 2,896, 7,418, 16,386 (231) | 293.6 to 293.8 | none | 439 to 411 | 2.8e9 to 5.8e9 | 2.6e6 to 2.0e7 | 1.46 to 1.56 |
+| globe 40 x 20 | 620, 1,502, 2,718, 3,549 (70) | 291.8 to 291.5 | 1.8 to 2.2 | 382 to 377 | 5.5e14 to 8.8e14 | 2.7e12 to 8.5e10 | 2.85 to 2.97 |
+
+The cost of a year over the run (ms, the sum of the stages; "most" is the highest mean of 10 years):
+
+| Run | Year 100 | Mean of the run | Most | Last 100 years |
+|---|---|---|---|---|
+| island 22 x 22 | 608 | 755 | 993 | 888 |
+| globe 36 x 18 | 641 | 851 | 1,800 | 769 |
+| region 24 x 24 | 901 | 1,838 | 11,901 | 5,182 |
+| globe 40 x 20 | 741 | 1,289 | 1,897 | 1,165 |
+
+What stands out:
+
+- **Crowded cells.** On the 36 x 18 globe one cell held 623 bodies at year 410 (and over 200 at years 350, 360, 440, 460, 500 and 510), and the cost of a year went to 1.2 to 1.8 s between years 340 and 540; the mean year is 0.85 s and the median 0.73 s. About 120 s of the 852 s come from the years that cost more than 1.25 times the median. The 40 x 20 globe has them too (up to 70 in a cell). It is the foundation's open item "crowded cells" (kinds of one lineage that differ in their genes do not merge; S66).
+- **The refined region.** Its eaters multiply in the last 100 years: eater nodes 948 (year 800), 1,323 (900), 7,359 (1,000); bodies 16,386 and 400,651 updates in the year 1,000, 16.5 s of that year in the bodies. The last 100 years are 28% of the wall time (518 of 1,839 s). The foundation's run had 11,536 bodies at year 1,000. The run was not carried past year 1,000.
+- **The 800-cell globe** needs 21.7 minutes: it does not fit the 15 minutes. A globe has an even number of rows (`--size` is its rows from pole to pole), so no size lies between 36 x 18 (14.3 minutes, 4.4% under the budget) and 40 x 20 (21.7 minutes). By a straight line between the two, 15 minutes is at about 660 cells.
 
 ## Profile of the baseline
 

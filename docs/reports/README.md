@@ -21,6 +21,13 @@ a folder with the same name as the report.
   files are not kept. The viewer's pictures show the first Phase L runs (before the final foundation code). The
   folder is 2.6 MB.
 
+- `speed.md`: the speed work after the foundation and its final check: where the speed stands against the baseline and
+  the aim of 10 times, the 1,000-year runs, the largest planet that fits 15 minutes, what each phase gave, what was not
+  kept, why 10 times was not reached, and what you decide.
+- `speed/`: its pictures (SVG, made from the runs' `series.csv`): a year then and now, where a year goes, minutes for
+  1,000 years, the cost of a year and the bodies over 1,000 years, the land temperature. 70 KB. The runs themselves
+  are not kept; their numbers are in `docs/speed-post-foundation/measures.md`.
+
 Folder sizes today: `foundation-a/` 11 MB (series and pictures of the A2 runs; it is not trimmed yet),
 `foundation-bc/` 84 KB, `foundation-d/` 320 KB.
 

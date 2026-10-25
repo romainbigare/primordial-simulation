@@ -1,0 +1,30 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 720 360' width='720' height='360' role='img' aria-label='Refined region: cost of a year'>
+<rect width='720' height='360' fill='#fcfcfb'/>
+<text x='20.0' y='26.0' font-size='16' text-anchor='start' fill='#0b0b0b' font-weight='bold' font-family='Helvetica,Arial,sans-serif'>Refined region: cost of a year</text>
+<text x='20.0' y='44.0' font-size='12' text-anchor='start' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>Seconds a year (mean of 10 years). The last 100 years take 28% of the run: the eaters multiply.</text>
+<line x1='64.0' y1='312.0' x2='570.0' y2='312.0' stroke='#e4e3df' stroke-width='1'/>
+<text x='56.0' y='316.0' font-size='11' text-anchor='end' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>0</text>
+<line x1='64.0' y1='262.0' x2='570.0' y2='262.0' stroke='#e4e3df' stroke-width='1'/>
+<text x='56.0' y='266.0' font-size='11' text-anchor='end' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>3</text>
+<line x1='64.0' y1='212.0' x2='570.0' y2='212.0' stroke='#e4e3df' stroke-width='1'/>
+<text x='56.0' y='216.0' font-size='11' text-anchor='end' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>6</text>
+<line x1='64.0' y1='162.0' x2='570.0' y2='162.0' stroke='#e4e3df' stroke-width='1'/>
+<text x='56.0' y='166.0' font-size='11' text-anchor='end' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>9</text>
+<line x1='64.0' y1='112.0' x2='570.0' y2='112.0' stroke='#e4e3df' stroke-width='1'/>
+<text x='56.0' y='116.0' font-size='11' text-anchor='end' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>12</text>
+<line x1='64.0' y1='62.0' x2='570.0' y2='62.0' stroke='#e4e3df' stroke-width='1'/>
+<text x='56.0' y='66.0' font-size='11' text-anchor='end' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>15</text>
+<text x='64.0' y='330.0' font-size='11' text-anchor='middle' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>0</text>
+<text x='165.2' y='330.0' font-size='11' text-anchor='middle' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>200</text>
+<text x='266.4' y='330.0' font-size='11' text-anchor='middle' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>400</text>
+<text x='367.6' y='330.0' font-size='11' text-anchor='middle' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>600</text>
+<text x='468.8' y='330.0' font-size='11' text-anchor='middle' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>800</text>
+<text x='570.0' y='330.0' font-size='11' text-anchor='middle' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>1,000</text>
+<text x='317.0' y='352.0' font-size='12' text-anchor='middle' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>year</text>
+<text x='14.0' y='187.0' font-size='12' text-anchor='middle' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif' transform='rotate(-90 14 187.0)'>seconds a year</text>
+<line x1='64.0' y1='297.0' x2='570.0' y2='297.0' stroke='#52514e' stroke-width='1' stroke-dasharray='4 3'/>
+<text x='70.0' y='292.0' font-size='11' text-anchor='start' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>0.9 s</text>
+<polyline points='69.1,306.5 74.1,305.2 79.2,303.4 84.2,301.1 89.3,297.6 94.4,293.0 99.4,291.4 104.5,293.4 109.5,293.1 114.6,295.3 119.7,296.1 124.7,295.7 129.8,293.8 134.8,290.6 139.9,291.6 145.0,293.7 150.0,292.8 155.1,291.3 160.1,291.1 165.2,293.7 170.3,292.7 175.3,290.6 180.4,294.4 185.4,292.5 190.5,291.1 195.6,290.3 200.6,290.6 205.7,288.6 210.7,289.1 215.8,290.6 220.9,290.8 225.9,289.6 231.0,288.8 236.0,287.0 241.1,288.1 246.2,285.8 251.2,286.1 256.3,286.7 261.3,290.7 266.4,288.4 271.5,287.0 276.5,284.8 281.6,288.6 286.6,287.8 291.7,287.0 296.8,286.7 301.8,289.8 306.9,286.9 311.9,285.2 317.0,282.9 322.1,283.1 327.1,285.2 332.2,288.1 337.2,286.9 342.3,288.2 347.4,287.6 352.4,287.0 357.5,285.9 362.5,287.3 367.6,289.6 372.7,287.9 377.7,288.6 382.8,287.8 387.8,287.2 392.9,285.7 398.0,286.0 403.0,286.7 408.1,287.3 413.1,287.7 418.2,286.9 423.3,286.7 428.3,286.9 433.4,287.7 438.4,287.2 443.5,289.5 448.6,286.7 453.6,282.5 458.7,283.3 463.7,284.7 468.8,283.9 473.9,280.6 478.9,279.2 484.0,278.2 489.0,273.2 494.1,269.1 499.2,267.4 504.2,265.8 509.3,261.6 514.3,266.2 519.4,269.5 524.5,265.8 529.5,260.3 534.6,252.0 539.6,245.1 544.7,240.0 549.8,237.5 554.8,227.5 559.9,215.4 564.9,199.1 570.0,113.7' fill='none' stroke='#2a78d6' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
+<rect x='576.0' y='108.7' width='10.0' height='3.0' fill='#2a78d6' rx='0'/>
+<text x='590.0' y='114.7' font-size='11' text-anchor='start' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>region 24x24</text>
+</svg>

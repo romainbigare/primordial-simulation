@@ -1,0 +1,66 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 720 400' width='720' height='400' role='img' aria-label='Where a simulated year goes'>
+<rect width='720' height='400' fill='#fcfcfb'/>
+<text x='20.0' y='26.0' font-size='16' text-anchor='start' fill='#0b0b0b' font-weight='bold' font-family='Helvetica,Arial,sans-serif'>Where a simulated year goes</text>
+<text x='20.0' y='44.0' font-size='12' text-anchor='start' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>Seconds a year by stage (medians). The bodies are still the largest stage.</text>
+<line x1='64.0' y1='336.0' x2='700.0' y2='336.0' stroke='#e4e3df' stroke-width='1'/>
+<text x='56.0' y='340.0' font-size='11' text-anchor='end' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>0</text>
+<line x1='64.0' y1='285.6' x2='700.0' y2='285.6' stroke='#e4e3df' stroke-width='1'/>
+<text x='56.0' y='289.6' font-size='11' text-anchor='end' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>0.3</text>
+<line x1='64.0' y1='235.2' x2='700.0' y2='235.2' stroke='#e4e3df' stroke-width='1'/>
+<text x='56.0' y='239.2' font-size='11' text-anchor='end' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>0.6</text>
+<line x1='64.0' y1='184.8' x2='700.0' y2='184.8' stroke='#e4e3df' stroke-width='1'/>
+<text x='56.0' y='188.8' font-size='11' text-anchor='end' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>0.9</text>
+<line x1='64.0' y1='134.4' x2='700.0' y2='134.4' stroke='#e4e3df' stroke-width='1'/>
+<text x='56.0' y='138.4' font-size='11' text-anchor='end' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>1.2</text>
+<line x1='64.0' y1='84.0' x2='700.0' y2='84.0' stroke='#e4e3df' stroke-width='1'/>
+<text x='56.0' y='88.0' font-size='11' text-anchor='end' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>1.5</text>
+<text x='14.0' y='210.0' font-size='12' text-anchor='middle' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif' transform='rotate(-90 14 210.0)'>seconds a year</text>
+<rect x='92.6' y='307.9' width='70.0' height='28.1' fill='#2a78d6' rx='0'/>
+<rect x='92.6' y='299.2' width='70.0' height='7.7' fill='#eb6834' rx='0'/>
+<rect x='92.6' y='186.1' width='70.0' height='112.1' fill='#1baf7a' rx='0'/>
+<rect x='92.6' y='184.1' width='70.0' height='1.0' fill='#6250d6' rx='0'/>
+<text x='127.6' y='178.1' font-size='11' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>0.91</text>
+<text x='127.6' y='354.0' font-size='12' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>island22</text>
+<text x='127.6' y='368.0' font-size='12' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>baseline</text>
+<rect x='219.8' y='315.2' width='70.0' height='20.8' fill='#2a78d6' rx='0'/>
+<rect x='219.8' y='307.4' width='70.0' height='6.7' fill='#eb6834' rx='0'/>
+<rect x='219.8' y='236.7' width='70.0' height='69.7' fill='#1baf7a' rx='0'/>
+<rect x='219.8' y='233.7' width='70.0' height='1.5' fill='#6250d6' rx='0'/>
+<text x='254.8' y='227.7' font-size='11' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>0.61</text>
+<text x='254.8' y='354.0' font-size='12' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>island22</text>
+<text x='254.8' y='368.0' font-size='12' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>now, 4 threads</text>
+<rect x='347.0' y='293.0' width='70.0' height='43.0' fill='#2a78d6' rx='0'/>
+<rect x='347.0' y='282.9' width='70.0' height='9.1' fill='#eb6834' rx='0'/>
+<rect x='347.0' y='96.3' width='70.0' height='185.6' fill='#1baf7a' rx='0'/>
+<rect x='347.0' y='88.4' width='70.0' height='6.9' fill='#e87ba4' rx='0'/>
+<rect x='347.0' y='85.8' width='70.0' height='1.5' fill='#6250d6' rx='0'/>
+<text x='382.0' y='79.8' font-size='11' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>1.5</text>
+<text x='382.0' y='354.0' font-size='12' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>globe36</text>
+<text x='382.0' y='368.0' font-size='12' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>baseline</text>
+<rect x='474.2' y='305.2' width='70.0' height='30.8' fill='#2a78d6' rx='0'/>
+<rect x='474.2' y='297.5' width='70.0' height='6.7' fill='#eb6834' rx='0'/>
+<rect x='474.2' y='220.9' width='70.0' height='75.6' fill='#1baf7a' rx='0'/>
+<rect x='474.2' y='215.4' width='70.0' height='4.5' fill='#e87ba4' rx='0'/>
+<rect x='474.2' y='213.2' width='70.0' height='1.2' fill='#6250d6' rx='0'/>
+<text x='509.2' y='207.2' font-size='11' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>0.74</text>
+<text x='509.2' y='354.0' font-size='12' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>globe36</text>
+<text x='509.2' y='368.0' font-size='12' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>now, 4 threads</text>
+<rect x='601.4' y='303.2' width='70.0' height='32.8' fill='#2a78d6' rx='0'/>
+<rect x='601.4' y='291.8' width='70.0' height='10.4' fill='#eb6834' rx='0'/>
+<rect x='601.4' y='194.0' width='70.0' height='96.8' fill='#1baf7a' rx='0'/>
+<rect x='601.4' y='192.5' width='70.0' height='0.5' fill='#e87ba4' rx='0'/>
+<rect x='601.4' y='188.5' width='70.0' height='3.0' fill='#6250d6' rx='0'/>
+<text x='636.4' y='182.5' font-size='11' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>0.88</text>
+<text x='636.4' y='354.0' font-size='12' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>region24</text>
+<text x='636.4' y='368.0' font-size='12' text-anchor='middle' fill='#0b0b0b' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>now, 4 threads</text>
+<rect x='64.0' y='56.0' width='10.0' height='10.0' fill='#2a78d6' rx='2'/>
+<text x='79.0' y='65.0' font-size='11' text-anchor='start' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>Flow</text>
+<rect x='112.8' y='56.0' width='10.0' height='10.0' fill='#eb6834' rx='2'/>
+<text x='127.8' y='65.0' font-size='11' text-anchor='start' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>Change</text>
+<rect x='174.0' y='56.0' width='10.0' height='10.0' fill='#1baf7a' rx='2'/>
+<text x='189.0' y='65.0' font-size='11' text-anchor='start' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>bodies</text>
+<rect x='235.2' y='56.0' width='10.0' height='10.0' fill='#e87ba4' rx='2'/>
+<text x='250.2' y='65.0' font-size='11' text-anchor='start' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>parts</text>
+<rect x='290.2' y='56.0' width='10.0' height='10.0' fill='#6250d6' rx='2'/>
+<text x='305.2' y='65.0' font-size='11' text-anchor='start' fill='#52514e' font-weight='normal' font-family='Helvetica,Arial,sans-serif'>tape</text>
+</svg>
