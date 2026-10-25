@@ -1,9 +1,11 @@
 # Speed after the foundation: the plan
 
-**Status:** the owner asked for this work on 24 October 2026: build ideas A to E of the speed list (group F waits).
+**Status: done (phase Z; see `docs/reports/speed.md`).** Below is the plan as written; `docs/history.md` section 5 says what was built and what was not kept.
+
+**Start:** the owner asked for this work on 24 October 2026: build ideas A to E of the speed list (group F waits).
 The owner asked the architect to take every decision and log it: they are in `decisions.md` next to this file (S1,
 S2, ...). What was built and measured goes in `docs/history.md` (section 5) and in `measures.md` next to this file.
-Where this file and `docs/handover.md` differ, the handover wins until it is updated. Phase A is done.
+Where this file and `docs/handover.md` differ, the handover wins until it is updated.
 
 This file is for the agents who do the work and for the owner. It is written in simple English (handover 0).
 

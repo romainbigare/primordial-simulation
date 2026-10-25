@@ -13,7 +13,7 @@ ask the owner.
 | Every free number: unit, anchor, mark (physical, anchored, tuned) | `docs/numbers.md` |
 | What the tape records | `docs/tape.md` |
 | What changed and when, what was tried and not kept | `docs/history.md` |
-| The work now: speed after the foundation | `docs/speed-post-foundation/plan.md` (its rules in 2; the foundation's main rule in `docs/foundation/plan.md` holds) |
+| Speed after the foundation (done) | The result: `docs/reports/speed.md`. The plan, the decisions (S1 to S84) and the measures: `docs/speed-post-foundation/` (`plan.md`, `decisions.md`, `measures.md`). Its rules in 2 of the plan and the foundation's main rule in `docs/foundation/plan.md` hold for any new speed work |
 | The foundation before M4 (done) | `docs/foundation/plan.md` (read its main rule first) |
 | The laws | `core/src/<law>/` (`flow`, `change`, `bond`, `copy`, `choose`), bodies in `core/src/body/` |
 | Physical constants and units | `core/src/units.rs` |

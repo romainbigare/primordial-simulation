@@ -235,7 +235,7 @@ light-eater nodes and the eaters), with about 89,000 updates a year at about 40 
 callgrind): a body costs about 0.65 ms per body-year, about twice what it costs at year 30, as the eaters' decisions
 and children are dearer than plants'. A settled cell costs about 1.9 ms a year, and about 470 cells fit the budget of
 0.9 s a year. Bodies are about 80% of that year. Threads over bodies do not pay at this size (5.6). Each phase report
-measures these again.
+measures these again; the speed work did so (`docs/reports/speed.md`: a settled cell now costs 1.1 to 1.3 ms a year on 4 cores, and about 650 cells fit the budget).
 
 ---
 
