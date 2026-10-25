@@ -1574,3 +1574,51 @@ whole run 7,860.7 M instructions on island22 and 7,161.8 M on globe36). Not merg
 **Verdict for G2** (X67): a decision costs 33% (island) and 41% (globe) of an animal update after MI5, and the take a
 habit keeps is 36% and 26% of it; with 0.67 to 0.70 of the node updates as habits, the animal updates cost x0.85 to
 x0.86 and x0.79 to x0.80 of today, the year -3.4 to -3.5% and -6.9 to -7.1% on one thread.
+## AIR3: the air's book as column moves
+
+Level 2. The air's booking (`flow::air::book`) no longer builds link lists for `store::apply`. It books through the one
+helper `store::book_by_array`: each block of the store's arrays (the amounts of 4 substances of the ground, the air or
+the bodies' nodes, or the heat of one of them) is one task, which adds what the step moves as column moves. A task
+walks its own array: the ground's gas goes up into its own air node and rains out of the four it sees (what the cell
+gives is `up[gas][link]`, five links to a cell), then the heat, the bodies' gas, the wind and the lifts. Both sides of
+each move come from the same arrays. A move of zero is not added. The sun, space and the potential keep their sums
+apart and add them once (`Store::add_far_heat`, as `apply` did). `hold_air` is as it was; E4 does not touch this
+booking. Core: +157 -44 code lines (10,173 in all; the plan said -10, the two structs that cut the long function in
+stages and the six column functions cost the rest).
+
+Why level 2: adding a zero to an amount of a carried class (`Store::carry`) folds the carry into the amount, so it
+is not always a no-op. With every zero added (a variant) the golden fingerprints are the base's, bit for bit: the rest
+of the rewrite keeps the order of the sums. Leaving out the zeros (most of the bodies' gas, every rain link that does
+not rain) changes when a carry is folded, never the value it stands for. Golden re-pinned (seeds 1, 2, 3).
+
+| Check | Result |
+|---|---|
+| Golden, with threads and with one thread (also with debug assertions on) | the same new fingerprints |
+| Golden, a variant that adds every zero | the old fingerprints |
+| One year of region24 from `bench48`, 1, 2 and 4 threads | the same hash `d7ff018fd2a0045d` |
+| A world of 48 x 48 cells, 8 years, 1, 2 and 4 threads (the booking goes to the pool above 2,048 cells) | the same hash `fc8f2ebe8a105a6c` |
+| `series.csv`, 3 years from each `bench48` save, base `f85d626` and AIR3 (4 threads), largest difference over the 3 years, relative | elements 2e-16; energy 1e-7; air temperature 6e-5; land temperature 2e-4 (globe36; the warmest month 1e-3); the heat-absorbing gas 8e-4; rain on land 1e-3 at most; the trace gas 5e-2; life moves by its choices (bodies within 3%, plant members within 23%) |
+
+The differences are 0 at the save, about 1e-6 after one year and grow with the years, as every step that moves the
+world at rounding (E1c: land and air temperature within 1e-4 over 3 years). The books stay at rounding.
+
+**One thread, instructions of one year, the air's `book`** (callgrind, `RAYON_NUM_THREADS=1`, `bench48` saves; the
+inclusive cost of `book` as `step` calls it, 36 calls; base `f85d626`; `book` is kept out of `step`'s inline in both):
+
+| | island22 | globe36 |
+|---|---|---|
+| base | 212,304,899 | 241,503,740 |
+| AIR3 | 123,374,288 | 122,009,422 |
+| change | **-41.9%** | **-49.5%** |
+| the run, base / AIR3 | 7,859.8 / 7,800.9 million (-0.7%) | 7,162.0 / 7,047.8 million (-1.6%) |
+
+In the base, `store::apply` was 168,939,410 of the globe's 241,503,740. Done when `book` -40%: met on both benches (the island with 2 points to spare). Kill line -25%: passed. The runs are
+not the same world (level 2), so the run totals carry the noise of the judging method (instructions count above 0.1%);
+the `book` numbers are the code's own, as every call does the same work on its world. What is left in `book` is the
+cells' gas rows (`gives`), the cloud and the cut (`hold_air`), the lift and rain notes (`Scratch::note`) and `sums`: about
+70 million of the base's 212 to 241.
+
+**Wall time on 4 threads: not measured** (the machine is shared; the architect judges it in a quiet window). The
+booking goes to the pool only when the world has `par::SERIAL_BELOW` x `CELLS_PER_ITEM` = 2,048 cells or more; the three
+benches are under it (484, 648 and 768 cells), so on them it runs on the calling thread, and the gain above is the
+whole gain on 4 threads too. Whether a smaller threshold pays is for a wall-time measure.

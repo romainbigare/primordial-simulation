@@ -7,67 +7,100 @@ use super::newton::Wind;
 use super::step::{Active, Iterate, Start, FIXED, PER_GAS};
 use super::wind::Links;
 use super::{lerp, shares, sums};
-use crate::store::{apply, Batch, Boundary, Class, LinkFlux};
+use crate::store::{book_by_array, held_more, Booker, Boundary, Class};
 use crate::{World, AIR};
+use std::ops::Range;
 
-/// Book what the step of `dt` seconds moves, from its last round's rows, wind and air, in one call: sunlight, light set
-/// aside for bodies, the heat each ground node gives its bodies' node, heat to the air and to space, the
-/// ground's gas with its heat, the wind and the lifts; then the light on bodies, the rain and the clouds of what condensed in each air node (`rained`). No node gives more of a gas
-/// than it holds and gets (`hold_air`).
-pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[[f64; 2]]), (rows, width): (&[f64], usize), wind: &Wind, (it, start): (&Iterate, &Start), dt: f64) {
+/// Ground cells whose booking is as much work as one item of the pool's (`par::SERIAL_BELOW`): a task of the booking is
+/// a few thousand additions, so a world of fewer than `SERIAL_BELOW` x this many cells books on the calling thread.
+const CELLS_PER_ITEM: usize = 256;
+
+/// What the ground nodes give the air over a step, per link of a ground node to the air (`[e * n + i]`): to its own air
+/// node (`e` 0), and to the four it sees (`ends[e]` their air nodes).
+struct Gives {
+    ne: usize,
+    ends: Vec<u32>,
+    /// Per gas and link (`[x * ne + e]`): what goes up, mol (what evaporates into its own air node, what rains out of
+    /// each node it sees by its share), and the heat each mol takes from the ground, J (what evaporates leaves at the
+    /// node's temperature, the heat it held there).
+    up: Vec<f64>,
+    up_heat: Vec<f64>,
+    /// Per gas and node (`[x * n + i]`), what evaporates of the rain it gets in the step, mol.
+    of_rain: Vec<f64>,
+    /// Per link: the heat the ground gives its air node over it, J.
+    heat: Vec<f64>,
+    /// Per ground node: the sunlight it absorbs, J; the light on its bodies, J; the heat set aside for them, J; the heat
+    /// it gives them, J; what rains on it, mol.
+    sun: Vec<f64>,
+    light: Vec<f64>,
+    kept: Vec<f64>,
+    drawn: Vec<f64>,
+    rain: Vec<f64>,
+    /// Per air node: the heat it radiates to space, J.
+    space: Vec<f64>,
+}
+
+/// The rows of the last round as what each ground node gives the air (`Gives`).
+fn gives(w: &World, s: &Scratch, (act, rows, width): (&[Active], &[f64], usize), it: &Iterate, dt: f64) -> Gives {
     let (n, na, cells) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.mesh.cells());
-    let (parent, area) = (cells.parent().to_vec(), cells.area().to_vec());
-    // The links of each ground node to the air (`[e * n + i]`): to its own air node (`e` 0), and to the four it sees.
+    let (parent, area) = (cells.parent(), cells.area());
     let ends: Vec<u32> = parent.iter().copied().chain((0..4).flat_map(|c| s.near.iter().map(move |j| j[c]))).collect();
-    let (from, ne): (Vec<u32>, usize) = ((0..ends.len()).map(|e| (e % n) as u32).collect(), ends.len());
+    let ne = ends.len();
     let v = |len: usize| vec![0.0; len];
-    let (mut sun, mut heat, mut light, mut kept, mut drawn, mut rain, mut out) = (v(n), v(ne), v(n), v(n), v(n), v(n), v(na));
-    // Per gas and link (`[x * ne + e]`): what goes up, mol (what evaporates into its own air node, what rains out of each
-    // node it sees by its share), and the heat each mol takes from the ground, J (what evaporates leaves at the node's
-    // temperature, the heat it held there); per gas and node (`[x * n + i]`), what evaporates of the rain it gets in
-    // the step.
-    let (mut up, mut up_heat, mut of_rain) = (v(act.len() * ne), v(act.len() * ne), v(act.len() * n));
+    let mut g = Gives { ne, ends, up: v(act.len() * ne), up_heat: v(act.len() * ne), of_rain: v(act.len() * n), heat: v(ne), sun: v(n), light: v(n), kept: v(n), drawn: v(n), rain: v(n), space: v(na) };
     for (i, row) in rows.chunks_exact(width).enumerate() {
         let (j, tn) = (parent[i] as usize, s.state.tg[i]);
-        (sun[i], heat[i], light[i], kept[i], drawn[i]) = (row[3], row[0] + row[2], row[5], row[6] * area[i] * dt, row[7]);
-        out[j] += row[2];
+        (g.sun[i], g.heat[i], g.light[i], g.kept[i], g.drawn[i]) = (row[3], row[0] + row[2], row[5], row[6] * area[i] * dt, row[7]);
+        g.space[j] += row[2];
         for (x, ac) in act.iter().enumerate() {
             let (o, sp, e) = (FIXED + PER_GAS * x, s.sp[ac.k], x * ne);
             let (r, a) = (row[o + 3], w.store.amounts(Class::Ground)[ac.k * n + i]);
             let m = row[o].min(a + r);
-            (up[e + i], up_heat[e + i], of_rain[x * n + i]) = (m.min(a), sp.cp * tn + sp.lf + sp.lv, (m - a).max(0.0));
+            (g.up[e + i], g.up_heat[e + i], g.of_rain[x * n + i]) = (m.min(a), sp.cp * tn + sp.lf + sp.lv, (m - a).max(0.0));
             for (c, (q, share)) in shares(s, &it.x[ac.gi * na..(ac.gi + 1) * na], i).into_iter().enumerate() {
-                (up[e + (c + 1) * n + i], up_heat[e + (c + 1) * n + i]) = (-r * share, sp.cp * it.t[q] + row[o + 7]);
+                (g.up[e + (c + 1) * n + i], g.up_heat[e + (c + 1) * n + i]) = (-r * share, sp.cp * it.t[q] + row[o + 7]);
             }
-            rain[i] += r;
+            g.rain[i] += r;
         }
     }
+    g
+}
+
+/// Book what the step of `dt` seconds moves, from its last round's rows, wind and air, in one call: sunlight, light set
+/// aside for bodies, the heat each ground node gives its bodies' node, heat to the air and to space, the ground's gas
+/// with its heat, the wind and the lifts; then the light on bodies, the rain and the clouds of what condensed in each
+/// air node (`rained`). No node gives more of a gas than it holds and gets (`hold_air`). It is not inlined into `step`,
+/// so a profile shows the booking apart.
+#[inline(never)]
+pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[[f64; 2]]), (rows, width): (&[f64], usize), wind: &Wind, (it, start): (&Iterate, &Start), dt: f64) {
+    let (n, na, area) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.mesh.cells().area().to_vec());
+    let mut g = gives(w, s, (act, rows, width), it, dt);
     // The clouds of what condensed, which the next step's sunlight passes.
     let (refl, depth): (Vec<f64>, Vec<f64>) = rained.iter().zip(w.mesh.level(AIR).area()).map(|(&r, &a)| cloud((w.cfg.cloud, w.cfg.cloud_ir), (r[0], r[1]), a, dt)).map(|[r, d]| (r, d)).unzip();
     s.state.cloud = (0..n).map(|i| lerp(s, &refl, i)).collect();
     s.state.cloud_depth = (0..n).map(|i| lerp(s, &depth, i)).collect();
     // The wind and the rain of each gas, cut where an air node would give more than it holds.
     let links = Links::of(w.mesh.level(AIR));
-    let (nl, mut wind_mol) = (links.a.len(), wind.mol.clone());
+    let (nl, mut wind_mol, ne) = (links.a.len(), wind.mol.clone(), g.ne);
     for (gi, &k) in s.state.gas.iter().enumerate() {
-        let rain = act.iter().position(|a| a.k == k).map_or(&mut [][..], |x| &mut up[x * ne..(x + 1) * ne]);
-        hold_air(&start.x[gi * na..(gi + 1) * na], (&links.a, &links.b), &mut wind_mol[gi * nl..(gi + 1) * nl], (&ends, rain));
+        let rain = act.iter().position(|a| a.k == k).map_or(&mut [][..], |x| &mut g.up[x * ne..(x + 1) * ne]);
+        hold_air(&start.x[gi * na..(gi + 1) * na], (&links.a, &links.b), &mut wind_mol[gi * nl..(gi + 1) * nl], (&g.ends, rain));
     }
     // What evaporates of the rain comes up once the cut has set the rain each node gets, so no node gives more than it
     // holds and gets (the cut counted on none of it).
-    for (x, i) in (0..act.len() * n).filter(|&y| of_rain[y] > 0.0).map(|y| (y / n, y % n)) {
-        up[x * ne + i] += of_rain[x * n + i].min((1..ne / n).map(|c| -up[x * ne + c * n + i]).sum());
+    for (x, i) in (0..act.len() * n).filter(|&y| g.of_rain[y] > 0.0).map(|y| (y / n, y % n)) {
+        g.up[x * ne + i] += g.of_rain[x * n + i].min((1..ne / n).map(|c| -g.up[x * ne + c * n + i]).sum());
     }
-    w.light.iter_mut().zip(&light).for_each(|(l, got)| *l += got);
-    w.life.each_mut(|b| b.mark -= (b.shade - 1.0) * light[b.cell as usize]);
-    // Each ground node's gas crosses its links to the air, one column per gas, with its heat; the air pays the lift.
-    let (g, view) = (w.cfg.gravity, s.view());
-    let (mut paid, mut net) = (wind.paid.iter().zip(&start.lift).map(|(a, b)| a + b).collect::<Vec<f64>>(), v(act.len() * n));
+    w.light.iter_mut().zip(&g.light).for_each(|(l, got)| *l += got);
+    w.life.each_mut(|b| b.mark -= (b.shade - 1.0) * g.light[b.cell as usize]);
+    // Each ground node's gas crosses its links to the air with its heat; the air pays the lift.
+    let (grav, view) = (w.cfg.gravity, s.view());
+    let (mut paid, mut net) = (wind.paid.iter().zip(&start.lift).map(|(a, b)| a + b).collect::<Vec<f64>>(), vec![0.0; act.len() * n]);
     for (x, ac) in act.iter().enumerate() {
-        for e in (0..ne).filter(|&e| up[x * ne + e] != 0.0) {
-            let (m, i, j) = (up[x * ne + e], e % n, ends[e] as usize);
-            heat[e] += up_heat[x * ne + e] * m;
-            paid[j] += m * s.sp[ac.k].mm * view.lift(i, j, g);
+        for e in (0..ne).filter(|&e| g.up[x * ne + e] != 0.0) {
+            let (m, i, j) = (g.up[x * ne + e], e % n, g.ends[e] as usize);
+            g.heat[e] += g.up_heat[x * ne + e] * m;
+            paid[j] += m * s.sp[ac.k].mm * view.lift(i, j, grav);
             net[x * n + i] += m;
         }
     }
@@ -75,30 +108,132 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
         net[x * n..(x + 1) * n].iter().any(|&u| u < 0.0).then(|| s.add_loose(ac.k, false));
         (0..n).filter(|&i| net[x * n + i] != 0.0).for_each(|i| s.note(ac.k, i, -net[x * n + i], area[i]));
     }
-    let ids: Vec<u32> = (0..n as u32).collect();
     // The gas of the bodies' nodes comes up whole, with the latent heat it holds; the air paid its lift (`Start`).
-    let (all, bodies_gas): (Vec<u16>, Vec<f64>) = ((0..w.chem.ns() as u16).collect(), w.store.amounts(Class::Bodies).to_vec());
-    let (to_sun, space) = (vec![Boundary::Sun as u32; n], vec![Boundary::Space as u32; na]);
-    let mut lift = Batch::fallen(Class::Air, paid.iter().map(|q| -q));
-    let (ks, gas): (Vec<u16>, Vec<u16>) = (act.iter().map(|a| a.k as u16).collect(), s.state.gas.iter().map(|&k| k as u16).collect());
-    let fluxes = [
-        LinkFlux { class: [Class::Boundary, Class::Ground], a: &to_sun, b: &ids, ks: &[], mol: &[], heat: &sun },
-        LinkFlux { class: [Class::Boundary, Class::Bodies], a: &to_sun, b: &ids, ks: &[], mol: &[], heat: &kept },
-        LinkFlux { class: [Class::Ground, Class::Bodies], a: &ids, b: &ids, ks: &[], mol: &[], heat: &drawn },
-        LinkFlux { class: [Class::Ground, Class::Air], a: &from, b: &ends, ks: &ks, mol: &up, heat: &heat },
-        LinkFlux { class: [Class::Bodies, Class::Air], a: &ids, b: &parent, ks: &all, mol: &bodies_gas, heat: &[] },
-        LinkFlux { class: [Class::Air, Class::Boundary], a: &ids[..na], b: &space, ks: &[], mol: &[], heat: &out },
-        LinkFlux { class: [Class::Air; 2], a: &links.a, b: &links.b, ks: &gas, mol: &wind_mol, heat: &wind.heat },
-        lift.flux(),
-    ];
-    apply(w, &fluxes, &[], &[]);
+    let bodies_gas = w.store.amounts(Class::Bodies).to_vec();
+    let more: Vec<f64> = act.iter().map(|a| held_more(&w.chem, Class::Ground, Class::Air, a.k)).collect();
+    let gas = &s.state.gas;
+    let cols = Columns { n, na, g: &g, act, more: &more, parent: w.mesh.cells().parent(), bodies_gas: &bodies_gas, paid: &paid, links: &links, gas, wind_mol: &wind_mol, wind_heat: &wind.heat };
+    let rounded = book_by_array(&mut w.store, w.chem.ns(), &[Class::Ground, Class::Air, Class::Bodies], n / CELLS_PER_ITEM, |b| cols.book(b));
+    (w.counts.rounded[0], w.counts.rounded[1]) = (w.counts.rounded[0] + rounded[0], w.counts.rounded[1] + rounded[1]);
+    // The boundary nodes and the potential hold a whole history's sum: what the step moves is summed apart and added once.
+    let sun_taken = g.sun.iter().chain(&g.kept).fold(0.0, |far, d| far - d);
+    w.store.add_far_heat(Class::Boundary, Boundary::Sun as usize, sun_taken);
+    w.store.add_far_heat(Class::Boundary, Boundary::Space as usize, g.space.iter().fold(0.0, |far, d| far + d));
+    w.store.add_far_heat(Class::Potential, 0, paid.iter().fold(0.0, |far, d| far + d));
     let ema = year_weight(w, dt);
     for (i, ((r, sum), e)) in w.rain.iter_mut().zip(&mut w.rained).zip(&mut w.evap).enumerate() {
-        follow(r, (rain[i] / (area[i] * dt)) as f32, ema);
-        follow(e, ((0..act.len()).map(|x| up[x * ne + i]).sum::<f64>() / (area[i] * dt)) as f32, ema);
-        *sum += rain[i] / area[i];
+        follow(r, (g.rain[i] / (area[i] * dt)) as f32, ema);
+        follow(e, ((0..act.len()).map(|x| g.up[x * ne + i]).sum::<f64>() / (area[i] * dt)) as f32, ema);
+        *sum += g.rain[i] / area[i];
     }
     sums(w, s);
+}
+
+/// What the step adds to the arrays of the store, as column moves: each ground node's gas goes up into its own air node
+/// and rains out of the four it sees, with its heat; the bodies' gas comes up whole; the wind and the lifts move the
+/// air's own.
+struct Columns<'a> {
+    n: usize,
+    na: usize,
+    g: &'a Gives,
+    act: &'a [Active],
+    /// What a mol of each active gas holds more in the air than in the ground, J/mol (`held_more`).
+    more: &'a [f64],
+    parent: &'a [u32],
+    bodies_gas: &'a [f64],
+    /// What the air pays for the lifts, J, per air node.
+    paid: &'a [f64],
+    /// The wind: its links, the gases it carries, their mol (`[gas * links + link]`) and its heat per link, J.
+    links: &'a Links,
+    gas: &'a [usize],
+    wind_mol: &'a [f64],
+    wind_heat: &'a [f64],
+}
+
+impl Columns<'_> {
+    /// The changes to the numbers of the array of booker `b`, both sides of each move (`book_by_array`).
+    fn book(&self, b: &mut Booker) {
+        match (b.class, b.ks.clone()) {
+            (Class::Ground, Some(ks)) => self.ground_gas(b, ks),
+            (Class::Ground, None) => self.ground_heat(b),
+            (Class::Air, Some(ks)) => self.air_gas(b, ks),
+            (Class::Air, None) => self.air_heat(b),
+            (Class::Bodies, Some(ks)) => self.bodies_gas(b, ks),
+            (Class::Bodies, None) => self.bodies_heat(b),
+            _ => {}
+        }
+    }
+    /// The gas each ground node gives its five links, and takes back as rain.
+    fn ground_gas(&self, b: &mut Booker, ks: Range<usize>) {
+        let (n, ne) = (self.n, self.g.ne);
+        for (x, ac) in self.act.iter().enumerate().filter(|(_, ac)| ks.contains(&ac.k)) {
+            for (e, &u) in self.g.up[x * ne..(x + 1) * ne].iter().enumerate().filter(|(_, u)| **u != 0.0) {
+                b.add(ac.k * n + e % n, -u);
+            }
+        }
+    }
+    /// The heat the ground takes from the sun, gives its bodies' node and gives the air over its links.
+    fn ground_heat(&self, b: &mut Booker) {
+        let (n, g) = (self.n, self.g);
+        for i in 0..n {
+            [g.sun[i], -g.drawn[i]].into_iter().chain((0..g.ne / n).map(|c| -g.heat[c * n + i])).filter(|&d| d != 0.0).for_each(|d| b.add(i, d));
+        }
+    }
+    /// The gas of the air nodes: what rises or rains over the links to the ground, the gas of the bodies' nodes, the wind.
+    fn air_gas(&self, b: &mut Booker, ks: Range<usize>) {
+        let (n, na, ne) = (self.n, self.na, self.g.ne);
+        let (a, to, mol) = (&self.links.a, &self.links.b, self.wind_mol);
+        for k in ks {
+            if let Some(x) = self.act.iter().position(|ac| ac.k == k) {
+                for (e, &u) in self.g.up[x * ne..(x + 1) * ne].iter().enumerate().filter(|(_, u)| **u != 0.0) {
+                    b.add(k * na + self.g.ends[e] as usize, u);
+                }
+            }
+            for (i, &m) in self.bodies_gas[k * n..(k + 1) * n].iter().enumerate().filter(|(_, m)| **m != 0.0) {
+                b.add(k * na + self.parent[i] as usize, m);
+            }
+            if let Some(gi) = self.gas.iter().position(|&q| q == k) {
+                let nl = a.len();
+                for (l, &m) in mol[gi * nl..(gi + 1) * nl].iter().enumerate().filter(|(_, m)| **m != 0.0) {
+                    b.add(k * na + a[l] as usize, -m);
+                    b.add(k * na + to[l] as usize, m);
+                }
+            }
+        }
+    }
+    /// The heat of the air nodes: what the ground gives over its links less what its gas holds more in the air, what
+    /// they radiate to space, the wind's, and the lifts they pay.
+    fn air_heat(&self, b: &mut Booker) {
+        let (ne, g) = (self.g.ne, self.g);
+        for e in 0..ne {
+            let given = (0..self.act.len()).fold(g.heat[e], |q, x| q - g.up[x * ne + e] * self.more[x]);
+            if given != 0.0 {
+                b.add(g.ends[e] as usize, given);
+            }
+        }
+        let (a, to) = (&self.links.a, &self.links.b);
+        let space = g.space.iter().enumerate().map(|(j, &d)| (j, -d));
+        let wind = self.wind_heat.iter().enumerate().flat_map(|(l, &d)| [(a[l] as usize, -d), (to[l] as usize, d)]);
+        let lifts = self.paid.iter().enumerate().map(|(j, &d)| (j, -d));
+        for (j, d) in space.chain(wind).chain(lifts).filter(|&(_, d)| d != 0.0) {
+            b.add(j, d);
+        }
+    }
+    /// The heat the bodies' nodes keep of the sun and take from the ground.
+    fn bodies_heat(&self, b: &mut Booker) {
+        for i in 0..self.n {
+            [self.g.kept[i], self.g.drawn[i]].into_iter().filter(|&d| d != 0.0).for_each(|d| b.add(i, d));
+        }
+    }
+    /// The gas of the bodies' nodes, which goes up whole.
+    fn bodies_gas(&self, b: &mut Booker, ks: Range<usize>) {
+        let n = self.n;
+        for k in ks {
+            for (i, &m) in self.bodies_gas[k * n..(k + 1) * n].iter().enumerate().filter(|(_, m)| **m != 0.0) {
+                b.add(k * n + i, -m);
+            }
+        }
+    }
 }
 
 /// Passes of `hold_air` before every air node gives at most what it holds.

@@ -340,7 +340,7 @@ impl World {
         (counts.rounded[0], counts.rounded[1]) = (counts.rounded[0] + rounded[0], counts.rounded[1] + rounded[1]);
         for (k, mut m) in views {
             let (lift, short) = m.close();
-            store.heat[Class::Potential as usize][0] += lift;
+            store.add_far_heat(Class::Potential, 0, lift);
             counts.clamped_heat += short;
             debug_assert!(life.domains[k].moves.open.is_none(), "a view opened while the moves gathered were booked");
             life.domains[k].moves = m;

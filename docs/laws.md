@@ -100,7 +100,7 @@ than `wake_share`, then its law brings it up to date over the whole time since.
 **Checks before a run**: `Config::validate`, `Chemistry::validate` (every reaction keeps its elements and mass).
 
 **The books.** Every move takes from one node exactly what it gives another, with its heat; `store::apply` and the
-booking of the bodies' moves (`store::book_by_array`, which adds as `apply` adds) are the store's only writers. A move out of the bed, which holds far more than its loose ground, takes only what the bed can
+bookings of the bodies' moves and of the air's step (`store::book_by_array`, which adds as `apply` adds) are the store's only writers. A move out of the bed, which holds far more than its loose ground, takes only what the bed can
 lose exactly (`Move::loosen`), so no amount below the bed's rounding reaches the ground for free. A ground node under
 deep standing liquid holds far more of it, and an air node far more of the main gases, than a body moves: what rounding takes from their
 amounts is kept apart and counted in the books (`Store::carry`, Neumaier 1974). Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`);
@@ -163,7 +163,7 @@ and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving t
 ### 1.4 The air's step, the sun and the bodies' share
 `flow::air::step`, every `air_hours`: radiation, the ground's exchange with the air and the wind in one implicit step
 (backward Euler by Newton's method, `newton`, with a banded solve of the air level, `solve::band`), booked whole as
-solved (`air::book`). A long step gives the world of short ones: the long-step test (`tape/tests/ranges.rs`) holds each
+solved (`air::book`: column moves, each array of the store one task of `store::book_by_array`). A long step gives the world of short ones: the long-step test (`tape/tests/ranges.rs`) holds each
 seed's climate at 10-day steps to its own at 6-hour steps; a melting plateau used up inside a step holds only for
 its share of the step (1.1). Wind pushes and clouds come from the step's start. The rounds stop at a tolerance, and a node
 whose air stood still (its temperature and each gas it exchanges) keeps the row of an earlier round, carried to the

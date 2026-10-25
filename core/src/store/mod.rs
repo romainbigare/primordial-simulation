@@ -1,6 +1,6 @@
 //! The store: the names of the world's nodes, what the fixed ones hold (`Store`, private arrays), and the one way the
-//! laws change them (moves, transforms and link fluxes, booked by `apply`; the bodies' moves array by array by
-//! `book_by_array`, which adds as `apply` adds), with the boundary nodes that book what crosses the world's edge. It
+//! laws change them (moves, transforms and link fluxes, booked by `apply`; the bodies' moves and the air's step array by
+//! array by `book_by_array`, which adds as `apply` adds), with the boundary nodes that book what crosses the world's edge. It
 //! decides nothing physical: it adds what the laws give it and counts the rounding it sets to zero (laws.md 0, "The
 //! books").
 
@@ -47,6 +47,11 @@ impl Store {
         let amounts = vec![ground, air, vec![0.0; ns * n], bed, vec![0.0; ns * n], vec![0.0; ns * BOUNDARIES], Vec::new()];
         let heat = vec![e_ground, e_air, vec![0.0; n], Vec::new(), vec![0.0; n], vec![0.0; BOUNDARIES], vec![0.0]];
         Store { amounts, heat, carry }
+    }
+    /// Heat `d` J joins the sum of boundary node or potential `at` of `class`, which holds a whole history's sum: the law
+    /// adds what a call moves once, summed apart (as `apply` does), so small changes do not round away against it.
+    pub(crate) fn add_far_heat(&mut self, class: Class, at: usize, d: f64) {
+        self.heat[class as usize][at] += d;
     }
     /// The amounts of the nodes of `class`, `[k * len + index]`, mol (none for a class whose nodes hold none here).
     pub fn amounts(&self, class: Class) -> &[f64] {
