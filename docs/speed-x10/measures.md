@@ -473,6 +473,29 @@ Seeds 1, 2 and 3 in brackets.
 The test ends with its one known failure, S50. S84 (the sleep bias on `air_3`) is a different test and was not run.
 The raw output is in `raw/keys.log`.
 
+### The key-number references after AIR4.0
+
+AIR4.0 (a law fix) landed after R2, so the references were taken again on `speed/x10` at `52d7f4a` (the same test,
+293 s). **These are the references of the steps from here on** (X5). Seeds 1, 2 and 3 in brackets.
+
+| Key number | Value (seeds) | Reference | Verdict |
+|---|---|---|---|
+| ground temperature on land | 292.141805 K (291.498262, 292.626744, 292.300407) | 291.79 +-1 | in range |
+| seasonal swing on land | 15.466616 K (16.078478, 15.070124, 15.251246) | 15.13 +-1.5 | in range |
+| rain on land | 0.001813 mol/m2/s (0.001754, 0.001843, 0.001843) | 0.001714 x/ 1.3 | in range |
+| heat-absorbing gas | 411.302593 ppm (397.992582, 419.571942, 416.343256) | 388.8 +-40 | in range |
+| river cells | 691.9 (720.5, 618.1, 737.1) | 712.4 x/ 1.5 | in range |
+| land worn down | 0.145151 mm/yr (0.139475, 0.147602, 0.148376) | 0.141 x/ 2 | in range |
+| light-eaters | 10.243410 log10 kg (10.303762, 10.210589, 10.215880) | 10.38 +-0.3 | in range |
+| eaters | 5.392981 log10 kg (5.320758, 5.450584, 5.407600) | 5.354 +-0.5 | in range |
+| life of light-eaters | 1.217728 yr (1.193534, 1.198841, 1.260808) | 1.81 x/ 2 | in range |
+| life of eaters | 13.115309 yr (13.326111, 12.917477, 13.102341) | 10.47 x/ 2 | in range |
+| rain on land (m/yr) | 1.015 | Earth's 0.76 x/ 3 | in range |
+| **light-eaters' stored share (S50)** | **0.556** (0.560, 0.555, 0.553) | under 0.5 | **out (known failure)** |
+
+The benches were made again at `52d7f4a` (snapshot version 47; 4.5 minutes, one thread each). Hashes of the world at
+the saved year: island22 `0042d375dadc16e5`, globe36 `98c6aea63d4d407c`, region24 `6bed83a5b075cbbd`.
+
 ### The gates at a glance
 
 | Gate (step) | Number | Verdict |
