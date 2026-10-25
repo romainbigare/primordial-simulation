@@ -34,6 +34,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | D2.5b, the largest domains first (the same saves) | D2.5b | 1.179 | 143 | 51 | 956 | 3 | 27 | 3,679 | 53,648 | 0.801 | 203 | 50 | 515 | 18 | 14 | 1,648 | 23,373 | 9,679 |
 | D2.6, the survey on threads (the same saves) | D2.6 | 1.062 | 143 | 48 | 841 | 3 | 27 | 3,679 | 53,648 | 0.777 | 203 | 50 | 493 | 18 | 14 | 1,648 | 23,373 | 9,691 |
 | E2.3, the repeated reads of one update (the same saves) | E2.3 | 1.044 | 147 | 48 | 821 | 3 | 25 | 3,679 | 53,648 | 0.796 | 209 | 49 | 505 | 20 | 13 | 1,648 | 23,373 | 9,689 |
+| E2.3, the recorder on the pool, not kept (medians of 7 runs on 4 threads, the saves of the profile after D2; branch `speed/e23-tape-not-kept`) | `7e21f1f` | 1.096 | 146 | 50 | 879 | 3 | 20 | 3,679 | 53,648 | 0.826 | 213 | 52 | 530 | 19 | 12 | 1,648 | 23,373 | 9,689 |
 
 ### A2: compiler settings
 
@@ -655,6 +656,62 @@ the state (S31). The depth of liquid over a body is the same two comparisons on 
 read again at the mass of that moment (a body afloat changes with its mass), so it is not given along. The prologue and
 the burnings' rates of `plan` are repeated in its second call (an estimate of about 70 million, 0.5%) and would need arrays in
 `Payer`; they are left for a later spot.
+
+### E2.3: the recorder on the pool, and PGO again (both not kept)
+
+Both were measured on 4 threads, 7 runs of 5 years from the saves of the profile after D2, the four builds interleaved
+(`main`, the recorder build, `main` without PGO, `main` with PGO) on a machine with no other job (a run was made again
+when another process used the cores); the medians, the range in brackets. "Year" is the sum of the five stage times.
+The results of all builds are the same: the same world hash, and for the recorder build the same `series.csv` (all
+columns but the timings), `months.csv` and viewer file for 2 years of both benches with a frame every month.
+
+**The recorder on the pool (`tape/` only, level 1, branch `speed/e23-tape-not-kept`).** The monthly pass over the
+bodies (a row of numbers for each body made on the pool with `par::rows`, then summed in the order of `Life::alive`), the
+yearly read of each body (mass, size, activity, life, matter, brood, learned offset: one `Seen` for each body, read
+once, then summed by the rows of the series) and of each ground cell (`layers::fields`) run on the pool. Every sum keeps
+its order, so nothing changes. The land cells come once from `Fields::z` (they were found by `is_land`, which works out
+`surface_z`, three more times in a yearly row).
+
+| | island22 | globe36 |
+|---|---|---|
+| tape stage, `main`, ms a year | 27.9 (24.0 to 32.4) | 14.5 (13.4 to 16.6) |
+| tape stage, recorder on the pool | 20.1 (18.7 to 22.4) | 11.9 (10.9 to 12.4) |
+| **gain** | **7.8 ms, 0.7% of the year** | **2.6 ms, 0.3% of the year** |
+| year, `main` and recorder on the pool | 1,136 (1,032 to 1,177) and 1,096 (1,016 to 1,201) | 828 (797 to 878) and 826 (794 to 880) |
+| the tape stage, share of the year | 2.5% | 1.8% |
+
+Under the kill line (1% of a 4-thread year on both): not kept. The year's own spread (5 to 10%) hides these gains; the
+tape stage column is the fair one. The recorder is 2.5% and 1.8% of the year, so a gain of 1% would have to take away 40%
+and 57% of it; even a recorder that cost nothing in its event counts (2 to 3 ms a year, one thread) would not have
+reached it on globe36 (0.3% + 0.3%).
+
+Why it does not go further, from timers inside a probe build and callgrind (one thread, one year):
+
+- The reading of a body is little work (about 54 instructions for the monthly row of a body) but many misses: a body's
+  genes, signals and known bodies are in separate allocations. With 4 threads the monthly pass of island22 fell from
+  about 1.2 to 0.45 ms, and that of globe36 (1,600 bodies) from 0.42 to 0.29 ms: a call into the pool costs 30 to 55 µs
+  (D3), a large part of 0.3 ms.
+- What stays on one thread: the sums in order (about 1.6 ms a year on island22), the event counts (`Recorder::count`,
+  130,000 events a year, 62,000 of them deaths, 3 ms a year on island22, 2.2 on globe36; the tallies are floats summed
+  in event order and `Took` fills a `BTreeMap` of the snapshot, so they cannot be split without a level 2 change),
+  the row's other columns and `finish`.
+- Found on the way: the first record after a resume works out `surface_z` for every body (`Life::env` is empty until
+  the first survey), 45 million instructions once; the file writing (`finish`) is called twice at the end of a run
+  (`cli/src/main.rs`, once in the snapshot block, once after the loop): neither is in the bench's tape stage.
+
+**PGO again** on the code after D2 (S35's bar to keep it is 8%; the flow of A2: `-Cprofile-generate` on a build of
+`main`, 2 years of island22, globe36 and region24 from the saves, `llvm-profdata merge` (the one of the toolchain),
+`-Cprofile-use` on the same code; the control is the same code built the same way without it). The year on 4 threads:
+
+| | island22 | globe36 |
+|---|---|---|
+| without PGO, ms | 1,080 (1,045 to 1,267) | 836 (793 to 902) |
+| with PGO, ms | 1,068 (1,027 to 1,130) | 804 (767 to 886) |
+| **gain** | **1.1%** | **3.8%** |
+
+Under the bar on both (and under the 5% and 4% of A2, which were on one thread and the older code): not kept. The
+instruction cache loses 12% of the update's cycles, but the profile does not turn that into a gain above 4%. S35 stands:
+no PGO, no `scripts/pgo.sh`.
 
 ## Profile of the baseline
 
