@@ -245,25 +245,22 @@ impl Moves {
     /// below zero is set to zero and counted (`Counters::rounded`); the lift is added to the potential, and the heat
     /// the ground nodes could not give is counted.
     fn book(&mut self, (counts, mesh, store): (&mut Counters, &Mesh, &mut Store)) {
-        // Number `v` of the store, of a node that holds `node` of that unit, changes by `d` (with its rounding `carry`,
-        // an amount of a carried class); it ends below zero only by rounding (checked in debug builds, as in `apply`).
-        let put = |v: &mut f64, carry: Option<&mut f64>, (d, node): (f64, f64), rounded: &mut f64| {
+        // Number `v` of the store changes by `d` (with its rounding `carry`, an amount of a carried class); it ends below
+        // zero only by rounding, since `alter` checks each take against the view's running value.
+        let put = |v: &mut f64, carry: Option<&mut f64>, d: f64, rounded: &mut f64| {
             if d != 0.0 {
-                let was = *v;
                 add_carried(v, carry, d);
-                debug_assert!(-*v <= ROUNDING * (node + was.abs() + d.abs()), "a law overdrew a node: a number ends at {v}");
                 zero_rounding(v, rounded);
             }
         };
         // Node `i` of class `c` (of `len` nodes), at slot `at` of the view.
         let mut book = |c: usize, i: usize, at: usize, len: usize| {
-            let node = if cfg!(debug_assertions) { (0..self.ns).map(|k| store.amounts[c][k * len + i].abs()).sum() } else { 0.0 };
             for (k, x) in (0..self.ns).map(|k| (k, k * len + i)) {
                 let d = std::mem::take(&mut self.view[2 * c][at * self.ns + k][1]);
-                put(&mut store.amounts[c][x], store.carry.get_mut(c).map(|carry| &mut carry[x]), (d, node), &mut counts.rounded[0]);
+                put(&mut store.amounts[c][x], store.carry.get_mut(c).map(|carry| &mut carry[x]), d, &mut counts.rounded[0]);
             }
             if let Some(e) = store.heat[c].get_mut(i) {
-                put(e, None, (std::mem::take(&mut self.view[2 * c + 1][at][1]), 0.0), &mut counts.rounded[1]);
+                put(e, None, std::mem::take(&mut self.view[2 * c + 1][at][1]), &mut counts.rounded[1]);
             }
         };
         // (No domain open: nothing gathered since the last booking.)
