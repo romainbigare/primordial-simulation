@@ -28,9 +28,11 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
 pub fn survey(w: &mut World, reversed: bool) {
     let n = w.mesh.cells().n();
     let monthly = w.time.is_multiple_of(w.cfg.calendar().month);
-    let (pushed, lay) = (std::mem::take(&mut w.life.pushed), Layout::of(&w.chem));
-    let worn = |w: &World, d: &mut Domain, i: usize| {
-        if let Some(&e) = pushed.get(i).filter(|&&e| e > 0.0) {
+    let lay = Layout::of(&w.chem);
+    // Cell `i`, the `k`th of domain `d`.
+    let worn = |w: &World, d: &mut Domain, (k, i): (usize, usize)| {
+        let e = std::mem::take(&mut d.pushed[k]);
+        if e > 0.0 {
             choose::wear(w, d, i, e);
         }
         if monthly {
@@ -40,17 +42,19 @@ pub fn survey(w: &mut World, reversed: bool) {
     let parts = |w: &World, d: &Domain, i: usize| !w.parts.at[i].is_empty() || d.cell(i).any(|h| d[h].hold.is_some() || d[h].inside.is_some());
     // The domains that store bodies, each with their count.
     let peopled = |w: &World| w.life.domains.iter().enumerate().map(|(k, d)| (k, d.at.iter().map(Vec::len).sum(), ())).filter(|x| x.1 > 0).collect();
+    // (Movers who pushed through cells where no body is break nothing.)
+    w.life.domains.iter_mut().filter(|d| d.at.iter().all(Vec::is_empty)).for_each(|d| d.pushed.fill(0.0));
     on_domains(w, peopled(w), reversed, |w, d, _| {
         for k in 0..d.cells.len() {
             let i = d.cells[k] as usize;
             if !parts(w, d, i) {
-                worn(w, d, i);
+                worn(w, d, (k, i));
             }
         }
     });
     let serial: Vec<usize> = (0..n).filter(|&i| parts(w, w.life.domain(i), i)).collect();
     for i in serial {
-        w.in_domain(i, |w, d| worn(w, d, i));
+        w.in_domain(i, |w, d| worn(w, d, (w.life.cell_slot(i).1, i)));
         crate::outbox::deliver(w);
     }
     on_domains(w, peopled(w), reversed, |w, d, _| shade(w, d));
@@ -108,15 +112,17 @@ fn light_area(b: &Body) -> f64 {
     b.vis[1] as f64 * b.n() * (1.0 - b.reflectance())
 }
 
-/// The yearly moving average of the crossings of each cell (`Counters::traffic`), once a month.
+/// The yearly moving average of the crossings of each cell (`Domain::crossings`, kept by its domain), once a month.
 fn traffic(w: &mut World) {
-    let (n, d) = (w.mesh.cells().n(), &mut w.counts);
-    d.traffic.resize(n, 0.0);
-    d.crossings.resize(n, 0.0);
-    let a = 1.0 / w.cfg.months_per_year as f32;
-    for (t, c) in d.traffic.iter_mut().zip(d.crossings.iter_mut()) {
-        *t += a * (*c * w.cfg.months_per_year as f32 - *t);
-        *c = 0.0;
+    let World { life, counts, cfg, mesh, .. } = w;
+    counts.traffic.resize(mesh.cells().n(), 0.0);
+    let a = 1.0 / cfg.months_per_year as f32;
+    for d in &mut life.domains {
+        for (&i, c) in d.cells.iter().zip(&mut d.crossings) {
+            let t = &mut counts.traffic[i as usize];
+            *t += a * (*c * cfg.months_per_year as f32 - *t);
+            *c = 0.0;
+        }
     }
 }
 
@@ -243,6 +249,7 @@ pub fn batch(w: &mut World, reversed: bool) {
 /// small one (longest processing time first, Graham 1969; ties by domain), backwards with `reversed`; then the domains
 /// back, their moves booked, the world settled (`World::settle`) and the outboxes applied (`outbox::deliver`).
 fn on_domains<T: Send + Sync>(w: &mut World, mut work: Vec<(usize, usize, T)>, reversed: bool, f: impl Fn(&World, &mut Domain, &T) + Sync + Send) {
+    work.iter().for_each(|x| w.life.mark(x.0));
     work.sort_by_key(|x| (std::cmp::Reverse(x.1), x.0));
     if reversed {
         work.reverse();

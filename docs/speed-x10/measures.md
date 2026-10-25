@@ -717,3 +717,38 @@ limit (+0.19 / +0.26 / +0.08 K). Expected gain of TR-BDF2 in calm months: Flow x
 | Sun over the step instead of at its end | -0.09 ±0.04 | -0.04 | -0.40 ±0.03 (moves the error) |
 | Each other explicit part | under 0.05 | under 0.08 | under 0.08 |
 | Left after the plateau fix (Euler's error) | +0.29 | -0.10 | +0.86 |
+
+## E1a: counts per domain, booking and delivering only the domains that ran
+
+The step (level 1): `pushed` and `crossings` live in each domain (`Domain::pushed`, `Domain::crossings`, one number
+per cell of the domain, saved with it, snapshot version 48); `Life` keeps two sets of domains (bits): the ones that ran
+since their moves were booked and since their outboxes were taken. `World::book_moves` and `Life::take_queued` visit only
+those. `Counters::crossings` and `Life::pushed` are gone. Core: +55 code lines (9,606 to 9,661): the sets, the saved shape of a domain, and `Life::pushed`, which the order test reads.
+
+**Same world, bit for bit.** The snapshot has a new shape, so the bench saves of version 47 cannot be read: the three
+benches were made again with this build (`ew run` from worldgen, as `scripts/bench.sh`). The last line of each run
+(drifts, bodies, nodes, splits, gifts, watches) is the same as the base build's (`52d7f4a`) to every digit, for 300 years
+(island22) and 200 years (globe36, region24). Two more years from each build's own save give the same `series.csv`
+in every column but the five timers (`ms_*`). Golden is re-pinned for the new shape only; it passes with and without threads.
+
+**One thread, instructions of one year** (callgrind, `RAYON_NUM_THREADS=1`, the base build on its save and this build
+on its own; million instructions, inclusive; the machine was loaded, which does not change instructions):
+
+| | island22 base | island22 E1a | globe36 base | globe36 E1a |
+|---|---|---|---|---|
+| the simulation (`run_for`) | 6,243.22 | 6,243.65 (+0.007%) | 7,275.60 | 7,275.04 (-0.008%) |
+| bodies: `survey::batch` | 3,883.81 | 3,885.33 (+0.04%) | 4,202.08 | 4,203.62 (+0.04%) |
+| bodies: `survey::survey` | 338.56 | 337.99 | 326.56 | 324.98 |
+| `outbox::deliver` (inside the batch) | 210.66 | 210.81 | 330.22 | 329.82 |
+| parts (`bond::month::step`) | 123.09 | 122.96 | 130.49 | 130.01 |
+
+**Verdict: neutral on one thread, as expected; kept.** The scan of the 36 to 45 domains that the step removes cost
+about 8 million instructions a year (`take_queued` 1.7 to 5.3, `book_moves` 0.7 to 2.0, the survey's filter 2.2); the new
+sets cost about the same (a bigger `Domain` is copied by each serial step, +1.7 million). The kill line (parts or bodies
+slower on one thread) is not met by more than 0.04% of the batch. The gain comes with E1b and E2: with tiles there are
+about four times as many domains, and a serial step then visits one, not all.
+
+For E1b.1: the sets are `Life::unbooked` and `Life::unsent`; `Life::mark(k)` is called by `World::in_domain` and by
+`survey::on_domains`; any new place that runs body code on a domain must mark it (a domain not marked is not booked and
+its outbox is not taken). The per-cell numbers are indexed by the cell's slot in its domain (`Life::cell_slot`), so
+tiles of 4 cells only change the length of the lists.

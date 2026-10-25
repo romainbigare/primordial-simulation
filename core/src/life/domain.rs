@@ -2,7 +2,8 @@
 //! taken out of the world (`(&World, &mut Domain)`), in the parallel phase of a batch and in every serial step
 //! (`World::in_domain`) alike: it writes its bodies, their lists, its ring, the store's view (`store::Moves`), its
 //! events and counters, its outbox, and the lineages and born rows it makes (provisional, `registry`) and the changes of
-//! their holders; the world settles them when the domain is back (`World::settle`, S72).
+//! their holders; the world settles them when the domain is back (`World::settle`, S72). What lands in its cells
+//! (`Life::cross`) is its own too.
 
 use super::{free_place, Handle, Held, ID_SHIFT, RING};
 use crate::{body::Body, event::Event, lineage::Lineage, outbox::Entry, store::Moves, Counters, World};
@@ -27,6 +28,11 @@ pub struct Domain {
     pub(super) ring: Vec<Vec<u64>>,
     /// Per cell (by its order in `cells`): whether its bodies changed since the survey last shared out its light
     pub(crate) stale: Vec<bool>,
+    /// Per cell (by its order in `cells`): the energy movers spent pushing through its bodies since the last survey,
+    /// which then breaks them, J (`choose::wear`)
+    pub(crate) pushed: Vec<f64>,
+    /// Per cell (by its order in `cells`): the members that moved into it since the last month (`Counters::traffic`)
+    pub(crate) crossings: Vec<f32>,
     /// What its bodies' updates do outside them, in the order made (`outbox`)
     pub out: Vec<Entry>,
     /// The length of `out` when the update running began (`queued`)
@@ -147,6 +153,7 @@ impl World {
     /// parallel phase, it is put back, and the world settles (`settle`).
     pub fn in_domain<R>(&mut self, i: usize, f: impl FnOnce(&World, &mut Domain) -> R) -> R {
         let k = self.life.domain_of(i);
+        self.life.mark(k);
         let mut d = std::mem::take(&mut self.life.domains[k]);
         let r = f(self, &mut d);
         self.life.domains[k] = d;

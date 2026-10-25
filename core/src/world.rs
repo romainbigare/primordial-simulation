@@ -7,9 +7,8 @@ use serde::{Deserialize, Serialize};
 /// Counts and slow averages for the shell; the laws never read them. The fields not saved count since the shell last read them.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Counters {
-    /// Members moving into each ground cell, per year (moving average over about a year), and since the last month
+    /// Members moving into each ground cell, per year (moving average over about a year)
     pub traffic: Vec<f32>,
-    pub crossings: Vec<f32>,
     /// Decisions drawn, and of them those where the action drawn had the highest score
     #[serde(skip)]
     pub decisions: f64,
@@ -38,8 +37,8 @@ impl Counters {
     /// The counts `c` of a domain's bodies are added (`World::settle`), and start again. Every field is named, so a new
     /// one cannot be left out; a domain keeps no counts per cell (checked in debug builds).
     pub(crate) fn add(&mut self, c: &mut Counters) {
-        let Counters { traffic, crossings, decisions, greedy, body_batches, busiest_share, splits, updates, clamped_heat, parts, rounded } = std::mem::take(c);
-        debug_assert!(traffic.is_empty() && crossings.is_empty(), "a domain counted per cell");
+        let Counters { traffic, decisions, greedy, body_batches, busiest_share, splits, updates, clamped_heat, parts, rounded } = std::mem::take(c);
+        debug_assert!(traffic.is_empty(), "a domain counted per cell");
         (self.updates, self.splits, self.decisions, self.greedy) = (self.updates + updates, self.splits + splits, self.decisions + decisions, self.greedy + greedy);
         (self.body_batches, self.busiest_share, self.clamped_heat) = (self.body_batches + body_batches, self.busiest_share + busiest_share, self.clamped_heat + clamped_heat);
         (self.rounded[0], self.rounded[1]) = (self.rounded[0] + rounded[0], self.rounded[1] + rounded[1]);

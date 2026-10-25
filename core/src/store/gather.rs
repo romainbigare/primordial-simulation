@@ -305,9 +305,12 @@ impl Domain {
 }
 
 impl World {
-    /// The moves each domain gathered are booked, domain by domain in order (`Moves::book`).
+    /// The moves gathered by the domains that ran since the last booking are booked, domain by domain in order
+    /// (`Moves::book`).
     pub fn book_moves(&mut self) {
         let World { life, counts, mesh, store, .. } = self;
-        life.domains.iter_mut().for_each(|d| d.moves.book((counts, mesh, store)));
+        for k in life.unbooked.take() {
+            life.domains[k].moves.book((counts, mesh, store));
+        }
     }
 }

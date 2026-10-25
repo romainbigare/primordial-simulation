@@ -58,10 +58,7 @@ pub(crate) fn land_move(w: &mut World, id: u64, (i, j): (usize, usize), (pushed,
     let t = if kin { w.in_domain(j, |w, d| copy::kin(w, d, j, b.lineage, (&b.genes, &b.spread), b.adult(&w.chem))) } else { None };
     bond::moved(w, &mut b, carried, j, mb);
     (b.cell, b.mark, b.rained, b.leaving) = (j as u32, w.light[j], w.rained[j], false);
-    w.counts.crossings.resize(w.mesh.cells().n(), 0.0);
-    w.counts.crossings[j] += b.n() as f32;
-    w.life.pushed.resize(w.mesh.cells().n(), 0.0);
-    w.life.pushed[j] += pushed;
+    w.life.cross(j, b.n() as f32, pushed);
     lanes::clear(w, i, j, lane);
     let s = w.life.relocate(s, i, b);
     if let Some(t) = t {
@@ -70,7 +67,7 @@ pub(crate) fn land_move(w: &mut World, id: u64, (i, j): (usize, usize), (pushed,
 }
 
 /// Before each survey: the energy `energy` J movers spent pushing through the bodies of cell `j` of domain `d` since the
-/// last (`Life::pushed`) breaks their body matter. Each body there takes its share by mass and loses what that pays to
+/// last (`Life::cross`) breaks their body matter. Each body there takes its share by mass and loses what that pays to
 /// break, each of its members alike (`Body::breaking`, `body::wound`; laws.md 6.8). A cell's bodies are worn once a
 /// survey, not once a move. (Those who held a part let go of it when the outbox is applied, `bond::let_go`.)
 pub fn wear(w: &World, d: &mut Domain, j: usize, energy: f64) {

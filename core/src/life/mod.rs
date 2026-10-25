@@ -1,8 +1,8 @@
 //! The registry of bodies: their storage, ids and cells, lineages and born rows (`registry`), the rings of updates due
 //! and the outboxes. The cells are cut into domains, the cells under one air node (`domain::Domain`); each domain
-//! stores the bodies of its cells, their lists, its ring and its outbox, and finds them by id. A body's id is the domain
-//! it was placed in and that domain's count of bodies placed; it never changes, wherever the body is stored. A body that
-//! moves to a cell of another domain moves to that domain's storage.
+//! stores the bodies of its cells, their lists, its ring and its outbox, what moved into its cells, and finds the
+//! bodies by id. A body's id is the domain it was placed in and that domain's count of bodies placed; it never changes,
+//! wherever the body is stored. A body that moves to a cell of another domain moves to that domain's storage.
 
 mod domain;
 mod registry;
@@ -44,15 +44,16 @@ pub struct Life {
     /// The domain each body stored outside the domain it was placed in is stored in, by id (`find`; a body that died
     /// there is left out at the end of each batch, `settle_moved`)
     away: BTreeMap<u64, u32>,
+    /// The domains that ran since their moves were last booked (`World::book_moves`), and since their outboxes were
+    /// last taken (`take_queued`): what a domain wrote lies in these only
+    pub(crate) unbooked: Ran,
+    unsent: Ran,
     /// Per cell, from the last survey: members, then their visible traits summed, then the energy to break all its
     /// bodies, J; then their capture area times their shade, m², and that times the share set aside for their light
     /// reactions. The survey's caches are not saved: a snapshot is taken at a month's start, where the survey builds
     /// them before any law reads them; this one the tape reads first, so `tape::load_snapshot` rebuilds it
     /// (`survey::sums`).
     pub sum: Vec<[f64; crate::survey::ROW]>,
-    /// Per cell: the energy movers spent pushing through its bodies since the last survey, which then breaks them, J
-    /// (`choose::wear`; empty: none)
-    pub pushed: Vec<f64>,
     /// Per cell, from the last survey: the share of the light reaching its bodies' capture area that they absorb
     pub absorb: Vec<f32>,
     /// Per cell, from the last survey: the share of that absorbed light set aside for its bodies' light reactions
@@ -76,29 +77,66 @@ pub struct Life {
     pub(crate) batch: bool,
 }
 
-/// What a snapshot keeps of `Life`: per domain its cells, its count of bodies placed and its living bodies in the order of `Life::alive`;
-/// the energy movers spent in each cell; the lineages and born rows. Where bodies are stored, the ring and the id table
-/// follow from the bodies, and the survey's caches are rebuilt (`Life::sum`). Written from the world's own (borrowed),
-/// read back as new (owned).
+/// A set of domains by their index, as bits: each once, taken in order.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Ran(Vec<u64>);
+
+impl Ran {
+    fn add(&mut self, k: usize) {
+        if k / 64 >= self.0.len() {
+            self.0.resize(k / 64 + 1, 0);
+        }
+        self.0[k / 64] |= 1 << (k % 64);
+    }
+    /// The domains in the set, in order; the set is left empty.
+    pub(crate) fn take(&mut self) -> impl Iterator<Item = usize> + '_ {
+        self.0.iter_mut().enumerate().flat_map(|(word, bits)| {
+            let mut bits = std::mem::take(bits);
+            std::iter::from_fn(move || {
+                (bits != 0).then(|| {
+                    let k = bits.trailing_zeros() as usize;
+                    bits &= bits - 1;
+                    64 * word + k
+                })
+            })
+        })
+    }
+}
+
+/// What a snapshot keeps of `Life`: per domain its cells, its count of bodies placed, what moved into its cells and its
+/// living bodies in the order of `Life::alive`; the lineages and born rows. Where bodies are stored, the ring and the id
+/// table follow from the bodies, and the survey's caches are rebuilt (`Life::sum`). Written from the world's own
+/// (borrowed), read back as new (owned).
 #[derive(Serialize, Deserialize)]
 struct Saved<'a> {
     domains: Vec<SavedDomain<'a>>,
-    pushed: Cow<'a, [f64]>,
     brains: Cow<'a, [Option<Lineage>]>,
     members: Cow<'a, [u32]>,
     genomes: Cow<'a, [Genome]>,
     free_genomes: Cow<'a, [u32]>,
 }
 
-/// A domain as a snapshot keeps it (`Saved`): its cells, its count of bodies placed and its living bodies.
-type SavedDomain<'a> = (Cow<'a, [u32]>, u64, Vec<Cow<'a, Body>>);
+/// A domain as a snapshot keeps it (`Saved`): its cells, its count of bodies placed, per cell the energy movers spent
+/// pushing through its bodies since the last survey and the members that moved into it since the last month, and its
+/// living bodies.
+#[derive(Serialize, Deserialize)]
+struct SavedDomain<'a> {
+    cells: Cow<'a, [u32]>,
+    placed: u64,
+    pushed: Cow<'a, [f64]>,
+    crossings: Cow<'a, [f32]>,
+    bodies: Vec<Cow<'a, Body>>,
+}
 
 impl Serialize for Life {
     fn serialize<S: Serializer>(&self, to: S) -> Result<S::Ok, S::Error> {
-        let bodies = |d: &Domain| d.at.iter().flatten().map(|&h| Cow::Borrowed(&self[h])).filter(|b| b.alive).collect();
-        let domains = self.domains.iter().map(|d| (Cow::Borrowed(&d.cells[..]), d.placed, bodies(d))).collect();
-        let (pushed, brains, members) = ((&self.pushed).into(), (&self.brains).into(), (&self.members).into());
-        Saved { domains, pushed, brains, members, genomes: (&self.genomes).into(), free_genomes: (&self.free_genomes).into() }.serialize(to)
+        let mut domains = Vec::with_capacity(self.domains.len());
+        for d in &self.domains {
+            let bodies = d.at.iter().flatten().map(|&h| Cow::Borrowed(&self[h])).filter(|b| b.alive).collect();
+            domains.push(SavedDomain { cells: (&d.cells).into(), placed: d.placed, pushed: (&d.pushed).into(), crossings: (&d.crossings).into(), bodies });
+        }
+        let (brains, members) = ((&self.brains).into(), (&self.members).into());
+        Saved { domains, brains, members, genomes: (&self.genomes).into(), free_genomes: (&self.free_genomes).into() }.serialize(to)
     }
 }
 
@@ -106,11 +144,13 @@ impl Serialize for Life {
 impl<'de> Deserialize<'de> for Life {
     fn deserialize<D: Deserializer<'de>>(from: D) -> Result<Self, D::Error> {
         let x = Saved::deserialize(from)?;
-        let (pushed, brains, members) = (x.pushed.into_owned(), x.brains.into_owned(), x.members.into_owned());
-        let mut life = Life { pushed, brains, members, genomes: x.genomes.into_owned(), free_genomes: x.free_genomes.into_owned(), ..Default::default() };
-        life.cut(x.domains.iter().map(|d| d.0.to_vec()).collect());
-        for (d, (_, placed, bodies)) in x.domains.into_iter().enumerate() {
-            life.domains[d].placed = placed;
+        let (brains, members) = (x.brains.into_owned(), x.members.into_owned());
+        let mut life = Life { brains, members, genomes: x.genomes.into_owned(), free_genomes: x.free_genomes.into_owned(), ..Default::default() };
+        life.cut(x.domains.iter().map(|d| d.cells.to_vec()).collect());
+        for (d, saved) in x.domains.into_iter().enumerate() {
+            let SavedDomain { placed, pushed, crossings, bodies, .. } = saved;
+            let dom = &mut life.domains[d];
+            (dom.placed, dom.pushed, dom.crossings) = (placed, pushed.into_owned(), crossings.into_owned());
             for b in bodies.into_iter().map(Cow::into_owned) {
                 if (b.id >> ID_SHIFT) as usize != d {
                     life.away.insert(b.id, d as u32);
@@ -222,7 +262,8 @@ impl Life {
         }
         let domain = |(d, cells): (usize, Vec<u32>)| {
             let (at, stale, ring) = (vec![Vec::new(); cells.len()], vec![true; cells.len()], vec![Vec::new(); RING as usize]);
-            Domain { index: d as u32, at, stale, ring, cells, ..Default::default() }
+            let (pushed, crossings) = (vec![0.0; cells.len()], vec![0.0; cells.len()]);
+            Domain { index: d as u32, at, stale, ring, pushed, crossings, cells, ..Default::default() }
         };
         self.domains = cells.into_iter().enumerate().map(domain).collect();
     }
@@ -232,9 +273,29 @@ impl Life {
         let k = (batch % RING) as usize;
         self.domains.iter_mut().flat_map(|d| std::mem::take(&mut d.ring[k])).collect()
     }
-    /// The entries of the outboxes, domain by domain, each's in the order made; they are left empty.
+    /// Domain `k` ran: its moves wait to be booked and its outbox to be taken.
+    pub(crate) fn mark(&mut self, k: usize) {
+        self.unbooked.add(k);
+        self.unsent.add(k);
+    }
+    /// The entries of the outboxes of the domains that ran since the last, domain by domain, each's in the order made;
+    /// they are left empty.
     pub(crate) fn take_queued(&mut self) -> Vec<Entry> {
-        self.domains.iter_mut().flat_map(|d| std::mem::take(&mut d.out)).collect()
+        let Life { domains, unsent, .. } = self;
+        unsent.take().flat_map(|k| std::mem::take(&mut domains[k].out)).collect()
+    }
+    /// `members` members entered cell `i` in a move that spent `pushed` J pushing through its bodies
+    /// (`choose::land_move`).
+    pub fn cross(&mut self, i: usize, members: f32, pushed: f64) {
+        let (d, k) = self.cell_slot(i);
+        let x = &mut self.domains[d];
+        (x.crossings[k], x.pushed[k]) = (x.crossings[k] + members, x.pushed[k] + pushed);
+    }
+    /// The energy movers spent pushing through the bodies of cell `i` since the last survey, which then breaks them, J
+    /// (`choose::wear`).
+    pub fn pushed(&self, i: usize) -> f64 {
+        let (d, k) = self.cell_slot(i);
+        self.domains[d].pushed[k]
     }
 
     /// The bodies that moved away and died since are left out of `away`.

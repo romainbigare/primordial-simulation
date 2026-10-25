@@ -66,13 +66,13 @@ holding one, lets go there too). A body
 with a move queued, or a node's part with a part act queued, is **leaving** (`Body::leaving`): it stays in its old
 cell until the batch ends, where the rest of its update runs, but it does not mature, and the others there neither see
 it in their cell nor take from it, give to it, join it or mix with it. A body with a move queued, or a part act but a let-go or an anchor, does not
-split in that update. Then the serial phase, in a fixed order: the domains back, their moves booked in domain order
-(each number a domain's moves touched gets their sum once, `Moves::book`), and the world settles, domain by domain; the outboxes applied, domain by domain in the order
+split in that update. Then the serial phase, in a fixed order: the domains back, the moves of the domains that ran booked in domain order
+(each number a domain's moves touched gets their sum once, `Moves::book`), and the world settles, domain by domain; the outboxes of the domains that ran applied, domain by domain in the order
 made, then what applying them queued; the bodies that hold or are inside a part, whole updates in domain and body
 order, each a serial step on its domain with its view opened fresh and booked after it, its own outbox applied after
 it; last the holders' changes added in domain order. Each entry is applied by its law on the bodies and parts as
 they are then. A move lands (`choose::land_move`): the body enters the cell with its marks of light and rain, carries
-what it holds if it paid to (else it lets go of it), pushes the structures there, counts in the crossings, and its push breaks the bodies there at the next
+what it holds if it paid to (else it lets go of it), pushes the structures there, counts in the crossings of the cell's domain, and its push breaks the bodies there at the next
 survey and clears the lane; members of a node who moved join their kind there (`copy::kin`). A litter joins its kind
 there or starts a body, and its birth is recorded then (`copy::land_litter`). A watch blends by the share of the watcher's
 members who watched (5.5). A part act runs whole on a part in the body's cell (`choose::land_act`); a node's part then comes back
@@ -526,7 +526,7 @@ a share of a node's members kills an individual with that chance.
 `body/death.rs`. **A bite** (`take_body`) tears from each member reached the share taken and pays to break it (3.6);
 matter breaks first and spills its stores; in a node those members lose it (grazing) or die (`body::wound`). **Pushing
 through** (`choose::wear`) breaks what its energy pays for: the energy movers spent in a cell is kept until the next
-survey (`Life::pushed`); then each body there, a mover that stayed too, takes its share by mass and loses what that
+survey (`Domain::pushed`, of the cell's domain); then each body there, a mover that stayed too, takes its share by mass and loses what that
 breaks of it, each of its members alike. So a cell's bodies are worn once a survey, not once for each move into it.
 **Heat** burns matter by reaction 21. A member dies when `lethal` of its body is torn at once; a hurt adult is
 immature until healed. **Starving** (`starved`): a body below its copy mass that did not rebuild what it lost keeps
