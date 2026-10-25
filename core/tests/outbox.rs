@@ -28,6 +28,9 @@ fn dispersing(w: &mut World, i: usize, k: f64) -> Body {
     n
 }
 
+/// The dispersing nodes in each of the two cells next to a cell of the order test (`the_order_of_the_domains_changes_nothing`).
+const CROWD: usize = 96;
+
 /// Each kind of entry fails once and changes nothing but what its failure rule says: a move of a body that died, whole
 /// or of members who would join their kind; children with no node to join and less than one member, back into their
 /// living parent's brood, or to the ground of the cell their dead parent was in; a watch of a body that died, and one
@@ -215,8 +218,6 @@ fn the_order_of_the_domains_changes_nothing() {
     // differ (their move queued as their update would).
     let edge = |a: usize, b: usize| w.life.domain_of(a) != w.life.domain_of(b) && w.mesh.cells().link(a, b).is_some();
     let (a, b) = free.iter().flat_map(|&a| free.iter().map(move |&b| (a, b))).find(|&(a, b)| a != x && a != m && b != x && b != m && edge(a, b)).expect("two cells across a domain edge");
-    let used = [x, m, a, b];
-    let edges: Vec<usize> = free.iter().copied().filter(|&c| !used.contains(&c) && free.iter().any(|&o| edge(c, o))).take(16).collect();
     let e = eater(&mut w, a, brain::REST, 1.0);
     let (mover, mut kind) = (node_of(&mut w, e.clone(), 4.0), node_of(&mut w, e, 8.0));
     kind.genome = w.life.new_genome(w.life.born(&mover).iter().map(|r| r - 0.5).collect());
@@ -225,12 +226,25 @@ fn the_order_of_the_domains_changes_nothing() {
     let (mover, kind) = (w.add(mover, 300), w.add(kind, 300));
     let (mover, kind) = (w.life[mover].id, w.life[kind].id);
     w.in_domain(a, |_, d| d.out.push(Entry::Go { id: mover, from: a as u32, to: b as u32, pushed: 0.0, lane: 0.0, carries: false, kin: true, body: None }));
-    // Dispersing nodes in the cells next to another domain, so that litters from two domains land in one cell.
+    // Two cells of different domains next to a third, each with many dispersing nodes: each node sends its litter in
+    // one of the 8 directions at random, so the litters of both cells land in the third in one batch (it fails
+    // with a chance under 1 in 100,000), however the draws of the world's history fall.
+    let (used, link) = ([x, m, a, b], |a: usize, b: usize| w.mesh.cells().link(a, b).is_some());
+    let (from, from_other) = free
+        .iter()
+        .filter(|t| !used.contains(t))
+        .find_map(|&t| {
+            let next: Vec<usize> = free.iter().copied().filter(|c| !used.contains(c) && *c != t && link(*c, t)).collect();
+            next.iter().find_map(|&c| next.iter().find(|&&o| w.life.domain_of(c) != w.life.domain_of(o)).map(|&o| (c, o)))
+        })
+        .expect("two cells of different domains next to a third");
     let mut parents = std::collections::BTreeMap::new();
-    for c in edges {
-        let n = dispersing(&mut w, c, 3.0);
-        let h = w.add(n, 1);
-        parents.insert(w.life[h].id, w.life.domain_of(c));
+    for c in [from, from_other] {
+        for _ in 0..CROWD {
+            let n = dispersing(&mut w, c, 3.0);
+            let h = w.add(n, 1);
+            parents.insert(w.life[h].id, w.life.domain_of(c));
+        }
     }
     // Movers pushed through every third cell and the holder's hard enough to kill (`Body::breaking`; each body there
     // takes its share by mass).

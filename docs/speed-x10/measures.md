@@ -1426,3 +1426,13 @@ is 205, 152 and 494 million a year; with E0's 67, 103 and 85 ms of `deliver` at 
 work on the pool, the expected gain is about 35 to 45 ms a year, 7 to 10% of the bodies' stage: near the line, not
 far past it. A quiet machine must judge it, or the chain is judged at E1c (X40).
 Verdict: -2.85% on the globe against the kill line of -1.5%, and the nodes check passes. The commit is kept.
+
+A later commit gives the group a whole-node rule that keeps CLAUDE.md 3.2 (a member count is never rounded up): when a
+group would leave fewer than one member behind, the whole node moves with chance group / count, so the mean of the
+movers is the group. Before, the group became the whole node every time it was drawn: on globe36, nodes under 2 members
+sent 17.1 movers where the chances say 14.2 (before MI5: 16.1). Globe36, one year, one
+thread, callgrind: 7,259,920,987 before and 7,260,718,845 after (+0.011%), so MI5's gain stays. Golden re-pinned, the
+same with and without threads. Key numbers once, on the world with E1b.2 (88 s): all in range but S50 (0.555, the known failure); ground
+temperature 292.154 K, swing 15.479 K, rain 0.001814, heat-absorbing gas 411.31 ppm, river cells 694.4, land worn down
+0.1446 mm/yr, light-eaters 10.240 log10 kg, eaters 5.339, life of light-eaters 1.271 yr, life of eaters 13.297 yr; all
+within the noise of the references after AIR4.0.

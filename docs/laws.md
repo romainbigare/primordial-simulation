@@ -429,9 +429,10 @@ faces, 0: looks, signals, well-being, past dealings); up to 3 parts. Walls and c
 ### 5.3 Actions
 One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;
 a node spreads its members over the actions by those chances (`choose::spread`). The members that move leave as one
-group: count × the sum of the chances to go in every direction (less than one member: one member with that chance),
-all in the one direction drawn by its chance over that sum, so each direction gets its share of members on average, in
-groups. A group splits off only if the cell it enters has room and the node bears the `bump` share of its weight
+group: count × the sum of the chances to go in every direction (less than one member: one member with that chance;
+fewer than one member left behind: the whole node, with the chance that keeps the mean at count × the sum), all in the
+one direction drawn by its chance over that sum, so each direction gets its share of members on average, in groups. A
+group splits off only if the cell it enters has room and the node bears the `bump` share of its weight
 (`choose::go::can_go`). **rest**; **move** (`choose::go`:
 `walk` per kg and metre, climbing, the bodies in the way; needs force, 3.5); **take**, **put**, **give**
 (`choose/feed.rs`); **watch** (5.5); Bond's form, hold, take from or put to a part, join, break, let go, anchor, dig,

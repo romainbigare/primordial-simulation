@@ -31,13 +31,18 @@ pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: 
 /// The members of node `node` that do each option: count × chance, a part of less than one member being one member with
 /// that chance. The members that move are one group, count × the sum of the chances to go in every direction, and the
 /// group takes the one direction drawn by its chance over that sum, so its option holds the group and the other
-/// directions none.
+/// directions none. A group that would leave less than one member behind is the whole node, with the chance that keeps
+/// the mean of the movers at count × chance.
 fn members(node: &Body, c: &Choice, rng: &mut Rng) -> [f64; OPTS] {
     let mut part = |chance: f64| match node.count * chance { x if x > 0.0 && x < 1.0 => (rng.f64() < x) as u8 as f64, x => x };
     let moves = FIXED..TO_BODY;
     let mut x: [f64; OPTS] = std::array::from_fn(|o| if moves.contains(&o) { 0.0 } else { part(c.p[o] as f64) });
     let chance: f64 = c.p[moves.clone()].iter().map(|&p| p as f64).sum();
-    let group = part(chance);
+    // (If fewer than one member would stay, the node goes whole with the chance that makes the movers count × chance.)
+    let group = match node.count * chance {
+        g if g > 0.0 && node.count - g < 1.0 => if rng.f64() < chance { node.count } else { 0.0 },
+        _ => part(chance),
+    };
     if group > 0.0 {
         // The direction: the chance of each over their sum.
         let mut u = rng.f64() * chance;
