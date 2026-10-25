@@ -803,6 +803,32 @@ there) on the old saves of `~/.cache/ew-bench` (snapshot version 45), with the s
 | 1 | island22 | 0.892 (0.879 to 0.908) | 184 | 71 | 621 | 0 | 13 | 2,744 | 27,762 |
 | 1 | globe36 | 1.598 (1.534 to 1.662) | 317 | 86 | 1,136 | 47 | 15 | 1,955 | 25,626 |
 
+These three sets ran after the new code's, not in turns with it (S45 asks for 5 or more in turns).
+
+**The baseline and today's code in turns (final review).** The baseline code built again in a scratch folder on the
+same old saves, and today's code (`main` with the final review's commits, which change no step of a run) on its
+benches made again with `scripts/bench.sh --remake` (the same worlds as above: the same bodies and updates). Five sets,
+each: the baseline on 4 threads, today's code on 4 threads, the baseline on 1 thread, today's code on 1 thread. Each run
+waited for a machine with no other `ew`, `cargo`, `rustc` or `valgrind`, and a run during which another process started
+was thrown away and made again (2 of 22). Medians, ms a year (range of the totals in brackets):
+
+| Code | Threads | Bench | s/yr | flow | change | bodies | parts | tape | updates/yr | bodies' stage per update |
+|---|---|---|---|---|---|---|---|---|---|---|
+| baseline | 4 | island22 | 0.943 (0.902 to 1.023) | 176 | 55 | 698 | 0 | 13 | 27,762 | 25.1 µs |
+| baseline | 4 | globe36 | 1.553 (1.440 to 1.616) | 272 | 61 | 1,155 | 50 | 15 | 25,626 | 45.1 µs |
+| today | 4 | island22 | 0.664 (0.644 to 0.700) | 137 | 50 | 459 | 3 | 15 | 32,499 | 14.1 µs |
+| today | 4 | globe36 | 0.805 (0.792 to 0.849) | 203 | 52 | 501 | 36 | 14 | 22,847 | 21.9 µs |
+| today | 4 | region24 | 0.974 (0.925 to 1.053) | 216 | 78 | 643 | 10 | 30 | 52,839 | 12.2 µs |
+| baseline | 1 | island22 | 0.945 (0.887 to 1.133) | 199 | 77 | 656 | 0 | 13 | 27,762 | 23.6 µs |
+| baseline | 1 | globe36 | 1.630 (1.554 to 1.751) | 333 | 88 | 1,143 | 51 | 15 | 25,626 | 44.6 µs |
+| today | 1 | island22 | 1.261 (1.185 to 1.316) | 167 | 60 | 1,012 | 3 | 17 | 32,499 | 31.1 µs |
+| today | 1 | globe36 | 1.338 (1.202 to 1.405) | 262 | 64 | 959 | 35 | 16 | 22,847 | 42.0 µs |
+| today | 1 | region24 | 1.733 (1.604 to 2.003) | 262 | 92 | 1,338 | 9 | 32 | 52,839 | 25.3 µs |
+
+In turns, today's code is **1.42 times** (island22) and **1.93 times** (globe36) faster than the baseline on 4 threads,
+and its bodies' stage per update 1.78 and 2.06 times cheaper. The machine was about 8% slower than in Z1's hour (today's
+code on 4 threads 0.664 against 0.614 s), and today's code on 1 thread more so (1.261 against 1.072 s on the island).
+
 The baseline row of the first table (0.857 and 1.347 s) was taken in another hour; the machine is 6% to 11% slower
 today, so the gain is given against both.
 
@@ -906,8 +932,10 @@ cells on the globe are about 650 to 690 in a real run (below).
 `ew run --seed 1 --years 1000` with the default `--every 10`, `--frames-every 10`, `--monthly-years 2` (a snapshot, the
 tape so far and a picture every 10 years), one run at a time, nothing else on the machine, 4 threads, the build of
 `60a05eb`. Wall time is the time of the process (start to end, with the writing of snapshots and pictures); "own clock"
-is the sum of the stage clocks that `ew` prints. The "before" times are those of `docs/reports/foundation-l.md` (the
-foundation's final code, one run at a time, the island beside another run).
+is the sum of the stage clocks that `ew` prints. The "before" times are those of `docs/reports/foundation-l.md` (one run at a
+time; the refined region on the foundation's final code, the 22 x 22 island and the 36 x 18 globe on the code before
+its last three fixes, wear once a survey and its decisions 70 to 72; its run beside another was the 17 x 17 island,
+not used here).
 
 | Run | Cells | Wall | Own clock | Before | Faster | Mean year | Hash |
 |---|---|---|---|---|---|---|---|

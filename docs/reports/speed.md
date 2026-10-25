@@ -6,8 +6,9 @@ the decisions in `decisions.md` (S1 to S84), and what changed and when in `docs/
 
 ## In short
 
-- **We did not reach 10 times.** A settled year is now 1.5 to 2 times faster than at the start (4 cores, the same hour):
-  the 22 x 22 island 0.91 s to 0.61 s, the 36 x 18 globe 1.49 s to 0.74 s. The aim was 0.086 s and 0.135 s.
+- **We did not reach 10 times.** A settled year is now 1.4 to 1.9 times faster than at the start (4 cores, the old and
+  the new code run in turns in one hour): the 22 x 22 island 0.94 s to 0.66 s, the 36 x 18 globe 1.55 s to 0.81 s. The
+  aim was 0.086 s and 0.135 s.
 - **1,000 years are 2 to 2.8 times faster than before the speed work:** island 22 x 22 25.1 to 12.8 minutes, globe 36 x 18
   36.6 to 14.3 minutes, refined region 86 to 31.1 minutes. The aim for the globe was 3.7 minutes.
 - **The largest planet that fits 15 minutes is the 36 x 18 globe: 648 cells** (before: about 290; the aim: about 2,900).
@@ -17,34 +18,48 @@ the decisions in `decisions.md` (S1 to S84), and what changed and when in `docs/
   at 291 to 294 K for 1,000 years, with no runaway ice or heat.
 - **Why not 10 times:** the part of a year that is not bodies (Flow, Change, parts, tape) alone is 194 ms on the island
   and 281 ms on the globe. The whole year of the aim is 86 and 135 ms. So even bodies that cost nothing would give
-  only 4.7 and 5.3 times. The bodies became 1.9 to 2.2 times cheaper for one update on 4 cores, and four cores give the
+  only 4.7 and 5.3 times (Z1's hour). The bodies became 1.8 to 2.1 times cheaper for one update on 4 cores, and four cores give the
   bodies only about 2 times, as a third of their time stays on one thread.
 - **The two big ideas that cut the work did not pay** (fewer bodies, B; fewer updates, C): they were tried and not kept.
   The speed comes from the compiler (A), hot spots in the code (E2), and threads (D3, D2).
-- **Open, and your choice:** seven items, on the last page of this report. The main ones: the world that makes many
+- **Open, and your choice:** eight items, on the last page of this report. The main ones: the world that makes many
   bodies in one cell (S66), the law question that C2 found, and the sleep bias that costs 20% to fix (S84).
 
 ## Where the speed stands
 
-Seconds for one simulated year of a settled world, 4 cores (the medians of 5 sets; the baseline code was run in the
-same hour on its own old saves):
+Seconds for one simulated year of a settled world, 4 cores, medians. Two hours: the final review ran the baseline code
+(on its own old saves) and today's code in turns, 5 sets, each on 4 threads and on 1 thread (S45); Z1 ran today's code
+alone (5 sets, 4 and 1 thread in turns), then the baseline code for 3 sets after it, not in turns. The machine was about
+8% slower in the final review's hour.
 
 | | island22 | globe36 | region24 |
 |---|---|---|---|
-| baseline code, 4 threads | 0.910 | 1.490 | |
-| baseline as written in `measures.md` (another hour) | 0.857 | 1.347 | |
+| **in turns, one hour (final review, 5 sets)** | | | |
+| baseline code, 4 threads | 0.943 | 1.553 | |
+| now, 4 threads | 0.664 | 0.805 | 0.974 |
+| baseline code, 1 thread | 0.945 | 1.630 | |
+| now, 1 thread | 1.261 | 1.338 | 1.733 |
+| **faster than the baseline, 4 threads** | **1.42** | **1.93** | |
+| **Z1's hour** | | | |
+| baseline code, 4 threads (3 sets, after the new code) | 0.910 | 1.490 | |
 | now, 1 thread | 1.072 | 1.183 | 1.589 |
-| now, 4 threads | **0.614** | **0.738** | **0.888** |
-| faster than the baseline of the same hour | 1.48 | 2.02 | |
+| now, 4 threads | 0.614 | 0.738 | 0.888 |
+| faster than the baseline | 1.48 | 2.02 | |
+| **other** | | | |
+| baseline as written in `measures.md` (another hour) | 0.857 | 1.347 | |
 | the aim (10 times faster) | 0.086 | 0.135 | |
+
+The fair gain is the one in turns: 1.42 and 1.93 times. Z1's 1.48 and 2.02 compared runs that were not in turns. The
+rest of this report uses Z1's numbers for today's code (its shares and the cost model come from those sets).
 
 ![A simulated year, then and now](speed/year-then-now.svg)
 
 Read this with care: the benches were made again with the new code, so "now" is another world than "then" (S65). On
 the island the new world has 17% more body updates a year (32,499 against 27,762), so its year looks worse than its
-code is. A fairer number is the cost of one body update on 4 cores: island22 24.2 to 13.0 µs (1.86 times), globe36
-43.4 to 20.0 µs (2.17 times). On one thread the new island is slower than the baseline (1.07 against 0.89 s), as the
-domains, faces and outbox cost about 3% for each update and the world has more updates. The threads win it back.
+code is. A fairer number is the cost of one body update on 4 cores, in turns: island22 25.1 to 14.1 µs (1.78 times),
+globe36 45.1 to 21.9 µs (2.06 times) (Z1's hour: 24.2 to 13.0 and 43.4 to 20.0 µs). On one thread the new island is
+slower than the baseline (1.26 against 0.95 s in turns; 1.07 against 0.89 s in Z1's hour), as the domains, faces and
+outbox cost about 3% for each update and the world has more updates. The threads win it back.
 
 Where a year goes (4 threads):
 
@@ -54,7 +69,9 @@ Bodies are still the largest stage (69%, 62% and 66% of a year; at the baseline 
 32% and 30%.
 
 **1,000 years** (one run at a time, nothing else on the machine; default pictures and snapshots every 10 years). The
-"before" column is the foundation's report (`docs/reports/foundation-l.md`; its code was the foundation's final code).
+"before" column is the foundation's report (`docs/reports/foundation-l.md`): its refined region ran on the foundation's
+final code, its 22 x 22 island and 36 x 18 globe on the code before the foundation's last three fixes (wear once a
+survey, its decisions 70 to 72).
 
 | Run | Cells | Before | Now | Faster |
 |---|---|---|---|---|
@@ -65,8 +82,9 @@ Bodies are still the largest stage (69%, 62% and 66% of a year; at the baseline 
 
 ![Minutes for 1,000 years](speed/minutes-1000-years.svg)
 
-The 1,000-year gain is bigger than the gain of one settled year. The "before" times come from another hour and from the
-foundation's final code, and its island run ran beside another run, so this gain is less exact than the gain of a year.
+The 1,000-year gain is bigger than the gain of one settled year. The "before" times come from another hour, and those
+of the island and the globe from code before the foundation's last three fixes (see `foundation-l.md`), so this gain
+is less exact than the gain of a year.
 
 **The largest planet in 15 minutes.** The foundation's model is: the time of a run is the cost of a cell and of a body
 for a year, times their numbers (plan 5.7). Now a settled cell costs 1.1 to 1.3 ms a year on 4 cores (1.8 to 2.1 ms at
@@ -111,14 +129,14 @@ Two things in these runs are worth your eyes.
 ## What each phase gave
 
 Each gain is measured in its own step (`measures.md`); the percents are of the instructions or the time that step
-named. The steps do not multiply into the 1.5 to 2 times of the year, as the benches were made again several times (S65).
+named. The steps do not multiply into the 1.4 to 1.9 times of the year, as the benches were made again several times (S65).
 
 | Phase | What it did | What it gave |
 |---|---|---|
 | A | The bench kit (A1); one code unit for the compiler (A2); many worlds at once (A3) | A2: the year 0.857 to 0.702 s (island) and 1.347 to 1.220 s (globe). A3: three runs side by side make 2.9 times more worlds a minute |
 | E2.1 | Members of a node that stay in their cell act as the node, no clone for each part | the globe's bodies 4% faster (7% of their instructions) |
 | E2.2 | Powers and exponentials in the body update kept once, cube root and square roots | 2.1% (island) and 1.4% (globe) of a year's instructions |
-| D3 | The air's passes and Change's rows use all the threads (no least size of task; the main thread joins the pool) | Flow 1.23 and 1.22 times faster, the year about 8% |
+| D3 | The air's passes and Change's rows use all the threads (no least size of task; the main thread joins the pool) | Flow 1.23 and 1.22 times faster; Flow and Change about 4% of the year; the year 8% in that hour's runs |
 | D2 | The world cut into domains; each runs its bodies on its own thread in 2-day batches; what leaves a domain waits in an outbox (D2.1 to D2.6, with the largest domain first and the survey on threads) | the bodies on 4 threads against 1: 2.10, 1.83 and 2.07 times; against the code before D2: 1.82, 1.79 and 1.98 times (aim 2.2, kill line 1.6). It cost about 3% an update on one thread |
 | E2.3 | The repeated reads of an update; the booking once for each number; a fast path for taking from the store | 2.35% and 1.45%; 3.0% and 2.0%; 2.1% and 1.4% of a year's instructions (island, globe). The bodies' stage on 4 threads 5% faster for the booking |
 | Room | Simplifications that made room for D1 (b); the tape written once at the end | 0.4% of instructions, and 100 lines fewer |
@@ -150,12 +168,12 @@ Each was built or measured, judged against its kill line, and taken out (or not 
 ## Why not 10 times
 
 The aim was a year of 86 ms on the island and 135 ms on the globe. The plan said at the start that 3 to 5 times was
-more likely (S20). We got 1.5 to 2.
+more likely (S20). We got 1.4 to 1.9.
 
 1. **The rest of a year is too big.** Flow, Change, parts and tape cost 194 ms (island) and 281 ms (globe) today, 2.3
    and 2.1 times the whole aim. Flow's air step is a solve of the whole air that runs mostly in ordered passes. D3
    made it 1.2 times faster; nothing else in the plan could make it much cheaper. With bodies for free, the island
-   would be 4.7 times and the globe 5.3 times faster than the baseline.
+   would be 4.7 times and the globe 5.3 times faster than the baseline (Z1's hour).
 2. **The serial share (Amdahl).** On 4 cores the bodies run 2.04, 1.87 and 2.10 times faster than on 1. About a third
    of their time stays on one thread: settling the world and applying the outboxes after each batch, the booking,
    the faces, and bodies that hold a part. The design's ceiling on 4 cores was measured at 2.45 to 2.74 after D2.6;
@@ -185,7 +203,9 @@ solve are the ones that act on the part that stops 10 times.
 ## The slow suite (Z2)
 
 The slow tests (`cargo test --release --workspace --no-fail-fast -- --ignored`, 70 minutes) ran at the end, and the
-debug checks of plan 2.3 too. They pass: the century of books, the nodes check (nodes and individuals make the same
+debug checks of plan 2.3 too. They ran only here, at Z2: plan 2.3 asks for the slow suite and the nodes check at the end
+of each phase (the nodes check at the end of phase D too), and that was not done. So the churn test failed from D2.4a
+until Z2 without anyone seeing it (first item below). They pass: the century of books, the nodes check (nodes and individuals make the same
 world), the pace of nodes, the batches of bodies, the eaters, the climate of the globe and of the long step, the scale
 test, the learning scene, the island's wear, the speed test and the golden test without threads. Five failed at first:
 
@@ -221,11 +241,21 @@ test, the learning scene, the island's wear, the speed test and the golden test 
    13 times as many). This is a splitting error of the laws, not a speed question. It is yours to rule on (branch `speed/c2-not-kept`).
 7. **Phases B and C gave no speed**, and D2 reached 1.8 to 2.0 against its target of 2.2. If you want the 10 times, it
    needs group F or a new solve for the air; A to E are used up.
+8. **The three rules for smart bodies (plan 2.2).** Where each stands:
+   - Individuals stay real: a node can always be split back into individuals (`nodes::open`, tested), and the control
+     run `--individuals` is kept.
+   - The step per place: each domain owns its bodies and its ring of updates, and the ring (`RING`, 384 batches) holds
+     the longest interval even with batches of one day, so a zone can later run shorter sub-batches inside a batch.
+   - Two kinds of body code: the update splits once between bodies with a brain and without one (`survey::update`);
+     a body with a brain keeps its own path, and nothing assumes all bodies take the same branches.
+   - Open: rule 1's one predicate for who may join whom, `nodes::may_join`, was not built (S67: dearer, and no speed).
+     The merge paths still test who may join each in their own place. It waits for the step that brings minds that
+     must stay individual.
 
 ## Surprises
 
 - The new island on one thread is slower than the baseline's.
-- The baseline code hardly gains from 4 threads (0.91 to 0.89 s).
+- The baseline code hardly gains from 4 threads (0.945 to 0.943 s in turns).
 - The two globes round a few joules to zero in 1,000 years (3e5 J of 1e25); the foundation's globe rounded none. The
   counted amounts are tiny, and the drift is far under the limit.
 
@@ -233,10 +263,12 @@ test, the learning scene, the island's wear, the speed test and the golden test 
 
 - **Benches:** `scripts/bench.sh` with the three benches made again at `60a05eb` (snapshot version 47), five sets on
   4 threads and on 1 thread (`RAYON_NUM_THREADS=1`) interleaved, medians. The baseline code (`16e6a4e`) was built in a
-  scratch folder and run on the old saves in the same hour, three sets.
+  scratch folder and run on the old saves in the same hour, three sets. In the final review, the baseline code and
+  today's code ran in turns, five sets of each on 4 threads and on 1 thread, on a machine where no other run was
+  going (a run during which another process started was thrown away and made again).
 - **Profiles:** `scripts/bench.sh profile` (callgrind, one year, one thread).
 - **Long runs:** one `ew run` at a time on a quiet machine of 4 cores, with the default pictures, frames and
-  snapshots, wall time of the process. "Before" is from `foundation-l.md` (another hour; its island ran beside another
-  run).
+  snapshots, wall time of the process. "Before" is from `foundation-l.md` (another hour; its 22 x 22 island and
+  36 x 18 globe ran on the code before the foundation's last three fixes).
 - **Pictures:** made from the runs' `series.csv` and the bench lines by a small script kept outside the repository.
 - **The machine drifts** by about 6% to 11% between hours; every comparison above is inside one hour or says so.

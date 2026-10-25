@@ -1,4 +1,4 @@
-//! The outbox and the serial phase of a batch (plan 3.6): an entry whose body or target is gone does nothing and keeps
+//! The outbox and the serial phase of a batch (laws.md 0): an entry whose body or target is gone does nothing and keeps
 //! the books, a holder killed in the parallel phase lets go of its part in the serial phase, and the order in which the
 //! domains run and the threads that run them change nothing.
 
@@ -153,7 +153,7 @@ fn a_holder_killed_in_the_parallel_phase_lets_go_in_the_serial_phase() {
 }
 
 /// The order in which the domains run in the parallel phase of a batch and of the survey, and the threads that run them,
-/// change nothing: the lineages and born rows made there get the same global ids (plan 3.3), and the world ends the
+/// change nothing: the lineages and born rows made there get the same global ids (laws.md 0), and the world ends the
 /// same, bit for bit, with its events and counters. In the batches each kind of the serial phase happens: a dispersing
 /// litter lands, a watch and a part act are applied, a body that holds a part runs, one anchors its part, lineages are
 /// made; in the first survey, movers kill a body in a cell with no part and a holder in its cell with a part, which lets

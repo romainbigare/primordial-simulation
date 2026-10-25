@@ -155,13 +155,21 @@ impl Life {
     /// domain, an id table that points elsewhere, or a living body not filed exactly once in the rings, in its domain's
     /// at its due batch (`check::broken`).
     pub fn unsound(&self) -> Option<String> {
-        let mut filed: BTreeMap<u64, usize> = BTreeMap::new();
-        self.domains.iter().flat_map(|x| x.ring.iter().flatten()).for_each(|&id| *filed.entry(id).or_default() += 1);
+        // Each id filed in the rings: how many times, and the domain and ring slot where it was filed last.
+        let mut filed: BTreeMap<u64, (usize, usize, usize)> = BTreeMap::new();
+        for (d, x) in self.domains.iter().enumerate() {
+            for (k, slot) in x.ring.iter().enumerate() {
+                for &id in slot {
+                    let e = filed.entry(id).or_default();
+                    *e = (e.0 + 1, d, k);
+                }
+            }
+        }
         for (d, x) in self.domains.iter().enumerate() {
             for (&cell, list) in x.cells.iter().zip(&x.at) {
                 for &h in list {
                     let b = &self[h];
-                    let ring = x.ring[(b.due % RING) as usize].contains(&b.id) && filed.get(&b.id) == Some(&1);
+                    let ring = filed.get(&b.id) == Some(&(1, d, (b.due % RING) as usize));
                     if h.domain as usize != d || b.cell != cell || !b.alive || self.find(b.id) != Some(h) || !ring {
                         return Some(format!("body {} at {h:?} in the list of cell {cell} (domain {d}): its cell {}, filed {ring}", b.id, b.cell));
                     }

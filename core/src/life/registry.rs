@@ -1,5 +1,5 @@
 //! The lineages and the born rows of `Life`: their registries, the holders counted into them, and the provisional ids
-//! of those body code makes, kept by their domain until the world settles and makes them global (plan 3.3, S72).
+//! of those body code makes, kept by their domain until the world settles and makes them global (laws.md 0, S72).
 
 use super::{free_place, Domain, Life};
 use crate::body::Body;
@@ -9,7 +9,7 @@ use crate::World;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-/// The bit that marks a provisional id of a lineage or of born rows, made by body code (plan 3.3): its domain lies above
+/// The bit that marks a provisional id of a lineage or of born rows, made by body code (laws.md 0): its domain lies above
 /// `PROV_SHIFT`, its place in that domain's list below.
 const PROVISIONAL: u32 = 1 << 31;
 /// The bit of a provisional lineage's id that says it has no brain (`Lineage::none`), so `Life::brainless` reads it
@@ -83,7 +83,7 @@ impl Life {
         }
     }
     /// The lineages and born rows the domains made get global ids, domain by domain in the order made, and the bodies,
-    /// the outbox and the changes of holders of each domain name those (plan 3.3).
+    /// the outbox and the changes of holders of each domain name those (laws.md 0).
     pub(crate) fn remap(&mut self, ds: std::ops::Range<usize>) {
         let made: Vec<usize> = ds.filter(|&d| !self.domains[d].brains.is_empty() || !self.domains[d].genomes.is_empty()).collect();
         for d in made {

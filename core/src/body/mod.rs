@@ -123,7 +123,7 @@ pub struct Body {
     pub wb: f32,
     pub trace: Vec<f32>,
     /// It has a move queued in the batch running, or is a node's part with a part act queued (`outbox`): it stays in
-    /// its cell until then, but the others there no longer deal with it (plan 3.6); false outside a batch, not saved
+    /// its cell until then, but the others there no longer deal with it (laws.md 0); false outside a batch, not saved
     #[serde(skip)]
     pub leaving: bool,
     /// Numbers that follow from the genes (`prepare`); not saved

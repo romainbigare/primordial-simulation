@@ -186,7 +186,7 @@ fn start(w: &World, d: &mut Domain, mut c: Body, rows: Option<Vec<f32>>, size: f
     None
 }
 
-/// A litter (`emit`) lands when its batch ends (plan 3.6, S25): it joins the young node of its kind and lineage there
+/// A litter (`emit`) lands when its batch ends (laws.md 0, S25): it joins the young node of its kind and lineage there
 /// (`kin`) or starts a body of its own (`start`), and its birth is recorded. Less than one member (of a node's children:
 /// an individual's are whole) with no node to join goes back into its parent's brood if the parent lives; else what
 /// they hold goes to the ground of the cell their parent was in, as remains do (`body::remains`).

@@ -15,6 +15,7 @@ png = "0.17"
 serde_json = "1"
 
 [features]
-# Flow and Change on threads (the same results as without), on by default; `--no-default-features` runs without.
+# Flow, Change, the survey and the bodies on threads (the same results as without), on by default;
+# `--no-default-features` runs without.
 default = ["threads"]
 threads = ["pcore/threads"]
