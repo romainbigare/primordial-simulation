@@ -17,31 +17,27 @@ Measures: `measures.md` (made in R2). History: `docs/history.md`, section 6.
 alternative (section 3); laws and rules may change for speed; the three rules for smart bodies hold (individuals stay
 real; the step length per place; kinds of body code).
 
-**What the plan can give** (section 5 has the table; the numbers below are the designs' estimates; **section 5.0
-restates them after the probes**, and its line is the one to read):
+**What the plan can give, after phase P** (section 5.0; the designs' estimates are in 5.1 and are not repeated here).
+Times against the baseline; "likely" counts G5's fallback, half of G12 and no MI3a or MI4. **Until PR-A2 and P1b's
+30-day check land, "likely" is the span of both cases of G2:** a 30-day floor for every node, or for young nodes only.
 
 | Set of steps | island22 | globe36 |
 |---|---|---|
 | today | 1.5 times | 2.0 times |
-| phase 1 and P3 (plants, engine, air, MI1 and MI5) | 2.4 | 3.1 |
-| + the steps that change no law (G1, G6, G7, G8, G13, G15) and G4 | 3.2 | 4.1 |
-| + all law and clock steps, without G14 | 7.4 | 9.8 |
-| everything, with G14 (its bound counts the serial parts) | 9.8 to 12.2 | 12.8 to 15.9 |
-| likely at design time: everything, with G5's fallback, half of G12, G14's bound | 8.6 to 10.5 | 11.5 to 14.3 |
-| **likely after phase P (5.0): G2 at 30 days, G14 -15 to -35%, stands at 9 to 10 µs, no MI3a** | **6.9 to 9.0** | **9.6 to 12.6** |
-| after phase P, if G2 takes the young-only floor (X48) | 5.9 to 7.7 | 7.9 to 10.3 |
-| everything but AIR4, with G14 | 8.0 to 10.0 | 10.7 to 13.3 |
-| without G14 and without AIR4 | 5.9 | 8.0 |
-| everything but G2 and G3, with G14 | 5.5 to 6.9 | 6.6 to 8.2 |
+| **likely, everything with G14 (-15 to -35% of the year; globe from -13%)** | **5.8 to 8.7** | **7.6 to 12.4** |
+| of it, G2 at 30 days for every node | 6.7 to 8.7 | 9.3 to 12.4 |
+| of it, G2 for young nodes only (X48) | 5.8 to 7.6 | 7.6 to 10.2 |
+| without G14 | 4.9 to 5.7 | 6.6 to 8.0 |
+| without G14 and without AIR4 | 4.2 to 4.8 | 5.7 to 6.8 |
+| without G2 and G3 (P1b keeps neither the eaters nor the mineral at 30 days), with G14 | 4.8 to 6.3 | 6.1 to 8.1 |
 
-**Plainly, after phase P (5.0):** **10 times on the island is no longer likely**: about 7 to 9 times. G14-P1 saved
-15% of today's year, not the 25% to 39% the bound gave; a stand update costs 9 to 10 µs, not 6 (PR-M); MI3a's gate
-fails (R2). **The globe likely reaches about 10 to 12.5 times**, with G2 at 30 days and G14 near the middle of its
-range. Two steps still carry the risk: **G2** needs P1b's month to pass PR-A's 30-day check (the eaten mineral and the
-adults' cycle, answered by the pools of `month.md`; PR-A2 looks for the rest); if it fails, the young-only floor gives
-about 6 to 7.7 times (island) and 8 to 10 (globe). **G14**: G14-P2 restates it after G4, G5, AIR2, AIR3. Without G14,
-about 5.8 and 8.2 times. No claim is made for 16 cores: this machine gives at most about 3 times on 4 cores (`gap.md`
-1.3).
+**Plainly:** **10 times on the island is no longer likely**: about 6 to 9 times. G14-P1 saved 15% (island) and 13%
+(globe) of today's year, not the 25 to 39% its bound gave; a stand update costs 10 to 10.5 µs, not 6 (PR-M, with the bare
+reactions the prototype left out); MI3a's gate fails (R2). **The globe reaches 10 times only with G2 at 30 days and
+G14 past its low end:** about 7.6 to 12.4 times. Two steps carry the risk: **G2** needs P1b's month to pass PR-A's
+30-day check (the eaten mineral and the adults' cycle, answered by the sub-steps of `month.md`; PR-A2 looks for the
+rest); **G14**: G14-P2 restates it after G4, G5, AIR2, AIR3. No claim is made for 16 cores: this machine gives at most
+about 3 times on 4 cores (`gap.md` 1.3).
 
 ## 2. Rules for this round
 
@@ -68,8 +64,9 @@ started during it.
 **Steps that bump `SNAPSHOT_VERSION`** (`Config` is saved in `World`, so any `Config` field does) cannot run the
 other build's save. **They are judged on one world (X50, PR-S's second method):** the base's save is turned to the
 step's snapshot (the default bytes of a new field inserted), the step's build runs one year from it, and its
-instructions of `run_for` (and per update or per stand-year) are set against the base's on the original save; a gain
-counts above 0.1%. Remade benches and same-seed runs from worldgen (X24) are a check only: across different worlds a
+instructions per update and per stand-year (or per node-year) are set against the base's on the original save. A step
+that changes no law counts above 0.1% of the year; a law step changes the world inside its year (one more year moves
+`run_for` by +0.15% on the island and -1.3% on the globe), so its whole-year gain counts only above 2%. Remade benches and same-seed runs from worldgen (X24) are a check only: across different worlds a
 gain counts only above 19% (island22) and 11% (globe36) on the mean of three seeds. Parallel lanes each bump the
 version; at each merge it is set to the highest on either side plus one.
 
@@ -133,8 +130,9 @@ holds the rest. A kill line reverts the step and keeps it on a branch.
 
 **Review after phase P.** Done: section 5.0 restates section 5 with R2 and the probes (X51). PR-A failed (its causes
 (a) to (d) win nothing) and G14-P1 passed on the line of X38 (15% and 13%), so the "both fail" message (6 and 8 times)
-does not apply; the owner is told the restated end (island about 7 to 9 times, globe about 10 to 12.5). The month law
-is redesigned after PR-M and PR-A (`design/month.md`, X41 to X50).
+does not apply; the owner is told the restated end: island about 5.8 to 8.7 times, globe about 7.6 to 12.4 (the span
+of G2's two cases until PR-A2 and P1b's check land). The month law is redesigned after PR-M, PR-A and its review
+(`design/month.md`, X41 to X53).
 
 ### Phase 1: five lanes in parallel
 
@@ -143,11 +141,11 @@ is redesigned after PR-M and PR-A (`design/month.md`, X41 to X50).
 | ID | What | Level | Done when | Kill line | Needs | Agent | Detail |
 |---|---|---|---|---|---|---|---|
 | P1.1 | `body::apply_extent`: one helper books a reaction's extent on a body, cut out of `pay::pay_at` | 1 | golden unchanged with and without threads | not bit for bit: fix, never re-pin | R1 | Sonnet | plants 2.3 stage 5 |
-| P1.2 | The month law for stands (`design/month.md`): the plan (stages 0 to 5, writing nothing) and the booking (stages 6 and 7) (X41); the pools, with product inhibition, the release limit, roots and soaking, the bare and other reactions and growth inside their equations (X42, X43); every rate read over the window `D`, and `D` = `Physics::reserve_days` 36 for stands (X44; X14's choice is closed); the liquids first, no sweating, **the stand at its ground's temperature as the last stage (P1.3 folded in, X45)**; the card; booking order X29; the sample runs the plan with its own card (no clone, no checkpoint); `node_days` -> `field_days` **30** (`Config::validate` wants a multiple of `batch_days`; G4, G5 and P3 need 30, 60 or 90, X17); **the brain-loss switch** (below); the kept tests of `month.md` 6 and a switch test; `laws.md` 6.10 and 6.3 (stands), `numbers.md` (`field_days`, `reserve_days`), handover 7.1, 7.3; snapshot bumped. **A law change, announced:** deaths by the rate (`1 - e^-u` for a deep famine); stands at their ground's temperature, without sweating; the floor from 36 to 30 days | 3 | the splitting test of `month.md` 6 (90th percentile 2%, worst 10%) and its day-law check; tests pass; books 1e-12 in the century; key numbers within the references, the land's temperature reported (a move over 0.3 K is looked into); the stand's law at most 4.5 µs (island22 callgrind); island 1T -10% (X50: one year from the base save turned to the new snapshot) | the splitting test fails after the sub-steps; the stand's law over 5 µs; under 7% fewer island instructions; key numbers out and not accepted. A climate test fails: stage 7 takes `relax_heat`'s closed form (X45) | P1.1, PR-M, PR-B | Opus, adversarial review | month 2 to 7 |
+| P1.2 | The month law for stands (`design/month.md`): the plan (stages 0 to 5, writing nothing; it returns the new light and rain marks) and the booking (X41); the fuel stock by X9's closed form with product inhibition on its product substance, the release limit, the moving reserve `U (D + days left)` and deaths by the rate; the body's other reactions (bare ones too, X43) and growth in sub-steps by the reactor's kernel with their own orders, ended at `MONTH_SHARE` of a scarcest input or a change of the fuel's phase (X42); starving judged per sub-step on the body's path (X53); every rate read over the window `D`, `D` = `Physics::reserve_days` 36 for stands (X44); the liquids first, no sweating, the stand at its ground's temperature as the last stage, the dead leaving at that state (P1.3 folded in, X45); the booking of the net change per substance in one pass (X52); the card; the sample in a scratch body; `node_days` -> `field_days` **30** (`Config::validate` wants a multiple of `batch_days`; G4, G5 and P3 need 30, 60 or 90, X17); **the brain-loss switch** (below); the kept tests of `month.md` 6 and a switch test; `laws.md` 6.10, 6.3 (stands), 2.4, `numbers.md` (`field_days`, `reserve_days`), handover 7.1, 7.3; snapshot bumped. **A law change, announced:** deaths by the rate (`1 - e^-u` for a deep famine); growth through the interval beside the body's reactions; the reserve with the rest of the interval; stands at their ground's temperature, without sweating; the floor from 36 to 30 days | 3 | the splitting test of `month.md` 6 (90th percentile 2%, worst 10%, with young stands and a seasonal ramp) and its day-law check; tests pass; books 1e-12 in the century; key numbers within the references, the land's temperature reported (a move over 0.3 K is looked into); the stand's law at most 5 µs (island22 callgrind); stand updates -30% per stand-year and the year -9% (X50: one year from the base save turned to the new snapshot) | the splitting test fails at 60 days after a smaller `MONTH_SHARE`; the stand's law over 6 µs; under 7% fewer island instructions; key numbers out and not accepted. A climate test fails: stage 7 takes `relax_heat`'s closed form and the rates the stand's own temperature (X45) | P1.1, PR-M, PR-B | Opus, adversarial review | month 2 to 7 |
 | P1.3 | **Folded into P1.2** (X45): the month reads its rates at one temperature, and PR-M measured the month and the ground's temperature together. Its kill line is P1.2's fallback | | | | | | month 2 |
-| P1.4 | `sample_every` goes: the sample (the month's plan for its own card) runs at every update | 3 | `selection_inside_a_node_moves_its_mean_as_its_members_would`; `genes_do_not_drift_without_selection` (slow); a sample run at most 1.5 µs; island 1T not up over 1% | the selection test fails: `sample_every` stays 2 | P1.2 | Sonnet | month 7 |
+| P1.4 | `sample_every` goes: the sample (stages 2 to 5 of the month for its genes, in a scratch body, `month.md` 5) runs at every update | 3 | `selection_inside_a_node_moves_its_mean_as_its_members_would`; `genes_do_not_drift_without_selection` (slow); a sample run at most 3 µs; island 1T not up over 1% | the selection test fails: `sample_every` stays 2 | P1.2 | Sonnet | month 5, 7 |
 | P2 | `field_days` 60 | 3 | the splitting test at 60 (1 x 60 against 6 x 10) on its grid; `the_pace_of_the_field_keeps_life` at 10 against 30, 60, 120; key numbers. These values are valid here because `phys_days` is still 10 and `batch_days` 2: the reference 10 is "every survey" only while `phys_days` is 10 (after G5 it is 30, see G9a) | the pace test or the splitting test fails at 60 (with the month's sub-steps): 30 stays | P1.4 | Sonnet | plants 9, month 6 |
-| P1b | The month law for every body (`month.md` 5.1): the plan and the booking for bodies with a brain, `D` their `INTERVAL` gene; **keep-warm's power in `U`**, taken at the update's start (X14); growth through the interval beside the body's own reactions (the pools), so the eaten mineral is used before it turns solid and the body is rebuilt as it is burnt (PR-A); `settle_upkeep`, the body's call of the reactor, `keep_warm`, `copy::grow`'s paying and `soak_again` go; the day law's heat network stays, fed the month's heat; the acts stay after the update. **PR-A2's answer (pending, `month.md` 5.2) may add a step.** **A law change, announced:** deaths by the rate (a deep famine kills `1 - e^-u`, not `u`); no dip of the body between updates; keep-warm inside `U` | 3 | the splitting test with two animal nodes (also at 260 K); key numbers at today's pace in their ranges, the shifts reported as law effects; **PR-A's script again with P1b at a 30-day floor: the eaters within the seed noise of the gene's pace, its counters read** (adults under their copy mass at `copy`, the mineral left at growth); an animal update 1T measured (expected -10 to -20%) | key numbers out and not accepted: not merged. The 30-day check fails: P1b merges as the law (X6), and G2 takes the young-only floor (X48) or waits for the cause PR-A2 names | P2, PR-A, PR-A2 | Opus, adversarial review | month 5.1, 5.2; animals 1, 4 |
+| P1b | The month law for every body (`month.md` 5.1): the plan and the booking for bodies with a brain, `D` their `INTERVAL` gene; **keep-warm's power in `U`**, taken at the update's start (X14); growth in the sub-steps beside the body's own reactions, so the eaten mineral is used as it turns solid and the body is rebuilt as it is burnt (PR-A); starving per sub-step on the body's path and the reserve with the rest of the interval (X53); `settle_upkeep`, the body's call of the reactor, `settle_gas`, `store_light`, `keep_warm`, the body paths of `soak` and `roots`, `copy::grow`'s conversion and paying and `soak_again` go; the day law's heat network stays, fed the month's heat; the acts stay after the update. **PR-A2's answer (pending, `month.md` 5.2) may add a step.** **A law change, announced:** deaths by the rate (a deep famine kills `1 - e^-u`, not `u`); no dip of the body between updates; keep-warm inside `U` | 3 | the splitting test with young and adult animal nodes, also at 260 K, and a dip that recovers; key numbers at today's pace in their ranges, the shifts reported as law effects; **PR-A's script again with P1b at a 30-day floor: the eaters within the seed noise of the gene's pace, its counters read** (adults under their copy mass at `copy`, the mineral left at growth); an animal update 1T measured (an estimate: -10 to -20%) | key numbers out and not accepted: not merged. The 30-day check fails: P1b merges as the law (X6); if the mineral is kept, G2 takes the young-only floor; if not, G2 waits for the cause (X48) | P2, PR-A, PR-A2 | Opus, adversarial review | month 3, 5.1, 5.2; animals 1, 4 |
 
 **The brain-loss switch (P1.2, P3).** Plants are not a closed set: `lineage::resize` (`core/src/lineage.rs:69-85`)
 moves a body whose `HIDDEN` gene falls below 0.5 (its range starts at -1, `body/genes.rs:105`) to a lineage with
@@ -207,7 +205,7 @@ is a month, books kept). PR-B says how often it happens.
 | G9b | Compact stands (P4). Gate: the handling of `Body` values (moves, clones) at least 5% of a year in P3's profile | 1 | stands 1T -10% | under -3% of a year on 4T | P3, G9a | Opus | plants P4, gap G9 |
 | G4 | `batch_days` 10 (replaces S64). `field_days` must then be 30, 60 or 90 and `node_days` a multiple of 10 (`Config::validate`, X17). A small law effect: gene intervals from 5 to 15 days all become 10 days | 3 | the batch test (`the_batches_of_bodies_keep_life`) changes from 1 against 2 days to 2 against 10; key numbers; bodies' stage 4T -10% | under -6%: back to 2 | E1c | Sonnet, Opus review | gap G4 |
 | G5 | `phys_days` 30; the air stays at 10 days (`field_days` 30, 60 or 90). **Expect the fallback:** 75% of Change's rests are under 10 days, and a 30-day span for every node grows S84's bias, so Change likely keeps 10 days and the rest takes 30; section 5's "likely" column counts only that part | 3 | long-step and globe climate tests at `phys_days` 30; the sleep test within noise; key numbers; year 4T -4% | a climate test fails or under -3%: 10, or Change at 10 and the rest at 30 | G4, G1 | Opus | gap G5 |
-| G2 | Every population node updates at least every `node_days` 30; the movers (with MI5's one group: `x = count x min(1, Σp x paces)` members leave, `Σp` the sum of the chances to go in every direction, and one direction is drawn by `p[d]/Σp`), learning's discount (`discount^paces`, carried here, so MI3a is not needed), `away` (gene intervals) and an act's heat follow the pace; MI6 is never written. **The nodes check (30-day nodes against individuals at their gene) is a strong test of G2.** **The floor (X48):** 30 days for every population node; if P1b's 30-day check failed, 30 days for young nodes only (PR-A: the eaters within the noise once the eaten mineral is kept; about 0.6 of the node updates, about 57% of G2's gain); 20 days is not a fallback (PR-A: it fails too) | 3 | pace test for animals at 10, 30, 60; key numbers; nodes check; learning scene; bodies' stage 4T -25% on both (young only: -12%) | fails at 30 for every node: young only; fails for young only, or under -15% (every node) / -8% (young only): revert | P1b, MI5 (PR-A2 if it names a cause) | Opus, adversarial review | gap G2, month 5.1 |
+| G2 | Every population node updates at least every `node_days` 30; the movers (with MI5's one group: `x = count x min(1, Σp x paces)` members leave, `Σp` the sum of the chances to go in every direction, and one direction is drawn by `p[d]/Σp`), learning's discount (`discount^paces`, carried here, so MI3a is not needed), `away` (gene intervals) and an act's heat follow the pace; MI6 is never written. **The nodes check (30-day nodes against individuals at their gene) is a strong test of G2.** **The floor (X48):** 30 days for every population node; if P1b's 30-day check failed but its counter shows the eaten mineral kept, 30 days for young nodes only (PR-A: the eaters within the noise once the mineral is kept; about 0.6 of the node updates, about 57% of G2's gain); if the mineral is not kept, G2 is not built until its cause is fixed; 20 days is not a fallback (PR-A: it fails too) | 3 | pace test for animals at 10, 30, 60; key numbers; nodes check; learning scene; bodies' stage 4T -25% on both (young only: -12%) | fails at 30 for every node: young only; fails for young only, or under -15% (every node) / -8% (young only): revert | P1b, MI5 (PR-A2 if it names a cause) | Opus, adversarial review | gap G2, month 5.1 |
 | G3 | The heat of population nodes with a brain by a closed form: the stand's lean evaporation with sweating as a rate, and `relax_heat`'s closed form without its second conductance; individuals and full minds keep the day law's heat. **Gated after P1b (X49):** P1b's month already takes the reactor, upkeep, keep-warm and growth out of an animal's day; G3 is built only if the heat network and the evaporation are at least 25% of an animal node update in P1b's profile | 3 | the splitting test for an animal node, also at 260 K; animal update 1T -15% | the gate fails: not built; under -10%: keep P1b's law only | P1b, G2 | Opus | gap G3, month 5.1 |
 | MI3a | Habits, still paying one decision per update; `--full-minds` (the control run); counter `thoughts`. **Gated after G2** (X36): on the merged branch after G2, the sleep share at least 40% on island and globe; likely gain 5 to 8 ms a year for about +145 net lines. Not built: `--full-minds` waits for the first smart kind, and G2 plus G16 stand in its place. `CLAUDE.md` 2.6 adds `--full-minds`; handover 6.5 habits bullet, 7.5; `laws.md` 5.3, 5.4, 5.6 | 3 | all tests; the learning scene; `habits_give_the_patterns_of_full_minds` (the full-minds check, slow) and the nodes check on this commit; key numbers; island and globe 1T -1% (after G2) | the gate fails after G2: not built. Under -0.7% on both, or the full-minds check fails beyond the noise: revert | G2, MI1, R2 (MI0) | Opus | minds 2.1, 2.5 |
 | MI4 | Shared place senses per domain and survey. **Gated after G2** (X36): sharing at least 1.5, measured again on the merged branch; likely gain 1 to 2 ms | 2 | golden re-pinned; series within noise; island 1T -0.5% | the gate fails after G2: not built. Under -0.3% island and -0.2% globe: revert | G2 (MI3a if built) | Sonnet | minds 2.2 |
@@ -250,39 +248,48 @@ the measures move them, and its end is the plan's expected result (X51).
 | R2 | the shares hold: plant updates 30.0% / 14.7% of a one-thread year, a 30-day floor keeps 0.30 / 0.31 of the animal node updates; the machine runs 4 to 14% slower than Z1's hour; MI3a's gate fails (sleep 14% / 11%, the line 40%) | the table keeps Z1's scale; MI3a and MI4 are not counted in "likely" (their 6 / 8 ms stay; G16 takes 1 to 2) |
 | E1a | neutral on one thread (+0.04% of the batch), as expected | nothing: the chain E1a to E1c is judged at E1c (X40) |
 | AIR1 | globe: Flow -11.7%, the year -3.6% on one thread (5.2 said -2%); island and region about 0 | the air's row as planned, a little better on the globe |
-| G14-P1 | the join saves 15% (island) and 13% (globe) of today's year; the lanes' imbalance is 1.6 to 2.0 (the bound guessed 1.1 to 1.3); the serial part 57 / 75 ms; the saving grows as the bodies' lane shrinks and the physics' share rises; over the line of X38 (10%), so G14-P2 decides | G14: -15 to -35% of the year it meets (the bound: -25 to -39%) |
-| PR-M | the stand's law 7.0 µs (lean about 4); a whole stand update about 9 to 10 µs at 30 days, 8.5 after P3 (5.1 took 6); the month failed its own splitting test until the fixes of `month.md`; `D` = 36 for stands | the plants' rows, below |
-| PR-A | (a) to (d) win nothing; the eaten mineral and the adults' cycle are the causes; 20 days fails too; a young-only floor keeps the eaters once the mineral is kept | G2 at 30 days rests on P1b's month passing PR-A's check; its fallback is the young-only floor (about 57% of G2's gain, X48) |
-| PR-S | across different worlds a gain counts only above 19% (island) and 11% (globe); on one world (a turned save) above 0.1% | law steps are judged on turned saves (X50); no gain moves |
+| G14-P1 | the join saves 15% (island) and 13% (globe) of today's year; the lanes' imbalance is 1.6 to 2.0 (the bound guessed 1.1 to 1.3); the serial part 57 / 75 ms; the saving grows as the bodies' lane shrinks and the physics' share rises; over the line of X38 (10%), so G14-P2 decides | G14: -15% (island) and -13% (globe) at the low end, -35% at the high end, of the year it meets (the bound: -25 to -39%) |
+| PR-M | the stand's law 7.0 µs without bare reactions; with them and lean stages about 4.5 to 5 µs; a whole stand update about 10 to 10.5 µs at 30 days, 9 after P3 (5.1 took 6); the month failed its own splitting test until the fixes of `month.md`; `D` = 36 for stands | the plants' rows, below |
+| PR-A | (a) to (d) win nothing; the eaten mineral and the adults' cycle are the causes; 20 days fails too; a young-only floor keeps the eaters once the mineral is kept | G2 at 30 days rests on P1b's month passing PR-A's check; its fallback is the young-only floor (about 57% of G2's gain), only if P1b keeps the mineral (X48); "likely" spans both until PR-A2 and P1b land |
+| PR-S | across different worlds a gain counts only above 19% (island) and 11% (globe); on one world above 0.1%, and a law step's own year moves the world by up to about 1.3% | law steps are judged per update and per stand-year on turned saves, whole years only above 2% (X50); no gain moves |
 | AIR4-R1, AIR4.0 | the plateau fault is fixed; TR-BDF2 lands near the 0.3 K limit | AIR4 stays a research step at risk |
 
 **The rows that move** (four threads, ms a year saved, Z1's scale, in the order of 5.1):
 
 | Step | island, 5.1 | island, restated | globe, 5.1 | globe, restated | Why |
 |---|---|---|---|---|---|
-| P1.1 to P1.4 | -73 | -56 | -40 | -31 | a stand update of 9 to 10 µs at 30 days, not 7.5 (PR-M) |
-| P2 | -32 | -39 | -22 | -27 | a dearer update gains more for each update dropped |
-| P3 | -13 | -13 | -16 | -16 | 8.5 µs, not 6; its gain is mostly faces and the ring |
+| P1.1 to P1.4 | -73 | -48 | -40 | -26 | a stand update of 10 to 10.5 µs at 30 days, not 7.5 (`month.md` 7) |
+| P2 | -32 | -43 | -22 | -29 | a dearer update gains more for each update dropped |
+| P3 | -13 | -13 | -16 | -16 | 9 µs, not 6; its gain is mostly faces and the ring |
 | P1b | 0 | -15 | 0 | -20 | the body's reactor and today's upkeep, keep-warm and growth passes leave animal updates (`month.md` 5.1) |
 | G2 at 30 days | -73 | -61 | -121 | -102 | counted on P1b's cheaper update |
 | MI3a, MI4 | -6 | -2 | -8 | -2 | gates fail (R2); G16 instead |
 | G3 | -9 | -4 | -12 | -6 | only the heat is left after P1b (X49) |
 | G9a, G9b | -10 | -10 | -6 | -6 | |
-| G14 | -32 to -51 | -15 to -35% | -40 to -65 | -15 to -35% | G14-P1 |
+| G14 | -32 to -51 | -15 to -35% | -40 to -65 | -13 to -35% | G14-P1 (its low end per bench) |
 
-**The end, restated.** Before G14 the likely year is about 165 ms (island; 5.1: 149) and 202 ms (globe; 5.1: 187).
-With G14 at -15 to -35%: **island 107 to 140 ms, 6.9 to 9.0 times; globe 131 to 172 ms, 9.6 to 12.6 times.** If G2
-takes the young-only floor: island 124 to 162 ms (5.9 to 7.7 times), globe 160 to 209 ms (7.9 to 10.3 times). Without
-G14: about 5.8 and 8.2 times. What would lift the island toward 10: G14 at the good end of its range (G14-P2 after G4,
-G5, AIR2, AIR3), AIR4 without its climate risk, and stands near 8 µs. **The owner is told:** 10 times on the island is
-no longer likely; the globe likely passes it.
+**The end, restated.** Before G14 the year is about 169 ms (island; 5.1's likely: 149) and 205 ms (globe; 187) with
+G2 at 30 days for every node, and about 195 and 249 ms with the young-only floor. With G14 at -15 to -35% (island) and
+-13 to -35% (globe):
+
+| Case | island22 | globe36 |
+|---|---|---|
+| G2 at 30 days for every node | 110 to 144 ms, 6.7 to 8.7 times | 133 to 178 ms, 9.3 to 12.4 times |
+| G2 for young nodes only | 127 to 166 ms, 5.8 to 7.6 times | 162 to 217 ms, 7.6 to 10.2 times |
+| **likely, until PR-A2 and P1b's check land: the span** | **5.8 to 8.7 times** | **7.6 to 12.4 times** |
+| without G14 (both cases) | 4.9 to 5.7 times | 6.6 to 8.0 times |
+| without G2 and G3 (the mineral not kept), with G14 | 4.8 to 6.3 times | 6.1 to 8.1 times |
+
+What would lift the island toward 10: G14 at the good end of its range (G14-P2 after G4, G5, AIR2, AIR3), AIR4 without
+its climate risk, G2 at 30 days for every node, and stands near 8 µs. **The owner is told:** 10 times on the island is
+no longer likely; the globe passes it only with G2 at 30 days and G14 past its low end.
 
 ### 5.1 Four threads, ms of a year (the goal's measure)
 
 "Likely" is the same as "year" down to G4; from G5 on it counts G5's expected fallback (Change keeps 10 days: about
 half of G5's gain), half of G12 (a guess until R3's clock fix lands and it is measured) and G14's bound with the serial
-parts. Both columns take a stand update of 6 µs after P1.2 to P3; PR-M found 9 to 10 µs (8.5 after P3), and 5.0
-restates the rows that this and the other probes move.
+parts. Both columns take a stand update of 6 µs after P1.2 to P3; after PR-M it is 10 to 10.5 µs (9 after P3), and
+5.0 restates the rows that this and the other probes move.
 
 | Step | island saves | island year | x | island likely (x) | globe saves | globe year | x | globe likely (x) |
 |---|---|---|---|---|---|---|---|---|
@@ -334,10 +341,10 @@ Kept apart from 5.1: one-thread gains do not add up to the 4T year (the parallel
 
 | Step | island22 1T | globe36 1T | Note |
 |---|---|---|---|
-| P1.1 to P1.4 | -10 to -12% | -5 to -6% | plants are 38% and 21% of a 1T year; a stand update 9 to 10 µs at 30 days (`month.md` 7) |
-| P2 | -7% | -3% | |
+| P1.1 to P1.4 | -9 to -11% | -4.5 to -5.5% | plants are 38% and 21% of a 1T year; a stand update 10 to 10.5 µs at 30 days (`month.md` 7) |
+| P2 | -9 to -10% | -4.5% | a dearer update gains more for each update dropped |
 | P3 | -5% | -3% | |
-| P1b | -3 to -6% | -4 to -7% | a law step; the body's reactor and today's upkeep, keep-warm and growth passes leave animal updates (`month.md` 5.1) |
+| P1b | -3 to -6% | -4 to -7% | an estimate (an animal update -10 to -20%); a law step; the body's reactor and today's upkeep, keep-warm and growth passes leave animal updates (`month.md` 5.1) |
 | E1, E2, AIR2, G1, G6, G7, G8, G14, G15 | 0 to +3% | 0 to +3% | they share work out; they cost a little on one thread |
 | AIR1 | about 0 | -2% (Flow -8% or more) | the island already needs 2.26 rounds |
 | AIR3 | -1% | -1% | |
@@ -352,13 +359,13 @@ Kept apart from 5.1: one-thread gains do not add up to the 4T year (the parallel
 
 | | island22 | globe36 |
 |---|---|---|
-| needs | G2, G14 and AIR4, each at its good end, and stands near 8 µs | G2, and G14 near the middle of its range |
-| likely with everything (5.0) | 6.9 to 9.0 times: 10 times no longer likely | 9.6 to 12.6 times: likely |
-| at risk | G2: needs P1b's month to pass PR-A's 30-day check (PR-A2 looks for the rest); fallback the young-only floor (about 57% of G2's gain, X48): 5.9 to 7.7 times | the same G2: 7.9 to 10.3 times |
-| at risk | G14: the hardest step; G14-P1 saved 15% today, G14-P2 decides | AIR4: its climate test (0.3 K) |
+| needs | G2 at 30 days, G14 and AIR4, each at its good end, and stands near 8 µs | G2 at 30 days, and G14 past its low end |
+| likely with everything (5.0, the span of both G2 cases) | 5.8 to 8.7 times: 10 times no longer likely | 7.6 to 12.4 times |
+| at risk | G2: needs P1b's month to pass PR-A's 30-day check (PR-A2 looks for the rest); fallback the young-only floor (about 57% of G2's gain), only if P1b keeps the mineral (X48): 5.8 to 7.6 times; without G2: 4.8 to 6.3 | the same G2: 7.6 to 10.2 times; without G2: 6.1 to 8.1 |
+| at risk | G14: the hardest step; G14-P1 saved 15% (globe 13%) today, G14-P2 decides | AIR4: its climate test (0.3 K) |
 | at risk | G5 (its fallback is expected), G12 (not measured), the month's splitting test at 60 and 90 days (`month.md` 6) | the same |
-| without G14 | 5.8 times | 8.2 times |
-| without G14 and AIR4 | 5.9 times | 8.0 times |
+| without G14 | 4.9 to 5.7 times | 6.6 to 8.0 times |
+| without G14 and AIR4 | 4.2 to 4.8 times | 5.7 to 6.8 times |
 
 ## 6. Order and lanes
 
@@ -416,8 +423,8 @@ Phase 2   P3 ─ G13, G6 ;  P3 ─ G9a (also after G5) ─ G9b (gated)
 |---|---|
 | The sum stays under 10 times | Said in section 1; each step is judged on its own kill line |
 | P1.2 and P1b move the key numbers (S50, eaters) | Announced law changes: a deep famine kills `1 - e^-u`, not `u`; stands at their ground's temperature; no dip of an animal's body between updates. Stands keep `D` = 36 days (PR-M: the gene moved S50 past its noise, X44). Level 3 against the references after AIR4.0; a law change is its own commit with its effect |
-| P1b's month does not pass PR-A's 30-day check | P1b still lands (X6); G2 takes the young-only floor (X48) or waits for the cause PR-A2 names (`month.md` 5.2); 20 days is no fallback (PR-A) |
-| The month fails its splitting test at 60 or 90 days (the living body held at its start) | the pools in sub-steps of at most 30 days (stage 4 only, `month.md` 3.1); else P2 or G9a keeps the shorter pace |
+| P1b's month does not pass PR-A's 30-day check | P1b still lands (X6); G2 takes the young-only floor if P1b keeps the mineral, else waits for the cause PR-A2 names (`month.md` 5.2) (X48); 20 days is no fallback (PR-A) |
+| The month fails its splitting test at 60 or 90 days (the living body held at its start, the ramp's temperature) | a smaller `MONTH_SHARE`, a running total of the ground's temperature (`month.md` 2, 8); else P2 or G9a keeps the shorter pace |
 | C2's second cause: children and maturing members wait for their node's update (P2, G2, G9a) | PR-A (e): births about 13.5 days late cost under 1% of the members in 2 years; the pace tests read births less deaths; the fallbacks are 30 days (stands), the young-only floor (animals) and 60 days (G9a) |
 | Habits slow learning | The learning scene must pass; the answer is a wake on surprise, never a looser test |
 | Tiles let a crowded tile run short of a scarce gas | E2 is level 3; the share per tile is `Mesh::share`; the E2 audit |
@@ -429,7 +436,7 @@ Phase 2   P3 ─ G13, G6 ;  P3 ─ G9a (also after G5) ─ G9b (gated)
 
 ## 9. Lines
 
-Core today: 9,602 code lines. Estimates from the designs (net): lane A +290 (P1.x +400, P1b -110; `month.md` 9), P3 +155, engine
+Core today: 9,602 code lines. Estimates from the designs (net): lane A +290 (P1.x +460, P1b -170; `month.md` 9), P3 +155, engine
 +120, air +257 (AIR1 +12, AIR3 -10, AIR2 +35, AIR4 +140, G11 +80), minds +193, gap steps +490 (G14 +250, G3 +100, G1
 +20, G2 +20, G4/G5/G12 +30, G6 +25, G7 +30, G13 +10, G15/G16 +5): about **+1,505, to 11,110**. The gated steps
 (G9b +100, E4 +30, E5 +150) bring it to about 11,360; if the estimates run 20% over, about 11,800. So the ceiling is
