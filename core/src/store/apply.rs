@@ -120,24 +120,23 @@ fn each_change<'x>(cx: &Ctx, (fluxes, lifted): (&'x [LinkFlux], &'x [Vec<f64>]),
 #[inline(always)]
 fn add(v: &mut f64, s: Slot, d: f64, low: &mut Vec<Slot>, carry: &mut [Vec<f64>]) {
     let was = *v;
-    if s.arr.is_multiple_of(2) && s.arr < 2 * CARRIED {
-        add_carried(v, &mut carry[s.arr / 2][s.at], d);
-    } else {
-        *v += d;
-    }
+    add_carried(v, (s.arr.is_multiple_of(2) && s.arr < 2 * CARRIED).then(|| &mut carry[s.arr / 2][s.at]), d);
     if *v < 0.0 && was >= 0.0 && s.arr < BOUNDARY_ARRAYS {
         low.push(s);
     }
 }
 
-/// Adds `d` to amount `v` of a carried class, whose rounding so far is `carry` (Neumaier 1974).
+/// Adds `d` to number `v`; to an amount of a carried class with what rounding took so far, `carry`, which keeps what it
+/// takes now (Neumaier 1974).
 #[inline(always)]
-pub(super) fn add_carried(v: &mut f64, carry: &mut f64, d: f64) {
+pub(super) fn add_carried(v: &mut f64, carry: Option<&mut f64>, d: f64) {
     let was = *v;
     *v += d;
-    let lost = *carry + rounding_lost(was, d, *v);
-    let folded = *v + lost;
-    (*carry, *v) = (rounding_lost(*v, lost, folded), folded);
+    if let Some(carry) = carry {
+        let lost = *carry + rounding_lost(was, d, *v);
+        let folded = *v + lost;
+        (*carry, *v) = (rounding_lost(*v, lost, folded), folded);
+    }
 }
 
 /// Does `dmol` keep every element of the chemistry's table, to rounding? `sums` is room for the element totals.
@@ -155,8 +154,10 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut [f64]) -> bo
 /// books are kept by their form. Only what each number holds at the end counts, so what passes through a node in one
 /// call needs nothing held. Then each number below zero, the rounding of the sums, is set to zero and counted in
 /// `Counters::rounded` (handover 12.1; checked in debug builds). Boundary nodes and the potential give all they are
-/// asked. Panics on a flux of the wrong shape, a transform that breaks its elements, or a node beyond its class.
+/// asked. Panics on a flux of the wrong shape, a transform that breaks its elements, or a node beyond its class. No
+/// domain's view of the store is open then (`Moves::open`; checked in debug builds).
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[Transform]) {
+    debug_assert!(w.life.domains.iter().all(|d| d.moves.open.is_none()), "the store changes while a domain is open");
     let World { chem, counts, mesh, store, .. } = w;
     let n = mesh.cells().n();
     let cx = Ctx { chem, len: [n, mesh.level(AIR).n(), n, n, n, BOUNDARIES, 1] };

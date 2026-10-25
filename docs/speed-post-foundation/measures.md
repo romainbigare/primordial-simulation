@@ -36,6 +36,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | E2.3, the repeated reads of one update (the same saves) | E2.3 | 1.044 | 147 | 48 | 821 | 3 | 25 | 3,679 | 53,648 | 0.796 | 209 | 49 | 505 | 20 | 13 | 1,648 | 23,373 | 9,689 |
 | E2.3, the recorder on the pool, not kept (medians of 7 runs on 4 threads, the saves of the profile after D2; branch `speed/e23-tape-not-kept`) | `7e21f1f` | 1.096 | 146 | 50 | 879 | 3 | 20 | 3,679 | 53,648 | 0.826 | 213 | 52 | 530 | 19 | 12 | 1,648 | 23,373 | 9,689 |
 | E2.3 (1), the booking once per number (the same saves; another history, level 2) | E2.3 (1) | 1.056 | 142 | 51 | 833 | 3 | 26 | 3,634 | 53,515 | 0.795 | 210 | 50 | 505 | 16 | 15 | 1,620 | 23,160 | 9,688 |
+| E2.3 (2), a fast path for gathering (the same saves and history as E2.3 (1)) | E2.3 (2) | 1.111 | 153 | 53 | 872 | 3 | 29 | 3,634 | 53,515 | 0.772 | 210 | 51 | 482 | 16 | 13 | 1,620 | 23,160 | 9,689 |
 
 ### A2: compiler settings
 
@@ -736,6 +737,26 @@ year, -5.4%; globe36 508.8 (469 to 523) -> 483.8 (460 to 502), -4.9%. Level 2: g
 saves against f3c3c97: `t_land` within 4e-5, `t_air` within 4e-5, the bodies within 1.1%, the updates within 0.7%,
 the rain within 2e-4 (relative); the elements are kept to 1e-16. The order test's scenario cells moved (the old ones
 no longer gave a dispersing litter that lands in another cell with this history).
+
+### E2.3 (2): a fast path for gathering
+
+A domain's view takes its air node from the store when the domain opens, and the nodes of the updater's cell when its
+update opens; `Moves::view_load` finds these two first and goes to the cell's slot only for the other cells of the
+domain. `take` and `give` gather their one end of the store straight (the updater's end is its law's), and the cold
+taking of a cell from the store is out of the hot path (`Moves::take_in`). The view no longer notes whether it holds
+its air node, and a move no longer says whether it changes amounts there. Level 1: golden unchanged, the series of a
+year bit for bit the same. Callgrind, one year on one thread, the same saves, before at E2.3 (1) (million
+instructions):
+
+| | island22 before | island22 after | globe36 before | globe36 after |
+|---|---|---|---|---|
+| all instructions | 13,546.1 | 13,259.3 (-2.12%) | 8,983.8 | 8,858.9 (-1.39%) |
+| the batch (`survey::batch`) | 8,890.5 | 8,613.9 (-3.1%) | 4,577.8 | 4,448.3 (-2.8%) |
+| `gather` and `view_load` (exclusive) | 478.8 | gone (`give` 144.7, `take` 53.9, `take_in` 20.6) | 223.0 | gone (`give` 62.5, `take` 23.0, `take_in` 13.7) |
+
+Over the kill line of 2% on island22, under it on globe36 (1.39%), where the bodies are a smaller share of the
+year. The opening of an update costs more (+23 and +28 million: the air node is taken whole at each opening of a
+domain, also for a serial step that touches it little).
 
 ## Profile of the baseline
 
