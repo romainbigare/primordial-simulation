@@ -1,4 +1,4 @@
-//! The outbox (plan 3.6): what a body's update in a batch does outside it is queued in its domain's outbox, in the
+//! The outbox (laws.md 0): what a body's update in a batch does outside it is queued in its domain's outbox, in the
 //! order made, and applied in the serial phase, domain by domain: its moves to another cell, its children who start in
 //! another cell, its watches and its acts on parts. Each kind is applied by its law on the bodies and parts as they are
 //! then; one whose body or target is gone does nothing, as its law says.

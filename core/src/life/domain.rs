@@ -1,4 +1,4 @@
-//! A domain (plan 3.2): the cells under one air node and all that its bodies' updates write. Body code runs on a domain
+//! A domain (laws.md 0): the cells under one air node and all that its bodies' updates write. Body code runs on a domain
 //! taken out of the world (`(&World, &mut Domain)`), in the parallel phase of a batch and in every serial step
 //! (`World::in_domain`) alike: it writes its bodies, their lists, its ring, the store's view (`store::Moves`), its
 //! events and counters, its outbox, and the lineages and born rows it makes (provisional, `registry`) and the changes of

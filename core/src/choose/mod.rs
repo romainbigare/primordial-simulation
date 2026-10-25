@@ -1,5 +1,5 @@
 //! Law 5: Choose. A body perceives a little (`perceive`), its brain scores the actions and one is drawn (a node spreads
-//! its members over them, `spread`), and it acts: move (`go`), take, put or give (`feed`), watch (`learn::watch`),
+//! its members over them, `spread`), and it acts: move (`go`), take, put or give (`feed`), watch (`learn::watched`),
 //! rest, or Bond's actions; at its next decision it learns from the change of its well-being (`learn`). Laws.md 5.
 
 mod feed;

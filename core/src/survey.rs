@@ -23,7 +23,7 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
 /// of alike nodes (`nodes::crowd`); then each cell's light shared out (`shade`) and what it holds (`sum_cells`); once a
 /// month the traffic and each cell's surroundings. The wear and the merge run per domain on the pool (`on_domains`) in
 /// the cells where no part is and no body holds or is inside one; then in those cells, one by one, each a serial step
-/// with its outbox applied after it, as a death or a merge there lets go of a part (plan 3.10). With `reversed`, the
+/// with its outbox applied after it, as a death or a merge there lets go of a part (laws.md 0). With `reversed`, the
 /// domains start in reversed order: only for the order test.
 pub fn survey(w: &mut World, reversed: bool) {
     let n = w.mesh.cells().n();
@@ -148,7 +148,7 @@ fn shade(w: &World, d: &mut Domain) {
     }
 }
 
-/// What a body shows others in a batch, as it was at the batch's start (plan 3.5): what they perceive of it.
+/// What a body shows others in a batch, as it was at the batch's start (laws.md 0): what they perceive of it.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Face {
     pub id: u64,
@@ -194,7 +194,7 @@ impl Faces {
     }
 }
 
-/// Update the bodies due in this batch, all at its first day (plan 3.6). First the parallel phase: the domains are taken
+/// Update the bodies due in this batch, all at its first day (laws.md 0). First the parallel phase: the domains are taken
 /// out of the world (`life::Domain`), and each runs, on a thread of the pool with the feature `threads` (`on_domains`),
 /// its bodies that hold no part and are inside none, cell by cell, and in a cell by id (an order that does not depend on
 /// where bodies are stored, and keeps memory reads close together), with the world read only. They see each other as

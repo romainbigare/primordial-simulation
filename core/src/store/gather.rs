@@ -1,6 +1,6 @@
 //! The moves of the bodies' updates of a domain in a batch, or of one serial step, gathered while they run and booked
 //! when they end. Each domain keeps its own (`life::Domain::moves`), with a view of its nodes as those moves leave them
-//! (plan 3.4): its air node, taken from the store when the domain opens, and the ground, bed and bodies' node of each
+//! (laws.md 0): its air node, taken from the store when the domain opens, and the ground, bed and bodies' node of each
 //! of its cells, taken when an update in the cell or a move first touches it (until then the store holds what the view
 //! would; nothing else changes the store while a domain is open). A move changes only its domain's nodes, the
 //! potential, whose lift is summed apart as `apply` sums it, and a body or a part, whose law books its side. A read of
