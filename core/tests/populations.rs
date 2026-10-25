@@ -5,7 +5,7 @@ use pcore::body::{Body, Layout, ALLOC, CHILD, COPY_MASS, DISPERSE, GAS, HIDDEN, 
 use pcore::event::EventKind;
 use pcore::rng::{Purpose, Rng};
 use pcore::units::DAY_S;
-use pcore::{body, brain, copy, lineage, nodes, World};
+use pcore::{body, brain, copy, lineage, nodes, outbox, World};
 use worldgen::testkit::{self, brood, life_totals, same_totals, children, founder, out, small_world, start, Books, Brain};
 
 /// Two parents: the gene value of the first body in the genes under test, and the step the catalyst genes move in.
@@ -345,6 +345,8 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
                 nodes::split(w, d, &mut b);
                 d[s] = b;
             });
+            // (Children who start in another cell wait in the outbox until a batch ends: they land here, as there.)
+            outbox::deliver(&mut w);
             // The children are young nodes of their own (immature, `copy::young`); here they grow up at once, and
             // would mature into their parent's node: they join it now, so the update's node math is the same.
             let kids: Vec<Handle> = live(&w).into_iter().filter(|k| *k != s && !before.contains(k) && w.life[*k].parent == id).collect();
@@ -449,6 +451,8 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
         let n0 = live(&w).len();
         w.time += DAY_S;
         assert!(w.in_domain(c.cell as usize, |w, d| copy::copy(w, d, &mut c)), "no children");
+        // (They land in the next cell, as at a batch's end.)
+        outbox::deliver(&mut w);
         (joined, tries) = (joined + (live(&w).len() == n0) as u32, tries + 1);
         w.events.clear();
     }
