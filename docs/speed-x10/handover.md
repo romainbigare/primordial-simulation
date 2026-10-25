@@ -39,7 +39,7 @@ points to. It is written in very simple English, as the owner wants for everythi
 | 4cc7b81 | **R1**: the rules true at once (CLAUDE.md 2.11, 3.1, 6.1, its table; handover 12.1, 12.3, 12.5, 14.3, 14.5; `cli/tests/core_size.rs` `CEILING` 12,000) |
 | f579a5d | **R3**: the long-step test runs a world `Config::validate` accepts (`phys_days` 2) and every `tape/tests` world is validated; the liquid's clock counts a `flow_days` over a month from the world's start (`schedule::days`); `validate` refuses a `flow_days` over a month that is not a whole number of months; a new test. The long-step test passes (t_land 0.145 K, seed 1 at 0.306 K) |
 | ac8a3f2 | **AIR4.0, a law fix** (golden re-pinned): in `Surface::balance` (`core/src/flow/air/radiation.rs`) a melting plateau used up inside an air step held for the whole step and restarted on the wrong side of the fusion enthalpy (a sign error), and the snow cover's cap held after the snow was gone. Now the node stays on the plateau only for its share of the step. Long-step test t_land 0.145 to 0.118 K, winter 0.026 to 0.002 K; a new test `a_plateau_used_up_in_one_long_step_ends_where_short_steps_end`; the test `liquid_wears_its_bed_with_the_work_its_load_leaves_free` now holds its land's temperature (`hold_ground`) |
-| (R2's commit, if merged) | **R2**: the gates measured on fresh benches (see section 4) |
+| 413f552, fb6eb94 (merged 3162b9d) | **R2**: every gate measured on benches remade in one hour, and the key-number references fixed (`measures.md`, section "R2"; its table "The gates at a glance" and "What is measured and what is not yet") |
 
 Probes done (pushed branches; their results are in `measures.md`):
 - **PR-B** (`probe/brain-loss`): no body lost its brain in 1,000 years of island22 or globe36 (seed 1). The switch in
@@ -55,12 +55,18 @@ Probes done (pushed branches; their results are in `measures.md`):
 
 ## 4. What is not done yet, in order
 
-1. **R2, finish it.** It remakes the three benches in one hour and measures every gate (plants and animals shares P0,
-   E0 (a)-(f), AIR0, MI0, G0, the minds breakdown) and the fixed key-number references. In this session it was asked
-   to stop early and commit what it had: check `docs/speed-x10/measures.md` on the branch for what is marked "not
-   yet measured", and measure the rest. Note: AIR4.0 (a law fix) landed after R2's benches were made, so remake the
-   benches on the branch's current head before the probes below, and take the key-number references there.
-2. **The probes that need R2** (plan section 4, phase P): **PR-M** (the plant month prototype: µs per stand, error
+1. **R2 is done** (`measures.md`). What it found, in short: plant updates are 30% of island22's year (about 37% with
+   their share of the rest), so P3 stays; stands differ from their ground's temperature by over 3 K in about half of
+   their updates, so P1.3's stage 6 must book that step; E2's gate is met (busiest share at 4 cells 0.43 / 0.55 /
+   0.26 of today's); E4's gate is met (booking 9% of a 4-thread year); calm cells (AIR1) skip rows mainly on the
+   globe (27%; island 2%); **MI3a's gate fails** (sleep share 14 / 11 / 29%, the gate is 40%: by X36 MI3a is re-gated
+   after G2 and will likely not be built); MI4's gate is met (sharing 1.95 / 2.17); G15 is 0.02 to 0.11 from its line;
+   the key numbers are all in range except S50. Weak spots it names: some shares are proxies, tiles were counted not
+   timed, the wall times were taken on a busy machine (judge by instructions).
+   **Its benches lived in the scratchpad, which is gone with the container.** AIR4.0 (a law fix) also landed after
+   them. So the next session first remakes the benches on the branch's head (`scripts/bench.sh --remake` with
+   `BENCH_DIR` set, a few minutes each), and takes the key-number references there.
+2. **The probes that need the benches** (plan section 4, phase P): **PR-M** (the plant month prototype: µs per stand, error
    against `body::live` at 2 and 6 days, a first look at `D` = gene against `D` = 36), **PR-A** (what starves animal
    nodes at a 30-day pace, cause by cause), **PR-S** (the noise of the judging method for steps that change the
    snapshot), **G14-P1** (the first overlap probe: the air step and the batch joined; month windows timed apart; the
