@@ -2,6 +2,7 @@
 //! sizes, how much signals say about their sender's state, the members' masses and what each starting kind eats.
 
 use super::Row;
+use crate::layers::Ctx;
 use crate::measure;
 use crate::rec::tally::Signals;
 use crate::rec::Recorder;
@@ -40,9 +41,9 @@ fn info(sig: &[Signals], c: usize) -> f64 {
 }
 
 impl Recorder {
-    pub(super) fn brain_cols(&self, w: &World, row: &mut Row) {
-        self.learning(w, row);
-        self.variety(w, row);
+    pub(super) fn brain_cols(&self, c: &Ctx, row: &mut Row) {
+        self.learning(c.w, row);
+        self.variety(c, row);
         // What signals say about cold ground, harm met and low well-being.
         for (c, name) in ["mi_cold", "mi_hurt", "mi_low"].into_iter().enumerate() {
             row.push(name, "bit", info(&self.year.sig, c));
@@ -72,10 +73,11 @@ impl Recorder {
 
     /// The members' mass range (kg), and the share of what a starting kind took from bodies that came from animals:
     /// for the kind with most bodies, and the highest of any.
-    fn variety(&self, w: &World, row: &mut Row) {
+    fn variety(&self, c: &Ctx, row: &mut Row) {
+        let w = c.w;
         let live: Vec<&pcore::body::Body> = w.life.alive().collect();
         // Each member's mass with the starting kind of its lineage (NaN: none), the heaviest last.
-        let mut heavy: Vec<(f64, f64)> = live.iter().map(|b| (b.mass(&w.chem) / b.n(), w.life.brains[b.lineage as usize].as_ref().map_or(f64::NAN, |l| l.root as f64))).collect();
+        let mut heavy: Vec<(f64, f64)> = live.iter().zip(&c.mass).map(|(b, m)| (m / b.n(), w.life.brains[b.lineage as usize].as_ref().map_or(f64::NAN, |l| l.root as f64))).collect();
         heavy.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mass: Vec<f64> = heavy.iter().map(|m| m.0).collect();
         let at = |q: usize| mass.get(q).copied().unwrap_or(f64::NAN);

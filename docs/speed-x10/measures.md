@@ -1088,3 +1088,37 @@ that skipped that draw changed the world after a year, though the golden test di
 
 Verdict: bit for bit; the gain is under the kill line (-0.5%) by a little and under the aim (-0.8%). The commit stays
 on its branch for the architect to decide.
+
+## G8: the tape's recorder on the pool
+
+Level 1 for the world (the recorder only reads it) and level 1 for the tape: every sum is added in the order it was
+before. The walks over bodies and cells make their numbers in parallel (`tape/src/par.rs`: results come back in the
+order of the items), and the recorder adds them up in that order. Side by side (`par::join`): counting the events
+and looking at the bodies for the month; the world's fields and totals (`Ctx`); the yearly columns that only read the
+recorder (world, kinds, brains, parts). Costly numbers of a body (mass, `life_years`, activity, size, brood, the ground's
+temperature of its cell) are worked out once, in parallel. `tape` has the feature `threads`, which `cli` turns on.
+
+| Check | Result |
+|---|---|
+| Golden test, with threads and with one thread | unchanged |
+| `series.csv` and `months.csv`, 3 years from each bench save, base `52d7f4a` and this step | identical (every column but `ms_*`) |
+| The same on one thread (`RAYON_NUM_THREADS=1`), island22 | identical |
+| Viewer frames, island22, one year, monthly frames | identical bytes |
+| One year on one thread, callgrind (instructions), previous commit then this step | island22 7,351.7 M then 7,341.6 M; globe36 8,468.1 M then 8,455.4 M |
+
+The tape's time a year on 4 threads (the `ms_tape` column; 3 years from the bench save, the mean of years 2 and 3,
+which hold a whole year of work each: the first year's row lacks the yearly row's own cost). 10 interleaved runs of the
+base build and this build, with `flock`; the medians, on a machine with other work at a load of about 2 (the runs
+themselves are 1 to 1.8 of it):
+
+| Bench | Base ms a year | This step ms a year | Change |
+|---|---|---|---|
+| island22 | 10.07 | 6.30 | -37% |
+| globe36 | 11.07 | 6.89 | -38% |
+
+The same runs on a busier machine (load 3 to 5, other agents building) gave -8% to -30% on the island and -22% to -44% on
+the globe: threads that wait for a core give less. Where the time goes now (island22, one thread, a year): the events
+counted one after the other (about 1 ms, 3 ms on the globe: the `BTreeMap`s of who took and who watched), the world's
+totals (`check::totals`, compensated sums in a fixed order), the files of a decade.
+
+Verdict: above the kill line (-25%) on both benches, a little under the aim (-40%). Kept.

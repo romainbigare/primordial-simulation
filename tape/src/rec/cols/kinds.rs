@@ -4,6 +4,7 @@
 
 use super::{ratio, Row};
 use crate::layers::Ctx;
+use crate::par;
 use crate::rec::{Recorder, CAUSES};
 use pcore::body::{self, Body};
 use pcore::World;
@@ -49,19 +50,20 @@ impl Kind {
         Kind { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, brood: 0.0, alloc: 0.0, child: 0.0, act: 0.0, dry: 0.0, wet: 0.0, genes: [0.0; GENES.len()], cat: vec![(0.0, 0.0); nr] }
     }
 
-    fn add(&mut self, w: &World, b: &Body, cat: usize) {
+    /// Add body `b` (of the kind), with what is costly to work out for it (`Heavy`).
+    fn add(&mut self, w: &World, b: &Body, cat: usize, h: &Heavy) {
         let (chem, n) = (&w.chem, b.n());
         let matter_mm = chem.matter().map(|m| (m, chem.subs[m].molar_mass));
         self.members += n;
         self.bodies += 1.0;
-        self.life += n * life_years(w, b);
-        self.mass += b.mass(chem);
+        self.life += n * h.life;
+        self.mass += h.mass;
         self.matter += matter_mm.map_or(0.0, |(m, mm)| b.store[m] * mm);
-        self.body += b.size(chem);
+        self.body += h.size;
         self.copy_mass += n * b.k.copy_mass;
         (self.alloc, self.child) = (self.alloc + n * b.gene(body::ALLOC), self.child + n * b.gene(body::CHILD));
-        self.brood += b.brooded(chem) * matter_mm.map_or(0.0, |(_, mm)| mm);
-        let a = b.activity(chem, &w.cfg.phys);
+        self.brood += h.brooded * matter_mm.map_or(0.0, |(_, mm)| mm);
+        let a = h.activity;
         (self.act, self.dry, self.wet) = (self.act + n * a, self.dry + n * (a < DRY) as u8 as f64, self.wet + n * b.gene(body::WET));
         for (x, &(g, ..)) in self.genes.iter_mut().zip(&GENES) {
             *x += n * b.gene(g);
@@ -75,9 +77,26 @@ impl Kind {
     }
 }
 
-/// Years a member of `b` lives at its upkeep now: `e_life` × 10^`REPAIR` per kg of living body over its upkeep.
-fn life_years(w: &World, b: &Body) -> f64 {
-    let (m, d) = (b.mass(&w.chem), b.interval(w) as f64);
+/// What a body adds to its kind that is costly to work out: the years a member lives (`life_years`), its mass, its
+/// size, its brood and its activity.
+struct Heavy {
+    life: f64,
+    mass: f64,
+    size: f64,
+    brooded: f64,
+    activity: f64,
+}
+
+impl Heavy {
+    fn of(c: &Ctx, q: usize, b: &Body) -> Heavy {
+        let (w, chem) = (c.w, &c.w.chem);
+        Heavy { life: life_years(w, b, c.mass[q]), mass: c.mass[q], size: b.size(chem), brooded: b.brooded(chem), activity: b.activity(chem, &w.cfg.phys) }
+    }
+}
+
+/// Years a member of `b` (of mass `m`, kg) lives at its upkeep now: `e_life` × 10^`REPAIR` per kg of living body over its upkeep.
+fn life_years(w: &World, b: &Body, m: f64) -> f64 {
+    let d = b.interval(w) as f64;
     w.cfg.phys.e_life * b.dec(body::REPAIR) * b.built(&w.chem).max(1e-9 * m) * d / body::upkeep(w, b, d, m, b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys)).max(1e-300) / w.days_per_year() as f64
 }
 
@@ -87,13 +106,15 @@ impl Recorder {
         let (nr, cat) = (w.chem.reactions.len(), body::Layout::of(&w.chem).cat);
         let seen = self.series.iter().filter(|c| c.name.starts_with("root_") && c.name.ends_with("_members")).count();
         let mut kinds = vec![Kind::new(nr); seen.max(y.kinds.len())];
-        for b in w.life.alive() {
+        let bodies: Vec<&Body> = w.life.alive().collect();
+        let heavy = par::map_n(bodies.len(), |q| Heavy::of(c, q, bodies[q]));
+        for (b, h) in bodies.iter().zip(&heavy) {
             if let Some(l) = &w.life.brains[b.lineage as usize] {
                 let k = l.root as usize;
                 if k >= kinds.len() {
                     kinds.resize(k + 1, Kind::new(nr));
                 }
-                kinds[k].add(w, b, cat);
+                kinds[k].add(w, b, cat, h);
             }
         }
         // The catalyst genes on in some member of the kind so far keep their columns.

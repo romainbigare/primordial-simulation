@@ -457,6 +457,7 @@ This is a speed tool, not a law: the history is the same with and without thread
 - Bodies update in **batches** of `batch_days` (2) days. In a batch each domain runs on its own thread. Body code reads the world as it was at the batch's start and writes only its own domain. What leaves the domain (a move to another cell, a litter that starts in another cell, a watch, an act on a part) waits in the domain's **outbox** and is applied at the batch's end, in a fixed order, on one thread. Bodies that hold a part or are inside one run in that serial phase.
 - Flow's air step and Change's reactors and the survey's wear, merge and shade use the same pool where a loop is large enough to pay for a call into it (30 to 55 µs).
 - How it works: `docs/laws.md` 0. What it gave and what limits it: `docs/reports/speed.md`. On 4 cores the bodies run about 2 times faster than on one, and a whole year about 1.6 to 1.8 times; the rest stays on one thread (the serial phase of a batch, the booking, Flow's ordered passes).
+- The tape's recorder uses the same pool (the feature `threads` of `tape`, `tape/src/par.rs`): its walks over bodies and cells, and the parts of a yearly row that write different columns, run side by side, and every sum is added in the order of the data, so its files are the same with and without threads.
 - A zone that needs a shorter step later (7.3) can run several sub-batches inside one global batch: its edge effects still land at the global batch's end. Nothing built blocks that.
 
 ---

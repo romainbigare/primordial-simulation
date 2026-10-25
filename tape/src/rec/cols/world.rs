@@ -16,7 +16,7 @@ impl Recorder {
     pub(super) fn world_cols(&self, c: &Ctx, land: &[usize], row: &mut Row) {
         let w = c.w;
         let (life, area, air_area) = (&w.life, w.mesh.cells().area(), w.mesh.level(AIR).area());
-        let tot = pcore::check::totals(w);
+        let tot = &c.tot;
         row.push("year", "yr", w.year());
         row.push("null", "1", w.cfg.null as u8 as f64);
         for (j, &v) in tot.elems.iter().enumerate() {
@@ -65,7 +65,7 @@ impl Recorder {
         cover.sort_by(|a, b| a.total_cmp(b));
         row.push("cover_median", "kg/m2", cover.get(cover.len() / 2).copied().unwrap_or(0.0));
         row.push("cover_max", "kg/m2", cover.last().copied().unwrap_or(0.0));
-        row.push("body_mass", "t", life.alive().map(|b| b.mass(&w.chem)).sum::<f64>() / 1e3);
+        row.push("body_mass", "t", c.mass.iter().sum::<f64>() / 1e3);
         dead(w, land, row);
         row.push("births", "1/yr", self.year.births);
         for (cause, &x) in CAUSES.iter().zip(&self.year.deaths) {

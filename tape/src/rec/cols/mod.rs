@@ -10,6 +10,7 @@ mod world;
 
 use super::{Column, Recorder, Spent};
 use crate::layers::Ctx;
+use crate::par;
 
 /// The unit of the mineral columns counted in mol: 10^9 mol.
 const GIGA: f64 = 1e9;
@@ -24,6 +25,13 @@ impl Row {
     }
 }
 
+/// The columns `fill` writes, as a row of their own.
+fn made(fill: impl FnOnce(&mut Row)) -> Row {
+    let mut row = Row::default();
+    fill(&mut row);
+    row
+}
+
 /// `a` over `b`, NaN (a mean of nothing) where `b` is not above 0.
 fn ratio(a: f64, b: f64) -> f64 {
     if b > 0.0 {
@@ -36,13 +44,15 @@ fn ratio(a: f64, b: f64) -> f64 {
 impl Recorder {
     /// Write the yearly row, then start the sums of the year again.
     pub(super) fn push_series(&mut self, c: &Ctx, spent: &Spent) {
-        let land: Vec<usize> = (0..c.w.mesh.cells().n()).filter(|&i| c.w.is_land(i)).collect();
-        let mut row = Row::default();
-        self.world_cols(c, &land, &mut row);
-        self.kind_cols(c, &mut row);
-        self.brain_cols(c.w, &mut row);
+        let land: Vec<usize> = (0..c.f.z.len()).filter(|&i| c.f.z[i] > 0.0).collect();
+        // The parts of the row that only read the recorder are made side by side; the rest follow, in the row's order.
+        let ((world, kinds), (brains, parts)) = par::join(
+            || par::join(|| made(|r| self.world_cols(c, &land, r)), || made(|r| self.kind_cols(c, r))),
+            || par::join(|| made(|r| self.brain_cols(c, r)), || made(|r| self.parts_cols(c.w, r))),
+        );
+        let mut row = Row([world.0, kinds.0, brains.0].concat());
         self.social_cols(c, &land, &mut row);
-        self.parts_cols(c.w, &mut row);
+        row.0.extend(parts.0);
         self.time_cols(spent, &mut row);
         self.year = Default::default();
         self.updates = c.w.counts.updates;

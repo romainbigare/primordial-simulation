@@ -2,6 +2,7 @@
 
 mod layers;
 mod measure;
+mod par;
 mod rec;
 mod snapshot;
 

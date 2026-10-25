@@ -1,6 +1,9 @@
 //! Surface fields, the layer table and byte quantisation for viewer frames.
 //! To add a layer, add one line to `LAYERS` (and the data it needs to `Ctx`).
 
+use crate::par;
+use pcore::body::Body;
+use pcore::check::{totals, Totals};
 use pcore::chem::{Phase, Substance};
 use pcore::{World, AIR};
 
@@ -34,38 +37,49 @@ pub struct Fields {
     pub rgb: Vec<[f64; 3]>,
 }
 
+/// One cell's values: elevation, liquid depth, frozen cover depth, loose solid depth, temperature, colour.
+type Cell = (f64, f64, f64, f64, f64, [f64; 3]);
+
 pub fn fields(w: &World) -> Fields {
-    let (n, ns) = (w.mesh.cells().n(), w.chem.ns());
-    let mut f = Fields { z: vec![0.0; n], depth: vec![0.0; n], ice: vec![0.0; n], loose: vec![0.0; n], t: vec![0.0; n], rgb: vec![[0.0; 3]; n] };
-    for i in 0..n {
-        let (t, pl) = w.thaw_last(i);
-        // Kinds of cover in order of priority: frozen, liquid, loose, bonded. Each: volume, volume * colour.
-        let mut acc = [[0.0f64; 4]; 4];
-        let mut add = |kind: usize, vol: f64, refl: [f32; 3]| {
-            acc[kind][0] += vol;
-            for c in 0..3 {
-                acc[kind][1 + c] += vol * refl[c] as f64;
-            }
-        };
-        for k in 0..ns {
-            let s = &w.chem.subs[k];
-            let (melt, a) = (w.molten(k, i, t, pl), w.g(k, i));
-            let solid = a * (1.0 - melt) * w.chem.molar_volume(k, Phase::Solid);
-            add(if is_cover(s) { 0 } else { 2 }, solid, s.refl[0]);
-            if t < s.boil {
-                add(1, a * melt * w.chem.molar_volume(k, Phase::Liquid), s.refl[1]);
-            }
-            add(3, w.b(k, i) * w.chem.molar_volume(k, Phase::Solid), s.refl[0]);
-        }
-        f.t[i] = t;
-        f.z[i] = w.surface_z(i);
-        let area = w.mesh.cells().area()[i];
-        (f.ice[i], f.depth[i], f.loose[i]) = (acc[0][0] / area, acc[1][0] / area, acc[2][0] / area);
-        let top = acc[..3].iter().find(|a| a[0] / area >= COVER_MIN).unwrap_or(&acc[3]);
-        let glow = 1.0 + 2.0 * ((t - GLOW_T) / GLOW_T).clamp(0.0, 1.0);
-        f.rgb[i] = [1, 2, 3].map(|c| if top[0] > 0.0 { (top[c] / top[0] * glow).min(1.0) } else { 0.0 });
+    let cells = par::map_n(w.mesh.cells().n(), |i| cell(w, i));
+    let mut f = Fields { z: vec![], depth: vec![], ice: vec![], loose: vec![], t: vec![], rgb: vec![] };
+    for (z, depth, ice, loose, t, rgb) in cells {
+        f.z.push(z);
+        f.depth.push(depth);
+        f.ice.push(ice);
+        f.loose.push(loose);
+        f.t.push(t);
+        f.rgb.push(rgb);
     }
     f
+}
+
+/// The values of cell `i` (`Cell`).
+fn cell(w: &World, i: usize) -> Cell {
+    let (t, pl) = w.thaw_last(i);
+    // Kinds of cover in order of priority: frozen, liquid, loose, bonded. Each: volume, volume * colour.
+    let mut acc = [[0.0f64; 4]; 4];
+    let mut add = |kind: usize, vol: f64, refl: [f32; 3]| {
+        acc[kind][0] += vol;
+        for c in 0..3 {
+            acc[kind][1 + c] += vol * refl[c] as f64;
+        }
+    };
+    for k in 0..w.chem.ns() {
+        let s = &w.chem.subs[k];
+        let (melt, a) = (w.molten(k, i, t, pl), w.g(k, i));
+        let solid = a * (1.0 - melt) * w.chem.molar_volume(k, Phase::Solid);
+        add(if is_cover(s) { 0 } else { 2 }, solid, s.refl[0]);
+        if t < s.boil {
+            add(1, a * melt * w.chem.molar_volume(k, Phase::Liquid), s.refl[1]);
+        }
+        add(3, w.b(k, i) * w.chem.molar_volume(k, Phase::Solid), s.refl[0]);
+    }
+    let area = w.mesh.cells().area()[i];
+    let top = acc[..3].iter().find(|a| a[0] / area >= COVER_MIN).unwrap_or(&acc[3]);
+    let glow = 1.0 + 2.0 * ((t - GLOW_T) / GLOW_T).clamp(0.0, 1.0);
+    let rgb = [1, 2, 3].map(|c| if top[0] > 0.0 { (top[c] / top[0] * glow).min(1.0) } else { 0.0 });
+    (w.surface_z(i), acc[1][0] / area, acc[0][0] / area, acc[2][0] / area, t, rgb)
 }
 
 /// Liquid deeper than this stands (a basin), m; shallower, it may flow as a river.
@@ -95,41 +109,50 @@ pub(crate) struct Ctx<'a> {
     pub bodies: Vec<f64>,
     /// Per ground cell: mass of made objects (parts), kg/m²
     pub parts: Vec<f64>,
-    /// Per living body (`Life::alive`): a light-eater (`body::light_eater`)
+    /// Per living body (`Life::alive`): a light-eater (`body::light_eater`), and its mass, kg
     pub light: Vec<bool>,
+    pub mass: Vec<f64>,
+    /// What the world holds in all (`check::totals`)
+    pub tot: Totals,
 }
 
 impl<'a> Ctx<'a> {
     pub(crate) fn new(w: &'a World) -> Self {
-        let (na, ns) = (w.mesh.level(AIR).n(), w.chem.ns());
         let n = w.mesh.cells().n();
-        let (t_air, vapor, absorber) = ((0..na).map(|j| w.t_air(j)).collect(), vec![0.0; na], vec![0.0; na]);
-        let light = w.life.alive().map(|b| pcore::body::light_eater(&w.chem, &b.genes)).collect();
-        let mut c = Ctx { w, f: fields(w), t_air, vapor, absorber, plants: vec![0.0; n], animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], light };
+        let t_air = (0..w.mesh.level(AIR).n()).map(|j| w.t_air(j)).collect();
+        let bodies: Vec<&Body> = w.life.alive().collect();
+        let (light, mass) = par::map(&bodies, |b| (pcore::body::light_eater(&w.chem, &b.genes), b.mass(&w.chem))).into_iter().unzip();
+        let (f, tot) = par::join(|| fields(w), || totals(w));
+        let mut c = Ctx { w, f, tot, t_air, vapor: vec![], absorber: vec![], plants: vec![0.0; n], animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], light, mass };
         for (x, p) in w.parts.parts.iter().enumerate().filter(|(_, p)| p.alive) {
             let i = pcore::bond::cell(w, x);
             c.parts[i] += p.mass(&w.chem) / w.mesh.cells().area()[i];
         }
-        for (b, &light) in w.life.alive().zip(&c.light) {
+        for ((b, &light), &mass) in bodies.iter().zip(&c.light).zip(&c.mass) {
             let i = b.cell as usize;
-            let m = b.mass(&w.chem) / w.mesh.cells().area()[i];
+            let m = mass / w.mesh.cells().area()[i];
             *if light { &mut c.plants[i] } else { &mut c.animals[i] } += m;
             c.bodies[i] += 1.0;
         }
-        for (j, &area) in w.mesh.level(AIR).area().iter().enumerate() {
-            for k in 0..ns {
-                let (s, n) = (&w.chem.subs[k], w.a(k, j));
-                c.absorber[j] += w.chem.depth(k, n / area);
-                if s.boil > VAPOR_BOIL {
-                    c.vapor[j] += n / area;
-                }
-            }
-        }
+        (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), |j| air_column(w, j)).into_iter().unzip();
         c
     }
     fn air(&self, i: usize) -> usize {
         self.w.mesh.up(i, 0, AIR)
     }
+}
+
+/// Air node `j`: its heat-absorbing column (Σ n·ir_abs / area) and the column of condensable gases, mol/m².
+fn air_column(w: &World, j: usize) -> (f64, f64) {
+    let (mut absorber, mut vapor, area) = (0.0, 0.0, w.mesh.level(AIR).area()[j]);
+    for (k, s) in w.chem.subs.iter().enumerate() {
+        let n = w.a(k, j);
+        absorber += w.chem.depth(k, n / area);
+        if s.boil > VAPOR_BOIL {
+            vapor += n / area;
+        }
+    }
+    (absorber, vapor)
 }
 
 pub struct Layer {

@@ -8,6 +8,7 @@ mod months;
 mod tally;
 
 use crate::layers::{frame, Ctx};
+use crate::par;
 use months::MonthRow;
 use pcore::event::{Event, EventKind};
 use pcore::{Taken, World, AIR};
@@ -163,19 +164,28 @@ impl Recorder {
         if self.months.last().is_some_and(|r| (r.year, r.month) == months::year_month(w)) {
             return;
         }
-        for e in &events {
-            self.count(e, w);
-        }
-        self.detect(w);
         let framed = year < self.monthly || (yearly && self.every > 0 && year % self.every == 0);
-        self.month(w);
-        if !yearly && !framed {
-            return;
-        }
+        // The recorder counts the events while it looks at the bodies, and both while the world's fields are worked out.
+        let (_, ctx) = par::join(
+            || {
+                let last = std::mem::take(&mut self.social.last);
+                let (_, seen) = par::join(
+                    || {
+                        for e in &events {
+                            self.count(e, w);
+                        }
+                        self.detect(w);
+                    },
+                    || months::look(w, &last),
+                );
+                self.month(w, seen);
+            },
+            || (yearly || framed).then(|| Ctx::new(w)),
+        );
+        let Some(c) = ctx else { return };
         if let Some(t) = taken.filter(|_| yearly) {
             (self.year.decisions, self.year.busiest, self.year.parts) = ([t.decisions, t.greedy], [t.body_batches, t.busiest_share], t.parts);
         }
-        let c = Ctx::new(w);
         if yearly {
             self.push_series(&c, spent);
         }
