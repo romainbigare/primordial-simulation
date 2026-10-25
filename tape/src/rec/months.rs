@@ -66,8 +66,10 @@ impl Recorder {
         let (mut n, mut sum, mut inside, mut tm) = (0.0f64, [0.0; 4], 0.0, 0.0);
         let mut last = BTreeMap::new();
         // The surface heights of the last survey (`Life::env`, not saved), or, before the first survey of a resumed world,
-        // from the amounts (`World::surface_z`).
-        let z_of = |i: usize| w.life.env.get(i).map_or_else(|| w.surface_z(i), |e| e[2]);
+        // from the amounts (`World::surface_z`), each cell's once.
+        let cells = w.mesh.cells().n();
+        let fresh: Vec<f64> = if w.life.env.len() < cells { (0..cells).map(|i| w.surface_z(i)).collect() } else { Vec::new() };
+        let z_of = |i: usize| w.life.env.get(i).map_or_else(|| fresh[i], |e| e[2]);
         y.months += 1.0;
         for b in w.life.alive() {
             let i = b.cell as usize;
