@@ -1,136 +1,359 @@
 # Speed x10: the plan
 
-Status: plan, under review. Branch `speed/x10`. The low-level design of each part is in `design/` (`plants.md`,
-`engine.md`, `air.md`, `minds.md`); this file joins them, takes the decisions between them (`decisions.md`, X1 and on)
-and gives the order of the work. Measures go in `measures.md`. History goes in `docs/history.md`, section 6.
+Status: plan, after the adversarial review (two parts). Branch `speed/x10`. **This file is the single source of the
+steps:** each kept step has here its description, check level, done-when, kill line, what it needs and its agent.
+The designs in `design/` (`plants.md`, `animals.md`, `engine.md`, `air.md`, `minds.md`, `gap.md`) hold the detail;
+each starts with a note of which of its steps are kept, dropped or renamed. Decisions: `decisions.md` (X1 and on).
+Measures: `measures.md` (made in R2). History: `docs/history.md`, section 6.
 
-## 1. Why, and what to expect
+## 1. The goal, and what to expect
 
-The last round (`docs/reports/speed.md`) made a year about 2 times faster and stopped: it changed how the computer does
-the work, not what the world computes. The owner now accepts changes of laws and rules for speed, and named eleven
-ideas (section 3). The designs studied each one against the code; this plan builds the ones that can pay and drops the
-ones the designs showed to be bad from the start (section 3 says which and why).
+**The goal:** a settled year on 4 cores 10 times faster than at the start of the last round: island22 0.910 s ->
+0.091 s, globe36 1.490 s -> 0.149 s (`docs/speed-post-foundation/measures.md` Z1). Today 0.614 s and 0.738 s, so
+6.7 times (island) and 5.0 times (globe) are still to find.
 
-**What the four designs found, in short:**
+**The owner's rules for this round:** bad ideas are dropped from the start; every dropped strategy brings an
+alternative (section 3); laws and rules may change for speed; the three rules for smart bodies hold (individuals stay
+real; the step length per place; kinds of body code).
 
-| Part | Biggest finding | Expected gain |
+**What the plan can give** (section 5 has the table; all numbers are estimates from the designs until R2 measures
+them again on one set of benches):
+
+| Set of steps | island22 | globe36 |
 |---|---|---|
-| Plants | Plants are 38% (island) and 21% (globe) of a year, not most of it: an animal update costs twice a plant's. Plants become *stands* that run one month-long law (upkeep and light together, exact solution per phase), so they update far less often | island 1.25 to 1.45 times, globe 1.1 to 1.2 |
-| Engine | The 32 to 40% of the bodies' time on one core is not the price of determinism: it is one thread doing every write that crosses a domain. These writes can be shared out by destination in an order fixed by the data. Domains become tiles of 4 cells. 32-bit books do not pay and would break the books | bodies' stage -16 to -19% on 4 cores; 2 to 3 times today's design on 16 cores |
-| Air | The air is already on a grid 4 x 4 times coarser than the ground, and its solve is 6 to 8% of its step. Longer air steps warm the winters past the climate test. What pays: calm cells keep their rows, the per-cell loops on all cores, a dense book | Flow 1.5 to 1.65 times (sure steps), up to 2.5 to 2.9 if the research steps pass |
-| Minds | Decisions are 16% of a year; acting (node parts split off and back) is 40 to 64% of that, the network itself 1.4 to 2.1%. Habits (think only on change), shared senses of a place, movers as one group | year 1.05 to 1.08 times; calm animals updating less often 1.10 to 1.22 more |
+| today | 1.5 times | 2.0 times |
+| phase 1 and P3 (plants, engine, air, minds) | 2.5 | 3.3 |
+| + the steps that change no law (G1, G6, G7, G8, G13, G15) and G4 | 3.4 | 4.5 |
+| + all law and clock steps, without G14 | 7.4 | 9.9 |
+| **everything, with G14** | **10.9 to 12.8** | **14.7 to 17.4** |
+| everything but AIR4, with G14 | 8.9 to 10.6 | 12.3 to 14.5 |
+| without G14 and without AIR4 | 5.9 | 8.1 |
+| everything but G2 and G3, with G14 | 6.1 to 7.2 | 7.5 to 8.8 |
 
-**Honest arithmetic.** Multiplied, the sure steps give a year about 1.8 to 2.4 times faster on 4 cores than today, so
-about 3 to 4.5 times the start of the last round. The research and gated steps could add 1.3 to 1.6 times more. On 16
-cores the engine's pipeline adds 2 to 3 times over today's design. **10 times on 4 cores is not in sight with these
-ideas; it is in sight on 16 or more cores, or with the gated steps passing.** 100 times needs a different engine
-(a GPU for Flow and the stands, `docs/reports/speed.md`), which is not in this plan. The plan says so now so that no step
-is judged against a hope.
-
-**The goal stays 10 times** (a settled year on 4 cores, against the start of the last round). The steps above do not
-reach it, so this plan also carries a *gap* design (`design/gap.md`): more strategies, with their arithmetic, until the
-sum reaches 10 times. **Rule: a review or a step that drops a strategy proposes an alternative in its place** (with its
-expected gain and the rule or law it would change); the architect logs both in `decisions.md`.
+**Plainly:** 10 times on 4 cores is on paper only with the whole set. **The globe** reaches it with G2 and either AIR4
+or G14. **The island** needs G2 *and* G14, and is at the edge unless AIR4 passes too. Two steps carry the risk:
+**G2** (every population node at least every 30 days) needs P1b first, and PR-A must find what starves animal nodes
+at a long pace; **G14** (physics beside the bodies) is the hardest step of the round, and G14-P decides early whether
+it can pay. If G14 or AIR4 fail, expect about **6 to 7.5 times** on the island and **8 to 10 times** on the globe.
+No claim is made for 16 cores: this machine gives at most about 3 times on 4 cores (`gap.md` 1.3).
 
 ## 2. Rules for this round
 
-All of `CLAUDE.md` holds, except what decisions X1 to X6 change (the new wording is written into `CLAUDE.md` and the
-handover in step R1). The working rules of the last round hold (`docs/speed-post-foundation/plan.md` section 2): check
-levels, how a gain is judged (S45: callgrind instructions on one thread; wall time on 4 threads, 5 or more interleaved
-runs on a quiet machine), kill lines, one step per commit, a review after each big step, the three rules for smart
-bodies (plan 2.2 there: individuals stay real; the step length can be chosen per place; two kinds of body code).
+All of `CLAUDE.md` holds; the rules that change land with the step that makes them true (section 7). The working rules
+of the last round hold (`docs/speed-post-foundation/plan.md` section 2): one step per commit, a review after each
+lane, the three rules for smart bodies.
 
-**Check levels.** Level 1 bit for bit; level 2 the same to rounding; level 3 the same world: the key numbers
-(`tape/tests/ranges.rs`) in their ranges, the nodes check, the pace tests. A level-3 step re-pins the golden test in its
-commit and runs the key-number test once.
+**Check levels.** Level 1: bit for bit (golden unchanged with and without threads). Level 2: the same to rounding
+(golden re-pinned; a few series columns within rounding where life does not amplify it). Level 3: the same world:
+the key numbers (`tape/tests/ranges.rs`) in their ranges, the pace tests, and the nodes check **only for steps that
+touch nodes or minds**. Any change of `Config` (a field or a default) re-pins golden. A level-3 step re-pins golden in
+its commit and runs the key-number test once.
+
+**Key-number references.** R2 runs the key-number test once at the branch's start and keeps its values in
+`measures.md`. Every level-3 step is judged against these, and each lane review runs the test again. S50 (stored share)
+and S84 (sleep bias on `air_3`) are known failures: a step must not move them past their seeds' noise unless it says
+why (X5).
+
+**How a gain is judged.** One thread: callgrind instructions of a year (S45). Four threads: wall time, 5 or more
+interleaved runs on a quiet machine, medians. **One lock for wall time:** every wall-time run takes `flock
+/tmp/ew-bench.lock`, so two lanes never time at once; a run is thrown away if another cargo, rustc, valgrind or ew
+started during it.
+
+**Steps that bump `SNAPSHOT_VERSION`** (`Config` is saved in `World`, so any `Config` field does) cannot run the
+other build's save. They are judged (X24, method set by PR-S): (a) per update or per stand (µs, instructions) on each
+build's own remade bench (S65); and (b) runs from worldgen with the same seed and both builds (`ew run --seed 1`,
+the cost of years 150 to 200). A gain counts when both agree beyond PR-S's noise band. Parallel lanes each bump the
+version; at each merge it is set to the highest on either side plus one.
 
 **Agents.** Opus for steps that change a law or the structure of the update; Sonnet for normal code, tests and docs;
-Haiku for measures and data. Steps on different files run in parallel worktrees and merge one at a time; a step that
-re-pins golden rebases and re-pins on the branch it merges into.
+Haiku for measures. Steps on different files run in parallel worktrees and merge one at a time; a step that re-pins
+golden rebases and re-pins on the branch it merges into.
 
-**Measures.** Each lane remakes the benches with its own code (S65: remade worlds are not comparable across laws) and
-judges a step on one world: the same save run with both builds. Wall-time runs wait for a quiet machine (no other
-cargo, rustc, valgrind or ew).
+**Words.** No Earth words in `core/` (`cli/tests/word_ban.rs`): code names use physical words, never "herd" (a
+group of movers) or "sea" (open liquid cells).
 
-## 3. The eleven ideas: what is built, what is dropped
+## 3. The owner's ideas: what is built, what is dropped, and the alternatives
 
-| # | Owner's idea | What we build | Design | Decision |
-|---|---|---|---|---|
-| 1 | Plants as a field | Plants (bodies of a lineage with no brain) become *stands*: a stand is the plant node of a cell, stepped by one month-long law (P1); then a field step per cell in the survey takes them out of the ring (P3) | plants 3, 4 | X7 |
-| 2 | A growth table per genome | A *card*: the constants of a genome's month law, made in `prepare` (P1). A grid table is dropped | plants 6 | X8 |
-| 3 | Upkeep and light together across the interval | The month law for plants (P1); then the same law for animals (P1b), so there is one energy law and animals can update less often (MI6) | plants 4 | X9 |
-| 4 | Accept a different history with threads | Not needed: the pipeline E1, E2 shares the cross-domain writes out in an order fixed by the data, with the same gain; the history stays the same with any number of threads. An order-free variant is dropped | engine 2, 3 | X3 |
-| 5 | Exact books per cell and month, 32-bit inside | Dropped for numbers that hold matter or energy: they stay 64-bit (32 bits would break the books and buy no speed). 32-bit is allowed for numbers that hold nothing (cards, brain rows, faces) where a step measures a gain | engine 5 | X4 |
-| 6 | Fewer air steps where calm; a coarser air grid | Calm cells keep their rows and a calm solver (AIR1); the per-cell loops on all cores (AIR2); a dense book (AIR3); calm months by an error-controlled step, research (AIR4); shared sea balance, gated (AIR6). A coarser air grid is dropped: the air is already 4 x 4 coarser and its solve is 6 to 8% of its step | air 4 to 8 | X10 |
-| 7 | Raise the code ceiling | 11,500 code lines in `core` | engine 4 | X2 |
-| 8 | Think only when something changes | Habits (MI3): a body thinks again when its senses move, a body of another lineage comes or goes, its habit is no longer possible, or a season has passed | minds 2 | X11 |
-| 9 | Think in groups | Shared senses of a place (MI4); a node's movers leave as one group (MI5). One decision for unlike nodes is not built (a merge of unlike nodes, S66) | minds 3 | X11 |
-| 10 | Neural networks in batches | Dropped: each body owns 76% of its brain's weights, so a batch shares little (about 0.1% of a year), and the network is 1.4 to 2.1% of a year | minds 4 | X12 |
-| 11 | Full thinking for smart bodies | `--full-minds` (every body thinks at every update) is the control run of habits; a lineage at or over `Config::full_hidden` hidden units is never a node and always thinks fully (MI8) | minds 5 | X13 |
+| # | Owner's idea | What we build | Dropped, and its alternative |
+|---|---|---|---|
+| 1 | Plants as a field | Stands: the plant node of a cell, stepped by the month law (P1.2), then per cell in the survey, out of the ring (P3) | A new field type replacing plant bodies (X7): stands stay `Body` values |
+| 2 | A growth table per genome | A card: the constants of a genome's month law, made in `prepare` (P1.2) | A grid table (X8): alternative the card; discrete strains (P5) only on a branch if the owner asks |
+| 3 | Upkeep and light together | The month law for stands (P1.2) and for every body (P1b); D is the body's own gene interval (X14) | Today's law at a longer pace (C2): replaced by the stock equation |
+| 4 | A different history with threads | Not needed: the history is fixed by the data with any number of threads; E1 shares out the crossing writes | An order-free pipeline (X3): alternative E1's fixed-order pipeline |
+| 5 | 32-bit books | Books stay 64-bit; 32-bit only for numbers that hold nothing (G11 uses it) | A 32-bit store (X4): alternative G11 (f32 rates in the air's rows) |
+| 6 | Fewer air steps; a coarser air grid | AIR1 to AIR3; calm months AIR4 (= G10); G11 | A coarser air grid (X10): alternative AIR1 to AIR3 and AIR4; AIR5 only for worlds of 2,000+ cells. Longer Euler air steps: alternative AIR4. AIR6 (calm cells share a row): alternative G11 (X27) |
+| 7 | Raise the code ceiling | 12,000 code lines in `core` (X22) | 11,500 (too tight for the full set) |
+| 8 | Think only on change | Habits (MI3a), paid per thought (MI3b) | MI6 (calm animals update less often): alternative G2 (X16) |
+| 9 | Think in groups | Shared place senses (MI4); a node's movers leave as one group (MI5) | One decision for unlike nodes (a merge of unlike nodes, S66): alternative MI4 and MI5 |
+| 10 | Batched neural networks | Not built (X12) | Alternative: habits (MI3a) cut the thoughts; GM measures a thought for later brains |
+| 11 | Full thinking for smart bodies | `--full-minds`, the control run of habits (MI3a); the mark of a smart lineage comes with the first smart kind (MI7) | `Config::full_hidden` now (MI8, X25): dead code, and a node that crossed it would open into about 10^4 individuals at once |
+
+**Other ideas checked and dropped** (`gap.md` 4, `engine.md` 2.6, `air.md` 1.5):
+
+| Idea | Why not | Alternative |
+|---|---|---|
+| Climate "on repeat" (last year's fluxes) | a cache of past results, not physics; most cells would wake anyway | G5, AIR4 |
+| Last year's air as Newton's first guess | the step before was already worse (2.4 rounds, not 2.1) | AIR1's calm solver |
+| Change asleep by its net change | sleeps reaction pairs that undo themselves (S84's bias) | G1, G5 |
+| A cap of bodies per cell | not a speed tool after P3 (a crowded cell costs about 7.5 ms a year); a world choice | P3, G9a |
+| Fewer substances or reactions | Change's rows cost 2.3 µs a node; the cost is the booking and the clock | G1, G5 |
+| A stage-by-stage update for the instruction cache | 3% repeated work (E3's gate); it reorders moves (level 3) | G3 and G9 shrink the update code |
+| A linear-time air solver | the band solve is 6 to 8% of the air step | AIR5, gated on large worlds |
+| Takes inside one crowded cell on several threads (history by timing) | not needed while E2's tiles balance | E2 |
+| D1 (b)'s reserved shares (S81) | 170 to 280 lines, more law changes | G14 (the cut at booking) |
+| The 16-core model as a road to the goal | this machine gives at most about 3 times on 4 cores | the 4-core budget of section 5; E7 measures only |
 
 ## 4. The steps
 
-Each step has its full description, done-when and kill line in its design file; the table gives the order, the level,
-the agent and the gate. "4T" is wall time on 4 threads; "instr." is callgrind instructions of a year on one thread.
+"4T": wall time on 4 threads; "1T": callgrind instructions of a year on one thread; "detail": where the design
+holds the rest. A kill line reverts the step and keeps it on a branch.
 
-### Phase R: rules and measures (first)
+### Phase P: rules, measures and probes (before phase 1)
 
-| Step | What | Level | Agent | Done when / kill line |
-|---|---|---|---|---|
-| R1 | The new rules: `CLAUDE.md` (2.11 the ceiling 11,500; 3 the books; 6.1 the levels), handover 12 and 14, `cli/tests/core_size.rs` (X1 to X6); docs `speed-x10/` | docs | Sonnet | the rules read as X1 to X6 say |
-| R2 | Gate measures on remade benches at the branch's start: plant and animal shares (P0), the busiest share for tiles of 1, 4, 16 cells and the serial phase's parts (E0), the sleep share and the place-table sharing (MI0, a probe on a branch), the air's rows and rounds (air 3) | none | Haiku | `measures.md` holds them |
-| R3 | The long-step test runs a world `Config::validate` accepts (`phys_days` 2, not 3), and calls `validate` (AIR-T) | test | Sonnet | the test passes or its failure is reported |
+| ID | What | Level | Done when | Kill line | Needs | Agent | Detail |
+|---|---|---|---|---|---|---|---|
+| R1 | The rules true at once: `CLAUDE.md` 2.11 (ceiling 12,000), 3.1 (books are 64-bit), 6.1 (the number of threads does not change the world; every order fixed by the data), its table row "the work now"; handover 12.1, 12.3, 12.5, 14.3, 14.5; `cli/tests/core_size.rs` `CEILING` 12,000 | 1 | tests pass; wording as X3, X4, X22 | none | none | Sonnet | engine 4 |
+| R2 | One set of benches remade in one hour, and every gate measured on it: plants' and animals' shares (P0), E0 (a) to (f), AIR0, MI0 (sleep share; wake causes counted by cause, `others` keyed by lineage; decisions per (cell, lineage, batch); place sharing), G0 (the update split, Change's sleep, the clock settings, the four-worlds test), the minds breakdown (Z1: `choose::act` 11.6 / 17.8 / 3.5%, not 16%); the key-number references; section 5 restated | none | rows in `measures.md`; section 5 restated and read by the review | none | R1 | Haiku (Sonnet for timer builds on branches) | plants 9 (P0), engine 9 (E0), air 9 (AIR0), minds 9 (MI0), gap 9 (G0) |
+| R3 | The long-step test runs `phys_days` 2 and calls `Config::validate` (AIR-T); the `flow_days` bug: the liquid's clock counts its own period (`clock::Every` within it, as creep does) and `validate` refuses a `flow_days` over a month that is not a whole number of months | 1 (golden unchanged at `flow_days` 30) | the long-step test runs a world `validate` accepts (it passes, or its failure is reported); a test that `flow_days` 60 runs the liquid every 60 days | none | none | Sonnet | air 5, gap 1.2 |
+| PR-M | Month prototype on a branch: the plant month (stages 3 to 6); µs per stand; its error against `body::live` on a grid (light, temperature, wetness, fuel fill) at 2 and 6 days | none | a table in `measures.md` | a stand over 4 µs, or over 5% error at 6 days: P1.2's design is reviewed before it starts | R2 | Opus | plants 2.4 |
+| PR-B | Brain loss: a counter (on a branch) of resizes to no hidden unit, with members and parts held, in 1,000 years of island22 and globe36 | none | rows in `measures.md` | none | none | Sonnet (counter), Haiku (runs) | this plan, P1.2 |
+| PR-A | What starves animal nodes at a 30-day pace with today's law, cause by cause | none | its table | none | R2 | Opus | animals 2 |
+| PR-S | The judging method: a dummy `Config` field on a branch; the noise of per-update cost on own remade benches and of same-seed runs from worldgen | none | noise bands in `measures.md` | none | R2 | Sonnet (branch), Haiku (runs) | section 2 |
+| G14-P1 | First overlap probe on today's code (branch): the air step and the batch joined (`rayon::join`, physics rows not booked; timing only) | none | 4T year of both together against one after the other | under 15% saved: G14 is marked at risk in section 5 and the owner is told; G14-P2 decides | R2 | Sonnet | gap G14 |
+| AIR4-R1 | Why 30-day Euler steps warm the winters: switch the explicit parts one at a time | none | a table of each part's share of the +1.2 K | none | R3 | Opus | air 2.4 |
 
-### Phase 1: four lanes in parallel
+**Review after phase P.** The architect restates section 5 with R2 and the probes. If PR-A and G14-P1 both fail,
+the owner is told before phase 1 that the likely end is about 6 times (island) and 8 times (globe).
 
-Each lane is a chain; the lanes touch different files (plants: `body/`, `copy/`, `survey` stands; engine: `outbox`,
-`life/`, `survey::batch`, `store/`; air: `flow/`, `solve/`; minds: `choose/`, `brain/`). Where two lanes touch one file
-(`survey.rs`), the later merge rebases.
+### Phase 1: five lanes in parallel
 
-| Lane | Steps in order | Notes |
-|---|---|---|
-| Plants | **P1** the plant month and the card (Opus, level 3; kill line: under 10% fewer island instr.) → **P2** `field_days` 60 if the pace test passes (Sonnet) → **P1b** the month law for animals (Opus, level 3; X9) → **P3** the field step per cell, plants out of the ring (Opus, gated: at least 5% more) | |
-| Engine | **E1a, E1b, E1c** the pipeline: leaving bodies and sorted outboxes, global ids in a short serial step, landing and booking per destination on the pool, the small serial rest (Opus; kill line: under 6% on 4T) → **E2** tiles of 4 cells, each taking at most its cells' share of their air node (Opus, level 3; gated by R2) → **E4, E5** gated | |
-| Air | **AIR1** calm cells and calm solver (Sonnet, level 2) → **AIR3** dense book (Sonnet, level 1 or 2) → **AIR2** the air's and liquid's per-cell loops on all cores (Opus, level 1 with the fixed-order rule) | AIR4, AIR6 in phase 2 |
-| Minds | **MI1** the face cover once per batch (Sonnet, level 1) → **MI3** habits (Opus, level 3; gate: sleep share at least 40%) → **MI4** shared place senses (Sonnet, level 2) → **MI8** full minds by `full_hidden` (Sonnet) | MI5, MI6 in phase 2 |
+**Lane A, plants and animals** (`body/`, `copy/`, `params.rs`)
 
-### Phase 2: the gated and research steps
+| ID | What | Level | Done when | Kill line | Needs | Agent | Detail |
+|---|---|---|---|---|---|---|---|
+| P1.1 | `body::apply_extent`: one helper books a reaction's extent on a body, cut out of `pay::pay_at` | 1 | golden unchanged with and without threads | not bit for bit: fix, never re-pin | R1 | Sonnet | plants 2.3 stage 5 |
+| P1.2 | The month law for stands (stages 1 to 5 and 7; the heat still by the day law), the card, the stock's phases with the release limit (animals 3.1), booking order X29, D = the gene interval (X14), `node_days` -> `field_days` 36; **the brain-loss switch** (below); tests 1 to 3 of plants 5 and a switch test; `laws.md` 6.10, `numbers.md`, handover 7.1, 7.3; snapshot bumped | 3 | tests pass; books 1e-12 in the century; key numbers within the references (or new ones accepted by the owner); pace test 10, 36, 72; island 1T -10% | under 7% fewer island instructions, or key numbers out and not accepted | P1.1, PR-M, PR-B | Opus, adversarial review | plants 2.1 to 2.4, 3, 4 |
+| P1.3 | The stand at its ground's temperature (stage 6): no own heat network, keep-warm or cooling for stands; the switch books its heat step | 3 | stand tests; R2's `|T_plant - T_ground|` in `measures.md`; key numbers; island 1T -2% | a climate test or a key number fails: stands keep the day law's heat (`relax_heat`) | P1.2 | Opus | plants 2.3 stage 6 |
+| P1.4 | The sample by the month at every update; `sample_every` goes | 3 | `selection_inside_a_node_moves_its_mean_as_its_members_would`; `genes_do_not_drift_without_selection` (slow); island 1T not up over 1% | the selection test fails: `sample_every` stays 2 | P1.2 | Sonnet | plants 2.6 |
+| P2 | `field_days` 60 | 3 | `the_pace_of_the_field_keeps_life` at 10 against 30, 60, 120; key numbers | the pace test fails at 60: 36 stays | P1.4 | Sonnet | plants 9 |
+| P1b | The month law for every body: food as a pulse at the interval's start, the release limit, starving by a rate, the reserve by the gene, booking X29; acts stay after the update | 3 | the splitting test of the balance (60 days against 6 x 10, 2%); key numbers at today's pace within noise; PR-A again with P1b at a 30-day floor within the seed noise | key numbers out and not accepted: not merged. The 30-day check fails: P1b merges as the law (X6), G2 waits for the cause PR-A names or takes 20 days | P2, PR-A | Opus, adversarial review | animals 3 to 5 |
 
-| Step | What | Where | Kept when |
-|---|---|---|---|
-| AIR4 | Calm months by TR-BDF2 with an error estimate: first find why long steps warm the winters (R1 of air) | lane | the climate tests hold (0.3 K) and Flow gains at least 15% |
-| AIR6 | Alike open-sea cells share one surface balance | lane, gated | the gate's measure, then 10% of Flow |
-| MI5 | A node's movers leave as one group | lane | the nodes check holds and decisions gain at least 10% |
-| MI6 | Calm animals update less often (needs P1b) | lane | a new animal pace test holds and a year gains at least 5% |
-| E7 | Scaling check on more cores (as far as the machine allows) | measure | `measures.md` |
+**The brain-loss switch (P1.2, P1.3, P3).** Plants are not a closed set: `lineage::resize` (`core/src/lineage.rs:69-85`)
+moves a body whose `HIDDEN` gene falls below 0.5 (its range starts at -1, `body/genes.rs:105`) to a lineage with
+no hidden unit, and `resize` already clears its trace, memory and signal (`lineage.rs:81-84`). From then on it is a
+stand. The law changes at the resize: (1) from its next update it runs the month law (P1.2); (2) it lets go of any
+part it holds or is inside (the `bond` helper a dying holder uses), at the resize; (3) it is scheduled at
+`field_days` from that day (P1.2); (4) its heat steps to its ground's temperature, the difference booked with its
+bodies' node and the ground as stage 6 books it (P1.3); (5) it leaves the ring (P3). The other way cannot happen
+(decision 72: a body with no brain does not mutate its brain-size genes, `genes.rs:256-264`). Test:
+`a_body_that_loses_its_brain_becomes_a_stand` (a node with `HIDDEN` at 0.4 resized: it holds no part, its next update
+is a month, books kept). PR-B says how often it happens.
+
+**Lane B, engine** (`outbox`, `life/`, `survey::batch`, `store/`, `par.rs`)
+
+| ID | What | Level | Done when | Kill line | Needs | Agent | Detail |
+|---|---|---|---|---|---|---|---|
+| E1a | `pushed` and `crossings` per domain; booking and delivering only the domains touched | 1 (series bit for bit; fingerprint re-pinned for the snapshot format) | golden with and without threads; 2 years of each bench, same `series.csv` | the parts' or bodies' stage slower (1T) | R1 | Sonnet | engine 2.3 |
+| E1b.1 | Faces per domain, made at the end of the domain's own phase; a domain changed later marks its faces stale | 1 | golden unchanged | bodies' stage 4T slower | E1a, MI1 | Sonnet | engine 2.2 |
+| E1b.2 | Landing by destination: leaving bodies taken out at P1's end, outboxes in buckets, global ids in S1, landing per destination in P2 | 3 | the order test (widened) equal; golden re-pinned, the same without threads; key numbers once | bodies' stage 4T under -6% on two benches, or worse on the third | E1b.1 | Opus | engine 2.2, 2.3 |
+| E1b.3 | The S2 reorder: part acts, watches, returns of litters, lane clears after all landings | 3 | as E1b.2 | bodies' stage 4T slower than after E1b.2 | E1b.2 | Opus | engine 2.2 |
+| E1c | Booking by array in P2's call: **the one helper `store::book_by_array`** (AIR3, G1, E4 use it); **one domain runner** (LPT order, scratch per thread with `each_init`, `SERIAL_BELOW`) that AIR2, G1, G6, G7 use | 2 | golden re-pinned; the series to rounding | bodies' stage 4T under -2% on top of E1b on two benches | E1b.3 | Opus | engine 2.2 |
+| E2 | Tiles of 4 cells with the air column. First, on the merged branch: the busiest share at 4 cells (gate: at most 0.6 x today's on two benches). Audit: no body code reads `Class::Air` straight from the store (only through the view); the shares of an air node's cells sum to 1 (a debug assert). `CLAUDE.md` 3.4 tile sentence, handover 7.4 | 3 | order test; golden; key numbers; per update 1T at most +3% | bodies' stage 4T under -5% on two benches and under -8% on region24 | E1c | Opus | engine 2.4 |
+
+**Lane C, air** (`flow/`, `solve/`)
+
+| ID | What | Level | Done when | Kill line | Needs | Agent | Detail |
+|---|---|---|---|---|---|---|---|
+| AIR1 | Calm cells (`CALM_K`, `CALM_SHARE`) and the calm solver (`STILL_SHARE` 1e-4); `CLAUDE.md` 6.5 (air tolerances are speed numbers) | 3 (with the long-step and globe climate tests) | globe rounds at most 3.3; cell rows -25%; both climate tests; golden re-pinned; key numbers | Flow 1T under -8% on globe36 | R3 | Sonnet | air 2.1 |
+| AIR3 | The air's book as column moves, written through E1c's `book_by_array` (no own pass); E4 does not touch the air | 1 or 2 | `book` -40% | under -25% | E1c, AIR1 | Sonnet | air 2.3 |
+| AIR2 | The air's and the liquid's per-cell loops in phases on E1c's runner, the domains **cut by air node** (the tiles of one node in one task), partials per air node summed in node order | 2 | golden re-pinned; 5-year runs: climate columns within 0.05 K and 1%; Flow 4T x1.25 on both | under x1.15 on either | E1c, AIR3 | Opus | air 2.2 |
+
+**Lane D, minds** (`choose/`, `brain/`)
+
+| ID | What | Level | Done when | Kill line | Needs | Agent | Detail |
+|---|---|---|---|---|---|---|---|
+| MI1 | The cover of a face once per batch (`hide` in `Faces::make`); lands before E1b.1 | 1 | golden unchanged; island 1T -0.8% | under -0.5% | R1 | Sonnet | minds 2.7 |
+| MI3a | Habits, still paying one decision per update; `--full-minds` (the control run); counter `thoughts`. First, on the merged branch: the sleep share (gate at least 40% on island and globe). `CLAUDE.md` 2.6 adds `--full-minds`; handover 6.5 habits bullet, 7.5; `laws.md` 5.3, 5.4, 5.6 | 3 | all tests; the learning scene; `habits_give_the_patterns_of_full_minds` (the full-minds check, slow) and the nodes check on this commit; key numbers; island 1T -2.5%, globe -2% | under -2% on both, or the full-minds check fails beyond the noise | MI1, R2 (MI0) | Opus | minds 2.1, 2.5 |
+| MI4 | Shared place senses per domain and survey (gate: sharing at least 1.5, R2) | 2 | golden re-pinned; series within noise; island 1T -1% | under -1% island and -0.5% globe | MI3a | Sonnet | minds 2.2 |
+| MI5 | A node's movers leave as one group; `can_go` before a split | 3 | nodes check; globe 1T -1.5% | under -1.5% on globe, or the nodes check fails | MI3a | Sonnet, Opus review | minds 2.3 |
+| MI3b | Pay per thought, its own law commit: a thought's cost is a drain in P1b's balance over the interval; the commit gives its effect on the eaters (mass, members, births less deaths) | 3 | key numbers; nodes check; eaters within noise of MI3a, or the change reported as a law effect | the eaters leave their range and the owner does not accept | P1b, MI3a | Opus | minds 2.1 "Paying" |
+
+**Lane E, the steps that change no law** (`change/`, `bond/`, `tape`, `par.rs`)
+
+| ID | What | Level | Done when | Kill line | Needs | Agent | Detail |
+|---|---|---|---|---|---|---|---|
+| G8 | The tape's recorder on the pool (chunks summed in order) | 1 | tape files the same; tape 4T -40% | under -25% | none | Sonnet | gap G8 |
+| G1 | Change per domain on E1c's runner, booked by `book_by_array` | 2 | golden re-pinned; Change 4T -50% | under -30% | E1c | Sonnet | gap G1 |
+| G7 | Bond's monthly turns per domain | 2 | parts 4T -40% on globe36 | under -25% | E1c | Sonnet | gap G7 |
+| G15 | Find and remove the sharing between threads ((a) to (d) of G15, each measured first) | 1 | an update on 4T at most 1.2 times its 1T cost | nothing found above 3% of the bodies' stage: stop | E2 | Sonnet (measures), Opus (a fix) | gap G15 |
+
+### Phase 2: the clock and law steps, then the research steps
+
+| ID | What | Level | Done when | Kill line | Needs | Agent | Detail |
+|---|---|---|---|---|---|---|---|
+| P3 | The field step per cell in the survey; stands out of the ring. Files: `survey::survey`; `Life::unsound` (stands are in no ring); `copy::place_child` and `Domain::add` (no ring entry for a stand); `Body::interval` (its `n() > 1` test: every stand by `field_days`); the snapshot reader (`life/mod.rs:118`); the switch leaves the ring | 3 | plants test 4; key numbers; island 1T -5% on top of P2 | under -5% | P2, E1b.3, E1c | Opus | plants 2.5 |
+| G13 | One heat draw per cell for stands | 2 | `Draws` and the light marks loop over cells for stands | under 2 ms a year | P3 | Sonnet | gap G13 |
+| G6 | The whole survey per domain on E1c's runner | 2 | survey 4T -35% on both | under -20% | P3, E1c | Sonnet | gap G6 |
+| G9a | `field_days` 90 | 3 | the field's pace test at 10, 45, 90, 180; key numbers | fails at 90: 60 | P3 | Sonnet | gap G9 |
+| G9b | Compact stands (P4). Gate: the handling of `Body` values (moves, clones) at least 5% of a year in P3's profile | 1 | stands 1T -10% | under -3% of a year on 4T | P3, G9a | Opus | plants P4, gap G9 |
+| G4 | `batch_days` 10 (replaces S64) | 3 | the equivalence test of batches at 2 against 10; key numbers; bodies' stage 4T -10% | under -6%: back to 2 | E1c | Sonnet, Opus review | gap G4 |
+| G5 | `phys_days` 30; the air stays at 10 days | 3 | long-step and globe climate tests at `phys_days` 30; the sleep test within noise; key numbers; year 4T -4% | a climate test fails or under -3%: 10, or Change at 10 and the rest at 30 | G4, G1 | Opus | gap G5 |
+| G2 | Every population node updates at least every `node_days` 30; the movers (`min(1, p x paces)`), learning's discount, `away` (gene intervals) and an act's heat follow the pace; MI6 is never written | 3 | pace test for animals at 10, 30, 60; key numbers; nodes check; learning scene; bodies' stage 4T -25% on both | fails at 30: 20; fails at 20, or under -15%: revert | P1b, MI3a, MI5 | Opus, adversarial review | gap G2, animals 5 |
+| G3 | The animal month as a cost path for population nodes with a brain: keep-warm as a drain in the balance, the heat by `relax_heat`'s closed form; individuals and full minds keep the day law's heat | 3 | the splitting test for an animal node, also at 260 K; animal update 1T -30% | under -15%: keep P1b's law only | P1b, G2 | Opus | gap G3 |
+| G12 | `flow_days` 60 | 3 | rivers, land rain, worn land in range; liquid -35% | a key number out: 30 | AIR2, R3 | Sonnet | gap G12 |
+| AIR4 | Calm months (= G10). If AIR4-R1 names an explicit part, it is fixed first; **then a calm-month variant is always built and measured** (TR-BDF2 with its error estimate, against Euler with the fix) | 3 | long-step test within 0.3 K, globe test, key numbers, sleep test; at least 6 of 12 months calm on both | Flow 4T under x1.4 after AIR3, or a climate test fails | AIR4-R1, AIR1 to AIR3 | Opus | air 2.4 |
+| G11 | f32 and SIMD for the air's cell rows (replaces AIR6) | 2 | climate tests; `pass` -35% | under -20%: revert, then AIR6 is tried as the alternative (gate: R2's share of cells that would group at least 40%) | AIR2 (after AIR4 if kept) | Opus | gap G11, air 2.6 |
+| G16 | Well-being once per decision | 3 | learning scene; nodes check | under 1% of the bodies' stage | MI3a, MI5 | Sonnet | gap G16 |
+| E4 | `store::apply` per array for what is left on one core (the liquid's fluxes). Gate: `apply` at least 3% of a year on the main thread at 4T after AIR3 and G1 | 1 | golden unchanged with and without threads | year 4T under -2% | AIR3, G1 | Sonnet | engine 2.8 |
+| E5 | Parts per tile. Gate, measured on the merged branch after G7 and G2: serial-body updates at least 10% on a bench, or S2 at least 15% of the bodies' stage | 3 | order test with parts; golden; key numbers | bodies' stage 4T under -8% on globe36 | E2, G7, G2 | Opus | engine 2.5 |
+| G14-P2 | The overlap probe again, on the branch after G4, G5, AIR2, AIR3 | none | as G14-P1 | under 15% of a year saved: G14 is not built; the island's goal then rests on AIR4 and is reported at risk | G4, G5, AIR2, AIR3 | Sonnet | gap G14 |
+| G14 | Physics beside the bodies: the physics works out its moves from the window's start and books them after the bodies, each node's outgoing moves cut to what it then holds; `CLAUDE.md` 3.4 sentence, handover 7.3, `laws.md` 0 | 3 | order test with the two lanes in both orders; books each month; the cut counter under 1e-3; climate tests; key numbers; year 4T -25% | under -15% on either bench, or the cut counter over 1e-3 | G14-P2, E1c, AIR2, AIR3, G1, G4, G5 | Opus, adversarial review | gap G14 |
+| GM | The cost of a thought at 12 and 64 hidden units, and of a `--full-minds` year | none | a row in `measures.md` | none | MI3a | Haiku | gap G16 |
+| E7 | Scaling at 1, 2, 4 threads (more if a machine allows): a measure, no claim against the goal | none | a table in `measures.md` | none | E2 | Haiku | engine 6.2 |
 
 ### Phase Z: the final check
 
-The benches and profiles, the slow suite (key numbers, nodes check, pace tests, the debug checks), 1,000-year runs of
-the island, the globe, the refined region and the largest planet that fits 15 minutes, a watch report
-`docs/reports/speed-x10.md` saying plainly where the speed stands against 10 times, and the docs describing the present.
+The benches and profiles; the slow suite (key numbers, nodes check, pace tests, debug checks); 1,000-year runs of
+the island, the globe, the refined region and the largest planet that fits 15 minutes; a watch report
+`docs/reports/speed-x10.md` saying plainly where the speed stands against 10 times; the docs describing the present;
+the ceiling set to the lines then plus 200.
 
-## 5. Order and parallel lanes
+## 5. Expected gains
+
+**These are estimates** from the designs' measures (`gap.md` 2, on its probe world: today 646 ms island, 818 ms
+globe; 96 and 165 ms there stand for Z1's 91 and 149). R2 measures the shares again on one set of benches made in one
+hour and restates this section before phase 1. "x" is against the baseline (Z1 scale: 960 and 1,650 ms in the probe
+world). Each step is counted **in the order of the table, on what the steps above it left**, so a saving is counted
+once: plants' share of the booking and faces is counted after E1, MI5's landings after E1, G2's after G4.
+
+### 5.1 Four threads, ms of a year (the goal's measure)
+
+| Step | island saves | island year | x | globe saves | globe year | x |
+|---|---|---|---|---|---|---|
+| today | | 646 | 1.49 | | 818 | 2.02 |
+| E1a to E1c (the serial phase) | -50 | 596 | 1.61 | -76 | 742 | 2.22 |
+| MI1, MI3a, MI4 (decisions) | -23 | 573 | 1.68 | -32 | 710 | 2.32 |
+| MI5 (acting; its landings after E1) | -4 | 569 | 1.69 | -26 | 684 | 2.41 |
+| P1.1 to P1.4 (the month law) | -73 | 496 | 1.94 | -40 | 644 | 2.56 |
+| P2 (`field_days` 60; its booking after E1) | -32 | 464 | 2.07 | -22 | 622 | 2.65 |
+| AIR1, AIR3, AIR2 | -51 | 413 | 2.32 | -83 | 539 | 3.06 |
+| E2 (tiles) | -18 | 395 | 2.43 | -19 | 520 | 3.17 |
+| P3 (field step; faces and booking after E1) | -13 | 382 | 2.51 | -16 | 504 | 3.27 |
+| **after phase 1 and P3** | | **382** | **2.51** | | **504** | **3.27** |
+| G1 Change per domain | -32 | 350 | 2.74 | -32 | 472 | 3.50 |
+| G7 Bond per domain | -4 | 346 | 2.77 | -16 | 456 | 3.62 |
+| G8 tape on the pool | -8 | 338 | 2.84 | -8 | 448 | 3.68 |
+| G6 survey per domain | -13 | 325 | 2.95 | -20 | 428 | 3.86 |
+| G15 sharing between threads | -13 | 312 | 3.08 | -17 | 411 | 4.01 |
+| G13 one draw per cell | -3 | 309 | 3.11 | -3 | 408 | 4.04 |
+| G4 `batch_days` 10 | -26 | 283 | 3.39 | -39 | 369 | 4.47 |
+| G5 `phys_days` 30 | -24 | 259 | 3.71 | -23 | 346 | 4.77 |
+| **G2 nodes at least every 30 days** | **-59** | **200** | **4.80** | **-101** | **245** | **6.73** |
+| G3 the animal month (cost) | -9 | 191 | 5.03 | -12 | 233 | 7.08 |
+| G9a, G9b stands at a season, compact | -10 | 181 | 5.30 | -6 | 227 | 7.27 |
+| G12 liquid every 60 days | -13 | 168 | 5.71 | -14 | 213 | 7.75 |
+| AIR4 calm months (research) | -32 | 136 | 7.06 | -38 | 175 | 9.43 |
+| G11 f32 cell rows | -6 | 130 | 7.38 | -9 | 166 | 9.94 |
+| **G14 physics beside the bodies** | -42 to -55 | **75 to 88** | **10.9 to 12.8** | -54 to -71 | **95 to 112** | **14.7 to 17.4** |
+
+P1b, MI3b, G16, E4, E5 are counted as 0 here (P1b and MI3b are law steps; G16, E4 and E5 are small or gated).
+Landing in another order moves milliseconds between rows, not the total. G14 cuts no work: it fills idle cores; its
+bound is all the parts' thread time over 4 cores times an imbalance of 1.1 to 1.3 (`gap.md` 2.2).
+
+### 5.2 One thread, instructions of a year (how most steps are judged)
+
+Kept apart from 5.1: one-thread gains do not add up to the 4T year (the parallel steps gain nothing on one thread).
+
+| Step | island22 1T | globe36 1T | Note |
+|---|---|---|---|
+| P1.1 to P1.4 | -12% | -8% | plants are 38% and 21% of a 1T year |
+| P2 | -7% | -3% | |
+| P3 | -5% | -3% | |
+| P1b | about 0 | about 0 | a law step |
+| E1, E2, AIR2, G1, G6, G7, G8, G14, G15 | 0 to +3% | 0 to +3% | they share work out; they cost a little on one thread |
+| AIR1 | about 0 | -2% (Flow -8% or more) | the island already needs 2.26 rounds |
+| AIR3 | -1% | -1% | |
+| MI1, MI3a, MI4, MI5 | -4 to -5% | -4 to -7% | `choose::act` is 11.6% and 17.8% of a 1T year (Z1) |
+| G2 | -25 to -35% | -30 to -40% | animal node updates x0.28 and x0.31 |
+| G3 | -5% | -7% | an animal update -30% |
+| G4, G5 | -5% | -5% | faces x0.22; Change x0.4 |
+| G9a, G9b, G12, AIR4, G11 | -3%, -2%, -2%, -6%, -2% | -2%, -1%, -2%, -10%, -3% | |
+
+### 5.3 What reaches 10 times, and what is at risk
+
+| | island22 | globe36 |
+|---|---|---|
+| needs | G2 and G14 (AIR4 for margin) | G2, and AIR4 or G14 |
+| at risk | G2: needs P1b, and PR-A must find what starves nodes at 30 days (fallback 20 days: about 75% of G2's gain) | the same G2 |
+| at risk | G14: the hardest step; G14-P1 and G14-P2 decide early | AIR4: its climate test (0.3 K) |
+| likely without G14 and AIR4 | 6 to 7.5 times | 8 to 10 times |
+
+## 6. Order and lanes
 
 ```
-R1, R2, R3 ──► plants: P1 ──► P2 ──► P1b ──► P3 ─────────────┐
-           ├─► engine: E1a ──► E1b ──► E1c ──► E2 ──► (E4, E5)  ├─► review per lane ─► phase 2 ─► Z
-           ├─► air:    AIR1 ──► AIR3 ──► AIR2 ────────────────┤
-           └─► minds:  MI1 ──► MI3 ──► MI4 ──► MI8 ───────────┘
+Phase P   R1 ─ R2 ─ R3, probes: PR-M, PR-B, PR-A, PR-S, G14-P1, AIR4-R1 ─► review (section 5 restated)
+Phase 1   A: P1.1 ─ P1.2 ─ P1.3 ─ P1.4 ─ P2 ─ P1b ─────────────────────────────┐
+          B: E1a ─ (MI1) ─ E1b.1 ─ E1b.2 ─ E1b.3 ─ E1c ─ E2 ───────────────────┤
+          C: AIR1 ─────────────────────────── (E1c) ─ AIR3 ─ AIR2 ─────────────┤─► lane reviews
+          D: MI1 ─ MI3a ─ MI4 ─ MI5 ──────────────────── (P1b) ─ MI3b ─────────┤
+          E: G8 ──────────────────────────── (E1c) ─ G1 ─ G7 ─ (E2) ─ G15 ─────┘
+Phase 2   P3 ─ G13, G6, G9a ─ G9b (gated)
+          G4 ─ G5 ;  G2 ─ G3 ;  G12 ;  AIR4 ─ G11 ;  G16 ;  E4, E5 (gated)
+          G14-P2 ─ G14 (last) ;  GM, E7 (measures)            ─► review ─► Z
 ```
 
-Merges into `speed/x10` go one at a time; level-3 steps rebase and re-pin. A review (adversarial Opus, then a fixer,
-until approved) runs after each lane's chain and after phase 2, and a final review after Z. Wall-time measures of two
-lanes never run at the same time.
+**Where steps collide, this order holds** (X23):
+- MI1 lands before E1b.1 (both touch the faces).
+- E1b.3 lands before P3 (P3 runs inside the new pipeline).
+- E1c builds the one domain runner and the one `book_by_array` helper. AIR2, G1, G6, G7 use the runner; AIR3 and G1
+  book through the helper. AIR2 comes after E1c and cuts its domains by air node. E4 never touches the air's book
+  (one way for it: AIR3).
+- P1b lands before MI3b (a thought's cost is a drain in P1b's balance) and before G2. MI5 lands before G2 (both
+  change `spread`).
+- Stale gates are measured again on the merged branch just before their step: E2's busiest share, E5's serial share,
+  MI3a's sleep share.
+- Merges into `speed/x10` go one at a time; a level-3 step rebases and re-pins golden; `SNAPSHOT_VERSION` goes to the
+  highest plus one at each merge. A review (adversarial Opus, then a fixer, until approved) runs after each lane, after
+  phase 2 and after Z; each lane review runs the key-number test against the references.
 
-## 6. Risks
+## 7. Rule changes, and the step that writes each
+
+| Rule | Lands with |
+|---|---|
+| `CLAUDE.md` 2.11 ceiling 12,000; 3.1 books are 64-bit; 6.1 threads do not change the world; handover 12.1, 12.3, 12.5, 14.3, 14.5 | R1 |
+| `CLAUDE.md` 3.6 "one writer for each number" | E1c |
+| `CLAUDE.md` 3.4 a tile takes at most its cells' share of its air node; handover 7.4 domains are tiles | E2 |
+| `CLAUDE.md` 6.5 air tolerances are speed numbers | AIR1 |
+| `CLAUDE.md` 2.6 `--full-minds` among the control runs; handover 6.5 habits, 7.5 | MI3a |
+| handover 6.5 a brain is paid per thought | MI3b |
+| handover 7.1 stands, 7.3 population nodes; `laws.md` 6.10; `numbers.md` `field_days` | P1.2 (P2, G9a move the value) |
+| `laws.md` 6.2 one energy law for all bodies | P1b |
+| `laws.md` 0, 4.4, 5.4; handover 7.3; `numbers.md` `node_days` 30; plan 2.2 rule 2 (a batch is 10 days; individuals and smart bodies may run sub-batches) | G2, G4 |
+| `numbers.md` `batch_days` 10 (S64 replaced), `phys_days` 30, `flow_days` 60 | G4, G5, G12 |
+| handover 7.3 the air's method; `numbers.md` `calm_tol` | AIR4 |
+| `CLAUDE.md` 3.4: "When the physics runs beside the bodies, it works out its moves from the store at the window's start and books them after the bodies; each node's outgoing moves are cut by one share to what the node holds then, so no order of the two lanes can overdraw it."; handover 7.3 the step loop | G14 |
+
+## 8. Risks
 
 | Risk | Answer |
 |---|---|
-| The sum stays far from 10 times | Said in section 1; each step is judged on its own kill line, not on the total |
-| P1 moves the key numbers (stored share S50, eaters) | Level 3 with the key-number test; a law change is its own commit with its effect |
+| The sum stays under 10 times | Said in section 1; each step is judged on its own kill line |
+| P1.2 moves the key numbers (S50, eaters) | Level 3 against R2's references; a law change is its own commit with its effect |
+| PR-A finds a cause P1b does not fix | P1b still lands (X6); G2 takes 20 days or waits for that cause |
+| C2's second cause: children and maturing members wait for their node's update (P2, G2, G9a) | PR-A (e) measures it; the pace tests read births less deaths; the fallbacks are 36, 20 and 60 days |
 | Habits slow learning | The learning scene must pass; the answer is a wake on surprise, never a looser test |
-| Fewer updates repeat C2's failure | P1b removes C2's cause (upkeep before light) before MI6; MI6 has its own pace test |
-| Tiles let a crowded tile run short of a scarce gas | E2 is level 3 with the key numbers; the share per tile is the parts law's `Mesh::share` |
-| The lanes conflict in `survey.rs` and the golden pins | One merge at a time; each re-pins on the branch it lands on |
-| The ceiling is reached | 11,500 leaves about 1,900 lines; each step names its deletions |
+| Tiles let a crowded tile run short of a scarce gas | E2 is level 3; the share per tile is `Mesh::share`; the E2 audit |
+| G14's two lanes fight for memory | G14-P1 and G14-P2 before the build; the cut counter shows the lag |
+| AIR4 fails its climate test | The island then needs G14 at its good end; the globe still passes with G14 |
+| G5 grows S84's bias | Change keeps 10 days, the survey and state take 30 |
+| Lanes collide in `survey.rs`, `spread.rs` and golden | Section 6's order; one merge at a time |
+| Snapshot bumps break the comparison of two builds | Section 2's judging method (PR-S) |
+
+## 9. Lines
+
+Core today: 9,602 code lines. Estimates from the designs (net): lane A +265 (P1.x +215, P1b +50), P3 +155, engine
++120, air +257 (AIR1 +12, AIR3 -10, AIR2 +35, AIR4 +140, G11 +80), minds +193, gap steps +490 (G14 +250, G3 +100, G1
++20, G2 +20, G4/G5/G12 +30, G6 +25, G7 +30, G13 +10, G15/G16 +5): about **+1,480, to 11,080**. The gated steps
+(G9b +100, E4 +30, E5 +150) bring it to about 11,360; if the estimates run 20% over, about 11,800. So the ceiling is
+**12,000** (X22): each step names what it deletes; at the end of the round the ceiling is set to the lines then plus
+200.

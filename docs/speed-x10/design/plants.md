@@ -1,5 +1,14 @@
 # Speed x10, section "plants": a field of stands, a card per genome, upkeep and light together
 
+> **Note: what the plan kept** (`plan.md` is the single source of the steps; this design keeps its old numbering).
+> P0: in R2. **P1: split** into P1.1 (`apply_extent`, level 1), P1.2 (the month law, the card, `field_days` 36, the
+> brain-loss switch), P1.3 (the stand at its ground's temperature), P1.4 (the sample at every update). P2: kept.
+> P3: kept, after the engine's E1b.3 (its file list is in the plan). P4: back as G9b, gated (X26). P5: dropped
+> (only on a branch, if the owner asks). **Corrections:** sections 0 and 1.1 say the set of plants is closed; it is
+> not (`lineage::resize` can take a body's brain away, X15; the plan's P1.2 gives the switch). `reserve_days` is
+> replaced by the body's own gene interval (X14). Stage 5's booking follows X29 (supplies in the limits, a fixed
+> order, no clamp). The month for animals is in `animals.md` (P1b). The gains are restated in the plan's section 5.
+
 Owner's choices covered here: **1** (plants as a field), **2** (a growth table per genome), **3** (pay upkeep and get
 light together across the interval). Other sections: engine (threads, 32-bit, ceiling), air, minds.
 
@@ -58,7 +67,7 @@ light together across the interval). Other sections: engine (threads, 32-bit, ce
 A plant is due every `Config::node_days` (36) days (`Body::interval`, `body/mod.rs:245-248`). Its update
 (`survey::update`, `survey.rs:262-297`):
 
-1. `copy::sample` (`copy/select.rs:211-235`): on one update in `sample_every` (2), a clone with one gene one standard
+1. `copy::sample` (`copy/select.rs:71-98`): on one update in `sample_every` (2), a clone with one gene one standard
    deviation off runs the whole update as far as growth (`gain_to_growth`, `body/live.rs:122-124`), in a checkpoint of
    the store view, rolled back.
 2. `body::live` (`body/live.rs:81-91`) → `to_growth` (`live.rs:97-117`):
@@ -73,8 +82,8 @@ A plant is due every `Config::node_days` (36) days (`Body::interval`, `body/mod.
      `convert` 87-139 keeps **a reserve of one interval's upkeep**, line 107), `starved` (131-139).
    - then children (`copy::copy`, `copy/mod.rs:57-103`; dispersing ones go to the outbox as a `Litter`, 168-171) and
      `shed` (254-272).
-3. `copy::select` (`select.rs:240-249`): the breeder's equation moves one gene's mean by the sample's gain.
-4. `copy::mature` (`copy/young.rs:386-412`): young members past the copy mass join the adult node.
+3. `copy::select` (`select.rs:100-109`): the breeder's equation moves one gene's mean by the sample's gain.
+4. `copy::mature` (`copy/young.rs:45-71`): young members past the copy mass join the adult node.
 5. `nodes::split` (`nodes.rs:206-238`), `Domain::see` (`life/domain.rs:126-129`), `Domain::schedule`.
 
 Around the updates, per survey (every `phys_days`, 10): wear and the monthly merge (`nodes::crowd`, `nodes.rs:15-20`),
@@ -282,7 +291,7 @@ interpolated) was worked out and is **not proposed**:
 | a small grid | 5 light × 8 temperature × 3 wetness × 3 fuel fill = 360 points, without carbon gas, minerals and size |
 | cost of one point | one run of the body law, about 50,000 instructions (`to_growth`, `measures.md` Z1) |
 | cost of one table | 18 million instructions (360 points) to 200 million (with 3 more inputs) |
-| how often a genome changes | every update of every stand: selection moves a gene mean (`select.rs:247`), joins pool the genes (`nodes::add`), splits shift them. A table per stand would be rebuilt at each update: 18 million instructions instead of 50,000 |
+| how often a genome changes | every update of every stand: selection moves a gene mean (`select.rs:107`), joins pool the genes (`nodes::add`), splits shift them. A table per stand would be rebuilt at each update: 18 million instructions instead of 50,000 |
 | a table per lineage | all plants are one lineage: one table for 1,820 stands with genes that differ by up to 16 steps: wrong for most |
 | accuracy | interpolation in 4 to 7 inputs over `min()` limits (light, gas, water) and the reserve's corners makes errors of several percent where the stand sits at a limit; the books stay exact (the moves are extents), but the law would be a fit, not the physics |
 | a rule of the repository | a table of past results is a cache; the main rule of the foundation forbids new caches for timing |

@@ -1,5 +1,14 @@
 # Air: fewer air steps where the air is calm, and a coarser air grid (owner's choice 6)
 
+> **Note: what the plan kept** (`plan.md` is the single source of the steps; this design keeps its old numbering).
+> AIR0: in R2. AIR-T: in R3 (with the `flow_days` fix). AIR1: kept, **level 3** with the long-step and globe
+> climate tests (X34). AIR3: kept, written through the engine's `book_by_array` (E1c); E4 does not touch the air.
+> AIR2: kept, **level 2**, after E1c, on its domain runner, domains cut by air node, partials summed in node order:
+> a fixed order, not a free one (X3). AIR4-R1: a probe of phase P. AIR4: kept and counted (= G10); a calm-month
+> variant is built and measured whatever R1 finds (X32). AIR5: gated on worlds of 2,000+ cells, not in this round's
+> benches. **AIR6: dropped**, replaced by G11; it is G11's alternative (X27). The liquid moves to 60 days in G12.
+> Code names say "open liquid", never "sea" (X35).
+
 Design section for the speed x10 plan. Written for the owner: short sentences, common words.
 All numbers below were measured for this section at `f63c06a` (the bench worlds made again with this code: island
 22 x 22 at year 300, globe 36 x 18 at year 200), with a timing probe and knobs on a copy of the code outside the repo.

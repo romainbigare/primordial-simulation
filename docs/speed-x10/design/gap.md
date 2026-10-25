@@ -1,5 +1,12 @@
 # Speed x10, section "gap": what closes the road to 10 times on 4 cores
 
+> **Note: what the plan kept** (`plan.md` is the single source of the steps; this design keeps its numbering).
+> G0: in R2. Kept: G1, G2 (needs P1b, `animals.md`), G3, G4, G5, G6, G7, G8, G10 (= AIR4), G11, G12 (its clock fix
+> is in R3), G13, G14, G15, G16, GM. **G9: split** into G9a (`field_days` 90) and G9b (compact stands, gated, level 1,
+> X26). **G14-P runs twice:** G14-P1 in phase P on today's code, G14-P2 before G14. The ceiling is 12,000 (X22).
+> The budget of section 2 is the plan's section 5, restated after R2; the plan counts each step once in landing
+> order (X33).
+
 Design section of the x10 plan (`plan.md` section 1: "the plan also carries a gap design"). It takes the four designs
 (plants, engine, air, minds) as they are, adds the strategies that close the gap, and gives the arithmetic. Written in
 simple words for the owner. Code at `0f891fe` (branch `speed/x10`).

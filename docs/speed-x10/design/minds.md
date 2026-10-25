@@ -1,5 +1,14 @@
 # Speed x10: minds (the owner's choices 8, 9, 10 and 11)
 
+> **Note: what the plan kept** (`plan.md` is the single source of the steps; this design keeps its old numbering).
+> MI0: in R2 (plus wake causes counted by cause, `others` keyed by lineage, decisions per (cell, lineage, batch)).
+> MI1: kept, lands before E1b.1. **MI3: split** into MI3a (habits, still paying per update; `--full-minds` checked
+> on it) and MI3b (pay per thought, its own law commit after P1b) (X28). MI4, MI5: kept (MI5 before G2). **MI6:
+> dropped**, replaced by G2 (X16). MI7: with the first smart kind. **MI8** (batched networks here; `full_hidden` in
+> the old plan): both dropped (X12, X25); GM measures a thought. The shares of section 0 and 6 are older: Z1 gives
+> `choose::act` 11.6% (island), 17.8% (globe), 3.5% (region); R2 restates them. Code names say "group", never
+> "herd" (X35).
+
 Section of the x10 plan. It covers: think only when something changes (8), think in groups (9), neural networks in
 batches (10), and the door for smart bodies (11). Other sections: plants, engine, air.
 

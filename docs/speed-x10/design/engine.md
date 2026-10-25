@@ -1,5 +1,15 @@
 # Engine: threads, numbers and the line ceiling (owner's choices 4, 5, 7)
 
+> **Note: what the plan kept** (`plan.md` is the single source of the steps; this design keeps its old numbering).
+> X-E3: in R1, which writes only the rules true at once (the ceiling is 12,000, X22; 64-bit books; the order fixed
+> by the data); 3.4's tile wording lands with E2, 3.6 "one writer" with E1c (X31). X-E0: in R2. X-E1a: E1a.
+> **X-E1b: split** into E1b.1 (faces per domain), E1b.2 (landing by destination), E1b.3 (the S2 reorder). X-E1c:
+> E1c, which also builds the one domain runner and the one `store::book_by_array` helper used by AIR2, AIR3, G1, G6,
+> G7 (X23). X-E2: E2, its gate measured again on the merged branch, with an audit (no body code reads `Class::Air`
+> straight from the store; an air node's cell shares sum to 1). X-E4: E4, gated, never on the air's book. X-E5: E5,
+> gated after G7 and G2 (X27). X-E6: an optional probe on a branch. X-E7: E7, a measure only; the 16-core numbers of
+> 6.2 are not a claim against the goal (X33). Section 2.6's permission is not used. S64 is replaced by G4 (X17).
+
 Design section of the speed x10 plan. Scope: how the bodies' stage runs on many cores, what the books need, which
 numbers may be 32-bit, and the code ceiling. The other sections (plants, air, minds) change *what* is computed; this
 one changes *how the work is shared out* and makes sure their work can use 8, 16 or more cores.
