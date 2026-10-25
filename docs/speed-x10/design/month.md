@@ -19,8 +19,8 @@
 - **Two parts, one plan.** The fuel stock keeps X9's closed form: income with product inhibition, upkeep with the
   release limit, growth above the reserve, deaths by starving at a rate. The body's other reactions (catalysed and
   bare, with their true orders: the dissolved mineral's return to the solid is third order) run in **sub-steps** by the
-  reactor's own kernel, with growth among them at the rate the fuel's form gives; a sub-step ends where a rate would use
-  a set share of its input or the fuel's form changes phase (X42).
+  reactor's own kernel: roots and soaking first, then growth (capped by what its inputs hold plus their inflow), then
+  the reactions; a sub-step ends where a store's net change would reach 0.3 of it or the fuel's form changes phase (X42).
 - **Bare reactions stay** inside bodies (X43, decided). PR-A's two causes, the eaten mineral that turns solid before
   growth and the body burnt between two updates while growth rebuilds only at the update, are a pulse meeting rates; in
   the sub-steps growth runs beside them.
@@ -32,12 +32,13 @@
 - **The booking books the plan's net change per substance in one pass**, with exact sums, as the reactor does (X52).
 - **Stands stand at their ground's temperature** as the month's last stage; P1.3 is folded into P1.2 (X45).
 - **The reference is the month's own splitting test**, now with young stands, young animal nodes, a dip that recovers,
-  and a seasonal ramp of light and temperature (X47).
+  a seasonal ramp of light and temperature, and long intervals centred on the summer's peak and the winter's low (X47).
 - **Cost:** the stand's law about 4.5 to 5 µs (PR-M's v2: 7.0, without bare reactions; today 10.6), a sample run
   about 2.5 to 3 µs (about 1.1 µs on average), a whole stand update about 10 to 10.5 µs at 30 days and about 9 after P3.
   Section 5 of the plan assumed 6 µs (X46).
 - **Gain now** (one thread, instructions of a year): P1.2 with P1.4 island -9 to -11%, globe -4.5 to -5.5%; with P2
-  about -19% and -9%. P1b, an estimate: an animal update -10 to -20%, the year -3 to -6% and -4 to -7%.
+  about -19% and -9%. P1b, an estimate with its sub-steps counted: an animal update -8 to -16% at the gene's pace, the
+  year -2.5 to -5% and -3 to -6%.
 
 ## 1. What the probes and the review found, and the answer to each
 
@@ -49,7 +50,7 @@
 | PR-M 3: the light reaction's liquid is a store; over 36 days it needs many times what a stand holds | the liquid is a supply soaked in through the interval | 2, stage 2 |
 | PR-M 4: the activity lags; a dry stand soaks to its level in a day | the liquids come first; the activity of the interval follows from them (one mean: an approximation) | 2, stage 2 |
 | PR-M 5: product inhibition read at the start breaks the splitting test | inhibition is a term of the fuel's closed form, on the product substance | 3.1 |
-| PR-M 6: roots and soaking are capped by one room per update | fluxes toward the level, refreshed at each sub-step | 3.2 |
+| PR-M 6: roots and soaking are capped by one room per update | fluxes toward the level, before growth in each sub-step; growth at an input's minimum runs at its inflow | 3.2 |
 | PR-M 7: sweating drained a stand's liquid in one long update | stands do not sweat | 5 |
 | PR-M 8: heat booked by `energy_at` broke the books; growth's heat moved the land -0.52 K; the light's rounding | one place sets the heat, after growth; the bounds of today kept; the rounding counted | 4 |
 | PR-M 9: the death rule is a law change for stands too | the rate `(1 - kR/U) / D` for every body (X14) | 3.1 |
@@ -64,10 +65,12 @@
 
 A body's update covers the `Δ` days since its last. It works per member: deaths take a share of every store (`thin`),
 so they do not change what a member holds. Forcing over the interval is an exact total where the world keeps one (light,
-rain); the temperature its rates are read at is the mean of its temperature at its last update and now (a stand stood
-at its ground's then, so this costs no new state; the splitting test with a seasonal ramp checks it, and a running total
-of the ground's temperature per cell, like `w.light`, is the answer if it fails); the air's shares and the ground's
-liquid are read at the start. The card (3.4) holds what the genes fix.
+rain, and the ground's temperature: a running total of each cell's ground temperature over time is kept beside
+`w.light`, and a stand keeps its mark as it keeps its light's, so a stand's rates are read at the exact mean of its
+ground's temperature over its interval (one number a cell a flow step, one a stand; a 90-day update centred on the
+summer's peak has its two ends about 2 K below it, so the mean of the ends is not enough). A body with a brain reads its
+rates at its own temperature at the update's start, as today. The air's shares and the ground's liquid are read at the
+start. The card (3.4) holds what the genes fix.
 
 | Kind | What |
 |---|---|
@@ -84,7 +87,7 @@ nothing; they return what the booking needs, the new light and rain marks (`mark
 
 | Stage | What | Kind |
 |---|---|---|
-| 0. Site | cell, air node, ground temperature, depth, cover, `Δ` (`live::site`) | plan |
+| 0. Site | cell, air node, the temperature its rates are read at (a stand: its ground's mean over `Δ` from the running total and its mark), depth, cover, `Δ` (`live::site`) | plan |
 | 1. Supplies | light caught, rain caught, the breath pool of the gases its reactions touch (`gas_pool`, capped by the air node), the soil, the light set aside in the bodies' node (`keep`, capped by what it holds), the heat held for it (`Draw::owed`) | plan |
 | 2. Liquids | the key liquid's level where soaking meets what the pores pass (`through`); the activity of the interval, one mean (where the liquid's own time is over a tenth of `Δ`, about a quarter of the updates, the mean of the approach: an approximation, as activity is a power of the level); what the light reaction's liquid can bring; a stand's evaporation of its key liquids within today's `heat_bound` (no sweating) | plan |
 | 3. Rates | upkeep `U` (`pay::upkeep`, plus keep-warm's power for a body with a brain), the release limit `k`, the light reaction's limits and inhibition, the Arrhenius factor of every reaction the body runs that is not negligible over `Δ` (the reactor's `NEGLIGIBLE` rule, at the interval's temperature), growth's allowance and what a kg takes of each input, wear | plan |
@@ -113,7 +116,8 @@ a sub-step the substances other than the light reaction's product are held, so `
 - **Growth** `G`: the allowance while `R` is above the **reserve** `R_res(t) = U (D + Δ - t)`: `D` days of upkeep plus
   the upkeep of the rest of the interval, which over short updates would come from food not yet taken (X53). On that
   moving boundary growth takes the income, `G = P`, so over the interval growth spends what short updates spend in
-  total. Growth is also capped by its inputs over the sub-step (3.2).
+  total. Before the fuel's form is solved for a sub-step, `G` is set to the least of the allowance and what growth's
+  inputs allow over that sub-step (3.2), so the two agree.
 - **Deaths** while release-limited, at `μ(t) = (1 - k R(t) / U) / D` (`SPENT`): the share `1 - e^(-∫μ dt)`.
 
 Each phase is `dR/dt = a - b R`, solved exactly; the times to the reserve, to `U / k` and to the knee have closed
@@ -124,18 +128,33 @@ forms. This is today's labile pool (Thornley 1972; Sitch et al. 2003; Kooijman 2
 The body's other reactions are not linear: in chemistry 0 the dissolved mineral turns back into the solid by a third-
 order law (reaction 23, `i = [[23,3]]`: PR-A's 46% lost after 9.7 days and 77% after 27 days fit it; a first-order law
 would lose over 99%); the solid and the dissolved mineral are a two-way pair (22 and 23); the bare burning of matter (21)
-feeds the nitrogen mineral and lime at a rate that follows the matter; fixing (24) draws on the fuel and is inhibited
+feeds the minerals 24 and 10 at a rate that follows the matter; fixing (24) draws on the fuel and is inhibited
 by its own product. So they run as the reactor runs them: **in sub-steps, each reaction's rate read at the sub-step's
 start and applied as `Reactor::apply` does** (its order's power, `gone`; each limited by what is left), at the
-interval's temperature, with the Arrhenius factors of stage 3. Growth is one of them, at the rate the fuel's form
-gives for that sub-step and no more than its inputs hold then; roots and soaking bring the minerals toward their level
-at the soaking rate (today's exact form of `roots` and `soak`, now a flux, no room per update).
+interval's temperature, with the Arrhenius factors of stage 3. In each sub-step, in this order:
+1. **Inflows first:** roots and soaking bring the minerals and the liquid toward their level at the soaking rate
+   (today's exact form of `roots` and `soak`, now a flux, no room per update).
+2. **Growth:** `G` is the least of the allowance and, for each input, what it holds above its safe minimum plus the
+   sub-step's inflow, over the sub-step's length; the fuel's form is then solved with that `G`. **At an input's
+   minimum growth runs at that input's inflow rate** (it stays there while the inflow lasts), so a store that roots refill
+   never throttles growth to one room per sub-step (PR-M 6).
+3. **The other reactions**, each limited by what is left, `gone` with its order's power. Within a sub-step `gone`
+   integrates a reaction that runs alone on its scarcest input exactly, whatever the length (the third-order return of
+   23 too); only its competition with growth and the other reactions is held at the start.
 
-**A sub-step ends** where a running reaction (growth too) would use `MONTH_SHARE` of its scarcest input at its starting
-rate, or where the fuel's closed form changes phase (growth starts or stops, the release limit begins); at most
-`MONTH_STEPS` of them, the last takes what is left (both named `const`s; a count of sub-steps cut by the cap). The fuel's
-closed form runs inside each sub-step with the other substances held, so its phases stay exact. This is the reactor's
-kernel at a fixed temperature, not a second reactor.
+**A sub-step ends** where a store's **net** change (inflow, growth's draw and the reactions together) would reach
+`MONTH_SHARE` = 0.3 of the store at its starting rates, or where the fuel's closed form changes phase (growth starts or
+stops, the release limit begins); at most `MONTH_STEPS` = 16, the last takes what is left (both named `const`s; a counter
+of sub-steps and of those cut by the cap). A store near its level, where roots bring what growth takes, ends no
+sub-step. The fuel's closed form runs inside each sub-step with the other substances held, so its phases stay exact.
+This is the reactor's kernel at a fixed temperature, not a second reactor.
+
+**How many sub-steps.** A stand: its minerals sit near their level (roots refill what growth takes), its pair of 10 and
+23 near its balance, its matter's bare burning about a thousandth a day; the fuel changes phase in about 10 to 15% of
+the updates (P0: the stock crosses its reserve in 10%, runs low in 0.5 to 1.4%). So about 1.2 sub-steps a stand update
+on average, rarely over 3; P1.2 counts them. An eater: the eaten mineral 23 falls 46% in 9.7 days and 77% in 27 (PR-A),
+mostly at first; a net change of 0.3 a sub-step takes about `ln(x0 / x) / -ln(0.7)` sub-steps: about 2 at the gene's
+pace (about 9.5 days) and about 4 to 5 at 30 days, with the fuel's phase changes about 2 to 3 and 5 to 6.
 
 **Why it answers PR-A.** Today a body's reactor turns its stores through the whole interval and growth acts once, at
 the update: the eaten mineral turns solid and the body is burnt (about 0.04 kg a member a day) with nothing rebuilding
@@ -152,7 +171,7 @@ short ones. 97 to 99% of the eaters' deaths are of this kind (PR-A), so P1b's sp
 past that the share `ALLOC` goes into the brood; the built solids first by their shares (`copy::grow`'s order).
 
 **What is held at the start of the interval:** the living body (so upkeep, the allowance and `x_p*`), members, the
-temperature (the interval's mean). The splitting test bounds what that costs.
+temperature (a stand: its ground's mean over the interval; a body with a brain: its own at the start). The splitting test bounds what that costs.
 
 ### 3.3 The window `D`
 
@@ -185,7 +204,8 @@ The plan holds every reaction's extent over the interval and every supply taken.
    (ground node), the light set aside (bodies' node). If the plan's total take of a node's substance is over what it
    holds (a gas several reactions breathe; the ground's liquid or mineral that soaking and roots both take), stage 4
    runs once more with that cap as a limit (X29's second solve). What still exceeds it is cut by one share for each
-   reaction as a whole, in a fixed order (X21's way), and counted.
+   reaction as a whole, in a fixed order (X21's way), and counted; between two cut reactions this cut can pass through a
+   negative store, as extents one after another do: rare, counted, and caught by the debug check.
 2. **One pass of the net change.** Each substance of the body changes by the sum over all reactions and flows, summed
    exactly where terms cancel (`Reactor::made`, `math::add_times`), so every element is kept; the reactions' heat as one
    sum; the net gas to and from the air through `Moves::gas` with its heat and latent heat, the latent heat of gas put out
@@ -219,7 +239,7 @@ member). Every other body, node or individual, is a body with a brain.
 | Upkeep | `pay::upkeep` | `pay::upkeep` plus keep-warm's power (X14) |
 | Evaporation | key liquids, in stage 2, within `heat_bound`, no sweating | in the heat stage, with sweating at `COOL_T` (until G3) |
 | Heat (stage 7) | at its ground's temperature | the day law's heat network with the month's heat |
-| Temperature its rates are read at | the mean of its ground's at its last update and now | the mean of its own at its last update and now |
+| Temperature its rates are read at | its ground's mean over the interval (the running total) | its own at the update's start |
 | Frost reads | the temperature stage 7 leaves (the ground's, or colder if the ground could not pay) | its temperature after the heat network, as today |
 | Selection sample | the plan for the sample's genes (below) | none |
 | After the update | children, shed, mature, split | the decision (`choose::act`), then the same |
@@ -267,7 +287,9 @@ left is the heat network and the evaporation. G3 is gated again on P1b's profile
    6 (G9a: 90 against three of 30); members, fuel and body matter, the 90th percentile under 2%, the worst under 10%.
    Its points: PR-M's grid (3 adult stands; light 0 to 250 W/m², ground 275 to 305 K, wetness 0.1 to 0.9, fuel 0.3 to
    10 times `D` of upkeep) **and young growing stands**, each at constant forcing and with a **seasonal ramp** (the
-   light and the ground's temperature of a spring and of an autumn month, as the air would give them); P1b adds **young
+   light and the ground's temperature of a spring and of an autumn month, as the air would give them), **and intervals
+   of 60 and 90 days centred on the summer's peak and on the winter's low** (where Arrhenius' curve and the mean
+   temperature matter most; G9a's 90 days is that case); P1b adds **young
    and adult animal nodes**, also at 260 K, with food pulses, and **a dip that recovers** (food short for a third of
    the time, then plenty).
 2. **Against the day law** (a sanity check): members and body matter of adult stands that pay, at 2 days, the 90th
@@ -287,10 +309,11 @@ switch test of X15 stays.
 
 PR-M's v2 (island22, one thread, instructions a call of the stand's law) ran **no bare reactions**; today's
 `Reactor::react` inside the stand's law is about 19,000 instructions a call (10.0% of island22's year), on about ten
-bare reactions a stand update (P0). The month runs only the reactions not negligible over the interval at its
-temperature (the reactor's `NEGLIGIBLE` rule; chemistry 0's frame rot and others drop out), with their Arrhenius factors
-read once per update (once per cell after P3, not before) and no phase search per sub-step (the temperature is held):
-about 1,000 to 1,500 instructions a sub-step, one to three sub-steps.
+bare reactions a stand update (P0). The month runs the same reactions (the reactor's `NEGLIGIBLE` rule freezes few at
+living temperatures: the frame's bare rot, 26, only below about 190 K); it saves by reading each Arrhenius factor once
+per update (once per cell after P3, not before), by no phase search per sub-step (the temperature is held) and by few
+sub-steps: about 1,500 to 2,500 instructions for the factors and 1,000 to 1,500 a sub-step, about 1.2 sub-steps a stand
+update on average (3.2).
 
 | Stage | v2 | target | How |
 |---|---|---|---|
@@ -307,7 +330,7 @@ about 1,000 to 1,500 instructions a sub-step, one to three sub-steps.
 | site, films, roles | 2,000 | 1,500 | roles on the card |
 | the rest, the fuel's form | 3,900 | 3,500 | |
 | net booking (new) | 0 | 1,500 | one pass, exact sums |
-| **the other reactions in sub-steps (new: v2 had none)** | **0** | **3,000 to 6,000** | not negligible ones only, Arrhenius once, 1 to 3 sub-steps |
+| **the other reactions in sub-steps (new: v2 had none)** | **0** | **3,000 to 6,000** | Arrhenius once, no phase search, about 1.2 sub-steps (up to 3) |
 | **total** | **37,900 (7.0 µs)** | **about 23,000 to 26,000; with a margin for what the list misses, 4.5 to 5.0 µs** | at P1.2's line of 5 µs (its kill line is 6 µs) |
 
 **The sample** today clones the body, runs its whole update in a checkpoint and rolls it back (2.3 µs a stand update on
@@ -330,7 +353,16 @@ about 127 µs (x0.66); P2 (60 days, about 11 µs): about 66 µs (x0.35); P3: abo
 | P1.2 with P1.4 | -9 to -11% | -4.5 to -5.5% | -12% and -8% (P1.1 to P1.4) |
 | P2 | -9 to -10% | -4.5% | -7% and -3% |
 | P3 | -3 to -5% | -2 to -3% | -5% and -3% |
-| P1b (an estimate: an animal update -10 to -20%) | -3 to -6% | -4 to -7% | about 0 (a law step) |
+| P1b (an estimate: an animal update -8 to -16%, below) | -2.5 to -5% | -3 to -6% | about 0 (a law step) |
+
+**P1b's estimate, with its sub-steps.** An animal update today, island22: 37.9 µs, of it the body's day 18.0. The month
+takes out `settle_upkeep`, the reactor (about 19,000 instructions), `keep_warm` and growth's paying: about 50,000 to
+55,000 instructions. It puts in the plan and the booking (about 20,000 to 25,000, as a stand's without its liquids'
+closed form) and its sub-steps: at the gene's pace about 2 to 3 (3,000 to 4,500 instructions), at 30 days about 5 to 6
+(7,500 to 9,000). So an animal update -8 to -16% at the gene's pace; at G2's 30 days the sub-steps cost about 5,000
+instructions more an update, which G2's count of updates (x0.30) covers many times. P1b counts its sub-steps; if an
+eater needs more than 8 at 30 days, the third-order return gets a looser rule (`gone` already integrates it exactly when
+it runs alone).
 
 P1.2's kill line (under 7% of island22's year) still has 2 to 4 points of room. On four threads (plan 5.0): the
 plants' rows give about 14 ms less than the plan on the island and 7 on the globe; P1b moves part of G3's gain earlier.
@@ -339,9 +371,10 @@ plants' rows give about 14 ms less than the plan on the island and 7 on the glob
 
 | Risk | Answer |
 |---|---|
-| The splitting test fails (the living body held at the start of 60 to 90 days; the ramp's temperature as a mean of two ends) | `MONTH_SHARE` smaller; a running total of the ground's temperature per cell; else P2 or G9a keeps the shorter pace |
+| The splitting test fails (the living body held at the start of 60 to 90 days; Arrhenius' curve over a season) | `MONTH_SHARE` smaller; else P2 or G9a keeps the shorter pace |
 | The stand's law over 5 µs (bare reactions, sub-steps) | P1.2's kill line is 6 µs, where its gain line (7% of island22's year) still holds; section 5 of the plan counts 10 to 10.5 µs a stand update |
-| Sub-steps of a third-order return, a two-way pair, a rate that follows the matter, a product-inhibited fixing | the reactor's own kernel and its orders, rates read at each sub-step's start, ended at `MONTH_SHARE` of the scarcest input; the splitting test, with eaters' pulses of the mineral |
+| Sub-steps of a third-order return, a two-way pair, a rate that follows the matter, a product-inhibited fixing | the reactor's own kernel and its orders, rates read at each sub-step's start, ended at a net change of `MONTH_SHARE`; the splitting test, with eaters' pulses of the mineral |
+| More sub-steps than counted (stands over 3, eaters over 8 at 30 days) | the counters of P1.2 and P1b; a looser rule for a reaction `gone` integrates alone; the cost lines of P1.2 (6 µs) and P1b hold the step |
 | The heat's path moves the land (PR-M: -0.52 K) | one place sets the heat, after growth; the land reported; fallback for stands: `relax_heat`'s closed form at their own temperature |
 | P1b moves the eaters at today's pace (no dip between updates, deaths by the rate, the reserve with the rest of the interval) | announced as law effects, reported against the references; key numbers out and not accepted: not merged |
 | PR-A2 finds a cause the sub-steps do not answer | 5.2; G2 waits for it or takes the young-only floor (only if the mineral is kept) |
@@ -350,7 +383,8 @@ plants' rows give about 14 ms less than the plan on the island and 7 on the glob
 ## 9. Lines
 
 `body/month/` (the plan, the fuel's form, the sub-steps on the reactor's kernel, the net booking, the scratch sample):
-about +500 (PR-M's prototype was 392 lines with its probe code, without bare reactions or sub-steps); P1.2 deletes
+about +500 (PR-M's prototype was 392 lines with its probe code, without bare reactions or sub-steps), and about +15
+for the running total of the ground's temperature and the stand's mark; P1.2 deletes
 `gain_to_growth`, the sample's checkpoint path for stands and `node_days`'s branch (about -30); P1.4 deletes
 `sample_every` (-12); P1b deletes `settle_upkeep`, `keep_warm`, the body's call of the reactor (`react`), `settle_gas`,
 `store_light`, the body paths of `soak` and `roots`, `copy::grow`'s conversion and paying, and `soak_again` (about -230)
