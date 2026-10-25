@@ -180,6 +180,14 @@ impl Moves {
             self.end((x, at), k, mol, heat - mol * held_more(&w.chem, who.class, x.class, k));
         }
     }
+    /// The amounts `m` (mol of each substance; those not 0) and then `heat` J go from the one whose update it is to node
+    /// `x` of the store, a `give` each.
+    pub(crate) fn give_all(&mut self, w: &World, x: Node, m: &[f64], heat: f64) {
+        for (k, &a) in m.iter().enumerate().filter(|e| *e.1 != 0.0) {
+            self.give(w, x, k, a, 0.0);
+        }
+        self.give(w, x, 0, 0.0, heat);
+    }
     /// `m` mol of gas `k` go from the one whose update it is into its cell's bodies' node, which the air's step empties
     /// into the air with the lift (laws.md 1.5); the giver pays its latent heat. Negative, `-m` mol come down from its
     /// cell's air node, from `lift` J/kg below its mean height, giving the lift back to the air.

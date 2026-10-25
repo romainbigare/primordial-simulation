@@ -93,16 +93,13 @@ impl Draws {
         apply(w, &[back.flux()], &[], &[]);
         d
     }
-    fn of(&self, i: usize) -> &[Draw] {
-        &self.each[self.at[i] as usize..self.at[i + 1] as usize]
-    }
     /// Do bodies draw from cell `i`'s ground?
     pub(crate) fn any(&self, i: usize) -> bool {
         self.at[i] < self.at[i + 1]
     }
     /// What the bodies of cell `i` draw at `t` K, W, and its slope, W/K.
     fn drawn(&self, i: usize, t: f64) -> (f64, f64) {
-        self.of(i).iter().map(|d| d.at(t)).fold((0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1))
+        self.each[self.at[i] as usize..self.at[i + 1] as usize].iter().map(|d| d.at(t)).fold((0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1))
     }
     /// What the bodies of cell `i` draw from its ground at `t` K, past what they draw from their node's pool, W, and
     /// its slope, W/K.

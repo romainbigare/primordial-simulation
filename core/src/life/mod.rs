@@ -17,6 +17,7 @@ use crate::outbox::Entry;
 use crate::space::Mesh;
 use crate::{World, AIR};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 /// Updates are kept in a ring of this many batches: more than the longest interval is in batches (`MAX_INTERVAL`) with
@@ -77,46 +78,40 @@ pub struct Life {
 
 /// What a snapshot keeps of `Life`: per domain its cells, its count of bodies placed and its living bodies in the order of `Life::alive`;
 /// the energy movers spent in each cell; the lineages and born rows. Where bodies are stored, the ring and the id table
-/// follow from the bodies, and the survey's caches are rebuilt (`Life::sum`).
-#[derive(Serialize)]
+/// follow from the bodies, and the survey's caches are rebuilt (`Life::sum`). Written from the world's own (borrowed),
+/// read back as new (owned).
+#[derive(Serialize, Deserialize)]
 struct Saved<'a> {
-    domains: Vec<(&'a [u32], u64, Vec<&'a Body>)>,
-    pushed: &'a [f64],
-    brains: &'a [Option<Lineage>],
-    members: &'a [u32],
-    genomes: &'a [Genome],
-    free_genomes: &'a [u32],
+    domains: Vec<SavedDomain<'a>>,
+    pushed: Cow<'a, [f64]>,
+    brains: Cow<'a, [Option<Lineage>]>,
+    members: Cow<'a, [u32]>,
+    genomes: Cow<'a, [Genome]>,
+    free_genomes: Cow<'a, [u32]>,
 }
 
-/// `Saved` as it is read back.
-#[derive(Deserialize)]
-struct Loaded {
-    domains: Vec<(Vec<u32>, u64, Vec<Body>)>,
-    pushed: Vec<f64>,
-    brains: Vec<Option<Lineage>>,
-    members: Vec<u32>,
-    genomes: Vec<Genome>,
-    free_genomes: Vec<u32>,
-}
+/// A domain as a snapshot keeps it (`Saved`): its cells, its count of bodies placed and its living bodies.
+type SavedDomain<'a> = (Cow<'a, [u32]>, u64, Vec<Cow<'a, Body>>);
 
 impl Serialize for Life {
     fn serialize<S: Serializer>(&self, to: S) -> Result<S::Ok, S::Error> {
-        let bodies = |d: &Domain| d.at.iter().flatten().map(|&h| &self[h]).filter(|b| b.alive).collect();
-        let domains = self.domains.iter().map(|d| (&d.cells[..], d.placed, bodies(d))).collect();
-        let (pushed, brains, members, genomes, free_genomes) = (&self.pushed[..], &self.brains[..], &self.members[..], &self.genomes[..], &self.free_genomes[..]);
-        Saved { domains, pushed, brains, members, genomes, free_genomes }.serialize(to)
+        let bodies = |d: &Domain| d.at.iter().flatten().map(|&h| Cow::Borrowed(&self[h])).filter(|b| b.alive).collect();
+        let domains = self.domains.iter().map(|d| (Cow::Borrowed(&d.cells[..]), d.placed, bodies(d))).collect();
+        let (pushed, brains, members) = ((&self.pushed).into(), (&self.brains).into(), (&self.members).into());
+        Saved { domains, pushed, brains, members, genomes: (&self.genomes).into(), free_genomes: (&self.free_genomes).into() }.serialize(to)
     }
 }
 
 /// A loaded world stores its bodies anew, in the order saved; the caches come back empty.
 impl<'de> Deserialize<'de> for Life {
     fn deserialize<D: Deserializer<'de>>(from: D) -> Result<Self, D::Error> {
-        let x = Loaded::deserialize(from)?;
-        let mut life = Life { pushed: x.pushed, brains: x.brains, members: x.members, genomes: x.genomes, free_genomes: x.free_genomes, ..Default::default() };
-        life.cut(x.domains.iter().map(|d| d.0.clone()).collect());
+        let x = Saved::deserialize(from)?;
+        let (pushed, brains, members) = (x.pushed.into_owned(), x.brains.into_owned(), x.members.into_owned());
+        let mut life = Life { pushed, brains, members, genomes: x.genomes.into_owned(), free_genomes: x.free_genomes.into_owned(), ..Default::default() };
+        life.cut(x.domains.iter().map(|d| d.0.to_vec()).collect());
         for (d, (_, placed, bodies)) in x.domains.into_iter().enumerate() {
             life.domains[d].placed = placed;
-            for b in bodies {
+            for b in bodies.into_iter().map(Cow::into_owned) {
                 if (b.id >> ID_SHIFT) as usize != d {
                     life.away.insert(b.id, d as u32);
                 }

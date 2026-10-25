@@ -61,10 +61,6 @@ impl Life {
     pub(crate) fn brainless(&self, b: &Body) -> bool {
         self.has_brain(b.lineage) == Some(false)
     }
-    /// The starting kind body `b` descends from (`Lineage::root`); `u32::MAX` if its lineage is gone.
-    pub fn root(&self, b: &Body) -> u32 {
-        self.brain(b.lineage).map_or(u32::MAX, |l| l.root)
-    }
     /// The rows body `b` was born with (provisional ones are read through their domain, `Domain::born`).
     pub fn born(&self, b: &Body) -> &[f32] {
         &self.genomes[b.genome as usize].rows

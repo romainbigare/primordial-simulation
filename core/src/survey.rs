@@ -174,8 +174,8 @@ impl Faces {
     pub fn of(&self, i: usize) -> &[Face] {
         self.at.get(i + 1).map_or(&[], |&e| &self.all[self.at[i] as usize..e as usize])
     }
-    /// The face of every living body of `w` as it is now, cell by cell.
-    fn make(&mut self, w: &World) {
+    /// The face of every living body of `w` as it is now, cell by cell, in the room these faces held.
+    fn make(mut self, w: &World) -> Faces {
         self.clear();
         self.at.push(0);
         for i in 0..w.mesh.cells().n() {
@@ -185,6 +185,7 @@ impl Faces {
             }
             self.at.push(self.all.len() as u32);
         }
+        self
     }
     /// No batch runs.
     fn clear(&mut self) {
@@ -218,9 +219,7 @@ pub fn batch(w: &mut World, reversed: bool) {
     let most = list.chunk_by(|a, b| a.0 == b.0).map(|d| d.len()).max().unwrap_or(0);
     let c = &mut w.counts;
     (c.busiest_share, c.body_batches) = (c.busiest_share + most as f64 / list.len().max(1) as f64, c.body_batches + 1.0);
-    let mut faces = std::mem::take(&mut w.life.faces);
-    faces.make(w);
-    w.life.faces = faces;
+    w.life.faces = std::mem::take(&mut w.life.faces).make(w);
     let (serial, list): (Vec<_>, Vec<_>) = list.into_iter().partition(|x| x.3);
     w.life.batch = true;
     let runs = list.chunk_by(|a, b| a.0 == b.0).map(|run| (run[0].0, run.len(), run)).collect();

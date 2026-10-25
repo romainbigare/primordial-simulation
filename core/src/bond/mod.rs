@@ -290,12 +290,8 @@ fn dissolve(w: &mut World, s: usize) {
         w.life[h].hold = None;
     }
     let (i, p) = (cell(w, s), std::mem::take(&mut w.parts.parts[s]));
-    w.in_domain(i, |w, d| {
-        for (k, (a, f)) in p.wall.iter().zip(&p.fill).enumerate().filter(|(_, (a, f))| *a + *f != 0.0) {
-            d.moves.give(w, Node::ground(i), k, a + f, 0.0);
-        }
-        d.moves.give(w, Node::ground(i), 0, 0.0, p.e);
-    });
+    let held: Vec<f64> = p.wall.iter().zip(&p.fill).map(|(a, f)| a + f).collect();
+    w.in_domain(i, |w, d| d.moves.give_all(w, Node::ground(i), &held, p.e));
     w.parts.at[i].retain(|&x| x as usize != s);
     // Its slot is free for a new part, of the next generation.
     w.parts.parts[s].gen = p.gen + 1;

@@ -719,7 +719,7 @@ fn individuals_mode_merges_no_animal() {
     assert_eq!(here(&w), n, "animals merged");
     // Animals alive at the end of each month, and animals born in the window (members).
     let (mut alive, mut born) = (Vec::new(), 0.0);
-    let roots: Vec<u32> = w.life.alive().filter(|b| animal(&w, b)).map(|b| w.life.root(b)).collect();
+    let roots: Vec<u32> = w.life.alive().filter(|b| animal(&w, b)).map(|b| w.life.brain(b.lineage).map_or(u32::MAX, |l| l.root)).collect();
     w.events.clear();
     for _ in 0..36 {
         pcore::step(&mut w);

@@ -17,24 +17,16 @@ pub fn die(w: &World, d: &mut Domain, h: Handle, mut b: Body, cause: u8) {
 
 /// All that body `b` holds goes to its cell's ground node as loose amounts, with its heat (the update open moves it).
 pub(crate) fn remains(w: &World, d: &mut Domain, b: &Body) {
-    let i = b.cell as usize;
-    for (k, &a) in b.store.iter().enumerate().filter(|x| *x.1 != 0.0) {
-        d.moves.give(w, Node::ground(i), k, a, 0.0);
-    }
-    d.moves.give(w, Node::ground(i), 0, 0.0, b.e);
+    d.moves.give_all(w, Node::ground(b.cell as usize), &b.store, b.e);
 }
 
 /// Amounts `m` (mol of each substance, at most what it holds) go from body `b`, at the plateau state `th`, to its cell's
 /// ground as loose amounts, with their heat and fusion enthalpy (`Body::heat_with`).
 pub(crate) fn to_ground(w: &World, d: &mut Domain, b: &mut Body, th: &Melting, m: &[f64]) {
-    let i = b.cell as usize;
     let q = b.heat_with(&w.chem, th, m);
     b.lose(&w.chem, m);
-    for (k, &a) in m.iter().enumerate().filter(|x| *x.1 != 0.0) {
-        d.moves.give(w, Node::ground(i), k, a, 0.0);
-    }
     b.e -= q;
-    d.moves.give(w, Node::ground(i), 0, 0.0, q);
+    d.moves.give_all(w, Node::ground(b.cell as usize), m, q);
 }
 
 /// `dead` (mol of each, at most what it holds) goes from body `b` at the plateau state `th` to the ground; in a node
