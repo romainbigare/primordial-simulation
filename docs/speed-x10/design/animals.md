@@ -1,5 +1,10 @@
 # Speed x10, section "animals": the month law for bodies with a brain (P1b)
 
+> **After phase P, `month.md` replaces** 3.1 to 3.4 (the law, the pulse, the booking, the update) and the two tests of
+> 5: growth runs through the interval beside the body's own reactions (the pools), which answers PR-A's eaten mineral
+> and the adults' burnt body; G2's fallback is the young-only floor, not 20 days; G3 is gated again (X42, X48, X49).
+> Sections 1, 2 (PR-A, done), 4 and 6 stand.
+
 Design section of the x10 plan (`plan.md` step P1b; decisions X6, X9, X14, X29). It gives bodies with a brain the
 same energy law as stands: upkeep, income and growth paid together over the interval by one stock equation. It is the
 step that makes G2 (every population node updates at least every 30 days, which replaces MI6) honest. Written in

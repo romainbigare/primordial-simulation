@@ -11,6 +11,10 @@
 > today's 36 days and their `INTERVAL` gene starts to matter to selection (a law change, announced); PR-M runs `D` =
 > gene against `D` = 36 and the architect chooses, with `D` = 36 as a `numbers.md` row if the key numbers move. Stage 5's booking follows X29 (supplies in the limits, a fixed
 > order, no clamp). The month for animals is in `animals.md` (P1b). The gains are restated in the plan's section 5.
+> **After phase P, `month.md` replaces** 2.3 (the stages), the month's numbers of 2.4 (the case against a grid table
+> stays), the sample's cost in 2.6, items 1 to 4 of 3, tests 1 to 3 of 5, 6 (the gains) and the P1 row of 9: the month
+> is a plan and a booking, with product inhibition, roots and the body's reactions inside its pools; `D` is 36 days for
+> stands (`reserve_days`); P1.3 is folded into P1.2; a stand update costs about 9 to 10 µs, not 7.5 (X41 to X47).
 
 Owner's choices covered here: **1** (plants as a field), **2** (a growth table per genome), **3** (pay upkeep and get
 light together across the interval). Other sections: engine (threads, 32-bit, ceiling), air, minds.

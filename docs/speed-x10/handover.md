@@ -10,7 +10,7 @@ points to. It is written in very simple English, as the owner wants for everythi
 | The branch of this work | `speed/x10` (pushed). `main` holds the last round as it ended and is **not** changed by this work until the owner merges the branch (X1) |
 | The plan (the single source of the steps) | `docs/speed-x10/plan.md` |
 | The decisions of this round (X1 to X36) | `docs/speed-x10/decisions.md` |
-| The low-level designs | `docs/speed-x10/design/` (`plants.md`, `engine.md`, `air.md`, `minds.md`, `gap.md`, `animals.md`); each has a note at its top saying which of its steps are kept, dropped or renamed. Where a design and the plan disagree, the plan wins |
+| The low-level designs | `docs/speed-x10/design/` (`month.md`, the month law after phase P, which replaces parts of `plants.md` and `animals.md`; `plants.md`, `engine.md`, `air.md`, `minds.md`, `gap.md`, `animals.md`); each has a note at its top saying which of its steps are kept, dropped or renamed. Where a design and the plan disagree, the plan wins |
 | The measures of this round | `docs/speed-x10/measures.md` (created by R2; see section 4 here for its state) |
 | What changed and when | `docs/history.md`, section 6 "Speed x10" |
 | The rules | `CLAUDE.md` (already updated by R1 for this round: ceiling 12,000, 64-bit books, the world the same with any number of threads) and `docs/handover.md` (the spec) |
