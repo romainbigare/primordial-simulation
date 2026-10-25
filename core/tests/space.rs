@@ -3,7 +3,7 @@
 
 use pcore::{World, AIR};
 use pcore::space::square::Square;
-use pcore::space::{Layer, Level, Mesh, Stack};
+use pcore::space::{Level, Mesh, Stack};
 use std::collections::BTreeSet;
 
 const SIDE: f64 = 2000.0;
@@ -104,7 +104,7 @@ fn the_compass_of_a_square_is_its_eight_neighbours() {
 fn a_stack_of_three_layers_links_each_cell_up_its_column() {
     let [_, (sq, mesh)] = maps();
     // Today's column: a deep store and the ground on the squares, the air on its coarser level.
-    let layers = [Layer { level: 0, depth: 30.0 }, Layer { level: 0, depth: 2.0 }, Layer { level: 1, depth: 1e4 }];
+    let layers = [0, 0, 1];
     let st = Stack::new(&mesh, &layers);
     let (n, na) = (sq.n(), mesh.level(1).n());
     assert_eq!(st.nodes(), 2 * n + na);
@@ -113,8 +113,8 @@ fn a_stack_of_three_layers_links_each_cell_up_its_column() {
     for i in 0..n {
         let (deep, ground, air) = (st.node(0, i), st.node(1, i), st.node(2, mesh.up(i, 0, 1)));
         assert_eq!((deep, ground, air), (i, n + i, 2 * n + mesh.up(i, 0, 1)));
-        assert_eq!((st.lo()[i] as usize, st.hi()[i] as usize, st.dist()[i]), (deep, ground, 16.0));
-        assert_eq!((st.lo()[n + i] as usize, st.hi()[n + i] as usize, st.dist()[n + i]), (ground, air, 5001.0));
+        assert_eq!((st.lo()[i] as usize, st.hi()[i] as usize), (deep, ground));
+        assert_eq!((st.lo()[n + i] as usize, st.hi()[n + i] as usize), (ground, air));
         assert_eq!(st.area()[i], SIDE * SIDE);
         into_air[mesh.up(i, 0, 1)] += st.area()[n + i];
     }

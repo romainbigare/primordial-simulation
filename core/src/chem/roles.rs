@@ -35,13 +35,8 @@ impl Chemistry {
         self.dh(r) < 0.0 && self.reactions[r].inputs.iter().any(|p| self.gas_at_surface(p.0 as usize))
     }
 
-    /// Is `k` an input of a reaction that burns (`burning`)?
-    pub fn burnt(&self, k: usize) -> bool {
-        self.burner(k).is_some()
-    }
-
     /// The first reaction that burns `k` (`burning`).
-    fn burner(&self, k: usize) -> Option<usize> {
+    pub(super) fn burner(&self, k: usize) -> Option<usize> {
         (0..self.reactions.len()).find(|&r| self.burning(r) && self.reactions[r].inputs.iter().any(|p| p.0 as usize == k))
     }
 

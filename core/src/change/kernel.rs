@@ -347,11 +347,9 @@ impl Reactor {
         while reach(sub) > MAX_DT_K * c && iter < MAX_SUBSTEPS && sub > left * MIN_SUB {
             sub *= 0.5;
         }
-        for &r in self.on.iter().filter(|&&r| self.kap[r] > 0.0) {
-            if iter == 0 && !self.lit[r] && !self.minor[r] {
-                (self.kap0[r], self.lim0[r]) = (self.kap[r], self.lim[r]);
-                self.on0.push(r);
-            }
+        for &r in self.on.iter().filter(|&&r| iter == 0 && self.kap[r] > 0.0 && !self.lit[r] && !self.minor[r]) {
+            (self.kap0[r], self.lim0[r]) = (self.kap[r], self.lim[r]);
+            self.on0.push(r);
         }
         sub
     }
@@ -360,11 +358,8 @@ impl Reactor {
     /// from the `pool` around first, gas products to it), its heat to or from `energy`, stored light from `light`.
     fn apply(&mut self, chem: &Chemistry, n: &mut [f64], pool: &mut [f64], energy: &mut f64, light: &mut f64) {
         let has_pool = !pool.is_empty();
-        for x in 0..self.on.len() {
-            let (r, rx) = (self.on[x], &chem.reactions[self.on[x]]);
-            if self.kap[r] <= 0.0 {
-                continue;
-            }
+        for &r in self.on.iter().filter(|&&r| self.kap[r] > 0.0) {
+            let rx = &chem.reactions[r];
             let (dh, lim) = (self.dh[r], scarce(&rx.inputs, |k| self.av[k]).0);
             // No more than the light it stores, or than `MOST_HEAT` of the heat it takes.
             let most = if self.lit[r] { *light * self.light_yield / dh } else if dh > 0.0 { MOST_HEAT * *energy / dh } else { f64::INFINITY };

@@ -3,7 +3,7 @@
 //! cells in each layer, which `solve::spread` solves.
 
 use super::{land::{bottom, filled, t_now, table, wet}, liquid::{book, mobile}, Scratch};
-use crate::{math::one_minus_exp, solve::spread::{within, Net, Spread}, space::{Layer, Stack}, store::{Batch, Class, LinkFlux}, World};
+use crate::{math::one_minus_exp, solve::spread::{within, Net, Spread}, space::Stack, store::{Batch, Class, LinkFlux}, World};
 
 /// The layers of each cell's stack under its surface, bottom up: the bed's store and the loose ground's pores.
 const DEEP: usize = 0;
@@ -14,8 +14,9 @@ const PORES: usize = 1;
 /// (`come_up`). A move takes its share of every liquid with what is dissolved and its heat; lost head heats where it goes.
 pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt: f64) {
     let (n, p, g) = (w.mesh.cells().n(), w.cfg.phys, w.cfg.gravity);
-    // The stack of the two layers: the store `bed_depth` deep under the active layer of the ground (`skin_m`).
-    let stack = Stack::new(&w.mesh, &[Layer { level: 0, depth: p.bed_depth }, Layer { level: 0, depth: w.cfg.skin_m }]);
+    // The stack of the two layers, both on the cells: the store `bed_depth` deep under the active layer of the ground
+    // (`skin_m`).
+    let stack = Stack::new(&w.mesh, &[0, 0]);
     let (mob, held) = (mobile(w, s, liq, tmin), stores(w, s, tmin));
     // The heat each node of the stack gains from the head lost on the way into it, J.
     let mut fallen = vec![0.0; stack.nodes()];

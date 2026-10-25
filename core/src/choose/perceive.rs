@@ -91,14 +91,8 @@ pub(super) fn perceive(w: &World, d: &Domain, b: &Body, nseen: usize, rng: &mut 
     }
     let (held, list) = (bond::held(w, b), &w.parts.at[i][..]);
     let (mut parts, mut np, off) = ([0usize; PARTS], 0, if list.is_empty() { 0 } else { rng.below(list.len()) });
-    for q in 0..list.len() {
-        let p = list[(off + q) % list.len()] as usize;
-        if np == PARTS {
-            break;
-        }
-        if Some(p) != held {
-            (parts[np], np) = (p, np + 1);
-        }
+    for p in (0..list.len()).map(|q| list[(off + q) % list.len()] as usize).filter(|&p| Some(p) != held).take(PARTS) {
+        (parts[np], np) = (p, np + 1);
     }
     Choice {
         seen,

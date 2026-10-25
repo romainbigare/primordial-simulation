@@ -58,14 +58,8 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
     for (x, i) in (0..act.len() * n).filter(|&y| of_rain[y] > 0.0).map(|y| (y / n, y % n)) {
         up[x * ne + i] += of_rain[x * n + i].min((1..ne / n).map(|c| -up[x * ne + c * n + i]).sum());
     }
-    let World { light: lit, life, .. } = w;
-    for (i, (l, &got)) in lit.iter_mut().zip(&light).enumerate() {
-        *l += got;
-        for k in 0..life.in_cell(i) {
-            let h = life.cell(i).nth(k).expect("a body of the cell");
-            life[h].mark -= (life[h].shade - 1.0) * got;
-        }
-    }
+    w.light.iter_mut().zip(&light).for_each(|(l, got)| *l += got);
+    w.life.each_mut(|b| b.mark -= (b.shade - 1.0) * light[b.cell as usize]);
     // Each ground node's gas crosses its links to the air, one column per gas, with its heat; the air pays the lift.
     let (g, view) = (w.cfg.gravity, s.view());
     let (mut paid, mut net) = (wind.paid.iter().zip(&start.lift).map(|(a, b)| a + b).collect::<Vec<f64>>(), v(act.len() * n));

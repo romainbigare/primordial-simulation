@@ -149,7 +149,7 @@ impl Chemistry {
     fn derived(&self) -> &Derived {
         self.derived.get_or_init(|| {
             // The inputs of growth no reaction burns, per mol of matter; the starting air's heat capacity per mol.
-            let minerals = self.build.as_ref().map_or(Vec::new(), |bl| bl.inputs.iter().filter(|p| !self.burnt(p.0 as usize)).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect());
+            let minerals = self.build.as_ref().map_or(Vec::new(), |bl| bl.inputs.iter().filter(|p| self.burner(p.0 as usize).is_none()).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect());
             let air_cp: f64 = self.air.iter().zip(&self.subs).map(|(x, s)| x * s.cp).sum();
             let burners = (0..self.reactions.len()).filter(|&r| self.dh(r) < 0.0 && !self.keeps(r)).map(|r| (r, -self.dh(r))).collect();
             let mut by_melt: Vec<usize> = (0..self.ns()).filter(|&k| self.subs[k].lf > 0.0).collect();

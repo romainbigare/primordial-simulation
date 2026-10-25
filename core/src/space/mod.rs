@@ -6,7 +6,7 @@
 pub mod square;
 pub mod stack;
 
-pub use stack::{Layer, Stack};
+pub use stack::Stack;
 
 use std::f64::consts::TAU;
 
