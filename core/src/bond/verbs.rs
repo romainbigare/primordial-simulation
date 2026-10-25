@@ -1,8 +1,8 @@
 //! What bodies do to parts: hold, take, put, join, break and enter; form new parts, anchor them, dig the bonded ground,
 //! let go, and carry what they hold when they move. A body's force decides what it can hold and break.
 
-use super::{dissolve, event, held, holder, id, link, make, move_structure, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
-use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase}, life::{Domain, Handle}, outbox::Entry, store::{Class, Move, Node}, World};
+use super::{dissolve, event, held, holder, id, link, make, move_structure, part, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
+use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase}, life::{Domain, Handle}, outbox::Entry, store::{Class, Move, Node, NodeId}, World};
 
 /// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the ground rests on it).
 fn grab(w: &mut World, b: &mut Body, p: usize) {
@@ -266,10 +266,10 @@ pub fn carry(w: &World, b: &Body) -> Option<(usize, f64)> {
     (!s.anchored && s.mass * w.cfg.gravity <= bears(w, b)).then_some((r, s.mass))
 }
 
-/// After a body moved from `i` into `j`: the structure it carried comes along; it pushes the structures there.
-pub fn moved(w: &mut World, b: &mut Body, carried: Option<(usize, f64)>, j: usize, mb: f64) {
-    b.inside = None;
-    if let Some((r, _)) = carried {
+/// After a body of mass `mb` kg moved into cell `j` (`choose::land_move`): the structure it carried (`carried`, its
+/// root) comes along if it is still there; it pushes the structures there.
+pub fn moved(w: &mut World, carried: Option<NodeId>, j: usize, mb: f64) {
+    if let Some(r) = carried.and_then(|r| part(w, r)) {
         move_structure(w, r, j);
     }
     let push = (w.cfg.phys.bump * mb * w.cfg.gravity) as f32;

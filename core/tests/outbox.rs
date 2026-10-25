@@ -46,7 +46,7 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     let a = w.add(e, 1);
     for kin in [false, true] {
         let id = w.life[a].id;
-        w.in_domain(i, |_, d| d.out.push(Entry::Go { id, from: i as u32, to: j as u32, pushed: 1.0, lane: 1.0, carries: false, kin }));
+        w.in_domain(i, |_, d| d.out.push(Entry::Go { id, from: i as u32, to: j as u32, pushed: 1.0, lane: 1.0, carries: false, kin, body: None }));
     }
     kill(&mut w, a);
     deliver(&mut w);
@@ -152,13 +152,14 @@ fn a_holder_killed_in_the_parallel_phase_lets_go_in_the_serial_phase() {
     books.assert_kept(&w, 1e-12);
 }
 
-/// The order in which the domains run in the parallel phase of a batch and of the survey, and the threads that run them,
-/// change nothing: the lineages and born rows made there get the same global ids (laws.md 0), and the world ends the
-/// same, bit for bit, with its events and counters. In the batches each kind of the serial phase happens: a dispersing
-/// litter lands, a watch and a part act are applied, a body that holds a part runs, one anchors its part, lineages are
-/// made; in the first survey, movers kill a body in a cell with no part and a holder in its cell with a part, which lets
-/// go of the part, and the month's merge joins two nodes with different born rows into new born rows; the books are
-/// kept.
+/// The order in which the domains run in the parallel phase of a batch and of the survey and in their landing, and the
+/// threads that run them, change nothing: the lineages and born rows made there get the same global ids (laws.md 0),
+/// and the world ends the same, bit for bit, with its events and counters. In the batches each kind of entry happens: a
+/// dispersing litter lands, litters from two domains land in one cell in one batch, a watch and a part act are applied,
+/// a body that holds a part runs, one anchors its part, lineages are made; in the first survey, movers kill a body in a
+/// cell with no part and a holder in its cell with a part, which lets go of the part, the month's merge joins two nodes
+/// with different born rows into new born rows, and members who moved into another domain join their kind there into
+/// new born rows as they land; the books are kept.
 #[test]
 fn the_order_of_the_domains_changes_nothing() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -212,6 +213,27 @@ fn the_order_of_the_domains_changes_nothing() {
     let big = w.add(big, 300);
     let big = w.life[big].id;
     w.add(small, 300);
+    // Members of a node who move from a cell of one domain into a node of their kind in the next domain, whose born rows
+    // differ (their move queued as their update would).
+    let edge = |a: usize, b: usize| w.life.domain_of(a) != w.life.domain_of(b) && w.mesh.cells().link(a, b).is_some();
+    let (a, b) = free.iter().flat_map(|&a| free.iter().map(move |&b| (a, b))).find(|&(a, b)| a != x && a != m && b != x && b != m && edge(a, b)).expect("two cells across a domain edge");
+    let used = [x, m, a, b];
+    let edges: Vec<usize> = free.iter().copied().filter(|&c| !used.contains(&c) && free.iter().any(|&o| edge(c, o))).take(16).collect();
+    let e = eater(&mut w, a, brain::REST, 1.0);
+    let (mover, mut kind) = (node_of(&mut w, e.clone(), 4.0), node_of(&mut w, e, 8.0));
+    kind.genome = w.life.new_genome(w.life.born(&mover).iter().map(|r| r - 0.5).collect());
+    kind.cell = b as u32;
+    let kind_rows = [w.life.born(&mover).to_vec(), w.life.born(&kind).to_vec()];
+    let (mover, kind) = (w.add(mover, 300), w.add(kind, 300));
+    let (mover, kind) = (w.life[mover].id, w.life[kind].id);
+    w.in_domain(a, |_, d| d.out.push(Entry::Go { id: mover, from: a as u32, to: b as u32, pushed: 0.0, lane: 0.0, carries: false, kin: true, body: None }));
+    // Dispersing nodes in the cells next to another domain, so that litters from two domains land in one cell.
+    let mut parents = std::collections::BTreeMap::new();
+    for c in edges {
+        let n = dispersing(&mut w, c, 3.0);
+        let h = w.add(n, 1);
+        parents.insert(w.life[h].id, w.life.domain_of(c));
+    }
     // Movers pushed through every third cell and the holder's hard enough to kill (`Body::breaking`; each body there
     // takes its share by mass).
     let (h, all) = (w.life.find(doomed_id).unwrap(), w.life.cell(x).map(|o| w.life[o].mass(&w.chem)).sum::<f64>());
@@ -233,18 +255,28 @@ fn the_order_of_the_domains_changes_nothing() {
             let did = |f: &dyn Fn(&pcore::event::Event) -> bool| v.events.iter().any(f);
             let merged = v.life.find(big).map(|h| v.life.born(&v.life[h]).to_vec());
             let broken = did(&|e| matches!(e.kind, EventKind::Died { cause: BROKEN, .. }) && e.node != x as u32);
-            let first = (broken, did(&|e| matches!(e.kind, EventKind::BondBroken)), merged);
+            let joined = v.life.find(kind).filter(|_| v.life.find(mover).is_none()).map(|h| v.life.born(&v.life[h]).to_vec());
+            let first = (broken, did(&|e| matches!(e.kind, EventKind::BondBroken)), merged, joined);
+            // Whether children of parents of two domains started in one cell in one batch.
+            let mut met = false;
             for _ in 0..30 {
                 pcore::survey::batch(&mut v, reversed);
+                let mut from: std::collections::BTreeMap<u32, Vec<usize>> = Default::default();
+                for b in v.life.alive().filter(|b| b.born == v.day() && parents.contains_key(&b.parent)) {
+                    from.entry(b.cell).or_default().push(parents[&b.parent]);
+                }
+                met |= from.values().any(|d| d.iter().any(|&k| k != d[0]));
                 v.time += v.cfg.batch_days as u64 * DAY_S;
                 pcore::survey::survey(&mut v, reversed);
             }
-            (v, first)
+            (v, (first, met))
         })
     });
-    let (killed, let_go, merged) = &ends[0].1;
+    let ((killed, let_go, merged, joined), met) = &ends[0].1;
     let new_rows = merged.as_ref().is_some_and(|r| !rows.contains(r));
-    assert!(*killed && *let_go && new_rows, "the first survey: killed {killed}, let go {let_go}, new born rows {new_rows}");
+    let landed_rows = joined.as_ref().is_some_and(|r| !kind_rows.contains(r));
+    assert!(*killed && *let_go && new_rows && landed_rows, "the first survey: killed {killed}, let go {let_go}, new born rows {new_rows}, joined on landing into new born rows {landed_rows}");
+    assert!(*met, "no litters from two domains landed in one cell in one batch");
     assert!(ends.iter().all(|e| e.1 == ends[0].1), "the threads or the order of the domains changed the first survey");
     let ends = ends.map(|e| e.0);
     // (The whole saved world, and the events and counters of the batches, which are not saved.)

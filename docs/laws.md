@@ -68,20 +68,27 @@ holding one, lets go there too). A body
 with a move queued, or a node's part with a part act queued, is **leaving** (`Body::leaving`): it stays in its old
 cell until the batch ends, where the rest of its update runs, but it does not mature, and the others there neither see
 it in their cell nor take from it, give to it, join it or mix with it. A body with a move queued, or a part act but a let-go or an anchor, does not
-split in that update. Then the serial phase, in a fixed order: the domains back, the moves of the domains that ran booked in domain order
-(each number a domain's moves touched gets their sum once, `Moves::book`), and the world settles, domain by domain; the outboxes of the domains that ran applied, domain by domain in the order
-made, then what applying them queued; the bodies that hold or are inside a part, whole updates in domain and body
-order, each a serial step on its domain with its view opened fresh and booked after it, its own outbox applied after
-it; last the holders' changes added in domain order. Each entry is applied by its law on the bodies and parts as
-they are then. A move lands (`choose::land_move`): the body enters the cell with its marks of light and rain, carries
-what it holds if it paid to (else it lets go of it), pushes the structures there, counts in the crossings of the cell's domain, and its push breaks the bodies there at the next
-survey and clears the lane; members of a node who moved join their kind there (`copy::kin`). A litter joins its kind
-there or starts a body, and its birth is recorded then (`copy::land_litter`). A watch blends by the share of the watcher's
+split in that update; when its domain's task ends, a body with a move queued leaves the domain's storage with its move
+(`Domain::post`). Then, in a fixed order: the domains back, the moves of the domains that ran booked in domain order
+(each number a domain's moves touched gets their sum once, `Moves::book`), and the world settles, domain by domain.
+Then the landing phase (`outbox::land`): the moves and the litters land, each in the domain of the cell it goes to, in
+the order of the domains they come from and then the order made, each domain on its own on the pool as in the parallel
+phase; then each domain that ran or landed makes the faces its bodies show in the next batch; the domains back, and
+the world settles. Then one by one, each a serial step: the other entries of the outboxes (watches, part acts), domain
+by domain in the order made, then what landing and applying queued, the same way; the bodies that hold or are inside a
+part, whole updates in domain and body order, each a serial step on its domain with its view opened fresh and booked
+after it, its own outbox delivered after it in the same phases; last the holders' changes added in domain order. Each
+entry is applied by its law on the bodies and parts as they are then. A move lands (`choose::land_move`): the body
+enters the cell with its marks of light and rain, carries what it holds if it paid to (else it lets go of it), counts
+in the crossings of the cell's domain, and its push breaks the bodies there at the next survey; members of a node who
+moved join their kind there (`copy::kin`); after the landings its push reaches the structures there, the structure it
+carries comes along, and it clears the lane (`Entry::Passed`). A litter joins its kind there or starts a body, and its
+birth is recorded then (`copy::land_litter`). A watch blends by the share of the watcher's
 members who watched (5.5). A part act runs whole on a part in the body's cell (`choose::land_act`); a node's part then comes back
 to its node if it holds nothing, is inside nothing, and the node is in its cell and not leaving it. An entry whose body or target is gone does nothing: a move
 of a body that died (its cost was paid), a watch whose watcher is no longer of its lineage, a part act no longer
-possible or that cannot be paid; less than one member of a node's children with no node to join goes back into the
-parent's brood, or to the ground of the parent's cell if it died. So a body is seen as it was at the batch's start,
+possible or that cannot be paid; less than one member of a node's children with no node to join goes back, after the
+landings, into the parent's brood, or to the ground of the parent's cell if it died (`copy::back`). So a body is seen as it was at the batch's start,
 and every move to another cell, every watch and every act on a part lands at the batch's end.
 
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
@@ -426,7 +433,7 @@ groups. A group splits off only if the cell it enters has room and the node bear
 (`choose::go::can_go`). **rest**; **move** (`choose::go`:
 `walk` per kg and metre, climbing, the bodies in the way; needs force, 3.5); **take**, **put**, **give**
 (`choose/feed.rs`); **watch** (5.5); Bond's form, hold, take from or put to a part, join, break, let go, anchor, dig,
-enter (`bond/verbs.rs`). A move, a watch and an act on a part are applied when the batch ends, in the serial phase (0).
+enter (`bond/verbs.rs`). A move lands when the batch ends, and a watch and an act on a part are applied then, one by one (0).
 No copy action, no "farm", "trade" or "attack": those must be patterns of these.
 
 **Taking** (`feed::intake`, one law for the ground and for bodies) goes by uptake genes (`Body::wanted`) at `c_handle`

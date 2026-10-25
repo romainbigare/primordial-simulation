@@ -29,7 +29,7 @@ const RING: u64 = 384;
 const ID_SHIFT: u32 = 40;
 
 /// Where a body is stored: its domain and its slot there (`Life`'s index). It holds until the body leaves the world or
-/// moves to another domain (`Life::relocate`); a body is named for longer by its id.
+/// moves (`Domain::post`); a body is named for longer by its id.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Handle {
     pub domain: u32,
@@ -42,8 +42,8 @@ pub struct Life {
     pub(crate) domains: Vec<Domain>,
     /// Each cell's domain and its index in that domain's cells
     cell_in: Vec<(u32, u32)>,
-    /// The domain each body stored outside the domain it was placed in is stored in, by id (`find`; a body that died
-    /// there is left out at the end of each batch, `settle_moved`)
+    /// The domain each body stored outside the domain it was placed in is stored in, by id (`find`; noted when the
+    /// world settles, `World::settle`; a body that died there is left out at the end of each batch, `settle_moved`)
     away: BTreeMap<u64, u32>,
     /// The domains that ran since their moves were last booked (`World::book_moves`), and since their outboxes were
     /// last taken (`take_queued`): what a domain wrote lies in these only
@@ -235,7 +235,7 @@ impl Life {
         &self.domains[self.domain_of(i)]
     }
     /// The domain of cell `i`.
-    pub(crate) fn domain_of(&self, i: usize) -> usize {
+    pub fn domain_of(&self, i: usize) -> usize {
         self.cell_in[i].0 as usize
     }
     /// The domain of cell `i` and its slot among that domain's cells (`Level::children` of its air node).
@@ -244,18 +244,22 @@ impl Life {
         let (d, k) = self.cell_in[i];
         (d as usize, k as usize)
     }
-    /// Body `b`, taken out of `h` in cell `from`, is stored again in its cell now (it moved there): at the end of its
-    /// list, in the storage of its domain (where it is noted, `find`), its update due filed there; returns where it is.
+    /// Body `b`, taken out of `h` in cell `from`, is stored again in its cell, an edit outside the laws (a move lands
+    /// by `Domain::arrive`); returns where it is.
     pub fn relocate(&mut self, h: Handle, from: usize, b: Body) -> Handle {
-        let (d, due) = (self.domain_of(b.cell as usize), (b.due % RING) as usize);
-        let x = &mut self.domains[h.domain as usize];
-        x.unstore(h, b.id, from);
-        if d != h.domain as usize {
-            x.ring[due].retain(|&y| y != b.id);
-            self.domains[d].ring[due].push(b.id);
+        self.domains[h.domain as usize].depart(h, &b, from);
+        let d = self.domain_of(b.cell as usize);
+        let s = self.domains[d].arrive(b);
+        self.note_arrived(d);
+        s
+    }
+    /// Where the bodies that moved into domain `d` are stored is noted (`find`; a body stored in the domain it was
+    /// placed in is found by its id alone).
+    pub(super) fn note_arrived(&mut self, d: usize) {
+        let x = &mut self.domains[d];
+        for id in x.arrived.drain(..) {
+            if (id >> ID_SHIFT) as u32 == x.index { self.away.remove(&id) } else { self.away.insert(id, x.index) };
         }
-        if (b.id >> ID_SHIFT) as usize == d { self.away.remove(&b.id) } else { self.away.insert(b.id, d as u32) };
-        self.domains[d].store(b)
     }
     /// No bodies yet on `mesh`: a domain under each air node, with its cells.
     pub fn new(mesh: &Mesh) -> Life {
@@ -289,20 +293,33 @@ impl Life {
         self.unbooked.add(k);
         self.unsent.add(k);
     }
-    /// The entries of the outboxes of the domains that ran since the last, domain by domain, each's in the order made;
-    /// they are left empty. Only a domain that ran has an outbox (checked in debug builds).
-    pub(crate) fn take_queued(&mut self) -> Vec<Entry> {
-        let Life { domains, unsent, .. } = self;
-        let queued = unsent.take().flat_map(|k| std::mem::take(&mut domains[k].out)).collect();
-        debug_assert!(domains.iter().all(|d| d.out.is_empty()), "an outbox in a domain that did not run");
-        queued
+    /// The entries of the outboxes of the domains that ran since the last, domain by domain, each's in the order made
+    /// (its bodies that move taken out of its storage first, `Domain::post`); they are left empty. The moves and the
+    /// litters go to the inbox of the domain of their cell; returns those domains, in order, and the other entries.
+    pub(crate) fn take_queued(&mut self) -> (Vec<usize>, Vec<Entry>) {
+        let (mut to, mut rest) = (Vec::new(), Vec::new());
+        let ran: Vec<usize> = self.unsent.take().collect();
+        for k in ran {
+            self.domains[k].post();
+            for e in std::mem::take(&mut self.domains[k].out) {
+                let Some(i) = e.lands_in() else {
+                    rest.push(e);
+                    continue;
+                };
+                let d = self.domain_of(i);
+                to.push(d);
+                self.domains[d].inbox.push(e);
+            }
+        }
+        debug_assert!(self.domains.iter().all(|d| d.out.is_empty()), "an outbox in a domain that did not run");
+        to.sort_unstable();
+        to.dedup();
+        (to, rest)
     }
-    /// `members` members entered cell `i` in a move that spent `pushed` J pushing through its bodies
-    /// (`choose::land_move`).
+    /// `members` members entered cell `i` in a move that spent `pushed` J pushing through its bodies.
     pub fn cross(&mut self, i: usize, members: f32, pushed: f64) {
         let (d, k) = self.cell_slot(i);
-        let x = &mut self.domains[d];
-        (x.crossings[k], x.pushed[k]) = (x.crossings[k] + members, x.pushed[k] + pushed);
+        self.domains[d].cross(k, members, pushed);
     }
     /// The energy movers spent pushing through the bodies of cell `i` since the last survey, which then breaks them, J
     /// (`choose::wear`).

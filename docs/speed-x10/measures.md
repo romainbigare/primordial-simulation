@@ -1350,3 +1350,77 @@ other mutations and died young. The parent's mutation size is now 10^-6, so its 
 The test's assertions are the same.
 
 Verdict: -2.87% on the globe against the kill line of -1.5%, and the nodes check passes. The commit is kept.
+
+## E1b.2: landing by destination
+
+Level 3. When a domain's task ends, each body with a move queued leaves the domain's storage and goes with its move
+(`Domain::post`, `Entry::Go::body`). Then `outbox::land`: the moves and the litters go to the inbox of the domain of
+their cell (source domain order, then order made), and each domain lands its own on the pool (`survey::run`, the
+runner the batch uses too), then makes its faces for the next batch (`Domain::make_next_faces`; the domains that ran
+and the ones that landed something). What a landing does to things no domain owns is queued in the landing domain's
+outbox and applied one by one after it: the lane cleared, the structures pushed and carried along (`Entry::Passed`),
+and children who go back to their parent or the ground (`Entry::Back`). The watches and part acts are applied one by
+one after the landings. `World::settle` notes where the bodies that moved are stored (`Life::away`). The serial steps
+(the bodies that hold parts, the survey's cells with parts) deliver through the same phases. Core: 9,748 to 9,848 code
+lines (+100).
+
+| Check | Result |
+|---|---|
+| The order test (widened: litters from two domains land in one cell in one batch; members who moved into another domain join their kind into new born rows as they land; the landing order is reversed too) | equal on 1 and 4 threads, in order and reversed |
+| The same test with the inbox reversed when `reversed` (a probe, not kept) | fails, so the test sees the landing order |
+| Golden | re-pinned; the same fingerprints with threads and without |
+| `cargo test --release --workspace`, also with `CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true` (the kept faces compared with a fresh make every batch) | passes |
+| The key numbers (once; seeds in brackets) | all in range but S50 (0.557, known failure); see below |
+
+| Key number | E1b.2 | Reference after AIR4.0 |
+|---|---|---|
+| ground temperature on land, K | 292.159 (291.504, 292.654, 292.321) | 292.142 |
+| seasonal swing, K | 15.470 | 15.467 |
+| rain on land, mol/m2/s | 0.001814 | 0.001813 |
+| heat-absorbing gas, ppm | 411.34 | 411.30 |
+| river cells | 695.0 | 691.9 |
+| land worn down, mm/yr | 0.1447 | 0.1452 |
+| light-eaters, log10 kg | 10.248 | 10.243 |
+| eaters, log10 kg | 5.393 | 5.393 |
+| life of light-eaters, yr | 1.164 (1.328, 1.252, 0.912) | 1.218 (1.194, 1.199, 1.261) |
+| life of eaters, yr | 13.07 (14.32, 13.01, 11.87) | 13.12 |
+| stored share (S50, known failure) | 0.557 | 0.556 |
+
+The lives move most, by seed (seed 3 of the light-eaters from 1.26 to 0.91 years); R2's references had 1.10 to 1.32
+over the seeds, so this is inside the noise of a life's choices.
+
+**One thread, instructions of one year** (callgrind, `RAYON_NUM_THREADS=1`, bench48 saves, base `13f4035`; million
+instructions; the worlds part within the year, so the whole year moves a little with them):
+
+| | island22 base / E1b.2 | globe36 base / E1b.2 | region24 base / E1b.2 |
+|---|---|---|---|
+| the year | 7,940.6 / 7,927.1 (-0.17%) | 7,423.3 / 7,436.1 (+0.17%) | 16,912.2 / 16,822.5 (-0.53%) |
+| `survey::batch` | 4,472.7 / 4,456.1 | 3,711.9 / 3,723.2 | 10,204.6 / 10,139.5 |
+| delivery, all (`deliver` / `land`) | 233.2 / 287.6 | 253.9 / 279.0 | 593.2 / 673.1 |
+| of it on the pool (landing and faces) | 0 / 259.5 | 0 / 177.5 | 0 / 573.5 |
+| of it on the main thread | 233.2 / 28.1 | 253.9 / 101.5 | 593.2 / 99.6 |
+| faces made again before a batch (`faces::remake`) | 58.7 / 51.0 | | 132.4 / 127.1 |
+
+The work of delivering that stays on the main thread falls by 88% (island22), 60% (globe36: its many watches and part
+acts) and 83% (region24). The faces are now made at the end of the landing task (66 / 143 million on island22 /
+region24, made at the end of the domain's own task before); the remakes before a batch fall only 13% and 4%: most come
+from the survey (the wear of movers writes bodies) and the serial steps, not from the landings.
+
+**Wall time on 4 threads, the bodies' stage** (`ms_bodies`, mean of years 2 and 3 of a run of 3 years from the bench
+save; interleaved base and E1b.2, `flock` on `timing.lock`; ms a year). The machine was shared with other agents'
+builds and tests the whole time:
+
+| | round 1 (7 runs each, load 2.2 to 4.4) median / min | round 2 (10 runs each, load 6.1 to 8.5) median / min | all 17: median / min |
+|---|---|---|---|
+| island22 base | 398 / 304 | 581 / 357 | 534 / 304 |
+| island22 E1b.2 | 391 / 310 (-1.9% / +1.9%) | 484 / 399 (-16.7% / +11.7%) | 459 / 310 (-14.0% / +1.9%) |
+| globe36 base | 369 / 298 | 447 / 363 | 415 / 298 |
+| globe36 E1b.2 | 420 / 312 (+14.0% / +4.7%) | 450 / 331 (+0.7% / -8.8%) | 441 / 312 (+6.3% / +4.7%) |
+| region24 base | 921 / 753 | 1,120 / 881 | 1,114 / 753 |
+| region24 E1b.2 | 892 / 713 (-3.1% / -5.4%) | 1,281 / 727 (+14.3% / -17.5%) | 956 / 713 (-14.2% / -5.4%) |
+
+**Verdict: the kill line cannot be judged on this machine.** A build against itself spreads by 30 to 60% here, and the
+medians and minima go both ways by more than the 6% line. From the instructions, the work that leaves the main thread
+is 205, 152 and 494 million a year; with E0's 67, 103 and 85 ms of `deliver` at 4 threads and E0's speed-up of 2.5 for
+work on the pool, the expected gain is about 35 to 45 ms a year, 7 to 10% of the bodies' stage: near the line, not
+far past it. A quiet machine must judge it, or the chain is judged at E1c (X40).

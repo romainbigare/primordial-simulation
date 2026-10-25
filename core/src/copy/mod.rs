@@ -34,7 +34,7 @@ use mix::{mix, mix_rows, partner};
 /// brood): half a child each on average. A member who dies loses the brood it held.
 pub const BROOD_HELD: f64 = 0.5;
 
-/// The node in whose name the remains of a litter whose parent died go to the ground (`land_litter`): no body holds
+/// The node in whose name the remains of a litter whose parent died go to the ground (`back`): no body holds
 /// them now, and the store books no body's side of a move (`store::apply`), so a body node of any slot serves.
 const NO_BODY: Node = Node { class: Class::Body, index: 0 };
 
@@ -186,17 +186,25 @@ fn start(w: &World, d: &mut Domain, mut c: Body, rows: Option<Vec<f32>>, size: f
     None
 }
 
-/// A litter (`emit`) lands when its batch ends (laws.md 0, S25): it joins the young node of its kind and lineage there
-/// (`kin`) or starts a body of its own (`start`), and its birth is recorded. Less than one member (of a node's children:
-/// an individual's are whole) with no node to join goes back into its parent's brood if the parent lives; else what
-/// they hold goes to the ground of the cell their parent was in, as remains do (`body::remains`).
-pub(crate) fn land_litter(w: &mut World, x: Litter) {
-    let Litter { mut c, rows, size, alone, from, born } = x;
-    let hit = if alone { None } else { w.in_domain(c.cell as usize, |w, d| kin(w, d, c.cell as usize, c.lineage, (&c.genes, &c.spread), false)) };
-    if hit.is_some() || c.count >= 1.0 {
-        w.events.push(born);
-        w.in_domain(c.cell as usize, |w, d| start(w, d, c, rows, size, alone, hit));
-    } else if let Some(p) = w.life.find(c.parent) {
+/// A litter (`emit`) lands when its batch ends (laws.md 0, S25) in `d`, the domain of its cell: it joins the young
+/// node of its kind and lineage there (`kin`) or starts a body of its own (`start`), and its birth is recorded. Less
+/// than one member (of a node's children: an individual's are whole) with no node to join goes back (`back`).
+pub(crate) fn land_litter(w: &World, d: &mut Domain, x: Litter) {
+    let i = x.c.cell as usize;
+    let hit = if x.alone { None } else { kin(w, d, i, x.c.lineage, (&x.c.genes, &x.c.spread), false) };
+    if hit.is_none() && x.c.count < 1.0 {
+        return d.out.push(Entry::Back(Box::new(x)));
+    }
+    let Litter { c, rows, size, alone, born, .. } = x;
+    d.events.push(born);
+    start(w, d, c, rows, size, alone, hit);
+}
+
+/// Children of a litter who found no node to join (`land_litter`) go back into their parent's brood if the parent
+/// lives; else what they hold goes to the ground of the cell their parent was in, as remains do (`body::remains`).
+pub(crate) fn back(w: &mut World, x: Litter) {
+    let Litter { mut c, from, .. } = x;
+    if let Some(p) = w.life.find(c.parent) {
         let (mi, p) = (w.chem.matter().unwrap_or(0), &mut w.life[p]);
         p.store.iter_mut().zip(&c.store).for_each(|(a, x)| *a += x);
         (p.e, p.brood) = (p.e + c.e, p.brood + c.store[mi]);

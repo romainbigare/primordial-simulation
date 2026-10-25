@@ -34,7 +34,7 @@ pub fn go(w: &World, d: &mut Domain, b: &mut Body, j: usize, kin: bool) {
     let (pushed, all) = (cost * (1.0 - 1.0 / resist), w.life.sum[j][7]);
     let lane = if all > 0.0 { pushed * w.mesh.cells().area()[j] / all } else { 0.0 };
     b.leaving = true;
-    d.out.push(Entry::Go { id: b.id, from: i as u32, to: j as u32, pushed, lane, carries: carried.is_some(), kin });
+    d.out.push(Entry::Go { id: b.id, from: i as u32, to: j as u32, pushed, lane, carries: carried.is_some(), kin, body: None });
 }
 
 /// Whether share `share` of body `b` (a node's movers, or the body whole with 1) carrying `load` kg can step into cell
@@ -47,28 +47,25 @@ pub(super) fn can_go(w: &World, b: &Body, j: usize, share: f64, load: f64) -> bo
         && share * bond::bears(w, b) >= w.cfg.phys.bump * (mb + load) * w.cfg.gravity
 }
 
-/// The move of body `id` from cell `i` to `j` that `go` queued lands, if the body still lives: it enters `j` (its
-/// marks of light and rain those of `j`), carries what it holds if it paid for that (`carries`; else it lets go of it)
-/// and pushes the structures there (`bond::moved`), its push breaks the bodies there at the next survey and clears
-/// `lane` m² of the lane. With `kin`, the members of a node who moved join the first node of their kind and stage there
-/// (`copy::kin`).
-pub(crate) fn land_move(w: &mut World, id: u64, (i, j): (usize, usize), (pushed, lane): (f64, f64), (carries, kin): (bool, bool)) {
-    let Some(s) = w.life.find(id) else { return };
-    let mut b = std::mem::take(&mut w.life[s]);
+/// The move of body `b` from cell `i` to `j` that `go` queued lands in `d`, the domain of `j`: it enters `j` (its
+/// marks of light and rain those of `j`, inside no structure), carries what it holds if it paid for that (`carries`;
+/// else it lets go of it), and its push breaks the bodies there at the next survey. What it does to things no domain
+/// owns is queued (`Entry::Passed`): it pushes the structures there (`bond::moved`) and clears `lane` m² of the lane.
+/// With `kin`, the members of a node who moved join the first node of their kind and stage there (`copy::kin`).
+pub(crate) fn land_move(w: &World, d: &mut Domain, mut b: Body, (i, j): (usize, usize), (pushed, lane): (f64, f64), (carries, kin): (bool, bool)) {
     let carried = bond::carry(w, &b).filter(|_| carries);
     if carried.is_none() {
-        bond::dropped(w, &mut b, carries);
+        bond::let_go(w, d, &mut b, carries);
     }
-    let mb = b.mass(&w.chem);
-    // (Before it enters `j` and out of its slot, it is no node of its cell for `kin`.)
-    let t = if kin { w.in_domain(j, |w, d| copy::kin(w, d, j, b.lineage, (&b.genes, &b.spread), b.adult(&w.chem))) } else { None };
-    bond::moved(w, &mut b, carried, j, mb);
-    (b.cell, b.mark, b.rained, b.leaving) = (j as u32, w.light[j], w.rained[j], false);
-    w.life.cross(j, b.n() as f32, pushed);
-    lanes::clear(w, i, j, lane);
-    let s = w.life.relocate(s, i, b);
+    let mass = b.mass(&w.chem);
+    // (Before it enters `j`, it is no node of its cell for `kin`.)
+    let t = if kin { copy::kin(w, d, j, b.lineage, (&b.genes, &b.spread), b.adult(&w.chem)) } else { None };
+    (b.cell, b.mark, b.rained, b.leaving, b.inside) = (j as u32, w.light[j], w.rained[j], false, None);
+    d.cross(w.life.cell_slot(j).1, b.n() as f32, pushed);
+    d.out.push(Entry::Passed { from: i as u32, to: j as u32, lane, mass, carried: carried.map(|c| bond::id(w, c.0)) });
+    let s = d.arrive(b);
     if let Some(t) = t {
-        w.in_domain(j, |w, d| nodes::merge(w, d, s, t));
+        nodes::merge(w, d, s, t);
     }
 }
 

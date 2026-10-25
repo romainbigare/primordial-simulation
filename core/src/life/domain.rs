@@ -40,6 +40,11 @@ pub struct Domain {
     pub(crate) made: Faces,
     /// What its bodies' updates do outside them, in the order made (`outbox`)
     pub out: Vec<Entry>,
+    /// The moves and litters that land in its cells, in the order of the domains they come from, then the order made
+    /// (`outbox::land`)
+    pub(crate) inbox: Vec<Entry>,
+    /// The ids of the bodies that moved into it since the world last settled (`World::settle` notes where they are)
+    pub(super) arrived: Vec<u64>,
     /// The length of `out` when the update running began (`queued`)
     pub(crate) began: usize,
     /// The lineages and the born rows its bodies made since the world last settled, by provisional id (`PROVISIONAL`),
@@ -118,6 +123,41 @@ impl Domain {
         self.bodies[h.slot as usize] = Body::default();
         self.free.push(h.slot);
     }
+    /// Body `b`, which moved into its cell from another, is stored here, its update due filed here.
+    pub(crate) fn arrive(&mut self, b: Body) -> Handle {
+        self.ring[(b.due % RING) as usize].push(b.id);
+        self.arrived.push(b.id);
+        self.store(b)
+    }
+    /// At the end of its task: each body with a move queued (`Entry::Go`) leaves its storage and its ring, and goes with
+    /// its move; a move whose body died or joined another since is dropped.
+    pub(crate) fn post(&mut self) {
+        let mut out = std::mem::take(&mut self.out);
+        out.retain_mut(|e| {
+            let Entry::Go { id, body: body @ None, .. } = e else { return true };
+            let Some(h) = self.find(*id) else { return false };
+            let b = std::mem::take(self.quiet(h));
+            self.depart(h, &b, b.cell as usize);
+            *body = Some(Box::new(b));
+            true
+        });
+        self.out = out;
+    }
+    /// `members` members entered its `k`th cell in a move that spent `pushed` J pushing through its bodies
+    /// (`choose::land_move`).
+    pub(crate) fn cross(&mut self, k: usize, members: f32, pushed: f64) {
+        (self.crossings[k], self.pushed[k]) = (self.crossings[k] + members, self.pushed[k] + pushed);
+    }
+    /// The work of its landing task (`outbox::land`): the entries in its inbox, and with `faces` its bodies, whose
+    /// faces it makes.
+    pub(crate) fn landing(&self, faces: bool) -> usize {
+        self.inbox.len() + if faces { self.table.len() } else { 0 }
+    }
+    /// Body `b`, taken out of `h` in cell `i`, leaves its storage and its ring, to be stored again elsewhere (`arrive`).
+    pub(super) fn depart(&mut self, h: Handle, b: &Body, i: usize) {
+        self.unstore(h, b.id, i);
+        self.ring[(b.due % RING) as usize].retain(|&y| y != b.id);
+    }
     /// File the next update of body `b` in batch `due`.
     pub(crate) fn schedule(&mut self, due: u64, b: &mut Body) {
         b.due = due;
@@ -171,14 +211,16 @@ impl World {
         r
     }
     /// The world takes what domains `ds` wrote since it last settled (S72), domain by domain in order: their events and
-    /// counters; the lineages and born rows they made get global ids (`Life::remap`); outside a batch the changes of
-    /// holders are added (`Life::count_all`), in a batch at its end.
+    /// counters, and where the bodies that moved into them are stored (`Life::find`); the lineages and born rows they
+    /// made get global ids (`Life::remap`); outside a batch the changes of holders are added (`Life::count_all`), in a
+    /// batch at its end.
     pub(crate) fn settle(&mut self, ds: std::ops::Range<usize>) {
         let World { life, events, counts, .. } = self;
         for d in &mut life.domains[ds.clone()] {
             events.append(&mut d.events);
             counts.add(&mut d.counts);
         }
+        ds.clone().for_each(|k| life.note_arrived(k));
         life.remap(ds.clone());
         if !life.batch {
             life.count_all(ds);

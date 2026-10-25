@@ -82,7 +82,7 @@ impl Faces {
 
 impl Domain {
     /// Make the faces its bodies show in the next batch, from them as they are now (the end of its task in a batch).
-    pub(super) fn make_next_faces(&mut self, w: &World) {
+    pub(crate) fn make_next_faces(&mut self, w: &World) {
         let mut faces = std::mem::take(&mut self.made);
         self.touched = faces.make(w, self, true);
         self.made = faces;
