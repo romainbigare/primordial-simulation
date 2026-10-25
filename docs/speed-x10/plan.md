@@ -167,7 +167,7 @@ is a month, books kept). PR-B says how often it happens.
 
 | ID | What | Level | Done when | Kill line | Needs | Agent | Detail |
 |---|---|---|---|---|---|---|---|
-| AIR1 | Calm cells (`CALM_K`, `CALM_SHARE`) and the calm solver (`STILL_SHARE` 1e-4); `CLAUDE.md` 6.5 (air tolerances are speed numbers) | 3 (with the long-step and globe climate tests) | globe rounds at most 3.3; cell rows -25%; both climate tests; golden re-pinned; key numbers | Flow 1T under -8% on globe36 | R3 | Sonnet | air 2.1 |
+| AIR1 | Calm cells (`CALM_K`, `CALM_SHARE`) and the calm solver (`STILL_SHARE` 2e-4, X39); `CLAUDE.md` 6.5 (air tolerances are speed numbers) | 3 (with the long-step and globe climate tests) | globe rounds at most 3.3; cell rows -25%; both climate tests; golden re-pinned; key numbers | Flow 1T under -8% on globe36 | R3 | Sonnet | air 2.1 |
 | AIR3 | The air's book as column moves, written through E1c's `book_by_array` (no own pass); E4 does not touch the air | 1 or 2 | `book` -40% | under -25% | E1c, AIR1 | Sonnet | air 2.3 |
 | AIR2 | The air's and the liquid's per-cell loops in phases on E1c's runner, the domains **cut by air node** (the tiles of one node in one task), partials per air node summed in node order | 2 | golden re-pinned; 5-year runs: climate columns within 0.05 K and 1%; Flow 4T x1.25 on both | under x1.15 on either | E1c, AIR3 | Opus | air 2.2 |
 

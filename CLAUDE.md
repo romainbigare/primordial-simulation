@@ -107,3 +107,6 @@ ask the owner.
 3. Before you push: build, all tests, clippy, the wasm build (`cargo build -p pcore --target wasm32-unknown-unknown`).
 4. Reviews of the code and of the laws happen in rounds with the owner. What stays banned is proof machinery: receipts,
    cross-machine determinism, replay proofs (`docs/handover.md` 14.5).
+5. **The air's solver tolerances are speed numbers** (`STILL_K`, `STILL_SHARE`, `CALM_K`, `CALM_SHARE` in
+   `core/src/flow/air/step.rs`), like a time step. A change re-pins the golden test and must pass the long-step test and
+   the globe's climate test (`tape/tests/ranges.rs`), in the same commit.

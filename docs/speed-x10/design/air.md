@@ -172,7 +172,7 @@ const CALM_K: f64 = 1e-2;
 const CALM_SHARE: f64 = 1e-4;
 ```
 
-**Calm solver.** `STILL_SHARE` goes from 1e-5 to 1e-4 (`step.rs:19`). Reason: the gas test is the one that binds;
+**Calm solver.** `STILL_SHARE` goes from 1e-5 to 2e-4 (`step.rs:19`; 1e-4 left the globe at 3.69 rounds, X39). Reason: the gas test is the one that binds;
 1e-4 of the air is about 0.5% of its vapour, and the temperature has already stopped moving (0.003 to 0.04 K).
 The rain of a step moves by about that share, far under the year-to-year spread of rain on land.
 
@@ -410,7 +410,7 @@ Sure steps: about +37 lines. All: about +360. The ceiling must rise (the engine 
 |---|---|---|---|---|---|---|---|
 | AIR0 | Measure on a branch, on the new benches: the table of 1.4 (1 and 4 threads), rounds, the share of cells that are calm per round, the share of sea cells that would group (AIR6) | none | the table in this round's measures | none | none | all | Haiku |
 | AIR-T | Fix the long-step test's short physics step (3 to 2 days) | 1 (a test) | the test runs a world `validate` accepts and passes | none | none | all | Haiku |
-| AIR1 | Calm cells (`CALM_K`, `CALM_SHARE`) and `STILL_SHARE` 1e-4 | 3 | rounds globe36 at most 3.3, cell rows -25% or more, the climate tests pass, golden re-pinned | Flow on 1 thread (callgrind) under 8% better on globe36 | AIR-T | AIR3, AIR4-R1 | Sonnet |
+| AIR1 | Calm cells (`CALM_K`, `CALM_SHARE`) and `STILL_SHARE` 2e-4 (X39) | 3 | rounds globe36 at most 3.3, cell rows -25% or more, the climate tests pass, golden re-pinned | Flow on 1 thread (callgrind) under 8% better on globe36 | AIR-T | AIR3, AIR4-R1 | Sonnet |
 | AIR2 | The air's and the liquid's per-cell loops in phases per domain on the pool (free order) | 2 | Flow on 4 threads 1.25 times faster on both benches | under 1.15 times on either | the engine's rule for choice 4; AIR1 | AIR3 | Opus |
 | AIR3 | The air's book as column moves | 1 or 2 | `book` -40% | under -25% | engine's apply design (choice 5), or none | AIR1, AIR2 | Sonnet |
 | AIR4-R1 | Find what makes 30-day steps warm the winters (switch the explicit parts one by one) | none (branch) | a table: each part's share of the +1.2 K | none | AIR-T | AIR1 to AIR3 | Opus |

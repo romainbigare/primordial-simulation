@@ -16,9 +16,13 @@ use crate::{ground::heat_above_floor, store::Class, survey::Draws, units::{MAX_S
 /// The rounds stop when no air node's temperature moves by more than this from one round to the next, K,
 const STILL_K: f64 = 5e-2;
 /// and no gas of an air node by more than this share of the node's gas,
-const STILL_SHARE: f64 = 1e-5;
+const STILL_SHARE: f64 = 2e-4;
 /// or after this many rounds.
 const ROUNDS: usize = 16;
+/// A ground node keeps its row from the round before when the air it sees moved less than this, K,
+const CALM_K: f64 = 1e-2;
+/// and its active gases less than this share of their sum.
+const CALM_SHARE: f64 = 1e-4;
 /// A round leaves each gas of a node at least this share of what it held, a bound on that one unknown alone.
 const KEEP: f64 = 0.5;
 /// A ground node's surface balance is solved again about the temperature it gives, up to this many times, until that
@@ -55,6 +59,9 @@ pub(super) const FIXED: usize = 9;
 /// its two slopes; the slope of the heat the node gives its air with the column's gas, J/mol; the fusion enthalpy a mol
 /// of its rain brings the ground, J/mol.
 pub(super) const PER_GAS: usize = 8;
+/// After the numbers of the gases, the air a row was made with: the temperature it saw, K, and the sum of the active
+/// gases it saw, mol (`pass`).
+const SEEN: usize = 2;
 
 /// The air during the rounds: per node the temperature, K; per gas and node (`[gas * nodes + node]`) the amount, mol.
 #[derive(Clone)]
@@ -141,12 +148,12 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64, draws: &Draws) {
     let mut it = Iterate { t: s.ta.clone(), x: s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect() };
     let drive = Drive::of(w, s, &start.x, dt);
     let (mut ts, mut alb, mut rows, mut wind) = (s.state.tg.clone(), s.alb.clone(), std::mem::take(&mut s.rad), Wind::default());
-    let width = FIXED + PER_GAS * act.len();
+    let width = FIXED + PER_GAS * act.len() + SEEN;
     rows.resize(n * width, 0.0);
     let (fixed, far) = (fixed(w, s, &act), far(s));
     let room: Vec<f64> = (0..n).map(|i| if draws.any(i) { heat_above_floor(w.store.heat(Class::Ground)[i], w.heat_cap_ground(i)) } else { 0.0 }).collect();
     for round in 0.. {
-        pass(&Ctx { w, s, it: &it, act: &act, ts: &ts, alb: &alb, fixed: &fixed, draws, room: &room, dt, decl }, &mut rows, width);
+        pass(&Ctx { w, s, it: &it, act: &act, ts: &ts, alb: &alb, fixed: &fixed, draws, room: &room, dt, decl }, &mut rows, (width, round > 0));
         ts.iter_mut().zip(alb.iter_mut()).zip(rows.chunks_exact(width)).for_each(|((t, a), row)| (*t, *a) = (row[4], row[8]));
         let g = gather(w, s, &it, &act, (&rows, width), far);
         let (next, coef) = solve(w, s, (&act, &drive), (&start, &g), &it, dt, &mut wind);
@@ -193,8 +200,10 @@ fn active(w: &World, s: &mut Scratch, henry: &[(usize, usize)]) -> Vec<Active> {
     act
 }
 
-/// Every ground node's row (`cell`) from the air of the round, in rows (in parallel, with `threads`).
-fn pass(cx: &Ctx, rows: &mut [f64], width: usize) {
+/// Every ground node's row (`cell`) from the air of the round, in rows (in parallel, with `threads`). After the first
+/// round (`later`), a node whose air is calm keeps its row: its exchange stays linearised about the air of the round it
+/// was made in, and its slopes still enter the Newton step (an inexact Newton step, Dembo, Eisenstat and Steihaug 1982).
+fn pass(cx: &Ctx, rows: &mut [f64], (width, later): (usize, bool)) {
     let (cfg, lat) = (&cx.w.cfg, cx.w.mesh.cells().lat());
     // Each task keeps the last latitude and its sunlight: neighbouring cells often share a latitude (a row of the
     // square map), and the sunlight is the same function of it.
@@ -202,8 +211,19 @@ fn pass(cx: &Ctx, rows: &mut [f64], width: usize) {
         if lat[i] != last.0 {
             *last = (lat[i], insolation(cfg.sun, lat[i].to_radians(), cx.decl));
         }
+        let (seen, at) = (seen_air(cx, i), row.len() - SEEN);
+        if later && (seen.0 - row[at]).abs() < CALM_K && (seen.1 - row[at + 1]).abs() < CALM_SHARE * seen.1 {
+            return;
+        }
         cell(cx, i, last.1, row);
+        row[at..].copy_from_slice(&[seen.0, seen.1]);
     });
+}
+
+/// The air ground node `i` sees in the round: its temperature, K, and the sum of its active gases, mol.
+fn seen_air(cx: &Ctx, i: usize) -> (f64, f64) {
+    let na = cx.w.mesh.level(AIR).n();
+    (lerp(cx.s, &cx.it.t, i), cx.act.iter().map(|ac| lerp(cx.s, &cx.it.x[ac.gi * na..(ac.gi + 1) * na], i)).sum())
 }
 
 /// The row of ground node `i` under the sunlight `q` of its latitude, W/m²: sunlight past the clouds, what bodies
