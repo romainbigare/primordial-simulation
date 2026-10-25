@@ -1,12 +1,15 @@
 # Speed x10, section "plants": a field of stands, a card per genome, upkeep and light together
 
 > **Note: what the plan kept** (`plan.md` is the single source of the steps; this design keeps its old numbering).
-> P0: in R2. **P1: split** into P1.1 (`apply_extent`, level 1), P1.2 (the month law, the card, `field_days` 36, the
-> brain-loss switch), P1.3 (the stand at its ground's temperature), P1.4 (the sample at every update). P2: kept.
+> P0: in R2. **P1: split** into P1.1 (`apply_extent`, level 1), P1.2 (the month law, the card, `field_days` 30, the
+> brain-loss switch; 36 below is now 30, as `Config::validate` wants a multiple of `batch_days`, which G4 makes 10,
+> and P3 a multiple of `phys_days`: X17; P2's fallback is 30), P1.3 (the stand at its ground's temperature), P1.4 (the sample at every update). P2: kept.
 > P3: kept, after the engine's E1b.3 (its file list is in the plan). P4: back as G9b, gated (X26). P5: dropped
 > (only on a branch, if the owner asks). **Corrections:** sections 0 and 1.1 say the set of plants is closed; it is
 > not (`lineage::resize` can take a body's brain away, X15; the plan's P1.2 gives the switch). `reserve_days` is
-> replaced by the body's own gene interval (X14). Stage 5's booking follows X29 (supplies in the limits, a fixed
+> replaced by the body's own gene interval (X14): with it most stands keep a reserve 1.8 to 3.6 times smaller than
+> today's 36 days and their `INTERVAL` gene starts to matter to selection (a law change, announced); PR-M runs `D` =
+> gene against `D` = 36 and the architect chooses, with `D` = 36 as a `numbers.md` row if the key numbers move. Stage 5's booking follows X29 (supplies in the limits, a fixed
 > order, no clamp). The month for animals is in `animals.md` (P1b). The gains are restated in the plan's section 5.
 
 Owner's choices covered here: **1** (plants as a field), **2** (a growth table per genome), **3** (pay upkeep and get
