@@ -3,7 +3,8 @@
 > **After phase P, `month.md` replaces** 3.1 to 3.4 (the law, the pulse, the booking, the update) and the two tests of
 > 5: growth runs through the interval beside the body's own reactions (in sub-steps), which answers PR-A's eaten mineral
 > and the adults' burnt body; the reserve covers the rest of the interval and starving is judged on the body's path;
-> G2's fallback is the young-only floor, only if the mineral is kept; G3 is gated again (X42, X48, X49, X53).
+> PR-A2: a long update eats and matures at the gene's pace in segments, G2 floors the brain only, its fallbacks are 20
+> days and then young-only on the segmented law; G3 is gated again (X42, X49, X53, X55 to X58).
 > Sections 1, 2 (PR-A, done), 4 and 6 stand.
 
 Design section of the x10 plan (`plan.md` step P1b; decisions X6, X9, X14, X29). It gives bodies with a brain the

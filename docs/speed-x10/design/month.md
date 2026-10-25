@@ -7,23 +7,26 @@
 > 6 (the gains) and the P1 row of 9. **In `animals.md` it replaces:** 3.1 to 3.4 (the law, the pulse, the booking,
 > the update) and 5's two tests. **Kept there:** `plants.md` 2.1, 2.2, 2.5 (P3), 2.6 (but the sample is the month's
 > plan, below), 2.7, 2.8; `animals.md` 1, 2 (PR-A, done), 4 (why the acts stay after the update) and 6. Decisions:
-> X41 to X53.
+> X41 to X53, X55 to X59.
 
 ## 0. In short
 
 - **One law for every body** (X6): a body's update runs its whole interval at once, as a *plan* worked out on numbers
   (no store is touched), then one *booking* of that plan (X41). Every body runs the same plan; a stand and a body with
   a brain differ in their reserve time `D`, their heat stage and whether they sweat (section 5).
-- **Rates, not pulses.** Everything a body does between two updates is a rate over the interval. The only pulse is what
-  it holds at the start, which for an eater holds the food it took at its last update (X42).
+- **Rates, not pulses.** Everything a body does between two updates is a rate over the interval. The only pulses are
+  its food: one per gene interval, on its day (X42, X55).
+- **Segments** (PR-A2, X55): a long update is the sum of the body's own gene intervals. In each segment the body burns,
+  grows and starves; at each boundary its young members that reached the copy mass pass to the adult node and its brood
+  makes children; a body that takes is visited at its gene's pace for a take-only visit (no brain), and its update's
+  month starts a segment at each take. Only the brain runs once an update (G2).
 - **Two parts, one plan.** The fuel stock keeps X9's closed form: income with product inhibition, upkeep with the
   release limit, growth above the reserve, deaths by starving at a rate. The body's other reactions (catalysed and
   bare, with their true orders: the dissolved mineral's return to the solid is third order) run in **sub-steps** by the
   reactor's own kernel: roots and soaking first, then growth (capped by what its inputs hold plus their inflow), then
   the reactions; a sub-step ends where a store's net loss would reach 0.3 of it or the fuel's form changes phase (X42).
-- **Bare reactions stay** inside bodies (X43, decided). PR-A's two causes, the eaten mineral that turns solid before
-  growth and the body burnt between two updates while growth rebuilds only at the update, are a pulse meeting rates; in
-  the sub-steps growth runs beside them.
+- **Bare reactions stay** inside bodies (X43, decided); growth runs beside them in the sub-steps, so the eaten mineral
+  is used before it turns solid (PR-A's (g)).
 - **Over a long interval** growth keeps the upkeep of the rest of the interval besides its reserve, and starving is
   judged on the body's path, sub-step by sub-step, so a dip that recovers kills as it does over short updates (X53).
 - **One window `D`** for every rate read from Change's law inside a body, never the update's length (X44): 36 days for
@@ -38,7 +41,8 @@
   Section 5 of the plan assumed 6 µs (X46).
 - **Gain now** (one thread, instructions of a year): P1.2 with P1.4 island -9 to -11%, globe -4.5 to -5.5%; with P2
   about -19% and -9%. P1b, an estimate with its sub-steps counted: an animal update -8 to -16% at the gene's pace, the
-  year -2.5 to -5% and -3 to -6%.
+  year -2.5 to -5% and -3 to -6%. G2, which now saves the brain's work and the per-update work but keeps the segments
+  and the visits: about 0.6 of the animal node updates' cost, not 0.7 (7).
 
 ## 1. What the probes and the review found, and the answer to each
 
@@ -57,9 +61,10 @@
 | PR-M: `D` = gene moves S50 by +0.010 past its noise | stands take `D` = 36 days (decided, X44) | 3.3 |
 | PR-A (a) to (d): no effect | kept as law choices (rate deaths, reserve by `D`; `away` and the movers by the gene in G2) | 5.1 |
 | PR-A (g): the eaten mineral turns solid before growth uses it | growth runs beside the third-order return in the sub-steps | 3.2 |
-| PR-A: adults burn their body all interval and rebuild only at the update | the same: growth repairs the body as it burns, sub-step by sub-step | 3.2 |
-| PR-A: 20 days fails too; young-only keeps the eaters once the mineral is kept | G2's fallback is the young-only floor, if P1b keeps the mineral | 5.1 |
-| PR-A2 (pending) | its place | 5.2 |
+| PR-A: 20 days fails too (today's law) | G2's fallbacks are on the segmented law: 20 days, then young-only | 5.2 |
+| PR-A2: the loss is not in the body law (PR-A's adult and young split was the probe's); it is eating (one 30-day take from what lies, cut more often) and maturing (young wait up to a month) | segments: takes and maturing at the gene's pace, the brain once an update | 5.1 |
+| PR-A2: a balance exact in time moves today's eaters (-0.04 to -0.16 in 2 years) | accepted as P1b's announced law effect, reported, key numbers in range | 5.2 |
+| PR-A2: today's take sized by the planned interval gives a floored node 11% more food a day | a take sized by the days to the next visit | 5.1 |
 
 ## 2. The law in physical words, and its stages
 
@@ -78,12 +83,13 @@ start. The card (3.4) holds what the genes fix.
 
 | Kind | What |
 |---|---|
-| Pulse, at the interval's start | what the body holds when its update starts: for an eater, the food it took at its last update (digested into fuel at the take, `Body::digest`) |
+| Pulse, one per gene interval on its day | the food a body takes (digested into fuel at the take, `Body::digest`): at its update, and at each take-only visit between its updates (5.1); each starts a segment |
 | Exact total, spread evenly | light caught (`w.light`, the marks moved by shade at each air step), rain caught |
 | Rate, read at a sub-step's start | the body's reactions, roots and soaking, growth's draw on its inputs |
 | Rate over the interval, in the fuel's closed form | the light reaction (affine in its product by inhibition), upkeep, keep-warm's power (bodies with a brain), the release limit, growth's allowance, deaths by starving the fuel |
 | Judged on the path | starving (`starved`, per sub-step), wear (a rate) |
-| Rule on the end state | minimums (`LACK`), frost and boiling (`PHASE`), children, shedding, maturing |
+| At each segment's boundary (5.1) | maturing (young that reached the copy mass pass to the adult node), children |
+| Rule on the end state | minimums (`LACK`), frost and boiling (`PHASE`), shedding |
 
 **The stages, in order.** Stages 0 to 5 are the *plan*: they read the body, its card and the store's view, and write
 nothing; they return what the booking needs, the new light and rain marks (`mark`, `rained`) and the light share
@@ -148,8 +154,8 @@ interval's temperature, with the Arrhenius factors of stage 3. In each sub-step,
 
 **A sub-step ends** where a store's **net loss** (what growth and the reactions take of it, less its inflow and what
 reactions make of it) would reach `MONTH_SHARE` = 0.3 of the store at its starting rates, or where the fuel's closed form
-changes phase (growth starts or stops, the release limit begins); at most `MONTH_STEPS` = 16, the last takes what is
-left (both named `const`s). As in today's reactor (`far`, `rest`), what a store loses ends a sub-step, never what it
+changes phase (growth starts or stops, the release limit begins), and at each segment's boundary (5.1); at most
+`MONTH_STEPS` = 16 a segment, the last takes what is left (both named `const`s). As in today's reactor (`far`, `rest`), what a store loses ends a sub-step, never what it
 gains: **a store that only grows ends no sub-step** (the products of the bare reactions that `shed` empties at each
 update, a dry key liquid soaking in), **unless a running rate reads it** (a product that inhibits its reaction, the solid
 10 that feeds reaction 22); then its change is measured against the larger of the store and its level. A counter counts
@@ -163,12 +169,13 @@ the updates (P0: the stock crosses its reserve in 10%, runs low in 0.5 to 1.4%).
 on average, rarely over 3; P1.2 counts them. An eater: the eaten mineral 23 falls 46% in 9.7 days and 77% in 27 (PR-A),
 mostly at first. Its return is third order, so a sub-step that loses 0.3 at its starting rate keeps about
 `1 / sqrt(1.6)`, 0.79, of the store, not 0.7 (`gone`); it takes about `ln(x0 / x) / 0.236` sub-steps: about 3 at the
-gene's pace (about 9.5 days) and about 6 at 30 days, with the fuel's phase changes about 4 and about 8.
+gene's pace (about 9.5 days), about 4 with the fuel's phase changes: about 4 a segment, as each segment starts with its
+own pulse (5.1), so about 12 in a 30-day update.
 
-**Why it answers PR-A.** Today a body's reactor turns its stores through the whole interval and growth acts once, at
-the update: the eaten mineral turns solid and the body is burnt (about 0.04 kg a member a day) with nothing rebuilding
-it, so at a 30-day pace an adult is under its copy mass when `copy` runs. In the sub-steps growth takes the mineral as
-it turns and repairs the body as it burns. Whether this is all of the adults' loss is PR-A2's question (5.2).
+**What it answers of PR-A.** Today a body's reactor turns its stores through the whole interval and growth acts once,
+at the update, so the eaten mineral turns solid before growth (PR-A's (g)); in the sub-steps growth takes it as it
+turns, and repairs the body (its matter burnt by reaction 21, about 0.04 kg a member a day) as it burns. The rest of the
+loss at a 30-day pace is eating and maturing (PR-A2), which the segments answer (5.1).
 
 **Starving on the path** (X53). `starved` keeps the share `x^a` of the members when a member's body fell to `x` of what
 it was below its copy mass; a body that dips and recovers over short updates loses members at the dip and does not get
@@ -251,7 +258,7 @@ member). Every other body, node or individual, is a body with a brain.
 | Temperature its rates are read at | its ground's mean over the interval (the running total) | its own at the update's start |
 | Frost reads | the temperature stage 7 leaves (the ground's, or colder if the ground could not pay) | its temperature after the heat network, as today |
 | Selection sample | the plan for the sample's genes (below) | none |
-| After the update | children, shed, mature, split | the decision (`choose::act`), then the same |
+| After the update | maturing and children as the segments made them (booked), shed, split | the same, then the decision (`choose::act`) once an update; take-only visits between updates (G2) |
 
 **The sample.** The node's own plan keeps stage 0 and stage 1 (stage 1 is made again only if the sample's gene is read
 there: leaf, gas). The sample copies the node into a scratch `Body` kept in `LiveTmp` (no allocation after the first),
@@ -260,35 +267,60 @@ changes its gene, runs `prepare` and stages 2 to 5, and keeps only the gain. Abo
 **If a climate test fails** (P1.2's fallback, X45), a stand keeps its own temperature by `relax_heat`'s closed form and
 its rates are read at the temperature it holds, its own, as for a body with a brain.
 
-### 5.1 Animals (P1b)
+### 5.1 Segments: a long update is the sum of the body's own intervals (X55)
 
-P1b gives the month to every body. In a body with a brain it replaces `settle_upkeep` (and its per-update death of the
-unpaid share), the body's reactor in `physics` (`Reactor::react` leaves body updates), `settle_gas`, `store_light`,
-`keep_warm`, the paths of `soak` and `roots`, `copy::grow`'s conversion and its paying, and `soak_again`. What stays of
-`physics` for them: rain, evaporation with sweating, the heat network (`relax_heat`), fed the month's released heat.
-The acts stay after the update (`animals.md` 4).
+PR-A2 (5.2) found that what a long update must keep at the body's own pace is not the body law but the acts that come
+once an update: eating and maturing. So **every month runs in segments of the body's gene interval** (`Consts::interval`
+days; one segment at today's pace):
+- **Inside the update, per segment:** the body burns, grows and starves through the segment (the sub-steps of 3.2; a
+  segment boundary ends a sub-step); at each boundary, the young members that have reached the copy mass pass to the
+  adult node (`copy::mature`'s `math::Pass`, from the growth through the segment), and the brood that covers children
+  makes them (`copy::copy`'s rule). These are computed in the plan and **booked once at the update's end**: the
+  passers with the stores they had at their boundary and their join day (`nodes::rejoin` counts members from when
+  they came), the children as one litter with their mean birth day. After a boundary the plan runs on the members left.
+  Stages 0 to 3 run once an update, so a segment costs only its sub-steps and its shares.
+- **Food comes as one pulse per gene interval, on its day** (bodies that take): a body whose brain is floored (G2) is
+  still visited at its gene's pace. A **visit** takes only (no brain): with the chance to take of its last decision,
+  from what lies on that day, sized by the days to its next visit (today's sizing by the planned interval gives a floored
+  node 11% more food a day, PR-A2), its room counting the upkeep paid since the update at the update's rate (`U`, kept
+  from the last plan), so it sees its stock as it is used. The take is booked at the visit (ground to body, as today);
+  the body keeps a short row for it until its next update: the day and what it added to the fuel and to growth's inputs
+  (at most `paces` rows, saved). The update's month starts a segment at each row's day with that pulse.
+- **Only the brain runs once an update:** the decision, its moves, gifts and learning (G2).
 
-What P1b answers of PR-A: (a) deaths by the rate; (b) the reserve by `D` (now with the rest of the interval, X53); (g)
-and the adults' burnt body by the sub-steps (3.2). What G2 adds: `away` and the movers by the gene's interval, learning's
-discount, an act's heat. PR-A's check is P1b's done-when: its script again with P1b at a 30-day floor, the eaters within
-the seed noise, its counters read (adults under their copy mass at `copy`, the mineral left at growth). **If it fails
-but the mineral is kept** (the counter of the mineral left at growth at the gene pace's level), G2 takes the floor for
-young nodes only (PR-A: within the noise once the mineral is kept; about 0.6 of the node updates). **If the mineral is
-not kept either**, the young-only floor is not safe (PR-A measured it with the mineral kept): G2 waits for that cause
-(PR-A2, or a fix of the sub-steps) and is not built until then (X48).
+At today's pace (one segment, the take at the update) this is today's order. PR-A2's probe of it (today's body law in
+pieces, takes and maturing at the gene's pace, with the mineral kept): +0.015, +0.011, +0.001 against a seed noise of
+0.023, 0.054, 0.014 at a 30-day floor; at 20 days within the noise on the globe and the region, -0.030 on the island.
+Stands take no food; their maturing and children take the same segments.
 
-**G3 after P1b.** The month already takes the reactor, upkeep, keep-warm and growth out of an animal's day; what is
-left is the heat network and the evaporation. G3 is gated again on P1b's profile (X49).
+### 5.2 Animals (P1b and G2)
 
-### 5.2 PR-A2: the adults' root cause (pending)
+**P1b** gives the month to every body with a brain, at its gene's pace (one segment an update). It replaces
+`settle_upkeep` (and its per-update death of the unpaid share), the body's reactor in `physics` (`Reactor::react` leaves
+body updates), `settle_gas`, `store_light`, `keep_warm`, the paths of `soak` and `roots`, `copy::grow`'s conversion and
+its paying, and `soak_again`. What stays of `physics` for them: rain, evaporation with sweating, the heat network
+(`relax_heat`), fed the month's released heat. The acts stay after the update (`animals.md` 4). It carries PR-A's (a) and
+(b) (they change nothing, PR-A) and the eaten mineral (g) (the sub-steps); keep-warm burns little in these worlds (about
+0.01 mol of fuel a member-day, PR-A2). **Its law effect at today's pace is accepted** (X56): a balance exact in time
+resolves the stock finer than today's one step per update, and PR-A2 measured what that does to today's eaters (the body
+law in 5-day or 3-day pieces: -0.04 to -0.16 of the members in 2 years); P1b reports it, and the key numbers must stay
+in their ranges.
 
-**Waiting for PR-A2's result; this section is replaced by it.** What each answer would mean here:
-- **The cause is the timing of the body's own reactions between updates** (the bare burning of matter, the mineral
-  turning solid, growth only at the update): the sub-steps answer it; P1b as written.
-- **The cause is the birth rule** (children only at an update; an adult under its copy mass then makes none): the
-  month knows the brood's path; children would be made from the brood the interval built, whether or not the mean
-  member is at its copy mass at the update's end. A small change in `copy::copy`, its own law commit before G2.
-- **Another cause:** a step of its own before G2, named by PR-A2, with its law change and the same 30-day check.
+**G2** floors the brain, not the body (X57): every population node with a brain decides at least every `node_days` 30;
+between its updates it is visited at its gene's pace (5.1). It saves the decisions (37% of an animal update on the
+island, 50% on the globe, R2) and the per-update work of the body (stages 0 to 3, the booking, the heat network, the
+checks, split, `see`, schedule) on 0.70 / 0.69 of the node updates, and keeps the segments' sub-steps and shares and
+the visits' takes. Its 30-day check is PR-A's script with G2 on P1b. **Its fallbacks** (X58): a 20-day floor on the
+segmented law (PR-A2: within the noise on the globe and the region, -0.030 on the island); then the floor for young
+nodes only; then revert. Under today's law 20 days is no fallback (PR-A2: -0.12, -0.16, -0.07).
+
+**G3 after P1b and G2.** The month already takes the reactor, upkeep, keep-warm and growth out of an animal's day, and
+G2 runs the heat network once an update; G3 is gated again on the profile after G2 (X49).
+
+**What PR-A2 corrects in PR-A.** The split into adult and young nodes was the probe's (`Body::interval` read `adult()`
+at each call, so a node that crossed its copy mass changed its interval inside the update): the loss is not in the
+adults' body law. One long body step is kinder to the eaters than pieces with the same food (`starved` judges the body
+once an update and growth is capped once an update), which is why the exact-in-time balance moves them (X56).
 
 ## 6. The checks
 
@@ -298,21 +330,25 @@ left is the heat network and the evaporation. G3 is gated again on P1b's profile
    10 times `D` of upkeep) **and young growing stands**, each at constant forcing and with a **seasonal ramp** (the
    light and the ground's temperature of a spring and of an autumn month, as the air would give them), **and intervals
    of 60 and 90 days centred on the summer's peak and on the winter's low** (where Arrhenius' curve and the mean
-   temperature matter most; G9a's 90 days is that case); P1b adds **young
-   and adult animal nodes**, also at 260 K, with food pulses, and **a dip that recovers** (food short for a third of
-   the time, then plenty).
+   temperature matter most; G9a's 90 days is that case); stands of a short gene interval at 60 and 90 days, so several
+   segments mature and give birth in one update. P1b adds **young and adult animal nodes**, also at 260 K, and **a dip
+   that recovers** (food short for a third of the time, then plenty); G2 adds one update of 30 days with its three
+   visits' pulse rows against three updates of 10 days with the same takes on the same days.
 2. **Against the day law** (a sanity check): members and body matter of adult stands that pay, at 2 days, the 90th
    percentile under 5% (PR-M: 3.6% and 3.7%). Not fuel: the day law is not converged there itself (PR-M: 33% at 2 days).
 3. **Key numbers** at level 3 against the references after AIR4.0; S50 and S84 not past their seeds' noise; the land's
    temperature reported (a move over 0.3 K is looked into before merging); the window's effect on the light reaction
    (3.3) read against PR-M's runs.
 4. **Books:** 1e-12 in the century (slow suite).
+5. **G2's 30-day check:** PR-A's script with G2 on P1b at a 30-day floor (and at 20 for the fallback), the eaters within
+   the seed noise of the gene's pace, with PR-A2's counters (takes cut by what lies, young that mature per young
+   member-day, growth bound by the stock at its minimum) near the gene pace's.
 
 **Kept tests** (few, fast, `worldgen::testkit`): `a_months_stock_splits_alike` (four points: light-limited, inhibited,
 release-limited at 275 K, a young stand on a ramp; 2%); `a_starving_body_dies_at_its_own_time` (`1/D` a day for an empty
 stock and no growth, whatever its updates); `a_months_stands_keep_the_books` (a cell's stands over a month, 1e-12,
-never more liquid than the ground holds); P1b adds an animal node at 260 K and a dip that recovers to the first. The
-switch test of X15 stays.
+never more liquid than the ground holds); P1b adds an animal node at 260 K and a dip that recovers to the first, and
+G2 a floored node with three pulse rows. The switch test of X15 stays.
 
 ## 7. Cost per stand, how it is reached, and what it gains
 
@@ -367,14 +403,24 @@ about 127 µs (x0.66); P2 (60 days, about 11 µs): about 66 µs (x0.35); P3: abo
 **P1b's estimate, with its sub-steps.** An animal update today, island22: 37.9 µs, of it the body's day 18.0. The month
 takes out `settle_upkeep`, the reactor (about 19,000 instructions), `keep_warm` and growth's paying: about 50,000 to
 55,000 instructions. It puts in the plan and the booking (about 20,000 to 25,000, as a stand's without its liquids'
-closed form) and its sub-steps: at the gene's pace about 4 (4,000 to 6,000 instructions), at 30 days about 8 (8,000 to
-12,000). So an animal update -8 to -16% at the gene's pace; at G2's 30 days the sub-steps cost about 4,000 to 6,000
-instructions more an update, which G2's count of updates (x0.30) covers many times. P1b counts its sub-steps; if an
-eater needs more than 10 at 30 days, the third-order return gets a looser rule (`gone` already integrates it exactly when
-it runs alone).
+closed form) and its sub-steps: about 4 at the gene's pace (4,000 to 6,000 instructions). So an animal update -8 to
+-16% at the gene's pace. P1b counts its sub-steps; if an eater needs more than 10 a segment, the third-order return gets
+a looser rule (`gone` already integrates it exactly when it runs alone).
+
+**G2's estimate, from PR-A2** (X57). After P1b an animal node update at the gene's pace costs about 33.4 µs on the
+island (the decision 14.1, the body about 13.5, the rest 5.8) and 36.8 on the globe (the decision 21.2). At a 30-day
+floor a node updates on 0.30 / 0.31 of the days it did, each update spanning about 3.2 gene intervals. What one floored
+update keeps: the decision (14.1 / 21.2 µs), stages 0 to 3, the booking and the checks once (about 9.5), the heat
+network once (about 3), the segments' sub-steps (about 3.2 x 4 of them, about 2.9) and their shares of maturing and
+children (about 2.3), and the rest (about 2.6): about 34 / 41 µs. Plus its visits: about 2.2 an update, a take and its
+scheduling, about 3.5 µs each: about 8. So about 42 / 49 µs an update against 107 / 118 for its 3.2 updates at the
+gene's pace today: the animal node updates cost **x0.39 (island) and x0.42 (globe)**, not x0.30 and x0.31. G2 keeps
+about 87% (island) and 84% (globe) of its earlier estimate. At a 20-day floor (2.1 intervals an update, 0.45 / 0.46 of
+the updates): x0.52 and x0.57. With the floor for young nodes only: about 0.57 of the 30-day saving.
 
 P1.2's kill line (under 7% of island22's year) still has 2 to 4 points of room. On four threads (plan 5.0): the
-plants' rows give about 14 ms less than the plan on the island and 7 on the globe; P1b moves part of G3's gain earlier.
+plants' rows give about 14 ms less than the plan on the island and 7 on the globe; P1b moves part of G3's gain earlier;
+G2 gives about 8 ms less on the island and 17 on the globe.
 
 ## 8. Risks
 
@@ -383,10 +429,10 @@ plants' rows give about 14 ms less than the plan on the island and 7 on the glob
 | The splitting test fails (the living body held at the start of 60 to 90 days; Arrhenius' curve over a season) | `MONTH_SHARE` smaller; else P2 or G9a keeps the shorter pace |
 | The stand's law over 5 µs (bare reactions, sub-steps) | P1.2's kill line is 6 µs, where its gain line (7% of island22's year) still holds; section 5 of the plan counts 10 to 10.5 µs a stand update |
 | Sub-steps of a third-order return, a two-way pair, a rate that follows the matter, a product-inhibited fixing | the reactor's own kernel and its orders, rates read at each sub-step's start, ended at a net loss of `MONTH_SHARE`; the splitting test, with eaters' pulses of the mineral |
-| More sub-steps than counted (stands over 3, eaters over 10 at 30 days) | the counters of P1.2 and P1b; a looser rule for a reaction `gone` integrates alone; the cost lines of P1.2 (6 µs) and P1b hold the step |
+| More sub-steps than counted (stands over 3 a segment, eaters over 10 a segment) | the counters of P1.2 and P1b; a looser rule for a reaction `gone` integrates alone; the cost lines of P1.2 (6 µs) and P1b hold the step |
 | The heat's path moves the land (PR-M: -0.52 K) | one place sets the heat, after growth; the land reported; fallback for stands: `relax_heat`'s closed form at their own temperature |
-| P1b moves the eaters at today's pace (no dip between updates, deaths by the rate, the reserve with the rest of the interval) | announced as law effects, reported against the references; key numbers out and not accepted: not merged |
-| PR-A2 finds a cause the sub-steps do not answer | 5.2; G2 waits for it or takes the young-only floor (only if the mineral is kept) |
+| P1b moves the eaters at today's pace (a balance exact in time: PR-A2's pieces -0.04 to -0.16; deaths by the rate; the reserve with the rest of the interval) | accepted as P1b's law effect (X56), reported against the references; key numbers out of range: not merged |
+| The segmented law at 30 days is not PR-A2's probe (the month instead of today's body law in pieces; the visit's room from the update's `U`) | G2's 30-day check with PR-A2's counters; fallbacks: 20 days on the segmented law, then young-only, then revert (X58) |
 | The window `D` gives the light reaction more catalyst than PR-M measured with | it is today's law at today's pace; P1.2 reads the key numbers with it |
 
 ## 9. Lines
@@ -397,5 +443,6 @@ for the running total of the ground's temperature and the stand's mark; P1.2 del
 `gain_to_growth`, the sample's checkpoint path for stands and `node_days`'s branch (about -30); P1.4 deletes
 `sample_every` (-12); P1b deletes `settle_upkeep`, `keep_warm`, the body's call of the reactor (`react`), `settle_gas`,
 `store_light`, the body paths of `soak` and `roots`, `copy::grow`'s conversion and paying, and `soak_again` (about -230)
-and adds the keep-warm drain and the heat hand-over (+60). Lane A net about **+290**; the core at the end about 11,110,
-under the ceiling.
+and adds the keep-warm drain and the heat hand-over (+60). The segments' shares of maturing and children: about +40 in
+P1.2. Lane A net about **+330**. G2 adds the take-only visit and the pulse rows (about +60, in its own count). The core at
+the end about 11,200, under the ceiling.
