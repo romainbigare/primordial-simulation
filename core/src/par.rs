@@ -58,7 +58,7 @@ pub fn each_init<T: Send, S>(items: &mut [T], work: usize, init: impl Fn() -> S 
 /// The one runner of per-domain work: `f` on what each of `work` is given (a domain's index, its count of work, and what
 /// it is given), with a scratch made by `init` once per thread (`each_init`), the most work first so the last to end is
 /// a small one (longest processing time first, Graham 1969; ties by domain), backwards with `reversed`. A domain is the
-/// cells under one air node: its bodies (`survey::run`) or its ground nodes' rows in the air's step (`flow::air`).
+/// cells under one air node: its bodies (`survey::run`) or its rows of Change's reactors (`change/rows.rs`).
 pub fn longest_first<T: Send, S>(mut work: Vec<(usize, usize, T)>, reversed: bool, init: impl Fn() -> S + Sync + Send, f: impl Fn(&mut S, &mut T) + Sync + Send) {
     work.sort_by_key(|x| (std::cmp::Reverse(x.1), x.0));
     if reversed {

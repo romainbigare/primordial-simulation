@@ -69,7 +69,7 @@ ask the owner.
    bodies, its cells and its view; a booker one array of the store (`store::book_by_array`). What a task does to
    another task's numbers waits in its outbox and lands in the next phase, in the task that owns it, in an order fixed
    by the data (domain, cell, id), never by which thread ends first. Per-domain work runs on the one runner
-   (`survey::run`).
+   (`par::longest_first`; `survey::run` is its use for body domains).
 
 ## 4. Comments and docs
 

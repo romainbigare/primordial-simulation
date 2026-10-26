@@ -9,6 +9,7 @@ use pcore::chem::{Chemistry, Phase};
 use pcore::event::EventKind;
 use pcore::life::{Domain, Handle};
 use pcore::lineage::{self, Lineage};
+use pcore::outbox::{deliver, Entry};
 use pcore::rng::{Purpose, Rng};
 use pcore::store::{Boundary, Class, Move, Node};
 use pcore::units::DAY_S;
@@ -269,6 +270,14 @@ pub fn out(w: &mut World, b: Body) -> (Handle, Body) {
     let mut b = std::mem::take(&mut w.life[s]);
     b.prepare(&w.chem, &w.cfg);
     (s, b)
+}
+
+/// The body at `h` moves to cell `j` at no cost, by the landing of a move (`Entry::Go`; `deliver`): where it is stored then.
+pub fn relocate(w: &mut World, h: Handle, j: usize) -> Handle {
+    let (id, from) = (w.life[h].id, w.life[h].cell);
+    w.in_domain(from as usize, |_, d| d.out.push(Entry::Go { id, from, to: j as u32, pushed: 0.0, lane: 0.0, carries: false, kin: false, body: None }));
+    deliver(w);
+    w.life.find(id).expect("the body landed")
 }
 
 /// What `f` does when it calls a law of bodies or parts on its own, outside an update: a serial step on the domain of

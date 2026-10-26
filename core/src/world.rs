@@ -28,7 +28,8 @@ pub struct Counters {
     /// What bodies did with parts
     #[serde(skip)]
     pub parts: bond::Tally,
-    /// What `store::apply` set from just below zero (rounding) to zero: mol, and J
+    /// What `store::apply` and the booking by array (`book_by_array`, `add_rounded`) set from just below zero (rounding)
+    /// to zero: mol, and J
     #[serde(skip)]
     pub rounded: [f64; 2],
 }

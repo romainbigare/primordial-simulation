@@ -65,20 +65,22 @@ pub fn deliver(w: &mut World) {
 /// start in reversed order, only for the order test), while the moves gathered before are booked beside them
 /// (`World::book_moves_beside`). The domains back and the world settled once (`World::settle`: also where the bodies
 /// that moved are stored), the other entries are applied one by one in order; then the same for what landing and
-/// applying queued, until nothing is left; last the moves gathered are booked.
+/// applying queued, until nothing is left; last the moves gathered are booked. (Every domain is settled in each round,
+/// not only the landed ones: one that wrote nothing has nothing to add, and `World::settle` takes a range of domains.)
 pub(crate) fn land(w: &mut World, reversed: bool) {
     loop {
         let (to, rest) = w.life.take_queued();
         if to.is_empty() && rest.is_empty() {
             break;
         }
-        let work: Vec<_> = to.into_iter().map(|k| (k, w.life.domains[k].inbox.len(), ())).collect();
+        let work: Vec<_> = to.iter().map(|&k| (k, w.life.domains[k].inbox.len(), ())).collect();
         w.book_moves_beside(|w| {
             crate::survey::run(w, work, reversed, |_| (), |w, d, _, _| {
                 for e in std::mem::take(&mut d.inbox) {
                     land_one(w, d, e);
                 }
-            })
+            });
+            debug_assert!(to.iter().all(|&k| w.life.domains[k].moves.open.is_none()), "a landing opened a view");
         });
         w.settle(0..w.life.domains.len());
         rest.into_iter().for_each(|e| apply(w, e));

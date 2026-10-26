@@ -7,7 +7,7 @@ use pcore::body::{self, Body, Layout, COPY_MASS, DENATURE, DISPERSE, LIQ, PHASE,
 use pcore::store::{Boundary, Class, Node};
 use pcore::units::{DAY, DAY_S, T_FLOOR};
 use pcore::{brain, change, World, AIR};
-use worldgen::testkit::{add, brood, node_of, open_area, release, dry_land, eater, empty_cell, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, moved, open_air, out, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{add, brood, node_of, open_area, release, dry_land, eater, empty_cell, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, moved, open_air, out, put, put_kg_m2, relocate, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
 fn cfg() -> pcore::Config {
@@ -979,9 +979,7 @@ fn a_tall_member_shades_a_short_one() {
     // The cell's other nodes move next door.
     for s in w.life.cell(i).filter(|&s| s != short).collect::<Vec<_>>() {
         let j = i ^ 1;
-        let mut b = std::mem::take(&mut w.life[s]);
-        (b.cell, b.mark) = (j as u32, w.light[j]);
-        w.life.relocate(s, i, b);
+        relocate(&mut w, s, j);
     }
     // Two nodes of capture area 0.5 per ground area each, the same but for member mass (and the copy mass gene, so they
     // are not alike and stay apart).

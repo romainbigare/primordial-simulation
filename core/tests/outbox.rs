@@ -18,6 +18,12 @@ fn kill(w: &mut World, h: Handle) {
     moved(w, (b.cell as usize, h), |w, d| die(w, d, h, b, LACK));
 }
 
+/// The energy movers spent pushing through the bodies of cell `i` since the last survey, J.
+fn pushed(w: &World, i: usize) -> f64 {
+    let (d, k) = w.life.cell_slot(i);
+    w.life.domains[d].pushed[k]
+}
+
 /// A node of 5 resting members in cell `i` whose children all start in a neighbour cell, with a brood of `k` children
 /// ready.
 fn dispersing(w: &mut World, i: usize, k: f64) -> Body {
@@ -53,7 +59,7 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     }
     kill(&mut w, a);
     deliver(&mut w);
-    assert!(w.life.in_cell(j) == at_j && (0..w.mesh.cells().n()).all(|c| w.life.pushed(c) == 0.0), "a move of a dead body landed");
+    assert!(w.life.in_cell(j) == at_j && (0..w.mesh.cells().n()).all(|c| pushed(&w, c) == 0.0), "a move of a dead body landed");
 
     // Less than one member of a node's children, all starting in a neighbour cell where no node of theirs is: back
     // into the parent's brood, or to the ground of its cell if it died.
@@ -251,7 +257,8 @@ fn the_order_of_the_domains_changes_nothing() {
     let (h, all) = (w.life.find(doomed_id).unwrap(), w.life.cell(x).map(|o| w.life[o].mass(&w.chem)).sum::<f64>());
     let kill_holder = 2.0 * w.life[h].breaking(&w.chem, &w.cfg, 1.0) * all / w.life[h].mass(&w.chem);
     for i in (0..w.mesh.cells().n()).filter(|&i| i == x || (i % 3 == 0 && !busy.contains(&i))) {
-        w.life.cross(i, 0.0, if i == x { kill_holder } else { 3e6 });
+        let (d, k) = w.life.cell_slot(i);
+        w.life.domains[d].cross(k, 0.0, if i == x { kill_holder } else { 3e6 });
     }
     w.drain_events();
     let books = Books::now(&w);

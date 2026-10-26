@@ -70,7 +70,7 @@ pub(crate) fn land_move(w: &World, d: &mut Domain, mut b: Body, (i, j): (usize, 
 }
 
 /// Before each survey: the energy `energy` J movers spent pushing through the bodies of cell `j` of domain `d` since the
-/// last (`Life::cross`) breaks their body matter. Each body there takes its share by mass and loses what that pays to
+/// last (recorded by `Domain::cross` in `land_move`) breaks their body matter. Each body there takes its share by mass and loses what that pays to
 /// break, each of its members alike (`Body::breaking`, `body::wound`; laws.md 6.8). A cell's bodies are worn once a
 /// survey, not once a move. (Those who held a part let go of it when the outbox is applied, `bond::let_go`.)
 pub fn wear(w: &World, d: &mut Domain, j: usize, energy: f64) {

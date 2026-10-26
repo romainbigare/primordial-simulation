@@ -30,7 +30,7 @@ pub struct Domain {
     pub(crate) stale: Vec<bool>,
     /// Per cell (by its order in `cells`): the energy movers spent pushing through its bodies since the last survey,
     /// which then breaks them, J (`choose::wear`)
-    pub(crate) pushed: Vec<f64>,
+    pub pushed: Vec<f64>,
     /// Per cell (by its order in `cells`): the members that moved into it since the last month (`Counters::traffic`)
     pub(crate) crossings: Vec<f32>,
     /// What its bodies' updates do outside them, in the order made (`outbox`)
@@ -136,7 +136,7 @@ impl Domain {
     }
     /// `members` members entered its `k`th cell in a move that spent `pushed` J pushing through its bodies
     /// (`choose::land_move`).
-    pub(crate) fn cross(&mut self, k: usize, members: f32, pushed: f64) {
+    pub fn cross(&mut self, k: usize, members: f32, pushed: f64) {
         (self.crossings[k], self.pushed[k]) = (self.crossings[k] + members, self.pushed[k] + pushed);
     }
     /// Body `b`, taken out of `h` in cell `i`, leaves its storage and its ring, to be stored again elsewhere (`arrive`).

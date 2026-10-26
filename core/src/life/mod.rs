@@ -6,6 +6,7 @@
 
 mod domain;
 mod registry;
+mod saved;
 
 pub use domain::Domain;
 pub use registry::Genome;
@@ -17,8 +18,6 @@ use crate::outbox::Entry;
 use crate::space::Mesh;
 use crate::survey::{Face, Faces};
 use crate::{World, AIR};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 /// Updates are kept in a ring of this many batches: more than the longest interval is in batches (`MAX_INTERVAL`) with
@@ -39,7 +38,7 @@ pub struct Handle {
 #[derive(Clone, Debug, Default)]
 pub struct Life {
     /// The domains (taken out of the world while body code runs on them, `World::in_domain`)
-    pub(crate) domains: Vec<Domain>,
+    pub domains: Vec<Domain>,
     /// Each cell's domain and its index in that domain's cells
     cell_in: Vec<(u32, u32)>,
     /// The domain each body stored outside the domain it was placed in is stored in, by id (`find`; noted when the
@@ -101,66 +100,6 @@ impl Ran {
                 })
             })
         })
-    }
-}
-
-/// What a snapshot keeps of `Life`: per domain its cells, its count of bodies placed, what moved into its cells and its
-/// living bodies in the order of `Life::alive`; the lineages and born rows. Where bodies are stored, the ring and the id
-/// table follow from the bodies, and the survey's caches are rebuilt (`Life::sum`). Written from the world's own
-/// (borrowed), read back as new (owned).
-#[derive(Serialize, Deserialize)]
-struct Saved<'a> {
-    domains: Vec<SavedDomain<'a>>,
-    brains: Cow<'a, [Option<Lineage>]>,
-    members: Cow<'a, [u32]>,
-    genomes: Cow<'a, [Genome]>,
-    free_genomes: Cow<'a, [u32]>,
-}
-
-/// A domain as a snapshot keeps it (`Saved`): its cells, its count of bodies placed, per cell the energy movers spent
-/// pushing through its bodies since the last survey and the members that moved into it since the last month, and its
-/// living bodies.
-#[derive(Serialize, Deserialize)]
-struct SavedDomain<'a> {
-    cells: Cow<'a, [u32]>,
-    placed: u64,
-    pushed: Cow<'a, [f64]>,
-    crossings: Cow<'a, [f32]>,
-    bodies: Vec<Cow<'a, Body>>,
-}
-
-impl Serialize for Life {
-    fn serialize<S: Serializer>(&self, to: S) -> Result<S::Ok, S::Error> {
-        let mut domains = Vec::with_capacity(self.domains.len());
-        for d in &self.domains {
-            let bodies = d.at.iter().flatten().map(|&h| Cow::Borrowed(&self[h])).filter(|b| b.alive).collect();
-            domains.push(SavedDomain { cells: (&d.cells).into(), placed: d.placed, pushed: (&d.pushed).into(), crossings: (&d.crossings).into(), bodies });
-        }
-        let (brains, members) = ((&self.brains).into(), (&self.members).into());
-        Saved { domains, brains, members, genomes: (&self.genomes).into(), free_genomes: (&self.free_genomes).into() }.serialize(to)
-    }
-}
-
-/// A loaded world stores its bodies anew, in the order saved; the caches come back empty.
-impl<'de> Deserialize<'de> for Life {
-    fn deserialize<D: Deserializer<'de>>(from: D) -> Result<Self, D::Error> {
-        let x = Saved::deserialize(from)?;
-        let (brains, members) = (x.brains.into_owned(), x.members.into_owned());
-        let mut life = Life { brains, members, genomes: x.genomes.into_owned(), free_genomes: x.free_genomes.into_owned(), ..Default::default() };
-        life.cut(x.domains.iter().map(|d| d.cells.to_vec()).collect());
-        for (d, saved) in x.domains.into_iter().enumerate() {
-            let SavedDomain { placed, pushed, crossings, bodies, .. } = saved;
-            let dom = &mut life.domains[d];
-            (dom.placed, dom.pushed, dom.crossings) = (placed, pushed.into_owned(), crossings.into_owned());
-            for b in bodies.into_iter().map(Cow::into_owned) {
-                if (b.id >> ID_SHIFT) as usize != d {
-                    life.away.insert(b.id, d as u32);
-                }
-                life.domains[d].ring[(b.due % RING) as usize].push(b.id);
-                life.domains[d].store(b);
-            }
-        }
-        Ok(life)
     }
 }
 
@@ -236,18 +175,9 @@ impl Life {
     }
     /// The domain of cell `i` and its slot among that domain's cells (`Level::children` of its air node).
     #[inline]
-    pub(crate) fn cell_slot(&self, i: usize) -> (usize, usize) {
+    pub fn cell_slot(&self, i: usize) -> (usize, usize) {
         let (d, k) = self.cell_in[i];
         (d as usize, k as usize)
-    }
-    /// Body `b`, taken out of `h` in cell `from`, is stored again in its cell, an edit outside the laws (a move lands
-    /// by `Domain::arrive`); returns where it is.
-    pub fn relocate(&mut self, h: Handle, from: usize, b: Body) -> Handle {
-        self.domains[h.domain as usize].depart(h, &b, from);
-        let d = self.domain_of(b.cell as usize);
-        let s = self.domains[d].arrive(b);
-        self.note_arrived(d);
-        s
     }
     /// Where the bodies that moved into domain `d` are stored is noted (`find`; a body stored in the domain it was
     /// placed in is found by its id alone).
@@ -311,17 +241,6 @@ impl Life {
         to.sort_unstable();
         to.dedup();
         (to, rest)
-    }
-    /// `members` members entered cell `i` in a move that spent `pushed` J pushing through its bodies.
-    pub fn cross(&mut self, i: usize, members: f32, pushed: f64) {
-        let (d, k) = self.cell_slot(i);
-        self.domains[d].cross(k, members, pushed);
-    }
-    /// The energy movers spent pushing through the bodies of cell `i` since the last survey, which then breaks them, J
-    /// (`choose::wear`).
-    pub fn pushed(&self, i: usize) -> f64 {
-        let (d, k) = self.cell_slot(i);
-        self.domains[d].pushed[k]
     }
 
     /// The bodies that moved away and died since are left out of `away`.

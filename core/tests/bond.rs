@@ -6,7 +6,7 @@ use pcore::body::{Body, COPY_MASS, LIQ, STRENGTH};
 use pcore::brain;
 use pcore::chem::Phase;
 use pcore::units::DAY_S;
-use worldgen::testkit::{dry_land, moved_serial, plate, scale, small_world, start as world, Books, Brain, Line};
+use worldgen::testkit::{dry_land, moved_serial, plate, relocate, scale, small_world, start as world, Books, Brain, Line};
 
 /// A bond breaks when the weight it bears is more than it holds: of two parts hung on an anchored one by bonds that
 /// hold 10 t weight, the one of 1 t stays and the one of 100 t falls.
@@ -34,6 +34,10 @@ fn walls_keep_a_body_warm() {
     let (mut w, i) = world();
     worldgen::life::seed(&mut w, 0);
     worldgen::life::seed(&mut w, 1);
+    // The same body outside and inside: one that does not capture light (its upkeep warms it), from the warmest place.
+    let bs = &w.life;
+    let slot = bs.living().map(|x| x.0).filter(|&s| pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body");
+    let slot = relocate(&mut w, slot, i);
     // Six blocks joined around a small space, one bonded to the ground.
     let parts: Vec<usize> = (0..6).map(|_| plate(&mut w, i, 1e3, true)).collect();
     bond::link(&mut w, parts[0], GROUND, 1e9);
@@ -42,13 +46,6 @@ fn walls_keep_a_body_warm() {
     }
     let r = w.parts.parts[parts[0]].root as usize;
     assert!(w.parts.parts[r].s.encl.closed > 0.99, "not closed: {:?}", w.parts.parts[r].s);
-    // The same body outside and inside: one that does not capture light (its upkeep warms it), from the warmest place.
-    let bs = &w.life;
-    let slot = bs.living().map(|x| x.0).filter(|&s| pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body");
-    let from = w.life[slot].cell as usize;
-    let mut b = std::mem::take(&mut w.life[slot]);
-    b.cell = i as u32;
-    let slot = w.life.relocate(slot, from, b);
     // Enough liquid for a month without rain.
     // It rests (the biases of its brain's action rows: resting up, every other action down), so it stays where it is put.
     let shape = w.life.brains[w.life[slot].lineage as usize].as_ref().expect("a brain").shape;

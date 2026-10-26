@@ -59,7 +59,7 @@ and counters and its outbox; the lineages and born rows it makes get provisional
 their holders wait there. When the domain is back the world settles (`World::settle`): its events and counters are
 added, those ids made global in the order made; the holders' changes are added at once outside a batch, at its end in
 one, and a lineage left with no body dies out, born rows left with no holder are freed. Every serial step, a body or
-part law run on its own (a part act, a landing, the monthly merge and the wear of movers in a cell with a part), runs so
+part law run on its own (a part act, `copy::back`, the monthly merge and the wear of movers in a cell with a part), runs so
 too, on the domain of its cell (`World::in_domain`). First the parallel phase: the bodies due that hold no part and are
 inside none update, each domain on a thread of the pool with the feature `threads` (`survey::run`, the domains with
 the most updates first), one after another without it or when the phase is small (`par::SERIAL_BELOW`). What an
