@@ -286,19 +286,22 @@ fn climate(seed: u64, set: fn(&mut Config)) -> Vec<[f64; CLIMATE.len()]> {
 }
 
 /// The air's step of 6 hours (`air_hours`), short against the air's changes in a day, and a physics step of 2 days
-/// (`phys_days`); the bodies' batch (`batch_days`) is then 2 days too, as a batch divides the physics step.
+/// (`phys_days`); the liquid's step (`flow_days`) and the bodies' batch (`batch_days`) are then 2 days too, as each
+/// divides or is divided by the physics step.
 const SHORT_AIR_HOURS: u32 = 6;
 const SHORT_PHYS_DAYS: u32 = 2;
 
 /// The long step against the short one, each seed against itself: at the default steps of Flow (`air_hours`,
 /// `phys_days`, `flow_days`) and of the bodies' batch the mean over the seeds of what the long step moves each of the
 /// climate's key numbers (the mean of its last years) from the short steps (`SHORT_AIR_HOURS`, `SHORT_PHYS_DAYS`, and
-/// batches of `SHORT_PHYS_DAYS`) is less than `STEP_K` for a temperature, and less than its year-to-year spread at the
+/// liquid steps and batches of `SHORT_PHYS_DAYS`) is less than `STEP_K` for a temperature, and less than its year-to-year spread at the
 /// short steps (the mean over the seeds of its highest less its lowest yearly value) for the others.
 #[test]
 #[ignore = "slow: six 20-year runs of a 32 x 32 world with life"]
 fn the_long_step_keeps_the_climate() {
-    let short: fn(&mut Config) = |c| (c.air_hours, c.phys_days, c.batch_days) = (SHORT_AIR_HOURS, SHORT_PHYS_DAYS, SHORT_PHYS_DAYS);
+    let short: fn(&mut Config) = |c| {
+        (c.air_hours, c.phys_days, c.flow_days, c.batch_days) = (SHORT_AIR_HOURS, SHORT_PHYS_DAYS, SHORT_PHYS_DAYS, SHORT_PHYS_DAYS);
+    };
     let default: fn(&mut Config) = |_| {};
     // Per seed, [short, default], all side by side.
     let runs: Vec<[Vec<[f64; CLIMATE.len()]>; 2]> = std::thread::scope(|s| {

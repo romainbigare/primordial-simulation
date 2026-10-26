@@ -48,8 +48,9 @@ fn day_month_and_season_come_from_the_seconds() {
 }
 
 /// A month of `step`: on its first day the survey, the parts of Flow due (at a month's start at least its state and
-/// the air, and the liquid when its period starts there) and Change, then Bond, then the bodies; the physics every `phys_days` days and the
-/// bodies every `batch_days` days. The clock ends a whole month on, and `day` moves it by one day.
+/// the air, and the liquid when its period starts there) and Change, then Bond, then the bodies; the physics every
+/// `phys_days` days and the bodies every `batch_days` days. The clock ends a whole month on, and `day` moves it by one
+/// day.
 #[test]
 fn a_month_runs_its_processes_in_their_order() {
     let mut w = small_world();
@@ -142,7 +143,8 @@ fn a_sleeping_node_catches_up_as_an_awake_node_steps() {
 }
 
 /// The default settings pass; a time step of 0, an air step that does not divide the physics step, a batch that does not
-/// divide the physics step or the month, a liquid step over a month that is not whole months, a pace of nodes that is not whole batches, or a dormancy of 1 is refused.
+/// divide the physics step or the month, a liquid step over a month that is not whole months, a pace of nodes that is
+/// not whole batches, or a dormancy of 1 is refused.
 #[test]
 fn the_default_settings_pass_and_a_step_off_its_base_or_out_of_step_or_a_dormancy_of_1_is_refused() {
     assert_eq!(Config::default().validate(), Ok(()));

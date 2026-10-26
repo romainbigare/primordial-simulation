@@ -135,7 +135,7 @@ mod tests {
         // Ground that stays wet, dries to `wet`, dries further, wets again under rain, and has no bucket; with the
         // derivative by central differences.
         let dt = 1e5;
-        for (a, r, e, wet) in [(10.0, 0.0, 1e-5, 1.0), (2.0, 0.0, 1e-4, 1.0), (0.5, 0.0, 1e-5, 1.0), (0.5, 0.3, 1e-5, 1.0), (0.5, 3.0, 1e-5, 1.0), (2.0, 0.5, 1e-4, 0.0)] {
+        for (a, r, e, wet) in [(10.0, 0.0, 1e-5, 1.0), (2.0, 0.0, 1e-4, 1.0), (0.5, 0.0, 1e-5, 1.0), (0.5, 0.3, 1e-5, 1.0), (0.5, 3.0, 1e-5, 1.0), (2.0, 0.5, 1e-4, 0.0), (0.0, 3.0, 1e-5, 0.0)] {
             let (m, slope) = bucket(a, r, e, wet, dt);
             let h = e * 1e-6;
             let fd = (bucket(a, r, e + h, wet, dt).0 - bucket(a, r, e - h, wet, dt).0) / (2.0 * h);

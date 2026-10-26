@@ -57,22 +57,22 @@ pub(super) fn fixed(w: &World, s: &Scratch, act: &[Active]) -> Vec<f64> {
     out
 }
 
-/// The row of ground node `i` under the sunlight `q` of its latitude, W/m², and the air it sees, `seen` (its
+/// The row of ground node `i` under the sunlight `q` of its latitude, W/m², and the air it sees, `air_now` (its
 /// temperature, K, then each active gas, mol, `step::seen_air`): sunlight past the clouds, what bodies
 /// intercept less the share their light reactions store (set aside for them, laws.md 1.4); rain (`rain`); then the
 /// surface balance (`exchange`) under the reflectance its surface ends the step with, as backward Euler takes it: from
 /// the round before's, each guess followed to the end it gives, and halved between two once a guess and its end cross,
 /// until they agree.
-pub(super) fn cell(cx: &Ctx, i: usize, q: f64, seen: &[f64], gas: &mut Vec<Vapour>, row: &mut [f64]) {
+pub(super) fn cell(cx: &Ctx, i: usize, q: f64, air_now: &[f64], gas: &mut Vec<Vapour>, row: &mut [f64]) {
     let (w, s, dt) = (cx.w, cx.s, cx.dt);
     let [gam, zair, f] = s.seen[i];
-    let tl = (seen[0] - gam * (s.head[i] - zair)).max(1.0);
+    let tl = (air_now[0] - gam * (s.head[i] - zair)).max(1.0);
     let c = s.state.cloud[i];
     let [over, cover, caught, keep] = <[f64; FIXED_CELL]>::try_from(&cx.fixed[i * (FIXED_CELL + cx.act.len())..][..FIXED_CELL]).unwrap();
     // Per unit of capture area the bodies intercept cover / a of the light, all of it where they are few.
     let per_area = if cover > 0.0 { cover / w.canopy[i] as f64 } else { 1.0 };
     let (dl, kept) = (q * (1.0 - c) * per_area * dt, q * (1.0 - c) * caught * keep);
-    let fall = rain(cx, i, (tl, &seen[1..]), over, gas, row);
+    let fall = rain(cx, i, (tl, &air_now[1..]), over, gas, row);
     let sw = |a: f64| q * (1.0 - c) * ((1.0 - cover) * (1.0 - a) + caught) - kept;
     // The air's layers send the same at every guess: the air touching the ground stays at `tl`.
     let air = Air { tl, f, down: glow(f, tl, &s.lay[i][0]), emit: glow(f, tl, &s.lay[i][1]) };
@@ -107,7 +107,7 @@ pub(super) struct Vapour {
     up: bool,
     pa: f64,
     rain: f64,
-    /// What the node holds, mol; what it holds wet (`exchange::bucket`), mol; the air's film, mol K/(Pa).
+    /// What the node holds, mol; what it holds wet (`exchange::bucket`), mol; the air's film, mol K/(Pa s).
     held: f64,
     wet: f64,
     film: f64,
