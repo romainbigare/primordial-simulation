@@ -639,6 +639,11 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
     let run = |cost: f64| {
         let (mut w, i) = start();
         w.cfg.tilt = 0.0;
+        // The fuel is laid each morning, and on a physics day Change reacts what lies over its whole step (at times all
+        // of it) before the bodies of that day take; in batches of 10 days every update falls on a physics day. In
+        // batches of 2 days (`Config::batch_days`) the body's updates fall between Change's steps and find the fuel laid
+        // for them.
+        w.cfg.batch_days = 2;
         // Building never binds; the costs of keeping tissue are `cost` times the starting ones.
         w.cfg.phys.c_build = 1e7;
         for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_cat, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn, &mut w.cfg.phys.c_signal] {

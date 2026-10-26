@@ -15,7 +15,7 @@
 //! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2. So is
 //! the pace of population nodes: the same world keeps its life's key numbers with every node at its own `INTERVAL`
 //! gene (`Config::node_days` 0), and with the setting x2 and /2. So are the batches of bodies: the same world keeps its
-//! life's key numbers with bodies updated every day (`Config::batch_days` 1).
+//! life's key numbers with bodies in batches of 2 days (`Config::batch_days`).
 //!
 //! The eaters live: at 48 x 48 they still have members at year 100 in seeds 1, 2 and 3, after the booms and busts
 //! that year 30 hides; they have stopped growing by their last ten years, and none hold more than a few times the
@@ -321,6 +321,10 @@ fn the_long_step_keeps_the_climate() {
 /// light-eaters live, and the heat-absorbing gas they take from the air.
 const LIFE: [&str; 5] = ["plant_members", "root_0_kg", "births", "root_0_life_real", "air_3"];
 
+/// The short batch of the batch test: 2 days, under the shortest interval (`MIN_INTERVAL`, 5 days), so an interval
+/// keeps its gene's days to within a day; it divides the physics step, the month and the pace of nodes.
+const SHORT_BATCH_DAYS: u32 = 2;
+
 /// Every population node at the pace of its own `INTERVAL` gene against the pace of nodes (`Config::node_days`), and
 /// that setting x2 and /2 (`docs/numbers.md`, speed settings): the mean of each of life's key numbers over the last
 /// years moves by less than its noise, the spread of its values over those years with every node at its own pace.
@@ -337,14 +341,13 @@ fn the_pace_of_nodes_keeps_life() {
     assert!(out.is_empty(), "the pace of nodes changed life: {out:?}");
 }
 
-/// Bodies updated every day against in batches of `Config::batch_days` (`docs/numbers.md`, speed settings; the batch
-/// cannot be doubled, 4 days does not divide the physics step, and 5 or 10 would change the shortest interval itself):
-/// the mean of each of life's key numbers over the last years moves by less than its noise, the spread of its values over
-/// those years with bodies updated every day.
+/// Bodies updated in batches of `SHORT_BATCH_DAYS` against in batches of `Config::batch_days` (`docs/numbers.md`, speed
+/// settings; the batch cannot be doubled, as it is the physics step): the mean of each of life's key numbers over the
+/// last years moves by less than its noise, the spread of its values over those years with the short batches.
 #[test]
 #[ignore = "slow: two 8-year runs of a 32 x 32 world with life"]
 fn the_batches_of_bodies_keep_life() {
-    let settings = [1, Config::default().batch_days];
+    let settings = [SHORT_BATCH_DAYS, Config::default().batch_days];
     let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
         let runs: Vec<_> = settings.iter().map(|&days| s.spawn(move || yearly(&LIFE, |c| c.batch_days = days))).collect();
         runs.into_iter().map(|r| r.join().expect("a run")).collect()

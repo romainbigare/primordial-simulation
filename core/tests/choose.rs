@@ -77,7 +77,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     // A third of the fuel of a starting eater, so that what it takes, not what it carries, decides how long it lives.
     let fuel = -2.0 / 3.0 * testkit::kg(&w, &b, RICH);
     testkit::add(&mut w, &mut b, RICH, fuel);
-    // Decisions every 6 days: the shortest interval, 5 days, rounded to whole batches of 2 days.
+    // Decisions every 10 days: the shortest interval, 5 days, rounded to one batch (`Config::batch_days`).
     (b.genes[LEARN], b.genes[INTERVAL]) = (learn, 0.7);
     // (It is found by its id: it is stored elsewhere when it steps into another domain.)
     let slot = w.add(b, 1);
@@ -258,7 +258,8 @@ fn a_body_gives_its_stores_but_not_its_body() {
     let (m0, fuel0) = (giver.store[MATTER], giver.store[RICH]);
     let g = w.add(giver, 1);
     w.add(taker, 1);
-    for _ in 0..3 {
+    // Days until the first batch after the placing has run.
+    for _ in 0..=w.cfg.batch_days {
         pcore::day(&mut w);
         for b in w.life.alive() {
             assert!(b.mass(&w.chem) >= 1e-3 * b.n(), "an empty body is alive: energy {}, stores {:?}", b.e, b.store);
@@ -326,9 +327,9 @@ fn moving_costs_the_real_cost_of_transport() {
 }
 
 
-/// A node of 50 eaters (a 10-day gene, mature at 1,000 t) on ground with 3 kg/m² of matter, for 80 days with a decision
-/// every `think_days` days at the least: the updates, the decisions, the updates with a take from the ground, and the
-/// kg taken from it. The books are kept.
+/// A node of 50 eaters (a 10-day gene, mature at 1,000 t) on ground with 3 kg/m² of matter, for 90 days (its first
+/// update a batch on) with a decision every `think_days` days at the least: the updates, the decisions, the updates
+/// with a take from the ground, and the kg taken from it. The books are kept.
 fn node_takes(think_days: u32) -> (u64, f64, u64, f64) {
     let (mut w, i) = start();
     w.cfg.think_days = think_days;
@@ -339,7 +340,7 @@ fn node_takes(think_days: u32) -> (u64, f64, u64, f64) {
     let node = node_of(&mut w, b, 50.0);
     w.add(node, 1);
     let (books, mut took_on_update, mut kg) = (Books::now(&w), 0, 0.0);
-    for _ in 0..80 {
+    for _ in 0..90 {
         let u = w.counts.updates;
         w.events.clear();
         pcore::day(&mut w);
@@ -357,7 +358,7 @@ fn node_takes(think_days: u32) -> (u64, f64, u64, f64) {
 fn a_node_decides_every_think_days_and_takes_between() {
     let (control, habit) = (node_takes(0), node_takes(20));
     eprintln!("every update (updates, decisions, updates with a take, kg): {control:?}; 20 days: {habit:?}");
-    assert_eq!(control.0, 8, "a 10-day gene updates 8 times in 80 days");
+    assert_eq!(control.0, 8, "a 10-day gene updates 8 times in 90 days, from its first batch");
     assert_eq!(control.1, control.0 as f64, "think_days 0 decides at every update");
     assert_eq!(habit.0, control.0, "the habit keeps the gene's updates");
     assert!((habit.1 - habit.0 as f64 / 2.0).abs() <= 1.0, "a decision every second update, not {} of {}", habit.1, habit.0);

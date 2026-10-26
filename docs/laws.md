@@ -31,13 +31,14 @@ movers and the monthly merge per domain on the pool with the feature `threads`, 
 inside one, then in those cells one by one; the shade per domain, the sums per cell), the parts of Flow that are due
 (air every `air_hours`, liquid and erosion every `flow_days`, heat sideways and creep yearly) and Change; on the month's
 first day Bond (the turns of the parts: each domain's in slot order on its view, the domains on the pool, their moves
-booked in the order of the domains; then the loads of the structures one by one); every `batch_days` days (2) the bodies
-whose interval ends (`survey::batch`).
+booked in the order of the domains; then the loads of the structures one by one); every `batch_days` days (10, one
+air step) the bodies whose interval ends (`survey::batch`).
 **Intervals are whole batches**: a body's interval is its `INTERVAL` gene (5 to 360 days; a population node without a
-brain at least `node_days`, a multiple of `batch_days`) rounded to the nearest whole number of batches, at least one
+brain at least `node_days`, 40, a multiple of `batch_days`) rounded to the nearest whole number of batches, at least one
 (`Body::interval`), so an update always starts a batch, all the updates of a batch run at its first day, and a body
-placed during a batch first updates in a later one. Each run stands for the time to its next. A population node
-with a brain runs its whole update at its gene's pace but decides only about every `think_days` (20), and acts by its
+placed during a batch first updates in a later one; so a gene of 5 to 15 days updates every 10 days. A batch is as long
+as a physics step, so the bodies of a batch read the ground and the air as that day's Change and air step left them. Each
+run stands for the time to its next. A population node with a brain runs its whole update at its gene's pace but decides only about every `think_days` (20), and acts by its
 last decision's habit between (5.3).
 **Bodies and their order** (`life`): the cells are cut into domains, the cells under one air node; each domain stores
 the bodies of its cells, and a body that moves into a cell of another domain moves to its storage. A body's id is the

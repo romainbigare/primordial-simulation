@@ -195,7 +195,7 @@ fn trampling_breaks_body_matter() {
 
 /// Heat burns body matter: a warm body that lives on (its liquid does not boil) burns matter by the reaction that burns
 /// it, so it is smaller in body, not only in fuel, with no new rule (the reactions of `body::live` act on the matter in
-/// its stores, and the body is its matter over 1 - h). Elements and energy are kept. (30 days of 350 K: the solid burns
+/// its stores, and the body is its matter over 1 - h). Elements and energy are kept. (25 days of 350 K: the solid burns
 /// first and takes the burning gas the body has at hand, and the matter, which needs its sixth power, follows; what is
 /// tested is that heat makes a body smaller in body as well as in fuel, not how soon.)
 #[test]
@@ -215,7 +215,7 @@ fn a_body_burnt_by_heat_and_alive_is_smaller_in_body() {
     let s = place(&mut w, b);
     let books = Books::now(&w);
     let before = seen(&w, s);
-    for d in 0..30 {
+    for d in 0..25 {
         // The cell held at 350 K, booked as an edit.
         hold_ground(&mut w, i, 350.0);
         pcore::day(&mut w);

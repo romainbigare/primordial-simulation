@@ -2233,3 +2233,97 @@ the kill line of -25%. The gain is 1.2 ms a year of a year of about 400 ms: the 
 (70 to 90 parts) is far under the 15 ms that the plan counted, so G7 gives about 0.3% of the year. What is left of the
 1.46 ms: the loads of the structures (about 0.3), the 2 months of reactions (about 0.7), the 10 months of turns (about
 0.4). A second pool call for the booking, or the loads on the pool, would cost about as much as they give.
+
+## G4: batches of 10 days, stands at 40 days
+
+Level 3 (a small law change). `batch_days` 2 to 10, one air step (X17, replaces S64), and `node_days` 36 to 40, a
+multiple of 10 (X76). Only the two defaults change; `Config::validate` already refuses a `node_days` that is not a
+multiple of `batch_days`. No field changes, so the snapshot stays 49 and an old save keeps its own batch and pace. Core
+10,283 code lines (+2 -2).
+
+What the law feels: a gene of 5 to 15 days updates every 10 days (5 rounded to 6 before); a batch starts on a physics
+day, so its bodies read the ground and the air as that day's Change and air step left them (with batches of 2 days, 4
+batches in 5 fell between Change's steps); moves land, and faces are read, up to 10 days late.
+
+**How.** Base: the `ew` of `speed/x10` at `7749ea4` on the `bench49` saves (batch 2, node 36). G4: the `ew` of
+`x10/g4` on the same saves turned (X50): `batch_days` and `node_days` set, each body's due batch moved to the first new
+batch at or after its due day (a throw-away tool test, not kept). To split the two changes, two more turned saves run
+on the G4 build: batch 2 with node 40, and batch 10 with node 30 (X76's other choice). The worlds drift apart inside
+the year, so the gain of the year counts only above 2% (plan 2).
+
+**One thread, instructions of one year** (callgrind, `RAYON_NUM_THREADS=1`, millions; the bodies' stage is
+`survey::batch` and `survey::survey`, inclusive):
+
+| | island22 year | island22 stage | globe36 year | globe36 stage | region24 year | region24 stage |
+|---|---|---|---|---|---|---|
+| base: batch 2, node 36 | 5,856.0 | 4,274.9 | 5,641.0 | 3,480.0 | 12,855.1 | 10,373.1 |
+| batch 2, node 40 | 5,739.6 (-2.0%) | 4,132.1 (-3.3%) | 5,470.3 (-3.0%) | 3,338.9 (-4.1%) | 12,449.0 (-3.2%) | 9,963.1 (-4.0%) |
+| **G4: batch 10, node 40** | **5,588.2 (-4.6%)** | **3,981.7 (-6.9%)** | **5,435.8 (-3.6%)** | **3,223.1 (-7.4%)** | **11,986.3 (-6.8%)** | **9,508.5 (-8.3%)** |
+| batch 10, node 30 | 6,243.4 (+6.6%) | 4,652.9 (+8.8%) | 5,799.0 (+2.8%) | 3,656.1 (+5.1%) | 13,337.5 (+3.8%) | 10,858.7 (+4.7%) |
+
+On one thread the batch of 10 days gives -3.5 to -4.6% of the stage (batch 2 to 10 at node 40), the pace of 40 days
+-3.3 to -4.1%. At node 30 the stands update a third more often than at 40, which costs more than the batch saves.
+
+**Four threads, wall time** (`ms_bodies` and the year, ms, the mean of years 2 and 3 of a 3-year run; 12 interleaved
+sets, each run under `flock $X/timing.lock` after the machine had no compiler or profiler running; load average 1.2 to
+3.3, about 2 from the run itself; in 4 of the 108 runs a compiler started during the run; leaving them
+out moves G4's ratios by at most 0.015):
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| base: the stage, median (min) | 310.1 (272.7) | 284.1 (264.8) | 764.2 (662.0) |
+| batch 2, node 40 | 310.9 (258.7): x1.00 | 278.6 (256.2): x0.98 | 720.0 (621.5): x0.94 |
+| **G4: the stage** | **256.4 (215.5): x0.827 (min x0.790)** | **221.6 (209.1): x0.780 (min x0.790)** | **602.5 (481.0): x0.788 (min x0.727)** |
+| G4 over base, median of the 12 per-set ratios (quartiles) | 0.810 (0.758 to 0.849) | 0.788 (0.693 to 0.863) | 0.764 (0.724 to 0.822) |
+| G4 over batch 2 at node 40 (the batch alone) | x0.825 | x0.795 | x0.837 |
+| the year: base, G4 (median) | 448.9, 402.4: x0.896 | 462.1, 393.2: x0.851 | 1,000.1, 816.3: x0.816 |
+| updates a year: base, batch 2 at 40, G4 | 30,270; 28,222; 28,384 | 22,256; 20,790; 21,424 | 69,188; 65,170; 64,335 |
+| busiest domain's share of a batch: base, G4 | 0.174, 0.116 | 0.166, 0.106 | 0.239, 0.180 |
+
+On 4 threads the gain is the batch's: the pool's calls, the faces and the landing come once in 10 days, not 5 times.
+The busiest domain's share of a batch's updates falls by 25 to 36% (X75 asks for it after G4; the wait for
+the busiest task itself was not timed). An earlier set of 14 runs on a busy machine (load 11 to 13, 6 to 9 compilers)
+gave x0.88, x0.93 and x0.77 by the medians: not used.
+
+**Checks.**
+
+| Check | Result |
+|---|---|
+| Golden | re-pinned (`0x73e67d01d3018a20`, `0x4df6835ca57dd1c4`, `0x769ee0f6a9fb4515`), the same with and without threads |
+| `cargo test --release --workspace`, with debug assertions too, clippy, the wasm build | pass, no warning |
+| The pace test (`the_pace_of_nodes_keeps_life`, seed 1) | passes at 40, 80 and 20 |
+| The batch test (`the_batches_of_bodies_keep_life`, 2 against 10 days, seed 1) | **fails**: the light-eaters' life (`root_0_life_real`) 4.80 against 4.87 years, off by -0.066, noise 0.026 (2.6 times); the other four under 0.05 of their noise |
+| The key numbers (once, against the references after AIR4.0) | all in range but S50 (0.563, the known failure): ground temperature on land 292.107 K, swing 15.413 K, rain 0.001813, heat-absorbing gas 411.24 ppm, river cells 695.2, land worn 0.1467 mm/yr, light-eaters 10.254, **eaters 5.217 log10 kg** (seeds 5.217, 5.213, 5.220; G2 5.226), **life of light-eaters 1.416 yr** (seeds 1.457, 1.421, 1.371; G2 1.241, the reference 1.218), life of eaters 14.34 yr |
+| The nodes check (`tape/tests/nodes.rs`, 282 s) | passes; rule (b) broken once within the noise (roster, seed 5, kind 2 `copy_log` -0.74 against +0.10), rule (c) nowhere |
+| Tests that changed | `a_body_gives_its_stores_but_not_its_body` runs a batch and a day (the body's first update is a batch on); `node_takes` 90 days, not 80 (8 updates from its first batch); the heat test 25 days, not 30 (its last update spans 10 days of 350 K, and what it tests is not how soon); the growth test runs batches of 2 days (the test lays fuel each morning and Change reacts all of it on some physics days before the body of that day takes; in batches of 2 days its updates fall between Change's steps) |
+
+**The pace test for stands** (`the_pace_of_nodes_keeps_life` on seeds 1 to 5, batches of 10 days: each pace against
+every stand at its own gene's pace; seeds passing of 5, then seed 1, the test as it is; a throw-away test, not kept):
+
+| pace (days) | 20 | 30 | 40 | 60 | 80 |
+|---|---|---|---|---|---|
+| batches of 10 days | 5/5 p | 5/5 p | 5/5 p | 4/5 p | 3/5 p |
+
+With batches of 2 days (PR-C2's today's law): 18 5/5, 30 5/5, 36 5/5, 60 4/5, 72 4/5. At 80 seeds 4 and 5 fail on the
+light-eaters' life (2.1 and 1.7 times the noise; plant members -30% and -23%, births -37% and -32%); at 60 seed 4
+(1.06 times). The test at 30 cannot run as it is: its /2, 15, is no whole
+number of batches.
+
+**The batch test on 10 seeds** (2 against 10 days, and 1 against 2, each against the batch of 2 days; the same
+throw-away test):
+
+| `node_days` | 10 against 2 | 1 against 2 | the light-eaters' life, 10 against 2, mean of the seeds |
+|---|---|---|---|
+| 40 | 9/10 (seed 1 fails: life -1.4%, 2.6 times its noise) | 9/10 (seed 1 fails: life -0.6%, 1.2 times) | -0.4% (from -2.3% to +1.5%) |
+| 30 | 10/10 | 10/10 | +0.1% (from -1.7% to +1.3%) |
+
+So the failure on seed 1 at 40 is that seed's tight year-to-year spread of the light-eaters' life at 40 (0.026 years,
+against 0.31 in the gene-pace run of the pace test on the same seed), not the batch: the batch test of today (1 against 2) fails
+there too. The key numbers at node 30 (once, for X76): all in range but S50 (0.552); eaters 5.228, life of light-eaters
+1.224 years (seeds 1.322, 1.187, 1.165), the climate within 0.1 K and 2 ppm of G4's at 40, life of eaters 12.9 years (14.3 at 40). So the light-eaters' longer life in G4's
+key numbers comes with the stands' pace of 40, not with the batch.
+
+**Verdict.** The done-when (the bodies' stage on 4 threads -10%) is met: -17% (island22), -22% (globe36), -21%
+(region24) by the medians, -21%, -21%, -27% by the minima, far over the kill line of -6%. The year on 4 threads -10%,
+-15%, -18%; on one thread -4.6%, -3.6%, -6.8%. Open (X76, for the architect): the batch test fails on its seed at
+`node_days` 40, by that seed's noise; the light-eaters live 14% longer in the key numbers (in range).
