@@ -3150,3 +3150,29 @@ g12/bench/island22.bin.gz --years 1 --monthly-years 0 --frames-every 100000 --ev
 
 **Verdict.** No kill line for this measure. Core code: 10,434 lines (`core_size`, ceiling 12,000). A 64-unit thought
 costs 4.7 times a 12-unit thought, and `think_days` 0 costs 4.2% more in a year.
+
+## Z: the year at the round's end
+
+The build at the round's start (`52d7f4a`, on its own benches made at `52d7f4a`) against the build at its end
+(`cb6db47`, on benches made again at `cb6db47`, snapshot 49: batches of 10 days, stands at 40 days, the liquid every 60
+days). Each build runs its own worlds, so the worlds differ (the laws changed: G2, G4, G12); a year is the mean of years
+2 and 3 of a 3-year run from the save, the sum of the stages' timers (`ms_flow`, `ms_change`, `ms_bodies`, `ms_parts`,
+`ms_tape`). 6 interleaved sets, each run under `flock`, the machine quiet (load before a run 1.1 to 1.7; no other
+agent). Medians, ms a year:
+
+| Bench | Threads | Start of the round | End of the round | Faster by |
+|---|---|---|---|---|
+| island22 | 4 | 460 (bodies 287, Flow 108) | 260 (bodies 161, Flow 71) | x1.77 |
+| island22 | 2 | | 366 | |
+| island22 | 1 | 750 | 626 | x1.20 |
+| globe36 | 4 | 522 (bodies 325, Flow 142) | 361 (bodies 202, Flow 118) | x1.45 |
+| globe36 | 2 | | 450 | |
+| globe36 | 1 | 839 | 633 | x1.33 |
+| region24 | 4 | 761 (bodies 533, Flow 156) | 529 (bodies 357, Flow 121) | x1.44 |
+| region24 | 2 | | 771 | |
+| region24 | 1 | 1,464 | 1,392 | x1.05 |
+
+**Against the baseline of the last round** (Z1 of `docs/speed-post-foundation/measures.md`: island22 0.910 s, globe36
+1.490 s on 4 threads; the start of this round was x1.48 and x2.02 of it): about **x2.6 (island22)** and **x2.9
+(globe36)**. The goal was x10. The scaling of the end build (E7): from 1 to 2 threads x1.71 / x1.41 / x1.81, from 1 to 4
+threads x2.41 / x1.75 / x2.63 (island22, globe36, region24).
