@@ -719,6 +719,180 @@ limit (+0.19 / +0.26 / +0.08 K). Expected gain of TR-BDF2 in calm months: Flow x
 | Each other explicit part | under 0.05 | under 0.08 | under 0.08 |
 | Left after the plateau fix (Euler's error) | +0.29 | -0.10 | +0.86 |
 
+### PR-C2: the day law at a longer stand pace
+
+**Verdict: the kill line is met. No variant passes the pace test at 60 days with its x2 (120 days), nor the splitting
+line.** Stands stay at 36 days on today's law; P2.1, P2.2, G9a and P3 are not built (plan 5.0's case "no plant pace
+passes": island 3.2 to 4.2 times, globe 5.0 to 6.7). The main cause found is not in the energy budget that C2's fixes
+mend: at a long pace the stands' copy-mass gene climbs (fewer, larger members: births fall, life rises), under every law
+tried, today's too.
+
+**How.** Branch `probe/pr-c2` (code `3fef87a`, never merged; scripts in `scripts/probe-pr-c2/`). Switches by environment
+variables, all off by default: with none set the build gives the base's world bit for bit (two years from the `bench48`
+saves: island22 `a2e671d74726c28a`, globe36 `d00495507d6a7c3e`, as `f85d626`).
+
+| Switch | What it does |
+|---|---|
+| `C2_LAW=1` (law1) | `lane-a.md` 2.2 as written: the upkeep the stock cannot pay is owed and paid after the physics (C2's `pay_owed`); the unpaid share `u` kills `1 - e^(-u Δ / D)`; a stand's growth reserve is `D` = 36 days of upkeep and `buildable` looks 36 days ahead |
+| `C2_LAW=2` (law2) | the first two changes only (the windows read the interval, as today) |
+| `C2_LAW=3` (law3) | law1, with the reserve read against what the stand can release over `D` too (law1 compares 36 days of upkeep with the release over the interval) |
+| `C2_GRID=1` (b) | growth in pieces cut at the stand's 36-day grid points (`d mod 36 = id mod 36`); at a point an adult makes its children, who start at that day (`last` and the marks of light and rain of that day), and a young stand's passers leave, grow as adults to the update's end and join their adult node after it; physics, upkeep and the sample once an update. `C2_GRID=5` (b5): the same, and children and passers at the update's end too |
+| `C2_PACE=d` | the stands' pace in place of `node_days` |
+| `C2_COUNT=1`, `C2_NOSEL=1` | counters; no selection inside nodes (a diagnostic) |
+
+**The pace test** (`the_pace_of_nodes_keeps_life` for seeds 1 to 5: 32 x 32, 8 years, the mean of years 5 to 8 of each
+life column against every stand at its own gene's pace, over the spread of those years; `tape/tests/c2_pace.rs`). Seeds
+passing of 5, then the test as it is (seed 1): p passes, **f** fails.
+
+| law | 36 | 72 | 18 | 60 | 120 | 30 | 90 | 180 | 46 |
+|---|---|---|---|---|---|---|---|---|---|
+| today's law | 5/5 p | 4/5 p | 5/5 p | 4/5 p | 1/5 p | 5/5 p | 4/5 p | 0/5 **f** | 5/5 p |
+| law1 (a): P2.1 as written | 3/5 p | 3/5 **f** | 5/5 p | 2/5 **f** | 2/5 **f** | 5/5 p | 3/5 **f** | 1/5 **f** | 3/5 p |
+| law1 (b): with the grid | 4/5 p | 2/5 p | 5/5 p | 2/5 p | 1/5 **f** | 4/5 p | 1/5 **f** | 0/5 **f** | 2/5 p |
+| law2 (a): changes 1 and 2 only | 5/5 p | 2/5 **f** | 5/5 p | 3/5 **f** | 0/5 **f** | 5/5 p | 1/5 **f** | 0/5 **f** | 5/5 p |
+| law2 (b) | 5/5 p | 2/5 **f** | 5/5 p | 3/5 **f** | 0/5 **f** | 5/5 p | 1/5 **f** | 0/5 **f** | 5/5 p |
+| law3 (a): the reserve against `D` days' release | 4/5 **f** | 3/5 **f** | 5/5 p | 3/5 **f** | 0/5 **f** | 4/5 **f** | 2/5 **f** | 0/5 **f** | 4/5 **f** |
+| law3 (b) | 5/5 p | 3/5 **f** | 5/5 p | 3/5 **f** | 1/5 **f** | 5/5 p | 2/5 **f** | 0/5 **f** | 5/5 p |
+| law3 (b5): points and the update's end | 4/5 **f** | 2/5 **f** | 5/5 p | 3/5 **f** | 1/5 **f** | 5/5 p | 1/5 **f** | 0/5 **f** | 3/5 **f** |
+
+The moves behind it (mean of 5 seeds, per cent of the gene-pace reference: plant members, kg, births, the light-eaters'
+life). The life column has the smallest noise (about 1 to 2% of its value), so most fails are there; members and births
+swing by about 90% of their mean from year to year, so their fails need large moves.
+
+| law | 60 | 120 | 90 | 180: births |
+|---|---|---|---|---|
+| today's law | -9%, +5%, -13%, +2% | -52%, -24%, -62%, -0% | -32%, -3%, -40%, +2% | -76% |
+| law1 (a) | +58%, +56%, +57%, +3% | +24%, +51%, +10%, +6% | +44%, +62%, +38%, +3% | -24% |
+| law1 (b) | +60%, +44%, +60%, +4% | +10%, +20%, -6%, +8% | +34%, +35%, +26%, +5% | -39% |
+| law2 (a) | -6%, +7%, -12%, +4% | -41%, -11%, -56%, +15% | -24%, +6%, -35%, +10% | -73% |
+| law3 (a) | +12%, +19%, +8%, +3% | -6%, +20%, -19%, +11% | +5%, +26%, -4%, +6% | -45% |
+| law3 (b) | +13%, +9%, +10%, +3% | -19%, -7%, -34%, +10% | -4%, +4%, -13%, +6% | -57% |
+
+- **law1 moves the reference, not only the long paces.** At the gene's pace (light-eaters about 20 days) law1's reserve
+  asks 36 days of upkeep from what the stand releases in 20: the gene-pace world holds 27% fewer plant members than
+  today's (1.47e8 against 2.01e8), and every slower pace sits +40 to +60% above it. law3 reads both over 36 days: its
+  gene-pace reference is today's (1.99e8), and 36 sits +11% above it.
+- **No law brings 120 back.** law3 (a) gets births from -62% to -19% at 120, but the life rises +11%; the grid does not
+  help at 120 (law3 (b) -34% births). Without selection inside nodes (`C2_NOSEL`) the picture is the same (law3 (b) at
+  120: births -28%, life +11%; today's law: -59%, +0%).
+
+**Why 120 fails: the stands' copy mass climbs at a long pace** (island22 from the `bench48` save, 3 years, one thread;
+the member-weighted mean of the copy-mass gene, log10 kg, -2.29 at the start):
+
+| | 36 | 60 | 90 | 120 |
+|---|---|---|---|---|
+| today's law | -2.38 | -2.21 | -2.07 | -1.66 |
+| law3 (a) | -2.32 | -2.11 | | -1.67 |
+| law3 (b) | -2.28 | -2.06 | | -1.38 |
+| law3 (a), no selection inside nodes | -2.29 | | | -1.80 |
+
+In 3 years at 120 days the copy mass grows 4 to 8 times (the repair gene falls too, from 1.02 to 0.62 to 0.78). Fewer,
+larger members make fewer births of members and live longer: the pace test's pattern at 120. It comes with every law and
+also without selection inside nodes, so it is in how a long pace selects between nodes (or in the node mechanics), not
+in the stock equation. **Its cause is not found**; it would need a probe of its own. The births per adult member-day of
+law1 (a) hold at 60 and 90 (table below), so the energy budget is not what fails.
+
+
+**The splitting test of the day law** (`core/tests/c2_split.rs`: a stand of the light-eaters' kind in a 16 x 16 world,
+10 cases: young and adult, light-limited 30 W/m² at 290 K, inhibited 250 W/m² at 295 K, release-limited 30 W/m² at 275
+K with 5% of its fuel, the summer's peak and the winter's low of a seasonal cosine centred on the window; each after a
+month at 10-day updates; air, ground liquid and the light set aside held). Error = |one update - many| over the larger,
+90th percentile / worst, %. "All" counts every body (the stand, its young and children), "the stand" the stand alone.
+
+| law | test | all members | all body matter | all fuel, 90% | the stand's members | the stand's body matter |
+|---|---|---|---|---|---|---|
+| today | 1 x 36 / 6 x 6 | 2.55 / 2.74 | 6.87 / 8.20 | 23.0 | 2.55 / 2.74 | 6.87 / 8.20 |
+| today | 1 x 60 / 6 x 10 | 11.3 / 12.7 | 18.5 / 18.6 | 33.5 | 5.44 / 5.61 | 16.9 / 18.5 |
+| today | 1 x 90 / 9 x 10 | 15.9 / 16.9 | 20.3 / 21.1 | 43.4 | 6.00 / 6.32 | 18.9 / 20.3 |
+| today | 1 x 90 / 3 x 30 | 14.5 / 16.1 | 13.7 / 14.1 | 22.9 | 4.23 / 4.72 | 11.6 / 13.7 |
+| law1 (a) | 1 x 36 / 6 x 6 | 5.10 / 5.29 | 14.6 / 15.6 | 29.0 | 5.10 / 5.29 | 14.6 / 15.6 |
+| law1 (a) | 1 x 60 / 6 x 10 | 12.5 / 14.3 | 18.5 / 23.1 | 33.5 | 5.44 / 7.29 | 18.5 / 21.5 |
+| law1 (b) | 1 x 60 / 6 x 10 | 5.31 / 7.29 | 15.4 / 20.7 | 34.4 | 5.31 / 7.29 | 15.4 / 20.7 |
+| law1 (b) | 1 x 90 / 9 x 10 | 7.06 / 9.52 | 18.8 / 24.7 | 46.9 | 7.06 / 9.52 | 18.8 / 24.7 |
+| law1 (b) | 1 x 90 / 3 x 30 | 4.96 / 5.23 | 8.59 / 9.55 | 24.9 | 4.96 / 5.23 | 8.59 / 9.55 |
+| law3 (a), law2 (a) | as today in every test (no case owes upkeep, and the reserve never binds; law1 differs as its reserve asks 36 days of upkeep from 6 or 10 days' release) | | | | | |
+| law3 (b) | 1 x 36 / 6 x 6 | 2.55 / 2.74 | 6.55 / 7.83 | 23.1 | 2.55 / 2.74 | 6.55 / 7.83 |
+| law3 (b) | 1 x 60 / 6 x 10 | 5.31 / 5.61 | 14.4 / 16.1 | 34.4 | 5.31 / 5.61 | 14.4 / 16.1 |
+| law3 (b) | 1 x 90 / 9 x 10 | 5.83 / 6.31 | 13.4 / 16.3 | 44.6 | 5.83 / 6.31 | 13.4 / 16.3 |
+| law3 (b) | 1 x 90 / 3 x 30 | 4.96 / 5.23 | 8.59 / 9.55 | 24.9 | 4.96 / 5.23 | 8.59 / 9.55 |
+
+The line (members and body matter: 90th percentile under 5%, and no worse than today's law at 1 x 36 against 6 x 6)
+fails for every variant: the best (law3 (b)) is 5.3% in members and 14% in body matter at 60, against 2.6% and 6.9% for
+today's law at 36 (whose body matter is itself over 5%). In the grid runs the test's stands made no children inside the
+window: these stands hover at their copy mass, and the physics books the burning of the whole update before the first
+growth piece, so at a point inside the update they stand under it (below). A starving stand (no fuel, dark, 60 days)
+dies at its own time with law1 and law3: 0.1781 of its members left in one update, 0.1769 in six (the rate alone
+e^(-60/36) = 0.1889, a little more die of wear and burning); today's law kills it all in both.
+
+**Counters** (island22 from the `bench48` save, 2 years, 2 threads; per member-day of stands unless said):
+
+| run | mean days | unpaid upkeep deaths | starving deaths | births | births per adult member-day | young that mature per young member-day | 23 at growth / at start | light reaction under its light | grid points an update | stands at the end |
+|---|---|---|---|---|---|---|---|---|---|---|
+| today, 36 | 34.2 | 1.63e-03 | 9.33e-04 | 3.67e-03 | 1.71e-02 | 5.47e-04 | 1.39 | 56% | 0.00 | 2405 |
+| today, 60 | 54.5 | 2.15e-03 | 6.91e-04 | 3.60e-03 | 1.69e-02 | 4.48e-04 | 1.61 | 63% | 0.00 | 2488 |
+| today, 90 | 78.2 | 2.02e-03 | 6.56e-04 | 2.50e-03 | 1.03e-02 | 2.36e-04 | 1.80 | 65% | 0.00 | 2246 |
+| law1 (a), 36 | 34.5 | 1.23e-03 | 8.60e-04 | 3.69e-03 | 1.67e-02 | 6.30e-04 | 1.36 | 57% | 0.00 | 2725 |
+| law1 (a), 60 | 54.9 | 1.59e-03 | 8.57e-04 | 3.73e-03 | 1.82e-02 | 2.75e-04 | 1.55 | 62% | 0.00 | 2605 |
+| law1 (a), 90 | 78.5 | 1.79e-03 | 7.15e-04 | 3.36e-03 | 1.63e-02 | 2.89e-04 | 1.70 | 63% | 0.00 | 2327 |
+| law1 (b), 36 | 35.6 | 9.29e-04 | 9.50e-04 | 3.08e-03 | 1.61e-02 | 5.84e-04 | 1.30 | 59% | 0.98 | 2854 |
+| law1 (b), 60 | 56.8 | 1.20e-03 | 7.68e-04 | 2.87e-03 | 1.53e-02 | 5.24e-04 | 1.49 | 64% | 1.53 | 2877 |
+| law1 (b), 90 | 81.9 | 1.36e-03 | 6.43e-04 | 2.51e-03 | 1.41e-02 | 4.11e-04 | 1.64 | 68% | 2.17 | 2718 |
+
+- The law does what it should with the energy: unpaid-upkeep deaths -25% at 36, and births per adult member-day hold at
+  60 and 90 (today's law loses 40% of them at 90).
+- Without the grid, maturing falls by 56% at 60 (C2's second cause, as expected); the grid holds more of it (-17% at 60,
+  -35% at 90, against law1 (a) at 36) but costs births: a grid point inside an update sees the stand after the whole
+  update's burning and only part of its growth.
+- The dissolved mineral 23 is not short at growth: there is more of it at growth than at the update's start (roots
+  refill it), more so at a long pace (1.36 to 1.70). The light reaction is under its light in 57 to 68% of stand
+  updates, a little more at a long pace (its income a member-day still rises: 2.9e4 J at 36, 3.5e4 at 60).
+- **At today's pace the law moves the world:** law1 at 36 has 11% more stand-years in the first year on island22 (2,509
+  against 2,267), which costs +4.2% of the year's instructions.
+
+**Found and fixed inside the probe (for any later grid):** a stand that makes children at a point must soak its key
+liquid again at once, as `live` does after the update's children (without it births per adult member-day fell 25%);
+an adult at the update's start makes its children at a point even if the update's burning left it under its copy mass
+there (else it is taken for a young stand and its passers split off as a new adult node); a young stand that joins its
+adult node whole at a point must not be cleared by the passers' placing.
+
+**Cost** (callgrind, island22 `bench48` save, one year, one thread, the probe's build for every row, same save; the
+stand updates are the `update_stand` mark; stand-years are the days the updates covered over 365):
+
+| run | stand updates | thousand instructions a stand update | grid points an update | stand-years | million instructions a stand-year | the year, million instructions |
+|---|---|---|---|---|---|---|
+| today, 36 | 24,201 | 101.8 | 0 | 2,267 | 1.087 (x1.00) | 8,033 |
+| law1 (a), 36 | 26,621 | 104.6 | 0 | 2,509 | 1.110 (x1.02) | 8,370 (+4.2%) |
+| law1 (a), 60 | 15,330 | 105.4 | 0 | 2,235 | 0.723 (x0.67) | 6,894 (-14.2%) |
+| law1 (a), 90 | 10,185 | 105.9 | 0 | 2,030 | 0.531 (x0.49) | 6,036 (-24.9%) |
+| law1 (b), 36 | 26,520 | 121.4 | 0.98 | 2,584 | 1.246 (x1.15) | 8,814 (+9.7%) |
+| law1 (b), 60 | 15,736 | 141.1 | 1.49 | 2,372 | 0.936 (x0.86) | 7,443 (-7.3%) |
+| law1 (b), 90 | 10,305 | 160.8 | 2.02 | 2,140 | 0.774 (x0.71) | 6,681 (-16.8%) |
+| law3 (b), 60 | 15,727 | 150.2 | 1.49 | 2,370 | 0.997 (x0.92) | 7,584 (-5.6%) |
+
+The first year after the switch still holds updates of 36-day stands; at the second year's rate ((a) 6.46 updates a
+stand-year at 60, 4.33 at 90; (b) 6.25 at 60) a stand-year is x0.63 (a, 60), x0.42 (a, 90) and about x0.82 (b, 60) of
+today's (10.67 updates a stand-year). A grid point costs about 17 thousand instructions (3.2 µs at 5,400 a µs;
+`lane-a.md` 2.3 took 5.4 µs). The probe's switch reads and marks cost 2.2% of the year against the base build (8,033
+against 7,861 M), so the rows compare with each other, not with other sections. **Plant nodes at year 30** (64 x 64,
+seed 1): today's law 6,288; law1 (a) at 60 6,350 (+1.0%); law1 (b) at 60 6,911 (+9.9%); law3 (b) at 60 6,610 (+5.1%).
+So the cost line (x0.85) holds for (a) at 60, is at the line for law1 (b) and past it for law3 (b) (its reserve reads
+the release a second time); with `sample_every` 1 (about +12 thousand instructions an update) (b) would be past it
+too.
+
+**Selection.** `selection_inside_a_node_moves_its_mean_as_its_members_would` passes at 60 (today's law, law1 (a), law1
+(b), law3 (b)) and at 90 (law1 (b)), with its own `sample_every` 1 (it measures one update, so it cannot judge a sample
+on one update in 2). `genes_do_not_drift_without_selection` runs no body update, so no switch reaches it: not run. With
+no variant past the pace line, the sample's fallback decides nothing.
+
+**Against the kill line.** Around 36 (the test as it is, seed 1): law1 (a) fails at 72 (`air_3` -1.24), law1 (b)
+passes, law2 and law3 fail at 72 or 36; on 5 seeds every variant passes fewer than today's law. At 60 with x2 and /2:
+every variant fails at 120 on seed 1, and none passes 120 on more than 2 of 5 seeds. (Today's law alone passes seed
+1 at 60, 120 and 30, as members and births have a wide noise, but 120 on 1 of 5 seeds with births -62%: not a pass.) The splitting line fails for every
+variant. Key numbers were not run (no variant passed). **P2.1, P2.2, G9a and P3 are not built; stands stay at 36 days
+on today's law.** If lane A comes back to the plants' pace, three things come first: why a long pace makes the stands'
+copy mass climb (a probe of its own); a reserve read over the same window as the release (law3, or the gene-pace
+reference moves); and for a grid, a stand's maturity at a point that does not see the burning of the days after it.
+
 ## E1a: counts per domain, booking and delivering only the domains that ran
 
 The step (level 1): `pushed` and `crossings` live in each domain (`Domain::pushed`, `Domain::crossings`, one number
