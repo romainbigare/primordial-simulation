@@ -257,11 +257,11 @@ fn heat_bound(pay: f64, (latent, brings): (f64, f64), held: f64, flows: bool) ->
 /// heat and fusion enthalpy, or the body soaks less.
 #[allow(clippy::too_many_arguments)]
 fn soak(w: &World, d: &mut Domain, b: &mut Body, s: &Site, gcap: f64, heat: &mut f64, soil: &Soil, lost: &[f64], fall: f64, mass2: f64) {
-    let paces = b.paces(w);
-    let (i, tg, days) = (s.i, s.tg, s.days);
     if soil.in_ground <= 0.0 {
         return;
     }
+    let paces = b.paces(w);
+    let (i, tg, days) = (s.i, s.tg, s.days);
     for k in ones(soil.wets) {
         let (chem, gk) = (&w.chem, d.moves.amount(w, Node::ground(i), k));
         let (x, room) = (gk / soil.in_ground, b.room(chem, paces, k, mass2));

@@ -65,10 +65,7 @@ impl Chemistry {
     /// is dissolved in it, where `k` is the solvent (laws.md 2.5). A gas counts not: it dissolves only to Henry's share,
     /// a thousandth of a kelvin. Where `k` is absent it melts at its own point.
     pub fn melt_in(&self, k: usize, a: impl Fn(usize) -> f64) -> f64 {
-        if !self.lowers_melt(k) {
-            return self.subs[k].melt;
-        }
-        let js = self.mixes(k).unwrap_or_default();
+        let Some(js) = self.mixes(k).filter(|_| self.lowers_melt(k)) else { return self.subs[k].melt };
         let (x, mut other, mut most) = (a(k).max(0.0), 0.0, 0.0f64);
         for &(j, dissolved, liquid) in js {
             let y = a(j).max(0.0);
