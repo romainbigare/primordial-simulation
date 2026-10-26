@@ -1,12 +1,12 @@
 //! Upkeep, and paying a cost by running the body's burnings at the rate Change gives them (laws.md 6.2).
 
-use super::exchange::{breath, conductance, cover_of, film};
+use super::exchange::{breath, cover_of, film, ground_conductance};
 use super::{Body, REPAIR, STRENGTH};
 use crate::chem::{Chemistry, Phase};
 use crate::ground::Melting;
 use crate::math::mean_decay;
 use crate::store::Node;
-use crate::units::{DAY, MAX_SUBSTANCES};
+use crate::units::{DAY, MAX_REACTIONS, MAX_SUBSTANCES};
 use crate::{bond, life::Domain, lineage::Lineage, World, AIR};
 
 /// Upkeep over `days` of a body of `mass` kg, J (laws.md 6.2): per kg of living body its basal, catalyst, strength,
@@ -45,7 +45,7 @@ pub struct Payer {
     tot: f64,
     cover: f64,
     /// The rate constant of each of its burnings (`Consts::burn`) at its activity and temperature (`Body::rate_at`), 1/s
-    rates: Vec<f64>,
+    rates: [f64; MAX_REACTIONS],
 }
 
 impl Payer {
@@ -56,7 +56,10 @@ impl Payer {
         let depth = bond::depth(w, d, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
         let tot = d.moves.a_seen_all(w, j);
         let share = (breath(chem, &w.cfg, b, &film(chem, &w.cfg, b, mass, cover), days, depth) / tot).min(1.0);
-        let rates = b.k.burn.iter().map(|&(r, _)| b.rate_at(chem, &w.cfg.phys, r, dry, th.t)).collect();
+        let mut rates = [0.0; MAX_REACTIONS];
+        for (rate, &(r, _)) in rates.iter_mut().zip(&b.k.burn) {
+            *rate = b.rate_at(chem, &w.cfg.phys, r, dry, th.t);
+        }
         Payer { mass, th, dry, days, share, tot, cover, rates }
     }
 }
@@ -87,7 +90,7 @@ pub(crate) fn spend(w: &World, d: &mut Domain, b: &mut Body, cost: f64, dt: f64,
 /// The share of a heat released over `dt` s that body `b` as the payer `p` sees it (its mass, temperature and cover)
 /// keeps: the mean over that time of a pulse that decays with its time constant, `mean_decay` of g dt / heat capacity.
 pub(super) fn hold(w: &World, d: &Domain, b: &Body, p: &Payer, dt: f64) -> f64 {
-    mean_decay(conductance(w, d, b, (p.mass, p.cover), p.th.t) * dt / b.heat_cap(&w.chem).max(1e-9))
+    mean_decay(ground_conductance(w, d, b, (p.mass, p.cover), p.th.t) * dt / b.heat_cap(&w.chem).max(1e-9))
 }
 
 /// How far each burning (`Consts::burn`) runs to release up to `cost` J, and the energy released: each at most as far

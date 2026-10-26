@@ -137,6 +137,12 @@ fn scaled(w: &mut World, b: &Body, f: f64) -> Body {
     x
 }
 
+/// The heat conductance of `b` at a whole mass of `mass` kg and `t` K to the ground it stands on, W/K.
+fn ground_g(w: &World, b: &Body, mass: f64, t: f64) -> f64 {
+    let d = w.life.domain(b.cell as usize);
+    body::ground_conductance(w, d, b, (mass, body::cover_of(w, d, b)), t)
+}
+
 /// The work a body pays for (`body::pay`: moving, handling, building) leaves heat in it, which leaves through its
 /// surface by its conductance: spread over the interval to its next update, a cost Q warms it by Q / (g dt), g the
 /// conductance of its genes, cover and walls and what it radiates, dt the interval. The heat that does not stay goes to
@@ -151,7 +157,7 @@ fn heat_made_by_work_stays_in_the_body_and_leaves_by_its_conductance() {
     let (temp0, mass) = (b.temp(&w.chem), b.mass(&w.chem));
     let cost = 2e6;
     assert!(moved(w, (b.cell as usize, Handle::default()), |w, d| pcore::body::pay(w, d, &mut b, cost, days)), "it can pay");
-    let (temp1, g) = (b.temp(&w.chem), pcore::body::conductance_to_ground(w, w.life.domain(b.cell as usize), &b, mass, temp0));
+    let (temp1, g) = (b.temp(&w.chem), ground_g(w, &b, mass, temp0));
     let (cap, dt) = (b.heat_cap(&w.chem), b.interval(w) as f64 * DAY);
     let (rise, kept) = (temp1 - temp0, cap * (temp1 - temp0));
     println!("a cost of {cost:.1e} J warms a body of {mass:.0} kg by {rise:.4} K (g {g:.2} W/K, {:.1} h time constant): the rate law says {:.4} K", cap / g / 3600.0, cost / (g * dt));
@@ -184,7 +190,7 @@ fn a_bigger_body_of_the_same_genes_is_warmer() {
         assert!(moved(w, (b.cell as usize, Handle::default()), |w, d| pcore::body::pay(w, d, &mut b, per_kg * mass, 10.0)), "it can pay");
         b.temp(&w.chem) - t0
     };
-    let g = |w: &World, b: &Body| pcore::body::conductance_to_ground(w, w.life.domain(b.cell as usize), b, b.mass(&w.chem), b.temp(&w.chem));
+    let g = |w: &World, b: &Body| ground_g(w, b, b.mass(&w.chem), b.temp(&w.chem));
     let want = 8.0 * g(w, &small) / g(w, &big);
     let (a, c) = (rise(w, small, 1e5), rise(w, big, 1e5));
     println!("warmth over the ground for the same work per kg: {a:.4} K, 8 times the body {c:.4} K ({:.3} times; 8 g / g' = {want:.3})", c / a);
@@ -309,7 +315,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             let vapour = wet.min((chem.p_sat(LIQUID, t) / pcore::units::P_REF - x_air) * b.k.gas * open_area(&b, chem, &w0.cfg.phys, mass) * days);
             (0..ns).map(|k| (x.store[k] - y.store[k] + air(k)) * h(k, t)).sum::<f64>() - vapour * chem.subs[LIQUID].lv
         };
-        let lost = |t: f64| (t - tg) * pcore::body::conductance_to_ground(w0, w0.life.domain(b.cell as usize), &b, mass, t) * days * DAY;
+        let lost = |t: f64| (t - tg) * ground_g(w0, &b, mass, t) * days * DAY;
         let (mut lo, mut hi) = (tg, tg + 20.0);
         for _ in 0..80 {
             let mid = 0.5 * (lo + hi);
@@ -392,7 +398,7 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     let books = Books::now(w);
     held_days(w, &[cell], &[280.0], 21);
     // One update more: the fuel it burns against the heat it loses (by the mean of its conductance at its start and end).
-    let g = |w: &World, b: &Body| pcore::body::conductance_to_ground(w, w.life.domain(b.cell as usize), b, b.mass(&w.chem), b.temp(&w.chem));
+    let g = |w: &World, b: &Body| ground_g(w, b, b.mass(&w.chem), b.temp(&w.chem));
     let (b, tg) = (w.life[slots[0]].clone(), 280.0);
     let mut fur = b.clone();
     fur.genes[pcore::body::HEAT] = -1.0;

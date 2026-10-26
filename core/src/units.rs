@@ -29,3 +29,6 @@ pub const T_FLOOR: f64 = 3.0;
 
 /// Most substances a chemistry may have: sets of substances are bits of a `u64`.
 pub const MAX_SUBSTANCES: usize = 64;
+
+/// Most reactions a chemistry may have: a body keeps a value for each of its burnings in a fixed array.
+pub const MAX_REACTIONS: usize = 64;

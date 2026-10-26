@@ -3045,7 +3045,7 @@ The differences start at rounding in year 1 and grow with the years and life's c
 
 ## PL1: a cheaper stand update (kept; done-when not met)
 
-**How.** One thread, callgrind, one year from the `$X/g12/bench` saves, base `a63cb20`. The stand updates are counted
+**How.** One thread, callgrind, one year from the `$X/g12/bench` saves, base `7f5ee97`. The stand updates are counted
 alone: a measuring build (not committed) sends the update of a node without a brain through a function of its own and
 callgrind collects only inside it (`--toggle-collect`). Every step is level 1: the golden test is unchanged with and
 without threads, with debug assertions and in a plain debug build, and one-year runs of the three benches end on their
@@ -3061,7 +3061,7 @@ The profile is flat: no function but the reactor and `vary` is over 5%, and no s
 
 | Step | island22 | of the base |
 |---|---|---|
-| base `a63cb20` | 1,497.3 | |
+| base `7f5ee97` | 1,497.3 | |
 | PL1.1: the sets of a few substances as bits (solvents, built solids, light reactions; key liquids, liquids of the ground) | 1,400.3 | -6.5% |
 | PL1.2: one look-up of the view per node (`Moves::amounts`, `Moves::seen`) | 1,383.6 | -7.6% |
 | PL1.3: what goes to the ground, without copies (`give_all`, `thin`, `shed`) | 1,370.1 | -8.5% |

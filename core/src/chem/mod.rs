@@ -4,7 +4,7 @@
 mod roles;
 mod thermo;
 
-use crate::{params::require, units::MAX_SUBSTANCES};
+use crate::{params::require, units::{MAX_REACTIONS, MAX_SUBSTANCES}};
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 
@@ -133,10 +133,11 @@ struct Derived {
     mixes: Vec<Option<Vec<(usize, bool, bool)>>>,
     /// `Chemistry::by_melt`
     by_melt: Vec<usize>,
-    /// The substances others dissolve in (`Chemistry::mixes` is some), and the solids bodies build besides their matter
-    /// (`Chemistry::materials`), a bit per substance; the light reactions, by number
+    /// The substances others dissolve in (`Chemistry::mixes` is some), a bit per substance
     solvents: u64,
+    /// The solids bodies build besides their matter (`Chemistry::materials`), a bit per substance
     materials: u64,
+    /// The light reactions, by number
     light: Vec<usize>,
 }
 
@@ -201,10 +202,12 @@ impl Chemistry {
     }
 
     /// Is the chemistry one the laws can run? At most `MAX_SUBSTANCES` substances with element counts, a vapour pressure
-    /// curve and densities; every reaction and conversion names substances that exist and keeps its elements and mass.
+    /// curve and densities, and at most `MAX_REACTIONS` reactions; every reaction and conversion names substances that exist and keeps its elements and mass.
     pub fn validate(&self) -> Result<(), String> {
         let ns = self.ns();
         require(ns <= MAX_SUBSTANCES, || format!("{ns} substances: at most {MAX_SUBSTANCES}"))?;
+        let nr = self.reactions.len();
+        require(nr <= MAX_REACTIONS, || format!("{nr} reactions: at most {MAX_REACTIONS}"))?;
         for (k, s) in self.subs.iter().enumerate() {
             require(s.elems.len() == self.n_elements, || format!("substance {k}: wrong element count"))?;
             require(s.lv > 0.0, || format!("substance {k}: vaporisation enthalpy must be above 0"))?;

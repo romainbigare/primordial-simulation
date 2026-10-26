@@ -14,7 +14,7 @@ mod tissue;
 pub use death::{die, wound};
 use death::thin;
 pub(crate) use death::{remains, to_ground, torn_to_death};
-pub use exchange::{conductance_to_ground, cover_of};
+pub use exchange::{cover_of, ground_conductance};
 pub use genes::*;
 pub(crate) use live::{gain_to_growth, live, LiveTmp};
 pub use live::Lived;
@@ -225,9 +225,7 @@ impl Body {
     /// The fusion enthalpy amounts `m` hold at the plateau state `th` (a store `th` does not know, by its melting point
     /// now), J.
     pub(crate) fn fused_of(&self, chem: &Chemistry, th: &Melting, m: &[f64]) -> f64 {
-        // (Only a substance others dissolve in melts below its own point.)
-        let solvents = chem.solvents();
-        let molten_at = |k: usize| th.t >= chem.subs[k].melt || solvents >> k & 1 == 1 && th.t >= self.melt(chem, k);
+        let molten_at = |k: usize| th.t >= chem.subs[k].melt || chem.lowers_melt(k) && th.t >= self.melt(chem, k);
         let molten = |k: usize| if th.bits >> k & 1 == 1 { th.molten(k) } else { molten_at(k) as u8 as f64 };
         m.iter().enumerate().filter(|&(k, &a)| a > 0.0 && chem.subs[k].lf > 0.0).map(|(k, a)| a * chem.subs[k].lf * molten(k)).sum()
     }

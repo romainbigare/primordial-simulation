@@ -65,7 +65,10 @@ impl Chemistry {
     /// is dissolved in it, where `k` is the solvent (laws.md 2.5). A gas counts not: it dissolves only to Henry's share,
     /// a thousandth of a kelvin. Where `k` is absent it melts at its own point.
     pub fn melt_in(&self, k: usize, a: impl Fn(usize) -> f64) -> f64 {
-        let Some(js) = self.mixes(k) else { return self.subs[k].melt };
+        if !self.lowers_melt(k) {
+            return self.subs[k].melt;
+        }
+        let js = self.mixes(k).unwrap_or_default();
         let (x, mut other, mut most) = (a(k).max(0.0), 0.0, 0.0f64);
         for &(j, dissolved, liquid) in js {
             let y = a(j).max(0.0);
@@ -86,6 +89,12 @@ impl Chemistry {
         self.derived().solvents
     }
 
+    /// Whether others dissolve in `k` (`mixes` is some): only such a substance melts below its own point (`melt_in`).
+    #[inline(always)]
+    pub(crate) fn lowers_melt(&self, k: usize) -> bool {
+        self.solvents() >> k & 1 == 1
+    }
+
     /// `mixes` of `k`, from the substances' points.
     pub(super) fn find_mixes(&self, k: usize) -> Option<Vec<(usize, bool, bool)>> {
         let (s, liquid) = (&self.subs[k], |d: &Substance| d.melt < T_SURF && d.boil > T_SURF);
@@ -99,12 +108,11 @@ impl Chemistry {
         &self.derived().by_melt
     }
 
-    /// Phase of `k` at `t` among the amounts `a(j)` of one node or body, at its melting point there (`melt_in`; only a
-    /// substance others dissolve in melts below its own point).
+    /// Phase of `k` at `t` among the amounts `a(j)` of one node or body, at its melting point there (`melt_in`).
     #[inline(always)]
     pub(crate) fn phase_in(&self, k: usize, t: f64, a: impl Fn(usize) -> f64) -> Phase {
         match self.phase(k, t) {
-            Phase::Solid if self.solvents() >> k & 1 == 1 && t >= self.melt_in(k, a) => Phase::Liquid,
+            Phase::Solid if self.lowers_melt(k) && t >= self.melt_in(k, a) => Phase::Liquid,
             p => p,
         }
     }
