@@ -2391,3 +2391,81 @@ dear tissue takes 1.102 times its upkeep in its last 100 days (the bound is unde
 longer run): it starts smaller (26.5 kg at day 50 against 28.0) and levels off later. The cause is the setup: the
 body is placed on day 30, so its first update waited for day 40. The test now starts its year at the body's first
 batch, and at the default 10 days it takes 1.0967 times its upkeep, under the bound (17aa1aa).
+longer run): it starts smaller (26.5 kg at day 50 against 28.0) and levels off later. So the test keeps batches of 2
+days (with the rot off, 1.09), and its doc says why.
+
+## G15: the sharing between threads
+
+Level 1. `ew` uses mimalloc as its allocator (`cli/src/main.rs`, the crate `mimalloc`). The C library's allocator
+(glibc 2.39) made an update about 1.15 to 1.2 times dearer on 4 threads than on 1, and the landing and the survey
+dearer still: bodies and their rows are made on one thread of the pool and freed on another after a move, a merge or
+a death, and such a free goes to the arena of the thread that made the block, under its lock, once the freeing thread's
+small cache is full. No core code changes (core 10,297 lines). The world is the same: the series of every run of a
+bench has the same hash in all variants below (plain and timed builds, glibc and mimalloc, 1 and 4 threads), and golden
+passes unchanged with and without threads (the tests do not use `ew`'s allocator).
+
+**How.** Throw-away timer builds (branch-less copies, not kept) sum per thread, in padded slots: the thread CPU time of
+the parallel phase's tasks (`clock_gettime` of the thread, so time off the core does not count) and their updates, the
+wall of P1, of the landing, of the survey and of each runner call. `c` is the CPU time of P1's tasks per update, µs.
+Runs: 3 years from the saves (mean of years 2 and 3), each under `flock $X/timing.lock` after up to 60 s of waiting for
+a quiet machine, and run again (up to 6 times) when other processes used more than 0.3 of a core during it; runs over
+that are left out. Variants interleave in an order that turns by one each set. Another agent ran G4 beside this.
+
+**Before G4** (base 88e6a7b, `bench49`, 2 to 3 sets, medians; ms a year of the bodies' stage; `c` against 1 thread):
+
+| variant (4 threads) | island22 c, stage | globe36 c, stage | region24 c, stage | what it tests |
+|---|---|---|---|---|
+| base | 1.34, 335 | 1.37, 314 | 1.33, 802 | |
+| (a) `Domain` aligned to 128 bytes | 1.33, 343 | 1.25, 292 | 1.27, 758 | shared lines of neighbouring domains |
+| (b) jemalloc (`LD_PRELOAD`) | 1.14, 299 | 1.27, 290 | 1.05, 754 | the allocator |
+| (c) one shared counter instead of `par_bridge` | 1.37, 336 | 1.29, 306 | 1.28, 821 | a lock per item |
+| (d) rayon's idle threads sleep at once | 1.40, 351 | 1.31, 303 | 1.27, 801 | serial code beside spinning threads |
+| (e) rayon's idle threads spin 2,000 rounds | 1.38, 299 | 1.29, 261 | 1.22, 727 | the wake of each pool call |
+| (e) each domain on thread k mod 4 first, then steal | 1.30, 340 | 1.33, 304 | 1.21, 753 | data left in another core's cache |
+
+**After G4** (base 5977ce5, the G4 saves at node 40, 6 sets, medians; the bodies' stage, ms a year):
+
+| variant (4 threads) | island22 | globe36 | region24 |
+|---|---|---|---|
+| base (glibc) | 256 | 252 | 591 |
+| (a) `Domain` aligned to 128 bytes | 268 | 230 | 620 |
+| (e) spin 2,000 rounds | 266 | 232 | 575 |
+| (e) the other threads spin up to 500 µs after each call | 256 | 246 | 594 |
+| (e) domain k on thread k mod 4 first | 262 | 229 | 587 |
+| glibc with a cache of 4,096 blocks per size (`GLIBC_TUNABLES`) | 247 | 229 | 588 |
+| jemalloc | 234 | 219 | 521 |
+| **mimalloc** | **219** | **201** | **543** |
+
+(a), (c) and (d) gain nothing above the noise. The wake (e) was 9 to 17% of the stage before G4; G4's batches of 10
+days call the pool 5 times less often, and after it neither more spin nor lingering threads gain. Keeping a domain on
+one thread lowers `c` a little but not the stage. A larger cache in glibc takes part of the allocator's cost (the
+landing 28 to 23 ms on island22), which says where it is: frees from another thread.
+
+**The kept change, plain builds** (no timers; 5977ce5 against 5977ce5 with mimalloc; 10 interleaved sets on the G4
+saves, all runs with at most 0.13 other cores busy; ms a year, median (minimum); per-set ratio: the median of the 10
+ratios, with quartiles):
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| 4 threads, stage: base, mimalloc | 254.2 (240.9), 206.5 (189.2) | 225.6 (214.6), 194.4 (171.6) | 602.6 (545.7), 516.7 (475.7) |
+| **ratio of medians (per-set ratio, quartiles)** | **x0.812** (0.812, 0.758 to 0.834) | **x0.862** (0.837, 0.799 to 0.890) | **x0.857** (0.887, 0.839 to 0.902) |
+| 4 threads, year: ratio of medians (per set) | x0.863 (0.861) | x0.967 (0.931) | x0.932 (0.944) |
+| 1 thread, stage: ratio of medians (per set) | x1.017 (0.981) | x1.019 (1.020) | x0.866 (0.854) |
+| 1 thread, year: ratio of medians (per set) | x1.026 (0.990) | x1.039 (1.048) | x0.873 (0.862) |
+
+**The done-when** (timer builds, the same 10 sets; `c` in µs, then over the base's 1 thread, then over its own build's
+1 thread):
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| base: 1 thread, 4 threads | 18.3, 21.6 (x1.18) | 20.0, 24.0 (x1.20) | 20.2, 23.1 (x1.15) |
+| mimalloc: 1 thread, 4 threads | 18.1, 20.1 (x1.10; x1.11) | 18.3, 22.2 (x1.11; x1.21) | 19.4, 22.0 (x1.09; x1.13) |
+| landing, survey on 4 threads (ms): base, mimalloc | 28.3, 36.1; 18.9, 25.3 | 30.9, 34.6; 24.5, 27.7 | 66.9, 79.7; 44.9, 56.6 |
+
+**Verdict.** Kept: mimalloc for `ew`. On 4 threads the bodies' stage is 14 to 19% shorter and the year 3 to 14%, far
+above the kill line (3% of the stage). An update on 4 threads costs 1.09 to 1.11 times the base's 1-thread update (1.11
+to 1.21 times mimalloc's own; globe36's 1-thread update is 8% cheaper with mimalloc). After G4 the base was already at
+1.15 to 1.20, so most of G15's gain is in the landing and the survey, where moved and dead bodies are freed. On one
+thread the change is inside the noise on island22 and globe36 (+2% by the medians, -2% and +2% by the sets) and
+helps region24. It adds a C library to the build of `ew` (the `cc` crate compiles it); `pcore` and the wasm build do
+not change.

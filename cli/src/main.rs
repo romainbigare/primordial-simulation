@@ -16,6 +16,13 @@ use worldgen::schedule::Schedule;
 /// Years between snapshots (and between writes of the tape so far).
 const SNAP_EVERY: u64 = 10;
 
+/// The allocator: mimalloc (Leijen, Zorn and de Moura 2019). Bodies and their rows are made on one thread of the pool
+/// and freed on another after a move, a merge or a death. The system's allocator (glibc) frees such a block into the
+/// arena of the thread that made it, under that arena's lock, once the freeing thread's small cache is full, and the
+/// arena's lines move between cores; mimalloc gives it back to its page's own list without a lock.
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 fn main() {
     let args = Args(std::env::args().collect());
     if args.wants_help() {
