@@ -3095,3 +3095,58 @@ step (LLVM shares it already).
   the order of the sums (level 2).
 - A litter's genes (`vary`, 7% of a stand update) draw a number for each of the 127 genes; fewer draws would change
   every child (a law change).
+
+### GM: the cost of a thought
+
+What one thought (`brain::think`) costs, and what a year costs at `think_days` 0 (every update thinks). One thread,
+callgrind (instructions). The save is `island22` (`g12`), one year from year 300. The brains in this world have 12
+hidden units and 6 memory numbers: every eater body does, and the other bodies are light-eaters with no brain (the
+tape's `hidden` mean, 1.99 over all 2,117 bodies, is 4,212 = 351 eaters × 12).
+
+**The cost of a thought** (instructions):
+
+| Thought | Hidden units | Instructions |
+|---|---|---|
+| in the world: all 5,753 thoughts of the year (callgrind) | 12 | **8,038** |
+| alone, same shape (26 substances, 73 inputs, 119 rows) | 12 | 8,049 |
+| alone, same shape | 64 | **37,878** (4.7 × the 12-unit thought) |
+| alone, same shape, for scale | 2 | 2,209 |
+
+The thought is close to a straight line: about 575 instructions for each hidden unit, and about 1,060 that do not
+depend on it. The 12-unit thought in the world and alone agree to 0.1%.
+
+**The cost of a decision** (`choose::act`, instructions a call):
+
+| | think_days 20 (default) | think_days 0 |
+|---|---|---|
+| calls of `choose::act` in the year | 11,325 (5,753 thoughts, 5,572 habits) | 11,420 (all thoughts) |
+| per call, all calls | 41.2 k | 60.1 k (a decision) |
+| a habit (derived: the rest of the year's cost over the habits; an estimate) | about 21.8 k | - |
+| the thought in a decision | 8.0 k (19%) | 8.0 k (13%) |
+
+**The whole year** (instructions, million):
+
+| | think_days 20 (default) | think_days 0 | change |
+|---|---|---|---|
+| the year (`ew resume`, whole run) | 6,009.1 | 6,261.5 | **+4.2%** |
+| `schedule::run_for` | 4,841.0 | 5,088.3 | +5.1% |
+| thoughts (`brain::think` calls) | 5,753 (46.2) | 11,420 (91.7) | × 2.0 |
+| `choose::act` | 466.9 | 686.2 | +47% |
+
+Of the +252 M a year, the thoughts themselves are +45.5 M (5,667 more thoughts at 8 k). The rest is the other work of
+a decision (scores, learning, spreading) on the habits that become decisions. The two runs start from the same save,
+but their worlds part after the first decision, so the counts differ a little.
+
+**What is not measured.** The learning after a thought (`brain::learn`) also goes over every row and hidden unit, so
+a decision with 64 hidden units costs more than the thought alone. The habit's cost is derived, not counted: `repeat`
+is inlined into `choose::act`.
+
+**Method, and what was thrown away.** Branch `probe/gm` at `d0fc280`. To get the numbers, three throw-away changes
+were made in the worktree and not kept: `brain::think` marked `#[inline(never)]` (in the normal build it is inlined,
+so callgrind cannot show its own cost; the whole year changed by 0.01%); `--think-days` read by `ew resume` (which
+otherwise keeps the save's 20); and an ignored test that calls `think` alone 0 and 2,000 times (the cost is the
+difference over 2,000). The year: `RAYON_NUM_THREADS=1 valgrind --tool=callgrind`, `ew resume --from
+g12/bench/island22.bin.gz --years 1 --monthly-years 0 --frames-every 100000 --every 100000`.
+
+**Verdict.** No kill line for this measure. Core code: 10,434 lines (`core_size`, ceiling 12,000). A 64-unit thought
+costs 4.7 times a 12-unit thought, and `think_days` 0 costs 4.2% more in a year.
