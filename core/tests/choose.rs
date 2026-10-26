@@ -10,7 +10,7 @@ use pcore::body::{self, Layout, INTERVAL, LEARN};
 use pcore::rng::{Purpose, Rng};
 use pcore::World;
 use pcore::store::{Class, Node};
-use worldgen::testkit::{self, moved, dry_land, founder, scale, set_amount, set_heat, start, Books, Brain, Line, LIQUID, MATTER, MILD_LAT, OFF, RICH};
+use worldgen::testkit::{self, dry_land, eater, founder, moved, node_of, put_kg_m2, scale, set_amount, set_heat, start, took_from_ground, Books, Brain, Line, LIQUID, MATTER, MILD_LAT, OFF, RICH};
 
 /// The scene's grid.
 const W: usize = 12;
@@ -325,3 +325,42 @@ fn moving_costs_the_real_cost_of_transport() {
     assert!(p.c_move > 0.7 * 10.7 * 30f64.powf(-0.32) && p.c_move < 1.0 * 10.7 * 30f64.powf(-0.32));
 }
 
+
+/// A node of 50 eaters (a 10-day gene, mature at 1,000 t) on ground with 3 kg/m² of matter, for 80 days with a decision
+/// every `think_days` days at the least: the updates, the decisions, the updates with a take from the ground, and the
+/// kg taken from it. The books are kept.
+fn node_takes(think_days: u32) -> (u64, f64, u64, f64) {
+    let (mut w, i) = start();
+    w.cfg.think_days = think_days;
+    put_kg_m2(&mut w, MATTER, i, 3.0);
+    let mut b = eater(&mut w, i, pcore::brain::TAKE, 6.0);
+    b.genes[INTERVAL] = 1.0;
+    b.prepare(&w.chem, &w.cfg);
+    let node = node_of(&mut w, b, 50.0);
+    w.add(node, 1);
+    let (books, mut took_on_update, mut kg) = (Books::now(&w), 0, 0.0);
+    for _ in 0..80 {
+        let u = w.counts.updates;
+        w.events.clear();
+        pcore::day(&mut w);
+        kg += took_from_ground(&w);
+        took_on_update += (w.counts.updates > u && took_from_ground(&w) > 0.0) as u64;
+    }
+    books.assert_kept(&w, 1e-9);
+    (w.counts.updates, w.counts.decisions, took_on_update, kg)
+}
+
+/// A node with a brain decides about every `think_days` days (`Config::think_days`) and 0 is a decision at every update;
+/// between decisions its members take from the ground by the chance of the last, so it takes as much as when it decides
+/// at every update.
+#[test]
+fn a_node_decides_every_think_days_and_takes_between() {
+    let (control, habit) = (node_takes(0), node_takes(20));
+    eprintln!("every update (updates, decisions, updates with a take, kg): {control:?}; 20 days: {habit:?}");
+    assert_eq!(control.0, 8, "a 10-day gene updates 8 times in 80 days");
+    assert_eq!(control.1, control.0 as f64, "think_days 0 decides at every update");
+    assert_eq!(habit.0, control.0, "the habit keeps the gene's updates");
+    assert!((habit.1 - habit.0 as f64 / 2.0).abs() <= 1.0, "a decision every second update, not {} of {}", habit.1, habit.0);
+    assert!(control.3 > 0.0 && habit.2 == habit.0 && control.2 == control.0, "an update without a take: {control:?}, {habit:?}");
+    assert!((habit.3 / control.3 - 1.0).abs() < 1e-3, "the habit took {} kg, the control {}", habit.3, control.3);
+}

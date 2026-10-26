@@ -470,7 +470,7 @@ could take.
 **Well-being** (`Body::wellbeing_at`): the energy its stores could release, in decisions' worth, less how near it is
 to its limits; no reward is hand-shaped. **Within a life** (`choose::learn`, `brain::learn`): a policy gradient
 against the critic (actor-critic) on the change of its own well-being since its last decision, the critic's estimate
-from now discounted by `discount` per interval of its gene since then (`discount^paces`), at its `LEARN` rate, in units
+from now discounted by `discount` per interval of its gene since then (`discount^since`), at its `LEARN` rate, in units
 of the root of the critic's running mean square of errors; that mean and each row's mean square of steps both weigh the newest value
 by `learn_beta`. A node learns as from one
 member drawn among those who stayed, with the node's change plus how much more its part's action raised it than the

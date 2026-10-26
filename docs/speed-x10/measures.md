@@ -1926,6 +1926,17 @@ days)**, life of light-eaters 1.241 yr, life of eaters 13.62 yr. **The nodes che
 Verdict at 20 days: the kill lines pass, the benches' eaters stay within the noise, the nodes check and the key
 numbers pass (S50 known); the young world's eaters fall -0.17 decades (the range's low end is 4.854).
 
+**The take-path criterion.** The plan's row asks a habit update's take path to be no dearer than the take option of
+today's decision (21.0 and 22.5 thousand, island and globe, measured after MI5). The habit also holds the body takes
+(X72), so it is judged against a decision's takes, the ground and the bodies together: 23.1 and 27.1 thousand. The habit
+costs 19.2 (island) and 23.6 (globe) at 20 days: it passes. Against the ground take option alone (22.1 and 23.0) the
+globe's habit is 0.6 thousand dearer, because of the body takes it holds.
+
+**The globe's body takes at 20 days** (callgrind marks of the 20-day rows above, two years, `bench48`, one thread; calls
+of `take_body` by the caller): globe36 1,921 in decisions and 1,831 in habits, 3,752 in all, against 3,845 in decisions
+without G2; island22 495 and 457, 952, against 788. So the habit keeps about as many body takes as the decisions it
+replaces (the globe's loss of 93 body takes in two years is under 3%). PR-A2's own counters near G2 were not measured.
+
 ## AIR2: the air's loops on the domain runner (not kept)
 
 **Built** (branch `x10/air2-not-kept`, level 2). The generic part of E1c's runner moves to `par::longest_first` (longest

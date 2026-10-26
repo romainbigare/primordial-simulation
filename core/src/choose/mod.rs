@@ -88,7 +88,7 @@ pub fn act(w: &World, d: &mut Domain, b: &mut Body, lived: &Lived, t: &mut ActTm
         return;
     }
     // The intervals of its gene since its last decision (one at its first), over which the decision's rates run.
-    let paces = b.habit.as_ref().map_or(1.0, |h| (w.day() - h.day) as f64 / b.k.interval as f64);
+    let since = b.habit.as_ref().map_or(1.0, |h| (w.day() - h.day) as f64 / b.k.interval as f64);
     // Mass and heat capacity are as `body::live` just left them.
     let temp = b.temp(&w.chem);
     // A brain perceives sizes per member.
@@ -102,7 +102,7 @@ pub fn act(w: &World, d: &mut Domain, b: &mut Body, lived: &Lived, t: &mut ActTm
     let mut c = perceive(w, d, b, nseen, &mut rng);
     inputs(w, b, lived, temp, &c, &mut t.input);
     brain::think(&lin.base, &b.rows, s, &t.input, &mut t.thought);
-    learn::learn(w, b, s, (wb, paces), &t.thought.h);
+    learn::learn(w, b, s, (wb, since), &t.thought.h);
     walk(w, b.cell as usize, sight, t);
     options(w, b, s, (pm, b.volume(&w.chem, temp) / b.n()), &mut c, t);
     pick(d, &mut c, &mut rng);
@@ -110,7 +110,7 @@ pub fn act(w: &World, d: &mut Domain, b: &mut Body, lived: &Lived, t: &mut ActTm
     (b.wb, b.habit) = (wb, Some(habit(w, &c)));
     let k = Kit { s, t, z, form, wb: &now };
     if b.n() > 1.0 {
-        spread::spread(w, d, b, &c, &k, paces, &mut rng);
+        spread::spread(w, d, b, &c, &k, since, &mut rng);
     } else {
         b.trace = trace(w, b, &c, &k, c.a, 0.0);
         act_as(w, d, b, &c, &k, (c.a, None), &mut rng);
@@ -119,11 +119,11 @@ pub fn act(w: &World, d: &mut Domain, b: &mut Body, lived: &Lived, t: &mut ActTm
 
 /// What a node's members repeat between its decisions (`choose::act`, `spread::repeat`): the day of its last decision,
 /// and its chances then to take from the ground and from each body it saw in its cell (by id).
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Habit {
-    pub day: u64,
-    pub take: f32,
-    pub prey: Vec<(u64, f32)>,
+    pub(super) day: u64,
+    pub(super) take: f32,
+    pub(super) prey: Vec<(u64, f32)>,
 }
 
 /// The habit of decision `c`, made today.

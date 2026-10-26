@@ -179,7 +179,7 @@ pub struct Physics {
     pub shape_noise: f32,
     /// Spread of the signal around its mean
     pub signal_noise: f32,
-    /// Weight of well-being one decision ahead against well-being now
+    /// Weight of well-being one interval of its gene ahead against well-being now
     pub discount: f32,
     /// Share of the way a watcher's rows move toward the watched one's
     pub blend: f32,

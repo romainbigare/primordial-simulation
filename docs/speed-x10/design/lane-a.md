@@ -149,6 +149,8 @@ One thread, on the bench48 saves X50 judges against (plant updates 35.0% of isla
 
 ### 3.1 The law
 
+(Amended by X72: 20 days; the habit repeats the body takes.)
+
 A population node with a brain runs **today's body update at its gene's pace** (`Body::interval` stays its gene's):
 `body::live` (upkeep, physics, keep-warm, checks, growth, children, shedding), maturing, split, `see`, schedule. Only
 the brain is floored:

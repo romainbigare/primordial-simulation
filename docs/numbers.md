@@ -124,7 +124,7 @@ The five costs of keeping tissue (`c_basal`, `c_cat`, `c_strength`, `c_learn`, `
 | `keep_min` | times | a body keeps this many times the safe minimum of each store it gives away (`choose::give`) or puts out to parts (`bond::verbs`) | none found: a margin over the minimum below which it dies | tuned, first guess |
 | `shape_noise` | none | spread of the shape of a part made, around its mean | none found | tuned, first guess |
 | `signal_noise` | none | spread of the signal, around its mean | none found | tuned, first guess |
-| `discount` | none | weight of well-being one decision ahead against well-being now | the usual 0.9 of learning machines | anchored |
+| `discount` | none | weight of well-being one interval of its gene ahead against well-being now | the usual 0.9 of learning machines | anchored |
 | `blend` | share | share of the way a watcher's rows move toward the watched one's | none found | tuned, first guess |
 | `learn_beta` | share | weight of the newest value in a learner's running mean squares: of a learned row's steps, and of the critic's errors | the usual 0.1 of a running average in learning machines | anchored |
 | `learn_most` | learning-rate units | the most a row moves in one step | none found | tuned, first guess |

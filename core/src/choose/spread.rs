@@ -8,12 +8,13 @@ use crate::life::Handle;
 use crate::store::{Class, Node, NodeId};
 use crate::nodes;
 
-/// Node `node` (taken out of its slot) spreads its members over the options (`members`, its movers over `paces`
-/// intervals of its gene), and each part acts as so many members together (`part_acts`; the moves last, so the others
-/// act where the node is). Its brain learns as from one member drawn among those who stayed (`trace`): from what that
-/// member did, and how much more its part's action raised their well-being than the mean of the members.
-pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, paces: f64, rng: &mut Rng) {
-    let x = members(node, c, paces, rng);
+/// Node `node` (taken out of its slot) spreads its members over the options (`members`, its movers over the `since`
+/// intervals of its gene since its last decision), and each part acts as so many members together (`part_acts`; the
+/// moves last, so the others act where the node is). Its brain learns as from one member drawn among those who stayed
+/// (`trace`): from what that member did, and how much more its part's action raised their well-being than the mean of
+/// the members.
+pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, since: f64, rng: &mut Rng) {
+    let x = members(node, c, since, rng);
     // The members of each option in the node after acting, and the change of their well-being.
     let (mut kept, mut gain) = ([0.0; OPTS], [0f32; OPTS]);
     for o in (0..FIXED).chain(TO_BODY..OPTS).chain(FIXED..TO_BODY).filter(|&o| x[o] > 0.0) {
@@ -55,15 +56,15 @@ fn share(count: f64, chance: f64, rng: &mut Rng) -> f64 {
 }
 
 /// The members of node `node` that do each option: count × chance (`share`). The members that move are one group, count
-/// × the sum of the chances to go in every direction times the `paces` intervals of its gene since its last decision
+/// × the sum of the chances to go in every direction times the `since` intervals of its gene since its last decision
 /// (at most all), and the group takes the one direction drawn by its chance over that sum, so its option holds the
 /// group and the other directions none. A group that would leave less than one member behind is the whole node, with
 /// the chance that keeps the mean of the movers at count × chance.
-fn members(node: &Body, c: &Choice, paces: f64, rng: &mut Rng) -> [f64; OPTS] {
+fn members(node: &Body, c: &Choice, since: f64, rng: &mut Rng) -> [f64; OPTS] {
     let moves = FIXED..TO_BODY;
     let mut x: [f64; OPTS] = std::array::from_fn(|o| if moves.contains(&o) { 0.0 } else { share(node.count, c.p[o] as f64, rng) });
     let sum: f64 = c.p[moves.clone()].iter().map(|&p| p as f64).sum();
-    let chance = (sum * paces).min(1.0);
+    let chance = (sum * since).min(1.0);
     // (If fewer than one member would stay, the node goes whole with the chance that makes the movers count × chance.)
     let group = match node.count * chance {
         g if g > 0.0 && node.count - g < 1.0 => if rng.f64() < chance { node.count } else { 0.0 },

@@ -78,8 +78,8 @@ pub fn resize(w: &World, d: &mut Domain, b: &mut Body) {
     b.rows = if b.rows.is_empty() { born.clone() } else { rerow(&b.rows) };
     let lineage = d.new_lineage(l);
     d.move_to(b, lineage, born);
-    // With no brain it has no decision to learn from, no memory and no signal.
+    // With no brain it has no decision to learn from, no habit, no memory and no signal.
     if w.life.brainless(b) {
-        (b.trace, b.mem, b.sig, b.wb, b.var, b.ms) = (Vec::new(), Vec::new(), Default::default(), 0.0, 0.0, Vec::new());
+        (b.trace, b.mem, b.sig, b.wb, b.var, b.ms, b.habit) = (Vec::new(), Vec::new(), Default::default(), 0.0, 0.0, Vec::new(), None);
     }
 }
