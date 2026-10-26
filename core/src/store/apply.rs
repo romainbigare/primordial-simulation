@@ -139,6 +139,13 @@ pub(super) fn add_carried(v: &mut f64, carry: Option<&mut f64>, d: f64) {
     }
 }
 
+/// Panics when number `now`, below zero, ends there by more than rounding (`ROUNDING`): relative to `node`, what its
+/// node holds of that unit, what it held before (`now - sum`) and the sizes of its changes, `sum` their sum and `size`
+/// the sum of their sizes. More is a law that overdrew a node (laws.md 0, "No overdraw"); `at` names the number.
+pub(super) fn overdraw_check(now: f64, node: f64, [sum, size]: [f64; 2], at: impl std::fmt::Debug) {
+    assert!(-now <= ROUNDING * (node + (now - sum).abs() + size), "a law overdrew a node: number {at:?} ends at {now}");
+}
+
 /// What rounding left of number `v` below zero is set to zero and counted in `rounded` (mol or J).
 #[inline(always)]
 pub(super) fn zero_rounding(v: &mut f64, rounded: &mut f64) {
@@ -215,14 +222,13 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
         for (s, [sum, size]) in low.iter().zip(sums) {
             let (v, len) = (&books[s.arr], cx.len[s.arr / 2]);
             let node: f64 = v[s.at % len..].iter().step_by(len).map(|x| x.abs()).sum();
-            let now = v[s.at];
-            assert!(-now <= ROUNDING * (node + (now - sum).abs() + size), "a law overdrew a node: number {s:?} ends at {now}");
+            overdraw_check(v[s.at], node, [sum, size], s);
         }
     }
     for s in low {
         zero_rounding(&mut books[s.arr][s.at], &mut counts.rounded[s.arr % 2]);
     }
     for (c, far) in [(Class::Boundary, &far_heat[..]), (Class::Potential, &far_lift[..])] {
-        store.heat[c as usize].iter_mut().zip(far).for_each(|(v, d)| *v += d);
+        far.iter().enumerate().for_each(|(at, &d)| store.add_far_heat(c, at, d));
     }
 }

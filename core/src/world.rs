@@ -42,9 +42,13 @@ impl Counters {
         debug_assert!(traffic.is_empty(), "a domain counted per cell");
         (self.updates, self.splits, self.decisions, self.greedy) = (self.updates + updates, self.splits + splits, self.decisions + decisions, self.greedy + greedy);
         (self.body_batches, self.busiest_share, self.clamped_heat) = (self.body_batches + body_batches, self.busiest_share + busiest_share, self.clamped_heat + clamped_heat);
-        (self.rounded[0], self.rounded[1]) = (self.rounded[0] + rounded[0], self.rounded[1] + rounded[1]);
+        self.add_rounded(rounded);
         let p = &mut self.parts;
         (p.afloat, p.formed, p.to_parts, p.from_parts) = (p.afloat + parts.afloat, p.formed + parts.formed, p.to_parts + parts.to_parts, p.from_parts + parts.from_parts);
+    }
+    /// What a booking set from just below zero to zero is added (`Counters::rounded`): mol, and J.
+    pub(crate) fn add_rounded(&mut self, [mol, heat]: [f64; 2]) {
+        (self.rounded[0], self.rounded[1]) = (self.rounded[0] + mol, self.rounded[1] + heat);
     }
 }
 

@@ -192,7 +192,7 @@ fn seen_air(cx: &Ctx, i: usize, out: &mut [f64]) {
 /// round's move and the stored air moves at each keep, so a row may drift up to about (rounds - 1) x `CALM_K` from the
 /// air it was made at. The numbers the Newton step does not read (the heat to space `row[2]`, the end temperature
 /// `row[4]`, the heat given to bodies `row[7]` and the end reflectance `row[8]`) stay at the made-at air: an error of
-/// about 4 sigma T^3 per 0.01 K of drift, a few hundredths of a W/m^2, and the books stay exact.
+/// about 4 sigma T^3 times the drift, a few hundredths of a W/m^2 per 0.01 K, and the books stay exact.
 fn keep(row: &mut [f64], seen: &[f64], over: f64) -> bool {
     let (at, nx) = (row.len() - seen.len(), seen.len() - 1);
     let d_tl = seen[0] - row[at];

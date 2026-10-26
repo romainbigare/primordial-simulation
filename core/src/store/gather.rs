@@ -31,8 +31,8 @@ pub struct Moves {
     who: Option<(Node, usize)>,
     /// The domain open and its air node, and the count of substances. While a domain is open the store does not change
     /// (only the booking writes it then, `World::book_moves_beside`, and closes it), so a node taken into the view early
-    /// holds what it would later (checked in debug builds, `apply`)
-    pub(super) open: Option<(usize, usize)>,
+    /// holds what it would later (checked in debug builds by `apply` and the air's booking, `flow::air`)
+    pub(crate) open: Option<(usize, usize)>,
     ns: usize,
     /// The view of the domain open: by class, the amounts of its nodes (`[2 * class][x * ns + k]`, mol) and their heat
     /// (`[2 * class + 1][x]`, J), `x` a cell's slot in its domain (`Life::cell_slot`; the air node: 0); then at `SEEN`
@@ -337,7 +337,7 @@ impl World {
             both
         };
         let World { life, counts, store, .. } = self;
-        (counts.rounded[0], counts.rounded[1]) = (counts.rounded[0] + rounded[0], counts.rounded[1] + rounded[1]);
+        counts.add_rounded(rounded);
         for (k, mut m) in views {
             let (lift, short) = m.close();
             store.add_far_heat(Class::Potential, 0, lift);

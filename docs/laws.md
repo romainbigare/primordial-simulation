@@ -102,7 +102,7 @@ than `wake_share`, then its law brings it up to date over the whole time since.
 **Checks before a run**: `Config::validate`, `Chemistry::validate` (every reaction keeps its elements and mass).
 
 **The books.** Every move takes from one node exactly what it gives another, with its heat; `store::apply` and the
-bookings of the bodies' moves, of the air's step and of Change's rows (`store::book_by_array`, which adds as `apply` adds) are the store's only writers. A move out of the bed, which holds far more than its loose ground, takes only what the bed can
+bookings of the bodies' moves, of the air's step and of Change's rows (`store::book_by_array`, which adds as `apply` adds) are the store's only writers; the heat of the boundary nodes and of the potential, a whole history's sum, gets each booking's changes summed apart and added once (`Store::add_far_heat`). A move out of the bed, which holds far more than its loose ground, takes only what the bed can
 lose exactly (`Move::loosen`), so no amount below the bed's rounding reaches the ground for free. A ground node under
 deep standing liquid holds far more of it, and an air node far more of the main gases, than a body moves: what rounding takes from their
 amounts is kept apart and counted in the books (`Store::carry`, Neumaier 1974). Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`);

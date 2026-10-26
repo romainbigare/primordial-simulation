@@ -70,10 +70,14 @@ impl<'a> LinkFlux<'a> {
             return Vec::new();
         }
         let (links, mut q) = (self.a.len(), self.heat.to_vec());
-        for (x, &k) in self.ks.iter().enumerate() {
-            let more = held_more(chem, self.class[0], self.class[1], k as usize);
-            q.iter_mut().zip(&self.mol[x * links..(x + 1) * links]).for_each(|(q, m)| *q -= m * more);
-        }
+        let more = |k: u16| held_more(chem, self.class[0], self.class[1], k as usize);
+        self.ks.iter().enumerate().for_each(|(x, &k)| less_held_more(&mut q, &self.mol[x * links..(x + 1) * links], more(k)));
         q
     }
+}
+
+/// The heat `q` J that reaches the far end of each link loses what its `mol` of one substance hold more there, `more`
+/// J/mol (`held_more`). Called substance by substance, it gives what the far ends receive.
+pub(crate) fn less_held_more(q: &mut [f64], mol: &[f64], more: f64) {
+    q.iter_mut().zip(mol).for_each(|(q, m)| *q -= m * more);
 }

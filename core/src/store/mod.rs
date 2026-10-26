@@ -20,13 +20,15 @@ pub use batch::Batch;
 pub(crate) use book::{book_by_array, Booker};
 pub use gather::Moves;
 pub use moves::{held, held_more, LinkFlux, Move, Transform};
+pub(crate) use moves::less_held_more;
 pub use nodes::{Boundary, Class, Node, NodeId, BOUNDARIES};
 
 use crate::World;
 use serde::{Deserialize, Serialize};
 
 /// What the fixed nodes hold, by class (`Class::Ground` to `Class::Potential`): amounts `[k * len + index]`, mol, and
-/// heat, J (the bed holds no heat, the potential no amounts). Only `apply` and `book_by_array` write them.
+/// heat, J (the bed holds no heat, the potential no amounts). Only `apply` and `book_by_array` write them, and
+/// `Store::add_far_heat` adds the heat of the boundary nodes and the potential.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Store {
     amounts: Vec<Vec<f64>>,
@@ -49,9 +51,11 @@ impl Store {
         let heat = vec![e_ground, e_air, vec![0.0; n], Vec::new(), vec![0.0; n], vec![0.0; BOUNDARIES], vec![0.0]];
         Store { amounts, heat, carry }
     }
-    /// Heat `d` J joins the sum of boundary node or potential `at` of `class`, which holds a whole history's sum: the law
-    /// adds what a call moves once, summed apart (as `apply` does), so small changes do not round away against it.
+    /// Heat `d` J joins the sum of boundary node or potential `at` of `class`, which holds a whole history's sum: a
+    /// booking (`apply`, `book_by_array`'s callers) adds what it moves there once, summed apart, so small changes do not
+    /// round away against it. Panics for another class.
     pub(crate) fn add_far_heat(&mut self, class: Class, at: usize, d: f64) {
+        assert!(matches!(class, Class::Boundary | Class::Potential), "far heat only of a boundary node or the potential");
         self.heat[class as usize][at] += d;
     }
     /// The amounts of the nodes of `class`, `[k * len + index]`, mol (none for a class whose nodes hold none here).

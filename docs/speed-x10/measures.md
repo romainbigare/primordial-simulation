@@ -2067,3 +2067,20 @@ user in the code, only the store test; `Batch::clear` and `Batch::is_empty` and 
 check that a node's reactions keep the elements stays as a `debug_assert` in `Step::react` (it ran on every transform
 in release before). Deleting `Transform` and the `apply` argument touches `flow/` and `survey/` (every `apply` call
 passes `&[]`): left for E4, which rewrites `apply`.
+
+## AIR3's review fixes
+
+Level 1: golden unchanged with threads and with one thread; the tests also pass with debug assertions on (the new
+checks of `book_by_array` and of the air's `book` run there). The check that the air's book gets no dearer: one year of
+globe36 on one thread under callgrind, base `64592df`, from a save made with the base at snapshot version 49 (the
+`bench48` saves are version 48; G2 made 49). Both runs end on the same hash, `df8dfb6fdabbf6f3`.
+
+| | base | fixes | change |
+|---|---|---|---|
+| the run | 6,888.8 million | 6,883.9 million | -0.07% |
+| `air::step`, inclusive (the fixes inline `book` into it) | 1,177.4 million | 1,174.2 million | -0.28% |
+
+With `#[inline(never)]` left on `book` (a probe build), `book` is 116.8 million against 120.7 (-3.2%). A first build
+was dearer (+4.4% in `book`): `Booker::add` was no longer inlined once `Booker::column` called it, and the shared
+lifted-heat helper went link by link; `Booker::add` is now `#[inline(always)]` and the helper goes column by column, as
+before. `CELLS_PER_ITEM` (256) is not measured.
