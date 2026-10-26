@@ -2696,3 +2696,11 @@ of 12 months calm" by the estimate is met on neither bench. The air keeps its 10
 for calm months: a step that makes the state again between its stages (`trb`) costs two bookings a month, so a month
 saves only about a third of three steps; and a calm test that reads the season (the curvature of the sun and the
 temperatures over months), not the step-to-step rates.
+
+## The slow suite at the end of phase 1
+
+`cargo test --release --workspace --no-fail-fast -- --ignored` on `speed/x10` at `9673a5f` (after G15, before G5's
+measure and G12). Every slow test passes but the two known failures: the key numbers fail only on S50 (0.562; seeds
+0.568, 0.557, 0.562) and the sleep test only on `air_3` (S84: off by 0.6e-6 to 1.3e-6 against a noise of 0.5e-6, the
+other substances within their noise). The century keeps its books; the nodes check, the pace tests, the batch test
+(on 3 seeds), the long-step and globe climate tests, the learning scene and the selection tests pass.
