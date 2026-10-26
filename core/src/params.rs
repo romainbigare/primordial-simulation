@@ -426,7 +426,7 @@ impl Default for Config {
             months_per_year: 12,
             phys_days: 10,
             air_hours: 240,
-            flow_days: 30,
+            flow_days: 60,
             crowd: 4,
             wake_share: 0.05,
             sleep_days: 90,

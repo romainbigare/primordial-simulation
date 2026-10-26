@@ -2546,3 +2546,62 @@ about 2.5% of the year on 4 threads (0.9% of the work), and the 4-thread medians
 3 of 5 seeds and gains under 3% on island22 and region24 too. So `phys_days` stays 10 and Change with it (the kill
 line: back to 10); the branch `x10/g5-not-kept` holds the split (`change_days`) for G6 or a later step to try again
 when the survey's monthly part is cheaper.
+
+## G12: the liquid every 60 days (kill line met)
+
+Level 3 (a small law change). `flow_days` 30 to 60 (X19); R3 had fixed the clock, so the liquid now runs every 60 days
+(6 steps a year, not 12). No field changes, so the snapshot stays 49 and an old save keeps its own `flow_days`. Core
+10,297 code lines (+1 -1).
+
+**How.** Base: the `ew` of `speed/x10` at `09f7be8` on the G4 saves (`flow_days` 30). G12: the `ew` of `x10/g12` on the
+same saves turned to `flow_days` 60 (X50: a throw-away tool test, not kept; the liquid's clock counts from the world's
+start, which is a whole number of 60 days on all three saves).
+
+**One thread, instructions of one year** (callgrind, `RAYON_NUM_THREADS=1`, millions; `flow::liquid` inclusive):
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| `flow::liquid`: base | 261.7 | 395.4 | 419.7 |
+| `flow::liquid`: G12 | 131.5 (x0.503) | 196.8 (x0.498) | 211.3 (x0.504) |
+| the year: base | 6,675.9 | 6,461.6 | 14,434.9 |
+| the year: G12 | 6,543.5 (-2.0%) | 6,172.2 (-4.5%) | 14,226.9 (-1.4%) |
+
+A liquid step costs the same at 60 days as at 30 (its work is per cell, not per litre), so half the steps cost half. The
+liquid is 3.9%, 6.1% and 2.9% of the year; the gain of the year is that share halved, with the world's own drift in the
+globe's figure (the worlds differ inside the year: a law step counts above 2%, X50). `flow::state` is the same.
+
+**Four threads, wall time** (ms a year, `ms_flow` the Flow stage and the year, the mean of years 2 and 3 of a 3-year run;
+10 interleaved sets under `flock $X/timing.lock`; the machine was busy: load average 3.4 to 4.7 with other builds; median
+(minimum), then the ratio of the medians and the median of the per-set ratios with its quartiles):
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| Flow stage: base | 100.8 (88.7) | 143.6 (128.1) | 192.1 (159.0) |
+| Flow stage: G12 | 82.6 (78.0) | 117.2 (100.6) | 136.3 (129.9) |
+| G12 over base | x0.819; per set 0.809 (0.713 to 0.915) | x0.816; per set 0.826 (0.710 to 0.929) | x0.710; per set 0.725 (0.685 to 0.838) |
+| the year: G12 over base | x0.869; per set 0.931 | x0.956; per set 0.928 | x0.781; per set 0.857 |
+
+The liquid alone is not timed on 4 threads (the series holds the Flow stage). Its instructions halve, and the stage falls
+by 18%, 18% and 29%, which is the liquid's share of the stage (AIR0: 33 to 55 ms of 148 to 225) at a cost near
+halved. The done-when (the liquid -35%) is met by the instructions (-50%).
+
+**Checks.**
+
+| Check | Result |
+|---|---|
+| Golden | re-pinned (`0x03cc0511e7c64112`, `0xda6b6afd8a746cb5`, `0xecc8894e5b74d038`), the same with and without threads |
+| `cargo test --release --workspace`, with debug assertions too, clippy, the wasm build, the size test | pass, no warning (core 10,297 code lines) |
+| The key numbers (once, against the references after AIR4.0) | all in range but S50 (0.557, seeds 0.563, 0.555, 0.555: the known failure; G4 0.563): land 292.160 K, rain 0.001819 mol/(m² s) (G4 0.001813), heat-absorbing gas 412.49 ppm, river cells 698.1 (G4 695.2; reference 712.4), land worn 0.1339 mm/yr (G4 0.1467; reference 0.141, range x/2), light-eaters 10.243, eaters 5.176 (seeds 5.149, 5.246, 5.133), life of light-eaters 1.410 yr (seeds 1.427, 1.337, 1.465), life of eaters 13.50 yr |
+| The globe's climate test | passes: surface 290.13 K, vapour 0.0069, rain on land 1.80 m/yr, land 286.09 K, drift 0.005 K a year, ice at most 0.103 |
+| The long-step test (air 6 hours, `phys_days` 2, batch 2 against the defaults) | passes: land +0.103 K (seeds +0.249, -0.008, +0.069), summer -0.007 K, winter -0.006 K, limit 0.3 K; rain +1.2e-5 against 3.1e-4; rivers +2.3 against 19 (G4's review: +0.117 K) |
+| Tests that changed | the clock test expects the liquid in a month only when its period starts there (`small_world` has run one month, so the first month of the test has none) |
+
+**The liquid's own step in the long-step test.** That test leaves `flow_days` at the default in both runs, so it does not
+test the liquid's step. Run with the short run's liquid at 2 days (all else as above), the land is off by +0.318 K
+(seeds +0.500, +0.171, +0.283; limit 0.3: out by 6%), summer +0.202, winter +0.155; with it at 30 days +0.229 K. So the
+step of the liquid alone moves the land by about 0.2 K from 2 to 60 days, 0.13 K from 30 to 60, and the rain (+2.1e-5) and
+the rivers (-0.07) stay inside their limits. The test is not changed for this: the key-number test is the kill line, and
+it holds. The architect decides whether the long-step test should compare the liquid's step too.
+
+**Verdict.** The kill line (a key number out) is not met, so `flow_days` stays 60. The liquid costs half in instructions
+(done-when -35% met), the Flow stage on 4 threads x0.82, x0.82 and x0.71 on a busy machine.
