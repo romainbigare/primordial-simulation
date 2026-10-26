@@ -1925,3 +1925,52 @@ days)**, life of light-eaters 1.241 yr, life of eaters 13.62 yr. **The nodes che
 
 Verdict at 20 days: the kill lines pass, the benches' eaters stay within the noise, the nodes check and the key
 numbers pass (S50 known); the young world's eaters fall -0.17 decades (the range's low end is 4.854).
+
+## AIR2: the air's loops on the domain runner (not kept)
+
+**Built** (branch `x10/air2-not-kept`, level 2). The generic part of E1c's runner moves to `par::longest_first` (longest
+first, a scratch per thread); `survey::run` calls it for the bodies, bit for bit. The air's round runs the cells of one
+air node in one task: each task makes its cells' rows (in the order of `Level::children`) and adds them into that
+node's part (`newton::Part`: the air nodes its cells see, and the slopes of each pair of nodes one cell sees both of);
+the parts are added in the order of the air nodes (`Gathered::of`), so the world is the same on any number of threads.
+The old `gather` is gone. Three small pieces go with it, each bit for bit: the sunlight of a cell's latitude is one of
+its fixed numbers (made once a step in cell order; the tasks' latitude cache went wrong in tile order), the saturation
+tables grow at their end instead of being made again (`Sat::fit`: island22 about 2 ms a year less on the main
+thread), and the liquid's `slopes` run on the pool (`par::map_n`). Core 10,173 to 10,255 code lines (+158 -76).
+
+**Tried and dropped inside the step:** the air each cell sees (`air::seen`) and the rows of `dissolve`, per air node in
+one more pool call a step (a link flux per air node). The phase took 11.4 ms a year on 4 threads and 10.7 on one
+(island22), against 7.9 ms for the two loops on one core before: no speed-up, and the per-node buffers cost 35% on one
+thread. A pool call with under about 0.3 ms of work does not pay here (as `chain/phases.md` found for the bodies).
+
+**Checks.** Golden re-pinned (the sums of the round change order): the same new fingerprints with and without threads
+and with `RAYON_NUM_THREADS=1`. `cargo test --release --workspace`, clippy and the wasm build pass. 5 years from each
+`bench48` save, base `457965b` against AIR2, largest yearly difference: island22 ground 0.031 K, air 0.031 K, land
+0.022 K (summer 0.10, winter 0.06), rain 0.16%, rain on land 0.06%, the heat-absorbing gas 0.6%; globe36 ground 0.032 K,
+air 0.042 K, land 0.067 K (summer 0.39, winter 0.26), rain 0.18%, rain on land 0.24%, the gas 0.6%. The land's
+differences change sign from year to year as life's choices part the worlds (the 5-year mean of the land: island22
++0.012 K, globe36 -0.009 K); the summer and winter months of the globe are over 0.05 K in single years.
+
+**Flow on 4 threads** (`ms_flow`, mean of the 3 years of a run from `bench48`, interleaved, under `flock timing.lock`,
+`nice -15`; the machine was shared all the time, the load is the 1-minute load average at each run's start):
+
+| Set | island22 base / AIR2, median (min) | x | globe36 base / AIR2, median (min) | x |
+|---|---|---|---|---|
+| plain builds, 12 runs each, load 3.4 | 123.2 (105.0) / 116.1 (97.5) | 1.06 (1.08) | 157.4 (135.4) / 161.8 (137.0) | 0.97 (0.99) |
+| plain builds, 12 runs each, load 11 | 119.9 (98.4) / 124.6 (104.9) | 0.96 (0.94) | 163.2 (126.9) / 172.7 (150.8) | 0.95 (0.84) |
+| builds with timers, 30 runs each, load 6 | 113.9 (95.1) / 111.0 (93.2) | 1.03 (1.02) | 161.8 (122.4) / 159.3 (119.9) | 1.02 (1.02) |
+
+From the timers (30 runs, minima, ms a year): the round's rows and their sums were `pass` 20.4 + `gather` 5.9 on the
+island and 27.4 + 7.0 on the globe; with AIR2 21.9 + 1.3 (adding the parts) and 28.8 + 2.3. So about 3 ms a year leave
+the main thread; the rest of Flow on one core is untouched: `book` 11 to 12, the liquid 24 to 34 (its downhill pass
+10 to 15), the band solve 4 to 9, `dissolve` 6 to 9, `Draws::settle` 2 to 4, Flow's state 5 to 6.
+
+**One thread, instructions of one year** (callgrind, plain builds; `flow::air` + `flow::liquid` + `flow::state`): island22
+1,215.6 M to 1,225.1 M (+0.8%); globe36 1,716.2 M to 1,809.5 M (+5.4%; `flow::air` +7.6%, with the same rounds, 245 in 3
+years). The globe's rise is over the step's limit of about 3%.
+
+**Verdict: kill line.** Flow on 4 threads is x1.06 (island22) and x0.97 (globe36) on the quietest set, under x1.15 on
+both (done when x1.25). The air's per-cell work that the design counted on one core shrank with AIR1 and AIR3, and the
+loops left are short per call (0.1 to 0.3 ms a step): moved to the pool they gain less than a pool call costs. The
+three small pieces (the sunlight in the fixed numbers, `Sat::fit`, the liquid's `slopes` on the pool) are bit for bit
+and could be taken alone.
