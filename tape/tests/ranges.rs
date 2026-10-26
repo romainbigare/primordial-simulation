@@ -15,7 +15,8 @@
 //! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2. So is
 //! the pace of population nodes: the same world keeps its life's key numbers with every node at its own `INTERVAL`
 //! gene (`Config::node_days` 0), and with the setting x2 and /2. So are the batches of bodies: three worlds keep the
-//! mean of their life's key numbers with bodies in batches of 2 days (`Config::batch_days`).
+//! mean of their life's key numbers with bodies in batches of 2 days (`Config::batch_days`). Both are judged on the
+//! mean of seeds 1 to 3 against the noise of that mean.
 //!
 //! The eaters live: at 48 x 48 they still have members at year 100 in seeds 1, 2 and 3, after the booms and busts
 //! that year 30 hides; they have stopped growing by their last ten years, and none hold more than a few times the
@@ -222,9 +223,23 @@ fn seed_mean(runs: &[Vec<Vec<f64>>]) -> Vec<Vec<f64>> {
     (0..runs[0].len()).map(|y| (0..runs[0][y].len()).map(|q| runs.iter().map(|r| r[y][q]).sum::<f64>() / seeds).collect()).collect()
 }
 
+/// The seeds' mean of each year of the sleep test's world, for each of `settings` (`set` applies one to a `Config`),
+/// with one run for each setting and seed side by side: `columns` as `yearly` gives them. One seed's years can spread
+/// far less than the seeds' runs differ, so one seed's spread is no measure of the noise; the seeds' mean, with the
+/// spread of that mean, is. Seeds are `SEEDS`, as in the key numbers.
+fn seeds_mean_by_setting<S: Copy + Send>(columns: &[&str], settings: &[S], set: impl Fn(&mut Config, S) + Sync) -> Vec<Vec<Vec<f64>>> {
+    let set = &set;
+    std::thread::scope(|s| {
+        let runs: Vec<Vec<_>> = settings.iter().map(|&setting| SEEDS.iter().map(|&seed| s.spawn(move || yearly(seed, columns, |c| set(c, setting)))).collect()).collect();
+        runs.into_iter().map(|seeds| seed_mean(&seeds.into_iter().map(|r| r.join().expect("a run")).collect::<Vec<_>>())).collect()
+    })
+}
+
 /// For each of `columns`, the mean over the years of each run of `runs` after the first, against the first's: it must
 /// move by less than its noise, the spread of the first run's values over those years. Prints each; returns the
-/// columns and settings (named by `name`) that moved more.
+/// columns and settings (named by `name`) that moved more. The noise is the year-to-year range, trend included: for
+/// numbers that still grow in these years (plant members, kg and births) it is 66 to 84% of the value, so the test is
+/// loose on those three and tight on the others.
 fn off_by_noise<S: Copy>(columns: &[&str], runs: &[Vec<Vec<f64>>], settings: &[S], name: impl Fn(S) -> String) -> Vec<String> {
     let mut out = vec![];
     for (q, column) in columns.iter().enumerate() {
@@ -337,35 +352,28 @@ const LIFE: [&str; 5] = ["plant_members", "root_0_kg", "births", "root_0_life_re
 const SHORT_BATCH_DAYS: u32 = 2;
 
 /// Every population node at the pace of its own `INTERVAL` gene against the pace of nodes (`Config::node_days`), and
-/// that setting x2 and /2 (`docs/numbers.md`, speed settings): the mean of each of life's key numbers over the last
-/// years moves by less than its noise, the spread of its values over those years with every node at its own pace.
+/// that setting x2 and /2 (`docs/numbers.md`, speed settings; the stands' pace is this setting too), on seeds 1, 2 and 3
+/// as the key numbers: the mean over the seeds of each of life's key numbers over the last years moves by less than the
+/// noise of that mean, the spread over those years of the seeds' mean with every node at its own pace.
 #[test]
-#[ignore = "slow: four 8-year runs of a 32 x 32 world with life"]
+#[ignore = "slow: twelve 8-year runs of a 32 x 32 world with life"]
 fn the_pace_of_nodes_keeps_life() {
     let set = Config::default().node_days;
     let settings = [0, set, 2 * set, set / 2];
-    let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
-        let runs: Vec<_> = settings.iter().map(|&days| s.spawn(move || yearly(SEEDS[0], &LIFE, |c| c.node_days = days))).collect();
-        runs.into_iter().map(|r| r.join().expect("a run")).collect()
-    });
-    let out = off_by_noise(&LIFE, &runs, &settings, |days| format!("nodes every {days} days at most"));
+    let runs = seeds_mean_by_setting(&LIFE, &settings, |c, days| c.node_days = days);
+    let out = off_by_noise(&LIFE, &runs, &settings, |days| format!("nodes every {days} days at most, mean of seeds {SEEDS:?}"));
     assert!(out.is_empty(), "the pace of nodes changed life: {out:?}");
 }
 
 /// Bodies updated in batches of `SHORT_BATCH_DAYS` against in batches of `Config::batch_days` (`docs/numbers.md`, speed
 /// settings; the batch cannot be doubled, as it is the physics step), on seeds 1, 2 and 3 as the key numbers: the mean
 /// over the seeds of each of life's key numbers over the last years moves by less than the noise of that mean, the
-/// spread over those years of the seeds' mean with the short batches. (One seed's years can spread far less than the
-/// seeds' runs differ, so one seed's spread is no measure of the noise.)
+/// spread over those years of the seeds' mean with the short batches.
 #[test]
 #[ignore = "slow: six 8-year runs of a 32 x 32 world with life"]
 fn the_batches_of_bodies_keep_life() {
     let settings = [SHORT_BATCH_DAYS, Config::default().batch_days];
-    // Per setting, the seeds' mean of each year.
-    let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
-        let runs: Vec<Vec<_>> = settings.iter().map(|&days| SEEDS.iter().map(|&seed| s.spawn(move || yearly(seed, &LIFE, |c| c.batch_days = days))).collect()).collect();
-        runs.into_iter().map(|seeds| seed_mean(&seeds.into_iter().map(|r| r.join().expect("a run")).collect::<Vec<_>>())).collect()
-    });
+    let runs = seeds_mean_by_setting(&LIFE, &settings, |c, days| c.batch_days = days);
     let out = off_by_noise(&LIFE, &runs, &settings, |days| format!("batches of {days} days, mean of seeds {SEEDS:?}"));
     assert!(out.is_empty(), "the batches changed life: {out:?}");
 }
