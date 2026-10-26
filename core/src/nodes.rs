@@ -58,14 +58,14 @@ type Likeness = (Vec<f32>, Vec<f32>, (u32, bool));
 /// unlike).
 fn merge_closest(w: &World, d: &mut Domain, lay: &Layout, left: Vec<Handle>, max: usize) {
     let (m, lim) = (left.len(), w.cfg.phys.alike);
-    let units = likes(lay, d[left[0]].genes.len());
+    let units = likes(lay, lay.len);
     let steps = |d: &Domain, s: Handle| {
         let b = &d[s];
         (steps_by(lay, &units, &b.genes), spreads(&b.spread, b.genes.len()), (b.lineage, b.adult(&w.chem)))
     };
     let mut v: Vec<Likeness> = left.iter().map(|&s| steps(d, s)).collect();
     let dist = |p: &Likeness, q: &Likeness| {
-        let gap = |g: usize| (p.0[g] - q.0[g]).abs() > within_steps(lay, lim, p.1[g] + q.1[g], g);
+        let gap = |g: usize| (p.0[g] - q.0[g]).abs() > within_steps(lim, p.1[g] + q.1[g], units[g]);
         if p.2 != q.2 || (0..p.0.len()).any(gap) { f32::INFINITY } else { p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum() }
     };
     // The key of each pair `p`, `q` lies at `at(p, q)`, the smaller first.

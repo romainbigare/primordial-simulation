@@ -25,7 +25,8 @@ pub(crate) const CREEP_YEARS: u64 = 1;
 
 /// Each part of the law (`state`, `air`, `liquid`, `creep`, `refresh`) is a process of the clock (`schedule`). This one:
 /// the state of ground and air nodes from the world now, which the other laws read until the next physics step (in full
-/// at each liquid step, so a world resumed at a month's start goes on as an unbroken one).
+/// at each liquid step, so a world resumed at a month's start goes on as an unbroken one; the survey builds it in full
+/// at a month's start, `built_now`).
 pub fn state(w: &mut World, full: bool) {
     with(w, |w, s| {
         ground_now(w, s, full);
@@ -35,10 +36,18 @@ pub fn state(w: &mut World, full: bool) {
 }
 
 /// The state of ground nodes (`ground_state`): only what changed since it was last rebuilt, or every node with `full` or
-/// when a refresh changed what is present.
+/// when a refresh changed what is present. A full build notes the time it was made (`built_now`).
 fn ground_now(w: &World, s: &mut Scratch, full: bool) {
     let full = full || std::mem::take(&mut s.stale) || s.lay.len() != w.mesh.cells().n();
     ground_state(w, s, full);
+    if full {
+        s.full_at = Some(w.time);
+    }
+}
+
+/// Was the state of ground nodes built in full at the world's time now? Then the `state` process has nothing to add.
+pub(crate) fn built_now(w: &World) -> bool {
+    w.scratch.full_at == Some(w.time)
 }
 
 /// The air's step for `dt` seconds (`air::step`), booked whole, from the state of ground and air nodes, after the

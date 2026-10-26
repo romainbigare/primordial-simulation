@@ -33,7 +33,7 @@ pub fn survey(w: &mut World, reversed: bool) {
     // (Movers who pushed through cells where no body is break nothing.)
     w.life.domains.iter_mut().filter(|d| d.count() == 0).for_each(|d| d.pushed.fill(0.0));
     let mut sums = std::mem::take(&mut w.life.sums);
-    let work: Vec<_> = sums.iter_mut().enumerate().filter_map(|(k, s)| Some((k, w.life.domains[k].count(), s)).filter(|x| x.1 > 0 || x.2.live)).collect();
+    let work: Vec<_> = sums.iter_mut().enumerate().map(|(k, s)| (k, w.life.domains[k].count(), s)).filter(|x| x.1 > 0 || x.2.live).collect();
     let ran: Vec<usize> = work.iter().map(|x| x.0).collect();
     run(w, work, reversed, |_| Vec::new(), |w, d, s, l| {
         (0..d.cells.len()).for_each(|k| worn(w, d, &lay, k, monthly));
@@ -58,7 +58,7 @@ pub fn survey(w: &mut World, reversed: bool) {
 }
 
 /// Whether it is a month's start: the survey merges nodes, adds up the traffic and rebuilds Flow's state in full.
-pub(crate) fn monthly(w: &World) -> bool {
+fn monthly(w: &World) -> bool {
     w.time.is_multiple_of(w.cfg.calendar().month)
 }
 

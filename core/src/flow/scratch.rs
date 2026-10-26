@@ -131,6 +131,8 @@ pub struct Scratch {
     pub(super) state: State,
     /// The substances present changed: rebuild the state of ground and air at the next step.
     pub(super) stale: bool,
+    /// The time of the last full build of the state of ground nodes, s.
+    pub(super) full_at: Option<u64>,
     /// The numbers of each substance.
     pub(super) sp: Vec<Sp>,
     /// Heat capacity of the skin of each ground node's bed, J/K (at every step, `land::ground_state`).

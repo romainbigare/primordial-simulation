@@ -166,8 +166,13 @@ fn like(lay: &Layout, g: usize) -> f32 {
 }
 
 /// Gene `g` of value `x` in steps of `like` (a gene that is off counts as 0).
+fn in_steps(lay: &Layout, g: usize, x: f32, like: f32) -> f32 {
+    (if g < lay.cat { x } else { x.max(0.0) }) / like
+}
+
+/// Gene `g` of value `x` in steps of its own `like`.
 fn step(lay: &Layout, g: usize, x: f32) -> f32 {
-    (if g < lay.cat { x } else { x.max(0.0) }) / like(lay, g)
+    in_steps(lay, g, x, like(lay, g))
 }
 
 /// Genes in steps of `like`.
@@ -177,7 +182,7 @@ pub fn steps(lay: &Layout, a: &[f32]) -> Vec<f32> {
 
 /// `steps` with the step of each gene for likeness (`likes`) made once for many bodies.
 pub(crate) fn steps_by(lay: &Layout, likes: &[f32], a: &[f32]) -> Vec<f32> {
-    a.iter().zip(likes).enumerate().map(|(g, (&x, &like))| (if g < lay.cat { x } else { x.max(0.0) }) / like).collect()
+    a.iter().zip(likes).enumerate().map(|(g, (&x, &like))| in_steps(lay, g, x, like)).collect()
 }
 
 /// The step for likeness of each of the first `n` genes (`like`).
@@ -192,7 +197,7 @@ pub(crate) fn spread_at(spread: &[f32], g: usize) -> f32 {
 
 /// The variance of each of the first `n` genes in a node's spread (`spread_at`).
 pub(crate) fn spreads(spread: &[f32], n: usize) -> Vec<f32> {
-    spread.iter().map(|&v| v.max(0.0)).chain(std::iter::repeat(0.0)).take(n).collect()
+    (0..n).map(|g| spread_at(spread, g)).collect()
 }
 
 /// The variance `v` a node keeps along gene `g` of mean `x`: none for a gene that is off, where differences do nothing.
@@ -224,16 +229,16 @@ pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
 /// merge: small, so a node never mixes genes that individuals of two kinds would not.
 const WITHIN: f32 = 0.5;
 
-/// The most steps gene `g` of two bodies may be apart for one to belong to the other: `limit` plus `WITHIN` standard
-/// deviations of the sum of their variances `var`.
-pub(crate) fn within_steps(lay: &Layout, limit: f32, var: f32, g: usize) -> f32 {
-    limit + WITHIN * var.sqrt() / like(lay, g)
+/// The most steps (of `like`, the gene's step for likeness) a gene of two bodies may be apart for one to belong to the
+/// other: `limit` plus `WITHIN` standard deviations of the sum of their variances `var`.
+pub(crate) fn within_steps(limit: f32, var: f32, like: f32) -> f32 {
+    limit + WITHIN * var.sqrt() / like
 }
 
 /// Do children of genes `genes` and spread `spread` belong to node `o` (`within_steps` in each gene alone, so kinds
 /// that differ in a few genes stay apart)?
 pub(crate) fn within(lay: &Layout, limit: f32, o: &Body, genes: &[f32], spread: &[f32]) -> bool {
-    let reach = |g: usize| within_steps(lay, limit, spread_at(&o.spread, g) + spread_at(spread, g), g);
+    let reach = |g: usize| within_steps(limit, spread_at(&o.spread, g) + spread_at(spread, g), like(lay, g));
     distance(lay, &o.genes, genes, reach).is_some()
 }
 
