@@ -1,6 +1,6 @@
 //! Upkeep, and paying a cost by running the body's burnings at the rate Change gives them (laws.md 6.2).
 
-use super::exchange::{breath, conductance_to_ground, cover_of, film};
+use super::exchange::{breath, conductance, cover_of, film};
 use super::{Body, REPAIR, STRENGTH};
 use crate::chem::{Chemistry, Phase};
 use crate::ground::Melting;
@@ -35,7 +35,7 @@ pub(super) fn breathes(chem: &Chemistry, r: usize, t: f64) -> bool {
 
 /// A body about to pay over some days, valid until its stores or heat change: its mass, kg, its plateau state, the days,
 /// the share of its air node it exchanges gas with in them, and all that node holds, mol. Its activity (`Body::activity`)
-/// is read once for all the stages that pay.
+/// and the cover of other bodies over it (`cover_of`) are read once for all the stages that pay.
 pub struct Payer {
     pub mass: f64,
     pub th: Melting,
@@ -43,6 +43,9 @@ pub struct Payer {
     days: f64,
     share: f64,
     tot: f64,
+    cover: f64,
+    /// The rate constant of each of its burnings (`Consts::burn`) at its activity and temperature (`Body::rate_at`), 1/s
+    rates: Vec<f64>,
 }
 
 impl Payer {
@@ -53,7 +56,8 @@ impl Payer {
         let depth = bond::depth(w, d, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
         let tot = d.moves.a_seen_all(w, j);
         let share = (breath(chem, &w.cfg, b, &film(chem, &w.cfg, b, mass, cover), days, depth) / tot).min(1.0);
-        Payer { mass, th, dry, days, share, tot }
+        let rates = b.k.burn.iter().map(|&(r, _)| b.rate_at(chem, &w.cfg.phys, r, dry, th.t)).collect();
+        Payer { mass, th, dry, days, share, tot, cover, rates }
     }
 }
 
@@ -69,21 +73,21 @@ pub fn pay(w: &World, d: &mut Domain, b: &mut Body, cost: f64, days: f64) -> boo
 /// `pay` by the payer `p` (body `b` as it stands) with the heat released held over `dt` s; returns what was not paid
 /// (with `part` it pays what it can, else all or nothing).
 pub(crate) fn spend(w: &World, d: &mut Domain, b: &mut Body, cost: f64, dt: f64, part: bool, p: &Payer) -> f64 {
-    let (left, mass, th0) = (pay_at(w, d, b, cost, p, part), p.mass, &p.th);
+    let (left, th0) = (pay_at(w, d, b, cost, p, part), &p.th);
     // The heat released leaves through its surface over `dt`: the body keeps the share `hold`, the ground gets the rest.
     let (keep, i) = (b.heat_with(&w.chem, th0, &b.store), b.cell as usize);
     if b.e > keep {
-        let held = hold(w, d, b, mass, th0.t, dt);
+        let held = hold(w, d, b, p, dt);
         d.moves.give(w, Node::ground(i), 0, 0.0, (b.e - keep) * (1.0 - held));
         b.e = keep + (b.e - keep) * held;
     }
     left
 }
 
-/// The share of a heat released over `dt` s that a body of `mass` kg at `t` keeps: the mean over that time of a pulse
-/// that decays with its time constant, `mean_decay` of g dt / heat capacity.
-pub(super) fn hold(w: &World, d: &Domain, b: &Body, mass: f64, t: f64, dt: f64) -> f64 {
-    mean_decay(conductance_to_ground(w, d, b, mass, t) * dt / b.heat_cap(&w.chem).max(1e-9))
+/// The share of a heat released over `dt` s that body `b` as the payer `p` sees it (its mass, temperature and cover)
+/// keeps: the mean over that time of a pulse that decays with its time constant, `mean_decay` of g dt / heat capacity.
+pub(super) fn hold(w: &World, d: &Domain, b: &Body, p: &Payer, dt: f64) -> f64 {
+    mean_decay(conductance(w, d, b, (p.mass, p.cover), p.th.t) * dt / b.heat_cap(&w.chem).max(1e-9))
 }
 
 /// How far each burning (`Consts::burn`) runs to release up to `cost` J, and the energy released: each at most as far
@@ -108,7 +112,7 @@ pub fn plan(w: &World, d: &Domain, b: &Body, cost: f64, p: &Payer) -> (Vec<f64>,
             continue;
         }
         let act = crate::change::pace(rx, lim, |k| have[k], |k| if gas(k) { have[k] * tot / air(k) } else { have[k] });
-        let rate = b.rate_at(chem, &w.cfg.phys, r, p.dry, t) * act;
+        let rate = p.rates[q] * act;
         ext[q] = (lim * crate::change::frac(rate * days * DAY)).min((cost - got) / e);
         got += e * ext[q];
         for &(k, nu) in &rx.inputs {

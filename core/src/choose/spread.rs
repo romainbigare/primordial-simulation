@@ -124,7 +124,7 @@ fn part_acts(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, (o
         return (0.0, Some(false));
     }
     let part = nodes::part(d, node, f, f);
-    let s = d.place(w, part);
+    let s = d.place_part(w, part);
     let mut m = std::mem::take(&mut d[s]);
     let gain = acts(d, &mut m, Some(node.id));
     if !m.leaving {

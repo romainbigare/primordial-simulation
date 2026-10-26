@@ -146,16 +146,22 @@ impl Lot {
 pub(crate) fn add(w: &World, d: &mut Domain, t: Handle, c: Lot, (genes, spread): (&[f32], &[f32]), size: (f32, f32), (born, own, row_spread): (&[f32], &[f32], f32)) {
     let mut o = std::mem::take(&mut d[t]);
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.count / (o.count + c.count)) as f32);
-    let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
+    let mix = |p: f32, q: f32| p + a * (q - p);
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
-    let mean = mix(&o.genes, genes);
-    let v = |g| pool(spread_at(&o.spread, g), spread_at(spread, g), (genes[g] - o.genes[g]).powi(2), range(&lay, g).0);
-    o.spread = (0..o.genes.len()).map(|g| spread_kept(&lay, g, mean[g], v(g))).collect();
+    // The rows first: their spread's step reads the genes as they were.
     let was = d.born(w, &o);
     let gap = was.iter().zip(born).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / was.len().max(1) as f32;
     o.row_spread = pool(o.row_spread, row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
-    d.reborn(w, &mut o, mix(was, born));
-    o.genes = mean;
+    d.reborn(w, &mut o, was.iter().zip(born).map(|(&p, &q)| mix(p, q)).collect());
+    // Each gene's mean and the spread pooled around it, in place.
+    let mut pooled = std::mem::take(&mut o.spread);
+    pooled.resize(o.genes.len(), 0.0);
+    for (g, (x, v)) in o.genes.iter_mut().zip(&mut pooled).enumerate() {
+        let mean = mix(*x, genes[g]);
+        *v = spread_kept(&lay, g, mean, pool(v.max(0.0), spread_at(spread, g), (genes[g] - *x).powi(2), range(&lay, g).0));
+        *x = mean;
+    }
+    o.spread = pooled;
     o.prepare(&w.chem, &w.cfg);
     rejoin(w, d, &mut o, c, size, Some(own));
     d.see(w, &mut o);

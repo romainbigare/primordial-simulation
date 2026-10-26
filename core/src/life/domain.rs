@@ -163,6 +163,11 @@ impl Domain {
     /// worked out from what it holds now, so others see it before its first update.
     pub(crate) fn place(&mut self, w: &World, mut c: Body) -> Handle {
         c.prepare(&w.chem, &w.cfg);
+        self.place_part(w, c)
+    }
+    /// `place` for a part of a node with the node's genes (`nodes::part`), whose constants (`Body::k`) follow from them
+    /// already.
+    pub(crate) fn place_part(&mut self, w: &World, mut c: Body) -> Handle {
         self.see(w, &mut c);
         let due = w.due_in(c.interval(w));
         self.add(c, w.day(), due)

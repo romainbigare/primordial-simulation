@@ -106,9 +106,13 @@ pub(super) fn through(l: f64, ls: f64, e: f64, rd: f64, n: f64) -> f64 {
 
 /// The heat conductance of a body of `mass` kg at `t` to the ground (`surface`, with its cover and walls), W/K.
 pub fn conductance_to_ground(w: &World, d: &Domain, b: &Body, mass: f64, t: f64) -> f64 {
-    let i = b.cell as usize;
-    let tg = w.t_ground_last(i);
-    surface(&w.cfg, b, mass, &film(&w.chem, &w.cfg, b, mass, cover_of(w, d, b)), bond::enclosure(w, d, b), t, tg)
+    conductance(w, d, b, (mass, cover_of(w, d, b)), t)
+}
+
+/// `conductance_to_ground` with the cover of other bodies over it known (`cover_of`).
+pub(super) fn conductance(w: &World, d: &Domain, b: &Body, (mass, cover): (f64, f64), t: f64) -> f64 {
+    let tg = w.t_ground_last(b.cell as usize);
+    surface(&w.cfg, b, mass, &film(&w.chem, &w.cfg, b, mass, cover), bond::enclosure(w, d, b), t, tg)
 }
 
 /// Heat conductance of radiation between a surface of `area` m² at `t` and the ground at `tg`, W/K: σ (T² + tg²)

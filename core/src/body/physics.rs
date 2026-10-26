@@ -198,7 +198,8 @@ fn evaporate(w: &World, d: &mut Domain, b: &mut Body, tmp: &LiveTmp, s: &Site, h
         if push <= 0.0 || t0 < b.melt(chem, k) {
             continue;
         }
-        let (ct, x) = (b.heat_cap(chem) + h.c_out, g * dt / (b.heat_cap(chem) + h.c_out));
+        let ct = b.heat_cap(chem) + h.c_out;
+        let x = g * dt / ct;
         let bx = mean_decay(x);
         let e1 = one_minus_exp(x) * ct * tg + (-x).exp() * b.e + bx * h.heat;
         let need = ((e1 - ct * b.gene(COOL_T)) / bx / chem.subs[k].latent_gas()).max(0.0);

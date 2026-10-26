@@ -3042,3 +3042,56 @@ near -30%, and 32 bits would add rounding to the end temperature for nothing mea
 | `series.csv`, 3 years from the `g12` saves, base `acf8f82` and G11, largest relative difference after year 1 / over the 3 years | island22: elements 2e-16; energy 7e-9; air temperature 6e-6 / 6e-5; land temperature 8e-6 / 6e-5 (summer 2e-4, winter 5e-5); the heat-absorbing gas 2e-5 / 4e-4; the trace gas 5e-4 / 2e-3; rain on land 3e-4 / 4e-4; evaporation on land 3e-4 / 3e-3; rivers the same / 1 cell; bodies 1e-3 / 7e-3. globe36: elements 4e-16; energy 6e-9; air temperature 1e-6 / 5e-5; land temperature 2e-6 / 8e-5 (summer 4e-4, winter 3e-4); the gas 6e-5 / 1e-3; the trace gas 6e-4 / 3e-3; rain on land 7e-5 / 2e-3; evaporation on land 7e-5 / 1e-2; ice share the same / 0.0014 (of 0.013 to 0.016); rivers the same / 2 cells; bodies 8e-3 / 2e-2 |
 
 The differences start at rounding in year 1 and grow with the years and life's choices, as in AIR3 and E1c.
+
+## PL1: a cheaper stand update (kept; done-when not met)
+
+**How.** One thread, callgrind, one year from the `$X/g12/bench` saves, base `a63cb20`. The stand updates are counted
+alone: a measuring build (not committed) sends the update of a node without a brain through a function of its own and
+callgrind collects only inside it (`--toggle-collect`). Every step is level 1: the golden test is unchanged with and
+without threads, with debug assertions and in a plain debug build, and one-year runs of the three benches end on their
+base fingerprints (island22 `e0ae139a051bf057`, globe36 `cd96247ef84a20c0`, region24 `5f045eec6fd68ae8`).
+
+**Where a stand update goes** (island22, base, thousand instructions an update, 15,986 updates): 93.7 in all; the
+body's day `to_growth` 54.2 (the reactor 12.6, growth 8.8, the death of a share of members 3.3, the rest is the
+physics' many small stages); its children (`copy::copy`) 12.0, of them `genes::vary` 7.1; the sample member 11.5 (its
+day 9.1 on one update in six); maturing 5.2; shedding 4.5; the soil and soaking again 2.1; what others see of it 1.8.
+The profile is flat: no function but the reactor and `vary` is over 5%, and no single piece is 15%.
+
+**The pieces** (stand updates only, million instructions):
+
+| Step | island22 | of the base |
+|---|---|---|
+| base `a63cb20` | 1,497.3 | |
+| PL1.1: the sets of a few substances as bits (solvents, built solids, light reactions; key liquids, liquids of the ground) | 1,400.3 | -6.5% |
+| PL1.2: one look-up of the view per node (`Moves::amounts`, `Moves::seen`) | 1,383.6 | -7.6% |
+| PL1.3: what goes to the ground, without copies (`give_all`, `thin`, `shed`) | 1,370.1 | -8.5% |
+| PL1.4: values worked out once (the payer's cover and rates, a part's constants, the heat capacity in evaporation, pooled genes in place) | **1,341.4** | **-10.4%** |
+
+**All three benches** (one thread, million instructions):
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| stand updates, base / PL1 | 1,497.3 / 1,341.4 (**-10.4%**) | 980.0 / 874.7 (**-10.7%**) | 3,354.1 / 3,002.9 (**-10.5%**) |
+| a stand update, thousand instructions | 93.7 / 83.9 | 98.6 / 88.0 | 95.8 / 85.8 |
+| the year (`schedule::run_for`), base / PL1 | 5,180.2 / 4,840.2 (**-6.6%**) | 4,836.4 / 4,546.0 (**-6.0%**) | 11,212.5 / 10,397.8 (**-7.3%**) |
+
+The helpers are shared, so animal updates and Change gain too: the year falls by more than the stands' share alone.
+
+**Verdict.** Kill line (under -3% of island22's year): passed, -6.6%. Done when (a stand update -15%): not met,
+-10.4%. What is left is spread thin; the pieces below were tried and not kept, as they gained nothing: the sample's gene
+drawn without a list (+0.2%), `vary` read along the spread (+1.3%), the Newton steps of `through` with one power a
+step (LLVM shares it already).
+
+**What would need more than level 1** (for later):
+- A part of a young node that matures joins its adult node at once, yet it is placed first (an id, its visible traits,
+  its ring entry) and merged: about 1% of a stand update after PL1.4. Joining without placing changes the ids of later births and
+  so their random streams (a level 3 change).
+- The sample member runs a second body's day on one update in six, about 11% of a stand update; it is the law of
+  selection inside nodes (`copy::select`).
+- The reactor is 14% of a stand update, nine in ten of its reactions bare (P0); only a law that runs them less often
+  cuts it (P1.2 and PR-C2: not kept).
+- The sums over the substances (`heat_cap_of`, `mass`, `fused_of`, about 6% of a stand update) are sequential over the
+  26 substances, each from its large `Substance`; four running sums over a dense array would cut most of it, but change
+  the order of the sums (level 2).
+- A litter's genes (`vary`, 7% of a stand update) draw a number for each of the 127 genes; fewer draws would change
+  every child (a law change).

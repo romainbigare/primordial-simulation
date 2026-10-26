@@ -195,7 +195,7 @@ fn keep_warm(w: &World, d: &mut Domain, b: &mut Body, span: f64, s: &Site) {
             break;
         }
         let p = Payer::at(w, d, b, span, m, b.thermal(&w.chem), (s.cover, b.activity(&w.chem, &w.cfg.phys)));
-        if spend(w, d, b, short / hold(w, d, b, m, p.th.t, s.dt), s.dt, true, &p) > 0.0 {
+        if spend(w, d, b, short / hold(w, d, b, &p, s.dt), s.dt, true, &p) > 0.0 {
             break;
         }
     }

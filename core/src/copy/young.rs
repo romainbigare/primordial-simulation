@@ -62,7 +62,7 @@ pub fn mature(w: &World, d: &mut Domain, b: &mut Body, before: f64) -> Grown {
     let mut c = part(d, b, members, held);
     b.set_size(&w.chem, stay.0, stay.1);
     c.set_size(&w.chem, slice.0, slice.1);
-    let s = d.place(w, c);
+    let s = d.place_part(w, c);
     match adult {
         Some(t) => merge(w, d, s, t),
         None => link(d, b, s),
