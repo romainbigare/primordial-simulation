@@ -7,7 +7,7 @@ use super::pay::breathes;
 use super::{Body, Layout, COOL_T, DENATURE};
 use crate::change::{send_gas, GasMove, Reactor};
 use crate::ground::{heat_above_floor, share, Melting};
-use crate::{chem::Phase, math::{mean_decay, one_minus_exp}, life::Domain, store::Node, World};
+use crate::{chem::Phase, math::{mean_decay, one_minus_exp, ones}, life::Domain, store::Node, World};
 use crate::units::{MAX_SUBSTANCES, P_REF};
 
 /// The heat of an update as its stages go.
@@ -165,11 +165,11 @@ fn soil(w: &World, d: &Domain, b: &Body, s: &Site, wk: f64) -> Soil {
     let (chem, i, tg) = (&w.chem, s.i, s.tg);
     let (ns, g) = (chem.ns(), |k: usize| d.moves.amount(w, Node::ground(i), k));
     let liquid = (0..ns).filter(|&k| chem.phase_in(k, tg, g) == Phase::Liquid).fold(0u64, |m, k| m | 1 << k);
-    let vol: f64 = (0..ns).filter(|&k| liquid >> k & 1 == 1).map(|k| g(k) * chem.molar_volume(k, Phase::Liquid)).sum();
+    let vol: f64 = ones(liquid).map(|k| g(k) * chem.molar_volume(k, Phase::Liquid)).sum();
     let standing = if s.stands && s.depth == 0.0 { 0.0 } else { vol / w.mesh.cells().area()[i] };
     let wet = standing / (standing + w.cfg.phys.wet_depth);
-    let wets = (0..ns).filter(|&k| liquid >> k & 1 == 1 && chem.subs[k].solubility > 0.0).fold(0u64, |m, k| m | 1 << k);
-    let in_ground: f64 = (0..ns).filter(|&k| wets >> k & 1 == 1).map(g).sum();
+    let wets = ones(liquid).filter(|&k| chem.subs[k].solubility > 0.0).fold(0u64, |m, k| m | 1 << k);
+    let in_ground: f64 = ones(wets).map(g).sum();
     Soil { wets, in_ground, rate: b.k.liq * wet * wk }
 }
 
@@ -256,7 +256,7 @@ fn heat_bound(pay: f64, (latent, brings): (f64, f64), held: f64, flows: bool) ->
 fn soak(w: &World, d: &mut Domain, b: &mut Body, s: &Site, gcap: f64, heat: &mut f64, soil: &Soil, lost: &[f64], fall: f64, mass2: f64) {
     let paces = b.paces(w);
     let (i, tg, days) = (s.i, s.tg, s.days);
-    for k in (0..w.chem.ns()).filter(|&k| soil.in_ground > 0.0 && soil.wets >> k & 1 == 1) {
+    for k in ones(soil.wets).filter(|_| soil.in_ground > 0.0) {
         let (chem, gk) = (&w.chem, d.moves.amount(w, Node::ground(i), k));
         let (x, room) = (gk / soil.in_ground, b.room(chem, paces, k, mass2));
         // At rate r per day over `days` with a loss e a day it takes gap f + e days (1 - f / (r days)), f = 1 - exp(-r days).

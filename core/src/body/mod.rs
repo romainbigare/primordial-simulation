@@ -211,7 +211,8 @@ impl Body {
         // At their own points they melt in the chemistry's order (`Chemistry::by_melt`).
         let (cap, by) = (self.heat_cap(chem).max(1e-9), || chem.by_melt().iter().copied().filter(held));
         let own = melting(cap, self.e, by().map(|k| (chem.subs[k].melt, k, lat(k))));
-        if by().all(|k| chem.mixes(k).is_none() || own.t > chem.subs[k].melt) {
+        // (Only the few substances others dissolve in are looked at.)
+        if crate::math::ones(chem.solvents()).all(|k| !(held(&k) && chem.subs[k].lf > 0.0) || own.t > chem.subs[k].melt) {
             return own;
         }
         let (mut ks, mut m) = ([(0.0, 0usize); MAX_SUBSTANCES], 0);
@@ -224,7 +225,9 @@ impl Body {
     /// The fusion enthalpy amounts `m` hold at the plateau state `th` (a store `th` does not know, by its melting point
     /// now), J.
     pub(crate) fn fused_of(&self, chem: &Chemistry, th: &Melting, m: &[f64]) -> f64 {
-        let molten_at = |k: usize| th.t >= chem.subs[k].melt || th.t >= self.melt(chem, k);
+        // (Only a substance others dissolve in melts below its own point.)
+        let solvents = chem.solvents();
+        let molten_at = |k: usize| th.t >= chem.subs[k].melt || solvents >> k & 1 == 1 && th.t >= self.melt(chem, k);
         let molten = |k: usize| if th.bits >> k & 1 == 1 { th.molten(k) } else { molten_at(k) as u8 as f64 };
         m.iter().enumerate().filter(|&(k, &a)| a > 0.0 && chem.subs[k].lf > 0.0).map(|(k, a)| a * chem.subs[k].lf * molten(k)).sum()
     }

@@ -101,16 +101,7 @@ impl Ran {
     }
     /// The domains in the set, in order; the set is left empty.
     pub(crate) fn take(&mut self) -> impl Iterator<Item = usize> + '_ {
-        self.0.iter_mut().enumerate().flat_map(|(word, bits)| {
-            let mut bits = std::mem::take(bits);
-            std::iter::from_fn(move || {
-                (bits != 0).then(|| {
-                    let k = bits.trailing_zeros() as usize;
-                    bits &= bits - 1;
-                    64 * word + k
-                })
-            })
-        })
+        self.0.iter_mut().enumerate().flat_map(|(word, bits)| crate::math::ones(std::mem::take(bits)).map(move |k| 64 * word + k))
     }
 }
 

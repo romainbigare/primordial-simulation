@@ -148,7 +148,7 @@ impl Body {
 
 /// The highest speed-up (log10) of any reaction driven by light in the genes (0 if the chemistry has none).
 pub fn light_cat(chem: &Chemistry, genes: &[f32]) -> f32 {
-    chem.reactions.iter().enumerate().filter(|(_, rx)| rx.light).map(|(r, _)| genes[NSCALAR + r]).fold(0.0, f32::max)
+    chem.light_reactions().iter().map(|&r| genes[NSCALAR + r]).fold(0.0, f32::max)
 }
 
 /// A body whose light reactions are sped up at least this much (log10) is a light-eater, for the tape; no law reads it.

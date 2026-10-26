@@ -81,6 +81,11 @@ impl Chemistry {
         self.derived().mixes[k].as_deref()
     }
 
+    /// The substances others dissolve in (`mixes` is some), a bit per substance.
+    pub(crate) fn solvents(&self) -> u64 {
+        self.derived().solvents
+    }
+
     /// `mixes` of `k`, from the substances' points.
     pub(super) fn find_mixes(&self, k: usize) -> Option<Vec<(usize, bool, bool)>> {
         let (s, liquid) = (&self.subs[k], |d: &Substance| d.melt < T_SURF && d.boil > T_SURF);
@@ -94,10 +99,11 @@ impl Chemistry {
         &self.derived().by_melt
     }
 
-    /// Phase of `k` at `t` among the amounts `a(j)` of one node or body, at its melting point there (`melt_in`).
+    /// Phase of `k` at `t` among the amounts `a(j)` of one node or body, at its melting point there (`melt_in`; only a
+    /// substance others dissolve in melts below its own point).
     pub(crate) fn phase_in(&self, k: usize, t: f64, a: impl Fn(usize) -> f64) -> Phase {
         match self.phase(k, t) {
-            Phase::Solid if t >= self.melt_in(k, a) => Phase::Liquid,
+            Phase::Solid if self.solvents() >> k & 1 == 1 && t >= self.melt_in(k, a) => Phase::Liquid,
             p => p,
         }
     }

@@ -1,9 +1,21 @@
-//! Small functions of decay the laws share, members passing a level (`Pass`), and an exact sum.
+//! Small functions of decay the laws share, members passing a level (`Pass`), an exact sum, and the bits of a set.
 
 /// 1 - exp(-x), exact for small `x`: the share a first-order decay over `x` time constants takes.
 #[inline]
 pub(crate) fn one_minus_exp(x: f64) -> f64 {
     -(-x).exp_m1()
+}
+
+/// The bits set in `bits`, lowest first: a set of a few of 64 things (substances, domains) visited without the rest.
+#[inline]
+pub(crate) fn ones(mut bits: u64) -> impl Iterator<Item = usize> {
+    std::iter::from_fn(move || {
+        (bits != 0).then(|| {
+            let k = bits.trailing_zeros() as usize;
+            bits &= bits - 1;
+            k
+        })
+    })
 }
 
 /// What rounding took from `a + b`, given their computed sum `s`, exactly (Neumaier 1974): kept apart, it makes a sum

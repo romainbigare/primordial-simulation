@@ -54,7 +54,12 @@ impl Chemistry {
 
     /// Is `k` one of the solids bodies build besides their matter (`materials`)?
     pub fn is_material(&self, k: usize) -> bool {
-        self.materials().any(|x| x == k)
+        self.derived().materials >> k & 1 == 1
+    }
+
+    /// The light reactions (`Reaction::light`), by number.
+    pub fn light_reactions(&self) -> &[usize] {
+        &self.derived().light
     }
 
     /// The body matter: the first output of growth (`build`), if bodies grow.

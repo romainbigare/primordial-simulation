@@ -133,6 +133,11 @@ struct Derived {
     mixes: Vec<Option<Vec<(usize, bool, bool)>>>,
     /// `Chemistry::by_melt`
     by_melt: Vec<usize>,
+    /// The substances others dissolve in (`Chemistry::mixes` is some), and the solids bodies build besides their matter
+    /// (`Chemistry::materials`), a bit per substance; the light reactions, by number
+    solvents: u64,
+    materials: u64,
+    light: Vec<usize>,
 }
 
 impl Chemistry {
@@ -147,8 +152,18 @@ impl Chemistry {
         self.subs.len()
     }
 
-    /// What follows from the chemistry (`Derived`), made at the first call.
+    /// What follows from the chemistry (`Derived`), made at the first call (`derive`).
+    #[inline]
     fn derived(&self) -> &Derived {
+        match self.derived.get() {
+            Some(d) => d,
+            None => self.derive(),
+        }
+    }
+
+    /// `derived` made, at the first call.
+    #[cold]
+    fn derive(&self) -> &Derived {
         self.derived.get_or_init(|| {
             // The inputs of growth no reaction burns, per mol of matter; the starting air's heat capacity per mol.
             let minerals = self.build.as_ref().map_or(Vec::new(), |bl| bl.inputs.iter().filter(|p| self.burner(p.0 as usize).is_none()).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect());
@@ -157,7 +172,11 @@ impl Chemistry {
             let mut by_melt: Vec<usize> = (0..self.ns()).filter(|&k| self.subs[k].lf > 0.0).collect();
             by_melt.sort_by(|&a, &b| self.subs[a].melt.total_cmp(&self.subs[b].melt));
             let air_cp = if air_cp > 0.0 { air_cp } else { thermo::DIATOMIC_CP };
-            Derived { minerals, air_cp, burners, mixes: (0..self.ns()).map(|k| self.find_mixes(k)).collect(), by_melt }
+            let mixes: Vec<_> = (0..self.ns()).map(|k| self.find_mixes(k)).collect();
+            let solvents = (0..self.ns()).filter(|&k| mixes[k].is_some()).fold(0, |m, k| m | 1 << k);
+            let materials = self.materials().fold(0, |m, k| m | 1 << k);
+            let light = (0..self.reactions.len()).filter(|&r| self.reactions[r].light).collect();
+            Derived { minerals, air_cp, burners, mixes, by_melt, solvents, materials, light }
         })
     }
 

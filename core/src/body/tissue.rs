@@ -98,7 +98,7 @@ impl Body {
             return 1.0;
         }
         let (mut have, mut keep) = (0.0, 0.0);
-        for k in (0..chem.ns()).filter(|&k| self.wet >> k & 1 == 1) {
+        for k in self.wet_ks(chem) {
             let mm = chem.subs[k].molar_mass;
             have += self.store[k] * mm;
             keep += self.level(chem, k, 0.0) * mm;
@@ -109,15 +109,15 @@ impl Body {
     pub fn melt(&self, chem: &Chemistry, k: usize) -> f64 {
         chem.melt_in(k, |j| self.store[j])
     }
+    /// Its key liquids (`wet`), lowest first.
+    fn wet_ks(&self, chem: &Chemistry) -> impl Iterator<Item = usize> {
+        crate::math::ones(if chem.ns() < 64 { self.wet & ((1 << chem.ns()) - 1) } else { self.wet })
+    }
     /// The key liquids it holds, kg, and the most share of its mass it keeps of any (its keep gene, 0..`MAX_KEEP`).
     pub fn wet_h(&self, chem: &Chemistry) -> (f64, f64) {
-        let (keep, ns) = (Layout::of(chem).keep, chem.ns());
-        // The key liquids are a few of the substances: visit the bits set, lowest first.
-        let mut bits = if ns < 64 { self.wet & ((1 << ns) - 1) } else { self.wet };
+        let keep = Layout::of(chem).keep;
         let (mut liquid, mut h) = (0.0f64, 0.0f64);
-        while bits != 0 {
-            let k = bits.trailing_zeros() as usize;
-            bits &= bits - 1;
+        for k in self.wet_ks(chem) {
             (liquid, h) = (liquid + self.store[k] * chem.subs[k].molar_mass, h.max(self.gene(keep + k).clamp(0.0, MAX_KEEP)));
         }
         (liquid, h)
