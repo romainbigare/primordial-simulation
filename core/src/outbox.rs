@@ -57,40 +57,30 @@ impl Entry {
 
 /// The outboxes of the domains that ran are applied (`land`): after a serial step, or by a test.
 pub fn deliver(w: &mut World) {
-    land(w, false, Vec::new());
+    land(w, false);
 }
 
 /// The outboxes of the domains that ran are taken (`Life::take_queued`). The moves and the litters land per domain of
 /// their cell, the domains taken out of the world and run on the pool (`survey::run`; with `reversed` the domains
 /// start in reversed order, only for the order test), while the moves gathered before are booked beside them
-/// (`World::book_moves_beside`); the domains of `faced` and those that landed something make their faces for the next
-/// batch then, after landing (`Domain::make_next_faces`). The domains back and the world settled (`World::settle`:
-/// also where the bodies that moved are stored), the other entries are applied one by one in order; then the same for
-/// what landing and applying queued, until nothing is left; last the moves gathered are booked.
-pub(crate) fn land(w: &mut World, reversed: bool, mut faced: Vec<usize>) {
+/// (`World::book_moves_beside`). The domains back and the world settled once (`World::settle`: also where the bodies
+/// that moved are stored), the other entries are applied one by one in order; then the same for what landing and
+/// applying queued, until nothing is left; last the moves gathered are booked.
+pub(crate) fn land(w: &mut World, reversed: bool) {
     loop {
         let (to, rest) = w.life.take_queued();
-        if to.is_empty() && rest.is_empty() && faced.is_empty() {
+        if to.is_empty() && rest.is_empty() {
             break;
         }
-        let face = !faced.is_empty();
-        faced.extend(&to);
-        faced.sort_unstable();
-        faced.dedup();
-        // The work of each: the entries it lands and the bodies whose faces it makes.
-        let work: Vec<_> = std::mem::take(&mut faced).into_iter().map(|k| (k, w.life.domains[k].landing(face), ())).collect();
-        let ran: Vec<usize> = work.iter().map(|x| x.0).collect();
+        let work: Vec<_> = to.into_iter().map(|k| (k, w.life.domains[k].inbox.len(), ())).collect();
         w.book_moves_beside(|w| {
             crate::survey::run(w, work, reversed, |_| (), |w, d, _, _| {
                 for e in std::mem::take(&mut d.inbox) {
                     land_one(w, d, e);
                 }
-                if face {
-                    d.make_next_faces(w);
-                }
             })
         });
-        ran.into_iter().for_each(|k| w.settle(k..k + 1));
+        w.settle(0..w.life.domains.len());
         rest.into_iter().for_each(|e| apply(w, e));
     }
     w.book_moves();

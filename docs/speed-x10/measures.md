@@ -2084,3 +2084,90 @@ With `#[inline(never)]` left on `book` (a probe build), `book` is 116.8 million 
 was dearer (+4.4% in `book`): `Booker::add` was no longer inlined once `Booker::column` called it, and the shared
 lifted-heat helper went link by link; `Booker::add` is now `#[inline(always)]` and the helper goes column by column, as
 before. `CELLS_PER_ITEM` (256) is not measured.
+## E1d: faces once a batch, one settle
+
+Level 1. The rework of the chain E1b.1 to E1c after the measure of its phases (the chain gained only about 3% of the
+bodies' stage at 4 threads). Two changes, each replacing code:
+
+- **Faces once a batch.** At a batch's start every domain makes its faces, one domain after another on the calling
+  thread (`survey::faces::make`). Gone: the faces made at the end of each landing task, the remake of the stale domains
+  on the pool, and the machinery that told which were stale (`Domain::touched`, `Domain::quiet`, `Domain::made`,
+  `Faces::holds`, `faces::keep`, each face list's canopy, the debug comparison of kept faces).
+- **One settle after the landing call** (`World::settle` of all domains), not one per landed domain.
+
+Core: 10,060 to 9,994 code lines (+32 -98).
+
+| Check | Result |
+|---|---|
+| Golden, with threads and with one thread | unchanged |
+| `cargo test --release --workspace`, clippy, the wasm build | pass |
+| One year from each bench48 save, f85d626 and E1d, 1 and 4 threads | the same fingerprint (island22 `7592b4a75a93f8d0`, globe36 `1a67a68553444f5b`, region24 `c448abe46d4f09ae`) |
+| Three years from each save, every run of the measures below (f85d626, E1d, the variant, the timer builds) | one fingerprint per bench |
+
+**One thread, instructions of one year** (callgrind, `RAYON_NUM_THREADS=1`, bench48 saves, base f85d626; million
+instructions; "faces" is all face making: in f85d626 the remake and the faces made at the end of the landing, in
+E1d `faces::make`, measured on a build where it is not inlined):
+
+| | island22 f85d626 / E1d | globe36 f85d626 / E1d | region24 f85d626 / E1d |
+|---|---|---|---|
+| the run | 7,859.6 / 7,803.2 (-0.72%) | 7,161.9 / 7,132.8 (-0.41%) | 16,739.9 / 16,583.1 (-0.94%) |
+| `survey::batch` | 4,380.8 / 4,324.3 (-1.29%) | 3,428.1 / 3,399.1 (-0.85%) | 10,025.0 / 9,872.1 (-1.53%) |
+| faces | 118.0 / 68.1 | 60.6 / 35.7 | 271.8 / 130.6 |
+| `outbox::land` (with the faces of the landing in f85d626) | 320.3 / 253.4 | 286.3 / 254.0 | 727.1 / 583.6 |
+| `World::settle`, all calls | 35.1 / 35.2 | 33.7 / 35.8 | 87.0 / 88.6 |
+
+Faces are made once for every domain, not about twice for half of them: -42 to -52% of their work. One settle of all
+domains costs about the same instructions as one per landed domain (it visits every domain; the gain is at 4 threads,
+below).
+
+**Wall time on 4 threads.** The machine was shared with two other agents' builds and runs the whole time; every run
+waited at most 30 s for the machine to be 85% idle, then ran under `flock timing.lock`. Three years from each bench48
+save, the bodies' stage (`ms_bodies`) the mean of years 2 and 3, builds interleaved in each set.
+
+The plain builds, 20 sets (load average at the runs: median 2.0, 1.3 to 5.5). "Pool" is a variant of E1d with the faces
+made on the pool, one domain a task (not kept):
+
+| ms a year | f85d626 median (min) | E1d median (min) | change of medians / paired median | E1d with faces on the pool | change / paired |
+|---|---|---|---|---|---|
+| island22 | 322.4 (284.9) | 321.3 (287.5) | -0.3% / +0.5% | 321.1 (280.6) | -0.4% / +0.6% |
+| globe36 | 288.0 (273.6) | 291.1 (262.6) | +1.1% / +0.6% | 294.2 (251.3) | +2.2% / -1.8% |
+| region24 | 725.5 (663.5) | 699.3 (633.7) | -3.6% / -3.0% | 723.0 (653.1) | -0.3% / -2.3% |
+
+(Paired: the median over the sets of E1d's run over f85d626's run of the same set.) The standard error of these
+medians is about 1 to 2%: on island22 and globe36 E1d is not shown faster or slower; on region24 it is about 3% faster.
+Faces on the pool are not better than on the calling thread: it is kept simple.
+
+The phases (the timer builds of `chain/timers-new.diff`, the same points on E1d; 12 sets, of them the runs at a load
+under 3.5: 7 of each, 6 of f85d626 on region24; ms a year, f85d626 / E1d and the change):
+
+| ms a year, 4T | island22 | globe36 | region24 |
+|---|---|---|---|
+| the bodies' stage (`ms_bodies`) | 315.9 / 307.4 (-8.5) | 300.8 / 302.6 (+1.8) | 748.3 / 716.2 (-32.1) |
+| batches, all | 278.4 / 271.1 (-7.2) | 269.8 / 271.2 (+1.4) | 671.2 / 641.4 (-29.8) |
+| faces before P1 (f85d626: the stale domains, on the pool; E1d: all, on the calling thread) | 14.3 / 16.5 (+2.2) | 12.7 / 9.9 (-2.8) | 29.8 / 33.6 (+3.8) |
+| P1: the pool call (wall) | 184.7 / 190.0 (+5.2) | 163.3 / 176.1 (+12.7) | 460.6 / 452.0 (-8.6) |
+| of it the wake (call start to first task) | 2.4 / 7.5 (+5.1) | 1.0 / 7.1 (+6.1) | 5.9 / 8.2 (+2.3) |
+| settle after P1 | 8.1 / 6.8 (-1.4) | 4.6 / 4.2 (-0.4) | 14.9 / 13.3 (-1.6) |
+| delivery, all (landing call, settle, entries, booking) | 49.6 / 41.5 (-8.2) | 64.0 / 56.2 (-7.8) | 113.8 / 89.7 (-24.2) |
+| of it the landing call (f85d626: faces made there too) | 36.2 / 31.3 (-4.9) | 31.3 / 26.7 (-4.6) | 74.3 / 60.2 (-14.1) |
+| of it the settle after the landing call (f85d626: one per landed domain) | 5.8 / 3.3 (-2.5) | 3.2 / 2.1 (-1.2) | 15.1 / 7.2 (-7.9) |
+| of it the entries applied one by one | 4.6 / 4.4 (-0.2) | 26.3 / 24.4 (-2.0) | 19.0 / 17.0 (-2.0) |
+| other main thread (list, partition, serial bodies, tail) | 18.5 / 18.2 (-0.3) | 23.5 / 23.7 (+0.2) | 48.7 / 47.1 (-1.5) |
+| thread time of the faces made (f85d626: remake + end of landing) | 33.1 / 16.5 (-16.6) | 20.2 / 9.9 (-10.3) | 82.1 / 33.6 (-48.5) |
+| the survey | 37.1 / 37.5 (+0.4) | 30.5 / 31.4 (+0.8) | 76.6 / 75.0 (-1.7) |
+
+Reading:
+- What the rework aimed at is there: the delivery falls by 8, 8 and 24 ms a year (the landing call no longer makes
+  faces, the settle after it is one), and the thread time of making faces halves.
+- The faces before P1 cost about the same as before (+2.2, -2.8, +3.8 ms): all domains on the calling thread take as
+  long as half of them on the pool. The data they read was last written by the pool's threads.
+- P1 loses 2 to 6 ms of its wake: the remake call of f85d626 woke the pool's threads just before P1; now nothing does.
+  With the faces on the pool (the variant) P1 finds them awake again, but the faces call costs that much more (in a
+  loaded set of 8 runs on island22, on the pool against on the calling thread: faces 22.0 against 17.0 ms, P1's wake 1.1
+  against 6.2 ms).
+- The rest of P1 (+5 / +13 / -9 ms) is the noise of the pool call (its standard error here is about 5 to 10 ms).
+
+**Verdict against the done line** (the stage at 4T lower than f85d626's on island22 and globe36, not worse on
+region24, fewer core lines): fewer core lines (-66), and not worse on any bench; lower on region24 (about -3%), but on
+island22 and globe36 the change (-0.3% and +1.1% of medians) is inside the noise of this busy machine. The gain the
+phases show there (about 8 ms of delivery) is about eaten by the lost wake of P1. A quiet window must judge it.

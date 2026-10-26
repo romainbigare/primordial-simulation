@@ -46,7 +46,7 @@ pub fn survey(w: &mut World, reversed: bool) {
     let peopled = |w: &World| w.life.domains.iter().enumerate().map(|(k, d)| (k, d.at.iter().map(Vec::len).sum(), ())).filter(|x| x.1 > 0).collect();
     // (Movers who pushed through cells where no body is break nothing.)
     w.life.domains.iter_mut().filter(|d| d.at.iter().all(Vec::is_empty)).for_each(|d| d.pushed.fill(0.0));
-    on_domains(w, peopled(w), reversed, false, |_| (), |w, d, _, _| {
+    on_domains(w, peopled(w), reversed, |_| (), |w, d, _, _| {
         for k in 0..d.cells.len() {
             let i = d.cells[k] as usize;
             if !parts(w, d, i) {
@@ -59,7 +59,7 @@ pub fn survey(w: &mut World, reversed: bool) {
         w.in_domain(i, |w, d| worn(w, d, (w.life.cell_slot(i).1, i)));
         crate::outbox::deliver(w);
     }
-    on_domains(w, peopled(w), reversed, false, |_| (), |w, d, _, _| shade(w, d));
+    on_domains(w, peopled(w), reversed, |_| (), |w, d, _, _| shade(w, d));
     sum_cells(w);
     if monthly && w.time > 0 {
         traffic(w);
@@ -83,7 +83,7 @@ fn sum_cells(w: &mut World) {
     life.keep.resize(n, 0.0);
     let area = mesh.cells().area();
     for (i, r) in life.sum.iter().enumerate() {
-        canopy[i] = canopy_of(r[2], area[i]);
+        canopy[i] = (r[2] / area[i]) as f32;
         life.absorb[i] = if r[2] > 0.0 { (r[8] / r[2]) as f32 } else { 0.0 };
         life.keep[i] = if r[8] > 0.0 { (r[9] / r[8]) as f32 } else { 0.0 };
     }
@@ -112,11 +112,6 @@ pub fn sums(w: &mut World) {
 /// The capture area of `n` members who each show `vis` of it (`Body::vis`), m².
 pub(super) fn capture(vis: f32, n: f64) -> f64 {
     vis as f64 * n
-}
-
-/// The canopy of a cell of area `area` m² whose bodies' capture areas sum to `sum` m².
-pub(super) fn canopy_of(sum: f64, area: f64) -> f32 {
-    (sum / area) as f32
 }
 
 /// The capture area of body `b`'s members times the share of light they absorb, m².
@@ -160,7 +155,7 @@ fn shade(w: &World, d: &mut Domain) {
             let e = k + l[k..].iter().take_while(|x| x.0 == l[k].0).count();
             let x: f64 = l[k..e].iter().map(|x| x.1).sum();
             let f = (-above).exp() * g(x) / all;
-            l[k..e].iter().for_each(|y| d.quiet(y.2).shade = f);
+            l[k..e].iter().for_each(|y| d[y.2].shade = f);
             (above, k) = (above + x, e);
         }
     }
@@ -173,11 +168,10 @@ fn shade(w: &World, d: &mut Domain) {
 /// they were at the batch's start (`Faces`) and the store as their domain's moves leave it (`store::Moves`); what they
 /// do outside their domain goes to its outbox (`outbox`), and the lineages and born rows they make are provisional. Then
 /// the domains back, the world settles (`World::settle`: events, counters, those ids made global), the moves and
-/// litters land per domain on the pool while the moves gathered are booked beside them, array by array, where each
-/// domain then makes its faces for the next batch, and the other entries are applied one by one (`outbox::land`); then
-/// the bodies that hold or are inside a part, each a serial step on its domain (`World::in_domain`) with its outbox
-/// applied after it, and last the changes of holders are added: the lineages and born rows left with no holder die out
-/// or are freed.
+/// litters land per domain on the pool while the moves gathered are booked beside them, array by array, and the other
+/// entries are applied one by one (`outbox::land`); then the bodies that hold or are inside a part, each a serial step
+/// on its domain (`World::in_domain`) with its outbox applied after it, and last the changes of holders are added: the
+/// lineages and born rows left with no holder die out or are freed.
 /// With `reversed`, the domains of the parallel phase start in reversed order: only for the test that this order (and
 /// which thread runs a domain) changes nothing.
 pub fn batch(w: &mut World, reversed: bool) {
@@ -193,11 +187,11 @@ pub fn batch(w: &mut World, reversed: bool) {
     let most = list.chunk_by(|a, b| a.0 == b.0).map(|d| d.len()).max().unwrap_or(0);
     let c = &mut w.counts;
     (c.busiest_share, c.body_batches) = (c.busiest_share + most as f64 / list.len().max(1) as f64, c.body_batches + 1.0);
-    faces::remake(w);
+    faces::make(w);
     let (serial, list): (Vec<_>, Vec<_>) = list.into_iter().partition(|x| x.3);
     w.life.batch = true;
     let runs = list.chunk_by(|a, b| a.0 == b.0).map(|run| (run[0].0, run.len(), run)).collect();
-    on_domains(w, runs, reversed, true, scratch, |w, d, run, s| {
+    on_domains(w, runs, reversed, scratch, |w, d, run, s| {
         run.iter().for_each(|&(_, cell, id, _)| update(w, d, (cell, id), s));
     });
     let mut scratch = scratch(w);
@@ -208,21 +202,18 @@ pub fn batch(w: &mut World, reversed: bool) {
     w.life.batch = false;
     w.settle(0..w.life.domains.len());
     w.life.settle_moved();
-    faces::keep(w);
 }
 
 /// Run `f` on the domains of `work` (`run`), each ending by taking its bodies that move out of its storage
 /// (`Domain::post`); then the domains back, the world settled (`World::settle`) and the outboxes applied
-/// (`outbox::land`), where the moves gathered are booked beside the landing and, with `faces`, the domains of `work`
-/// make their faces for the next batch.
-fn on_domains<T: Send + Sync, S>(w: &mut World, work: Vec<(usize, usize, T)>, reversed: bool, faces: bool, init: impl Fn(&World) -> S + Sync + Send, f: impl Fn(&World, &mut Domain, &T, &mut S) + Sync + Send) {
-    let faced = if faces { work.iter().map(|x| x.0).collect() } else { Vec::new() };
+/// (`outbox::land`), where the moves gathered are booked beside the landing.
+fn on_domains<T: Send + Sync, S>(w: &mut World, work: Vec<(usize, usize, T)>, reversed: bool, init: impl Fn(&World) -> S + Sync + Send, f: impl Fn(&World, &mut Domain, &T, &mut S) + Sync + Send) {
     run(w, work, reversed, init, |w, d, t, s| {
         f(w, d, t, s);
         d.post();
     });
     w.settle(0..w.life.domains.len());
-    crate::outbox::land(w, reversed, faced);
+    crate::outbox::land(w, reversed);
 }
 
 /// Run `f` on the domains of `work` (each with its count of work and what it is given), marked as run (`Life::mark`)

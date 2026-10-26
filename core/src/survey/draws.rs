@@ -117,7 +117,7 @@ impl Draws {
             if r > 0.0 {
                 let per = (got + r.min(self.pool[i]) * dt) / r;
                 for x in self.at[i] as usize..self.at[i + 1] as usize {
-                    w.life.quiet(self.body[x]).draw.owed += self.each[x].at(t(i)).0 * per;
+                    w.life[self.body[x]].draw.owed += self.each[x].at(t(i)).0 * per;
                 }
             }
         }

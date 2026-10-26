@@ -6,7 +6,7 @@
 //! (`Life::cross`) is its own too.
 
 use super::{free_place, Handle, Held, ID_SHIFT, RING};
-use crate::{body::Body, event::Event, lineage::Lineage, outbox::Entry, store::Moves, survey::Faces, Counters, World};
+use crate::{body::Body, event::Event, lineage::Lineage, outbox::Entry, store::Moves, Counters, World};
 use std::collections::BTreeMap;
 
 /// The cells under one air node, how many bodies were placed in it, the bodies of its cells (their slots, the last freed
@@ -33,11 +33,6 @@ pub struct Domain {
     pub(crate) pushed: Vec<f64>,
     /// Per cell (by its order in `cells`): the members that moved into it since the last month (`Counters::traffic`)
     pub(crate) crossings: Vec<f32>,
-    /// Whether a number its faces show was written since they were made, or a body is inside a structure (whose parts
-    /// change outside the domain)
-    pub(crate) touched: bool,
-    /// The faces its bodies show in the next batch, made at the end of its task in the batch running (`Life::faces`)
-    pub(crate) made: Faces,
     /// What its bodies' updates do outside them, in the order made (`outbox`)
     pub out: Vec<Entry>,
     /// The moves and litters that land in its cells, in the order of the domains they come from, then the order made
@@ -72,10 +67,6 @@ impl Domain {
     /// Where the body with id `id` is stored, if it lives and is stored in this domain.
     pub fn find(&self, id: u64) -> Option<Handle> {
         self.table.get(&id).map(|&slot| Handle { domain: self.index, slot })
-    }
-    /// Body `h` for a write to a number that no face shows (its shade, what it owes): its faces stay as they are.
-    pub(crate) fn quiet(&mut self, h: Handle) -> &mut Body {
-        &mut self.bodies[h.slot as usize]
     }
     /// The bodies of its cell `i` changed: the survey shares out its light again (`survey::shade`).
     pub(crate) fn stir(&mut self, i: u32) {
@@ -118,7 +109,7 @@ impl Domain {
     pub(super) fn unstore(&mut self, h: Handle, id: u64, i: usize) {
         let k = self.slot(i);
         self.at[k].retain(|&x| x != h);
-        (self.stale[k], self.touched) = (true, true);
+        self.stale[k] = true;
         self.table.remove(&id);
         self.bodies[h.slot as usize] = Body::default();
         self.free.push(h.slot);
@@ -136,7 +127,7 @@ impl Domain {
         out.retain_mut(|e| {
             let Entry::Go { id, body: body @ None, .. } = e else { return true };
             let Some(h) = self.find(*id) else { return false };
-            let b = std::mem::take(self.quiet(h));
+            let b = std::mem::take(&mut self[h]);
             self.depart(h, &b, b.cell as usize);
             *body = Some(Box::new(b));
             true
@@ -147,11 +138,6 @@ impl Domain {
     /// (`choose::land_move`).
     pub(crate) fn cross(&mut self, k: usize, members: f32, pushed: f64) {
         (self.crossings[k], self.pushed[k]) = (self.crossings[k] + members, self.pushed[k] + pushed);
-    }
-    /// The work of its landing task (`outbox::land`): the entries in its inbox, and with `faces` its bodies, whose
-    /// faces it makes.
-    pub(crate) fn landing(&self, faces: bool) -> usize {
-        self.inbox.len() + if faces { self.table.len() } else { 0 }
     }
     /// Body `b`, taken out of `h` in cell `i`, leaves its storage and its ring, to be stored again elsewhere (`arrive`).
     pub(super) fn depart(&mut self, h: Handle, b: &Body, i: usize) {
@@ -193,8 +179,7 @@ impl std::ops::Index<Handle> for Domain {
 
 impl std::ops::IndexMut<Handle> for Domain {
     fn index_mut(&mut self, h: Handle) -> &mut Body {
-        self.touched = true;
-        self.quiet(h)
+        &mut self.bodies[h.slot as usize]
     }
 }
 

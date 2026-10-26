@@ -44,10 +44,8 @@ members drawn); it never changes, and its random draws are keyed by it. The bodi
 due in a batch update domain by domain, cell by cell, and in a cell by id; sums over bodies go domain by domain, cell by
 cell, each cell's bodies in the order they came. No order depends on where a body is stored.
 **What a body sees in a batch** (`survey::batch`). At a batch's start each living body leaves a face (`survey::Faces`:
-its id, members, visible traits, signal, well-being, and the room it is in), cell by cell. A domain makes its faces at
-the end of its own task in the batch before; it makes them again at this batch's start only if something they show was
-written since, or a body of it is inside a structure. A body perceives the others
-only by these faces, as they were then, whatever they did in the batch since; a body placed in the batch is seen from
+its id, members, visible traits, signal, well-being, and the room it is in), domain by domain, cell by cell. A body
+perceives the others only by these faces, as they were then, whatever they did in the batch since; a body placed in the batch is seen from
 the next. It takes from or gives to a body it saw only if that body still lives, is still in its cell and is not
 leaving it; the partner of its children and the cover over its cell are the bodies there now. It reads the store
 through its domain's view (`store::Moves`): the ground, bed and bodies' node of each cell of its domain and its air
@@ -77,8 +75,7 @@ phase (`outbox::land`): the moves and the litters land, each in the domain of th
 domains they come from and then the order made, each domain on its own on the pool as in the parallel phase; beside
 them in the same call the moves of the domains that ran are booked, each array of the store by one task in domain
 order (each number a domain's moves touched gets their sum once, `store::book_by_array`; a landing reads no store);
-then each domain that ran or landed makes the faces its bodies show in the next batch; the domains back, and
-the world settles. Then one by one, each a serial step: the other entries of the outboxes (watches, part acts), domain
+the domains back, and the world settles once. Then one by one, each a serial step: the other entries of the outboxes (watches, part acts), domain
 by domain in the order made, then what landing and applying queued, the same way (in each round the moves gathered
 before are booked first, beside its landings); the bodies that hold or are inside a
 part, whole updates in domain and body order, each a serial step on its domain with its view opened fresh and booked
