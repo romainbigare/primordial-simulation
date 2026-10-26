@@ -118,12 +118,12 @@ pub fn take_body(w: &World, d: &mut Domain, b: &mut Body, s: Handle, rng: &mut R
     let mut o = std::mem::take(&mut d[s]);
     let m: Vec<f64> = m.iter().map(|a| a * hit / per).collect();
     let torn = if body::torn_to_death(&w.cfg.phys, f) { hit } else { f * hit };
-    let rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (torn * s - a).max(0.0)).collect();
+    let mut rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (torn * s - a).max(0.0)).collect();
     let got = w.chem.mass_of(&m);
     transfer(&w.chem, &mut d.counts.rounded[0], &mut o, b, &m);
     let ev = EventKind::Took { by: b.id, from: o.id, used: used_kg(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), light_cat(&w.chem, &o.genes)] };
     d.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: got });
-    if body::wound(w, d, s, o, (hit, f), &rest, TAKEN) {
+    if body::wound(w, d, s, o, (hit, f), &mut rest, TAKEN) {
         d[s].note(b.id, -(NOTE_SCALE * got / mo) as f32);
     }
 }

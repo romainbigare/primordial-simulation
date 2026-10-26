@@ -84,7 +84,7 @@ pub fn wear(w: &World, d: &mut Domain, j: usize, energy: f64) {
         let o = std::mem::take(&mut d[s]);
         let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));
         let f = (energy * m / total / o.breaking(&w.chem, &w.cfg, 1.0).max(1e-30)).min(1.0);
-        let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
-        body::wound(w, d, s, o, (1.0, f), &dead, BROKEN);
+        let mut dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
+        body::wound(w, d, s, o, (1.0, f), &mut dead, BROKEN);
     }
 }

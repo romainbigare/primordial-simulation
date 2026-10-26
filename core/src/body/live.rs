@@ -11,7 +11,7 @@ use crate::chem::Phase;
 use crate::ground::Melting;
 use crate::math::one_minus_exp;
 use crate::rng::{Purpose, Rng};
-use crate::units::DAY;
+use crate::units::{DAY, MAX_SUBSTANCES};
 use crate::{life::Domain, World, AIR};
 
 /// Passes of `keep_warm`: its products take a part of the heat it burns at its temperature, so a second pass tops it up.
@@ -255,17 +255,20 @@ fn shed(w: &World, d: &mut Domain, b: &mut Body) -> f64 {
     let (chem, mass) = (&w.chem, b.mass(&w.chem));
     let th = b.thermal(chem);
     let t = th.t;
-    let minerals = chem.minerals();
-    let over: Vec<f64> = (0..chem.ns())
-        .map(|k| {
-            let kept = b.wet >> k & 1 == 1 || minerals.iter().any(|m| m.0 == k) || chem.is_material(k);
-            let over = b.store[k] - if kept { b.level(chem, k, mass) } else { 0.0 };
-            let stays = over <= 0.0 || chem.phase(k, t) == Phase::Gas || chem.matter() == Some(k) || b.burns_at(chem, k, t);
-            if stays { 0.0 } else { over }
-        })
-        .collect();
-    if over.iter().any(|&a| a > 0.0) {
-        to_ground(w, d, b, &th, &over);
+    let (minerals, ns, matter) = (chem.minerals(), chem.ns(), chem.matter());
+    let (mut over, mut sheds) = ([0.0f64; MAX_SUBSTANCES], false);
+    for (k, x) in over.iter_mut().enumerate().take(ns) {
+        if chem.phase(k, t) == Phase::Gas || matter == Some(k) || b.burns_at(chem, k, t) {
+            continue;
+        }
+        let kept = b.wet >> k & 1 == 1 || minerals.iter().any(|m| m.0 == k) || chem.is_material(k);
+        let past = b.store[k] - if kept { b.level(chem, k, mass) } else { 0.0 };
+        if past > 0.0 {
+            (*x, sheds) = (past, true);
+        }
+    }
+    if sheds {
+        to_ground(w, d, b, &th, &over[..ns]);
         return b.mass(&w.chem);
     }
     mass
