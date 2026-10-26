@@ -2605,3 +2605,94 @@ it holds. The architect decides whether the long-step test should compare the li
 
 **Verdict.** The kill line (a key number out) is not met, so `flow_days` stays 60. The liquid costs half in instructions
 (done-when -35% met), the Flow stage on 4 threads x0.82, x0.82 and x0.71 on a busy machine.
+
+## AIR4: calm months by TR-BDF2 (not kept, the kill line)
+
+Level 3, research. Built on the branch `x10/air4-not-kept` (from `46ec255`): the air's step solved as stages
+(`flow/air/step.rs` `stage`, `flow/air/stages.rs`), each a backward Euler solve over its own span from the step's start
+with what the stages before moved added to it (`Extra`: the ground's heat and gas, the air's heat and gas), and one sum
+of what the stages moved booked once; with the research switch `AIR4` off the world is bit for bit today's (golden
+unchanged). Variants, each a value of the switch:
+
+- `tr`: TR-BDF2 (Bank et al. 1985; Hosea and Shampine 1996) as `air.md` 2.4 designs it: both stages from the step's
+  start, the rates at the start from the last stage of the step before, one booking.
+- `trb`: TR-BDF2 with its first stage booked and the state of ground and air made again before the second stage (two
+  bookings).
+- `be30`, `trb30`: one step a month (Euler with the plateau fix of AIR4.0, or `trb`); `AIR4_CALM` picks the months.
+- `auto`: the month is calm when the error estimate of the last month (Hosea and Shampine: the second difference of
+  the three rates, 2 ERR [A0/γ - Aγ/(γ(1-γ)) + A1/(1-γ)], or 27 ERR (A1 - 2 A2 + A3) from a month of three Euler steps)
+  is under 0.1 K and 1% of the vapour in every air node (`air.md` 2.4).
+
+**Finding 1: a TR-BDF2 that starts both stages from the step's start is no better than Euler.** One month from the
+same world (32 x 32, seed 1, no life, year 4, each month of the year), the land's and the air's mean temperature at the
+month's end against 6-hour air steps, K (a throw-away probe, `tape/tests/air4_probe.rs` on the branch):
+
+| Variant | land, mean of the 12 months' error | land, largest | air, mean | air, largest |
+|---|---|---|---|---|
+| Euler, 10 days (today) | 0.72 | 1.20 | 0.15 | 0.25 |
+| Euler, 5 days | 0.35 | 0.59 | 0.08 | 0.13 |
+| `tr`, 10 days (one booking) | 0.75 | 1.23 | 0.12 | 0.20 |
+| `trb`, 10 days (two bookings) | 0.29 | 0.50 | 0.08 | 0.13 |
+| Euler, 30 days | 0.32 | 0.53 | 0.26 | 0.65 |
+| `trb30`, 30 days | 0.10 | 0.29 | 0.19 | 0.32 |
+
+The land relaxes in about 3 days, so its end follows the forcing at the stage's end; what a stage takes from the state
+at its start (the ground's capacity, plateau and cover, the air's column, lapse and gas heights, the wind's pushes)
+holds that forcing back by the whole step, whatever the integrator. Two Euler stages of 5 days from the same start
+(a check of the stage code) give Euler's 10-day error too, while two real 5-day steps halve it. So the design's one
+booking cannot give a second-order step; only `trb` (the state made again between the stages) does. A first try that
+fed the stage's start the gas's own heat as warming cooled the land by 5 K: the ground warms only by the heat that is
+not the heat and fusion enthalpy of the gas it gains (as `Scratch::note` holds it), fixed before these numbers.
+
+**Finding 2: the long-step test** (3 seeds against 6-hour air steps, limit 0.3 K):
+
+| Variant | months in one step | land | summer | winter | verdict |
+|---|---|---|---|---|---|
+| Euler 10 days (today, `46ec255`) | 0 | +0.103 | -0.007 | -0.006 | pass |
+| Euler 30 days, every month | 12 | +0.209 | +0.278 | **+0.832** | fails |
+| `tr`, 10 days (one booking) | 0 | +0.211 | +0.185 | -0.001 | pass |
+| `tr30`, every month (one booking) | 12 | +0.226 | +0.216 | **+0.576** | fails |
+| `trb`, 10 days | 0 | +0.148 | +0.172 | +0.029 | pass |
+| `trb30`, every month | 12 | +0.155 | +0.118 | **+0.510** | fails |
+| `trb30`, month 0 at Euler 10 days | 11 | +0.153 | +0.125 | +0.221 | pass |
+| `trb30`, months 0 and 1 at Euler | 10 | +0.228 | +0.268 | **+0.369** | fails |
+| `trb30`, months 11, 0 and 1 at Euler | 9 | +0.131 | +0.123 | +0.216 | pass |
+
+Rain, `air_3` and rivers stay inside their limits in every row. The winter is the coldest month; a month at 30 days
+before it warms it. 10 calm months failing where 9 and 11 pass shows the test's noise near the limit (seed 1 alone is
++0.35 to +0.69 in winter).
+
+**Finding 3: the error estimate chooses no month.** In the long-step world (years 11 to 20, 3 seeds; the median per
+month of the year), the estimate's largest error of an air node is 1.0 to 1.9 K in every month, of the vapour 20 to 35%
+of a node's, of a land node 0.6 to 19 K, with Euler months and with `trb30` months alike, while a month's real error is
+0.1 to 0.3 K (Finding 1). The rates of one step differ from the next by the weather, which no smooth second difference
+follows, so the estimate is the weather's noise, not the step's error. Under the design's tolerance (0.1 K and 1%)
+no month is calm; no tolerance singles out the winter months the test needs at 10 days.
+
+**Finding 4: the speed** (Flow stage, ms a year on 4 threads, the mean of years 2 and 3 of a 3-year run from the
+`$X/g12/bench` saves; base the `ew` of `46ec255`; interleaved sets under `flock $X/timing.lock`, each run started when
+no compiler, profiler or other run was going; medians, then the median of the per-set ratios with its quartiles):
+
+Two measures, on a machine shared with other agents (load average 1.2 to 2.9 in the first, 1.7 to 2.9 in the second;
+in the second, 5 of 60 runs saw a compiler start during the run):
+
+| | island22 | globe36 |
+|---|---|---|
+| first (9 sets): base | 84.4 | 112.4 |
+| first: `trb30`, all 12 months in one step | 54.7 (**x1.54**) | 78.1 (**x1.44**) |
+| second (10 sets): base | 91.9 | 113.0 |
+| second: `trb30`, all 12 months | 64.2 (x1.43 by the medians; per set 0.727, 0.660 to 0.803: **x1.38**) | 101.8 (x1.11; per set 0.886, 0.800 to 1.108: **x1.13**) |
+| second: `trb30`, 11 months (month 0 at 10 days) | 70.1 (x1.31; per set 0.734: **x1.36**) | 102.2 (x1.11; per set 0.911: **x1.10**) |
+| one step a month by Euler (`be30`, 3 sets, the bound) | 43 (x1.9) | 57 (x1.8) |
+
+A month by `trb30` costs two bookings, two makings of the state and two rounds of solves: about 0.6 of three Euler steps.
+From the first measure, the globe stays at x1.4 only with all 12 months in one step (11 months: about x1.38 by the
+same arithmetic); the second measure, on a busier machine, puts both benches under x1.4 even then.
+
+**Verdict.** Not kept. The kill line holds on both counts: with every month in one step (the only setting near x1.4 on
+the globe) the long-step test fails in winter (+0.51 K); with the winter's month at 10 days the test passes but the
+globe's Flow is under x1.4; and the error estimate cannot choose the months (Finding 3), so the done-when "at least 6
+of 12 months calm" by the estimate is met on neither bench. The air keeps its 10-day Euler step. What would be needed
+for calm months: a step that makes the state again between its stages (`trb`) costs two bookings a month, so a month
+saves only about a third of three steps; and a calm test that reads the season (the curvature of the sun and the
+temperatures over months), not the step-to-step rates.
