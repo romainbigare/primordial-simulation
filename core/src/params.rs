@@ -45,6 +45,8 @@ pub struct Config {
     pub node_days: u32,
     /// Speed setting: a node without a brain runs its sample member on one update in this many, drawn (`copy::select`)
     pub sample_every: u32,
+    /// Speed setting: a population node with a brain decides about every this many days and acts by habit between (`choose::act`; 0: every update)
+    pub think_days: u32,
 
     // Ground and air physics
     /// Depth of ground that exchanges heat with the surface, m
@@ -431,6 +433,7 @@ impl Default for Config {
             batch_days: 2,
             node_days: 36,
             sample_every: 2,
+            think_days: 20,
             skin_m: 2.0,
             air_top_m: 10_000.0,
             sensible: 10.0,

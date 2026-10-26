@@ -31,6 +31,7 @@ pub const USAGE: &str = "usage:
     --crowd N             past N body nodes in a cell, the most alike merge each month (4; Config::crowd)
     --node-days N         a population node updates at most every N days (36; Config::node_days)
     --sample-every N      a node without a brain runs its sample member on one update in N (2; Config::sample_every)
+    --think-days N        a population node with a brain decides about every N days, by habit between (20; 0: every update; Config::think_days)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
     --years N, --every N, --out DIR, --frames-every N, --monthly-years N   as for run
@@ -104,6 +105,7 @@ impl Args {
         c.crowd = self.get("--crowd", c.crowd);
         c.node_days = self.get("--node-days", c.node_days);
         c.sample_every = self.get("--sample-every", c.sample_every);
+        c.think_days = self.get("--think-days", c.think_days);
         c.null = self.has("--null");
         c.nodes = !self.has("--individuals");
         c.two_parents = !self.has("--no-mix");

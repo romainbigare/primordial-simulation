@@ -8,12 +8,12 @@ use crate::life::Handle;
 use crate::store::{Class, Node, NodeId};
 use crate::nodes;
 
-/// Node `node` (taken out of its slot) spreads its members over the options (`members`), and each part acts as so many
-/// members together (`part_acts`; the moves last, so the others act where the node is). Its brain learns as from one
-/// member drawn among those who stayed (`trace`): from what that member did, and how much more its part's action raised
-/// their well-being than the mean of the members.
-pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, rng: &mut Rng) {
-    let x = members(node, c, rng);
+/// Node `node` (taken out of its slot) spreads its members over the options (`members`, its movers over `paces`
+/// intervals of its gene), and each part acts as so many members together (`part_acts`; the moves last, so the others
+/// act where the node is). Its brain learns as from one member drawn among those who stayed (`trace`): from what that
+/// member did, and how much more its part's action raised their well-being than the mean of the members.
+pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, paces: f64, rng: &mut Rng) {
+    let x = members(node, c, paces, rng);
     // The members of each option in the node after acting, and the change of their well-being.
     let (mut kept, mut gain) = ([0.0; OPTS], [0f32; OPTS]);
     for o in (0..FIXED).chain(TO_BODY..OPTS).chain(FIXED..TO_BODY).filter(|&o| x[o] > 0.0) {
@@ -28,39 +28,82 @@ pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: 
     node.trace = trace(w, node, c, k, a, gain[a] - mean as f32);
 }
 
-/// The members of node `node` that do each option: count × chance, a part of less than one member being one member with
-/// that chance. The members that move are one group, count × the sum of the chances to go in every direction, and the
-/// group takes the one direction drawn by its chance over that sum, so its option holds the group and the other
-/// directions none. A group that would leave less than one member behind is the whole node, with the chance that keeps
-/// the mean of the movers at count × chance.
-fn members(node: &Body, c: &Choice, rng: &mut Rng) -> [f64; OPTS] {
-    let mut part = |chance: f64| match node.count * chance { x if x > 0.0 && x < 1.0 => (rng.f64() < x) as u8 as f64, x => x };
+/// Node `node` (taken out of its slot) at an update between its decisions: the shares of its members that took from the
+/// ground and from each body of its cell at its last decision (`Habit`, its chances then) take again, as at a decision
+/// (`share`, `stays`), sized by its interval, from a body only while it lives in the cell (`here`); it perceives,
+/// thinks, learns and does nothing else.
+pub(super) fn repeat(w: &World, d: &mut Domain, node: &mut Body, h: &Habit, rng: &mut Rng) {
+    let x = share(node.count, h.take as f64, rng);
+    if x > 0.0 {
+        stays(w, d, node, x, |d, b| feed::take_node(w, d, b));
+    }
+    for &(id, chance) in &h.prey {
+        let Some(o) = here(d, node, id) else { continue };
+        let x = share(node.count, chance as f64, rng);
+        if x > 0.0 {
+            stays(w, d, node, x, |d, b| take_body(w, d, b, o, rng));
+        }
+    }
+}
+
+/// `count` × `chance` members, a part of less than one member being one member with that chance.
+fn share(count: f64, chance: f64, rng: &mut Rng) -> f64 {
+    match count * chance {
+        x if x > 0.0 && x < 1.0 => (rng.f64() < x) as u8 as f64,
+        x => x,
+    }
+}
+
+/// The members of node `node` that do each option: count × chance (`share`). The members that move are one group, count
+/// × the sum of the chances to go in every direction times the `paces` intervals of its gene since its last decision
+/// (at most all), and the group takes the one direction drawn by its chance over that sum, so its option holds the
+/// group and the other directions none. A group that would leave less than one member behind is the whole node, with
+/// the chance that keeps the mean of the movers at count × chance.
+fn members(node: &Body, c: &Choice, paces: f64, rng: &mut Rng) -> [f64; OPTS] {
     let moves = FIXED..TO_BODY;
-    let mut x: [f64; OPTS] = std::array::from_fn(|o| if moves.contains(&o) { 0.0 } else { part(c.p[o] as f64) });
-    let chance: f64 = c.p[moves.clone()].iter().map(|&p| p as f64).sum();
+    let mut x: [f64; OPTS] = std::array::from_fn(|o| if moves.contains(&o) { 0.0 } else { share(node.count, c.p[o] as f64, rng) });
+    let sum: f64 = c.p[moves.clone()].iter().map(|&p| p as f64).sum();
+    let chance = (sum * paces).min(1.0);
     // (If fewer than one member would stay, the node goes whole with the chance that makes the movers count × chance.)
     let group = match node.count * chance {
         g if g > 0.0 && node.count - g < 1.0 => if rng.f64() < chance { node.count } else { 0.0 },
-        _ => part(chance),
+        _ => share(node.count, chance, rng),
     };
     if group > 0.0 {
         // The direction: the chance of each over their sum.
-        let mut u = rng.f64() * chance;
+        let mut u = rng.f64() * sum;
         let way = moves.clone().filter(|&o| c.p[o] > 0.0).find(|&o| { u -= c.p[o] as f64; u < 0.0 });
         x[way.unwrap_or_else(|| moves.rev().find(|&o| c.p[o] > 0.0).expect("a group of movers has a direction"))] = group;
     }
     x
 }
 
-/// `x` members of node `node` (taken out of its slot) do option `o`. Members that stay in its cell (any option but a move or a
-/// bond) act as the node itself, holding and inside nothing, while the others wait aside with their share of its amounts
-/// (`nodes::Lot::split`); then those come back (`nodes::rejoin`: amounts and sizes by members).
-/// Members that move or bond are placed as a body of their own (`nodes::part`); unless they queued a move or a part
-/// act (`outbox`), they then come back as well; else they live on as a body, leaving the node (`Body::leaving`), with
-/// the trace of what they did: those who move join the first node of their kind and stage where they land
-/// (`choose::land_move`), those who act on a part come back after it if they can (`land_act`). The node acts itself if less
-/// than one member would be left. Returns the change of their well-being, and whether they left the node (none: it
-/// moved whole).
+/// `x` members of node `node` (taken out of its slot) that stay in its cell act by `act` as the node itself: the whole
+/// node if less than one member would be left, else holding and inside nothing while the others wait aside with their
+/// share of its amounts (`nodes::Lot::split`), and then come back (`nodes::rejoin`: amounts and sizes by members).
+fn stays<R>(w: &World, d: &mut Domain, node: &mut Body, x: f64, act: impl FnOnce(&mut Domain, &mut Body) -> R) -> R {
+    if node.count - x < 1.0 {
+        return act(d, node);
+    }
+    let f = x / node.count;
+    // As members split by shares, their sizes are the node's.
+    let size = node.size_moments(&w.chem);
+    let rest = nodes::Lot::split(d, node, 1.0 - f, 1.0 - f);
+    let held = (node.hold.take(), node.inside.take());
+    let out = act(d, node);
+    debug_assert!(node.hold.is_none() && node.inside.is_none(), "an action that stays in its cell takes no hold and enters nothing");
+    (node.hold, node.inside) = held;
+    nodes::rejoin(w, d, node, rest, size, None);
+    out
+}
+
+/// `x` members of node `node` (taken out of its slot) do option `o`. Members that stay in its cell (any option but a
+/// move or a bond) act as the node itself (`stays`). Members that move or bond are placed as a body of their own
+/// (`nodes::part`); unless they queued a move or a part act (`outbox`), they then come back (`nodes::rejoin`); else
+/// they live on as a body, leaving the node (`Body::leaving`), with the trace of what they did: those who move join the
+/// first node of their kind and stage where they land (`choose::land_move`), those who act on a part come back after it
+/// if they can (`land_act`). The node acts itself if less than one member would be left. Returns the change of their
+/// well-being, and whether they left the node (none: it moved whole).
 fn part_acts(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, (o, x): (usize, f64), rng: &mut Rng) -> (f32, Option<bool>) {
     let (moves, bond) = ((FIXED..TO_BODY).contains(&o), (FORM..FIXED).contains(&o) || o >= TO_PART);
     let mut acts = |d: &mut Domain, b: &mut Body, part_of: Option<u64>| {
@@ -68,21 +111,13 @@ fn part_acts(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, (o
         act_as(w, d, b, c, k, (o, part_of), rng);
         (k.wb)(w, b) - before
     };
+    if !(moves || bond) {
+        return (stays(w, d, node, x, |d, b| acts(d, b, None)), Some(false));
+    }
     if node.count - x < 1.0 {
         return (acts(d, node, None), (!node.leaving).then_some(false));
     }
     let f = x / node.count;
-    if !(moves || bond) {
-        // The others wait aside with their share; as members split by shares, their sizes are the node's.
-        let size = node.size_moments(&w.chem);
-        let rest = nodes::Lot::split(d, node, 1.0 - f, 1.0 - f);
-        let held = (node.hold.take(), node.inside.take());
-        let gain = acts(d, node, None);
-        debug_assert!(node.hold.is_none() && node.inside.is_none(), "an action that stays in its cell takes no hold and enters nothing");
-        (node.hold, node.inside) = held;
-        nodes::rejoin(w, d, node, rest, size, None);
-        return (gain, Some(false));
-    }
     // (A move that cannot happen splits nothing.)
     if moves && !can_go(w, node, c.to[o - FIXED], f, 0.0) {
         return (0.0, Some(false));

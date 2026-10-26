@@ -122,6 +122,8 @@ pub struct Body {
     /// Well-being at the last decision; the trace of that decision for learning
     pub wb: f32,
     pub trace: Vec<f32>,
+    /// What a node's members repeat until its next decision, from its last (`choose::Habit`); none before its first
+    pub habit: Option<crate::choose::Habit>,
     /// It has a move queued in the batch running, or is a node's part with a part act queued (`outbox`): it stays in
     /// its cell until then, but the others there no longer deal with it (laws.md 0); false outside a batch, not saved
     #[serde(skip)]

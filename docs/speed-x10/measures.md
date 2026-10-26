@@ -1796,3 +1796,132 @@ cells' gas rows (`gives`), the cloud and the cut (`hold_air`), the lift and rain
 booking goes to the pool only when the world has `par::SERIAL_BELOW` x `CELLS_PER_ITEM` = 2,048 cells or more; the three
 benches are under it (484, 648 and 768 cells), so on them it runs on the calling thread, and the gain above is the
 whole gain on 4 threads too. Whether a smaller threshold pays is for a wall-time measure.
+
+## G2: the brain floored, the body at its gene's pace
+
+Level 3 (a law change). A population node with a brain keeps its gene's update and its body's whole update; it decides
+at the update nearest to `think_days` after its last decision: **20 days (X72)**, after it was built and measured at
+30 (the tables below, kept as measured, then the 20-day measures at the end). At its other updates the shares of its members that
+took from the ground and from each body of its cell at that decision take again (`spread::repeat`, `choose::Habit`),
+from a body only while it lives in the cell, and it does nothing else. At a decision the movers are `count x min(1, Σp x
+paces)` and learning discounts by `discount^paces`, `paces` the gene's intervals since the last decision. `away` reads
+the gene intervals, as before (a node with a brain keeps its gene's interval). Snapshot 49. Core 10,173 to 10,227.
+
+The body takes in the habit are lane-a 3.4's first remedy, used here. Without them (the first build: the habit took
+from the ground only) the key-number runs' eaters fell to 4.904 log10 kg (seeds 4.936, 4.904, 4.872), -0.49 against
+the reference: in a young world the eaters' founders, in small nodes, live on what they take from the light-eaters
+(at `think_days` 0, 40% of what the eaters ate in their first year; 25% without the body takes in the habit, 43% with
+them; seed 1).
+
+**How.** Two throw-away builds with the marks of "Lane A replan" (`#[inline(never)]` wrappers for stand and animal
+updates, the take option, `take_node`), and `take_body` and the habit (`spread::repeat`) marked too, with two
+environment switches (`PROBE_SEED`, a seed after the load; `THINK_DAYS`): the base at `688c6a5`, and G2 with `habit`
+and `think_days` not read from the save (`#[serde(skip)]`, `think_days` 30), so it runs the `bench48` saves as they
+are: X50's turned save, every node with no habit yet (it decides at its first update). Not merged. Callgrind, one
+thread, from the `bench48` saves, one year and two years (the second shows the first month's extra decisions do not
+matter).
+
+**The cost** (instructions; animal updates = the wrapper of the updates of bodies with a brain, inclusive):
+
+| | island22 base | island22 G2 | globe36 base | globe36 G2 |
+|---|---|---|---|---|
+| `run_for`, one year, M | 6,684.7 | 6,434.3 (-3.7%) | 6,059.4 | 5,508.1 (-9.1%) |
+| animal updates, one year: M; calls | 1,602.4; 9,151 | 1,364.5; 8,992 | 2,071.3; 10,794 | 1,631.2; 10,628 |
+| **an animal update, thousand** | 175.1 | **151.7 (x0.866)** | 191.9 | **153.5 (x0.800)** |
+| all animal updates of the year (G2 over base) | | x0.852 | | x0.788 |
+| an animal update over two years, thousand | 174.9 | 151.5 (x0.866) | 193.8 | 154.6 (x0.798) |
+| `choose::act` calls; of them habits (`repeat`) | 9,110; 0 | 8,950; 5,934 (66%) | 10,027; 0 | 9,918; 6,775 (68%) |
+| **the habit's take path** (`repeat`: ground and body takes with their splits and rejoins), thousand a call | | **19.4** | | **23.3** |
+| the take option of a decision (`take_option`, the ground), thousand a call | 22.1 | 22.1 | 23.0 | 23.0 |
+| `take_body`: calls; thousand a call | 414; 22.6 | 476; 22.7 | 1,892; 21.8 | 1,772; 22.1 |
+| a decision's takes (the take option and `take_body`), thousand a decision | 23.1 | | 27.1 | |
+
+Stand updates are unchanged (96.8 to 100.0 thousand a call in both). Over two years a third of the node updates decide
+(island 6,100 of 18,217, globe 6,278 of 19,861). The habit's take path is cheaper than a decision's takes (19.4 against
+23.1, 23.3 against 27.1), and on the globe a little dearer than the ground take option alone (23.3 against 23.0), as
+it also holds the body takes.
+
+**Verdict on the kill lines** (30 days: x0.89 island, x0.85 globe): **x0.866 and x0.800 per animal update, x0.852 and
+x0.788 for the year's animal updates: both pass.** The year on one thread -3.7% and -9.1% (the plan: -3.4 to -3.5%
+and -6.9 to -7.1%).
+
+**The eaters on the benches** (PR-A2's measure: the `bench48` saves, `ew resume` 2 years, 4 threads, 5 seeds by
+`PROBE_SEED`; eaters' members at the end over the start ± the sd of the seeds (against `think_days` 0); kg end over
+start):
+
+| Run | island22 | globe36 | region24 |
+|---|---|---|---|
+| base build (`688c6a5`) | 1.132 ±0.012 (-0.005); 1.11 | 0.899 ±0.021 (-0.000); 0.90 | 0.995 ±0.015 (+0.001); 1.00 |
+| `think_days` 0 (the control) | 1.137 ±0.009; 1.12 | 0.900 ±0.022; 0.90 | 0.994 ±0.011; 1.00 |
+| `think_days` 15 | 1.137 ±0.012 (+0.000); 1.13 | 0.900 ±0.019 (-0.000); 0.90 | 1.000 ±0.010 (+0.006); 1.01 |
+| **`think_days` 30** | **1.145 ±0.013 (+0.008); 1.14** | **0.887 ±0.022 (-0.012); 0.89** | **0.995 ±0.016 (+0.002); 1.01** |
+| `think_days` 60 | 1.129 ±0.015 (-0.008); 1.13 | 0.903 ±0.018 (+0.004); 0.90 | 0.982 ±0.009 (-0.012); 1.00 |
+
+All within the seeds' noise. This is the animals' pace test of the plan's row, run on the benches (no pace test of
+animals exists in `tape/tests/ranges.rs`). `think_days` 0 is the base's world wherever a decision comes one gene
+interval after the last (globe seed 5 gives the base's hash); it differs where `paces` is not 1. Gifts and watches fall
+to about a third (island 510 to 187 gifts and 472 to 150 watches in 2 years; globe 2,879 to 894 and 26,613 to 8,491),
+as they come at decisions only.
+
+**The key numbers** (at 30 days, on `speed/x10` with AIR3; against the references after AIR4.0): all in range but S50
+(0.556, the known failure). Ground temperature on land 292.148 K (292.142), swing 15.467 K (15.467), rain 0.001814
+(0.001813), heat-absorbing gas 411.38 ppm (411.30), river cells 694.9 (691.9), land worn 0.1450 mm/yr (0.1452),
+light-eaters 10.243 (10.243), **eaters 5.076 log10 kg (5.393; seeds 5.071, 5.136, 5.021)**, life of light-eaters
+1.276 yr (1.218), life of eaters 14.17 yr (13.12). (Before the rebase on AIR3: eaters 5.084, the rest alike.)
+
+**The eaters of a young world fall: -0.32 decades** (the range is ±0.5; the seeds' spread about 0.06). The benches
+(settled worlds) do not show it; the key-number runs read the eaters 8 years after their founders came. The loss is in
+the first year (seed 1: 3.2e4 kg at its end against 4.1e4 at 0; the growth after is alike). The same 64 x 64 runs,
+three seeds, eaters at year 30, log10 kg (on `688c6a5`, before the rebase):
+
+| Run | eaters | against 0 |
+|---|---|---|
+| `think_days` 0 | 5.347 | |
+| `think_days` 20 (the key-number test) | 5.230 | -0.12 |
+| `think_days` 30 | 5.084 | -0.26 |
+| 30, movers not scaled by `paces` | 4.948 | -0.40 |
+| 30, learning's discount not by `paces` | 5.092 | -0.26 |
+| 30 for young nodes only (adults decide at every update, X58's last fallback) | 5.312 | -0.04 |
+
+So the movers' rule by `paces` helps, learning's discount does not matter, and the loss is in the adult nodes that
+decide less often while their founders spread. **The nodes check** (`tape/tests/nodes.rs`, 227 s) passes: rules (b) and
+(c) break nowhere. (With the first build, without the body takes in the habit, it failed once: roster seed 5, rule
+(b), kind 2 `copy_log` +0.04 against -0.45.) **The learning scene** (`body_learns_to_move_toward_what_it_can_take`)
+passes (on the strip 0.576 against 0.409; toward 0.403 against chance 0.376): it runs individuals, which decide at
+every update.
+
+Verdict at 30 days: the kill lines pass, the benches' eaters stay within the noise at 15, 30 and 60 days, the nodes
+check, the learning scene and the key numbers pass (S50 known). But the young world's eaters fall: against
+`think_days` 0, -0.26 decades at 30 days (-0.32 against the reference), -0.12 at 20, -0.04 with the floor for young
+nodes only. **The architect set `think_days` to 20 (X72).**
+
+**At 20 days (X72, the default).** The same method, on `speed/x10` at `284c6ba` (after AIR3): the base is that commit
+with the marks, G2 is the G2 commit with the marks (the 30-day row is the same build at 30).
+
+| | island22 base | island22 G2 at 20 | island22 G2 at 30 | globe36 base | globe36 G2 at 20 | globe36 G2 at 30 |
+|---|---|---|---|---|---|---|
+| `run_for`, one year, M | 6,608.2 | 6,369.3 (-3.6%) | 6,363.3 (-3.7%) | 5,940.7 | 5,535.6 (-6.8%) | 5,391.5 (-9.2%) |
+| animal updates, one year: M; calls | 1,607.3; 9,172 | 1,417.6; 9,011 | 1,363.3; 9,016 | 2,070.9; 10,814 | 1,746.8; 10,596 | 1,629.8; 10,602 |
+| **an animal update, thousand** | 175.2 | **157.3 (x0.898)** | 151.2 (x0.863) | 191.5 | **164.9 (x0.861)** | 153.7 (x0.803) |
+| all animal updates of the year | | x0.882 | x0.848 | | x0.844 | x0.787 |
+| an animal update over two years, thousand | 174.9 | 157.1 (x0.898) | | 194.1 | 166.3 (x0.857) | |
+| habits (`repeat`) in `choose::act` calls, two years | 0 | 8,975 of 18,109 (50%) | | 0 | 9,822 of 19,704 (50%) | |
+| the habit's take path, thousand a call | | 19.2 | 19.2 | | 23.6 | 23.4 |
+
+**Against the kill lines of 20 days** (X58 and the plan's row: x0.91 island, x0.88 globe): **x0.898 and x0.861 per
+animal update (x0.882 and x0.844 for the year's animal updates): both pass.** The plan's estimate at 20 days was x0.89
+and x0.84. Half the node updates decide (a 10-day gene decides at every second update). The year on one thread -3.6%
+and -6.8%.
+
+The benches' eaters at 20 days (the rebased builds; the same 5 seeds, 2 years): island22 1.137 ±0.011 (+0.004 against
+`think_days` 0, 1.133 ±0.013), globe36 0.897 ±0.016 (-0.004; 0.901 ±0.020), region24 0.996 ±0.011 (+0.001; 0.995
+±0.016); the base 1.133, 0.896, 0.994: all within the noise.
+
+**Key numbers at 20 days** (once): all in range but S50 (0.556, known). Ground temperature on land 292.147 K, swing
+15.465 K, rain 0.001814, heat-absorbing gas 411.40 ppm, river cells 695.3, land worn 0.1451 mm/yr, light-eaters
+10.241, **eaters 5.226 log10 kg (seeds 5.176, 5.273, 5.229; -0.17 against the reference 5.393, against -0.32 at 30
+days)**, life of light-eaters 1.241 yr, life of eaters 13.62 yr. **The nodes check passes** at 20 days (454 s; rules
+(b) and (c) break nowhere).
+
+Verdict at 20 days: the kill lines pass, the benches' eaters stay within the noise, the nodes check and the key
+numbers pass (S50 known); the young world's eaters fall -0.17 decades (the range's low end is 4.854).

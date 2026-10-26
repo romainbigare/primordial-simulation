@@ -34,7 +34,9 @@ first day Bond; every `batch_days` days (2) the bodies whose interval ends (`sur
 **Intervals are whole batches**: a body's interval is its `INTERVAL` gene (5 to 360 days; a population node without a
 brain at least `node_days`, a multiple of `batch_days`) rounded to the nearest whole number of batches, at least one
 (`Body::interval`), so an update always starts a batch, all the updates of a batch run at its first day, and a body
-placed during a batch first updates in a later one. Each run stands for the time to its next.
+placed during a batch first updates in a later one. Each run stands for the time to its next. A population node
+with a brain runs its whole update at its gene's pace but decides only about every `think_days` (20), and acts by its
+last decision's habit between (5.3).
 **Bodies and their order** (`life`): the cells are cut into domains, the cells under one air node; each domain stores
 the bodies of its cells, and a body that moves into a cell of another domain moves to its storage. A body's id is the
 domain it was placed in and that domain's count of bodies placed (children, split halves, parts of nodes acting apart,
@@ -404,7 +406,9 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
 - **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
 - **Pace** (`Body::interval`): a node without a brain updates at most every `node_days`, and every interval is a whole
   number of batches (0); rules per interval are rates over the update (`Body::paces`), so its `INTERVAL` gene is the
-  turnover time of its stores (a known limit).
+  turnover time of its stores (a known limit). A node with a brain updates at its gene's pace, its body as at every
+  update, but its brain is slower: it decides at the update nearest to `think_days` after its last decision, and acts
+  by habit at the others (5.3).
 - **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage. A
   body with no brain does not mutate its brain-size genes (`body::vary`): they do nothing without one, so a brain
   arises only in a lineage founded with one (decision 72). An
@@ -431,10 +435,18 @@ faces, 0: looks, signals, well-being, past dealings); up to 3 parts. Walls and c
 
 ### 5.3 Actions
 One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;
-a node spreads its members over the actions by those chances (`choose::spread`). The members that move leave as one
-group: count × the sum of the chances to go in every direction (less than one member: one member with that chance;
-fewer than one member left behind: the whole node, with the chance that keeps the mean at count × the sum), all in the
-one direction drawn by its chance over that sum, so each direction gets its share of members on average, in groups. A
+a node spreads its members over the actions by those chances (`choose::spread`). An individual decides at every update.
+**A node decides about every `think_days`** (20): at the update nearest to that many days after its last decision
+(this one, unless its next update lies nearer). At its other updates it acts by its **habit** (`spread::repeat`): the
+shares of its members that took from the ground and from each body of its cell at its last decision (its chances
+then, `choose::Habit`) take again as at a decision, sized by the update's interval, from a body only while it lives
+in the cell; it perceives, thinks and learns nothing, and moves, puts, gives, watches and acts on parts only at
+decisions. Its body's update (upkeep with one decision's cost, physics, growth,
+children, maturing) runs at every update, as at its gene's pace. At a decision the members that move leave as one
+group: count × the sum of the chances to go in every direction × the intervals of its gene since its last decision,
+at most all (less than one member: one member with that chance; fewer than one member left behind: the whole node,
+with the chance that keeps the mean at count × that share), all in the one direction drawn by its chance over the sum,
+so each direction gets its share of members on average, in groups. A
 group splits off only if the cell it enters has room and the node bears the `bump` share of its weight
 (`choose::go::can_go`). **rest**; **move** (`choose::go`:
 `walk` per kg and metre, climbing, the bodies in the way; needs force, 3.5); **take**, **put**, **give**
@@ -457,8 +469,9 @@ could take.
 ### 5.4 Learning
 **Well-being** (`Body::wellbeing_at`): the energy its stores could release, in decisions' worth, less how near it is
 to its limits; no reward is hand-shaped. **Within a life** (`choose::learn`, `brain::learn`): a policy gradient
-against the critic (actor-critic) on the change of its own well-being, at its `LEARN` rate, in units of the root of
-the critic's running mean square of errors; that mean and each row's mean square of steps both weigh the newest value
+against the critic (actor-critic) on the change of its own well-being since its last decision, the critic's estimate
+from now discounted by `discount` per interval of its gene since then (`discount^paces`), at its `LEARN` rate, in units
+of the root of the critic's running mean square of errors; that mean and each row's mean square of steps both weigh the newest value
 by `learn_beta`. A node learns as from one
 member drawn among those who stayed, with the node's change plus how much more its part's action raised it than the
 mean, so its brain moves as an individual's does. **Across lives**: evolution of born rows and base.
@@ -469,8 +482,8 @@ the lineage it watched in, the watcher's rows move part way (`blend`) toward the
 same sizes, less the less alike they are, times the share of the watcher's members now who watched (for a node, the
 mean by members). **Signals**: 2 numbers a decision with
 noise (`signal_noise`), meaningless at first, at an upkeep (`c_signal`). **Memory**: up to 4 others and how dealings
-went (`Body::note`, `Body::recall`). **Thinking** (`Physics::think`) costs by brain size and mass^0.25 per decision, so
-a long interval saves it. **Null run** (`--null`): no learning or imitation, rows frozen, genes still evolve.
+went (`Body::note`, `Body::recall`). **Thinking** (`Physics::think`) costs by brain size and mass^0.25 one decision per
+update (a node's habit updates too), so a long interval saves it. **Null run** (`--null`): no learning or imitation, rows frozen, genes still evolve.
 
 ## 6. Bodies
 Files: `core/src/body/`, `copy::grow`. `body::live` runs an update in stages: upkeep, the physics of the time since

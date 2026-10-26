@@ -69,6 +69,7 @@ Fields of `Config` that say when the model may save time (mark **speed**). The t
 | `node_days` | days | a population node without a brain updates at most every this many days; a body with a brain by its `INTERVAL` gene (`Body::interval`) | about 10 updates a year (handover 7.3 suggests a month for population nodes) | speed |
 | `crowd` | nodes per cell | past this many body nodes in a cell at a month's start the most alike merge (unlike ones never); a node splits only while its cell has fewer than this minus one; it never bounds the members | 4; nodes must give the patterns of individuals (handover 7.1: the check takes `--crowd 4` and `8` as its noise) | speed |
 | `sample_every` | updates | a node without a brain runs its sample member on one update in this many, drawn; its weight and its cap are that many times larger, so each gene moves at the same mean rate (`copy::select`) | 2 halves the samples' time; ×2 and ÷2 keep plants, animals, carbon gas and land temperature within their noise | speed |
+| `think_days` | days | a population node with a brain decides at the update nearest to this many days after its last decision; at its other updates the shares of its members that took from the ground and from each body of its cell then take again, and it does nothing else (`choose::act`); 0: a decision at every update | 20 (X72): a node of a 9 to 11-day gene decides at every second update, so an animal update costs x0.90 (island22) and x0.86 (globe36) of a decision at every update; at 15, 20, 30 and 60 the eaters' members over 2 years stay within the seeds' noise of 0 on three benches, but in a new world they spread more slowly: the eaters at year 30 lie 0.12 decades below 0 at 20 days and 0.26 at 30 (`docs/speed-x10/measures.md`, G2) | speed |
 
 ## Physics
 
@@ -257,7 +258,7 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 115 rows of `Config` and `Physics` are their 115 fields.
+The 116 rows of `Config` and `Physics` are their 116 fields.
 
 | mark | rows | which |
 |---|---|---|
@@ -266,7 +267,7 @@ The 115 rows of `Config` and `Physics` are their 115 fields.
 | tuned (run or reason named) | 7, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`; outside: `WITHIN`), set for an outcome (`rain_time`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
 | tuned, first guess | 39 | 35 free numbers (`wind`, `cloud`, `gas_depth`, `hard_min`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `keep_min`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 3 | `nodes`, `two_parents`, `null` |
-| speed | 9, and 1 outside the structs | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days`, `batch_days`, `node_days`, `crowd`, `sample_every`; outside: `MIN_INTERVAL` |
+| speed | 10, and 1 outside the structs | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days`, `batch_days`, `node_days`, `crowd`, `sample_every`, `think_days`; outside: `MIN_INTERVAL` |
 | container | 1 | `phys` |
 
 Rows marked tuned in all: 52 (46 in the structs, 6 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.
