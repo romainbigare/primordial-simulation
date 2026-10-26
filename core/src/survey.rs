@@ -226,21 +226,15 @@ fn on_domains<T: Send + Sync, S>(w: &mut World, work: Vec<(usize, usize, T)>, re
 }
 
 /// Run `f` on the domains of `work` (each with its count of work and what it is given), marked as run (`Life::mark`)
-/// and taken out of the world (`life::Domain`), with a scratch made by `init` once per thread, on the pool with the
-/// feature `threads` when the work is large enough (`par::each_init`), the most work first so the last to end is a
-/// small one (longest processing time first, Graham 1969; ties by domain), backwards with `reversed`; then the
-/// domains back. The one runner of per-domain work: each domain writes only its own numbers (CLAUDE.md 3.6).
-pub(crate) fn run<T: Send + Sync, S>(w: &mut World, mut work: Vec<(usize, usize, T)>, reversed: bool, init: impl Fn(&World) -> S + Sync + Send, f: impl Fn(&World, &mut Domain, &T, &mut S) + Sync + Send) {
+/// and taken out of the world (`life::Domain`), with a scratch made by `init` once per thread, by the one runner of
+/// per-domain work (`par::longest_first`); then the domains back. Each domain writes only its own numbers (CLAUDE.md
+/// 3.6).
+pub(crate) fn run<T: Send + Sync, S>(w: &mut World, work: Vec<(usize, usize, T)>, reversed: bool, init: impl Fn(&World) -> S + Sync + Send, f: impl Fn(&World, &mut Domain, &T, &mut S) + Sync + Send) {
     work.iter().for_each(|x| w.life.mark(x.0));
-    work.sort_by_key(|x| (std::cmp::Reverse(x.1), x.0));
-    if reversed {
-        work.reverse();
-    }
-    let total = work.iter().map(|x| x.1).sum();
     let mut domains = std::mem::take(&mut w.life.domains);
     let mut free: Vec<Option<&mut Domain>> = domains.iter_mut().map(Some).collect();
-    let mut runs: Vec<_> = work.into_iter().map(|(k, _, t)| (free[k].take().expect("once a domain"), t)).collect();
-    crate::par::each_init(&mut runs, total, || init(w), |s, (d, t)| f(w, d, t, s));
+    let runs = work.into_iter().map(|(k, n, t)| (k, n, (free[k].take().expect("once a domain"), t))).collect();
+    crate::par::longest_first(runs, reversed, || init(w), |s, (d, t)| f(w, d, t, s));
     w.life.domains = domains;
 }
 

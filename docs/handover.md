@@ -477,7 +477,7 @@ core/       the five laws, world state, random numbers. No IO, no Earth words.
   src/store/  the names of the nodes (a fixed node by class and index, among them the bed and the bodies' node of
               each cell; a part by slot and generation), what the fixed ones hold (`Store`: private arrays, read
               through methods), the boundary nodes sun, space and outside, the one way to change them (`apply`:
-              moves, transforms, link fluxes; and `book_by_array` for the bodies' moves and the air's step, which adds as `apply` adds),
+              moves, transforms, link fluxes; and `book_by_array` for the bodies' moves, the air's step and Change's rows, which adds as `apply` adds),
               and the moves of a body's or a part's update (`Moves`)
   src/clock/  time in whole seconds, the calendar, processes with periods, sleep and wake of nodes
   src/solve/  the shared maths: spread (implicit step on links), downhill, band (the air level with the wind)

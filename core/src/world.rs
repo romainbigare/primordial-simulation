@@ -105,9 +105,6 @@ pub struct World {
     pub events: Vec<Event>,
     /// Flow's working memory: its state (saved) and its caches (rebuilt when missing, `flow::Scratch`)
     pub scratch: flow::Scratch,
-    /// What Change books at a step, kept between steps (not saved)
-    #[serde(skip)]
-    pub batches: crate::change::Batches,
 }
 
 /// The level of the world's mesh its air nodes live on.

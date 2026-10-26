@@ -146,10 +146,10 @@ pub(super) fn zero_rounding(v: &mut f64, rounded: &mut f64) {
 }
 
 /// Does `dmol` keep every element of the chemistry's table, to rounding? `sums` is room for the element totals.
-fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut [f64]) -> bool {
+pub(crate) fn keeps_elements(chem: &Chemistry, dmol: impl IntoIterator<Item = (u16, f64)>, sums: &mut [f64]) -> bool {
     let mut size = 0.0;
     sums.fill(0.0);
-    for &(k, d) in dmol {
+    for (k, d) in dmol {
         chem.add_elems(k as usize, d, sums);
         size += d.abs() * chem.subs[k as usize].elems.iter().map(|&c| c as f64).sum::<f64>();
     }
@@ -175,7 +175,7 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     }
     let mut sums = vec![0.0; if transforms.is_empty() { 0 } else { chem.n_elements }];
     for t in transforms {
-        assert!(keeps_elements(chem, &t.dmol, &mut sums), "a transform that does not keep its elements: {t:?}");
+        assert!(keeps_elements(chem, t.dmol.iter().copied(), &mut sums), "a transform that does not keep its elements: {t:?}");
     }
     let lifted: Vec<_> = fluxes.iter().map(|x| x.lifted(chem)).collect();
     // The heat of the boundary nodes and the potential is a whole history's sum: their changes are summed apart and added

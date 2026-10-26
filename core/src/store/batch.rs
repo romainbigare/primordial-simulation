@@ -67,16 +67,6 @@ impl Batch {
             self.link((0, i), q);
         }
     }
-    /// No link in it any more (its substances stay).
-    pub fn clear(&mut self) {
-        [&mut self.heat].into_iter().chain(&mut self.mol).for_each(Vec::clear);
-        self.a.clear();
-        self.b.clear();
-    }
-    /// Whether no link is in it yet.
-    pub fn is_empty(&self) -> bool {
-        self.a.is_empty()
-    }
     /// The batch as a link flux, for `apply`.
     pub fn flux(&mut self) -> LinkFlux<'_> {
         self.flat.clear();
