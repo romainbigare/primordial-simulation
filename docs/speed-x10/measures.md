@@ -2388,5 +2388,6 @@ of 10 changes few of their updates; the stands' change is the pace (X76).
 fuel the test lays each day is gone at every update after day 60 (Change reacts it over its step, before the batch), and
 the body dies of lack of energy on day 89. With the open world's rot of the fuel off (`Reaction::open` 1), the body with
 dear tissue takes 1.102 times its upkeep in its last 100 days (the bound is under 1.1; 1.094 over days 350 to 440 of a
-longer run): it starts smaller (26.5 kg at day 50 against 28.0) and levels off later. So the test keeps batches of 2
-days (with the rot off, 1.09), and its doc says why.
+longer run): it starts smaller (26.5 kg at day 50 against 28.0) and levels off later. The cause is the setup: the
+body is placed on day 30, so its first update waited for day 40. The test now starts its year at the body's first
+batch, and at the default 10 days it takes 1.0967 times its upkeep, under the bound (17aa1aa).
