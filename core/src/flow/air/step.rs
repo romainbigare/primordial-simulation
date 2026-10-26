@@ -160,8 +160,8 @@ fn active(w: &World, s: &mut Scratch, henry: &[(usize, usize)]) -> Vec<Active> {
 fn pass(cx: &Ctx, rows: &mut [f64], (width, later): (usize, bool)) {
     let (cfg, lat, per) = (&cx.w.cfg, cx.w.mesh.cells().lat(), FIXED_CELL + cx.act.len());
     // Each task keeps the last latitude and its sunlight: neighbouring cells often share a latitude (a row of the
-    // square map), and the sunlight is the same function of it; and room for the air a node sees.
-    crate::par::rows(rows, width, || (f64::NAN, 0.0, vec![0.0; 1 + cx.act.len()]), |(lat_seen, q, seen), i, row| {
+    // square map), and the sunlight is the same function of it; and room for the air a node sees and its gases.
+    crate::par::rows(rows, width, || (f64::NAN, 0.0, vec![0.0; 1 + cx.act.len()], Vec::new()), |(lat_seen, q, seen, gas), i, row| {
         if lat[i] != *lat_seen {
             (*lat_seen, *q) = (lat[i], insolation(cfg.sun, lat[i].to_radians(), cx.decl));
         }
@@ -169,7 +169,7 @@ fn pass(cx: &Ctx, rows: &mut [f64], (width, later): (usize, bool)) {
         if later && keep(row, seen, cx.fixed[i * per]) {
             return;
         }
-        cell(cx, i, *q, row);
+        cell(cx, i, *q, seen, gas, row);
         let at = row.len() - seen.len();
         row[at..].copy_from_slice(seen);
     });

@@ -112,7 +112,8 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
             continue;
         }
         let pk = s.state.pk[i];
-        let th = thaw_at(w, s, c, e, |k| w.store.amounts(Class::Ground)[k * n + i]);
+        let amt = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
+        let th = thaw_at(s, c, e, amt, &melts(w, s, amt));
         (s.state.pk[i], s.state.phi[i]) = th.on.unwrap_or((NONE, s.state.phi[i]));
         s.latent[i] = Latent { held: th.held, lo: th.lo, hi: th.hi, lat: th.lat, molten: th.bits };
         s.state.tg[i] = th.t;
@@ -122,15 +123,26 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     }
 }
 
-/// Where a ground node of heat capacity `c`, J/K, energy `e`, J, and amounts `amt(k)`, mol, stands on the melting
-/// plateaus of the substances that vary (`ground::melting`), each at its point lowered by what is dissolved (laws.md 2.5).
-pub(super) fn thaw_at(w: &World, s: &Scratch, c: f64, e: f64, amt: impl Fn(usize) -> f64) -> Melting {
-    let (mut ord, m) = ([(0.0, 0); MAX_SUBSTANCES], s.state.vary.len());
-    for (o, &k) in ord.iter_mut().zip(&s.state.vary) {
-        *o = (w.chem.melt_in(k, &amt), k);
+/// The melting point of each substance that varies in a ground node of amounts `amt(k)`, mol, lowered by what is
+/// dissolved (`Chemistry::melt_in`, laws.md 2.5), K, by substance.
+pub(super) fn melts(w: &World, s: &Scratch, amt: impl Fn(usize) -> f64) -> [f64; MAX_SUBSTANCES] {
+    let mut melt = [0.0; MAX_SUBSTANCES];
+    for &k in &s.state.vary {
+        melt[k] = w.chem.melt_in(k, &amt);
     }
-    ord[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
-    melting(c, e, ord[..m].iter().map(|&(t, k)| (t, k, amt(k) * s.sp[k].lf)))
+    melt
+}
+
+/// Where a ground node of heat capacity `c`, J/K, energy `e`, J, and amounts `amt(k)`, mol, stands on the melting
+/// plateaus of the substances that vary (`ground::melting`), each at its point `melt[k]`, K (`melts`).
+pub(super) fn thaw_at(s: &Scratch, c: f64, e: f64, amt: impl Fn(usize) -> f64, melt: &[f64; MAX_SUBSTANCES]) -> Melting {
+    // The substances by their melting points here; a substance's number fits a byte (`MAX_SUBSTANCES`).
+    let (mut ord, m) = ([0u8; MAX_SUBSTANCES], s.state.vary.len());
+    for (o, &k) in ord.iter_mut().zip(&s.state.vary) {
+        *o = k as u8;
+    }
+    ord[..m].sort_by(|&a, &b| melt[a as usize].total_cmp(&melt[b as usize]));
+    melting(c, e, ord[..m].iter().map(|&k| (melt[k as usize], k as usize, amt(k as usize) * s.sp[k as usize].lf)))
 }
 
 /// Heat conducts sideways through the ground's active layer over `dt` seconds: one backward-Euler step of
@@ -171,16 +183,17 @@ pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
 /// and Paterson 2010), so the liquid on it stands and runs off.
 pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[i]);
-    let (l, z, [rc, tc]) = layers(w, s, i, s.state.tg[i], |k| w.store.amounts(Class::Ground)[k * n + i], |k| molten(s, k, i));
+    let amt = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
+    let (l, z, [rc, tc]) = layers(w, s, i, s.state.tg[i], amt, |k| molten(s, k, i), |k| w.chem.melt_in(k, amt));
     (s.z[i], s.head[i], s.cover[i], s.alb[i]) = (z, z + l[2] / area, [rc, tc, l[0] / area], reflectance(w, s, i, &l));
     s.pd[i] = w.cfg.phys.porosity * l[4] / area;
 }
 
 /// The layers of ground node `i` at temperature `t` with amounts `amt(k)`, of which the share `molten(k)` is molten:
 /// the volume and volume × reflectance of each of [soft solid, liquid, loose solid] top down, m³; its solid surface, m;
-/// and of its soft cover the heat resistance, m² K/W, and the melting point, K: its solids' melting points (lowered by
-/// what is dissolved, `Chemistry::melt_in`), a mean by volume; infinite with no cover.
-pub(super) fn layers(w: &World, s: &Scratch, i: usize, t: f64, amt: impl Fn(usize) -> f64, molten: impl Fn(usize) -> f64) -> ([f64; 6], f64, [f64; 2]) {
+/// and of its soft cover the heat resistance, m² K/W, and the melting point, K: its solids' melting points `melt(k)`
+/// (lowered by what is dissolved, `Chemistry::melt_in`), a mean by volume; infinite with no cover.
+pub(super) fn layers(w: &World, s: &Scratch, i: usize, t: f64, amt: impl Fn(usize) -> f64, molten: impl Fn(usize) -> f64, melt: impl Fn(usize) -> f64) -> ([f64; 6], f64, [f64; 2]) {
     let area = w.mesh.cells().area()[i];
     let mut l = [0.0, 0.0, 0.0, 0.0, s.state.fix[i][0], s.state.fix[i][1]];
     let (mut z, mut cover) = (w.base_z + (s.state.bed[i].vol + s.state.fix[i][0]) / area, [0.0; 2]);
@@ -196,7 +209,7 @@ pub(super) fn layers(w: &World, s: &Scratch, i: usize, t: f64, amt: impl Fn(usiz
         (l[2], l[3]) = (l[2] + a * liq * p.v[1], l[3] + a * liq * p.v[1] * p.refl[1]);
         z += vs / area;
         if o == 0 {
-            (cover[0], cover[1]) = (cover[0] + vs / area / p.cond, cover[1] + vs * w.chem.melt_in(k, &amt));
+            (cover[0], cover[1]) = (cover[0] + vs / area / p.cond, cover[1] + vs * melt(k));
         }
     }
     cover[1] = if l[0] > 0.0 { cover[1] / l[0] } else { f64::INFINITY };

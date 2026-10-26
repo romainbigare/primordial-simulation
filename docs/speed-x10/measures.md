@@ -2834,3 +2834,58 @@ the pool call is within 20% of the thread time over 4, so more of the same step 
 instructions: most comparisons stop at the first gene); the gap loop of `merge_closest` in vectors, without the early
 exit (slower); the reach worked out only past `lim` (no change). The state of the 60-day flow (G12): the skip is only
 when the process would be in full, as that is the only case it repeats.
+
+## G11: the air's cell rows (kept; done-when not met)
+
+Level 2. The row of a ground node (`step::pass`, `cell.rs`) does the same physics with less work. No f32 and no SIMD:
+see "Why not f32" below.
+
+**What changed.**
+- A row finds once what does not move inside it: the air the node sees (`seen`, not interpolated again by `rain`); what
+  the air's layers send (`glow`, once a row, not once a Newton step); per active gas what evaporation reads and does
+  not move with the end temperature (`Vapour`: the amount, the wet share, the film, the boil-off, the latent heat), not
+  once per evaporation; the partial pressures stay in `Vapour`, so a row no longer copies its tail to the heap for each
+  reflectance guess. A cell with no bodies does not ask the draws.
+- The end reflectance reads the node's amounts once into a dense array, finds the melting points once
+  (`land::melts`, shared by the plateaus and the cover; `layers` asked again for each soft solid), and the plateaus
+  sort substance numbers (64 bytes), not pairs (1 KB).
+- The bucket's slope with the open rate is the derivative of its closed form (`exchange::bucket`), not a second bucket
+  with a nudge of 1e-6. This is the only change of the numbers: with the old slope the golden runs keep the old
+  fingerprints (checked), so every other change is bit for bit.
+
+**One thread, instructions of one year** (callgrind, `RAYON_NUM_THREADS=1`, the `$X/g12/bench` saves, base `acf8f82`;
+`pass` is the inclusive cost of its pool call, millions):
+
+| `pass` | island22 | globe36 |
+|---|---|---|
+| base | 426.9 | 639.5 |
+| + amounts read once in the end reflectance | | 586.6 |
+| + `seen`, `glow` once a row, no heap copy, no draws without bodies | | 550.7 |
+| + the melting points once | 359.7 | 524.6 |
+| + `Vapour` | 332.0 | 481.3 |
+| + the bucket's slope by its derivative | 313.8 | 461.2 |
+| + the plateaus sort numbers (G11) | **307.5 (-28.0%)** | **451.8 (-29.4%)** |
+| the year: base / G11 | 6,543.3 / 6,433.7 (-1.7%) | 6,171.9 / 5,999.1 (-2.8%) |
+
+Done when `pass` -35%: not met. Kill line -20%: passed, so the step is kept. AIR6 is not tried: R2's share of all
+cells that would group is 22 to 28%, under its 40% gate.
+
+**Why not f32.** After the cuts the row's cost is spread over branchy, per-substance work: the end reflectance (the
+melting points of about 10 substances, their sort, the plateaus, the layers) is about a third of `pass`; the bucket
+(with its `ln` and `exp`), the bodies' draws and the tables of saturation pressure most of the rest. The arithmetic a
+32-bit lane would speed up, the surface balance (`Surface::balance`) and the layers' glow, is 7% to 8% of `pass` in a
+build without inlining (37 of 529 million on globe36, 25 of 345 on island22). Even at no cost it would leave `pass`
+near -30%, and 32 bits would add rounding to the end temperature for nothing measurable. So X4's f32 is not used.
+
+**Checks.**
+
+| Check | Result |
+|---|---|
+| Golden | re-pinned (`0xc563aa1ce985fc57`, `0x0378350ad6d84a8b`, `0x745990747d905b46`): the same with and without threads, with debug assertions and in a plain debug build |
+| `cargo test --release --workspace`, with debug assertions too, clippy, the wasm build | pass, no warning |
+| The bucket's slope | a new test: the slope is the derivative of the bucket in each of its regimes (stays wet, dries to `wet`, dries further, wets again under rain, no bucket) |
+| `the_long_step_keeps_the_climate` | passes: land +0.088 K (seeds +0.219, -0.044, +0.089), summer -0.029 K, winter -0.015 K, limit 0.3 K; rain on land +1.1e-5 against 3.1e-4; `air_3` +8e-9 against 1.7e-5; rivers +2.3 against 15 |
+| `a_globe_without_life_keeps_an_earth_like_climate` | passes: surface 290.13 K, vapour 0.0069, rain on land 1.80 m/yr, land 286.09 K, drift 0.006 K a year, ice at most 0.103 (G12: the same but drift 0.005) |
+| `series.csv`, 3 years from the `g12` saves, base `acf8f82` and G11, largest relative difference after year 1 / over the 3 years | island22: elements 2e-16; energy 7e-9; air temperature 6e-6 / 6e-5; land temperature 8e-6 / 6e-5 (summer 2e-4, winter 5e-5); the heat-absorbing gas 2e-5 / 4e-4; the trace gas 5e-4 / 2e-3; rain on land 3e-4 / 4e-4; evaporation on land 3e-4 / 3e-3; rivers the same / 1 cell; bodies 1e-3 / 7e-3. globe36: elements 4e-16; energy 6e-9; air temperature 1e-6 / 5e-5; land temperature 2e-6 / 8e-5 (summer 4e-4, winter 3e-4); the gas 6e-5 / 1e-3; the trace gas 6e-4 / 3e-3; rain on land 7e-5 / 2e-3; evaporation on land 7e-5 / 1e-2; ice share the same / 0.0014 (of 0.013 to 0.016); rivers the same / 2 cells; bodies 8e-3 / 2e-2 |
+
+The differences start at rounding in year 1 and grow with the years and life's choices, as in AIR3 and E1c.

@@ -33,40 +33,39 @@ impl Sat {
 }
 
 /// What evaporates over `dt` seconds from ground holding `a` mol that gets `r` mol of rain evenly: `e` mol/s while it
-/// holds `wet` mol or more, in proportion below that (the bucket of Manabe 1969), integrated exactly over the step.
-fn bucket(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> f64 {
+/// holds `wet` mol or more, in proportion below that (the bucket of Manabe 1969), integrated exactly over the step; and
+/// its slope with the open rate `e`, s.
+pub(super) fn bucket(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> (f64, f64) {
     let rate = r / dt;
     if e <= 0.0 {
-        return 0.0;
+        return (0.0, 0.0);
     }
-    let (mut m, mut left, mut now) = (0.0, dt, a);
+    // No more than the ground holds and gets, and no less than nothing.
+    let held = |m: f64, dm: f64| (m.min(a + r).max(0.0), if m > 0.0 && m < a + r { dm } else { 0.0 });
+    // What has evaporated and the time left when the ground comes down to `wet`, holding `now`; each with its slope.
+    let (mut m, mut left, mut now, mut dm, mut d_left) = (0.0, dt, a, 0.0, 0.0);
     if now > wet {
         let t1 = if e > rate { (now - wet) / (e - rate) } else { dt };
         if t1 >= dt {
-            return (e * dt).min(a + r);
+            return held(e * dt, dt);
         }
-        (m, left, now) = (e * t1, dt - t1, wet);
+        let d_t1 = -t1 / (e - rate);
+        (m, left, now, dm, d_left) = (e * t1, dt - t1, wet, t1 + e * d_t1, -d_t1);
     }
     if wet <= 0.0 {
-        return (m + rate.min(e) * left).min(a + r);
+        return held(m + rate.min(e) * left, dm + if e < rate { left } else { 0.0 } + rate.min(e) * d_left);
     }
     // Below `wet`: d(held)/dt = rate - k held, toward `rate / k`; when that is over `wet` the ground wets again.
     let (k, eq) = (e / wet, rate * wet / e);
+    let (d_k, d_eq) = (1.0 / wet, -eq / e);
     let t2 = if eq > wet { ((eq - now) / (eq - wet)).ln() / k } else { f64::INFINITY };
-    let m = if t2 >= left { m + rate * left + (now - eq) * one_minus_exp(k * left) } else { m + rate * t2 - (wet - now) + e * (left - t2) };
-    m.min(a + r).max(0.0)
-}
-
-/// The slope of what evaporates with the open rate is taken over this share of it, where the ground dries in the step.
-const NUDGE: f64 = 1e-6;
-
-/// `bucket` and its slope with the open rate `e`: `dt` where the ground stays wet through the step, else over a nudge.
-pub(super) fn bucket_slope(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> (f64, f64) {
-    if e > 0.0 && a > wet && a - wet >= (e - r / dt) * dt && e * dt <= a + r {
-        return (e * dt, dt);
+    if t2 >= left {
+        let gone = one_minus_exp(k * left);
+        held(m + rate * left + (now - eq) * gone, dm + rate * d_left - d_eq * gone + (now - eq) * (1.0 - gone) * (d_k * left + k * d_left))
+    } else {
+        let d_t2 = (d_eq * (1.0 / (eq - now) - 1.0 / (eq - wet)) - t2 * d_k) / k;
+        held(m + rate * t2 - (wet - now) + e * (left - t2), dm + (rate - e) * d_t2 + left - t2 + e * d_left)
     }
-    let m = bucket(a, r, e, wet, dt);
-    (m, (bucket(a, r, e * (1.0 + NUDGE), wet, dt) - m) / (e * NUDGE))
 }
 
 /// The cloud where `m` mol condense over `area` m² in `dt` seconds, a layer of droplets whose optical depth grows with
@@ -123,6 +122,25 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
     for &(_, k) in henry {
         if (0..n).any(|i| w.store.amounts(Class::Ground)[k * n + i] > 0.0) {
             s.add_loose(k, true);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bucket;
+
+    #[test]
+    fn the_bucket_slope_is_its_derivative() {
+        // Ground that stays wet, dries to `wet`, dries further, wets again under rain, and has no bucket; with the
+        // derivative by central differences.
+        let dt = 1e5;
+        for (a, r, e, wet) in [(10.0, 0.0, 1e-5, 1.0), (2.0, 0.0, 1e-4, 1.0), (0.5, 0.0, 1e-5, 1.0), (0.5, 0.3, 1e-5, 1.0), (0.5, 3.0, 1e-5, 1.0), (2.0, 0.5, 1e-4, 0.0)] {
+            let (m, slope) = bucket(a, r, e, wet, dt);
+            let h = e * 1e-6;
+            let fd = (bucket(a, r, e + h, wet, dt).0 - bucket(a, r, e - h, wet, dt).0) / (2.0 * h);
+            assert!(m > 0.0 && m <= a + r, "{m}");
+            assert!((slope - fd).abs() <= 1e-6 * fd.abs().max(dt * 1e-3), "a {a} r {r} e {e} wet {wet}: {slope} against {fd}");
         }
     }
 }

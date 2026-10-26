@@ -46,11 +46,20 @@ pub fn glow(f: f64, tl: f64, lay: &[f64; LAYERS]) -> (f64, f64) {
     })
 }
 
-/// What a ground node's surface balance reads, per m²: shortwave absorbed, W/m²; the air's temperature at the ground,
-/// K; the heat of the gas it exchanges, linearised about `t0` (`gain`, `slope`); and rain at `t_rain` through `g_rain`.
-pub(super) struct Surface {
-    pub(super) sw: f64,
+/// The air touching a ground node in a step: its temperature, K; the share of heat radiation it absorbs; and what its
+/// layers send [down, up] (`glow`), W/m², each with its slope with `tl`, W/(m² K).
+pub(super) struct Air {
     pub(super) tl: f64,
+    pub(super) f: f64,
+    pub(super) down: (f64, f64),
+    pub(super) emit: (f64, f64),
+}
+
+/// What a ground node's surface balance reads, per m²: shortwave absorbed, W/m²; the air touching it; the heat of the
+/// gas it exchanges, linearised about `t0` (`gain`, `slope`); and rain at `t_rain` through `g_rain`.
+pub(super) struct Surface<'a> {
+    pub(super) sw: f64,
+    pub(super) air: &'a Air,
     pub(super) t0: f64,
     pub(super) gain: f64,
     pub(super) slope: f64,
@@ -71,17 +80,17 @@ pub(super) struct Balance {
     pub(super) to_space: f64,
 }
 
-impl Surface {
+impl Surface<'_> {
     /// The balance of ground node `i` over `dt` seconds: σT⁴ out, the air's layers back (`column`), contact heat
     /// (`sensible`) and the gas's heat; solved implicitly about the temperature before the step, the node's heat capacity
     /// in series with any soft cover, whose top melts. A melting point the node is at or reaches in the step holds it
     /// while the fusion enthalpy there lasts, `fusion` on its plateau (`plateau`), so a long step freezes and thaws as
     /// short ones do.
     pub(super) fn balance(&self, s: &Scratch, (i, area, dt): (usize, f64, f64), sensible: f64, fusion: f64) -> Balance {
-        let (adt, f, t) = (area * dt, s.seen[i][2], s.state.tg[i]);
-        let ((down, d_down), (emit, d_emit)) = (glow(f, self.tl, &s.lay[i][0]), glow(f, self.tl, &s.lay[i][1]));
+        let (adt, t, tl) = (area * dt, s.state.tg[i], self.air.tl);
+        let (f, (down, d_down), (emit, d_emit)) = (self.air.f, self.air.down, self.air.emit);
         let t3 = SIGMA * t * t * t;
-        let num = self.sw + down + 3.0 * t3 * t + sensible * self.tl + self.gain - self.slope * self.t0 + self.g_rain * self.t_rain;
+        let num = self.sw + down + 3.0 * t3 * t + sensible * tl + self.gain - self.slope * self.t0 + self.g_rain * self.t_rain;
         let den = 4.0 * t3 + sensible + self.g_rain - self.slope;
         // The surface's end temperature and response with the node from `tn` behind a resistance `r`; held at `tn` where
         // `r` is too small to change it (`r den` below the last digit, where `1 / r` may overflow). The surface of a
@@ -93,7 +102,7 @@ impl Surface {
             let at = if r * den > f64::EPSILON { ((tn / r + num) / d, 1.0 / d) } else { (tn, 0.0) };
             if at.0 > cap { (cap, 0.0) } else { at }
         };
-        let flux = |ts: f64| (t3 * (4.0 * ts - 3.0 * t), sensible * (ts - self.tl));
+        let flux = |ts: f64| (t3 * (4.0 * ts - 3.0 * t), sensible * (ts - tl));
         // The heat the node gets over the step with the surface at `ts`, J.
         let net = |ts: f64| {
             let (up, hs) = flux(ts);
