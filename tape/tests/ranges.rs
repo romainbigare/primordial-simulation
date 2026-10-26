@@ -294,8 +294,9 @@ const SHORT_PHYS_DAYS: u32 = 2;
 /// The long step against the short one, each seed against itself: at the default steps of Flow (`air_hours`,
 /// `phys_days`, `flow_days`) and of the bodies' batch the mean over the seeds of what the long step moves each of the
 /// climate's key numbers (the mean of its last years) from the short steps (`SHORT_AIR_HOURS`, `SHORT_PHYS_DAYS`, and
-/// liquid steps and batches of `SHORT_PHYS_DAYS`) is less than `STEP_K` for a temperature, and less than its year-to-year spread at the
-/// short steps (the mean over the seeds of its highest less its lowest yearly value) for the others.
+/// liquid steps and batches of `SHORT_PHYS_DAYS`) is less than `STEP_K` for a temperature, and less than its
+/// year-to-year spread at the short steps (the mean over the seeds of its highest less its lowest yearly value) for the
+/// others.
 #[test]
 #[ignore = "slow: six 20-year runs of a 32 x 32 world with life"]
 fn the_long_step_keeps_the_climate() {
