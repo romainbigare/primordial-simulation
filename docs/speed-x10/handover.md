@@ -109,8 +109,13 @@ Probes done (pushed branches; their results are in `measures.md`):
 
 ## 6. Known open items for the owner
 
-- **S50** (from the last round): the light-eaters' stored share fails its key-number range (0.556 against "under 0.5");
-  known since the foundation.
+- **S50** (from the last round): the light-eaters' stored share fails its key-number range (0.556 at the round's start,
+  0.563 since G4's stands at 40 days, X76, against "under 0.5"); known since the foundation.
+- **X76**: G4's law effects are accepted, the roster is not tuned again: intervals are whole batches of 10 days (a gene
+  of 5 to 15 days updates every 10 days, so speed gives no escape between such bodies), stands update every 40 days
+  and mature and give births only then, and what bodies leave on the ground waits a whole step of Change.
+- **X77**: the batch test is judged on the mean of seeds 1 to 3 against the noise of that mean (one seed's years spread
+  too little); it passes.
 - **S84**: the sleep of Change biases the sea's gas 3 slightly; a fix is on the branch `sleep/pair-calm-proposal` and
   costs about 20% of a run; a law question.
 - **S83**: the canopy check takes the densest 5% of land cells (a rank) since plants weigh about half.

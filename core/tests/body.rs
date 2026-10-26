@@ -461,10 +461,12 @@ fn a_body_evaporates_no_more_than_the_ground_can_pay() {
     b.store.iter_mut().for_each(|a| *a *= f);
     (b.e, b.count, b.last) = (b.e * f, b.n() * f, w.day() as f64);
     let slot = w.add(b, days);
-    let (books, rounded) = (Books::now(&w), w.counts.rounded);
-    w.time += days * DAY_S;
+    let (books, rounded, updates) = (Books::now(&w), w.counts.rounded, w.counts.updates);
+    // To the first day of the batch its update is due in (`Body::due`).
+    w.time = w.life[slot].due * w.cfg.batch_days as u64 * DAY_S;
     pcore::survey::survey(&mut w, false);
     pcore::survey::batch(&mut w, false);
+    assert_eq!(w.counts.updates, updates + 1, "the body did not update");
     let b = &w.life[slot];
     let floor = w.heat_cap_ground(i) * T_FLOOR;
     let e = w.store.heat(Class::Ground)[i] - floor;

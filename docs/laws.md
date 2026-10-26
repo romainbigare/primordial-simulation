@@ -36,9 +36,14 @@ air step) the bodies whose interval ends (`survey::batch`).
 **Intervals are whole batches**: a body's interval is its `INTERVAL` gene (5 to 360 days; a population node without a
 brain at least `node_days`, 40, a multiple of `batch_days`) rounded to the nearest whole number of batches, at least one
 (`Body::interval`), so an update always starts a batch, all the updates of a batch run at its first day, and a body
-placed during a batch first updates in a later one; so a gene of 5 to 15 days updates every 10 days. A batch is as long
-as a physics step, so the bodies of a batch read the ground and the air as that day's Change and air step left them. Each
-run stands for the time to its next. A population node with a brain runs its whole update at its gene's pace but decides only about every `think_days` (20), and acts by its
+placed during a batch first updates in a later one. So a gene of 5 to 15 days updates every 10 days, and one of 15 to
+25 days every 20: bodies whose genes differ inside one such span update alike, and none of them gets away from another
+by being quicker (5.3, the take from a body). `batch_days` divides `phys_days`, so every physics day starts a batch, after
+that day's Change and air step (at the defaults the two are 10 days, so every batch starts on a physics day): the bodies
+of a batch read the ground and the air as that day's Change and air step left them, and what bodies leave on the ground
+in a batch (the free solid they shed, remains) goes through a whole step of Change before the next batch's bodies can
+take it, so most of the free solid has rotted by then (it rots in about a week, 2.1). Each run stands for the time to
+its next. A population node with a brain runs its whole update at its gene's pace but decides only about every `think_days` (20), and acts by its
 last decision's habit between (5.3).
 **Bodies and their order** (`life`): the cells are cut into domains, the cells under one air node; each domain stores
 the bodies of its cells, and a body that moves into a cell of another domain moves to its storage. A body's id is the
@@ -466,7 +471,8 @@ minerals it builds of count in s as food does: one search finds all it uses, so 
 members lie over the cell like the ground's food: a bite reaches those the swept area holds (one individual body
 whole, by one draw with the chance the area holds it, whether a node or an individual takes it; of a node, less than one member is one whole member met with that chance:
 it takes, tears and pays that meeting's outcome times the chance), limited by force against theirs; a quicker body
-escapes with the chance its interval gives. **Giving** (`Body::spare`) is of what the other uses, of stores only (no
+escapes with chance 1 - its interval / the taker's (intervals in whole batches, 0: two bodies of genes of 5 to 15 days
+both update every 10 days, so neither gets away from the other). **Giving** (`Body::spare`) is of what the other uses, of stores only (no
 matter, brood, built solids or key liquid below level), above `keep_min` × their minimum, at most what the members met
 could take.
 

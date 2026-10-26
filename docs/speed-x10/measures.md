@@ -2292,7 +2292,7 @@ gave x0.88, x0.93 and x0.77 by the medians: not used.
 | Golden | re-pinned (`0x73e67d01d3018a20`, `0x4df6835ca57dd1c4`, `0x769ee0f6a9fb4515`), the same with and without threads |
 | `cargo test --release --workspace`, with debug assertions too, clippy, the wasm build | pass, no warning |
 | The pace test (`the_pace_of_nodes_keeps_life`, seed 1) | passes at 40, 80 and 20 |
-| The batch test (`the_batches_of_bodies_keep_life`, 2 against 10 days, seed 1) | **fails**: the light-eaters' life (`root_0_life_real`) 4.80 against 4.87 years, off by -0.066, noise 0.026 (2.6 times); the other four under 0.05 of their noise |
+| The batch test (`the_batches_of_bodies_keep_life`, 2 against 10 days, seed 1; the design before X77) | **fails**: the light-eaters' life (`root_0_life_real`) 4.80 against 4.87 years, off by -0.066, noise 0.026 (2.6 times); the other four under 0.05 of their noise |
 | The key numbers (once, against the references after AIR4.0) | all in range but S50 (0.563, the known failure): ground temperature on land 292.107 K, swing 15.413 K, rain 0.001813, heat-absorbing gas 411.24 ppm, river cells 695.2, land worn 0.1467 mm/yr, light-eaters 10.254, **eaters 5.217 log10 kg** (seeds 5.217, 5.213, 5.220; G2 5.226), **life of light-eaters 1.416 yr** (seeds 1.457, 1.421, 1.371; G2 1.241, the reference 1.218), life of eaters 14.34 yr |
 | The nodes check (`tape/tests/nodes.rs`, 282 s) | passes; rule (b) broken once within the noise (roster, seed 5, kind 2 `copy_log` -0.74 against +0.10), rule (c) nowhere |
 | Tests that changed | `a_body_gives_its_stores_but_not_its_body` runs a batch and a day (the body's first update is a batch on); `node_takes` 90 days, not 80 (8 updates from its first batch); the heat test 25 days, not 30 (its last update spans 10 days of 350 K, and what it tests is not how soon); the growth test runs batches of 2 days (the test lays fuel each morning and Change reacts all of it on some physics days before the body of that day takes; in batches of 2 days its updates fall between Change's steps) |
@@ -2321,9 +2321,72 @@ So the failure on seed 1 at 40 is that seed's tight year-to-year spread of the l
 against 0.31 in the gene-pace run of the pace test on the same seed), not the batch: the batch test of today (1 against 2) fails
 there too. The key numbers at node 30 (once, for X76): all in range but S50 (0.552); eaters 5.228, life of light-eaters
 1.224 years (seeds 1.322, 1.187, 1.165), the climate within 0.1 K and 2 ppm of G4's at 40, life of eaters 12.9 years (14.3 at 40). So the light-eaters' longer life in G4's
-key numbers comes with the stands' pace of 40, not with the batch.
+key numbers comes mostly with the stands' pace of 40, and a small part with the batch (the review's split below).
 
 **Verdict.** The done-when (the bodies' stage on 4 threads -10%) is met: -17% (island22), -22% (globe36), -21%
 (region24) by the medians, -21%, -21%, -27% by the minima, far over the kill line of -6%. The year on 4 threads -10%,
--15%, -18%; on one thread -4.6%, -3.6%, -6.8%. Open (X76, for the architect): the batch test fails on its seed at
-`node_days` 40, by that seed's noise; the light-eaters live 14% longer in the key numbers (in range).
+-15%, -18%; on one thread -4.6%, -3.6%, -6.8%. The batch test, judged since the review on the mean of seeds 1 to 3
+(X77), passes; the light-eaters live 14% longer in the key numbers (in range; X76).
+
+### G4: the review's measures
+
+Tests and docs only (level 1: golden unchanged). Each run once.
+
+**The batch test on seeds 1 to 3** (`the_batches_of_bodies_keep_life` as redesigned, X77: the mean over the seeds of
+each number's mean of years 5 to 8, against the spread over those years of the seeds' mean in batches of 2 days):
+passes.
+
+| Number | batches of 2 days | of 10 days | off | noise | off / noise |
+|---|---|---|---|---|---|
+| plant members | 2.1561e8 | 2.1935e8 | +3.74e6 | 1.820e8 | 0.021 |
+| light-eaters' kg | 3.6307e8 | 3.6525e8 | +2.17e6 | 2.693e8 | 0.008 |
+| births | 9.8384e7 | 1.00632e8 | +2.25e6 | 6.467e7 | 0.035 |
+| light-eaters' life (yr) | 4.4815 | 4.4515 | -0.0300 | 0.2477 | 0.12 |
+| heat-absorbing gas | 3.86308e-4 | 3.86274e-4 | -3.4e-8 | 4.08e-6 | 0.008 |
+
+On seed 1 alone the light-eaters' life moves -0.066 years against its spread of 0.026 (the failure of the old design);
+seeds 2 and 3 move +0.006 and -0.030. In this small world the plants still spread in years 5 to 8, so the spread of
+plant members, kg and births is mostly their growth, as it was in the test of one seed.
+
+**The long-step test** (`the_long_step_keeps_the_climate`; its short run now has batches of 2 days, as a batch must
+divide the physics step of 2 days): passes. The long steps against the short, mean of seeds 1 to 3 (seeds): land
+temperature +0.117 K (+0.273, -0.043, +0.123), summer +0.110 K, winter +0.002 K, all against the limit 0.3 K; rain on
+land +1.4e-5 against a spread of 3.1e-4; the heat-absorbing gas +1.7e-8 against 1.7e-5; river cells +1.0 against 19.3.
+
+**The key numbers at batch 2, node 40** (a throw-away copy with the default `batch_days` 2; against G4, batch 10 at
+node 40, G2's final run at batch 2 and node 36, and G4's run at node 30):
+
+| Key number | batch 2, node 36 (G2) | batch 2, node 40 | batch 10, node 30 | batch 10, node 40 (G4) |
+|---|---|---|---|---|
+| light-eaters' life (yr) | 1.241 (1.160, 1.271, 1.292) | 1.211 (1.396, 1.382, 0.856) | 1.224 (1.322, 1.187, 1.165) | 1.416 (1.457, 1.421, 1.371) |
+| stored share (S50) | 0.556 (0.564, 0.550, 0.553) | 0.558 (0.563, 0.553, 0.557) | 0.552 (0.551, 0.548, 0.557) | 0.563 (0.569, 0.558, 0.562) |
+| eaters (log10 kg) | 5.226 | 5.249 | 5.228 | 5.217 |
+| life of eaters (yr) | 13.62 | 13.47 | 12.89 | 14.34 |
+| ground temperature on land (K) | 292.147 | 292.120 | | 292.107 |
+
+All in range at batch 2 and node 40 but S50. On seeds 1 and 2 the pace of 40 gives most of the light-eaters' longer
+life (+0.24 and +0.11 years from 36 to 40 at batch 2) and the batch of 10 adds 0.04 to 0.06; seed 3 swings by 0.5
+years between settings, so the three seeds' mean moves by up to 0.2 years by chance. S50 rises from 30 to 40 in every seed (+0.011
+on the mean): growth leaves an interval's upkeep in store (`laws.md` 6.6), so a stand that updates less often holds
+more stored solid; the batch of 10 adds about 0.005 in every seed (X76).
+
+**How many updates change their interval** (one year of the G4 saves, a throw-away counter: each update's interval
+against what it would be in batches of 2 days with stands at 36):
+
+| | island22 | globe36 |
+|---|---|---|
+| updates | 27,444 | 20,630 |
+| stands (nodes without a brain): changed | 16,002 of 16,004 (36 to 40 days) | 9,900 of 9,900 |
+| other bodies: changed | 507 of 11,440 (4.4%) | 4 of 10,730 |
+| other bodies: gene of 5 to 15 days | 11,440 | 10,728 |
+| other bodies: mean interval, batch 2 against 10 | 10.05, 10.00 days | 10.00, 10.00 days |
+
+The bodies with a brain and the individuals of these worlds have genes near 10 days, so the rounding to whole batches
+of 10 changes few of their updates; the stands' change is the pace (X76).
+
+**The growth test at the defaults** (`growth_stops_where_upkeep_meets_what_the_body_can_take`): in batches of 10 the
+fuel the test lays each day is gone at every update after day 60 (Change reacts it over its step, before the batch), and
+the body dies of lack of energy on day 89. With the open world's rot of the fuel off (`Reaction::open` 1), the body with
+dear tissue takes 1.102 times its upkeep in its last 100 days (the bound is under 1.1; 1.094 over days 350 to 440 of a
+longer run): it starts smaller (26.5 kg at day 50 against 28.0) and levels off later. So the test keeps batches of 2
+days (with the rot off, 1.09), and its doc says why.

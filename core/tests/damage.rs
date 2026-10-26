@@ -195,9 +195,10 @@ fn trampling_breaks_body_matter() {
 
 /// Heat burns body matter: a warm body that lives on (its liquid does not boil) burns matter by the reaction that burns
 /// it, so it is smaller in body, not only in fuel, with no new rule (the reactions of `body::live` act on the matter in
-/// its stores, and the body is its matter over 1 - h). Elements and energy are kept. (25 days of 350 K: the solid burns
-/// first and takes the burning gas the body has at hand, and the matter, which needs its sixth power, follows; what is
-/// tested is that heat makes a body smaller in body as well as in fuel, not how soon.)
+/// its stores, and the body is its matter over 1 - h). Elements and energy are kept. (25 days of 350 K from day 31: the
+/// body, a 10-day gene, updates on the first days of the batches at days 40 and 50, the last for 10 days of 350 K; the
+/// solid burns first and takes the burning gas the body has at hand, and the matter, which needs its sixth power,
+/// follows; what is tested is that heat makes a body smaller in body as well as in fuel, not how soon.)
 #[test]
 fn a_body_burnt_by_heat_and_alive_is_smaller_in_body() {
     let (mut w, i) = bite_start();

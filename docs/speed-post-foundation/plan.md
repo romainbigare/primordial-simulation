@@ -164,7 +164,9 @@ The work must not close the door to smart, people-like bodies later (handover 13
    (`nodes::open` stays and is tested).
 2. **The step length can later be chosen per place.** A domain owns its bodies and its ring of updates, so a zone
    domain (a focus zone, handover 7.3) can later run several sub-batches inside one global batch, its edge effects
-   still landing at the global batch's end. Nothing in D2 blocks that; today one batch length holds for all domains.
+   still landing at the global batch's end. Nothing in D2 blocks that; today one batch length holds for all domains:
+   10 days (`batch_days`, one air step). Individuals with a short gene and smart bodies may later run sub-batches
+   inside it.
 3. **Two kinds of body code.** E3, if built, is for bodies without a brain. Bodies with a brain keep a per-body path,
    and nothing in E3 may assume that every body takes the same branches. (B1 is one mechanism for every node; young
    animals act through their node's spread of actions, S36.)

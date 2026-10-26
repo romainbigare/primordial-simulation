@@ -14,8 +14,8 @@
 //! The sleep of Change's nodes is a speed tool: a small world with life keeps the chemistry's key numbers
 //! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2. So is
 //! the pace of population nodes: the same world keeps its life's key numbers with every node at its own `INTERVAL`
-//! gene (`Config::node_days` 0), and with the setting x2 and /2. So are the batches of bodies: the same world keeps its
-//! life's key numbers with bodies in batches of 2 days (`Config::batch_days`).
+//! gene (`Config::node_days` 0), and with the setting x2 and /2. So are the batches of bodies: three worlds keep the
+//! mean of their life's key numbers with bodies in batches of 2 days (`Config::batch_days`).
 //!
 //! The eaters live: at 48 x 48 they still have members at year 100 in seeds 1, 2 and 3, after the booms and busts
 //! that year 30 hides; they have stopped growing by their last ten years, and none hold more than a few times the
@@ -26,8 +26,8 @@
 //! ice, and its surface, vapour and rain on land within wide bounds around Earth's.
 //!
 //! The steps of Flow are speed settings too (the long step against the short one): small worlds with life, each seed
-//! against itself, keep their climate at the default steps and with the air's step at 6 hours and the physics step at
-//! 2 days, within 0.3 K for a temperature and the year-to-year spread for the others.
+//! against itself, keep their climate at the default steps and with the air's step at 6 hours and the physics step and
+//! the bodies' batch at 2 days, within 0.3 K for a temperature and the year-to-year spread for the others.
 
 mod common;
 
@@ -204,15 +204,22 @@ const SLEEP_FROM: u64 = 5;
 /// and lime.
 const CHEMISTRY: [&str; 7] = ["air_3", "min0_land", "min0_sea", "min1_land", "min1_sea", "dead_22", "dead_10"];
 
-/// The `columns` at the end of each year from `SLEEP_FROM` of the sleep test's world with the settings `set` makes.
-fn yearly(columns: &[&str], set: impl Fn(&mut Config)) -> Vec<Vec<f64>> {
+/// The `columns` at the end of each year from `SLEEP_FROM` of the sleep test's world of `seed` with the settings `set`
+/// makes.
+fn yearly(seed: u64, columns: &[&str], set: impl Fn(&mut Config)) -> Vec<Vec<f64>> {
     let mut years = vec![];
-    run(1, SLEEP_SIDE, SLEEP_YEARS, false, set, |y, _, rec| {
+    run(seed, SLEEP_SIDE, SLEEP_YEARS, false, set, |y, _, rec| {
         if y >= SLEEP_FROM {
             years.push(columns.iter().map(|c| rec.last(c)).collect());
         }
     });
     years
+}
+
+/// The mean over the seeds of `runs` (each run's yearly values, as `yearly` gives them), year by year.
+fn seed_mean(runs: &[Vec<Vec<f64>>]) -> Vec<Vec<f64>> {
+    let seeds = runs.len() as f64;
+    (0..runs[0].len()).map(|y| (0..runs[0][y].len()).map(|q| runs.iter().map(|r| r[y][q]).sum::<f64>() / seeds).collect()).collect()
 }
 
 /// For each of `columns`, the mean over the years of each run of `runs` after the first, against the first's: it must
@@ -247,7 +254,7 @@ fn the_sleep_of_change_keeps_the_chemistry() {
     let (set, share) = (Config::default().sleep_days, Config::default().wake_share);
     let settings = [(0, share), (set, share), (2 * set, share), (set / 2, share), (set, 2.0 * share), (set, share / 2.0)];
     let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
-        let runs: Vec<_> = settings.iter().map(|&(days, wake)| s.spawn(move || yearly(&CHEMISTRY, |c| (c.sleep_days, c.wake_share) = (days, wake)))).collect();
+        let runs: Vec<_> = settings.iter().map(|&(days, wake)| s.spawn(move || yearly(SEEDS[0], &CHEMISTRY, |c| (c.sleep_days, c.wake_share) = (days, wake)))).collect();
         runs.into_iter().map(|r| r.join().expect("a run")).collect()
     });
     let out = off_by_noise(&CHEMISTRY, &runs, &settings, |(days, wake)| format!("sleep {days} days, wake at {wake}"));
@@ -279,19 +286,19 @@ fn climate(seed: u64, set: fn(&mut Config)) -> Vec<[f64; CLIMATE.len()]> {
 }
 
 /// The air's step of 6 hours (`air_hours`), short against the air's changes in a day, and a physics step of 2 days
-/// (`phys_days`).
+/// (`phys_days`); the bodies' batch (`batch_days`) is then 2 days too, as a batch divides the physics step.
 const SHORT_AIR_HOURS: u32 = 6;
 const SHORT_PHYS_DAYS: u32 = 2;
 
 /// The long step against the short one, each seed against itself: at the default steps of Flow (`air_hours`,
-/// `phys_days`, `flow_days`) the mean over the seeds of what the long step moves each of the climate's key numbers
-/// (the mean of its last years) from the short steps (`SHORT_AIR_HOURS`, `SHORT_PHYS_DAYS`) is less than `STEP_K` for
-/// a temperature, and less than its year-to-year spread at the short steps (the mean over the seeds of its highest
-/// less its lowest yearly value) for the others.
+/// `phys_days`, `flow_days`) and of the bodies' batch the mean over the seeds of what the long step moves each of the
+/// climate's key numbers (the mean of its last years) from the short steps (`SHORT_AIR_HOURS`, `SHORT_PHYS_DAYS`, and
+/// batches of `SHORT_PHYS_DAYS`) is less than `STEP_K` for a temperature, and less than its year-to-year spread at the
+/// short steps (the mean over the seeds of its highest less its lowest yearly value) for the others.
 #[test]
 #[ignore = "slow: six 20-year runs of a 32 x 32 world with life"]
 fn the_long_step_keeps_the_climate() {
-    let short: fn(&mut Config) = |c| (c.air_hours, c.phys_days) = (SHORT_AIR_HOURS, SHORT_PHYS_DAYS);
+    let short: fn(&mut Config) = |c| (c.air_hours, c.phys_days, c.batch_days) = (SHORT_AIR_HOURS, SHORT_PHYS_DAYS, SHORT_PHYS_DAYS);
     let default: fn(&mut Config) = |_| {};
     // Per seed, [short, default], all side by side.
     let runs: Vec<[Vec<[f64; CLIMATE.len()]>; 2]> = std::thread::scope(|s| {
@@ -334,7 +341,7 @@ fn the_pace_of_nodes_keeps_life() {
     let set = Config::default().node_days;
     let settings = [0, set, 2 * set, set / 2];
     let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
-        let runs: Vec<_> = settings.iter().map(|&days| s.spawn(move || yearly(&LIFE, |c| c.node_days = days))).collect();
+        let runs: Vec<_> = settings.iter().map(|&days| s.spawn(move || yearly(SEEDS[0], &LIFE, |c| c.node_days = days))).collect();
         runs.into_iter().map(|r| r.join().expect("a run")).collect()
     });
     let out = off_by_noise(&LIFE, &runs, &settings, |days| format!("nodes every {days} days at most"));
@@ -342,17 +349,20 @@ fn the_pace_of_nodes_keeps_life() {
 }
 
 /// Bodies updated in batches of `SHORT_BATCH_DAYS` against in batches of `Config::batch_days` (`docs/numbers.md`, speed
-/// settings; the batch cannot be doubled, as it is the physics step): the mean of each of life's key numbers over the
-/// last years moves by less than its noise, the spread of its values over those years with the short batches.
+/// settings; the batch cannot be doubled, as it is the physics step), on seeds 1, 2 and 3 as the key numbers: the mean
+/// over the seeds of each of life's key numbers over the last years moves by less than the noise of that mean, the
+/// spread over those years of the seeds' mean with the short batches. (One seed's years can spread far less than the
+/// seeds' runs differ, so one seed's spread is no measure of the noise.)
 #[test]
-#[ignore = "slow: two 8-year runs of a 32 x 32 world with life"]
+#[ignore = "slow: six 8-year runs of a 32 x 32 world with life"]
 fn the_batches_of_bodies_keep_life() {
     let settings = [SHORT_BATCH_DAYS, Config::default().batch_days];
+    // Per setting, the seeds' mean of each year.
     let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
-        let runs: Vec<_> = settings.iter().map(|&days| s.spawn(move || yearly(&LIFE, |c| c.batch_days = days))).collect();
-        runs.into_iter().map(|r| r.join().expect("a run")).collect()
+        let runs: Vec<Vec<_>> = settings.iter().map(|&days| SEEDS.iter().map(|&seed| s.spawn(move || yearly(seed, &LIFE, |c| c.batch_days = days))).collect()).collect();
+        runs.into_iter().map(|seeds| seed_mean(&seeds.into_iter().map(|r| r.join().expect("a run")).collect::<Vec<_>>())).collect()
     });
-    let out = off_by_noise(&LIFE, &runs, &settings, |days| format!("batches of {days} days"));
+    let out = off_by_noise(&LIFE, &runs, &settings, |days| format!("batches of {days} days, mean of seeds {SEEDS:?}"));
     assert!(out.is_empty(), "the batches changed life: {out:?}");
 }
 
