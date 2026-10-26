@@ -7,7 +7,9 @@ use pcore::brain;
 use pcore::chem::Phase;
 use pcore::life::Handle;
 use pcore::units::DAY_S;
-use worldgen::testkit::{dry_land, moved_serial, plate, relocate, scale, small_world, start as world, Books, Brain, Line};
+use pcore::store::{Class, Node};
+use pcore::World;
+use worldgen::testkit::{dry_land, moved_serial, part_of, plate, relocate, scale, set_amount, small_world, start as world, Books, Brain, Line, LIQUID, MINERAL};
 
 /// A bond breaks when the weight it bears is more than it holds: of two parts hung on an anchored one by bonds that
 /// hold 10 t weight, the one of 1 t stays and the one of 100 t falls.
@@ -186,4 +188,75 @@ fn a_node_acts_on_bonds_as_its_members_together() {
     scene(0);
     scene(1);
     scene(2);
+}
+
+/// A part whose walls fall under `min_kg` falls apart, and all it still holds goes to its cell's ground: its walls, the
+/// liquid in its hollow and its heat. So in its monthly turn, and when a body takes from it (what the body took aside).
+#[test]
+fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
+    // A hollow part of 5 t of the mineral holding 100 kg of the liquid, in cell `i`; walls under `min_kg` from now on.
+    let new_part = |w: &mut World, i: usize| {
+        let (ns, n) = (w.chem.ns(), w.mesh.cells().n());
+        let (mut wall, mut fill) = (vec![0.0; ns], vec![0.0; ns]);
+        (wall[MINERAL], fill[LIQUID]) = (5e3 / w.chem.subs[MINERAL].molar_mass, 1e2 / w.chem.subs[LIQUID].molar_mass);
+        for k in [MINERAL, LIQUID] {
+            let a = w.store.amounts(Class::Ground)[k * n + i];
+            set_amount(w, Node::ground(i), k, a + 2.0 * (wall[k] + fill[k]));
+        }
+        w.cfg.phys.min_kg = 1e9;
+        part_of(w, i, wall, fill, 0.0, 0.5)
+    };
+    // What the ground of cell `i` holds: of each substance, mol, and its heat, J.
+    let ground = |w: &World, i: usize| {
+        let n = w.mesh.cells().n();
+        ((0..w.chem.ns()).map(|k| w.store.amounts(Class::Ground)[k * n + i]).collect::<Vec<f64>>(), w.store.heat(Class::Ground)[i])
+    };
+    // The ground gained `gain` mol of each substance and `heat` J, to rounding.
+    let gained = |w: &World, i: usize, before: &(Vec<f64>, f64), gain: &[f64], heat: f64| {
+        let now = ground(w, i);
+        for (k, &g) in gain.iter().enumerate() {
+            let d = now.0[k] - before.0[k];
+            assert!((d - g).abs() <= 1e-12 * g.abs() + 1e-14 * before.0[k], "substance {k}: the ground gained {d} mol of {g}");
+        }
+        let d = now.1 - before.1;
+        assert!((d - heat).abs() <= 1e-9 * heat.abs() + 1e-14 * before.1.abs(), "the ground gained {d} J of {heat}");
+    };
+    let holds = |w: &World, p: usize| {
+        let pt = &w.parts.parts[p];
+        (pt.wall.iter().zip(&pt.fill).map(|(a, f)| a + f).collect::<Vec<f64>>(), pt.e)
+    };
+
+    // Its monthly turn (in a month without reactions with the air).
+    let (mut w, i) = world();
+    let month = w.cfg.calendar().month;
+    if w.month() % 6 == 0 {
+        w.time += month;
+    }
+    let p = new_part(&mut w, i);
+    let (books, before, (held, e)) = (Books::now(&w), ground(&w, i), holds(&w, p));
+    bond::step(&mut w);
+    assert!(!w.parts.parts[p].alive, "the part is still there");
+    gained(&w, i, &before, &held, e);
+    books.assert_within(&w, 1e-12, 1e-9);
+
+    // A take: a body takes some of the mineral (it takes nothing else, and pays nothing).
+    let (mut w, _) = world();
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
+    let h = w.life.living().map(|x| x.0).find(|&s| w.life[s].n() == 1.0).expect("a body");
+    let i = w.life[h].cell as usize;
+    let p = new_part(&mut w, i);
+    let mut b = std::mem::take(&mut w.life[h]);
+    let up = pcore::body::Layout::of(&w.chem).upt;
+    (0..w.chem.ns()).for_each(|k| b.genes[up + k] = if k == MINERAL { 8.0 } else { -8.0 });
+    (w.cfg.phys.c_handle, w.cfg.phys.take) = (0.0, 1e-3 * w.cfg.phys.take);
+    let (books, before, (held, e), (store, eb)) = (Books::now(&w), ground(&w, i), holds(&w, p), (b.store.clone(), b.e));
+    moved_serial(&mut w, (i, h), |w| bond::act(w, &mut b, 1, p));
+    assert!(!w.parts.parts[p].alive, "the part is still there");
+    let took: Vec<f64> = b.store.iter().zip(&store).map(|(a, s)| a - s).collect();
+    assert!(took[MINERAL] > 0.0 && took[MINERAL] < 0.5 * held[MINERAL], "it took {} mol of {}", took[MINERAL], held[MINERAL]);
+    let gain: Vec<f64> = held.iter().zip(&took).map(|(a, t)| a - t).collect();
+    gained(&w, i, &before, &gain, e - (b.e - eb));
+    w.life[h] = b;
+    books.assert_within(&w, 1e-12, 1e-9);
 }

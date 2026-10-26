@@ -15,7 +15,7 @@ pub(crate) use sense::{enclosure, possible, sense, SENSE};
 pub use verbs::{act, carry, dig, force, form, moved, release, ANCHORS, LET_GO, TORN};
 pub(crate) use verbs::{bears, dropped, let_go, lever};
 
-use crate::{chem::{Chemistry, Phase}, event::{Event, EventKind}, life::{free_place, Handle}, store::NodeId, World};
+use crate::{chem::{Chemistry, Phase}, event::{Event, EventKind}, life::{free_place, Domain, Handle}, store::{Class, Node, NodeId}, World};
 use serde::{Deserialize, Serialize};
 
 /// Held by no body; the bonded ground (as the other end of a bond).
@@ -280,7 +280,21 @@ pub fn make(w: &mut World, i: usize, wall: Vec<f64>, e: f64, x: f32, h: f32) -> 
     s
 }
 
-/// A part falls apart (its amounts and heat went to its cell's ground, `month::turns`): its bonds are gone, and its node.
+/// Part `p`, at slot `s` (taken out of it), falls apart: all it holds, its walls, the liquid in its hollow and its heat,
+/// goes to its cell's ground, moved by its own update on the view of its domain `d`. It holds nothing from then on, until
+/// `dissolve` frees it. Both ways a part falls apart use it: its walls run off in its turn (`month::turns`), or a body
+/// takes them below `min_kg` (`verbs::take`).
+fn fall_apart(w: &World, d: &mut Domain, s: usize, p: &mut Part) {
+    let i = p.cell as usize;
+    d.moves.open(w, i, Node::new(Class::Part, s));
+    let held: Vec<f64> = p.wall.iter().zip(&p.fill).map(|(a, f)| a + f).collect();
+    d.moves.give_all(w, Node::ground(i), &held, p.e);
+    p.wall.fill(0.0);
+    p.fill.fill(0.0);
+    p.e = 0.0;
+}
+
+/// A part that fell apart (`fall_apart`) is freed: its bonds are gone, and its node.
 fn dissolve(w: &mut World, s: usize) {
     loop {
         let Some((o, _)) = w.parts.bonds.of(s).next() else { break };

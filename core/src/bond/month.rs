@@ -1,6 +1,6 @@
 //! The monthly step of parts: heat, Change, loads and failure, floating and drifting.
 
-use super::{cell, dissolve, holder, id, members, move_structure, restructure, sense::liquid, unlink, verbs::{bears, torn_from}, Part, GROUND};
+use super::{cell, dissolve, fall_apart, holder, id, members, move_structure, restructure, sense::liquid, unlink, verbs::{bears, torn_from}, Part, GROUND};
 use crate::{change::{send_gas, GasMove, Reactor}, chem::Phase, ground::share, life::Domain, rng::{Purpose, Rng}, space::COMPASS, store::{Class, Node}, survey::run, AIR, World};
 
 /// Parts react with the air every this many months.
@@ -39,9 +39,9 @@ struct Turn {
 
 /// The turns of all parts: heat, and every `REACT_MONTHS` months the reactions with the air. Each domain takes the turns
 /// of its parts in slot order, on its view of the store (`store::Moves`), on the pool (`survey::run`); then the moves
-/// are booked, the domains' in their order. A part whose walls are gone gives all it holds to its cell's ground in its
-/// turn. Returns the slots of the parts that fall apart, in order: they are freed one by one (`dissolve`), as that
-/// unbonds other parts.
+/// are booked, the domains' in their order. A part whose walls are gone falls apart in its turn (`fall_apart`).
+/// Returns the slots of the parts that fall apart, in order: they are freed one by one (`dissolve`), as that unbonds
+/// other parts.
 fn turns(w: &mut World, react: bool) -> Vec<usize> {
     let dt = (REACT_MONTHS * w.cfg.calendar().month) as f64;
     // The parts by the domain of their cell, then by slot.
@@ -53,18 +53,17 @@ fn turns(w: &mut World, react: bool) -> Vec<usize> {
         .collect();
     // A turn that only settles costs about a microsecond, less than a pool call: it counts no work, so the runner keeps
     // the domains on the calling thread; the reactions are the work.
-    let work = list.chunk_by_mut(|a, b| a.domain == b.domain).map(|run| (run[0].domain, if react { run.len() } else { 0 }, run)).collect();
+    let work = list.chunk_by_mut(|a, b| a.domain == b.domain).map(|mine| (mine[0].domain, if react { mine.len() } else { 0 }, mine)).collect();
     let init = |w: &World| react.then(|| (Reactor::new(&w.chem, &w.cfg), vec![0.0; w.chem.ns()]));
-    run(w, work, false, init, |w, d, run, scratch| {
-        for t in run.iter_mut() {
+    run(w, work, false, init, |w, d, mine, scratch| {
+        for t in mine.iter_mut() {
             d.moves.open(w, t.cell, Node::new(Class::Part, t.slot));
             if let Some((rc, pool)) = scratch {
                 react_part(w, d, rc, (&mut t.part, t.cell), pool, dt);
             }
             t.gone = settle(w, d, &mut t.part, t.cell);
             if t.gone {
-                let held: Vec<f64> = t.part.wall.iter().zip(&t.part.fill).map(|(a, f)| a + f).collect();
-                d.moves.give_all(w, Node::ground(t.cell), &held, t.part.e);
+                fall_apart(w, d, t.slot, &mut t.part);
             }
         }
     });

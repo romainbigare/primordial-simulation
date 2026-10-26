@@ -314,8 +314,9 @@ A **part** is a made object (solid walls, the liquid in its hollow, heat, 3 size
 the bed; its strength comes from the weaker material and the contact area (`tensile`, `joint`), at `c_join` per m². A
 **structure** is the parts joined by bonds and moves as one. Parts take their cell's temperature monthly. A part's turn
 is a step on its domain like a body's: it reads and writes the domain's view of the store, so a part sees what the parts
-before it in its domain left in the air and the ground; a part whose walls are gone gives all it holds to its cell's
-ground in its turn and is freed after the turns (`bond/month.rs`).
+before it in its domain left in the air and the ground (`bond/month.rs`). A part whose walls fall under `min_kg` falls
+apart (`bond::fall_apart`): all it holds, its walls, the liquid in its hollow and its heat, goes to its cell's ground,
+whether its walls ran off in its turn (it is freed after the turns) or a body took them (`bond::verbs::take`).
 
 ### 3.2 Loads and failure
 Monthly (`bond/month.rs`) each bond carries the weight hanging on it, less buoyancy, plus the push of moving liquid and

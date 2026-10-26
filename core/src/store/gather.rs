@@ -11,9 +11,8 @@
 //! changes nothing (`copy::sample`).
 
 use super::apply::ROUNDING;
-use super::{book_by_array, heat_received, held_more, Booker, Class, Move, Node, Store};
+use super::{heat_received, held_more, Booker, Class, Move, Node};
 use crate::ground::{heat_above_floor, share};
-use crate::par::SERIAL_BELOW;
 use crate::units::T_FLOOR;
 use crate::{life::Domain, World, AIR};
 
@@ -258,7 +257,7 @@ impl Moves {
     }
     /// Its changes to the arrays of booker `b` (`store::book_by_array`): the change of each number the view holds of
     /// them, of its air node and of each cell taken in.
-    fn book_into(&self, b: &mut Booker) {
+    pub(super) fn book_into(&self, b: &mut Booker) {
         // (No domain open: nothing gathered since the last booking.)
         let Some((_, j)) = self.open else { return };
         let air = [(0, j as u32)];
@@ -285,7 +284,7 @@ impl Moves {
     }
     /// The moves gathered close, once booked: returns the heat lifted into the potential and the heat the ground nodes
     /// could not give, J.
-    fn close(&mut self) -> (f64, f64) {
+    pub(super) fn close(&mut self) -> (f64, f64) {
         (self.who, self.open) = (None, None);
         (std::mem::take(&mut self.lift), std::mem::take(&mut self.short))
     }
@@ -309,55 +308,5 @@ impl Domain {
         (self.moves.lift, self.moves.short) = (m.lift, m.short);
         self.events.truncate(m.events);
         self.counts.rounded = m.rounded;
-    }
-}
-
-/// The classes whose nodes a domain's view holds, which its booking writes.
-const VIEWED: [Class; 4] = [Class::Ground, Class::Air, Class::Bed, Class::Bodies];
-
-impl World {
-    /// The moves gathered by the domains that ran since the last booking are booked (`Moves::book_into`): each array of
-    /// the store by one task, which adds each domain's changes in the domains' order (`store::book_by_array`); what
-    /// rounding leaves below zero is set to zero and counted (`Counters::rounded`), then the lift into the potential
-    /// and the heat the ground nodes could not give (`Counters::clamped_heat`), domain by domain. With work enough
-    /// for the pool, `f` runs beside it in the same call, the store out of the world meanwhile: `f` must not read the
-    /// store (a landing reads none: it moves no matter of the store, laws.md 0) nor open a view.
-    pub(crate) fn book_moves_beside<R: Send>(&mut self, f: impl FnOnce(&mut World) -> R + Send) -> R {
-        self.book_gathered(true, f)
-    }
-    /// The moves gathered by the domains that ran since the last booking are booked on the calling thread: a serial
-    /// step, or the turns of the parts, gather a few numbers a domain, and a pool call costs more than their booking.
-    pub fn book_moves(&mut self) {
-        self.book_gathered(false, |_| ());
-    }
-    /// `book_moves_beside` (`pool`: on the pool when there are domains enough) or `book_moves`.
-    fn book_gathered<R: Send>(&mut self, pool: bool, f: impl FnOnce(&mut World) -> R + Send) -> R {
-        let crate::life::Life { unbooked, domains, .. } = &mut self.life;
-        // (A domain that ran but gathered nothing has no view open.)
-        let open: Vec<usize> = unbooked.take().filter(|&k| domains[k].moves.open.is_some()).collect();
-        let views: Vec<(usize, Moves)> = open.into_iter().map(|k| (k, std::mem::take(&mut domains[k].moves))).collect();
-        let (ns, work) = (self.chem.ns(), if pool { views.len() } else { 0 });
-        let book = |store: &mut Store| book_by_array(store, ns, &VIEWED, work, |b| views.iter().for_each(|(_, m)| m.book_into(b)));
-        let (r, rounded) = if views.is_empty() {
-            (f(self), [0.0; 2])
-        } else if work < SERIAL_BELOW {
-            let rounded = book(&mut self.store);
-            (f(self), rounded)
-        } else {
-            let mut store = std::mem::take(&mut self.store);
-            let both = crate::par::join(|| f(self), || book(&mut store));
-            self.store = store;
-            both
-        };
-        let World { life, counts, store, .. } = self;
-        counts.add_rounded(rounded);
-        for (k, mut m) in views {
-            let (lift, short) = m.close();
-            store.add_far_heat(Class::Potential, 0, lift);
-            counts.clamped_heat += short;
-            debug_assert!(life.domains[k].moves.open.is_none(), "a view opened while the moves gathered were booked");
-            life.domains[k].moves = m;
-        }
-        r
     }
 }

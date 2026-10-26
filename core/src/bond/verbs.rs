@@ -1,7 +1,7 @@
 //! What bodies do to parts: hold, take, put, join, break and enter; form new parts, anchor them, dig the bonded ground,
 //! let go, and carry what they hold when they move. A body's force decides what it can hold and break.
 
-use super::{dissolve, event, held, holder, id, link, make, move_structure, part, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
+use super::{dissolve, event, fall_apart, held, holder, id, link, make, move_structure, part, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
 use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase}, life::{Domain, Handle}, outbox::Entry, store::{Class, Move, Node, NodeId}, World};
 
 /// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the ground rests on it).
@@ -120,7 +120,7 @@ pub fn act(w: &mut World, b: &mut Body, v: usize, p: usize) {
 }
 
 /// Take from a part by the body's uptake selectivity, the held liquid first, as much as it takes by its mass in the
-/// time and its stores have room for. Walls taken below `min_kg` fall apart.
+/// time and its stores have room for. Walls taken below `min_kg` fall apart (`fall_apart`): the rest goes to the ground.
 fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let pt = &w.parts.parts[p];
     let m = b.wanted(&w.chem, b.paces(w), |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mb);
@@ -144,6 +144,13 @@ fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
         if b.hold == me {
             dropped(w, b, false);
         }
+        // The part's update opens on the view of its domain, then the body's goes on.
+        let (mut fallen, i, h) = (std::mem::take(&mut w.parts.parts[p]), b.cell as usize, w.life.find(b.id).expect("the body acting"));
+        w.in_domain(i, |w, d| {
+            fall_apart(w, d, p, &mut fallen);
+            d.moves.open(w, i, Node::new(Class::Body, h.slot as usize));
+        });
+        w.parts.parts[p] = fallen;
         dissolve(w, p);
     } else {
         pt.resize(chem);
