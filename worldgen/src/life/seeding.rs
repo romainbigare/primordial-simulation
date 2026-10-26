@@ -21,8 +21,9 @@ pub const FIX_GENE: f32 = 9.8;
 const BRAIN_NOISE: f32 = 0.1;
 /// Step of one round of the spray on the bias of every row of a neutral start.
 const ROW_SPRAY: f32 = 0.2;
-/// How many times the step of one generation the genes of a neutral start get in all.
-const GENE_SPRAY: f32 = 3.0;
+/// How many decades the mutation size of the genes of a neutral start is raised for the spray: log10 3, so the genes get
+/// 3 times the step of one generation (a constant, as a library `log10` of a constant may round either way).
+const GENE_SPRAY_DECADES: f32 = 0.477_121_26;
 /// A founder's id (the key of its random streams): 1 + its kind above `KIND_BIT`, its cell above `CELL_BIT`, its
 /// number in the cell below.
 const KIND_BIT: u32 = 48;
@@ -120,7 +121,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
         for k in 0..kind.per {
             let id = founder_id(which, i, k);
             let genome = shared.unwrap_or_else(|| sprayed(w, kind, shape, &rows, how, hand, id));
-            let Some(mut b) = make_with(w, which, i, lineage, genome, how.rounds, if hand { 1.0 } else { GENE_SPRAY }, id) else { return String::new() };
+            let Some(mut b) = make_with(w, which, i, lineage, genome, how.rounds, if hand { 0.0 } else { GENE_SPRAY_DECADES }, id) else { return String::new() };
             // A share `fixers` of the light-eaters carry the gene of the fixing reaction; the draw is by the body's own id.
             if let Some(fx) = fix.filter(|_| Rng::new(w.seed, w.day(), id, Purpose::Fixer).f64() < how.fixers) {
                 b.genes[lay.cat + fx] = FIX_GENE;
@@ -190,7 +191,7 @@ fn line(w: &World, kind: &Kind, how: &Seeding, hand: bool, fix: Option<usize>, p
     } else if hand {
         ", row and gene steps of one generation".to_string()
     } else {
-        format!(", row biases {} x {ROW_SPRAY} (spread {:.2}), other row entries and genes at one generation's step (genes x{GENE_SPRAY})", how.rounds, ROW_SPRAY * (how.rounds as f32).sqrt())
+        format!(", row biases {} x {ROW_SPRAY} (spread {:.2}), other row entries and genes at one generation's step (genes x{:.0})", how.rounds, ROW_SPRAY * (how.rounds as f32).sqrt(), 10f32.powf(GENE_SPRAY_DECADES))
     };
     let fixing = match fix {
         Some(r) => format!("; {} of them ({:.1}%) carry the gene of reaction {r}, the fixing reaction (log10 speed-up {FIX_GENE}, share {} chosen before any run), the others have it off", p.fixers, 100.0 * p.fixers as f64 / p.bodies.max(1) as f64, how.fixers),

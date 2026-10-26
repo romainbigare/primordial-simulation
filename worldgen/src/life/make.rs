@@ -46,7 +46,7 @@ pub(super) fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
 /// A body of starting kind `which` in cell `i`, of `lineage`, born with brain rows `genome` (its own rows those), at
 /// the cell's temperature; its matter and energy are booked like an edit. Not yet placed.
 pub fn make(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32) -> Option<Body> {
-    make_with(w, which, i, lineage, genome, 0, 1.0, 0)
+    make_with(w, which, i, lineage, genome, 0, 0.0, 0)
 }
 
 /// The genes of a founder of `which` before any mutation (`None` without the roles of life in the chemistry).
@@ -74,22 +74,22 @@ fn genes(w: &World, which: usize) -> Option<Vec<f32>> {
     Some(genes)
 }
 
-/// `make` after `rounds` rounds of mutation of its genes, `gmul` times a generation's step (a random walk keyed by
-/// `id`).
+/// `make` after `rounds` rounds of mutation of its genes, the mutation size raised by `spray_decades` decades (10^that
+/// times a generation's step; a random walk keyed by `id`).
 #[allow(clippy::too_many_arguments)]
-pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, rounds: u32, gmul: f32, id: u64) -> Option<Body> {
+pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, rounds: u32, spray_decades: f32, id: u64) -> Option<Body> {
     let ((_, rich, liquid, _), kind, mut genes) = (w.chem.life_roles()?, KINDS.get(which)?, genes(w, which)?);
     let rows = w.life.genomes[genome as usize].rows.clone();
     let mut rg = Rng::new(w.seed, w.day(), id, Purpose::Make);
     let (chem, t) = (&w.chem, w.life.env[i][0]);
     let (lay, ns) = (Layout::of(chem), chem.ns());
-    // Its mutation size is raised by `gmul` for the rounds (and taken back, whatever the walk made of it).
-    genes[body::MUT] += gmul.log10();
+    // Its mutation size is raised by `spray_decades` for the rounds (and taken back, whatever the walk made of it).
+    genes[body::MUT] += spray_decades;
     let brain = w.life.brains[lineage as usize].as_ref().is_some_and(|l| !l.none());
     for _ in 0..rounds {
         genes = body::vary(&lay, &genes, &[], 1.0, 0.0, brain, &mut rg).0;
     }
-    genes[body::MUT] -= gmul.log10();
+    genes[body::MUT] -= spray_decades;
     // A founder is an adult: its living body is its copy mass after the spray, with the share `store` of fuel on top.
     let matter = chem.matter_roles();
     let h = genes[lay.keep + liquid].clamp(0.0, MAX_LIQUID_SHARE as f32) as f64;
