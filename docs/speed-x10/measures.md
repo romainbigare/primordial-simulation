@@ -697,6 +697,86 @@ AIR2, AIR3 change both), and G5 moves Change into the month windows, where the g
 G14-P2 decides. (5) Not measured: the real G14 reads one store (not two copies) and books the physics after the
 bodies; the copies cost cache that the real one does not, and the booking costs time that the probe does not.
 
+### G14-P2: the overlap probe again
+
+**Verdict: under the kill line (10%, X38) on both benches. The join saves about 9% of the year on the island and 3% on
+the globe. G14 is not built.** The island is near the line: its 90% interval is 5% to 13%. The globe is clearly under it
+(1% to 6%). The first 56 rounds gave 11% and 6%, the last 80 gave 7% and 3%; I ran 136 rounds so that the busy machine
+(load about 7 on 4 cores the whole time) did not decide the answer.
+
+**What was built** (branch `probe/g14-p2`, code `d2a5ae7`, never merged): the method of G14-P1 on today's code, after G4,
+G12, G1, G7, G15 and E1a to E1d (G5, AIR2, AIR4 are not kept). `core/src/schedule.rs`, `G14_MODE=off|seq|join|mix`. In each
+10-day window the survey and Bond's month run first, one after the other. Then two lanes: the physics lane (Flow's
+state, the air, the liquid, creep, refresh, Change) on a shadow copy of the world, and the bodies' lane (the window's one
+batch). `seq` runs the lanes one after the other, `join` runs them with `rayon::join` on the one pool, `mix` joins the
+windows of months 0 and 3 of each four. Both worlds are wrong (the physics books nothing into the bodies); only the wall
+time counts. A window is a **liquid window** (every 60 days: 6 a year, with the full state and the liquid), a **month-line
+window** without the liquid (Bond's month and the tape line: 6 a year) or an **other window** (24 a year). The two month
+kinds together are the 12 "month windows". Change runs in every window (G5 is not kept).
+
+**How it was timed.** `ew resume --years 2` from `island22` and `globe36` of `$X/g12/bench` (snapshot of G12, `flow_days`
+60), 4 threads, each run under `flock $X/timing.lock` and at nice -20 for its own scheduling group (as G14-P1). 56 rounds
+of `mix`, `off`, `seq`, `join` in a rotating order (the order of the first 16 rounds was fixed), then 80 more rounds of
+`seq` and `join` only, in alternating order: 136 runs of `seq` and 136 of `join` on each bench. The year is the run's time
+over 2 years, minus the one clone. Other agents' builds and runs ran beside mine all the time, so read the intervals, not
+the digits.
+
+**The year, ms** (medians; saved = share of the `seq` year):
+
+| Bench | `off` (today's order, 56 runs) | `seq` | `join` | Saved, medians | Saved, paired runs (median; 90% interval) | Saved, `mix` windows |
+|---|---|---|---|---|---|---|
+| island22 | 350 | 318 | 290 | **8.7%** | 9.2% (5.5% to 13.1%) | 3.3% |
+| globe36 | 338 | 331 | 321 | **3.1%** | 3.3% (0.6% to 6.0%) | 7.7% |
+
+All three ways of counting are under 10% on both benches (the first 56 rounds alone gave 11.4% and 13.3% on the island). The `seq` column is the fair base, as in G14-P1: `seq` is 9% (island) and 2% (globe) under
+`off`, so `join` against `off` (17% and 5%) is not the saving of the overlap.
+
+**Windows, apart** (ms in one window, medians of the 136 `seq` and 136 `join` runs; "serial before" is the survey and Bond):
+
+| Bench | Window (a year) | Serial before | Physics lane `seq` / `join` | Bodies lane `seq` / `join` | Lanes `seq` | Lanes `join` | Saved |
+|---|---|---|---|---|---|---|---|
+| island22 | other (24) | 0.3 | 2.2 / 4.1 | 5.2 / 6.0 | 7.4 | 6.7 | 0.7 (9%) |
+| island22 | month line (6) | 0.9 | 2.0 / 4.3 | 4.9 / 6.1 | 7.0 | 6.9 | 0.1 (1%) |
+| island22 | liquid (6) | 1.2 | 5.1 / 7.9 | 4.4 / 6.1 | 9.8 | 8.7 | 1.1 (11%) |
+| globe36 | other (24) | 0.3 | 2.7 / 4.6 | 4.8 / 6.2 | 7.4 | 7.0 | 0.4 (5%) |
+| globe36 | month line (6) | 1.1 | 2.7 / 4.9 | 5.2 / 6.7 | 8.0 | 7.7 | 0.3 (4%) |
+| globe36 | liquid (6) | 2.4 | 6.7 / 9.6 | 3.5 / 4.9 | 10.3 | 9.8 | 0.5 (5%) |
+
+Summed over a year these windows give 8.6% (island) and 5.3% (globe), the same as the year's medians within the noise.
+
+**Why the join hides so little.** The joined window is not the bodies' lane alone, as it was in G14-P1. The bodies' lane
+takes 15% to 40% longer beside the physics (it already uses 2.5 to 2.7 of the 4 cores; the physics lane uses 1.3 to 1.7),
+and the physics lane takes about twice as long (it shares the pool and the memory bus). The gain per window is the
+physics lane's `seq` time (2 to 7 ms) less the bodies lane's slow-down (about 1 ms), and the physics is now small. The
+joined lanes use 2.2 to 2.5 cores, so about 1.5 cores stay idle; the imbalance (joined wall over the lanes' CPU time over
+4 cores) is 1.5 to 2.1, as G14-P1 found (1.6 to 2.0). The month windows are not better than the others now: with G12
+the liquid runs 6 times a year, and Change runs in every window.
+
+**The physics is a smaller share of the year than in G14-P1.** From the `off` runs: Flow 87 / 112 ms and Change 22 / 24 ms
+of 350 / 338 ms, so the physics is 31% (island) and 40% (globe) of the year, and the bodies (the survey and the batch)
+222 / 196 ms. The join hides at most that. It hides 26% of it on the island (28 ms) and 7% on the globe (10 ms).
+
+**The serial part outside the two lanes** (ms a year, medians of the `seq` and `join` runs):
+
+| Part | island22 | globe36 |
+|---|---|---|
+| Survey (every window; G6 has not run) | 17.5 | 21 |
+| Bond's month (in the probe's timing; the `off` stage "parts" says 1.2 and 1.1) | 1.4 | 5.5 |
+| Tape (month lines; the `off` stage) | 7 | 7 |
+| **Sum** | **26** | **34** |
+| `Draws::settle` (inside the physics lane here) | 3.2 | 2.5 |
+
+That is 9% of the joined year on the island and 11% on the globe (with the draws, 10% and 11%). It is smaller than in
+G14-P1 (57 and 75 ms): Bond's month fell from 13 and 12.5 ms to 1.2 and 1.1 ms (G7), the survey from 31 and 48 ms to 17.5 and
+21 ms (what changed it is not probed), and the tape from 9 and 10.5 ms to 7 ms.
+
+**What this says to the plan.** (1) The kill line of G14-P2 is met on both benches: G14 is not built, and the plan's rows
+"without G14" hold (X38). (2) The overlap hid 50% to 70% of the physics in G14-P1 and hides 7% to 26% now, because
+the lanes are short (7 to 10 ms a window) and slow each other. (3) What would bring it back is a longer physics lane or a
+bodies' lane that leaves more cores free. (4) Not measured, as in G14-P1: the real G14 reads one
+store, not two copies, and books the physics after the bodies, which costs time the probe does not pay; so 9% and 3%
+are an upper bound for it.
+
 ### AIR4-R1: why 30-day air steps warm the land and the winters
 
 On the long-step test's world (6 seeds against 6-hour air steps; branch `probe/air4-r1`, `a74a2f5`, switches off by
