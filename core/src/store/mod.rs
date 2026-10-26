@@ -1,8 +1,8 @@
 //! The store: the names of the world's nodes, what the fixed ones hold (`Store`, private arrays), and the one way the
-//! laws change them (moves, transforms and link fluxes, booked by `apply`; the bodies' moves and the air's step array by
-//! array by `book_by_array`, which adds as `apply` adds), with the boundary nodes that book what crosses the world's edge. It
-//! decides nothing physical: it adds what the laws give it and counts the rounding it sets to zero (laws.md 0, "The
-//! books").
+//! laws change them (moves and link fluxes, booked by `apply`; the bodies' moves, the air's step and Change's rows array
+//! by array by `book_by_array`, which adds as `apply` adds), with the boundary nodes that book what crosses the world's
+//! edge. It decides nothing physical: it adds what the laws give it and counts the rounding it sets to zero (laws.md 0,
+//! "The books").
 
 mod apply;
 mod batch;
@@ -13,14 +13,13 @@ pub mod moves;
 pub mod nodes;
 
 pub use apply::apply;
-pub(crate) use apply::keeps_elements;
 pub(crate) use apply::ROUNDING;
 pub use links::Links;
 pub use batch::Batch;
 pub(crate) use book::{book_by_array, Booker};
 pub use gather::Moves;
-pub use moves::{held, held_more, LinkFlux, Move, Transform};
-pub(crate) use moves::less_held_more;
+pub use moves::{held, held_more, LinkFlux, Move};
+pub(crate) use moves::{heat_received, less_held_more};
 pub use nodes::{Boundary, Class, Node, NodeId, BOUNDARIES};
 
 use crate::World;
@@ -78,6 +77,6 @@ impl World {
         let from = Node::new(Class::Boundary, b as usize);
         let mut moves: Vec<Move> = mol.into_iter().map(|(k, m)| Move { from, to, k: k as u16, mol: m, heat: 0.0 }).collect();
         moves.push(Move { from, to, k: 0, mol: 0.0, heat });
-        apply(self, &[], &moves, &[]);
+        apply(self, &[], &moves);
     }
 }

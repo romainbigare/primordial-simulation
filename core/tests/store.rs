@@ -4,7 +4,7 @@
 
 use pcore::check;
 use pcore::rng::{Purpose, Rng};
-use pcore::store::{apply, held, Boundary, Class, LinkFlux, Move, Node, NodeId, Transform, BOUNDARIES};
+use pcore::store::{apply, held, Boundary, Class, LinkFlux, Move, Node, NodeId, BOUNDARIES};
 use pcore::{World, AIR};
 use worldgen::testkit::{founder, node_of, put, set_amount, small_world, start, Books, Brain, LIQUID, ROCK};
 
@@ -40,7 +40,7 @@ fn what_passes_through_a_node_needs_nothing_held() {
     let (a, b): (Vec<u32>, Vec<u32>) = (0..CHAIN as u32 - 1).map(|i| (i, i + 1)).unzip();
     let mol = vec![have; CHAIN - 1];
     let books = Books::now(&w);
-    apply(&mut w, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[LIQUID as u16], mol: &mol, heat: &[] }], &[], &[]);
+    apply(&mut w, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[LIQUID as u16], mol: &mol, heat: &[] }], &[]);
     books.assert_kept(&w, 1e-12);
     let after = &w.store.amounts(Class::Ground)[LIQUID * n..LIQUID * n + CHAIN];
     assert_eq!((after[0], w.counts.rounded), (0.0, [0.0; 2]), "nothing is rounded");
@@ -59,7 +59,7 @@ fn a_link_joins_a_ground_node_to_its_store() {
     let (have, deep, heat) = (w.g(LIQUID, i), w.store.amounts(Class::Deep)[LIQUID * n + i], 1e-3 * w.store.heat(Class::Ground)[i]);
     let books = Books::now(&w);
     let cell = [i as u32];
-    apply(&mut w, &[LinkFlux { class: [Class::Ground, Class::Deep], a: &cell, b: &cell, ks: &[LIQUID as u16], mol: &[have / 2.0], heat: &[heat] }], &[], &[]);
+    apply(&mut w, &[LinkFlux { class: [Class::Ground, Class::Deep], a: &cell, b: &cell, ks: &[LIQUID as u16], mol: &[have / 2.0], heat: &[heat] }], &[]);
     books.assert_kept(&w, 1e-12);
     assert!((w.g(LIQUID, i) - have / 2.0).abs() <= 1e-12 * have && (w.store.amounts(Class::Deep)[LIQUID * n + i] - deep - have / 2.0).abs() <= 1e-12 * have);
 }
@@ -76,19 +76,11 @@ fn a_gas_that_rises_pays_its_latent_heat_and_its_lift() {
     let m = 0.5 * heat / latent;
     let rise = LinkFlux { class: [Class::Ground, Class::Air], a: &[i as u32], b: &[j], ks: &[LIQUID as u16], mol: &[m], heat: &[heat] };
     let paid = LinkFlux { class: [Class::Potential, Class::Air], a: &[0], b: &[j], ks: &[], mol: &[], heat: &[-lift] };
-    apply(&mut w, &[rise, paid], &[], &[]);
+    apply(&mut w, &[rise, paid], &[]);
     books.assert_kept(&w, 1e-12);
     let near = |x: f64, y: f64, of: f64| (x - y).abs() <= 1e-12 * of;
     assert!(near(w.store.heat(Class::Air)[j as usize] - e_air, heat - m * latent - lift, e_air) && near(e_ground - w.store.heat(Class::Ground)[i], heat, e_ground));
     assert!(near(w.store.heat(Class::Potential)[0] - pot, lift, pot.abs()));
-}
-
-#[test]
-#[should_panic(expected = "does not keep its elements")]
-fn a_transform_that_makes_elements_is_refused() {
-    let mut w = small_world();
-    let at = Node::new(Class::Ground, 0);
-    apply(&mut w, &[], &[], &[Transform { at, dmol: vec![(0, 1.0)] }]);
 }
 
 /// A node of a random class, and its index.
@@ -132,10 +124,10 @@ impl Left {
 }
 
 /// One round of random changes, each asking a random share of what its node has left (`Left`): a link flux of two
-/// substances and heat over a third of them (between ground nodes and deep stores), then moves between nodes of any
-/// classes, then the chemistry's reactions in any node; in one call, or the flux alone first.
+/// substances and heat over half of them (between ground nodes and deep stores), then moves between nodes of any
+/// classes; in one call, or the flux alone first.
 fn random_round(w: &mut World, r: &mut Rng) {
-    let (ns, per, mut left) = (w.chem.ns(), PER_ROUND / 3, Left::of(w));
+    let (ns, per, mut left) = (w.chem.ns(), PER_ROUND / 2, Left::of(w));
     let class = [ALIKE[r.below(2)], ALIKE[r.below(2)]];
     let len = class.map(|c| arrays(w, c).2);
     let (a, b): (Vec<u32>, Vec<u32>) = (0..per).map(|_| (r.below(len[0]) as u32, r.below(len[1]) as u32)).unzip();
@@ -165,32 +157,17 @@ fn random_round(w: &mut World, r: &mut Rng) {
             Move { from: Node::new(from.0, from.1), to: Node::new(to.0, to.1), k: k as u16, mol, heat: h }
         })
         .collect();
-    // A transform takes from its node's heat the energy its products hold apart from heat more than its inputs.
-    let transforms: Vec<Transform> = (0..PER_ROUND - 2 * per)
-        .map(|_| {
-            let (rx, at) = (&w.chem.reactions[r.below(w.chem.reactions.len())], any_node(w, r));
-            let terms: Vec<(u16, f64)> = rx.inputs.iter().map(|&(k, n)| (k, -(n as f64))).chain(rx.outputs.iter().map(|&(k, n)| (k, n as f64))).collect();
-            let need = terms.iter().map(|&(k, n)| n * held(&w.chem, at.0, k as usize)).sum::<f64>();
-            let mut most = r.f64() * rx.inputs.iter().map(|&(k, n)| *left.at(w, at, Some(k as usize)) / n as f64).fold(f64::MAX, f64::min);
-            if need > 0.0 {
-                most = most.min(*left.at(w, at, None) / need);
-                left.take(w, at, None, need * most);
-            }
-            rx.inputs.iter().for_each(|&(k, n)| *left.at(w, at, Some(k as usize)) -= n as f64 * most);
-            Transform { at: Node::new(at.0, at.1), dmol: terms.iter().map(|&(k, n)| (k, n * most)).collect() }
-        })
-        .collect();
-    // In one call, or the flux alone and then the rest.
+    // In one call, or the flux alone and then the moves.
     if r.below(2) == 0 {
-        apply(w, &[flux], &moves, &transforms);
+        apply(w, &[flux], &moves);
     } else {
-        apply(w, &[flux], &[], &[]);
-        apply(w, &[], &moves, &transforms);
+        apply(w, &[flux], &[]);
+        apply(w, &[], &moves);
     }
 }
 
-/// A million random moves, transforms and link fluxes that ask no node for more than it holds keep every element and
-/// the energy to rounding, and leave no amount and no heat below zero; what was set to zero is rounding.
+/// A million random moves and link fluxes that ask no node for more than it holds keep every element and the energy to
+/// rounding, and leave no amount and no heat below zero; what was set to zero is rounding.
 #[test]
 fn random_changes_keep_the_books() {
     let mut w = small_world();
@@ -237,7 +214,7 @@ fn what_crosses_the_boundary_keeps_the_books() {
     let mut w = small_world();
     let books = Books::now(&w);
     let (from, to) = (Node::new(Class::Boundary, Boundary::Outside as usize), Node::new(Class::Ground, 0));
-    apply(&mut w, &[], &[Move { from, to, k: LIQUID as u16, mol: 1e3, heat: 1e6 }], &[]);
+    apply(&mut w, &[], &[Move { from, to, k: LIQUID as u16, mol: 1e3, heat: 1e6 }]);
     put(&mut w, ROCK, 1, 1e2);
     let q = 1e-3 * w.store.heat(Class::Air)[0];
     w.cross((Boundary::Sun, Node::ground(2)), [], q);

@@ -11,7 +11,7 @@
 //! changes nothing (`copy::sample`).
 
 use super::apply::ROUNDING;
-use super::{book_by_array, held_more, Booker, Class, Move, Node, Store};
+use super::{book_by_array, heat_received, held_more, Booker, Class, Move, Node, Store};
 use crate::ground::{heat_above_floor, share};
 use crate::par::SERIAL_BELOW;
 use crate::units::T_FLOOR;
@@ -90,7 +90,7 @@ impl Moves {
     /// Gather move `m` of the update running: the view changes as `apply` would change the store, at the slots of its
     /// ends (a part's or a body's has none).
     pub(crate) fn gather(&mut self, w: &World, m: Move) {
-        let into = m.heat - m.mol * held_more(&w.chem, m.from.class, m.to.class, m.k as usize);
+        let into = heat_received(m.heat, m.mol, held_more(&w.chem, m.from.class, m.to.class, m.k as usize));
         for (x, mol, heat) in [(m.from, -m.mol, -m.heat), (m.to, m.mol, into)] {
             if let Some(at) = self.view_load(w, x) {
                 self.end((x, at), m.k as usize, mol, heat);
@@ -181,7 +181,7 @@ impl Moves {
     pub(crate) fn give(&mut self, w: &World, x: Node, k: usize, mol: f64, heat: f64) {
         let who = self.who.expect(RUNNING).0;
         if let Some(at) = self.view_load(w, x) {
-            self.end((x, at), k, mol, heat - mol * held_more(&w.chem, who.class, x.class, k));
+            self.end((x, at), k, mol, heat_received(heat, mol, held_more(&w.chem, who.class, x.class, k)));
         }
     }
     /// The amounts `m` (mol of each substance; those not 0) and then `heat` J go from the one whose update it is to node

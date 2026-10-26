@@ -55,6 +55,6 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
             lift(s, b, ub);
         }
     }
-    apply(w, &[moved.flux(), fall.flux()], &[], &[]);
+    apply(w, &[moved.flux(), fall.flux()], &[]);
     crate::lanes::regrow(w, dt);
 }

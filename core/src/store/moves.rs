@@ -1,5 +1,5 @@
-//! The three ways a law changes the world: a move between two nodes, a transform of the amounts inside one node, and a
-//! link flux over a whole field. Each books both sides, so the books are kept by their form (laws.md 0).
+//! The two ways a law changes the world: a move between two nodes and a link flux over a whole field. Each books both
+//! sides, so the books are kept by their form (laws.md 0).
 
 use super::nodes::{Class, Node};
 use crate::chem::Chemistry;
@@ -22,14 +22,6 @@ impl Move {
     pub fn loosen(i: usize, k: usize, mol: f64, bed: f64) -> Move {
         Move { from: Node::new(Class::Bed, i), to: Node::ground(i), k: k as u16, mol: bed - (bed - mol), heat: 0.0 }
     }
-}
-
-/// The amounts of node `at` change by `dmol` (substance, mol), keeping every element; the energy they held apart from
-/// heat (`held`) and no longer hold becomes the node's heat (the heat of reaction).
-#[derive(Clone, Debug)]
-pub struct Transform {
-    pub at: Node,
-    pub dmol: Vec<(u16, f64)>,
 }
 
 /// What crosses each link of a field at once: link `l` joins node `a[l]` of `class[0]` to node `b[l]` of `class[1]` and
@@ -79,5 +71,12 @@ impl<'a> LinkFlux<'a> {
 /// The heat `q` J that reaches the far end of each link loses what its `mol` of one substance hold more there, `more`
 /// J/mol (`held_more`). Called substance by substance, it gives what the far ends receive.
 pub(crate) fn less_held_more(q: &mut [f64], mol: &[f64], more: f64) {
-    q.iter_mut().zip(mol).for_each(|(q, m)| *q -= m * more);
+    q.iter_mut().zip(mol).for_each(|(q, &m)| *q = heat_received(*q, m, more));
+}
+
+/// The heat a node receives when `mol` of a substance come in with `heat` J and hold `more` J/mol more there than where
+/// they left (`held_more`): the far end of a move or a link pays that from the heat.
+#[inline(always)]
+pub(crate) fn heat_received(heat: f64, mol: f64, more: f64) -> f64 {
+    heat - mol * more
 }

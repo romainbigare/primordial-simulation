@@ -404,7 +404,7 @@ pub fn plate(w: &mut World, i: usize, kg: f64, thick: bool) -> usize {
     assert!(w.store.amounts(Class::Ground)[k * n + i] > wall[k], "the cell holds less than the part");
     let (e, mol) = (wall[k] * w.chem.subs[k].cp * w.t_ground_last(i), wall[k]);
     let s = bond::make(w, i, wall, e, if thick { 0.0 } else { -1.0 }, 0.0);
-    pcore::store::apply(w, &[], &[Move { from: Node::ground(i), to: Node::new(Class::Part, s), k: k as u16, mol, heat: e }], &[]);
+    pcore::store::apply(w, &[], &[Move { from: Node::ground(i), to: Node::new(Class::Part, s), k: k as u16, mol, heat: e }]);
     s
 }
 

@@ -14,7 +14,8 @@ const PER_TASK: usize = 4;
 /// A booking task: the arrays of one class of nodes it owns, the amounts of substances `ks` (`[k * len + index]`, mol)
 /// or with `ks` none the heat (`[index]`, J), with what rounding took of each amount (a carried class, `Store::carry`);
 /// the numbers that fell below zero on the way, and what rounding left below zero, set to zero at the task's end. In
-/// debug builds, per number the sum of its changes and of their sizes (`apply::overdraw_check`).
+/// debug builds, per number the sum of its changes and of their sizes, and what each node of the class held of all
+/// substances before the booking (`apply::overdraw_check`).
 pub struct Booker<'s> {
     pub class: Class,
     pub ks: Option<Range<usize>>,
@@ -27,6 +28,7 @@ pub struct Booker<'s> {
     low: Vec<usize>,
     rounded: f64,
     changed: Vec<[f64; 2]>,
+    node: &'s [f64],
 }
 
 impl Booker<'_> {
@@ -52,11 +54,11 @@ impl Booker<'_> {
         }
     }
     /// What rounding left below zero is set to zero and counted; more than rounding is a law that overdrew a node
-    /// (checked in debug builds; the node's other numbers are those of the task's substances).
+    /// (checked in debug builds, against what the node held of all substances, or its heat).
     fn zero_low(&mut self) {
         for &x in &self.low {
             if cfg!(debug_assertions) && self.v[x] < 0.0 {
-                let node = self.v[x % self.len..].iter().step_by(self.len).map(|v| v.abs()).sum();
+                let node = if self.ks.is_some() { self.node[(x + self.from) % self.len] } else { self.v[x].abs() };
                 overdraw_check(self.v[x], node, self.changed[x], (self.class, self.ks.is_some(), x + self.from));
             }
             zero_rounding(&mut self.v[x], &mut self.rounded);
@@ -69,19 +71,28 @@ impl Booker<'_> {
 /// `PER_TASK` substances of a class are one task; else all of a class's amounts, on the calling thread. Then what
 /// rounding left below zero in each is set to zero (`zero_rounding`). Returns what was set to zero, each task's in
 /// task order: of the amounts, mol, and of the heat, J (`Counters::rounded`).
-pub(crate) fn book_by_array<'s>(store: &'s mut Store, ns: usize, classes: &[Class], work: usize, f: impl Fn(&mut Booker) + Sync + Send) -> [f64; 2] {
+pub(crate) fn book_by_array(store: &mut Store, ns: usize, classes: &[Class], work: usize, f: impl Fn(&mut Booker) + Sync + Send) -> [f64; 2] {
     let Store { amounts, heat, carry } = store;
+    // In debug builds, what each node of each class held of all substances before the booking (`zero_low`).
+    let nodes: Vec<Vec<f64>> = amounts
+        .iter()
+        .enumerate()
+        .map(|(c, a)| {
+            let len = a.len() / ns;
+            let held = |i: usize| (0..ns).map(|k| a[k * len + i].abs()).sum::<f64>();
+            if cfg!(debug_assertions) && classes.contains(&Class::ALL[c]) { (0..len).map(held).collect() } else { Vec::new() }
+        })
+        .collect();
     // Substances per task.
     let per = if work >= crate::par::SERIAL_BELOW { PER_TASK } else { ns };
     let mut tasks = Vec::new();
     let carries = carry.iter_mut().map(Some).chain(std::iter::repeat_with(|| None));
-    for (((c, a), h), carry) in amounts.iter_mut().enumerate().zip(heat.iter_mut()).zip(carries) {
+    for ((((c, a), h), carry), node) in amounts.iter_mut().enumerate().zip(heat.iter_mut()).zip(carries).zip(&nodes) {
         let class = Class::ALL[c];
         if !classes.contains(&class) {
             continue;
         }
-        let changed = |len| vec![[0.0; 2]; if cfg!(debug_assertions) { len } else { 0 }];
-        let task = |ks, len, from, v: &'s mut [f64], carry| Booker { class, ks, len, changed: changed(v.len()), v, carry, from, low: Vec::new(), rounded: 0.0 };
+        let task = |ks, len, from, v, carry| Booker { class, ks, len, v, carry, from, low: Vec::new(), rounded: 0.0, changed: Vec::new(), node };
         if !a.is_empty() {
             let len = a.len() / ns;
             let mut carry = carry.map(|x| x.chunks_mut(per * len));
@@ -95,6 +106,9 @@ pub(crate) fn book_by_array<'s>(store: &'s mut Store, ns: usize, classes: &[Clas
         }
     }
     crate::par::each_init(&mut tasks, work, || (), |_, b| {
+        if cfg!(debug_assertions) {
+            b.changed = vec![[0.0; 2]; b.v.len()];
+        }
         f(b);
         b.zero_low();
     });

@@ -37,7 +37,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
     ks.sort_unstable();
     ks.dedup();
     let before: Vec<f64> = ks.iter().flat_map(|&k| w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().copied()).collect();
-    apply(w, fluxes, &[], &[]);
+    apply(w, fluxes, &[]);
     for (q, &k) in ks.iter().enumerate() {
         for (i, (&now, &was)) in w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().zip(&before[q * n..(q + 1) * n]).enumerate().filter(|p| p.1 .0 != p.1 .1) {
             s.note(k, i, now - was, w.mesh.cells().area()[i]);
@@ -167,7 +167,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
             wear(w, s, i, worn[i], &mut broke);
         }
     }
-    apply(w, &[], &broke, &[]);
+    apply(w, &[], &broke);
 }
 
 /// The crossings of a pass as the columns of a link flux, row `r` in column `col_of[r]`: the links that carried

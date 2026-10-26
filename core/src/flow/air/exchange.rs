@@ -119,7 +119,7 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
             s.hold(k, i, -up);
         }
     }
-    apply(w, &[links.flux(), Batch::fallen(Class::Air, lift.iter().map(|q| -q)).flux()], &[], &[]);
+    apply(w, &[links.flux(), Batch::fallen(Class::Air, lift.iter().map(|q| -q)).flux()], &[]);
     for &(_, k) in henry {
         if (0..n).any(|i| w.store.amounts(Class::Ground)[k * n + i] > 0.0) {
             s.add_loose(k, true);

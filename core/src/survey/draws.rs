@@ -90,7 +90,7 @@ impl Draws {
                 back.link((i, i), free - most[i]);
             }
         }
-        apply(w, &[back.flux()], &[], &[]);
+        apply(w, &[back.flux()], &[]);
         d
     }
     /// Do bodies draw from cell `i`'s ground?

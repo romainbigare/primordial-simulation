@@ -10,6 +10,8 @@ use std::sync::OnceLock;
 
 /// A reaction keeps mass where its two sides differ by no more than this share (the sums of molar masses round).
 const MASS_ROUNDING: f64 = 1e-12;
+/// What a change of amounts may lose or gain of an element to rounding, relative to all the elements it changes.
+const ELEMENT_ROUNDING: f64 = 1e-9;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
@@ -213,5 +215,16 @@ impl Chemistry {
     #[inline]
     pub fn add_elems(&self, k: usize, amount: f64, out: &mut [f64]) {
         self.subs[k].elems.iter().enumerate().filter(|e| *e.1 != 0).for_each(|(j, &c)| out[j] += c as f64 * amount);
+    }
+
+    /// Does `dmol` (substance, mol) keep every element of the table, to rounding? `sums` is room for the element totals.
+    pub(crate) fn keeps_elements(&self, dmol: impl IntoIterator<Item = (u16, f64)>, sums: &mut [f64]) -> bool {
+        let mut size = 0.0;
+        sums.fill(0.0);
+        for (k, d) in dmol {
+            self.add_elems(k as usize, d, sums);
+            size += d.abs() * self.subs[k as usize].elems.iter().map(|&c| c as f64).sum::<f64>();
+        }
+        sums.iter().all(|e| e.abs() <= ELEMENT_ROUNDING * size)
     }
 }

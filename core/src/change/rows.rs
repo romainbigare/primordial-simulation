@@ -138,7 +138,7 @@ impl Step<'_> {
             rc.made(&w.chem, &mut row[..ns]);
         }
         debug_assert!(
-            crate::store::keeps_elements(&w.chem, row[..ns].iter().enumerate().map(|(k, &d)| (k as u16, d)), &mut vec![0.0; w.chem.n_elements]),
+            w.chem.keeps_elements(row[..ns].iter().enumerate().map(|(k, &d)| (k as u16, d)), &mut vec![0.0; w.chem.n_elements]),
             "a reaction that does not keep its elements: node {i} of {:?}",
             self.class
         );

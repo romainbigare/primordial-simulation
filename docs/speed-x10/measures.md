@@ -1994,8 +1994,10 @@ in place of a `store::apply` call with link lists and transforms. The air nodes 
 the runner), booked the same way. The result is the base's world, bit for bit: an air node gets gas only from the cells
 under it, so a domain's sum into its air node is the base's sum; the booking keeps the base's order for each number (gas
 before the reactions in a ground node; for the air's heat, one gas after the other over the nodes in order, then the lift).
-No order of sums changes, so the golden test needs no re-pin. Core: 10,173 to 10,299 code lines (+236 -110; the plan said
-+45 -25: the rows, their booking and the debug check of elements are two files of 126 and 85 lines).
+No order of sums changes, so the golden test needs no re-pin. Core: 10,227 to 10,353 code lines (+236 -110; the plan said
++45 -25: the rows, their booking and the debug check of elements are two files of 126 and 85 lines). The measures below
+were made with G1 on `284c6ba` (before G2, with the `bench48` saves); G1 was then rebased on `8370448`, its true base, and
+gives that base's world there bit for bit.
 
 | Check | Result |
 |---|---|
