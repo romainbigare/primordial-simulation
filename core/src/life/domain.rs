@@ -59,6 +59,10 @@ impl Domain {
     pub(super) fn slot(&self, i: usize) -> usize {
         self.cells.iter().position(|&c| c as usize == i).expect("a cell of the domain")
     }
+    /// How many bodies are stored in it.
+    pub(crate) fn count(&self) -> usize {
+        self.table.len()
+    }
     /// The handles of the bodies of its cell `i`, in the order they came.
     pub fn cell(&self, i: usize) -> impl Iterator<Item = Handle> + '_ {
         self.at[self.slot(i)].iter().copied()

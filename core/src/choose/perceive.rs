@@ -118,7 +118,7 @@ pub(super) fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, 
     let (none, min) = (SHARE_SENSE * ln(STORE_FLOOR), Layout::of(chem).min);
     x.extend((0..ns).map(|k| if b.store[k] > 0.0 { SHARE_SENSE * ln((b.store[k] * chem.subs[k].molar_mass / mass) as f32 + STORE_FLOOR) } else { none } - SHARE_SENSE * ln(b.genes[min + k].max(0.0) + MIN_FLOOR)));
     x.extend_from_slice(&w.life.seen[i * ns..(i + 1) * ns]);
-    let crowd = ln(1.0 + (w.life.sum[i][1] / w.mesh.cells().area()[i]) as f32);
+    let crowd = ln(1.0 + (w.life.sum(i)[1] / w.mesh.cells().area()[i]) as f32);
     let (dt, lit, sun) = ((temp - env[0]) as f32, lived.lit as f32, w.season() as f32 * std::f32::consts::TAU);
     x.extend([dt / WARM_SCALE, ln(pm as f32) / LN_MASS - 1.0, ln(1.0 + lit) / LN_LIGHT, ln(1.0 + env[1] as f32), (env[0] as f32 - T_MID) / T_SPAN, crowd, sun.sin(), sun.cos()]);
     x.extend(heard);
@@ -131,7 +131,8 @@ pub(super) fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, 
 /// in place `WET`, its parts in the last place).
 pub fn cells(w: &mut World) {
     let (life, parts) = (&w.life, &w.parts.at);
-    let cellf = life.sum.iter().zip(&life.env).zip(w.mesh.cells().area()).zip(parts).map(|(((c, e), &area), p)| {
+    let cellf = (0..w.mesh.cells().n()).map(|i| {
+        let (c, e, area, p) = (life.sum(i), &life.env[i], w.mesh.cells().area()[i], &parts[i]);
         let resist = 1.0 + thickness(w, c[1], area) as f32;
         let c = c.map(|v| v as f32);
         let n = c[0].max(1.0);

@@ -2704,3 +2704,53 @@ measure and G12). Every slow test passes but the two known failures: the key num
 0.568, 0.557, 0.562) and the sleep test only on `air_3` (S84: off by 0.6e-6 to 1.3e-6 against a noise of 0.5e-6, the
 other substances within their noise). The century keeps its books; the nodes check, the pace tests, the batch test
 (on 3 seeds), the long-step and globe climate tests, the learning scene and the selection tests pass.
+## G6: the survey per domain
+
+Level 2, as the plan says: golden seed 3 is re-pinned (`0xecc8894e5b74d038` to `0x4e102ebb2430f4cc`; seeds 1 and 2 unchanged). The world is the same; only the numbers the born brain rows get differ (below). The survey is one pool call, a task per domain, that does in each of its
+cells the wear of movers, the monthly merge of nodes, the shade and the sums (`Life::sum`, now kept per domain in
+`Life::sums`, so the task of a domain is the one writer of its rows). Before: a pool call for the wear and merge (only
+where no part is), the cells with parts one by one (`in_domain`, each with its outbox applied), a pool call for the
+shade, a third (`par::rows`) for the sums, and a settle and a landing after each of the first two. Now a death or a
+merge that lets go of a part queues that in the domain's outbox, applied after the call (`outbox::land`), as in a
+batch; so the cells with parts need no serial step. Two more changes: the `state` process leaves a month's start to the
+survey when it would be in full there (the survey rebuilt it in full already, for the cells' surroundings; it was done
+twice), and the merge of nodes makes the genes of its nodes in steps with the step of each gene made once
+(`body::steps_by`, `body::likes`, `body::spreads`; it made `like` for each gene of each node). Core 10,297 to 10,329
+(+109 -77 of code lines). One test added (a domain left with no bodies holds nothing at the next survey).
+
+| Check | Result |
+|---|---|
+| Golden | seed 3 re-pinned, `0xecc8894e5b74d038` to `0x4e102ebb2430f4cc` (seeds 1 and 2 unchanged). The cause: the born brain rows (`Life::genomes`) get their global ids when the world settles, domain by domain; the survey now settles once after one call, where it settled after the call on the cells without parts and then after each cell with parts, so rows are numbered and freed in another order. Checked on the golden world of seed 3 at the end: the store, the counts, the rain, the light, the links, the parts, the lineages and all 302 bodies are equal, the born rows each body holds are equal, 256 rows held in both; only the order of the rows in the table differs. The order is fixed by the data (domain, then order made): the same fingerprints with threads, with one thread, without the `threads` feature and in a plain debug build, each in a clean target dir |
+| `cargo test --release --workspace`, also with debug assertions, clippy, the wasm build | pass |
+| The key numbers (once, against the references after AIR4.0) | the same as G12's, to every digit printed: all in range but S50 (0.557, seeds 0.563, 0.555, 0.555: the known failure); land 292.160 K, swing 15.320 K, rain 0.001819 mol/(m² s), heat-absorbing gas 412.49 ppm, land worn 0.1339 mm/yr, light-eaters 10.243, eaters 5.176, life of light-eaters 1.410 yr, life of eaters 13.50 yr, rain on land 1.018 m/yr |
+| 3 years of each G12 save, 1, 2 and 4 threads | the same fingerprint on every number of threads |
+| `series.csv`, 3 years of each bench, base `46ec255` and G6 | every column equal (223 of 223, island22, globe36, region24) |
+| The world, island22 and globe36, 3 years | the stores, the counts and every body are equal; only the numbers of the born brain rows differ (the rows numbered and freed in another order), so the fingerprints differ |
+
+**One thread, instructions of one year** (callgrind, `RAYON_NUM_THREADS=1`, G12 saves, base `46ec255`; million):
+survey island22 298.7 to 220.9 (-26.0%), globe36 235.1 to 183.4 (-22.0%); `survey::batch` 3,614.1 to 3,614.4 and 2,926.4
+to 2,927.6 (not up); the run 6,543.5 to 6,457.6 (-1.3%) and 6,172.0 to 6,110.1 (-1.0%). Of the survey's gain the steps of
+the merge are 70 million on island22; the merge of nodes is 75 to 80% of the survey's thread time (island22, 4 threads:
+32 of 41 ms a year, 24 of 32 on globe36), the shade and the sums 5 and 3 ms.
+
+**Wall time of the survey on 4 threads** (a timer round each process of `schedule::run_for`, summed in a year, mean of years
+2 and 3 of a 3-year run from the G12 saves; 14 interleaved sets, each run under `flock $X/timing.lock` after the machine
+was 90% idle; ms a year):
+
+| | island22 base / G6 | globe36 base / G6 |
+|---|---|---|
+| survey, median (minimum) | 22.2 (19.7) / 16.0 (14.4) | 26.2 (20.5) / 15.5 (13.7) |
+| **change of medians** (per-set median, quartiles) | **-27.9%** (-25.7%, 0.69 to 0.93 of the base) | **-40.6%** (-38.9%, 0.54 to 0.84) |
+| the `state` process | 2.8 / 2.1 | 4.0 / 2.8 |
+| survey and state process | 25.2 / 18.3 (-27.2%) | 30.6 / 18.3 (-40.2%) |
+
+**Verdict.** Over the kill line (-20%) on both; the done-when (-35%) is met on globe36 and **not on island22** (-28%).
+Where the island's survey stands (ms a year, 4 threads): the pool call 10 to 13, of it the merge of nodes about 8; the
+full state 1.6; the landing and settle 1; the cells' surroundings 1; the rest under 1. The merge is work, not waiting:
+the pool call is within 20% of the thread time over 4, so more of the same step gains little; only less work in
+`nodes::crowd` does (the `dist` and `alike` of its pairs are the next cost).
+
+**Tried and not kept.** The genes in steps made once for every node of a cell in `join_alike` (+17 million
+instructions: most comparisons stop at the first gene); the gap loop of `merge_closest` in vectors, without the early
+exit (slower); the reach worked out only past `lim` (no change). The state of the 60-day flow (G12): the skip is only
+when the process would be in full, as that is the only case it repeats.

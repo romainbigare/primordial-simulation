@@ -431,7 +431,7 @@ const CANOPY_SHARE: f64 = 0.15;
 fn the_ground_under_dense_canopies_stays_near_its_neighbours() {
     let (mut w, _) = run(1, SIDE, CANOPY_YEARS, false, |_| {}, |_, _, _| {});
     let area = w.mesh.cells().area().to_vec();
-    let per_area = |i: usize| w.life.sum.get(i).map_or(0.0, |s| s[1]) / area[i];
+    let per_area = |i: usize| w.life.sum(i)[1] / area[i];
     let mut land: Vec<usize> = (0..area.len()).filter(|&i| w.is_land(i) && per_area(i) > 0.0).collect();
     land.sort_by(|&a, &b| per_area(b).total_cmp(&per_area(a)));
     let dense: Vec<usize> = land[..(CANOPY_TOP * land.len() as f64).ceil() as usize].to_vec();

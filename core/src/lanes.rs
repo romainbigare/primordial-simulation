@@ -29,7 +29,7 @@ pub(crate) fn clear(w: &mut World, i: usize, j: usize, m2: f64) {
 /// What it costs, against bare ground, to step from `i` into `j`: one, plus `j`'s body mass per area over `rho_pass`
 /// for the share of the passage not yet cleared.
 pub(crate) fn resist(w: &World, i: usize, j: usize) -> f64 {
-    1.0 + (1.0 - open(w, link(w, i, j))) * thickness(w, w.life.sum[j][1], w.mesh.cells().area()[j])
+    1.0 + (1.0 - open(w, link(w, i, j))) * thickness(w, w.life.sum(j)[1], w.mesh.cells().area()[j])
 }
 
 /// How much cheaper link `l` is than uncleared ground, for the mean cover of its two cells (1 when bare or uncleared).
@@ -39,7 +39,7 @@ pub fn eased(w: &World, l: usize) -> f64 {
     }
     let cells = w.mesh.cells();
     let (i, j) = (cells.a()[l] as usize, cells.b()[l] as usize);
-    let c = thickness(w, (w.life.sum[i][1] + w.life.sum[j][1]) / 2.0, (cells.area()[i] + cells.area()[j]) / 2.0);
+    let c = thickness(w, (w.life.sum(i)[1] + w.life.sum(j)[1]) / 2.0, (cells.area()[i] + cells.area()[j]) / 2.0);
     (1.0 + c) / (1.0 + (1.0 - open(w, l)) * c)
 }
 
@@ -52,7 +52,7 @@ pub fn regrow(w: &mut World, dt: f64) {
         }
         let cells = w.mesh.cells();
         let (i, j, dist) = (cells.a()[l] as usize, cells.b()[l] as usize, cells.dist()[l]);
-        let fill = thickness(w, (w.life.sum[i][1] + w.life.sum[j][1]) / 2.0, (cells.area()[i] + cells.area()[j]) / 2.0).min(1.0);
+        let fill = thickness(w, (w.life.sum(i)[1] + w.life.sum(j)[1]) / 2.0, (cells.area()[i] + cells.area()[j]) / 2.0).min(1.0);
         let a = &mut w.links.cleared[l];
         *a = (*a - (2.0 * w.cfg.regrow * fill * dist * dt) as f32).max(0.0);
     }

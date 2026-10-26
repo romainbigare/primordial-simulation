@@ -51,7 +51,13 @@ fn processes(w: &World) -> [(Every, Run); 9] {
     let physics = days(cfg, cfg.phys_days);
     [
         (physics, (Stage::Bodies, "survey", |w, _| survey::survey(w, false))),
-        (physics, (Stage::Flow, "state", |w, _| flow::state(w, days(&w.cfg, w.cfg.flow_days).span(w.time).is_some()))),
+        // (A month's start that is a full state's has it already: the survey rebuilt it in full for the cells' surroundings.)
+        (physics, (Stage::Flow, "state", |w, _| {
+            let full = days(&w.cfg, w.cfg.flow_days).span(w.time).is_some();
+            if !(full && survey::monthly(w)) {
+                flow::state(w, full);
+            }
+        })),
         (Every { period: cfg.air_hours as u64 * HOUR_S, within: cal.month }, (Stage::Flow, "air", |w, s| flow::air(w, s as f64))),
         (days(cfg, cfg.flow_days), (Stage::Flow, "liquid", |w, s| flow::liquid(w, s as f64))),
         (from_start(flow::CREEP_YEARS * cal.year), (Stage::Flow, "creep", |w, s| flow::creep(w, s as f64))),

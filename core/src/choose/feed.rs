@@ -102,7 +102,7 @@ pub fn take_body(w: &World, d: &mut Domain, b: &mut Body, s: Handle, rng: &mut R
     let per = reached.max(1.0 / o.n());
     let chance = reached / per;
     let m = b.wanted(&w.chem, b.paces(w), |k| per * o.store[k], kg * fb / (fb + fo + 1e-30), mb);
-    let resist = 1.0 + lanes::thickness(w, w.life.sum[b.cell as usize][1], w.mesh.cells().area()[b.cell as usize]);
+    let resist = 1.0 + lanes::thickness(w, w.life.sum(b.cell as usize)[1], w.mesh.cells().area()[b.cell as usize]);
     let away = (1.0 - o.interval(w) as f64 / b.interval(w) as f64).max(0.0);
     let hit = reached * if !one { 1.0 - away } else { (u >= away) as u8 as f64 };
     // The bite tears this share of the body of each member it reaches; the stores they held spill in proportion, less

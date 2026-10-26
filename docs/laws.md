@@ -26,9 +26,11 @@ quarters, linked to a square beside them at the distance between centres across 
 across it passes exactly.
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it). Processes run by their periods
-(`clock::Every`) in the order of `schedule::processes`: every `phys_days` the survey (`survey::survey`: the wear of
-movers and the monthly merge per domain on the pool with the feature `threads`, where no part is and no body holds or is
-inside one, then in those cells one by one; the shade per domain, the sums per cell), the parts of Flow that are due
+(`clock::Every`) in the order of `schedule::processes`: every `phys_days` the survey (`survey::survey`: one task per
+domain on the pool with the feature `threads`, in each of its cells the wear of movers, the monthly merge, the shade and
+the sums; a death or a merge that lets go of a part queues that in the domain's outbox, applied after the tasks as in a
+batch; at a month's start Flow's state is rebuilt in full for the cells' surroundings, and its own process leaves it when
+it would be in full then), the parts of Flow that are due
 (air every `air_hours`, liquid and erosion every `flow_days`, heat sideways and creep yearly) and Change; on the month's
 first day Bond (the turns of the parts: each domain's in slot order on its view, the domains on the pool, their moves
 booked in the order of the domains; then the loads of the structures one by one); every `batch_days` days (10, one
@@ -65,7 +67,7 @@ and counters and its outbox; the lineages and born rows it makes get provisional
 their holders wait there. When the domain is back the world settles (`World::settle`): its events and counters are
 added, those ids made global in the order made; the holders' changes are added at once outside a batch, at its end in
 one, and a lineage left with no body dies out, born rows left with no holder are freed. Every serial step, a body or
-part law run on its own (a part act, `copy::back`, the monthly merge and the wear of movers in a cell with a part), runs so
+part law run on its own (a part act, `copy::back`), runs so
 too, on the domain of its cell (`World::in_domain`). First the parallel phase: the bodies due that hold no part and are
 inside none update, each domain on a thread of the pool with the feature `threads` (`survey::run`, the domains with
 the most updates first), one after another without it or when the phase is small (`par::SERIAL_BELOW`). What an

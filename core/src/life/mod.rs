@@ -48,12 +48,10 @@ pub struct Life {
     /// last taken (`take_queued`): what a domain wrote lies in these only
     pub(crate) unbooked: Ran,
     unsent: Ran,
-    /// Per cell, from the last survey: members, then their visible traits summed, then the energy to break all its
-    /// bodies, J; then their capture area times their shade, m², and that times the share set aside for their light
-    /// reactions. The survey's caches are not saved: a snapshot is taken at a month's start, where the survey builds
-    /// them before any law reads them; this one the tape reads first, so `tape::load_snapshot` rebuilds it
-    /// (`survey::sums`).
-    pub sum: Vec<[f64; crate::survey::ROW]>,
+    /// Per domain, from the last survey: the numbers of each of its cells (`Life::sum`). The survey's caches are not
+    /// saved: a snapshot is taken at a month's start, where the survey builds them before any law reads them; this one
+    /// the tape reads first, so `tape::load_snapshot` rebuilds it (`survey::sums`).
+    pub(crate) sums: Vec<Sums>,
     /// Per cell, from the last survey: the share of the light reaching its bodies' capture area that they absorb
     pub absorb: Vec<f32>,
     /// Per cell, from the last survey: the share of that absorbed light set aside for its bodies' light reactions
@@ -75,6 +73,19 @@ pub struct Life {
     free_genomes: Vec<u32>,
     /// A batch runs: the changes of the holders of lineages and born rows wait in the domains until it ends (`count_all`)
     pub(crate) batch: bool,
+}
+
+/// The numbers of the cells of a domain, each domain's kept apart from the others so that the survey's task of a domain
+/// is the one writer of them (CLAUDE.md 3.6).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Sums {
+    /// Per cell (by its order in the domain's cells): members, then their visible traits summed, then the energy to break
+    /// all its bodies, J; then their capture area times their shade, m², and that times the share set aside for their
+    /// light reactions
+    pub rows: Vec<[f64; crate::survey::ROW]>,
+    /// Whether the domain has bodies, or may have had some at the last survey: a domain that has none and had none has
+    /// rows of zeros and caches of zeros, and the survey leaves it alone
+    pub live: bool,
 }
 
 /// A set of domains by their index, as bits: each once, taken in order.
@@ -173,6 +184,11 @@ impl Life {
     pub fn domain_of(&self, i: usize) -> usize {
         self.cell_in[i].0 as usize
     }
+    /// The numbers of cell `i` from the last survey (`Sums::rows`).
+    pub fn sum(&self, i: usize) -> &[f64; crate::survey::ROW] {
+        let (d, k) = self.cell_slot(i);
+        &self.sums[d].rows[k]
+    }
     /// The domain of cell `i` and its slot among that domain's cells (`Level::children` of its air node).
     #[inline]
     pub(crate) fn cell_slot(&self, i: usize) -> (usize, usize) {
@@ -205,6 +221,7 @@ impl Life {
             let (pushed, crossings) = (vec![0.0; cells.len()], vec![0.0; cells.len()]);
             Domain { index: d as u32, at, stale, ring, pushed, crossings, cells, ..Default::default() }
         };
+        self.sums = cells.iter().map(|c| Sums { rows: vec![[0.0; crate::survey::ROW]; c.len()], live: true }).collect();
         self.domains = cells.into_iter().enumerate().map(domain).collect();
         self.faces = vec![Faces::default(); self.domains.len()];
     }

@@ -968,6 +968,28 @@ fn a_big_node_stores_light_set_aside_as_it_fell() {
     books.assert_kept(&w, 1e-9);
 }
 
+/// The survey adds up what each cell holds (`Life::sum`) and the light its bodies take (`World::canopy`), one domain at a
+/// time: a domain whose bodies are all gone holds nothing and takes no light at the next survey.
+#[test]
+fn a_domain_left_with_no_bodies_holds_nothing_at_the_next_survey() {
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    worldgen::life::seed(&mut w, 0);
+    pcore::survey::survey(&mut w, false);
+    let i = w.life.living().map(|x| w.life[x.0].cell as usize).next().expect("a body");
+    let members: f64 = w.life.cell(i).map(|s| w.life[s].n()).sum();
+    assert!(members > 0.0 && w.life.sum(i)[0] == members && w.canopy[i] > 0.0, "{members} members, sum {}", w.life.sum(i)[0]);
+    let d = w.life.domain_of(i);
+    let all: Vec<(Handle, usize)> = w.life.living().filter(|x| w.life.domain_of(x.1.cell as usize) == d).map(|x| (x.0, x.1.cell as usize)).collect();
+    for (h, cell) in all {
+        let b = std::mem::take(&mut w.life[h]);
+        moved(&mut w, (cell, h), |w, d| body::die(w, d, h, b, body::LACK));
+    }
+    pcore::survey::survey(&mut w, false);
+    assert!((0..w.mesh.cells().n()).filter(|&c| w.life.domain_of(c) == d).all(|c| w.life.sum(c).iter().all(|&x| x == 0.0) && w.canopy[c] == 0.0), "a cell of the emptied domain still holds something");
+    assert_eq!(pcore::check::broken(&w), None);
+}
+
 /// Light passes through a cell's bodies from the tallest member down (`survey::shade`): of two light-eater nodes with the
 /// same capture area, the one of 100 times heavier members catches more light per m² of it (e^(its capture area per
 /// ground area) times more), the two together catch what the cell's canopy intercepts, and matter and energy are kept.

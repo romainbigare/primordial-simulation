@@ -3,7 +3,7 @@
 //! node as individuals (`open`). Members, stores and heat are kept exactly in every join and split.
 
 use crate::bond::{held, let_go, room};
-use crate::body::{self, alike, most, noise, range, spread_at, spread_kept, steps, wall_room, within_steps, Body, Layout, REACH};
+use crate::body::{self, alike, likes, most, noise, range, spread_at, spread_kept, spreads, steps_by, wall_room, within_steps, Body, Layout, REACH};
 use crate::brain::{blend, row_step, shake};
 use crate::rng::{Purpose, Rng};
 use crate::life::Handle;
@@ -46,7 +46,7 @@ fn join_alike(w: &World, d: &mut Domain, lay: &Layout, i: usize) -> Vec<Handle> 
     (0..list.len()).filter(|&x| head[x] == x).map(|x| list[x].1).collect()
 }
 
-/// A body's genes in steps (`body::steps`), its spread per gene (`body::spread_at`), and its lineage and stage
+/// A body's genes in steps (`body::steps_by`), its spread per gene (`body::spreads`), and its lineage and stage
 /// (`merge_closest`).
 type Likeness = (Vec<f32>, Vec<f32>, (u32, bool));
 
@@ -58,9 +58,10 @@ type Likeness = (Vec<f32>, Vec<f32>, (u32, bool));
 /// unlike).
 fn merge_closest(w: &World, d: &mut Domain, lay: &Layout, left: Vec<Handle>, max: usize) {
     let (m, lim) = (left.len(), w.cfg.phys.alike);
+    let units = likes(lay, d[left[0]].genes.len());
     let steps = |d: &Domain, s: Handle| {
         let b = &d[s];
-        (steps(lay, &b.genes), (0..b.genes.len()).map(|g| spread_at(&b.spread, g)).collect(), (b.lineage, b.adult(&w.chem)))
+        (steps_by(lay, &units, &b.genes), spreads(&b.spread, b.genes.len()), (b.lineage, b.adult(&w.chem)))
     };
     let mut v: Vec<Likeness> = left.iter().map(|&s| steps(d, s)).collect();
     let dist = |p: &Likeness, q: &Likeness| {

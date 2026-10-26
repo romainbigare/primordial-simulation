@@ -21,46 +21,29 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
     [w.t_ground_last(i), d, z]
 }
 
-/// Before each physics step, in each cell: what movers broke since the last (`choose::wear`) and once a month the merge
-/// of alike nodes (`nodes::crowd`); then each cell's light shared out (`shade`) and what it holds (`sum_cells`); once a
-/// month the traffic and each cell's surroundings. The wear and the merge run per domain on the pool (`on_domains`) in
-/// the cells where no part is and no body holds or is inside one; then in those cells, one by one, each a serial step
-/// with its outbox applied after it, as a death or a merge there lets go of a part (laws.md 0). With `reversed`, the
-/// domains start in reversed order: only for the order test.
+/// Before each physics step, one task per domain on the pool (`run`), in each of its cells: what movers broke since the
+/// last (`choose::wear`), once a month the merge of alike nodes (`nodes::crowd`), the light shared out (`shade`) and what
+/// the cell holds (`rows`). A death or a merge that lets go of a part queues that in the domain's outbox, applied after
+/// the tasks (`outbox::land`, laws.md 0). Then the caches of the cells (`caches`), once a month the traffic and each
+/// cell's surroundings. With `reversed`, the domains start in reversed order: only for the order test.
 pub fn survey(w: &mut World, reversed: bool) {
     let n = w.mesh.cells().n();
-    let monthly = w.time.is_multiple_of(w.cfg.calendar().month);
+    let monthly = monthly(w);
     let lay = Layout::of(&w.chem);
-    // Cell `i`, the `k`th of domain `d`.
-    let worn = |w: &World, d: &mut Domain, (k, i): (usize, usize)| {
-        let e = std::mem::take(&mut d.pushed[k]);
-        if e > 0.0 {
-            choose::wear(w, d, i, e);
-        }
-        if monthly {
-            crate::nodes::crowd(w, d, &lay, i);
-        }
-    };
-    let parts = |w: &World, d: &Domain, i: usize| !w.parts.at[i].is_empty() || d.cell(i).any(|h| d[h].hold.is_some() || d[h].inside.is_some());
-    // The domains that store bodies, each with their count.
-    let peopled = |w: &World| w.life.domains.iter().enumerate().map(|(k, d)| (k, d.at.iter().map(Vec::len).sum(), ())).filter(|x| x.1 > 0).collect();
     // (Movers who pushed through cells where no body is break nothing.)
-    w.life.domains.iter_mut().filter(|d| d.at.iter().all(Vec::is_empty)).for_each(|d| d.pushed.fill(0.0));
-    on_domains(w, peopled(w), reversed, |_| (), |w, d, _, _| {
-        for k in 0..d.cells.len() {
-            let i = d.cells[k] as usize;
-            if !parts(w, d, i) {
-                worn(w, d, (k, i));
-            }
-        }
+    w.life.domains.iter_mut().filter(|d| d.count() == 0).for_each(|d| d.pushed.fill(0.0));
+    let mut sums = std::mem::take(&mut w.life.sums);
+    let work: Vec<_> = sums.iter_mut().enumerate().filter_map(|(k, s)| Some((k, w.life.domains[k].count(), s)).filter(|x| x.1 > 0 || x.2.live)).collect();
+    let ran: Vec<usize> = work.iter().map(|x| x.0).collect();
+    run(w, work, reversed, |_| Vec::new(), |w, d, s, l| {
+        (0..d.cells.len()).for_each(|k| worn(w, d, &lay, k, monthly));
+        (0..d.cells.len()).for_each(|c| shade(w, d, c, l));
+        rows(w, d, &mut s.rows);
+        s.live = d.count() > 0;
     });
-    let serial: Vec<usize> = (0..n).filter(|&i| parts(w, w.life.domain(i), i)).collect();
-    for i in serial {
-        w.in_domain(i, |w, d| worn(w, d, (w.life.cell_slot(i).1, i)));
-        crate::outbox::deliver(w);
-    }
-    on_domains(w, peopled(w), reversed, |_| (), |w, d, _, _| shade(w, d));
-    sum_cells(w);
+    w.life.sums = sums;
+    land_all(w, reversed);
+    caches(w, &ran);
     if monthly && w.time > 0 {
         traffic(w);
     }
@@ -74,39 +57,65 @@ pub fn survey(w: &mut World, reversed: bool) {
     choose::cells(w);
 }
 
-/// Per cell: its members and visible traits summed, their capture area per ground area, the light they absorb and the
-/// share set aside for their light reactions.
-fn sum_cells(w: &mut World) {
-    sums(w);
+/// Whether it is a month's start: the survey merges nodes, adds up the traffic and rebuilds Flow's state in full.
+pub(crate) fn monthly(w: &World) -> bool {
+    w.time.is_multiple_of(w.cfg.calendar().month)
+}
+
+/// Cell `k` of domain `d`: what movers broke since the last survey (`choose::wear`), and once a month the merge of alike
+/// nodes (`nodes::crowd`).
+fn worn(w: &World, d: &mut Domain, lay: &Layout, k: usize, monthly: bool) {
+    let (i, e) = (d.cells[k] as usize, std::mem::take(&mut d.pushed[k]));
+    if e > 0.0 {
+        choose::wear(w, d, i, e);
+    }
+    // (Fewer than two bodies have nothing to merge.)
+    if monthly && d.at[k].len() > 1 {
+        crate::nodes::crowd(w, d, lay, i);
+    }
+}
+
+/// The numbers of the cells of domain `d` (`Life::sum`), from its bodies in the order they came: their members, then
+/// their visible traits summed, then the energy to break them; then their capture area times their shade, and that
+/// times the share they set aside for their light reactions.
+fn rows(w: &World, d: &Domain, rows: &mut [[f64; ROW]]) {
+    for (k, row) in rows.iter_mut().enumerate() {
+        *row = [0.0; ROW];
+        for b in d.at[k].iter().map(|&h| &d[h]).filter(|b| b.alive) {
+            let (m, a) = (b.n(), light_area(b) * b.shade);
+            row[0] += m;
+            row[1..7].iter_mut().zip(&b.vis).for_each(|(x, &v)| *x += v as f64 * m);
+            (row[7], row[8], row[9]) = (row[7] + b.breaking(&w.chem, &w.cfg, 1.0), row[8] + a, row[9] + a * b.keep as f64);
+        }
+    }
+}
+
+/// Per cell of the domains `ran`: their capture area per ground area, the light they absorb and the share set aside for
+/// their light reactions.
+fn caches(w: &mut World, ran: &[usize]) {
     let (n, World { life, mesh, canopy, .. }) = (w.mesh.cells().n(), w);
     life.absorb.resize(n, 0.0);
     life.keep.resize(n, 0.0);
     let area = mesh.cells().area();
-    for (i, r) in life.sum.iter().enumerate() {
-        canopy[i] = (r[2] / area[i]) as f32;
-        life.absorb[i] = if r[2] > 0.0 { (r[8] / r[2]) as f32 } else { 0.0 };
-        life.keep[i] = if r[8] > 0.0 { (r[9] / r[8]) as f32 } else { 0.0 };
+    for &k in ran {
+        for (&i, r) in life.domains[k].cells.iter().zip(&life.sums[k].rows) {
+            let i = i as usize;
+            canopy[i] = (r[2] / area[i]) as f32;
+            life.absorb[i] = if r[2] > 0.0 { (r[8] / r[2]) as f32 } else { 0.0 };
+            life.keep[i] = if r[8] > 0.0 { (r[9] / r[8]) as f32 } else { 0.0 };
+        }
     }
 }
 
 /// The numbers of `Life::sum` per cell.
 pub(crate) const ROW: usize = 10;
 
-/// Per cell (`Life::sum`), cell by cell on the pool (`par::rows`), each cell's bodies in the order they came: its
-/// members, then their visible traits summed, then the energy to break its bodies; then their capture area times their
-/// shade, and that times the share they set aside for their light reactions.
+/// Per cell (`Life::sum`), for every domain, on the pool (`run`).
 pub fn sums(w: &mut World) {
-    let mut rows = vec![[0.0; ROW]; w.mesh.cells().n()];
-    let v = &*w;
-    crate::par::rows(rows.as_flattened_mut(), ROW, || (), |_, i, s| {
-        for b in v.life.cell(i).map(|h| &v.life[h]).filter(|b| b.alive) {
-            let (m, a) = (b.n(), light_area(b) * b.shade);
-            s[0] += m;
-            s[1..7].iter_mut().zip(&b.vis).for_each(|(x, &v)| *x += v as f64 * m);
-            (s[7], s[8], s[9]) = (s[7] + b.breaking(&v.chem, &v.cfg, 1.0), s[8] + a, s[9] + a * b.keep as f64);
-        }
-    });
-    w.life.sum = rows;
+    let mut sums = std::mem::take(&mut w.life.sums);
+    let work = sums.iter_mut().enumerate().map(|(k, s)| (k, w.life.domains[k].count(), s)).collect();
+    run(w, work, false, |_| (), |w, d, s, _| rows(w, d, &mut s.rows));
+    w.life.sums = sums;
 }
 
 /// The capture area of `n` members who each show `vis` of it (`Body::vis`), m².
@@ -133,31 +142,26 @@ fn traffic(w: &mut World) {
     }
 }
 
-/// Light passes the bodies of a cell of domain `d` from the tallest member down, equal heights sharing a layer; a layer of
-/// capture area `x` per ground area absorbs 1 - exp(-x) of what reaches it. The cell's light is only shared out (the
-/// shades, weighted by capture area, have mean 1). Only cells whose bodies changed are worked out again
-/// (`Domain::stir`).
-fn shade(w: &World, d: &mut Domain) {
+/// Light passes the bodies of cell `c` of domain `d` from the tallest member down, equal heights sharing a layer; a layer
+/// of capture area `x` per ground area absorbs 1 - exp(-x) of what reaches it. The cell's light is only shared out (the
+/// shades, weighted by capture area, have mean 1). Only if its bodies changed (`Domain::stir`), with `l` for the work.
+fn shade(w: &World, d: &mut Domain, c: usize, l: &mut Vec<(f32, f64, Handle)>) {
+    if !std::mem::take(&mut d.stale[c]) {
+        return;
+    }
     // What a layer of capture area `x` per ground area intercepts, per unit of `x`: (1 - e^-x) / x.
     let g = mean_decay;
-    let area = w.mesh.cells().area();
-    let mut l: Vec<(f32, f64, Handle)> = Vec::new();
-    for c in 0..d.cells.len() {
-        if !std::mem::take(&mut d.stale[c]) {
-            continue;
-        }
-        let a = area[d.cells[c] as usize];
-        l.clear();
-        l.extend(d.at[c].iter().map(|&s| (s, &d[s])).map(|(s, b)| (b.vis[6], b.vis[1] as f64 * b.n() / a, s)));
-        l.sort_by(|a, b| b.0.total_cmp(&a.0));
-        let (all, mut above, mut k) = (g(l.iter().map(|x| x.1).sum()), 0f64, 0);
-        while k < l.len() {
-            let e = k + l[k..].iter().take_while(|x| x.0 == l[k].0).count();
-            let x: f64 = l[k..e].iter().map(|x| x.1).sum();
-            let f = (-above).exp() * g(x) / all;
-            l[k..e].iter().for_each(|y| d[y.2].shade = f);
-            (above, k) = (above + x, e);
-        }
+    let a = w.mesh.cells().area()[d.cells[c] as usize];
+    l.clear();
+    l.extend(d.at[c].iter().map(|&s| (s, &d[s])).map(|(s, b)| (b.vis[6], b.vis[1] as f64 * b.n() / a, s)));
+    l.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let (all, mut above, mut k) = (g(l.iter().map(|x| x.1).sum()), 0f64, 0);
+    while k < l.len() {
+        let e = k + l[k..].iter().take_while(|x| x.0 == l[k].0).count();
+        let x: f64 = l[k..e].iter().map(|x| x.1).sum();
+        let f = (-above).exp() * g(x) / all;
+        l[k..e].iter().for_each(|y| d[y.2].shade = f);
+        (above, k) = (above + x, e);
     }
 }
 
@@ -212,6 +216,12 @@ fn on_domains<T: Send + Sync, S>(w: &mut World, work: Vec<(usize, usize, T)>, re
         f(w, d, t, s);
         d.post();
     });
+    land_all(w, reversed);
+}
+
+/// The domains back from a run: the world settled (`World::settle`) and the outboxes applied (`outbox::land`), where
+/// the moves gathered are booked beside the landing.
+fn land_all(w: &mut World, reversed: bool) {
     w.settle(0..w.life.domains.len());
     crate::outbox::land(w, reversed);
 }

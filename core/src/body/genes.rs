@@ -172,12 +172,27 @@ fn step(lay: &Layout, g: usize, x: f32) -> f32 {
 
 /// Genes in steps of `like`.
 pub fn steps(lay: &Layout, a: &[f32]) -> Vec<f32> {
-    a.iter().enumerate().map(|(g, &x)| step(lay, g, x)).collect()
+    steps_by(lay, &likes(lay, a.len()), a)
+}
+
+/// `steps` with the step of each gene for likeness (`likes`) made once for many bodies.
+pub(crate) fn steps_by(lay: &Layout, likes: &[f32], a: &[f32]) -> Vec<f32> {
+    a.iter().zip(likes).enumerate().map(|(g, (&x, &like))| (if g < lay.cat { x } else { x.max(0.0) }) / like).collect()
+}
+
+/// The step for likeness of each of the first `n` genes (`like`).
+pub(crate) fn likes(lay: &Layout, n: usize) -> Vec<f32> {
+    (0..n).map(|g| like(lay, g)).collect()
 }
 
 /// The variance of gene `g` in a node's spread (0 past its end).
 pub(crate) fn spread_at(spread: &[f32], g: usize) -> f32 {
     spread.get(g).map_or(0.0, |&v| v.max(0.0))
+}
+
+/// The variance of each of the first `n` genes in a node's spread (`spread_at`).
+pub(crate) fn spreads(spread: &[f32], n: usize) -> Vec<f32> {
+    spread.iter().map(|&v| v.max(0.0)).chain(std::iter::repeat(0.0)).take(n).collect()
 }
 
 /// The variance `v` a node keeps along gene `g` of mean `x`: none for a gene that is off, where differences do nothing.

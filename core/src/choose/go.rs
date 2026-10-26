@@ -31,7 +31,7 @@ pub fn go(w: &World, d: &mut Domain, b: &mut Body, j: usize, kin: bool) {
     d.counts.parts.afloat += afloat as u8 as f64;
     // What it spends pushing through the bodies there breaks them at the next survey (`wear`) and clears the lane: the
     // ground whose cover that energy breaks.
-    let (pushed, all) = (cost * (1.0 - 1.0 / resist), w.life.sum[j][7]);
+    let (pushed, all) = (cost * (1.0 - 1.0 / resist), w.life.sum(j)[7]);
     let lane = if all > 0.0 { pushed * w.mesh.cells().area()[j] / all } else { 0.0 };
     b.leaving = true;
     d.out.push(Entry::Go { id: b.id, from: i as u32, to: j as u32, pushed, lane, carries: carried.is_some(), kin, body: None });
@@ -43,7 +43,7 @@ pub fn go(w: &World, d: &mut Domain, b: &mut Body, j: usize, kin: bool) {
 /// movers off. (What a move pays and where it lands are for `go`.)
 pub(super) fn can_go(w: &World, b: &Body, j: usize, share: f64, load: f64) -> bool {
     let mb = share * b.mass(&w.chem);
-    (w.life.sum[j][1] + mb) / w.cfg.phys.rho_body <= w.cfg.phys.layer * w.mesh.cells().area()[j]
+    (w.life.sum(j)[1] + mb) / w.cfg.phys.rho_body <= w.cfg.phys.layer * w.mesh.cells().area()[j]
         && share * bond::bears(w, b) >= w.cfg.phys.bump * (mb + load) * w.cfg.gravity
 }
 
