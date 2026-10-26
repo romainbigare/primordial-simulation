@@ -235,6 +235,10 @@ impl Moves {
     pub(crate) fn a_seen_all(&self, w: &World, j: usize) -> f64 {
         (0..w.chem.ns()).map(|k| self.a_seen(w, k, j)).sum()
     }
+    /// Temperature of air node `j` as the moves gathered leave it, K (`World::t_air`).
+    pub(crate) fn t_air(&self, w: &World, j: usize) -> f64 {
+        crate::flow::air_temp(self.heat(w, Node::air(j)), w.cap_air(|k| self.a_seen(w, k, j)))
+    }
     /// Heat capacity of ground node `i`'s active layer as the moves gathered leave it, J/K (`World::heat_cap_ground`).
     pub(crate) fn heat_cap_ground(&self, w: &World, i: usize) -> f64 {
         w.heat_cap_of(i, self.amounts(w, Node::ground(i)), self.amounts(w, Node::new(Class::Bed, i)))
@@ -319,15 +323,24 @@ impl World {
     /// for the pool, `f` runs beside it in the same call, the store out of the world meanwhile: `f` must not read the
     /// store (a landing reads none: it moves no matter of the store, laws.md 0) nor open a view.
     pub(crate) fn book_moves_beside<R: Send>(&mut self, f: impl FnOnce(&mut World) -> R + Send) -> R {
+        self.book_gathered(true, f)
+    }
+    /// The moves gathered by the domains that ran since the last booking are booked on the calling thread: a serial
+    /// step, or the turns of the parts, gather a few numbers a domain, and a pool call costs more than their booking.
+    pub fn book_moves(&mut self) {
+        self.book_gathered(false, |_| ());
+    }
+    /// `book_moves_beside` (`pool`: on the pool when there are domains enough) or `book_moves`.
+    fn book_gathered<R: Send>(&mut self, pool: bool, f: impl FnOnce(&mut World) -> R + Send) -> R {
         let crate::life::Life { unbooked, domains, .. } = &mut self.life;
         // (A domain that ran but gathered nothing has no view open.)
         let open: Vec<usize> = unbooked.take().filter(|&k| domains[k].moves.open.is_some()).collect();
         let views: Vec<(usize, Moves)> = open.into_iter().map(|k| (k, std::mem::take(&mut domains[k].moves))).collect();
-        let ns = self.chem.ns();
-        let book = |store: &mut Store| book_by_array(store, ns, &VIEWED, views.len(), |b| views.iter().for_each(|(_, m)| m.book_into(b)));
+        let (ns, work) = (self.chem.ns(), if pool { views.len() } else { 0 });
+        let book = |store: &mut Store| book_by_array(store, ns, &VIEWED, work, |b| views.iter().for_each(|(_, m)| m.book_into(b)));
         let (r, rounded) = if views.is_empty() {
             (f(self), [0.0; 2])
-        } else if views.len() < SERIAL_BELOW {
+        } else if work < SERIAL_BELOW {
             let rounded = book(&mut self.store);
             (f(self), rounded)
         } else {
@@ -346,9 +359,5 @@ impl World {
             life.domains[k].moves = m;
         }
         r
-    }
-    /// The moves gathered by the domains that ran since the last booking are booked (`book_moves_beside`).
-    pub fn book_moves(&mut self) {
-        self.book_moves_beside(|_| ());
     }
 }

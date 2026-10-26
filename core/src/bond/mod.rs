@@ -15,7 +15,7 @@ pub(crate) use sense::{enclosure, possible, sense, SENSE};
 pub use verbs::{act, carry, dig, force, form, moved, release, ANCHORS, LET_GO, TORN};
 pub(crate) use verbs::{bears, dropped, let_go, lever};
 
-use crate::{chem::{Chemistry, Phase}, event::{Event, EventKind}, life::{free_place, Handle}, store::{Node, NodeId}, World};
+use crate::{chem::{Chemistry, Phase}, event::{Event, EventKind}, life::{free_place, Handle}, store::NodeId, World};
 use serde::{Deserialize, Serialize};
 
 /// Held by no body; the bonded ground (as the other end of a bond).
@@ -280,7 +280,7 @@ pub fn make(w: &mut World, i: usize, wall: Vec<f64>, e: f64, x: f32, h: f32) -> 
     s
 }
 
-/// A part falls apart: its amounts and heat go to its cell's ground, and its node is gone.
+/// A part falls apart (its amounts and heat went to its cell's ground, `month::turns`): its bonds are gone, and its node.
 fn dissolve(w: &mut World, s: usize) {
     loop {
         let Some((o, _)) = w.parts.bonds.of(s).next() else { break };
@@ -290,8 +290,6 @@ fn dissolve(w: &mut World, s: usize) {
         w.life[h].hold = None;
     }
     let (i, p) = (cell(w, s), std::mem::take(&mut w.parts.parts[s]));
-    let held: Vec<f64> = p.wall.iter().zip(&p.fill).map(|(a, f)| a + f).collect();
-    w.in_domain(i, |w, d| d.moves.give_all(w, Node::ground(i), &held, p.e));
     w.parts.at[i].retain(|&x| x as usize != s);
     // Its slot is free for a new part, of the next generation.
     w.parts.parts[s].gen = p.gen + 1;

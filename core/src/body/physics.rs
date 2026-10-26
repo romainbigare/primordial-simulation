@@ -133,7 +133,7 @@ fn react(w: &World, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site,
 /// bodies' node holds for it.
 fn settle_gas(w: &World, d: &mut Domain, b: &mut Body, dpool: &[f64], s: &Site, h: &mut Heat) {
     let (j, lift) = (s.j, w.lift(s.i));
-    let gas = GasMove::of(&w.chem, dpool, crate::flow::air_temp(d.moves.heat(w, Node::air(j)), w.cap_air(|k| d.moves.a_seen(w, k, j))));
+    let gas = GasMove::of(&w.chem, dpool, d.moves.t_air(w, j));
     b.e += gas.q_in;
     d.moves.take(w, Node::air(j), 0, 0.0, gas.q_in);
     let heat = h.heat + gas.back;

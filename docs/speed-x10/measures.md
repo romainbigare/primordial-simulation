@@ -2171,3 +2171,63 @@ Reading:
 region24, fewer core lines): fewer core lines (-66), and not worse on any bench; lower on region24 (about -3%), but on
 island22 and globe36 the change (-0.3% and +1.1% of medians) is inside the noise of this busy machine. The gain the
 phases show there (about 8 ms of delivery) is about eaten by the lost wake of P1. A quiet window must judge it.
+
+## G7: Bond's month per domain
+
+Level 2. A part's turn (heat with its ground and, every 6 months, the reactions with its cell's air) is a step on its
+domain like a body's. The parts are grouped by the domain of their cell, each domain's in slot order, and the domains
+run on the one runner (`survey::run`, which now hands its work to `f` as `&mut`, so a domain's turns can own the parts
+taken out of their slots). A turn reads the air through the domain's view (`Moves::t_air`, `Moves::amount`; before it
+read the store, which the booking after the previous turn had changed), so a part sees what the parts before it in its
+domain left. A part whose walls are gone gives all it holds to its ground in its turn; it is freed after the turns, one
+by one, in slot order (`dissolve` unbonds other parts and keeps no moves). All the moves are booked once at the end
+of the turns, the domains' in their order. Two choices come from the measure of the phases (a pool call costs 40 to 70
+µs, and a month has 25 to 90 parts):
+
+- A turn that only settles (10 months in 12) costs about a microsecond, so such a month counts no work and the runner
+  keeps it on the calling thread; the 2 months of reactions (about 8 µs a part) go to the pool.
+- `World::book_moves` (no landing beside it) books on the calling thread. A part's turn gathers a few numbers, and the
+  booking of 30 to 90 domains took 60 to 170 µs on the pool, against 6 to 45 µs on one thread. `book_moves_beside`
+  keeps its rule (the pool from `SERIAL_BELOW` domains). The booking is the same sums in the same order: this is bit
+  for bit for every other caller.
+
+Core: 10,281 to 10,307 code lines (+62 -36; the plan said +40 -10: the scratch is optional, the gift to the ground
+moved into the turn, and the booking has its two entries).
+
+| Check | Result |
+|---|---|
+| Golden, with threads, with one thread, and without the feature | the same fingerprints; seed 2 re-pinned (`0x0951f502ad16b322` to `0x21c31edb3aaf741a`), seeds 1 and 3 unchanged |
+| `cargo test --release --workspace`, clippy, the wasm build | pass, no warning; golden also passes with debug assertions on, with and without threads |
+| One year of each `bench49` save on 1, 2 and 4 threads | the same hash on every number of threads: `27fec60cebfca2ff` (island22), `1af4c39e9f14a6f1` (globe36), `bd7208d69bf60aab` (region24) |
+| `series.csv`, 3 years from each `bench49` save, base `cdd4839` and G7 (4 threads) | year 1: every column equal (no `ms_`); years 2 and 3: land and air temperature within 1.4e-4 (relative), rain within 8e-4, energy within 4e-8, the gases within 2e-2; life's columns move by life's choices (bodies within 2.2%, plant members within 18%, parts counts by a few) |
+
+**Wall time, `ms_parts` on 4 threads** (mean of years 2 and 3 of a 3-year run from each `bench49` save, interleaved runs
+of base and G7 under `flock $X/timing.lock`, `chrt -f 50`; ms a year). The machine was shared and busy (load average 10
+to 12; the cores busy that were not the run's: 1.6 to 1.8 in every run).
+
+| | globe36 base / G7 | island22 base / G7 | region24 base / G7 |
+|---|---|---|---|
+| runs of each | 12 | 6 | 6 |
+| median | 2.62 / 1.46 | 1.39 / 1.33 | 1.55 / 1.10 |
+| quartiles | 2.50 to 2.72 / 1.38 to 1.49 | - | - |
+| minimum | 2.43 / 1.33 | 1.38 / 1.22 | 1.41 / 1.02 |
+| change (median) | **-44%** (minima -45%) | -4% | -29% |
+
+**Where the month goes** (globe36, 4 threads, wall timers around the phases in a throw-away build, microseconds of one
+month; 70 to 90 parts in the 2 months of reactions, 25 to 85 in the 10 others): the base's turns took 570 to 740 in a
+month of reactions (the dissolves, the serial `in_domain` and one booking for each part inside), and 50 to 140 in a
+month without. G7: a month of reactions 260 to 430 (the list 10, the run 190 to 370, the booking 26 to 45, the
+dissolves 15 to 60), a month without about 40 to 60 (the list 5, the run 20 to 40, the booking 6 to 15); the loads of
+the structures (15 to 55 a month, one by one) did not change. A first version that booked on the pool was slower than
+the base in the 10 months without reactions (the booking cost 60 to 170).
+
+**One thread, instructions of one year** (callgrind, `RAYON_NUM_THREADS=1`, globe36 `bench49`, base `cdd4839`;
+inclusive cost of `bond::month::step`, 12 calls): base 23.8 million, G7 15.6 million (**-35%**), not up. The whole run
+6,757.0 and 6,744.7 million (-0.18%). The two runs are not the same world after the first reaction month (the hashes
+differ), so the parts differ a little.
+
+**Verdict.** The done-when (parts -40% on 4 threads, globe36) is met: -44% by the medians and -45% by the minima, over
+the kill line of -25%. The gain is 1.2 ms a year of a year of about 400 ms: the 2.6 ms of Bond's month in these saves
+(70 to 90 parts) is far under the 15 ms that the plan counted, so G7 gives about 0.3% of the year. What is left of the
+1.46 ms: the loads of the structures (about 0.3), the 2 months of reactions (about 0.7), the 10 months of turns (about
+0.4). A second pool call for the booking, or the loads on the pool, would cost about as much as they give.

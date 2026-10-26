@@ -216,11 +216,11 @@ fn on_domains<T: Send + Sync, S>(w: &mut World, work: Vec<(usize, usize, T)>, re
     crate::outbox::land(w, reversed);
 }
 
-/// Run `f` on the domains of `work` (each with its count of work and what it is given), marked as run (`Life::mark`)
+/// Run `f` on the domains of `work` (each with its count of work and what it is given, which `f` may change), marked as run (`Life::mark`)
 /// and taken out of the world (`life::Domain`), with a scratch made by `init` once per thread, by the one runner of
 /// per-domain work (`par::longest_first`); then the domains back. Each domain writes only its own numbers (CLAUDE.md
 /// 3.6).
-pub(crate) fn run<T: Send + Sync, S>(w: &mut World, work: Vec<(usize, usize, T)>, reversed: bool, init: impl Fn(&World) -> S + Sync + Send, f: impl Fn(&World, &mut Domain, &T, &mut S) + Sync + Send) {
+pub(crate) fn run<T: Send, S>(w: &mut World, work: Vec<(usize, usize, T)>, reversed: bool, init: impl Fn(&World) -> S + Sync + Send, f: impl Fn(&World, &mut Domain, &mut T, &mut S) + Sync + Send) {
     work.iter().for_each(|x| w.life.mark(x.0));
     let mut domains = std::mem::take(&mut w.life.domains);
     let mut free: Vec<Option<&mut Domain>> = domains.iter_mut().map(Some).collect();

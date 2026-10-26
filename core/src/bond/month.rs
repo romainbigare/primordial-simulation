@@ -1,7 +1,7 @@
 //! The monthly step of parts: heat, Change, loads and failure, floating and drifting.
 
 use super::{cell, dissolve, holder, id, members, move_structure, restructure, sense::liquid, unlink, verbs::{bears, torn_from}, Part, GROUND};
-use crate::{change::{send_gas, GasMove, Reactor}, chem::Phase, ground::share, rng::{Purpose, Rng}, space::COMPASS, store::{Class, Node}, life::Domain, AIR, World};
+use crate::{change::{send_gas, GasMove, Reactor}, chem::Phase, ground::share, life::Domain, rng::{Purpose, Rng}, space::COMPASS, store::{Class, Node}, survey::run, AIR, World};
 
 /// Parts react with the air every this many months.
 const REACT_MONTHS: u64 = 6;
@@ -13,30 +13,9 @@ pub fn step(w: &mut World) {
     if w.parts.parts.iter().all(|p| !p.alive) {
         return;
     }
-    let (month, ns) = (w.cfg.calendar().month, w.chem.ns());
     let react = w.month().is_multiple_of(REACT_MONTHS);
-    let mut rc = Reactor::new(&w.chem, &w.cfg);
-    let mut pool = vec![0.0; ns];
-    let dt = (REACT_MONTHS * month) as f64;
-    for s in 0..w.parts.parts.len() {
-        if !w.parts.parts[s].alive {
-            continue;
-        }
-        // What it moves to and from the store is gathered and booked once, at the end of its turn (a serial step on
-        // its domain, the part taken out of its slot).
-        let (i, mut p) = (cell(w, s), std::mem::take(&mut w.parts.parts[s]));
-        let gone = w.in_domain(i, |w, d| {
-            d.moves.open(w, i, Node::new(Class::Part, s));
-            if react {
-                react_part(w, d, &mut rc, (&mut p, i), &mut pool, dt);
-            }
-            settle(w, d, &mut p, i)
-        });
-        w.parts.parts[s] = p;
-        if gone {
-            dissolve(w, s);
-        }
-        w.book_moves();
+    for s in turns(w, react) {
+        dissolve(w, s);
     }
     for r in 0..w.parts.parts.len() {
         if w.parts.parts[r].alive && w.parts.parts[r].root as usize == r {
@@ -48,13 +27,66 @@ pub fn step(w: &mut World) {
     }
 }
 
+/// A part's turn: the part (taken out of its slot while its domain runs), its slot and cell, the domain of its cell, and
+/// whether its walls are gone.
+struct Turn {
+    domain: usize,
+    slot: usize,
+    cell: usize,
+    part: Part,
+    gone: bool,
+}
+
+/// The turns of all parts: heat, and every `REACT_MONTHS` months the reactions with the air. Each domain takes the turns
+/// of its parts in slot order, on its view of the store (`store::Moves`), on the pool (`survey::run`); then the moves
+/// are booked, the domains' in their order. A part whose walls are gone gives all it holds to its cell's ground in its
+/// turn. Returns the slots of the parts that fall apart, in order: they are freed one by one (`dissolve`), as that
+/// unbonds other parts.
+fn turns(w: &mut World, react: bool) -> Vec<usize> {
+    let dt = (REACT_MONTHS * w.cfg.calendar().month) as f64;
+    // The parts by the domain of their cell, then by slot.
+    let mut order: Vec<(usize, usize)> = (0..w.parts.parts.len()).filter(|&s| w.parts.parts[s].alive).map(|s| (w.life.domain_of(cell(w, s)), s)).collect();
+    order.sort_unstable();
+    let mut list: Vec<Turn> = order
+        .into_iter()
+        .map(|(domain, slot)| Turn { domain, slot, cell: cell(w, slot), part: std::mem::take(&mut w.parts.parts[slot]), gone: false })
+        .collect();
+    // A turn that only settles costs about a microsecond, less than a pool call: it counts no work, so the runner keeps
+    // the domains on the calling thread; the reactions are the work.
+    let work = list.chunk_by_mut(|a, b| a.domain == b.domain).map(|run| (run[0].domain, if react { run.len() } else { 0 }, run)).collect();
+    let init = |w: &World| react.then(|| (Reactor::new(&w.chem, &w.cfg), vec![0.0; w.chem.ns()]));
+    run(w, work, false, init, |w, d, run, scratch| {
+        for t in run.iter_mut() {
+            d.moves.open(w, t.cell, Node::new(Class::Part, t.slot));
+            if let Some((rc, pool)) = scratch {
+                react_part(w, d, rc, (&mut t.part, t.cell), pool, dt);
+            }
+            t.gone = settle(w, d, &mut t.part, t.cell);
+            if t.gone {
+                let held: Vec<f64> = t.part.wall.iter().zip(&t.part.fill).map(|(a, f)| a + f).collect();
+                d.moves.give_all(w, Node::ground(t.cell), &held, t.part.e);
+            }
+        }
+    });
+    let mut gone = Vec::new();
+    for t in list {
+        w.parts.parts[t.slot] = t.part;
+        if t.gone {
+            gone.push(t.slot);
+        }
+    }
+    gone.sort_unstable();
+    w.book_moves();
+    gone
+}
+
 /// Part `p` of cell `i` reacts with its share of its cell's air for `dt` s and settles the gas as a ground node does
 /// (`change::send_gas`); the ground under it pays the gas's latent heat, and gas it cannot pay for goes to the ground.
 fn react_part(w: &World, d: &mut Domain, rc: &mut Reactor, (p, i): (&mut Part, usize), pool: &mut [f64], dt: f64) {
-    let (na, j) = (w.mesh.level(AIR).n(), w.mesh.up(i, 0, AIR));
-    let (air_share, lift, ta) = (w.mesh.share(i, AIR), w.lift(i), w.t_air(j));
+    let j = w.mesh.up(i, 0, AIR);
+    let (air_share, lift, ta) = (w.mesh.share(i, AIR), w.lift(i), d.moves.t_air(w, j));
     let chem = &w.chem;
-    pool.iter_mut().enumerate().for_each(|(k, p)| *p = w.store.amounts(Class::Air)[k * na + j] * air_share);
+    pool.iter_mut().enumerate().for_each(|(k, p)| *p = d.moves.amount(w, Node::air(j), k) * air_share);
     let fixed: f64 = p.fill.iter().zip(&chem.subs).map(|(a, x)| a * x.cp).sum();
     // It lies on its cell's ground, as moist as that.
     rc.moist = w.scratch.view().moist(i, w.cfg.phys.field);

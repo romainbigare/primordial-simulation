@@ -30,7 +30,9 @@ across it passes exactly.
 movers and the monthly merge per domain on the pool with the feature `threads`, where no part is and no body holds or is
 inside one, then in those cells one by one; the shade per domain, the sums per cell), the parts of Flow that are due
 (air every `air_hours`, liquid and erosion every `flow_days`, heat sideways and creep yearly) and Change; on the month's
-first day Bond; every `batch_days` days (2) the bodies whose interval ends (`survey::batch`).
+first day Bond (the turns of the parts: each domain's in slot order on its view, the domains on the pool, their moves
+booked in the order of the domains; then the loads of the structures one by one); every `batch_days` days (2) the bodies
+whose interval ends (`survey::batch`).
 **Intervals are whole batches**: a body's interval is its `INTERVAL` gene (5 to 360 days; a population node without a
 brain at least `node_days`, a multiple of `batch_days`) rounded to the nearest whole number of batches, at least one
 (`Body::interval`), so an update always starts a batch, all the updates of a batch run at its first day, and a body
@@ -309,7 +311,10 @@ A **part** is a made object (solid walls, the liquid in its hollow, heat, 3 size
 (`Class::Part`) by slot and generation (`bond::id`), lying in a cell or held. A body makes one with "form"
 (`bond::form`, `c_form` per kg, at most `form` of its mass). A **bond** (`bond::Bonds`) joins two parts or a part and
 the bed; its strength comes from the weaker material and the contact area (`tensile`, `joint`), at `c_join` per m². A
-**structure** is the parts joined by bonds and moves as one. Parts take their cell's temperature monthly.
+**structure** is the parts joined by bonds and moves as one. Parts take their cell's temperature monthly. A part's turn
+is a step on its domain like a body's: it reads and writes the domain's view of the store, so a part sees what the parts
+before it in its domain left in the air and the ground; a part whose walls are gone gives all it holds to its cell's
+ground in its turn and is freed after the turns (`bond/month.rs`).
 
 ### 3.2 Loads and failure
 Monthly (`bond/month.rs`) each bond carries the weight hanging on it, less buoyancy, plus the push of moving liquid and
