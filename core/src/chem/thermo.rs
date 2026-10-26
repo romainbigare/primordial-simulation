@@ -101,6 +101,7 @@ impl Chemistry {
 
     /// Phase of `k` at `t` among the amounts `a(j)` of one node or body, at its melting point there (`melt_in`; only a
     /// substance others dissolve in melts below its own point).
+    #[inline(always)]
     pub(crate) fn phase_in(&self, k: usize, t: f64, a: impl Fn(usize) -> f64) -> Phase {
         match self.phase(k, t) {
             Phase::Solid if self.solvents() >> k & 1 == 1 && t >= self.melt_in(k, a) => Phase::Liquid,

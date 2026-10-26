@@ -90,7 +90,7 @@ pub(super) fn hold(w: &World, d: &Domain, b: &Body, mass: f64, t: f64, dt: f64) 
 /// as Change's rate at the body's temperature takes it over the days, so a cold body releases little by the rate alone.
 pub fn plan(w: &World, d: &Domain, b: &Body, cost: f64, p: &Payer) -> (Vec<f64>, f64) {
     let (chem, j) = (&w.chem, w.mesh.up(b.cell as usize, 0, AIR));
-    let air = |k: usize| d.moves.amount(w, Node::air(j), k);
+    let air = d.moves.amounts(w, Node::air(j));
     let (t, days, share, tot) = (p.th.t, p.days, p.share, p.tot);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
     let mut have = [0.0f64; MAX_SUBSTANCES];

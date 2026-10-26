@@ -225,18 +225,20 @@ impl Moves {
     pub(crate) fn heat(&self, w: &World, x: Node) -> f64 {
         self.view_at(w, x).map_or_else(|| w.store.heat(x.class)[x.index], |at| self.view[2 * x.class as usize + 1][at][0])
     }
-    /// Amount of substance `k` that bodies and parts see in air node `j` (`World::a_seen`), as the moves gathered leave
-    /// it, mol.
-    pub(crate) fn a_seen(&self, w: &World, k: usize, j: usize) -> f64 {
-        self.view_at(w, Node::air(j)).map_or_else(|| w.a_seen(k, j), |_| self.view[SEEN][k][0])
+    /// What bodies and parts see in air node `j` (`World::a_seen`) as the moves gathered leave it: of substance `k`,
+    /// mol, at `k`. One look-up of the view for a node read substance by substance.
+    #[inline]
+    pub(crate) fn seen<'a>(&'a self, w: &'a World, j: usize) -> impl Fn(usize) -> f64 + 'a {
+        let held = self.view_at(w, Node::air(j)).is_some();
+        move |k| if held { self.view[SEEN][k][0] } else { w.a_seen(k, j) }
     }
-    /// All that bodies and parts see in air node `j` (`a_seen` summed over the substances), mol.
+    /// All that bodies and parts see in air node `j` (`seen` summed over the substances), mol.
     pub(crate) fn a_seen_all(&self, w: &World, j: usize) -> f64 {
-        (0..w.chem.ns()).map(|k| self.a_seen(w, k, j)).sum()
+        (0..w.chem.ns()).map(self.seen(w, j)).sum()
     }
     /// Temperature of air node `j` as the moves gathered leave it, K (`World::t_air`).
     pub(crate) fn t_air(&self, w: &World, j: usize) -> f64 {
-        crate::flow::air_temp(self.heat(w, Node::air(j)), w.cap_air(|k| self.a_seen(w, k, j)))
+        crate::flow::air_temp(self.heat(w, Node::air(j)), w.cap_air(self.seen(w, j)))
     }
     /// Heat capacity of ground node `i`'s active layer as the moves gathered leave it, J/K (`World::heat_cap_ground`).
     pub(crate) fn heat_cap_ground(&self, w: &World, i: usize) -> f64 {

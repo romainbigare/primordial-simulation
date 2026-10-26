@@ -95,12 +95,13 @@ fn gas_pool(w: &World, d: &Domain, b: &Body, s: &Site, f: &Film, tmp: &mut LiveT
     let (chem, j) = (&w.chem, s.j);
     let tot = d.moves.a_seen_all(w, j);
     let reach = breath(chem, &w.cfg, b, f, s.days, s.depth);
+    let (seen, air) = (d.moves.seen(w, j), d.moves.amounts(w, Node::air(j)));
     tmp.x.clear();
     tmp.pool.clear();
     for k in 0..chem.ns() {
-        let x = if tot > 0.0 { d.moves.a_seen(w, k, j) / tot } else { 0.0 };
+        let x = if tot > 0.0 { seen(k) / tot } else { 0.0 };
         tmp.x.push(x);
-        tmp.pool.push((x * reach).min(d.moves.amount(w, Node::air(j), k)));
+        tmp.pool.push((x * reach).min(air(k)));
     }
     reach
 }
@@ -163,13 +164,13 @@ fn store_light(w: &World, d: &mut Domain, b: &mut Body, s: &Site, caught: f64, u
 /// The liquids of the cell's ground a body soaks up (`Soil`); a body afloat reaches none.
 fn soil(w: &World, d: &Domain, b: &Body, s: &Site, wk: f64) -> Soil {
     let (chem, i, tg) = (&w.chem, s.i, s.tg);
-    let (ns, g) = (chem.ns(), |k: usize| d.moves.amount(w, Node::ground(i), k));
-    let liquid = (0..ns).filter(|&k| chem.phase_in(k, tg, g) == Phase::Liquid).fold(0u64, |m, k| m | 1 << k);
+    let (ns, g) = (chem.ns(), d.moves.amounts(w, Node::ground(i)));
+    let liquid = (0..ns).filter(|&k| chem.phase_in(k, tg, &g) == Phase::Liquid).fold(0u64, |m, k| m | 1 << k);
     let vol: f64 = ones(liquid).map(|k| g(k) * chem.molar_volume(k, Phase::Liquid)).sum();
     let standing = if s.stands && s.depth == 0.0 { 0.0 } else { vol / w.mesh.cells().area()[i] };
     let wet = standing / (standing + w.cfg.phys.wet_depth);
     let wets = ones(liquid).filter(|&k| chem.subs[k].solubility > 0.0).fold(0u64, |m, k| m | 1 << k);
-    let in_ground: f64 = ones(wets).map(g).sum();
+    let in_ground: f64 = ones(wets).map(&g).sum();
     Soil { wets, in_ground, rate: b.k.liq * wet * wk }
 }
 
@@ -202,11 +203,12 @@ fn evaporate(w: &World, d: &mut Domain, b: &mut Body, tmp: &LiveTmp, s: &Site, h
         let e1 = one_minus_exp(x) * ct * tg + (-x).exp() * b.e + bx * h.heat;
         let need = ((e1 - ct * b.gene(COOL_T)) / bx / chem.subs[k].latent_gas()).max(0.0);
         let spare = if b.wet >> k & 1 == 1 { b.store[k] - b.gene(lay.min + k) * size / chem.subs[k].molar_mass } else { 0.0 };
-        let gk = d.moves.amount(w, Node::ground(i), k);
+        let ground = d.moves.amounts(w, Node::ground(i));
+        let gk = ground(k);
         let soak_rate = if soil.in_ground > 0.0 && soil.wets >> k & 1 == 1 { soil.rate * chem.subs[k].solubility * gk / soil.in_ground } else { 0.0 };
         let open_m = if b.wet >> k & 1 == 1 { through(b.store[k], b.level(chem, k, 0.0), push * reach, soak_rate * days, cfg.phys.dormancy) } else { push * reach };
         let (cp, latent, flows) = (chem.subs[k].cp, chem.subs[k].latent_gas(), soak_rate > 0.0 && b.wet >> k & 1 == 1);
-        let fused = chem.fused_heat(k, tg, |j| d.moves.amount(w, Node::ground(i), j));
+        let fused = chem.fused_heat(k, tg, ground);
         let (own, conduct) = (h.heat - h.lit + h.took - warmed, g * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0));
         let (per, cool) = ((latent, fused - cp * (t0 - tg)), (push * wide).min(need).min(spare));
         let want = open_m.max(cool);
@@ -257,7 +259,7 @@ fn soak(w: &World, d: &mut Domain, b: &mut Body, s: &Site, gcap: f64, heat: &mut
     let paces = b.paces(w);
     let (i, tg, days) = (s.i, s.tg, s.days);
     for k in ones(soil.wets).filter(|_| soil.in_ground > 0.0) {
-        let (chem, gk) = (&w.chem, d.moves.amount(w, Node::ground(i), k));
+        let (chem, gk) = (&w.chem, d.moves.amounts(w, Node::ground(i))(k));
         let (x, room) = (gk / soil.in_ground, b.room(chem, paces, k, mass2));
         // At rate r per day over `days` with a loss e a day it takes gap f + e days (1 - f / (r days)), f = 1 - exp(-r days).
         let rate = soil.rate * chem.subs[k].solubility;
@@ -271,7 +273,7 @@ fn soak(w: &World, d: &mut Domain, b: &mut Body, s: &Site, gcap: f64, heat: &mut
 /// Up to `want` mol of liquid `k` of ground node `i` go into the body with their heat at `tg` and their fusion enthalpy
 /// (into `heat`), which the ground pays, or the body takes less.
 fn soak_in(w: &World, d: &mut Domain, b: &mut Body, (i, tg, gcap): (usize, f64, f64), (k, want): (usize, f64), heat: &mut f64) {
-    let (cp, fused) = (w.chem.subs[k].cp, w.chem.fused_heat(k, tg, |j| d.moves.amount(w, Node::ground(i), j)));
+    let (cp, fused) = (w.chem.subs[k].cp, w.chem.fused_heat(k, tg, d.moves.amounts(w, Node::ground(i))));
     let per = cp * tg;
     let took = d.moves.take_from_ground(w, i, (k, want, cp), want * (per + fused), gcap).0;
     (b.store[k], b.e, *heat) = (b.store[k] + took, b.e + took * per, *heat + took * fused);
@@ -296,8 +298,9 @@ fn roots(w: &World, d: &mut Domain, b: &mut Body, s: &Site, h: &mut Heat, mass2:
     let soak = one_minus_exp(b.k.liq * s.days) * wk;
     for x in 0..b.k.upt.len() {
         let (k, u) = b.k.upt[x];
-        let (chem, gk) = (&w.chem, d.moves.amount(w, Node::ground(i), k));
-        if u <= 0.0 || chem.subs[k].solubility > 0.0 || chem.phase_in(k, tg, |j| d.moves.amount(w, Node::ground(i), j)) != Phase::Liquid || gk <= 0.0 {
+        let (chem, ground) = (&w.chem, d.moves.amounts(w, Node::ground(i)));
+        let gk = ground(k);
+        if u <= 0.0 || chem.subs[k].solubility > 0.0 || chem.phase_in(k, tg, ground) != Phase::Liquid || gk <= 0.0 {
             continue;
         }
         let want = (b.room(chem, paces, k, mass2) * soak).min(gk);

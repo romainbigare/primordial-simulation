@@ -56,11 +56,13 @@ fn read(w: &World, d: &Domain, lay: &Layout, b: &Body, g: usize, (x, y): (f32, f
     }
     if g < lay.keep {
         let k = g - lay.upt;
-        return roots(k) && (x > 0.0) != (y > 0.0) && chem.phase_in(k, w.t_ground_last(i), |j| d.moves.amount(w, Node::ground(i), j)) == Phase::Liquid && d.moves.amount(w, Node::ground(i), k) > 0.0;
+        let ground = d.moves.amounts(w, Node::ground(i));
+        return roots(k) && (x > 0.0) != (y > 0.0) && chem.phase_in(k, w.t_ground_last(i), &ground) == Phase::Liquid && ground(k) > 0.0;
     }
     let (k, tg) = (g - lay.keep, w.t_ground_last(i));
     let product = b.store[k] > 0.0 && chem.phase(k, tg) != Phase::Gas && chem.reactions.iter().enumerate().any(|(r, rx)| b.genes[lay.cat + r] > 0.0 && rx.outputs.iter().any(|p| p.0 as usize == k));
-    let liquid = chem.phase_in(k, tg, |j| d.moves.amount(w, Node::ground(i), j)) == Phase::Liquid && d.moves.amount(w, Node::ground(i), k) > 0.0;
+    let ground = d.moves.amounts(w, Node::ground(i));
+    let liquid = chem.phase_in(k, tg, &ground) == Phase::Liquid && ground(k) > 0.0;
     let taken = (!roots(k) || b.genes[lay.upt + k] > 0.0) && liquid && b.store[k] < b.level_at(chem, k, b.mass(chem), hi);
     chem.is_material(k) || b.wet >> k & 1 == 1 || product || taken
 }
