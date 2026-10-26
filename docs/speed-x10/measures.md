@@ -583,6 +583,159 @@ All gates named for R2 have a number above. These parts are weaker than the rest
 | Wall times | made on a busy machine (4% to 14% above Z1); judge steps by instructions (S45) |
 | PR-A, PR-B, PR-M, PR-S, G14-P1, AIR4-R1, R3 | not part of R2; not done here |
 
+### The gates of phase 2
+
+R2 measured these gates at the branch's start. Here they are measured again on `speed/x10` at `442a40c` (after G1, G2,
+G4, G5's try, G6, G7, G12, G15, AIR3 and E1a to E1d; X36, X75 and the plan rows E2, E4, E5, G9b, MI4 and G16 ask for
+it). No law and no line of `core` changed: the counters and timers are on the throw-away branch `probe/gates2` (commits
+`6c85775` and `63bffa9`, never merged; `core/src/probe.rs`, on with `EW_PROBE=timers,counts`). **The world is not
+changed:** 3 years of each save give the same fingerprint as the plain build, with the probes off (4 threads) and on
+(1 and 4 threads) (island22 `f57053e0c6005094`, globe36 `e0cb6bc0f8f7a49f`, region24 `ff5d591b9c5fc1cb`).
+
+| Gate | island22 | globe36 | region24 | Verdict |
+|---|---|---|---|---|
+| **E2** (X75): wait for the busiest task in the batch's parallel phase, 4 threads; share of the bodies' stage; gate at least 5% | **1.7%** (3.2 of 186 ms a year) | **1.8%** (2.9 of 161 ms) | **1.6%** (6.6 of 423 ms) | **Not met.** E2 is not built. All pool calls of the stage together: 2.6 / 2.4 / 2.2% |
+| **E4**: `store::apply` on the main thread, share of a year at 4 threads; gate at least 3% | **1.4%** (4.0 of 298 ms) | **1.8%** (5.6 of 315 ms) | **1.1%** (6.8 of 611 ms) | **Not met.** With the other booking that stays on one core (the air's and Change's `book_by_array` calls, `book_moves`) it is 4.5 / 5.0 / 3.1%, but those calls are too small for the pool (below); E4 is not built |
+| **E5**: serial-body updates, share of the updates; gate at least 10% | **0.22%** (64 of 28,636 a year) | **0.50%** (108 of 21,463) | **0.15%** (98 of 63,786) | **Not met** |
+| **E5**: S2 (the serial bodies and the entries applied one by one), share of the bodies' stage; gate at least 15% | **2.2%** (4.1 ms) | **7.8%** (12.6 ms) | **1.9%** (7.9 ms) | **Not met.** E5 is not built. (All the landing of the batch is 9.2 / 14.3 / 9.3%, and most of it is the pooled call) |
+| **G9b**: handling of `Body` values (moves, clones, drops), share of a year (one thread, instructions); gate at least 5% | **1.1%** | **1.2%** | **1.2%** | **Not met**, by a factor of 4. G9b is not built. (The drops are an upper bound: all frees.) |
+| **MI4** (X36): decisions per distinct (cell, sight) between two surveys; gate at least 1.5 | **1.80** (164 decisions on 91 places) | **1.84** (146 on 79) | **1.85** (378 on 205) | **Gate met**, but the work that sharing can save is small: at most 0.28 / 0.33 / 0.29% of a year (likely half of it), at the kill line (0.3% island, 0.2% globe). Recommended: not built; the architect decides |
+| **G16**: well-being, share of the bodies' stage (one thread, instructions); gate for its kill line at least 1% | **1.07%** of the stage (0.63% in `wellbeing_at` alone); what once per decision removes: **0.55%** | **2.29%** (1.35%); removes **1.72%** | **1.09%** (0.64%); removes **0.57%** | **Met as a share, but the gain is under the 1% line on island22 and region24** and over it on globe36 only. Recommended: not built (a law change for 0.6% on two benches); the architect decides |
+
+The notes below say how each number was taken.
+
+**How the numbers were taken.** The saves are the G12 saves (`$X/g12/bench`: `flow_days` 60, the other defaults of today;
+snapshot version 49). *Wall times (E2, E4, E5):* `ew resume --years 3` on 4 threads with `EW_PROBE=timers,counts`, the mean
+of years 2 and 3, 10 runs of each bench, medians; "year" is the sum of the five `ms_` columns of `series.csv` and "the
+bodies' stage" is `ms_bodies`. **Each run started when the machine was at least 90% idle (cpu idle over 2 s from
+`/proc/stat`) and was kept only if it was at least 85% idle after** (`scripts/gates2/quiet.sh`): the median idle was
+99 / 97 / 98%, the one-minute load about 1.0 to 1.1, and 3 runs of 33 were thrown away. Other lanes ran builds and
+callgrind on the same four cores all the time, so quiet windows were short; a first set of 9 runs per bench made at
+idle 0 to 3% (load 6 to 9) is not used: it gave a wait of 14.5 / 11.3 / 9.0% of the stage, which is the other
+processes taking cores from the tasks (the year was then 1.7 to 2.4 times as long). *Instructions (G9b, G16, MI4, E4's check):*
+`valgrind --tool=callgrind`, one year, `RAYON_NUM_THREADS=1`, from the same saves, shares of `schedule::run_for` (island22
+5,283 M, globe36 5,012 M, region24 11,394 M instructions) and of the bodies' stage (`survey::batch` plus
+`survey::survey`: 3,837 M, 3,119 M and 9,154 M, that is 72.6 / 62.2 / 80.3% of `run_for`); `survey::survey`, `survey::batch`,
+`choose::walk`, `choose::options` and `Body::wellbeing_at` are `#[inline(never)]` in the probe build (+0.04% instructions),
+and a part act's two well-being calls go through a wrapper (`wb_part`). The cost of the probes: plain build and probe
+build with the probes on, 1 thread, CPU time of 3 years, 5 runs: within -3 to +5% (the noise of the machine, which is
+the same size); the 4-thread cost of the clocks was not measured apart.
+
+**E2: the wait for the busiest task** (P1, the pool call of the batch's updates; 36 calls a year, 23 to 26 tasks a
+call; ms a year, medians of 10 quiet runs). The direct measure: after its last task each of the 4 threads waits for the
+call's last task to end; the mean of these waits is the time a perfect split would save. The other two: the longest
+task over an even share (`bound`, wall times), and the same on the thread CPU times of the tasks, with the tasks given
+in their start order to the thread that is free first (`LPT on CPU`, a simulation that the load of the machine cannot
+change).
+
+| P1, ms a year | island22 | globe36 | region24 |
+|---|---|---|---|
+| the call's wall | 136.0 | 108.6 | 312.1 |
+| wake (call to first task) + join (last task to return), per call | 40 + 50 µs | 42 + 51 µs | 48 + 62 µs |
+| **wait for the last task (direct)** | **3.19** (1.7% of the stage; runs 0.7 to 4.8%) | **2.92** (1.8%; 1.4 to 3.6%) | **6.61** (1.6%; 1.0 to 3.4%) |
+| longest task over an even share (wall) | 0.25 (0.1%) | 0.00 (0.0%) | 2.76 (0.7%) |
+| LPT on CPU times | 1.38 (0.7%) | 1.94 (1.2%) | 3.84 (0.9%) |
+| the same wait in the landing call and the survey's call | 1.27 and 0.43 | 0.51 and 0.40 | 1.54 and 1.09 |
+| all three calls, share of the stage | 2.6% | 2.4% | 2.2% |
+
+The busiest domain is no longer a problem: G4's batches of 10 days hold 23 to 26 tasks of 4 threads' work, and
+`longest_first` starts the biggest first. The pool call itself (wake and join, 90 to 110 µs a call) costs 3.2 to 4.0 ms a
+year, more than the wait. **Verdict: not met on every bench (X75's 5%). E2 stays unbuilt.**
+
+**E4: booking on one core** (4 threads, main thread, ms a year; medians of 10 quiet runs; the share is of the year,
+298 / 315 / 611 ms).
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| `store::apply`, all calls | 4.03 (1.35%) | 5.56 (1.76%) | 6.82 (1.12%) |
+| of it the liquid's fluxes (4 calls per liquid step, 24 a year) | 2.55 (106 µs a call) | 3.35 (140 µs) | 4.43 (185 µs) |
+| of it the air's link exchange (36 calls) | 1.06 (30 µs) | 1.60 (45 µs) | 1.70 (47 µs) |
+| of it creep (1 call) and the rest | 0.33 and 0.11 | 0.45 and 0.11 | 0.54 and 0.14 |
+| `book_by_array` on the calling thread (the air's `book`, 36 calls of 125 to 215 µs; Change's rows, 50 to 72 calls of 60 to 70 µs; their work is under `par::SERIAL_BELOW`) | 8.98 (3.02%) | 9.69 (3.07%) | 11.23 (1.84%) |
+| `book_moves` on the calling thread | 0.29 | 0.47 | 0.65 |
+| **all booking on one core** | **13.30 (4.47%)** | **15.72 (4.99%)** | **18.70 (3.06%)** |
+| `book_by_array` on the pool (the bodies' moves, with the landing; Change's rows on region24) | 4.37 (1.47%) | 4.12 (1.31%) | 13.44 (2.20%) |
+
+In instructions (one thread) `apply` is 1.00 / 1.55 / 0.75% of `run_for`, and all booking by array 1.80 / 1.93 / 1.40%.
+**Verdict.** `apply` alone is under 3% on every bench. Counted with the other booking that stays on one core the gate
+is met (3.1 to 5.0%), but E4 cannot gain from those calls: a pool call costs 90 to 110 µs here (wake and join) and
+the calls are 30 to 215 µs, so with the 4 threads' 1.2-fold inflation (G15) they gain nothing; the best case, all of
+`apply` four times faster for free, is 1.0 / 1.3 / 0.8% of the year, under E4's kill line (-2%). **E4 is not built.**
+
+**E5: the parts.**
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| updates a year; of them by serial bodies (bodies that hold or are inside a part) | 28,636; 64 (**0.22%**) | 21,463; 108 (**0.50%**) | 63,786; 98 (**0.15%**) |
+| the serial loop (their updates and the delivery after each), ms a year | 2.02 (1.1% of the stage) | 3.02 (1.9%) | 3.16 (0.8%) |
+| the entries applied one by one in a batch (part acts, watches, litters back, lane clears) | 2.03 (1.1%) | 9.57 (5.9%) | 4.69 (1.1%) |
+| of them the part acts, watches, litters back, lane clears | 1.09, 0.61, 0.28, 0.04 | 6.51, 2.94, 0.02, 0.06 | 2.59, 1.45, 0.42, 0.26 |
+| **S2** (the serial loop and the entries) | **4.06 (2.2%)** | **12.59 (7.8%)** | **7.86 (1.9%)** |
+| all of `outbox::land` in the batches (the pooled landing call, settle, booking, the entries) | 17.25 (9.2%) | 23.08 (14.3%) | 39.15 (9.3%) |
+
+R2 had 0.5 / 2.1 / 0.0% of the updates (before G2 and G4). The share of the globe's S2 comes from its part acts and
+watches. **Verdict:** both gates are far from met on every bench (10% of the updates, 15% of the stage); even all of
+the landing, which is more than S2, is under 15%. **E5 is not built.**
+
+**G9b: `Body` values** (one thread, instructions; share of `run_for`; `Body` is 688 bytes). Moves: the calls of
+`memcpy` and `memmove` of exactly 688 bytes, found by a preload shim that gives them their own function (`shim.c`); clones:
+`Body::clone` with its allocations; drops: no symbol (the glue is inlined), so all `mi_free` calls are counted, which is
+an upper bound.
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| moves of a `Body`: calls a year; instructions a call; share | 210,756; 103; **0.41%** | 209,370; 103; **0.43%** | 514,362; 103; **0.46%** |
+| clones: calls; instructions a call; share | 10,111; 1,478; **0.28%** | 11,706; 1,779; **0.42%** | 23,680; 1,607; **0.33%** |
+| all frees (upper bound of the drops); share | 836,573 calls; **0.40%** | 780,323; **0.40%** | 1,832,744; **0.42%** |
+| **sum** | **1.10%** | **1.24%** | **1.22%** |
+
+About 7 moves of a `Body` for each update. The count shows instructions, not the cache misses of 688 bytes read and
+written; E1's probe (S77, S82) found no gain from storing bodies in update order. **Verdict:** a quarter of the 5% line.
+**G9b is not built.**
+
+**MI4: place sharing.** A decision looks at a place by its (cell, sight); between two surveys (the survey and the batch are
+both every 10 days now, so this is one batch) the decisions that share a place could share what `choose::walk` and the
+cell loop of `choose::options` work out. Full decisions only (a node's habit update does not look); nodes are 99% of
+them.
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| full decisions a year (calls of `choose::act` a year: 11,311 / 10,069 / 26,630; the rest are habit updates) | 5,902 | 5,245 | 13,606 |
+| distinct places, summed over the 36 surveys | 3,276 | 2,848 | 7,367 |
+| **decisions per distinct place** (R2: 1.95 / 2.17 / 1.48) | **1.80** | **1.84** | **1.85** |
+| `choose::options` with `walk`, share of the bodies' stage (the most sharing could touch) | 0.85% | 1.15% | 0.79% |
+| the part that is the same for every body in a place (`walk`, and the lines of the cell loop that do not use the body's uptake or the live lane), share of the stage | 0.21% | 0.43% | 0.20% |
+| **gain at the measured sharing**, share of a one-thread year: lower bound (the shared lines) to upper bound (all of `options` and `walk`) | 0.07 to 0.28% | 0.12 to 0.33% | 0.07 to 0.29% |
+
+The lower bound counts only the source lines of the cell loop in `choose/mod.rs` (the library code inlined into them is
+not in it, so the true shared part lies between the two). **Verdict:** the gate (1.5) is met on all three, with room. The
+gain is not: the plan's "1 to 2 ms" is 0.3 to 0.7% of a year, and the upper bound here is 0.28% (island) and 0.33%
+(globe), against the kill line of -0.3% island and -0.2% globe, and the cache of places (`Box<Place>` per place, a
+clear at each survey) would take part of it back. Recommended: not built.
+
+**G16: well-being.** Calls of `Body::wellbeing_at` (1,028 instructions each) cost 1,740 to 1,750 with the temperature each
+needs and the call through the wrapper. A node's decision calls it once at its start (`wb`) and, in `spread::part_acts`, twice for each part act. Once
+per decision keeps the first call and makes one more after all parts; the gain is the calls it saves.
+
+| One thread, one year | island22 | globe36 | region24 |
+|---|---|---|---|
+| `wellbeing_at` alone (calls) | 24.1 M, 0.63% of the stage (23,489) | 42.1 M, 1.35% (40,951) | 58.4 M, 0.64% (56,795) |
+| **all well-being calls** (with the temperature), share of the stage | **41.1 M, 1.07%** | **71.3 M, 2.29%** | **99.5 M, 1.09%** |
+| of it in the part acts (calls) | 31.0 M, 0.81% (17,746) | 62.4 M, 2.00% (35,848) | 75.9 M, 0.83% (43,296) |
+| decisions (one call each, kept) | 5,743 | 5,103 | 13,499 |
+| **gain of once per decision** (the calls it saves), share of the stage; of a year | **21.0 M, 0.55%**; 0.40% | **53.6 M, 1.72%**; 1.07% | **52.2 M, 0.57%**; 0.46% |
+
+A node decision makes 3.1 / 7.0 / 3.2 part-act calls. The gain is an upper bound (it keeps one call for each decision,
+also for one with no part act). **Verdict:** as a share the gate (1%) is met on every bench; the kill line (a gain under
+1% of the bodies' stage) is hit on island22 and region24 (about 0.55%) and cleared on globe36 only (1.7%). G16 is a law
+change (level 3: the advantage of each part becomes a mean) for 0.4 to 0.5% of a year on two benches. Recommended: not
+built, or only if the globe alone is the aim; the architect decides.
+
+**What follows for the plan.** E2, E4, E5 and G9b fail their gates by a wide margin and are not built; E2's
+tile sentence for `CLAUDE.md` 3.4 is not written. MI4 and G16 clear their gates but not, on these numbers, their
+kill lines. In a batch the landing is 9 to 14% of the stage, mostly its pooled call (work), and the wake and join of the
+pool calls cost 3 to 4 ms a year for P1 alone.
+
 ## The probes of phase P
 
 ### PR-B: brain loss in 1,000 years
