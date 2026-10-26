@@ -272,9 +272,11 @@ pub fn out(w: &mut World, b: Body) -> (Handle, Body) {
     (s, b)
 }
 
-/// The body at `h` moves to cell `j` at no cost, by the landing of a move (`Entry::Go`; `deliver`): where it is stored then.
+/// The body at `h` moves to the neighbour cell `j` at no cost, by the landing of a move (`Entry::Go`; `deliver`): where
+/// it is stored then. The move counts in the cell's crossings, and it pushes the structures there (it clears a lane).
 pub fn relocate(w: &mut World, h: Handle, j: usize) -> Handle {
     let (id, from) = (w.life[h].id, w.life[h].cell);
+    assert!(w.mesh.cells().link(from as usize, j).is_some(), "relocate: cell {j} is not a neighbour of cell {from}, where the body is");
     w.in_domain(from as usize, |_, d| d.out.push(Entry::Go { id, from, to: j as u32, pushed: 0.0, lane: 0.0, carries: false, kin: false, body: None }));
     deliver(w);
     w.life.find(id).expect("the body landed")

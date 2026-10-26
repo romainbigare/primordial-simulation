@@ -977,8 +977,8 @@ fn a_tall_member_shades_a_short_one() {
     let short = w.life.living().map(|x| x.0).max_by(|&a, &b| w.life[a].count.total_cmp(&w.life[b].count)).expect("a node");
     let (i, area) = (w.life[short].cell as usize, w.mesh.cells().area()[0]);
     // The cell's other nodes move next door.
+    let j = w.mesh.cells().around(i).1[0] as usize;
     for s in w.life.cell(i).filter(|&s| s != short).collect::<Vec<_>>() {
-        let j = i ^ 1;
         relocate(&mut w, s, j);
     }
     // Two nodes of capture area 0.5 per ground area each, the same but for member mass (and the copy mass gene, so they

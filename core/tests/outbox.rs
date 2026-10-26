@@ -20,8 +20,13 @@ fn kill(w: &mut World, h: Handle) {
 
 /// The energy movers spent pushing through the bodies of cell `i` since the last survey, J.
 fn pushed(w: &World, i: usize) -> f64 {
-    let (d, k) = w.life.cell_slot(i);
-    w.life.domains[d].pushed[k]
+    let d = w.life.domain(i);
+    d.pushed[slot(d, i)]
+}
+
+/// The slot of cell `i` among the cells of its domain `d`.
+fn slot(d: &pcore::life::Domain, i: usize) -> usize {
+    d.cells.iter().position(|&c| c as usize == i).expect("the cell is in its domain")
 }
 
 /// A node of 5 resting members in cell `i` whose children all start in a neighbour cell, with a brood of `k` children
@@ -257,8 +262,8 @@ fn the_order_of_the_domains_changes_nothing() {
     let (h, all) = (w.life.find(doomed_id).unwrap(), w.life.cell(x).map(|o| w.life[o].mass(&w.chem)).sum::<f64>());
     let kill_holder = 2.0 * w.life[h].breaking(&w.chem, &w.cfg, 1.0) * all / w.life[h].mass(&w.chem);
     for i in (0..w.mesh.cells().n()).filter(|&i| i == x || (i % 3 == 0 && !busy.contains(&i))) {
-        let (d, k) = w.life.cell_slot(i);
-        w.life.domains[d].cross(k, 0.0, if i == x { kill_holder } else { 3e6 });
+        let k = slot(w.life.domain(i), i);
+        w.in_domain(i, |_, d| d.cross(k, 0.0, if i == x { kill_holder } else { 3e6 }));
     }
     w.drain_events();
     let books = Books::now(&w);

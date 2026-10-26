@@ -5,6 +5,7 @@ use pcore::bond::{self, GROUND};
 use pcore::body::{Body, COPY_MASS, LIQ, STRENGTH};
 use pcore::brain;
 use pcore::chem::Phase;
+use pcore::life::Handle;
 use pcore::units::DAY_S;
 use worldgen::testkit::{dry_land, moved_serial, plate, relocate, scale, small_world, start as world, Books, Brain, Line};
 
@@ -34,10 +35,12 @@ fn walls_keep_a_body_warm() {
     let (mut w, i) = world();
     worldgen::life::seed(&mut w, 0);
     worldgen::life::seed(&mut w, 1);
-    // The same body outside and inside: one that does not capture light (its upkeep warms it), from the warmest place.
+    // The same body outside and inside: one that does not capture light (its upkeep warms it), from the warmest place
+    // among the cells next to cell `i` (a body steps to a neighbour).
     let bs = &w.life;
-    let slot = bs.living().map(|x| x.0).filter(|&s| pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body");
-    let slot = relocate(&mut w, slot, i);
+    let next = |s: Handle| bs[s].cell as usize == i || w.mesh.cells().link(bs[s].cell as usize, i).is_some();
+    let slot = bs.living().map(|x| x.0).filter(|&s| next(s) && pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body next to the cell");
+    let slot = if w.life[slot].cell as usize == i { slot } else { relocate(&mut w, slot, i) };
     // Six blocks joined around a small space, one bonded to the ground.
     let parts: Vec<usize> = (0..6).map(|_| plate(&mut w, i, 1e3, true)).collect();
     bond::link(&mut w, parts[0], GROUND, 1e9);

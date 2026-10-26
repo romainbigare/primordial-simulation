@@ -38,7 +38,7 @@ pub struct Handle {
 #[derive(Clone, Debug, Default)]
 pub struct Life {
     /// The domains (taken out of the world while body code runs on them, `World::in_domain`)
-    pub domains: Vec<Domain>,
+    pub(crate) domains: Vec<Domain>,
     /// Each cell's domain and its index in that domain's cells
     cell_in: Vec<(u32, u32)>,
     /// The domain each body stored outside the domain it was placed in is stored in, by id (`find`; noted when the
@@ -175,7 +175,7 @@ impl Life {
     }
     /// The domain of cell `i` and its slot among that domain's cells (`Level::children` of its air node).
     #[inline]
-    pub fn cell_slot(&self, i: usize) -> (usize, usize) {
+    pub(crate) fn cell_slot(&self, i: usize) -> (usize, usize) {
         let (d, k) = self.cell_in[i];
         (d as usize, k as usize)
     }
