@@ -641,11 +641,8 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         w.cfg.tilt = 0.0;
         // The open world's decomposers do not rot the fuel laid for it (`Reaction::open` 1): an update that starts a
         // batch on a physics day comes after Change has reacted what lies on the ground over its whole step (laws.md 0),
-        // and the free solid rots in about a week. Batches of 2 days (`Config::batch_days`), not the default 10: in
-        // batches of 10 the body's first update comes later, it starts smaller and is still further from its ceiling at
-        // the year's end, so what it takes over its upkeep in its last 100 days lies at the bound below, not under it.
+        // and the free solid rots in about a week.
         w.chem.reactions[BURN].open = 1.0;
-        w.cfg.batch_days = 2;
         // Building never binds; the costs of keeping tissue are `cost` times the starting ones.
         w.cfg.phys.c_build = 1e7;
         for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_cat, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn, &mut w.cfg.phys.c_signal] {
@@ -660,6 +657,8 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         (b.genes[COPY_MASS], w.cfg.phys.e_life) = (1.645, 1e30);
         let (s, b0) = out(&mut w, b);
         w.life[s] = b0;
+        // The year starts at the body's first batch, so its first update is on the first day.
+        w.time = w.life[s].due * w.cfg.batch_days as u64 * DAY_S;
         let area = w.mesh.cells().area()[0];
         let joule = -w.chem.dh(BURN) / w.chem.reactions[BURN].inputs.iter().find(|x| x.0 as usize == RICH).unwrap().1 as f64 / w.chem.subs[RICH].molar_mass;
         let (mut built, mut takes, mut ups) = (Vec::new(), vec![0.0; 360], vec![0.0; 360]);
