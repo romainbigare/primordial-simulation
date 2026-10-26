@@ -2469,3 +2469,80 @@ to 1.21 times mimalloc's own; globe36's 1-thread update is 8% cheaper with mimal
 thread the change is inside the noise on island22 and globe36 (+2% by the medians, -2% and +2% by the sets) and
 helps region24. It adds a C library to the build of `ew` (the `cc` crate compiles it); `pcore` and the wasm build do
 not change.
+
+## G5: the survey and Flow's state every 30 days, Change at 10 (kill line met)
+
+Level 3 (a small law change). Built on the branch `x10/g5-not-kept`: a new `Config` field `change_days` (10) for
+Change's step, and `phys_days` 30 for the survey and Flow's state (snapshot 50). The air stays at 10 days. Core 10,297
+to 10,301 code lines. What the law feels: a body placed or born has its cell's mean light until the next survey (up to
+30 days, before up to 10), and movers read the cells around them as the month's survey saw them.
+
+**Which split.** The code lets Change, the survey and Flow's state each run on their own period (`schedule::processes`;
+the air must divide each, `Config::validate`). `node_days` 40 and `think_days` 20 do not need a multiple of 30: stands
+update in batches of 10 days at their own pace, and a decision counts days, not surveys; only `batch_days` must divide
+`phys_days` (10 divides 30). The chemistry of the sleep test's world (32 x 32, 8 years, the mean of years 5 to 8) on 5
+seeds, each setting against every node awake at 10-day steps (today's reference); off / noise, the noise the spread of
+that reference's years (a throw-away probe, `$X/g5/g5_probe.rs`):
+
+| survey, Change, sleep (days) | `air_3` (seeds 1 to 5) | `min1_land` (seeds 1 to 5) | the other five columns |
+|---|---|---|---|
+| 10, 10, 90 (today) | 1.89, 0.20, 0.19, 0.13, 0.14 | 0.15, 0.77, 0.41, 0.26, 0.17 | under 0.20 |
+| 30, 10, 90 (G5) | 1.89, 0.18, 0.18, 0.13, 0.14 | 0.15, 0.81, 0.20, 0.32, 0.47 | under 0.20 |
+| 30, 10, 0 | -0.02, 0.01, 0.00, 0.00, 0.00 | 0.03, 0.09, 0.11, 0.06, 0.18 | under 0.02 |
+| 30, 30, 90 (all at 30) | 0.59, 0.11, 0.08, 0.07, 0.09 | **0.96, 1.77, 1.07, 1.53, 0.80** | under 0.16 |
+| 30, 30, 0 | -0.64, -0.04, -0.04, -0.01, 0.01 | **0.91, 1.58, 0.93, 1.34, 0.57** | under 0.17 |
+
+The survey at 30 moves nothing (with every node awake, at most 0.18 of the noise). Change at 30 days raises the land's
+mineral of the rock (`min1_land`) by 0.8 to 1.8 times its noise in every seed, with every node awake too: the 30-day
+span itself moves it, not the sleep. It shrinks S84's `air_3` bias on seed 1 (1.89 to 0.59). So Change keeps 10 days
+(X18's fallback); only seed 1 has the small `air_3` noise (5.2e-7, the others 5e-6 to 8e-6) on which S84 shows.
+
+**Checks.**
+
+| Check | Result |
+|---|---|
+| Golden | re-pinned (`0x0ce12774a44570d4`, `0x6a847e25791cbeec`, `0xda718b84f65f0dbd`), the same with and without threads and in the plain debug build |
+| `cargo test --release --workspace`, with debug assertions too, clippy, the wasm build | pass, no warning |
+| The sleep test (`the_sleep_of_change_keeps_the_chemistry`, seed 1) | fails on `air_3` only (S84, known): sleep 90 days +9.96e-7 against a noise of 5.79e-7 (1.7 times; today 9.82e-7 against 5.20e-7, 1.9 times); the other five settings +6.2e-7 to +1.26e-6; every other column within its noise. Not grown |
+| The long-step test (survey, Change and batch at 2 days and the air at 6 hours against the defaults) | passes: land +0.112 K (seeds +0.261, -0.048, +0.123), summer +0.100 K, winter -0.002 K, limit 0.3 K (G4's review: +0.117, +0.110, +0.002); rain +1.4e-5 against 3.1e-4; `air_3` +1.0e-8 against 1.7e-5; rivers +1.2 against 19.3 |
+| The globe climate test | passes: land 285.84 K, drift 0.008 K a year, ice at most 0.104; surface 290.00 K, vapour 0.0069, rain on land 1.781 m/yr |
+| The key numbers (once, against the references after AIR4.0) | all in range but S50 (0.563, seeds 0.570, 0.555, 0.563; G4 0.563): land 292.115 K, swing 15.433 K, rain 0.001814, heat-absorbing gas 410.69 ppm, river cells 692.4, land worn 0.1451 mm/yr, light-eaters 10.248, **eaters 5.200** log10 kg (seeds 5.165, 5.217, 5.218; G4 5.217), **life of light-eaters 1.303 yr** (seeds 1.373, 1.208, 1.328; G4 1.416, the reference 1.218), life of eaters 14.14 yr (G4 14.34) |
+
+**One thread, instructions of one year** (callgrind, `RAYON_NUM_THREADS=1`, millions; base: `ew` of 9673a5f on the G4
+saves; G5 and "all at 30" (survey and Change at 30): this branch's `ew` on the same saves turned to snapshot 50 (X50:
+`phys_days` set, `change_days` inserted); inclusive costs; `flow::state` counts its calls from the survey too):
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| the year: base, G5, all at 30 | 6,676.3; 6,665.5 (-0.16%); 6,493.6 (-2.7%) | 6,461.6; 6,349.4 (-1.7%); 6,146.4 (-4.9%) | 14,435.2; 14,383.3 (-0.36%); 14,134.4 (-2.1%) |
+| `survey::survey`: base, G5 | 298.9, 264.6 | 236.9, 206.4 | 736.3, 652.6 |
+| `flow::state`: base, G5 | 59.1, 36.5 | 81.1, 51.2 | 93.3, 57.0 |
+| survey and state saved, of the base's year | -57 (-0.85%) | -60 (-0.94%) | -120 (-0.83%) |
+| `change::step`: base (G5), all at 30 | 383.5, 167.5 (x0.44) | 441.3, 202.3 (x0.46) | 623.2, 258.9 (x0.42) |
+
+The survey costs little less at 30 days: most of it is the monthly merge of alike nodes (`nodes::crowd`), which runs once
+a month at any `phys_days`; the surveys between months only shared out light and summed the cells.
+
+**Four threads, wall time** (ms a year, the mean of years 2 and 3 of a 3-year run, each run under `flock
+$X/timing.lock` after the machine had no compiler or profiler running; 24 interleaved sets of base and G5, the first 12
+with "all at 30" too; load average 1.4 to 3.1, about 1 from the run itself; in 7 of 180 runs a compiler started during
+the run; median (minimum), then the ratio of the medians and the median of the per-set ratios with its quartiles):
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| the year: base | 331.8 (282.2) | 367.1 (288.3) | 679.7 (608.1) |
+| the year: G5 | 340.6 (284.0) | 345.7 (304.0) | 695.9 (580.7) |
+| G5 over base | x1.027; per set 0.952 (0.901 to 1.102) | x0.942; per set 0.941 (0.886 to 1.052) | x1.024; per set 0.984 (0.927 to 1.100) |
+| all at 30 over base (12 sets) | x0.972; per set 0.934 | x0.912; per set 0.914 | x1.011; per set 0.977 |
+| Change: base, all at 30 (12 sets) | 21.9, 9.9 (x0.46) | 28.0, 13.8 (x0.49) | 37.0, 14.7 (x0.40) |
+
+On this shared machine the per-set ratios spread by about 10% either way, more than G5 can save; the medians move by
+-6% to +3% in both directions. The instructions say what G5 saves: about 0.9% of the year's work, all of it serial
+(about 8 ms of island22's year on one core, 2.5% of its 4-thread year if none of it ran in parallel).
+
+**Verdict.** The done-when (the year on 4 threads -4%) is not met, and the kill line (under -3%) is: G5 saves at most
+about 2.5% of the year on 4 threads (0.9% of the work), and the 4-thread medians cannot tell it from the noise. "All at
+30" would save more (Change x0.4 to x0.5; the year -2.1% to -4.9% on one thread) but moves `min1_land` past its noise on
+3 of 5 seeds and gains under 3% on island22 and region24 too. So `phys_days` stays 10 and Change with it (the kill
+line: back to 10); the branch `x10/g5-not-kept` holds the split (`change_days`) for G6 or a later step to try again
+when the survey's monthly part is cheaper.
