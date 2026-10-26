@@ -175,7 +175,7 @@ leaves the ring, books kept). PR-B saw no brain loss in 1,000 years of island22 
 | E1b.2 | Landing by destination: leaving bodies taken out at P1's end, outboxes in buckets, global ids in S1, landing per destination in P2 | 3 | the order test (widened) equal; golden re-pinned, the same without threads; key numbers once | bodies' stage 4T under -6% on two benches, or worse on the third | E1b.1 | Opus | engine 2.2, 2.3 |
 | E1b.3 | **Folded into E1b.2** (X61): watches, part acts, returns of litters, lane clears and pushes on structures already run after all landings, one by one in a fixed order | | | | | | engine 2.2 |
 | E1c | Booking by array in P2's call: **the one helper `store::book_by_array`** (AIR3, G1, E4 use it); **one domain runner** (LPT order, scratch per thread with `each_init`, `SERIAL_BELOW`) that AIR2, G1, G6, G7 use | 2 | golden re-pinned; the series to rounding | bodies' stage 4T under -2% on top of E1b on two benches | E1b.3 | Opus | engine 2.2 |
-| E2 | Tiles of 4 cells with the air column. First, on the merged branch: the busiest share at 4 cells (gate: at most 0.6 x today's on two benches). Audit: no body code reads `Class::Air` straight from the store (only through the view); the shares of an air node's cells sum to 1 (a debug assert). `CLAUDE.md` 3.4 tile sentence, handover 7.4 | 3 | order test; golden; key numbers; per update 1T at most +3% | bodies' stage 4T under -5% on two benches and under -8% on region24 | E1c | Opus | engine 2.4 |
+| E2 | **Not built now; re-gated after G4 (X75).** Tiles of 4 cells with the air column. First, on the merged branch: the busiest share at 4 cells (gate: at most 0.6 x today's on two benches). Audit: no body code reads `Class::Air` straight from the store (only through the view); the shares of an air node's cells sum to 1 (a debug assert). `CLAUDE.md` 3.4 tile sentence, handover 7.4 | 3 | order test; golden; key numbers; per update 1T at most +3% | bodies' stage 4T under -5% on two benches and under -8% on region24 | E1c | Opus | engine 2.4 |
 
 **Lane C, air** (`flow/`, `solve/`)
 
@@ -199,7 +199,7 @@ leaves the ring, books kept). PR-B saw no brain loss in 1,000 years of island22 
 | G8 | The tape's recorder on the pool (chunks summed in order) | 1 for the world (golden unchanged); 2 for the tape (its files the same to rounding), or 1 if each sum keeps its order | golden unchanged; tape files as the level says; tape 4T -40% | under -25% | none | Sonnet | gap G8 |
 | G1 | Change per domain on E1c's runner: the domain tasks make the rows (they book nothing); the rows are booked after the call by `book_by_array`, and the air nodes' sums in domain order. So G14 later books the same rows after the bodies and does not redo G1 | 2 | golden re-pinned; Change 4T -50% | under -30% | E1c | Sonnet | gap G1 |
 | G7 | Bond's monthly turns per domain | 2 | parts 4T -40% on globe36 | under -25% | E1c | Sonnet | gap G7 |
-| G15 | Find and remove the sharing between threads ((a) to (d) of G15, each measured first) | 1 | an update on 4T at most 1.2 times its 1T cost | nothing found above 3% of the bodies' stage: stop | E2 | Sonnet (measures), Opus (a fix) | gap G15 |
+| G15 | Find and remove the sharing between threads ((a) to (d) of G15, each measured first) | 1 | an update on 4T at most 1.2 times its 1T cost | nothing found above 3% of the bodies' stage: stop | E1d (X75) | Sonnet (measures), Opus (a fix) | gap G15 |
 
 ### Phase 2: the clock and law steps, then the research steps
 
