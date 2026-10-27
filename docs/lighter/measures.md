@@ -587,3 +587,48 @@ the five `air_3` rows are off by 0.76e-6 to 1.64e-6 (limit 3e-6).
 100; not growing, and under the key-number ranges (40 ppm, 1.0 K) and the long-step test's 0.3 K by factors of 10 and
 7. The fix on `sleep/pair-calm-proposal` costs about 20% of a run for it; not worth it today. If the owner wants it
 gone, a cheaper fix must shorten the sleep only for a reaction pair that undoes itself, not for every node.
+
+## Small nodes: not kept (an open item)
+
+Open item 8 of the speed x10 report. A node of `count` members gives `count × chance` members to an action
+(`spread::share`), and acts whole when that leaves less than one member behind (`stays`, `part_acts`). It then acts
+whole every time it is drawn, so more members act than `count × chance`:
+
+| node | chance | members that act, mean | count × chance |
+|---|---|---|---|
+| `count` 2 or more | above 1 - 1 / count | count (always) | under one member less |
+| `count` 1 to 2 | under 1 / count | count² × chance (up to x2) | count × chance |
+| `count` 1 to 2 | 1 / count or more | count (always): x 1 / chance | count × chance |
+
+MI5 fixed the first row for the movers only. **How often** (a probe build, never merged):
+
+| world | node decisions and habits | of nodes under 2 members | takes: members that act / asked | of nodes under 2 members |
+|---|---|---|---|---|
+| island22 (`benchH1`, 5 years) | 63,084 | 0.58% (4e-6 of members) | +5.1e-5 | +6.8% |
+| globe36 (`benchH1`, 5 years) | 47,176 | 0.29% | +1e-11 | +0.6% |
+| region24 (`benchH1`, 5 years) | 138,155 | 0.51% | +1.4e-4 | +4.5% |
+| 64 x 64, seed 1, years 1 to 30 (eaters come at 20) | 90,012 | 52% (29% of members) | **+11.4%** | +31% |
+| 64 x 64, seed 2, years 1 to 30 | 80,045 | 46% (22% of members) | **+8.1%** | +29% |
+
+In the young world the moves were +15% and +11%, the bonds +24% and +21%. Settled worlds barely feel it; a young
+eater population is mostly small nodes.
+
+**Two fixes tried** (branch `study/small-nodes-not-kept`; key numbers 64 x 64 seeds 1 to 3; the nodes check):
+
+| | eaters, log10 kg (seeds) | life of eaters | roster rule (a) broken, seed 1 / 5 | roster eaters (kind 1) with nodes, seed 1 / 5 |
+|---|---|---|---|---|
+| H1 (today) | 5.18 (5.22, 5.20, 5.13) | 13.34 yr | 2 / 6 | 2.25e4 / 1.83e4 kg |
+| O8: `share` gives the whole node with `chance` (each option's mean exact) | 4.89 (4.86, 4.94, 4.86) | 14.08 | 5 / 6 | 6.4e3 / 5.9e3 |
+| O8b: O8, and a node under two members does one option whole, drawn by its chances, as an individual does | 4.89 (4.86, 4.98, 4.84) | 12.51 | 5 / 6 | 1.09e4 / 9.8e3 |
+| individuals | | | | 2.83e4 / 3.80e4 |
+
+Both keep the books and pass the nodes check's rules (b) and (c); O8 also passed the pace, batch, long-step, climate,
+century and eaters' tests (at year 100 the eaters are as before: 2.47e6, 2.34e6, 1.81e6 members against 2.37e6,
+2.30e6, 2.11e6). But both move nodes away from individuals (rule (a)) and lower the young eaters by 0.29 decades,
+near the floor of their range (4.854).
+
+**Verdict.** Not kept (the architect's gate: rule (a) no worse than H1 and the eaters back near 5.13 to 5.22). The
+over-draw hides a deficit of small nodes elsewhere: with an exact mean, even as one option a decision like an
+individual's, young eater nodes fare worse than individuals. **Open item:** find that deficit first (candidates: a
+node decides every `think_days` and repeats its habit between, an individual decides at every update; the habit's
+takes of a node under two members; `stays` and `rejoin`), then remove the over-draw with it.
