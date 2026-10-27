@@ -539,3 +539,51 @@ never end are not finished physics. An open item for the owner: how walls end is
 
 One draw per birth: -1.54 / -0.45 / -1.68% of the year, under the 3% a level-3 step needs (L41). Branch
 `lighter/h5-not-kept`.
+
+## Study: the sleep's bias on the gas
+
+Question (S84): the sleep of Change biases `air_3` (the heat-absorbing gas) in `the_sleep_of_change_keeps_the_chemistry`,
+judged on seed 1 only. Is it real across seeds, and is it small on the long term? The owner: "Test and ignore if small
+issue on long term." Probe code: `tape/tests/sleep_probe.rs` (branch `study/sleep-bias-probe`, not for
+merge). Machine: 4 cores shared with builders (load 3 to 16 while the runs went); runs on 1 or 2 threads, two at a time.
+
+**1. Across seeds (the test's world: 32 x 32, 8 years, years 5 to 8, sleep 90 days against 0).** The bias is real.
+It has the same sign and size in all six seeds. Seed 1 has an unusually narrow noise.
+
+| seed | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| `air_3` sleep less no sleep, 1e-6 | +1.19 | +1.47 | +1.28 | +1.49 | +1.56 | +1.34 |
+| noise (range over the 4 years with no sleep), 1e-6 | 0.52 | 5.17 | 5.49 | 8.27 | 8.20 | 3.23 |
+
+It is about 0.3% of the gas (382 to 393 ppm). The other six numbers of the test (two minerals on land and sea, dead
+matter, lime) are 4 to 100 times under their noise in every seed. `min1_sea` is low by 0.12 to 0.13 in all six seeds
+(0.14% of 85 to 90, noise 0.5 to 1.0): the same kind of steady offset, far under its noise.
+
+**2. Over a long run (32 x 32 world with life, `ew run` setting, sleep 90 days against 0, seeds 1 to 3, 300 years).**
+Means over windows of years, sleep less no sleep. After year 100 the two worlds of a seed move apart (chaos: land
+differences of -0.7 to +0.3 K and gas differences of -7 to +16 ppm in single decades, with both signs), so only the
+first 100 years compare one world with itself.
+
+| years | gas, ppm, seeds 1 / 2 / 3 | gas, mean | share of gas | land, K, seeds 1 / 2 / 3 | land, mean |
+|---|---|---|---|---|---|
+| 1 to 8 | +0.93 / +1.07 / +0.97 | +0.99 | +0.26% | +0.042 / -0.020 / +0.041 | +0.021 |
+| 21 to 30 | +3.21 / +3.55 / +4.95 | +3.90 | +0.94% | +0.059 / +0.033 / +0.034 | +0.042 |
+| 31 to 60 | +3.46 / +3.18 / +5.93 | +4.19 | +0.97% | +0.055 / +0.049 / +0.024 | +0.043 |
+| 61 to 100 | +2.65 / +4.35 / +4.83 | +3.94 | +0.89% | +0.024 / +0.027 / +0.063 | +0.038 |
+| 21 to 100 | +3.02 / +3.81 / +5.26 | +4.03 (seeds' sd 1.1) | +0.9% | +0.040 / +0.036 / +0.045 | +0.040 (seeds' sd 0.004) |
+| 101 to 300 | +11.75 / -2.18 / +4.71 | +4.76 (seeds' sd 7.0) | +1.1% | -0.245 / +0.039 / +0.150 | -0.019 (seeds' sd 0.20) |
+
+The gas level is 380 to 460 ppm in these worlds. The bias grows over the first 20 years (+1 ppm at year 8, +4 ppm from
+year 21) and then stays flat at +4 ppm, about 0.9% of the gas: the air's own balance takes it back, it does not pile up.
+The land is warmer by 0.04 K in each of the three seeds from year 21 to 100. That is what 0.9% more of the gas should do
+(Earth's 5.35 ln(1.009) = 0.05 W/m2 at about 0.8 K per W/m2 gives 0.04 K). After year 100 the mean of three seeds shows
+no sign: the later offsets are noise of diverged worlds, larger than the bias.
+
+**3. The test.** It keeps its comparison of every column on seed 1 against its noise, and holds `air_3` to
+`GAS_SLEEP_BIAS` (3e-6, about twice the largest bias measured) instead of its noise, so a growing bias fails it. On seed 1
+the five `air_3` rows are off by 0.76e-6 to 1.64e-6 (limit 3e-6).
+
+**Verdict.** Small on the long term: +4 ppm (0.9%) of the gas and +0.04 K of the land at the plateau, from year 21 to
+100; not growing, and under the key-number ranges (40 ppm, 1.0 K) and the long-step test's 0.3 K by factors of 10 and
+7. The fix on `sleep/pair-calm-proposal` costs about 20% of a run for it; not worth it today. If the owner wants it
+gone, a cheaper fix must shorten the sleep only for a reaction pair that undoes itself, not for every node.

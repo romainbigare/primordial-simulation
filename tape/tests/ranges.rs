@@ -240,18 +240,20 @@ fn seeds_mean_by_setting<S: Copy + Send>(columns: &[&str], settings: &[S], set: 
 /// move by less than its noise, the spread of the first run's values over those years. Prints each; returns the
 /// columns and settings (named by `name`) that moved more. The noise is the year-to-year range, trend included: for
 /// numbers that still grow in these years (plant members, kg and births) it is 66 to 84% of the value, so the test is
-/// loose on those three and tight on the others.
-fn off_by_noise<S: Copy>(columns: &[&str], runs: &[Vec<Vec<f64>>], settings: &[S], name: impl Fn(S) -> String) -> Vec<String> {
+/// loose on those three and tight on the others. A column in `accepted` is held to the bound given there, a known bias
+/// the owner accepts, instead of to its noise.
+fn off_by_noise<S: Copy>(columns: &[&str], runs: &[Vec<Vec<f64>>], settings: &[S], accepted: &[(&str, f64)], name: impl Fn(S) -> String) -> Vec<String> {
     let mut out = vec![];
     for (q, column) in columns.iter().enumerate() {
         let values = |run: &[Vec<f64>]| run.iter().map(|y| y[q]).collect::<Vec<f64>>();
         let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
         let first = values(&runs[0]);
         let noise = first.iter().fold(f64::MIN, |m, &x| m.max(x)) - first.iter().fold(f64::MAX, |m, &x| m.min(x));
+        let limit = accepted.iter().find(|a| a.0 == *column).map_or(noise, |a| a.1);
         for (run, &set) in runs.iter().zip(settings).skip(1) {
             let off = mean(&values(run)) - mean(&first);
-            let ok = off.abs() <= noise;
-            println!("{column}, {}: {:.6e}, against {:.6e}, off by {off:.3e}, noise {noise:.3e}{}", name(set), mean(&values(run)), mean(&first), if ok { "" } else { ": OUT" });
+            let ok = off.abs() <= limit;
+            println!("{column}, {}: {:.6e}, against {:.6e}, off by {off:.3e}, noise {noise:.3e}, limit {limit:.3e}{}", name(set), mean(&values(run)), mean(&first), if ok { "" } else { ": OUT" });
             if !ok {
                 out.push(format!("{column}, {}", name(set)));
             }
@@ -260,10 +262,16 @@ fn off_by_noise<S: Copy>(columns: &[&str], runs: &[Vec<Vec<f64>>], settings: &[S
     out
 }
 
+/// The sleep's known bias on the heat-absorbing gas, as a share of the air: the sleep of Change leaves it 0.8e-6 to
+/// 1.6e-6 high in this world (seeds 1 to 6), about +0.9% of the gas and +0.04 K of the land over a long run, which the
+/// owner accepts (`docs/lighter/measures.md`, "Study: the sleep's bias on the gas"). Held to twice that, so a growing
+/// bias fails the test.
+const GAS_SLEEP_BIAS: f64 = 3e-6;
+
 /// Sleep against no sleep, and each speed setting of the sleep x2 and /2 (`docs/numbers.md`, speed settings): the
 /// longest sleep (`sleep_days`) and the gain that wakes a node (`wake_share`). Against every node awake every step, the
 /// mean of each of the chemistry's key numbers over the last years moves by less than its noise, the spread of its
-/// values over those years with every node awake.
+/// values over those years with every node awake; the heat-absorbing gas by less than `GAS_SLEEP_BIAS`.
 #[test]
 #[ignore = "slow: six 8-year runs of a 32 x 32 world with life"]
 fn the_sleep_of_change_keeps_the_chemistry() {
@@ -273,7 +281,7 @@ fn the_sleep_of_change_keeps_the_chemistry() {
         let runs: Vec<_> = settings.iter().map(|&(days, wake)| s.spawn(move || yearly(SEEDS[0], &CHEMISTRY, |c| (c.sleep_days, c.wake_share) = (days, wake)))).collect();
         runs.into_iter().map(|r| r.join().expect("a run")).collect()
     });
-    let out = off_by_noise(&CHEMISTRY, &runs, &settings, |(days, wake)| format!("sleep {days} days, wake at {wake}"));
+    let out = off_by_noise(&CHEMISTRY, &runs, &settings, &[("air_3", GAS_SLEEP_BIAS)], |(days, wake)| format!("sleep {days} days, wake at {wake}"));
     assert!(out.is_empty(), "the sleep changed: {out:?}");
 }
 
@@ -365,7 +373,7 @@ fn the_pace_of_nodes_keeps_life() {
     let set = Config::default().node_days;
     let settings = [0, set, 2 * set, set / 2];
     let runs = seeds_mean_by_setting(&LIFE, &settings, |c, days| c.node_days = days);
-    let out = off_by_noise(&LIFE, &runs, &settings, |days| format!("nodes every {days} days at most, mean of seeds {SEEDS:?}"));
+    let out = off_by_noise(&LIFE, &runs, &settings, &[], |days| format!("nodes every {days} days at most, mean of seeds {SEEDS:?}"));
     assert!(out.is_empty(), "the pace of nodes changed life: {out:?}");
 }
 
@@ -378,7 +386,7 @@ fn the_pace_of_nodes_keeps_life() {
 fn the_batches_of_bodies_keep_life() {
     let settings = [SHORT_BATCH_DAYS, Config::default().batch_days];
     let runs = seeds_mean_by_setting(&LIFE, &settings, |c, days| c.batch_days = days);
-    let out = off_by_noise(&LIFE, &runs, &settings, |days| format!("batches of {days} days, mean of seeds {SEEDS:?}"));
+    let out = off_by_noise(&LIFE, &runs, &settings, &[], |days| format!("batches of {days} days, mean of seeds {SEEDS:?}"));
     assert!(out.is_empty(), "the batches changed life: {out:?}");
 }
 
