@@ -792,3 +792,17 @@ means of years 11 to 20, L1 less base):
 
 **Verdict.** Kept: a physics fix. The long liquid step no longer darkens and warms the land (the long-step test has 36%
 of room instead of 9%), every key number stays in range, at +0.3% of a year.
+
+## C1: not kept
+
+Branch `lighter/c-not-kept` (`700f203`). Counted on the same saves: the year -1.2% (island22, line -3%), -6.0%
+(globe36), -6.7% (region24). Light-eater splits a year from about 10 to 230 to 910; test 1's second invasion fails (a
+better kind spreads under 2 cells a decade against 29 today); light-eaters' copy mass -0.7 to -1.0 decades. C2 not
+built (C1 + C2 about -7% on island22). L45.
+
+## HP1: not kept
+
+Branch `lighter/hp1-not-kept` (`c45730b`, `c2a49f8`; `lighter/hp1-v1`). Plants stiffen with lime (17 to 34% of dry
+mass) as chemistry 0 makes lime cheaper than frame; island22's year +40% (light-eater bodies 2.3 times the base by year
+300). HP2 not built. L47.
+

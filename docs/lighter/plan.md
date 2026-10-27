@@ -1,10 +1,10 @@
 # Lighter world: the plan
 
-Status: **restated after phase P and the third review; row statuses after lanes G and H** (L39, L41, L43, L44) (the probes R0, PR1, PR3, PR6, PR7, PR8, C0, PA;
-`measures.md`). Branch `speed/lighter` at `195bbc2`: lane F, G1, the six-seed long-step test and B1 (the skip) merged.
-This file is the one source of the steps: each row has its files, check level, done-when and kill line. The designs are
-in `design/`; decisions in `decisions.md` (L1 to L44; answers to three reviews at its end); measures in `measures.md`;
-history in `docs/history.md`, section 7.
+Status: **before phase Z** (L45 to L47). Branch `speed/lighter` at `bcef8fd`: lane F, G1, the six-seed long-step test,
+B1 (the skip), H1 (children in lumps) and L1 (the liquid's sink every physics step) merged; G2, H5, C1 and HP1 not
+kept (their branches named below). This file is the one source of the steps: each row has its files, check level,
+done-when and kill line, and its status. The designs are in `design/`; decisions in `decisions.md` (L1 to L47; answers
+to three reviews at its end); measures in `measures.md`; history in `docs/history.md`, section 7.
 
 ## 1. The goal, and where the year goes
 
@@ -32,30 +32,37 @@ landing, much of it `nodes::add` at about 21 thousand instructions a call) is 16
 decision and the habit together. Stands are 19% to 24%, all included about 27% / 24% / 30% (C0). Every animal updates
 every batch (its `INTERVAL` gene at or under 10 days, PA).
 
-**What the round can give** (one thread, instructions of a settled year; estimates from the probes; "x" is faster by):
+**What was kept** (one thread, instructions of a settled year, each step measured on its own base; "x" is faster by):
 
 | Step | island22 | globe36 | region24 | Status |
 |---|---|---|---|---|
-| F the saves (long runs) | 0 | 0 | 0 | done: long runs about -6% (F3, estimate) and the main thread's saves 2.4% to 0.4% (F2, counted) |
-| B1 the skip | -2.2% | -0.8% | -2.4% | **done** (`195bbc2`, measured) |
-| G1 the parts' search start | 0 | -1.18% | -0.1% | **done** (measured) |
-| G2 a part reacts its walls with the air over its footprint, held at its ground's temperature | 0 | 0 | 0 | **not kept** (L43): an open item for the owner; branch `lighter/g2-not-kept` |
-| H1 children in lumps | **-7.0%** | **-5.9%** | **-7.1%** | **done** (`060341f`, measured on the same saves; L39) |
-| H5 one draw per birth | (-1.54%) | (-0.45%) | (-1.68%) | **not kept** (under a level-3 step's 3%; L41); branch `lighter/h5-not-kept` |
-| H2 maturing in lumps | (up to -2.1%) | (-1.4%) | (-2.1%) | **not built** (under a law step's 3%; L39) |
-| H4 a cheaper join | to be counted | to be counted | to be counted | probe after H1 and H5 |
-| C the cover: C1a and C1 / with C2 | -1 to -7.5% / -9 to -13.5% | -2.5 to -6.5% / -8.5 to -11% | -3 to -8% / -11.5 to -15% | C0 done; `design/cover.md` after its third review (counted estimates; C1's range depends on the fill of kinds); the entry condition L42 |
+| F the saves (long runs) | 0 | 0 | 0 | **done**: long runs about -6% (F3, estimate) and the main thread's saves 2.4% to 0.4% of a 300-year run (F2, counted); a quiet wall pair in phase Z |
+| B1 the skip | -2.2% | -0.8% | -2.4% | **done** (`195bbc2`) |
+| G1 the parts' search start | 0 | -1.18% | -0.1% | **done** (`feceae7`) |
+| H1 children in lumps | -7.0% | -5.9% | -7.1% | **done** (`060341f`) |
+| L1 the liquid's sink every physics step (a law fix, L46) | +0.3% | +0.3% | +0.3% | **done** (`bcef8fd`) |
+| **all kept, added** | **about -8.9% (x1.10)** | **about -7.6% (x1.08)** | **about -9.3% (x1.10)** | phase Z measures the year against the start |
 
-| Case | island22 | globe36 | region24 | long runs |
-|---|---|---|---|---|
-| without the cover (B1, G1, H1, measured) | about x1.10 | about x1.09 | about x1.11 | about 6 to 8% more |
-| with C1a and C1 | about x1.11 to x1.19 | about x1.11 to x1.16 | about x1.14 to x1.21 | the same |
-| **with C1 and C2** | **about x1.22 to x1.28** | **about x1.19 to x1.23** | **about x1.26 to x1.32** | the same |
+**Not kept or not built:** G2 (parts no longer end, L43), H5 (-1.5% at most, L41), H2 and H3 (L39), C1 (-1.2% on
+island22, and it changed the plants, L45), C2 (C1 + C2 about -7% on island22, under -10%), HP1 and HP2 (L47), the law
+of living bodies (L9), D1, D2 (L14), E1 (L12), A3, A4 (under their worth lines). **Plainly:** the round gives about a
+tenth of the year on the benches, and about 6 to 8% more on long runs; the cover did not pay on today's world.
 
-(The cases add the steps' shares of today's year; each step's own measure restates them.) **Plainly:** the cover is no
-longer the whole round: on `benchZ` the stands are a fifth to a quarter of the year, and the
-animals two fifths. The round's largest sure gain is in the animals' bookkeeping (lane H), the parts' reactor on the
-globe (G) and the long runs' saves (F, done). Built and not built so far: section 3.
+### The owner's open choices, as they stand
+
+1. **Living bodies do not rot** (handover 13.2): the owner says leave as is; the law (b0) is ready if wanted (L9).
+2. **How walls end and the parts' reactor** (G2, L43): the owner said yes to the loose-residue rule (Pilling-Bedworth),
+   rot through the outer skin, part nodes now, built solids of bodies (shells) as building matter, a pieces store per
+   cell, mud by properties only, and stone that lasts centuries; designs running (`design/objects-scale`,
+   `design/objects-materials`); for the next steps, not this round's speed.
+3. **S50, plants store too much:** a study queued.
+4. **The 60-day liquid warms the land:** answered by L1 (the long-step test's room 0.191 of 0.3 K).
+5. **The sleep's gas bias:** accepted as small; the sleep test states it.
+6. **Plant forms side by side:** C1 not kept (L45); the hard plant law waits for chemistry 0's price of lime against
+   frame (a life round), then HP1 (L47).
+7. **The plants' copy-mass gene at long paces** (PR-C2): kept in the notes.
+8. **Small nodes act whole:** not kept; an open item.
+9. **A coarser air:** leave (E1 not built, L12).
 
 ## 2. Rules for this round
 
@@ -142,7 +149,7 @@ updates +38%, so it belongs to a round about life, with new eater references.
 |---|---|---|---|---|---|
 | H1 | **Done** (`060341f`: -7.0 / -5.9 / -7.1%; the guard `lump_days <= node_days` dropped, the window applies to every node, L39). **Children in lumps:** a node's brood fills at every update as today; it makes children at most once in a window of `Config::lump_days` (30, a speed number like `batch_days`, `numbers.md` row; snapshot bumped). The window is the world's batch index with the node's phase from its id (no world-wide pulse); the node keeps the index of its last lump (one field), so a changed interval gene can neither lump twice in a window nor skip one it updates in. `Config` validation: `lump_days` a multiple of `batch_days` and at most `node_days`. One direction draw per birth call, as today (so a lump's dispersers go one way: `animals.md` 2). Individuals and stands as today. `laws.md` 4.2 | `copy/mod.rs`, `params.rs`, `body/mod.rs`, `tape/src/snapshot.rs`, tests, docs | 4 | what must hold, below; counted: the year 1T -3% on island22 and region24 (upper bound -4.4 / -4.9%) | under -3% on island22 (L2) |
 | H5 | **Not kept** (-1.54 / -0.45 / -1.68%, under 3%; L41; branch `lighter/h5-not-kept`). **One draw per birth** (L41): `copy::copy` draws the children's genes and brain rows once per birth and splits the members between dispersers and stayers (the gap of the two groups' means into their spread), instead of two `emit` calls that each draw | `copy/mod.rs`, tests, docs | 2 or 3 | golden re-pinned; the key numbers; the nodes check; the year 1T -1% after H1 (about -1.2 / -0.8 / -1.2%; -2.3% alone) | under -1% of the year (a step of 20 lines or less, L2) |
-| H4 | **To come** (after H1; H5 not kept). **Probe first, after H1 and H5:** a cheaper `nodes::add` for joiners of the same lineage (the group that moved, the part that matured): the share of joins whose genes equal or lie within rounding of the node's; the cost of a join's per-gene pooling, `Body::prepare`, the rows' blend and `see`; then a step at level 1 or 2 if it clears L2. Before C (both edit `nodes.rs`) | `nodes.rs` | probe, then 1 or 2 | the probe's table; a step only at 1% of the year (20 lines) or 1.5% (40) | as L2 |
+| H4 | **Open** (after H1; H5 not kept; the architect decides before phase Z). **Probe first, after H1 and H5:** a cheaper `nodes::add` for joiners of the same lineage (the group that moved, the part that matured): the share of joins whose genes equal or lie within rounding of the node's; the cost of a join's per-gene pooling, `Body::prepare`, the rows' blend and `see`; then a step at level 1 or 2 if it clears L2. Before C (both edit `nodes.rs`) | `nodes.rs` | probe, then 1 or 2 | the probe's table; a step only at 1% of the year (20 lines) or 1.5% (40) | as L2 |
 
 **H1 must still hold:** the key numbers, the eaters within their range (5.354 ± 0.5; life 10.47 yr x/ 2); the nodes
 check (individuals keep per-update births); the pace and batch tests; `the_eaters_live_and_stop_growing`;
@@ -172,11 +179,33 @@ animals unchanged; else C1 alone if it passed 3%, else neither (A4 or nothing).
 
 | ID | What | Files | Level | Done when | Kill line |
 |---|---|---|---|---|---|
-| C1a | **Building: C1a and C1 are one law step** (L44). **`crowd` counts bodies with a brain only, set to 1; an animal node splits only while it is the only body with a brain in its cell** (3): `nodes::crowd` and `nodes::split`; `numbers.md`'s `crowd` row; `laws.md` 4.4; handover 7.1 (the check's pair `--crowd 1` and `2`); `tape/tests/nodes.rs` (`NOISE_CROWD` 2); snapshot | `nodes.rs`, `params.rs`, `tape/src/snapshot.rs`, `tape/tests/nodes.rs`, docs | 4 (animals) | animal nodes per planted cell, animal updates a year and animal splits and merges a year (planted and unplanted cells) within their seeds' noise of the world after lane H (counted, 3 seeds), and in a young world (32 x 32, year 30) splits as today's; the eaters' key numbers; the nodes check holds its rules; its own effect on the counted year reported apart | those move past their seeds' noise: option (a) stays, and C1 and C2 are gated on the animals as they are |
-| C1 | **Building, with C1a as one step** (L44). **The bound on kinds and the clock** on today's young-adult pairs (3): `Config::cell_kinds` = 3 (row in `numbers.md`, speed); a new kind starts in `emit` and `land_litter` only while the newcomer place is free, else the litter joins the most alike; a light-eater node splits only while its cell holds fewer than `cell_kinds` kinds with adults; at a month's start `nodes::crowd` merges the most alike pair of a cell holding more than `cell_kinds` kinds with adults (no `alike` limit for bodies without a brain), and every kind without adults older than its life span at its ground's temperature now joins its most alike kind (`Body::life_span`); snapshot; test 1 (two invasions, the speed against today's code) and the rewritten `crowd` and `dispersing` tests; `laws.md` 4.2, 4.4; `history.md` | `params.rs`, `nodes.rs`, `copy/mod.rs`, `body/tissue.rs`, `tape/src/snapshot.rs`, tests, docs | 4 | at every month's start, after `nodes::crowd`, at most `2 (cell_kinds + 1)` = 8 bodies without a brain in every cell (kinds with adults and newcomers per planted cell measured apart); test 1; animals within their seeds' noise of the world after C1a and H; key numbers in range (S50 within noise); the climate and life tests of 6; kinds by climate kept (the spread of the form genes' cell means across globe36's land at least half of C0's); the counted year against the world after C1a and H (estimate -1% to -7.5% island22, -3% to -8% region24) | **kept if** the counted year falls at least 3% on island22 and region24 with all its law checks (decision 37), **or, if D13 is taken,** if its law checks pass and C1 + C2's estimate from its counted world reaches -10%; else C stops (A4 or nothing) |
-| C2 | **The young inside** (2), **built only if C1 is kept and C1 + C2's estimate from C1's counted world (kinds with adults and newcomers per planted cell, the prices of 5) reaches -10% on island22 and region24**: `Body::young` and `Young`; `adult`, `size_moments`, `set_size`, `height`, `equiv` by stage; two shade entries; growth by each stage's balance, a young deficit only killing young (2.5); maturing in `live` before children; children join the cover; seeds as young; `starved` per stage, the brood with the adults; `nodes::add`, `rejoin`, `Lot`, `part`, `kin`, `kin_key` without stage; founders and bodies that lose their brain all adult; `Young::held` a day, read by the clock; snapshot; tape `root_<K>_adults`; tests 2 and 3 and the rewritten ones; `laws.md` 1.4, 3.6, 4.2, 4.4, 6.6; `tape.md`; `history.md` | `body/mod.rs`, `body/tissue.rs`, `body/live.rs`, `copy/grow.rs`, `copy/mod.rs`, `copy/young.rs`, `nodes.rs`, `survey.rs`, `life/domain.rs`, `lineage.rs`, `worldgen/src/life/make.rs`, `tape/src/snapshot.rs`, `tape/src/rec/cols/`, tests, docs | 4 | at every month's start at most `cell_kinds` + 1 = 4 bodies without a brain in every cell; **C1 + C2 at least -10% of the year counted on island22 and region24 against the world after C1a and H** (decision 37; estimate -10% to -14.5%, -12.5% to -16%) with animal nodes and animal updates within their seeds' noise; light-eater members per planted cell within a factor of 2 of C1's; test 2; key numbers, kinds by climate and tests as C1; the land within 0.3 K of C1 | C1 + C2 under -10% on island22 or region24, or the animal, key-number, climate or kinds lines fail: C2 is not merged, C1 stays if it passed its own lines |
-| C3 | **The checks** (no code): counted runs of the three benches, plants all included; wall on 4 threads (5 interleaved runs under the lock); key numbers; the slow suite; 1,000-year runs of the island, the globe and the region, one at a time, with the watch list of 6 | `docs/lighter/measures.md` | — | the measure and a verdict per bench | — |
-| **G-C** | **The cover's gate** (decisions 37, 46), against the world after C1a and lane H: C1 at least -3% of the year counted on island22 and region24 with its law checks (or D13); with C2, C1 + C2 at least -10% on both, globe36 not worse; animal nodes per planted cell and animal updates a year within their seeds' noise; every key number in range (S50 within noise), the climate tests and the canopy check pass; the 1,000-year runs keep their books and live; tests 1 to 3 pass | | | | **fails:** what failed is not merged (C1 stays if it passed its own lines); A4 or nothing |
+| C1a | **Not kept, with C1** (L45; branch `lighter/c-not-kept`). **`crowd` counts bodies with a brain only, set to 1; an animal node splits only while it is the only body with a brain in its cell** (3): `nodes::crowd` and `nodes::split`; `numbers.md`'s `crowd` row; `laws.md` 4.4; handover 7.1 (the check's pair `--crowd 1` and `2`); `tape/tests/nodes.rs` (`NOISE_CROWD` 2); snapshot | `nodes.rs`, `params.rs`, `tape/src/snapshot.rs`, `tape/tests/nodes.rs`, docs | 4 (animals) | animal nodes per planted cell, animal updates a year and animal splits and merges a year (planted and unplanted cells) within their seeds' noise of the world after lane H (counted, 3 seeds), and in a young world (32 x 32, year 30) splits as today's; the eaters' key numbers; the nodes check holds its rules; its own effect on the counted year reported apart | those move past their seeds' noise: option (a) stays, and C1 and C2 are gated on the animals as they are |
+| C1 | **Not kept** (L45; `700f203` on `lighter/c-not-kept`: -1.2% of island22's year against the -3% line; splits of light-eaters x20 to x90; the second invasion of test 1 fails; light-eaters' copy mass -0.7 to -1.0 decades). **The bound on kinds and the clock** on today's young-adult pairs (3): `Config::cell_kinds` = 3 (row in `numbers.md`, speed); a new kind starts in `emit` and `land_litter` only while the newcomer place is free, else the litter joins the most alike; a light-eater node splits only while its cell holds fewer than `cell_kinds` kinds with adults; at a month's start `nodes::crowd` merges the most alike pair of a cell holding more than `cell_kinds` kinds with adults (no `alike` limit for bodies without a brain), and every kind without adults older than its life span at its ground's temperature now joins its most alike kind (`Body::life_span`); snapshot; test 1 (two invasions, the speed against today's code) and the rewritten `crowd` and `dispersing` tests; `laws.md` 4.2, 4.4; `history.md` | `params.rs`, `nodes.rs`, `copy/mod.rs`, `body/tissue.rs`, `tape/src/snapshot.rs`, tests, docs | 4 | at every month's start, after `nodes::crowd`, at most `2 (cell_kinds + 1)` = 8 bodies without a brain in every cell (kinds with adults and newcomers per planted cell measured apart); test 1; animals within their seeds' noise of the world after C1a and H; key numbers in range (S50 within noise); the climate and life tests of 6; kinds by climate kept (the spread of the form genes' cell means across globe36's land at least half of C0's); the counted year against the world after C1a and H (estimate -1% to -7.5% island22, -3% to -8% region24) | **kept if** the counted year falls at least 3% on island22 and region24 with all its law checks (decision 37), **or, if D13 is taken,** if its law checks pass and C1 + C2's estimate from its counted world reaches -10%; else C stops (A4 or nothing) |
+| C2 | **Not built** (C1 + C2 about -7% on island22, under -10%; L45). **The young inside** (2), **built only if C1 is kept and C1 + C2's estimate from C1's counted world (kinds with adults and newcomers per planted cell, the prices of 5) reaches -10% on island22 and region24**: `Body::young` and `Young`; `adult`, `size_moments`, `set_size`, `height`, `equiv` by stage; two shade entries; growth by each stage's balance, a young deficit only killing young (2.5); maturing in `live` before children; children join the cover; seeds as young; `starved` per stage, the brood with the adults; `nodes::add`, `rejoin`, `Lot`, `part`, `kin`, `kin_key` without stage; founders and bodies that lose their brain all adult; `Young::held` a day, read by the clock; snapshot; tape `root_<K>_adults`; tests 2 and 3 and the rewritten ones; `laws.md` 1.4, 3.6, 4.2, 4.4, 6.6; `tape.md`; `history.md` | `body/mod.rs`, `body/tissue.rs`, `body/live.rs`, `copy/grow.rs`, `copy/mod.rs`, `copy/young.rs`, `nodes.rs`, `survey.rs`, `life/domain.rs`, `lineage.rs`, `worldgen/src/life/make.rs`, `tape/src/snapshot.rs`, `tape/src/rec/cols/`, tests, docs | 4 | at every month's start at most `cell_kinds` + 1 = 4 bodies without a brain in every cell; **C1 + C2 at least -10% of the year counted on island22 and region24 against the world after C1a and H** (decision 37; estimate -10% to -14.5%, -12.5% to -16%) with animal nodes and animal updates within their seeds' noise; light-eater members per planted cell within a factor of 2 of C1's; test 2; key numbers, kinds by climate and tests as C1; the land within 0.3 K of C1 | C1 + C2 under -10% on island22 or region24, or the animal, key-number, climate or kinds lines fail: C2 is not merged, C1 stays if it passed its own lines |
+| C3 | **Not run** (C not kept). **The checks** (no code): counted runs of the three benches, plants all included; wall on 4 threads (5 interleaved runs under the lock); key numbers; the slow suite; 1,000-year runs of the island, the globe and the region, one at a time, with the watch list of 6 | `docs/lighter/measures.md` | — | the measure and a verdict per bench | — |
+| **G-C** | **Failed at C1** (L45). **The cover's gate** (decisions 37, 46), against the world after C1a and lane H: C1 at least -3% of the year counted on island22 and region24 with its law checks (or D13); with C2, C1 + C2 at least -10% on both, globe36 not worse; animal nodes per planted cell and animal updates a year within their seeds' noise; every key number in range (S50 within noise), the climate tests and the canopy check pass; the 1,000-year runs keep their books and live; tests 1 to 3 pass | | | | **fails:** what failed is not merged (C1 stays if it passed its own lines); A4 or nothing |
+
+### Lane L: the liquid (the owner's study request; `design/liquid.md`)
+
+| ID | What | Level | Done when | Kill line | Status |
+|---|---|---|---|---|---|
+| L1 | **A law fix:** the liquid's sink into the bed's store (`drain::sink`) runs every physics step right after the air step; the rest of the liquid every `flow_days` (60). Rain over field capacity no longer waits in the pores for up to 60 days, darkening the land (+1.7 W/m² absorbed, +0.2 K in the study); `Config::validate` wants each liquid step on a physics step | 3 | the long-step test's land 0.273 -> 0.191 K; the key numbers in range but S50 (land 292.155 -> 292.103 K, rain on land -0.5%, land worn 0.1335 -> 0.1471 mm/yr); golden re-pinned | the year +1% | **done** (`bcef8fd`; +0.3% of the year; L46) |
+
+### Lane HP: hard plant matter (the owner's request: plants tall and short side by side)
+
+| ID | What | Level | Status |
+|---|---|---|---|
+| HP1 | The band rule and the sample's height credit (`c45730b`, `c2a49f8`; one-commit version `lighter/hp1-v1`) | 4 | **not kept** (L47; branch `lighter/hp1-not-kept`): plants stiffen with lime (17 to 34% of dry mass), as chemistry 0 makes lime cheaper than frame; island22's year +40%; S50's pass is arithmetic |
+| HP2 | The second step of the hard plant law | 4 | **not built** (L47) |
+
+### Studies and test fixes (no law change, or not kept)
+
+| What | Status |
+|---|---|
+| The sleep test states the gas bias it accepts (S84: `air_3` 0.3% high in six of six seeds, +4 ppm and +0.04 K over a century, flat after year 21; held to `GAS_SLEEP_BIAS` 3e-6, twice the measured) | **done** (`c9f263a`; the owner accepts it as small) |
+| The drift tests' scene makes children at every update (`churn`: `lump_days` one batch, as the other node tests since H1; `genes_do_not_drift_without_selection` and `selection_moves_a_nodes_brain_size` pass again) | **done** (`335e1c1`) |
+| Small nodes act whole (open item 8 of speed x10): two fixes lower the young eaters (5.18 to 4.89 log10 kg) and move nodes away from individuals in the nodes check | **not kept** (`5d226db`; branch `study/small-nodes-not-kept`); an open item |
+| Why the long liquid step warms the land (X80) | **done** (`4a6039a`), then L1 |
 
 ### Lanes not built
 
@@ -184,14 +213,14 @@ animals unchanged; else C1 alone if it passed 3%, else neither (A4 or nothing).
 |---|---|---|
 | D (D1, D2) | PR6: perception 0.55 to 0.91% of the year, the take's payer 0.6%, the per-substance repeats in the take 0.6% (L14) | lane H |
 | E (E1) | PR7: -4.7% of globe36, -3.8 to -4.2% of the size-28 globe, but rain on land +6% to +12% on every seed and world, 13 to 20 times its year-to-year spread (L12); code on `probe/pr7` | lane G (G2) |
-| A (A3, A4) | phase 2 only (L6, L18) | A4 if C2 is not built and it is worth L2's line |
+| A (A3, A4) | phase 2 only (L6, L18); with C not kept, A3 and A4 are under their worth lines (L45) | none for speed |
 
 ### Phase 2 (after the gate)
 
 | ID | What | Level | Done when | Kill line |
 |---|---|---|---|---|
-| A4 | Only if C2 is not built: the sample runs only the stages its gene reads, the node's other results reused | 2 | a stand update 1T -6%; the year 1T -1.5% | under -1.5% of the year (L2) |
-| C4 | After G-C if C2 is built: a probe of the cost of making a cover's children (L30) | probe | its table | none |
+| A4 | **Not built** (L45: under its worth line). Only if C2 is not built: the sample runs only the stages its gene reads, the node's other results reused | 2 | a stand update 1T -6%; the year 1T -1.5% | under -1.5% of the year (L2) |
+| C4 | **Not built** (C2 not built). After G-C if C2 is built: a probe of the cost of making a cover's children (L30) | probe | its table | none |
 
 ### Phase Z: the end (unchanged)
 
@@ -211,10 +240,10 @@ animals unchanged; else C1 alone if it passed 3%, else neither (A4 or nothing).
 
 ```
 Phase P   done
-Phase 1   F: done ;  B: B1 done ;  G: G1 done ─ G2 (design note, review, step) ──┐
-          H: H1 ─ H5 ─ H4 (probe, then maybe a step) ──────────────────────────┼─► lane reviews
-          C (after H): C1a ─ C1 ─ (C2 at its entry) ─ C3 ─ G-C ─────────────────┘
-Phase 2   C2 not built: A4 ;  C2 built: C4
+Phase 1   F: done ;  B: B1 done ;  G: G1 done, G2 not kept ;  L: L1 done
+          H: H1 done, H5 not kept, H4 open ;  C (after H): C1a and C1 not kept, C2 not built
+          HP: HP1 not kept, HP2 not built
+Phase 2   not built (A4 and C4 under their conditions)
 Phase Z   the end ─► final review
 ```
 
