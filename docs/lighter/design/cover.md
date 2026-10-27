@@ -386,8 +386,8 @@ balances 18, maturing in `live` 20, children in place 15, starving per stage and
 and resize 6, the rest 3). **Net about +31 for C1a and C1, about +146 with C2.** The cover cannot delete more than it
 adds: the young law, splits, merges and litters stay for animal nodes, and the day is shared (L4 as rewritten).
 
-**Risks.** (1) The climate coupling of plants (P1.2's -0.78 K; the long-step test, judged on the mean of 3 seeds,
-decision 34): the day's code is whole, so the risk is in mass and liquid held; gated in C1 and C2. (2) S50 with pooled
+**Risks.** (1) The climate coupling of plants (P1.2's -0.78 K; the long-step test, judged on the mean of seeds 1 to 6,
+L38): the day's code is whole, so the risk is in mass and liquid held; gated in C1 and C2. (2) S50 with pooled
 stores. (3) Light-eaters' mass (0.16 above its floor) and life: shared stores, starving per stage. (4) Animals: C1a
 moves the merge where few stands stood; more animal faces in `SEEN` after C2; gated. (5) Fecundity genes selected only
 between kinds and cells. (6) The newcomer place is almost always taken (C0): a better kind waits for the clock of the
@@ -408,7 +408,7 @@ margin to the -10% line on the island is about 1.5 points (2.5 after lane H): C1
 |---|---|
 | D1 | **Decided, L35.** The cover with stages, after the bound on young-adult pairs. |
 | D2 | **Decided, L17.** `cell_kinds` = 3 (the owner's three forms; with the newcomer place at most 4 kinds a cell). |
-| D3 | **Decided, L23**, restated from C0: at most `cell_kinds` + 1 kinds, one of them a newcomer (a kind that has not yet held adults); a new kind starts only while that place is free; past `cell_kinds` kinds with adults the most alike pair merges monthly, without the `alike` limit; **proposed: the L23 clock from the start** (a newcomer older than its genes' life span joins its most alike kind), as C0 shows the place almost always taken by kinds that never mature. |
+| D3 | **Decided, L23**, restated from C0: at most `cell_kinds` + 1 kinds, one of them a newcomer (a kind that has not yet held adults); a new kind starts only while that place is free; past `cell_kinds` kinds with adults the most alike pair merges monthly, without the `alike` limit; **the L23 clock from the start** (decided, L23): a newcomer older than its genes' life span joins its most alike kind, as C0 shows the place almost always taken by kinds that never mature. |
 | D4 | **Decided** (names that clash with nothing; the architect's first decisions, 9): `Body::young`, `Young`, `Config::cell_kinds`; "cover" only in docs. |
 | D5 | **Decided, L25.** One law (the McKendrick flux by `math::Pass`) with two holders, node pairs for animals (their young and adults act apart) and stages for covers; `rejoin` is the one place that pools size moments. Said in `laws.md` 4.4. |
 | D6 | **Decided, L24.** Counted parts on remade benches (above), no converter of old saves. Why: a converter is code nobody keeps, and the counted parts are robust to the world's noise. |
@@ -417,7 +417,7 @@ margin to the -10% line on the island is about 1.5 points (2.5 after lane H): C1
 | D9 | **Decided, L5, L6, L15, L18.** Idea 2 and A1 dropped before the cover; B1 and C in any order. |
 | D10 | **Decided, L29.** C1a, C1 and C2 each bump the snapshot (the highest number plus one at each merge); benches remade at each. |
 | D11 | **Decided, L28.** The tape column `root_<K>_adults` (share of members that are adults): one column to watch the stages. |
-| D12 | **Proposed (C0):** option (b), step C1a: `crowd` counts bodies with a brain only, set to 1, what planted cells do today (no animal splits; animal pairs merge where stands fill the count). Why: under (a) the cover's fewer bodies would let animals split and merge less (the globe's 815 merges a year), so the animals' law would follow the plants' bookkeeping. The nodes check's noise becomes `--crowd 2` and `4`. |
+| D12 | **Decided, L40.** Option (b), step C1a: `crowd` counts bodies with a brain only, set to 1, what planted cells do today (no animal splits; animal pairs merge where stands fill the count). Why: under (a) the cover's fewer bodies would let animals split and merge less (the globe's 815 merges a year), so the animals' law would follow the plants' bookkeeping. The nodes check's noise becomes `--crowd 2` and `4`. |
 
 ## 10. Answers to the review (`review-cover.md`)
 
