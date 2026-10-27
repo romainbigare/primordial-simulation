@@ -517,3 +517,25 @@ less what waits in the brood; a node that joins it and the half split off it mak
 then some), `no_batch_holds_a_pulse_of_births` (thirty nodes placed together, a year: each batch within 25% of its even
 share; one shared phase gives 200%, phases 2:1 give 33%). The node tests that are not about lumps set `lump_days` to
 one batch; the settings test refuses a `lump_days` that is not whole batches.
+
+## G2: not kept
+
+Branch `lighter/g2-not-kept` (`c22b297` the reactor held at its ground's temperature, `ed1c0bb` law 5, loose solids of
+decays). The reactor law works: a part's reactor call falls from 136k to 5.7k instructions; the rise in a call is 0.84
+K as expected; a wall's frame rots like dead frame in its ground in 97% of calls. But parts no longer end: the 1e6 K
+burn was what ended walls, and their leftover rock (2.9%) keeps them above `min_kg`.
+
+| Parts after 30 years, `benchZ` globe36 | parts |
+|---|---|
+| base (today's reactor, the 1e6 K burn) | 660 |
+| G2 | 26,087 |
+| G2 with law 5 | 20,693 |
+| G2 with the built-solids rule (under `min_kg`) | 19,679, still rising (parts last about 35 years) |
+
+**Verdict.** Not kept (L43): a fix that leaves 30 to 40 times as many parts makes the world heavier, and walls that
+never end are not finished physics. An open item for the owner: how walls end is a Bond-law design of its own.
+
+## H5: not kept
+
+One draw per birth: -1.54 / -0.45 / -1.68% of the year, under the 3% a level-3 step needs (L41). Branch
+`lighter/h5-not-kept`.
