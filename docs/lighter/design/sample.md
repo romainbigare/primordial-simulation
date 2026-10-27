@@ -1,5 +1,7 @@
 # Idea 4: a cheaper sample member (A4, only if the cover fails)
 
+> **Status after phase P (L6, L35):** A4 is the alternative if C2 is not built and it is worth L2's line.
+
 Steps: A4 in phase 2 (`plan.md` section 4). Decisions: L6, L15, L22. **A1 (`sample_every` 4) is dropped** (L15): the
 cap would make most samples jump a gene's mean by 4 standard deviations (section 2). The cover keeps `copy::select` and
 sets the sample's cadence in its own design. PR4 is not run.

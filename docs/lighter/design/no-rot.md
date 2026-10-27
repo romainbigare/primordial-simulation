@@ -1,5 +1,7 @@
 # Idea 3: living bodies do not rot (lane B)
 
+> **Status after phase P (L9):** the law is not built this round (PR3: every form makes the world heavier, eaters x35, updates +38%); it is an open item for the owner, best as (b0). Lane B builds the skip instead (B1, `plan.md` 4). This note records the candidates and why.
+
 Steps: PR3, then a design review of lane B, then B1 and B2 (`plan.md` section 4). Decisions: L5, L9, L19, L32 to L34.
 **B1's law is not chosen yet:** PR3 chooses between (b) and (d') below, or "not built" with its alternative (L9). Handover 13.2 lists it as the owner's choice: "The
 litter constants also run inside living bodies (real living stems and bones do not rot)." The owner now says yes.

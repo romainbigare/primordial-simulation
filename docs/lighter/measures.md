@@ -72,6 +72,114 @@ files (a line in the run's length, 6.6%; measured 24.9 s, 7.5% of 334 s). The pl
 It is the smaller. The order F1, F3, F2 is right. A writer thread (F2) could take away the compression and the write
 of the snapshot (about 90% of a save) and the tape's files; the gate for F2 comes after F3.
 
+## Phase P: the probes (short)
+
+The key table and the verdict of each probe. The full tables, the methods and the scripts stay on the probe branches
+(never merged): `probe/r0` (R0, PR6, PR8), `probe/c0` (C0), `probe/pr3` (PR3), `probe/pr7` (PR7), `probe/pa` (PA).
+All: one year from the `benchZ` saves (snapshot 49), one thread, callgrind, shares of `schedule::run_for`; the probes
+change nothing (each ends on `$L/ew-base`'s fingerprints).
+
+### R0: the start
+
+Core code at the start: 10,444 lines.
+
+| Share of `run_for` | island22 | globe36 | region24 |
+|---|---|---|---|
+| the year, M instructions | 5,019 | 5,516 | 10,557 |
+| animal updates | 40.2% | 32.1% | 42.7% |
+| stand updates | 21.7% | 18.5% | 24.1% |
+| landing of moves and litters | 6.8% | 4.8% | 6.3% |
+| the survey | 5.3% | 5.0% | 5.5% |
+| the air / the liquid | 13.4% / 2.6% | 20.6% / 3.5% | 11.0% / 2.0% |
+| Change / parts | 7.8% / 0 | 7.8% / 5.4% | 6.1% / 0.2% |
+| a stand update / an animal update, thousand instructions | 87.6 / 159.2 | 88.5 / 154.5 | 89.7 / 161.3 |
+
+**Verdict.** The start is not the old P0 table: animals are the largest part; stands all included are about 21 to 30%
+of the year, not 37 / 19 / 60%. The write of a snapshot is 11 to 13% of a one-year run.
+
+### PR6: a decision and the take
+
+| Stage (island22) | per decision | share of the year |
+|---|---|---|
+| perceive / inputs / options / walk | 6.0 / 1.6 / 5.3 / 0.4 k | 0.77 / 0.21 / 0.68 / 0.05% |
+| think / learn | 8.0 / 3.5 k | 1.03 / 0.45% |
+| spread and its acts | 39.4 k | 5.03% |
+| a habit (the takes again) | 18.5 k | 2.27% |
+| the take (`take_node`, 16.1 k a call) / of it the payer | | 4.02% / 0.62% |
+
+**Verdict.** Perception is about 6 of a decision's 70 thousand instructions (0.55 to 0.91% of the year); the stands
+are 80% of the faces tested. D1 (the payer, 0.6%) and D2 (`perceive`, under 1%) are not built (L14).
+
+### PR8: the parts' reactor (globe36)
+
+| | a part, 6 months | a ground node, 10 days |
+|---|---|---|
+| instructions a call | 191 k | 18 to 24 k |
+| sub-steps a call / halvings a call | 14.3 / 110 | 1.0 / 0 |
+| the highest temperature inside a call | over 1e6 K in every call (up to 2.8e8 K) | |
+
+1,186 calls a year, 4.2% of globe36's year. The part reacts its cell's whole air share for 6 months on its own 2.8e5 J/K.
+**Verdict.** G1 (the search starts where the heat allows): -1.21%, the hash unchanged (built, below). A part reacting
+as a ground node does (G2, a law fix): about -3.5% (L20).
+
+### PR3: rot inside living bodies
+
+| island22, one year | year | body reactor (share of the year) |
+|---|---|---|
+| base | 4,946 M | 322 M (6.5%) |
+| the skip alone | **-2.0%** | -18% |
+| (b0): decomposer reactions only by a body's own catalyst | +4.2% | -16% |
+| (b0) and the skip | +1.2% | -33% |
+| (d') (data in `open`, two-state unfolding) | +4.1% | 0 |
+
+32 x 32, seeds 1 to 6, 30 years, paired with the base: the skip keeps every number within its noise (the land +0.01 K); every law
+variant gives land +0.3 K, gas -22 ppm, light-eaters x1.7, **eaters x35**, updates a year +38%, animal nodes x7, S50
++0.02. Key numbers of (b0) with the skip: every climate key in range, eaters 6.67 log10 kg (out). The eaters' bare
+self-burning is 0.21 to 0.30 of their upkeep. Globe36 and region24: the skip -0.9 / -2.1%.
+**Verdict.** The law makes the world heavier and costs time: not built this round, an open item for the owner (L9).
+The skip is built (B1).
+
+### PR7: the air on globes
+
+| Counted, wide (6 x 4 / 8 x 4) against 4 x 4 | globe36 | size 28, year 50 | size 28, year 100 |
+|---|---|---|---|
+| the air's instructions | -22.5% | -12.2% | -14.6% |
+| share of the year | -4.7% | -4.2% | -3.8% |
+| rain on land (each seed, 30 years) | +5.8% to +9.7% | +11% | |
+
+The globe test passes (rain on land +12.5%); zonal temperatures move under 1 K; the busiest domain stays under 0.15.
+**Verdict.** The gain passes the 3% line, but the land is wetter on every seed and world (13 to 20 times the
+year-to-year spread) while the globe's rain does not move: E1 is not built (L12). Code on `probe/pr7`.
+
+### C0: plants per cell today
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| stands a planted cell: adult / young / all | 2.19 / 3.97 / 6.17 | 1.96 / 3.60 / 5.56 | 2.37 / 4.48 / 6.85 |
+| adult mass in the 3 largest form groups | 100% | 100% | 100% |
+| an adult / a young stand update, thousand instructions | 105.2 / 75.2 | 106.7 / 75.8 | 105.9 / 78.0 |
+| stand updates, share of the year | 21.7% | 18.6% | 24.0% |
+| the cover's gain, all included: at today's kinds / at the full bound | -13% / -5% | -11% / -2% | -15% / -9% |
+
+**Verdict.** `cell_kinds` 3 holds; the adult update is under 120k; the old gate is out of reach; lane C is restated
+(L35, L36).
+
+### PA: the animal update by stage
+
+| Share of the year | island22 | globe36 | region24 |
+|---|---|---|---|
+| animal updates | 40.2% | 32.7% | 43.0% |
+| the body's day / the decision / the habit | 16.6 / 9.0 / 2.3% | 12.8 / 9.5 / 2.0% | 17.3 / 9.7 / 2.8% |
+| children (`copy::copy`) / maturing | 7.3 / 4.0% | 4.8 / 2.7% | 7.8 / 4.1% |
+| landing of their moves and litters | 4.9% | 1.3% | 4.2% |
+| `nodes::add` (all callers; 21 k a call) | 10.1% | 6.3% | 9.9% |
+
+Every animal's `INTERVAL` is at or under 10 days (36 updates a year); a young node's update 144 k, an adult's 185 k.
+Levers (estimates): children in lumps -5.8 / -3.8 / -6.5%; maturing in lumps -2.6 / -1.8 / -2.7%; decisions every 40
+days -3.3 / -3.7 / -3.4%.
+**Verdict.** The bookkeeping of nodes is 16 / 9 / 16% of the year, more than the decisions: lane H (H1, H2; H3 not
+built; H4 a probe) (L39).
+
 ## F1: the snapshot is timed with the tape
 
 `cli/src/main.rs`: the snapshot's time is added to `clock.spent[TAPE]`, as the files of the tape are. The world does

@@ -1,5 +1,7 @@
 # Idea 1: cheaper saves (lane F)
 
+> **Status after phase P (L13):** lane F is done (F1, F3, F2); the measures are in `measures.md`.
+
 Steps: PR1, F1, F3, then F2 only if needed (`plan.md` section 4). Decisions: L8, L13, L21.
 
 ## 1. What the code does today

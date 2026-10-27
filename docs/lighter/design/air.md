@@ -1,5 +1,7 @@
 # Idea 7: a coarser air on globes (lane E)
 
+> **Status after phase P (L12):** E1 is not built (PR7: -4.7% of globe36, but rain on land +6% to +12% on every seed and world); the code stays on `probe/pr7`. The alternative is lane G (G2).
+
 Steps: PR7, E1 (`plan.md` section 4). Decision: L12. E2 (a new solver) is dropped; the alternative if E1 fails is lane G
 (`design/parts.md`). The last round chose not to build a coarser air (X10,
 `docs/speed-x10/design/air.md` 0 and 6.5); this note says what changed and why the form here is different.

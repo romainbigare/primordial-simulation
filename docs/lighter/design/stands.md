@@ -1,5 +1,7 @@
 # Idea 2: fewer stands a cell (A3, only if the cover fails)
 
+> **Status after phase P (L6, L18):** not built; A3 only if the cover fails. C0 measured the counts this note asked for (`measures.md`, "C0").
+
 Steps: A3 in phase 2 (`plan.md` section 4). Decisions: L6, L18, L22. **The owner dropped idea 2 before the cover**
 (L18): A2 is not built, PR2 is not run (its counts are in C0), and the rule below is A3, built only if the cover fails
 its gate. A stand is a population node of a lineage without a brain (the light-eaters).

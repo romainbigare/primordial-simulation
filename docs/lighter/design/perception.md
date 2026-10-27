@@ -1,5 +1,7 @@
 # Idea 6: animals look around less (lane D)
 
+> **Status after phase P (L14):** D1 and D2 are not built (PR6: perception 0.55 to 0.91% of the year, the take's payer 0.6%). Idea 6 became lane H (`design/animals.md`).
+
 Steps: PR6, D1, D2 (`plan.md` section 4). Decision: L14. "Most of a decision is perception, not the thought" (GM: a
 12-unit thought is 8.0 of a decision's 41.2 thousand instructions at `think_days` 20, 19%).
 
