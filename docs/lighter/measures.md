@@ -632,3 +632,104 @@ over-draw hides a deficit of small nodes elsewhere: with an exact mean, even as 
 individual's, young eater nodes fare worse than individuals. **Open item:** find that deficit first (candidates: a
 node decides every `think_days` and repeats its habit between, an individual decides at every update; the habit's
 takes of a node under two members; `stays` and `rejoin`), then remove the over-draw with it.
+
+## Study: why the long liquid step warms the land
+
+Question (X80, X85): the liquid every 60 days warms the land about 0.2 K against a 2-day liquid, and the long-step
+test passes at 0.26 to 0.28 K of its 0.3 K. Why, and what fix within today's laws? Probe code on the branch
+`study/liquid-warm` (never merged): `core/src/probe.rs` sums over land at each air step (sunlight absorbed, heat out,
+evaporation, rain, the liquid on land and its share over field capacity and over the pores, reflectance, temperature);
+`tape/tests/probe_liquid.rs` runs the long-step test's world; `scripts/probe-liquid/` reads the rows. Machine: 4 cores
+shared with other agents (load 5 to 8); runs on one thread, one at a time; the two ranges tests on 2 and 3 cores.
+
+**1. The liquid's step alone** (32 x 32, 20 years with life, years 11 to 20, seeds 1 to 6, each against itself with
+the liquid at 2 days; air, physics and batch at 10 days as today). Land means over the air steps (not the month ends
+the test reads); ± is two standard errors over the seeds. Excess: liquid over field capacity, standing: over the pores
+(part of the excess), mm; sun, latent and out (heat radiation and sensible heat), W/m²; rain and runoff to the sea,
+mmol/(m² s).
+
+| liquid step | land, K | excess | standing | reflectance | sun | latent | out | rain | runoff |
+|---|---|---|---|---|---|---|---|---|---|
+| 2 days (the reference) | 288.1 | 25 | 3 | 0.3064 | 211.8 | 24.3 | 180.2 | 1.828 | 1.241 |
+| 10 days | +0.086 ± 0.038 | +9 | +6 | -0.0023 | +0.99 | +0.26 | +0.58 | +0.003 | +0.020 |
+| 30 days | +0.114 ± 0.020 | +31 | +17 | -0.0037 | +0.98 | +0.40 | +0.54 | +0.006 | +0.037 |
+| **60 days (today)** | **+0.200 ± 0.046** | +65 | +41 | -0.0069 | +1.70 | +0.58 | +1.10 | +0.009 | +0.053 |
+| 120 days | +0.432 ± 0.071 | +135 | +101 | -0.0139 | +3.64 | +1.22 | +2.35 | +0.021 | +0.050 |
+| all short (air 6 h, the rest 2 days) | -0.126 ± 0.066 | -14 | -3 | +0.0028 | -0.10 | -0.02 | -0.27 | -0.008 | +0.005 |
+
+At 60 days by season (the same columns): winter +0.18 K (excess +73, reflectance -0.0098, sun +1.20, latent +0.05,
+out +0.87), spring +0.19, summer +0.25 (+65, -0.0048, +2.22, +1.05, +1.79), autumn +0.18. Every season warms.
+
+**2. The mechanism.** The air step books its 10 days of rain into the ground nodes. Liquid over field capacity leaves
+a node only in the liquid step: it sinks into the bed's store (the vertical link of `drain::under`; `seep` passes 3.1 m
+in 10 days, so in effect at once, as far as the store has room), drains down the hillslope and runs off. With a 60-day
+step the rain of up to 60 days waits in the pores and on the surface, a saw tooth whose mean grows with the step: +65 mm
+over field capacity at 60 days, +135 at 120. Evaporation hardly follows: ground at field capacity already evaporates at
+the open rate (the bucket's `wet` is `field` x the pores, Manabe 1969), so latent cooling grows only +0.58 W/m². The
+reflectance does follow: `land::reflectance` covers the ground with all its liquid (depth d over d + `hide`, 0.5 m for a
+liquid), and the liquid is darker than the loose ground: the land's reflectance falls by 0.0069, the land absorbs +1.70
+W/m² more sunlight, and +1.10 W/m² leaves as heat from a ground 0.20 K warmer. The surface budget closes on these terms
+(sun less latent +1.12 W/m², out +1.10 W/m²).
+
+It is not less evaporation (there is more), not heat carried by moving liquid (the budget closes without it), not
+liquid held in rivers (runoff to the sea is +2% to +4% from 10 to 120 days), and hardly the order of the liquid
+against the air (the 10-day liquid runs right after each air step and gives +0.09 K). It is a first-order splitting
+error: about +0.0035 K a day of step. A Strang split would not mend it at today's cost: it runs the liquid twice a step
+(a 30-day liquid's cost, +0.11 K) and still leaves rain waiting a quarter of the step.
+
+**3. A fix within today's laws (prototype `LIQ_FAST=1`).** The sink into the store (the same loop, rate, room, heat and
+head lost as in `under`) runs every physics step right after the air step; `under` no longer sinks; the rest of the
+liquid stays every `flow_days`. Same 6 seeds, against the same 2-day reference:
+
+| liquid step | land, K | excess | standing | reflectance | sun | latent | out |
+|---|---|---|---|---|---|---|---|
+| 30 days, column apart | +0.074 ± 0.025 | +23 | +20 | -0.0021 | +0.57 | +0.14 | +0.45 |
+| **60 days, column apart** | **+0.052 ± 0.042** | +37 | +34 | -0.0013 | +0.37 | +0.00 | +0.48 |
+| 120 days, column apart | +0.093 ± 0.051 | +72 | +67 | -0.0022 | +0.58 | +0.04 | +0.82 |
+
+The liquid over field capacity in the pores is gone (+24 mm at 60 days today, +3 mm with the column apart); what stands
+on full pores over a full store still waits for the pass but darkens little. The warming no longer grows with the step.
+
+**4. The tests with the prototype.** The long-step test (`the_long_step_keeps_the_climate`, seeds 1 to 6; the prototype
+in both runs):
+
+| | today | column apart | limit |
+|---|---|---|---|
+| land, K | +0.273 (0.439, 0.165, 0.337, 0.269, 0.208, 0.219) | **+0.191** (0.263, 0.104, 0.296, 0.140, 0.178, 0.165) | 0.3 |
+| summer / winter, K | +0.174 / +0.092 | +0.118 / +0.017 | 0.3 |
+| rain on land | +1.8e-5 | +1.1e-5 | 3.2e-4 |
+| gas 3 | +3.5e-6 | +2.7e-6 | 1.8e-5 |
+| rivers | +1.2 | +0.15 | 27.7 |
+
+The room grows from 9% to 36%. The short runs move -0.06 K (their 2-day column now runs before the pass) and the
+default runs -0.14 K. The key numbers (64 x 64, 30 years, seeds 1 to 3), once each:
+
+| Number | today | column apart | reference |
+|---|---|---|---|
+| land | 292.155 K | 292.103 K | 291.79 ± 1 |
+| swing | 15.305 K | 15.305 K | 15.13 ± 1.5 |
+| rain on land | 0.001819 | 0.001809 | 0.001714 x/ 1.3 |
+| gas 3 | 412.2 ppm | 412.0 ppm | 388.8 ± 40 |
+| river cells | 696.2 | 696.8 | 712.4 x/ 1.5 |
+| land worn | 0.1335 mm/yr | 0.1471 mm/yr | 0.141 x/ 2 |
+| light-eaters / eaters, log10 kg | 10.252 / 5.182 | 10.241 / 5.178 | 10.38 ± 0.3 / 5.354 ± 0.5 |
+| life of light-eaters / eaters, yr | 1.429 / 13.34 | 1.356 / 12.85 | 1.81 x/ 2 / 10.47 x/ 2 |
+| stored share (S50, the known failure) | 0.559 | 0.559 | under 0.5 |
+
+All in range but S50. Land worn goes back to the 30-day liquid's 0.1467 (G12 had 0.1339): more liquid sinks and comes
+back up through the springs before the pass.
+
+**5. Cost** (callgrind, one thread, one year from the `benchO50` saves; millions; the probe's sums in the air step are
+outside these two counts):
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| `flow::liquid` today | 132.5 | 185.6 | 212.3 |
+| `flow::liquid` with the column apart + the column (36 calls) | 126.2 + 23.3 | 173.4 + 33.0 | 201.1 + 42.4 |
+| added, share of the year | +17.0 (+0.29%) | +20.8 (+0.38%) | +31.2 (+0.26%) |
+
+**Verdict.** The long liquid step warms the land by darkening it: rain over field capacity waits up to 60 days in the
+ground, and the liquid's cover lowers the reflectance. Sinking it into the store every physics step (the same law, its
+fast part booked when the rain comes) removes three quarters of the warming (+0.20 to +0.05 K), makes it independent of
+the step, gives the long-step test 36% of room, keeps every key number in range, and costs 0.3% of a year. Design:
+`docs/lighter/design/liquid.md`. Level 3 when built.
