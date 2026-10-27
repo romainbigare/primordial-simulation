@@ -298,6 +298,8 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
     // not choose it in return, so children are pulled toward the nodes that are many bodies' nearest, and the mean over
     // all members wanders by more than the bound below.
     w.cfg.two_parents = false;
+    // (A node may make children at every update: `lump_days` of one batch.)
+    w.cfg.lump_days = w.cfg.batch_days;
     worldgen::life::seed(&mut w, 0);
     let len = Layout::of(&w.chem).len;
     let b0 = &w.life[live(&w)[0]];
