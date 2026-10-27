@@ -699,11 +699,24 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
 /// nodes on they merge, `crowded_individuals_merge_into_a_node`), and over three years of the whole world no animal
 /// becomes a node; light-eaters still are nodes. The animals are hand-set eaters (as `ew run` places them, which find
 /// what they eat), so that some live and breed through the window: the check would be empty with none (neutral animal
-/// founders mostly die in their first year). Matter and energy are kept.
+/// founders mostly die in their first year, and in one world all may die before they breed), so it runs three worlds
+/// (seeds 1 to 3) and asks for births in them together. Matter and energy are kept.
 #[test]
-#[ignore = "slow: three years of a 32 x 32 world"]
+#[ignore = "slow: three years of three 32 x 32 worlds"]
 fn individuals_mode_merges_no_animal() {
-    let mut w = worldgen::new_world(1, 32, 32);
+    let (mut born, mut alive_at_end) = (0.0, 0);
+    for seed in 1..=3 {
+        let (b, a) = individuals_window(seed);
+        born += b;
+        alive_at_end += a;
+    }
+    assert!(born > 0.0 && alive_at_end > 0, "no animal was born ({born}) or alive at the end ({alive_at_end}) in three worlds");
+}
+
+/// One world of `individuals_mode_merges_no_animal`: its checks, and the animals born in its window (members) and alive
+/// at its end.
+fn individuals_window(seed: u64) -> (f64, usize) {
+    let mut w = worldgen::new_world(seed, 32, 32);
     w.cfg.nodes = false;
     let books = Books::now(&w);
     pcore::step(&mut w);
@@ -732,11 +745,10 @@ fn individuals_mode_merges_no_animal() {
         w.events.clear();
         alive.push(w.life.alive().filter(|b| animal(&w, b)).count());
     }
-    println!("animals alive at the end of each month: {alive:?}; born in the window {born}");
-    assert!(alive.last().is_some_and(|&a| a > 0), "no animal was alive at the end: {alive:?}");
-    assert!(born > 0.0, "no animal was born in the window: {alive:?}");
+    println!("seed {seed}: animals alive at the end of each month: {alive:?}; born in the window {born}");
     assert!(w.life.alive().any(|b| !animal(&w, b) && b.count > 1.0), "no light-eater node");
     books.assert_kept(&w, 1e-9);
+    (born, alive.last().copied().unwrap_or(0))
 }
 
 /// What body `s` holds that can become body (`worth`), mol, and its gene `g`, after its next update (`pcore::day` until
