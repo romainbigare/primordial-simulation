@@ -24,6 +24,14 @@ fn run(w: &mut World, months: u32) {
     }
 }
 
+/// The world with two kinds of life: light-eaters and eaters with neutral brains.
+fn two_kinds() -> World {
+    let mut w = world();
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
+    w
+}
+
 /// A folder of this test process for `name`.
 fn tmp(name: &str) -> std::path::PathBuf {
     let d = std::env::temp_dir().join(format!("ew_{name}_{}", std::process::id()));
@@ -329,9 +337,7 @@ fn read_tape(dir: &std::path::Path) -> (serde_json::Value, usize, Vec<String>, V
 #[test]
 fn resume_into_the_same_folder_continues_the_tape() {
     let dir = tmp("resume");
-    let mut w = world();
-    worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
+    let mut w = two_kinds();
     let (mpy, dpy) = (w.cfg.months_per_year as u64, w.days_per_year());
     let mut rec = tape::Recorder::new(&w, 1, 0);
     common::record(&mut rec, &mut w);
@@ -377,6 +383,36 @@ fn resume_into_the_same_folder_continues_the_tape() {
     assert_eq!(days, (0..5).map(|y| y * dpy).collect::<Vec<_>>());
     assert_eq!(bytes, 5 * SIDE * SIDE * tape::LAYERS.len());
     assert_eq!((meta["events"].clone(), meta["series_units"].clone()), (whole.0["events"].clone(), whole.0["series_units"].clone()));
+}
+
+/// A recorder that writes the tape at the end of each year (the CSV files then get only their new rows) leaves the same
+/// CSV files as one that writes it once at the end, also when a kind that comes late gives both files new columns.
+#[test]
+fn csv_files_grown_year_by_year_are_those_written_at_once() {
+    let (by_year, at_once) = (tmp("csv_by_year"), tmp("csv_at_once"));
+    for (dir, each_year) in [(&by_year, true), (&at_once, false)] {
+        let mut w = two_kinds();
+        let mpy = w.cfg.months_per_year as u64;
+        let mut rec = tape::Recorder::new(&w, 0, 0);
+        common::record(&mut rec, &mut w);
+        for m in 1..=3 * mpy {
+            run(&mut w, 1);
+            common::record(&mut rec, &mut w);
+            if each_year && m % mpy == 0 {
+                rec.finish(dir).unwrap();
+            }
+            if m == mpy {
+                worldgen::life::seed_with(&mut w, 2, &worldgen::life::Seeding::neutral());
+            }
+        }
+        rec.finish(dir).unwrap();
+    }
+    for file in ["series.csv", "months.csv"] {
+        let (a, b) = (std::fs::read_to_string(by_year.join(file)).unwrap(), std::fs::read_to_string(at_once.join(file)).unwrap());
+        assert!(a == b, "{file} differs");
+    }
+    let series = std::fs::read_to_string(by_year.join("series.csv")).unwrap();
+    assert!(series.lines().next().unwrap().contains("root_2_"), "the late kind has columns");
 }
 
 /// A null run: with life about and copies made, nobody learns (the bodies' own adjustments stay

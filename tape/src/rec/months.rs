@@ -32,25 +32,32 @@ pub(super) struct MonthRow {
     pub deaths: Vec<f64>,
 }
 
-/// The whole file: one births column per starting kind seen in any month, then one deaths column per kind and
+/// The starting kinds with columns: one births column per kind seen in any month, then one deaths column per kind and
 /// cause (a month before a kind's first birth or death reads 0).
-pub(super) fn csv(rows: &[MonthRow]) -> String {
-    let nk = rows.iter().map(|r| r.births.len().max(r.deaths.len().div_ceil(NC))).max().unwrap_or(0);
+pub(super) fn kinds(rows: &[MonthRow]) -> usize {
+    rows.iter().map(|r| r.births.len().max(r.deaths.len().div_ceil(NC))).max().unwrap_or(0)
+}
+
+/// The file's first line, for `nk` kinds.
+pub(super) fn head(nk: usize) -> String {
     let mut out = format!("year,month,{}", COLS.map(|c| c.0).join(","));
     out += &(0..nk).map(|k| format!(",root_{k}_births")).collect::<String>();
     out += &(0..nk).flat_map(|k| CAUSES.iter().map(move |c| format!(",root_{k}_died_{c}"))).collect::<String>();
-    for r in rows {
-        out += &format!("\n{},{}", r.year, r.month);
-        for (&v, (_, decimals)) in r.values.iter().zip(COLS) {
-            out += &match decimals {
-                Some(d) => format!(",{v:.d$}"),
-                None => format!(",{v}"),
-            };
-        }
-        out += &(0..nk).map(|k| format!(",{}", r.births.get(k).copied().unwrap_or(0.0))).collect::<String>();
-        out += &(0..NC * nk).map(|q| format!(",{}", r.deaths.get(q).copied().unwrap_or(0.0))).collect::<String>();
+    out
+}
+
+/// One row of the file, for `nk` kinds.
+pub(super) fn line(r: &MonthRow, nk: usize) -> String {
+    let mut out = format!("{},{}", r.year, r.month);
+    for (&v, (_, decimals)) in r.values.iter().zip(COLS) {
+        out += &match decimals {
+            Some(d) => format!(",{v:.d$}"),
+            None => format!(",{v}"),
+        };
     }
-    out + "\n"
+    out += &(0..nk).map(|k| format!(",{}", r.births.get(k).copied().unwrap_or(0.0))).collect::<String>();
+    out += &(0..NC * nk).map(|q| format!(",{}", r.deaths.get(q).copied().unwrap_or(0.0))).collect::<String>();
+    out
 }
 
 /// The world's year and month of the year now.

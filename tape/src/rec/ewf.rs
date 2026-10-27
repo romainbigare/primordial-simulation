@@ -8,30 +8,73 @@ use super::{Column, MonthRow, Recorder};
 use crate::layers::LAYERS;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use pcore::World;
+use serde::Serialize;
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
 use std::path::Path;
 
 const FILE: &str = "world.ewf.gz";
 const MAGIC: &[u8; 4] = b"EWF2";
 
+/// The header of the file, as JSON.
+#[derive(Serialize)]
+struct Head<'a> {
+    w: usize,
+    h: usize,
+    cell_m: f64,
+    globe: bool,
+    lat_north: f64,
+    lat_south: f64,
+    seed: u64,
+    days_per_year: u64,
+    layers: Vec<Value>,
+    frames: Vec<Stamp>,
+    series: BTreeMap<&'a str, &'a [f64]>,
+    series_units: BTreeMap<&'a str, &'a str>,
+    events: Vec<Logged<'a>>,
+    months: &'a [MonthRow],
+}
+
+/// A day and the year it falls in.
+#[derive(Serialize)]
+struct Stamp {
+    day: u64,
+    year: f64,
+}
+
+/// An event of the viewer's list: its day, the year and its text.
+#[derive(Serialize)]
+struct Logged<'a> {
+    day: u64,
+    year: f64,
+    text: &'a str,
+}
+
 impl Recorder {
     /// Write the file into `dir`.
     pub(super) fn write_ewf(&self, dir: &Path) -> io::Result<()> {
         let s = self.shape;
-        let year = |d: u64| d as f64 / s.days_per_year as f64;
-        let head = json!({
-            "w": s.w, "h": s.h, "cell_m": s.cell_m, "globe": s.globe, "lat_north": s.lat_north, "lat_south": s.lat_south, "seed": s.seed, "days_per_year": s.days_per_year,
-            "layers": LAYERS.iter().map(|l| json!({"name": l.name, "unit": l.unit, "scale": l.scale, "min": l.min, "max": l.max})).collect::<Vec<_>>(),
-            "frames": self.frames.iter().map(|&d| json!({"day": d, "year": year(d)})).collect::<Vec<_>>(),
-            "series": self.series.iter().map(|c| (c.name.clone(), json!(c.values))).collect::<serde_json::Map<_, _>>(),
-            "series_units": self.series.iter().map(|c| (c.name.clone(), json!(c.unit))).collect::<serde_json::Map<_, _>>(),
-            "events": self.log.iter().map(|(d, t)| json!({"day": d, "year": year(*d), "text": t})).collect::<Vec<_>>(),
-            "months": self.months,
-        });
+        let stamp = |&day: &u64| Stamp { day, year: day as f64 / s.days_per_year as f64 };
+        let head = Head {
+            w: s.w,
+            h: s.h,
+            cell_m: s.cell_m,
+            globe: s.globe,
+            lat_north: s.lat_north,
+            lat_south: s.lat_south,
+            seed: s.seed,
+            days_per_year: s.days_per_year,
+            layers: LAYERS.iter().map(|l| json!({"name": l.name, "unit": l.unit, "scale": l.scale, "min": l.min, "max": l.max})).collect(),
+            frames: self.frames.iter().map(stamp).collect(),
+            series: self.series.iter().map(|c| (c.name.as_str(), c.values.as_slice())).collect(),
+            series_units: self.series.iter().map(|c| (c.name.as_str(), c.unit.as_str())).collect(),
+            events: self.log.iter().map(|(day, text)| Logged { day: *day, year: stamp(day).year, text }).collect(),
+            months: &self.months,
+        };
         let head = serde_json::to_vec(&head)?;
         // Four large writes, so no `BufWriter` is needed (small writes need one before the compressor).
-        let mut z = GzEncoder::new(std::fs::File::create(dir.join(FILE))?, Compression::default());
+        let mut z = GzEncoder::new(std::fs::File::create(dir.join(FILE))?, Compression::fast());
         z.write_all(MAGIC)?;
         z.write_all(&(head.len() as u32).to_le_bytes())?;
         z.write_all(&head)?;

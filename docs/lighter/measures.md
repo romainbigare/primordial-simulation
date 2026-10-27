@@ -26,8 +26,9 @@ from year 100; the file is 0.8, 3.8 and 6.4 to 6.8 MB. The cost grows until abou
 | the write of 6 MB | 0.3 ms | 8 ms | 3 to 25 ms | 0.51 s |
 
 The parts measured apart (bincode, then gzip, then write) add up to more than the real save (about 120 ms against
-42 ms late in the run): the probe copies the world into a `Vec` that grows, and its first gzip pass pays for a new
-buffer. The real save streams the bytes through a small buffer. **A save is about 42 ms late in a 300-year island run,
+42 ms late in the run): the probe copies the world into a `Vec` that grows, and its first pass over a new buffer pays
+for the page faults (on a warm buffer the world to bytes takes 3.5 to 4.5 ms, see "F2: the gate"). The real save
+streams the bytes through a small buffer. **A save is about 42 ms late in a 300-year island run,
 4 ms a year, 1.7% of the run.** Gzip at level 6 would cost 7 times the level the code uses for 1.5% to 3% less size, so the
 level is right. The write is a small part. Another coder (zstd, lz4) was not measured: no crate for it is in this
 build, and the architect's order (F1, F3, F2) does not need it.
@@ -65,10 +66,11 @@ against the last report's 334 s for 1,000 years of the island: the saves 1.3%, t
 a gap of 1.6 s. The start (making the world) is 0.2 s, the saves are 1.1 s, the pictures (0.6 ms each) and the yearly
 check (0.3 to 1.3 ms) are 0.05 s; the rest is printing and the placing of what the plan says. The saves were the gap.
 
-**Verdict.** The saves' cost is the sum of two parts that PR1 separates: the snapshot (flat, 1.3% of a 1,000-year run) and
-the tape's files (a line in the run's length, 6.6%). The plan counted the snapshot as the larger. It is the smaller. The
-order F1, F3, F2 is right. A writer thread (F2) can take away at most the gzip and the write of the snapshot (about
-half of 1.3%) and the tape's files; PR1 puts the gate for F2 after F3.
+**Verdict.** The saves' cost is the sum of two parts that PR1 separates: the snapshot (flat, about 1.3% of a 1,000-year
+run by this estimate; the 1,000-year run of F3 measured 6.6 s, 2.0%, as saves grow in the last centuries) and the tape's
+files (a line in the run's length, 6.6%; measured 24.9 s, 7.5% of 334 s). The plan counted the snapshot as the larger.
+It is the smaller. The order F1, F3, F2 is right. A writer thread (F2) could take away the compression and the write
+of the snapshot (about 90% of a save) and the tape's files; the gate for F2 comes after F3.
 
 ## F1: the snapshot is timed with the tape
 
@@ -87,3 +89,48 @@ within 0.4 s of the wall time, the start (0.2 s) included. The year's own row is
 snapshot lands in the next row (`docs/tape.md`). The pictures and the yearly check are not timed (0.05 s in 300 years).
 The long-run times of `docs/reports/speed-x10.md` leave the snapshots out; from here a run's "per year" holds them
 (1.7% more on the island).
+
+## F3: the tape's files written cheaper
+
+**What it does** (`tape/src/rec/`). The viewer's file is compressed at gzip level 1 (it was level 6); its header is
+written straight from the recorder's data (a struct, `serde_json::to_vec`), not through a JSON value tree; `series.csv`
+and `months.csv` get only the rows added since the last write (`csv.rs`), and are written whole only when their header
+line changed or at a resumed run's first write. `Recorder::finish` takes `&mut self` for the bookkeeping. The files
+hold the same rows. New test `csv_files_grown_year_by_year_are_those_written_at_once` (a kind that comes late changes
+the header of both files between two writes); the resume test passes unchanged.
+
+**Same tape, same world** (1,000 years, island22, seed 1, the build before F3 against F3): the same hash
+(`1d1e6532df96b27d`), the same `snap_01000.bin.gz` byte for byte, the same `months.csv` byte for byte, the same
+`series.csv` in every column but the clocks (`ms_*`), and the same frames, events, months and series in the viewer's
+file once read (the file is 8% larger: 3.49 MB against 3.23 MB at year 1,000).
+
+**What the writes cost** (the timers of the run itself; the machine was loaded by other builds, 4.6 to 8.3 on 4 cores,
+so the wall times of the two runs cannot be compared, but the parts of one run can):
+
+| 1,000-year island run | before F3 | F3 |
+|---|---|---|
+| all `finish` calls (99 writes) | 24.9 s | **5.6 s** |
+| growth of a write, ms for each year of the run | 0.52 | 0.116 |
+| one write at year 500 | 255 ms | 41 ms |
+| all snapshots (100 saves, same code in both) | 6.6 s | 7.3 s (noise) |
+| CPU time of the process (user + sys) | 713 s | **660 s (-7.4%)** |
+| wall time (loaded machine, not comparable) | 468 s | 540 s |
+
+One write at year 300, by part, F3 against the PR1 table: the file 22 ms against 114 ms (the header's compression 13 ms
+against 91, the header built and made bytes 5 ms against 13, the frames' compression 2 ms against 8), the three small
+files 2 ms against 15. In 300 years all writes cost 0.39 s against 2.0 s.
+
+**Verdict against the kill line (the long run's wall time a year under -1%): passed.** The writes fall by 19 s of a
+1,000-year run. The last report's quiet run of this island is 334 s, so that is -5.8% of the wall time; the CPU time
+of the process falls by 7.4% in the measure above. A wall-time pair on a quiet machine was not possible. What is left
+after F3, in a 1,000-year run: the snapshots 6.6 to 7.3 s and the tape's writes 5.6 s, about 12 s, which is 2.7%
+to 3.7% of a quiet run (334 s, or 12 s of the loaded runs' 468 s to 540 s: 2.2% to 2.6%). The gate of F2 is 2%.
+
+## F2: the gate
+
+The gate asks whether the saves and the tape are still over 2% of a long run after F3. They are: 2.2% to 3.7% in a
+1,000-year island run (above), 2.4% in the 300-year run (snapshots 1.15 s, writes 0.4 s, of 65 s). A direct measure of
+the parts of one snapshot of the bench save `island22` (8.6 MB of bincode, 4 passes): the world to bytes 3.5 to 4.5 ms
+(into a sink or a `Vec`), gzip level 1 of those bytes 36 to 38 ms, the same into a file 40 to 43 ms (one pass of four
+took 188 ms: the disk). So 90% of a save is compression and the write, which a writer thread can take; the world to
+bytes stays on the main thread.

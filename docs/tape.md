@@ -16,6 +16,12 @@ A mean of nothing is written `NaN` (`null` in the viewer's file, drawn as a gap)
 | `world.ewf.gz` | the viewer's file: `EWF2`, the header's length, the header (JSON: size, whether the world is a globe and its edge latitudes, layers, frames, series and units, events, the months rows), then the frames |
 | `yearNNNN.png` | map, temperature, rain, life and traffic every `--every` years |
 
+**How the files are written.** At every snapshot and at the run's end the recorder writes `world.ewf.gz` again whole
+(gzip at its fast level; the viewer reads any level) and `physics.json`. `series.csv` and `months.csv` are not written
+again: a file the recorder wrote before gets only the rows added since, at its end. A file is written whole when its
+header line changed (a column, or a starting kind, that is new) and at the first write of a resumed run, which cuts the
+file back to the rows the snapshot's day holds. A stopped run keeps the tape up to its last snapshot.
+
 **Raw events** (`core/src/event.rs`): born (with kind, one or two parents), died (with cause, kind,
 the light catalyst of the dead), took, gave, watched, bond made or broken, first time a substance appears. Only physical facts; the viewer shows the first appearances.
 Took, gave and watched name bodies by their id (`Body::id`): the domain the body was placed in (the cells under one

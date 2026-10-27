@@ -3,6 +3,7 @@
 //! and writes it all to a folder; the viewer's file (`ewf`) holds what a resumed run needs to go on.
 
 mod cols;
+mod csv;
 mod ewf;
 mod months;
 mod tally;
@@ -17,6 +18,7 @@ use serde_json::json;
 use std::io;
 use std::path::Path;
 use std::time::Duration;
+use csv::Written;
 use tally::{MonthTally, Social, YearTally};
 use pcore::store::Class;
 
@@ -86,6 +88,8 @@ pub struct Recorder {
     spent: Spent,
     /// The run's `Physics` and `Config` as JSON text, written next to the series (`physics.json`)
     physics: String,
+    /// What `series.csv` and `months.csv` hold from the last `finish`
+    written: Written,
 }
 
 /// The run's numbers, `{"physics": {..}, "config": {..}}`, keys sorted, one line each, so two runs compare with a diff.
@@ -118,6 +122,7 @@ impl Recorder {
             updates: 0,
             spent: Spent::default(),
             physics: physics_json(w),
+            written: Written::default(),
         }
     }
 
@@ -201,17 +206,12 @@ impl Recorder {
     }
 
     /// Write `world.ewf.gz` (viewer frames and what a resumed run reads), `physics.json`, `months.csv` and `series.csv`
-    /// into `dir`.
-    pub fn finish(&self, dir: impl AsRef<Path>) -> io::Result<()> {
+    /// into `dir`. The viewer's file is written whole each time; the two CSV files get only their new rows (`csv`).
+    pub fn finish(&mut self, dir: impl AsRef<Path>) -> io::Result<()> {
         let dir = dir.as_ref();
         std::fs::create_dir_all(dir)?;
         self.write_ewf(dir)?;
-        let mut csv = self.series.iter().map(|c| c.name.as_str()).collect::<Vec<_>>().join(",");
-        for row in 0..self.series.first().map_or(0, |c| c.values.len()) {
-            csv += &format!("\n{}", self.series.iter().map(|c| c.values[row].to_string()).collect::<Vec<_>>().join(","));
-        }
         std::fs::write(dir.join("physics.json"), &self.physics)?;
-        std::fs::write(dir.join("months.csv"), months::csv(&self.months))?;
-        std::fs::write(dir.join("series.csv"), csv + "\n")
+        self.write_csv(dir)
     }
 }
