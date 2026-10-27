@@ -25,23 +25,24 @@ of `run_for`; the bodies' reactor called from their day 6.4% / 5.0% / 7.0%; the 
 |---|---|---|---|---|
 | 1 saves (lane F) | 0 | 0 | 0 | the benches write no tape; **long runs: about -8 to -10% from the tape's rewrite (F3), at most -2% from the snapshots (F2)** |
 | 2 fewer stands a cell | 0 now | 0 now | 0 now | waits for the cover (L18); A3 only if the cover fails |
-| 3 living bodies do not rot (B1, variant (d)) | -3 to -5% | -3 to -4% | -3 to -5% | most of the bodies' reactor runs bare reactions (P0: 90% of a stand's, all of an animal's); under (d) the frozen rule skips the decay in a living body |
+| 3 living bodies do not rot (B1, by PR3 among (b) and (d')) | 0 to -5% | 0 to -4% | 0 to -5% | most of the bodies' reactor runs bare reactions (P0: 90% of a stand's, all of an animal's); a gain needs (b)'s body code or (d')'s frozen test on the real rate: today's frozen rule skips nothing in a living body at any `X` that fits the genes (L9) |
 | 4 a cheaper sample | 0 now | 0 now | 0 now | the cover sets the sample's cadence (L15); A4 only if the cover fails |
 | 5 the cover (C1, C2) | **x1.20 to x1.28** (C1 alone x1.05 to x1.12) | **x1.03 to x1.09** (C1 about x1.0) | **x1.49 to x1.58** (C1 alone x1.14 to x1.23) | `cover.md` 5: `cell_kinds` 3, so at most 4 kinds a cell; a cover update is an adult-node update (about 100k instructions), 3 to 4 covers a planted cell on the island (2 to 3 globe, 3.5 to 4 region) against 8.2 / 4.6 / 10.3 stands; the outbox litters go by copying updates and rise on the globe; plants all included 37% / 19% / 60% of the year fall to 15 to 21% / 11 to 16% / 23 to 27% |
 | 6 animals look around less (D) | about -0.5% (D1, likely not built) | the same | about 0 | `take_node`'s payer is about 16% of a take (2.5 of 16.0 thousand); D2 after the cover |
-| 7 a coarser air on globes (E1) | 0 | -1 to -2% (1T) | 0 | the band solve is 1.4% of globe36's year, the rest of the Newton part 2.3%; more on large globes; 4 threads may lose it (fewer domains) |
+| 7 a coarser air on globes (E1) | 0 | -1 to -2% (1T) | 0 | built only if it gives 3% of the year on the size-28 globe (L12); the band solve is 1.4% of globe36's year, the rest of the Newton part 2.3%; 4 threads may lose it (fewer domains) |
 | parts' reactor (lane G, the review's find) | 0 | -2 to -3% | about 0 | 191 thousand instructions a call, about 10 times a ground node's; PR8 says why |
 
 | Case | island22 | globe36 | region24 | long runs |
 |---|---|---|---|---|
-| without the cover (B1, E1, G1, F) | about x1.03 to x1.05 | about x1.06 to x1.1 | about x1.03 to x1.05 | about 10% more |
+| without the cover (B1, E1, G1, F) | about x1.0 to x1.05 | about x1.03 to x1.1 | about x1.0 to x1.05 | about 10% more |
 | C1 alone (C2 fails its lines) | about x1.08 to x1.17 | about x1.06 to x1.1 | about x1.17 to x1.28 | about 10% more |
-| **with the cover (C1 and C2)** | **about x1.24 to x1.34** | **about x1.09 to x1.20** | **about x1.53 to x1.66** | about 10% more |
+| **with the cover (C1 and C2)** | **about x1.21 to x1.33** | **about x1.07 to x1.18** | **about x1.50 to x1.62** | about 10% more |
 
-In the "with the cover" row B1 counts on the animals only: the cover cuts the stands' reactor itself. On 4 threads the
+In the "with the cover" row B1 counts on the animals only (about 9% of the region's year), and B1's part is 0 if PR3
+finds no candidate; the cover cuts the stands' reactor itself. On 4 threads the
 gains are smaller where the work cut ran on the pool. **Plainly:** without the cover this round gives a few percent on
 the benches and about 10% on long runs; with it about a quarter to a third on the island, a tenth to a fifth on the
-globe and about 50 to 65% on the region. The next lever after the cover is the cost of making children, a third of a cover
+globe and about 50 to 60% on the region. The next lever after the cover is the cost of making children, a third of a cover
 update (probe C4, phase 2, L30).
 
 ## 2. Rules for this round
@@ -54,8 +55,8 @@ that change land with the step that makes them true (section 7).
   must still hold and which tests change. Never loosen a tolerance; a test of a deleted mechanism is deleted; a test of
   a changed law is rewritten to state the new law.
 - **Kill lines and worth** (L2): a kill line asks for at most 10% of the year (for lane F, of a long run's year). A
-  level-1 step of 20 core lines or less is kept at 1% of the year or more; a law step (level 3 or 4) needs about 3% on
-  its target worlds, as each costs a key-number cycle and new references for every lane. A step under its kill line is
+  level-1 or level-2 step of 20 core lines or less is kept at 1% of the year or more, of 21 to 40 lines at 1.5%; a law
+  step (level 3 or 4) needs about 3% on its target worlds, as each costs a key-number cycle and new references for every lane. A step under its kill line is
   reverted and kept on a branch `lighter/<id>-not-kept`, and its alternative (section 3) starts.
 - **References** (L10): the start's key numbers are those of `docs/speed-x10/measures.md` "Z: the final checks" 1.
   After each level-4 law lands, the key-number test runs once more and its values become the reference. **Every
@@ -64,17 +65,21 @@ that change land with the step that makes them true (section 7).
   their range, the architect takes new eater references with the cause said (L19).
 - **How a gain is judged** (L11). One thread: callgrind instructions of a year (`RAYON_NUM_THREADS=1`). Four threads:
   wall time under `flock $L/timing.lock`, 5 or more interleaved runs, medians, the load said. A step that keeps the
-  saved world runs `benchZ` as it is; one that changes it is judged on one world (a turned save, per update; X50) or by
-  counted work on same-seed worlds (E1); across remade worlds only large cuts count (PR-S: 19% island22, 11% globe36).
-  **Long runs count wall time** (L8).
+  saved world runs the newest benches as they are; one that changes it is judged on one world (a turned save, per
+  update; X50) or by counted work on same-seed worlds (E1, the cover); across remade worlds only large cuts count
+  (PR-S: 19% island22, 11% globe36). **Long runs count wall time** (L8).
+- **Benches** (L11): the step that bumps `SNAPSHOT_VERSION` remakes the three benches with its own build
+  (`make_benches.sh`, `$L/bench<version>`, about 7 minutes) as part of its merge and names the folder in `measures.md`;
+  later steps use the newest set, base build and step build both run from it. Until the first bump it is `benchZ`.
 - **Agents.** Law steps (level 4) and every adversarial review go to the strongest agents; normal code to normal
   agents; measures to measuring agents. Each step in its own worktree and branch; the architect merges one at a time;
   a step that re-pins golden rebases and re-pins on `speed/lighter`; `SNAPSHOT_VERSION` goes to the highest plus one at
   each merge.
 - **The three rules for smart bodies hold:** individuals stay real; the step per place (each domain owns its bodies and
   its ring); two kinds of body code (code paths, not two physics).
-- **Core lines** (L4): the ceiling is 10,643; each lane has a budget (section 9). A step may pass the ceiling only with a
-  decision that says how many lines and why.
+- **Core lines** (L4, L31): the ceiling is 10,643; each lane has a budget (section 9). The step that would pass it
+  raises `CEILING` in `cli/tests/core_size.rs`, `CLAUDE.md` 2.11 and handover 14.3 in the same commit, by the lines it
+  needs, with a decision logged that gives the number; phase Z sets the round's ceiling.
 
 ## 3. The owner's seven ideas: what we build, and the alternative if it is dropped
 
@@ -82,11 +87,11 @@ that change land with the step that makes them true (section 7).
 |---|---|---|---|
 | 1 | Cheaper saves | F1 the save timed; F3 the tape's rewrite cheaper (csv appended, viewer file at gzip fast); F2 a writer thread only if the saves are still over 2% of a long run's wall time (L13) | Snapshots every 20 years and at the end, the owner told (handover 7.3, 8.3) |
 | 2 | Fewer stands a cell | Nothing before the cover (L18); the cover bounds the kinds a cell holds | A3 if the cover fails its gate (PR2's counts are in C0) |
-| 3 | Living bodies do not rot | B1, variant (d) (L9): reactions 1 and 21 written as 26 already is (a negligible bare rate, the litter decay in `open`); no body code changes | Variant (b) (only the rot stops, by body code with a stated heat-damage law); else not built and the owner told |
+| 3 | Living bodies do not rot | B1's law chosen by PR3 among (b) (the decomposers' reactions do not run in a living body, by body code, with heat damage kept by a stated law) and (d') (the decay in `open`, a frozen test on the real rate, the two-state `denature`), then a design review of lane B (L9) | "Not built": the owner told, handover 13.2's item stays open; the reactor made cheaper for what bodies run (B2, G1) |
 | 4 | A cheaper sample member | Nothing before the cover (L15): the cover sets the sample's cadence | A4 if the cover fails its gate (the sample runs only the stages its gene reads) |
 | 5 | Plants as a cover | C0, then C1 (the bound on kinds, on today's young-adult pairs), then C2 (the young inside the cover), C3 the checks, gate G-C (`design/cover.md` 7) | C1 alone if C2 fails its lines; A3 and A4 if C1 fails too (stands stay bodies) |
 | 6 | Animals look around less | D1 a cheaper take, only if PR6 finds its payer over 1% of the year (L14); D2 a cheaper view, after the cover's gate | D2; the stands' faces go with the cover |
-| 7 | A coarser air on globes | E1: air nodes wider than tall on globes (rows of latitude kept), gated by PR7 on 1 and 4 threads (L12) | Lane G (the parts' reactor), the globe's other background cost |
+| 7 | A coarser air on globes | E1: air nodes wider than tall on globes (rows of latitude kept), built only if it gives 3% of the year on the size-28 globe (counted) and the 4T year is not slower (L12) | Lane G (the parts' reactor), the globe's other background cost |
 
 ## 4. The steps
 
@@ -99,7 +104,7 @@ the detail.
 |---|---|---|---|---|
 | R0 | The start on `benchZ`: P0's table again (plant updates alone and all included, stands a cell, young and adult, the bare share, `nodes::add` and merges), with `#[inline(never)]` on the parts the probes name; the untimed parts of a run (`save_snapshot`, `render::save`, `check::broken`); the 4T year of `$L/ew-base` (5 sets) | a table in `measures.md` "R0"; section 1 restated | the base of every step | this plan |
 | PR1 | The tape and the saves by part: `Recorder::finish` by file (the viewer's JSON, its gzip, the frames, `series.csv`, `months.csv`) and the snapshot (bincode, gzip, write), how each grows over a 300-year island run (carried to 1,000); the share of a long run's wall time | its table | F3's parts; whether F2 is needed | `design/saves.md` |
-| PR3 | Bare reactions in living bodies on `benchZ` at the gene's pace: by reaction, in stands and animals, the moles, heat and gas a year against the world's flows; the eaters' self-burning against their upkeep (PR-A's number again); variants (d), (a), (b) on 3 seeds with the key numbers; `denature` against each variant's factors; dry litter's rot under (d); dormant bodies; the cost of a stand and an animal update | its table | B1's variant and numbers (L9) | `design/no-rot.md` |
+| PR3 | Bare reactions in living bodies (running now): on `benchZ` at the gene's pace, by reaction, in stands and animals, the moles, heat and gas a year; the eaters' self-burning against their upkeep (PR-A's number again); **the frozen points** of 1, 21, 26 under today's rule and under (d')'s test on the real rate, `X` from 1e6 up; **`denature`**: today's form against the two-state form on the eaters (at 310 K, at `COOL_T`, the share of eater updates above `DENATURE - 10 K`); **rot by moisture class** (the ground's dead matter and the mineral 24 on land for m 0 to 0.2, 0.2 to 0.5, 0.5 to 1; the parts' walls' life on globe36); **bodies with genes of 1 or 21 between 0 and log10 `X`**; the cost of a stand and an animal update; (b) and (d') on 3 seeds with the key numbers, dormant bodies, S50; globe36 with life | its table | B1's law: (b), (d') or not built, then the design review of lane B (L9) | `design/no-rot.md` |
 | PR6 | A decision and a habit by stage (perceive, inputs, think, learn, walk, options, pick, spread, the take); `take_node` by part (`wanted`, `intake`, `body::pay`: `Payer::at` and `spend`, the ground's heat); faces walked per decision by kind | its table | D1 (payer over 1% of the year), D2 | `design/perception.md` |
 | PR7 | The air on globe36 and the size-28 globe, 4 x 4 against 6 x 4 and 8 x 4: the air's instructions by part, Newton rounds a step, the band solve; the 4T year and the busiest domain's share; the globe test; globe36 with life, 3 seeds, 30 years: zonal rain and land temperature by row | its table | E1 | `design/air.md` |
 | PR8 | The parts' reactor on globe36: per call the sub-steps, the halvings (`MAX_DT_K`), the reactions that run and the one that limits, what a part holds; calls a year | its table | G1 | `design/parts.md` |
@@ -120,12 +125,15 @@ Each lane is its own part of the code, its own agent and worktree; the lanes mer
 | F3 | The tape's rewrite cheaper: `series.csv` and `months.csv` appended (a resumed run cuts them to the world's day), the viewer's file at gzip `fast`, the rest PR1 names | 1 (the files hold the same rows) | tape tests (resume equals unbroken); the tape's column of a 300-year island run, carried to 1,000 years, -60% | a 1,000-year island run's wall time a year under -4% |
 | F2 | Only if the saves and the tape are still over 2% of a long run's wall time after F3: the compression and the write on one writer thread (bytes made on the main thread, one job in flight, `.part` then rename) | 1 | as F3; the main thread's share under 1% | under -1% of a long run's wall time a year |
 
-**Lane B: living bodies do not rot** (`worldgen/src/chem0.toml`, `worldgen/src/life/make.rs`; `design/no-rot.md`)
+**Lane B: living bodies do not rot** (`design/no-rot.md`): **B1's law chosen by PR3 among (b) and (d'), then a
+design review** of lane B (L9). Files by the choice: (b) `core/src/body/physics.rs`; (d') `worldgen/src/chem0.toml`,
+`worldgen/src/life/make.rs`, `core/src/change/kernel.rs`.
 
 | ID | What | Level | Done when | Kill line |
 |---|---|---|---|---|
-| B1 | **A law, variant (d):** reactions 1 and 21 written as 26 is: their bare `k` divided by `X` (PR3's number; 26 uses 1e6) and their `open` times `X`, so the open world's decay is unchanged and a living body's decay falls under the frozen rule; the founders' catalyst genes of 1 and 21 raised by log10 `X` (`LITTER_X`'s rule), so a body's catalysed burning is unchanged. No body code. `numbers.md` rows of 1, 21 and their `open`; `laws.md` 2.1, 2.4, 6.8, 6.9; handover 13.2's "inside bodies" item closed; snapshot bumped (the chemistry is saved in `World`, L29); `denature` on the larger factors accepted as a law effect on hot bodies, reported by PR3 (L32) | 4 | what must hold, below; golden re-pinned; a stand update and an animal update 1T -10% on a turned save | the year 1T under -3% on island22, or a climate key out: variant (b) or not built |
-| B2 | Only if PR3 shows the reactor's setup on a body with nothing to run still over 1% of the year after B1: `Reactor::react` returns at once when no reaction can run (inside the reactor, not a second end of `physics::react`) | 1 on B1's world | an animal update 1T -3% | under -1% of the year |
+| B0 | The design review of lane B after PR3: it reads PR3's table and chooses (b), (d') or "not built", with `X`, the skip share and the heat-damage law where they apply; `no-rot.md` rewritten to the choice | none | the review's verdict; L9 rewritten to the choice | none |
+| B1 | **A law, as B0 chose.** (b): in `body::physics::react` a decomposers' reaction (`open > 1`: 1, 21, 26) gets factor 0 when its gene is off, a catalysed burning 0 (it runs on demand); 22, 23, 25 as today; heat damage by the stated law. (d'): 1 and 21 written as 26 (`k / X`, `open · X`, every body's genes of 1 and 21 raised by log10 `X`), the frozen test on the real rate against a named skip share (a level-2 rule for every node), the two-state `denature` (`1 + (f - 1) / (1 + e^z)`, L32); snapshot bumped (L29). `laws.md` 2.1, 2.4, 6.8, 6.9; handover 13.2's "Inside bodies" item closed; `numbers.md` rows of what changes | 4 | what must hold, below; golden re-pinned; a stand update and an animal update 1T -10% on a turned save | the year 1T under -3% on island22, or a climate key out: not built |
+| B2 | Only if worth 1% of the year after B1 (and after G1, L34): `Reactor::react` returns at once when no reaction can run (inside the reactor, not a second end of `physics::react`) | 1 on B1's world | an animal update 1T -3% | under -1% of the year |
 
 **B1 must still hold:** the climate keys (land, swing, rain, gas, rivers, worn land) and the light-eaters' two in range;
 the eaters' two in range, or new references taken with the cause said (L19: today their bare self-burning is 5 to 8
@@ -133,11 +141,13 @@ times their Kleiber upkeep, an artifact of a litter constant run inside them); S
 long-step test; the pace and batch tests; the nodes check; `the_eaters_live_and_stop_growing`;
 `a_century_keeps_its_books`; globe36 with life (3 seeds, 30 years) for the climate. **Watch:** eaters do not eat most
 of the plants' production (handover 13.2); bodies with activity under 1% that outlive a few of their kind's lives
-(counted at year 30 and in the 1,000-year runs); dry litter (moisture 0) now decays slowly: the gas 3 from dry land.
-**Tests that change:** `a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses` (its heat made counts no
-bare burning); `chemistry0.rs` and `numbers.rs` where they read the rows of 1 and 21; a new test
-`a_living_body_runs_no_decay_but_its_own_catalysts` (a body with its burning genes off keeps its matter and solid
-over a year at 300 K; the same matter on moist ground rots at its litter constant; at fire's heat it burns).
+(counted at year 30 and in the 1,000-year runs); under (d'): the ground's dead matter and the mineral 24 on land that is
+not fully moist, and the parts' walls. **Tests that change:**
+`a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses` (its heat made counts no bare burning); a new
+test `a_living_body_runs_no_decay_but_its_own_catalysts` (a body with its burning genes off keeps its matter and solid
+over a year at 300 K; the same matter on moist ground rots at its litter constant); under (d') `chemistry0.rs`,
+`numbers.rs` where they read 1 and 21, and a test of the two-state unfolding; under (b) a test of the stated heat-damage
+law.
 
 **Lane C: plants as a cover** (`design/cover.md`, its section 7; decisions L23 to L28, L30). "Counted" = callgrind on one
 thread, one year from the benches remade at the step's snapshot (`make_benches.sh`), seeds 1 to 3, with
@@ -171,7 +181,7 @@ reference. The cover's tests of its own chemistry are written after B1 if B1 lan
 
 | ID | What | Level | Done when | Kill line |
 |---|---|---|---|---|
-| E1 | Air nodes wider than tall on a globe: blocks of `sx x 4` squares, `sx` the largest divisor of the row from 5 to 8 (globe36 6, size 28 and the test globe 8), else 4 x 4; the island and regions keep 4 x 4. `World::air_scale` a pair; snapshot bumped; handover 7.2, 7.4; `laws.md` 1.4 | 4 | what must hold, below; counted work on same-seed worlds: the air's instructions a year -8% on globe36, -15% on the size-28 globe; the 4T year not slower on globe36 | globe36 4T slower, or the size-28 globe's air under -5% |
+| E1 | Air nodes wider than tall on a globe: blocks of `sx x 4` squares, `sx` the largest divisor of the row from 5 to 8 (globe36 6, size 28 and the test globe 8), else 4 x 4; the island and regions keep 4 x 4. `World::air_scale` a pair; snapshot bumped; handover 7.2, 7.4; `laws.md` 1.4. **Built only if PR7 shows it worth 3% of the size-28 globe's year** (L12) | 4 | what must hold, below; counted work on same-seed size-28 worlds: the year 1T -3%; the 4T year not slower on globe36 and on size 28 | the size-28 globe's year 1T under -3% (counted), or a 4T year slower: not built, lane G is the alternative |
 
 **E1 must still hold:** `a_globe_without_life_keeps_an_earth_like_climate`; globe36 with life, 3 seeds, years 21 to 30:
 land temperature and rain on land within their seeds' noise, zonal rain and land temperature by row within 1 K and 15%,
@@ -183,7 +193,7 @@ mountains, ice at the poles). **Tests that change:** `core/tests/space.rs` gains
 
 | ID | What | Level | Done when | Kill line |
 |---|---|---|---|---|
-| G1 | The cut PR8 names (for example a part's heat stage that halves its sub-steps far less often, or its six months run as Change runs a ground node); level by the probe | 1 to 3 | the parts' reactor 1T -50% on globe36 | globe36's year 1T under -1.5% (a law form: under -3%) |
+| G1 | The cut PR8 names (for example a part's heat stage that halves its sub-steps far less often, or its six months run as Change runs a ground node); level by the probe; on B1's world if B1 lands first (its walls rot by B1's law, L34) | 1 to 3 | the parts' reactor 1T -50% on globe36 | globe36's year 1T under -1.5% (a law form: under -3%) |
 
 **Lane reviews.** After each lane's last step: an adversarial review, then a fixer, until accepted (section 6).
 
@@ -218,7 +228,7 @@ mountains, ice at the poles). **Tests that change:** `core/tests/space.rs` gains
 ```
 Phase P   R0 ─ PR1, PR3, PR6, PR7, PR8, C0 (side by side) ─► review P (section 1 restated, gates)
 Phase 1   F: F1 ─ F3 ─ (F2) ──────────────────────────────────┐
-          B: B1 ─ (B2) ───────────────────────────────────────┤
+          B: B0 (design review after PR3) ─ B1 ─ (B2) ─────────┤
           C: C1 (the bound on kinds) ─ C2 (the stages) ─ C3 ─ G-C ┤
           D: (D1) ────────────────────────────────────────────┼─► lane reviews
           E: E1 ──────────────────────────────────────────────┤
@@ -235,7 +245,8 @@ Phase Z   the end (section 4) ─► final review
 - C1 then C2, each its own law step with its gate on the whole year; C2 takes new key-number references (L26).
 - D2 comes after G-C, on the world the cover leaves.
 - B1, C1 (snapshot 50 in its design), C2 (51) and E1 bump the snapshot: the number is the highest plus one at each merge.
-  G1 and B2 both touch `change/kernel.rs`: one at a time.
+- `change/kernel.rs` (L34): B1, if it edits the kernel ((d')), lands before G1; B2 after both; each re-pins golden.
+  B1 is the base of G's walls: if B1 lands first, PR8's walls' numbers run again on its world before G1 is judged.
 - F touches only `tape/` and `cli/`; it lands any time (level 1).
 - Merges into `speed/lighter` one at a time; golden re-pinned by the step that changes it; the snapshot version the
   highest plus one. If `main` moves, it is merged in at the next lane review (L1).
@@ -243,7 +254,8 @@ Phase Z   the end (section 4) ─► final review
 ## 6. Reviews
 
 The cycle is: plan, adversarial review, implement, adversarial review, fix, until accepted. Review rounds sit:
-1. **After this plan** (done: `decisions.md`, "Answers to the first review"; `cover.md` reviewed and rewritten).
+1. **After this plan** (done twice: `decisions.md`, "Answers to the first review" and "... second review"; `cover.md`
+   reviewed and rewritten twice). Lanes C, D, E, F, G and phase P accepted; lane B after its own review (B0).
 2. **After phase P:** section 1 restated, gates go or no go.
 3. **After each lane's last step** (F, B, D, E, G): the lane's diffs, tests and measures against its rows; each review
    of a level-4 lane runs the key-number test against the reference.
@@ -259,7 +271,7 @@ claim) and ends with a verdict; a fixer answers each finding; the review runs ag
 |---|---|
 | `CLAUDE.md` table row "Lighter world (in progress)" | the first merged step |
 | `docs/tape.md` (a run's year holds its saves and pictures, in the next year's row; how the tape is written); `measures.md` of the last round, Z 3's sentence | F1, F3, F2 |
-| `laws.md` 2.1 (a living body runs no decay but its own catalysts), 2.4, 6.8 (heat burns matter at fire's heat), 6.9; handover 13.2 "Inside bodies" closed; `numbers.md` reactions 1, 21 and their `open`, `LITTER_X` | B1 |
+| `laws.md` 2.1 (the decomposers' decay does not run in a living body), 2.4 (under (d'): the two-state unfolding, the genes of 1 and 21 useful from log10 `X`), 6.8 (heat damage: (b)'s stated law, or under (d') ended until fire's own reaction at M4), 6.9; handover 13.2 "Inside bodies" closed; `numbers.md` rows of what changes | B1 |
 | handover 7.1, 7.3; `laws.md` 4, 6 (what a plant is) | C (from `design/cover.md`) |
 | `laws.md` 5.2 (what a body perceives), if D2 is a law | D2 |
 | handover 7.2 and 7.4 (air nodes on globes, domains); `laws.md` 1.4 | E1 |
@@ -272,8 +284,8 @@ claim) and ends with a verdict; a fixer answers each finding; the review runs ag
 |---|---|
 | B1 changes the eaters' energy budget (their bare self-burning is 5 to 8 times their upkeep, PR-A, an artifact) | PR3 measures it again on `benchZ`; the eaters' references may be re-taken with the cause said (L19); the plants must not be eaten out |
 | B1 moves the land as P1.2 did (-0.78 K, not explained) | PR-M's prototype ran stands with no bare reactions and moved the land +0.13 K (v1); PR3 reads 3 seeds and hunts reaction by reaction only if the mean moves past the seeds' noise |
-| B1 under (d) leaves dry litter rotting slowly (the open world's bare rate falls too) | PR3 reads the gas 3 from dry land; if it matters, (d) is set with a smaller `X` |
-| A catalyst factor `X` times larger unfolds more steeply under `denature` (it works on log f) | PR3 checks a hot body's catalysed rate under (d) against today's; a heat-killed enzyme now leaves almost nothing, not the bare rate |
+| Under (d') dead matter rots slower on land that is not fully moist (the factor is `1 + (open - 1) m`), which moves the mineral 24 and lime on land and the parts' walls | PR3 reads them by moisture class; B0 weighs it against (b), which keeps the open world as it is |
+| A catalyst factor `X` times larger would unfold more steeply under today's `denature` (it works on log f), for every warm body | (d') comes with the two-state `denature`, which does not depend on `f`'s size (L32); PR3 measures it on the eaters |
 | A dormant body (activity near 0) never dies once nothing burns it bare | the watch in B1's checks |
 | S50 rises when stored solid no longer burns bare | reported in PR3 and B1, with its cause |
 | The cover fails its gate late | C1 alone if it passed its own lines; else A3, A4, D2 in phase 2; the round then gives a few percent (section 1) |
@@ -288,8 +300,10 @@ claim) and ends with a verdict; a fixer answers each finding; the review runs ag
 
 Core at the round's start: 10,443 code lines (X88; the cover's designer counted 10,444; R0 counts it), ceiling 10,643.
 Budgets by lane: the cover C1 about +23 net, C2 about +113 net (`cover.md` 7: net about +136, to about 10,580; it
-cannot delete more than it adds, as the node code stays for the animals, L4); F 0 (tape and cli only); B1 0 (data and
-worldgen), B2 at most +10; D1 at most +10, D2 at most +20; E1 at most +40; G1 at most +30; C4 by its probe. **The
-whole plan comes to about +246, about 10,690, past the ceiling by about 50:** the round may pass the ceiling by what the
-cover needs, each step saying its lines in its commit, and phase Z sets the new ceiling (the lines then plus 200, X88's
-rule) (L31). The lanes that land after the cover fit what is left or say how many lines they add and why.
+cannot delete more than it adds, as the node code stays for the animals, L4); F 0 (tape and cli only); B1 (b) about
++10, (d') about +25 (the frozen test, the two-state unfolding), B2 at most +10; D1 at most +10, D2 at most +20; E1 at
+most +40; G1 at most +30; C4 by its probe. **The whole plan comes to about +260, about 10,700, past the ceiling by
+about 60, and the crossing comes from the lanes after the cover, not from the cover** (about 10,580). The step that
+would cross raises `CEILING` (`cli/tests/core_size.rs`), `CLAUDE.md` 2.11 and handover 14.3 in its own commit, by the
+lines it needs, with a decision that gives the number; E1 and G1 shrink first where they can; phase Z sets the round's
+ceiling (the lines then plus 200, X88's rule) (L31).

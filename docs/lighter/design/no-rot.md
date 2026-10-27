@@ -1,6 +1,7 @@
 # Idea 3: living bodies do not rot (lane B)
 
-Steps: PR3, B1, B2 (`plan.md` section 4). Decisions: L5, L9, L19. Handover 13.2 lists it as the owner's choice: "The
+Steps: PR3, then a design review of lane B, then B1 and B2 (`plan.md` section 4). Decisions: L5, L9, L19, L32 to L34.
+**B1's law is not chosen yet:** PR3 chooses between (b) and (d') below, or "not built" with its alternative (L9). Handover 13.2 lists it as the owner's choice: "The
 litter constants also run inside living bodies (real living stems and bones do not rot)." The owner now says yes.
 
 ## 1. What the code does today
@@ -31,68 +32,97 @@ its own matter is 5 to 8 times its upkeep (`c_basal` is anchored to Kleiber), so
 Kleiber, most of it this artifact (21's bare rate rises x3 to x7 from 290 to 300 to 310 K). On `benchZ` the bodies'
 reactor called from their day is 6.4% / 5.0% / 7.0% of `run_for`.
 
-## 2. What changes
+**The frozen rule reads the bare constant only.** `frozen_below` freezes a reaction below `Ea / ln(k · year /
+NEGLIGIBLE)` (`NEGLIGIBLE` 1e-12, `year` in seconds): no catalyst, no contact, no orders. So today 1 is frozen only
+below 142 K, 21 below 135 K, 26 below 190 K: in every living body (270 to 320 K) all three run, 26 too.
 
-**B1, a law (level 4), variant (d):** write 1 and 21 as 26 is written.
-- Their bare `k` is divided by `X` and their `open` multiplied by `X`. `Ea` stays, so the decomposers' decay in a moist
-  open node keeps its rate and its temperature law exactly (`k · open` unchanged). PR3 picks `X`: large enough that the
-  frozen rule skips the bare decay at every living body's temperature (26 uses 1e6; for 21 at 1e6 the bare rate is
-  under 1e-5 a year at 320 K), small enough that matter still burns at fire's heat (21 at 700 K: 6e-3 /s at 1e6).
-- The founders' catalyst genes of 1 and 21 rise by log10 `X` (the rule `LITTER_X` states), so a body's catalysed
-  burning (`Body::rate_at`), the catalysts' upkeep (`k.cats`: `contact_rates` times `f`) and product inhibition stay as
-  set. Catalyst genes have room up to 18 (`body/genes.rs`).
-- **No body code changes.** A gene that is off gives `cr` = 1, and a breathing burning in `react` gets 1: both are then
-  colder than the frozen point and skipped. 22, 23 and 25 keep running in a body's liquid as real chemistry; at fire's
-  heat matter still burns by 21 (`laws.md` 6.8 keeps its sentence, with "at fire's heat").
-- The chemistry is saved in `World`, so the snapshot is bumped (L29: an old save would run its old chemistry). B1 is judged per
-  update on a turned save (a measuring branch rewrites the chemistry and raises the genes at load).
+**`denature`** (`kernel.rs`) keeps a catalyst factor as `f^(1/(1+e^z))`, `z = (T - td)/unfold`, `unfold` 3 K: the loss
+grows with `ln f`, so the share of the rate an enzyme keeps near its `DENATURE` gene depends on how large `f` is.
 
-**Docs and tests.** `numbers.md` rows of 1, 21 and their `open` (the anchor: Olson's constant is the decomposers'),
-`LITTER_X`'s doc; `laws.md` 2.1 ("no decomposer works in a body" gains: "the decay of 1, 21 and 26 is the decomposers'
-work, so a living body runs it only by its own catalysts"), 6.8, 6.9; handover 13.2's "Inside bodies" item closed (the
-rock salt still falls out of a body as lime: real chemistry). Tests: `a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses`
-(its heat made counts no bare burning), `chemistry0.rs` and `numbers.rs` where they read 1 and 21, a new
-`a_living_body_runs_no_decay_but_its_own_catalysts`.
+## 2. The two candidates (PR3 chooses; then a design review)
 
-**Variants PR3 sets beside it** (body code, kept only if (d) fails):
-- (a) no bare rate inside a body at all: a body's factor `(f - 1) a`. It needs a new heat-damage law (21's bare rate is
-  the only one, `laws.md` 6.8) and its unfolding must be `denature(1 + (f - 1) a) - 1` with `Reactor::rates` not
-  unfolding it again (the review: `denature` pulls a factor above 1 toward 1, the bare rate);
-- (b) only the decay (1, 21, 26) gets factor 0 in a body, by body code.
-(c) (stands only) is dropped: tissue would rot by kind.
+**What the first plan said, and why it does not hold (variant (d), the second review S1 to S5).** (d) divided the bare
+`k` of 1 and 21 by `X` and multiplied their `open` by `X`, the founders' genes raised by log10 `X`, "no body code". But:
+- the frozen rule reads `k e^(-Ea/T)` against 1e-12 of a year, so at `X` 1e6 reaction 1 is frozen only below 190 K
+  and 21 below 171 K (1e8: 214 and 187 K; 1e12: 287 and 232 K): **nothing is skipped in a living body**, so (d) gives
+  no speed; freezing at 320 K needs `X` about 1.6e13 (1) and 4.4e16 (21), past the catalyst genes' top of 18;
+- a factor `X` times larger unfolds more steeply under today's `denature` for every warm body (an eater at its `COOL_T`
+  315 K, `td` 320 K: 48% of its rate today, 5% at `X` 1e6), so the temperature law of all bodies would hang on `X`, a
+  speed number;
+- heat damage at fire's heat: with the order 6 of the oxidising gas, 21 at 700 K and `X` 1e6 runs about 16 a year
+  (5e-7 /s), a half-life of two weeks, not a fire (the first note's "6e-3 /s" left out the orders);
+- the open world's decay is unchanged only in fully moist nodes: the factor is `1 + (open - 1) m`, so under (d) dead
+  matter (21, `open` 5) rots 17% slower at m = 0.5, 44% at m = 0.2, not at all at m = 0;
+- genes of 1 and 21 between 0 and log10 `X` are "on" (they put the reaction in `k.burn`) but burn about nothing.
 
-**B2 (level 1, only if PR3 shows it worth 1% of the year after B1):** `Reactor::react` returns at once when no reaction
-can run (inside the reactor; `physics::react` stays whole). Under (d) `rates` already breaks at the first sub-step, so
-B2 may not be needed.
+So (d) as written is dropped. Two candidates remain.
+
+**(b) The decomposers' reactions do not run in a living body (body code).** In `body::physics::react`, a reaction
+whose decay is the decomposers' (`open > 1`: 1, 21, 26) gets factor 0 when its gene is off, and a catalysed burning
+gets 0 in `react` (it runs on demand in `body::pay`); 22, 23, 25 run as today. The data do not change, so the open world
+is unchanged at every moisture. **Heat damage** (`laws.md` 6.8: "heat burns matter by reaction 21", today the bare rate
+of 21 in a body) must then be kept by a stated law in the same commit: the bare part of 21 above a temperature where
+matter itself breaks down (an anchored number, about where proteins and walls char), or "heat damage of bodies ends
+until fire's own reaction at M4", said plainly. Speed: the reactor of an animal runs nothing it needs; of a stand,
+only its catalysed reactions and 22, 23, 25.
+
+**(d') The decay in `open`, with an honest frozen test and the two-state `denature` (data plus kernel code).**
+- The data of (d): 1 and 21 written as 26 (`k / X`, `open · X`, the founders' and every body's genes of 1 and 21
+  raised by log10 `X` in the turned save);
+- **the frozen test reads the rate the reactor would use:** `cr · k e^(-Ea/T)` times the reaction's contact and orders
+  (`pace`) over the call's time, against a skip share: a speed number with a name, a one-line doc and a `numbers.md`
+  row, larger than 1e-12. A level-2 rule for every node (ground, parts, bodies) in `change/kernel.rs`;
+- **the two-state `denature`:** an enzyme is folded and works, or unfolded and does not (Lumry and Eyring 1954): the
+  factor is `1 + (f - 1) / (1 + e^z)`, the folded share times the catalysed part, so unfolding no longer depends on
+  how large `f` is. Part of the law in B1's commit (`laws.md` 2.4, `kernel.rs`'s doc).
+- Costs, stated in B1's commit if chosen: dead matter rots slower on land that is not fully moist (above), which moves
+  the mineral 24 and lime on land and the parts' walls; heat damage of bodies ends below about 1,000 K (fire needs its
+  own abiotic reaction at M4; `laws.md` 6.8 says so); the useful range of the genes of 1 and 21 starts at log10 `X`
+  (`laws.md` 2.4).
+
+**"Not built"** if neither holds the climate keys and gives about 3% of the year (L2). Its alternative: the reactor
+cheaper for what bodies do run (B2 and G1's kernel work), and handover 13.2's item stays open for the owner.
+
+**B2 (level 1, only if worth 1% of the year after B1):** `Reactor::react` returns at once when no reaction can run
+(inside the reactor; `physics::react` stays whole).
+
+**Docs and tests (either candidate).** `laws.md` 2.1 (the decomposers' decay does not run in a living body), 2.4, 6.8,
+6.9; handover 13.2's "Inside bodies" item closed; `numbers.md` rows of what changes; tests:
+`a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses` (its heat made counts no bare burning), a new
+`a_living_body_runs_no_decay_but_its_own_catalysts` (a body with its burning genes off keeps its matter and solid over
+a year at 300 K; the same matter on moist ground rots at its litter constant); under (d') `chemistry0.rs` and
+`numbers.rs` where they read 1 and 21, and a test of the two-state unfolding.
 
 ## 3. Risks
 
 - **The eaters' budget.** Without their bare self-burning they need far less food: they may grow until they eat most
-  of the plants' production (handover 13.2), and their key numbers (5.354 ± 0.5 log10 kg; life 10.47 yr x/ 2) will
-  likely leave their ranges. That is the honest effect (L19: new references with the cause said); the plants must not
-  be eaten out (the watch).
-- **`denature` under a larger factor.** It keeps `f^(1/(1+e^z))`: on a factor `X` times larger, a half-unfolded enzyme
-  keeps a smaller share of its rate (at `td`, 1e-4 of it for f = 1e8, against 0.1 for f = 1e2). A heat-killed enzyme
-  now leaves almost nothing, not the bare decay: accepted as a law effect on hot bodies (L32); PR3 reports it.
-- **Dry litter.** In the open world a dry node (moisture 0) has `cr` = 1: under (d) its decay falls `X` times (real dry
-  litter decays slowly too). Less gas 3 from dry land; PR3 reads it.
+  of the plants' production (handover 13.2), and their key numbers will likely leave their ranges. That is the honest
+  effect (L19: new references with the cause said); the plants must not be eaten out.
+- **Unfolding.** Under (d') the two-state form changes every body's rate near its `DENATURE` gene (today's form keeps
+  48% at 5 K below it for f = 100; the two-state form keeps 85%). PR3 measures it on the eaters (key numbers, the share
+  of eater updates above `DENATURE - 10 K`).
 - **Dormant bodies.** Upkeep and ageing go with activity; a dry body no longer loses anything bare. Watch bodies with
   activity under 1% that outlive a few of their kind's lives.
-- **S50**, the light-eaters' stored share, rises if stored solid no longer burns bare (0.558 now, "under 0.5" wanted).
-- **The land.** P1.2 moved it -0.78 K, cause not found; P1.2 changed several things at once. PR-M's prototype ran stands
-  with no bare reactions: v1 moved the land +0.13 K (292.27 and 292.28 against 292.14), S50 0.573, light-eaters 10.43 to
-  10.44; v2's -0.52 K was put on its heat stage (`measures.md`, "PR-M"). So the bare reactions are not the known cause.
+- **S50** rises if stored solid no longer burns bare (0.558 now, "under 0.5" wanted).
+- **The land.** P1.2 moved it -0.78 K, cause not found; its prototype PR-M ran stands with no bare reactions and moved
+  the land +0.13 K (v1); v2's -0.52 K was put on its heat stage (`measures.md`, "PR-M"). PR3 reads 3 seeds.
+- **The kernel** (d') is shared by every node and by lanes G and B2: one at a time, B1 first (L34).
 
-## 4. What PR3 must show first
+## 4. What PR3 must show (running now)
 
-On a branch (the chemistry and the genes turned at load for (d); a switch for (a) and (b)):
+On a branch (switches for (b) and (d'); the chemistry and every body's genes of 1 and 21 turned at load for (d')):
 1. On each `benchZ` save, one year, one thread, at the gene's pace: per reaction, in stands and animals apart, the
-   moles, heat and gas a year; the eaters' self-burning against their upkeep (PR-A's number again, on today's world).
-2. The cost of a stand update and an animal update under (d), (a), (b).
-3. The key numbers on 3 seeds under (d) (and (a), (b) if (d) fails), with S50, the minerals in bodies, the gas 3 from
-   dry land, dormant bodies; globe36 with life (3 seeds, 30 years) for the climate. Reaction by reaction only if the
-   3-seed land mean moves past the seeds' noise.
-4. `denature`: a body above its `DENATURE` gene, its catalysed release today and under (d).
-5. `X`: the frozen points of 1 and 21 at 1e4, 1e6, 1e8, against the warmest living bodies.
+   moles, heat and gas a year; the eaters' self-burning against their upkeep (PR-A's number again).
+2. **The frozen points** of 1, 21 and 26 under today's rule (the review's table) and under (d')'s test on the real
+   rate, against the warmest living bodies; `X` from 1e6 up.
+3. **`denature`:** today's form against the two-state form, on the eaters at 310 K and at their `COOL_T`, and the share
+   of eater updates above `DENATURE - 10 K`.
+4. **Rot by moisture class:** the ground's dead matter and the mineral 24 on land by moisture class (m 0 to 0.2, 0.2 to
+   0.5, 0.5 to 1) under (d'), and the parts' walls' life on globe36.
+5. **Genes of 1 or 21 between 0 and log10 `X`:** the living bodies that hold one on `benchZ`, by kind.
+6. The cost of a stand update and an animal update under (b) and (d').
+7. The key numbers on 3 seeds under (b) and (d'), with S50, the minerals in bodies, dormant bodies; globe36 with life
+   (3 seeds, 30 years). Reaction by reaction only if the 3-seed land mean moves past the seeds' noise.
 
-**Gate for B1:** (d) with the climate keys in range and the year 1T -3% on island22.
+**Then a design review of lane B** chooses (b), (d') or "not built", with its numbers, before B1 is written.
+**Gate for B1:** the climate keys in range and the year 1T -3% on island22.

@@ -379,17 +379,17 @@ times the kinds per km² (the scale test).
 
 | | Decision |
 |---|---|
-| D1 | Settled (decision 9): the cover with stages, after the bound on young-adult pairs. |
-| D2 | Settled: `cell_kinds` = 3 (the owner's three forms; with the newcomer place at most 4 kinds a cell). |
-| D3 | Settled (second round): at most `cell_kinds` + 1 kinds, a new kind starts while fewer are held; past `cell_kinds` kinds with adults the most alike pair merges monthly, without the `alike` limit, so the place comes free and invasions repeat. |
-| D4 | Settled (names that clash with nothing): `Body::young`, `Young`, `Config::cell_kinds`; "cover" only in docs. |
-| D5 | Proposed: one law (the McKendrick flux by `math::Pass`) with two holders, node pairs for animals (their young and adults act apart) and stages for covers; `rejoin` is the one place that pools size moments. Said in `laws.md` 4.4. |
-| D6 | Proposed: counted parts on remade benches (above), no converter of old saves. Why: a converter is code nobody keeps, and the counted parts are robust to the world's noise. |
-| D7 | Proposed: new key-number references on C2's commit, for the steps after it (the cover changes the world). |
-| D8 | Proposed: accept that `CHILD`, `MUT`, `DISPERSE`, `WET`, `ALLOC` are selected only between kinds and cells, with C0's number (the adult mass from unlike litters) and the 1,000-year watch. No C5: `sample_every` 1 cannot reach them (`select::UNREAD`). |
-| D9 | Settled: idea 2 and A1 dropped before the cover; B1 and C in any order. |
-| D10 | Snapshot 50 in C1 (a `Config` field), 51 in C2 (a `Body` field); benches remade at each. |
-| D11 | Proposed: the tape column `root_<K>_adults` (share of members that are adults): one column to watch the stages. |
+| D1 | **Decided, L35.** The cover with stages, after the bound on young-adult pairs. |
+| D2 | **Decided, L17.** `cell_kinds` = 3 (the owner's three forms; with the newcomer place at most 4 kinds a cell). |
+| D3 | **Decided, L23.** At most `cell_kinds` + 1 kinds, a new kind starts while fewer are held; past `cell_kinds` kinds with adults the most alike pair merges monthly, without the `alike` limit, so the place comes free and invasions repeat. |
+| D4 | **Decided** (names that clash with nothing; the architect's first decisions, 9): `Body::young`, `Young`, `Config::cell_kinds`; "cover" only in docs. |
+| D5 | **Decided, L25.** One law (the McKendrick flux by `math::Pass`) with two holders, node pairs for animals (their young and adults act apart) and stages for covers; `rejoin` is the one place that pools size moments. Said in `laws.md` 4.4. |
+| D6 | **Decided, L24.** Counted parts on remade benches (above), no converter of old saves. Why: a converter is code nobody keeps, and the counted parts are robust to the world's noise. |
+| D7 | **Decided, L26.** New key-number references on C2's commit, for the steps after it (the cover changes the world). |
+| D8 | **Decided, L27.** Accept that `CHILD`, `MUT`, `DISPERSE`, `WET`, `ALLOC` are selected only between kinds and cells, with C0's number (the adult mass from unlike litters) and the 1,000-year watch. No C5: `sample_every` 1 cannot reach them (`select::UNREAD`). |
+| D9 | **Decided, L5, L6, L15, L18.** Idea 2 and A1 dropped before the cover; B1 and C in any order. |
+| D10 | **Decided, L29.** Snapshot 50 in C1 (a `Config` field), 51 in C2 (a `Body` field); benches remade at each. |
+| D11 | **Decided, L28.** The tape column `root_<K>_adults` (share of members that are adults): one column to watch the stages. |
 
 ## 10. Answers to the review (`review-cover.md`)
 
