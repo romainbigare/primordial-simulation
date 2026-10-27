@@ -806,3 +806,100 @@ Branch `lighter/hp1-not-kept` (`c45730b`, `c2a49f8`; `lighter/hp1-v1`). Plants s
 mass) as chemistry 0 makes lime cheaper than frame; island22's year +40% (light-eater bodies 2.3 times the base by year
 300). HP2 not built. L47.
 
+
+## Z: the year in instructions
+
+**How.** Callgrind, one year, one thread (`RAYON_NUM_THREADS=1`), `ew resume --years 1 --monthly-years 0
+--frames-every 100000 --every 100000`. The start: `$L/ew-base` (the code of `cb6db47`) on `benchZ` (made at `cb6db47`,
+snapshot 49). The end: `speed/lighter` at `1abddae` on benches made with its own build, **`$L/benchZ50`** (snapshot 50;
+`make_benches.sh`; island22 300 years, globe36 and region24 200 years, seed 1). The year's total comes from the plain
+builds. The parts come from a measuring build of each (not kept; scratch script `$L/z/tools/mark.py`): the same code
+with `#[inline(never)]` on the year's parts and the body update split in two by the body's brain, so stands and animals
+are counted apart. It ends on the same hashes as the plain build and costs 0.06% to 0.11% more. Each build runs its own
+world, so the worlds differ (H1, B1, L1 changed laws, and the benches were made again): across remade worlds only
+large cuts count (PR-S: about 19% island22, 11% globe36). The cost of one update is the steadier measure.
+
+The year (`schedule::run_for`), millions of instructions:
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| start (`ew-base`, `benchZ`) | 4,932 | 5,393 | 10,365 |
+| **end (`1abddae`, `benchZ50`)** | **4,339** | **4,183** | **9,284** |
+| change | **-12.0% (x1.14)** | **-22.4% (x1.29)** | **-10.4% (x1.12)** |
+| the kept steps added, each on its own base (`plan.md` 1) | about -8.9% | about -7.6% | about -9.3% |
+| all instructions of the run (with the load of the save and the last snapshot) | 6,104 / 5,489 | 6,602 / 5,151 | 12,875 / 11,990 |
+
+By part (inclusive, millions; share of the year in brackets; "points" is the change as a share of the start's year):
+
+| Part | island22 start / end | points | globe36 start / end | points | region24 start / end | points |
+|---|---|---|---|---|---|---|
+| bodies (the batch: updates and landing) | 3,453 (69.9%) / 2,874 (66.2%) | -11.7 | 3,073 (56.9%) / 2,411 (57.6%) | -12.3 | 7,728 (74.5%) / 6,646 (71.5%) | -10.4 |
+| of it: animal updates | 1,976 (40.0%) / 1,708 (39.3%) | -5.4 | 1,738 (32.2%) / 1,318 (31.5%) | -7.8 | 4,422 (42.6%) / 4,160 (44.8%) | -2.5 |
+| of it: stand updates | 1,068 (21.6%) / 967 (22.3%) | -2.1 | 1,002 (18.6%) / 931 (22.2%) | -1.3 | 2,492 (24.0%) / 2,011 (21.6%) | -4.6 |
+| of it: the landing (`survey::land_all`) | 344 (7.0%) / 156 (3.6%) | -3.8 | 265 (4.9%) / 125 (3.0%) | -2.6 | 671 (6.5%) / 354 (3.8%) | -3.1 |
+| the survey | 266 (5.4%) / 203 (4.7%) | -1.3 | 273 (5.1%) / 196 (4.7%) | -1.4 | 582 (5.6%) / 455 (4.9%) | -1.2 |
+| the air | 673 (13.6%) / 715 (16.5%) | +0.9 | 1,135 (21.0%) / 989 (23.6%) | -2.7 | 1,162 (11.2%) / 1,190 (12.8%) | +0.3 |
+| the liquid (`liquid` + `sink`) | 132 (2.7%) / 126 + 23 (3.4%) | +0.3 | 191 (3.5%) / 159 + 28 (4.5%) | -0.1 | 213 (2.0%) / 201 + 41 (2.6%) | +0.3 |
+| Change | 373 (7.6%) / 355 (8.2%) | -0.4 | 413 (7.7%) / 354 (8.5%) | -1.1 | 612 (5.9%) / 643 (6.9%) | +0.3 |
+| parts (Bond's month) | 0 / 6.5 (0.1%) | +0.1 | 257 (4.8%) / 2.2 (0.1%) | -4.7 | 15 (0.1%) / 58 (0.6%) | +0.4 |
+| the tape (12 months' records, outside `run_for`) | 86 (1.7%) / 86 (2.0%) | 0 | 100 (1.8%) / 85 (2.0%) | -0.3 | 163 (1.6%) / 164 (1.8%) | 0 |
+
+One update, thousand instructions (updates in the year in brackets):
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| an animal update, start / end | 156.0 (12,665) / 129.6 (13,175): **-17%** | 151.6 (11,469) / 131.4 (10,028): **-13%** | 158.1 (27,969) / 123.6 (33,649): **-22%** |
+| a stand update, start / end | 85.9 (12,437) / 80.5 (12,008): -6% | 86.8 (11,534) / 85.9 (10,839): -1% | 87.9 (28,340) / 82.6 (24,329): -6% |
+
+The worlds of the benches (from the benches' logs): island22 1,750 / 1,713 bodies, 373 / 381 animal nodes, 0 / 6
+parts; globe36 1,777 / 1,525 bodies, 426 / 311 animal nodes, **573 / 14 parts**; region24 3,919 / 3,679 bodies, 809 /
+959 animal nodes, 17 / 42 parts.
+
+**Verdict.** The year on one thread is 12% (island22), 22% (globe36) and 10% (region24) shorter. The part that comes
+from the round's steps is the per-update work: an animal update 13% to 22% cheaper (H1's children in lumps, with the
+landing after the batch about half of what it was), a stand update 1% to 6% cheaper (B1's skip), together 10 to 12
+points of the year. The rest is the world: globe36's start bench holds 573 parts whose reactor (PR8) is 4.8% of its
+year, the end's bench 14, and fewer animal nodes (311 against 426); its air is 13% cheaper on a calmer world. On
+island22 and region24 the air, the liquid (L1's sink, +0.4 to +0.7%) and Change grow a little as shares, as the bodies
+shrink. The snapshot at the end of the run (588 to 608 M on island22) is on the writer thread at the end (F2) and on
+the main thread at the start; it is not in the year.
+
+## Z: the slow suite
+
+The build is `speed/lighter` at `1abddae`. Each heavy thing ran alone from this worktree; another agent built and ran
+tests beside it (load 4 to 7).
+
+| Check | Result |
+|---|---|
+| `cargo test --release --workspace --no-fail-fast -- --ignored` (16 minutes) | 17 slow tests: **16 pass, 1 fails: `the_key_numbers_stay_in_their_ranges`, only on S50 (known)** |
+| `RAYON_NUM_THREADS=1 cargo test --release -p tape --test golden` | passes: the three runs end on their pinned fingerprints |
+| `CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo test --release --workspace --no-fail-fast --target-dir target/dbg` | 199 passed, 0 failed, 17 ignored (the slow ones) |
+| `cargo test -p tape --test golden` (plain debug build, no LTO) | passes |
+
+Pass: `nodes_and_individuals_make_the_same_world`, `the_pace_of_nodes_keeps_life`, `the_batches_of_bodies_keep_life`,
+`the_long_step_keeps_the_climate`, `a_globe_without_life_keeps_an_earth_like_climate`,
+`the_sleep_of_change_keeps_the_chemistry` (S84: it now states the bias it accepts, `c9f263a`, and passes),
+`the_eaters_live_and_stop_growing`, `the_ground_under_dense_canopies_stays_near_its_neighbours`,
+`a_century_keeps_its_books`, `speed`, `the_laws_do_not_depend_on_the_size_of_the_cells`,
+`selection_moves_a_nodes_brain_size`, `genes_do_not_drift_without_selection`, `individuals_mode_merges_no_animal`,
+`an_island_loses_ground_at_a_real_rate`, `body_learns_to_move_toward_what_it_can_take`.
+
+The key numbers (mean of 3 seeds; the same as at L1, as the world has not changed since):
+
+| Number | Now | Reference | Start of the round (`speed-x10` Z 1) |
+|---|---|---|---|
+| ground temperature on land | 292.10 K (291.43, 292.61, 292.28) | 291.79 +-1 | 292.16 |
+| seasonal swing on land | 15.30 K | 15.13 +-1.5 | 15.33 |
+| rain on land | 0.001809 mol/m2/s | 0.001714 x/ 1.3 | 0.001819 |
+| heat-absorbing gas | 412.0 ppm | 388.8 +-40 | 412.3 |
+| river cells | 696.8 | 712.4 x/ 1.5 | 695 |
+| land worn down | 0.1471 mm/yr | 0.141 x/ 2 | 0.1337 |
+| light-eaters | 10.24 log10 kg | 10.38 +-0.3 | 10.25 |
+| eaters | 5.18 log10 kg | 5.354 +-0.5 | 5.24 |
+| life of light-eaters | 1.36 yr | 1.81 x/ 2 | 1.38 |
+| life of eaters | 12.85 yr | 10.47 x/ 2 | 13.26 |
+| light-eaters' stored share (S50) | 0.559 (0.563, 0.559, 0.553) | under 0.5: OUT (known) | 0.558 |
+
+**Verdict.** Nothing new fails. S50 is the one failure, as known, at 0.559 (0.558 at the start). S84 no longer fails:
+its test states the bias the owner accepts. The books, the overdraw and view checks and the golden test (with and
+without threads, release and plain debug) all pass.
