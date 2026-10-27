@@ -190,7 +190,7 @@ These are not numbers of the world and not rows of `Physics` or `Config`, but th
 
 ## Constants outside the structs that act like free numbers
 
-These are in the code, not in `Physics`. They are not covered by the test. Numerical safeguards (`T_FLOOR`, `MAX_DT_K`, `NEGLIGIBLE`...) and the schedules of the slow work (`REFRESH_MONTHS`, `REACT_MONTHS`...) are left out: they change how fast or how exactly the laws run, not the laws' sizes.
+These are in the code, not in `Physics`. They are not covered by the test. Numerical safeguards (`T_FLOOR`, `MAX_DT_K`, `NEGLIGIBLE`, `TOO_SLOW`...) and the schedules of the slow work (`REFRESH_MONTHS`, `REACT_MONTHS`...) are left out: they change how fast or how exactly the laws run, not the laws' sizes.
 
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|

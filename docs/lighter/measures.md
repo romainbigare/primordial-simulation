@@ -233,3 +233,77 @@ change of rounding, and the test had 2.5% of room. Six halve the variance. On th
 | winter, K | 0.274, -0.042, 0.196, 0.011, -0.019, 0.097 | 0.086 | 0.3 |
 
 Rain, gas 3 and rivers stay far within their year-to-year spread. It passes.
+
+## B1: the skip of tiny bare reactions
+
+**What.** In a body's reactor (`change/kernel.rs`, `Reactor::rates`; stands and animals alike, and the sample member's
+day), a bare reaction (catalyst factor at most 1) whose rate, contact and orders included, would use less than
+`TOO_SLOW` = 3.6e-5 of its scarcest input over the world's year is skipped. It books nothing, so the books stay exact.
+It counts over the year, like the frozen rule beside it, so it does not depend on the length of a body's update (its
+`INTERVAL` gene, node or individual, `batch_days`): the first form counted over the call (1e-6 a call), which made the
+same body run another chemistry by its interval (review of B1, finding 1). 3.6e-5 a year is that first form at a
+10-day call. Ground, air and parts' nodes pass no catalysts and are not touched. It replaces the law "living bodies do
+not rot", which probe PR3 found makes the world heavier (branch `probe/pr3`, its `measures.md`).
+
+**Why a `const`, not a `Physics` number.** It is a speed tolerance like `NEGLIGIBLE`: it says how exactly the reactor
+runs, not how large a law is (named in `numbers.md` among the safeguards). At living temperatures it skips per call
+about 3.4 to 4.6 of the 11.4 to 11.9 reactions a stand runs and 5.7 to 6.6 of an animal's 12.1 to 13.3: the frame
+rotting and splitting (26, 27), the mineral breaking down hot (25), charring where cool (4, in part), the light and
+fixing reactions where they run bare, and 2, 3, 6 (probe PR3, its section 2).
+
+**Cost** (callgrind, one thread, one year from the `benchZ` saves; base `$L/ew-base`; calls from the call tree):
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| the year (`run_for`), base / B1, M | 4,932 / 4,823 (**-2.2%**) | 5,393 / 5,348 (**-0.8%**) | 10,365 / 10,120 (**-2.4%**) |
+| a body reactor call, base / B1, k (calls) | 12.06 / 9.77 (**-19.0%**; 26,307 / 26,220) | 11.82 / 9.40 (**-20.5%**; 22,908 / 22,923) | 12.10 / 9.66 (**-20.2%**; 59,688 / 59,655) |
+| a body's day `to_growth`, base / B1, k (calls) | 53.5 / 50.0 (-6.5%; 27,161 / 27,090) | 52.7 / 49.0 (-6.9%; 24,764 / 24,816) | 54.0 / 50.1 (-7.2%; 60,925 / 60,876) |
+| the cheaper day times the base's days, share of the year | -1.9% | -1.7% | -2.3% |
+| `Reactor::react` in all (bodies, ground, air), M | 551 / 489 (-11.2%) | 755 / 697 (-7.7%) | 1,114 / 968 (-13.1%) |
+
+About a third of the day's gain is outside the reactor: a skipped reaction moves no gas, so the day's later stages skip
+those moves. The rest of the year's change is the slightly different world after a year (hashes `83fe7c125bb6f508`,
+`d54531013bf7aec3`, `f645b07365c67e1d`): -0.3% on island22, +0.8% on globe36, -0.1% on region24.
+
+**Kill line** (under -1% of the year on island22 and region24): passed, -2.2% and -2.4% (the cheaper day alone: -1.9%
+and -2.3%).
+
+**Level 3.** The skipped fluxes are real, if tiny (at most 3.6e-5 of an input a year, a one-sided bias that ends at
+death, when the matter goes to the ground), and life's choices amplify them, so the world moves by more than rounding.
+Golden re-pinned. Probe PR3's paired runs of the first form (32 x 32, 30 years, seeds 1 to 6) moved the land +0.012
+± 0.004 K; the eaters' life -1.7 ± 0.8 years (2 standard errors) is noise, as the key numbers below have it +0.07
+years. The key numbers (64 x 64, seeds 1 to 3):
+
+| Number | B1 | today (speed x10, "Z: the final checks" 1) | reference |
+|---|---|---|---|
+| land | 292.17 K | 292.16 | 291.79 ± 1 |
+| swing | 15.30 K | 15.33 | 15.13 ± 1.5 |
+| rain on land | 0.001818 | 0.001819 | 0.001714 x/ 1.3 |
+| gas 3 | 412.4 ppm | 412.3 | 388.8 ± 40 |
+| river cells | 699 | 695 | 712.4 x/ 1.5 |
+| land worn down | 0.1344 mm/yr | 0.1337 | 0.141 x/ 2 |
+| light-eaters | 10.25 log10 kg | 10.25 | 10.38 ± 0.3 |
+| eaters | 5.21 log10 kg | 5.24 | 5.354 ± 0.5 |
+| life of light-eaters | 1.42 yr | 1.38 | 1.81 x/ 2 |
+| life of eaters | 13.33 yr | 13.26 | 10.47 x/ 2 |
+| S50 | 0.558 (known out) | 0.558 | under 0.5 |
+
+**The batch test** (2 against 10 days, mean of seeds 1 to 3) passes: plant members +0.4%, light-eaters' kg -0.06%,
+births +1.2%, their life -0.03 yr, gas 3 -3e-8, each far within its noise. The globe's climate test passes.
+
+**The long-step test passes** on six worlds (the step before this one): the land 0.262 K off, against 0.259 K on the
+base, limit 0.3 K. Per seed, default steps against short ones, K:
+
+| reactor | seeds 1, 2, 3 | seeds 4, 5, 6 | mean of six |
+|---|---|---|---|
+| base (`07897b6`) | 0.398, 0.103, 0.377 | 0.261, 0.210, 0.207 | 0.259 |
+| B1 | 0.424, 0.164, 0.329 | 0.230, 0.193, 0.231 | **0.262** |
+
+Single seeds move by up to ±0.06 K between reactors that differ by under 1e-6 of a flux a call, in both directions, so
+the skip does not warm the land. On seeds 1 to 3 alone B1 would read 0.305 K: that is why the test went to six.
+
+**Tests.** `a_body_skips_the_same_tiny_reactions_whatever_its_calls` (`core/tests/change.rs`) states the skip: a year
+in 360 calls and in 9 makes the same products and moves each starting store by the same amount to within 1e-3 (the
+rest is the reactions run one after the other in a call), the frame not at all, each call exact in elements and energy;
+it fails with no skip (the frame rots) and would fail with the per-call form (charring runs in 40-day calls, not in
+1-day ones). `catalysts_fail_when_hot` takes its bare reference outside a body (`None`) and asserts it is above 0.

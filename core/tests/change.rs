@@ -165,12 +165,12 @@ fn a_node_on_its_melting_plateau_reacts_at_its_melting_point() {
 }
 
 /// A body's catalyst works below the temperature where it loses its shape, and a few K above it the reaction goes
-/// about as fast as bare in a body (all catalysts off; at once, for a catalyst that loses its shape over no width).
+/// about as fast as bare (a dry node: no catalyst; at once, for a catalyst that loses its shape over no width).
 #[test]
 fn catalysts_fail_when_hot() {
     let (chem, _) = worldgen::chemistry0();
     let mut rc = Reactor::new(&chem, &cfg());
-    let (mut cat, off) = (vec![1.0; chem.reactions.len()], vec![1.0; chem.reactions.len()]);
+    let mut cat = vec![1.0; chem.reactions.len()];
     cat[1] = 1e6;
     let mut used = |t: f64, c: Option<(&[f64], f64, f64)>| {
         let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
@@ -179,12 +179,50 @@ fn catalysts_fail_when_hot() {
         rc.react(&chem, &mut n, Some(&mut gas), &mut e, HUGE_CAP, c, 0.0, 1.0);
         1e6 - gas[OX]
     };
-    let (cool, cool_bare) = (used(310.0, Some((&cat, 320.0, 3.0))), used(310.0, Some((&off, 320.0, 3.0))));
-    let (hot, hot_bare) = (used(340.0, Some((&cat, 320.0, 3.0))), used(340.0, Some((&off, 320.0, 3.0))));
-    assert!(cool > 1e5 * cool_bare && hot < 1.2 * hot_bare, "310 K: {cool:e} vs bare {cool_bare:e}; 340 K: {hot:e} vs bare {hot_bare:e}");
+    let (cool, cool_bare) = (used(310.0, Some((&cat, 320.0, 3.0))), used(310.0, None));
+    let (hot, hot_bare) = (used(340.0, Some((&cat, 320.0, 3.0))), used(340.0, None));
+    assert!(cool_bare > 0.0 && cool > 1e5 * cool_bare && hot < 1.2 * hot_bare, "310 K: {cool:e} vs bare {cool_bare:e}; 340 K: {hot:e} vs bare {hot_bare:e}");
     // With no width it is whole up to its temperature and gone above it.
     let (sharp_cool, sharp_hot) = (used(310.0, Some((&cat, 320.0, 0.0))), used(340.0, Some((&cat, 320.0, 0.0))));
     assert!(sharp_cool >= cool && sharp_hot == hot_bare, "no width: 310 K {sharp_cool:e}, 340 K {sharp_hot:e}");
+}
+
+/// In a body a bare reaction too slow to matter over the world's year is skipped (`kernel.rs`, `TOO_SLOW`), whatever
+/// the length of the body's calls: a year in 360 calls and in 9 runs the same reactions (it makes the same products)
+/// and moves each store it starts with by the same amount to within 1e-3 of that amount (what is left is the reactions
+/// run one after the other in each call), the frame (its bare rot is far under the skip) not at all, and each call
+/// keeps its elements and energy.
+#[test]
+fn a_body_skips_the_same_tiny_reactions_whatever_its_calls() {
+    let (chem, _) = worldgen::chemistry0();
+    let mut rc = Reactor::new(&chem, &cfg());
+    let (bare, year) = (vec![1.0; chem.reactions.len()], cfg().calendar().year as f64);
+    let start = |n: &mut Vec<f64>| (n[RICH], n[FRAME], n[LIQUID]) = (1000.0, 1000.0, 1000.0);
+    let mut run = |calls: usize| {
+        let (mut n, mut gas) = (vec![0.0; chem.ns()], air_over_m2(&chem, 400.0));
+        start(&mut n);
+        let mut e = 300.0 * HUGE_CAP;
+        for _ in 0..calls {
+            let (el0, en0) = node_totals(&chem, &n, &gas, e);
+            rc.react(&chem, &mut n, Some(&mut gas), &mut e, HUGE_CAP, Some((&bare, 320.0, 3.0)), 0.0, year / calls as f64);
+            let (el1, en1) = node_totals(&chem, &n, &gas, e);
+            let kept = (0..chem.n_elements).all(|j| (el1[j] - el0[j]).abs() <= 1e-12 * el0[j].max(1.0)) && (en1 - en0).abs() <= 1e-12 * en0.abs();
+            assert!(kept, "a call of {calls} lost elements or energy");
+        }
+        n
+    };
+    let (many, few) = (run(360), run(9));
+    let mut held = vec![0.0; chem.ns()];
+    start(&mut held);
+    assert!(many[FRAME] == held[FRAME] && few[FRAME] == held[FRAME], "the frame moved: {} and {}", many[FRAME], few[FRAME]);
+    assert!(many[RICH] < 0.9 * held[RICH], "the solid's bare rot ran: {} left", many[RICH]);
+    for k in (0..chem.ns()).filter(|&k| held[k] > 0.0) {
+        let moved = (many[k] - held[k]).abs();
+        assert!((many[k] - few[k]).abs() <= 1e-3 * moved, "substance {k}: {} in 360 calls, {} in 9, of {}", many[k], few[k], held[k]);
+    }
+    for k in (0..chem.ns()).filter(|&k| held[k] == 0.0) {
+        assert!((many[k] > 0.0) == (few[k] > 0.0), "substance {k}: {} made in 360 calls, {} in 9", many[k], few[k]);
+    }
 }
 
 /// Dead matter in the wet open world goes with what there is of it (first order: the same share lost for 1 and 1,000

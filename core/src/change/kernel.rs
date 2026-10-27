@@ -4,6 +4,9 @@ use crate::{chem::{Chemistry, Phase, Reaction}, math::{add_times, one_minus_exp}
 
 /// A reaction whose fraction over the world's year stays below this is frozen and skipped.
 const NEGLIGIBLE: f64 = 1e-12;
+/// In a body, a bare reaction (catalyst factor at most 1) whose rate would use less than this share of its scarcest
+/// input over the world's year is skipped: a speed tolerance, as `NEGLIGIBLE` but on the rate the reactor would use.
+const TOO_SLOW: f64 = 3.6e-5;
 /// Largest temperature change in one sub-step, K.
 const MAX_DT_K: f64 = 30.0;
 /// Sub-steps of one `react` that are shortened to keep within `MAX_DT_K`; one more takes all the time left.
@@ -29,6 +32,8 @@ const PHASES: [Phase; 3] = [Phase::Solid, Phase::Liquid, Phase::Gas];
 pub struct Reactor {
     /// Temperature below which a reaction is frozen (catalyst 1), K (`frozen_below`).
     thr: Vec<f64>,
+    /// The world's year, s.
+    year: f64,
     /// Enthalpy change per reaction unit, J.
     dh: Vec<f64>,
     /// Per reaction: does it store absorbed light (light-driven and taking energy)? And its inputs, a bit per substance.
@@ -168,6 +173,7 @@ impl Reactor {
         let dh: Vec<f64> = (0..nr).map(|r| chem.dh(r)).collect();
         let mut rc = Reactor {
             thr: chem.reactions.iter().map(|rx| frozen_below(rx, year)).collect(),
+            year,
             lit: chem.reactions.iter().zip(&dh).map(|(rx, &d)| rx.light && d > 0.0).collect(),
             needs: chem.reactions.iter().map(|rx| rx.inputs.iter().fold(0, |m, &(k, _)| m | 1 << k)).collect(),
             light_yield: cfg.phys.light_yield,
@@ -307,7 +313,8 @@ impl Reactor {
     }
 
     /// The rate `kap`, limit `lim` and power `pw` of each reaction at `t` that is not frozen and has all its inputs (with
-    /// light, for one that stores it). Returns whether any can run.
+    /// light, for one that stores it), and in a body is not bare and too slow to matter over a year (`TOO_SLOW`). Returns
+    /// whether any can run.
     fn rates(&mut self, chem: &Chemistry, tot: &[f64; 3], t: f64, cat: Option<(&[f64], f64, f64)>, light: f64) -> bool {
         self.on.clear();
         for (r, rx) in chem.reactions.iter().enumerate() {
@@ -322,7 +329,11 @@ impl Reactor {
             }
             let (lim, q) = scarce(&rx.inputs, |k| self.av[k]);
             if lim > 0.0 {
-                self.kap[r] = cr * rx.arrhenius(t) * self.pace(rx, lim, tot);
+                let kap = cr * rx.arrhenius(t) * self.pace(rx, lim, tot);
+                if cat.is_some() && cr <= 1.0 && kap * self.year < TOO_SLOW {
+                    continue;
+                }
+                self.kap[r] = kap;
                 self.lim[r] = lim;
                 self.on.push(r);
                 // In a liquid or a gas the power is its order less 1, as far as it is not most of its phase.

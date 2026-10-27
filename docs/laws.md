@@ -246,7 +246,9 @@ what its pores hold at field capacity, at most 1 (`FlowView::moist`, the bucket 
 ground's; an air node has none. `open` is 1 for most reactions; 200 for reaction 1 (the free sugar's rot, about a
 week); 5 for 21 (body matter rots 3.8 times faster than the frame); 10^6 for 26 (the frame rots by the decomposers
 only: bare, a millionth of that). No decomposer works in a body: it runs its reactions by its own catalysts.
-`change::pace` is the one formula for all nodes.
+`change::pace` is the one formula for all nodes. **Frozen**: a bare reaction whose rate constant k exp(−Ea/T) would
+use under 1e-12 of an input over the world's year is skipped in every node (`frozen_below`, `NEGLIGIBLE`), a speed
+tolerance.
 
 ### 2.2 Where it runs
 **Ground and air nodes** (`change::step`, `Reactor::react`) react when due over all the time since, at Flow's last
@@ -272,6 +274,12 @@ made·τ/eq) / (1 + used·τ/eq). So dead matter on the sea floor rots as fast a
 - **Burnings** (catalysed, release heat, take a gas) run on demand to pay costs (`body::plan`, `body::pay`). A reaction
   that keeps part of a fuel's energy in its product (`Chemistry::keeps`, fixing) runs at its catalyst's pace. **Fuel**
   (`Body::burns_at`) is a non-gas store a burning takes. Enzymes cost upkeep by their capacity, used or not (6.2).
+- **Too slow to matter**: in a body a bare reaction (factor at most 1) whose rate, contact and orders included,
+  would use less than 3.6e-5 of its scarcest input over the world's year is skipped (`kernel.rs`, `TOO_SLOW`), a
+  speed tolerance like the frozen rule (2.1), which reads the rate constant alone. At living temperatures it skips
+  about half of a body's bare reactions (the frame rotting and splitting, the mineral breaking down hot, charring
+  where cool). It counts over the year, so it does not depend on the length of a body's updates. Only bodies: the
+  ground and the air sleep by their own rates (2.2), and the open world's rot must stay whole.
 
 ### 2.5 Phases and the freezing law
 Solid, liquid or gas by melting and boiling points (`Chemistry::phase`). A liquid's melting point in a mixture falls by
