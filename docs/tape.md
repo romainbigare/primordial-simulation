@@ -107,7 +107,7 @@ worn edges, structures, true colour (r, g, b).
 | Column | Unit | Meaning |
 |---|---|---|
 | `ms_flow`, `ms_change`, `ms_bodies`, `ms_parts` | ms/yr | wall time in Flow, in Change, in the bodies (survey and body batches) and in the parts since the last row |
-| `ms_tape` | ms/yr | wall time in the tape itself (the months recorded and the files written since the last row, so not the row's own month) |
+| `ms_tape` | ms/yr | wall time in the tape itself since the last row: the months recorded, the snapshots and the files written. The row's own month, and the snapshot and files written after the row (at a decade's end), land in the next row. The pictures and the yearly check are not timed |
 
 ## `series.csv`: by starting kind
 

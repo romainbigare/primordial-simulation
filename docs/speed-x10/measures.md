@@ -3232,7 +3232,7 @@ The architect decides: pick a seed or a window where births happen, or find why 
 
 `ew run <world> --seed 1 --years 1000 --out <dir> --monthly-years 0 --frames-every 100000 --every 100000`, 4 threads,
 one run at a time. "Per year" is the run's own line (`1000 years in ... s`); it is the mean of the 1,000 years and holds
-the snapshot a run writes every 10 years (the tape column, about 35 to 50 ms). Life grows, so the last years cost more:
+the tape's files a run writes every 10 years (the tape column, about 35 to 50 ms); the snapshot is not in it (it is timed from the round "Lighter world" on). Life grows, so the last years cost more:
 the second line of each cell is the mean of years 901 to 1000 from `series.csv` (flow + change + bodies + parts + tape).
 
 | | island, `--size 22` | globe, `--globe --size 18` | region, `--size 24 --region 8,8,8,8` |

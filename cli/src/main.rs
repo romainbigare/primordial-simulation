@@ -112,7 +112,9 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
             render::save(&w, &format!("{out}/year{y:04}.png"));
         }
         if y % SNAP_EVERY == 0 || y == y0 + years {
+            let t = Instant::now();
             tape::save_snapshot(&w, &(&plan, rec.kept()), format!("{out}/snap_{y:05}.bin.gz")).expect("save snapshot");
+            clock.spent[TAPE] += t.elapsed();
         }
         // Write the tape so far with each snapshot, so a stopped run keeps its series and frames (the last year's is
         // written once the run ends).
