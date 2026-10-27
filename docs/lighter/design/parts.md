@@ -1,6 +1,6 @@
 # The parts' reactor (lane G)
 
-> **Status after phase P (L20):** G1 (the search start, level 1) is done; G2 (a part reacts as a ground node does, a law fix, about -3.5% of globe36) comes next with its own design and review.
+> **Status (L20):** G1 (the search start, level 1) is done (-1.18% of globe36). G2 (a part reacts its own share of the air, held with its ground's heat, one call a 6 months; level 4 for parts; about -2.5%, done-when -2%) gets its own design note, which answers the third review's T2 and T3, then a review.
 
 Steps: PR8, G1 (`plan.md` section 4). Decision: L20. The first review found this cost; no owner's idea named it.
 

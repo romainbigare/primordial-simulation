@@ -1,6 +1,7 @@
-# Lane H: the animals' bookkeeping in lumps (H1, H2; H4 a probe)
+# Lane H: the animals' bookkeeping (H1, H5; H4 a probe)
 
-Steps: H1, H2, H4 (`plan.md` section 4). Decision: L39. Probe: PA (`measures.md`, "PA"; branch `probe/pa`).
+Steps: H1, H5, then H4 (`plan.md` section 4). Decisions: L39, L41. Probe: PA (`measures.md`, "PA"; branch
+`probe/pa`). H2 (maturing in lumps) and H3 (`think_days` 40) are not built (L39).
 
 ## 1. What the code does today
 
@@ -33,53 +34,74 @@ copy mass) to the growth of this update (`grew` = log10 of now over before), spl
 
 **H1, children in lumps (a law step, level 4).** The brood fills at every update as today (growth, `ALLOC`, the
 losses with dead members). A **node** makes children at most once in a window of `Config::lump_days` (30, a speed
-number with its `numbers.md` row; the snapshot bumped): at the update whose window differs from the window of the update
-before it, the window of a day `t` being `floor((t + phase) / lump_days)` with `phase` = `id mod lump_days` (its own
-phase: no date that every body shares, so no world-wide pulse; no new state: the day before is `t - interval`). At that
-update it makes all the births its brood covers, as today's rule does (the brood above `BROOD_HELD`): so the mean flow
-of children is the same, in lumps of about three updates' worth, and `vary`, the rows and the join run once per lump
-with a larger `m`. Individuals keep making children at every update (individuals stay real; they are under 1% of the
-year); stands update every 40 days and so give birth at each update as today. `laws.md` 4.2 says it.
+number like `batch_days`, with its `numbers.md` row; the snapshot bumped).
+- **The window** is the world's batch index: `w = floor((batch + phase) / n)`, `n = lump_days / batch_days` (3), with
+  `phase = id mod n` (each node its own phase: ids are `domain << 40 | placed`, and the phases spread evenly; no date
+  that every body shares, so no world-wide pulse).
+- **The node keeps the window of its last lump** (one small `Body` field, 0 for a new node; a node that joins another
+  takes the receiver's, as a merge keeps the receiver's fields). It makes children at an update when `w` is past that
+  value, then sets it. So a node lumps at most once a window, and never skips a window it updates in, whatever its
+  interval gene does between updates (a rule on "the update before, `t - interval`" could lump twice or skip when the
+  gene changes).
+- At that update it makes all the births its brood covers, as today's rule does (the brood above `BROOD_HELD`): the
+  mean flow of children is the same, in lumps, and `vary`, the rows and the join run once per lump with a larger `m`.
+- **Dispersal:** one direction is drawn per birth call, as today (a node's dispersers go one way at a call; not one
+  draw per child today either). So a node's dispersers go one way a window instead of about two: the mean flow to each
+  neighbour is the same, its grain coarser. Not one draw per child: that would need an `emit` per direction, the cost
+  H1 removes. Checked: litters landing where no node of their kind is, and the eaters' range on globe36.
+- **The guard:** `Config::validate` refuses a `lump_days` that is not a multiple of `batch_days` or is over `node_days`
+  (stands update every `node_days` 40, so they give birth at each update as today).
+- Individuals keep making children at every update (individuals stay real; they are under 1% of the year).
+- `laws.md` 4.2 says it.
 
-**H2, maturing in lumps (a law step, level 4).** A young node runs its maturing flux at most once in its window (the
-same rule). Its growth over the window is kept in one `Body` field, the log10 growth of its mean member summed over
-the updates since its last flux (each update adds today's `grew`), so joins between fluxes (children, litters) change
-the size moments (`rejoin`) but not the growth; the flux uses the sum and resets it. The snapshot is bumped and the
-benches remade. `laws.md` 4.4 says it.
+**Its gain, an upper bound** (third review T1): an adult node makes children at 67% of its updates, about 24 birth
+updates a year with two `emit`s each; a window allows 12 lumps a year, so the calls fall by at most half: about **-4.4
+/ -2.9 / -4.9%** of the year (half of the children's 6.9 / 4.7 / 7.5% and of their litters' landing).
 
-**H4 (a probe, then maybe a step at level 1 or 2).** Count the joins whose joiner has the node's genes (a group that
-moved and joins a node of its own kind, a part that matured back into its adult node) or genes within rounding of
-them, and split `nodes::add`'s 21 thousand into the per-gene pooling, `prepare`, the rows' blend and `see`. A step only
-if a cheaper path for those joins (skip what pools to the same numbers) is worth L2's line.
+**H5, one draw per birth (level 2 or 3, L41).** `copy::copy` calls `emit` twice per birth, the dispersers and the
+stayers, and each draws the genes (`vary`) and the brain rows (`child_rows`) again. H5 draws them once for the birth and
+splits the members, the gap between the two groups' means going into their spread (`vary`'s spread left), so the
+mean and the variance of the litter are as one draw gives them. About -2.3 / -1.5 / -2.4% alone, about half of that
+after H1. No change of timing.
 
-## 3. Risks
+**H4 (a probe after H1 and H5, then maybe a step at level 1 or 2).** Count the joins whose joiner has the node's genes
+(a group that moved and joins a node of its own kind, a part that matured into its adult node) or genes within
+rounding of them, and split `nodes::add`'s 21 thousand into the per-gene pooling, `prepare`, the rows' blend and `see`.
+A step only if a cheaper path for those joins is worth L2's line; before the cover (both edit `nodes.rs`).
 
-- **The brood and the timing of births.** Children come up to a window later than today, and the brood waits longer:
-  it is lost with members who die in between (honest: a dead parent's brood dies with it), so births a year may fall a
-  little where deaths are high. The young node gets children in lumps, so its size spread and its maturing see a step
-  every window. Births a year, the young node's members and the eaters' key numbers must stay within their noise.
-- **No calendar rule.** A month is the world's clock step, not a season: the window is a step length, and each body's
-  window has its own phase from its id. A rule tied to a date shared by every body (all births at the month's first
-  batch) would make a world-wide pulse of births and of prey for the eaters of eaters: not built.
-- **Predators and prey.** Children that come in lumps are prey in lumps; a taker that meets a young node just after a
-  lump finds more. The nodes check and watch-for M1 (populations rise, fall and cycle) say whether that matters.
+**Not built: H2, maturing in lumps.** Its upper bound is about -2.1 / -1.4 / -2.1% (maturing comes at 69% of a young
+node's updates, about 2.1 fluxes a window), under a law step's 3%; and its field (the growth since the last flux)
+would need two rules the third review found missing: what a merge of two young nodes does with it (else the joiner's
+crossed members stay young above the copy mass), and a window of growth then loss (maturing is final; a summed growth
+would undo a crossing).
+
+## 3. Risks (H1)
+
+- **The brood and the timing of births.** Children come up to a window later than today, about 10 to 15 days later on
+  average, at a season's end into colder weather; the brood waits longer and is lost with members who die in between
+  (honest: a dead parent's brood dies with it), so births a year may fall a little where deaths are high. The young
+  node gets children in lumps. Births a year, **births by month** (`months.csv`), the young node's members and the
+  eaters' key numbers must stay within their noise.
+- **No calendar rule.** A month is the world's clock step, not a season: the window is a speed number, judged against
+  the per-update law (the nodes check against individuals), and each node's window has its own phase. All births at a
+  month's first batch would be a world-wide pulse of births and of prey: not built; the pulse test guards it.
+- **Predators and prey.** Children that come in lumps are prey in lumps. The nodes check and watch-for M1 (populations
+  rise, fall and cycle).
 - **The books.** Each lump is booked by today's code (`give`, `provisions`, `start`, `land_litter`) with a larger `m`;
   nothing new moves matter. `a_century_keeps_its_books` and the golden runs' books.
-- **H2's field.** The young and adult counts differ by up to a window of flux from today's; the field is new state
-  (the snapshot); a node that loses its young stage (all grown) resets it.
-- **Individuals against nodes.** Individuals keep today's per-update births; the nodes check compares the two: a
-  difference past the `--crowd` noise is a bug of the lumps (handover 7.1).
+- **Individuals against nodes.** Individuals keep per-update births; the nodes check compares the two: a difference past
+  its noise is a bug of the lumps (handover 7.1).
 
-## 4. What the law checks must show
+## 4. What the law checks must show (H1; H5 by the same list where it applies)
 
-For H1 and H2 each (seeds 1 to 3; counted on the remade benches):
-1. the counted year -3% (H1) and -2% on top (H2) on island22 and region24 (L2);
-2. the key numbers, the eaters within their range (5.354 ± 0.5; life 10.47 yr x/ 2);
-3. the nodes check (nodes against individuals), the pace and batch tests, `the_eaters_live_and_stop_growing`;
-4. births a year, the young nodes' members and the share of members that are young, within their seeds' noise;
-5. the books in every golden run and in `a_century_keeps_its_books`;
-6. the tests restated: the copy tests that make children in one update state the window
-   (`a_mature_nodes_children_gather_in_its_young_node`, `reproducing_updates_keep_elements_and_energy`), the maturing
-   tests state the flux over the window (`young_members_mature_at_the_rate_their_growth_gives`,
-   `any_spread_of_sizes_matures_a_share_of_the_young`); a new test: a node's births over 90 days are the same in lumps
-   as at every update, within the brood held.
+1. The counted year -3% on island22 and region24 (L2; the upper bound -4.4 / -4.9%).
+2. The key numbers, the eaters within their range (5.354 ± 0.5; life 10.47 yr x/ 2).
+3. The nodes check, the pace and batch tests, `the_eaters_live_and_stop_growing`.
+4. Births a year, births by month, the young nodes' members and the share of members that are young, within their
+   seeds' noise; litters landing where no node of their kind is, and the eaters' range on globe36.
+5. The books in every golden run and in `a_century_keeps_its_books`.
+6. Tests: the copy tests that make children in one update state the window
+   (`a_mature_nodes_children_gather_in_its_young_node`, `reproducing_updates_keep_elements_and_energy`); new: a node's
+   births over 90 days are the same in lumps as at every update, within the brood held; over N windows a node lumps at
+   most N times, also when its interval gene changes between updates; the pulse test: no batch holds more than about
+   one in `n` of the year's lumps, within a stated margin; `Config::validate` refuses a `lump_days` over `node_days`.
