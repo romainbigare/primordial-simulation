@@ -1,0 +1,81 @@
+# Idea 7: a coarser air on globes (lane E)
+
+Steps: PR7, E1, E2 (`plan.md` section 4). Decision: L12. The last round chose not to build a coarser air (X10,
+`docs/speed-x10/design/air.md` 0 and 6.5); this note says what changed and why the form here is different.
+
+## 1. What the code does today
+
+- **The air level.** One air node over a block of `AIR_SCALE`² = 4 x 4 squares (`worldgen/src/terrain.rs`,
+  `AIR_SCALE`; saved as `World::air_scale`; `World::mesh_of` builds the mesh with `Square::mesh(&[air_scale], ...)`).
+  `Square::mesh` (`core/src/space/square.rs`) numbers the blocks row by row, on a globe in the folded order (0, w-1, 1,
+  w-2, ...), "so the blocks either side of the wrap are numbered side by side and a banded solve of the level stays one
+  row wide", and asserts that a globe's row is a whole number of blocks. Globe36 (`--globe --size 18`: 36 x 18 squares)
+  has 9 x 5 = 45 air nodes; the size-28 globe (56 x 28) 14 x 7 = 98; the test globe of
+  `a_globe_without_life_keeps_an_earth_like_climate` (64 x 32) 16 x 8 = 128.
+- **The air's step** (`core/src/flow/air/step.rs`, `newton.rs`; `laws.md` 1.4): backward Euler by Newton's method; each
+  round makes every ground cell's row (`pass`, on the pool) and solves the air level's system by a banded solve
+  (`core/src/solve/band.rs`: "the cost is unknowns times the band squared"; the band is one row of air nodes wide).
+  A cell reads its four nearest air nodes bilinearly on the map (`flow/scratch.rs`, `tables`: distances from
+  `Mesh::on_map`, so any block shape works).
+- **Domains are the cells under one air node** (`life/mod.rs`, handover 7.4): each domain owns its bodies, its ring
+  and its view, and threads split by domain. A larger air node is a larger domain.
+
+**Where the time goes** (one thread, `benchZ`, the end's profile): the air (`flow::air`) is 11.0% / 17.2% / 9.0% of a
+whole run (island22 / globe36 / region24), 1,121 M on globe36 (21% of `run_for`); the Newton part (`newton.rs`, with
+the band solve) 199 M on globe36 (3.7% of `run_for`), 90 M on island22; the cells' rows (`pass`) 452 M on globe36
+after G11. Rounds a step on globe36: 3.25 (AIR1). On a 72 x 36 globe the last round measured 6.9 rounds and `solve` 99
+ms a year: the per-node part grows with the band's width, so it matters most on large globes, where the 15-minute
+planet lives (size 28 today).
+
+## 2. What changes
+
+**E1 (level 4): air nodes wider than tall on a globe.** A block of `sx x sy` squares: `sy` stays 4 (the air keeps its
+5 rows on globe36, 7 on size 28, 8 on the test globe: the rain belts and the heat carried to the poles stay), `sx` is
+about twice that and must divide the row (globe36: 6, so 6 x 5 = 30 nodes; size 28: 8, so 7 x 7 = 49; the test globe:
+8, so 8 x 8 = 64). The island and regions keep 4 x 4. The band is the row's nodes, so it is about half as wide: the
+band solve's cost (unknowns x band²) falls to about an eighth, the rest of the per-node work by about half.
+
+**The physical reason:** the map of a globe is equal-angle, so a cell at latitude φ is `cos φ` as wide as it is tall; at
+60° a 8 x 4 block is about as wide as tall in metres. Today's 4 x 4 nodes are tall and thin away from the equator, so
+wider nodes are closer to square there; the air's resolution in latitude, which carries the climate's bands, is kept.
+
+**Code.** `Square::mesh` takes a block shape per coarser level (`(sx, sy)`; the square case is `(s, s)`); `block` reads
+`x / sx` and `y / sy`; the globe's assert checks `w % sx`. `World::air_scale` becomes the pair (snapshot bumped);
+`terrain.rs` picks it (4 x 4, or `(sx, 4)` on a globe, `sx` the largest divisor of the row from 5 to 8: 8 on size 28
+and the test globe, 6 on globe36; a named `const` for the 8 with its one-line reason); `terrain.rs:282` (a node's centre row) reads `sy`. `core/tests/flow.rs:179` reads the width of the air
+level from the mesh. Domains follow by themselves (the cells under one air node).
+
+**E2 (level 2), only if E1 fails its climate checks:** a solve of the air level whose cost grows with the unknowns, not
+with the band squared, for globes of 1,500 cells and more (a preconditioned Krylov solve, or the band kept for small
+worlds); `docs/speed-x10/design/air.md` 6.5's second answer. Its gate: the band solve at least 10% of the air on the
+size-28 globe (PR7).
+
+## 3. Risks
+
+- **The climate.** Wider nodes smooth the east-west contrasts: monsoon-like land and liquid contrasts, rain behind
+  mountains in longitude, the wind's east-west part. Checks: the globe test; on globe36 (3 seeds, years 21 to 30) the
+  land's temperature and rain within their seeds' noise, zonal rain and land temperature by row within 1 K and 15%,
+  ice within its noise; watch-for M0 (rain belts, deserts behind mountains, ice at the poles). The orographic rain stays
+  (each cell takes its air at its own height, `step.rs`).
+- **Threads.** 30 domains on globe36 (45 today) and 49 on size 28: the busiest domain's share on 4 threads (R2: 0.189
+  on globe36) may rise. Line: at most 0.3; PR7 measures it.
+- **Rounds.** Fewer, larger nodes may need more or fewer Newton rounds; PR7 counts them. If the rounds rise, the gain
+  may vanish on globe36.
+- **The long-step test** runs on the island (unchanged by E1).
+- **The gain on globe36 is small** (about 1 to 3% of its year); E1 is for large globes. If it fails there, nothing is
+  lost but the probe.
+
+## 4. What PR7 must show first
+
+On a branch: `Square::mesh` with a block shape, `AIR_SCALE` set per run by an environment variable (probe only).
+1. On globe36 and on a size-28 globe (made at the start's code, 50 years, seed 1), one year, one thread, with
+   `#[inline(never)]` on `newton`'s parts: the air's instructions by part (`pass`, the gather and booking, the
+   Newton step, the band solve), rounds a step, the busiest domain's share; at 4 x 4 and at 6 x 4 (globe36) or 8 x 4
+   (size 28).
+2. The globe test (64 x 32) at 8 x 4.
+3. Globe36 at 4 x 4 and at 6 x 4, seeds 1 to 3, 30 years from worldgen: land temperature, rain on land, ice share, and
+   zonal rain and land temperature by row over years 21 to 30.
+
+**Gate for E1:** the climate checks of section 3 hold, the busiest share at most 0.3, and the air's instructions -10%
+on globe36 or -20% on size 28. Else E2's gate is read; if both fail, idea 7 is dropped and the owner told (the air on
+globes keeps 4 x 4).
