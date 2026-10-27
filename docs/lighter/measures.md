@@ -95,8 +95,8 @@ The long-run times of `docs/reports/speed-x10.md` leave the snapshots out; from 
 **What it does** (`tape/src/rec/`). The viewer's file is compressed at gzip level 1 (it was level 6); its header is
 written straight from the recorder's data (a struct, `serde_json::to_vec`), not through a JSON value tree; `series.csv`
 and `months.csv` get only the rows added since the last write (`csv.rs`), and are written whole only when their header
-line changed or at a resumed run's first write. `Recorder::finish` takes `&mut self` for the bookkeeping. The files
-hold the same rows. New test `csv_files_grown_year_by_year_are_those_written_at_once` (a kind that comes late changes
+line changed or at a resumed run's first write (the bookkeeping is a `Written` that the caller keeps; F2 gives it to
+the writer thread, `Recorder::finish` writes the whole tape). The files hold the same rows. New test `csv_files_grown_year_by_year_are_those_written_at_once` (a kind that comes late changes
 the header of both files between two writes); the resume test passes unchanged.
 
 **Same tape, same world** (1,000 years, island22, seed 1, the build before F3 against F3): the same hash
@@ -113,16 +113,17 @@ so the wall times of the two runs cannot be compared, but the parts of one run c
 | growth of a write, ms for each year of the run | 0.52 | 0.116 |
 | one write at year 500 | 255 ms | 41 ms |
 | all snapshots (100 saves, same code in both) | 6.6 s | 7.3 s (noise) |
-| CPU time of the process (user + sys) | 713 s | **660 s (-7.4%)** |
+| CPU time of the process (user + sys), one pair on a loaded machine | 713 s | 660 s (noise: the writes fell by 19 s, this by 53 s) |
 | wall time (loaded machine, not comparable) | 468 s | 540 s |
 
 One write at year 300, by part, F3 against the PR1 table: the file 22 ms against 114 ms (the header's compression 13 ms
 against 91, the header built and made bytes 5 ms against 13, the frames' compression 2 ms against 8), the three small
 files 2 ms against 15. In 300 years all writes cost 0.39 s against 2.0 s.
 
-**Verdict against the kill line (the long run's wall time a year under -1% in the brief, under -4% in the plan): passed both.** The writes fall by 19 s of a
-1,000-year run. The last report's quiet run of this island is 334 s, so that is -5.8% of the wall time; the CPU time
-of the process falls by 7.4% in the measure above. A wall-time pair on a quiet machine was not possible. What is left
+**Verdict against the kill line (the long run's wall time a year under -1% in the brief, under -4% in the plan): passed
+on an estimate.** The writes fall by 19.3 s of a 1,000-year run, read from the run's own timers. The last report's
+quiet run of this island is 334 s, so that is about -5.8% of the wall time. This is an estimate, not a wall-time
+pair: the machine was loaded, and the CPU pair above is noise. A quiet wall pair belongs to phase Z. What is left
 after F3, in a 1,000-year run: the snapshots 6.6 to 7.3 s and the tape's writes 5.6 s, about 12 s, which is 2.7%
 to 3.7% of a quiet run (334 s, or 12 s of the loaded runs' 468 s to 540 s: 2.2% to 2.6%). The gate of F2 is 2%.
 
@@ -139,10 +140,11 @@ bytes stays on the main thread.
 
 **What it does** (`cli/src/writer.rs`, `tape/src/snapshot.rs`, `tape/src/rec/mod.rs`). At each snapshot year the main
 thread fills a buffer with the snapshot's bytes (bincode, the buffer is kept for the next time) and copies the tape
-(`Recorder::tape`), and one writer thread compresses and writes them: the snapshot to a `.part` file that takes its
-name when whole, then the tape's files. One job at a time: the run waits for the last one before it starts the next
+(`Recorder::tape`), and one writer thread compresses and writes them: the tape's files, then the snapshot (so that a
+tape is never behind a snapshot). The snapshot and the viewer's file go to a `.part` file that takes its name when
+whole (`gzfile::write_gzip`). One job at a time: the run waits for the last one before it starts the next
 and at its end. `Recorder::finish` is the same call as before for one whole write (the tests and the exit on a broken
-state use it); the thread uses `Tape::write`, which keeps what the CSV files hold between jobs (`Written`). The files
+state use it); the thread uses `TapeFiles::write`, which keeps what the CSV files hold between jobs (`Written`). The files
 are the same: a 45-year run gives the same `snap_*.bin.gz` byte for byte, the same `months.csv`, the same `series.csv`
 (but the clocks) and the same viewer's file once read as the build before; a run resumed from its year 40 into the same
 folder gives the same files again.
@@ -168,15 +170,10 @@ The process's CPU time does not change (the work moved to the thread: 150 s agai
 
 **Wall time.** A pair of builds, 3 rounds of 300 years interleaved under the lock, gave medians of 150.3 s (F3) and
 148.2 s (F2); the machine was at load 8 to 15 on 4 cores from other agents' builds, and the runs differ by 30% among
-themselves, so this cannot tell 2%. The count above is the measure; a quiet machine should show it in wall time too,
-since the thread uses a core that the run leaves idle (the process uses 2.4 cores of 4 on average).
+themselves, so this cannot tell 2%.
 
-**Verdict against the kill line** (under -1% of a long run's wall time a year; the main thread's share under 1%):
-passed on the count, -2.0% of a 300-year run and about -3.3% of a 1,000-year run; not shown in wall time. After F2
-the saves and the tape cost the main thread 0.4% of a 300-year island run.
-
-## F1, the pictures
-
-The pictures every `--every` years (`render::save`) are timed in the tape's column too, so that a run's "per year" and
-its wall time agree. A picture costs 0.6 ms on the island (PR1), 0.05 s in 300 years: under 0.1% of a run. The yearly
-check (0.3 to 1.3 ms) is not timed.
+**Verdict.** F2 is judged on the count (the architect logs this): the main thread's part of the saves and the tape in
+a 300-year island run falls from 1.55 s to 0.15 s of CPU time, 2.4% to 0.4% of the run. This is an upper bound of the
+gain in wall time: the writer's 1.4 s of CPU now runs beside the four pool threads, and when it takes a core from a
+domain's thread the barrier of that batch waits. The process uses 2.4 cores of 4 on average, so a gain is likely, but
+it is not shown. A quiet wall pair (5 runs interleaved, 300 years) belongs to phase Z.

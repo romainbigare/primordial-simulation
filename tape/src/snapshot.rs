@@ -1,7 +1,7 @@
 //! Snapshots: the whole world and the shell's own state (`P`: what it still has to place, what its recorder keeps,
 //! `Recorder::kept`), in one file.
 
-use flate2::{read::GzDecoder, write::GzEncoder, Compression};
+use flate2::read::GzDecoder;
 use pcore::World;
 use serde::{de::DeserializeOwned, Serialize};
 use std::io::{self, BufReader, Read, Write};
@@ -14,8 +14,6 @@ const SNAPSHOT_VERSION: u32 = 49;
 /// Buffer between bincode and the decompressor, bytes: bincode reads 8 bytes at a time, and each call into the
 /// decompressor is slow.
 const BUFFER: usize = 1 << 20;
-/// Added to a snapshot's name while it is being written.
-const PART: &str = ".part";
 
 /// FNV-1a, 64 bits: offset basis and prime.
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
@@ -36,23 +34,9 @@ pub fn snapshot_bytes<P: Serialize>(w: &World, plan: &P, bytes: &mut Vec<u8>) ->
     bincode::serialize_into(&mut *bytes, plan).map_err(bad)
 }
 
-/// Write the bytes of a snapshot (`snapshot_bytes`) to `path` as gzip. They go to a file beside it that takes the name
-/// once whole, so a run that stops during the write leaves no half snapshot under the name.
+/// Write the bytes of a snapshot (`snapshot_bytes`) to `path` as gzip, whole or not at all (`gzfile::write_gzip`).
 pub fn write_snapshot(bytes: &[u8], path: impl AsRef<Path>) -> io::Result<()> {
-    let path = path.as_ref();
-    let mut part = path.as_os_str().to_owned();
-    part.push(PART);
-    let mut z = GzEncoder::new(std::fs::File::create(&part)?, Compression::fast());
-    z.write_all(bytes)?;
-    z.finish()?.flush()?;
-    std::fs::rename(part, path)
-}
-
-/// Save the world and the shell's state in one go: `snapshot_bytes`, then `write_snapshot`.
-pub fn save_snapshot<P: Serialize>(w: &World, plan: &P, path: impl AsRef<Path>) -> io::Result<()> {
-    let mut bytes = vec![];
-    snapshot_bytes(w, plan, &mut bytes)?;
-    write_snapshot(&bytes, path)
+    crate::gzfile::write_gzip(path.as_ref(), &[bytes])
 }
 
 /// Load a snapshot of this format version; caches come back empty and are rebuilt (the mesh from the map, each body's

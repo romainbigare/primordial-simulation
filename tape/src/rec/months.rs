@@ -170,6 +170,6 @@ impl Recorder {
         let [sp, sy] = std::mem::take(&mut self.month.spent);
         let values = [n, mean[0], mean[1], mean[2], mean[3], inside, tm / n.max(1.0), sp, sy / sp.max(MIN_SPENT)];
         let (births, deaths) = (std::mem::take(&mut self.month.births), std::mem::take(&mut self.month.deaths));
-        self.months.push(MonthRow { year, month, values, births, deaths });
+        self.files.months.push(MonthRow { year, month, values, births, deaths });
     }
 }

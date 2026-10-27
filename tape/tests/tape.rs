@@ -32,6 +32,13 @@ fn two_kinds() -> World {
     w
 }
 
+/// Save the world and the shell's state `plan` to `path`.
+fn save_snapshot<P: serde::Serialize>(w: &World, plan: &P, path: std::path::PathBuf) -> std::io::Result<()> {
+    let mut bytes = vec![];
+    tape::snapshot_bytes(w, plan, &mut bytes)?;
+    tape::write_snapshot(&bytes, path)
+}
+
 /// A folder of this test process for `name`.
 fn tmp(name: &str) -> std::path::PathBuf {
     let d = std::env::temp_dir().join(format!("ew_{name}_{}", std::process::id()));
@@ -65,7 +72,7 @@ fn snapshot_round_trip_mid_cycle() {
         w.links.cleared[0] = 1.0;
     }
     run(&mut a, 17);
-    tape::save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
+    save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
     let (mut b, ()) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
     assert_eq!(fingerprint(&a), fingerprint(&b));
     assert!(pcore::lanes::eased(&b, 0) >= 1.0, "the lane's ease, from the rebuilt sums");
@@ -84,7 +91,7 @@ fn a_part_keeps_its_id_through_a_snapshot_and_its_freed_slot_gets_a_new_generati
     let i = worldgen::testkit::dry_land(&a);
     let q = [0; 2].map(|_| worldgen::testkit::plate(&mut a, i, 10.0, false))[1];
     let id = bond::id(&a, q);
-    tape::save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
+    save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
     let (mut b, ()) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
     assert_eq!((bond::part(&b, id), bond::cell(&b, q)), (Some(q), i));
     // Both fall apart in the month, as lighter than the least a part may weigh; `q`'s slot is the last freed.
@@ -117,7 +124,7 @@ fn a_resumed_run_places_the_kinds_still_due() {
     years(&mut whole, &plan, 2);
     years(&mut a, &plan, 1);
     assert!(a.life.brains.iter().flatten().all(|l| !late.contains(&l.root)), "a later kind placed before the snapshot");
-    tape::save_snapshot(&a, &plan, dir.join("s.bin.gz")).unwrap();
+    save_snapshot(&a, &plan, dir.join("s.bin.gz")).unwrap();
     let (mut b, plan): (World, Schedule) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
     // (Checked as they are placed: a kind placed in so small a world may die out within the year.)
     plan.place(&mut b);
@@ -347,7 +354,7 @@ fn resume_into_the_same_folder_continues_the_tape() {
         run(&mut w, 1);
         common::record(&mut rec, &mut w);
         if m == mpy {
-            tape::save_snapshot(&w, &rec.kept(), dir.join("snap.bin.gz")).unwrap();
+            save_snapshot(&w, &rec.kept(), dir.join("snap.bin.gz")).unwrap();
         }
         if m == 2 * mpy {
             late(&mut w);
@@ -383,6 +390,28 @@ fn resume_into_the_same_folder_continues_the_tape() {
     assert_eq!(days, (0..5).map(|y| y * dpy).collect::<Vec<_>>());
     assert_eq!(bytes, 5 * SIDE * SIDE * tape::LAYERS.len());
     assert_eq!((meta["events"].clone(), meta["series_units"].clone()), (whole.0["events"].clone(), whole.0["series_units"].clone()));
+}
+
+/// A tape that stops before the snapshot it is resumed from (a run that ended between the two writes) is refused, not
+/// continued with a gap.
+#[test]
+fn a_tape_that_stops_before_the_snapshot_is_refused() {
+    let dir = tmp("stale");
+    let mut w = two_kinds();
+    let mpy = w.cfg.months_per_year as u64;
+    let mut rec = tape::Recorder::new(&w, 1, 0);
+    common::record(&mut rec, &mut w);
+    for m in 1..=2 * mpy {
+        run(&mut w, 1);
+        common::record(&mut rec, &mut w);
+        if m == mpy {
+            rec.finish(&dir).unwrap();
+        }
+    }
+    save_snapshot(&w, &rec.kept(), dir.join("snap.bin.gz")).unwrap();
+    let (w, kept) = tape::load_snapshot(dir.join("snap.bin.gz")).unwrap();
+    let e = tape::Recorder::new(&w, 1, 0).resume(&w, kept, &dir).expect_err("refused");
+    assert!(e.to_string().contains("stops before the snapshot"), "{e}");
 }
 
 /// A tape written at the end of each year (the CSV files then get only their new rows) leaves the same CSV files as one

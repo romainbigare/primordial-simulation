@@ -103,6 +103,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
             record(&mut rec, &mut w, &clock);
             clock.spent[TAPE] += t.elapsed();
         }
+        writer.check();
         // The yearly check is the release check; debug builds also check after every law part.
         if let Some(e) = pcore::check::broken(&w) {
             eprintln!("year {y}: broken state: {e}");

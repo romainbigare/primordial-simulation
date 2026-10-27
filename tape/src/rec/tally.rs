@@ -118,7 +118,7 @@ impl Recorder {
     pub(super) fn count(&mut self, e: &Event, w: &World) {
         let (y, m, s) = (&mut self.year, &mut self.month, &mut self.social);
         match e.kind {
-            EventKind::FirstSubstance(k) => self.log.push((e.day, format!("substance {k} first appears"))),
+            EventKind::FirstSubstance(k) => self.files.log.push((e.day, format!("substance {k} first appears"))),
             EventKind::Born { root, mixed, .. } => {
                 y.births += e.value;
                 if root != u32::MAX {

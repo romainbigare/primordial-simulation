@@ -16,11 +16,17 @@ A mean of nothing is written `NaN` (`null` in the viewer's file, drawn as a gap)
 | `world.ewf.gz` | the viewer's file: `EWF2`, the header's length, the header (JSON: size, whether the world is a globe and its edge latitudes, layers, frames, series and units, events, the months rows), then the frames |
 | `yearNNNN.png` | map, temperature, rain, life and traffic every `--every` years |
 
-**How the files are written.** At every snapshot and at the run's end the shell makes the snapshot's bytes and copies the tape, and a writer thread (`cli/src/writer.rs`) compresses and writes them while the world goes on: at most one job at a time, and the run waits for it before the next job and at its end. A snapshot is written to `snap_NNNNN.bin.gz.part` and takes its name when whole. The writer writes `world.ewf.gz` again whole
-(gzip at its fast level; the viewer reads any level) and `physics.json`. `series.csv` and `months.csv` are not written
-again: a file the recorder wrote before gets only the rows added since, at its end. A file is written whole when its
-header line changed (a column, or a starting kind, that is new) and at the first write of a resumed run, which cuts the
-file back to the rows the snapshot's day holds. A stopped run keeps the tape up to its last snapshot.
+**How the files are written.** At every snapshot and at the run's end the shell makes the snapshot's bytes and copies the
+tape, and a writer thread (`cli/src/writer.rs`) compresses and writes them while the world goes on: at most one job at a
+time, and the run waits for it before the next job and at its end. A write error stops the run at the end of the year
+it happens in. The job writes the tape first and the snapshot last, so a tape is never behind a snapshot, and
+`ew resume` refuses a tape whose months stop before the snapshot's. `world.ewf.gz` is written again whole (gzip at its
+fast level; the viewer reads any level) and `physics.json`. `series.csv` and `months.csv` are not written again: a file
+the writer wrote before gets only the rows added since, at its end. A file is written whole when its header line
+changed (a column, or a starting kind, that is new) and at the first write of a resumed run, which cuts the file back to
+the rows the snapshot's day holds. A snapshot and the viewer's file go to a `.part` file that takes the name when whole;
+a run killed during a write leaves its `.part` file, which nothing reads. A stopped run keeps the tape up to its last
+snapshot.
 
 **Raw events** (`core/src/event.rs`): born (with kind, one or two parents), died (with cause, kind,
 the light catalyst of the dead), took, gave, watched, bond made or broken, first time a substance appears. Only physical facts; the viewer shows the first appearances.

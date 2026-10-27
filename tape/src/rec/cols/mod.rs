@@ -61,10 +61,10 @@ impl Recorder {
 
     /// Add a row; a column new this year reads NaN in the years before, and one the row does not have is dropped.
     fn append(&mut self, row: Row) {
-        if self.series.iter().map(|c| &c.name).ne(row.0.iter().map(|r| &r.0)) {
-            let rows = self.series.first().map_or(0, |c| c.values.len());
-            let mut old = std::mem::take(&mut self.series);
-            self.series = row
+        if self.files.series.iter().map(|c| &c.name).ne(row.0.iter().map(|r| &r.0)) {
+            let rows = self.files.series.first().map_or(0, |c| c.values.len());
+            let mut old = std::mem::take(&mut self.files.series);
+            self.files.series = row
                 .0
                 .iter()
                 .map(|r| match old.iter().position(|c| c.name == r.0) {
@@ -73,7 +73,7 @@ impl Recorder {
                 })
                 .collect();
         }
-        for (col, (_, unit, v)) in self.series.iter_mut().zip(row.0) {
+        for (col, (_, unit, v)) in self.files.series.iter_mut().zip(row.0) {
             if col.unit != unit {
                 col.unit = unit.to_string();
             }

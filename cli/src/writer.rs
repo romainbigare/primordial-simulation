@@ -1,11 +1,11 @@
 //! The writer: one thread that compresses and writes a decade's snapshot and tape while the world goes on.
 
 use pcore::World;
-use serde::Serialize;
 use std::io;
 use std::path::Path;
 use std::thread::JoinHandle;
-use tape::{Tape, Written};
+use tape::{Kept, TapeFiles, Written};
+use worldgen::schedule::Schedule;
 
 /// What the writer thread gives back when a job ends: what the CSV files hold, and the buffer of the snapshot's bytes
 /// (kept for the next snapshot: a new buffer that grows to its size costs more than filling it).
@@ -32,17 +32,35 @@ impl Writer {
         }
     }
 
-    /// Make the bytes of a snapshot of `w` and `plan` and a copy of `tape`, and start writing them to the file `snapshot`
-    /// and into the folder `dir`, once the last job has ended.
-    pub fn start<P: Serialize>(&mut self, w: &World, plan: &P, snapshot: String, tape: Tape, dir: String) {
+    /// Stop the run now if the job in flight has ended with an error; never wait for a job that is still going.
+    pub fn check(&mut self) {
+        if self.job.as_ref().is_some_and(|job| job.is_finished()) {
+            self.wait();
+        }
+    }
+
+    /// Make the bytes of a snapshot of `w` and the shell's state and take a copy of the tape, and start writing them to
+    /// the file `snapshot` and into the folder `dir`, once the last job has ended. The tape goes first and the snapshot
+    /// last, so that a tape is never behind a snapshot: a run that stops between the two files leaves a snapshot
+    /// that resumes.
+    pub fn start(&mut self, w: &World, shell: &(&Schedule, Kept), snapshot: String, tape: TapeFiles, dir: String) {
         self.wait();
         let Idle { mut written, mut bytes } = self.idle.take().expect("the last job gave back its buffers");
-        tape::snapshot_bytes(w, plan, &mut bytes).expect("make the snapshot");
+        tape::snapshot_bytes(w, shell, &mut bytes).expect("make the snapshot");
         let job = move || {
-            tape::write_snapshot(&bytes, &snapshot)?;
             tape.write(Path::new(&dir), &mut written)?;
+            tape::write_snapshot(&bytes, &snapshot)?;
             Ok(Idle { written, bytes })
         };
         self.job = Some(std::thread::Builder::new().name("writer".into()).spawn(job).expect("start the writer thread"));
+    }
+}
+
+/// A run that stops while a job is going (a panic of the main thread) lets it end first, so that no file is cut.
+impl Drop for Writer {
+    fn drop(&mut self) {
+        if let Some(job) = self.job.take() {
+            let _ = job.join();
+        }
     }
 }

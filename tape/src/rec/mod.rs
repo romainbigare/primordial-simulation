@@ -65,13 +65,12 @@ pub struct Kept {
     social: Social,
 }
 
-pub struct Recorder {
+/// What a tape's files hold: the viewer's file (frames, events, the series and the months), `physics.json`,
+/// `series.csv` and `months.csv`. The recorder keeps it as it goes (`Recorder::tape` copies it for another thread to
+/// write).
+#[derive(Clone)]
+pub struct TapeFiles {
     shape: Shape,
-    /// Frames are kept every `every` years, and every month in the first `monthly` years
-    every: u64,
-    monthly: u64,
-    /// The substances found anywhere so far (`detect`)
-    seen: Vec<bool>,
     /// The day of each frame kept, and their bytes (`layers::frame`)
     frames: Vec<u64>,
     bytes: Vec<u8>,
@@ -79,6 +78,17 @@ pub struct Recorder {
     /// The events the viewer shows: day and text
     log: Vec<(u64, String)>,
     months: Vec<MonthRow>,
+    /// The run's `Physics` and `Config` as JSON text, written next to the series (`physics.json`)
+    physics: String,
+}
+
+pub struct Recorder {
+    /// Frames are kept every `every` years, and every month in the first `monthly` years
+    every: u64,
+    monthly: u64,
+    /// The substances found anywhere so far (`detect`)
+    seen: Vec<bool>,
+    files: TapeFiles,
     /// The sums of the year so far and of the month to come, and what is kept across years
     year: YearTally,
     month: MonthTally,
@@ -87,8 +97,6 @@ pub struct Recorder {
     updates: u64,
     /// The time spent by process at the last yearly row (`Spent`)
     spent: Spent,
-    /// The run's `Physics` and `Config` as JSON text, written next to the series (`physics.json`)
-    physics: String,
 }
 
 /// The run's numbers, `{"physics": {..}, "config": {..}}`, keys sorted, one line each, so two runs compare with a diff.
@@ -105,22 +113,17 @@ impl Recorder {
     /// Frames are kept every `every` years, and every month in the first `monthly` years.
     pub fn new(w: &World, every: u64, monthly: u64) -> Self {
         let g = &w.map;
+        let shape = Shape { w: g.w, h: g.h, cell_m: g.side, globe: g.wrap, lat_north: w.cfg.lat_north, lat_south: w.cfg.lat_south, seed: w.seed, days_per_year: w.days_per_year() };
         Recorder {
-            shape: Shape { w: g.w, h: g.h, cell_m: g.side, globe: g.wrap, lat_north: w.cfg.lat_north, lat_south: w.cfg.lat_south, seed: w.seed, days_per_year: w.days_per_year() },
             every,
             monthly,
             seen: vec![false; w.chem.ns()],
-            frames: vec![],
-            bytes: vec![],
-            series: vec![],
-            log: vec![],
-            months: vec![],
+            files: TapeFiles { shape, frames: vec![], bytes: vec![], series: vec![], log: vec![], months: vec![], physics: physics_json(w) },
             year: YearTally::default(),
             month: MonthTally::default(),
             social: Social::default(),
             updates: 0,
             spent: Spent::default(),
-            physics: physics_json(w),
         }
     }
 
@@ -164,7 +167,7 @@ impl Recorder {
     pub fn record_month(&mut self, w: &World, events: Vec<Event>, taken: Option<Taken>, spent: &Spent) {
         let cal = w.cfg.calendar();
         let (year, yearly) = (cal.years(w.time), w.time.is_multiple_of(cal.year));
-        if self.months.last().is_some_and(|r| (r.year, r.month) == months::year_month(w)) {
+        if self.files.months.last().is_some_and(|r| (r.year, r.month) == months::year_month(w)) {
             return;
         }
         let framed = year < self.monthly || (yearly && self.every > 0 && year % self.every == 0);
@@ -193,48 +196,28 @@ impl Recorder {
             self.push_series(&c, spent);
         }
         if framed {
-            self.frames.push(w.day());
-            frame(&c, &mut self.bytes);
+            self.files.frames.push(w.day());
+            frame(&c, &mut self.files.bytes);
         }
     }
 
     /// The latest value of a series column (NaN if there is none), for the run's printed line.
     pub fn last(&self, name: &str) -> f64 {
-        self.series.iter().find(|c| c.name == name).and_then(|c| c.values.last().copied()).unwrap_or(f64::NAN)
+        self.files.series.iter().find(|c| c.name == name).and_then(|c| c.values.last().copied()).unwrap_or(f64::NAN)
     }
 
-    /// What the tape's files hold now, copied so that another thread can write them (`Tape::write`).
-    pub fn tape(&self) -> Tape {
-        Tape {
-            shape: self.shape,
-            frames: self.frames.clone(),
-            bytes: self.bytes.clone(),
-            series: self.series.clone(),
-            log: self.log.clone(),
-            months: self.months.clone(),
-            physics: self.physics.clone(),
-        }
+    /// What the tape's files hold now, copied so that another thread can write them while the world goes on.
+    pub fn tape(&self) -> TapeFiles {
+        self.files.clone()
     }
 
-    /// Write the whole tape into `dir` (`Tape::write` with nothing written before).
+    /// Write the whole tape into `dir` (`TapeFiles::write` with nothing written before).
     pub fn finish(&self, dir: impl AsRef<Path>) -> io::Result<()> {
-        self.tape().write(dir.as_ref(), &mut Written::default())
+        self.files.write(dir.as_ref(), &mut Written::default())
     }
 }
 
-/// What a tape's files hold, copied out of a recorder (`Recorder::tape`): the viewer's file, `physics.json`,
-/// `series.csv` and `months.csv`.
-pub struct Tape {
-    shape: Shape,
-    frames: Vec<u64>,
-    bytes: Vec<u8>,
-    series: Vec<Column>,
-    log: Vec<(u64, String)>,
-    months: Vec<MonthRow>,
-    physics: String,
-}
-
-impl Tape {
+impl TapeFiles {
     /// Write `world.ewf.gz` (viewer frames and what a resumed run reads), `physics.json`, `months.csv` and `series.csv`
     /// into `dir`. The viewer's file is written whole each time; the two CSV files get only their new rows (`csv`), when
     /// `written` says what this caller wrote to them before.

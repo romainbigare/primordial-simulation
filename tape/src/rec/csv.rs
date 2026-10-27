@@ -3,16 +3,14 @@
 //! kind that is new) or when its writer has not written it yet (a resumed run's first write cuts the file back to the
 //! rows the recorder holds).
 
-use super::{months, Tape};
+use super::{months, TapeFiles};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-/// What the two files hold after their writer's last write, in a folder: each file's header line and the number of
-/// rows under it.
+/// What the two files hold after their writer's last write: each file's header line and the number of rows under it.
 #[derive(Default)]
 pub struct Written {
-    dir: PathBuf,
     series: Option<(String, usize)>,
     months: Option<(String, usize)>,
 }
@@ -34,12 +32,9 @@ fn sync(path: &Path, head: String, rows: usize, row: impl Fn(usize) -> String, h
     Ok(())
 }
 
-impl Tape {
+impl TapeFiles {
     /// Bring `series.csv` (one row a year) and `months.csv` (one row a month) in `dir` up to the rows held.
     pub(super) fn write_csv(&self, dir: &Path, written: &mut Written) -> io::Result<()> {
-        if written.dir != dir {
-            *written = Written { dir: dir.to_path_buf(), ..Written::default() };
-        }
         let series = &self.series;
         let head = series.iter().map(|c| c.name.as_str()).collect::<Vec<_>>().join(",");
         let row = |i: usize| series.iter().map(|c| c.values[i].to_string()).collect::<Vec<_>>().join(",");

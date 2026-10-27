@@ -104,7 +104,7 @@ impl Recorder {
     pub(super) fn kind_cols(&self, c: &Ctx, row: &mut Row) {
         let (w, y) = (c.w, &self.year);
         let (nr, cat) = (w.chem.reactions.len(), body::Layout::of(&w.chem).cat);
-        let seen = self.series.iter().filter(|c| c.name.starts_with("root_") && c.name.ends_with("_members")).count();
+        let seen = self.files.series.iter().filter(|c| c.name.starts_with("root_") && c.name.ends_with("_members")).count();
         let mut kinds = vec![Kind::new(nr); seen.max(y.kinds.len())];
         let bodies: Vec<&Body> = w.life.alive().collect();
         let heavy = par::map_n(bodies.len(), |q| Heavy::of(c, q, bodies[q]));
@@ -118,7 +118,7 @@ impl Recorder {
             }
         }
         // The catalyst genes on in some member of the kind so far keep their columns.
-        let ever: BTreeSet<(usize, usize)> = self.series.iter().filter_map(|c| c.name.strip_prefix("root_")?.split_once("_cat_")).filter_map(|(k, r)| Some((k.parse().ok()?, r.parse().ok()?))).collect();
+        let ever: BTreeSet<(usize, usize)> = self.files.series.iter().filter_map(|c| c.name.strip_prefix("root_")?.split_once("_cat_")).filter_map(|(k, r)| Some((k.parse().ok()?, r.parse().ok()?))).collect();
         for (k, v) in kinds.iter().enumerate() {
             let per = |x: f64| ratio(x, v.members);
             let year = y.kinds.get(k).copied().unwrap_or_default();

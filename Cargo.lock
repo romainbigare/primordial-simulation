@@ -46,7 +46,6 @@ dependencies = [
  "mimalloc",
  "pcore",
  "png",
- "serde",
  "serde_json",
  "tape",
  "worldgen",

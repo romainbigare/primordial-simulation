@@ -4,14 +4,14 @@
 //! (one byte a cell and layer, `layers::frame`).
 
 use super::months::year_month;
-use super::{Column, MonthRow, Recorder, Tape};
+use super::{Column, MonthRow, Recorder, TapeFiles};
 use crate::layers::LAYERS;
-use flate2::{read::GzDecoder, write::GzEncoder, Compression};
+use flate2::read::GzDecoder;
 use pcore::World;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use std::path::Path;
 
 const FILE: &str = "world.ewf.gz";
@@ -51,7 +51,7 @@ struct Logged<'a> {
     text: &'a str,
 }
 
-impl Tape {
+impl TapeFiles {
     /// Write the file into `dir`.
     pub(super) fn write_ewf(&self, dir: &Path) -> io::Result<()> {
         let s = self.shape;
@@ -73,19 +73,13 @@ impl Tape {
             months: &self.months,
         };
         let head = serde_json::to_vec(&head)?;
-        // Four large writes, so no `BufWriter` is needed (small writes need one before the compressor).
-        let mut z = GzEncoder::new(std::fs::File::create(dir.join(FILE))?, Compression::fast());
-        z.write_all(MAGIC)?;
-        z.write_all(&(head.len() as u32).to_le_bytes())?;
-        z.write_all(&head)?;
-        z.write_all(&self.bytes)?;
-        z.finish()?.flush()
+        crate::gzfile::write_gzip(&dir.join(FILE), &[MAGIC, &(head.len() as u32).to_le_bytes(), &head, &self.bytes])
     }
 }
 
 impl Recorder {
     /// Load what an earlier run of this world wrote to `dir`, up to the world's day: frames, events, series rows and
-    /// month rows (nothing if `dir` holds no file).
+    /// month rows (nothing if `dir` holds no file; an error if its months stop before the world's).
     pub(super) fn read_ewf(&mut self, dir: &Path, w: &World) -> io::Result<()> {
         let Ok(f) = std::fs::File::open(dir.join(FILE)) else { return Ok(()) };
         let bad = |e: &str| io::Error::new(io::ErrorKind::InvalidData, format!("{}: {e}", dir.display()));
@@ -94,7 +88,7 @@ impl Recorder {
         let n = raw.get(4..8).map_or(0, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize);
         let head = raw.get(8..8 + n).filter(|_| raw.starts_with(MAGIC)).ok_or_else(|| bad("not a tape"))?;
         let g: Value = serde_json::from_slice(head)?;
-        let s = self.shape;
+        let s = self.files.shape;
         if [g["w"].as_u64(), g["h"].as_u64(), g["seed"].as_u64(), g["days_per_year"].as_u64()] != [s.w as u64, s.h as u64, s.seed, s.days_per_year].map(Some) {
             return Err(bad("the tape is of another world"));
         }
@@ -107,9 +101,9 @@ impl Recorder {
         if raw.len() - 8 - n != frame * frames.len() {
             return Err(bad("the frames do not fit the tape's size"));
         }
-        self.frames = frames.iter().map(day).take_while(|&d| d <= w.day()).collect();
-        self.bytes = raw[8 + n..8 + n + frame * self.frames.len()].to_vec();
-        self.log = events.iter().take_while(|e| day(e) <= w.day()).map(|e| (day(e), e["text"].as_str().unwrap_or("").to_string())).collect();
+        self.files.frames = frames.iter().map(day).take_while(|&d| d <= w.day()).collect();
+        self.files.bytes = raw[8 + n..8 + n + frame * self.files.frames.len()].to_vec();
+        self.files.log = events.iter().take_while(|e| day(e) <= w.day()).map(|e| (day(e), e["text"].as_str().unwrap_or("").to_string())).collect();
         // Series: the rows of years up to this one (a null is a written NaN). A column with no value yet is left out, as
         // the unbroken run had it then; it comes back with its first value (`Recorder::append`).
         let (series, units) = (object("series")?, object("series_units")?);
@@ -124,11 +118,14 @@ impl Recorder {
                 columns.push(Column { name: k.clone(), unit, values });
             }
         }
-        self.series = columns;
+        self.files.series = columns;
         // Months: the rows up to this month.
         let now = year_month(w);
         let months: Vec<MonthRow> = serde_json::from_value(g["months"].clone())?;
-        self.months = months.into_iter().take_while(|r| (r.year, r.month) <= now).collect();
+        self.files.months = months.into_iter().take_while(|r| (r.year, r.month) <= now).collect();
+        if self.files.months.last().map(|r| (r.year, r.month)) != Some(now) {
+            return Err(bad("the tape stops before the snapshot"));
+        }
         Ok(())
     }
 }
