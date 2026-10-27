@@ -8,9 +8,10 @@
 
 use pcore::body::{self, Layout, INTERVAL, LEARN};
 use pcore::rng::{Purpose, Rng};
+use pcore::brain::{REST, TAKE};
 use pcore::World;
 use pcore::store::{Class, Node};
-use worldgen::testkit::{self, dry_land, eater, founder, moved, node_of, put_kg_m2, scale, set_amount, set_heat, start, took_from_ground, Books, Brain, Line, LIQUID, MATTER, MILD_LAT, OFF, RICH};
+use worldgen::testkit::{self, dry_land, eater_of, founder, moved, node_of, put_kg_m2, scale, set_amount, set_heat, start, took_from_ground, Books, Brain, Line, LIQUID, MATTER, MILD_LAT, OFF, RICH};
 
 /// The scene's grid.
 const W: usize = 12;
@@ -326,16 +327,15 @@ fn moving_costs_the_real_cost_of_transport() {
     assert!(p.c_move > 0.7 * 10.7 * 30f64.powf(-0.32) && p.c_move < 1.0 * 10.7 * 30f64.powf(-0.32));
 }
 
-
-/// A node of 50 eaters (a 10-day gene, mature at 1,000 t) on ground with 3 kg/m² of matter, for 90 days (its first
-/// update a batch on) with a decision every `think_days` days at the least: the updates, the decisions, the updates
-/// with a take from the ground, and the kg taken from it. The books are kept.
-fn node_takes(think_days: u32) -> (u64, f64, u64, f64) {
+/// A node of 50 eaters of brain `brain` (a 10-day gene, mature at 1,000 t) on ground with 3 kg/m² of matter, for 90 days
+/// (its first update a batch on) with a decision every `think_days` days at the least: the updates, the decisions, the
+/// updates with a take from the ground, and the kg taken from it. The books are kept.
+fn node_takes(brain: &Brain, think_days: u32) -> (u64, f64, u64, f64) {
     let (mut w, i) = start();
     w.cfg.think_days = think_days;
     put_kg_m2(&mut w, MATTER, i, 3.0);
-    let mut b = eater(&mut w, i, pcore::brain::TAKE, 6.0);
-    b.genes[INTERVAL] = 1.0;
+    let mut b = eater_of(&mut w, i, brain, 6.0);
+    (b.genes[INTERVAL], b.genes[LEARN]) = (1.0, LEARN_OFF);
     b.prepare(&w.chem, &w.cfg);
     let node = node_of(&mut w, b, 50.0);
     w.add(node, 1);
@@ -353,11 +353,16 @@ fn node_takes(think_days: u32) -> (u64, f64, u64, f64) {
 
 /// A node with a brain decides about every `think_days` days (`Config::think_days`) and 0 is a decision at every update;
 /// between decisions its members take from the ground by the chance of the last, so it takes as much as when it decides
-/// at every update.
+/// at every update. The brain's chance to take is clearly under 1, so a habit that ignored it would take more.
 #[test]
 fn a_node_decides_every_think_days_and_takes_between() {
-    let (control, habit) = (node_takes(0), node_takes(20));
-    eprintln!("every update (updates, decisions, updates with a take, kg): {control:?}; 20 days: {habit:?}");
+    // With weights of 0 its chances are its biases: to take or to rest, half each, whatever it perceives and learns.
+    let mut brain = Brain { weights: 0.0, ..Brain::only(TAKE) };
+    brain.fixed[REST] = testkit::ON;
+    let (control, habit) = (node_takes(&brain, 0), node_takes(&brain, 20));
+    let sure = node_takes(&Brain { weights: 0.0, ..Brain::only(TAKE) }, 0);
+    eprintln!("every update (updates, decisions, updates with a take, kg): {control:?}; 20 days: {habit:?}; chance 1: {sure:?}");
+    assert!(control.3 < 0.75 * sure.3, "its chance to take is under 1: {} kg against {}", control.3, sure.3);
     assert_eq!(control.0, 8, "a 10-day gene updates 8 times in 90 days, from its first batch");
     assert_eq!(control.1, control.0 as f64, "think_days 0 decides at every update");
     assert_eq!(habit.0, control.0, "the habit keeps the gene's updates");

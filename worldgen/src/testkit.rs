@@ -87,13 +87,14 @@ const MEMORY: usize = 6;
 const WEIGHTS: f32 = 0.1;
 
 /// A brain to found a lineage with: the biases of its fixed actions, of its move and of its verbs, its hidden units,
-/// and the seed of its random weights.
+/// and the size and the seed of its random weights.
 #[derive(Clone, Copy, Debug)]
 pub struct Brain {
     pub fixed: [f32; FIXED],
     pub dir: f32,
     pub verbs: [f32; VERBS + OVERBS],
     pub hidden: usize,
+    pub weights: f32,
     pub seed: u64,
 }
 
@@ -102,19 +103,19 @@ impl Brain {
     pub fn only(act: usize) -> Self {
         let mut fixed = [OFF; FIXED];
         fixed[act] = ON;
-        Brain { fixed, dir: OFF, verbs: [OFF; VERBS + OVERBS], hidden: HIDDEN, seed: 1 }
+        Brain { fixed, dir: OFF, verbs: [OFF; VERBS + OVERBS], hidden: HIDDEN, weights: WEIGHTS, seed: 1 }
     }
 
     /// A brain that only does verb `verb` (`brain::GIVE`, ..., or `brain::VERBS + k` for the verbs on parts).
     pub fn verb(verb: usize) -> Self {
         let mut verbs = [OFF; VERBS + OVERBS];
         verbs[verb] = ON;
-        Brain { fixed: [OFF; FIXED], dir: OFF, verbs, hidden: HIDDEN, seed: 1 }
+        Brain { fixed: [OFF; FIXED], dir: OFF, verbs, hidden: HIDDEN, weights: WEIGHTS, seed: 1 }
     }
 
     /// Every bias 0: nothing preferred.
     pub fn neutral() -> Self {
-        Brain { fixed: [0.0; FIXED], dir: 0.0, verbs: [0.0; VERBS + OVERBS], hidden: HIDDEN, seed: 1 }
+        Brain { fixed: [0.0; FIXED], dir: 0.0, verbs: [0.0; VERBS + OVERBS], hidden: HIDDEN, weights: WEIGHTS, seed: 1 }
     }
 }
 
@@ -128,7 +129,7 @@ impl Line {
     /// A new lineage of `brain`, labelled with starting kind `root`.
     pub fn new(w: &mut World, brain: &Brain, root: u32) -> Line {
         let shape = lineage::shape(w.chem.ns(), brain.hidden, MEMORY);
-        let mut base = brain::random(shape, &mut Rng::new(brain.seed, 0, 0, Purpose::Brain), WEIGHTS, brain.fixed, brain.dir, brain.verbs);
+        let mut base = brain::random(shape, &mut Rng::new(brain.seed, 0, 0, Purpose::Brain), brain.weights, brain.fixed, brain.dir, brain.verbs);
         let rows = base.split_off(shape.base());
         let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root });
         Line { lineage, rows }
@@ -156,7 +157,12 @@ pub const EATER_KG: f64 = 30.0;
 /// A starting eater of `EATER_KG` in cell `i`, of a brain that only does fixed action `act`, weak (strength 0), staying
 /// where it is, soaking no liquid up, mature at 10^`copy` kg of body.
 pub fn eater(w: &mut World, i: usize, act: usize, copy: f32) -> Body {
-    let mut b = founder(w, 1, i, &Brain::only(act));
+    eater_of(w, i, &Brain::only(act), copy)
+}
+
+/// An eater (`eater`) of brain `brain`.
+pub fn eater_of(w: &mut World, i: usize, brain: &Brain, copy: f32) -> Body {
+    let mut b = founder(w, 1, i, brain);
     let m = b.mass(&w.chem);
     scale(w, &mut b, EATER_KG / m);
     (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS], b.genes[LIQ]) = (0.0, 0.0, copy, -4.0);

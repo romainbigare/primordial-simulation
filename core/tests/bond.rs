@@ -2,7 +2,7 @@
 //! and hold parts.
 
 use pcore::bond::{self, GROUND};
-use pcore::body::{Body, COPY_MASS, LIQ, STRENGTH};
+use pcore::body::{die, Body, COPY_MASS, LACK, LIQ, STRENGTH};
 use pcore::brain;
 use pcore::chem::Phase;
 use pcore::life::Handle;
@@ -239,17 +239,22 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     gained(&w, i, &before, &held, e);
     books.assert_within(&w, 1e-12, 1e-9);
 
-    // A take: a body takes some of the mineral (it takes nothing else, and pays nothing).
-    let (mut w, _) = world();
-    worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed(&mut w, 1);
-    let h = w.life.living().map(|x| x.0).find(|&s| w.life[s].n() == 1.0).expect("a body");
-    let i = w.life[h].cell as usize;
-    let p = new_part(&mut w, i);
-    let mut b = std::mem::take(&mut w.life[h]);
-    let up = pcore::body::Layout::of(&w.chem).upt;
-    (0..w.chem.ns()).for_each(|k| b.genes[up + k] = if k == MINERAL { 8.0 } else { -8.0 });
-    (w.cfg.phys.c_handle, w.cfg.phys.take) = (0.0, 1e-3 * w.cfg.phys.take);
+    // A take: a body takes some of the mineral (it takes nothing else, and pays nothing). A world with the body (taken
+    // out of its slot), its cell and a part in it.
+    let take_scene = || {
+        let (mut w, _) = world();
+        worldgen::life::seed(&mut w, 0);
+        worldgen::life::seed(&mut w, 1);
+        let h = w.life.living().map(|x| x.0).find(|&s| w.life[s].n() == 1.0).expect("a body");
+        let i = w.life[h].cell as usize;
+        let p = new_part(&mut w, i);
+        let mut b = std::mem::take(&mut w.life[h]);
+        let up = pcore::body::Layout::of(&w.chem).upt;
+        (0..w.chem.ns()).for_each(|k| b.genes[up + k] = if k == MINERAL { 8.0 } else { -8.0 });
+        (w.cfg.phys.c_handle, w.cfg.phys.take) = (0.0, 1e-3 * w.cfg.phys.take);
+        (w, h, i, p, b)
+    };
+    let (mut w, h, i, p, mut b) = take_scene();
     let (books, before, (held, e), (store, eb)) = (Books::now(&w), ground(&w, i), holds(&w, p), (b.store.clone(), b.e));
     moved_serial(&mut w, (i, h), |w| bond::act(w, &mut b, 1, p));
     assert!(!w.parts.parts[p].alive, "the part is still there");
@@ -258,5 +263,15 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     let gain: Vec<f64> = held.iter().zip(&took).map(|(a, t)| a - t).collect();
     gained(&w, i, &before, &gain, e - (b.e - eb));
     w.life[h] = b;
+    books.assert_within(&w, 1e-12, 1e-9);
+
+    // The body dies in the same update, on the view the fall opened again: the books are kept.
+    let (mut w, h, i, p, mut b) = take_scene();
+    let (books, id) = (Books::now(&w), b.id);
+    moved_serial(&mut w, (i, h), |w| {
+        bond::act(w, &mut b, 1, p);
+        w.in_domain(i, |w, d| die(w, d, h, b, LACK));
+    });
+    assert!(!w.parts.parts[p].alive && w.life.find(id).is_none(), "the part or the body is still there");
     books.assert_within(&w, 1e-12, 1e-9);
 }

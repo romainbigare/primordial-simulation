@@ -2297,16 +2297,15 @@ region24; `ROWS_PER_ITEM` is 64 (the pool from 512 rows). (3) A first version ma
 17 tiny tasks went to the pool and cost more than they gave (2.2 ms against 1.4 serial), so the air nodes are cut in
 blocks of 8.
 
-**For the architect.** `store::Transform` and the transform path of `store::apply` (and its element check) now have no
-user in the code, only the store test; `Batch::clear` and `Batch::is_empty` and `World::batches` are deleted. The
+**For the architect.** `store::Transform` and the transform path of `store::apply` (and its element check) had no
+user in the code, only the store test, and were deleted in 7749ea4 (not left for E4); `Batch::clear` and `Batch::is_empty` and `World::batches` are deleted. The
 check that a node's reactions keep the elements stays as a `debug_assert` in `Step::react` (it ran on every transform
-in release before). Deleting `Transform` and the `apply` argument touches `flow/` and `survey/` (every `apply` call
-passes `&[]`): left for E4, which rewrites `apply`.
+in release before).
 
 ## AIR3's review fixes
 
-Level 1: golden unchanged with threads and with one thread; the tests also pass with debug assertions on (the new
-checks of `book_by_array` and of the air's `book` run there). The check that the air's book gets no dearer: one year of
+Level 1: golden unchanged with threads and with one thread; the tests also pass with debug assertions on, from
+7749ea4 on (the new checks of `book_by_array` and of the air's `book` run there). The check that the air's book gets no dearer: one year of
 globe36 on one thread under callgrind, base `64592df`, from a save made with the base at snapshot version 49 (the
 `bench48` saves are version 48; G2 made 49). Both runs end on the same hash, `df8dfb6fdabbf6f3`.
 

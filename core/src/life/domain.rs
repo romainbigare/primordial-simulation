@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 pub struct Domain {
     /// Its place among the domains, and its cells in order (`Level::children` of its air node)
     pub(super) index: u32,
-    pub cells: Vec<u32>,
+    pub(crate) cells: Vec<u32>,
     /// Bodies placed in it so far (children, split halves, parts of nodes, members drawn, founders)
     pub(super) placed: u64,
     pub(super) bodies: Vec<Body>,
@@ -56,7 +56,7 @@ pub struct Domain {
 
 impl Domain {
     /// The order of cell `i` among its cells.
-    pub(super) fn slot(&self, i: usize) -> usize {
+    pub fn slot(&self, i: usize) -> usize {
         self.cells.iter().position(|&c| c as usize == i).expect("a cell of the domain")
     }
     /// How many bodies are stored in it.
