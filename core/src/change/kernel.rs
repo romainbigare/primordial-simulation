@@ -344,8 +344,16 @@ impl Reactor {
             heat + if self.lit[r] { 0.0 } else { self.dh[r].abs() * self.lim[r] * self.far[r] }
         });
         let mut sub = left;
-        while reach(sub) > MAX_DT_K * c && iter < MAX_SUBSTEPS && sub > left * MIN_SUB {
-            sub *= 0.5;
+        loop {
+            let heat = reach(sub);
+            if heat <= MAX_DT_K * c || iter >= MAX_SUBSTEPS || sub <= left * MIN_SUB {
+                break;
+            }
+            // The heat is concave in the length, so it falls by less than half when the length halves: the first try
+            // jumps to the fewest halvings that can be enough, ceil(log2(heat / bound)), not past the shortest sub-step.
+            let most = (1.0 / MIN_SUB).log2().ceil();
+            let halvings = if sub == left { (heat / (MAX_DT_K * c)).log2().ceil().clamp(1.0, most) } else { 1.0 };
+            sub *= 0.5f64.powi(halvings as i32);
         }
         for &r in self.on.iter().filter(|&&r| iter == 0 && self.kap[r] > 0.0 && !self.lit[r] && !self.minor[r]) {
             (self.kap0[r], self.lim0[r]) = (self.kap[r], self.lim[r]);

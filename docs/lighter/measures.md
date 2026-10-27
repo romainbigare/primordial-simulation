@@ -183,3 +183,37 @@ a 300-year island run falls from 1.55 s to 0.15 s of CPU time, 2.4% to 0.4% of t
 gain in wall time: the writer's 1.4 s of CPU now runs beside the four pool threads, and when it takes a core from a
 domain's thread the barrier of that batch waits. The process uses 2.4 cores of 4 on average, so a gain is likely, but
 it is not shown. A quiet wall pair (5 runs interleaved, 300 years) belongs to phase Z.
+
+## G1: the parts' reactor starts its halving where the heat allows
+
+Step: `Reactor::sub_step` (`core/src/change/kernel.rs`). The sub-step is halved while the heat of the running reactions
+would move the node by more than `MAX_DT_K`. The heat is concave in the length (each reaction's share used is
+`1 - e^-z` or its power form), so it falls by less than half when the length halves: no fewer than
+`ceil(log2(heat / bound))` halvings can be enough. The first try now jumps there (not past the shortest sub-step),
+then halves one at a time as before. It finds the same sub-step, so the world is the same bit for bit (level 1). The
+search has one call site of `reach`; with two the compiler outlines the closure and the other reactors lose 20 M on
+globe36.
+
+Callgrind, one year, one thread (`RAYON_NUM_THREADS=1`), from the `benchZ` saves; base = `speed/lighter` at `07897b6`,
+same machine, fresh out folders. Instructions in millions.
+
+| | base | G1 | change |
+|---|---|---|---|
+| globe36, all | 6,601.8 | 6,538.2 | -63.6 (-0.96%) |
+| globe36, `run_for` (the year) | 5,393.1 | 5,329.5 | **-63.6 (-1.18%)** |
+| globe36, parts (`bond::month::step`) | 257.4 | 194.0 | -63.3 (-24.6%) |
+| globe36, Change | 412.9 | 412.9 | 0 |
+| island22, `run_for` | 4,932.1 | 4,931.9 | -0.2 (0.00%) |
+| region24, `run_for` | 10,365.1 | 10,362.3 | -2.8 (-0.03%) |
+
+The parts' reactor alone (the part of `bond::step` that is `Reactor::react`, 226.6 M, 191 k a call) falls to about
+163 M, -28%; the same sub-steps are found with 59% fewer evaluations of the reactions' heat (60,798 against 147,289
+by the count of PR8). Same fingerprint of the year on all three saves (`63c9e0c7cc7c87e5`, `0baf9b2e8c7657ec`,
+`f528d300f41d6ab3`).
+
+Checks: the golden test passes unchanged with threads and with `RAYON_NUM_THREADS=1`, and in the plain debug build;
+`cargo test --release --workspace` passes; the same with debug assertions; clippy has no warnings; the wasm build
+passes. Core code lines: 10,450 (+8 -2).
+
+Verdict: kept. -1.18% of globe36's year for 8 lines passes L2's line for a level-1 step of 20 lines or less (1%). It is
+under the plan row's 1.5% kill line; the architect decided for L2's line. The 4-thread year was not timed.
