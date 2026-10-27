@@ -44,7 +44,7 @@ reactor called from their day is 6.4% / 5.0% / 7.0% of `run_for`.
 - **No body code changes.** A gene that is off gives `cr` = 1, and a breathing burning in `react` gets 1: both are then
   colder than the frozen point and skipped. 22, 23 and 25 keep running in a body's liquid as real chemistry; at fire's
   heat matter still burns by 21 (`laws.md` 6.8 keeps its sentence, with "at fire's heat").
-- The chemistry is saved in `World`, so the snapshot is bumped (an old save keeps its old data). B1 is judged per
+- The chemistry is saved in `World`, so the snapshot is bumped (L29: an old save would run its old chemistry). B1 is judged per
   update on a turned save (a measuring branch rewrites the chemistry and raises the genes at load).
 
 **Docs and tests.** `numbers.md` rows of 1, 21 and their `open` (the anchor: Olson's constant is the decomposers'),
@@ -73,8 +73,7 @@ B2 may not be needed.
   be eaten out (the watch).
 - **`denature` under a larger factor.** It keeps `f^(1/(1+e^z))`: on a factor `X` times larger, a half-unfolded enzyme
   keeps a smaller share of its rate (at `td`, 1e-4 of it for f = 1e8, against 0.1 for f = 1e2). A heat-killed enzyme
-  now leaves almost nothing, not the bare decay: honest, but hot bodies pay more and release less. PR3 compares a hot
-  body's catalysed rate with today's.
+  now leaves almost nothing, not the bare decay: accepted as a law effect on hot bodies (L32); PR3 reports it.
 - **Dry litter.** In the open world a dry node (moisture 0) has `cr` = 1: under (d) its decay falls `X` times (real dry
   litter decays slowly too). Less gas 3 from dry land; PR3 reads it.
 - **Dormant bodies.** Upkeep and ageing go with activity; a dry body no longer loses anything bare. Watch bodies with

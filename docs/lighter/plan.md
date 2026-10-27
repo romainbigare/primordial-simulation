@@ -2,9 +2,9 @@
 
 Status: **planned, after the first review** (`decisions.md`, "Answers to the first review"). Branch `speed/lighter`
 (from `speed/x10` at `9656b89`). This file is the one source of the steps: each row has its files, check level,
-done-when and kill line. The designs are in `design/` (one note per idea; `cover.md` for idea 5 is its designer's, and
-lane C's table below waits for its new version). Decisions: `decisions.md` (L1 and on; the owner's words are L17 and
-L18). Measures: `measures.md` (made by the first step that measures). History: `docs/history.md`, section 7.
+done-when and kill line. The designs are in `design/` (one note per idea; `cover.md` for idea 5 is its designer's; lane C's
+table below is its section 7). Decisions: `decisions.md` (L1 and on; the owner's words are L17 and L18; the cover's decisions D1 to D11 are in `cover.md` 9 and logged as L23
+to L28 and L30). Measures: `measures.md` (made by the first step that measures). History: `docs/history.md`, section 7.
 
 ## 1. The goal, and what to expect
 
@@ -27,7 +27,7 @@ of `run_for`; the bodies' reactor called from their day 6.4% / 5.0% / 7.0%; the 
 | 2 fewer stands a cell | 0 now | 0 now | 0 now | waits for the cover (L18); A3 only if the cover fails |
 | 3 living bodies do not rot (B1, variant (d)) | -3 to -5% | -3 to -4% | -3 to -5% | most of the bodies' reactor runs bare reactions (P0: 90% of a stand's, all of an animal's); under (d) the frozen rule skips the decay in a living body |
 | 4 a cheaper sample | 0 now | 0 now | 0 now | the cover sets the sample's cadence (L15); A4 only if the cover fails |
-| 5 the cover (C) | from `cover.md` | from `cover.md` | from `cover.md` | its designer restates the cost (an adult-node update a cover, K covers a cell); the gate is on the whole year |
+| 5 the cover (C1, C2) | **x1.22 to x1.30** (C1 alone x1.05 to x1.12) | **x1.06 to x1.12** (C1 about x1.0) | **x1.54 to x1.63** (C1 alone x1.14 to x1.23) | `cover.md` 5: a cover update is an adult-node update (about 100k instructions), 3 to 4 covers a planted cell on the island (2 to 3 globe, 3.5 to 4 region) against 8.2 / 4.6 / 10.3 stands; plants all included 37% / 19% / 60% of the year fall to 14 to 19% / 9 to 13% / 21 to 25% |
 | 6 animals look around less (D) | about -0.5% (D1, likely not built) | the same | about 0 | `take_node`'s payer is about 16% of a take (2.5 of 16.0 thousand); D2 after the cover |
 | 7 a coarser air on globes (E1) | 0 | -1 to -2% (1T) | 0 | the band solve is 1.4% of globe36's year, the rest of the Newton part 2.3%; more on large globes; 4 threads may lose it (fewer domains) |
 | parts' reactor (lane G, the review's find) | 0 | -2 to -3% | about 0 | 191 thousand instructions a call, about 10 times a ground node's; PR8 says why |
@@ -35,11 +35,14 @@ of `run_for`; the bodies' reactor called from their day 6.4% / 5.0% / 7.0%; the 
 | Case | island22 | globe36 | region24 | long runs |
 |---|---|---|---|---|
 | without the cover (B1, E1, G1, F) | about x1.03 to x1.05 | about x1.06 to x1.1 | about x1.03 to x1.05 | about 10% more |
-| with the cover | the cover's own estimate (`cover.md`), times about x1.03 | the same, times about x1.08 | the same, times about x1.03 | about 10% more |
+| C1 alone (C2 fails its lines) | about x1.08 to x1.17 | about x1.06 to x1.1 | about x1.17 to x1.28 | about 10% more |
+| **with the cover (C1 and C2)** | **about x1.25 to x1.35** | **about x1.12 to x1.22** | **about x1.57 to x1.70** | about 10% more |
 
 In the "with the cover" row B1 counts on the animals only: the cover cuts the stands' reactor itself. On 4 threads the
 gains are smaller where the work cut ran on the pool. **Plainly:** without the cover this round gives a few percent on
-the benches and about 10% on long runs; the cover is the round.
+the benches and about 10% on long runs; with it about a quarter to a third on the island, a tenth to a fifth on the
+globe and about 60% on the region. The next lever after the cover is the cost of making children, a third of a cover
+update (probe C4, phase 2, L30).
 
 ## 2. Rules for this round
 
@@ -81,7 +84,7 @@ that change land with the step that makes them true (section 7).
 | 2 | Fewer stands a cell | Nothing before the cover (L18); the cover bounds the kinds a cell holds | A3 if the cover fails its gate (PR2's counts are in C0) |
 | 3 | Living bodies do not rot | B1, variant (d) (L9): reactions 1 and 21 written as 26 already is (a negligible bare rate, the litter decay in `open`); no body code changes | Variant (b) (only the rot stops, by body code with a stated heat-damage law); else not built and the owner told |
 | 4 | A cheaper sample member | Nothing before the cover (L15): the cover sets the sample's cadence | A4 if the cover fails its gate (the sample runs only the stages its gene reads) |
-| 5 | Plants as a cover | C0, then C1 to Cn from `design/cover.md`: the bound on kinds first, then the stages | A3 and A4 (stands stay bodies) |
+| 5 | Plants as a cover | C0, then C1 (the bound on kinds, on today's young-adult pairs), then C2 (the young inside the cover), C3 the checks, gate G-C (`design/cover.md` 7) | C1 alone if C2 fails its lines; A3 and A4 if C1 fails too (stands stay bodies) |
 | 6 | Animals look around less | D1 a cheaper take, only if PR6 finds its payer over 1% of the year (L14); D2 a cheaper view, after the cover's gate | D2; the stands' faces go with the cover |
 | 7 | A coarser air on globes | E1: air nodes wider than tall on globes (rows of latitude kept), gated by PR7 on 1 and 4 threads (L12) | Lane G (the parts' reactor), the globe's other background cost |
 
@@ -121,7 +124,7 @@ Each lane is its own part of the code, its own agent and worktree; the lanes mer
 
 | ID | What | Level | Done when | Kill line |
 |---|---|---|---|---|
-| B1 | **A law, variant (d):** reactions 1 and 21 written as 26 is: their bare `k` divided by `X` (PR3's number; 26 uses 1e6) and their `open` times `X`, so the open world's decay is unchanged and a living body's decay falls under the frozen rule; the founders' catalyst genes of 1 and 21 raised by log10 `X` (`LITTER_X`'s rule), so a body's catalysed burning is unchanged. No body code. `numbers.md` rows of 1, 21 and their `open`; `laws.md` 2.1, 2.4, 6.8, 6.9; handover 13.2's "inside bodies" item closed; snapshot bumped (the chemistry is saved) | 4 | what must hold, below; golden re-pinned; a stand update and an animal update 1T -10% on a turned save | the year 1T under -3% on island22, or a climate key out: variant (b) or not built |
+| B1 | **A law, variant (d):** reactions 1 and 21 written as 26 is: their bare `k` divided by `X` (PR3's number; 26 uses 1e6) and their `open` times `X`, so the open world's decay is unchanged and a living body's decay falls under the frozen rule; the founders' catalyst genes of 1 and 21 raised by log10 `X` (`LITTER_X`'s rule), so a body's catalysed burning is unchanged. No body code. `numbers.md` rows of 1, 21 and their `open`; `laws.md` 2.1, 2.4, 6.8, 6.9; handover 13.2's "inside bodies" item closed; snapshot bumped (the chemistry is saved in `World`, L29); `denature` on the larger factors accepted as a law effect on hot bodies, reported by PR3 (L32) | 4 | what must hold, below; golden re-pinned; a stand update and an animal update 1T -10% on a turned save | the year 1T under -3% on island22, or a climate key out: variant (b) or not built |
 | B2 | Only if PR3 shows the reactor's setup on a body with nothing to run still over 1% of the year after B1: `Reactor::react` returns at once when no reaction can run (inside the reactor, not a second end of `physics::react`) | 1 on B1's world | an animal update 1T -3% | under -1% of the year |
 
 **B1 must still hold:** the climate keys (land, swing, rain, gas, rivers, worn land) and the light-eaters' two in range;
@@ -136,15 +139,20 @@ bare burning); `chemistry0.rs` and `numbers.rs` where they read the rows of 1 an
 `a_living_body_runs_no_decay_but_its_own_catalysts` (a body with its burning genes off keeps its matter and solid
 over a year at 300 K; the same matter on moist ground rots at its litter constant; at fire's heat it burns).
 
-**Lane C: plants as a cover** (from `design/cover.md`; its designer is rewriting it, and the architect sends the new
-table. Order: C0, then **the bound on kinds first** (on today's young-adult pairs), **then the stages**, each its own
-law step with its gate on the whole year)
+**Lane C: plants as a cover** (`design/cover.md`, its section 7; decisions L23 to L28, L30). "Counted" = callgrind on one
+thread, one year from the benches remade at the step's snapshot (`make_benches.sh`), seeds 1 to 3, with
+`--toggle-collect` on the update of a body without a brain: the year, the plant work per planted cell-year, the
+planted cells, the animal updates a year, bodies per planted cell (L24). The order: C0 (phase P), **C1 the bound on
+kinds on today's young-adult pairs, then C2 the stages**, then C3 the checks and the gate. A number in brackets in the
+table is a section of `cover.md`; tests 1 to 3 are its 6.3.
 
-| ID | What | Level | Done when | Kill line |
-|---|---|---|---|---|
-| C0 | The cover's probe (phase P) | none | from `design/cover.md` | none |
-| C1 to Cn | from `design/cover.md` | 4 | from `design/cover.md` | from `design/cover.md` |
-| **G-C** | **The cover's gate** (placeholder, from `design/cover.md`): its checks pass; the whole year and the animal updates judged | | | **fails:** C is not merged; A3 and A4 start (phase 2) |
+| ID | What | Files | Level | Done when | Kill line |
+|---|---|---|---|---|---|
+| C0 | Probe (branch `probe/cover-c0`, not merged), on the three bench saves and one year of each: stands per planted cell by stage; alike groups (adult and young by `body::within`); **growth forms side by side** (groups unlike in the form genes: `COPY_MASS`, `LEAF`, the keep genes of the frame and lime, `STRENGTH`; and the heights `Body::height`); share of adult mass in the largest 1 to 4 groups; litters a planted cell-year that land where no node of their kind is, and the adult mass a year later that came from them; animal nodes per planted cell, animal splits and `merge_closest` runs a year; callgrind of a stand update split by `b.adult()` | a test file on the branch | probe | `cell_kinds` chosen: the least of 3 or 4 that holds 90% of the adult mass in that many form groups on all three benches; the numbers in `docs/lighter/measures.md` C0 | none (if 4 is too few, or the adult update is over 120k, the architect is told before C1) |
+| C1 | **The bound on kinds** on today's young-adult pairs (3): `Config::cell_kinds` (row in `numbers.md`, speed); the newcomer rule in `emit` and `land_litter`; `nodes::split` room for light-eater nodes from the kinds with adults; `crowd` unchanged; snapshot 50; test 1 and the rewritten `crowd` and `dispersing` tests; `laws.md` 4.2, 4.4; `history.md` | `params.rs`, `nodes.rs`, `copy/mod.rs`, `tape/src/snapshot.rs`, tests, docs | 4 | bodies per planted cell at most 2 (`cell_kinds` + 1); the counted year -5% on island22 and -12% on region24; animal nodes per planted cell and animal updates a year within their seeds' noise; key numbers in range (S50 within noise); the climate and life tests of 6 pass; test 1 passes | the counted year falls less than 3% on island22 or less than 8% on region24, or animal updates a year move past their seeds' noise, or a key number or a climate test fails: C stops; G-C fails |
+| C2 | **The young inside** (2): `Body::young` and `Young`; `adult`, `size_moments`, `set_size`, `height`, `equiv` by stage; two shade entries; growth split; maturing in `live` before children; children join the cover; seeds as young; `starved` per stage; `nodes::add`, `rejoin`, `Lot`, `part`, `kin`, `kin_key` without stage for covers; founders all adult; snapshot 51; tape `root_<K>_adults`; tests 2 and 3 and the rewritten ones; `laws.md` 1.4, 3.6, 4.2, 4.4 (one law, the flux by `Pass`, with two holders: node pairs for animals, stages for covers), 6.6; `tape.md`; `history.md` | `body/mod.rs`, `body/tissue.rs`, `body/live.rs`, `copy/grow.rs`, `copy/mod.rs`, `copy/young.rs`, `nodes.rs`, `survey.rs`, `life/domain.rs`, `lineage.rs`, `worldgen/src/life/make.rs`, `tape/src/snapshot.rs`, `tape/src/rec/cols/`, tests, docs | 4 | one body per kind (bodies per planted cell at most `cell_kinds` + 1); counted plant work per planted cell-year x1.4 against C1 on island22 and region24; test 2 within 2%; animals, key numbers and tests as C1; the land within 0.3 K of C1 (else stop and find why: P1.2's -0.78 K was never explained) | the counted year falls less than 5% against C1 on island22 (or less than 8% on region24), or the animal or key-number or climate lines of C1 fail: C1 stays, C2 is not merged |
+| C3 | **The checks** (no code): counted runs of the three benches, plants all included as in P0; wall on 4 threads (5 interleaved runs under the lock); key numbers; the slow suite; 1,000-year runs of the island, the globe and the region, one at a time, with the watch list of 6 | `docs/lighter/measures.md` | — | the measure and a verdict per bench | — |
+| **G-C** | **The cover's gate** (after C3): the whole year, one thread, counted, at least -15% on island22 and -30% on region24, and not worse on globe36; animal nodes per planted cell and animal updates a year within their seeds' noise of today; every key number in range (S50 within noise), the climate tests and the canopy check pass; the 1,000-year runs keep their books and live; tests 1 to 3 pass | | | | **fails:** what failed is not merged (C1 alone may stay if it passed its own lines); A3 and A4 start (phase 2) |
 
 B1 and the cover are independent (L5): they land in any order; the second re-runs the key numbers against the first's
 reference. The cover's tests of its own chemistry are written after B1 if B1 lands first.
@@ -186,6 +194,7 @@ mountains, ice at the poles). **Tests that change:** `core/tests/space.rs` gains
 | A3 | Only if G-C fails: stands of a full cell merge past `crowd` whatever their genes (or C0's smaller rule); merges and `nodes::add` counted | 4 | as `design/stands.md` 4; island22 1T -5% | island22 1T under -3% |
 | A4 | Only if G-C fails: the sample runs only the stages its gene reads, the node's other results reused | 2 | a stand update 1T -6% | under -3% |
 | D2 | As lane D, after G-C | | | |
+| C4 | After G-C passes: a probe of the cost of making children (two `vary` calls, the join, the litter: about a third of a cover update), and a law step by it if it is worth 3% (L2, L30) | none, then 4 | its table | none |
 
 ### Phase Z: the end
 
@@ -210,21 +219,23 @@ mountains, ice at the poles). **Tests that change:** `core/tests/space.rs` gains
 Phase P   R0 ─ PR1, PR3, PR6, PR7, PR8, C0 (side by side) ─► review P (section 1 restated, gates)
 Phase 1   F: F1 ─ F3 ─ (F2) ──────────────────────────────────┐
           B: B1 ─ (B2) ───────────────────────────────────────┤
-          C: C1 to Cn: the bound on kinds, then the stages ─ G-C ┤
+          C: C1 (the bound on kinds) ─ C2 (the stages) ─ C3 ─ G-C ┤
           D: (D1) ────────────────────────────────────────────┼─► lane reviews
           E: E1 ──────────────────────────────────────────────┤
           G: G1 ──────────────────────────────────────────────┘
-Phase 2   G-C failed: A3, A4, D2 (stands seen through the cell) ;  G-C passed: D2
+Phase 2   G-C failed: C1 alone if it passed; else A3, A4, D2 (stands seen through the cell) ;  G-C passed: C4, D2
 Phase Z   the end (section 4) ─► final review
 ```
 
 **Where steps collide, this order holds:**
 - B1 and the cover's steps are all level 4 and move the plants: they merge one at a time, in any order; the second
   re-runs the key numbers against the reference the first set (L5, L10).
-- B1 changes the chemistry's data and the founders' genes (worldgen); the cover changes the bodies' code: no shared
-  file but `numbers.md`, `laws.md` and golden.
-- D1 and the cover both touch `choose/feed.rs`: D1 (level 1) lands first if it is built; the cover rebases.
-- E1 and the cover both bump the snapshot; G1 and B2 both touch `change/kernel.rs`: one at a time.
+- B1 changes the chemistry's data and the founders' genes; C2 changes the bodies' code and the founders (all adult):
+  both touch `worldgen/src/life/make.rs`, `numbers.md`, `laws.md` and golden; the second rebases.
+- C1 then C2, each its own law step with its gate on the whole year; C2 takes new key-number references (L26).
+- D2 comes after G-C, on the world the cover leaves.
+- B1, C1 (snapshot 50 in its design), C2 (51) and E1 bump the snapshot: the number is the highest plus one at each merge.
+  G1 and B2 both touch `change/kernel.rs`: one at a time.
 - F touches only `tape/` and `cli/`; it lands any time (level 1).
 - Merges into `speed/lighter` one at a time; golden re-pinned by the step that changes it; the snapshot version the
   highest plus one. If `main` moves, it is merged in at the next lane review (L1).
@@ -232,7 +243,7 @@ Phase Z   the end (section 4) ─► final review
 ## 6. Reviews
 
 The cycle is: plan, adversarial review, implement, adversarial review, fix, until accepted. Review rounds sit:
-1. **After this plan** (done once: `decisions.md`, "Answers to the first review"; again when `cover.md` is merged).
+1. **After this plan** (done: `decisions.md`, "Answers to the first review"; `cover.md` reviewed and rewritten).
 2. **After phase P:** section 1 restated, gates go or no go.
 3. **After each lane's last step** (F, B, D, E, G): the lane's diffs, tests and measures against its rows; each review
    of a level-4 lane runs the key-number test against the reference.
@@ -265,7 +276,9 @@ claim) and ends with a verdict; a fixer answers each finding; the review runs ag
 | A catalyst factor `X` times larger unfolds more steeply under `denature` (it works on log f) | PR3 checks a hot body's catalysed rate under (d) against today's; a heat-killed enzyme now leaves almost nothing, not the bare rate |
 | A dormant body (activity near 0) never dies once nothing burns it bare | the watch in B1's checks |
 | S50 rises when stored solid no longer burns bare | reported in PR3 and B1, with its cause |
-| The cover fails its gate late | A3, A4, D2 in phase 2; the round then gives a few percent (section 1) |
+| The cover fails its gate late | C1 alone if it passed its own lines; else A3, A4, D2 in phase 2; the round then gives a few percent (section 1) |
+| A newcomer kind that never matures holds the newcomer place and blocks invasions | the invasion test and the long runs watch it; if it shows, the place frees when the newcomer has not matured within its own gene's life span (L23) |
+| Reproduction genes are selected only between kinds and cells under the cover | accepted (L27); C0's number and the 1,000-year watch |
 | E1 loses the rain belts or the heat to the poles | the rows of latitude are kept; zonal checks on globe36 with life |
 | E1 costs more on 4 threads (45 domains become 30 on globe36) than it saves | E1's done-when asks the 4T year not slower; PR7 measures it first |
 | The machine is shared: wall times swing | 1T instructions judge most steps; wall time under the lock, interleaved, the load said |
@@ -274,8 +287,9 @@ claim) and ends with a verdict; a fixer answers each finding; the review runs ag
 ## 9. Lines
 
 Core at the round's start: 10,443 code lines (X88; the cover's designer counted 10,444; R0 counts it), ceiling 10,643.
-Budgets by lane: F 0 (tape and cli only); B1 0 (data and worldgen), B2 at most +10; D1 at most +10, D2 at most +20; E1
-at most +40; G1 at most +30; the cover from `design/cover.md` (its first version said net about +75 to +95; it deletes
-little, as `copy::select` stays on each cover). Without the cover about +100; with it about +190, past the ceiling: the
-cover may pass it only with a decision that says how many lines and why (L4), and the lanes that land after it must
-fit what is left or ask.
+Budgets by lane: the cover C1 about +20 net, C2 about +105 net (`cover.md` 7: net about +125, to about 10,570; it
+cannot delete more than it adds, as the node code stays for the animals, L4); F 0 (tape and cli only); B1 0 (data and
+worldgen), B2 at most +10; D1 at most +10, D2 at most +20; E1 at most +40; G1 at most +30; C4 by its probe. **The
+whole plan comes to about +235, about 10,680, past the ceiling by about 40:** the round may pass the ceiling by what the
+cover needs, each step saying its lines in its commit, and phase Z sets the new ceiling (the lines then plus 200, X88's
+rule) (L31). The lanes that land after the cover fit what is left or say how many lines they add and why.

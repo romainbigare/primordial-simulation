@@ -934,4 +934,4 @@ the golden test.
 
 ## 7. Lighter world (from 27 October 2026)
 
-- The plan (`docs/lighter/plan.md`; `decisions.md` L1 to L22; designs in `docs/lighter/design/`), after the first adversarial review: compute less in six lanes (F the tape and saves, B living bodies do not rot by variant (d), C the cover, D the take and the view, E wider air nodes on globes, G the parts' reactor), probes first (R0, PR1, PR3, PR6, PR7, PR8, C0); ideas 2 and 4 wait for the cover (the owner's word for idea 2; A3 and A4 only if the cover fails); several plant kinds per cell that do not mix are a must for the cover (the owner's word).
+- The plan (`docs/lighter/plan.md`; `decisions.md` L1 to L33; designs in `docs/lighter/design/`), after the first adversarial review: compute less in six lanes (F the tape and saves, B living bodies do not rot by variant (d), C the cover, D the take and the view, E wider air nodes on globes, G the parts' reactor), probes first (R0, PR1, PR3, PR6, PR7, PR8, C0); ideas 2 and 4 wait for the cover (the owner's word for idea 2; A3 and A4 only if the cover fails); several plant kinds per cell that do not mix are a must for the cover (the owner's word).
