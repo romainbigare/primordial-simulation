@@ -113,7 +113,9 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
         if y % every == 0 || y == y0 + years {
             println!("{}", report::year(&w, y, &t0, &clock, &rec));
             clock.print_at(y, w.counts.updates);
+            let t = Instant::now();
             render::save(&w, &format!("{out}/year{y:04}.png"));
+            clock.spent[TAPE] += t.elapsed();
         }
         // A snapshot with each decade and at the end, and with it the tape so far, so a stopped run keeps its series and
         // frames. The writer thread compresses and writes them; the main thread only makes the snapshot's bytes and copies the tape.

@@ -174,3 +174,9 @@ since the thread uses a core that the run leaves idle (the process uses 2.4 core
 **Verdict against the kill line** (under -1% of a long run's wall time a year; the main thread's share under 1%):
 passed on the count, -2.0% of a 300-year run and about -3.3% of a 1,000-year run; not shown in wall time. After F2
 the saves and the tape cost the main thread 0.4% of a 300-year island run.
+
+## F1, the pictures
+
+The pictures every `--every` years (`render::save`) are timed in the tape's column too, so that a run's "per year" and
+its wall time agree. A picture costs 0.6 ms on the island (PR1), 0.05 s in 300 years: under 0.1% of a run. The yearly
+check (0.3 to 1.3 ms) is not timed.
