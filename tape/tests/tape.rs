@@ -411,7 +411,7 @@ fn a_tape_that_stops_before_the_snapshot_is_refused() {
     save_snapshot(&w, &rec.kept(), dir.join("snap.bin.gz")).unwrap();
     let (w, kept) = tape::load_snapshot(dir.join("snap.bin.gz")).unwrap();
     let e = tape::Recorder::new(&w, 1, 0).resume(&w, kept, &dir).expect_err("refused");
-    assert!(e.to_string().contains("stops before the snapshot"), "{e}");
+    assert!(e.to_string().contains("no month at the snapshot"), "{e}");
 }
 
 /// A tape written at the end of each year (the CSV files then get only their new rows) leaves the same CSV files as one

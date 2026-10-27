@@ -90,6 +90,12 @@ snapshot lands in the next row (`docs/tape.md`). The pictures and the yearly che
 The long-run times of `docs/reports/speed-x10.md` leave the snapshots out; from here a run's "per year" holds them
 (1.7% more on the island).
 
+## F1, the pictures
+
+The pictures every `--every` years (`render::save`) are timed in the tape's column too, so that a run's "per year" and
+its wall time agree. A picture costs 0.6 ms on the island (PR1), 0.05 s in 300 years: under 0.1% of a run. The yearly
+check (0.3 to 1.3 ms) is not timed.
+
 ## F3: the tape's files written cheaper
 
 **What it does** (`tape/src/rec/`). The viewer's file is compressed at gzip level 1 (it was level 6); its header is

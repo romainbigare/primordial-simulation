@@ -124,7 +124,7 @@ impl Recorder {
         let months: Vec<MonthRow> = serde_json::from_value(g["months"].clone())?;
         self.files.months = months.into_iter().take_while(|r| (r.year, r.month) <= now).collect();
         if self.files.months.last().map(|r| (r.year, r.month)) != Some(now) {
-            return Err(bad("the tape stops before the snapshot"));
+            return Err(bad("the tape has no month at the snapshot (it stops before it or starts after it)"));
         }
         Ok(())
     }
