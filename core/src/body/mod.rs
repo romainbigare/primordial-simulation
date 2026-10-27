@@ -103,6 +103,8 @@ pub struct Body {
     pub wet: u64,
     /// Body matter built for children and held back, mol (part of `store`, not of the body: `size`, `built`; laws.md 4.2)
     pub brood: f64,
+    /// For a node: the first batch of the world's clock at which it may make children (`copy::due`; 0: not set)
+    pub lump_at: u64,
     /// Visible traits: mass kg, light-capture area m², strength, colour (3 bands), height m (`height`)
     pub vis: [f32; 7],
     /// Its brain rows: the rows it was born with plus what it (a node: its members) learned; empty without a brain

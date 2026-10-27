@@ -1,10 +1,11 @@
 //! Law 4: Copy. Reproduction is a share of a surplus. A mature body puts the share `ALLOC` of what it builds (`grow`)
 //! into a brood, and whenever the brood covers the matter of a child, a child is made (`copy`) at the body's update,
-//! whatever its brain does. A child's genes are its parent's plus small noise, or with two parents each gene is one
-//! parent's (`mix`). A population node keeps how its members differ (`Body::spread`, `Body::row_spread`,
-//! `Body::size_spread`); its children are booked on the young node of their kind where they start, or start one, and
-//! grow up into its adult node (`young`). Only individuals' children start new lineages. With `Config::nodes` off
-//! bodies with a brain are never nodes: their children start as individuals and join nothing.
+//! whatever its brain does (a node at most once in `Config::lump_days`, `due`). A child's genes are its parent's plus
+//! small noise, or with two parents each gene is one parent's (`mix`). A population node keeps how its members differ
+//! (`Body::spread`, `Body::row_spread`, `Body::size_spread`); its children are booked on the young node of their kind
+//! where they start, or start one, and grow up into its adult node (`young`). Only individuals' children start new
+//! lineages. With `Config::nodes` off bodies with a brain are never nodes: their children start as individuals and join
+//! nothing.
 
 mod grow;
 mod mix;
@@ -22,7 +23,7 @@ use crate::chem::Chemistry;
 use crate::event::{Event, EventKind};
 use crate::lineage::{resized, sizes_of, wanted};
 use crate::nodes::{add, may_be_node, open, Lot, COUNT_SLACK};
-use crate::rng::{Purpose, Rng};
+use crate::rng::{self, Purpose, Rng};
 use crate::space::COMPASS;
 use crate::outbox::Entry;
 use crate::store::{Class, Node};
@@ -52,12 +53,13 @@ struct Births {
 }
 
 /// A mature body makes children whenever its brood covers one: an individual whole children of one parent or two, a
-/// node fractional members of one parent beyond `BROOD_HELD`; a share `DISPERSE` starts in a neighbour cell (laws.md
-/// 4.2-4.4). Returns whether any were made.
+/// node fractional members of one parent beyond `BROOD_HELD`, at most once in `Config::lump_days` (`due`); a share
+/// `DISPERSE` starts in a neighbour cell (laws.md 4.2-4.4). Returns whether any were made.
 pub fn copy(w: &World, d: &mut Domain, b: &mut Body) -> bool {
     let (chem, n, mc) = (&w.chem, b.n(), b.k.copy_mass);
     let Some(mi) = chem.matter() else { return false };
-    if !b.adult(chem) {
+    let node = n > 1.0;
+    if !b.adult(chem) || node && !due(w, b) {
         return false;
     }
     let mm = chem.subs[mi].molar_mass;
@@ -67,7 +69,6 @@ pub fn copy(w: &World, d: &mut Domain, b: &mut Body) -> bool {
     let body = 10f64.powf(b.gene_in_range(CHILD)) * mc;
     let matter = body * (1.0 - WET_TISSUE) / mm;
     let k = b.brood / matter;
-    let node = n > 1.0;
     let births = if node { k - BROOD_HELD * n } else { (k + COUNT_SLACK).floor() };
     if births <= 0.0 {
         return false;
@@ -78,7 +79,8 @@ pub fn copy(w: &World, d: &mut Domain, b: &mut Body) -> bool {
     let mate = if node { None } else { partner(w, d, b, &mut r) };
     // Children that start in the neighbour cell of a compass direction drawn (no link that way: none): of a node, the
     // share `DISPERSE` of its births, however few (less than one member with no node to join there waits in the brood,
-    // as the stayers do, `emit`); an individual's go together, by that chance.
+    // as the stayers do, `emit`), all of one update the same way, as the children of one call cost one `emit`; an
+    // individual's go together, by that chance.
     let disperse = b.gene_in_range(DISPERSE);
     let prov = provisions(&w.chem, b, mi, matter, births);
     let litter = Births { body, matter, prov, node, alone: !may_be_node(w, b), mate, parent: id };
@@ -90,6 +92,14 @@ pub fn copy(w: &World, d: &mut Domain, b: &mut Body) -> bool {
         Some(j) => (j, m),
         None => (i, 0.0),
     };
+    // A node all of whose children would wait (under one member, all staying, no young node to join) makes none now
+    // and keeps its turn; else this is its turn (`due`).
+    if node {
+        if m == 0.0 && births < 1.0 && young::linked(w, d, b, false).is_none() {
+            return false;
+        }
+        b.lump_at = w.batch() + (w.cfg.lump_days / w.cfg.batch_days) as u64;
+    }
     let mut made = false;
     if m > 0.0 {
         made |= emit(w, d, b, &litter, cell, m, &mut r);
@@ -100,6 +110,20 @@ pub fn copy(w: &World, d: &mut Domain, b: &mut Body) -> bool {
         made |= emit(w, d, b, &litter, i, births - m, &mut r);
     }
     made
+}
+
+/// Whether node `b` may make children at this update: `Config::lump_days` or more after its last (`Body::lump_at`).
+/// One that never made any waits for the first batch of its phase (a hash of its id), so that nodes made together
+/// (founders) do not make theirs at the same batches ever after. A node makes all its brood covers at its first update
+/// that may; its brood fills at every update and leaves with members who die (`Body::lose`). So `vary`, the rows and
+/// the join run once in `lump_days`. A part split off a node keeps its turn, and a node keeps its own when others join
+/// it.
+fn due(w: &World, b: &mut Body) -> bool {
+    let (per, now) = ((w.cfg.lump_days / w.cfg.batch_days) as u64, w.batch());
+    if b.lump_at == 0 {
+        b.lump_at = now + (per - (now + rng::mix(b.id)) % per) % per;
+    }
+    now >= b.lump_at
 }
 
 /// Children that start in another cell than their parent's (`emit`), in the outbox until the batch ends (`land_litter`): their

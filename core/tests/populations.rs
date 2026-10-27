@@ -235,6 +235,8 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
+    // (A node may make children at every update: `lump_days` of one batch.)
+    w.cfg.lump_days = w.cfg.batch_days;
     let books = Books::now(&w);
     let s = live(&w).into_iter().find(|&s| w.life[s].count > 10.0).expect("a node");
     let mut b = std::mem::take(&mut w.life[s]);
@@ -416,6 +418,8 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     let mut w = small_world();
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::alike());
     (w.cfg.phys.c_copy, w.cfg.crowd) = (0.0, 64);
+    // (A node may make children at every update: `lump_days` of one batch.)
+    w.cfg.lump_days = w.cfg.batch_days;
     let lay = Layout::of(&w.chem);
     // Every gene's spread at the split threshold, (alike step)² π / 8 + step² (`body::most`).
     let inv = body::steps(&lay, &vec![1.0; lay.len]);

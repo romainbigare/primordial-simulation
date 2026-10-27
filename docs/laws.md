@@ -379,12 +379,19 @@ gene within `alike` steps; it decides who mixes, joins and merges.
 A body is **mature** (`Body::adult`) when its living body per member reaches `COPY_MASS`; then growth (6.6) puts the
 share `ALLOC` into a **brood** (`Body::brood`), matter held for children that leaves with the body's matter in the same
 share (`Body::lose`). Whenever the brood covers a child, children are made (`copy::copy`) whatever the brain does:
-bodies copy by physics only. A child has a body of 10^`CHILD` × the copy mass, provisions of the other stores in its
-parent's proportions (the key liquid × 10^`WET`, so children may be dry and dormant), its share of heat, and the genes
-plus noise. A node keeps half a child of brood per member (`copy::BROOD_HELD`), so its members' broods lie evenly
-between none and one child, as individuals' do. A share `DISPERSE` of the children starts in a neighbour cell in a
-random direction (for an individual, that chance), where they land when the batch ends (0). Less than one member
-with no node to join waits in the brood, or, landed in a neighbour cell, goes back into it.
+bodies copy by physics only. An individual makes them at its update; a node at most once in `lump_days` (30), at its
+first update that may (`copy::due`), all that its brood covers then. A node's first children wait for the first batch of
+its own phase (a hash of its id), so nodes made together do not make theirs at the same batches; no turn is tied to a
+date (a month is the clock's step, not a season). A node whose children would all wait (below) keeps its turn. A part
+split off a node keeps the node's turn; a node that others join keeps its own. The brood fills at every update and
+leaves with members who die. This holds for every node: one without a brain updates at most every `node_days` (40, more
+than `lump_days`), so by default it makes children at each update. A child has a body of 10^`CHILD` × the copy mass,
+provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
+dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member
+(`copy::BROOD_HELD`), so its members' broods lie evenly between none and one child, as individuals' do. A share
+`DISPERSE` of the children starts in a neighbour cell in a random direction, one for all of a node's children of an
+update (for an individual, that chance), where they land when the batch ends (0). Less than one member with no node to
+join waits in the brood, or, landed in a neighbour cell, goes back into it.
 
 ### 4.3 Two parents
 A mature individual takes the most alike mature **partner** in its cell (`copy::mix::partner`); each gene and born row

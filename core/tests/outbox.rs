@@ -46,6 +46,8 @@ const CROWD: usize = 96;
 #[test]
 fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     let (mut w, i) = start();
+    // (A node may make children at every update: `lump_days` of one batch.)
+    w.cfg.lump_days = w.cfg.batch_days;
     let j = w.mesh.cells().around(i).1[0] as usize;
     let books = Books::now(&w);
     let rest = |w: &mut World| eater(w, i, brain::REST, 1.0);

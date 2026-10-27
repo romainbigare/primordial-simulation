@@ -43,6 +43,8 @@ pub struct Config {
     pub batch_days: u32,
     /// Speed setting: a population node (more than one member) updates at most every this many days (`Body::interval`)
     pub node_days: u32,
+    /// Speed setting: a population node makes its children at most once in a window of this many days (`copy::copy`)
+    pub lump_days: u32,
     /// Speed setting: a node without a brain runs its sample member on one update in this many, drawn (`copy::select`)
     pub sample_every: u32,
     /// Speed setting: a population node with a brain decides about every this many days and acts by habit between (`choose::act`; 0: every update)
@@ -392,6 +394,8 @@ impl Config {
         let b = self.batch_days;
         require(b > 0 && d.is_multiple_of(b) && self.days_per_month.is_multiple_of(b), || format!("batch_days ({b}) must be at least 1 and divide phys_days ({d}) and days_per_month ({})", self.days_per_month))?;
         require(self.node_days.is_multiple_of(b), || format!("node_days ({}) must be a multiple of batch_days ({b})", self.node_days))?;
+        let lump = self.lump_days;
+        require(lump > 0 && lump.is_multiple_of(b), || format!("lump_days ({lump}) must be a whole number of batches ({b} days), at least one"))?;
         // A liquid step of more than a month counts its own period from the start (`schedule::days`).
         let (f, m) = (f, self.days_per_month);
         require(f <= m || f.is_multiple_of(m), || format!("flow_days ({f}) over a month must be a whole number of months ({m} days)"))?;
@@ -432,6 +436,7 @@ impl Default for Config {
             sleep_days: 90,
             batch_days: 10,
             node_days: 40,
+            lump_days: 30,
             sample_every: 2,
             think_days: 20,
             skin_m: 2.0,

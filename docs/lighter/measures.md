@@ -415,3 +415,105 @@ in 360 calls and in 9 makes the same products and moves each starting store by t
 rest is the reactions run one after the other in a call), the frame not at all, each call exact in elements and energy;
 it fails with no skip (the frame rots) and would fail with the per-call form (charring runs in 40-day calls, not in
 1-day ones). `catalysts_fail_when_hot` takes its bare reference outside a body (`None`) and asserts it is above 0.
+
+## H1: children in lumps
+
+**What.** A population node makes its children at most once in `lump_days` (30): at its first update `lump_days` or
+more after its last children, all that its brood covers then (`copy::due`). The node keeps the first batch at which it
+may make them again (`Body::lump_at`), so a changed interval gene can neither make them twice in 30 days nor skip a
+turn, and a part split off a node keeps the node's turn. A node that never made children waits for the first batch of
+its own phase (a hash of its id): without it, nodes placed together (founders) would make theirs at the same batches
+ever after (the pulse test caught this). A node whose children would all wait (under one member, all staying, no young
+node) makes none and keeps its turn. The brood fills at every update as before and leaves with members who die.
+Individuals make children at every update. The rule holds for every node; a node without a brain updates every 40
+days, so by default each of its updates may make children (the guard `lump_days <= node_days` of decision 43 is not
+built: it would refuse the pace test's settings 0 and 20). The dispersers of an update go one way (one direction draw
+an update, not one a child: a direction a child would need an `emit`, a join, a child).
+
+**Cost** (callgrind, one thread, one year; base: `speed/lighter` at `195bbc2`; the `benchZ` saves read by an H1 build
+that keeps snapshot 49, the new field and setting skipped on load, so both years start from one world).
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| the year (`run_for`), base / H1, M | 4,823 / 4,485 (**-7.0%**) | 5,286 / 4,974 (**-5.9%**) | 10,118 / 9,398 (**-7.1%**) |
+| of it `copy::copy`, M | 521 / 283 (-4.9 points) | 390 / 216 (-3.3) | 1,172 / 641 (-5.3) |
+| of it the landing after the batch (`outbox::land`), M | 331 / 270 (-1.3 points) | 273 / 227 (-0.9) | 648 / 497 (-1.5) |
+| the rest of a body update, M | 2,420 / 2,395 (-0.5 points) | 2,269 / 2,229 (-0.8) | 5,495 / 5,484 (-0.1) |
+| the rest of the year, M | 1,551 / 1,537 (-0.3 points) | 2,354 / 2,302 (-1.0) | 2,803 / 2,776 (-0.3) |
+| groups of children made (`copy::emit` calls) | 12,982 / 8,127 (-37%) | 9,814 / 6,426 (-35%) | 28,780 / 18,316 (-36%) |
+| joins (`nodes::add` calls) | 23,270 / 18,951 | 15,761 / 12,881 | 49,642 / 39,721 |
+| animal updates (`choose::act` calls) | 12,548 / 12,494 | 10,706 / 10,584 | 27,742 / 27,898 |
+| a group made (`emit`), k | 39.5 / 34.1 | 39.1 / 32.8 | 40.1 / 34.3 |
+
+**Why more than T1's bound (-4.4% on the island).** T1 took half of the children (6.9%) and half of the litters'
+landing (1.8%). The children fall by 46% here (521 to 283 M), and their landing by 18% of all landing: an adult animal
+node made children at about 24 updates a year and now at 12, and each group made is 14% cheaper. That is the mix of
+groups, not a cheaper group: per call the brain rows' shake falls from 10.3 k to 6.4 k (`brain::shake` in `emit`) and
+the join from 19.2 k to 16.4 k (`copy::start`), because the groups of animals (with brain rows to shake) fall by about
+half while the groups of stands (no rows) stay. About 1 point of the year (the rest of the update and of the year) is
+the world moving within the year.
+
+**Kill line** (under -3% of the year on island22 and region24, counted): passed, -7.0% and -7.1%.
+
+**Do the animals move?** (Review of lane H, item 1.) Base `195bbc2` against H1 (and H5), with counters in a probe
+build (never merged): litters that land and found a node, join one, or go back; stayer groups that found a node; the
+young share. Seeds 1 to 3 each.
+
+The key-number island (64 x 64, 100 years: the eaters there settle by year 70 to 100; "Reading the eaters", handover
+13.2): eaters' log10 kg over years 91 to 100, the rest over years 71 to 100, a year.
+
+| | base | H1 | H1 and H5 |
+|---|---|---|---|
+| eaters, log10 kg | 8.29, 8.35, 8.07 (8.24) | 8.31, 8.23, 8.11 (8.22) | 8.50, 8.31, 8.04 (8.28) |
+| eater members, millions | 4.57, 5.33, 2.81 | 4.89, 4.09, 2.91 | 7.17, 4.77, 2.57 |
+| eater births a year, millions | 1.06, 1.25, 0.64 | 1.07, 1.03, 0.68 | 1.41, 1.13, 0.63 |
+| (births - deaths) / births | -0.13, -0.04, -0.08 | -0.08, -0.09, -0.06 | -0.03, -0.06, -0.09 |
+| young share of animal members | 0.820, 0.813, 0.808 | 0.809, 0.814, 0.794 | 0.807, 0.818, 0.810 |
+| animal nodes; cells with animals | 2,922; 1,445 (means) | 2,953; 1,441 | 3,425; 1,442 |
+| litters that found a node | 722, 1,136, 595 | 475, 542, 378 | 530, 556, 374 |
+| litters that join a node | 31,685, 26,871, 28,232 | 11,797, 9,358, 10,715 | 13,996, 9,838, 10,639 |
+| litters sent back | 1,307, 764, 1,256 | 358, 175, 354 | 961, 210, 401 |
+| stayer groups that found a node | 66, 7, 127 | 60, 10, 80 | 220, 8, 99 |
+| died of lack | 0, 5, 0 | 0, 0, 0 | 0, 0, 0 |
+
+island22 (22 x 22, 300 years, the bench's world; log10 kg over years 271 to 300, the rest over 241 to 300): eaters
+7.57, 7.07, 6.80 (base), 7.40, 7.11, 6.62 (H1), 7.53, 6.91, 6.87 (H1 and H5); animal members at year 300 8.3e5, 3.0e5,
+2.1e5 (base), 4.3e5, 2.2e5, 1.0e5 (H1), 6.5e5, 1.3e5, 1.8e5 (H1 and H5); litters that found a node 296, 135, 70 (base),
+121, 112, 34 (H1); cells with animals 154, 155, 163 (means).
+
+globe36 (an 18-cell-side globe, 150 years; eaters there spread late: log10 kg over years 141 to 150, the rest 121 to
+150): eaters 12.52, 12.55, 12.30 (base), 12.71, 12.68, 12.47 (H1), 12.47, 12.39, 12.31 (H1 and H5); cells with animals
+150, 81, 112 (base), 154, 101, 106 (H1), 136, 65, 107 (H1 and H5); litters that found a node 684, 178, 415 (base), 286,
+133, 181 (H1); died of lack 4, 0, 0 (base), 8.0e6 (0.04% of births), 1,167, 0 (H1), 19, 3,211, 3 (H1 and H5).
+
+- **The warning sign is the world of B1, not H1.** The remade island22 bench holds 6.55e5 animal members against 0.9e5
+  to 2.5e5 on the earlier bench builds, but the base `195bbc2` itself (after B1 and G1) holds 8.3e5 on the same seed
+  and year: the earlier builds were made before B1.
+- **The animals stay within their seeds' noise** on all three worlds: mass, members, births, births less deaths, the
+  young share, nodes and cells. On the globe H1's eaters lie 0.16 decades above the base (seeds spread 0.25), and H1
+  with H5 0.07 below it: the gap between two steps that do not change timing (H1, H1 and H5) is as large, so it is
+  noise.
+- **Larger lumps found fewer nodes, not more.** Litters are fewer and larger (a third as many land), so more of them
+  pass one member, but in all fewer found a node (-43% on the 64 x 64 island, -53% on the globe) and far fewer go
+  back (-73%). The cells the animals hold stay the same: the range does not depend on the founding rate at this level.
+- **Lack:** one globe seed shows 8e6 deaths of lack a year with H1 (0.04% of births; the base 4). Larger lumps take
+  larger provisions at once (review item 7); watch it.
+
+**Births inside a month** (the 64 x 64 island, years 71 to 100, node births of animals by batch): the share of birth
+updates in the first, second and third batch of a month is 0.331, 0.333, 0.335 (base) and 0.328, 0.326, 0.346 (H1);
+of members born 0.336, 0.329, 0.335 and 0.328, 0.312, 0.360. By batch of the year the largest and smallest share of
+birth updates are 0.0362 and 0.0188 (base, the seasons) and 0.0357 and 0.0207 (H1); an even share is 0.0278. No pulse;
+the third batch of a month holds 4% more than an even third.
+
+**Level 4.** Golden re-pinned. The key numbers (64 x 64, seeds 1 to 3) against B1: land 292.15 K (B1
+292.17), swing 15.30 (15.30), rain on land 0.001819 (0.001818), gas 3 412.2 ppm (412.4), river cells 696 (699), land
+worn down 0.1335 mm/yr (0.1344), light-eaters 10.25 (10.25), eaters 5.18 (5.21), life of light-eaters 1.43 yr (1.42),
+life of eaters 13.34 yr, seeds 14.8, 11.8, 13.5 (13.33), S50 0.559 (known out). All in their ranges.
+
+**Tests.** The nodes check, the pace and batch tests, the long-step test on six worlds (land 0.273 K off, limit 0.3 K; B1
+0.262), the globe's climate test, `a_century_keeps_its_books` and `the_eaters_live_and_stop_growing` pass. New: `a_node_makes_its_children_at_most_once_in_lump_days` (updates at gaps of one to three batches:
+no two births under 30 days apart, none skipped at an update 30 days or more after the last, as many as at every update
+less what waits in the brood; a node that joins it and the half split off it make none until 30 days after its births,
+then some), `no_batch_holds_a_pulse_of_births` (thirty nodes placed together, a year: each batch within 25% of its even
+share; one shared phase gives 200%, phases 2:1 give 33%). The node tests that are not about lumps set `lump_days` to
+one batch; the settings test refuses a `lump_days` that is not whole batches.

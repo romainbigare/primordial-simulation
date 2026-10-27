@@ -143,8 +143,8 @@ fn a_sleeping_node_catches_up_as_an_awake_node_steps() {
 }
 
 /// The default settings pass; a time step of 0, an air step that does not divide the physics step, a batch that does not
-/// divide the physics step or the month, a liquid step over a month that is not whole months, a pace of nodes that is
-/// not whole batches, or a dormancy of 1 is refused.
+/// divide the physics step or the month, a liquid step over a month that is not whole months, a pace of nodes or a
+/// window of children (`lump_days`) that is not whole batches, or a dormancy of 1 is refused.
 #[test]
 fn the_default_settings_pass_and_a_step_off_its_base_or_out_of_step_or_a_dormancy_of_1_is_refused() {
     assert_eq!(Config::default().validate(), Ok(()));
@@ -159,6 +159,8 @@ fn the_default_settings_pass_and_a_step_off_its_base_or_out_of_step_or_a_dormanc
         Config { batch_days: 4, ..Default::default() },
         Config { batch_days: 5, node_days: 36, ..Default::default() },
         Config { batch_days: 10, node_days: 36, phys_days: 30, ..Default::default() },
+        Config { lump_days: 0, ..Default::default() },
+        Config { lump_days: 25, ..Default::default() },
         dormant,
     ];
     for c in refused {
