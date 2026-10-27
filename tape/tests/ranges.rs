@@ -28,7 +28,8 @@
 //!
 //! The steps of Flow are speed settings too (the long step against the short one): small worlds with life, each seed
 //! against itself, keep their climate at the default steps and with the air's step at 6 hours and the physics step and
-//! the bodies' batch at 2 days, within 0.3 K for a temperature and the year-to-year spread for the others.
+//! the bodies' batch at 2 days, within 0.3 K for a temperature and the year-to-year spread for the others, on the mean
+//! of seeds 1 to 6.
 
 mod common;
 
@@ -287,6 +288,9 @@ const STEP_YEARS: u64 = 20;
 const STEP_FROM: u64 = 11;
 /// How far the long step may move each temperature of the climate from the short step's, each seed against itself, K.
 const STEP_K: f64 = 0.3;
+/// The long-step test's seeds: six, as one seed's offset of the land spans 0.10 to 0.40 K, so the mean of three moved
+/// by about 0.01 K with any change of rounding; six halve its variance.
+const STEP_SEEDS: [u64; 6] = [1, 2, 3, 4, 5, 6];
 
 /// The `CLIMATE` columns at the end of each year from `STEP_FROM`, on the long-step test's world of `seed`, with the
 /// steps of Flow that `set` makes.
@@ -313,7 +317,7 @@ const SHORT_PHYS_DAYS: u32 = 2;
 /// year-to-year spread at the short steps (the mean over the seeds of its highest less its lowest yearly value) for the
 /// others.
 #[test]
-#[ignore = "slow: six 20-year runs of a 32 x 32 world with life"]
+#[ignore = "slow: twelve 20-year runs of a 32 x 32 world with life"]
 fn the_long_step_keeps_the_climate() {
     let short: fn(&mut Config) = |c| {
         (c.air_hours, c.phys_days, c.flow_days, c.batch_days) = (SHORT_AIR_HOURS, SHORT_PHYS_DAYS, SHORT_PHYS_DAYS, SHORT_PHYS_DAYS);
@@ -321,7 +325,7 @@ fn the_long_step_keeps_the_climate() {
     let default: fn(&mut Config) = |_| {};
     // Per seed, [short, default], all side by side.
     let runs: Vec<[Vec<[f64; CLIMATE.len()]>; 2]> = std::thread::scope(|s| {
-        let runs: Vec<_> = SEEDS.iter().map(|&seed| [short, default].map(|set| s.spawn(move || climate(seed, set)))).collect();
+        let runs: Vec<_> = STEP_SEEDS.iter().map(|&seed| [short, default].map(|set| s.spawn(move || climate(seed, set)))).collect();
         runs.into_iter().map(|pair| pair.map(|r| r.join().expect("a run"))).collect()
     });
     let seeds = runs.len() as f64;

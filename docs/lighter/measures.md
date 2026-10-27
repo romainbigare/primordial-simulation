@@ -217,3 +217,19 @@ passes. Core code lines: 10,450 (+8 -2).
 
 Verdict: kept. -1.18% of globe36's year for 8 lines passes L2's line for a level-1 step of 20 lines or less (1%). It is
 under the plan row's 1.5% kill line; the architect decided for L2's line. The 4-thread year was not timed.
+One section per step, in the order of the work. `$L` is the scratch folder of the round.
+
+## The long-step test judges six worlds
+
+`the_long_step_keeps_the_climate` judges the mean over seeds 1 to 6 of what the default steps move the climate from
+the short ones (its own list, `STEP_SEEDS`; the other tests keep `SEEDS`, 1 to 3), with the limit unchanged, 0.3 K for
+a temperature. One seed's offset of the land spans 0.10 to 0.40 K, so a mean of three moved by about 0.01 K with any
+change of rounding, and the test had 2.5% of room. Six halve the variance. On the base (`07897b6`):
+
+| | seeds 1 to 6 | mean | limit |
+|---|---|---|---|
+| land, K | 0.398, 0.103, 0.377, 0.261, 0.210, 0.207 | **0.259** | 0.3 |
+| summer, K | 0.251, -0.017, 0.269, 0.187, 0.179, -0.003 | 0.144 | 0.3 |
+| winter, K | 0.274, -0.042, 0.196, 0.011, -0.019, 0.097 | 0.086 | 0.3 |
+
+Rain, gas 3 and rivers stay far within their year-to-year spread. It passes.
