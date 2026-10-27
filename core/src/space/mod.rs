@@ -18,7 +18,6 @@ macro_rules! views {
         })*
     };
 }
-use views;
 
 /// One level of a mesh: its cells, its links, and how it nests in the levels next to it.
 #[derive(Clone, Debug, Default)]

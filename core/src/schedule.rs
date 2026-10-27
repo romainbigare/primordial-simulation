@@ -44,7 +44,7 @@ fn days(cfg: &Config, d: u32) -> Every {
 
 /// The processes of the world in their fixed order at one time, each on its period counted from the start of the longer
 /// period that holds it (`Every`); Flow's state comes first, as the others read it.
-fn processes(w: &World) -> [(Every, Run); 9] {
+fn processes(w: &World) -> [(Every, Run); 10] {
     let (cfg, cal) = (&w.cfg, w.cfg.calendar());
     // The slow parts count from the start of the world.
     let from_start = |period: u64| Every { period, within: period };
@@ -58,6 +58,7 @@ fn processes(w: &World) -> [(Every, Run); 9] {
             }
         })),
         (Every { period: cfg.air_hours as u64 * HOUR_S, within: cal.month }, (Stage::Flow, "air", |w, s| flow::air(w, s as f64))),
+        (physics, (Stage::Flow, "sink", |w, s| flow::sink(w, s as f64))),
         (days(cfg, cfg.flow_days), (Stage::Flow, "liquid", |w, s| flow::liquid(w, s as f64))),
         (from_start(flow::CREEP_YEARS * cal.year), (Stage::Flow, "creep", |w, s| flow::creep(w, s as f64))),
         (from_start(flow::REFRESH_MONTHS * cal.month), (Stage::Flow, "refresh", |w, _| flow::refresh(w))),

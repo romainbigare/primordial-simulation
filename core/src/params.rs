@@ -399,6 +399,11 @@ impl Config {
         // A liquid step of more than a month counts its own period from the start (`schedule::days`).
         let (f, m) = (f, self.days_per_month);
         require(f <= m || f.is_multiple_of(m), || format!("flow_days ({f}) over a month must be a whole number of months ({m} days)"))?;
+        // Each liquid step falls on a physics step, after that step's state in full and its sink (`flow::sink`). A step
+        // of the physics up to a month counts from each month's start, so a liquid step of whole months falls on one;
+        // a shorter liquid step, or a physics step over a month, only on a whole number of physics steps.
+        let on_physics = f.is_multiple_of(d) || (d <= m && f >= m);
+        require(on_physics, || format!("flow_days ({f}) must fall on physics steps ({d} days): a whole number of them, or of months"))?;
         let why = "sample_every must be at least 1 (a sample on one update in that many)";
         require(self.sample_every > 0, || why.into())?;
         let wake = self.wake_share;

@@ -100,29 +100,18 @@ fn the_compass_of_a_square_is_its_eight_neighbours() {
     }
 }
 
+/// A stack numbers each layer's nodes after the layer below: a deep store and the ground on the squares, the air on its
+/// coarser level.
 #[test]
-fn a_stack_of_three_layers_links_each_cell_up_its_column() {
+fn a_stack_numbers_each_layer_after_the_one_below() {
     let [_, (sq, mesh)] = maps();
-    // Today's column: a deep store and the ground on the squares, the air on its coarser level.
-    let layers = [0, 0, 1];
-    let st = Stack::new(&mesh, &layers);
+    let st = Stack::new(&mesh, &[0, 0, 1]);
     let (n, na) = (sq.n(), mesh.level(1).n());
     assert_eq!(st.nodes(), 2 * n + na);
-    assert_eq!(st.lo().len(), 2 * n, "one link per square below the ground, one from each square up to its air");
-    let mut into_air = vec![0.0; na];
     for i in 0..n {
         let (deep, ground, air) = (st.node(0, i), st.node(1, i), st.node(2, mesh.up(i, 0, 1)));
         assert_eq!((deep, ground, air), (i, n + i, 2 * n + mesh.up(i, 0, 1)));
-        assert_eq!((st.lo()[i] as usize, st.hi()[i] as usize), (deep, ground));
-        assert_eq!((st.lo()[n + i] as usize, st.hi()[n + i] as usize), (ground, air));
-        assert_eq!(st.area()[i], SIDE * SIDE);
-        into_air[mesh.up(i, 0, 1)] += st.area()[n + i];
     }
-    assert_eq!(into_air, mesh.level(1).area(), "the links into an air node cross its whole floor");
-    // Two layers on the coarse level are linked once per coarse cell.
-    let air2 = Stack::new(&mesh, &[layers[1], layers[2], layers[2]]);
-    assert_eq!(air2.lo().len(), n + na);
-    assert!(air2.lo()[n..].iter().zip(&air2.hi()[n..]).all(|(&lo, &hi)| hi as usize == lo as usize + na));
 }
 
 /// A globe: its cells cover the whole sphere, narrower toward the poles; its rows wrap east to west at every level,

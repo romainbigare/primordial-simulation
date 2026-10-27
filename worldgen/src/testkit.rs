@@ -309,10 +309,11 @@ pub fn moved_serial<R>(w: &mut World, (i, h): (usize, Handle), f: impl FnOnce(&m
 }
 
 /// Every part of Flow but creep once, for `dt` seconds, in the clock's order: the state rebuilt in full, the air's step,
-/// liquid, and the refresh; then the state the step leaves. A law of Flow on its own.
+/// the sink into the bed's store, liquid, and the refresh; then the state the step leaves. A law of Flow on its own.
 pub fn flow_step(w: &mut World, dt: f64) {
     pcore::flow::state(w, true);
     pcore::flow::air(w, dt);
+    pcore::flow::sink(w, dt);
     pcore::flow::liquid(w, dt);
     pcore::flow::refresh(w);
     pcore::flow::state(w, false);

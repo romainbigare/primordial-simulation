@@ -30,11 +30,12 @@ across it passes exactly.
 domain on the pool with the feature `threads`, in each of its cells the wear of movers, the monthly merge, the shade and
 the sums; a death or a merge that lets go of a part queues that in the domain's outbox, applied after the tasks as in a
 batch; at a month's start Flow's state is rebuilt in full for the cells' surroundings, and its own process leaves it when
-it would be in full then), the parts of Flow that are due
-(air every `air_hours`, liquid and erosion every `flow_days`, heat sideways and creep yearly) and Change; on the month's
-first day Bond (the turns of the parts: each domain's in slot order on its view, the domains on the pool, their moves
-booked in the order of the domains; then the loads of the structures one by one); every `batch_days` days (10, one
-air step) the bodies whose interval ends (`survey::batch`).
+it would be in full then), the parts of Flow that are due (air every `air_hours`; after it, every physics step, the
+sink of the liquid over field capacity into the bed's store; liquid and erosion every `flow_days`, always on a physics
+step; heat sideways and creep yearly) and Change; on the month's first day Bond (the turns of the parts: each
+domain's in slot order on its view, the domains on the pool, their moves booked in the order of the domains; then the
+loads of the structures one by one); every `batch_days` days (10, one air step) the bodies whose interval ends
+(`survey::batch`).
 **Intervals are whole batches**: a body's interval is its `INTERVAL` gene (5 to 360 days; a population node without a
 brain at least `node_days`, 40, a multiple of `batch_days`) rounded to the nearest whole number of batches, at least one
 (`Body::interval`), so an update always starts a batch, all the updates of a batch run at its first day, and a body
@@ -140,7 +141,9 @@ and a soft cover that melts away holds its surface at the melting point only unt
 long step ends where short ones do.
 
 ### 1.2 Liquid
-`flow::liquid`, every `flow_days` (60): inside a month, counted from the month's start; over a month, counted from the world's start (a whole number of months, `Config::validate`).
+`flow::liquid`, every `flow_days` (60): inside a month, counted from the month's start (a whole number of physics
+steps); over a month, counted from the world's start (a whole number of months); so always on a physics step, after its
+sink (`Config::validate`). The sink into the bed's store runs every physics step (`flow::sink`).
 - **Pores first**: the loose ground's pores (`porosity`) fill first, under any soft cover; only liquid above them stands
   and has a head (`flow::land::stand`), the depth bodies and Change read.
 - **Spill levels**: a priority flood over the ground gives each cell its spill level (Barnes, Lehman and Mulla 2014;
@@ -150,8 +153,10 @@ long step ends where short ones do.
   `Level::steepest`): two neighbours next in compass order make a triangle with the centre, the plane through their
   drops gives its slope and way, and the steepest triangle shares the liquid between its two neighbours by angle.
 - **Pore water** flows by Darcy's law (one implicit `spread` on the liquid table): `seep` × saturated thickness × width
-  / distance; pores at or under field capacity (`field`) give nothing. Liquid above it sinks to the deep store, which
-  flows by `bed_seep`. Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
+  / distance; pores at or under field capacity (`field`) give nothing. Liquid above it sinks to the deep store
+  (`drain::sink`, at most `seep` a second and the store's room) every physics step, right after the air's step that
+  brings the rain: held until a long liquid step, it would cover and darken the ground (`land::reflectance`, 1.4) and
+  warm it. The store flows by `bed_seep`. Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
   the cell's steepest slope over a hillslope of `hill` into the runoff (`flow::drain`).
 - **What goes with it**: its share of every liquid and of what is dissolved, with heat. Liquid passing through a node
   keeps its fusion heat whatever the node's phase and leaves at the temperature of the node mixed with what came in

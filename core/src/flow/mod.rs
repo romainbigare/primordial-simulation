@@ -23,7 +23,7 @@ pub(crate) const REFRESH_MONTHS: u64 = 3;
 /// cells of kilometres both are slow, and the implicit spread holds for any step.
 pub(crate) const CREEP_YEARS: u64 = 1;
 
-/// Each part of the law (`state`, `air`, `liquid`, `creep`, `refresh`) is a process of the clock (`schedule`). This one:
+/// Each part of the law (`state`, `air`, `sink`, `liquid`, `creep`, `refresh`) is a process of the clock (`schedule`). This one:
 /// the state of ground and air nodes from the world now, which the other laws read until the next physics step (in full
 /// at each liquid step, so a world resumed at a month's start goes on as an unbroken one; the survey builds it in full
 /// at a month's start, `built_now`).
@@ -59,6 +59,11 @@ pub fn air(w: &mut World, dt: f64) {
         air::state(w, s);
         air::step(w, s, dt, &draws);
     });
+}
+
+/// Liquid over field capacity sinks into the bed's store for `dt` seconds (`drain::sink`).
+pub fn sink(w: &mut World, dt: f64) {
+    with(w, |w, s| drain::sink(w, s, dt));
 }
 
 /// Liquid with its drainage and its work on the bed for `dt` seconds (`liquid::liquid`).

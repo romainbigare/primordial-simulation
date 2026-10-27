@@ -683,17 +683,17 @@ liquid stays every `flow_days`. Same 6 seeds, against the same 2-day reference:
 
 | liquid step | land, K | excess | standing | reflectance | sun | latent | out |
 |---|---|---|---|---|---|---|---|
-| 30 days, column apart | +0.074 ± 0.025 | +23 | +20 | -0.0021 | +0.57 | +0.14 | +0.45 |
-| **60 days, column apart** | **+0.052 ± 0.042** | +37 | +34 | -0.0013 | +0.37 | +0.00 | +0.48 |
-| 120 days, column apart | +0.093 ± 0.051 | +72 | +67 | -0.0022 | +0.58 | +0.04 | +0.82 |
+| 30 days, sink apart | +0.074 ± 0.025 | +23 | +20 | -0.0021 | +0.57 | +0.14 | +0.45 |
+| **60 days, sink apart** | **+0.052 ± 0.042** | +37 | +34 | -0.0013 | +0.37 | +0.00 | +0.48 |
+| 120 days, sink apart | +0.093 ± 0.051 | +72 | +67 | -0.0022 | +0.58 | +0.04 | +0.82 |
 
-The liquid over field capacity in the pores is gone (+24 mm at 60 days today, +3 mm with the column apart); what stands
+The liquid over field capacity in the pores is gone (+24 mm at 60 days today, +3 mm with the sink apart); what stands
 on full pores over a full store still waits for the pass but darkens little. The warming no longer grows with the step.
 
 **4. The tests with the prototype.** The long-step test (`the_long_step_keeps_the_climate`, seeds 1 to 6; the prototype
 in both runs):
 
-| | today | column apart | limit |
+| | today | sink apart | limit |
 |---|---|---|---|
 | land, K | +0.273 (0.439, 0.165, 0.337, 0.269, 0.208, 0.219) | **+0.191** (0.263, 0.104, 0.296, 0.140, 0.178, 0.165) | 0.3 |
 | summer / winter, K | +0.174 / +0.092 | +0.118 / +0.017 | 0.3 |
@@ -704,7 +704,7 @@ in both runs):
 The room grows from 9% to 36%. The short runs move -0.06 K (their 2-day column now runs before the pass) and the
 default runs -0.14 K. The key numbers (64 x 64, 30 years, seeds 1 to 3), once each:
 
-| Number | today | column apart | reference |
+| Number | today | sink apart | reference |
 |---|---|---|---|
 | land | 292.155 K | 292.103 K | 291.79 ± 1 |
 | swing | 15.305 K | 15.305 K | 15.13 ± 1.5 |
@@ -725,11 +725,70 @@ outside these two counts):
 | | island22 | globe36 | region24 |
 |---|---|---|---|
 | `flow::liquid` today | 132.5 | 185.6 | 212.3 |
-| `flow::liquid` with the column apart + the column (36 calls) | 126.2 + 23.3 | 173.4 + 33.0 | 201.1 + 42.4 |
+| `flow::liquid` with the sink apart + the sink (36 calls) | 126.2 + 23.3 | 173.4 + 33.0 | 201.1 + 42.4 |
 | added, share of the year | +17.0 (+0.29%) | +20.8 (+0.38%) | +31.2 (+0.26%) |
 
 **Verdict.** The long liquid step warms the land by darkening it: rain over field capacity waits up to 60 days in the
 ground, and the liquid's cover lowers the reflectance. Sinking it into the store every physics step (the same law, its
 fast part booked when the rain comes) removes three quarters of the warming (+0.20 to +0.05 K), makes it independent of
 the step, gives the long-step test 36% of room, keeps every key number in range, and costs 0.3% of a year. Design:
-`docs/lighter/design/liquid.md`. Level 3 when built.
+`docs/lighter/design/liquid.md`. Built as L1 (below), level 3.
+
+## L1: the liquid's sink every physics step
+
+**What** (level 3, a change of the order of a law; design `design/liquid.md`). Liquid over field capacity sinks into
+the bed's store (`drain::sink`: the same rate, room, heat and head lost as before) every physics step, right after the
+air step that brings the rain; the rest of the liquid (springs, the downhill pass, Darcy's law between cells, what a
+full store gives back) stays every `flow_days`. `Config::validate` requires each liquid step to fall on a physics step
+(after its state in full and its sink): a whole number of physics steps, or of months while the physics step is at
+most a month, as the physics steps count from each month's start. `space::Stack` keeps only the numbering of its layers' nodes (no
+law reads its vertical links any more). The physics reason: rain held up to 60 days in the pores covers the ground and darkens it, which warmed the land
++0.2 K against a 2-day liquid (the study above). No field changes: the snapshot stays 50. Core 10,473 code lines (-2).
+
+**The world.** The built step gives the prototype's numbers to every digit printed (the long-step test and the key
+numbers below are the same as in the study, section 4). Golden re-pinned (`0x1eabafb44093a1e5`, `0xfb3df1291bd32281`,
+`0xee42e4e58dd90b65`), the same with and without threads and in the plain debug build.
+
+| Check | Result |
+|---|---|
+| the long-step test (six worlds) | passes: land **+0.191 K** (base +0.273), summer +0.118, winter +0.017, limit 0.3; rain +1.1e-5 (limit 3.2e-4), gas 3 +2.7e-6 (1.8e-5), rivers +0.15 (27.7) |
+| the globe's climate test | passes: surface 290.23 K (base 290.13), vapour 0.0070 (0.0069), rain on land 1.807 m/yr (1.798), land 286.25 K (286.09), drift 0.013 K a year (0.006), ice at most 0.101 (0.103) |
+| the key numbers (once) | all in range but S50 (0.559, the known failure): land 292.103 K (base 292.155), swing 15.305, rain on land 0.001809 (0.001819), gas 3 412.0 ppm, river cells 696.8 (696.2), land worn 0.1471 mm/yr (0.1335), light-eaters 10.241, eaters 5.178, life of light-eaters 1.356 yr (1.429), of eaters 12.85 yr |
+| `cargo test --release --workspace`, with debug assertions too, clippy, the wasm build, the size test | pass, no warning |
+| tests changed | the clock test counts the sink among Flow's parts at a month's start, refuses `flow_days` 15 with 10-day physics steps and accepts 60 with 7-day ones; the 60-day period test now states the law (the store under poured liquid stays as it was until the first physics step, on day 10, then fills to its room with what the ground loses, 2.4000e6 m³ against 2.4049e6, and the rest runs off at day 60); the 20-day period test runs a 20-day liquid in place of 15 (default `seep`); the Darcy test fills the store under the wet cell, so none sinks before it flows; the channel test runs with `seep` 0: the sink fills the neighbours' stores before the liquid step, their springs drain them by `hill`, and the tested store's Darcy flow would then depend on `hill` |
+
+**Cost** (callgrind, one thread, one year from the `benchO50` saves; millions; the base is the study branch with its
+switch off, the same world as `335e1c1`, its probe outside these counts):
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| `flow::liquid`, base | 132.5 | 185.6 | 212.3 |
+| `flow::liquid` + `flow::sink` (6 + 36 calls), L1 | 126.1 + 23.3 | 173.3 + 32.9 | 201.1 + 42.4 |
+| added, share of the year | +16.9 (+0.29%) | +20.6 (+0.39%) | +31.1 (+0.27%) |
+
+**The numbers that move the other way** (probe on `study/liquid-warm`, switch `LIQ_FAST`, the same world as L1; land
+means of years 11 to 20, L1 less base):
+
+| | island 32 x 32, seeds 1 to 6 | globe without life 64 x 32, seeds 1 to 3 |
+|---|---|---|
+| land | -0.13 K (all six below 0) | +0.26 K (seeds +0.16, +0.59, +0.04) |
+| liquid over field capacity | -28 mm of 90 | +1.3 mm of 170 |
+| the bed's store, share full (base, L1) | 0.28, 0.33 | 0.57, 0.58 |
+| evaporation / rain | -2.3% / -0.5% | +1.1% / +0.6% |
+| reflectance / sunlight absorbed | +0.0056 / -1.3 W/m² | -0.0031 / +0.9 W/m² (under 45°: -0.0040, +1.2; snow lying -24 mm) |
+
+- **The globe warms.** Its land is wetter and its stores are fuller, so the island's mechanism hardly acts there: the
+  liquid over field capacity does not fall. What moves is under 45°: more evaporation and rain (the climate test's
+  vapour +1.4%), less snow lying, a darker ground. It is positive in all three seeds, but its size spans +0.04 to
+  +0.59 K: a globe without life swings by up to 0.2 K from one year to the next (seed 2), and a small change in when
+  liquid moves shifts its snow and vapour. Not probed further; the climate test holds with room (land in range, ice
+  0.101 of 0.25).
+- **The globe's drift** (the test's two-point measure, year 20 less year 11, over 9 years): seed 1 0.006 to 0.013 K a
+  year; over seeds 1 to 3 -0.059 to +0.044 today and +0.001 to +0.043 with L1. The change lies inside the seeds'
+  spread: noise, against a limit of 0.2.
+- **The light-eaters' life** (-5% in the key numbers, read at year 30 on three seeds): over ten years and six seeds of
+  the island it moves -0.9% (seeds -0.11 to +0.13 yr of 3.0), noise. Their mass and members are 8% lower in all six
+  seeds: the pores hold less liquid over field capacity and the land is cooler; not probed further.
+
+**Verdict.** Kept: a physics fix. The long liquid step no longer darkens and warms the land (the long-step test has 36%
+of room instead of 9%), every key number stays in range, at +0.3% of a year.

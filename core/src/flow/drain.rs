@@ -1,8 +1,9 @@
 //! Liquid under the surface: the pores of the loose ground and the store of the bed below (`Class::Deep`), two layers
-//! of each cell's stack joined by a vertical link (laws.md 1.2): the rates along that link, and Darcy's law between
-//! cells in each layer, which `solve::spread` solves.
+//! of each cell's stack (laws.md 1.2). Liquid over field capacity sinks from the pores into the store under them
+//! (`sink`, every physics step); Darcy's law moves it between cells in each layer, which `solve::spread` solves, and a
+//! full store gives back what it cannot hold (`under`, every liquid step).
 
-use super::{land::{bottom, filled, t_now, table, wet}, liquid::{book, mobile}, Scratch};
+use super::{land::{bottom, filled, t_now, table, wet}, liquid::{book, mobile}, range, Scratch};
 use crate::{math::one_minus_exp, solve::spread::{within, Net, Spread}, space::Stack, store::{Batch, Class, LinkFlux}, World};
 
 /// The layers of each cell's stack under its surface, bottom up: the bed's store and the loose ground's pores.
@@ -10,8 +11,39 @@ const DEEP: usize = 0;
 const PORES: usize = 1;
 
 /// Liquid over field capacity sinks into the store, at most `seep` a second (Darcy's law under its own weight) and no
-/// more than its room; in each layer liquid flows between cells (`flows`); what a store holds over its room comes up
-/// (`come_up`). A move takes its share of every liquid with what is dissolved and its heat; lost head heats where it goes.
+/// more than its room, with its heat; the head it loses heats the store. It runs every physics step, after the air's
+/// step that brings the rain: the rain of a long liquid step would otherwise wait in the pores, darkening the ground
+/// (`land::reflectance`), until the step.
+pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
+    let (n, p, g, area) = (w.mesh.cells().n(), w.cfg.phys, w.cfg.gravity, w.mesh.cells().area());
+    let (tmin, tmax) = range(&s.state.tg);
+    let liq = s.liquids(&w.chem, (tmin, tmax), true);
+    let (mob, held) = (mobile(w, s, &liq, tmin), stores(w, s, tmin));
+    // The cells where liquid sinks, the share of their mobile liquid that does, and the head it loses into the store, J.
+    let (mut sinks, mut fallen) = (Vec::new(), Batch::falls(Class::Deep));
+    for i in 0..n {
+        let room = p.bed_porosity * p.bed_depth * area[i] - held[i];
+        let sink = (mob.vol[i] - p.field * s.pd[i] * area[i]).min(room).min(p.seep * area[i] * dt);
+        if sink > 0.0 {
+            let (share, kg) = (sink / mob.vol[i], (0..liq.len()).map(|q| mob.mol[q * n + i] * s.sp[liq[q]].mm).sum::<f64>());
+            fallen.fall(i, share * kg * g * (s.head[i] - store_table(w, s, i, held[i])));
+            sinks.push((i as u32, share));
+        }
+    }
+    let down: Vec<u32> = sinks.iter().map(|c| c.0).collect();
+    let sunk = carry(&sinks, &liq, |q, i| mob.mol[q * n + i], |i, _, mol| liquid_heat(w, s, &liq, i, mol));
+    let liq16: Vec<u16> = liq.iter().map(|&k| k as u16).collect();
+    book(w, s, &[LinkFlux { class: [Class::Ground, Class::Deep], a: &down, b: &down, ks: &liq16, mol: &sunk.0, heat: &sunk.1 }, fallen.flux()]);
+}
+
+/// The heat of `mol` of the liquids `liq` leaving ground node `i`, at the node's temperature now, J.
+fn liquid_heat(w: &World, s: &Scratch, liq: &[usize], i: usize, mol: &[f64]) -> f64 {
+    let t = t_now(w, s, i);
+    liq.iter().zip(mol).map(|(&k, m)| m * (s.sp[k].cp * t + s.sp[k].lf)).sum()
+}
+
+/// In each layer liquid flows between cells (`flows`); what a store holds over its room comes up (`come_up`). A move
+/// takes its share of every liquid with what is dissolved and its heat; lost head heats where it goes.
 pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt: f64) {
     let (n, p, g) = (w.mesh.cells().n(), w.cfg.phys, w.cfg.gravity);
     // The stack of the two layers, both on the cells: the store `bed_depth` deep under the active layer of the ground
@@ -20,32 +52,13 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
     let (mob, held) = (mobile(w, s, liq, tmin), stores(w, s, tmin));
     // The heat each node of the stack gains from the head lost on the way into it, J.
     let mut fallen = vec![0.0; stack.nodes()];
-    // The cells where liquid sinks down the vertical link, and the share of their mobile liquid that does.
-    let mut sinks = Vec::new();
-    for (v, &area) in stack.area().iter().enumerate() {
-        let (lo, i) = (stack.lo()[v] as usize, stack.hi()[v] as usize - stack.node(PORES, 0));
-        let room = p.bed_porosity * p.bed_depth * area - held[i];
-        let sink = (mob.vol[i] - p.field * s.pd[i] * area).min(room).min(p.seep * area * dt);
-        if sink > 0.0 {
-            let (share, kg) = (sink / mob.vol[i], (0..liq.len()).map(|q| mob.mol[q * n + i] * s.sp[liq[q]].mm).sum::<f64>());
-            fallen[lo] += share * kg * g * (s.head[i] - store_table(w, s, i, held[i]));
-            sinks.push((i as u32, share));
-        }
-    }
-    let down: Vec<u32> = sinks.iter().map(|c| c.0).collect();
     let mut spread = std::mem::take(&mut s.spread);
     let (a, b, flux, x) = flows(w, s, &mut spread, &stack, (&mob, &held), dt);
     s.spread = spread;
-    // The heat of the liquid that leaves a node, at the node's temperature now.
-    let liquid_heat = |i: usize, _: f64, mol: &[f64]| {
-        let t = t_now(w, s, i);
-        liq.iter().zip(mol).map(|(&k, m)| m * (s.sp[k].cp * t + s.sp[k].lf)).sum()
-    };
-    let sunk = carry(&sinks, liq, |q, i| mob.mol[q * n + i], liquid_heat);
     let links = a.len();
     // What the volumes carry: the share of the sender's mobile liquid, at its temperature, or of its store.
     let deep: Vec<usize> = (0..w.chem.ns()).filter(|&k| w.store.amounts(Class::Deep)[k * n..(k + 1) * n].iter().any(|&m| m > 0.0)).collect();
-    let pores = carried((&a, &b), &flux[links..], (liq, |q, i| mob.mol[q * n + i]), &mob.vol, liquid_heat);
+    let pores = carried((&a, &b), &flux[links..], (liq, |q, i| mob.mol[q * n + i]), &mob.vol, |i, _, mol| liquid_heat(w, s, liq, i, mol));
     let in_stores = carried((&a, &b), &flux[..links], (&deep, |q, i| w.store.amounts(Class::Deep)[deep[q] * n + i]), &held, |i, share, _| w.store.heat(Class::Deep)[i] * share);
     for (layer, (ks, c)) in [(DEEP, (&deep[..], &in_stores)), (PORES, (liq, &pores))] {
         let links = c.a.len();
@@ -62,7 +75,6 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
     let fluxes = [
         LinkFlux { class: [Class::Ground; 2], a: &pores.a, b: &pores.b, ks: &liq16, mol: &pores.mol, heat: &pores.heat },
         LinkFlux { class: [Class::Deep; 2], a: &in_stores.a, b: &in_stores.b, ks: &deep16, mol: &in_stores.mol, heat: &in_stores.heat },
-        LinkFlux { class: [Class::Ground, Class::Deep], a: &down, b: &down, ks: &liq16, mol: &sunk.0, heat: &sunk.1 },
         into_deep.flux(),
         into_pores.flux(),
     ];

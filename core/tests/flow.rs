@@ -363,37 +363,57 @@ fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
     assert!(full < 1.05 && full > 0.55, "the ground holds {full} of its pore volume after the excess ran off");
 }
 
-/// Each part of Flow runs on its own period on the world's clock: with the air every 3 days and liquid every 15,
+/// Each part of Flow runs on its own period on the world's clock: with the air every 80 hours and liquid every 20 days,
 /// liquid poured on a slope (four times what the pores hold) after the first day stays through the steps of the air
-/// and runs off at the 15-day step.
+/// (what the physics step on day 10 sinks into the bed's store fills it and leaves most on the ground) and runs off at
+/// the 20-day step.
 #[test]
 fn liquid_runs_on_its_own_period_between_steps_of_the_air() {
     let mut w = worldgen::new_world(3, 16, 16);
-    (w.cfg.air_hours, w.cfg.flow_days) = (72, 15);
-    pcore::day(&mut w);
-    let (i, _) = pair(&w);
-    let pores = w.cfg.phys.porosity * loose(&w, i);
-    pour(&mut w, i, 4.0 * pores);
-    let v0 = liquid_m3(&w, i);
-    (1..15).for_each(|_| pcore::day(&mut w));
-    assert!(liquid_m3(&w, i) > 0.5 * v0, "{} of {v0} m³ stayed through the steps of the air", liquid_m3(&w, i));
-    pcore::day(&mut w);
-    assert!(liquid_m3(&w, i) < 0.5 * v0, "{} of {v0} m³ stayed after the liquid step", liquid_m3(&w, i));
-}
-
-/// A liquid step of more than a month counts its own period from the world's start: with `flow_days` 60, liquid poured
-/// on a slope after the first day stays through the first month and runs off at the 60-day step.
-#[test]
-fn a_liquid_step_over_a_month_runs_every_flow_days() {
-    let mut w = worldgen::new_world(3, 16, 16);
-    (w.cfg.air_hours, w.cfg.flow_days) = (80, 60);
+    (w.cfg.air_hours, w.cfg.flow_days) = (80, 20);
     assert_eq!(w.cfg.validate(), Ok(()));
     pcore::day(&mut w);
     let (i, _) = pair(&w);
     let pores = w.cfg.phys.porosity * loose(&w, i);
     pour(&mut w, i, 4.0 * pores);
     let v0 = liquid_m3(&w, i);
-    (1..60).for_each(|_| pcore::day(&mut w));
+    (1..20).for_each(|_| pcore::day(&mut w));
+    assert!(liquid_m3(&w, i) > 0.5 * v0, "{} of {v0} m³ stayed through the steps of the air", liquid_m3(&w, i));
+    pcore::day(&mut w);
+    assert!(liquid_m3(&w, i) < 0.5 * v0, "{} of {v0} m³ stayed after the liquid step", liquid_m3(&w, i));
+}
+
+/// The liquid in the bed's store under cell `i`, m³.
+fn store_m3(w: &World, i: usize) -> f64 {
+    w.store.amounts(Class::Deep)[LIQUID * w.mesh.cells().n() + i] * w.chem.molar_volume(LIQUID, Phase::Liquid)
+}
+
+/// The sink into the bed's store runs every physics step, the rest of the liquid every `flow_days`, and a liquid step
+/// of more than a month counts its own period from the world's start. With `flow_days` 60, liquid poured on a slope
+/// (four times what the pores hold, more over field capacity than the store has room for) after the first day stays
+/// on the ground until the first physics step, on day 10: then the store under it fills to its room with what the
+/// ground loses, and the rest waits on the ground through the month and runs off at the 60-day step.
+#[test]
+fn liquid_sinks_into_the_bed_at_each_physics_step_and_runs_off_every_flow_days() {
+    let mut w = worldgen::new_world(3, 16, 16);
+    (w.cfg.air_hours, w.cfg.flow_days) = (80, 60);
+    assert_eq!(w.cfg.validate(), Ok(()));
+    pcore::day(&mut w);
+    let (i, _) = pair(&w);
+    let p = w.cfg.phys;
+    let (pores, full) = (p.porosity * loose(&w, i), p.bed_porosity * p.bed_depth * w.mesh.cells().area()[i]);
+    pour(&mut w, i, 4.0 * pores);
+    let (v0, d0) = (liquid_m3(&w, i), store_m3(&w, i));
+    assert!(v0 - p.field * pores > full - d0, "more over field capacity ({}) than the store's room ({})", v0 - p.field * pores, full - d0);
+    (1..10).for_each(|_| pcore::day(&mut w));
+    let (v9, d9) = (liquid_m3(&w, i), store_m3(&w, i));
+    assert_eq!(d9, d0, "nothing sinks between physics steps");
+    pcore::day(&mut w);
+    let (v10, d10) = (liquid_m3(&w, i), store_m3(&w, i));
+    println!("day 10: the store {d9:.4e} -> {d10:.4e} m³ (room {:.4e}), the ground {v9:.4e} -> {v10:.4e} m³", full - d9);
+    assert!((d10 - full).abs() <= 1e-9 * full, "the store fills to its room: {d10} of {full} m³");
+    assert!(((v9 - v10) / (d10 - d9) - 1.0).abs() < 0.01, "the ground loses what the store gains (and what that day's air step takes): {} against {}", v9 - v10, d10 - d9);
+    (11..60).for_each(|_| pcore::day(&mut w));
     assert!(liquid_m3(&w, i) > 0.5 * v0, "{} of {v0} m³ stayed through the first 59 days", liquid_m3(&w, i));
     pcore::day(&mut w);
     assert!(liquid_m3(&w, i) < 0.5 * v0, "{} of {v0} m³ stayed after the 60-day step", liquid_m3(&w, i));
@@ -411,8 +431,14 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
         let mut w = worldgen::new_world(3, 16, 16);
         let (i, j) = pair(&w);
         w.cfg.phys.seep = seep;
-        // (No evaporation, which would lower the liquid table before the liquid flows, and no channels inside the cell.)
+        // (No evaporation, which would lower the liquid table before the liquid flows, no channels inside the cell, and
+        // a full store under `i`, so none of its liquid sinks before it flows.)
         (w.cfg.evap, w.cfg.phys.hill) = (0.0, 1e15);
+        let (p, mv) = (w.cfg.phys, w.chem.molar_volume(LIQUID, Phase::Liquid));
+        let full = p.bed_porosity * p.bed_depth * w.mesh.cells().area()[i] / mv;
+        set_amount(&mut w, Node::new(Class::Deep, i), LIQUID, full);
+        let warm = full * (w.chem.subs[LIQUID].cp * 290.0 + w.chem.subs[LIQUID].lf);
+        set_heat(&mut w, Node::new(Class::Deep, i), warm);
         let pores = w.cfg.phys.porosity * loose(&w, i);
         pour(&mut w, i, share * pores);
         let books = Books::now(&w);
@@ -472,10 +498,11 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
         }
         s
     };
-    // One liquid step with the store of `i` full and warm, with channels `hill` apart: the store and the ground liquid after.
+    // One liquid step with the store of `i` full and warm, with channels `hill` apart: the store and the ground liquid
+    // after. (No pore liquid sinks into the stores, `seep` 0, so the neighbours' stores do not change with `hill`.)
     let run = |i: usize, hill: f64| {
         let mut w = worldgen::new_world(3, 16, 16);
-        (w.cfg.evap, w.cfg.phys.hill) = (0.0, hill);
+        (w.cfg.evap, w.cfg.phys.hill, w.cfg.phys.seep) = (0.0, hill, 0.0);
         let e = full / mv * (w.chem.subs[LIQUID].cp * 290.0 + w.chem.subs[LIQUID].lf);
         set_amount(&mut w, Node::new(Class::Deep, i), LIQUID, full / mv);
         set_heat(&mut w, Node::new(Class::Deep, i), e);

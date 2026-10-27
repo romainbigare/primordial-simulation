@@ -47,10 +47,10 @@ fn day_month_and_season_come_from_the_seconds() {
     assert_eq!(cal.season(cal.year / 2), 0.5);
 }
 
-/// A month of `step`: on its first day the survey, the parts of Flow due (at a month's start at least its state and
-/// the air, and the liquid when its period starts there) and Change, then Bond, then the bodies; the physics every
-/// `phys_days` days and the bodies every `batch_days` days. The clock ends a whole month on, and `day` moves it by one
-/// day.
+/// A month of `step`: on its first day the survey, the parts of Flow due (at a month's start at least its state, the
+/// air and the sink into the bed's store, and the liquid when its period starts there) and Change, then Bond, then the
+/// bodies; the physics every `phys_days` days and the bodies every `batch_days` days. The clock ends a whole month on,
+/// and `day` moves it by one day.
 #[test]
 fn a_month_runs_its_processes_in_their_order() {
     let mut w = small_world();
@@ -62,7 +62,7 @@ fn a_month_runs_its_processes_in_their_order() {
     // A liquid step of more than a month starts on a multiple of its period from the world's start.
     let (flow_s, dpm) = (w.cfg.flow_days as u64 * cal.day, w.cfg.days_per_month);
     let liquid = (w.cfg.flow_days <= dpm || t0.is_multiple_of(flow_s)) as usize;
-    assert!(marks[0] == Stage::Bodies && flow >= 2 + liquid, "{marks:?}");
+    assert!(marks[0] == Stage::Bodies && flow >= 3 + liquid, "{marks:?}");
     assert_eq!(marks[1 + flow..][..3], [Stage::Change, Stage::Parts, Stage::Bodies]);
     let count = |s: Stage| marks.iter().filter(|&&m| m == s).count() as u32;
     let phys = w.cfg.phys_days;
@@ -142,15 +142,19 @@ fn a_sleeping_node_catches_up_as_an_awake_node_steps() {
     assert!(amount[0] > 0.9, "the law ran: {amount:?}");
 }
 
-/// The default settings pass; a time step of 0, an air step that does not divide the physics step, a batch that does not
-/// divide the physics step or the month, a liquid step over a month that is not whole months, a pace of nodes or a
-/// window of children (`lump_days`) that is not whole batches, or a dormancy of 1 is refused.
+/// The default settings pass, and so does a liquid step of whole months over a physics step that does not divide them;
+/// a time step of 0, an air step that does not divide the physics step, a batch that does not divide the physics step
+/// or the month, a liquid step that does not fall on physics steps or over a month is not whole months, a pace of
+/// nodes or a window of children (`lump_days`) that is not whole batches, or a dormancy of 1 is refused.
 #[test]
 fn the_default_settings_pass_and_a_step_off_its_base_or_out_of_step_or_a_dormancy_of_1_is_refused() {
     assert_eq!(Config::default().validate(), Ok(()));
+    let weekly = Config { phys_days: 7, air_hours: 24, batch_days: 1, flow_days: 60, ..Default::default() };
+    assert_eq!(weekly.validate(), Ok(()));
     let dormant = Config { phys: Physics { dormancy: 1.0, ..Default::default() }, ..Default::default() };
     let refused = [
         Config { flow_days: 0, ..Default::default() },
+        Config { flow_days: 15, ..Default::default() },
         Config { flow_days: 45, ..Default::default() },
         Config { air_hours: 0, ..Default::default() },
         Config { air_hours: 480, ..Default::default() },
