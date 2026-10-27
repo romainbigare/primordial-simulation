@@ -1,493 +1,385 @@
 # Design: light-eaters as a cover (idea 5)
 
-The round "Lighter world", idea 5. The owner said yes to this law change. This file is the design; the plan
-(`docs/lighter/plan.md`) and the decisions (`docs/lighter/decisions.md`, L1, L2, ...) take what the architect keeps.
+The round "Lighter world", idea 5. The owner said yes to this law change, and asked for at least three kinds per cell
+that do not mix ("trees, shrubs, small plants"), made by genes, and for new kinds that can enter a full cell
+(`architect-1.md`). This is the design after the first review (`review-cover.md`, 17 findings; answers in 10). The
+plan's lane C takes its steps from 7.
 
-## 0. The idea in five lines
+## 0. The idea
 
-Today a cell holds about 8 light-eater nodes (stands): young and adult nodes of each kind, split halves, nodes of
-neighbours' litters. Each is a body with its own update every 40 days. The cover keeps light-eaters as **bodies**, but
-only **one body per kind per cell** (at most `cover_kinds`, proposed 2), and that body holds its young and its adults
-together in **two stages**. Its children stay in it (no new body), its seeds land in the neighbour cell's cover of their
-kind (gene flow), and its gene means move by the sample member (Lande 1976, today's `copy::select`). The physics of
-its day is today's `body::live`, unchanged. So most of the work goes: fewer updates, no young nodes, no churn of
-splits and merges, few faces, few litters.
+Today a planted cell holds about 8 light-eater nodes (stands): an adult and a young node of each kind, and young nodes
+of unlike litters from the neighbours. Each is a body that updates every 40 days. The cover keeps light-eaters as
+**bodies** (one law of physics for every body), and changes two things, in two law steps:
 
-**Why a body and not a new store class.** Every reader of light-eaters reads them as bodies: the shade
-(`survey::shade`), the cell sums (`survey::rows`, `Life::sum`, read by lanes, moving, erosion's `hold`, perception),
-the light set aside and the draws of ground heat (`survey::Draws`, `draws::claims`), the bites (`feed::take_body`),
-the wear of movers (`choose::wear`), the shelter (`body::cover_of`), the faces, the tape. A new store class would need
-a second copy of each. A body per kind keeps one place for each idea (CLAUDE.md 2.1) and one law of physics for every
-body. The gain comes from the count, not from a new formula.
+1. **The bound on kinds (C1).** A cell holds at most `cell_kinds` kinds (3 or 4, from C0) plus one place for a
+   newcomer kind. A kind is today's adult node with its linked young node. A new kind enters a full cell as a group
+   through the newcomer place; a kind ends only as every node ends (fewer than one member).
+2. **The young inside (C2).** A kind is one body, the **cover**: its young and its adults are two stages of it
+   (`Body::young: Option<Young>`). Its children stay in it; its seeds land in a neighbour's cover of their kind (gene
+   flow); its young mature inside it by the same flux as today (`math::Pass`). The young keep their own height and
+   their own share of the light.
 
-**Name.** "cover" is taken in code: the soft cover (snow, `flow::land`), `body::cover_of` (the others over a body),
-`cover_median`. This design calls the law "the cover" in the docs and uses only `Stages` (a type) and
-`Config::cover_kinds` in code. The architect may rename (decision D4).
+The physics of the day (`body::live`) is unchanged. The gain is fewer bodies: from about 8 a planted cell to at most
+`cell_kinds` + 1. Names: `Young`, `Young::adults`, `Young::body`, `Young::lit`, `Config::cell_kinds`; none of them is
+used today ("cover" is the soft cover of `flow::land`, `cover_of` and `Site::cover`; "stages" are the stages of an
+update; the code does not use them for this). "The cover" is a word of the docs only.
+
+**Why bodies and not a field.** Shade (`survey::shade`), the cell sums (`survey::rows`, read by lanes, moving, erosion's
+`hold`, perception), the light set aside and the ground's heat draws (`survey/draws.rs`), bites (`feed::take_body`),
+the wear of movers (`choose::wear`), shelter (`body::cover_of`), faces and the tape all read light-eaters as bodies.
+Half of a stand update is the body's day; a field would write it a second time (CLAUDE.md 2.1), and the last round's
+cheaper day laws failed (P1.2, PR-C2).
 
 ## 1. Inventory: where light-eaters as bodies are touched today
 
-"Stays": the code is not touched; it reads the cover as it read stands. "Rewritten": it changes. "Goes": deleted
-for bodies without a brain (it stays for animal nodes where they use it).
+"Stays": not touched. "Rewritten": changes in C1 or C2. Code that stays for animal nodes is never deleted.
 
-### 1.1 Their day (Flow and Change on a body)
-
-| Place | What it does for a stand | Cover |
+| Place | Today, for stands | With the cover |
 |---|---|---|
-| `body::live`, `live::to_growth`, `settle_upkeep`, `keep_warm`, `check_stores`, `starved`, `shed` | the whole update | stays |
-| `body/physics.rs`: `catch_light`, `store_light`, `rain_caught`, `gas_pool`, `react` (`Reactor::react`), `settle_gas`, `evaporate` (transpiration by `GAS`), `soak`, `soak_again`, `roots`, `relax_heat` | light, breath, reactions, liquids, heat | stays |
-| `body/exchange.rs`: `film`, `surface`, `breath`, `through`, `leaf_area` | boundary layer, leaf | stays (`leaf_area` reads `equiv`, below) |
-| `body/pay.rs`: `upkeep`, `plan`, `pay`, `Payer` (brainless: no mind cost) | paying | stays |
-| `body/tissue.rs`: `adult`, `equiv`, `height`, `member_body`, `size_moments` | maturity, supply by mass^0.75, height | **rewritten** for a body with `Stages` (2.3) |
-| `copy::grow` (`ALLOC` share into the brood past maturity) | growth | **rewritten**: the brood comes from the adult stage's growth (2.4) |
-| `survey::shade` (light from the tallest down), rain shared the same way | light between bodies | stays; fewer bodies a cell |
-| `survey::rows`, `caches` (canopy, absorb, keep) and `flow/air/cell.rs` reading them | the light bodies absorb warms the surface; their light reactions' share is set aside in `Class::Bodies` | stays |
-| `survey/draws.rs` (`Draw`, `Draws::settle`, `owe`, `claims`) | ground heat drawn between updates | stays |
-| `Body::interval` (a brainless node: at least `node_days`, 40) | pace | stays |
+| `body::live`: `to_growth`, `settle_upkeep`, `keep_warm`, `check_stores`, `shed`; `body/physics.rs` (light, breath, `Reactor::react`, transpiration by `GAS`, soaking, roots, heat); `body/exchange.rs`; `body/pay.rs` | the day | stays (C2 adds the maturing between growth and children, 2.4) |
+| `live::starved` | the mean member against the copy mass | rewritten: per stage (2.5) |
+| `Body::adult`, `size_moments`, `set_size`, `height`, `equiv` (`body/tissue.rs`) | the mean member | rewritten for a body with `Young` (2.3) |
+| `copy::grow` | past maturity `ALLOC` of growth is brood | rewritten: growth splits between stages, brood from the adults' part (2.4) |
+| `copy::copy`, `emit`, `give`, `provisions`, `start` | children join the young node; `DISPERSE` leave as a litter | rewritten: stayers join the cover's young, nothing moves; dispersers are a litter of young (2.4) |
+| `copy::kin`, `land_litter`, `back`, `outbox::Entry::Litter` | a litter joins its kind's young node or starts one | rewritten: the newcomer place (3); `kin` matches any stage of a cover |
+| `copy::young` (`linked`, `link`, `mature`, `Grown`), `Body::link`, `survey::update`'s maturing | young and adult nodes | stays for animal nodes; a cover matures inside `live` with `math::Pass` |
+| `nodes::add`, `rejoin`, `Lot`, `part` | pool genes, spreads, size moments | rewritten: they pool `Young`, and `rejoin` weighs the young's size moments by young members |
+| `nodes::split` | room while the cell has fewer than `crowd` - 1 bodies | for light-eaters: room from the bound (3); animals unchanged |
+| `nodes::crowd`, `join_alike`, `merge_closest` | monthly merge; covers and animals counted together | stays: covers still count in `crowd` (option (a) of finding 2, 3) |
+| `copy::select` (sample member) | breeder's equation in a node | stays, `sample_every` 2 (2.6) |
+| `body::vary` | children's genes | stays |
+| `survey::shade` | one entry per body | rewritten: a cover is two entries, adults and young (2.3) |
+| `survey::rows`, `caches`, `flow/air/cell.rs`, `survey/draws.rs`, `air/book.rs` (marks moved by shade) | light, heat, rain | stay (one shade per body, 2.3) |
+| `survey::worn`, `choose::wear`, `body::wound`, `lanes` | wear, paths | stay |
+| Bond (`bond/`) | light-eaters are never held, inside, formed or joined | stays: nothing changes |
+| Choose: faces, `perceive`, `take_body`, `Habit::prey` | animals see and bite stands | stay; 1 to 4 light-eater faces a cell instead of about 8 |
+| `Body::interval` (`node_days` 40), `lineage::resize` | pace, brain sizes | stay |
+| worldgen founders (`life/kinds.rs`: one node per land cell; fixers whole cells; `life/make.rs`) | adults | C2: founders get `Young` with all members adult |
+| tape (`docs/tape.md`): `plants`, `plant_members`, `cover_median`, `cover_max`, `births`, `died_<cause>`, `root_0_*` | | keep their meaning (members, mass, births); C2 adds `root_<K>_adults` |
+| snapshot (`tape/src/snapshot.rs`) | version 49 | C1: 50 (a `Config` field); C2: 51 (a `Body` field) |
+| viewer | reads the tape | stays |
 
-### 1.2 Copying
+**Readers of `member_body` and `adult`, and what a cover reads** (finding 4):
 
-| Place | Today | Cover |
-|---|---|---|
-| `copy::copy`, `emit`, `give`, `provisions`, `start` | a node's children join its young node, a share `DISPERSE` go to a neighbour as a litter | **rewritten** for bodies with `Stages`: stayers join the cover itself as young (no stores move); dispersers are a litter as today |
-| `copy::young` (`linked`, `link`, `mature`, `Grown`), `Body::link` | young node and adult node, members mature along the link | **goes for covers** (stays for animal nodes); covers mature inside (2.4) with the same `math::Pass` |
-| `copy::kin` (the young or adult node of a kind) | stage must match | **rewritten**: a body with `Stages` matches any stage |
-| `copy::land_litter`, `back`, `outbox::Entry::Litter` | a litter joins its kind's young node, else starts a body | stays; a litter that finds no kind and no room joins the most alike cover (3) |
-| `nodes::add`, `rejoin`, `Lot`, `part` | pooling of genes, spreads, sizes | **rewritten**: they pool `Stages` too |
-| `nodes::split` | a node whose halves are not alike splits while the cell has fewer than `crowd` - 1 bodies | stays; for covers the room is `cover_kinds` |
-| `nodes::crowd`, `join_alike`, `merge_closest` (monthly) | merges alike nodes; past `crowd` the most alike | stays for animals; covers join alike covers monthly, and never pass `cover_kinds` (3) |
-| `copy::select` (`sample`, `select`, `read`) | the sample member: the breeder's equation inside a node | stays, on each cover |
-| `body::vary` (mutation of a group of children) | 127 draws a litter | stays, once a cover update (stayers) plus once a litter |
-| `lineage::resize` (brainless branch) | | stays |
+| Reader | Cover |
+|---|---|
+| `tissue.rs:73` `adult` | it holds adults and the adults' member body `m_a` is at or past the copy mass |
+| `tissue.rs:83, 87` `size_moments`, `set_size` | the young's moments, about the young's mean member `m_y` (2.2) |
+| `live.rs:101` `from`, `live.rs:132` `starved` | per stage: `m_a` and `m_y` before and after (2.5) |
+| `grow.rs:20` `needs` | what the adult stage lacks to the copy mass |
+| `copy/mod.rs:60` (only adults copy) | `adult` above |
+| `copy/mod.rs:255` `kin`, `nodes.rs:36` and `:64` (stage in the key) | no stage: a cover is every stage of its kind |
+| `young.rs:20, 47, 51`, `survey.rs:258` | not run for a cover (it matures inside `live`) |
+| `mix.rs:26` (partner), `go.rs:62` (`land_move`) | not reached: covers are nodes and never move |
 
-### 1.3 The survey
-
-`survey::survey`: `worn` (wear of movers: `choose::wear` gives each body of the cell its share of the energy by mass,
-`body::wound` with `BROKEN`), the monthly `nodes::crowd`, `shade`, `rows`: all stay. Fewer bodies make them cheaper.
-The canopy check S83 (`the_ground_under_dense_canopies_stays_near_its_neighbours`) takes the densest 5% of land cells by
-rank: it stays and keeps its meaning.
-
-### 1.4 Bond
-
-Light-eaters are never held, never inside a part, never form, join or anchor (they have no brain; `bond::form` uses
-the former's own stores). Movers break them by `choose::wear`; bites break them by `Body::breaking`; both read
-`Body::solids` and stay. The movement cost through what stands in a cell (handover 6.1, `lanes::resist`, `thickness`)
-reads `Life::sum[1]`, which holds the covers: stays. Erosion's `hold` (`flow/mod.rs`) the same. No part is made of
-plant matter directly: an eater that takes a solid it uses (`Body::uses`) and forms before it digests it could make
-one, today and with the cover alike. **Nothing in Bond changes.**
-
-### 1.5 Choose
-
-Animals see light-eaters through faces (`survey::Faces`, `perceive::perceive`), take from them with `TAKE_FROM`
-(`feed::take_body`: Holling's type II on the swept share of a node's members, the escape by intervals, `wound`), and
-repeat by habit (`choose::Habit::prey`, by id). A cover is a body with a face: **all of this stays**. A cell shows
-1 or 2 light-eater faces instead of about 8 (87% of the faces made today are plants, P0), so an animal's `SEEN` slots
-hold more animals than before (an effect to watch, 6). A cover lives for many years, so habits keep their prey longer.
-
-### 1.6 The tape, worldgen, the viewer
-
-- Tape (`docs/tape.md`): `plants` (now covers), `plant_members`, `cover_median`, `cover_max`, `births`,
-  `died_<cause>`, `root_0_*` (members, kg, bodies, life, life_real, births, genes): **all keep their meaning** (members
-  and births are members). `root_0_bodies` falls by about 5 times. Proposed new column `root_<K>_adults`: the share of
-  members in the adult stage (D11). The key numbers (light-eaters' mass, life of light-eaters, S50) keep their
-  meaning.
-- Snapshot: `Body` gains `stages`, loses nothing; bump `SNAPSHOT_VERSION` (49 to 50) in the law step.
-- Worldgen: light-eaters already start as one node per land cell (`worldgen::life::kinds::LIGHT`, "one node per land
-  cell"); fixers are whole cells. A founder gets `Stages` all adult. **No other change.**
-- Viewer: reads only the tape: no change.
-
-### 1.7 Tests that state plant laws
-
-Listed with their fate in 6.3.
-
-## 2. The new law
+## 2. The new law (C2)
 
 ### 2.1 What a cover holds
 
-A cover is a `Body` with no brain (its lineage has none, `Life::brainless`), one per kind per cell. It holds what a
-stand holds: every substance (64-bit, all members together), heat `e`, the brood, genes (means), `spread` (variances),
-marks of light and rain, `keep`, `draw`, members `count`, and its face traits `vis`. New: `stages: Option<Stages>`
-(None for a body with a brain):
+A cover is a body of a lineage with no brain, one per kind in a cell. It holds what a stand holds: every substance
+(64-bit, all members), heat, the brood, gene means and `spread`, the marks of light and rain, `keep`, `draw`, members
+`count`, its face. New: `young: Option<Young>`, all `f64`:
 
 ```
-Stages {
-    adults: f32,      // share of the members at or past the copy mass (0..1)
-    young_body: f32,  // share of the living body (`built`) that is the young's (0..1)
-    young_var: f32,   // variance of log10 of the young members' bodies, decades²
+Young {
+    adults: f64,  // share of the members that are adults (at or past the copy mass)
+    body: f64,    // share of the living body (`built`) that is the young's
+    lit: f64,     // the young stage's shade over the cover's (survey::shade)
 }
 ```
 
-They are **shares**, so every law that acts on all members alike keeps them as they are: deaths of a share
-(`lose_share`, `thin`), a bite that tears a share of every member (`wound`), shedding, splits by halves (`part`). Only
-growth, maturing, births and joins change them. They hold no matter (32-bit is allowed: X4). From them:
+They are shares, so the laws that act on all members alike keep them: deaths of a share (`lose_share`, `thin`), a
+bite or wear that tears a share of every member (`wound`), `part`. From them: `n_a = adults · n`, `n_y = n - n_a`,
+`m_a = (1 - body) · built / n_a`, `m_y = body · built / n_y`. **One source:** `young` is set where a body is placed
+(`Domain::add`) from `Life::brainless`, and set or cleared where `lineage::resize` moves a body between a lineage
+with a brain and one without; `survey::update` asserts in debug builds that the two agree.
 
-- young members `n_y = (1 - adults) n`, adults `n_a = adults n`;
-- a young member's mean body `m_y = young_body · built / n_y`; an adult's `m_a = (1 - young_body) · built / n_a`;
-- the mean of log10 of the young bodies `mean_y = log10 m_y - ln10 · young_var / 2` (log-normal).
+### 2.2 The young's sizes
 
-`size_lag` and `size_spread` stay for animal nodes; a cover leaves them at 0 (D5).
-
-### 2.2 How it grows: today's day
-
-The update is `survey::update` as today: `copy::sample` (on one update in `sample_every`), `body::live` (upkeep, the
-physics of the time, keeping warm, store checks, growth, children, shedding), no decision, `copy::select`,
-`lineage::resize`, then the stage step (2.4) where `copy::mature` ran, `nodes::split`, `Domain::see`, the next
-update at `node_days`. The reactor of the cover is the body's reactor (`Reactor::react` with its catalysts, the bare
-reactions too); upkeep is paid by its burnings (`body::pay`); death by a share (`lose_share`), remains to the ground
-(`to_ground`, `remains`), where the litter constants rot them (laws.md 2.1). Light, rain, breath, transpiration,
-soaking, roots and heat are today's stages. **No formula of the day changes.**
+The young's log10 bodies keep their mean and variance in today's fields `size_lag` and `size_spread`, about `m_y`
+instead of the mean member (`size_moments`, `set_size`), pooled by `rejoin` as today with the young's members as the
+weight. No new shape: `math::Pass` (the McKendrick steady state, a truncated exponential) fits them as it fits a young
+node. A body without `Young` (animals) reads them about its mean member, as today.
 
 ### 2.3 What the stages change in the body's numbers
 
-- **Supply** (`Body::equiv`, read by intake, growth's allowance and the leaf): a cover sums its stages, each by
-  mass^`intake_exp` (b = `intake_exp`): `n_a m_ref (m_a / m_ref)^b + n_y m_ref (m_y / m_ref)^b · exp(b (b - 1) (ln 10)²
-  young_var / 2)`. The last factor is the mean of a power over a log-normal spread (Jensen). Without it a pool of many
-  small members and a few large ones would get up to 50% more supply than the same members as two nodes.
-- **Maturity** (`Body::adult`): a cover is adult when it has adults and `m_a` is at or past the copy mass. A hurt adult
-  stage (`m_a` below it, after bites or wear) is immature until healed, as today.
-- **Height** (`Body::height`, the order of light and rain): a cover's height is its adults' member (the top of the
-  canopy); with no adults, its mean young member's. Its visible mass `vis[0]` stays the mean member's (what an animal
-  meets).
+- **Supply** (`Body::equiv`: intake, growth's allowance, the leaf): the sum of the two stages, each by its mean member,
+  `n_a m_ref (m_a / m_ref)^b + n_y m_ref (m_y / m_ref)^b`, b = `intake_exp`. This is exactly today's young node plus
+  adult node. No spread factor.
+- **Maturity** (`adult`): as in the table of 1. A hurt adult stage is immature until healed, as today.
+- **Height and light** (`survey::shade`): a cover gives two entries, the adult stage at the height of `m_a` with its
+  leaf (its share of `equiv` times the leaf gene) and the young stage at the height of `m_y` with its leaf. Light
+  passes from the tallest down as today, so the young sit under their adults (Weiner 1990's one-sided competition) and
+  under taller kinds, as today's young nodes do. The body's `shade` is the leaf-weighted mean of the two entries' and
+  `Young::lit` the young's over it; marks, rows, rain and draws read the one `shade` as today. The face's height
+  (`vis[6]`) is the adults'.
+- **Only these go by stage** (finding 15): supply (and so growth, intake, leaf), maturity, height, light and
+  starving. The coat (`n m^(2/3)`), skin area, boundary layer and `empty_at` read the mean member: for young at 0.3
+  of the copy mass and adults at 1 to 1.5 times it, a few percent (about 5% for a size ratio of 4).
 
-### 2.4 Children, maturing and seeds: the stage step
+### 2.4 Growth, maturing, children, seeds (in this order, inside `live`)
 
-At growth (`copy::grow`), the matter it makes splits by supply: the adults' share `a = E_a / (E_a + E_y)` (E the two
-terms of 2.3; the growth allowance goes by supply). Of the adults' part, what heals `m_a` back to the copy mass is
-body, and of the rest the share `ALLOC` is brood (today's rule, read on the adult stage). The young's part is young
-body (`young_body` rises).
+1. **Growth** (`copy::grow`). What it builds splits by light-weighted supply: the adults take
+   `a = E_a / (E_a + E_y · lit)` (E the two terms of `equiv`; the adult entry's shade over the cover's is
+   `(1 - leaf_y · lit) / leaf_a` of it, folded in the same way). Of the adults' part, what brings `m_a` back to the
+   copy mass is body, and of the rest the share `ALLOC` is brood (today's rule on the adult stage). The young's part is
+   young body (`Young::body` rises).
+2. **Maturing** (new, in `live` after `to_growth` and before `copy::copy`, so no newborn is in the young yet; finding
+   3). The young's log10 bodies rose by `d = log10(m_y after / m_y before)`, members fixed. `Pass::new(mean, var,
+   log10 copy_mass, d)` gives the share of young members that pass and the share of young body they hold, and the
+   moments of those left. `adults += passed · (1 - adults)`, `body -= held · body`, the young's moments set to those
+   left. **One size** (variance 0, a new cover, finding 16): `Pass` gives none, and all young pass together when `m_y`
+   reaches the copy mass, as a young node turns adult whole today (`young.rs:47`).
+3. **Children** (`copy::copy`; a cover has one parent). `births = brood / child matter - BROOD_HELD · n_a`. A share
+   `DISPERSE` leave as seeds; the rest stay: their genes are drawn as today (`body::vary`: drift of the group's mean,
+   variance left, mutation added; Lande 1976), and they join the cover's young: genes and spreads pool by members (the
+   pooling of `nodes::add` on the body itself), `n += births`, the young's moments pool with log10 of the child's body
+   and variance 0 (`rejoin`'s formula), `Young::body` takes the children's body, `adults = n_a / n`. **No store
+   moves**: the brood's matter becomes young body in the same store; the provisions are already the cover's. The `Born`
+   event is recorded as today.
+4. **Seeds.** As today's litter (`emit`, `give` takes their matter, provisions and heat out of the cover,
+   `Entry::Litter`, `land_litter` at the batch's end in their cell's domain), with `Young` all young. They join the
+   cover of their kind there (`kin`) by `nodes::add`: genes, spreads, members and young pool. This is gene flow between
+   cells weighted by seed output (Wright's island model). Where their kind is not held: the newcomer rule (3).
 
-After the update's growth and children (where `copy::young::mature` runs today):
+### 2.5 Starving per stage (finding 4)
 
-1. **Maturing.** The young's log10 bodies rose by `d = log10(new young body / old young body)` (members fixed, so the
-   growth per member). `math::Pass::new(mean_y, young_var, log10 copy_mass, d)` gives the share of young members that
-   pass the copy mass and the share of the young body they hold (`shares(0)`, `shares(ln 10)`), and the moments of
-   those left (`moments`). `adults += passed members · (1 - adults)`, `young_body -= passed body share · young_body`,
-   `young_var = left variance`. This is today's flux across a size (McKendrick 1926; von Foerster 1959), with the same
-   function; nothing is placed or merged, two shares change.
-2. **Births** (`copy::copy`, a cover is a node: one parent). `births = brood / child matter - BROOD_HELD · n_a`
-   (today's `BROOD_HELD` per member, now per adult). A share `DISPERSE` leaves (3 below); the rest **stays**: their
-   genes are drawn as today (`body::vary`: the mean of the group plus drift noise of its variance over its size, the
-   variance left among them, mutation added; Lande 1976), and they join the cover as young members: genes and spreads
-   pool by members (`nodes::add`'s formula, run on the cover itself: `join_self`), `n += births`, the young pool
-   with `log10 child body` and variance 0 by members (`rejoin`'s formula), `young_body` takes the children's body
-   (`births · child body`), `adults = n_a / n`. **No store moves**: the brood's matter becomes young body inside the
-   same store, the provisions are already the cover's. The `Born` event is recorded as today.
-3. **Seeds.** The dispersers are a litter as today (`emit` with `!here`: `give` takes their matter and provisions,
-   with heat, out of the cover; `Entry::Litter` in the outbox; `land_litter` at the batch's end in the cell's domain).
-   The litter's `Stages` are all young (`adults` 0, `young_body` 1, `young_var` 0). It joins the cover of its kind there
-   (`kin`, no stage test) by `nodes::add`: genes, spreads and stages pool by members. This is **gene flow** between
-   cells by seed spread, weighted by each cover's seed output (Wright's island model): a cover that makes more seeds
-   spreads its genes more. A litter of less than one member with no cover to join goes back (`copy::back`), as
-   today.
+`starved` today kills `1 - (now / was)^a` with `was = min(from, copy mass)`. A cover takes it per stage: the adults with
+`now = m_a`, `was = min(m_a before, copy mass)` (an adult that shrinks toward the copy mass by `ALLOC` is not
+starving), the young with `now = m_y`, `was = m_y before`. The members that die are `n_a f_a + n_y f_y`; they take
+their stages' body with them (matter by stage, the other stores by the share of members), and `adults` and `body` are
+set from what is left. Then `lose_share`'s rule (one law for nodes and individuals) as today.
 
-### 2.5 Competition, kinds and selection
+### 2.6 Competition, kinds and selection
 
-- **Light.** Covers of a cell share light by height, a layer of leaf area x taking 1 - exp(-x), equal heights sharing
-  a layer (`survey::shade`): a tall kind shades a short one. Inside a cover, young and adults are one layer: the cell
-  absorbs the same light for the same leaf area, but a kind's seedlings are not shaded by their own adults (2.7).
-- **Water and minerals.** Each cover soaks and takes roots' minerals from the same ground by its own genes, in id order
-  inside the batch, as stands do.
-- **Selection inside a cover** (`copy::select`): the sample member one standard deviation up or down in one drawn gene,
-  its gain against the cover's: the breeder's equation (Lande 1976; Robertson 1966). Unchanged.
-- **Selection between covers and cells.** The kinds of a cell compete for light, water and minerals, and the one that
-  grows more takes the cell. Covers that make more seeds send more genes to their neighbours.
-- **Kinds**: section 3.
+- **Light**: by height, two entries a cover (2.3). **Liquid and minerals**: each cover soaks and takes by its genes from
+  the same ground, in id order in the batch, as stands do.
+- **Selection inside a cover**: `copy::select`, the sample member one standard deviation off in one drawn gene; the
+  breeder's equation (Lande 1976; Robertson 1966). **Cadence: `sample_every` stays 2.** Each cover is sampled as
+  often as a stand was, so each gene's mean moves at today's rate per node; 1 would add about 10% to a cover update for
+  no measured need; 4 was dropped (the cap makes a jump of 4 standard deviations, decision 4 of `architect-1.md`).
+- **Selection between kinds and cells**: kinds of a cell compete for light, liquid and minerals; covers with more seeds
+  send more genes to their neighbours. The genes no update reads before growth (`select::UNREAD`: `CHILD`, `MUT`,
+  `DISPERSE`, `WET`, `ALLOC`) are selected only this way (inside a cell no sample runs on them, today or here). C0
+  measures how much of today's adult mass came from unlike litters, which the bound acts on (finding 8).
 
-### 2.6 Animals eat it, movers wear it, the books
+### 2.7 Eaten, worn, the books
 
-- **Eaten**: `feed::take_body` on the cover's face: the taker's swept share of the cell holds that share of the cover's
-  members; it takes by Holling's type II, pays `c_handle` and the breaking energy of the share it tears
-  (`Body::breaking`), the moved stores and heat go from the cover to the taker in one `transfer` (both sides, 64-bit),
-  the torn spill goes to the ground (`body::wound`, `thin`, `to_ground` by `d.moves.give_all`). Unchanged.
-- **Worn**: `choose::wear` at the survey: the cell's push energy is shared by mass among its bodies, a cover takes its
-  share and loses what that breaks (`BROKEN`). Unchanged. Lanes and their regrowth (`lanes::regrow`) read the cell's
-  body mass: unchanged.
-- **Books.** Every move of the cover is today's: the store view `store::Moves` of its domain, booked by
-  `store::book_by_array`; body to body in `transfer`; remains by `give_all`. The births that stay move nothing. Seeds
-  take their stores and heat out of the cover and into the litter body (`give`), and add them to the cover where they
-  land (`rejoin`): sums of 64-bit numbers. `check::drift` holds them; the debug checks of overdraw stay.
-- **Principles.** No calendar: seasons come from the tempo by temperature (`Body::pace`, the rate law). Real sizes:
-  members, member bodies in kg, mass per m². No Earth word: the code names are `Stages`, `adults`, `young_body`,
-  `young_var`, `cover_kinds`.
+- **Eaten**: `feed::take_body` on the cover's face, unchanged: Holling's type II on the swept share of its members,
+  `c_handle`, the breaking energy (`Body::breaking`), one `transfer` of stores and heat (both sides, 64-bit), the
+  torn spill to the ground (`wound`, `thin`, `to_ground`).
+- **Worn**: `choose::wear` shares the cell's push energy by mass among its bodies; unchanged.
+- **Books**: every move is today's (`store::Moves`, `book_by_array`, `transfer`, `give_all`). Children that stay move
+  nothing. Seeds leave by `give` and join by `rejoin`: sums of 64-bit numbers. `check::drift` and the debug checks of
+  overdraw hold them.
+- **Principles**: no calendar (the tempo by temperature); real sizes (members, kg, kg/m²); no Earth word.
+- **The reactor**: the day's, so it follows B1 whatever lands first (L5 is dropped, decision 1): with B1's variant (d)
+  the decay of reactions 1 and 21 does not run in a living cover, as in any living body.
 
-### 2.7 What the cover cannot do that stands do today
+### 2.8 What the cover cannot do that stands do today
 
-1. A cell holds at most `cover_kinds` kinds of light-eaters (today unbounded: up to 26 to 28 nodes).
-2. A kind's young and adults share one store, one temperature and one light layer: seedlings are not shaded by their
-   own adults, and do not starve, freeze or age apart from them (members of all stages die alike).
-3. Seeds of a new kind that land in a full cell join the most alike cover (their genes mix with it) instead of
-   starting a node (3, D3).
-4. Inside a cell, the genes no update reads before growth (`CHILD`, `DISPERSE`, `WET`, `ALLOC`, `MUT`: `select::UNREAD`)
-   are no longer selected between young nodes of different genes. They are selected between the kinds of a cell, and
-   between cells by seed output (gene flow). Watch them (6).
-5. The young of a kind are one group with one size spread, not several young nodes from different neighbours.
+1. A cell holds at most `cell_kinds` kinds and one newcomer (today unbounded: up to 26 to 28 nodes).
+2. A kind's young and adults share one store and one temperature (they still have their own light and their own
+   starving): no young starves while its adults are full.
+3. Seeds of a kind not held, landing where the newcomer place is taken, join the most alike cover: their genes mix.
+4. The fecundity genes are selected only between kinds and between cells (2.6).
+5. A kind's young are one group with one size spread.
 
-**What stays possible** (the watch-for of M1 to M3 and later): being eaten, trampled and worn into paths; shading,
-transpiring and warming the ground; rotting into the minerals; dead frame on the ground as fuel; solids for parts
-through an eater; kinds that differ by climate (between cells, and up to `cover_kinds` in a cell); adapting to places
-(the sample, gene flow, clines: Haldane 1948, Slatkin 1973). **Tending** stays possible by physics: an animal can put
-minerals or liquid on a cell's ground (`feed::put`), keep other eaters off (take from them), wear away the covers of
-a cell by moving through it, and eat one kind and spare the other (two faces, `TAKE_FROM`): what a tended patch needs.
-Moving seeds by hand is not possible, today or with the cover. No watch-for item is blocked.
+**What stays possible**: eaten, trampled and worn into paths; shading, transpiring, warming the ground; rotting into
+minerals; dead frame as fuel; solids for parts through an eater; kinds by climate and by form in one cell (trees,
+shrubs, small plants by their genes, up to `cell_kinds`); adapting to places (the sample, gene flow, clines: Haldane
+1948, Slatkin 1973); invasion of a full cell as a group (3). **Tending** stays possible by physics: an animal puts
+minerals or liquid on a cell's ground (`feed::put`), keeps eaters off, wears away one kind by moving through, eats one
+kind and spares another (each kind has a face). No watch-for item of M1 to M3 or later is blocked.
 
-## 3. Kinds: up to `cover_kinds` covers per cell
+## 3. Kinds and the bound (C1, kept by C2)
 
-**Decision proposed: a few covers per cell, `Config::cover_kinds` = 2 (a speed setting with a physical side effect,
-like `crowd`), set by the probe C0.**
-
-- One gene distribution per cell (1) cannot hold two strategies: a fixer and a non-fixer, a tall slow kind and a short
-  quick one. A fixer's seeds landing beside a non-fixer would pool into "half fixers", and disruptive selection could
-  never split them. The watch-for wants kinds that differ; the start already has two (the fixers, a tenth of the
-  cells).
-- Today a planted cell holds about 2.7 (island22), 1.6 (globe36) and 3.5 (region24) adult nodes (P0: 659 / 377 /
-  1,593 adult nodes over the planted cells), many of them split halves kept apart for selection between nodes, which
-  the sample now does inside the cover. Two hold two strategies at a cost near one.
-- **A new kind starts** in two ways, both only while the cell has fewer than `cover_kinds` covers: a cover whose halves
-  would not be alike splits along its widest gene (`nodes::split`, today's rule, room from `cover_kinds`; the halves
-  keep their stages); or a litter that finds no alike cover (`kin`) starts one (`copy::start`).
-- **A full cell.** A litter that finds no alike cover in a full cell joins the most alike cover there (`nodes::add`;
-  its gap widens that cover's spread, capped by `body::most` as today). Covers of a cell that became alike join at the
-  monthly survey (`join_alike`, the key without stage). So a cell never passes `cover_kinds`, and `merge_closest`
-  never runs for covers.
-- Animal nodes keep `crowd` and every rule they have.
+- **A kind** in a cell: an adult node and its linked young node (C1), then one cover (C2). A kind **without adults** is a
+  newcomer (a young node with no adult in C1, a cover with `adults` 0 in C2).
+- **`Config::cell_kinds`** (a speed setting with a physical side effect, like `crowd`; at least 3, the owner's words;
+  C0 picks 3 or 4): a cell holds at most `cell_kinds` kinds with adults and **one** newcomer.
+- **Start of a kind.** A litter (staying or landing) with no kind of its genes in the cell (`kin`) starts a newcomer
+  if the cell has none; else it joins the newcomer if alike, else the most alike kind (`nodes::add`; its gap widens
+  that kind's spread up to `body::most`). A split (`nodes::split`, halves not alike) needs a free place among the
+  kinds with adults and leaves the newcomer place free.
+- **Invasion.** A newcomer grows in the cell as a group (its genes together, not pooled) under the residents' shade.
+  When it matures it becomes a kind with adults, and the cell may then hold `cell_kinds` + 1 of them for a while:
+  no new newcomer starts until one kind ends. A kind ends **only** as any node ends: fewer than one member (outgrown
+  in light, liquid or minerals, eaten, frozen). No hand rule picks a loser. The cost stays bounded: at most
+  `cell_kinds` + 1 bodies (C2) a cell. Forms come from genes only (height from materials and size, `Body::height`);
+  core names none.
+- **Animals and `crowd`** (finding 2): option (a), covers still count in `crowd`'s two tests (`nodes.rs:16`, `:214`),
+  no code change for animals. With 3 or 4 covers a planted cell is still at or past `crowd` (4) with one animal node,
+  as with today's 8 stands, so animal splits stay rare and `merge_closest` runs where two animal nodes meet, as
+  today. Where a cell holds fewer covers (the globe: about 1.6 kinds), animals find more room: C0 measures animal nodes
+  per planted cell and animal splits a year today, and C1 and C2 are gated on them. If they move past their seeds'
+  noise, option (b) (`crowd` counts nodes with a brain only, with `crowd` set from C0 so the counts hold) is a stated
+  change of the animals' law in its own commit.
 
 ## 4. Cadence and threads
 
-- **When.** A cover updates in the body batches at its pace: at least `node_days` (40) days, a whole number of
-  batches, as a stand (`Body::interval`). The stage step runs inside that update. The monthly join runs in the
-  survey's `worn` (`nodes::crowd`). Nothing new runs at the physics step: light, rain and heat reach the cover between
-  updates through the marks and the bodies' node, as for stands.
-- **Threads.** Covers are bodies of their domain. They update in the parallel phase of `survey::batch` (`on_domains`,
-  the one runner `par::longest_first`), domain by domain, cell by cell, by id: one writer, the domain (CLAUDE.md
-  3.6). Births that stay write only the cover. Seeds are `Entry::Litter` in the domain's outbox and land at the batch's
-  end in the domain of their cell (`outbox::land`), in the order of the domains they come from, then the order made;
-  the full-cell test reads only that domain. No new phase, no new order: the world is the same with and without
-  threads.
-- **Not chosen:** the cover in the survey or with Change every 10 days (four times the updates, and a second booking
-  path for bodies); a slower pace (X64's `field_days` 60 or 90 needs growth in pieces: a later step if wanted).
+- A cover updates in the body batches at `node_days` (40), as a stand. Growth, maturing, children and seeds run inside
+  its update, in the order of 2.4. The shade with two entries runs in the survey (`survey::shade`), monthly joins of
+  alike covers in `nodes::crowd`. Nothing new at the physics step.
+- Covers are bodies of their domain: they update in the parallel phase of `survey::batch` (`on_domains`,
+  `par::longest_first`), domain by domain, cell by cell, by id; one writer, the domain (CLAUDE.md 3.6). Children that
+  stay write only the cover. Seeds wait in the outbox and land at the batch's end in their cell's domain
+  (`outbox::land`), in the order of the domains they come from, then the order made; the newcomer rule reads only that
+  domain. The world is the same with and without threads.
 
-## 5. Cost
+## 5. Cost (finding 1)
 
-Today (P0 at the speed x10 benches; per update after PL1 about 84k instructions, 16 µs on one thread):
+**Prices** (one thread, instructions, after PL1): a stand update about 84k on average; an adult-node update about 100k
+(the day 48k, copying about 32k: two `vary` of 127 draws, the join of the stayers, a litter; the sample 10k; shed, soil
+and `see` 8k; the review's split, C0 measures it); a young-node update about 75k. **A cover update is an adult-node
+update plus maturing (about 1k) and the second shade entry: about 100k, 19 µs.** It copies at every update.
 
-| | island22 | globe36 | region24 |
-|---|---|---|---|
-| stands per planted cell (mean) | 8.2 | 4.6 | 10.3 |
-| plant updates a year per planted cell | about 85 | about 46 | about 104 |
-| plant updates, µs a planted cell-year (1 thread) | about 1,400 | about 760 | about 1,700 |
-| the same, all included (faces, booking, litters, survey) | about 1,700 | about 1,000 | about 2,100 |
-| plants, share of the year (1 thread, all included) | 37% | 19% | 60% |
+**Today, plant updates per planted cell-year:** island22 85 x 84k = 7.1 M; globe36 46 x 88k = 4.0 M; region24 104 x 86k
+= 8.9 M. Plants all included are 37% / 19% / 60% of the year (P0).
 
-The cover (estimates, to be measured):
-
-- A cover update: today's stand update less maturing as a body (5.2k), the litter search and placing of stayers, the
-  churn of `nodes::add` and `merge`; plus the stage step (one `Pass`, a few hundred instructions) and `equiv` with
-  stages. About 75k instructions, 14 to 15 µs.
-- Covers per planted cell with `cover_kinds` 2: about 1.3 to 1.8 (the probe C0 measures it). At 40 days, 9.1 updates
-  a year: about 12 to 17 updates a planted cell-year, plus one landing litter an update (about 3 µs).
-- **About 230 to 320 µs a planted cell-year all included, against 1,000 to 2,100: 5 to 8 times less.**
-
-Expected share of the year after (one thread, the middle of the range, x6.5 on the plants all included):
+**Bodies a planted cell:** after C1, about two per kind (adult and young) plus a newcomer; after C2, one per kind plus
+a newcomer, between today's kinds (adult nodes per planted cell: 2.7 / 1.6 / 3.5, P0) plus a newcomer and the bound
+(`cell_kinds` + 1). Cells fill toward the bound (finding 11), so the estimate takes the upper end, island 3 to 4,
+globe 2 to 3, region 3.5 to 4 covers, at 9.1 updates a year.
 
 | | island22 | globe36 | region24 |
 |---|---|---|---|
-| plants, share of today's year, after | about 5.7% | about 2.9% | about 9.2% |
-| the year after, against today | x0.69 (x1.46 faster) | x0.84 (x1.19) | x0.49 (x2.0) |
-| plants, share of the new year | about 8% | about 3.5% | about 19% |
+| C1: bodies a planted cell (today 8.2 / 4.6 / 10.3) | about 6.4 to 7 | about 4.2 | about 7 to 8 |
+| C1: plant work a planted cell-year | x1.15 to x1.4 | x1.0 to x1.1 | x1.25 to x1.45 |
+| C1: the year, 1 thread | x1.05 to x1.12 | x1.00 to x1.02 | x1.14 to x1.23 |
+| C2: covers a planted cell | 3 to 4 | 2 to 3 | 3.5 to 4 |
+| C2: plant work a planted cell-year, M | 2.7 to 3.6 (x2.0 to x2.6) | 1.8 to 2.7 (x1.5 to x2.2) | 3.2 to 3.6 (x2.4 to x2.8) |
+| C2: plants, share of today's year | 14% to 19% | 9% to 13% | 21% to 25% |
+| **C2: the year, 1 thread** | **x1.22 to x1.30** | **x1.06 to x1.12** | **x1.54 to x1.63** |
 
-At x5 the island gains x1.42 and the region x1.92; at x8, x1.48 and x2.1. Animals gain a little too: fewer faces to
-look through and fewer plant entries in the booking and the outbox. Ideas 3 and 4 still act on the cover's update
-(its reactor and its sample), on a much smaller base.
+(The year after = 1 - p + p / x, p the plants' all-included share; the faces, booking and litters are taken to fall
+with the plant work.) C1 cuts only the young nodes of unlike litters past one newcomer (today about 2.7 a planted
+cell on the island, `young` 5.4 against `adult` 2.7); it is mainly the base of C2. The globe gains least: its cells
+hold few stands today. At `cell_kinds` 3 the upper ends hold;
+at 4 the lower ends. **The next lever** is the copy work, a third of a cover update (two `vary` calls, the join, the
+litter): a law step of its own after G-C, not in this design.
 
 ## 6. What must still hold (level 4)
 
-### 6.1 Key numbers (`the_key_numbers_stay_in_their_ranges`, 3 seeds)
+**Key numbers** (`the_key_numbers_stay_in_their_ranges`, 3 seeds): ground temperature on land (291.79 +-1), seasonal
+swing, rain on land, heat-absorbing gas, river cells, land worn down, light-eaters 10.38 +-0.3 log10 kg (today 10.24,
+0.16 above the floor), eaters, life of light-eaters (1.81 x/ 2, members over deaths), life of eaters. S50 is the known
+failure and must not move past its seeds' noise (about +-0.004) away from 0.5. References: "after AIR4.0" of
+`docs/speed-x10/measures.md`, or the round's own if B1 lands first (decision 1). After C2 the architect takes new
+references (D7).
 
-All keep their meaning and their ranges: ground temperature on land (291.79 +-1), seasonal swing (15.13 +-1.5), rain
-on land, heat-absorbing gas (388.8 +-40), river cells, land worn down, **light-eaters 10.38 +-0.3 log10 kg**, eaters
-5.354 +-0.5, **life of light-eaters 1.81 x/ 2** (members over deaths: young deaths count as today), life of eaters,
-rain in m/yr. **S50** (stored share, today 0.556 to 0.558) is the known failure: it must not move past its seeds'
-noise (about +-0.004) away from its range; a move toward 0.5 is welcome. Compare with "The key-number references
-after AIR4.0" and "Z: the final checks" 1 of `docs/speed-x10/measures.md`. After the law lands, the architect takes
-new references for the steps after it (D7).
+**Animals**: animal nodes per planted cell and animal updates a year within their seeds' noise of today (3 seeds,
+remade benches); the eaters' key numbers.
 
-### 6.2 Climate and life tests
-
-`the_long_step_keeps_the_climate` (its margin is 2%: +0.293 K against 0.3, X85), `a_globe_without_life_keeps_an_earth_like_climate`
-(no life: unchanged), `the_ground_under_dense_canopies_stays_near_its_neighbours` (S83), `the_pace_of_nodes_keeps_life`,
+**Climate and life tests**: `the_long_step_keeps_the_climate` (margin 2%, X85), `a_globe_without_life_keeps_an_earth_like_climate`,
+`the_ground_under_dense_canopies_stays_near_its_neighbours` (S83), `the_pace_of_nodes_keeps_life`,
 `the_batches_of_bodies_keep_life`, `the_eaters_live_and_stop_growing`, `the_laws_do_not_depend_on_the_size_of_the_cells`
-(quarters hold four times the kinds per area: watch), `nodes_and_individuals_make_the_same_world` (animals only; the
-covers are the same in both modes), `a_century_keeps_its_books`, the golden test (re-pinned in each law step).
+(a quarter holds as many kinds as a square: watch), `nodes_and_individuals_make_the_same_world`, `a_century_keeps_its_books`,
+golden (re-pinned in C1 and C2).
 
-### 6.3 Tests rewritten, deleted, new
+**Tests rewritten** (they state the law of light-eater nodes):
+- `populations.rs`: `a_node_spreads_with_its_children_and_splits_when_too_varied` (C2: children join the cover's young;
+  it splits when too varied while there is a place), `dispersing_children_of_a_varied_node_join_their_kind` (seeds
+  join their kind's cover), `selection_inside_a_node_moves_its_mean_as_its_members_would` (on a cover).
+- `choose.rs`: `a_body_with_no_brain_lives_and_copies` (a cover lives and recruits).
+- slow: `genes_do_not_drift_without_selection` (covers, `cell_kinds` 3 in place of `crowd` 1 and 64);
+  `selection_moves_a_nodes_brain_size` (it gives brainless founders 12 hidden units: founded on eaters if the lineage
+  change no longer states it).
+- `copy.rs`: `crowd_bounds_the_nodes_of_a_cell` states both: covers count in `crowd` for animals, and the cell's kinds
+  stay within `cell_kinds` + 1.
+- Stay (eaters): the four young-node tests of `copy.rs`. Check on covers: `a_tall_member_shades_a_short_one`,
+  `a_big_node_stores_light_set_aside_as_it_fell`. Deleted: none.
 
-Rewritten (they state the law of light-eater nodes, which becomes the cover's):
-- `core/tests/populations.rs`: `a_node_spreads_with_its_children_and_splits_when_too_varied` (the children join the
-  cover as young; it splits when too varied while the cell has room); `dispersing_children_of_a_varied_node_join_their_kind`
-  (seeds join the cover of their kind in the next cell); `selection_inside_a_node_moves_its_mean_as_its_members_would`
-  (on a cover; the law is unchanged).
-- `core/tests/choose.rs`: `a_body_with_no_brain_lives_and_copies` (a cover lives and recruits).
-- `core/tests/populations.rs` slow: `genes_do_not_drift_without_selection` (the churn of covers, `cover_kinds` 1 and 2
-  in place of `crowd` 1 and 64); `selection_moves_a_nodes_brain_size` (it gives brainless founders 12 hidden units:
-  check it; if the lineage change makes them animal nodes in a way the test no longer states, found it on eaters).
-- `core/tests/copy.rs`: `crowd_bounds_the_nodes_of_a_cell` gains the covers' bound.
+**Tests new** (fast, `worldgen::testkit` setup):
+1. `a_better_kind_enters_full_cells` (C1): a strip of cells full of kinds; a kind that grows more seeded at one end;
+   after N updates it holds the most mass in the far cell, and no cell ever holds more than `cell_kinds` + 1 kinds.
+2. `a_cover_gives_what_its_young_and_adult_nodes_give` (C2): a cover and a young-adult pair of the same genes, sizes and
+   light, one update: the members that mature, the births and the mass agree to 2%; both keep elements, energy and
+   members (births less deaths).
+3. `a_covers_young_mature_before_its_children_join` (C2): an update with many births matures the young members `Pass`
+   gives from the growth alone; with one size, all young pass together when they reach the copy mass.
 
-Stay (they use eaters: `testkit::eater`): the four young-node tests of `copy.rs`; `a_tall_member_shades_a_short_one`
-and `a_big_node_stores_light_set_aside_as_it_fell` (check them on covers). Deleted: none (the young-node law stays for
-animal nodes).
+**Watch in 1,000 years** (island, globe, region; seed 1): books under 1e-14; no die-out; key numbers in range;
+covers per planted cell (at most `cell_kinds` + 1) and how often a newcomer becomes a kind; `root_0_adults` steady;
+gene means of `root_0_*` move as today's (gas, leaf, copy_log, interval, alloc, child, `cat_<r>_on`); forms side by
+side (the spread of height and copy mass among a cell's covers in the year-1,000 snapshot, a probe script); kinds by
+latitude on the globe; eaters' mass and life; trails (`worn_edges`, `traffic_top2`); land temperature and `evap_land`.
 
-New (few, fast, one law each, in `core/tests/copy.rs`, setup from `worldgen::testkit`):
-1. `a_covers_young_mature_by_their_growth_and_its_children_stay_in_it`: a cover with young and adults in steady light:
-   the members passing are those `Pass` gives, births add young members at the child's size, elements, energy and
-   members are kept (births less deaths).
-2. `a_covers_supply_is_the_sum_of_its_stages`: `equiv` equals the sum over an adult stage and a log-normal young stage
-   drawn as individuals (to 1%).
-3. `seeds_join_the_cover_of_their_kind_or_start_one_where_there_is_room`: a third kind's seeds in a full cell join
-   the most alike cover; in a cell with room they start one.
+## 7. Steps (lane C)
 
-### 6.4 What to watch in a 1,000-year run (island, globe, region; seed 1)
+Lines are `core` code lines (`cli/tests/core_size.rs`; about 10,444 today, ceiling 10,643). "Counted" = callgrind on
+one thread, one year from the remade benches (`make_benches.sh`, the step's snapshot version), seeds 1 to 3, with
+`--toggle-collect` on the update of a body without a brain (as PL1): the year's instructions, the plant work per
+planted cell-year, the planted cells, the animal updates a year, bodies per planted cell. Across worlds the year alone
+counts only above PR-S's bands (19% island22, 11% globe36); the counted parts carry the verdict.
 
-- The books (element and energy drift under 1e-14), no run dies out, every key number in its range at year 1,000.
-- Covers per planted cell (at most `cover_kinds`), `root_0_adults` (a steady share, not 0 or 1), births and deaths of
-  light-eaters that cycle with the seasons, not with a calendar.
-- Gene means of `root_0_*` move as today's do (gas, leaf, copy_log, interval, alloc, child, `cat_<r>_on`), and the
-  fecundity genes (`alloc`, `child`, `wet_gene`) are not frozen (2.7, 4).
-- Kinds differ by climate: on the globe, the covers' gene means by latitude band in the year-1,000 snapshot (a probe
-  script, no tape change).
-- The eaters' mass and life, and the share of perceived bodies that are animals (more animal faces per decision).
-- Trails (`worn_edges`, `traffic_top2`) on the island as today.
-- The land temperature and `evap_land`: plants' light and heat coupling is sensitive (P1.2 moved the land -0.78 K).
+| ID | What | Files | Level | Done when | Kill line |
+|---|---|---|---|---|---|
+| C0 | Probe (branch `probe/cover-c0`, not merged), on the three bench saves and one year of each: stands per planted cell by stage; alike groups (adult and young by `body::within`); **growth forms side by side** (groups unlike in the form genes: `COPY_MASS`, `LEAF`, the keep genes of the frame and lime, `STRENGTH`; and the heights `Body::height`); share of adult mass in the largest 1 to 4 groups; litters a planted cell-year that land where no node of their kind is, and the adult mass a year later that came from them; animal nodes per planted cell, animal splits and `merge_closest` runs a year; callgrind of a stand update split by `b.adult()` | a test file on the branch | probe | `cell_kinds` chosen: the least of 3 or 4 that holds 90% of the adult mass in that many form groups on all three benches; the numbers in `docs/lighter/measures.md` C0 | none (if 4 is too few, or the adult update is over 120k, the architect is told before C1) |
+| C1 | **The bound on kinds** on today's young-adult pairs (3): `Config::cell_kinds` (row in `numbers.md`, speed); the newcomer rule in `emit` and `land_litter`; `nodes::split` room for light-eater nodes from the kinds with adults; `crowd` unchanged; snapshot 50; test 1 and the rewritten `crowd` and `dispersing` tests; `laws.md` 4.2, 4.4; `history.md` | `params.rs`, `nodes.rs`, `copy/mod.rs`, `tape/src/snapshot.rs`, tests, docs | 4 | bodies per planted cell at most 2 (`cell_kinds` + 1); the counted year -5% on island22 and -12% on region24; animal nodes per planted cell and animal updates a year within their seeds' noise; key numbers in range (S50 within noise); the climate and life tests of 6 pass; test 1 passes | the counted year falls less than 3% on island22 or less than 8% on region24, or animal updates a year move past their seeds' noise, or a key number or a climate test fails: C stops; G-C fails |
+| C2 | **The young inside** (2): `Body::young` and `Young`; `adult`, `size_moments`, `set_size`, `height`, `equiv` by stage; two shade entries; growth split; maturing in `live` before children; children join the cover; seeds as young; `starved` per stage; `nodes::add`, `rejoin`, `Lot`, `part`, `kin`, `kin_key` without stage for covers; founders all adult; snapshot 51; tape `root_<K>_adults`; tests 2 and 3 and the rewritten ones; `laws.md` 1.4, 3.6, 4.2, 4.4 (one law, the flux by `Pass`, with two holders: node pairs for animals, stages for covers), 6.6; `tape.md`; `history.md` | `body/mod.rs`, `body/tissue.rs`, `body/live.rs`, `copy/grow.rs`, `copy/mod.rs`, `copy/young.rs`, `nodes.rs`, `survey.rs`, `life/domain.rs`, `lineage.rs`, `worldgen/src/life/make.rs`, `tape/src/snapshot.rs`, `tape/src/rec/cols/`, tests, docs | 4 | one body per kind (bodies per planted cell at most `cell_kinds` + 1); counted plant work per planted cell-year x1.4 against C1 on island22 and region24; test 2 within 2%; animals, key numbers and tests as C1; the land within 0.3 K of C1 (else stop and find why: P1.2's -0.78 K was never explained) | the counted year falls less than 5% against C1 on island22 (or less than 8% on region24), or the animal or key-number or climate lines of C1 fail: C1 stays, C2 is not merged |
+| C3 | **The checks** (no code): counted runs of the three benches, plants all included as in P0; wall on 4 threads (5 interleaved runs under the lock); key numbers; the slow suite; 1,000-year runs of the island, the globe and the region, one at a time, with the watch list of 6 | `docs/lighter/measures.md` | — | the measure and a verdict per bench | — |
+| **G-C** | **The cover's gate** (after C3): the whole year, one thread, counted, at least -15% on island22 and -30% on region24, and not worse on globe36; animal nodes per planted cell and animal updates a year within their seeds' noise of today; every key number in range (S50 within noise), the climate tests and the canopy check pass; the 1,000-year runs keep their books and live; tests 1 to 3 pass | | | | **fails:** what failed is not merged (C1 alone may stay if it passed its own lines); A3 and A4 start (phase 2) |
 
-## 7. Steps
+**Lines.** C1 about +25 -5. C2 about +115 -10 (`Young` and its reads 25, shade entries 12, growth split 10, maturing
+in `live` 20, children in place 15, starving per stage 12, pooling 10, placement and resize 6, the rest 5).
+**Net about +125: from about 10,444 to about 10,570, under the ceiling** (about 70 left for the round). The cover
+cannot delete more than it adds: the young law, splits, merges and litters stay for animal nodes, and the day is
+shared. The plan's line "the cover should delete more than it adds" (L4) must change; the architect logs it.
 
-Each step is one commit on the round's branch. Lines are `core` code lines (`cli/tests/core_size.rs`; 10,444 today,
-ceiling 10,643).
+**Risks.** (1) The climate coupling of plants (P1.2's -0.78 K; the long-step test's 2% margin): the day's code is
+whole, so the risk is in mass and liquid held; gated in C1 and C2. (2) S50 with pooled stores. (3) Light-eaters' mass
+(0.16 above its floor) and life: shared stores, starving per stage. (4) Animals: `crowd` on cells with fewer covers
+(the globe), more animal faces in `SEEN`; gated. (5) Fecundity genes selected only between kinds and cells. (6) A
+newcomer place held by a kind that never matures blocks invasions in that cell; test 1 and the watch measure it.
+(7) Judging across worlds: the counted parts carry the verdict. (8) Kinds are per cell: a refined region holds four
+times the kinds per km² (the scale test).
 
-### C0. Probe: kinds and stages in today's world (branch `probe/cover-c0`, not merged)
+## 8. Alternatives if the gate fails
 
-- **What.** On the three bench saves (`benchZ`): per planted cell, the brainless nodes, the alike groups (young and
-  adult nodes joined by `body::within`), the share of light-eater adult mass in the largest 1, 2 and 3 groups, young
-  and adult members and mass, and over one year how many litters land where no node of their kind is. A test file
-  that reads a save and prints.
-- **Done when.** `cover_kinds` is chosen: the least K that holds at least 90% of the adult mass of the planted cells on
-  all three benches (2 expected), and the expected covers per cell are known for 5.
-- **Kill line.** None (a probe). If K must be 4 or more, the gain falls to about x3 a cell: tell the architect before C2.
+- **C1 alone** (the bound on young-adult pairs) if C2 fails its lines: about x1.05 to x1.12 on the island, x1.14 to
+  x1.23 on the region, about nothing on the globe. It keeps the owner's kinds and invasion rule.
+- **A3 and A4** (phase 2, stands as bodies): stands of a full cell merge past `crowd`; the sample runs only the stages
+  its gene reads. B1 (living bodies do not rot) acts on stands and covers alike.
 
-### C1. Helpers without a law change (level 1)
+## 9. Decisions D1 to D11
 
-- **What.** `nodes::add` splits into the pooling of genes and spreads on a body out of its slot (`join_self`) and the
-  join of a stored node; `copy::emit`'s path for children who stay is cut out of it. No behaviour change.
-- **Files.** `core/src/nodes.rs`, `core/src/copy/mod.rs`.
-- **Check.** Level 1: golden bit for bit with and without threads.
-- **Done when.** C2 calls them. **Kill line.** None. **Lines.** about +6.
+| | Decision |
+|---|---|
+| D1 | Settled (decision 9): the cover with stages, after the bound on young-adult pairs. |
+| D2 | Settled: `cell_kinds` at least 3, C0 picks 3 or 4. Proposed in addition: one newcomer place, so a full cell can be invaded as a group with no hand rule (3). |
+| D3 | Settled in spirit (invasion as a group). Proposed: the newcomer place; seeds of a kind not held join the most alike kind only while the newcomer place is taken. Why: a new form enters whole, a kind ends only by dying out, the cost stays bounded. |
+| D4 | Settled (names that clash with nothing): `Body::young`, `Young`, `Config::cell_kinds`; "cover" only in docs. |
+| D5 | Proposed: one law (the McKendrick flux by `math::Pass`) with two holders, node pairs for animals (their young and adults act apart) and stages for covers; `rejoin` is the one place that pools size moments. Said in `laws.md` 4.4. |
+| D6 | Proposed: counted parts on remade benches (above), no converter of old saves. Why: a converter is code nobody keeps, and the counted parts are robust to the world's noise. |
+| D7 | Proposed: new key-number references on C2's commit, for the steps after it (the cover changes the world). |
+| D8 | Proposed: accept that `CHILD`, `MUT`, `DISPERSE`, `WET`, `ALLOC` are selected only between kinds and cells, with C0's number (the adult mass from unlike litters) and the 1,000-year watch. No C5: `sample_every` 1 cannot reach them (`select::UNREAD`). |
+| D9 | Settled: idea 2 and A1 dropped before the cover; B1 and C in any order. |
+| D10 | Snapshot 50 in C1 (a `Config` field), 51 in C2 (a `Body` field); benches remade at each. |
+| D11 | Proposed: the tape column `root_<K>_adults` (share of members that are adults): one column to watch the stages. |
 
-### C2. The law: a light-eater node holds its young (level 4, the main step)
+## 10. Answers to the review (`review-cover.md`)
 
-- **What.** `Body::stages` (2.1); `Body::adult`, `equiv`, `height` read them (2.3); `copy::grow` takes the brood from
-  the adult stage (2.4); `copy::copy`: the stayers join the cover as young (`join_self`), the seeds are a litter of
-  young; `survey::update` runs the stage step where `copy::mature` runs (covers mature inside by `math::Pass`;
-  `young::linked`, `link` and `Body::link` only for nodes with a brain); `copy::kin` matches any stage for a cover;
-  `nodes::Lot`, `rejoin`, `part` carry and pool stages; founders get all-adult stages; `SNAPSHOT_VERSION` 50; tape
-  column `root_<K>_adults` (D11). Tests of 6.3 rewritten and the three new ones. Docs: laws.md 4.2, 4.4 (a light-eater
-  node holds its young; young nodes are for nodes with a brain), 6.6, 3.6 (a cover's height); `docs/tape.md`;
-  `docs/history.md` section 7; the measure in `docs/lighter/measures.md`.
-- **Files.** `core/src/body/mod.rs`, `body/tissue.rs`, `copy/grow.rs`, `copy/mod.rs`, `copy/young.rs`, `nodes.rs`,
-  `survey.rs`, `worldgen/src/life/make.rs`, `tape/src/snapshot.rs`, `tape/src/rec/cols/`, tests, docs.
-- **Check.** Level 4: golden re-pinned (why: a law change); key numbers (3 seeds, about 5 minutes); the slow suite's
-  life and climate tests of 6.2; benches remade (`make_benches.sh`, version 50); the debug checks.
-- **Measure.** On remade benches, seeds 1 to 3 (PR-S method 3) and counted work, which does not depend on the noise
-  of the worlds: light-eater nodes per planted cell, plant updates a year, instructions a plant update, plant
-  instructions per planted cell-year (callgrind with `--toggle-collect` on the update of a body with no brain, as PL1).
-- **Done when.** Plant instructions per planted cell-year fall by at least half on island22 and region24; every key
-  number in range but S50, S50 within its noise; the climate and life tests of 6.2 pass.
-- **Kill line.** Plant instructions per planted cell-year fall by less than 10% (owner's rule), or a key number leaves
-  its range (not S50), or S50 moves past its noise away from 0.5, or the long-step test fails: then the fallback F1 (8).
-- **Lines.** about +95 (stages and their reads +45, growth +8, births in place +15, stage step +20, pooling +10)
-  and -20 (the young-node path for brainless nodes, the stage test in `kin`): **net about +75**.
-- **Probe first?** No: the key-number test is the gate. But if the land temperature moves more than 0.3 K, stop and
-  find why before C3 (the -0.78 K of P1.2 was never explained).
-
-### C3. The bound: at most `cover_kinds` covers in a cell (level 4)
-
-- **What.** `Config::cover_kinds` (validated at least 1; a row in `docs/numbers.md`, mark "speed", in the speed count
-  of handover 14.3); `nodes::split` takes its room from it for covers; `copy::land_litter` and `emit`: a litter with no
-  alike cover in a full cell joins the most alike (`nodes::add`); `nodes::crowd` for covers joins alike only. `crowd`'s
-  row says it is for nodes with a brain.
-- **Files.** `core/src/params.rs`, `nodes.rs`, `copy/mod.rs`, `docs/numbers.md`, `docs/laws.md` 4.4, tests
-  (`crowd_bounds_the_nodes_of_a_cell`, new test 3).
-- **Check.** Level 4 as C2; `SNAPSHOT_VERSION` 51 (a `Config` field).
-- **Done when.** At most `cover_kinds` covers in every cell of the three benches; the year on one thread (all
-  included) has plants under 10% on island22 and under 20% on region24.
-- **Kill line.** The plant instructions per planted cell-year fall by less than 10% against C2, or a key-number or
-  climate gate of C2 fails: then keep C2 alone and set `cover_kinds` aside (D2).
-- **Lines.** about +20 -5.
-
-### C4. The round's checks of the cover (no code)
-
-- **What.** Callgrind of the three remade benches (the year and its stages, plants all included as in P0); wall time
-  on 4 threads (5 interleaved runs under the lock); the key numbers again; the slow suite; 1,000-year runs of the
-  island, the globe and the region (one at a time, under the lock), with the watch list of 6.4.
-- **Done when.** The measure is in `docs/lighter/measures.md` with a verdict per bench; the architect logs the new
-  references (D7).
-
-### C5 (only if needed). The sample on every update (level 4)
-
-If the 1,000-year runs show gene means of light-eaters slower than today's (the sample now carries all selection
-inside a cell), `sample_every` 1: the sample is 13% of a cover update, about 1% of the year after C3. One number, its
-row in `docs/numbers.md`. Lines 0.
-
-**Core lines in all:** about +100 -25, net about +75 to +95: from 10,444 to about 10,520 to 10,540, under the
-ceiling. The cover deletes little code: almost all of a stand's code is shared with animal nodes (the day, the young
-law, splits, merges, litters), and it stays for them. The gain is in the work, not in the lines.
-
-### Risks
-
-1. **Climate coupling.** The light and heat of plants reach the ground through their stores, transpiration and
-   draws; P1.2 moved the land -0.78 K with no found cause. The cover keeps the day's code whole, so the risk is in the
-   mass and the liquid it holds, not in a new formula. Gate: C2's key numbers and the long-step test, whose margin is
-   only 2% (X85).
-2. **S50.** Pooled stores of young and adults: the stored share may move. Gate: its seeds' noise.
-3. **Light-eaters' mass and life.** Supply with stages (2.3) keeps growth near two nodes'; without the log-normal
-   factor it would be up to 50% higher. The members of all stages die alike (2.7): the life of light-eaters may move.
-4. **Selection of fecundity genes** is weaker inside a cell (2.7, 4). Watch, C5.
-5. **Animals.** Fewer plant faces leave more room for animal faces in `SEEN`; covers are larger prey nodes; the
-   eaters' key number and the trails must hold. The eaters live mostly on dead matter (handover 13.2), so the risk is
-   small.
-6. **Judging.** A law step cannot run the base's save. The counted work (nodes, updates, instructions per update) is
-   the main measure; the year across worlds counts only above PR-S's bands (19% island22, 11% globe36), which the
-   expected cuts (31%, 16%, 51%) pass. A same-world judge needs a one-off converter of a version 49 save into covers on
-   the step's branch (not merged: no compatibility code): optional, D6.
-7. **Key-number references.** After C2 the world is a new world: later steps of the round need new references (D7).
-8. **Size of cells.** Kinds per cell are per cell, so a refined region holds four times the kinds per km²; the scale
-   test may notice.
-
-## 8. Alternatives if the cover fails its gate
-
-- **F1: the cover as two bodies per kind** (young and adult nodes, today's `copy::young` whole), with C3's bound on
-  kinds (a kind is a linked pair) and the children of a node joining its young node only. It changes less law (no
-  stages, no supply sum) and gains less: about 2 x 1.6 = 3.2 nodes a planted cell instead of 8.2, a plant update a
-  little cheaper; the island's year about x1.34, the region's about x1.7. It is idea 2 in a strong form, and C3 lands
-  on it as it is.
-- **F2: ideas 3 and 4 on stands as bodies.** Living bodies do not rot (a reactor without the bare reactions, about 9 in
-  10 of a stand's; probe first, X63's -0.78 K) and a cheaper sample (`sample_every` 4, or the sample's gain estimated):
-  together perhaps 15% to 20% of a stand update. They also apply on top of the cover or of F1.
-- If the stage law itself is wrong (C2's key numbers out), F1 keeps everything else of C3 (the bound, seeds as gene
-  flow) and is the shortest way back.
-
-## 9. Decisions for the architect
-
-- **D1.** The cover as one body per kind with two stages (this design), or F1 (two bodies per kind) as the target.
-- **D2.** `cover_kinds`: its value (2 proposed, from C0), and whether C3 is built at all.
-- **D3.** Seeds of a new kind in a full cell: join the most alike cover (proposed: their matter and members live, the
-  gap widens its spread) or die to the ground as dead matter (a cap that kills: a harder rule).
-- **D4.** Names: "cover" is taken in code (soft cover, `cover_of`, `cover_median`); this design uses `Stages` and
-  `Config::cover_kinds`. Keep, or another word.
-- **D5.** Two ways of holding young: node pairs for animals (`copy::young`) and stages for covers, sharing
-  `math::Pass`. Accept as one idea in two book-keepings, or plan to move animal nodes to stages later (it would delete
-  `copy::young`'s links and maturing as a body, and change animals' laws: not in this round).
-- **D6.** Judging: counted work on remade benches (proposed), or also a one-off converter for a same-world judge.
-- **D7.** New key-number references after C2 (or C3) for the steps that follow.
-- **D8.** The weaker selection of fecundity genes inside a cell (2.7, 4): accepted with the watch and C5.
-- **D9.** Order with the other ideas: idea 2 is moot if C3 lands (it is F1 otherwise); ideas 3 and 4 act on the cover's
-  update after it; idea 6 meets fewer plant faces.
-- **D10.** Snapshot versions 50 (C2) and 51 (C3), and benches remade at each.
-- **D11.** The tape column `root_<K>_adults` (the share of members in the adult stage), to watch the stages.
+1. Fixed: a cover update priced as an adult-node update (about 100k), covers at the upper end of the bound; gains
+   restated (5); C0 measures the adult and young split.
+2. Fixed: option (a), covers count in `crowd`; C0 measures the animals today; C1, C2 and G-C gate animal nodes and
+   animal updates; option (b) only as its own stated law change (3).
+3. Fixed: maturing runs in `live` after growth and before children (2.4, 4).
+4. Fixed: `starved` per stage (2.5), and every reader of `member_body` and `adult` listed with what a cover reads (1).
+5. Fixed: the young's log moments in `size_lag` and `size_spread`, pooled by `rejoin`; no log-normal (2.2).
+6. Fixed: no supply factor; the stages summed as today's two nodes (2.3); the circular test dropped.
+7. Fixed: two shade entries, the young at their own height under their adults (2.3), growth split by light (2.4).
+8. Fixed: the newcomer place lets a new kind enter a full cell whole (3); test 1 (a better kind enters full cells); C0
+   measures what the bound acts on; C5 removed, D8 says plainly how fecundity genes are selected.
+9. Answered: the cover follows B1 through the shared day (2.7; L5 dropped); lines net about +125 and the plan's "delete
+   more than it adds" must change (7); two holders of one law, `rejoin` the one place (D5).
+10. Fixed: C1 is the bound on today's pairs, C2 the stages; each gated on the whole year and on animal updates (7).
+11. Fixed: the estimate takes covers near the bound (5); C0 counts the litters into cells with no node of their kind
+    as a rate.
+12. Fixed: test 2 (cover against a pair) and test 1 (invasion) added; the circular test dropped; the `crowd` test
+    states both laws (6).
+13. Fixed: `Young`, `Body::young`, `Config::cell_kinds`; no `Stages`, no `cover_kinds`.
+14. Fixed: `Young`'s numbers are `f64`.
+15. Fixed: 2.3 says which laws go by stage and which read the mean member, with the size of the error.
+16. Fixed: one size, all young pass together at the copy mass (2.4).
+17. Fixed: `young` set from `brainless` at placement and at `lineage::resize`; a debug assertion that they agree (2.1).
