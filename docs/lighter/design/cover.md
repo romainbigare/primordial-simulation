@@ -2,8 +2,8 @@
 
 The round "Lighter world", idea 5. The owner said yes to this law change, and asked for at least three kinds per cell
 that do not mix ("trees, shrubs, small plants"), made by genes, and for new kinds that can enter a full cell
-(`architect-1.md`). This is the design after the first review (`review-cover.md`, 17 findings; answers in 10). The
-plan's lane C takes its steps from 7.
+(`architect-1.md`). This is the design after the first and second reviews (`review-cover.md`: 17 findings, then 9;
+answers in 10). The plan's lane C takes its steps from 7.
 
 ## 0. The idea
 
@@ -11,16 +11,17 @@ Today a planted cell holds about 8 light-eater nodes (stands): an adult and a yo
 of unlike litters from the neighbours. Each is a body that updates every 40 days. The cover keeps light-eaters as
 **bodies** (one law of physics for every body), and changes two things, in two law steps:
 
-1. **The bound on kinds (C1).** A cell holds at most `cell_kinds` kinds (3 or 4, from C0) plus one place for a
-   newcomer kind. A kind is today's adult node with its linked young node. A new kind enters a full cell as a group
-   through the newcomer place; a kind ends only as every node ends (fewer than one member).
+1. **The bound on kinds (C1).** A cell holds at most `cell_kinds` + 1 kinds (`cell_kinds` = 3: the owner's three
+   forms, and one place for a newcomer); a new kind starts while fewer are held. A kind is today's adult node with its
+   linked young node. A new kind enters a full cell as a group; at a month's start, a cell with more than
+   `cell_kinds` kinds with adults merges its most alike pair, so the newcomer place comes free again.
 2. **The young inside (C2).** A kind is one body, the **cover**: its young and its adults are two stages of it
    (`Body::young: Option<Young>`). Its children stay in it; its seeds land in a neighbour's cover of their kind (gene
    flow); its young mature inside it by the same flux as today (`math::Pass`). The young keep their own height and
    their own share of the light.
 
 The physics of the day (`body::live`) is unchanged. The gain is fewer bodies: from about 8 a planted cell to at most
-`cell_kinds` + 1. Names: `Young`, `Young::adults`, `Young::body`, `Young::lit`, `Config::cell_kinds`; none of them is
+4. Names: `Young`, `Young::adults`, `Young::body`, `Young::lit`, `Config::cell_kinds`; none of them is
 used today ("cover" is the soft cover of `flow::land`, `cover_of` and `Site::cover`; "stages" are the stages of an
 update; the code does not use them for this). "The cover" is a word of the docs only.
 
@@ -37,15 +38,15 @@ cheaper day laws failed (P1.2, PR-C2).
 | Place | Today, for stands | With the cover |
 |---|---|---|
 | `body::live`: `to_growth`, `settle_upkeep`, `keep_warm`, `check_stores`, `shed`; `body/physics.rs` (light, breath, `Reactor::react`, transpiration by `GAS`, soaking, roots, heat); `body/exchange.rs`; `body/pay.rs` | the day | stays (C2 adds the maturing between growth and children, 2.4) |
-| `live::starved` | the mean member against the copy mass | rewritten: per stage (2.5) |
+| `live::starved` | the mean member against the copy mass | rewritten: per stage, the young by their own energy balance (2.5) |
 | `Body::adult`, `size_moments`, `set_size`, `height`, `equiv` (`body/tissue.rs`) | the mean member | rewritten for a body with `Young` (2.3) |
-| `copy::grow` | past maturity `ALLOC` of growth is brood | rewritten: growth splits between stages, brood from the adults' part (2.4) |
+| `copy::grow` | past maturity `ALLOC` of growth is brood | rewritten: growth splits between stages by each stage's light less its upkeep, brood from the adults' part (2.4) |
 | `copy::copy`, `emit`, `give`, `provisions`, `start` | children join the young node; `DISPERSE` leave as a litter | rewritten: stayers join the cover's young, nothing moves; dispersers are a litter of young (2.4) |
 | `copy::kin`, `land_litter`, `back`, `outbox::Entry::Litter` | a litter joins its kind's young node or starts one | rewritten: the newcomer place (3); `kin` matches any stage of a cover |
 | `copy::young` (`linked`, `link`, `mature`, `Grown`), `Body::link`, `survey::update`'s maturing | young and adult nodes | stays for animal nodes; a cover matures inside `live` with `math::Pass` |
 | `nodes::add`, `rejoin`, `Lot`, `part` | pool genes, spreads, size moments | rewritten: they pool `Young`, and `rejoin` weighs the young's size moments by young members |
 | `nodes::split` | room while the cell has fewer than `crowd` - 1 bodies | for light-eaters: room from the bound (3); animals unchanged |
-| `nodes::crowd`, `join_alike`, `merge_closest` | monthly merge; covers and animals counted together | stays: covers still count in `crowd` (option (a) of finding 2, 3) |
+| `nodes::crowd`, `join_alike`, `merge_closest` | monthly merge; covers and animals counted together | stays: covers still count in `crowd` (option (a) of finding 2, 3); for light-eaters, past `cell_kinds` kinds with adults `merge_closest`'s distance has no `alike` limit (3) |
 | `copy::select` (sample member) | breeder's equation in a node | stays, `sample_every` 2 (2.6) |
 | `body::vary` | children's genes | stays |
 | `survey::shade` | one entry per body | rewritten: a cover is two entries, adults and young (2.3) |
@@ -92,7 +93,9 @@ They are shares, so the laws that act on all members alike keep them: deaths of 
 bite or wear that tears a share of every member (`wound`), `part`. From them: `n_a = adults · n`, `n_y = n - n_a`,
 `m_a = (1 - body) · built / n_a`, `m_y = body · built / n_y`. **One source:** `young` is set where a body is placed
 (`Domain::add`) from `Life::brainless`, and set or cleared where `lineage::resize` moves a body between a lineage
-with a brain and one without; `survey::update` asserts in debug builds that the two agree.
+with a brain and one without; `survey::update` asserts in debug builds that the two agree. So a body that loses its
+brain (X15; none seen in PR-B's 1,000 years) becomes a cover whatever it eats: it starts with `Young` all adult, as a
+founder, and counts among its cell's kinds (the bound counts bodies without a brain).
 
 ### 2.2 The young's sizes
 
@@ -119,11 +122,18 @@ node. A body without `Young` (animals) reads them about its mean member, as toda
 
 ### 2.4 Growth, maturing, children, seeds (in this order, inside `live`)
 
-1. **Growth** (`copy::grow`). What it builds splits by light-weighted supply: the adults take
-   `a = E_a / (E_a + E_y · lit)` (E the two terms of `equiv`; the adult entry's shade over the cover's is
-   `(1 - leaf_y · lit) / leaf_a` of it, folded in the same way). Of the adults' part, what brings `m_a` back to the
-   copy mass is body, and of the rest the share `ALLOC` is brood (today's rule on the adult stage). The young's part is
-   young body (`Young::body` rises).
+1. **Growth** (`copy::grow`), by each stage's own energy balance, as a young node and an adult node pay apart today.
+   The leaf shares are `ℓ_y = E_y / (E_a + E_y)` and `ℓ_a = 1 - ℓ_y` (E the two terms of `equiv`; each leaf is its
+   `equiv` times one leaf gene). The young catch the share `ℓ_y · lit` of the cover's light, the adults `1 - ℓ_y · lit`
+   (exact, as the body's shade is the leaf-weighted mean of the two entries'). Each stage's balance over the update is
+   its share of the light its reactions stored (`store_light`) less its share by mass of the update's upkeep
+   (`settle_upkeep`'s cost): `B_y = ℓ_y lit P - μ_y U`, `B_a = (1 - ℓ_y lit) P - (1 - μ_y) U`, μ_y = `Young::body`.
+   What the cover builds splits by the positive balances: the young take `max(B_y, 0) / (max(B_y, 0) + max(B_a, 0))`
+   (by mass when both are 0). Of the adults' part, what brings `m_a` back to the copy mass is body, and of the rest the
+   share `ALLOC` is brood (today's rule on the adult stage). The young's part is young body. **The young hold no
+   reserve:** a negative `B_y` is young body lost (`-B_y` over the energy of burning a kg of body matter, reaction 21),
+   which `starved` reads (2.5). It breaks no book: the cover's store paid the upkeep, and the young that die go to the
+   ground with their matter, as any dead.
 2. **Maturing** (new, in `live` after `to_growth` and before `copy::copy`, so no newborn is in the young yet; finding
    3). The young's log10 bodies rose by `d = log10(m_y after / m_y before)`, members fixed. `Pass::new(mean, var,
    log10 copy_mass, d)` gives the share of young members that pass and the share of young body they hold, and the
@@ -146,9 +156,12 @@ node. A body without `Young` (animals) reads them about its mean member, as toda
 
 `starved` today kills `1 - (now / was)^a` with `was = min(from, copy mass)`. A cover takes it per stage: the adults with
 `now = m_a`, `was = min(m_a before, copy mass)` (an adult that shrinks toward the copy mass by `ALLOC` is not
-starving), the young with `now = m_y`, `was = m_y before`. The members that die are `n_a f_a + n_y f_y`; they take
-their stages' body with them (matter by stage, the other stores by the share of members), and `adults` and `body` are
-set from what is left. Then `lose_share`'s rule (one law for nodes and individuals) as today.
+starving), the young with `now = m_y` less the body their negative balance lost (2.4), `was = m_y before`. So young
+under their adults or a taller kind thin by shade, as a shaded young node does today (Weiner 1990). The members that
+die are `n_a f_a + n_y f_y`; they take their stages' body with them (matter by stage, the other stores by the share of
+members), the brood falls by the adults' share `f_a` (it is the adults' matter; `Body::lose` would keep it at the
+mean share), and `adults` and `body` are set from what is left. Then `lose_share`'s rule (one law for nodes and
+individuals) as today.
 
 ### 2.6 Competition, kinds and selection
 
@@ -178,10 +191,12 @@ set from what is left. Then `lose_share`'s rule (one law for nodes and individua
 
 ### 2.8 What the cover cannot do that stands do today
 
-1. A cell holds at most `cell_kinds` kinds and one newcomer (today unbounded: up to 26 to 28 nodes).
-2. A kind's young and adults share one store and one temperature (they still have their own light and their own
-   starving): no young starves while its adults are full.
-3. Seeds of a kind not held, landing where the newcomer place is taken, join the most alike cover: their genes mix.
+1. A cell holds at most `cell_kinds` + 1 = 4 kinds (today unbounded: up to 26 to 28 nodes).
+2. A kind's young and adults share one store and one temperature. They keep their own light, growth and starving (the
+   young by their own energy balance, 2.4), but the young draw on no reserve of their own and the adults' store pays
+   the upkeep of the whole cover.
+3. Seeds of a kind not held, landing while the cell holds `cell_kinds` + 1 kinds, join the most alike cover: their
+   genes mix. Past `cell_kinds` kinds with adults, the most alike pair of kinds merges (3).
 4. The fecundity genes are selected only between kinds and between cells (2.6).
 5. A kind's young are one group with one size spread.
 
@@ -196,18 +211,25 @@ kind and spares another (each kind has a face). No watch-for item of M1 to M3 or
 
 - **A kind** in a cell: an adult node and its linked young node (C1), then one cover (C2). A kind **without adults** is a
   newcomer (a young node with no adult in C1, a cover with `adults` 0 in C2).
-- **`Config::cell_kinds`** (a speed setting with a physical side effect, like `crowd`; at least 3, the owner's words;
-  C0 picks 3 or 4): a cell holds at most `cell_kinds` kinds with adults and **one** newcomer.
-- **Start of a kind.** A litter (staying or landing) with no kind of its genes in the cell (`kin`) starts a newcomer
-  if the cell has none; else it joins the newcomer if alike, else the most alike kind (`nodes::add`; its gap widens
-  that kind's spread up to `body::most`). A split (`nodes::split`, halves not alike) needs a free place among the
-  kinds with adults and leaves the newcomer place free.
+- **`Config::cell_kinds` = 3** (a speed setting with a physical side effect, like `crowd`; the owner's three forms,
+  decision (4) of the second round). **The bound is one number: a cell holds at most `cell_kinds` + 1 kinds of bodies
+  without a brain, whatever they eat, and a new kind starts only while fewer are held.** The extra place is the
+  newcomer's.
+- **Start of a kind.** A litter (staying or landing) with no kind of its genes in the cell (`kin`) starts a kind if
+  the cell holds fewer than `cell_kinds` + 1; else it joins the most alike kind (`nodes::add`; its gap widens that
+  kind's spread up to `body::most`). A split (`nodes::split`, halves not alike) needs two free places, so it never
+  takes the newcomer's.
+- **The place comes free** (second review, finding 1). At each month's start (`nodes::crowd`), a cell that holds more
+  than `cell_kinds` kinds with adults merges its most alike pair, the smaller into the larger: `merge_closest`'s
+  distance (`nodes.rs:59-94`) without its `alike` limit for bodies without a brain. It is a speed tool like `crowd`,
+  not a choice by fitness: the most alike forms merge, so different forms stay apart while there are no more than
+  `cell_kinds` of them. A resident that holds no adults (after a cold spell) is a kind like any other.
 - **Invasion.** A newcomer grows in the cell as a group (its genes together, not pooled) under the residents' shade.
-  When it matures it becomes a kind with adults, and the cell may then hold `cell_kinds` + 1 of them for a while:
-  no new newcomer starts until one kind ends. A kind ends **only** as any node ends: fewer than one member (outgrown
-  in light, liquid or minerals, eaten, frozen). No hand rule picks a loser. The cost stays bounded: at most
-  `cell_kinds` + 1 bodies (C2) a cell. Forms come from genes only (height from materials and size, `Body::height`);
-  core names none.
+  When it matures the cell holds `cell_kinds` + 1 kinds with adults; the next month the most alike two merge and the
+  place is free for the next newcomer, so a landscape can be invaded again and again. A kind also ends as any node
+  ends: fewer than one member (outgrown in light, liquid or minerals, eaten, frozen). The cost stays bounded: at most
+  `cell_kinds` + 1 bodies (C2) a cell, `2 (cell_kinds + 1)` in C1. Forms come from genes only (height from materials
+  and size, `Body::height`); core names none.
 - **Animals and `crowd`** (finding 2): option (a), covers still count in `crowd`'s two tests (`nodes.rs:16`, `:214`),
   no code change for animals. With 3 or 4 covers a planted cell is still at or past `crowd` (4) with one animal node,
   as with today's 8 stands, so animal splits stay rare and `merge_closest` runs where two animal nodes meet, as
@@ -237,27 +259,34 @@ update plus maturing (about 1k) and the second shade entry: about 100k, 19 µs.*
 **Today, plant updates per planted cell-year:** island22 85 x 84k = 7.1 M; globe36 46 x 88k = 4.0 M; region24 104 x 86k
 = 8.9 M. Plants all included are 37% / 19% / 60% of the year (P0).
 
-**Bodies a planted cell:** after C1, about two per kind (adult and young) plus a newcomer; after C2, one per kind plus
-a newcomer, between today's kinds (adult nodes per planted cell: 2.7 / 1.6 / 3.5, P0) plus a newcomer and the bound
-(`cell_kinds` + 1). Cells fill toward the bound (finding 11), so the estimate takes the upper end, island 3 to 4,
-globe 2 to 3, region 3.5 to 4 covers, at 9.1 updates a year.
+**Bodies a planted cell** (`cell_kinds` 3, so at most 4 kinds): after C1, about two per kind (adult and young) plus
+a newcomer; after C2, one per kind, between today's kinds (adult nodes per planted cell: 2.7 / 1.6 / 3.5, P0) plus a
+newcomer and the bound (4). Cells fill toward the bound (finding 11), so the estimate takes the upper end: island 3
+to 4, globe 2 to 3, region 3.5 to 4 covers, at 9.1 updates a year.
+
+**Litters** (second review, finding 5) go by copying updates, not by plant work: a litter leaves at each update of an
+adult node or a cover. `outbox::deliver` is 3.4% / 5.0% / 3.0% of the year and the plants make 62% / 56% / 94% of its
+litters: about 2.1% / 2.8% / 2.8% of the year today. Copying updates a planted cell-year: today about 28 / 15 / 32;
+with covers 27 to 36 / 18 to 27 / 32 to 36. So the litters cost about 2.0 to 2.7% / 3.5 to 5.3% / 2.9 to 3.3% of
+today's year after C2. Faces, booking and the survey fall with the plant work.
 
 | | island22 | globe36 | region24 |
 |---|---|---|---|
-| C1: bodies a planted cell (today 8.2 / 4.6 / 10.3) | about 6.4 to 7 | about 4.2 | about 7 to 8 |
+| C1: bodies a planted cell, mean (today 8.2 / 4.6 / 10.3) | about 6.4 to 7 | about 4.2 | about 7 to 8 |
 | C1: plant work a planted cell-year | x1.15 to x1.4 | x1.0 to x1.1 | x1.25 to x1.45 |
 | C1: the year, 1 thread | x1.05 to x1.12 | x1.00 to x1.02 | x1.14 to x1.23 |
 | C2: covers a planted cell | 3 to 4 | 2 to 3 | 3.5 to 4 |
-| C2: plant work a planted cell-year, M | 2.7 to 3.6 (x2.0 to x2.6) | 1.8 to 2.7 (x1.5 to x2.2) | 3.2 to 3.6 (x2.4 to x2.8) |
-| C2: plants, share of today's year | 14% to 19% | 9% to 13% | 21% to 25% |
-| **C2: the year, 1 thread** | **x1.22 to x1.30** | **x1.06 to x1.12** | **x1.54 to x1.63** |
+| C2: plant updates a planted cell-year, M instructions | 2.7 to 3.6 (x2.0 to x2.6) | 1.8 to 2.7 (x1.5 to x2.2) | 3.2 to 3.6 (x2.4 to x2.8) |
+| C2: plants all included, share of today's year (litters too) | 15% to 21% | 11% to 16% | 23% to 27% |
+| **C2: the year, 1 thread** | **x1.20 to x1.28 (-16 to -22%)** | **x1.03 to x1.09 (-3 to -8%)** | **x1.49 to x1.58 (-33 to -37%)** |
 
-(The year after = 1 - p + p / x, p the plants' all-included share; the faces, booking and litters are taken to fall
-with the plant work.) C1 cuts only the young nodes of unlike litters past one newcomer (today about 2.7 a planted
-cell on the island, `young` 5.4 against `adult` 2.7); it is mainly the base of C2. The globe gains least: its cells
-hold few stands today. At `cell_kinds` 3 the upper ends hold;
-at 4 the lower ends. **The next lever** is the copy work, a third of a cover update (two `vary` calls, the join, the
-litter): a law step of its own after G-C, not in this design.
+(The year after = 1 - p + (p - l) / x + l', p the plants' all-included share, l their litters today, l' after.) C1
+cuts only the young nodes of unlike litters past one newcomer (today about 2.7 a planted cell on the island, `young`
+5.4 against `adult` 2.7); it is the base of C2 and has no speed line. The globe gains least: its cells hold few stands
+today, and its litters rise. G-C (-15% island22, -30% region24) passes at the estimate's both ends, with 1 to 7 points
+on the island. **`cell_kinds` 4** (5 kinds) would fail G-C by these prices (island about -13%, region about -29%), so
+if C0's forms need 4, G-C is restated before C1. **The next lever** is the copy work, a third of a cover update (two
+`vary` calls, the join, the litter): a law step of its own after G-C (C4 of the plan), not in this design.
 
 ## 6. What must still hold (level 4)
 
@@ -292,10 +321,11 @@ golden (re-pinned in C1 and C2).
 
 **Tests new** (fast, `worldgen::testkit` setup):
 1. `a_better_kind_enters_full_cells` (C1): a strip of cells full of kinds; a kind that grows more seeded at one end;
-   after N updates it holds the most mass in the far cell, and no cell ever holds more than `cell_kinds` + 1 kinds.
-2. `a_cover_gives_what_its_young_and_adult_nodes_give` (C2): a cover and a young-adult pair of the same genes, sizes and
-   light, one update: the members that mature, the births and the mass agree to 2%; both keep elements, energy and
-   members (births less deaths).
+   after N updates it holds the most mass in the far cell. Then a **second** better kind, of another form, seeded at
+   the same end: it takes the strip too. No cell ever holds more than `cell_kinds` + 1 kinds at a month's start.
+2. `a_cover_gives_what_its_young_and_adult_nodes_give` (C2): a cover and a young-adult pair of the same genes and
+   sizes, about 10 updates under the shade of a taller kind: the members that mature, the births and the mass agree
+   to 5%, the young's deaths within a factor of 2; both keep elements, energy and members (births less deaths).
 3. `a_covers_young_mature_before_its_children_join` (C2): an update with many births matures the young members `Pass`
    gives from the growth alone; with one size, all young pass together when they reach the copy mass.
 
@@ -310,28 +340,31 @@ latitude on the globe; eaters' mass and life; trails (`worn_edges`, `traffic_top
 Lines are `core` code lines (`cli/tests/core_size.rs`; about 10,444 today, ceiling 10,643). "Counted" = callgrind on
 one thread, one year from the remade benches (`make_benches.sh`, the step's snapshot version), seeds 1 to 3, with
 `--toggle-collect` on the update of a body without a brain (as PL1): the year's instructions, the plant work per
-planted cell-year, the planted cells, the animal updates a year, bodies per planted cell. Across worlds the year alone
+planted cell-year, the planted cells, the animal updates a year, bodies per planted cell, `outbox::deliver`. Across worlds the year alone
 counts only above PR-S's bands (19% island22, 11% globe36); the counted parts carry the verdict.
 
 | ID | What | Files | Level | Done when | Kill line |
 |---|---|---|---|---|---|
-| C0 | Probe (branch `probe/cover-c0`, not merged), on the three bench saves and one year of each: stands per planted cell by stage; alike groups (adult and young by `body::within`); **growth forms side by side** (groups unlike in the form genes: `COPY_MASS`, `LEAF`, the keep genes of the frame and lime, `STRENGTH`; and the heights `Body::height`); share of adult mass in the largest 1 to 4 groups; litters a planted cell-year that land where no node of their kind is, and the adult mass a year later that came from them; animal nodes per planted cell, animal splits and `merge_closest` runs a year; callgrind of a stand update split by `b.adult()` | a test file on the branch | probe | `cell_kinds` chosen: the least of 3 or 4 that holds 90% of the adult mass in that many form groups on all three benches; the numbers in `docs/lighter/measures.md` C0 | none (if 4 is too few, or the adult update is over 120k, the architect is told before C1) |
-| C1 | **The bound on kinds** on today's young-adult pairs (3): `Config::cell_kinds` (row in `numbers.md`, speed); the newcomer rule in `emit` and `land_litter`; `nodes::split` room for light-eater nodes from the kinds with adults; `crowd` unchanged; snapshot 50; test 1 and the rewritten `crowd` and `dispersing` tests; `laws.md` 4.2, 4.4; `history.md` | `params.rs`, `nodes.rs`, `copy/mod.rs`, `tape/src/snapshot.rs`, tests, docs | 4 | bodies per planted cell at most 2 (`cell_kinds` + 1); the counted year -5% on island22 and -12% on region24; animal nodes per planted cell and animal updates a year within their seeds' noise; key numbers in range (S50 within noise); the climate and life tests of 6 pass; test 1 passes | the counted year falls less than 3% on island22 or less than 8% on region24, or animal updates a year move past their seeds' noise, or a key number or a climate test fails: C stops; G-C fails |
-| C2 | **The young inside** (2): `Body::young` and `Young`; `adult`, `size_moments`, `set_size`, `height`, `equiv` by stage; two shade entries; growth split; maturing in `live` before children; children join the cover; seeds as young; `starved` per stage; `nodes::add`, `rejoin`, `Lot`, `part`, `kin`, `kin_key` without stage for covers; founders all adult; snapshot 51; tape `root_<K>_adults`; tests 2 and 3 and the rewritten ones; `laws.md` 1.4, 3.6, 4.2, 4.4 (one law, the flux by `Pass`, with two holders: node pairs for animals, stages for covers), 6.6; `tape.md`; `history.md` | `body/mod.rs`, `body/tissue.rs`, `body/live.rs`, `copy/grow.rs`, `copy/mod.rs`, `copy/young.rs`, `nodes.rs`, `survey.rs`, `life/domain.rs`, `lineage.rs`, `worldgen/src/life/make.rs`, `tape/src/snapshot.rs`, `tape/src/rec/cols/`, tests, docs | 4 | one body per kind (bodies per planted cell at most `cell_kinds` + 1); counted plant work per planted cell-year x1.4 against C1 on island22 and region24; test 2 within 2%; animals, key numbers and tests as C1; the land within 0.3 K of C1 (else stop and find why: P1.2's -0.78 K was never explained) | the counted year falls less than 5% against C1 on island22 (or less than 8% on region24), or the animal or key-number or climate lines of C1 fail: C1 stays, C2 is not merged |
+| C0 | Probe (branch `probe/cover-c0`, not merged), on the three bench saves and one year of each: stands per planted cell by stage; alike groups (adult and young by `body::within`); **growth forms side by side** (groups unlike in the form genes: `COPY_MASS`, `LEAF`, the keep genes of the frame and lime, `STRENGTH`; and the heights `Body::height`); share of adult mass in the largest 1 to 4 groups; litters a planted cell-year that land where no node of their kind is, and the adult mass a year later that came from them; animal nodes per planted cell, animal splits and `merge_closest` runs a year; the spread of the form genes' cell means across the land cells of globe36 (kinds by climate, C1's reference); callgrind of a stand update split by `b.adult()` | a test file on the branch | probe | the numbers in `docs/lighter/measures.md` C0; `cell_kinds` is 3 (decided); if the forms side by side need 4, the architect restates G-C before C1 (4 fails G-C as priced, 5) | none (if the adult update is over 120k, the architect is told before C1) |
+| C1 | **The bound on kinds** on today's young-adult pairs (3): `Config::cell_kinds` = 3 (row in `numbers.md`, speed); a new kind starts in `emit` and `land_litter` only while the cell holds fewer than `cell_kinds` + 1 kinds, else the litter joins the most alike; `nodes::split` of a light-eater node needs two free places; at a month's start `nodes::crowd` merges the most alike pair of a cell holding more than `cell_kinds` kinds with adults (`merge_closest` without the `alike` limit for bodies without a brain); `crowd` unchanged for animals; snapshot 50; test 1 (two invasions) and the rewritten `crowd` and `dispersing` tests; `laws.md` 4.2, 4.4; `history.md` | `params.rs`, `nodes.rs`, `copy/mod.rs`, `tape/src/snapshot.rs`, tests, docs | 4 | at every month's start, after `nodes::crowd`, at most `2 (cell_kinds + 1)` = 8 bodies without a brain in every cell (and the mean per planted cell measured); test 1 passes; animal nodes per planted cell and animal updates a year within their seeds' noise; key numbers in range (S50 within noise); the climate and life tests of 6 pass; kinds by climate kept (the spread of the form genes' cell means across globe36's land at least half of C0's); the counted year measured, not gated | **no speed line** (it is the base of C2; G-C judges the speed): animal updates a year or animal nodes per planted cell past their seeds' noise, a key number out of range or S50 past its noise, a climate test failing, test 1 failing, or kinds by climate lost: C stops; G-C fails |
+| C2 | **The young inside** (2): `Body::young` and `Young`; `adult`, `size_moments`, `set_size`, `height`, `equiv` by stage; two shade entries; growth split by each stage's energy balance (light share less mass share of upkeep); maturing in `live` before children; children join the cover; seeds as young; `starved` per stage, the brood falling with the adults; `nodes::add`, `rejoin`, `Lot`, `part`, `kin`, `kin_key` without stage for covers; founders and bodies that lose their brain all adult; snapshot 51; tape `root_<K>_adults`; tests 2 and 3 and the rewritten ones; `laws.md` 1.4, 3.6, 4.2, 4.4 (one law, the flux by `Pass`, with two holders: node pairs for animals, stages for covers), 6.6; `tape.md`; `history.md` | `body/mod.rs`, `body/tissue.rs`, `body/live.rs`, `copy/grow.rs`, `copy/mod.rs`, `copy/young.rs`, `nodes.rs`, `survey.rs`, `life/domain.rs`, `lineage.rs`, `worldgen/src/life/make.rs`, `tape/src/snapshot.rs`, `tape/src/rec/cols/`, tests, docs | 4 | at every month's start at most `cell_kinds` + 1 = 4 bodies without a brain in every cell; counted plant work per planted cell-year x1.4 against C1 on island22 and region24 (`outbox::deliver` counted with it); light-eater members per planted cell within a factor of 2 of C1's; test 2 passes; animals, key numbers, kinds by climate and tests as C1; the land within 0.3 K of C1 (else stop and find why: P1.2's -0.78 K was never explained) | the counted year falls less than 5% against C1 on island22 or less than 8% on region24, or the animal, key-number, climate or kinds lines of C1 fail: C1 stays, C2 is not merged |
 | C3 | **The checks** (no code): counted runs of the three benches, plants all included as in P0; wall on 4 threads (5 interleaved runs under the lock); key numbers; the slow suite; 1,000-year runs of the island, the globe and the region, one at a time, with the watch list of 6 | `docs/lighter/measures.md` | — | the measure and a verdict per bench | — |
-| **G-C** | **The cover's gate** (after C3): the whole year, one thread, counted, at least -15% on island22 and -30% on region24, and not worse on globe36; animal nodes per planted cell and animal updates a year within their seeds' noise of today; every key number in range (S50 within noise), the climate tests and the canopy check pass; the 1,000-year runs keep their books and live; tests 1 to 3 pass | | | | **fails:** what failed is not merged (C1 alone may stay if it passed its own lines); A3 and A4 start (phase 2) |
+| **G-C** | **The cover's gate** (after C3, `cell_kinds` 3): the whole year, one thread, counted, at least -15% on island22 and -30% on region24, and not worse on globe36 (estimate: -16 to -22%, -33 to -37%, -3 to -8%); animal nodes per planted cell and animal updates a year within their seeds' noise of today; every key number in range (S50 within noise), the climate tests and the canopy check pass; the 1,000-year runs keep their books and live; tests 1 to 3 pass | | | | **fails:** what failed is not merged (C1 alone may stay if it passed its own lines); A3 and A4 start (phase 2) |
 
-**Lines.** C1 about +25 -5. C2 about +115 -10 (`Young` and its reads 25, shade entries 12, growth split 10, maturing
-in `live` 20, children in place 15, starving per stage 12, pooling 10, placement and resize 6, the rest 5).
-**Net about +125: from about 10,444 to about 10,570, under the ceiling** (about 70 left for the round). The cover
-cannot delete more than it adds: the young law, splits, merges and litters stay for animal nodes, and the day is
-shared. The plan's line "the cover should delete more than it adds" (L4) must change; the architect logs it.
+**Lines.** C1 about +28 -5 (the newcomer rule, the split's room, the merge past `cell_kinds`). C2 about +123 -10
+(`Young` and its reads 25, shade entries 12, growth split by balances 18, maturing in `live` 20, children in place 15,
+starving per stage and the brood 14, pooling 10, placement and resize 6, the rest 3). **Net about +136: from about
+10,444 to about 10,580, under the ceiling.** The cover cannot delete more than it adds: the young law, splits, merges
+and litters stay for animal nodes, and the day is shared (L4 as rewritten).
 
 **Risks.** (1) The climate coupling of plants (P1.2's -0.78 K; the long-step test's 2% margin): the day's code is
 whole, so the risk is in mass and liquid held; gated in C1 and C2. (2) S50 with pooled stores. (3) Light-eaters' mass
 (0.16 above its floor) and life: shared stores, starving per stage. (4) Animals: `crowd` on cells with fewer covers
 (the globe), more animal faces in `SEEN`; gated. (5) Fecundity genes selected only between kinds and cells. (6) A
-newcomer place held by a kind that never matures blocks invasions in that cell; test 1 and the watch measure it.
+newcomer that never matures (kept alive by seed rain) holds the extra place, as the merge counts kinds with adults;
+test 1 and the watch (how often a newcomer becomes a kind) measure it; if it shows, the plan's remedy (L23: the
+place frees when the newcomer has not matured within its gene's life span). (9) The island's margin to G-C is 1 to 7
+points.
 (7) Judging across worlds: the counted parts carry the verdict. (8) Kinds are per cell: a refined region holds four
 times the kinds per km² (the scale test).
 
@@ -347,8 +380,8 @@ times the kinds per km² (the scale test).
 | | Decision |
 |---|---|
 | D1 | Settled (decision 9): the cover with stages, after the bound on young-adult pairs. |
-| D2 | Settled: `cell_kinds` at least 3, C0 picks 3 or 4. Proposed in addition: one newcomer place, so a full cell can be invaded as a group with no hand rule (3). |
-| D3 | Settled in spirit (invasion as a group). Proposed: the newcomer place; seeds of a kind not held join the most alike kind only while the newcomer place is taken. Why: a new form enters whole, a kind ends only by dying out, the cost stays bounded. |
+| D2 | Settled: `cell_kinds` = 3 (the owner's three forms; with the newcomer place at most 4 kinds a cell). |
+| D3 | Settled (second round): at most `cell_kinds` + 1 kinds, a new kind starts while fewer are held; past `cell_kinds` kinds with adults the most alike pair merges monthly, without the `alike` limit, so the place comes free and invasions repeat. |
 | D4 | Settled (names that clash with nothing): `Body::young`, `Young`, `Config::cell_kinds`; "cover" only in docs. |
 | D5 | Proposed: one law (the McKendrick flux by `math::Pass`) with two holders, node pairs for animals (their young and adults act apart) and stages for covers; `rejoin` is the one place that pools size moments. Said in `laws.md` 4.4. |
 | D6 | Proposed: counted parts on remade benches (above), no converter of old saves. Why: a converter is code nobody keeps, and the counted parts are robust to the world's noise. |
@@ -383,3 +416,20 @@ times the kinds per km² (the scale test).
 15. Fixed: 2.3 says which laws go by stage and which read the mean member, with the size of the error.
 16. Fixed: one size, all young pass together at the copy mass (2.4).
 17. Fixed: `young` set from `brainless` at placement and at `lineage::resize`; a debug assertion that they agree (2.1).
+
+**Second review** (same file, section "Second review"):
+
+1. Fixed: the bound is one number (`cell_kinds` + 1 kinds); past `cell_kinds` kinds with adults the most alike pair
+   merges at the monthly survey, without the `alike` limit, so the place comes free (3); test 1 has a second invasion.
+2. Fixed: the young catch `ℓ_y · lit` of the cover's light, `ℓ_y = E_y / (E_a + E_y)`, written once (2.4).
+3. Fixed by the first fix: each stage's growth is its light share less its mass share of upkeep; the young hold no
+   reserve, a negative balance is young body lost and `starved` thins them (2.4, 2.5); no law breaks (the books hold,
+   the dead go to the ground); test 2 runs about 10 updates under a taller kind; C2 gates light-eater members.
+4. Fixed: `cell_kinds` = 3; C1 has no speed line (law, animals, key numbers, kinds by climate); G-C as written,
+   which `cell_kinds` 4 would fail by these prices (5).
+5. Fixed: litters priced by copying updates (5); `outbox::deliver` counted in C2 and G-C.
+6. Fixed: C1 at most `2 (cell_kinds + 1)` = 8 and C2 at most `cell_kinds` + 1 = 4 bodies without a brain in every
+   cell at each month's start; the mean per planted cell is a separate number (5, 7).
+7. Fixed: the plan's section 1 and lane C take this design's gains and steps (same commit).
+8. Fixed: a body that loses its brain becomes a cover, all adult, and counts among the kinds (2.1).
+9. Fixed: when the stages die apart, the brood falls by the adults' share (2.5).
