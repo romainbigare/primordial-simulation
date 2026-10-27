@@ -994,7 +994,7 @@ Only items that are still open. Do not build them before M4 starts unless the ow
 - **The methane-like gas** lives by the air's temperature (months at 280 K, years at 255 K). If a warm world has a methane story, look here first.
 - **Fire and disease.** Natural fire starts wait for M4: they need a "burning share of a cell" law (a fire front) and M4's weather, with the spark booked like the sun. Disease (bodies inside bodies) waits until after M4.
 - **Reading the eaters.** Eaters settle by years 90 to 100, so report their log10 kg over years 91 to 100 and their births less deaths over years 71 to 100 (a decade swings by about 15% of births), three seeds at least. Under 2 times is noise.
-- **Core size.** `core` holds at most 12,000 code lines (14.3, counted by `cli/tests/core_size.rs`; `docs/speed-x10/decisions.md` X22).
+- **Core size.** `core` holds at most 10,643 code lines (14.3, counted by `cli/tests/core_size.rs`; `docs/speed-x10/decisions.md` X22 and X88).
 
 ---
 
@@ -1021,7 +1021,7 @@ All of these must be true:
 
 | Part | Budget |
 |---|---|
-| `core` (five laws, state, random numbers) | ≤ 12,000 lines of code through M7 (`docs/speed-x10/decisions.md` X22), not counting comments and blank lines |
+| `core` (five laws, state, random numbers) | ≤ 10,643 lines of code through M7 (`docs/speed-x10/decisions.md` X22 and X88), not counting comments and blank lines |
 | `worldgen` | ≤ 3,000 lines |
 | `analyze` + `library` loader | ≤ 6,000 lines |
 | whole repository (excluding art assets and library data) | ≤ 25,000 lines through M7 |
@@ -1030,11 +1030,11 @@ All of these must be true:
 
 **Counting code size.** A comment line starts with `//` after its spaces. The test `cli/tests/core_size.rs` counts
 the code lines of `core/src`, prints them per folder (`cargo test --release -p cli --test core_size -- --nocapture`)
-and fails above its ceiling: 12,000 lines (`docs/speed-x10/decisions.md` X22). Comments are not counted, so do not delete them to save lines. The foundation
+and fails above its ceiling: 10,643 lines (`docs/speed-x10/decisions.md` X22 and X88). Comments are not counted, so do not delete them to save lines. The foundation
 keeps `core` small by replacing special code with general pieces, not by adding to it (`docs/foundation/plan.md`,
 "The main rule" and "The line budget").
 
-If you hit a code budget, simplify before adding. The budgets are **goals, not hard stops**: the viewer and the pattern finder may need more than expected. If a part goes over its budget, tell the owner with the number and the reason, and keep going. Going over by 20% with a reason is fine. Going over by 3× means something is wrong (see Section 2). The `core` row goes past the 20% in the speed x10 round (9,700 × 1.2 = 11,640; the row is 12,000) with the owner's explicit yes (`docs/speed-x10/decisions.md` X22).
+If you hit a code budget, simplify before adding. The budgets are **goals, not hard stops**: the viewer and the pattern finder may need more than expected. If a part goes over its budget, tell the owner with the number and the reason, and keep going. Going over by 20% with a reason is fine. Going over by 3× means something is wrong (see Section 2). The `core` row goes past the 20% in the speed x10 round (9,700 × 1.2 = 11,640 was the limit; the round was allowed 12,000, and ended at 10,443 lines, so the row is 10,643) with the owner's explicit yes (`docs/speed-x10/decisions.md` X22 and X88).
 
 ### 14.4 Earth-word ban in `core` and `worldgen`
 

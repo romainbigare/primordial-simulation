@@ -1,7 +1,8 @@
 # Speed x10: the plan
 
-Status: plan, after the second adversarial review, restated after phase P and after P1.2 (section 5.0). Branch
-`speed/x10`. **This file is the single source of the steps:** each kept step has here its description, check level,
+Status: **the round is done.** The result is in `docs/reports/speed-x10.md`: about 2.6 times (island) and 2.9 (globe)
+against the last round's baseline, not 10. Each row below says whether its step was kept, not kept or not built. The plan
+was restated after phase P and after P1.2 (section 5.0). Branch `speed/x10`. **This file is the single source of the steps:** each kept step has here its description, check level,
 done-when, kill line, what it needs and its agent. The designs in `design/` (`lane-a.md`, `plants.md`, `animals.md`,
 `engine.md`, `air.md`, `minds.md`, `gap.md`, and `month.md`, not kept) hold the detail; `lane-a.md` replaces
 `month.md` and parts of `plants.md`, `animals.md` and `gap.md` (its note says which); each starts with a note of which

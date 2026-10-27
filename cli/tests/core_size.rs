@@ -4,9 +4,9 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-/// The most code lines `core/src` may hold (`docs/speed-x10/decisions.md` X22: past handover 14.3's 20%, with the
-/// owner's explicit yes).
-const CEILING: usize = 12_000;
+/// The most code lines `core/src` may hold: the lines at the end of the speed x10 round plus 200 (`docs/speed-x10/decisions.md`
+/// X22 and X88; past handover 14.3's 20%, with the owner's explicit yes).
+const CEILING: usize = 10_643;
 
 /// Is `line` a line of code (not blank, not a comment)?
 fn is_code(line: &str) -> bool {
