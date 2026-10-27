@@ -1,6 +1,7 @@
 # Idea 7: a coarser air on globes (lane E)
 
-Steps: PR7, E1, E2 (`plan.md` section 4). Decision: L12. The last round chose not to build a coarser air (X10,
+Steps: PR7, E1 (`plan.md` section 4). Decision: L12. E2 (a new solver) is dropped; the alternative if E1 fails is lane G
+(`design/parts.md`). The last round chose not to build a coarser air (X10,
 `docs/speed-x10/design/air.md` 0 and 6.5); this note says what changed and why the form here is different.
 
 ## 1. What the code does today
@@ -22,7 +23,8 @@ Steps: PR7, E1, E2 (`plan.md` section 4). Decision: L12. The last round chose no
 
 **Where the time goes** (one thread, `benchZ`, the end's profile): the air (`flow::air`) is 11.0% / 17.2% / 9.0% of a
 whole run (island22 / globe36 / region24), 1,121 M on globe36 (21% of `run_for`); the Newton part (`newton.rs`, with
-the band solve) 199 M on globe36 (3.7% of `run_for`), 90 M on island22; the cells' rows (`pass`) 452 M on globe36
+the band solve) 199 M on globe36 (3.7% of `run_for`), 90 M on island22; of globe36's 199 M the band solve is about 76 M
+(`Band::factor` 39 M, `solve` 16 M, `step` 9 M, `zero` 8 M), **1.4% of the year**; the cells' rows (`pass`) 452 M on globe36
 after G11. Rounds a step on globe36: 3.25 (AIR1). On a 72 x 36 globe the last round measured 6.9 rounds and `solve` 99
 ms a year: the per-node part grows with the band's width, so it matters most on large globes, where the 15-minute
 planet lives (size 28 today).
@@ -42,13 +44,19 @@ wider nodes are closer to square there; the air's resolution in latitude, which 
 **Code.** `Square::mesh` takes a block shape per coarser level (`(sx, sy)`; the square case is `(s, s)`); `block` reads
 `x / sx` and `y / sy`; the globe's assert checks `w % sx`. `World::air_scale` becomes the pair (snapshot bumped);
 `terrain.rs` picks it (4 x 4, or `(sx, 4)` on a globe, `sx` the largest divisor of the row from 5 to 8: 8 on size 28
-and the test globe, 6 on globe36; a named `const` for the 8 with its one-line reason); `terrain.rs:282` (a node's centre row) reads `sy`. `core/tests/flow.rs:179` reads the width of the air
+and the test globe, 6 on globe36; **4 x 4 where none divides the row**, as 58 columns (size 29); a named `const` for the
+8 with its one-line reason); `terrain.rs:282` (a node's centre row) reads `sy`. `core/tests/flow.rs:179` reads the width of the air
 level from the mesh. Domains follow by themselves (the cells under one air node).
 
-**E2 (level 2), only if E1 fails its climate checks:** a solve of the air level whose cost grows with the unknowns, not
-with the band squared, for globes of 1,500 cells and more (a preconditioned Krylov solve, or the band kept for small
-worlds); `docs/speed-x10/design/air.md` 6.5's second answer. Its gate: the band solve at least 10% of the air on the
-size-28 globe (PR7).
+**How E1 is judged.** It bumps the snapshot, so `benchZ` cannot load in its build, and a 1 to 2% gain cannot be seen
+across remade worlds (PR-S: only cuts over 11% count on globe36). So E1 is judged by **counted work** on same-seed
+worlds of the same age made by both builds: the air's instructions a year and per air step, Newton rounds a step (the
+air's work goes with the cells and the rounds, not with life's noise); and by the **4T year** on globe36, interleaved
+under the lock, which must not be slower.
+
+**Not chosen: E2**, a solve that grows with the unknowns (a Krylov solve): a large new solver for the band solve's 1.4%
+of globe36's year. Only if PR7 found the band solve at 10% or more of the size-28 globe's year would it come back, by a
+decision.
 
 ## 3. Risks
 
@@ -58,7 +66,9 @@ size-28 globe (PR7).
   ice within its noise; watch-for M0 (rain belts, deserts behind mountains, ice at the poles). The orographic rain stays
   (each cell takes its air at its own height, `step.rs`).
 - **Threads.** 30 domains on globe36 (45 today) and 49 on size 28: the busiest domain's share on 4 threads (R2: 0.189
-  on globe36) may rise. Line: at most 0.3; PR7 measures it.
+  on globe36) may rise. The globe already runs only x1.75 faster on 4 threads than on 1 and its body batch is 47% of
+  its year, so a worse balance can cost more wall time than the air saves. Line: at most 0.3, and the 4T year not
+  slower; PR7 measures both first.
 - **Rounds.** Fewer, larger nodes may need more or fewer Newton rounds; PR7 counts them. If the rounds rise, the gain
   may vanish on globe36.
 - **The long-step test** runs on the island (unchanged by E1).
@@ -72,10 +82,10 @@ On a branch: `Square::mesh` with a block shape, `AIR_SCALE` set per run by an en
    `#[inline(never)]` on `newton`'s parts: the air's instructions by part (`pass`, the gather and booking, the
    Newton step, the band solve), rounds a step, the busiest domain's share; at 4 x 4 and at 6 x 4 (globe36) or 8 x 4
    (size 28).
-2. The globe test (64 x 32) at 8 x 4.
-3. Globe36 at 4 x 4 and at 6 x 4, seeds 1 to 3, 30 years from worldgen: land temperature, rain on land, ice share, and
+2. The globe test (64 x 32) at 8 x 4; the 4T year of globe36 at 4 x 4 and 6 x 4 (5 interleaved runs, under the lock).
+3. Globe36 with life at 4 x 4 and at 6 x 4, seeds 1 to 3, 30 years from worldgen: land temperature, rain on land, ice share, and
    zonal rain and land temperature by row over years 21 to 30.
 
-**Gate for E1:** the climate checks of section 3 hold, the busiest share at most 0.3, and the air's instructions -10%
-on globe36 or -20% on size 28. Else E2's gate is read; if both fail, idea 7 is dropped and the owner told (the air on
-globes keeps 4 x 4).
+**Gate for E1:** the climate checks of section 3 hold, the busiest share at most 0.3, the 4T year of globe36 not slower,
+and the air's instructions -8% on globe36 or -15% on size 28. Else idea 7 is dropped and the owner told (the air on
+globes keeps 4 x 4); lane G is the globe's other background cost.
