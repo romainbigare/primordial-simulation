@@ -120,7 +120,7 @@ One write at year 300, by part, F3 against the PR1 table: the file 22 ms against
 against 91, the header built and made bytes 5 ms against 13, the frames' compression 2 ms against 8), the three small
 files 2 ms against 15. In 300 years all writes cost 0.39 s against 2.0 s.
 
-**Verdict against the kill line (the long run's wall time a year under -1%): passed.** The writes fall by 19 s of a
+**Verdict against the kill line (the long run's wall time a year under -1% in the brief, under -4% in the plan): passed both.** The writes fall by 19 s of a
 1,000-year run. The last report's quiet run of this island is 334 s, so that is -5.8% of the wall time; the CPU time
 of the process falls by 7.4% in the measure above. A wall-time pair on a quiet machine was not possible. What is left
 after F3, in a 1,000-year run: the snapshots 6.6 to 7.3 s and the tape's writes 5.6 s, about 12 s, which is 2.7%
@@ -134,3 +134,43 @@ the parts of one snapshot of the bench save `island22` (8.6 MB of bincode, 4 pas
 (into a sink or a `Vec`), gzip level 1 of those bytes 36 to 38 ms, the same into a file 40 to 43 ms (one pass of four
 took 188 ms: the disk). So 90% of a save is compression and the write, which a writer thread can take; the world to
 bytes stays on the main thread.
+
+## F2: the writer thread
+
+**What it does** (`cli/src/writer.rs`, `tape/src/snapshot.rs`, `tape/src/rec/mod.rs`). At each snapshot year the main
+thread fills a buffer with the snapshot's bytes (bincode, the buffer is kept for the next time) and copies the tape
+(`Recorder::tape`), and one writer thread compresses and writes them: the snapshot to a `.part` file that takes its
+name when whole, then the tape's files. One job at a time: the run waits for the last one before it starts the next
+and at its end. `Recorder::finish` is the same call as before for one whole write (the tests and the exit on a broken
+state use it); the thread uses `Tape::write`, which keeps what the CSV files hold between jobs (`Written`). The files
+are the same: a 45-year run gives the same `snap_*.bin.gz` byte for byte, the same `months.csv`, the same `series.csv`
+(but the clocks) and the same viewer's file once read as the build before; a run resumed from its year 40 into the same
+folder gives the same files again.
+
+**The first try, a new buffer for each snapshot, was no gain.** The main thread's CPU time (read from
+`/proc/thread-self/schedstat`, so that the load of the machine does not count) for the bytes of a snapshot into a new
+`Vec` was 1.19 s in 300 years, as much as the whole save before (1.15 s): a growing buffer pays for its page faults and
+copies (5 to 45 ms a time). The same bytes streamed through gzip into nothing cost 1.07 s, and gzip of the finished bytes
+alone 0.94 s, so the serialising is 0.1 s in all. The kept buffer takes the bytes to 4 ms a time.
+
+**The main thread's part, 300-year island run** (CPU time of the thread, and its wall time, over the 30 jobs):
+
+| | F3 (the main thread writes) | F2 |
+|---|---|---|
+| the snapshot: bytes, compression, write | 1.15 s | 0.15 s (bytes only) |
+| the tape's files | 0.4 s | 0.00 s (the copy: 0.5 ms a time) |
+| together, CPU time | 1.55 s | **0.15 s** |
+| together, wall time of the main thread (machine at load 6 to 9) | 1.55 s | 0.27 s |
+| share of the run (65 s on a quiet machine) | 2.4% | **0.4%** |
+
+The process's CPU time does not change (the work moved to the thread: 150 s against 149 s in 300 years). Carried to
+1,000 years: the main thread's part falls from about 12 s to about 1 s, 3.3% of a quiet run (334 s).
+
+**Wall time.** A pair of builds, 3 rounds of 300 years interleaved under the lock, gave medians of 150.3 s (F3) and
+148.2 s (F2); the machine was at load 8 to 15 on 4 cores from other agents' builds, and the runs differ by 30% among
+themselves, so this cannot tell 2%. The count above is the measure; a quiet machine should show it in wall time too,
+since the thread uses a core that the run leaves idle (the process uses 2.4 cores of 4 on average).
+
+**Verdict against the kill line** (under -1% of a long run's wall time a year; the main thread's share under 1%):
+passed on the count, -2.0% of a 300-year run and about -3.3% of a 1,000-year run; not shown in wall time. After F2
+the saves and the tape cost the main thread 0.4% of a 300-year island run.

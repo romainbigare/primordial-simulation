@@ -23,7 +23,7 @@ const MIN_SPENT: f64 = 1e-9;
 
 /// One row of `months.csv`: the year and month, the values of `COLS`, members born by starting kind and died by
 /// kind and cause (index kind x `NC` + cause).
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(super) struct MonthRow {
     pub year: u64,
     pub month: u64,

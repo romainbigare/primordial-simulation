@@ -4,7 +4,7 @@
 //! (one byte a cell and layer, `layers::frame`).
 
 use super::months::year_month;
-use super::{Column, MonthRow, Recorder};
+use super::{Column, MonthRow, Recorder, Tape};
 use crate::layers::LAYERS;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use pcore::World;
@@ -51,7 +51,7 @@ struct Logged<'a> {
     text: &'a str,
 }
 
-impl Recorder {
+impl Tape {
     /// Write the file into `dir`.
     pub(super) fn write_ewf(&self, dir: &Path) -> io::Result<()> {
         let s = self.shape;
@@ -81,7 +81,9 @@ impl Recorder {
         z.write_all(&self.bytes)?;
         z.finish()?.flush()
     }
+}
 
+impl Recorder {
     /// Load what an earlier run of this world wrote to `dir`, up to the world's day: frames, events, series rows and
     /// month rows (nothing if `dir` holds no file).
     pub(super) fn read_ewf(&mut self, dir: &Path, w: &World) -> io::Result<()> {

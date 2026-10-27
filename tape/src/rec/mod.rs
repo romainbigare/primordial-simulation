@@ -18,7 +18,7 @@ use serde_json::json;
 use std::io;
 use std::path::Path;
 use std::time::Duration;
-use csv::Written;
+pub use csv::Written;
 use tally::{MonthTally, Social, YearTally};
 use pcore::store::Class;
 
@@ -36,6 +36,7 @@ const TIMED: [&str; 5] = ["flow", "change", "bodies", "parts", "tape"];
 pub const TAPE: usize = TIMED.len() - 1;
 
 /// One column of the yearly series: its name, unit and a value a year (NaN: none that year).
+#[derive(Clone)]
 struct Column {
     name: String,
     unit: String,
@@ -88,8 +89,6 @@ pub struct Recorder {
     spent: Spent,
     /// The run's `Physics` and `Config` as JSON text, written next to the series (`physics.json`)
     physics: String,
-    /// What `series.csv` and `months.csv` hold from the last `finish`
-    written: Written,
 }
 
 /// The run's numbers, `{"physics": {..}, "config": {..}}`, keys sorted, one line each, so two runs compare with a diff.
@@ -122,7 +121,6 @@ impl Recorder {
             updates: 0,
             spent: Spent::default(),
             physics: physics_json(w),
-            written: Written::default(),
         }
     }
 
@@ -205,13 +203,45 @@ impl Recorder {
         self.series.iter().find(|c| c.name == name).and_then(|c| c.values.last().copied()).unwrap_or(f64::NAN)
     }
 
+    /// What the tape's files hold now, copied so that another thread can write them (`Tape::write`).
+    pub fn tape(&self) -> Tape {
+        Tape {
+            shape: self.shape,
+            frames: self.frames.clone(),
+            bytes: self.bytes.clone(),
+            series: self.series.clone(),
+            log: self.log.clone(),
+            months: self.months.clone(),
+            physics: self.physics.clone(),
+        }
+    }
+
+    /// Write the whole tape into `dir` (`Tape::write` with nothing written before).
+    pub fn finish(&self, dir: impl AsRef<Path>) -> io::Result<()> {
+        self.tape().write(dir.as_ref(), &mut Written::default())
+    }
+}
+
+/// What a tape's files hold, copied out of a recorder (`Recorder::tape`): the viewer's file, `physics.json`,
+/// `series.csv` and `months.csv`.
+pub struct Tape {
+    shape: Shape,
+    frames: Vec<u64>,
+    bytes: Vec<u8>,
+    series: Vec<Column>,
+    log: Vec<(u64, String)>,
+    months: Vec<MonthRow>,
+    physics: String,
+}
+
+impl Tape {
     /// Write `world.ewf.gz` (viewer frames and what a resumed run reads), `physics.json`, `months.csv` and `series.csv`
-    /// into `dir`. The viewer's file is written whole each time; the two CSV files get only their new rows (`csv`).
-    pub fn finish(&mut self, dir: impl AsRef<Path>) -> io::Result<()> {
-        let dir = dir.as_ref();
+    /// into `dir`. The viewer's file is written whole each time; the two CSV files get only their new rows (`csv`), when
+    /// `written` says what this caller wrote to them before.
+    pub fn write(&self, dir: &Path, written: &mut Written) -> io::Result<()> {
         std::fs::create_dir_all(dir)?;
         self.write_ewf(dir)?;
         std::fs::write(dir.join("physics.json"), &self.physics)?;
-        self.write_csv(dir)
+        self.write_csv(dir, written)
     }
 }

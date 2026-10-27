@@ -12,6 +12,7 @@ pcore = { path = "../core" }
 worldgen = { path = "../worldgen" }
 tape = { path = "../tape" }
 png = "0.17"
+serde = "1"
 serde_json = "1"
 # The allocator of `ew` (main.rs)
 mimalloc = "0.1"

@@ -5,12 +5,14 @@ mod chem;
 mod numbers;
 mod render;
 mod report;
+mod writer;
 
 use args::{Args, USAGE};
 use pcore::World;
 use report::Clock;
 use std::time::{Duration, Instant};
 use tape::{Kept, Recorder, TAPE};
+use writer::Writer;
 use worldgen::schedule::Schedule;
 
 /// Years between snapshots (and between writes of the tape so far).
@@ -83,6 +85,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     let y0 = w.cfg.calendar().years(w.time);
     render::save(&w, &format!("{out}/year{y0:04}.png"));
     let mut clock = Clock::new(y0, w.counts.updates);
+    let mut writer = Writer::new();
     record(&mut rec, &mut w, &clock);
     println!("{}", report::config(&w, &plan.seeding));
     if !resumed {
@@ -103,6 +106,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
         // The yearly check is the release check; debug builds also check after every law part.
         if let Some(e) = pcore::check::broken(&w) {
             eprintln!("year {y}: broken state: {e}");
+            writer.wait();
             rec.finish(&out).expect("write tape");
             std::process::exit(1);
         }
@@ -111,21 +115,19 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
             clock.print_at(y, w.counts.updates);
             render::save(&w, &format!("{out}/year{y:04}.png"));
         }
+        // A snapshot with each decade and at the end, and with it the tape so far, so a stopped run keeps its series and
+        // frames. The writer thread compresses and writes them; the main thread only makes the snapshot's bytes and copies the tape.
         if y % SNAP_EVERY == 0 || y == y0 + years {
             let t = Instant::now();
-            tape::save_snapshot(&w, &(&plan, rec.kept()), format!("{out}/snap_{y:05}.bin.gz")).expect("save snapshot");
-            clock.spent[TAPE] += t.elapsed();
-        }
-        // Write the tape so far with each snapshot, so a stopped run keeps its series and frames (the last year's is
-        // written once the run ends).
-        if y % SNAP_EVERY == 0 && y < y0 + years {
-            let t = Instant::now();
-            rec.finish(&out).expect("write tape");
+            writer.start(&w, &(&plan, rec.kept()), format!("{out}/snap_{y:05}.bin.gz"), rec.tape(), out.clone());
             clock.spent[TAPE] += t.elapsed();
         }
     }
     let t = Instant::now();
-    rec.finish(&out).expect("write tape");
+    writer.wait();
+    if years == 0 {
+        rec.finish(&out).expect("write tape");
+    }
     clock.spent[TAPE] += t.elapsed();
     println!("{}", report::rivers(&w, &rec));
     let s = clock.spent.iter().sum::<Duration>().as_secs_f64();

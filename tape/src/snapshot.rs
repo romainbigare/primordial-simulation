@@ -4,16 +4,18 @@
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use pcore::World;
 use serde::{de::DeserializeOwned, Serialize};
-use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufReader, Read, Write};
 use std::path::Path;
 
 /// Start of every snapshot file, before the bincode body: a tag, then the format version (little-endian `u32`).
 const SNAPSHOT_TAG: [u8; 4] = *b"EWSN";
 /// Raise it whenever the serialized layout of `World` (or of the shell's state) changes.
 const SNAPSHOT_VERSION: u32 = 49;
-/// Buffer between bincode and the compressor, bytes: bincode reads and writes 8 bytes at a time, and each call into
-/// the compressor is slow.
+/// Buffer between bincode and the decompressor, bytes: bincode reads 8 bytes at a time, and each call into the
+/// decompressor is slow.
 const BUFFER: usize = 1 << 20;
+/// Added to a snapshot's name while it is being written.
+const PART: &str = ".part";
 
 /// FNV-1a, 64 bits: offset basis and prime.
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
@@ -23,14 +25,34 @@ fn bad(e: impl std::fmt::Display) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, e.to_string())
 }
 
-/// Save the world and the shell's state (header, then bincode, gzip). The laws' caches are not saved (`docs/tape.md`).
+/// Put the bytes of a snapshot of the world and the shell's state into `bytes` (replacing what it held): the header,
+/// then bincode. The laws' caches are not saved (`docs/tape.md`). The buffer is the caller's, so that it can be used
+/// again: filling a new one that grows costs more than the serialising does.
+pub fn snapshot_bytes<P: Serialize>(w: &World, plan: &P, bytes: &mut Vec<u8>) -> io::Result<()> {
+    bytes.clear();
+    bytes.extend_from_slice(&SNAPSHOT_TAG);
+    bytes.extend_from_slice(&SNAPSHOT_VERSION.to_le_bytes());
+    bincode::serialize_into(&mut *bytes, w).map_err(bad)?;
+    bincode::serialize_into(&mut *bytes, plan).map_err(bad)
+}
+
+/// Write the bytes of a snapshot (`snapshot_bytes`) to `path` as gzip. They go to a file beside it that takes the name
+/// once whole, so a run that stops during the write leaves no half snapshot under the name.
+pub fn write_snapshot(bytes: &[u8], path: impl AsRef<Path>) -> io::Result<()> {
+    let path = path.as_ref();
+    let mut part = path.as_os_str().to_owned();
+    part.push(PART);
+    let mut z = GzEncoder::new(std::fs::File::create(&part)?, Compression::fast());
+    z.write_all(bytes)?;
+    z.finish()?.flush()?;
+    std::fs::rename(part, path)
+}
+
+/// Save the world and the shell's state in one go: `snapshot_bytes`, then `write_snapshot`.
 pub fn save_snapshot<P: Serialize>(w: &World, plan: &P, path: impl AsRef<Path>) -> io::Result<()> {
-    let mut z = BufWriter::with_capacity(BUFFER, GzEncoder::new(std::fs::File::create(path)?, Compression::fast()));
-    z.write_all(&SNAPSHOT_TAG)?;
-    z.write_all(&SNAPSHOT_VERSION.to_le_bytes())?;
-    bincode::serialize_into(&mut z, w).map_err(bad)?;
-    bincode::serialize_into(&mut z, plan).map_err(bad)?;
-    z.into_inner().map_err(|e| e.into_error())?.finish()?.flush()
+    let mut bytes = vec![];
+    snapshot_bytes(w, plan, &mut bytes)?;
+    write_snapshot(&bytes, path)
 }
 
 /// Load a snapshot of this format version; caches come back empty and are rebuilt (the mesh from the map, each body's

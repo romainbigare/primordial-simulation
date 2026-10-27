@@ -385,27 +385,31 @@ fn resume_into_the_same_folder_continues_the_tape() {
     assert_eq!((meta["events"].clone(), meta["series_units"].clone()), (whole.0["events"].clone(), whole.0["series_units"].clone()));
 }
 
-/// A recorder that writes the tape at the end of each year (the CSV files then get only their new rows) leaves the same
-/// CSV files as one that writes it once at the end, also when a kind that comes late gives both files new columns.
+/// A tape written at the end of each year (the CSV files then get only their new rows) leaves the same CSV files as one
+/// written once at the end, also when a kind that comes late gives both files new columns.
 #[test]
 fn csv_files_grown_year_by_year_are_those_written_at_once() {
     let (by_year, at_once) = (tmp("csv_by_year"), tmp("csv_at_once"));
     for (dir, each_year) in [(&by_year, true), (&at_once, false)] {
         let mut w = two_kinds();
         let mpy = w.cfg.months_per_year as u64;
-        let mut rec = tape::Recorder::new(&w, 0, 0);
+        let (mut rec, mut written) = (tape::Recorder::new(&w, 0, 0), tape::Written::default());
         common::record(&mut rec, &mut w);
         for m in 1..=3 * mpy {
             run(&mut w, 1);
             common::record(&mut rec, &mut w);
             if each_year && m % mpy == 0 {
-                rec.finish(dir).unwrap();
+                rec.tape().write(dir, &mut written).unwrap();
             }
             if m == mpy {
                 worldgen::life::seed_with(&mut w, 2, &worldgen::life::Seeding::neutral());
             }
         }
-        rec.finish(dir).unwrap();
+        if each_year {
+            rec.tape().write(dir, &mut written).unwrap();
+        } else {
+            rec.finish(dir).unwrap();
+        }
     }
     for file in ["series.csv", "months.csv"] {
         let (a, b) = (std::fs::read_to_string(by_year.join(file)).unwrap(), std::fs::read_to_string(at_once.join(file)).unwrap());

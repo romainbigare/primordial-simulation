@@ -16,7 +16,7 @@ A mean of nothing is written `NaN` (`null` in the viewer's file, drawn as a gap)
 | `world.ewf.gz` | the viewer's file: `EWF2`, the header's length, the header (JSON: size, whether the world is a globe and its edge latitudes, layers, frames, series and units, events, the months rows), then the frames |
 | `yearNNNN.png` | map, temperature, rain, life and traffic every `--every` years |
 
-**How the files are written.** At every snapshot and at the run's end the recorder writes `world.ewf.gz` again whole
+**How the files are written.** At every snapshot and at the run's end the shell makes the snapshot's bytes and copies the tape, and a writer thread (`cli/src/writer.rs`) compresses and writes them while the world goes on: at most one job at a time, and the run waits for it before the next job and at its end. A snapshot is written to `snap_NNNNN.bin.gz.part` and takes its name when whole. The writer writes `world.ewf.gz` again whole
 (gzip at its fast level; the viewer reads any level) and `physics.json`. `series.csv` and `months.csv` are not written
 again: a file the recorder wrote before gets only the rows added since, at its end. A file is written whole when its
 header line changed (a column, or a starting kind, that is new) and at the first write of a resumed run, which cuts the
@@ -113,7 +113,7 @@ worn edges, structures, true colour (r, g, b).
 | Column | Unit | Meaning |
 |---|---|---|
 | `ms_flow`, `ms_change`, `ms_bodies`, `ms_parts` | ms/yr | wall time in Flow, in Change, in the bodies (survey and body batches) and in the parts since the last row |
-| `ms_tape` | ms/yr | wall time in the tape itself since the last row: the months recorded, the snapshots and the files written. The row's own month, and the snapshot and files written after the row (at a decade's end), land in the next row. The pictures and the yearly check are not timed |
+| `ms_tape` | ms/yr | wall time of the main thread in the tape itself since the last row: the months recorded, the snapshot's bytes and the copy of the tape that go to the writer thread, and any wait for it (the writer's own time runs beside the world and is not counted). The row's own month, and the snapshot and copy made after the row (at a decade's end), land in the next row. The pictures and the yearly check are not timed |
 
 ## `series.csv`: by starting kind
 
