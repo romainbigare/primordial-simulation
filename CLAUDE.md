@@ -13,6 +13,7 @@ ask the owner.
 | Every free number: unit, anchor, mark (physical, anchored, tuned) | `docs/numbers.md` |
 | What the tape records | `docs/tape.md` |
 | What changed and when, what was tried and not kept | `docs/history.md` |
+| Lighter world (done) | The result: `docs/reports/lighter.md`. The plan, the decisions (L1 to L47), the measures and the designs: `docs/lighter/` (`plan.md`, `decisions.md`, `measures.md`, `design/`). The work is on the branch `speed/lighter`, not merged into `main` yet. The earlier rounds' rules below hold |
 | Speed x10 (done) | The result: `docs/reports/speed-x10.md`. The plan, the decisions (X1 to X88), the measures and the designs: `docs/speed-x10/` (`plan.md`, `decisions.md`, `measures.md`, `handover.md`, `design/`). The work is merged into `main`. The earlier rounds' rules below hold |
 | Speed after the foundation (done) | The result: `docs/reports/speed.md`. The plan, the decisions (S1 to S84) and the measures: `docs/speed-post-foundation/` (`plan.md`, `decisions.md`, `measures.md`). Its rules in 2 of the plan and the foundation's main rule in `docs/foundation/plan.md` hold for any new speed work |
 | The foundation before M4 (done) | `docs/foundation/plan.md` (read its main rule first) |
@@ -43,7 +44,7 @@ ask the owner.
 9. **No Earth words in `core/` and `worldgen/`** (`cli/tests/word_ban.rs`), including substance names (nitrogen,
    carbon, salt, sugar...). Use numbers and physical words.
 10. `cargo clippy --release --workspace --all-targets` gives no warnings.
-11. **Size.** `core` holds at most 10,643 lines of code (`docs/speed-x10/decisions.md` X22 and X88; the owner said yes to going past
+11. **Size.** `core` holds at most 10,673 lines of code (`docs/lighter/decisions.md` L4, `docs/speed-x10/decisions.md` X22 and X88; the owner said yes to going past
     the 20% of `docs/handover.md` 14.3), not counting comments and blank lines (`docs/handover.md` 14.3; the test `cli/tests/core_size.rs` counts them). Simplify before
     you add. Never delete useful comments to save lines: they are not counted. Never pick a slower or less honest
     design to save lines.

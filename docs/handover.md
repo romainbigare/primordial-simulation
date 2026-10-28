@@ -186,8 +186,8 @@ This is the main tool for speed. Do not build it first (see milestones). Build t
 - **The size follows a time budget, not the other way round:** the planet has as many cells as fit in the time a run
   may take (a planet run of 1,000 years in under 15 minutes on the owner's machine). The cost of one cell and of one
   body node per simulated year, measured at each step of the work, gives that size (`docs/foundation/plan.md`, "The
-  time budget" and 5.7). Faster code buys a bigger planet. Today the largest globe that fits is 36 × 18 cells (648
-  cells; a run of 1,000 years takes about 14 minutes on 4 cores; `docs/reports/speed.md`).
+  time budget" and 5.7). Faster code buys a bigger planet. Today the largest globe that fits is 60 × 30 cells (1,800
+  cells; a run of 1,000 years takes about 13 minutes on 4 cores; `docs/reports/lighter.md`).
 
 ---
 
@@ -445,7 +445,7 @@ Not everything needs the same step. These are suggested defaults to measure and 
 | Individual bodies in detailed areas | 1 day |
 | Snapshots for the history tape | every 10 years (and before every god action) |
 
-As built (`docs/laws.md` 0): the survey, the state of ground and air, Change and the air every 10 days (`phys_days`, `air_hours` 240). The air's step solves radiation, evaporation, rain, gases dissolving and the wind together (backward Euler, by Newton's method with a banded solve of the whole air level) and is booked whole as it is solved, so it divides the physics step. Liquid every 60 days (`flow_days`), its sink into the bed's store every physics step; the loose ground creeps once a year; bodies in batches of 10 days (`batch_days`, one air step), every 10 to 360 days (their `INTERVAL` gene, to a whole number of batches; a population node without a brain at least every `node_days`, 40; a population node with a brain decides about every `think_days`, 20, and acts by habit at its other updates); the loads of parts once a month and their reactions every 6 months. Backward Euler is first order in the step, so a longer step needs a step of second order.
+As built (`docs/laws.md` 0): the survey, the state of ground and air, Change and the air every 10 days (`phys_days`, `air_hours` 240). The air's step solves radiation, evaporation, rain, gases dissolving and the wind together (backward Euler, by Newton's method with a banded solve of the whole air level) and is booked whole as it is solved, so it divides the physics step. Liquid every 60 days (`flow_days`), its sink into the bed's store every physics step; the loose ground creeps once a year; bodies in batches of 10 days (`batch_days`, one air step), every 10 to 360 days (their `INTERVAL` gene, to a whole number of batches; a population node without a brain at least every `node_days`, 40; a population node with a brain decides about every `think_days`, 20, and acts by habit at its other updates; a population node makes its children at most once in `lump_days`, 30, its brood filling at every update); the loads of parts once a month and their reactions every 6 months. Backward Euler is first order in the step, so a longer step needs a step of second order.
 
 There is **one world clock**. Fast processes in detailed areas sub-step inside a month. Seasons must exist, because they matter for food and migration.
 
@@ -924,7 +924,7 @@ Each milestone ends with a short report for the owner, in simple English, saved 
 | M4 planet, coarse with detail in places | 1,000 years in under 15 minutes, on the largest planet that fits (the size follows the budget, 5.4) |
 | M6 god mode | 200 years of one region in about 1–2 minutes |
 
-**Where they stand** (`docs/reports/speed.md`, 4 cores): a settled year takes 0.61 s on the 22 × 22 island and 0.74 s on the 36 × 18 globe. 1,000 years take 12.8 minutes on the island (the M1–M3 target of 10 minutes is not met) and 14.3 minutes on the globe (648 cells, the largest that fits the M4 budget; a 40 × 20 globe of 800 cells takes 21.7 minutes).
+**Where they stand** (`docs/reports/lighter.md`, 4 cores): a settled year takes 0.25 s on the 22 × 22 island and 0.25 s on the 36 × 18 globe. 1,000 years take 4.3 minutes on the island (the M1–M3 target of 10 minutes is met) and 3.7 minutes on the globe. The largest globe that fits the M4 budget is 60 × 30 (1,800 cells, 12.9 minutes); a 64 × 32 globe of 2,048 cells takes 17.1 minutes.
 
 **Be honest about these targets.** They are hard. For example, 50,000 bodies with one step per day for 1,000 years in 10 minutes means about 30 million brain decisions per second, plus physics. Expect to miss the M1–M3 target at first. Report the real number (years per second) in every watch report, and do not slow down the project to chase the target before something has emerged.
 
@@ -988,13 +988,15 @@ Only items that are still open. Do not build them before M4 starts unless the ow
 - **What eaters eat.** Eaters live almost only on dead plant matter, digested in full; nothing stops them before they eat most of the plants' production. A structural plant matter that only a priced catalyst breaks is an option (the owner decides).
 - **Warm blood.** A body whose upkeep rises about 9% a kelvin has no steady warmth with real fur, because no body can raise its conductance (no sweating or blood flow to the skin). `KEEP_T` and `COOL_T` are not selected on the mild island; M4's cold and seasons will test them.
 - **Carbon.** The carbon cycle has no source (a volcano-like input is the same physics as the god action). The sea's store goes with its depth to the power 2/3, the Revelle factor is 3, and the whole depth is one mixed layer (6.1), so the sea answers the air in years, not centuries.
-- **Inside bodies.** The litter constants also run inside living bodies (real living stems and bones do not rot). The rock salt cannot be kept in a body (real bodies bind calcium in solids). Each is the owner's choice.
+- **Inside bodies.** The litter constants also run inside living bodies (real living stems and bones do not rot); only a bare reaction too slow to matter over a year is skipped (`TOO_SLOW`). The law where a decomposer reaction runs in a living body only by the body's own catalyst is ready (`docs/lighter/decisions.md` L9); it makes the world heavier (eaters x35). The rock salt cannot be kept in a body (real bodies bind calcium in solids). Each is the owner's choice.
+- **Parts' reactor and how walls end.** A part reacts its cell's whole air share for 6 months with no exchange of heat and passes 1e6 K in each call; that burn is what ends walls. Its fix needs a law of how walls end (a part whose binders rotted breaks under its own weight), `docs/lighter/decisions.md` L43.
+- **Hard plant matter.** Plants tall and short side by side need a stiff matter; with today's chemistry lime is cheaper than frame, so plants stiffen with lime (`docs/lighter/decisions.md` L47).
 - **Water and air.** Transpiration is set by the breath (`GAS`), not by the liquid or the heat. Still air is forced convection at one anchored wind; free convection (calm air) is not modelled.
 - **Tuned numbers that matter.** `bump` (tuned) decides whether a body can move; `c_brain` sets most of what an animal pays to think (plants have no brain).
 - **The methane-like gas** lives by the air's temperature (months at 280 K, years at 255 K). If a warm world has a methane story, look here first.
 - **Fire and disease.** Natural fire starts wait for M4: they need a "burning share of a cell" law (a fire front) and M4's weather, with the spark booked like the sun. Disease (bodies inside bodies) waits until after M4.
 - **Reading the eaters.** Eaters settle by years 90 to 100, so report their log10 kg over years 91 to 100 and their births less deaths over years 71 to 100 (a decade swings by about 15% of births), three seeds at least. Under 2 times is noise.
-- **Core size.** `core` holds at most 10,643 code lines (14.3, counted by `cli/tests/core_size.rs`; `docs/speed-x10/decisions.md` X22 and X88).
+- **Core size.** `core` holds at most 10,673 code lines (14.3, counted by `cli/tests/core_size.rs`; `docs/lighter/decisions.md` L4).
 
 ---
 
@@ -1021,7 +1023,7 @@ All of these must be true:
 
 | Part | Budget |
 |---|---|
-| `core` (five laws, state, random numbers) | ≤ 10,643 lines of code through M7 (`docs/speed-x10/decisions.md` X22 and X88), not counting comments and blank lines |
+| `core` (five laws, state, random numbers) | ≤ 10,673 lines of code through M7 (`docs/lighter/decisions.md` L4; `docs/speed-x10/decisions.md` X22 and X88), not counting comments and blank lines |
 | `worldgen` | ≤ 3,000 lines |
 | `analyze` + `library` loader | ≤ 6,000 lines |
 | whole repository (excluding art assets and library data) | ≤ 25,000 lines through M7 |
@@ -1030,11 +1032,11 @@ All of these must be true:
 
 **Counting code size.** A comment line starts with `//` after its spaces. The test `cli/tests/core_size.rs` counts
 the code lines of `core/src`, prints them per folder (`cargo test --release -p cli --test core_size -- --nocapture`)
-and fails above its ceiling: 10,643 lines (`docs/speed-x10/decisions.md` X22 and X88). Comments are not counted, so do not delete them to save lines. The foundation
+and fails above its ceiling: 10,673 lines (`docs/lighter/decisions.md` L4). Comments are not counted, so do not delete them to save lines. The foundation
 keeps `core` small by replacing special code with general pieces, not by adding to it (`docs/foundation/plan.md`,
 "The main rule" and "The line budget").
 
-If you hit a code budget, simplify before adding. The budgets are **goals, not hard stops**: the viewer and the pattern finder may need more than expected. If a part goes over its budget, tell the owner with the number and the reason, and keep going. Going over by 20% with a reason is fine. Going over by 3× means something is wrong (see Section 2). The `core` row goes past the 20% in the speed x10 round (9,700 × 1.2 = 11,640 was the limit; the round was allowed 12,000, and ended at 10,443 lines, so the row is 10,643) with the owner's explicit yes (`docs/speed-x10/decisions.md` X22 and X88).
+If you hit a code budget, simplify before adding. The budgets are **goals, not hard stops**: the viewer and the pattern finder may need more than expected. If a part goes over its budget, tell the owner with the number and the reason, and keep going. Going over by 20% with a reason is fine. Going over by 3× means something is wrong (see Section 2). The `core` row goes past the 20% in the speed x10 round (9,700 × 1.2 = 11,640 was the limit; the round was allowed 12,000, and ended at 10,443 lines) with the owner's explicit yes (`docs/speed-x10/decisions.md` X22 and X88). Each round ends with the row at its lines plus 200: the round "Lighter world" ended at 10,473 lines, so the row is 10,673 (`docs/lighter/decisions.md` L4).
 
 ### 14.4 Earth-word ban in `core` and `worldgen`
 
