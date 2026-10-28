@@ -80,5 +80,5 @@ The full list is in `docs/reports/lighter.md` ("Open items for you") and `docs/l
 3. **Small nodes** (branch `study/small-nodes-not-kept`): the old over-draw hides a weakness of young animal nodes
    against individuals; not found yet.
 4. **The objects round** above, and its smaller choices in `docs/objects/decisions.md`.
-5. **Watch items** of one seed: the end's globe 0.5 K colder in its last 50 years; the end's island with fewer animal
-   lineages (2 against 9). Three seeds would say if either is real.
+5. **Watch items** of one seed: the end's globe 0.5 K colder in its last 50 years; the end's island 0.7 K colder with
+   lighter plants (part of it L1) and fewer animal lineages (2 against 9). Three seeds would say if any is real.

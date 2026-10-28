@@ -325,7 +325,6 @@ passes. Core code lines: 10,450 (+8 -2).
 
 Verdict: kept. -1.18% of globe36's year for 8 lines passes L2's line for a level-1 step of 20 lines or less (1%). It is
 under the plan row's 1.5% kill line; the architect decided for L2's line. The 4-thread year was not timed.
-One section per step, in the order of the work. `$L` is the scratch folder of the round.
 
 ## The long-step test judges six worlds
 
@@ -874,7 +873,7 @@ tests beside it (load 4 to 7).
 | `cargo test --release --workspace --no-fail-fast -- --ignored` (16 minutes) | 17 slow tests: **16 pass, 1 fails: `the_key_numbers_stay_in_their_ranges`, only on S50 (known)** |
 | `RAYON_NUM_THREADS=1 cargo test --release -p tape --test golden` | passes: the three runs end on their pinned fingerprints |
 | `CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo test --release --workspace --no-fail-fast --target-dir target/dbg` | 199 passed, 0 failed, 17 ignored (the slow ones) |
-| `cargo test -p tape --test golden` (plain debug build, no LTO) | passes |
+| `cargo test -p tape --test golden` (plain debug build, no LTO) | passes (a restart of the machine cut its first run; run again) |
 
 Pass: `nodes_and_individuals_make_the_same_world`, `the_pace_of_nodes_keeps_life`, `the_batches_of_bodies_keep_life`,
 `the_long_step_keeps_the_climate`, `a_globe_without_life_keeps_an_earth_like_climate`,

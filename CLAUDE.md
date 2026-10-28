@@ -14,7 +14,7 @@ ask the owner.
 | What the tape records | `docs/tape.md` |
 | What changed and when, what was tried and not kept | `docs/history.md` |
 | The work now: the objects round (paused) | Start with the handover `docs/lighter/handover.md`. The round lives on the branch `objects` (not merged): its plan, decisions and designs are in `docs/objects/` there |
-| Lighter world (done) | The result: `docs/reports/lighter.md`. The plan, the decisions (L1 to L47), the measures and the designs: `docs/lighter/` (`plan.md`, `decisions.md`, `measures.md`, `design/`). The work is merged into `main`. The earlier rounds' rules below hold |
+| Lighter world (done) | The result: `docs/reports/lighter.md`. The plan, the decisions (L1 to L47), the measures, the designs and the handover: `docs/lighter/` (`plan.md`, `decisions.md`, `measures.md`, `design/`, `handover.md`). The work is merged into `main`. The earlier rounds' rules below hold |
 | Speed x10 (done) | The result: `docs/reports/speed-x10.md`. The plan, the decisions (X1 to X88), the measures and the designs: `docs/speed-x10/` (`plan.md`, `decisions.md`, `measures.md`, `handover.md`, `design/`). The work is merged into `main`. The earlier rounds' rules below hold |
 | Speed after the foundation (done) | The result: `docs/reports/speed.md`. The plan, the decisions (S1 to S84) and the measures: `docs/speed-post-foundation/` (`plan.md`, `decisions.md`, `measures.md`). Its rules in 2 of the plan and the foundation's main rule in `docs/foundation/plan.md` hold for any new speed work |
 | The foundation before M4 (done) | `docs/foundation/plan.md` (read its main rule first) |

@@ -45,8 +45,9 @@ every batch (its `INTERVAL` gene at or under 10 days, PA).
 
 **Not kept or not built:** G2 (parts no longer end, L43), H5 (-1.5% at most, L41), H2 and H3 (L39), C1 (-1.2% on
 island22, and it changed the plants, L45), C2 (C1 + C2 about -7% on island22, under -10%), HP1 and HP2 (L47), the law
-of living bodies (L9), D1, D2 (L14), E1 (L12), A3, A4 (under their worth lines). **Plainly:** the round gives about a
-tenth of the year on the benches, and about 6 to 8% more on long runs; the cover did not pay on today's world.
+of living bodies (L9), D1, D2 (L14), E1 (L12), A3, A4 (under their worth lines). **Plainly:** the kept steps give about a
+tenth of the year on the benches; phase Z measured x1.02 to x1.30 for a settled year on 4 threads and x1.22 to x1.41
+for 1,000 years, partly from the remade worlds; the cover did not pay on today's world.
 
 ### The owner's open choices, as they stand
 
@@ -266,9 +267,9 @@ Phase Z   done (the year, 1,000 years, the largest globe, the slow suite, the re
 ## 6. Reviews
 
 The cycle is: plan, adversarial review, implement, adversarial review, fix, until accepted. Done: the plan (three rounds),
-`cover.md` (three rounds), lane F, lane B (two rounds). To come: G2's design note before its step; H1's
-step against `animals.md`; each lane after its last step (G, H, C), each level-3 or level-4 lane with the
-key-number test against the reference; the cover's restated design and G-C; phase Z.
+`cover.md` (three rounds), lane F, lane B (two rounds), G2's design note, H1 against `animals.md`, lanes G, H and C
+after their last steps with the key numbers, the cover's restated design and G-C, and phase Z (`review-z`, accepted
+after fixes).
 
 ## 7. Rule and doc changes, and the step that writes each
 
@@ -292,12 +293,13 @@ key-number test against the reference; the cover's restated design and G-C; phas
 | H1 moves births into colder weather (about 10 to 15 days later on average) and spreads litters in fewer, larger steps | births by month and litters landing where no kind of theirs is, within their seeds' noise |
 | G2 changes the parts' walls and their gas turnover (today what a wall can burn burns every 6 months) | its checks against the litter constants on globe36 with life, not against today's runaway; the books |
 | The cover's gain on the restated world is small | C1 judged at 3%, C2 at -10% with the animals unchanged; the alternative A4 or nothing |
-| A step moves the long-step test by chance (one seed spans 0.10 to 0.40 K) | the test judges the mean of seeds 1 to 6 (L38); the cause of the small room (the 60-day liquid, X80) stays an open item for the owner |
+| A step moves the long-step test by chance (one seed spans 0.10 to 0.40 K) | the test judges the mean of seeds 1 to 6 (L38); the cause of the small room (the 60-day liquid, X80) is answered by L1 (0.273 to 0.191 K, L46) |
 | Lanes collide in `copy/`, golden and the snapshot | section 5's order; one merge at a time; key numbers again after a rebase |
 
 ## 9. Lines
 
-Core at the round's start 10,444 (R0); at its end 10,473 (G1, B1, H1, L1); the ceiling 10,643, now 10,673 (phase Z, L4). Budgets: G2 about +6 net (`parts-law.md`); H1 about +25 (the
+Core at the round's start 10,444 (R0); at its end 10,473 (G1, B1, H1, L1); the ceiling 10,643, now 10,673 (phase Z, L4). The budgets below were for the steps as planned; G2, H5, H4 and the
+cover were not kept or not built. Budgets: G2 about +6 net (`parts-law.md`); H1 about +25 (the
 window, its field and the guard); H5 about +15; H4 by its probe (at most +20); the cover by `design/cover.md` 7 (C1a
 about +2, C1 about +29 net, C2 about +115 net). Without C2 about +95 (to about 10,555), within the ceiling; with C2
 about +210 (to about 10,670): C2 (or the step that crosses) raises the ceiling in its commit, with a decision (L31).
