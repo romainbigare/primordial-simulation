@@ -903,3 +903,92 @@ The key numbers (mean of 3 seeds; the same as at L1, as the world has not change
 **Verdict.** Nothing new fails. S50 is the one failure, as known, at 0.559 (0.558 at the start). S84 no longer fails:
 its test states the bias the owner accepts. The books, the overdraw and view checks and the golden test (with and
 without threads, release and plain debug) all pass.
+
+## Z: the year in wall time
+
+**How.** The start (`$L/ew-base` on `benchZ`) and the end (`1abddae` on `$L/benchZ50`), each on its own benches, so
+the worlds differ (the same caveat as above). 6 interleaved sets; in each set, per bench, 4 threads then 1 thread, the
+start then the end; each run alone under `flock $L/timing.lock`; `ew resume --years 3` with the quiet flags; a year is
+the mean of years 2 and 3 of the stages' timers (`ms_flow + ms_change + ms_bodies + ms_parts + ms_tape`). The machine
+was quiet (no build; one reading agent); the load before the sets was 1.2 to 1.8 (one-minute mean, falling from the
+earlier builds). Scratch script `$L/z/tools/wall.sh`. Medians, ms a year (the six runs in brackets):
+
+| Bench | Threads | Start | End | Faster by |
+|---|---|---|---|---|
+| island22 | 4 | 271 (bodies 169, Flow 77) (279 300 261 298 263 247) | 246 (bodies 141, Flow 79) (240 253 252 233 274 226) | **x1.10** |
+| island22 | 1 | 617 (531 to 709) | 542 (473 to 661) | x1.14 |
+| globe36 | 4 | 321 (bodies 185, Flow 101, parts 9) (311 to 340) | 247 (bodies 131, Flow 94, parts 0.3) (232 to 270) | **x1.30** |
+| globe36 | 1 | 662 (591 to 708) | 491 (466 to 647) | x1.35 |
+| region24 | 4 | 561 (bodies 388, Flow 127) (538 to 592) | 548 (bodies 362, Flow 139) (491 to 610) | **x1.02** |
+| region24 | 1 | 1,447 (1,301 to 1,724) | 1,220 (1,150 to 1,302) | x1.19 |
+
+The one-thread runs spread by up to 30% within a build (a run of the same save and build: island22 531 to 709 ms), so
+their medians are read to about 10%. **Read with the instructions above:** the one-thread medians agree with the
+counted year (x1.14 / x1.29 / x1.12). On four threads the bodies' stage falls 17% / 29% / 7%, but Flow does not fall
+(the air is the same code) and region24's end bench is the busier world (33,649 animal updates a year against 27,969,
+959 animal nodes against 809), so its year on four threads is about the same as at the start: the cheaper update is
+spent on more animals. Against the last round's end (`docs/speed-x10/measures.md` Z: 260 / 361 / 529 ms on 4 threads,
+another hour), the start build now reads 271 / 321 / 561 ms: the machine drifts by about 5% to 10% between hours.
+
+## Z: 1,000 years
+
+`ew run <world> --seed 1 --years 1000 --out <dir>` with the **default pictures and saves** (a picture and a frame
+every 10 years, months for 2 years, a snapshot every 10 years), 4 threads, one run at a time under the timing lock,
+start and end one after the other; the machine quiet (load 1.6 to 3.3 before a run, from the runs themselves). "Wall"
+is the time of the whole command; "per year" is the run's own line, which at the end holds the snapshots and pictures
+(F1) and at the start does not. Scratch script `$L/z/tools/long.sh`. The start's runs end on the same hashes as the
+last round's report (`1d1e6532df96b27d`, `ac58843c09a98662`, `90c1fb533e1b5fec`), so the pictures change nothing.
+
+| | island 22 start / end | globe 18 start / end | region 24, `--region 8,8,8,8`, start / end |
+|---|---|---|---|
+| **wall** | 366 s / **260 s (x1.41)** | 306 s / **224 s (x1.37)** | 635 s / **521 s (x1.22)** |
+| per year (the run's line) | 355.8 / 258.8 ms | 300.5 / 222.7 ms | 615.1 / 517.4 ms |
+| years 901 to 1000 (stages' timers) | 563 / 250 ms | 306 / 232 ms | 948 / 604 ms |
+| stages, mean of the run (flow / change / bodies / parts / tape, ms) | 78 / 21 / 218 / 0.5 / 38 against 80 / 20 / 151 / 0.8 / 7 | 103 / 21 / 136 / 5.3 / 35 against 98 / 18 / 101 / 0.5 / 5.5 | 114 / 26 / 432 / 1.2 / 41 against 111 / 25 / 365 / 3.9 / 13 |
+| hash at the end | `332f4e0cdeb4e8e3` | `65204b2d5ab55428` | `b4409e7c95776563` |
+| element / energy drift | 2.5e-16 / 1.6e-14 against 1.8e-16 / 3.2e-16 | 3.1e-16 / 5.1e-16 against 3.1e-16 / 4.0e-15 | 3.7e-16 / 2.4e-15 against 1.5e-16 / 5.9e-15 |
+| bodies at year 1000 | 2,627 / 2,119 | 1,343 / 1,424 | 7,979 / 6,011 |
+| light-eaters (members) | 1,174 (3.44e9) / 1,729 (2.41e9) | 1,098 (2.04e14) / 1,207 (3.17e14) | 5,254 (3.79e9) / 4,200 (3.55e9) |
+| animals: single / nodes (members) | 113 / 1,340 (4.47e5) against 8 / 382 (5.31e5) | 2 / 243 (9.2e9) against 0 / 217 (4.8e9) | 47 / 2,678 (5.6e7) against 85 / 1,726 (1.6e6) |
+| animal nodes, mean of years 401 to 500 / 901 to 1000 | 302 / 1,275 against 361 / 392 | 305 / 286 against 277 / 187 | 731 / 2,476 against 1,250 / 1,700 |
+| lineages | 9 / 2 | 2 / 2 | 5 / 5 |
+
+Heat not given 0 in all six. `series.csv` at year 1000 (in brackets the mean of years 951 to 1000):
+
+| | island start / end | globe start / end | region start / end |
+|---|---|---|---|
+| land temperature, K | 294.53 (294.42) / 293.94 (293.71) | 291.45 (291.30) / 290.62 (290.78) | 293.71 (293.80) / 294.24 (294.10) |
+| rain on land, mol/m2/s | 2.66e-3 (2.65e-3) / 2.61e-3 (2.60e-3) | 5.96e-3 (5.99e-3) / 6.20e-3 (6.18e-3) | 2.75e-3 (2.75e-3) / 2.68e-3 (2.69e-3) |
+| heat-absorbing gas (`air_3`), ppm | 395.5 (387.4) / 403.7 (406.8) | 365.0 (358.7) / 374.6 (376.1) | 393.9 (398.3) / 407.6 (406.1) |
+| light-eaters' mass, log10 kg | 9.76 (9.79) / 9.62 (9.58) | 15.06 (15.11) / 15.05 (15.03) | 9.91 (9.89) / 9.85 (9.84) |
+| eaters' mass, log10 kg | 7.28 (7.21) / 7.34 (7.42) | 11.55 (11.70) / 11.44 (11.21) | 7.56 (7.54) / 7.50 (7.53) |
+
+**Read with care.** One seed a world, and the two builds' worlds part early (H1, B1 and L1 change the laws), so the
+gain of the last centuries is partly the world's: the start's island grows to 1,275 animal nodes in its last century
+(302 in years 401 to 500, with 9 lineages at the end), the end's stays near 390 (2 lineages), and its years 901 to 1000
+cost 250 ms against 563. The whole run is the fairer number: x1.41 / x1.37 / x1.22, against x1.10 / x1.30 / x1.02 for a
+settled year on 4 threads; the rest is the saves (the tape's column 35 to 41 ms a year at the start, 5.5 to 13 ms at the
+end, the snapshots now in it: lane F) and the different worlds. The books hold to 1e-14 in all six; the worlds are
+alive (land 290.6 to 294.5 K, the gas 359 to 407 ppm against the reference 389 +-40). The end's globe is 0.5 K colder
+over its last 50 years (290.78 K against 291.30) with 3% more rain on land: one seed, a globe swings by up to 0.2 K a
+year (L1's study); a watch item, not probed.
+
+## Z: the largest globe
+
+The end's build, `ew run --globe --size N --seed 1 --years 1000` with the default pictures and saves, 4 threads, one run
+at a time under the lock, the machine quiet (load 2.3 to 2.9 before a run). The size-28 run was cut at year 300 by a
+restart of the machine and run again whole. "Wall" is the whole command.
+
+| `--size` | cells | per year (the run's line) | **wall** | years 901 to 1000 | bodies at year 1000 (light-eaters) | element / energy drift |
+|---|---|---|---|---|---|---|
+| 18 | 648 | 222.7 ms | 224 s | 232 ms | 1,424 (1,207) | 3.1e-16 / 4.0e-15 |
+| 28 | 1,568 | 701.4 ms | 706 s | 783 ms | 7,078 (6,312) | 2.3e-16 / 2.5e-15 |
+| **30** | **1,800** | 768.0 ms | **773 s** | 939 ms | 11,009 (10,241) | 4.3e-16 / 5.9e-15 |
+| 32 | 2,048 | 1,018.0 ms | 1,025 s | 1,712 ms | 29,308 (28,567) | 5.8e-16 / 4.0e-15 |
+
+**Verdict.** The largest globe that runs 1,000 years in 15 minutes is **size 30** (30 rows of 60 columns, 1,800 cells),
+with 14% to spare; size 32 misses by 125 s. At the last round's end size 28 fitted (791 s of wall) and size 30 missed
+by 22 s (922 s). The cost grows faster than the cells because the light-eater bodies grow faster: size 32 holds 28,567
+light-eater bodies at year 1000 (4.5 times size 28's for 1.3 times the cells) and its last century costs 1.7 s a year.
+Every run keeps its books (heat not given 0) and ends alive with 2 lineages; the land at year 1000 is 290.8 / 290.1 /
+289.1 K (sizes 28, 30, 32).
