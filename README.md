@@ -6,8 +6,6 @@ A world that runs on five physical laws; everything else must emerge.
 - `docs/laws.md`: how each law works now, with the code that does it
 - `docs/numbers.md`: every free number, its unit and its source
 - `docs/tape.md`: what a run records
-- `docs/history.md`: what changed in M0 to M3 and in its clean-up, and where old files are in git
-- `docs/foundation/plan.md`: the foundation work before M4 (read its main rule first: it replaces code, it does not add patches)
 
 ```
 cargo run --release -p cli --bin ew -- run --years 300 --frames-every 5 --out out/run       # simulate: pictures, tape, snapshots
