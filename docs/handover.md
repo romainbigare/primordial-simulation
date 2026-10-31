@@ -10,9 +10,6 @@ The other documents:
 - `docs/laws.md`: how each law works **now**, part by part, with the code that does it.
 - `docs/numbers.md`: every free number, its unit, its source and whether it is physical, anchored or tuned.
 - `docs/tape.md`: what a run records.
-- `docs/history.md`: what changed, phase by phase, what was tried and not kept, and where old files are in git.
-- `docs/reports/`: the watch reports (Section 12.4).
-- `docs/foundation/plan.md`: the foundation work before M4 (the owner's choice at the M3 check point, 13.1). Its decisions are in its Section 3. Its first rule: the foundation replaces the special code, it is not one more patch. Where it and this document differ, this document wins until it is updated.
 
 ---
 
@@ -132,7 +129,7 @@ What went wrong:
 | Language | Rust for the core (compiles to native and to WebAssembly), TypeScript for the viewer |
 | Version 1 | Not available and not reused. The useful ideas are written out in Section 18 |
 
-How each of these works in the code: `docs/laws.md`. When and why each came: `docs/history.md`.
+How each of these works in the code: `docs/laws.md`.
 
 ---
 
@@ -183,11 +180,7 @@ This is the main tool for speed. Do not build it first (see milestones). Build t
 
 - **Prototype island:** 128 × 128 cells, about 1 km per cell. Up to about 10,000–50,000 individual bodies.
 - **Later, planet:** a latitude-longitude grid of squares that wraps east to west, with finer cells only where needed.
-- **The size follows a time budget, not the other way round:** the planet has as many cells as fit in the time a run
-  may take (a planet run of 1,000 years in under 15 minutes on the owner's machine). The cost of one cell and of one
-  body node per simulated year, measured at each step of the work, gives that size (`docs/foundation/plan.md`, "The
-  time budget" and 5.7). Faster code buys a bigger planet. Today the largest globe that fits is 60 × 30 cells (1,800
-  cells; a run of 1,000 years takes about 13 minutes on 4 cores; `docs/reports/lighter.md`).
+- **The size follows a time budget, not the other way round.**
 
 ---
 
@@ -445,8 +438,6 @@ Not everything needs the same step. These are suggested defaults to measure and 
 | Individual bodies in detailed areas | 1 day |
 | Snapshots for the history tape | every 10 years (and before every god action) |
 
-As built (`docs/laws.md` 0): the survey, the state of ground and air, Change and the air every 10 days (`phys_days`, `air_hours` 240). The air's step solves radiation, evaporation, rain, gases dissolving and the wind together (backward Euler, by Newton's method with a banded solve of the whole air level) and is booked whole as it is solved, so it divides the physics step. Liquid every 60 days (`flow_days`), its sink into the bed's store every physics step; the loose ground creeps once a year; bodies in batches of 10 days (`batch_days`, one air step), every 10 to 360 days (their `INTERVAL` gene, to a whole number of batches; a population node without a brain at least every `node_days`, 40; a population node with a brain decides about every `think_days`, 20, and acts by habit at its other updates; a population node makes its children at most once in `lump_days`, 30, its brood filling at every update); the loads of parts once a month and their reactions every 6 months. Backward Euler is first order in the step, so a longer step needs a step of second order.
-
 There is **one world clock**. Fast processes in detailed areas sub-step inside a month. Seasons must exist, because they matter for food and migration.
 
 ### 7.4 Threads: domains, batches and the outbox
@@ -456,7 +447,7 @@ This is a speed tool, not a law: the history is the same with and without thread
 - The cells are cut into **domains**: the cells under one air node. A domain owns its bodies, its ring of updates and its view of the store.
 - Bodies update in **batches** of `batch_days` (10) days, one air step. In a batch each domain runs on its own thread. Body code reads the world as it was at the batch's start and writes only its own domain. What leaves the domain (a move to another cell, a litter that starts in another cell, a watch, an act on a part) waits in the domain's **outbox**. At the batch's end the moves and the litters land, each in the domain of the cell it goes to, on the pool, with the booking of the moves by array beside them; only the watches, the part acts, `Passed` and `Back` are applied one by one, in a fixed order, on one thread. Bodies that hold a part or are inside one run in a serial phase.
 - Flow's air step and Change's reactors and the survey's wear, merge and shade use the same pool where a loop is large enough to pay for a call into it (30 to 55 µs).
-- How it works: `docs/laws.md` 0. What it gave and what limits it: `docs/reports/speed.md`. On 4 cores the bodies run about 2 times faster than on one, and a whole year about 1.6 to 1.8 times; the rest stays on one thread (the entries applied one by one, the bodies that hold a part, Flow's ordered passes).
+- How it works: `docs/laws.md` 0. On 4 cores the bodies run about 2 times faster than on one, and a whole year about 1.6 to 1.8 times; the rest stays on one thread (the entries applied one by one, the bodies that hold a part, Flow's ordered passes).
 - The tape's recorder uses the same pool (`pcore::par::map`, `map_n` and `join`, under the one feature `threads` of `pcore`): its walks over bodies and cells, and the parts of a yearly row that write different columns, run side by side, and every sum is added in the order of the data, so its files are the same with and without threads.
 - A zone that needs a shorter step later (7.3), such as individuals with a short gene or smart bodies, can run several sub-batches inside one global batch of 10 days: its edge effects still land at the global batch's end. Nothing built blocks that.
 
@@ -860,7 +851,7 @@ If the world cannot do something (for example nothing burns, or there is no dise
 
 ### 12.1 Numbers
 
-- Use `f64` for every number that holds matter or energy, and book each move on both sides with one `f64` number: the world's amounts span 27 decades and the books must close to about 1e-12 (`docs/speed-x10/decisions.md` X4). Use `f32` only for numbers that hold nothing (cards, brain rows, faces, rates), and only where a measure shows a gain.
+- Use `f64` for every number that holds matter or energy, and book each move on both sides with one `f64` number: the world's amounts span 27 decades and the books must close to about 1e-12. Use `f32` only for numbers that hold nothing (cards, brain rows, faces, rates), and only where a measure shows a gain.
 - Clamp tiny negative amounts from rounding to zero, and count how much you clamp. If the clamped total grows, there is a bug.
 
 ### 12.2 Conservation checks
@@ -887,15 +878,15 @@ What the tests must cover:
 
 How the suite is built:
 
-- **The normal suite** (`cargo test --release --workspace`) takes about 18 seconds on 4 cores. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs` (with `populations.rs` for Copy in populations and `damage.rs` for the damage to a body), one per part of the foundation's base (`core/tests/{space, store, clock, solve}.rs`), `core/tests/outbox.rs` (the outbox and the serial phase of a batch), with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (the rows and budgets of `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run); `cli/tests/word_ban.rs` (14.4) and `cli/tests/core_size.rs` (14.3).
-- **The contract between the layers** (`docs/foundation/plan.md` 5.2) needs no test: the store's arrays are private
+- **The normal suite** (`cargo test --release --workspace`) takes about 18 seconds on 4 cores. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs` (with `populations.rs` for Copy in populations and `damage.rs` for the damage to a body), one per part of the base (`core/tests/{space, store, clock, solve}.rs`), `core/tests/outbox.rs` (the outbox and the serial phase of a batch), with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (the rows and budgets of `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run); `cli/tests/word_ban.rs` (14.4) and `cli/tests/core_size.rs` (14.3).
+- **The contract between the layers** needs no test: the store's arrays are private
   fields of `store::Store`, which only `store::apply` and `store::book_by_array` (for the bodies' moves and the air's step, adding as `apply`
   adds) write, both inside the module `store`, so the compiler checks it; the sums of the boundary nodes and the
   potential are added by `Store::add_far_heat`. A test or an edit changes the
   store by moves from the outside node (`World::cross`).
 - **The test kit.** The tests share one kit: `worldgen::testkit` (a small world, founders, edits booked from the outside node, the rock of a cell, the books of a world, chemistry 0's substances by number). It is behind the `testkit` feature, which only the dev-dependencies of `core` and `tape` turn on, so it is never in a run.
-- **The golden test** (`tape/tests/golden.rs`). Three small runs (16 × 16 cells, 2 years, every starting kind) must stay whole, keep their books and end on pinned fingerprints (`tape::fingerprint`, a hash of the whole saved state). A pure clean-up keeps the fingerprints; a change of the laws, or speed work that changes the order of sums, re-pins them in the same commit and says why: `GOLDEN=print` prints the new values. It runs with threads in the workspace's tests (the `cli` turns them on) and must give the same fingerprints without them: `cargo test --release -p tape --test golden`.
-- **Slow tests** are marked `#[ignore]`: a century that keeps its books, the speed benchmark (`speed`), the learning scene over many seeds, long checks of genes, nodes and the island's erosion, and the key-number test (`tape/tests/ranges.rs`: ten numbers of climate, land and life of three 30-year runs, each near its reference of `docs/foundation/plan.md` 6.3). Run them before the last push of a phase (`cargo test --release --workspace --no-fail-fast -- --ignored`); there is no CI on GitHub for now.
+- **The golden test** (`tape/tests/golden.rs`). Three small runs (16 × 16 cells, 2 years, every starting kind) must stay whole, keep their books and end on pinned fingerprints (`tape::fingerprint`, a hash of the whole saved state). A pure clean-up keeps the fingerprints; a change of the laws re-pins them: `GOLDEN=print` prints the new values. It runs with threads in the workspace's tests (the `cli` turns them on) and must give the same fingerprints without them: `cargo test --release -p tape --test golden`.
+- **Slow tests** are marked `#[ignore]`: a century that keeps its books, the speed benchmark (`speed`), the learning scene over many seeds, long checks of genes, nodes and the island's erosion, and the key-number test (`tape/tests/ranges.rs`: ten numbers of climate, land and life of three 30-year runs). Run them before the last push of a phase (`cargo test --release --workspace --no-fail-fast -- --ignored`); there is no CI on GitHub for now.
 
 That is the core of testing, until something emerges. Reviews of the code and of the laws happen in rounds, by the agent and the owner together. What stays banned is proof machinery: receipts, proof campaigns, cross-machine determinism, replay proofs.
 
@@ -911,7 +902,7 @@ Each milestone ends with a short report for the owner, in simple English, saved 
 ### 12.5 Repeatability (cheap kind only)
 
 - Same seed, same code version and same machine/build give the same history.
-- The number of threads does not change the history: every order (of sums, of landings, of writes) is fixed by the data, never by which thread is first (`docs/speed-x10/decisions.md` X3). The golden test checks it with and without threads.
+- The number of threads does not change the history: every order (of sums, of landings, of writes) is fixed by the data, never by which thread is first. The golden test checks it with and without threads.
 - Purpose: finding bugs, and replaying a run.
 - **Do not** build identical results across machines, CPU/GPU agreement to the last bit, receipts or replay proofs.
 
@@ -923,8 +914,6 @@ Each milestone ends with a short report for the owner, in simple English, saved 
 | M1–M3 island with life | 1,000 years in under 10 minutes |
 | M4 planet, coarse with detail in places | 1,000 years in under 15 minutes, on the largest planet that fits (the size follows the budget, 5.4) |
 | M6 god mode | 200 years of one region in about 1–2 minutes |
-
-**Where they stand** (`docs/reports/lighter.md`, 4 cores): a settled year takes 0.25 s on the 22 × 22 island and 0.25 s on the 36 × 18 globe. 1,000 years take 4.3 minutes on the island (the M1–M3 target of 10 minutes is met) and 3.7 minutes on the globe. The largest globe that fits the M4 budget is 60 × 30 (1,800 cells, 12.9 minutes); a 64 × 32 globe of 2,048 cells takes 17.1 minutes.
 
 **Be honest about these targets.** They are hard. For example, 50,000 bodies with one step per day for 1,000 years in 10 minutes means about 30 million brain decisions per second, plus physics. Expect to miss the M1–M3 target at first. Report the real number (years per second) in every watch report, and do not slow down the project to chase the target before something has emerged.
 
@@ -964,9 +953,6 @@ Then the owner decides one of:
 
 Do not drift into Part 2 without this decision.
 
-**The owner's decision (17 October 2026):** first a foundation phase, then M4. The work, its decisions and its
-checks are in `docs/foundation/plan.md`.
-
 **Interest score (for M7), suggested ingredients:**
 - number of different repeated structures
 - size of the largest lasting settlement
@@ -980,23 +966,7 @@ Use it only to **choose worlds and tune free physics numbers**. Never use it to 
 
 ### 13.2 Open items for M4
 
-Only items that are still open. Do not build them before M4 starts unless the owner asks.
-
-- **Nodes against individuals.** The check of Section 7.1 runs as a slow test (`tape/tests/nodes.rs`). It holds the rules that pass and prints the others, which still fail (`docs/foundation/decisions.md` 25).
-- **Long runs.** The 300-year runs at 128×128 are in `docs/reports/foundation-a.md`. Open: the absorbing gas falls in one seed of three (see "Carbon").
-- **No people-like kind is expected from M4 itself.** Nothing on the island pays for a tool, a shelter or a bigger brain yet, and planning is not built (6.5). The intelligence step is option 2 of the check point (13.1), after M4.
-- **What eaters eat.** Eaters live almost only on dead plant matter, digested in full; nothing stops them before they eat most of the plants' production. A structural plant matter that only a priced catalyst breaks is an option (the owner decides).
-- **Warm blood.** A body whose upkeep rises about 9% a kelvin has no steady warmth with real fur, because no body can raise its conductance (no sweating or blood flow to the skin). `KEEP_T` and `COOL_T` are not selected on the mild island; M4's cold and seasons will test them.
-- **Carbon.** The carbon cycle has no source (a volcano-like input is the same physics as the god action). The sea's store goes with its depth to the power 2/3, the Revelle factor is 3, and the whole depth is one mixed layer (6.1), so the sea answers the air in years, not centuries.
-- **Inside bodies.** The litter constants also run inside living bodies (real living stems and bones do not rot); only a bare reaction too slow to matter over a year is skipped (`TOO_SLOW`). The law where a decomposer reaction runs in a living body only by the body's own catalyst is ready (`docs/lighter/decisions.md` L9); it makes the world heavier (eaters x35). The rock salt cannot be kept in a body (real bodies bind calcium in solids). Each is the owner's choice.
-- **Parts' reactor and how walls end.** A part reacts its cell's whole air share for 6 months with no exchange of heat and passes 1e6 K in each call; that burn is what ends walls. Its fix needs a law of how walls end (a part whose binders rotted breaks under its own weight), `docs/lighter/decisions.md` L43; it is half built on the branch `objects` (O2, O3; `docs/lighter/handover.md`).
-- **Hard plant matter.** Plants tall and short side by side need a stiff matter; with today's chemistry lime is cheaper than frame, so plants stiffen with lime (`docs/lighter/decisions.md` L47).
-- **Water and air.** Transpiration is set by the breath (`GAS`), not by the liquid or the heat. Still air is forced convection at one anchored wind; free convection (calm air) is not modelled.
-- **Tuned numbers that matter.** `bump` (tuned) decides whether a body can move; `c_brain` sets most of what an animal pays to think (plants have no brain).
-- **The methane-like gas** lives by the air's temperature (months at 280 K, years at 255 K). If a warm world has a methane story, look here first.
-- **Fire and disease.** Natural fire starts wait for M4: they need a "burning share of a cell" law (a fire front) and M4's weather, with the spark booked like the sun. Disease (bodies inside bodies) waits until after M4.
-- **Reading the eaters.** Eaters settle by years 90 to 100, so report their log10 kg over years 91 to 100 and their births less deaths over years 71 to 100 (a decade swings by about 15% of births), three seeds at least. Under 2 times is noise.
-- **Core size.** `core` holds at most 10,673 code lines (14.3, counted by `cli/tests/core_size.rs`; `docs/lighter/decisions.md` L4).
+Open items are listed in `review/big-look.md` section 2.5 until the next watch report.
 
 ---
 
@@ -1023,7 +993,7 @@ All of these must be true:
 
 | Part | Budget |
 |---|---|
-| `core` (five laws, state, random numbers) | ≤ 10,673 lines of code through M7 (`docs/lighter/decisions.md` L4; `docs/speed-x10/decisions.md` X22 and X88), not counting comments and blank lines |
+| `core` (five laws, state, random numbers) | ≤ 10,000 lines of code through M7, not counting comments and blank lines; a warning sign, not a daily constraint |
 | `worldgen` | ≤ 3,000 lines |
 | `analyze` + `library` loader | ≤ 6,000 lines |
 | whole repository (excluding art assets and library data) | ≤ 25,000 lines through M7 |
@@ -1031,12 +1001,10 @@ All of these must be true:
 **Budget for tuned numbers.** `docs/numbers.md` has one row for every field of `Physics` and `Config` (and for the free constants outside them), with its unit, the fact it is, the real size it is anchored to and a mark: physical, anchored or tuned. A tuned number is one set so a run came out a certain way (a rule in a smaller coat, Section 2, lesson 3), or one with no real size behind it. A test (`core/tests/numbers.rs`) fails when a field has no row, when the tuned rows are more than `TUNED_BUDGET`, or when the second table, "Rules chosen for a run" (things picked for a run that are not numbers, such as the hand-set eater start and the fixing founders), has more than `RULES_BUDGET` (**3**) rows. **The rule: the counts may not grow.** A new number must be physical or anchored, or it replaces a tuned one. When a tuned number is anchored or removed, lower the budget in the test. The M7 world search varies only tuned and anchored numbers, within their anchors, never the physical ones.
 
 **Counting code size.** A comment line starts with `//` after its spaces. The test `cli/tests/core_size.rs` counts
-the code lines of `core/src`, prints them per folder (`cargo test --release -p cli --test core_size -- --nocapture`)
-and fails above its ceiling: 10,673 lines (`docs/lighter/decisions.md` L4). Comments are not counted, so do not delete them to save lines. The foundation
-keeps `core` small by replacing special code with general pieces, not by adding to it (`docs/foundation/plan.md`,
-"The main rule" and "The line budget").
+the code lines of `core/src` and prints them per folder (`cargo test --release -p cli --test core_size -- --nocapture`).
+Comments are not counted, so do not delete them to save lines.
 
-If you hit a code budget, simplify before adding. The budgets are **goals, not hard stops**: the viewer and the pattern finder may need more than expected. If a part goes over its budget, tell the owner with the number and the reason, and keep going. Going over by 20% with a reason is fine. Going over by 3× means something is wrong (see Section 2). The `core` row goes past the 20% in the speed x10 round (9,700 × 1.2 = 11,640 was the limit; the round was allowed 12,000, and ended at 10,443 lines) with the owner's explicit yes (`docs/speed-x10/decisions.md` X22 and X88). The row is the last round's lines plus 200 (`docs/lighter/decisions.md` L4).
+If you hit a code budget, simplify before adding. The budgets are **goals, not hard stops**: the viewer and the pattern finder may need more than expected. If a part goes over its budget, tell the owner with the number and the reason, and keep going. Going over by 20% with a reason is fine. Going over by 3× means something is wrong (see Section 2).
 
 ### 14.4 Earth-word ban in `core` and `worldgen`
 
