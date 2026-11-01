@@ -9,7 +9,7 @@ use super::cells::{exchange, put, sunlight, Ctx, Response, FIXED, GAS, KEPT, LIG
 use super::exchange::bucket;
 use super::lerp;
 use super::step::Active;
-use crate::{store::Class, units::{MAX_SUBSTANCES, R_GAS}, AIR};
+use crate::{store::Class, units::{MAX_SUBSTANCES, R_GAS}, World, AIR};
 
 /// The ground an exchange solves (`cells::exchange`): its area, m², its air node, the area of the air it sees (`lerp`),
 /// m², and its mean sunlight at the top of the air, W/m²; that air's drop with height, K/m, and mean height, m, and
@@ -124,8 +124,7 @@ impl Surf {
 
 /// The patches of the low basin that each solve one surface balance: under each air node, the cells of the low basin that
 /// mix as one (`basin::one_surface`), by what is molten in them; at least two cells each, in the order of their cells.
-pub(super) fn patches(cx: &Ctx) -> Vec<Vec<u32>> {
-    let (w, s) = (cx.w, cx.s);
+pub(super) fn patches(w: &World, s: &Scratch) -> Vec<Vec<u32>> {
     let parent = w.mesh.cells().parent();
     let mut by: std::collections::BTreeMap<(u32, u64), Vec<u32>> = std::collections::BTreeMap::new();
     (0..w.mesh.cells().n()).filter(|&i| one_surface(w, s, i)).for_each(|i| by.entry((parent[i], s.latent[i].molten)).or_default().push(i as u32));
@@ -176,7 +175,7 @@ pub(super) struct Vapour {
     held: f64,
     wet: f64,
     film: f64,
-    /// Over its boiling point, what the node's heat boils, mol (`Scratch::boil_off`).
+    /// Over its boiling point, what the node's heat boils, mol (`land::boil_off`).
     boil: Option<f64>,
     /// Its vaporisation enthalpy, and that plus its fusion enthalpy, J/mol; the fusion enthalpy a mol of it holds in the
     /// node (`Scratch::fusion`), J/mol.

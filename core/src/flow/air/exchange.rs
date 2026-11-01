@@ -1,7 +1,7 @@
 //! The exchange of ground nodes with the air: evaporation, condensation (rain and cloud), and gases dissolving in the
 //! ground's liquid; and how what dissolves is booked (`Crossing`).
 
-use super::super::{land::wet, Scratch};
+use super::super::{land::{boil_off, wet}, Scratch};
 use super::touching;
 use super::super::potential::apply;
 use crate::{chem::Chemistry, math::one_minus_exp, store::{Class, LinkFlux}, units::R_GAS, AIR, World};
@@ -85,8 +85,9 @@ pub(super) fn cloud((cloud, cloud_ir): (f64, f64), (m, mr): (f64, f64), area: f6
 /// coming out takes it back. What crosses is booked in one call: a link from each ground node that takes or gives some
 /// to its air node with the mol of each gas (+ up) and the heat that leaves the ground, no air node giving more than it
 /// holds (in the order of the cells), and the lift of the gas, paid by the air (`potential`); the next state of the ground nodes
-/// (`land::ground_state`) reads what they then hold.
-pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64)) {
+/// (`land::ground_state`) reads what they then hold. The low basin under one air node takes up gas as one liquid
+/// (`surf::patches`), each of its cells by its share of that liquid, and gives it up by what each holds of it.
+pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64), patches: &[Vec<u32>]) {
     let (n, na, nh) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), henry.len());
     if nh == 0 {
         return;
@@ -95,22 +96,44 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
     // What each ground node would take up of each gas over the step, mol (`[i * nh + x]`; negative: it comes out).
     let mut want = vec![0.0; n * nh];
     let (wr, sr) = (&*w, &*s);
+    let mut alone = vec![true; n];
+    patches.iter().flatten().for_each(|&i| alone[i as usize] = false);
+    let (area, ground) = (wr.mesh.cells().area(), wr.store.amounts(Class::Ground));
+    let liquid = |i: usize| solv.iter().fold((0.0, 0.0), |(l, v), &k| (l + ground[k * n + i] * wet(sr, k, i), v + ground[k * n + i] * wet(sr, k, i) * sr.sp[k].v[1]));
     crate::par::rows(&mut want, nh, || (), |_, i, row| {
-        let (t, area, ground) = (sr.state.tg[i], wr.mesh.cells().area()[i], wr.store.amounts(Class::Ground));
-        let (l, v) = solv.iter().fold((0.0, 0.0), |(l, v), &k| (l + ground[k * n + i] * wet(sr, k, i), v + ground[k * n + i] * wet(sr, k, i) * sr.sp[k].v[1]));
-        let tl = touching(sr, &sr.ta, i);
-        for (x, &(gi, k)) in henry.iter().enumerate().filter(|h| l > 0.0 || ground[h.1 .1 * n + i] > 0.0) {
-            // The column of its air node over the cell, its height, mol dissolved per mol at balance, and the time to balance.
-            let (j, air) = (wr.mesh.cells().parent()[i] as usize, wr.mesh.level(AIR));
-            let (col, hk) = (wr.store.amounts(Class::Air)[k * na + j] * area / air.area()[j], sr.hk[gi * na + j]);
-            let b = l * wr.chem.henry(k, t, R_GAS * tl / (area * hk));
-            let tau = b * hk / wr.cfg.evap + v / area / wr.cfg.dissolve;
-            let a = ground[k * n + i];
-            // Coming out cools the node, no further than the boiling point.
-            let m = (b * (a + col) / (1.0 + b) - a) * one_minus_exp(dt * (1.0 + b) / tau);
-            row[x] = if m >= 0.0 { m } else { -(-m).min(sr.boil_off(k, i, t)) };
+        if alone[i] {
+            let pool = Liquid { area: area[i], t: sr.state.tg[i], tl: touching(sr, &sr.ta, i), j: wr.mesh.cells().parent()[i] as usize, cap: sr.cap[i], lv: liquid(i) };
+            take_up(wr, sr, &pool, |k| ground[k * n + i], (henry, dt), row);
         }
     });
+    let shared = crate::par::map(patches, |cells| {
+        let each: Vec<(f64, f64)> = cells.iter().map(|&i| liquid(i as usize)).collect();
+        let (sum, by_area) = (|f: &dyn Fn(usize, usize) -> f64| cells.iter().enumerate().map(|(c, &i)| f(c, i as usize)).sum::<f64>(), area_of(cells, area));
+        let cap = sum(&|_, i| sr.cap[i]);
+        let pool = Liquid {
+            area: by_area,
+            t: sum(&|_, i| sr.state.tg[i] * sr.cap[i]) / cap,
+            tl: sum(&|_, i| touching(sr, &sr.ta, i) * area[i]) / by_area,
+            j: wr.mesh.cells().parent()[cells[0] as usize] as usize,
+            cap,
+            lv: (sum(&|c, _| each[c].0), sum(&|c, _| each[c].1)),
+        };
+        let held = |k: usize| sum(&|_, i| ground[k * n + i]);
+        let mut row = vec![0.0; nh];
+        take_up(wr, sr, &pool, held, (henry, dt), &mut row);
+        // Each cell's share: of what is taken up, by its liquid; of what comes out, by what it holds.
+        let mut rows = vec![0.0; cells.len() * nh];
+        for (c, &i) in cells.iter().enumerate() {
+            for (x, &(_, k)) in henry.iter().enumerate() {
+                let share = if row[x] >= 0.0 { each[c].0 / pool.lv.0.max(f64::MIN_POSITIVE) } else { ground[k * n + i as usize] / held(k).max(f64::MIN_POSITIVE) };
+                rows[c * nh + x] = row[x] * share;
+            }
+        }
+        rows
+    });
+    for (cells, rows) in patches.iter().zip(shared) {
+        cells.iter().zip(rows.chunks_exact(nh)).for_each(|(&i, r)| want[i as usize * nh..(i as usize + 1) * nh].copy_from_slice(r));
+    }
     let ks: Vec<u16> = henry.iter().map(|h| h.1 as u16).collect();
     let parent = w.mesh.cells().parent();
     // What each air node holds of each gas as the crossing leaves it, mol (`[x * na + j]`); the cells that take or give
@@ -137,6 +160,38 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
         if (0..n).any(|i| w.store.amounts(Class::Ground)[k * n + i] > 0.0) {
             s.add_loose(k, true);
         }
+    }
+}
+
+/// The liquid a ground takes up gas into (`take_up`): its area, m², temperature, K, the air touching it, K, its air
+/// node, its heat capacity, J/K, and its liquid, mol, with that liquid's volume, m³.
+struct Liquid {
+    area: f64,
+    t: f64,
+    tl: f64,
+    j: usize,
+    cap: f64,
+    lv: (f64, f64),
+}
+
+/// The area of the cells `cells`, m².
+fn area_of(cells: &[u32], area: &[f64]) -> f64 {
+    cells.iter().map(|&i| area[i as usize]).sum()
+}
+
+/// What the liquid `pool` holding `held(k)` mol of each gas takes up of each gas of `henry` over `dt` seconds toward
+/// Henry's share under its air node's column over it, through the air's film and the liquid's in series, into `row`
+/// (negative: it comes out, cooling it no further than the boiling point).
+fn take_up(w: &World, s: &Scratch, pool: &Liquid, held: impl Fn(usize) -> f64, (henry, dt): (&[(usize, usize)], f64), row: &mut [f64]) {
+    let (na, air, (l, v)) = (w.mesh.level(AIR).n(), w.mesh.level(AIR), pool.lv);
+    for (x, &(gi, k)) in henry.iter().enumerate().filter(|h| l > 0.0 || held(h.1 .1) > 0.0) {
+        // The column of its air node over it, its height, mol dissolved per mol at balance, and the time to balance.
+        let (col, hk) = (w.store.amounts(Class::Air)[k * na + pool.j] * pool.area / air.area()[pool.j], s.hk[gi * na + pool.j]);
+        let b = l * w.chem.henry(k, pool.t, R_GAS * pool.tl / (pool.area * hk));
+        let tau = b * hk / w.cfg.evap + v / pool.area / w.cfg.dissolve;
+        let a = held(k);
+        let m = (b * (a + col) / (1.0 + b) - a) * one_minus_exp(dt * (1.0 + b) / tau);
+        row[x] = if m >= 0.0 { m } else { -(-m).min(boil_off(&s.sp[k], pool.cap, pool.t)) };
     }
 }
 

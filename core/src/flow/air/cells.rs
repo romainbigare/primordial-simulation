@@ -10,7 +10,7 @@ use super::daily::Ground;
 use super::rain::Wet;
 use super::radiation::{glow, glow_slope, insolation, Air, Surface};
 use super::step::Active;
-use super::surf::{patch_rows, patches, Surf, Vapour};
+use super::surf::{patch_rows, Surf, Vapour};
 use super::{at_height, lerp};
 use crate::{math::one_minus_exp, store::Class, units::{MAX_SUBSTANCES, R_GAS}, World, AIR};
 
@@ -127,7 +127,7 @@ impl Response {
 }
 
 /// Each cell's response over the step (`Response`), in parallel with `threads`.
-pub(super) fn respond(cx: &Ctx) -> Response {
+pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>]) -> Response {
     let (n, nx, na) = (cx.w.mesh.cells().n(), cx.act.len(), cx.w.mesh.level(AIR).n());
     let seen: Vec<f64> = (0..n)
         .flat_map(|i| std::iter::once(lerp(cx.s, cx.t0, i)).chain((0..nx).map(move |y| lerp(cx.s, &cx.x0[y * na..(y + 1) * na], i))))
@@ -135,7 +135,6 @@ pub(super) fn respond(cx: &Ctx) -> Response {
     let width = Response::width(nx);
     let mut rows = vec![0.0; n * width];
     // The low basin under each air node solves one surface (`surf::patches`); the other cells each their own.
-    let patches = patches(cx);
     let mut alone = vec![true; n];
     patches.iter().flatten().for_each(|&i| alone[i as usize] = false);
     // Each task keeps the last latitude and its mean sunlight over the step: neighbouring cells often share a latitude.
@@ -152,7 +151,7 @@ pub(super) fn respond(cx: &Ctx) -> Response {
         put(&p, &carry, &mut row[FIXED..]);
         row[..FIXED].copy_from_slice(&fixed);
     });
-    for (cells, block) in patches.iter().zip(crate::par::map(&patches, |cells| patch_rows(cx, cells, &seen))) {
+    for (cells, block) in patches.iter().zip(crate::par::map(patches, |cells| patch_rows(cx, cells, &seen))) {
         cells.iter().zip(block.chunks_exact(width)).for_each(|(&i, r)| rows[i as usize * width..(i as usize + 1) * width].copy_from_slice(r));
     }
     Response { nx, rows, seen }

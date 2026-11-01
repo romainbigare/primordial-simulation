@@ -10,6 +10,7 @@ use super::cells::{respond, Ctx};
 use super::rain::{landed, wet};
 use super::daily::run;
 use super::exchange::dissolve;
+use super::surf::patches;
 use super::radiation::declination;
 use crate::{store::Class, units::DAY, World, AIR};
 
@@ -31,7 +32,9 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     up_from_bodies(w, s);
     let (tmin, tmax) = range(&s.state.tg);
     let henry: Vec<(usize, usize)> = s.state.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect();
-    dissolve(w, s, dt, &henry, (tmin, tmax));
+    // The low basin under each air node faces the air as one surface (`surf::patches`).
+    let patches = patches(w, s);
+    dissolve(w, s, dt, &henry, (tmin, tmax), &patches);
     let act = active(w, s, &henry);
     // The sun's declination at the middle of each day of the step.
     let days = (dt / DAY).ceil().max(1.0) as usize;
@@ -42,7 +45,7 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     let t0: Vec<f64> = (0..na).map(|j| air_temp(w.store.heat(Class::Air)[j], s.state.gas.iter().map(|&k| w.store.amounts(Class::Air)[k * na + j] * s.sp[k].cp).sum())).collect();
     let x0: Vec<f64> = act.iter().flat_map(|ac| w.store.amounts(Class::Air)[ac.k * na..(ac.k + 1) * na].iter().copied()).collect();
     let cx = Ctx { w, s, act: &act, t0: &t0, x0: &x0, dt, decl: &decl };
-    let response = respond(&cx);
+    let response = respond(&cx, &patches);
     let ground = response.ground(&cx, wet(w, s, &act, &t0));
     let mean = run(w, s, &act, &ground, dt);
     let rain = landed(&act, ground.wet(), &mean);

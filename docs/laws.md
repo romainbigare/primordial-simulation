@@ -227,7 +227,7 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
 `flow::air::cells`, `daily`, `rain`, `exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against
 the air's): wet ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket), taking the
 heat it held at the node's temperature; a node over a substance's boiling point boils of it what its heat over that
-point pays, cooling to it (`Scratch::boil_off`; gas coming out of the liquid too). **Rain**: what an air node holds of a
+point pays, cooling to it (`land::boil_off`; gas coming out of the liquid too). **Rain**: what an air node holds of a
 gas over what saturates the air touching each of its cells (colder higher up) rains out in `rain_time`. Each node's air
 lies over the cells that see it (bilinearly), each by its share; the cells' saturation is taken as the step starts, as
 a ratio to the node's, so the day sums them in rising order. In the air's day the vapour of each block (1.6), evened
@@ -242,7 +242,8 @@ freezing frees; condensing frees the vaporisation enthalpy in the air. **Lift**:
 ground's head to its air node's mean ground, paid by the air's heat; rain's fall gives it back (0, "The books"). **Dissolving**
 (`exchange::dissolve`): a gas that cannot condense dissolves in the ground's liquid toward Henry's share, through the
 air's film (`evap`) and the liquid's (`dissolve`) in series, freeing its vaporisation enthalpy, and comes out when the
-liquid warms, thins or freezes. **Known limit:** a liquid's whole depth is one mixed layer, so a deep sea takes up gas
+liquid warms, thins or freezes. The sea under one air node (1.4) takes it up as one liquid, each cell by its share of that
+liquid, and gives it up by what each holds of it. **Known limit:** a liquid's whole depth is one mixed layer, so a deep sea takes up gas
 in months and warms over centuries; a real one is the other way round.
 
 ### 1.6 Wind
