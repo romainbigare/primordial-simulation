@@ -104,8 +104,8 @@ fn join_kin(w: &World, d: &mut Chunk, i: usize) -> Vec<Handle> {
     (0..list.len()).filter(|&x| head[x] == x).map(|x| list[x].1).collect()
 }
 
-/// Each node of `heads` (one per `Kin`, largest first) joins the first larger node of another lineage of the same stage,
-/// room and part, alike in genes, whose brain has the same sizes (`merge_taking`). Individuals stay apart.
+/// Each node of `heads` (one per `Kin`, largest first) joins the first larger node of another lineage of its starting
+/// kind and the same stage, room and part, alike in genes, whose brain has the same sizes (`merge_taking`). Individuals stay apart.
 fn join_other(w: &World, d: &mut Chunk, lay: &Layout, heads: Vec<Handle>) {
     let heads: Vec<Handle> = heads.into_iter().filter(|&s| d[s].n() > 1.0).collect();
     let mut gone = vec![false; heads.len()];
@@ -114,7 +114,7 @@ fn join_other(w: &World, d: &mut Chunk, lay: &Layout, heads: Vec<Handle>) {
         let sizes = |k: u32| d.brain(w, k).map(sizes_of);
         let to = (0..x).filter(|&y| !gone[y]).find(|&y| {
             let (t, kt) = (&d[heads[y]], kin_of(w, &d[heads[y]]));
-            kt.0 != ka.0 && (kt.1, kt.2, kt.3) == (ka.1, ka.2, ka.3) && sizes(kt.0) == sizes(ka.0) && alike(lay, w.cfg.phys.alike, &t.genes, &a.genes)
+            kt.0 != ka.0 && d.root(w, t) == d.root(w, a) && (kt.1, kt.2, kt.3) == (ka.1, ka.2, ka.3) && sizes(kt.0) == sizes(ka.0) && alike(lay, w.cfg.phys.alike, &t.genes, &a.genes)
         });
         if let Some(y) = to {
             merge_taking(w, d, heads[x], heads[y]);

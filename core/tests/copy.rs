@@ -797,4 +797,12 @@ fn the_cap_merges_only_within_a_kind_and_brain() {
     }
     w.in_cell(i, |w, d| pcore::nodes::cap(w, d, &lay, i));
     assert_eq!(cell_books(&w, i).1, 9, "a cell with no pair of one kind and brain stays over the cap");
+
+    // Two alike nodes of two starting kinds, one stage and one brain: the monthly merge keeps them apart.
+    let (mut w, i) = start();
+    capped(&mut w, i, (1, 12), -0.4, 10.0);
+    capped(&mut w, i, (5, 12), -0.4, 20.0);
+    assert!(w.time.is_multiple_of(w.cfg.calendar().month), "the survey merges at a month's start");
+    pcore::survey::survey(&mut w);
+    assert_eq!(cell_books(&w, i).0.len(), 2, "two starting kinds merged: {:?}", cell_books(&w, i).0);
 }
