@@ -55,7 +55,7 @@ pub(super) fn forcing(w: &World, s: &Scratch, act: &[Active], dt: f64) -> Forcin
             let (film, ps) = (w.cfg.evap / R_GAS * area / t0, s.sat[ac.k].at(t0));
             let wet = w.cfg.phys.field * s.pd[i] * area / sp.v[melted(s, ac.k, i) as usize];
             let open = film * ps * if wet > 0.0 { (held / wet).min(1.0) } else { 1.0 };
-            let k = open.min(held / dt) / ps;
+            let k = open.min(held / dt) / ps.max(f64::MIN_POSITIVE);
             (f.open[y], f.close[y], f.brings[y]) = (f.open[y] + k * ps, f.close[y] + k * R_GAS / (air.area()[j] * s.hk[ac.gi * na + j]), f.brings[y] + k * ps * (sp.cp * t0 - lift));
         }
     }
@@ -129,7 +129,7 @@ pub(super) fn pass(cx: &Ctx) -> Vec<f64> {
     crate::par::rows(&mut rows, width, || (f64::NAN, 0.0), |(lat, q), i, row| {
         let at = cx.w.mesh.cells().lat()[i];
         if at != *lat {
-            (*lat, *q) = (at, sunlight(cx, at));
+            (*lat, *q) = (at, sunlight(cx.w, cx.decl, at));
         }
         cell(cx, i, *q, row);
     });
@@ -140,13 +140,14 @@ pub(super) fn pass(cx: &Ctx) -> Vec<f64> {
 pub(super) fn again(cx: &Ctx, cells: &[usize], rows: &mut [f64]) {
     let width = ROW + cx.act.len();
     for &i in cells {
-        cell(cx, i, sunlight(cx, cx.w.mesh.cells().lat()[i]), &mut rows[i * width..(i + 1) * width]);
+        cell(cx, i, sunlight(cx.w, cx.decl, cx.w.mesh.cells().lat()[i]), &mut rows[i * width..(i + 1) * width]);
     }
 }
 
-/// The mean sunlight at the top of the air at latitude `lat`, degrees, over the days of the step, W/m².
-fn sunlight(cx: &Ctx, lat: f64) -> f64 {
-    cx.decl.iter().map(|&d| insolation(cx.w.cfg.sun, lat.to_radians(), d)).sum::<f64>() / cx.decl.len() as f64
+/// The mean sunlight at the top of the air at latitude `lat`, degrees, over the days of the step, their sun's
+/// declinations `decl`, W/m².
+fn sunlight(w: &World, decl: &[f64], lat: f64) -> f64 {
+    decl.iter().map(|&d| insolation(w.cfg.sun, lat.to_radians(), d)).sum::<f64>() / decl.len() as f64
 }
 
 /// An active gas of a ground node, as its evaporation reads it (`Vapour::evaporate`): its partial pressure near the

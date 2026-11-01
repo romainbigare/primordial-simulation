@@ -239,9 +239,10 @@ island's air is one block). Across the links between blocks gas moves by three p
 start, explicit: the column's pressure (p = nRT/V), evened in the time sound takes to cross the link (Lamb waves,
 Lindzen 1990); overturning, the lower half flowing to the warmer column and the upper half back at `wind` per K,
 turned by the planet's rotation (`rotation`), vapour crowding low; and eddies mixing the columns (`mix`, width over
-length). Each moves at most what evens its link in a day, and a node's links together at most what it holds, so the
-day is stable for any rates. **Known limit:** where a push is faster than a day (the pressure, always) a link evens
-in a day at most, so a pressure difference across many links of blocks takes days to even out. Mass that crosses is
+length). Each moves at most what evens its link in a day; over a node's links together the pressure at most half of
+what evens them all, and the eddies and the overturning at most half of what the node holds, so the day is stable
+for any rates. **Known limit:** where a push is faster than a day (the pressure, always) its links even in a day at
+most that share, so a pressure difference across many links of blocks takes days to even out. Mass that crosses is
 lifted between the nodes' mean heights by the heat of the node it enters. A cell sees its air node and three
 neighbours bilinearly (`flow/scratch.rs`). Air moves as whole columns, so bodies use the anchored `wind_ground` (6.3).
 

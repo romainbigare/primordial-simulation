@@ -2,7 +2,7 @@
 //! ground's liquid; and how what dissolves is booked (`Crossing`).
 
 use super::super::{land::wet, Scratch};
-use super::{lerp, over_cell, touching};
+use super::touching;
 use crate::{chem::Chemistry, math::one_minus_exp, store::{apply, Batch, Class, LinkFlux}, units::R_GAS, AIR, World};
 
 /// Entries of the table of a saturation pressure (`Sat`) per K.
@@ -98,8 +98,9 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
         let (l, v) = solv.iter().fold((0.0, 0.0), |(l, v), &k| (l + ground[k * n + i] * wet(sr, k, i), v + ground[k * n + i] * wet(sr, k, i) * sr.sp[k].v[1]));
         let tl = touching(wr, sr, &sr.ta, i);
         for (x, &(gi, k)) in henry.iter().enumerate().filter(|h| l > 0.0 || ground[h.1 .1 * n + i] > 0.0) {
-            // The column over the cell, its height, mol dissolved per mol at balance, and the time to balance.
-            let (col, hk) = (lerp(sr, &wr.store.amounts(Class::Air)[k * na..(k + 1) * na], i) * over_cell(wr, sr, i), lerp(sr, &sr.hk[gi * na..(gi + 1) * na], i));
+            // The column of its air node over the cell, its height, mol dissolved per mol at balance, and the time to balance.
+            let (j, air) = (wr.mesh.cells().parent()[i] as usize, wr.mesh.level(AIR));
+            let (col, hk) = (wr.store.amounts(Class::Air)[k * na + j] * area / air.area()[j], sr.hk[gi * na + j]);
             let b = l * wr.chem.henry(k, t, R_GAS * tl / (area * hk));
             let tau = b * hk / wr.cfg.evap + v / area / wr.cfg.dissolve;
             let a = ground[k * n + i];

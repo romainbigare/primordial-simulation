@@ -56,6 +56,7 @@ pub(super) struct Mean {
 /// What moves between pairs of air nodes over a step (the links between blocks, then each block's other nodes from its
 /// hub): per gas of the air and pair (`[gi * pairs + p]`) mol from `a` to `b`, and per pair the heat, J; and per node
 /// the lift its heat pays for the mass that enters it, J (a fall gives it back).
+#[derive(Default)]
 pub(super) struct Moved {
     pub(super) a: Vec<u32>,
     pub(super) b: Vec<u32>,
@@ -203,8 +204,10 @@ fn lift((a, b): (usize, usize), kg: f64, (s, g): (&Scratch, f64), e: &mut [f64],
 }
 
 /// One day of `dd` seconds of the wind over the links between blocks (`border`), each from the air at the day's start:
-/// the evening of pressure, the eddies and the overturning, each at most what evens its link in the day, and together
-/// at most what a node holds (each link's share cut by the busier of its nodes), so the day is stable for any rates.
+/// the evening of pressure, the eddies and the overturning, each at most what evens its link in the day; the evening of
+/// pressure over a node's links together at most half of what evens them all, and the eddies and the overturning
+/// together at most half of what it holds (each link's share cut by the busier of its nodes), so the day is stable for
+/// any rates.
 /// What crosses is the sender's air (by halves for the overturning: the lower half to the warmer node, the upper half
 /// back, each with its node's heat per mol); the node the mass enters pays its lift.
 fn wind(w: &World, s: &Scratch, (push, links, border): (&Pushes, &Links, &[usize]), (x, e): (&mut [f64], &mut [f64]), dd: f64, moved: &mut Moved) {
@@ -218,8 +221,9 @@ fn wind(w: &World, s: &Scratch, (push, links, border): (&Pushes, &Links, &[usize
     let upper: Vec<f64> = (0..na).map(|j| sum(&|q, j| x[q * na + j] * s.split[q * na + j], j)).collect();
     let lower: Vec<f64> = (0..na).map(|j| nt[j] - upper[j]).collect();
     let c: Vec<f64> = (0..na).map(|j| R_GAS * t[j] / s.vol[j]).collect();
-    // Each link's share of what evens it in the day, by pressure, eddies and overturning, and each node's sum of them.
-    let mut busy = vec![0.0; na];
+    // Each link's share of what evens it in the day, by pressure, eddies and overturning, and each node's sum of them:
+    // of the pressure's, and of the others'.
+    let mut busy = vec![[0.0; 2]; na];
     let shares: Vec<[f64; 3]> = border
         .iter()
         .map(|&l| {
@@ -228,19 +232,19 @@ fn wind(w: &World, s: &Scratch, (push, links, border): (&Pushes, &Links, &[usize
             let even = (dd * push.even[l] * (c[ia] + c[ib])).min(1.0);
             let mix = (dd * push.mix[l] * (1.0 / nt[ia] + 1.0 / nt[ib])).min(1.0);
             let over = (dd * o.abs() / lower[from].min(upper[to]).max(f64::MIN_POSITIVE)).min(1.0);
-            [ia, ib].iter().for_each(|&j| busy[j] += even + mix + over);
+            [ia, ib].iter().for_each(|&j| busy[j] = [busy[j][0] + even, busy[j][1] + mix + over]);
             [even, mix, over]
         })
         .collect();
     let (x0, e0, mut d) = (x.to_vec(), e.to_vec(), vec![0.0; ng + 1]);
     for (p, (&l, [even, mix, over])) in border.iter().zip(shares).enumerate() {
         let (ia, ib, o) = (links.a[l] as usize, links.b[l] as usize, push.over[l]);
-        let cut = 1.0 / busy[ia].max(busy[ib]).max(1.0);
+        let cut = |q: usize| 1.0 / (2.0 * busy[ia][q].max(busy[ib][q])).max(1.0);
         let (from, to, sign) = if o > 0.0 { (ia, ib, 1.0) } else { (ib, ia, -1.0) };
         // The air that evens the pressure (from the higher), what the eddies swap each way, and each half overturned.
-        let push_mol = cut * even * (nt[ia] * c[ia] - nt[ib] * c[ib]) / (c[ia] + c[ib]);
+        let push_mol = cut(0) * even * (nt[ia] * c[ia] - nt[ib] * c[ib]) / (c[ia] + c[ib]);
         let sender = if push_mol > 0.0 { ia } else { ib };
-        let (swap, turned) = (cut * mix / (1.0 / nt[ia] + 1.0 / nt[ib]), sign * cut * over * lower[from].min(upper[to]));
+        let (swap, turned) = (cut(1) * mix / (1.0 / nt[ia] + 1.0 / nt[ib]), sign * cut(1) * over * lower[from].min(upper[to]));
         let mut kg = 0.0;
         for (q, &k) in s.state.gas.iter().enumerate() {
             let at = |j: usize| x0[q * na + j];
