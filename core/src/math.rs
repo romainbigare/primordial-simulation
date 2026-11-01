@@ -40,16 +40,17 @@ pub(crate) fn mean_decay(x: f64) -> f64 {
 
 /// Light passing layers from the tallest down (Beer's law): `l` holds per layer member its height, its capture area per
 /// ground area `x` and a tag, and is sorted here, tallest first; members of one height share a layer, and a layer of
-/// capture area x absorbs 1 - exp(-x) of what reaches it. `set(tag, f)` gets each member's light per unit of capture
-/// area over the mean of all (weighted by capture area, the factors have mean 1).
-pub(crate) fn shade<T: Copy>(l: &mut [(f32, f64, T)], mut set: impl FnMut(T, f64)) {
+/// capture area x absorbs 1 - exp(-x) of what reaches it. `set(tag, f, bottom)` gets each member's light per unit of capture
+/// area over the mean of all (weighted by capture area, the factors have mean 1), and the light at the bottom of its
+/// layer per unit of capture area over the same mean.
+pub(crate) fn shade<T: Copy>(l: &mut [(f32, f64, T)], mut set: impl FnMut(T, f64, f64)) {
     l.sort_by(|a, b| b.0.total_cmp(&a.0));
     let (all, mut above, mut k) = (mean_decay(l.iter().map(|x| x.1).sum()), 0f64, 0);
     while k < l.len() {
         let e = k + l[k..].iter().take_while(|x| x.0 == l[k].0).count();
         let x: f64 = l[k..e].iter().map(|x| x.1).sum();
-        let f = (-above).exp() * mean_decay(x) / all;
-        l[k..e].iter().for_each(|y| set(y.2, f));
+        let (f, bottom) = ((-above).exp() * mean_decay(x) / all, (-above - x).exp() / all);
+        l[k..e].iter().for_each(|y| set(y.2, f, bottom));
         (above, k) = (above + x, e);
     }
 }

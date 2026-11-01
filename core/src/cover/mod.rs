@@ -92,6 +92,9 @@ pub struct Cover {
     /// Per slot: its genes, and the starting kind it descends from (a label for the tape; `NO_ROOT` when empty)
     pub genes: Vec<[f32; NG]>,
     pub root: Vec<u32>,
+    /// Per slot: whether one more kg of it did not pay its upkeep in its last month (`grow::build`): seeds of its kind
+    /// do not take hold there
+    pub full: Vec<bool>,
     /// Per cell: the heat of its cover, J; the cell's light (`World::light`) at its last step, J/m²; the share of the
     /// light its cover absorbs that its bodies' node sets aside for its light reaction
     pub e: Vec<f64>,
@@ -106,7 +109,7 @@ impl Cover {
     /// No cover on `cells` cells.
     pub fn new(cells: usize) -> Cover {
         let n = cells * SLOTS;
-        Cover { mol: vec![[0.0; NP]; n], genes: vec![[0.0; NG]; n], root: vec![NO_ROOT; n], e: vec![0.0; cells], mark: vec![0.0; cells], keep: vec![0.0; cells], seeds: Vec::new() }
+        Cover { mol: vec![[0.0; NP]; n], genes: vec![[0.0; NG]; n], root: vec![NO_ROOT; n], full: vec![false; n], e: vec![0.0; cells], mark: vec![0.0; cells], keep: vec![0.0; cells], seeds: Vec::new() }
     }
     /// Whether it holds any cover.
     pub fn any(&self) -> bool {

@@ -45,6 +45,35 @@ fn the_cover_grows_in_light_and_keeps_the_books() {
     books.assert_kept(&w, 1e-9);
 }
 
+/// A cover far thicker than its light can keep (20 kg per m², a capture area 100 times its ground) does not thicken:
+/// one more kg would not pay its upkeep at the bottom of its layer, so all it builds leaves as seeds, and over a
+/// summer its cell holds less than it started with; the books are kept.
+#[test]
+fn a_thick_cover_does_not_thicken() {
+    let (mut w, i) = start();
+    let books = Books::now(&w);
+    assert!(cover::place(&mut w, i, genes(), 0, 20.0));
+    let kg0 = cover::per_m2(&w)[i];
+    for _ in 0..6 {
+        pcore::step(&mut w);
+    }
+    let kg = cover::per_m2(&w)[i];
+    println!("cover on its cell {kg0:.2} kg/m2, six months later {kg:.2} kg/m2");
+    assert!(kg < kg0, "the thick cover thickened: {kg0} then {kg}");
+    books.assert_kept(&w, 1e-9);
+}
+
+/// The light reaction goes with its gas in the air (`Physics::gas_factor`): nothing at the compensation point, all
+/// it stores at `light_yield` at the reference share, and less in between.
+#[test]
+fn the_light_reaction_goes_with_its_gas() {
+    let p = pcore::Physics::default();
+    assert_eq!(p.gas_factor(p.gas_floor), 0.0);
+    assert!((p.gas_factor(p.gas_ref) - 1.0).abs() < 1e-12);
+    let half = p.gas_factor(0.5 * p.gas_ref);
+    assert!(half > 0.0 && half < 1.0 && p.gas_factor(2.0 * p.gas_ref) > 1.0, "{half}");
+}
+
 /// Cover whose frost gene lies above its ground's temperature dies of frost in its month (`PHASE`), and what dies goes
 /// to the ground: the books are kept.
 #[test]

@@ -77,6 +77,8 @@ The four costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`, `c_signal`
 |---|---|---|---|---|
 | `light_depth` | m | liquid thickness over the cover that holds back 63% of the light reaching it (`cover::step`) | clear sea water: broadband light falls by e in 1 to 20 m; 10 m is the clear end (unchecked) | anchored |
 | `light_yield` | share | the share of the light a light-driven reaction takes that it stores; the rest becomes heat | real photosynthesis stores at most 4.6% (C3) to 6% (C4) of the sunlight, 1 to 2% in crops over a season (Zhu, Long and Ort 2008, from memory): 5% | anchored |
+| `gas_floor` | mole fraction | share of a light reaction's gas in the air at which it stores nothing (`Physics::gas_factor`) | the compensation point without day breathing, Γ* = 42.75 µmol/mol at 25 °C (Bernacchi et al. 2001) | anchored |
+| `gas_ref` | mole fraction | share of that gas in the air at which a light reaction stores `light_yield` | the air of the measurements `light_yield` comes from, about 380 µmol/mol (Zhu, Long and Ort 2008) | anchored |
 | `wet_depth` | m | depth of the key liquid of a cell, standing or in the pores of its ground, at which the ground counts as half wet (`Physics::wetness`: the cover's activity goes by it) | a film or puddle of about 1 cm | anchored |
 | `t_cat` | K | the temperature at which the costs are anchored; upkeep goes from it by the bare rate law of its main burning reaction (`Body::upkeep_pace`), and what a body takes and builds per day by that rate law as the body catalyses it, its rate constant at T over that at `t_cat` (`Body::pace`) | a typical surface temperature, 290 K (`pcore::units::T_SURF`); the tempo of life follows the Boltzmann factor (Gillooly et al. 2001, Science 293: 2248, E about 0.6 eV; checked: Ernest et al. 2003). A cost or a rate of taking measured at another temperature T is the measured value over the eater founder's pace at T: 4.80 at 310 K | anchored |
 | `unfold` | K | width over which the cover's frozen share grows below its frost gene (`cover::FROST`): the share min(1, (frost − T) / `unfold`) dies | tissue freezes within a few K below its point (from memory) | anchored |
@@ -251,12 +253,12 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 107 rows of `Config` and `Physics` are their 107 fields.
+The 109 rows of `Config` and `Physics` are their 109 fields.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
-| anchored | 49, and 11 outside the structs | 49 fields (among them `c_basal`, `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `mix`, `light_yield`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `MAX_KEEP`, and the three decomposers' factors `open` of the chemistry (reactions 1, 21 and 26) |
+| anchored | 51, and 11 outside the structs | 51 fields (among them `c_basal`, `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `mix`, `light_yield`, `gas_floor`, `gas_ref`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `MAX_KEEP`, and the three decomposers' factors `open` of the chemistry (reactions 1, 21 and 26) |
 | tuned (run or reason named) | 6, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`; outside: `WITHIN`), set for an outcome (`rain_time`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
 | tuned, first guess | 38 | 34 free numbers (`wind`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `keep_min`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 3 | `nodes`, `two_parents`, `null` |

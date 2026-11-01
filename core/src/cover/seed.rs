@@ -1,6 +1,7 @@
 //! Seeds (laws.md 4.3): what a slot sends out in its month lands, when every domain has had its month, in the cell it
 //! goes to, domain by domain in the order made. It joins the slot of an alike kind there (the genes the mean by built
-//! cover), or takes an empty slot, or the lightest if it outweighs it (whose cover then dies as remains); else it dies.
+//! cover) unless that slot is full (`Cover::full`), or takes an empty slot, or the lightest if it outweighs it (whose
+//! cover then dies as remains); else it dies.
 
 use super::{built_kg, distance, Cover, Parts, EMPTY_KG, NG, NO_ROOT, NP};
 use crate::store::{apply, Class, Move, Node};
@@ -53,13 +54,15 @@ pub(super) enum Landed {
     Out([f64; NP]),
 }
 
-/// Seeds `s` settle in the `k`th cell of cover `c`, with their heat: into the most alike slot within `alike` steps, an
-/// empty slot, or the lightest slot if they outweigh its built cover, which dies.
+/// Seeds `s` settle in the `k`th cell of cover `c`, with their heat: into the most alike slot within `alike` steps
+/// (they die if it is full: one more kg there would not pay, `Cover::full`), an empty slot, or the lightest slot if
+/// they outweigh its built cover, which dies.
 pub(super) fn settle(c: &mut Cover, mm: &[f64; NP], k: usize, s: &Seed, alike: f32) -> Landed {
     let kg = built_kg(mm, &s.mol);
     let near = Cover::slots(k).filter(|&x| c.root[x] != NO_ROOT).map(|x| (distance(&c.genes[x], &s.genes), x)).filter(|e| e.0 <= alike).min_by(|a, b| a.0.total_cmp(&b.0));
-    let place = |c: &mut Cover, x: usize| (c.mol[x], c.genes[x], c.root[x]) = (s.mol, s.genes, s.root);
+    let place = |c: &mut Cover, x: usize| (c.mol[x], c.genes[x], c.root[x], c.full[x]) = (s.mol, s.genes, s.root, false);
     let x = match near {
+        Some((_, x)) if c.full[x] => return Landed::Dead,
         Some((_, x)) => {
             // The seeds join as a slot of their own would, the genes the mean by built cover.
             (0..NG).for_each(|g| c.genes[x][g] += (kg / (kg + c.built(mm, x)).max(1e-300)) as f32 * (s.genes[g] - c.genes[x][g]));

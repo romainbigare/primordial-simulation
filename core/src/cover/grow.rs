@@ -27,14 +27,17 @@ pub fn step(w: &World, d: &mut Domain) {
 }
 
 /// What a slot is in a month: its built cover, kg; its capture area and what of it absorbs, m²; its light per unit of
-/// absorbing area over the cover's mean (`math::shade`); its activity.
+/// absorbing area over the cover's mean, and at the bottom of its layer (`math::shade`); its activity; what one more
+/// kg of it would store in the month at the bottom of its layer, J (`light`).
 #[derive(Clone, Copy, Default)]
 struct Slot {
     built: f64,
     leaf: f64,
     abs: f64,
     shade: f64,
+    bottom: f64,
     act: f64,
+    gain: f64,
 }
 
 /// What a cell's cover changes outside itself in a month: per substance the mol it takes in (+) or gives out (-), the
@@ -88,16 +91,16 @@ fn cell(w: &World, d: &mut Domain, p: &Parts, k: usize, dt: f64) {
             continue;
         }
         let act = ph.activity(moist / dec(c.genes[x][MOIST]));
-        s[q] = Slot { built, leaf, abs: leaf * (1.0 - c.reflectance(chem, p, x)), shade: 0.0, act };
+        s[q] = Slot { built, leaf, abs: leaf * (1.0 - c.reflectance(chem, p, x)), act, ..Default::default() };
         layers.push(((c.mol[x][WALL] * mm[WALL] / area) as f32, leaf / area, q));
     }
-    crate::math::shade(&mut layers, |q, f| s[q].shade = f);
+    crate::math::shade(&mut layers, |q, f, bottom| (s[q].shade, s[q].bottom) = (f, bottom));
     let (a_abs, lit): (f64, f64) = (s.iter().map(|x| x.abs).sum(), s.iter().map(|x| x.abs * x.shade).sum());
     let caught = dl * a_abs;
     // The light its bodies' node set aside for it (`Cover::keep`), as far as the node holds it.
     let set_aside = (c.keep[k] as f64 * caught).min(moves.heat(w, Node::bodies(i))).max(0.0);
     let mut b = Books { ext: [0.0; MAX_SUBSTANCES], heat: 0.0, dead: [0.0; MAX_SUBSTANCES] };
-    let stored = light(w, (moves, c), p, (k, i, j), &s, caught * reach / lit.max(1e-300), (t, dt), &mut b);
+    let stored = light(w, (moves, c), p, (k, i, j), &mut s, caught * reach / lit.max(1e-300), (t, dt), &mut b);
     c.keep[k] = if caught > 0.0 { (stored / caught) as f32 } else { 0.0 };
     // Its minerals in the ground, shared out slot by slot (the tallest first) as each builds.
     let mut ground: [f64; MAX_SUBSTANCES] = std::array::from_fn(|x| if x < chem.ns() { moves.amount(w, Node::ground(i), x) } else { 0.0 });
@@ -105,9 +108,11 @@ fn cell(w: &World, d: &mut Domain, p: &Parts, k: usize, dt: f64) {
     order.sort_by(|&a, &b| s[b].shade.total_cmp(&s[a].shade));
     for q in order {
         let x = k * SLOTS + q;
-        let lost = upkeep(w, c, p, x, &s[q], (t, dt), &mut b);
+        let (lost, cost) = upkeep(w, c, p, x, &s[q], (t, dt), &mut b);
         counts.cover_lost.iter_mut().zip(lost).for_each(|(a, l)| *a += l);
-        build(w, c, p, x, &s[q], (i, t, dt), &mut ground, &mut b);
+        let pays = s[q].gain * s[q].built > cost;
+        c.full[x] = !pays;
+        build(w, c, p, x, (&s[q], pays), (i, t, dt), &mut ground, &mut b);
         // What rounding left below zero is set to zero and counted (a larger overdraw is this law's fault).
         let (size, all) = (c.mol[x].iter().map(|m| m.abs()).sum::<f64>(), c.mol[x]);
         for m in c.mol[x].iter_mut().filter(|m| **m < 0.0) {
@@ -121,18 +126,25 @@ fn cell(w: &World, d: &mut Domain, p: &Parts, k: usize, dt: f64) {
 
 /// The light reaction of each slot over `dt` at `t` K: what its share of the light caught (`per` of it per unit of
 /// absorbing area times shade) stores at `light_yield`, at most its capacity times its activity and the reaction's
-/// pace, all slots cut together to the key liquid in the ground and the gas the cell's share of its air node holds.
-/// Returns the energy stored, J.
+/// pace, both times what the air's share of the reaction's gas allows (`Physics::gas_factor`, the least over its gas
+/// inputs); all slots cut together to the key liquid in the ground and the gas the cell's share of its air node holds.
+/// Each slot's `Slot::gain` is set: what one more kg would store, its light that of the bottom of its layer. Returns the
+/// energy stored, J.
 #[allow(clippy::too_many_arguments)]
-fn light(w: &World, (moves, c): (&Moves, &mut Cover), p: &Parts, (k, i, j): (usize, usize, usize), s: &[Slot; SLOTS], per: f64, (t, dt): (f64, f64), b: &mut Books) -> f64 {
+fn light(w: &World, (moves, c): (&Moves, &mut Cover), p: &Parts, (k, i, j): (usize, usize, usize), s: &mut [Slot; SLOTS], per: f64, (t, dt): (f64, f64), b: &mut Books) -> f64 {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let rx = &chem.reactions[p.light];
     let (dh, pace) = (chem.dh(p.light), rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat));
+    let seen = moves.seen(w, j);
+    let air: f64 = (0..chem.ns()).map(&seen).sum();
+    let gas = rx.inputs.iter().filter(|q| chem.phase(q.0 as usize, t) == Phase::Gas).map(|q| ph.gas_factor(seen(q.0 as usize) / air.max(1e-300))).fold(1.0, f64::min);
     let mut x = [0.0; SLOTS];
     for (q, v) in Cover::slots(k).enumerate() {
         let need = dec(c.genes[v][MOIST]);
-        let cap = dec(c.genes[v][LIGHT]) * need * s[q].built * pace * s[q].act * dt;
-        x[q] = (per * s[q].abs * s[q].shade * ph.light_yield / dh).min(cap).max(0.0);
+        let cap = dec(c.genes[v][LIGHT]) * need * pace * s[q].act * dt;
+        let lit = |f: f64| per * s[q].abs * f * ph.light_yield / dh;
+        x[q] = lit(s[q].shade).min(cap * s[q].built).max(0.0) * gas;
+        s[q].gain = if s[q].built > 0.0 { (lit(s[q].bottom) / s[q].built).min(cap).max(0.0) * gas * dh } else { 0.0 };
     }
     let all: f64 = x.iter().sum();
     if all <= 0.0 {
@@ -140,7 +152,6 @@ fn light(w: &World, (moves, c): (&Moves, &mut Cover), p: &Parts, (k, i, j): (usi
     }
     // What the cell offers of each input that is not a part: the gas of its share of its air node, the rest from its ground.
     let share = w.mesh.share(i, AIR);
-    let seen = moves.seen(w, j);
     let offer = |kk: usize| if chem.phase(kk, t) == Phase::Gas { seen(kk) * share } else { moves.amount(w, Node::ground(i), kk) };
     let f = rx.inputs.iter().filter(|q| !p.sub.contains(&(q.0 as usize))).map(|&(kk, n)| offer(kk as usize) / (n as f64 * all)).fold(1.0, f64::min);
     for (q, v) in Cover::slots(k).enumerate() {
@@ -150,8 +161,9 @@ fn light(w: &World, (moves, c): (&Moves, &mut Cover), p: &Parts, (k, i, j): (usi
 }
 
 /// Slot `x` pays its upkeep over `dt` at `t` K by burning its fuel, then loses the share unpaid (`SPENT`), the share
-/// its wear gives (`AGE`) and the share frozen (`PHASE`) to its cell's remains. Returns the kg lost by cause.
-fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64, f64), b: &mut Books) -> [f64; 6] {
+/// its wear gives (`AGE`) and the share frozen (`PHASE`) to its cell's remains. Returns the kg lost by cause, and the
+/// upkeep, J.
+fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64, f64), b: &mut Books) -> ([f64; 6], f64) {
     let (chem, ph, g) = (&w.chem, &w.cfg.phys, c.genes[x]);
     let (burn, days) = (&chem.reactions[p.burn], dt / DAY);
     let pace = burn.arrhenius(t.max(1.0)) / burn.arrhenius(ph.t_cat);
@@ -185,16 +197,18 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
             (c.mol[x][q], b.dead[p.sub[q]]) = (c.mol[x][q] - m, b.dead[p.sub[q]] + m);
         }
     }
-    lost
+    (lost, cost)
 }
 
 /// Slot `x` builds what its fuel over its reserve (`STORE`) and the minerals of its ground (`ground`, mol, shared out
 /// as slots build) allow, by the conversions of growth (`Chemistry::build`, `builds`) at its shares (`WALLS`,
 /// `Physics::cover_hard`), paying `c_copy` per kg by burning fuel; a fixer (`FIX`) makes the mineral it lacks, at its
 /// capacity, paid by the fixing reaction's fuel. The share `SEED` of what it builds leaves as seeds for a neighbour
-/// cell drawn (`Seed`), with a generation's mutation.
+/// cell drawn (`Seed`), with a generation's mutation; all of it where one more kg would not pay its upkeep (`pays`
+/// false: its light at the bottom of its layer is under its compensation point), so a cover stops thickening where its
+/// lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005).
 #[allow(clippy::too_many_arguments)]
-fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (i, t, dt): (usize, f64, f64), ground: &mut [f64; MAX_SUBSTANCES], b: &mut Books) {
+fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool), (i, t, dt): (usize, f64, f64), ground: &mut [f64; MAX_SUBSTANCES], b: &mut Books) {
     let (chem, ph, g) = (&w.chem, &w.cfg.phys, c.genes[x]);
     let (Some(bl), mm) = (chem.build.as_ref(), p.mm(chem)) else { return };
     let conv = |q: usize| chem.builds.iter().find(|r| r.outputs[0].0 as usize == p.sub[q]);
@@ -239,7 +253,7 @@ fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (i, t, dt): (u
     // What it builds goes into the slot; the share `SEED` of it leaves as seeds.
     let before = c.mol[x];
     units.iter().for_each(|(rx, u)| b.run(chem, p, &mut c.mol[x], rx, kg * u));
-    let seed = g[SEED].clamp(0.0, 1.0) as f64;
+    let seed = if pays { g[SEED].clamp(0.0, 1.0) as f64 } else { 1.0 };
     if seed > 0.0 {
         let mut mol = [0.0; NP];
         for q in [MATTER, WALL, HARD] {
@@ -277,7 +291,7 @@ pub(super) fn join(c: &mut Cover, mm: &[f64; NP], big: usize, small: usize) {
     let (gs, ms) = (c.genes[small], c.mol[small]);
     (0..NG).for_each(|g| c.genes[big][g] += f * (gs[g] - c.genes[big][g]));
     (0..NP).for_each(|q| c.mol[big][q] += ms[q]);
-    (c.mol[small], c.root[small]) = ([0.0; NP], NO_ROOT);
+    (c.mol[small], c.root[small], c.full[small]) = ([0.0; NP], NO_ROOT, false);
 }
 
 /// Book what the `k`th cell's cover (cell `i`, air node `j`, ground at `t` K) took and gave in its month (`Books`): the
@@ -294,7 +308,7 @@ fn book(w: &World, moves: &mut Moves, c: &mut Cover, p: &Parts, (k, i, j, t): (u
     for x in Cover::slots(k) {
         if c.root[x] != NO_ROOT && c.built(&mm, x) <= EMPTY_KG {
             (0..NP).for_each(|q| dead[p.sub[q]] += c.mol[x][q]);
-            (c.mol[x], c.root[x]) = ([0.0; NP], NO_ROOT);
+            (c.mol[x], c.root[x], c.full[x]) = ([0.0; NP], NO_ROOT, false);
         }
     }
     let cap = moves.heat_cap_ground(w, i);

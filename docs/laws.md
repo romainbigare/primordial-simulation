@@ -456,8 +456,11 @@ task per domain), slot by slot, the tallest (most walls per m²) first:
 - **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
   10^`LIGHT` × 10^`MOIST` mol per kg of built cover per s, times the reaction's pace k e^(−Ea/T) over its value at
   `t_cat`, times its activity a = min(1, wet / 10^`MOIST`)^`dormancy` (wet: how wet its ground is as bodies feel it,
-  d / (d + `wet_depth`), d the depth of its key liquid in its pores and standing, `Physics::wetness`). All kinds of a cell are cut together to the key liquid of its ground and the carbon gas
-  of its share of its air node. A cover that works on drier ground works more slowly: its capacity goes with its
+  d / (d + `wet_depth`), d the depth of its key liquid in its pores and standing, `Physics::wetness`); both the light
+  and the capacity limit go with the air's share x of the reaction's gas as (x − `gas_floor`) / (x + 2 `gas_floor`)
+  over its value at `gas_ref` (`Physics::gas_factor`; the light-limited rate of Farquhar, von Caemmerer and Berry
+  1980): nothing at or below the floor, so the cover cannot strip the air of that gas. All kinds of a cell are cut
+  together to the key liquid of its ground and the carbon gas of its share of its air node. A cover that works on drier ground works more slowly: its capacity goes with its
   moisture need. The light its bodies' node set aside for it (`Cover::keep`, 1.4) pays first; what it stores beyond
   that comes from its ground, which that light warmed.
 - **Upkeep**, paid by burning its fuel (reaction 1) with the air's oxidising gas: per kg of built cover and day
@@ -473,9 +476,12 @@ task per domain), slot by slot, the tallest (most walls per m²) first:
   by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (24), at
   most 10^`FIX` mol per kg per s at the reaction's pace, paid by the reaction's fuel.
 - **Seeds**: the share `SEED` of what it builds leaves for a neighbour cell drawn (or stays where there is none), with
-  one generation's mutation of its genes (noise × each gene's step × `cover_mut`). When every domain has had its month
-  the seeds land (`cover::land`), domain by domain in the order made: they join the most alike kind of the cell (every
-  gene within `alike` steps, `cover::distance`; the genes the mean by built cover), else an empty slot, else the
+  one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
+  not pay: what a kg more would store with the light at the bottom of its layer (`math::shade`) is less than a kg's
+  upkeep, so the slot is **full** (`Cover::full`) and stops thickening where its lowest leaves would not pay for
+  themselves (Monsi and Saeki 1953; Hirose 2005). When every domain has had its month the seeds land (`cover::land`),
+  domain by domain in the order made: they join the most alike kind of the cell (every gene within `alike` steps,
+  `cover::distance`; the genes the mean by built cover; they die if that slot is full), else an empty slot, else the
   lightest slot if they outweigh its built cover (whose cover dies as remains); else they die as remains. Alike kinds
   of a cell share one slot (`merge_alike`). Selection is between kinds and cells: what grows better sends more seeds.
 - **What it takes and gives**: liquids and minerals from and to its ground with their heat; gases from the air (with

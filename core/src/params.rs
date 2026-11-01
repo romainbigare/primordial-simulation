@@ -93,6 +93,10 @@ pub struct Physics {
     pub light_depth: f64,
     /// Share of the light a light-driven reaction takes that it stores; the rest becomes heat
     pub light_yield: f64,
+    /// Mole fraction of a light reaction's gas in the air at which it stores nothing (its compensation point)
+    pub gas_floor: f64,
+    /// Mole fraction of a light reaction's gas in the air at which it stores `light_yield`
+    pub gas_ref: f64,
     /// Depth of liquid, standing or in the ground's pores, at which the ground counts as half wet, m
     pub wet_depth: f64,
     /// Temperature at which upkeep measures catalyst capacity and the costs are anchored, K
@@ -269,6 +273,13 @@ impl Physics {
     pub fn repair(&self, gene: f64) -> f64 {
         1.0 - self.c_repair + self.c_repair * 2f64.powf(gene)
     }
+    /// What a light reaction stores in air that holds the mole fraction `x` of its gas, as a share of what it stores at
+    /// `gas_ref`: the light-limited rate (x - floor) / (x + 2 floor) of Farquhar, von Caemmerer and Berry (1980), none
+    /// at or below the floor.
+    pub fn gas_factor(&self, x: f64) -> f64 {
+        let f = |x: f64| ((x - self.gas_floor) / (x + 2.0 * self.gas_floor)).max(0.0);
+        f(x) / f(self.gas_ref)
+    }
     /// How wet ground with `depth` m of liquid (in its pores and standing) is, 0..1: half at `wet_depth`.
     pub fn wetness(&self, depth: f64) -> f64 {
         depth / (depth + self.wet_depth)
@@ -284,6 +295,8 @@ impl Default for Physics {
         Physics {
             light_depth: 10.0,
             light_yield: 0.05,
+            gas_floor: 4.3e-5,
+            gas_ref: 3.8e-4,
             wet_depth: 0.01,
             t_cat: T_SURF,
             unfold: 3.0,
