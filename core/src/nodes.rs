@@ -20,7 +20,7 @@ pub(crate) fn crowd(w: &World, d: &mut Domain, lay: &Layout, i: usize) {
 }
 
 /// What a node shares with those it joins (`join_alike`): its lineage (a node has one brain), its stage (both mature or
-/// both young: the young join their adult node member by member as they mature, `copy::young`), the structure whose
+/// both young: a young node joins its adult kin at the merge once it matures), the structure whose
 /// room it is in (its root, as the room law counts those inside, `bond::room`) and the structure it holds (its root).
 type Kin = (u32, bool, Option<usize>, Option<usize>);
 

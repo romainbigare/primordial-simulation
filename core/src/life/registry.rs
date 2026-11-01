@@ -13,7 +13,7 @@ use std::collections::BTreeSet;
 /// `PROV_SHIFT`, its place in that domain's list below.
 const PROVISIONAL: u32 = 1 << 31;
 /// The bit of a provisional lineage's id that says it has no brain (`Lineage::none`), so `Life::brainless` reads it
-/// through the world alone (`Body::interval`, `body::upkeep`) while its domain is out.
+/// through the world alone (`body::upkeep`) while its domain is out.
 const NONE: u32 = 1 << 30;
 /// The bits of a provisional id below its domain: room for 65,536 made in one domain between two settlings, and 16,384
 /// domains.
