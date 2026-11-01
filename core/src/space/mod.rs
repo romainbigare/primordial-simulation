@@ -142,21 +142,32 @@ impl Level {
     /// and its one or two links by their place, each with its share (`None`: no drop).
     pub fn steepest(&self, i: usize, drop: impl Fn(usize) -> Option<f64>) -> Option<(f64, [(usize, f64); 2])> {
         let s0 = self.start[i] as usize;
-        let ring: Vec<usize> = self.compass[i].iter().filter(|&&e| e != NONE).map(|&e| e as usize - s0).collect();
-        let to = |k: usize| self.offset(i, self.adj_cell[s0 + k] as usize);
+        // The links in compass order (at most 8), each with its drop and the way to its cell.
+        let (mut ring, mut m) = ([(0, None, [0.0; 2]); 8], 0);
+        for &e in self.compass[i].iter().filter(|&&e| e != NONE) {
+            let k = e as usize - s0;
+            ring[m] = (k, drop(k), self.offset(i, self.adj_cell[e as usize] as usize));
+            m += 1;
+        }
         let cross = |u: [f64; 2], v: [f64; 2]| u[0] * v[1] - u[1] * v[0];
         let dot = |u: [f64; 2], v: [f64; 2]| u[0] * v[0] + u[1] * v[1];
         let (mut top, mut best) = (0.0, None);
-        let mut keep = |slope: f64, way: [(usize, f64); 2]| if slope > top { (top, best) = (slope, Some(way)) };
-        for (&k1, &k2) in ring.iter().zip(ring.iter().cycle().skip(1)) {
-            let (Some(s1), u, v) = (drop(k1), to(k1), to(k2)) else { continue };
-            keep(s1 / u[0].hypot(u[1]), [(k1, 1.0), (k1, 0.0)]);
-            // The way down `g` with g·u = s1 and g·v = s2, inside the triangle where it lies between u and v.
-            let (Some(s2), det) = (drop(k2), cross(u, v)) else { continue };
+        for (&(k1, d1, u), &(k2, d2, v)) in ring[..m].iter().zip(ring[..m].iter().cycle().skip(1)) {
+            let Some(s1) = d1 else { continue };
+            let slope = s1 / u[0].hypot(u[1]);
+            if slope > top {
+                (top, best) = (slope, Some([(k1, 1.0), (k1, 0.0)]));
+            }
+            // The way down `g` with g·u = s1 and g·v = s2, inside the triangle where it lies between u and v; its
+            // share between them only where it is the steepest so far.
+            let (Some(s2), det) = (d2, cross(u, v)) else { continue };
             let g = [(s1 * v[1] - s2 * u[1]) / det, (u[0] * s2 - v[0] * s1) / det];
             if det > 0.0 && cross(g, v) >= 0.0 && cross(u, g) >= 0.0 {
-                let (a, b) = (cross(u, g).atan2(dot(u, g)), cross(g, v).atan2(dot(g, v)));
-                keep(g[0].hypot(g[1]), [(k1, b / (a + b)), (k2, a / (a + b))]);
+                let slope = g[0].hypot(g[1]);
+                if slope > top {
+                    let (a, b) = (cross(u, g).atan2(dot(u, g)), cross(g, v).atan2(dot(g, v)));
+                    (top, best) = (slope, Some([(k1, b / (a + b)), (k2, a / (a + b))]));
+                }
             }
         }
         best.map(|b| (top, b))

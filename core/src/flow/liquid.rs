@@ -38,11 +38,23 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
     let mut ks: Vec<usize> = fluxes.iter().flat_map(|x| x.ks.iter()).map(|&k| k as usize).collect();
     ks.sort_unstable();
     ks.dedup();
-    let before: Vec<f64> = ks.iter().flat_map(|&k| w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().copied()).collect();
+    // The ground nodes at the ends of the links, in order: no other one changes.
+    let mut cells: Vec<u32> = Vec::new();
+    for x in fluxes {
+        let ends = [(x.class[0], x.a), (x.class[1], x.b)];
+        ends.iter().filter(|e| e.0 == Class::Ground).for_each(|e| cells.extend_from_slice(e.1));
+    }
+    cells.sort_unstable();
+    cells.dedup();
+    let amount = |w: &World, k: usize, i: u32| w.store.amounts(Class::Ground)[k * n + i as usize];
+    let before: Vec<f64> = ks.iter().flat_map(|&k| cells.iter().map(move |&i| (k, i))).map(|(k, i)| amount(w, k, i)).collect();
     apply(w, s, fluxes, &[]);
     for (q, &k) in ks.iter().enumerate() {
-        for (i, (&now, &was)) in w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().zip(&before[q * n..(q + 1) * n]).enumerate().filter(|p| p.1 .0 != p.1 .1) {
-            s.note(k, i, now - was, w.mesh.cells().area()[i]);
+        for (&i, &was) in cells.iter().zip(&before[q * cells.len()..(q + 1) * cells.len()]) {
+            let now = amount(w, k, i);
+            if now != was {
+                s.note(k, i as usize, now - was, w.mesh.cells().area()[i as usize]);
+            }
         }
     }
 }

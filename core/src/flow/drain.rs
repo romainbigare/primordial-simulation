@@ -191,7 +191,11 @@ fn stores(w: &World, s: &Scratch, tmin: f64) -> Vec<f64> {
     let n = w.mesh.cells().n();
     let mut vol = vec![0.0; n];
     for k in (0..w.chem.ns()).filter(|&k| s.sp[k].boil > tmin) {
-        vol.iter_mut().zip(&w.store.amounts(Class::Deep)[k * n..(k + 1) * n]).for_each(|(v, &m)| *v += m * s.sp[k].v[1]);
+        // (A substance no store holds adds nothing.)
+        let held = &w.store.amounts(Class::Deep)[k * n..(k + 1) * n];
+        if held.iter().any(|&m| m != 0.0) {
+            vol.iter_mut().zip(held).for_each(|(v, &m)| *v += m * s.sp[k].v[1]);
+        }
     }
     vol
 }
