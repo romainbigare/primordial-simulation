@@ -114,11 +114,10 @@ fn range(v: &[f64]) -> (f64, f64) {
     v.iter().fold((f64::MAX, f64::MIN), |(a, b), &x| (a.min(x), b.max(x)))
 }
 
-/// Does liquid run off cell `i`, a land cell (its solid surface above 0 m) with liquid moving out of it
-/// (`World::liquid_flux` above 0)? Erosion, creep and heat conducted sideways act only on such cells; on
-/// ground below 0 m and on ground no liquid leaves they are far slower than the step.
-fn runs_off(w: &World, s: &Scratch, i: usize) -> bool {
-    s.z[i] > 0.0 && w.liquid_flux[i] > 0.0
+/// Is cell `i` land (its solid surface above 0 m, as Flow's state has it)? Creep and heat conducted sideways act only on
+/// land: below 0 m they are far slower than the step.
+fn on_land(s: &Scratch, i: usize) -> bool {
+    s.z[i] > 0.0
 }
 
 /// Share of carrying and creep the bodies on cell `i` leave there (1 when bare).

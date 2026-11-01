@@ -42,13 +42,14 @@ pub fn step_with_air(w: &mut World, air_days: u32) {
     run_for(w, w.cfg.calendar().month, air_days, &mut |_, _| {});
 }
 
-/// Advance the world by one day: at a month's start the month's passes, which stand for the whole month, then the day.
-pub fn day(w: &mut World) {
-    day_marked(w, &mut |_, _| {});
+/// Advance the world by one day; on a month's first day the whole month's passes run first, as they stand for the whole
+/// month (the other days of a month run nothing).
+pub fn day_with_month_at_start(w: &mut World) {
+    day_with_month_at_start_marked(w, &mut |_, _| {});
 }
 
-/// `day`, calling `mark(world, stage)` after each pass.
-pub fn day_marked(w: &mut World, mark: &mut dyn FnMut(&mut World, Stage)) {
+/// `day_with_month_at_start`, calling `mark(world, stage)` after each pass.
+pub fn day_with_month_at_start_marked(w: &mut World, mark: &mut dyn FnMut(&mut World, Stage)) {
     run_for(w, w.cfg.calendar().day, AIR_STEP_DAYS, mark);
 }
 

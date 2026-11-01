@@ -54,15 +54,18 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     let mut paid = mean.moved.paid.clone();
     (0..n).for_each(|i| paid[parent[i] as usize] += at(i, LIFT));
     mean.fall.iter().zip(&mut paid).for_each(|(f, p)| *p -= f);
-    // The rain, at the air touching each cell, with the fusion enthalpy each mol of its node's rain keeps.
+    // The rain, at the air touching each cell, with the fusion enthalpy each mol of its node's rain keeps; its fall from
+    // its node's mean ground (where the day's fall ends) to the cell's head heats the cell (a lift where the head is
+    // higher), so each mol falls as far as it was lifted from.
     let mut rained = Batch::new([Class::Ground, Class::Air], &ks);
-    let mut fell = vec![0.0; nx * n];
+    let (mut fell, mut below) = (vec![0.0; nx * n], vec![0.0; n]);
     for (y, list) in rain.iter().enumerate() {
         for &(i, j, m) in list {
-            let at = y * na + j as usize;
-            let per = s.sp[ks[y] as usize].cp * touching(sr, &mean.t, i as usize) + mean.rain_fusion[at] / mean.rain[at];
+            let (at, sp) = (y * na + j as usize, s.sp[ks[y] as usize]);
+            let per = sp.cp * touching(sr, &mean.t, i as usize) + mean.rain_fusion[at] / mean.rain[at];
             rained.add((i as usize, j as usize), ks[y], (-m, -m * per));
             fell[y * n + i as usize] += m;
+            below[i as usize] += m * sp.mm * w.cfg.gravity * (s.za[j as usize] - s.head[i as usize]);
         }
     }
     let (sun, space) = (Boundary::Sun as usize, Boundary::Space as usize);
@@ -83,6 +86,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     let wind = LinkFlux { class: [Class::Air, Class::Air], a: &m.a, b: &m.b, ks: &gases, mol: &m.mol, heat: &m.heat };
     apply(w, &[up, rained.flux(), wind, lit.flux(), kept.flux(), cooled.flux(), sky.flux()], &[]);
     fall_heat(w, Class::Air, &paid.iter().map(|q| -q).collect::<Vec<f64>>());
+    fall_heat(w, Class::Ground, &below);
     for (y, ac) in act.iter().enumerate() {
         let net = |i: usize| mol[y * n + i] - fell[y * n + i];
         (0..n).any(|i| net(i) < 0.0).then(|| s.add_loose(ac.k, false));

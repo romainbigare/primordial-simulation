@@ -91,7 +91,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
         let near: Vec<usize> = w.mesh.cells().around(from).1.iter().map(|&j| j as usize).collect();
         let richer: Vec<usize> = near.iter().copied().filter(|&j| seen(&w, j) > seen(&w, from) + 0.02).collect();
         strip.iter().for_each(|&(i, a)| set_amount(&mut w, Node::ground(i), RICH, a));
-        pcore::day(&mut w);
+        pcore::day_with_month_at_start(&mut w);
         // A body that has children: they die at once, their matter back to the ground where they were born, so the scene
         // stays one body.
         for s in w.life.living().map(|x| x.0).collect::<Vec<_>>() {
@@ -258,7 +258,7 @@ fn a_body_gives_its_stores_but_not_its_body() {
     w.add(taker);
     // Days until the first batch after the placing has run.
     for _ in 0..=w.cfg.days_per_month {
-        pcore::day(&mut w);
+        pcore::day_with_month_at_start(&mut w);
         for b in w.life.alive() {
             assert!(b.mass(&w.chem) >= 1e-3 * b.n(), "an empty body is alive: energy {}, stores {:?}", b.e, b.store);
         }

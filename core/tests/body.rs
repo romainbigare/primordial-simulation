@@ -154,7 +154,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
         let mut took = 0.0;
         for _ in 0..TAKE_DAYS {
             w.events.clear();
-            pcore::day(&mut w);
+            pcore::day_with_month_at_start(&mut w);
             took += took_from_ground(&w);
         }
         let b = &w.life[s];

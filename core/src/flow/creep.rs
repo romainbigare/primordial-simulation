@@ -1,10 +1,10 @@
 //! The yearly part of Flow: creep of loose solids, and the regrowth of bodies into cleared ground.
 
-use super::{bare_share, land::{lift, melted, molten, rise}, range, runs_off, Scratch};
+use super::{bare_share, land::{lift, melted, molten, rise}, on_land, range, Scratch};
 use crate::{store::{apply, fall_heat, Batch, Class}, World};
 
 /// Yearly: loose solids creep to lower neighbours, link by link, each from what the links before it left, booked in one
-/// call, out of the cells liquid runs off (`runs_off`); then bodies spread back into cleared links (`lanes::regrow`). Over each link they creep from the higher node
+/// call, out of land cells (`on_land`) down their slopes; then bodies spread back into cleared links (`lanes::regrow`). Over each link they creep from the higher node
 /// `a` to `b` with their heat, and the fall heats `b`; they cross a border as wide as the side of the smaller of the two
 /// cells (a quarter's beside a refined square), across a corner too.
 pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
@@ -14,7 +14,7 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     // Each solid in each node, mol (`[q * n + i]`), and the volume able to creep by softness, m³, as the links so far
     // leave them; what moves over each link with its heat, and the fall that heats the lower node.
     let mut amt: Vec<f64> = sol.iter().flat_map(|&k| w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().copied()).collect();
-    let (from, mut mob): (Vec<bool>, _) = ((0..n).map(|i| runs_off(w, s, i)).collect(), vec![0.0; n]);
+    let (from, mut mob): (Vec<bool>, _) = ((0..n).map(|i| on_land(s, i)).collect(), vec![0.0; n]);
     for (q, &k) in sol.iter().enumerate() {
         mob.iter_mut().enumerate().filter(|p| from[p.0]).for_each(|(i, m)| *m += amt[q * n + i] * (1.0 - molten(s, k, i)) * s.sp[k].v[0] * soft[q]);
     }

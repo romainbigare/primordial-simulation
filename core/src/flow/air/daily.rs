@@ -3,7 +3,7 @@
 //! between blocks. Explicit, on plain arrays of the level.
 
 use super::super::Scratch;
-use super::rain::{Pool, Wet};
+use super::rain::{rain_air, Pool, Wet};
 use super::wind::{even, pushes, wind, Links};
 use super::{air_temp, at_height, radiation::{glow, glow_slope}, step::Active};
 use crate::{math::mean_passed, store::Class, units::{DAY, R_GAS}, World, AIR};
@@ -189,10 +189,12 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
             let (at, sp, i, m) = (ac.gi * na + j, s.sp[ac.k], y * na + j, rain[y * na + j]);
             x[at] += day[1 + y] * share - m;
             if m > 0.0 {
-                // The rain leaves the air frozen or liquid at the temperature of the air at the node's mean ground, the
-                // air paying what warms it on the way down, and its fall heats the air.
+                // The rain leaves the air frozen or liquid as the air at the node's mean ground is, at the temperature of
+                // the air touching the cells it falls on (`rain_air`, as the book lands it), the air paying what warms
+                // it on the way down, and its fall to the node's mean ground heats the air.
                 let (liquid, fall) = (if ts[j] < sp.melt { 0.0 } else { sp.lf }, m * sp.mm * g * (s.zair[j] - s.za[j]));
-                e[j] += m * (sp.lv + sp.lf - liquid - sp.cp * ts[j]) + fall;
+                let tr = rain_air(s, ground.wet(), (y, j, ratio[i]), &t).unwrap_or(ts[j]);
+                e[j] += m * (sp.lv + sp.lf - liquid - sp.cp * tr) + fall;
                 (out.rain[i], out.rain_fusion[i], out.ratio[i]) = (out.rain[i] + m, out.rain_fusion[i] + m * liquid, out.ratio[i] + ratio[i]);
                 out.fall[j] += fall;
             }
