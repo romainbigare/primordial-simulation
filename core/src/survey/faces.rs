@@ -1,7 +1,6 @@
 //! What the bodies of a domain show one another in a batch (laws.md 0): their faces, made for every domain at the
 //! batch's start.
 
-use super::capture;
 use crate::{brain::SIG, life::Domain, World};
 
 /// What a body shows others in a batch, as it was at the batch's start (laws.md 0): what they perceive of it.
@@ -15,8 +14,8 @@ pub struct Face {
     pub wb: f32,
     /// The root of the structure it is inside and how closed its walls are (`bond::room`)
     pub room: Option<(u32, f32)>,
-    /// The chance that the cover of the others over it leaves it seen, exp(-a) with a their capture area per m²
-    /// (`UNCOVERED` under no cover)
+    /// The chance that the cover of its cell leaves it seen, exp(-a) with a its capture area per m² (`UNCOVERED` under
+    /// no cover)
     pub show: f64,
 }
 
@@ -35,19 +34,17 @@ impl Faces {
     pub fn of(&self, k: usize) -> &[Face] {
         self.at.get(k + 1).map_or(&[], |&e| &self.all[self.at[k] as usize..e as usize])
     }
-    /// The faces of the living bodies of `d` as they are now, cell by cell, under the canopy of the survey's last
-    /// (`World::canopy`), in the room these faces held.
+    /// The faces of the living bodies of `d` as they are now, cell by cell, under the cover's canopy of the survey's
+    /// last (`World::canopy`), in the room these faces held.
     fn make(&mut self, w: &World, d: &Domain) {
         self.all.clear();
         self.at.clear();
         self.at.push(0);
-        let area = w.mesh.cells().area();
         for (k, &i) in d.cells.iter().enumerate() {
-            let (canopy, a) = (w.canopy[i as usize] as f64, area[i as usize]);
+            let cover = w.canopy[i as usize] as f64;
+            let show = if cover <= 0.0 { UNCOVERED } else { (-cover).exp() };
             for b in d.at[k].iter().map(|&h| &d[h]).filter(|b| b.alive) {
                 let room = crate::bond::room(w, b).map(|(r, e)| (r as u32, e.closed));
-                let cover = (canopy - capture(b.vis[1], b.n()) / a).max(0.0);
-                let show = if cover <= 0.0 { UNCOVERED } else { (-cover).exp() };
                 self.all.push(Face { id: b.id, n: b.n(), vis: b.vis, sig: b.sig, wb: b.wb, room, show });
             }
             self.at.push(self.all.len() as u32);

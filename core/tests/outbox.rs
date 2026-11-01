@@ -2,7 +2,7 @@
 //! the books, a holder killed in the parallel phase lets go of its part in the serial phase, and the order in which the
 //! domains run and the threads that run them change nothing.
 
-use pcore::body::{die, Body, BROKEN, CHILD, COPY_MASS, DISPERSE, HIDDEN, LACK, LIQ};
+use pcore::body::{die, Body, BROKEN, CHILD, COPY_MASS, DISPERSE, HIDDEN, LACK};
 use pcore::event::EventKind;
 use pcore::life::Handle;
 use pcore::outbox::{deliver, Entry};
@@ -148,7 +148,7 @@ fn a_holder_killed_in_the_parallel_phase_lets_go_in_the_serial_phase() {
     let mut t = founder(&mut w, 1, i, &Brain::verb(brain::TAKE_FROM));
     let m = t.mass(&w.chem);
     scale(&mut w, &mut t, EATER_KG / m);
-    (t.genes[DISPERSE], t.genes[COPY_MASS], t.genes[LIQ]) = (0.0, 1.0, -4.0);
+    (t.genes[DISPERSE], t.genes[COPY_MASS]) = (0.0, 1.0);
     w.add(t, 1);
     w.cfg.phys.sweep *= 1e9;
     for _ in 0..10 {
@@ -204,7 +204,8 @@ fn the_order_of_the_domains_changes_nothing() {
     let mut anchorer = eater(&mut w, at(4), brain::ANCHOR, 1.0);
     anchorer.hold = Some(bond::id(&w, r));
     let anchorer = w.add(anchorer, 1);
-    w.parts.parts[r].held = w.life[anchorer].id;
+    let anchorer = w.life[anchorer].id;
+    w.parts.parts[r].held = anchorer;
     // A holder in a cell of its own with a part, and two alike nodes of one lineage whose born rows differ.
     let busy: Vec<usize> = (0..5).map(at).collect();
     let free: Vec<usize> = land.iter().copied().filter(|c| !busy.contains(c) && c % 3 != 0).collect();
@@ -313,7 +314,9 @@ fn the_order_of_the_domains_changes_nothing() {
     let ran = v.life.find(holder).is_none_or(|h| v.life[h].last > last);
     let made = v.life.brains.len() - lineages;
     assert!(landed > 0 && watched > 0 && held > 0 && ran && made > 1, "litters landed {landed}, watches {watched}, holds {held}, holder ran {ran}, lineages {made}");
+    // (Once let go of, another body may take hold of it.)
     let anchored = v.parts.bonds.of(r).any(|b| b.0 == bond::GROUND);
-    assert!(anchored && v.parts.parts[r].held == bond::NOBODY, "the part was not anchored and let go of (anchored {anchored})");
+    let let_go = v.life.find(anchorer).is_none_or(|h| v.life[h].hold.is_none());
+    assert!(anchored && let_go, "the part was not anchored and let go of (anchored {anchored}, let go {let_go})");
     books.assert_kept(v, 1e-12);
 }

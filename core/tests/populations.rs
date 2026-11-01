@@ -1,7 +1,7 @@
 //! Law 4 (Copy) in populations: two parents mix, and population nodes spread, split, merge and open.
 
 use pcore::life::Handle;
-use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, GAS, LEAF, LIQ, MUT, STRENGTH};
+use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, HEAT, MUT, STRENGTH};
 use pcore::event::EventKind;
 use pcore::rng::{Purpose, Rng};
 use pcore::units::DAY_S;
@@ -16,7 +16,7 @@ const STEP: f32 = 0.3;
 /// little (so the noise on a gene is far less than the steps tested), with children 10^-3 of its copy mass.
 fn mixer(w: &mut World, i: usize, copy: f32) -> Body {
     let mut b = founder(w, 1, i, &Brain::only(brain::REST));
-    (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS], b.genes[LIQ]) = (0.0, 0.0, copy, -4.0);
+    (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS]) = (0.0, 0.0, copy);
     (b.genes[MUT], b.genes[CHILD]) = (-3.0, -3.0);
     b
 }
@@ -363,9 +363,8 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     // measured).
     let (lay, genes0) = (Layout::of(&w.chem), w.life[s].genes.clone());
     let cat = lay.cat + 1;
-    let wide = [(COPY_MASS, 0.04f64), (GAS, 0.09), (cat, 0.09)];
+    let wide = [(COPY_MASS, 0.04f64), (HEAT, 0.09), (cat, 0.09)];
     w.life[s].spread = (0..lay.len).map(|g| wide.iter().find(|x| x.0 == g).map_or(0.0, |x| x.1 as f32)).collect();
-    w.life[s].spread[LEAF] = 0.09;
     // And one of 0.1 in the born rows.
     w.life[s].row_spread = 0.01;
     let rows0 = w.life.born(&w.life[s]).to_vec();

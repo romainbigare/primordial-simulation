@@ -1,7 +1,7 @@
 //! What the tests of the laws share (the `testkit` feature, for dev-dependencies only): a small world, founders of a
 //! chosen brain, edits booked from outside, the books, and the substances of chemistry 0 by number.
 
-use pcore::body::{Body, Layout, BRAIN_SIZES, CHILD, COPY_MASS, DISPERSE, LIQ, STRENGTH, WET_TISSUE};
+use pcore::body::{Body, Layout, BRAIN_SIZES, CHILD, COPY_MASS, DISPERSE, STRENGTH, WET_TISSUE};
 use pcore::bond;
 use pcore::brain::{self, FIXED, OVERBS, VERBS};
 use pcore::check::{self, Totals};
@@ -165,15 +165,15 @@ pub fn eater_of(w: &mut World, i: usize, brain: &Brain, copy: f32) -> Body {
     let mut b = founder(w, 1, i, brain);
     let m = b.mass(&w.chem);
     scale(w, &mut b, EATER_KG / m);
-    (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS], b.genes[LIQ]) = (0.0, 0.0, copy, -4.0);
+    (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS]) = (0.0, 0.0, copy);
     b.prepare(&w.chem, &w.cfg);
     b
 }
 
-/// Eater nodes of `members` members each (starting kind 1, of a brain that rests), one on each dry land cell, placed:
-/// the nodes the tests of population nodes run on. Returns where they are stored.
+/// Eater nodes of `members` members each (starting kind 1, with no brain: they decide nothing), one on each dry land
+/// cell, placed: the nodes the tests of population nodes run on. Returns where they are stored.
 pub fn eater_nodes(w: &mut World, members: f64) -> Vec<Handle> {
-    let line = Line::new(w, &Brain::only(brain::REST), 1);
+    let line = Line::new(w, &Brain { hidden: 0, ..Brain::only(brain::REST) }, 1);
     dry_lands(w).into_iter().map(|i| {
         let b = line.founder(w, 1, i);
         let b = node_of(w, b, members);
@@ -336,22 +336,15 @@ pub fn flow_step(w: &mut World, dt: f64) {
     pcore::flow::state(w, false);
 }
 
-/// Body `b` grows for `days` days at the plateau state it stands at (`copy::grow`). Returns whether it built anything.
+/// Body `b` grows for `days` days at its temperature (`copy::grow`). Returns whether it built anything.
 pub fn grow(w: &World, d: &mut Domain, b: &mut Body, days: f64) -> bool {
-    let (th, cover) = (b.thermal(&w.chem), pcore::body::cover_of(w, d, b));
-    pcore::copy::grow(w, d, b, days, th, cover)
+    let t = b.temp(&w.chem);
+    pcore::copy::grow(w, d, b, days, t)
 }
 
-/// Energy body `b`'s reactions can release over `days` at its temperature now, J (the most `body::pay` could pay).
-pub fn release(w: &World, b: &Body, days: f64) -> f64 {
-    let d = w.life.domain(b.cell as usize);
-    let (cover, dry) = (pcore::body::cover_of(w, d, b), b.activity(&w.chem, &w.cfg.phys));
-    pcore::body::plan(w, d, b, f64::MAX, &pcore::body::Payer::at(w, d, b, days, b.mass(&w.chem), b.thermal(&w.chem), (cover, dry))).1
-}
-
-/// The surface body `b` of `mass` kg exchanges gas with the air through, m²: its light-capture area and its skin.
-pub fn open_area(b: &Body, chem: &Chemistry, p: &pcore::Physics, mass: f64) -> f64 {
-    b.leaf_area(chem, p) + b.skin_area(p, mass)
+/// Energy body `b`'s fuel can release at its temperature now, J (the most `body::pay` could pay).
+pub fn release(w: &World, b: &Body) -> f64 {
+    b.fuel(&w.chem, b.temp(&w.chem))
 }
 
 /// Heat conducted sideways through the ground and creep for `dt` seconds, from the state of the world now: the yearly

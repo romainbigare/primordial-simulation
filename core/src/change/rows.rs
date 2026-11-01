@@ -134,7 +134,7 @@ impl Step<'_> {
         } else {
             // An air node holds its gas itself: no liquid's film stands between them, and it is no moist ground
             // (the reactor's `film` and `moist` stay 0: it reacts only air nodes).
-            rc.react(&w.chem, &mut h.amt, None, &mut { w.store.heat(Class::Air)[i] }, 0.0, None, 0.0, span);
+            rc.react(&w.chem, &mut h.amt, None, &mut { w.store.heat(Class::Air)[i] }, 0.0, span);
             rc.made(&w.chem, &mut row[..ns]);
         }
         debug_assert!(
@@ -160,7 +160,7 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: 
     let cap = |amt: &[f64]| nodes.skin[i] + (0..chem.ns()).map(|k| amt[k] * chem.subs[k].cp).sum::<f64>();
     let fused = nodes.fused(i, w.store.heat(Class::Ground)[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);
     let mut e = w.store.heat(Class::Ground)[i] - fused;
-    rc.react(chem, &mut h.amt, Some(&mut h.pool), &mut e, nodes.skin[i], None, 0.0, time);
+    rc.react(chem, &mut h.amt, Some(&mut h.pool), &mut e, nodes.skin[i], time);
     let (made, out) = row.split_at_mut(ns);
     rc.made(chem, made);
     // What they gave to the gas around the node, or took from it, mol: what they made less what the node itself gained

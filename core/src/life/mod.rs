@@ -208,10 +208,10 @@ impl Life {
             c.iter().enumerate().for_each(|(k, &i)| self.cell_in[i as usize] = (d as u32, k as u32));
         }
         let domain = |(d, cells): (usize, Vec<u32>)| {
-            let (at, stale, ring) = (vec![Vec::new(); cells.len()], vec![true; cells.len()], vec![Vec::new(); RING as usize]);
+            let (at, ring) = (vec![Vec::new(); cells.len()], vec![Vec::new(); RING as usize]);
             let (pushed, crossings) = (vec![0.0; cells.len()], vec![0.0; cells.len()]);
             let cover = crate::cover::Cover::new(cells.len());
-            Domain { index: d as u32, at, stale, ring, pushed, crossings, cover, cells, ..Default::default() }
+            Domain { index: d as u32, at, ring, pushed, crossings, cover, cells, ..Default::default() }
         };
         self.sums = cells.iter().map(|c| Sums { rows: vec![[0.0; crate::survey::ROW]; c.len()], live: true }).collect();
         self.domains = cells.into_iter().enumerate().map(domain).collect();

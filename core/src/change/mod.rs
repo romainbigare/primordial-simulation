@@ -12,7 +12,7 @@ mod rows;
 pub use balance::reversible;
 pub(crate) use gas::{send_gas, GasMove};
 pub use kernel::Reactor;
-pub(crate) use kernel::{denature, frac, pace, scarce, terms};
+pub(crate) use kernel::{open_catalyst, terms};
 
 use crate::{store::Class, AIR, World};
 use rows::Rows;

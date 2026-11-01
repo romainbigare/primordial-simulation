@@ -6,7 +6,7 @@ use pcore::rng::{Purpose, Rng};
 use pcore::store::Class;
 use pcore::units::DAY_S;
 use pcore::{bond, brain, choose, World};
-use worldgen::testkit::{node_of, eater, died, hold_ground, kg, moved, place, scale, start, Books, LIQUID, MATTER, RICH};
+use worldgen::testkit::{node_of, eater, died, kg, moved, place, scale, start, Books, LIQUID, MATTER, RICH};
 
 /// A world with a dry land cell where a bite costs no handling, and the area a taker works does not bind (a node's
 /// members are reached as an individual is).
@@ -190,45 +190,5 @@ fn trampling_breaks_body_matter() {
     assert!(w.life[big].n() == nb0 && sb > 0.0, "a node of heavy members lost members: {} of {nb0}", w.life[big].n());
     assert!(w.life[small].n() == ns0 && ss > 0.0, "a node of light members lost members: {} of {ns0}", w.life[small].n());
     assert!(w.store.amounts(Class::Ground)[MATTER * w.mesh.cells().n() + i] > g0 && w.store.heat(Class::Ground)[i] > e0, "nothing went to the ground");
-    books.assert_kept(&w, 1e-9);
-}
-
-/// Heat burns body matter: a warm body that lives on (its liquid does not boil) burns matter by the reaction that burns
-/// it, so it is smaller in body, not only in fuel, with no new rule (the reactions of `body::live` act on the matter in
-/// its stores, and the body is its matter over 1 - h). Elements and energy are kept. (25 days of 350 K from day 31: the
-/// body, a 10-day gene, updates on the first days of the batches at days 40 and 50, the last for 10 days of 350 K; the
-/// solid burns first and takes the burning gas the body has at hand, and the matter, which needs its sixth power,
-/// follows; what is tested is that heat makes a body smaller in body as well as in fuel, not how soon.)
-#[test]
-fn a_body_burnt_by_heat_and_alive_is_smaller_in_body() {
-    let (mut w, i) = bite_start();
-    w.cfg.phys.c_build = 0.0;
-    // Upkeep goes with the body's temperature, about 100 times as much at 350 K as at 290 K: a body that paid it would
-    // die of `SPENT` on the first days. This test is about what the heat does to the matter, so the costs of keeping
-    // tissue are put to nothing.
-    for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_cat, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn, &mut w.cfg.phys.c_signal, &mut w.cfg.phys.c_leaf, &mut w.cfg.phys.c_brain] {
-        *c = 0.0;
-    }
-    let mut b = resting(&mut w, i, 6.0, 0.0);
-    // (Nor does it evaporate to cool: above its `COOL_T` of 320 K it would dry and die of it. Its copy mass a tenth of its
-    // body: what burns is not starving.)
-    (b.genes[pcore::body::COOL_T], b.genes[pcore::body::COPY_MASS]) = (400.0, (0.1 * b.built(&w.chem)).log10() as f32);
-    let s = place(&mut w, b);
-    let books = Books::now(&w);
-    let before = seen(&w, s);
-    for d in 0..25 {
-        // The cell held at 350 K, booked as an edit.
-        hold_ground(&mut w, i, 350.0);
-        pcore::day(&mut w);
-        if !w.life[s].alive {
-            let cause = w.events.iter().find_map(|e| if let pcore::event::EventKind::Died { cause, .. } = e.kind { Some(cause) } else { None });
-            panic!("it died on day {d}, cause {cause:?} (0 lack, 1 phase, 2 spent)");
-        }
-    }
-    let alive = w.life[s].alive;
-    let after = seen(&w, s);
-    println!("alive {alive}: body {:.2} -> {:.2} kg, matter {:.3} -> {:.3}, solid {:.2} -> {:.2}", before.built, after.built, before.matter, after.matter, before.solid, after.solid);
-    assert!(alive, "it died");
-    assert!(after.matter < 0.9 * before.matter && after.built < 0.9 * before.built, "its body did not shrink with its fuel");
     books.assert_kept(&w, 1e-9);
 }

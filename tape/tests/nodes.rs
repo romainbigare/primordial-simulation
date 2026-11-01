@@ -18,7 +18,7 @@
 mod common;
 
 use common::run;
-use pcore::body::{steps, Layout, ALLOC, CHILD, COPY_MASS, GAS, HEAT, HIDDEN, INTERVAL, KEEP_T, LEAF, REPAIR, WET};
+use pcore::body::{steps, Layout, ALLOC, CHILD, COPY_MASS, HEAT, HIDDEN, INTERVAL, KEEP_T, REPAIR, WET};
 use pcore::{Config, World};
 use std::collections::BTreeMap;
 use tape::Recorder;
@@ -37,7 +37,7 @@ const FACTOR: f64 = 2.0;
 /// `copy_units`).
 const MOVE: f64 = 0.3;
 /// The main genes (`docs/tape.md`, `root_<k>_*`) and their place in the genome.
-const GENES: [(&str, usize); 11] = [("gas", GAS), ("leaf", LEAF), ("copy_log", COPY_MASS), ("interval", INTERVAL), ("hidden", HIDDEN), ("heat", HEAT), ("keep_t", KEEP_T), ("repair", REPAIR), ("wet_gene", WET), ("alloc", ALLOC), ("child", CHILD)];
+const GENES: [(&str, usize); 9] = [("copy_log", COPY_MASS), ("interval", INTERVAL), ("hidden", HIDDEN), ("heat", HEAT), ("keep_t", KEEP_T), ("repair", REPAIR), ("wet_gene", WET), ("alloc", ALLOC), ("child", CHILD)];
 /// The rules the check holds, per plan (default, roster) and rule (a, b, c, d); it prints the others.
 const HELD: [[bool; 4]; 2] = [[false, true, false, false], [false, true, true, false]];
 /// What eaters took of what they use (`Body::uses`), by source.

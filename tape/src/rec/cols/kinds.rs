@@ -13,9 +13,7 @@ use pcore::World;
 use std::collections::BTreeSet;
 
 /// The genes averaged per kind: gene, column name and unit.
-const GENES: [(usize, &str, &str); 8] = [
-    (body::GAS, "gas", "log10"),
-    (body::LEAF, "leaf", "log10"),
+const GENES: [(usize, &str, &str); 6] = [
     (body::COPY_MASS, "copy_log", "log10"),
     (body::INTERVAL, "interval", "log10"),
     (body::HIDDEN, "hidden", "1"),

@@ -204,14 +204,12 @@ nothing, and their exchange made again; then what the wind takes of that gas fro
   radiation at depth `cloud_ir` × x (Stephens 1978). A globe of Earth's size without life holds about Earth's
   climate. **Known limit:** their depth is spread like the air's mass, not set where they condense. The ground also
   trades sensible heat with the air (`sensible`).
-- **The bodies' node** (`Class::Bodies`, one per cell): light the cover and bodies absorb warms the ground, except
-  the share their light reactions store, booked from the sun into this node. Each body's draw of ground heat between
-  its updates is part of its cell's implicit balance (`survey::Draw`): its last draw, falling to nothing as the ground
-  nears where its evaporation stops (the dew point, or `COOL_T`), so a cooling ground gives less and bodies cannot
-  pull it below that. A body takes at its update no more than it is owed; what none claims goes back (`survey::Draws::settle`).
-- **Gas from bodies** goes into the bodies' node with its latent heat; the air's step takes it up with its lift.
-- **Shade** (`survey.rs`): light passes a cell's bodies from the tallest down; a layer of leaf area x per ground area
-  takes 1 − exp(−x), equal heights sharing a layer. Rain on bodies is shared the same way.
+- **The bodies' node** (`Class::Bodies`, one per cell): light the cover absorbs warms the ground, except the share its
+  light reaction stores (`Cover::keep`), booked from the sun into this node; the cover takes it at its month, and what
+  it does not claim goes back to the ground before each air step (`survey::release`).
+- **Gas from bodies and the cover** goes into the bodies' node with its latent heat; the air's step takes it up with
+  its lift.
+- **Shade**: the cover's kinds share its light by height (4.5); bodies catch no light.
 
 ### 1.5 Evaporation, rain and dissolved gases
 `flow::air::cells`, `daily`, `exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against
@@ -270,11 +268,11 @@ goes like a surface. **Order** is the count or `Reaction::order`. **Extent** is 
 are of the solid, so a liquid holds its fusion heat and a gas its vaporisation heat too. **Light** reactions take
 absorbed light and store `light_yield` of it. **Catalyst**: a body's own (2.4, 6.5). **Open world**
 (`Reaction::open`): in ground, liquid, air and parts live the decomposers, whose catalyst `open` works as far as the
-node is moist, by the body's rule 1 + (`open` − 1) × moisture (`Body::catalyst`). Moisture is the node's liquid over
+node is moist: 1 + (`open` − 1) × moisture (`change::open_catalyst`). Moisture is the node's liquid over
 what its pores hold at field capacity, at most 1 (`FlowView::moist`, the bucket of evaporation); a part has its cell
 ground's; an air node has none. `open` is 1 for most reactions; 200 for reaction 1 (the free sugar's rot, about a
 week); 5 for 21 (body matter rots 3.8 times faster than the frame); 10^6 for 26 (the frame rots by the decomposers
-only: bare, a millionth of that). No decomposer works in a body: it runs its reactions by its own catalysts.
+only: bare, a millionth of that). No decomposer works in a body (2.4).
 `change::pace` is the one formula for all nodes. **Frozen**: a bare reaction whose rate constant k exp(−Ea/T) would
 use under 1e-12 of an input over the world's year is skipped in every node (`frozen_below`, `NEGLIGIBLE`), a speed
 tolerance.
@@ -284,7 +282,7 @@ tolerance.
 temperature (a plateau's fusion heat set aside), then sleep until their reactions would use 5% of an input or warm
 them 0.5 K, at most `sleep_days`. The nodes under one air node react as one task (a domain), each into a row of what its reactions changed and the gas it gives its air node; the rows are booked after the call, each array of the store by one task (`change/booking.rs`, `store::book_by_array`), so an air node gets the gas of its ground nodes in the order of their cells whatever thread ran them. Gas a ground node takes or gives
 (what its reactions made less what the node itself gained, so it never gives more than it holds) crosses to its air node with its heat and latent heat (parts and bodies the same, `change/gas.rs`). **Parts** react
-every 6 months (`bond::step`), **bodies** at each update with their catalysts (2.4); **growth** is a conversion only
+every 6 months (`bond::step`); **bodies** burn and digest by their diet (2.4); **growth** is a conversion only
 bodies run, paid by work (6.6).
 
 ### 2.3 What gas a ground node touches
@@ -293,31 +291,22 @@ the liquid's film in τ = depth / `dissolve` (`FlowView::standing`): a gas it ta
 made·τ/eq) / (1 + used·τ/eq). So dead matter on the sea floor rots as fast as the film brings the oxidising gas.
 
 ### 2.4 Change inside bodies
-- **Catalysts**: a gene speeds its reaction by f = 10^gene (off below 0). "Eating plants" means "my genes speed up the
-  reaction that burns what plants store". The speed-up is 1 + (f − 1) · a, a the activity (6.5).
-- **Product inhibition** (`Body::inhibited`): × max(0, 1 − Σ x / x*), x each product's store, x* its level (not gases or
-  the key liquid), on reactions run at the catalyst's pace, not on burnings run on demand.
-- **Heat kills enzymes** (`change::denature`): above `DENATURE` the speed-up falls within a few K (`unfold`); a firmer
-  shape costs upkeep (`t_firm`, `c_firm`). One rule (`Body::rate_at`) for release and supply; upkeep never falls with
-  heat (6.2).
-- **Burnings** (catalysed, release heat, take a gas) run on demand to pay costs (`body::plan`, `body::pay`). A reaction
-  that keeps part of a fuel's energy in its product (`Chemistry::keeps`, fixing) runs at its catalyst's pace. **Fuel**
-  (`Body::burns_at`) is a non-gas store a burning takes. Enzymes cost upkeep by their capacity, used or not (6.2).
-- **Too slow to matter**: in a body a bare reaction (factor at most 1) whose rate, contact and orders included,
-  would use less than 3.6e-5 of its scarcest input over the world's year is skipped (`kernel.rs`, `TOO_SLOW`), a
-  speed tolerance like the frozen rule (2.1), which reads the rate constant alone. At living temperatures it skips
-  about half of a body's bare reactions (the frame rotting and splitting, the mineral breaking down hot, charring
-  where cool). It counts over the year, so it does not depend on the length of a body's updates. Only bodies: the
-  ground and the air sleep by their own rates (2.2), and the open world's rot must stay whole.
+Bodies run no reactor: they run three conversions of the chemistry, each booked by its stoichiometry. **Burning** on
+demand to pay their costs (the reactions of their diet that release heat, `Chemistry::burners`: in chemistry 0 the
+fuel's, reaction 1, and the body matter's, 21), as far as their fuel and their air node's gases allow (`body::burn`).
+**Growth** by `Chemistry::build` and `builds` (6.6). **Digestion** (`Body::digest`): the reverse of growth for matter
+taken in. A body's diet is its reaction genes: on above 0, it burns or digests what that reaction takes (`Body::uses`).
+The light reaction runs only in the cover (4.5), the decomposers' reactions only in the open world (2.1).
 
 ### 2.5 Phases and the freezing law
 Solid, liquid or gas by melting and boiling points (`Chemistry::phase`). A liquid's melting point in a mixture falls by
 the ideal-solution law (`Chemistry::melt_in`): 1/T = 1/Tm − R · ln(x) / Lf, x the solvent's share among itself and
 its solutes. Only the solvent (the most abundant liquid) is lowered; solutes are liquids melting below it (the salts 23
 and 24, the fat 6); ice and liquid count together, so it freezes at one point. One law for bodies, ground plateaus,
-ice cover (`World::thaw`), parts and Change. **Latent heat**: a gas in the air holds its melting and boiling heat
-(`Substance::latent_gas`), paid or got as it enters or leaves; a body holds the fusion heat of its molten stores
-(`Body::thermal`), and liquid it takes or gives carries it (`Body::heat_with`).
+ice cover (`World::thaw`), parts and Change; bodies freeze their key liquids at the liquids' own melting points (6.3).
+**Latent heat**: a gas in the air holds its melting and boiling heat (`Substance::latent_gas`), paid or got as it
+enters or leaves; a body holds the fusion heat of its molten key liquids (`Body::thermal`), and liquid it takes or
+gives carries it (`Body::heat_with`).
 
 ### 2.6 Pairs at balance and the sea's carbon
 `change::reversible` finds each pair of reactions where one undoes the other; `Reactor::balance` finds from the
@@ -373,7 +362,7 @@ Holding is a bond whose strength is the body's **force**, strength gene × livin
 (`bond::force`), with a lever for a held part (`bond::lever`); a body holds only while its force bears the structure's
 weight. Fuel adds no force; a hurt body is weaker. **Digging** (`bond::dig`) breaks the bed by force and time. A body
 is **afloat** where the liquid is deeper than `deep` and what it and its structure displace weighs as much as they do
-(Archimedes): it breathes and catches light at the surface, reaches no ground, and crosses at `afloat` of walking's cost.
+(Archimedes): it reaches no ground, and crosses at `afloat` of walking's cost.
 
 ### 3.4 Containment
 Walls that close a space make an **inside** (`bond::room`) joined to its cell by one link (`bond::Enclosure`): heat
@@ -396,9 +385,9 @@ through breaks what its energy pays for (6.8).
 Files: `core/src/copy/` (`mix`, `grow`), `nodes.rs`, `body/genes.rs`, `lineage.rs`; the cover in `core/src/cover/` (4.5).
 
 ### 4.1 Genes
-21 scalar genes (`body::Layout`; `GAS`, `LIQ`, `HEAT`, `LEAF`, `STRENGTH`, `CHILD`, `COPY_MASS`, `INTERVAL`, `MUT`,
-`LEARN`, the brain sizes `HIDDEN`, `MEMORY`, `SEEN`, `SIGHT`, and `DISPERSE`, `DENATURE`, `REPAIR`, `WET`, `ALLOC`,
-`KEEP_T`, `COOL_T`; meanings in `body/genes.rs`), a catalyst per reaction, per substance a safe minimum, an uptake and
+17 scalar genes (`body::Layout`; `HEAT`, `STRENGTH`, `CHILD`, `COPY_MASS`, `INTERVAL`, `MUT`, `LEARN`, the brain sizes
+`HIDDEN`, `MEMORY`, `SEEN`, `SIGHT`, and `DISPERSE`, `REPAIR`, `WET`, `ALLOC`, `KEEP_T`, `COOL_T`; meanings in
+`body/genes.rs`), a diet gene per reaction (on above 0), per substance a safe minimum, an uptake and
 a keep gene, and the born brain rows. **Mutation** (`body::vary`): parent's gene plus noise of one step × 10^`MUT`,
 within range (not the brain-size genes of a body with no brain, 4.4); born rows change with `row_chance` by
 `row_noise`; rarely (`new_lineage`) a new lineage with a changed brain base. **Likeness** (`body::alike`): every
@@ -521,7 +510,7 @@ or part seen), a signal, the shape of a part, the next memory and a critic. Size
 learned (`Life::inherit`).
 
 ### 5.2 Perception
-Local (`choose/perceive.rs`): own stores against minimums, warmth, size, light; its cell's loose substances, liquid,
+Local (`choose/perceive.rs`): own stores against minimums, warmth, size, the cover of its cell (its capture area per m²); its cell's loose substances, liquid,
 temperature and crowding; the season; signals; memory; cells within sight ring by ring (weight 1 / ring²), with their
 parts, as the last survey saw them; up to `SEEN` bodies in or next to its cell as the batch's start saw them (their
 faces, 0: looks, signals, well-being, past dealings); up to 3 parts. Walls and cover hide.
@@ -549,7 +538,7 @@ No copy action, no "farm", "trade" or "attack": those must be patterns of these.
 
 **Taking** (`feed::intake`, one law for the ground and for bodies) goes by uptake genes (`Body::wanted`) at `c_handle`
 per kg, of food only (`Body::uses`: what it burns, the body matter and built solids it digests, the minerals it builds
-of; not what it cannot use, nor the key liquids it drinks, `soak`): per kg of supply, Holling's type II take × s /
+of; not what it cannot use, nor the key liquids it drinks, 6.4): per kg of supply, Holling's type II take × s /
 (take + s), s what the swept area holds (`sweep`) of its food, so thin food takes time to find (Holling 1959). The
 minerals it builds of count in s as food does: one search finds all it uses, so rich ground shortens it. Another body's
 members lie over the cell like the ground's food: a bite reaches those the swept area holds (one individual body
@@ -580,70 +569,67 @@ went (`Body::note`, `Body::recall`). **Thinking** (`Physics::think`) costs by br
 update (a node's habit updates too), so a long interval saves it. **Null run** (`--null`): no learning or imitation, rows frozen, genes still evolve.
 
 ## 6. Bodies
-Files: `core/src/body/`, `copy::grow`. `body::live` runs an update in stages: upkeep, the physics of the time since
-(`body/physics.rs`), keeping warm, store checks, growth and children, shedding; then the decision. Its trades are
-gathered as moves and booked with its batch's, each number of the store once per domain (`store::Moves`, 0), each set by its
-law's rate over the update's span, so nodes and individuals take alike, never more than is there.
+Files: `core/src/body/`, `copy::grow`. Bodies are the eaters (animals); the light-eaters are the cover (4.5).
+`body::live` runs an update in stages: upkeep, drinking, heat, store checks, growth and children, shedding; then the
+decision. Its trades are gathered as moves and booked with its batch's, each number of the store once per domain
+(`store::Moves`, 0), so nodes and individuals take alike, never more than is there.
 
 ### 6.1 What a body is
-**Stores**: every substance (all members together) and heat. **Body matter** (22) is what it is built of; its
-**living body** (`Body::built`) is matter less brood, over 1 − `WET_TISSUE`. Taking, building, upkeep, force and light
-go by the living body; fuel and extra liquid are carried, and storing fuel costs no work. `Body::size` (with its
-liquid) sets height, volume and minimums; `Body::mass` (everything) moving and load. **Levels** (`Body::level`): the
-key liquid h / (1 − h) of matter (h its keep gene), a built solid its share of matter, others keep gene × kg of living
-body; a full store is satiety. **Supply** (`Body::supply`): living body^`intake_exp` from `m_ref` × its pace (6.2).
+**Stores**: every substance (all members together) and heat; in practice its fuel (5, and 6 for a diet that burns
+it), body matter (22), its key liquid (0) and the two minerals. **Body matter** is what it is built of; its **living
+body** (`Body::built`) is matter less brood, over 1 − `WET_TISSUE`. Taking, building, upkeep and force go by the living
+body; fuel and extra liquid are carried, and storing fuel costs no work. `Body::size` (with its liquid) sets height,
+volume and minimums; `Body::mass` (everything) moving and load. **Levels** (`Body::level`): the key liquid h / (1 − h)
+of matter (h its keep gene), a built solid its share of matter, others keep gene × kg of living body; a full store is
+satiety. **Supply** (`Body::supply`): living body^`intake_exp` from `m_ref` × its pace (6.2). Bodies catch no light:
+their capture area is 0.
 
 ### 6.2 Upkeep and paying
 `body::upkeep` (`body/pay.rs`):
 
 ```
 tissue = living body × (copy mass / m_ref)^(intake_exp − 1)
-upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH + learning + signal)
-                    + c_leaf × leaf area ) + one decision ]
-         × (1 − c_repair + c_repair·2^REPAIR) × activity × upkeep pace(T)
+upkeep = [ days × tissue × (c_basal + c_strength·STRENGTH + learning + signal) + one decision ]
+         × repair (1 − c_repair + c_repair·2^REPAIR) × activity × pace(T)
 ```
 
 Costs go by the kg while supply goes with mass^0.75 (West, Brown and Enquist 1997), so a body grows until keeping what
 it has takes all it can supply: its costs set its size, not a cap; across kinds adults pay Kleiber's mass^0.75.
-**Capacity**: Σ over catalysts on of 10^gene × k × exp(−Ea / `t_cat`). **Pace** (`Body::pace`): its main burning's
-rate constant as its catalyst runs it at T (`Body::rate_at`, unfolding past `DENATURE`) over that at `t_cat`; supply
-follows it. **Upkeep pace** (`Body::upkeep_pace`): the bare rate law of that reaction, k e^(−Ea/T), over its value at
-`t_cat`: it never falls past the unfolding, as unfolded proteins are replaced, not saved (Hofmann and Somero 1995).
-Seasons come from temperature, not a calendar. **Paying** (`body::pay`, `body::plan`): burnings run
-as far as the rate law allows with the air breathed; the unpaid share dies (`SPENT`).
+**Pace** (`Body::pace`): the bare rate law of its main burning, k e^(−Ea/T), over its value at `t_cat`; supply and
+upkeep follow it, so seasons come from temperature, not a calendar. **Paying** (`body::pay`, `body::burn`): its
+burnings run on demand as far as its fuel and the air's gases allow; the gas they take comes from its air node and the
+gas they make goes to its cell's bodies' node, each with its heat and latent heat (gas exchange is free: no pores);
+the work becomes heat in its cell's ground, and the body keeps its temperature. The unpaid share of upkeep dies
+(`SPENT`).
 
 ### 6.3 Heat
-One heat network (`body/exchange.rs`): core → coat (`HEAT`, × mass^(2/3)) → surface → still air (forced convection,
-`forced` × √(`wind_ground` / d)) and radiation in parallel; others' cover (`shelter`) and walls (3.4) in series. Work
-heat leaves through it; the share (1 − e^−x)/x stays, x = conductance × time / heat capacity (`body::spend`).
-Reactions run at the body's temperature, held by the ground as a store of what it can conduct in over the update; the
-gas they release takes its latent heat as far as heat pays (`physics::settle_gas`). Below `KEEP_T` the body burns the
-heat that brings it there; above `COOL_T` it evaporates it, no faster than the still air carries vapour (the Lewis
-relation), never below its liquid's minimum.
+A body's temperature follows its ground's (`live::keep_warm`): the heat its upkeep released over the update leaves
+through its coat (`HEAT`, × mass^(2/3), `Body::conductance`; in series with the walls around it, 3.4), so it stands
+that much above the ground. Below its `KEEP_T` gene it burns what its coat loses at `KEEP_T` beyond that heat; above
+its `COOL_T` gene it evaporates its key liquid for the excess, at the liquid's vaporisation enthalpy, never below its
+safe minimum, the vapour going to the bodies' node with its latent heat. Its heat then comes to that temperature with
+its ground (`body::settle_heat`). Its key liquids hold their fusion heat when molten (`Body::thermal`, at their own
+melting points).
 
-### 6.4 Water: breath, rain, soaking, roots
-**Breath** (`breath`): `GAS` is the pores' (stomata) conductance per m² of open surface, in series with still air,
-slowed by liquid over the body (`gas_depth`); for vapour the pores close as the body dries (`closing`). **Rain**: a
-cell's bodies catch 1 − e^−x of the rain since their last update, shared by height. **Soaking** (`LIQ`): through its
-ground contact at `LIQ` × wetness (half at `wet_depth`) × solubility, driven by how far it is below its level, solved
-exactly (`soak_again` after growth). **Transpiration** (`through`): where soaking meets what the pores pass, liquid
-flows through the body, its latent heat paid by the body and what the ground conducts in (`physics::heat_bound`).
-**Roots**: mineral uptake genes take them from the loose ground at the soaking rate.
+### 6.4 Water: drinking
+A body drinks its key liquids from its cell's ground up to the level it keeps, as far as the ground holds them liquid,
+each day at most its uptake gene's share of that level, paying `c_handle` per kg; they come with their heat. It
+catches no rain and has no roots: its minerals come from what it digests (6.9).
 
 ### 6.5 Activity and dormancy
-`Body::activity`: a = min(1, l / l*)^`dormancy`, l the key liquid, l* its level. It multiplies the catalysts' speed-up,
-upkeep and the building allowance: a dry body pays and ages almost nothing and can hardly act. **Frost** kills a key
-liquid's frozen share × a (`PHASE`); **boiling** kills.
+`Body::activity`: a = min(1, l / l*)^`dormancy`, l the key liquid, l* its level. It multiplies upkeep and the building
+allowance: a dry body pays and ages almost nothing and can hardly act. **Frost**: a key liquid below its melting point
+kills the share frozen (`PHASE`); **boiling** kills.
 
 ### 6.6 Growth
-`copy::grow`. Sugar and minerals become matter at `c_copy` of work per kg, paid by `body::pay`, as far as all allow:
-the **allowance** (`c_build` × supply / `m_ref` × days × activity), the **spare** (its reactions must still release an
-interval's upkeep), what its reactions release now, and its stores. Built solids (frame, lime) come first by their
+`copy::grow`. Its fuel and minerals become matter at `c_copy` of work per kg, paid by burning (`body::pay`), as far as
+all allow: the **allowance** (`c_build` × supply / `m_ref` × days × activity), the **spare** (what its fuel can release
+beyond an interval's upkeep), and its stores down to their minimums. Built solids (frame, lime) come first by their
 share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing
 Intake at most `take` × supply a day (5.3). **Digestion** (`Body::digest`): matter taken is broken back into what it
-was built of, so food enters as fuel, and only if a catalyst of its own breaks it (`Body::uses`). **Minimums**
+was built of, so food enters as fuel, and only if its diet breaks it (`Body::uses`). **Minimums**
 (`Body::lacking`): a store below its minimum kills (`LACK`), except a fuel, whose minimum is a reserve. **Shedding**
 (`shed`): minerals, built solids and key liquid past level, and anything it neither burns nor is made of. **Ageing**:
 wear grows by the energy upkeep turns over per kg, over `e_life` × 10^`REPAIR` (the rate of living); 1 − e^−wear of
@@ -656,7 +642,7 @@ matter breaks first and spills its stores; in a node those members lose it (graz
 through** (`choose::wear`) breaks what its energy pays for: the energy movers spent in a cell is kept until the next
 survey (`Domain::pushed`, of the cell's domain); then each body there, a mover that stayed too, takes its share by mass and loses what that
 breaks of it, each of its members alike. So a cell's bodies are worn once a survey, not once for each move into it.
-**Heat** burns matter by reaction 21. A member dies when `lethal` of its body is torn at once; a hurt adult is
+A member dies when `lethal` of its body is torn at once; a hurt adult is
 immature until healed. **Starving** (`starved`): a body below its copy mass that did not rebuild what it lost keeps
 the share x and dies with chance 1 − x^a, a = ln 2 / −ln(1 − `lethal`), so starving to the lethal loss is survived
 with even chances in one update or many (`SPENT`).
@@ -664,8 +650,8 @@ Causes: `LACK`, `PHASE`, `SPENT`, `TAKEN`, `BROKEN`, `AGE`; at death all goes to
 
 ### 6.9 Materials and minerals in bodies
 Built solids count in mass and height, not living body; children get them, gifts never give them. Bodies get
-minerals by digestion (the cover from its ground, 4.5). The rock salt falls out of a body as lime (23). Fixing (24) makes the nitrogen
-mineral from the air, slowed as the store fills and stopped at its level.
+minerals by digestion (the cover from its ground, 4.5); what is past its level it sheds. Fixing (24) runs in the cover
+only (4.5).
 
 ## 7. Soil and minerals
 The minerals (`Chemistry::minerals`) live in the ground's liquid and move with it, so rain washes them to low ground
@@ -689,5 +675,5 @@ read a kind.
   out of deep liquid (a move's odds fall as 1 / (1 + depth / m)). Genes and rows get a spray (`--spray`).
 - **Fixers**: a tenth of the cells of the starting cover carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).
 - **Founder genes**: some measured from the laws (`LITTER_X`); bodies build solids at a small share (`BUILT_SHARE`);
-  `HEAT`, `CHILD`, `ALLOC` the same for all; `KEEP_T` and `COOL_T` 5 K above their liquid's melting point and 5 K below their catalysts' unfolding (`EATER_KEEP_T`, `EATER_COOL_T`).
+  `HEAT`, `CHILD`, `ALLOC` the same for all; `KEEP_T` and `COOL_T` 5 K above their liquid's melting point and 5 K below where life's enzymes fail (320 K) (`EATER_KEEP_T`, `EATER_COOL_T`).
 

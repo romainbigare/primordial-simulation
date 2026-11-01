@@ -1,6 +1,6 @@
 //! The table of starting kinds: the genes each starts with, and where, when and how many are placed.
 
-use pcore::body::{COOL_T, COPY_MASS, DISPERSE, GAS, HIDDEN, INTERVAL, KEEP_T, LEAF, LEARN, LIQ, MEMORY, NSCALAR, REPAIR, SEEN, SIGHT, STRENGTH};
+use pcore::body::{COOL_T, COPY_MASS, DISPERSE, HEAT, HIDDEN, INTERVAL, KEEP_T, LEARN, MEMORY, NSCALAR, REPAIR, SEEN, SIGHT, STRENGTH};
 use pcore::{brain, cover};
 
 /// One row of the table of starting kinds: its name, when it is placed, and what is placed.
@@ -62,9 +62,9 @@ const fn with<const N: usize>(mut s: [f32; N], d: &[(usize, f32)]) -> [f32; N] {
 }
 
 /// The genes every kind of bodies starts with unless its row says otherwise: HEAT 3.5 (no coat), CHILD -0.523 (a
-/// child 0.3 of the copy mass), MUT -1.2, HIDDEN 12, MEMORY 6, SEEN 3, SIGHT 1, DENATURE 320 K (about where enzymes
-/// fail), ALLOC 0.8, KEEP_T 250 K and COOL_T 320 K (outside what the island has: they do nothing at the start).
-const BASE: [f32; NSCALAR] = [0.0, 0.0, 3.5, 0.0, 0.0, -0.523, 0.0, 0.0, -1.2, 0.0, 12.0, 6.0, 3.0, 1.0, 0.0, 320.0, 0.0, 0.0, 0.8, 250.0, 320.0];
+/// child 0.3 of the copy mass), MUT -1.2, HIDDEN 12, MEMORY 6, SEEN 3, SIGHT 1, ALLOC 0.8, KEEP_T 250 K and COOL_T 320 K
+/// (outside what the island has: they do nothing at the start).
+const BASE: [f32; NSCALAR] = [3.5, 0.0, -0.523, 0.0, 0.0, -1.2, 0.0, 12.0, 6.0, 3.0, 1.0, 0.0, 0.0, 0.0, 0.8, 250.0, 320.0];
 
 /// The cover of the starting light-eaters: a light capacity that a full summer's light about fills at a capture area of
 /// 5 m² per kg (a herb's 20 m² per kg of leaf, a quarter of it leaf), walls 4 times its matter (herbs' cell walls), a
@@ -75,17 +75,18 @@ const COVER_GENES: [f32; cover::NG] = [-4.7, 0.7, 0.6, -1.0, 268.0, -0.3, 0.1, -
 const LIGHT: Kind = Kind { name: "light-eaters", year: 0, place: Place::Field(Field { genes: COVER_GENES, kg: 0.1, chance: 1.0 }) };
 
 /// The temperatures the eaters' founders keep their bodies between, K: the melting point of chemistry 0's key liquid
-/// (273 K) plus, and their catalysts' unfolding (`DENATURE`, 320 K) less, the margin within which a body's well-being
-/// falls for nearness to a limit (5 K, `body::PHASE_MARGIN`): their liquid does not freeze in a winter on the hills, and
-/// they sweat before their catalysts unfold in a summer; light-eaters keep none (`BASE`).
+/// (273 K) plus, and about where life's enzymes fail (320 K) less, the margin within which a body's well-being falls for
+/// nearness to a limit (5 K, `body::PHASE_MARGIN`): their liquid does not freeze in a winter on the hills, and they
+/// sweat before they overheat in a summer.
 const EATER_KEEP_T: f32 = 278.0;
 const EATER_COOL_T: f32 = 315.0;
 
 /// Eaters: fast burning, take the energy-rich solid from the ground, the cover and bodies, short intervals, learning
-/// on, keep warm and cool (`EATER_KEEP_T`, `EATER_COOL_T`); individuals, two in some cells where life already is.
+/// on, a fur coat (`HEAT` -1.0: 0.8 W/K for a member of 30 kg; fur passes 0.94, Herreid and Kessel 1967), keep warm
+/// and cool (`EATER_KEEP_T`, `EATER_COOL_T`); individuals, two in some cells where life already is.
 const EATER_BODIES: Bodies = Bodies {
     anywhere: false,
-    scalars: with(BASE, &[(GAS, 2.304), (LIQ, -0.5), (LEAF, -2.884), (STRENGTH, 0.6), (COPY_MASS, 1.645), (INTERVAL, 1.0), (LEARN, -1.0), (DISPERSE, 0.1), (REPAIR, -0.4), (KEEP_T, EATER_KEEP_T), (COOL_T, EATER_COOL_T)]),
+    scalars: with(BASE, &[(HEAT, -1.0), (STRENGTH, 0.6), (COPY_MASS, 1.645), (INTERVAL, 1.0), (LEARN, -1.0), (DISPERSE, 0.1), (REPAIR, -0.4), (KEEP_T, EATER_KEEP_T), (COOL_T, EATER_COOL_T)]),
     cat: [-1.0, 2.6],
     upt: [0.3, 1.0],
     per: 2,
@@ -113,14 +114,14 @@ pub const KINDS: [Kind; 10] = [
     Kind { name: "small fast light-eaters", year: 0, place: Place::Field(Field { genes: with(COVER_GENES, &[(cover::LIGHT, -4.4), (cover::LEAF, 1.0), (cover::WALLS, 0.3), (cover::SEED, 0.3), (cover::REPAIR, -1.2)]), kg: 0.05, chance: 0.6 }) },
     Kind { name: "big slow light-eaters", year: 0, place: Place::Field(Field { genes: with(COVER_GENES, &[(cover::LIGHT, -5.0), (cover::LEAF, 0.4), (cover::WALLS, 1.0), (cover::STORE, -0.7), (cover::SEED, 0.05), (cover::REPAIR, -0.5)]), kg: 0.3, chance: 0.4 }) },
     // Eaters of remains on the ground, small and big: no strength, the solid first.
-    eaters("small eaters of remains", 10, Bodies { scalars: with(EATER_BODIES.scalars, &[(GAS, 1.815), (STRENGTH, 0.0), (COPY_MASS, 0.245), (LEARN, -1.5), (DISPERSE, 0.3), (REPAIR, -1.48)]), upt: [0.2, 1.0], ..EATER_BODIES }),
-    eaters("big eaters of remains", 10, Bodies { scalars: with(EATER_BODIES.scalars, &[(GAS, 2.205), (STRENGTH, 0.0), (COPY_MASS, 1.325), (INTERVAL, 1.3), (LEARN, -1.5), (DISPERSE, 0.2), (REPAIR, -0.89)]), per: 1, chance: 0.2, ..EATER_BODIES }),
+    eaters("small eaters of remains", 10, Bodies { scalars: with(EATER_BODIES.scalars, &[(STRENGTH, 0.0), (COPY_MASS, 0.245), (LEARN, -1.5), (DISPERSE, 0.3), (REPAIR, -1.48)]), upt: [0.2, 1.0], ..EATER_BODIES }),
+    eaters("big eaters of remains", 10, Bodies { scalars: with(EATER_BODIES.scalars, &[(STRENGTH, 0.0), (COPY_MASS, 1.325), (INTERVAL, 1.3), (LEARN, -1.5), (DISPERSE, 0.2), (REPAIR, -0.89)]), per: 1, chance: 0.2, ..EATER_BODIES }),
     // Eaters of the cover, small and fast, and big and slow.
-    eaters("small fast eaters of light-eaters", 20, Bodies { scalars: with(EATER_BODIES.scalars, &[(GAS, 2.273), (STRENGTH, 0.3), (COPY_MASS, 0.625), (INTERVAL, 0.85), (DISPERSE, 0.2), (REPAIR, -1.06)]), ..EATER_BODIES }),
-    eaters("big slow eaters of light-eaters", 20, Bodies { scalars: with(EATER_BODIES.scalars, &[(GAS, 2.536), (LEAF, -2.702), (STRENGTH, 0.5), (COPY_MASS, 2.082), (INTERVAL, 1.2), (DISPERSE, 0.05), (REPAIR, -0.2)]), per: 1, chance: 0.15, store: 0.6, ..EATER_BODIES }),
+    eaters("small fast eaters of light-eaters", 20, Bodies { scalars: with(EATER_BODIES.scalars, &[(STRENGTH, 0.3), (COPY_MASS, 0.625), (INTERVAL, 0.85), (DISPERSE, 0.2), (REPAIR, -1.06)]), ..EATER_BODIES }),
+    eaters("big slow eaters of light-eaters", 20, Bodies { scalars: with(EATER_BODIES.scalars, &[(STRENGTH, 0.5), (COPY_MASS, 2.082), (INTERVAL, 1.2), (DISPERSE, 0.05), (REPAIR, -0.2)]), per: 1, chance: 0.15, store: 0.6, ..EATER_BODIES }),
     // Eaters of eaters, placed once the eaters have spread, with a bigger brain (16 hidden, 8 memory, 4 seen, sight 2).
-    eaters("strong fast eaters of eaters", 24, Bodies { scalars: with(EATER_BODIES.scalars, &[(GAS, 2.478), (COPY_MASS, 2.145), (INTERVAL, 0.85), (LEARN, -0.7), (HIDDEN, 16.0), (MEMORY, 8.0), (SEEN, 4.0), (SIGHT, 2.0), (REPAIR, -0.5)]), per: 1, chance: 0.15, ..EATER_BODIES }),
-    eaters("strong big slow eaters of eaters", 24, Bodies { scalars: with(EATER_BODIES.scalars, &[(GAS, 2.736), (LEAF, -2.702), (STRENGTH, 0.5), (COPY_MASS, 2.682), (INTERVAL, 1.15), (LEARN, -0.7), (HIDDEN, 16.0), (MEMORY, 8.0), (SEEN, 4.0), (SIGHT, 2.0), (DISPERSE, 0.05), (REPAIR, 0.0)]), per: 1, chance: 0.15, store: 0.6, ..EATER_BODIES }),
+    eaters("strong fast eaters of eaters", 24, Bodies { scalars: with(EATER_BODIES.scalars, &[(COPY_MASS, 2.145), (INTERVAL, 0.85), (LEARN, -0.7), (HIDDEN, 16.0), (MEMORY, 8.0), (SEEN, 4.0), (SIGHT, 2.0), (REPAIR, -0.5)]), per: 1, chance: 0.15, ..EATER_BODIES }),
+    eaters("strong big slow eaters of eaters", 24, Bodies { scalars: with(EATER_BODIES.scalars, &[(STRENGTH, 0.5), (COPY_MASS, 2.682), (INTERVAL, 1.15), (LEARN, -0.7), (HIDDEN, 16.0), (MEMORY, 8.0), (SEEN, 4.0), (SIGHT, 2.0), (DISPERSE, 0.05), (REPAIR, 0.0)]), per: 1, chance: 0.15, store: 0.6, ..EATER_BODIES }),
 ];
 
 /// The roster of `ew run --roster`: the ten rows of `KINDS`, each placed at its `year`.

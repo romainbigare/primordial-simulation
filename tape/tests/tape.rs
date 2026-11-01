@@ -250,7 +250,7 @@ fn yearly_series_has_the_measures_per_starting_kind() {
     let col = |n: &str, r: &Vec<f64>| r[head.iter().position(|h| *h == n).unwrap_or_else(|| panic!("no column {n}"))];
     let kinds: Vec<usize> = (0..8).filter(|k| head.contains(&format!("root_{k}_members").as_str())).collect();
     assert!(!kinds.is_empty());
-    for name in ["births", "life_real", "mass", "copy_mass", "matter", "body", "gas", "leaf", "copy_log", "interval", "hidden", "repair", "died_age", "alloc", "child", "brood"] {
+    for name in ["births", "life_real", "mass", "copy_mass", "matter", "body", "copy_log", "interval", "hidden", "repair", "died_age", "alloc", "child", "brood"] {
         assert!(head.contains(&format!("root_{}_{name}", kinds[0]).as_str()), "{name}");
     }
     for r in &rows {

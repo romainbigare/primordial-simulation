@@ -6,50 +6,43 @@ use crate::chem::Chemistry;
 use crate::rng::Rng;
 use std::f32::consts::{FRAC_PI_8, LOG10_2};
 
-// Scalar genes, then one per reaction (catalyst, log10 speed-up) and three per substance (safe minimum as a share of
-// mass; take selectivity; most share of mass kept): `Layout`. Below zero a gene is off.
-/// Gas exchange, log10 mol of air per m² of open surface (light-capture area and skin) per day: its pores' conductance
-pub const GAS: usize = 0;
-/// Liquid exchange with the ground, log10 per day
-pub const LIQ: usize = 1;
+// Scalar genes, then one per reaction (a diet: on above 0, it burns or digests what that reaction takes) and three per
+// substance (safe minimum as a share of mass; take selectivity; most share of mass kept): `Layout`. Below zero a gene
+// is off.
 /// Heat conductance through its coat, log10 W/(K kg) for a member of `Physics::m_ref` kg; with mass^(2/3)
-pub const HEAT: usize = 2;
-/// Light-capture area, log10 m² per kg-equivalent of its body (`Body::leaf_area`)
-pub const LEAF: usize = 3;
+pub const HEAT: usize = 0;
 /// Strength, 0..1
-pub const STRENGTH: usize = 4;
+pub const STRENGTH: usize = 1;
 /// A child's body, log10 of its share of its parent's copy mass (`COPY_MASS`), at most `LOG_HALF`
-pub const CHILD: usize = 5;
+pub const CHILD: usize = 2;
 /// Mass needed before copying, log10 kg
-pub const COPY_MASS: usize = 6;
+pub const COPY_MASS: usize = 3;
 /// Days between updates, log10 (kept between `MIN_INTERVAL` and `MAX_INTERVAL`)
-pub const INTERVAL: usize = 7;
+pub const INTERVAL: usize = 4;
 /// Mutation size, log10
-pub const MUT: usize = 8;
+pub const MUT: usize = 5;
 /// Learning rate of the brain within a life, log10 (off at the lower end)
-pub const LEARN: usize = 9;
+pub const LEARN: usize = 6;
 /// Sizes of the brain and the senses (each rounded): hidden units (0..64; 0 is no brain), memory numbers (0..12),
 /// bodies perceived (1..6), sight in cells (1..4) (`lineage::resize`).
-pub const HIDDEN: usize = 10;
-pub const MEMORY: usize = 11;
-pub const SEEN: usize = 12;
-pub const SIGHT: usize = 13;
+pub const HIDDEN: usize = 7;
+pub const MEMORY: usize = 8;
+pub const SEEN: usize = 9;
+pub const SIGHT: usize = 10;
 /// Share of the children that start in a neighbour cell, 0..1 (for an individual, the chance)
-pub const DISPERSE: usize = 14;
-/// Temperature above which its catalysts lose their shape, K (`change::denature`)
-pub const DENATURE: usize = 15;
+pub const DISPERSE: usize = 11;
 /// Repair, log10: a body wears out at `Physics::e_life` x 10^gene per kg; each unit doubles the repair share of upkeep
-pub const REPAIR: usize = 16;
+pub const REPAIR: usize = 12;
 /// The child's key liquid, log10 of the factor on its provisions: below 0, dry and nearly dormant children
-pub const WET: usize = 17;
+pub const WET: usize = 13;
 /// Share of what a mature body builds that goes to its brood (`Body::brood`), 0..1
-pub const ALLOC: usize = 18;
+pub const ALLOC: usize = 14;
 /// The temperature below which the body burns on demand to keep warm, K (`live::keep_warm`)
-pub const KEEP_T: usize = 19;
-/// The temperature above which the body evaporates to keep cool, K (`physics::evaporate`); between the two it does
-/// neither
-pub const COOL_T: usize = 20;
-pub const NSCALAR: usize = 21;
+pub const KEEP_T: usize = 15;
+/// The temperature above which the body evaporates its key liquid to keep cool, K (`live::keep_warm`); between the two
+/// it does neither
+pub const COOL_T: usize = 16;
+pub const NSCALAR: usize = 17;
 /// A rate gene (`LEARN`) at or below this is off: the lower end of its range, -4, less a margin for rounding.
 const GENE_OFF: f32 = -3.9;
 /// The genes of the sizes of brain and senses.
@@ -89,10 +82,7 @@ const SCALARS: [(f32, f32, f32); NSCALAR] = {
 
 const fn scalar(g: usize) -> (f32, f32, f32) {
     match g {
-        GAS => (0.3, -1.0, 6.0),
-        LIQ => (0.3, -4.0, 1.0),
         HEAT => (0.3, -2.5, 3.5),
-        LEAF => (0.3, -4.0, 1.0),
         STRENGTH => (0.1, 0.0, 1.0),
         CHILD => (0.1, -6.0, LOG_HALF),
         WET => (0.05, -3.0, 0.5),
@@ -107,7 +97,6 @@ const fn scalar(g: usize) -> (f32, f32, f32) {
         SEEN => (0.1, 1.0, 6.0),
         SIGHT => (0.07, 1.0, 4.0),
         DISPERSE => (0.05, 0.0, 1.0),
-        DENATURE => (5.0, 250.0, 450.0),
         REPAIR => (0.2, -3.0, 3.0),
         // Up to the warmest that real bodies keep (about 315 K), and far below the coldest ground.
         KEEP_T | COOL_T => (5.0, 200.0, 320.0),

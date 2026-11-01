@@ -108,17 +108,13 @@ pub fn merge(w: &World, d: &mut Domain, s: Handle, t: Handle) {
 }
 
 /// What splits and joins as an amount when members move between nodes, split by shares with the remainder kept so the
-/// parts add up: count, mol of each store, heat (J), brood (mol), the heat its bodies' node holds for them (J,
-/// `survey::Draw::owed`), and their last day and marks of light and rain.
+/// parts add up: count, mol of each store, heat (J), brood (mol), and their last day.
 pub(crate) struct Lot {
     pub count: f64,
     pub store: Vec<f64>,
     pub e: f64,
     pub brood: f64,
-    pub owed: f64,
     pub last: f64,
-    pub mark: f64,
-    pub rained: f64,
 }
 
 impl Lot {
@@ -128,14 +124,14 @@ impl Lot {
     pub(crate) fn split(d: &mut Domain, b: &mut Body, f: f64, fa: f64) -> Lot {
         let store: Vec<f64> = b.store.iter().map(|a| fa * a).collect();
         b.store.iter_mut().zip(&store).for_each(|(a, x)| *a -= x);
-        let c = Lot { count: f * b.count, store, e: fa * b.e, brood: fa * b.brood, owed: fa * b.draw.owed, last: b.last, mark: b.mark, rained: b.rained };
-        (b.e, b.brood, b.draw.owed) = (b.e - c.e, b.brood - c.brood, b.draw.owed - c.owed);
+        let c = Lot { count: f * b.count, store, e: fa * b.e, brood: fa * b.brood, last: b.last };
+        (b.e, b.brood) = (b.e - c.e, b.brood - c.brood);
         d.set_count(b, b.count - c.count);
         c
     }
     /// All that body `c` holds (its stores taken out of it).
     pub(crate) fn of(c: &mut Body) -> Lot {
-        Lot { count: c.count, store: std::mem::take(&mut c.store), e: c.e, brood: c.brood, owed: c.draw.owed, last: c.last, mark: c.mark, rained: c.rained }
+        Lot { count: c.count, store: std::mem::take(&mut c.store), e: c.e, brood: c.brood, last: c.last }
     }
 }
 
@@ -169,18 +165,18 @@ pub(crate) fn add(w: &World, d: &mut Domain, t: Handle, c: Lot, (genes, spread):
 /// Members `c` with the genes and spreads of body `o` join it (taken out of its slot): the members of a node who waited
 /// aside while the others acted, a part of a node that moved or bonded and came back to its cell (both
 /// `choose::spread`), or joiners after `add` pooled their genes. Amounts add up; the last
-/// day and the marks become the means by members; `rows`: the rows of `c` where they differ from `o`'s, which `o`'s
+/// day becomes the mean by members; `rows`: the rows of `c` where they differ from `o`'s, which `o`'s
 /// become the mean by members of. `o`'s visible traits are the caller's to work out again (`Domain::see`).
 pub(crate) fn rejoin(d: &mut Domain, o: &mut Body, c: Lot, rows: Option<&[f32]>) {
     let share = c.count / (o.count + c.count);
-    (o.last, o.mark, o.rained) = (o.last + share * (c.last - o.last), o.mark + share * (c.mark - o.mark), o.rained + share * (c.rained - o.rained));
+    o.last += share * (c.last - o.last);
     let a = share as f32;
     if let Some(rows) = rows {
         blend(&mut o.rows, rows, a);
     }
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     o.brood += c.brood;
-    (o.e, o.draw.owed) = (o.e + c.e, o.draw.owed + c.owed);
+    o.e += c.e;
     d.set_count(o, o.count + c.count);
 }
 
@@ -191,8 +187,7 @@ pub(crate) fn part(d: &mut Domain, b: &mut Body, f: f64, fa: f64) -> Body {
     let lot = Lot::split(d, b, f, fa);
     // (The trace and the stores are not the part's: set aside, not cloned.)
     let (trace, store) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.store));
-    let draw = crate::survey::Draw { owed: lot.owed, ..Default::default() };
-    let c = Body { count: lot.count, store: lot.store, e: lot.e, brood: lot.brood, draw, hold: None, inside: None, leaving: false, ..b.clone() };
+    let c = Body { count: lot.count, store: lot.store, e: lot.e, brood: lot.brood, hold: None, inside: None, leaving: false, ..b.clone() };
     (b.trace, b.store) = (trace, store);
     c
 }

@@ -9,7 +9,7 @@ use super::cells::{again, forcing, landed, pass, Ctx, ROW};
 use super::daily::{run, Moved};
 use super::exchange::dissolve;
 use super::radiation::declination;
-use crate::{store::Class, survey::Draws, units::DAY, World, AIR};
+use crate::{store::Class, units::DAY, World, AIR};
 
 /// The saturation tables reach this far above the warmest node at a step's start, K: no node warms more in a step.
 const SAT_REACH: f64 = 60.0;
@@ -24,8 +24,8 @@ pub(super) struct Active {
     pub(super) cond: bool,
 }
 
-/// The air's step of `dt` seconds, with the heat the bodies draw from the ground (`draws`).
-pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64, draws: &Draws) {
+/// The air's step of `dt` seconds.
+pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     up_from_bodies(w, s);
     let (tmin, tmax) = range(&s.state.tg);
     let henry: Vec<(usize, usize)> = s.state.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect();
@@ -37,7 +37,7 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64, draws: &Draws) {
     let f = forcing(w, s, &act, dt);
     let mut mean = run(w, s, &act, &f, dt);
     let mut rain = landed(w, &act, &f, &mean);
-    let mut rows = pass(&Ctx { w, s, act: &act, mean: &mean, rain: &rain, draws, dt, decl: &decl });
+    let mut rows = pass(&Ctx { w, s, act: &act, mean: &mean, rain: &rain, dt, decl: &decl });
     // Where an air node would end with less than nothing of a gas (its cells evaporated less than its days counted
     // on), what rains from it is cut by the share that leaves it nothing, and its cells' rows made again; where none
     // rains, what the wind takes of that gas from it. Each pass only lowers what is taken, so at most as many as there
@@ -59,10 +59,10 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64, draws: &Draws) {
             }
         }
         cut_wind(&act, &dry, &mut moved);
-        again(&Ctx { w, s, act: &act, mean: &mean, rain: &rain, draws, dt, decl: &decl }, &again_for, &mut rows);
+        again(&Ctx { w, s, act: &act, mean: &mean, rain: &rain, dt, decl: &decl }, &again_for, &mut rows);
     }
     mean.moved = moved;
-    book(w, s, (&act, &rows), &mean, draws, dt);
+    book(w, s, (&act, &rows), &mean, dt);
 }
 
 /// A node is short of a gas where it would end below this share of what it holds and is given and taken, the rounding

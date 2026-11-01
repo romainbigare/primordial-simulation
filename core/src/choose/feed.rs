@@ -42,14 +42,14 @@ pub const COVER: u64 = u64::MAX - 1;
 pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
     let (i, chem) = (b.cell as usize, &w.chem);
     let (tg, kc, parts) = (w.t_ground_last(i), d.slot(i), crate::cover::Parts::of(chem));
-    let free = |k: usize| if chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k) } else { 0.0 };
+    let free = |k: usize| if chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k).max(0.0) } else { 0.0 };
     let cover: [f64; crate::units::MAX_SUBSTANCES] = parts.as_ref().map_or([0.0; crate::units::MAX_SUBSTANCES], |p| d.cover.amounts(p, kc));
     let lying = |k: usize| free(k) + cover[k];
     let mut m = b.wanted(chem, b.paces(w), lying, intake(w, b, lying).0, b.mass(chem));
-    let grazed: Vec<f64> = m.iter().enumerate().map(|(k, &a)| if cover[k] > 0.0 { a * cover[k] / lying(k) } else { 0.0 }).collect();
+    let grazed: Vec<f64> = m.iter().enumerate().map(|(k, &a)| if cover[k] > 0.0 { (a * cover[k] / lying(k)).min(a).min(cover[k]) } else { 0.0 }).collect();
     let (all, kg) = (parts.as_ref().map_or(0.0, |p| d.cover.amounts(p, kc).iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()), chem.mass_of(&grazed));
     let breaking = parts.as_ref().filter(|_| kg > 0.0).map_or(0.0, |p| d.cover.breaking(chem, &w.cfg, p, kc, (kg / all.max(1e-300)).min(1.0)));
-    if !body::pay(w, d, b, w.cfg.phys.c_handle * chem.mass_of(&m) + breaking, b.interval(w) as f64) {
+    if !body::pay(w, d, b, w.cfg.phys.c_handle * chem.mass_of(&m) + breaking) {
         return;
     }
     for (from, x) in [(u64::MAX, chem.mass_of(&m) - kg), (COVER, kg)].into_iter().filter(|e| e.1 > 0.0) {
@@ -65,8 +65,10 @@ pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
         d.counts.cover_lost[TAKEN as usize] += kg;
     }
     for k in 0..m.len() {
-        let want = m[k] - grazed[k];
-        if want == 0.0 {
+        let held = if chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k).max(0.0) } else { 0.0 };
+        let want = (m[k] - grazed[k]).min(held);
+        if want <= 0.0 {
+            m[k] = grazed[k];
             continue;
         }
         // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
@@ -82,7 +84,7 @@ pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
 pub(super) fn put(w: &World, d: &mut Domain, b: &mut Body) {
     let mass = b.mass(&w.chem);
     let m: Vec<f64> = (0..w.chem.ns()).map(|k| (b.store[k] - b.level(&w.chem, k, mass)).clamp(0.0, b.store[k])).collect();
-    if !body::pay(w, d, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval(w) as f64) {
+    if !body::pay(w, d, b, w.cfg.phys.c_handle * w.chem.mass_of(&m)) {
         return;
     }
     let m: Vec<f64> = m.iter().zip(&b.store).map(|(&a, &held)| a.min(held)).collect();
@@ -133,7 +135,7 @@ pub fn take_body(w: &World, d: &mut Domain, b: &mut Body, s: Handle, rng: &mut R
     let f = (got / built.max(1e-30)).max(eaten).min(1.0);
     // The taker pays to handle what it takes and to break the share it tears (`Body::breaking`).
     let cost = (w.cfg.phys.c_handle * got * resist + o.breaking(&w.chem, &w.cfg, f * per)) * chance;
-    if !body::pay(w, d, b, cost, b.interval(w) as f64) || hit <= 0.0 {
+    if !body::pay(w, d, b, cost) || hit <= 0.0 {
         return;
     }
     let mut o = std::mem::take(&mut d[s]);
@@ -163,7 +165,7 @@ pub(super) fn give(w: &World, d: &mut Domain, b: &mut Body, s: Handle) {
     let mut m: Vec<f64> = (0..chem.ns()).map(|k| if o.uses(chem, k, t) { (spare(k) * share).min(o.room(chem, paces, k, mo) * met / o.n()) } else { 0.0 }).collect();
     o.digest_room(chem, paces, &mut m, mo);
     let got = w.chem.mass_of(&m);
-    if got <= 0.0 || !body::pay(w, d, b, w.cfg.phys.c_handle * got, b.interval(w) as f64) {
+    if got <= 0.0 || !body::pay(w, d, b, w.cfg.phys.c_handle * got) {
         return;
     }
     // Paying may have used some of what was to be put.

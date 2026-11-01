@@ -89,7 +89,7 @@ fn react_part(w: &World, d: &mut Domain, rc: &mut Reactor, (p, i): (&mut Part, u
     let fixed: f64 = p.fill.iter().zip(&chem.subs).map(|(a, x)| a * x.cp).sum();
     // It lies on its cell's ground, as moist as that.
     rc.moist = w.scratch.view().moist(i, w.cfg.phys.field);
-    rc.react(chem, &mut p.wall, Some(pool), &mut p.e, fixed, None, 0.0, dt);
+    rc.react(chem, &mut p.wall, Some(pool), &mut p.e, fixed, dt);
     let gas = GasMove::of(chem, &rc.dpool, ta);
     let c = p.heat_cap(chem);
     let q_out = p.e.max(0.0) * gas.c_out / (c + gas.c_out).max(1e-9);

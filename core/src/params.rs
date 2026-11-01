@@ -99,20 +99,12 @@ pub struct Physics {
     pub light_depth: f64,
     /// Share of the light a light-driven reaction takes that it stores; the rest becomes heat
     pub light_yield: f64,
-    /// Liquid thickness over a body that cuts its gas exchange by a factor e, m
-    pub gas_depth: f64,
     /// Depth of liquid, standing or in the ground's pores, at which the ground counts as half wet, m
     pub wet_depth: f64,
-    /// Heat a cover of m kg/m² passes to a body: `shelter / m` per m² of its surface, W kg/(m⁴ K)
-    pub shelter: f64,
-    /// Upkeep of catalysts, J per kg of body per day per unit of capacity (1/s) (`body::upkeep`)
-    pub c_cat: f64,
     /// Temperature at which upkeep measures catalyst capacity and the costs are anchored, K
     pub t_cat: f64,
     /// Width over which catalysts lose their shape above their `DENATURE` gene, K
     pub unfold: f64,
-    /// Catalysts that keep their shape up to this temperature cost no more, K
-    pub t_firm: f64,
     /// Each this many K of the `DENATURE` gene over `t_firm` adds the catalysts' upkeep once more, K
     pub c_firm: f64,
     /// Upkeep of strength, J per kg of body per day at strength 1
@@ -157,12 +149,6 @@ pub struct Physics {
     pub layer: f64,
     /// Density of bodies, kg/m³
     pub rho_body: f64,
-    /// The wind at a body, which the boundary layer of its surface goes by, m/s (`exchange::film`)
-    pub wind_ground: f64,
-    /// Forced convection through a surface's boundary layer, mol/(m² s) per (m/s / m)^0.5
-    pub forced: f64,
-    /// The length of the boundary layer of a body's capture area (a leaf), m
-    pub leaf_size: f64,
     /// Most a body takes per day of its interval, as a share of the mass it takes by (`Body::supply`)
     pub take: f64,
     /// Exponent of a member's body mass that its supply (intake, building, leaf) goes with (`Body::equiv`)
@@ -304,13 +290,9 @@ impl Default for Physics {
         Physics {
             light_depth: 10.0,
             light_yield: 0.05,
-            gas_depth: 1.0,
             wet_depth: 0.01,
-            shelter: 220.0,
-            c_cat: 5.483e9,
             t_cat: T_SURF,
             unfold: 3.0,
-            t_firm: 320.0,
             c_firm: 20.0,
             c_strength: 1.31e4,
             c_basal: 6.3e4,
@@ -332,9 +314,6 @@ impl Default for Physics {
             lane: 1.0,
             layer: 10.0,
             rho_body: 1e3,
-            wind_ground: 1.7,
-            forced: 0.189,
-            leaf_size: 0.05,
             take: 0.01042,
             sweep: 1.0,
             intake_exp: 0.75,

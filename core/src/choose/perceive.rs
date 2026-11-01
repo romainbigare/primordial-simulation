@@ -18,8 +18,8 @@ const MIN_FLOOR: f32 = 1e-2;
 const WARM_SCALE: f32 = 10.0;
 // ln of a mass: of a member, kg (less 1), of a perceived body's member over its own, of a cell's mean member.
 pub(super) use crate::brain::LN_MASS;
-/// ln(1 + the light it absorbed, J per kg per day).
-const LN_LIGHT: f32 = 15.0;
+/// ln(1 + the cover's capture area per m² of its cell, `World::canopy`) under a dense cover (10 m² per m²).
+const LN_CANOPY: f32 = 2.4;
 /// The ground temperature, from `T_MID` over `T_SPAN`, K.
 const T_MID: f32 = 285.0;
 const T_SPAN: f32 = 15.0;
@@ -119,8 +119,8 @@ pub(super) fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, 
     x.extend((0..ns).map(|k| if b.store[k] > 0.0 { SHARE_SENSE * ln((b.store[k] * chem.subs[k].molar_mass / mass) as f32 + STORE_FLOOR) } else { none } - SHARE_SENSE * ln(b.genes[min + k].max(0.0) + MIN_FLOOR)));
     x.extend_from_slice(&w.life.seen[i * ns..(i + 1) * ns]);
     let crowd = ln(1.0 + (w.life.sum(i)[1] / w.mesh.cells().area()[i]) as f32);
-    let (dt, lit, sun) = ((temp - env[0]) as f32, lived.lit as f32, w.season() as f32 * std::f32::consts::TAU);
-    x.extend([dt / WARM_SCALE, ln(pm as f32) / LN_MASS - 1.0, ln(1.0 + lit) / LN_LIGHT, ln(1.0 + env[1] as f32), (env[0] as f32 - T_MID) / T_SPAN, crowd, sun.sin(), sun.cos()]);
+    let (dt, canopy, sun) = ((temp - env[0]) as f32, w.canopy[i], w.season() as f32 * std::f32::consts::TAU);
+    x.extend([dt / WARM_SCALE, ln(pm as f32) / LN_MASS - 1.0, ln(1.0 + canopy) / LN_CANOPY, ln(1.0 + env[1] as f32), (env[0] as f32 - T_MID) / T_SPAN, crowd, sun.sin(), sun.cos()]);
     x.extend(heard);
     x.extend(bond::sense(w, b, pm));
     x.extend_from_slice(&b.mem);

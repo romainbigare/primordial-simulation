@@ -19,10 +19,10 @@ impl Body {
         let lay = Layout::of(chem);
         (0..chem.ns()).filter(|&k| self.genes[lay.min + k] > 0.0).fold(0, |m, k| m | 1 << k)
     }
-    /// Key stores that are liquid now.
-    pub fn key_liquids(&self, chem: &Chemistry) -> u64 {
-        let (t, lay) = (self.temp(chem), Layout::of(chem));
-        (0..chem.ns()).filter(|&k| self.genes[lay.min + k] > 0.0 && chem.phase_in(k, t, |j| self.store[j]) == Phase::Liquid).fold(0, |m, k| m | 1 << k)
+    /// Key stores that are liquid at `t` K.
+    pub fn key_liquids(&self, chem: &Chemistry, t: f64) -> u64 {
+        let lay = Layout::of(chem);
+        (0..chem.ns()).filter(|&k| self.genes[lay.min + k] > 0.0 && chem.phase(k, t) == Phase::Liquid).fold(0, |m, k| m | 1 << k)
     }
     /// The brood, mol of body matter (all members), no more than the matter there is.
     pub fn brooded(&self, chem: &Chemistry) -> f64 {
@@ -95,12 +95,8 @@ impl Body {
         }
         if keep <= 0.0 { 1.0 } else { p.activity(have / keep) }
     }
-    /// The melting point of its liquid `k`, lowered by what is dissolved in it (`Chemistry::melt_in`).
-    pub fn melt(&self, chem: &Chemistry, k: usize) -> f64 {
-        chem.melt_in(k, |j| self.store[j])
-    }
     /// Its key liquids (`wet`), lowest first.
-    fn wet_ks(&self, chem: &Chemistry) -> impl Iterator<Item = usize> {
+    pub(crate) fn wet_ks(&self, chem: &Chemistry) -> impl Iterator<Item = usize> {
         crate::math::ones(if chem.ns() < 64 { self.wet & ((1 << chem.ns()) - 1) } else { self.wet })
     }
     /// The key liquids it holds, kg, and the most share of its mass it keeps of any (its keep gene, 0..`MAX_KEEP`).
@@ -121,7 +117,7 @@ impl Body {
     /// What a body can take and build, in kg-equivalents: `equiv` of its living body times the pace of its temperature,
     /// as the whole tempo of a body goes with exp(-Ea/T) (Gillooly et al. 2001).
     pub fn supply(&self, chem: &Chemistry, p: &crate::Physics, t: f64) -> f64 {
-        self.equiv(p, self.built(chem)) * self.pace(chem, p, t)
+        self.equiv(p, self.built(chem)) * self.pace(chem, t)
     }
     /// Most of substance `k` the body holds, mol, by its keep gene (laws.md 6.1): a key liquid h / (1 - h) of its matter;
     /// a solid it builds what its `share` makes of its matter; any other, kg per kg of living body; body matter a share

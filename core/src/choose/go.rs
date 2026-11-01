@@ -25,7 +25,7 @@ pub fn go(w: &World, d: &mut Domain, b: &mut Body, j: usize, kin: bool) {
     let resist = lanes::resist(w, i, j);
     let mass = mb + carried.map_or(0.0, |c| c.1);
     let cost = mass * (w.cfg.phys.walk(mb / b.n()) * w.mesh.cells().dist()[lanes::link(w, i, j)] + w.cfg.gravity * climb) * resist * if afloat { w.cfg.phys.afloat } else { 1.0 };
-    if !body::pay(w, d, b, cost, b.interval(w) as f64) {
+    if !body::pay(w, d, b, cost) {
         return;
     }
     d.counts.parts.afloat += afloat as u8 as f64;
@@ -47,8 +47,8 @@ pub(super) fn can_go(w: &World, b: &Body, j: usize, share: f64, load: f64) -> bo
         && share * bond::bears(w, b) >= w.cfg.phys.bump * (mb + load) * w.cfg.gravity
 }
 
-/// The move of body `b` from cell `i` to `j` that `go` queued lands in `d`, the domain of `j`: it enters `j` (its
-/// marks of light and rain those of `j`, inside no structure), carries what it holds if it paid for that (`carries`;
+/// The move of body `b` from cell `i` to `j` that `go` queued lands in `d`, the domain of `j`: it enters `j` (inside
+/// no structure), carries what it holds if it paid for that (`carries`;
 /// else it lets go of it), and its push breaks the bodies there at the next survey. What it does to things no domain
 /// owns is queued (`Entry::Passed`): it pushes the structures there (`bond::moved`) and clears `lane` m² of the lane.
 /// With `kin`, the members of a node who moved join the first node of their kind and stage there (`copy::kin`).
@@ -60,7 +60,7 @@ pub(crate) fn land_move(w: &World, d: &mut Domain, mut b: Body, (i, j): (usize, 
     let mass = b.mass(&w.chem);
     // (Before it enters `j`, it is no node of its cell for `kin`.)
     let t = if kin { copy::kin(w, d, j, b.lineage, (&b.genes, &b.spread), b.adult(&w.chem)) } else { None };
-    (b.cell, b.mark, b.rained, b.leaving, b.inside) = (j as u32, w.light[j], w.rained[j], false, None);
+    (b.cell, b.leaving, b.inside) = (j as u32, false, None);
     d.cross(w.life.cell_slot(j).1, b.n() as f32, pushed);
     d.out.push(Entry::Passed { from: i as u32, to: j as u32, lane, mass, carried: carried.map(|c| bond::id(w, c.0)) });
     let s = d.arrive(b);

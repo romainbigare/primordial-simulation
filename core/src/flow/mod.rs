@@ -50,14 +50,14 @@ pub(crate) fn built_now(w: &World) -> bool {
     w.scratch.full_at == Some(w.time)
 }
 
-/// The air's step for `dt` seconds (`air::step`), booked whole, from the state of ground and air nodes, after the
-/// bodies' nodes settle what no body claims (`survey::Draws::settle`).
+/// The air's step for `dt` seconds (`air::step`), booked whole, from the state of ground and air nodes, after the heat
+/// of the bodies' nodes that the cover does not claim goes back to the ground (`survey::release`).
 pub fn air(w: &mut World, dt: f64) {
     with(w, |w, s| {
-        let draws = crate::survey::Draws::settle(w, dt);
+        crate::survey::release(w);
         ground_now(w, s, false);
         air::state(w, s);
-        air::step(w, s, dt, &draws);
+        air::step(w, s, dt);
     });
 }
 

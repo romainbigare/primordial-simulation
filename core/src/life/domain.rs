@@ -26,8 +26,6 @@ pub struct Domain {
     pub(super) table: BTreeMap<u64, u32>,
     /// Updates due, by batch modulo RING: body ids (`Body::due`)
     pub(super) ring: Vec<Vec<u64>>,
-    /// Per cell (by its order in `cells`): whether its bodies changed since the survey last shared out its light
-    pub(crate) stale: Vec<bool>,
     /// Per cell (by its order in `cells`): the energy movers spent pushing through its bodies since the last survey,
     /// which then breaks them, J (`choose::wear`)
     pub pushed: Vec<f64>,
@@ -78,22 +76,15 @@ impl Domain {
     pub fn find(&self, id: u64) -> Option<Handle> {
         self.table.get(&id).map(|&slot| Handle { domain: self.index, slot })
     }
-    /// The bodies of its cell `i` changed: the survey shares out its light again (`survey::shade`).
-    pub(crate) fn stir(&mut self, i: u32) {
-        let k = self.slot(i as usize);
-        self.stale[k] = true;
-    }
     /// Body `b` (taken out of its slot) now has `count` members.
     pub(crate) fn set_count(&mut self, b: &mut Body, count: f64) {
         b.count = count;
-        self.stir(b.cell);
     }
-    /// Place a new body in its cell on `day`; it first updates in batch `due`, and has its cell's mean light until the
-    /// survey shares it out again (`survey::shade`).
+    /// Place a new body in its cell on `day`; it first updates in batch `due`.
     pub(crate) fn add(&mut self, mut b: Body, day: u64, due: u64) -> Handle {
         self.placed += 1;
         assert!(self.placed < 1 << ID_SHIFT, "domain {} placed 2^{ID_SHIFT} bodies: its ids would run into the next domain's", self.index);
-        (b.id, b.alive, b.last, b.count, b.shade) = ((self.index as u64) << ID_SHIFT | self.placed, true, day as f64, b.n(), 1.0);
+        (b.id, b.alive, b.last, b.count) = ((self.index as u64) << ID_SHIFT | self.placed, true, day as f64, b.n());
         self.schedule(due, &mut b);
         self.enter(&b);
         self.store(b)
@@ -104,7 +95,6 @@ impl Domain {
         let h = Handle { domain: self.index, slot: free_place(&mut self.bodies, &mut self.free) as u32 };
         let k = self.slot(b.cell as usize);
         self.at[k].push(h);
-        self.stale[k] = true;
         self.table.insert(b.id, h.slot);
         self[h] = b;
         h
@@ -119,7 +109,6 @@ impl Domain {
     pub(super) fn unstore(&mut self, h: Handle, id: u64, i: usize) {
         let k = self.slot(i);
         self.at[k].retain(|&x| x != h);
-        self.stale[k] = true;
         self.table.remove(&id);
         self.bodies[h.slot as usize] = Body::default();
         self.free.push(h.slot);
@@ -178,10 +167,9 @@ impl Domain {
         let due = w.due_in(c.interval(w));
         self.add(c, w.day(), due)
     }
-    /// What others see of body `b` is worked out again (`Body::visible`), and its cell's light shared out again.
+    /// What others see of body `b` is worked out again (`Body::visible`).
     pub(crate) fn see(&mut self, w: &World, b: &mut Body) {
         b.vis = b.visible(&w.chem, &w.cfg);
-        self.stir(b.cell);
     }
 }
 

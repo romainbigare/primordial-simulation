@@ -30,9 +30,9 @@ pub(crate) fn let_go(w: &World, d: &mut Domain, b: &mut Body, load: bool) {
     b.hold = None;
 }
 
-/// Body `b` (taken out of its slot) pays `cost` J over `days` (`body::pay`) in a serial step on its domain.
-fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
-    w.in_domain(b.cell as usize, |w, d| body::pay(w, d, b, cost, days))
+/// Body `b` (taken out of its slot) pays `cost` J (`body::pay`) in a serial step on its domain.
+fn pay(w: &mut World, b: &mut Body, cost: f64) -> bool {
+    w.in_domain(b.cell as usize, |w, d| body::pay(w, d, b, cost))
 }
 
 /// Body `b` (taken out of its slot) lets go of the part it holds in a serial step, if the part is still held by it,
@@ -76,7 +76,7 @@ pub fn act(w: &mut World, b: &mut Body, v: usize, p: usize) {
     let (mb, days) = (b.mass(&w.chem), b.interval(w) as f64);
     match v {
         0 => {
-            if w.parts.parts[p].held == NOBODY && pay(w, b, w.cfg.phys.grab * w.cfg.phys.c_handle * w.parts.parts[p].mass(&w.chem), days) {
+            if w.parts.parts[p].held == NOBODY && pay(w, b, w.cfg.phys.grab * w.cfg.phys.c_handle * w.parts.parts[p].mass(&w.chem)) {
                 dropped(w, b, false);
                 grab(w, b, p);
             }
@@ -88,13 +88,13 @@ pub fn act(w: &mut World, b: &mut Body, v: usize, p: usize) {
             let (a, c) = (&w.parts.parts[h], &w.parts.parts[p]);
             let ac = a.contact().min(c.contact());
             let s = strength(w, a.walls(&w.chem).strength, c.walls(&w.chem).strength, ac);
-            if a.root != c.root && pay(w, b, w.cfg.phys.c_join * ac, days) {
+            if a.root != c.root && pay(w, b, w.cfg.phys.c_join * ac) {
                 link(w, h, p as u32, s);
             }
         }
         4 => {
             let f = force(w, b);
-            if !pay(w, b, f, days) {
+            if !pay(w, b, f) {
                 return;
             }
             if let Some(o) = holder(w, p) {
@@ -112,7 +112,7 @@ pub fn act(w: &mut World, b: &mut Body, v: usize, p: usize) {
             let (r, i) = (w.parts.parts[p].root as usize, b.cell as usize);
             let used: f64 = w.life.cell(i).map(|o| &w.life[o]).filter(|o| o.alive && room(w, o).is_some_and(|x| x.0 == r)).map(|o| o.volume(&w.chem, o.temp(&w.chem))).sum();
             let s = w.parts.parts[r].s;
-            if s.encl.closed > 0.0 && s.space >= used + b.volume(&w.chem, b.temp(&w.chem)) && pay(w, b, w.cfg.phys.walk(mb / b.n()) * mb * w.parts.parts[p].size[0] as f64, days) {
+            if s.encl.closed > 0.0 && s.space >= used + b.volume(&w.chem, b.temp(&w.chem)) && pay(w, b, w.cfg.phys.walk(mb / b.n()) * mb * w.parts.parts[p].size[0] as f64) {
                 b.inside = Some(id(w, p));
             }
         }
@@ -125,7 +125,7 @@ fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let pt = &w.parts.parts[p];
     let m = b.wanted(&w.chem, b.paces(w), |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mb);
     let got = w.chem.mass_of(&m);
-    if got <= 0.0 || !pay(w, b, w.cfg.phys.c_handle * got, days) {
+    if got <= 0.0 || !pay(w, b, w.cfg.phys.c_handle * got) {
         return;
     }
     let (me, chem, pt) = (Some(id(w, p)), &w.chem, &mut w.parts.parts[p]);
@@ -175,7 +175,7 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let fit = (w.parts.parts[p].room(chem) / lv.max(1e-12)).min(1.0);
     (0..chem.ns()).filter(|&k| wet[k]).for_each(|k| m[k] *= fit);
     let got = w.chem.mass_of(&m);
-    if got <= 0.0 || !pay(w, b, w.cfg.phys.c_handle * got, days) {
+    if got <= 0.0 || !pay(w, b, w.cfg.phys.c_handle * got) {
         return;
     }
     let (m, q) = give_up(&w.chem, b, &m);
@@ -208,7 +208,7 @@ pub fn form(w: &mut World, b: &mut Body, shape: [f32; 2]) {
     let f = (w.cfg.phys.form * mb / all.max(1e-9)).min(1.0);
     let wall: Vec<f64> = spare.iter().map(|a| a * f).collect();
     let got = w.chem.mass_of(&wall);
-    if got < w.cfg.phys.min_kg || !pay(w, b, w.cfg.phys.c_form * got, b.interval(w) as f64) {
+    if got < w.cfg.phys.min_kg || !pay(w, b, w.cfg.phys.c_form * got) {
         return;
     }
     let (wall, e) = give_up(&w.chem, b, &wall);
@@ -234,7 +234,7 @@ pub fn anchor(w: &mut World, b: &mut Body) {
     }));
     let ac = w.parts.parts[p].contact();
     let s = strength(w, w.parts.parts[p].walls(&w.chem).strength, sv / v.max(1e-12), ac);
-    if v > 0.0 && pay(w, b, w.cfg.phys.c_join * ac, b.interval(w) as f64) {
+    if v > 0.0 && pay(w, b, w.cfg.phys.c_join * ac) {
         link(w, p, GROUND, s);
         dropped(w, b, false);
     }
@@ -258,7 +258,7 @@ pub fn dig(w: &World, d: &mut Domain, b: &mut Body) {
         })
         .collect();
     let got = w.chem.mass_of(&m);
-    if !body::pay(w, d, b, w.cfg.phys.c_handle * got, b.interval(w) as f64) {
+    if !body::pay(w, d, b, w.cfg.phys.c_handle * got) {
         return;
     }
     for (k, &a) in m.iter().enumerate() {

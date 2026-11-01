@@ -1,32 +1,19 @@
-//! A body's update: Flow and Change on it since its last update, in stages (`live`). Upkeep and
-//! the end checks are here; the physics of the time between is in `physics`.
+//! A body's update: its upkeep, its drink, its heat, the checks of its stores, its growth and children, and what it
+//! sheds, over the time since its last update (laws.md 6).
 
-use super::exchange::cover_of;
-use super::pay::{hold, pay_at, plan, spend, upkeep, Payer};
-use super::physics::{physics, soak_again};
-use super::{thin, to_ground, Body, Layout, AGE, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
-use crate::bond::{self, Enclosure};
-use crate::change::Reactor;
+use super::pay::{burn, settle_heat, upkeep};
+use super::{thin, to_ground, Body, Layout, AGE, COOL_T, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
 use crate::chem::Phase;
 use crate::ground::Melting;
 use crate::math::one_minus_exp;
 use crate::rng::{Purpose, Rng};
+use crate::store::Node;
 use crate::units::{DAY, MAX_SUBSTANCES};
-use crate::{life::Domain, World, AIR};
-
-/// Passes of `keep_warm`: its products take a part of the heat it burns at its temperature, so a second pass tops it up.
-const KEEP_T_PASSES: usize = 2;
-/// `keep_warm` burns nothing for a shortfall under this share of the body's heat.
-const KEEP_T_SLACK: f64 = 1e-6;
+use crate::{life::Domain, World};
 
 /// Working memory of `live`, kept from body to body.
 #[derive(Default)]
 pub(crate) struct LiveTmp {
-    /// The gas the body may exchange with its air node in this update, mol of each, and the air's shares
-    pub(super) pool: Vec<f64>,
-    pub(super) x: Vec<f64>,
-    /// The catalyst factors of the reactions that run on their own
-    pub(super) cat: Vec<f64>,
     /// The amounts of a share of its members that die (`thin`)
     dead: Vec<f64>,
 }
@@ -34,81 +21,130 @@ pub(crate) struct LiveTmp {
 /// What a body's update left for its decision (`choose::act`).
 #[derive(Default)]
 pub struct Lived {
-    /// Light caught per kg per day, J
-    pub lit: f64,
-    /// What its reactions could release over the time against its upkeep (well-being counts it up to `MARGIN`)
+    /// What its fuel could release over the time against its upkeep (well-being counts it up to `MARGIN`)
     pub spare: f64,
     /// Its mass as its update leaves it, after it sheds (valid until its stores change)
     pub mass: f64,
 }
 
-/// Where a body is at its update, and the time since its last.
-pub(super) struct Site {
-    /// Its ground cell and air node
-    pub i: usize,
-    pub j: usize,
-    /// The ground's temperature as of the last flow step, K (the monthly survey's is too old to feel a cell that turned hot)
-    pub tg: f64,
-    /// Liquid stands in the cell; the depth of liquid over the body, m (`bond::depth`)
-    pub stands: bool,
-    pub depth: f64,
-    /// Its link to the outside through the walls around it (`bond::enclosure`), the cover of other bodies over it
-    /// (`cover_of`), and the share of the light and rain the walls let through
-    pub walls: Option<Enclosure>,
-    pub cover: f64,
-    pub open: f64,
-    /// Days since its last update (at least one), and the same in s
-    pub days: f64,
-    pub dt: f64,
-}
-
-fn site(w: &World, d: &Domain, b: &Body) -> Site {
-    let i = b.cell as usize;
-    let (tg, depth) = (w.t_ground_last(i), w.life.env[i][1]);
-    let (stands, depth, walls) = (depth > 0.0, bond::depth(w, d, b, depth), bond::enclosure(w, d, b));
-    let cover = cover_of(w, d, b);
-    let open = 1.0 - walls.map_or(0.0, |x| x.closed as f64);
+/// The update of body `b` over the time since its last: upkeep paid by burning (the share unpaid dies, `SPENT`, and the
+/// share its wear gives, `AGE`), its drink, its heat (`keep_warm`), the checks of its stores, growth (`copy::grow`),
+/// children (`copy::copy`) and what it sheds. Returns what it left for its decision, or a death cause.
+pub(crate) fn live(w: &World, d: &mut Domain, b: &mut Body, tmp: &mut LiveTmp) -> Result<Lived, u8> {
     let days = (w.day() as f64 - b.last).max(1.0);
-    Site { i, j: w.mesh.up(i, 0, AIR), tg, stands, depth, walls, cover, open, days, dt: days * DAY }
-}
-
-/// Flow and Change on one body since its last update: upkeep, the physics of the time (`physics`), the heat it keeps,
-/// the checks of its stores, growth and copying, and what it sheds. Returns what it left for its decision, or a death cause.
-pub(crate) fn live(w: &World, d: &mut Domain, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Result<Lived, u8> {
-    let (mut lived, built, s) = to_growth(w, d, b, rc, tmp)?;
-    // Offspring are made whenever the brood covers a child, by physics, whatever its brain does (`copy::copy`). The key
-    // liquid the new tissue lacks and the children took soaks in again (`soak_again`).
-    let born = b.brood > 0.0 && crate::copy::copy(w, d, b);
-    if built || born {
-        soak_again(w, d, b, &s);
-    }
-    lived.mass = shed(w, d, b);
-    Ok(lived)
-}
-
-/// The update of body `b` as far as its growth (`live`): upkeep, the physics of the time, the heat it keeps, the
-/// checks of its stores, and growth, which builds body matter paid by work (`copy::grow`; past maturity a share
-/// `ALLOC` of it goes into the brood). Returns what it left for its decision but its mass (`live` sets it after it
-/// sheds), whether it built, and where it is; or a death cause.
-fn to_growth(w: &World, d: &mut Domain, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Result<(Lived, bool, Site), u8> {
-    let s = site(w, d, b);
-    // (Its activity as the update begins: the stages that pay and what it can build read it from here.)
-    let (mass, dry) = (b.mass(&w.chem), b.activity(&w.chem, &w.cfg.phys));
-    let from = b.member_body(&w.chem);
     b.last = w.day() as f64;
+    let (mass, from) = (b.mass(&w.chem), b.member_body(&w.chem));
     // With nothing left of a member there is no heat capacity to hold a temperature: it dies.
     if b.empty_at(mass) {
         return Err(LACK);
     }
-    let (upkeep_heat, span, mass, spare, th) = settle_upkeep(w, d, b, &s, (mass, dry), tmp)?;
-    let lit = physics(w, d, b, rc, &mut *tmp, &s, mass, upkeep_heat, th);
-    keep_warm(w, d, b, span, &s);
+    let (heat, spare) = settle_upkeep(w, d, b, days, mass, tmp)?;
+    drink(w, d, b, days);
+    keep_warm(w, d, b, heat, days * DAY);
     let th = check_stores(w, d, b, tmp)?;
-    let built = crate::copy::grow(w, d, b, s.days, th, s.cover);
+    crate::copy::grow(w, d, b, days, th.t);
     if !starved(w, d, b, from, &mut tmp.dead) {
         return Err(SPENT);
     }
-    Ok((Lived { lit, spare, mass: 0.0 }, built, s))
+    // Offspring are made whenever the brood covers a child, by physics, whatever its brain does (`copy::copy`).
+    if b.brood > 0.0 {
+        crate::copy::copy(w, d, b);
+    }
+    Ok(Lived { spare, mass: shed(w, d, b) })
+}
+
+/// Upkeep over the time: what its fuel releases is paid (`burn`), the share left unpaid dies, and so does the share its
+/// wear gives (`lose_share`). Returns the heat it released, J, and its spare: what its fuel could release against its
+/// upkeep, up to `MARGIN`.
+fn settle_upkeep(w: &World, d: &mut Domain, b: &mut Body, days: f64, mass: f64, tmp: &mut LiveTmp) -> Result<(f64, f64), u8> {
+    let (chem, t) = (&w.chem, b.temp(&w.chem));
+    let cost = upkeep(w, b, days, mass, t, b.activity(chem, &w.cfg.phys));
+    let spare = b.fuel(chem, t).min(MARGIN * cost) / cost.max(1e-300);
+    let paid = burn(w, d, b, cost);
+    // Wear: the energy its upkeep turns over per kg of the body that is built (the tissue that wears, not the fuel it
+    // carries), over what it can turn over in its life (`Physics::e_life`). Its members die at the rate of the wear: over
+    // the time the share 1 - e^-wear of them (an individual, with that chance), so they live that life on average,
+    // whatever the length of its updates.
+    let worn = cost / (b.built(chem).max(1e-9 * mass) * w.cfg.phys.e_life * b.dec(REPAIR));
+    let short = if cost > 0.0 { 1.0 - paid / cost } else { 0.0 };
+    for (f, cause) in [(short, SPENT), (one_minus_exp(worn), AGE)] {
+        if f > 1e-9 && !lose_share(w, d, b, f, cause, &mut tmp.dead, &b.thermal(chem)) {
+            return Err(cause);
+        }
+    }
+    Ok((paid, spare))
+}
+
+/// It drinks its key liquids from its cell's ground up to the level it keeps (`Body::level`), as far as the ground holds
+/// them liquid, each day at most its uptake gene's share of that level, paying to handle them (`c_handle` per kg); they
+/// come with their heat.
+fn drink(w: &World, d: &mut Domain, b: &mut Body, days: f64) {
+    let (chem, p, i) = (&w.chem, &w.cfg.phys, b.cell as usize);
+    let (lay, tg, mass) = (Layout::of(chem), w.t_ground_last(i), b.mass(chem));
+    let (wet, ns) = (b.wet, chem.ns());
+    for k in crate::math::ones(wet).filter(|&k| k < ns) {
+        if b.gene(lay.upt + k) <= 0.0 {
+            continue;
+        }
+        let (ground, mm, level) = (d.moves.amount(w, Node::ground(i), k), chem.subs[k].molar_mass, b.level(chem, k, mass));
+        let x = (level - b.store[k]).max(0.0).min(ground).min(b.gene(lay.upt + k) * level * days);
+        if x <= 0.0 || chem.phase(k, tg) != Phase::Liquid || !super::pay(w, d, b, p.c_handle * x * mm) {
+            continue;
+        }
+        let cp = chem.subs[k].cp;
+        let want = x * (cp * tg + chem.subs[k].lf);
+        let (got, heat) = d.moves.take_from_ground(w, i, (k, x, cp), want, d.moves.heat_cap_ground(w, i));
+        (b.store[k], b.e) = (b.store[k] + got, b.e + heat);
+    }
+}
+
+/// Its heat over the time `dt` s (laws.md 6.3): the heat its upkeep released leaves through its coat (`HEAT`, in series
+/// with the walls around it, 3.4) to its ground, so it stands that much above the ground. Below its `KEEP_T` gene it
+/// burns what its coat loses at that temperature beyond it; above its `COOL_T` gene it evaporates its key liquid for the
+/// excess, at its latent heat, never below its safe minimum. It then stands at that temperature (`settle_heat`).
+fn keep_warm(w: &World, d: &mut Domain, b: &mut Body, heat: f64, dt: f64) {
+    let (chem, p, i) = (&w.chem, &w.cfg.phys, b.cell as usize);
+    let tg = w.t_ground_last(i);
+    let coat = b.conductance(p.m_ref, b.mass(chem));
+    let g = crate::bond::enclosure(w, d, b).map_or(coat, |x| 1.0 / (1.0 / coat + 1.0 / x.g)) * dt;
+    if g <= 0.0 {
+        return;
+    }
+    let (keep, cool) = (b.gene(KEEP_T), b.gene(COOL_T));
+    let free = tg + heat / g;
+    let t = if free < keep {
+        tg + (heat + burn(w, d, b, g * (keep - tg) - heat)) / g
+    } else if free > cool {
+        tg + (heat - evaporate(w, d, b, heat - g * (cool - tg))) / g
+    } else {
+        free
+    };
+    settle_heat(w, d, b, t);
+}
+
+/// It evaporates its key liquids to take `q` J away, at each one's vaporisation enthalpy, never below its safe minimum:
+/// the vapour goes to its cell's bodies' node with its heat and its latent heat (`Moves::gas`). Returns the heat taken
+/// away, J.
+fn evaporate(w: &World, d: &mut Domain, b: &mut Body, q: f64) -> f64 {
+    let (chem, i) = (&w.chem, b.cell as usize);
+    let (lay, t, size, lift) = (Layout::of(chem), b.temp(chem), b.size(chem), w.lift(i));
+    let mut taken = 0.0;
+    let (wet, ns) = (b.wet, chem.ns());
+    for k in crate::math::ones(wet).filter(|&k| k < ns) {
+        let s = &chem.subs[k];
+        let free = (b.store[k] - b.gene(lay.min + k).max(0.0) * size / s.molar_mass).max(0.0);
+        let x = free.min((q - taken) / s.lv);
+        if x <= 0.0 {
+            continue;
+        }
+        b.store[k] -= x;
+        d.moves.gas(w, k, x, lift);
+        d.moves.give(w, Node::bodies(i), 0, 0.0, x * s.cp * t);
+        // (Its own heat held the liquid's sensible and fusion heat; the vapour takes its vaporisation heat too.)
+        b.e -= x * (s.cp * t + s.latent_gas());
+        taken += x * s.lv;
+    }
+    taken
 }
 
 /// A body whose growth did not rebuild the body it lost in the update, below its copy mass, starves: it keeps the share
@@ -126,37 +162,6 @@ fn starved(w: &World, d: &mut Domain, b: &mut Body, from: f64, dead: &mut Vec<f6
     th.is_none_or(|th| lose_share(w, d, b, f, SPENT, dead, &th))
 }
 
-/// Upkeep over the time, at least an interval: the share left unpaid dies, and so does the share its wear gives
-/// (`lose_share`). Returns the heat released, the span, the mass left, its spare and the plateau state it came at.
-fn settle_upkeep(w: &World, d: &mut Domain, b: &mut Body, s: &Site, (mut mass, dry): (f64, f64), tmp: &mut LiveTmp) -> Result<(f64, f64, f64, f64, Melting), u8> {
-    // (One temperature and one activity for the stages that see the body as it came: the upkeep, the plan and the paying.)
-    let span = s.days.max(b.interval(w) as f64);
-    let p = Payer::at(w, d, b, span, mass, b.thermal(&w.chem), (s.cover, dry));
-    let cost = upkeep(w, b, s.days, mass, p.th.t, dry);
-    let spare = plan(w, d, b, MARGIN * cost, &p).1 / cost.max(1e-300);
-    let short = pay_at(w, d, b, cost, &p, true) / cost.max(1e-300);
-    // Wear: the energy its upkeep turns over per kg of the body that is built (the tissue that wears, not the fuel it
-    // carries), over what it can turn over in its life (`Physics::e_life`). Its members die at the rate of the wear: over
-    // the time the share 1 - e^-wear of them (an individual, with that chance), so they live that life on average,
-    // whatever the length of its updates.
-    let worn = cost / (b.built(&w.chem).max(1e-9 * mass) * w.cfg.phys.e_life * b.dec(REPAIR));
-    // The heat set aside is what the burning released less what its products take to stand at the body's temperature, so
-    // the body keeps its temperature as its stores change (as in `pay`).
-    let kept = b.heat_with(&w.chem, &p.th, &b.store);
-    let upkeep_heat = b.e - kept;
-    b.e = kept;
-    for (f, cause) in [(short, SPENT), (one_minus_exp(worn), AGE)] {
-        if f > 1e-9 {
-            if !lose_share(w, d, b, f, cause, &mut tmp.dead, &p.th) {
-                b.e += upkeep_heat;
-                return Err(cause);
-            }
-            mass = b.mass(&w.chem);
-        }
-    }
-    Ok((upkeep_heat, span, mass, spare, p.th))
-}
-
 /// Draws of death a body may take in a day, one for each cause (`Rng` keyed by the day and the cause).
 const CAUSES: u64 = 8;
 
@@ -172,25 +177,8 @@ fn lose_share(w: &World, d: &mut Domain, b: &mut Body, f: f64, cause: u8, dead: 
     thin(w, d, b, f, dead, cause, th)
 }
 
-/// It keeps its temperature at its `KEEP_T` gene: if the update left it colder, it burns on demand, as for its upkeep,
-/// the heat its surface sheds at that level over the time (the share `hold` of a heat released over the time stays in
-/// it), as far as its reactions can release it. Twice, as its products take a part of the heat at its temperature.
-fn keep_warm(w: &World, d: &mut Domain, b: &mut Body, span: f64, s: &Site) {
-    for _ in 0..KEEP_T_PASSES {
-        let (m, c) = b.mass_cap(&w.chem);
-        let short = b.energy_at(&w.chem, b.gene(KEEP_T)) - b.e;
-        if c <= 0.0 || short <= KEEP_T_SLACK * b.e {
-            break;
-        }
-        let p = Payer::at(w, d, b, span, m, b.thermal(&w.chem), (s.cover, b.activity(&w.chem, &w.cfg.phys)));
-        if spend(w, d, b, short / hold(w, d, b, &p, s.dt), s.dt, true, &p) > 0.0 {
-            break;
-        }
-    }
-}
-
 /// A store below its safe minimum kills it (a node: its poorest members, `starve`); a boiled key liquid kills it, a
-/// frozen one kills the share frozen times its activity (`Body::over_span`). Returns the plateau state it is left at.
+/// frozen one kills the share frozen. Returns the plateau state it is left at.
 fn check_stores(w: &World, d: &mut Domain, b: &mut Body, tmp: &mut LiveTmp) -> Result<Melting, u8> {
     let mass = b.mass(&w.chem);
     let mut th = b.thermal(&w.chem);
@@ -202,16 +190,15 @@ fn check_stores(w: &World, d: &mut Domain, b: &mut Body, tmp: &mut LiveTmp) -> R
     }
     let (chem, ns) = (&w.chem, w.chem.ns());
     let key = |k: usize| b.wet >> k & 1 == 1;
-    if (0..ns).any(|k| key(k) && chem.phase(k, th.t) == Phase::Gas) {
+    if (0..ns).any(|k| key(k) && th.t > chem.subs[k].boil) {
         return Err(PHASE);
     }
     let frozen = |k: usize| match th.on {
         Some((j, molten)) if j == k => 1.0 - molten,
-        _ => (th.t < b.melt(chem, k)) as u8 as f64,
+        _ => (th.t < chem.subs[k].melt) as u8 as f64,
     };
-    let frozen = (0..ns).filter(|&k| key(k)).map(frozen).fold(0.0, f64::max);
-    if frozen > 0.0 {
-        let f = frozen * b.activity(chem, &w.cfg.phys);
+    let f = (0..ns).filter(|&k| key(k)).map(frozen).fold(0.0, f64::max);
+    if f > 0.0 {
         if f >= 1.0 - 1e-9 || !lose_share(w, d, b, b.over_span(f, w), PHASE, &mut tmp.dead, &th) {
             return Err(PHASE);
         }
@@ -238,7 +225,7 @@ fn starve(w: &World, d: &mut Domain, b: &mut Body, th: &Melting, dead: &mut Vec<
 }
 
 /// What it sheds to the ground with its heat: minerals, built solids and key liquids past their level, and anything
-/// else it neither burns nor is made of; gases leave by breath. Returns its mass after.
+/// else it neither burns nor is made of. Returns its mass after.
 fn shed(w: &World, d: &mut Domain, b: &mut Body) -> f64 {
     let (chem, mass) = (&w.chem, b.mass(&w.chem));
     let th = b.thermal(chem);

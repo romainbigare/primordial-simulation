@@ -109,9 +109,9 @@ fn cell(w: &World, d: &mut Domain, p: &Parts, k: usize, dt: f64) {
         counts.cover_lost.iter_mut().zip(lost).for_each(|(a, l)| *a += l);
         build(w, c, p, x, &s[q], (i, t, dt), &mut ground, &mut b);
         // What rounding left below zero is set to zero and counted (a larger overdraw is this law's fault).
-        let size: f64 = c.mol[x].iter().map(|m| m.abs()).sum();
+        let (size, all) = (c.mol[x].iter().map(|m| m.abs()).sum::<f64>(), c.mol[x]);
         for m in c.mol[x].iter_mut().filter(|m| **m < 0.0) {
-            debug_assert!(-*m <= crate::store::ROUNDING * size, "the cover overdrew a part by {m}");
+            debug_assert!(-*m <= crate::store::ROUNDING * size, "the cover overdrew a part by {m}: {all:?}");
             counts.rounded[0] -= std::mem::take(m);
         }
     }
@@ -156,13 +156,15 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
     let (burn, days) = (&chem.reactions[p.burn], dt / DAY);
     let pace = burn.arrhenius(t.max(1.0)) / burn.arrhenius(ph.t_cat);
     // A capacity that could store `cap` W per kg costs the share `c_light` of that, the dearer the colder it stands (as
-    // a firm catalyst costs more, `t_firm`).
+    // a firmer catalyst costs more).
     let cap = dec(g[LIGHT]) * dec(g[MOIST]) * chem.dh(p.light) * DAY;
     let firm = 1.0 + (chem.subs[p.liquid].melt - g[FROST] as f64).max(0.0) / ph.c_firm;
     let cost = (s.built * days * (ph.c_basal + ph.c_light * cap * firm) + ph.c_leaf * s.leaf * days) * ph.repair(g[REPAIR] as f64) * s.act * pace;
     let (units, fuel) = (cost / -chem.dh(p.burn), per_input(burn, p.sub[FUEL]).unwrap_or(1.0));
-    let short = if units * fuel > c.mol[x][FUEL] { 1.0 - c.mol[x][FUEL] / (units * fuel) } else { 0.0 };
-    b.run(chem, p, &mut c.mol[x], burn, units * (1.0 - short));
+    // (What it burns is worked out first: one less a share near one would lose a small fuel to rounding.)
+    let burnt = (units * fuel).min(c.mol[x][FUEL].max(0.0));
+    let short = if units > 0.0 { 1.0 - burnt / (units * fuel) } else { 0.0 };
+    b.run(chem, p, &mut c.mol[x], burn, burnt / fuel);
     // Members of a field wear out at the rate of living as a body's do (laws.md 6.7); below its frost gene its frozen
     // share dies as far as it is active, within `unfold` K.
     let worn = cost / (s.built * ph.e_life * dec(g[REPAIR]));
@@ -179,7 +181,7 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
         let all = c.kg(&mm, x);
         lost.iter_mut().for_each(|l| *l *= all);
         for q in 0..NP {
-            let m = c.mol[x][q] * dies;
+            let m = c.mol[x][q].max(0.0) * dies;
             (c.mol[x][q], b.dead[p.sub[q]]) = (c.mol[x][q] - m, b.dead[p.sub[q]] + m);
         }
     }

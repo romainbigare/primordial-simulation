@@ -41,7 +41,7 @@ fn hot_reacts_faster() {
         let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
         (n[FRAME], gas[OX]) = (1000.0, 1e6);
         let mut e = t * HUGE_CAP;
-        rc.react(&chem, &mut n, Some(&mut gas), &mut e, HUGE_CAP, None, 0.0, 2.5e4);
+        rc.react(&chem, &mut n, Some(&mut gas), &mut e, HUGE_CAP, 2.5e4);
         1000.0 - n[FRAME]
     };
     let (cold, hot) = (used(300.0), used(450.0));
@@ -59,7 +59,7 @@ fn hot_energy_rich_node_keeps_burning() {
     let mut e = 650.0 * 1000.0 * chem.subs[RICH].cp;
     let (el0, en0) = node_totals(&chem, &n, &gas, e);
     for _ in 0..4 {
-        rc.react(&chem, &mut n, Some(&mut gas), &mut e, 0.0, None, 0.0, 3.0 * DAY);
+        rc.react(&chem, &mut n, Some(&mut gas), &mut e, 0.0, 3.0 * DAY);
     }
     let (el1, en1) = node_totals(&chem, &n, &gas, e);
     assert!(n[RICH] < 10.0 && gas[ABSORBER] > 500.0, "left {} released {}", n[RICH], gas[ABSORBER]);
@@ -164,67 +164,6 @@ fn a_node_on_its_melting_plateau_reacts_at_its_melting_point() {
     assert!(frozen > 0.0 && (half - frozen).abs() <= 1e-5 * frozen, "half frozen {half}, all frozen {frozen}");
 }
 
-/// A body's catalyst works below the temperature where it loses its shape, and a few K above it the reaction goes
-/// about as fast as bare (a dry node: no catalyst; at once, for a catalyst that loses its shape over no width).
-#[test]
-fn catalysts_fail_when_hot() {
-    let (chem, _) = worldgen::chemistry0();
-    let mut rc = Reactor::new(&chem, &cfg());
-    let mut cat = vec![1.0; chem.reactions.len()];
-    cat[1] = 1e6;
-    let mut used = |t: f64, c: Option<(&[f64], f64, f64)>| {
-        let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
-        (n[RICH], gas[OX]) = (1000.0, 1e6);
-        let mut e = t * HUGE_CAP;
-        rc.react(&chem, &mut n, Some(&mut gas), &mut e, HUGE_CAP, c, 0.0, 1.0);
-        1e6 - gas[OX]
-    };
-    let (cool, cool_bare) = (used(310.0, Some((&cat, 320.0, 3.0))), used(310.0, None));
-    let (hot, hot_bare) = (used(340.0, Some((&cat, 320.0, 3.0))), used(340.0, None));
-    assert!(cool_bare > 0.0 && cool > 1e5 * cool_bare && hot < 1.2 * hot_bare, "310 K: {cool:e} vs bare {cool_bare:e}; 340 K: {hot:e} vs bare {hot_bare:e}");
-    // With no width it is whole up to its temperature and gone above it.
-    let (sharp_cool, sharp_hot) = (used(310.0, Some((&cat, 320.0, 0.0))), used(340.0, Some((&cat, 320.0, 0.0))));
-    assert!(sharp_cool >= cool && sharp_hot == hot_bare, "no width: 310 K {sharp_cool:e}, 340 K {sharp_hot:e}");
-}
-
-/// In a body a bare reaction too slow to matter over the world's year is skipped (`kernel.rs`, `TOO_SLOW`), whatever
-/// the length of the body's calls: a year in 360 calls and in 9 runs the same reactions (it makes the same products)
-/// and moves each store it starts with by the same amount to within 1e-3 of that amount (what is left is the reactions
-/// run one after the other in each call), the frame (its bare rot is far under the skip) not at all, and each call
-/// keeps its elements and energy.
-#[test]
-fn a_body_skips_the_same_tiny_reactions_whatever_its_calls() {
-    let (chem, _) = worldgen::chemistry0();
-    let mut rc = Reactor::new(&chem, &cfg());
-    let (bare, year) = (vec![1.0; chem.reactions.len()], cfg().calendar().year as f64);
-    let start = |n: &mut Vec<f64>| (n[RICH], n[FRAME], n[LIQUID]) = (1000.0, 1000.0, 1000.0);
-    let mut run = |calls: usize| {
-        let (mut n, mut gas) = (vec![0.0; chem.ns()], air_over_m2(&chem, 400.0));
-        start(&mut n);
-        let mut e = 300.0 * HUGE_CAP;
-        for _ in 0..calls {
-            let (el0, en0) = node_totals(&chem, &n, &gas, e);
-            rc.react(&chem, &mut n, Some(&mut gas), &mut e, HUGE_CAP, Some((&bare, 320.0, 3.0)), 0.0, year / calls as f64);
-            let (el1, en1) = node_totals(&chem, &n, &gas, e);
-            let kept = (0..chem.n_elements).all(|j| (el1[j] - el0[j]).abs() <= 1e-12 * el0[j].max(1.0)) && (en1 - en0).abs() <= 1e-12 * en0.abs();
-            assert!(kept, "a call of {calls} lost elements or energy");
-        }
-        n
-    };
-    let (many, few) = (run(360), run(9));
-    let mut held = vec![0.0; chem.ns()];
-    start(&mut held);
-    assert!(many[FRAME] == held[FRAME] && few[FRAME] == held[FRAME], "the frame moved: {} and {}", many[FRAME], few[FRAME]);
-    assert!(many[RICH] < 0.9 * held[RICH], "the solid's bare rot ran: {} left", many[RICH]);
-    for k in (0..chem.ns()).filter(|&k| held[k] > 0.0) {
-        let moved = (many[k] - held[k]).abs();
-        assert!((many[k] - few[k]).abs() <= 1e-3 * moved, "substance {k}: {} in 360 calls, {} in 9, of {}", many[k], few[k], held[k]);
-    }
-    for k in (0..chem.ns()).filter(|&k| held[k] == 0.0) {
-        assert!((many[k] > 0.0) == (few[k] > 0.0), "substance {k}: {} made in 360 calls, {} in 9", many[k], few[k]);
-    }
-}
-
 /// Dead matter in the wet open world goes with what there is of it (first order: the same share lost for 1 and 1,000
 /// mol) at its litter constant, 0.27 a year at 290 K for the frame (Olson 1963; `docs/numbers.md`), the burning gas at
 /// its share of the air; the free energy-rich solid rots `Reaction::open` times faster, by the decomposers of the open
@@ -239,7 +178,7 @@ fn litter_goes_first_order_at_its_constant() {
         let (mut n, mut gas) = (vec![0.0; chem.ns()], air_over_m2(&chem, 400.0));
         n[k] = a;
         let mut e = 290.0 * OPEN_CAP;
-        rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, dt);
+        rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, dt);
         1.0 - n[k] / a
     };
     let (few, many) = (lost(FRAME, 1.0, year, 1.0), lost(FRAME, 1000.0, year, 1.0));
@@ -264,7 +203,7 @@ fn wet_land(chem: &Chemistry, rock: f64, dt: f64) -> (f64, bool) {
     (n[LIQUID], n[ROCK]) = (0.4 * MOL_PER_M3, rock);
     let mut e = 288.0 * (OPEN_CAP + n.iter().zip(&chem.subs).map(|(a, s)| a * s.cp).sum::<f64>());
     let (el0, en0) = node_totals(chem, &n, &gas, e);
-    rc.react(chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, dt);
+    rc.react(chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, dt);
     let (el1, en1) = node_totals(chem, &n, &gas, e);
     let closed = (0..chem.n_elements).all(|j| (el1[j] - el0[j]).abs() <= 1e-10 * el0[j].max(1.0)) && (en1 - en0).abs() <= 1e-9 * en0.abs();
     (n[DISSOLVED] / dt, closed && n.iter().chain(&gas).all(|&a| a >= 0.0))
@@ -308,7 +247,7 @@ fn a_mineral_past_its_balance_falls_out_by_its_rate_law_over_a_long_step() {
         (n[LIQUID], n[DISSOLVED]) = (1250.0, 4.35);
         let mut e = 305.0 * 1e7;
         for _ in 0..calls {
-            rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e7, None, 0.0, 10.0 * DAY / calls as f64);
+            rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e7, 10.0 * DAY / calls as f64);
         }
         n[DISSOLVED]
     };
@@ -346,7 +285,7 @@ fn the_two_reactions_close_elements_and_energy() {
         let mut e = 288.0 * (OPEN_CAP + n.iter().zip(&chem.subs).map(|(a, s)| a * s.cp).sum::<f64>());
         let (el0, en0) = node_totals(&chem, &n, &gas, e);
         for _ in 0..30 {
-            rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, 120.0 * DAY);
+            rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, 120.0 * DAY);
         }
         let (el1, en1) = node_totals(&chem, &n, &gas, e);
         assert!((n[DISSOLVED] - mineral).abs() > 1.0, "it did react: {mineral} -> {}", n[DISSOLVED]);
@@ -390,7 +329,7 @@ fn a_dry_cell_holds_none_and_a_deeper_column_holds_more() {
     let (mut n, mut gas) = column(&chem, 0.0, 400.0);
     n[DISSOLVED] = 100.0;
     let mut e = 288.0 * OPEN_CAP;
-    rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, DAY);
+    rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, DAY);
     assert!(n[DISSOLVED] < 1e-6, "left in a dry cell: {}", n[DISSOLVED]);
 }
 
@@ -410,7 +349,7 @@ fn a_long_run_settles_to_the_balance() {
         let mut e = 288.0 * OPEN_CAP;
         for _ in 0..(60 * 3) {
             let mut gas = gas0.clone();
-            rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, 120.0 * DAY);
+            rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, 120.0 * DAY);
         }
         assert!((n[DISSOLVED] / want - 1.0).abs() < 0.05, "from {start}: {} against the balance {want}", n[DISSOLVED]);
     }
@@ -430,7 +369,7 @@ fn under_a_liquid_dead_matter_burns_as_its_film_lets_the_gas_through() {
         let mut rc = Reactor::new(&chem, &cfg());
         (rc.film, rc.moist) = (film, 1.0);
         let (mut e, gas0) = (t * OPEN_CAP, gas[OX]);
-        rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, dt);
+        rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, dt);
         (gas0 - gas[OX]) / dt
     };
     let air: f64 = column(&chem, depth, 400.0).1.iter().sum();
@@ -511,7 +450,7 @@ fn rotting_gives_the_minerals_back_and_burning_hot_gives_the_gas_to_the_air() {
         let gas0 = gas.clone();
         // (A product waits for the next call to react further: the mineral breaks down in the calls after the one that makes it.)
         for _ in 0..3 {
-            rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, secs / 3.0);
+            rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, secs / 3.0);
         }
         let (el1, en1) = node_totals(&chem, &n, &gas, e);
         for j in 0..chem.n_elements {

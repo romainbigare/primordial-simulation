@@ -1,14 +1,13 @@
 //! The bodies seen from their cells: before each physics step what each cell holds and the shade of its bodies
 //! (`survey`), and every batch of days the updates due, in a parallel and a serial phase (`batch`).
 
-use crate::body::{die, live, Body, Layout, LiveTmp, LACK};
-use crate::{change::Reactor, choose, life::{Domain, Handle}, World};
+use crate::body::{die, live, Layout, LiveTmp, LACK};
+use crate::{choose, life::Domain, World};
 use crate::store::{Class, Node};
 
 mod draws;
 mod faces;
-pub use draws::Draw;
-pub(crate) use draws::Draws;
+pub(crate) use draws::release;
 pub use faces::{Face, Faces, UNCOVERED};
 
 /// A brain perceives the loose amount of a substance in a cell, `a` mol/m², as `LOOSE_SENSE` ln(1 + a).
@@ -22,8 +21,7 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
 }
 
 /// Before each physics step, one task per domain on the pool (`run`), in each of its cells: what movers broke since the
-/// last (`choose::wear`), once a month the merge of alike nodes (`nodes::crowd`), the light shared out (`shade`) and what
-/// the cell holds (`rows`). A death or a merge that lets go of a part queues that in the domain's outbox, applied after
+/// last (`choose::wear`), once a month the merge of alike nodes (`nodes::crowd`), and what the cell holds (`rows`). A death or a merge that lets go of a part queues that in the domain's outbox, applied after
 /// the tasks (`outbox::land`, laws.md 0). Then the caches of the cells (`caches`), once a month the traffic and each
 /// cell's surroundings. With `reversed`, the domains start in reversed order: only for the order test.
 pub fn survey(w: &mut World, reversed: bool) {
@@ -36,9 +34,8 @@ pub fn survey(w: &mut World, reversed: bool) {
     // (A domain with no bodies and no cover that had none at the last survey has nothing to do.)
     let work: Vec<_> = sums.iter_mut().enumerate().map(|(k, s)| (k, w.life.domains[k].count() + w.life.domains[k].cells.len(), s)).filter(|x| x.2.live || w.life.domains[x.0].lives()).collect();
     let ran: Vec<usize> = work.iter().map(|x| x.0).collect();
-    run(w, work, reversed, |_| Vec::new(), |w, d, s, l| {
+    run(w, work, reversed, |_| (), |w, d, s, _| {
         (0..d.cells.len()).for_each(|k| worn(w, d, &lay, k, monthly));
-        (0..d.cells.len()).for_each(|c| shade(w, d, c, l));
         rows(w, d, &mut s.rows);
         s.live = d.lives();
     });
@@ -85,9 +82,9 @@ fn worn(w: &World, d: &mut Domain, lay: &Layout, k: usize, monthly: bool) {
     }
 }
 
-/// The numbers of the cells of domain `d` (`Life::sum`), from its bodies in the order they came: their members, then
-/// their visible traits summed, then the energy to break them; then their capture area times their shade, and that
-/// times the share they set aside for their light reactions.
+/// The numbers of the cells of domain `d` (`Life::sum`), from its cover and its bodies in the order they came: their
+/// members, then their visible traits summed, then the energy to break them; then the cover's capture area times the
+/// share of light it absorbs, and that times the share set aside for its light reaction.
 fn rows(w: &World, d: &Domain, rows: &mut [[f64; ROW]]) {
     let parts = crate::cover::Parts::of(&w.chem);
     for (k, row) in rows.iter_mut().enumerate() {
@@ -103,10 +100,10 @@ fn rows(w: &World, d: &Domain, rows: &mut [[f64; ROW]]) {
             row[7] += c.breaking(&w.chem, &w.cfg, p, k, 1.0);
         }
         for b in d.at[k].iter().map(|&h| &d[h]).filter(|b| b.alive) {
-            let (m, a) = (b.n(), light_area(b) * b.shade);
+            let m = b.n();
             row[0] += m;
             row[1..7].iter_mut().zip(&b.vis).for_each(|(x, &v)| *x += v as f64 * m);
-            (row[7], row[8], row[9]) = (row[7] + b.breaking(&w.chem, &w.cfg, 1.0), row[8] + a, row[9] + a * b.keep as f64);
+            row[7] += b.breaking(&w.chem, &w.cfg, 1.0);
         }
     }
 }
@@ -139,16 +136,6 @@ pub fn sums(w: &mut World) {
     w.life.sums = sums;
 }
 
-/// The capture area of `n` members who each show `vis` of it (`Body::vis`), m².
-pub(super) fn capture(vis: f32, n: f64) -> f64 {
-    vis as f64 * n
-}
-
-/// The capture area of body `b`'s members times the share of light they absorb, m².
-fn light_area(b: &Body) -> f64 {
-    capture(b.vis[1], b.n()) * (1.0 - b.reflectance())
-}
-
 /// The yearly moving average of the crossings of each cell (`Domain::crossings`, kept by its domain), once a month.
 fn traffic(w: &mut World) {
     let World { life, counts, cfg, mesh, .. } = w;
@@ -161,19 +148,6 @@ fn traffic(w: &mut World) {
             *c = 0.0;
         }
     }
-}
-
-/// Light passes the bodies of cell `c` of domain `d` from the tallest member down, equal heights sharing a layer; a layer
-/// of capture area `x` per ground area absorbs 1 - exp(-x) of what reaches it. The cell's light is only shared out (the
-/// shades, weighted by capture area, have mean 1). Only if its bodies changed (`Domain::stir`), with `l` for the work.
-fn shade(w: &World, d: &mut Domain, c: usize, l: &mut Vec<(f32, f64, Handle)>) {
-    if !std::mem::take(&mut d.stale[c]) {
-        return;
-    }
-    let a = w.mesh.cells().area()[d.cells[c] as usize];
-    l.clear();
-    l.extend(d.at[c].iter().map(|&s| (s, &d[s])).map(|(s, b)| (b.vis[6], b.vis[1] as f64 * b.n() / a, s)));
-    crate::math::shade(l, |s, f| d[s].shade = f);
 }
 
 /// Update the bodies due in this batch, all at its first day (laws.md 0). First the parallel phase: the domains are taken
@@ -251,21 +225,21 @@ pub(crate) fn run<T: Send, S>(w: &mut World, work: Vec<(usize, usize, T)>, rever
 }
 
 /// The scratch of a body's update, made once per thread and used for each update it runs.
-type Scratch = (Reactor, LiveTmp, choose::ActTmp);
+type Scratch = (LiveTmp, choose::ActTmp);
 
 /// A new scratch of a body's update.
-fn scratch(w: &World) -> Scratch {
-    (Reactor::new(&w.chem, &w.cfg), LiveTmp::default(), choose::ActTmp::default())
+fn scratch(_: &World) -> Scratch {
+    (LiveTmp::default(), choose::ActTmp::default())
 }
 
 /// The update of body `id` of cell `cell` in domain `d`, if it is still stored there (it may have died or joined
 /// another body since): its physics, decision, lineage and split; or its death.
-fn update(w: &World, d: &mut Domain, (cell, id): (usize, u64), (rc, tmp, act): &mut Scratch) {
+fn update(w: &World, d: &mut Domain, (cell, id): (usize, u64), (tmp, act): &mut Scratch) {
     let Some(s) = d.find(id) else { return };
     d.moves.open(w, cell, Node::new(Class::Body, s.slot as usize));
     let mut b = std::mem::take(&mut d[s]);
     (d.counts.updates, d.began) = (d.counts.updates + 1, d.out.len());
-    let lived = match live(w, d, &mut b, rc, tmp) {
+    let lived = match live(w, d, &mut b, tmp) {
         Err(cause) => return die(w, d, s, b, cause),
         Ok(lived) => lived,
     };

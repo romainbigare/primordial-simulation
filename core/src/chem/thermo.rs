@@ -45,11 +45,6 @@ impl Chemistry {
         P_REF * (l / R_GAS * (1.0 / tb - 1.0 / t.max(T_MIN))).exp()
     }
 
-    /// Temperature at which the vapour pressure of `k` is `x` times the reference pressure, K.
-    pub(crate) fn t_sat(&self, k: usize, x: f64) -> f64 {
-        let (tb, l) = (self.subs[k].boil, self.subs[k].lv);
-        1.0 / (1.0 / tb - R_GAS * x.max(LEAST_SHARE).ln() / l)
-    }
 
     /// Melting point of `k` as the share `x` of its liquid's moles, K: an ideal solution freezes lower (Schroeder-van
     /// Laar): 1 / T = 1 / Tm - R ln x / Lf; for the common liquid that is the measured 1.86 K per mol in a kg.
@@ -99,11 +94,6 @@ impl Chemistry {
         liquid(s).then(|| self.subs.iter().enumerate().filter(|e| e.0 != k).map(mix).filter(|m| m.1 || m.2).collect())
     }
 
-    /// The substances that hold a fusion enthalpy, by their own melting points (ties by number): the order a body's
-    /// plateaus come in where nothing dissolved lowers a point (`Body::thermal`).
-    pub(crate) fn by_melt(&self) -> &[usize] {
-        &self.derived().by_melt
-    }
 
     /// Phase of `k` at `t` among the amounts `a(j)` of one node or body, at its melting point there (`melt_in`).
     #[inline(always)]

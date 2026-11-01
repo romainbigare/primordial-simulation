@@ -72,7 +72,7 @@ pub struct Reaction {
     /// Takes absorbed light instead of heat
     pub light: bool,
     /// The decomposers' catalyst of the open world (ground, liquid, air and parts: wherever no body's catalysts run it),
-    /// a factor that works as far as the node is moist (`Body::catalyst`); 1 for a reaction they do not speed
+    /// a factor that works as far as the node is moist (`change::open_catalyst`); 1 for a reaction they do not speed
     pub open: f64,
     /// The power of each input's share in the rate law; empty: the counts (mass action). A big molecule is not a
     /// meeting of 40 molecules: the rate law keeps the power it was measured at.
@@ -115,9 +115,6 @@ pub struct Chemistry {
     /// What follows from the fields above, made at its first use (not saved)
     #[serde(skip)]
     derived: OnceLock<Derived>,
-    /// `Chemistry::contact_rates` at the first temperature asked (not saved)
-    #[serde(skip)]
-    contact: OnceLock<(f64, Vec<f64>)>,
 }
 
 /// Numbers that follow from a chemistry, made once (`Chemistry::derived`).
@@ -131,8 +128,6 @@ struct Derived {
     burners: Vec<(usize, f64)>,
     /// `Chemistry::mixes` of each substance
     mixes: Vec<Option<Vec<(usize, bool, bool)>>>,
-    /// `Chemistry::by_melt`
-    by_melt: Vec<usize>,
     /// The substances others dissolve in (`Chemistry::mixes` is some), a bit per substance
     solvents: u64,
     /// The solids bodies build besides their matter (`Chemistry::materials`), a bit per substance
@@ -146,7 +141,7 @@ impl Chemistry {
     pub fn new(n_elements: usize, subs: Vec<Substance>, reactions: Vec<Reaction>, build: Option<Reaction>, builds: Vec<Reaction>, air: &[(usize, f64)]) -> Self {
         let mut shares = vec![0.0; subs.len()];
         air.iter().for_each(|&(k, x)| shares[k] = x);
-        Chemistry { n_elements, subs, reactions, build, builds, air: shares, derived: OnceLock::new(), contact: OnceLock::new() }
+        Chemistry { n_elements, subs, reactions, build, builds, air: shares, derived: OnceLock::new() }
     }
 
     pub fn ns(&self) -> usize {
@@ -170,27 +165,15 @@ impl Chemistry {
             let minerals = self.build.as_ref().map_or(Vec::new(), |bl| bl.inputs.iter().filter(|p| self.burner(p.0 as usize).is_none()).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect());
             let air_cp: f64 = self.air.iter().zip(&self.subs).map(|(x, s)| x * s.cp).sum();
             let burners = (0..self.reactions.len()).filter(|&r| self.dh(r) < 0.0 && !self.keeps(r)).map(|r| (r, -self.dh(r))).collect();
-            let mut by_melt: Vec<usize> = (0..self.ns()).filter(|&k| self.subs[k].lf > 0.0).collect();
-            by_melt.sort_by(|&a, &b| self.subs[a].melt.total_cmp(&self.subs[b].melt));
             let air_cp = if air_cp > 0.0 { air_cp } else { thermo::DIATOMIC_CP };
             let mixes: Vec<_> = (0..self.ns()).map(|k| self.find_mixes(k)).collect();
             let solvents = (0..self.ns()).filter(|&k| mixes[k].is_some()).fold(0, |m, k| m | 1 << k);
             let materials = self.materials().fold(0, |m, k| m | 1 << k);
             let light = (0..self.reactions.len()).filter(|&r| self.reactions[r].light).collect();
-            Derived { minerals, air_cp, burners, mixes, by_melt, solvents, materials, light }
+            Derived { minerals, air_cp, burners, mixes, solvents, materials, light }
         })
     }
 
-    /// The catalysed rate of each reaction per unit of contact at `t`, its gases at their share of the starting air to
-    /// their order, per second (the cost of catalysts, `Body::prepare`); kept for the first `t` asked.
-    pub(crate) fn contact_rates(&self, t: f64) -> std::borrow::Cow<'_, [f64]> {
-        let open = |rx: &Reaction| -> f64 {
-            rx.inputs.iter().enumerate().filter(|(_, x)| self.phase(x.0 as usize, t) == Phase::Gas).map(|(q, &(k, _))| self.air.get(k as usize).copied().filter(|&x| x > 0.0).unwrap_or(1.0).powi(rx.order(q) as i32)).product()
-        };
-        let rates = || self.reactions.iter().map(|rx| rx.arrhenius(t) * open(rx)).collect::<Vec<f64>>();
-        let kept = self.contact.get_or_init(|| (t, rates()));
-        if kept.0 == t { std::borrow::Cow::Borrowed(&kept.1) } else { std::borrow::Cow::Owned(rates()) }
-    }
 
     /// Element counts of a reaction side.
     fn side_elems(&self, v: &[(u16, u16)]) -> Vec<u32> {

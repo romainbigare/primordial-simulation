@@ -4,9 +4,6 @@ use crate::{chem::{Chemistry, Phase, Reaction}, math::{add_times, one_minus_exp}
 
 /// A reaction whose fraction over the world's year stays below this is frozen and skipped.
 const NEGLIGIBLE: f64 = 1e-12;
-/// In a body, a bare reaction (catalyst factor at most 1) whose rate would use less than this share of its scarcest
-/// input over the world's year is skipped: a speed tolerance, as `NEGLIGIBLE` but on the rate the reactor would use.
-const TOO_SLOW: f64 = 3.6e-5;
 /// Largest temperature change in one sub-step, K.
 const MAX_DT_K: f64 = 30.0;
 /// Sub-steps of one `react` that are shortened to keep within `MAX_DT_K`; one more takes all the time left.
@@ -32,15 +29,12 @@ const PHASES: [Phase; 3] = [Phase::Solid, Phase::Liquid, Phase::Gas];
 pub struct Reactor {
     /// Temperature below which a reaction is frozen (catalyst 1), K (`frozen_below`).
     thr: Vec<f64>,
-    /// The world's year, s.
-    year: f64,
     /// Enthalpy change per reaction unit, J.
     dh: Vec<f64>,
-    /// Per reaction: does it store absorbed light (light-driven and taking energy)? And its inputs, a bit per substance.
+    /// Per reaction: does it store absorbed light (light-driven and taking energy: it runs only in the cover, which
+    /// catches the light, `cover::step`)? And its inputs, a bit per substance.
     lit: Vec<bool>,
     needs: Vec<u64>,
-    /// Share of the light a light-driven reaction takes that it stores (`Physics::light_yield`).
-    light_yield: f64,
     /// Per substance: heat capacity, melting and boiling point.
     cp: Vec<f64>,
     melt: Vec<f64>,
@@ -141,16 +135,11 @@ pub(crate) fn pace(rx: &Reaction, lim: f64, a: impl Fn(usize) -> f64, whole: imp
     x * e / lim
 }
 
-/// Catalyst factor `f` at `t` of a catalyst that loses its shape above `td` K over a width `wk` K. A speed-up is a
-/// lowered barrier; an unfolded share loses it, so f is kept to the power 1 / (1 + exp((t − td) / wk)): smooth, and
-/// near 1 a few `wk` above `td` whatever its size.
+/// The decomposers' catalyst of the open world (`Reaction::open`, a factor `f`) as far as a node is wet, `a` (its
+/// moisture, `FlowView::moist`): 1 + (f - 1) a.
 #[inline]
-pub(crate) fn denature(f: f64, t: f64, td: f64, wk: f64) -> f64 {
-    if f <= 1.0 {
-        return f;
-    }
-    let z = if wk > 0.0 { (t - td) / wk } else if t > td { f64::INFINITY } else { f64::NEG_INFINITY };
-    f.powf(1.0 / (1.0 + z.exp()))
+pub(crate) fn open_catalyst(f: f64, a: f64) -> f64 {
+    1.0 + (f - 1.0) * a
 }
 
 /// 1 - exp(-z), cheap when small.
@@ -173,10 +162,8 @@ impl Reactor {
         let dh: Vec<f64> = (0..nr).map(|r| chem.dh(r)).collect();
         let mut rc = Reactor {
             thr: chem.reactions.iter().map(|rx| frozen_below(rx, year)).collect(),
-            year,
             lit: chem.reactions.iter().zip(&dh).map(|(rx, &d)| rx.light && d > 0.0).collect(),
             needs: chem.reactions.iter().map(|rx| rx.inputs.iter().fold(0, |m, &(k, _)| m | 1 << k)).collect(),
-            light_yield: cfg.phys.light_yield,
             dh,
             cp: chem.subs.iter().map(|s| s.cp).collect(),
             melt: chem.subs.iter().map(|s| s.melt).collect(),
@@ -265,11 +252,9 @@ impl Reactor {
         tot
     }
 
-    /// React the amounts `n` of one node for `dt` seconds; returns the light used, J. `gas`: the gas around the node
-    /// (gases are drawn from it first, gas products go to it); `energy`: its heat, J, at heat capacity `heat_cap` plus
-    /// its amounts'; `cat`: catalyst factors with their `denature` limits; `light_j`: light available, J. Elements are
-    /// exact; heat plus Σ n·hf gains exactly the light used.
-    #[allow(clippy::too_many_arguments)]
+    /// React the amounts `n` of one node for `dt` seconds, at its open world's catalysts (`open_catalyst`). `gas`: the
+    /// gas around the node (gases are drawn from it first, gas products go to it); `energy`: its heat, J, at heat
+    /// capacity `heat_cap` plus its amounts'. Elements are exact; heat plus Σ n·hf is kept.
     pub fn react(
         &mut self,
         chem: &Chemistry,
@@ -277,12 +262,10 @@ impl Reactor {
         gas: Option<&mut [f64]>,
         energy: &mut f64,
         heat_cap: f64,
-        cat: Option<(&[f64], f64, f64)>,
-        light_j: f64,
         dt: f64,
-    ) -> f64 {
+    ) {
         let pool: &mut [f64] = gas.unwrap_or(&mut []);
-        let (mut light, mut left) = (light_j, dt);
+        let mut left = dt;
         self.on0.clear();
         self.ran.iter().for_each(|&r| self.done[r] = 0.0);
         self.ran.clear();
@@ -297,25 +280,24 @@ impl Reactor {
                 self.cap0 = c;
             }
             let tot = self.phases(chem, n, (!pool.is_empty()).then_some(&*pool), t);
-            if !self.rates(chem, &tot, t, cat, light) {
+            if !self.rates(chem, &tot, t) {
                 break;
             }
             if self.film > 0.0 {
                 self.through_film(chem, &tot, t);
             }
             let sub = self.sub_step(left, c, iter);
-            self.apply(chem, n, pool, energy, &mut light);
+            self.apply(chem, n, pool, energy);
             left -= sub;
         }
         // A later sub-step may run a reaction an earlier one did not.
         self.ran.sort_unstable();
-        light_j - light
     }
 
     /// The rate `kap`, limit `lim` and power `pw` of each reaction at `t` that is not frozen and has all its inputs (with
     /// light, for one that stores it), and in a body is not bare and too slow to matter over a year (`TOO_SLOW`). Returns
     /// whether any can run.
-    fn rates(&mut self, chem: &Chemistry, tot: &[f64; 3], t: f64, cat: Option<(&[f64], f64, f64)>, light: f64) -> bool {
+    fn rates(&mut self, chem: &Chemistry, tot: &[f64; 3], t: f64) -> bool {
         self.on.clear();
         for (r, rx) in chem.reactions.iter().enumerate() {
             self.kap[r] = 0.0;
@@ -323,17 +305,13 @@ impl Reactor {
             if self.needs[r] & !self.held != 0 {
                 continue;
             }
-            let cr = cat.map_or(crate::body::Body::catalyst(rx.open, self.moist), |(c, td, wk)| denature(c[r], t, td, wk));
-            if cr <= 0.0 || (t < self.thr[r] && cr <= 1.0) || (self.lit[r] && light <= 0.0) {
+            let cr = open_catalyst(rx.open, self.moist);
+            if cr <= 0.0 || (t < self.thr[r] && cr <= 1.0) || self.lit[r] {
                 continue;
             }
             let (lim, q) = scarce(&rx.inputs, |k| self.av[k]);
             if lim > 0.0 {
-                let kap = cr * rx.arrhenius(t) * self.pace(rx, lim, tot);
-                if cat.is_some() && cr <= 1.0 && kap * self.year < TOO_SLOW {
-                    continue;
-                }
-                self.kap[r] = kap;
+                self.kap[r] = cr * rx.arrhenius(t) * self.pace(rx, lim, tot);
                 self.lim[r] = lim;
                 self.on.push(r);
                 // In a liquid or a gas the power is its order less 1, as far as it is not most of its phase.
@@ -348,11 +326,11 @@ impl Reactor {
     /// The length of sub-step `iter` of the `left` seconds still to go, at heat capacity `c`: halved while the reactions'
     /// heat would move the temperature more than `MAX_DT_K` (not the last). Sets `far`, and on the first `kap0`, `lim0`.
     fn sub_step(&mut self, left: f64, c: f64, iter: usize) -> f64 {
-        // Sets `far`, the share of its scarcest input each running reaction uses in `sub` seconds, and returns the heat of
-        // those not driven by light over that time, J.
+        // Sets `far`, the share of its scarcest input each running reaction uses in `sub` seconds, and returns their heat
+        // over that time, J.
         let mut reach = |sub: f64| self.on.iter().filter(|&&r| self.kap[r] > 0.0).fold(0.0, |heat, &r| {
             self.far[r] = gone(self.kap[r] * sub, self.pw[r]);
-            heat + if self.lit[r] { 0.0 } else { self.dh[r].abs() * self.lim[r] * self.far[r] }
+            heat + self.dh[r].abs() * self.lim[r] * self.far[r]
         });
         let mut sub = left;
         loop {
@@ -366,7 +344,7 @@ impl Reactor {
             let halvings = if sub == left { (heat / (MAX_DT_K * c)).log2().ceil().clamp(1.0, most) } else { 1.0 };
             sub *= 0.5f64.powi(halvings as i32);
         }
-        for &r in self.on.iter().filter(|&&r| iter == 0 && self.kap[r] > 0.0 && !self.lit[r] && !self.minor[r]) {
+        for &r in self.on.iter().filter(|&&r| iter == 0 && self.kap[r] > 0.0 && !self.minor[r]) {
             (self.kap0[r], self.lim0[r]) = (self.kap[r], self.lim[r]);
             self.on0.push(r);
         }
@@ -374,14 +352,14 @@ impl Reactor {
     }
 
     /// Run each reaction its share `far` of its scarcest input, one after the other, each limited by what is left (a gas
-    /// from the `pool` around first, gas products to it), its heat to or from `energy`, stored light from `light`.
-    fn apply(&mut self, chem: &Chemistry, n: &mut [f64], pool: &mut [f64], energy: &mut f64, light: &mut f64) {
+    /// from the `pool` around first, gas products to it), its heat to or from `energy`.
+    fn apply(&mut self, chem: &Chemistry, n: &mut [f64], pool: &mut [f64], energy: &mut f64) {
         let has_pool = !pool.is_empty();
         for &r in self.on.iter().filter(|&&r| self.kap[r] > 0.0) {
             let rx = &chem.reactions[r];
             let (dh, lim) = (self.dh[r], scarce(&rx.inputs, |k| self.av[k]).0);
-            // No more than the light it stores, or than `MOST_HEAT` of the heat it takes.
-            let most = if self.lit[r] { *light * self.light_yield / dh } else if dh > 0.0 { MOST_HEAT * *energy / dh } else { f64::INFINITY };
+            // No more than `MOST_HEAT` of the heat it takes.
+            let most = if dh > 0.0 { MOST_HEAT * *energy / dh } else { f64::INFINITY };
             let ext = (lim * self.far[r]).min(most);
             if ext <= 0.0 {
                 continue;
@@ -408,12 +386,7 @@ impl Reactor {
                 self.ran.push(r);
             }
             self.done[r] += ext;
-            if self.lit[r] {
-                *light -= dh * ext / self.light_yield;
-                *energy += dh * ext * (1.0 / self.light_yield - 1.0);
-            } else {
-                *energy -= dh * ext
-            }
+            *energy -= dh * ext;
         }
     }
 }

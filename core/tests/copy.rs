@@ -2,7 +2,7 @@
 //! rebuilds. Two parents and population nodes: `populations.rs`.
 
 use pcore::life::Handle;
-use pcore::body::{Layout, ALLOC, BRAIN_SIZES, CHILD, COOL_T, COPY_MASS, DENATURE, DISPERSE, GAS, HEAT, KEEP_T, LIQ};
+use pcore::body::{Layout, ALLOC, BRAIN_SIZES, CHILD, COOL_T, COPY_MASS, DISPERSE, KEEP_T, REPAIR};
 use pcore::body::{MUT, STRENGTH};
 use pcore::rng::{Purpose, Rng};
 use pcore::units::DAY_S;
@@ -10,20 +10,15 @@ use pcore::{body, brain, copy, nodes, World};
 use worldgen::testkit::{self, add, children, eater, kg, only_the_solid, out, put, put_kg_m2, scale, start, took_used, Books, BURN, DISSOLVED, LIQUID, MATTER, RICH};
 use pcore::store::Class;
 
-/// A body whose roots take the minerals growth is built of (the uptake genes at 0.01, so that a meal is still nearly
-/// all fuel; soaking at least a tenth a day, `body::live`), and the ground of its cell given a hundred times the level
-/// it keeps of each (booked as an edit): what a test that builds for many days needs to be free of the minerals. (The
-/// dissolved mineral falls out of the liquid inside a body within days, so a store given from outside is gone by the
-/// next update; roots give it at the update, just before the body builds.)
+/// A body given the minerals growth is built of up to the level it keeps (booked as an edit): what a test that builds
+/// needs to be free of the minerals (bodies have no roots; they get minerals by digestion).
 fn feed_minerals(w: &mut World, s: Handle) {
-    let (i, n, lay) = (w.life[s].cell as usize, w.mesh.cells().n(), Layout::of(&w.chem));
+    let mut b = std::mem::take(&mut w.life[s]);
     for (mk, _) in w.chem.minerals().to_vec() {
-        let b = &mut w.life[s];
-        (b.genes[lay.upt + mk], b.genes[LIQ]) = (0.01, b.genes[LIQ].max(-1.0));
-        b.prepare(&w.chem, &w.cfg);
-        let a = (100.0 * b.level(&w.chem, mk, b.mass(&w.chem)) - w.store.amounts(Class::Ground)[mk * n + i]).max(0.0);
-        put(w, mk, i, a);
+        let gap = (b.level(&w.chem, mk, b.mass(&w.chem)) - b.store[mk]).max(0.0) * w.chem.subs[mk].molar_mass;
+        testkit::add(w, &mut b, mk, gap);
     }
+    w.life[s] = b;
 }
 
 /// Growth makes body matter of the energy-rich solid and the two minerals (`chemistry0.rs` has the counts), and pays
@@ -40,6 +35,7 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let books = Books::now(&w);
     let (matter0, rich0, liquid0, e0) = (b.store[MATTER], b.store[RICH], b.store[LIQUID], w.store.heat(Class::Ground).iter().sum::<f64>());
     let minerals = w.chem.minerals().to_vec();
+    let store0 = b.store.clone();
     let mineral0: Vec<f64> = minerals.iter().map(|m| b.store[m.0]).collect();
     // (Counts of the chemistry's growth: the solid in, the liquid out.)
     let bl = w.chem.build.as_ref().expect("growth");
@@ -61,10 +57,13 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let burn_liquid = w.chem.reactions[BURN].outputs.iter().find(|p| p.0 as usize == LIQUID).map_or(0.0, |p| p.1 as f64);
     assert!((dliquid / (n_liquid * x + burn_liquid * burnt) - 1.0).abs() < 1e-6, "the liquid rose by {dliquid}, not {}", n_liquid * x + burn_liquid * burnt);
     // The work left the body as heat for the ground: that heat is the burnt solid's, less the fusion enthalpy the liquid it
-    // made holds in the body, less the share the body keeps while it leaves (about 5%).
+    // made holds in the body, less the heat its changed stores hold at its temperature (`held`), within the heat the
+    // gases of the burning carry in and out (a few %).
     let heat = w.store.heat(Class::Ground).iter().sum::<f64>() - e0;
     let work = burnt * (-w.chem.dh(BURN) - burn_liquid * w.chem.subs[LIQUID].lf);
-    assert!(heat > 0.0 && (heat / work - 1.0).abs() < 0.06, "heat to the ground {heat:e} J, the work {work:e} J");
+    let t = b.temp(&w.chem);
+    let held: f64 = (0..w.chem.ns()).map(|k| (b.store[k] - store0[k]) * w.chem.subs[k].cp * t).sum();
+    assert!(heat > 0.0 && (heat / (work - held) - 1.0).abs() < 0.06, "heat to the ground {heat:e} J, the work {work:e} J, held {held:e} J");
     // Growth is thermoneutral in a body: the matter holds the energy of the solid it was made of (the liquids holding their
     // fusion enthalpy).
     let (chem, bl) = (&w.chem, w.chem.build.as_ref().unwrap());
@@ -131,7 +130,7 @@ fn growth_is_limited_by_what_the_body_can_spare() {
         let m0 = b.store[MATTER];
         let grew = testkit::moved(&mut w, (b.cell as usize, Handle::default()), |w, d| testkit::grow(w, d, &mut b, days));
         let built = (b.store[MATTER] - m0) * w.chem.subs[MATTER].molar_mass;
-        let (up, release) = (body::upkeep(&w, &b, days, b.mass(&w.chem), b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys)), testkit::release(&w, &b, days));
+        let (up, release) = (body::upkeep(&w, &b, days, b.mass(&w.chem), b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys)), testkit::release(&w, &b));
         let room = w.cfg.phys.c_build * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)) / w.cfg.phys.m_ref * days / w.cfg.phys.c_copy;
         println!("fuel kept {keep}: built {built:.4} kg of matter (allowance {room:.3} kg), release {release:.3e} J against upkeep {up:.3e} J");
         w.life[s] = b;
@@ -407,7 +406,7 @@ fn a_node_makes_its_children_at_most_once_in_lump_days() {
     assert!((lumped + held - born).abs() < 1e-6 * born && held < 2.0 + 1e-6, "{lumped} born and {held} waiting against {born}");
 
     // Births on day `t`; another node with a full brood joins it, and it splits in two along a gene that copy does not
-    // read (`DENATURE`, the halves many steps apart).
+    // read (`REPAIR`, the halves many steps apart).
     let t = (made.last().unwrap() + lump).next_multiple_of(10);
     assert!(update_brood(&mut w, s, child, t), "no births on day {t}");
     let i = w.life[s].cell as usize;
@@ -417,7 +416,7 @@ fn a_node_makes_its_children_at_most_once_in_lump_days() {
     let before: Vec<Handle> = w.life.living().map(|x| x.0).collect();
     let mut n = std::mem::take(&mut w.life[s]);
     n.spread = vec![0.0; n.genes.len()];
-    n.spread[DENATURE] = 1e4;
+    n.spread[REPAIR] = 1e2;
     w.in_domain(n.cell as usize, |w, d| nodes::split(w, d, &mut n));
     w.life[s] = n;
     let half = w.life.living().map(|x| x.0).find(|x| !before.contains(x)).expect("not split");
@@ -613,7 +612,7 @@ const GROWTH_GROUND_K: f64 = 289.0;
 /// of keeping its tissue with its body^1.0 (`body::upkeep`), so growth, which builds only from the spare after upkeep
 /// (`copy::grow`), stops where the two meet, a size the body's own costs set. An eater (ALLOC 0: it builds only for
 /// itself; strength 1; building fast, so that the allowance never binds) in a place with all the fuel it can take, at
-/// every update, for 360 days. With 1.625 times the starting costs of tissue the ceiling is near its size: it
+/// every update, for 360 days. With twice the starting costs of tissue the ceiling is near its size: it
 /// levels off (under a quarter more body between the 100th and the 300th day) and in its last 100 days takes about what
 /// it pays to keep what it has; with a quarter of the starting costs, a ceiling many times higher, it is still growing
 /// fast and ends larger.
@@ -629,14 +628,12 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         w.chem.reactions[BURN].open = 1.0;
         // Building never binds; the costs of keeping tissue are `cost` times the starting ones.
         w.cfg.phys.c_build = 1e7;
-        for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_cat, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn, &mut w.cfg.phys.c_signal] {
+        for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn, &mut w.cfg.phys.c_signal] {
             *c *= cost;
         }
         let mut b = eater(&mut w, i, brain::TAKE, 0.0);
-        // A body that is wet (soaking), breathes freely and sheds its heat, so that only its energy limits it: a bare body
-        // sheds no more than its still air and radiation take, so growing it sheds the rest by evaporating above 295 K
-        // (`COOL_T`), and soaks fast to stay wet.
-        (b.genes[STRENGTH], b.genes[ALLOC], b.genes[LIQ], b.genes[GAS], b.genes[HEAT], b.genes[body::COOL_T]) = (1.0, 0.0, 1.0, 3.0, 3.0, 295.0);
+        // A body that sheds its heat freely, so that only its energy limits it.
+        (b.genes[STRENGTH], b.genes[ALLOC], b.genes[pcore::body::HEAT]) = (1.0, 0.0, 3.0);
         // The eater founder's size of maturity: tissue costs per kg go by it across kinds (Kleiber). It does not die of age.
         (b.genes[COPY_MASS], w.cfg.phys.e_life) = (1.645, 1e30);
         let (s, b0) = out(&mut w, b);
@@ -679,7 +676,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         println!("costs x {cost}: body (kg) every 50 days {built:.1?}; in the last 100 days it took {ratio:.2} times its upkeep");
         (built, ratio)
     };
-    let (full, r_full) = run(1.625);
+    let (full, r_full) = run(2.0);
     let (cheap, r_cheap) = run(0.25);
     let n = full.len();
     // Relative growth between the 100th and the 300th day (the first days only fill the body with the liquid it keeps).
@@ -785,7 +782,7 @@ fn child_has_parent_genes_plus_noise() {
     let diff: Vec<f32> = parent.iter().zip(&child).map(|(a, b)| (a - b).abs()).collect();
     assert!(diff.iter().any(|&d| d > 0.0), "no change");
     // (The two temperature genes step by 5 K, the others by at most 1.)
-    assert!(diff.iter().enumerate().all(|(g, &d)| d <= 6.0 * size * if g == DENATURE || g == KEEP_T || g == COOL_T { 5.0 } else { 1.0 }), "change too big");
+    assert!(diff.iter().enumerate().all(|(g, &d)| d <= 6.0 * size * if g == KEEP_T || g == COOL_T { 5.0 } else { 1.0 }), "change too big");
 }
 
 /// More than `cfg.crowd` alike individuals in one cell (of light-eaters, which they eat) merge into one population node

@@ -2,7 +2,7 @@
 //! and hold parts.
 
 use pcore::bond::{self, GROUND};
-use pcore::body::{die, Body, COPY_MASS, LACK, LIQ, STRENGTH};
+use pcore::body::{die, Body, COPY_MASS, LACK, STRENGTH};
 use pcore::brain;
 use pcore::chem::Phase;
 use pcore::life::Handle;
@@ -118,11 +118,10 @@ fn forming_never_takes_more_than_is_left() {
     b.genes[pcore::body::Layout::of(chem).min + k] = 0.0;
     b.store[k] = 0.05 * b.mass(chem) / chem.subs[k].molar_mass;
     b.e = b.energy_at(chem, t);
-    b.k.cat.iter_mut().for_each(|c| *c *= 1e6);
     // Half the fuel is to go out (`Physics::form` of its mass), and paying for it burns nearly all of it.
     let got = 0.5 * b.store[k] * chem.subs[k].molar_mass;
     w.cfg.phys.form = got / b.mass(chem);
-    let r = worldgen::testkit::release(&w, &w.life[slot], w.life[slot].interval(&w) as f64);
+    let r = worldgen::testkit::release(&w, &w.life[slot]);
     (w.cfg.phys.min_kg, w.cfg.phys.c_form) = (0.5 * got, 0.99 * r / got);
     let books = Books::now(&w);
     let mut b = std::mem::take(&mut w.life[slot]);
@@ -155,8 +154,6 @@ fn a_node_acts_on_bonds_as_its_members_together() {
         let (l, b) = (line.lineage, line.founder(&mut w, 1, i));
         let mut b = worldgen::testkit::node_of(&mut w, b, 800.0);
         (b.spread, b.row_spread) = (vec![0.01; b.genes.len()], 0.01);
-        // (No liquid soaked up from the ground, which would add a third to their mass.)
-        b.genes[LIQ] = -4.0;
         // (Mature past their copy mass, so the matter that rots is not starving, and putting nothing into a brood, so they
         // do not copy.)
         (b.genes[COPY_MASS], b.genes[pcore::body::ALLOC]) = (b.genes[COPY_MASS] - 1.0, 0.0);

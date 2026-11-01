@@ -163,9 +163,6 @@ fn emit(w: &World, d: &mut Domain, b: &mut Body, l: &Births, cell: usize, m: f64
         parent: l.parent,
         born: w.day(),
         last: w.day() as f64,
-        mark: w.light[cell],
-        rained: w.rained[cell],
-        keep: b.keep,
         store,
         e,
         genes,
@@ -345,7 +342,7 @@ fn place_child(w: &World, d: &mut Domain, alone: bool, mut c: Body, rows: Option
     // Its key liquids first: `place` works out its visible traits, which read the body (`Body::size`) through them. (A
     // parent that survived a freezing is still wet in the sense of its key liquids: its child's are kept though it is
     // born frozen.)
-    c.wet = c.key_liquids(&w.chem) | (c.wet & c.key_mask(&w.chem));
+    c.wet = c.key_liquids(&w.chem, c.temp(&w.chem)) | (c.wet & c.key_mask(&w.chem));
     let s = d.place(w, c);
     if alone && d[s].count > 1.5 {
         let k = d[s].count.round() as usize - 1;

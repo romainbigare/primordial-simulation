@@ -8,7 +8,6 @@ mod intake;
 mod live;
 mod metab;
 mod pay;
-mod physics;
 mod tissue;
 
 pub use tissue::solids_of;
@@ -16,12 +15,11 @@ pub use tissue::solids_of;
 pub use death::{die, wound};
 use death::thin;
 pub(crate) use death::{remains, to_ground, torn_to_death};
-pub use exchange::{cover_of, ground_conductance};
 pub use genes::*;
 pub(crate) use live::{live, LiveTmp};
 pub use live::Lived;
-pub use pay::{pay, plan, upkeep, Payer};
-pub(crate) use pay::spend;
+pub use pay::{pay, upkeep};
+pub(crate) use pay::settle_heat;
 
 use crate::brain::{ln, SIG};
 use crate::chem::{Chemistry, Phase};
@@ -69,19 +67,6 @@ pub struct Body {
     /// Day of the last update; for a node, the mean by members of the days its members' time was last integrated from
     /// (members who joined since count from when they came, `nodes::rejoin`)
     pub last: f64,
-    /// The cell's cumulative light at the last update, J/m², moved since by what its shade gave
-    /// it more or less than the cell's mean (`survey::shade`): it caught `light - mark` per m²
-    pub mark: f64,
-    /// The cell's cumulative rain at the last update, mol/m²: it caught a share of `rained - this` (`physics::rain_caught`)
-    pub rained: f64,
-    /// From the last survey: its light per m² of capture area over its cell's mean (`survey::shade`); not saved
-    #[serde(skip)]
-    pub shade: f64,
-    /// The share of the light it caught that its light reactions stored at its last update: its cell sets that share
-    /// aside in its bodies' node (`store::Class::Bodies`)
-    pub keep: f32,
-    /// The heat it draws from the ground between updates, set aside in its cell's bodies' node (`survey::Draw`)
-    pub draw: crate::survey::Draw,
     /// Thermal energy, J
     pub e: f64,
     /// mol of each substance
@@ -99,7 +84,8 @@ pub struct Body {
     pub brood: f64,
     /// For a node: the first batch of the world's clock at which it may make children (`copy::due`; 0: not set)
     pub lump_at: u64,
-    /// Visible traits: mass kg, light-capture area m², strength, colour (3 bands), height m (`height`)
+    /// Visible traits: mass kg, light-capture area m² (none: bodies catch no light), strength, colour (3 bands), height
+    /// m (`height`)
     pub vis: [f32; 7],
     /// Its brain rows: the rows it was born with plus what it (a node: its members) learned; empty without a brain
     pub rows: Vec<f32>,
@@ -132,29 +118,22 @@ pub struct Body {
 /// Numbers that follow from a body's genes, kept to save time.
 #[derive(Clone, Debug, Default)]
 pub struct Consts {
-    /// 10 to the power of the gas, liquid, heat and light-capture genes
-    pub gas: f64,
-    pub liq: f64,
+    /// 10 to the power of the coat gene (`HEAT`)
     pub heat: f64,
-    pub leaf: f64,
-    /// Catalyst factor of each reaction (1 when off)
-    pub cat: Vec<f64>,
     /// Days between the updates its `INTERVAL` gene asks for, a whole number of batches (`Body::interval`)
     pub interval: u64,
-    /// Catalysed reactions that release heat, with the heat per unit, J (not those that keep a part of a fuel's heat,
-    /// `Chemistry::keeps`)
+    /// The reactions of its diet that release heat, with the heat per unit, J (not those that keep a part of a fuel's
+    /// heat, `Chemistry::keeps`)
     pub burn: Vec<(usize, f64)>,
     /// The substances taken, by selectivity
     pub upt: Vec<(usize, f32)>,
-    /// Its catalysts' capacity (`upkeep`; an exponential per catalyst, so kept)
-    pub cats: f64,
     /// 10 to the power of the copy mass gene, kg
     pub copy_mass: f64,
     /// Factor of upkeep per kg of living body, (copy mass / `m_ref`)^(`intake_exp` - 1), 1
     pub tissue: f64,
-    /// The rate of the main burning at `t_cat`, catalysed (`Body::rate_at`) and bare, 1/s (`Body::pace`, `Body::upkeep_pace`)
-    pub ref_rate: [f64; 2],
-    /// What its burnings take, and what the reactions its catalysts run take (their inputs, a bit per substance)
+    /// The bare rate constant of its main burning at `t_cat`, 1/s (`Body::pace`)
+    pub pace_ref: f64,
+    /// What its burnings take, and what the reactions of its diet take (their inputs, a bit per substance)
     pub fuel: u64,
     pub broken: u64,
 }
@@ -191,44 +170,30 @@ impl Body {
     pub fn heat_cap(&self, chem: &Chemistry) -> f64 {
         chem.heat_cap_of(&self.store)
     }
-    /// `mass` and `heat_cap` in one pass over the stores (the same sums).
-    pub(crate) fn mass_cap(&self, chem: &Chemistry) -> (f64, f64) {
-        self.store.iter().zip(&chem.subs).fold((0.0, 0.0), |(m, c), (a, s)| (m + a * s.molar_mass, c + a * s.cp))
-    }
     /// Its temperature, K (`thermal`).
     pub fn temp(&self, chem: &Chemistry) -> f64 {
         self.thermal(chem).t
     }
-    /// Where the body stands among the melting plateaus of its stores (`ground::melting`): its molten stores hold their
-    /// fusion enthalpy in `e`, each melting at its point lowered by what is dissolved in it (`melt`). What is dissolved
-    /// only lowers a point, so the solve at the stores' own points holds when every such store is molten above it.
+    /// Where the body stands on the melting of its key liquids (`ground::melting`, at each one's own melting point): its
+    /// molten key liquids hold their fusion enthalpy in `e`; its other stores hold their sensible heat only (laws.md 6.3).
     pub fn thermal(&self, chem: &Chemistry) -> Melting {
-        let (held, lat) = (|k: &usize| self.store[*k] > 0.0, |k: usize| self.store[k] * chem.subs[k].lf);
-        // At their own points they melt in the chemistry's order (`Chemistry::by_melt`).
-        let (cap, by) = (self.heat_cap(chem).max(1e-9), || chem.by_melt().iter().copied().filter(held));
-        let own = melting(cap, self.e, by().map(|k| (chem.subs[k].melt, k, lat(k))));
-        // (Only the few substances others dissolve in are looked at.)
-        if crate::math::ones(chem.solvents()).all(|k| !(held(&k) && chem.subs[k].lf > 0.0) || own.t > chem.subs[k].melt) {
-            return own;
-        }
-        let (mut ks, mut m) = ([(0.0, 0usize); MAX_SUBSTANCES], 0);
-        for k in (0..chem.ns()).filter(|&k| held(&k) && chem.subs[k].lf > 0.0) {
-            (ks[m], m) = ((self.melt(chem, k), k), m + 1);
+        let (mut ks, mut m) = ([(0.0, 0usize, 0.0); MAX_SUBSTANCES], 0);
+        for k in self.wet_ks(chem).filter(|&k| self.store[k] > 0.0 && chem.subs[k].lf > 0.0) {
+            (ks[m], m) = ((chem.subs[k].melt, k, self.store[k] * chem.subs[k].lf), m + 1);
         }
         ks[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
-        melting(cap, self.e, ks[..m].iter().map(|&(tm, k)| (tm, k, lat(k))))
+        melting(self.heat_cap(chem).max(1e-9), self.e, ks[..m].iter().copied())
     }
-    /// The fusion enthalpy amounts `m` hold at the plateau state `th` (a store `th` does not know, by its melting point
-    /// now), J.
+    /// The fusion enthalpy amounts `m` hold at the plateau state `th`: of the key liquids among them, as far as they are
+    /// molten, J.
     pub(crate) fn fused_of(&self, chem: &Chemistry, th: &Melting, m: &[f64]) -> f64 {
-        let molten_at = |k: usize| th.t >= chem.subs[k].melt || chem.lowers_melt(k) && th.t >= self.melt(chem, k);
-        let molten = |k: usize| if th.bits >> k & 1 == 1 { th.molten(k) } else { molten_at(k) as u8 as f64 };
-        m.iter().enumerate().filter(|&(k, &a)| a > 0.0 && chem.subs[k].lf > 0.0).map(|(k, a)| a * chem.subs[k].lf * molten(k)).sum()
+        let molten = |k: usize| if th.bits >> k & 1 == 1 { th.molten(k) } else { (th.t >= chem.subs[k].melt) as u8 as f64 };
+        self.wet_ks(chem).filter(|&k| m[k] > 0.0).map(|k| m[k] * chem.subs[k].lf * molten(k)).sum()
     }
-    /// Its energy at `t`, what is at or over its melting point molten, J: the inverse of `temp` off a plateau.
+    /// Its energy at `t`, its key liquids at or over their melting point molten, J: the inverse of `temp` off a plateau.
     pub fn energy_at(&self, chem: &Chemistry, t: f64) -> f64 {
-        let held = (0..chem.ns()).filter(|&k| self.store[k] != 0.0);
-        self.heat_cap(chem) * t + held.map(|k| self.store[k] * chem.fused_heat(k, t, |j| self.store[j])).sum::<f64>()
+        let fused: f64 = self.wet_ks(chem).filter(|&k| t >= chem.subs[k].melt).map(|k| self.store[k] * chem.subs[k].lf).sum();
+        self.heat_cap(chem) * t + fused
     }
     /// The heat that leaves with amounts `m` (mol) at the plateau state `th`, with their molten shares' fusion enthalpy, J.
     pub(crate) fn heat_with(&self, chem: &Chemistry, th: &Melting, m: &[f64]) -> f64 {
@@ -257,38 +222,28 @@ impl Body {
     pub fn prepare(&mut self, chem: &Chemistry, cfg: &crate::Config) {
         let p = &cfg.phys;
         let (lay, nr) = (Layout::of(chem), chem.reactions.len());
-        let (cat, on) = (lay.cat, |r: usize| self.genes[lay.cat + r] > 0.0);
+        let on = |r: usize| self.genes[lay.cat + r] > 0.0;
         let mut k = std::mem::take(&mut self.k);
-        k.cat.clear();
-        k.cat.extend((0..nr).map(|r| if on(r) { self.dec(cat + r) } else { 1.0 }));
         k.burn.clear();
         k.burn.extend(chem.burners().iter().filter(|x| on(x.0)));
         k.fuel = k.burn.iter().flat_map(|x| &chem.reactions[x.0].inputs).fold(0, |m, p| m | 1 << p.0);
         k.broken = (0..nr).filter(|&r| on(r)).flat_map(|r| &chem.reactions[r].inputs).fold(0, |m, p| m | 1 << p.0);
         k.upt.clear();
         k.upt.extend((0..chem.ns()).filter(|&x| self.genes[lay.upt + x] > 0.0).map(|x| (x, self.genes[lay.upt + x])));
-        // Catalysts' capacity: the catalysed rate per unit of contact at `t_cat`, summed over the genes that are on, its
-        // gases at their share of the open air to their order; dearer when firm past `t_firm` (laws.md 6.2).
-        let cats: f64 = chem.contact_rates(p.t_cat).iter().zip(&k.cat).filter(|x| *x.1 > 1.0).map(|(c, f)| f * c).sum();
-        k.cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
         // The gene's days to the nearest whole batch, at least one, so every update starts a batch.
         let batch = cfg.batch_days as f64;
         k.interval = ((self.dec(INTERVAL).clamp(MIN_INTERVAL, MAX_INTERVAL) / batch).round().max(1.0) * batch) as u64;
-        (k.gas, k.liq, k.heat, k.leaf, k.copy_mass) = (self.dec(GAS), self.dec(LIQ), self.dec(HEAT), self.dec(LEAF), self.dec(COPY_MASS));
+        (k.heat, k.copy_mass) = (self.dec(HEAT), self.dec(COPY_MASS));
         k.tissue = (k.copy_mass / p.m_ref).powf(p.intake_exp - 1.0);
+        k.pace_ref = k.burn.first().map_or(1.0, |&(r, _)| chem.reactions[r].arrhenius(p.t_cat));
         self.k = k;
-        self.k.ref_rate = self.k.burn.first().map_or([1.0; 2], |&(r, _)| [self.rate_at(chem, p, r, 1.0, p.t_cat), chem.reactions[r].arrhenius(p.t_cat)]);
-    }
-    /// The reflectance of a member, the mean of its colour's three bands (`visible`).
-    pub(crate) fn reflectance(&self) -> f64 {
-        (self.vis[3] + self.vis[4] + self.vis[5]) as f64 / 3.0
     }
     /// Visible traits of one member (`Body::vis`); the colour is the reflectance of the stores by volume.
     pub fn visible(&self, chem: &Chemistry, cfg: &crate::Config) -> [f32; 7] {
-        let (m1, p, t) = (self.mass(chem) / self.n(), &cfg.phys, self.temp(chem));
+        let (m1, t) = (self.mass(chem) / self.n(), self.temp(chem));
         let (mut v, mut c) = (1e-12, [0.0; 3]);
         for (k, &a) in self.store.iter().enumerate().filter(|x| *x.1 > 0.0) {
-            let p = chem.phase_in(k, t, |j| self.store[j]);
+            let p = chem.phase(k, t);
             if p != Phase::Gas {
                 let vol = a * chem.molar_volume(k, p);
                 v += vol;
@@ -297,8 +252,7 @@ impl Body {
                 }
             }
         }
-        let leaf = self.leaf_area(chem, p) / self.n();
-        [m1 as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32, self.height(chem, cfg) as f32]
+        [m1 as f32, 0.0, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32, self.height(chem, cfg) as f32]
     }
     /// Well-being at `t` (laws.md 5.4): the log of the energy its reactions could release from a member's stores in
     /// decisions' worth (`think`, J), less its nearness to its limits: key stores to their minimums and reactions to upkeep
@@ -313,7 +267,7 @@ impl Body {
             }
             if self.wet >> k & 1 == 1 {
                 let s = &chem.subs[k];
-                w += (((t - self.melt(chem, k)).min(s.boil - t) as f32 - PHASE_MARGIN) / PHASE_MARGIN).min(0.0);
+                w += (((t - s.melt).min(s.boil - t) as f32 - PHASE_MARGIN) / PHASE_MARGIN).min(0.0);
             }
         }
         w

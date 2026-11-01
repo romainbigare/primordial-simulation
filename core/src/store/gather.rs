@@ -219,10 +219,6 @@ impl Moves {
         let held = self.view_at(w, Node::air(j)).is_some();
         move |k| if held { self.view[SEEN][k][0] } else { w.a_seen(k, j) }
     }
-    /// All that bodies and parts see in air node `j` (`seen` summed over the substances), mol.
-    pub(crate) fn a_seen_all(&self, w: &World, j: usize) -> f64 {
-        (0..w.chem.ns()).map(self.seen(w, j)).sum()
-    }
     /// Temperature of air node `j` as the moves gathered leave it, K (`World::t_air`).
     pub(crate) fn t_air(&self, w: &World, j: usize) -> f64 {
         crate::flow::air_temp(self.heat(w, Node::air(j)), w.cap_air(self.seen(w, j)))

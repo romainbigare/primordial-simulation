@@ -9,7 +9,7 @@ use super::exchange::bucket;
 use super::radiation::{glow, insolation, Air, Surface};
 use super::step::Active;
 use super::{lerp, over_cell, touching};
-use crate::{math::one_minus_exp, store::Class, survey::Draws, units::{MAX_SUBSTANCES, R_GAS, SIGMA}, World, AIR};
+use crate::{math::one_minus_exp, store::Class, units::{MAX_SUBSTANCES, R_GAS, SIGMA}, World, AIR};
 
 /// A ground node's surface balance is solved again about the temperature it gives, up to this many times, until that
 /// moves by less than `SURFACE_STILL_K`, K.
@@ -91,32 +91,29 @@ pub(super) fn landed(w: &World, act: &[Active], f: &Forcing, mean: &Mean) -> Vec
     out
 }
 
-/// The numbers of a cell's row (`pass`): its surface's end temperature, K; the heat it gives its air node over its link,
-/// J (sensible, the heat radiation the air absorbs less what it sends down, and the heat of the gas that crosses); the
-/// heat it sends to space, J; the sunlight it absorbs, J; the light per unit of its bodies' capture area, J/m²; the light
-/// set aside for them, J; the heat they draw from it, J; what rains on it and what evaporates, mol; the lift its air
-/// pays for the gas that goes up, J; then per active gas what goes up from it (less what rains), mol.
-pub(super) const ROW: usize = 10;
-pub(super) const TS: usize = 0;
-pub(super) const LINK: usize = 1;
-pub(super) const SPACE: usize = 2;
-pub(super) const SUN: usize = 3;
-pub(super) const LIGHT: usize = 4;
-pub(super) const KEPT: usize = 5;
-pub(super) const GIVEN: usize = 6;
-pub(super) const RAINED: usize = 7;
-pub(super) const EVAPORATED: usize = 8;
-pub(super) const LIFT: usize = 9;
+/// The numbers of a cell's row (`pass`): the heat it gives its air node over its link, J (sensible, the heat radiation
+/// the air absorbs less what it sends down, and the heat of the gas that crosses); the heat it sends to space, J; the
+/// sunlight it absorbs, J; the light per unit of its cover's capture area, J/m²; the light set aside for it, J; what
+/// rains on it and what evaporates, mol; the lift its air pays for the gas that goes up, J; then per active gas what
+/// goes up from it (less what rains), mol.
+pub(super) const ROW: usize = 8;
+pub(super) const LINK: usize = 0;
+pub(super) const SPACE: usize = 1;
+pub(super) const SUN: usize = 2;
+pub(super) const LIGHT: usize = 3;
+pub(super) const KEPT: usize = 4;
+pub(super) const RAINED: usize = 5;
+pub(super) const EVAPORATED: usize = 6;
+pub(super) const LIFT: usize = 7;
 
-/// What a pass reads: the world, the active gases, the step's mean air and the rain on each cell (`landed`), the
-/// bodies' draws, the step's length and the sun's declination on each of its days.
+/// What a pass reads: the world, the active gases, the step's mean air and the rain on each cell (`landed`), the step's
+/// length and the sun's declination on each of its days.
 pub(super) struct Ctx<'a> {
     pub(super) w: &'a World,
     pub(super) s: &'a Scratch,
     pub(super) act: &'a [Active],
     pub(super) mean: &'a Mean,
     pub(super) rain: &'a [f64],
-    pub(super) draws: &'a Draws,
     pub(super) dt: f64,
     pub(super) decl: &'a [f64],
 }
@@ -209,10 +206,10 @@ impl Vapour {
 }
 
 /// The row of cell `i` under the mean sunlight `q` of its latitude over the step, W/m², and the mean air of its node:
-/// sunlight past the clouds, what bodies intercept less the share their light reactions store (set aside for them,
+/// sunlight past the clouds, what the cover intercepts less the share its light reaction stores (set aside for it,
 /// laws.md 1.4); the rain it gets (`landed`), with its heat at the temperature of the air it comes from and its fusion
 /// enthalpy (none for snow, below the gas's melting point in the air touching it), of which the node keeps what stays
-/// molten; then the surface balance with what evaporates and what its bodies draw (`survey::Draws`), by Newton's steps
+/// molten; then the surface balance with what evaporates, by Newton's steps
 /// about its end temperature (`solve`), under the reflectance its surface has at the step's start. Where a soft cover
 /// lies or snow falls, under the reflectance it ends the step with, as backward Euler takes it (`end_reflectance`):
 /// from the start's, each guess followed to the end it gives, and halved between two once a guess and its end cross,
@@ -224,7 +221,7 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
     let a = w.canopy[i] as f64;
     let cover = if a > 0.0 { one_minus_exp(a) } else { 0.0 };
     let caught = cover * w.life.absorb.get(i).map_or(0.0, |&x| x as f64);
-    // Per unit of capture area the bodies intercept cover / a of the light, all of it where they are few.
+    // Per unit of capture area the cover intercepts cover / a of the light, all of it where it is thin.
     let kept = sun * caught * w.life.keep.get(i).map_or(0.0, |&x| x as f64);
     let sw = |alb: f64| sun * ((1.0 - cover) * (1.0 - alb) + caught) - kept;
     let air = Air { tl, f: s.absorbs[j], down: glow(s.absorbs[j], tl, &s.lay[j][0]) };
@@ -240,11 +237,9 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
     }
     let pk = s.state.pk[i];
     let fusion = if pk != NONE { w.store.amounts(Class::Ground)[pk * n + i] * s.sp[pk].lf } else { 0.0 };
-    let draws = cx.draws.any(i);
-    // The balance with what evaporates and what the bodies draw linearised about `t0`.
+    // The balance with what evaporates linearised about `t0`.
     let balance = |t0: f64, sw: f64| {
-        let (draw, d_draw) = if draws { cx.draws.ground(i, t0) } else { (0.0, 0.0) };
-        let (mut gain, mut slope) = (gain - draw / area, -d_draw / area);
+        let (mut gain, mut slope) = (gain, 0.0);
         for g in gas.iter().filter(|g| g.up) {
             let (m, dm_dt) = g.evaporate(s, t0, dt);
             (gain, slope) = (gain - g.lat(m) / adt, slope - g.lat(dm_dt) / adt);
@@ -253,9 +248,9 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
         surface.balance(s, (i, area, dt), w.cfg.sensible, fusion)
     };
     // Newton's steps, kept between the temperatures the end has been shown to lie between: the net heat a node gets
-    // falls as its end temperature rises, so a step down from `from` says the end lies below it. Either may move with
-    // the end temperature where the bodies draw or a gas may evaporate (none may at the start and much at the end).
-    let moves = draws || gas.iter().any(|g| g.up);
+    // falls as its end temperature rises, so a step down from `from` says the end lies below it. It may move with the
+    // end temperature where a gas may evaporate (none may at the start and much at the end).
+    let moves = gas.iter().any(|g| g.up);
     let solve = |sw: f64| {
         let (mut bal, mut from, (mut lo, mut hi)) = (balance(s.state.tg[i], sw), s.state.tg[i], (f64::MIN, f64::MAX));
         for _ in 1..SURFACE_ROUNDS {
@@ -279,11 +274,9 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
             row[ROW + x] = m - g.rain;
             lift += row[ROW + x] * sp.mm * w.cfg.gravity * (s.zair[j] - s.head[i]);
         }
-        // The bodies draw at the end temperature, no more than the node holds above `T_FLOOR`.
-        let given = if draws { (cx.draws.ground(i, bal.ts).0 * dt).min(crate::ground::heat_above_floor(w.store.heat(Class::Ground)[i], w.heat_cap_ground(i))) } else { 0.0 };
         let per_area = if cover > 0.0 { cover / a } else { 1.0 };
         let rained = cx.rain.iter().skip(i).step_by(n).sum();
-        row[..ROW].copy_from_slice(&[bal.ts, link, bal.to_space, adt * sw(alb), sun * per_area * dt, kept * adt, given, rained, evaporated, lift]);
+        row[..ROW].copy_from_slice(&[link, bal.to_space, adt * sw(alb), sun * per_area * dt, kept * adt, rained, evaporated, lift]);
     };
     let (mut alb, mut lo, mut hi) = (s.alb[i], f64::NAN, f64::NAN);
     fill(alb, row);
@@ -307,7 +300,7 @@ fn end_reflectance(cx: &Ctx, i: usize, row: &[f64]) -> f64 {
     // The node's amounts, read once: the melting points read them many times.
     let mut amt = [0.0; MAX_SUBSTANCES];
     amt.iter_mut().zip(w.store.amounts(Class::Ground)[i..].iter().step_by(n)).for_each(|(a, &a0)| *a = a0);
-    let (mut c, e) = (s.cap[i], w.store.heat(Class::Ground)[i] + row[SUN] - row[LINK] - row[SPACE] - row[GIVEN]);
+    let (mut c, e) = (s.cap[i], w.store.heat(Class::Ground)[i] + row[SUN] - row[LINK] - row[SPACE]);
     for (x, ac) in cx.act.iter().enumerate() {
         (amt[ac.k], c) = (amt[ac.k] - row[ROW + x], c - row[ROW + x] * s.sp[ac.k].cp);
     }
