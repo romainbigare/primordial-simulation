@@ -64,23 +64,42 @@ pub(crate) fn resized(lin: &Lineage, genes: &[f32], ns: usize, r: &mut Rng, nois
     (new != old).then(|| Lineage { shape: to, seen: new[2], sight: new[3], base: brain::rebase(&lin.base, lin.shape, to, r, noise), root: lin.root })
 }
 
+/// Living lineages a starting kind keeps at most: past them a body that changes sizes joins the nearest (a speed
+/// setting).
+const MAX_LINEAGES: usize = 8;
+
 /// At its update, a body whose brain-size genes are a whole unit away from its lineage's moves to a lineage of those
 /// sizes, its born rows and its own rows carried over with the same new weights: a living one of its starting kind
-/// with those sizes if there is one (it takes that one's base), else a new one. Moves no matter and no energy.
+/// with those sizes if there is one (it takes that one's base); else, if its kind has `MAX_LINEAGES` living lineages,
+/// the one nearest in sizes (none if that is its own); else a new one. Moves no matter and no energy.
 pub fn resize(w: &World, d: &mut Domain, b: &mut Body) {
     let (ns, noise, id) = (w.chem.ns(), w.cfg.new_noise(), b.id);
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Resize);
     let Some(lin) = d.brain(w, b.lineage) else { return };
     let Some(l) = resized(lin, &b.genes, ns, &mut r, noise) else { return };
     let from = lin.shape;
+    // The living lineage of its kind nearest in sizes (the sum of the size differences; the first of equals), and how
+    // many its kind has.
+    let sizes = sizes_of(&l);
+    let (mut count, mut near) = (0, None::<(u32, usize, brain::Shape)>);
+    for (k, x) in d.lineages_of(w, l.root) {
+        let gap = sizes_of(x).iter().zip(&sizes).map(|(a, b)| a.abs_diff(*b)).sum::<usize>();
+        count += 1;
+        if near.is_none_or(|n| gap < n.1) {
+            near = Some((k, gap, x.shape));
+        }
+    }
+    let to = near.filter(|n| n.1 == 0 || count >= MAX_LINEAGES);
+    if to.is_some_and(|n| n.0 == b.lineage) {
+        return;
+    }
+    let shape = to.map_or(l.shape, |n| n.2);
     // The born rows and its own get the same new weights (two streams of one key, the body's id turned over).
-    let rerow = |x: &[f32]| brain::rerow(x, from, l.shape, &mut Rng::new(w.seed, w.day(), !id, Purpose::Resize), noise);
+    let rerow = |x: &[f32]| brain::rerow(x, from, shape, &mut Rng::new(w.seed, w.day(), !id, Purpose::Resize), noise);
     let born = rerow(d.born(w, b));
     b.rows = if b.rows.is_empty() { born.clone() } else { rerow(&b.rows) };
-    let sizes = sizes_of(&l);
-    let kin = w.life.brains.iter().enumerate().find(|(k, x)| w.life.members[*k] > 0 && x.as_ref().is_some_and(|x| x.root == l.root && sizes_of(x) == sizes));
-    let lineage = match kin {
-        Some((k, _)) => k as u32,
+    let lineage = match to {
+        Some(n) => n.0,
         None => d.new_lineage(l),
     };
     d.move_to(b, lineage, born);

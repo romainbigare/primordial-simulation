@@ -114,6 +114,13 @@ impl Life {
 }
 
 impl Domain {
+    /// The living lineages of starting kind `root` this domain sees, with their ids: the world's that have members, then
+    /// its own provisional ones.
+    pub(crate) fn lineages_of<'a>(&'a self, w: &'a World, root: u32) -> impl Iterator<Item = (u32, &'a Lineage)> + 'a {
+        let settled = w.life.brains.iter().zip(&w.life.members).enumerate().filter_map(|(k, (l, &m))| Some((k as u32, l.as_ref().filter(|_| m > 0)?)));
+        let own = self.brains.iter().enumerate().map(|(k, l)| (provisional_id(self.index as usize, k) | if l.none() { NONE } else { 0 }, l));
+        settled.chain(own).filter(move |(_, l)| l.root == root)
+    }
     /// A new lineage, of no bodies yet: a provisional one of this domain.
     pub fn new_lineage(&mut self, l: Lineage) -> u32 {
         let none = if l.none() { NONE } else { 0 };

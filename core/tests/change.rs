@@ -5,7 +5,7 @@ use pcore::change::{self, Reactor};
 use pcore::chem::{Chemistry, Phase};
 use pcore::store::{Class, Node};
 use pcore::units::{DAY, DAY_S, P_REF, R_GAS, T_SURF};
-use worldgen::testkit::{empty_cell, in_all, set_amount, set_heat, BURN, BURNING_GAS, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, FRAME, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{empty_cell, hold_ground, in_all, loose_volume, set_amount, set_heat, BURN, BURNING_GAS, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, FRAME, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
 use pcore::AIR;
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
@@ -505,4 +505,32 @@ fn dead_matter_on_the_ground_returns_the_minerals_to_the_ground() {
     // liquid, to and from the cells around; the books of elements are exact.)
     assert!((rock / lost - 1.0).abs() < 0.1, "the rock element {rock} for the matter {lost}");
     books.assert_kept(&w, 1e-9);
+}
+
+/// Dead frame on land rots at its litter constant through the world's own steps of Change, its sleep and all: a land
+/// cell held at 290 K with no life, its pores at field capacity, with 5 kg/m² of frame, loses 15% to 35% of it in a
+/// year (1 - e^-0.27 = 24%, Olson 1963); the same cell dry loses under 5%.
+#[test]
+fn dead_frame_rots_on_moist_land_in_a_year() {
+    let lost = |wet: bool| {
+        let mut w = worldgen::new_world(1, 16, 16);
+        let i = (0..w.mesh.cells().n()).find(|&i| w.is_land(i)).expect("land");
+        assert_eq!(w.life.alive().count(), 0, "a world with no life");
+        let liquid = if wet { w.cfg.phys.field * w.cfg.phys.porosity * loose_volume(&w, i) / w.chem.molar_volume(LIQUID, Phase::Liquid) } else { 0.0 };
+        let frame = 5.0 * w.mesh.cells().area()[i] / w.chem.subs[FRAME].molar_mass;
+        set_amount(&mut w, Node::ground(i), FRAME, frame);
+        let (dt, year) = (w.cfg.phys_days as u64 * DAY_S, w.cfg.calendar().year);
+        let end = w.time + year;
+        while w.time < end {
+            set_amount(&mut w, Node::ground(i), LIQUID, liquid);
+            hold_ground(&mut w, i, 290.0);
+            pcore::flow::state(&mut w, true);
+            change::step(&mut w, dt as f64);
+            w.time += dt;
+        }
+        1.0 - w.g(FRAME, i) / frame
+    };
+    let (wet, dry) = (lost(true), lost(false));
+    assert!((0.15..0.35).contains(&wet), "share of the frame lost in a year at field capacity {wet}");
+    assert!(dry < 0.05, "share of the frame lost dry in a year {dry}");
 }

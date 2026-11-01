@@ -430,6 +430,12 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
   a speed tool with physical side effects: the joiners' members drop the structure they held, which stays in the cell
   for any body to take, and a lineage's brain spreads to alike bodies of another. Selection acts between cells and
   lineages, not within a cell.
+- **Two caps, speed tools.** After its merge a cell keeps at most `MAX_NODES` (8) bodies (`nodes::cap`): past them
+  the pair of one stage nearest in genes (in mutation steps) merges, whatever its lineage, room and part, the smaller
+  into the larger, taking its brain, born rows and lineage. A starting kind keeps at most `MAX_LINEAGES` (8) living
+  lineages (`lineage::resize`): past them a body whose sizes change joins the living lineage of its kind nearest in
+  sizes, and stays in its own if that is the nearest. Both make bodies of different heritage share a brain; they
+  bound the work, not a law.
 - **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
 - **Pace**: every node updates and decides once a month, as an individual does (0).
 - **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage. A
@@ -437,7 +443,8 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
   arises only in a lineage founded with one (decision 72). An
   individual's child joins its parent's lineage, or its partner's when its size genes fit that and not its parent's
   (its rows carried over to that brain; `copy::child_lineage`). A lineage starts only where a body's brain-size gene
-  moves a whole unit from its lineage's (`lineage::resize`, at its update).
+  moves a whole unit from its lineage's (`lineage::resize`, at its update) and no living lineage of its kind has the
+  sizes it moves to (it joins that one), within `MAX_LINEAGES`.
   `nodes::open` draws members as individuals. `--individuals` keeps bodies with a brain out of nodes (handover 7.1).
 
 ### 4.5 The cover: light-eaters as a field

@@ -3,7 +3,7 @@
 //! (`open`). Members, stores and heat are kept exactly in every join.
 
 use crate::bond::{held, let_go, room};
-use crate::body::{self, alike, most, noise, range, spread_at, spread_kept, wall_room, Body, Layout, REACH};
+use crate::body::{self, alike, distance, most, noise, range, spread_at, spread_kept, wall_room, Body, Layout, REACH};
 use crate::brain::{blend, row_step, shake};
 use crate::lineage::sizes_of;
 use crate::rng::{Purpose, Rng};
@@ -13,10 +13,61 @@ use crate::{life::Domain, World};
 /// The monthly merge of the bodies of cell `i` of domain `d` (laws.md 4.4): one node per kind and stage. Each body
 /// joins the largest of its `Kin` (`join_kin`); then a node joins a larger one of another lineage of its stage, room
 /// and part whose genes are alike (`body::alike`, on the means) and whose brain has the same sizes, taking its brain and
-/// lineage (`join_other`).
+/// lineage (`join_other`); then the cell keeps at most `MAX_NODES` bodies (`cap`).
 pub(crate) fn crowd(w: &World, d: &mut Domain, lay: &Layout, i: usize) {
     let heads = join_kin(w, d, i);
     join_other(w, d, lay, heads);
+    cap(w, d, lay, i);
+}
+
+/// Bodies a cell keeps at most after its monthly merge; past them the most alike pair of one stage merges (a speed
+/// setting).
+const MAX_NODES: usize = 8;
+
+/// While cell `i` holds more than `MAX_NODES` bodies that may be nodes, the pair of one stage nearest in genes (in
+/// mutation steps, `body::distance`) merges, whatever its lineage, room and part: the smaller joins the larger, taking
+/// its brain, born rows and lineage when that is another (`merge_taking`).
+fn cap(w: &World, d: &mut Domain, lay: &Layout, i: usize) {
+    let left: Vec<Handle> = d.cell(i).filter(|&s| may_be_node(w, &d[s])).collect();
+    if left.len() <= MAX_NODES {
+        return;
+    }
+    let m = left.len();
+    let gap = |d: &Domain, s: Handle, t: Handle| {
+        let (a, b) = (&d[s], &d[t]);
+        if a.adult(&w.chem) != b.adult(&w.chem) { f32::INFINITY } else { distance(lay, &a.genes, &b.genes, |_| f32::INFINITY).unwrap_or(f32::INFINITY) }
+    };
+    // The gap of each pair `p` < `q` lies at `p * m + q`.
+    let mut far = vec![f32::INFINITY; m * m];
+    for p in 0..m {
+        for q in p + 1..m {
+            far[p * m + q] = gap(d, left[p], left[q]);
+        }
+    }
+    let mut gone = vec![false; m];
+    for _ in MAX_NODES..m {
+        let k = (0..m * m).fold(0, |k, x| if far[x] < far[k] { x } else { k });
+        if far[k] == f32::INFINITY {
+            break;
+        }
+        let (p, q) = (k / m, k % m);
+        let (s, t) = if d[left[q]].n() > d[left[p]].n() { (p, q) } else { (q, p) };
+        if d[left[s]].lineage == d[left[t]].lineage {
+            merge(w, d, left[s], left[t]);
+        } else {
+            merge_taking(w, d, left[s], left[t]);
+        }
+        gone[s] = true;
+        // The joiner's pairs are gone; the node it joined has new means.
+        for (o, &out) in gone.iter().enumerate() {
+            let (lo, hi) = (o.min(s), o.max(s));
+            far[lo * m + hi] = f32::INFINITY;
+            if o != t && o != s && !out {
+                let (lo, hi) = (o.min(t), o.max(t));
+                far[lo * m + hi] = gap(d, left[lo], left[hi]);
+            }
+        }
+    }
 }
 
 /// What a node shares with those it joins (`join_kin`): its lineage (a node has one brain), its stage (both mature or
