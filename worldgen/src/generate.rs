@@ -11,6 +11,9 @@ use std::collections::BTreeMap;
 
 type Side = Vec<(u16, u16)>;
 
+/// A gas of a generated world boils at most this share of the coldest melting point of its liquids.
+const GAS_BELOW: f64 = 0.9;
+
 fn noise(r: &mut Rng, s: f64) -> f64 {
     (s * r.normal()).exp()
 }
@@ -43,7 +46,7 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
         }
     }
 
-    let subs: Vec<Substance> = elems
+    let mut subs: Vec<Substance> = elems
         .iter()
         .map(|e| {
             let sum = |p: &[f64]| e.iter().zip(p).map(|(&c, &x)| c as f64 * x).sum::<f64>();
@@ -81,6 +84,13 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
         })
         .collect();
     let ns = subs.len();
+    // A gas boils below the coldest melting point of the liquids, so it stays a gas wherever one of them is liquid (a body
+    // gives off what it cannot hold as a gas, `Chemistry::fits`): its phase points and their enthalpies scaled down.
+    let cold = subs.iter().filter(|s| s.melt < T_SURF && s.boil > T_SURF).map(|s| s.melt).fold(T_SURF, f64::min);
+    for s in subs.iter_mut().filter(|s| s.boil < T_SURF && s.boil >= GAS_BELOW * cold) {
+        let f = GAS_BELOW * cold / s.boil;
+        (s.melt, s.boil, s.lv, s.lf) = (f * s.melt, f * s.boil, f * s.lv, f * s.lf);
+    }
 
     // Starting world: the lightest gases make the air, the best liquid fills low ground, solids make the ground.
     let gas = |k: usize| subs[k].boil < T_SURF;

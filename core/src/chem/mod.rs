@@ -231,7 +231,7 @@ impl Chemistry {
             let (m_in, m_out) = (mass(&rx.inputs), mass(&rx.outputs));
             require((m_in - m_out).abs() <= MASS_ROUNDING * m_in.max(m_out), || format!("{name} does not keep mass"))?;
         }
-        self.body().fits()
+        self.body().fits(self)
     }
 
     /// Add element totals of `amount` moles of substance `k` into `out` (of the elements it holds).

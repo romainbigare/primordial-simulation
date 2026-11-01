@@ -103,10 +103,21 @@ impl BodyChem {
         self.subs.iter().zip(&mut m).for_each(|(&k, x)| *x = from(k));
         m
     }
-    /// Whether bodies of this chemistry can be held in a body's fixed arrays.
-    pub(super) fn fits(&self) -> Result<(), String> {
+    /// Whether bodies of this chemistry can be held in a body's fixed arrays, and whether what a body's reactions take or make that it does not hold (a gas at the surface) is a gas down to
+    /// the melting point of life's liquid, the coldest a working body is (below it it freezes, laws.md 6.5): so a gas
+    /// it makes always leaves it as a gas.
+    pub(super) fn fits(&self, chem: &Chemistry) -> Result<(), String> {
         let (ns, nr) = (self.n(), self.reactions.len());
         crate::params::require(ns <= BODY_STORES, || format!("bodies hold {ns} substances: at most {BODY_STORES}"))?;
-        crate::params::require(nr <= BODY_REACTIONS, || format!("bodies may run {nr} reactions: at most {BODY_REACTIONS}"))
+        crate::params::require(nr <= BODY_REACTIONS, || format!("bodies may run {nr} reactions: at most {BODY_REACTIONS}"))?;
+        let Some((_, _, liquid, _)) = chem.find_life_roles() else { return Ok(()) };
+        let cold = chem.subs[liquid].melt;
+        for &r in &self.reactions {
+            let rx = &chem.reactions[r];
+            for k in rx.inputs.iter().chain(&rx.outputs).map(|p| p.0 as usize).filter(|&k| self.place(k).is_none()) {
+                crate::params::require(chem.phase(k, cold) == super::Phase::Gas, || format!("reaction {r} of bodies: substance {k} is no gas at {cold} K, where a body's liquid melts"))?;
+            }
+        }
+        Ok(())
     }
 }

@@ -290,17 +290,22 @@ pub fn carry(c: &Cell, w: &World, b: &Body) -> Option<(u64, f64)> {
 }
 
 /// After body `by` of mass `mb` kg moved from cell `i` into cell `j` (`choose::land_move`): the structure it carried
-/// (`carried`, its root) comes along if it is still in `i`, and the other bodies that held a part of it, left behind,
-/// let go of it; it pushes the structures there. A step on two cells: serial.
+/// (`carried`, its root) comes along if it is still in `i`: the other bodies that held a part of it, left behind, let go
+/// of it, and those inside it are left outside; it pushes the structures there. A step on two cells: serial.
 pub fn moved(w: &mut World, (by, carried): (u64, Option<u64>), (i, j): (usize, usize), mb: f64) {
     if let Some(r) = carried.filter(|&r| at(&w.life.cells[i], r).is_some()) {
         w.in_cell(i, |w, d| {
-            for p in members(d.at(i), r) {
+            let parts = members(d.at(i), r);
+            for &p in &parts {
                 if let Some(o) = holder(d.at(i), p).filter(|&o| d.at(i).bodies[o].id != by) {
                     let mut ob = std::mem::take(&mut d.at_mut(i).bodies[o]);
                     drop_held(w, d, &mut ob, false);
                     d.at_mut(i).bodies[o] = ob;
                 }
+            }
+            let ids: Vec<u64> = parts.iter().map(|&p| d.at(i).parts[p].id).collect();
+            for o in d.at_mut(i).bodies.iter_mut().filter(|o| o.alive && o.inside.is_some_and(|x| ids.contains(&x))) {
+                o.inside = None;
             }
         });
         move_structure(w, i, r, j);
