@@ -5,7 +5,7 @@
 use super::super::Scratch;
 use super::rain::{rain_air, Pool, Wet};
 use super::wind::{even, pushes, wind, Links};
-use super::{air_temp, at_height, radiation::{glow, glow_slope}, step::Active};
+use super::{air_temp, at_height, radiation::{glow, glow_slope}, step::Active, touching};
 use crate::{math::mean_passed, store::Class, units::{DAY, R_GAS}, World, AIR};
 use std::collections::BTreeMap;
 
@@ -38,17 +38,29 @@ impl Ground {
     pub(super) fn wet(&self) -> &Wet {
         &self.wet
     }
-    /// What node `j` gets over the whole step under the air `t` (per node, K) and `x` (per gas of the air and node,
-    /// `[gi * na + j]`, mol) of `act`, into `out` (`[o]`, as `base`).
-    fn gives(&self, j: usize, act: &[Active], (t, x): (&[f64], &[f64]), out: &mut [f64]) {
+    /// How far the air `t` (per node, K) and `x` (per gas of the air and node, `[gi * na + j]`, mol) of `act` is from the
+    /// air of the step's start, per node its temperature then each active gas (`[q * (1 + nx) + v]`, as `gives` reads it).
+    fn moved(&self, act: &[Active], (t, x): (&[f64], &[f64])) -> Vec<f64> {
         let (outs, na) = (1 + self.nx, t.len());
-        out.copy_from_slice(&self.base[j * outs..(j + 1) * outs]);
-        for e in self.at[j]..self.at[j + 1] {
-            let q = self.near[e] as usize;
-            let slope = &self.slope[e * outs * outs..(e + 1) * outs * outs];
-            let dt = t[q] - self.t0[q];
-            for (o, v) in out.iter_mut().enumerate() {
-                *v += slope[o * outs] * dt + act.iter().enumerate().map(|(y, ac)| slope[o * outs + 1 + y] * (x[ac.gi * na + q] - self.x0[y * na + q])).sum::<f64>();
+        let mut d = vec![0.0; na * outs];
+        for (q, dq) in d.chunks_exact_mut(outs).enumerate() {
+            dq[0] = t[q] - self.t0[q];
+            act.iter().enumerate().for_each(|(y, ac)| dq[1 + y] = x[ac.gi * na + q] - self.x0[y * na + q]);
+        }
+        d
+    }
+    /// What each node gets over the whole step under the air that is `d` from the step's start (`moved`), into `got`
+    /// (`[j * (1 + nx) + o]`, as `base`): a few products per node, so on the calling thread.
+    fn gives(&self, d: &[f64], got: &mut [f64]) {
+        let outs = 1 + self.nx;
+        got.copy_from_slice(&self.base);
+        for (j, at) in self.at.windows(2).enumerate() {
+            for e in at[0]..at[1] {
+                let (q, r) = (self.near[e] as usize * outs, e * outs * outs);
+                for o in 0..outs {
+                    let r = r + o * outs;
+                    got[j * outs + o] += self.slope[r] * d[q] + (1..outs).map(|v| self.slope[r + v] * d[q + v]).sum::<f64>();
+                }
             }
         }
     }
@@ -177,8 +189,10 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     let [mean, rain, ratio] = vapour(w, s, (act, ground), (blocks, one), (x, &t, &ts), (dd, dt));
     (0..s.state.gas.len() * na).for_each(|at| out.x[at] += mean[at] * share);
     let got = given(ground, act, (&t, &mean));
-    // The air each node's rain meets (`rain_air`), per active gas and node (`[y * na + j]`), on the pool.
-    let met = crate::par::map_n(nx * na, |i| (rain[i] > 0.0).then(|| rain_air(s, ground.wet(), (i / na, i % na, ratio[i]), &t)).flatten());
+    // The air each node's rain meets (`rain_air`), per active gas and node (`[y * na + j]`), on the pool, from the air
+    // touching each cell.
+    let touched = if rain.iter().any(|&m| m > 0.0) { crate::par::map_n(w.mesh.cells().n(), |i| touching(s, &t, i)) } else { Vec::new() };
+    let met = crate::par::map_n(nx * na, |i| (rain[i] > 0.0).then(|| rain_air(ground.wet(), (i / na, i % na, ratio[i]), &touched)).flatten());
     for j in 0..na {
         out.t[j] += t[j] * share;
         let (sky, day) = (glow(s.absorbs[j], ts[j], &s.lay[j][1]) * air.area()[j] * dd, &got[j * (1 + nx)..(j + 1) * (1 + nx)]);
@@ -200,12 +214,11 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     }
 }
 
-/// What each node's ground gives it over the step under the air `t`, K, and `x` (`Ground::gives`), `[j * (1 + nx) + o]`,
-/// in parallel.
+/// What each node's ground gives it over the step under the air `t`, K, and `x` (`Ground::gives`), `[j * (1 + nx) + o]`.
 fn given(ground: &Ground, act: &[Active], (t, x): (&[f64], &[f64])) -> Vec<f64> {
     let outs = 1 + act.len();
-    let mut got = vec![0.0; t.len() * outs];
-    crate::par::rows(&mut got, outs, || (), |_, j, row| ground.gives(j, act, (t, x), row));
+    let (mut got, d) = (vec![0.0; t.len() * outs], ground.moved(act, (t, x)));
+    ground.gives(&d, &mut got);
     got
 }
 

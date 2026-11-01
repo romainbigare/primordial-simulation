@@ -80,45 +80,33 @@ impl Response {
         r[0] + r[1] * (t - seen[0]) + (0..nx).map(|y| r[2 + y] * (x(y) - seen[1 + y])).sum::<f64>()
     }
     /// Each node's ground (`Ground`): what its air gains and what evaporates into it, summed over its cells, with its
-    /// slopes with the air of each node they see, by the cells' shares of it (`lerp`). One task per node on the pool,
-    /// its cells in the order of their indices.
+    /// slopes with the air of each node they see, by the cells' shares of it (`lerp`): node by node, its cells in the
+    /// order of their indices, each node it sees where one of them first does.
     pub(super) fn ground(&self, cx: &Ctx, wet: Wet) -> Ground {
         let (w, s, nx) = (cx.w, cx.s, self.nx);
-        let (n, na, outs, per) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), 1 + nx, (1 + nx) * (1 + nx));
-        let mut g = Ground::new(na, nx, (cx.t0.to_vec(), cx.x0.to_vec()), wet);
-        let mut cells: Vec<Vec<usize>> = vec![Vec::new(); na];
-        (0..n).for_each(|i| cells[w.mesh.cells().parent()[i] as usize].push(i));
-        // Per node: what it gets at the air its cells see, and the nodes they see with their slopes there.
-        let nodes = crate::par::map_n(na, |j| {
-            let (mut base, mut near): (Vec<f64>, Vec<(u32, Vec<f64>)>) = (vec![0.0; outs], Vec::new());
-            for &i in &cells[j] {
-                let row = &self.rows[i * Self::width(nx) + FIXED..];
-                let out = |o: usize| if o == 0 { GAINS } else { UP + o - 1 };
-                (0..outs).for_each(|o| base[o] += row[out(o) * (2 + nx)]);
-                for c in 0..4 {
-                    let (q, wt) = (s.near[i][c], s.wt[i][c]);
-                    if wt == 0.0 {
-                        continue;
-                    }
-                    let at = match near.iter().position(|e| e.0 == q) {
-                        Some(at) => at,
+        let (air, outs, width) = (w.mesh.level(AIR), 1 + nx, Self::width(nx));
+        let per = outs * outs;
+        let mut g = Ground::new(air.n(), nx, (cx.t0.to_vec(), cx.x0.to_vec()), wet);
+        let out = |o: usize| if o == 0 { GAINS } else { UP + o - 1 };
+        for j in 0..air.n() {
+            let first = g.near.len();
+            for &i in air.children(j) {
+                let row = &self.rows[i as usize * width + FIXED..(i as usize + 1) * width];
+                (0..outs).for_each(|o| g.base[j * outs + o] += row[out(o) * (2 + nx)]);
+                for (&q, &wt) in s.near[i as usize].iter().zip(&s.wt[i as usize]).filter(|c| *c.1 != 0.0) {
+                    let at = match g.near[first..].iter().position(|&e| e == q) {
+                        Some(at) => first + at,
                         None => {
-                            near.push((q, vec![0.0; per]));
-                            near.len() - 1
+                            g.near.push(q);
+                            g.slope.resize(g.slope.len() + per, 0.0);
+                            g.near.len() - 1
                         }
                     };
+                    let slope = &mut g.slope[at * per..(at + 1) * per];
                     for o in 0..outs {
-                        (0..outs).for_each(|v| near[at].1[o * outs + v] += wt * row[out(o) * (2 + nx) + 1 + v]);
+                        (0..outs).for_each(|v| slope[o * outs + v] += wt * row[out(o) * (2 + nx) + 1 + v]);
                     }
                 }
-            }
-            (base, near)
-        });
-        for (j, (base, list)) in nodes.into_iter().enumerate() {
-            g.base[j * outs..(j + 1) * outs].copy_from_slice(&base);
-            for (q, slope) in list {
-                g.near.push(q);
-                g.slope.extend(slope);
             }
             g.at.push(g.near.len());
         }
