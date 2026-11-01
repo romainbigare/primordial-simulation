@@ -71,7 +71,9 @@ const MAX_LINEAGES: usize = 8;
 /// At its update, a body whose brain-size genes are a whole unit away from its lineage's moves to a lineage of those
 /// sizes, its born rows and its own rows carried over with the same new weights: a living one of its starting kind
 /// with those sizes if there is one (it takes that one's base); else, if its kind has `MAX_LINEAGES` living lineages,
-/// the one nearest in sizes (none if that is its own); else a new one. Moves no matter and no energy.
+/// the one nearest in sizes (none if that is its own); else a new one. Living: as the world held them when the pass
+/// began (`Life::lineages_of`), so two bodies that move to new sizes in one pass make two lineages. Moves no matter and
+/// no energy.
 pub fn resize(w: &World, d: &mut Chunk, b: &mut Body) {
     let (ns, noise, id) = (w.chem.ns(), w.cfg.new_noise(), b.id);
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Resize);
@@ -82,7 +84,7 @@ pub fn resize(w: &World, d: &mut Chunk, b: &mut Body) {
     // many its kind has.
     let sizes = sizes_of(&l);
     let (mut count, mut near) = (0, None::<(u32, usize, brain::Shape)>);
-    for (k, x) in d.lineages_of(w, l.root) {
+    for (k, x) in w.life.lineages_of(l.root) {
         let gap = sizes_of(x).iter().zip(&sizes).map(|(a, b)| a.abs_diff(*b)).sum::<usize>();
         count += 1;
         if near.is_none_or(|n| gap < n.1) {

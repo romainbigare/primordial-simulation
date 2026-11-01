@@ -27,6 +27,12 @@ impl Life {
     pub fn lineages(&self) -> usize {
         self.members.iter().filter(|&&m| m > 0).count()
     }
+    /// The living lineages of starting kind `root`, with their ids, as the world held them when the pass began: the
+    /// provisional ones of a chunk are not among them, so what a body chooses does not depend on who shares its chunk.
+    pub(crate) fn lineages_of(&self, root: u32) -> impl Iterator<Item = (u32, &Lineage)> + '_ {
+        let living = self.brains.iter().zip(&self.members).enumerate().filter_map(|(k, (l, &m))| Some((k as u32, l.as_ref().filter(|_| m > 0)?)));
+        living.filter(move |(_, l)| l.root == root)
+    }
     /// A new lineage, of no bodies yet (body code makes provisional ones, `Chunk::new_lineage`).
     pub fn new_lineage(&mut self, l: Lineage) -> u32 {
         self.brains.push(Some(l));
@@ -95,13 +101,6 @@ impl Life {
 }
 
 impl Chunk<'_> {
-    /// The living lineages of starting kind `root` this chunk sees, with their ids: the world's that have members, then
-    /// its own provisional ones.
-    pub(crate) fn lineages_of<'a>(&'a self, w: &'a World, root: u32) -> impl Iterator<Item = (u32, &'a Lineage)> + 'a {
-        let settled = w.life.brains.iter().zip(&w.life.members).enumerate().filter_map(|(k, (l, &m))| Some((k as u32, l.as_ref().filter(|_| m > 0)?)));
-        let own = self.brains.iter().enumerate().map(|(k, l)| (provisional_id(k) | if l.none() { NONE } else { 0 }, l));
-        settled.chain(own).filter(move |(_, l)| l.root == root)
-    }
     /// A new lineage, of no bodies yet: a provisional one of this chunk.
     pub fn new_lineage(&mut self, l: Lineage) -> u32 {
         let none = if l.none() { NONE } else { 0 };

@@ -4,12 +4,17 @@
 use pcore::store::Node;
 use pcore::{brain, AIR};
 use worldgen::life::{seed, ROSTER};
-use worldgen::testkit::{eater, set_amount, start, Books, OX, RICH};
+use pcore::body::HIDDEN;
+use worldgen::testkit::{dry_lands, eater, set_amount, start, Books, Brain, Line, OX, RICH};
 
 /// Years the roster's world runs in the test of threads and chunks.
 const YEARS: u64 = 3;
-/// A count of chunks other than the default, that cuts the rows of the 16 x 16 map at other places.
-const OTHER_CHUNKS: u32 = 7;
+/// Eaters that move to new brain sizes in the test of chunks, and the months it runs.
+const RESIZERS: usize = 6;
+const RESIZE_MONTHS: usize = 2;
+/// Counts of chunks other than the default: one chunk of all cells, and one that cuts the rows of the 16 x 16 map at
+/// other places.
+const OTHER_CHUNKS: [u32; 2] = [1, 7];
 
 /// The 16 x 16 world of the roster, every starting kind placed after its first month, run `YEARS` years on a pool of
 /// `threads` threads with its cells cut into `chunks` chunks: its whole saved state.
@@ -32,13 +37,43 @@ fn roster(threads: usize, chunks: u32) -> String {
     })
 }
 
-/// One world on 1 and on 4 threads, and with another count of chunks: every order is fixed by the cells.
+/// The world of `start` with an eater in each of its first `RESIZERS` dry cells whose hidden-units gene is two units
+/// over its lineage's (all of one lineage), run `RESIZE_MONTHS` months with its cells cut into `chunks` chunks: at their
+/// first update they move to new brain sizes (`lineage::resize`). Its whole saved state, and the lineages made.
+fn resizing(chunks: u32) -> (String, usize) {
+    let (mut w, _) = start();
+    w.cfg.chunks = chunks;
+    let line = Line::new(&mut w, &Brain::only(brain::REST), 1);
+    for &i in dry_lands(&w).iter().take(RESIZERS) {
+        let mut b = line.founder(&mut w, 1, i);
+        b.genes[HIDDEN] += 2.0;
+        b.prepare(&w.chem, &w.cfg);
+        w.add(b);
+    }
+    let founded = w.life.brains.len();
+    for _ in 0..RESIZE_MONTHS {
+        pcore::step(&mut w);
+    }
+    w.cfg.chunks = pcore::Config::default().chunks;
+    (serde_json::to_string(&w).expect("a world serialises"), w.life.brains.len() - founded)
+}
+
+/// One world on 1 and on 4 threads, and with other counts of chunks (one chunk of all cells among them): in the
+/// roster's world, and in one where bodies of one lineage in many cells move to the same new brain sizes in one pass
+/// (each makes a lineage of its own, whoever shares its chunk). Every order is fixed by the cells.
 #[test]
 fn the_threads_and_the_chunks_change_nothing() {
+    let (one, made) = resizing(pcore::Config::default().chunks);
+    assert!(made >= RESIZERS, "{made} lineages made");
+    for other in OTHER_CHUNKS {
+        assert!(one == resizing(other).0, "{other} chunks changed the world where brains resize");
+    }
     let chunks = pcore::Config::default().chunks;
     let one = roster(1, chunks);
     assert!(one == roster(4, chunks), "4 threads changed the world");
-    assert!(one == roster(4, OTHER_CHUNKS), "{OTHER_CHUNKS} chunks changed the world");
+    for other in OTHER_CHUNKS {
+        assert!(one == roster(4, other), "{other} chunks changed the world");
+    }
 }
 
 /// Bodies in every land cell under one air node that holds little of the gas they burn with, on ground that holds little
