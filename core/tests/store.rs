@@ -39,11 +39,11 @@ fn what_passes_through_a_node_needs_nothing_held() {
     held.iter().enumerate().for_each(|(i, &m)| set_amount(&mut w, Node::ground(i), LIQUID, m));
     let (a, b): (Vec<u32>, Vec<u32>) = (0..CHAIN as u32 - 1).map(|i| (i, i + 1)).unzip();
     let mol = vec![have; CHAIN - 1];
-    let books = Books::now(&w);
+    let (books, rounded) = (Books::now(&w), w.counts.rounded);
     apply(&mut w, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[LIQUID as u16], mol: &mol, heat: &[] }], &[]);
     books.assert_kept(&w, 1e-12);
     let after = &w.store.amounts(Class::Ground)[LIQUID * n..LIQUID * n + CHAIN];
-    assert_eq!((after[0], w.counts.rounded), (0.0, [0.0; 2]), "nothing is rounded");
+    assert_eq!((after[0], w.counts.rounded), (0.0, rounded), "nothing is rounded");
     for i in 1..CHAIN - 1 {
         assert!((after[i] - held[i]).abs() <= 1e-12 * have, "node {i} holds {} of {}", after[i], held[i]);
     }

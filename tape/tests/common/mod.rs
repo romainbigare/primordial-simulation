@@ -25,7 +25,13 @@ pub fn run(seed: u64, side: usize, years: u64, roster: bool, set: impl Fn(&mut C
 
 /// As `run`, on the new world `w`.
 #[allow(dead_code)]
-pub fn run_on(mut w: World, years: u64, roster: bool, set: impl Fn(&mut Config), mut each_year: impl FnMut(u64, &World, &Recorder)) -> (World, Recorder) {
+pub fn run_on(w: World, years: u64, roster: bool, set: impl Fn(&mut Config), each_year: impl FnMut(u64, &World, &Recorder)) -> (World, Recorder) {
+    run_stepped(w, years, roster, set, pcore::step, each_year)
+}
+
+/// As `run_on`, each month advanced by `step` (`pcore::step`, or a control run of it).
+#[allow(dead_code)]
+pub fn run_stepped(mut w: World, years: u64, roster: bool, set: impl Fn(&mut Config), step: impl Fn(&mut World), mut each_year: impl FnMut(u64, &World, &Recorder)) -> (World, Recorder) {
     set(&mut w.cfg);
     w.cfg.validate().expect("a world `Config::validate` accepts");
     // `ew run` scales the air's heat-absorbing gases by `--absorber` (1), which sets each air node's heat again.
@@ -36,7 +42,7 @@ pub fn run_on(mut w: World, years: u64, roster: bool, set: impl Fn(&mut Config),
     for y in 1..=years {
         plan.place(&mut w);
         for _ in 0..w.cfg.months_per_year {
-            pcore::step(&mut w);
+            step(&mut w);
             record(&mut rec, &mut w);
         }
         each_year(y, &w, &rec);

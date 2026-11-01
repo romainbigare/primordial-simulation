@@ -1,5 +1,5 @@
-//! The bodies seen from their cells: before each physics step what each cell holds and the shade of its bodies
-//! (`survey`), and every batch of days the updates due, in a parallel and a serial phase (`batch`).
+//! The bodies seen from their cells: at each month's start what each cell holds and the shade of its bodies
+//! (`survey`), and each month the updates due, in a parallel and a serial phase (`batch`).
 
 use crate::body::{die, live, Layout, LiveTmp, LACK};
 use crate::{choose, life::Domain, World};
@@ -20,7 +20,7 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
     [w.t_ground_last(i), d, z]
 }
 
-/// Before each physics step, one task per domain on the pool (`run`), in each of its cells: what movers broke since the
+/// At each month's start, one task per domain on the pool (`run`), in each of its cells: what movers broke since the
 /// last (`choose::wear`), once a month the merge of alike nodes (`nodes::crowd`), and what the cell holds (`rows`). A death or a merge that lets go of a part queues that in the domain's outbox, applied after
 /// the tasks (`outbox::land`, laws.md 0). Then the caches of the cells (`caches`), once a month the traffic and each
 /// cell's surroundings. With `reversed`, the domains start in reversed order: only for the order test.
@@ -190,6 +190,10 @@ pub fn batch(w: &mut World, reversed: bool) {
     w.life.batch = false;
     w.settle(0..w.life.domains.len());
     w.life.settle_moved();
+    // The bodies' visible traits from what they hold now (`Domain::see_changed`), so a world saved after the batch,
+    // whose bodies load as seen, reads at the next survey as an unbroken one does.
+    let work = (0..w.life.domains.len()).map(|k| (k, w.life.domains[k].count(), ())).filter(|x| x.1 > 0).collect();
+    run(w, work, reversed, |_| (), |w, d, _, _| d.see_changed(w));
 }
 
 /// Run `f` on the domains of `work` (`run`), each ending by taking its bodies that move out of its storage

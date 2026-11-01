@@ -25,22 +25,21 @@ east to west. A rectangle may be refined at the start (`--region`, `Square::refi
 quarters, linked to a square beside them at the distance between centres across the border, so a steady change
 across it passes exactly.
 
-**One step** (`schedule::step`, a month; time in whole seconds, the calendar from it). Processes run by their periods
-(`clock::Every`) in the order of `schedule::processes`: every `phys_days` the survey (`survey::survey`: one task per
-domain on the pool with the feature `threads`, in each of its cells the wear of movers, the monthly merge, the shade and
-the sums; a death or a merge that lets go of a part queues that in the domain's outbox, applied after the tasks as in a
-batch; at a month's start Flow's state is rebuilt in full for the cells' surroundings, and its own process leaves it when
-it would be in full then), the parts of Flow that are due (air every `air_hours`; after it, every physics step, the
-sink of the liquid over field capacity into the bed's store; liquid and erosion every `flow_days`, always on a physics
-step; heat sideways and creep yearly) and Change; on the month's first day Bond (the turns of the parts: each
-domain's in slot order on its view, the domains on the pool, their moves booked in the order of the domains; then the
+**One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
+(`schedule::month`), each for the whole month: the survey (`survey::survey`: one task per domain on the pool with the
+feature `threads`, in each of its cells the wear of movers, the monthly merge, the shade and the sums; a death or a merge
+that lets go of a part queues that in the domain's outbox, applied after the tasks as in a batch; it rebuilds Flow's
+state in full for the cells' surroundings, and Flow's own pass leaves it then); Flow: the air in steps of
+`AIR_STEP_DAYS` (10 days, three a month, each at its own time in the month), after each the sink of the liquid over
+field capacity into the bed's store; then the liquid and erosion; heat sideways and creep yearly; the cover's month;
+Change; Bond (the turns of the parts: each domain's in slot order on its view, the domains on the pool, their moves booked in the order of the domains; then the
 loads of the structures one by one); then the bodies (`survey::batch`).
-**Every body updates once a month**, at the month's first day, after that day's Change, air step and Bond: one batch
+**Every body updates once a month**, at the month's start, after the month's Flow, Change and Bond: one batch
 holds every living body, and a body placed during it first updates at the next month's start. Each update integrates
 the time since the body's last (`Body::last`): its upkeep, drink, heat, growth and the most it takes or breaks go by
 those days, so the month is a time step, not a calendar: a season's change comes from temperature (6.2). The bodies
-read the ground and the air as that day's Change and air step left them, and what they leave on the ground (the free
-solid they shed, remains) goes through the month's steps of Change before the next batch can take it, so most of the
+read the ground and the air as the month's Change and last air step left them, and what they leave on the ground (the
+free solid they shed, remains) goes through the next month's Change before the next batch can take it, so most of the
 free solid has rotted by then (it rots in about a week, 2.1). Every body decides at every update (5.3).
 **Bodies and their order** (`life`): the cells are cut into domains, the cells under one air node; each domain stores
 the bodies of its cells, and a body that moves into a cell of another domain moves to its storage. A body's id is the
@@ -137,9 +136,8 @@ and a soft cover that melts away holds its surface at the melting point only unt
 long step ends where short ones do.
 
 ### 1.2 Liquid
-`flow::liquid`, every `flow_days` (60): inside a month, counted from the month's start (a whole number of physics
-steps); over a month, counted from the world's start (a whole number of months); so always on a physics step, after its
-sink (`Config::validate`). The sink into the bed's store runs every physics step (`flow::sink`).
+`flow::liquid`, once a month, after the air's steps. The sink into the bed's store runs after each of the air's steps
+(`flow::sink`).
 - **Pores first**: the loose ground's pores (`porosity`) fill first, under any soft cover; only liquid above them stands
   and has a head (`flow::land::stand`), the depth bodies and Change read.
 - **Spill levels**: a priority flood over the ground gives each cell its spill level (Barnes, Lehman and Mulla 2014;
@@ -152,8 +150,8 @@ sink (`Config::validate`). The sink into the bed's store runs every physics step
   saturated thickness × width / distance, at most half of what would level two cells, and no cell giving more than it
   holds over field capacity; pores at or under field capacity (`field`) give nothing. Over cells of kilometres a
   liquid step moves a table a thousandth of the way to its neighbours', far below the explicit limit. Liquid above it sinks to the deep store
-  (`drain::sink`, at most `seep` a second and the store's room) every physics step, right after the air's step that
-  brings the rain: held until a long liquid step, it would cover and darken the ground (`land::reflectance`, 1.4) and
+  (`drain::sink`, at most `seep` a second and the store's room) right after each of the air's steps, which bring the
+  rain: held until the month's liquid step, it would cover and darken the ground (`land::reflectance`, 1.4) and
   warm it. The store flows by `bed_seep`. Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
   the cell's steepest slope over a hillslope of `hill` into the runoff (`flow::drain`).
 - **What goes with it**: its share of every liquid and of what is dissolved, with heat. Liquid passing through a node
@@ -174,7 +172,7 @@ loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hard
 and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 22.
 
 ### 1.4 The air's step, the sun and the bodies' share
-`flow::air::step`, every `air_hours`. First the gas of the bodies' nodes comes up into their air nodes and gases
+`flow::air::step`, every `AIR_STEP_DAYS` (10). First the gas of the bodies' nodes comes up into their air nodes and gases
 dissolve (1.5). Then each cell's exchange over the step with the air it sees is solved once, in its own implicit
 surface balance (Newton's steps about its end temperature, with its melting plateaus, 1.1), at the air of the step's
 start: sunlight, heat radiation, sensible heat with the air touching it and what evaporates from it by its saturation

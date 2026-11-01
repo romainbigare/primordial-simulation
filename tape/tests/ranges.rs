@@ -21,7 +21,7 @@
 
 mod common;
 
-use common::{run, LIFE_YEAR};
+use common::{run, run_stepped, LIFE_YEAR};
 use pcore::chem::Phase;
 use pcore::{Config, World};
 use std::fmt;
@@ -47,7 +47,7 @@ const ABSORBER_PPM: f64 = 388.8;
 /// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the reference runs.
 const RIVERS: f64 = 712.4;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
-const WORN: f64 = 0.318;
+const WORN: f64 = 0.3179;
 /// The cover (starting kind 0) at year 30, log10 kg (`root_0_cover_kg`), in the reference runs.
 const COVER_KG: f64 = 9.985;
 /// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the reference runs: a guard that the world stays near
@@ -339,13 +339,14 @@ const STEP_YEARS: u64 = 20;
 const STEP_FROM: u64 = 11;
 const STEP_SEEDS: [u64; 3] = [1, 2, 3];
 const STEP_K: f64 = 0.3;
-/// The shorter air steps, hours: a day, the air's own step.
-const SHORT_AIR_HOURS: [u32; 1] = [24];
+/// The shorter air steps, days: a day, the air's own step.
+const SHORT_AIR_DAYS: [u32; 1] = [1];
 
-/// The `CLIMATE` columns at the end of each year from `STEP_FROM` of seed `seed` with the air's step `hours` long.
-fn climate(seed: u64, hours: u32) -> Vec<[f64; CLIMATE.len()]> {
+/// The `CLIMATE` columns at the end of each year from `STEP_FROM` of seed `seed` with the air's steps `days` long.
+fn climate(seed: u64, days: u32) -> Vec<[f64; CLIMATE.len()]> {
     let mut years = vec![];
-    run(seed, STEP_SIDE, STEP_YEARS, false, |c: &mut Config| c.air_hours = hours, |y, _, rec| {
+    let w = worldgen::new_world(seed, STEP_SIDE, STEP_SIDE);
+    run_stepped(w, STEP_YEARS, false, |_| {}, |w| pcore::step_with_air(w, days), |y, _, rec| {
         if y >= STEP_FROM {
             years.push(CLIMATE.map(|c| rec.last(c)));
         }
@@ -353,29 +354,29 @@ fn climate(seed: u64, hours: u32) -> Vec<[f64; CLIMATE.len()]> {
     years
 }
 
-/// The long step against shorter ones (the air's step is a speed setting, `docs/numbers.md`): on small worlds with life,
+/// The long step against shorter ones (the air's step is a speed setting, `pcore::AIR_STEP_DAYS`): on small worlds with life,
 /// the mean over the seeds of what the default air step moves each of the climate's key numbers (the mean of its last
-/// years) from the step of each of `SHORT_AIR_HOURS`, each seed against itself, is less than `STEP_K` for a temperature
+/// years) from the step of each of `SHORT_AIR_DAYS`, each seed against itself, is less than `STEP_K` for a temperature
 /// and less than its year-to-year spread at the short step for the others.
 #[test]
 #[ignore = "slow: six 20-year runs of a 32 x 32 world with life"]
 fn the_long_step_keeps_the_climate() {
-    let hours: Vec<u32> = std::iter::once(Config::default().air_hours).chain(SHORT_AIR_HOURS).collect();
+    let days: Vec<u32> = std::iter::once(pcore::AIR_STEP_DAYS).chain(SHORT_AIR_DAYS).collect();
     let runs: Vec<Vec<Vec<[f64; CLIMATE.len()]>>> = std::thread::scope(|s| {
-        let runs: Vec<Vec<_>> = STEP_SEEDS.iter().map(|&seed| hours.iter().map(|&h| s.spawn(move || climate(seed, h))).collect()).collect();
+        let runs: Vec<Vec<_>> = STEP_SEEDS.iter().map(|&seed| days.iter().map(|&d| s.spawn(move || climate(seed, d))).collect()).collect();
         runs.into_iter().map(|seed| seed.into_iter().map(|r| r.join().expect("a run")).collect()).collect()
     });
     let mut out = vec![];
     for (q, name) in CLIMATE.iter().enumerate() {
         let mean = |run: &[[f64; CLIMATE.len()]]| run.iter().map(|y| y[q]).sum::<f64>() / run.len() as f64;
         let spread = |run: &[[f64; CLIMATE.len()]]| run.iter().map(|y| y[q]).fold(f64::MIN, f64::max) - run.iter().map(|y| y[q]).fold(f64::MAX, f64::min);
-        for (h, &short) in SHORT_AIR_HOURS.iter().enumerate() {
+        for (h, &short) in SHORT_AIR_DAYS.iter().enumerate() {
             let off = runs.iter().map(|seed| mean(&seed[0]) - mean(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64;
             let limit = if name.starts_with("t_") { STEP_K } else { runs.iter().map(|seed| spread(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64 };
             let ok = off.abs() <= limit;
-            println!("{name}: the default step off by {off:.3e} from {short}-hour steps, limit {limit:.3e}{}", if ok { "" } else { ": OUT" });
+            println!("{name}: the default step off by {off:.3e} from {short}-day steps, limit {limit:.3e}{}", if ok { "" } else { ": OUT" });
             if !ok {
-                out.push(format!("{name} at {short} hours"));
+                out.push(format!("{name} at {short} days"));
             }
         }
     }

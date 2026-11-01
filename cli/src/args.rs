@@ -25,9 +25,6 @@ pub const USAGE: &str = "usage:
     --null                learning and imitation off, brain rows frozen: the run to compare a seed with
     --sun X               the sun's strength, times the default (1)
     --absorber X          the heat-absorbing gases of the air at the start, times chemistry 0's (1)
-    --phys-days N         days between surveys of the cells and steps of the reactions (10)
-    --air-hours N         hours between steps of the air: radiation, evaporation, rain and wind (240; divides the physics step)
-    --flow-days N         days between moves of liquid (60; over a month, a whole number of months)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
     --years N, --every N, --out DIR, --frames-every N, --monthly-years N   as for run
@@ -90,14 +87,11 @@ impl Args {
         Ok(())
     }
 
-    /// Set what the flags of `ew run` change in a new world: the sun, the switches, the time steps, the
+    /// Set what the flags of `ew run` change in a new world: the sun, the switches, the
     /// heat-absorbing gases.
     pub fn apply(&self, w: &mut World) {
         let c = &mut w.cfg;
         c.sun *= self.get("--sun", 1.0);
-        c.phys_days = self.get("--phys-days", c.phys_days);
-        c.flow_days = self.get("--flow-days", c.flow_days);
-        c.air_hours = self.get("--air-hours", c.air_hours);
         c.null = self.has("--null");
         c.nodes = !self.has("--individuals");
         c.two_parents = !self.has("--no-mix");

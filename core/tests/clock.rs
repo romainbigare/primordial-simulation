@@ -1,40 +1,11 @@
-//! The clock: processes run at their periods inside longer ones, in a fixed order at one time; the day, the month and
-//! the season come from the seconds; the month of `step` is built on it. A calm node sleeps until its alarm or until
-//! it has gained more than a share of what it held, and then catches up.
+//! The clock: the day, the month and the season come from the seconds; the month of `step` is a fixed list of passes.
+//! A calm node sleeps until its alarm or until it has gained more than a share of what it held, and then catches up.
 
-use pcore::clock::{self, Every, Sleep};
+use pcore::clock::Sleep;
 use pcore::store::Class;
 use pcore::units::DAY_S;
 use pcore::{Config, Physics, Stage};
 use worldgen::testkit::small_world;
-
-/// A fast process runs a whole number of times inside a slow one, each run standing for the time to the next; a span
-/// that does not fill the slow period is cut at its end, and the next run starts the next slow period.
-#[test]
-fn a_fast_process_runs_several_times_inside_a_slow_one() {
-    let fast = Every { period: 3, within: 10 };
-    let runs: Vec<(u64, u64)> = (0..20).filter_map(|t| fast.span(t).map(|s| (t, s))).collect();
-    assert_eq!(runs, [(0, 3), (3, 3), (6, 3), (9, 1), (10, 3), (13, 3), (16, 3), (19, 1)]);
-    assert_eq!([0, 2, 8, 9, 10].map(|t| fast.next(t)), [3, 3, 9, 10, 13]);
-}
-
-/// At one time the processes due run in the order of their list, and the clock then goes to the next time any is
-/// due: over a slow period each process runs period / its period times, and its spans add up to the whole period.
-#[test]
-fn the_processes_due_at_one_time_run_in_the_order_of_their_list() {
-    let list = [(Every { period: 5, within: 10 }, 'a'), (Every { period: 10, within: 10 }, 'b'), (Every { period: 2, within: 10 }, 'c')];
-    assert_eq!(clock::due(&list, 0).collect::<Vec<_>>(), [('a', 5), ('b', 10), ('c', 2)]);
-    assert_eq!(clock::due(&list, 5).collect::<Vec<_>>(), [('a', 5)]);
-    let (mut t, mut ran) = (0, vec![]);
-    while t < 20 {
-        ran.extend(clock::due(&list, t));
-        t = clock::next(&list, t);
-    }
-    for (p, runs) in [('a', 4), ('b', 2), ('c', 10)] {
-        assert_eq!(ran.iter().filter(|r| r.0 == p).count(), runs, "{p}");
-        assert_eq!(ran.iter().filter(|r| r.0 == p).map(|r| r.1).sum::<u64>(), 20, "{p}");
-    }
-}
 
 /// The day, the month, the year and the season are the world's seconds counted in its calendar.
 #[test]
@@ -47,28 +18,20 @@ fn day_month_and_season_come_from_the_seconds() {
     assert_eq!(cal.season(cal.year / 2), 0.5);
 }
 
-/// A month of `step`: on its first day the survey, the parts of Flow due (at a month's start at least its state, the
-/// air and the sink into the bed's store, and the liquid when its period starts there), the cover's month and Change,
-/// then Bond, then the bodies; the physics every `phys_days` days and the bodies once a month. The clock ends a whole month on,
-/// and `day` moves it by one day.
+/// A month of `step`: the survey, Flow's state, the air and the sink into the bed's store in steps of `AIR_STEP_DAYS`,
+/// the liquid (with creep and the refresh at their months), the cover's month, Change, Bond, then the bodies, each
+/// once. The clock ends a whole month on, and `day` moves it by one day, the month's passes only at a month's start.
 #[test]
-fn a_month_runs_its_processes_in_their_order() {
+fn a_month_runs_its_passes_in_their_order() {
     let mut w = small_world();
     let (t0, cal) = (w.time, w.cfg.calendar());
     let mut marks = vec![];
-    pcore::step_marked(&mut w, &mut |s| marks.push(s));
+    pcore::step_marked(&mut w, &mut |_, s| marks.push(s));
     assert_eq!(w.time, t0 + cal.month);
+    let air = (w.cfg.days_per_month / pcore::AIR_STEP_DAYS) as usize;
     let flow = marks[1..].iter().take_while(|&&m| m == Stage::Flow).count();
-    // A liquid step of more than a month starts on a multiple of its period from the world's start.
-    let (flow_s, dpm) = (w.cfg.flow_days as u64 * cal.day, w.cfg.days_per_month);
-    let liquid = (w.cfg.flow_days <= dpm || t0.is_multiple_of(flow_s)) as usize;
-    assert!(marks[0] == Stage::Bodies && flow >= 3 + liquid, "{marks:?}");
-    assert_eq!(marks[1 + flow..][..4], [Stage::Bodies, Stage::Change, Stage::Parts, Stage::Bodies]);
-    let count = |s: Stage| marks.iter().filter(|&&m| m == s).count() as u32;
-    let phys = w.cfg.phys_days;
-    assert_eq!((count(Stage::Change), count(Stage::Parts)), (dpm.div_ceil(phys), 1));
-    // (A survey each physics step, the cover's month and the bodies' month.)
-    assert_eq!(count(Stage::Bodies), dpm.div_ceil(phys) + 2);
+    assert!(marks[0] == Stage::Bodies && flow >= 2 + 2 * air, "{marks:?}");
+    assert_eq!(marks[1 + flow..], [Stage::Bodies, Stage::Change, Stage::Parts, Stage::Bodies]);
     let (d, m) = (w.day(), w.month());
     pcore::day(&mut w);
     assert_eq!((w.day(), w.month(), w.time % cal.day), (d + 1, m, 0));
@@ -143,25 +106,12 @@ fn a_sleeping_node_catches_up_as_an_awake_node_steps() {
     assert!(amount[0] > 0.9, "the law ran: {amount:?}");
 }
 
-/// The default settings pass, and so does a liquid step of whole months over a physics step that does not divide them;
-/// a time step of 0, an air step that does not divide the physics step, a liquid step that does not fall on physics
-/// steps or over a month is not whole months, or a dormancy of 1 is refused.
+/// The default settings pass; a month that is not a whole number of the air's steps, or a dormancy of 1, is refused.
 #[test]
-fn the_default_settings_pass_and_a_step_off_its_base_or_out_of_step_or_a_dormancy_of_1_is_refused() {
+fn the_default_settings_pass_and_a_month_off_the_air_steps_or_a_dormancy_of_1_is_refused() {
     assert_eq!(Config::default().validate(), Ok(()));
-    let weekly = Config { phys_days: 7, air_hours: 24, flow_days: 60, ..Default::default() };
-    assert_eq!(weekly.validate(), Ok(()));
     let dormant = Config { phys: Physics { dormancy: 1.0, ..Default::default() }, ..Default::default() };
-    let refused = [
-        Config { flow_days: 0, ..Default::default() },
-        Config { flow_days: 15, ..Default::default() },
-        Config { flow_days: 45, ..Default::default() },
-        Config { air_hours: 0, ..Default::default() },
-        Config { air_hours: 480, ..Default::default() },
-        Config { phys_days: 0, ..Default::default() },
-        dormant,
-    ];
-    for c in refused {
-        assert!(c.validate().is_err(), "{} {} {} {}", c.phys_days, c.air_hours, c.flow_days, c.phys.dormancy);
+    for c in [Config { days_per_month: 25, ..Default::default() }, Config { days_per_month: 0, ..Default::default() }, dormant] {
+        assert!(c.validate().is_err(), "{} {}", c.days_per_month, c.phys.dormancy);
     }
 }

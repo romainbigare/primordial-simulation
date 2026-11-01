@@ -317,7 +317,7 @@ fn yearly_series_has_the_measures_per_starting_kind() {
     // The run's numbers are written beside the series.
     let doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("physics.json")).unwrap()).unwrap();
     assert_eq!(doc["physics"]["alike"].as_f64().map(|x| x as f32), Some(w.cfg.phys.alike));
-    assert_eq!(doc["config"]["phys_days"].as_u64(), Some(w.cfg.phys_days as u64));
+    assert_eq!(doc["config"]["days_per_month"].as_u64(), Some(w.cfg.days_per_month as u64));
     assert!(doc["config"].get("phys").is_none());
 }
 

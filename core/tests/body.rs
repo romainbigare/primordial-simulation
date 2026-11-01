@@ -5,7 +5,7 @@
 use pcore::body::{self, Body, Layout, COOL_T, HEAT, KEEP_T, PHASE};
 use pcore::life::Handle;
 use pcore::{brain, World, AIR};
-use worldgen::testkit::{add, died, dry_lands, eater, hold_ground, kg, moved, node_of, out, put_kg_m2, scale, small_world, start, took_from_ground, Books, Brain, Line, LIQUID, MATTER, RICH};
+use worldgen::testkit::{add, died, dry_lands, eater, held_day, hold_ground, kg, moved, node_of, out, put_kg_m2, scale, small_world, start, took_from_ground, Books, Brain, Line, LIQUID, MATTER, RICH};
 
 /// Days the takes from the ground run for (`matter_taken_from_outside_is_digested_into_the_solid`).
 const TAKE_DAYS: usize = 50;
@@ -15,8 +15,7 @@ const TAKE_DAYS: usize = 50;
 fn after_update(w: &mut World, s: Handle, t: f64) -> Body {
     let (id, i, updates) = (w.life[s].id, w.life[s].cell as usize, w.counts.updates);
     while w.counts.updates == updates {
-        hold_ground(w, i, t);
-        pcore::day(w);
+        held_day(w, &[i], t);
     }
     let h = w.life.find(id).unwrap_or_else(|| panic!("the body died on day {}", w.day()));
     w.life[h].clone()
@@ -120,8 +119,7 @@ fn a_frozen_body_dies() {
     w.events.clear();
     for _ in 0..40 {
         let i = w.life[s].cell as usize;
-        hold_ground(&mut w, i, 250.0);
-        pcore::day(&mut w);
+        held_day(&mut w, &[i], 250.0);
         if w.life.find(id).is_none() {
             break;
         }
@@ -257,11 +255,8 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     // A day with the ground held; the age deaths of the day, as (cell, day, members).
     let t_cat = w.cfg.phys.t_cat;
     let day = |w: &mut pcore::World, deaths: &mut Vec<(usize, u64, f64)>| {
-        for &i in &cells {
-            hold_ground(w, i, t_cat);
-        }
         w.events.clear();
-        pcore::day(w);
+        held_day(w, &cells, t_cat);
         deaths.extend(w.events.iter().filter(|e| matches!(e.kind, pcore::event::EventKind::Died { cause: AGE, .. })).map(|e| (e.node as usize, e.day, e.value)));
     };
     // Two months for the bodies to settle at the temperature their heat and the ground give them, then their upkeep per

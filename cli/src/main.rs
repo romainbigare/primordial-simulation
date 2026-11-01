@@ -95,7 +95,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
         plan.place(&mut w).iter().for_each(|l| println!("{l}"));
         for _ in 0..w.cfg.months_per_year {
             let mut t = Instant::now();
-            pcore::step_marked(&mut w, &mut |s| {
+            pcore::step_marked(&mut w, &mut |_, s| {
                 clock.spent[s as usize] += t.elapsed();
                 t = Instant::now();
             });

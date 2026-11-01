@@ -88,7 +88,7 @@ fn a_node_sleeps_by_its_own_rates() {
     set_amount(&mut w, Node::air(j), OX, ox);
     (0..na).for_each(|j| set_amount(&mut w, Node::air(j), BURNING_GAS, 0.0));
     set_heat(&mut w, Node::ground(hot), e);
-    let (step, sleep) = (w.cfg.phys_days as u64 * DAY_S, w.cfg.sleep_days as u64 * DAY_S);
+    let (step, sleep) = (w.cfg.calendar().month, w.cfg.sleep_days as u64 * DAY_S);
     let start = w.time;
     let mut cold_ran = Vec::new();
     while w.time < start + sleep + step {
@@ -156,7 +156,7 @@ fn a_node_on_its_melting_plateau_reacts_at_its_melting_point() {
         set_heat(&mut w, Node::ground(i), e);
         w.scratch = Default::default();
         assert_eq!(w.thaw(i).1.map(|p| p.0), half.then_some(LIQUID));
-        let dt = w.cfg.phys_days as f64 * DAY;
+        let dt = w.cfg.calendar().month as f64;
         change::step(&mut w, dt);
         10.0 - w.store.amounts(Class::Ground)[RICH * n + i]
     };
@@ -519,7 +519,7 @@ fn dead_frame_rots_on_moist_land_in_a_year() {
         let liquid = if wet { w.cfg.phys.field * w.cfg.phys.porosity * loose_volume(&w, i) / w.chem.molar_volume(LIQUID, Phase::Liquid) } else { 0.0 };
         let frame = 5.0 * w.mesh.cells().area()[i] / w.chem.subs[FRAME].molar_mass;
         set_amount(&mut w, Node::ground(i), FRAME, frame);
-        let (dt, year) = (w.cfg.phys_days as u64 * DAY_S, w.cfg.calendar().year);
+        let (dt, year) = (w.cfg.calendar().month, w.cfg.calendar().year);
         let end = w.time + year;
         while w.time < end {
             set_amount(&mut w, Node::ground(i), LIQUID, liquid);

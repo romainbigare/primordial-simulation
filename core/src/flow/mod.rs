@@ -17,16 +17,9 @@ use crate::{store::Class, AIR, World};
 use land::ground_state;
 use scratch::tables;
 
-/// The slow-changing ground and the substances present are rechecked this often, months (`schedule`).
-pub(crate) const REFRESH_MONTHS: u64 = 3;
-/// Heat conducted sideways and creep (with `lanes::regrow`) run once in this many years, for all that time: on
-/// cells of kilometres both are slow, far below the limit of an explicit step.
-pub(crate) const CREEP_YEARS: u64 = 1;
-
-/// Each part of the law (`state`, `air`, `sink`, `liquid`, `creep`, `refresh`) is a process of the clock (`schedule`). This one:
-/// the state of ground and air nodes from the world now, which the other laws read until the next physics step (in full
-/// at each liquid step, so a world resumed at a month's start goes on as an unbroken one; the survey builds it in full
-/// at a month's start, `built_now`).
+/// Each part of the law (`state`, `air`, `sink`, `liquid`, `creep`, `refresh`) is a pass of the month (`schedule`). This
+/// one: the state of ground and air nodes from the world now, which the other laws read (in full at each month's start,
+/// so a world resumed there goes on as an unbroken one; the survey builds it in full then, `built_now`).
 pub fn state(w: &mut World, full: bool) {
     with(w, |w, s| {
         ground_now(w, s, full);

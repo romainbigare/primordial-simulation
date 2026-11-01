@@ -60,11 +60,8 @@ Fields of `Config` that say when the model may save time (mark **speed**). The t
 
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
-| `phys_days` | days | how often the survey of the cells, the state of ground and air and Change run | 10, the air's step: three even steps a month (`air_hours`); a globe of 32 rows settles at 284.9 K, ice under 0.15 (`a_globe_without_life_keeps_an_earth_like_climate`) | speed |
-| `air_hours` | hours | the air's step: each cell's exchange with the air it sees, solved once and linear in that air, the air level day by day under it (radiation, the exchange, the wind, rain), and the book at the step's mean air (`flow::air`); it divides the physics step | 240, the physics step: 32 x 32 with life, seeds 1 to 3, years 11 to 20, against 24-hour steps the land 0.17 K warmer, its summer 0.14 and its winter 0.10 K, the rain 0.03% (`the_long_step_keeps_the_climate`); without life 0.12 to 0.26 K colder | speed |
-| `flow_days` | days | how often liquid moves, drains and wears the ground (`flow::liquid`) | 60, two months: the drainage shares are exact over a step and the downhill pass routes all water that may run off, so a longer step moves the same water in fewer steps, and the liquid costs half of 30 days' ; the sink into the bed's store runs every physics step, so the rain does not wait for the step in the pores, where it darkened the land (+0.2 K at 60 days without it). The key numbers at 60 days: rivers 696.8 cells, land worn 0.147 mm/yr, rain on land 0.001809 mol/(m² s); against a 2-day liquid, each seed against itself, the land is +0.05 K. Always on a physics step: a whole number of them, or of months, counted from the world's start | speed |
 | `wake_share` | share | a sleeping node wakes before its alarm when one of its amounts has grown by more than this share of what it held when it fell asleep (`clock::Sleep::watch`) | the share of its inputs a calm node's own reactions may use while it sleeps (`change`, `CALM`, 0.05) | speed |
-| `sleep_days` | days | the longest a ground or air node's reactions sleep before they run for the time since (`change::step`); 0: every node reacts at every physics step | a season: a node does not react through a whole season at the temperature of another | speed |
+| `sleep_days` | days | the longest a ground or air node's reactions sleep before they run for the time since (`change::step`); 0: every node reacts every month | a season: a node does not react through a whole season at the temperature of another | speed |
 
 ## Physics
 
@@ -264,7 +261,7 @@ The 107 rows of `Config` and `Physics` are their 107 fields.
 | tuned (run or reason named) | 6, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`), set for an outcome (`rain_time`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`, the cover's starting genes) |
 | tuned, first guess | 36 | 32 free numbers (`wind`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `keep_min`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 3 | `nodes`, `two_parents`, `null` |
-| speed | 5, and 3 outside the structs | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days`; outside: the caps `MAX_NODES`, `MAX_LINEAGES`, `MOST_ACTS` |
+| speed | 2, and 4 outside the structs | `wake_share`, `sleep_days`; outside: the air's step `schedule::AIR_STEP_DAYS` (10 days, three a month: against 1-day steps the land within 0.3 K, `the_long_step_keeps_the_climate`), the caps `MAX_NODES`, `MAX_LINEAGES`, `MOST_ACTS` |
 | container | 1 | `phys` |
 
 Rows marked tuned in all: 50 (42 in the structs, 8 outside: also `cover::RANGE` and `cover::APART`, first guesses). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

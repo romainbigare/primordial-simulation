@@ -253,6 +253,18 @@ pub fn hold_ground(w: &mut World, i: usize, t: f64) {
     set_heat(w, Node::ground(i), e);
 }
 
+/// One day of `pcore::day` with the ground of `cells` held at `t` K: before it, and after each pass of a month that
+/// starts on it, with Flow's state rebuilt from it, so the laws after each pass read that ground (a test of a body's
+/// law, not of the climate).
+pub fn held_day(w: &mut World, cells: &[usize], t: f64) {
+    let hold = |w: &mut World| {
+        cells.iter().for_each(|&i| hold_ground(w, i, t));
+        pcore::flow::state(w, true);
+    };
+    hold(w);
+    pcore::day_marked(w, &mut |w, _| hold(w));
+}
+
 /// The heat of node `x` of the store set to `e` J (booked as an edit: all it held out, then `e` in, so it holds `e`
 /// exactly).
 pub fn set_heat(w: &mut World, x: Node, e: f64) {

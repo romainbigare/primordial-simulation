@@ -1,6 +1,6 @@
 //! Liquid under the surface: the pores of the loose ground and the store of the bed below (`Class::Deep`), two layers
 //! of each cell's stack (laws.md 1.2). Liquid over field capacity sinks from the pores into the store under them
-//! (`sink`, every physics step); Darcy's law moves it between cells in each layer, one explicit `solve::sweep`, and a
+//! (`sink`, after each of the air's steps); Darcy's law moves it between cells in each layer, one explicit `solve::sweep`, and a
 //! full store gives back what it cannot hold (`under`, every liquid step).
 
 use super::{land::{bottom, filled, t_now, table, wet}, liquid::{book, mobile}, range, Scratch};
@@ -11,9 +11,9 @@ const DEEP: usize = 0;
 const PORES: usize = 1;
 
 /// Liquid over field capacity sinks into the store, at most `seep` a second (Darcy's law under its own weight) and no
-/// more than its room, with its heat; the head it loses heats the store. It runs every physics step, after the air's
-/// step that brings the rain: the rain of a long liquid step would otherwise wait in the pores, darkening the ground
-/// (`land::reflectance`), until the step.
+/// more than its room, with its heat; the head it loses heats the store. It runs after each of the air's steps, which
+/// bring the rain: the rain would otherwise wait in the pores, darkening the ground (`land::reflectance`), until the
+/// month's liquid step.
 pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, p, g, area) = (w.mesh.cells().n(), w.cfg.phys, w.cfg.gravity, w.mesh.cells().area());
     let (tmin, tmax) = range(&s.state.tg);

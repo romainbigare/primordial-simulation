@@ -1,7 +1,7 @@
 //! The settings of a world (`Config`) and the free numbers of its laws (`Physics`). What each
 //! number is anchored to is in `docs/numbers.md`, one row per field.
 
-use crate::{clock::Calendar, units::{DAY_S, HOUR_S, T_SURF}};
+use crate::{clock::Calendar, units::{DAY_S, T_SURF}};
 use serde::{Deserialize, Serialize};
 
 /// The settings of a world: the planet, the calendar and time steps, the physics of its ground
@@ -27,12 +27,6 @@ pub struct Config {
     pub days_per_month: u32,
     /// Months in a year
     pub months_per_year: u32,
-    /// The survey of the cells and the reactions of ground and air run every this many days
-    pub phys_days: u32,
-    /// The air's step (radiation, evaporation, rain and wind, together) runs every this many hours
-    pub air_hours: u32,
-    /// Liquid moves every this many days
-    pub flow_days: u32,
     /// Speed setting: a sleeping node that has gained over this share of an amount it held when it fell asleep wakes
     pub wake_share: f64,
     /// Speed setting: the longest a ground or air node's reactions sleep, days (0: every node reacts every step)
@@ -385,20 +379,10 @@ impl Config {
     }
     /// Check a run's settings before it starts: the time steps, and the numbers of the physics the laws need in range.
     pub fn validate(&self) -> Result<(), String> {
-        let (d, h, f, p) = (self.phys_days, self.air_hours, self.flow_days, &self.phys);
-        let each = d > 0 && h > 0 && f > 0;
-        require(each, || format!("phys_days ({d}), air_hours ({h}) and flow_days ({f}) must be at least 1"))?;
-        // The air's step is booked whole as it runs: a longer one would book its moves ahead of the physics steps.
-        let divides = (d as u64 * self.calendar().day).is_multiple_of(h as u64 * HOUR_S);
-        require(divides, || format!("the air's step ({h} hours) must divide the physics step ({d} days)"))?;
-        // A liquid step of more than a month counts its own period from the start (`schedule::days`).
-        let (f, m) = (f, self.days_per_month);
-        require(f <= m || f.is_multiple_of(m), || format!("flow_days ({f}) over a month must be a whole number of months ({m} days)"))?;
-        // Each liquid step falls on a physics step, after that step's state in full and its sink (`flow::sink`). A step
-        // of the physics up to a month counts from each month's start, so a liquid step of whole months falls on one;
-        // a shorter liquid step, or a physics step over a month, only on a whole number of physics steps.
-        let on_physics = f.is_multiple_of(d) || (d <= m && f >= m);
-        require(on_physics, || format!("flow_days ({f}) must fall on physics steps ({d} days): a whole number of them, or of months"))?;
+        let (m, p) = (self.days_per_month, &self.phys);
+        // The month holds a whole number of the air's steps (`schedule::AIR_STEP_DAYS`).
+        let air = crate::schedule::AIR_STEP_DAYS;
+        require(m > 0 && m.is_multiple_of(air), || format!("days_per_month ({m}) must be a whole number of the air's steps ({air} days)"))?;
         let wake = self.wake_share;
         require(wake > 0.0 && wake.is_finite(), || format!("wake_share ({wake}) must be above 0"))?;
         // `dormancy` above 1 (`body::exchange::closing` divides by n - 1); `light_yield` in (0, 1] (a light reaction takes
@@ -426,9 +410,6 @@ impl Default for Config {
             gravity: 9.81,
             days_per_month: 30,
             months_per_year: 12,
-            phys_days: 10,
-            air_hours: 240,
-            flow_days: 60,
             wake_share: 0.05,
             sleep_days: 90,
             skin_m: 2.0,

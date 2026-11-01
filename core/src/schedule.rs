@@ -1,7 +1,16 @@
-//! The order of the laws, as processes of the clock: each runs on its own period, and at one time they run in the
-//! order of `processes`, written once here (laws.md 0).
+//! The order of the laws: one world step is one month, a fixed list of passes, written once here (laws.md 0).
 
-use crate::{bond, change, check, clock::{self, Every}, flow, params::Config, survey, units::HOUR_S, world::World};
+use crate::{bond, change, check, flow, survey, world::World};
+
+/// The air runs in steps of this many days, a whole number of them in a month: each cell's exchange over a step is
+/// solved once and taken as linear in its air (`flow::air`), so a longer step smooths the seasons. The long-step test
+/// anchors it (`the_long_step_keeps_the_climate`: these steps against 1-day steps, the land within 0.3 K).
+pub const AIR_STEP_DAYS: u32 = 10;
+/// Heat conducted sideways and creep, with the lanes' regrowth, run once in this many months, for all that time: on
+/// cells of kilometres both are slow, far below the limit of an explicit step.
+const CREEP_MONTHS: u64 = 12;
+/// The slow-changing ground and the substances present are rechecked once in this many months (`flow::refresh`).
+const REFRESH_MONTHS: u64 = 3;
 
 /// A stage of the month, as `step_marked` reports it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -10,7 +19,7 @@ pub enum Stage {
     Flow,
     /// `change::step`
     Change,
-    /// `survey::survey` and `survey::batch`
+    /// `survey::survey`, `survey::cover` and `survey::batch`
     Bodies,
     /// `bond::step`
     Parts,
@@ -18,72 +27,81 @@ pub enum Stage {
 
 /// Advance the world by one month. This is the whole step: `next_state = step(state)`.
 pub fn step(w: &mut World) {
-    step_marked(w, &mut |_| {});
+    step_marked(w, &mut |_, _| {});
 }
 
-/// `step`, calling `mark(stage)` after each stage, e.g. to time them.
-pub fn step_marked(w: &mut World, mark: &mut dyn FnMut(Stage)) {
-    run_for(w, w.cfg.calendar().month, mark);
+/// `step`, calling `mark(world, stage)` after each pass, e.g. to time them.
+pub fn step_marked(w: &mut World, mark: &mut dyn FnMut(&mut World, Stage)) {
+    run_for(w, w.cfg.calendar().month, AIR_STEP_DAYS, mark);
 }
 
-/// Advance the world by one day: what `step` does on that day.
+/// `step` with the air in steps of `air_days` days (a whole number of them in a month): the control run the long step
+/// of the air is checked against (`AIR_STEP_DAYS`).
+pub fn step_with_air(w: &mut World, air_days: u32) {
+    assert!(w.cfg.days_per_month.is_multiple_of(air_days), "the air's steps of {air_days} days fill no month");
+    run_for(w, w.cfg.calendar().month, air_days, &mut |_, _| {});
+}
+
+/// Advance the world by one day: at a month's start the month's passes, which stand for the whole month, then the day.
 pub fn day(w: &mut World) {
-    run_for(w, w.cfg.calendar().day, &mut |_| {});
+    day_marked(w, &mut |_, _| {});
 }
 
-/// A process: its stage, its name (for the debug check) and what it does for the seconds its run stands for.
-type Run = (Stage, &'static str, fn(&mut World, u64));
-
-/// A process that runs every `d` days from the start of each month; one of more than a month counts its own period
-/// from the start of the world, as the slow parts do (`Config::validate` makes it a whole number of months).
-fn days(cfg: &Config, d: u32) -> Every {
-    let cal = cfg.calendar();
-    let period = d as u64 * cal.day;
-    Every { period, within: period.max(cal.month) }
+/// `day`, calling `mark(world, stage)` after each pass.
+pub fn day_marked(w: &mut World, mark: &mut dyn FnMut(&mut World, Stage)) {
+    run_for(w, w.cfg.calendar().day, AIR_STEP_DAYS, mark);
 }
 
-/// The processes of the world in their fixed order at one time, each on its period counted from the start of the longer
-/// period that holds it (`Every`); Flow's state comes first, as the others read it.
-fn processes(w: &World) -> [(Every, Run); 11] {
-    let (cfg, cal) = (&w.cfg, w.cfg.calendar());
-    // The slow parts count from the start of the world.
-    let from_start = |period: u64| Every { period, within: period };
-    let physics = days(cfg, cfg.phys_days);
-    [
-        (physics, (Stage::Bodies, "survey", |w, _| survey::survey(w, false))),
-        // (A state the survey just built in full for the cells' surroundings is not built again.)
-        (physics, (Stage::Flow, "state", |w, _| {
-            if !flow::built_now(w) {
-                flow::state(w, days(&w.cfg, w.cfg.flow_days).span(w.time).is_some());
-            }
-        })),
-        (Every { period: cfg.air_hours as u64 * HOUR_S, within: cal.month }, (Stage::Flow, "air", |w, s| flow::air(w, s as f64))),
-        (physics, (Stage::Flow, "sink", |w, s| flow::sink(w, s as f64))),
-        (days(cfg, cfg.flow_days), (Stage::Flow, "liquid", |w, s| flow::liquid(w, s as f64))),
-        (from_start(flow::CREEP_YEARS * cal.year), (Stage::Flow, "creep", |w, s| flow::creep(w, s as f64))),
-        (from_start(flow::REFRESH_MONTHS * cal.month), (Stage::Flow, "refresh", |w, _| flow::refresh(w))),
-        // (The cover's month reads Flow's state, built in full at a month's start, and the air as its step left it.)
-        (from_start(cal.month), (Stage::Bodies, "cover", |w, _| survey::cover(w))),
-        (physics, (Stage::Change, "change", |w, s| change::step(w, s as f64))),
-        // (Bond's own spans are months, `bond::step`; every body updates once a month, `survey::batch`.)
-        (from_start(cal.month), (Stage::Parts, "bond", |w, _| bond::step(w))),
-        (from_start(cal.month), (Stage::Bodies, "body batch", |w, _| survey::batch(w, false))),
-    ]
-}
-
-/// Run the processes due from the world's time on, for `span` seconds; after each, `mark(stage)`, and in debug builds a
-/// stop at the first stage that leaves the world broken.
-fn run_for(w: &mut World, span: u64, mark: &mut dyn FnMut(Stage)) {
-    let (list, end) = (processes(w), w.time + span);
+/// Run `span` seconds from the world's time: the month's passes at each month's start on the way (`month`).
+fn run_for(w: &mut World, span: u64, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) {
+    let (len, end) = (w.cfg.calendar().month, w.time + span);
     while w.time < end {
-        let t = w.time;
-        for ((stage, what, run), span) in clock::due(&list, t) {
-            run(w, span);
-            mark(stage);
-            if let Some(e) = cfg!(debug_assertions).then(|| check::broken(w)).flatten() {
-                panic!("broken after {what} (day {}): {e}", w.day());
-            }
+        if w.time.is_multiple_of(len) {
+            month(w, air_days, mark);
         }
-        w.time = clock::next(&list, t).min(end);
+        w.time = (w.time - w.time % len + len).min(end);
     }
+}
+
+/// The passes of one month from its start, each for the whole month unless it says otherwise; after each,
+/// `mark(world, stage)`, and in debug builds a stop at the first that leaves the world broken.
+fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) {
+    let cal = w.cfg.calendar();
+    let (t0, len, months) = (w.time, cal.month, cal.months(w.time));
+    let mut pass = |w: &mut World, stage: Stage, what: &str, run: &dyn Fn(&mut World)| {
+        run(w);
+        mark(w, stage);
+        if let Some(e) = cfg!(debug_assertions).then(|| check::broken(w)).flatten() {
+            panic!("broken after {what} (day {}): {e}", w.day());
+        }
+    };
+    // The survey of the cells builds Flow's state in full for their surroundings; Flow's own pass leaves it then.
+    pass(w, Stage::Bodies, "survey", &|w| survey::survey(w, false));
+    pass(w, Stage::Flow, "state", &|w| {
+        if !flow::built_now(w) {
+            flow::state(w, true);
+        }
+    });
+    // The air in steps of `air_days`, each at its own time in the month (the sun's season), its state brought up to date
+    // first (`flow::air`); after each, the sink of the liquid over field capacity into the bed's store.
+    let air = air_days as u64 * cal.day;
+    for k in 0..len / air {
+        w.time = t0 + k * air;
+        pass(w, Stage::Flow, "air", &|w| flow::air(w, air as f64));
+        pass(w, Stage::Flow, "sink", &|w| flow::sink(w, air as f64));
+    }
+    w.time = t0;
+    pass(w, Stage::Flow, "liquid", &|w| flow::liquid(w, len as f64));
+    if months.is_multiple_of(CREEP_MONTHS) {
+        pass(w, Stage::Flow, "creep", &|w| flow::creep(w, (CREEP_MONTHS * len) as f64));
+    }
+    if months.is_multiple_of(REFRESH_MONTHS) {
+        pass(w, Stage::Flow, "refresh", &flow::refresh);
+    }
+    // The cover's month reads Flow's state and the air as its last step left it.
+    pass(w, Stage::Bodies, "cover", &survey::cover);
+    pass(w, Stage::Change, "change", &|w| change::step(w, len as f64));
+    // Bond's own spans are months (`bond::step`); every body updates once a month (`survey::batch`).
+    pass(w, Stage::Parts, "bond", &bond::step);
+    pass(w, Stage::Bodies, "body batch", &|w| survey::batch(w, false));
 }

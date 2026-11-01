@@ -31,6 +31,6 @@ pub mod units;
 mod world;
 
 pub use params::{Config, Physics};
-pub use schedule::{day, step, step_marked, Stage};
+pub use schedule::{day, day_marked, step, step_marked, step_with_air, Stage, AIR_STEP_DAYS};
 pub use ground::Melting;
 pub use world::{Counters, Taken, World, AIR};
