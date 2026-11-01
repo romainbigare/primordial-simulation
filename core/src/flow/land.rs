@@ -2,14 +2,12 @@
 //! heads, and heat conducted sideways (`conduct`).
 
 use super::scratch::{Latent, Scratch, Sp};
-use crate::{ground::{melting, Melting}, solve::spread::Net, store::{apply, Class, LinkFlux}, units::{MAX_SUBSTANCES, T_FLOOR}, World};
+use crate::{ground::{heat_above_floor, melting, Melting}, solve::sweep::{sweep, Net}, store::{apply, Class, LinkFlux}, units::{MAX_SUBSTANCES, T_FLOOR}, World};
 
 /// No substance on a melting plateau (`Scratch::pk`).
 pub(super) const NONE: usize = usize::MAX;
 /// A node whose heat capacity changed by less than this share keeps its state off a plateau.
 const CAP_SAME: f64 = 1e-9;
-/// Liquid between two nodes goes no more than this share of the way to level (so heads never cross).
-pub(super) const HALF_WAY: f64 = 0.5;
 
 /// Molten share of substance `k` in ground node `i` (liquid, or gas above boiling).
 #[inline]
@@ -145,8 +143,9 @@ pub(super) fn thaw_at(s: &Scratch, c: f64, e: f64, amt: impl Fn(usize) -> f64, m
     melting(c, e, ord[..m].iter().map(|&k| (melt[k as usize], k as usize, amt(k as usize) * s.sp[k as usize].lf)))
 }
 
-/// Heat conducts sideways through the ground's active layer over `dt` seconds: one backward-Euler step of
-/// `solve::spread` on the cells' links, booked as heat-only link fluxes. A link passes the harmonic mean of its nodes'
+/// Heat conducts sideways through the ground's active layer over `dt` seconds: one explicit `solve::sweep` on the
+/// cells' links (rock passes a cell's heat to its neighbours in about 70,000 years, so a year is far below its limit),
+/// booked as heat-only link fluxes. A link passes the harmonic mean of its nodes'
 /// conductivity × thickness (two half cells in series, Patankar 1980, 4.2) times width over length. A node on a plateau
 /// takes its share as if it warmed; the next `ground_state` sets its temperature from its energy.
 pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
@@ -172,9 +171,9 @@ pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
             g.push(gl);
         }
     }
-    let (cap, mut t, mut heat) = (s.cap.iter().map(|&c| c.max(1.0)).collect::<Vec<_>>(), s.state.tg.clone(), vec![0.0; a.len()]);
-    // At most as many iterations as nodes: the solve stops once converged, in a few where links pass little.
-    s.spread.step(&Net { a: &a, b: &b, g: &g, cap: &cap }, &mut t, dt, n, &mut heat);
+    let cap: Vec<f64> = s.cap.iter().map(|&c| c.max(1.0)).collect();
+    let have: Vec<f64> = (0..n).map(|i| heat_above_floor(w.store.heat(Class::Ground)[i], cap[i])).collect();
+    let heat = sweep(&Net { a: &a, b: &b, g: &g, cap: &cap }, &s.state.tg, dt, &have);
     apply(w, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[], mol: &[], heat: &heat }], &[]);
 }
 

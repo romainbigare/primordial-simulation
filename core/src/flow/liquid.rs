@@ -2,7 +2,8 @@
 //! (`drain::springs`); what may run off runs down the cells in one pass in the order of a priority flood
 //! (`solve::downhill`), doing work on its bed; then the liquid under the surface moves (`drain::under`).
 
-use super::{bare_share, drain::{springs, under}, follow, land::{lift, solid, stand, wet, HALF_WAY, NONE}, range, year_weight, Scratch};
+use super::{bare_share, drain::{springs, under}, follow, land::{lift, solid, stand, wet, NONE}, range, year_weight, Scratch};
+use crate::solve::sweep::HALF_WAY;
 use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed}, store::{apply, Batch, Class, LinkFlux, Move}, units::T_FLOOR, World};
 
 /// Least bond strength wear divides by.
@@ -91,7 +92,8 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
     let mut order = std::mem::take(&mut s.order);
     order.update(&adj, &s.z, |i| head(&q, i));
     let (mut power, mut sent, mut worn, mut outs) = (vec![0.0; n], vec![0.0; n], vec![0.0; n], Vec::new());
-    let (land, mut off_land): (Vec<bool>, Vec<f64>) = ((0..n).map(|i| w.is_land(i)).collect(), vec![0.0; n]);
+    // A land cell, as `World::is_land` says: its solid surface above 0 m (Flow's state of it).
+    let (land, mut off_land): (Vec<bool>, Vec<f64>) = (s.z.iter().map(|&z| z > 0.0).collect(), vec![0.0; n]);
     let mut crossed = Crossed::default();
     let (ww, ss) = (&*w, &*s);
     pass(&order, &adj, &mut q, &mut crossed, |i, q, share| {

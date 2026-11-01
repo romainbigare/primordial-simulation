@@ -109,14 +109,14 @@ than `wake_share`, then its law brings it up to date over the whole time since.
 **Checks before a run**: `Config::validate`, `Chemistry::validate` (every reaction keeps its elements and mass).
 
 **The books.** Every move takes from one node exactly what it gives another, with its heat; `store::apply` and the
-bookings of the bodies' moves, of the air's step and of Change's rows (`store::book_by_array`, which adds as `apply` adds) are the store's only writers; the heat of the boundary nodes and of the potential, a whole history's sum, gets each booking's changes summed apart and added once (`Store::add_far_heat`). A move out of the bed, which holds far more than its loose ground, takes only what the bed can
+bookings of the bodies' moves and of Change's rows (`store::book_by_array`, which adds as `apply` adds) are the store's only writers; the heat of the boundary nodes and of the potential, a whole history's sum, gets each booking's changes summed apart and added once (`Store::add_far_heat`). A move out of the bed, which holds far more than its loose ground, takes only what the bed can
 lose exactly (`Move::loosen`), so no amount below the bed's rounding reaches the ground for free. A ground node under
 deep standing liquid holds far more of it, and an air node far more of the main gases, than a body moves: what rounding takes from their
 amounts is kept apart and counted in the books (`Store::carry`, Neumaier 1974). Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`);
 potential energy is one more node (`Class::Potential`): a lift moves heat into it, a fall takes it back. So every
 element and the energy are kept; `check::drift` checks it yearly and must stay near rounding.
 **No overdraw.** A law never asks a node for more than it holds; where it could, it cuts that node's own outgoing
-links (`solve::spread::within`), never a whole field. A body takes no more than its domain's view holds, what the
+links (`solve::sweep::within`), never a whole field. A body takes no more than its domain's view holds, what the
 bodies before it in the batch left (checked in debug builds). `apply` and `book_by_array` only add and set rounding below zero to zero, counted
 (`Counters::rounded`). A body takes ground heat no further than `T_FLOOR` (`World::take_from_ground`).
 
@@ -131,8 +131,9 @@ becomes ice (Cuffey and Paterson 2010). It insulates the node under it (its dept
 surface warms no further than its melting point: past it the top melts and the melt soaks in, so the node takes all
 the heat that reaches the surface (`air::radiation`). A cell is **land**
 when its solid surface is above 0 m (`World::is_land`). The top `skin_m` trades heat with the surface. Heat spreads
-sideways yearly by one implicit `solve::spread`, a link passing the harmonic mean of conductivity × thickness, times
-width over length (Patankar 1980; `flow::land::conduct`): rock spreads a hot spot one cell in about 70,000 years.
+sideways yearly by one explicit `solve::sweep`, a link passing the harmonic mean of conductivity × thickness, times
+width over length (Patankar 1980; `flow::land::conduct`): rock spreads a hot spot one cell in about 70,000 years, so a
+year is far below the explicit limit.
 **Melting plateaus** (`ground::melting`): a node holds the fusion enthalpy of what is molten in it, so it stays at a
 melting point (lowered by solutes, 2.5) until that substance has all frozen or melted. A node whose heat melts or
 freezes all of it within a step stays there only for the share of the step that takes, then goes on from that point,
@@ -151,8 +152,10 @@ sink (`Config::validate`). The sink into the bed's store runs every physics step
 - **Running off** (`solve::downhill`): each cell sends its liquid down its steepest way by D-infinity (Tarboton 1997;
   `Level::steepest`): two neighbours next in compass order make a triangle with the centre, the plane through their
   drops gives its slope and way, and the steepest triangle shares the liquid between its two neighbours by angle.
-- **Pore water** flows by Darcy's law (one implicit `spread` on the liquid table): `seep` × saturated thickness × width
-  / distance; pores at or under field capacity (`field`) give nothing. Liquid above it sinks to the deep store
+- **Pore water** flows by Darcy's law (one explicit `solve::sweep` on the liquid table, the store's too): `seep` ×
+  saturated thickness × width / distance, at most half of what would level two cells, and no cell giving more than it
+  holds over field capacity; pores at or under field capacity (`field`) give nothing. Over cells of kilometres a
+  liquid step moves a table a thousandth of the way to its neighbours', far below the explicit limit. Liquid above it sinks to the deep store
   (`drain::sink`, at most `seep` a second and the store's room) every physics step, right after the air's step that
   brings the rain: held until a long liquid step, it would cover and darken the ground (`land::reflectance`, 1.4) and
   warm it. The store flows by `bed_seep`. Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
@@ -174,52 +177,73 @@ slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness �
 and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 22.
 
 ### 1.4 The air's step, the sun and the bodies' share
-`flow::air::step`, every `air_hours`: radiation, the ground's exchange with the air and the wind in one implicit step
-(backward Euler by Newton's method, `newton`, with a banded solve of the air level, `solve::band`), booked whole as
-solved (`air::book`: column moves, each array of the store one task of `store::book_by_array`). A long step gives the world of short ones: the long-step test (`tape/tests/ranges.rs`) holds each
-seed's climate at 10-day steps to its own at 6-hour steps; a melting plateau used up inside a step holds only for
-its share of the step (1.1). Wind pushes and clouds come from the step's start. The rounds stop at a tolerance, and a node
-whose air stood still (its temperature and each gas it exchanges) keeps the row of an earlier round, carried to the
-round's air by its own slopes, so it stays linearised about the air it was made at (an inexact Newton step, Dembo,
-Eisenstat and Steihaug 1982): speed numbers, held by the same two tests (`CLAUDE.md` 6.5).
+`flow::air::step`, every `air_hours`, for any length of step. First the gas of the bodies' nodes comes up into their
+air nodes and gases dissolve (1.5). Then the ground under each air node gives it its forcing for the step, summed from
+its cells as they are at the step's start (`air::cells::forcing`): the heat radiation the air absorbs of theirs, their
+sensible heat with the air touching them, what evaporates from them by its saturation deficit (the bucket's share of
+their wetness, no more than they hold), and the saturation each cell rains at. The air level then runs day by day,
+explicitly, on plain arrays of its nodes (`air::daily`): each node's exchange with its ground and its heat radiation,
+the wind (1.6), then rain (1.5). Last, each cell exchanges once with the mean air its node had over the step
+(`air::cells::pass`): sunlight, heat radiation, sensible heat, what evaporates and what rains on it, in its own
+implicit surface balance (Newton's steps about its end temperature, with its melting plateaus, 1.1), and all of it is
+booked whole (`air::book`). The air's ground is the cells' at the step's start, the cells' air the step's mean: each
+part is stable for a step of any length, as each relaxes toward the other (the air's column takes about 20 days to
+follow its radiation and 10 its ground; a cell's skin 3). Where an air node would end with less than nothing of a gas
+(its cells evaporated less than its days counted on), the rain of its cells is cut by the share that leaves it
+nothing, and their exchange made again; then what the wind takes of that gas from it.
 - **Sun** (`radiation`): the daily mean by latitude, season and day length (Berger 1978), declination sin δ = sin ε sin
-  λ. The surface reflects as its cover is at the step's end (`land::reflectance`), so new snow reflects at once.
+  λ, the mean over the step's days. The surface reflects as its cover is at the step's start (`land::reflectance`);
+  where a soft cover lies or snow falls, as it is at the step's end, so new snow reflects at once and a cover that
+  melts away darkens the ground in its step.
 - **Heat radiation**: surfaces emit σT⁴; the air absorbs 1 − exp(−x), x the optical depth of the gases (each as the
-  square root past its own column amount) and clouds, and emits from 4 grey layers that cool with height, so more gas
-  lifts the layer that reaches space into colder air and the ground warms.
-- **Clouds** (`exchange::cloud`): scattering depth x = condensation rate / `cloud`; they reflect x / (1 + x) of the
-  sunlight (two-stream, Lacis and Hansen 1974) and absorb heat radiation at depth `cloud_ir` × x (Stephens 1978). A
-  globe of Earth's size without life holds about Earth's climate. **Known limit:** their depth is spread like the air's
-  mass, not set where they condense. The ground also trades sensible heat with the air (`sensible`).
-- **The bodies' node** (`Class::Bodies`, one per cell): light the cover and bodies absorb warms the ground, except the share their
-  light reactions store, booked from the sun into this node. Each body's draw of ground heat between its updates is
-  part of the ground's implicit balance (`survey::Draw`): its last draw, falling to nothing as the ground nears where
-  its evaporation stops (the dew point, or `COOL_T`), so a cooling ground gives less and bodies cannot pull it below
-  that. A body takes at its update no more than it is owed; what none claims goes back (`survey::Draws::settle`).
+  square root past its own column amount) and clouds, and emits from 2 grey layers that cool with height, so more gas
+  lifts the layer that reaches space into colder air and the ground warms. The layers are each air node's, over its
+  mean ground; the air touching a cell is colder by the drop with height from its node's mean height.
+- **Clouds** (`exchange::cloud`): scattering depth x = condensation rate / `cloud`, from what each air node rained in
+  the step before; they reflect x / (1 + x) of the sunlight (two-stream, Lacis and Hansen 1974) and absorb heat
+  radiation at depth `cloud_ir` × x (Stephens 1978). A globe of Earth's size without life holds about Earth's
+  climate. **Known limit:** their depth is spread like the air's mass, not set where they condense. The ground also
+  trades sensible heat with the air (`sensible`).
+- **The bodies' node** (`Class::Bodies`, one per cell): light the cover and bodies absorb warms the ground, except
+  the share their light reactions store, booked from the sun into this node. Each body's draw of ground heat between
+  its updates is part of its cell's implicit balance (`survey::Draw`): its last draw, falling to nothing as the ground
+  nears where its evaporation stops (the dew point, or `COOL_T`), so a cooling ground gives less and bodies cannot
+  pull it below that. A body takes at its update no more than it is owed; what none claims goes back (`survey::Draws::settle`).
 - **Gas from bodies** goes into the bodies' node with its latent heat; the air's step takes it up with its lift.
 - **Shade** (`survey.rs`): light passes a cell's bodies from the tallest down; a layer of leaf area x per ground area
   takes 1 − exp(−x), equal heights sharing a layer. Rain on bodies is shared the same way.
 
 ### 1.5 Evaporation, rain and dissolved gases
-`flow::air::exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against the air's): wet
-ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket), taking the heat it held at
-the node's temperature; a node over a substance's boiling point boils of it what its heat over that point pays,
-cooling to it (`Scratch::boil_off`; gas coming out of the liquid too). **Rain**: vapour beyond what the cell's air holds at its temperature (colder higher up) rains out
-in `rain_time`, from the four air nodes the cell sees by their shares; where the air at the ground is below the gas's
-melting point it falls as a solid (snow) and the air keeps the fusion enthalpy its freezing frees; where an air node
-holds less than it would give, its rain is cut, and the ground evaporates of the rain only what it gets
-(`book::hold_air`). **Lift**: gas going up is lifted from the ground's head to the air's mean height, paid by the
-air's heat. **Dissolving** (`exchange::dissolve`): a gas that cannot condense dissolves in the ground's liquid toward
-Henry's share, through the air's film (`evap`) and the liquid's (`dissolve`) in series, freeing its vaporisation
-enthalpy, and comes out when the liquid warms, thins or freezes. **Known limit:** a liquid's whole depth is one mixed
-layer, so a deep sea takes up gas in months and warms over centuries; a real one is the other way round.
+`flow::air::cells`, `daily`, `exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against
+the air's): wet ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket), taking the
+heat it held at the node's temperature; a node over a substance's boiling point boils of it what its heat over that
+point pays, cooling to it (`Scratch::boil_off`; gas coming out of the liquid too). In the air's day an air node's
+vapour relaxes toward the balance with its ground, as its cells were at the step's start. **Rain**: what an air node
+holds of a gas over what saturates the air touching each of its cells (colder higher up) rains out in `rain_time`,
+each day after the wind, as eddies carry vapour across the air in hours and rain takes a day. The cells' saturation is
+taken as the step starts, as a ratio to the node's, so the day sums them in rising order. What a node rained in the
+step falls on its cells by what each would hold over its own saturation at the ratio the node rained at. Where the air
+touching a cell is below the gas's melting point it falls there as a solid (snow) and the air keeps the fusion
+enthalpy its freezing frees; condensing frees the vaporisation enthalpy in the air. **Lift**: gas going up is lifted
+from the ground's head to the air's mean height, paid by the air's heat; rain's fall gives it back. **Dissolving**
+(`exchange::dissolve`): a gas that cannot condense dissolves in the ground's liquid toward Henry's share, through the
+air's film (`evap`) and the liquid's (`dissolve`) in series, freeing its vaporisation enthalpy, and comes out when the
+liquid warms, thins or freezes. **Known limit:** a liquid's whole depth is one mixed layer, so a deep sea takes up gas
+in months and warms over centuries; a real one is the other way round.
 
 ### 1.6 Wind
-`flow::air::wind`. Gas moves over each link of the air level by three pushes: the column's pressure (p = nRT/V),
-evened in the time sound takes to cross the link (Lamb waves, Lindzen 1990); overturning, the lower half flowing to the
-warmer column and the upper half back at `wind` per K, turned by the planet's rotation (`rotation`), vapour crowding
-low; and eddies mixing the columns (`mix`, width over length). A cell sees its air node and three neighbours
-bilinearly (`flow/scratch.rs`). Air moves as whole columns, so bodies use the anchored `wind_ground` (6.3).
+`flow::air::wind`, `daily`. Eddies (`mix`) even out the air within a day over the distance sqrt(`mix` × day), about
+300 km (Taylor 1922): the air nodes lie in blocks of that side on the map, and each day every gas and the heat of a
+block are shared among its nodes by their volumes, so its pressure, shares and temperature are the block's (an
+island's air is one block). Across the links between blocks gas moves by three pushes, each day from the air at its
+start, explicit: the column's pressure (p = nRT/V), evened in the time sound takes to cross the link (Lamb waves,
+Lindzen 1990); overturning, the lower half flowing to the warmer column and the upper half back at `wind` per K,
+turned by the planet's rotation (`rotation`), vapour crowding low; and eddies mixing the columns (`mix`, width over
+length). Each moves at most what evens its link in a day, and a node's links together at most what it holds, so the
+day is stable for any rates. **Known limit:** where a push is faster than a day (the pressure, always) a link evens
+in a day at most, so a pressure difference across many links of blocks takes days to even out. Mass that crosses is
+lifted between the nodes' mean heights by the heat of the node it enters. A cell sees its air node and three
+neighbours bilinearly (`flow/scratch.rs`). Air moves as whole columns, so bodies use the anchored `wind_ground` (6.3).
 
 ### 1.7 Paths
 `lanes.rs`. A body moving through a cell spends energy pushing through the bodies there (`choose::go`, `choose::wear`),

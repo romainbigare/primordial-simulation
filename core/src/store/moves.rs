@@ -70,7 +70,7 @@ impl<'a> LinkFlux<'a> {
 
 /// The heat `q` J that reaches the far end of each link loses what its `mol` of one substance hold more there, `more`
 /// J/mol (`held_more`). Called substance by substance, it gives what the far ends receive.
-pub(crate) fn less_held_more(q: &mut [f64], mol: &[f64], more: f64) {
+fn less_held_more(q: &mut [f64], mol: &[f64], more: f64) {
     q.iter_mut().zip(mol).for_each(|(q, &m)| *q = heat_received(*q, m, more));
 }
 

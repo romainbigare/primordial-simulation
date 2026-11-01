@@ -1,15 +1,12 @@
-//! Wind: gas and heat between neighbouring air nodes (laws.md 1.6): the three pushes on each link as the coefficients
-//! of an implicit step (`solve::band`), which the air's step solves with the ground's exchange.
+//! Wind: what moves air between neighbouring air nodes (laws.md 1.6): the three pushes on each link as rates, from the
+//! air of the step's start, which the air's days apply (`daily`).
 
 use super::super::Scratch;
-use crate::{solve::band::Carry, space::Level, units::R_GAS, Config};
+use crate::{space::Level, units::R_GAS, Config};
 
 /// A fit of a gradient whose neighbours nearly line up (the determinant below this share of the product of its
 /// diagonal) is made along each axis alone.
 const SINGULAR: f64 = 1e-9;
-
-/// The coefficients `(fwd, back)` of a transport over the links of `Links`, per link (`solve::band::Carry`).
-pub(super) type Coef = (Vec<f64>, Vec<f64>);
 
 /// The links of the air level that share a border (width above 0), with their ends.
 pub(super) struct Links {
@@ -24,18 +21,14 @@ impl Links {
         let (a, b) = id.iter().map(|&l| (air.a()[l], air.b()[l])).unzip();
         Links { id, a, b }
     }
-    /// The coefficients `(fwd, back)` of a transport over these links, for `solve::band`.
-    pub(super) fn carry<'a>(&'a self, (fwd, back): &'a Coef) -> Carry<'a> {
-        Carry { a: &self.a, b: &self.b, fwd, back }
-    }
 }
 
-/// The pushes on each link (`Links`), + from its `a` to its `b`, mol/s: mixing by eddies, overturning, and the
-/// conductance of the evening of pressure, mol/(Pa s).
+/// The pushes on each link (`Links`): mixing by eddies, mol/s each way; overturning, mol/s of the lower half from its
+/// `a` to its `b` (the upper half comes back); and the conductance of the evening of pressure, mol/(Pa s).
 pub(super) struct Pushes {
-    mix: Vec<f64>,
-    over: Vec<f64>,
-    even: Vec<f64>,
+    pub(super) mix: Vec<f64>,
+    pub(super) over: Vec<f64>,
+    pub(super) even: Vec<f64>,
 }
 
 /// Three pushes on each link: the column's pressure, evened in the time sound takes to cross it (Lamb waves, Lindzen
@@ -64,33 +57,6 @@ pub(super) fn pushes(cfg: &Config, s: &Scratch, air: &Level, links: &Links) -> P
         p.even.push((sound(a) + sound(b)) / 2.0 / (d * (c(a) + c(b))));
     }
     p
-}
-
-impl Pushes {
-    /// The coefficients of the evening of pressure over `dt` for the total amounts (`solve::band`).
-    pub(super) fn pressure(&self, s: &Scratch, links: &Links, dt: f64) -> Coef {
-        let c = |j: u32| R_GAS * s.ta[j as usize] / s.vol[j as usize];
-        let fwd = links.a.iter().zip(&self.even).map(|(&a, &g)| dt * g * c(a)).collect();
-        let back = links.b.iter().zip(&self.even).map(|(&b, &g)| dt * g * c(b)).collect();
-        (fwd, back)
-    }
-    /// The coefficients over `dt` of a gas whose share in each node's upper half is `split`, given the totals after the
-    /// step `n`, each half's gas `halves` and the pressure's flow `flow`: mixing evens its share, the overturning and the
-    /// pressure carry each half's share. With `split` None, the heat, each half carrying its node's heat per mol.
-    pub(super) fn carry(&self, links: &Links, n: &[f64], (split, halves): (Option<&[f64]>, &[[f64; 2]]), flow: &[f64], dt: f64) -> Coef {
-        let (mut fwd, mut back) = (Vec::with_capacity(flow.len()), Vec::with_capacity(flow.len()));
-        for (l, (&a, &b)) in links.a.iter().zip(&links.b).enumerate() {
-            let (a, b, o, f) = (a as usize, b as usize, self.over[l], flow[l]);
-            let (op, om) = (o.max(0.0), (-o).max(0.0));
-            let (to_b, to_a) = match split {
-                Some(up) => (op * (1.0 - up[a]) / halves[a][0] + om * up[a] / halves[a][1], op * up[b] / halves[b][1] + om * (1.0 - up[b]) / halves[b][0]),
-                None => (o.abs() / n[a], o.abs() / n[b]),
-            };
-            fwd.push((dt * self.mix[l] + f.max(0.0)) / n[a] + dt * to_b);
-            back.push((dt * self.mix[l] + (-f).max(0.0)) / n[b] + dt * to_a);
-        }
-        (fwd, back)
-    }
 }
 
 /// The gradient of `v` at each node [east, south], per m: the least-squares fit of its differences to its bordering

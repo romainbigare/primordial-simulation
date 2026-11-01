@@ -1,5 +1,5 @@
 //! The store: the names of the world's nodes, what the fixed ones hold (`Store`, private arrays), and the one way the
-//! laws change them (moves and link fluxes, booked by `apply`; the bodies' moves, the air's step and Change's rows array
+//! laws change them (moves and link fluxes, booked by `apply`; the bodies' moves and Change's rows array
 //! by array by `book_by_array`, which adds as `apply` adds), with the boundary nodes that book what crosses the world's
 //! edge. It decides nothing physical: it adds what the laws give it and counts the rounding it sets to zero (laws.md 0,
 //! "The books").
@@ -19,7 +19,7 @@ pub use batch::Batch;
 pub(crate) use book::{book_by_array, Booker};
 pub use gather::Moves;
 pub use moves::{held, held_more, LinkFlux, Move};
-pub(crate) use moves::{heat_received, less_held_more};
+pub(crate) use moves::heat_received;
 pub use nodes::{Boundary, Class, Node, NodeId, BOUNDARIES};
 
 use crate::World;

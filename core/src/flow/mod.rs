@@ -20,7 +20,7 @@ use scratch::tables;
 /// The slow-changing ground and the substances present are rechecked this often, months (`schedule`).
 pub(crate) const REFRESH_MONTHS: u64 = 3;
 /// Heat conducted sideways and creep (with `lanes::regrow`) run once in this many years, for all that time: on
-/// cells of kilometres both are slow, and the implicit spread holds for any step.
+/// cells of kilometres both are slow, far below the limit of an explicit step.
 pub(crate) const CREEP_YEARS: u64 = 1;
 
 /// Each part of the law (`state`, `air`, `sink`, `liquid`, `creep`, `refresh`) is a process of the clock (`schedule`). This one:
@@ -38,7 +38,7 @@ pub fn state(w: &mut World, full: bool) {
 /// The state of ground nodes (`ground_state`): only what changed since it was last rebuilt, or every node with `full` or
 /// when a refresh changed what is present. A full build notes the time it was made (`built_now`).
 fn ground_now(w: &World, s: &mut Scratch, full: bool) {
-    let full = full || std::mem::take(&mut s.stale) || s.lay.len() != w.mesh.cells().n();
+    let full = full || std::mem::take(&mut s.stale) || s.lay.len() != w.mesh.level(AIR).n();
     ground_state(w, s, full);
     if full {
         s.full_at = Some(w.time);
@@ -101,7 +101,7 @@ fn with(w: &mut World, f: impl FnOnce(&mut World, &mut Scratch)) {
         scratch::refresh(w, &mut s);
         // A new world's ground nodes, before its first step: no plateau, no clouds.
         let st = &mut s.state;
-        (st.tg, st.pk, st.phi, st.cloud, st.cloud_depth) = (vec![0.0; n], vec![land::NONE; n], vec![0.0; n], vec![0.0; n], vec![0.0; n]);
+        (st.tg, st.pk, st.phi, st.cloud) = (vec![0.0; n], vec![land::NONE; n], vec![0.0; n], vec![[0.0; 2]; w.mesh.level(AIR).n()]);
     }
     if s.cap.len() != n {
         scratch::room(w, &mut s);

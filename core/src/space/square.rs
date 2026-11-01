@@ -61,12 +61,10 @@ impl Square {
             Some(region) => self.refine(region, south, north),
             None => self.level(south, north),
         });
-        // The block of `scale`² squares that holds square `i`, numbered row by row; on a globe a row's blocks in the
-        // folded order 0, w-1, 1, w-2, ..., so the blocks either side of the wrap are numbered side by side and a banded
-        // solve of the level stays one row wide (`solve::band`).
+        // The block of `scale`² squares that holds square `i`, numbered row by row.
         let block = |i: usize, scale: usize| {
             let ((x, y), to) = ((self.xy(i).0 / scale, self.xy(i).1 / scale), self.w.div_ceil(scale));
-            (y * to + if !self.wrap { x } else if 2 * x < to { 2 * x } else { 2 * (to - 1 - x) + 1 }) as u32
+            (y * to + x) as u32
         };
         // A square of each cell of the coarsest level so far.
         let (mut fine, mut square): (usize, Vec<usize>) = (1, (0..mesh.cells().n()).map(|i| self.square_of(i)).collect());

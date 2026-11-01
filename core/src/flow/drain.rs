@@ -1,10 +1,10 @@
 //! Liquid under the surface: the pores of the loose ground and the store of the bed below (`Class::Deep`), two layers
 //! of each cell's stack (laws.md 1.2). Liquid over field capacity sinks from the pores into the store under them
-//! (`sink`, every physics step); Darcy's law moves it between cells in each layer, which `solve::spread` solves, and a
+//! (`sink`, every physics step); Darcy's law moves it between cells in each layer, one explicit `solve::sweep`, and a
 //! full store gives back what it cannot hold (`under`, every liquid step).
 
 use super::{land::{bottom, filled, t_now, table, wet}, liquid::{book, mobile}, range, Scratch};
-use crate::{math::one_minus_exp, solve::spread::{within, Net, Spread}, space::Stack, store::{Batch, Class, LinkFlux}, World};
+use crate::{math::one_minus_exp, solve::sweep::{sweep, Net}, space::Stack, store::{Batch, Class, LinkFlux}, World};
 
 /// The layers of each cell's stack under its surface, bottom up: the bed's store and the loose ground's pores.
 const DEEP: usize = 0;
@@ -52,9 +52,7 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
     let (mob, held) = (mobile(w, s, liq, tmin), stores(w, s, tmin));
     // The heat each node of the stack gains from the head lost on the way into it, J.
     let mut fallen = vec![0.0; stack.nodes()];
-    let mut spread = std::mem::take(&mut s.spread);
-    let (a, b, flux, x) = flows(w, s, &mut spread, &stack, (&mob, &held), dt);
-    s.spread = spread;
+    let (a, b, flux, x) = flows(w, s, &stack, (&mob, &held), dt);
     let links = a.len();
     // What the volumes carry: the share of the sender's mobile liquid, at its temperature, or of its store.
     let deep: Vec<usize> = (0..w.chem.ns()).filter(|&k| w.store.amounts(Class::Deep)[k * n..(k + 1) * n].iter().any(|&m| m > 0.0)).collect();
@@ -85,12 +83,13 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
     come_up(w, s, tmin, (&over, &held));
 }
 
-/// Darcy's law between cells in each layer by one `spread` over the stack: the potential is the liquid's table, the
-/// capacity its volume per metre of head, and a link passes the conductivity (`bed_seep`, `seep`) × the saturated
-/// thickness of its higher end × width / distance (none for pores at field capacity, held against gravity). No node
-/// gives more than it holds (`spread::within`). Returns the links, the volume through each (stores', then pores'), m³,
-/// and the heads before the step, m.
-fn flows(w: &World, s: &Scratch, spread: &mut Spread, stack: &Stack, (mob, held): (&super::liquid::Mobile, &[f64]), dt: f64) -> (Vec<u32>, Vec<u32>, Vec<f64>, Vec<f64>) {
+/// Darcy's law between cells in each layer by one explicit `sweep` over the stack: the potential is the liquid's table,
+/// the capacity its volume per metre of head, and a link passes the conductivity (`bed_seep`, `seep`) × the saturated
+/// thickness of its higher end × width / distance (none for pores at field capacity, held against gravity); `seep` over
+/// cells of kilometres moves a store's head a thousandth of the way to its neighbours' in a liquid step. No store gives
+/// more than it holds, and no pores more than they hold over field capacity. Returns the links, the volume through each
+/// (stores', then pores'), m³, and the heads before the step, m.
+fn flows(w: &World, s: &Scratch, stack: &Stack, (mob, held): (&super::liquid::Mobile, &[f64]), dt: f64) -> (Vec<u32>, Vec<u32>, Vec<f64>, Vec<f64>) {
     let (p, cells) = (w.cfg.phys, w.mesh.cells());
     let area = cells.area();
     let (mut x, mut cap) = (vec![0.0; stack.nodes()], vec![0.0; stack.nodes()]);
@@ -121,15 +120,12 @@ fn flows(w: &World, s: &Scratch, spread: &mut Spread, stack: &Stack, (mob, held)
             gl.push(thick * cells.width()[l] / cells.dist()[l]);
         }
     }
-    let mut flux = vec![0.0; gl.len()];
-    let x0 = x.clone();
-    // The network is far from stiff (dt g / capacity about 1e-3): the solve converges in a few iterations.
-    spread.step(&Net { a: &na, b: &nb, g: &gl, cap: &cap }, &mut x, dt, cap.len(), &mut flux);
-    // No store and no pores give more than they hold.
     let mut have = vec![0.0; stack.nodes()];
-    held.iter().enumerate().for_each(|(i, &vol)| (have[stack.node(DEEP, i)], have[stack.node(PORES, i)]) = (vol, mob.vol[i]));
-    within(&na, &nb, &mut flux, &have);
-    (a, b, flux, x0)
+    for (i, &vol) in held.iter().enumerate() {
+        (have[stack.node(DEEP, i)], have[stack.node(PORES, i)]) = (vol, mob.vol[i] - p.field * s.pd[i] * area[i]);
+    }
+    let flux = sweep(&Net { a: &na, b: &nb, g: &gl, cap: &cap }, &x, dt, &have);
+    (a, b, flux, x)
 }
 
 /// What crosses the links that carry something: their ends, mol of each substance (`[q * links + l]`) and J per link.

@@ -559,7 +559,8 @@ fn a_dry_body_builds_in_proportion_to_its_activity() {
 #[test]
 fn frost_kills_in_proportion_to_activity() {
     let mut s = set();
-    s.w.cfg.phys.c_build = 0.0;
+    // (No rain lands on them: it would wet the dry node.)
+    (s.w.cfg.phys.c_build, s.w.cfg.rain_time) = (0.0, f64::INFINITY);
     let count = 10_000.0;
     let node = |s: &mut Set, at: usize, x: f64| {
         let b = s.eater(at);
@@ -629,7 +630,8 @@ fn a_dry_child_waits_and_wakes_when_it_soaks_liquid() {
     let wet_gene = -0.5f32;
     let run = |wet: f32| {
         let mut s = set();
-        s.w.cfg.nodes = false;
+        // (No rain lands on the children: they wake by soaking the liquid on the ground.)
+        (s.w.cfg.nodes, s.w.cfg.rain_time) = (false, f64::INFINITY);
         let books = Books::now(&s.w);
         let mut b = s.eater(0);
         (b.genes[WET], b.genes[DISPERSE], b.genes[STRENGTH]) = (wet, 0.0, 0.0);

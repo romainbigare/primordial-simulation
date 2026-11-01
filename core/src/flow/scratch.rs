@@ -1,7 +1,7 @@
 //! The working memory of Flow (`Scratch`), its tables, and the recheck of what is present (`refresh`).
 
 use super::{air, land::NONE, range};
-use crate::{chem::Chemistry, solve::{downhill::Order, spread::Spread}, store::Class, AIR, World};
+use crate::{chem::Chemistry, solve::downhill::Order, store::Class, AIR, World};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Numbers of one substance Flow reads often (from `chem::Substance`).
@@ -107,9 +107,8 @@ pub(super) struct State {
     /// Substance held at its melting point in each ground node (or `NONE`), and its molten share.
     pub(super) pk: Vec<usize>,
     pub(super) phi: Vec<f64>,
-    /// Reflectance of the clouds over each ground cell, and their optical depth to heat radiation.
-    pub(super) cloud: Vec<f64>,
-    pub(super) cloud_depth: Vec<f64>,
+    /// Of the clouds of each air node: their reflectance, and their optical depth to heat radiation.
+    pub(super) cloud: Vec<[f64; 2]>,
     /// Substances present in loose ground, in order (`refresh`; exchange and liquid add new ones).
     pub(super) loose: Vec<usize>,
     /// Loose substances that stay solid and cannot evaporate, and the others in order of melting point.
@@ -153,17 +152,15 @@ pub struct Scratch {
     pub(super) cover: Vec<[f64; 3]>,
     /// The order of the liquid's pass, by a priority flood over the ground (`liquid`).
     pub(super) order: Order,
-    /// The work space of `solve::spread` (heat through the ground, the liquid under the surface).
-    pub(super) spread: Spread,
     /// The table of the saturation pressure of each substance, as far up as the exchange has asked (`air::Sat`).
     pub(super) sat: Vec<air::Sat>,
     /// The four nearest air nodes of each ground cell on the square map, and their weights (`air::lerp`).
     pub(super) near: Vec<[u32; 4]>,
     pub(super) wt: Vec<[f64; 4]>,
-    /// The air each ground cell sees: temperature drop, K/m; mean height, m; share of heat radiation it absorbs.
-    pub(super) seen: Vec<[f64; 3]>,
-    /// How much colder than the air at the ground each layer over a cell is, [down, up], K (`air::column`).
+    /// How much colder than the air at its mean ground each layer of an air node is, [down, up], K (`air::column`), and
+    /// the share of heat radiation its absorber takes.
     pub(super) lay: Vec<[[f64; air::LAYERS]; 2]>,
+    pub(super) absorbs: Vec<f64>,
     /// Mean height of the ground under each air node, m; the air's volume, m³.
     pub(super) za: Vec<f64>,
     pub(super) vol: Vec<f64>,
@@ -180,8 +177,6 @@ pub struct Scratch {
     pub(super) cond: Vec<bool>,
     pub(super) hk: Vec<f64>,
     pub(super) split: Vec<f64>,
-    /// Work space of the air's step (a row per ground cell).
-    pub(super) rad: Vec<f64>,
 }
 
 /// Only the state is saved (`Scratch`).
@@ -294,7 +289,6 @@ pub(super) fn room(w: &World, s: &mut Scratch) {
     for v in [&mut s.za, &mut s.vol, &mut s.nt, &mut s.capa, &mut s.mass, &mut s.fabs, &mut s.gam, &mut s.zair, &mut s.ta] {
         *v = vec![0.0; na];
     }
-    s.seen = vec![[0.0; 3]; n];
     s.cover = vec![[0.0; 3]; n];
 }
 

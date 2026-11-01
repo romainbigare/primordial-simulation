@@ -17,10 +17,10 @@ pub fn insolation(s0: f64, lat: f64, decl: f64) -> f64 {
     (s0 / PI * (h0 * lat.sin() * decl.sin() + lat.cos() * decl.cos() * h0.sin())).max(0.0)
 }
 
-/// Layers of the air over a cell in `column`.
-pub(crate) const LAYERS: usize = 4;
+/// Layers of the air in `column`.
+pub(crate) const LAYERS: usize = 2;
 
-/// The layers of the air over a cell that send heat radiation [down, up], as how much colder than the air at the
+/// The layers of the air over the ground that send heat radiation [down, up], as how much colder than the air at the
 /// ground each is, K: a grey absorber of optical depth `x` spread like the air's mass (scale height `h`, column `l`),
 /// cooling by `gam` per metre, summed at `LAYERS` points of Schwarzschild's integral. More gas lifts the layers that
 /// reach space into colder air, so the ground warms with no ceiling (a single slab would have one).
@@ -36,27 +36,23 @@ pub fn column(x: f64, gam: f64, l: f64, h: f64) -> [[f64; LAYERS]; 2] {
     out
 }
 
-/// What layers (`column`) over ground with air at `tl` that absorbs a share `f` send, W/m², and its slope with `tl`,
-/// W/(m² K).
-pub fn glow(f: f64, tl: f64, lay: &[f64; LAYERS]) -> (f64, f64) {
+/// What layers (`column`) over ground with air at `tl` that absorbs a share `f` send, W/m².
+pub fn glow(f: f64, tl: f64, lay: &[f64; LAYERS]) -> f64 {
     let k = SIGMA * f / LAYERS as f64;
-    lay.iter().fold((0.0, 0.0), |(g, s), &d| {
-        let t = (tl + d).max(1.0);
-        (g + k * t.powi(4), s + 4.0 * k * t.powi(3))
-    })
+    lay.iter().map(|&d| k * (tl + d).max(1.0).powi(4)).sum()
 }
 
-/// The air touching a ground node in a step: its temperature, K; the share of heat radiation it absorbs; and what its
-/// layers send [down, up] (`glow`), W/m², each with its slope with `tl`, W/(m² K).
+/// The air touching a ground node over a step: its temperature, K; the share of heat radiation it absorbs; and what its
+/// layers send down (`glow`), W/m².
 pub(super) struct Air {
     pub(super) tl: f64,
     pub(super) f: f64,
-    pub(super) down: (f64, f64),
-    pub(super) emit: (f64, f64),
+    pub(super) down: f64,
 }
 
 /// What a ground node's surface balance reads, per m²: shortwave absorbed, W/m²; the air touching it; the heat of the
-/// gas it exchanges, linearised about `t0` (`gain`, `slope`); and rain at `t_rain` through `g_rain`.
+/// gas it exchanges and what its bodies draw, linearised about `t0` (`gain`, `slope`); and rain at `t_rain` through
+/// `g_rain`.
 pub(super) struct Surface<'a> {
     pub(super) sw: f64,
     pub(super) air: &'a Air,
@@ -67,16 +63,11 @@ pub(super) struct Surface<'a> {
     pub(super) g_rain: f64,
 }
 
-/// What the balance gives: the node's end temperature, K; the heat it gives its air node, J, with its slopes with the
-/// air's and the node's temperature, J/K; the node's response per W/m², K m²/W, and per K of the air touching it; the
-/// heat to space through the air, J.
+/// What the balance gives: the surface's end temperature, K; the heat the node gives its air node, J (sensible heat and
+/// the heat radiation the air absorbs, less what the air sends down); and the heat it sends to space, J.
 pub(super) struct Balance {
     pub(super) ts: f64,
     pub(super) to_air: f64,
-    pub(super) slope: f64,
-    pub(super) warm: f64,
-    pub(super) give: f64,
-    pub(super) follow: f64,
     pub(super) to_space: f64,
 }
 
@@ -87,21 +78,16 @@ impl Surface<'_> {
     /// while the fusion enthalpy there lasts, `fusion` on its plateau (`plateau`), so a long step freezes and thaws as
     /// short ones do.
     pub(super) fn balance(&self, s: &Scratch, (i, area, dt): (usize, f64, f64), sensible: f64, fusion: f64) -> Balance {
-        let (adt, t, tl) = (area * dt, s.state.tg[i], self.air.tl);
-        let (f, (down, d_down), (emit, d_emit)) = (self.air.f, self.air.down, self.air.emit);
+        let (adt, t, tl, f, down) = (area * dt, s.state.tg[i], self.air.tl, self.air.f, self.air.down);
         let t3 = SIGMA * t * t * t;
         let num = self.sw + down + 3.0 * t3 * t + sensible * tl + self.gain - self.slope * self.t0 + self.g_rain * self.t_rain;
         let den = 4.0 * t3 + sensible + self.g_rain - self.slope;
-        // The surface's end temperature and response with the node from `tn` behind a resistance `r`; held at `tn` where
-        // `r` is too small to change it (`r den` below the last digit, where `1 / r` may overflow). The surface of a
-        // soft cover warms no further than the cover's melting point `cap`: past it the top melts and the melt soaks
-        // in, so the node takes all the heat that reaches the surface.
+        // The surface's end temperature with the node from `tn` behind a resistance `r`; held at `tn` where `r` is too
+        // small to change it (`r den` below the last digit, where `1 / r` may overflow). The surface of a soft cover
+        // warms no further than the cover's melting point `cap`: past it the top melts and the melt soaks in, so the
+        // node takes all the heat that reaches the surface.
         let [rc, tc, _] = s.cover[i];
-        let surface = |tn: f64, r: f64, cap: f64| {
-            let d = 1.0 / r + den;
-            let at = if r * den > f64::EPSILON { ((tn / r + num) / d, 1.0 / d) } else { (tn, 0.0) };
-            if at.0 > cap { (cap, 0.0) } else { at }
-        };
+        let surface = |tn: f64, r: f64, cap: f64| (if r * den > f64::EPSILON { (tn / r + num) / (1.0 / r + den) } else { tn }).min(cap);
         let flux = |ts: f64| (t3 * (4.0 * ts - 3.0 * t), sensible * (ts - tl));
         // The heat the node gets over the step with the surface at `ts`, J.
         let net = |ts: f64| {
@@ -116,35 +102,24 @@ impl Surface<'_> {
         // point has then melted: neither its cap nor its resistance stays.
         let plateau = |tm: f64, (melt, freeze): (f64, f64)| {
             let at = surface(tm, rc, tc);
-            let q = net(at.0) - c * (tm - t);
+            let q = net(at) - c * (tm - t);
             let through = if q > melt { melt } else if q < -freeze { -freeze } else { return at };
-            let part = ((c * (tm - t) + through) / net(at.0)).min(1.0);
-            let (r, cap) = if q > melt && at.0 >= tc { (0.0, f64::INFINITY) } else { (rc, tc) };
-            let rest = surface(tm, (1.0 - part) * adt / c + r, cap);
-            (part * at.0 + (1.0 - part) * rest.0, part * at.1 + (1.0 - part) * rest.1)
+            let part = ((c * (tm - t) + through) / net(at)).min(1.0);
+            let (r, cap) = if q > melt && at >= tc { (0.0, f64::INFINITY) } else { (rc, tc) };
+            part * at + (1.0 - part) * surface(tm, (1.0 - part) * adt / c + r, cap)
         };
         let (l, phi) = (s.latent[i], s.state.phi[i]);
-        let (mut ts, mut give) = if s.state.pk[i] != NONE { plateau(t, ((1.0 - phi) * fusion, phi * fusion)) } else { surface(t, free, tc) };
+        let mut ts = if s.state.pk[i] != NONE { plateau(t, ((1.0 - phi) * fusion, phi * fusion)) } else { surface(t, free, tc) };
         // Off a plateau, the node's end temperature past the melting point below or above it.
         let end = t + net(ts) / c;
         if s.state.pk[i] == NONE && l.hi != f64::MIN {
             if l.lo > f64::MIN && end < (l.lo - l.held) / c {
-                (ts, give) = plateau((l.lo - l.held) / c, (f64::INFINITY, l.lat[0]));
+                ts = plateau((l.lo - l.held) / c, (f64::INFINITY, l.lat[0]));
             } else if l.hi < f64::MAX && end > (l.hi - l.held) / c {
-                (ts, give) = plateau((l.hi - l.held) / c, (l.lat[1], f64::INFINITY));
+                ts = plateau((l.hi - l.held) / c, (l.lat[1], f64::INFINITY));
             }
         }
-        // How far the node follows a change of the air touching it, per K.
-        let follow = give * (d_down + sensible + self.g_rain);
         let (up, hs) = flux(ts);
-        Balance {
-            ts,
-            to_air: adt * (f * up + hs - down - emit),
-            slope: adt * (f * 4.0 * t3 * follow + sensible * (follow - 1.0) - d_down - d_emit),
-            warm: adt * (f * 4.0 * t3 + sensible),
-            give,
-            follow,
-            to_space: adt * ((1.0 - f) * up + emit),
-        }
+        Balance { ts, to_air: adt * (f * up + hs - down), to_space: adt * (1.0 - f) * up }
     }
 }

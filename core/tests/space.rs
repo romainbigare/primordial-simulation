@@ -138,10 +138,6 @@ fn a_globe_covers_its_sphere_and_wraps_east_to_west() {
         let way = lv.offset(west, east);
         assert!(way[0] > 0.0 && way[1].abs() < 1e-6 && (way[0] / lv.dist()[l] - 1.0).abs() < 1e-9, "the next cell east lies a link away: {way:?}");
     }
-    // The air's blocks are numbered so that no border reaches further than a row (the band of `solve::band`).
-    let coarse = mesh.level(1);
-    let reach = (0..coarse.a().len()).filter(|&l| coarse.width()[l] > 0.0).map(|l| coarse.b()[l] - coarse.a()[l]).max();
-    assert_eq!(reach, Some((sq.w / SCALE) as u32), "a border of the air reaches one row");
 }
 
 /// A refined region, on a flat map and on a globe: its squares in quarters that cover them, each cell under its

@@ -112,8 +112,8 @@ const MELT_HELD: f64 = 1e-3;
 
 /// A ground node on its melting plateau that one long air step melts all of (under the sun, its ice a cover whose
 /// melting point caps the surface) or freezes all of (in the dark under air 10% colder) ends no further from where
-/// short steps end than the same node with no plateau: it stays on the plateau only for the share of the step its heat
-/// takes, then goes on from the melting point, and the cover's cap stops with the cover.
+/// short steps end than the same node with no plateau, to within `PLATEAU_K`: it stays on the plateau only for the
+/// share of the step its heat takes, then goes on from the melting point, and the cover's cap stops with the cover.
 #[test]
 fn a_plateau_used_up_in_one_long_step_ends_where_short_steps_end() {
     let (w0, i) = worldgen::testkit::start();
@@ -122,7 +122,8 @@ fn a_plateau_used_up_in_one_long_step_ends_where_short_steps_end() {
         // From the melting point, a long step and short ones: the end temperature of each, and whether it ends on a plateau.
         let off = |mol: f64| {
             let mut w = w0.clone();
-            w.cfg.sun *= sun;
+            // (No rain: what falls in a step is snow or rain by the mean air of the step.)
+            (w.cfg.sun, w.cfg.rain_time) = (w.cfg.sun * sun, f64::INFINITY);
             for j in 0..w.mesh.level(AIR).n() {
                 let e = air * w.store.heat(Class::Air)[j];
                 set_heat(&mut w, Node::air(j), e);
@@ -144,13 +145,16 @@ fn a_plateau_used_up_in_one_long_step_ends_where_short_steps_end() {
             (long.0 - short.0).abs()
         };
         let (plateau, none) = (off(pool), off(0.0));
-        assert!(plateau <= none, "sun x{sun}: {plateau} K off with the plateau, {none} K with none");
+        assert!(plateau <= none + PLATEAU_K, "sun x{sun}: {plateau} K off with the plateau, {none} K with none");
     }
 }
 
-/// The depth of the liquid on the plateau, m, and the short steps a long one is checked against.
+/// The depth of the liquid on the plateau, m, the short steps a long one is checked against, and how much further the
+/// long step may end with the plateau than without, K (the long step's end reflectance darkens the melted pool for the
+/// whole step).
 const PLATEAU_M: f64 = 0.02;
 const SHORT_STEPS: usize = 48;
+const PLATEAU_K: f64 = 0.05;
 
 /// A ground node over a liquid's boiling point boils of it only what its heat over that point pays: a deep pool 2 K
 /// over boils a small share in an air step, keeps its books, and stays near the boiling point.
@@ -280,7 +284,7 @@ fn more_gas_warms_with_no_ceiling() {
         let (mut lo, mut hi) = (150.0, 500.0);
         for _ in 0..60 {
             let t: f64 = (lo + hi) / 2.0;
-            let up = (-x).exp() * 5.670e-8 * t.powi(4) + pcore::flow::glow(-(-x).exp_m1(), t, &pcore::flow::column(x, 0.0065, 1e4, 7600.0)[1]).0;
+            let up = (-x).exp() * 5.670e-8 * t.powi(4) + pcore::flow::glow(-(-x).exp_m1(), t, &pcore::flow::column(x, 0.0065, 1e4, 7600.0)[1]);
             (lo, hi) = if up > 240.0 { (lo, t) } else { (t, hi) };
         }
         lo
@@ -430,9 +434,10 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
         let mut w = worldgen::new_world(3, 16, 16);
         let (i, j) = pair(&w);
         w.cfg.phys.seep = seep;
-        // (No evaporation, which would lower the liquid table before the liquid flows, no channels inside the cell, and
-        // a full store under `i`, so none of its liquid sinks before it flows.)
-        (w.cfg.evap, w.cfg.phys.hill) = (0.0, 1e15);
+        // (No evaporation, which would lower the liquid table before the liquid flows, no rain, which would fill the dry
+        // cell's pores, no channels inside the cell, and a full store under `i`, so none of its liquid sinks before it
+        // flows.)
+        (w.cfg.evap, w.cfg.rain_time, w.cfg.phys.hill) = (0.0, f64::INFINITY, 1e15);
         let (p, mv) = (w.cfg.phys, w.chem.molar_volume(LIQUID, Phase::Liquid));
         let full = p.bed_porosity * p.bed_depth * w.mesh.cells().area()[i] / mv;
         set_amount(&mut w, Node::new(Class::Deep, i), LIQUID, full);
@@ -728,8 +733,8 @@ fn rain_crosses_the_land_in_one_step() {
 
 /// Moving liquid wears its bed only with the work its load leaves free (the cover effect, Sklar and Dietrich 2004).
 /// Once rain runs off (the pores of the land are full after three months), the land under its loose ground keeps its
-/// bed in the next liquid step; stripped of its loose solids (at the temperature it had), it breaks bonded ground at
-/// each of the next eight.
+/// bed in the next liquid step; stripped of its loose solids (at the temperature it had), over a full store, it breaks
+/// bonded ground at each of the next eight.
 #[test]
 fn liquid_wears_its_bed_with_the_work_its_load_leaves_free() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -745,6 +750,11 @@ fn liquid_wears_its_bed_with_the_work_its_load_leaves_free() {
         let solids: Vec<usize> = (0..w.chem.ns()).filter(|&k| w.chem.phase(k, t) == Phase::Solid).collect();
         solids.into_iter().for_each(|k| set_amount(&mut w, Node::ground(i), k, 0.0));
         hold_ground(&mut w, i, t);
+        // A full store under it, so the rain runs off rather than sinking.
+        let full = w.cfg.phys.bed_porosity * w.cfg.phys.bed_depth * w.mesh.cells().area()[i] / w.chem.molar_volume(LIQUID, Phase::Liquid);
+        set_amount(&mut w, Node::new(Class::Deep, i), LIQUID, full);
+        let warm = full * (w.chem.subs[LIQUID].cp * t + w.chem.subs[LIQUID].lf);
+        set_heat(&mut w, Node::new(Class::Deep, i), warm);
     }
     for step in 0..8 {
         let before = bed(&w);

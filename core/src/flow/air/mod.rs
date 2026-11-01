@@ -1,9 +1,11 @@
-//! Flow in and through the air, solved together over a step (`step`; laws.md 1.4). Here: the state of the air nodes.
+//! Flow in and through the air (laws.md 1.4 to 1.6): each air step the cells' ground gives the air level its forcing
+//! (`cells::forcing`), the air level runs day by day (`daily`), and each cell then exchanges with the step's mean air
+//! of its node (`cells::pass`), booked whole (`book`). Here: the state of the air nodes.
 
 mod book;
-mod cell;
+mod cells;
+mod daily;
 mod exchange;
-mod newton;
 mod radiation;
 mod sky;
 mod step;
@@ -39,19 +41,19 @@ pub(super) fn lerp(s: &Scratch, v: &[f64], i: usize) -> f64 {
     w[0] * v[j[0] as usize] + w[1] * v[j[1] as usize] + w[2] * v[j[2] as usize] + w[3] * v[j[3] as usize]
 }
 
-/// The four air nodes ground cell `i` sees, each with the share it gives of the node field `v` the cell sees (`lerp`):
-/// what condenses there comes out of each node in that share, so no node gives more than it holds.
-#[inline]
-pub(super) fn shares(s: &Scratch, v: &[f64], i: usize) -> [(usize, f64); 4] {
-    let (j, w, seen) = (&s.near[i], &s.wt[i], lerp(s, v, i));
-    std::array::from_fn(|c| (j[c] as usize, if seen > 0.0 { w[c] * v[j[c] as usize] / seen } else { 0.0 }))
-}
-
 /// The share of the air ground cell `i` sees that lies over it: its area over the area of the air it sees (`lerp`).
 #[inline]
 pub(super) fn over_cell(w: &World, s: &Scratch, i: usize) -> f64 {
     let mesh = &w.mesh;
     mesh.cells().area()[i] / lerp(s, mesh.level(AIR).area(), i)
+}
+
+/// Temperature of the air touching ground cell `i` under air nodes at `t` (`lerp`), K: colder by the drop with height
+/// from its node's mean height (`zair`).
+#[inline]
+pub(super) fn touching(w: &World, s: &Scratch, t: &[f64], i: usize) -> f64 {
+    let j = w.mesh.cells().parent()[i] as usize;
+    (lerp(s, t, i) - s.gam[j] * (s.head[i] - s.zair[j])).max(1.0)
 }
 
 /// Scale height of air at `t` K whose `mol` mol weigh `kg` kg under gravity `g`, RT/(Mg), m.
@@ -66,12 +68,12 @@ fn node_scale_height(s: &Scratch, j: usize, g: f64) -> f64 {
     scale_height(s.ta[j], s.nt[j], s.mass[j], g)
 }
 
-/// The state of every air node, the air each ground cell sees, and how high each gas fills its column (a gas that would
-/// condense higher up is held near the ground).
+/// The state of every air node, how high each gas fills its column (a gas that would condense higher up is held near
+/// the ground), and the layers that send its heat radiation.
 pub(super) fn state(w: &World, s: &mut Scratch) {
     nodes(w, s);
     heights(w, s);
-    seen(w, s);
+    layers(w, s);
 }
 
 /// Amount, mol, heat capacity, J/K, and mass, kg, of the gases of each air node, from its amounts now and the gas the
@@ -161,14 +163,14 @@ fn heights(w: &World, s: &mut Scratch) {
     }
 }
 
-/// The air each ground cell sees (from the four nearest nodes, `lerp`) and the layers of its column, whose absorber is
-/// its gases and the clouds of the step before (spread like the air's mass).
-fn seen(w: &World, s: &mut Scratch) {
-    let (n, g, top) = (w.mesh.cells().n(), w.cfg.gravity, w.cfg.air_top_m);
-    s.lay.resize(n, [[0.0; LAYERS]; 2]);
-    for (i, &j) in w.mesh.cells().parent().iter().enumerate() {
-        let (gam, zair, fabs) = (lerp(s, &s.gam, i), lerp(s, &s.zair, i), lerp(s, &s.fabs, i) + s.state.cloud_depth[i]);
-        s.lay[i] = column(fabs, gam, (top - s.head[i]).max(COLUMN_MIN), node_scale_height(s, j as usize, g));
-        s.seen[i] = [gam, zair, one_minus_exp(fabs)];
-    }
+/// The layers of each air node's column that send its heat radiation (`column`) and the share of it its absorber takes:
+/// its gases and the clouds of the step before (spread like the air's mass, over its mean ground).
+fn layers(w: &World, s: &mut Scratch) {
+    let (na, g, top) = (w.mesh.level(AIR).n(), w.cfg.gravity, w.cfg.air_top_m);
+    (s.lay, s.absorbs) = (0..na)
+        .map(|j| {
+            let x = s.fabs[j] + s.state.cloud[j][1];
+            (column(x, s.gam[j], (top - s.za[j]).max(COLUMN_MIN), node_scale_height(s, j, g)), one_minus_exp(x))
+        })
+        .unzip();
 }

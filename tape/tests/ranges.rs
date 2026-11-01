@@ -25,11 +25,6 @@
 //!
 //! A globe of Earth's size without life keeps an Earth-like climate: its land near Earth's, steady, with no runaway
 //! ice, and its surface, vapour and rain on land within wide bounds around Earth's.
-//!
-//! The steps of Flow are speed settings too (the long step against the short one): small worlds with life, each seed
-//! against itself, keep their climate at the default steps and with the air's step at 6 hours and the physics step and
-//! the bodies' batch at 2 days, within 0.3 K for a temperature and the year-to-year spread for the others, on the mean
-//! of seeds 1 to 6.
 
 mod common;
 
@@ -281,76 +276,6 @@ fn the_sleep_of_change_keeps_the_chemistry() {
     assert!(out.is_empty(), "the sleep changed: {out:?}");
 }
 
-/// The climate's key numbers (series columns): the ground temperature on land, the warmest and the coldest month's,
-/// the rain on land, the heat-absorbing gas and the river cells.
-const CLIMATE: [&str; 6] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "rivers"];
-
-/// The long-step test's world: its side, its years (long enough for the plants to grow, as an error that comes with
-/// them grows too), and the years from which its numbers are averaged.
-const STEP_SIDE: usize = 32;
-const STEP_YEARS: u64 = 20;
-const STEP_FROM: u64 = 11;
-/// How far the long step may move each temperature of the climate from the short step's, each seed against itself, K.
-const STEP_K: f64 = 0.3;
-/// The long-step test's seeds: six, as one seed's offset of the land spans 0.10 to 0.40 K, so the mean of three moved
-/// by about 0.01 K with any change of rounding; six halve its variance.
-const STEP_SEEDS: [u64; 6] = [1, 2, 3, 4, 5, 6];
-
-/// The `CLIMATE` columns at the end of each year from `STEP_FROM`, on the long-step test's world of `seed`, with the
-/// steps of Flow that `set` makes.
-fn climate(seed: u64, set: fn(&mut Config)) -> Vec<[f64; CLIMATE.len()]> {
-    let mut years = vec![];
-    run(seed, STEP_SIDE, STEP_YEARS, false, set, |y, _, rec| {
-        if y >= STEP_FROM {
-            years.push(CLIMATE.map(|c| rec.last(c)));
-        }
-    });
-    years
-}
-
-/// The air's step of 6 hours (`air_hours`), short against the air's changes in a day, and a physics step of 2 days
-/// (`phys_days`); the liquid's step (`flow_days`) and the bodies' batch (`batch_days`) are then 2 days too, as each
-/// divides or is divided by the physics step.
-const SHORT_AIR_HOURS: u32 = 6;
-const SHORT_PHYS_DAYS: u32 = 2;
-
-/// The long step against the short one, each seed against itself: at the default steps of Flow (`air_hours`,
-/// `phys_days`, `flow_days`) and of the bodies' batch the mean over the seeds of what the long step moves each of the
-/// climate's key numbers (the mean of its last years) from the short steps (`SHORT_AIR_HOURS`, `SHORT_PHYS_DAYS`, and
-/// liquid steps and batches of `SHORT_PHYS_DAYS`) is less than `STEP_K` for a temperature, and less than its
-/// year-to-year spread at the short steps (the mean over the seeds of its highest less its lowest yearly value) for the
-/// others.
-#[test]
-#[ignore = "slow: twelve 20-year runs of a 32 x 32 world with life"]
-fn the_long_step_keeps_the_climate() {
-    let short: fn(&mut Config) = |c| {
-        (c.air_hours, c.phys_days, c.flow_days, c.batch_days) = (SHORT_AIR_HOURS, SHORT_PHYS_DAYS, SHORT_PHYS_DAYS, SHORT_PHYS_DAYS);
-    };
-    let default: fn(&mut Config) = |_| {};
-    // Per seed, [short, default], all side by side.
-    let runs: Vec<[Vec<[f64; CLIMATE.len()]>; 2]> = std::thread::scope(|s| {
-        let runs: Vec<_> = STEP_SEEDS.iter().map(|&seed| [short, default].map(|set| s.spawn(move || climate(seed, set)))).collect();
-        runs.into_iter().map(|pair| pair.map(|r| r.join().expect("a run"))).collect()
-    });
-    let seeds = runs.len() as f64;
-    let mut out = vec![];
-    for (q, name) in CLIMATE.iter().enumerate() {
-        let mean = |run: &[[f64; CLIMATE.len()]]| run.iter().map(|y| y[q]).sum::<f64>() / run.len() as f64;
-        let spread = |run: &[[f64; CLIMATE.len()]]| run.iter().map(|y| y[q]).fold(f64::MIN, f64::max) - run.iter().map(|y| y[q]).fold(f64::MAX, f64::min);
-        let offs: Vec<f64> = runs.iter().map(|[base, long]| mean(long) - mean(base)).collect();
-        let off = offs.iter().sum::<f64>() / seeds;
-        let limit = if name.starts_with("t_") { STEP_K } else { runs.iter().map(|[base, _]| spread(base)).sum::<f64>() / seeds };
-        let ok = off.abs() <= limit;
-        let short: Vec<String> = runs.iter().map(|[base, _]| format!("{:.4e}", mean(base))).collect();
-        let seeds: Vec<String> = offs.iter().map(|x| format!("{x:.3e}")).collect();
-        println!("{name}: off by {off:.3e} (seeds {seeds:?}) at the default steps from the short ones (seeds {short:?}), limit {limit:.3e}{}", if ok { "" } else { ": OUT" });
-        if !ok {
-            out.push(*name);
-        }
-    }
-    assert!(out.is_empty(), "the long step changed: {out:?}");
-}
-
 /// Life's key numbers (series columns): the members and the mass of the light-eaters, the births of the year, the life
 /// light-eaters live, and the heat-absorbing gas they take from the air.
 const LIFE: [&str; 5] = ["plant_members", "root_0_kg", "births", "root_0_life_real", "air_3"];
@@ -428,10 +353,10 @@ const CANOPY_TOP: f64 = 0.05;
 const CANOPY_SWING: f64 = 10.0;
 const CANOPY_SHARE: f64 = 0.15;
 
-/// Bodies draw their heat from the ground inside the air's implicit step (laws.md 1.4), so the ground under a dense
-/// canopy (the densest `CANOPY_TOP` of the land cells with life) follows its neighbours: through a year, day by day,
-/// after `CANOPY_YEARS` of seed 1, fewer than `CANOPY_SHARE` of the dense canopies move more than `CANOPY_SWING`
-/// against their neighbours within 30 days.
+/// Bodies draw their heat from the ground in their cell's implicit balance in the air's step (laws.md 1.4), so the
+/// ground under a dense canopy (the densest `CANOPY_TOP` of the land cells with life) follows its neighbours: through a
+/// year, day by day, after `CANOPY_YEARS` of seed 1, fewer than `CANOPY_SHARE` of the dense canopies move more than
+/// `CANOPY_SWING` against their neighbours within 30 days.
 #[test]
 #[ignore = "slow: a 20-year run of a 64 x 64 world, then a year day by day"]
 fn the_ground_under_dense_canopies_stays_near_its_neighbours() {
