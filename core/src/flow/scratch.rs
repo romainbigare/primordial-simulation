@@ -163,6 +163,8 @@ pub struct Scratch {
     pub(super) cover: Vec<[f64; 3]>,
     /// The order of the liquid's pass, by a priority flood over the ground (`liquid`).
     pub(super) order: Order,
+    /// The basin, as the last full build of the state of ground nodes found it (`basin::find`).
+    pub(super) basin: super::basin::Basin,
     /// The table of the saturation pressure of each substance, as far up as the exchange has asked (`air::Sat`).
     pub(super) sat: Vec<air::Sat>,
     /// The four nearest air nodes of each ground cell on the square map, and their weights (`air::lerp`).

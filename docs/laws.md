@@ -132,12 +132,21 @@ long step ends where short ones do.
 (`flow::air`).
 - **Pores first**: the loose ground's pores (`porosity`) fill first, under any soft cover; only liquid above them stands
   and has a head (`flow::land::stand`), the depth bodies and Change read.
+- **The sea** (`flow::basin`, the low basin): the lowest cell and the cells joined to it through cells whose solid surface lies under
+  the level its liquid stands at are the sea, found at each month's start. A connected liquid body has one level: once
+  a month, after the runoff has reached it, all the sea's liquid stands at one level, found from all of it and the
+  floors of its cells (each solid surface less its pore space, which the liquid fills first; sorted, so the level is
+  exact). Each sea cell that holds more than its depth under that level gives the share of its liquid over it, with
+  that share of its heat; mixed, it goes to the cells that hold less, by what each lacks. **Known limit:** the sea's
+  slope under wind and rotation is not modelled, and what levels it crosses the sea at once.
 - **Spill levels**: a priority flood over the ground gives each cell its spill level (Barnes, Lehman and Mulla 2014;
-  `downhill::Order`). Liquid stands below it or in the lowest basin; elsewhere it passes on, counting as no higher than
-  its ground, so it crosses the map in one step while depressions fill and spill.
-- **Running off** (`solve::downhill`): each cell sends its liquid down its steepest way by D-infinity (Tarboton 1997;
-  `Level::steepest`): two neighbours next in compass order make a triangle with the centre, the plane through their
-  drops gives its slope and way, and the steepest triangle shares the liquid between its two neighbours by angle.
+  `downhill::Order`), starting from the sea (from the lowest cell where there is none). Liquid stands below it (or in
+  the lowest basin where there is no sea); elsewhere it passes on, counting as no higher than its ground, so it crosses
+  the map in one step while depressions fill and spill. Lakes (closed basins above the sea) fill and spill this way.
+- **Running off** (`solve::downhill`): each cell but the sea's sends its liquid down its steepest way by D-infinity
+  (Tarboton 1997; `Level::steepest`): two neighbours next in compass order make a triangle with the centre, the plane
+  through their drops gives its slope and way, and the steepest triangle shares the liquid between its two neighbours
+  by angle. What reaches a sea cell stays there and joins the sea.
 - **Pore water** flows by Darcy's law (one explicit `solve::sweep` on the liquid table, the store's too): `seep` ×
   saturated thickness × width / distance, at most half of what would level two cells, and no cell giving more than it
   holds over field capacity; pores at or under field capacity (`field`) give nothing. Over cells of kilometres a

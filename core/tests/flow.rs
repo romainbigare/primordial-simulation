@@ -291,8 +291,8 @@ fn more_gas_warms_with_no_ceiling() {
 }
 
 /// The most soluble gas of the air dissolves in the liquid of the deepest node toward Henry's share (here with a fast
-/// liquid side, so within an exchange), and part of it comes out when that liquid is warmed by 20 K (a fifth at
-/// balance); matter and energy are kept.
+/// liquid side, so within an exchange), and part of it comes out when the ground is warmed by 20 K (a fifth at balance;
+/// all of it, as the low basin mixes in a month); matter and energy are kept.
 #[test]
 fn gas_dissolves_and_comes_out_when_warmed() {
     let (_, init) = worldgen::chemistry0();
@@ -309,8 +309,10 @@ fn gas_dissolves_and_comes_out_when_warmed() {
     let x = w.store.amounts(Class::Air)[k * na + j] / (0..w.chem.ns()).map(|q| w.store.amounts(Class::Air)[q * na + j]).sum::<f64>();
     let (h1, want) = (held(&w), w.chem.henry(k, w.t_ground(i), x * pcore::units::P_REF));
     assert!(h1 > 0.5 * want && h1 < 2.0 * want, "{h1} dissolved per mol, Henry's share {want}");
-    let t = w.t_ground(i) + 20.0;
-    hold_ground(&mut w, i, t);
+    for c in 0..n {
+        let t = w.t_ground(c) + 20.0;
+        hold_ground(&mut w, c, t);
+    }
     (0..4).for_each(|_| worldgen::testkit::flow_step(&mut w, DT));
     assert!(held(&w) < 0.9 * h1, "{} dissolved per mol after warming, {h1} before", held(&w));
     books.assert_within(&w, 1e-9, 1e-9);
@@ -703,6 +705,44 @@ fn rain_crosses_the_land_in_one_step() {
     let ((wet, fell), (dry, _)) = (low_after(0.05), low_after(0.0));
     println!("{:.1}% of the rain on the land far from the low ground reached it in one step", 100.0 * (wet - dry) / fell);
     assert!(fell > 0.0 && wet - dry > 0.1 * fell, "{} of {fell} m³ reached the low ground", wet - dry);
+}
+
+/// The height the liquid of cell `i` stands at, m: its solid surface, and above it the liquid over what its pores hold.
+fn liquid_top(w: &World, i: usize) -> f64 {
+    let (t, plateau) = w.thaw_last(i);
+    let liquid: f64 = (0..w.chem.ns()).filter(|&k| t < w.chem.subs[k].boil).map(|k| w.g(k, i) * w.molten(k, i, t, plateau) * w.chem.molar_volume(k, Phase::Liquid)).sum();
+    w.surface_z(i) + (liquid - w.cfg.phys.porosity * loose(w, i)).max(0.0) / w.mesh.cells().area()[i]
+}
+
+/// A connected liquid body has one level: half a metre of liquid poured on one cell of an island's low basin, with the
+/// month's uneven rain and the runoff that reaches it, ends a liquid step at one level, within a millimetre, over all
+/// the cells joined to the lowest through cells under that level. Matter and energy are kept.
+#[test]
+fn a_connected_liquid_body_stands_at_one_level() {
+    let mut w = worldgen::testkit::small_world();
+    let n = w.mesh.cells().n();
+    let lowest = (0..n).min_by(|&a, &b| w.surface_z(a).total_cmp(&w.surface_z(b))).unwrap();
+    let top = liquid_top(&w, lowest);
+    let (mut basin, mut todo) = (vec![false; n], vec![lowest]);
+    basin[lowest] = true;
+    while let Some(i) = todo.pop() {
+        for &j in w.mesh.cells().around(i).1 {
+            if !basin[j as usize] && w.surface_z(j as usize) < top {
+                basin[j as usize] = true;
+                todo.push(j as usize);
+            }
+        }
+    }
+    let cells: Vec<usize> = (0..n).filter(|&i| basin[i]).collect();
+    assert!(cells.len() > n / 4, "a basin of {} cells", cells.len());
+    let area = w.mesh.cells().area()[lowest];
+    pour(&mut w, lowest, 0.5 * area);
+    let books = Books::now(&w);
+    worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
+    books.assert_within(&w, 1e-9, 1e-9);
+    let tops: Vec<f64> = cells.iter().map(|&i| liquid_top(&w, i)).collect();
+    let (lo, hi) = tops.iter().fold((f64::MAX, f64::MIN), |(a, b), &x| (a.min(x), b.max(x)));
+    assert!(hi - lo < 1e-3, "the basin stands between {lo} m and {hi} m");
 }
 
 /// Moving liquid wears its bed only with the work its load leaves free (the cover effect, Sklar and Dietrich 2004).

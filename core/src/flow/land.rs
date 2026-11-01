@@ -90,7 +90,8 @@ pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
 }
 
 /// Heat capacity, temperature, surface, head and reflectance of every ground node, each in parallel with `threads`
-/// (`node_state`); between full steps only nodes whose phases change get a new surface.
+/// (`node_state`); between full steps only nodes whose phases change get a new surface. A full build finds the basin
+/// (`basin::find`).
 pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     let n = w.mesh.cells().n();
     let mut rows = vec![0.0; n * STATE_ROW];
@@ -105,6 +106,9 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
         if r[12] != 0.0 {
             (s.z[i], s.head[i], s.cover[i], s.alb[i], s.pd[i]) = (r[13], r[14], [r[15], r[16], r[17]], r[18], r[19]);
         }
+    }
+    if full {
+        s.basin = super::basin::find(w, s);
     }
 }
 

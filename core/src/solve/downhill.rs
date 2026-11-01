@@ -4,7 +4,9 @@
 //! Liquid runs from higher levels to lower ones, and at one level from where it stands (below the spill level) out
 //! through the cells the flood reached earlier, so the pass by falling level, standing liquid first, then the last
 //! reached first, is a topological order of its links: one pass carries liquid across the map while depressions fill
-//! and spill, and a level stretch drains toward its outlet. The law says how much leaves a cell; this module moves it.
+//! and spill, and a level stretch drains toward its outlet. Where a basin is given, the flood starts from it instead: its
+//! cells are reached first, at the head of their liquid, and the pass does not visit them, so what reaches one stays
+//! there. The law says how much leaves a cell; this module moves it.
 
 use std::{cmp::Reverse, collections::BinaryHeap};
 
@@ -21,7 +23,7 @@ pub struct Adjacency<'a> {
     pub a: &'a [u32],
 }
 
-/// The cells in the order of the pass, the rank of each cell in it, whether the liquid of each cell stands (it lies
+/// The cells in the order of the pass, the rank of each cell in it (the basin's last, unvisited), whether the liquid of each cell stands (it lies
 /// below the cell's spill level, in a depression, or in the lowest basin), and the cell the flood reached each from.
 #[derive(Clone, Debug, Default)]
 pub struct Order {
@@ -41,38 +43,38 @@ fn rising(h: f64) -> u64 {
 }
 
 impl Order {
-    /// Bring the order up to date for the floor of each cell, `floor`, m, and the head of the liquid of cell `i`,
-    /// `head(i)`, m.
-    pub fn update(&mut self, adj: &Adjacency, floor: &[f64], head: impl Fn(usize) -> f64) {
+    /// Bring the order up to date for the floor of each cell, `floor`, m, the head of the liquid of cell `i`,
+    /// `head(i)`, m, and the cells of the basin, `basin` (none: the flood starts from the lowest cell).
+    pub fn update(&mut self, adj: &Adjacency, floor: &[f64], head: impl Fn(usize) -> f64, basin: &[u32]) {
         let n = floor.len();
         let Some(lowest) = (0..n).min_by(|&a, &b| floor[a].total_cmp(&floor[b])) else { return };
         let low = head(lowest).max(floor[lowest]);
-        // Each cell's spill level (infinite until reached); equal levels leave the heap in the order they entered it.
+        // Each cell's spill level (infinite until reached).
         let mut level = vec![f64::INFINITY; n];
-        level[lowest] = low;
-        let mut flood = BinaryHeap::from([Reverse((rising(low), 0u32, lowest as u32))]);
-        (self.cells, self.outlet) = (Vec::with_capacity(n), vec![u32::MAX; n]);
+        let mut flood = BinaryHeap::new();
+        (self.cells, self.outlet) = (Vec::with_capacity(n - basin.len()), vec![u32::MAX; n]);
+        if basin.is_empty() {
+            level[lowest] = low;
+            flood.push(Reverse((rising(low), 0u32, lowest as u32)));
+        } else {
+            basin.iter().for_each(|&c| level[c as usize] = head(c as usize).max(floor[c as usize]));
+            basin.iter().for_each(|&c| reach(adj, floor, c as usize, (&mut level, &mut self.outlet), 0, &mut flood));
+        }
         while let Some(Reverse((_, _, c))) = flood.pop() {
             self.cells.push(c);
-            let i = c as usize;
-            for j in adj.other[adj.start[i] as usize..adj.start[i + 1] as usize].iter().map(|&j| j as usize) {
-                if level[j] == f64::INFINITY {
-                    // What entered the heap so far: the cells taken out of it and those in it.
-                    let entered = (self.cells.len() + flood.len()) as u32;
-                    (level[j], self.outlet[j]) = (floor[j].max(level[i]), c);
-                    flood.push(Reverse((rising(level[j]), entered, j as u32)));
-                }
-            }
+            reach(adj, floor, c as usize, (&mut level, &mut self.outlet), self.cells.len(), &mut flood);
         }
-        debug_assert_eq!(self.cells.len(), n, "the mesh is connected");
+        debug_assert_eq!(self.cells.len() + basin.len(), n, "the mesh is connected");
+        // The basin's liquid stands, and no cell is visited after it.
         self.stands = (0..n).map(|i| floor[i] < level[i] || level[i] <= low).collect();
+        basin.iter().for_each(|&c| self.stands[c as usize] = true);
         // The pass: the highest level first; at one level the standing liquid first, highest head first (as liquid levels
         // out), then the cells it passes on through, the last reached first (`r`: the order the flood reached them in).
         let key = |(r, &c): (usize, &u32)| (!rising(level[c as usize]), !self.stands[c as usize], if self.stands[c as usize] { !rising(head(c as usize)) } else { !(r as u64) }, c);
         let mut keys: Vec<_> = self.cells.iter().enumerate().map(key).collect();
         keys.sort_unstable();
         self.cells = keys.iter().map(|k| k.3).collect();
-        self.rank.resize(n, 0);
+        self.rank = vec![u32::MAX; n];
         self.cells.iter().enumerate().for_each(|(r, &c)| self.rank[c as usize] = r as u32);
     }
 
@@ -80,6 +82,19 @@ impl Order {
     #[inline]
     pub fn before(&self, a: usize, b: usize) -> bool {
         self.rank[a] < self.rank[b]
+    }
+}
+
+/// The flood reaches cell `c` (of `level`, m): each cell next to it not reached yet enters the heap at the higher of
+/// its floor and that level, `c` its way out, after the `taken` cells taken out of the heap and those in it (equal
+/// levels leave the heap in the order they entered it).
+fn reach(adj: &Adjacency, floor: &[f64], c: usize, (level, outlet): (&mut [f64], &mut [u32]), taken: usize, flood: &mut BinaryHeap<Reverse<(u64, u32, u32)>>) {
+    for j in adj.other[adj.start[c] as usize..adj.start[c + 1] as usize].iter().map(|&j| j as usize) {
+        if level[j] == f64::INFINITY {
+            let entered = (taken + flood.len()) as u32;
+            (level[j], outlet[j]) = (floor[j].max(level[c]), c as u32);
+            flood.push(Reverse((rising(level[j]), entered, j as u32)));
+        }
     }
 }
 
@@ -95,8 +110,7 @@ pub struct Crossed {
 /// sets the share of what it holds that leaves along each entry (summing to at most 1); each row then moves by those
 /// shares, no more than is left, and `crossed` gets what crossed each link.
 pub fn pass(order: &Order, adj: &Adjacency, q: &mut [f64], crossed: &mut Crossed, mut rule: impl FnMut(usize, &mut [f64], &mut [f64])) {
-    let n = order.cells.len();
-    let rows = q.len() / n.max(1);
+    let rows = q.len() / (adj.start.len() - 1).max(1);
     let most = adj.start.windows(2).map(|s| (s[1] - s[0]) as usize).max().unwrap_or(0);
     let (mut share, mut out) = (vec![0.0; most], Vec::with_capacity(most));
     crossed.links.clear();

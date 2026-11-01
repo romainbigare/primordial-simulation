@@ -50,7 +50,7 @@ fn downhill_one_rain_in_one_pass_or_in_parts() {
     let (start, other, a) = (cells.start(), cells.adj_cell(), cells.a());
     let adj = Adjacency { start, link: cells.adj_link(), other, a };
     let mut order = Order::default();
-    order.update(&adj, &z, |i| z[i]);
+    order.update(&adj, &z, |i| z[i], &[]);
     let down = |i: usize, e: usize| z[other[e] as usize] < z[i] && order.before(i, other[e] as usize);
     let rule = |i: usize, _: &mut [f64], share: &mut [f64]| {
         let es = start[i] as usize..start[i + 1] as usize;
@@ -103,7 +103,7 @@ fn the_order_follows_the_spill_levels() {
     let adj = Adjacency { start: &start, link: &link, other: &other, a: &a };
     let mut order = Order::default();
     for (wet, standing) in [(0.0, vec![4, 9]), (1.5, vec![4, 8, 9])] {
-        order.update(&adj, &floor, |i| floor[i].max(wet));
+        order.update(&adj, &floor, |i| floor[i].max(wet), &[]);
         assert!((1..n as usize).all(|i| order.before(i - 1, i)), "the pass goes down the valley");
         assert_eq!((0..n as usize).filter(|&i| order.stands[i]).collect::<Vec<_>>(), standing);
         assert_eq!([1, 2, 3, 4, 6].map(|i| order.outlet[i] as usize), [2, 3, 4, 5, 7], "the way out of each level stretch and of the pit");

@@ -35,7 +35,7 @@ pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
 }
 
 /// The heat of `mol` of the liquids `liq` leaving ground node `i`, at the node's temperature now, J.
-fn liquid_heat(w: &World, s: &Scratch, liq: &[usize], i: usize, mol: &[f64]) -> f64 {
+pub(super) fn liquid_heat(w: &World, s: &Scratch, liq: &[usize], i: usize, mol: &[f64]) -> f64 {
     let t = t_now(w, s, i);
     liq.iter().zip(mol).map(|(&k, m)| m * (s.sp[k].cp * t + s.sp[k].lf)).sum()
 }

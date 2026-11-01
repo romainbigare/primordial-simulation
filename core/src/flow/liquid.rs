@@ -1,6 +1,7 @@
 //! Liquid on and in the loose ground at each liquid step: the stores of the bed drain to the channels inside the cells
 //! (`drain::springs`); what may run off runs down the cells in one pass in the order of a priority flood
-//! (`solve::downhill`), doing work on its bed; then the liquid under the surface moves (`drain::under`).
+//! (`solve::downhill`), doing work on its bed; the liquid under the surface moves (`drain::under`); and the basin stands
+//! at one level (`basin::level`).
 
 use super::{bare_share, drain::{springs, under}, follow, land::{lift, solid, stand, wet, NONE}, potential::apply, range, year_weight, Scratch};
 use crate::solve::sweep::HALF_WAY;
@@ -54,6 +55,7 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
     let runs = springs(w, s, tmin, &slope, dt);
     surface(w, s, (&liq, tmin), (&slope, &runs), dt);
     under(w, s, &liq, tmin, dt);
+    super::basin::level(w, s, &liq, tmin);
 }
 
 /// The slope of the surface of each ground node down its steepest way (`Level::steepest`) to the lower neighbours (by
@@ -90,7 +92,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
     let (q0, cells) = (q.clone(), w.mesh.cells());
     let adj = Adjacency { start: cells.start(), link: cells.adj_link(), other: cells.adj_cell(), a: cells.a() };
     let mut order = std::mem::take(&mut s.order);
-    order.update(&adj, &s.z, |i| head(&q, i));
+    order.update(&adj, &s.z, |i| head(&q, i), &s.basin.cells);
     let (mut sent, mut worn, mut outs) = (vec![0.0; n], vec![0.0; n], Vec::new());
     // A land cell, as `World::is_land` says: its solid surface above 0 m (Flow's state of it).
     let (land, mut off_land): (Vec<bool>, Vec<f64>) = (s.z.iter().map(|&z| z > 0.0).collect(), vec![0.0; n]);
