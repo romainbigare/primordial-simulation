@@ -67,14 +67,20 @@ impl Scratch {
     /// takes its vaporisation enthalpy and its heat over that point.
     #[inline]
     pub(super) fn boil_off(&self, k: usize, i: usize, t: f64) -> f64 {
-        let p = &self.sp[k];
-        self.cap[i].max(1.0) * (t - p.boil) / (p.cp * (t - p.boil) + p.lv)
+        boil_off(&self.sp[k], self.cap[i], t)
     }
     /// Fusion enthalpy `m` mol of `k` hold in ground node `i`, J: none where `k` is solid or on its plateau.
     #[inline]
     pub(super) fn fusion(&self, k: usize, i: usize, m: f64) -> f64 {
         if self.state.pk[i] != k && melted(self, k, i) { m * self.sp[k].lf } else { 0.0 }
     }
+}
+
+/// Most mol of a substance `p` a ground node of heat capacity `cap`, J/K, at `t` K can boil with its heat over the
+/// substance's boiling point, cooling to it (`Scratch::boil_off`).
+#[inline]
+pub(super) fn boil_off(p: &Sp, cap: f64, t: f64) -> f64 {
+    cap.max(1.0) * (t - p.boil) / (p.cp * (t - p.boil) + p.lv)
 }
 
 /// Solid amount of `k` in ground node `i`, mol.

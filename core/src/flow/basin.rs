@@ -2,8 +2,9 @@
 //! liquid with one level. `find` names them at each full build of the ground's state; `level` shares the basin's liquid
 //! by that level once a month, after the runoff has reached it.
 
-use super::{drain::liquid_heat, land::{stand, wet}, liquid::book, Scratch};
-use crate::{store::{Class, LinkFlux}, World};
+use super::{air::blocks, drain::liquid_heat, land::{stand, wet, NONE}, liquid::book, potential::apply, Scratch};
+use crate::{store::{Class, LinkFlux}, World, AIR};
+use std::collections::BTreeMap;
 
 /// The basin: whether each cell is in it, and its cells in order.
 #[derive(Clone, Debug, Default)]
@@ -115,4 +116,37 @@ pub(super) fn level(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64) {
     let ks: Vec<u16> = liq.iter().map(|&k| k as u16).collect();
     s.basin = basin;
     book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &ks, mol: &mol, heat: &heat }]);
+    mix_heat(w, s);
+}
+
+/// Does cell `i` mix as one with the low basin under its air block (`mix_heat`) and face the air as one surface with
+/// the basin under its air node (`air::surf`)? A cell of the low basin off its melting plateaus (and whose state is
+/// not stale), with no soft cover and no cover of bodies.
+pub(super) fn one_surface(w: &World, s: &Scratch, i: usize) -> bool {
+    s.basin.is[i] && s.state.pk[i] == NONE && s.latent[i].hi != f64::MIN && s.cover[i][2] <= 0.0 && w.canopy[i] <= 0.0
+}
+
+/// The low basin under each air block mixes its heat in a month: its cells that mix as one (`one_surface`), with the same
+/// phases, each take the block's temperature, the heat of their sum over their summed heat capacity (apart from the
+/// fusion enthalpy each holds), as one heat flux from the cell of the most heat capacity to each other.
+fn mix_heat(w: &mut World, s: &mut Scratch) {
+    let mut block = vec![0; w.mesh.level(AIR).n()];
+    blocks(w).iter().enumerate().for_each(|(b, nodes)| nodes.iter().for_each(|&j| block[j as usize] = b));
+    let parent = w.mesh.cells().parent();
+    let mut by: BTreeMap<(usize, u64), Vec<usize>> = BTreeMap::new();
+    for &i in s.basin.cells.iter().filter(|&&i| one_surface(w, s, i as usize)) {
+        by.entry((block[parent[i as usize] as usize], s.latent[i as usize].molten)).or_default().push(i as usize);
+    }
+    let (mut a, mut b, mut heat) = (Vec::new(), Vec::new(), Vec::new());
+    for cells in by.values().filter(|c| c.len() > 1) {
+        let free = |i: usize| w.store.heat(Class::Ground)[i] - s.latent[i].held;
+        let t = cells.iter().map(|&i| free(i)).sum::<f64>() / cells.iter().map(|&i| s.cap[i]).sum::<f64>();
+        let hub = cells.iter().copied().max_by(|&p, &q| s.cap[p].total_cmp(&s.cap[q]).then(q.cmp(&p))).unwrap_or(cells[0]);
+        for &i in cells.iter().filter(|&&i| i != hub) {
+            a.push(hub as u32);
+            b.push(i as u32);
+            heat.push(s.cap[i] * t - free(i));
+        }
+    }
+    apply(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[], mol: &[], heat: &heat }], &[]);
 }

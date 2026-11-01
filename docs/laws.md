@@ -141,7 +141,10 @@ long step ends where short ones do.
   floors of its cells (each solid surface less its pore space, which the liquid fills first; sorted, so the level is
   exact). Each sea cell that holds more than its depth under that level gives the share of its liquid over it, with
   that share of its heat; mixed, it goes to the cells that hold less, by what each lacks. **Known limit:** the sea's
-  slope under wind and rotation is not modelled, and what levels it crosses the sea at once.
+  slope under wind and rotation is not modelled, and what levels it crosses the sea at once. **The sea of each air
+  block mixes its heat in a month** (`basin::mix_heat`): then its cells off their melting plateaus, with no soft cover
+  or cover of bodies and the same phases, each take the block's temperature (their heat apart from the fusion enthalpy
+  each holds, over their heat capacity; their floor's top too, which is part of each cell's ground node).
 - **Spill levels**: a priority flood over the ground gives each cell its spill level (Barnes, Lehman and Mulla 2014;
   `downhill::Order`), starting from the sea (from the lowest cell where there is none). Liquid stands below it (or in
   the lowest basin where there is no sea); elsewhere it passes on, counting as no higher than its ground, so it crosses
@@ -178,8 +181,8 @@ and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving t
 
 ### 1.4 The air's step, the sun and the bodies' share
 `flow::air::step`, every `AIR_STEP_DAYS` (10). First the gas of the bodies' nodes comes up into their air nodes and gases
-dissolve (1.5). Then each cell's exchange over the step with the air it sees is solved once, in its own implicit
-surface balance (Newton's steps about its end temperature, with its melting plateaus, 1.1), at the air of the step's
+dissolve (1.5). Then each cell's exchange over the step with the air it sees is solved once (the sea under one air
+node as one surface, below), in its own implicit surface balance (Newton's steps about its end temperature, with its melting plateaus, 1.1), at the air of the step's
 start: sunlight, heat radiation, sensible heat with the air touching it and what evaporates from it by its saturation
 deficit (`air::cells::exchange`). Its slopes with the air it sees come from that same balance, on the branch it ended
 on (the implicit function theorem: on a melting plateau with the share of the step it lasts, none at a soft cover's
@@ -211,6 +214,11 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
 - **The bodies' node** (`Class::Bodies`, one per cell): light the cover absorbs warms the ground, except the share its
   light reaction stores (`Cover::keep`), booked from the sun into this node; the cover takes it at its month, and what
   it does not claim goes back to the ground before each air step (`survey::release`).
+- **The sea as one surface** (`air::surf`): under each air node the sea's cells that mix as one (1.2) face the air as
+  one surface: one balance with their summed area, heat, heat capacity and gases, at their mean temperature (by heat
+  capacity), reflectance, height and air (by area) and the sunlight of their mean latitude. Each cell takes its share of
+  what it gives: of the heat by its heat capacity, so they warm alike, and of each gas by what it holds of it, so none
+  gives more than it holds.
 - **Gas from bodies and the cover** goes into the bodies' node with its latent heat; the air's step takes it up with
   its lift.
 - **Shade**: the cover's kinds share its light by height (4.5); bodies catch no light.

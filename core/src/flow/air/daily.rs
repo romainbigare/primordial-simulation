@@ -80,7 +80,7 @@ pub(super) struct Moved {
 /// The air nodes in blocks that eddies even out within a day: squares on the map of side
 /// sqrt(`mix` × `BLOCK_DAY`), in whole nodes, at least one. Each block's nodes, its hub first, in the order of their
 /// squares. An island smaller than a block is one block.
-fn blocks(w: &World) -> Vec<Vec<u32>> {
+pub(in crate::flow) fn blocks(w: &World) -> Vec<Vec<u32>> {
     let (air, map) = (w.mesh.level(AIR), &w.map);
     let spacing = (air.area().iter().sum::<f64>() / air.n() as f64).sqrt();
     let side = w.air_scale * ((w.cfg.mix * BLOCK_DAY).sqrt() / spacing).max(1.0) as usize;

@@ -1,7 +1,8 @@
 //! Radiation: sunlight, the heat radiation of the ground and the layers of the air, and contact heat between the
 //! ground and the air touching it, in the balance of a ground node's surface over a step (`Surface`).
 
-use super::super::{land::NONE, Scratch};
+use super::super::land::NONE;
+use super::surf::Surf;
 use crate::{math::one_minus_exp, units::SIGMA};
 use std::f64::consts::{PI, TAU};
 
@@ -58,12 +59,12 @@ pub(super) struct Air {
 }
 
 impl Air {
-    /// How the balance `bal` of ground node `i` over `dt` seconds moves, to first order on the branch it ended on, with
+    /// How the balance `bal` of the ground `g` over `dt` seconds moves, to first order on the branch it ended on, with
     /// a change `dtl` of the air's temperature, K, and `dgain` of the gas's heat at its end temperature, W/m²: its end
     /// temperature, K, and the heat it gives its air node and sends to space, J (the implicit function theorem on
     /// `balance`, whose fluxes are linear in the end temperature).
-    pub(super) fn moves(&self, s: &Scratch, (i, area, dt): (usize, f64, f64), sensible: f64, bal: &Balance, (dtl, dgain): (f64, f64)) -> [f64; 3] {
-        let (adt, t, f) = (area * dt, s.state.tg[i], self.f);
+    pub(super) fn moves(&self, g: &Surf, dt: f64, sensible: f64, bal: &Balance, (dtl, dgain): (f64, f64)) -> [f64; 3] {
+        let (adt, t, f) = (g.area * dt, g.tg, self.f);
         let (t4, by_air) = (4.0 * SIGMA * t * t * t, (sensible + self.slope) * dtl);
         let dts = bal.give * (by_air + dgain);
         [dts, adt * ((f * t4 + sensible) * dts - by_air), adt * (1.0 - f) * t4 * dts]
@@ -92,13 +93,13 @@ pub(super) struct Balance {
 }
 
 impl Surface<'_> {
-    /// The balance of ground node `i` over `dt` seconds: σT⁴ out, the air's layers back (`column`), contact heat
+    /// The balance of the ground `g` over `dt` seconds: σT⁴ out, the air's layers back (`column`), contact heat
     /// (`sensible`) and the gas's heat; solved implicitly about the temperature before the step, the node's heat capacity
     /// in series with any soft cover, whose top melts. A melting point the node is at or reaches in the step holds it
-    /// while the fusion enthalpy there lasts, `fusion` on its plateau (`plateau`), so a long step freezes and thaws as
-    /// short ones do.
-    pub(super) fn balance(&self, s: &Scratch, (i, area, dt): (usize, f64, f64), sensible: f64, fusion: f64) -> Balance {
-        let (adt, t, tl, f, down) = (area * dt, s.state.tg[i], self.air.tl, self.air.f, self.air.down);
+    /// while the fusion enthalpy there lasts, `Surf::fusion` on its plateau (`plateau`), so a long step freezes and
+    /// thaws as short ones do.
+    pub(super) fn balance(&self, g: &Surf, dt: f64, sensible: f64) -> Balance {
+        let (adt, t, tl, f, down, fusion) = (g.area * dt, g.tg, self.air.tl, self.air.f, self.air.down, g.fusion);
         let t3 = SIGMA * t * t * t;
         let num = self.sw + down + 3.0 * t3 * t + sensible * tl + self.gain - self.slope * self.t0;
         let den = 4.0 * t3 + sensible - self.slope;
@@ -106,7 +107,7 @@ impl Surface<'_> {
         // small to change it (`r den` below the last digit, where `1 / r` may overflow). The surface of a soft cover
         // warms no further than the cover's melting point `cap`: past it the top melts and the melt soaks in, so the
         // node takes all the heat that reaches the surface.
-        let [rc, tc, _] = s.cover[i];
+        let [rc, tc, _] = g.cover;
         // With it, its slopes with `num` and with `r`.
         let surface = |tn: f64, r: f64, cap: f64| {
             let by_r = (num - den * tn) / (1.0 + r * den).powi(2);
@@ -119,7 +120,7 @@ impl Surface<'_> {
             let (up, hs) = flux(ts);
             adt * (self.sw + down - up - hs + self.gain + self.slope * (ts - self.t0))
         };
-        let (c, free) = (s.cap[i].max(1.0), adt / s.cap[i] + rc);
+        let (c, free) = (g.cap.max(1.0), adt / g.cap + rc);
         // On the plateau at `tm` the node melts up to `melt` J or freezes up to `freeze` J. Where its heat over the step
         // melts or freezes all of it, it stays at `tm` only for the share `part` of the step that takes (with the heat
         // that brings it from `t` to `tm`), then goes on from `tm` for the rest; the surface is the mean of the two parts
@@ -137,11 +138,11 @@ impl Surface<'_> {
             let d_rest = rest[1] - rest[2] * adt / c * dpart;
             (part * at[0] + (1.0 - part) * rest[0], part * at[1] + (1.0 - part) * d_rest + (at[0] - rest[0]) * dpart)
         };
-        let (l, phi) = (s.latent[i], s.state.phi[i]);
-        let (mut ts, mut give) = if s.state.pk[i] != NONE { plateau(t, ((1.0 - phi) * fusion, phi * fusion)) } else { (surface(t, free, tc)[0], surface(t, free, tc)[1]) };
+        let (l, phi) = (g.latent, g.phi);
+        let (mut ts, mut give) = if g.pk != NONE { plateau(t, ((1.0 - phi) * fusion, phi * fusion)) } else { (surface(t, free, tc)[0], surface(t, free, tc)[1]) };
         // Off a plateau, the node's end temperature past the melting point below or above it.
         let end = t + net(ts) / c;
-        if s.state.pk[i] == NONE && l.hi != f64::MIN {
+        if g.pk == NONE && l.hi != f64::MIN {
             if l.lo > f64::MIN && end < (l.lo - l.held) / c {
                 (ts, give) = plateau((l.lo - l.held) / c, (f64::INFINITY, l.lat[0]));
             } else if l.hi < f64::MAX && end > (l.hi - l.held) / c {

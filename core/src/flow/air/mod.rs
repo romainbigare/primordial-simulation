@@ -10,8 +10,10 @@ mod radiation;
 mod rain;
 mod sky;
 mod step;
+mod surf;
 mod wind;
 
+pub(super) use daily::blocks;
 pub(super) use exchange::Sat;
 pub(crate) use radiation::LAYERS;
 pub use radiation::{column, declination, glow, insolation};
