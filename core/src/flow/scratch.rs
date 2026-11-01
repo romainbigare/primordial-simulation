@@ -170,6 +170,8 @@ pub struct Scratch {
     /// The four nearest air nodes of each ground cell on the square map, and their weights (`air::lerp`).
     pub(super) near: Vec<[u32; 4]>,
     pub(super) wt: Vec<[f64; 4]>,
+    /// Which cells see each air node and which nodes each node's cells see (`air::Corners`).
+    pub(super) corners: air::Corners,
     /// The area of the air each ground cell sees (`air::lerp`), m²; and how much colder than that air at its mean
     /// height the air touching the cell is, K (`air::touching`, at each air state).
     pub(super) seen: Vec<f64>,
@@ -353,4 +355,5 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
         })
         .unzip();
     s.seen = (0..mesh.cells().n()).map(|i| air::lerp(s, air.area(), i)).collect();
+    s.corners = air::Corners::of(air, &s.near, &s.wt);
 }

@@ -87,28 +87,21 @@ impl Response {
         let (air, outs, width) = (w.mesh.level(AIR), 1 + nx, Self::width(nx));
         let per = outs * outs;
         let mut g = Ground::new(air.n(), nx, (cx.t0.to_vec(), cx.x0.to_vec()), wet);
+        let c = &s.corners;
+        (g.near, g.at, g.slope) = (c.sees.clone(), c.sees_at.clone(), vec![0.0; c.sees.len() * per]);
         let out = |o: usize| if o == 0 { GAINS } else { UP + o - 1 };
         for j in 0..air.n() {
-            let first = g.near.len();
             for &i in air.children(j) {
-                let row = &self.rows[i as usize * width + FIXED..(i as usize + 1) * width];
+                let (i, row) = (i as usize, &self.rows[i as usize * width + FIXED..(i as usize + 1) * width]);
                 (0..outs).for_each(|o| g.base[j * outs + o] += row[out(o) * (2 + nx)]);
-                for (&q, &wt) in s.near[i as usize].iter().zip(&s.wt[i as usize]).filter(|c| *c.1 != 0.0) {
-                    let at = match g.near[first..].iter().position(|&e| e == q) {
-                        Some(at) => first + at,
-                        None => {
-                            g.near.push(q);
-                            g.slope.resize(g.slope.len() + per, 0.0);
-                            g.near.len() - 1
-                        }
-                    };
+                for (&at, &wt) in c.entry[i].iter().zip(&s.wt[i]).filter(|e| *e.1 > 0.0) {
+                    let at = at as usize;
                     for (o, slope) in g.slope[at * per..(at + 1) * per].chunks_exact_mut(outs).enumerate() {
                         let by = &row[out(o) * (2 + nx) + 1..out(o) * (2 + nx) + 1 + outs];
                         slope.iter_mut().zip(by).for_each(|(d, r)| *d += wt * r);
                     }
                 }
             }
-            g.at.push(g.near.len());
         }
         g
     }

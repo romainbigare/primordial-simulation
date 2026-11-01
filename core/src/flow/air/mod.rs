@@ -4,6 +4,7 @@
 
 mod book;
 mod cells;
+mod corners;
 mod daily;
 mod exchange;
 mod radiation;
@@ -13,6 +14,7 @@ mod step;
 mod surf;
 mod wind;
 
+pub(super) use corners::Corners;
 pub(super) use daily::blocks;
 pub(super) use exchange::Sat;
 pub(crate) use radiation::LAYERS;

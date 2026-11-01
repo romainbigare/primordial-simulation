@@ -190,18 +190,7 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64]) -> Wet {
         act.iter().enumerate().for_each(|(y, ac)| row[1 + y] = s.sat[ac.k].at(tl) / tl * seen);
     });
     // The cells that see each node, in the order of the cells: their entries `at[q]..at[q + 1]` (cell, corner).
-    let mut at = vec![0; na + 1];
-    let corners = |i: usize| (0..4).filter(move |&c| s.wt[i][c] > 0.0);
-    (0..n).for_each(|i| corners(i).for_each(|c| at[s.near[i][c] as usize + 1] += 1));
-    (0..na).for_each(|q| at[q + 1] += at[q]);
-    let (mut by, mut next) = (vec![(0u32, 0u8); at[na]], at.clone());
-    for i in 0..n {
-        for c in corners(i) {
-            let q = s.near[i][c] as usize;
-            by[next[q]] = (i as u32, c as u8);
-            next[q] += 1;
-        }
-    }
+    let (at, by) = (&s.corners.by_at, &s.corners.by);
     let nodes = crate::par::map_n(na, |q| {
         let list = &by[at[q]..at[q + 1]];
         let (row, node) = (&|i: u32| &cell[i as usize * (1 + nx)..(i as usize + 1) * (1 + nx)], &node);
