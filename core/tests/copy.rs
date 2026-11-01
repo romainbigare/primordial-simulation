@@ -7,7 +7,7 @@ use pcore::body::{MUT, STRENGTH};
 use pcore::rng::{Purpose, Rng};
 use pcore::units::DAY_S;
 use pcore::{body, brain, copy, World};
-use worldgen::testkit::{self, add, children, eater, kg, only_the_solid, out, put, put_kg_m2, scale, start, took_used, Books, BURN, DISSOLVED, LIQUID, MATTER, RICH};
+use worldgen::testkit::{self, add, brood, children, eater, kg, node_of, only_the_solid, out, put, put_kg_m2, scale, start, took_used, Books, Brain, Line, BURN, DISSOLVED, LIQUID, MATTER, RICH};
 use pcore::store::Class;
 
 /// A body given the minerals growth is built of up to the level it keeps (booked as an edit): what a test that builds
@@ -720,4 +720,81 @@ fn a_cell_holds_one_node_per_kind_and_stage() {
     assert_eq!(kinds.len(), after.len(), "more than one node of a kind and stage: {after:?}");
     assert!((after.iter().map(|x| x.2).sum::<f64>() - before).abs() < 1e-9 * before, "members {before} then {after:?}");
     books.assert_kept(&w, 1e-9);
+}
+
+/// A node of `n` members in cell `i`, of a lineage of its own of starting kind `root` with `hidden` hidden units, its
+/// repair gene at `repair` and a brood: placed.
+fn capped(w: &mut pcore::World, i: usize, (root, hidden): (u32, usize), repair: f32, n: f64) -> pcore::life::Handle {
+    let brain = Brain { hidden, ..Brain::only(pcore::brain::REST) };
+    let mut b = Line::new(w, &brain, root).founder(w, 1, i);
+    b.genes[pcore::body::REPAIR] = repair;
+    let mut b = node_of(w, b, n);
+    brood(w, &mut b, 1.0);
+    b.prepare(&w.chem, &w.cfg);
+    w.add(b)
+}
+
+/// What `cell_books` gives: the members and bodies of each (starting kind, brain sizes), the bodies, three sums and the
+/// stores.
+type CellBooks = (std::collections::BTreeMap<(u32, [usize; 4]), (f64, usize)>, usize, [f64; 3], Vec<f64>);
+
+/// The members and bodies of each (starting kind, brain sizes) in cell `i`, its bodies, and the member-weighted sums of the
+/// repair gene, of brood and of every store, and the heat, of its bodies.
+fn cell_books(w: &pcore::World, i: usize) -> CellBooks {
+    let mut by = std::collections::BTreeMap::new();
+    let (mut count, mut sums, mut store) = (0, [0.0; 3], vec![0.0; w.chem.ns()]);
+    for b in w.life.alive().filter(|b| b.cell as usize == i) {
+        let l = w.life.brain(b.lineage).expect("a lineage");
+        let x = by.entry((l.root, pcore::lineage::sizes_of(l))).or_insert((0.0, 0));
+        (x.0, x.1) = (x.0 + b.n(), x.1 + 1);
+        count += 1;
+        sums[0] += b.n() * b.genes[pcore::body::REPAIR] as f64;
+        (sums[1], sums[2]) = (sums[1] + b.brood, sums[2] + b.e);
+        store.iter_mut().zip(&b.store).for_each(|(s, x)| *s += x);
+    }
+    (by, count, sums, store)
+}
+
+/// The cap of a cell (`nodes::cap`): past `MAX_NODES` bodies the pair of one stage, starting kind and brain sizes
+/// nearest in genes merges, the smaller into the larger (`nodes::merge_taking` across lineages), keeping members,
+/// stores, heat, brood and the member-weighted genes; bodies of another kind or other sizes never join, and where no
+/// such pair is left the cell stays over the cap.
+#[test]
+fn the_cap_merges_only_within_a_kind_and_brain() {
+    let (mut w, i) = start();
+    let lay = pcore::body::Layout::of(&w.chem);
+    assert_eq!(w.life.alive().filter(|b| b.cell as usize == i).count(), 0, "the cell starts empty");
+    // Six of one kind and brain, near in genes; two of that kind with a smaller brain and three of another kind, far
+    // apart: 11 bodies.
+    for q in 0..6 {
+        capped(&mut w, i, (1, 12), -0.4 + 0.05 * q as f32, 10.0 + q as f64);
+    }
+    for (q, &(kind, n)) in [((1, 6), 20.0), ((1, 6), 21.0), ((5, 12), 30.0), ((5, 12), 31.0), ((5, 12), 32.0)].iter().enumerate() {
+        capped(&mut w, i, kind, q as f32, n);
+    }
+    let books = Books::now(&w);
+    let before = cell_books(&w, i);
+    w.in_domain(i, |w, d| pcore::nodes::cap(w, d, &lay, i));
+    let after = cell_books(&w, i);
+    assert_eq!(after.1, pcore::nodes::MAX_NODES, "bodies after the cap");
+    for ((k, x), y) in before.0.iter().zip(after.0.values()) {
+        assert!((x.0 - y.0).abs() <= 1e-9 * x.0, "members of kind and brain {k:?}: {} then {}", x.0, y.0);
+        let merged = if k.1[0] == 12 && k.0 == 1 { 3 } else { 0 };
+        assert_eq!(x.1 - y.1, merged, "bodies of kind and brain {k:?} that merged");
+    }
+    for (q, (x, y)) in before.2.iter().zip(&after.2).enumerate() {
+        assert!((x - y).abs() <= 1e-6 * x.abs().max(1.0), "sum {q} (repair gene x members, brood, heat): {x} then {y}");
+    }
+    for (k, (x, y)) in before.3.iter().zip(&after.3).enumerate() {
+        assert!((x - y).abs() <= 1e-9 * x.abs().max(1.0), "store {k}: {x} then {y}");
+    }
+    books.assert_kept(&w, 1e-9);
+
+    // Nine bodies of nine kinds and brains: no pair to merge.
+    let (mut w, i) = start();
+    for (q, kind) in [(1, 12), (1, 6), (1, 3), (5, 12), (5, 6), (6, 12), (6, 6), (7, 12), (7, 6)].into_iter().enumerate() {
+        capped(&mut w, i, kind, -0.4, 10.0 + q as f64);
+    }
+    w.in_domain(i, |w, d| pcore::nodes::cap(w, d, &lay, i));
+    assert_eq!(cell_books(&w, i).1, 9, "a cell with no pair of one kind and brain stays over the cap");
 }

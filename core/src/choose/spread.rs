@@ -13,19 +13,22 @@ use crate::nodes;
 /// (`trace`): from what that member did, and how much more its part's action raised their well-being than the mean of
 /// the members.
 pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, rng: &mut Rng) {
-    let x = members(node, c, rng);
+    let q = top_chances(c);
+    let x = members(node, &q, rng);
     // The members of each option in the node after acting, and the change of their well-being.
-    let (mut kept, mut gain) = ([0.0; OPTS], [0f32; OPTS]);
+    let (mut kept, mut gain, mut acted) = ([0.0; OPTS], [0f32; OPTS], 0.0);
     for o in (0..FIXED).chain(TO_BODY..OPTS).chain(FIXED..TO_BODY).filter(|&o| x[o] > 0.0) {
         let (g, left) = if o == REST { (0.0, Some(false)) } else { part_acts(w, d, node, c, k, (o, x[o]), rng) };
-        (gain[o], kept[o]) = (g, if left == Some(true) { 0.0 } else { x[o] });
+        (gain[o], kept[o], acted) = (g, if left == Some(true) { 0.0 } else { x[o] }, acted + x[o]);
         let Some(_) = left else { break };
     }
-    // (With no member drawn for any option, all rest.)
+    // The members who did nothing (none drawn for them, or their option not reached) rest, at no gain, and count in
+    // the mean as those who rested.
+    kept[REST] += (node.count - acted).max(0.0);
     let mean = kept.iter().zip(&gain).map(|(n, &g)| n * g as f64).sum::<f64>() / kept.iter().sum::<f64>().max(f64::MIN_POSITIVE);
     let mut u = rng.f64() * kept.iter().sum::<f64>();
     let a = (0..OPTS).find(|&o| { u -= kept[o]; u < 0.0 }).unwrap_or(REST);
-    node.trace = trace(w, node, c, k, a, gain[a] - mean as f32);
+    node.trace = trace(w, node, c, &q, k, a, gain[a] - mean as f32);
 }
 
 /// `count` × `chance` members, a part of less than one member being one member with that chance.
@@ -40,21 +43,30 @@ fn share(count: f64, chance: f64, rng: &mut Rng) -> f64 {
 /// one); its members of the others rest.
 const MOST_ACTS: usize = 4;
 
-/// The members of node `node` that do each of its `MOST_ACTS` likeliest options: count × chance (`share`). The members
-/// that move are one group, count
-/// × the sum of the chances to go in every direction, and the group takes the one direction drawn by its chance over that sum, so its option holds the
-/// group and the other directions none. A group that would leave less than one member behind is the whole node, with
-/// the chance that keeps the mean of the movers at count × chance.
-fn members(node: &Body, c: &Choice, rng: &mut Rng) -> [f64; OPTS] {
+/// The chances of the decision `c` over its `MOST_ACTS` likeliest options (the moves together one), the others none,
+/// brought back to a sum of 1: the chances a node's members spread by, and its brain learns from (`trace`).
+fn top_chances(c: &Choice) -> [f32; OPTS] {
     let moves = FIXED..TO_BODY;
-    let sum: f64 = c.p[moves.clone()].iter().map(|&p| p as f64).sum();
-    // Only its `MOST_ACTS` likeliest options (the moves together one) get members; the others none.
-    let chance = |o: usize| if moves.contains(&o) { sum } else { c.p[o] as f64 };
+    let sum: f32 = c.p[moves.clone()].iter().sum();
+    let chance = |o: usize| if moves.contains(&o) { sum } else { c.p[o] };
     let mut top: Vec<usize> = (0..OPTS).filter(|&o| !moves.contains(&o) || o == FIXED).filter(|&o| chance(o) > 0.0).collect();
     top.sort_by(|&a, &b| chance(b).total_cmp(&chance(a)).then(a.cmp(&b)));
     top.truncate(MOST_ACTS);
-    let mut x: [f64; OPTS] = std::array::from_fn(|o| if moves.contains(&o) || !top.contains(&o) { 0.0 } else { share(node.count, c.p[o] as f64, rng) });
-    if !top.contains(&FIXED) {
+    let kept: f32 = top.iter().map(|&o| chance(o)).sum();
+    let on = |o: usize| top.contains(&if moves.contains(&o) { FIXED } else { o });
+    std::array::from_fn(|o| if on(o) { c.p[o] / kept } else { 0.0 })
+}
+
+/// The members of node `node` that do each option by the chances `p` (`top_chances`): count × chance (`share`). The
+/// members that move are one group, count × the sum of the chances to go in every direction, and the group takes the
+/// one direction drawn by its chance over that sum, so its option holds the group and the other directions none. A
+/// group that would leave less than one member behind is the whole node, with the chance that keeps the mean of the
+/// movers at count × chance.
+fn members(node: &Body, p: &[f32; OPTS], rng: &mut Rng) -> [f64; OPTS] {
+    let moves = FIXED..TO_BODY;
+    let sum: f64 = p[moves.clone()].iter().map(|&p| p as f64).sum();
+    let mut x: [f64; OPTS] = std::array::from_fn(|o| if moves.contains(&o) { 0.0 } else { share(node.count, p[o] as f64, rng) });
+    if sum <= 0.0 {
         return x;
     }
     let chance = sum.min(1.0);
@@ -66,8 +78,8 @@ fn members(node: &Body, c: &Choice, rng: &mut Rng) -> [f64; OPTS] {
     if group > 0.0 {
         // The direction: the chance of each over their sum.
         let mut u = rng.f64() * sum;
-        let way = moves.clone().filter(|&o| c.p[o] > 0.0).find(|&o| { u -= c.p[o] as f64; u < 0.0 });
-        x[way.unwrap_or_else(|| moves.rev().find(|&o| c.p[o] > 0.0).expect("a group of movers has a direction"))] = group;
+        let way = moves.clone().filter(|&o| p[o] > 0.0).find(|&o| { u -= p[o] as f64; u < 0.0 });
+        x[way.unwrap_or_else(|| moves.rev().find(|&o| p[o] > 0.0).expect("a group of movers has a direction"))] = group;
     }
     x
 }
@@ -122,7 +134,7 @@ fn part_acts(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, (o
         back(d, node, s, m);
         return (gain, Some(false));
     }
-    m.trace = trace(w, &m, c, k, o, 0.0);
+    m.trace = trace(w, &m, c, &top_chances(c), k, o, 0.0);
     d.see(w, &mut m);
     d[s] = m;
     (gain, Some(true))

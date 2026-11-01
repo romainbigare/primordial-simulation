@@ -5,7 +5,10 @@ use pcore::body::{PHASE, TAKEN};
 use pcore::cover::{self, FROST};
 use pcore::event::EventKind;
 use worldgen::life::{Place, KINDS};
-use worldgen::testkit::{dry_land, eater, small_world, Books};
+use worldgen::testkit::{dry_land, eater, small_world, Books, MILD_LAT};
+
+/// Latitudes of the south and north edges of a world whose land freezes in winter, degrees.
+const COLD_LAT: [f64; 2] = [55.0, 57.3];
 
 /// The genes of the starting cover (kind 0).
 fn genes() -> [f32; cover::NG] {
@@ -112,4 +115,77 @@ fn grazing_takes_from_the_cover() {
     println!("grazed {grazed:.3} kg; the cover lost {lost:.3} kg to it");
     assert!(grazed > 0.0 && (lost - grazed).abs() <= 1e-9 * grazed, "grazed {grazed}, lost {lost}");
     books.assert_kept(&w, 1e-9);
+}
+
+/// The slots of cover in cell `i`: each one's genes and built cover, kg.
+fn slots_of(w: &pcore::World, i: usize) -> Vec<([f32; cover::NG], f64)> {
+    let Some(p) = cover::Parts::of(&w.chem) else { return Vec::new() };
+    let (d, mm) = (w.life.domain(i), p.mm(&w.chem));
+    let (c, k) = (&d.cover, d.slot(i));
+    cover::Cover::slots(k).filter(|&x| c.root[x] != cover::NO_ROOT).map(|x| (c.genes[x], c.built(&mm, x))).collect()
+}
+
+/// Seeds land by their kind and genes (`seed::settle`): cover of the starting kind placed where that kind grows joins
+/// its slot when within `APART` x `alike` steps (one slot, the genes the mean by built cover), and a variant farther
+/// away founds a slot of its own and keeps it through a month (slots merge only within the same distance). The books
+/// are kept.
+#[test]
+fn seeds_join_their_kind_or_found_a_slot() {
+    let (mut w, i) = start();
+    let books = Books::now(&w);
+    let (g, step) = (genes(), cover::RANGE[FROST].0);
+    assert!(slots_of(&w, i).is_empty(), "the cell starts bare");
+    assert!(cover::place(&mut w, i, g, 0, 0.1));
+    let mut near = g;
+    near[FROST] -= step;
+    assert!(cover::place(&mut w, i, near, 0, 0.1));
+    let one = slots_of(&w, i);
+    assert_eq!(one.len(), 1, "a seed one step away joins: {one:?}");
+    assert!((one[0].0[FROST] - (g[FROST] - 0.5 * step)).abs() < 1e-3 * step, "the joined frost gene {} is not the mean", one[0].0[FROST]);
+    let mut far = g;
+    far[FROST] -= 4.0 * step;
+    assert!(cover::place(&mut w, i, far, 0, 0.1));
+    assert_eq!(slots_of(&w, i).len(), 2, "a seed farther than {} steps founds its own slot", cover::APART * w.cfg.phys.alike);
+    pcore::step(&mut w);
+    let two = slots_of(&w, i);
+    assert_eq!(two.len(), 2, "the variant was merged within its month: {two:?}");
+    books.assert_kept(&w, 1e-9);
+}
+
+/// The frost gene of the cover is selected by the climate (laws.md 4.5): two variants of the starting cover, its own
+/// frost gene and one 3 steps (15 K) lower, sown on every land cell of a world at mild latitudes and of one at cold
+/// latitudes, compete for 60 years. Where winters freeze below the higher gene, the lower one (dearer to keep:
+/// `c_firm`) wins; where they do not, the higher one wins. The cover's mean frost gene (by built cover) ends near the
+/// higher one in the mild world and more than a step lower in the cold one (whose low coasts stay mild).
+#[test]
+fn the_frost_gene_falls_where_winters_are_cold() {
+    let mean_frost = |lat: [f64; 2]| {
+        let (chem, init) = worldgen::chemistry0();
+        let cfg = pcore::Config { lat_south: lat[0], lat_north: lat[1], ..Default::default() };
+        let mut w = worldgen::terrain::build(1, worldgen::terrain::island(16, 16), chem, &init, cfg);
+        pcore::step(&mut w);
+        worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
+        let (g, step) = (genes(), cover::RANGE[FROST].0);
+        let mut low = g;
+        low[FROST] -= 3.0 * step;
+        let land: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
+        for i in land {
+            cover::place(&mut w, i, g, 0, 0.05);
+            cover::place(&mut w, i, low, 0, 0.05);
+        }
+        let coldest = |w: &pcore::World| (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).map(|i| w.t_ground_last(i)).fold(f64::MAX, f64::min);
+        let mut winter = f64::MAX;
+        for _ in 0..60 * 12 {
+            pcore::step(&mut w);
+            winter = winter.min(coldest(&w));
+        }
+        let s = cover::sums(&w);
+        let (frost, built) = s.iter().fold((0.0, 0.0), |a, x| (a.0 + x.genes[FROST], a.1 + x.built));
+        (frost / built, winter, g[FROST] as f64, low[FROST] as f64)
+    };
+    let ((mild, mild_winter, high, low), (cold, cold_winter, ..)) = (mean_frost(MILD_LAT), mean_frost(COLD_LAT));
+    let step = cover::RANGE[FROST].0 as f64;
+    println!("mean frost gene {mild:.1} K at mild latitudes (coldest land {mild_winter:.1} K), {cold:.1} K at cold ones ({cold_winter:.1} K); sown {high} and {low}");
+    assert!(cold_winter < high - 3.0 && mild_winter > high, "the climates do not differ: coldest land {mild_winter} and {cold_winter} K");
+    assert!(mild > high - 3.0 && mild - cold > step, "no selection: mean frost gene {mild} K (mild) and {cold} K (cold)");
 }

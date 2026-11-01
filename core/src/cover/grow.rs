@@ -3,7 +3,7 @@
 //! ground (fixing what it lacks if it can), and sends seeds out. Everything it takes and gives is booked through the
 //! domain's moves, with its heat; its own side it books itself.
 
-use super::{dec, distance, Cover, Parts, Seed, EMPTY_KG, FIX, FIX_OFF, FROST, FUEL, HARD, LIGHT, MATTER, NG, NO_ROOT, NP, REPAIR, SEED, SLOTS, STORE, WALL, WALLS, MOIST};
+use super::{dec, distance, Cover, Parts, Seed, APART, EMPTY_KG, FIX, FIX_OFF, FROST, FUEL, HARD, LIGHT, MATTER, NG, NO_ROOT, NP, REPAIR, SEED, SLOTS, STORE, WALL, WALLS, MOIST};
 use crate::body::{AGE, PHASE, SPENT};
 use crate::chem::{Chemistry, Phase, Reaction};
 use crate::rng::{Purpose, Rng};
@@ -41,14 +41,22 @@ struct Slot {
 }
 
 /// What a cell's cover changes outside itself in a month: per substance the mol it takes in (+) or gives out (-), the
-/// heat its reactions release, J, and per substance its remains, mol.
+/// heat its reactions release, J, and per substance its remains, mol; and per gas what the cell's share of its air node
+/// offers, mol (infinite for what is not a gas: the ground's inputs are limited where they are read).
 struct Books {
     ext: [f64; MAX_SUBSTANCES],
     heat: f64,
     dead: [f64; MAX_SUBSTANCES],
+    air: [f64; MAX_SUBSTANCES],
 }
 
 impl Books {
+    /// The most units of `rx` the gas the cell's share of its air node still offers allows (what the cover took of it
+    /// this month counted), as the light reaction is cut (`light`).
+    fn room(&self, p: &Parts, rx: &Reaction) -> f64 {
+        let outside = rx.inputs.iter().filter(|q| !p.sub.contains(&(q.0 as usize)));
+        outside.map(|&(k, n)| (self.air[k as usize] - self.ext[k as usize]).max(0.0) / n as f64).fold(f64::INFINITY, f64::min)
+    }
     /// `x` units of `rx` run in slot `m` (its parts by `p`); what is not a part is the cell's to take or give.
     fn run(&mut self, chem: &Chemistry, p: &Parts, m: &mut [f64; NP], rx: &Reaction, x: f64) {
         if x <= 0.0 {
@@ -74,10 +82,12 @@ fn cell(w: &World, d: &mut Domain, p: &Parts, k: usize, dt: f64) {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let Domain { cover: c, moves, cells, counts, .. } = d;
     let i = cells[k] as usize;
-    let (j, area, mm, t) = (w.mesh.up(i, 0, AIR), w.mesh.cells().area()[i], p.mm(chem), w.t_ground_last(i));
+    let (j, area, mm, (t, plateau)) = (w.mesh.up(i, 0, AIR), w.mesh.cells().area()[i], p.mm(chem), w.thaw_last(i));
     moves.open(w, i, Node::new(Class::Cover, i));
-    // How wet its ground is (`Physics::wetness`, as bodies feel it): its key liquid's depth, in its pores and standing.
-    let depth = moves.amount(w, Node::ground(i), p.liquid) * chem.molar_volume(p.liquid, Phase::Liquid) / area;
+    // How wet its ground is (`Physics::wetness`, as bodies feel it): the depth of its key liquid that is liquid, in its
+    // pores and standing.
+    let liquid = moves.amount(w, Node::ground(i), p.liquid) * w.molten(p.liquid, i, t, plateau);
+    let depth = liquid * chem.molar_volume(p.liquid, Phase::Liquid) / area;
     let moist = ph.wetness(depth);
     let reach = (-w.life.env.get(i).map_or(0.0, |e| e[1]) / ph.light_depth).exp();
     // The light since the last step: its capture areas share it by height (their walls per m²), tallest first.
@@ -99,8 +109,12 @@ fn cell(w: &World, d: &mut Domain, p: &Parts, k: usize, dt: f64) {
     let caught = dl * a_abs;
     // The light its bodies' node set aside for it (`Cover::keep`), as far as the node holds it.
     let set_aside = (c.keep[k] as f64 * caught).min(moves.heat(w, Node::bodies(i))).max(0.0);
-    let mut b = Books { ext: [0.0; MAX_SUBSTANCES], heat: 0.0, dead: [0.0; MAX_SUBSTANCES] };
-    let stored = light(w, (moves, c), p, (k, i, j), &mut s, caught * reach / lit.max(1e-300), (t, dt), &mut b);
+    let air = {
+        let (seen, share) = (moves.seen(w, j), w.mesh.share(i, AIR));
+        std::array::from_fn(|kk| if kk < chem.ns() && chem.phase(kk, t) == Phase::Gas { seen(kk) * share } else { f64::INFINITY })
+    };
+    let mut b = Books { ext: [0.0; MAX_SUBSTANCES], heat: 0.0, dead: [0.0; MAX_SUBSTANCES], air };
+    let stored = light(w, (moves, c), p, (k, i, j), &mut s, caught * reach / lit.max(1e-300), (t, dt, liquid), &mut b);
     c.keep[k] = if caught > 0.0 { (stored / caught) as f32 } else { 0.0 };
     // Its minerals in the ground, shared out slot by slot (the tallest first) as each builds.
     let mut ground: [f64; MAX_SUBSTANCES] = std::array::from_fn(|x| if x < chem.ns() { moves.amount(w, Node::ground(i), x) } else { 0.0 });
@@ -131,11 +145,12 @@ fn cell(w: &World, d: &mut Domain, p: &Parts, k: usize, dt: f64) {
 /// The light reaction of each slot over `dt` at `t` K: what its share of the light caught (`per` of it per unit of
 /// absorbing area times shade) stores at `light_yield`, at most its capacity times its activity and the reaction's
 /// pace, both times what the air's share of the reaction's gas allows (`Physics::gas_factor`, the least over its gas
-/// inputs); all slots cut together to the key liquid in the ground and the gas the cell's share of its air node holds.
+/// inputs); all slots cut together to the key liquid in the ground that is liquid (`liquid`, mol) and the gas the cell's
+/// share of its air node holds.
 /// Each slot's `Slot::gain` is set: what one more kg would store, its light that of the bottom of its layer. Returns the
 /// energy stored, J.
 #[allow(clippy::too_many_arguments)]
-fn light(w: &World, (moves, c): (&Moves, &mut Cover), p: &Parts, (k, i, j): (usize, usize, usize), s: &mut [Slot; SLOTS], per: f64, (t, dt): (f64, f64), b: &mut Books) -> f64 {
+fn light(w: &World, (moves, c): (&Moves, &mut Cover), p: &Parts, (k, i, j): (usize, usize, usize), s: &mut [Slot; SLOTS], per: f64, (t, dt, liquid): (f64, f64, f64), b: &mut Books) -> f64 {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let rx = &chem.reactions[p.light];
     let (dh, pace) = (chem.dh(p.light), rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat));
@@ -154,9 +169,13 @@ fn light(w: &World, (moves, c): (&Moves, &mut Cover), p: &Parts, (k, i, j): (usi
     if all <= 0.0 {
         return 0.0;
     }
-    // What the cell offers of each input that is not a part: the gas of its share of its air node, the rest from its ground.
-    let share = w.mesh.share(i, AIR);
-    let offer = |kk: usize| if chem.phase(kk, t) == Phase::Gas { seen(kk) * share } else { moves.amount(w, Node::ground(i), kk) };
+    // What the cell offers of each input that is not a part: the gas of its share of its air node, the rest from its
+    // ground (of the key liquid, what is liquid).
+    let offer = |kk: usize| match kk {
+        _ if chem.phase(kk, t) == Phase::Gas => b.air[kk],
+        _ if kk == p.liquid => liquid,
+        _ => moves.amount(w, Node::ground(i), kk),
+    };
     let f = rx.inputs.iter().filter(|q| !p.sub.contains(&(q.0 as usize))).map(|&(kk, n)| offer(kk as usize) / (n as f64 * all)).fold(1.0, f64::min);
     for (q, v) in Cover::slots(k).enumerate() {
         b.run(chem, p, &mut c.mol[v], rx, x[q] * f);
@@ -175,16 +194,19 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
     // a firmer catalyst costs more).
     let cap = dec(g[LIGHT]) * dec(g[MOIST]) * chem.dh(p.light) * DAY;
     let firm = 1.0 + (chem.subs[p.liquid].melt - g[FROST] as f64).max(0.0) / ph.c_firm;
-    let cost = (s.built * days * (ph.c_basal + ph.c_light * cap * firm) + ph.c_leaf * s.leaf * days) * ph.repair(g[REPAIR] as f64) * s.act * pace;
+    let active = (s.built * days * (ph.c_basal + ph.c_light * cap * firm) + ph.c_leaf * s.leaf * days) * ph.repair(g[REPAIR] as f64) * pace;
+    let cost = active * s.act;
     let (units, fuel) = (cost / -chem.dh(p.burn), per_input(burn, p.sub[FUEL]).unwrap_or(1.0));
-    // (What it burns is worked out first: one less a share near one would lose a small fuel to rounding.)
-    let burnt = (units * fuel).min(c.mol[x][FUEL].max(0.0));
+    // (What it burns is worked out first: one less a share near one would lose a small fuel to rounding.) It burns no
+    // more than its fuel and the gas the cell's share of its air node still offers.
+    let burnt = (units * fuel).min(c.mol[x][FUEL].max(0.0)).min(b.room(p, burn) * fuel);
     let short = if units > 0.0 { 1.0 - burnt / (units * fuel) } else { 0.0 };
     b.run(chem, p, &mut c.mol[x], burn, burnt / fuel);
-    // Members of a field wear out at the rate of living as a body's do (laws.md 6.7); below its frost gene its frozen
-    // share dies as far as it is active, within `unfold` K.
-    let worn = cost / (s.built * ph.e_life * dec(g[REPAIR]));
-    let frozen = if t < g[FROST] as f64 { ((g[FROST] as f64 - t) / ph.unfold).min(1.0) * s.act } else { 0.0 };
+    // Members of a field wear out at the rate of living as a body's do, a dormant one at least at `Physics::dormant` of
+    // the active rate (laws.md 6.7); below its frost gene its frozen share dies as far as it is active, within
+    // `frost_k` K (laws.md 6.5).
+    let worn = active * s.act.max(ph.dormant) / (s.built * ph.e_life * dec(g[REPAIR]));
+    let frozen = if t < g[FROST] as f64 { ((g[FROST] as f64 - t) / ph.frost_k).min(1.0) * s.act } else { 0.0 };
     let mut lost = [0.0; 6];
     let mut left = 1.0;
     for (f, cause) in [(short, SPENT), (crate::math::one_minus_exp(worn), AGE), (frozen, PHASE)] {
@@ -230,10 +252,12 @@ fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool)
     // fixes lacks, its fuel counted.
     let minerals = || (0..chem.ns()).filter(|&k| need[k] > 0.0 && k != p.sub[FUEL]);
     let by = |k: usize| ground[k] / need[k];
+    // (Fixing takes its gas from the cell's share of the air node, as far as that still offers it.)
     let fixed = p.fix.filter(|_| g[FIX] > FIX_OFF).and_then(|r| {
         let rx = &chem.reactions[r];
         let &(m, out) = rx.outputs.iter().find(|o| need[o.0 as usize] > 0.0)?;
-        Some((rx, m as usize, out as f64, per_input(rx, p.sub[FUEL])?, dec(g[FIX]) * s.built * rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat) * s.act * dt))
+        let most = (dec(g[FIX]) * s.built * rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat) * s.act * dt).min(b.room(p, rx));
+        Some((rx, m as usize, out as f64, per_input(rx, p.sub[FUEL])?, most))
     });
     let others = minerals().filter(|&k| fixed.is_none_or(|f| f.1 != k)).map(by).fold(surplus / fpk, f64::min);
     let mut kg = minerals().map(by).fold(others, f64::min);
@@ -246,6 +270,8 @@ fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool)
         }
         b.run(chem, p, &mut c.mol[x], rx, y);
     }
+    // Building's work burns fuel with the gas the cell's share of its air node still offers.
+    kg = kg.min(b.room(p, burn) * burn_e / ph.c_copy.max(1e-300));
     if kg <= 0.0 {
         return;
     }
@@ -274,12 +300,12 @@ fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool)
     }
 }
 
-/// Alike kinds of the `k`th cell (`Physics::alike` steps in every gene, `distance`) share a slot: the lighter joins the
-/// heavier, the genes the mean by built cover, its starting kind the heavier's.
+/// Alike kinds of the `k`th cell (`APART` × `Physics::alike` steps in every gene, `distance`) share a slot: the lighter
+/// joins the heavier, the genes the mean by built cover, its starting kind the heavier's.
 pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], k: usize, ph: &crate::Physics) {
     for a in Cover::slots(k) {
         for z in a + 1..(k + 1) * SLOTS {
-            if c.root[a] == NO_ROOT || c.root[z] == NO_ROOT || distance(&c.genes[a], &c.genes[z]) > ph.alike {
+            if c.root[a] == NO_ROOT || c.root[z] == NO_ROOT || distance(&c.genes[a], &c.genes[z]) > APART * ph.alike {
                 continue;
             }
             let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };

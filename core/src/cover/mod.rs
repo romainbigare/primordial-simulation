@@ -49,6 +49,11 @@ pub const FIX: usize = 8;
 pub const NG: usize = 9;
 /// A fixing gene at or below this is off.
 pub const FIX_OFF: f32 = -10.0;
+/// The share of `Physics::alike` within which seeds join a slot of their kind and slots of a cell merge
+/// (`seed::settle`, `grow::merge_alike`); seeds farther from every slot of their kind found one of their own, so a
+/// variant keeps its genes apart and competes for light by height with the others (a rule of the model).
+pub const APART: f32 = 0.5;
+
 /// Mutation step (times `Physics::cover_mut`) and range of each gene.
 pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0)];
 /// A slot whose built cover is under this, kg, is empty.

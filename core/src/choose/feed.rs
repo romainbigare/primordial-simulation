@@ -39,9 +39,9 @@ pub const COVER: u64 = u64::MAX - 1;
 /// Take loose solids and liquids from the cell's ground and from its cover (grazing) by the intake law (`intake`, one
 /// search over both), no more than its stores have room for, each substance from the two in proportion to what each
 /// holds of it. A bite of cover takes all its parts in the field's proportions: what the body does not use (`Body::uses`:
-/// the frame without the enzyme that splits it) it carries as bulk, which counts toward what it can take (`intake`, the
-/// gut) and leaves at its next update with what it sheds. What it takes of the cover it pays to break as a bite does
-/// (`Cover::breaking`).
+/// the frame without the enzyme that splits it) is bulk, which counts toward what it can take (`intake`, the gut) and
+/// passes through it to the ground at once, with its heat (a gut passage of days, within the update's month: it never
+/// becomes the body's own frame). What it takes of the cover it pays to break as a bite does (`Cover::breaking`).
 pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
     let (i, chem) = (b.cell as usize, &w.chem);
     let (tg, kc, parts) = (w.t_ground_last(i), d.slot(i), crate::cover::Parts::of(chem));
@@ -79,6 +79,10 @@ pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
             b.store[k] += g;
         }
         d.counts.cover_lost[TAKEN as usize] += kg;
+        if bulk.iter().any(|&x| x > 0.0) {
+            let th = b.thermal(chem);
+            body::to_ground(w, d, b, &th, &bulk);
+        }
     }
     for k in 0..m.len() {
         let held = if chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k).max(0.0) } else { 0.0 };

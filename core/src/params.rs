@@ -99,8 +99,8 @@ pub struct Physics {
     pub wet_depth: f64,
     /// Temperature at which upkeep measures catalyst capacity and the costs are anchored, K
     pub t_cat: f64,
-    /// Width over which catalysts lose their shape above their `DENATURE` gene, K
-    pub unfold: f64,
+    /// Spread of a cell's microclimate: below a freezing point the frozen share of a body's or the cover's members grows from 0 to 1 over this, K
+    pub frost_k: f64,
     /// Each this many K of the `DENATURE` gene over `t_firm` adds the catalysts' upkeep once more, K
     pub c_firm: f64,
     /// Upkeep of strength, J per kg of body per day at strength 1
@@ -131,6 +131,8 @@ pub struct Physics {
     pub c_repair: f64,
     /// Exponent of a body's activity in its key liquid over the level it keeps (`Body::activity`)
     pub dormancy: f64,
+    /// Least activity a dormant body or slot of cover wears out at, a share of the active rate (`body::live`, `cover::grow`)
+    pub dormant: f64,
     /// Share of its body whose loss kills a member: a hit that tears it kills; starving to it, even chances
     pub lethal: f64,
 
@@ -293,7 +295,7 @@ impl Default for Physics {
             gas_ref: 3.8e-4,
             wet_depth: 0.01,
             t_cat: T_SURF,
-            unfold: 3.0,
+            frost_k: 3.0,
             c_firm: 20.0,
             c_strength: 1.31e4,
             c_basal: 6.3e4,
@@ -309,6 +311,7 @@ impl Default for Physics {
             e_life: 1e9,
             c_repair: 0.25,
             dormancy: 5.7,
+            dormant: 0.02,
             lethal: 0.5,
             c_move: 3.0,
             rho_pass: 5.0,

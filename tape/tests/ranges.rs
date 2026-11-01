@@ -21,7 +21,7 @@
 
 mod common;
 
-use common::run;
+use common::{run, LIFE_YEAR};
 use pcore::chem::Phase;
 use pcore::{Config, World};
 use std::fmt;
@@ -104,25 +104,35 @@ impl fmt::Display for Range {
     }
 }
 
-/// The liveness check's island: its side and years.
+/// The liveness check's island: its side, and the years it runs past the roster's last placement.
 const LIVE_SIDE: usize = 16;
-const LIVE_YEARS: u64 = 26;
-/// The starting kinds that are animals (bodies) in the roster.
-fn animal_kinds() -> Vec<usize> {
-    worldgen::life::KINDS.iter().enumerate().filter(|k| matches!(k.1.place, worldgen::life::Place::Bodies(_))).map(|k| k.0).collect()
+const LIVE_AFTER: u64 = 10;
+/// Kinds the liveness island may lose by their physics. 6, the small fast eaters of the cover: 68 individuals come in
+/// the year kinds 1 and 7 (eaters of the same cover) do; about two thirds of them die in their first year, of unpaid
+/// upkeep and of their short life (`REPAIR` -1.06), so whether the rest take hold on a 16 x 16 island is chance: the
+/// laws' small changes decide it.
+const MAY_DIE: [usize; 1] = [6];
+/// The starting kinds that are animals (bodies) in the roster, each with the year it is placed.
+fn animal_kinds() -> Vec<(usize, u64)> {
+    let kinds = worldgen::life::KINDS.iter().enumerate();
+    kinds.filter(|k| matches!(k.1.place, worldgen::life::Place::Bodies(_))).map(|k| (k.0, LIFE_YEAR + k.1.year)).collect()
 }
 
-/// `LIVE_YEARS` of a `LIVE_SIDE` island with the roster (seed 1) keep every element and the energy (`common::run`
-/// checks the books to 1e-12), leave no number that is not finite (`check::broken`), and end with cover and at least
-/// two kinds of animals alive.
+/// A `LIVE_SIDE` island with the roster (seed 1), run `LIVE_AFTER` years past the last kind's placement, keeps every
+/// element and the energy (`common::run` checks the books to 1e-12), leaves no number that is not finite
+/// (`check::broken`), and ends with cover and every animal kind placed `LIVE_AFTER` or more years before the end alive
+/// but those of `MAY_DIE`.
 #[test]
 fn the_world_lives_and_keeps_its_books() {
-    let (w, rec) = run(1, LIVE_SIDE, LIVE_YEARS, true, |_| {}, |_, w, _| assert_eq!(pcore::check::broken(w), None));
+    let years = animal_kinds().iter().map(|k| k.1).max().expect("animal kinds") + LIVE_AFTER;
+    let (w, rec) = run(1, LIVE_SIDE, years, true, |_| {}, |_, w, _| assert_eq!(pcore::check::broken(w), None));
     let cover = rec.last("cover_kg");
-    let alive: Vec<usize> = animal_kinds().into_iter().filter(|k| w.life.alive().any(|b| w.life.brains[b.lineage as usize].as_ref().is_some_and(|l| l.root as usize == *k))).collect();
-    println!("year {LIVE_YEARS}: cover {cover:.3e} kg, animal kinds alive {alive:?}");
+    let root_alive = |k: usize| w.life.alive().any(|b| w.life.brains[b.lineage as usize].as_ref().is_some_and(|l| l.root as usize == k));
+    let due: Vec<usize> = animal_kinds().into_iter().filter(|k| k.1 + LIVE_AFTER <= years).map(|k| k.0).collect();
+    let dead: Vec<usize> = due.iter().copied().filter(|&k| !root_alive(k) && !MAY_DIE.contains(&k)).collect();
+    println!("year {years}: cover {cover:.3e} kg, animal kinds due {due:?}, dead {dead:?}");
     assert!(cover > 0.0, "the cover died out");
-    assert!(alive.len() >= 2, "animal kinds alive: {alive:?}");
+    assert!(dead.is_empty(), "animal kinds placed {LIVE_AFTER} or more years before year {years} died out: {dead:?}");
 }
 
 /// The key numbers in the order `key_numbers` gives them: name, unit, reference and range.

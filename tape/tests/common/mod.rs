@@ -7,7 +7,7 @@ use worldgen::schedule::Schedule;
 use worldgen::testkit::Books;
 
 /// The year life starts in `ew run` (`--life-year`).
-const LIFE_YEAR: u64 = 2;
+pub const LIFE_YEAR: u64 = 2;
 
 /// Record the month that has just ended: the world's events, at a year's end its counts, and no time spent.
 pub fn record(rec: &mut Recorder, w: &mut World) {

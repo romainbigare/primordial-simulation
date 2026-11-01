@@ -20,22 +20,27 @@ pub(crate) fn crowd(w: &World, d: &mut Domain, lay: &Layout, i: usize) {
     cap(w, d, lay, i);
 }
 
-/// Bodies a cell keeps at most after its monthly merge; past them the most alike pair of one stage merges (a speed
-/// setting).
-const MAX_NODES: usize = 8;
+/// Bodies a cell keeps at most after its monthly merge; past them the most alike pair of one stage, starting kind and
+/// brain sizes merges (a speed setting).
+pub const MAX_NODES: usize = 8;
 
-/// While cell `i` holds more than `MAX_NODES` bodies that may be nodes, the pair of one stage nearest in genes (in
-/// mutation steps, `body::distance`) merges, whatever its lineage, room and part: the smaller joins the larger, taking
-/// its brain, born rows and lineage when that is another (`merge_taking`).
-fn cap(w: &World, d: &mut Domain, lay: &Layout, i: usize) {
+/// While cell `i` holds more than `MAX_NODES` bodies that may be nodes, the pair of one stage, one starting kind
+/// (`Lineage::root`) and one brain's sizes nearest in genes (in mutation steps, `body::distance`) merges, whatever its
+/// lineage, room and part: the smaller joins the larger, taking its brain, born rows and lineage when that is another
+/// (`merge_taking`). Where no such pair is left the cell stays over the cap.
+pub fn cap(w: &World, d: &mut Domain, lay: &Layout, i: usize) {
     let left: Vec<Handle> = d.cell(i).filter(|&s| may_be_node(w, &d[s])).collect();
     if left.len() <= MAX_NODES {
         return;
     }
     let m = left.len();
+    let kind = |d: &Domain, s: Handle| {
+        let b = &d[s];
+        (b.adult(&w.chem), d.brain(w, b.lineage).map(|l| (l.root, sizes_of(l))))
+    };
     let gap = |d: &Domain, s: Handle, t: Handle| {
-        let (a, b) = (&d[s], &d[t]);
-        if a.adult(&w.chem) != b.adult(&w.chem) { f32::INFINITY } else { distance(lay, &a.genes, &b.genes, |_| f32::INFINITY).unwrap_or(f32::INFINITY) }
+        let (ks, kt) = (kind(d, s), kind(d, t));
+        if ks.1.is_none() || ks != kt { f32::INFINITY } else { distance(lay, &d[s].genes, &d[t].genes, |_| f32::INFINITY).unwrap_or(f32::INFINITY) }
     };
     // The gap of each pair `p` < `q` lies at `p * m + q`.
     let mut far = vec![f32::INFINITY; m * m];
@@ -118,9 +123,10 @@ fn join_other(w: &World, d: &mut Domain, lay: &Layout, heads: Vec<Handle>) {
     }
 }
 
-/// The body at `s` joins the body at `t` of another lineage whose brain has its sizes: its members take `t`'s brain,
-/// born rows and lineage (the means of `t`'s rows stay `t`'s), letting go of what they hold.
-fn merge_taking(w: &World, d: &mut Domain, s: Handle, t: Handle) {
+/// The body at `s` joins the body at `t` of another lineage of its starting kind whose brain has its sizes: its members
+/// take `t`'s brain, born rows and lineage (the means of `t`'s rows stay `t`'s), letting go of what they hold.
+pub fn merge_taking(w: &World, d: &mut Domain, s: Handle, t: Handle) {
+    debug_assert_eq!(d.root(w, &d[s]), d.root(w, &d[t]), "a merge across starting kinds");
     let (born, rows, spread) = (d.born(w, &d[t]).to_vec(), d[t].rows.clone(), d[t].row_spread);
     let mut c = std::mem::take(&mut d[s]);
     let_go(w, d, &mut c, false);

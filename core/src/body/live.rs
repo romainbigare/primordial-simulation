@@ -40,8 +40,8 @@ pub(crate) fn live(w: &World, d: &mut Domain, b: &mut Body, tmp: &mut LiveTmp) -
     }
     let (heat, spare) = settle_upkeep(w, d, b, days, mass, tmp)?;
     drink(w, d, b, days);
-    keep_warm(w, d, b, heat, days * DAY);
-    let th = check_stores(w, d, b, tmp)?;
+    let stands = keep_warm(w, d, b, heat, days * DAY);
+    let th = check_stores(w, d, b, stands, tmp)?;
     crate::copy::grow(w, d, b, days, th.t);
     if !starved(w, d, b, from, &mut tmp.dead) {
         return Err(SPENT);
@@ -57,15 +57,18 @@ pub(crate) fn live(w: &World, d: &mut Domain, b: &mut Body, tmp: &mut LiveTmp) -
 /// wear gives (`lose_share`). Returns the heat it released, J, and its spare: what its fuel could release against its
 /// upkeep, up to `MARGIN`.
 fn settle_upkeep(w: &World, d: &mut Domain, b: &mut Body, days: f64, mass: f64, tmp: &mut LiveTmp) -> Result<(f64, f64), u8> {
-    let (chem, t) = (&w.chem, b.temp(&w.chem));
-    let cost = upkeep(w, b, days, mass, t, b.activity(chem, &w.cfg.phys));
+    let (chem, t, act) = (&w.chem, b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys));
+    let cost = upkeep(w, b, days, mass, t, act);
     let spare = b.fuel(chem, t).min(MARGIN * cost) / cost.max(1e-300);
     let paid = burn(w, d, b, cost);
     // Wear: the energy its upkeep turns over per kg of the body that is built (the tissue that wears, not the fuel it
     // carries), over what it can turn over in its life (`Physics::e_life`). Its members die at the rate of the wear: over
     // the time the share 1 - e^-wear of them (an individual, with that chance), so they live that life on average,
-    // whatever the length of its updates.
-    let worn = cost / (b.built(chem).max(1e-9 * mass) * w.cfg.phys.e_life * b.dec(REPAIR));
+    // whatever the length of its updates. A dormant body wears at least at `Physics::dormant` of its active rate, as
+    // seeds and spores keep a slow metabolism and live years to decades, not for ever (Walters 1998).
+    let floor = w.cfg.phys.dormant;
+    let wearing = if act >= floor { cost } else { upkeep(w, b, days, mass, t, floor) };
+    let worn = wearing / (b.built(chem).max(1e-9 * mass) * w.cfg.phys.e_life * b.dec(REPAIR));
     let short = if cost > 0.0 { 1.0 - paid / cost } else { 0.0 };
     for (f, cause) in [(short, SPENT), (one_minus_exp(worn), AGE)] {
         if f > 1e-9 && !lose_share(w, d, b, f, cause, &mut tmp.dead, &b.thermal(chem)) {
@@ -102,13 +105,13 @@ fn drink(w: &World, d: &mut Domain, b: &mut Body, days: f64) {
 /// with the walls around it, 3.4) to its ground, so it stands that much above the ground. Below its `KEEP_T` gene it
 /// burns what its coat loses at that temperature beyond it; above its `COOL_T` gene it evaporates its key liquid for the
 /// excess, at its latent heat, never below its safe minimum. It then stands at that temperature (`settle_heat`).
-fn keep_warm(w: &World, d: &mut Domain, b: &mut Body, heat: f64, dt: f64) {
+fn keep_warm(w: &World, d: &mut Domain, b: &mut Body, heat: f64, dt: f64) -> f64 {
     let (chem, p, i) = (&w.chem, &w.cfg.phys, b.cell as usize);
     let tg = w.t_ground_last(i);
     let coat = b.conductance(p.m_ref, b.mass(chem));
     let g = crate::bond::enclosure(w, d, b).map_or(coat, |x| 1.0 / (1.0 / coat + 1.0 / x.g)) * dt;
     if g <= 0.0 {
-        return;
+        return b.temp(chem);
     }
     let (keep, cool) = (b.gene(KEEP_T), b.gene(COOL_T));
     let free = tg + heat / g;
@@ -120,6 +123,7 @@ fn keep_warm(w: &World, d: &mut Domain, b: &mut Body, heat: f64, dt: f64) {
         free
     };
     settle_heat(w, d, b, t);
+    t
 }
 
 /// It evaporates its key liquids to take `q` J away, at each one's vaporisation enthalpy, never below its safe minimum:
@@ -177,9 +181,11 @@ fn lose_share(w: &World, d: &mut Domain, b: &mut Body, f: f64, cause: u8, dead: 
     thin(w, d, b, f, dead, cause, th)
 }
 
-/// A store below its safe minimum kills it (a node: its poorest members, `starve`); a boiled key liquid kills it, a
-/// frozen one kills the share frozen. Returns the plateau state it is left at.
-fn check_stores(w: &World, d: &mut Domain, b: &mut Body, tmp: &mut LiveTmp) -> Result<Melting, u8> {
+/// A store below its safe minimum kills it (a node: its poorest members, `starve`); a boiled key liquid kills it; below
+/// a key liquid's melting point the share of its members that freezes at `stands` K, the temperature its heat holds it
+/// at over its ground (`keep_warm`, not the melting plateau its liquid passes on the way), dies (laws.md 6.5). Returns
+/// the plateau state it is left at.
+fn check_stores(w: &World, d: &mut Domain, b: &mut Body, stands: f64, tmp: &mut LiveTmp) -> Result<Melting, u8> {
     let mass = b.mass(&w.chem);
     let mut th = b.thermal(&w.chem);
     if b.lacking(&w.chem, mass, th.t) {
@@ -193,10 +199,10 @@ fn check_stores(w: &World, d: &mut Domain, b: &mut Body, tmp: &mut LiveTmp) -> R
     if (0..ns).any(|k| key(k) && th.t > chem.subs[k].boil) {
         return Err(PHASE);
     }
-    let frozen = |k: usize| match th.on {
-        Some((j, molten)) if j == k => 1.0 - molten,
-        _ => (th.t < chem.subs[k].melt) as u8 as f64,
-    };
+    // Its members' microclimates spread over `frost_k` around the temperature it stands at: below the melting point the
+    // share (melt - T) / `frost_k` of them freezes, as far as they are active (a dormant body holds little free liquid).
+    let act = b.activity(chem, &w.cfg.phys);
+    let frozen = |k: usize| ((chem.subs[k].melt - stands) / w.cfg.phys.frost_k).clamp(0.0, 1.0) * act;
     let f = (0..ns).filter(|&k| key(k)).map(frozen).fold(0.0, f64::max);
     if f > 0.0 {
         if f >= 1.0 - 1e-9 || !lose_share(w, d, b, f, PHASE, &mut tmp.dead, &th) {

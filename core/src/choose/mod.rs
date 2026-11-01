@@ -102,7 +102,7 @@ pub fn act(w: &World, d: &mut Domain, b: &mut Body, lived: &Lived, t: &mut ActTm
     if b.n() > 1.0 {
         spread::spread(w, d, b, &c, &k, &mut rng);
     } else {
-        b.trace = trace(w, b, &c, &k, c.a, 0.0);
+        b.trace = trace(w, b, &c, &c.p, &k, c.a, 0.0);
         act_as(w, d, b, &c, &k, (c.a, None), &mut rng);
     }
 }
@@ -224,8 +224,9 @@ fn noise(w: &World, b: &mut Body, s: Shape, t: &ActTmp, rng: &mut Rng) -> ([f32;
 /// The trace of the decision for learning (none if the body does not learn): the hidden layer; per learned row how its
 /// output moves the log-chance of option `a`, what was done (for the signal and shape the natural gradient, so their
 /// noise does not use up the step); and `adv`, how much more that raised the well-being of the members who did it than
-/// the mean of a node's members (`spread`; 0 for an individual).
-fn trace(w: &World, b: &Body, c: &Choice, k: &Kit, a: usize, adv: f32) -> Vec<f32> {
+/// the mean of a node's members (`spread`; 0 for an individual). `chances`: the chances the action was drawn by (a node's
+/// over its likeliest options, `spread::top_chances`), so the gradient's mean is 0.
+fn trace(w: &World, b: &Body, c: &Choice, chances: &[f32; OPTS], k: &Kit, a: usize, adv: f32) -> Vec<f32> {
     if b.learn_rate() <= 0.0 || w.cfg.null {
         return Vec::new();
     }
@@ -235,7 +236,7 @@ fn trace(w: &World, b: &Body, c: &Choice, k: &Kit, a: usize, adv: f32) -> Vec<f3
     v[..nh].copy_from_slice(&t.thought.h);
     v[nh + l] = adv;
     let cr = &mut v[nh..nh + l];
-    let g = |o: usize| (o == a) as u8 as f32 - c.p[o];
+    let g = |o: usize| (o == a) as u8 as f32 - chances[o];
     for (q, cq) in cr[..FIXED].iter_mut().enumerate() {
         *cq = g(q);
     }

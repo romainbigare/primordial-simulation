@@ -431,8 +431,9 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
   for any body to take, and a lineage's brain spreads to alike bodies of another. Selection acts between cells and
   lineages, not within a cell.
 - **Two caps, speed tools.** After its merge a cell keeps at most `MAX_NODES` (8) bodies (`nodes::cap`): past them
-  the pair of one stage nearest in genes (in mutation steps) merges, whatever its lineage, room and part, the smaller
-  into the larger, taking its brain, born rows and lineage. A starting kind keeps at most `MAX_LINEAGES` (8) living
+  the pair of one stage, one starting kind and one brain's sizes nearest in genes (in mutation steps) merges, whatever
+  its lineage, room and part, the smaller into the larger, taking its brain, born rows and lineage; where no such pair
+  is left the cell stays over the cap, so kinds and brains never mix. A starting kind keeps at most `MAX_LINEAGES` (8) living
   lineages (`lineage::resize`): past them a body whose sizes change joins the living lineage of its kind nearest in
   sizes, and stays in its own if that is the nearest. Both make bodies of different heritage share a brain; they
   bound the work, not a law.
@@ -462,19 +463,21 @@ task per domain), slot by slot, the tallest (most walls per m²) first:
 - **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
   10^`LIGHT` × 10^`MOIST` mol per kg of built cover per s, times the reaction's pace k e^(−Ea/T) over its value at
   `t_cat`, times its activity a = min(1, wet / 10^`MOIST`)^`dormancy` (wet: how wet its ground is as bodies feel it,
-  d / (d + `wet_depth`), d the depth of its key liquid in its pores and standing, `Physics::wetness`); both the light
+  d / (d + `wet_depth`), d the depth of its key liquid that is liquid, in its pores and standing, `Physics::wetness`); both the light
   and the capacity limit go with the air's share x of the reaction's gas as (x − `gas_floor`) / (x + 2 `gas_floor`)
   over its value at `gas_ref` (`Physics::gas_factor`; the light-limited rate of Farquhar, von Caemmerer and Berry
   1980): nothing at or below the floor, so the cover cannot strip the air of that gas. All kinds of a cell are cut
-  together to the key liquid of its ground and the carbon gas of its share of its air node. A cover that works on drier ground works more slowly: its capacity goes with its
+  together to the liquid share of its ground's key liquid and the carbon gas of its share of its air node; its
+  burnings and fixing take their gas from what that share still offers, so the cover never takes more of the air's
+  gas than its cell's share holds (`grow::Books::room`). A cover that works on drier ground works more slowly: its capacity goes with its
   moisture need. The light its bodies' node set aside for it (`Cover::keep`, 1.4) pays first; what it stores beyond
   that comes from its ground, which that light warmed.
 - **Upkeep**, paid by burning its fuel (reaction 1) with the air's oxidising gas: per kg of built cover and day
   `c_basal` plus `c_light` × what its capacity could store in a day (dearer by 1 + (melting point of the key liquid −
   `FROST`) / `c_firm` for a cover that stands the cold), plus `c_leaf` per m² of capture area; times its repair factor
   (`Physics::repair`), its activity and the burning's pace at T (seasons come from temperature only). The share unpaid
-  dies (`SPENT`). **Wear**: the share 1 − e^−wear dies (`AGE`), wear its upkeep over (built cover × `e_life` ×
-  10^`REPAIR`), as bodies wear (6.7). **Frost**: below its `FROST` gene the share min(1, (`FROST` − T) / `unfold`) × a
+  dies (`SPENT`). **Wear**: the share 1 − e^−wear dies (`AGE`), wear its upkeep at an activity of at least `dormant`
+  over (built cover × `e_life` × 10^`REPAIR`), as bodies wear (6.7). **Frost**: below its `FROST` gene the share min(1, (`FROST` − T) / `frost_k`) × a
   dies (`PHASE`).
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
   out as kinds build, tallest first) build body matter, walls (10^`WALLS` kg per kg of matter) and the hard solid
@@ -488,10 +491,13 @@ task per domain), slot by slot, the tallest (most walls per m²) first:
   not pay: what a kg more would store with the light at the bottom of its layer (`math::shade`) is less than a kg's
   upkeep, so the slot is **full** (`Cover::full`) and stops thickening where its lowest leaves would not pay for
   themselves (Monsi and Saeki 1953; Hirose 2005). When every domain has had its month the seeds land (`cover::land`),
-  domain by domain in the order made: they join the most alike kind of the cell (every gene within `alike` steps,
-  `cover::distance`; the genes the mean by built cover; they die if that slot is full), else an empty slot, else the
-  lightest slot if they outweigh its built cover (whose cover dies as remains); else they die as remains. Alike kinds
-  of a cell share one slot (`merge_alike`). Selection is between kinds and cells: what grows better sends more seeds.
+  domain by domain in the order made: they join the most alike slot of their starting kind in the cell (every gene
+  within `APART` (0.5) × `alike` steps, `cover::distance`; the genes the mean by built cover; they die if that slot is
+  full), else an empty slot, else the lightest slot if they outweigh its built cover (whose cover dies as remains);
+  else they die as remains. So a variant farther than that from its kind founds a slot of its own and competes with
+  the others for light by height. Slots of a cell within the same distance share one (`merge_alike`). Selection is
+  between slots and cells: what grows better sends more seeds (the frost gene falls where winters are cold,
+  `core/tests/cover.rs`).
 - **What it takes and gives**: liquids and minerals from and to its ground with their heat; gases from the air (with
   their heat at the air's temperature and their latent heat) and to its cell's bodies' node (with theirs), as bodies
   breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 21,
@@ -522,8 +528,10 @@ faces, 0: looks, signals, well-being, past dealings); up to 3 parts. Walls and c
 
 ### 5.3 Actions
 One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;
-a node spreads its members over its `MOST_ACTS` (4) likeliest actions by those chances (the moves counted as one;
-its members of the others rest, a speed setting; `choose::spread`). Every body decides at every update, once a
+a node spreads its members over its `MOST_ACTS` (4) likeliest actions (the moves counted as one; a speed setting) by
+their chances brought back to a sum of 1 (`spread::top_chances`), and its brain learns from those chances, so the
+gradient's mean is 0; members drawn for no action rest and count in the mean the advantage is measured from
+(`choose::spread`). Every body decides at every update, once a
 month. The members of a node that move leave as one group: count × the sum of the chances to go in every
 direction, at most all (less than one member: one member with that chance; fewer than one member left behind: the whole node,
 with the chance that keeps the mean at count × that share), all in the one direction drawn by its chance over the sum,
@@ -542,7 +550,8 @@ of; not what it cannot use, nor the key liquids it drinks, 6.4): per kg of suppl
 minerals it builds of count in s as food does: one search finds all it uses, so rich ground shortens it. **Grazing**
 (`feed::take_node`): a bite of the cover takes all its parts in the field's proportions; what the body does not use
 (the frame without the enzyme of reaction 27) is bulk that fills its gut (all it takes is at most its take × supply)
-and leaves with what it sheds at its next update, giving nothing (Van Soest 1994). Another body's
+and passes through it to the ground at once with its heat, giving nothing and never becoming the body's own frame
+(a gut passage of days, Van Soest 1994). Another body's
 members lie over the cell like the ground's food: a bite reaches those the swept area holds (one individual body
 whole, by one draw with the chance the area holds it, whether a node or an individual takes it; of a node, less than one member is one whole member met with that chance:
 it takes, tears and pays that meeting's outcome times the chance), limited by force against theirs. **Giving** (`Body::spare`) is of what the other uses, of stores only (no
@@ -618,8 +627,13 @@ catches no rain and has no roots: its minerals come from what it digests (6.9).
 
 ### 6.5 Activity and dormancy
 `Body::activity`: a = min(1, l / l*)^`dormancy`, l the key liquid, l* its level. It multiplies upkeep and the building
-allowance: a dry body pays and ages almost nothing and can hardly act. **Frost**: a key liquid below its melting point
-kills the share frozen (`PHASE`); **boiling** kills.
+allowance: a dry body pays almost nothing and can hardly act; it wears at an activity of at least `dormant` (0.02),
+so a dormant body lives about 50 times its active life, as dry seeds and spores do. **Frost** (`live::check_stores`): its members
+stand in microclimates that spread over `frost_k` (3 K) around the temperature T its heat holds it at over its ground
+(6.3; not the melting plateau its liquid passes on the way), so below a key liquid's melting point
+the share min(1, (melt − T) / `frost_k`) × a freezes and dies (`PHASE`), an individual with that chance: a dormant body
+(little free liquid) lives through frost, as seeds and spores do; the cover freezes by the same law below its `FROST`
+gene (4.5). **Boiling** kills.
 
 ### 6.6 Growth
 `copy::grow`. Its fuel and minerals become matter at `c_copy` of work per kg, paid by burning (`body::pay`), as far as
