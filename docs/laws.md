@@ -46,8 +46,8 @@ came (`life::Cell`). A body's id is the cell it was placed in and that cell's co
 halves, parts of nodes acting apart, members drawn); it never changes, and its random draws are keyed by it. The cells
 are cut into `Config::chunks` runs of neighbouring indices, the same for any number of threads. **The parallel pass**:
 each chunk is one task on the pool (`life::run`), its cells taken out of the world, the world read only; in each cell
-in order, each body that holds no part and is inside none updates, in the order they came (a body placed in the pass
-first updates at the next month). A body perceives the others only by their faces (`survey::Faces`: id, members,
+in order, each body updates, in the order they came (a body placed in the pass first updates at the next month); the
+parts it reads are as they were at the pass's start. A body perceives the others only by their faces (`survey::Faces`: id, members,
 visible traits, signal, well-being, room), made at the batch's start; it takes from or gives to a body it saw only if
 that body still lives and is not leaving its cell. **A cell's view of the store** (`store::Moves`): its ground, bed and
 bodies' node as the store held them at the pass's start with its own moves since, and **its share of its air node**
@@ -62,10 +62,10 @@ The lineages and born rows a chunk makes have ids of the chunk until it ends, wh
 When the chunks end the world takes their events, counters and queues chunk by chunk, and books their moves (each
 array of the store by one task, the changes cell by cell in the order of the cells, `store::book_by_array`), so every
 sum runs in the order of the cells and the world is the same for any count of threads and of chunks. **The serial
-pass** (`life::land`): the queue in rounds, each a serial step on one cell (`World::in_cell`): first the moves and the
-litters land, then the watches and the part acts, in the order queued; what they queue is the next round's. Then the
-bodies that hold or are inside a part update whole, one by one in the order of the cells, each followed by what it
-queued. Last the holders of each lineage and born rows are counted from the bodies (`Life::recount`): a lineage left
+pass** (`life::land`): the queue in rounds: first the moves and the litters land, each chunk of the cells they go to on
+the pool, in a chunk cell by cell and in a cell in the order queued; then the watches and the part acts one by one, in
+the order queued, each a serial step on one cell (`World::in_cell`); what they queue is the next round's. Last the
+holders of each lineage and born rows are counted from the bodies (`Life::recount`): a lineage left
 with none dies out, born rows left with none are freed. Each entry is applied by its law on the bodies and parts as
 they are then. A move lands (`choose::land_move`): the body enters the cell, carries what it holds if it paid to (else
 it lets go of it), counts in the cell's crossings, and its push breaks the bodies there at the next survey; members of

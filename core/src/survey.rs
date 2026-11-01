@@ -159,23 +159,20 @@ fn traffic(w: &mut World) {
 
 /// Update every living body, all at the month's first day (laws.md 0). First the parallel pass: the cells are taken out
 /// of the world in chunks (`life::run`), and each chunk runs, on a thread of the pool with the feature `threads`, its
-/// bodies that hold no part and are inside none, cell by cell, and in a cell in the order they came, with the world
-/// read only. They see each other as they were at the batch's start (`Faces`) and the store as their cell's moves leave
-/// it (`store::Moves`); what they do outside their cell is queued (`life::Entry`), and the lineages and born rows they
-/// make are provisional until the chunk ends. Then the serial pass (`life::land`): the moves and litters land and the
-/// other entries are applied, one by one; then the bodies that hold or are inside a part update, each a serial step on
-/// its cell (`World::in_cell`) with what it queued applied after it. Last the holders of each lineage and born rows are
-/// counted: those left with none die out or are freed.
+/// bodies cell by cell, and in a cell in the order they came, with the world read only. They see each other as they
+/// were at the batch's start (`Faces`), the parts as they were then, and the store as their cell's moves leave it
+/// (`store::Moves`); what they do outside their cell or to a part is queued (`life::Entry`), and the lineages and born
+/// rows they make are provisional until the chunk ends. Then the serial pass (`life::land`): the moves and litters
+/// land and the other entries are applied. Last the holders of each lineage and born rows are counted: those left with
+/// none die out or are freed.
 pub fn batch(w: &mut World) {
     w.life.compact();
     w.life.recount();
-    let holds = |b: &crate::body::Body| b.hold.is_some() || b.inside.is_some();
-    let serial: Vec<(usize, u64)> = w.life.living().filter(|x| holds(x.1)).map(|(h, b)| (h.cell as usize, b.id)).collect();
     let bounds = life::bounds(w);
     let mut per = vec![0usize; bounds.len() - 1];
-    w.life.living().filter(|x| !holds(x.1)).for_each(|(h, _)| per[bounds.partition_point(|&b| b <= h.cell as usize) - 1] += 1);
+    w.life.living().for_each(|(h, _)| per[bounds.partition_point(|&b| b <= h.cell as usize) - 1] += 1);
     let all: usize = per.iter().sum();
-    if all + serial.len() == 0 {
+    if all == 0 {
         return;
     }
     // The busiest chunk's share of the batch's updates (`Counters::busiest_share`).
@@ -187,19 +184,13 @@ pub fn batch(w: &mut World) {
         for i in d.cells() {
             for slot in 0..d.at(i).bodies.len() {
                 let h = Handle { cell: i as u32, slot: slot as u32 };
-                if d[h].alive && !holds(&d[h]) {
+                if d[h].alive {
                     update(w, d, h, s);
                 }
             }
         }
     });
     life::land(w);
-    let mut scratch = scratch(w);
-    for (cell, id) in serial {
-        let Some(h) = w.life.find_in(cell, id) else { continue };
-        w.in_cell(cell, |w, d| update(w, d, h, &mut scratch));
-        life::land(w);
-    }
     w.life.batch = false;
     w.life.recount();
     // The bodies' visible traits from what they hold now (`Chunk::see_changed`), so a world saved after the batch,
