@@ -64,7 +64,7 @@ Fields of `Config` that say when the model may save time (mark **speed**). The t
 
 ## Physics
 
-The four costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`, `c_signal`) are per kg of living body (`Body::built`) of a kind that matures at `m_ref`, times (copy mass / 1 kg)^-0.25, so adults of every kind pay Kleiber's mass^0.75 (laws 6.2). Where a row says "set at the eater founder", the number is what the starting eater (it matures at 44 kg) pays.
+The three costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`) are per kg of living body (`Body::built`) of a kind that matures at `m_ref`, times (copy mass / 1 kg)^-0.25, so adults of every kind pay Kleiber's mass^0.75 (laws 6.2). Where a row says "set at the eater founder", the number is what the starting eater (it matures at 44 kg) pays.
 
 ### Change and Flow, as bodies feel them
 
@@ -88,7 +88,6 @@ The four costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`, `c_signal`
 | `c_seen` | the same | cost per body perceived | derived: a share of `c_brain` (3 x 5e3 = 1.5e4) | tuned, first guess |
 | `c_sight` | the same | cost per square cell of sight | derived: a share of `c_brain` (1 x 1.5e4) | tuned, first guess |
 | `c_learn` | J per kg of body per day at learning rate 1 | upkeep of learning | none found; set at the eater founder | tuned, first guess |
-| `c_signal` | J per kg of body per day at signal size 1 | cost of signalling | none found; set at the eater founder | tuned, first guess |
 | `e_life` | J per kg | energy a kg of body turns over in its upkeep before it is worn out, at a repair gene of 0 (a body lives 10^gene times this) | Rubner 1908: many kinds that move turn over about 1,000 kJ per gram of body in a life | anchored |
 | `c_repair` | share | share of upkeep that is repair at repair 0: upkeep x (1 - c + c 2^gene), so each unit of the gene doubles it and every value of the gene has a cost | remaking a body's own matter takes 20 to 30% of resting upkeep in life | anchored |
 | `dormant` | share | the least activity a dormant body or slot of cover wears at, a share of its active rate (`body::live`, `cover::grow`): a dry body pays almost no upkeep but still ages | dry seeds and spores live years to decades (Walters 1998, from memory) where the active life of the same tissue is weeks to months: about 50 times longer, a floor of 0.02 | anchored |
@@ -110,7 +109,6 @@ The four costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`, `c_signal`
 | `c_handle` | J per kg | energy to handle one kg taken or put | none found; set for a run | tuned |
 | `keep_min` | times | a body keeps this many times the safe minimum of each store it gives away (`choose::give`) or puts out to parts (`bond::verbs`) | none found: a margin over the minimum below which it dies | tuned, first guess |
 | `shape_noise` | none | spread of the shape of a part made, around its mean | none found | tuned, first guess |
-| `signal_noise` | none | spread of the signal, around its mean | none found | tuned, first guess |
 | `discount` | none | weight of well-being one month (one update) ahead against well-being now | the usual 0.9 of learning machines | anchored |
 | `blend` | share | share of the way a watcher's rows move toward the watched one's | none found | tuned, first guess |
 | `learn_beta` | share | weight of the newest value in a learner's running mean squares: of a learned row's steps, and of the critic's errors | the usual 0.1 of a running average in learning machines | anchored |
@@ -258,9 +256,9 @@ The 105 rows of `Config` and `Physics` are their 105 fields.
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
 | anchored | 52, and 11 outside the structs | 52 fields (among them `c_basal`, `dormant`, `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `mix`, `light_yield`, `gas_floor`, `gas_ref`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `MAX_KEEP`, and the three decomposers' factors `open` of the chemistry (reactions 1, 21 and 26) |
 | tuned (run or reason named) | 6, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`), set for an outcome (`rain_time`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`, the cover's starting genes) |
-| tuned, first guess | 36 | 32 free numbers (`wind`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `keep_min`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
+| tuned, first guess | 34 | 30 free numbers (`wind`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `rho_pass`, `keep_min`, `shape_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 1 | `null` |
 | speed | 2, and 6 outside the structs | `wake_share`, `sleep_days`; outside: `Config::chunks`, a setting of the run that a snapshot does not keep (`ew --chunks`, 64: the cells cut into that many runs for the bodies' parallel passes, many more than the threads of a machine, so the pool shares out uneven runs; any count gives the same world), the air's step `schedule::AIR_STEP_DAYS` (10 days, three a month: against 1-day steps the land within 0.3 K, `the_long_step_keeps_the_climate`), the caps `MAX_NODES`, `MAX_LINEAGES`, `MOST_ACTS`, and `copy::MATE_HIDDEN` (8 hidden units: two parents only for individuals of a brain that big, a level of detail) |
 | container | 1 | `phys` |
 
-Rows marked tuned in all: 50 (42 in the structs, 8 outside: also `cover::RANGE` and `cover::APART`, first guesses). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.
+Rows marked tuned in all: 48 (40 in the structs, 8 outside: also `cover::RANGE` and `cover::APART`, first guesses). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

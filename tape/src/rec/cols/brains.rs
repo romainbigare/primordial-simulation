@@ -1,53 +1,17 @@
 //! Brains and kinds: how far learning moved the brains, how often the best-scored action was drawn, the brains'
-//! sizes, how much signals say about their sender's state, the members' masses and what each starting kind eats.
+//! sizes, the members' masses and what each starting kind eats.
 
 use super::Row;
 use crate::layers::Ctx;
 use crate::measure;
-use crate::rec::tally::Signals;
 use crate::rec::Recorder;
 use pcore::World;
 use std::collections::BTreeMap;
-use std::f64::consts::LN_2;
-
-/// Fewest signals of a lineage in a context for its information to count.
-const MIN_SIGNALS: f64 = 20.0;
-
-/// Mutual information (bits) between a binary context and the signal quarter, given lineage, less its small-sample
-/// bias, (2 - 1)(4 - 1) / (2 n ln 2) for 2 contexts and 4 quarters (Treves and Panzeri 1995).
-fn info(sig: &[Signals], c: usize) -> f64 {
-    let (mut sum, mut all) = (0.0, 0.0);
-    for t in sig {
-        let j = &t[c];
-        let n: f64 = j.iter().flatten().sum();
-        if n < MIN_SIGNALS {
-            continue;
-        }
-        let pc = [0, 1].map(|a| j[a].iter().sum::<f64>() / n);
-        let ps: Vec<f64> = (0..4).map(|q| (j[0][q] + j[1][q]) / n).collect();
-        let mut i = 0.0;
-        for a in 0..2 {
-            for q in 0..4 {
-                let p = j[a][q] / n;
-                if p > 0.0 {
-                    i += p * (p / pc[a] / ps[q]).log2();
-                }
-            }
-        }
-        sum += n * (i - 3.0 / (2.0 * n * LN_2)).max(0.0);
-        all += n;
-    }
-    sum / all.max(1.0)
-}
 
 impl Recorder {
     pub(super) fn brain_cols(&self, c: &Ctx, row: &mut Row) {
         self.learning(c.w, row);
         self.variety(c, row);
-        // What signals say about cold ground, harm met and low well-being.
-        for (c, name) in ["mi_cold", "mi_hurt", "mi_low"].into_iter().enumerate() {
-            row.push(name, "bit", info(&self.year.sig, c));
-        }
     }
 
     /// How far learning has moved the brains from their start, how often the best-scored action was the one drawn,

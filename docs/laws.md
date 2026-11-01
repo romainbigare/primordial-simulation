@@ -53,7 +53,7 @@ are cut into `Config::chunks` runs of neighbouring indices, the same for any num
 each chunk is one task on the pool (`life::run`), its cells taken out of the world, the world read only; in each cell
 in order, each body updates, in the order they came (a body placed in the pass first updates at the next month); the
 parts it reads are as they were at the pass's start. A body perceives the others only by their faces (`survey::Faces`: id, members,
-visible traits, signal, well-being, room), made at the batch's start; it takes from or gives to a body it saw only if
+visible traits, well-being, room), made at the batch's start; it takes from or gives to a body it saw only if
 that body still lives and is not leaving its cell. **A cell's view of the store** (`store::Moves`): its ground, bed and
 bodies' node as the store held them at the pass's start with its own moves since, and **its share of its air node**
 (`Mesh::share`, its area over the air node's) of the air's amounts and heat: a cell never takes more than that, so the
@@ -563,16 +563,16 @@ Files: `core/src/choose/` (`mod`, `perceive`, `learn`, `feed`, `go`, `spread`), 
 ### 5.1 The brain
 One hidden layer over what the body perceives and remembers. Its **base** belongs to a lineage and changes only by
 evolution; its **rows** are genes of each body: fixed action scores, shared scorers (per direction, per verb and body
-or part seen), a signal, the shape of a part, the next memory and a critic. Sizes are genes with costs: hidden units
+or part seen), the shape of a part, the next memory and a critic. Sizes are genes with costs: hidden units
 (0 to 64; 0 is no brain, no decisions, no cost), memory (0 to 12), bodies seen (1 to 6), sight
 (1 to 4 cells). One brain per body or node (`Body::rows`); a child starts with its born rows plus what its parent
 learned (`Life::inherit`).
 
 ### 5.2 Perception
 Local (`choose/perceive.rs`): own stores against minimums, warmth, size, the cover of its cell (its capture area per m²); its cell's loose substances, liquid,
-temperature and crowding; the season; signals; memory; cells within sight ring by ring (weight 1 / ring²), with their
+temperature and crowding; the season; memory; cells within sight ring by ring (weight 1 / ring²), with their
 parts, as the last survey saw them; up to `SEEN` bodies in or next to its cell as the batch's start saw them (their
-faces, 0: looks, signals, well-being, past dealings); up to 3 parts. Walls and cover hide.
+faces, 0: looks, well-being); up to 3 parts. Walls and cover hide.
 
 ### 5.3 Actions
 One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;
@@ -616,13 +616,13 @@ by `learn_beta`. A node learns as from one
 member drawn among those who stayed, with the node's change plus how much more its part's action raised it than the
 mean, so its brain moves as an individual's does. **Across lives**: evolution of born rows and base.
 
-### 5.5 Imitation, signals, memory
+### 5.5 Imitation and memory
 **Watching** (`choose::learn::watched`) costs the turn; when the batch ends, if both live and the watcher is still of
 the lineage it watched in, the watcher's rows move part way (`blend`) toward the watched one's, if the brains have the
 same sizes, less the less alike they are, times the share of the watcher's members now who watched (for a node, the
-mean by members). **Signals**: 2 numbers a decision with
-noise (`signal_noise`), meaningless at first, at an upkeep (`c_signal`). **Memory**: up to 4 others and how dealings
-went (`Body::note`, `Body::recall`). **Thinking** (`Physics::think`) costs by brain size and mass^0.25 one decision per
+mean by members). **Memory**: the brain's memory numbers (`MEMORY`), which it reads and writes at each decision.
+**Signals and the memory of others are parked** until a kind can plan: no body emits a signal or remembers whom it
+dealt with. **Thinking** (`Physics::think`) costs by brain size and mass^0.25 one decision per
 update, once a month. **Null run** (`--null`): no learning or imitation, rows frozen, genes still evolve.
 
 ## 6. Bodies
@@ -650,7 +650,7 @@ their capture area is 0.
 
 ```
 tissue = living body × (copy mass / m_ref)^(intake_exp − 1)
-upkeep = [ days × tissue × (c_basal + c_strength·STRENGTH + learning + signal) + one decision ]
+upkeep = [ days × tissue × (c_basal + c_strength·STRENGTH + learning) + one decision ]
          × repair (1 − c_repair + c_repair·2^REPAIR) × activity × pace(T)
 ```
 

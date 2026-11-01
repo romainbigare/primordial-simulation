@@ -510,7 +510,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         w.chem.reactions[BURN].open = 1.0;
         // Building never binds; the costs of keeping tissue are `cost` times the starting ones.
         w.cfg.phys.c_build = 1e7;
-        for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn, &mut w.cfg.phys.c_signal] {
+        for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn] {
             *c *= cost;
         }
         let mut b = eater(&mut w, i, brain::TAKE, 0.0);
@@ -708,7 +708,13 @@ fn a_cell_holds_one_node_per_kind_and_stage() {
     worldgen::life::seed(&mut w, 0);
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
     let a = w.life.alive().find(|b| b.count == 1.0).expect("an individual");
-    let (i, lineage, genome) = (a.cell as usize, a.lineage, a.genome);
+    let (i, lineage, genome, id) = (a.cell as usize, a.lineage, a.genome, a.id);
+    // (Alone in its cell: a pair of individuals that may mate stays apart, `nodes::crowd`.)
+    let others: Vec<Handle> = w.life.cell(i).filter(|&h| w.life[h].id != id).collect();
+    for h in others {
+        let b = std::mem::take(&mut w.life[h]);
+        w.in_cell(i, |w, d| body::die(w, d, h, b, body::LACK));
+    }
     for x in 0..12 {
         let mut b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
         b.genes[pcore::body::COPY_MASS] += 0.3 * (x + 1) as f32;

@@ -1,5 +1,5 @@
 //! A small brain (laws.md 5.1): a base of one hidden layer, the lineage's, and rows read from it, each body's, that
-//! give action scores, shared scorers, the signal, a part's shape, the next memory and a critic. Kept apart from the
+//! give action scores, shared scorers, a part's shape, the next memory and a critic. Kept apart from the
 //! laws so it can be swapped.
 
 use crate::rng::Rng;
@@ -22,8 +22,6 @@ pub const WATCH: usize = 2;
 pub const VERBS: usize = 3;
 /// Verbs toward a perceived part: hold, take from, put to, join the held part to, break its bonds, enter its inside.
 pub const OVERBS: usize = 6;
-/// Signal outputs.
-pub(crate) const SIG: usize = 2;
 /// Outputs for the shape of a part made: elongation, hollowness.
 pub(crate) const FORM_OUT: usize = 2;
 
@@ -48,7 +46,7 @@ impl Shape {
     pub fn base(&self) -> usize {
         self.h * self.ni + self.h
     }
-    /// First row of the direction scorer, of a verb's scorer, of the signal, of a part's shape, of the memory.
+    /// First row of the direction scorer, of a verb's scorer, of a part's shape.
     pub fn dir(&self) -> usize {
         FIXED
     }
@@ -56,11 +54,8 @@ impl Shape {
         let b = FIXED + self.nf + 1 + v.min(VERBS) * (self.nt + 1);
         b + v.saturating_sub(VERBS) * (self.no + 1)
     }
-    pub fn sig(&self) -> usize {
-        self.verb(VERBS + OVERBS)
-    }
     pub fn form(&self) -> usize {
-        self.sig() + SIG
+        self.verb(VERBS + OVERBS)
     }
     /// Rows that learn within a life (all but the memory rows).
     pub fn learned(&self) -> usize {

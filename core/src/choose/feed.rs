@@ -8,9 +8,6 @@ use crate::rng::Rng;
 use crate::units::MAX_SUBSTANCES;
 use crate::{bond, lanes, life::{Chunk, Handle}, store::Node, World};
 
-/// A dealing counts in a body's memory (`Body::note`) as this many times the share of its mass moved.
-const NOTE_SCALE: f64 = 10.0;
-
 /// Mass of the amounts `m` (mol of each store) that the body at `t` K uses (`Body::uses`), kg.
 fn used_kg(w: &World, b: &Body, t: f64, m: &Stores) -> f64 {
     let bc = w.chem.body();
@@ -135,7 +132,7 @@ fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body,
 /// would, times the chance, the expected outcome of an individual's draw.
 pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, s: Handle, rng: &mut Rng) {
     let (o, bc) = (&d[s], w.chem.body());
-    let (mb, mo, tb) = (b.mass(&w.chem), o.mass(&w.chem), b.temp(&w.chem));
+    let (mb, tb) = (b.mass(&w.chem), b.temp(&w.chem));
     let c = d.at(b.cell as usize);
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(c, w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(c, w, o) * o.built(&w.chem) / o.n());
     let (kg, swept) = intake(w, b, tb, |k| o.amount(bc, k));
@@ -165,14 +162,12 @@ pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, s: Handle, rng: &mut Rn
     transfer(&w.chem, &mut d.counts.rounded[0], &mut o, b, &m);
     let ev = EventKind::Took { by: b.id, from: o.id, used: used_kg(w, b, tb, &m) as f32 };
     d.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: got });
-    if body::wound(w, d, s, o, (hit, f), &mut rest, TAKEN) {
-        d[s].note(b.id, -(NOTE_SCALE * got / mo) as f32);
-    }
+    body::wound(w, d, s, o, (hit, f), &mut rest, TAKEN);
 }
 
 /// Give to another body in the cell what it can spare (`Body::spare`, laws.md 5.3), up to what the
 /// members it meets could take in the time and have room for (each of its members meets one of the other's, as many as
-/// both have). The other remembers the giver.
+/// both have).
 pub(super) fn give(w: &World, d: &mut Chunk, b: &mut Body, s: Handle) {
     let (chem, bc) = (&w.chem, w.chem.body());
     let (size, mass) = (b.size(chem), b.mass(chem));
@@ -191,7 +186,6 @@ pub(super) fn give(w: &World, d: &mut Chunk, b: &mut Body, s: Handle) {
     let m: Stores = std::array::from_fn(|q| m[q].min(b.store[q]));
     let mut o = std::mem::take(&mut d[s]);
     transfer(&w.chem, &mut d.counts.rounded[0], b, &mut o, &m);
-    o.note(b.id, (NOTE_SCALE * got / mo) as f32);
     o.stale = true;
     d.events.push(Event { day: w.day(), kind: EventKind::Gave { from: b.id, to: o.id }, node: b.cell, value: got });
     d[s] = o;

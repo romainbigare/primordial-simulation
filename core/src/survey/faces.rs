@@ -1,6 +1,6 @@
 //! What the bodies show one another in a batch (laws.md 0): their faces, made for every cell at the batch's start.
 
-use crate::{brain::SIG, World};
+use crate::World;
 
 /// What a body shows others in a batch, as it was at the batch's start (laws.md 0): what they perceive of it.
 #[derive(Clone, Copy, Debug, Default)]
@@ -8,10 +8,9 @@ pub struct Face {
     pub id: u64,
     /// Its place in its cell's list (`life::Handle::slot`), which holds through the batch
     pub slot: u32,
-    /// Its members (`Body::n`), visible traits (`Body::vis`), signal and well-being at its last decision
+    /// Its members (`Body::n`), visible traits (`Body::vis`) and well-being at its last decision
     pub n: f64,
     pub vis: [f32; 7],
-    pub sig: [f32; SIG],
     pub wb: f32,
     /// The root of the structure it is inside and how closed its walls are (`bond::room`)
     pub room: Option<(u64, f32)>,
@@ -50,7 +49,7 @@ pub(super) fn make(w: &mut World) {
         let show = if cover <= 0.0 { UNCOVERED } else { (-cover).exp() };
         for (slot, b) in c.bodies.iter().enumerate().filter(|x| x.1.alive) {
             let room = crate::bond::room(c, b).map(|(r, e)| (r, e.closed));
-            f.all.push(Face { id: b.id, slot: slot as u32, n: b.n(), vis: b.vis, sig: b.sig, wb: b.wb, room, show });
+            f.all.push(Face { id: b.id, slot: slot as u32, n: b.n(), vis: b.vis, wb: b.wb, room, show });
         }
         f.at.push(f.all.len() as u32);
     }

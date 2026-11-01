@@ -18,7 +18,7 @@ pub(crate) use spread::land_act;
 use perceive::{inputs, perceive, walk, DT_NEAR, DZ_SCALE, LN_LEAF, LN_MASS, WB_SCALE};
 
 use crate::body::{Body, Lived};
-use crate::brain::{self, ln, score, squash, Shape, Thought, ANCHOR, DIG, FIXED, FORM, FORM_OUT, OVERBS, PUT, RELEASE, REST, SIG, TAKE, TAKE_FROM, VERBS, WATCH};
+use crate::brain::{self, ln, score, squash, Shape, Thought, ANCHOR, DIG, FIXED, FORM, FORM_OUT, OVERBS, PUT, RELEASE, REST, TAKE, TAKE_FROM, VERBS, WATCH};
 use crate::life::Entry;
 use crate::rng::{Purpose, Rng};
 use crate::space::COMPASS;
@@ -27,7 +27,7 @@ use crate::{bond, lanes, life::{Chunk, Handle}, World};
 
 /// Features of a neighbour direction and of a perceived body.
 pub(crate) const NF: usize = 10;
-pub(crate) const NT: usize = 11;
+pub(crate) const NT: usize = 7;
 /// The feature of a neighbour direction that is the depth of standing liquid there, ln(1 + depth / m) (`perceive::cells`).
 pub const WET: usize = 1;
 /// Most bodies perceived (the `SEEN` gene sets how many); parts perceived; moves (one per compass direction of the
@@ -39,9 +39,9 @@ const OPTS: usize = FIXED + MOVES + VERBS * MAX_SEEN + OVERBS * PARTS;
 /// The first option toward a perceived body, and toward a perceived part.
 const TO_BODY: usize = FIXED + MOVES;
 const TO_PART: usize = TO_BODY + VERBS * MAX_SEEN;
-/// Inputs of a brain besides two per substance and its memory: its own state, its cell and the season, the signals
-/// heard, and what Bond senses.
-pub(crate) const INPUTS: usize = 8 + SIG + bond::SENSE;
+/// Inputs of a brain besides two per substance and its memory: its own state, its cell and the season, and what Bond
+/// senses.
+pub(crate) const INPUTS: usize = 8 + bond::SENSE;
 
 /// Working memory of `act`, kept from body to body.
 #[derive(Default)]
@@ -74,8 +74,7 @@ struct Choice {
     a: usize,
 }
 
-/// A body's decision at its update: perceive, think and learn from the last decision, score the options, emit the
-/// signal; an individual draws one option, keeps its trace and acts, a node spreads its members over them (`spread`).
+/// A body's decision at its update: perceive, think and learn from the last decision, score the options; an individual draws one option, keeps its trace and acts, a node spreads its members over them (`spread`).
 /// Every body decides at each update, once a month.
 pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
     let mut rng = Rng::new(w.seed, w.day(), b.id, Purpose::Choose);
@@ -92,7 +91,7 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, t: &mut ActTmp
     // (Its brain reads and writes the first `s.mem` numbers of its memory; those past them are none.)
     b.mem[s.mem..].fill(0.0);
     let mut c = perceive(w, d, b, nseen, &mut rng);
-    inputs(w, d.at(b.cell as usize), b, (lived, temp, s.mem), &c, &mut t.input);
+    inputs(w, d.at(b.cell as usize), b, (lived, temp, s.mem), &mut t.input);
     brain::think(&lin.base, d.at(b.cell as usize).brains.rows(b.brain, s), s, &t.input, &mut t.thought);
     learn::learn(w, b, &mut d.brains(b.cell as usize).mind(b.brain, s), s, (wb, &t.thought.h));
     walk(w, b.cell as usize, sight, t);
@@ -116,12 +115,12 @@ fn here(d: &Chunk, b: &Body, o: &Face) -> Option<Handle> {
 }
 
 /// What the actions of one decision share besides its options: the brain's shape and what it thought, the noise drawn
-/// for the signal and the shape of a part made, that shape (`noise`), and the well-being of a body now
+/// for the shape of a part made, that shape (`noise`), and the well-being of a body now
 /// (`Body::wellbeing_at`, at a decision's cost and the margin of the body's reactions over its upkeep).
 struct Kit<'a> {
     s: Shape,
     t: &'a ActTmp,
-    z: [f32; SIG + FORM_OUT],
+    z: [f32; FORM_OUT],
     form: [f32; FORM_OUT],
     wb: &'a dyn Fn(&World, &Body) -> f32,
 }
@@ -167,10 +166,8 @@ fn options(w: &World, ch: &Chunk, b: &Body, s: Shape, (pm, vol): (f64, f64), c: 
     }
     for (q, (o, same)) in c.seen[..c.nseen].iter().enumerate() {
         let v = o.vis;
-        // How past dealings with it went, if it is known.
-        let known = b.known.iter().find(|k| k.0 == o.id && k.0 != 0).map(|k| k.1);
         let fq = &mut c.fb[q * NT..(q + 1) * NT];
-        fq.copy_from_slice(&[ln(v[0] / pm as f32) / LN_MASS, ln(v[1] / v[0]) / LN_LEAF, v[2], v[3], v[4], v[5], o.sig[0], o.sig[1], known.unwrap_or(0.0), known.is_some() as u8 as f32, o.wb / WB_SCALE]);
+        fq.copy_from_slice(&[ln(v[0] / pm as f32) / LN_MASS, ln(v[1] / v[0]) / LN_LEAF, v[2], v[3], v[4], v[5], o.wb / WB_SCALE]);
         for verb in 0..VERBS {
             if *same || verb == WATCH {
                 c.logit[TO_BODY + q * VERBS + verb] = score(&out[s.verb(verb)..s.verb(verb) + NT + 1], fq);
@@ -214,20 +211,18 @@ fn pick(d: &mut Chunk, c: &mut Choice, rng: &mut Rng) {
     (d.counts.decisions, d.counts.greedy) = (d.counts.decisions + 1.0, d.counts.greedy + (c.logit[c.a] >= top) as u8 as f64);
 }
 
-/// The signal it emits, the shape of a part it would make and its next memory, with the noise drawn for the signal and
-/// the shape (`trace` learns from it).
-fn noise(w: &World, b: &mut Body, s: Shape, t: &ActTmp, rng: &mut Rng) -> ([f32; FORM_OUT], [f32; SIG + FORM_OUT]) {
+/// The shape of a part it would make and its next memory, with the noise drawn for the shape (`trace` learns from it).
+fn noise(w: &World, b: &mut Body, s: Shape, t: &ActTmp, rng: &mut Rng) -> ([f32; FORM_OUT], [f32; FORM_OUT]) {
     let (out, p) = (&t.thought.out, &w.cfg.phys);
-    let z: [f32; SIG + FORM_OUT] = std::array::from_fn(|_| rng.normal() as f32);
-    b.sig = std::array::from_fn(|k| squash(out[s.sig() + k]) + p.signal_noise * z[k]);
-    let form = std::array::from_fn(|k| squash(out[s.form() + k]) + p.shape_noise * z[SIG + k]);
+    let z: [f32; FORM_OUT] = std::array::from_fn(|_| rng.normal() as f32);
+    let form = std::array::from_fn(|k| squash(out[s.form() + k]) + p.shape_noise * z[k]);
     b.mem[..s.mem].iter_mut().enumerate().for_each(|(k, m)| *m = squash(out[s.learned() + k]));
     (form, z)
 }
 
 /// The trace of the decision for learning, into `v` (the trace of the body's brain, `life::Brains`; none if the body
 /// does not learn, false): the hidden layer; per learned row how its output moves the log-chance of option `a`, what
-/// was done (for the signal and shape the natural gradient, so their noise does not use up the step); and `adv`, how
+/// was done (for the shape the natural gradient, so its noise does not use up the step); and `adv`, how
 /// much more that raised the well-being of the members who did it than the mean of a node's members (`spread`; 0 for
 /// an individual). `chances`: the chances the action was drawn by (a node's over its likeliest options,
 /// `spread::top_chances`), so the gradient's mean is 0.
@@ -266,8 +261,7 @@ fn trace(w: &World, b: &Body, c: &Choice, (chances, a, adv): (&[f32; OPTS], usiz
         }
     }
     let natural = |r: usize, z: f32, noise: f32| (z * noise) * (1.0 - squash(out[r]) * squash(out[r]));
-    (0..SIG).for_each(|j| cr[s.sig() + j] = natural(s.sig() + j, k.z[j], p.signal_noise));
-    (0..FORM_OUT).for_each(|j| cr[s.form() + j] = if a == FORM { natural(s.form() + j, k.z[SIG + j], p.shape_noise) } else { 0.0 });
+    (0..FORM_OUT).for_each(|j| cr[s.form() + j] = if a == FORM { natural(s.form() + j, k.z[j], p.shape_noise) } else { 0.0 });
     true
 }
 

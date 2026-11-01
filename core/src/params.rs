@@ -118,8 +118,6 @@ pub struct Physics {
     pub c_sight: f64,
     /// Upkeep of learning, J per kg of body per day at learning rate 1
     pub c_learn: f64,
-    /// Cost of signalling, J per kg of body per day at signal size 1
-    pub c_signal: f64,
     /// Energy a kg of body turns over in its upkeep before it is worn out, at a `REPAIR` gene of 0, J/kg
     pub e_life: f64,
     /// Share of upkeep that is repair at a `REPAIR` gene of 0
@@ -154,8 +152,6 @@ pub struct Physics {
     pub keep_min: f64,
     /// Spread of the shape of a part made around its mean
     pub shape_noise: f32,
-    /// Spread of the signal around its mean
-    pub signal_noise: f32,
     /// Weight of well-being one month (one update) ahead against well-being now
     pub discount: f32,
     /// Share of the way a watcher's rows move toward the watched one's
@@ -302,7 +298,6 @@ impl Default for Physics {
             c_seen: 5e3,
             c_sight: 1.5e4,
             c_learn: 1.1049e5,
-            c_signal: 736.6,
             e_life: 1e9,
             c_repair: 0.25,
             dormancy: 5.7,
@@ -319,7 +314,6 @@ impl Default for Physics {
             c_handle: 1e3,
             keep_min: 2.0,
             shape_noise: 0.5,
-            signal_noise: 0.3,
             discount: 0.9,
             blend: 0.3,
             learn_beta: 0.1,

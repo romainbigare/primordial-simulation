@@ -34,9 +34,6 @@ pub(super) struct KindYear {
     pub deaths: [f64; NC],
 }
 
-/// Signal counts of one lineage, per context (cold, hurt, low): [context off, on] x signal quarter.
-pub(super) type Signals = [[[f64; 4]; 2]; 3];
-
 /// The sums of the year so far.
 #[derive(Default)]
 pub(super) struct YearTally {
@@ -62,8 +59,6 @@ pub(super) struct YearTally {
     pub gave_kg: f64,
     pub gave_eaters: f64,
     pub pairs: BTreeSet<(u64, u64)>,
-    /// By lineage: signal counts by context (`Signals`)
-    pub sig: Vec<Signals>,
     /// kg of what they use (`Body::uses`) that bodies that are not light-eaters took: from light-eaters, from others, from the
     /// ground
     pub intake: [f64; 3],

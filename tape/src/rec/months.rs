@@ -1,8 +1,8 @@
 //! `months.csv`, one row a month: where the mobile bodies (all but light-eaters) are and how they moved, and the
 //! members born and died of each starting kind, so seasons show. The month is also when the recorder adds to the
-//! year's sums what is counted at month ends (standing members, signals, bodies inside walls, the land's temperature).
+//! year's sums what is counted at month ends (standing members, bodies inside walls, the land's temperature).
 
-use super::tally::{bump, slot, NC};
+use super::tally::{bump, NC};
 use crate::measure::area_mean;
 use pcore::par;
 use super::{Recorder, CAUSES};
@@ -14,8 +14,6 @@ use std::collections::BTreeMap;
 /// The columns after `year` and `month`, with the decimals each is written with (none: as it is).
 const COLS: [(&str, Option<usize>); 9] =
     [("mobile", None), ("mean_y", Some(3)), ("mean_z", Some(1)), ("mean_dy", Some(4)), ("mean_dz", Some(3)), ("inside", None), ("t_mobile", Some(2)), ("spent", Some(0)), ("spent_y", Some(2))];
-/// Ground below this is cold for the signal contexts, K.
-const SIGNAL_COLD_T: f64 = 283.0;
 /// Ground below this is cold for the count of bodies inside walls, K.
 const INSIDE_COLD_T: f64 = 278.0;
 /// Of the bodies that died of `SPENT`: the least to divide their sum of rows by.
@@ -67,13 +65,9 @@ pub(super) fn year_month(w: &World) -> (u64, u64) {
 
 /// What the month's count needs of one living body, worked out in parallel and added up in the bodies' order.
 struct Look {
-    /// The starting kind of its lineage (none: no brain), and the lineage
+    /// The starting kind of its lineage (none: no brain)
     root: Option<u32>,
-    lineage: usize,
     members: f64,
-    /// The signal contexts (cold ground, harm met, low well-being) and its signal quarter
-    ctx: [bool; 3],
-    quarter: usize,
     /// None for a light-eater
     mobile: Option<Mobile>,
 }
@@ -120,10 +114,7 @@ pub(super) fn look<'a>(w: &'a World, last: &BTreeMap<u64, u32>) -> Seen<'a> {
         });
         Look {
             root: w.life.brains[b.lineage as usize].as_ref().map(|l| l.root),
-            lineage: b.lineage as usize,
             members: b.n(),
-            ctx: [t < SIGNAL_COLD_T, b.known.iter().any(|k| k.1 < 0.0), b.wb < 1.0],
-            quarter: (b.sig[0] > 0.0) as usize * 2 + (b.sig[1] > 0.0) as usize,
             mobile,
         }
     });
@@ -131,7 +122,7 @@ pub(super) fn look<'a>(w: &'a World, last: &BTreeMap<u64, u32>) -> Seen<'a> {
 }
 
 impl Recorder {
-    /// The month: its row, and what the year counts at month ends (members, signals, bodies inside walls, the land's
+    /// The month: its row, and what the year counts at month ends (members, bodies inside walls, the land's
     /// temperature), from what `look` saw.
     pub(super) fn month(&mut self, w: &World, seen: Seen) {
         let Seen { bodies, looks, ground_t } = seen;
@@ -143,10 +134,6 @@ impl Recorder {
         for (b, look) in bodies.iter().zip(&looks) {
             if let Some(root) = look.root {
                 bump(&mut y.stand, root as usize, look.members);
-            }
-            let tab = slot(&mut y.sig, look.lineage);
-            for (c, &on) in look.ctx.iter().enumerate() {
-                tab[c][on as usize][look.quarter] += 1.0;
             }
             let Some(m) = &look.mobile else { continue };
             mobile.push((b.id, m.cell));

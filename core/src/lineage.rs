@@ -113,9 +113,9 @@ pub fn resize(w: &World, d: &mut Chunk, b: &mut Body) {
         None => d.new_lineage(l),
     };
     d.move_to(b, lineage, born);
-    // With no brain it has no decision to learn from, no memory and no signal.
+    // With no brain it has no decision to learn from and no memory.
     if w.life.brainless(b) {
         d.brains(b.cell as usize).free(std::mem::take(&mut b.brain));
-        (b.traced, b.mem, b.sig, b.wb, b.var) = (false, Default::default(), Default::default(), 0.0, 0.0);
+        (b.traced, b.mem, b.wb, b.var) = (false, Default::default(), 0.0, 0.0);
     }
 }

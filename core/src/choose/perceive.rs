@@ -3,7 +3,7 @@
 
 use super::{ActTmp, Choice, MAX_SEEN, MOVES, NT, OPTS, PARTS};
 use crate::body::{Body, Layout, Lived};
-use crate::brain::{ln, REST, SIG};
+use crate::brain::{ln, REST};
 use crate::lanes::thickness;
 use crate::rng::Rng;
 use crate::survey::{Face, UNCOVERED};
@@ -111,10 +111,9 @@ pub(super) fn perceive(w: &World, d: &Chunk, b: &Body, nseen: usize, rng: &mut R
 
 /// The brain's inputs (laws.md 5.2), of a body of cell `cell` that has `lived` its update at `temp` K, with `mem`
 /// numbers of memory.
-pub(super) fn inputs(w: &World, cell: &Cell, b: &Body, (lived, temp, mem): (&Lived, f64, usize), c: &Choice, x: &mut Vec<f32>) {
+pub(super) fn inputs(w: &World, cell: &Cell, b: &Body, (lived, temp, mem): (&Lived, f64, usize), x: &mut Vec<f32>) {
     let (i, ns, chem, mass) = (b.cell as usize, w.chem.ns(), &w.chem, lived.mass);
     let (env, pm) = (w.life.env[i], mass / b.n());
-    let heard = c.seen[..c.nseen].iter().fold([0f32; SIG], |h, (o, _)| [0, 1].map(|k| h[k] + o.sig[k] / c.nseen as f32));
     x.clear();
     let (none, min, bc) = (SHARE_SENSE * ln(STORE_FLOOR), Layout::of(chem).min, chem.body());
     let (held, least) = (|k: usize| b.amount(bc, k), |k: usize| bc.place(k).map_or(0.0, |s| b.genes[min + s].max(0.0)));
@@ -123,7 +122,6 @@ pub(super) fn inputs(w: &World, cell: &Cell, b: &Body, (lived, temp, mem): (&Liv
     let crowd = ln(1.0 + (w.life.sum(i)[1] / w.mesh.cells().area()[i]) as f32);
     let (dt, canopy, sun) = ((temp - env[0]) as f32, w.canopy[i], w.season() as f32 * std::f32::consts::TAU);
     x.extend([dt / WARM_SCALE, ln(pm as f32) / LN_MASS - 1.0, ln(1.0 + canopy) / LN_CANOPY, ln(1.0 + env[1] as f32), (env[0] as f32 - T_MID) / T_SPAN, crowd, sun.sin(), sun.cos()]);
-    x.extend(heard);
     x.extend(bond::sense(cell, w, b, pm));
     x.extend_from_slice(&b.mem[..mem]);
 }

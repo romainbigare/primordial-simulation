@@ -21,7 +21,7 @@ pub use live::Lived;
 pub use pay::{pay, upkeep};
 pub(crate) use pay::settle_heat;
 
-use crate::brain::{ln, SIG};
+use crate::brain::ln;
 use crate::chem::{BodyChem, Chemistry, Phase, Stores};
 use crate::ground::{melting, Melting};
 use crate::life::Block;
@@ -47,8 +47,6 @@ const MARGIN_MIN: f64 = 1e-3;
 const PHASE_MARGIN: f32 = 5.0;
 /// The liquid share of living tissue: a kg of body matter makes 1 / (1 - this) kg of working body (`Body::built`).
 pub const WET_TISSUE: f64 = 0.75;
-/// Others a body remembers.
-pub(crate) const KNOWN: usize = 4;
 /// Most numbers of a brain's memory (the top of the `MEMORY` gene's range).
 pub const MEMORY_MOST: usize = 12;
 
@@ -101,12 +99,8 @@ pub struct Body {
     /// The part it holds, and a part of the structure it is inside (their ids, `bond::Part::id`; both lie in its cell)
     pub hold: Option<u64>,
     pub inside: Option<u64>,
-    /// Memory the brain reads and writes (its first numbers, as many as its lineage's brain has; the others 0); the
-    /// signal emitted at the last decision
+    /// Memory the brain reads and writes (its first numbers, as many as its lineage's brain has; the others 0)
     pub mem: [f32; MEMORY_MOST],
-    pub sig: [f32; SIG],
-    /// Others it knows (id) and how dealings with them went (-1 worse .. 1 better)
-    pub known: [(u64, f32); KNOWN],
     /// Well-being at the last decision
     pub wb: f32,
     /// It has a move queued in the batch running, or is a node's part with a part act queued (`life::Entry`): it stays in
@@ -280,14 +274,5 @@ impl Body {
             }
         }
         w
-    }
-    /// Remember a dealing with body `id`: better (+) or worse (-). A new one replaces the least marked.
-    pub(crate) fn note(&mut self, id: u64, d: f32) {
-        let s = self.known.iter().position(|k| k.0 == id).unwrap_or_else(|| {
-            let s = (0..KNOWN).min_by(|&a, &b| self.known[a].1.abs().total_cmp(&self.known[b].1.abs())).unwrap_or(0);
-            self.known[s] = (id, 0.0);
-            s
-        });
-        self.known[s].1 = (self.known[s].1 + d).clamp(-1.0, 1.0);
     }
 }
