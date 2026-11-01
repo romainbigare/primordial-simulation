@@ -1,6 +1,7 @@
 //! Law 1: Flow. Stuff moves along links from high push to low push, with loss (laws.md 1). `scratch`: the law's
-//! working memory; `land`: the state and surface of ground nodes; `liquid`, `drain`, `basin`, `creep`; `air`: radiation,
-//! exchange and wind in one step.
+//! working memory (`spare`: room its passes keep); `land`: the state and surface of ground nodes; `liquid`, `drain`,
+//! `basin`, `creep`; `air`: radiation, exchange and wind in one step; `potential` with `stack`: the potential energy of
+//! the matter and its booking.
 
 pub(crate) mod air;
 mod creep;
@@ -10,11 +11,12 @@ mod liquid;
 mod potential;
 mod scratch;
 mod spare;
+mod stack;
 mod basin;
 pub(crate) use air::air_temp;
 pub use air::{column, declination, glow, insolation, scale_height};
 pub use potential::total as potential;
-pub(crate) use potential::stack_gain;
+pub(crate) use stack::stack_gain;
 pub use scratch::Scratch;
 pub(crate) use scratch::FlowView;
 
