@@ -31,8 +31,6 @@ fn roster(threads: usize, chunks: u32) -> String {
             pcore::step(&mut w);
         }
         assert!(w.life.alive().count() > 0, "nothing lives");
-        // (The count of chunks is a setting of the run, not of its world.)
-        w.cfg.chunks = pcore::Config::default().chunks;
         serde_json::to_string(&w).expect("a world serialises")
     })
 }
@@ -54,7 +52,6 @@ fn resizing(chunks: u32) -> (String, usize) {
     for _ in 0..RESIZE_MONTHS {
         pcore::step(&mut w);
     }
-    w.cfg.chunks = pcore::Config::default().chunks;
     (serde_json::to_string(&w).expect("a world serialises"), w.life.brains.len() - founded)
 }
 

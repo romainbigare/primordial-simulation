@@ -31,7 +31,9 @@ pub struct Config {
     pub wake_share: f64,
     /// Speed setting: the longest a ground or air node's reactions sleep, days (0: every node reacts every step)
     pub sleep_days: u32,
-    /// Speed setting: the cells are cut into this many runs for the parallel passes of bodies (any count gives one world)
+    /// Speed setting: the cells are cut into this many runs for the parallel passes of bodies (any count gives one world;
+    /// a setting of the run, not saved)
+    #[serde(skip, default = "default_chunks")]
     pub chunks: u32,
 
     // Ground and air physics
@@ -402,6 +404,11 @@ impl Config {
     }
 }
 
+/// The count of chunks of a run that sets none (`Config::chunks`; `docs/numbers.md`).
+fn default_chunks() -> u32 {
+    64
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
@@ -415,7 +422,7 @@ impl Default for Config {
             months_per_year: 12,
             wake_share: 0.05,
             sleep_days: 90,
-            chunks: 64,
+            chunks: default_chunks(),
             skin_m: 2.0,
             air_top_m: 10_000.0,
             sensible: 10.0,

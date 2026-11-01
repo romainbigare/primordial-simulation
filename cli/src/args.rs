@@ -25,9 +25,11 @@ pub const USAGE: &str = "usage:
     --null                learning and imitation off, brain rows frozen: the run to compare a seed with
     --sun X               the sun's strength, times the default (1)
     --absorber X          the heat-absorbing gases of the air at the start, times chemistry 0's (1)
+    --chunks N            a speed setting: the cells cut into N runs for the bodies' parallel passes (64; any count
+                          gives one world)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
-    --years N, --every N, --out DIR, --frames-every N, --monthly-years N   as for run
+    --years N, --every N, --out DIR, --frames-every N, --monthly-years N, --chunks N   as for run
   ew chem     print chemistry 0 as a table
     --seed N              a generated chemistry instead
   ew numbers OLD NEW      the fields of Physics and Config that differ between two runs (directories or physics.json)";

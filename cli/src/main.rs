@@ -43,10 +43,6 @@ fn main() {
             map.region = args.region();
             let mut w = worldgen::terrain::new_map(seed, map);
             args.apply(&mut w);
-            if let Err(e) = w.cfg.validate() {
-                eprintln!("ew run: {e}");
-                std::process::exit(2);
-            }
             let plan = args.schedule();
             drive(w, &args, plan, None);
         }
@@ -74,6 +70,12 @@ fn record(rec: &mut Recorder, w: &mut World, clock: &Clock) {
 /// Simulate `--years` years: place what `plan` says when it is due, print drift and speed, and write pictures, the
 /// tape and snapshots to `--out`. A resumed run brings what its recorder kept (`kept`).
 fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
+    // (A setting of the run, not of its world: a snapshot does not keep it.)
+    w.cfg.chunks = a.get("--chunks", w.cfg.chunks);
+    if let Err(e) = w.cfg.validate() {
+        eprintln!("ew: {e}");
+        std::process::exit(2);
+    }
     let (years, every, out) = (a.get("--years", 10u64), a.get("--every", 10u64), a.get("--out", String::from("out")));
     std::fs::create_dir_all(&out).expect("create out dir");
     let mut rec = Recorder::new(&w, a.get("--frames-every", 10u64), a.get("--monthly-years", 2u64));
