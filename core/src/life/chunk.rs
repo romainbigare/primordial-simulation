@@ -65,11 +65,6 @@ impl<'a> Chunk<'a> {
     pub fn cell(&self, i: usize) -> impl Iterator<Item = Handle> + '_ {
         super::handles(self.at(i), i)
     }
-    /// Where the living body with id `id` is stored in its cell `i`, if it is there.
-    pub fn find_in(&self, i: usize, id: u64) -> Option<Handle> {
-        let s = self.at(i).bodies.iter().position(|b| b.alive && b.id == id)?;
-        Some(Handle { cell: i as u32, slot: s as u32 })
-    }
     /// The cover of its cell `i`.
     pub fn cover(&mut self, i: usize) -> &mut crate::cover::Cover {
         &mut self.at_mut(i).cover
@@ -181,7 +176,7 @@ pub(crate) fn run<T: Send, S>(w: &mut World, work: Vec<T>, load: usize, init: im
 
 /// The node in whose name a serial step moves for a body outside its update (`World::as_body`): the store books no
 /// body's side of a move, so a body node of any index serves.
-const A_BODY: Node = Node { class: Class::Body, index: 0 };
+pub(crate) const A_BODY: Node = Node { class: Class::Body, index: 0 };
 
 /// The classes whose nodes a chunk's view holds, which its booking writes.
 const VIEWED: [Class; 4] = [Class::Ground, Class::Air, Class::Bed, Class::Bodies];

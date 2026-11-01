@@ -174,9 +174,10 @@ pub(crate) fn land_act(w: &mut World, id: u64, on: Result<(usize, NodeId), [f32;
     }
     b.leaving = false;
     let its = node.and_then(|n| w.life.find(n)).filter(|&t| w.life[t].cell == b.cell && !w.life[t].leaving && b.hold.is_none() && b.inside.is_none());
-    w.as_body(i, move |w, d| {
-        // Paying can leave nothing of a member: it dies.
+    w.in_cell(i, move |w, d| {
+        // Paying can leave nothing of a member: it dies, its remains to the ground.
         if b.empty_at(b.mass(&w.chem)) {
+            d.moves.open(w, i, crate::life::A_BODY);
             return die(w, d, s, b, LACK);
         }
         let Some(t) = its else {

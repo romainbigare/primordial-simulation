@@ -65,6 +65,8 @@ pub struct Moves {
     /// Per cell taken: the potential energy its lifts gained less what its falls gave back (`Store::lifted`), and the
     /// heat its ground could not give (`Moves::take_from_ground`), J
     far: Vec<[f64; 2]>,
+    /// Whether a move changed a number of it since it was made
+    changed: bool,
 }
 
 impl Moves {
@@ -102,7 +104,7 @@ impl Moves {
     }
     /// Whether it gathered anything to book.
     pub(crate) fn gathered(&self) -> bool {
-        !self.cells.is_empty()
+        self.changed
     }
     /// Number `at` of the view changes by `d`. A take never passes what the view holds (a law that does overdraws its
     /// node; checked in debug builds), but of what bodies see of the air.
@@ -110,6 +112,7 @@ impl Moves {
         let x = &mut self.view[at];
         debug_assert!(seen || d >= 0.0 || x[0] + d >= -ROUNDING * (x[0].abs() + d.abs()), "a take of {d} from a view that holds {x:?} (at {at})");
         *x = [x[0] + d, x[1] + d];
+        self.changed = true;
     }
     /// The start of the row of the cell running if node `x` is one of its nodes (its ground, bed, bodies' node or air
     /// node).
@@ -195,6 +198,7 @@ impl Moves {
             let e = m * w.chem.subs[k].molar_mass * lift;
             self.alter(at + Row(self.ns).heat(Class::Air), -e, false);
             self.far[at / Row(self.ns).len()][0] += e;
+            self.changed = true;
         }
     }
     /// Amount of substance `k` in node `x` (a ground, bed, bodies' or air node) as the moves gathered leave it, mol.
@@ -237,6 +241,7 @@ impl Moves {
         let took = if want > 0.0 { want * share(heat_above_floor(self.heat(w, Node::ground(i)), cap), want - d * cp * T_FLOOR) } else { want };
         let at = self.row_of(Node::ground(i)).expect("a ground node");
         self.far[at / Row(self.ns).len()][1] += want - took;
+        self.changed = true;
         let mol = d * share(took, want);
         if mol != 0.0 || took != 0.0 {
             self.take(Node::ground(i), k, mol, took);

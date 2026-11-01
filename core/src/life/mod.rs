@@ -8,7 +8,7 @@ mod registry;
 mod saved;
 
 pub use chunk::Chunk;
-pub(crate) use chunk::{bounds, chunks, run};
+pub(crate) use chunk::{bounds, chunks, run, A_BODY};
 pub use cross::{deliver, Entry};
 pub(crate) use cross::land;
 pub use registry::Genome;
@@ -136,10 +136,6 @@ impl Life {
     /// The cover of cell `i`.
     pub fn cover(&self, i: usize) -> &Cover {
         &self.cells[i].cover
-    }
-    /// The energy movers spent pushing through the bodies of cell `i` since the last survey, J.
-    pub fn pushed(&self, i: usize) -> f64 {
-        self.cells[i].pushed
     }
     /// The holes the pass left are closed: each cell keeps its living bodies in their order, and a body that died away
     /// from the cell it was placed in leaves `moved`.
