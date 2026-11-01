@@ -314,10 +314,64 @@ fn the_eaters_live_and_stop_growing() {
     assert!(!boomed, "the eaters boomed past {EATER_MOST_KG_KM2} kg/km2: {eaters:?}");
 }
 
+/// The climate's key numbers (series columns): the ground temperature on land, the warmest and the coldest month's,
+/// the rain on land, the heat-absorbing gas and the river cells.
+const CLIMATE: [&str; 6] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "rivers"];
+
+/// The long-step test's world: its side, its years, the years from which its numbers are averaged, its seeds, and how
+/// far the default step may move each temperature of the climate from a shorter one's, each seed against itself, K.
+const STEP_SIDE: usize = 32;
+const STEP_YEARS: u64 = 20;
+const STEP_FROM: u64 = 11;
+const STEP_SEEDS: [u64; 3] = [1, 2, 3];
+const STEP_K: f64 = 0.3;
+/// The shorter air steps, hours: a day, the air's own step, and a quarter of one.
+const SHORT_AIR_HOURS: [u32; 2] = [24, 6];
+
+/// The `CLIMATE` columns at the end of each year from `STEP_FROM` of seed `seed` with the air's step `hours` long.
+fn climate(seed: u64, hours: u32) -> Vec<[f64; CLIMATE.len()]> {
+    let mut years = vec![];
+    run(seed, STEP_SIDE, STEP_YEARS, false, |c: &mut Config| c.air_hours = hours, |y, _, rec| {
+        if y >= STEP_FROM {
+            years.push(CLIMATE.map(|c| rec.last(c)));
+        }
+    });
+    years
+}
+
+/// The long step against shorter ones (the air's step is a speed setting, `docs/numbers.md`): on small worlds with life,
+/// the mean over the seeds of what the default air step moves each of the climate's key numbers (the mean of its last
+/// years) from the step of each of `SHORT_AIR_HOURS`, each seed against itself, is less than `STEP_K` for a temperature
+/// and less than its year-to-year spread at the short step for the others.
+#[test]
+#[ignore = "slow: nine 20-year runs of a 32 x 32 world with life"]
+fn the_long_step_keeps_the_climate() {
+    let hours = [Config::default().air_hours, SHORT_AIR_HOURS[0], SHORT_AIR_HOURS[1]];
+    let runs: Vec<Vec<Vec<[f64; CLIMATE.len()]>>> = std::thread::scope(|s| {
+        let runs: Vec<Vec<_>> = STEP_SEEDS.iter().map(|&seed| hours.iter().map(|&h| s.spawn(move || climate(seed, h))).collect()).collect();
+        runs.into_iter().map(|seed| seed.into_iter().map(|r| r.join().expect("a run")).collect()).collect()
+    });
+    let mut out = vec![];
+    for (q, name) in CLIMATE.iter().enumerate() {
+        let mean = |run: &[[f64; CLIMATE.len()]]| run.iter().map(|y| y[q]).sum::<f64>() / run.len() as f64;
+        let spread = |run: &[[f64; CLIMATE.len()]]| run.iter().map(|y| y[q]).fold(f64::MIN, f64::max) - run.iter().map(|y| y[q]).fold(f64::MAX, f64::min);
+        for (h, &short) in SHORT_AIR_HOURS.iter().enumerate() {
+            let off = runs.iter().map(|seed| mean(&seed[0]) - mean(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64;
+            let limit = if name.starts_with("t_") { STEP_K } else { runs.iter().map(|seed| spread(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64 };
+            let ok = off.abs() <= limit;
+            println!("{name}: the default step off by {off:.3e} from {short}-hour steps, limit {limit:.3e}{}", if ok { "" } else { ": OUT" });
+            if !ok {
+                out.push(format!("{name} at {short} hours"));
+            }
+        }
+    }
+    assert!(out.is_empty(), "the long step changed: {out:?}");
+}
+
 /// The globe of the climate check: its rows (twice as many columns), its years, and the years its means are over.
 const GLOBE_ROWS: usize = 32;
-const GLOBE_YEARS: u64 = 20;
-const GLOBE_FROM: u64 = 11;
+const GLOBE_YEARS: u64 = 100;
+const GLOBE_FROM: u64 = 71;
 /// Earth's land, K: its mean surface is about 282 K, its whole surface 288 K (from memory); the bounds leave a few K.
 const EARTH_LAND: [f64; 2] = [280.0, 292.0];
 /// Earth's whole surface, 288 K, and how far a globe's may lie from it, K.
@@ -327,8 +381,9 @@ const EARTH_SURFACE_RANGE: f64 = 4.0;
 /// 2005) times 29 / 18; and the factor either way a globe's may lie from it (about 7% a K, Clausius-Clapeyron).
 const EARTH_VAPOUR: f64 = 0.004;
 const EARTH_VAPOUR_RANGE: f64 = 2.0;
-/// The most the globe's land may drift in a year over those years, K, and the most of its surface ice may cover.
-const GLOBE_DRIFT_K: f64 = 0.2;
+/// The most the globe's land may drift in a year over those years, K (it has settled), and the most of its surface ice
+/// may cover.
+const GLOBE_DRIFT_K: f64 = 0.02;
 const GLOBE_ICE: f64 = 0.25;
 
 /// A globe of Earth's size under Earth's sun, without life, keeps an Earth-like climate: over years `GLOBE_FROM` to
@@ -336,7 +391,7 @@ const GLOBE_ICE: f64 = 0.25;
 /// less than `GLOBE_ICE` of it (no runaway of the ice's reflectance); its whole surface, its vapour and its rain on
 /// land lie within their bounds around Earth's.
 #[test]
-#[ignore = "slow: a 20-year run of a 64 x 32 globe without life"]
+#[ignore = "slow: a 100-year run of a 64 x 32 globe without life"]
 fn a_globe_without_life_keeps_an_earth_like_climate() {
     let mut w = worldgen::terrain::new_globe(1, GLOBE_ROWS);
     worldgen::terrain::scale_absorbers(&mut w, 1.0);

@@ -172,28 +172,26 @@ slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness �
 and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 22.
 
 ### 1.4 The air's step, the sun and the bodies' share
-`flow::air::step`, every `air_hours`, for any length of step. First the gas of the bodies' nodes comes up into their
-air nodes and gases dissolve (1.5). Then the ground under each air node gives it its forcing for the step, summed from
-its cells as they are at the step's start (`air::cells::forcing`): the heat radiation the air absorbs of theirs, their
-sensible heat with the air touching them, what evaporates from them by its saturation deficit (the bucket's share of
-their wetness, no more than they hold), and the saturation each cell rains at. The air level then runs day by day,
-explicitly, on plain arrays of its nodes (`air::daily`): each node's exchange with its ground and its heat radiation,
-the wind (1.6), then rain (1.5). Last, each cell exchanges once with the mean air its node had over the step
-(`air::cells::pass`): sunlight, heat radiation, sensible heat, what evaporates and what rains on it, in its own
-implicit surface balance (Newton's steps about its end temperature, with its melting plateaus, 1.1), and all of it is
-booked whole (`air::book`). The air's ground is the cells' at the step's start, the cells' air the step's mean: each
-part is stable for a step of any length, as each relaxes toward the other (the air's column takes about 20 days to
-follow its radiation and 10 its ground; a cell's skin 3). Where an air node would end with less than nothing of a gas
-(its cells evaporated less than its days counted on), the rain of its cells is cut by the share that leaves it
-nothing, and their exchange made again; then what the wind takes of that gas from it.
+`flow::air::step`, every `air_hours`. First the gas of the bodies' nodes comes up into their air nodes and gases
+dissolve (1.5). Then each cell's exchange over the step with the air it sees is solved once, in its own implicit
+surface balance (Newton's steps about its end temperature, with its melting plateaus, 1.1), at the air of the step's
+start: sunlight, heat radiation, sensible heat with the air touching it and what evaporates from it by its saturation
+deficit (`air::cells::respond`); and again a kelvin warmer and a little more of each gas, so the exchange is one law,
+linear in the air it sees, that never takes more than the cell holds. The air level then runs day by day, explicitly,
+on plain arrays of its nodes (`air::daily`): each node's exchange with its ground by that law summed over its cells at
+the day's air, its heat radiation to space, the wind (1.6), then rain (1.5). The book takes each cell's law at the
+mean air of the step (`air::book`), which is what the days summed, so the air ends just where its days left it and no
+node gives more than it holds. A 10-day step gives the climate of 1-day ones (`the_long_step_keeps_the_climate`,
+`tape/tests/ranges.rs`: within 0.1 K on the land; 6-hour steps make the land 0.4 K warmer).
 - **Sun** (`radiation`): the daily mean by latitude, season and day length (Berger 1978), declination sin δ = sin ε sin
   λ, the mean over the step's days. The surface reflects as its cover is at the step's start (`land::reflectance`);
-  where a soft cover lies or snow falls, as it is at the step's end, so new snow reflects at once and a cover that
-  melts away darkens the ground in its step.
+  where a soft cover lies, as it is at the step's end, so a cover that melts away darkens the ground in its step. Snow
+  reflects from the step after it falls.
 - **Heat radiation**: surfaces emit σT⁴; the air absorbs 1 − exp(−x), x the optical depth of the gases (each as the
   square root past its own column amount) and clouds, and emits from 2 grey layers that cool with height, so more gas
   lifts the layer that reaches space into colder air and the ground warms. The layers are each air node's, over its
-  mean ground; the air touching a cell is colder by the drop with height from its node's mean height.
+  mean ground; the air touching a cell is the air it sees (bilinearly, its four nearest nodes), colder by the drop with
+  height from that air's mean height.
 - **Clouds** (`exchange::cloud`): scattering depth x = condensation rate / `cloud`, from what each air node rained in
   the step before; they reflect x / (1 + x) of the sunlight (two-stream, Lacis and Hansen 1974) and absorb heat
   radiation at depth `cloud_ir` × x (Stephens 1978). A globe of Earth's size without life holds about Earth's
@@ -213,11 +211,12 @@ heat it held at the node's temperature; a node over a substance's boiling point 
 point pays, cooling to it (`Scratch::boil_off`; gas coming out of the liquid too). In the air's day an air node's
 vapour relaxes toward the balance with its ground, as its cells were at the step's start. **Rain**: what an air node
 holds of a gas over what saturates the air touching each of its cells (colder higher up) rains out in `rain_time`,
-each day after the wind, as eddies carry vapour across the air in hours and rain takes a day. The cells' saturation is
-taken as the step starts, as a ratio to the node's, so the day sums them in rising order. What a node rained in the
-step falls on its cells by what each would hold over its own saturation at the ratio the node rained at. Where the air
-touching a cell is below the gas's melting point it falls there as a solid (snow) and the air keeps the fusion
-enthalpy its freezing frees; condensing frees the vaporisation enthalpy in the air. **Lift**: gas going up is lifted
+each day after the wind, as eddies carry vapour across the air in hours and rain takes a day. Each node's air lies over
+the cells that see it (bilinearly), each by its share; the cells' saturation is taken as the step starts, as a ratio to
+the node's, so the day sums them in rising order. What a node rained in the step falls on those cells by what each would
+hold over its own saturation at the ratio the node rained at. Where the node's air at its mean ground is below the
+gas's melting point it falls as a solid (snow) and the air keeps the fusion enthalpy its freezing frees; condensing
+frees the vaporisation enthalpy in the air. **Lift**: gas going up is lifted
 from the ground's head to the air's mean height, paid by the air's heat; rain's fall gives it back. **Dissolving**
 (`exchange::dissolve`): a gas that cannot condense dissolves in the ground's liquid toward Henry's share, through the
 air's film (`evap`) and the liquid's (`dissolve`) in series, freeing its vaporisation enthalpy, and comes out when the
@@ -226,15 +225,16 @@ in months and warms over centuries; a real one is the other way round.
 
 ### 1.6 Wind
 `flow::air::wind`, `daily`. Eddies (`mix`) even out the air within a day over the distance sqrt(`mix` × day), about
-300 km (Taylor 1922): the air nodes lie in blocks of that side on the map, and each day every gas and the heat of a
-block are shared among its nodes by their volumes, so its pressure, shares and temperature are the block's (an
-island's air is one block). Across the links between blocks gas moves by three pushes, each day from the air at its
+300 km (Taylor 1922, `daily::BLOCK_DAY`): the air nodes lie in blocks of that side on the map, and each day every gas of
+a block is shared among its nodes by their volumes and its heat so that each has the block's warmth (its temperature
+raised to a common height by the block's drop with height), so its pressure, shares and warmth are the block's. An
+island smaller than a block (the islands of 64 and 128 cells) is one block, and has no wind: only the evening. Across the links between blocks gas moves by three pushes, each day from the air at its
 start, explicit: the column's pressure (p = nRT/V), evened in the time sound takes to cross the link (Lamb waves,
 Lindzen 1990); overturning, the lower half flowing to the warmer column and the upper half back at `wind` per K,
 turned by the planet's rotation (`rotation`), vapour crowding low; and eddies mixing the columns (`mix`, width over
-length). Each moves at most what evens its link in a day, and each link's pressure, and its eddies with its
-overturning, at most half of that over the links of the busier of its nodes, so a node's links together move at most
-half of what evens them or of what it holds and the day is stable for any rates. **Known limit:** where a push is
+length). Each moves at most what evens its link in a day; each link's pressure at most half of that, and its eddies
+with its overturning at most all of it, over the links of the busier of its nodes, so the day is stable for any rates;
+and no node gives more of a gas than it holds (`solve::sweep::within`). **Known limit:** where a push is
 faster than a day (the pressure, always; the eddies over the short links near a pole) its links even in a day at
 most that share, so a pressure difference across many links of blocks takes days to even out. Mass that crosses is
 lifted between the nodes' mean heights by the heat of the node it enters. A cell sees its air node and three

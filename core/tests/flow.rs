@@ -112,8 +112,8 @@ const MELT_HELD: f64 = 1e-3;
 
 /// A ground node on its melting plateau that one long air step melts all of (under the sun, its ice a cover whose
 /// melting point caps the surface) or freezes all of (in the dark under air 10% colder) ends no further from where
-/// short steps end than the same node with no plateau, to within `PLATEAU_K`: it stays on the plateau only for the
-/// share of the step its heat takes, then goes on from the melting point, and the cover's cap stops with the cover.
+/// short steps end than the same node with no plateau: it stays on the plateau only for the share of the step its heat
+/// takes, then goes on from the melting point, and the cover's cap stops with the cover.
 #[test]
 fn a_plateau_used_up_in_one_long_step_ends_where_short_steps_end() {
     let (w0, i) = worldgen::testkit::start();
@@ -145,16 +145,13 @@ fn a_plateau_used_up_in_one_long_step_ends_where_short_steps_end() {
             (long.0 - short.0).abs()
         };
         let (plateau, none) = (off(pool), off(0.0));
-        assert!(plateau <= none + PLATEAU_K, "sun x{sun}: {plateau} K off with the plateau, {none} K with none");
+        assert!(plateau <= none, "sun x{sun}: {plateau} K off with the plateau, {none} K with none");
     }
 }
 
-/// The depth of the liquid on the plateau, m, the short steps a long one is checked against, and how much further the
-/// long step may end with the plateau than without, K (the long step's end reflectance darkens the melted pool for the
-/// whole step).
+/// The depth of the liquid on the plateau, m, and the short steps a long one is checked against.
 const PLATEAU_M: f64 = 0.02;
 const SHORT_STEPS: usize = 48;
-const PLATEAU_K: f64 = 0.05;
 
 /// A ground node over a liquid's boiling point boils of it only what its heat over that point pays: a deep pool 2 K
 /// over boils a small share in an air step, keeps its books, and stays near the boiling point.
@@ -860,6 +857,17 @@ fn a_globe_keeps_its_books_round_the_wrap() {
         pcore::step(&mut w);
         assert_eq!(pcore::check::broken(&w), None, "month {month}");
     }
+    books.assert_kept(&w, 1e-12);
+}
+
+/// A globe of 18 rows without life keeps its books to rounding over 50 years: its air nodes and cells take no more than
+/// they hold (the air's days and the cells' exchange are one law), so nothing is set to zero.
+#[test]
+#[ignore = "slow: 50 years of an 18-row globe"]
+fn a_globe_keeps_its_books_to_rounding_for_fifty_years() {
+    let mut w = worldgen::terrain::new_globe(1, 18);
+    let books = Books::now(&w);
+    (0..50 * w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));
     books.assert_kept(&w, 1e-12);
 }
 

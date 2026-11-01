@@ -40,6 +40,7 @@ pub fn state(w: &mut World, full: bool) {
 fn ground_now(w: &World, s: &mut Scratch, full: bool) {
     let full = full || std::mem::take(&mut s.stale) || s.lay.len() != w.mesh.level(AIR).n();
     ground_state(w, s, full);
+    s.built_at = Some(w.time);
     if full {
         s.full_at = Some(w.time);
     }
@@ -50,12 +51,15 @@ pub(crate) fn built_now(w: &World) -> bool {
     w.scratch.full_at == Some(w.time)
 }
 
-/// The air's step for `dt` seconds (`air::step`), booked whole, from the state of ground and air nodes, after the heat
-/// of the bodies' nodes that the cover does not claim goes back to the ground (`survey::release`).
+/// The air's step for `dt` seconds (`air::step`), booked whole, from the state of ground and air nodes (brought up to
+/// date unless the `state` process just did; the heat of the bodies' nodes that the cover does not claim, which goes
+/// back to the ground first, `survey::release`, then warms it from the next state).
 pub fn air(w: &mut World, dt: f64) {
     with(w, |w, s| {
         crate::survey::release(w);
-        ground_now(w, s, false);
+        if s.built_at != Some(w.time) {
+            ground_now(w, s, false);
+        }
         air::state(w, s);
         air::step(w, s, dt);
     });

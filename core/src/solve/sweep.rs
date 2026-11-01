@@ -1,6 +1,7 @@
 //! Sweep: one explicit step of anything that moves from high to low along links and fills nodes. A link passes
 //! `g (x_a - x_b)` per second, a node holds `cap x`: over a step each link carries `dt g (x_a - x_b)` of the values at
-//! the step's start (explicit Euler), at most `HALF_WAY` of what would level its two nodes, so no two values cross, and
+//! the step's start (explicit Euler), at most `HALF_WAY` of what would level its two nodes (so two nodes linked alone
+//! never cross), and
 //! no node gives more than it holds (`within`). It is stable where `dt g / cap` is small, as for the liquid under the
 //! ground and the heat through it at their steps (laws.md 1.1, 1.2).
 

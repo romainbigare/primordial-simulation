@@ -48,12 +48,16 @@ pub(super) fn over_cell(w: &World, s: &Scratch, i: usize) -> f64 {
     mesh.cells().area()[i] / lerp(s, mesh.level(AIR).area(), i)
 }
 
-/// Temperature of the air touching ground cell `i` under air nodes at `t` (`lerp`), K: colder by the drop with height
-/// from its node's mean height (`zair`).
+/// Temperature of air at height `z`, m, that is at `t` K at its column's mean height `zair`, m, and cools by `gam` K/m.
 #[inline]
-pub(super) fn touching(w: &World, s: &Scratch, t: &[f64], i: usize) -> f64 {
-    let j = w.mesh.cells().parent()[i] as usize;
-    (lerp(s, t, i) - s.gam[j] * (s.head[i] - s.zair[j])).max(1.0)
+pub(super) fn at_height(t: f64, gam: f64, z: f64, zair: f64) -> f64 {
+    (t - gam * (z - zair)).max(1.0)
+}
+
+/// Temperature of the air touching ground cell `i` under air nodes at `t`, K: the air it sees (`lerp`) at its head.
+#[inline]
+pub(super) fn touching(s: &Scratch, t: &[f64], i: usize) -> f64 {
+    at_height(lerp(s, t, i), lerp(s, &s.gam, i), s.head[i], lerp(s, &s.zair, i))
 }
 
 /// Scale height of air at `t` K whose `mol` mol weigh `kg` kg under gravity `g`, RT/(Mg), m.

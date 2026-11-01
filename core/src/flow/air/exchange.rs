@@ -3,7 +3,7 @@
 
 use super::super::{land::wet, Scratch};
 use super::touching;
-use crate::{chem::Chemistry, math::one_minus_exp, store::{apply, Batch, Class, LinkFlux}, units::R_GAS, AIR, World};
+use crate::{chem::Chemistry, math::one_minus_exp, store::{apply, Batch, Class}, units::R_GAS, AIR, World};
 
 /// Entries of the table of a saturation pressure (`Sat`) per K.
 const SAT_PER_K: f64 = 20.0;
@@ -81,9 +81,10 @@ pub(super) fn cloud((cloud, cloud_ir): (f64, f64), (m, mr): (f64, f64), area: f6
 /// Gases that cannot condense on the ground (`henry`) dissolve in each ground node's liquid toward Henry's share and
 /// come out as it warms, thins or freezes, through the air's film and the liquid's in series, solved exactly over the
 /// step (laws.md 1.5), each node in parallel with `threads`. Dissolving frees the vaporisation enthalpy into the node;
-/// coming out takes it back. What crosses is booked in one call: a link per ground node to its air node with the mol of
-/// each gas (+ up) and the heat that leaves the ground, no air node giving more than it holds (in the order of the
-/// cells), and the lift of the gas into the potential.
+/// coming out takes it back. What crosses is booked in one call: a link from each ground node that takes or gives some
+/// to its air node with the mol of each gas (+ up) and the heat that leaves the ground, no air node giving more than it
+/// holds (in the order of the cells), and the lift of the gas into the potential; the next state of the ground nodes
+/// (`land::ground_state`) reads what they then hold.
 pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64)) {
     let (n, na, nh) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), henry.len());
     if nh == 0 {
@@ -96,7 +97,7 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
     crate::par::rows(&mut want, nh, || (), |_, i, row| {
         let (t, area, ground) = (sr.state.tg[i], wr.mesh.cells().area()[i], wr.store.amounts(Class::Ground));
         let (l, v) = solv.iter().fold((0.0, 0.0), |(l, v), &k| (l + ground[k * n + i] * wet(sr, k, i), v + ground[k * n + i] * wet(sr, k, i) * sr.sp[k].v[1]));
-        let tl = touching(wr, sr, &sr.ta, i);
+        let tl = touching(sr, &sr.ta, i);
         for (x, &(gi, k)) in henry.iter().enumerate().filter(|h| l > 0.0 || ground[h.1 .1 * n + i] > 0.0) {
             // The column of its air node over the cell, its height, mol dissolved per mol at balance, and the time to balance.
             let (j, air) = (wr.mesh.cells().parent()[i] as usize, wr.mesh.level(AIR));
@@ -109,8 +110,8 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
             row[x] = if m >= 0.0 { m } else { -(-m).min(sr.boil_off(k, i, t)) };
         }
     });
-    let (cells, parent): (Vec<u32>, Vec<u32>) = ((0..n as u32).collect(), w.mesh.cells().parent().to_vec());
-    let (mut mol, mut heat, mut lift) = (vec![0.0; nh * n], vec![0.0; n], vec![0.0; na]);
+    let ks: Vec<u16> = henry.iter().map(|h| h.1 as u16).collect();
+    let (parent, mut links, mut lift) = (w.mesh.cells().parent(), Batch::new([Class::Ground, Class::Air], &ks), vec![0.0; na]);
     // What each air node holds of each gas as the crossing leaves it, mol (`[x * na + j]`).
     let mut left: Vec<f64> = henry.iter().flat_map(|h| w.store.amounts(Class::Air)[h.1 * na..(h.1 + 1) * na].iter().copied()).collect();
     for (i, &j) in parent.iter().enumerate() {
@@ -120,14 +121,12 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
             // The gas brings its heat (the air's, or the ground's when it comes out) and frees its latent heat in the
             // node; `-m` mol go up from the ground node into its air node, and the ground node's state follows.
             let tq = if m > 0.0 { s.ta[j] } else { s.state.tg[i] };
-            (mol[x * n + i], heat[i]) = (-m, heat[i] - m * (sp.cp * tq + sp.lf + sp.lv));
-            (lift[j], left[x * na + j]) = (lift[j] - m * sp.mm * s.view().lift(i, j, w.cfg.gravity), left[x * na + j] - m);
-            s.hold(k, i, m);
+            links.add((i, j), k as u16, (-m, -m * (sp.cp * tq + sp.lf + sp.lv)));
+            lift[j] -= m * sp.mm * s.view().lift(i, j, w.cfg.gravity);
+            left[x * na + j] -= m;
         }
     }
-    let ks: Vec<u16> = henry.iter().map(|h| h.1 as u16).collect();
-    let up = LinkFlux { class: [Class::Ground, Class::Air], a: &cells, b: &parent, ks: &ks, mol: &mol, heat: &heat };
-    apply(w, &[up, Batch::fallen(Class::Air, lift.iter().map(|q| -q)).flux()], &[]);
+    apply(w, &[links.flux(), Batch::fallen(Class::Air, lift.iter().map(|q| -q)).flux()], &[]);
     for &(_, k) in henry {
         if (0..n).any(|i| w.store.amounts(Class::Ground)[k * n + i] > 0.0) {
             s.add_loose(k, true);

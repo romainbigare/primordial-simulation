@@ -1,22 +1,22 @@
 //! What an air step moves, booked at once (laws.md 0, "The books"): the bodies' gas coming up (`up_from_bodies`), then
-//! each cell's exchange with its air node, the sunlight and the heat to space, the wind and the evening of blocks, the
-//! lifts, and the light on the cover (`book`).
+//! each cell's exchange with its air node at the step's mean air, the rain, the sunlight and the heat to space, the wind
+//! and the evening of blocks, the lifts and falls, and the light of the cover (`book`).
 
 use super::super::{follow, year_weight, Scratch};
-use super::cells::{EVAPORATED, KEPT, LIFT, LIGHT, LINK, RAINED, ROW, SPACE, SUN};
+use super::cells::{Landed, Response, KEPT, LIFT, LIGHT, LINK, SPACE, SUN, UP};
 use super::daily::Mean;
 use super::exchange::cloud;
 use super::step::Active;
-use super::sums;
+use super::{lerp, sums};
 use crate::store::{apply, Batch, Boundary, Class, LinkFlux};
 use crate::{World, AIR};
 
 /// The gas the bodies' nodes hold comes up whole into their cells' air nodes, holding its latent heat as the air does;
-/// the air pays its lift (laws.md 1.5).
+/// the air pays its lift (laws.md 1.5). The bodies' nodes hold only gases of the air.
 pub(super) fn up_from_bodies(w: &mut World, s: &Scratch) {
     let (n, g) = (w.mesh.cells().n(), w.cfg.gravity);
     let held = w.store.amounts(Class::Bodies);
-    let ks: Vec<u16> = (0..w.chem.ns()).filter(|&k| held[k * n..(k + 1) * n].iter().any(|&m| m != 0.0)).map(|k| k as u16).collect();
+    let ks: Vec<u16> = s.state.gas.iter().copied().filter(|&k| held[k * n..(k + 1) * n].iter().any(|&m| m != 0.0)).map(|k| k as u16).collect();
     if ks.is_empty() {
         return;
     }
@@ -32,53 +32,71 @@ pub(super) fn up_from_bodies(w: &mut World, s: &Scratch) {
     apply(w, &[up, Batch::fallen(Class::Air, lift.iter().map(|q| -q)).flux()], &[]);
 }
 
-/// Book what the step of `dt` seconds moves, from the cells' rows (`cells::pass`) and the air level's days (`Mean`):
-/// over each cell's link to its air node its gas and heat; the sunlight it absorbs and keeps for its bodies, the heat it
-/// and its air send to space; the wind and the evening of blocks; and the lifts the air pays. Then the light on the
-/// cover, the clouds of what rained (which the next step's sunlight passes), and the tape's rain and evaporation.
-pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rows): (&[Active], &[f64]), mean: &Mean, dt: f64) {
-    let (n, na, width, area) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), ROW + act.len(), w.mesh.cells().area().to_vec());
-    let col = |c: usize| -> Vec<f64> { rows.iter().skip(c).step_by(width).copied().collect() };
+/// Book what the step of `dt` seconds moves: over each cell's link to its air node what evaporates and its heat, at the
+/// step's mean air (`Response::at`, the law the air's days summed); over the links to each node it sees its rain
+/// (`rain`, per active gas (cell, node, mol)) with the heat the node's days gave it; the sunlight it absorbs and keeps
+/// for its cover, the heat it and its air send to space; the wind and the evening of blocks; and the lifts the air pays
+/// and the falls that heat it. Then the light on the cover, the clouds of what rained (which the next step's sunlight
+/// passes), and the tape's rain and evaporation.
+pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Active], &Response, &[Landed]), mean: &Mean, dt: f64) {
+    let (n, na, nx, area) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), act.len(), w.mesh.cells().area().to_vec());
+    // Each cell's outputs at the mean air it saw.
+    let sr = &*s;
+    let seen: Vec<f64> = (0..n).flat_map(|i| std::iter::once(lerp(sr, &mean.t, i)).chain(act.iter().map(move |ac| lerp(sr, &mean.x[ac.gi * na..(ac.gi + 1) * na], i)))).collect();
+    let at = |i: usize, o: usize| response.at(i, o, seen[i * (1 + nx)], |y| seen[i * (1 + nx) + 1 + y]);
     let (cells, parent): (Vec<u32>, Vec<u32>) = ((0..n as u32).collect(), w.mesh.cells().parent().to_vec());
     let (ks, gases): (Vec<u16>, Vec<u16>) = (act.iter().map(|a| a.k as u16).collect(), s.state.gas.iter().map(|&k| k as u16).collect());
-    let (mol, link) = ((0..act.len()).flat_map(|x| col(ROW + x)).collect::<Vec<f64>>(), col(LINK));
+    let mol: Vec<f64> = (0..nx).flat_map(|y| (0..n).map(move |i| (y, i))).map(|(y, i)| at(i, UP + y)).collect();
+    let link: Vec<f64> = (0..n).map(|i| at(i, LINK)).collect();
     let mut paid = mean.moved.paid.clone();
-    parent.iter().zip(col(LIFT)).for_each(|(&j, q)| paid[j as usize] += q);
+    (0..n).for_each(|i| paid[parent[i] as usize] += at(i, LIFT));
+    mean.fall.iter().zip(&mut paid).for_each(|(f, p)| *p -= f);
+    // The rain, with the heat its nodes' days gave it, as each mol of a node's rain brings it.
+    let mut rained = Batch::new([Class::Ground, Class::Air], &ks);
+    let mut fell = vec![0.0; nx * n];
+    for (y, list) in rain.iter().enumerate() {
+        for &(i, j, m) in list {
+            let per = mean.rain_heat[y * na + j as usize] / mean.rain[y * na + j as usize];
+            rained.add((i as usize, j as usize), ks[y], (-m, -m * per));
+            fell[y * n + i as usize] += m;
+        }
+    }
     let (sun, space) = (Boundary::Sun as usize, Boundary::Space as usize);
-    let mut lit = Batch::new([Class::Boundary, Class::Ground], &[]);
-    let mut kept = Batch::new([Class::Boundary, Class::Bodies], &[]);
-    let mut cooled = Batch::new([Class::Ground, Class::Boundary], &[]);
-    for (i, row) in rows.chunks_exact(width).enumerate() {
-        lit.link((sun, i), row[SUN]);
-        cooled.link((i, space), row[SPACE]);
-        if row[KEPT] > 0.0 {
-            kept.link((sun, i), row[KEPT]);
+    let (mut lit, mut kept, mut cooled) = (Batch::new([Class::Boundary, Class::Ground], &[]), Batch::new([Class::Boundary, Class::Bodies], &[]), Batch::new([Class::Ground, Class::Boundary], &[]));
+    for i in 0..n {
+        lit.link((sun, i), response.fixed(i, SUN));
+        cooled.link((i, space), at(i, SPACE));
+        if response.fixed(i, KEPT) > 0.0 {
+            kept.link((sun, i), response.fixed(i, KEPT));
         }
     }
     let mut sky = Batch::new([Class::Air, Class::Boundary], &[]);
-    mean.space.iter().enumerate().for_each(|(j, &q)| (sky.link((j, space), q), ()).1);
+    for (j, &q) in mean.space.iter().enumerate() {
+        sky.link((j, space), q);
+    }
     let up = LinkFlux { class: [Class::Ground, Class::Air], a: &cells, b: &parent, ks: &ks, mol: &mol, heat: &link };
     let m = &mean.moved;
     let wind = LinkFlux { class: [Class::Air, Class::Air], a: &m.a, b: &m.b, ks: &gases, mol: &m.mol, heat: &m.heat };
     let mut lifts = Batch::fallen(Class::Air, paid.iter().map(|q| -q));
-    apply(w, &[up, wind, lit.flux(), kept.flux(), cooled.flux(), sky.flux(), lifts.flux()], &[]);
-    for (x, ac) in act.iter().enumerate() {
-        mol[x * n..(x + 1) * n].iter().any(|&u| u < 0.0).then(|| s.add_loose(ac.k, false));
-        (0..n).filter(|&i| mol[x * n + i] != 0.0).for_each(|i| s.note(ac.k, i, -mol[x * n + i], area[i]));
+    apply(w, &[up, rained.flux(), wind, lit.flux(), kept.flux(), cooled.flux(), sky.flux(), lifts.flux()], &[]);
+    for (y, ac) in act.iter().enumerate() {
+        let net = |i: usize| mol[y * n + i] - fell[y * n + i];
+        (0..n).any(|i| net(i) < 0.0).then(|| s.add_loose(ac.k, false));
+        (0..n).filter(|&i| net(i) != 0.0).for_each(|i| s.note(ac.k, i, -net(i), area[i]));
     }
-    let light = col(LIGHT);
-    w.light.iter_mut().zip(&light).for_each(|(l, got)| *l += got);
+    w.light.iter_mut().enumerate().for_each(|(i, l)| *l += response.fixed(i, LIGHT));
     s.state.cloud = (0..na)
         .map(|j| {
-            let (m, mr) = act.iter().enumerate().map(|(x, ac)| (mean.rain[x * na + j], mean.rain[x * na + j] * s.sp[ac.k].refl[0])).fold((0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1));
+            let (m, mr) = act.iter().enumerate().map(|(y, ac)| (mean.rain[y * na + j], mean.rain[y * na + j] * s.sp[ac.k].refl[0])).fold((0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1));
             cloud((w.cfg.cloud, w.cfg.cloud_ir), (m, mr), w.mesh.level(AIR).area()[j], dt)
         })
         .collect();
-    let (ema, rained, evaporated) = (year_weight(w, dt), col(RAINED), col(EVAPORATED));
+    let ema = year_weight(w, dt);
     for (i, ((r, sum), e)) in w.rain.iter_mut().zip(&mut w.rained).zip(&mut w.evap).enumerate() {
-        follow(r, (rained[i] / (area[i] * dt)) as f32, ema);
-        follow(e, (evaporated[i] / (area[i] * dt)) as f32, ema);
-        *sum += rained[i] / area[i];
+        let (got, up) = ((0..nx).map(|y| fell[y * n + i]).sum::<f64>(), (0..nx).map(|y| mol[y * n + i]).sum::<f64>());
+        follow(r, (got / (area[i] * dt)) as f32, ema);
+        follow(e, (up / (area[i] * dt)) as f32, ema);
+        *sum += got / area[i];
     }
     sums(w, s);
 }

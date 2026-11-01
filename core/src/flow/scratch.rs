@@ -132,6 +132,8 @@ pub struct Scratch {
     pub(super) stale: bool,
     /// The time of the last full build of the state of ground nodes, s.
     pub(super) full_at: Option<u64>,
+    /// The time the state of ground nodes was last brought up to date, s (`flow::ground_now`).
+    pub(super) built_at: Option<u64>,
     /// The numbers of each substance.
     pub(super) sp: Vec<Sp>,
     /// Heat capacity of the skin of each ground node's bed, J/K (at every step, `land::ground_state`).
