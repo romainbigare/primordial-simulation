@@ -858,8 +858,8 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
     for t in 0..5000 {
         // Fuel for the trip each time (the scene is not about eating), with its heat at the body's temperature.
         let mut m = std::mem::take(&mut w.life[slot]);
-        m.e += (1e3 - m.store[RICH]) * w.chem.subs[RICH].cp * m.temp(&w.chem);
-        m.store[RICH] = 1e3;
+        m.e += (1e3 - m.amount(w.chem.body(), RICH)) * w.chem.subs[RICH].cp * m.temp(&w.chem);
+        *m.store_of(&w.chem, RICH) = 1e3;
         let ((from, to), id) = (if t % 2 == 0 { (a, b) } else { (b, a) }, m.id);
         assert_eq!(m.cell as usize, from);
         w.in_cell(from, |w, d| choose::go(w, d, &mut m, to, false));

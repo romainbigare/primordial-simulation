@@ -1,8 +1,11 @@
 //! The world's chemistry: data the laws read; substances are numbers only. `thermo`: phases, melting, vapour pressure,
 //! solubility, heat capacity; `roles`: what the reactions do for bodies.
 
+mod body;
 mod roles;
 mod thermo;
+
+pub use body::{BodyChem, Stores};
 
 use crate::{params::require, units::{MAX_REACTIONS, MAX_SUBSTANCES}};
 use serde::{Deserialize, Serialize};
@@ -137,6 +140,8 @@ struct Derived {
     materials: u64,
     /// The light reactions, by number
     light: Vec<usize>,
+    /// `Chemistry::body`
+    body: BodyChem,
 }
 
 impl Chemistry {
@@ -149,6 +154,12 @@ impl Chemistry {
 
     pub fn ns(&self) -> usize {
         self.subs.len()
+    }
+
+    /// What bodies hold and run (`BodyChem`).
+    #[inline]
+    pub fn body(&self) -> &BodyChem {
+        &self.derived().body
     }
 
     /// What follows from the chemistry (`Derived`), made at the first call (`derive`).
@@ -174,7 +185,8 @@ impl Chemistry {
             let materials = self.materials().fold(0, |m, k| m | 1 << k);
             let light = (0..self.reactions.len()).filter(|&r| self.reactions[r].light).collect();
             let (roles, fixing) = (self.find_life_roles(), self.find_fixing(&minerals));
-            Derived { minerals, air_cp, burners, roles, fixing, mixes, solvents, materials, light }
+            let body = BodyChem::of(self);
+            Derived { minerals, air_cp, burners, roles, fixing, mixes, solvents, materials, light, body }
         })
     }
 
@@ -189,7 +201,9 @@ impl Chemistry {
     }
 
     /// Is the chemistry one the laws can run? At most `MAX_SUBSTANCES` substances with element counts, a vapour pressure
-    /// curve and densities, and at most `MAX_REACTIONS` reactions; every reaction and conversion names substances that exist and keeps its elements and mass.
+    /// curve and densities, and at most `MAX_REACTIONS` reactions; every reaction and conversion names substances that
+    /// exist and keeps its elements and mass; bodies hold at most `BODY_STORES` substances and may run at most
+    /// `BODY_REACTIONS` reactions (`BodyChem`).
     pub fn validate(&self) -> Result<(), String> {
         let ns = self.ns();
         require(ns <= MAX_SUBSTANCES, || format!("{ns} substances: at most {MAX_SUBSTANCES}"))?;
@@ -217,7 +231,7 @@ impl Chemistry {
             let (m_in, m_out) = (mass(&rx.inputs), mass(&rx.outputs));
             require((m_in - m_out).abs() <= MASS_ROUNDING * m_in.max(m_out), || format!("{name} does not keep mass"))?;
         }
-        Ok(())
+        self.body().fits()
     }
 
     /// Add element totals of `amount` moles of substance `k` into `out` (of the elements it holds).

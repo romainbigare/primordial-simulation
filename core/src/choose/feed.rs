@@ -2,17 +2,19 @@
 //! another body (`give`), each by the intake law of bodies (`Body::wanted`).
 
 use crate::body::{self, Body, STRENGTH, TAKEN};
-use crate::chem::{Chemistry, Phase};
+use crate::chem::{Chemistry, Phase, Stores};
 use crate::event::{Event, EventKind};
 use crate::rng::Rng;
+use crate::units::MAX_SUBSTANCES;
 use crate::{bond, lanes, life::{Chunk, Handle}, store::Node, World};
 
 /// A dealing counts in a body's memory (`Body::note`) as this many times the share of its mass moved.
 const NOTE_SCALE: f64 = 10.0;
 
-/// Mass of the amounts `m` that the body at `t` K uses (`Body::uses`), kg.
-fn used_kg(w: &World, b: &Body, t: f64, m: &[f64]) -> f64 {
-    m.iter().enumerate().filter(|&(k, _)| b.uses(&w.chem, k, t)).map(|(k, a)| a * w.chem.subs[k].molar_mass).sum()
+/// Mass of the amounts `m` (mol of each store) that the body at `t` K uses (`Body::uses`), kg.
+fn used_kg(w: &World, b: &Body, t: f64, m: &Stores) -> f64 {
+    let bc = w.chem.body();
+    bc.subs().iter().zip(m).enumerate().filter(|&(_, (&k, _))| b.uses(&w.chem, k, t)).map(|(s, (_, a))| a * bc.mm[s]).sum()
 }
 
 /// The intake law of bodies, one for the ground and for other bodies: what body `b` can take in its update from what
@@ -41,39 +43,41 @@ pub const COVER: u64 = u64::MAX - 1;
 /// passes through it to the ground at once, with its heat (a gut passage of days, within the update's month: it never
 /// becomes the body's own frame). What it takes of the cover it pays to break as a bite does (`Cover::breaking`).
 pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body) {
-    let (i, chem) = (b.cell as usize, &w.chem);
+    let (i, chem, bc) = (b.cell as usize, &w.chem, w.chem.body());
     let (tg, parts) = (w.t_ground_last(i), crate::cover::Parts::of(chem));
     let free = |k: usize| if chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k).max(0.0) } else { 0.0 };
-    let cover: [f64; crate::units::MAX_SUBSTANCES] = parts.as_ref().map_or([0.0; crate::units::MAX_SUBSTANCES], |p| d.at(i).cover.amounts(p));
+    let cover: [f64; MAX_SUBSTANCES] = parts.as_ref().map_or([0.0; MAX_SUBSTANCES], |p| d.at(i).cover.amounts(p));
     let (lying, t) = (|k: usize| free(k) + cover[k], b.temp(chem));
     let gut = intake(w, b, t, lying).0;
     let mut m = b.wanted(chem, lying, gut, b.mass(chem));
-    let mut grazed: Vec<f64> = m.iter().enumerate().map(|(k, &a)| if cover[k] > 0.0 { (a * cover[k] / lying(k)).min(a).min(cover[k]) } else { 0.0 }).collect();
+    // (The cover's parts are among the stores of bodies: its fuel, matter and built solids.)
+    let of_cover = |s: usize| bc.subs().get(s).map_or(0.0, |&k| cover[k]);
+    let mut grazed: Stores = std::array::from_fn(|s| if of_cover(s) > 0.0 { (m[s] * of_cover(s) / lying(bc.subs()[s])).min(m[s]).min(of_cover(s)) } else { 0.0 });
     // The bulk: the parts of the cover it does not use, at the share of the cover its bite took of those it uses.
-    let used = |k: usize| cover[k] > 0.0 && b.uses(chem, k, t);
-    let usable: f64 = (0..chem.ns()).filter(|&k| used(k)).map(|k| cover[k] * chem.subs[k].molar_mass).sum();
-    let bit = if usable > 0.0 { chem.mass_of(&grazed) / usable } else { 0.0 };
-    let mut bulk: Vec<f64> = (0..chem.ns()).map(|k| if cover[k] > 0.0 && !used(k) { cover[k] * bit } else { 0.0 }).collect();
+    let used = |s: usize| of_cover(s) > 0.0 && b.uses(chem, bc.subs()[s], t);
+    let usable: f64 = (0..bc.n()).filter(|&s| used(s)).map(|s| of_cover(s) * bc.mm[s]).sum();
+    let bit = if usable > 0.0 { bc.mass_of(&grazed) / usable } else { 0.0 };
+    let mut bulk: Stores = std::array::from_fn(|s| if of_cover(s) > 0.0 && !used(s) { of_cover(s) * bit } else { 0.0 });
     // All it takes fits its gut.
-    let full = chem.mass_of(&m) + chem.mass_of(&bulk);
+    let full = bc.mass_of(&m) + bc.mass_of(&bulk);
     if full > gut {
         let f = gut / full;
         [&mut m, &mut grazed, &mut bulk].into_iter().for_each(|v| v.iter_mut().for_each(|a| *a *= f));
     }
-    let (all, kg) = (parts.as_ref().map_or(0.0, |p| d.at(i).cover.amounts(p).iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()), chem.mass_of(&grazed) + chem.mass_of(&bulk));
+    let (all, kg) = (parts.as_ref().map_or(0.0, |p| d.at(i).cover.amounts(p).iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()), bc.mass_of(&grazed) + bc.mass_of(&bulk));
     let breaking = parts.as_ref().filter(|_| kg > 0.0).map_or(0.0, |p| d.at(i).cover.breaking(chem, &w.cfg, p, (kg / all.max(1e-300)).min(1.0)));
-    if !body::pay(w, d, b, w.cfg.phys.c_handle * (chem.mass_of(&m) + chem.mass_of(&bulk)) + breaking) {
+    if !body::pay(w, d, b, w.cfg.phys.c_handle * (bc.mass_of(&m) + bc.mass_of(&bulk)) + breaking) {
         return;
     }
-    for (from, x) in [(u64::MAX, chem.mass_of(&m) - chem.mass_of(&grazed)), (COVER, kg)].into_iter().filter(|e| e.1 > 0.0) {
-        let part: Vec<f64> = m.iter().zip(&grazed).map(|(&a, &g)| if from == COVER { g } else { a - g }).collect();
+    for (from, x) in [(u64::MAX, bc.mass_of(&m) - bc.mass_of(&grazed)), (COVER, kg)].into_iter().filter(|e| e.1 > 0.0) {
+        let part: Stores = std::array::from_fn(|s| if from == COVER { grazed[s] } else { m[s] - grazed[s] });
         let ev = EventKind::Took { by: b.id, from, used: used_kg(w, b, t, &part) as f32 };
         d.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: x });
     }
     if let Some(p) = parts.as_ref().filter(|_| kg > 0.0) {
-        for (k, g) in grazed.iter().zip(&bulk).map(|(g, x)| g + x).enumerate().filter(|e| e.1 > 0.0) {
-            b.e += d.cover(i).take(chem, p, k, g);
-            b.store[k] += g;
+        for (s, g) in grazed.iter().zip(&bulk).map(|(g, x)| g + x).enumerate().filter(|e| e.1 > 0.0) {
+            b.e += d.cover(i).take(chem, p, bc.subs()[s], g);
+            b.store[s] += g;
         }
         d.counts.cover_lost[TAKEN as usize] += kg;
         if bulk.iter().any(|&x| x > 0.0) {
@@ -81,11 +85,11 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body) {
             body::to_ground(w, d, b, &th, &bulk);
         }
     }
-    for k in 0..m.len() {
+    for (s, &k) in bc.subs().iter().enumerate() {
         let held = if chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k).max(0.0) } else { 0.0 };
-        let want = (m[k] - grazed[k]).min(held);
+        let want = (m[s] - grazed[s]).min(held);
         if want <= 0.0 {
-            m[k] = grazed[k];
+            m[s] = grazed[s];
             continue;
         }
         // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
@@ -93,34 +97,34 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body) {
         let heat = want * (cp * tg + chem.fused_heat(k, tg, |j| d.moves.amount(w, Node::ground(i), j)));
         let cap = d.moves.heat_cap_ground(w, i);
         let (got, took) = d.moves.take_from_ground(w, i, (k, want, cp), heat, cap);
-        (b.store[k], b.e, m[k]) = (b.store[k] + got, b.e + took, got + grazed[k]);
+        (b.store[s], b.e, m[s]) = (b.store[s] + got, b.e + took, got + grazed[s]);
     }
-    b.digest(chem, chem.matter().map_or(0.0, |k| m[k]), &mut d.counts.rounded[0]);
+    b.digest(chem, Body::matter_at(chem).map_or(0.0, |s| m[s]), &mut d.counts.rounded[0]);
 }
 
 /// Release stores above the level the body keeps (`Body::level`) to the cell's ground.
 pub(super) fn put(w: &World, d: &mut Chunk, b: &mut Body) {
-    let mass = b.mass(&w.chem);
-    let m: Vec<f64> = (0..w.chem.ns()).map(|k| (b.store[k] - b.level(&w.chem, k, mass)).clamp(0.0, b.store[k])).collect();
-    if !body::pay(w, d, b, w.cfg.phys.c_handle * w.chem.mass_of(&m)) {
+    let (mass, bc) = (b.mass(&w.chem), w.chem.body());
+    let m: Stores = std::array::from_fn(|s| if s < bc.n() { (b.store[s] - b.level(&w.chem, s, mass)).clamp(0.0, b.store[s]) } else { 0.0 });
+    if !body::pay(w, d, b, w.cfg.phys.c_handle * bc.mass_of(&m)) {
         return;
     }
-    let m: Vec<f64> = m.iter().zip(&b.store).map(|(&a, &held)| a.min(held)).collect();
+    let m: Stores = std::array::from_fn(|s| m[s].min(b.store[s]));
     let th = b.thermal(&w.chem);
     body::to_ground(w, d, b, &th, &m);
 }
 
-/// Move amounts `m` (mol) from `from` to `to`, with their heat and their share of `from`'s brood; `to` digests the body
-/// matter among them (`Body::digest`, its rounding counted in `rounded`).
-fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body, m: &[f64]) {
+/// Move amounts `m` (mol of each store) from `from` to `to`, with their heat and their share of `from`'s brood; `to`
+/// digests the body matter among them (`Body::digest`, its rounding counted in `rounded`).
+fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body, m: &Stores) {
     let q = from.heat_with(chem, &from.thermal(chem), m);
     from.lose(chem, m);
-    for (k, &a) in m.iter().enumerate() {
-        to.store[k] += a;
+    for (s, &a) in m.iter().enumerate() {
+        to.store[s] += a;
     }
     from.e -= q;
     to.e += q;
-    to.digest(chem, chem.matter().map_or(0.0, |k| m[k]), rounded);
+    to.digest(chem, Body::matter_at(chem).map_or(0.0, |s| m[s]), rounded);
 }
 
 /// Take from another body in the cell by uptake selectivity, by the intake law (`intake`: its members spread over the
@@ -130,22 +134,22 @@ fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body,
 /// less than one member of a node meets one whole member with that chance: it takes, tears and pays what that meeting
 /// would, times the chance, the expected outcome of an individual's draw.
 pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, s: Handle, rng: &mut Rng) {
-    let o = &d[s];
+    let (o, bc) = (&d[s], w.chem.body());
     let (mb, mo, tb) = (b.mass(&w.chem), o.mass(&w.chem), b.temp(&w.chem));
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
-    let (kg, swept) = intake(w, b, tb, |k| o.store[k]);
+    let (kg, swept) = intake(w, b, tb, |k| o.amount(bc, k));
     // One draw finds an individual prey.
     let reached = if o.n() > 1.0 { swept } else if rng.f64() < swept { 1.0 } else { return };
     // The share of the members a meeting reaches (at least one whole member) and the chance of that meeting.
     let per = reached.max(1.0 / o.n());
     let chance = reached / per;
-    let m = b.wanted(&w.chem, |k| per * o.store[k], kg * fb / (fb + fo + 1e-30), mb);
+    let m = b.wanted(&w.chem, |k| per * o.amount(bc, k), kg * fb / (fb + fo + 1e-30), mb);
     let resist = 1.0 + lanes::thickness(w, w.life.sum(b.cell as usize)[1], w.mesh.cells().area()[b.cell as usize]);
     let hit = reached;
     // The bite tears this share of the body of each member it reaches; the stores they held spill in proportion, less
     // what the taker took (all they held, if they die).
-    let (built, got) = (per * o.built(&w.chem), w.chem.mass_of(&m));
-    let eaten = w.chem.matter().map_or(0.0, |k| if o.store[k] > 0.0 { m[k] / (per * o.store[k]) } else { 0.0 });
+    let (built, got) = (per * o.built(&w.chem), bc.mass_of(&m));
+    let eaten = Body::matter_at(&w.chem).map_or(0.0, |k| if o.store[k] > 0.0 { m[k] / (per * o.store[k]) } else { 0.0 });
     let f = (got / built.max(1e-30)).max(eaten).min(1.0);
     // The taker pays to handle what it takes and to break the share it tears (`Body::breaking`).
     let cost = (w.cfg.phys.c_handle * got * resist + o.breaking(&w.chem, &w.cfg, f * per)) * chance;
@@ -153,10 +157,10 @@ pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, s: Handle, rng: &mut Rn
         return;
     }
     let mut o = std::mem::take(&mut d[s]);
-    let m: Vec<f64> = m.iter().map(|a| a * hit / per).collect();
+    let m = m.map(|a| a * hit / per);
     let torn = if body::torn_to_death(&w.cfg.phys, f) { hit } else { f * hit };
-    let mut rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (torn * s - a).max(0.0)).collect();
-    let got = w.chem.mass_of(&m);
+    let mut rest: Stores = std::array::from_fn(|q| (torn * o.store[q] - m[q]).max(0.0));
+    let got = bc.mass_of(&m);
     transfer(&w.chem, &mut d.counts.rounded[0], &mut o, b, &m);
     let ev = EventKind::Took { by: b.id, from: o.id, used: used_kg(w, b, tb, &m) as f32 };
     d.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: got });
@@ -169,21 +173,21 @@ pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, s: Handle, rng: &mut Rn
 /// members it meets could take in the time and have room for (each of its members meets one of the other's, as many as
 /// both have). The other remembers the giver.
 pub(super) fn give(w: &World, d: &mut Chunk, b: &mut Body, s: Handle) {
-    let chem = &w.chem;
+    let (chem, bc) = (&w.chem, w.chem.body());
     let (size, mass) = (b.size(chem), b.mass(chem));
-    let spare = |k: usize| b.spare(chem, &w.cfg.phys, k, (size, mass));
-    let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
+    let spare = |q: usize| b.spare(chem, &w.cfg.phys, q, (size, mass));
+    let all: f64 = (0..bc.n()).map(|q| spare(q) * bc.mm[q]).sum();
     let o = &d[s];
     let (mo, met, t) = (o.mass(chem), b.n().min(o.n()), o.temp(chem));
     let share = (w.cfg.phys.take * w.cfg.update_days() * o.supply(&w.chem, &w.cfg.phys, t) * met / o.n() / all.max(1e-9)).min(met / b.n());
-    let mut m: Vec<f64> = (0..chem.ns()).map(|k| if o.uses(chem, k, t) { (spare(k) * share).min(o.room(chem, k, mo) * met / o.n()) } else { 0.0 }).collect();
+    let mut m: Stores = std::array::from_fn(|q| if q < bc.n() && o.uses(chem, bc.subs()[q], t) { (spare(q) * share).min(o.room(chem, q, mo) * met / o.n()) } else { 0.0 });
     o.digest_room(chem, &mut m, mo);
-    let got = w.chem.mass_of(&m);
+    let got = bc.mass_of(&m);
     if got <= 0.0 || !body::pay(w, d, b, w.cfg.phys.c_handle * got) {
         return;
     }
     // Paying may have used some of what was to be put.
-    let m: Vec<f64> = m.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
+    let m: Stores = std::array::from_fn(|q| m[q].min(b.store[q]));
     let mut o = std::mem::take(&mut d[s]);
     transfer(&w.chem, &mut d.counts.rounded[0], b, &mut o, &m);
     o.note(b.id, (NOTE_SCALE * got / mo) as f32);

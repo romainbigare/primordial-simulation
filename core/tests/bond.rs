@@ -9,7 +9,7 @@ use pcore::life::{Entry, Handle};
 use pcore::units::DAY_S;
 use pcore::store::{Class, Node};
 use pcore::World;
-use worldgen::testkit::{dry_land, eater, part_of, plate, relocate, scale, set_amount, small_world, start as world, Books, Brain, Line, LIQUID, MINERAL};
+use worldgen::testkit::{dry_land, eater, part_of, plate, relocate, scale, set_amount, small_world, start as world, stores, Books, Brain, Line, LIQUID, MINERAL};
 
 /// A bond breaks when the weight it bears is more than it holds: of two parts hung on an anchored one by bonds that
 /// hold 10 t weight, the one of 1 t stays and the one of 100 t falls.
@@ -55,14 +55,14 @@ fn walls_keep_a_body_warm() {
     // It rests (the biases of its brain's action rows: resting up, every other action down), so it stays where it is put.
     let shape = w.life.brains[w.life[slot].lineage as usize].as_ref().expect("a brain").shape;
     let b = &mut w.life[slot];
-    let k = (0..b.store.len()).max_by(|&x, &y| b.store[x].total_cmp(&b.store[y])).unwrap();
+    let k = (0..w.chem.ns()).max_by(|&x, &y| b.amount(w.chem.body(), x).total_cmp(&b.amount(w.chem.body(), y))).unwrap();
     let rows = (0..pcore::brain::FIXED).chain([shape.dir()]).chain((0..pcore::brain::VERBS + pcore::brain::OVERBS).map(|v| shape.verb(v)));
     for q in rows {
         b.rows[q * shape.r() + shape.h] += if q == pcore::brain::REST { 3.0 } else { -3.0 };
     }
     // (At the body's temperature, with the fusion enthalpy a molten store holds: `Body::energy_at`.)
     let t = b.temp(&w.chem);
-    b.store[k] *= 1.3;
+    *b.store_of(&w.chem, k) *= 1.3;
     b.e = b.energy_at(&w.chem, t);
     // (It does not grow: a warm body builds faster, at the pace of its temperature, and would burn the fuel of its month.)
     w.cfg.phys.c_build = 0.0;
@@ -86,13 +86,14 @@ fn a_small_body_can_make_parts_and_a_cell_holds_many() {
     let slot = w.life.living().map(|x| x.0).find(|&s| w.life[s].n() == 1.0).expect("an eater");
     let mut b = std::mem::take(&mut w.life[slot]);
     b.cell = i as u32;
-    let fed: Vec<f64> = b.store.iter().map(|a| 2.0 * a).collect();
+    let fed = b.store.map(|a| 2.0 * a);
     for _ in 0..8 {
         // Fed again each time to twice its starting stores (its matter and heat are not booked here), so that it has
         // solids above its minimums to spare, and its liquid with them (a dry body's pores close, and it could not
         // breathe to pay).
         let t = b.temp(&w.chem);
-        (0..b.store.len()).filter(|&k| w.chem.phase(k, t) != Phase::Gas).for_each(|k| b.store[k] = b.store[k].max(fed[k]));
+        let subs = w.chem.body().subs();
+        (0..subs.len()).filter(|&s| w.chem.phase(subs[s], t) != Phase::Gas).for_each(|s| b.store[s] = b.store[s].max(fed[s]));
         b.e = b.energy_at(&w.chem, t);
         bond::form(&mut w, &mut b, [0.0, 0.5]);
         b.hold = None;
@@ -114,12 +115,12 @@ fn forming_never_takes_more_than_is_left() {
     let t = b.temp(chem);
     let solid = |k: usize| chem.phase(k, t) == Phase::Solid;
     let k = b.k.burn.iter().flat_map(|&(r, _)| chem.reactions[r].inputs.iter().map(|p| p.0 as usize)).find(|&k| solid(k)).expect("a solid fuel");
-    (0..b.store.len()).filter(|&x| solid(x) && x != k).for_each(|x| b.store[x] = 0.0);
+    chem.body().subs().iter().copied().filter(|&x| solid(x) && x != k).for_each(|x| *b.store_of(chem, x) = 0.0);
     b.genes[pcore::body::Layout::of(chem).min + k] = 0.0;
-    b.store[k] = 0.05 * b.mass(chem) / chem.subs[k].molar_mass;
+    *b.store_of(&w.chem, k) = 0.05 * b.mass(chem) / chem.subs[k].molar_mass;
     b.e = b.energy_at(chem, t);
     // Half the fuel is to go out (`Physics::form` of its mass), and paying for it burns nearly all of it.
-    let got = 0.5 * b.store[k] * chem.subs[k].molar_mass;
+    let got = 0.5 * b.amount(w.chem.body(), k) * chem.subs[k].molar_mass;
     w.cfg.phys.form = got / b.mass(chem);
     let r = worldgen::testkit::release(&w, &w.life[slot]);
     (w.cfg.phys.min_kg, w.cfg.phys.c_form) = (0.5 * got, 0.99 * r / got);
@@ -255,10 +256,10 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
         (w, h, i, p, b)
     };
     let (mut w, h, i, p, mut b) = take_scene();
-    let (books, before, (held, e), (store, eb)) = (Books::now(&w), ground(&w, i), holds(&w, p), (b.store.clone(), b.e));
+    let (books, before, (held, e), (store, eb)) = (Books::now(&w), ground(&w, i), holds(&w, p), (stores(&w, &b), b.e));
     bond::act(&mut w, &mut b, 1, p);
     assert!(!w.parts.parts[p].alive, "the part is still there");
-    let took: Vec<f64> = b.store.iter().zip(&store).map(|(a, s)| a - s).collect();
+    let took: Vec<f64> = stores(&w, &b).iter().zip(&store).map(|(a, s)| a - s).collect();
     assert!(took[MINERAL] > 0.0 && took[MINERAL] < 0.5 * held[MINERAL], "it took {} mol of {}", took[MINERAL], held[MINERAL]);
     let gain: Vec<f64> = held.iter().zip(&took).map(|(a, t)| a - t).collect();
     gained(&w, i, &before, &gain, e - (b.e - eb));

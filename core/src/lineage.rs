@@ -107,6 +107,6 @@ pub fn resize(w: &World, d: &mut Chunk, b: &mut Body) {
     d.move_to(b, lineage, born);
     // With no brain it has no decision to learn from, no memory and no signal.
     if w.life.brainless(b) {
-        (b.trace, b.mem, b.sig, b.wb, b.var, b.ms) = (Vec::new(), Vec::new(), Default::default(), 0.0, 0.0, Vec::new());
+        (b.trace, b.mem, b.sig, b.wb, b.var, b.ms) = (Vec::new(), Default::default(), Default::default(), 0.0, 0.0, Vec::new());
     }
 }

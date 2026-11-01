@@ -2,7 +2,8 @@
 //! let go, and carry what they hold when they move. A body's force decides what it can hold and break.
 
 use super::{cell, dissolve, event, fall_apart, held, holder, id, link, make, members, move_structure, part, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
-use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase}, life::{Chunk, Handle}, life::Entry, store::{Class, Move, Node, NodeId}, World};
+use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase, Stores}, life::{Chunk, Handle}, life::Entry, store::{Class, Move, Node, NodeId}, World};
+use crate::units::BODY_STORES;
 
 /// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the ground rests on it).
 fn grab(w: &mut World, b: &mut Body, p: usize) {
@@ -122,22 +123,23 @@ pub fn act(w: &mut World, b: &mut Body, v: usize, p: usize) {
 /// Take from a part by the body's uptake selectivity, the held liquid first, as much as it takes by its mass in the
 /// time and its stores have room for. Walls taken below `min_kg` fall apart (`fall_apart`): the rest goes to the ground.
 fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
-    let pt = &w.parts.parts[p];
+    let (pt, bc) = (&w.parts.parts[p], w.chem.body());
     let m = b.wanted(&w.chem, |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mb);
-    let got = w.chem.mass_of(&m);
+    let got = bc.mass_of(&m);
     if got <= 0.0 || !pay(w, b, w.cfg.phys.c_handle * got) {
         return;
     }
     let (me, chem, pt) = (Some(id(w, p)), &w.chem, &mut w.parts.parts[p]);
+    let bc = chem.body();
     // The heat that leaves with what it takes: its share by heat capacity.
-    let q = pt.e * chem.heat_cap_of(&m) / pt.heat_cap(chem);
-    for (k, &a) in m.iter().enumerate() {
+    let q = pt.e * bc.heat_cap_of(&m) / pt.heat_cap(chem);
+    for (s, (&a, &k)) in m.iter().zip(bc.subs()).enumerate() {
         let f = a.min(pt.fill[k]);
         pt.fill[k] -= f;
         pt.wall[k] = (pt.wall[k] - (a - f)).max(0.0);
-        b.store[k] += a;
+        b.store[s] += a;
     }
-    b.digest(chem, chem.matter().map_or(0.0, |k| m[k]), &mut w.counts.rounded[0]);
+    b.digest(chem, Body::matter_at(chem).map_or(0.0, |s| m[s]), &mut w.counts.rounded[0]);
     (pt.e, b.e) = (pt.e - q, b.e + q);
     w.counts.parts.from_parts += got;
     if pt.walls(chem).mass < w.cfg.phys.min_kg {
@@ -158,36 +160,36 @@ fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
 
 /// Put to a part what a body can spare (`Body::spare`): liquids into its hollow, solids onto its walls.
 fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
-    let (chem, t) = (&w.chem, b.temp(&w.chem));
-    let size = b.size(chem);
-    let phase: Vec<Phase> = (0..chem.ns()).map(|k| chem.phase_in(k, t, |j| b.store[j])).collect();
-    let spare: Vec<f64> = (0..chem.ns()).map(|k| if phase[k] == Phase::Gas { 0.0 } else { b.spare(chem, &w.cfg.phys, k, (size, mb)) }).collect();
-    let all = w.chem.mass_of(&spare);
+    let (chem, t, bc) = (&w.chem, b.temp(&w.chem), w.chem.body());
+    let (size, n) = (b.size(chem), bc.n());
+    let phase: [Phase; BODY_STORES] = std::array::from_fn(|s| if s < n { b.phase_of(chem, s, t) } else { Phase::Gas });
+    let spare: Stores = std::array::from_fn(|s| if phase[s] == Phase::Gas { 0.0 } else { b.spare(chem, &w.cfg.phys, s, (size, mb)) });
+    let all = bc.mass_of(&spare);
     if all <= 0.0 {
         return;
     }
-    let wet: Vec<bool> = phase.iter().map(|&p| p == Phase::Liquid).collect();
-    let mut m: Vec<f64> = spare.iter().map(|a| a * (w.cfg.phys.take * days * mb / all).min(1.0)).collect();
-    let lv: f64 = (0..chem.ns()).filter(|&k| wet[k]).map(|k| m[k] * chem.molar_volume(k, Phase::Liquid)).sum();
+    let wet = |s: usize| phase[s] == Phase::Liquid;
+    let mut m: Stores = spare.map(|a| a * (w.cfg.phys.take * days * mb / all).min(1.0));
+    let lv: f64 = (0..n).filter(|&s| wet(s)).map(|s| m[s] * chem.molar_volume(bc.subs()[s], Phase::Liquid)).sum();
     let fit = (w.parts.parts[p].room(chem) / lv.max(1e-12)).min(1.0);
-    (0..chem.ns()).filter(|&k| wet[k]).for_each(|k| m[k] *= fit);
-    let got = w.chem.mass_of(&m);
+    (0..n).filter(|&s| wet(s)).for_each(|s| m[s] *= fit);
+    let got = bc.mass_of(&m);
     if got <= 0.0 || !pay(w, b, w.cfg.phys.c_handle * got) {
         return;
     }
     let (m, q) = give_up(&w.chem, b, &m);
-    let pt = &mut w.parts.parts[p];
-    m.iter().enumerate().for_each(|(k, &a)| *if wet[k] { &mut pt.fill[k] } else { &mut pt.wall[k] } += a);
+    let (pt, bc) = (&mut w.parts.parts[p], w.chem.body());
+    bc.subs().iter().zip(&m).enumerate().for_each(|(s, (&k, &a))| *if wet(s) { &mut pt.fill[k] } else { &mut pt.wall[k] } += a);
     pt.e += q;
     w.counts.parts.to_parts += got;
     pt.resize(&w.chem);
     restructure(w, p);
 }
 
-/// Body `b` gives up `m` mol of its stores, no more than it holds (paying may have used some of them), with their share
-/// of its heat. Returns what it gave and that heat, J.
-fn give_up(chem: &Chemistry, b: &mut Body, m: &[f64]) -> (Vec<f64>, f64) {
-    let m: Vec<f64> = m.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
+/// Body `b` gives up `m` mol of each of its stores, no more than it holds (paying may have used some of them), with their
+/// share of its heat. Returns what it gave and that heat, J.
+fn give_up(chem: &Chemistry, b: &mut Body, m: &Stores) -> (Stores, f64) {
+    let m: Stores = std::array::from_fn(|s| m[s].min(b.store[s]));
     let q = b.heat_with(chem, &b.thermal(chem), &m);
     b.store.iter_mut().zip(&m).for_each(|(s, a)| *s -= a);
     b.e -= q;
@@ -198,17 +200,18 @@ fn give_up(chem: &Chemistry, b: &mut Body, m: &[f64]) -> (Vec<f64>, f64) {
 /// `min_kg`), shaped by the brain; the body holds it if its hands are free and its force bears it.
 pub fn form(w: &mut World, b: &mut Body, shape: [f32; 2]) {
     let i = b.cell as usize;
-    let (chem, mb, t) = (&w.chem, b.mass(&w.chem), b.temp(&w.chem));
+    let (chem, mb, t, bc) = (&w.chem, b.mass(&w.chem), b.temp(&w.chem), w.chem.body());
     let size = b.size(chem);
-    let spare: Vec<f64> = (0..chem.ns()).map(|k| if chem.phase_in(k, t, |j| b.store[j]) == Phase::Solid { (b.store[k] - b.kept(chem, &w.cfg.phys, k, size)).max(0.0) } else { 0.0 }).collect();
-    let all = w.chem.mass_of(&spare);
+    let spare: Stores = std::array::from_fn(|s| if s < bc.n() && b.phase_of(chem, s, t) == Phase::Solid { (b.store[s] - b.kept(chem, &w.cfg.phys, s, size)).max(0.0) } else { 0.0 });
+    let all = bc.mass_of(&spare);
     let f = (w.cfg.phys.form * mb / all.max(1e-9)).min(1.0);
-    let wall: Vec<f64> = spare.iter().map(|a| a * f).collect();
-    let got = w.chem.mass_of(&wall);
+    let wall = spare.map(|a| a * f);
+    let got = bc.mass_of(&wall);
     if got < w.cfg.phys.min_kg || !pay(w, b, w.cfg.phys.c_form * got) {
         return;
     }
     let (wall, e) = give_up(&w.chem, b, &wall);
+    let wall = w.chem.body().spread_out(&wall)[..w.chem.ns()].to_vec();
     let p = make(w, i, wall, e, shape[0], shape[1]);
     w.counts.parts.formed += 1.0;
     if held(w, b).is_none() {

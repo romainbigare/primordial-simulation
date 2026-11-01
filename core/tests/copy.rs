@@ -7,7 +7,7 @@ use pcore::body::{MUT, STRENGTH};
 use pcore::rng::{Purpose, Rng};
 use pcore::units::DAY_S;
 use pcore::{body, brain, copy, World};
-use worldgen::testkit::{self, add, brood, children, eater, kg, node_of, only_the_solid, out, put, put_kg_m2, scale, start, took_used, Books, Brain, Line, BURN, DISSOLVED, LIQUID, MATTER, RICH};
+use worldgen::testkit::{self, add, brood, children, eater, kg, node_of, only_the_solid, out, put, put_kg_m2, scale, start, stores, took_used, Books, Brain, Line, BURN, DISSOLVED, LIQUID, MATTER, RICH};
 use pcore::store::Class;
 
 /// A body given the minerals growth is built of up to the level it keeps (booked as an edit): what a test that builds
@@ -15,7 +15,7 @@ use pcore::store::Class;
 fn feed_minerals(w: &mut World, s: Handle) {
     let mut b = std::mem::take(&mut w.life[s]);
     for (mk, _) in w.chem.minerals().to_vec() {
-        let gap = (b.level(&w.chem, mk, b.mass(&w.chem)) - b.store[mk]).max(0.0) * w.chem.subs[mk].molar_mass;
+        let gap = (b.level(&w.chem, w.chem.body().place(mk).expect("a store"), b.mass(&w.chem)) - b.amount(w.chem.body(), mk)).max(0.0) * w.chem.subs[mk].molar_mass;
         testkit::add(w, &mut b, mk, gap);
     }
     w.life[s] = b;
@@ -33,21 +33,21 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let b = eater(&mut w, i, brain::REST, 6.0);
     let (s, mut b) = out(&mut w, b);
     let books = Books::now(&w);
-    let (matter0, rich0, liquid0, e0) = (b.store[MATTER], b.store[RICH], b.store[LIQUID], w.store.heat(Class::Ground).iter().sum::<f64>());
+    let (matter0, rich0, liquid0, e0) = (b.amount(w.chem.body(), MATTER), b.amount(w.chem.body(), RICH), b.amount(w.chem.body(), LIQUID), w.store.heat(Class::Ground).iter().sum::<f64>());
     let minerals = w.chem.minerals().to_vec();
-    let store0 = b.store.clone();
-    let mineral0: Vec<f64> = minerals.iter().map(|m| b.store[m.0]).collect();
+    let store0 = stores(&w, &b);
+    let mineral0: Vec<f64> = minerals.iter().map(|m| b.amount(w.chem.body(), m.0)).collect();
     // (Counts of the chemistry's growth: the solid in, the liquid out.)
     let bl = w.chem.build.as_ref().expect("growth");
     let (n_rich, n_liquid) = (bl.inputs.iter().find(|p| p.0 as usize == RICH).expect("the solid").1 as f64, bl.outputs.iter().find(|p| p.0 as usize == LIQUID).expect("the liquid").1 as f64);
     let days = w.cfg.update_days();
     assert!(w.in_cell(b.cell as usize, |w, d| testkit::grow(w, d, &mut b, days)), "it did not grow");
-    let (x, c_copy) = (b.store[MATTER] - matter0, w.cfg.phys.c_copy);
+    let (x, c_copy) = (b.amount(w.chem.body(), MATTER) - matter0, w.cfg.phys.c_copy);
     assert!(x > 0.0);
     // The work: c_copy per kg of matter, burnt as the solid is (heat per mol of the burning reaction).
     let burnt = c_copy * x * w.chem.subs[MATTER].molar_mass / -w.chem.dh(BURN);
-    let (dsolid, dliquid) = (rich0 - b.store[RICH], b.store[LIQUID] - liquid0);
-    let dmineral: Vec<f64> = minerals.iter().zip(&mineral0).map(|(m, a)| a - b.store[m.0]).collect();
+    let (dsolid, dliquid) = (rich0 - b.amount(w.chem.body(), RICH), b.amount(w.chem.body(), LIQUID) - liquid0);
+    let dmineral: Vec<f64> = minerals.iter().zip(&mineral0).map(|(m, a)| a - b.amount(w.chem.body(), m.0)).collect();
     println!("matter made {x:.4} mol ({:.3} kg), solid down {dsolid:.4} mol ({:.4} for the matter, burnt {burnt:.4}), minerals down {dmineral:.4?}, liquid up {dliquid:.4}", x * w.chem.subs[MATTER].molar_mass, n_rich * x);
     assert!((dsolid / (n_rich * x + burnt) - 1.0).abs() < 1e-6, "the solid fell by {dsolid}, not {}", n_rich * x + burnt);
     for (m, d) in minerals.iter().zip(&dmineral) {
@@ -62,7 +62,7 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let heat = w.store.heat(Class::Ground).iter().sum::<f64>() - e0;
     let work = burnt * (-w.chem.dh(BURN) - burn_liquid * w.chem.subs[LIQUID].lf);
     let t = b.temp(&w.chem);
-    let held: f64 = (0..w.chem.ns()).map(|k| (b.store[k] - store0[k]) * w.chem.subs[k].cp * t).sum();
+    let held: f64 = (0..w.chem.ns()).map(|k| (b.amount(w.chem.body(), k) - store0[k]) * w.chem.subs[k].cp * t).sum();
     assert!(heat > 0.0 && (heat / (work - held) - 1.0).abs() < 0.06, "heat to the ground {heat:e} J, the work {work:e} J, held {held:e} J");
     // Growth is thermoneutral in a body: the matter holds the energy of the solid it was made of (the liquids holding their
     // fusion enthalpy).
@@ -87,11 +87,11 @@ fn growth_is_limited_by_c_build() {
         b.genes[ALLOC] = alloc;
         scale(&mut w, &mut b, 5.0);
         let (s, mut b) = out(&mut w, b);
-        let m0 = b.store[MATTER];
+        let m0 = b.amount(w.chem.body(), MATTER);
         let days = w.cfg.update_days();
         let room = w.cfg.phys.c_build * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)) / w.cfg.phys.m_ref * days / w.cfg.phys.c_copy;
         let (built0, grew) = (b.built(&w.chem), w.in_cell(b.cell as usize, |w, d| testkit::grow(w, d, &mut b, days)));
-        let kg_matter = (b.store[MATTER] - m0) * w.chem.subs[MATTER].molar_mass;
+        let kg_matter = (b.amount(w.chem.body(), MATTER) - m0) * w.chem.subs[MATTER].molar_mass;
         let (brood, built1) = (b.brood * w.chem.subs[MATTER].molar_mass, b.built(&w.chem));
         w.life[s] = b;
         (grew, kg_matter, room, brood, built1 - built0)
@@ -127,9 +127,9 @@ fn growth_is_limited_by_what_the_body_can_spare() {
         add(&mut w, &mut b, RICH, -out_kg);
         let (s, mut b) = out(&mut w, b);
         let days = w.cfg.update_days();
-        let m0 = b.store[MATTER];
+        let m0 = b.amount(w.chem.body(), MATTER);
         let grew = w.in_cell(b.cell as usize, |w, d| testkit::grow(w, d, &mut b, days));
-        let built = (b.store[MATTER] - m0) * w.chem.subs[MATTER].molar_mass;
+        let built = (b.amount(w.chem.body(), MATTER) - m0) * w.chem.subs[MATTER].molar_mass;
         let (up, release) = (body::upkeep(&w, &b, days, b.mass(&w.chem), b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys)), testkit::release(&w, &b));
         let room = w.cfg.phys.c_build * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)) / w.cfg.phys.m_ref * days / w.cfg.phys.c_copy;
         println!("fuel kept {keep}: built {built:.4} kg of matter (allowance {room:.3} kg), release {release:.3e} J against upkeep {up:.3e} J");
@@ -159,8 +159,8 @@ fn storing_the_solid_costs_no_build() {
     add(&mut w, &mut b, RICH, 100.0);
     assert!(b.size(&w.chem) > 20.0);
     let (_, mut b) = out(&mut w, b);
-    let (stores, heat, days) = (b.store.clone(), b.e, w.cfg.update_days());
-    assert!(!w.in_cell(b.cell as usize, |w, d| testkit::grow(w, d, &mut b, days)) && b.store == stores && b.e == heat, "a body with no allowance built");
+    let (held, heat, days) = (b.store, b.e, w.cfg.update_days());
+    assert!(!w.in_cell(b.cell as usize, |w, d| testkit::grow(w, d, &mut b, days)) && b.store == held && b.e == heat, "a body with no allowance built");
 
     // A body taking the solid from the ground, with no allowance to build.
     let (mut w, i) = start();
@@ -212,7 +212,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     b.brood = 2.5 * child_mol;
     let (s, mut b) = out(&mut w, b);
     let books = Books::now(&w);
-    let (before, ground0, built0, size0, temp0) = (b.store.clone(), w.store.heat(Class::Ground).iter().sum::<f64>(), b.built(&w.chem), b.size(&w.chem), b.temp(&w.chem));
+    let (before, ground0, built0, size0, temp0) = (stores(&w, &b), w.store.heat(Class::Ground).iter().sum::<f64>(), b.built(&w.chem), b.size(&w.chem), b.temp(&w.chem));
     assert!(b.adult(&w.chem), "the parent is mature: built {} kg", built0);
     w.time += DAY_S;
     assert!(w.in_cell(b.cell as usize, |w, d| copy::copy(w, d, &mut b)), "no child");
@@ -226,21 +226,21 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     for &k in &kids {
         let c = &w.life[k];
         // (Its matter over 1 - h of its parent: its own keep gene is its parent's plus noise.)
-        let body = c.store[MATTER] * mm / c.n() / (1.0 - h);
+        let body = c.amount(w.chem.body(), MATTER) * mm / c.n() / (1.0 - h);
         assert!((body - 1.0).abs() < 1e-9, "a child's body is {body} kg, not 10^CHILD x the copy mass = 1 kg");
-        given += c.store[MATTER];
+        given += c.amount(w.chem.body(), MATTER);
         // Provisions in the proportion the parent's body holds them to its matter (what it holds of matter: 5.25 - its brood).
         let per_mol = c.n() * child_mol / (before[MATTER] - 2.5 * child_mol);
         for q in (0..w.chem.ns()).filter(|&q| q != MATTER) {
-            assert!((c.store[q] - per_mol * before[q]).abs() <= 1e-9 * before[q].max(1.0), "substance {q}: child {} of {}", c.store[q], before[q]);
+            assert!((c.amount(w.chem.body(), q) - per_mol * before[q]).abs() <= 1e-9 * before[q].max(1.0), "substance {q}: child {} of {}", c.amount(w.chem.body(), q), before[q]);
         }
         // As warm as its parent was, with no work paid.
         assert!((c.temp(&w.chem) / temp0 - 1.0).abs() < 1e-9, "the child is as warm as the parent was");
     }
     assert!((given - 2.0 * child_mol).abs() < 1e-9 * child_mol, "the children got {given} mol of matter, not {}", 2.0 * child_mol);
     for (q, &was) in before.iter().enumerate().take(w.chem.ns()) {
-        let kids_hold: f64 = kids.iter().map(|&k| w.life[k].store[q]).sum();
-        assert!((b.store[q] + kids_hold - was).abs() <= 1e-9 * was.max(1.0), "substance {q} not kept");
+        let kids_hold: f64 = kids.iter().map(|&k| w.life[k].amount(w.chem.body(), q)).sum();
+        assert!((b.amount(w.chem.body(), q) + kids_hold - was).abs() <= 1e-9 * was.max(1.0), "substance {q} not kept");
     }
     assert_eq!(w.store.heat(Class::Ground).iter().sum::<f64>(), ground0, "work was paid for a child");
     // The parent's body does not fall: the matter it built is what it was (the brood left its matter and its brood
@@ -266,7 +266,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     // A child is a body of half the copy mass: 5 kg, matter 1.25 kg; the members hold half a child each besides.
     n.brood = (7.3 + copy::BROOD_HELD * 5.0) * 5.0 * (1.0 - h) / mm;
     let (s, mut n) = out(&mut w, n);
-    let (before, count0, built0) = (n.store.clone(), n.count, n.built(&w.chem) / n.n());
+    let (before, count0, built0) = (stores(&w, &n), n.count, n.built(&w.chem) / n.n());
     assert!(n.adult(&w.chem), "the node is mature: built {} kg a member", n.built(&w.chem) / n.n());
     w.time += DAY_S;
     let at = w.life.alive().count();
@@ -280,14 +280,14 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     let (c, other) = (&w.life[kids[0]], &w.life[kids[1]]);
     assert!(c.cell != other.cell && (c.count + other.count - 7.3).abs() < 1e-6 && !c.adult(&w.chem), "{} and {} young members", c.count, other.count);
     for q in 0..w.chem.ns() {
-        let (x, y) = (c.store[q] / c.count, other.store[q] / other.count);
+        let (x, y) = (c.amount(w.chem.body(), q) / c.count, other.amount(w.chem.body(), q) / other.count);
         assert!((x - y).abs() <= 1e-9 * x.abs().max(1e-30), "substance {q}: {x} and {y} a child");
     }
     assert_eq!(n.count, count0, "the parent node took its children in");
     let held = copy::BROOD_HELD * 5.0 * 5.0 * (1.0 - h) / mm;
     assert!((n.brood - held).abs() < 1e-6 * held && (n.built(&w.chem) / n.n() - built0).abs() < 1e-9 * built0, "the brood is not what the members hold or the mean member fell: {built0} -> {}", n.built(&w.chem) / n.n());
-    let given = c.store[MATTER] + other.store[MATTER];
-    assert!((given - 7.3 * 1.25 / mm).abs() < 1e-6 * given && (before[MATTER] - n.store[MATTER] - given).abs() < 1e-9 * given);
+    let given = c.amount(w.chem.body(), MATTER) + other.amount(w.chem.body(), MATTER);
+    assert!((given - 7.3 * 1.25 / mm).abs() < 1e-6 * given && (before[MATTER] - n.amount(w.chem.body(), MATTER) - given).abs() < 1e-9 * given);
     println!("node: {count0} members of {built0:.2} kg; children {} members of {:.2} kg", c.count, c.built(&w.chem) / c.n());
 }
 
@@ -348,10 +348,10 @@ fn a_mature_body_splits_its_building_by_alloc() {
         let mut b = eater(&mut w, i, brain::REST, copy);
         b.genes[ALLOC] = alloc;
         let (s, mut b) = out(&mut w, b);
-        let (m0, built0, mm) = (b.store[MATTER], b.built(&w.chem), w.chem.subs[MATTER].molar_mass);
+        let (m0, built0, mm) = (b.amount(w.chem.body(), MATTER), b.built(&w.chem), w.chem.subs[MATTER].molar_mass);
         let days = w.cfg.update_days();
         assert!(w.in_cell(b.cell as usize, |w, d| testkit::grow(w, d, &mut b, days)), "it did not build");
-        let made = (b.store[MATTER] - m0) * mm;
+        let made = (b.amount(w.chem.body(), MATTER) - m0) * mm;
         let (brood, grown) = (b.brood * mm, (b.built(&w.chem) - built0) * (1.0 - 0.75));
         w.life[s] = b;
         (made, brood, grown)
@@ -546,8 +546,8 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
             // What its burning made and it holds above the level it keeps drains to the ground at its update (`live::shed`);
             // what a decision burns after it adds a trace.
             let b = &w.life[s];
-            let level = b.level(&w.chem, LIQUID, b.mass(&w.chem));
-            assert!(b.store[LIQUID] <= level * (1.0 + 1e-3), "day {day}: liquid over its level by a share {:.3e}", b.store[LIQUID] / level - 1.0);
+            let level = b.level(&w.chem, w.chem.body().place(LIQUID).expect("a store"), b.mass(&w.chem));
+            assert!(b.amount(w.chem.body(), LIQUID) <= level * (1.0 + 1e-3), "day {day}: liquid over its level by a share {:.3e}", b.amount(w.chem.body(), LIQUID) / level - 1.0);
             takes[day] = w.events.iter().map(|e| if let EventKind::Took { from: u64::MAX, used, .. } = e.kind { used as f64 * joule } else { 0.0 }).sum();
             let mut b = w.life[s].clone();
             b.prepare(&w.chem, &w.cfg);
@@ -604,8 +604,8 @@ fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
     assert!((made[0] / all - 0.2).abs() < 0.01 && (made[1] / all - 0.1).abs() < 0.01, "shares {:.3} and {:.3}", made[0] / all, made[1] / all);
     // The same body of soft tissue alone, and with 1 kg of frame (5% of its mass).
     let (mut soft, mut hard) = (b.clone(), b.clone());
-    mats.iter().for_each(|&k| (soft.store[k], hard.store[k]) = (0.0, 0.0));
-    hard.store[mats[0]] = 1.0 / w.chem.subs[mats[0]].molar_mass;
+    mats.iter().for_each(|&k| (*soft.store_of(&w.chem, k), *hard.store_of(&w.chem, k)) = (0.0, 0.0));
+    *hard.store_of(&w.chem, mats[0]) = 1.0 / w.chem.subs[mats[0]].molar_mass;
     let (h_soft, h, e_soft, e) = (soft.height(&w.chem, &w.cfg), hard.height(&w.chem, &w.cfg), soft.breaking(&w.chem, &w.cfg, 1.0), hard.breaking(&w.chem, &w.cfg, 1.0));
     println!("height {h_soft:.2} m of soft tissue alone, {h:.2} m with 1 kg of frame; breaking it all {e_soft:.0} J and {e:.0} J");
     assert!(h_soft < 1.5 && h > 2.0 * h_soft && e > 2.0 * e_soft);
@@ -624,28 +624,28 @@ fn growth_stops_without_a_mineral_and_goes_on_with_them() {
     let m = w.chem.matter().expect("matter");
     let b = eater(&mut w, i, brain::REST, 6.0);
     let (_, b) = out(&mut w, b);
-    assert!(minerals.iter().all(|&(k, _)| b.store[k] > 0.0), "a starting body holds the minerals its matter was made of");
+    assert!(minerals.iter().all(|&(k, _)| b.amount(w.chem.body(), k) > 0.0), "a starting body holds the minerals its matter was made of");
     let days = w.cfg.update_days();
     // With them it builds, and for the matter made it spends each by its count.
-    let m0 = b.store[m];
+    let m0 = b.amount(w.chem.body(), m);
     let mut with = b.clone();
     assert!(w.in_cell(with.cell as usize, |w, d| testkit::grow(w, d, &mut with, days)), "it did not grow with the minerals");
-    let made = with.store[m] - m0;
+    let made = with.amount(w.chem.body(), m) - m0;
     for &(k, per) in &minerals {
-        assert!(made > 0.0 && ((b.store[k] - with.store[k]) / (per * made) - 1.0).abs() < 1e-9, "{made} mol of matter for {} of substance {k}", b.store[k] - with.store[k]);
+        assert!(made > 0.0 && ((b.amount(w.chem.body(), k) - with.amount(w.chem.body(), k)) / (per * made) - 1.0).abs() < 1e-9, "{made} mol of matter for {} of substance {k}", b.amount(w.chem.body(), k) - with.amount(w.chem.body(), k));
     }
     for &(k, per) in &minerals {
         // Without it, none: not a gram of matter.
         let mut b = b.clone();
-        b.store[k] = 0.0;
+        *b.store_of(&w.chem, k) = 0.0;
         assert!(!w.in_cell(b.cell as usize, |w, d| testkit::grow(w, d, &mut b, days)), "it grew without substance {k}");
-        assert_eq!(b.store[m], m0);
+        assert_eq!(b.amount(w.chem.body(), m), m0);
         // A little of it, a little matter: it binds, in proportion.
-        b.store[k] = 0.5 * made * per;
+        *b.store_of(&w.chem, k) = 0.5 * made * per;
         assert!(w.in_cell(b.cell as usize, |w, d| testkit::grow(w, d, &mut b, days)));
-        let grown = b.store[m] - m0;
+        let grown = b.amount(w.chem.body(), m) - m0;
         assert!((grown / (0.5 * made) - 1.0).abs() < 1e-6, "{grown} mol for a store of {} mol of substance {k}", 0.5 * made * per);
-        assert!(b.store[k] < 1e-9 * made);
+        assert!(b.amount(w.chem.body(), k) < 1e-9 * made);
     }
 }
 
@@ -750,7 +750,7 @@ fn cell_books(w: &pcore::World, i: usize) -> CellBooks {
         count += 1;
         sums[0] += b.n() * b.genes[pcore::body::REPAIR] as f64;
         (sums[1], sums[2]) = (sums[1] + b.brood, sums[2] + b.e);
-        store.iter_mut().zip(&b.store).for_each(|(s, x)| *s += x);
+        store.iter_mut().zip(stores(w, b)).for_each(|(s, x)| *s += x);
     }
     (by, count, sums, store)
 }

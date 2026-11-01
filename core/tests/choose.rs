@@ -253,7 +253,7 @@ fn a_body_gives_its_stores_but_not_its_body() {
     // (Body matter given is digested into the solid, so it fills the taker's room for the solid (`Body::digest_room`):
     // room for all the giver's solid and matter, 2 kg per kg of body.)
     taker.genes[lay.keep + RICH] = 2.0;
-    let (m0, fuel0) = (giver.store[MATTER], giver.store[RICH]);
+    let (m0, fuel0) = (giver.amount(w.chem.body(), MATTER), giver.amount(w.chem.body(), RICH));
     let g = w.add(giver);
     w.add(taker);
     // Days until the first batch after the placing has run.
@@ -266,8 +266,8 @@ fn a_body_gives_its_stores_but_not_its_body() {
     }
     assert!(w.events.iter().any(|e| matches!(e.kind, EventKind::Gave { .. })), "nothing was given");
     let b = &w.life[g];
-    assert!(b.alive && b.store[MATTER] > 0.99 * m0 && b.store[RICH] < 0.5 * fuel0, "matter {m0} -> {}, fuel {fuel0} -> {}", b.store[MATTER], b.store[RICH]);
-    assert!(b.store[LIQUID] >= 0.99 * b.level(&w.chem, LIQUID, b.mass(&w.chem)), "the liquid of its body was given");
+    assert!(b.alive && b.amount(w.chem.body(), MATTER) > 0.99 * m0 && b.amount(w.chem.body(), RICH) < 0.5 * fuel0, "matter {m0} -> {}, fuel {fuel0} -> {}", b.amount(w.chem.body(), MATTER), b.amount(w.chem.body(), RICH));
+    assert!(b.amount(w.chem.body(), LIQUID) >= 0.99 * b.level(&w.chem, w.chem.body().place(LIQUID).expect("a store"), b.mass(&w.chem)), "the liquid of its body was given");
 }
 
 /// Moving costs the real cost of transport: per kg and m a 30 kg member pays `c_move`, a smaller one more and a bigger

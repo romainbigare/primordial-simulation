@@ -109,21 +109,22 @@ pub(super) fn perceive(w: &World, d: &Chunk, b: &Body, nseen: usize, rng: &mut R
     }
 }
 
-/// The brain's inputs (laws.md 5.2).
-pub(super) fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, x: &mut Vec<f32>) {
+/// The brain's inputs (laws.md 5.2), of a body that has `lived` its update at `temp` K, with `mem` numbers of memory.
+pub(super) fn inputs(w: &World, b: &Body, (lived, temp, mem): (&Lived, f64, usize), c: &Choice, x: &mut Vec<f32>) {
     let (i, ns, chem, mass) = (b.cell as usize, w.chem.ns(), &w.chem, lived.mass);
     let (env, pm) = (w.life.env[i], mass / b.n());
     let heard = c.seen[..c.nseen].iter().fold([0f32; SIG], |h, (o, _)| [0, 1].map(|k| h[k] + o.sig[k] / c.nseen as f32));
     x.clear();
-    let (none, min) = (SHARE_SENSE * ln(STORE_FLOOR), Layout::of(chem).min);
-    x.extend((0..ns).map(|k| if b.store[k] > 0.0 { SHARE_SENSE * ln((b.store[k] * chem.subs[k].molar_mass / mass) as f32 + STORE_FLOOR) } else { none } - SHARE_SENSE * ln(b.genes[min + k].max(0.0) + MIN_FLOOR)));
+    let (none, min, bc) = (SHARE_SENSE * ln(STORE_FLOOR), Layout::of(chem).min, chem.body());
+    let held = |k: usize| b.amount(bc, k);
+    x.extend((0..ns).map(|k| if held(k) > 0.0 { SHARE_SENSE * ln((held(k) * chem.subs[k].molar_mass / mass) as f32 + STORE_FLOOR) } else { none } - SHARE_SENSE * ln(b.genes[min + k].max(0.0) + MIN_FLOOR)));
     x.extend_from_slice(&w.life.seen[i * ns..(i + 1) * ns]);
     let crowd = ln(1.0 + (w.life.sum(i)[1] / w.mesh.cells().area()[i]) as f32);
     let (dt, canopy, sun) = ((temp - env[0]) as f32, w.canopy[i], w.season() as f32 * std::f32::consts::TAU);
     x.extend([dt / WARM_SCALE, ln(pm as f32) / LN_MASS - 1.0, ln(1.0 + canopy) / LN_CANOPY, ln(1.0 + env[1] as f32), (env[0] as f32 - T_MID) / T_SPAN, crowd, sun.sin(), sun.cos()]);
     x.extend(heard);
     x.extend(bond::sense(w, b, pm));
-    x.extend_from_slice(&b.mem);
+    x.extend_from_slice(&b.mem[..mem]);
 }
 
 /// After each survey: what a brain perceives of each cell as a place to move to (the height and temperature differences

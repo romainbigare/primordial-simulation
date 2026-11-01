@@ -189,12 +189,12 @@ impl Moves {
             self.end((x, at), k, mol, heat_received(heat, mol, held_more(&w.chem, who.class, x.class, k)));
         }
     }
-    /// The amounts `m` (mol of each substance; those not 0) and then `heat` J go from the one whose update it is to node
-    /// `x` of the store, each as `give` gives it.
-    pub(crate) fn give_all(&mut self, w: &World, x: Node, m: &[f64], heat: f64) {
+    /// The amounts `m` (substance and mol, substances in order; those not 0) and then `heat` J go from the one whose
+    /// update it is to node `x` of the store, each as `give` gives it.
+    pub(crate) fn give_all(&mut self, w: &World, x: Node, m: impl IntoIterator<Item = (usize, f64)>, heat: f64) {
         let who = self.who.expect(RUNNING);
         let Some(at) = self.row_of(w, x) else { return };
-        for (k, &a) in m.iter().enumerate().filter(|e| *e.1 != 0.0) {
+        for (k, a) in m.into_iter().filter(|e| e.1 != 0.0) {
             self.end((x, at), k, a, heat_received(0.0, a, held_more(&w.chem, who.class, x.class, k)));
         }
         self.end((x, at), 0, 0.0, heat_received(heat, 0.0, held_more(&w.chem, who.class, x.class, 0)));

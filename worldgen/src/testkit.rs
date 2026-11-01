@@ -188,7 +188,8 @@ pub fn cover(w: &mut World, i: usize, kg: f64) {
 
 /// Body `b` made `f` times as big: its stores and heat (booked as an edit).
 pub fn scale(w: &mut World, b: &mut Body, f: f64) {
-    w.cross((Boundary::Outside, A_BODY), b.store.iter().map(|&a| (f - 1.0) * a).enumerate(), (f - 1.0) * b.e);
+    let more: Vec<(usize, f64)> = pcore::body::each(&w.chem, &b.store).map(|(k, a)| (k, (f - 1.0) * a)).collect();
+    w.cross((Boundary::Outside, A_BODY), more, (f - 1.0) * b.e);
     b.store.iter_mut().for_each(|a| *a *= f);
     b.e *= f;
 }
@@ -196,14 +197,19 @@ pub fn scale(w: &mut World, b: &mut Body, f: f64) {
 /// `kg` of substance `k` added to body `b` at its temperature (booked as an edit), or taken out if negative.
 pub fn add(w: &mut World, b: &mut Body, k: usize, kg: f64) {
     let (a, t, e0) = (kg / w.chem.subs[k].molar_mass, b.temp(&w.chem), b.e);
-    b.store[k] += a;
+    *b.store_of(&w.chem, k) += a;
     b.e = b.energy_at(&w.chem, t);
     w.cross((Boundary::Outside, A_BODY), [(k, a)], b.e - e0);
 }
 
+/// What body `b` holds, mol of each substance.
+pub fn stores(w: &World, b: &Body) -> Vec<f64> {
+    (0..w.chem.ns()).map(|k| b.amount(w.chem.body(), k)).collect()
+}
+
 /// What body `b` holds of substance `k`, kg.
 pub fn kg(w: &World, b: &Body, k: usize) -> f64 {
-    b.store[k] * w.chem.subs[k].molar_mass
+    b.amount(w.chem.body(), k) * w.chem.subs[k].molar_mass
 }
 
 /// `mol` of substance `k` put on the ground of cell `i` at its temperature (booked as an edit).
@@ -349,13 +355,13 @@ pub fn node_of(w: &mut World, mut b: Body, n: f64) -> Body {
     b
 }
 
-/// Totals over all live bodies: members, each store, heat.
+/// Totals over all live bodies: members, mol of each substance, heat.
 pub fn life_totals(w: &World) -> (f64, Vec<f64>, f64) {
     let (mut n, mut store, mut e) = (0.0, vec![0.0; w.chem.ns()], 0.0);
     for b in w.life.alive() {
         n += b.n();
         e += b.e;
-        store.iter_mut().zip(&b.store).for_each(|(s, x)| *s += x);
+        pcore::body::each(&w.chem, &b.store).for_each(|(k, x)| store[k] += x);
     }
     (n, store, e)
 }

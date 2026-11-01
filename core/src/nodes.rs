@@ -5,6 +5,7 @@
 use crate::bond::{held, let_go, room};
 use crate::body::{self, alike, distance, most, range, spread_at, spread_kept, Body, Layout};
 use crate::brain::{blend, row_step};
+use crate::chem::Stores;
 use crate::lineage::sizes_of;
 use crate::life::Handle;
 use crate::{life::Chunk, World};
@@ -145,7 +146,7 @@ pub fn merge(w: &World, d: &mut Chunk, s: Handle, t: Handle) {
 /// parts add up: count, mol of each store, heat (J), brood (mol), and their last day.
 pub(crate) struct Lot {
     pub count: f64,
-    pub store: Vec<f64>,
+    pub store: Stores,
     pub e: f64,
     pub brood: f64,
     pub last: f64,
@@ -156,7 +157,7 @@ impl Lot {
     /// (the remainder, so the two add up to what it held to rounding). The same share of both is members alike to the
     /// others; a larger share of the amounts is members that hold more than the mean.
     pub(crate) fn split(b: &mut Body, f: f64, fa: f64) -> Lot {
-        let store: Vec<f64> = b.store.iter().map(|a| fa * a).collect();
+        let store = b.store.map(|a| fa * a);
         b.store.iter_mut().zip(&store).for_each(|(a, x)| *a -= x);
         let c = Lot { count: f * b.count, store, e: fa * b.e, brood: fa * b.brood, last: b.last };
         (b.e, b.brood) = (b.e - c.e, b.brood - c.brood);
@@ -219,10 +220,10 @@ pub(crate) fn rejoin(o: &mut Body, c: Lot, rows: Option<&[f32]>) {
 /// holding nothing, inside nothing.
 pub(crate) fn part(b: &mut Body, f: f64, fa: f64) -> Body {
     let lot = Lot::split(b, f, fa);
-    // (The trace and the stores are not the part's: set aside, not cloned.)
-    let (trace, store) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.store));
+    // (The trace is not the part's: set aside, not cloned.)
+    let trace = std::mem::take(&mut b.trace);
     let c = Body { count: lot.count, store: lot.store, e: lot.e, brood: lot.brood, hold: None, inside: None, leaving: false, ..b.clone() };
-    (b.trace, b.store) = (trace, store);
+    b.trace = trace;
     c
 }
 

@@ -69,7 +69,7 @@ impl Kind {
         self.bodies += 1.0;
         self.life += n * h.life;
         self.mass += h.mass;
-        self.matter += matter_mm.map_or(0.0, |(m, mm)| b.store[m] * mm);
+        self.matter += matter_mm.map_or(0.0, |(m, mm)| b.amount(chem.body(), m) * mm);
         self.body += h.size;
         self.copy_mass += n * b.k.copy_mass;
         (self.alloc, self.child) = (self.alloc + n * b.gene(body::ALLOC), self.child + n * b.gene(body::CHILD));

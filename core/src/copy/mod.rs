@@ -13,7 +13,7 @@ pub use grow::grow;
 
 use crate::body::{most, mutation_size, remains, vary, Body, Layout, CHILD, DISPERSE, WET, WET_TISSUE};
 use crate::brain::{self, row_step, shake};
-use crate::chem::Chemistry;
+use crate::chem::{Chemistry, Stores};
 use crate::event::{Event, EventKind};
 use crate::lineage::{sizes_of, wanted};
 use crate::nodes::{add, Lot, COUNT_SLACK};
@@ -34,7 +34,7 @@ pub const BROOD_HELD: f64 = 0.5;
 /// node; the partner; and the parent's id.
 struct Births {
     matter: f64,
-    prov: Vec<f64>,
+    prov: Stores,
     node: bool,
     mate: Option<Handle>,
     parent: u64,
@@ -45,12 +45,12 @@ struct Births {
 /// `DISPERSE` starts in a neighbour cell (laws.md 4.2-4.4). Returns whether any were made.
 pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
     let (chem, n, mc) = (&w.chem, b.n(), b.k.copy_mass);
-    let Some(mi) = chem.matter() else { return false };
+    let Some(mi) = Body::matter_at(chem) else { return false };
     let node = n > 1.0;
     if !b.adult(chem) {
         return false;
     }
-    let mm = chem.subs[mi].molar_mass;
+    let mm = chem.body().mm[mi];
     b.brood = b.brooded(chem);
     // A child's body (kg) and its matter (mol); the births the brood covers: an individual's whole children, a node's what
     // its brood holds beyond `BROOD_HELD`.
@@ -203,7 +203,7 @@ pub(crate) fn land_litter(w: &World, d: &mut Chunk, x: Litter) {
 pub(crate) fn back(w: &mut World, x: Litter) {
     let Litter { mut c, from, .. } = x;
     if let Some(p) = w.life.find(c.parent) {
-        let (mi, p) = (w.chem.matter().unwrap_or(0), &mut w.life[p]);
+        let (mi, p) = (Body::matter_at(&w.chem).unwrap_or(0), &mut w.life[p]);
         p.store.iter_mut().zip(&c.store).for_each(|(a, x)| *a += x);
         (p.e, p.brood) = (p.e + c.e, p.brood + c.store[mi]);
     } else {
@@ -216,10 +216,10 @@ pub(crate) fn back(w: &mut World, x: Litter) {
 /// of all `m` from the brood and their provisions (`Births::prov`), each at most what it holds; their heat that of
 /// its temperature on the heat capacity they got, with the fusion enthalpy of what they got molten (`Body::heat_with`),
 /// so they start as warm as their parent (a dry child would else be much hotter, a wet one colder).
-fn give(w: &World, b: &mut Body, l: &Births, m: f64) -> (Vec<f64>, f64) {
-    let mi = w.chem.matter().unwrap_or(0);
+fn give(w: &World, b: &mut Body, l: &Births, m: f64) -> (Stores, f64) {
+    let mi = Body::matter_at(&w.chem).unwrap_or(0);
     let take = (m * l.matter).min(b.store[mi]);
-    let store: Vec<f64> = b.store.iter().zip(&l.prov).enumerate().map(|(k, (a, p))| if k == mi { take } else { (p * m).min(*a) }).collect();
+    let store: Stores = std::array::from_fn(|s| if s == mi { take } else { (l.prov[s] * m).min(b.store[s]) });
     let e = b.heat_with(&w.chem, &b.thermal(&w.chem), &store);
     b.e -= e;
     for (a, x) in b.store.iter_mut().zip(&store) {
@@ -229,14 +229,14 @@ fn give(w: &World, b: &mut Body, l: &Births, m: f64) -> (Vec<f64>, f64) {
     (store, e)
 }
 
-/// What one of the `births` children of `b` takes of each store but the matter (`mi`), mol: of the parent's stores
+/// What one of the `births` children of `b` takes of each store but the matter (at `mi`), mol: of the parent's stores
 /// when the litter starts, the share the litter's `matter` is of the parent's body matter (of the key liquid 10^`WET`
 /// times that: a child of a parent whose `WET` is below 0 is dry, and nearly dormant), at most all, split over the
 /// births, so children who leave and children who stay get alike.
-fn provisions(chem: &Chemistry, b: &Body, mi: usize, matter: f64, births: f64) -> Vec<f64> {
+fn provisions(chem: &Chemistry, b: &Body, mi: usize, matter: f64, births: f64) -> Stores {
     let share = (births * matter).min(b.store[mi]) / (b.store[mi] - b.brooded(chem)).max(1e-300);
     let wet = share * b.dec(WET);
-    b.store.iter().enumerate().map(|(k, a)| if k == mi { 0.0 } else { a * (if b.wet >> k & 1 == 1 { wet } else { share }).min(1.0) / births }).collect()
+    std::array::from_fn(|s| if s == mi { 0.0 } else { b.store[s] * (if b.wet >> s & 1 == 1 { wet } else { share }).min(1.0) / births })
 }
 
 /// The node of `cell` of `lineage` (a node has one brain), mature or young as `mature` asks: the one node of its kind

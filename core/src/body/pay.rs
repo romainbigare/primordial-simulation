@@ -51,7 +51,7 @@ fn burn_at(w: &World, d: &mut Chunk, b: &mut Body, cost: f64, t: f64) -> f64 {
     if cost <= 0.0 {
         return 0.0;
     }
-    let (chem, i) = (&w.chem, b.cell as usize);
+    let (chem, i, bc) = (&w.chem, b.cell as usize, w.chem.body());
     let j = w.mesh.up(i, 0, AIR);
     let (lift, ta, held) = (w.lift(i), d.moves.t_air(w, j), b.matter_mol(chem));
     let mut got = 0.0;
@@ -61,15 +61,16 @@ fn burn_at(w: &World, d: &mut Chunk, b: &mut Body, cost: f64, t: f64) -> f64 {
             break;
         }
         let rx = &chem.reactions[r];
-        let have = |k: usize| if chem.phase(k, t) == Phase::Gas { d.moves.amount(w, Node::air(j), k) } else { b.store[k] };
+        let have = |k: usize| if chem.phase(k, t) == Phase::Gas { d.moves.amount(w, Node::air(j), k) } else { b.amount(bc, k) };
         let x = rx.inputs.iter().map(|&(k, nu)| have(k as usize) / nu as f64).fold((cost - got) / e, f64::min);
         if x <= 0.0 {
             continue;
         }
         for (k, nu) in crate::change::terms(rx) {
             let (dn, s) = (nu * x, &chem.subs[k]);
-            if chem.phase(k, t) != Phase::Gas {
-                super::add_store(&mut b.store[k], dn, &mut d.counts.rounded[0]);
+            // (What it makes and cannot hold, a store of no body, leaves it as a gas does.)
+            if let Some(p) = bc.place(k).filter(|_| chem.phase(k, t) != Phase::Gas) {
+                super::add_store(&mut b.store[p], dn, &mut d.counts.rounded[0]);
             } else if dn > 0.0 {
                 // (It gives the gas its heat and pays its latent heat, `Moves::gas`.)
                 d.moves.gas(w, k, dn, lift);

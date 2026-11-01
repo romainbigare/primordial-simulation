@@ -287,8 +287,7 @@ pub fn make(w: &mut World, i: usize, wall: Vec<f64>, e: f64, x: f32, h: f32) -> 
 fn fall_apart(w: &World, d: &mut Chunk, s: usize, p: &mut Part) {
     let i = p.cell as usize;
     d.moves.open(w, i, Node::new(Class::Part, s));
-    let held: Vec<f64> = p.wall.iter().zip(&p.fill).map(|(a, f)| a + f).collect();
-    d.moves.give_all(w, Node::ground(i), &held, p.e);
+    d.moves.give_all(w, Node::ground(i), p.wall.iter().zip(&p.fill).map(|(a, f)| a + f).enumerate(), p.e);
     p.wall.fill(0.0);
     p.fill.fill(0.0);
     p.e = 0.0;

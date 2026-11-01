@@ -141,7 +141,7 @@ fn a_big_bite_kills_the_members_it_reaches() {
     let mut m = resting(&mut w, i, 6.0, 0.0);
     scale(&mut w, &mut m, 0.01);
     let mut v = node_of(&mut w, m, 1000.0);
-    v.brood = 0.5 * v.store[MATTER];
+    v.brood = 0.5 * v.amount(w.chem.body(), MATTER);
     let (a, v) = (place(&mut w, a), place(&mut w, v));
     let books = Books::now(&w);
     let b = &w.life[v];

@@ -54,7 +54,7 @@ pub fn totals(w: &World) -> Totals {
     // The light set aside in the bodies' nodes counts as heat until they store it.
     [Class::Ground, Class::Air, Class::Bodies, Class::Deep].iter().flat_map(|&c| w.store.heat(c)).for_each(|&e| thermal.add(e));
     for b in w.life.alive() {
-        b.store.iter().zip(subs.iter_mut()).for_each(|(&a, s)| s.add(a));
+        chem.body().subs().iter().zip(&b.store).for_each(|(&k, &a)| subs[k].add(a));
         thermal.add(b.e);
     }
     if let Some(p) = crate::cover::Parts::of(chem) {

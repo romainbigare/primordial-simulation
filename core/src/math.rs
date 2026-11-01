@@ -1,4 +1,5 @@
-//! Small functions of decay the laws share, members passing a level (`Pass`), an exact sum, and the bits of a set.
+//! Small functions of decay the laws share, members passing a level (`Pass`), an exact sum, the bits of a set, and a
+//! short list held in place (`Few`).
 
 /// 1 - exp(-x), exact for small `x`: the share a first-order decay over `x` time constants takes.
 #[inline]
@@ -99,4 +100,43 @@ pub(crate) fn add_times(parts: &mut Vec<f64>, n: f64, x: f64) {
     let hi = t - (t - x);
     grow(parts, n * hi);
     grow(parts, n * (x - hi));
+}
+
+/// A list of at most `N` small things held in place (no heap): what a body works out from its genes (`body::Consts`).
+#[derive(Clone, Copy, Debug)]
+pub struct Few<T: Copy + Default, const N: usize> {
+    v: [T; N],
+    n: usize,
+}
+
+impl<T: Copy + Default, const N: usize> Default for Few<T, N> {
+    fn default() -> Self {
+        Few { v: [T::default(); N], n: 0 }
+    }
+}
+
+impl<T: Copy + Default, const N: usize> Few<T, N> {
+    /// `x` goes last. Panics past `N`.
+    pub fn push(&mut self, x: T) {
+        self.v[self.n] = x;
+        self.n += 1;
+    }
+    pub fn clear(&mut self) {
+        self.n = 0;
+    }
+}
+
+impl<T: Copy + Default, const N: usize> std::ops::Deref for Few<T, N> {
+    type Target = [T];
+    fn deref(&self) -> &[T] {
+        &self.v[..self.n]
+    }
+}
+
+impl<T: Copy + Default, const N: usize> FromIterator<T> for Few<T, N> {
+    fn from_iter<I: IntoIterator<Item = T>>(it: I) -> Self {
+        let mut f = Few::default();
+        it.into_iter().for_each(|x| f.push(x));
+        f
+    }
 }

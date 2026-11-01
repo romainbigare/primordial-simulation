@@ -22,10 +22,11 @@ pub use pay::{pay, upkeep};
 pub(crate) use pay::settle_heat;
 
 use crate::brain::{ln, SIG};
-use crate::chem::{Chemistry, Phase};
+use crate::chem::{BodyChem, Chemistry, Phase, Stores};
 use crate::ground::{melting, Melting};
+use crate::math::Few;
 use crate::store::NodeId;
-use crate::units::MAX_SUBSTANCES;
+use crate::units::{BODY_REACTIONS, BODY_STORES, MAX_SUBSTANCES};
 use serde::{Deserialize, Serialize};
 
 /// Death causes: a store below its safe minimum; a key liquid froze or boiled; upkeep not paid; taken by a body.
@@ -47,6 +48,8 @@ const PHASE_MARGIN: f32 = 5.0;
 pub const WET_TISSUE: f64 = 0.75;
 /// Others a body remembers.
 pub(crate) const KNOWN: usize = 4;
+/// Most numbers of a brain's memory (the top of the `MEMORY` gene's range).
+pub const MEMORY_MOST: usize = 12;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Body {
@@ -67,8 +70,8 @@ pub struct Body {
     pub last: f64,
     /// Thermal energy, J
     pub e: f64,
-    /// mol of each substance
-    pub store: Vec<f64>,
+    /// mol of each store (`Chemistry::body`: the substances bodies hold, each at its place)
+    pub store: Stores,
     pub genes: Vec<f32>,
     /// How a node's members differ: the variance of each gene around `genes` (empty: none), and of their born rows, one
     /// number for every row
@@ -76,8 +79,8 @@ pub struct Body {
     pub row_spread: f32,
     /// The brain rows it was born with (genes too), in `Life::genomes`
     pub genome: u32,
-    /// Key stores (safe minimum > 0) that were liquid at birth, one bit per substance
-    pub wet: u64,
+    /// Key stores (safe minimum > 0) that were liquid at birth, one bit per store
+    pub wet: u32,
     /// Body matter built for children and held back, mol (part of `store`, not of the body: `size`, `built`; laws.md 4.2)
     pub brood: f64,
     /// Visible traits: mass kg, light-capture area m² (none: bodies catch no light), strength, colour (3 bands), height
@@ -96,8 +99,9 @@ pub struct Body {
     /// The part it holds, and a part of the structure it is inside
     pub hold: Option<NodeId>,
     pub inside: Option<NodeId>,
-    /// Memory the brain reads and writes; the signal emitted at the last decision
-    pub mem: Vec<f32>,
+    /// Memory the brain reads and writes (its first numbers, as many as its lineage's brain has; the others 0); the
+    /// signal emitted at the last decision
+    pub mem: [f32; MEMORY_MOST],
     pub sig: [f32; SIG],
     /// Others it knows (id) and how dealings with them went (-1 worse .. 1 better)
     pub known: [(u64, f32); KNOWN],
@@ -119,10 +123,10 @@ pub struct Consts {
     /// 10 to the power of the coat gene (`HEAT`)
     pub heat: f64,
     /// The reactions of its diet that release heat, with the heat per unit, J (not those that keep a part of a fuel's
-    /// heat, `Chemistry::keeps`)
-    pub burn: Vec<(usize, f64)>,
+    /// heat, `Chemistry::keeps`; only those bodies may run, `Chemistry::body`)
+    pub burn: Few<(usize, f64), BODY_REACTIONS>,
     /// The substances taken, by selectivity
-    pub upt: Vec<(usize, f32)>,
+    pub upt: Few<(usize, f32), MAX_SUBSTANCES>,
     /// 10 to the power of the copy mass gene, kg
     pub copy_mass: f64,
     /// Factor of upkeep per kg of living body, (copy mass / `m_ref`)^(`intake_exp` - 1), 1
@@ -132,6 +136,11 @@ pub struct Consts {
     /// What its burnings take, and what the reactions of its diet take (their inputs, a bit per substance)
     pub fuel: u64,
     pub broken: u64,
+}
+
+/// Amounts `m` of a body's stores as (substance, mol), in the order of the substances.
+pub fn each<'a>(chem: &'a Chemistry, m: &'a Stores) -> impl Iterator<Item = (usize, f64)> + 'a {
+    chem.body().subs().iter().copied().zip(m.iter().copied())
 }
 
 /// Store amount `x` of a body changes by `d` mol; what rounding leaves below zero is set to zero and counted, as
@@ -161,57 +170,77 @@ impl Body {
         (self.gene(g) * std::f64::consts::LN_10).exp()
     }
     pub fn mass(&self, chem: &Chemistry) -> f64 {
-        self.store.iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()
+        chem.body().mass_of(&self.store)
     }
     pub fn heat_cap(&self, chem: &Chemistry) -> f64 {
-        chem.heat_cap_of(&self.store)
+        chem.body().heat_cap_of(&self.store)
+    }
+    /// mol of substance `k` it holds (none of one bodies do not hold, `Chemistry::body`).
+    #[inline]
+    pub fn amount(&self, bc: &BodyChem, k: usize) -> f64 {
+        bc.place(k).map_or(0.0, |s| self.store[s])
+    }
+    /// Its store of substance `k`, mol. Panics for one bodies do not hold.
+    pub fn store_of(&mut self, chem: &Chemistry, k: usize) -> &mut f64 {
+        &mut self.store[chem.body().place(k).expect("bodies hold it")]
     }
     /// Its temperature, K (`thermal`).
     pub fn temp(&self, chem: &Chemistry) -> f64 {
         self.thermal(chem).t
     }
-    /// Where the body stands on the melting of its key liquids (`ground::melting`, at each one's own melting point): its
-    /// molten key liquids hold their fusion enthalpy in `e`; its other stores hold their sensible heat only (laws.md 6.3).
+    /// Where the body stands on the melting of its key liquids (`ground::melting`, at each one's own melting point, by
+    /// the place of each among its stores): its molten key liquids hold their fusion enthalpy in `e`; its other stores
+    /// hold their sensible heat only (laws.md 6.3).
     pub fn thermal(&self, chem: &Chemistry) -> Melting {
-        let (mut ks, mut m) = ([(0.0, 0usize, 0.0); MAX_SUBSTANCES], 0);
-        for k in self.wet_ks(chem).filter(|&k| self.store[k] > 0.0 && chem.subs[k].lf > 0.0) {
-            (ks[m], m) = ((chem.subs[k].melt, k, self.store[k] * chem.subs[k].lf), m + 1);
+        let subs = chem.body().subs();
+        let (mut ks, mut m) = ([(0.0, 0usize, 0.0); BODY_STORES], 0);
+        for s in self.wet_ks().filter(|&s| self.store[s] > 0.0 && chem.subs[subs[s]].lf > 0.0) {
+            let x = &chem.subs[subs[s]];
+            (ks[m], m) = ((x.melt, s, self.store[s] * x.lf), m + 1);
         }
         ks[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
         melting(self.heat_cap(chem).max(1e-9), self.e, ks[..m].iter().copied())
     }
-    /// The fusion enthalpy amounts `m` hold at the plateau state `th`: of the key liquids among them, as far as they are
-    /// molten, J.
-    pub(crate) fn fused_of(&self, chem: &Chemistry, th: &Melting, m: &[f64]) -> f64 {
-        let molten = |k: usize| if th.bits >> k & 1 == 1 { th.molten(k) } else { (th.t >= chem.subs[k].melt) as u8 as f64 };
-        self.wet_ks(chem).filter(|&k| m[k] > 0.0).map(|k| m[k] * chem.subs[k].lf * molten(k)).sum()
+    /// The fusion enthalpy amounts `m` (mol of each store) hold at the plateau state `th` (`thermal`): of the key liquids
+    /// among them, as far as they are molten, J.
+    pub(crate) fn fused_of(&self, chem: &Chemistry, th: &Melting, m: &Stores) -> f64 {
+        let subs = chem.body().subs();
+        let molten = |s: usize| if th.bits >> s & 1 == 1 { th.molten(s) } else { (th.t >= chem.subs[subs[s]].melt) as u8 as f64 };
+        self.wet_ks().filter(|&s| m[s] > 0.0).map(|s| m[s] * chem.subs[subs[s]].lf * molten(s)).sum()
     }
     /// Its energy at `t`, its key liquids at or over their melting point molten, J: the inverse of `temp` off a plateau.
     pub fn energy_at(&self, chem: &Chemistry, t: f64) -> f64 {
-        let fused: f64 = self.wet_ks(chem).filter(|&k| t >= chem.subs[k].melt).map(|k| self.store[k] * chem.subs[k].lf).sum();
+        let subs = chem.body().subs();
+        let fused: f64 = self.wet_ks().filter(|&s| t >= chem.subs[subs[s]].melt).map(|s| self.store[s] * chem.subs[subs[s]].lf).sum();
         self.heat_cap(chem) * t + fused
     }
-    /// The heat that leaves with amounts `m` (mol) at the plateau state `th`, with their molten shares' fusion enthalpy, J.
-    pub(crate) fn heat_with(&self, chem: &Chemistry, th: &Melting, m: &[f64]) -> f64 {
-        chem.heat_cap_of(m) * th.t + self.fused_of(chem, th, m)
+    /// The heat that leaves with amounts `m` (mol of each store) at the plateau state `th`, with their molten shares'
+    /// fusion enthalpy, J.
+    pub(crate) fn heat_with(&self, chem: &Chemistry, th: &Melting, m: &Stores) -> f64 {
+        chem.body().heat_cap_of(m) * th.t + self.fused_of(chem, th, m)
+    }
+    /// The phase of its store `s` at `t`: of its substance, or liquid where its liquid holds what lowers its melting point
+    /// (`Chemistry::phase_in`).
+    pub(crate) fn phase_of(&self, chem: &Chemistry, s: usize, t: f64) -> Phase {
+        let bc = chem.body();
+        chem.phase_in(bc.subs()[s], t, |j| self.amount(bc, j))
     }
     /// Volume of its solids and liquids at its temperature `t`, m³.
     pub fn volume(&self, chem: &Chemistry, t: f64) -> f64 {
-        let held = self.store.iter().enumerate().filter(|x| *x.1 != 0.0);
-        held.map(|(k, a)| a * chem.molar_volume(k, chem.phase_in(k, t, |j| self.store[j]))).sum()
+        let bc = chem.body();
+        let held = bc.subs().iter().zip(&self.store).enumerate().filter(|x| *x.1 .1 != 0.0);
+        held.map(|(s, (&k, a))| a * chem.molar_volume(k, self.phase_of(chem, s, t))).sum()
     }
     /// Work `k` out from the genes and the settings, at every change of the genes.
     pub fn prepare(&mut self, chem: &Chemistry, cfg: &crate::Config) {
         let p = &cfg.phys;
-        let (lay, nr) = (Layout::of(chem), chem.reactions.len());
+        let (lay, nr, bc) = (Layout::of(chem), chem.reactions.len(), chem.body());
         let on = |r: usize| self.genes[lay.cat + r] > 0.0;
         let mut k = std::mem::take(&mut self.k);
-        k.burn.clear();
-        k.burn.extend(chem.burners().iter().filter(|x| on(x.0)));
+        k.burn = chem.burners().iter().filter(|x| on(x.0) && bc.reaction(x.0).is_some()).copied().collect();
         k.fuel = k.burn.iter().flat_map(|x| &chem.reactions[x.0].inputs).fold(0, |m, p| m | 1 << p.0);
         k.broken = (0..nr).filter(|&r| on(r)).flat_map(|r| &chem.reactions[r].inputs).fold(0, |m, p| m | 1 << p.0);
-        k.upt.clear();
-        k.upt.extend((0..chem.ns()).filter(|&x| self.genes[lay.upt + x] > 0.0).map(|x| (x, self.genes[lay.upt + x])));
+        k.upt = (0..chem.ns()).filter(|&x| self.genes[lay.upt + x] > 0.0).map(|x| (x, self.genes[lay.upt + x])).collect();
         (k.heat, k.copy_mass) = (self.dec(HEAT), self.dec(COPY_MASS));
         k.tissue = (k.copy_mass / p.m_ref).powf(p.intake_exp - 1.0);
         k.pace_ref = k.burn.first().map_or(1.0, |&(r, _)| chem.reactions[r].arrhenius(p.t_cat));
@@ -219,9 +248,9 @@ impl Body {
     }
     /// Visible traits of one member (`Body::vis`); the colour is the reflectance of the stores by volume.
     pub fn visible(&self, chem: &Chemistry, cfg: &crate::Config) -> [f32; 7] {
-        let (m1, t) = (self.mass(chem) / self.n(), self.temp(chem));
+        let (m1, t, bc) = (self.mass(chem) / self.n(), self.temp(chem), chem.body());
         let (mut v, mut c) = (1e-12, [0.0; 3]);
-        for (k, &a) in self.store.iter().enumerate().filter(|x| *x.1 > 0.0) {
+        for (&k, &a) in bc.subs().iter().zip(&self.store).filter(|x| *x.1 > 0.0) {
             let p = chem.phase(k, t);
             if p != Phase::Gas {
                 let vol = a * chem.molar_volume(k, p);
@@ -237,14 +266,14 @@ impl Body {
     /// decisions' worth (`think`, J), less its nearness to its limits: key stores to their minimums and reactions to upkeep
     /// (`spare`), in `MARGIN` form, and key liquids to freezing or boiling.
     pub(crate) fn wellbeing_at(&self, chem: &Chemistry, think: f64, t: f64, spare: f64) -> f32 {
-        let (lay, mass) = (Layout::of(chem), self.size(chem));
+        let (lay, mass, bc) = (Layout::of(chem), self.size(chem), chem.body());
         let mut w = ln(1.0 + (self.fuel(chem, t) / self.n() / think) as f32) + ln(spare.clamp(MARGIN_MIN, MARGIN) as f32 / MARGIN as f32);
         for k in 0..chem.ns() {
             let min = self.genes[lay.min + k];
             if min > 0.0 {
-                w += ln(ln((self.store[k] * chem.subs[k].molar_mass / mass) as f32 / min).clamp(MARGIN_MIN as f32, MARGIN as f32) / MARGIN as f32);
+                w += ln(ln((self.amount(bc, k) * chem.subs[k].molar_mass / mass) as f32 / min).clamp(MARGIN_MIN as f32, MARGIN as f32) / MARGIN as f32);
             }
-            if self.wet >> k & 1 == 1 {
+            if bc.place(k).is_some_and(|s| self.wet >> s & 1 == 1) {
                 let s = &chem.subs[k];
                 w += (((t - s.melt).min(s.boil - t) as f32 - PHASE_MARGIN) / PHASE_MARGIN).min(0.0);
             }

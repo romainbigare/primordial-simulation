@@ -284,16 +284,16 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
         // of children are: a child joins no mature node (`copy::kin`).
         if t != s {
             let m = w.chem.matter().expect("matter");
-            w.life[t].store[m] *= 0.5;
+            *w.life[t].store_of(&w.chem, m) *= 0.5;
         }
     }
     // A node of two members: two children.
     let b = w.life[s].clone();
-    let per: Vec<f64> = b.store.iter().map(|x| x / b.count).collect();
+    let per = b.store.map(|x| x / b.count);
     let (mut joined, mut tries) = (0, 0);
     for _ in 0..200 {
         let mut c = b.clone();
-        (c.count, c.store, c.e) = (2.0, per.iter().map(|x| 2.0 * x).collect(), 2.0 * b.e / b.count);
+        (c.count, c.store, c.e) = (2.0, per.map(|x| 2.0 * x), 2.0 * b.e / b.count);
         c.prepare(&w.chem, &w.cfg);
         brood(&w, &mut c, 2.0);
         let n0 = live(&w).len();

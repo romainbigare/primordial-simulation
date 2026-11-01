@@ -22,7 +22,8 @@ pub fn grow(w: &World, d: &mut Chunk, b: &mut Body, days: f64, t: f64) -> bool {
     let (mut room, mut built) = (room0, false);
     for bk in &chem.builds {
         let k = bk.outputs[0].0 as usize;
-        let gap = (b.level(&w.chem, k, 0.0) - b.store[k]).max(0.0) * w.chem.subs[k].molar_mass;
+        let s = chem.body().place(k).expect("a built solid is a store");
+        let gap = (b.level(&w.chem, s, 0.0) - b.store[s]).max(0.0) * w.chem.subs[k].molar_mass;
         let made = convert(w, d, b, bk, room0 * b.share(&w.chem, k), gap, 0.0, t);
         (room, built) = (room - w.cfg.phys.c_copy * made, built || made > 0.0);
     }
@@ -36,12 +37,12 @@ pub fn grow(w: &World, d: &mut Chunk, b: &mut Body, days: f64, t: f64) -> bool {
 /// the conversion takes of it and, if it burns, the fuel the work burns, and leave its safe minimum (a body is not built
 /// of its last fuel: below its minimum it dies); with each input's minimum, mol.
 fn reach(chem: &Chemistry, p: &crate::Physics, b: &Body, bl: &Reaction, t: f64) -> (Vec<f64>, f64) {
-    let (lay, size, m) = (Layout::of(chem), b.size(chem), bl.outputs[0].0 as usize);
+    let (lay, size, m, bc) = (Layout::of(chem), b.size(chem), bl.outputs[0].0 as usize, chem.body());
     let (nu0, mm) = (bl.outputs[0].1 as f64, chem.subs[m].molar_mass);
     let floors: Vec<f64> = bl.inputs.iter().map(|&(k, _)| b.gene(lay.min + k as usize).max(0.0) * size / chem.subs[k as usize].molar_mass).collect();
     let reach = bl.inputs.iter().zip(&floors).map(|(&(k, nu), f)| {
         let heat = b.heat_of(chem, k as usize, t);
-        (b.store[k as usize] - f).max(0.0) / (nu as f64 / (mm * nu0) + if heat > 0.0 { p.c_copy / heat } else { 0.0 })
+        (b.amount(bc, k as usize) - f).max(0.0) / (nu as f64 / (mm * nu0) + if heat > 0.0 { p.c_copy / heat } else { 0.0 })
     });
     let most = reach.fold(f64::MAX, f64::min);
     (floors, most)
@@ -84,22 +85,24 @@ fn convert(w: &World, d: &mut Chunk, b: &mut Body, bl: &Reaction, room: f64, mos
         return 0.0;
     }
     // What was paid may have burnt some of the solid: convert what is left of it, to its minimum.
-    let ext = ins.iter().zip(&floors).fold(kg / (mm * nu0), |e, (&(k, nu), f)| e.min((b.store[k as usize] - f).max(0.0) / nu as f64));
+    let at = |k: u16| chem.body().place(k as usize).expect("growth's substances are stores");
+    let ext = ins.iter().zip(&floors).fold(kg / (mm * nu0), |e, (&(k, nu), f)| e.min((b.store[at(k)] - f).max(0.0) / nu as f64));
     for &(k, nu) in ins {
-        body::add_store(&mut b.store[k as usize], -(nu as f64) * ext, &mut d.counts.rounded[0]);
+        body::add_store(&mut b.store[at(k)], -(nu as f64) * ext, &mut d.counts.rounded[0]);
     }
     b.e -= chem.dh_of(bl) * ext;
     let (lift, i) = (w.lift(b.cell as usize), b.cell as usize);
     for &(k, nu) in outs {
         let (k, x) = (k as usize, nu as f64 * ext);
-        if w.chem.phase(k, t) == Phase::Gas {
+        // (What it makes and cannot hold, a store of no body, leaves it as a gas does.)
+        if let Some(s) = chem.body().place(k).filter(|_| w.chem.phase(k, t) != Phase::Gas) {
+            b.store[s] += x;
+        } else {
             // (Its heat goes with it, and the body pays the latent heat a gas holds in the air, `Substance::latent_gas`.)
             let q = x * w.chem.subs[k].cp * t;
             b.e = b.e - q - x * w.chem.subs[k].latent_gas();
             d.moves.give(w, Node::bodies(i), 0, 0.0, q);
             d.moves.gas(w, k, x, lift);
-        } else {
-            b.store[k] += x;
         }
     }
     body::settle_heat(w, d, b, t);

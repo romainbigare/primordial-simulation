@@ -5,7 +5,7 @@
 use pcore::body::{self, Body, Layout, COOL_T, HEAT, KEEP_T, PHASE};
 use pcore::life::Handle;
 use pcore::{brain, World, AIR};
-use worldgen::testkit::{add, died, dry_lands, eater, held_day, hold_ground, kg, node_of, out, put_kg_m2, scale, small_world, start, took_from_ground, Books, Brain, Line, LIQUID, MATTER, RICH};
+use worldgen::testkit::{add, died, dry_lands, eater, held_day, hold_ground, kg, node_of, out, put_kg_m2, scale, small_world, start, stores, took_from_ground, Books, Brain, Line, LIQUID, MATTER, RICH};
 
 /// Days the takes from the ground run for (`matter_taken_from_outside_is_digested_into_the_solid`).
 const TAKE_DAYS: usize = 50;
@@ -58,10 +58,10 @@ fn an_animal_keeps_warm_by_burning_fuel() {
     let burnt = |t: f64| {
         let (mut w, s) = resting(t);
         let books = Books::now(&w);
-        let fuel0 = w.life[s].store[RICH];
+        let fuel0 = w.life[s].amount(w.chem.body(), RICH);
         let b = after_update(&mut w, s, t);
         books.assert_kept(&w, 1e-9);
-        (b.temp(&w.chem), b.gene(KEEP_T), fuel0 - b.store[RICH])
+        (b.temp(&w.chem), b.gene(KEEP_T), fuel0 - b.amount(w.chem.body(), RICH))
     };
     let (t_cold, keep, cold) = burnt(255.0);
     let (_, _, warm) = burnt(290.0);
@@ -75,10 +75,10 @@ fn an_animal_keeps_warm_by_burning_fuel() {
 #[test]
 fn an_animal_keeps_cool_by_evaporating() {
     let (mut w, s) = resting(330.0);
-    let (books, liquid0) = (Books::now(&w), w.life[s].store[LIQUID]);
+    let (books, liquid0) = (Books::now(&w), w.life[s].amount(w.chem.body(), LIQUID));
     let b = after_update(&mut w, s, 330.0);
-    println!("on ground at 330 K it stands at {:.2} K (cools from {} K), liquid {liquid0:.2} -> {:.2} mol", b.temp(&w.chem), b.gene(COOL_T), b.store[LIQUID]);
-    assert!(b.temp(&w.chem) < 330.0 && b.store[LIQUID] < liquid0, "no cooling");
+    println!("on ground at 330 K it stands at {:.2} K (cools from {} K), liquid {liquid0:.2} -> {:.2} mol", b.temp(&w.chem), b.gene(COOL_T), b.amount(w.chem.body(), LIQUID));
+    assert!(b.temp(&w.chem) < 330.0 && b.amount(w.chem.body(), LIQUID) < liquid0, "no cooling");
     books.assert_kept(&w, 1e-9);
 }
 
@@ -89,18 +89,18 @@ fn a_body_drinks_its_liquid_from_the_ground() {
     let (mut w, s) = resting(290.0);
     let i = w.life[s].cell as usize;
     put_kg_m2(&mut w, LIQUID, i, 50.0);
-    let dry = 0.5 * w.life[s].store[LIQUID];
+    let dry = 0.5 * w.life[s].amount(w.chem.body(), LIQUID);
     let mut b = std::mem::take(&mut w.life[s]);
     // (Nor does it evaporate to keep cool: the drink is what this is about.)
     b.genes[COOL_T] = 360.0;
     let kg_dry = dry * w.chem.subs[LIQUID].molar_mass;
     add(&mut w, &mut b, LIQUID, -kg_dry);
-    let low = b.store[LIQUID];
+    let low = b.amount(w.chem.body(), LIQUID);
     w.life[s] = b;
     let books = Books::now(&w);
     let b = after_update(&mut w, s, 290.0);
-    println!("liquid {low:.2} -> {:.2} mol", b.store[LIQUID]);
-    assert!(b.store[LIQUID] > low + 5.0, "it did not drink");
+    println!("liquid {low:.2} -> {:.2} mol", b.amount(w.chem.body(), LIQUID));
+    assert!(b.amount(w.chem.body(), LIQUID) > low + 5.0, "it did not drink");
     books.assert_kept(&w, 1e-9);
 }
 
@@ -147,7 +147,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
         }
         // Only matter on the ground to take: it takes neither the liquid nor the solid.
         (b.genes[lay.upt + LIQUID], b.genes[lay.upt + RICH]) = (-0.1, -0.1);
-        let (rich0, matter0, size0) = (b.store[RICH], b.store[MATTER], b.size(&w.chem));
+        let (rich0, matter0, size0) = (b.amount(w.chem.body(), RICH), b.amount(w.chem.body(), MATTER), b.size(&w.chem));
         let s = w.add(b);
         let books = Books::now(&w);
         // (What the body took from the ground, by the events, not what left it: dead matter on the ground also rots.)
@@ -159,7 +159,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
         }
         let b = &w.life[s];
         books.assert_kept(&w, 1e-9);
-        (b.store[RICH] - rich0, b.store[MATTER] - matter0, took / w.chem.subs[MATTER].molar_mass, b.size(&w.chem) - size0)
+        (b.amount(w.chem.body(), RICH) - rich0, b.amount(w.chem.body(), MATTER) - matter0, took / w.chem.subs[MATTER].molar_mass, b.size(&w.chem) - size0)
     };
     let (rich, matter, taken, size) = take_from_ground(true);
     println!("an eater took {taken:.2} mol of matter from the ground: solid +{rich:.2} mol, its own matter {matter:+.3} mol, body {size:+.3} kg");
@@ -174,7 +174,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
     let mut b = eater(&mut w, i, brain::REST, 6.0);
     add(&mut w, &mut b, MATTER, 34.56);
     let (s, mut b) = out(&mut w, b);
-    let (books, before) = (Books::now(&w), b.store.clone());
+    let (books, before) = (Books::now(&w), stores(&w, &b));
     let x = b.digest(&w.chem, 10.0, &mut 0.0);
     assert!((x - 10.0).abs() < 1e-12);
     // 10 of matter and the liquid growth makes with it become what growth is made of, 10 times its counts.
@@ -182,7 +182,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
     for (side, sign) in [(&growth.inputs, 1.0), (&growth.outputs, -1.0)] {
         for p in side.iter() {
             let k = p.0 as usize;
-            assert!((sign * (b.store[k] - before[k]) - 10.0 * p.1 as f64).abs() < 1e-9, "substance {k}: {} -> {}", before[k], b.store[k]);
+            assert!((sign * (b.amount(w.chem.body(), k) - before[k]) - 10.0 * p.1 as f64).abs() < 1e-9, "substance {k}: {} -> {}", before[k], b.amount(w.chem.body(), k));
         }
     }
     w.life[s] = b;

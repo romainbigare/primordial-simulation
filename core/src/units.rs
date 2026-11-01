@@ -32,3 +32,7 @@ pub const MAX_SUBSTANCES: usize = 64;
 
 /// Most reactions a chemistry may have: a body keeps a value for each of its burnings in a fixed array.
 pub const MAX_REACTIONS: usize = 64;
+
+/// Most substances a body holds and reactions it may run (`chem::BodyChem`): its stores and genes are fixed arrays.
+pub const BODY_STORES: usize = 8;
+pub const BODY_REACTIONS: usize = 12;

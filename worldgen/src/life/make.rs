@@ -107,10 +107,12 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
             genes[lay.keep + k] = (MINERAL_KEEP * per * chem.subs[k].molar_mass / chem.subs[m].molar_mass * (1.0 - h)) as f32;
         }
     }
-    let mut b = Body { cell: i as u32, count, lineage, store, genes, genome, rows, ..Default::default() };
+    let mut b = Body { cell: i as u32, count, lineage, store: chem.body().gather(|k| store[k]), genes, genome, rows, ..Default::default() };
     b.prepare(chem, &w.cfg);
     // It holds what its shares make of its matter (`Body::level`).
-    chem.materials().for_each(|k| b.store[k] = b.level(chem, k, 0.0));
+    for s in chem.materials().filter_map(|k| chem.body().place(k)) {
+        b.store[s] = b.level(chem, s, 0.0);
+    }
     // Its key liquids first: its heat holds their fusion enthalpy, and `visible` reads the body (`Body::size`) through
     // them.
     b.wet = b.key_liquids(chem, t);

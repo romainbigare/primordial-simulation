@@ -26,5 +26,6 @@ fn open_land(w: &World, i: usize) -> bool {
 
 /// Book a new body like an edit: its stores and its heat, from outside the world.
 fn book_body(w: &mut World, b: &Body) {
-    w.cross((Boundary::Outside, Node::new(Class::Body, 0)), b.store.iter().copied().enumerate(), b.e);
+    let held: Vec<(usize, f64)> = pcore::body::each(&w.chem, &b.store).collect();
+    w.cross((Boundary::Outside, Node::new(Class::Body, 0)), held, b.e);
 }

@@ -597,8 +597,12 @@ decision. Its trades are gathered as moves on its cell's view and booked when it
 nodes and individuals take alike, never more than is there.
 
 ### 6.1 What a body is
-**Stores**: every substance (all members together) and heat; in practice its fuel (5, and 6 for a diet that burns
-it), body matter (22), its key liquid (0) and the two minerals. **Body matter** is what it is built of; its **living
+**Stores** (all members together) and heat. A body holds only the substances of bodies (`Chemistry::body`, one
+place each in a fixed array): the liquid and the energy-rich solid of life's roles and every substance growth and the
+other built solids take or make that is not a gas at the surface; in chemistry 0 the key liquid (0), the fuel (5), the
+body matter (22), the two minerals (23, 24) and the two built solids (25, 10). It runs only the reactions whose every
+substance is one of these or a gas, taking at least one of these; what such a reaction makes that it cannot hold leaves
+it as a gas. **Body matter** is what it is built of; its **living
 body** (`Body::built`) is matter less brood, over 1 − `WET_TISSUE`. Taking, building, upkeep and force go by the living
 body; fuel and extra liquid are carried, and storing fuel costs no work. `Body::size` (with its liquid) sets height,
 volume and minimums; `Body::mass` (everything) moving and load. **Levels** (`Body::level`): the key liquid h / (1 − h)

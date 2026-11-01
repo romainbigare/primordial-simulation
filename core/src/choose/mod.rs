@@ -89,9 +89,10 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, t: &mut ActTmp
     let wb = now(w, b);
     let Some(lin) = d.brain(w, b.lineage) else { return };
     let (s, nseen, sight) = (lin.shape, lin.seen.min(MAX_SEEN), lin.sight.max(1));
-    b.mem.resize(s.mem, 0.0);
+    // (Its brain reads and writes the first `s.mem` numbers of its memory; those past them are none.)
+    b.mem[s.mem..].fill(0.0);
     let mut c = perceive(w, d, b, nseen, &mut rng);
-    inputs(w, b, lived, temp, &c, &mut t.input);
+    inputs(w, b, (lived, temp, s.mem), &c, &mut t.input);
     brain::think(&lin.base, &b.rows, s, &t.input, &mut t.thought);
     learn::learn(w, b, s, wb, &t.thought.h);
     walk(w, b.cell as usize, sight, t);
@@ -219,7 +220,7 @@ fn noise(w: &World, b: &mut Body, s: Shape, t: &ActTmp, rng: &mut Rng) -> ([f32;
     let z: [f32; SIG + FORM_OUT] = std::array::from_fn(|_| rng.normal() as f32);
     b.sig = std::array::from_fn(|k| squash(out[s.sig() + k]) + p.signal_noise * z[k]);
     let form = std::array::from_fn(|k| squash(out[s.form() + k]) + p.shape_noise * z[SIG + k]);
-    b.mem.iter_mut().enumerate().for_each(|(k, m)| *m = squash(out[s.learned() + k]));
+    b.mem[..s.mem].iter_mut().enumerate().for_each(|(k, m)| *m = squash(out[s.learned() + k]));
     (form, z)
 }
 
