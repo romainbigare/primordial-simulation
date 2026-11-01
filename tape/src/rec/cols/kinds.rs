@@ -1,12 +1,14 @@
 //! Each starting kind (`root_<k>_*`, by `Lineage::root`): its members, bodies and mass, its births and deaths of
-//! the year, its lives, and the means by members of its mass, body, genes and catalysts. A kind that died out reads
-//! 0 (its means NaN); the columns are there for every kind up to the largest seen so far.
+//! the year, its lives, and the means by members of its mass, body, genes and catalysts; and for a kind of cover
+//! (`cover::Cover::root`) its slots, mass and the means of its genes by built cover. A kind that died out reads 0 (its
+//! means NaN); the columns are there for every kind up to the largest seen so far.
 
 use super::{ratio, Row};
 use crate::layers::Ctx;
 use pcore::par;
 use crate::rec::{Recorder, CAUSES};
 use pcore::body::{self, Body};
+use pcore::cover;
 use pcore::World;
 use std::collections::BTreeSet;
 
@@ -20,6 +22,18 @@ const GENES: [(usize, &str, &str); 8] = [
     (body::HEAT, "heat", "log10"),
     (body::KEEP_T, "keep_t", "K"),
     (body::REPAIR, "repair", "log10"),
+];
+/// The genes of the cover averaged per kind: gene, column name and unit.
+const COVER_GENES: [(usize, &str, &str); 9] = [
+    (cover::LIGHT, "light", "log10"),
+    (cover::LEAF, "leaf", "log10"),
+    (cover::WALLS, "walls", "log10"),
+    (cover::STORE, "store", "log10"),
+    (cover::FROST, "frost", "K"),
+    (cover::MOIST, "moist", "log10"),
+    (cover::SEED, "seed", "1"),
+    (cover::REPAIR, "repair", "log10"),
+    (cover::FIX, "fix", "log10"),
 ];
 /// A member below this activity (`Body::activity`) counts as dry.
 const DRY: f64 = 0.5;
@@ -115,6 +129,22 @@ impl Recorder {
                     kinds.resize(k + 1, Kind::new(nr));
                 }
                 kinds[k].add(w, b, cat, h);
+            }
+        }
+        // The cover of each kind of cover seen so far: its slots, mass, capture area per m² of the world's land, and its
+        // genes' means by built cover.
+        let sums = cover::sums(w);
+        let seen = self.files.series.iter().filter(|c| c.name.starts_with("root_") && c.name.ends_with("_slots")).count();
+        let land_area: f64 = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).map(|i| w.mesh.cells().area()[i]).sum::<f64>().max(f64::MIN_POSITIVE);
+        for k in 0..sums.len().max(seen) {
+            let s = sums.get(k).cloned().unwrap_or_default();
+            let n = |x: &str| format!("root_{k}_{x}");
+            row.push(n("slots"), "1", s.slots);
+            row.push(n("cover_kg"), "kg", s.kg);
+            row.push(n("cover_area"), "m2/m2", s.leaf / land_area);
+            for (&(g, name, unit), &x) in COVER_GENES.iter().zip(&s.genes) {
+                debug_assert!(g < cover::NG);
+                row.push(n(&format!("cover_{name}")), unit, ratio(x, s.built));
             }
         }
         // The catalyst genes on in some member of the kind so far keep their columns.

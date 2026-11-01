@@ -7,8 +7,8 @@ mod make;
 mod seeding;
 mod soil;
 
-pub use kinds::{Kind, KINDS, ROSTER};
-pub use make::{make, LIGHT_X, LITTER_X};
+pub use kinds::{Bodies, Field, Kind, Place, KINDS, ROSTER};
+pub use make::{make, LITTER_X};
 pub use seeding::{seed, seed_with, Seeding, FIXERS, FIX_GENE};
 pub use soil::soil;
 

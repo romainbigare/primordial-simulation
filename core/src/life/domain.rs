@@ -2,7 +2,7 @@
 //! taken out of the world (`(&World, &mut Domain)`), in the parallel phase of a batch and in every serial step
 //! (`World::in_domain`) alike: it writes its bodies, their lists, its ring, the store's view (`store::Moves`), its
 //! events and counters, its outbox, and the lineages and born rows it makes (provisional, `registry`) and the changes of
-//! their holders; the world settles them when the domain is back (`World::settle`, S72). What lands in its cells
+//! their holders; the world settles them when the domain is back (`World::settle`). What lands in its cells
 //! (`Life::cross`) is its own too.
 
 use super::{free_place, Handle, Held, ID_SHIFT, RING};
@@ -47,6 +47,8 @@ pub struct Domain {
     pub(super) brains: Vec<Lineage>,
     pub(super) genomes: Vec<Vec<f32>>,
     pub(super) counted: Vec<(Held, u32, i32)>,
+    /// The cover of its cells (`cover`)
+    pub cover: crate::cover::Cover,
     /// The moves its bodies gathered and the view of its nodes as they leave them
     pub moves: Moves,
     /// The events and counters of its bodies since the world last settled
@@ -62,6 +64,10 @@ impl Domain {
     /// How many bodies are stored in it.
     pub(crate) fn count(&self) -> usize {
         self.table.len()
+    }
+    /// Whether it holds bodies or cover.
+    pub(crate) fn lives(&self) -> bool {
+        self.count() > 0 || self.cover.any()
     }
     /// The handles of the bodies of its cell `i`, in the order they came.
     pub fn cell(&self, i: usize) -> impl Iterator<Item = Handle> + '_ {
@@ -204,7 +210,7 @@ impl World {
         self.settle(k..k + 1);
         r
     }
-    /// The world takes what domains `ds` wrote since it last settled (S72), domain by domain in order: their events and
+    /// The world takes what domains `ds` wrote since it last settled, domain by domain in order: their events and
     /// counters, and where the bodies that moved into them are stored (`Life::find`); the lineages and born rows they
     /// made get global ids (`Life::remap`); outside a batch the changes of holders are added (`Life::count_all`), in a
     /// batch at its end.

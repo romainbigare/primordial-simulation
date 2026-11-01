@@ -104,8 +104,7 @@ pub fn merge(w: &World, d: &mut Domain, s: Handle, t: Handle) {
     let (born, mut c) = (d.born(w, &d[s]).to_vec(), std::mem::take(&mut d[s]));
     let_go(w, d, &mut c, false);
     d.remove(s, &c);
-    let size = c.size_moments(&w.chem);
-    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), size, (&born, &c.rows, c.row_spread));
+    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (&born, &c.rows, c.row_spread));
 }
 
 /// What splits and joins as an amount when members move between nodes, split by shares with the remainder kept so the
@@ -140,10 +139,9 @@ impl Lot {
     }
 }
 
-/// Members `c` join the body at `t` with genes and spread `genes`, size moments `size` and rows `rows` (born rows,
-/// rows, row spread): amounts add up (`rejoin`), genes, sizes and rows become the means by members and the spreads pool
-/// around them (laws.md 4.4).
-pub(crate) fn add(w: &World, d: &mut Domain, t: Handle, c: Lot, (genes, spread): (&[f32], &[f32]), size: (f32, f32), (born, own, row_spread): (&[f32], &[f32], f32)) {
+/// Members `c` join the body at `t` with genes and spread `genes` and rows `rows` (born rows, rows, row spread):
+/// amounts add up (`rejoin`), genes and rows become the means by members and the spreads pool around them (laws.md 4.4).
+pub(crate) fn add(w: &World, d: &mut Domain, t: Handle, c: Lot, (genes, spread): (&[f32], &[f32]), (born, own, row_spread): (&[f32], &[f32], f32)) {
     let mut o = std::mem::take(&mut d[t]);
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.count / (o.count + c.count)) as f32);
     let mix = |p: f32, q: f32| p + a * (q - p);
@@ -163,7 +161,7 @@ pub(crate) fn add(w: &World, d: &mut Domain, t: Handle, c: Lot, (genes, spread):
     }
     o.spread = pooled;
     o.prepare(&w.chem, &w.cfg);
-    rejoin(w, d, &mut o, c, size, Some(own));
+    rejoin(d, &mut o, c, Some(own));
     d.see(w, &mut o);
     d[t] = o;
 }
@@ -171,16 +169,12 @@ pub(crate) fn add(w: &World, d: &mut Domain, t: Handle, c: Lot, (genes, spread):
 /// Members `c` with the genes and spreads of body `o` join it (taken out of its slot): the members of a node who waited
 /// aside while the others acted, a part of a node that moved or bonded and came back to its cell (both
 /// `choose::spread`), or joiners after `add` pooled their genes. Amounts add up; the last
-/// day, the marks and the sizes (moments `size`, `Body::size_moments`) become the means by members, the sizes' variance
-/// with the gap between the two means (members who fed are larger than those who did not); `rows`: the rows of `c`
-/// where they differ from `o`'s, which `o`'s become the mean by members of. `o`'s visible traits are the caller's to
-/// work out again (`Domain::see`).
-pub(crate) fn rejoin(w: &World, d: &mut Domain, o: &mut Body, c: Lot, size: (f32, f32), rows: Option<&[f32]>) {
+/// day and the marks become the means by members; `rows`: the rows of `c` where they differ from `o`'s, which `o`'s
+/// become the mean by members of. `o`'s visible traits are the caller's to work out again (`Domain::see`).
+pub(crate) fn rejoin(d: &mut Domain, o: &mut Body, c: Lot, rows: Option<&[f32]>) {
     let share = c.count / (o.count + c.count);
     (o.last, o.mark, o.rained) = (o.last + share * (c.last - o.last), o.mark + share * (c.mark - o.mark), o.rained + share * (c.rained - o.rained));
-    let ((mo, vo), a) = (o.size_moments(&w.chem), share as f32);
-    let gap = size.0 - mo;
-    let (size_mean, size_var) = (mo + a * gap, (1.0 - a) * vo + a * size.1 + a * (1.0 - a) * gap * gap);
+    let a = share as f32;
     if let Some(rows) = rows {
         blend(&mut o.rows, rows, a);
     }
@@ -188,7 +182,6 @@ pub(crate) fn rejoin(w: &World, d: &mut Domain, o: &mut Body, c: Lot, size: (f32
     o.brood += c.brood;
     (o.e, o.draw.owed) = (o.e + c.e, o.draw.owed + c.owed);
     d.set_count(o, o.count + c.count);
-    o.set_size(&w.chem, size_mean as f64, size_var as f64);
 }
 
 /// Share `f` of node `b`'s members and share `fa` of each of its stores, of its brood and of its heat as a new body
@@ -299,7 +292,7 @@ fn draw(w: &World, d: &mut Domain, b: &mut Body, r: &mut Rng) -> Handle {
         d.reborn(w, b, left);
     }
     b.prepare(&w.chem, &w.cfg);
-    (c.count, c.spread, c.row_spread, c.size_spread, c.size_lag) = (1.0, Vec::new(), 0.0, 0.0, 0.0);
+    (c.count, c.spread, c.row_spread) = (1.0, Vec::new(), 0.0);
     d.place(w, c)
 }
 

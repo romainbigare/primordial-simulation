@@ -256,7 +256,8 @@ fn the_order_of_the_domains_changes_nothing() {
     }
     // Movers pushed through every third cell and the holder's hard enough to kill (`Body::breaking`; each body there
     // takes its share by mass).
-    let (h, all) = (w.life.find(doomed_id).unwrap(), w.life.cell(x).map(|o| w.life[o].mass(&w.chem)).sum::<f64>());
+    pcore::survey::survey(&mut w, false);
+    let (h, all) = (w.life.find(doomed_id).unwrap(), w.life.sum(x)[1]);
     let kill_holder = 2.0 * w.life[h].breaking(&w.chem, &w.cfg, 1.0) * all / w.life[h].mass(&w.chem);
     for i in (0..w.mesh.cells().n()).filter(|&i| i == x || (i % 3 == 0 && !busy.contains(&i))) {
         let k = w.life.domain(i).slot(i);
@@ -275,7 +276,7 @@ fn the_order_of_the_domains_changes_nothing() {
             // the merged node's born rows.
             let did = |f: &dyn Fn(&pcore::event::Event) -> bool| v.events.iter().any(f);
             let merged = v.life.find(big).map(|h| v.life.born(&v.life[h]).to_vec());
-            let broken = did(&|e| matches!(e.kind, EventKind::Died { cause: BROKEN, .. }) && e.node != x as u32);
+            let broken = did(&|e| matches!(e.kind, EventKind::Died { cause: BROKEN, .. }) && e.node != x as u32) || v.counts.cover_lost[BROKEN as usize] > 0.0;
             let joined = v.life.find(kind).filter(|_| v.life.find(mover).is_none()).map(|h| v.life.born(&v.life[h]).to_vec());
             let first = (broken, did(&|e| matches!(e.kind, EventKind::BondBroken)), merged, joined);
             // Whether children of parents of two domains started in one cell in one batch.

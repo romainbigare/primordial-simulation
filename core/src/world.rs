@@ -32,6 +32,9 @@ pub struct Counters {
     /// to zero: mol, and J
     #[serde(skip)]
     pub rounded: [f64; 2],
+    /// Cover that died, kg, by the cause a body would die of (`body::LACK` to `AGE`)
+    #[serde(skip)]
+    pub cover_lost: [f64; 6],
 }
 
 impl Counters {
@@ -39,11 +42,12 @@ impl Counters {
     /// one cannot be left out. A domain's own counts per cell are its fields (`Domain::crossings`, `Domain::pushed`), so
     /// its `traffic` stays empty (checked in debug builds).
     pub(crate) fn add(&mut self, c: &mut Counters) {
-        let Counters { traffic, decisions, greedy, body_batches, busiest_share, splits, updates, clamped_heat, parts, rounded } = std::mem::take(c);
+        let Counters { traffic, decisions, greedy, body_batches, busiest_share, splits, updates, clamped_heat, parts, rounded, cover_lost } = std::mem::take(c);
         debug_assert!(traffic.is_empty(), "a domain counted per cell");
         (self.updates, self.splits, self.decisions, self.greedy) = (self.updates + updates, self.splits + splits, self.decisions + decisions, self.greedy + greedy);
         (self.body_batches, self.busiest_share, self.clamped_heat) = (self.body_batches + body_batches, self.busiest_share + busiest_share, self.clamped_heat + clamped_heat);
         self.add_rounded(rounded);
+        self.cover_lost.iter_mut().zip(cover_lost).for_each(|(a, b)| *a += b);
         let p = &mut self.parts;
         (p.afloat, p.formed, p.to_parts, p.from_parts) = (p.afloat + parts.afloat, p.formed + parts.formed, p.to_parts + parts.to_parts, p.from_parts + parts.from_parts);
     }
@@ -61,6 +65,7 @@ pub struct Taken {
     pub body_batches: f64,
     pub busiest_share: f64,
     pub parts: bond::Tally,
+    pub cover_lost: [f64; 6],
 }
 
 /// The whole state of a world: what `step` advances, and what a snapshot saves.
@@ -124,12 +129,12 @@ impl World {
     pub fn drain_events(&mut self) -> Vec<Event> {
         std::mem::take(&mut self.events)
     }
-    /// Hand the shell the yearly counts (`Counters::decisions`, `greedy`, `body_batches`, `busiest_share`, `parts`),
+    /// Hand the shell the yearly counts (`Counters::decisions`, `greedy`, `body_batches`, `busiest_share`, `parts`, `cover_lost`),
     /// and start them again.
     pub fn take_counters(&mut self) -> Taken {
         let c = &mut self.counts;
         let (decisions, greedy, body_batches, busiest_share) = (std::mem::take(&mut c.decisions), std::mem::take(&mut c.greedy), std::mem::take(&mut c.body_batches), std::mem::take(&mut c.busiest_share));
-        Taken { decisions, greedy, body_batches, busiest_share, parts: std::mem::take(&mut c.parts) }
+        Taken { decisions, greedy, body_batches, busiest_share, parts: std::mem::take(&mut c.parts), cover_lost: std::mem::take(&mut c.cover_lost) }
     }
     pub fn days_per_year(&self) -> u64 {
         self.cfg.calendar().days(self.cfg.calendar().year)

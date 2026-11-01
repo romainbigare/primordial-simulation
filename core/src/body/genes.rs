@@ -146,19 +146,6 @@ impl Body {
     }
 }
 
-/// The highest speed-up (log10) of any reaction driven by light in the genes (0 if the chemistry has none).
-pub fn light_cat(chem: &Chemistry, genes: &[f32]) -> f32 {
-    chem.light_reactions().iter().map(|&r| genes[NSCALAR + r]).fold(0.0, f32::max)
-}
-
-/// A body whose light reactions are sped up at least this much (log10) is a light-eater, for the tape; no law reads it.
-pub const LIGHT_EATER: f32 = 5.0;
-
-/// Does a body of these genes live on light (`LIGHT_EATER`)?
-pub fn light_eater(chem: &Chemistry, genes: &[f32]) -> bool {
-    light_cat(chem, genes) >= LIGHT_EATER
-}
-
 /// The step gene `g` is measured in for likeness: its mutation step, but a whole unit for the sizes of brain and senses
 /// (in their small steps a split's halves would be unlike; not counted, small brains would join a big-brained kind).
 fn like(lay: &Layout, g: usize) -> f32 {

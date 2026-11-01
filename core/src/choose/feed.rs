@@ -1,7 +1,7 @@
 //! Taking and giving: from the cell's ground (`take_node`), to it (`put`), from another body (`take_body`), and to
 //! another body (`give`), each by the intake law of bodies (`Body::wanted`).
 
-use crate::body::{self, light_cat, Body, STRENGTH, TAKEN};
+use crate::body::{self, Body, STRENGTH, TAKEN};
 use crate::chem::{Chemistry, Phase};
 use crate::event::{Event, EventKind};
 use crate::rng::Rng;
@@ -33,28 +33,49 @@ fn intake(w: &World, b: &Body, from: impl Fn(usize) -> f64) -> (f64, f64) {
     (p.take * found / (p.take + found) * days * supply, held)
 }
 
-/// Take loose solids and liquids from the cell's ground by the intake law (`intake`), no more than its stores have room
-/// for.
+/// The id a take from the cover of a cell reads in its event (`EventKind::Took`; the ground's is `u64::MAX`).
+pub const COVER: u64 = u64::MAX - 1;
+
+/// Take loose solids and liquids from the cell's ground and from its cover (grazing) by the intake law (`intake`, one
+/// search over both), no more than its stores have room for, each substance from the two in proportion to what each
+/// holds of it. What it takes of the cover it pays to break as a bite does (`Cover::breaking`).
 pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
-    let i = b.cell as usize;
-    let tg = w.t_ground_last(i);
-    let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k) } else { 0.0 };
-    let mut m = b.wanted(&w.chem, b.paces(w), free, intake(w, b, free).0, b.mass(&w.chem));
-    if !body::pay(w, d, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval(w) as f64) {
+    let (i, chem) = (b.cell as usize, &w.chem);
+    let (tg, kc, parts) = (w.t_ground_last(i), d.slot(i), crate::cover::Parts::of(chem));
+    let free = |k: usize| if chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k) } else { 0.0 };
+    let cover: [f64; crate::units::MAX_SUBSTANCES] = parts.as_ref().map_or([0.0; crate::units::MAX_SUBSTANCES], |p| d.cover.amounts(p, kc));
+    let lying = |k: usize| free(k) + cover[k];
+    let mut m = b.wanted(chem, b.paces(w), lying, intake(w, b, lying).0, b.mass(chem));
+    let grazed: Vec<f64> = m.iter().enumerate().map(|(k, &a)| if cover[k] > 0.0 { a * cover[k] / lying(k) } else { 0.0 }).collect();
+    let (all, kg) = (parts.as_ref().map_or(0.0, |p| d.cover.amounts(p, kc).iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()), chem.mass_of(&grazed));
+    let breaking = parts.as_ref().filter(|_| kg > 0.0).map_or(0.0, |p| d.cover.breaking(chem, &w.cfg, p, kc, (kg / all.max(1e-300)).min(1.0)));
+    if !body::pay(w, d, b, w.cfg.phys.c_handle * chem.mass_of(&m) + breaking, b.interval(w) as f64) {
         return;
     }
-    let ev = EventKind::Took { by: b.id, from: u64::MAX, used: used_kg(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), 0.0] };
-    d.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: w.chem.mass_of(&m) });
-    for (k, a) in m.iter_mut().enumerate().filter(|x| *x.1 != 0.0) {
-        // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
-        let cp = w.chem.subs[k].cp;
-        let want = *a * (cp * tg + w.chem.fused_heat(k, tg, |j| d.moves.amount(w, Node::ground(i), j)));
-        let took;
-        (*a, took) = d.moves.take_from_ground(w, i, (k, *a, cp), want, d.moves.heat_cap_ground(w, i));
-        b.store[k] += *a;
-        b.e += took;
+    for (from, x) in [(u64::MAX, chem.mass_of(&m) - kg), (COVER, kg)].into_iter().filter(|e| e.1 > 0.0) {
+        let part: Vec<f64> = m.iter().zip(&grazed).map(|(&a, &g)| if from == COVER { g } else { a - g }).collect();
+        let ev = EventKind::Took { by: b.id, from, used: used_kg(w, b, &part) as f32 };
+        d.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: x });
     }
-    b.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]), &mut d.counts.rounded[0]);
+    if let Some(p) = parts.as_ref().filter(|_| kg > 0.0) {
+        for (k, &g) in grazed.iter().enumerate().filter(|e| *e.1 > 0.0) {
+            b.e += d.cover.take(chem, p, kc, k, g);
+            b.store[k] += g;
+        }
+        d.counts.cover_lost[TAKEN as usize] += kg;
+    }
+    for k in 0..m.len() {
+        let want = m[k] - grazed[k];
+        if want == 0.0 {
+            continue;
+        }
+        // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
+        let cp = chem.subs[k].cp;
+        let heat = want * (cp * tg + chem.fused_heat(k, tg, |j| d.moves.amount(w, Node::ground(i), j)));
+        let (got, took) = d.moves.take_from_ground(w, i, (k, want, cp), heat, d.moves.heat_cap_ground(w, i));
+        (b.store[k], b.e, m[k]) = (b.store[k] + got, b.e + took, got + grazed[k]);
+    }
+    b.digest(chem, chem.matter().map_or(0.0, |k| m[k]), &mut d.counts.rounded[0]);
 }
 
 /// Release stores above the level the body keeps (`Body::level`) to the cell's ground.
@@ -121,7 +142,7 @@ pub fn take_body(w: &World, d: &mut Domain, b: &mut Body, s: Handle, rng: &mut R
     let mut rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (torn * s - a).max(0.0)).collect();
     let got = w.chem.mass_of(&m);
     transfer(&w.chem, &mut d.counts.rounded[0], &mut o, b, &m);
-    let ev = EventKind::Took { by: b.id, from: o.id, used: used_kg(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), light_cat(&w.chem, &o.genes)] };
+    let ev = EventKind::Took { by: b.id, from: o.id, used: used_kg(w, b, &m) as f32 };
     d.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: got });
     if body::wound(w, d, s, o, (hit, f), &mut rest, TAKEN) {
         d[s].note(b.id, -(NOTE_SCALE * got / mo) as f32);

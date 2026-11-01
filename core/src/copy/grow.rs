@@ -61,17 +61,6 @@ fn allowance(w: &World, b: &Body, t: f64, days: f64, dry: f64) -> f64 {
     p.c_build * b.supply(&w.chem, p, t) / p.m_ref * days * dry
 }
 
-/// What body `b` at `t` K holds that is or soon becomes body, kg: its matter (its brood with it), and of the matter its
-/// stores could make (`reach`) as much as one interval's allowance builds. Selection inside a node counts its members'
-/// gain in it (`copy::select`): a gene that brings more of what growth converts gains though the update builds no
-/// more, but a store past what growth can use in an interval gains nothing, and a solid it builds counts only by what
-/// it does (its height and strength), as neither becomes children.
-pub fn buildable(w: &World, b: &Body, t: f64, dry: f64) -> f64 {
-    let (Some(bl), Some(m)) = (w.chem.build.as_ref(), w.chem.matter()) else { return 0.0 };
-    let soon = allowance(w, b, t, b.interval(w) as f64, dry) / w.cfg.phys.c_copy;
-    b.store[m] * w.chem.subs[m].molar_mass + reach(&w.chem, &w.cfg.phys, b, bl, t).1.min(soon)
-}
-
 /// It plans on this share of what its reactions can release, so rounding never leaves it short.
 const RELEASE_MARGIN: f64 = 0.999;
 /// Less than this share of `full` (or of its mass) made is nothing made.

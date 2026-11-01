@@ -20,14 +20,15 @@ struct Saved<'a> {
 }
 
 /// A domain as a snapshot keeps it (`Saved`): its cells, its count of bodies placed, per cell the energy movers spent
-/// pushing through its bodies since the last survey and the members that moved into it since the last month, and its
-/// living bodies.
+/// pushing through its bodies since the last survey and the members that moved into it since the last month, its
+/// cover and its living bodies.
 #[derive(Serialize, Deserialize)]
 struct SavedDomain<'a> {
     cells: Cow<'a, [u32]>,
     placed: u64,
     pushed: Cow<'a, [f64]>,
     crossings: Cow<'a, [f32]>,
+    cover: Cow<'a, crate::cover::Cover>,
     bodies: Vec<Cow<'a, Body>>,
 }
 
@@ -36,7 +37,7 @@ impl Serialize for Life {
         let mut domains = Vec::with_capacity(self.domains.len());
         for d in &self.domains {
             let bodies = d.at.iter().flatten().map(|&h| Cow::Borrowed(&self[h])).filter(|b| b.alive).collect();
-            domains.push(SavedDomain { cells: (&d.cells).into(), placed: d.placed, pushed: (&d.pushed).into(), crossings: (&d.crossings).into(), bodies });
+            domains.push(SavedDomain { cells: (&d.cells).into(), placed: d.placed, pushed: (&d.pushed).into(), crossings: (&d.crossings).into(), cover: Cow::Borrowed(&d.cover), bodies });
         }
         let (brains, members) = ((&self.brains).into(), (&self.members).into());
         Saved { domains, brains, members, genomes: (&self.genomes).into(), free_genomes: (&self.free_genomes).into() }.serialize(to)
@@ -51,9 +52,9 @@ impl<'de> Deserialize<'de> for Life {
         let mut life = Life { brains, members, genomes: x.genomes.into_owned(), free_genomes: x.free_genomes.into_owned(), ..Default::default() };
         life.cut(x.domains.iter().map(|d| d.cells.to_vec()).collect());
         for (d, saved) in x.domains.into_iter().enumerate() {
-            let SavedDomain { placed, pushed, crossings, bodies, .. } = saved;
+            let SavedDomain { placed, pushed, crossings, cover, bodies, .. } = saved;
             let dom = &mut life.domains[d];
-            (dom.placed, dom.pushed, dom.crossings) = (placed, pushed.into_owned(), crossings.into_owned());
+            (dom.placed, dom.pushed, dom.crossings, dom.cover) = (placed, pushed.into_owned(), crossings.into_owned(), cover.into_owned());
             for b in bodies.into_iter().map(Cow::into_owned) {
                 if (b.id >> ID_SHIFT) as usize != d {
                     life.away.insert(b.id, d as u32);

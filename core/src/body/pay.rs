@@ -25,7 +25,7 @@ pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64, t: f64, dry: f64) -> f6
     let think = w.life.has_brain(b.lineage).map_or(p.c_brain, |brain| Lineage::cost(brain, p, &b.genes));
     let tissue = b.built(&w.chem) * b.k.tissue;
     let u = days * (tissue * (p.c_basal + p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n();
-    u * (1.0 - p.c_repair + p.c_repair * 2f64.powf(b.gene(REPAIR))) * dry * b.upkeep_pace(&w.chem, t)
+    u * p.repair(b.gene(REPAIR)) * dry * b.upkeep_pace(&w.chem, t)
 }
 
 /// Reaction `r` takes an input that is gas at `t`: it breathes, so it runs on demand.

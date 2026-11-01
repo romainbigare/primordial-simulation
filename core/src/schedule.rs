@@ -44,7 +44,7 @@ fn days(cfg: &Config, d: u32) -> Every {
 
 /// The processes of the world in their fixed order at one time, each on its period counted from the start of the longer
 /// period that holds it (`Every`); Flow's state comes first, as the others read it.
-fn processes(w: &World) -> [(Every, Run); 10] {
+fn processes(w: &World) -> [(Every, Run); 11] {
     let (cfg, cal) = (&w.cfg, w.cfg.calendar());
     // The slow parts count from the start of the world.
     let from_start = |period: u64| Every { period, within: period };
@@ -62,6 +62,8 @@ fn processes(w: &World) -> [(Every, Run); 10] {
         (days(cfg, cfg.flow_days), (Stage::Flow, "liquid", |w, s| flow::liquid(w, s as f64))),
         (from_start(flow::CREEP_YEARS * cal.year), (Stage::Flow, "creep", |w, s| flow::creep(w, s as f64))),
         (from_start(flow::REFRESH_MONTHS * cal.month), (Stage::Flow, "refresh", |w, _| flow::refresh(w))),
+        // (The cover's month reads Flow's state, built in full at a month's start, and the air as its step left it.)
+        (from_start(cal.month), (Stage::Bodies, "cover", |w, _| survey::cover(w))),
         (physics, (Stage::Change, "change", |w, s| change::step(w, s as f64))),
         // (Bond's own spans are months, `bond::step`; the bodies' intervals whole batches of days, `survey::batch`.)
         (from_start(cal.month), (Stage::Parts, "bond", |w, _| bond::step(w))),

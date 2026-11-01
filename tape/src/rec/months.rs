@@ -112,7 +112,7 @@ pub(super) fn look<'a>(w: &'a World, last: &BTreeMap<u64, u32>) -> Seen<'a> {
     let ground_t: Vec<f64> = (0..cells).map(|i| w.t_ground_last(i)).collect();
     let looks = par::map(&bodies, |b| {
         let t = ground_t[b.cell as usize];
-        let mobile = (!pcore::body::light_eater(&w.chem, &b.genes)).then(|| {
+        let mobile = Some({
             let z = z_of(b.cell as usize);
             let moved = last.get(&b.id).map_or((0.0, 0.0), |&c| (row(b.cell) - row(c), z - z_of(c as usize)));
             Mobile { cell: b.cell, row: row(b.cell), z, inside: pcore::bond::room(w, b).is_some(), warm: t >= INSIDE_COLD_T, t, moved }

@@ -7,14 +7,13 @@
 //! another domain's node reads the store, which nothing changes until the moves are booked. The view keeps beside each
 //! number its change since it was taken, which the booking adds to the store once, as `apply` adds. The view's sums
 //! are plain, not compensated as `apply` compensates the ground and the air (`Store::carry`): what a body reads differs
-//! from what is booked by less than `ROUNDING`. A checkpoint of the view can be rolled back: a sample member's update
-//! changes nothing (`copy::sample`).
+//! from what is booked by less than `ROUNDING`.
 
 use super::apply::ROUNDING;
 use super::{heat_received, held_more, Booker, Class, Move, Node};
 use crate::ground::{heat_above_floor, share};
 use crate::units::T_FLOOR;
-use crate::{life::Domain, World, AIR};
+use crate::{World, AIR};
 
 /// What a move made when no update runs says (moves are made inside an update).
 const RUNNING: &str = "an update running";
@@ -47,28 +46,14 @@ pub struct Moves {
     short: f64,
     /// Heat lifted into the potential (`Class::Potential`), J
     lift: f64,
-    /// While a checkpoint is set, each number of the view changed since, with what it held (and its change) then
-    undo: Option<Vec<(u8, u32, [f64; 2])>>,
-}
-
-/// A checkpoint of the moves of a domain: its view (through `Moves::undo`), the heat it lifted and could not take, and
-/// the events and the counters an update changes (`Domain::checkpoint`).
-pub struct Mark {
-    lift: f64,
-    short: f64,
-    events: usize,
-    rounded: [f64; 2],
 }
 
 impl Moves {
-    /// Number `at` of array `arr` of the view changes by `d`; noted while a checkpoint is set. A take never passes what
-    /// the view holds (a law that does overdraws its node; checked in debug builds).
+    /// Number `at` of array `arr` of the view changes by `d`. A take never passes what the view holds (a law that does
+    /// overdraws its node; checked in debug builds).
     fn alter(&mut self, arr: usize, at: usize, d: f64) {
         let x = &mut self.view[arr][at];
         debug_assert!(arr == SEEN || d >= 0.0 || x[0] + d >= -ROUNDING * (x[0].abs() + d.abs()), "a take of {d} from a view that holds {x:?} (array {arr}, at {at})");
-        if let Some(u) = &mut self.undo {
-            u.push((arr as u8, at as u32, *x));
-        }
         *x = [x[0] + d, x[1] + d];
     }
     /// Node `x`, at slot `at` of the view, gains `mol` of substance `k` and `heat` J (one end of a move).
@@ -145,7 +130,7 @@ impl Moves {
             Class::Ground | Class::Bed | Class::Bodies if x.index == own.0 => return Some(own.1),
             Class::Air if x.index == air => return Some(0),
             Class::Ground | Class::Bed | Class::Bodies if w.life.domain_of(x.index) == open => w.life.cell_slot(x.index).1,
-            Class::Part | Class::Body => return None,
+            Class::Part | Class::Body | Class::Cover => return None,
             _ => panic!("a move of {x:?}, outside the domain open"),
         };
         if !self.held[at] {
@@ -291,26 +276,5 @@ impl Moves {
     pub(super) fn close(&mut self) -> (f64, f64) {
         (self.who, self.open) = (None, None);
         (std::mem::take(&mut self.lift), std::mem::take(&mut self.short))
-    }
-}
-
-impl Domain {
-    /// A checkpoint of the moves of the update running, of the domain's view, and of its events and counters, to roll
-    /// back to (`roll_back`).
-    pub(crate) fn checkpoint(&mut self) -> Mark {
-        debug_assert!(self.moves.undo.is_none(), "one checkpoint at a time");
-        self.moves.undo = Some(Vec::new());
-        Mark { lift: self.moves.lift, short: self.moves.short, events: self.events.len(), rounded: self.counts.rounded }
-    }
-    /// Everything since checkpoint `m` is undone: the moves gathered, the view's numbers, the events and the counters.
-    /// (A node first taken into the view since holds what the store holds again.)
-    pub(crate) fn roll_back(&mut self, m: Mark) {
-        let undo = self.moves.undo.take().expect("a checkpoint set");
-        for &(arr, at, x) in undo.iter().rev() {
-            self.moves.view[arr as usize][at as usize] = x;
-        }
-        (self.moves.lift, self.moves.short) = (m.lift, m.short);
-        self.events.truncate(m.events);
-        self.counts.rounded = m.rounded;
     }
 }

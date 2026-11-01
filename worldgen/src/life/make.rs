@@ -1,6 +1,6 @@
 //! One founder body: its genes from its kind's row, its stores, its temperature, booked as new matter.
 
-use super::kinds::{light, KINDS};
+use super::kinds::{Bodies, Place, KINDS};
 use super::book_body;
 use pcore::body::{self, Body, Layout};
 use pcore::rng::{Purpose, Rng};
@@ -9,14 +9,8 @@ use pcore::World;
 /// log10 of how much faster the open world burns the energy-rich solid and body matter than the founders' `cat`
 /// numbers assume (litter constants of 0.27 and 0.2 a year): their burning genes are that much lower.
 pub const LITTER_X: f32 = 0.602;
-/// log10 of how much more light catalyst a founder light-eater needs: the reaction's contact is the body's liquid, and
-/// a founder (2 kg, a 20-day interval) exchanges 182 times its liquid in gas.
-pub const LIGHT_X: f32 = 2.26;
 /// Every founder's keep gene of each solid bodies build besides their matter: small, so selection finds its worth.
 const BUILT_SHARE: f32 = 0.02;
-/// A light-eater founder's keep gene of the solid it builds of its fuel alone, its walls: the cell walls of herbs are
-/// 30 to 60% of their dry mass.
-const WALL_SHARE: f32 = 0.4;
 /// A gene that is off starts below zero, so small changes keep it off: catalysts and the rest.
 const CAT_OFF: f32 = -1.0;
 const GENE_OFF: f32 = -0.1;
@@ -49,28 +43,33 @@ pub fn make(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32) ->
     make_with(w, which, i, lineage, genome, 0, 0.0, 0)
 }
 
-/// The genes of a founder of `which` before any mutation (`None` without the roles of life in the chemistry).
+/// The bodies of starting kind `which`, if it places bodies.
+fn bodies(which: usize) -> Option<&'static Bodies> {
+    match &KINDS.get(which)?.place {
+        Place::Bodies(b) => Some(b),
+        Place::Field(_) => None,
+    }
+}
+
+/// The genes of a founder of `which` before any mutation (`None` without the roles of life in the chemistry, or for a
+/// kind that places cover).
 fn genes(w: &World, which: usize) -> Option<Vec<f32>> {
-    let ((r_light, rich, liquid, burn), kind, chem) = (w.chem.life_roles()?, KINDS.get(which)?, &w.chem);
+    let ((r_light, rich, liquid, burn), kind, chem) = (w.chem.life_roles()?, bodies(which)?, &w.chem);
     let lay = Layout::of(chem);
     let mut genes = vec![GENE_OFF; lay.len];
     genes[lay.cat..lay.min].fill(CAT_OFF);
     genes[..body::NSCALAR].copy_from_slice(&kind.scalars);
-    let lit = if light(kind) { kind.cat[0] + LIGHT_X } else { kind.cat[0] };
-    (genes[lay.cat + r_light], genes[lay.cat + burn]) = (lit, kind.cat[1] - LITTER_X);
+    (genes[lay.cat + r_light], genes[lay.cat + burn]) = (kind.cat[0], kind.cat[1] - LITTER_X);
     (genes[lay.min + liquid], genes[lay.min + rich]) = (MIN_LIQUID, MIN_SOLID);
     (genes[lay.upt + liquid], genes[lay.upt + rich]) = (kind.upt[0], kind.upt[1]);
-    // Animals digest body matter as they digest the solid, and take it: light-eaters do not.
-    if let Some((m, r)) = chem.matter_roles().filter(|_| !light(kind)) {
+    // They digest body matter as they digest the solid, and take it.
+    if let Some((m, r)) = chem.matter_roles() {
         (genes[lay.cat + r], genes[lay.upt + m]) = (kind.cat[1] - LITTER_X, kind.upt[1]);
     }
     genes[lay.keep..].fill(KEEP_SOLID);
     genes[lay.keep + liquid] = KEEP_LIQUID;
     genes[lay.keep + rich] = KEEP_SOLID.max((KEEP_MARGIN * kind.store / (1.0 - kind.store)) as f32);
     chem.materials().for_each(|k| genes[lay.keep + k] = BUILT_SHARE);
-    for bk in chem.builds.iter().filter(|bk| light(kind) && bk.inputs.iter().all(|p| p.0 as usize == rich)) {
-        genes[lay.keep + bk.outputs[0].0 as usize] = WALL_SHARE;
-    }
     Some(genes)
 }
 
@@ -78,7 +77,7 @@ fn genes(w: &World, which: usize) -> Option<Vec<f32>> {
 /// times a generation's step; a random walk keyed by `id`).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, rounds: u32, spray_decades: f32, id: u64) -> Option<Body> {
-    let ((_, rich, liquid, _), kind, mut genes) = (w.chem.life_roles()?, KINDS.get(which)?, genes(w, which)?);
+    let ((_, rich, liquid, _), kind, mut genes) = (w.chem.life_roles()?, bodies(which)?, genes(w, which)?);
     let rows = w.life.genomes[genome as usize].rows.clone();
     let mut rg = Rng::new(w.seed, w.day(), id, Purpose::Make);
     let (chem, t) = (&w.chem, w.life.env[i][0]);
@@ -94,7 +93,7 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
     let matter = chem.matter_roles();
     let h = genes[lay.keep + liquid].clamp(0.0, MAX_LIQUID_SHARE as f32) as f64;
     let mass = 10f64.powf(genes[body::COPY_MASS] as f64) * if matter.is_some() { (1.0 - body::WET_TISSUE) / (1.0 - h) / (1.0 - kind.store) } else { 1.0 };
-    let count = if kind.cover > 0.0 { kind.cover * w.mesh.cells().area()[i] / mass } else { 1.0 };
+    let count = 1.0;
     let mut store = vec![0.0; ns];
     let (fuel, liq, mat) = split(kind.store, genes[lay.keep + liquid] as f64, matter.is_some());
     store[rich] = fuel * count * mass / chem.subs[rich].molar_mass;
@@ -106,9 +105,6 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
         for &(k, per) in chem.minerals() {
             store[k] = store[m] * per;
             genes[lay.keep + k] = (MINERAL_KEEP * per * chem.subs[k].molar_mass / chem.subs[m].molar_mass * (1.0 - h)) as f32;
-            if light(kind) {
-                genes[lay.upt + k] = 1.0;
-            }
         }
     }
     let mut b = Body { cell: i as u32, count, lineage, mark: w.light[i], rained: w.rained[i], store, genes, genome, rows, ..Default::default() };

@@ -5,7 +5,7 @@ use pcore::change::{self, Reactor};
 use pcore::chem::{Chemistry, Phase};
 use pcore::store::{Class, Node};
 use pcore::units::{DAY, DAY_S, P_REF, R_GAS, T_SURF};
-use worldgen::testkit::{empty_cell, hold_ground, in_all, set_amount, set_heat, BURN, BURNING_GAS, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, FRAME, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{empty_cell, in_all, set_amount, set_heat, BURN, BURNING_GAS, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, FRAME, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
 use pcore::AIR;
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
@@ -566,36 +566,4 @@ fn dead_matter_on_the_ground_returns_the_minerals_to_the_ground() {
     // liquid, to and from the cells around; the books of elements are exact.)
     assert!((rock / lost - 1.0).abs() < 0.1, "the rock element {rock} for the matter {lost}");
     books.assert_kept(&w, 1e-9);
-}
-
-/// Cover is fuel when hot: on a cell held at 700 K until its light-eater node has updated, the node loses most of its
-/// energy-rich solid (it reacts with the gas, in the body or, once the body dies, in the ground), while the same cell
-/// left as it was keeps it.
-#[test]
-fn hot_cover_burns() {
-    let run = |hot: bool| {
-        let mut w = worldgen::new_world(1, 16, 16);
-        // (No growth and no basal upkeep: building body matter and keeping it take the solid too, and this is about the
-        // burning.)
-        (w.cfg.phys.c_build, w.cfg.phys.c_basal) = (0.0, 0.0);
-        pcore::step(&mut w);
-        worldgen::life::seed(&mut w, 0);
-        let node = w.life.alive().max_by(|a, b| a.count.total_cmp(&b.count)).expect("a node");
-        let (i, days) = (node.cell as usize, node.interval(&w) + 1);
-        let n = w.mesh.cells().n();
-        let held = |w: &pcore::World| w.store.amounts(Class::Ground)[RICH * n + i] + w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.store[RICH]).sum::<f64>();
-        let before = held(&w);
-        // Its interval and a day (its first update comes within its interval), the cell heated back to 700 K before
-        // each day (booked as an edit).
-        for _ in 0..days {
-            if hot {
-                hold_ground(&mut w, i, 700.0);
-            }
-            pcore::day(&mut w);
-        }
-        assert_eq!(pcore::check::broken(&w), None);
-        held(&w) / before
-    };
-    let (hot, cold) = (run(true), run(false));
-    assert!(hot < 0.5 && cold > 0.9, "energy-rich solid left: {hot:.3} hot, {cold:.3} as it was");
 }

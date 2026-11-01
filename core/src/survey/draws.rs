@@ -10,6 +10,17 @@ use serde::{Deserialize, Serialize};
 /// ground gave the node for each since its last update (`Draw::owed`).
 pub(crate) fn claims(w: &World) -> Vec<f64> {
     let mut claim = vec![0.0; w.mesh.cells().n()];
+    // The cover of each cell claims the light set aside for it since its last month (`cover::step`).
+    if let Some(p) = crate::cover::Parts::of(&w.chem) {
+        let mm = p.mm(&w.chem);
+        for d in &w.life.domains {
+            let c = &d.cover;
+            for (k, &i) in d.cells.iter().enumerate().filter(|e| c.keep[e.0] > 0.0) {
+                let abs: f64 = crate::cover::Cover::slots(k).filter(|&x| c.root[x] != crate::cover::NO_ROOT).map(|x| c.leaf(&mm, x) * (1.0 - c.reflectance(&w.chem, &p, x))).sum();
+                claim[i as usize] += c.keep[k] as f64 * abs * (w.light[i as usize] - c.mark[k]);
+            }
+        }
+    }
     for b in w.life.alive() {
         let i = b.cell as usize;
         claim[i] += light_area(b) * b.keep as f64 * (w.light[i] - b.mark) + b.draw.owed;

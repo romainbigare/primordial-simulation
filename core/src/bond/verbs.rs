@@ -16,7 +16,7 @@ fn grab(w: &mut World, b: &mut Body, p: usize) {
 }
 
 /// The verbs of the part acts by which a body lets go of its part (`let_go`), or by a load (`TORN`), and bonds its
-/// part to the ground (`ANCHORS`, `anchor`), after the verbs of `act`: parts change only in serial steps (S72).
+/// part to the ground (`ANCHORS`, `anchor`), after the verbs of `act`: parts change only in serial steps.
 pub const LET_GO: usize = OVERBS;
 pub const TORN: usize = OVERBS + 1;
 pub const ANCHORS: usize = OVERBS + 2;

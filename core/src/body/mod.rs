@@ -11,12 +11,14 @@ mod pay;
 mod physics;
 mod tissue;
 
+pub use tissue::solids_of;
+
 pub use death::{die, wound};
 use death::thin;
 pub(crate) use death::{remains, to_ground, torn_to_death};
 pub use exchange::{cover_of, ground_conductance};
 pub use genes::*;
-pub(crate) use live::{gain_to_growth, live, LiveTmp};
+pub(crate) use live::{live, LiveTmp};
 pub use live::Lived;
 pub use pay::{pay, plan, upkeep, Payer};
 pub(crate) use pay::spend;
@@ -89,14 +91,6 @@ pub struct Body {
     /// number for every row
     pub spread: Vec<f32>,
     pub row_spread: f32,
-    /// The variance of log10 of its members' bodies, decades² (`Body::size_moments`, `copy::young`)
-    pub size_spread: f32,
-    /// How far the mean of log10 of its members' bodies lies below log10 of its mean member's body, decades
-    /// (`Body::size_moments`): 0 when all are of one size
-    pub size_lag: f32,
-    /// The node of its kind in its cell at the other stage (young or adult; its id), along which births and maturing
-    /// members flow (`copy::young`)
-    pub link: Option<u64>,
     /// The brain rows it was born with (genes too), in `Life::genomes`
     pub genome: u32,
     /// Key stores (safe minimum > 0) that were liquid at birth, one bit per substance
@@ -245,13 +239,11 @@ impl Body {
         let held = self.store.iter().enumerate().filter(|x| *x.1 != 0.0);
         held.map(|(k, a)| a * chem.molar_volume(k, chem.phase_in(k, t, |j| self.store[j]))).sum()
     }
-    /// Days between its updates, a whole number of batches (`Config::batch_days`): its `INTERVAL` gene, and at least
-    /// `Config::node_days` for a population node without a brain, which takes no decisions (laws.md 4.4, the pace of nodes).
-    pub fn interval(&self, w: &crate::World) -> u64 {
-        let own = self.k.interval;
-        if self.n() > 1.0 && w.life.brainless(self) { own.max(w.cfg.node_days as u64) } else { own }
+    /// Days between its updates, a whole number of batches (`Config::batch_days`): its `INTERVAL` gene.
+    pub fn interval(&self, _w: &crate::World) -> u64 {
+        self.k.interval
     }
-    /// How many of the intervals its `INTERVAL` gene asks for one update spans (1 but for a node that updates less often).
+    /// How many of the intervals its `INTERVAL` gene asks for one update spans.
     pub(crate) fn paces(&self, w: &crate::World) -> f64 {
         self.interval(w) as f64 / self.k.interval as f64
     }

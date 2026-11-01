@@ -2,7 +2,7 @@
 //! (`survey`), and every batch of days the updates due, in a parallel and a serial phase (`batch`).
 
 use crate::body::{die, live, Body, Layout, LiveTmp, LACK};
-use crate::{change::Reactor, choose, copy::Grown, life::{Domain, Handle}, math::mean_decay, World};
+use crate::{change::Reactor, choose, life::{Domain, Handle}, World};
 use crate::store::{Class, Node};
 
 mod draws;
@@ -33,13 +33,14 @@ pub fn survey(w: &mut World, reversed: bool) {
     // (Movers who pushed through cells where no body is break nothing.)
     w.life.domains.iter_mut().filter(|d| d.count() == 0).for_each(|d| d.pushed.fill(0.0));
     let mut sums = std::mem::take(&mut w.life.sums);
-    let work: Vec<_> = sums.iter_mut().enumerate().map(|(k, s)| (k, w.life.domains[k].count(), s)).filter(|x| x.1 > 0 || x.2.live).collect();
+    // (A domain with no bodies and no cover that had none at the last survey has nothing to do.)
+    let work: Vec<_> = sums.iter_mut().enumerate().map(|(k, s)| (k, w.life.domains[k].count() + w.life.domains[k].cells.len(), s)).filter(|x| x.2.live || w.life.domains[x.0].lives()).collect();
     let ran: Vec<usize> = work.iter().map(|x| x.0).collect();
     run(w, work, reversed, |_| Vec::new(), |w, d, s, l| {
         (0..d.cells.len()).for_each(|k| worn(w, d, &lay, k, monthly));
         (0..d.cells.len()).for_each(|c| shade(w, d, c, l));
         rows(w, d, &mut s.rows);
-        s.live = d.count() > 0;
+        s.live = d.lives();
     });
     w.life.sums = sums;
     land_all(w, reversed);
@@ -55,6 +56,15 @@ pub fn survey(w: &mut World, reversed: bool) {
         w.life.seen = (0..n * ns).map(|x| LOOSE_SENSE * crate::brain::ln(1.0 + (w.store.amounts(Class::Ground)[(x % ns) * n + x / ns] / area[x / ns]) as f32)).collect();
     }
     choose::cells(w);
+}
+
+/// Once a month, after Flow's state is built in full: the cover's month (`cover::step`) in each domain that holds any,
+/// one task per domain on the pool, its moves booked as a batch's are; then its seeds land (`cover::land`).
+pub fn cover(w: &mut World) {
+    let work: Vec<_> = (0..w.life.domains.len()).filter(|&k| w.life.domains[k].cover.any()).map(|k| (k, w.life.domains[k].cells.len(), ())).collect();
+    run(w, work, false, |_| (), |w, d, _, _| crate::cover::step(w, d));
+    land_all(w, false);
+    crate::cover::land(w);
 }
 
 /// Whether it is a month's start: the survey merges nodes, adds up the traffic and rebuilds Flow's state in full.
@@ -79,8 +89,19 @@ fn worn(w: &World, d: &mut Domain, lay: &Layout, k: usize, monthly: bool) {
 /// their visible traits summed, then the energy to break them; then their capture area times their shade, and that
 /// times the share they set aside for their light reactions.
 fn rows(w: &World, d: &Domain, rows: &mut [[f64; ROW]]) {
+    let parts = crate::cover::Parts::of(&w.chem);
     for (k, row) in rows.iter_mut().enumerate() {
         *row = [0.0; ROW];
+        // Its cover, as one more body of no members: its mass, capture area and energy to break, and the light it absorbs
+        // at its mean shade (its kinds share it out among them, `cover::step`).
+        if let Some(p) = parts.as_ref() {
+            let (c, mm) = (&d.cover, p.mm(&w.chem));
+            for x in crate::cover::Cover::slots(k).filter(|&x| c.root[x] != crate::cover::NO_ROOT) {
+                let (leaf, abs) = (c.leaf(&mm, x), c.leaf(&mm, x) * (1.0 - c.reflectance(&w.chem, p, x)));
+                (row[1], row[2], row[8], row[9]) = (row[1] + c.kg(&mm, x), row[2] + leaf, row[8] + abs, row[9] + abs * c.keep[k] as f64);
+            }
+            row[7] += c.breaking(&w.chem, &w.cfg, p, k, 1.0);
+        }
         for b in d.at[k].iter().map(|&h| &d[h]).filter(|b| b.alive) {
             let (m, a) = (b.n(), light_area(b) * b.shade);
             row[0] += m;
@@ -149,20 +170,10 @@ fn shade(w: &World, d: &mut Domain, c: usize, l: &mut Vec<(f32, f64, Handle)>) {
     if !std::mem::take(&mut d.stale[c]) {
         return;
     }
-    // What a layer of capture area `x` per ground area intercepts, per unit of `x`: (1 - e^-x) / x.
-    let g = mean_decay;
     let a = w.mesh.cells().area()[d.cells[c] as usize];
     l.clear();
     l.extend(d.at[c].iter().map(|&s| (s, &d[s])).map(|(s, b)| (b.vis[6], b.vis[1] as f64 * b.n() / a, s)));
-    l.sort_by(|a, b| b.0.total_cmp(&a.0));
-    let (all, mut above, mut k) = (g(l.iter().map(|x| x.1).sum()), 0f64, 0);
-    while k < l.len() {
-        let e = k + l[k..].iter().take_while(|x| x.0 == l[k].0).count();
-        let x: f64 = l[k..e].iter().map(|x| x.1).sum();
-        let f = (-above).exp() * g(x) / all;
-        l[k..e].iter().for_each(|y| d[y.2].shade = f);
-        (above, k) = (above + x, e);
-    }
+    crate::math::shade(l, |s, f| d[s].shade = f);
 }
 
 /// Update the bodies due in this batch, all at its first day (laws.md 0). First the parallel phase: the domains are taken
@@ -248,16 +259,12 @@ fn scratch(w: &World) -> Scratch {
 }
 
 /// The update of body `id` of cell `cell` in domain `d`, if it is still stored there (it may have died or joined
-/// another body since): its physics, decision, selection, lineage, maturing and split; or its death.
+/// another body since): its physics, decision, lineage and split; or its death.
 fn update(w: &World, d: &mut Domain, (cell, id): (usize, u64), (rc, tmp, act): &mut Scratch) {
     let Some(s) = d.find(id) else { return };
     d.moves.open(w, cell, Node::new(Class::Body, s.slot as usize));
     let mut b = std::mem::take(&mut d[s]);
     (d.counts.updates, d.began) = (d.counts.updates + 1, d.out.len());
-    // Its mean member's body before the update, for what its members grow (`copy::mature`).
-    let before = b.member_body(&w.chem);
-    // A node without a brain runs its update for a sample member too, which changes nothing (`copy::sample`).
-    let sample = crate::copy::sample(w, d, &b, rc, tmp);
     let lived = match live(w, d, &mut b, rc, tmp) {
         Err(cause) => return die(w, d, s, b, cause),
         Ok(lived) => lived,
@@ -270,16 +277,7 @@ fn update(w: &World, d: &mut Domain, (cell, id): (usize, u64), (rc, tmp, act): &
             return die(w, d, s, b, LACK);
         }
     }
-    // Its mean moves by what the sample gained over its members (`copy::select`).
-    if let Some(x) = sample {
-        crate::copy::select(w, &mut b, x, lived.gain);
-    }
     crate::lineage::resize(w, d, &mut b);
-    // Young members who grew past their copy mass join their adult node (`copy::mature`).
-    if let Grown::Joins(t) = crate::copy::mature(w, d, &mut b, before) {
-        d[s] = b;
-        return crate::nodes::merge(w, d, s, t);
-    }
     crate::nodes::split(w, d, &mut b);
     d.see(w, &mut b);
     d.schedule(w.due_in(b.interval(w)), &mut b);

@@ -168,7 +168,7 @@ fn soil(w: &World, d: &Domain, b: &Body, s: &Site, wk: f64) -> Soil {
     let liquid = (0..ns).filter(|&k| chem.phase_in(k, tg, &g) == Phase::Liquid).fold(0u64, |m, k| m | 1 << k);
     let vol: f64 = ones(liquid).map(|k| g(k) * chem.molar_volume(k, Phase::Liquid)).sum();
     let standing = if s.stands && s.depth == 0.0 { 0.0 } else { vol / w.mesh.cells().area()[i] };
-    let wet = standing / (standing + w.cfg.phys.wet_depth);
+    let wet = w.cfg.phys.wetness(standing);
     let wets = ones(liquid).filter(|&k| chem.subs[k].solubility > 0.0).fold(0u64, |m, k| m | 1 << k);
     let in_ground: f64 = ones(wets).map(&g).sum();
     Soil { wets, in_ground, rate: b.k.liq * wet * wk }

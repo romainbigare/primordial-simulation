@@ -6,7 +6,6 @@ use pcore::chem::Phase;
 use pcore::store::{Boundary, Class, Node};
 use pcore::units::DAY;
 use pcore::{body, brain, choose, lanes, World, AIR};
-use pcore::survey::Draw;
 use worldgen::testkit::{flow_step, ground_of, hold_ground, loose_volume as loose, moved, put, set_amount, set_heat, Books, Brain, Line, DISSOLVED, LIQUID, MINERAL, OFF, RICH};
 
 /// One step of radiation and the air.
@@ -772,32 +771,6 @@ fn an_island_loses_ground_at_a_real_rate() {
     assert!(rate > 0.003 && rate < 1.0, "{rate} mm a year");
 }
 
-/// A body draws its heat from the ground inside the air's implicit step (`survey::Draw`, laws.md 1.4): one that asks
-/// 1 kW/m² for a whole step, many times what the ground can give, pulls it no colder than where its draw stops; the
-/// bodies' node holds what it is owed, and matter and energy are kept.
-#[test]
-fn a_body_draws_its_ground_no_colder_than_where_its_draw_stops() {
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
-    worldgen::life::seed(&mut w, 0);
-    pcore::step(&mut w);
-    let s = w.life.living().map(|x| x.0).max_by(|&a, &b| w.life[a].count.total_cmp(&w.life[b].count)).expect("a node");
-    let i = w.life[s].cell as usize;
-    for o in w.life.cell(i).collect::<Vec<_>>() {
-        w.life[o].draw = Draw::default();
-    }
-    let (area, t0, dt) = (w.mesh.cells().area()[i], w.t_ground_last(i), 10.0 * DAY);
-    let (most, stop) = (1e3 * area, t0 - 2.0);
-    assert!(most * dt > 20.0 * (t0 - stop) * w.heat_cap_ground(i), "it asks too little");
-    w.life[s].draw = Draw { most, g: most / (t0 - stop), t: stop, owed: 0.0 };
-    let books = Books::now(&w);
-    flow_step(&mut w, dt);
-    let (t1, owed) = (w.t_ground_last(i), w.life[s].draw.owed);
-    assert!(t1 > stop - 0.5 && t1 < t0, "the ground went from {t0:.2} to {t1:.2} K, its draw stops at {stop:.2} K");
-    assert!(owed > 0.0 && owed <= w.store.heat(Class::Bodies)[i], "owed {owed:e} J, its node holds {:e} J", w.store.heat(Class::Bodies)[i]);
-    books.assert_kept(&w, 1e-12);
-}
-
 /// Cover per area in the two cells of the lane scene, kg/m².
 const COVER: f64 = 20.0;
 
@@ -811,14 +784,9 @@ fn lane_scene() -> (World, usize, usize, Handle) {
     let n = w.mesh.cells().n();
     let a = (0..n - 1).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i + 1][2] > 0.0 && i % 12 < 11).expect("two land cells");
     let brain = Brain { verbs: [OFF; brain::VERBS + brain::OVERBS], seed: 3, ..Brain::neutral() };
-    let line = Line::new(&mut w, &brain, 0);
+    let line = Line::new(&mut w, &brain, 1);
     for cell in [a, a + 1] {
-        let mut p = line.founder(&mut w, 0, cell);
-        // The node scaled to the cover wanted (stores are totals).
-        let k = COVER * w.mesh.cells().area()[0] / p.mass(&w.chem);
-        p.store.iter_mut().for_each(|x| *x *= k);
-        p.count *= k;
-        w.add(p, 1);
+        worldgen::testkit::cover(&mut w, cell, COVER);
     }
     let m = line.founder(&mut w, 1, a);
     let slot = w.add(m, 1);

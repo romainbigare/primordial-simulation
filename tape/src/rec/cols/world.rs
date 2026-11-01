@@ -50,18 +50,19 @@ impl Recorder {
         row.push("runoff_sea", "mol/m2/s", land.iter().map(|&i| w.off_land[i] as f64).sum::<f64>() / land_area);
         // Rivers as the web viewer draws them.
         row.push("rivers", "1", dry_land_flux(w, &c.f).iter().filter(|&&q| q > RIVER_WEB).count() as f64);
-        // Bodies (nodes and individuals) and light-eaters; members of light-eaters and of the others; nodes of the others.
-        let (mut members, mut nodes) = ([0.0; 2], 0.0);
-        for (b, &light) in life.alive().zip(&c.light) {
-            members[!light as usize] += b.n();
-            nodes += (!light && b.n() > 1.0) as u8 as f64;
-        }
+        // Bodies (nodes and individuals), their members and their nodes; the slots of cover and its mass.
+        let (members, nodes) = life.alive().fold((0.0, 0.0), |(m, n), b| (m + b.n(), n + (b.n() > 1.0) as u8 as f64));
         row.push("bodies", "1", life.alive().count() as f64);
-        row.push("plants", "1", c.light.iter().filter(|&&l| l).count() as f64);
-        row.push("plant_members", "1", members[0]);
-        row.push("animal_members", "1", members[1]);
+        let cover = pcore::cover::sums(w);
+        row.push("cover_slots", "1", cover.iter().map(|s| s.slots).sum::<f64>());
+        row.push("cover_kg", "kg", cover.iter().map(|s| s.kg).sum::<f64>());
+        row.push("animal_members", "1", members);
         row.push("animal_nodes", "1", nodes);
-        // Light-eater mass per m² on land: median and largest.
+        // The cover that died in the year, kg, by cause (eaten: `taken`; broken by movers: `broken`).
+        for (cause, &x) in CAUSES.iter().zip(&self.year.cover_lost) {
+            row.push(format!("cover_died_{cause}"), "kg/yr", x);
+        }
+        // The cover's mass per m² on land: median and largest.
         let mut cover: Vec<f64> = land.iter().map(|&i| c.plants[i]).collect();
         cover.sort_by(|a, b| a.total_cmp(b));
         row.push("cover_median", "kg/m2", cover.get(cover.len() / 2).copied().unwrap_or(0.0));
@@ -86,14 +87,14 @@ impl Recorder {
             g.iter_mut().enumerate().for_each(|(r, x)| *x += b.genes[cat + r].max(0.0) as f64 * b.n());
         }
         for (r, &x) in g.iter().enumerate() {
-            row.push(format!("cat_{r}"), "log10", x / (members[0] + members[1]).max(1.0));
+            row.push(format!("cat_{r}"), "log10", x / members.max(1.0));
         }
     }
 }
 
 /// Each mineral (`Chemistry::minerals`): its mass in the ground per m² of land and of sea, and where it is in all, in
 /// 10^9 mol of it (matter counted at its share of it): dead matter on the ground of land and of the sea, the bodies,
-/// and the stores of the bed (`World::deep`).
+/// the cover, and the stores of the bed (`World::deep`).
 fn minerals(c: &Ctx, row: &mut Row) {
     let w = c.w;
     let (n, area, matter, minerals) = (w.mesh.cells().n(), w.mesh.cells().area(), w.chem.matter(), w.chem.minerals());
@@ -103,6 +104,7 @@ fn minerals(c: &Ctx, row: &mut Row) {
             *x += b.store[k] + matter.map_or(0.0, |m| b.store[m]) * per;
         }
     }
+    let cover = pcore::cover::totals(w);
     for (q, &(k, per)) in minerals.iter().enumerate() {
         // [ground, dead matter] x [land, sea], and the area of each
         let (mut t, mut areas) = ([[0.0f64; 2]; 2], [0.0f64; 2]);
@@ -118,6 +120,7 @@ fn minerals(c: &Ctx, row: &mut Row) {
         row.push(format!("min{q}_dead_land"), "1e9 mol", t[1][0] / GIGA);
         row.push(format!("min{q}_dead_sea"), "1e9 mol", t[1][1] / GIGA);
         row.push(format!("min{q}_bodies"), "1e9 mol", bodies[q] / GIGA);
+        row.push(format!("min{q}_cover"), "1e9 mol", (cover[k] + matter.map_or(0.0, |m| cover[m]) * per) / GIGA);
         row.push(format!("min{q}_deep"), "1e9 mol", w.store.amounts(Class::Deep).get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) / GIGA);
     }
 }

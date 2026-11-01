@@ -35,6 +35,9 @@ pub enum Class {
     /// its slot in its domain (`life::Handle`), a name for the length of its update only: `apply` never reads a body's
     /// side, and a body may be stored elsewhere after its update.
     Body,
+    /// The cover of a cell (`cover::Cover`): like a body it holds its own amounts and heat, and its law books its side.
+    /// Its index is its cell.
+    Cover,
 }
 
 /// A fixed node: its class and its index in that class's arrays.
@@ -79,5 +82,5 @@ pub const BOUNDARIES: usize = 3;
 
 impl Class {
     /// Every class, by its index (`class as usize`).
-    pub(crate) const ALL: [Class; 9] = [Class::Ground, Class::Air, Class::Deep, Class::Bed, Class::Bodies, Class::Boundary, Class::Potential, Class::Part, Class::Body];
+    pub(crate) const ALL: [Class; 10] = [Class::Ground, Class::Air, Class::Deep, Class::Bed, Class::Bodies, Class::Boundary, Class::Potential, Class::Part, Class::Body, Class::Cover];
 }

@@ -1,7 +1,6 @@
 //! The lines a run prints: what it is, the liquid's start, one line every `--every` years, the rivers and the end.
 
 use crate::render::RIVER_PNG;
-use pcore::body::light_eater;
 use pcore::check::Totals;
 use pcore::{World, AIR};
 use tape::{Recorder, Spent, RIVER_WEB, TAPE};
@@ -15,7 +14,7 @@ pub fn config(w: &World, how: &Seeding) -> String {
     let nodes = if w.cfg.nodes { "on (animals may be nodes)" } else { "OFF (--individuals: bodies with a brain are individuals, those without nodes)" };
     let parents = if w.cfg.two_parents { "on (a mature alike body of the cell is a second parent)" } else { "OFF (--no-mix: one parent)" };
     let animals = if how.hand { "HAND-SET eater biases (default; --neutral-eaters for neutral brains)" } else { "NEUTRAL brains (--neutral-eaters)" };
-    format!("config: seed {}, {}x{}, {run}, nodes {nodes}, two parents {parents}, start: animals {animals}, plants no brain", w.seed, w.map.w, w.map.h)
+    format!("config: seed {}, {}x{}, {run}, nodes {nodes}, two parents {parents}, start: animals {animals}, light-eaters as cover", w.seed, w.map.w, w.map.h)
 }
 
 /// The liquid's store at the start, set at balance with the air (`Reactor::balance`): what each reversible pair makes,
@@ -59,12 +58,12 @@ impl Clock {
 pub fn year(w: &World, y: u64, t0: &Totals, clock: &Clock, rec: &Recorder) -> String {
     let ((de, dq), now) = (pcore::check::drift(w, t0), pcore::check::totals(w));
     let each: Vec<String> = (0..now.elems.len()).map(|j| format!("{:+.1e}", pcore::check::elem_drift(&now, t0, j))).collect();
-    let (all, le) = (w.life.alive().count(), w.life.alive().filter(|b| light_eater(&w.chem, &b.genes)).count());
-    // Members of light-eaters; individuals, nodes and members of the others.
-    let mut m = [0.0; 4];
+    let all = w.life.alive().count();
+    // Individuals, nodes and members.
+    let mut m = [0.0; 3];
     for b in w.life.alive() {
-        let k = if light_eater(&w.chem, &b.genes) { 0 } else { 1 + (b.n() > 1.0) as usize };
-        (m[k], m[3]) = (m[k] + if k == 0 { b.n() } else { 1.0 }, m[3] + if k > 0 { b.n() } else { 0.0 });
+        let k = (b.n() > 1.0) as usize;
+        (m[k], m[2]) = (m[k] + 1.0, m[2] + b.n());
     }
     let years = (y - clock.since) as f64;
     let ms: Vec<f64> = clock.spent.iter().zip(&clock.printed).map(|(now, before)| (*now - *before).as_secs_f64() * 1000.0 / years).collect();
@@ -73,8 +72,10 @@ pub fn year(w: &World, y: u64, t0: &Totals, clock: &Clock, rec: &Recorder) -> St
     let us = if updates > 0 { format!("{:.2} us/update", ms[2] * 1e3 * years / updates as f64) } else { String::from("no updates") };
     let most = (0..w.mesh.cells().n()).map(|i| w.life.in_cell(i)).max().unwrap_or(0);
     let born = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count();
+    let cover = pcore::cover::sums(w);
+    let (kg, slots, kinds) = (cover.iter().map(|s| s.kg).sum::<f64>(), cover.iter().map(|s| s.slots).sum::<f64>(), cover.iter().filter(|s| s.slots > 0.0).count());
     format!(
-        "year {y}: element drift {de:.2e} ({}), energy drift {dq:.2e}, heat not given {:.2e} J, rounded to zero {:.1e} mol {:.1e} J, bodies {all} (at most {most} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {born}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {us} ({} parts); node splits {:.0} in two; gifts {}/yr, watches {}/yr",
+        "year {y}: element drift {de:.2e} ({}), energy drift {dq:.2e}, heat not given {:.2e} J, rounded to zero {:.1e} mol {:.1e} J, cover {kg:.3e} kg in {slots} slots of {kinds} starting kinds, bodies {all} (at most {most} in a cell; {} single, {} nodes, {:.3e} members), lineages {}, born brains {born}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {us} ({} parts); node splits {:.0} in two; gifts {}/yr, watches {}/yr",
         each.join(" "),
         w.counts.clamped_heat,
         w.counts.rounded[0],
@@ -82,7 +83,6 @@ pub fn year(w: &World, y: u64, t0: &Totals, clock: &Clock, rec: &Recorder) -> St
         m[0],
         m[1],
         m[2],
-        m[3],
         w.life.lineages(),
         ms[0],
         ms[1],

@@ -202,13 +202,8 @@ fn recording() -> &'static Recording {
         let mut w = world();
         w.chem.reactions[worldgen::testkit::MINERAL_BREAKS].k = 0.0;
         worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
-        worldgen::life::seed(&mut w, 0);
-        let (lay, fix) = (pcore::body::Layout::of(&w.chem), w.chem.fixing().expect("the fixing reaction"));
-        let World { life, chem, cfg, .. } = &mut w;
-        life.each_mut(|b| {
-            b.genes[lay.cat + fix] = -1.0;
-            b.prepare(chem, cfg);
-        });
+        // (No cover fixes: the mineral's whole is then kept.)
+        worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding { fixers: 0.0, ..Default::default() });
         worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
         let cells = |w: &World| {
             let land = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).count() as f64;
@@ -268,7 +263,9 @@ fn yearly_series_has_the_measures_per_starting_kind() {
     let last = rows.last().unwrap();
     assert!(col("t_land_summer", last) >= col("t_land_winter", last));
     // A catalyst gene on in a kind keeps its columns, with the share of members that carry it.
-    assert!(head.iter().any(|h| h.starts_with("root_0_cat_") && h.ends_with("_on")));
+    assert!(head.iter().any(|h| h.starts_with("root_1_cat_") && h.ends_with("_on")));
+    // The kind of cover keeps its columns: its slots, mass and genes.
+    assert!(["slots", "cover_kg", "cover_area", "cover_light", "cover_frost"].iter().all(|c| head.contains(&format!("root_0_{c}").as_str())));
     // The kind's mass in kg is its members times its mean member's mass.
     for k in &kinds {
         let (m, mean, kg) = (col(&format!("root_{k}_members"), last), col(&format!("root_{k}_mass"), last), col(&format!("root_{k}_kg"), last));
@@ -455,22 +452,15 @@ fn csv_files_grown_year_by_year_are_those_written_at_once() {
 /// copies carry rows.
 #[test]
 fn null_run_freezes_the_brain_rows() {
-    // (Each of their decisions spreads their many members over every action.)
-    const FEW: usize = 4;
     let go = |null: bool| {
         let mut w = world();
         w.cfg.null = null;
+        worldgen::life::seed(&mut w, 0);
         pcore::survey::survey(&mut w, false);
-        // (Light-eaters of one lineage with neutral brains, in a few cells.)
-        let line = worldgen::testkit::Line::new(&mut w, &worldgen::testkit::Brain::neutral(), 0);
-        for i in worldgen::testkit::dry_lands(&w).into_iter().take(FEW) {
-            let b = line.founder(&mut w, 0, i);
-            w.add(b, 1);
-        }
-        worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
+        worldgen::life::seed(&mut w, 1);
         let start: Vec<&Vec<f32>> = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).map(|g| &g.rows).collect();
         let (lo, hi): (Vec<f32>, Vec<f32>) = (0..start[0].len()).map(|k| start.iter().fold((f32::MAX, f32::MIN), |m, r| (m.0.min(r[k]), m.1.max(r[k])))).unzip();
-        run(&mut w, 24);
+        run(&mut w, 72);
         // (Rows of the starting shape only: genes still mutate in a null run, and a lineage whose size genes moved a whole unit
         // has rows of another length, carried over from the starting ones.)
         let out = |r: &Vec<f32>| r.len() == lo.len() && r.iter().enumerate().any(|(k, &x)| x < lo[k] - 1e-5 || x > hi[k] + 1e-5);
@@ -505,7 +495,7 @@ fn yearly_series_counts_the_minerals() {
     let (mm, area) = (w.chem.subs[w.chem.minerals()[0].0].molar_mass, w.mesh.cells().area()[0]);
     let all = |r: &Vec<f64>, c: [f64; 2]| {
         let ground = (col("min0_land", r) * c[0].max(1.0) + col("min0_sea", r) * c[1].max(1.0)) * area / mm / 1e9;
-        ground + ["min0_dead_land", "min0_dead_sea", "min0_bodies", "min0_deep"].iter().map(|c| col(c, r)).sum::<f64>()
+        ground + ["min0_dead_land", "min0_dead_sea", "min0_bodies", "min0_cover", "min0_deep"].iter().map(|c| col(c, r)).sum::<f64>()
     };
     for (r, &c) in rows.iter().zip(at) {
         assert!((all(r, c) / all(first, at[0]) - 1.0).abs() < 1e-6, "the mineral in all: {} against {}", all(r, c), all(first, at[0]));

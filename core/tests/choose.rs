@@ -11,7 +11,7 @@ use pcore::rng::{Purpose, Rng};
 use pcore::brain::{REST, TAKE};
 use pcore::World;
 use pcore::store::{Class, Node};
-use worldgen::testkit::{self, dry_land, eater_of, founder, moved, node_of, put_kg_m2, scale, set_amount, set_heat, start, took_from_ground, Books, Brain, Line, LIQUID, MATTER, MILD_LAT, OFF, RICH};
+use worldgen::testkit::{self, dry_land, eater_of, founder, moved, node_of, put_kg_m2, scale, set_amount, set_heat, start, took_from_ground, Books, Brain, LIQUID, MATTER, MILD_LAT, OFF, RICH};
 
 /// The scene's grid.
 const W: usize = 12;
@@ -271,46 +271,6 @@ fn a_body_gives_its_stores_but_not_its_body() {
     let b = &w.life[g];
     assert!(b.alive && b.store[MATTER] > 0.99 * m0 && b.store[RICH] < 0.5 * fuel0, "matter {m0} -> {}, fuel {fuel0} -> {}", b.store[MATTER], b.store[RICH]);
     assert!(b.store[LIQUID] >= 0.99 * b.level(&w.chem, LIQUID, b.mass(&w.chem)), "the liquid of its body was given");
-}
-
-/// A brain of no hidden units is no brain: a body of such a lineage takes no decision and pays nothing for a brain,
-/// but lives its physics at its updates and has offspring from its brood. Matter and energy are kept.
-#[test]
-fn a_body_with_no_brain_lives_and_copies() {
-    use pcore::body::{COPY_MASS, HIDDEN};
-    let (mut w, i) = start();
-    // The light-eaters' sizes but no hidden units.
-    let line = Line::new(&mut w, &Brain { hidden: 0, ..Brain::neutral() }, 0);
-    assert!(w.life.brains[line.lineage as usize].as_ref().expect("its lineage").base.is_empty());
-    // A light-eater node whose members are mature: a body (0.7 kg of the 1 kg) of more than their copy mass (0.25 kg).
-    let mut b = line.founder(&mut w, 0, i);
-    (b.genes[HIDDEN], b.genes[COPY_MASS]) = (0.0, -0.6);
-    // Twice the fuel of a starting light-eater: with what one holds, half its members cannot pay their upkeep in the
-    // second month, and what is left with its children is fewer than it started with.
-    let fuel = testkit::kg(&w, &b, RICH);
-    testkit::add(&mut w, &mut b, RICH, fuel);
-    let (n0, s) = (b.count, w.add(b, 1));
-    // It pays nothing for a brain, however costly brains are.
-    let mut x = w.life[s].clone();
-    x.prepare(&w.chem, &w.cfg);
-    let (d, m, p0) = (x.interval(&w) as f64, x.mass(&w.chem), w.cfg.phys);
-    let u0 = pcore::body::upkeep(&w, &x, d, m, x.temp(&w.chem), x.activity(&w.chem, &w.cfg.phys));
-    (w.cfg.phys.c_hidden, w.cfg.phys.c_memory, w.cfg.phys.c_seen, w.cfg.phys.c_sight, w.cfg.phys.c_learn) = (1e9, 1e9, 1e9, 1e9, 1e9);
-    assert_eq!(pcore::body::upkeep(&w, &x, d, m, x.temp(&w.chem), x.activity(&w.chem, &w.cfg.phys)), u0);
-    w.cfg.phys = p0;
-    let (books, u) = (Books::now(&w), w.counts.updates);
-    for _ in 0..2 {
-        pcore::step(&mut w);
-        assert_eq!(pcore::check::broken(&w), None);
-    }
-    let b = &w.life[s];
-    let born = testkit::born(&w);
-    println!("updates {}, members {n0:.0} -> {:.0}, born {born:.0}", w.counts.updates - u, b.count);
-    // (Its children are small against its members: young, so they are nodes of their own.)
-    let all: f64 = w.life.alive().map(|x| x.n()).sum();
-    assert!(b.alive && w.counts.updates - u >= 2 && born > 0.0 && all > n0, "no children: {born}");
-    assert!(w.counts.decisions == 0.0 && b.trace.is_empty() && b.wb == 0.0, "the brain was called");
-    books.assert_kept(&w, 1e-9);
 }
 
 /// Moving costs the real cost of transport: per kg and m a 30 kg member pays `c_move`, a smaller one more and a bigger

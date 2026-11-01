@@ -2,7 +2,7 @@
 
 What each law does, its rule, its physical reason and where it lives. How the code does it (rounds, caches, buffers,
 orderings) is said once, in the code's doc comments; the code is the truth. Numbers, units and anchors are in
-`docs/numbers.md`, what a run records in `docs/tape.md`, when and why a rule came in `docs/history.md`.
+`docs/numbers.md`, what a run records in `docs/tape.md`.
 
 **Where the code is** (`core/src/`): time in `clock/` and `schedule.rs`; the shape of the world in `space/`; shared
 maths in `solve/` (`spread`, `downhill`, `band`); nodes and books in `store/`, `world.rs`, `check.rs`; ground heat in
@@ -14,8 +14,8 @@ tape's events in `event.rs`; threads in `par.rs` (the same results with and with
 in a refined region. A **node** is anything that holds stuff: a cell's ground, an air column, a body, a part. A
 **body** is a living node with genes and maybe a brain; a **member** is one living thing in it (one member: an
 **individual**; many: a **population node**). A **gene** is a number a body inherits, often log10 (1 means ×10) and
-"off" below 0. The **key liquid** is the liquid a body's chemistry runs in (substance 0). **Light-eaters** are bodies
-whose light-reaction gene is high (plant-like); the others are **eaters**.
+"off" below 0. The **key liquid** is the liquid a body's chemistry runs in (substance 0). **Light-eaters** (plant-like)
+are not bodies but the **cover** of each cell, a field (4.5); bodies are **eaters**.
 
 ## 0. The world, one step, the books
 **The map** (`space/`, `World::mesh`): cells, links with widths and headings, and a coarser air level. The laws step
@@ -36,8 +36,7 @@ step; heat sideways and creep yearly) and Change; on the month's first day Bond 
 domain's in slot order on its view, the domains on the pool, their moves booked in the order of the domains; then the
 loads of the structures one by one); every `batch_days` days (10, one air step) the bodies whose interval ends
 (`survey::batch`).
-**Intervals are whole batches**: a body's interval is its `INTERVAL` gene (5 to 360 days; a population node without a
-brain at least `node_days`, 40, a multiple of `batch_days`) rounded to the nearest whole number of batches, at least one
+**Intervals are whole batches**: a body's interval is its `INTERVAL` gene (5 to 360 days) rounded to the nearest whole number of batches, at least one
 (`Body::interval`), so an update always starts a batch, all the updates of a batch run at its first day, and a body
 placed during a batch first updates in a later one. So a gene of 5 to 15 days updates every 10 days, and one of 15 to
 25 days every 20: bodies whose genes differ inside one such span update alike, and none of them gets away from another
@@ -61,7 +60,7 @@ the next. It takes from or gives to a body it saw only if that body still lives,
 leaving it; the partner of its children and the cover over its cell are the bodies there now. It reads the store
 through its domain's view (`store::Moves`): the ground, bed and bodies' node of each cell of its domain and its air
 node, as the moves of the bodies before it in the batch left them; a node of another domain as it was at the batch's
-start. A sample member's update (`copy::sample`) runs in a checkpoint of the view and is rolled back.
+start.
 **A batch's two phases** (`survey::batch`, `outbox`). Body code runs on a domain taken out of the world
 (`life::Domain`), the world read only: it writes the domain's bodies and lists, its store view and moves, its events
 and counters and its outbox; the lineages and born rows it makes get provisional ids of the domain, and the changes of
@@ -192,7 +191,7 @@ Eisenstat and Steihaug 1982): speed numbers, held by the same two tests (`CLAUDE
   sunlight (two-stream, Lacis and Hansen 1974) and absorb heat radiation at depth `cloud_ir` × x (Stephens 1978). A
   globe of Earth's size without life holds about Earth's climate. **Known limit:** their depth is spread like the air's
   mass, not set where they condense. The ground also trades sensible heat with the air (`sensible`).
-- **The bodies' node** (`Class::Bodies`, one per cell): light bodies absorb warms the ground, except the share their
+- **The bodies' node** (`Class::Bodies`, one per cell): light the cover and bodies absorb warms the ground, except the share their
   light reactions store, booked from the sun into this node. Each body's draw of ground heat between its updates is
   part of the ground's implicit balance (`survey::Draw`): its last draw, falling to nothing as the ground nears where
   its evaporation stops (the dew point, or `COOL_T`), so a cooling ground gives less and bodies cannot pull it below
@@ -369,7 +368,7 @@ of soft tissue and each built solid, E their Young's modulus (`modulus`); it ord
 through breaks what its energy pays for (6.8).
 
 ## 4. Copy: a piece of the graph is copied, with small changes
-Files: `core/src/copy/` (`mix`, `grow`, `young`, `select`), `nodes.rs`, `body/genes.rs`, `lineage.rs`.
+Files: `core/src/copy/` (`mix`, `grow`), `nodes.rs`, `body/genes.rs`, `lineage.rs`; the cover in `core/src/cover/` (4.5).
 
 ### 4.1 Genes
 21 scalar genes (`body::Layout`; `GAS`, `LIQ`, `HEAT`, `LEAF`, `STRENGTH`, `CHILD`, `COPY_MASS`, `INTERVAL`, `MUT`,
@@ -389,8 +388,7 @@ first update that may (`copy::due`), all that its brood covers then. A node's fi
 its own phase (a hash of its id), so nodes made together do not make theirs at the same batches; no turn is tied to a
 date (a month is the clock's step, not a season). A node whose children would all wait (below) keeps its turn. A part
 split off a node keeps the node's turn; a node that others join keeps its own. The brood fills at every update and
-leaves with members who die. This holds for every node: one without a brain updates at most every `node_days` (40, more
-than `lump_days`), so by default it makes children at each update. A child has a body of 10^`CHILD` × the copy mass,
+leaves with members who die. A child has a body of 10^`CHILD` × the copy mass,
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
 dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member
 (`copy::BROOD_HELD`), so its members' broods lie evenly between none and one child, as individuals' do. A share
@@ -416,10 +414,9 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
   than those who waited) join; what members who watched copy is applied when the batch ends (5.5).
 - **One lineage** per node (one brain). Children join the young node of their kind in their cell when alike within
   `alike` steps plus `WITHIN` standard deviations (`body::within`), else start one.
-- **Young that grow up** (`copy/young.rs`): a kind in a cell is an adult and a young node joined by a link. Below the
-  copy mass the young's log10 bodies have a density e^(−k y) fitted to their mean and variance (`math::Pass`), the
-  steady state of a stage entered at one size; those pushed past the copy mass move to the adult node with their slice
-  (`copy::mature`): the flux across a size of a size-structured population (McKendrick 1926; von Foerster 1959).
+- **Young nodes**: children join a young node of their kind in their cell (`copy::kin`: not mature, of their lineage
+  and alike within `alike` steps plus `WITHIN` standard deviations), or start one; a young node matures as a whole when
+  its mean member reaches the copy mass, and alike nodes of one stage merge (below).
 - **Merging** (`nodes::crowd`, monthly): alike bodies of one lineage and stage in a cell join a node of more than one
   member if they are in the room of the same structure (its root) or none and hold the same structure or nothing
   (`nodes::Kin`). Past `crowd` nodes a cell merges its most alike pairs of one lineage and stage while alike, whatever
@@ -428,24 +425,64 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
   they held, which stays in the cell for any body to take, and leave or enter a room (decision 56).
 - **Splitting** (`nodes::split`): a node whose halves would no longer be alike splits along its widest gene if its cell
   has room; selection then acts between the halves. Means are kept exactly.
-- **Selection inside a node** (`copy/select.rs`): a node without a brain also runs its update for a sample member one
-  standard deviation up or down in one drawn gene, its moves dropped; the gene's mean moves by the step × tanh(sample's
-  gain − node's gain) × genes drawn from × `sample_every`, the gain the log of what is or soon becomes body
-  (`copy::buildable`: body matter with its brood, and of what its stores could make as much as one interval's growth
-  allowance builds; built solids count by what they do, decision 69): Price's equation (Price 1970), the breeder's
-  equation (Lande 1976). Skipped where the step cannot change the gain.
 - **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
-- **Pace** (`Body::interval`): a node without a brain updates at most every `node_days`, and every interval is a whole
-  number of batches (0); rules per interval are rates over the update (`Body::paces`), so its `INTERVAL` gene is the
-  turnover time of its stores (a known limit). A node with a brain updates at its gene's pace, its body as at every
-  update, but its brain is slower: it decides at the update nearest to `think_days` after its last decision, and acts
-  by habit at the others (5.3).
+- **Pace** (`Body::interval`): every interval is a whole number of batches (0); rules per interval are rates over the
+  update. A node with a brain updates at its gene's pace, its body as at every update, but its brain is slower: it
+  decides at the update nearest to `think_days` after its last decision, and acts by habit at the others (5.3).
 - **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage. A
   body with no brain does not mutate its brain-size genes (`body::vary`): they do nothing without one, so a brain
   arises only in a lineage founded with one (decision 72). An
   individual's child joins its parent's lineage when its size genes fit it, else its partner's when they fit that
   (its rows carried over to that brain); only a child that fits neither starts a new lineage (`copy::child_lineage`).
   `nodes::open` draws members as individuals. `--individuals` keeps bodies with a brain out of nodes (handover 7.1).
+
+### 4.5 The cover: light-eaters as a field
+`core/src/cover/`. The light-eaters are not bodies: each cell holds up to `SLOTS` (4) kinds of **cover**, each the
+amounts of four substances of chemistry 0 per cell (the fuel 5 its light reaction makes, body matter 22, its walls 25
+and the hard solid 10: `cover::Parts`, found from the chemistry's roles) and 9 genes (`cover::LIGHT`, `LEAF`, `WALLS`,
+`STORE`, `FROST`, `MOIST`, `SEED`, `REPAIR`, `FIX`; ranges in `cover::RANGE`). The cover of a cell is a node of the
+store (`Class::Cover`) whose law books its own side; it is kept in the domain of its cell (`Domain::cover`), so the
+cell's domain is its one writer. Its temperature is its ground's: at the end of each month it trades heat with its
+ground to that temperature. **One month** (`cover::step`, its own process after the air's step at a month's start, one
+task per domain), slot by slot, the tallest (most walls per m²) first:
+- **Light**: the light the cell caught since its last month per m² of capture area (`World::light`), on its capture
+  area (10^`LEAF` m² per kg of built cover) less what it reflects (its parts' colours by volume), shared among its
+  kinds by height (Beer's law, `math::shade`); under standing liquid times e^(−depth / `light_depth`).
+- **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
+  10^`LIGHT` × 10^`MOIST` mol per kg of built cover per s, times the reaction's pace k e^(−Ea/T) over its value at
+  `t_cat`, times its activity a = min(1, wet / 10^`MOIST`)^`dormancy` (wet: how wet its ground is as bodies feel it,
+  d / (d + `wet_depth`), d the depth of its key liquid in its pores and standing, `Physics::wetness`). All kinds of a cell are cut together to the key liquid of its ground and the carbon gas
+  of its share of its air node. A cover that works on drier ground works more slowly: its capacity goes with its
+  moisture need. The light its bodies' node set aside for it (`Cover::keep`, 1.4) pays first; what it stores beyond
+  that comes from its ground, which that light warmed.
+- **Upkeep**, paid by burning its fuel (reaction 1) with the air's oxidising gas: per kg of built cover and day
+  `c_basal` plus `c_light` × what its capacity could store in a day (dearer by 1 + (melting point of the key liquid −
+  `FROST`) / `c_firm` for a cover that stands the cold), plus `c_leaf` per m² of capture area; times its repair factor
+  (`Physics::repair`), its activity and the burning's pace at T (seasons come from temperature only). The share unpaid
+  dies (`SPENT`). **Wear**: the share 1 − e^−wear dies (`AGE`), wear its upkeep over (built cover × `e_life` ×
+  10^`REPAIR`), as bodies wear (6.7). **Frost**: below its `FROST` gene the share min(1, (`FROST` − T) / `unfold`) × a
+  dies (`PHASE`).
+- **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
+  out as kinds build, tallest first) build body matter, walls (10^`WALLS` kg per kg of matter) and the hard solid
+  (`cover_hard` kg per kg of matter) by the conversions of growth (`Chemistry::build`, `builds`), paying `c_copy` per kg
+  by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (24), at
+  most 10^`FIX` mol per kg per s at the reaction's pace, paid by the reaction's fuel.
+- **Seeds**: the share `SEED` of what it builds leaves for a neighbour cell drawn (or stays where there is none), with
+  one generation's mutation of its genes (noise × each gene's step × `cover_mut`). When every domain has had its month
+  the seeds land (`cover::land`), domain by domain in the order made: they join the most alike kind of the cell (every
+  gene within `alike` steps, `cover::distance`; the genes the mean by built cover), else an empty slot, else the
+  lightest slot if they outweigh its built cover (whose cover dies as remains); else they die as remains. Alike kinds
+  of a cell share one slot (`merge_alike`). Selection is between kinds and cells: what grows better sends more seeds.
+- **What it takes and gives**: liquids and minerals from and to its ground with their heat; gases from the air (with
+  their heat at the air's temperature and their latent heat) and to its cell's bodies' node (with theirs), as bodies
+  breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 21,
+  26). Every move is booked through the domain's moves (`store::Moves`).
+- **Eaten and broken**: an animal's take from the place takes from its ground and its cover by one search
+  (`feed::take_node`, 5.3), paying to break what it takes of the cover (`Cover::breaking`, as a bite pays); movers that
+  push through a cell break the cover by its share of the cell's mass, as they break bodies (6.8, `choose::wear`).
+- **What it is to the rest**: its mass, capture area, the light it absorbs and the energy to break it are one more
+  body of the cell in the survey's sums (`Life::sum`), so it shades, holds the ground (1.3), hides bodies, slows
+  movers and makes lanes (1.7) as bodies do.
 
 ## 5. Choose: a small brain sees a little, acts, learns and copies others
 Files: `core/src/choose/` (`mod`, `perceive`, `learn`, `feed`, `go`, `spread`), `core/src/brain.rs`.
@@ -454,7 +491,7 @@ Files: `core/src/choose/` (`mod`, `perceive`, `learn`, `feed`, `go`, `spread`), 
 One hidden layer over what the body perceives and remembers. Its **base** belongs to a lineage and changes only by
 evolution; its **rows** are genes of each body: fixed action scores, shared scorers (per direction, per verb and body
 or part seen), a signal, the shape of a part, the next memory and a critic. Sizes are genes with costs: hidden units
-(0 to 64; 0 is no brain, no decisions, no cost; light-eaters start so), memory (0 to 12), bodies seen (1 to 6), sight
+(0 to 64; 0 is no brain, no decisions, no cost), memory (0 to 12), bodies seen (1 to 6), sight
 (1 to 4 cells). One brain per body or node (`Body::rows`); a child starts with its born rows plus what its parent
 learned (`Life::inherit`).
 
@@ -601,8 +638,8 @@ with even chances in one update or many (`SPENT`).
 Causes: `LACK`, `PHASE`, `SPENT`, `TAKEN`, `BROKEN`, `AGE`; at death all goes to the ground (`body::die`).
 
 ### 6.9 Materials and minerals in bodies
-Built solids count in mass and height, not living body; children get them, gifts never give them. Light-eaters get
-minerals by roots, eaters by digestion. The rock salt falls out of a body as lime (23). Fixing (24) makes the nitrogen
+Built solids count in mass and height, not living body; children get them, gifts never give them. Bodies get
+minerals by digestion (the cover from its ground, 4.5). The rock salt falls out of a body as lime (23). Fixing (24) makes the nitrogen
 mineral from the air, slowed as the store fills and stopped at its level.
 
 ## 7. Soil and minerals
@@ -619,15 +656,13 @@ read a kind.
   land cell drains from the start (`drain`): a priority flood raises closed basins to their outlet at 1 m per km
   (`DRAIN_SLOPE`; Planchon and Darboux 2001), from every cell below 0 m on a globe, from those joined to the lowest
   cell on an island. Quarters read the same noise at their own centres.
-- **Life** at year 2 (`--life-year`): light-eaters, then eaters 20 years later (`worldgen::life::KINDS`); `--roster`
-  places ten kinds (`ROSTER`). Founders are adults on land under at most half a metre of liquid; mass 30% sugar (60%
-  for the two big slow kinds).
+- **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS` rows of `Place::Field`: kg per m² and genes,
+  on every open land cell by its chance), then eaters 20 years later; `--roster` places ten kinds (`ROSTER`). Founders
+  are adults on land under at most half a metre of liquid; mass 30% fuel (60% for the two big slow eater kinds).
 - **Brains**: eaters start with hand-set biases (`Seeding::hand`; `--neutral-eaters` without), since neutral founders
-  die before they learn: they bite a body (2) before they take from the ground (0.5) and keep out of deep liquid (a
-  move's odds fall as 1 / (1 + depth / m)). Light-eaters have no brain. Genes and rows get a spray (`--spray`).
-- **Fixers**: a tenth of the starting light-eaters carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).
-- **Founder genes**: some measured from the laws (`LIGHT_X`, `LITTER_X`, a real leaf's `GAS`); light-eaters build
-  their frame at a herb's share of cell walls (`WALL_SHARE`), other solids at a small share (`BUILT_SHARE`); `HEAT`,
-  `CHILD`, `ALLOC` the same for all; `KEEP_T`, `COOL_T` off for light-eaters and, for eaters, 5 K above their
-  liquid's melting point and 5 K below their catalysts' unfolding (`EATER_KEEP_T`, `EATER_COOL_T`).
+  die before they learn: they take from the place, its ground and its cover (1), before they bite a body (0.5), and keep
+  out of deep liquid (a move's odds fall as 1 / (1 + depth / m)). Genes and rows get a spray (`--spray`).
+- **Fixers**: a tenth of the cells of the starting cover carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).
+- **Founder genes**: some measured from the laws (`LITTER_X`); bodies build solids at a small share (`BUILT_SHARE`);
+  `HEAT`, `CHILD`, `ALLOC` the same for all; `KEEP_T` and `COOL_T` 5 K above their liquid's melting point and 5 K below their catalysts' unfolding (`EATER_KEEP_T`, `EATER_COOL_T`).
 

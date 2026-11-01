@@ -41,12 +41,8 @@ pub struct Config {
     pub sleep_days: u32,
     /// Speed setting: bodies update in batches of this many days; an interval is a whole number of batches (`Body::interval`)
     pub batch_days: u32,
-    /// Speed setting: a population node (more than one member) updates at most every this many days (`Body::interval`)
-    pub node_days: u32,
     /// Speed setting: a population node makes its children at most once in a window of this many days (`copy::copy`)
     pub lump_days: u32,
-    /// Speed setting: a node without a brain runs its sample member on one update in this many, drawn (`copy::select`)
-    pub sample_every: u32,
     /// Speed setting: a population node with a brain decides about every this many days and acts by habit between (`choose::act`; 0: every update)
     pub think_days: u32,
 
@@ -240,6 +236,14 @@ pub struct Physics {
     /// Nodes of a cell whose genes differ by at most this many mutation steps merge (`body::alike`)
     pub alike: f32,
 
+    // The cover (`cover`)
+    /// Upkeep of the cover's light capacity, as a share of what that capacity could store in the time
+    pub c_light: f64,
+    /// Mutation size of the cover's genes per generation, times each gene's step
+    pub cover_mut: f32,
+    /// The solid the cover builds of a mineral (`cover::HARD`), kg per kg of its body matter
+    pub cover_hard: f64,
+
     // Flow, as ground cover and moving liquid feel it
     /// Thickness of a layer that hides half of what lies below it: [soft solid, liquid, loose], m
     pub hide: [f64; 3],
@@ -280,6 +284,18 @@ impl Physics {
     /// m1^-0.32 J per kg per m (Taylor et al. 1982), scaled to `c_move` at `MOVE_REF`. Climbing is the weight lifted.
     pub fn walk(&self, m1: f64) -> f64 {
         self.c_move * (m1 / MOVE_REF).powf(MOVE_EXP)
+    }
+    /// The factor on upkeep of a repair gene (log10): its repair share `c_repair` doubles for each unit.
+    pub fn repair(&self, gene: f64) -> f64 {
+        1.0 - self.c_repair + self.c_repair * 2f64.powf(gene)
+    }
+    /// How wet ground with `depth` m of liquid (in its pores and standing) is, 0..1: half at `wet_depth`.
+    pub fn wetness(&self, depth: f64) -> f64 {
+        depth / (depth + self.wet_depth)
+    }
+    /// The activity of a living thing that holds the share `x` of the liquid it keeps: x^`dormancy`, 1 at or above it.
+    pub fn activity(&self, x: f64) -> f64 {
+        if x >= 1.0 { 1.0 } else { x.max(0.0).powf(self.dormancy) }
     }
 }
 
@@ -353,6 +369,9 @@ impl Default for Physics {
             row_noise: 0.3,
             new_noise: 0.1,
             alike: 4.0,
+            c_light: 0.1,
+            cover_mut: 0.063,
+            cover_hard: 0.02,
             hide: [0.2, 0.5, 0.02],
             soft: 0.75,
             still: 0.01,
@@ -387,13 +406,10 @@ impl Config {
         // The air's step is booked whole as it runs: a longer one would book its moves ahead of the physics steps.
         let divides = (d as u64 * self.calendar().day).is_multiple_of(h as u64 * HOUR_S);
         require(divides, || format!("the air's step ({h} hours) must divide the physics step ({d} days)"))?;
-        let (days, most) = (self.node_days as f64, crate::body::MAX_INTERVAL);
-        require(days <= most, || format!("node_days ({days}) must be at most {most} days, the longest interval"))?;
         // A batch is a whole number of days that starts every body's update: it fits in the physics step and the month,
         // and nodes' intervals are whole batches.
         let b = self.batch_days;
         require(b > 0 && d.is_multiple_of(b) && self.days_per_month.is_multiple_of(b), || format!("batch_days ({b}) must be at least 1 and divide phys_days ({d}) and days_per_month ({})", self.days_per_month))?;
-        require(self.node_days.is_multiple_of(b), || format!("node_days ({}) must be a multiple of batch_days ({b})", self.node_days))?;
         let lump = self.lump_days;
         require(lump > 0 && lump.is_multiple_of(b), || format!("lump_days ({lump}) must be a whole number of batches ({b} days), at least one"))?;
         // A liquid step of more than a month counts its own period from the start (`schedule::days`).
@@ -404,8 +420,6 @@ impl Config {
         // a shorter liquid step, or a physics step over a month, only on a whole number of physics steps.
         let on_physics = f.is_multiple_of(d) || (d <= m && f >= m);
         require(on_physics, || format!("flow_days ({f}) must fall on physics steps ({d} days): a whole number of them, or of months"))?;
-        let why = "sample_every must be at least 1 (a sample on one update in that many)";
-        require(self.sample_every > 0, || why.into())?;
         let wake = self.wake_share;
         require(wake > 0.0 && wake.is_finite(), || format!("wake_share ({wake}) must be above 0"))?;
         // `dormancy` above 1 (`body::exchange::closing` divides by n - 1); `light_yield` in (0, 1] (a light reaction takes
@@ -440,9 +454,7 @@ impl Default for Config {
             wake_share: 0.05,
             sleep_days: 90,
             batch_days: 10,
-            node_days: 40,
             lump_days: 30,
-            sample_every: 2,
             think_days: 20,
             skin_m: 2.0,
             air_top_m: 10_000.0,

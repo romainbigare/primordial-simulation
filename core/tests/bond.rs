@@ -41,7 +41,7 @@ fn walls_keep_a_body_warm() {
     // among the cells next to cell `i` (a body steps to a neighbour).
     let bs = &w.life;
     let next = |s: Handle| bs[s].cell as usize == i || w.mesh.cells().link(bs[s].cell as usize, i).is_some();
-    let slot = bs.living().map(|x| x.0).filter(|&s| next(s) && pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body next to the cell");
+    let slot = bs.living().map(|x| x.0).filter(|&s| next(s)).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body next to the cell");
     let slot = if w.life[slot].cell as usize == i { slot } else { relocate(&mut w, slot, i) };
     // Six blocks joined around a small space, one bonded to the ground.
     let parts: Vec<usize> = (0..6).map(|_| plate(&mut w, i, 1e3, true)).collect();
@@ -139,8 +139,8 @@ fn forming_never_takes_more_than_is_left() {
 /// breaks the ground) the node holds nothing and is as it was: its members, genes and the spread of its born rows.
 #[test]
 fn a_node_acts_on_bonds_as_its_members_together() {
-    // 0: holds a part of 5 kg, members of 40 kg at strength about 1 (they bear about 200 N, the part weighs 49 N); 1: the
-    // same with the light-eater's own members (1 kg at strength about 0.05: they bear about 0.25 N); 2: breaks the ground.
+    // 0: holds a part of 5 kg, members at strength about 1 (they bear about 200 N, the part weighs 49 N); 1: the same at
+    // strength 0 (they bear nothing); 2: breaks the ground.
     let scene = |case: u8| {
         let hold = case < 2;
         let mut w = small_world();
@@ -152,7 +152,8 @@ fn a_node_acts_on_bonds_as_its_members_together() {
         let p = plate(&mut w, i, 5.0, false);
         let brain = if hold { Brain::verb(brain::VERBS) } else { Brain::only(brain::DIG) };
         let line = Line::new(&mut w, &brain, 0);
-        let (l, mut b) = (line.lineage, line.founder(&mut w, 0, i));
+        let (l, b) = (line.lineage, line.founder(&mut w, 1, i));
+        let mut b = worldgen::testkit::node_of(&mut w, b, 800.0);
         (b.spread, b.row_spread) = (vec![0.01; b.genes.len()], 0.01);
         // (No liquid soaked up from the ground, which would add a third to their mass.)
         b.genes[LIQ] = -4.0;
@@ -161,6 +162,8 @@ fn a_node_acts_on_bonds_as_its_members_together() {
         (b.genes[COPY_MASS], b.genes[pcore::body::ALLOC]) = (b.genes[COPY_MASS] - 1.0, 0.0);
         if case == 0 {
             (b.genes[STRENGTH], b.genes[COPY_MASS], b.count) = (1.0, 1.0, b.count / 40.0);
+        } else if case == 1 {
+            b.genes[STRENGTH] = 0.0;
         }
         // (Twenty members of the same size: in case 1 too weak together to bear the part.)
         let few = 20f64.min(b.count) / b.count;

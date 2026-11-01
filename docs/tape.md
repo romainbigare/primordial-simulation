@@ -49,7 +49,7 @@ map repeating east and west, and a cell's latitude and longitude in the inspect 
 
 **Map layers** in the frames (`tape/src/layers.rs`, one byte a square of the map, row by row; a square of a refined
 region, `ew run --region`, shows its north-west quarter, as do the PNG pictures): height, liquid depth, ice, liquid flux, loose
-ground, ground and air temperature, rain, vapour, absorber, light-eater and other body mass per m², bodies, traffic,
+ground, ground and air temperature, rain, vapour, absorber, the cover's and the bodies' mass per m², bodies, traffic,
 worn edges, structures, true colour (r, g, b).
 
 ## `series.csv`: the world
@@ -60,7 +60,7 @@ worn edges, structures, true colour (r, g, b).
 | `elem_<j>` | mol | element j in the world (must not change) |
 | `energy` | J | heat and chemical energy in the world |
 | `min<q>_land`, `min<q>_sea` | kg/m² | mineral q in the ground of land and of the sea floor |
-| `min<q>_dead_land`, `min<q>_dead_sea`, `min<q>_bodies`, `min<q>_deep` | 10⁹ mol | mineral q in dead matter on land and sea, in bodies, in the bed's stores |
+| `min<q>_dead_land`, `min<q>_dead_sea`, `min<q>_bodies`, `min<q>_cover`, `min<q>_deep` | 10⁹ mol | mineral q in dead matter on land and sea, in bodies, in the cover, in the bed's stores |
 | `t_ground`, `t_air` | K | mean ground and air temperature (by area) |
 | `t_land`, `t_land_summer`, `t_land_winter` | K | the land's ground: the mean of the year's months, the warmest month and the coldest |
 | `absorber` | | mean absorption of the heat-absorbing gases |
@@ -71,9 +71,11 @@ worn edges, structures, true colour (r, g, b).
 | `rain`, `rain_land` | mol/m²/s | mean rain, and on land (a moving average over about a year) |
 | `evap_land`, `runoff_sea` | mol/m²/s | on land, what rises into the air less what condenses on the ground, and what runs over the surface into cells under the sea's level, per m² of land (moving averages over about a year): with `rain_land` the land's water budget |
 | `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) with a liquid flux over the web viewer's threshold (`tape::RIVER_WEB`) |
-| `bodies`, `plants` | | bodies (nodes and individuals), of them light-eaters |
-| `plant_members`, `animal_members`, `animal_nodes` | | members of light-eaters and of the others; nodes of the others |
-| `cover_median`, `cover_max` | kg/m² | light-eater mass on a land cell: median and largest |
+| `bodies` | | bodies (nodes and individuals) |
+| `cover_slots`, `cover_kg` | , kg | slots of cover in the world (`cover::SLOTS` a cell at most), and its mass |
+| `cover_died_<cause>` | kg/yr | cover that died in the year by cause: `spent` (upkeep unpaid), `age`, `phase` (frost), `taken` (eaten), `broken` (by movers) |
+| `animal_members`, `animal_nodes` | | members of the bodies; nodes |
+| `cover_median`, `cover_max` | kg/m² | the cover's mass on a land cell: median and largest |
 | `body_mass` | t | mass of all bodies |
 | `dead_<k>` | kg/m² | dead fuel, matter and built solids on the ground of the land |
 | `births`, `died_<cause>` | 1/yr | members born; died by cause (`lack`, `phase`, `spent`, `taken`, `broken`, `age`) |
@@ -95,13 +97,13 @@ worn edges, structures, true colour (r, g, b).
 
 | Column | Unit | Meaning |
 |---|---|---|
-| `eat_animals` | | bodies that took more from eaters than from light-eaters in their life |
+| `eat_animals` | | bodies that took more from other bodies than from the cover in their life |
 | `crossings`, `traffic_top2`, `traffic_persist` | 1/yr, , | moves to a neighbour cell; share on the busiest 2% of cells; overlap with ten years before |
 | `worn_edges`, `worn_new`, `worn_persist` | , 1/yr, | edges cleared by movers (path-like), new ones, kept from ten years before |
 | `mass_top2`, `mass_land` | kg/m² | body mass on the busiest cells and on other land |
 | `watched`, `watched_kin`, `watched_bodies`, `spread_max` | 1/yr, 1/yr, , bodies | watches (imitation), of them within a lineage; bodies watched; most watchers of one |
 | `gave`, `gave_kg`, `gave_eaters`, `gave_pairs`, `gave_reciprocal` | 1/yr, kg/yr, 1/yr, , | gifts, kg given, gifts by eaters, giving pairs, pairs giving both ways |
-| `ate_light_eaters`, `ate_others`, `ate_ground` | kg/yr | what eaters took of what they use (`Body::uses`: their food), by source |
+| `ate_cover`, `ate_others`, `ate_ground` | kg/yr | what eaters took of what they use (`Body::uses`: their food), by source: the cover, other bodies, the ground |
 
 **Parts and structures**
 
@@ -124,7 +126,7 @@ worn edges, structures, true colour (r, g, b).
 ## `series.csv`: by starting kind
 
 `root_<K>_*`, for every kind up to the largest seen; a kind that died out reads 0 (its means `NaN`). Means are by
-members.
+members; for a kind of cover by its built cover.
 
 | Column | Unit | Meaning |
 |---|---|---|
@@ -137,10 +139,13 @@ members.
 | `gas`, `leaf`, `copy_log`, `interval`, `heat`, `repair`, `wet_gene` | log10 | gene means |
 | `hidden`, `keep_t` | , K | gene means |
 | `cat_<r>`, `cat_<r>_on` | log10, | catalyst gene of reaction r over the members that carry it on; share that do |
+| `slots`, `cover_kg`, `cover_area` | , kg, m²/m² | a kind of cover: its slots, its mass, its capture area per m² of land |
+| `cover_light`, `cover_leaf`, `cover_walls`, `cover_store`, `cover_moist`, `cover_repair`, `cover_fix` | log10 | the means of its genes (`cover::LIGHT` ...) |
+| `cover_frost`, `cover_seed` | K, | the means of its frost and seed genes |
 
 ## `months.csv`
 
-One row a month: `year`, `month`; the bodies that are not light-eaters: `mobile` (how many), `mean_y`, `mean_z` (mean
+One row a month: `year`, `month`; the bodies: `mobile` (how many), `mean_y`, `mean_z` (mean
 row and height), `mean_dy`, `mean_dz` (mean move since last month), `inside` (inside walls), `t_mobile` (mean ground
 temperature under them, K), `spent`, `spent_y` (members died of `spent`, and their mean row); then for each starting
 kind `root_<K>_births` and `root_<K>_died_<cause>` (members in the month), so seasons of births and deaths show.

@@ -170,6 +170,23 @@ pub fn eater_of(w: &mut World, i: usize, brain: &Brain, copy: f32) -> Body {
     b
 }
 
+/// Eater nodes of `members` members each (starting kind 1, of a brain that rests), one on each dry land cell, placed:
+/// the nodes the tests of population nodes run on. Returns where they are stored.
+pub fn eater_nodes(w: &mut World, members: f64) -> Vec<Handle> {
+    let line = Line::new(w, &Brain::only(brain::REST), 1);
+    dry_lands(w).into_iter().map(|i| {
+        let b = line.founder(w, 1, i);
+        let b = node_of(w, b, members);
+        w.add(b, 1)
+    }).collect()
+}
+
+/// `kg` per m² of the cover of starting kind 0 (its genes, `life::KINDS`) placed in cell `i` (`cover::place`).
+pub fn cover(w: &mut World, i: usize, kg: f64) {
+    let crate::life::Place::Field(f) = &crate::life::KINDS[0].place else { unreachable!("kind 0 is cover") };
+    assert!(pcore::cover::place(w, i, f.genes, 0, kg), "no room for cover in cell {i}");
+}
+
 /// Body `b` made `f` times as big: its stores and heat (booked as an edit).
 pub fn scale(w: &mut World, b: &mut Body, f: f64) {
     w.cross((Boundary::Outside, A_BODY), b.store.iter().map(|&a| (f - 1.0) * a).enumerate(), (f - 1.0) * b.e);

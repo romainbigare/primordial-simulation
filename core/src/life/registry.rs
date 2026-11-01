@@ -1,5 +1,5 @@
 //! The lineages and the born rows of `Life`: their registries, the holders counted into them, and the provisional ids
-//! of those body code makes, kept by their domain until the world settles and makes them global (laws.md 0, S72).
+//! of those body code makes, kept by their domain until the world settles and makes them global (laws.md 0).
 
 use super::{free_place, Domain, Life};
 use crate::body::Body;

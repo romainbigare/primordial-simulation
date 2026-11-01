@@ -40,8 +40,8 @@ pub enum Purpose {
     Make,
     /// Which founders carry the fixing reaction's gene (`worldgen`)
     Fixer,
-    /// The side of each gene of the sample member of a node (`copy::select`)
-    Select,
+    /// Where a slot of cover sends its seeds, and their mutation (`cover::grow`)
+    Cover,
 }
 
 pub struct Rng(u64);

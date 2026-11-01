@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The speed bench kit (docs/speed-post-foundation/plan.md 1.2).
+# The speed bench kit.
 #   scripts/bench.sh [--remake]        run the three benches for 5 years each, print one line per bench
 #   scripts/bench.sh profile BENCH     run 1 year of BENCH (island22, globe36 or region24) under callgrind, print the top
 #                                      functions

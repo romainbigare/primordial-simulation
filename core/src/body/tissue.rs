@@ -77,16 +77,6 @@ impl Body {
     pub fn member_body(&self, chem: &Chemistry) -> f64 {
         self.built(chem) / self.n()
     }
-    /// The mean and the variance of log10 of its members' bodies, kg: the mean is kept as `size_lag` below log10 of the
-    /// mean member's body, so it rises as much when all grow alike in proportion.
-    pub fn size_moments(&self, chem: &Chemistry) -> (f32, f32) {
-        ((self.member_body(chem).max(f64::MIN_POSITIVE).log10() - self.size_lag as f64) as f32, self.size_spread)
-    }
-    /// Its members' log10 bodies (kg) have the mean `mean` and the variance `v` (`size_moments`).
-    pub(crate) fn set_size(&mut self, chem: &Chemistry, mean: f64, v: f64) {
-        self.size_lag = (self.member_body(chem).max(f64::MIN_POSITIVE).log10() - mean) as f32;
-        self.size_spread = v.max(0.0) as f32;
-    }
     /// A member body (`member_body`) is at or past the copy mass (`adult`).
     pub fn mature(&self, member: f64) -> bool {
         member >= (1.0 - 1e-9) * self.k.copy_mass
@@ -103,7 +93,7 @@ impl Body {
             have += self.store[k] * mm;
             keep += self.level(chem, k, 0.0) * mm;
         }
-        if keep <= 0.0 || have >= keep { 1.0 } else { (have / keep).max(0.0).powf(p.dormancy) }
+        if keep <= 0.0 { 1.0 } else { p.activity(have / keep) }
     }
     /// The melting point of its liquid `k`, lowered by what is dissolved in it (`Chemistry::melt_in`).
     pub fn melt(&self, chem: &Chemistry, k: usize) -> f64 {
@@ -167,10 +157,7 @@ impl Body {
     /// What the body is built of, all members: [volume m³, Σ volume × Young's modulus, Σ volume × breaking stress] over
     /// its soft tissue (`built` at `rho_body`) and each solid it builds.
     pub fn solids(&self, chem: &Chemistry, cfg: &crate::Config) -> [f64; 3] {
-        let Some(m) = chem.matter() else { return [0.0; 3] };
-        let soft = self.built(chem).max(0.0) / cfg.phys.rho_body;
-        let of = |v: f64, s: &crate::chem::Substance| [v, v * s.modulus, v * s.rupture];
-        chem.materials().map(|k| of(self.store[k].max(0.0) * chem.subs[k].molar_mass / chem.subs[k].density[0], &chem.subs[k])).fold(of(soft, &chem.subs[m]), |a, x| [a[0] + x[0], a[1] + x[1], a[2] + x[2]])
+        solids_of(chem, cfg, self.built(chem), |k| self.store[k])
     }
     /// A member's height, m: what it is built of holds up against its own weight. A column buckles past h³ = `GREENHILL`
     /// E I / w (Greenhill 1881; real stems near a quarter of it, McMahon 1973); one round section (I = A² / 4π, A = V / h)
@@ -205,4 +192,13 @@ impl Body {
         let (lay, size) = (Layout::of(chem), self.size(chem));
         self.empty_at(m) || (0..chem.ns()).any(|k| self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * size && !self.burns_at(chem, k, t))
     }
+}
+
+/// What a living thing of `built` kg of soft tissue (`Body::built`) and `mol(k)` of each solid it builds is built of:
+/// [volume m³, Σ volume × Young's modulus, Σ volume × breaking stress], its soft tissue at `rho_body`.
+pub fn solids_of(chem: &Chemistry, cfg: &crate::Config, built: f64, mol: impl Fn(usize) -> f64) -> [f64; 3] {
+    let Some(m) = chem.matter() else { return [0.0; 3] };
+    let soft = built.max(0.0) / cfg.phys.rho_body;
+    let of = |v: f64, s: &crate::chem::Substance| [v, v * s.modulus, v * s.rupture];
+    chem.materials().map(|k| of(mol(k).max(0.0) * chem.subs[k].molar_mass / chem.subs[k].density[0], &chem.subs[k])).fold(of(soft, &chem.subs[m]), |a, x| [a[0] + x[0], a[1] + x[1], a[2] + x[2]])
 }

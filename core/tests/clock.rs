@@ -48,8 +48,8 @@ fn day_month_and_season_come_from_the_seconds() {
 }
 
 /// A month of `step`: on its first day the survey, the parts of Flow due (at a month's start at least its state, the
-/// air and the sink into the bed's store, and the liquid when its period starts there) and Change, then Bond, then the
-/// bodies; the physics every `phys_days` days and the bodies every `batch_days` days. The clock ends a whole month on,
+/// air and the sink into the bed's store, and the liquid when its period starts there), the cover's month and Change,
+/// then Bond, then the bodies; the physics every `phys_days` days and the bodies every `batch_days` days. The clock ends a whole month on,
 /// and `day` moves it by one day.
 #[test]
 fn a_month_runs_its_processes_in_their_order() {
@@ -63,11 +63,11 @@ fn a_month_runs_its_processes_in_their_order() {
     let (flow_s, dpm) = (w.cfg.flow_days as u64 * cal.day, w.cfg.days_per_month);
     let liquid = (w.cfg.flow_days <= dpm || t0.is_multiple_of(flow_s)) as usize;
     assert!(marks[0] == Stage::Bodies && flow >= 3 + liquid, "{marks:?}");
-    assert_eq!(marks[1 + flow..][..3], [Stage::Change, Stage::Parts, Stage::Bodies]);
+    assert_eq!(marks[1 + flow..][..4], [Stage::Bodies, Stage::Change, Stage::Parts, Stage::Bodies]);
     let count = |s: Stage| marks.iter().filter(|&&m| m == s).count() as u32;
     let phys = w.cfg.phys_days;
     assert_eq!((count(Stage::Change), count(Stage::Parts)), (dpm.div_ceil(phys), 1));
-    assert_eq!(count(Stage::Bodies), dpm / w.cfg.batch_days + dpm.div_ceil(phys));
+    assert_eq!(count(Stage::Bodies), dpm / w.cfg.batch_days + dpm.div_ceil(phys) + 1);
     let (d, m) = (w.day(), w.month());
     pcore::day(&mut w);
     assert_eq!((w.day(), w.month(), w.time % cal.day), (d + 1, m, 0));
@@ -161,8 +161,6 @@ fn the_default_settings_pass_and_a_step_off_its_base_or_out_of_step_or_a_dormanc
         Config { phys_days: 0, ..Default::default() },
         Config { batch_days: 0, ..Default::default() },
         Config { batch_days: 4, ..Default::default() },
-        Config { batch_days: 5, node_days: 36, ..Default::default() },
-        Config { batch_days: 10, node_days: 36, phys_days: 30, ..Default::default() },
         Config { lump_days: 0, ..Default::default() },
         Config { lump_days: 25, ..Default::default() },
         dormant,

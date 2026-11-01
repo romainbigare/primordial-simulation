@@ -2,12 +2,12 @@
 //! rebuilds. Two parents and population nodes: `populations.rs`.
 
 use pcore::life::Handle;
-use pcore::body::{Body, Layout, ALLOC, BRAIN_SIZES, CHILD, COOL_T, COPY_MASS, DENATURE, DISPERSE, GAS, HEAT, KEEP_T, LIQ};
+use pcore::body::{Layout, ALLOC, BRAIN_SIZES, CHILD, COOL_T, COPY_MASS, DENATURE, DISPERSE, GAS, HEAT, KEEP_T, LIQ};
 use pcore::body::{MUT, STRENGTH};
 use pcore::rng::{Purpose, Rng};
 use pcore::units::DAY_S;
 use pcore::{body, brain, copy, nodes, World};
-use worldgen::testkit::{self, add, brood, life_totals, same_totals, children, eater, kg, only_the_solid, out, put, put_kg_m2, scale, start, took_used, Books, BURN, DISSOLVED, LIQUID, MATTER, RICH};
+use worldgen::testkit::{self, add, children, eater, kg, only_the_solid, out, put, put_kg_m2, scale, start, took_used, Books, BURN, DISSOLVED, LIQUID, MATTER, RICH};
 use pcore::store::Class;
 
 /// A body whose roots take the minerals growth is built of (the uptake genes at 0.01, so that a meal is still nearly
@@ -326,13 +326,11 @@ fn a_mature_nodes_children_gather_in_its_young_node() {
         w.life[s] = n;
         w.time += w.cfg.lump_days as u64 * DAY_S;
     }
-    // All three broods are in one young node, linked to its adult node; its members are all of one size.
+    // All three broods are in one young node.
     let kids: Vec<Handle> = w.life.living().map(|x| x.0).filter(|&k| k != s).collect();
     assert_eq!(kids.len(), 1, "the children are {} nodes", kids.len());
     let young = &w.life[kids[0]];
     assert!((young.count - 12.0).abs() < 1e-4 && !young.adult(&w.chem), "young: {} members", young.count);
-    assert_eq!((young.link, w.life[s].link), (Some(w.life[s].id), Some(young.id)), "not linked");
-    assert!(young.size_spread.abs() < 1e-9, "children of one size have a size spread {}", young.size_spread);
     // A month's merge: alike in genes, but the young are immature.
     let month = w.cfg.calendar().month;
     w.time = (w.time / month + 1) * month;
@@ -453,137 +451,6 @@ fn no_batch_holds_a_pulse_of_births() {
     println!("lumps by batch over a year: {lumps:?}");
     assert!(even * year as f64 >= 12.0 * nodes.len() as f64, "{even} lumps a batch of {} nodes", nodes.len());
     assert!(lumps.iter().all(|x| (x / even - 1.0).abs() <= PULSE), "a batch holds more or less than {PULSE} off its even share {even:.2}: {lumps:?}");
-}
-
-/// Young members mature at the rate their growth gives (`copy::mature`): a young node of 1,000 members whose log10
-/// bodies lie evenly over the decade below the copy mass (the steady state of a stage entered at one size, with growth
-/// at one pace and no deaths), beside its adult node. Without growth none matures. When every member grows by 0.1
-/// decades, the top tenth of them join the adult node, holding the share (1 - 10^-0.1) / (1 - 10^-1) of the body (the
-/// bodies 10^x over the decade). Members, stores and heat are kept; the adult node stays mature and the young one is
-/// still young.
-#[test]
-fn young_members_mature_at_the_rate_their_growth_gives() {
-    let (mut w, sa, mut y) = young_beside_adult();
-    let mm = w.chem.subs[MATTER].molar_mass;
-    let top = 10f64.log10();
-    y.size_spread = 1.0 / 12.0;
-    y.size_lag = ((y.built(&w.chem) / y.count).log10() - (top - 0.5)) as f32;
-    let (sy, mut y) = out(&mut w, y);
-    assert!(!y.adult(&w.chem) && w.life[sa].adult(&w.chem));
-    let x0 = y.member_body(&w.chem);
-    // No growth: nobody matures.
-    assert!(matches!(w.in_domain(y.cell as usize, |w, d| copy::mature(w, d, &mut y, x0)), copy::Grown::Lives) && y.count == 1000.0, "members matured without growth");
-    // Every member grows by 0.1 decades: the young node's matter times 10^0.1 (booked as an edit).
-    let kg_in = (10f64.powf(0.1) - 1.0) * y.store[MATTER] * mm;
-    add(&mut w, &mut y, MATTER, kg_in);
-    w.life[sy] = y;
-    let (books, before) = (Books::now(&w), life_totals(&w));
-    let mut y = std::mem::take(&mut w.life[sy]);
-    let (n0, matter0) = (y.count, y.store[MATTER]);
-    let (members, body) = (0.1, (1.0 - 10f64.powf(-0.1)) / 0.9);
-    let adult0 = w.life[sa].count;
-    assert!(matches!(w.in_domain(y.cell as usize, |w, d| copy::mature(w, d, &mut y, x0)), copy::Grown::Lives));
-    let moved = n0 - y.count;
-    println!("matured {moved:.3} of {n0} members (wanted {:.3}), {:.4} of the body (wanted {body:.4})", members * n0, 1.0 - y.store[MATTER] / matter0);
-    assert!((moved - members * n0).abs() < 1e-5 * n0, "{moved} matured, wanted {}", members * n0);
-    assert!((1.0 - y.store[MATTER] / matter0 - body).abs() < 1e-5, "the body share that left");
-    assert!((w.life[sa].count - adult0 - moved).abs() < 1e-9 * n0, "the adult node took in {} members", w.life[sa].count - adult0);
-    assert!(w.life[sa].adult(&w.chem) && !y.adult(&w.chem), "the stages mixed");
-    w.life[sy] = y;
-    same_totals(&before, &life_totals(&w));
-    books.assert_kept(&w, 1e-9);
-}
-
-/// A world with an adult node of 5 eaters of copy mass 10 kg (where it is stored), and taken out a young node of 1,000
-/// members of its kind whose mean body is 6 kg (matter over 1 - 0.75), their sizes not set.
-fn young_beside_adult() -> (World, Handle, Body) {
-    let (mut w, i) = start();
-    let mm = w.chem.subs[MATTER].molar_mass;
-    let mut a = eater(&mut w, i, brain::REST, 10f32.log10());
-    scale(&mut w, &mut a, 5.0);
-    a.count = 5.0;
-    let mut y = a.clone();
-    let sa = testkit::place(&mut w, a);
-    scale(&mut w, &mut y, 200.0);
-    y.count = 1000.0;
-    let kg_in = (0.6 * 10.0 * 0.25 * y.count / mm - y.store[MATTER]) * mm;
-    add(&mut w, &mut y, MATTER, kg_in);
-    (w, sa, y)
-}
-
-/// Any spread of a young node's sizes matures a share of its members and of its body between 0 and 1
-/// (`copy::mature`), also one wider than the steady state of a stage can hold (`math::Pass`: then an exponential tail
-/// below the copy mass, of their mean): two cohorts far apart, as members who starved for years and newborns make (sd 2
-/// decades about a mean 1 decade below the copy mass). The rest keep a mean below the copy mass, and members and books
-/// are kept.
-#[test]
-fn any_spread_of_sizes_matures_a_share_of_the_young() {
-    let (mut w, sa, y) = young_beside_adult();
-    let mm = w.chem.subs[MATTER].molar_mass;
-    let (sy, mut y) = out(&mut w, y);
-    let x0 = y.member_body(&w.chem);
-    (y.size_spread, y.size_lag) = (4.0, (x0.log10() - (10f64.log10() - 1.0)) as f32);
-    // Every member grows by 0.05 decades (booked as an edit).
-    let kg_in = (10f64.powf(0.05) - 1.0) * y.store[MATTER] * mm;
-    add(&mut w, &mut y, MATTER, kg_in);
-    w.life[sy] = y;
-    let books = Books::now(&w);
-    let mut y = std::mem::take(&mut w.life[sy]);
-    let (n0, matter0, adult0) = (y.count, y.store[MATTER], w.life[sa].count);
-    assert!(matches!(w.in_domain(y.cell as usize, |w, d| copy::mature(w, d, &mut y, x0)), copy::Grown::Lives));
-    let (moved, body) = (n0 - y.count, 1.0 - y.store[MATTER] / matter0);
-    let (m, v) = y.size_moments(&w.chem);
-    println!("matured {moved:.3} of {n0} members, {body:.4} of the body");
-    assert!(moved > 0.0 && moved < n0 && body > 0.0 && body < 1.0, "matured {moved} members, {body} of the body");
-    assert!(m.is_finite() && v.is_finite() && y.e.is_finite() && (m as f64) < 10f64.log10(), "the rest: mean {m}, variance {v}, heat {}", y.e);
-    assert!((w.life[sa].count - adult0 - moved).abs() < 1e-9 * n0, "the adult node took in {} members", w.life[sa].count - adult0);
-    w.life[sy] = y;
-    books.assert_kept(&w, 1e-9);
-}
-
-/// A young node's sizes stay between birth and the copy mass (`copy::copy`, `copy::mature`): members are born at one
-/// size, grow alike and leave at the copy mass. An adult node of copy mass 10 kg has 10 children of 1 kg each round
-/// (an update), and its young members grow by 0.02 decades a round, so each member is young for 50 rounds. At every
-/// round the mean of their log10 bodies lies between 0 and 1 and their variance is at most 1/4, that of half at each end (Popoviciu
-/// 1935); once steady, as many mature as are born, so the young are about 10 x 50 members (Little 1961).
-#[test]
-fn a_young_nodes_sizes_stay_between_birth_and_the_copy_mass() {
-    let (mut w, i) = start();
-    // (A node may make children at every update: `lump_days` of one batch.)
-    (w.cfg.phys.c_copy, w.cfg.lump_days) = (1e18, w.cfg.batch_days);
-    let mm = w.chem.subs[MATTER].molar_mass;
-    let mut n = eater(&mut w, i, brain::REST, 10f32.log10());
-    (n.genes[CHILD], n.genes[DISPERSE]) = (0.1f32.log10(), 0.0);
-    scale(&mut w, &mut n, 5.0);
-    n.count = 5.0;
-    let s = w.add(n, 1);
-    let mut young = None;
-    for round in 0..300 {
-        let mut n = std::mem::take(&mut w.life[s]);
-        // A brood of 10 children besides what the members hold, and matter that keeps them at the copy mass.
-        n.prepare(&w.chem, &w.cfg);
-        brood(&w, &mut n, 10.0);
-        let short = (n.k.copy_mass * (1.0 - body::WET_TISSUE) * n.count - n.matter_kg(&w.chem)).max(0.0);
-        add(&mut w, &mut n, MATTER, short);
-        n.prepare(&w.chem, &w.cfg);
-        assert!(w.in_domain(n.cell as usize, |w, d| copy::copy(w, d, &mut n)), "round {round}: no children");
-        w.life[s] = n;
-        // (The few members who start in a neighbour cell land there, or go back to their parent's brood, as at a batch's end.)
-        pcore::outbox::deliver(&mut w);
-        let y = *young.get_or_insert_with(|| children(&w, w.life[s].id).into_iter().find(|&k| k != s).expect("a young node"));
-        let mut b = std::mem::take(&mut w.life[y]);
-        let before = b.member_body(&w.chem);
-        let grown = (10f64.powf(0.02) - 1.0) * b.store[MATTER] * mm;
-        add(&mut w, &mut b, MATTER, grown);
-        assert!(matches!(w.in_domain(b.cell as usize, |w, d| copy::mature(w, d, &mut b, before)), copy::Grown::Lives), "round {round}: the young left");
-        let (m, v) = b.size_moments(&w.chem);
-        assert!((-1e-6..=1.0).contains(&m) && v <= 0.25, "round {round}: mean {m} and variance {v} of log10 kg");
-        if round >= 200 {
-            assert!((b.count / 500.0 - 1.0).abs() < 0.1, "round {round}: {} young", b.count);
-        }
-        w.life[y] = b;
-        w.time += w.cfg.lump_days as u64 * DAY_S;
-    }
 }
 
 /// A mature body splits what it builds in an update by `ALLOC`: the share to its brood, the rest its own growth; one
@@ -907,6 +774,7 @@ fn growth_stops_without_a_mineral_and_goes_on_with_them() {
 fn child_has_parent_genes_plus_noise() {
     let mut w = worldgen::new_world(1, 16, 16);
     worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
     let parent = w.life.alive().next().expect("a body").genes.clone();
     let lay = Layout::of(&w.chem);
     let r = || Rng::new(1, 0, 0, Purpose::Mutate);

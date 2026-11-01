@@ -75,11 +75,19 @@ pub(crate) fn land_move(w: &World, d: &mut Domain, mut b: Body, (i, j): (usize, 
 /// survey, not once a move. (Those who held a part let go of it when the outbox is applied, `bond::let_go`.)
 pub fn wear(w: &World, d: &mut Domain, j: usize, energy: f64) {
     let here: Vec<_> = d.cell(j).collect();
-    let total: f64 = here.iter().map(|&s| d[s].mass(&w.chem)).sum();
+    let (k, parts) = (d.slot(j), crate::cover::Parts::of(&w.chem));
+    let cover = parts.as_ref().map_or(0.0, |p| crate::cover::Cover::slots(k).map(|x| d.cover.kg(&p.mm(&w.chem), x)).sum());
+    let total: f64 = here.iter().map(|&s| d[s].mass(&w.chem)).sum::<f64>() + cover;
     if total <= 0.0 {
         return;
     }
-    d.moves.open(w, j, Node::new(Class::Body, here[0].slot as usize));
+    d.moves.open(w, j, Node::new(Class::Cover, j));
+    // The cover takes its share by mass as a body does: what that breaks of it goes to the ground as remains.
+    if let Some(p) = parts.as_ref().filter(|_| cover > 0.0) {
+        let f = (energy * cover / total / d.cover.breaking(&w.chem, &w.cfg, p, k, 1.0).max(1e-30)).min(1.0);
+        d.counts.cover_lost[BROKEN as usize] += f * cover;
+        crate::cover::lose(w, d, p, k, f);
+    }
     for s in here {
         let o = std::mem::take(&mut d[s]);
         let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));

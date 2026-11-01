@@ -101,15 +101,14 @@ pub(crate) struct Ctx<'a> {
     pub t_air: Vec<f64>,
     pub vapor: Vec<f64>,
     pub absorber: Vec<f64>,
-    /// Per ground cell: body mass of light-eaters ("plants") and of the others ("animals"), kg/m²
-    /// (all members of each node); bodies (nodes and individuals)
+    /// Per ground cell: the cover's mass ("plants", `cover::per_m2`) and the bodies' ("animals", all members of each
+    /// node), kg/m²; bodies (nodes and individuals)
     pub plants: Vec<f64>,
     pub animals: Vec<f64>,
     pub bodies: Vec<f64>,
     /// Per ground cell: mass of made objects (parts), kg/m²
     pub parts: Vec<f64>,
-    /// Per living body (`Life::alive`): a light-eater (`body::light_eater`), and its mass, kg
-    pub light: Vec<bool>,
+    /// Per living body (`Life::alive`): its mass, kg
     pub mass: Vec<f64>,
 }
 
@@ -118,17 +117,16 @@ impl<'a> Ctx<'a> {
         let n = w.mesh.cells().n();
         let t_air = (0..w.mesh.level(AIR).n()).map(|j| w.t_air(j)).collect();
         let bodies: Vec<&Body> = w.life.alive().collect();
-        let (light, mass) = par::map(&bodies, |b| (pcore::body::light_eater(&w.chem, &b.genes), b.mass(&w.chem))).into_iter().unzip();
+        let mass = par::map(&bodies, |b| b.mass(&w.chem));
         let f = fields(w);
-        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: vec![0.0; n], animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], light, mass };
+        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: pcore::cover::per_m2(w), animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], mass };
         for (x, p) in w.parts.parts.iter().enumerate().filter(|(_, p)| p.alive) {
             let i = pcore::bond::cell(w, x);
             c.parts[i] += p.mass(&w.chem) / w.mesh.cells().area()[i];
         }
-        for ((b, &light), &mass) in bodies.iter().zip(&c.light).zip(&c.mass) {
+        for (b, &mass) in bodies.iter().zip(&c.mass) {
             let i = b.cell as usize;
-            let m = mass / w.mesh.cells().area()[i];
-            *if light { &mut c.plants[i] } else { &mut c.animals[i] } += m;
+            c.animals[i] += mass / w.mesh.cells().area()[i];
             c.bodies[i] += 1.0;
         }
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), |j| air_column(w, j)).into_iter().unzip();

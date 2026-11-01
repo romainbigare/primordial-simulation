@@ -1,22 +1,22 @@
 //! Placing the bodies of a starting kind: their lineage and brain, a spray of variants, the fixers among the
 //! light-eaters, and the line that reports it.
 
-use super::kinds::{light, Hand, Kind, KINDS};
+use super::kinds::{Bodies, Field, Hand, Kind, Place, KINDS};
 use super::open_land;
 use super::make::{make_with, split, KEEP_LIQUID};
 use pcore::body::{self, Body, Layout};
 use pcore::lineage::Lineage;
 use pcore::brain::{self, Shape};
 use pcore::rng::{Purpose, Rng};
-use pcore::{lineage, World};
+use pcore::{cover, lineage, World};
 use serde::{Deserialize, Serialize};
 
-/// The share of the starting light-eaters that carry the gene of the fixing reaction: one in ten, as fixing plants are
-/// near a tenth of flowering species (docs/numbers.md). The gene then evolves as any other.
+/// The share of the cells of the starting cover that carry the gene of the fixing reaction: one in ten, as fixing plants
+/// are near a tenth of flowering species (docs/numbers.md). The gene then evolves as any other.
 pub const FIXERS: f64 = 0.1;
-/// log10 of the speed-up of the fixing reaction in those founders: what a body that turns its matter over in about
-/// half a year needs (3 x 10^-9 mol of the mineral a kg and second) over the bare reaction.
-pub const FIX_GENE: f32 = 9.8;
+/// The fixing gene of that cover (`cover::FIX`), log10 mol per kg per s: 10^-8, about 10 g of the fixed element per
+/// m² a year for a kg of cover per m², what real fixing stands fix (Cleveland et al. 1999).
+pub const FIX_GENE: f32 = -8.0;
 /// Size of the random weights of a founder lineage's brain.
 const BRAIN_NOISE: f32 = 0.1;
 /// Step of one round of the spray on the bias of every row of a neutral start.
@@ -44,7 +44,7 @@ pub struct Seeding {
     pub hand: bool,
     /// Rounds of mutation given to every body placed (0: all bodies of a kind are the same)
     pub rounds: u32,
-    /// The share of the light-eaters placed that carry the gene of the fixing reaction (`FIXERS`)
+    /// The share of the cells of cover placed that carry the gene of the fixing reaction (`FIXERS`)
     pub fixers: f64,
 }
 
@@ -72,14 +72,13 @@ pub fn seed(w: &mut World, which: usize) -> String {
     seed_with(w, which, &Seeding::default())
 }
 
-/// What was placed, for the seeding line: bodies, members, kg and fixers; the ranges of the light and burning genes
+/// What was placed, for the seeding line: bodies, members and kg; the ranges of the light and burning genes
 /// and of the copy-mass gene; and the range, sum and sum of squares of the bias of taking from a body (none without a
 /// brain).
 struct Placed {
     bodies: usize,
     members: f64,
     kg: f64,
-    fixers: usize,
     cat: [(f32, f32); 2],
     copy_mass: (f32, f32),
     take: (f32, f32, f64, f64),
@@ -101,44 +100,77 @@ impl Placed {
 /// `seed` with the choices of `how`. Returns what was placed, in one line.
 pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     let Some(kind) = KINDS.get(which) else { return String::new() };
+    match &kind.place {
+        Place::Field(f) => field(w, which, kind, f, how),
+        Place::Bodies(b) => bodies(w, which, kind, b, how),
+    }
+}
+
+/// Place the cover of field row `f` of kind `which` on the open land, each cell by its chance: its genes after `rounds`
+/// rounds of mutation (a random walk keyed by the cell), the fixing gene on in the share `fixers` of the cells.
+fn field(w: &mut World, which: usize, kind: &Kind, f: &Field, how: &Seeding) -> String {
+    pcore::survey::survey(w, false);
+    let mut r = Rng::new(w.seed, w.day(), which as u64, Purpose::Brain);
+    let (mut cells, mut fixers, mut kg) = (0, 0, 0.0);
+    for i in 0..w.mesh.cells().n() {
+        if !open_land(w, i) || r.f64() >= f.chance {
+            continue;
+        }
+        let id = founder_id(which, i, 0);
+        let mut genes = f.genes;
+        let mut rg = Rng::new(w.seed, w.day(), id, Purpose::Make);
+        for _ in 0..how.rounds {
+            genes = cover::mutate(&genes, w.cfg.phys.cover_mut, &mut rg);
+        }
+        let fixes = Rng::new(w.seed, w.day(), id, Purpose::Fixer).f64() < how.fixers;
+        if fixes {
+            genes[cover::FIX] = FIX_GENE;
+        }
+        if cover::place(w, i, genes, which as u32, f.kg) {
+            (cells, fixers, kg) = (cells + 1, fixers + fixes as usize, kg + f.kg * w.mesh.cells().area()[i]);
+        }
+    }
+    let g = &f.genes;
+    format!(
+        "year {:.1}: placed the cover of {} on {cells} cells ({kg:.3e} kg, {:.2} kg per m2; light capacity 10^{} mol per kg per s, capture area 10^{} m2 per kg, walls 10^{} of its matter, fuel kept 10^{}, frost at {} K, active at moisture 10^{}, {:.0}% to seeds, repair {}), {} rounds of mutation each; {fixers} cells ({:.1}%) carry the fixing gene 10^{FIX_GENE} (share {} chosen before any run)",
+        w.year(), kind.name, f.kg, g[cover::LIGHT], g[cover::LEAF], g[cover::WALLS], g[cover::STORE], g[cover::FROST], g[cover::MOIST], 100.0 * g[cover::SEED], g[cover::REPAIR], how.rounds, 100.0 * fixers as f64 / cells.max(1) as f64, how.fixers
+    )
+}
+
+/// Place the bodies of row `b` of kind `which`.
+fn bodies(w: &mut World, which: usize, kind: &Kind, b: &Bodies, how: &Seeding) -> String {
     let Some((r_light, _, _, burn)) = w.chem.life_roles() else { return String::new() };
     pcore::survey::survey(w, false);
     let mut r = Rng::new(w.seed, w.day(), which as u64, Purpose::Brain);
-    let hand = kind.hand.filter(|_| how.hand);
-    let (shape, lineage, rows) = founder_lineage(w, which, kind, hand, &mut r);
+    let hand = b.hand.filter(|_| how.hand);
+    let (shape, lineage, rows) = founder_lineage(w, which, b, hand, &mut r);
     let hand = hand.is_some();
     // One genome for all when nothing is sprayed; else one per body.
     let shared = (how.rounds == 0).then(|| w.life.new_genome(rows.clone()));
-    let fix = w.chem.fixing().filter(|_| light(kind));
     let lay = Layout::of(&w.chem);
     // One action bias, "take from a body": its range and spread over the bodies placed (a brain's only).
     let take = (shape.h > 0).then(|| shape.verb(brain::TAKE_FROM) * shape.r() + shape.h);
-    let mut p = Placed { bodies: 0, members: 0.0, kg: 0.0, fixers: 0, cat: [(f32::MAX, f32::MIN); 2], copy_mass: (f32::MAX, f32::MIN), take: (f32::MAX, f32::MIN, 0.0, 0.0) };
+    let mut p = Placed { bodies: 0, members: 0.0, kg: 0.0, cat: [(f32::MAX, f32::MIN); 2], copy_mass: (f32::MAX, f32::MIN), take: (f32::MAX, f32::MIN, 0.0, 0.0) };
     for i in 0..w.mesh.cells().n() {
-        if !open_land(w, i) || r.f64() >= kind.chance || (!kind.anywhere && w.life.in_cell(i) == 0) {
+        let lives = w.life.in_cell(i) > 0 || w.life.sum(i)[1] > 0.0;
+        if !open_land(w, i) || r.f64() >= b.chance || (!b.anywhere && !lives) {
             continue;
         }
-        for k in 0..kind.per {
+        for k in 0..b.per {
             let id = founder_id(which, i, k);
-            let genome = shared.unwrap_or_else(|| sprayed(w, kind, shape, &rows, how, hand, id));
-            let Some(mut b) = make_with(w, which, i, lineage, genome, how.rounds, if hand { 0.0 } else { GENE_SPRAY_DECADES }, id) else { return String::new() };
-            // A share `fixers` of the light-eaters carry the gene of the fixing reaction; the draw is by the body's own id.
-            if let Some(fx) = fix.filter(|_| Rng::new(w.seed, w.day(), id, Purpose::Fixer).f64() < how.fixers) {
-                b.genes[lay.cat + fx] = FIX_GENE;
-                b.prepare(&w.chem, &w.cfg);
-                p.fixers += 1;
-            }
-            p.add(w, &b, [lay.cat + r_light, lay.cat + burn], take);
-            let delay = 1 + r.below(b.interval(w) as usize) as u64;
-            w.add(b, delay);
+            let genome = shared.unwrap_or_else(|| sprayed(w, b, shape, &rows, how, hand, id));
+            let Some(body) = make_with(w, which, i, lineage, genome, how.rounds, if hand { 0.0 } else { GENE_SPRAY_DECADES }, id) else { return String::new() };
+            p.add(w, &body, [lay.cat + r_light, lay.cat + burn], take);
+            let delay = 1 + r.below(body.interval(w) as usize) as u64;
+            w.add(body, delay);
         }
     }
-    line(w, kind, how, hand, fix, &p)
+    line(w, kind, b, how, hand, &p)
 }
 
 /// The founders' lineage (labelled with the kind's row) and its brain: the hand-set biases `hand`, or neutral ones.
 /// Returns its shape, the lineage and the born rows of its brain.
-fn founder_lineage(w: &mut World, which: usize, kind: &Kind, hand: Option<Hand>, r: &mut Rng) -> (Shape, u32, Vec<f32>) {
+fn founder_lineage(w: &mut World, which: usize, kind: &Bodies, hand: Option<Hand>, r: &mut Rng) -> (Shape, u32, Vec<f32>) {
     let [h, mem, seen, sight] = lineage::sizes(&kind.scalars);
     let shape = lineage::shape(w.chem.ns(), h, mem);
     let mut base = match hand {
@@ -161,7 +193,7 @@ fn founder_lineage(w: &mut World, which: usize, kind: &Kind, hand: Option<Hand>,
 /// A genome of its own for founder `id`: the born rows after `rounds` rounds of mutation, and for a neutral start the
 /// bias of each row (its last entry) as far as `rounds` rounds of `ROW_SPRAY` go.
 #[allow(clippy::too_many_arguments)]
-fn sprayed(w: &mut World, kind: &Kind, shape: Shape, rows: &[f32], how: &Seeding, hand: bool, id: u64) -> u32 {
+fn sprayed(w: &mut World, kind: &Bodies, shape: Shape, rows: &[f32], how: &Seeding, hand: bool, id: u64) -> u32 {
     let mut v = rows.to_vec();
     let mut rr = Rng::new(w.seed, w.day(), id, Purpose::Spray);
     let size = pcore::brain::row_step(&w.cfg.phys, body::mutation_size(&kind.scalars));
@@ -176,10 +208,10 @@ fn sprayed(w: &mut World, kind: &Kind, shape: Shape, rows: &[f32], how: &Seeding
 }
 
 /// The seeding line: what was placed, how, and the spread of the genes and of one bias.
-fn line(w: &World, kind: &Kind, how: &Seeding, hand: bool, fix: Option<usize>, p: &Placed) -> String {
-    let sc = &kind.scalars;
-    let (fuel, liq, mat) = split(kind.store, KEEP_LIQUID as f64, w.chem.matter_roles().is_some());
-    let name = format!("{} (adults: members of {:.4} kg, their body at their copy mass of {:.4} kg, every {:.0} days, strength {}, repair {}, starting mass {:.1}% energy-rich solid, {:.1}% liquid, {:.1}% body matter, a child's body {:.2} of its parent's copy mass (CHILD gene {}), {:.0}% of what a mature body builds to offspring (ALLOC gene {}))", kind.name, 10f64.powf(sc[body::COPY_MASS] as f64) / (1.0 - if mat > 0.0 { kind.store } else { 0.0 }), 10f32.powf(sc[body::COPY_MASS]), 10f32.powf(sc[body::INTERVAL]), sc[body::STRENGTH], sc[body::REPAIR], 100.0 * fuel, 100.0 * liq, 100.0 * mat, 10f32.powf(sc[body::CHILD]), sc[body::CHILD], 100.0 * sc[body::ALLOC], sc[body::ALLOC]);
+fn line(w: &World, kind: &Kind, b: &Bodies, how: &Seeding, hand: bool, p: &Placed) -> String {
+    let sc = &b.scalars;
+    let (fuel, liq, mat) = split(b.store, KEEP_LIQUID as f64, w.chem.matter_roles().is_some());
+    let name = format!("{} (adults: members of {:.4} kg, their body at their copy mass of {:.4} kg, every {:.0} days, strength {}, repair {}, starting mass {:.1}% energy-rich solid, {:.1}% liquid, {:.1}% body matter, a child's body {:.2} of its parent's copy mass (CHILD gene {}), {:.0}% of what a mature body builds to offspring (ALLOC gene {}))", kind.name, 10f64.powf(sc[body::COPY_MASS] as f64) / (1.0 - if mat > 0.0 { b.store } else { 0.0 }), 10f32.powf(sc[body::COPY_MASS]), 10f32.powf(sc[body::INTERVAL]), sc[body::STRENGTH], sc[body::REPAIR], 100.0 * fuel, 100.0 * liq, 100.0 * mat, 10f32.powf(sc[body::CHILD]), sc[body::CHILD], 100.0 * sc[body::ALLOC], sc[body::ALLOC]);
     let brain = match (hand, lineage::sizes(sc)[0] == 0) {
         (_, true) => "no brain (HIDDEN gene 0: no decisions)",
         (true, _) => "hand-set brain biases (initial condition)",
@@ -193,13 +225,9 @@ fn line(w: &World, kind: &Kind, how: &Seeding, hand: bool, fix: Option<usize>, p
     } else {
         format!(", row biases {} x {ROW_SPRAY} (spread {:.2}), other row entries and genes at one generation's step (genes x{:.0})", how.rounds, ROW_SPRAY * (how.rounds as f32).sqrt(), 10f32.powf(GENE_SPRAY_DECADES))
     };
-    let fixing = match fix {
-        Some(r) => format!("; {} of them ({:.1}%) carry the gene of reaction {r}, the fixing reaction (log10 speed-up {FIX_GENE}, share {} chosen before any run), the others have it off", p.fixers, 100.0 * p.fixers as f64 / p.bodies.max(1) as f64, how.fixers),
-        None => String::new(),
-    };
     let bias = if p.take.0 > p.take.1 { String::new() } else { format!("; bias of taking from a body {:.2}..{:.2} (mean {m:.2}, sd {:.2})", p.take.0, p.take.1, (p.take.3 / n - m * m).max(0.0).sqrt()) };
     format!(
-        "year {:.1}: placed {} {name} ({:.3e} members, {:.3e} kg) with {brain}, {} rounds of mutation each{spray}{fixing}; light gene {:.2}..{:.2}, burn gene {:.2}..{:.2}, copy-mass gene {:.2}..{:.2}{bias}",
+        "year {:.1}: placed {} {name} ({:.3e} members, {:.3e} kg) with {brain}, {} rounds of mutation each{spray}; light gene {:.2}..{:.2}, burn gene {:.2}..{:.2}, copy-mass gene {:.2}..{:.2}{bias}",
         w.year(),
         p.bodies,
         p.members,

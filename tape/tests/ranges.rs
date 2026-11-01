@@ -37,7 +37,7 @@ use common::run;
 use pcore::chem::Phase;
 use pcore::{Config, World};
 use std::fmt;
-use worldgen::testkit::{ground_of, ABSORBER, LIQUID, RICH};
+use worldgen::testkit::{ground_of, ABSORBER, LIQUID};
 
 const SEEDS: [u64; 3] = [1, 2, 3];
 const SIDE: usize = 64;
@@ -87,15 +87,11 @@ fn rain_m_yr(w: &World, rain: f64) -> f64 {
     rain * w.chem.molar_volume(LIQUID, Phase::Liquid) * w.cfg.calendar().year as f64
 }
 
-/// The share of the live light-eaters' dry mass (all but their key liquids) that is their stored solid.
+/// The share of the cover's dry mass that is its stored solid.
 fn stored_share(w: &World) -> f64 {
-    let (mut stored, mut dry) = (0.0, 0.0);
-    for b in w.life.alive().filter(|b| pcore::body::light_eater(&w.chem, &b.genes)) {
-        let kg = |k: usize| b.store[k] * w.chem.subs[k].molar_mass;
-        let wet: f64 = (0..w.chem.ns()).filter(|&k| b.wet >> k & 1 == 1).map(kg).sum();
-        (stored, dry) = (stored + kg(RICH), dry + b.mass(&w.chem) - wet);
-    }
-    stored / dry.max(f64::MIN_POSITIVE)
+    let s = pcore::cover::sums(w);
+    let (kg, built) = (s.iter().map(|x| x.kg).sum::<f64>(), s.iter().map(|x| x.built).sum::<f64>());
+    (kg - built) / kg.max(f64::MIN_POSITIVE)
 }
 
 /// How far a number may lie from its reference: by at most so much, or by at most a factor either way.
@@ -362,20 +358,6 @@ const LIFE: [&str; 5] = ["plant_members", "root_0_kg", "births", "root_0_life_re
 /// The short batch of the batch test: 2 days, under the shortest interval (`MIN_INTERVAL`, 5 days), so an interval
 /// keeps its gene's days to within a day; it divides the physics step, the month and the pace of nodes.
 const SHORT_BATCH_DAYS: u32 = 2;
-
-/// Every population node at the pace of its own `INTERVAL` gene against the pace of nodes (`Config::node_days`), and
-/// that setting x2 and /2 (`docs/numbers.md`, speed settings; the stands' pace is this setting too), on seeds 1, 2 and 3
-/// as the key numbers: the mean over the seeds of each of life's key numbers over the last years moves by less than the
-/// noise of that mean, the spread over those years of the seeds' mean with every node at its own pace.
-#[test]
-#[ignore = "slow: twelve 8-year runs of a 32 x 32 world with life"]
-fn the_pace_of_nodes_keeps_life() {
-    let set = Config::default().node_days;
-    let settings = [0, set, 2 * set, set / 2];
-    let runs = seeds_mean_by_setting(&LIFE, &settings, |c, days| c.node_days = days);
-    let out = off_by_noise(&LIFE, &runs, &settings, &[], |days| format!("nodes every {days} days at most, mean of seeds {SEEDS:?}"));
-    assert!(out.is_empty(), "the pace of nodes changed life: {out:?}");
-}
 
 /// Bodies updated in batches of `SHORT_BATCH_DAYS` against in batches of `Config::batch_days` (`docs/numbers.md`, speed
 /// settings; the batch cannot be doubled, as it is the physics step), on seeds 1, 2 and 3 as the key numbers: the mean

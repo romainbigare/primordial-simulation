@@ -18,7 +18,7 @@ impl Recorder {
     pub(super) fn social_cols(&mut self, c: &Ctx, land: &[usize], row: &mut Row) {
         let (w, gn) = (c.w, c.w.mesh.cells().n());
         let life = &w.life;
-        // Bodies that took more from other eaters than from light-eaters in their life.
+        // Bodies that took more from other bodies than from the cover in their life.
         let eat = life.alive().filter(|b| self.social.eaten(b.id).is_some_and(|t| t[1] > t[0])).count();
         row.push("eat_animals", "1", eat as f64);
         // Traffic: the share of crossings on the busiest cells, their overlap with the busiest a decade ago, and the
@@ -59,15 +59,14 @@ impl Recorder {
         row.push("watched_kin", "1/yr", y.kin_watched);
         row.push("watched_bodies", "1", y.spread.len() as f64);
         row.push("spread_max", "bodies", y.spread.values().map(|v| v.len()).max().unwrap_or(0) as f64);
-        // Gifts: puts into other bodies, kg, those by bodies that are not light-eaters, giving pairs and pairs giving
-        // both ways.
+        // Gifts: puts into other bodies, kg, those by bodies still alive, giving pairs and pairs giving both ways.
         row.push("gave", "1/yr", y.gave);
         row.push("gave_kg", "kg/yr", y.gave_kg);
         row.push("gave_eaters", "1/yr", y.gave_eaters);
         row.push("gave_pairs", "1", y.pairs.len() as f64);
         row.push("gave_reciprocal", "1", y.pairs.iter().filter(|&&(a, b)| a < b && y.pairs.contains(&(b, a))).count() as f64);
-        // What bodies that are not light-eaters could burn of what they took, from each source.
-        for (name, x) in ["ate_light_eaters", "ate_others", "ate_ground"].into_iter().zip(y.intake) {
+        // What bodies could use of what they took, from each source.
+        for (name, x) in ["ate_cover", "ate_others", "ate_ground"].into_iter().zip(y.intake) {
             row.push(name, "kg/yr", x);
         }
     }

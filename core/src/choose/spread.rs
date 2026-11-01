@@ -36,13 +36,13 @@ pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: 
 pub(super) fn repeat(w: &World, d: &mut Domain, node: &mut Body, h: &Habit, rng: &mut Rng) {
     let x = share(node.count, h.take as f64, rng);
     if x > 0.0 {
-        stays(w, d, node, x, |d, b| feed::take_node(w, d, b));
+        stays(d, node, x, |d, b| feed::take_node(w, d, b));
     }
     for &(id, chance) in &h.prey {
         let Some(o) = here(d, node, id) else { continue };
         let x = share(node.count, chance as f64, rng);
         if x > 0.0 {
-            stays(w, d, node, x, |d, b| take_body(w, d, b, o, rng));
+            stays(d, node, x, |d, b| take_body(w, d, b, o, rng));
         }
     }
 }
@@ -82,19 +82,17 @@ fn members(node: &Body, c: &Choice, since: f64, rng: &mut Rng) -> [f64; OPTS] {
 /// `x` members of node `node` (taken out of its slot) that stay in its cell act by `act` as the node itself: the whole
 /// node if less than one member would be left, else holding and inside nothing while the others wait aside with their
 /// share of its amounts (`nodes::Lot::split`), and then come back (`nodes::rejoin`: amounts and sizes by members).
-fn stays<R>(w: &World, d: &mut Domain, node: &mut Body, x: f64, act: impl FnOnce(&mut Domain, &mut Body) -> R) -> R {
+fn stays<R>(d: &mut Domain, node: &mut Body, x: f64, act: impl FnOnce(&mut Domain, &mut Body) -> R) -> R {
     if node.count - x < 1.0 {
         return act(d, node);
     }
     let f = x / node.count;
-    // As members split by shares, their sizes are the node's.
-    let size = node.size_moments(&w.chem);
     let rest = nodes::Lot::split(d, node, 1.0 - f, 1.0 - f);
     let held = (node.hold.take(), node.inside.take());
     let out = act(d, node);
     debug_assert!(node.hold.is_none() && node.inside.is_none(), "an action that stays in its cell takes no hold and enters nothing");
     (node.hold, node.inside) = held;
-    nodes::rejoin(w, d, node, rest, size, None);
+    nodes::rejoin(d, node, rest, None);
     out
 }
 
@@ -113,7 +111,7 @@ fn part_acts(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, (o
         (k.wb)(w, b) - before
     };
     if !(moves || bond) {
-        return (stays(w, d, node, x, |d, b| acts(d, b, None)), Some(false));
+        return (stays(d, node, x, |d, b| acts(d, b, None)), Some(false));
     }
     if node.count - x < 1.0 {
         return (acts(d, node, None), (!node.leaving).then_some(false));
@@ -128,7 +126,7 @@ fn part_acts(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, (o
     let mut m = std::mem::take(&mut d[s]);
     let gain = acts(d, &mut m, Some(node.id));
     if !m.leaving {
-        back(w, d, node, s, m);
+        back(d, node, s, m);
         return (gain, Some(false));
     }
     m.trace = trace(w, &m, c, k, o, 0.0);
@@ -138,10 +136,9 @@ fn part_acts(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, (o
 }
 
 /// Part `m` of node `node` (both taken out of their slots, `m`'s at `s`) comes back to it (`nodes::rejoin`).
-fn back(w: &World, d: &mut Domain, node: &mut Body, s: Handle, mut m: Body) {
+fn back(d: &mut Domain, node: &mut Body, s: Handle, mut m: Body) {
     d.remove(s, &m);
-    let size = m.size_moments(&w.chem);
-    nodes::rejoin(w, d, node, nodes::Lot::of(&mut m), size, None);
+    nodes::rejoin(d, node, nodes::Lot::of(&mut m), None);
 }
 
 /// The part act body `id` queued in a batch (`outbox`), run whole on it and on the part as they are now: verb `on.0`
@@ -172,7 +169,7 @@ pub(crate) fn land_act(w: &mut World, id: u64, on: Result<(usize, NodeId), [f32;
             return;
         };
         let mut o = std::mem::take(&mut d[t]);
-        back(w, d, &mut o, s, b);
+        back(d, &mut o, s, b);
         d.see(w, &mut o);
         d[t] = o;
     });

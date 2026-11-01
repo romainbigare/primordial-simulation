@@ -3,7 +3,7 @@
 //! cells and the worn edges at the last decade).
 
 use super::{Recorder, CAUSES};
-use pcore::body::{light_eater, LIGHT_EATER, SPENT};
+use pcore::body::SPENT;
 use pcore::event::{Event, EventKind};
 use pcore::World;
 use serde::{Deserialize, Serialize};
@@ -78,6 +78,8 @@ pub(super) struct YearTally {
     pub decisions: [f64; 2],
     pub busiest: [f64; 2],
     pub parts: pcore::bond::Tally,
+    /// Cover that died, kg, by cause (`Counters::cover_lost`)
+    pub cover_lost: [f64; 6],
 }
 
 /// The sums of the month to come (a row of `months.csv`).
@@ -128,14 +130,14 @@ impl Recorder {
                     bump(&mut m.births, root as usize, e.value);
                 }
             }
-            EventKind::Died { cause, cat, root, .. } => {
+            EventKind::Died { cause, root } => {
                 let c = (cause as usize).min(NC - 1);
                 y.deaths[c] += e.value;
                 if root != u32::MAX {
                     slot(&mut y.kinds, root as usize).deaths[c] += e.value;
                     bump(&mut m.deaths, NC * root as usize + c, e.value);
                 }
-                if cat < LIGHT_EATER && cause == SPENT {
+                if cause == SPENT {
                     m.spent = [m.spent[0] + e.value, m.spent[1] + e.value * w.map.xy(w.map.square_of(e.node as usize)).1 as f64];
                 }
             }
@@ -146,16 +148,19 @@ impl Recorder {
             EventKind::Gave { from, to } => {
                 (y.gave, y.gave_kg) = (y.gave + 1.0, y.gave_kg + e.value);
                 y.pairs.insert((from, to));
-                let b = w.life.find(from).map(|s| &w.life[s]);
-                y.gave_eaters += b.is_some_and(|b| !light_eater(&w.chem, &b.genes)) as u8 as f64;
+                y.gave_eaters += w.life.find(from).is_some() as u8 as f64;
             }
-            EventKind::Took { by, from, used, cat } => {
-                if from != u64::MAX {
-                    s.took.entry(by).or_default()[(cat[1] < LIGHT_EATER) as usize] += e.value as f32;
+            EventKind::Took { by, from, used } => {
+                // From the cover, from other bodies, from the ground.
+                let source = match from {
+                    u64::MAX => 2,
+                    pcore::choose::COVER => 0,
+                    _ => 1,
+                };
+                if source < 2 {
+                    s.took.entry(by).or_default()[source] += e.value as f32;
                 }
-                if cat[0] < LIGHT_EATER {
-                    y.intake[if from == u64::MAX { 2 } else { (cat[1] < LIGHT_EATER) as usize }] += used as f64;
-                }
+                y.intake[source] += used as f64;
             }
             EventKind::BondMade => y.made[(e.value as usize).min(2)] += 1.0,
             EventKind::BondBroken if e.value >= pcore::bond::LOAD => y.failed += 1.0,

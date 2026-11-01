@@ -2,20 +2,14 @@
 //! into a brood, and whenever the brood covers the matter of a child, a child is made (`copy`) at the body's update,
 //! whatever its brain does (a node at most once in `Config::lump_days`, `due`). A child's genes are its parent's plus
 //! small noise, or with two parents each gene is one parent's (`mix`). A population node keeps how its members differ
-//! (`Body::spread`, `Body::row_spread`, `Body::size_spread`); its children are booked on the young node of their kind
-//! where they start, or start one, and grow up into its adult node (`young`). Only individuals' children start new
-//! lineages. With `Config::nodes` off bodies with a brain are never nodes: their children start as individuals and join
+//! (`Body::spread`, `Body::row_spread`); its children join a young node of their kind where they start, or start one,
+//! which grows up as a whole (`kin`). Only individuals' children start new lineages. With `Config::nodes` off bodies with a brain are never nodes: their children start as individuals and join
 //! nothing.
 
 mod grow;
 mod mix;
-mod select;
-mod young;
 
 pub use grow::grow;
-pub use grow::buildable;
-pub(crate) use select::{sample, select};
-pub use young::{mature, Grown};
 
 use crate::body::{most, mutation_size, remains, vary, within, Body, Layout, CHILD, DISPERSE, WET, WET_TISSUE};
 use crate::brain::{self, row_step, shake};
@@ -39,11 +33,10 @@ pub const BROOD_HELD: f64 = 0.5;
 /// them now, and the store books no body's side of a move (`store::apply`), so a body node of any slot serves.
 const NO_BODY: Node = Node { class: Class::Body, index: 0 };
 
-/// What the children of one `copy` share: each one's body, kg, its matter, mol (its body is that over 1 -
-/// `WET_TISSUE`), and its provisions, mol of each store (none of the matter: `provisions`); whether the parent is a
+/// What the children of one `copy` share: each one's matter, mol (its body is that over 1 - `WET_TISSUE`), and its
+/// provisions, mol of each store (none of the matter: `provisions`); whether the parent is a
 /// node; whether they join no node (`nodes::may_be_node`); the partner; and the parent's id.
 struct Births {
-    body: f64,
     matter: f64,
     prov: Vec<f64>,
     node: bool,
@@ -83,7 +76,7 @@ pub fn copy(w: &World, d: &mut Domain, b: &mut Body) -> bool {
     // individual's go together, by that chance.
     let disperse = b.gene_in_range(DISPERSE);
     let prov = provisions(&w.chem, b, mi, matter, births);
-    let litter = Births { body, matter, prov, node, alone: !may_be_node(w, b), mate, parent: id };
+    let litter = Births { matter, prov, node, alone: !may_be_node(w, b), mate, parent: id };
     let m = if node { disperse * births } else { (r.f64() < disperse) as u8 as f64 };
     let cells = w.mesh.cells();
     let to = if m > 0.0 { cells.way(i, r.below(COMPASS)).map(|e| cells.adj_cell()[e] as usize) } else { None };
@@ -95,7 +88,7 @@ pub fn copy(w: &World, d: &mut Domain, b: &mut Body) -> bool {
     // A node all of whose children would wait (under one member, all staying, no young node to join) makes none now
     // and keeps its turn; else this is its turn (`due`).
     if node {
-        if m == 0.0 && births < 1.0 && young::linked(w, d, b, false).is_none() {
+        if m == 0.0 && births < 1.0 && kin(w, d, i, b.lineage, (&b.genes, &b.spread), false).is_none() {
             return false;
         }
         b.lump_at = w.batch() + (w.cfg.lump_days / w.cfg.batch_days) as u64;
@@ -127,13 +120,12 @@ fn due(w: &World, b: &mut Body) -> bool {
 }
 
 /// Children that start in another cell than their parent's (`emit`), in the outbox until the batch ends (`land_litter`): their
-/// body (in the cell they start in), their born rows (none: their parent's), the log10 of their bodies' mass, whether
-/// they join no node (`Births::alone`), the cell their parent was in, and their birth.
+/// body (in the cell they start in), their born rows (none: their parent's), whether they join no node
+/// (`Births::alone`), the cell their parent was in, and their birth.
 #[derive(Clone, Debug)]
 pub struct Litter {
     pub(crate) c: Body,
     rows: Option<Vec<f32>>,
-    size: f32,
     alone: bool,
     from: u32,
     born: Event,
@@ -148,15 +140,11 @@ fn emit(w: &World, d: &mut Domain, b: &mut Body, l: &Births, cell: usize, m: f64
     let (from, pooled) = mixed.as_ref().map_or((&b.genes, &b.spread), |x| (&x.0, &x.1));
     let (genes, spread) = vary(&Layout::of(&w.chem), from, pooled, m, w.cfg.phys.alike, !w.life.brainless(b), r);
     let size = mutation_size(from);
-    // The young node of their kind they join in their parent's cell: for a node's children, its young node
-    // (`young::linked`); else the first young node there of their genes and spread (`kin`). Nothing between here and
-    // the join changes the nodes of the cell or the children's genes, so the search made now holds for the join.
+    // The young node of their kind they join in their parent's cell: the first young node there of their genes and
+    // spread (`kin`). Nothing between here and the join changes the nodes of the cell or the children's genes, so the
+    // search made now holds for the join.
     let here = cell == b.cell as usize;
-    let hit = match () {
-        _ if l.alone || !here => None,
-        _ if l.node => young::linked(w, d, b, false),
-        _ => kin(w, d, cell, b.lineage, (&genes, &spread), false),
-    };
+    let hit = if l.alone || !here { None } else { kin(w, d, cell, b.lineage, (&genes, &spread), false) };
     if l.node && here && m < 1.0 && hit.is_none() {
         return false;
     }
@@ -188,29 +176,29 @@ fn emit(w: &World, d: &mut Domain, b: &mut Body, l: &Births, cell: usize, m: f64
         wet: b.wet,
         ..Default::default()
     };
-    let (born, size) = (Event { day: w.day(), kind: EventKind::Born { root: d.root(w, b), mixed: l.mate.is_some() }, node: cell as u32, value: m }, l.body.log10() as f32);
+    let born = Event { day: w.day(), kind: EventKind::Born { root: d.root(w, b), mixed: l.mate.is_some() }, node: cell as u32, value: m };
     if !here {
-        let x = Litter { c, rows, size, alone: l.alone, from: b.cell, born };
+        let x = Litter { c, rows, alone: l.alone, from: b.cell, born };
         d.out.push(Entry::Litter(Box::new(x)));
         return true;
     }
     d.events.push(born);
-    if let (Some(s), true) = (start(w, d, c, rows, size, l.alone, hit), l.node) {
-        young::link(d, b, s);
-    }
+    start(w, d, c, rows, l.alone, hit);
     true
 }
 
-/// Children `c` (a body not placed), born with `rows` (none: their parent's) and of bodies of log10 mass `size`, join
-/// the node at `hit` (`nodes::add`), or start a body of their own (`place_child`), which is returned.
-fn start(w: &World, d: &mut Domain, mut c: Body, rows: Option<Vec<f32>>, size: f32, alone: bool, hit: Option<Handle>) -> Option<Handle> {
-    let Some(t) = hit else { return Some(place_child(w, d, alone, c, rows)) };
+/// Children `c` (a body not placed), born with `rows` (none: their parent's), join the node at `hit` (`nodes::add`), or
+/// start a body of their own (`place_child`).
+fn start(w: &World, d: &mut Domain, mut c: Body, rows: Option<Vec<f32>>, alone: bool, hit: Option<Handle>) {
+    let Some(t) = hit else {
+        place_child(w, d, alone, c, rows);
+        return;
+    };
     let born = rows.unwrap_or_else(|| d.born(w, &c).to_vec());
-    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (size, 0.0), (&born, &c.rows, c.row_spread));
-    None
+    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (&born, &c.rows, c.row_spread));
 }
 
-/// A litter (`emit`) lands when its batch ends (laws.md 0, S25) in `d`, the domain of its cell: it joins the young
+/// A litter (`emit`) lands when its batch ends (laws.md 0) in `d`, the domain of its cell: it joins the young
 /// node of its kind and lineage there (`kin`) or starts a body of its own (`start`), and its birth is recorded. Less
 /// than one member (of a node's children: an individual's are whole) with no node to join goes back (`back`).
 pub(crate) fn land_litter(w: &World, d: &mut Domain, x: Litter) {
@@ -219,9 +207,9 @@ pub(crate) fn land_litter(w: &World, d: &mut Domain, x: Litter) {
     if hit.is_none() && x.c.count < 1.0 {
         return d.out.push(Entry::Back(Box::new(x)));
     }
-    let Litter { c, rows, size, alone, born, .. } = x;
+    let Litter { c, rows, alone, born, .. } = x;
     d.events.push(born);
-    start(w, d, c, rows, size, alone, hit);
+    start(w, d, c, rows, alone, hit);
 }
 
 /// Children of a litter who found no node to join (`land_litter`) go back into their parent's brood if the parent
@@ -349,8 +337,8 @@ fn child_lineage(w: &World, d: &mut Domain, b: &Body, l: &Births, genes: &[f32],
 /// Children `c` of `b` that join no node start a body of their own, born with `rows` (none: its parent's). Several
 /// children together that join no node at all (`alone`) are drawn from it as individuals (`nodes::open`: each with
 /// genes and born rows of its own, drawn from their spread), the last one the body itself, with the
-/// genes and rows the draws left. Returns where the body is stored.
-fn place_child(w: &World, d: &mut Domain, alone: bool, mut c: Body, rows: Option<Vec<f32>>) -> Handle {
+/// genes and rows the draws left.
+fn place_child(w: &World, d: &mut Domain, alone: bool, mut c: Body, rows: Option<Vec<f32>>) {
     if let Some(v) = rows {
         c.genome = d.new_genome(v);
     }
@@ -369,5 +357,4 @@ fn place_child(w: &World, d: &mut Domain, alone: bool, mut c: Body, rows: Option
         d.see(w, &mut c);
         d[s] = c;
     }
-    s
 }

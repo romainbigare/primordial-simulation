@@ -4,15 +4,10 @@
 
 use pcore::life::Handle;
 use pcore::body::{self, Body, Layout, COPY_MASS, DENATURE, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
-use pcore::store::{Boundary, Class, Node};
-use pcore::units::{DAY, DAY_S, T_FLOOR};
-use pcore::{brain, change, World, AIR};
-use worldgen::testkit::{add, brood, node_of, open_area, release, dry_land, eater, empty_cell, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, moved, open_air, out, put, put_kg_m2, relocate, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
-
-/// The default world's settings (its year: a reaction too slow to matter over it is frozen).
-fn cfg() -> pcore::Config {
-    pcore::Config::default()
-}
+use pcore::store::Class;
+use pcore::units::{DAY, DAY_S};
+use pcore::{brain, World, AIR};
+use worldgen::testkit::{add, brood, node_of, open_area, release, eater, children, died, dry_lands, founder, hold_ground, kg, moved, out, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, FIX_GAS, LIQUID, MATTER, OX, RICH};
 
 /// A world with a lineage of brains that only rest, and the land cells with no liquid on them.
 struct Set {
@@ -446,41 +441,6 @@ fn a_body_keeps_its_temperature_from_above_by_evaporating() {
     assert!((t - 300.0).abs() < 0.5 && t_dry > t + 1.0, "{t} K, the twin {t_dry} K");
     assert!(kg > 0.0, "{kg} kg");
     books.assert_kept(w, 1e-9);
-}
-
-/// What a wet body evaporates past its store flows through it from the ground (`through`), and the ground's heat pays the
-/// latent heat only after that liquid has left with its own: a node of 10^8 light-eaters on a cell whose ground is only
-/// 10^10 mol of liquid at 300 K evaporates in one update no more than the ground can pay. The ground stays above
-/// `T_FLOOR`, the body above zero energy, and matter and energy are kept.
-#[test]
-fn a_body_evaporates_no_more_than_the_ground_can_pay() {
-    const MEMBERS: f64 = 1e8;
-    const LIQUID_MOL: f64 = 1e10;
-    let mut w = small_world();
-    let (i, days) = (dry_land(&w), 36);
-    empty_cell(&mut w, i);
-    put(&mut w, LIQUID, i, LIQUID_MOL);
-    hold_ground(&mut w, i, 300.0);
-    pcore::flow::state(&mut w, true);
-    let mut b = founder(&mut w, 0, i, &Brain::only(brain::REST));
-    let f = MEMBERS / b.n();
-    b.store.iter_mut().for_each(|a| *a *= f);
-    (b.e, b.count, b.last) = (b.e * f, b.n() * f, w.day() as f64);
-    let slot = w.add(b, days);
-    let (books, rounded, updates) = (Books::now(&w), w.counts.rounded, w.counts.updates);
-    // To the first day of the batch its update is due in (`Body::due`).
-    w.time = w.life[slot].due * w.cfg.batch_days as u64 * DAY_S;
-    pcore::survey::survey(&mut w, false);
-    pcore::survey::batch(&mut w, false);
-    assert_eq!(w.counts.updates, updates + 1, "the body did not update");
-    let b = &w.life[slot];
-    let floor = w.heat_cap_ground(i) * T_FLOOR;
-    let e = w.store.heat(Class::Ground)[i] - floor;
-    println!("the body at {:.1} K; the ground {e:.3e} J above the floor, {:.3e} of {LIQUID_MOL:e} mol of liquid left", b.temp(&w.chem), w.g(LIQUID, i));
-    assert!(!b.alive || b.e >= 0.0, "the body ends at {} J", b.e);
-    assert!(e >= 0.0, "the ground ends {e:e} J below the floor");
-    assert_eq!(w.counts.rounded, rounded);
-    books.assert_kept(&w, 1e-12);
 }
 
 /// Activity needs liquid: a body's chemistry runs in its liquid, so a dry body is nearly dormant. Activity is
@@ -946,41 +906,13 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
     books.assert_kept(&w, 1e-12);
 }
 
-/// The light a node's light reactions store is set aside in its cell as it falls (not drawn back from the ground's heat
-/// at its update): a node a thousand times as large as seeded that decides once a year takes it from there, no heat
-/// goes ungiven, and matter and energy are kept.
-#[test]
-fn a_big_node_stores_light_set_aside_as_it_fell() {
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
-    worldgen::life::seed(&mut w, 0);
-    for _ in 0..3 {
-        pcore::step(&mut w);
-    }
-    let s = w.life.living().map(|x| x.0).max_by(|&a, &b| w.life[a].count.total_cmp(&w.life[b].count)).expect("a node");
-    let b = &mut w.life[s];
-    b.count *= 1e3;
-    b.store.iter_mut().for_each(|a| *a *= 1e3);
-    b.e *= 1e3;
-    // It decides once a year: a year's stored light at once.
-    b.genes[pcore::body::INTERVAL] = 2.556;
-    b.prepare(&w.chem, &w.cfg);
-    let (books, h0) = (Books::now(&w), w.counts.clamped_heat);
-    for _ in 0..14 {
-        pcore::step(&mut w);
-        assert_eq!(pcore::check::broken(&w), None);
-    }
-    assert!(w.store.heat(Class::Bodies).iter().sum::<f64>() > 0.0 && w.counts.clamped_heat == h0, "heat not given {:e} J", w.counts.clamped_heat - h0);
-    books.assert_kept(&w, 1e-9);
-}
-
 /// The survey adds up what each cell holds (`Life::sum`) and the light its bodies take (`World::canopy`), one domain at a
 /// time: a domain whose bodies are all gone holds nothing and takes no light at the next survey.
 #[test]
 fn a_domain_left_with_no_bodies_holds_nothing_at_the_next_survey() {
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
-    worldgen::life::seed(&mut w, 0);
+    worldgen::testkit::eater_nodes(&mut w, 10.0);
     pcore::survey::survey(&mut w, false);
     let i = w.life.living().map(|x| w.life[x.0].cell as usize).next().expect("a body");
     let members: f64 = w.life.cell(i).map(|s| w.life[s].n()).sum();
@@ -994,54 +926,6 @@ fn a_domain_left_with_no_bodies_holds_nothing_at_the_next_survey() {
     pcore::survey::survey(&mut w, false);
     assert!((0..w.mesh.cells().n()).filter(|&c| w.life.domain_of(c) == d).all(|c| w.life.sum(c).iter().all(|&x| x == 0.0) && w.canopy[c] == 0.0), "a cell of the emptied domain still holds something");
     assert_eq!(pcore::check::broken(&w), None);
-}
-
-/// Light passes through a cell's bodies from the tallest member down (`survey::shade`): of two light-eater nodes with the
-/// same capture area, the one of 100 times heavier members catches more light per m² of it (e^(its capture area per
-/// ground area) times more), the two together catch what the cell's canopy intercepts, and matter and energy are kept.
-#[test]
-fn a_tall_member_shades_a_short_one() {
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
-    worldgen::life::seed(&mut w, 0);
-    let short = w.life.living().map(|x| x.0).max_by(|&a, &b| w.life[a].count.total_cmp(&w.life[b].count)).expect("a node");
-    let (i, area) = (w.life[short].cell as usize, w.mesh.cells().area()[0]);
-    // The cell's other nodes move next door.
-    let j = w.mesh.cells().around(i).1[0] as usize;
-    for s in w.life.cell(i).filter(|&s| s != short).collect::<Vec<_>>() {
-        relocate(&mut w, s, j);
-    }
-    // Two nodes of capture area 0.5 per ground area each, the same but for member mass (and the copy mass gene, so they
-    // are not alike and stay apart).
-    let b = &mut w.life[short];
-    let f = 0.5 * area / (b.vis[1] as f64 * b.n());
-    b.store.iter_mut().for_each(|a| *a *= f);
-    (b.e, b.count) = (b.e * f, b.n() * f);
-    let mut tall = b.clone();
-    // Leaf goes with mass^0.75: 100 times fewer members of 100 times the mass have 100^-0.25 of the leaf, so the tall
-    // one's LEAF gene is raised by 0.5 to make the areas equal.
-    (tall.count, tall.genes[pcore::body::COPY_MASS]) = (b.n() / 100.0, b.genes[pcore::body::COPY_MASS] + 2.0);
-    tall.genes[pcore::body::LEAF] += 0.5;
-    tall.prepare(&w.chem, &w.cfg);
-    (b.vis, tall.vis) = (b.visible(&w.chem, &w.cfg), tall.visible(&w.chem, &w.cfg));
-    let slots = [w.add(tall, 1), short];
-    let books = Books::now(&w);
-    pcore::survey::survey(&mut w, false);
-    let (light0, dt) = (w.light[i], w.cfg.phys_days as f64 * DAY);
-    worldgen::testkit::flow_step(&mut w, dt);
-    let bs = &w.life;
-    let per = |s: Handle| w.light[i] - bs[s].mark;
-    let cap = |s: Handle| bs[s].vis[1] as f64 * bs[s].n();
-    let (t, sh) = (per(slots[0]), per(slots[1]));
-    println!("light per m² of capture area: tall {t:.4e}, short {sh:.4e} J");
-    assert!(sh > 0.0 && (t / sh / (cap(slots[0]) / area).exp() - 1.0).abs() < 1e-6, "tall {t:e}, short {sh:e}");
-    let (all, cell) = (cap(slots[0]) * t + cap(slots[1]) * sh, (w.light[i] - light0) * w.canopy[i] as f64 * area);
-    assert!((all / cell - 1.0).abs() < 1e-6, "bodies caught {all:e} J, the canopy {cell:e} J");
-    for _ in 0..3 {
-        pcore::step(&mut w);
-        assert_eq!(pcore::check::broken(&w), None);
-    }
-    books.assert_kept(&w, 1e-9);
 }
 
 /// Living wears a body: its members die at the rate of the energy their upkeep turns over per kg, over `e_life` x
@@ -1263,186 +1147,4 @@ fn leaf_area_per_kg_falls_with_mass() {
     // copy mass) and one of 1,000 kg have leaf in the ratio of their bodies to the power 0.75.
     let (at, past) = (member(1.0, 10.0, 1.0), member(1.0, 1000.0, 1.0));
     assert!((leaf(&past) / leaf(&at) / 100f64.powf(0.75) - 1.0).abs() < 1e-5 && (leaf(&at) / 0.5 / 10f64.powf(0.75) - 1.0).abs() < 1e-5, "past maturity: {} and {}", leaf(&at), leaf(&past));
-}
-
-/// A small world after a year, and a land cell with no liquid standing, whose pores hold liquid, and the dissolved
-/// mineral in it.
-fn start_wet() -> (World, usize) {
-    let mut w = worldgen::new_world(1, 16, 16);
-    for _ in 0..12 {
-        pcore::step(&mut w);
-    }
-    let n = w.mesh.cells().n();
-    let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3 && w.store.amounts(Class::Ground)[DISSOLVED * n + i] > 1e5).expect("wet land");
-    (w, i)
-}
-
-/// A starting body of kind `which` (0 light-eaters, 1 eaters) of a brain that only does fixed action `act`, weak,
-/// staying where it is, soaking no liquid up, repair 0.
-fn eater_of(w: &mut World, which: usize, i: usize, act: usize) -> Body {
-    let mut b = founder(w, which, i, &Brain::only(act));
-    (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[LIQ], b.genes[REPAIR]) = (0.0, 0.0, -4.0, 0.0);
-    b.prepare(&w.chem, &w.cfg);
-    b
-}
-
-/// Fixing the air's gas: in the open it is nothing, and a body whose genes speed the reaction up makes the mineral from
-/// the air's gas and the energy-rich solid it burns, at the cost of the reaction: it burns 14 units of its fuel for each
-/// mol of the mineral, and their heat pays none of its upkeep (it burns that much
-/// more than its twin), and the enzyme costs upkeep by its capacity like the others. A body that has none fixes none.
-/// Elements and energy are kept.
-#[test]
-fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
-    let (chem, init) = worldgen::chemistry0();
-    let (mineral, _) = chem.minerals()[0];
-    let fix = chem.fixing().expect("fixing");
-    let (_, rich, _, _) = chem.life_roles().expect("roles");
-    // In the open: ten years at 290 K, the air in plenty and the liquid and the fuel there.
-    let mut rc = change::Reactor::new(&chem, &cfg());
-    let (mut n, mut gas, mut e) = open_air(&chem, &init, 290.0);
-    (n[LIQUID], n[rich]) = (1e6, 1e6);
-    rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, 10.0 * 365.0 * DAY);
-    println!("in the open, ten years: {:.3e} mol of the mineral", n[mineral]);
-    assert!(n[mineral] < 1e-6 * 1e6, "the open world fixed {} mol with 10^6 mol of the fuel there", n[mineral]);
-    // A plant that fixes (the enzyme speeds the reaction up by 10^FIX_GENE) and its twin that does not, 60 days.
-    const FIX: f32 = worldgen::life::FIX_GENE;
-    let run = |cat: f32| {
-        let (mut w, i) = start();
-        let lay = Layout::of(&w.chem);
-        let mut b = eater_of(&mut w, 0, i, brain::REST);
-        // Its own mineral just short of nothing: what it holds past its level goes to the ground and is counted there.
-        b.genes[lay.cat + fix] = cat;
-        // (None of the dissolved mineral, so neither builds: the two differ by the fixing alone. Their copy mass a tenth
-        // below their body, so the matter that rots unrebuilt in the 60 days is not starving.)
-        b.store[w.chem.minerals()[1].0] = 0.0;
-        b.genes[pcore::body::COPY_MASS] += 0.9f32.log10();
-        // (In the dark: no light-capture area, so neither makes fuel and the two differ by what they burn alone; in the
-        // light the fixer's reaction changes the gas its light reactions take up.)
-        b.genes[pcore::body::LEAF] = -9.0;
-        let s = w.add(b, 1);
-        let books = Books::now(&w);
-        let before = in_all(&w, mineral);
-        let mut up = 0.0;
-        for _ in 0..60 {
-            pcore::day(&mut w);
-            let mut b = w.life[s].clone();
-            b.prepare(&w.chem, &w.cfg);
-            // Its upkeep over that of the same body with the gene off.
-            let mut off = b.clone();
-            off.genes[lay.cat + fix] = -1.0;
-            off.prepare(&w.chem, &w.cfg);
-            up = body::upkeep(&w, &b, 1.0, b.mass(&w.chem), b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys)) / body::upkeep(&w, &off, 1.0, b.mass(&w.chem), off.temp(&w.chem), off.activity(&w.chem, &w.cfg.phys));
-        }
-        assert!(w.life[s].alive);
-        books.assert_kept(&w, 1e-9);
-        let b = &w.life[s];
-        (in_all(&w, mineral) - before, up, b.k.cats, b.store[rich], b.mass(&w.chem))
-    };
-    let (fixed, up_with, cats_with, fuel_with, mass) = run(FIX);
-    let (none, up_without, cats_without, fuel_without, _) = run(-1.0);
-    println!("60 days: the fixing plant made {fixed:.3e} mol of the mineral, upkeep {up_with:.4} times that with the gene off ({up_without:.4}); the other {none:.3e} mol; fuel {fuel_with:.4e} against {fuel_without:.4e}");
-    // (What the enzyme made is the difference.)
-    let made = fixed - none;
-    assert!(made > 1.0, "the plant fixed {made} mol");
-    println!("it fixed {:.2e} mol of the mineral a kg of plant and second", made / (mass * 60.0 * DAY));
-    // And 14 mol of its fuel for each, the units the reaction burns (and the enzyme's upkeep, a little more): their heat
-    // paid no upkeep.
-    let count = |v: &[(u16, u16)], k: usize| v.iter().find(|p| p.0 as usize == k).expect("in the reaction").1 as f64;
-    let units = count(&chem.reactions[fix].inputs, rich) / count(&chem.reactions[fix].outputs, mineral);
-    assert!((fuel_without - fuel_with) / made > 0.95 * units && (fuel_without - fuel_with) / made < 1.2 * units, "{} mol of fuel for {made} of the mineral", fuel_without - fuel_with);
-    // The enzyme costs by its capacity: the plant that fixes pays more upkeep than it would with the gene off.
-    assert!(cats_with > cats_without && up_with > 1.0 && up_without == 1.0, "capacity {cats_with} against {cats_without}, upkeep {up_with} against {up_without}");
-}
-
-/// Roots take each mineral from the ground by the uptake genes, up to the level the body keeps and no more; a body
-/// whose gene is off takes none. What a body holds of one past its level goes back to the ground at its update, with
-/// its heat (an eater that digested matter, a plant that burned its own); the dissolved mineral, which falls out of the
-/// liquid in a body in days as the rock, goes back as the rock past the level the body keeps of it (the rock is a solid
-/// bodies build, kept at its share, `Body::level`). Elements and energy are kept.
-#[test]
-fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
-    let (w0, _) = start();
-    for (q, &(mineral, _)) in w0.chem.minerals().iter().enumerate() {
-        // (The dissolved mineral lives only in the liquid of the pores, which the rock and the gas make it in: none is put
-        // on this ground, it has its own.)
-        let (mut w, i) = start_wet();
-        let lay = Layout::of(&w.chem);
-        let n = w.mesh.cells().n();
-        // A plant with its store of this mineral emptied, the ground full of it.
-        let mut plant = eater_of(&mut w, 0, i, brain::REST);
-        // (It soaks as a plant does, 1 a day, the rate roots take what is dissolved at; with no capture area it catches no
-        // rain, whose liquid would bring what is dissolved in the ground with it.)
-        (plant.genes[LIQ], plant.genes[pcore::body::LEAF]) = (0.0, -9.0);
-        let mut idle = plant.clone();
-        for b in [&mut plant, &mut idle] {
-            let a = b.store[mineral];
-            w.cross((Boundary::Outside, Node::new(Class::Body, 0)), [(mineral, -a)], 0.0);
-            b.store[mineral] = 0.0;
-        }
-        idle.genes[lay.upt + mineral] = -0.1;
-        assert!(plant.genes[lay.upt + mineral] > 0.0);
-        if q == 0 {
-            put(&mut w, mineral, i, 1e9);
-        }
-        let level = |w: &World, b: &Body| b.level(&w.chem, mineral, b.mass(&w.chem));
-        let (sp, si) = (w.add(plant, 1), w.add(idle, 1));
-        let books = Books::now(&w);
-        // (The most it held in the days, at the end of an update: the dissolved mineral falls out as the rock between them.)
-        let mut most = 0.0f64;
-        for _ in 0..40 {
-            pcore::day(&mut w);
-            most = most.max(w.life[sp].store[mineral]);
-        }
-        let (took, lvl) = (w.life[sp].store[mineral], level(&w, &w.life[sp]));
-        println!("substance {mineral}: a plant with the gene on held {took:.3e} mol (at most {most:.3e}), its level {lvl:.3e}, the rock {:.3e}; the other {:.3e}", w.life[sp].store[ROCK], w.life[si].store[mineral]);
-        assert!(most > 0.1 * lvl && most <= lvl * (1.0 + 1e-6), "held at most {most}, level {lvl}");
-        let kept = |w: &World, s: Handle| w.life[s].store[ROCK] <= w.life[s].level(&w.chem, ROCK, 0.0) * (1.0 + 1e-9);
-        assert!(kept(&w, sp) && kept(&w, si), "the rock past its level stayed in a body");
-        assert!(w.life[si].store[mineral] < 1e-9 * lvl, "a body whose gene is off took substance {mineral}");
-        books.assert_kept(&w, 1e-9);
-        // The excess: give the plant ten times its level, and it is back on the ground at its next update (as the rock for
-        // the dissolved mineral: the rock element in the ground, in all its forms, rises by what was over).
-        let mut twin = w.clone();
-        let more = 10.0 * lvl;
-        w.cross((Boundary::Outside, Node::new(Class::Body, sp.slot as usize)), [(mineral, more)], more * w.chem.subs[mineral].cp * w.life[sp].temp(&w.chem));
-        w.life[sp].e += more * w.chem.subs[mineral].cp * w.life[sp].temp(&w.chem);
-        w.life[sp].store[mineral] += more;
-        for _ in 0..40 {
-            twin.events.clear();
-            pcore::day(&mut twin);
-            w.events.clear();
-            pcore::day(&mut w);
-        }
-        let (held, lvl2) = (w.life[sp].store[mineral], level(&w, &w.life[sp]));
-        // (Against its twin, the same world without the excess: the fixed mineral by itself, the rock element in all its
-        // forms.)
-        let back = if q == 0 { w.store.amounts(Class::Ground)[mineral * n + i] - twin.g(mineral, i) } else { rock_outside_matter(&w, i) - rock_outside_matter(&twin, i) };
-        println!("with ten times its level more: it holds {held:.3e} against a level of {lvl2:.3e}, the rock {:.3e}; the ground gained {back:.3e} (the excess {more:.3e})", w.life[sp].store[ROCK]);
-        assert!(held <= lvl2 * 1.05, "held {held} past the level {lvl2}");
-        assert!(kept(&w, sp), "the rock past its level stayed in the body");
-        assert!(back > 0.5 * more, "the excess did not go back to the ground: {back} of {more}");
-        books.assert_kept(&w, 1e-9);
-    }
-}
-
-/// End-product inhibition: a body's catalyst is slowed by its store of each product it keeps a level of, by
-/// 1 - store / level: with none held it runs at full speed, at its level not at all. Gases and the key liquid do not
-/// count, so a burning (gas and the liquid) is not slowed.
-#[test]
-fn a_catalyst_is_slowed_by_the_product_the_body_holds() {
-    let (mut w, i) = start();
-    let (mineral, _) = w.chem.minerals()[0];
-    let fix = w.chem.fixing().expect("fixing");
-    let (light, rich, _, burn) = w.chem.life_roles().expect("roles");
-    let b = eater_of(&mut w, 0, i, brain::REST);
-    let (_, mut b) = out(&mut w, b);
-    let (t, mass) = (b.temp(&w.chem), b.mass(&w.chem));
-    for (r, k) in [(fix, mineral), (light, rich)] {
-        b.store[k] = 0.0;
-        let none = b.inhibited(&w.chem, r, mass, t);
-        b.store[k] = b.level(&w.chem, k, mass);
-        let full = b.inhibited(&w.chem, r, mass, t);
-        assert!(none == 1.0 && full.abs() < 1e-9, "reaction {r}: {none} with none held, {full} at its level");
-    }
-    assert_eq!(b.inhibited(&w.chem, burn, mass, t), 1.0, "a burning makes gas and the liquid");
 }

@@ -1,6 +1,6 @@
 //! Death and damage: what a body or a share of its members leaves goes to its cell's ground, with its heat.
 
-use super::{light_cat, Body};
+use super::Body;
 use crate::event::{Event, EventKind};
 use crate::ground::Melting;
 use crate::store::Node;
@@ -10,8 +10,8 @@ use crate::{bond, life::{Domain, Handle}, World};
 pub fn die(w: &World, d: &mut Domain, h: Handle, mut b: Body, cause: u8) {
     bond::let_go(w, d, &mut b, false);
     remains(w, d, &b);
-    let (cat, root) = (light_cat(&w.chem, &b.genes), d.root(w, &b));
-    d.events.push(Event { day: w.day(), kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count });
+    let root = d.root(w, &b);
+    d.events.push(Event { day: w.day(), kind: EventKind::Died { cause, root }, node: b.cell, value: b.count });
     d.remove(h, &b);
 }
 
@@ -35,8 +35,8 @@ pub(super) fn thin(w: &World, d: &mut Domain, b: &mut Body, f: f64, dead: &mut [
     dead.iter_mut().zip(&b.store).for_each(|(a, &held)| *a = a.min(held));
     to_ground(w, d, b, th, dead);
     if b.n() > 1.0 && f > 0.0 {
-        let (cat, root) = (light_cat(&w.chem, &b.genes), d.root(w, b));
-        d.events.push(Event { day: w.day(), kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count * f });
+        let root = d.root(w, b);
+        d.events.push(Event { day: w.day(), kind: EventKind::Died { cause, root }, node: b.cell, value: b.count * f });
         d.set_count(b, b.count * (1.0 - f));
     }
     b.count >= 1.0

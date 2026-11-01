@@ -41,7 +41,7 @@ const GENES: [(&str, usize); 11] = [("gas", GAS), ("leaf", LEAF), ("copy_log", C
 /// The rules the check holds, per plan (default, roster) and rule (a, b, c, d); it prints the others.
 const HELD: [[bool; 4]; 2] = [[false, true, false, false], [false, true, true, false]];
 /// What eaters took of what they use (`Body::uses`), by source.
-const ATE: [&str; 3] = ["ate_light_eaters", "ate_others", "ate_ground"];
+const ATE: [&str; 3] = ["ate_cover", "ate_others", "ate_ground"];
 /// The causes of death (`docs/tape.md`).
 const CAUSES: [&str; 6] = ["lack", "phase", "spent", "taken", "broken", "age"];
 /// Being taken, among the rates rule (d) compares (births first, then `CAUSES`).

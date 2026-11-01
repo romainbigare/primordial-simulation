@@ -40,10 +40,6 @@ pub struct Lived {
     pub spare: f64,
     /// Its mass as its update leaves it, after it sheds (valid until its stores change)
     pub mass: f64,
-    /// The log of what it holds that is or soon becomes body (`copy::buildable`: its matter, brood with it, and what
-    /// its stores could build in an interval) after its growth over that as its update began: what its members gained
-    /// in the time, by growth and reserves, less the deaths (`copy::select`)
-    pub gain: f64,
 }
 
 /// Where a body is at its update, and the time since its last.
@@ -98,7 +94,7 @@ fn to_growth(w: &World, d: &mut Domain, b: &mut Body, rc: &mut Reactor, tmp: &mu
     let s = site(w, d, b);
     // (Its activity as the update begins: the stages that pay and what it can build read it from here.)
     let (mass, dry) = (b.mass(&w.chem), b.activity(&w.chem, &w.cfg.phys));
-    let (held, from) = (crate::copy::buildable(w, b, s.tg, dry), b.member_body(&w.chem));
+    let from = b.member_body(&w.chem);
     b.last = w.day() as f64;
     // With nothing left of a member there is no heat capacity to hold a temperature: it dies.
     if b.empty_at(mass) {
@@ -112,15 +108,7 @@ fn to_growth(w: &World, d: &mut Domain, b: &mut Body, rc: &mut Reactor, tmp: &mu
     if !starved(w, d, b, from, &mut tmp.dead) {
         return Err(SPENT);
     }
-    let gain = (crate::copy::buildable(w, b, s.tg, b.activity(&w.chem, &w.cfg.phys)) / held.max(f64::MIN_POSITIVE)).ln();
-    Ok((Lived { lit, spare, mass: 0.0, gain }, built, s))
-}
-
-/// What the members of body `b` (taken out of its slot) gain in an update as far as its growth (`Lived::gain`;
-/// minus infinity if it dies), for a sample member that changes nothing (`copy::select`: the caller gives the world
-/// back as it was).
-pub(crate) fn gain_to_growth(w: &World, d: &mut Domain, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> f64 {
-    to_growth(w, d, b, rc, tmp).map_or(f64::NEG_INFINITY, |g| g.0.gain)
+    Ok((Lived { lit, spare, mass: 0.0 }, built, s))
 }
 
 /// A body whose growth did not rebuild the body it lost in the update, below its copy mass, starves: it keeps the share

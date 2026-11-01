@@ -8,7 +8,7 @@ mod learn;
 mod perceive;
 mod spread;
 
-pub use feed::take_body;
+pub use feed::{take_body, COVER};
 pub use go::{go, wear};
 pub(crate) use go::land_move;
 pub(crate) use learn::watched;

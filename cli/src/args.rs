@@ -29,9 +29,7 @@ pub const USAGE: &str = "usage:
     --air-hours N         hours between steps of the air: radiation, evaporation, rain and wind (240; divides the physics step)
     --flow-days N         days between moves of liquid (60; over a month, a whole number of months)
     --crowd N             past N body nodes in a cell, the most alike merge each month (4; Config::crowd)
-    --node-days N         a population node without a brain updates at most every N days (40; a multiple of the bodies' batch, 10 days; Config::node_days)
     --lump-days N         a population node makes its children at most once in N days (30; a multiple of the bodies' batch; Config::lump_days)
-    --sample-every N      a node without a brain runs its sample member on one update in N (2; Config::sample_every)
     --think-days N        a population node with a brain decides about every N days, by habit between (20; 0: every update; Config::think_days)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
@@ -104,9 +102,7 @@ impl Args {
         c.flow_days = self.get("--flow-days", c.flow_days);
         c.air_hours = self.get("--air-hours", c.air_hours);
         c.crowd = self.get("--crowd", c.crowd);
-        c.node_days = self.get("--node-days", c.node_days);
         c.lump_days = self.get("--lump-days", c.lump_days);
-        c.sample_every = self.get("--sample-every", c.sample_every);
         c.think_days = self.get("--think-days", c.think_days);
         c.null = self.has("--null");
         c.nodes = !self.has("--individuals");

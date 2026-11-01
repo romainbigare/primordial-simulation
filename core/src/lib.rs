@@ -9,6 +9,7 @@ pub mod chem;
 pub mod choose;
 pub mod clock;
 pub mod copy;
+pub mod cover;
 pub mod event;
 pub mod flow;
 mod ground;
