@@ -102,11 +102,34 @@ pub(crate) fn add_times(parts: &mut Vec<f64>, n: f64, x: f64) {
     grow(parts, n * (x - hi));
 }
 
-/// A list of at most `N` small things held in place (no heap): what a body works out from its genes (`body::Consts`).
+/// A list of at most `N` small things held in place (no heap): a body's genes (`body::Genes`) and what it works out
+/// from them (`body::Consts`). Saved as the list it holds.
 #[derive(Clone, Copy, Debug)]
 pub struct Few<T: Copy + Default, const N: usize> {
     v: [T; N],
     n: usize,
+}
+
+impl<T: Copy + Default + PartialEq, const N: usize> PartialEq for Few<T, N> {
+    fn eq(&self, o: &Self) -> bool {
+        **self == **o
+    }
+}
+
+impl<T: Copy + Default + serde::Serialize, const N: usize> serde::Serialize for Few<T, N> {
+    fn serialize<S: serde::Serializer>(&self, to: S) -> Result<S::Ok, S::Error> {
+        (**self).serialize(to)
+    }
+}
+
+impl<'de, T: Copy + Default + serde::Deserialize<'de>, const N: usize> serde::Deserialize<'de> for Few<T, N> {
+    fn deserialize<D: serde::Deserializer<'de>>(from: D) -> Result<Self, D::Error> {
+        let v = Vec::<T>::deserialize(from)?;
+        if v.len() > N {
+            return Err(serde::de::Error::invalid_length(v.len(), &"at most the room held"));
+        }
+        Ok(Few::of(&v))
+    }
 }
 
 impl<T: Copy + Default, const N: usize> Default for Few<T, N> {
@@ -123,6 +146,40 @@ impl<T: Copy + Default, const N: usize> Few<T, N> {
     }
     pub fn clear(&mut self) {
         self.n = 0;
+    }
+    /// The things of `x`, in order. Panics past `N`.
+    pub fn of(x: &[T]) -> Self {
+        let mut f = Few::default();
+        f.v[..x.len()].copy_from_slice(x);
+        f.n = x.len();
+        f
+    }
+    /// `n` things: those it has, and `x` past them. Panics past `N`.
+    pub fn resize(&mut self, n: usize, x: T) {
+        if n > self.n {
+            self.v[self.n..n].fill(x);
+        }
+        self.n = n;
+    }
+    /// `n` things `x`. Panics past `N`.
+    pub fn filled(x: T, n: usize) -> Self {
+        let mut f = Few { v: [T::default(); N], n };
+        f.v[..n].fill(x);
+        f
+    }
+}
+
+impl<'a, T: Copy + Default, const N: usize> IntoIterator for &'a Few<T, N> {
+    type Item = &'a T;
+    type IntoIter = std::slice::Iter<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<T: Copy + Default, const N: usize> std::ops::DerefMut for Few<T, N> {
+    fn deref_mut(&mut self) -> &mut [T] {
+        &mut self.v[..self.n]
     }
 }
 

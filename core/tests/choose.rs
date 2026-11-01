@@ -252,7 +252,7 @@ fn a_body_gives_its_stores_but_not_its_body() {
     taker.genes[lay.keep..].fill(0.95);
     // (Body matter given is digested into the solid, so it fills the taker's room for the solid (`Body::digest_room`):
     // room for all the giver's solid and matter, 2 kg per kg of body.)
-    taker.genes[lay.keep + RICH] = 2.0;
+    taker.genes[lay.keep + w.chem.body().place(RICH).expect("a store")] = 2.0;
     let (m0, fuel0) = (giver.amount(w.chem.body(), MATTER), giver.amount(w.chem.body(), RICH));
     let g = w.add(giver);
     w.add(taker);

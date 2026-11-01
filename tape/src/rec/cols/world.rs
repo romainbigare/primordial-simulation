@@ -81,10 +81,10 @@ impl Recorder {
         row.push("busiest_chunk", "1", busiest / batches.max(1.0));
         // The mean catalyst gene (log10 speed-up; below 0 counts as off, 0) of each reaction over the live members:
         // which reactions life speeds up.
-        let (nr, cat) = (w.chem.reactions.len(), pcore::body::Layout::of(&w.chem).cat);
+        let nr = w.chem.reactions.len();
         let mut g = vec![0.0; nr];
         for b in life.alive() {
-            g.iter_mut().enumerate().for_each(|(r, x)| *x += b.genes[cat + r].max(0.0) as f64 * b.n());
+            g.iter_mut().enumerate().for_each(|(r, x)| *x += b.diet(&w.chem, r).map_or(0.0, |g| g.max(0.0)) as f64 * b.n());
         }
         for (r, &x) in g.iter().enumerate() {
             row.push(format!("cat_{r}"), "log10", x / members.max(1.0));

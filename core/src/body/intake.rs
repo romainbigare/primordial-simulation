@@ -24,9 +24,9 @@ impl Body {
     /// selectivity, up to `kg` in all, no more than is there and within the room of its stores.
     pub(crate) fn wanted(&self, chem: &Chemistry, from: impl Fn(usize) -> f64, kg: f64, mass: f64) -> Stores {
         let (lay, t, bc, from) = (Layout::of(chem), self.temp(chem), chem.body(), |k: usize| from(k).max(0.0));
-        let up = |k: usize| if from(k) > 0.0 && self.uses(chem, k, t) { self.gene(lay.upt + k).max(0.0) } else { 0.0 };
+        let up = |s: usize, k: usize| if from(k) > 0.0 && self.uses(chem, k, t) { self.gene(lay.upt + s).max(0.0) } else { 0.0 };
         let mut m = [0.0; BODY_STORES];
-        bc.subs().iter().zip(&mut m).for_each(|(&k, x)| *x = up(k));
+        bc.subs().iter().zip(&mut m).enumerate().for_each(|(s, (&k, x))| *x = up(s, k));
         let sum: f64 = m.iter().sum();
         // A built solid it takes past its own level until its reactions break it down; the rest it sheds.
         let room = |s: usize| if chem.is_material(bc.subs()[s]) { f64::MAX } else { self.room(chem, s, mass) };

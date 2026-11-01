@@ -122,7 +122,7 @@ fn growth_is_limited_by_what_the_body_can_spare() {
         let mut b = eater(&mut w, i, brain::REST, 6.0);
         // (This measures the spare rule: the solid's minimum, the reserve growth keeps, is set low so that it does not
         // bind.)
-        b.genes[Layout::of(&w.chem).min + RICH] = 0.02;
+        b.genes[Layout::of(&w.chem).min + w.chem.body().place(RICH).expect("a store")] = 0.02;
         let out_kg = (1.0 - keep) * kg(&w, &b, RICH);
         add(&mut w, &mut b, RICH, -out_kg);
         let (s, mut b) = out(&mut w, b);
@@ -588,7 +588,7 @@ fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
     let mut b = eater(&mut w, i, brain::REST, 6.0);
     // Shares of 0.2 and 0.1, none of either held yet, the dissolved mineral the rock is made of in plenty.
     for (&k, s) in mats.iter().zip([0.2, 0.1]) {
-        b.genes[lay.keep + k] = s;
+        b.genes[lay.keep + w.chem.body().place(k).expect("a store")] = s;
         let held = kg(&w, &b, k);
         add(&mut w, &mut b, k, -held);
     }
@@ -656,7 +656,7 @@ fn child_has_parent_genes_plus_noise() {
     let mut w = worldgen::new_world(1, 16, 16);
     worldgen::life::seed(&mut w, 0);
     worldgen::life::seed(&mut w, 1);
-    let parent = w.life.alive().next().expect("a body").genes.clone();
+    let parent = w.life.alive().next().expect("a body").genes;
     let lay = Layout::of(&w.chem);
     let r = || Rng::new(1, 0, 0, Purpose::Mutate);
     let (child, brainless) = [true, false].map(|brain| pcore::body::vary(&lay, &parent, &[], 1.0, 0.0, brain, &mut r()).0).into();
@@ -694,8 +694,8 @@ fn crowded_individuals_merge_into_a_node() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// However unlike their genes, the bodies of one lineage and stage in a cell merge at a month's start into one node; no
-/// member is lost and matter and energy are kept.
+/// However unlike their genes, the bodies of one lineage and stage in a cell merge at a month's start into one node
+/// (twelve young bodies beside an adult founder: two); no member is lost and matter and energy are kept.
 #[test]
 fn a_cell_holds_one_node_per_kind_and_stage() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -707,7 +707,7 @@ fn a_cell_holds_one_node_per_kind_and_stage() {
     let (i, lineage, genome) = (a.cell as usize, a.lineage, a.genome);
     for x in 0..12 {
         let mut b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
-        b.genes[pcore::body::COPY_MASS] += 0.3 * x as f32;
+        b.genes[pcore::body::COPY_MASS] += 0.3 * (x + 1) as f32;
         w.add(b);
     }
     let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i).map(|b| (b.lineage, b.adult(&w.chem), b.n())).collect::<Vec<_>>();

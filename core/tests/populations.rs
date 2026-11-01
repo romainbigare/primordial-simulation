@@ -268,17 +268,17 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     // Every gene's spread at the split threshold, (alike step)² π / 8 + step² (`body::most`).
     let inv = body::steps(&lay, &vec![1.0; lay.len]);
     let a = w.cfg.phys.alike;
-    let spread: Vec<f32> = inv.iter().map(|&x| if x > 0.0 { (a * a * std::f32::consts::FRAC_PI_8 + 1.0) / (x * x) } else { 0.0 }).collect();
+    let spread: body::Genes = inv.iter().map(|&x| if x > 0.0 { (a * a * std::f32::consts::FRAC_PI_8 + 1.0) / (x * x) } else { 0.0 }).collect();
     let s = live(&w).into_iter().find(|&s| {
         let i = w.life[s].cell as usize;
         let near = w.mesh.cells().around(i).1;
         near.len() == 8 && near.iter().all(|&j| w.life.in_cell(j as usize) > 0)
     }).expect("a node with nodes all around");
     // Members mature from 0.65 of their body, all children leave.
-    let mut genes = w.life[s].genes.clone();
+    let mut genes = w.life[s].genes;
     (genes[COPY_MASS], genes[DISPERSE]) = ((0.65 * w.life[s].member_body(&w.chem) as f32).log10(), 1.0);
     for t in live(&w) {
-        (w.life[t].genes, w.life[t].spread) = (genes.clone(), spread.clone());
+        (w.life[t].genes, w.life[t].spread) = (genes, spread);
         w.life[t].prepare(&w.chem, &w.cfg);
         // The nodes around are immature (half the matter: a member's body half, under its copy mass at 0.65), as nodes
         // of children are: a child joins no mature node (`copy::kin`).

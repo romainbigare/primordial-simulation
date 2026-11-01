@@ -39,7 +39,7 @@ pub fn grow(w: &World, d: &mut Chunk, b: &mut Body, days: f64, t: f64) -> bool {
 fn reach(chem: &Chemistry, p: &crate::Physics, b: &Body, bl: &Reaction, t: f64) -> (Vec<f64>, f64) {
     let (lay, size, m, bc) = (Layout::of(chem), b.size(chem), bl.outputs[0].0 as usize, chem.body());
     let (nu0, mm) = (bl.outputs[0].1 as f64, chem.subs[m].molar_mass);
-    let floors: Vec<f64> = bl.inputs.iter().map(|&(k, _)| b.gene(lay.min + k as usize).max(0.0) * size / chem.subs[k as usize].molar_mass).collect();
+    let floors: Vec<f64> = bl.inputs.iter().map(|&(k, _)| b.gene(lay.min + bc.place(k as usize).expect("growth's inputs are stores")).max(0.0) * size / chem.subs[k as usize].molar_mass).collect();
     let reach = bl.inputs.iter().zip(&floors).map(|(&(k, nu), f)| {
         let heat = b.heat_of(chem, k as usize, t);
         (b.amount(bc, k as usize) - f).max(0.0) / (nu as f64 / (mm * nu0) + if heat > 0.0 { p.c_copy / heat } else { 0.0 })

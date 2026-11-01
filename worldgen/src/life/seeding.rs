@@ -158,7 +158,7 @@ fn bodies(w: &mut World, which: usize, kind: &Kind, b: &Bodies, how: &Seeding) -
             let id = founder_id(which, i, k);
             let genome = shared.unwrap_or_else(|| sprayed(w, b, shape, &rows, how, hand, id));
             let Some(body) = make_with(w, which, i, lineage, genome, how.rounds, if hand { 0.0 } else { GENE_SPRAY_DECADES }, id) else { return String::new() };
-            p.add(w, &body, lay.cat + burn, take);
+            p.add(w, &body, lay.diet(&w.chem, burn).expect("bodies may run life's burning"), take);
             w.add(body);
         }
     }

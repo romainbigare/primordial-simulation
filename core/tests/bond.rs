@@ -116,7 +116,7 @@ fn forming_never_takes_more_than_is_left() {
     let solid = |k: usize| chem.phase(k, t) == Phase::Solid;
     let k = b.k.burn.iter().flat_map(|&(r, _)| chem.reactions[r].inputs.iter().map(|p| p.0 as usize)).find(|&k| solid(k)).expect("a solid fuel");
     chem.body().subs().iter().copied().filter(|&x| solid(x) && x != k).for_each(|x| *b.store_of(chem, x) = 0.0);
-    b.genes[pcore::body::Layout::of(chem).min + k] = 0.0;
+    b.genes[pcore::body::Layout::of(chem).min + chem.body().place(k).expect("a store")] = 0.0;
     *b.store_of(&w.chem, k) = 0.05 * b.mass(chem) / chem.subs[k].molar_mass;
     b.e = b.energy_at(chem, t);
     // Half the fuel is to go out (`Physics::form` of its mass), and paying for it burns nearly all of it.
@@ -154,7 +154,7 @@ fn a_node_acts_on_bonds_as_its_members_together() {
         let line = Line::new(&mut w, &brain, 0);
         let (l, b) = (line.lineage, line.founder(&mut w, 1, i));
         let mut b = worldgen::testkit::node_of(&mut w, b, 800.0);
-        (b.spread, b.row_spread) = (vec![0.01; b.genes.len()], 0.01);
+        (b.spread, b.row_spread) = (pcore::body::Genes::filled(0.01, b.genes.len()), 0.01);
         // (Mature past their copy mass, so the matter that rots is not starving, and putting nothing into a brood, so they
         // do not copy.)
         (b.genes[COPY_MASS], b.genes[pcore::body::ALLOC]) = (b.genes[COPY_MASS] - 1.0, 0.0);
@@ -167,7 +167,7 @@ fn a_node_acts_on_bonds_as_its_members_together() {
         let few = 20f64.min(b.count) / b.count;
         scale(&mut w, &mut b, few);
         b.count *= few;
-        let (n0, genes) = (b.count, b.genes.clone());
+        let (n0, genes) = (b.count, b.genes);
         w.add(b);
         pcore::survey::survey(&mut w);
         w.time += w.cfg.days_per_month as u64 * DAY_S;
@@ -251,7 +251,7 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
         let p = new_part(&mut w, i);
         let mut b = std::mem::take(&mut w.life[h]);
         let up = pcore::body::Layout::of(&w.chem).upt;
-        (0..w.chem.ns()).for_each(|k| b.genes[up + k] = if k == MINERAL { 8.0 } else { -8.0 });
+        w.chem.body().subs().iter().enumerate().for_each(|(s, &k)| b.genes[up + s] = if k == MINERAL { 8.0 } else { -8.0 });
         (w.cfg.phys.c_handle, w.cfg.phys.take) = (0.0, 1e-3 * w.cfg.phys.take);
         (w, h, i, p, b)
     };

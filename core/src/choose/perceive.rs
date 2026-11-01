@@ -116,8 +116,8 @@ pub(super) fn inputs(w: &World, b: &Body, (lived, temp, mem): (&Lived, f64, usiz
     let heard = c.seen[..c.nseen].iter().fold([0f32; SIG], |h, (o, _)| [0, 1].map(|k| h[k] + o.sig[k] / c.nseen as f32));
     x.clear();
     let (none, min, bc) = (SHARE_SENSE * ln(STORE_FLOOR), Layout::of(chem).min, chem.body());
-    let held = |k: usize| b.amount(bc, k);
-    x.extend((0..ns).map(|k| if held(k) > 0.0 { SHARE_SENSE * ln((held(k) * chem.subs[k].molar_mass / mass) as f32 + STORE_FLOOR) } else { none } - SHARE_SENSE * ln(b.genes[min + k].max(0.0) + MIN_FLOOR)));
+    let (held, least) = (|k: usize| b.amount(bc, k), |k: usize| bc.place(k).map_or(0.0, |s| b.genes[min + s].max(0.0)));
+    x.extend((0..ns).map(|k| if held(k) > 0.0 { SHARE_SENSE * ln((held(k) * chem.subs[k].molar_mass / mass) as f32 + STORE_FLOOR) } else { none } - SHARE_SENSE * ln(least(k) + MIN_FLOOR)));
     x.extend_from_slice(&w.life.seen[i * ns..(i + 1) * ns]);
     let crowd = ln(1.0 + (w.life.sum(i)[1] / w.mesh.cells().area()[i]) as f32);
     let (dt, canopy, sun) = ((temp - env[0]) as f32, w.canopy[i], w.season() as f32 * std::f32::consts::TAU);

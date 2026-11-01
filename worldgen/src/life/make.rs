@@ -2,7 +2,7 @@
 
 use super::kinds::{Bodies, Place, KINDS};
 use super::book_body;
-use pcore::body::{self, Body, Layout};
+use pcore::body::{self, Body, Genes, Layout};
 use pcore::rng::{Purpose, Rng};
 use pcore::World;
 
@@ -53,23 +53,24 @@ fn bodies(which: usize) -> Option<&'static Bodies> {
 
 /// The genes of a founder of `which` before any mutation (`None` without the roles of life in the chemistry, or for a
 /// kind that places cover).
-fn genes(w: &World, which: usize) -> Option<Vec<f32>> {
+fn genes(w: &World, which: usize) -> Option<Genes> {
     let ((r_light, rich, liquid, burn), kind, chem) = (w.chem.life_roles()?, bodies(which)?, &w.chem);
-    let lay = Layout::of(chem);
-    let mut genes = vec![GENE_OFF; lay.len];
+    let (lay, bc) = (Layout::of(chem), chem.body());
+    let (at, diet) = (|k: usize| bc.place(k).expect("life's roles are stores"), |r: usize| lay.diet(chem, r).expect("bodies may run life's reactions"));
+    let mut genes = Genes::filled(GENE_OFF, lay.len);
     genes[lay.cat..lay.min].fill(CAT_OFF);
     genes[..body::NSCALAR].copy_from_slice(&kind.scalars);
-    (genes[lay.cat + r_light], genes[lay.cat + burn]) = (kind.cat[0], kind.cat[1] - LITTER_X);
-    (genes[lay.min + liquid], genes[lay.min + rich]) = (MIN_LIQUID, MIN_SOLID);
-    (genes[lay.upt + liquid], genes[lay.upt + rich]) = (kind.upt[0], kind.upt[1]);
+    (genes[diet(r_light)], genes[diet(burn)]) = (kind.cat[0], kind.cat[1] - LITTER_X);
+    (genes[lay.min + at(liquid)], genes[lay.min + at(rich)]) = (MIN_LIQUID, MIN_SOLID);
+    (genes[lay.upt + at(liquid)], genes[lay.upt + at(rich)]) = (kind.upt[0], kind.upt[1]);
     // They digest body matter as they digest the solid, and take it.
     if let Some((m, r)) = chem.matter_roles() {
-        (genes[lay.cat + r], genes[lay.upt + m]) = (kind.cat[1] - LITTER_X, kind.upt[1]);
+        (genes[diet(r)], genes[lay.upt + at(m)]) = (kind.cat[1] - LITTER_X, kind.upt[1]);
     }
     genes[lay.keep..].fill(KEEP_SOLID);
-    genes[lay.keep + liquid] = KEEP_LIQUID;
-    genes[lay.keep + rich] = KEEP_SOLID.max((KEEP_MARGIN * kind.store / (1.0 - kind.store)) as f32);
-    chem.materials().for_each(|k| genes[lay.keep + k] = BUILT_SHARE);
+    genes[lay.keep + at(liquid)] = KEEP_LIQUID;
+    genes[lay.keep + at(rich)] = KEEP_SOLID.max((KEEP_MARGIN * kind.store / (1.0 - kind.store)) as f32);
+    chem.materials().for_each(|k| genes[lay.keep + at(k)] = BUILT_SHARE);
     Some(genes)
 }
 
@@ -91,11 +92,12 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
     genes[body::MUT] -= spray_decades;
     // A founder is an adult: its living body is its copy mass after the spray, with the share `store` of fuel on top.
     let matter = chem.matter_roles();
-    let h = genes[lay.keep + liquid].clamp(0.0, MAX_LIQUID_SHARE as f32) as f64;
+    let at = |k: usize| chem.body().place(k).expect("life's roles are stores");
+    let h = genes[lay.keep + at(liquid)].clamp(0.0, MAX_LIQUID_SHARE as f32) as f64;
     let mass = 10f64.powf(genes[body::COPY_MASS] as f64) * if matter.is_some() { (1.0 - body::WET_TISSUE) / (1.0 - h) / (1.0 - kind.store) } else { 1.0 };
     let count = 1.0;
     let mut store = vec![0.0; ns];
-    let (fuel, liq, mat) = split(kind.store, genes[lay.keep + liquid] as f64, matter.is_some());
+    let (fuel, liq, mat) = split(kind.store, genes[lay.keep + at(liquid)] as f64, matter.is_some());
     store[rich] = fuel * count * mass / chem.subs[rich].molar_mass;
     store[liquid] = liq * count * mass / chem.subs[liquid].molar_mass;
     // A member holds the minerals its matter was made of, so it can build that again, and keeps up to `MINERAL_KEEP`
@@ -104,7 +106,7 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
         store[m] = mat * count * mass / chem.subs[m].molar_mass;
         for &(k, per) in chem.minerals() {
             store[k] = store[m] * per;
-            genes[lay.keep + k] = (MINERAL_KEEP * per * chem.subs[k].molar_mass / chem.subs[m].molar_mass * (1.0 - h)) as f32;
+            genes[lay.keep + at(k)] = (MINERAL_KEEP * per * chem.subs[k].molar_mass / chem.subs[m].molar_mass * (1.0 - h)) as f32;
         }
     }
     let mut b = Body { cell: i as u32, count, lineage, store: chem.body().gather(|k| store[k]), genes, genome, rows, ..Default::default() };

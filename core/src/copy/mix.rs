@@ -1,7 +1,7 @@
 //! Two parents: the partner of a mature body (`partner`), and the genes and born rows its children take from each
 //! (`mix`, `mix_rows`).
 
-use crate::body::{distance, spread_at, Body, Layout};
+use crate::body::{distance, spread_at, Body, Genes, Layout};
 use crate::rng::{Purpose, Rng};
 use crate::{life::{Chunk, Handle}, World};
 use crate::brain;
@@ -44,13 +44,14 @@ fn share(m: f64, r: &mut Rng) -> f32 {
 /// (`share`); for a group of many the mean between them by the share drawn, and the
 /// spread what a merge pools (`nodes::add`). One child gets one parent's gene and that parent's spread. The
 /// generation's mutation (`body::vary`) is added after, as for one parent.
-pub(super) fn mix(a: &Body, t: &Body, m: f64, r: &mut Rng) -> (Vec<f32>, Vec<f32>) {
-    (0..a.genes.len())
-        .map(|g| {
-            let (x, d, f) = (a.genes[g], t.genes[g] - a.genes[g], share(m, r));
-            (x + f * d, (1.0 - f) * spread_at(&a.spread, g) + f * spread_at(&t.spread, g) + f * (1.0 - f) * d * d)
-        })
-        .unzip()
+pub(super) fn mix(a: &Body, t: &Body, m: f64, r: &mut Rng) -> (Genes, Genes) {
+    let (mut genes, mut spread) = (Genes::default(), Genes::default());
+    for g in 0..a.genes.len() {
+        let (x, d, f) = (a.genes[g], t.genes[g] - a.genes[g], share(m, r));
+        genes.push(x + f * d);
+        spread.push((1.0 - f) * spread_at(&a.spread, g) + f * spread_at(&t.spread, g) + f * (1.0 - f) * d * d);
+    }
+    (genes, spread)
 }
 
 /// The born rows of the children of `a` and its partner `t` (`t`'s carried over to the sizes of `a`'s brain if they

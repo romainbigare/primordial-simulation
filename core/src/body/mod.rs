@@ -26,7 +26,7 @@ use crate::chem::{BodyChem, Chemistry, Phase, Stores};
 use crate::ground::{melting, Melting};
 use crate::math::Few;
 use crate::store::NodeId;
-use crate::units::{BODY_REACTIONS, BODY_STORES, MAX_SUBSTANCES};
+use crate::units::{BODY_REACTIONS, BODY_STORES};
 use serde::{Deserialize, Serialize};
 
 /// Death causes: a store below its safe minimum; a key liquid froze or boiled; upkeep not paid; taken by a body.
@@ -72,10 +72,10 @@ pub struct Body {
     pub e: f64,
     /// mol of each store (`Chemistry::body`: the substances bodies hold, each at its place)
     pub store: Stores,
-    pub genes: Vec<f32>,
+    pub genes: Genes,
     /// How a node's members differ: the variance of each gene around `genes` (empty: none), and of their born rows, one
     /// number for every row
-    pub spread: Vec<f32>,
+    pub spread: Genes,
     pub row_spread: f32,
     /// The brain rows it was born with (genes too), in `Life::genomes`
     pub genome: u32,
@@ -126,7 +126,7 @@ pub struct Consts {
     /// heat, `Chemistry::keeps`; only those bodies may run, `Chemistry::body`)
     pub burn: Few<(usize, f64), BODY_REACTIONS>,
     /// The substances taken, by selectivity
-    pub upt: Few<(usize, f32), MAX_SUBSTANCES>,
+    pub upt: Few<(usize, f32), BODY_STORES>,
     /// 10 to the power of the copy mass gene, kg
     pub copy_mass: f64,
     /// Factor of upkeep per kg of living body, (copy mass / `m_ref`)^(`intake_exp` - 1), 1
@@ -234,13 +234,13 @@ impl Body {
     /// Work `k` out from the genes and the settings, at every change of the genes.
     pub fn prepare(&mut self, chem: &Chemistry, cfg: &crate::Config) {
         let p = &cfg.phys;
-        let (lay, nr, bc) = (Layout::of(chem), chem.reactions.len(), chem.body());
-        let on = |r: usize| self.genes[lay.cat + r] > 0.0;
+        let (lay, bc) = (Layout::of(chem), chem.body());
+        let on = |r: usize| lay.diet(chem, r).is_some_and(|g| self.genes[g] > 0.0);
         let mut k = std::mem::take(&mut self.k);
-        k.burn = chem.burners().iter().filter(|x| on(x.0) && bc.reaction(x.0).is_some()).copied().collect();
+        k.burn = chem.burners().iter().filter(|x| on(x.0)).copied().collect();
         k.fuel = k.burn.iter().flat_map(|x| &chem.reactions[x.0].inputs).fold(0, |m, p| m | 1 << p.0);
-        k.broken = (0..nr).filter(|&r| on(r)).flat_map(|r| &chem.reactions[r].inputs).fold(0, |m, p| m | 1 << p.0);
-        k.upt = (0..chem.ns()).filter(|&x| self.genes[lay.upt + x] > 0.0).map(|x| (x, self.genes[lay.upt + x])).collect();
+        k.broken = bc.reactions().iter().filter(|&&r| on(r)).flat_map(|&r| &chem.reactions[r].inputs).fold(0, |m, p| m | 1 << p.0);
+        k.upt = (0..bc.n()).filter(|&s| self.genes[lay.upt + s] > 0.0).map(|s| (bc.subs()[s], self.genes[lay.upt + s])).collect();
         (k.heat, k.copy_mass) = (self.dec(HEAT), self.dec(COPY_MASS));
         k.tissue = (k.copy_mass / p.m_ref).powf(p.intake_exp - 1.0);
         k.pace_ref = k.burn.first().map_or(1.0, |&(r, _)| chem.reactions[r].arrhenius(p.t_cat));
@@ -268,14 +268,14 @@ impl Body {
     pub(crate) fn wellbeing_at(&self, chem: &Chemistry, think: f64, t: f64, spare: f64) -> f32 {
         let (lay, mass, bc) = (Layout::of(chem), self.size(chem), chem.body());
         let mut w = ln(1.0 + (self.fuel(chem, t) / self.n() / think) as f32) + ln(spare.clamp(MARGIN_MIN, MARGIN) as f32 / MARGIN as f32);
-        for k in 0..chem.ns() {
-            let min = self.genes[lay.min + k];
+        for (s, &k) in bc.subs().iter().enumerate() {
+            let min = self.genes[lay.min + s];
             if min > 0.0 {
-                w += ln(ln((self.amount(bc, k) * chem.subs[k].molar_mass / mass) as f32 / min).clamp(MARGIN_MIN as f32, MARGIN as f32) / MARGIN as f32);
+                w += ln(ln((self.store[s] * bc.mm[s] / mass) as f32 / min).clamp(MARGIN_MIN as f32, MARGIN as f32) / MARGIN as f32);
             }
-            if bc.place(k).is_some_and(|s| self.wet >> s & 1 == 1) {
-                let s = &chem.subs[k];
-                w += (((t - s.melt).min(s.boil - t) as f32 - PHASE_MARGIN) / PHASE_MARGIN).min(0.0);
+            if self.wet >> s & 1 == 1 {
+                let x = &chem.subs[k];
+                w += (((t - x.melt).min(x.boil - t) as f32 - PHASE_MARGIN) / PHASE_MARGIN).min(0.0);
             }
         }
         w

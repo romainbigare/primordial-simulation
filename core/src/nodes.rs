@@ -185,7 +185,7 @@ pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread): 
     // Each gene's mean and the spread pooled around it, in place.
     let mut pooled = std::mem::take(&mut o.spread);
     pooled.resize(o.genes.len(), 0.0);
-    for (g, (x, v)) in o.genes.iter_mut().zip(&mut pooled).enumerate() {
+    for (g, (x, v)) in o.genes.iter_mut().zip(pooled.iter_mut()).enumerate() {
         let mean = mix(*x, genes[g]);
         *v = spread_kept(&lay, g, mean, pool(v.max(0.0), spread_at(spread, g), (genes[g] - *x).powi(2), range(&lay, g).0));
         *x = mean;

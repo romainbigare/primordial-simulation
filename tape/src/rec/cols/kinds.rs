@@ -62,7 +62,7 @@ impl Kind {
     }
 
     /// Add body `b` (of the kind), with what is costly to work out for it (`Heavy`).
-    fn add(&mut self, w: &World, b: &Body, cat: usize, h: &Heavy) {
+    fn add(&mut self, w: &World, b: &Body, h: &Heavy) {
         let (chem, n) = (&w.chem, b.n());
         let matter_mm = chem.matter().map(|m| (m, chem.subs[m].molar_mass));
         self.members += n;
@@ -79,9 +79,8 @@ impl Kind {
         for (x, &(g, ..)) in self.genes.iter_mut().zip(&GENES) {
             *x += n * b.gene(g);
         }
-        let nr = self.cat.len();
-        for (x, &g) in self.cat.iter_mut().zip(&b.genes[cat..cat + nr]) {
-            if g >= 0.0 {
+        for (r, x) in self.cat.iter_mut().enumerate() {
+            if let Some(g) = b.diet(chem, r).filter(|&g| g >= 0.0) {
                 (x.0, x.1) = (x.0 + n * g as f64, x.1 + n);
             }
         }
@@ -115,7 +114,7 @@ fn life_years(w: &World, b: &Body, m: f64) -> f64 {
 impl Recorder {
     pub(super) fn kind_cols(&self, c: &Ctx, row: &mut Row) {
         let (w, y) = (c.w, &self.year);
-        let (nr, cat) = (w.chem.reactions.len(), body::Layout::of(&w.chem).cat);
+        let nr = w.chem.reactions.len();
         let seen = self.files.series.iter().filter(|c| c.name.starts_with("root_") && c.name.ends_with("_members")).count();
         let mut kinds = vec![Kind::new(nr); seen.max(y.kinds.len())];
         let bodies: Vec<&Body> = w.life.alive().collect();
@@ -126,7 +125,7 @@ impl Recorder {
                 if k >= kinds.len() {
                     kinds.resize(k + 1, Kind::new(nr));
                 }
-                kinds[k].add(w, b, cat, h);
+                kinds[k].add(w, b, h);
             }
         }
         // The cover of each kind of cover seen so far: its slots, mass, capture area per m² of the world's land, and its

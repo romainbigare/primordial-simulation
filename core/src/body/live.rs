@@ -86,11 +86,11 @@ fn drink(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     let (lay, tg, mass) = (Layout::of(chem), w.t_ground_last(i), b.mass(chem));
     for s in b.wet_ks() {
         let k = chem.body().subs()[s];
-        if b.gene(lay.upt + k) <= 0.0 {
+        if b.gene(lay.upt + s) <= 0.0 {
             continue;
         }
         let (ground, mm, level) = (d.moves.amount(w, Node::ground(i), k), chem.subs[k].molar_mass, b.level(chem, s, mass));
-        let x = (level - b.store[s]).max(0.0).min(ground).min(b.gene(lay.upt + k) * level * days);
+        let x = (level - b.store[s]).max(0.0).min(ground).min(b.gene(lay.upt + s) * level * days);
         if x <= 0.0 || chem.phase(k, tg) != Phase::Liquid || !super::pay(w, d, b, p.c_handle * x * mm) {
             continue;
         }
@@ -137,7 +137,7 @@ fn evaporate(w: &World, d: &mut Chunk, b: &mut Body, q: f64) -> f64 {
     for p in b.wet_ks() {
         let k = chem.body().subs()[p];
         let s = &chem.subs[k];
-        let free = (b.store[p] - b.gene(lay.min + k).max(0.0) * size / s.molar_mass).max(0.0);
+        let free = (b.store[p] - b.gene(lay.min + p).max(0.0) * size / s.molar_mass).max(0.0);
         let x = free.min((q - taken) / s.lv);
         if x <= 0.0 {
             continue;
@@ -218,13 +218,13 @@ fn check_stores(w: &World, d: &mut Chunk, b: &mut Body, stands: f64, tmp: &mut L
 fn starve(w: &World, d: &mut Chunk, b: &mut Body, th: &Melting, dead: &mut Stores) -> bool {
     let t = th.t;
     let (chem, lay, bc) = (&w.chem, Layout::of(&w.chem), w.chem.body());
-    let x = |k: usize| b.amount(bc, k) * chem.subs[k].molar_mass;
+    let x = |s: usize| b.store[s] * bc.mm[s];
     // (Safe minimums are shares of the body; the survivors, a share `live` of the members, have that share of it.)
     let size = b.size(chem);
-    let short = |&k: &usize| x(k) < b.gene(lay.min + k) * size && !b.burns_at(chem, k, t);
-    let live = (0..chem.ns()).filter(short).map(|k| x(k) / (b.gene(lay.min + k) * size).max(1e-30)).fold(1.0, f64::min);
+    let short = |&s: &usize| x(s) < b.gene(lay.min + s) * size && !b.burns_at(chem, bc.subs()[s], t);
+    let live = (0..bc.n()).filter(short).map(|s| x(s) / (b.gene(lay.min + s) * size).max(1e-30)).fold(1.0, f64::min);
     let f = 1.0 - live.max(0.0);
-    *dead = std::array::from_fn(|s| if s < bc.n() && !short(&bc.subs()[s]) { b.store[s] * f } else { 0.0 });
+    *dead = std::array::from_fn(|s| if s < bc.n() && !short(&s) { b.store[s] * f } else { 0.0 });
     f < 1.0 && thin(w, d, b, f, dead, LACK, th) && !b.lacking(&w.chem, b.mass(&w.chem), b.temp(&w.chem))
 }
 

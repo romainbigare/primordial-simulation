@@ -17,14 +17,13 @@ impl Body {
     /// Key stores (safe minimum above 0), one bit per store.
     pub(crate) fn key_mask(&self, chem: &Chemistry) -> u32 {
         let lay = Layout::of(chem);
-        let subs = chem.body().subs();
-        (0..subs.len()).filter(|&s| self.genes[lay.min + subs[s]] > 0.0).fold(0, |m, s| m | 1 << s)
+        (0..chem.body().n()).filter(|&s| self.genes[lay.min + s] > 0.0).fold(0, |m, s| m | 1 << s)
     }
     /// Key stores that are liquid at `t` K, one bit per store.
     pub fn key_liquids(&self, chem: &Chemistry, t: f64) -> u32 {
         let lay = Layout::of(chem);
         let subs = chem.body().subs();
-        (0..subs.len()).filter(|&s| self.genes[lay.min + subs[s]] > 0.0 && chem.phase(subs[s], t) == Phase::Liquid).fold(0, |m, s| m | 1 << s)
+        (0..subs.len()).filter(|&s| self.genes[lay.min + s] > 0.0 && chem.phase(subs[s], t) == Phase::Liquid).fold(0, |m, s| m | 1 << s)
     }
     /// The place of its body matter among its stores, if bodies grow (`Chemistry::matter`).
     #[inline]
@@ -113,7 +112,7 @@ impl Body {
         let (keep, bc) = (Layout::of(chem).keep, chem.body());
         let (mut liquid, mut h) = (0.0f64, 0.0f64);
         for s in self.wet_ks() {
-            (liquid, h) = (liquid + self.store[s] * bc.mm[s], h.max(self.gene(keep + bc.subs()[s]).clamp(0.0, MAX_KEEP)));
+            (liquid, h) = (liquid + self.store[s] * bc.mm[s], h.max(self.gene(keep + s).clamp(0.0, MAX_KEEP)));
         }
         (liquid, h)
     }
@@ -132,7 +131,7 @@ impl Body {
     /// a solid it builds what its `share` makes of its matter; any other, kg per kg of living body; body matter a share
     /// of the whole mass `mass`.
     pub fn level(&self, chem: &Chemistry, s: usize, mass: f64) -> f64 {
-        self.level_at(chem, s, mass, self.gene(Layout::of(chem).keep + chem.body().subs()[s]))
+        self.level_at(chem, s, mass, self.gene(Layout::of(chem).keep + s))
     }
     /// `level` with the keep gene of store `s` at `f`.
     pub(crate) fn level_at(&self, chem: &Chemistry, s: usize, mass: f64, f: f64) -> f64 {
@@ -148,7 +147,7 @@ impl Body {
     /// What it keeps of store `s` when it gives or puts out (of size `size`, kg): `Physics::keep_min` times its safe
     /// minimum, mol.
     pub(crate) fn kept(&self, chem: &Chemistry, p: &crate::Physics, s: usize, size: f64) -> f64 {
-        p.keep_min * self.gene(Layout::of(chem).min + chem.body().subs()[s]).max(0.0) * size / chem.body().mm[s]
+        p.keep_min * self.gene(Layout::of(chem).min + s).max(0.0) * size / chem.body().mm[s]
     }
     /// What it can spare of store `s` to give, to a body or into a part (of size `size` and mass `mass`, kg), mol: never
     /// its body matter or a built solid; what it holds above `kept` and, of a key liquid, above its level.
@@ -185,9 +184,10 @@ impl Body {
     /// The share of solid `k` (a substance) in what the body builds (its keep gene, all together at most `MAX_KEEP`;
     /// `usize::MAX`: the sum).
     pub fn share(&self, chem: &Chemistry, k: usize) -> f64 {
-        let keep = Layout::of(chem).keep;
-        let all: f64 = chem.materials().map(|x| self.gene(keep + x).clamp(0.0, 1.0)).sum();
-        let s = if k == usize::MAX { all } else { self.gene(keep + k).clamp(0.0, 1.0) };
+        let (keep, bc) = (Layout::of(chem).keep, chem.body());
+        let gene = |x: usize| bc.place(x).map_or(0.0, |s| self.gene(keep + s).clamp(0.0, 1.0));
+        let all: f64 = chem.materials().map(gene).sum();
+        let s = if k == usize::MAX { all } else { gene(k) };
         s * (MAX_KEEP / all.max(1e-30)).min(1.0)
     }
     /// Nothing left of a member (under `EMPTY_KG` each) when the mass is `m`.
@@ -198,7 +198,7 @@ impl Body {
     pub fn lacking(&self, chem: &Chemistry, m: f64, t: f64) -> bool {
         // A safe minimum is a share of the body, not of the whole mass: holding fuel kills no body.
         let (lay, size, bc) = (Layout::of(chem), self.size(chem), chem.body());
-        self.empty_at(m) || (0..chem.ns()).any(|k| self.amount(bc, k) * chem.subs[k].molar_mass < self.gene(lay.min + k) * size && !self.burns_at(chem, k, t))
+        self.empty_at(m) || (0..bc.n()).any(|s| self.store[s] * bc.mm[s] < self.gene(lay.min + s) * size && !self.burns_at(chem, bc.subs()[s], t))
     }
 }
 

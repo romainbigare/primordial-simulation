@@ -81,7 +81,7 @@ worn edges, structures, true colour (r, g, b).
 | `births`, `died_<cause>` | 1/yr | members born; died by cause (`lack`, `phase`, `spent`, `taken`, `broken`, `age`) |
 | `lineages`, `lineages_ever`, `updates` | , , 1/yr | brain lineages alive and ever; body updates |
 | `busiest_chunk` | | the busiest chunk's share of a batch's body updates in the parallel pass (its bodies over all of the pass's), the year's mean over its batches: how evenly the chunks share the work |
-| `cat_<r>` | log10 | mean diet gene of reaction r over all members (on above 0: the body runs or digests by that reaction; mixes kinds, read the per-kind columns) |
+| `cat_<r>` | log10 | mean diet gene of reaction r over all members (on above 0: the body runs or digests by that reaction; mixes kinds, read the per-kind columns); 0 for a reaction bodies may not run (laws.md 6.1) |
 
 **Brains and kinds**
 

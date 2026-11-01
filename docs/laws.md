@@ -274,7 +274,7 @@ goes like a surface. **Order** is the count or `Reaction::order`. **Extent** is 
 (`change/kernel.rs`), never past the scarce input. **Heat**: −ΔH to the node (`Chemistry::dh`); formation enthalpies
 are of the solid, so a liquid holds its fusion heat and a gas its vaporisation heat too. **Light** reactions take
 absorbed light and store `light_yield` of it. **Catalyst**: a body runs no reactor: its diet genes (one per
-reaction) switch its burnings and what it digests on or off (2.4, 6.2, 6.7). **Open world**
+reaction bodies may run, 6.1) switch its burnings and what it digests on or off (2.4, 6.2, 6.7). **Open world**
 (`Reaction::open`): in ground, liquid, air and parts live the decomposers, whose catalyst `open` works as far as the
 node is moist: 1 + (`open` − 1) × moisture (`change::open_catalyst`). Moisture is how wet the node is as living things
 feel it: d / (d + `wet_depth`), d the depth of its liquid in its pores and standing (`FlowView::moist`,
@@ -395,8 +395,9 @@ Files: `core/src/copy/` (`mix`, `grow`), `nodes.rs`, `body/genes.rs`, `lineage.r
 ### 4.1 Genes
 16 scalar genes (`body::Layout`; `HEAT`, `STRENGTH`, `CHILD`, `COPY_MASS`, `MUT`, `LEARN`, the brain sizes
 `HIDDEN`, `MEMORY`, `SEEN`, `SIGHT`, and `DISPERSE`, `REPAIR`, `WET`, `ALLOC`, `KEEP_T`, `COOL_T`; meanings in
-`body/genes.rs`), a diet gene per reaction (on above 0), per substance a safe minimum, an uptake and
-a keep gene, and the born brain rows. **Mutation** (`body::vary`): parent's gene plus noise of one step × 10^`MUT`,
+`body/genes.rs`), a diet gene per reaction bodies may run (on above 0), per store a safe minimum, an uptake and a
+keep gene (6.1; in place, `body::Genes`), and the born brain rows. **Mutation** (`body::vary`): parent's gene plus
+noise of one step × 10^`MUT`,
 within range (not the brain-size genes of a body with no brain, 4.4); born rows change with `row_chance` by
 `row_noise`. **Likeness** (`body::alike`): every
 gene within `alike` steps; it decides who mixes, joins and merges.

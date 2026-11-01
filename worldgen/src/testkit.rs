@@ -397,7 +397,8 @@ pub fn children(w: &World, id: u64) -> Vec<Handle> {
 pub fn only_the_solid(w: &World, b: &mut Body) {
     let lay = Layout::of(&w.chem);
     let (m, burn_matter) = w.chem.matter_roles().expect("body matter");
-    (b.genes[lay.cat + burn_matter], b.genes[lay.upt + m]) = (-1.0, -0.1);
+    let (diet, m) = (lay.diet(&w.chem, burn_matter).expect("a diet gene"), w.chem.body().place(m).expect("a store"));
+    (b.genes[diet], b.genes[lay.upt + m]) = (-1.0, -0.1);
     b.prepare(&w.chem, &w.cfg);
 }
 

@@ -3,12 +3,14 @@
 
 use super::Body;
 use crate::chem::Chemistry;
+use crate::math::Few;
 use crate::rng::Rng;
+use crate::units::{BODY_REACTIONS, BODY_STORES};
 use std::f32::consts::{FRAC_PI_8, LOG10_2};
 
-// Scalar genes, then one per reaction (a diet: on above 0, it burns or digests what that reaction takes) and three per
-// substance (safe minimum as a share of mass; take selectivity; most share of mass kept): `Layout`. Below zero a gene
-// is off.
+// Scalar genes, then one per reaction bodies may run (a diet: on above 0, it burns or digests what that reaction takes)
+// and three per store (safe minimum as a share of mass; take selectivity; most share of mass kept), in the order of
+// `Chemistry::body`: `Layout`. Below zero a gene is off.
 /// Heat conductance through its coat, log10 W/(K kg) for a member of `Physics::m_ref` kg; with mass^(2/3)
 pub const HEAT: usize = 0;
 /// Strength, 0..1
@@ -41,6 +43,10 @@ pub const KEEP_T: usize = 14;
 /// it does neither
 pub const COOL_T: usize = 15;
 pub const NSCALAR: usize = 16;
+/// Most genes of a body: the scalar genes, a diet gene per reaction and three genes per store, at most.
+pub const GENES: usize = NSCALAR + BODY_REACTIONS + 3 * BODY_STORES;
+/// A body's genes in place (`Layout::len` of them), or the variance of each among a node's members (none: no spread).
+pub type Genes = Few<f32, GENES>;
 /// A rate gene (`LEARN`) at or below this is off: the lower end of its range, -4, less a margin for rounding.
 const GENE_OFF: f32 = -3.9;
 /// The genes of the sizes of brain and senses.
@@ -94,7 +100,8 @@ const fn scalar(g: usize) -> (f32, f32, f32) {
     }
 }
 
-/// Where the genes of each kind start, for a chemistry.
+/// Where the genes of each kind start, for a chemistry: the diet genes, one per reaction bodies may run, and the genes of
+/// the stores, one per store each (`Chemistry::body`).
 #[derive(Clone, Copy)]
 pub struct Layout {
     pub cat: usize,
@@ -106,13 +113,21 @@ pub struct Layout {
 
 impl Layout {
     pub fn of(chem: &Chemistry) -> Self {
-        let (nr, ns) = (chem.reactions.len(), chem.ns());
+        let (nr, ns) = (chem.body().reactions().len(), chem.body().n());
         let cat = NSCALAR;
         Layout { cat, min: cat + nr, upt: cat + nr + ns, keep: cat + nr + 2 * ns, len: cat + nr + 3 * ns }
+    }
+    /// The diet gene of reaction `r`, if bodies may run it.
+    pub fn diet(&self, chem: &Chemistry, r: usize) -> Option<usize> {
+        chem.body().reaction(r).map(|q| self.cat + q)
     }
 }
 
 impl Body {
+    /// Its diet gene of reaction `r`, if bodies may run it (`Chemistry::body`).
+    pub fn diet(&self, chem: &Chemistry, r: usize) -> Option<f32> {
+        Layout::of(chem).diet(chem, r).map(|g| self.genes[g])
+    }
     /// Learning rate of its brain within its life: 10 to the power of its gene, 0 when it is off (at the lower end of
     /// its range).
     pub fn learn_rate(&self) -> f32 {
@@ -143,17 +158,7 @@ fn step(lay: &Layout, g: usize, x: f32) -> f32 {
 
 /// Genes in steps of `like`.
 pub fn steps(lay: &Layout, a: &[f32]) -> Vec<f32> {
-    steps_by(lay, &likes(lay, a.len()), a)
-}
-
-/// `steps` with the step of each gene for likeness (`likes`) made once for many bodies.
-pub(crate) fn steps_by(lay: &Layout, likes: &[f32], a: &[f32]) -> Vec<f32> {
-    a.iter().zip(likes).enumerate().map(|(g, (&x, &like))| in_steps(lay, g, x, like)).collect()
-}
-
-/// The step for likeness of each of the first `n` genes (`like`).
-pub(crate) fn likes(lay: &Layout, n: usize) -> Vec<f32> {
-    (0..n).map(|g| like(lay, g)).collect()
+    a.iter().enumerate().map(|(g, &x)| step(lay, g, x)).collect()
 }
 
 /// The variance of gene `g` in a node's spread (0 past its end).
@@ -219,9 +224,8 @@ pub(crate) fn most(step: f32, alike: f32) -> f32 {
 /// `most`). The spread's share of the noise shrinks near a wall, so the mean is never clamped: a clamp would be a drift
 /// no selection made. A body with no `brain` does not mutate its brain-size genes (`BRAIN_SIZES`): they do nothing
 /// without one, so a brain arises only in a lineage founded with one ("no brain where nothing is decided").
-pub fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, brain: bool, r: &mut Rng)
-    -> (Vec<f32>, Vec<f32>) {
-    let (size, m, mut left) = (mutation_size(genes), m.max(1.0) as f32, Vec::with_capacity(genes.len()));
+pub fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, brain: bool, r: &mut Rng) -> (Genes, Genes) {
+    let (size, m, mut left) = (mutation_size(genes), m.max(1.0) as f32, Genes::default());
     let genes = (genes.iter().enumerate())
         .map(|(g, &v)| {
             let (step, lo, hi) = range(lay, g);

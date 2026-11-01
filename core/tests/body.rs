@@ -143,10 +143,11 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
         let lay = Layout::of(&w.chem);
         let (_, burn_matter) = w.chem.matter_roles().expect("matter");
         if !digests {
-            b.genes[lay.cat + burn_matter] = -1.0;
+            b.genes[lay.diet(&w.chem, burn_matter).expect("a diet gene")] = -1.0;
         }
         // Only matter on the ground to take: it takes neither the liquid nor the solid.
-        (b.genes[lay.upt + LIQUID], b.genes[lay.upt + RICH]) = (-0.1, -0.1);
+        let at = |k: usize| w.chem.body().place(k).expect("a store");
+        (b.genes[lay.upt + at(LIQUID)], b.genes[lay.upt + at(RICH)]) = (-0.1, -0.1);
         let (rich0, matter0, size0) = (b.amount(w.chem.body(), RICH), b.amount(w.chem.body(), MATTER), b.size(&w.chem));
         let s = w.add(b);
         let books = Books::now(&w);
