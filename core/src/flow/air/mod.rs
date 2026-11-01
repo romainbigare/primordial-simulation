@@ -47,8 +47,7 @@ pub(super) fn lerp(s: &Scratch, v: &[f64], i: usize) -> f64 {
 /// The share of the air ground cell `i` sees that lies over it: its area over the area of the air it sees (`lerp`).
 #[inline]
 pub(super) fn over_cell(w: &World, s: &Scratch, i: usize) -> f64 {
-    let mesh = &w.mesh;
-    mesh.cells().area()[i] / lerp(s, mesh.level(AIR).area(), i)
+    w.mesh.cells().area()[i] / s.seen[i]
 }
 
 /// Temperature of air at height `z`, m, that is at `t` K at its column's mean height `zair`, m, and cools by `gam` K/m.
@@ -57,10 +56,11 @@ pub(super) fn at_height(t: f64, gam: f64, z: f64, zair: f64) -> f64 {
     (t - gam * (z - zair)).max(1.0)
 }
 
-/// Temperature of the air touching ground cell `i` under air nodes at `t`, K: the air it sees (`lerp`) at its head.
+/// Temperature of the air touching ground cell `i` under air nodes at `t`, K: the air it sees (`lerp`) at its head, colder
+/// by `Scratch::cool` (`at_height`).
 #[inline]
 pub(super) fn touching(s: &Scratch, t: &[f64], i: usize) -> f64 {
-    at_height(lerp(s, t, i), lerp(s, &s.gam, i), s.head[i], lerp(s, &s.zair, i))
+    (lerp(s, t, i) - s.cool[i]).max(1.0)
 }
 
 /// Scale height of air at `t` K whose `mol` mol weigh `kg` kg under gravity `g`, RT/(Mg), m.
@@ -81,6 +81,8 @@ pub(super) fn state(w: &World, s: &mut Scratch) {
     nodes(w, s);
     heights(w, s);
     layers(w, s);
+    let cells = w.mesh.cells().n();
+    s.cool = (0..cells).map(|i| lerp(s, &s.gam, i) * (s.head[i] - lerp(s, &s.zair, i))).collect();
 }
 
 /// Amount, mol, heat capacity, J/K, and mass, kg, of the gases of each air node, from its amounts now and the gas the

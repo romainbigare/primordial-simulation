@@ -9,7 +9,7 @@ use super::cells::{exchange, put, sunlight, Ctx, Response, FIXED, GAS, KEPT, LIG
 use super::exchange::bucket;
 use super::lerp;
 use super::step::Active;
-use crate::{store::Class, units::{MAX_SUBSTANCES, R_GAS}, World, AIR};
+use crate::{store::Class, units::{MAX_SUBSTANCES, R_GAS}, World};
 
 /// The ground an exchange solves (`cells::exchange`): its area, m², its air node, the area of the air it sees (`lerp`),
 /// m², and its mean sunlight at the top of the air, W/m²; that air's drop with height, K/m, and mean height, m, and
@@ -55,7 +55,7 @@ impl Surf {
         Surf {
             area: w.mesh.cells().area()[i],
             j: w.mesh.cells().parent()[i] as usize,
-            seen_area: lerp(s, w.mesh.level(AIR).area(), i),
+            seen_area: s.seen[i],
             sun,
             gam: lerp(s, &s.gam, i),
             zair: lerp(s, &s.zair, i),

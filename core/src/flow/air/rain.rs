@@ -4,7 +4,7 @@
 use super::super::Scratch;
 use super::daily::Mean;
 use super::step::Active;
-use super::{at_height, lerp, over_cell, touching};
+use super::{at_height, over_cell, touching};
 use crate::{math::{mean_decay, mean_passed}, World, AIR};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -185,7 +185,7 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64]) -> Wet {
         .collect();
     let mut cell = vec![0.0; n * (1 + nx)];
     crate::par::rows(&mut cell, 1 + nx, || (), |_, i, row| {
-        let (tl, seen) = (touching(s, t0, i), lerp(s, air.area(), i));
+        let (tl, seen) = (touching(s, t0, i), s.seen[i]);
         row[0] = over_cell(w, s, i);
         act.iter().enumerate().for_each(|(y, ac)| row[1 + y] = s.sat[ac.k].at(tl) / tl * seen);
     });
@@ -226,7 +226,7 @@ pub(super) fn rain_air(s: &Scratch, wet: &Wet, (y, j, ratio): (usize, usize, f64
     let node = &wet.0[j];
     let len = node.cell.len();
     let over = |e: usize| node.share[e] * (ratio - node.ratio[y * len + e]).max(0.0);
-    let (sum, all) = (0..len).fold((0.0, 0.0), |(sum, all), e| (sum + over(e) * touching(s, t, node.cell[e] as usize), all + over(e)));
+    let (sum, all) = (0..len).map(|e| (e, over(e))).filter(|p| p.1 > 0.0).fold((0.0, 0.0), |(sum, all), (e, o)| (sum + o * touching(s, t, node.cell[e] as usize), all + o));
     (all > 0.0).then(|| sum / all)
 }
 
