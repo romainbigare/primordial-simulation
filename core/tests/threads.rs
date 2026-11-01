@@ -64,5 +64,5 @@ fn a_cell_takes_no_more_than_its_ground_and_its_share_of_the_air() {
     let lost = w.counts.rounded[0] - rounded;
     assert!(w.a(OX, j) >= 0.0 && lost <= 1e-9, "the air holds {} mol of the gas; {lost} mol rounded away", w.a(OX, j));
     assert!(under.iter().all(|&c| w.g(RICH, c) >= 0.0), "a ground was overdrawn");
-    books.assert_kept(&w, 1e-12);
+    books.assert_kept(&w, pcore::check::DRIFT);
 }
