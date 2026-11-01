@@ -1,7 +1,7 @@
 //! Ground nodes: heat capacity and temperature on the melting plateaus (`ground_state`), phases, the surface and
 //! heads, and heat conducted sideways (`conduct`).
 
-use super::{runs_off, scratch::{Latent, Scratch, Sp}};
+use super::{on_land, scratch::{Latent, Scratch, Sp}};
 use crate::{ground::{heat_above_floor, melting, Melting}, solve::sweep::{sweep, Net}, store::{apply, Class, LinkFlux}, units::{MAX_SUBSTANCES, T_FLOOR}, World};
 
 /// No substance on a melting plateau (`Scratch::pk`).
@@ -169,8 +169,8 @@ pub(super) fn thaw_at(s: &Scratch, c: f64, e: f64, amt: impl Fn(usize) -> f64, m
 pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, cells) = (w.mesh.cells().n(), w.mesh.cells());
     // Conductivity × thickness of each node's active layer, W/K: its bed's skin and its loose ground side by side; none
-    // where liquid does not run off (`runs_off`), so heat crosses only links between two such cells.
-    let on: Vec<bool> = (0..n).map(|i| runs_off(w, s, i)).collect();
+    // below 0 m (`on_land`), so heat crosses only links between two land cells.
+    let on: Vec<bool> = (0..n).map(|i| on_land(s, i)).collect();
     let mut kt: Vec<f64> = s.state.bed.iter().zip(&on).map(|(b, &on)| if on { b.cond * w.cfg.skin_m } else { 0.0 }).collect();
     for &k in &s.state.loose {
         let p = s.sp[k];

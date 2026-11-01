@@ -208,8 +208,6 @@ fn a_hot_spot_spreads_through_the_ground_at_its_diffusivity() {
     for i in 0..n {
         hold_ground(&mut w, i, if i == mid { 310.0 } else { 300.0 });
     }
-    // Liquid runs off every cell, so heat goes sideways through all of them (`flow::runs_off`).
-    w.liquid_flux.fill(1.0);
     w.scratch = Default::default();
     let (books, base, hot) = (Books::now(&w), w.energy_ground(0, 300.0), w.store.heat(Class::Ground)[mid] - w.energy_ground(0, 300.0));
     // Spread to a standard deviation of one cell, in ten steps (the edges, 7 cells off, then reflect almost nothing).
@@ -264,7 +262,6 @@ fn heat_crosses_the_border_of_a_refined_region_by_its_width() {
             let t = 300.0 + if even { 0.0 } else { GRAD * x(&w, i) };
             hold_ground(&mut w, i, t);
         }
-        w.liquid_flux.fill(1.0);
         w.scratch = Default::default();
         let (books, before) = (Books::now(&w), w.store.heat(Class::Ground).to_vec());
         worldgen::testkit::creep(&mut w, dt);
@@ -383,16 +380,16 @@ fn liquid_sinks_into_the_bed_and_runs_off_once_a_month() {
     let mut w = worldgen::new_world(3, 16, 16);
     // Into the summer, so the poured liquid stays liquid.
     (0..SUMMER_MONTHS).for_each(|_| pcore::step(&mut w));
-    pcore::day(&mut w);
+    pcore::day_with_month_at_start(&mut w);
     let (i, _) = pair(&w);
     let p = w.cfg.phys;
     let (pores, full) = (p.porosity * loose(&w, i), p.bed_porosity * p.bed_depth * w.mesh.cells().area()[i]);
     pour(&mut w, i, 4.0 * pores);
     let (v0, d0) = (liquid_m3(&w, i), store_m3(&w, i));
     assert!(v0 - p.field * pores > full - d0, "more over field capacity ({}) than the store's room ({})", v0 - p.field * pores, full - d0);
-    (1..w.cfg.days_per_month).for_each(|_| pcore::day(&mut w));
+    (1..w.cfg.days_per_month).for_each(|_| pcore::day_with_month_at_start(&mut w));
     assert_eq!((liquid_m3(&w, i), store_m3(&w, i)), (v0, d0), "nothing moves inside the month");
-    pcore::day(&mut w);
+    pcore::day_with_month_at_start(&mut w);
     let d = store_m3(&w, i);
     println!("the store {d0:.4e} -> {d:.4e} m³ (room {:.4e}), the ground {v0:.4e} -> {:.4e} m³", full - d0, liquid_m3(&w, i));
     assert!(d > d0, "the store gains: {d0} -> {d} m³");

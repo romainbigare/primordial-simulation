@@ -180,7 +180,7 @@ fn storing_the_solid_costs_no_build() {
     let mut took = 0.0;
     for _ in 0..30 {
         w.events.clear();
-        pcore::day(&mut w);
+        pcore::day_with_month_at_start(&mut w);
         took += took_used(&w);
     }
     let b = &w.life[s];
@@ -408,7 +408,7 @@ fn an_immature_body_never_reproduces() {
     for d in 0..400 {
         feed_minerals(&mut w, s);
         w.events.clear();
-        pcore::day(&mut w);
+        pcore::day_with_month_at_start(&mut w);
         let b = &w.life[s];
         if !b.alive {
             break;
@@ -479,7 +479,7 @@ fn reproducing_updates_keep_elements_and_energy() {
     let mut born = 0.0;
     for _ in 0..150 {
         w.events.clear();
-        pcore::day(&mut w);
+        pcore::day_with_month_at_start(&mut w);
         born += testkit::born(&w);
         assert_eq!(pcore::check::broken(&w), None);
     }
@@ -541,7 +541,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
             feed_minerals(&mut w, s);
             testkit::hold_ground(&mut w, i, GROWTH_GROUND_K);
             w.events.clear();
-            pcore::day(&mut w);
+            pcore::day_with_month_at_start(&mut w);
             assert!(w.life[s].alive, "the body died on day {day}: {:?}", w.events.iter().filter_map(|e| if let EventKind::Died { cause, .. } = e.kind { Some(cause) } else { None }).collect::<Vec<_>>());
             // What its burning made and it holds above the level it keeps drains to the ground at its update (`live::shed`);
             // what a decision burns after it adds a trace.

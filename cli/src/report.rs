@@ -75,8 +75,9 @@ pub fn year(w: &World, y: u64, t0: &Totals, clock: &Clock, rec: &Recorder) -> St
     let cover = pcore::cover::sums(w);
     let (kg, slots, kinds) = (cover.iter().map(|s| s.kg).sum::<f64>(), cover.iter().map(|s| s.slots).sum::<f64>(), cover.iter().filter(|s| s.slots > 0.0).count());
     format!(
-        "year {y}: element drift {de:.2e} ({}), energy drift {dq:.2e}, heat not given {:.2e} J, rounded to zero {:.1e} mol {:.1e} J, cover {kg:.3e} kg in {slots} slots of {kinds} starting kinds, bodies {all} (at most {most} in a cell; {} single, {} nodes, {:.3e} members), lineages {}, born brains {born}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {us} ({} parts); gifts {}/yr, watches {}/yr",
+        "year {y}: element drift {de:.2e} ({}), energy drift {dq:.2e}, potential energy gained {:.3e} J, heat not given {:.2e} J, rounded to zero {:.1e} mol {:.1e} J, cover {kg:.3e} kg in {slots} slots of {kinds} starting kinds, bodies {all} (at most {most} in a cell; {} single, {} nodes, {:.3e} members), lineages {}, born brains {born}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {us} ({} parts); gifts {}/yr, watches {}/yr",
         each.join(" "),
+        w.store.lifted(),
         w.counts.clamped_heat,
         w.counts.rounded[0],
         w.counts.rounded[1],

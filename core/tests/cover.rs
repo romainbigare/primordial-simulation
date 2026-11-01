@@ -111,7 +111,7 @@ fn grazing_takes_from_the_cover() {
     w.take_counters();
     w.events.clear();
     for _ in 0..60 {
-        pcore::day(&mut w);
+        pcore::day_with_month_at_start(&mut w);
     }
     let grazed: f64 = w.events.iter().filter_map(|e| matches!(e.kind, EventKind::Took { from: pcore::choose::COVER, .. }).then_some(e.value)).sum();
     let lost = w.take_counters().cover_lost[TAKEN as usize];
@@ -162,6 +162,7 @@ fn seeds_join_their_kind_or_found_a_slot() {
 /// lower in the world with winters. (Below the liquid's melting point the cover is dormant, its ground's liquid frozen,
 /// and frost does not kill it: a frost gene under 273 K is never selected by frost.)
 #[test]
+#[ignore = "slow: two 60-year runs of a 16 x 16 world"]
 fn the_frost_gene_falls_where_winters_are_cold() {
     let mean_frost = |lat: [f64; 2]| {
         let (chem, init) = worldgen::chemistry0();
