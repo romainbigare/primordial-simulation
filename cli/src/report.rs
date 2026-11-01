@@ -34,7 +34,8 @@ pub fn balances(w: &World) -> Vec<String> {
 }
 
 /// The time spent so far, by stage (flow, change, bodies, parts) and in the tape (the recorder each month, the snapshot
-/// and the files each decade); and the year and body updates counted at the last yearly line, with the time spent then.
+/// and the files each time they are written, and the pictures); and the year and body updates counted at the last
+/// yearly line, with the time spent then.
 pub struct Clock {
     pub spent: Spent,
     printed: Spent,

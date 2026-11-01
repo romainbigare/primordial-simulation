@@ -257,8 +257,7 @@ fn off_by_noise<S: Copy>(columns: &[&str], runs: &[Vec<Vec<f64>>], settings: &[S
 
 /// The sleep's known bias on the heat-absorbing gas, as a share of the air: the sleep of Change leaves it 0.8e-6 to
 /// 1.6e-6 high in this world (seeds 1 to 6), about +0.9% of the gas and +0.04 K of the land over a long run, which the
-/// owner accepts (`docs/lighter/measures.md`, "Study: the sleep's bias on the gas"). Held to twice that, so a growing
-/// bias fails the test.
+/// owner accepts. Held to twice that, so a growing bias fails the test.
 const GAS_SLEEP_BIAS: f64 = 3e-6;
 
 /// Sleep against no sleep, and each speed setting of the sleep x2 and /2 (`docs/numbers.md`, speed settings): the
