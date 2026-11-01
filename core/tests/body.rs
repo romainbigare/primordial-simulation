@@ -218,11 +218,11 @@ fn a_cell_left_with_no_bodies_holds_nothing_at_the_next_survey() {
 fn bodies_die_of_age_by_their_rate_of_living() {
     use pcore::body::{AGE, COPY_MASS, DISPERSE, LEARN, REPAIR, STRENGTH};
     use pcore::brain;
-    const ONES: usize = 100;
+    const ONES: usize = 60;
     let mut w = small_world();
     // Bodies that do not grow (their mass, which the wear goes by, stays): no building work. Their copy mass is half their body: the matter that rots is not starving. No one
-    // ages until they have settled, and bodies with a brain do not merge into nodes (`--individuals`).
-    (w.cfg.phys.c_build, w.cfg.phys.e_life, w.cfg.nodes) = (0.0, 1e30, false);
+    // ages until they have settled, and each individual stands alone in its cell, so none merges into a node.
+    (w.cfg.phys.c_build, w.cfg.phys.e_life) = (0.0, 1e30);
     // Upkeep goes with the temperature: the bodies stand on ground held at the temperature the costs are anchored to
     // (`Physics::t_cat`, booked as an edit), so that they pay what the costs say, in two cells of high ground (rain
     // does not flood it) with other air nodes.
@@ -230,6 +230,9 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     land.sort_by(|&a, &b| w.life.env[b][2].total_cmp(&w.life.env[a][2]));
     let air = w.mesh.up(land[0], 0, AIR);
     let cells = [land[0], *land.iter().find(|&&i| w.mesh.up(i, 0, AIR) != air).expect("another air node")];
+    let lone: Vec<usize> = land.iter().copied().filter(|i| !cells.contains(i)).take(ONES).collect();
+    assert_eq!(lone.len(), ONES, "a cell of high ground for each individual");
+    let held: Vec<usize> = cells.iter().chain(&lone).copied().collect();
     // Starting eaters whose brain only rests, weak so their stores last.
     let line = Line::new(&mut w, &Brain::only(brain::REST), 1);
     let make = |w: &mut pcore::World, i: usize, repair: f32, count: f64| {
@@ -247,15 +250,15 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         b.prepare(&w.chem, &w.cfg);
         w.add(b)
     };
-    // A node of members at repair 0 alone in one cell; one at repair 0.5 and a hundred individuals at repair 0 in the
-    // other (an individual's death is of one member, a node's of a share).
+    // A node of members at repair 0 alone in one cell, one at repair 0.5 in the other, and individuals at repair 0, each
+    // alone in a cell (an individual's death is of one member, a node's of a share).
     let (sa, sb) = (make(&mut w, cells[1], 0.0, 1000.0), make(&mut w, cells[0], 0.5, 1000.0));
-    let ones: Vec<Handle> = (0..ONES).map(|_| make(&mut w, cells[0], 0.0, 1.0)).collect();
+    let ones: Vec<Handle> = lone.iter().map(|&i| make(&mut w, i, 0.0, 1.0)).collect();
     // A day with the ground held; the age deaths of the day, as (cell, day, members).
     let t_cat = w.cfg.phys.t_cat;
     let day = |w: &mut pcore::World, deaths: &mut Vec<(usize, u64, f64)>| {
         w.events.clear();
-        held_day(w, &cells, t_cat);
+        held_day(w, &held, t_cat);
         deaths.extend(w.events.iter().filter(|e| matches!(e.kind, pcore::event::EventKind::Died { cause: AGE, .. })).map(|e| (e.node as usize, e.day, e.value)));
     };
     // Two months for the bodies to settle at the temperature their heat and the ground give them, then their upkeep per
@@ -303,7 +306,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     let chance = |f: f64| -(-((by - f) / every).floor() * every / li).exp_m1();
     let expected: f64 = from[2..].iter().map(|&f| chance(f)).sum();
     let sd = from[2..].iter().map(|&f| chance(f) * (1.0 - chance(f))).sum::<f64>().sqrt();
-    let dead = deaths.iter().filter(|x| x.0 == cells[0] && x.2 == 1.0 && (x.1 as f64) <= by).count() as f64;
+    let dead = deaths.iter().filter(|x| lone.contains(&x.0) && x.2 == 1.0 && (x.1 as f64) <= by).count() as f64;
     println!("lives, days: nodes {la:.1} and {lb:.1} at genes 0 and 0.5 (predicted {life} and {:.0}); individuals dead in a life {dead} of {ONES} (expected {expected:.1} +- {sd:.1})", life * x);
     assert!((la / life - 1.0).abs() < 0.1 && (lb / (life * x) - 1.0).abs() < 0.1, "node lives {la} and {lb}");
     assert!((dead - expected).abs() < 3.5 * sd, "individuals dead in a life: {dead}, expected {expected} +- {sd}");

@@ -460,7 +460,6 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
   sizes it moves to (it joins that one), within `MAX_LINEAGES`. Living: as at the start of the month's pass
   (`Life::lineages_of`), so bodies that move to the same new sizes in one pass found a lineage each, whoever shares
   their chunk.
-  `nodes::open` draws members as individuals. `--individuals` keeps bodies with a brain out of nodes (handover 7.1).
 
 ### 4.5 The cover: light-eaters as a field
 `core/src/cover/`. The light-eaters are not bodies: each cell holds up to `SLOTS` (4) kinds of **cover**, each the

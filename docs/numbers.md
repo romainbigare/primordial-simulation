@@ -49,7 +49,6 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `regrow` | m/s | speed at which bodies spread back into a cleared lane, from each side, under dense cover (times cover / `rho_pass` below that) | 1 nm/s is 3 cm a year, the slow end of the spread of a ground cover by runners (my arithmetic, unchecked) | anchored |
 | `creep` | m/s per unit slope, times 1/hardness | loose solids creeping down a slope: a flux of D x slope, D = creep x softness x thickness | hillslope diffusivity 1e-3 to 1e-2 m²/yr (Roering et al. 1999; Fernandes and Dietrich 1997; Hanks 2000; checked in part in Whipple's MIT notes, 2004); 3e-3 m²/yr on the starting loose ground (1 m, softness 1.53) is 6.3e-11 m/s | anchored |
 | `hard_min` | none (a hardness) | added to a solid's hardness before its softness, 1 / (hardness + this), is taken: a solid of hardness 0 creeps about 20 times as fast as one of hardness 1 | none found | tuned, first guess |
-| `nodes` | on/off | bodies with a brain may be population nodes (off, `--individuals`: they are individuals; bodies without a brain stay nodes) | a setting, for the check that nodes give the same patterns as individuals (handover 7.1) | switch |
 | `two_parents` | on/off | a mature body's children may have a second, alike parent (off, `--no-mix`: copies of one parent) | a setting: the check that nodes keep the mean of their genes without selection, and the measure of what mixing changes (handover 6.4) | switch |
 | `null` | on/off | a null run: no learning, no imitation, born rows and brain bases never change; genes still mutate | the run to compare a seed with | switch |
 | `phys` | (a `Physics`) | holds the numbers below | | container |
@@ -252,7 +251,7 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 107 rows of `Config` and `Physics` are their 107 fields.
+The 106 rows of `Config` and `Physics` are their 106 fields.
 
 | mark | rows | which |
 |---|---|---|
@@ -260,7 +259,7 @@ The 107 rows of `Config` and `Physics` are their 107 fields.
 | anchored | 52, and 11 outside the structs | 52 fields (among them `c_basal`, `dormant`, `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `mix`, `light_yield`, `gas_floor`, `gas_ref`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `MAX_KEEP`, and the three decomposers' factors `open` of the chemistry (reactions 1, 21 and 26) |
 | tuned (run or reason named) | 6, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`), set for an outcome (`rain_time`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`, the cover's starting genes) |
 | tuned, first guess | 36 | 32 free numbers (`wind`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `keep_min`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
-| switch | 3 | `nodes`, `two_parents`, `null` |
+| switch | 2 | `two_parents`, `null` |
 | speed | 2, and 5 outside the structs | `wake_share`, `sleep_days`; outside: `Config::chunks`, a setting of the run that a snapshot does not keep (`ew --chunks`, 64: the cells cut into that many runs for the bodies' parallel passes, many more than the threads of a machine, so the pool shares out uneven runs; any count gives the same world), the air's step `schedule::AIR_STEP_DAYS` (10 days, three a month: against 1-day steps the land within 0.3 K, `the_long_step_keeps_the_climate`), the caps `MAX_NODES`, `MAX_LINEAGES`, `MOST_ACTS` |
 | container | 1 | `phys` |
 

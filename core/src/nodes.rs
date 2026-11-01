@@ -1,12 +1,11 @@
 //! Population nodes: the monthly merge in each cell to one node per kind and stage (`crowd`), a body joining another
-//! (`merge`, `add`), a part of a node coming back to it (`rejoin`), and members drawn from a node as individuals
-//! (`open`). Members, stores and heat are kept exactly in every join.
+//! (`merge`, `add`), and a part of a node coming back to it (`rejoin`). Members, stores and heat are kept exactly in
+//! every join.
 
 use crate::bond::{held, let_go, room};
-use crate::body::{self, alike, distance, most, noise, range, spread_at, spread_kept, wall_room, Body, Layout, REACH};
-use crate::brain::{blend, row_step, shake};
+use crate::body::{self, alike, distance, most, range, spread_at, spread_kept, Body, Layout};
+use crate::brain::{blend, row_step};
 use crate::lineage::sizes_of;
-use crate::rng::{Purpose, Rng};
 use crate::life::Handle;
 use crate::{life::Chunk, World};
 
@@ -29,7 +28,7 @@ pub const MAX_NODES: usize = 8;
 /// lineage, room and part: the smaller joins the larger, taking its brain, born rows and lineage when that is another
 /// (`merge_taking`). Where no such pair is left the cell stays over the cap.
 pub fn cap(w: &World, d: &mut Chunk, lay: &Layout, i: usize) {
-    let left: Vec<Handle> = d.cell(i).filter(|&s| may_be_node(w, &d[s])).collect();
+    let left: Vec<Handle> = d.cell(i).collect();
     if left.len() <= MAX_NODES {
         return;
     }
@@ -93,7 +92,7 @@ const PAIR: usize = 2;
 /// `Kin`, where that is a node or its kind has more than `PAIR` bodies there. Returns the bodies left, largest first.
 fn join_kin(w: &World, d: &mut Chunk, i: usize) -> Vec<Handle> {
     let b = &*d;
-    let mut list: Vec<(u64, Handle)> = b.cell(i).filter(|&s| may_be_node(w, &b[s])).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
+    let mut list: Vec<(u64, Handle)> = b.cell(i).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
     list.sort_by_key(|x| x.0);
     let kind: Vec<Kin> = list.iter().map(|&(_, s)| kin_of(w, &b[s])).collect();
     let many = |x: usize| b[list[x].1].n() > 1.0 || kind.iter().filter(|&&k| k == kind[x]).count() > PAIR;
@@ -132,12 +131,6 @@ pub fn merge_taking(w: &World, d: &mut Chunk, s: Handle, t: Handle) {
     let_go(w, d, &mut c, false);
     d.remove(s, &c);
     add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (&born, &rows, spread));
-}
-
-/// Body `b` may be or join a population node: any body with `Config::nodes`, else only one without a brain (the check
-/// of nodes against individuals compares brains in nodes and alone; a body with no brain decides nothing).
-pub(crate) fn may_be_node(w: &World, b: &Body) -> bool {
-    w.cfg.nodes || w.life.brainless(b)
 }
 
 /// The body at `s` joins the body at `t`, of its lineage (`add`), letting go of what it holds.
@@ -235,70 +228,3 @@ pub(crate) fn part(b: &mut Body, f: f64, fa: f64) -> Body {
 
 /// A count this close to a whole number is that number.
 pub(crate) const COUNT_SLACK: f64 = 1e-9;
-
-/// `n` members of the node at `h` as individuals, each drawn with genes and born rows of its own (`draw`),
-/// drawn as its genes are from their spread (`Body::row_spread`), placed in the node's cell: the close view of a node,
-/// and what the check of nodes against individuals compares. Each draw leaves the others' genes and rows, so the mean
-/// of all is kept. The node keeps at least one member (draws stop when it has fewer than two), seen as what is left of
-/// it. Returns where the members are stored.
-pub fn open(w: &World, d: &mut Chunk, h: Handle, n: usize) -> Vec<Handle> {
-    let mut b = std::mem::take(&mut d[h]);
-    let mut r = Rng::new(w.seed, w.day(), b.id, Purpose::Open);
-    let mut out = Vec::with_capacity(n);
-    for _ in 0..n {
-        let whole = b.count.round();
-        if (b.count - whole).abs() < COUNT_SLACK {
-            b.count = whole;
-        }
-        if b.count < 2.0 {
-            break;
-        }
-        out.push(draw(w, d, &mut b, &mut r));
-    }
-    b.stale = true;
-    d[h] = b;
-    out
-}
-
-/// One member drawn from node `b`, placed with the node's light-keep share: its genes the node's plus noise of their
-/// spread (shrunk near a wall, so it is never clamped, as in `body::vary`), a share 1/count of its stores and heat
-/// (`part`), and born rows of its own (`member_rows`), keeping what the node learned on top; the node's genes, rows and
-/// spreads become those of the others.
-fn draw(w: &World, d: &mut Chunk, b: &mut Body, r: &mut Rng) -> Handle {
-    let (lay, n) = (Layout::of(&w.chem), b.count as f32);
-    // (The member keeps no spread: it is left out of the clone.)
-    let spread = std::mem::take(&mut b.spread);
-    let mut c = part(b, 1.0 / b.count, 1.0 / b.count);
-    b.spread = spread;
-    for (g, x) in c.genes.iter_mut().enumerate() {
-        let ((_, lo, hi), v) = (range(&lay, g), spread_at(&b.spread, g));
-        *x += v.sqrt().min(wall_room(*x, lo, hi) / REACH) * noise(r);
-        let d = *x - b.genes[g];
-        b.genes[g] = (b.genes[g] - d / (n - 1.0)).clamp(lo, hi);
-        if let Some(s) = b.spread.get_mut(g) {
-            *s = ((n * v - d * d * n / (n - 1.0)) / (n - 1.0)).max(0.0);
-        }
-    }
-    if b.row_spread > 0.0 {
-        let (mine, left, spread) = member_rows(d.born(w, b), b.row_spread, n, r);
-        let shift = |rows: &mut [f32], to: &[f32], from: &[f32]| rows.iter_mut().zip(to).zip(from).for_each(|((x, t), f)| *x += t - f);
-        let born = d.born(w, b);
-        shift(&mut c.rows, &mine, born);
-        shift(&mut b.rows, &left, born);
-        (c.genome, b.row_spread) = (d.new_genome(mine), spread);
-        d.reborn(w, b, left);
-    }
-    b.prepare(&w.chem, &w.cfg);
-    (c.count, c.spread, c.row_spread) = (1.0, Vec::new(), 0.0);
-    d.place(w, c)
-}
-
-/// The born rows of one member drawn from `n` members whose rows have mean `rows` and variance `v` (`brain::shake`),
-/// the mean of the others' rows, and the variance left among them, as `draw` draws genes.
-fn member_rows(rows: &[f32], v: f32, n: f32, r: &mut Rng) -> (Vec<f32>, Vec<f32>, f32) {
-    let mut mine = rows.to_vec();
-    shake(&mut mine, r, v.sqrt());
-    let d2 = mine.iter().zip(rows).map(|(x, m)| (x - m) * (x - m)).sum::<f32>() / rows.len().max(1) as f32;
-    let left = rows.iter().zip(&mine).map(|(m, x)| m - (x - m) / (n - 1.0)).collect();
-    (mine, left, ((n * v - d2 * n / (n - 1.0)) / (n - 1.0)).max(0.0))
-}

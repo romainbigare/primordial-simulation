@@ -1,11 +1,11 @@
-//! Law 4 (Copy) in populations: two parents mix, and population nodes spread, split, merge and open.
+//! Law 4 (Copy) in populations: two parents mix, and population nodes spread, split and merge.
 
 use pcore::life::Handle;
-use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, HEAT, MUT, STRENGTH};
+use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, MUT, STRENGTH};
 use pcore::event::EventKind;
 use pcore::units::DAY_S;
 use pcore::{body, brain, copy, life, nodes, World};
-use worldgen::testkit::{self, brood, life_totals, same_totals, children, founder, out, small_world, start, Books, Brain};
+use worldgen::testkit::{brood, life_totals, children, founder, out, small_world, start, Books, Brain};
 
 /// Two parents: the gene value of the first body in the genes under test, and the step the catalyst genes move in.
 const BASE: f32 = 3.0;
@@ -308,82 +308,6 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     assert!(joined as f64 >= 0.95 * tries as f64, "{joined} of {tries} joined");
 }
 
-/// Body `s` is seen as what it holds now: its visible traits are those its stores, genes and members give, or it is
-/// marked to have them worked out at the next survey (`Body::stale`).
-fn seen_as_it_is(w: &World, s: Handle) {
-    let b = &w.life[s];
-    assert!(b.stale || b.vis == b.visible(&w.chem, &w.cfg), "body {s:?} is seen as it was");
-}
-
-/// `open` draws members of a node as individuals: they are in the node's cell, of count 1, and
-/// members, stores and heat are kept exactly; the node keeps its place with the members left; each is seen as what it
-/// holds (`Body::vis`); the genes of the drawn
-/// are the node's plus noise of its spread (their mean near the node's, within four standard errors, and as wide as the
-/// spread) and the mean of all members, drawn and left, is the node's; and so are their born rows, each member's its
-/// own (a light-eater node of a test lineage with a brain: its own kind has no born rows).
-#[test]
-fn opening_a_node_draws_members_and_keeps_everything() {
-    let mut w = worldgen::new_world(1, 16, 16);
-    let books = Books::now(&w);
-    pcore::step(&mut w);
-    let i = testkit::dry_land(&w);
-    let b = founder(&mut w, 1, i, &Brain::neutral());
-    let b = testkit::node_of(&mut w, b, 2000.0);
-    let s = w.add(b);
-    assert!(w.life[s].count > 1000.0, "a node");
-    // A spread of one step in the copy mass (0.2), in the gas gene (0.3) and in a catalyst gene; and one in the
-    // light-capture gene, so each is seen with its own leaf area (near its wall: its noise shrinks, so it is not
-    // measured).
-    let (lay, genes0) = (Layout::of(&w.chem), w.life[s].genes.clone());
-    let cat = lay.cat + 1;
-    let wide = [(COPY_MASS, 0.04f64), (HEAT, 0.09), (cat, 0.09)];
-    w.life[s].spread = (0..lay.len).map(|g| wide.iter().find(|x| x.0 == g).map_or(0.0, |x| x.1 as f32)).collect();
-    // And one of 0.1 in the born rows.
-    w.life[s].row_spread = 0.01;
-    let rows0 = w.life.born(&w.life[s]).to_vec();
-    let (before, count0, cell) = (life_totals(&w), w.life[s].count, w.life[s].cell);
-    let n = 400;
-    let drawn = w.in_cell(w.life[s].cell as usize, |w, d| nodes::open(w, d, s, n));
-    assert_eq!(drawn.len(), n);
-    same_totals(&before, &life_totals(&w));
-    assert!((life_totals(&w).0 - before.0).abs() <= 1e-9 * before.0, "members {} then {}", before.0, life_totals(&w).0);
-    drawn.iter().chain([&s]).for_each(|&m| seen_as_it_is(&w, m));
-    let node = &w.life[s];
-    assert!((node.count + n as f64 - count0).abs() < 1e-6 && node.count >= 1.0 && node.alive);
-    let mut mean = vec![0.0f64; lay.len];
-    for &m in &drawn {
-        let b = &w.life[m];
-        assert!(b.alive && b.count == 1.0 && b.cell == cell && b.spread.is_empty());
-        mean.iter_mut().zip(&b.genes).for_each(|(x, &y)| *x += y as f64 / n as f64);
-    }
-    for (g, var) in wide {
-        let (se, off) = ((var / n as f64).sqrt(), mean[g] - genes0[g] as f64);
-        assert!(off.abs() < 4.0 * se, "gene {g}: drawn mean {} against {} (standard error {se})", mean[g], genes0[g]);
-        let sd = (drawn.iter().map(|&m| (w.life[m].genes[g] as f64 - mean[g]).powi(2)).sum::<f64>() / n as f64).sqrt();
-        assert!(sd > 0.8 * var.sqrt() && sd < 1.2 * var.sqrt(), "gene {g}: spread {sd}, wanted {}", var.sqrt());
-    }
-    // The mean of all members, by count, is what it was.
-    for g in 0..lay.len {
-        let all = (mean[g] * n as f64 + node.genes[g] as f64 * node.count) / count0;
-        assert!((all - genes0[g] as f64).abs() < 1e-4 * (1.0 + genes0[g].abs() as f64), "gene {g}: mean of all {all} against {}", genes0[g]);
-    }
-    let (mut rows, mut var) = (w.life.born(node).iter().map(|&x| x as f64 * node.count / count0).collect::<Vec<f64>>(), 0.0);
-    for b in drawn.iter().map(|&m| &w.life[m]) {
-        for ((r, &x), &x0) in rows.iter_mut().zip(w.life.born(b)).zip(&rows0) {
-            (*r, var) = (*r + x as f64 / count0, var + (x as f64 - x0 as f64).powi(2) / (n * rows0.len()) as f64);
-        }
-    }
-    let off = rows.iter().zip(&rows0).map(|(x, &y)| (x - y as f64).abs()).fold(0.0, f64::max);
-    assert!(off < 1e-4 && var.sqrt() > 0.08 && var.sqrt() < 0.12, "born rows: mean of all off by {off}, drawn as wide as {}", var.sqrt());
-    // A node keeps one member: asked for more than it has, it gives all but one. (Its rows made alike first, so that its
-    // many members do not each get rows of their own.)
-    w.life[s].row_spread = 0.0;
-    let rest = w.life[s].count.floor() as usize;
-    assert_eq!(w.in_cell(w.life[s].cell as usize, |w, d| nodes::open(w, d, s, rest + 5)).len(), rest - 1);
-    assert!(w.life[s].count < 2.0);
-    books.assert_kept(&w, 1e-9);
-}
-
 /// Members who join a node are kept (`nodes::merge`): a body of 1.4 members adds 1.4 to its count, and the genes become
 /// the means by members.
 #[test]
@@ -404,121 +328,4 @@ fn joining_a_node_keeps_members_and_weighs_genes_by_them() {
         let want = x + 0.1 * 1.4 / 4.4;
         assert!((y - want).abs() < 1e-5 * (1.0 + x.abs()), "gene {g}: {x} then {y}, wanted {want}");
     }
-}
-
-/// With `Config::nodes` off an animal's children are individuals: a child joins no node, even when one of its own kind
-/// is in its cell (with nodes on it joins it), and a member whose brood covers many children has that many
-/// individuals, not a node of them. Members, stores and heat are kept.
-#[test]
-fn individuals_mode_children_of_an_animal_are_individuals() {
-    for nodes in [true, false] {
-        let mut w = worldgen::new_world(1, 16, 16);
-        pcore::step(&mut w);
-        worldgen::life::seed(&mut w, 0);
-        worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
-        (w.cfg.nodes, w.cfg.phys.c_copy) = (nodes, 0.0);
-        let s = live(&w).into_iter().next().expect("an animal");
-        // A node of its own kind beside it, in its cell; its children stay in their cell.
-        let mut node = w.life[s].clone();
-        (node.count, node.genes[DISPERSE]) = (5.0, 0.0);
-        node.store.iter_mut().for_each(|x| *x *= 5.0);
-        // Young (half the matter of an adult founder), as a node children join is.
-        node.store[w.chem.matter().expect("matter")] *= 0.5;
-        node.e *= 5.0;
-        w.life[s].genes[DISPERSE] = 0.0;
-        let t = w.add(node);
-        // One child: its parent is mature (its copy mass is half its body, `Body::built`, which maturity reads, so it stays
-        // mature with the brood out of its body whatever its sprayed `CHILD` gene).
-        let (was, before) = (live(&w), life_totals(&w));
-        let mut b = std::mem::take(&mut w.life[s]);
-        b.genes[COPY_MASS] = (0.5 * b.built(&w.chem) as f32).log10();
-        b.prepare(&w.chem, &w.cfg);
-        brood(&w, &mut b, 1.0);
-        w.time += DAY_S;
-        assert!(w.in_cell(b.cell as usize, |w, d| copy::copy(w, d, &mut b)), "no child");
-        w.life[s] = b;
-        let kids: Vec<Handle> = live(&w).into_iter().filter(|k| !was.contains(k)).collect();
-        println!("nodes {nodes}: bodies added {}, node of the kind now {}", kids.len(), w.life[t].count);
-        same_totals(&before, &life_totals(&w));
-        if nodes {
-            assert!(kids.is_empty() && w.life[t].count > 5.0, "the child did not join the node of its kind");
-            continue;
-        }
-        assert!(kids.len() == 1 && w.life[t].count == 5.0 && w.life[kids[0]].count == 1.0, "the child joined a node");
-        // Many children at once: its brood covers 3.5 of them.
-        let (was, before) = (live(&w), life_totals(&w));
-        let mut b = std::mem::take(&mut w.life[s]);
-        b.genes[COPY_MASS] = (0.3 * b.built(&w.chem) as f32).log10();
-        b.prepare(&w.chem, &w.cfg);
-        brood(&w, &mut b, 3.5);
-        w.time += DAY_S;
-        assert!(w.in_cell(b.cell as usize, |w, d| copy::copy(w, d, &mut b)), "no children");
-        w.life[s] = b;
-        let kids: Vec<Handle> = live(&w).into_iter().filter(|k| !was.contains(k)).collect();
-        println!("many at once: {} children", kids.len());
-        same_totals(&before, &life_totals(&w));
-        assert!(kids.len() >= 3, "{} children", kids.len());
-        for k in kids {
-            let c = &w.life[k];
-            assert!(c.alive && c.count == 1.0 && c.spread.is_empty(), "child {k:?}: count {}", c.count);
-        }
-    }
-}
-
-/// With `Config::nodes` off, `CROWDED` alike animals in one cell stay individuals at the month's start (with
-/// nodes on they merge, `crowded_individuals_merge_into_a_node`), and over three years of the whole world no animal
-/// becomes a node; light-eaters still are nodes. The animals are hand-set eaters (as `ew run` places them, which find
-/// what they eat), so that some live and breed through the window: the check would be empty with none (neutral animal
-/// founders mostly die in their first year, and in one world all may die before they breed), so it runs three worlds
-/// (seeds 1 to 3) and asks for births in them together. Matter and energy are kept.
-/// Alike animals placed in one cell by the tests of the monthly merge.
-const CROWDED: usize = 8;
-
-#[test]
-#[ignore = "slow: three years of three 32 x 32 worlds"]
-fn individuals_mode_merges_no_animal() {
-    let (mut born, mut alive_at_end) = (0.0, 0);
-    for seed in 1..=3 {
-        let (b, a) = individuals_window(seed);
-        born += b;
-        alive_at_end += a;
-    }
-    assert!(born > 0.0 && alive_at_end > 0, "no animal was born ({born}) or alive at the end ({alive_at_end}) in three worlds");
-}
-
-/// One world of `individuals_mode_merges_no_animal`: its checks, and the animals born in its window (members) and alive
-/// at its end.
-fn individuals_window(seed: u64) -> (f64, usize) {
-    let mut w = worldgen::new_world(seed, 32, 32);
-    w.cfg.nodes = false;
-    let books = Books::now(&w);
-    pcore::step(&mut w);
-    worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed(&mut w, 1);
-    let animal = |_: &pcore::World, _: &Body| true;
-    assert!(w.life.alive().filter(|b| animal(&w, b)).all(|b| b.count == 1.0), "an animal was placed as a node");
-    let a = w.life.alive().find(|b| animal(&w, b)).expect("an animal");
-    let (i, lineage, genome) = (a.cell as usize, a.lineage, a.genome);
-    let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i && animal(w, b)).count();
-    while here(&w) < CROWDED {
-        let b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
-        w.add(b);
-    }
-    let n = here(&w);
-    pcore::survey::survey(&mut w);
-    assert_eq!(here(&w), n, "animals merged");
-    // Animals alive at the end of each month, and animals born in the window (members).
-    let (mut alive, mut born) = (Vec::new(), 0.0);
-    let roots: Vec<u32> = w.life.alive().filter(|b| animal(&w, b)).map(|b| w.life.brain(b.lineage).map_or(u32::MAX, |l| l.root)).collect();
-    w.events.clear();
-    for _ in 0..36 {
-        pcore::step(&mut w);
-        assert!(w.life.alive().filter(|b| animal(&w, b)).all(|b| b.count == 1.0), "an animal became a node");
-        born += w.events.iter().filter(|e| matches!(e.kind, EventKind::Born { root, .. } if roots.contains(&root))).map(|e| e.value).sum::<f64>();
-        w.events.clear();
-        alive.push(w.life.alive().filter(|b| animal(&w, b)).count());
-    }
-    println!("seed {seed}: animals alive at the end of each month: {alive:?}; born in the window {born}");
-    books.assert_kept(&w, 1e-9);
-    (born, alive.last().copied().unwrap_or(0))
 }
