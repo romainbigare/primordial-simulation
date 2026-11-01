@@ -860,14 +860,15 @@ fn a_globe_keeps_its_books_round_the_wrap() {
     books.assert_kept(&w, 1e-12);
 }
 
-/// A globe of 18 rows without life keeps its books to rounding over 50 years: its air nodes and cells take no more than
-/// they hold (the air's days and the cells' exchange are one law), so nothing is set to zero.
+/// A globe of 32 rows without life keeps its books to rounding over 100 years, through its ice and its soft covers: its
+/// air nodes and cells take no more than they hold (the air's days and the cells' exchange are one law), so nothing is
+/// set to zero.
 #[test]
-#[ignore = "slow: 50 years of an 18-row globe"]
-fn a_globe_keeps_its_books_to_rounding_for_fifty_years() {
-    let mut w = worldgen::terrain::new_globe(1, 18);
+#[ignore = "slow: 100 years of a 32-row globe"]
+fn a_globe_keeps_its_books_to_rounding_for_a_hundred_years() {
+    let mut w = worldgen::terrain::new_globe(1, 32);
     let books = Books::now(&w);
-    (0..50 * w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));
+    (0..100 * w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));
     books.assert_kept(&w, 1e-12);
 }
 

@@ -6,14 +6,15 @@ use super::super::scratch::may_evaporate;
 use super::super::{range, Scratch};
 use super::book::{book, up_from_bodies};
 use super::air_temp;
-use super::cells::{landed, respond, wet, Ctx};
+use super::cells::{respond, Ctx};
+use super::rain::{landed, wet};
 use super::daily::run;
 use super::exchange::dissolve;
 use super::radiation::declination;
 use crate::{store::Class, units::DAY, World, AIR};
 
 /// The saturation tables reach this far above the warmest node at a step's start, K: no node warms more in a step.
-pub(super) const SAT_REACH: f64 = 60.0;
+const SAT_REACH: f64 = 60.0;
 
 /// A gas that may leave the ground or condense: its index in `Scratch::gas`, its substance, and whether it may
 /// evaporate or condense.

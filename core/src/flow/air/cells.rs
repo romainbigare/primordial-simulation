@@ -1,16 +1,17 @@
 //! The cells and their air (laws.md 1.4, 1.5): each cell's exchange over a step with the air it sees, solved once in its
-//! own implicit surface balance at the air of the step's start and taken as linear in that air, its slopes found by a
-//! small step of the air (`respond`). The air level's days sum that one law over each node's cells (`Response::ground`),
-//! and the book takes each cell's at the step's mean air (`Response::at`), so the air and its cells agree. And where a
-//! node's rain falls (`wet`, `landed`).
+//! own implicit surface balance at the air of the step's start and taken as linear in that air, its slopes from that
+//! balance on the branch it ended on (`exchange`). The air level's days sum that one law over each node's cells
+//! (`Response::ground`), and the book takes each cell's at the step's mean air (`Response::at`), so the air and its
+//! cells agree.
 
 use super::super::land::{layers, melted, melts, reflectance, thaw_at, NONE};
 use super::super::Scratch;
-use super::daily::{Ground, Mean, Wet};
+use super::daily::Ground;
+use super::rain::Wet;
 use super::exchange::bucket;
-use super::radiation::{glow, insolation, Air, Surface};
-use super::step::{Active, SAT_REACH};
-use super::{at_height, lerp, over_cell, touching};
+use super::radiation::{glow, glow_slope, insolation, Air, Surface};
+use super::step::Active;
+use super::{at_height, lerp, over_cell};
 use crate::{math::one_minus_exp, store::Class, units::{MAX_SUBSTANCES, R_GAS}, World, AIR};
 
 /// A ground node's surface balance is solved again about the temperature it gives, up to this many times, until that
@@ -21,27 +22,29 @@ const SURFACE_STILL_K: f64 = 1e-3;
 /// `REFLECT_STILL` from the one its end state gives.
 const REFLECT_ROUNDS: usize = 8;
 const REFLECT_STILL: f64 = 1e-3;
-/// The step of the air's temperature, K, and of a gas's amount, as a share of it, by which a cell's response is found
-/// to change with its air.
-const STEP_K: f64 = 1.0;
-const STEP_SHARE: f64 = 1e-3;
+/// The air a cell sees moves in a step by up to this, K, as its slopes are held to what it holds (`hold`).
+const AIR_SWING_K: f64 = 60.0;
 
-/// The outputs of a cell's exchange that change with its air: its surface's end temperature, K; what its air node gains
-/// over the step, J (sensible heat, the heat radiation the air absorbs less what it sends down, and the heat of the gas
-/// that goes up less its lift); the heat over its link to the air as the store books it, J (with the gas's latent
-/// heat); the heat it sends to space, J; the lift its air pays for its gas, J; then per active gas what evaporates, mol.
-pub(super) const TS: usize = 0;
-pub(super) const GAINS: usize = 1;
-pub(super) const LINK: usize = 2;
-pub(super) const SPACE: usize = 3;
-pub(super) const LIFT: usize = 4;
-pub(super) const UP: usize = 5;
+/// The outputs of a cell's exchange that change with its air: what its air node gains over the step, J (sensible heat,
+/// the heat radiation the air absorbs less what it sends down, and the heat of the gas that goes up less its lift); the
+/// heat over its link to the air as the store books it, J (with the gas's latent heat); the heat it sends to space, J;
+/// the lift its air pays for its gas, J; then per active gas what evaporates, mol.
+pub(super) const GAINS: usize = 0;
+pub(super) const LINK: usize = 1;
+pub(super) const SPACE: usize = 2;
+pub(super) const LIFT: usize = 3;
+pub(super) const UP: usize = 4;
 /// The outputs that do not: the sunlight it absorbs, J; the light per unit of its cover's capture area, J/m²; the light
 /// set aside for its cover, J.
 pub(super) const SUN: usize = 0;
 pub(super) const LIGHT: usize = 1;
 pub(super) const KEPT: usize = 2;
 const FIXED: usize = 3;
+/// The parts the changing outputs are made of (`put`), each laid out as an output is: the heat the cell gives its air
+/// node and the heat it sends to space, J (`Balance`), then what evaporates of each active gas, mol.
+const TO_AIR: usize = 0;
+const TO_SPACE: usize = 1;
+const GAS: usize = 2;
 
 /// What a pass reads: the world, the active gases, the air of the step's start (per node its temperature, K; per active
 /// gas and node, `[x * na + j]`, mol), the step's length and the sun's declination on each of its days.
@@ -132,7 +135,8 @@ pub(super) fn respond(cx: &Ctx) -> Response {
         if at != *lat {
             (*lat, *q) = (at, sunlight(cx.w, cx.decl, at));
         }
-        respond_cell(cx, i, *q, &seen[i * (1 + nx)..(i + 1) * (1 + nx)], row);
+        let fixed = exchange(cx, i, *q, &seen[i * (1 + nx)..(i + 1) * (1 + nx)], &mut row[FIXED..]);
+        row[..FIXED].copy_from_slice(&fixed);
     });
     Response { nx, rows, seen }
 }
@@ -143,58 +147,62 @@ fn sunlight(w: &World, decl: &[f64], lat: f64) -> f64 {
     decl.iter().map(|&d| insolation(w.cfg.sun, lat.to_radians(), d)).sum::<f64>() / decl.len() as f64
 }
 
-/// The row of cell `i` (`Response`) under the mean sunlight `q` of its latitude, W/m², and the air it sees at the
-/// step's start, `seen` (its temperature, K, then each active gas, mol): its exchange there (`exchange`), and again a
-/// step of the air's temperature and of each gas away, for the slopes.
-fn respond_cell(cx: &Ctx, i: usize, q: f64, seen: &[f64], row: &mut [f64]) {
-    let (nx, outs) = (cx.act.len(), UP + cx.act.len());
-    let mut air = seen.to_vec();
-    let fixed = exchange(cx, i, q, &air, &mut row[FIXED..]);
-    row[..FIXED].copy_from_slice(&fixed);
-    let base: Vec<f64> = (0..outs).map(|o| row[FIXED + o * (2 + nx)]).collect();
-    for v in 0..1 + nx {
-        let step = if v == 0 { STEP_K } else { (STEP_SHARE * seen[v]).max(f64::MIN_POSITIVE.sqrt()) };
-        air[v] += step;
-        let mut moved = vec![0.0; outs * (2 + nx)];
-        exchange(cx, i, q, &air, &mut moved);
-        (0..outs).for_each(|o| row[FIXED + o * (2 + nx) + 1 + v] = (moved[o * (2 + nx)] - base[o]) / step);
-        air[v] = seen[v];
+/// Holds the slopes of cell `i`'s parts (`p`, `exchange`) so that it gives no more than it holds however the air it
+/// sees moves in the step: its temperature by up to `AIR_SWING_K`, each gas between none and twice what it held at the
+/// start (`seen`). What evaporates of each gas stays within what the cell holds of it; then the heat over its link and
+/// to space, with what each mol carries (`carry`), within its heat and the sunlight it absorbs, `sun`, J.
+fn hold(cx: &Ctx, i: usize, (seen, sun): (&[f64], f64), carry: &[[f64; 3]], p: &mut [f64]) {
+    let (w, nx) = (cx.w, cx.act.len());
+    let (n, stride) = (w.mesh.cells().n(), 2 + nx);
+    // The share of a row's slopes that keeps its value within `most` however far the air moves.
+    let keep = |r: &[f64], most: f64| {
+        let far = r[1].abs() * AIR_SWING_K + (0..nx).map(|v| (r[2 + v] * seen[1 + v]).abs()).sum::<f64>();
+        if r[0] + far > most && far > 0.0 { ((most - r[0]) / far).clamp(0.0, 1.0) } else { 1.0 }
+    };
+    for (y, ac) in cx.act.iter().enumerate() {
+        let r = &mut p[(GAS + y) * stride..(GAS + y + 1) * stride];
+        let k = keep(r, w.store.amounts(Class::Ground)[ac.k * n + i]);
+        r[1..].iter_mut().for_each(|d| *d *= k);
     }
-    hold(cx, i, seen, row);
+    let loss: Vec<f64> = (0..stride).map(|v| p[TO_AIR * stride + v] + p[TO_SPACE * stride + v] + carry.iter().enumerate().map(|(y, c)| p[(GAS + y) * stride + v] * c[0]).sum::<f64>()).collect();
+    let k = keep(&loss, w.store.heat(Class::Ground)[i] + sun);
+    if k < 1.0 {
+        p.chunks_mut(stride).for_each(|r| r[1..].iter_mut().for_each(|d| *d *= k));
+    }
 }
 
-/// The slopes of what cell `i` evaporates of each gas, cut so that it takes no more than it holds however the air it
-/// sees moves in the step: its temperature by up to `SAT_REACH`, each gas between none and twice what it held at the
-/// start (`seen`); the heat of what it no longer takes comes off its link and its air's gain (`exchange`).
-fn hold(cx: &Ctx, i: usize, seen: &[f64], row: &mut [f64]) {
-    let (w, s, nx) = (cx.w, cx.s, cx.act.len());
-    let (n, j, stride) = (w.mesh.cells().n(), w.mesh.cells().parent()[i] as usize, 2 + nx);
-    for (y, ac) in cx.act.iter().enumerate() {
-        let (m, sp) = (FIXED + (UP + y) * stride, s.sp[ac.k]);
-        let held = w.store.amounts(Class::Ground)[ac.k * n + i];
-        let most = row[m] + row[m + 1].abs() * SAT_REACH + (0..nx).map(|v| (row[m + 2 + v] * seen[1 + v]).abs()).sum::<f64>();
-        if most <= held || most <= row[m] {
-            continue;
-        }
-        let keep = ((held - row[m]) / (most - row[m])).max(0.0);
-        let lift = sp.mm * s.view().lift(i, j, w.cfg.gravity);
-        for v in 1..stride {
-            let cut = row[m + v] * (1.0 - keep);
-            row[m + v] -= cut;
-            row[FIXED + LINK * stride + v] -= cut * (sp.cp * s.state.tg[i] + sp.lf + sp.lv);
-            row[FIXED + GAINS * stride + v] -= cut * (sp.cp * s.state.tg[i] - lift);
-            row[FIXED + LIFT * stride + v] -= cut * lift;
-        }
+/// What a mol of active gas `k` that evaporates from cell `i` carries, J: the heat over its link as the store books it
+/// (its heat at the cell's temperature and its latent heat), what its air node gains (that heat less its latent heat and
+/// its lift), and the lift its air pays.
+fn carried(cx: &Ctx, i: usize, k: usize) -> [f64; 3] {
+    let (s, sp, j) = (cx.s, cx.s.sp[k], cx.w.mesh.cells().parent()[i] as usize);
+    let (heat, lift) = (sp.cp * s.state.tg[i], sp.mm * s.view().lift(i, j, cx.w.cfg.gravity));
+    [heat + sp.lf + sp.lv, heat - lift, lift]
+}
+
+/// A cell's changing outputs (`out`) from its parts (`p`), each a row of its value and its slopes, with what each mol of
+/// each gas carries (`carry`).
+fn put(p: &[f64], carry: &[[f64; 3]], out: &mut [f64]) {
+    let stride = 2 + carry.len();
+    for v in 0..stride {
+        let part = |r: usize| p[r * stride + v];
+        let gas = |c: usize| carry.iter().enumerate().map(|(y, h)| part(GAS + y) * h[c]).sum::<f64>();
+        out[GAINS * stride + v] = part(TO_AIR) + gas(1);
+        out[LINK * stride + v] = part(TO_AIR) + gas(0);
+        out[SPACE * stride + v] = part(TO_SPACE);
+        out[LIFT * stride + v] = gas(2);
+        (0..carry.len()).for_each(|y| out[(UP + y) * stride + v] = part(GAS + y));
     }
 }
 
 /// An active gas of a ground node, as its evaporation reads it (`Vapour::evaporate`): its partial pressure near the
-/// ground, Pa; and what does not move with the node's end temperature.
+/// ground, Pa, and that per mol of the gas in the air, Pa/mol; and what does not move with the node's end temperature.
 struct Vapour {
     k: usize,
     /// It may evaporate, and the node holds some.
     up: bool,
     pa: f64,
+    per: f64,
     /// What the node holds, mol; what it holds wet (`exchange::bucket`), mol; the air's film, mol K/(Pa s).
     held: f64,
     wet: f64,
@@ -209,50 +217,51 @@ struct Vapour {
 }
 
 impl Vapour {
-    /// Ground node `i`'s active gas `ac` under a partial pressure `pa`.
-    fn of(cx: &Ctx, i: usize, ac: Active, pa: f64) -> Vapour {
+    /// Ground node `i`'s active gas `ac` with `x` mol of it in the air, at `per` Pa per mol.
+    fn of(cx: &Ctx, i: usize, ac: Active, x: f64, per: f64) -> Vapour {
         let (w, s) = (cx.w, cx.s);
         let (n, sp, area) = (w.mesh.cells().n(), s.sp[ac.k], w.mesh.cells().area()[i]);
         let held = w.store.amounts(Class::Ground)[ac.k * n + i];
         let up = ac.up && held > 0.0;
         let boil = (up && s.state.tg[i] >= sp.boil).then(|| held.min(s.boil_off(ac.k, i, s.state.tg[i])));
         let (film, wet) = (w.cfg.evap / R_GAS * area, w.cfg.phys.field * s.pd[i] * area / sp.v[melted(s, ac.k, i) as usize]);
-        Vapour { k: ac.k, up, pa, held, wet, film, boil, lv: sp.lv, lf_lv: sp.lf + sp.lv, fusion: s.fusion(ac.k, i, 1.0) }
+        Vapour { k: ac.k, up, pa: x * per, per, held, wet, film, boil, lv: sp.lv, lf_lv: sp.lf + sp.lv, fusion: s.fusion(ac.k, i, 1.0) }
     }
     /// The heat `m` mol take from the node as they leave it, J: their fusion and vaporisation enthalpies, less the fusion
     /// enthalpy the node holds for them.
     fn lat(&self, m: f64) -> f64 {
         m * self.lf_lv - m * self.fusion
     }
-    /// What evaporates over the step from the node, ending at `t`, mol, and its slope with `t`: the saturation deficit
-    /// through the air's film (`evap`), at the open rate while wet (`exchange::bucket`); over the boiling point, all of
-    /// it that the node's heat over that point boils.
-    fn evaporate(&self, s: &Scratch, t: f64, dt: f64) -> (f64, f64) {
+    /// What evaporates over the step from the node, ending at `t`, mol, and its slopes with `t` and with the partial
+    /// pressure: the saturation deficit through the air's film (`evap`), at the open rate while wet
+    /// (`exchange::bucket`); over the boiling point, all of it that the node's heat over that point boils.
+    fn evaporate(&self, s: &Scratch, t: f64, dt: f64) -> [f64; 3] {
         if !self.up {
-            return (0.0, 0.0);
+            return [0.0; 3];
         }
         if let Some(m) = self.boil {
-            return (m, 0.0);
+            return [m, 0.0, 0.0];
         }
         let ps = s.sat[self.k].at(t);
         let e = self.film * (ps - self.pa) / t;
         if e <= 0.0 {
-            return (0.0, 0.0);
+            return [0.0; 3];
         }
         let (m, dm_de) = bucket(self.held, 0.0, e, self.wet, dt);
-        // The open rate's slope with `t` (Clausius-Clapeyron).
-        (m, dm_de * self.film * (ps * self.lv / (R_GAS * t * t) - (ps - self.pa) / t) / t)
+        // The open rate's slopes with `t` (Clausius-Clapeyron) and with the partial pressure.
+        [m, dm_de * self.film * (ps * self.lv / (R_GAS * t * t) - (ps - self.pa) / t) / t, -dm_de * self.film / t]
     }
 }
 
 /// The exchange of cell `i` over the step under the mean sunlight `q` of its latitude, W/m², and the air it sees, `air`
-/// (its temperature, K, then each active gas, mol): its changing outputs into `out` (`TS` on, each the first of its
-/// columns), and its fixed ones returned. Sunlight past the clouds, what the cover intercepts less the share its light
-/// reaction stores (set aside for it, laws.md 1.4); the surface balance with what evaporates, by Newton's steps about
-/// its end temperature, under the reflectance its surface has at the step's start; where a soft cover lies, under the
+/// (its temperature, K, then each active gas, mol): its changing outputs with their slopes into `out` (`Response`), and
+/// its fixed ones returned. Sunlight past the clouds, what the cover intercepts less the share its light reaction
+/// stores (set aside for it, laws.md 1.4); the surface balance with what evaporates, by Newton's steps about its end
+/// temperature, under the reflectance its surface has at the step's start; where a soft cover lies, under the
 /// reflectance it ends the step with, as backward Euler takes it (`end_reflectance`): from the start's, each guess
 /// followed to the end it gives, and halved between two once a guess and its end cross, until they agree, so a cover
-/// that melts away darkens the ground in its step.
+/// that melts away darkens the ground in its step. The slopes come from the last balance on the branch it ended on
+/// (`Air::moves`), held to what the cell holds (`hold`).
 fn exchange(cx: &Ctx, i: usize, q: f64, air: &[f64], out: &mut [f64]) -> [f64; FIXED] {
     let (w, s, dt, act) = (cx.w, cx.s, cx.dt, cx.act);
     let (n, na, j, area) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.mesh.cells().parent()[i] as usize, w.mesh.cells().area()[i]);
@@ -263,18 +272,19 @@ fn exchange(cx: &Ctx, i: usize, q: f64, air: &[f64], out: &mut [f64]) -> [f64; F
     // Per unit of capture area the cover intercepts cover / a of the light, all of it where it is thin.
     let kept = sun * caught * w.life.keep.get(i).map_or(0.0, |&x| x as f64);
     let sw = |alb: f64| sun * ((1.0 - cover) * (1.0 - alb) + caught) - kept;
-    let rad = Air { tl, f: s.absorbs[j], down: glow(s.absorbs[j], tl, &s.lay[j][0]) };
-    let gas: Vec<Vapour> = act.iter().enumerate().map(|(y, &ac)| Vapour::of(cx, i, ac, air[1 + y] * over_cell(w, s, i) * R_GAS * tl / (area * s.hk[ac.gi * na + j]))).collect();
+    let (f, lay) = (s.absorbs[j], &s.lay[j][0]);
+    let rad = Air { tl, f, down: glow(f, tl, lay), slope: glow_slope(f, tl, lay) };
+    let gas: Vec<Vapour> = act.iter().enumerate().map(|(y, &ac)| Vapour::of(cx, i, ac, air[1 + y], over_cell(w, s, i) * R_GAS * tl / (area * s.hk[ac.gi * na + j]))).collect();
     let pk = s.state.pk[i];
     let fusion = if pk != NONE { w.store.amounts(Class::Ground)[pk * n + i] * s.sp[pk].lf } else { 0.0 };
     // The balance with what evaporates linearised about `t0`.
     let balance = |t0: f64, sw: f64| {
         let (mut gain, mut slope) = (0.0, 0.0);
         for g in gas.iter().filter(|g| g.up) {
-            let (m, dm_dt) = g.evaporate(s, t0, dt);
+            let [m, dm_dt, _] = g.evaporate(s, t0, dt);
             (gain, slope) = (gain - g.lat(m) / adt, slope - g.lat(dm_dt) / adt);
         }
-        let surface = Surface { sw, air: &rad, t0, gain, slope: slope.min(0.0), t_rain: 0.0, g_rain: 0.0 };
+        let surface = Surface { sw, air: &rad, t0, gain, slope: slope.min(0.0) };
         surface.balance(s, (i, area, dt), w.cfg.sensible, fusion)
     };
     // Newton's steps, kept between the temperatures the end has been shown to lie between: the net heat a node gets
@@ -293,22 +303,29 @@ fn exchange(cx: &Ctx, i: usize, q: f64, air: &[f64], out: &mut [f64]) -> [f64; F
         }
         bal
     };
-    let stride = 2 + act.len();
-    // The outputs under the reflectance `alb`; what evaporates at the end temperature leaves with its heat at the
-    // node's temperature and its latent heat, and its air pays its lift.
-    let fill = |alb: f64, out: &mut [f64]| {
+    let (nx, stride) = (act.len(), 2 + act.len());
+    // The parts (`TO_AIR`) under the reflectance `alb`, what evaporates at the end temperature, with their slopes: the
+    // air's temperature moves the air touching the cell and each gas's partial pressure, a gas's amount its own.
+    let parts = |alb: f64| {
         let bal = solve(sw(alb));
-        let (mut link, mut gains, mut lift) = (bal.to_air, bal.to_air, 0.0);
-        for (y, (g, ac)) in gas.iter().zip(act).enumerate() {
-            let (m, sp) = (g.evaporate(s, bal.ts, dt).0, s.sp[ac.k]);
-            (link, gains) = (link + m * (sp.cp * s.state.tg[i] + sp.lf + sp.lv), gains + m * sp.cp * s.state.tg[i]);
-            lift += m * sp.mm * s.view().lift(i, j, w.cfg.gravity);
-            out[(UP + y) * stride] = m;
+        let ev: Vec<[f64; 3]> = gas.iter().map(|g| g.evaporate(s, bal.ts, dt)).collect();
+        let mut p = vec![0.0; (GAS + nx) * stride];
+        (p[TO_AIR * stride], p[TO_SPACE * stride]) = (bal.to_air, bal.to_space);
+        ev.iter().enumerate().for_each(|(y, e)| p[(GAS + y) * stride] = e[0]);
+        for v in 0..1 + nx {
+            // How the air's change `v` moves each gas's partial pressure, Pa per K or per mol.
+            let dpa = |y: usize| if v == 0 { gas[y].pa / tl } else if v == 1 + y { gas[y].per } else { 0.0 };
+            let dgain = -gas.iter().zip(&ev).enumerate().map(|(y, (g, e))| g.lat(e[2] * dpa(y))).sum::<f64>() / adt;
+            let [dts, d_air, d_space] = rad.moves(s, (i, area, dt), w.cfg.sensible, &bal, (if v == 0 { 1.0 } else { 0.0 }, dgain));
+            (p[TO_AIR * stride + 1 + v], p[TO_SPACE * stride + 1 + v]) = (d_air, d_space);
+            ev.iter().enumerate().for_each(|(y, e)| p[(GAS + y) * stride + 1 + v] = e[1] * dts + e[2] * dpa(y));
         }
-        [(TS, bal.ts), (GAINS, gains - lift), (LINK, link), (SPACE, bal.to_space), (LIFT, lift)].into_iter().for_each(|(o, v)| out[o * stride] = v);
+        p
     };
+    let carry: Vec<[f64; 3]> = act.iter().map(|ac| carried(cx, i, ac.k)).collect();
     let (mut alb, mut lo, mut hi) = (s.alb[i], f64::NAN, f64::NAN);
-    fill(alb, out);
+    let mut p = parts(alb);
+    put(&p, &carry, out);
     for _ in 1..if s.cover[i][2] > 0.0 { REFLECT_ROUNDS } else { 1 } {
         let end = end_reflectance(cx, i, (adt * sw(alb), out));
         if (end - alb).abs() < REFLECT_STILL {
@@ -316,8 +333,11 @@ fn exchange(cx: &Ctx, i: usize, q: f64, air: &[f64], out: &mut [f64]) -> [f64; F
         }
         (lo, hi) = if end > alb { (alb, hi) } else { (lo, alb) };
         alb = if lo.is_nan() || hi.is_nan() { end } else { 0.5 * (lo + hi) };
-        fill(alb, out);
+        p = parts(alb);
+        put(&p, &carry, out);
     }
+    hold(cx, i, (air, adt * sw(alb)), &carry, &mut p);
+    put(&p, &carry, out);
     let per_area = if cover > 0.0 { cover / a } else { 1.0 };
     [adt * sw(alb), sun * per_area * dt, kept * adt]
 }
@@ -339,46 +359,4 @@ fn end_reflectance(cx: &Ctx, i: usize, (sun, out): (f64, &[f64])) -> f64 {
     let melt = melts(w, s, |k| amt[k]);
     let th = thaw_at(s, c.max(1.0), e, |k| amt[k], &melt);
     reflectance(w, s, i, &layers(w, s, i, th.t, |k| amt[k], |k| th.molten(k), |k| melt[k]).0)
-}
-
-/// Where each node's rain falls, as of the step's start (`Wet`): on each cell that sees the node (`lerp`), by the share
-/// `a` of the node's air over it (its weight there times its area over the area it sees), past the node's saturation
-/// ratio `e` at which the air touching the cell saturates (colder on higher ground). The node rains what its cells hold
-/// over their saturation, summed (laws.md 1.5).
-pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64]) -> Wet {
-    let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
-    let (n, na) = (cells.n(), air.n());
-    let mut by: Vec<Vec<(u32, f64, Vec<f64>)>> = vec![Vec::new(); na];
-    for i in 0..n {
-        let tl = touching(s, t0, i);
-        for c in (0..4).filter(|&c| s.wt[i][c] > 0.0) {
-            let q = s.near[i][c] as usize;
-            let ts = at_height(t0[q], s.gam[q], s.za[q], s.zair[q]);
-            let (share, seen) = (s.wt[i][c] * over_cell(w, s, i), lerp(s, air.area(), i) / air.area()[q]);
-            let ratio = act.iter().map(|ac| s.sat[ac.k].at(tl) / tl / (s.sat[ac.k].at(ts) / ts).max(f64::MIN_POSITIVE) * seen).collect();
-            by[q].push((i as u32, share, ratio));
-        }
-    }
-    Wet::new(act.len(), by)
-}
-
-/// What rains of one gas on each cell from each node it sees over the step: (cell, node, mol), in the order of the nodes.
-pub(super) type Landed = Vec<(u32, u32, f64)>;
-
-/// What rains on each cell from each node it sees over the step (`Landed`), per active gas: each node's rain shared
-/// among the cells that see it by what each would hold over its own saturation at the ratio the node rained at (`Wet`).
-pub(super) fn landed(act: &[Active], wet: &Wet, mean: &Mean) -> Vec<Landed> {
-    let na = wet.at.len() - 1;
-    (0..act.len())
-        .map(|x| {
-            let mut out = Vec::new();
-            for j in (0..na).filter(|&j| mean.rain[x * na + j] > 0.0) {
-                let entries = wet.at[j]..wet.at[j + 1];
-                let over = |e: usize| wet.share[e] * (mean.ratio[x * na + j] - wet.ratio[x][e]).max(0.0);
-                let all: f64 = entries.clone().map(over).sum();
-                out.extend(entries.filter(|&e| over(e) > 0.0).map(|e| (wet.cell[e], j as u32, mean.rain[x * na + j] * over(e) / all)));
-            }
-            out
-        })
-        .collect()
 }

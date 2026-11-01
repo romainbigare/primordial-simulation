@@ -3,8 +3,9 @@
 //! and the evening of blocks, the lifts and falls, and the light of the cover (`book`).
 
 use super::super::{follow, year_weight, Scratch};
-use super::cells::{Landed, Response, KEPT, LIFT, LIGHT, LINK, SPACE, SUN, UP};
+use super::cells::{Response, KEPT, LIFT, LIGHT, LINK, SPACE, SUN, UP};
 use super::daily::Mean;
+use super::rain::Landed;
 use super::exchange::cloud;
 use super::step::Active;
 use super::{lerp, sums};

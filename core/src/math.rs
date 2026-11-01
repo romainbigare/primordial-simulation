@@ -32,10 +32,21 @@ pub(crate) fn cube_area(n: f64, v: f64) -> f64 {
     n * 6.0 * v.cbrt().powi(2)
 }
 
-/// (1 - exp(-x)) / x: the mean over a time of a pulse that decays `x` time constants in it (1 below 1e-9).
+/// (1 - exp(-x)) / x: the mean over a time of a pulse that decays `x` time constants in it (grows, below zero; 1 within
+/// 1e-9 of zero).
 #[inline]
 pub(crate) fn mean_decay(x: f64) -> f64 {
-    if x < 1e-9 { 1.0 } else { one_minus_exp(x) / x }
+    if x.abs() < 1e-9 { 1.0 } else { one_minus_exp(x) / x }
+}
+
+/// Below this many time constants `mean_passed` sums its series: the difference would lose digits.
+const SERIES_BELOW: f64 = 1e-3;
+
+/// (x - 1 + exp(-x)) / x²: the mean over a time of what a pulse that decays `x` time constants in it has passed by each
+/// moment, per its first rate and the time (`mean_decay` at each moment, weighted by the moment); 1/2 with no decay.
+#[inline]
+pub(crate) fn mean_passed(x: f64) -> f64 {
+    if x.abs() < SERIES_BELOW { 0.5 - x / 6.0 + x * x / 24.0 } else { (1.0 - mean_decay(x)) / x }
 }
 
 /// Light passing layers from the tallest down (Beer's law): `l` holds per layer member its height, its capture area per

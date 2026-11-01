@@ -5,7 +5,7 @@ use pcore::body::{PHASE, TAKEN};
 use pcore::cover::{self, FROST};
 use pcore::event::EventKind;
 use worldgen::life::{Place, KINDS};
-use worldgen::testkit::{dry_land, eater, small_world, Books, MILD_LAT};
+use worldgen::testkit::{dry_lands, eater, small_world, Books, MILD_LAT};
 
 /// Latitudes of the south and north edges of a world whose land freezes in winter, degrees.
 const COLD_LAT: [f64; 2] = [55.0, 57.3];
@@ -21,12 +21,12 @@ fn cover_kg(w: &pcore::World) -> f64 {
     cover::sums(w).iter().map(|s| s.kg).sum()
 }
 
-/// A small world with its soil, after a month (Flow's state built), and a dry land cell.
+/// A small world with its soil, after a month (Flow's state built), and a dry land cell that rain reaches.
 fn start() -> (pcore::World, usize) {
     let mut w = small_world();
     pcore::step(&mut w);
     worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
-    let i = dry_land(&w);
+    let i = dry_lands(&w).into_iter().find(|&i| w.rain[i] > 0.0).expect("dry land with rain");
     (w, i)
 }
 

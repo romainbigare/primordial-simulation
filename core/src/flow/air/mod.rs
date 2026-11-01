@@ -1,12 +1,13 @@
-//! Flow in and through the air (laws.md 1.4 to 1.6): each air step the cells' ground gives the air level its forcing
-//! (`cells::forcing`), the air level runs day by day (`daily`), and each cell then exchanges with the step's mean air
-//! of its node (`cells::pass`), booked whole (`book`). Here: the state of the air nodes.
+//! Flow in and through the air (laws.md 1.4 to 1.6): each air step each cell's exchange with the air it sees is found
+//! as one law, linear in that air (`cells::respond`), the air level runs day by day under it (`daily`), and each cell's
+//! exchange at the step's mean air is booked whole (`book`). Here: the state of the air nodes.
 
 mod book;
 mod cells;
 mod daily;
 mod exchange;
 mod radiation;
+mod rain;
 mod sky;
 mod step;
 mod wind;

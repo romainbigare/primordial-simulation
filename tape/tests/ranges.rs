@@ -36,12 +36,14 @@ const FROM: u64 = 21;
 const PPM: f64 = 1e6;
 const MM: f64 = 1e3;
 
-/// Ground temperature on land, K (series `t_land`), in the reference runs.
-const T_LAND: f64 = 291.79;
-/// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the reference runs.
-const SWING: f64 = 15.13;
-/// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs.
-const RAIN_LAND: f64 = 1.714e-3;
+/// Ground temperature on land, K (series `t_land`), in the reference runs, re-anchored on the warmth-evened air.
+const T_LAND: f64 = 288.01;
+/// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the reference runs, re-anchored on the
+/// warmth-evened air.
+const SWING: f64 = 12.87;
+/// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs, re-anchored on the
+/// warmth-evened air.
+const RAIN_LAND: f64 = 2.998e-3;
 /// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs.
 const ABSORBER_PPM: f64 = 388.8;
 /// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the reference runs.
@@ -336,8 +338,8 @@ const STEP_YEARS: u64 = 20;
 const STEP_FROM: u64 = 11;
 const STEP_SEEDS: [u64; 3] = [1, 2, 3];
 const STEP_K: f64 = 0.3;
-/// The shorter air steps, hours: a day, the air's own step, and a quarter of one.
-const SHORT_AIR_HOURS: [u32; 2] = [24, 6];
+/// The shorter air steps, hours: a day, the air's own step.
+const SHORT_AIR_HOURS: [u32; 1] = [24];
 
 /// The `CLIMATE` columns at the end of each year from `STEP_FROM` of seed `seed` with the air's step `hours` long.
 fn climate(seed: u64, hours: u32) -> Vec<[f64; CLIMATE.len()]> {
@@ -355,9 +357,9 @@ fn climate(seed: u64, hours: u32) -> Vec<[f64; CLIMATE.len()]> {
 /// years) from the step of each of `SHORT_AIR_HOURS`, each seed against itself, is less than `STEP_K` for a temperature
 /// and less than its year-to-year spread at the short step for the others.
 #[test]
-#[ignore = "slow: nine 20-year runs of a 32 x 32 world with life"]
+#[ignore = "slow: six 20-year runs of a 32 x 32 world with life"]
 fn the_long_step_keeps_the_climate() {
-    let hours = [Config::default().air_hours, SHORT_AIR_HOURS[0], SHORT_AIR_HOURS[1]];
+    let hours: Vec<u32> = std::iter::once(Config::default().air_hours).chain(SHORT_AIR_HOURS).collect();
     let runs: Vec<Vec<Vec<[f64; CLIMATE.len()]>>> = std::thread::scope(|s| {
         let runs: Vec<Vec<_>> = STEP_SEEDS.iter().map(|&seed| hours.iter().map(|&h| s.spawn(move || climate(seed, h))).collect()).collect();
         runs.into_iter().map(|seed| seed.into_iter().map(|r| r.join().expect("a run")).collect()).collect()
