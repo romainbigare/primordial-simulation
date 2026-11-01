@@ -105,7 +105,8 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
         (st.tg, st.pk, st.phi, st.cloud) = (vec![0.0; n], vec![land::NONE; n], vec![0.0; n], vec![[0.0; 2]; w.mesh.level(AIR).n()]);
     }
     let build = s.cap.len() != n;
-    s.lifts = (!fresh && (moving || build)).then(|| potential::Lifts::start(w, &s));
+    let known = s.known.take();
+    s.lifts = (!fresh && (moving || build)).then(|| potential::Lifts::start(w, &s, known));
     if build {
         scratch::room(w, &mut s);
         ground_state(w, &mut s, true);
@@ -113,9 +114,16 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
     }
     f(w, &mut s);
     if let Some(lifts) = s.lifts.take() {
-        lifts.book(w, &s);
+        let now = lifts.book(w, &s);
+        s.known = s.chained.then_some(now);
     }
     w.scratch = s;
+}
+
+/// The parts of Flow that run from now until `chain(w, false)` follow each other with nothing else between: each starts
+/// from the potential energy the last left (`potential::Lifts`), not found again.
+pub fn chain(w: &mut World, on: bool) {
+    (w.scratch.chained, w.scratch.known) = (on, None);
 }
 
 /// Lowest and highest of `v`.

@@ -78,6 +78,8 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
     };
     // The survey of the cells builds Flow's state in full for their surroundings; Flow's own pass leaves it then.
     pass(w, Stage::Bodies, "survey", &|w| survey::survey(w));
+    // Flow's parts follow each other with nothing between (`flow::chain`), from here to its refresh.
+    flow::chain(w, true);
     pass(w, Stage::Flow, "state", &|w| {
         if !flow::built_now(w) {
             flow::state(w, true);
@@ -99,6 +101,7 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
     if months.is_multiple_of(REFRESH_MONTHS) {
         pass(w, Stage::Flow, "refresh", &flow::refresh);
     }
+    flow::chain(w, false);
     // The cover's month reads Flow's state and the air as its last step left it.
     pass(w, Stage::Bodies, "cover", &survey::cover);
     pass(w, Stage::Change, "change", &|w| change::step(w, len as f64));
