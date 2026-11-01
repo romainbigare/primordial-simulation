@@ -99,10 +99,11 @@ pub(super) fn even(w: &World, s: &Scratch, blocks: &[Vec<u32>], (x, e): (&mut [f
         // Each node's heat capacity once evened, J/K; the block's drop with height, K/m, and its warmth, K: its heat with
         // what that drop takes from its mean height, over its capacity.
         let capa = |j: usize| s.state.gas.iter().enumerate().map(|(q, &k)| gas[q] * s.vol[j] / vol * s.sp[k].cp).sum::<f64>();
-        let all = nodes.iter().map(|&j| capa(j as usize)).sum::<f64>().max(f64::MIN_POSITIVE);
-        let gam = nodes.iter().map(|&j| capa(j as usize) * s.gam[j as usize]).sum::<f64>() / all;
-        let warmth = (heat + nodes.iter().map(|&j| capa(j as usize) * gam * s.zair[j as usize]).sum::<f64>()) / all;
-        for &m in &nodes[1..] {
+        let caps: Vec<f64> = nodes.iter().map(|&j| capa(j as usize)).collect();
+        let all = caps.iter().sum::<f64>().max(f64::MIN_POSITIVE);
+        let gam = nodes.iter().zip(&caps).map(|(&j, c)| c * s.gam[j as usize]).sum::<f64>() / all;
+        let warmth = (heat + nodes.iter().zip(&caps).map(|(&j, c)| c * gam * s.zair[j as usize]).sum::<f64>()) / all;
+        for (&m, cap) in nodes[1..].iter().zip(&caps[1..]) {
             let (j, share) = (m as usize, s.vol[m as usize] / vol);
             let mut kg = 0.0;
             for (q, &k) in s.state.gas.iter().enumerate() {
@@ -112,7 +113,7 @@ pub(super) fn even(w: &World, s: &Scratch, blocks: &[Vec<u32>], (x, e): (&mut [f
                 moved.mol[q * pairs + p] += d;
                 kg += d * s.sp[k].mm;
             }
-            let d = capa(j) * (warmth - gam * s.zair[j]) - e[j];
+            let d = cap * (warmth - gam * s.zair[j]) - e[j];
             e[j] += d;
             e[hub] -= d;
             moved.heat[p] += d;
