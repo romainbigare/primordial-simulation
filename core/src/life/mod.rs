@@ -135,7 +135,8 @@ impl Life {
     /// The features of cell `i` as a body of sight `sight` (1 to `choose::SIGHTS`) sees them from a neighbour cell, as
     /// the last survey found them (`choose::cells`); its own at sight 1.
     pub fn feat(&self, i: usize, sight: usize) -> &[f32; crate::choose::NCELL] {
-        &self.feat[(sight.clamp(1, crate::choose::SIGHTS) - 1) * self.cells.len() + i]
+        // (The cells are taken out of the world while a pass runs: the count comes from the features.)
+        &self.feat[(sight.clamp(1, crate::choose::SIGHTS) - 1) * (self.feat.len() / crate::choose::SIGHTS) + i]
     }
     /// The numbers of cell `i` from the last survey (`Cell::sum`).
     pub fn sum(&self, i: usize) -> &[f64; ROW] {
