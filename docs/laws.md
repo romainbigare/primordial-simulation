@@ -127,7 +127,8 @@ surface warms no further than its melting point: past it the top melts and the m
 the heat that reaches the surface (`air::radiation`). A cell is **land**
 when its solid surface is above 0 m (`World::is_land`). The top `skin_m` trades heat with the surface. Heat spreads
 sideways yearly by one explicit `solve::sweep`, a link passing the harmonic mean of conductivity × thickness, times
-width over length (Patankar 1980; `flow::land::conduct`): rock spreads a hot spot one cell in about 70,000 years, so a
+width over length (Patankar 1980; `flow::land::conduct`), between land cells liquid runs off (`flow::runs_off`: land
+with `World::liquid_flux` above 0): rock spreads a hot spot one cell in about 70,000 years, so a
 year is far below the explicit limit.
 **Melting plateaus** (`ground::melting`): a node holds the fusion enthalpy of what is molten in it, so it stays at a
 melting point (lowered by solutes, 2.5) until that substance has all frozen or melted. A node whose heat melts or
@@ -164,11 +165,12 @@ sink (`Config::validate`). The sink into the bed's store runs every physics step
   potential node (`flow::Falls`).
 
 ### 1.3 Erosion and creep
-The head lost by moving liquid does work where it is lost (`flow::liquid::load`, `wear`): it **carries** up to `carry`
+The head lost by moving liquid does work where it is lost on land (`flow::liquid::load`, `wear`; below 0 m its load
+settles and it wears nothing): it **carries** up to `carry`
 m³ of loose solids per J (dropping what is over capacity, so load settles where flow slows), and with the work its
 load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears** `wear` m³ of
-bed per J over its strength into loose ground. **Creep** (`flow::creep`, yearly): loose ground slides downhill as a
-slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope. Bodies hold the ground: carrying
+bed per J over its strength into loose ground. **Creep** (`flow::creep`, yearly, out of land cells liquid runs off):
+loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope. Bodies hold the ground: carrying
 and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 22.
 
 ### 1.4 The air's step, the sun and the bodies' share

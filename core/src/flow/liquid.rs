@@ -140,9 +140,10 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         let x = ww.store.heat(Class::Ground)[i] + q[heat] - held - c * ss.state.tg[i];
         let t = (ss.state.tg[i] + (x.min(0.0) + (x - lat).max(0.0)) / c.max(1.0)).max(T_FLOOR);
         let kg = |q: &[f64], rs: std::ops::Range<usize>| rs.map(|r| q[r] * ss.sp[ks[r]].mm).sum::<f64>();
-        // The work, on the bed below the liquid left standing (which hides it).
+        // The work, on the bed below the liquid left standing (which hides it); none below 0 m, where the load
+        // settles.
         let left = sv * (1.0 - out) / area[i];
-        let bedwork = g * drop * kg(q, 0..nl) * ph.hide[1] / (ph.hide[1] + left);
+        let bedwork = if land[i] { g * drop * kg(q, 0..nl) * ph.hide[1] / (ph.hide[1] + left) } else { 0.0 };
         worn[i] = load(ww, ss, i, q, (nl..rows, &sol), bedwork, out);
         q[heat] = ks.iter().enumerate().map(|(r, &k)| q[r] * (ss.sp[k].cp * t + if r < nl { ss.sp[k].lf } else { 0.0 })).sum();
         power[i] = g * drop * kg(q, 0..rows);

@@ -208,6 +208,8 @@ fn a_hot_spot_spreads_through_the_ground_at_its_diffusivity() {
     for i in 0..n {
         hold_ground(&mut w, i, if i == mid { 310.0 } else { 300.0 });
     }
+    // Liquid runs off every cell, so heat goes sideways through all of them (`flow::runs_off`).
+    w.liquid_flux.fill(1.0);
     w.scratch = Default::default();
     let (books, base, hot) = (Books::now(&w), w.energy_ground(0, 300.0), w.store.heat(Class::Ground)[mid] - w.energy_ground(0, 300.0));
     // Spread to a standard deviation of one cell, in ten steps (the edges, 7 cells off, then reflect almost nothing).
@@ -262,6 +264,7 @@ fn heat_crosses_the_border_of_a_refined_region_by_its_width() {
             let t = 300.0 + if even { 0.0 } else { GRAD * x(&w, i) };
             hold_ground(&mut w, i, t);
         }
+        w.liquid_flux.fill(1.0);
         w.scratch = Default::default();
         let (books, before) = (Books::now(&w), w.store.heat(Class::Ground).to_vec());
         worldgen::testkit::creep(&mut w, dt);
