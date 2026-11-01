@@ -207,13 +207,13 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64]) -> Wet {
 pub(super) type Landed = Vec<(u32, u32, f64)>;
 
 /// The air the rain of active gas `y` of node `j` meets on a day it rains at its saturation ratio `ratio`: the air
-/// touching the cells it falls on (`touching`, under the day's air `t`), each by its share of the rain as it lands
-/// (`landed`), K; none where it falls on no cell.
-pub(super) fn rain_air(s: &Scratch, wet: &Wet, (y, j, ratio): (usize, usize, f64), t: &[f64]) -> Option<f64> {
+/// touching the cells it falls on (`touched`, per cell, `touching` under the day's air), each by its share of the rain
+/// as it lands (`landed`), K; none where it falls on no cell.
+pub(super) fn rain_air(wet: &Wet, (y, j, ratio): (usize, usize, f64), touched: &[f64]) -> Option<f64> {
     let node = &wet.0[j];
     let len = node.cell.len();
     let over = |e: usize| node.share[e] * (ratio - node.ratio[y * len + e]).max(0.0);
-    let (sum, all) = (0..len).map(|e| (e, over(e))).filter(|p| p.1 > 0.0).fold((0.0, 0.0), |(sum, all), (e, o)| (sum + o * touching(s, t, node.cell[e] as usize), all + o));
+    let (sum, all) = (0..len).map(|e| (e, over(e))).filter(|p| p.1 > 0.0).fold((0.0, 0.0), |(sum, all), (e, o)| (sum + o * touched[node.cell[e] as usize], all + o));
     (all > 0.0).then(|| sum / all)
 }
 

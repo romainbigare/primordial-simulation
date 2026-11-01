@@ -155,16 +155,17 @@ fn node_state(w: &World, s: &Scratch, i: usize, full: bool, row: &mut [f64]) {
     row[2..12].copy_from_slice(&[th.t, 1.0, pk as f64, phi, th.held, th.lo, th.hi, th.lat[0], th.lat[1], f64::from_bits(th.bits)]);
     if full || s.state.pk[i] != NONE || pk != NONE || th.bits != was {
         row[12] = 1.0;
-        row[13..].copy_from_slice(&surface_of(w, s, i, th.t, |k| th.molten(k)));
+        row[13..].copy_from_slice(&surface_of(w, s, i, th.t, |k| th.molten(k), &melt));
     }
 }
 
 /// The melting point of each substance that varies in a ground node of amounts `amt(k)`, mol, lowered by what is
 /// dissolved (`Chemistry::melt_in`, laws.md 2.5), K, by substance.
 pub(super) fn melts(w: &World, s: &Scratch, amt: impl Fn(usize) -> f64) -> [f64; MAX_SUBSTANCES] {
-    let mut melt = [0.0; MAX_SUBSTANCES];
+    let (mut melt, solvents) = ([0.0; MAX_SUBSTANCES], w.chem.solvents());
     for &k in &s.state.vary {
-        melt[k] = w.chem.melt_in(k, &amt);
+        // Only a substance others dissolve in melts below its own point (`Chemistry::lowers_melt`).
+        melt[k] = if solvents >> k & 1 == 1 { w.chem.melt_in(k, &amt) } else { s.sp[k].melt };
     }
     melt
 }
@@ -218,14 +219,14 @@ pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
 }
 
 /// Solid surface, head, soft cover and reflectance of node `i` at temperature `t` with the share `molten(k)` of each
-/// substance molten, from its layers (`layers`): its solid surface and head, m, its soft cover (`Scratch::cover`), its
+/// substance molten and its melting points `melt` (`melts`), from its layers (`layers`): its solid surface and head, m, its soft cover (`Scratch::cover`), its
 /// reflectance and its pore space as a depth, m. The pores of the loose ground hold the first liquid. A soft cover holds
 /// none: its pores close as it settles, as snow becomes ice (Cuffey and Paterson 2010), so the liquid on it stands and
 /// runs off.
-fn surface_of(w: &World, s: &Scratch, i: usize, t: f64, molten: impl Fn(usize) -> f64) -> [f64; 7] {
+fn surface_of(w: &World, s: &Scratch, i: usize, t: f64, molten: impl Fn(usize) -> f64, melt: &[f64; MAX_SUBSTANCES]) -> [f64; 7] {
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[i]);
     let amt = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
-    let (l, z, [rc, tc]) = layers(w, s, i, t, amt, molten, |k| w.chem.melt_in(k, amt));
+    let (l, z, [rc, tc]) = layers(w, s, i, t, amt, molten, |k| melt[k]);
     [z, z + l[2] / area, rc, tc, l[0] / area, reflectance(w, s, i, &l), w.cfg.phys.porosity * l[4] / area]
 }
 
