@@ -455,7 +455,9 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
   individual's child joins its parent's lineage, or its partner's when its size genes fit that and not its parent's
   (its rows carried over to that brain; `copy::child_lineage`). A lineage starts only where a body's brain-size gene
   moves a whole unit from its lineage's (`lineage::resize`, at its update) and no living lineage of its kind has the
-  sizes it moves to (it joins that one), within `MAX_LINEAGES`.
+  sizes it moves to (it joins that one), within `MAX_LINEAGES`. Living: as at the start of the month's pass
+  (`Life::lineages_of`), so bodies that move to the same new sizes in one pass found a lineage each, whoever shares
+  their chunk.
   `nodes::open` draws members as individuals. `--individuals` keeps bodies with a brain out of nodes (handover 7.1).
 
 ### 4.5 The cover: light-eaters as a field
