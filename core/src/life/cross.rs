@@ -11,8 +11,9 @@ use crate::{body::Body, bond, choose, copy, lanes, life, World};
 pub enum Entry {
     /// Body `id` moves from cell `from` to `to` (`choose::go`), having spent `pushed` J pushing through the bodies
     /// there, which clears `lane` m² of its lane; `carries`: it paid to carry the structure it holds; with `kin`, it is
-    /// members of a node who join their kind there
-    Go { id: u64, from: u32, to: u32, pushed: f64, lane: f64, carries: bool, kin: bool },
+    /// members of a node who join their kind there, and `brain` the numbers of their brain (`Brains::all`), which has no
+    /// block (empty: the body's block goes with it)
+    Go { id: u64, from: u32, to: u32, pushed: f64, lane: f64, carries: bool, kin: bool, brain: Vec<f32> },
     /// Children who start in another cell (`copy::emit`)
     Litter(Box<copy::Litter>),
     /// Body `by` of mass `mass` kg landed in cell `to` from `from` (`choose::land_move`): it clears `lane` m² of the
@@ -65,12 +66,12 @@ fn land_all(w: &mut World, landing: Vec<Entry>) {
     let mut per: Vec<Vec<(u32, usize, Landing)>> = (1..bounds.len()).map(|_| Vec::new()).collect();
     for (x, e) in landing.into_iter().enumerate() {
         let (cell, l) = match e {
-            Entry::Go { id, from, to, pushed, lane, carries, kin } => {
+            Entry::Go { id, from, to, pushed, lane, carries, kin, brain } => {
                 let Some(h) = w.life.find_in(from as usize, id) else { continue };
                 let b = std::mem::take(&mut w.life[h]);
                 let carried = bond::carry(&w.life.cells[from as usize], w, &b).map(|x| x.0);
                 let c = &mut w.life.cells[from as usize];
-                let brain = c.brains.all(b.brain).to_vec();
+                let brain = if b.brain.some() { c.brains.all(b.brain).to_vec() } else { brain };
                 c.brains.free(b.brain);
                 (to, Landing::Move { b: Box::new(b), brain, carried, from, to, pushed, lane, carries, kin })
             }
@@ -84,9 +85,8 @@ fn land_all(w: &mut World, landing: Vec<Entry>) {
     life::run(w, per, load, |_| (), |w, d, list, _| {
         for (_, _, l) in list.drain(..) {
             match l {
-                Landing::Move { mut b, brain, carried, from, to, pushed, lane, carries, kin } => {
-                    b.brain = d.brains(to as usize).take_in(&brain);
-                    choose::land_move(w, d, *b, (from as usize, to as usize, carried), (pushed, lane), (carries, kin));
+                Landing::Move { b, brain, carried, from, to, pushed, lane, carries, kin } => {
+                    choose::land_move(w, d, (*b, &brain), (from as usize, to as usize, carried), (pushed, lane), (carries, kin));
                 }
                 Landing::Litter(x) => copy::land_litter(w, d, *x),
             }

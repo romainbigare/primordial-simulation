@@ -34,7 +34,7 @@ pub fn go(w: &World, d: &mut Chunk, b: &mut Body, j: usize, kin: bool) {
     let (pushed, all) = (cost * (1.0 - 1.0 / resist), w.life.sum(j)[7]);
     let lane = if all > 0.0 { pushed * w.mesh.cells().area()[j] / all } else { 0.0 };
     b.leaving = true;
-    d.out.push(Entry::Go { id: b.id, from: i as u32, to: j as u32, pushed, lane, carries: carried.is_some(), kin });
+    d.out.push(Entry::Go { id: b.id, from: i as u32, to: j as u32, pushed, lane, carries: carried.is_some(), kin, brain: Vec::new() });
 }
 
 /// Whether share `share` of body `b` (a node's movers, or the body whole with 1) carrying `load` kg can step into cell
@@ -47,13 +47,14 @@ pub(super) fn can_go(w: &World, b: &Body, j: usize, share: f64, load: f64) -> bo
         && share * bond::bears(w, b) >= w.cfg.phys.bump * (mb + load) * w.cfg.gravity
 }
 
-/// The move of body `b` from cell `i` to `j` that `go` queued lands in `d`, the chunk of `j` in the serial pass: it
-/// enters `j` (inside no structure), carries the structure it holds (`carried`: its root, as the cell it left held it)
-/// if it paid for that (`carries`; else it lets go of it), and its push breaks the bodies there at the next survey.
-/// What it does to things no cell owns is queued (`Entry::Passed`): it pushes the structures there (`bond::moved`) and
-/// clears `lane` m² of the lane. With `kin`, the members of a node who moved join the first node of their kind and
-/// stage there (`copy::kin`).
-pub(crate) fn land_move(w: &World, d: &mut Chunk, mut b: Body, (i, j, carried): (usize, usize, Option<u64>), (pushed, lane): (f64, f64), (carries, kin): (bool, bool)) {
+/// The move of body `b` from cell `i` to `j` that `go` queued lands in `d`, the chunk of `j` in the serial pass, with
+/// the numbers of its brain (`brain`, `Brains::all`): it enters `j` (inside no structure), carries the structure it
+/// holds (`carried`: its root, as the cell it left held it) if it paid for that (`carries`; else it lets go of it), and
+/// its push breaks the bodies there at the next survey. What it does to things no cell owns is queued
+/// (`Entry::Passed`): it pushes the structures there (`bond::moved`) and clears `lane` m² of the lane. With `kin`, the
+/// members of a node who moved join the first node of their kind and stage there (`copy::kin`) as an amount, their
+/// genes and rows (`nodes::add`), not as a body; else it is stored there with its brain.
+pub(crate) fn land_move(w: &World, d: &mut Chunk, (mut b, brain): (Body, &[f32]), (i, j, carried): (usize, usize, Option<u64>), (pushed, lane): (f64, f64), (carries, kin): (bool, bool)) {
     let carried = carried.filter(|_| carries);
     if carried.is_none() {
         // (The part it holds lies in the cell it left: it lets go of it there, in the acts' landing.)
@@ -68,9 +69,12 @@ pub(crate) fn land_move(w: &World, d: &mut Chunk, mut b: Body, (i, j, carried): 
     (b.cell, b.leaving, b.inside) = (j as u32, false, None);
     d.cross(j, b.n() as f32, pushed);
     d.out.push(Entry::Passed { by: b.id, from: i as u32, to: j as u32, lane, mass, carried });
-    let s = d.arrive(b);
-    if let Some(t) = t {
-        nodes::merge(w, d, s, t);
+    match t.filter(|_| b.hold.is_none()) {
+        Some(t) => nodes::add(w, d, t, nodes::Lot::of(&mut b), (&b.genes, &b.spread), (b.lineage, b.genome, Some(nodes::Own::Carried(brain)), b.row_spread)),
+        None => {
+            b.brain = d.brains(j).take_in(brain);
+            d.arrive(b);
+        }
     }
 }
 

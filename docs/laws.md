@@ -78,7 +78,7 @@ holders of each lineage and born rows are counted from the bodies (`Life::recoun
 with none dies out, born rows left with none are freed. Each entry is applied by its law on the bodies and parts as
 they are then. A move lands (`choose::land_move`): the body enters the cell, carries what it holds if it paid to (else
 it lets go of it), counts in the cell's crossings, and its push breaks the bodies there at the next survey; members of
-a node who moved join their kind there (`copy::kin`); then its push reaches the structures there, the structure it
+a node who moved join their kind there (`copy::kin`) as an amount with their genes and rows, not as a body; then its push reaches the structures there, the structure it
 carries comes along (any other body that held a part of it, left behind, lets go of it), and it clears the lane
 (`Entry::Passed`). A litter joins its kind there or starts a body, and its
 birth is recorded then (`copy::land_litter`). A watch blends by the share of the watcher's members who watched (5.5). A
@@ -454,9 +454,9 @@ Every body is a node: one body for many members, and a node of one member is an 
 rule of death, of taking, of children for both: what a share of a node's members does, an individual does with that
 chance).
 - **Exact members** (`nodes::Lot` for every split, `nodes::rejoin` for every join, inside `nodes::add` for merges and
-  births): members, stores, heat and brood split by shares and join as sums; genes, sizes and rows become means by
-  members; the spread per gene (`Body::spread`, `Body::row_spread`) and of the sizes (`Body::size_spread`) pools each
-  one's spread and its gap to the new mean. Members of a node with a brain that take any action but a move or a
+  births): members, stores, heat and brood split by shares and join as sums; genes, sizes and own rows become means by
+  members, and the spread per gene (`Body::spread`) pools each one's spread and its gap to the new mean; a node keeps
+  its born rows, and its row spread (`Body::row_spread`) pools the joiners' spread and their gap to them. Members of a node with a brain that take any action but a move or a
   bond (`choose::spread`) act as the node itself while the others wait aside with their share; these come back by
   `rejoin` alone: their genes and spreads are the node's, so only amounts and sizes (members who fed are now larger
   than those who waited) join; what members who watched copy is applied when the batch ends (5.5).

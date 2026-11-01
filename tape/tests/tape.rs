@@ -482,8 +482,9 @@ fn null_run_freezes_the_brain_rows() {
 }
 
 /// The minerals: the series has each mineral (`min0_`, the mineral of the fixing reaction's gas, and `min1_`) in the ground per m²
-/// of land and of sea, and where the first is in all (dead matter on land and sea, the bodies, the bed's stores), which with the
-/// ground's stays what the soil gave the world (no body fixes, and the reaction that breaks it down is off).
+/// of land and of sea, and where the first is in all (dead matter on land and sea, the bodies, the cover, the parts, the bed's
+/// stores), which with the ground's stays what the soil gave the world (no body fixes, and the reaction that breaks it
+/// down is off).
 #[test]
 fn yearly_series_counts_the_minerals() {
     let Recording { w, dir, cells: at } = recording();
@@ -502,7 +503,7 @@ fn yearly_series_counts_the_minerals() {
     let (mm, area) = (w.chem.subs[w.chem.minerals()[0].0].molar_mass, w.mesh.cells().area()[0]);
     let all = |r: &Vec<f64>, c: [f64; 2]| {
         let ground = (col("min0_land", r) * c[0].max(1.0) + col("min0_sea", r) * c[1].max(1.0)) * area / mm / 1e9;
-        ground + ["min0_dead_land", "min0_dead_sea", "min0_bodies", "min0_cover", "min0_deep"].iter().map(|c| col(c, r)).sum::<f64>()
+        ground + ["min0_dead_land", "min0_dead_sea", "min0_bodies", "min0_cover", "min0_parts", "min0_deep"].iter().map(|c| col(c, r)).sum::<f64>()
     };
     for (r, &c) in rows.iter().zip(at) {
         assert!((all(r, c) / all(first, at[0]) - 1.0).abs() < 1e-6, "the mineral in all: {} against {}", all(r, c), all(first, at[0]));

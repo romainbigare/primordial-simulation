@@ -315,7 +315,7 @@ pub fn out(w: &mut World, b: Body) -> (Handle, Body) {
 pub fn relocate(w: &mut World, h: Handle, j: usize) -> Handle {
     let (id, from) = (w.life[h].id, w.life[h].cell);
     assert!(w.mesh.cells().link(from as usize, j).is_some(), "relocate: cell {j} is not a neighbour of cell {from}, where the body is");
-    w.in_cell(from as usize, |_, d| d.out.push(Entry::Go { id, from, to: j as u32, pushed: 0.0, lane: 0.0, carries: false, kin: false }));
+    w.in_cell(from as usize, |_, d| d.out.push(Entry::Go { id, from, to: j as u32, pushed: 0.0, lane: 0.0, carries: false, kin: false, brain: Vec::new() }));
     land(w);
     w.life.find(id).expect("the body landed")
 }

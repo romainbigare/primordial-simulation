@@ -146,10 +146,18 @@ fn part_acts(w: &World, d: &mut Chunk, node: &mut Body, (c, q): (&Choice, &[f32;
         back(d, node, s, m);
         return (gain, Some(false));
     }
-    // (It lives on as a body: a brain of its own, the node's, with the trace of what it did.)
+    // (It lives on as a body: a brain of its own, the node's, with the trace of what it did. Movers carry its numbers in
+    // their move, `Entry::Go`, which lands them where they go.)
     let brains = d.brains(m.cell as usize);
-    m.brain = brains.copy(node.brain);
-    m.traced = trace(w, &m, c, (q, o, 0.0), k, brains.mind(m.brain, k.s).trace);
+    if moves {
+        let mut v = brains.all(node.brain).to_vec();
+        m.traced = trace(w, &m, c, (q, o, 0.0), k, crate::life::Brains::split(&mut v, k.s).trace);
+        let Some(Entry::Go { brain, .. }) = d.out.last_mut() else { unreachable!("a mover that leaves queued its move last") };
+        *brain = v;
+    } else {
+        m.brain = brains.copy(node.brain);
+        m.traced = trace(w, &m, c, (q, o, 0.0), k, brains.mind(m.brain, k.s).trace);
+    }
     m.stale = true;
     d[s] = m;
     (gain, Some(true))

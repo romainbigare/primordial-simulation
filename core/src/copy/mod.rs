@@ -16,7 +16,7 @@ use crate::brain::{self, row_step, shake};
 use crate::chem::{Chemistry, Stores};
 use crate::event::{Event, EventKind};
 use crate::lineage::{sizes_of, wanted};
-use crate::nodes::{add, Lot, COUNT_SLACK, MAX_NODES};
+use crate::nodes::{add, Lot, Own, COUNT_SLACK, MAX_NODES};
 use crate::rng::{Purpose, Rng};
 use crate::space::COMPASS;
 use crate::life::Entry;
@@ -130,14 +130,14 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
     let (store, e) = give(w, b, l, m);
     let born = Event { day: w.day(), kind: EventKind::Born { root: d.root(w, b), mixed: l.mate.is_some() }, node: cell as u32, value: m };
     // A node's children who stay join its young node there as amounts and means (`nodes::add`): their born rows are
-    // their parent's, the generation's change of them its variance (`row_change`), their own rows their parent's, so
-    // no child body, no draw of every row and no new born rows are made.
+    // their parent's, the generation's change of them its variance (`row_change`), their own rows their parent's; the
+    // young node keeps its born rows, so no child body, no draw of every row and no new born rows are made.
     if let (true, Some(t)) = (l.node, hit) {
         // (The noise their mean would take is their spread: `add` pools it, to `body::most`.)
         let (_, sd, left) = row_change(w, b.row_spread, m, size, r);
         let row_spread = left + sd * sd;
         d.events.push(born);
-        add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.day() as f64 }, (&genes, &spread), (b.lineage, b.genome, Some(b.brain), row_spread));
+        add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.day() as f64 }, (&genes, &spread), (b.lineage, b.genome, Some(Own::Block(b.brain)), row_spread));
         return true;
     }
     let (mut rows, row_spread) = child_rows(w, d, b, l, m, size, r);
@@ -186,7 +186,7 @@ fn start(w: &World, d: &mut Chunk, mut c: Body, rows: Option<Vec<f32>>, hit: Opt
         place_child(w, d, c);
         return;
     };
-    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.lineage, c.genome, Some(c.brain), c.row_spread));
+    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.lineage, c.genome, Some(Own::Block(c.brain)), c.row_spread));
     d.brains(c.cell as usize).free(c.brain);
 }
 

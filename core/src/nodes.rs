@@ -103,7 +103,7 @@ pub fn merge(w: &World, d: &mut Chunk, s: Handle, t: Handle) {
     debug_assert_eq!(d.root(w, &d[s]), d.root(w, &d[t]), "a merge across starting kinds");
     let mut c = std::mem::take(&mut d[s]);
     let_go(d, &mut c, false);
-    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.lineage, c.genome, Some(c.brain), c.row_spread));
+    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.lineage, c.genome, Some(Own::Block(c.brain)), c.row_spread));
     d.remove(s, &c);
 }
 
@@ -135,29 +135,34 @@ impl Lot {
     }
 }
 
+/// The own rows of members who join a node (`add`): their block in the node's cell's brains, or the numbers of a block
+/// they carried from another cell (`Brains::all`, its rows first).
+pub(crate) enum Own<'a> {
+    Block(Block),
+    Carried(&'a [f32]),
+}
+
 /// Members `c` join the body at `t` with genes and spread `genes` and rows `rows` (their lineage, the genome of their
-/// born rows, the block of their own rows in the cell's brains, none: `t`'s, and their row spread): amounts add up
-/// (`rejoin`), genes and rows become the means by members and the spreads pool around them (laws.md 4.4). Members of
-/// another lineage (of its starting kind) take `t`'s brain, born rows and lineage: its own rows become the mean by
-/// members where the brains have one shape, else they stay `t`'s.
-pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread): (&[f32], &[f32]), (lineage, genome, own, row_spread): (u32, u32, Option<Block>, f32)) {
+/// born rows, their own rows, none: `t`'s, and their row spread): amounts add up (`rejoin`), genes and own rows become
+/// the means by members and the spreads pool around them; `t` keeps its born rows, the joiners' gap to them pooled
+/// into its row spread (laws.md 4.4). Members of another lineage (of its starting kind) take `t`'s brain, born rows and
+/// lineage: its own rows become the mean by members where the brains have one shape, else they stay `t`'s.
+pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread): (&[f32], &[f32]), (lineage, genome, own, row_spread): (u32, u32, Option<Own>, f32)) {
     let mut o = std::mem::take(&mut d[t]);
-    let other = lineage != o.lineage;
+    let (other, theirs) = (lineage != o.lineage, genome);
     let (genome, row_spread) = if other { (o.genome, o.row_spread) } else { (genome, row_spread) };
     let own = own.filter(|_| !other || d.shape_of(w, lineage) == d.shape_of(w, o.lineage));
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.count / (o.count + c.count)) as f32);
     let mix = |p: f32, q: f32| p + a * (q - p);
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
-    // The rows first: their spread's step reads the genes as they were. (Born rows of one genome have no gap and keep
-    // their mean.)
-    let same = o.genome == genome;
-    let (was, born) = (d.born_of(w, o.genome), d.born_of(w, genome));
-    let gap = if same { 0.0 } else { was.iter().zip(born).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / was.len().max(1) as f32 };
-    o.row_spread = pool(o.row_spread, row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
-    if !same {
-        let mixed = was.iter().zip(born).map(|(&p, &q)| mix(p, q)).collect();
-        d.reborn(w, &mut o, mixed);
-    }
+    // The rows first: their spread's step reads the genes as they were. The node keeps its born rows: the joiners' gap
+    // to them goes into its spread around them. (Born rows of one genome have no gap.)
+    let gap = if o.genome == genome { 0.0 } else {
+        let (was, born) = (d.born_of(w, o.genome), d.born_of(w, genome));
+        was.iter().zip(born).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / was.len().max(1) as f32
+    };
+    let step = row_step(p, body::mutation_size(&o.genes));
+    o.row_spread = ((1.0 - a) * o.row_spread + a * (row_spread + gap)).min(most(step, p.alike));
     // Each gene's mean and the spread pooled around it, in place.
     let mut pooled = std::mem::take(&mut o.spread);
     pooled.resize(o.genes.len(), 0.0);
@@ -168,9 +173,9 @@ pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread): 
     }
     o.spread = pooled;
     o.prepare(&w.chem, &w.cfg);
-    // Its own rows become the mean by members.
+    // Its own rows: its born rows and the mean by members of what each learned (`Chunk::blend_learned`).
     if let (Some(own), Some(s)) = (own, d.shape_of(w, o.lineage)) {
-        d.brains(o.cell as usize).blend(o.brain, own, s, a);
+        d.blend_learned(w, (o.cell as usize, o.brain), own, (o.genome, theirs), s, a);
     }
     rejoin(&mut o, c);
     o.stale = true;

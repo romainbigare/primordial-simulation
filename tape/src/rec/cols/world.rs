@@ -94,7 +94,7 @@ impl Recorder {
 
 /// Each mineral (`Chemistry::minerals`): its mass in the ground per m² of land and of sea, and where it is in all, in
 /// 10^9 mol of it (matter counted at its share of it): dead matter on the ground of land and of the sea, the bodies,
-/// the cover, and the stores of the bed (`World::deep`).
+/// the cover, the parts (their walls and what they hold), and the stores of the bed (`World::deep`).
 fn minerals(c: &Ctx, row: &mut Row) {
     let w = c.w;
     let (n, area, matter, minerals) = (w.mesh.cells().n(), w.mesh.cells().area(), w.chem.matter(), w.chem.minerals());
@@ -105,6 +105,8 @@ fn minerals(c: &Ctx, row: &mut Row) {
         }
     }
     let cover = pcore::cover::totals(w);
+    let held = |p: &pcore::bond::Part, k: usize| p.wall.get(k).copied().unwrap_or(0.0) + p.fill.get(k).copied().unwrap_or(0.0);
+    let parts: Vec<f64> = minerals.iter().map(|&(k, per)| w.life.parts().map(|p| held(p, k) + matter.map_or(0.0, |m| held(p, m)) * per).sum()).collect();
     for (q, &(k, per)) in minerals.iter().enumerate() {
         // [ground, dead matter] x [land, sea], and the area of each
         let (mut t, mut areas) = ([[0.0f64; 2]; 2], [0.0f64; 2]);
@@ -121,6 +123,7 @@ fn minerals(c: &Ctx, row: &mut Row) {
         row.push(format!("min{q}_dead_sea"), "1e9 mol", t[1][1] / GIGA);
         row.push(format!("min{q}_bodies"), "1e9 mol", bodies[q] / GIGA);
         row.push(format!("min{q}_cover"), "1e9 mol", (cover[k] + matter.map_or(0.0, |m| cover[m]) * per) / GIGA);
+        row.push(format!("min{q}_parts"), "1e9 mol", parts[q] / GIGA);
         row.push(format!("min{q}_deep"), "1e9 mol", w.store.amounts(Class::Deep).get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) / GIGA);
     }
 }

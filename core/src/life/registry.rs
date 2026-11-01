@@ -152,10 +152,24 @@ impl Chunk<'_> {
         }
         c
     }
-    /// Body `b` (taken out of its slot) is now born with `rows` (its own rows are the caller's).
-    pub(crate) fn reborn(&mut self, w: &World, b: &mut Body, rows: Vec<f32>) {
-        if rows != self.born(w, b) {
-            b.genome = self.new_genome(rows);
+    /// The own rows of block `t` of cell `i`, of a body born with genome `gt`, move the share `a` of the way toward
+    /// `own`, the rows of members born with genome `gj` (both of a brain of shape `s`), in what each learned: they
+    /// become `gt`'s born rows and the mean of what each learned since its own (with one genome, the mean of the rows).
+    pub(crate) fn blend_learned(&mut self, w: &World, (i, t): (usize, Block), own: crate::nodes::Own, (gt, gj): (u32, u32), s: Shape, a: f32) {
+        let Chunk { cells, written } = self;
+        let born = |g: u32| provisional(g).map_or_else(|| &w.life.genomes[g as usize].rows[..], |k| &written.genomes[k][..]);
+        let (bt, bj) = (born(gt), born(gj));
+        let brains = &mut cells[i - written.first].brains;
+        match own {
+            crate::nodes::Own::Block(b) if gt == gj => brains.blend(t, b, s, a),
+            crate::nodes::Own::Block(b) => brains.blend_learned(t, b, (bt, bj), s, a),
+            crate::nodes::Own::Carried(v) if gt == gj => crate::brain::blend(brains.mind(t, s).rows, v, a),
+            crate::nodes::Own::Carried(v) => {
+                let rows = brains.mind(t, s).rows;
+                for (q, x) in rows.iter_mut().enumerate() {
+                    *x += a * ((v[q] - bj[q]) - (*x - bt[q]));
+                }
+            }
         }
     }
     /// Body `b` (taken out of its slot) moves to `lineage`, born with `rows`.

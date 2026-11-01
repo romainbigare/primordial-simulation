@@ -135,8 +135,11 @@ impl Brains {
     }
     /// The parts of block `b` of a brain of shape `s`.
     pub(crate) fn mind(&mut self, b: Block, s: Shape) -> Mind<'_> {
+        Brains::split(if b.some() { self.of_mut(b) } else { &mut [] }, s)
+    }
+    /// The parts of `all`, the numbers of a block of a brain of shape `s` (`Brains::all`).
+    pub(crate) fn split(all: &mut [f32], s: Shape) -> Mind<'_> {
         let [r, m, _] = parts(s);
-        let all: &mut [f32] = if b.some() { self.of_mut(b) } else { &mut [] };
         let (rows, rest) = all.split_at_mut(r.min(all.len()));
         let (ms, trace) = rest.split_at_mut(m.min(rest.len()));
         Mind { rows, ms, trace }
@@ -150,6 +153,17 @@ impl Brains {
         for q in 0..r {
             let (x, y) = (self.v[b.at as usize + q], self.v[o.at as usize + q]);
             self.v[b.at as usize + q] = x + a * (y - x);
+        }
+    }
+    /// The rows of block `b` (born with `born.0`) move the share `a` of the way toward those of block `o` (born with
+    /// `born.1`) in what each learned since (both of a brain of shape `s`): x + a ((y - born.1) - (x - born.0)).
+    pub(crate) fn blend_learned(&mut self, b: Block, o: Block, born: (&[f32], &[f32]), s: Shape, a: f32) {
+        if !b.some() || !o.some() || b == o {
+            return;
+        }
+        for q in 0..parts(s)[0] {
+            let (x, y) = (self.v[b.at as usize + q], self.v[o.at as usize + q]);
+            self.v[b.at as usize + q] = x + a * ((y - born.1[q]) - (x - born.0[q]));
         }
     }
     /// To the rows of block `c` comes what the rows of block `b` learned since they were `from` (both of a brain of
