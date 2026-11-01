@@ -4,7 +4,7 @@ use pcore::life::Handle;
 use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, HEAT, MUT, STRENGTH};
 use pcore::event::EventKind;
 use pcore::units::DAY_S;
-use pcore::{body, brain, copy, nodes, outbox, World};
+use pcore::{body, brain, copy, life, nodes, World};
 use worldgen::testkit::{self, brood, life_totals, same_totals, children, founder, out, small_world, start, Books, Brain};
 
 /// Two parents: the gene value of the first body in the genes under test, and the step the catalyst genes move in.
@@ -40,7 +40,7 @@ fn copies(w: &mut World, a: &mut Body, n: usize) -> Vec<Body> {
     for _ in 0..n {
         w.time += DAY_S;
         brood(w, a, 1.0);
-        assert!(w.in_domain(a.cell as usize, |w, d| copy::copy(w, d, a)), "no child");
+        assert!(w.in_cell(a.cell as usize, |w, d| copy::copy(w, d, a)), "no child");
     }
     let out: Vec<Body> = children(w, a.id).into_iter().map(|k| w.life[k].clone()).collect();
     assert_eq!(out.len(), n);
@@ -239,7 +239,7 @@ fn a_node_spreads_with_its_children() {
     let n0 = b.count;
     brood(&w, &mut b, n0);
     let before = live(&w);
-    assert!(b.spread.is_empty() && w.in_domain(b.cell as usize, |w, d| copy::copy(w, d, &mut b)), "no children");
+    assert!(b.spread.is_empty() && w.in_cell(b.cell as usize, |w, d| copy::copy(w, d, &mut b)), "no children");
     assert_eq!(b.count, n0, "the children joined their mature parents");
     w.life[s] = b;
     let kids: Vec<Handle> = live(&w).into_iter().filter(|x| !before.contains(x) && *x != s).collect();
@@ -248,7 +248,7 @@ fn a_node_spreads_with_its_children() {
     assert!((c.count - n0).abs() < 1e-6 * n0 && !c.adult(&w.chem), "{} young members", c.count);
     assert!(c.spread.iter().all(|&v| v >= 0.0) && c.spread.iter().any(|&v| v > 0.0) && c.row_spread > 0.0, "children keep no spread");
     // Grown, they join the node (as the month's merge does): its spread is widened.
-    w.in_domain(w.life[s].cell as usize, |w, d| nodes::merge(w, d, kids[0], s));
+    w.in_cell(w.life[s].cell as usize, |w, d| nodes::merge(w, d, kids[0], s));
     let b = std::mem::take(&mut w.life[s]);
     assert!(b.count > 1.5 * n0 && b.spread.iter().any(|&v| v > 0.0) && b.row_spread > 0.0, "the merge widened nothing");
 
@@ -298,9 +298,9 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
         brood(&w, &mut c, 2.0);
         let n0 = live(&w).len();
         w.time += DAY_S;
-        assert!(w.in_domain(c.cell as usize, |w, d| copy::copy(w, d, &mut c)), "no children");
+        assert!(w.in_cell(c.cell as usize, |w, d| copy::copy(w, d, &mut c)), "no children");
         // (They land in the next cell, as at a batch's end.)
-        outbox::deliver(&mut w);
+        life::deliver(&mut w);
         (joined, tries) = (joined + (live(&w).len() == n0) as u32, tries + 1);
         w.events.clear();
     }
@@ -343,7 +343,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     let rows0 = w.life.born(&w.life[s]).to_vec();
     let (before, count0, cell) = (life_totals(&w), w.life[s].count, w.life[s].cell);
     let n = 400;
-    let drawn = w.in_domain(w.life[s].cell as usize, |w, d| nodes::open(w, d, s, n));
+    let drawn = w.in_cell(w.life[s].cell as usize, |w, d| nodes::open(w, d, s, n));
     assert_eq!(drawn.len(), n);
     same_totals(&before, &life_totals(&w));
     assert!((life_totals(&w).0 - before.0).abs() <= 1e-9 * before.0, "members {} then {}", before.0, life_totals(&w).0);
@@ -379,7 +379,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     // many members do not each get rows of their own.)
     w.life[s].row_spread = 0.0;
     let rest = w.life[s].count.floor() as usize;
-    assert_eq!(w.in_domain(w.life[s].cell as usize, |w, d| nodes::open(w, d, s, rest + 5)).len(), rest - 1);
+    assert_eq!(w.in_cell(w.life[s].cell as usize, |w, d| nodes::open(w, d, s, rest + 5)).len(), rest - 1);
     assert!(w.life[s].count < 2.0);
     books.assert_kept(&w, 1e-9);
 }
@@ -397,7 +397,7 @@ fn joining_a_node_keeps_members_and_weighs_genes_by_them() {
     let mut c = o.clone();
     (c.count, c.genes) = (1.4, o.genes.iter().map(|g| g + 0.1).collect());
     let s = w.add(c);
-    w.in_domain(w.life[t].cell as usize, |w, d| nodes::merge(w, d, s, t));
+    w.in_cell(w.life[t].cell as usize, |w, d| nodes::merge(w, d, s, t));
     let (after, node) = (life_totals(&w).0, &w.life[t]);
     assert!((after - (before + 1.4)).abs() < 1e-12 * after && (node.count - 4.4).abs() < 1e-12, "members {before} + 1.4 then {after}");
     for (g, (x, y)) in o.genes.iter().zip(&node.genes).enumerate() {
@@ -435,7 +435,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         b.prepare(&w.chem, &w.cfg);
         brood(&w, &mut b, 1.0);
         w.time += DAY_S;
-        assert!(w.in_domain(b.cell as usize, |w, d| copy::copy(w, d, &mut b)), "no child");
+        assert!(w.in_cell(b.cell as usize, |w, d| copy::copy(w, d, &mut b)), "no child");
         w.life[s] = b;
         let kids: Vec<Handle> = live(&w).into_iter().filter(|k| !was.contains(k)).collect();
         println!("nodes {nodes}: bodies added {}, node of the kind now {}", kids.len(), w.life[t].count);
@@ -452,7 +452,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         b.prepare(&w.chem, &w.cfg);
         brood(&w, &mut b, 3.5);
         w.time += DAY_S;
-        assert!(w.in_domain(b.cell as usize, |w, d| copy::copy(w, d, &mut b)), "no children");
+        assert!(w.in_cell(b.cell as usize, |w, d| copy::copy(w, d, &mut b)), "no children");
         w.life[s] = b;
         let kids: Vec<Handle> = live(&w).into_iter().filter(|k| !was.contains(k)).collect();
         println!("many at once: {} children", kids.len());
@@ -505,7 +505,7 @@ fn individuals_window(seed: u64) -> (f64, usize) {
         w.add(b);
     }
     let n = here(&w);
-    pcore::survey::survey(&mut w, false);
+    pcore::survey::survey(&mut w);
     assert_eq!(here(&w), n, "animals merged");
     // Animals alive at the end of each month, and animals born in the window (members).
     let (mut alive, mut born) = (Vec::new(), 0.0);

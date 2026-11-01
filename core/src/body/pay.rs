@@ -3,7 +3,7 @@
 use super::{Body, REPAIR, STRENGTH};
 use crate::chem::Phase;
 use crate::store::Node;
-use crate::{life::Domain, lineage::Lineage, World, AIR};
+use crate::{life::Chunk, lineage::Lineage, World, AIR};
 
 /// Upkeep over `days` of a body of `mass` kg at `t` K, J (laws.md 6.2): per kg of living body its basal, strength,
 /// learning and signal costs, times (copy mass)^(`intake_exp` - 1) so adults pay Kleiber's mass^0.75 while one body grows
@@ -25,7 +25,7 @@ pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64, t: f64, dry: f64) -> f6
 }
 
 /// Pay `cost` J, all or nothing: false, and nothing paid, if its fuel cannot release that much (`burn`).
-pub fn pay(w: &World, d: &mut Domain, b: &mut Body, cost: f64) -> bool {
+pub fn pay(w: &World, d: &mut Chunk, b: &mut Body, cost: f64) -> bool {
     if cost <= 0.0 {
         return true;
     }
@@ -42,12 +42,12 @@ pub fn pay(w: &World, d: &mut Domain, b: &mut Body, cost: f64) -> bool {
 /// latent heat; a gas it makes goes to its cell's bodies' node with its own (`Moves::gas`), as a body breathes; the rest
 /// goes to its stores. What it releases becomes heat in its cell's ground, as the work it pays for ends as heat there:
 /// the body keeps its temperature (`settle_heat`). Returns the energy released, J.
-pub(crate) fn burn(w: &World, d: &mut Domain, b: &mut Body, cost: f64) -> f64 {
+pub(crate) fn burn(w: &World, d: &mut Chunk, b: &mut Body, cost: f64) -> f64 {
     burn_at(w, d, b, cost, b.temp(&w.chem))
 }
 
 /// `burn` for a body at `t` K, its temperature now.
-fn burn_at(w: &World, d: &mut Domain, b: &mut Body, cost: f64, t: f64) -> f64 {
+fn burn_at(w: &World, d: &mut Chunk, b: &mut Body, cost: f64, t: f64) -> f64 {
     if cost <= 0.0 {
         return 0.0;
     }
@@ -77,7 +77,7 @@ fn burn_at(w: &World, d: &mut Domain, b: &mut Body, cost: f64, t: f64) -> f64 {
                 b.e -= dn * (s.cp * t + s.latent_gas());
             } else {
                 d.moves.gas(w, k, dn, lift);
-                d.moves.take(w, Node::air(j), 0, 0.0, -dn * s.cp * ta);
+                d.moves.take(Node::air(j), 0, 0.0, -dn * s.cp * ta);
                 b.e -= dn * (s.cp * ta + s.latent_gas());
             }
         }
@@ -90,7 +90,7 @@ fn burn_at(w: &World, d: &mut Domain, b: &mut Body, cost: f64, t: f64) -> f64 {
 
 /// Body `b` comes to temperature `t` with its stores as they are: its heat over what it holds at `t` goes to its cell's
 /// ground, and what it lacks comes from there (as far as the ground can give it, `Moves::take_from_ground`).
-pub(crate) fn settle_heat(w: &World, d: &mut Domain, b: &mut Body, t: f64) {
+pub(crate) fn settle_heat(w: &World, d: &mut Chunk, b: &mut Body, t: f64) {
     let (i, target) = (b.cell as usize, b.energy_at(&w.chem, t));
     let over = b.e - target;
     if over > 0.0 {

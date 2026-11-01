@@ -58,9 +58,9 @@ pub fn totals(w: &World) -> Totals {
         thermal.add(b.e);
     }
     if let Some(p) = crate::cover::Parts::of(chem) {
-        for d in &w.life.domains {
-            d.cover.mol.iter().flat_map(|m| m.iter().zip(p.sub)).for_each(|(&a, k)| subs[k].add(a));
-            d.cover.e.iter().for_each(|&e| thermal.add(e));
+        for c in w.life.cells.iter().map(|x| &x.cover) {
+            c.mol.iter().flat_map(|m| m.iter().zip(p.sub)).for_each(|(&a, k)| subs[k].add(a));
+            thermal.add(c.e);
         }
     }
     for p in w.parts.alive() {
@@ -132,10 +132,10 @@ pub fn broken(w: &World) -> Option<String> {
         let bad = !above_0(p.e) || !p.wall.iter().chain(&p.fill).all(|&x| at_least_0(x));
         bad.then(|| format!("part {s}: energy {}, walls {:?}, fill {:?}", p.e, p.wall, p.fill))
     });
-    let cover = w.life.domains.iter().find_map(|d| {
-        let c = &d.cover;
+    let cover = w.life.cells.iter().enumerate().find_map(|(i, x)| {
+        let c = &x.cover;
         let mol = first_bad("mol", c.mol.as_flattened(), at_least_0);
-        mol.or_else(|| first_bad("e", &c.e, at_least_0)).or_else(|| first_bad("keep", &c.keep, at_least_0)).map(|x| format!("the cover of the domain of cell {}: {x}", d.cells[0]))
+        mol.or_else(|| first_bad("e", &[c.e], at_least_0)).or_else(|| first_bad("keep", &[c.keep], at_least_0)).map(|x| format!("the cover of cell {i}: {x}"))
     });
     found.or(body).or(part).or(cover).or_else(|| w.life.unsound())
 }

@@ -1,7 +1,7 @@
 //! The monthly step of parts: heat, Change, loads and failure, floating and drifting.
 
 use super::{cell, dissolve, fall_apart, holder, id, members, move_structure, restructure, sense::liquid, unlink, verbs::{bears, torn_from}, Part, GROUND};
-use crate::{change::{send_gas, GasMove, Reactor}, chem::Phase, ground::share, life::Domain, rng::{Purpose, Rng}, space::COMPASS, store::{Class, Node}, survey::run, AIR, World};
+use crate::{change::{send_gas, GasMove, Reactor}, chem::Phase, ground::share, life::{self, Chunk}, rng::{Purpose, Rng}, space::COMPASS, store::{Class, Node}, AIR, World};
 
 /// Parts react with the air every this many months.
 const REACT_MONTHS: u64 = 6;
@@ -27,35 +27,35 @@ pub fn step(w: &mut World) {
     }
 }
 
-/// A part's turn: the part (taken out of its slot while its domain runs), its slot and cell, the domain of its cell, and
-/// whether its walls are gone.
+/// A part's turn: the part (taken out of its slot while its chunk runs), its slot and cell, and whether its walls are
+/// gone.
 struct Turn {
-    domain: usize,
     slot: usize,
     cell: usize,
     part: Part,
     gone: bool,
 }
 
-/// The turns of all parts: heat, and every `REACT_MONTHS` months the reactions with the air. Each domain takes the turns
-/// of its parts in slot order, on its view of the store (`store::Moves`), on the pool (`survey::run`); then the moves
-/// are booked, the domains' in their order. A part whose walls are gone falls apart in its turn (`fall_apart`).
-/// Returns the slots of the parts that fall apart, in order: they are freed one by one (`dissolve`), as that unbonds
-/// other parts.
+/// The turns of all parts: heat, and every `REACT_MONTHS` months the reactions with the air. Each chunk takes the turns
+/// of the parts of its cells, cell by cell and in a cell in slot order, on its view of the store (`store::Moves`), on
+/// the pool (`life::run`), whose moves are booked when the chunks end. A part whose walls are gone falls apart in its
+/// turn (`fall_apart`). Returns the slots of the parts that fall apart, in order: they are freed one by one
+/// (`dissolve`), as that unbonds other parts.
 fn turns(w: &mut World, react: bool) -> Vec<usize> {
     let dt = (REACT_MONTHS * w.cfg.calendar().month) as f64;
-    // The parts by the domain of their cell, then by slot.
-    let mut order: Vec<(usize, usize)> = (0..w.parts.parts.len()).filter(|&s| w.parts.parts[s].alive).map(|s| (w.life.domain_of(cell(w, s)), s)).collect();
+    // The parts by their cell, then by slot.
+    let mut order: Vec<(usize, usize)> = (0..w.parts.parts.len()).filter(|&s| w.parts.parts[s].alive).map(|s| (cell(w, s), s)).collect();
     order.sort_unstable();
-    let mut list: Vec<Turn> = order
-        .into_iter()
-        .map(|(domain, slot)| Turn { domain, slot, cell: cell(w, slot), part: std::mem::take(&mut w.parts.parts[slot]), gone: false })
-        .collect();
+    let bounds = life::bounds(w);
+    let mut work: Vec<Vec<Turn>> = (1..bounds.len()).map(|_| Vec::new()).collect();
+    for (cell, slot) in order {
+        work[bounds.partition_point(|&b| b <= cell) - 1].push(Turn { slot, cell, part: std::mem::take(&mut w.parts.parts[slot]), gone: false });
+    }
     // A turn that only settles costs about a microsecond, less than a pool call: it counts no work, so the runner keeps
-    // the domains on the calling thread; the reactions are the work.
-    let work = list.chunk_by_mut(|a, b| a.domain == b.domain).map(|mine| (mine[0].domain, if react { mine.len() } else { 0 }, mine)).collect();
+    // the chunks on the calling thread; the reactions are the work.
+    let load = if react { work.iter().map(Vec::len).sum() } else { 0 };
     let init = |w: &World| react.then(|| (Reactor::new(&w.chem, &w.cfg), vec![0.0; w.chem.ns()]));
-    run(w, work, false, init, |w, d, mine, scratch| {
+    let work = life::run(w, work, load, init, |w, d, mine, scratch| {
         for t in mine.iter_mut() {
             d.moves.open(w, t.cell, Node::new(Class::Part, t.slot));
             if let Some((rc, pool)) = scratch {
@@ -68,24 +68,23 @@ fn turns(w: &mut World, react: bool) -> Vec<usize> {
         }
     });
     let mut gone = Vec::new();
-    for t in list {
+    for t in work.into_iter().flatten() {
         w.parts.parts[t.slot] = t.part;
         if t.gone {
             gone.push(t.slot);
         }
     }
     gone.sort_unstable();
-    w.book_moves();
     gone
 }
 
 /// Part `p` of cell `i` reacts with its share of its cell's air for `dt` s and settles the gas as a ground node does
 /// (`change::send_gas`); the ground under it pays the gas's latent heat, and gas it cannot pay for goes to the ground.
-fn react_part(w: &World, d: &mut Domain, rc: &mut Reactor, (p, i): (&mut Part, usize), pool: &mut [f64], dt: f64) {
+fn react_part(w: &World, d: &mut Chunk, rc: &mut Reactor, (p, i): (&mut Part, usize), pool: &mut [f64], dt: f64) {
     let j = w.mesh.up(i, 0, AIR);
-    let (air_share, lift, ta) = (w.mesh.share(i, AIR), w.lift(i), d.moves.t_air(w, j));
+    let (lift, ta) = (w.lift(i), d.moves.t_air(w, j));
     let chem = &w.chem;
-    pool.iter_mut().enumerate().for_each(|(k, p)| *p = d.moves.amount(w, Node::air(j), k) * air_share);
+    pool.iter_mut().enumerate().for_each(|(k, p)| *p = d.moves.amount(w, Node::air(j), k));
     let fixed: f64 = p.fill.iter().zip(&chem.subs).map(|(a, x)| a * x.cp).sum();
     // It lies on its cell's ground, as moist as that.
     rc.moist = w.scratch.view().moist(i, &w.cfg.phys);
@@ -96,12 +95,12 @@ fn react_part(w: &World, d: &mut Domain, rc: &mut Reactor, (p, i): (&mut Part, u
     p.e += gas.q_in - q_out;
     let m = &mut d.moves;
     m.give(w, Node::air(j), 0, 0.0, q_out);
-    m.take(w, Node::air(j), 0, 0.0, gas.q_in);
+    m.take(Node::air(j), 0, 0.0, gas.q_in);
     m.give(w, Node::ground(i), 0, 0.0, gas.back);
     let cap = m.heat_cap_ground(w, i);
     let paid = share(m.take_from_ground(w, i, (0, 0.0, 0.0), gas.pay, cap).1, gas.pay);
     // The heat of the gas that goes to the ground goes with it.
-    m.take(w, Node::air(j), 0, 0.0, q_out * (1.0 - paid));
+    m.take(Node::air(j), 0, 0.0, q_out * (1.0 - paid));
     m.give(w, Node::ground(i), 0, 0.0, q_out * (1.0 - paid));
     send_gas(&rc.dpool, paid, |k, sent, kept| {
         m.give(w, Node::ground(i), k, kept, 0.0);
@@ -113,7 +112,7 @@ fn react_part(w: &World, d: &mut Domain, rc: &mut Reactor, (p, i): (&mut Part, u
 
 /// Walls of part `p` of cell `i` no longer solid run off; the part takes the ground's temperature. Returns whether its
 /// walls are under `min_kg`: it falls apart (`dissolve`).
-fn settle(w: &World, d: &mut Domain, p: &mut Part, i: usize) -> bool {
+fn settle(w: &World, d: &mut Chunk, p: &mut Part, i: usize) -> bool {
     let (ns, chem, tg) = (w.chem.ns(), &w.chem, w.t_ground_last(i));
     let t = p.e / p.heat_cap(chem).max(1e-9);
     for k in 0..ns {

@@ -92,7 +92,7 @@ impl Rows {
             })
             .collect();
         let held = || Held { amt: vec![0.0; ns], pool: vec![0.0; ns] };
-        crate::par::longest_first(work, false, || (Reactor::new(&w.chem, &w.cfg), held()), |s, (list, rows, lift)| {
+        crate::par::longest_first(work, || (Reactor::new(&w.chem, &w.cfg), held()), |s, (list, rows, lift)| {
             for (&i, row) in list.iter().zip(rows.chunks_exact_mut(width)) {
                 step.react(s, i, row);
                 **lift = row[3 * ns..4 * ns].iter().fold(**lift, |sum, q| sum + q);

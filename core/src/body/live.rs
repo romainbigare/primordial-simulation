@@ -9,7 +9,7 @@ use crate::math::one_minus_exp;
 use crate::rng::{Purpose, Rng};
 use crate::store::Node;
 use crate::units::{DAY, MAX_SUBSTANCES};
-use crate::{life::Domain, World};
+use crate::{life::Chunk, World};
 
 /// Working memory of `live`, kept from body to body.
 #[derive(Default)]
@@ -30,7 +30,7 @@ pub struct Lived {
 /// The update of body `b` over the time since its last: upkeep paid by burning (the share unpaid dies, `SPENT`, and the
 /// share its wear gives, `AGE`), its drink, its heat (`keep_warm`), the checks of its stores, growth (`copy::grow`),
 /// children (`copy::copy`) and what it sheds. Returns what it left for its decision, or a death cause.
-pub(crate) fn live(w: &World, d: &mut Domain, b: &mut Body, tmp: &mut LiveTmp) -> Result<Lived, u8> {
+pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) -> Result<Lived, u8> {
     let days = (w.day() as f64 - b.last).max(1.0);
     b.last = w.day() as f64;
     let (mass, from) = (b.mass(&w.chem), b.member_body(&w.chem));
@@ -56,7 +56,7 @@ pub(crate) fn live(w: &World, d: &mut Domain, b: &mut Body, tmp: &mut LiveTmp) -
 /// Upkeep over the time: what its fuel releases is paid (`burn`), the share left unpaid dies, and so does the share its
 /// wear gives (`lose_share`). Returns the heat it released, J, and its spare: what its fuel could release against its
 /// upkeep, up to `MARGIN`.
-fn settle_upkeep(w: &World, d: &mut Domain, b: &mut Body, days: f64, mass: f64, tmp: &mut LiveTmp) -> Result<(f64, f64), u8> {
+fn settle_upkeep(w: &World, d: &mut Chunk, b: &mut Body, days: f64, mass: f64, tmp: &mut LiveTmp) -> Result<(f64, f64), u8> {
     let (chem, t, act) = (&w.chem, b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys));
     let cost = upkeep(w, b, days, mass, t, act);
     let spare = b.fuel(chem, t).min(MARGIN * cost) / cost.max(1e-300);
@@ -81,7 +81,7 @@ fn settle_upkeep(w: &World, d: &mut Domain, b: &mut Body, days: f64, mass: f64, 
 /// It drinks its key liquids from its cell's ground up to the level it keeps (`Body::level`), as far as the ground holds
 /// them liquid, each day at most its uptake gene's share of that level, paying to handle them (`c_handle` per kg); they
 /// come with their heat.
-fn drink(w: &World, d: &mut Domain, b: &mut Body, days: f64) {
+fn drink(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     let (chem, p, i) = (&w.chem, &w.cfg.phys, b.cell as usize);
     let (lay, tg, mass) = (Layout::of(chem), w.t_ground_last(i), b.mass(chem));
     let (wet, ns) = (b.wet, chem.ns());
@@ -105,7 +105,7 @@ fn drink(w: &World, d: &mut Domain, b: &mut Body, days: f64) {
 /// with the walls around it, 3.4) to its ground, so it stands that much above the ground. Below its `KEEP_T` gene it
 /// burns what its coat loses at that temperature beyond it; above its `COOL_T` gene it evaporates its key liquid for the
 /// excess, at its latent heat, never below its safe minimum. It then stands at that temperature (`settle_heat`).
-fn keep_warm(w: &World, d: &mut Domain, b: &mut Body, heat: f64, dt: f64) -> f64 {
+fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, dt: f64) -> f64 {
     let (chem, p, i) = (&w.chem, &w.cfg.phys, b.cell as usize);
     let tg = w.t_ground_last(i);
     let coat = b.conductance(p.m_ref, b.mass(chem));
@@ -129,7 +129,7 @@ fn keep_warm(w: &World, d: &mut Domain, b: &mut Body, heat: f64, dt: f64) -> f64
 /// It evaporates its key liquids to take `q` J away, at each one's vaporisation enthalpy, never below its safe minimum:
 /// the vapour goes to its cell's bodies' node with its heat and its latent heat (`Moves::gas`). Returns the heat taken
 /// away, J.
-fn evaporate(w: &World, d: &mut Domain, b: &mut Body, q: f64) -> f64 {
+fn evaporate(w: &World, d: &mut Chunk, b: &mut Body, q: f64) -> f64 {
     let (chem, i) = (&w.chem, b.cell as usize);
     let (lay, t, size, lift) = (Layout::of(chem), b.temp(chem), b.size(chem), w.lift(i));
     let mut taken = 0.0;
@@ -156,7 +156,7 @@ fn evaporate(w: &World, d: &mut Domain, b: &mut Body, q: f64) -> f64 {
 /// that one that starved to the lethal loss (`Physics::lethal`) has lived through it with even chances, in one update or
 /// in many (`lose_share`). An adult larger than its copy mass shrinks towards it as it chooses (`ALLOC`): that is no
 /// starving. False if it dies (a node: less than one member is left).
-fn starved(w: &World, d: &mut Domain, b: &mut Body, from: f64, dead: &mut Vec<f64>) -> bool {
+fn starved(w: &World, d: &mut Chunk, b: &mut Body, from: f64, dead: &mut Vec<f64>) -> bool {
     let (now, was) = (b.member_body(&w.chem), from.min(b.k.copy_mass));
     let a = -std::f64::consts::LN_2 / (1.0 - w.cfg.phys.lethal).ln();
     // (A body with no body left has starved whatever it was.)
@@ -172,7 +172,7 @@ const CAUSES: u64 = 8;
 /// The share `f` of the members of body `b`, at the plateau state `th`, dies of `cause`: a node loses that
 /// share, with that share of every store (`thin`); an individual dies with that chance. One rule for both, so a node is
 /// the average of its members. False if it dies (a node: less than one member is left).
-fn lose_share(w: &World, d: &mut Domain, b: &mut Body, f: f64, cause: u8, dead: &mut Vec<f64>, th: &Melting) -> bool {
+fn lose_share(w: &World, d: &mut Chunk, b: &mut Body, f: f64, cause: u8, dead: &mut Vec<f64>, th: &Melting) -> bool {
     if b.n() <= 1.0 {
         return Rng::new(w.seed, w.day() * CAUSES + cause as u64, b.id, Purpose::Death).f64() >= f;
     }
@@ -185,7 +185,7 @@ fn lose_share(w: &World, d: &mut Domain, b: &mut Body, f: f64, cause: u8, dead: 
 /// a key liquid's melting point the share of its members that freezes at `stands` K, the temperature its heat holds it
 /// at over its ground (`keep_warm`, not the melting plateau its liquid passes on the way), dies (laws.md 6.5). Returns
 /// the plateau state it is left at.
-fn check_stores(w: &World, d: &mut Domain, b: &mut Body, stands: f64, tmp: &mut LiveTmp) -> Result<Melting, u8> {
+fn check_stores(w: &World, d: &mut Chunk, b: &mut Body, stands: f64, tmp: &mut LiveTmp) -> Result<Melting, u8> {
     let mass = b.mass(&w.chem);
     let mut th = b.thermal(&w.chem);
     if b.lacking(&w.chem, mass, th.t) {
@@ -216,7 +216,7 @@ fn check_stores(w: &World, d: &mut Domain, b: &mut Body, stands: f64, tmp: &mut 
 /// A node at the plateau state `th` short of key stores: the members poorest in them die (members differ around the
 /// mean), so the survivors keep those stores and the dead take their share of the rest. The share that dies is the least
 /// that lifts every key store to its safe minimum; false if that is all of them.
-fn starve(w: &World, d: &mut Domain, b: &mut Body, th: &Melting, dead: &mut Vec<f64>) -> bool {
+fn starve(w: &World, d: &mut Chunk, b: &mut Body, th: &Melting, dead: &mut Vec<f64>) -> bool {
     let t = th.t;
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let x = |k: usize| b.store[k] * chem.subs[k].molar_mass;
@@ -232,7 +232,7 @@ fn starve(w: &World, d: &mut Domain, b: &mut Body, th: &Melting, dead: &mut Vec<
 
 /// What it sheds to the ground with its heat: minerals, built solids and key liquids past their level, and anything
 /// else it neither burns nor is made of. Returns its mass after.
-fn shed(w: &World, d: &mut Domain, b: &mut Body) -> f64 {
+fn shed(w: &World, d: &mut Chunk, b: &mut Body) -> f64 {
     let (chem, mass) = (&w.chem, b.mass(&w.chem));
     let th = b.thermal(chem);
     let t = th.t;

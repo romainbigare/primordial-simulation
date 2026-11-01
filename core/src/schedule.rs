@@ -76,7 +76,7 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
         }
     };
     // The survey of the cells builds Flow's state in full for their surroundings; Flow's own pass leaves it then.
-    pass(w, Stage::Bodies, "survey", &|w| survey::survey(w, false));
+    pass(w, Stage::Bodies, "survey", &|w| survey::survey(w));
     pass(w, Stage::Flow, "state", &|w| {
         if !flow::built_now(w) {
             flow::state(w, true);
@@ -103,5 +103,5 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
     pass(w, Stage::Change, "change", &|w| change::step(w, len as f64));
     // Bond's own spans are months (`bond::step`); every body updates once a month (`survey::batch`).
     pass(w, Stage::Parts, "bond", &bond::step);
-    pass(w, Stage::Bodies, "body batch", &|w| survey::batch(w, false));
+    pass(w, Stage::Bodies, "body batch", &|w| survey::batch(w));
 }

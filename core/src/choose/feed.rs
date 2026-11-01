@@ -5,7 +5,7 @@ use crate::body::{self, Body, STRENGTH, TAKEN};
 use crate::chem::{Chemistry, Phase};
 use crate::event::{Event, EventKind};
 use crate::rng::Rng;
-use crate::{bond, lanes, life::{Domain, Handle}, store::Node, World};
+use crate::{bond, lanes, life::{Chunk, Handle}, store::Node, World};
 
 /// A dealing counts in a body's memory (`Body::note`) as this many times the share of its mass moved.
 const NOTE_SCALE: f64 = 10.0;
@@ -40,11 +40,11 @@ pub const COVER: u64 = u64::MAX - 1;
 /// the frame without the enzyme that splits it) is bulk, which counts toward what it can take (`intake`, the gut) and
 /// passes through it to the ground at once, with its heat (a gut passage of days, within the update's month: it never
 /// becomes the body's own frame). What it takes of the cover it pays to break as a bite does (`Cover::breaking`).
-pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
+pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body) {
     let (i, chem) = (b.cell as usize, &w.chem);
-    let (tg, kc, parts) = (w.t_ground_last(i), d.slot(i), crate::cover::Parts::of(chem));
+    let (tg, parts) = (w.t_ground_last(i), crate::cover::Parts::of(chem));
     let free = |k: usize| if chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k).max(0.0) } else { 0.0 };
-    let cover: [f64; crate::units::MAX_SUBSTANCES] = parts.as_ref().map_or([0.0; crate::units::MAX_SUBSTANCES], |p| d.cover.amounts(p, kc));
+    let cover: [f64; crate::units::MAX_SUBSTANCES] = parts.as_ref().map_or([0.0; crate::units::MAX_SUBSTANCES], |p| d.at(i).cover.amounts(p));
     let (lying, t) = (|k: usize| free(k) + cover[k], b.temp(chem));
     let gut = intake(w, b, t, lying).0;
     let mut m = b.wanted(chem, lying, gut, b.mass(chem));
@@ -60,8 +60,8 @@ pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
         let f = gut / full;
         [&mut m, &mut grazed, &mut bulk].into_iter().for_each(|v| v.iter_mut().for_each(|a| *a *= f));
     }
-    let (all, kg) = (parts.as_ref().map_or(0.0, |p| d.cover.amounts(p, kc).iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()), chem.mass_of(&grazed) + chem.mass_of(&bulk));
-    let breaking = parts.as_ref().filter(|_| kg > 0.0).map_or(0.0, |p| d.cover.breaking(chem, &w.cfg, p, kc, (kg / all.max(1e-300)).min(1.0)));
+    let (all, kg) = (parts.as_ref().map_or(0.0, |p| d.at(i).cover.amounts(p).iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()), chem.mass_of(&grazed) + chem.mass_of(&bulk));
+    let breaking = parts.as_ref().filter(|_| kg > 0.0).map_or(0.0, |p| d.at(i).cover.breaking(chem, &w.cfg, p, (kg / all.max(1e-300)).min(1.0)));
     if !body::pay(w, d, b, w.cfg.phys.c_handle * (chem.mass_of(&m) + chem.mass_of(&bulk)) + breaking) {
         return;
     }
@@ -72,7 +72,7 @@ pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
     }
     if let Some(p) = parts.as_ref().filter(|_| kg > 0.0) {
         for (k, g) in grazed.iter().zip(&bulk).map(|(g, x)| g + x).enumerate().filter(|e| e.1 > 0.0) {
-            b.e += d.cover.take(chem, p, kc, k, g);
+            b.e += d.cover(i).take(chem, p, k, g);
             b.store[k] += g;
         }
         d.counts.cover_lost[TAKEN as usize] += kg;
@@ -98,7 +98,7 @@ pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
 }
 
 /// Release stores above the level the body keeps (`Body::level`) to the cell's ground.
-pub(super) fn put(w: &World, d: &mut Domain, b: &mut Body) {
+pub(super) fn put(w: &World, d: &mut Chunk, b: &mut Body) {
     let mass = b.mass(&w.chem);
     let m: Vec<f64> = (0..w.chem.ns()).map(|k| (b.store[k] - b.level(&w.chem, k, mass)).clamp(0.0, b.store[k])).collect();
     if !body::pay(w, d, b, w.cfg.phys.c_handle * w.chem.mass_of(&m)) {
@@ -128,7 +128,7 @@ fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body,
 /// holds it). The bite tears each member it reaches (`body::wound`; laws.md 6.8). A bite that reaches
 /// less than one member of a node meets one whole member with that chance: it takes, tears and pays what that meeting
 /// would, times the chance, the expected outcome of an individual's draw.
-pub fn take_body(w: &World, d: &mut Domain, b: &mut Body, s: Handle, rng: &mut Rng) {
+pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, s: Handle, rng: &mut Rng) {
     let o = &d[s];
     let (mb, mo, tb) = (b.mass(&w.chem), o.mass(&w.chem), b.temp(&w.chem));
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
@@ -167,7 +167,7 @@ pub fn take_body(w: &World, d: &mut Domain, b: &mut Body, s: Handle, rng: &mut R
 /// Give to another body in the cell what it can spare (`Body::spare`, laws.md 5.3), up to what the
 /// members it meets could take in the time and have room for (each of its members meets one of the other's, as many as
 /// both have). The other remembers the giver.
-pub(super) fn give(w: &World, d: &mut Domain, b: &mut Body, s: Handle) {
+pub(super) fn give(w: &World, d: &mut Chunk, b: &mut Body, s: Handle) {
     let chem = &w.chem;
     let (size, mass) = (b.size(chem), b.mass(chem));
     let spare = |k: usize| b.spare(chem, &w.cfg.phys, k, (size, mass));

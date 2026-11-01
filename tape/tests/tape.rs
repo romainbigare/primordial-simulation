@@ -457,7 +457,7 @@ fn null_run_freezes_the_brain_rows() {
         let mut w = world();
         w.cfg.null = null;
         worldgen::life::seed(&mut w, 0);
-        pcore::survey::survey(&mut w, false);
+        pcore::survey::survey(&mut w);
         worldgen::life::seed(&mut w, 1);
         let start: Vec<&Vec<f32>> = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).map(|g| &g.rows).collect();
         let (lo, hi): (Vec<f32>, Vec<f32>) = (0..start[0].len()).map(|k| start.iter().fold((f32::MAX, f32::MIN), |m, r| (m.0.min(r[k]), m.1.max(r[k])))).unzip();

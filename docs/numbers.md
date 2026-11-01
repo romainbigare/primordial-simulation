@@ -62,6 +62,7 @@ Fields of `Config` that say when the model may save time (mark **speed**). The t
 |---|---|---|---|---|
 | `wake_share` | share | a sleeping node wakes before its alarm when one of its amounts has grown by more than this share of what it held when it fell asleep (`clock::Sleep::watch`) | the share of its inputs a calm node's own reactions may use while it sleeps (`change`, `CALM`, 0.05) | speed |
 | `sleep_days` | days | the longest a ground or air node's reactions sleep before they run for the time since (`change::step`); 0: every node reacts every month | a season: a node does not react through a whole season at the temperature of another | speed |
+| `chunks` | 1 | the cells are cut into this many runs of neighbouring indices for the parallel passes of bodies, one task each on the pool (`life::run`); any count gives the same world | many more than the threads of a machine, so the pool can share out uneven runs, and few enough that a run's fixed cost stays small | speed |
 
 ## Physics
 
@@ -261,7 +262,7 @@ The 107 rows of `Config` and `Physics` are their 107 fields.
 | tuned (run or reason named) | 6, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`), set for an outcome (`rain_time`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`, the cover's starting genes) |
 | tuned, first guess | 36 | 32 free numbers (`wind`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `keep_min`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 3 | `nodes`, `two_parents`, `null` |
-| speed | 2, and 4 outside the structs | `wake_share`, `sleep_days`; outside: the air's step `schedule::AIR_STEP_DAYS` (10 days, three a month: against 1-day steps the land within 0.3 K, `the_long_step_keeps_the_climate`), the caps `MAX_NODES`, `MAX_LINEAGES`, `MOST_ACTS` |
+| speed | 3, and 4 outside the structs | `wake_share`, `sleep_days`, `chunks`; outside: the air's step `schedule::AIR_STEP_DAYS` (10 days, three a month: against 1-day steps the land within 0.3 K, `the_long_step_keeps_the_climate`), the caps `MAX_NODES`, `MAX_LINEAGES`, `MOST_ACTS` |
 | container | 1 | `phys` |
 
 Rows marked tuned in all: 50 (42 in the structs, 8 outside: also `cover::RANGE` and `cover::APART`, first guesses). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

@@ -2,7 +2,7 @@
 //! let go, and carry what they hold when they move. A body's force decides what it can hold and break.
 
 use super::{cell, dissolve, event, fall_apart, held, holder, id, link, make, move_structure, part, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
-use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase}, life::{Domain, Handle}, outbox::Entry, store::{Class, Move, Node, NodeId}, World};
+use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase}, life::{Chunk, Handle}, life::Entry, store::{Class, Move, Node, NodeId}, World};
 
 /// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the ground rests on it).
 fn grab(w: &mut World, b: &mut Body, p: usize) {
@@ -22,17 +22,17 @@ pub const TORN: usize = OVERBS + 1;
 pub const ANCHORS: usize = OVERBS + 2;
 
 /// Let go of the held part (also when the body dies or joins another), broken off by a load if `load`: a part act
-/// queued in the outbox (`dropped`, applied on a body of its id that holds that part). The body holds nothing from now.
-pub(crate) fn let_go(w: &World, d: &mut Domain, b: &mut Body, load: bool) {
+/// queued for the serial pass (`dropped`, applied on a body of its id that holds that part). The body holds nothing from now.
+pub(crate) fn let_go(w: &World, d: &mut Chunk, b: &mut Body, load: bool) {
     if let Some(p) = held(w, b) {
         d.out.push(Entry::Act { id: b.id, on: Ok((if load { TORN } else { LET_GO }, id(w, p))), node: None });
     }
     b.hold = None;
 }
 
-/// Body `b` (taken out of its slot) pays `cost` J (`body::pay`) in a serial step on its domain.
+/// Body `b` (taken out of its slot) pays `cost` J (`body::pay`) in a serial step on its cell.
 fn pay(w: &mut World, b: &mut Body, cost: f64) -> bool {
-    w.in_domain(b.cell as usize, |w, d| body::pay(w, d, b, cost))
+    w.as_body(b.cell as usize, |w, d| body::pay(w, d, b, cost))
 }
 
 /// Body `b` (taken out of its slot) lets go of the part it holds in a serial step, if the part is still held by it,
@@ -144,13 +144,10 @@ fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
         if b.hold == me {
             dropped(w, b, false);
         }
-        // The part's update opens on the view of its domain, then the body's goes on. (The part lies in the body's cell.)
+        // The part's update is a serial step on its cell, the body's. (The part lies in the body's cell.)
         debug_assert_eq!(cell(w, p), b.cell as usize, "a body takes from a part in its own cell");
-        let (mut fallen, i, h) = (std::mem::take(&mut w.parts.parts[p]), b.cell as usize, w.life.find(b.id).expect("the body acting"));
-        w.in_domain(i, |w, d| {
-            fall_apart(w, d, p, &mut fallen);
-            d.moves.open(w, i, Node::new(Class::Body, h.slot as usize));
-        });
+        let (mut fallen, i) = (std::mem::take(&mut w.parts.parts[p]), b.cell as usize);
+        w.in_cell(i, |w, d| fall_apart(w, d, p, &mut fallen));
         w.parts.parts[p] = fallen;
         dissolve(w, p);
     } else {
@@ -220,18 +217,17 @@ pub fn form(w: &mut World, b: &mut Body, shape: [f32; 2]) {
 }
 
 /// Let go of the held part; with nothing held, leave the inside.
-pub fn release(w: &World, d: &mut Domain, b: &mut Body) {
+pub fn release(w: &World, d: &mut Chunk, b: &mut Body) {
     if held(w, b).is_some() { let_go(w, d, b, false) } else { b.inside = None }
 }
 
 /// Bond the held part to the cell's bonded ground and let go of it.
 pub fn anchor(w: &mut World, b: &mut Body) {
     let (Some(p), i) = (held(w, b), b.cell as usize) else { return };
-    // (Its bed as the moves of the step leave it, through its domain's view.)
-    let (v, sv) = w.in_domain(i, |w, d| (0..w.chem.ns()).fold((0.0, 0.0), |(v, sv), k| {
-        let vol = d.moves.amount(w, Node::new(Class::Bed, i), k) * w.chem.molar_volume(k, Phase::Solid);
+    let (v, sv) = (0..w.chem.ns()).fold((0.0, 0.0), |(v, sv), k| {
+        let vol = w.b(k, i) * w.chem.molar_volume(k, Phase::Solid);
         (v + vol, sv + vol * w.chem.subs[k].strength)
-    }));
+    });
     let ac = w.parts.parts[p].contact();
     let s = strength(w, w.parts.parts[p].walls(&w.chem).strength, sv / v.max(1e-12), ac);
     if v > 0.0 && pay(w, b, w.cfg.phys.c_join * ac) {
@@ -242,7 +238,7 @@ pub fn anchor(w: &mut World, b: &mut Body) {
 
 /// Break bonded ground with force: each substance weaker than the body's strength (times a held part's lever) comes
 /// loose, the more the weaker, as far as `dig` × its living body allows in the time.
-pub fn dig(w: &World, d: &mut Domain, b: &mut Body) {
+pub fn dig(w: &World, d: &mut Chunk, b: &mut Body) {
     let (i, mb) = (b.cell as usize, b.built(&w.chem));
     let (lev, chem) = (lever(w, b), &w.chem);
     let f = b.gene(STRENGTH) * lev;

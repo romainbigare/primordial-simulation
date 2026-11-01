@@ -123,9 +123,8 @@ fn grazing_takes_from_the_cover() {
 /// The slots of cover in cell `i`: each one's genes and built cover, kg.
 fn slots_of(w: &pcore::World, i: usize) -> Vec<([f32; cover::NG], f64)> {
     let Some(p) = cover::Parts::of(&w.chem) else { return Vec::new() };
-    let (d, mm) = (w.life.domain(i), p.mm(&w.chem));
-    let (c, k) = (&d.cover, d.slot(i));
-    cover::Cover::slots(k).filter(|&x| c.root[x] != cover::NO_ROOT).map(|x| (c.genes[x], c.built(&mm, x))).collect()
+    let (c, mm) = (w.life.cover(i), p.mm(&w.chem));
+    c.held().map(|x| (c.genes[x], c.built(&mm, x))).collect()
 }
 
 /// Seeds land by their kind and genes (`seed::settle`): cover of the starting kind placed where that kind grows joins

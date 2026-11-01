@@ -1,0 +1,238 @@
+//! A chunk (laws.md 0): a run of cells and all that body code writes while it runs on them. The cells are cut into
+//! `Config::chunks` runs of neighbouring indices, the same for any number of threads; one task per chunk runs on the
+//! pool (`run`), the world read only, and a serial step runs on a chunk of one cell (`World::in_cell`). A chunk writes
+//! its cells (their bodies, cover and sums), its view of the store (`store::Moves`: each cell sees only itself and its
+//! share of its air node), its events and counters, the lineages and born rows it makes (named when it ends,
+//! `registry`) and what its bodies do to other cells (`cross::Entry`). When it ends the world takes all that, chunk by
+//! chunk, so every sum runs in the order of the cells (`World::settle`).
+
+use super::{Cell, Handle, ID_SHIFT};
+use crate::lineage::Lineage;
+use crate::store::{book_by_array, Class, Moves, Node};
+use crate::{body::Body, event::Event, Counters, World};
+use super::cross::Entry;
+
+/// A run of cells, from cell `first`, and what body code wrote on them.
+pub struct Chunk<'a> {
+    first: usize,
+    cells: &'a mut [Cell],
+    /// The view of the store of its cells and the moves gathered on it
+    pub moves: Moves,
+    /// What its bodies did to other cells and to parts, in the order made
+    pub out: Vec<Entry>,
+    pub(crate) events: Vec<Event>,
+    pub(crate) counts: Counters,
+    /// The lineages and born rows its bodies made, by provisional id (`registry`)
+    pub(super) brains: Vec<Lineage>,
+    pub(super) genomes: Vec<Vec<f32>>,
+    /// The bodies that moved into its cells, by id, with their cell
+    arrived: Vec<(u64, u32)>,
+}
+
+/// What a chunk wrote besides its cells, once it ended: the world takes it (`World::settle`).
+pub(crate) struct Done {
+    first: usize,
+    len: usize,
+    moves: Moves,
+    out: Vec<Entry>,
+    events: Vec<Event>,
+    counts: Counters,
+    brains: Vec<Lineage>,
+    genomes: Vec<Vec<f32>>,
+    arrived: Vec<(u64, u32)>,
+}
+
+impl<'a> Chunk<'a> {
+    fn new(first: usize, cells: &'a mut [Cell]) -> Chunk<'a> {
+        Chunk { first, cells, moves: Moves::default(), out: Vec::new(), events: Vec::new(), counts: Counters::default(), brains: Vec::new(), genomes: Vec::new(), arrived: Vec::new() }
+    }
+    fn done(self) -> Done {
+        let Chunk { first, cells, moves, out, events, counts, brains, genomes, arrived } = self;
+        Done { first, len: cells.len(), moves, out, events, counts, brains, genomes, arrived }
+    }
+    /// Its cells, by index.
+    pub fn cells(&self) -> std::ops::Range<usize> {
+        self.first..self.first + self.cells.len()
+    }
+    /// The life of its cell `i`. Panics for a cell of another chunk.
+    pub fn at(&self, i: usize) -> &Cell {
+        &self.cells[i - self.first]
+    }
+    pub fn at_mut(&mut self, i: usize) -> &mut Cell {
+        &mut self.cells[i - self.first]
+    }
+    /// The handles of the living bodies of its cell `i`, in the order they came.
+    pub fn cell(&self, i: usize) -> impl Iterator<Item = Handle> + '_ {
+        super::handles(self.at(i), i)
+    }
+    /// Where the living body with id `id` is stored in its cell `i`, if it is there.
+    pub fn find_in(&self, i: usize, id: u64) -> Option<Handle> {
+        let s = self.at(i).bodies.iter().position(|b| b.alive && b.id == id)?;
+        Some(Handle { cell: i as u32, slot: s as u32 })
+    }
+    /// The cover of its cell `i`.
+    pub fn cover(&mut self, i: usize) -> &mut crate::cover::Cover {
+        &mut self.at_mut(i).cover
+    }
+    /// The cover of its cell `i`, its view and its counters, each apart (`cover::step`).
+    pub(crate) fn cover_with(&mut self, i: usize) -> (&mut crate::cover::Cover, &mut Moves, &mut Counters) {
+        (&mut self.cells[i - self.first].cover, &mut self.moves, &mut self.counts)
+    }
+    /// Place a new body in its cell on `day`; it first updates at the next month's start.
+    pub(crate) fn add(&mut self, mut b: Body, day: u64) -> Handle {
+        let i = b.cell as usize;
+        let c = self.at_mut(i);
+        c.placed += 1;
+        assert!(c.placed < 1 << ID_SHIFT, "cell {i} placed 2^{ID_SHIFT} bodies: its ids would run into the next cell's");
+        (b.id, b.alive, b.last, b.count) = ((i as u64) << ID_SHIFT | c.placed, true, day as f64, b.n());
+        self.store(b)
+    }
+    /// Store body `b` at the end of its cell's list.
+    fn store(&mut self, b: Body) -> Handle {
+        let i = b.cell as usize;
+        let list = &mut self.at_mut(i).bodies;
+        list.push(b);
+        Handle { cell: i as u32, slot: (list.len() - 1) as u32 }
+    }
+    /// Body `b`, taken out of `h`, leaves the world: its place is a hole that keeps its id until the pass ends.
+    pub(crate) fn remove(&mut self, h: Handle, b: &Body) {
+        self[h] = Body { id: b.id, ..Default::default() };
+    }
+    /// Body `b`, which moved into its cell from another, is stored here.
+    pub(crate) fn arrive(&mut self, b: Body) -> Handle {
+        self.arrived.push((b.id, b.cell));
+        self.store(b)
+    }
+    /// `members` members entered its cell `i` in a move that spent `pushed` J pushing through its bodies
+    /// (`choose::land_move`).
+    pub fn cross(&mut self, i: usize, members: f32, pushed: f64) {
+        let c = self.at_mut(i);
+        (c.crossings, c.pushed) = (c.crossings + members, c.pushed + pushed);
+    }
+    /// Place body `c` made by a law on the world's day, its first update at the next month's start; its visible traits are
+    /// worked out from what it holds now, so others see it before its first update.
+    pub(crate) fn place(&mut self, w: &World, mut c: Body) -> Handle {
+        c.prepare(&w.chem, &w.cfg);
+        self.place_part(w, c)
+    }
+    /// `place` for a part of a node with the node's genes (`nodes::part`), whose constants (`Body::k`) follow from them
+    /// already.
+    pub(crate) fn place_part(&mut self, w: &World, mut c: Body) -> Handle {
+        c.stale = true;
+        self.add(c, w.day())
+    }
+    /// The visible traits of its living bodies that changed since the last survey are worked out again
+    /// (`Body::visible`, `Body::stale`): once before what reads them, the cells' sums and the batch's faces.
+    pub(crate) fn see_changed(&mut self, w: &World) {
+        for b in self.cells.iter_mut().flat_map(|c| &mut c.bodies).filter(|b| b.alive && b.stale) {
+            (b.vis, b.stale) = (b.visible(&w.chem, &w.cfg), false);
+        }
+    }
+}
+
+impl std::ops::Index<Handle> for Chunk<'_> {
+    type Output = Body;
+    fn index(&self, h: Handle) -> &Body {
+        &self.at(h.cell as usize).bodies[h.slot as usize]
+    }
+}
+
+impl std::ops::IndexMut<Handle> for Chunk<'_> {
+    fn index_mut(&mut self, h: Handle) -> &mut Body {
+        &mut self.at_mut(h.cell as usize).bodies[h.slot as usize]
+    }
+}
+
+/// The first cell of each chunk of the world (`Config::chunks` runs of its cells, at most one per cell), and the count
+/// of cells last: the chunk of cell `i` is the last whose first cell is at most `i`.
+pub(crate) fn bounds(w: &World) -> Vec<usize> {
+    let n = w.mesh.cells().n();
+    let c = (w.cfg.chunks as usize).clamp(1, n.max(1));
+    (0..=c).map(|k| k * n / c).collect()
+}
+
+/// The count of chunks of the world (`bounds`).
+pub(crate) fn chunks(w: &World) -> usize {
+    bounds(w).len() - 1
+}
+
+/// Run `f` on each chunk with what `work` gives it (one item per chunk, `count`), which `f` may change, and a scratch
+/// made by `init` once per thread, on the pool (`par::each_init`; on the calling thread when `load`, the phase's count of
+/// work, is small). The cells are taken out of the world meanwhile, and the world settles after (`World::settle`):
+/// what the chunks did to other cells is queued (`Life::queued`). Returns `work`.
+pub(crate) fn run<T: Send, S>(w: &mut World, work: Vec<T>, load: usize, init: impl Fn(&World) -> S + Sync + Send, f: impl Fn(&World, &mut Chunk, &mut T, &mut S) + Sync + Send) -> Vec<T> {
+    let b = bounds(w);
+    assert_eq!(work.len(), b.len() - 1, "one item of work per chunk");
+    let mut cells = std::mem::take(&mut w.life.cells);
+    let mut items = Vec::with_capacity(work.len());
+    let mut rest = &mut cells[..];
+    for (k, t) in work.into_iter().enumerate() {
+        let (mine, after) = rest.split_at_mut(b[k + 1] - b[k]);
+        items.push((Chunk::new(b[k], mine), t));
+        rest = after;
+    }
+    let world = &*w;
+    crate::par::each_init(&mut items, load, || init(world), |s, (c, t)| f(world, c, t, s));
+    let (done, work): (Vec<Done>, Vec<T>) = items.into_iter().map(|(c, t)| (c.done(), t)).unzip();
+    w.life.cells = cells;
+    w.settle(done);
+    work
+}
+
+/// The node in whose name a serial step moves for a body outside its update (`World::as_body`): the store books no
+/// body's side of a move, so a body node of any index serves.
+const A_BODY: Node = Node { class: Class::Body, index: 0 };
+
+/// The classes whose nodes a chunk's view holds, which its booking writes.
+const VIEWED: [Class; 4] = [Class::Ground, Class::Air, Class::Bed, Class::Bodies];
+
+impl World {
+    /// A serial step on cell `i`: its life is taken out of the world into a chunk of its own, `f` runs on it as body
+    /// code runs on a chunk of the pool, it is put back, and the world settles (`settle`).
+    pub fn in_cell<R>(&mut self, i: usize, f: impl FnOnce(&World, &mut Chunk) -> R) -> R {
+        let mut one = [std::mem::take(&mut self.life.cells[i])];
+        let mut c = Chunk::new(i, &mut one);
+        let r = f(self, &mut c);
+        let done = c.done();
+        let [cell] = one;
+        self.life.cells[i] = cell;
+        self.settle(vec![done]);
+        r
+    }
+    /// A serial step on cell `i` for a body outside its update (a part act, children back to the ground): `in_cell`, the
+    /// moves in the name of a body (whose side its law books).
+    pub fn as_body<R>(&mut self, i: usize, f: impl FnOnce(&World, &mut Chunk) -> R) -> R {
+        self.in_cell(i, |w, d| {
+            d.moves.open(w, i, A_BODY);
+            f(w, d)
+        })
+    }
+    /// The world takes what chunks `done` wrote, chunk by chunk in order: their events and counters, where the bodies
+    /// that moved into their cells are stored (`Life::find`), the lineages and born rows they made named (`Life::name`),
+    /// their moves booked (each array of the store by one task, the chunks' changes in their order and each chunk's in the
+    /// order of its cells, `store::book_by_array`), and what they did to other cells queued (`Life::queued`).
+    pub(crate) fn settle(&mut self, mut done: Vec<Done>) {
+        for d in &mut done {
+            self.events.append(&mut d.events);
+            self.counts.add(&mut d.counts);
+            d.arrived.iter().for_each(|&(id, i)| self.life.note_at(id, i));
+            if !d.brains.is_empty() || !d.genomes.is_empty() {
+                let (brains, genomes) = (std::mem::take(&mut d.brains), std::mem::take(&mut d.genomes));
+                self.life.name(d.first..d.first + d.len, (brains, genomes), &mut d.out);
+            }
+        }
+        let open: Vec<&Moves> = done.iter().map(|d| &d.moves).filter(|m| m.gathered()).collect();
+        if !open.is_empty() {
+            let (ns, work) = (self.chem.ns(), open.len());
+            let rounded = book_by_array(&mut self.store, ns, &VIEWED, work, |b| open.iter().for_each(|m| m.book_into(b)));
+            self.counts.add_rounded(rounded);
+            for m in open {
+                m.each_cell(|lift, short| {
+                    self.store.lift(lift);
+                    self.counts.clamped_heat += short;
+                });
+            }
+        }
+        done.into_iter().for_each(|d| self.life.queued.extend(d.out));
+    }
+}

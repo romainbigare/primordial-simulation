@@ -14,7 +14,7 @@ pub struct Counters {
     pub decisions: f64,
     #[serde(skip)]
     pub greedy: f64,
-    /// Batches of bodies' updates, and the busiest domain's share of each one's updates summed (`survey::batch`)
+    /// Batches of bodies' updates, and the busiest chunk's share of each one's updates summed (`survey::batch`)
     #[serde(skip)]
     pub body_batches: f64,
     #[serde(skip)]
@@ -36,12 +36,12 @@ pub struct Counters {
 }
 
 impl Counters {
-    /// The counts `c` of a domain's bodies are added (`World::settle`), and start again. Every field is named, so a new
-    /// one cannot be left out. A domain's own counts per cell are its fields (`Domain::crossings`, `Domain::pushed`), so
-    /// its `traffic` stays empty (checked in debug builds).
+    /// The counts `c` of a chunk are added (`World::settle`), and start again. Every field is named, so a new one
+    /// cannot be left out. A chunk counts per cell in its cells (`Cell::crossings`, `Cell::pushed`), so its `traffic`
+    /// stays empty (checked in debug builds).
     pub(crate) fn add(&mut self, c: &mut Counters) {
         let Counters { traffic, decisions, greedy, body_batches, busiest_share, updates, clamped_heat, parts, rounded, cover_lost } = std::mem::take(c);
-        debug_assert!(traffic.is_empty(), "a domain counted per cell");
+        debug_assert!(traffic.is_empty(), "a chunk counted per cell");
         (self.updates, self.decisions, self.greedy) = (self.updates + updates, self.decisions + decisions, self.greedy + greedy);
         (self.body_batches, self.busiest_share, self.clamped_heat) = (self.body_batches + body_batches, self.busiest_share + busiest_share, self.clamped_heat + clamped_heat);
         self.add_rounded(rounded);

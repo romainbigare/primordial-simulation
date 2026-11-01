@@ -32,15 +32,16 @@ pub fn rows<S>(out: &mut [f64], width: usize, init: impl Fn() -> S + Sync + Send
     }
 }
 
-/// The least work of a phase that goes to the pool, counted in its items of work (updates, entries landed, bodies
-/// worn or shown, domains booked): a pool call costs 30 to 55 µs, more than a few updates, so a smaller phase runs on
+/// The least work of a phase that goes to the pool, counted in its items of work (updates, cells surveyed, views
+/// booked): a pool call costs 30 to 55 µs, more than a few updates, so a smaller phase runs on
 /// the calling thread.
 pub const SERIAL_BELOW: usize = 8;
 
 /// Run `f` on each item with a scratch `state` made by `init` once per thread, not per item; each idle thread takes the
 /// next item in their order (so the first items start first). In order on the calling thread without threads, or when
-/// the phase's `work` is under `SERIAL_BELOW`. Each item owns all it writes (a domain, `longest_first`; an array of the
-/// store, `store::book_by_array`), so the order and the threads change nothing.
+/// the phase's `work` is under `SERIAL_BELOW`. Each item owns all it writes (a chunk of cells, `life::run`; a block of
+/// Change's nodes, `longest_first`; an array of the store, `store::book_by_array`), so the order and the threads change
+/// nothing.
 pub fn each_init<T: Send, S>(items: &mut [T], work: usize, init: impl Fn() -> S + Sync + Send, f: impl Fn(&mut S, &mut T) + Sync + Send) {
     #[cfg(feature = "threads")]
     {
@@ -55,15 +56,11 @@ pub fn each_init<T: Send, S>(items: &mut [T], work: usize, init: impl Fn() -> S 
     items.iter_mut().for_each(|x| f(&mut st, x));
 }
 
-/// The one runner of per-domain work: `f` on what each of `work` is given (a domain's index, its count of work, and what
-/// it is given), with a scratch made by `init` once per thread (`each_init`), the most work first so the last to end is
-/// a small one (longest processing time first, Graham 1969; ties by domain), backwards with `reversed`. A domain is the
-/// cells under one air node: its bodies (`survey::run`) or its rows of Change's reactors (`change/rows.rs`).
-pub fn longest_first<T: Send, S>(mut work: Vec<(usize, usize, T)>, reversed: bool, init: impl Fn() -> S + Sync + Send, f: impl Fn(&mut S, &mut T) + Sync + Send) {
+/// `f` on what each block of `work` is given (its index, its count of work, and what it is given), with a scratch made
+/// by `init` once per thread (`each_init`), the most work first so the last to end is a small one (longest processing
+/// time first, Graham 1969; ties by index): the blocks of Change's reactors under one air node (`change/rows.rs`).
+pub fn longest_first<T: Send, S>(mut work: Vec<(usize, usize, T)>, init: impl Fn() -> S + Sync + Send, f: impl Fn(&mut S, &mut T) + Sync + Send) {
     work.sort_by_key(|x| (std::cmp::Reverse(x.1), x.0));
-    if reversed {
-        work.reverse();
-    }
     let total = work.iter().map(|x| x.1).sum();
     each_init(&mut work, total, init, |s, x| f(s, &mut x.2));
 }

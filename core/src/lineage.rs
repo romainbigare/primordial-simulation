@@ -3,7 +3,7 @@
 use crate::body::{Body, BRAIN_SIZES, HIDDEN, MEMORY, SEEN, SIGHT};
 use crate::brain::{self, Shape};
 use crate::rng::{Purpose, Rng};
-use crate::{bond, choose, life::Domain, World};
+use crate::{bond, choose, life::Chunk, World};
 use serde::{Deserialize, Serialize};
 
 /// What the bodies of a lineage share: the sizes of brain and senses, the brain's base, and where it came from.
@@ -72,7 +72,7 @@ const MAX_LINEAGES: usize = 8;
 /// sizes, its born rows and its own rows carried over with the same new weights: a living one of its starting kind
 /// with those sizes if there is one (it takes that one's base); else, if its kind has `MAX_LINEAGES` living lineages,
 /// the one nearest in sizes (none if that is its own); else a new one. Moves no matter and no energy.
-pub fn resize(w: &World, d: &mut Domain, b: &mut Body) {
+pub fn resize(w: &World, d: &mut Chunk, b: &mut Body) {
     let (ns, noise, id) = (w.chem.ns(), w.cfg.new_noise(), b.id);
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Resize);
     let Some(lin) = d.brain(w, b.lineage) else { return };

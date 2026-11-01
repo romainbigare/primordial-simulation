@@ -9,7 +9,7 @@ use pcore::life::Handle;
 use pcore::units::DAY_S;
 use pcore::store::{Class, Node};
 use pcore::World;
-use worldgen::testkit::{dry_land, moved_serial, part_of, plate, relocate, scale, set_amount, small_world, start as world, Books, Brain, Line, LIQUID, MINERAL};
+use worldgen::testkit::{dry_land, part_of, plate, relocate, scale, set_amount, small_world, start as world, Books, Brain, Line, LIQUID, MINERAL};
 
 /// A bond breaks when the weight it bears is more than it holds: of two parts hung on an anchored one by bonds that
 /// hold 10 t weight, the one of 1 t stays and the one of 100 t falls.
@@ -94,7 +94,7 @@ fn a_small_body_can_make_parts_and_a_cell_holds_many() {
         let t = b.temp(&w.chem);
         (0..b.store.len()).filter(|&k| w.chem.phase(k, t) != Phase::Gas).for_each(|k| b.store[k] = b.store[k].max(fed[k]));
         b.e = b.energy_at(&w.chem, t);
-        moved_serial(&mut w, (b.cell as usize, slot), |w| bond::form(w, &mut b, [0.0, 0.5]));
+        bond::form(&mut w, &mut b, [0.0, 0.5]);
         b.hold = None;
     }
     assert!(w.parts.at[i].len() > 6, "{} parts in the cell", w.parts.at[i].len());
@@ -125,7 +125,7 @@ fn forming_never_takes_more_than_is_left() {
     (w.cfg.phys.min_kg, w.cfg.phys.c_form) = (0.5 * got, 0.99 * r / got);
     let books = Books::now(&w);
     let mut b = std::mem::take(&mut w.life[slot]);
-    moved_serial(&mut w, (b.cell as usize, slot), |w| bond::form(w, &mut b, [0.0, 0.5]));
+    bond::form(&mut w, &mut b, [0.0, 0.5]);
     assert!(b.store.iter().all(|&a| a >= 0.0), "{:?}", b.store);
     w.life[slot] = b;
     assert!(w.parts.alive().count() == 1 && pcore::check::broken(&w).is_none());
@@ -168,9 +168,9 @@ fn a_node_acts_on_bonds_as_its_members_together() {
         b.count *= few;
         let (n0, genes) = (b.count, b.genes.clone());
         w.add(b);
-        pcore::survey::survey(&mut w, false);
+        pcore::survey::survey(&mut w);
         w.time += w.cfg.days_per_month as u64 * DAY_S;
-        pcore::survey::batch(&mut w, false);
+        pcore::survey::batch(&mut w);
         let all: Vec<&Body> = w.life.alive().filter(|b| b.lineage == l).collect();
         let members: f64 = all.iter().map(|b| b.count).sum();
         assert!((members - n0).abs() < 1e-9 * n0, "case {case}: {members} members of {n0}");
@@ -256,7 +256,7 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     };
     let (mut w, h, i, p, mut b) = take_scene();
     let (books, before, (held, e), (store, eb)) = (Books::now(&w), ground(&w, i), holds(&w, p), (b.store.clone(), b.e));
-    moved_serial(&mut w, (i, h), |w| bond::act(w, &mut b, 1, p));
+    bond::act(&mut w, &mut b, 1, p);
     assert!(!w.parts.parts[p].alive, "the part is still there");
     let took: Vec<f64> = b.store.iter().zip(&store).map(|(a, s)| a - s).collect();
     assert!(took[MINERAL] > 0.0 && took[MINERAL] < 0.5 * held[MINERAL], "it took {} mol of {}", took[MINERAL], held[MINERAL]);
@@ -265,13 +265,11 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     w.life[h] = b;
     books.assert_within(&w, 1e-9, 1e-9);
 
-    // The body dies in the same update, on the view the fall opened again: the books are kept.
+    // The body dies after the fall: the books are kept.
     let (mut w, h, i, p, mut b) = take_scene();
     let (books, id) = (Books::now(&w), b.id);
-    moved_serial(&mut w, (i, h), |w| {
-        bond::act(w, &mut b, 1, p);
-        w.in_domain(i, |w, d| die(w, d, h, b, LACK));
-    });
+    bond::act(&mut w, &mut b, 1, p);
+    w.as_body(i, |w, d| die(w, d, h, b, LACK));
     assert!(!w.parts.parts[p].alive && w.life.find(id).is_none(), "the part or the body is still there");
     books.assert_within(&w, 1e-9, 1e-9);
 }

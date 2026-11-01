@@ -5,14 +5,14 @@ use super::go::can_go;
 use super::*;
 use crate::body::{die, LACK};
 use crate::life::Handle;
-use crate::store::{Class, Node, NodeId};
+use crate::store::NodeId;
 use crate::nodes;
 
 /// Node `node` (taken out of its slot) spreads its members over the options (`members`), and each part acts as so many members together (`part_acts`; the
 /// moves last, so the others act where the node is). Its brain learns as from one member drawn among those who stayed
 /// (`trace`): from what that member did, and how much more its part's action raised their well-being than the mean of
 /// the members.
-pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, rng: &mut Rng) {
+pub(super) fn spread(w: &World, d: &mut Chunk, node: &mut Body, c: &Choice, k: &Kit, rng: &mut Rng) {
     let q = top_chances(c);
     let x = members(node, &q, rng);
     // The members of each option in the node after acting, and the change of their well-being.
@@ -98,31 +98,31 @@ fn members(node: &Body, p: &[f32; OPTS], rng: &mut Rng) -> [f64; OPTS] {
 /// `x` members of node `node` (taken out of its slot) that stay in its cell act by `act` as the node itself: the whole
 /// node if less than one member would be left, else holding and inside nothing while the others wait aside with their
 /// share of its amounts (`nodes::Lot::split`), and then come back (`nodes::rejoin`: amounts and sizes by members).
-fn stays<R>(d: &mut Domain, node: &mut Body, x: f64, act: impl FnOnce(&mut Domain, &mut Body) -> R) -> R {
+fn stays<R>(d: &mut Chunk, node: &mut Body, x: f64, act: impl FnOnce(&mut Chunk, &mut Body) -> R) -> R {
     if node.count - x < 1.0 {
         return act(d, node);
     }
     let f = x / node.count;
-    let rest = nodes::Lot::split(d, node, 1.0 - f, 1.0 - f);
+    let rest = nodes::Lot::split(node, 1.0 - f, 1.0 - f);
     let held = (node.hold.take(), node.inside.take());
     let out = act(d, node);
     debug_assert!(node.hold.is_none() && node.inside.is_none(), "an action that stays in its cell takes no hold and enters nothing");
     (node.hold, node.inside) = held;
-    nodes::rejoin(d, node, rest, None);
+    nodes::rejoin(node, rest, None);
     out
 }
 
 /// `x` members of node `node` (taken out of its slot) do option `o`. Members that stay in its cell (any option but a
 /// move or a bond) act as the node itself (`stays`). Members that move or bond are placed as a body of their own
-/// (`nodes::part`); unless they queued a move or a part act (`outbox`), they then come back (`nodes::rejoin`); else
+/// (`nodes::part`); unless they queued a move or a part act (`life::Entry`), they then come back (`nodes::rejoin`); else
 /// they live on as a body, leaving the node (`Body::leaving`), with the trace of what they did: those who move join the
 /// first node of their kind and stage where they land (`choose::land_move`), those who act on a part come back after it
 /// if they can (`land_act`). The node acts itself if less than one member would be left. `q`: the node's chances
 /// (`top_chances`), which a part that leaves learns from. Returns the change of their well-being, and whether they left
 /// the node (none: it moved whole).
-fn part_acts(w: &World, d: &mut Domain, node: &mut Body, (c, q): (&Choice, &[f32; OPTS]), k: &Kit, (o, x): (usize, f64), rng: &mut Rng) -> (f32, Option<bool>) {
+fn part_acts(w: &World, d: &mut Chunk, node: &mut Body, (c, q): (&Choice, &[f32; OPTS]), k: &Kit, (o, x): (usize, f64), rng: &mut Rng) -> (f32, Option<bool>) {
     let (moves, bond) = ((FIXED..TO_BODY).contains(&o), (FORM..FIXED).contains(&o) || o >= TO_PART);
-    let mut acts = |d: &mut Domain, b: &mut Body, part_of: Option<u64>| {
+    let mut acts = |d: &mut Chunk, b: &mut Body, part_of: Option<u64>| {
         let before = (k.wb)(w, b);
         act_as(w, d, b, c, k, (o, part_of), rng);
         (k.wb)(w, b) - before
@@ -138,7 +138,7 @@ fn part_acts(w: &World, d: &mut Domain, node: &mut Body, (c, q): (&Choice, &[f32
     if moves && !can_go(w, node, c.to[o - FIXED], f, 0.0) {
         return (0.0, Some(false));
     }
-    let part = nodes::part(d, node, f, f);
+    let part = nodes::part(node, f, f);
     let s = d.place_part(w, part);
     let mut m = std::mem::take(&mut d[s]);
     let gain = acts(d, &mut m, Some(node.id));
@@ -153,12 +153,12 @@ fn part_acts(w: &World, d: &mut Domain, node: &mut Body, (c, q): (&Choice, &[f32
 }
 
 /// Part `m` of node `node` (both taken out of their slots, `m`'s at `s`) comes back to it (`nodes::rejoin`).
-fn back(d: &mut Domain, node: &mut Body, s: Handle, mut m: Body) {
+fn back(d: &mut Chunk, node: &mut Body, s: Handle, mut m: Body) {
     d.remove(s, &m);
-    nodes::rejoin(d, node, nodes::Lot::of(&mut m), None);
+    nodes::rejoin(node, nodes::Lot::of(&mut m), None);
 }
 
-/// The part act body `id` queued in a batch (`outbox`), run whole on it and on the part as they are now: verb `on.0`
+/// The part act body `id` queued in a batch (`life::Entry`), run whole on it and on the part as they are now: verb `on.0`
 /// to part `on.1` if that part still exists, lies in the body's cell and the act is still possible (`bond::possible`),
 /// or a part of the shape given formed; the body pays as it acts, and does nothing if it cannot. A part of node `node` then comes back to it if it holds
 /// nothing, is inside nothing, and the node is in its cell and not leaving it; else it lives on as a body.
@@ -166,7 +166,6 @@ pub(crate) fn land_act(w: &mut World, id: u64, on: Result<(usize, NodeId), [f32;
     let Some(s) = w.life.find(id) else { return };
     let mut b = std::mem::take(&mut w.life[s]);
     let i = b.cell as usize;
-    w.in_domain(i, |w, d| d.moves.open(w, i, Node::new(Class::Body, s.slot as usize)));
     let here = |v: usize, p: usize| bond::cell(w, p) == b.cell as usize && bond::possible(w, &b, v, p, b.volume(&w.chem, b.temp(&w.chem)) / b.n());
     match on.map(|(v, p)| (v, bond::part(w, p).filter(|&p| here(v, p)))) {
         Err(shape) => bond::form(w, &mut b, shape),
@@ -175,7 +174,7 @@ pub(crate) fn land_act(w: &mut World, id: u64, on: Result<(usize, NodeId), [f32;
     }
     b.leaving = false;
     let its = node.and_then(|n| w.life.find(n)).filter(|&t| w.life[t].cell == b.cell && !w.life[t].leaving && b.hold.is_none() && b.inside.is_none());
-    w.in_domain(i, move |w, d| {
+    w.as_body(i, move |w, d| {
         // Paying can leave nothing of a member: it dies.
         if b.empty_at(b.mass(&w.chem)) {
             return die(w, d, s, b, LACK);

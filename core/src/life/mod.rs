@@ -1,54 +1,67 @@
-//! The registry of bodies: their storage, ids and cells, lineages and born rows (`registry`), and the outboxes. The
-//! cells are cut into domains, the cells under one air node (`domain::Domain`); each domain stores the bodies of its
-//! cells, their lists and its outbox, what moved into its cells, and finds the
-//! bodies by id. A body's id is the domain it was placed in and that domain's count of bodies placed; it never changes,
-//! wherever the body is stored. A body that moves to a cell of another domain moves to that domain's storage.
+//! The registry of bodies (laws.md 0): the bodies of each ground cell (`Cell`), with ids each cell gives, found by id;
+//! the faces they show in a batch; the caches of the last survey; the lineages and born rows (`registry`). Body code
+//! runs on chunks of cells (`chunk`), and what it does to other cells waits in a queue for the serial pass (`cross`).
 
-mod domain;
+mod chunk;
+mod cross;
 mod registry;
 mod saved;
 
-pub use domain::Domain;
+pub use chunk::Chunk;
+pub(crate) use chunk::{bounds, chunks, run};
+pub use cross::{deliver, Entry};
+pub(crate) use cross::land;
 pub use registry::Genome;
-pub(crate) use registry::Held;
 
 use crate::body::Body;
-use crate::lineage::Lineage;
-use crate::outbox::Entry;
+use crate::cover::Cover;
 use crate::space::Mesh;
-use crate::survey::{Face, Faces};
-use crate::{World, AIR};
+use crate::survey::{Face, Faces, ROW};
+use crate::World;
 use std::collections::BTreeMap;
 
-/// A body's id is the domain it was placed in shifted left by this many bits, plus that domain's count of bodies placed
-/// then (from 1, so no body has id 0; it stays below 2^this, `Domain::add`).
+/// A body's id is the cell it was placed in shifted left by this many bits, plus that cell's count of bodies placed
+/// then (from 1, so no body has id 0; it stays below 2^this, `Chunk::add`).
 const ID_SHIFT: u32 = 40;
 
-/// Where a body is stored: its domain and its slot there (`Life`'s index). It holds until the body leaves the world or
-/// moves (`Domain::post`); a body is named for longer by its id.
+/// Where a body is stored: its cell and its place in that cell's list. It holds until the pass ends (`Life::compact`);
+/// a body is named for longer by its id.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Handle {
-    pub domain: u32,
+    pub cell: u32,
     pub slot: u32,
+}
+
+/// The life of one ground cell: its bodies, in the order they came (one that died or left stays as a hole, not alive,
+/// until the pass ends, so a handle holds through a pass), how many bodies were placed in it, its cover, and what the
+/// movers did there.
+#[derive(Clone, Debug, Default)]
+pub struct Cell {
+    pub(crate) bodies: Vec<Body>,
+    /// Bodies placed in it so far (children, split halves, parts of nodes, members drawn, founders)
+    placed: u64,
+    /// The energy movers spent pushing through its bodies since the last survey, which then breaks them, J
+    /// (`choose::wear`)
+    pub pushed: f64,
+    /// The members that moved into it since the last month (`Counters::traffic`)
+    pub(crate) crossings: f32,
+    pub cover: Cover,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Life {
-    /// The domains (taken out of the world while body code runs on them, `World::in_domain`)
-    pub(crate) domains: Vec<Domain>,
-    /// Each cell's domain and its index in that domain's cells
-    cell_in: Vec<(u32, u32)>,
-    /// The domain each body stored outside the domain it was placed in is stored in, by id (`find`; noted when the
-    /// world settles, `World::settle`; a body that died there is left out at the end of each batch, `settle_moved`)
-    away: BTreeMap<u64, u32>,
-    /// The domains that ran since their moves were last booked (`World::book_moves`), and since their outboxes were
-    /// last taken (`take_queued`): what a domain wrote lies in these only
-    pub(crate) unbooked: Ran,
-    unsent: Ran,
-    /// Per domain, from the last survey: the numbers of each of its cells (`Life::sum`). The survey's caches are not
-    /// saved: a snapshot is taken at a month's start, where the survey builds them before any law reads them; this one
-    /// the tape reads first, so `tape::load_snapshot` rebuilds it (`survey::sums`).
-    pub(crate) sums: Vec<Sums>,
+    /// The life of each ground cell (taken out of the world while body code runs on it, `chunk::run`)
+    pub(crate) cells: Vec<Cell>,
+    /// The cell each body stored outside the cell it was placed in is in, by id (`find`)
+    moved: BTreeMap<u64, u32>,
+    /// What body code did outside its cell, waiting for the serial pass (`cross::land`)
+    pub(crate) queued: Vec<Entry>,
+    /// Per cell, from the last survey: its members, then their visible traits summed, then the energy to break all its
+    /// bodies, J; then their capture area times their shade, m², and that times the share set aside for their light
+    /// reactions (`Life::sum`). The survey's caches are not saved: a snapshot is taken at a month's start, where the
+    /// survey builds them before any law reads them; this one the tape reads first, so `tape::load_snapshot` rebuilds it
+    /// (`survey::sums`)
+    pub(crate) sums: Vec<[f64; ROW]>,
     /// Per cell, from the last survey: the share of the light reaching its bodies' capture area that they absorb
     pub absorb: Vec<f32>,
     /// Per cell, from the last survey: the share of that absorbed light set aside for its bodies' light reactions
@@ -59,195 +72,109 @@ pub struct Life {
     pub seen: Vec<f32>,
     /// Per cell, from the last survey: what a brain perceives of it as a place to move to (`choose::cells`)
     pub cellf: Vec<[f32; crate::choose::NF]>,
-    /// What each living body showed others at the start of the batch running, domain by domain (`survey::Faces`); read
-    /// only in a batch (`faces_of`)
-    pub(crate) faces: Vec<Faces>,
+    /// What each living body showed others at the start of the batch running (`survey::Faces`); read only in a batch
+    /// (`faces_of`)
+    pub(crate) faces: Faces,
     /// The brain of each lineage (None once it died out), and its living bodies
-    pub brains: Vec<Option<Lineage>>,
+    pub brains: Vec<Option<crate::lineage::Lineage>>,
     pub members: Vec<u32>,
     /// Born brain rows, each shared by the bodies born with them (none: free)
     pub genomes: Vec<Genome>,
     free_genomes: Vec<u32>,
-    /// A batch runs: the changes of the holders of lineages and born rows wait in the domains until it ends (`count_all`)
+    /// A batch runs: the faces are those of its start
     pub(crate) batch: bool,
 }
 
-/// The numbers of the cells of a domain, each domain's kept apart from the others so that the survey's task of a domain
-/// is the one writer of them (CLAUDE.md 3.6).
-#[derive(Clone, Debug, Default)]
-pub(crate) struct Sums {
-    /// Per cell (by its order in the domain's cells): members, then their visible traits summed, then the energy to break
-    /// all its bodies, J; then their capture area times their shade, m², and that times the share set aside for their
-    /// light reactions
-    pub rows: Vec<[f64; crate::survey::ROW]>,
-    /// Whether the domain has bodies, or may have had some at the last survey: a domain that has none and had none has
-    /// rows of zeros and caches of zeros, and the survey leaves it alone
-    pub live: bool,
-}
-
-/// A set of domains by their index, as bits: each once, taken in order.
-#[derive(Clone, Debug, Default)]
-pub(crate) struct Ran(Vec<u64>);
-
-impl Ran {
-    fn add(&mut self, k: usize) {
-        if k / 64 >= self.0.len() {
-            self.0.resize(k / 64 + 1, 0);
-        }
-        self.0[k / 64] |= 1 << (k % 64);
-    }
-    /// The domains in the set, in order; the set is left empty.
-    pub(crate) fn take(&mut self) -> impl Iterator<Item = usize> + '_ {
-        self.0.iter_mut().enumerate().flat_map(|(word, bits)| crate::math::ones(std::mem::take(bits)).map(move |k| 64 * word + k))
-    }
-}
-
 impl Life {
-    /// The living bodies with their handles, in a fixed order that does not depend on where they are stored: domain by
-    /// domain, cell by cell, each cell's in the order they came.
+    /// No bodies yet on `mesh`.
+    pub fn new(mesh: &Mesh) -> Life {
+        let n = mesh.cells().n();
+        Life { cells: vec![Cell::default(); n], sums: vec![[0.0; ROW]; n], ..Default::default() }
+    }
+    /// The living bodies with their handles, cell by cell, each cell's in the order they came.
     pub fn living(&self) -> impl Iterator<Item = (Handle, &Body)> {
-        self.domains.iter().flat_map(|d| d.at.iter().flatten()).map(|&h| (h, &self[h])).filter(|x| x.1.alive)
+        self.cells.iter().enumerate().flat_map(|(i, c)| c.bodies.iter().enumerate().map(move |(s, b)| (Handle { cell: i as u32, slot: s as u32 }, b))).filter(|x| x.1.alive)
     }
     /// The living bodies, in the order of `living`.
     pub fn alive(&self) -> impl Iterator<Item = &Body> {
         self.living().map(|x| x.1)
     }
-    /// Run `f` on each living body, in the order they are stored, for work that does not depend on order.
+    /// Run `f` on each living body, for work that does not depend on order.
     pub fn each_mut(&mut self, f: impl FnMut(&mut Body)) {
-        self.domains.iter_mut().flat_map(|d| &mut d.bodies).filter(|b| b.alive).for_each(f);
+        self.cells.iter_mut().flat_map(|c| &mut c.bodies).filter(|b| b.alive).for_each(f);
     }
-
-    /// The handles of the bodies of cell `i`, in the order they came.
-    pub fn cell(&self, i: usize) -> impl ExactSizeIterator<Item = Handle> + '_ {
-        let (d, k) = self.cell_slot(i);
-        self.domains[d].at[k].iter().copied()
+    /// The handles of the living bodies of cell `i`, in the order they came.
+    pub fn cell(&self, i: usize) -> impl Iterator<Item = Handle> + '_ {
+        handles(&self.cells[i], i)
     }
-    /// How many bodies cell `i` holds.
+    /// How many living bodies cell `i` holds.
     pub fn in_cell(&self, i: usize) -> usize {
-        self.cell(i).len()
+        self.cell(i).count()
     }
-    /// Where the body with id `id` is stored, if it lives: in the domain it was placed in, unless it moved away.
+    /// Where the body with id `id` is stored, if it lives: in the cell it was placed in, unless it moved away.
     pub fn find(&self, id: u64) -> Option<Handle> {
-        self.domains.get(self.away.get(&id).map_or((id >> ID_SHIFT) as usize, |&d| d as usize))?.find(id)
+        self.find_in(self.moved.get(&id).map_or((id >> ID_SHIFT) as usize, |&c| c as usize), id)
     }
-    /// The first break of the storage, if any: a cell's list that holds a body of another cell or stored in another
-    /// domain, or an id table that points elsewhere (`check::broken`).
+    /// Where the living body with id `id` is stored in cell `i`, if it is there.
+    pub(crate) fn find_in(&self, i: usize, id: u64) -> Option<Handle> {
+        let s = self.cells.get(i)?.bodies.iter().position(|b| b.alive && b.id == id)?;
+        Some(Handle { cell: i as u32, slot: s as u32 })
+    }
+    /// The first break of the storage, if any: a body in the list of a cell that is not its own, or one its id does not
+    /// find (`check::broken`).
     pub fn unsound(&self) -> Option<String> {
-        for (d, x) in self.domains.iter().enumerate() {
-            for (&cell, list) in x.cells.iter().zip(&x.at) {
-                for &h in list {
-                    let b = &self[h];
-                    if h.domain as usize != d || b.cell != cell || !b.alive || self.find(b.id) != Some(h) {
-                        return Some(format!("body {} at {h:?} in the list of cell {cell} (domain {d}): its cell {}", b.id, b.cell));
-                    }
-                }
-            }
-        }
-        let listed: usize = self.domains.iter().map(|x| x.at.iter().map(|l| l.len()).sum::<usize>()).sum();
-        let tables: usize = self.domains.iter().map(|x| x.table.len()).sum();
-        (listed != tables).then(|| format!("{listed} bodies in the cells' lists, {tables} in the id tables"))
+        self.living().find(|&(h, b)| b.cell != h.cell || self.find(b.id) != Some(h)).map(|(h, b)| format!("body {} at {h:?}: its cell {}, found at {:?}", b.id, b.cell, self.find(b.id)))
     }
     /// The faces of the bodies of cell `i` as they were at the batch's start (none outside a batch).
     pub fn faces_of(&self, i: usize) -> &[Face] {
-        let (d, k) = self.cell_slot(i);
-        if self.batch { self.faces[d].of(k) } else { &[] }
+        if self.batch { self.faces.of(i) } else { &[] }
     }
-    /// The domain of cell `i`, read outside body code (by the shell and the tests).
-    pub fn domain(&self, i: usize) -> &Domain {
-        &self.domains[self.domain_of(i)]
+    /// The numbers of cell `i` from the last survey (`Cell::sum`).
+    pub fn sum(&self, i: usize) -> &[f64; ROW] {
+        &self.sums[i]
     }
-    /// The domain of cell `i`.
-    pub fn domain_of(&self, i: usize) -> usize {
-        self.cell_in[i].0 as usize
+    /// The cover of cell `i`.
+    pub fn cover(&self, i: usize) -> &Cover {
+        &self.cells[i].cover
     }
-    /// The numbers of cell `i` from the last survey (`Sums::rows`).
-    pub fn sum(&self, i: usize) -> &[f64; crate::survey::ROW] {
-        let (d, k) = self.cell_slot(i);
-        &self.sums[d].rows[k]
+    /// The energy movers spent pushing through the bodies of cell `i` since the last survey, J.
+    pub fn pushed(&self, i: usize) -> f64 {
+        self.cells[i].pushed
     }
-    /// The domain of cell `i` and its slot among that domain's cells (`Level::children` of its air node).
-    #[inline]
-    pub(crate) fn cell_slot(&self, i: usize) -> (usize, usize) {
-        let (d, k) = self.cell_in[i];
-        (d as usize, k as usize)
-    }
-    /// Where the bodies that moved into domain `d` are stored is noted (`find`; a body stored in the domain it was
-    /// placed in is found by its id alone).
-    pub(super) fn note_arrived(&mut self, d: usize) {
-        let x = &mut self.domains[d];
-        for id in x.arrived.drain(..) {
-            if (id >> ID_SHIFT) as u32 == x.index { self.away.remove(&id) } else { self.away.insert(id, x.index) };
-        }
-    }
-    /// No bodies yet on `mesh`: a domain under each air node, with its cells.
-    pub fn new(mesh: &Mesh) -> Life {
-        let air = mesh.level(AIR);
-        let mut life = Life::default();
-        life.cut((0..air.n()).map(|j| air.children(j).to_vec()).collect());
-        life
-    }
-    /// The domains are `cells` (each a list of cells; together every cell once): their cell lists sized.
-    fn cut(&mut self, cells: Vec<Vec<u32>>) {
-        self.cell_in = vec![(0, 0); cells.iter().map(|c| c.len()).sum()];
-        for (d, c) in cells.iter().enumerate() {
-            c.iter().enumerate().for_each(|(k, &i)| self.cell_in[i as usize] = (d as u32, k as u32));
-        }
-        let domain = |(d, cells): (usize, Vec<u32>)| {
-            let at = vec![Vec::new(); cells.len()];
-            let (pushed, crossings) = (vec![0.0; cells.len()], vec![0.0; cells.len()]);
-            let cover = crate::cover::Cover::new(cells.len());
-            Domain { index: d as u32, at, pushed, crossings, cover, cells, ..Default::default() }
-        };
-        self.sums = cells.iter().map(|c| Sums { rows: vec![[0.0; crate::survey::ROW]; c.len()], live: true }).collect();
-        self.domains = cells.into_iter().enumerate().map(domain).collect();
-        self.faces = vec![Faces::default(); self.domains.len()];
-    }
-    /// Domain `k` ran: its moves wait to be booked and its outbox to be taken.
-    pub(crate) fn mark(&mut self, k: usize) {
-        self.unbooked.add(k);
-        self.unsent.add(k);
-    }
-    /// The entries of the outboxes of the domains that ran since the last, domain by domain, each's in the order made
-    /// (its bodies that move taken out of its storage first, `Domain::post`); they are left empty. The moves and the
-    /// litters go to the inbox of the domain of their cell; returns those domains, in order, and the other entries.
-    pub(crate) fn take_queued(&mut self) -> (Vec<usize>, Vec<Entry>) {
-        let (mut to, mut rest) = (Vec::new(), Vec::new());
-        let ran: Vec<usize> = self.unsent.take().collect();
-        for k in ran {
-            self.domains[k].post();
-            for e in std::mem::take(&mut self.domains[k].out) {
-                let Some(i) = e.lands_in() else {
-                    rest.push(e);
-                    continue;
-                };
-                let d = self.domain_of(i);
-                to.push(d);
-                self.domains[d].inbox.push(e);
+    /// The holes the pass left are closed: each cell keeps its living bodies in their order, and a body that died away
+    /// from the cell it was placed in leaves `moved`.
+    pub(crate) fn compact(&mut self) {
+        let Life { cells, moved, .. } = self;
+        for (i, c) in cells.iter_mut().enumerate().filter(|x| x.1.bodies.iter().any(|b| !b.alive)) {
+            for b in c.bodies.iter().filter(|b| !b.alive && b.id != 0) {
+                if moved.get(&b.id) == Some(&(i as u32)) {
+                    moved.remove(&b.id);
+                }
             }
+            c.bodies.retain(|b| b.alive);
         }
-        debug_assert!(self.domains.iter().all(|d| d.out.is_empty()), "an outbox in a domain that did not run");
-        to.sort_unstable();
-        to.dedup();
-        (to, rest)
     }
+    /// Body `id` is now stored in cell `i` (`find`).
+    fn note_at(&mut self, id: u64, i: u32) {
+        if (id >> ID_SHIFT) as u32 == i { self.moved.remove(&id) } else { self.moved.insert(id, i) };
+    }
+}
 
-    /// The bodies that moved away and died since are left out of `away`.
-    pub(crate) fn settle_moved(&mut self) {
-        let domains = &self.domains;
-        self.away.retain(|id, d| domains[*d as usize].table.contains_key(id));
-    }
+/// The handles of the living bodies of `c`, cell `i`, in the order they came.
+fn handles(c: &Cell, i: usize) -> impl Iterator<Item = Handle> + '_ {
+    c.bodies.iter().enumerate().filter(|x| x.1.alive).map(move |(s, _)| Handle { cell: i as u32, slot: s as u32 })
 }
 
 impl std::ops::Index<Handle> for Life {
     type Output = Body;
     fn index(&self, h: Handle) -> &Body {
-        &self.domains[h.domain as usize][h]
+        &self.cells[h.cell as usize].bodies[h.slot as usize]
     }
 }
 
 impl std::ops::IndexMut<Handle> for Life {
     fn index_mut(&mut self, h: Handle) -> &mut Body {
-        &mut self.domains[h.domain as usize][h]
+        &mut self.cells[h.cell as usize].bodies[h.slot as usize]
     }
 }
 
@@ -255,7 +182,7 @@ impl World {
     /// Place body `b` made outside the laws (a founder, an edit); it first updates at the next month's start.
     pub fn add(&mut self, mut b: Body) -> Handle {
         b.prepare(&self.chem, &self.cfg);
-        self.in_domain(b.cell as usize, |w, d| d.add(b, w.day()))
+        self.in_cell(b.cell as usize, |w, d| d.add(b, w.day()))
     }
 }
 

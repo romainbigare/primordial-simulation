@@ -31,6 +31,8 @@ pub struct Config {
     pub wake_share: f64,
     /// Speed setting: the longest a ground or air node's reactions sleep, days (0: every node reacts every step)
     pub sleep_days: u32,
+    /// Speed setting: the cells are cut into this many runs for the parallel passes of bodies (any count gives one world)
+    pub chunks: u32,
 
     // Ground and air physics
     /// Depth of ground that exchanges heat with the surface, m
@@ -383,6 +385,7 @@ impl Config {
         // The month holds a whole number of the air's steps (`schedule::AIR_STEP_DAYS`).
         let air = crate::schedule::AIR_STEP_DAYS;
         require(m > 0 && m.is_multiple_of(air), || format!("days_per_month ({m}) must be a whole number of the air's steps ({air} days)"))?;
+        require(self.chunks > 0, || "chunks must be at least 1".to_string())?;
         let wake = self.wake_share;
         require(wake > 0.0 && wake.is_finite(), || format!("wake_share ({wake}) must be above 0"))?;
         // `dormancy` above 1 (`body::exchange::closing` divides by n - 1); `light_yield` in (0, 1] (a light reaction takes
@@ -412,6 +415,7 @@ impl Default for Config {
             months_per_year: 12,
             wake_share: 0.05,
             sleep_days: 90,
+            chunks: 64,
             skin_m: 2.0,
             air_top_m: 10_000.0,
             sensible: 10.0,

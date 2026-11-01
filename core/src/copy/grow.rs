@@ -3,12 +3,12 @@
 use crate::body::{self, Body, Layout, ALLOC, WET_TISSUE};
 use crate::chem::{Chemistry, Phase, Reaction};
 use crate::store::Node;
-use crate::{life::Domain, World};
+use crate::{life::Chunk, World};
 
 /// Growth: a member builds body matter, paid by work, as far as its allowance, its spare, its fuel and the stores it
 /// converts allow; past its copy mass a share `ALLOC` goes into the brood (laws.md 6.6). It stands at `t` K. Returns
 /// whether it built anything.
-pub fn grow(w: &World, d: &mut Domain, b: &mut Body, days: f64, t: f64) -> bool {
+pub fn grow(w: &World, d: &mut Chunk, b: &mut Body, days: f64, t: f64) -> bool {
     let chem = &w.chem;
     let Some(bl) = chem.build.as_ref() else { return false };
     let (m, n) = (bl.outputs[0].0 as usize, b.n());
@@ -64,7 +64,7 @@ const LEAST_MADE: f64 = 1e-12;
 /// Returns the kg made: none below `LEAST_MADE` of `full` (kg of matter of the size of maturity; 0 for the other
 /// solids).
 #[allow(clippy::too_many_arguments)]
-fn convert(w: &World, d: &mut Domain, b: &mut Body, bl: &Reaction, room: f64, most: f64, full: f64, t: f64) -> f64 {
+fn convert(w: &World, d: &mut Chunk, b: &mut Body, bl: &Reaction, room: f64, most: f64, full: f64, t: f64) -> f64 {
     if room <= 0.0 || most <= 0.0 {
         return 0.0;
     }

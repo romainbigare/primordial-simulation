@@ -5,7 +5,7 @@
 use pcore::body::{self, Body, Layout, COOL_T, HEAT, KEEP_T, PHASE};
 use pcore::life::Handle;
 use pcore::{brain, World, AIR};
-use worldgen::testkit::{add, died, dry_lands, eater, held_day, hold_ground, kg, moved, node_of, out, put_kg_m2, scale, small_world, start, took_from_ground, Books, Brain, Line, LIQUID, MATTER, RICH};
+use worldgen::testkit::{add, died, dry_lands, eater, held_day, hold_ground, kg, node_of, out, put_kg_m2, scale, small_world, start, took_from_ground, Books, Brain, Line, LIQUID, MATTER, RICH};
 
 /// Days the takes from the ground run for (`matter_taken_from_outside_is_digested_into_the_solid`).
 const TAKE_DAYS: usize = 50;
@@ -189,25 +189,24 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// The survey adds up what each cell holds (`Life::sum`), one domain at a time: a domain whose bodies are all gone (and
-/// that has no cover) holds nothing at the next survey.
+/// The survey adds up what each cell holds (`Life::sum`): a cell whose bodies are all gone (and that has no cover) holds
+/// nothing at the next survey.
 #[test]
-fn a_domain_left_with_no_bodies_holds_nothing_at_the_next_survey() {
+fn a_cell_left_with_no_bodies_holds_nothing_at_the_next_survey() {
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     worldgen::testkit::eater_nodes(&mut w, 10.0);
-    pcore::survey::survey(&mut w, false);
+    pcore::survey::survey(&mut w);
     let i = w.life.living().map(|x| w.life[x.0].cell as usize).next().expect("a body");
     let members: f64 = w.life.cell(i).map(|s| w.life[s].n()).sum();
     assert!(members > 0.0 && w.life.sum(i)[0] == members, "{members} members, sum {}", w.life.sum(i)[0]);
-    let d = w.life.domain_of(i);
-    let all: Vec<(Handle, usize)> = w.life.living().filter(|x| w.life.domain_of(x.1.cell as usize) == d).map(|x| (x.0, x.1.cell as usize)).collect();
-    for (h, cell) in all {
+    let all: Vec<Handle> = w.life.cell(i).collect();
+    for h in all {
         let b = std::mem::take(&mut w.life[h]);
-        moved(&mut w, (cell, h), |w, d| body::die(w, d, h, b, body::LACK));
+        w.as_body(i, |w, d| body::die(w, d, h, b, body::LACK));
     }
-    pcore::survey::survey(&mut w, false);
-    assert!((0..w.mesh.cells().n()).filter(|&c| w.life.domain_of(c) == d).all(|c| w.life.sum(c).iter().all(|&x| x == 0.0)), "a cell of the emptied domain still holds something");
+    pcore::survey::survey(&mut w);
+    assert!(w.life.sum(i).iter().all(|&x| x == 0.0), "the emptied cell still holds something");
     assert_eq!(pcore::check::broken(&w), None);
 }
 

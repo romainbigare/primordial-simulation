@@ -19,11 +19,11 @@ use perceive::{inputs, perceive, walk, DT_NEAR, DZ_SCALE, LN_LEAF, LN_MASS, WB_S
 
 use crate::body::{Body, Lived};
 use crate::brain::{self, ln, score, squash, Shape, Thought, ANCHOR, DIG, FIXED, FORM, FORM_OUT, OVERBS, PUT, RELEASE, REST, SIG, TAKE, TAKE_FROM, VERBS, WATCH};
-use crate::outbox::Entry;
+use crate::life::Entry;
 use crate::rng::{Purpose, Rng};
 use crate::space::COMPASS;
 use crate::survey::Face;
-use crate::{bond, lanes, life::{Domain, Handle}, World};
+use crate::{bond, lanes, life::{Chunk, Handle}, World};
 
 /// Features of a neighbour direction and of a perceived body.
 pub(crate) const NF: usize = 10;
@@ -77,7 +77,7 @@ struct Choice {
 /// A body's decision at its update: perceive, think and learn from the last decision, score the options, emit the
 /// signal; an individual draws one option, keeps its trace and acts, a node spreads its members over them (`spread`).
 /// Every body decides at each update, once a month.
-pub fn act(w: &World, d: &mut Domain, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
+pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
     let mut rng = Rng::new(w.seed, w.day(), b.id, Purpose::Choose);
     // Mass and heat capacity are as `body::live` just left them.
     let temp = b.temp(&w.chem);
@@ -108,9 +108,10 @@ pub fn act(w: &World, d: &mut Domain, b: &mut Body, lived: &Lived, t: &mut ActTm
     }
 }
 
-/// Body `id` as it is now, if it lives, is in body `b`'s cell and is not leaving it.
-fn here(d: &Domain, b: &Body, id: u64) -> Option<Handle> {
-    d.find(id).filter(|&o| d[o].alive && !d[o].leaving && d[o].cell == b.cell)
+/// The body of face `o` of body `b`'s cell as it is now, if it lives and is not leaving it.
+fn here(d: &Chunk, b: &Body, o: &Face) -> Option<Handle> {
+    let h = Handle { cell: b.cell, slot: o.slot };
+    (d[h].alive && d[h].id == o.id && !d[h].leaving).then_some(h)
 }
 
 /// What the actions of one decision share besides its options: the brain's shape and what it thought, the noise drawn
@@ -192,7 +193,7 @@ fn options(w: &World, b: &Body, s: Shape, (pm, vol): (f64, f64), c: &mut Choice,
 }
 
 /// Draw one action by its score (a softmax); with no option open, rest.
-fn pick(d: &mut Domain, c: &mut Choice, rng: &mut Rng) {
+fn pick(d: &mut Chunk, c: &mut Choice, rng: &mut Rng) {
     let top = c.logit.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
     if top == f32::NEG_INFINITY {
         (c.p, c.a) = ([0.0; OPTS], REST);
@@ -267,9 +268,9 @@ fn trace(w: &World, b: &Body, c: &Choice, chances: &[f32; OPTS], k: &Kit, a: usi
 }
 
 /// Body `b` (taken out of its slot), a part of node `part_of` if any (`spread`), does option `a`. Forming a part, acting
-/// on one and watching are queued in the outbox (`outbox`), applied when the batch ends; so is a move (`go`). A node's
+/// on one and watching are queued (`life::Entry`), applied in the serial pass; so is a move (`go`). A node's
 /// part that queued one of these but a watch leaves the node until it is applied (`Body::leaving`).
-fn act_as(w: &World, d: &mut Domain, b: &mut Body, c: &Choice, k: &Kit, (a, part_of): (usize, Option<u64>), rng: &mut Rng) {
+fn act_as(w: &World, d: &mut Chunk, b: &mut Body, c: &Choice, k: &Kit, (a, part_of): (usize, Option<u64>), rng: &mut Rng) {
     b.leaving |= part_of.is_some() && (a == FORM || a >= TO_PART);
     let act = |on| Entry::Act { id: b.id, on, node: part_of };
     match a {
@@ -283,11 +284,11 @@ fn act_as(w: &World, d: &mut Domain, b: &mut Body, c: &Choice, k: &Kit, (a, part
         a if a < TO_BODY => go(w, d, b, c.to[a - FIXED], part_of.is_some()),
         a if a >= TO_PART => d.out.push(act(Ok(((a - TO_PART) % OVERBS, bond::id(w, c.parts[(a - TO_PART) / OVERBS]))))),
         a => {
-            let (id, verb) = (c.seen[(a - TO_BODY) / VERBS].0.id, (a - TO_BODY) % VERBS);
+            let ((face, same), verb) = (c.seen[(a - TO_BODY) / VERBS], (a - TO_BODY) % VERBS);
             if verb == WATCH {
-                return d.out.push(Entry::Watch { by: b.id, n: b.n(), lineage: b.lineage, of: id });
+                return d.out.push(Entry::Watch { by: b.id, n: b.n(), lineage: b.lineage, of: face.id });
             }
-            let Some(o) = here(d, b, id) else { return };
+            let Some(o) = here(d, b, &face).filter(|_| same) else { return };
             if verb == TAKE_FROM { take_body(w, d, b, o, rng) } else { feed::give(w, d, b, o) }
         }
     }

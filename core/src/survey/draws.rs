@@ -10,12 +10,9 @@ pub(crate) fn claims(w: &World) -> Vec<f64> {
     let mut claim = vec![0.0; w.mesh.cells().n()];
     let Some(p) = crate::cover::Parts::of(&w.chem) else { return claim };
     let mm = p.mm(&w.chem);
-    for d in &w.life.domains {
-        let c = &d.cover;
-        for (k, &i) in d.cells.iter().enumerate().filter(|e| c.keep[e.0] > 0.0) {
-            let abs: f64 = crate::cover::Cover::slots(k).filter(|&x| c.root[x] != crate::cover::NO_ROOT).map(|x| c.leaf(&mm, x) * (1.0 - c.reflectance(&w.chem, &p, x))).sum();
-            claim[i as usize] += c.keep[k] as f64 * abs * (w.light[i as usize] - c.mark[k]);
-        }
+    for (i, c) in w.life.cells.iter().map(|x| &x.cover).enumerate().filter(|e| e.1.keep > 0.0) {
+        let abs: f64 = c.held().map(|x| c.leaf(&mm, x) * (1.0 - c.reflectance(&w.chem, &p, x))).sum();
+        claim[i] += c.keep as f64 * abs * (w.light[i] - c.mark);
     }
     claim
 }

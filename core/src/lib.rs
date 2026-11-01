@@ -18,7 +18,6 @@ pub mod life;
 pub mod lineage;
 mod math;
 pub mod nodes;
-pub mod outbox;
 pub mod par;
 mod params;
 pub mod rng;

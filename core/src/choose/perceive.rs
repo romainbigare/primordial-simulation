@@ -7,7 +7,7 @@ use crate::brain::{ln, REST, SIG};
 use crate::lanes::thickness;
 use crate::rng::Rng;
 use crate::survey::{Face, UNCOVERED};
-use crate::{bond, life::Domain, World};
+use crate::{bond, life::{Chunk, Handle}, World};
 
 /// A brain perceives a share `x` of the body as `SHARE_SENSE` ln(x + floor): a store with the floor `STORE_FLOOR` (no
 /// store: as that floor), less its safe minimum with the floor `MIN_FLOOR`.
@@ -67,7 +67,7 @@ pub(super) fn walk(w: &World, i: usize, sight: usize, t: &mut ActTmp) {
 /// Bodies perceived, its own cell first, then a neighbour's from a random side, up to `nseen`, as they were at the
 /// batch's start (their faces, `survey::Faces`): walls hide by how closed they are, cover with chance 1 - exp(-a), a the
 /// others' capture area per m² (`Face::show`). Then the parts in its cell.
-pub(super) fn perceive(w: &World, d: &Domain, b: &Body, nseen: usize, rng: &mut Rng) -> Choice {
+pub(super) fn perceive(w: &World, d: &Chunk, b: &Body, nseen: usize, rng: &mut Rng) -> Choice {
     let i = b.cell as usize;
     let (mut seen, mut cnt, side, cells) = ([(Face::default(), false); MAX_SEEN], 0, rng.below(MOVES), w.mesh.cells());
     let room = bond::room(w, b);
@@ -76,8 +76,8 @@ pub(super) fn perceive(w: &World, d: &Domain, b: &Body, nseen: usize, rng: &mut 
     let mine = face.map_or_else(|| room.map(|(r, e)| (r as u32, e.closed)), |o| o.room);
     for q in 0..9 {
         let Some(j) = (if q == 0 { Some(i) } else { cells.way(i, (side + q) % MOVES).map(|e| cells.adj_cell()[e] as usize) }) else { continue };
-        // (Of its own cell, not those leaving it: they are there only until the batch ends, `Body::leaving`.)
-        let here = |o: &&Face| q > 0 || d.find(o.id).is_none_or(|h| !d[h].leaving);
+        // (Of its own cell, not those leaving it: they are there only until the serial pass, `Body::leaving`.)
+        let here = |o: &&Face| q > 0 || !d[Handle { cell: j as u32, slot: o.slot }].leaving;
         for o in w.life.faces_of(j).iter().filter(|o| o.id != b.id).filter(here) {
             if cnt == nseen {
                 break;

@@ -127,10 +127,8 @@ pub(super) fn zero_rounding(v: &mut f64, rounded: &mut f64) {
 /// form. Only what each number holds at the end counts, so what passes through a node in one call needs nothing held.
 /// Then each number below zero, the rounding of the sums, is set to zero and counted in `Counters::rounded` (handover
 /// 12.1; checked in debug builds). Boundary nodes give all they are asked. Panics on a flux of the
-/// wrong shape or a node beyond its class. No domain's view of the store is open then (`Moves::open`; checked in debug
-/// builds).
+/// wrong shape or a node beyond its class.
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move]) {
-    debug_assert!(w.life.domains.iter().all(|d| d.moves.open.is_none()), "the store changes while a domain is open");
     let World { chem, counts, mesh, store, .. } = w;
     let n = mesh.cells().n();
     let cx = Ctx { chem, len: [n, mesh.level(AIR).n(), n, n, n, BOUNDARIES] };

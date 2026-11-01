@@ -6,7 +6,7 @@ pub(crate) fn one_minus_exp(x: f64) -> f64 {
     -(-x).exp_m1()
 }
 
-/// The bits set in `bits`, lowest first: a set of a few of 64 things (substances, domains) visited without the rest.
+/// The bits set in `bits`, lowest first: a set of a few of 64 things (substances, key liquids) visited without the rest.
 #[inline]
 pub(crate) fn ones(mut bits: u64) -> impl Iterator<Item = usize> {
     std::iter::from_fn(move || {

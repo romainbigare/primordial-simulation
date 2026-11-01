@@ -50,7 +50,7 @@ pub(crate) const KNOWN: usize = 4;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Body {
-    /// Its id, given at birth (`Domain::add`); 0 for none
+    /// Its id, given at birth (`Chunk::add`); 0 for none
     pub id: u64,
     /// Whether it is a living body (not an empty slot)
     pub alive: bool,
@@ -84,7 +84,7 @@ pub struct Body {
     /// m (`height`)
     pub vis: [f32; 7],
     /// Whether what it holds changed since its visible traits were worked out: the next survey works them out again
-    /// (`Domain::see_changed`); a saved body's are as saved
+    /// (`Chunk::see_changed`); a saved body's are as saved
     #[serde(skip)]
     pub stale: bool,
     /// Its brain rows: the rows it was born with plus what it (a node: its members) learned; empty without a brain
@@ -104,7 +104,7 @@ pub struct Body {
     /// Well-being at the last decision; the trace of that decision for learning
     pub wb: f32,
     pub trace: Vec<f32>,
-    /// It has a move queued in the batch running, or is a node's part with a part act queued (`outbox`): it stays in
+    /// It has a move queued in the batch running, or is a node's part with a part act queued (`life::Entry`): it stays in
     /// its cell until then, but the others there no longer deal with it (laws.md 0); false outside a batch, not saved
     #[serde(skip)]
     pub leaving: bool,

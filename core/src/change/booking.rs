@@ -24,10 +24,8 @@ struct Columns<'a> {
 impl Rows {
     /// Book the rows on the world: the reactions of each node, and the gas a ground node gives its air node with its
     /// heat and latent heat, the air paying its lift from its heat into the potential energy (`Store::lifted`). What rounding leaves below zero is set to
-    /// zero and counted (`Counters::rounded`). No domain's view of the store is open then (`Moves::open`; checked in
-    /// debug builds).
+    /// zero and counted (`Counters::rounded`).
     pub(super) fn book(&self, w: &mut World) {
-        debug_assert!(w.life.domains.iter().all(|d| d.moves.open.is_none()), "the store changes while a domain is open");
         let World { chem, store, counts, .. } = w;
         let ns = chem.ns();
         let cols = Columns {

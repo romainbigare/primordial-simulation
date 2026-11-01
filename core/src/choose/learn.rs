@@ -37,7 +37,7 @@ pub(super) fn learn(w: &World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
 }
 
 /// Body `by` watched body `of` in a batch (it cost the turn; `n` of its members watched, of `lineage` then), applied
-/// when the batch ends (`outbox`) on both as they are then, if both live and it is still of that lineage: its rows move
+/// in the serial pass (`life::land`) on both as they are then, if both live and it is still of that lineage: its rows move
 /// part of the way toward the other's if the brains have the same sizes, less the less alike the bodies are, as a body
 /// can only copy what its own body can do, and by the share of its members now who watched (a node's rows are the
 /// mean of its members').

@@ -8,13 +8,13 @@ use crate::brain::{blend, row_step, shake};
 use crate::lineage::sizes_of;
 use crate::rng::{Purpose, Rng};
 use crate::life::Handle;
-use crate::{life::Domain, World};
+use crate::{life::Chunk, World};
 
-/// The monthly merge of the bodies of cell `i` of domain `d` (laws.md 4.4): one node per kind and stage. Each body
+/// The monthly merge of the bodies of cell `i` of chunk `d` (laws.md 4.4): one node per kind and stage. Each body
 /// joins the largest of its `Kin` (`join_kin`); then a node joins a larger one of another lineage of its stage, room
 /// and part whose genes are alike (`body::alike`, on the means) and whose brain has the same sizes, taking its brain and
 /// lineage (`join_other`); then the cell keeps at most `MAX_NODES` bodies (`cap`).
-pub(crate) fn crowd(w: &World, d: &mut Domain, lay: &Layout, i: usize) {
+pub(crate) fn crowd(w: &World, d: &mut Chunk, lay: &Layout, i: usize) {
     let heads = join_kin(w, d, i);
     join_other(w, d, lay, heads);
     cap(w, d, lay, i);
@@ -28,17 +28,17 @@ pub const MAX_NODES: usize = 8;
 /// (`Lineage::root`) and one brain's sizes nearest in genes (in mutation steps, `body::distance`) merges, whatever its
 /// lineage, room and part: the smaller joins the larger, taking its brain, born rows and lineage when that is another
 /// (`merge_taking`). Where no such pair is left the cell stays over the cap.
-pub fn cap(w: &World, d: &mut Domain, lay: &Layout, i: usize) {
+pub fn cap(w: &World, d: &mut Chunk, lay: &Layout, i: usize) {
     let left: Vec<Handle> = d.cell(i).filter(|&s| may_be_node(w, &d[s])).collect();
     if left.len() <= MAX_NODES {
         return;
     }
     let m = left.len();
-    let kind = |d: &Domain, s: Handle| {
+    let kind = |d: &Chunk, s: Handle| {
         let b = &d[s];
         (b.adult(&w.chem), d.brain(w, b.lineage).map(|l| (l.root, sizes_of(l))))
     };
-    let gap = |d: &Domain, s: Handle, t: Handle| {
+    let gap = |d: &Chunk, s: Handle, t: Handle| {
         let (ks, kt) = (kind(d, s), kind(d, t));
         if ks.1.is_none() || ks != kt { f32::INFINITY } else { distance(lay, &d[s].genes, &d[t].genes, |_| f32::INFINITY).unwrap_or(f32::INFINITY) }
     };
@@ -91,7 +91,7 @@ const PAIR: usize = 2;
 
 /// Each body of cell `i` that may be a node, largest first (equals in the cell's order), joins the largest of its
 /// `Kin`, where that is a node or its kind has more than `PAIR` bodies there. Returns the bodies left, largest first.
-fn join_kin(w: &World, d: &mut Domain, i: usize) -> Vec<Handle> {
+fn join_kin(w: &World, d: &mut Chunk, i: usize) -> Vec<Handle> {
     let b = &*d;
     let mut list: Vec<(u64, Handle)> = b.cell(i).filter(|&s| may_be_node(w, &b[s])).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
     list.sort_by_key(|x| x.0);
@@ -106,7 +106,7 @@ fn join_kin(w: &World, d: &mut Domain, i: usize) -> Vec<Handle> {
 
 /// Each node of `heads` (one per `Kin`, largest first) joins the first larger node of another lineage of the same stage,
 /// room and part, alike in genes, whose brain has the same sizes (`merge_taking`). Individuals stay apart.
-fn join_other(w: &World, d: &mut Domain, lay: &Layout, heads: Vec<Handle>) {
+fn join_other(w: &World, d: &mut Chunk, lay: &Layout, heads: Vec<Handle>) {
     let heads: Vec<Handle> = heads.into_iter().filter(|&s| d[s].n() > 1.0).collect();
     let mut gone = vec![false; heads.len()];
     for x in 1..heads.len() {
@@ -125,7 +125,7 @@ fn join_other(w: &World, d: &mut Domain, lay: &Layout, heads: Vec<Handle>) {
 
 /// The body at `s` joins the body at `t` of another lineage of its starting kind whose brain has its sizes: its members
 /// take `t`'s brain, born rows and lineage (the means of `t`'s rows stay `t`'s), letting go of what they hold.
-pub fn merge_taking(w: &World, d: &mut Domain, s: Handle, t: Handle) {
+pub fn merge_taking(w: &World, d: &mut Chunk, s: Handle, t: Handle) {
     debug_assert_eq!(d.root(w, &d[s]), d.root(w, &d[t]), "a merge across starting kinds");
     let (born, rows, spread) = (d.born(w, &d[t]).to_vec(), d[t].rows.clone(), d[t].row_spread);
     let mut c = std::mem::take(&mut d[s]);
@@ -141,7 +141,7 @@ pub(crate) fn may_be_node(w: &World, b: &Body) -> bool {
 }
 
 /// The body at `s` joins the body at `t`, of its lineage (`add`), letting go of what it holds.
-pub fn merge(w: &World, d: &mut Domain, s: Handle, t: Handle) {
+pub fn merge(w: &World, d: &mut Chunk, s: Handle, t: Handle) {
     let (born, mut c) = (d.born(w, &d[s]).to_vec(), std::mem::take(&mut d[s]));
     let_go(w, d, &mut c, false);
     d.remove(s, &c);
@@ -162,12 +162,12 @@ impl Lot {
     /// The share `f` of node `b`'s members and the share `fa` of its stores, heat and brood leave it; it keeps the rest
     /// (the remainder, so the two add up to what it held to rounding). The same share of both is members alike to the
     /// others; a larger share of the amounts is members that hold more than the mean.
-    pub(crate) fn split(d: &mut Domain, b: &mut Body, f: f64, fa: f64) -> Lot {
+    pub(crate) fn split(b: &mut Body, f: f64, fa: f64) -> Lot {
         let store: Vec<f64> = b.store.iter().map(|a| fa * a).collect();
         b.store.iter_mut().zip(&store).for_each(|(a, x)| *a -= x);
         let c = Lot { count: f * b.count, store, e: fa * b.e, brood: fa * b.brood, last: b.last };
         (b.e, b.brood) = (b.e - c.e, b.brood - c.brood);
-        d.set_count(b, b.count - c.count);
+        b.count -= c.count;
         c
     }
     /// All that body `c` holds (its stores taken out of it).
@@ -178,7 +178,7 @@ impl Lot {
 
 /// Members `c` join the body at `t` with genes and spread `genes` and rows `rows` (born rows, rows, row spread):
 /// amounts add up (`rejoin`), genes and rows become the means by members and the spreads pool around them (laws.md 4.4).
-pub(crate) fn add(w: &World, d: &mut Domain, t: Handle, c: Lot, (genes, spread): (&[f32], &[f32]), (born, own, row_spread): (&[f32], &[f32], f32)) {
+pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread): (&[f32], &[f32]), (born, own, row_spread): (&[f32], &[f32], f32)) {
     let mut o = std::mem::take(&mut d[t]);
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.count / (o.count + c.count)) as f32);
     let mix = |p: f32, q: f32| p + a * (q - p);
@@ -198,7 +198,7 @@ pub(crate) fn add(w: &World, d: &mut Domain, t: Handle, c: Lot, (genes, spread):
     }
     o.spread = pooled;
     o.prepare(&w.chem, &w.cfg);
-    rejoin(d, &mut o, c, Some(own));
+    rejoin(&mut o, c, Some(own));
     o.stale = true;
     d[t] = o;
 }
@@ -207,8 +207,8 @@ pub(crate) fn add(w: &World, d: &mut Domain, t: Handle, c: Lot, (genes, spread):
 /// aside while the others acted, a part of a node that moved or bonded and came back to its cell (both
 /// `choose::spread`), or joiners after `add` pooled their genes. Amounts add up; the last
 /// day becomes the mean by members; `rows`: the rows of `c` where they differ from `o`'s, which `o`'s
-/// become the mean by members of. `o`'s visible traits are the caller's to work out again (`Domain::see`).
-pub(crate) fn rejoin(d: &mut Domain, o: &mut Body, c: Lot, rows: Option<&[f32]>) {
+/// become the mean by members of. `o`'s visible traits are the caller's to work out again (`Chunk::see`).
+pub(crate) fn rejoin(o: &mut Body, c: Lot, rows: Option<&[f32]>) {
     let share = c.count / (o.count + c.count);
     o.last += share * (c.last - o.last);
     let a = share as f32;
@@ -218,14 +218,14 @@ pub(crate) fn rejoin(d: &mut Domain, o: &mut Body, c: Lot, rows: Option<&[f32]>)
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     o.brood += c.brood;
     o.e += c.e;
-    d.set_count(o, o.count + c.count);
+    o.count += c.count;
 }
 
 /// Share `f` of node `b`'s members and share `fa` of each of its stores, of its brood and of its heat as a new body
 /// (not placed, `Lot::split`); lineage, genome, genes and their constants, brain rows, link and memory as the node's;
 /// holding nothing, inside nothing.
-pub(crate) fn part(d: &mut Domain, b: &mut Body, f: f64, fa: f64) -> Body {
-    let lot = Lot::split(d, b, f, fa);
+pub(crate) fn part(b: &mut Body, f: f64, fa: f64) -> Body {
+    let lot = Lot::split(b, f, fa);
     // (The trace and the stores are not the part's: set aside, not cloned.)
     let (trace, store) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.store));
     let c = Body { count: lot.count, store: lot.store, e: lot.e, brood: lot.brood, hold: None, inside: None, leaving: false, ..b.clone() };
@@ -241,14 +241,14 @@ pub(crate) const COUNT_SLACK: f64 = 1e-9;
 /// and what the check of nodes against individuals compares. Each draw leaves the others' genes and rows, so the mean
 /// of all is kept. The node keeps at least one member (draws stop when it has fewer than two), seen as what is left of
 /// it. Returns where the members are stored.
-pub fn open(w: &World, d: &mut Domain, h: Handle, n: usize) -> Vec<Handle> {
+pub fn open(w: &World, d: &mut Chunk, h: Handle, n: usize) -> Vec<Handle> {
     let mut b = std::mem::take(&mut d[h]);
     let mut r = Rng::new(w.seed, w.day(), b.id, Purpose::Open);
     let mut out = Vec::with_capacity(n);
     for _ in 0..n {
         let whole = b.count.round();
         if (b.count - whole).abs() < COUNT_SLACK {
-            d.set_count(&mut b, whole);
+            b.count = whole;
         }
         if b.count < 2.0 {
             break;
@@ -264,11 +264,11 @@ pub fn open(w: &World, d: &mut Domain, h: Handle, n: usize) -> Vec<Handle> {
 /// spread (shrunk near a wall, so it is never clamped, as in `body::vary`), a share 1/count of its stores and heat
 /// (`part`), and born rows of its own (`member_rows`), keeping what the node learned on top; the node's genes, rows and
 /// spreads become those of the others.
-fn draw(w: &World, d: &mut Domain, b: &mut Body, r: &mut Rng) -> Handle {
+fn draw(w: &World, d: &mut Chunk, b: &mut Body, r: &mut Rng) -> Handle {
     let (lay, n) = (Layout::of(&w.chem), b.count as f32);
     // (The member keeps no spread: it is left out of the clone.)
     let spread = std::mem::take(&mut b.spread);
-    let mut c = part(d, b, 1.0 / b.count, 1.0 / b.count);
+    let mut c = part(b, 1.0 / b.count, 1.0 / b.count);
     b.spread = spread;
     for (g, x) in c.genes.iter_mut().enumerate() {
         let ((_, lo, hi), v) = (range(&lay, g), spread_at(&b.spread, g));

@@ -7,9 +7,8 @@ use pcore::brain::{self, FIXED, OVERBS, VERBS};
 use pcore::check::{self, Totals};
 use pcore::chem::{Chemistry, Phase};
 use pcore::event::EventKind;
-use pcore::life::{Domain, Handle};
+use pcore::life::{deliver, Chunk, Entry, Handle};
 use pcore::lineage::{self, Lineage};
-use pcore::outbox::{deliver, Entry};
 use pcore::rng::{Purpose, Rng};
 use pcore::store::{Boundary, Class, Move, Node};
 use pcore::units::DAY_S;
@@ -298,7 +297,7 @@ pub fn warm(w: &mut World, b: &mut Body, t: f64) {
 /// Body `b` placed and taken out again, prepared, to call the laws on directly: where it is stored, and the body.
 pub fn out(w: &mut World, b: Body) -> (Handle, Body) {
     let s = w.add(b);
-    pcore::survey::survey(w, false);
+    pcore::survey::survey(w);
     w.time += DAY_S;
     let mut b = std::mem::take(&mut w.life[s]);
     b.prepare(&w.chem, &w.cfg);
@@ -310,29 +309,9 @@ pub fn out(w: &mut World, b: Body) -> (Handle, Body) {
 pub fn relocate(w: &mut World, h: Handle, j: usize) -> Handle {
     let (id, from) = (w.life[h].id, w.life[h].cell);
     assert!(w.mesh.cells().link(from as usize, j).is_some(), "relocate: cell {j} is not a neighbour of cell {from}, where the body is");
-    w.in_domain(from as usize, |_, d| d.out.push(Entry::Go { id, from, to: j as u32, pushed: 0.0, lane: 0.0, carries: false, kin: false, body: None }));
+    w.in_cell(from as usize, |_, d| d.out.push(Entry::Go { id, from, to: j as u32, pushed: 0.0, lane: 0.0, carries: false, kin: false }));
     deliver(w);
     w.life.find(id).expect("the body landed")
-}
-
-/// What `f` does when it calls a law of bodies or parts on its own, outside an update: a serial step on the domain of
-/// ground cell `i` (`World::in_domain`), its moves in the name of the body at `h`, booked when it ends.
-pub fn moved<R>(w: &mut World, (i, h): (usize, Handle), f: impl FnOnce(&World, &mut Domain) -> R) -> R {
-    let r = w.in_domain(i, |w, d| {
-        d.moves.open(w, i, Node::new(Class::Body, h.slot as usize));
-        f(w, d)
-    });
-    w.book_moves();
-    r
-}
-
-/// What `f` does to `w` when it calls the serial code of parts on its own (a part act, `bond::form`): its moves in
-/// ground cell `i`, in the name of the body at `h`, booked when it ends.
-pub fn moved_serial<R>(w: &mut World, (i, h): (usize, Handle), f: impl FnOnce(&mut World) -> R) -> R {
-    w.in_domain(i, |w, d| d.moves.open(w, i, Node::new(Class::Body, h.slot as usize)));
-    let r = f(w);
-    w.book_moves();
-    r
 }
 
 /// Every part of Flow but creep once, for `dt` seconds, in the clock's order: the state rebuilt in full, the air's step,
@@ -347,7 +326,7 @@ pub fn flow_step(w: &mut World, dt: f64) {
 }
 
 /// Body `b` grows for `days` days at its temperature (`copy::grow`). Returns whether it built anything.
-pub fn grow(w: &World, d: &mut Domain, b: &mut Body, days: f64) -> bool {
+pub fn grow(w: &World, d: &mut Chunk, b: &mut Body, days: f64) -> bool {
     let t = b.temp(&w.chem);
     pcore::copy::grow(w, d, b, days, t)
 }

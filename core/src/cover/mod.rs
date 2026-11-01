@@ -1,6 +1,6 @@
 //! The cover: the light-eaters as a field (laws.md 4). Each ground cell holds up to `SLOTS` kinds of cover, each the
 //! amounts of a few substances (`Parts`: the fuel its light reaction makes, body matter, and the two solids it builds)
-//! and a small vector of genes, as plain arrays per domain (`Cover`). Once a month each cell's cover catches light,
+//! and a small vector of genes, as plain arrays per cell (`Cover`). Once a month each cell's cover catches light,
 //! runs its light reaction, pays its upkeep, fixes, builds and dies (`grow`), and sends seeds to a neighbour cell
 //! (`seed`); alike kinds share a slot. The cover of a cell is a node of the store (`Class::Cover`) whose law books its
 //! own side; animals graze it (`choose::feed`) and movers break it (`choose::wear`).
@@ -89,40 +89,42 @@ impl Parts {
     }
 }
 
-/// The cover of a domain's cells, slot `k * SLOTS + s` of its `k`th cell (by its order in `Domain::cells`).
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+/// The cover of one ground cell, in `SLOTS` slots.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Cover {
     /// Per slot: mol of each part
-    pub mol: Vec<[f64; NP]>,
+    pub mol: [[f64; NP]; SLOTS],
     /// Per slot: its genes, and the starting kind it descends from (a label for the tape; `NO_ROOT` when empty)
-    pub genes: Vec<[f32; NG]>,
-    pub root: Vec<u32>,
+    pub genes: [[f32; NG]; SLOTS],
+    pub root: [u32; SLOTS],
     /// Per slot: whether one more kg of it did not pay its upkeep in its last month (`grow::build`): seeds of its kind
     /// do not take hold there
-    pub full: Vec<bool>,
-    /// Per cell: the heat of its cover, J; the cell's light (`World::light`) at its last step, J/m²; the share of the
-    /// light its cover absorbs that its bodies' node sets aside for its light reaction
-    pub e: Vec<f64>,
-    pub mark: Vec<f64>,
-    pub keep: Vec<f32>,
-    /// Seeds made in its cells' last step, landed after it (`land`); not saved
+    pub full: [bool; SLOTS],
+    /// The heat of its cover, J; the cell's light (`World::light`) at its last step, J/m²; the share of the light its
+    /// cover absorbs that its bodies' node sets aside for its light reaction
+    pub e: f64,
+    pub mark: f64,
+    pub keep: f32,
+    /// Seeds made in its last step, landed after every cell had its step (`land`); not saved
     #[serde(skip)]
     pub(crate) seeds: Vec<Seed>,
 }
 
-impl Cover {
-    /// No cover on `cells` cells.
-    pub fn new(cells: usize) -> Cover {
-        let n = cells * SLOTS;
-        Cover { mol: vec![[0.0; NP]; n], genes: vec![[0.0; NG]; n], root: vec![NO_ROOT; n], full: vec![false; n], e: vec![0.0; cells], mark: vec![0.0; cells], keep: vec![0.0; cells], seeds: Vec::new() }
+impl Default for Cover {
+    /// No cover.
+    fn default() -> Cover {
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], e: 0.0, mark: 0.0, keep: 0.0, seeds: Vec::new() }
     }
+}
+
+impl Cover {
     /// Whether it holds any cover.
     pub fn any(&self) -> bool {
         self.root.iter().any(|&r| r != NO_ROOT)
     }
-    /// The slots of the `k`th cell.
-    pub fn slots(k: usize) -> std::ops::Range<usize> {
-        k * SLOTS..(k + 1) * SLOTS
+    /// Its slots that hold cover.
+    pub fn held(&self) -> impl Iterator<Item = usize> + '_ {
+        (0..SLOTS).filter(|&x| self.root[x] != NO_ROOT)
     }
     /// The built cover of slot `x` (body matter and solids), kg.
     pub fn built(&self, mm: &[f64; NP], x: usize) -> f64 {
@@ -136,23 +138,23 @@ impl Cover {
     pub fn leaf(&self, mm: &[f64; NP], x: usize) -> f64 {
         dec(self.genes[x][LEAF]) * self.built(mm, x)
     }
-    /// The mol of substance `k` the cover of the `k`th cell holds (0 for a substance it is not made of).
-    pub fn amount(&self, p: &Parts, cell: usize, k: usize) -> f64 {
-        p.sub.iter().position(|&s| s == k).map_or(0.0, |q| Cover::slots(cell).map(|x| self.mol[x][q]).sum())
+    /// The mol of substance `k` it holds (0 for a substance it is not made of).
+    pub fn amount(&self, p: &Parts, k: usize) -> f64 {
+        p.sub.iter().position(|&s| s == k).map_or(0.0, |q| self.mol.iter().map(|m| m[q]).sum())
     }
-    /// The heat capacity of the cover of the `k`th cell, J/K.
-    pub fn cap(&self, chem: &Chemistry, p: &Parts, k: usize) -> f64 {
-        Cover::slots(k).map(|x| (0..NP).map(|q| self.mol[x][q] * chem.subs[p.sub[q]].cp).sum::<f64>()).sum()
+    /// Its heat capacity, J/K.
+    pub fn cap(&self, chem: &Chemistry, p: &Parts) -> f64 {
+        self.mol.iter().map(|m| (0..NP).map(|q| m[q] * chem.subs[p.sub[q]].cp).sum::<f64>()).sum()
     }
-    /// The temperature of the cover of the `k`th cell, K (0 for none).
-    pub fn temp(&self, chem: &Chemistry, p: &Parts, k: usize) -> f64 {
-        let c = self.cap(chem, p, k);
-        if c > 0.0 { self.e[k] / c } else { 0.0 }
+    /// Its temperature, K (0 for none).
+    pub fn temp(&self, chem: &Chemistry, p: &Parts) -> f64 {
+        let c = self.cap(chem, p);
+        if c > 0.0 { self.e / c } else { 0.0 }
     }
-    /// The energy to break the share `f` of the cover of the `k`th cell, J: its soft tissue (as a body's, with its
-    /// liquid) and its solids by their breaking stresses (`body::solids_of`).
-    pub fn breaking(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts, k: usize, f: f64) -> f64 {
-        let sum = |q: usize| Cover::slots(k).map(|x| self.mol[x][q]).sum::<f64>();
+    /// The energy to break the share `f` of it, J: its soft tissue (as a body's, with its liquid) and its solids by
+    /// their breaking stresses (`body::solids_of`).
+    pub fn breaking(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts, f: f64) -> f64 {
+        let sum = |q: usize| self.mol.iter().map(|m| m[q]).sum::<f64>();
         let built = sum(MATTER) * chem.subs[p.sub[MATTER]].molar_mass / (1.0 - WET_TISSUE);
         f * crate::body::solids_of(chem, cfg, built, |s| p.sub.iter().position(|&q| q == s).map_or(0.0, sum))[2]
     }
@@ -166,42 +168,42 @@ impl Cover {
         }
         r / v
     }
-    /// `mol` of substance `k` taken from the cover of the `k`th cell, from its slots in proportion to what each holds
-    /// of it: returns the heat that goes with it, J (at the cover's temperature).
-    pub(crate) fn take(&mut self, chem: &Chemistry, p: &Parts, cell: usize, k: usize, mol: f64) -> f64 {
+    /// `mol` of substance `k` taken from it, from its slots in proportion to what each holds of it: returns the heat
+    /// that goes with it, J (at its temperature).
+    pub(crate) fn take(&mut self, chem: &Chemistry, p: &Parts, k: usize, mol: f64) -> f64 {
         let Some(q) = p.sub.iter().position(|&s| s == k) else { return 0.0 };
-        let all = self.amount(p, cell, k);
+        let all = self.amount(p, k);
         if all <= 0.0 || mol <= 0.0 {
             return 0.0;
         }
-        let (f, t) = ((mol / all).min(1.0), self.temp(chem, p, cell));
-        Cover::slots(cell).for_each(|x| self.mol[x][q] -= self.mol[x][q] * f);
-        let heat = (mol.min(all) * chem.subs[k].cp * t).min(self.e[cell]);
-        self.e[cell] -= heat;
+        let (f, t) = ((mol / all).min(1.0), self.temp(chem, p));
+        self.mol.iter_mut().for_each(|m| m[q] -= m[q] * f);
+        let heat = (mol.min(all) * chem.subs[k].cp * t).min(self.e);
+        self.e -= heat;
         heat
     }
-    /// The amounts of the cover of the `k`th cell by substance, mol (`MAX_SUBSTANCES`).
-    pub fn amounts(&self, p: &Parts, k: usize) -> [f64; MAX_SUBSTANCES] {
+    /// Its amounts by substance, mol (`MAX_SUBSTANCES`).
+    pub fn amounts(&self, p: &Parts) -> [f64; MAX_SUBSTANCES] {
         let mut a = [0.0; MAX_SUBSTANCES];
-        for x in Cover::slots(k) {
-            (0..NP).for_each(|q| a[p.sub[q]] += self.mol[x][q]);
+        for m in &self.mol {
+            (0..NP).for_each(|q| a[p.sub[q]] += m[q]);
         }
         a
     }
 }
 
-/// The share `f` of the cover of the `k`th cell of `d` breaks: it goes to the cell's ground as remains, with its heat,
-/// through the domain's moves (opened by the caller for the cover's node).
-pub(crate) fn lose(w: &crate::World, d: &mut crate::life::Domain, p: &Parts, k: usize, f: f64) {
-    let (i, c) = (d.cells[k] as usize, &mut d.cover);
-    let t = c.temp(&w.chem, p, k);
+/// The share `f` of the cover of cell `i` of `d` breaks: it goes to the cell's ground as remains, with its heat,
+/// through the chunk's moves (opened by the caller for the cover's node).
+pub(crate) fn lose(w: &crate::World, d: &mut crate::life::Chunk, p: &Parts, i: usize, f: f64) {
+    let c = d.cover(i);
+    let t = c.temp(&w.chem, p);
     let mut dead = [0.0; NP];
-    for x in Cover::slots(k) {
-        (0..NP).for_each(|q| dead[q] += c.mol[x][q] * f);
-        c.mol[x].iter_mut().for_each(|a| *a -= *a * f);
+    for m in &mut c.mol {
+        (0..NP).for_each(|q| dead[q] += m[q] * f);
+        m.iter_mut().for_each(|a| *a -= *a * f);
     }
-    let heat = ((0..NP).map(|q| dead[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * t).min(c.e[k]);
-    c.e[k] -= heat;
+    let heat = ((0..NP).map(|q| dead[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * t).min(c.e);
+    c.e -= heat;
     let ground = crate::store::Node::ground(i);
     (0..NP).for_each(|q| d.moves.give(w, ground, p.sub[q], dead[q], 0.0));
     d.moves.give(w, ground, 0, 0.0, heat);
@@ -217,17 +219,16 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     let built = kg * w.mesh.cells().area()[i] / (1.0 + dec(genes[STORE]));
     let mol = [built * dec(genes[STORE]) / mm[FUEL], built * fm / mm[MATTER], built * fm * dec(genes[WALLS]) / mm[WALL], built * fm * w.cfg.phys.cover_hard / mm[HARD]];
     let heat = (0..NP).map(|q| mol[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * t;
-    let (d, k) = w.life.cell_slot(i);
     let s = Seed { to: i as u32, mol, genes, root, heat };
-    let c = &mut w.life.domains[d].cover;
-    let was = c.temp(&w.chem, &p, k);
-    match seed::settle(c, &mm, k, &s, alike) {
+    let c = &mut w.life.cells[i].cover;
+    let was = c.temp(&w.chem, &p);
+    match seed::settle(c, &mm, &s, alike) {
         seed::Landed::Dead => return false,
         seed::Landed::In => {}
         // What it outweighed goes to the ground as remains, with its heat.
         seed::Landed::Out(m) => {
-            let q = ((0..NP).map(|q| m[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * was).min(c.e[k]);
-            c.e[k] -= q;
+            let q = ((0..NP).map(|q| m[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * was).min(c.e);
+            c.e -= q;
             let (from, to) = (crate::store::Node::new(crate::store::Class::Cover, i), crate::store::Node::ground(i));
             let mut moves: Vec<_> = (0..NP).map(|x| crate::store::Move { from, to, k: p.sub[x] as u16, mol: m[x], heat: 0.0 }).collect();
             moves.push(crate::store::Move { from, to, k: 0, mol: 0.0, heat: q });
@@ -236,7 +237,7 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     }
     // (The cover's side is its own: the store books the outside node's.)
     w.cross((crate::store::Boundary::Outside, crate::store::Node::new(crate::store::Class::Cover, i)), (0..NP).map(|q| (p.sub[q], mol[q])), heat);
-    w.life.domains[d].cover.mark[k] = w.light[i];
+    w.life.cells[i].cover.mark = w.light[i];
     true
 }
 
@@ -262,13 +263,13 @@ pub struct Sum {
     pub genes: [f64; NG],
 }
 
-/// The cover of the world by starting kind (index: the root), in the order of the domains and their slots.
+/// The cover of the world by starting kind (index: the root), in the order of the cells and their slots.
 pub fn sums(w: &crate::World) -> Vec<Sum> {
     let Some(p) = Parts::of(&w.chem) else { return Vec::new() };
     let mm = p.mm(&w.chem);
     let mut out: Vec<Sum> = Vec::new();
-    for c in w.life.domains.iter().map(|d| &d.cover) {
-        for x in (0..c.root.len()).filter(|&x| c.root[x] != NO_ROOT) {
+    for c in w.life.cells.iter().map(|x| &x.cover) {
+        for x in c.held() {
             let r = c.root[x] as usize;
             if r >= out.len() {
                 out.resize(r + 1, Sum::default());
@@ -281,16 +282,16 @@ pub fn sums(w: &crate::World) -> Vec<Sum> {
     out
 }
 
-/// Each slot of cover in the world, in the order of the domains: its starting kind and its genes.
+/// Each slot of cover in the world, in the order of the cells: its starting kind and its genes.
 pub fn slots(w: &crate::World) -> impl Iterator<Item = (u32, &[f32; NG])> {
-    w.life.domains.iter().flat_map(|d| d.cover.root.iter().zip(&d.cover.genes)).filter(|x| *x.0 != NO_ROOT).map(|(&r, g)| (r, g))
+    w.life.cells.iter().flat_map(|c| c.cover.root.iter().zip(&c.cover.genes)).filter(|x| *x.0 != NO_ROOT).map(|(&r, g)| (r, g))
 }
 
 /// The cover of the whole world by substance, mol (`MAX_SUBSTANCES`).
 pub fn totals(w: &crate::World) -> [f64; MAX_SUBSTANCES] {
     let mut a = [0.0; MAX_SUBSTANCES];
     let Some(p) = Parts::of(&w.chem) else { return a };
-    for c in w.life.domains.iter().map(|d| &d.cover) {
+    for c in w.life.cells.iter().map(|x| &x.cover) {
         c.mol.iter().for_each(|m| (0..NP).for_each(|q| a[p.sub[q]] += m[q]));
     }
     a
@@ -301,10 +302,8 @@ pub fn per_m2(w: &crate::World) -> Vec<f64> {
     let mut out = vec![0.0; w.mesh.cells().n()];
     let Some(p) = Parts::of(&w.chem) else { return out };
     let (mm, area) = (p.mm(&w.chem), w.mesh.cells().area());
-    for d in &w.life.domains {
-        for (k, &i) in d.cells.iter().enumerate() {
-            out[i as usize] = Cover::slots(k).map(|x| d.cover.kg(&mm, x)).sum::<f64>() / area[i as usize];
-        }
+    for (i, c) in w.life.cells.iter().enumerate() {
+        out[i] = (0..SLOTS).map(|x| c.cover.kg(&mm, x)).sum::<f64>() / area[i];
     }
     out
 }

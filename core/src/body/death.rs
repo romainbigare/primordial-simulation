@@ -4,10 +4,10 @@ use super::Body;
 use crate::event::{Event, EventKind};
 use crate::ground::Melting;
 use crate::store::Node;
-use crate::{bond, life::{Domain, Handle}, World};
+use crate::{bond, life::{Chunk, Handle}, World};
 
 /// Remains go to the ground node as loose amounts, with the body's heat.
-pub fn die(w: &World, d: &mut Domain, h: Handle, mut b: Body, cause: u8) {
+pub fn die(w: &World, d: &mut Chunk, h: Handle, mut b: Body, cause: u8) {
     bond::let_go(w, d, &mut b, false);
     remains(w, d, &b);
     let root = d.root(w, &b);
@@ -16,13 +16,13 @@ pub fn die(w: &World, d: &mut Domain, h: Handle, mut b: Body, cause: u8) {
 }
 
 /// All that body `b` holds goes to its cell's ground node as loose amounts, with its heat (the update open moves it).
-pub(crate) fn remains(w: &World, d: &mut Domain, b: &Body) {
+pub(crate) fn remains(w: &World, d: &mut Chunk, b: &Body) {
     d.moves.give_all(w, Node::ground(b.cell as usize), &b.store, b.e);
 }
 
 /// Amounts `m` (mol of each substance, at most what it holds) go from body `b`, at the plateau state `th`, to its cell's
 /// ground as loose amounts, with their heat and fusion enthalpy (`Body::heat_with`).
-pub(crate) fn to_ground(w: &World, d: &mut Domain, b: &mut Body, th: &Melting, m: &[f64]) {
+pub(crate) fn to_ground(w: &World, d: &mut Chunk, b: &mut Body, th: &Melting, m: &[f64]) {
     let q = b.heat_with(&w.chem, th, m);
     b.lose(&w.chem, m);
     b.e -= q;
@@ -31,13 +31,13 @@ pub(crate) fn to_ground(w: &World, d: &mut Domain, b: &mut Body, th: &Melting, m
 
 /// `dead` (mol of each, cut here to what it holds) goes from body `b` at the plateau state `th` to the ground; in a node
 /// the remains of the share `f` of its members, dead of `cause`. False if less than one member is left.
-pub(super) fn thin(w: &World, d: &mut Domain, b: &mut Body, f: f64, dead: &mut [f64], cause: u8, th: &Melting) -> bool {
+pub(super) fn thin(w: &World, d: &mut Chunk, b: &mut Body, f: f64, dead: &mut [f64], cause: u8, th: &Melting) -> bool {
     dead.iter_mut().zip(&b.store).for_each(|(a, &held)| *a = a.min(held));
     to_ground(w, d, b, th, dead);
     if b.n() > 1.0 && f > 0.0 {
         let root = d.root(w, b);
         d.events.push(Event { day: w.day(), kind: EventKind::Died { cause, root }, node: b.cell, value: b.count * f });
-        d.set_count(b, b.count * (1.0 - f));
+        b.count *= 1.0 - f;
     }
     b.count >= 1.0
 }
@@ -50,7 +50,7 @@ pub(crate) fn torn_to_death(p: &crate::Physics, f: f64) -> bool { f >= p.lethal 
 /// `thin`, which cuts it to what the body holds). Those it tears `Physics::lethal` of their body or more die (an individual also when a store falls below its
 /// safe minimum), and `dead` holds all they held; else they live on, smaller, and the node's mean body falls. True if
 /// the body lives (back in its slot).
-pub fn wound(w: &World, d: &mut Domain, h: Handle, mut b: Body, (hit, f): (f64, f64), dead: &mut [f64], cause: u8) -> bool {
+pub fn wound(w: &World, d: &mut Chunk, h: Handle, mut b: Body, (hit, f): (f64, f64), dead: &mut [f64], cause: u8) -> bool {
     let (dies, th) = (torn_to_death(&w.cfg.phys, f), b.thermal(&w.chem));
     if !thin(w, d, &mut b, if dies { hit } else { 0.0 }, dead, cause, &th) || (b.n() <= 1.0 && (dies || b.lacking(&w.chem, b.mass(&w.chem), b.temp(&w.chem)))) {
         die(w, d, h, b, cause);
