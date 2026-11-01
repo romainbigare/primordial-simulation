@@ -13,6 +13,7 @@ mod basin;
 pub(crate) use air::air_temp;
 pub use air::{column, declination, glow, insolation, scale_height};
 pub use potential::total as potential;
+pub(crate) use potential::stack_gain;
 pub use scratch::Scratch;
 pub(crate) use scratch::FlowView;
 

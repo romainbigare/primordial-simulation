@@ -19,13 +19,17 @@ struct Columns<'a> {
     held: Vec<f64>,
     /// What a mol of each holds more in the air than in the ground, J/mol (`held_more`)
     more: Vec<f64>,
+    /// Per row of ground nodes, the heat its node gives the potential energy, J (`fall`)
+    fall: Vec<f64>,
 }
 
 impl Rows {
     /// Book the rows on the world: the reactions of each node, and the gas a ground node gives its air node with its
-    /// heat and latent heat, the air paying its lift from its heat into the potential energy (`Store::lifted`). What rounding leaves below zero is set to
-    /// zero and counted (`Counters::rounded`).
+    /// heat and latent heat, the air paying its lift from its heat into the potential energy (`Store::lifted`), and a
+    /// ground node what its stack gains (`fall`). What rounding leaves below zero is set to zero and counted
+    /// (`Counters::rounded`).
     pub(super) fn book(&self, w: &mut World) {
+        let fall = self.fall(w);
         let World { chem, store, counts, .. } = w;
         let ns = chem.ns();
         let cols = Columns {
@@ -33,12 +37,30 @@ impl Rows {
             ns,
             held: (0..ns).map(|k| held(chem, self.class, k)).collect(),
             more: (0..ns).map(|k| held_more(chem, Class::Ground, Class::Air, k)).collect(),
+            fall,
         };
         let classes: &[Class] = if self.class == Class::Ground { &[Class::Ground, Class::Air] } else { &[Class::Air] };
         counts.add_rounded(book_by_array(store, ns, classes, self.nodes.len() / ROWS_PER_ITEM, |b| cols.changes(b)));
         // The potential energy is a whole history's sum: the lifts are summed apart, in the order of the air nodes, and
-        // added once.
+        // added once; then what the ground nodes' stacks gained, in the order of the rows.
         store.lift(self.blocks.iter().fold(0.0, |far, b| far + b.lift));
+        store.lift(-cols.fall.iter().sum::<f64>());
+    }
+
+    /// Per row of ground nodes, what its node's heat gives the potential energy, J: its gas leaves from its head (the
+    /// air pays the rest of its lift, `rows`), and its reactions and the gas it gave move the matter of its stack
+    /// (`flow::stack_gain`); none for the rows of air nodes, whose matter all lies at their mean ground (laws.md 0, "The
+    /// books").
+    fn fall(&self, w: &World) -> Vec<f64> {
+        if self.class != Class::Ground {
+            return Vec::new();
+        }
+        let (ns, g, head) = (w.chem.ns(), w.cfg.gravity, w.scratch.view().head);
+        let rows: Vec<(usize, &[f64])> = self.each().collect();
+        crate::par::map(&rows, |&(i, row)| {
+            let up: f64 = (0..ns).map(|k| row[ns + k] * w.chem.subs[k].molar_mass).sum();
+            -(crate::flow::stack_gain(w, i, |k| row[k] - row[ns + k]) + up * g * head[i])
+        })
     }
 }
 
@@ -61,13 +83,16 @@ impl Columns<'_> {
         }
     }
     /// The heat of the nodes that reacted: what their gas takes with it, then what their reactions hold apart from heat
-    /// less after them than before (the heat of reaction).
+    /// less after them than before (the heat of reaction), then what their stacks gained (`fall`).
     fn own_heat(&self, b: &mut Booker) {
         let ns = self.ns;
-        for (i, row) in self.rows.each() {
+        for (r, (i, row)) in self.rows.each().enumerate() {
             b.column(|_| i, &row[2 * ns..3 * ns], -1.0);
             if row[..ns].iter().any(|&d| d != 0.0) {
                 b.add(i, (0..ns).filter(|&k| row[k] != 0.0).fold(0.0, |q, k| q - row[k] * self.held[k]));
+            }
+            if let Some(&q) = self.fall.get(r).filter(|q| **q != 0.0) {
+                b.add(i, q);
             }
         }
     }

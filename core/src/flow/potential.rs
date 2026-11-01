@@ -3,12 +3,12 @@
 //! each part of Flow (`Lifts`): each move carries its potential energy from the height it leaves, and each node's heat
 //! takes what came in less what left less the change of its own, so `Store::lifted` is the change of that function.
 
-use super::Scratch;
+use super::{scratch::Sp, Scratch};
 use crate::store::{self, fall_heat, Class, LinkFlux, Move};
 use crate::{World, AIR};
 
 /// Numbers of a ground cell's row in `potential`: the potential energy of its stack and of its bed's store, J; the
-/// heights its liquid and its store's liquid reach, m; and the potential energy of its bodies' node, J.
+/// heights its liquid and its store's liquid reach, m; and the potential energy of the matter at its head, J.
 const ROW: usize = 5;
 /// Cells of a task of `potential`: it walks the amounts of each substance over them in turn.
 const CELLS_PER_TASK: usize = 256;
@@ -39,72 +39,135 @@ struct Heights {
 /// and its plateau (`State`); its store lies `bed_depth` under its bed's top, filled from the bottom (`drain`). An air
 /// node's matter lies at the mean head of its cells: the height of its column above that is in its heat (its heat
 /// capacity at constant pressure holds the work its column does as it warms), so lifting matter into it lifts it to
-/// there. A bodies' node's gas lies at its cell's head.
+/// there. A bodies' node's gas, and the matter of the cell's life (its bodies, its cover and its parts), lie at its
+/// cell's head.
 pub(super) fn potential(w: &World, s: &Scratch) -> Potential {
-    potential_of(w, s)
-}
-
-fn potential_of(w: &World, s: &Scratch) -> Potential {
     let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
-    let (n, na, g, p) = (cells.n(), air.n(), w.cfg.gravity, w.cfg.phys);
-    // The substances Flow's last refresh found in the ground, its bed and the air, and those it added since
-    // (`scratch::refresh`): what its stores and the bodies' nodes hold comes from them.
-    let mut ks: Vec<usize> = s.state.loose.iter().chain(&s.state.bedk).chain(&s.state.gas).copied().collect();
-    ks.sort_unstable();
-    ks.dedup();
+    let (n, na, ns) = (cells.n(), air.n(), w.chem.ns());
     let (ground, bed, deep, bodies) = (w.store.amounts(Class::Ground), w.store.amounts(Class::Bed), w.store.amounts(Class::Deep), w.store.amounts(Class::Bodies));
+    let life = Life::of(w);
     let mut rows = vec![0.0; n.div_ceil(CELLS_PER_TASK) * CELLS_PER_TASK * ROW];
     crate::par::rows(&mut rows, CELLS_PER_TASK * ROW, || (), |_, task, out| {
         let cells_of = task * CELLS_PER_TASK..((task + 1) * CELLS_PER_TASK).min(n);
-        // Per cell: mass, kg, and volume, m³, of each layer (bed, loose solids, liquid), then of its store, then the
-        // mass of its bodies' node.
-        let mut sums = vec![[0.0; 9]; cells_of.len()];
+        let mut sums = vec![[0.0; LAYERS]; cells_of.len()];
         // Where each substance lies in its class's amounts over the task's cells (`held`: none where it holds none).
         let at = |k: usize| k * n + cells_of.start..k * n + cells_of.end;
-        let (tg, pk, phi) = (&s.state.tg[cells_of.clone()], &s.state.pk[cells_of.clone()], &s.state.phi[cells_of.clone()]);
-        for &k in &ks {
+        for k in 0..ns {
             let sp = &s.sp[k];
             if let Some(r) = held(&bed[at(k)]) {
-                sums.iter_mut().zip(r).for_each(|(x, &a)| (x[0], x[3]) = (x[0] + a * sp.mm, x[3] + a * sp.v[0]));
+                sums.iter_mut().zip(r).for_each(|(x, &a)| bed_layer(x, sp, a));
             }
             if let Some(r) = held(&ground[at(k)]) {
-                for (c, (x, &a)) in sums.iter_mut().zip(r).enumerate() {
-                    let t = tg[c];
-                    let wet = if t >= sp.boil { 1.0 } else if pk[c] == k { phi[c] } else { (t >= sp.melt) as u8 as f64 };
-                    let (wet_mol, dry_mol) = (a * wet, a - a * wet);
-                    (x[2], x[5]) = (x[2] + wet_mol * sp.mm, x[5] + if t < sp.boil { wet_mol * sp.v[1] } else { 0.0 });
-                    (x[1], x[4]) = (x[1] + dry_mol * sp.mm, x[4] + dry_mol * sp.v[0]);
-                }
+                sums.iter_mut().zip(r).zip(cells_of.clone()).for_each(|((x, &a), i)| ground_layers(x, s, (k, i), a));
             }
             if let Some(r) = held(&deep[at(k)]) {
-                for (c, (x, &a)) in sums.iter_mut().zip(r).enumerate() {
-                    (x[6], x[7]) = (x[6] + a * sp.mm, x[7] + if tg[c] < sp.boil { a * sp.v[1] } else { 0.0 });
-                }
+                sums.iter_mut().zip(r).zip(cells_of.clone()).for_each(|((x, &a), i)| deep_layer(x, sp, s.state.tg[i], a));
             }
             if let Some(r) = held(&bodies[at(k)]) {
-                sums.iter_mut().zip(r).for_each(|(x, &a)| x[8] += a * sp.mm);
+                sums.iter_mut().zip(r).for_each(|(x, &a)| x[HEAD] += a * sp.mm);
             }
         }
-        for ((x, i), row) in sums.iter().zip(cells_of.clone()).zip(out.chunks_exact_mut(ROW)) {
-            let area = cells.area()[i];
-            // Each layer's bottom, m, and its potential energy at its middle.
-            let (mut z, mut e) = (w.base_z, 0.0);
-            for (m, v) in x[..3].iter().zip(&x[3..6]) {
-                e += m * g * (z + v / area / 2.0);
-                z += v / area;
-            }
-            let (floor, fill) = (w.base_z + x[3] / area - p.bed_depth, x[7] / (p.bed_porosity * area));
-            row.copy_from_slice(&[e, x[6] * g * (floor + fill / 2.0), z, floor + fill, x[8] * g * z]);
+        for ((x, i), row) in sums.iter_mut().zip(cells_of.clone()).zip(out.chunks_exact_mut(ROW)) {
+            x[HEAD] += life.kg(w, &s.sp, i);
+            row.copy_from_slice(&stack(w, x, i));
         }
     });
     rows.truncate(n * ROW);
     let at = |c: usize| rows.iter().skip(c).step_by(ROW).copied().collect::<Vec<f64>>();
-    let (head, amounts) = (at(2), w.store.amounts(Class::Air));
+    let (head, amounts, g) = (at(2), w.store.amounts(Class::Air), w.cfg.gravity);
     let mut za = vec![0.0; na];
     cells.parent().iter().enumerate().for_each(|(i, &j)| za[j as usize] += head[i] * cells.area()[i]);
     za.iter_mut().zip(air.area()).for_each(|(z, a)| *z /= a);
-    let e_air = (0..na).map(|j| ks.iter().map(|&k| amounts[k * na + j] * s.sp[k].mm).sum::<f64>() * g * za[j]).collect();
+    let e_air = (0..na).map(|j| (0..ns).map(|k| amounts[k * na + j] * s.sp[k].mm).sum::<f64>() * g * za[j]).collect();
     Potential { ground: at(0), air: e_air, deep: at(1), bodies: at(4), heights: Heights { ground: head, air: za, deep: at(3) } }
+}
+
+/// What a ground cell's stack is made of: the mass, kg, and the volume, m³, of each layer (bed, loose solids, liquid),
+/// then of its store, then the mass at its head, kg (its bodies' node's gas and its life).
+const LAYERS: usize = 9;
+const HEAD: usize = 8;
+
+/// `a` mol of substance `sp` in a bed.
+#[inline]
+fn bed_layer(x: &mut [f64; LAYERS], sp: &Sp, a: f64) {
+    (x[0], x[3]) = (x[0] + a * sp.mm, x[3] + a * sp.v[0]);
+}
+
+/// `a` mol of substance `k` in ground node `i`, in its phase by the node's temperature and plateau (`State`).
+#[inline]
+fn ground_layers(x: &mut [f64; LAYERS], s: &Scratch, (k, i): (usize, usize), a: f64) {
+    let (sp, t) = (&s.sp[k], s.state.tg[i]);
+    let wet = if t >= sp.boil { 1.0 } else if s.state.pk[i] == k { s.state.phi[i] } else { (t >= sp.melt) as u8 as f64 };
+    let (wet_mol, dry_mol) = (a * wet, a - a * wet);
+    (x[2], x[5]) = (x[2] + wet_mol * sp.mm, x[5] + if t < sp.boil { wet_mol * sp.v[1] } else { 0.0 });
+    (x[1], x[4]) = (x[1] + dry_mol * sp.mm, x[4] + dry_mol * sp.v[0]);
+}
+
+/// `a` mol of substance `sp` in a store under ground at `t` K.
+#[inline]
+fn deep_layer(x: &mut [f64; LAYERS], sp: &Sp, t: f64, a: f64) {
+    (x[6], x[7]) = (x[6] + a * sp.mm, x[7] + if t < sp.boil { a * sp.v[1] } else { 0.0 });
+}
+
+/// The row of `potential` (`ROW`) of ground cell `i` made of `x` (`LAYERS`).
+fn stack(w: &World, x: &[f64; LAYERS], i: usize) -> [f64; ROW] {
+    let (area, g, p) = (w.mesh.cells().area()[i], w.cfg.gravity, w.cfg.phys);
+    // Each layer's bottom, m, and its potential energy at its middle.
+    let (mut z, mut e) = (w.base_z, 0.0);
+    for (m, v) in x[..3].iter().zip(&x[3..6]) {
+        e += m * g * (z + v / area / 2.0);
+        z += v / area;
+    }
+    let (floor, fill) = (w.base_z + x[3] / area - p.bed_depth, x[7] / (p.bed_porosity * area));
+    [e, x[6] * g * (floor + fill / 2.0), z, floor + fill, x[HEAD] * g * z]
+}
+
+/// The matter of the cells' life, which lies at their heads: the substances of a body and of the cover's parts.
+struct Life {
+    body: Vec<usize>,
+    cover: Option<[usize; crate::cover::NP]>,
+}
+
+impl Life {
+    fn of(w: &World) -> Life {
+        Life { body: w.chem.body().subs().to_vec(), cover: crate::cover::Parts::of(&w.chem).map(|p| p.sub) }
+    }
+    /// The mass of the life of cell `i`, kg: its living bodies, its cover and its parts.
+    fn kg(&self, w: &World, sp: &[Sp], i: usize) -> f64 {
+        let cell = w.life.cell_at(i);
+        let mut kg = 0.0;
+        for b in cell.bodies.iter().filter(|b| b.alive) {
+            kg += self.body.iter().zip(&b.store).map(|(&k, &a)| a * sp[k].mm).sum::<f64>();
+        }
+        if let Some(sub) = self.cover {
+            kg += cell.cover.mol.iter().flat_map(|m| m.iter().zip(sub)).map(|(&a, k)| a * sp[k].mm).sum::<f64>();
+        }
+        for p in &cell.parts {
+            kg += p.wall.iter().zip(&p.fill).zip(sp).map(|((&a, &f), sp)| (a + f) * sp.mm).sum::<f64>();
+        }
+        kg
+    }
+}
+
+/// What the potential energy of ground cell `i` and the matter at its head gains, J, when its ground's amounts change
+/// by `d(k)` mol, by Flow's state of its ground (`potential`): how a change inside a node moves its stack.
+pub(crate) fn stack_gain(w: &World, i: usize, d: impl Fn(usize) -> f64) -> f64 {
+    let (s, n, ns) = (&w.scratch, w.mesh.cells().n(), w.chem.ns());
+    let at = |class: Class, k: usize| w.store.amounts(class)[k * n + i];
+    let mut x = [0.0; LAYERS];
+    for (k, sp) in s.sp.iter().enumerate() {
+        bed_layer(&mut x, sp, at(Class::Bed, k));
+        deep_layer(&mut x, sp, s.state.tg[i], at(Class::Deep, k));
+        x[HEAD] += at(Class::Bodies, k) * sp.mm;
+    }
+    x[HEAD] += Life::of(w).kg(w, &s.sp, i);
+    let (mut before, mut after) = (x, x);
+    for k in 0..ns {
+        ground_layers(&mut before, s, (k, i), at(Class::Ground, k));
+        ground_layers(&mut after, s, (k, i), at(Class::Ground, k) + d(k));
+    }
+    let (a, b) = (stack(w, &after, i), stack(w, &before, i));
+    a[0] + a[4] - b[0] - b[4]
 }
 
 /// The potential energy of the world's matter, J (`potential`), from Flow's state of its ground.
