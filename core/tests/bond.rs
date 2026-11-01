@@ -54,12 +54,12 @@ fn walls_keep_a_body_warm() {
     // Enough liquid for a month without rain.
     // It rests (the biases of its brain's action rows: resting up, every other action down), so it stays where it is put.
     let shape = w.life.brains[w.life[slot].lineage as usize].as_ref().expect("a brain").shape;
-    let b = &mut w.life[slot];
-    let k = (0..w.chem.ns()).max_by(|&x, &y| b.amount(w.chem.body(), x).total_cmp(&b.amount(w.chem.body(), y))).unwrap();
     let rows = (0..pcore::brain::FIXED).chain([shape.dir()]).chain((0..pcore::brain::VERBS + pcore::brain::OVERBS).map(|v| shape.verb(v)));
     for q in rows {
-        b.rows[q * shape.r() + shape.h] += if q == pcore::brain::REST { 3.0 } else { -3.0 };
+        w.life.rows_mut(slot)[q * shape.r() + shape.h] += if q == pcore::brain::REST { 3.0 } else { -3.0 };
     }
+    let b = &mut w.life[slot];
+    let k = (0..w.chem.ns()).max_by(|&x, &y| b.amount(w.chem.body(), x).total_cmp(&b.amount(w.chem.body(), y))).unwrap();
     // (At the body's temperature, with the fusion enthalpy a molten store holds: `Body::energy_at`.)
     let t = b.temp(&w.chem);
     *b.store_of(&w.chem, k) *= 1.3;

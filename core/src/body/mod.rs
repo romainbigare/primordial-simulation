@@ -24,6 +24,7 @@ pub(crate) use pay::settle_heat;
 use crate::brain::{ln, SIG};
 use crate::chem::{BodyChem, Chemistry, Phase, Stores};
 use crate::ground::{melting, Melting};
+use crate::life::Block;
 use crate::math::Few;
 use crate::store::NodeId;
 use crate::units::{BODY_REACTIONS, BODY_STORES};
@@ -90,12 +91,13 @@ pub struct Body {
     /// (`Chunk::see_changed`); a saved body's are as saved
     #[serde(skip)]
     pub stale: bool,
-    /// Its brain rows: the rows it was born with plus what it (a node: its members) learned; empty without a brain
-    pub rows: Vec<f32>,
-    /// Moving average of the square of its critic's error (0 until the first one), and per learned row a moving average
-    /// of the square of its share of the learning steps (`brain::learn`)
+    /// Its brain in its cell's brains (`life::Brains`; none without a brain): its rows, the rows it was born with plus
+    /// what it (a node: its members) learned; per learned row a moving average of the square of its share of the
+    /// learning steps (`brain::learn`); the trace of its last decision, which holds one if `traced`
+    pub brain: Block,
+    pub traced: bool,
+    /// Moving average of the square of its critic's error (0 until the first one)
     pub var: f32,
-    pub ms: Vec<f32>,
     /// The part it holds, and a part of the structure it is inside
     pub hold: Option<NodeId>,
     pub inside: Option<NodeId>,
@@ -105,9 +107,8 @@ pub struct Body {
     pub sig: [f32; SIG],
     /// Others it knows (id) and how dealings with them went (-1 worse .. 1 better)
     pub known: [(u64, f32); KNOWN],
-    /// Well-being at the last decision; the trace of that decision for learning
+    /// Well-being at the last decision
     pub wb: f32,
-    pub trace: Vec<f32>,
     /// It has a move queued in the batch running, or is a node's part with a part act queued (`life::Entry`): it stays in
     /// its cell until then, but the others there no longer deal with it (laws.md 0); false outside a batch, not saved
     #[serde(skip)]

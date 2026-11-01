@@ -97,12 +97,13 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
 }
 
 /// Children that start in another cell than their parent's (`emit`), queued until the serial pass (`land_litter`): their
-/// body (in the cell they start in), their born rows (none: their parent's), the cell their parent was in, and their
-/// birth.
+/// body (in the cell they start in), their born rows (none: their parent's), their brain (`life::Brains::all`, to take
+/// into their cell's brains), the cell their parent was in, and their birth.
 #[derive(Clone, Debug)]
 pub struct Litter {
     pub(crate) c: Body,
     rows: Option<Vec<f32>>,
+    brain: Vec<f32>,
     from: u32,
     born: Event,
 }
@@ -133,10 +134,8 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
         // (The noise their mean would take is their spread: `add` pools it, to `body::most`.)
         let (_, sd, left) = row_change(w, b.row_spread, m, size, r);
         let row_spread = left + sd * sd;
-        let from = d.born(w, b).to_vec();
-        let own = if b.rows.len() == from.len() { &b.rows } else { &from };
         d.events.push(born);
-        add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.day() as f64 }, (&genes, &spread), (&from, own, row_spread));
+        add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.day() as f64 }, (&genes, &spread), (b.genome, Some(b.brain), row_spread));
         return true;
     }
     let (mut rows, row_spread) = child_rows(w, d, b, l, m, size, r);
@@ -145,8 +144,8 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
     let lineage = if l.node { b.lineage } else { child_lineage(w, d, b, l, &genes, &mut rows, r) };
     let hit = if lineage == b.lineage || !here { hit } else { kin(w, d, cell, lineage, false) };
     // Their brain: their born rows plus what their parent learned.
-    let own = d.inherit(w, rows.as_deref().unwrap_or(d.born(w, b)), lineage, b);
-    let c = Body {
+    let brain = d.inherit(w, rows.as_deref(), lineage, b);
+    let mut c = Body {
         cell: cell as u32,
         count: m,
         lineage,
@@ -159,13 +158,15 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
         spread,
         row_spread,
         genome: b.genome,
-        rows: own,
+        brain,
         wet: b.wet,
         ..Default::default()
     };
     if !here {
-        let x = Litter { c, rows, from: b.cell, born };
-        d.out.push(Entry::Litter(Box::new(x)));
+        let brains = d.brains(b.cell as usize);
+        let x = brains.all(c.brain).to_vec();
+        brains.free(std::mem::take(&mut c.brain));
+        d.out.push(Entry::Litter(Box::new(Litter { c, rows, brain: x, from: b.cell, born })));
         return true;
     }
     d.events.push(born);
@@ -173,15 +174,18 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
     true
 }
 
-/// Children `c` (a body not placed), born with `rows` (none: their parent's), join the node at `hit` (`nodes::add`), or
-/// start a body of their own (`place_child`).
+/// Children `c` (a body not placed, its brain in its cell's brains), born with `rows` (none: their parent's), join the
+/// node at `hit` (`nodes::add`), or start a body of their own (`place_child`).
 fn start(w: &World, d: &mut Chunk, mut c: Body, rows: Option<Vec<f32>>, hit: Option<Handle>) {
+    if let Some(v) = rows {
+        c.genome = d.new_genome(v);
+    }
     let Some(t) = hit else {
-        place_child(w, d, c, rows);
+        place_child(w, d, c);
         return;
     };
-    let born = rows.unwrap_or_else(|| d.born(w, &c).to_vec());
-    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (&born, &c.rows, c.row_spread));
+    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.genome, Some(c.brain), c.row_spread));
+    d.brains(c.cell as usize).free(c.brain);
 }
 
 /// A litter (`emit`) lands in the serial pass (laws.md 0) in `d`, the chunk of its cell: it joins the young
@@ -193,7 +197,8 @@ pub(crate) fn land_litter(w: &World, d: &mut Chunk, x: Litter) {
     if hit.is_none() && x.c.count < 1.0 {
         return d.out.push(Entry::Back(Box::new(x)));
     }
-    let Litter { c, rows, born, .. } = x;
+    let Litter { mut c, rows, brain, born, .. } = x;
+    c.brain = d.brains(i).take_in(&brain);
     d.events.push(born);
     start(w, d, c, rows, hit);
 }
@@ -312,11 +317,8 @@ fn row_change(w: &World, spread: f32, m: f64, size: f32, r: &mut Rng) -> (f32, f
     (var, sd, (var * (1.0 - 1.0 / mm)).min(most(row_step(p, size), p.alike)))
 }
 
-/// Children `c` of `b` that join no node start a body of their own, born with `rows` (none: its parent's).
-fn place_child(w: &World, d: &mut Chunk, mut c: Body, rows: Option<Vec<f32>>) {
-    if let Some(v) = rows {
-        c.genome = d.new_genome(v);
-    }
+/// Children `c` that join no node start a body of their own.
+fn place_child(w: &World, d: &mut Chunk, mut c: Body) {
     // Its key liquids first: `place` works out its visible traits, which read the body (`Body::size`) through them. (A
     // parent that survived a freezing is still wet in the sense of its key liquids: its child's are kept though it is
     // born frozen.)

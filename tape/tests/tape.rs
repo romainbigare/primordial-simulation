@@ -466,7 +466,7 @@ fn null_run_freezes_the_brain_rows() {
         // has rows of another length, carried over from the starting ones.)
         let out = |r: &Vec<f32>| r.len() == lo.len() && r.iter().enumerate().any(|(k, &x)| x < lo[k] - 1e-5 || x > hi[k] + 1e-5);
         let new = w.life.genomes.iter().filter(|g| !g.rows.is_empty() && out(&g.rows)).count();
-        let moved = w.life.alive().filter(|b| b.rows.as_slice() != w.life.born(b)).count();
+        let moved = w.life.alive().filter(|b| w.life.rows_of(b) != w.life.born(b)).count();
         (new, moved, w.counts.updates)
     };
     let (real, null) = (go(false), go(true));

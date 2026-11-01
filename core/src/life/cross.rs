@@ -47,9 +47,9 @@ pub fn land(w: &mut World) {
     }
 }
 
-/// A move with its body, taken out of the cell it leaves, or a litter, landing in a cell.
+/// A move with its body and its brain (`Brains::all`), taken out of the cell it leaves, or a litter, landing in a cell.
 enum Landing {
-    Move { b: Box<Body>, from: u32, to: u32, pushed: f64, lane: f64, carries: bool, kin: bool },
+    Move { b: Box<Body>, brain: Vec<f32>, from: u32, to: u32, pushed: f64, lane: f64, carries: bool, kin: bool },
     Litter(Box<copy::Litter>),
 }
 
@@ -63,7 +63,11 @@ fn land_all(w: &mut World, landing: Vec<Entry>) {
         let (cell, l) = match e {
             Entry::Go { id, from, to, pushed, lane, carries, kin } => {
                 let Some(h) = w.life.find_in(from as usize, id) else { continue };
-                (to, Landing::Move { b: Box::new(std::mem::take(&mut w.life[h])), from, to, pushed, lane, carries, kin })
+                let b = std::mem::take(&mut w.life[h]);
+                let brains = &mut w.life.cells[from as usize].brains;
+                let brain = brains.all(b.brain).to_vec();
+                brains.free(b.brain);
+                (to, Landing::Move { b: Box::new(b), brain, from, to, pushed, lane, carries, kin })
             }
             Entry::Litter(x) => (x.c.cell, Landing::Litter(x)),
             _ => unreachable!("only moves and litters land"),
@@ -75,7 +79,10 @@ fn land_all(w: &mut World, landing: Vec<Entry>) {
     life::run(w, per, load, |_| (), |w, d, list, _| {
         for (_, _, l) in list.drain(..) {
             match l {
-                Landing::Move { b, from, to, pushed, lane, carries, kin } => choose::land_move(w, d, *b, (from as usize, to as usize), (pushed, lane), (carries, kin)),
+                Landing::Move { mut b, brain, from, to, pushed, lane, carries, kin } => {
+                    b.brain = d.brains(to as usize).take_in(&brain);
+                    choose::land_move(w, d, *b, (from as usize, to as usize), (pushed, lane), (carries, kin));
+                }
                 Landing::Litter(x) => copy::land_litter(w, d, *x),
             }
         }

@@ -219,14 +219,14 @@ fn brain_grown_and_shrunk_back_is_unchanged() {
 }
 
 /// Each body with a brain learns into rows of its own: its rows are those it was born with plus what it learned, so
-/// bodies that lived differ from their born rows, and they learned different things (a body drawn from a node,
-/// `nodes::open`, carries the node's learned rows, so two may share them). Matter and energy still add up.
+/// bodies that lived differ from their born rows, and they learned different things (a part that leaves a node carries
+/// the node's learned rows, so two may share them). Matter and energy still add up.
 #[test]
 fn each_body_learns_into_its_own_rows() {
     let (w, books) = lived();
-    let minds: Vec<&pcore::body::Body> = w.life.alive().filter(|b| !b.rows.is_empty()).collect();
-    assert!(minds.iter().all(|b| b.rows.len() == w.life.born(b).len()), "rows of another shape than the born rows");
-    let learned: Vec<Vec<f32>> = minds.iter().map(|b| b.rows.iter().zip(w.life.born(b)).map(|(r, x)| r - x).collect()).collect();
+    let minds: Vec<&pcore::body::Body> = w.life.alive().filter(|b| !w.life.rows_of(b).is_empty()).collect();
+    assert!(minds.iter().all(|b| w.life.rows_of(b).len() == w.life.born(b).len()), "rows of another shape than the born rows");
+    let learned: Vec<Vec<f32>> = minds.iter().map(|b| w.life.rows_of(b).iter().zip(w.life.born(b)).map(|(r, x)| r - x).collect()).collect();
     let moved = learned.iter().filter(|l| l.iter().any(|&x| x != 0.0)).count();
     assert!(moved >= 2, "{moved} of {} bodies learned", minds.len());
     let kinds = (0..learned.len()).filter(|&a| learned[a].iter().any(|&x| x != 0.0) && !(0..a).any(|b| learned[b] == learned[a])).count();

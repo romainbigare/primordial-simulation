@@ -14,8 +14,8 @@ use super::cross::Entry;
 
 /// A run of cells and what body code wrote besides them (`Written`, which the chunk reads as its own fields).
 pub struct Chunk<'a> {
-    cells: &'a mut [Cell],
-    written: Written,
+    pub(super) cells: &'a mut [Cell],
+    pub(super) written: Written,
 }
 
 /// What body code wrote on a chunk's cells besides the cells: the world takes it when the chunk ends
@@ -23,7 +23,7 @@ pub struct Chunk<'a> {
 #[derive(Default)]
 pub struct Written {
     /// The chunk's first cell and its count of cells
-    first: usize,
+    pub(super) first: usize,
     len: usize,
     /// The view of the store of its cells and the moves gathered on it
     pub moves: Moves,
@@ -95,9 +95,19 @@ impl<'a> Chunk<'a> {
         list.push(b);
         Handle { cell: i as u32, slot: (list.len() - 1) as u32 }
     }
-    /// Body `b`, taken out of `h`, leaves the world: its place is a hole that keeps its id until the pass ends.
+    /// Body `b`, taken out of `h`, leaves the world: its place is a hole that keeps its id until the pass ends, and its
+    /// brain's block is free.
     pub(crate) fn remove(&mut self, h: Handle, b: &Body) {
+        self.at_mut(h.cell as usize).brains.free(b.brain);
         self[h] = Body { id: b.id, ..Default::default() };
+    }
+    /// The brains of its cell `i`.
+    pub(crate) fn brains(&mut self, i: usize) -> &mut crate::life::Brains {
+        &mut self.at_mut(i).brains
+    }
+    /// The rows of body `b` (taken out of its slot or not) in its cell, of its lineage's shape.
+    pub(crate) fn rows(&self, w: &World, b: &Body) -> &[f32] {
+        self.shape_of(w, b.lineage).map_or(&[], |s| self.at(b.cell as usize).brains.rows(b.brain, s))
     }
     /// Body `b`, which moved into its cell from another, is stored here.
     pub(crate) fn arrive(&mut self, b: Body) -> Handle {

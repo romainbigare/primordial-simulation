@@ -79,7 +79,7 @@ fn genes(w: &World, which: usize) -> Option<Genes> {
 #[allow(clippy::too_many_arguments)]
 pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, rounds: u32, spray_decades: f32, id: u64) -> Option<Body> {
     let ((_, rich, liquid, _), kind, mut genes) = (w.chem.life_roles()?, bodies(which)?, genes(w, which)?);
-    let rows = w.life.genomes[genome as usize].rows.clone();
+
     let mut rg = Rng::new(w.seed, w.day(), id, Purpose::Make);
     let (chem, t) = (&w.chem, w.life.env[i][0]);
     let (lay, ns) = (Layout::of(chem), chem.ns());
@@ -109,7 +109,7 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
             genes[lay.keep + at(k)] = (MINERAL_KEEP * per * chem.subs[k].molar_mass / chem.subs[m].molar_mass * (1.0 - h)) as f32;
         }
     }
-    let mut b = Body { cell: i as u32, count, lineage, store: chem.body().gather(|k| store[k]), genes, genome, rows, ..Default::default() };
+    let mut b = Body { cell: i as u32, count, lineage, store: chem.body().gather(|k| store[k]), genes, genome, ..Default::default() };
     b.prepare(chem, &w.cfg);
     // It holds what its shares make of its matter (`Body::level`).
     for s in chem.materials().filter_map(|k| chem.body().place(k)) {

@@ -8,11 +8,11 @@ use pcore::World;
 /// Mean absolute learned offset of the brains of the living bodies (their rows less the rows they were born with),
 /// averaged over bodies by their members.
 pub(crate) fn learned(w: &World) -> f64 {
-    let bodies: Vec<&Body> = w.life.alive().filter(|b| !b.rows.is_empty()).collect();
-    let offsets = par::map(&bodies, |b| b.rows.iter().zip(w.life.born(b)).map(|(r, x)| (r - x).abs() as f64).sum::<f64>());
-    let (mut sum, mut members) = (0.0, 0.0);
+    let bodies: Vec<&Body> = w.life.alive().filter(|b| !w.life.rows_of(b).is_empty()).collect();
+    let offsets = par::map(&bodies, |b| w.life.rows_of(b).iter().zip(w.life.born(b)).map(|(r, x)| (r - x).abs() as f64).sum::<f64>());
+    let (mut sum, mut members) = (0.0f64, 0.0f64);
     for (b, d) in bodies.iter().zip(offsets) {
-        (sum, members) = (sum + d / b.rows.len() as f64 * b.n(), members + b.n());
+        (sum, members) = (sum + d / w.life.rows_of(b).len() as f64 * b.n(), members + b.n());
     }
     sum / members.max(1.0)
 }

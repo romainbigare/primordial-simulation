@@ -3,6 +3,7 @@
 
 use crate::body::Body;
 use crate::brain::{self, ln, Shape};
+use crate::life::Mind;
 use crate::event::{Event, EventKind};
 use crate::World;
 
@@ -15,14 +16,14 @@ const STRENGTH_STEP: f32 = 0.2;
 /// Learn from the last decision (actor-critic): the change of well-being since (for a node, of the member its trace
 /// stands for, `choose::spread`) plus the estimate from now, discounted once (one month), less the estimate then. The critic moves toward it; the learned rows move along the decision's trace by it, in units
 /// of its spread, times the learning rate (`brain::learn`).
-pub(super) fn learn(w: &World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
+pub(super) fn learn(w: &World, b: &mut Body, m: &mut Mind, s: Shape, (wb, now): (f32, &[f32])) {
     let (l, lr, cr, nh) = (s.learned(), b.learn_rate(), s.critic() * s.r(), s.h);
-    if b.trace.len() != nh + l + 1 || lr <= 0.0 {
+    if !b.traced || m.trace.len() != nh + l + 1 || lr <= 0.0 {
         return;
     }
     // (The trace ends with the advantage of what was done, `choose::trace`.)
-    let (h, c) = b.trace.split_at(nh);
-    let v = |x: &[f32]| b.rows[cr + nh] + brain::dot(&b.rows[cr..cr + nh], x);
+    let (h, c) = m.trace.split_at(nh);
+    let v = |x: &[f32]| m.rows[cr + nh] + brain::dot(&m.rows[cr..cr + nh], x);
     let delta = wb - b.wb + c[l] + w.cfg.phys.discount * v(now) - v(h);
     // The critic's errors are averaged as the rows' steps are (`learn_beta`). An error too big for a number teaches
     // nothing.
@@ -32,8 +33,8 @@ pub(super) fn learn(w: &World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
         return;
     }
     b.var = var;
-    brain::fit(&mut b.rows[cr..cr + s.r()], h, &[1.0], lr * delta);
-    brain::learn(&mut b.rows[..l * s.r()], h, &c[..l], a / lr, lr, &mut b.ms, (w.cfg.phys.learn_beta, w.cfg.phys.learn_most));
+    brain::fit(&mut m.rows[cr..cr + s.r()], h, &[1.0], lr * delta);
+    brain::learn(&mut m.rows[..l * s.r()], h, &c[..l], a / lr, lr, m.ms, (w.cfg.phys.learn_beta, w.cfg.phys.learn_most));
 }
 
 /// Body `by` watched body `of` in a batch (it cost the turn; `n` of its members watched, of `lineage` then), applied
@@ -43,16 +44,14 @@ pub(super) fn learn(w: &World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
 /// mean of its members').
 pub(crate) fn watched(w: &mut World, by: u64, (n, lineage): (f64, u32), of: u64) {
     let (Some(s), Some(t)) = (w.life.find(by).filter(|&s| w.life[s].lineage == lineage), w.life.find(of)) else { return };
-    let (mut b, o) = (std::mem::take(&mut w.life[s]), &w.life[t]);
+    let (b, o) = (std::mem::take(&mut w.life[s]), &w.life[t]);
     let (u, v) = (o.visible(&w.chem, &w.cfg), b.visible(&w.chem, &w.cfg));
     let d = |a: f32, b: f32| ln(a.max(1e-9) / b.max(1e-9)).powi(2);
     let alike = (-0.5 * (d(u[0], v[0]) + d(u[1], v[1]) + ((u[2] - v[2]) / STRENGTH_STEP).powi(2))).exp();
     let alike = if w.cfg.null { 0.0 } else { w.cfg.phys.blend * alike * (n / b.n()).min(1.0) as f32 };
-    let shape = |x: u32| w.life.brain(x).map(|l| l.shape);
-    if shape(o.lineage) == shape(b.lineage) && o.rows.len() == b.rows.len() {
-        brain::blend(&mut b.rows, &o.rows, alike);
-    }
-    let same = (o.lineage == b.lineage) as u8 as f64;
-    w.events.push(Event { day: w.day(), kind: EventKind::Watched { by: b.id, of: o.id }, node: b.cell, value: same });
+    let (same, of) = ((o.lineage == b.lineage) as u8 as f64, o.id);
+    let o = o.clone();
+    w.life.blend_rows(&b, &o, alike);
+    w.events.push(Event { day: w.day(), kind: EventKind::Watched { by: b.id, of }, node: b.cell, value: same });
     w.life[s] = b;
 }

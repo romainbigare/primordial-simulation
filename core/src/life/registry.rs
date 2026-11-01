@@ -2,7 +2,7 @@
 //! (`Life::recount`), and the provisional ids of those body code makes, which the chunk keeps until the world names
 //! them when the chunk ends (laws.md 0).
 
-use super::{free_place, Chunk, Entry, Life};
+use super::{free_place, Block, Chunk, Entry, Life};
 use crate::body::Body;
 use crate::brain::Shape;
 use crate::lineage::Lineage;
@@ -126,16 +126,31 @@ impl Chunk<'_> {
     }
     /// The rows body `b` was born with (provisional, of this chunk, or not).
     pub(crate) fn born<'a>(&'a self, w: &'a World, b: &Body) -> &'a [f32] {
-        provisional(b.genome).map_or_else(|| w.life.born(b), |k| &self.genomes[k])
+        self.born_of(w, b.genome)
     }
-    /// The rows of a body born with `born` from body `b`: its born rows plus what `b` learned, where the brains have one
-    /// shape; else its born rows.
-    pub(crate) fn inherit(&self, w: &World, born: &[f32], lineage: u32, b: &Body) -> Vec<f32> {
-        let (from, rows) = (self.born(w, b), &b.rows);
-        if self.shape_of(w, lineage) != self.shape_of(w, b.lineage) || born.len() != rows.len() || from.len() != rows.len() {
-            return born.to_vec();
+    /// The born rows of genome `g` (provisional, of this chunk, or not).
+    pub(crate) fn born_of<'a>(&'a self, w: &'a World, g: u32) -> &'a [f32] {
+        provisional(g).map_or_else(|| &w.life.genomes[g as usize].rows[..], |k| &self.genomes[k])
+    }
+    /// A brain for body `b` (not placed, or taken out of its slot), in its cell, of its lineage's shape: the rows it was
+    /// born with (none without a brain).
+    pub(crate) fn new_brain(&mut self, w: &World, b: &Body) -> Block {
+        let Some(s) = self.shape_of(w, b.lineage) else { return Block::default() };
+        let born = provisional(b.genome).map_or_else(|| w.life.born(b), |k| &self.written.genomes[k][..]);
+        self.cells[b.cell as usize - self.written.first].brains.alloc(s, born)
+    }
+    /// The brain of a child of body `b` (taken out of its slot), of `lineage` and born with `born` (none: with `b`'s born
+    /// rows), in `b`'s cell: its born rows plus what `b` learned, where the brains have one shape; else its born rows.
+    pub(crate) fn inherit(&mut self, w: &World, born: Option<&[f32]>, lineage: u32, b: &Body) -> Block {
+        let (Some(s), sb) = (self.shape_of(w, lineage), self.shape_of(w, b.lineage)) else { return Block::default() };
+        let from = provisional(b.genome).map_or_else(|| w.life.born(b), |k| &self.written.genomes[k][..]);
+        let born = born.unwrap_or(from);
+        let brains = &mut self.cells[b.cell as usize - self.written.first].brains;
+        let c = brains.alloc(s, born);
+        if sb == Some(s) && b.brain.some() && from.len() == born.len() {
+            brains.learned_onto(c, b.brain, from, s);
         }
-        born.iter().zip(rows).zip(from).map(|((x, r), f)| x + (r - f)).collect()
+        c
     }
     /// Body `b` (taken out of its slot) is now born with `rows` (its own rows are the caller's).
     pub(crate) fn reborn(&mut self, w: &World, b: &mut Body, rows: Vec<f32>) {

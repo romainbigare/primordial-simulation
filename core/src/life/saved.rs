@@ -27,11 +27,12 @@ struct SavedCell<'a> {
     crossings: f32,
     cover: Cow<'a, crate::cover::Cover>,
     bodies: Vec<Cow<'a, Body>>,
+    brains: Cow<'a, super::Brains>,
 }
 
 impl Serialize for Life {
     fn serialize<S: Serializer>(&self, to: S) -> Result<S::Ok, S::Error> {
-        let cells = self.cells.iter().map(|c| SavedCell { placed: c.placed, pushed: c.pushed, crossings: c.crossings, cover: Cow::Borrowed(&c.cover), bodies: c.bodies.iter().filter(|b| b.alive).map(Cow::Borrowed).collect() }).collect();
+        let cells = self.cells.iter().map(|c| SavedCell { placed: c.placed, pushed: c.pushed, crossings: c.crossings, cover: Cow::Borrowed(&c.cover), bodies: c.bodies.iter().filter(|b| b.alive).map(Cow::Borrowed).collect(), brains: Cow::Borrowed(&c.brains) }).collect();
         let (brains, members) = ((&self.brains).into(), (&self.members).into());
         Saved { cells, brains, members, genomes: (&self.genomes).into(), free_genomes: (&self.free_genomes).into() }.serialize(to)
     }
@@ -46,7 +47,7 @@ impl<'de> Deserialize<'de> for Life {
         for (i, c) in x.cells.into_iter().enumerate() {
             let bodies: Vec<Body> = c.bodies.into_iter().map(Cow::into_owned).collect();
             bodies.iter().for_each(|b| life.note_at(b.id, i as u32));
-            life.cells.push(Cell { bodies, placed: c.placed, pushed: c.pushed, crossings: c.crossings, cover: c.cover.into_owned() });
+            life.cells.push(Cell { bodies, placed: c.placed, pushed: c.pushed, crossings: c.crossings, cover: c.cover.into_owned(), brains: c.brains.into_owned() });
         }
         life.sums = vec![[0.0; crate::survey::ROW]; life.cells.len()];
         Ok(life)

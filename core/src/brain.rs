@@ -161,8 +161,8 @@ pub fn fit(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32) {
 
 /// Move each learned row `r` by `lr · g / rms · [h, 1]`, `g = a · coef[r]` its share of the step and `rms` the root of
 /// a moving average of its squares (`ms`), capped at `most · lr`: a row that rarely matters learns as fast when it does.
-pub fn learn(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32, lr: f32, ms: &mut Vec<f32>, (beta, most): (f32, f32)) {
-    ms.resize(coef.len(), 0.0);
+pub fn learn(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32, lr: f32, ms: &mut [f32], (beta, most): (f32, f32)) {
+    debug_assert_eq!(ms.len(), coef.len(), "a moving average per learned row");
     for ((r, &c), v) in rows.chunks_exact_mut(h.len() + 1).zip(coef).zip(ms.iter_mut()) {
         let g = a * c;
         if g == 0.0 {

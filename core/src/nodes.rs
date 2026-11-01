@@ -4,7 +4,8 @@
 
 use crate::bond::{held, let_go, room};
 use crate::body::{self, alike, distance, most, range, spread_at, spread_kept, Body, Layout};
-use crate::brain::{blend, row_step};
+use crate::brain::row_step;
+use crate::life::Block;
 use crate::chem::Stores;
 use crate::lineage::sizes_of;
 use crate::life::Handle;
@@ -127,19 +128,19 @@ fn join_other(w: &World, d: &mut Chunk, lay: &Layout, heads: Vec<Handle>) {
 /// take `t`'s brain, born rows and lineage (the means of `t`'s rows stay `t`'s), letting go of what they hold.
 pub fn merge_taking(w: &World, d: &mut Chunk, s: Handle, t: Handle) {
     debug_assert_eq!(d.root(w, &d[s]), d.root(w, &d[t]), "a merge across starting kinds");
-    let (born, rows, spread) = (d.born(w, &d[t]).to_vec(), d[t].rows.clone(), d[t].row_spread);
+    let (genome, spread) = (d[t].genome, d[t].row_spread);
     let mut c = std::mem::take(&mut d[s]);
     let_go(w, d, &mut c, false);
+    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (genome, None, spread));
     d.remove(s, &c);
-    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (&born, &rows, spread));
 }
 
 /// The body at `s` joins the body at `t`, of its lineage (`add`), letting go of what it holds.
 pub fn merge(w: &World, d: &mut Chunk, s: Handle, t: Handle) {
-    let (born, mut c) = (d.born(w, &d[s]).to_vec(), std::mem::take(&mut d[s]));
+    let mut c = std::mem::take(&mut d[s]);
     let_go(w, d, &mut c, false);
+    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.genome, Some(c.brain), c.row_spread));
     d.remove(s, &c);
-    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (&born, &c.rows, c.row_spread));
 }
 
 /// What splits and joins as an amount when members move between nodes, split by shares with the remainder kept so the
@@ -170,18 +171,24 @@ impl Lot {
     }
 }
 
-/// Members `c` join the body at `t` with genes and spread `genes` and rows `rows` (born rows, rows, row spread):
-/// amounts add up (`rejoin`), genes and rows become the means by members and the spreads pool around them (laws.md 4.4).
-pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread): (&[f32], &[f32]), (born, own, row_spread): (&[f32], &[f32], f32)) {
+/// Members `c` join the body at `t` with genes and spread `genes` and rows `rows` (the genome of their born rows, the
+/// block of their own rows in the cell's brains, none: `t`'s, and their row spread): amounts add up (`rejoin`), genes
+/// and rows become the means by members and the spreads pool around them (laws.md 4.4).
+pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread): (&[f32], &[f32]), (genome, own, row_spread): (u32, Option<Block>, f32)) {
     let mut o = std::mem::take(&mut d[t]);
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.count / (o.count + c.count)) as f32);
     let mix = |p: f32, q: f32| p + a * (q - p);
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
-    // The rows first: their spread's step reads the genes as they were.
-    let was = d.born(w, &o);
-    let gap = was.iter().zip(born).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / was.len().max(1) as f32;
+    // The rows first: their spread's step reads the genes as they were. (Born rows of one genome have no gap and keep
+    // their mean.)
+    let same = o.genome == genome;
+    let (was, born) = (d.born_of(w, o.genome), d.born_of(w, genome));
+    let gap = if same { 0.0 } else { was.iter().zip(born).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / was.len().max(1) as f32 };
     o.row_spread = pool(o.row_spread, row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
-    d.reborn(w, &mut o, was.iter().zip(born).map(|(&p, &q)| mix(p, q)).collect());
+    if !same {
+        let mixed = was.iter().zip(born).map(|(&p, &q)| mix(p, q)).collect();
+        d.reborn(w, &mut o, mixed);
+    }
     // Each gene's mean and the spread pooled around it, in place.
     let mut pooled = std::mem::take(&mut o.spread);
     pooled.resize(o.genes.len(), 0.0);
@@ -192,23 +199,22 @@ pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread): 
     }
     o.spread = pooled;
     o.prepare(&w.chem, &w.cfg);
-    rejoin(&mut o, c, Some(own));
+    // Its own rows become the mean by members.
+    if let (Some(own), Some(s)) = (own, d.shape_of(w, o.lineage)) {
+        d.brains(o.cell as usize).blend(o.brain, own, s, a);
+    }
+    rejoin(&mut o, c);
     o.stale = true;
     d[t] = o;
 }
 
 /// Members `c` with the genes and spreads of body `o` join it (taken out of its slot): the members of a node who waited
 /// aside while the others acted, a part of a node that moved or bonded and came back to its cell (both
-/// `choose::spread`), or joiners after `add` pooled their genes. Amounts add up; the last
-/// day becomes the mean by members; `rows`: the rows of `c` where they differ from `o`'s, which `o`'s
-/// become the mean by members of. `o`'s visible traits are the caller's to work out again (`Chunk::see`).
-pub(crate) fn rejoin(o: &mut Body, c: Lot, rows: Option<&[f32]>) {
+/// `choose::spread`), or joiners after `add` pooled their genes and rows. Amounts add up; the last day becomes the mean
+/// by members. `o`'s visible traits are the caller's to work out again (`Chunk::see`).
+pub(crate) fn rejoin(o: &mut Body, c: Lot) {
     let share = c.count / (o.count + c.count);
     o.last += share * (c.last - o.last);
-    let a = share as f32;
-    if let Some(rows) = rows {
-        blend(&mut o.rows, rows, a);
-    }
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     o.brood += c.brood;
     o.e += c.e;
@@ -216,15 +222,12 @@ pub(crate) fn rejoin(o: &mut Body, c: Lot, rows: Option<&[f32]>) {
 }
 
 /// Share `f` of node `b`'s members and share `fa` of each of its stores, of its brood and of its heat as a new body
-/// (not placed, `Lot::split`); lineage, genome, genes and their constants, brain rows, link and memory as the node's;
+/// (not placed, `Lot::split`); lineage, genome, genes and their constants, link and memory as the node's; no brain of
+/// its own (it acts on the node's decision, and gets a copy of the node's brain if it leaves, `choose::spread`);
 /// holding nothing, inside nothing.
 pub(crate) fn part(b: &mut Body, f: f64, fa: f64) -> Body {
     let lot = Lot::split(b, f, fa);
-    // (The trace is not the part's: set aside, not cloned.)
-    let trace = std::mem::take(&mut b.trace);
-    let c = Body { count: lot.count, store: lot.store, e: lot.e, brood: lot.brood, hold: None, inside: None, leaving: false, ..b.clone() };
-    b.trace = trace;
-    c
+    Body { count: lot.count, store: lot.store, e: lot.e, brood: lot.brood, hold: None, inside: None, leaving: false, brain: Block::default(), traced: false, ..b.clone() }
 }
 
 /// A count this close to a whole number is that number.

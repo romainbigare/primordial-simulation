@@ -2,11 +2,13 @@
 //! the faces they show in a batch; the caches of the last survey; the lineages and born rows (`registry`). Body code
 //! runs on chunks of cells (`chunk`), and what it does to other cells waits in a queue for the serial pass (`cross`).
 
+mod brains;
 mod chunk;
 mod cross;
 mod registry;
 mod saved;
 
+pub use brains::{Block, Brains, Mind};
 pub use chunk::Chunk;
 pub(crate) use chunk::{bounds, chunks, run};
 pub use cross::{land, Entry};
@@ -45,6 +47,8 @@ pub struct Cell {
     /// The members that moved into it since the last month (`Counters::traffic`)
     pub(crate) crossings: f32,
     pub cover: Cover,
+    /// The brains of its bodies
+    pub brains: Brains,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -177,7 +181,40 @@ impl World {
     /// Place body `b` made outside the laws (a founder, an edit); it first updates at the next month's start.
     pub fn add(&mut self, mut b: Body) -> Handle {
         b.prepare(&self.chem, &self.cfg);
-        self.in_cell(b.cell as usize, |w, d| d.add(b, w.day()))
+        self.in_cell(b.cell as usize, |w, d| {
+            // (Its brain, if it has none yet: the rows it was born with.)
+            if !b.brain.some() {
+                b.brain = d.new_brain(w, &b);
+            }
+            d.add(b, w.day())
+        })
+    }
+}
+
+impl Life {
+    /// The brain rows of living body `b` (none without a brain).
+    pub fn rows_of(&self, b: &Body) -> &[f32] {
+        self.brain(b.lineage).map_or(&[], |l| self.cells[b.cell as usize].brains.rows(b.brain, l.shape))
+    }
+    /// The brain rows of the body at `h`, to change (an edit).
+    pub fn rows_mut(&mut self, h: Handle) -> &mut [f32] {
+        let b = &self[h];
+        let (blk, s) = (b.brain, self.brain(b.lineage).map(|l| l.shape).unwrap_or_default());
+        self.cells[h.cell as usize].brains.mind(blk, s).rows
+    }
+    /// The rows of body `b` (taken out of its slot) move the share `a` of the way toward those of body `o`, if their
+    /// brains have one shape (`choose::watched`).
+    pub(crate) fn blend_rows(&mut self, b: &Body, o: &Body, a: f32) {
+        let (Some(s), Some(so)) = (self.brain(b.lineage).map(|l| l.shape), self.brain(o.lineage).map(|l| l.shape)) else { return };
+        if s != so || !b.brain.some() || !o.brain.some() {
+            return;
+        }
+        let (i, j) = (b.cell as usize, o.cell as usize);
+        if i == j {
+            return self.cells[i].brains.blend(b.brain, o.brain, s, a);
+        }
+        let from: Vec<f32> = self.cells[j].brains.rows(o.brain, s).to_vec();
+        crate::brain::blend(self.cells[i].brains.mind(b.brain, s).rows, &from, a);
     }
 }
 

@@ -99,7 +99,15 @@ pub fn resize(w: &World, d: &mut Chunk, b: &mut Body) {
     // The born rows and its own get the same new weights (two streams of one key, the body's id turned over).
     let rerow = |x: &[f32]| brain::rerow(x, from, shape, &mut Rng::new(w.seed, w.day(), !id, Purpose::Resize), noise);
     let born = rerow(d.born(w, b));
-    b.rows = if b.rows.is_empty() { born.clone() } else { rerow(&b.rows) };
+    let rows = match d.rows(w, b) {
+        [] => born.clone(),
+        own => rerow(own),
+    };
+    // Its brain moves to a block of the new shape, with what of its learning and its last trace fits it.
+    let brains = d.brains(b.cell as usize);
+    let new = brains.alloc(shape, &rows);
+    b.traced &= brains.carry(b.brain, from, new, shape);
+    brains.free(std::mem::replace(&mut b.brain, new));
     let lineage = match to {
         Some(n) => n.0,
         None => d.new_lineage(l),
@@ -107,6 +115,7 @@ pub fn resize(w: &World, d: &mut Chunk, b: &mut Body) {
     d.move_to(b, lineage, born);
     // With no brain it has no decision to learn from, no memory and no signal.
     if w.life.brainless(b) {
-        (b.trace, b.mem, b.sig, b.wb, b.var, b.ms) = (Vec::new(), Default::default(), Default::default(), 0.0, 0.0, Vec::new());
+        d.brains(b.cell as usize).free(std::mem::take(&mut b.brain));
+        (b.traced, b.mem, b.sig, b.wb, b.var) = (false, Default::default(), Default::default(), 0.0, 0.0);
     }
 }

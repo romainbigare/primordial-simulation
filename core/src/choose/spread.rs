@@ -28,7 +28,7 @@ pub(super) fn spread(w: &World, d: &mut Chunk, node: &mut Body, c: &Choice, k: &
     let mean = kept.iter().zip(&gain).map(|(n, &g)| n * g as f64).sum::<f64>() / kept.iter().sum::<f64>().max(f64::MIN_POSITIVE);
     let mut u = rng.f64() * kept.iter().sum::<f64>();
     let a = (0..OPTS).find(|&o| { u -= kept[o]; u < 0.0 }).unwrap_or(REST);
-    node.trace = trace(w, node, c, &q, k, a, gain[a] - mean as f32);
+    node.traced = trace(w, node, c, (&q, a, gain[a] - mean as f32), k, d.brains(node.cell as usize).mind(node.brain, k.s).trace);
 }
 
 /// `count` × `chance` members, a part of less than one member being one member with that chance.
@@ -108,7 +108,7 @@ fn stays<R>(d: &mut Chunk, node: &mut Body, x: f64, act: impl FnOnce(&mut Chunk,
     let out = act(d, node);
     debug_assert!(node.hold.is_none() && node.inside.is_none(), "an action that stays in its cell takes no hold and enters nothing");
     (node.hold, node.inside) = held;
-    nodes::rejoin(node, rest, None);
+    nodes::rejoin(node, rest);
     out
 }
 
@@ -146,7 +146,10 @@ fn part_acts(w: &World, d: &mut Chunk, node: &mut Body, (c, q): (&Choice, &[f32;
         back(d, node, s, m);
         return (gain, Some(false));
     }
-    m.trace = trace(w, &m, c, q, k, o, 0.0);
+    // (It lives on as a body: a brain of its own, the node's, with the trace of what it did.)
+    let brains = d.brains(m.cell as usize);
+    m.brain = brains.copy(node.brain);
+    m.traced = trace(w, &m, c, (q, o, 0.0), k, brains.mind(m.brain, k.s).trace);
     m.stale = true;
     d[s] = m;
     (gain, Some(true))
@@ -155,7 +158,7 @@ fn part_acts(w: &World, d: &mut Chunk, node: &mut Body, (c, q): (&Choice, &[f32;
 /// Part `m` of node `node` (both taken out of their slots, `m`'s at `s`) comes back to it (`nodes::rejoin`).
 fn back(d: &mut Chunk, node: &mut Body, s: Handle, mut m: Body) {
     d.remove(s, &m);
-    nodes::rejoin(node, nodes::Lot::of(&mut m), None);
+    nodes::rejoin(node, nodes::Lot::of(&mut m));
 }
 
 /// The part act body `id` queued in a batch (`life::Entry`), run whole on it and on the part as they are now: verb `on.0`

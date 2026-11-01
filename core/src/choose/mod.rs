@@ -93,8 +93,8 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, t: &mut ActTmp
     b.mem[s.mem..].fill(0.0);
     let mut c = perceive(w, d, b, nseen, &mut rng);
     inputs(w, b, (lived, temp, s.mem), &c, &mut t.input);
-    brain::think(&lin.base, &b.rows, s, &t.input, &mut t.thought);
-    learn::learn(w, b, s, wb, &t.thought.h);
+    brain::think(&lin.base, d.at(b.cell as usize).brains.rows(b.brain, s), s, &t.input, &mut t.thought);
+    learn::learn(w, b, &mut d.brains(b.cell as usize).mind(b.brain, s), s, (wb, &t.thought.h));
     walk(w, b.cell as usize, sight, t);
     options(w, b, s, (pm, b.volume(&w.chem, temp) / b.n()), &mut c, t);
     pick(d, &mut c, &mut rng);
@@ -104,7 +104,7 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, t: &mut ActTmp
     if b.n() > 1.0 {
         spread::spread(w, d, b, &c, &k, &mut rng);
     } else {
-        b.trace = trace(w, b, &c, &c.p, &k, c.a, 0.0);
+        b.traced = trace(w, b, &c, (&c.p, c.a, 0.0), &k, d.brains(b.cell as usize).mind(b.brain, s).trace);
         act_as(w, d, b, &c, &k, (c.a, None), &mut rng);
     }
 }
@@ -224,18 +224,20 @@ fn noise(w: &World, b: &mut Body, s: Shape, t: &ActTmp, rng: &mut Rng) -> ([f32;
     (form, z)
 }
 
-/// The trace of the decision for learning (none if the body does not learn): the hidden layer; per learned row how its
-/// output moves the log-chance of option `a`, what was done (for the signal and shape the natural gradient, so their
-/// noise does not use up the step); and `adv`, how much more that raised the well-being of the members who did it than
-/// the mean of a node's members (`spread`; 0 for an individual). `chances`: the chances the action was drawn by (a node's
-/// over its likeliest options, `spread::top_chances`), so the gradient's mean is 0.
-fn trace(w: &World, b: &Body, c: &Choice, chances: &[f32; OPTS], k: &Kit, a: usize, adv: f32) -> Vec<f32> {
+/// The trace of the decision for learning, into `v` (the trace of the body's brain, `life::Brains`; none if the body
+/// does not learn, false): the hidden layer; per learned row how its output moves the log-chance of option `a`, what
+/// was done (for the signal and shape the natural gradient, so their noise does not use up the step); and `adv`, how
+/// much more that raised the well-being of the members who did it than the mean of a node's members (`spread`; 0 for
+/// an individual). `chances`: the chances the action was drawn by (a node's over its likeliest options,
+/// `spread::top_chances`), so the gradient's mean is 0.
+fn trace(w: &World, b: &Body, c: &Choice, (chances, a, adv): (&[f32; OPTS], usize, f32), k: &Kit, v: &mut [f32]) -> bool {
     if b.learn_rate() <= 0.0 || w.cfg.null {
-        return Vec::new();
+        return false;
     }
     let (s, t, p, out) = (k.s, k.t, &w.cfg.phys, &k.t.thought.out);
     let (nh, l) = (s.h, s.learned());
-    let mut v = vec![0.0; nh + l + 1];
+    debug_assert_eq!(v.len(), nh + l + 1, "a trace of the brain's shape");
+    v.fill(0.0);
     v[..nh].copy_from_slice(&t.thought.h);
     v[nh + l] = adv;
     let cr = &mut v[nh..nh + l];
@@ -265,7 +267,7 @@ fn trace(w: &World, b: &Body, c: &Choice, chances: &[f32; OPTS], k: &Kit, a: usi
     let natural = |r: usize, z: f32, noise: f32| (z * noise) * (1.0 - squash(out[r]) * squash(out[r]));
     (0..SIG).for_each(|j| cr[s.sig() + j] = natural(s.sig() + j, k.z[j], p.signal_noise));
     (0..FORM_OUT).for_each(|j| cr[s.form() + j] = if a == FORM { natural(s.form() + j, k.z[SIG + j], p.shape_noise) } else { 0.0 });
-    v
+    true
 }
 
 /// Body `b` (taken out of its slot), a part of node `part_of` if any (`spread`), does option `a`. Forming a part, acting
