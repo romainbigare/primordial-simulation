@@ -22,9 +22,31 @@ pub(super) struct Potential {
     deep: Vec<f64>,
     bodies: Vec<f64>,
     heights: Heights,
-    /// The mass of each cell's life, kg (`Life::kg`): no law but Flow's parts runs while they follow each other
-    /// (`flow::chain`), and none of them moves it, so it is found once for them.
+    found: Found,
+}
+
+/// The classes of the store whose amounts `potential` reads per cell, in the order of `Found::holds`.
+const HELD: [Class; 4] = [Class::Ground, Class::Bed, Class::Deep, Class::Bodies];
+
+/// What the parts of Flow that follow each other (`flow::chain`) find once: the mass of each cell's life, kg
+/// (`Life::kg`: no law but Flow's runs between them, and none of them moves it); and per class of `HELD` a bit for each
+/// substance its nodes may hold, set as the parts book into it (`apply`), so `potential` reads no array that holds
+/// nothing.
+#[derive(Clone, Debug, Default)]
+struct Found {
     life: Vec<f64>,
+    holds: [u64; HELD.len()],
+}
+
+impl Found {
+    fn of(w: &World, s: &Scratch) -> Found {
+        let (n, mut holds) = (w.mesh.cells().n(), [0; HELD.len()]);
+        for (bits, &class) in holds.iter_mut().zip(&HELD) {
+            let v = w.store.amounts(class);
+            *bits = (0..w.chem.ns()).filter(|&k| v[k * n..(k + 1) * n].iter().any(|&a| a != 0.0)).fold(0, |b, k| b | 1 << k);
+        }
+        Found { life: Life::of(w).every(w, &s.sp), holds }
+    }
 }
 
 /// The height each node's matter leaves from, m: a ground node's, its bed's and its bodies' node's, the top of its
@@ -44,11 +66,12 @@ struct Heights {
 /// capacity at constant pressure holds the work its column does as it warms), so lifting matter into it lifts it to
 /// there. A bodies' node's gas, and the matter of the cell's life (its bodies, its cover and its parts), lie at its
 /// cell's head.
-pub(super) fn potential(w: &World, s: &Scratch, life: Option<Vec<f64>>) -> Potential {
+fn potential(w: &World, s: &Scratch, found: Option<Found>) -> Potential {
     let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
     let (n, na, ns) = (cells.n(), air.n(), w.chem.ns());
     let (ground, bed, deep, bodies) = (w.store.amounts(Class::Ground), w.store.amounts(Class::Bed), w.store.amounts(Class::Deep), w.store.amounts(Class::Bodies));
-    let life = life.unwrap_or_else(|| Life::of(w).every(w, &s.sp));
+    let found = found.unwrap_or_else(|| Found::of(w, s));
+    let (life, holds) = (&found.life, found.holds);
     let same = Same::of(s);
     let mut rows = vec![0.0; n.div_ceil(CELLS_PER_TASK) * CELLS_PER_TASK * ROW];
     crate::par::rows(&mut rows, CELLS_PER_TASK * ROW, || (), |_, task, out| {
@@ -57,11 +80,11 @@ pub(super) fn potential(w: &World, s: &Scratch, life: Option<Vec<f64>>) -> Poten
         // Where each substance lies in its class's amounts over the task's cells (`held`: none where it holds none).
         let at = |k: usize| k * n + cells_of.start..k * n + cells_of.end;
         for k in 0..ns {
-            let sp = &s.sp[k];
-            if let Some(r) = held(&bed[at(k)]) {
+            let (sp, has) = (&s.sp[k], |c: usize| holds[c] >> k & 1 == 1);
+            if let Some(r) = has(1).then(|| held(&bed[at(k)])).flatten() {
                 sums.iter_mut().zip(r).for_each(|(x, &a)| bed_layer(x, sp, a));
             }
-            if let Some(r) = held(&ground[at(k)]) {
+            if let Some(r) = has(0).then(|| held(&ground[at(k)])).flatten() {
                 let each = sums.iter_mut().zip(r);
                 match same[k] {
                     // What `ground_layers` gives where the phase is the same in every node.
@@ -71,7 +94,7 @@ pub(super) fn potential(w: &World, s: &Scratch, life: Option<Vec<f64>>) -> Poten
                     Same::Varies => each.zip(cells_of.clone()).for_each(|((x, &a), i)| ground_layers(x, s, (k, i), a)),
                 }
             }
-            if let Some(r) = held(&deep[at(k)]) {
+            if let Some(r) = has(2).then(|| held(&deep[at(k)])).flatten() {
                 let each = sums.iter_mut().zip(r);
                 match same[k] {
                     Same::Gas => each.for_each(|(x, &a)| x[6] += a * sp.mm),
@@ -79,7 +102,7 @@ pub(super) fn potential(w: &World, s: &Scratch, life: Option<Vec<f64>>) -> Poten
                     Same::Varies => each.zip(cells_of.clone()).for_each(|((x, &a), i)| deep_layer(x, sp, s.state.tg[i], a)),
                 }
             }
-            if let Some(r) = held(&bodies[at(k)]) {
+            if let Some(r) = has(3).then(|| held(&bodies[at(k)])).flatten() {
                 sums.iter_mut().zip(r).for_each(|(x, &a)| x[HEAD] += a * sp.mm);
             }
         }
@@ -95,7 +118,7 @@ pub(super) fn potential(w: &World, s: &Scratch, life: Option<Vec<f64>>) -> Poten
     cells.parent().iter().enumerate().for_each(|(i, &j)| za[j as usize] += head[i] * cells.area()[i]);
     za.iter_mut().zip(air.area()).for_each(|(z, a)| *z /= a);
     let e_air = (0..na).map(|j| (0..ns).map(|k| amounts[k * na + j] * s.sp[k].mm).sum::<f64>() * g * za[j]).collect();
-    Potential { ground: at(0), air: e_air, deep: at(1), bodies: at(4), heights: Heights { ground: head, air: za, deep: at(3) }, life }
+    Potential { ground: at(0), air: e_air, deep: at(1), bodies: at(4), heights: Heights { ground: head, air: za, deep: at(3) }, found }
 }
 
 /// What a ground cell's stack is made of: the mass, kg, and the volume, m³, of each layer (bed, loose solids, liquid),
@@ -300,7 +323,7 @@ impl Lifts {
     /// room of its moves, emptied.
     pub(super) fn book(self, w: &mut World, s: &Scratch) -> (Potential, Vec<Moved>) {
         let (mut start, mut moved) = (self.start, self.moved);
-        let (now, g) = (potential(w, s, Some(std::mem::take(&mut start.life))), w.cfg.gravity);
+        let (now, g) = (potential(w, s, Some(std::mem::take(&mut start.found))), w.cfg.gravity);
         let olds = start.energies();
         let mut q: [Vec<f64>; 4] = now.energies().map(|v| vec![0.0; v.len()]);
         for m in &moved {
@@ -327,6 +350,12 @@ impl Lifts {
 /// link the mass of all its substances that goes each way.
 pub(super) fn apply(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], moves: &[Move]) {
     if let Some(l) = s.lifts.as_mut() {
+        let holds = &mut l.start.found.holds;
+        let mut into = |class: Class, k: u16| HELD.iter().zip(holds.iter_mut()).filter(|c| *c.0 == class).for_each(|(_, b)| *b |= 1 << k);
+        for x in fluxes {
+            x.class.iter().for_each(|&c| x.ks.iter().for_each(|&k| into(c, k)));
+        }
+        moves.iter().for_each(|m| [m.from.class, m.to.class].iter().for_each(|&c| into(c, m.k)));
         for x in fluxes {
             // Per link the mass that goes each way, summed over its substances in their order.
             let links = x.a.len();
