@@ -43,7 +43,7 @@ const SWING: f64 = 12.59;
 /// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs.
 const RAIN_LAND: f64 = 3.049e-3;
 /// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs.
-const ABSORBER_PPM: f64 = 388.8;
+const ABSORBER_PPM: f64 = 258.1;
 /// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the reference runs.
 const RIVERS: f64 = 712.4;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.

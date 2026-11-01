@@ -355,6 +355,9 @@ breaking down when hot; 26 rotting of the frame; 27 splitting the frame into sug
 in moist open ground at a litter constant (26: about a quarter a year at 290 K; 21: about one a year). **Growth** (`Chemistry::build`, bodies only, paid by
 work): matter from 118 sugar + 3 nitrogen mineral + 1 rock salt; frame from 6 sugar; lime from 1 rock salt.
 `Chemistry::minerals` are growth's inputs no reaction burns (24, 23), `materials` the solids bodies build (25, 10).
+The air's carbon gas (3) settles where the cover's light reaction takes it up as fast as rot and burning give it back:
+the world has no source of it (an input from below, as volcanoes give, would be an edit from outside the laws, and is
+not built).
 
 ## 3. Bond: things can be joined, joins break when pushed too hard
 Files: `core/src/bond/` (`verbs`, `sense`, `month`, `bonds`); also `choose::go`, `Body::height`, `Body::breaking`.
