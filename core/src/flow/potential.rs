@@ -132,6 +132,8 @@ pub(super) struct Moved {
 
 /// The array of `Moved::to` for a node that holds no matter here.
 const NOWHERE: u8 = u8::MAX;
+/// The array of the bodies' nodes (`slot`).
+const BODIES: u8 = 3;
 
 /// The array of `Potential` and the index of node `index` of `class`, for a class that holds matter here (the bed's
 /// matter lies in its cell's stack).
@@ -140,7 +142,7 @@ fn slot(class: Class, index: u32) -> (u8, u32) {
         Class::Ground | Class::Bed => (0, index),
         Class::Air => (1, index),
         Class::Deep => (2, index),
-        Class::Bodies => (3, index),
+        Class::Bodies => (BODIES, index),
         _ => (NOWHERE, index),
     }
 }
@@ -154,7 +156,7 @@ impl Potential {
     fn height(&self, (c, index): (u8, u32)) -> f64 {
         let index = index as usize;
         match c {
-            0 | 3 => self.heights.ground[index],
+            0 | BODIES => self.heights.ground[index],
             1 => self.heights.air[index],
             _ => self.heights.deep[index],
         }
@@ -178,8 +180,10 @@ impl Lifts {
     /// Book the part's lifts and falls: each mass moved carries its potential energy from the height it left, the mean
     /// of its node's height at the part's start and at its end (so a node's own matter that leaves it, however much,
     /// takes what it held of it); each node's heat takes what came in less what left less the change of its own
-    /// potential energy (`store::fall_heat`, which adds their sum to `Store::lifted`). Returns the potential energy now,
-    /// and the room of its moves, emptied.
+    /// potential energy (`store::fall_heat`, which adds their sum to `Store::lifted`). A bodies' node's gas lies at its
+    /// cell's head, which the part moves with the ground's matter, not its own: what its lifts and falls give or take
+    /// is its ground node's (a bodies' node holds little heat of its own). Returns the potential energy now, and the
+    /// room of its moves, emptied.
     pub(super) fn book(self, w: &mut World, s: &Scratch) -> (Potential, Vec<Moved>) {
         let (now, g) = (potential(w, s), w.cfg.gravity);
         let (start, mut moved) = (self.start, self.moved);
@@ -193,8 +197,12 @@ impl Lifts {
             }
         }
         moved.clear();
-        for (((class, q), old), new) in [Class::Ground, Class::Air, Class::Deep, Class::Bodies].into_iter().zip(&mut q).zip(olds).zip(now.energies()) {
+        for ((q, old), new) in q.iter_mut().zip(olds).zip(now.energies()) {
             q.iter_mut().zip(old.iter().zip(new)).for_each(|(q, (o, n))| *q -= n - o);
+        }
+        let [ground, air, deep, bodies] = &mut q;
+        ground.iter_mut().zip(bodies.iter_mut()).for_each(|(g, b)| *g += std::mem::take(b));
+        for (class, q) in [(Class::Ground, ground), (Class::Air, air), (Class::Deep, deep)] {
             fall_heat(w, class, q);
         }
         (now, moved)
