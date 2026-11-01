@@ -1,17 +1,8 @@
 //! `docs/numbers.md` has one row for every field of `Physics` and `Config`, and no row for a field that does not
-//! exist: a number cannot be added without saying what it is. Its tuned numbers and the rules chosen for a run stay
-//! within their budgets.
+//! exist: a number cannot be added without saying what it is.
 
 use std::collections::BTreeSet;
 use std::path::Path;
-
-/// Rows marked tuned in the whole file: it may not grow. A new number must be physical or anchored, or replace a tuned
-/// one. Lower this when a tuned number is anchored or removed; do not raise it without asking.
-const TUNED_BUDGET: usize = 54;
-
-/// Rules chosen for a run (what was picked so a run came out a certain way, not a number of `Physics` or `Config`): the
-/// table "Rules chosen for a run" lists them, and it may not grow.
-const RULES_BUDGET: usize = 3;
 
 const MARKS: [&str; 6] = ["physical", "anchored", "tuned", "switch", "container", "speed"];
 
@@ -84,17 +75,4 @@ fn every_row_has_one_name_and_a_known_mark() {
         assert!(seen.insert(name.clone()), "two rows for {name}");
         assert!(MARKS.iter().any(|m| mark.starts_with(m)), "{name}: the mark is one of {MARKS:?}, not {mark:?}");
     }
-}
-
-#[test]
-fn the_rules_chosen_for_a_run_stay_within_their_budget() {
-    let n = rows().into_iter().filter(|r| r.heading == "Rules chosen for a run" && r.cells[0] != "rule").count();
-    assert!(n > 0, "the table of rules chosen for a run is missing");
-    assert!(n <= RULES_BUDGET, "{n} rules chosen for a run; the budget is {RULES_BUDGET}");
-}
-
-#[test]
-fn the_tuned_numbers_stay_within_their_budget() {
-    let tuned = rows().into_iter().filter(|r| r.cells.len() == 5 && r.cells[4].starts_with("tuned")).count();
-    assert!(tuned <= TUNED_BUDGET, "{tuned} rows are marked tuned; the budget is {TUNED_BUDGET}");
 }

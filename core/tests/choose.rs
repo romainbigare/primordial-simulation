@@ -160,6 +160,7 @@ fn report(on: &Tally, off: &Tally) -> String {
 /// its decisions a clearly larger share is made on the strip. (Whether its moves go toward the richer cells is a
 /// smaller effect, which needs the seeds of the slow version.)
 #[test]
+#[ignore = "slow: 800 runs of the learning scene, and fewer seeds lose the three standard errors"]
 fn a_body_that_learns_lives_on_what_it_can_take() {
     let (on, off) = (measure(LEARN_ON, 400), measure(LEARN_OFF, 400));
     let ((life_on, e_on), (life_off, e_off)) = (mean_and_error(&on.lives), mean_and_error(&off.lives));
