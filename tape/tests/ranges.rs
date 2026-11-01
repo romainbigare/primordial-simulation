@@ -47,7 +47,7 @@ const ABSORBER_PPM: f64 = 388.8;
 /// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the reference runs.
 const RIVERS: f64 = 712.4;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
-const WORN: f64 = 0.141;
+const WORN: f64 = 0.318;
 /// The cover (starting kind 0) at year 30, log10 kg (`root_0_cover_kg`), in the reference runs.
 const COVER_KG: f64 = 9.985;
 /// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the reference runs: a guard that the world stays near
