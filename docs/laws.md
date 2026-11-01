@@ -154,7 +154,9 @@ long step ends where short ones do.
   (`drain::sink`, at most `seep` a second and the store's room) right after each of the air's steps, which bring the
   rain: held until the month's liquid step, it would cover and darken the ground (`land::reflectance`, 1.4) and
   warm it. The store flows by `bed_seep`. Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
-  the cell's steepest slope over a hillslope of `hill` into the runoff (`flow::drain`).
+  the cell's steepest slope over a hillslope of `hill` into the runoff (`flow::drain`). **None of this runs under the
+  sea**: its loose ground lies under it with its pores full, and the bed's store under it is not drained, so no liquid
+  sinks there, no pore or store flow reaches or leaves a sea cell, and its store feeds no channel.
 - **What goes with it**: its share of every liquid and of what is dissolved, with heat. Liquid passing through a node
   keeps its fusion heat whatever the node's phase and leaves at the temperature of the node mixed with what came in
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node

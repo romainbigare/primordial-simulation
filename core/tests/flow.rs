@@ -714,27 +714,33 @@ fn liquid_top(w: &World, i: usize) -> f64 {
     w.surface_z(i) + (liquid - w.cfg.phys.porosity * loose(w, i)).max(0.0) / w.mesh.cells().area()[i]
 }
 
+/// The low basin of `w` under the level `top`, m: the lowest cell and the cells joined to it through cells whose solid
+/// surface lies under it; and that lowest cell.
+fn basin_under(w: &World, top: impl Fn(&World, usize) -> f64) -> (Vec<usize>, usize) {
+    let n = w.mesh.cells().n();
+    let lowest = (0..n).min_by(|&a, &b| w.surface_z(a).total_cmp(&w.surface_z(b))).unwrap();
+    let level = top(w, lowest);
+    let (mut basin, mut todo) = (vec![false; n], vec![lowest]);
+    basin[lowest] = true;
+    while let Some(i) = todo.pop() {
+        for &j in w.mesh.cells().around(i).1 {
+            if !basin[j as usize] && w.surface_z(j as usize) < level {
+                basin[j as usize] = true;
+                todo.push(j as usize);
+            }
+        }
+    }
+    ((0..n).filter(|&i| basin[i]).collect(), lowest)
+}
+
 /// A connected liquid body has one level: half a metre of liquid poured on one cell of an island's low basin, with the
 /// month's uneven rain and the runoff that reaches it, ends a liquid step at one level, within a millimetre, over all
 /// the cells joined to the lowest through cells under that level. Matter and energy are kept.
 #[test]
 fn a_connected_liquid_body_stands_at_one_level() {
     let mut w = worldgen::testkit::small_world();
-    let n = w.mesh.cells().n();
-    let lowest = (0..n).min_by(|&a, &b| w.surface_z(a).total_cmp(&w.surface_z(b))).unwrap();
-    let top = liquid_top(&w, lowest);
-    let (mut basin, mut todo) = (vec![false; n], vec![lowest]);
-    basin[lowest] = true;
-    while let Some(i) = todo.pop() {
-        for &j in w.mesh.cells().around(i).1 {
-            if !basin[j as usize] && w.surface_z(j as usize) < top {
-                basin[j as usize] = true;
-                todo.push(j as usize);
-            }
-        }
-    }
-    let cells: Vec<usize> = (0..n).filter(|&i| basin[i]).collect();
-    assert!(cells.len() > n / 4, "a basin of {} cells", cells.len());
+    let (cells, lowest) = basin_under(&w, liquid_top);
+    assert!(cells.len() > w.mesh.cells().n() / 4, "a basin of {} cells", cells.len());
     let area = w.mesh.cells().area()[lowest];
     pour(&mut w, lowest, 0.5 * area);
     let books = Books::now(&w);
@@ -743,6 +749,22 @@ fn a_connected_liquid_body_stands_at_one_level() {
     let tops: Vec<f64> = cells.iter().map(|&i| liquid_top(&w, i)).collect();
     let (lo, hi) = tops.iter().fold((f64::MAX, f64::MIN), |(a, b), &x| (a.min(x), b.max(x)));
     assert!(hi - lo < 1e-3, "the basin stands between {lo} m and {hi} m");
+}
+
+/// Under the low basin the loose ground's pores are full and the bed's store is not drained: over a year of Flow no
+/// liquid sinks into, flows through or comes up from the stores of its cells (those a metre under its level), while the
+/// stores of the land take rain and drain.
+#[test]
+fn nothing_sinks_or_seeps_under_the_low_basin() {
+    let mut w = worldgen::testkit::small_world();
+    let (cells, _) = basin_under(&w, |w, i| liquid_top(w, i) - 1.0);
+    let land: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
+    let (under, on_land) = (cells.iter().map(|&i| store_m3(&w, i)).collect::<Vec<f64>>(), land.iter().map(|&i| store_m3(&w, i)).collect::<Vec<f64>>());
+    for _ in 0..12 {
+        worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
+    }
+    assert!(cells.iter().zip(&under).all(|(&i, &v)| store_m3(&w, i) == v), "a store under the basin changed");
+    assert!(land.iter().zip(&on_land).any(|(&i, &v)| store_m3(&w, i) != v), "no store on the land changed");
 }
 
 /// Moving liquid wears its bed only with the work its load leaves free (the cover effect, Sklar and Dietrich 2004).

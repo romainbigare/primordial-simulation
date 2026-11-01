@@ -1,7 +1,8 @@
 //! Liquid under the surface: the pores of the loose ground and the store of the bed below (`Class::Deep`), two layers
 //! of each cell's stack (laws.md 1.2). Liquid over field capacity sinks from the pores into the store under them
 //! (`sink`, after each of the air's steps); Darcy's law moves it between cells in each layer, one explicit `solve::sweep`, and a
-//! full store gives back what it cannot hold (`under`, every liquid step).
+//! full store gives back what it cannot hold (`under`, every liquid step). Under the low basin (`basin`) the pores are
+//! full and the store is not drained: none of this runs there.
 
 use super::{land::{bottom, filled, t_now, table, wet}, liquid::{book, mobile}, range, Scratch};
 use crate::{math::one_minus_exp, solve::sweep::{sweep, Net}, space::Stack, store::{Class, LinkFlux}, World};
@@ -11,7 +12,7 @@ const DEEP: usize = 0;
 const PORES: usize = 1;
 
 /// Liquid over field capacity sinks into the store, at most `seep` a second (Darcy's law under its own weight) and no
-/// more than its room, with its heat; its fall heats the store (`potential`). It runs after each of the air's steps, which
+/// more than its room, with its heat, outside the low basin; its fall heats the store (`potential`). It runs after each of the air's steps, which
 /// bring the rain: the rain would otherwise wait in the pores, darkening the ground (`land::reflectance`), until the
 /// month's liquid step.
 pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
@@ -21,7 +22,7 @@ pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
     let (mob, held) = (mobile(w, s, &liq, tmin), stores(w, s, tmin));
     // The cells where liquid sinks, and the share of their mobile liquid that does.
     let mut sinks = Vec::new();
-    for i in 0..n {
+    for i in (0..n).filter(|&i| !s.basin.is[i]) {
         let room = p.bed_porosity * p.bed_depth * area[i] - held[i];
         let sink = (mob.vol[i] - p.field * s.pd[i] * area[i]).min(room).min(p.seep * area[i] * dt);
         if sink > 0.0 {
@@ -68,8 +69,9 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
 
 /// Darcy's law between cells in each layer by one explicit `sweep` over the stack: the potential is the liquid's table,
 /// the capacity its volume per metre of head, and a link passes the conductivity (`bed_seep`, `seep`) × the saturated
-/// thickness of its higher end × width / distance (none for pores at field capacity, held against gravity); `seep` over
-/// cells of kilometres moves a store's head a thousandth of the way to its neighbours' in a liquid step. No store gives
+/// thickness of its higher end × width / distance (none for pores at field capacity, held against gravity; none to or
+/// from the low basin); `seep` over cells of kilometres moves a store's head a thousandth of the way to its neighbours'
+/// in a liquid step. No store gives
 /// more than it holds, and no pores more than they hold over field capacity. Returns the links and the volume through
 /// each (stores', then pores'), m³.
 fn flows(w: &World, s: &Scratch, stack: &Stack, (mob, held): (&super::liquid::Mobile, &[f64]), dt: f64) -> (Vec<u32>, Vec<u32>, Vec<f64>) {
@@ -82,7 +84,8 @@ fn flows(w: &World, s: &Scratch, stack: &Stack, (mob, held): (&super::liquid::Mo
         (x[q], cap[q]) = (table(s, i, p.porosity), area[i] * if filled(s, i, p.porosity) { 1.0 } else { p.porosity });
     }
     let free = |i: usize| mob.vol[i].min(s.pd[i] * area[i]) > p.field * s.pd[i] * area[i];
-    let border: Vec<usize> = (0..cells.a().len()).filter(|&l| cells.width()[l] > 0.0).collect();
+    let off_basin = |l: usize| !s.basin.is[cells.a()[l] as usize] && !s.basin.is[cells.b()[l] as usize];
+    let border: Vec<usize> = (0..cells.a().len()).filter(|&l| cells.width()[l] > 0.0 && off_basin(l)).collect();
     let (a, b): (Vec<u32>, Vec<u32>) = border.iter().map(|&l| (cells.a()[l], cells.b()[l])).unzip();
     let (mut na, mut nb, mut gl) = (Vec::new(), Vec::new(), Vec::new());
     for layer in [DEEP, PORES] {
@@ -173,11 +176,13 @@ fn come_up(w: &mut World, s: &mut Scratch, tmin: f64, share: &[f64]) -> Vec<f64>
     got
 }
 
-/// The stores drain to the channels inside each cell, `hill` from the divides, by Darcy's law down its slope: a share
-/// 1 - exp(-`bed_seep` × slope × time / (`bed_porosity` × `hill`)) comes up. Returns the volume each node got, m³.
+/// The stores drain to the channels inside each cell outside the low basin, `hill` from the divides, by Darcy's law
+/// down its slope: a share 1 - exp(-`bed_seep` × slope × time / (`bed_porosity` × `hill`)) comes up. Returns the
+/// volume each node got, m³.
 pub(super) fn springs(w: &mut World, s: &mut Scratch, tmin: f64, slope: &[f64], dt: f64) -> Vec<f64> {
     let p = w.cfg.phys;
-    let share: Vec<f64> = slope.iter().map(|&q| one_minus_exp(p.bed_seep * q * dt / (p.bed_porosity * p.hill))).collect();
+    let drain = |(&q, &basin): (&f64, &bool)| if basin { 0.0 } else { one_minus_exp(p.bed_seep * q * dt / (p.bed_porosity * p.hill)) };
+    let share: Vec<f64> = slope.iter().zip(&s.basin.is).map(drain).collect();
     come_up(w, s, tmin, &share)
 }
 
