@@ -114,11 +114,15 @@ impl Moves {
     pub(crate) fn gathered(&self) -> bool {
         self.changed
     }
-    /// Number `at` of the view changes by `d`. A take never passes what the view holds (a law that does overdraws its
-    /// node; checked in debug builds), but of what bodies see of the air.
-    fn alter(&mut self, at: usize, d: f64, seen: bool) {
+    /// Number `at` of the view changes by `d`. A take never passes what the view holds, to rounding relative to what
+    /// the node holds of that unit, the numbers `node` of the view, as `store::apply` checks a booking (a law that does
+    /// overdraws its node; checked in debug builds); none for what bodies see of the air.
+    fn alter(&mut self, at: usize, d: f64, node: Option<std::ops::Range<usize>>) {
+        if cfg!(debug_assertions) && d < 0.0 && self.view[at][0] + d < 0.0 {
+            let held: f64 = node.map_or(f64::INFINITY, |r| self.view[r].iter().map(|x| x[0].abs()).sum());
+            assert!(self.view[at][0] + d >= -ROUNDING * (held + d.abs()), "a take of {d} from a view that holds {:?} (at {at})", self.view[at]);
+        }
         let x = &mut self.view[at];
-        debug_assert!(seen || d >= 0.0 || x[0] + d >= -ROUNDING * (x[0].abs() + d.abs()), "a take of {d} from a view that holds {x:?} (at {at})");
         *x = [x[0] + d, x[1] + d];
         self.changed = true;
     }
@@ -149,14 +153,16 @@ impl Moves {
         debug_assert!(heat == 0.0 || x.class != Class::Bed, "heat moved to the bed, which holds none");
         let row = Row(self.ns);
         if mol != 0.0 {
-            self.alter(at + row.amounts(x.class) + k, mol, false);
+            let node = at + row.amounts(x.class);
+            self.alter(node + k, mol, Some(node..node + self.ns));
             // (The air node and the bodies' node are what bodies see of the air.)
             if matches!(x.class, Class::Air | Class::Bodies) {
-                self.alter(at + row.seen() + k, mol, true);
+                self.alter(at + row.seen() + k, mol, None);
             }
         }
         if heat != 0.0 {
-            self.alter(at + row.heat(x.class), heat, false);
+            let e = at + row.heat(x.class);
+            self.alter(e, heat, Some(e..e + 1));
         }
     }
     /// Gather move `m` of the update running: the view changes as `apply` would change the store.
@@ -204,7 +210,8 @@ impl Moves {
             // The fall gives the air its lift back, from the potential energy.
             self.take(w, Node::air(j), k, -m, 0.0);
             let (e, at) = (m * w.chem.subs[k].molar_mass * lift, self.own_row_mut(w));
-            self.alter(at + Row(self.ns).heat(Class::Air), -e, false);
+            let air = at + Row(self.ns).heat(Class::Air);
+            self.alter(air, -e, Some(air..air + 1));
             self.far[at / Row(self.ns).len()][0] += e;
             self.changed = true;
         }
