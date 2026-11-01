@@ -4,7 +4,7 @@
 //! task. It adds as `apply` adds, counts the rounding it sets to zero and checks it as `apply` checks. Here too the
 //! booking of the moves the domains gathered (`World::book_moves`).
 
-use super::apply::{add_carried, overdraw_check, zero_rounding};
+use super::apply::{overdraw_check, zero_rounding};
 use super::{Class, Moves, Store};
 use crate::{par::SERIAL_BELOW, World};
 use std::ops::Range;
@@ -14,8 +14,7 @@ use std::ops::Range;
 const PER_TASK: usize = 4;
 
 /// A booking task: the arrays of one class of nodes it owns, the amounts of substances `ks` (`[k * len + index]`, mol)
-/// or with `ks` none the heat (`[index]`, J), with what rounding took of each amount (a carried class, `Store::carry`);
-/// the numbers that fell below zero on the way, and what rounding left below zero, set to zero at the task's end. In
+/// or with `ks` none the heat (`[index]`, J); the numbers that fell below zero on the way, and what rounding left below zero, set to zero at the task's end. In
 /// debug builds, per number the sum of its changes and of their sizes, and what each node of the class held of all
 /// substances before the booking (`apply::overdraw_check`).
 pub struct Booker<'s> {
@@ -25,7 +24,6 @@ pub struct Booker<'s> {
     pub len: usize,
     /// Its numbers, from `[ks.start * len]`
     v: &'s mut [f64],
-    carry: Option<&'s mut [f64]>,
     from: usize,
     low: Vec<usize>,
     rounded: f64,
@@ -35,12 +33,12 @@ pub struct Booker<'s> {
 
 impl Booker<'_> {
     /// Number `x` of the class's array (`[k * len + index]` of an amount, `[index]` of the heat) changes by `d`, as
-    /// `apply` adds it (`add_carried`). Only what it holds at the end must be at zero or above.
+    /// `apply` adds it. Only what it holds at the end must be at zero or above.
     #[inline(always)]
     pub fn add(&mut self, x: usize, d: f64) {
         let x = x - self.from;
         let was = self.v[x];
-        add_carried(&mut self.v[x], self.carry.as_deref_mut().map(|c| &mut c[x]), d);
+        self.v[x] += d;
         if self.v[x] < 0.0 && was >= 0.0 {
             self.low.push(x);
         }
@@ -74,7 +72,7 @@ impl Booker<'_> {
 /// rounding left below zero in each is set to zero (`zero_rounding`). Returns what was set to zero, each task's in
 /// task order: of the amounts, mol, and of the heat, J (`Counters::rounded`).
 pub(crate) fn book_by_array(store: &mut Store, ns: usize, classes: &[Class], work: usize, f: impl Fn(&mut Booker) + Sync + Send) -> [f64; 2] {
-    let Store { amounts, heat, carry } = store;
+    let Store { amounts, heat, .. } = store;
     // In debug builds, what each node of each class held of all substances before the booking (`zero_low`).
     let nodes: Vec<Vec<f64>> = amounts
         .iter()
@@ -88,23 +86,21 @@ pub(crate) fn book_by_array(store: &mut Store, ns: usize, classes: &[Class], wor
     // Substances per task.
     let per = if work >= crate::par::SERIAL_BELOW { PER_TASK } else { ns };
     let mut tasks = Vec::new();
-    let carries = carry.iter_mut().map(Some).chain(std::iter::repeat_with(|| None));
-    for ((((c, a), h), carry), node) in amounts.iter_mut().enumerate().zip(heat.iter_mut()).zip(carries).zip(&nodes) {
+    for (((c, a), h), node) in amounts.iter_mut().enumerate().zip(heat.iter_mut()).zip(&nodes) {
         let class = Class::ALL[c];
         if !classes.contains(&class) {
             continue;
         }
-        let task = |ks, len, from, v, carry| Booker { class, ks, len, v, carry, from, low: Vec::new(), rounded: 0.0, changed: Vec::new(), node };
+        let task = |ks, len, from, v| Booker { class, ks, len, v, from, low: Vec::new(), rounded: 0.0, changed: Vec::new(), node };
         if !a.is_empty() {
             let len = a.len() / ns;
-            let mut carry = carry.map(|x| x.chunks_mut(per * len));
             for (q, v) in a.chunks_mut(per * len).enumerate() {
                 let ks = q * per..((q + 1) * per).min(ns);
-                tasks.push(task(Some(ks), len, q * per * len, v, carry.as_mut().and_then(Iterator::next)));
+                tasks.push(task(Some(ks), len, q * per * len, v));
             }
         }
         if !h.is_empty() {
-            tasks.push(task(None, h.len(), 0, h, None));
+            tasks.push(task(None, h.len(), 0, h));
         }
     }
     crate::par::each_init(&mut tasks, work, || (), |_, b| {
@@ -126,8 +122,8 @@ const VIEWED: [Class; 4] = [Class::Ground, Class::Air, Class::Bed, Class::Bodies
 impl World {
     /// The moves gathered by the domains that ran since the last booking are booked (`Moves::book_into`): each array of
     /// the store by one task, which adds each domain's changes in the domains' order (`store::book_by_array`); what
-    /// rounding leaves below zero is set to zero and counted (`Counters::rounded`), then the lift into the potential
-    /// and the heat the ground nodes could not give (`Counters::clamped_heat`), domain by domain. With work enough
+    /// rounding leaves below zero is set to zero and counted (`Counters::rounded`), then the potential energy their
+    /// lifts gained (`Store::lifted`) and the heat the ground nodes could not give (`Counters::clamped_heat`), domain by domain. With work enough
     /// for the pool, `f` runs beside it in the same call, the store out of the world meanwhile: `f` must not read the
     /// store (a landing reads none: it moves no matter of the store, laws.md 0) nor open a view.
     pub(crate) fn book_moves_beside<R: Send>(&mut self, f: impl FnOnce(&mut World) -> R + Send) -> R {
@@ -161,7 +157,7 @@ impl World {
         counts.add_rounded(rounded);
         for (k, mut m) in views {
             let (lift, short) = m.close();
-            store.add_far_heat(Class::Potential, 0, lift);
+            store.lift(lift);
             counts.clamped_heat += short;
             debug_assert!(life.domains[k].moves.open.is_none(), "a view opened while the moves gathered were booked");
             life.domains[k].moves = m;

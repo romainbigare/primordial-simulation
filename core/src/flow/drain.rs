@@ -4,7 +4,7 @@
 //! full store gives back what it cannot hold (`under`, every liquid step).
 
 use super::{land::{bottom, filled, t_now, table, wet}, liquid::{book, mobile}, range, Scratch};
-use crate::{math::one_minus_exp, solve::sweep::{sweep, Net}, space::Stack, store::{Batch, Class, LinkFlux}, World};
+use crate::{math::one_minus_exp, solve::sweep::{sweep, Net}, space::Stack, store::{fall_heat, Class, LinkFlux}, World};
 
 /// The layers of each cell's stack under its surface, bottom up: the bed's store and the loose ground's pores.
 const DEEP: usize = 0;
@@ -20,20 +20,21 @@ pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
     let liq = s.liquids(&w.chem, (tmin, tmax), true);
     let (mob, held) = (mobile(w, s, &liq, tmin), stores(w, s, tmin));
     // The cells where liquid sinks, the share of their mobile liquid that does, and the head it loses into the store, J.
-    let (mut sinks, mut fallen) = (Vec::new(), Batch::falls(Class::Deep));
+    let (mut sinks, mut fallen) = (Vec::new(), vec![0.0; n]);
     for i in 0..n {
         let room = p.bed_porosity * p.bed_depth * area[i] - held[i];
         let sink = (mob.vol[i] - p.field * s.pd[i] * area[i]).min(room).min(p.seep * area[i] * dt);
         if sink > 0.0 {
             let (share, kg) = (sink / mob.vol[i], (0..liq.len()).map(|q| mob.mol[q * n + i] * s.sp[liq[q]].mm).sum::<f64>());
-            fallen.fall(i, share * kg * g * (s.head[i] - store_table(w, s, i, held[i])));
+            fallen[i] = share * kg * g * (s.head[i] - store_table(w, s, i, held[i]));
             sinks.push((i as u32, share));
         }
     }
     let down: Vec<u32> = sinks.iter().map(|c| c.0).collect();
     let sunk = carry(&sinks, &liq, |q, i| mob.mol[q * n + i], |i, _, mol| liquid_heat(w, s, &liq, i, mol));
     let liq16: Vec<u16> = liq.iter().map(|&k| k as u16).collect();
-    book(w, s, &[LinkFlux { class: [Class::Ground, Class::Deep], a: &down, b: &down, ks: &liq16, mol: &sunk.0, heat: &sunk.1 }, fallen.flux()]);
+    book(w, s, &[LinkFlux { class: [Class::Ground, Class::Deep], a: &down, b: &down, ks: &liq16, mol: &sunk.0, heat: &sunk.1 }]);
+    fall_heat(w, Class::Deep, &fallen);
 }
 
 /// The heat of `mol` of the liquids `liq` leaving ground node `i`, at the node's temperature now, J.
@@ -68,15 +69,14 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
         }
     }
     let (liq16, deep16): (Vec<u16>, Vec<u16>) = (liq.iter().map(|&k| k as u16).collect(), deep.iter().map(|&k| k as u16).collect());
-    let mut into_deep = Batch::fallen(Class::Deep, (0..n).map(|i| fallen[stack.node(DEEP, i)]));
-    let mut into_pores = Batch::fallen(Class::Ground, (0..n).map(|i| fallen[stack.node(PORES, i)]));
     let fluxes = [
         LinkFlux { class: [Class::Ground; 2], a: &pores.a, b: &pores.b, ks: &liq16, mol: &pores.mol, heat: &pores.heat },
         LinkFlux { class: [Class::Deep; 2], a: &in_stores.a, b: &in_stores.b, ks: &deep16, mol: &in_stores.mol, heat: &in_stores.heat },
-        into_deep.flux(),
-        into_pores.flux(),
     ];
     book(w, s, &fluxes);
+    for (class, layer) in [(Class::Deep, DEEP), (Class::Ground, PORES)] {
+        fall_heat(w, class, &(0..n).map(|i| fallen[stack.node(layer, i)]).collect::<Vec<f64>>());
+    }
     let (held, area) = (stores(w, s, tmin), w.mesh.cells().area());
     let full = |i: usize| p.bed_porosity * p.bed_depth * area[i];
     let over: Vec<f64> = held.iter().enumerate().map(|(i, &v)| if v > full(i) { (v - full(i)) / v } else { 0.0 }).collect();
@@ -169,11 +169,11 @@ fn carry(from: &[(u32, f64)], ks: &[usize], amount: impl Fn(usize, usize) -> f64
     (mol, e)
 }
 
-/// A share `share[i]` of the store under each ground node comes up into it with its heat, paying its rise into the
-/// potential energy. Returns the volume each node got, m³ (dissolved gas adds none).
+/// A share `share[i]` of the store under each ground node comes up into it with its heat, the node paying its rise
+/// (`store::fall_heat`). Returns the volume each node got, m³ (dissolved gas adds none).
 fn come_up(w: &mut World, s: &mut Scratch, tmin: f64, (share, held): (&[f64], &[f64])) -> Vec<f64> {
     let (n, g, ns) = (w.mesh.cells().n(), w.cfg.gravity, w.chem.ns());
-    let (mut got, mut rise) = (vec![0.0; n], Batch::falls(Class::Ground));
+    let (mut got, mut rise) = (vec![0.0; n], vec![0.0; n]);
     let holds = |i: usize| (0..ns).any(|k| w.store.amounts(Class::Deep)[k * n + i] > 0.0);
     let ups: Vec<(u32, f64)> = share.iter().enumerate().filter(|p| *p.1 > 0.0 && holds(p.0)).map(|(i, &f)| (i as u32, f)).collect();
     let ks: Vec<usize> = (0..ns).filter(|&k| ups.iter().any(|c| w.store.amounts(Class::Deep)[k * n + c.0 as usize] > 0.0)).collect();
@@ -187,9 +187,10 @@ fn come_up(w: &mut World, s: &mut Scratch, tmin: f64, (share, held): (&[f64], &[
             r += m * sp.mm * lift;
             got[i] += if sp.boil > tmin { m * sp.v[1] * wet(s, k, i) } else { 0.0 };
         }
-        rise.fall(i, -r);
+        rise[i] = -r;
     }
-    book(w, s, &[LinkFlux { class: [Class::Deep, Class::Ground], a: &up, b: &up, ks: &ks16, mol: &mol, heat: &heat }, rise.flux()]);
+    book(w, s, &[LinkFlux { class: [Class::Deep, Class::Ground], a: &up, b: &up, ks: &ks16, mol: &mol, heat: &heat }]);
+    fall_heat(w, Class::Ground, &rise);
     got
 }
 

@@ -104,8 +104,8 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
             clock.spent[TAPE] += t.elapsed();
         }
         writer.check();
-        // The yearly check is the release check; debug builds also check after every law part.
-        if let Some(e) = pcore::check::broken(&w) {
+        // The yearly check is the release check, with the books' drift; debug builds also check after every law part.
+        if let Some(e) = pcore::check::broken(&w).or_else(|| pcore::check::drifted(&w, &t0)) {
             eprintln!("year {y}: broken state: {e}");
             writer.wait();
             rec.finish(&out).expect("write tape");

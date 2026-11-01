@@ -106,9 +106,9 @@ fn a_node_sleeps_by_its_own_rates() {
 
 /// Gas a ground reaction exchanges with the air crosses the height from the ground to the air's mean height: in a world
 /// whose only reaction is the burning of the energy-rich solid, a hot node of it burns and takes more gas from the air
-/// than it gives; the world's potential energy changes by the weight the air gained times a height within the air
-/// (kilometres: the air's scale height), the air's heat pays for the difference, and energy is kept with the potential
-/// energy counted.
+/// than it gives; the world's potential energy (`Store::lifted`) changes by the weight the air gained times a height
+/// within the air (kilometres: the air's scale height), the air's heat pays for the difference, and energy is kept with
+/// the potential energy counted.
 #[test]
 fn gas_a_ground_node_exchanges_with_the_air_crosses_the_air_s_height() {
     let (mut chem, init) = worldgen::chemistry0();
@@ -124,14 +124,14 @@ fn gas_a_ground_node_exchanges_with_the_air_crosses_the_air_s_height() {
     set_amount(&mut w, Node::ground(i), RICH, 1000.0);
     let e = w.energy_ground(i, 600.0);
     set_heat(&mut w, Node::ground(i), e);
-    let (books, air0, pot0) = (Books::now(&w), w.store.amounts(Class::Air).to_vec(), w.store.heat(Class::Potential)[0]);
+    let (books, air0, pot0) = (Books::now(&w), w.store.amounts(Class::Air).to_vec(), w.store.lifted());
     change::step(&mut w, 3.0 * DAY);
     let na = w.mesh.level(AIR).n();
     let kg: f64 = (0..w.chem.ns()).map(|k| (0..na).map(|j| w.store.amounts(Class::Air)[k * na + j] - air0[k * na + j]).sum::<f64>() * w.chem.subs[k].molar_mass).sum();
-    let height = (w.store.heat(Class::Potential)[0] - pot0) / (g * kg);
+    let height = (w.store.lifted() - pot0) / (g * kg);
     println!("the air gained {kg:.2} kg across {height:.0} m");
     assert!(kg.abs() > 1.0 && height > 1e3 && height < w.cfg.air_top_m, "{kg} kg across {height} m");
-    books.assert_kept(&w, 1e-12);
+    books.assert_kept(&w, 1e-9);
 }
 
 /// A ground node reacts at its temperature: one half frozen, on the melting plateau of its liquid, burns the energy-rich

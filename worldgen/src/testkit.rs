@@ -280,13 +280,11 @@ pub fn empty_cell(w: &mut World, i: usize) {
     }
 }
 
-/// The amount of substance `k` in node `x` of the store set to `mol`, with what rounding took from it (`Store::carry`)
-/// (booked as an edit, as `set_heat`, with no heat: set it after).
+/// The amount of substance `k` in node `x` of the store set to `mol` (booked as an edit, as `set_heat`, with no heat:
+/// set it after).
 pub fn set_amount(w: &mut World, x: Node, k: usize, mol: f64) {
     let at = k * w.store.amounts(x.class).len() / w.chem.ns() + x.index;
-    // Taking out the amount folds the carry back into it; the second move takes that out.
-    let carry = w.store.carry(x.class).get(at).copied().unwrap_or(0.0);
-    w.cross((Boundary::Outside, x), [(k, -w.store.amounts(x.class)[at]), (k, -carry)], 0.0);
+    w.cross((Boundary::Outside, x), [(k, -w.store.amounts(x.class)[at])], 0.0);
     w.cross((Boundary::Outside, x), [(k, mol)], 0.0);
 }
 

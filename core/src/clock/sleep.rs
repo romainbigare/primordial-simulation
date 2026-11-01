@@ -29,7 +29,7 @@ struct Alarms {
 pub struct Sleep([Alarms; RUN]);
 
 impl Sleep {
-    /// The alarms of `class`. Panics for a class that runs no process (a boundary node, the potential, a part).
+    /// The alarms of `class`. Panics for a class that runs no process (a boundary node, a part).
     fn of(&mut self, class: Class) -> &mut Alarms {
         assert!((class as usize) < RUN, "a node of {class:?} runs no process, so it never sleeps");
         &mut self.0[class as usize]

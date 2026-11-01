@@ -1,7 +1,7 @@
 //! The yearly part of Flow: creep of loose solids, and the regrowth of bodies into cleared ground.
 
 use super::{bare_share, land::{lift, melted, molten, rise}, range, runs_off, Scratch};
-use crate::{store::{apply, Batch, Class}, World};
+use crate::{store::{apply, fall_heat, Batch, Class}, World};
 
 /// Yearly: loose solids creep to lower neighbours, link by link, each from what the links before it left, booked in one
 /// call, out of the cells liquid runs off (`runs_off`); then bodies spread back into cleared links (`lanes::regrow`). Over each link they creep from the higher node
@@ -19,7 +19,7 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
         mob.iter_mut().enumerate().filter(|p| from[p.0]).for_each(|(i, m)| *m += amt[q * n + i] * (1.0 - molten(s, k, i)) * s.sp[k].v[0] * soft[q]);
     }
     let ks: Vec<u16> = sol.iter().map(|&k| k as u16).collect();
-    let (mut moved, mut fall) = (Batch::new([Class::Ground; 2], &ks), Batch::falls(Class::Ground));
+    let (mut moved, mut fall) = (Batch::new([Class::Ground; 2], &ks), vec![0.0; n]);
     let cells = w.mesh.cells();
     for (l, (&i, &j)) in cells.a().iter().zip(cells.b()).enumerate() {
         let (i, j) = (i as usize, j as usize);
@@ -50,11 +50,12 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
             // The heat of what moves goes with it.
             let u = moved.link((a, b), c * ta);
             sol.iter().zip(&out).for_each(|(&k, &m)| moved.carry(u, k as u16, m));
-            fall.fall(b, mass * g * dz / 2.0);
+            fall[b] += mass * g * dz / 2.0;
             lift(s, a, ua);
             lift(s, b, ub);
         }
     }
-    apply(w, &[moved.flux(), fall.flux()], &[]);
+    apply(w, &[moved.flux()], &[]);
+    fall_heat(w, Class::Ground, &fall);
     crate::lanes::regrow(w, dt);
 }

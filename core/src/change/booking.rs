@@ -23,7 +23,7 @@ struct Columns<'a> {
 
 impl Rows {
     /// Book the rows on the world: the reactions of each node, and the gas a ground node gives its air node with its
-    /// heat and latent heat, the air paying the lift out of the potential. What rounding leaves below zero is set to
+    /// heat and latent heat, the air paying its lift from its heat into the potential energy (`Store::lifted`). What rounding leaves below zero is set to
     /// zero and counted (`Counters::rounded`). No domain's view of the store is open then (`Moves::open`; checked in
     /// debug builds).
     pub(super) fn book(&self, w: &mut World) {
@@ -38,9 +38,9 @@ impl Rows {
         };
         let classes: &[Class] = if self.class == Class::Ground { &[Class::Ground, Class::Air] } else { &[Class::Air] };
         counts.add_rounded(book_by_array(store, ns, classes, self.nodes.len() / ROWS_PER_ITEM, |b| cols.changes(b)));
-        // The potential holds a whole history's sum: the lifts are summed apart, in the order of the air nodes, and
+        // The potential energy is a whole history's sum: the lifts are summed apart, in the order of the air nodes, and
         // added once.
-        store.add_far_heat(Class::Potential, 0, self.blocks.iter().fold(0.0, |far, b| far + b.lift));
+        store.lift(self.blocks.iter().fold(0.0, |far, b| far + b.lift));
     }
 }
 

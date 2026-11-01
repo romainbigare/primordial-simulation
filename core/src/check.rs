@@ -10,7 +10,7 @@ pub struct Totals {
     pub thermal: f64,
     /// J, chemical energy held in substances (formation enthalpies, and the latent heat held in the air and the bodies' nodes)
     pub chemical: f64,
-    /// J, potential energy gained since the start (the heat of `store::Class::Potential`)
+    /// J, potential energy the world's matter gained since the start (`Store::lifted`)
     pub potential: f64,
     /// J, the energy each boundary node holds (`store::Boundary`): its heat and its amounts' formation enthalpy
     pub boundary_energy: [f64; BOUNDARIES],
@@ -40,12 +40,9 @@ pub fn totals(w: &World) -> Totals {
     let (mut subs, mut held, mut thermal) = (vec![Sum::default(); ns], Sum::default(), Sum::default());
     for (class, len) in [(Class::Ground, w.mesh.cells().n()), (Class::Bed, w.mesh.cells().n()), (Class::Air, w.mesh.level(AIR).n()), (Class::Deep, w.mesh.cells().n()), (Class::Bodies, w.mesh.cells().n())] {
         let (store, latent) = (w.store.amounts(class), matches!(class, Class::Air | Class::Bodies));
-        // The amounts with what rounding took from their sums (`Store::carry`).
-        let carry = w.store.carry(class);
         for (k, sum) in subs.iter_mut().enumerate() {
             let mut s = Sum::default();
-            let at = k * len..(k + 1) * len;
-            store.get(at.clone()).unwrap_or(&[]).iter().chain(carry.get(at).unwrap_or(&[])).for_each(|&a| s.add(a));
+            store.get(k * len..(k + 1) * len).unwrap_or(&[]).iter().for_each(|&a| s.add(a));
             sum.add(s.get());
             // Air and the bodies' nodes hold their gases' fusion and vaporisation enthalpy; the ground holds fusion in
             // `e_ground`.
@@ -82,13 +79,17 @@ pub fn totals(w: &World) -> Totals {
         chem.add_elems(k, a, &mut boundary_elems);
         boundary_energy[b] += a * chem.subs[k].hf;
     }
-    Totals { elems, thermal: thermal.get(), chemical: chemical.get(), potential: w.store.heat(Class::Potential)[0], boundary_energy, boundary_elems }
+    Totals { elems, thermal: thermal.get(), chemical: chemical.get(), potential: w.store.lifted(), boundary_energy, boundary_elems }
 }
 
 /// The relative drift of element `j` from `start` to `now`, signed: its change less what the boundary nodes gave.
 pub fn elem_drift(now: &Totals, start: &Totals, j: usize) -> f64 {
     (now.elems[j] - start.elems[j] - (start.boundary_elems[j] - now.boundary_elems[j])) / start.elems[j].abs().max(1.0)
 }
+
+/// The most the elements and the energy may drift since a start, relative (`drift`): the rounding of plain sums over a
+/// long run.
+pub const DRIFT: f64 = 1e-9;
 
 /// Compare now with a start point: the world's elements and energy change only by what the boundary nodes gave it.
 /// Returns the worst relative drift of elements and of energy.
@@ -99,6 +100,12 @@ pub fn drift(w: &World, start: &Totals) -> (f64, f64) {
     let change = (now.thermal + now.chemical + now.potential) - (start.thermal + start.chemical + start.potential);
     let scale = given[Boundary::Sun as usize].abs().max(start.thermal.abs()).max(1.0);
     (worst_e, (change - given.iter().sum::<f64>()).abs() / scale)
+}
+
+/// The drift of the elements or the energy since `start`, if more than `DRIFT`.
+pub fn drifted(w: &World, start: &Totals) -> Option<String> {
+    let (de, dq) = drift(w, start);
+    (de.max(dq) > DRIFT).then(|| format!("the books drifted: elements {de:.2e}, energy {dq:.2e}, over {DRIFT:e}"))
 }
 
 /// The first element of `v` that `ok` refuses, as `name[i] = value`.

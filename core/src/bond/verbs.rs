@@ -262,8 +262,7 @@ pub fn dig(w: &World, d: &mut Domain, b: &mut Body) {
         return;
     }
     for (k, &a) in m.iter().enumerate() {
-        let bed = d.moves.amount(w, Node::new(Class::Bed, i), k);
-        d.moves.gather(w, Move::loosen(i, k, a, bed));
+        d.moves.gather(w, Move { from: Node::new(Class::Bed, i), to: Node::ground(i), k: k as u16, mol: a, heat: 0.0 });
     }
 }
 

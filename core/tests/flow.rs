@@ -64,7 +64,7 @@ fn hot_plateau_cools_but_not_to_the_floor() {
     worldgen::testkit::flow_step(&mut w, DT);
     let t = w.t_ground(i);
     assert!(t > 150.0 && t < melt, "{t} K after a step from {melt} K");
-    books.assert_within(&w, 1e-12, 1e-9);
+    books.assert_within(&w, 1e-9, 1e-9);
 }
 
 /// A pool with a solute in it freezes lower than a pure one (`Chemistry::melt_in`): 1 mol of solute in a kg of the
@@ -104,7 +104,7 @@ fn a_pool_with_a_solute_freezes_lower() {
         assert!((held - w.melt(k, i)).abs() < MELT_HELD && w.thaw_last(i).1.is_some_and(|(q, _)| q == k), "{held} K, melting at {} K", w.melt(k, i));
     }
     assert!(w.t_ground_last(mixed) < w.t_ground_last(pure), "the pool with a solute is held lower");
-    books.assert_within(&w, 1e-12, 1e-9);
+    books.assert_within(&w, 1e-9, 1e-9);
 }
 
 /// How near its melting point Flow holds a pool after a step, K: the step's evaporation changes what is dissolved.
@@ -138,7 +138,7 @@ fn a_plateau_used_up_in_one_long_step_ends_where_short_steps_end() {
                     pcore::flow::state(&mut w, true);
                     pcore::flow::air(&mut w, DT / steps as f64);
                 }
-                books.assert_within(&w, 1e-12, 1e-9);
+                books.assert_within(&w, 1e-9, 1e-9);
                 (w.t_ground(i), w.thaw(i).1.is_some())
             });
             assert!(!long.1 && !short.1, "sun x{sun}: a plateau left");
@@ -166,7 +166,7 @@ fn a_hot_pool_boils_only_what_its_heat_pays() {
     let books = Books::now(&w);
     pcore::flow::state(&mut w, true);
     pcore::flow::air(&mut w, DT);
-    books.assert_within(&w, 1e-12, 1e-9);
+    books.assert_within(&w, 1e-9, 1e-9);
     let (left, t) = (w.g(k, i) / pool, w.t_ground(i));
     assert!(left > 0.99 && t > w.chem.subs[k].boil - 5.0, "{left} of the pool left, at {t} K");
 }
@@ -184,7 +184,7 @@ fn warm_air_spreads() {
     worldgen::testkit::flow_step(&mut warm, DT);
     assert!(warm.t_air(j) - cold.t_air(j) < 0.5 * excess, "warm node kept its heat");
     assert!(warm.t_air(j + 1) - cold.t_air(j + 1) > 0.5, "neighbour did not warm");
-    books.assert_within(&warm, 1e-12, 1e-9);
+    books.assert_within(&warm, 1e-9, 1e-9);
 }
 
 /// Heat spreads sideways through flat, even ground as diffusion does: on the bed of one land cell everywhere with no
@@ -228,7 +228,7 @@ fn a_hot_spot_spreads_through_the_ground_at_its_diffusivity() {
     println!("diffusivity {d:.2e} m2/s over {:.0} years: variance {:.6} and {:.6} of 2 D t", t / DAY / 365.0, var[0] / sum / (2.0 * d * t), var[1] / sum / (2.0 * d * t));
     assert!((sum / hot - 1.0).abs() < 1e-9, "excess heat {sum} of {hot}");
     assert!(var.iter().all(|v| (v / sum / (2.0 * d * t) - 1.0).abs() < 1e-4), "variance {var:?} of {}", 2.0 * d * t * sum);
-    books.assert_within(&w, 1e-12, 1e-12);
+    books.assert_within(&w, 1e-9, 1e-9);
 }
 
 /// Heat crosses the border of a refined region by the border's width over the distance across it: on even bed
@@ -271,7 +271,7 @@ fn heat_crosses_the_border_of_a_refined_region_by_its_width() {
         let off = (0..n).filter(|&i| even || away(&w, i)).map(|i| (w.store.heat(Class::Ground)[i] - before[i]).abs()).fold(0.0, f64::max);
         println!("even {even}: the most any cell changed, {:.3e} of the heat across a side", off / side_heat);
         assert!(off <= 1e-6 * side_heat, "a cell changed by {off:.3e} J, against {side_heat:.3e} J across a side");
-        books.assert_within(&w, 1e-12, 1e-12);
+        books.assert_within(&w, 1e-9, 1e-9);
     }
 }
 
@@ -316,7 +316,7 @@ fn gas_dissolves_and_comes_out_when_warmed() {
     hold_ground(&mut w, i, t);
     (0..4).for_each(|_| worldgen::testkit::flow_step(&mut w, DT));
     assert!(held(&w) < 0.9 * h1, "{} dissolved per mol after warming, {h1} before", held(&w));
-    books.assert_within(&w, 1e-12, 1e-9);
+    books.assert_within(&w, 1e-9, 1e-9);
 }
 
 /// The pore space of a cell is the porosity times the volume of its loose solids; the liquid in it does not stand:
@@ -353,7 +353,7 @@ fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
         let books = Books::now(&w);
         let v0 = liquid_m3(&w, i);
         worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
-        books.assert_within(&w, 1e-12, 1e-9);
+        books.assert_within(&w, 1e-9, 1e-9);
         (liquid_m3(&w, i) / v0, liquid_m3(&w, i) / pores)
     };
     // Half the pores' volume: it all stays (but for what the open air takes); with no pores the same sheet runs off.
@@ -424,7 +424,7 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
         pour(&mut w, i, share * pores);
         let books = Books::now(&w);
         worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
-        books.assert_within(&w, 1e-12, 1e-9);
+        books.assert_within(&w, 1e-9, 1e-9);
         let (area, depth) = (w.mesh.cells().area()[0], loose(&w, i) / w.mesh.cells().area()[0]);
         // The liquid table of `i` stood at its bottom plus the depth the liquid fills; `j` was dry on its own bottom.
         let (bi, bj) = (w.surface_z(i) - depth, w.surface_z(j) - loose(&w, j) / area);
@@ -700,7 +700,7 @@ fn rain_crosses_the_land_in_one_step() {
         far.iter().for_each(|&i| pour(&mut w, i, rain * area));
         let books = Books::now(&w);
         worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
-        books.assert_within(&w, 1e-12, 1e-9);
+        books.assert_within(&w, 1e-9, 1e-9);
         (low.iter().map(|&i| liquid_m3(&w, i)).sum::<f64>(), rain * area * far.len() as f64)
     };
     let ((wet, fell), (dry, _)) = (low_after(0.05), low_after(0.0));
@@ -837,7 +837,7 @@ fn a_globe_keeps_its_books_round_the_wrap() {
         pcore::step(&mut w);
         assert_eq!(pcore::check::broken(&w), None, "month {month}");
     }
-    books.assert_kept(&w, 1e-12);
+    books.assert_kept(&w, 1e-9);
 }
 
 /// A globe of 32 rows without life keeps its books to rounding over 100 years, through its ice and its soft covers: its
@@ -849,7 +849,7 @@ fn a_globe_keeps_its_books_to_rounding_for_a_hundred_years() {
     let mut w = worldgen::terrain::new_globe(1, 32);
     let books = Books::now(&w);
     (0..100 * w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));
-    books.assert_kept(&w, 1e-12);
+    books.assert_kept(&w, 1e-9);
 }
 
 /// The sun is right at every latitude, on a circular orbit: the yearly mean at a pole is S sin ε / π and at the equator

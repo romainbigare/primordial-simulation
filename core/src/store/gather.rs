@@ -2,12 +2,10 @@
 //! when they end. Each domain keeps its own (`life::Domain::moves`), with a view of its nodes as those moves leave them
 //! (laws.md 0): its air node, taken from the store when the domain opens, and the ground, bed and bodies' node of each
 //! of its cells, taken when an update in the cell or a move first touches it (until then the store holds what the view
-//! would; nothing else changes the store while a domain is open). A move changes only its domain's nodes, the
-//! potential, whose lift is summed apart as `apply` sums it, and a body or a part, whose law books its side. A read of
-//! another domain's node reads the store, which nothing changes until the moves are booked. The view keeps beside each
-//! number its change since it was taken, which the booking adds to the store once, as `apply` adds. The view's sums
-//! are plain, not compensated as `apply` compensates the ground and the air (`Store::carry`): what a body reads differs
-//! from what is booked by less than `ROUNDING`.
+//! would; nothing else changes the store while a domain is open). A move changes only its domain's nodes and a body or
+//! a part, whose law books its side. A read of another domain's node reads the store, which nothing changes until the
+//! moves are booked. The view keeps beside each number its change since it was taken, which the booking adds to the
+//! store once, as `apply` adds: what a body reads differs from what is booked by less than `ROUNDING`.
 
 use super::apply::ROUNDING;
 use super::{heat_received, held_more, Booker, Class, Move, Node};
@@ -44,7 +42,7 @@ pub struct Moves {
     own: (usize, usize),
     /// Heat a ground node could not give (`Moves::take_from_ground`), J
     short: f64,
-    /// Heat lifted into the potential (`Class::Potential`), J
+    /// The potential energy the moves' lifts gained less what their falls gave back (`Store::lifted`), J
     lift: f64,
 }
 
@@ -186,8 +184,8 @@ impl Moves {
         if m > 0.0 {
             self.give(w, Node::bodies(i), k, m, m * held_more(&w.chem, who.class, Class::Bodies, k));
         } else {
+            // The fall gives the air its lift back, from the potential energy.
             self.take(w, air, k, -m, 0.0);
-            // (The heat of the potential is summed apart, as `apply` sums it.)
             let e = m * w.chem.subs[k].molar_mass * lift;
             self.alter(2 * Class::Air as usize + 1, 0, -e);
             self.lift += e;
@@ -267,8 +265,8 @@ impl Moves {
             None => each(&self.view[2 * c + 1], 1, 0, 0),
         }
     }
-    /// The moves gathered close, once booked: returns the heat lifted into the potential and the heat the ground nodes
-    /// could not give, J.
+    /// The moves gathered close, once booked: returns the potential energy their lifts gained and the heat the ground
+    /// nodes could not give, J.
     pub(super) fn close(&mut self) -> (f64, f64) {
         (self.who, self.open) = (None, None);
         (std::mem::take(&mut self.lift), std::mem::take(&mut self.short))

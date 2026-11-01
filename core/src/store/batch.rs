@@ -4,7 +4,7 @@ use super::moves::LinkFlux;
 use super::nodes::Class;
 
 /// What crosses links between nodes of two classes, gathered link by link: ends, mol of each of `ks` (+ from `a` to
-/// `b`) and the heat leaving `a`, J. A batch from the potential is the heat falls give and lifts take (`falls`).
+/// `b`) and the heat leaving `a`, J.
 #[derive(Clone, Debug)]
 pub struct Batch {
     class: [Class; 2],
@@ -22,10 +22,6 @@ impl Batch {
     /// No link yet between nodes of `class`, of the substances `ks` (more join as they cross).
     pub fn new(class: [Class; 2], ks: &[u16]) -> Batch {
         Batch { class, a: Vec::new(), b: Vec::new(), ks: ks.to_vec(), mol: vec![Vec::new(); ks.len()], heat: Vec::new(), flat: Vec::new() }
-    }
-    /// No fall yet into the nodes of `class` (`fall`).
-    pub fn falls(class: Class) -> Batch {
-        Batch::new([Class::Potential, class], &[])
     }
     /// A new link from node `a` to node `b`, carrying `heat` J and nothing else yet; its index.
     pub fn link(&mut self, (a, b): (usize, usize), heat: f64) -> usize {
@@ -54,18 +50,6 @@ impl Batch {
             _ => self.link((a, b), heat),
         };
         self.carry(l, k, m);
-    }
-    /// Falls give each node `i` of `class` its `q[i]` J from the potential (a lift, negative, takes it).
-    pub fn fallen(class: Class, q: impl IntoIterator<Item = f64>) -> Batch {
-        let mut b = Batch::falls(class);
-        q.into_iter().enumerate().for_each(|(i, q)| b.fall(i, q));
-        b
-    }
-    /// A fall gives node `i` `q` J from the potential (a lift, negative, takes it).
-    pub fn fall(&mut self, i: usize, q: f64) {
-        if q != 0.0 {
-            self.link((0, i), q);
-        }
     }
     /// The batch as a link flux, for `apply`.
     pub fn flux(&mut self) -> LinkFlux<'_> {

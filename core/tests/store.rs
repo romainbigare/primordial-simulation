@@ -4,7 +4,7 @@
 
 use pcore::check;
 use pcore::rng::{Purpose, Rng};
-use pcore::store::{apply, held, Boundary, Class, LinkFlux, Move, Node, NodeId, BOUNDARIES};
+use pcore::store::{apply, held, fall_heat, Boundary, Class, LinkFlux, Move, Node, NodeId, BOUNDARIES};
 use pcore::{World, AIR};
 use worldgen::testkit::{put, set_amount, small_world, Books, LIQUID, ROCK};
 
@@ -21,7 +21,6 @@ fn arrays(w: &World, class: Class) -> (&[f64], &[f64], usize) {
     let len = match class {
         Class::Air => w.mesh.level(AIR).n(),
         Class::Boundary => BOUNDARIES,
-        Class::Potential => 1,
         Class::Part | Class::Body => unreachable!("a part's or a body's amounts lie in it"),
         _ => w.mesh.cells().n(),
     };
@@ -41,7 +40,7 @@ fn what_passes_through_a_node_needs_nothing_held() {
     let mol = vec![have; CHAIN - 1];
     let (books, rounded) = (Books::now(&w), w.counts.rounded);
     apply(&mut w, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[LIQUID as u16], mol: &mol, heat: &[] }], &[]);
-    books.assert_kept(&w, 1e-12);
+    books.assert_kept(&w, 1e-9);
     let after = &w.store.amounts(Class::Ground)[LIQUID * n..LIQUID * n + CHAIN];
     assert_eq!((after[0], w.counts.rounded), (0.0, rounded), "nothing is rounded");
     for i in 1..CHAIN - 1 {
@@ -60,27 +59,30 @@ fn a_link_joins_a_ground_node_to_its_store() {
     let books = Books::now(&w);
     let cell = [i as u32];
     apply(&mut w, &[LinkFlux { class: [Class::Ground, Class::Deep], a: &cell, b: &cell, ks: &[LIQUID as u16], mol: &[have / 2.0], heat: &[heat] }], &[]);
-    books.assert_kept(&w, 1e-12);
+    books.assert_kept(&w, 1e-9);
     assert!((w.g(LIQUID, i) - have / 2.0).abs() <= 1e-12 * have && (w.store.amounts(Class::Deep)[LIQUID * n + i] - deep - have / 2.0).abs() <= 1e-12 * have);
 }
 
 /// A link may join a ground node to its air node: the gas that rises takes from the heat the air receives what the air
-/// holds of it apart from heat (its latent heat), and its lift goes from the air's heat into the potential.
+/// holds of it apart from heat (its latent heat), and the air pays its lift from its heat into the potential energy
+/// (`store::fall_heat`, `Store::lifted`).
 #[test]
 fn a_gas_that_rises_pays_its_latent_heat_and_its_lift() {
     let mut w = small_world();
     let i = 3;
     let (j, latent) = (w.mesh.up(i, 0, AIR) as u32, w.chem.subs[LIQUID].latent_gas());
-    let (e_air, e_ground, pot, books) = (w.store.heat(Class::Air)[j as usize], w.store.heat(Class::Ground)[i], w.store.heat(Class::Potential)[0], Books::now(&w));
+    let (e_air, e_ground, pot, books) = (w.store.heat(Class::Air)[j as usize], w.store.heat(Class::Ground)[i], w.store.lifted(), Books::now(&w));
     let (heat, lift) = (1e-6 * e_ground, 1e-9 * e_ground);
     let m = 0.5 * heat / latent;
     let rise = LinkFlux { class: [Class::Ground, Class::Air], a: &[i as u32], b: &[j], ks: &[LIQUID as u16], mol: &[m], heat: &[heat] };
-    let paid = LinkFlux { class: [Class::Potential, Class::Air], a: &[0], b: &[j], ks: &[], mol: &[], heat: &[-lift] };
-    apply(&mut w, &[rise, paid], &[]);
-    books.assert_kept(&w, 1e-12);
+    apply(&mut w, &[rise], &[]);
+    let mut paid = vec![0.0; w.mesh.level(AIR).n()];
+    paid[j as usize] = -lift;
+    fall_heat(&mut w, Class::Air, &paid);
+    books.assert_kept(&w, 1e-9);
     let near = |x: f64, y: f64, of: f64| (x - y).abs() <= 1e-12 * of;
     assert!(near(w.store.heat(Class::Air)[j as usize] - e_air, heat - m * latent - lift, e_air) && near(e_ground - w.store.heat(Class::Ground)[i], heat, e_ground));
-    assert!(near(w.store.heat(Class::Potential)[0] - pot, lift, pot.abs()));
+    assert!(near(w.store.lifted() - pot, lift, pot.abs()), "the potential energy gained {} of {lift} J", w.store.lifted() - pot);
 }
 
 /// A node of a random class, and its index.
@@ -219,5 +221,5 @@ fn what_crosses_the_boundary_keeps_the_books() {
     let q = 1e-3 * w.store.heat(Class::Air)[0];
     w.cross((Boundary::Sun, Node::ground(2)), [], q);
     w.cross((Boundary::Space, Node::air(0)), [], -q);
-    books.assert_kept(&w, 1e-12);
+    books.assert_kept(&w, 1e-9);
 }

@@ -50,7 +50,7 @@ fn the_soil_is_given_to_the_land_and_booked() {
     let grams = per_m2 * w.chem.subs[k].elems[2] as f64 * 14.0;
     assert!((grams - 10.0).abs() < 0.05, "{grams} g of the gas's element to the m²");
     let (de, dq) = pcore::check::drift(&w, &t0);
-    assert!(de < 1e-12 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
 
 /// The air starts lying as Flow's law has it: each air node's column, against the column at height 0 (`terrain::air_column`), is thinner

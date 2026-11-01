@@ -4,7 +4,7 @@
 
 use super::{bare_share, drain::{springs, under}, follow, land::{lift, solid, stand, wet, NONE}, range, year_weight, Scratch};
 use crate::solve::sweep::HALF_WAY;
-use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed}, store::{apply, Batch, Class, LinkFlux, Move}, units::T_FLOOR, World};
+use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed}, store::{apply, fall_heat, Class, LinkFlux, Move, Node}, units::T_FLOOR, World};
 
 /// Least bond strength wear divides by.
 const STRENGTH_MIN: f64 = 0.05;
@@ -147,7 +147,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         worn[i] = load(ww, ss, i, q, (nl..rows, &sol), bedwork, out);
         q[heat] = ks.iter().enumerate().map(|(r, &k)| q[r] * (ss.sp[k].cp * t + if r < nl { ss.sp[k].lf } else { 0.0 })).sum();
         power[i] = g * drop * kg(q, 0..rows);
-        // The head lost on the way out heats what runs out: booked to the node from the potential, it leaves with the
+        // The head lost on the way out heats what runs out: booked to the node (`store::fall_heat`), it leaves with the
         // liquid (as under the surface, `drain::under`), so a node the liquid runs out of keeps none of the fall's heat.
         q[heat] += if out > 0.0 { power[i] / out } else { 0.0 };
         // What leaves a land cell for cells that are not land runs off the land.
@@ -159,8 +159,9 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
     let kinds: Vec<u16> = liq.iter().chain(sol.iter().filter(|k| !liq.contains(k))).map(|&k| k as u16).collect();
     let col_of: Vec<usize> = ks.iter().map(|&k| kinds.iter().position(|&x| x as usize == k).unwrap_or(0)).chain([kinds.len()]).collect();
     let (a, b, mol) = by_link(&crossed, rows + 2, &col_of, (cells.a(), cells.b()));
-    let (at, mut fall) = (kinds.len() * a.len(), Batch::fallen(Class::Ground, power));
-    book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &kinds, mol: &mol[..at], heat: &mol[at..] }, fall.flux()]);
+    let at = kinds.len() * a.len();
+    book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &kinds, mol: &mol[..at], heat: &mol[at..] }]);
+    fall_heat(w, Class::Ground, &power);
     s.order = order;
     let (ema, mut broke) = (year_weight(w, dt), Vec::new());
     for i in 0..n {
@@ -218,7 +219,8 @@ fn wear(w: &World, s: &mut Scratch, i: usize, bedwork: f64, broke: &mut Vec<Move
         let b = w.store.amounts(Class::Bed)[k * n + i];
         if b > 0.0 && bv > 0.0 {
             let v = w.cfg.wear * bedwork * (b * s.sp[k].v[0] / bv) / w.chem.subs[k].strength.max(STRENGTH_MIN);
-            let (go, area) = (Move::loosen(i, k, (v / s.sp[k].v[0]).min(b), b), w.mesh.cells().area()[i]);
+            let go = Move { from: Node::new(Class::Bed, i), to: Node::ground(i), k: k as u16, mol: (v / s.sp[k].v[0]).min(b), heat: 0.0 };
+            let area = w.mesh.cells().area()[i];
             let (m, dz) = (go.mol, go.mol * s.sp[k].v[0] / area);
             broke.push(go);
             s.state.bed[i].vol -= m * s.sp[k].v[0];

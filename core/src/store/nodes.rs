@@ -1,4 +1,4 @@
-//! The names of the world's nodes: a fixed node (ground, air, deep, boundary, potential) by its class and index
+//! The names of the world's nodes: a fixed node (ground, air, deep, bed, bodies, boundary) by its class and index
 //! (`Node`); what comes and goes by slot and generation (`NodeId` for a part; a body has `Body::id`).
 
 use serde::{Deserialize, Serialize};
@@ -19,16 +19,14 @@ pub enum Class {
     Air,
     /// The store of the bed under a cell: its liquid and what is dissolved in it, and its heat (`flow::drain`)
     Deep,
-    /// The bonded ground under a cell: amounts only (its skin's heat is its ground node's); it breaks by `Move::loosen`
+    /// The bonded ground under a cell: amounts only (its skin's heat is its ground node's); wear and digging break it
+    /// into its ground node
     Bed,
     /// The bodies' node of a cell: the light and heat set aside for its bodies between their updates, J, and the gas its
     /// bodies and parts give off until the air's step takes it up (holding its latent heat as the air does)
     Bodies,
     /// A node beyond the world's boundary (`Boundary`): it holds what crossed, with a node's sign, so it may go below zero
     Boundary,
-    /// The potential energy the world's matter gained in gravity since the start, as the heat of one node: a lift moves
-    /// heat into it, a fall takes it back; like a boundary node it gives all it is asked
-    Potential,
     /// A part (`bond::Part`), at its slot in `World::parts`, named by a `NodeId`
     Part,
     /// A body (`body::Body`): like a part it holds its own amounts, and its law books its side of a move. Its index is
@@ -82,5 +80,5 @@ pub const BOUNDARIES: usize = 3;
 
 impl Class {
     /// Every class, by its index (`class as usize`).
-    pub(crate) const ALL: [Class; 10] = [Class::Ground, Class::Air, Class::Deep, Class::Bed, Class::Bodies, Class::Boundary, Class::Potential, Class::Part, Class::Body, Class::Cover];
+    pub(crate) const ALL: [Class; 9] = [Class::Ground, Class::Air, Class::Deep, Class::Bed, Class::Bodies, Class::Boundary, Class::Part, Class::Body, Class::Cover];
 }

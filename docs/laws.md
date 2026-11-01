@@ -103,12 +103,12 @@ than `wake_share`, then its law brings it up to date over the whole time since.
 **Checks before a run**: `Config::validate`, `Chemistry::validate` (every reaction keeps its elements and mass).
 
 **The books.** Every move takes from one node exactly what it gives another, with its heat; `store::apply` and the
-bookings of the bodies' moves and of Change's rows (`store::book_by_array`, which adds as `apply` adds) are the store's only writers; the heat of the boundary nodes and of the potential, a whole history's sum, gets each booking's changes summed apart and added once (`Store::add_far_heat`). A move out of the bed, which holds far more than its loose ground, takes only what the bed can
-lose exactly (`Move::loosen`), so no amount below the bed's rounding reaches the ground for free. A ground node under
-deep standing liquid holds far more of it, and an air node far more of the main gases, than a body moves: what rounding takes from their
-amounts is kept apart and counted in the books (`Store::carry`, Neumaier 1974). Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`);
-potential energy is one more node (`Class::Potential`): a lift moves heat into it, a fall takes it back. So every
-element and the energy are kept; `check::drift` checks it yearly and must stay near rounding.
+bookings of the bodies' moves and of Change's rows (`store::book_by_array`, which adds as `apply` adds) are the store's only writers, with plain sums.
+Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`). A lift is paid from
+the heat of the node that lifts (the air, for a gas going up; the ground node a store's liquid rises into) and a fall
+gives its heat to where the matter lands (`store::fall_heat`); the other side of each is the potential energy the
+world's matter gained, one number of the store (`Store::lifted`). So every element and the energy are kept;
+`check::drift` checks it yearly against `check::DRIFT` (1e-9).
 **No overdraw.** A law never asks a node for more than it holds; where it could, it cuts that node's own outgoing
 links (`solve::sweep::within`), never a whole field. A body takes no more than its domain's view holds, what the
 bodies before it in the batch left (checked in debug builds). `apply` and `book_by_array` only add and set rounding below zero to zero, counted
@@ -159,8 +159,8 @@ long step ends where short ones do.
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node
   holds and what stays keeps that temperature. A salt is a liquid that never
   boils (23, 24): it moves with the liquid and stays when it evaporates. Lost head heats the liquid that loses it (on
-  the surface what runs out of a node, under it where it goes) and does work (1.3); lifts and falls book through the
-  potential node (`flow::Falls`).
+  the surface what runs out of a node, under it where it goes) and does work (1.3); lifts and falls book on the node
+  that pays or gets them (`store::fall_heat`).
 
 ### 1.3 Erosion and creep
 The head lost by moving liquid does work where it is lost on land (`flow::liquid::load`, `wear`; below 0 m its load

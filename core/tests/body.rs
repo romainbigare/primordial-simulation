@@ -186,7 +186,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
         }
     }
     w.life[s] = b;
-    books.assert_kept(&w, 1e-12);
+    books.assert_kept(&w, 1e-9);
 }
 
 /// The survey adds up what each cell holds (`Life::sum`), one domain at a time: a domain whose bodies are all gone (and

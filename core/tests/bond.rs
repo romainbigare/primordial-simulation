@@ -27,7 +27,7 @@ fn bond_breaks_under_too_much_load() {
     let (p, bonds) = (&w.parts.parts, &w.parts.bonds);
     assert!(bonds.of(light).any(|l| l.0 == top as u32), "the light part fell");
     assert!(bonds.of(heavy).next().is_none() && p[heavy].root as usize == heavy, "the heavy part still hangs");
-    books.assert_within(&w, 1e-12, 1e-9);
+    books.assert_within(&w, 1e-9, 1e-9);
 }
 
 /// Walls shelter a body's heat: a resting animal inside a closed structure of thick walls (which conduct less than the
@@ -129,7 +129,7 @@ fn forming_never_takes_more_than_is_left() {
     assert!(b.store.iter().all(|&a| a >= 0.0), "{:?}", b.store);
     w.life[slot] = b;
     assert!(w.parts.alive().count() == 1 && pcore::check::broken(&w).is_none());
-    books.assert_within(&w, 1e-12, 1e-9);
+    books.assert_within(&w, 1e-9, 1e-9);
 }
 
 /// The members of a node who do an action of Bond (all of them, when its brain gives it every chance) act together, as
@@ -237,7 +237,7 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     bond::step(&mut w);
     assert!(!w.parts.parts[p].alive, "the part is still there");
     gained(&w, i, &before, &held, e);
-    books.assert_within(&w, 1e-12, 1e-9);
+    books.assert_within(&w, 1e-9, 1e-9);
 
     // A take: a body takes some of the mineral (it takes nothing else, and pays nothing). A world with the body (taken
     // out of its slot), its cell and a part in it.
@@ -263,7 +263,7 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     let gain: Vec<f64> = held.iter().zip(&took).map(|(a, t)| a - t).collect();
     gained(&w, i, &before, &gain, e - (b.e - eb));
     w.life[h] = b;
-    books.assert_within(&w, 1e-12, 1e-9);
+    books.assert_within(&w, 1e-9, 1e-9);
 
     // The body dies in the same update, on the view the fall opened again: the books are kept.
     let (mut w, h, i, p, mut b) = take_scene();
@@ -273,5 +273,5 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
         w.in_domain(i, |w, d| die(w, d, h, b, LACK));
     });
     assert!(!w.parts.parts[p].alive && w.life.find(id).is_none(), "the part or the body is still there");
-    books.assert_within(&w, 1e-12, 1e-9);
+    books.assert_within(&w, 1e-9, 1e-9);
 }

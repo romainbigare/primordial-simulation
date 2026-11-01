@@ -9,7 +9,7 @@ use super::rain::Landed;
 use super::exchange::cloud;
 use super::step::Active;
 use super::{lerp, sums, touching};
-use crate::store::{apply, Batch, Boundary, Class, LinkFlux};
+use crate::store::{apply, fall_heat, Batch, Boundary, Class, LinkFlux};
 use crate::{World, AIR};
 
 /// The gas the bodies' nodes hold comes up whole into their cells' air nodes, holding its latent heat as the air does;
@@ -30,7 +30,8 @@ pub(super) fn up_from_bodies(w: &mut World, s: &Scratch) {
         }
     }
     let up = LinkFlux { class: [Class::Bodies, Class::Air], a: &cells, b: &parent, ks: &ks, mol: &mol, heat: &[] };
-    apply(w, &[up, Batch::fallen(Class::Air, lift.iter().map(|q| -q)).flux()], &[]);
+    apply(w, &[up], &[]);
+    fall_heat(w, Class::Air, &lift.iter().map(|q| -q).collect::<Vec<f64>>());
 }
 
 /// Book what the step of `dt` seconds moves: over each cell's link to its air node what evaporates and its heat, at the
@@ -80,8 +81,8 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     let up = LinkFlux { class: [Class::Ground, Class::Air], a: &cells, b: &parent, ks: &ks, mol: &mol, heat: &link };
     let m = &mean.moved;
     let wind = LinkFlux { class: [Class::Air, Class::Air], a: &m.a, b: &m.b, ks: &gases, mol: &m.mol, heat: &m.heat };
-    let mut lifts = Batch::fallen(Class::Air, paid.iter().map(|q| -q));
-    apply(w, &[up, rained.flux(), wind, lit.flux(), kept.flux(), cooled.flux(), sky.flux(), lifts.flux()], &[]);
+    apply(w, &[up, rained.flux(), wind, lit.flux(), kept.flux(), cooled.flux(), sky.flux()], &[]);
+    fall_heat(w, Class::Air, &paid.iter().map(|q| -q).collect::<Vec<f64>>());
     for (y, ac) in act.iter().enumerate() {
         let net = |i: usize| mol[y * n + i] - fell[y * n + i];
         (0..n).any(|i| net(i) < 0.0).then(|| s.add_loose(ac.k, false));

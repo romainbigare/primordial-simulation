@@ -15,15 +15,6 @@ pub struct Move {
     pub heat: f64,
 }
 
-impl Move {
-    /// `mol` of substance `k` of the bed under ground node `i`, which holds `bed` of it, break into its loose ground
-    /// (wear, digging). It moves only what the bed can lose exactly (`bed - (bed - mol)`): the bed holds far more than
-    /// its loose ground, so an amount below the bed's rounding would leave the bed whole and still reach the ground.
-    pub fn loosen(i: usize, k: usize, mol: f64, bed: f64) -> Move {
-        Move { from: Node::new(Class::Bed, i), to: Node::ground(i), k: k as u16, mol: bed - (bed - mol), heat: 0.0 }
-    }
-}
-
 /// What crosses each link of a field at once: link `l` joins node `a[l]` of `class[0]` to node `b[l]` of `class[1]` and
 /// carries `mol[q * links + l]` of substance `ks[q]` and `heat[l]` J, + from `a` to `b`. Where the classes hold a
 /// substance unlike (`held`), `b` receives the heat less what the mol hold more there, as a `Move`'s `to` does. Only

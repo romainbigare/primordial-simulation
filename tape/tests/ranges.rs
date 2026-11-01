@@ -116,7 +116,7 @@ fn animal_kinds() -> Vec<(usize, u64)> {
 }
 
 /// A `LIVE_SIDE` island with the roster (seed 1), run `LIVE_AFTER` years past the last kind's placement, keeps every
-/// element and the energy (`common::run` checks the books to 1e-12), leaves no number that is not finite
+/// element and the energy (`common::run` checks the books to 1e-9), leaves no number that is not finite
 /// (`check::broken`), and ends with the base kinds alive (the starting cover, 0, and the starting eaters, 1) and at least
 /// `LIVE_KINDS` animal kinds. The others may die by their physics, so a small change of climate or law does not fail
 /// it: the eaters of remains (4, 5) live on what dies and the small fast eaters of the cover (6) on a short life

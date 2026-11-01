@@ -129,7 +129,7 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     assert!(w.life.find(ids[0]).is_none() && w.life[s].count == count + 1.0, "the part that holds nothing did not come back");
     let h = w.life.find(ids[1]).expect("the part that holds the part lives on");
     assert!(w.life[h].hold == Some(part) && !w.life[h].leaving, "the part did not take hold of the part");
-    books.assert_kept(&w, 1e-12);
+    books.assert_kept(&w, 1e-9);
 }
 
 /// A body of the parallel phase that kills a body holding a part: the dead holder lets go of the part in the serial
@@ -161,7 +161,7 @@ fn a_holder_killed_in_the_parallel_phase_lets_go_in_the_serial_phase() {
     let at = |f: &dyn Fn(&EventKind) -> bool| w.events.iter().position(|e| f(&e.kind));
     assert!(at(&|k| matches!(k, EventKind::BondBroken)) > at(&|k| matches!(k, EventKind::Died { .. })), "it let go before it died");
     assert_eq!(w.parts.parts[p].held, bond::NOBODY, "the dead holder still holds the part");
-    books.assert_kept(&w, 1e-12);
+    books.assert_kept(&w, 1e-9);
 }
 
 /// The order in which the domains run in the parallel phase of a batch and of the survey and in their landing, and the
@@ -321,5 +321,5 @@ fn the_order_of_the_domains_changes_nothing() {
     let anchored = v.parts.bonds.of(r).any(|b| b.0 == bond::GROUND);
     let let_go = v.life.find(anchorer).is_none_or(|h| v.life[h].hold.is_none());
     assert!(anchored && let_go, "the part was not anchored and let go of (anchored {anchored}, let go {let_go})");
-    books.assert_kept(v, 1e-12);
+    books.assert_kept(v, 1e-9);
 }

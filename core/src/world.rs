@@ -1,5 +1,5 @@
 //! The world's state: the store's nodes (ground, air, bed, deep stores, bodies' nodes, the nodes beyond its boundary
-//! that book what crossed it, the potential), the bodies and parts, and the counters the shell reads.
+//! that book what crossed it), the bodies and parts, and the counters the shell reads.
 
 use crate::{bond, chem::Chemistry, event::Event, flow, params::Config, space::{square::Square, Mesh}, store::{Class, Node, Store}};
 use serde::{Deserialize, Serialize};

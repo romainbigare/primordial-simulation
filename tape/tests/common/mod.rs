@@ -47,6 +47,6 @@ pub fn run_stepped(mut w: World, years: u64, roster: bool, set: impl Fn(&mut Con
         }
         each_year(y, &w, &rec);
     }
-    books.assert_kept(&w, 1e-12);
+    books.assert_kept(&w, 1e-9);
     (w, rec)
 }

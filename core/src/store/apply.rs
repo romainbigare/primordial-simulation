@@ -5,9 +5,7 @@
 use super::{heat_received, held_more};
 use super::moves::{LinkFlux, Move};
 use super::nodes::{Class, Node, BOUNDARIES};
-use super::CARRIED;
 use crate::chem::Chemistry;
-use crate::math::rounding_lost;
 use crate::{World, AIR};
 
 /// What a number may end below zero by to rounding, relative to what its node holds of that unit, what it held and the
@@ -16,8 +14,8 @@ pub(crate) const ROUNDING: f64 = 1e-9;
 /// The classes `apply` books, the first ones: those whose amounts and heat lie in the `Store` (a part or a body books
 /// its own).
 const BOOKED: usize = Class::Part as usize;
-/// The first array of the nodes that give all they are asked and may hold less than nothing: the boundary nodes and
-/// the potential (`Class::Boundary`, `Class::Potential`).
+/// The first array of the nodes that give all they are asked and may hold less than nothing: the boundary nodes
+/// (`Class::Boundary`).
 const BOUNDARY_ARRAYS: usize = 2 * Class::Boundary as usize;
 
 /// One number of the world: entry `at` of array `arr` (`2 * class` the amounts of a class, `2 * class + 1` its heat);
@@ -103,28 +101,12 @@ fn each_change<'x>(cx: &Ctx, (fluxes, lifted): (&'x [LinkFlux], &'x [Vec<f64>]),
 }
 
 /// Adds `d` to number `s`, `v`, noting it in `low` when it falls below zero (but of a node that gives all it is asked).
-/// A ground node under deep standing liquid holds much of it and an air node much of the main gases, so a small move of
-/// a body would round away against them: what rounding takes from an amount of a carried class (`CARRIED`) is kept in
-/// `carry` and folded back as far as the amount can hold it (Neumaier 1974).
 #[inline(always)]
-fn add(v: &mut f64, s: Slot, d: f64, low: &mut Vec<Slot>, carry: &mut [Vec<f64>]) {
-    let was = *v;
-    add_carried(v, (s.arr.is_multiple_of(2) && s.arr < 2 * CARRIED).then(|| &mut carry[s.arr / 2][s.at]), d);
-    if *v < 0.0 && was >= 0.0 && s.arr < BOUNDARY_ARRAYS {
-        low.push(s);
-    }
-}
-
-/// Adds `d` to number `v`; to an amount of a carried class with what rounding took so far, `carry`, which keeps what it
-/// takes now (Neumaier 1974).
-#[inline(always)]
-pub(super) fn add_carried(v: &mut f64, carry: Option<&mut f64>, d: f64) {
+fn add(v: &mut f64, s: Slot, d: f64, low: &mut Vec<Slot>) {
     let was = *v;
     *v += d;
-    if let Some(carry) = carry {
-        let lost = *carry + rounding_lost(was, d, *v);
-        let folded = *v + lost;
-        (*carry, *v) = (rounding_lost(*v, lost, folded), folded);
+    if *v < 0.0 && was >= 0.0 && s.arr < BOUNDARY_ARRAYS {
+        low.push(s);
     }
 }
 
@@ -144,14 +126,14 @@ pub(super) fn zero_rounding(v: &mut f64, rounded: &mut f64) {
 /// Book the link fluxes, then the moves, as given: what leaves one node enters another, so the books are kept by their
 /// form. Only what each number holds at the end counts, so what passes through a node in one call needs nothing held.
 /// Then each number below zero, the rounding of the sums, is set to zero and counted in `Counters::rounded` (handover
-/// 12.1; checked in debug builds). Boundary nodes and the potential give all they are asked. Panics on a flux of the
+/// 12.1; checked in debug builds). Boundary nodes give all they are asked. Panics on a flux of the
 /// wrong shape or a node beyond its class. No domain's view of the store is open then (`Moves::open`; checked in debug
 /// builds).
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move]) {
     debug_assert!(w.life.domains.iter().all(|d| d.moves.open.is_none()), "the store changes while a domain is open");
     let World { chem, counts, mesh, store, .. } = w;
     let n = mesh.cells().n();
-    let cx = Ctx { chem, len: [n, mesh.level(AIR).n(), n, n, n, BOUNDARIES, 1] };
+    let cx = Ctx { chem, len: [n, mesh.level(AIR).n(), n, n, n, BOUNDARIES] };
     for x in fluxes {
         let links = x.a.len();
         let heat = if x.alike(chem) { x.heat.is_empty() || x.heat.len() == links } else { x.heat.len() == links };
@@ -159,23 +141,18 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move]) {
         assert!(shaped, "a link flux of the wrong shape");
     }
     let lifted: Vec<_> = fluxes.iter().map(|x| x.lifted(chem)).collect();
-    // The heat of the boundary nodes and the potential is a whole history's sum: their changes are summed apart and added
-    // once, so small changes do not round away against it.
-    let (mut far_heat, mut far_lift) = ([0.0; BOUNDARIES], [0.0]);
-    let carry = &mut store.carry[..];
     let mut books: Vec<&mut [f64]> = store.amounts.iter_mut().zip(&mut store.heat).flat_map(|(a, h)| [&mut a[..], &mut h[..]]).collect();
-    (books[2 * Class::Boundary as usize + 1], books[2 * Class::Potential as usize + 1]) = (&mut far_heat, &mut far_lift);
     // Each number that falls below zero on the way (those that end there are among them).
     let mut low = Vec::new();
     each_change(&cx, (fluxes, &lifted), moves, |change| match change {
-        Change::One(s, d) => add(&mut books[s.arr][s.at], s, d, &mut low, carry),
+        Change::One(s, d) => add(&mut books[s.arr][s.at], s, d, &mut low),
         Change::Column(c) if c.arr[0] == c.arr[1] => {
             let v = &mut *books[c.arr[0]];
-            c.each(|s, d| add(&mut v[s.at], s, d, &mut low, carry));
+            c.each(|s, d| add(&mut v[s.at], s, d, &mut low));
         }
         Change::Column(c) => {
             let [p, q] = books.get_disjoint_mut(c.arr).expect("two arrays");
-            c.each(|s, d| add(if s.arr == c.arr[0] { &mut p[s.at] } else { &mut q[s.at] }, s, d, &mut low, carry));
+            c.each(|s, d| add(if s.arr == c.arr[0] { &mut p[s.at] } else { &mut q[s.at] }, s, d, &mut low));
         }
     });
     low.sort_unstable();
@@ -202,7 +179,25 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move]) {
     for s in low {
         zero_rounding(&mut books[s.arr][s.at], &mut counts.rounded[s.arr % 2]);
     }
-    for (c, far) in [(Class::Boundary, &far_heat[..]), (Class::Potential, &far_lift[..])] {
-        far.iter().enumerate().for_each(|(at, &d)| store.add_far_heat(c, at, d));
+}
+
+/// The heat a fall gives each node of `class` that matter lands in, or a lift takes from the node that pays it, `q[i]`
+/// J (negative for a lift), booked on that node, and its other side on the potential energy of the world's matter
+/// (`Store::lifted`), summed apart and added once (laws.md 0, "The books"). A lift never takes more than its node
+/// holds; what rounding leaves below zero is set to zero and counted (`Counters::rounded`).
+pub fn fall_heat(w: &mut World, class: Class, q: &[f64]) {
+    let World { store, counts, .. } = w;
+    let mut fell = 0.0;
+    for (i, (v, &d)) in store.heat[class as usize].iter_mut().zip(q).enumerate().filter(|p| *p.1 .1 != 0.0) {
+        let was = *v;
+        *v += d;
+        fell += d;
+        if *v < 0.0 {
+            if cfg!(debug_assertions) {
+                overdraw_check(*v, was.abs(), [d, d.abs()], (class, i));
+            }
+            zero_rounding(v, &mut counts.rounded[1]);
+        }
     }
+    store.lifted -= fell;
 }
