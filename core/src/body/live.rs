@@ -19,7 +19,7 @@ pub(crate) struct LiveTmp {
 }
 
 /// What a body's update left for its decision (`choose::act`).
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 pub struct Lived {
     /// What its fuel could release over the time against its upkeep (well-being counts it up to `MARGIN`)
     pub spare: f64,

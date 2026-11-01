@@ -5,6 +5,7 @@
 mod feed;
 mod go;
 mod learn;
+mod minds;
 mod perceive;
 mod spread;
 
@@ -12,10 +13,11 @@ pub use feed::{take_body, COVER};
 pub use go::{go, wear};
 pub(crate) use go::land_move;
 pub(crate) use learn::watched;
+pub use minds::Minds;
 pub use perceive::cells;
 pub(crate) use spread::land_act;
 
-use perceive::{inputs, perceive, Face, HEIGHT, LN_LEAF, LN_MASS, T, WB_SCALE};
+use perceive::{perceive, Face, HEIGHT, LN_LEAF, LN_MASS, T, WB_SCALE};
 pub use perceive::{DEAD, EDIBLE, NCELL, SIGHTS, WET};
 
 use crate::body::{Body, Lived};
@@ -45,7 +47,6 @@ pub(crate) const INPUTS: usize = 4 + NCELL + bond::SENSE;
 /// Working memory of `act`, kept from body to body.
 #[derive(Default)]
 pub struct ActTmp {
-    pub input: Vec<f32>,
     pub thought: Thought,
     /// Features of each direction (flat), for learning
     pub feat: Vec<f32>,
@@ -68,9 +69,10 @@ struct Choice {
     a: usize,
 }
 
-/// A body's decision at its update: perceive, think and learn from the last decision, score the options; an individual draws one option, keeps its trace and acts, a node spreads its members over them (`spread`).
-/// Every body decides at each update, once a month.
-pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
+/// A body's decision at its update, from the sums of its hidden layer `z` (`Minds::sense`): perceive the bodies and
+/// parts of its cell, think and learn from the last decision, score the options; an individual draws one option, keeps
+/// its trace and acts, a node spreads its members over them (`spread`). Every body decides at each update, once a month.
+pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: &mut ActTmp) {
     let mut rng = Rng::new(w.seed, w.day(), b.id, Purpose::Choose);
     // Mass and heat capacity are as `body::live` just left them.
     let temp = b.temp(&w.chem);
@@ -85,14 +87,13 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, t: &mut ActTmp
     // (Its brain reads and writes the first `s.mem` numbers of its memory; those past them are none.)
     b.mem[s.mem..].fill(0.0);
     let mut c = perceive(w, d, b, nseen, &mut rng);
-    inputs(w, d.at(b.cell as usize), b, (lived, temp, s.mem), &mut t.input);
-    brain::think(&lin.base, d.at(b.cell as usize).brains.rows(b.brain, s), s, &t.input, &mut t.thought);
+    brain::think(d.at(b.cell as usize).brains.rows(b.brain, s), s, z, &mut t.thought);
     learn::learn(w, b, &mut d.brains(b.cell as usize).mind(b.brain, s), s, (wb, &t.thought.h));
     options(w, d, b, (s, sight), (pm, b.volume(&w.chem, temp) / b.n()), &mut c, t);
     pick(d, &mut c, &mut rng);
-    let (form, z) = noise(w, b, s, t, &mut rng);
+    let (form, zn) = noise(w, b, s, t, &mut rng);
     b.wb = wb;
-    let k = Kit { s, t, z, form, wb: &now };
+    let k = Kit { s, t, z: zn, form, wb: &now };
     if b.n() > 1.0 {
         spread::spread(w, d, b, &c, &k, &mut rng);
     } else {

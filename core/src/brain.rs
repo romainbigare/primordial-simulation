@@ -95,11 +95,22 @@ pub fn dot(a: &[f32], b: &[f32]) -> f32 {
     acc.iter().sum::<f32>() + tail
 }
 
-/// `base` is the lineage's, `rows` the body's.
-pub(crate) fn think(base: &[f32], rows: &[f32], s: Shape, x: &[f32], t: &mut Thought) {
+/// The sums of the hidden layer, before it squashes them, of bodies of one lineage of base `base` and inputs `xs` (each
+/// body's `s.ni` one after another): one matrix product of the inputs with the base's weights, plus its biases, into
+/// `z` (each body's `s.h` one after another).
+pub(crate) fn sums(base: &[f32], s: Shape, xs: &[f32], z: &mut Vec<f32>) {
     let b1 = s.h * s.ni;
+    z.clear();
+    for x in xs.chunks_exact(s.ni.max(1)) {
+        z.extend((0..s.h).map(|m| base[b1 + m] + dot(&base[m * s.ni..(m + 1) * s.ni], x)));
+    }
+}
+
+/// What a body with rows `rows` thinks from the sums of its hidden layer `z` (`sums`): its hidden layer and every row's
+/// value.
+pub(crate) fn think(rows: &[f32], s: Shape, z: &[f32], t: &mut Thought) {
     t.h.clear();
-    t.h.extend((0..s.h).map(|m| squash(base[b1 + m] + dot(&base[m * s.ni..(m + 1) * s.ni], x))));
+    t.h.extend(z.iter().map(|&v| squash(v)));
     // The rows four at a time (four sums that do not wait on each other), then the rest.
     t.out.clear();
     let (n, r) = (s.h, s.r());

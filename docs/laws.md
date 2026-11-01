@@ -51,8 +51,9 @@ and that cell's count of bodies placed (children, split
 halves, parts of nodes acting apart); it never changes, and its random draws are keyed by it. The cells
 are cut into `Config::chunks` runs of neighbouring indices, the same for any number of threads. **The parallel pass**:
 each chunk is one task on the pool (`life::run`), its cells taken out of the world, the world read only; in each cell
-in order, each body updates, in the order they came (a body placed in the pass first updates at the next month); the
-parts it reads are as they were at the pass's start. A body perceives the others of its own cell as they are when it
+in order, the physics of each body, in the order they came (a body placed in the pass first updates at the next month);
+then every body with a brain perceives its inputs and the bodies of each lineage find their hidden layers together
+(5.1); then each decides and acts, in the same order. The parts it reads are as they were at the pass's start. A body perceives the others of its own cell as they are when it
 decides (5.2); it takes from or gives to a body it saw only if that body still lives and is not leaving its cell. **A cell's view of the store** (`store::Moves`): its ground, bed and
 bodies' node as the store held them at the pass's start with its own moves since, and **its share of its air node**
 (`Mesh::share`, its area over the air node's) of the air's amounts and heat: a cell never takes more than that, so the
@@ -565,7 +566,10 @@ evolution; its **rows** are genes of each body: fixed action scores, shared scor
 or part seen), the shape of a part, the next memory and a critic. Sizes are genes with costs: hidden units
 (0 to 64; 0 is no brain, no decisions, no cost), memory (0 to 12), bodies seen (1 to 6), sight
 (1 to 4 cells). One brain per body or node (`Body::rows`); a child starts with its born rows plus what its parent
-learned (`Life::inherit`).
+learned (`Life::inherit`). **Evaluated by lineage** (`choose::Minds`): in each chunk the bodies with a brain perceive
+after the physics of all its bodies and before any acts; the inputs of each lineage's bodies lie in one buffer, and
+the sums of their hidden layers are one matrix product with the lineage's base (`brain::sums`); each body then reads its
+own rows from its hidden layer (`brain::think`) and learns on its own.
 
 ### 5.2 Perception
 Local (`choose/perceive.rs`). **Each cell's features** (`choose::cells`, once a month after the survey, the same for

@@ -162,16 +162,7 @@ pub fn batch(w: &mut World) {
     // The busiest chunk's share of the batch's updates (`Counters::busiest_share`).
     let c = &mut w.counts;
     (c.busiest_share, c.body_batches) = (c.busiest_share + *per.iter().max().unwrap_or(&0) as f64 / all.max(1) as f64, c.body_batches + 1.0);
-    life::run(w, per, all, scratch, |w, d, _, s| {
-        for i in d.cells() {
-            for slot in 0..d.at(i).bodies.len() {
-                let h = Handle { cell: i as u32, slot: slot as u32 };
-                if d[h].alive {
-                    update(w, d, h, s);
-                }
-            }
-        }
-    });
+    life::run(w, per, all, scratch, |w, d, _, s| updates(w, d, s));
     life::land(w);
     let lay = Layout::of(&w.chem);
     let load = w.life.cells.iter().filter(|c| c.bodies.len() > 1).count();
@@ -191,30 +182,72 @@ pub fn batch(w: &mut World) {
     life::run(w, vec![(); life::chunks(w)], load, |_| (), |w, d, _, _| d.see_changed(w));
 }
 
-/// The scratch of a body's update, made once per thread and used for each update it runs.
-type Scratch = (LiveTmp, choose::ActTmp);
+/// The scratch of a chunk's updates, made once per thread and used for each chunk it runs.
+type Scratch = (LiveTmp, choose::Minds, choose::ActTmp);
 
-/// A new scratch of a body's update.
+/// A new scratch of a chunk's updates.
 fn scratch(_: &World) -> Scratch {
-    (LiveTmp::default(), choose::ActTmp::default())
+    (LiveTmp::default(), choose::Minds::default(), choose::ActTmp::default())
 }
 
-/// The update of the living body at `h` in chunk `d`: its physics, decision, lineage and split; or its death.
-fn update(w: &World, d: &mut Chunk, h: Handle, (tmp, act): &mut Scratch) {
+/// The updates of the living bodies of chunk `d`: the physics of each, cell by cell and in a cell in the order they
+/// came (`live_one`); then the inputs of those with a brain, the sums of the hidden layers of each lineage's bodies
+/// together (`choose::Minds::sense`); then each one's decision in that order (`decide`).
+fn updates(w: &World, d: &mut Chunk, (tmp, minds, act): &mut Scratch) {
+    minds.clear();
+    for i in d.cells() {
+        for slot in 0..d.at(i).bodies.len() {
+            let h = Handle { cell: i as u32, slot: slot as u32 };
+            if d[h].alive {
+                if let Some(lived) = live_one(w, d, h, tmp) {
+                    minds.bodies.push((h, d[h].id, lived));
+                }
+            }
+        }
+    }
+    minds.sense(w, d);
+    for k in 0..minds.bodies.len() {
+        let (h, id, lived) = minds.bodies[k];
+        // (A body taken from to death by another since does not decide.)
+        if d[h].alive && d[h].id == id {
+            let shape = d.shape_of(w, d[h].lineage).unwrap_or_default();
+            decide(w, d, h, &lived, minds.of(k, shape.h), act);
+        }
+    }
+}
+
+/// The physics of the living body at `h` in chunk `d` (`body::live`), or its death. A body with no brain takes no
+/// decision: its update ends with its lineage (`lineage::resize`). Returns what its update left for its decision, if
+/// it has a brain.
+fn live_one(w: &World, d: &mut Chunk, h: Handle, tmp: &mut LiveTmp) -> Option<crate::body::Lived> {
     d.moves.open(w, h.cell as usize, Node::new(Class::Body, h.slot as usize));
     let mut b = std::mem::take(&mut d[h]);
     d.counts.updates += 1;
     let lived = match live(w, d, &mut b, tmp) {
-        Err(cause) => return die(w, d, h, b, cause),
+        Err(cause) => {
+            die(w, d, h, b, cause);
+            return None;
+        }
         Ok(lived) => lived,
     };
-    // A body with no brain takes no decision: its update is its physics only.
-    if !w.life.brainless(&b) {
-        choose::act(w, d, &mut b, &lived, act);
-        // An action can leave nothing of a member: it dies at once, before another body deals with it.
-        if b.empty_at(b.mass(&w.chem)) {
-            return die(w, d, h, b, LACK);
-        }
+    let brain = !w.life.brainless(&b);
+    if !brain {
+        crate::lineage::resize(w, d, &mut b);
+    }
+    b.stale = true;
+    d[h] = b;
+    brain.then_some(lived)
+}
+
+/// The decision of the body at `h` in chunk `d` from the sums of its hidden layer `z` (`choose::act`), its lineage
+/// (`lineage::resize`); or its death, if an action left nothing of a member.
+fn decide(w: &World, d: &mut Chunk, h: Handle, lived: &crate::body::Lived, z: &[f32], act: &mut choose::ActTmp) {
+    d.moves.open(w, h.cell as usize, Node::new(Class::Body, h.slot as usize));
+    let mut b = std::mem::take(&mut d[h]);
+    choose::act(w, d, &mut b, lived, z, act);
+    // An action can leave nothing of a member: it dies at once, before another body deals with it.
+    if b.empty_at(b.mass(&w.chem)) {
+        return die(w, d, h, b, LACK);
     }
     crate::lineage::resize(w, d, &mut b);
     b.stale = true;
