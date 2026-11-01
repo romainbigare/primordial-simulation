@@ -10,7 +10,7 @@ mod writer;
 use args::{Args, FRAMES_EVERY, PICTURES_EVERY, SNAPSHOTS_EVERY, USAGE};
 use pcore::World;
 use report::Clock;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tape::{Kept, Recorder, TAPE};
 use writer::Writer;
 use worldgen::schedule::Schedule;
@@ -95,6 +95,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     let mut clock = Clock::new(y0, w.counts.updates);
     let mut writer = Writer::new();
     record(&mut rec, &mut w, &clock);
+    let (mut settled_from, mut settled_to) = (clock.total(), clock.total());
     println!("{}", report::config(&w, &plan.seeding));
     if !resumed {
         report::balances(&w).iter().for_each(|l| println!("{l}"));
@@ -120,6 +121,13 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
             std::process::exit(1);
         }
         let last = y == y0 + years;
+        // The settled cost is the simulation of the last years, not the writes of the end.
+        if y == report::settled_after(y0, years) {
+            settled_from = clock.total();
+        }
+        if last {
+            settled_to = clock.total();
+        }
         if y % every == 0 || last {
             println!("{}", report::year(&w, y, &t0, &clock, &rec));
             clock.print_at(y, w.counts.updates);
@@ -146,6 +154,5 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     }
     clock.spent[TAPE] += t.elapsed();
     println!("{}", report::rivers(&w, &rec));
-    let s = clock.spent.iter().sum::<Duration>().as_secs_f64();
-    println!("{years} years in {s:.2} s ({:.1} ms per year), hash {:016x}", s * 1000.0 / years.max(1) as f64, tape::fingerprint(&w));
+    println!("{}", report::speed(&w, years, clock.total(), settled_to - settled_from));
 }

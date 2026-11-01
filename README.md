@@ -18,5 +18,7 @@ cargo run --release -p cli --no-default-features --bin ew -- run ...            
 cd web && npm run build && cp ../out/run/world.ewf.gz dist/                                   # viewer: open dist/index.html via a local server
 ```
 
+Speed: `ew run --size 128 --years 1000` on 4 cores: 2.1 s per year, measured over 20 years (`--years 20 --every 1000 --frames-every 1000`; 2.2 s per year over the last 2 of them, 16,384 cells, no bodies yet), on 2026-11-01 with a load average of 1.9 (`uptime`). Every run prints its own speed line at the end.
+
 By default the animals start with hand-set brain biases (`--neutral-eaters` for neutral brains) and the
 light-eaters with no brain.

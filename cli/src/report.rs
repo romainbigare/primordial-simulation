@@ -1,4 +1,4 @@
-//! The lines a run prints: what it is, the liquid's start, one line every `--every` years, the rivers and the end.
+//! The lines a run prints: what it is, the liquid's start, one line every `--every` years, the rivers and the speed.
 
 use crate::render::RIVER_PNG;
 use pcore::check::Totals;
@@ -6,6 +6,7 @@ use pcore::{World, AIR};
 use tape::{Recorder, Spent, RIVER_WEB, TAPE};
 use worldgen::life::Seeding;
 use pcore::store::Class;
+use std::time::Duration;
 
 /// Which run this is: whether it is the real run or its null run (a resumed run keeps the snapshot's), its switches,
 /// and which start the animals and the light-eaters had.
@@ -44,6 +45,11 @@ pub struct Clock {
 impl Clock {
     pub fn new(since: u64, updates: u64) -> Self {
         Clock { spent: Spent::default(), printed: Spent::default(), since, updates }
+    }
+
+    /// The time spent so far in all stages and the tape.
+    pub fn total(&self) -> Duration {
+        self.spent.iter().sum()
     }
 
     /// Start the next line's span at year `y`.
@@ -92,6 +98,32 @@ pub fn year(w: &World, y: u64, t0: &Totals, clock: &Clock, rec: &Recorder) -> St
         w.life.parts().count(),
         rec.last("gave"),
         rec.last("watched")
+    )
+}
+
+/// Years that make the settled cost of a run: a tenth of its years (at least one).
+fn settled_years(years: u64) -> u64 {
+    (years / 10).max(1).min(years)
+}
+
+/// The year after which the settled cost of a run of `years` years from year `y0` is timed.
+pub fn settled_after(y0: u64, years: u64) -> u64 {
+    y0 + years - settled_years(years)
+}
+
+/// The run's last line: the years, the time spent (`total`), the cost a year over the whole run and over its last tenth
+/// (`settled`, the time spent in the years after `settled_after`, without the writes of the end), the cells and the bodies at the end, and the world's fingerprint.
+pub fn speed(w: &World, years: u64, total: Duration, settled: Duration) -> String {
+    let per_year = |t: Duration, n: u64| t.as_secs_f64() * 1000.0 / n.max(1) as f64;
+    let last = settled_years(years);
+    format!(
+        "{years} years in {:.2} s ({:.1} ms per year; {:.1} ms per year over the last {last}), {} cells, {} bodies, hash {:016x}",
+        total.as_secs_f64(),
+        per_year(total, years),
+        per_year(settled, last),
+        w.mesh.cells().n(),
+        w.life.alive().count(),
+        tape::fingerprint(w)
     )
 }
 
