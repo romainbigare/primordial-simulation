@@ -7,12 +7,8 @@ use crate::store::{Class, Node};
 use crate::{choose, World};
 
 mod draws;
-mod faces;
 pub(crate) use draws::release;
-pub use faces::{Face, Faces, UNCOVERED};
 
-/// A brain perceives the loose amount of a substance in a cell, `a` mol/m², as `LOOSE_SENSE` ln(1 + a).
-const LOOSE_SENSE: f32 = 0.2;
 
 /// Temperature, depth of the standing liquid and surface height of a ground cell, as Flow's last step left them (once
 /// Flow's working memory is built, `flow::ensure`).
@@ -51,12 +47,10 @@ pub fn survey(w: &mut World) {
     if monthly && w.time > 0 {
         traffic(w);
     }
-    if monthly || w.life.env.len() != n || w.life.seen.len() != n * w.chem.ns() {
+    if monthly || w.life.env.len() != n {
         // From Flow's state rebuilt in full, as at a month's start, so a resumed run reads what an unbroken one does.
         crate::flow::state(w, true);
         w.life.env = (0..n).map(|i| env_of(w, i)).collect();
-        let (ns, area) = (w.chem.ns(), w.mesh.cells().area());
-        w.life.seen = (0..n * ns).map(|x| LOOSE_SENSE * crate::brain::ln(1.0 + (w.store.amounts(Class::Ground)[(x % ns) * n + x / ns] / area[x / ns]) as f32)).collect();
     }
     choose::cells(w);
 }
@@ -168,8 +162,6 @@ pub fn batch(w: &mut World) {
     // The busiest chunk's share of the batch's updates (`Counters::busiest_share`).
     let c = &mut w.counts;
     (c.busiest_share, c.body_batches) = (c.busiest_share + *per.iter().max().unwrap_or(&0) as f64 / all.max(1) as f64, c.body_batches + 1.0);
-    faces::make(w);
-    w.life.batch = true;
     life::run(w, per, all, scratch, |w, d, _, s| {
         for i in d.cells() {
             for slot in 0..d.at(i).bodies.len() {
@@ -181,7 +173,6 @@ pub fn batch(w: &mut World) {
         }
     });
     life::land(w);
-    w.life.batch = false;
     let lay = Layout::of(&w.chem);
     let load = w.life.cells.iter().filter(|c| c.bodies.len() > 1).count();
     life::run(w, vec![(); life::chunks(w)], load, |_| (), |w, d, _, _| {

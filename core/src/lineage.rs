@@ -36,7 +36,7 @@ impl Lineage {
 
 /// The brain's sizes for `ns` substances, `h` hidden units and `mem` memory numbers.
 pub fn shape(ns: usize, h: usize, mem: usize) -> Shape {
-    Shape { h, mem, ni: 2 * ns + choose::INPUTS + mem, nf: choose::NF, nt: choose::NT, no: bond::NO }
+    Shape { h, mem, ni: ns + choose::INPUTS + mem, nf: choose::NF, nt: choose::NT, no: bond::NO }
 }
 
 /// The sizes the genes give: hidden units, memory numbers, bodies perceived, sight (cells).

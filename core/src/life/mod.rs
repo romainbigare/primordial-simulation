@@ -17,7 +17,7 @@ pub use registry::Genome;
 use crate::body::Body;
 use crate::cover::Cover;
 use crate::space::Mesh;
-use crate::survey::{Face, Faces, ROW};
+use crate::survey::ROW;
 use crate::World;
 use std::collections::BTreeMap;
 
@@ -78,21 +78,15 @@ pub struct Life {
     pub keep: Vec<f32>,
     /// Per cell, from the last monthly survey: ground temperature, liquid depth, surface height
     pub env: Vec<[f64; 3]>,
-    /// Per cell, from the last monthly survey: its loose substances as a brain perceives them, [cell * substances + k]
-    pub seen: Vec<f32>,
-    /// Per cell, from the last survey: what a brain perceives of it as a place to move to (`choose::cells`)
-    pub cellf: Vec<[f32; crate::choose::NF]>,
-    /// What each living body showed others at the start of the batch running (`survey::Faces`); read only in a batch
-    /// (`faces_of`)
-    pub(crate) faces: Faces,
+    /// Per cell, from the last survey: its features as every brain perceives them, then the same smoothed over the
+    /// neighbours once to `choose::SIGHTS - 1` times (`choose::cells`, read by `feat`)
+    pub(crate) feat: Vec<[f32; crate::choose::NCELL]>,
     /// The brain of each lineage (None once it died out), and its living bodies
     pub brains: Vec<Option<crate::lineage::Lineage>>,
     pub members: Vec<u32>,
     /// Born brain rows, each shared by the bodies born with them (none: free)
     pub genomes: Vec<Genome>,
     free_genomes: Vec<u32>,
-    /// A batch runs: the faces are those of its start
-    pub(crate) batch: bool,
     /// While a parallel pass runs (`life::run`): what bodies and parts see in each air node as the store held it at the
     /// pass's start (`World::a_seen`, [air node * substances + k]), the same for every cell under it; else empty
     pub(crate) air_seen: Vec<f64>,
@@ -138,9 +132,10 @@ impl Life {
     pub fn unsound(&self) -> Option<String> {
         self.living().find(|&(h, b)| b.cell != h.cell || self.find(b.id) != Some(h)).map(|(h, b)| format!("body {} at {h:?}: its cell {}, found at {:?}", b.id, b.cell, self.find(b.id)))
     }
-    /// The faces of the bodies of cell `i` as they were at the batch's start (none outside a batch).
-    pub fn faces_of(&self, i: usize) -> &[Face] {
-        if self.batch { self.faces.of(i) } else { &[] }
+    /// The features of cell `i` as a body of sight `sight` (1 to `choose::SIGHTS`) sees them from a neighbour cell, as
+    /// the last survey found them (`choose::cells`); its own at sight 1.
+    pub fn feat(&self, i: usize, sight: usize) -> &[f32; crate::choose::NCELL] {
+        &self.feat[(sight.clamp(1, crate::choose::SIGHTS) - 1) * self.cells.len() + i]
     }
     /// The numbers of cell `i` from the last survey (`Cell::sum`).
     pub fn sum(&self, i: usize) -> &[f64; ROW] {

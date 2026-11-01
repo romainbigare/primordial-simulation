@@ -52,9 +52,8 @@ halves, parts of nodes acting apart); it never changes, and its random draws are
 are cut into `Config::chunks` runs of neighbouring indices, the same for any number of threads. **The parallel pass**:
 each chunk is one task on the pool (`life::run`), its cells taken out of the world, the world read only; in each cell
 in order, each body updates, in the order they came (a body placed in the pass first updates at the next month); the
-parts it reads are as they were at the pass's start. A body perceives the others only by their faces (`survey::Faces`: id, members,
-visible traits, well-being, room), made at the batch's start; it takes from or gives to a body it saw only if
-that body still lives and is not leaving its cell. **A cell's view of the store** (`store::Moves`): its ground, bed and
+parts it reads are as they were at the pass's start. A body perceives the others of its own cell as they are when it
+decides (5.2); it takes from or gives to a body it saw only if that body still lives and is not leaving its cell. **A cell's view of the store** (`store::Moves`): its ground, bed and
 bodies' node as the store held them at the pass's start with its own moves since, and **its share of its air node**
 (`Mesh::share`, its area over the air node's) of the air's amounts and heat: a cell never takes more than that, so the
 cells under one air node never overdraw it together (the cover's month and the parts' turns read the air the same
@@ -569,10 +568,19 @@ or part seen), the shape of a part, the next memory and a critic. Sizes are gene
 learned (`Life::inherit`).
 
 ### 5.2 Perception
-Local (`choose/perceive.rs`): own stores against minimums, warmth, size, the cover of its cell (its capture area per m²); its cell's loose substances, liquid,
-temperature and crowding; the season; memory; cells within sight ring by ring (weight 1 / ring²), with their
-parts, as the last survey saw them; up to `SEEN` bodies in or next to its cell as the batch's start saw them (their
-faces, 0: looks, well-being); up to 3 parts. Walls and cover hide.
+Local (`choose/perceive.rs`). **Each cell's features** (`choose::cells`, once a month after the survey, the same for
+every brain, 18 numbers each scaled to about one): its ground temperature, the depth of its standing liquid, its
+surface height, the shade of its cover, the mass per m² of each slot of its cover and of the cover's fuel and body
+matter (what most diets eat), the fuel and body matter loose on its ground, the mass per m² of its animals in three
+classes of member mass (below 3 kg, to 100 kg, above), their members and mean strength, how hard it is to push
+through, its parts and the members that moved in last month. The same features smoothed over each cell and its
+neighbours once, twice and three times make what a body of sight 2, 3 and 4 sees of a cell it would step into (the
+mean of the cells about that many links around it, `Life::feat`). **A brain's inputs**: its own stores against their
+minimums, its warmth, size and the season, its own cell's features, what Bond senses (3.4), its memory. **Each
+direction** with a link: the features of the cell it leads to as its sight sees it, the temperature and height as
+differences from its own cell's, and how hard its link is to pass (`lanes::resist`). **Bodies**: up to `SEEN` of its
+own cell, as they are when it decides (their looks and well-being), from a random place in the cell's list; walls and
+cover hide them. Up to 3 parts of its cell.
 
 ### 5.3 Actions
 One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;

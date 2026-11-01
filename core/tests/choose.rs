@@ -54,9 +54,9 @@ fn scene(seed: u64) -> World {
     w
 }
 
-/// What a body perceives of the energy-rich solid in cell `i`.
+/// What a body perceives of the fuel and body matter loose on the ground of cell `i`.
 fn seen(w: &World, i: usize) -> f32 {
-    w.life.seen[i * w.chem.ns() + RICH]
+    w.life.feat(i, 1)[pcore::choose::DEAD]
 }
 
 /// Per decision: on the strip; moved; a neighbour was richer; moved to a richer one; the share of richer neighbours

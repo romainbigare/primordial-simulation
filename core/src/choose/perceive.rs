@@ -1,13 +1,14 @@
-//! What a body perceives: the bodies and parts it sees (`perceive`), its brain's inputs (`inputs`), the cells seen in
-//! each direction (`sector`) and what a cell offers as a place to move to (`cells`); each scaled to about one.
+//! What a body perceives (laws.md 5.2): the features of each cell, worked out once a month for every cell and read by
+//! every brain (`cells`); the bodies and parts of its own cell (`perceive`); its brain's inputs (`inputs`); each scaled
+//! to about one.
 
-use super::{ActTmp, Choice, MAX_SEEN, MOVES, NT, OPTS, PARTS};
+use super::{Choice, MAX_SEEN, MOVES, NT, OPTS, PARTS};
 use crate::body::{Body, Layout, Lived};
 use crate::brain::{ln, REST};
 use crate::lanes::thickness;
 use crate::rng::Rng;
-use crate::survey::{Face, UNCOVERED};
-use crate::{bond, life::{Cell, Chunk, Handle}, World};
+use crate::store::Class;
+use crate::{bond, life::{Cell, Chunk}, World};
 
 /// A brain perceives a share `x` of the body as `SHARE_SENSE` ln(x + floor): a store with the floor `STORE_FLOOR` (no
 /// store: as that floor), less its safe minimum with the floor `MIN_FLOOR`.
@@ -23,74 +24,80 @@ const LN_CANOPY: f32 = 2.4;
 /// The ground temperature, from `T_MID` over `T_SPAN`, K.
 const T_MID: f32 = 285.0;
 const T_SPAN: f32 = 15.0;
-/// From a cell to the cells it sees: the height difference, m, and the temperature difference, K.
-pub(super) const DZ_SCALE: f64 = 200.0;
-pub(super) const DT_NEAR: f64 = 5.0;
-/// ln of the light-capture area per mass (of a perceived body, of a cell's members).
+/// The surface height, m.
+const DZ_SCALE: f32 = 200.0;
+/// ln of the light-capture area per mass of a perceived body.
 pub(super) const LN_LEAF: f32 = 5.0;
 /// ln(1 + the members of a cell).
 const LN_MEMBERS: f32 = 10.0;
 /// A perceived body's well-being.
 pub(super) const WB_SCALE: f32 = 4.0;
+/// The members of the three classes of animals of a cell's vector weigh below `SMALL_KG`, up to `BIG_KG`, and more.
+const SMALL_KG: f32 = 3.0;
+const BIG_KG: f32 = 100.0;
 
-/// The cells within `sight` links of cell `i` (not `i`), each with its weight (nearer cells more, 1 / rings²), in the
-/// order of the cells: a walk over the mesh's links, ring by ring, that marks what it reached with `t.stamp`.
-pub(super) fn walk(w: &World, i: usize, sight: usize, t: &mut ActTmp) {
-    let cells = w.mesh.cells();
-    t.mark.resize(cells.n(), 0);
-    t.stamp = t.stamp.wrapping_add(1);
-    if t.stamp == 0 {
-        t.mark.fill(0);
-        t.stamp = 1;
-    }
-    let (seen, mark, stamp) = (&mut t.seen, &mut t.mark, t.stamp);
-    seen.clear();
-    seen.push((i as u32, 0.0));
-    mark[i] = stamp;
-    let mut from = 0;
-    for ring in 1..=sight {
-        let to = seen.len();
-        for q in from..to {
-            for &j in cells.around(seen[q].0 as usize).1 {
-                if mark[j as usize] != stamp {
-                    mark[j as usize] = stamp;
-                    seen.push((j, 1.0 / (ring * ring) as f32));
-                }
-            }
-        }
-        from = to;
-    }
-    seen.swap_remove(0);
-    seen.sort_unstable_by_key(|s| s.0);
+/// The features of a cell (`cells`): its ground temperature, the depth of its standing liquid (ln(1 + depth / m)), its
+/// surface height, the shade of its cover, the mass of each slot of its cover and of the cover's fuel and body matter
+/// (what most diets eat), the fuel and body matter loose on its ground, the mass of its animals in three classes of
+/// member mass, their members and mean strength, how hard it is to push through, its parts, and the members that moved
+/// in last month; masses per m² as ln(1 + kg/m²).
+pub const T: usize = 0;
+pub const WET: usize = 1;
+pub const HEIGHT: usize = 2;
+const SHADE: usize = 3;
+const COVER: usize = 4;
+pub const EDIBLE: usize = COVER + crate::cover::SLOTS;
+pub const DEAD: usize = EDIBLE + 1;
+const ANIMALS: usize = DEAD + 1;
+const MEMBERS: usize = ANIMALS + 3;
+const STRENGTH: usize = MEMBERS + 1;
+const RESIST: usize = STRENGTH + 1;
+const PARTS_HERE: usize = RESIST + 1;
+const CROSSED: usize = PARTS_HERE + 1;
+pub const NCELL: usize = CROSSED + 1;
+/// The levels of the cells' features (`Life::feat`): the cells' own, then smoothed once to `SIGHTS - 1` times over
+/// their neighbours, what a body of sight 1 to `SIGHTS` sees of the cell it would step into.
+pub const SIGHTS: usize = 4;
+
+/// What a body perceives of another of its cell that it may act on: its id, its place in the cell's list
+/// (`life::Handle::slot`, which holds through the pass), its visible traits (`Body::vis`) and its well-being at its last
+/// decision.
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct Face {
+    pub id: u64,
+    pub slot: u32,
+    pub vis: [f32; 7],
+    pub wb: f32,
 }
 
-/// Bodies perceived, its own cell first, then a neighbour's from a random side, up to `nseen`, as they were at the
-/// batch's start (their faces, `survey::Faces`): walls hide by how closed they are, cover with chance 1 - exp(-a), a the
-/// others' capture area per m² (`Face::show`). Then the parts in its cell.
+/// Bodies perceived in its own cell, from a random place in the cell's list on, up to `nseen`, as they are now: walls
+/// hide by how closed they are, cover with chance 1 - exp(-a), a the cell's capture area per m² (`Face::show`). Then
+/// the parts in its cell.
 pub(super) fn perceive(w: &World, d: &Chunk, b: &Body, nseen: usize, rng: &mut Rng) -> Choice {
-    let i = b.cell as usize;
-    let (mut seen, mut cnt, side, cells) = ([(Face::default(), false); MAX_SEEN], 0, rng.below(MOVES), w.mesh.cells());
-    let room = bond::room(d.at(i), b);
-    // Its own room as the others' are seen, from its face (outside a batch, where there are none, as it is now).
-    let face = w.life.faces_of(i).iter().find(|o| o.id == b.id);
-    let mine = face.map_or_else(|| room.map(|(r, e)| (r, e.closed)), |o| o.room);
-    for q in 0..9 {
-        let Some(j) = (if q == 0 { Some(i) } else { cells.way(i, (side + q) % MOVES).map(|e| cells.adj_cell()[e] as usize) }) else { continue };
-        // (Of its own cell, not those leaving it: they are there only until the serial pass, `Body::leaving`.)
-        let here = |o: &&Face| q > 0 || !d[Handle { cell: j as u32, slot: o.slot }].leaving;
-        for o in w.life.faces_of(j).iter().filter(|o| o.id != b.id).filter(here) {
-            if cnt == nseen {
-                break;
-            }
-            let walls = if mine.map(|r| r.0) == o.room.map(|r| r.0) { 0.0 } else { mine.map_or(0.0, |r| r.1).max(o.room.map_or(0.0, |r| r.1)) };
-            if (walls == 0.0 || rng.f64() as f32 >= walls) && (o.show == UNCOVERED || rng.f64() < o.show) {
-                (seen[cnt], cnt) = ((*o, q == 0), cnt + 1);
-            }
+    let (i, mut seen, mut cnt) = (b.cell as usize, [Face::default(); MAX_SEEN], 0);
+    let cell = d.at(i);
+    let room = bond::room(cell, b);
+    let mine = room.map(|(r, e)| (r, e.closed));
+    let show = (-(w.canopy[i] as f64)).exp();
+    let n = cell.bodies.len();
+    let off = if n == 0 { 0 } else { rng.below(n) };
+    for slot in (0..n).map(|q| (off + q) % n) {
+        let o = &cell.bodies[slot];
+        if cnt == nseen {
+            break;
+        }
+        if !o.alive || o.id == b.id || o.leaving {
+            continue;
+        }
+        let theirs = bond::room(cell, o).map(|(r, e)| (r, e.closed));
+        let walls = if mine.map(|r| r.0) == theirs.map(|r| r.0) { 0.0 } else { mine.map_or(0.0, |r| r.1).max(theirs.map_or(0.0, |r| r.1)) };
+        if (walls == 0.0 || rng.f64() as f32 >= walls) && (show >= 1.0 || rng.f64() < show) {
+            (seen[cnt], cnt) = (Face { id: o.id, slot: slot as u32, vis: o.vis, wb: o.wb }, cnt + 1);
         }
     }
-    let (held, n) = (bond::held(d.at(i), b), d.at(i).parts.len());
-    let (mut parts, mut np, off) = ([0usize; PARTS], 0, if n == 0 { 0 } else { rng.below(n) });
-    for p in (0..n).map(|q| (off + q) % n).filter(|&p| Some(p) != held).take(PARTS) {
+    let (held, np_all) = (bond::held(cell, b), cell.parts.len());
+    let (mut parts, mut np, off) = ([0usize; PARTS], 0, if np_all == 0 { 0 } else { rng.below(np_all) });
+    for p in (0..np_all).map(|q| (off + q) % np_all).filter(|&p| Some(p) != held).take(PARTS) {
         (parts[np], np) = (p, np + 1);
     }
     Choice {
@@ -110,36 +117,69 @@ pub(super) fn perceive(w: &World, d: &Chunk, b: &Body, nseen: usize, rng: &mut R
 }
 
 /// The brain's inputs (laws.md 5.2), of a body of cell `cell` that has `lived` its update at `temp` K, with `mem`
-/// numbers of memory.
+/// numbers of memory: its stores against their minimums, its warmth, its size and the season, its cell's features,
+/// what Bond senses, its memory.
 pub(super) fn inputs(w: &World, cell: &Cell, b: &Body, (lived, temp, mem): (&Lived, f64, usize), x: &mut Vec<f32>) {
     let (i, ns, chem, mass) = (b.cell as usize, w.chem.ns(), &w.chem, lived.mass);
-    let (env, pm) = (w.life.env[i], mass / b.n());
+    let pm = mass / b.n();
     x.clear();
     let (none, min, bc) = (SHARE_SENSE * ln(STORE_FLOOR), Layout::of(chem).min, chem.body());
     let (held, least) = (|k: usize| b.amount(bc, k), |k: usize| bc.place(k).map_or(0.0, |s| b.genes[min + s].max(0.0)));
     x.extend((0..ns).map(|k| if held(k) > 0.0 { SHARE_SENSE * ln((held(k) * chem.subs[k].molar_mass / mass) as f32 + STORE_FLOOR) } else { none } - SHARE_SENSE * ln(least(k) + MIN_FLOOR)));
-    x.extend_from_slice(&w.life.seen[i * ns..(i + 1) * ns]);
-    let crowd = ln(1.0 + (w.life.sum(i)[1] / w.mesh.cells().area()[i]) as f32);
-    let (dt, canopy, sun) = ((temp - env[0]) as f32, w.canopy[i], w.season() as f32 * std::f32::consts::TAU);
-    x.extend([dt / WARM_SCALE, ln(pm as f32) / LN_MASS - 1.0, ln(1.0 + canopy) / LN_CANOPY, ln(1.0 + env[1] as f32), (env[0] as f32 - T_MID) / T_SPAN, crowd, sun.sin(), sun.cos()]);
+    let (dt, sun) = ((temp - w.life.env[i][0]) as f32, w.season() as f32 * std::f32::consts::TAU);
+    x.extend([dt / WARM_SCALE, ln(pm as f32) / LN_MASS - 1.0, sun.sin(), sun.cos()]);
+    x.extend_from_slice(w.life.feat(i, 1));
     x.extend(bond::sense(cell, w, b, pm));
     x.extend_from_slice(&b.mem[..mem]);
 }
 
-/// After each survey: what a brain perceives of each cell as a place to move to (the height and temperature differences
-/// are added per move, in places 0 and 6, and what the body can take there in place 8; the depth of standing liquid is
-/// in place `WET`, its parts in the last place).
+/// Once a month, after the survey: the features of every cell (`NCELL`, the same for every brain), then each level of
+/// `SIGHTS` the last smoothed over each cell and its neighbours (`Life::feat`).
 pub fn cells(w: &mut World) {
-    let life = &w.life;
-    let cellf = (0..w.mesh.cells().n()).map(|i| {
-        let (c, e, area, p) = (life.sum(i), &life.env[i], w.mesh.cells().area()[i], &life.cells[i].parts);
-        let resist = 1.0 + thickness(w, c[1], area) as f32;
-        let c = c.map(|v| v as f32);
-        let n = c[0].max(1.0);
-        let leaf = if c[0] > 0.0 { ln(c[2] / c[1].max(1.0)) / LN_LEAF } else { 0.0 };
-        let (members, mass) = (ln(1.0 + c[0]) / LN_MEMBERS, ln((c[1] / n).max(1.0)) / LN_MASS - 1.0);
-        let parts = ln(1.0 + p.len() as f32);
-        [0.0, ln(1.0 + e[1] as f32), members, mass, leaf, c[3] / n, 0.0, ln(resist), 0.0, parts]
-    });
-    w.life.cellf = cellf.collect();
+    let (n, life, chem) = (w.mesh.cells().n(), &w.life, &w.chem);
+    let parts = crate::cover::Parts::of(chem);
+    let mm = parts.as_ref().map(|p| p.mm(chem));
+    let ln_kg = |kg: f64, area: f64| ln(1.0 + (kg / area) as f32);
+    let ground = w.store.amounts(Class::Ground);
+    let mut feat: Vec<[f32; NCELL]> = (0..n).map(|i| {
+        let (c, e, area, cell) = (life.sum(i), &life.env[i], w.mesh.cells().area()[i], &life.cells[i]);
+        let mut f = [0f32; NCELL];
+        (f[T], f[WET], f[HEIGHT]) = ((e[0] as f32 - T_MID) / T_SPAN, ln(1.0 + e[1] as f32), e[2] as f32 / DZ_SCALE);
+        f[SHADE] = ln(1.0 + w.canopy[i]) / LN_CANOPY;
+        if let (Some(p), Some(mm)) = (&parts, &mm) {
+            for x in 0..crate::cover::SLOTS {
+                f[COVER + x] = ln_kg(cell.cover.kg(mm, x), area);
+            }
+            let soft: f64 = (0..crate::cover::SLOTS).map(|x| cell.cover.mol[x][0] * mm[0] + cell.cover.mol[x][1] * mm[1]).sum();
+            f[EDIBLE] = ln_kg(soft, area);
+            f[DEAD] = ln_kg(p.sub[..2].iter().zip(mm).map(|(&k, m)| ground[k * n + i] * m).sum(), area);
+        }
+        for o in cell.bodies.iter().filter(|o| o.alive) {
+            let class = if o.vis[0] < SMALL_KG { 0 } else if o.vis[0] < BIG_KG { 1 } else { 2 };
+            f[ANIMALS + class] += o.vis[0] * o.n() as f32;
+        }
+        for class in 0..3 {
+            f[ANIMALS + class] = ln(1.0 + f[ANIMALS + class] / area as f32);
+        }
+        f[MEMBERS] = ln(1.0 + c[0] as f32) / LN_MEMBERS;
+        f[STRENGTH] = (c[3] / c[0].max(1.0)) as f32;
+        f[RESIST] = ln(1.0 + thickness(w, c[1], area) as f32);
+        (f[PARTS_HERE], f[CROSSED]) = (ln(1.0 + cell.parts.len() as f32), ln(1.0 + cell.crossings));
+        f
+    }).collect();
+    // Each level the last smoothed over each cell and its neighbours.
+    let cells = w.mesh.cells();
+    for level in 1..SIGHTS {
+        let last = &feat[(level - 1) * n..level * n];
+        let next: Vec<[f32; NCELL]> = (0..n).map(|i| {
+            let around = cells.around(i).1;
+            let mut f = last[i];
+            for &j in around {
+                f.iter_mut().zip(&last[j as usize]).for_each(|(a, b)| *a += b);
+            }
+            f.map(|v| v / (1 + around.len()) as f32)
+        }).collect();
+        feat.extend(next);
+    }
+    w.life.feat = feat;
 }
