@@ -146,9 +146,8 @@ pub(super) fn patch_rows(cx: &Ctx, cells: &[u32], seen: &[f64]) -> Vec<f64> {
     for (m, &i) in members.iter().zip(cells) {
         air.iter_mut().zip(&seen[i as usize * (1 + nx)..]).for_each(|(a, &x)| *a += x * m.area / g.area);
     }
-    let mut out = vec![0.0; width - FIXED];
     let mut work = Work::default();
-    let fixed = exchange(cx, &g, &air, &mut out, &mut work);
+    let fixed = exchange(cx, &g, &air, &mut work);
     let (p, carry) = (&work.p, &work.carry);
     let (mut rows, mut part) = (vec![0.0; cells.len() * width], Vec::with_capacity(p.len()));
     for (m, row) in members.iter().zip(rows.chunks_exact_mut(width)) {

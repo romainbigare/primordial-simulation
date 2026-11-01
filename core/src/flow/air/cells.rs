@@ -136,7 +136,7 @@ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Respons
             (*lat, *q) = (at, sunlight(cx.w, cx.decl, at));
         }
         let ground = Surf::of_cell(cx, i, *q);
-        let fixed = exchange(cx, &ground, &seen[i * (1 + nx)..(i + 1) * (1 + nx)], &mut row[FIXED..], work);
+        let fixed = exchange(cx, &ground, &seen[i * (1 + nx)..(i + 1) * (1 + nx)], work);
         put(&work.p, &work.carry, &mut row[FIXED..]);
         row[..FIXED].copy_from_slice(&fixed);
     });
@@ -201,26 +201,27 @@ pub(super) fn put(p: &[f64], carry: &[[f64; 2]], out: &mut [f64]) {
 
 /// The buffers of one task's exchanges (`exchange`), kept from cell to cell: its active gases as their evaporation reads
 /// them (`Vapour`), what each evaporates (`Vapour::evaporate`), its parts (`put`), what each mol of each gas carries
-/// (`carried`), and the heat it may lose (`hold`).
+/// (`carried`), its changing outputs as a soft cover's end reflectance reads them (`end_reflectance`), and the heat it
+/// may lose (`hold`).
 #[derive(Default)]
 pub(super) struct Work {
     gas: Vec<Vapour>,
     ev: Vec<[f64; 3]>,
     pub(super) p: Vec<f64>,
     pub(super) carry: Vec<[f64; 2]>,
+    out: Vec<f64>,
     loss: Vec<f64>,
 }
 
 /// The exchange of the ground `g` over the step under the air it sees, `air` (its temperature, K, then each active gas,
-/// mol): its changing outputs with their slopes into `out` (`Response`); into `work`, its parts (`put`) and what each
-/// mol of each gas carries (`carried`); returned, its fixed outputs. Sunlight past the clouds, what the cover intercepts less the share its light reaction
+/// mol): into `work`, its parts (`put`) and what each mol of each gas carries (`carried`); returned, its fixed outputs. Sunlight past the clouds, what the cover intercepts less the share its light reaction
 /// stores (set aside for it, laws.md 1.4); the surface balance with what evaporates, by Newton's steps about its end
 /// temperature, under the reflectance its surface has at the step's start; where a soft cover lies, under the
 /// reflectance it ends the step with, as backward Euler takes it (`end_reflectance`): from the start's, each guess
 /// followed to the end it gives, and halved between two once a guess and its end cross, until they agree, so a cover
 /// that melts away darkens the ground in its step. The slopes come from the last balance on the branch it ended on
 /// (`Air::moves`), held to what the cell holds (`hold`).
-pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], out: &mut [f64], work: &mut Work) -> [f64; FIXED] {
+pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64; FIXED] {
     let (w, s, dt, act) = (cx.w, cx.s, cx.dt, cx.act);
     let (na, j, area) = (w.mesh.level(AIR).n(), g.j, g.area);
     let (adt, tl, sun) = (area * dt, at_height(air[0], g.gam, g.head, g.zair), g.sun * (1.0 - s.state.cloud[j][0]));
@@ -234,7 +235,7 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], out: &mut [f64], work: &
     let rad = Air { tl, f, down: glow(f, tl, lay), slope: glow_slope(f, tl, lay) };
     // The share of the air it sees that lies over it (`over_cell`).
     let over = area / g.seen_area;
-    let Work { gas, ev, p, carry, loss } = work;
+    let Work { gas, ev, p, carry, out, loss } = work;
     gas.clear();
     gas.extend(act.iter().enumerate().map(|(y, &ac)| Vapour::of(cx, g, ac, air[1 + y], over * R_GAS * tl / (area * s.hk[ac.gi * na + j]))));
     let gas = &*gas;
@@ -288,7 +289,10 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], out: &mut [f64], work: &
     carry.extend(act.iter().map(|ac| carried(cx, g, ac.k)));
     let (mut alb, mut lo, mut hi) = (g.alb, f64::NAN, f64::NAN);
     parts(alb, p, ev);
-    put(p, carry, out);
+    if g.cover[2] > 0.0 {
+        out.resize(Response::width(nx) - FIXED, 0.0);
+        put(p, carry, out);
+    }
     for _ in 1..if g.cover[2] > 0.0 { REFLECT_ROUNDS } else { 1 } {
         let end = end_reflectance(cx, g.cell, (adt * sw(alb), out));
         if (end - alb).abs() < REFLECT_STILL {
