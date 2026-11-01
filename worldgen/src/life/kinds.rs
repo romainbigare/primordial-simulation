@@ -82,8 +82,7 @@ const LIGHT: Kind = Kind { name: "light-eaters", year: 0, place: Place::Field(Fi
 const EATER_KEEP_T: f32 = 278.0;
 const EATER_COOL_T: f32 = 315.0;
 
-/// Eaters: fast burning, take the energy-rich solid from the ground, the cover and bodies, short intervals, learning
-/// on, a fur coat (`HEAT` -1.0: 0.8 W/K for a member of 30 kg; fur passes 0.94, Herreid and Kessel 1967), keep warm
+/// Eaters: fast burning, take the energy-rich solid from the ground, the cover and bodies, learning on, a fur coat (`HEAT` -1.0: 0.8 W/K for a member of 30 kg; fur passes 0.94, Herreid and Kessel 1967), keep warm
 /// and cool (`EATER_KEEP_T`, `EATER_COOL_T`); individuals, two in some cells where life already is.
 const EATER_BODIES: Bodies = Bodies {
     anywhere: false,

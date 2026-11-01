@@ -3,8 +3,9 @@
 //! whatever its brain does. A child's genes are its parent's plus
 //! small noise, or with two parents each gene is one parent's (`mix`). A population node keeps how its members differ
 //! (`Body::spread`, `Body::row_spread`); its children join a young node of their kind where they start, or start one,
-//! which grows up as a whole (`kin`). Only individuals' children start new lineages. With `Config::nodes` off bodies with a brain are never nodes: their children start as individuals and join
-//! nothing.
+//! which grows up as a whole (`kin`). A lineage starts only where a body's brain-size genes move a whole unit from its
+//! own (`lineage::resize`). With `Config::nodes` off bodies with a brain are never nodes: their children start as
+//! individuals and join nothing.
 
 mod grow;
 mod mix;

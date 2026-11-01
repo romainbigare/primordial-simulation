@@ -27,7 +27,7 @@ pub const MATTER: usize = 1;
 pub const WALL: usize = 2;
 pub const HARD: usize = 3;
 
-// The genes of a kind of cover (laws.md 4.1).
+// The genes of a kind of cover (laws.md 4.5).
 /// Capacity of the light reaction, log10 mol per kg of built cover per s at `t_cat` (at a moisture need of 1)
 pub const LIGHT: usize = 0;
 /// Capture area, log10 m² per kg of built cover

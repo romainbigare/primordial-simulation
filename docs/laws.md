@@ -271,7 +271,8 @@ p       = (order of the scarce input − 1) · (1 − its share)   for a gas or 
 goes like a surface. **Order** is the count or `Reaction::order`. **Extent** is the exact integral over the step
 (`change/kernel.rs`), never past the scarce input. **Heat**: −ΔH to the node (`Chemistry::dh`); formation enthalpies
 are of the solid, so a liquid holds its fusion heat and a gas its vaporisation heat too. **Light** reactions take
-absorbed light and store `light_yield` of it. **Catalyst**: a body's own (2.4, 6.5). **Open world**
+absorbed light and store `light_yield` of it. **Catalyst**: a body runs no reactor: its diet genes (one per
+reaction) switch its burnings and what it digests on or off (2.4, 6.2, 6.7). **Open world**
 (`Reaction::open`): in ground, liquid, air and parts live the decomposers, whose catalyst `open` works as far as the
 node is moist: 1 + (`open` − 1) × moisture (`change::open_catalyst`). Moisture is how wet the node is as living things
 feel it: d / (d + `wet_depth`), d the depth of its liquid in its pores and standing (`FlowView::moist`,
@@ -287,8 +288,8 @@ tolerance.
 temperature (a plateau's fusion heat set aside), then sleep until their reactions would use 5% of an input or warm
 them 0.5 K, at most `sleep_days`. The nodes under one air node react as one task (a domain), each into a row of what its reactions changed and the gas it gives its air node; the rows are booked after the call, each array of the store by one task (`change/booking.rs`, `store::book_by_array`), so an air node gets the gas of its ground nodes in the order of their cells whatever thread ran them. Gas a ground node takes or gives
 (what its reactions made less what the node itself gained, so it never gives more than it holds) crosses to its air node with its heat and latent heat (parts and bodies the same, `change/gas.rs`). **Parts** react
-every 6 months (`bond::step`); **bodies** burn and digest by their diet (2.4); **growth** is a conversion only
-bodies run, paid by work (6.6).
+every 6 months (`bond::step`); **bodies** burn and digest by their diet (2.4); **growth** is a conversion bodies and
+the cover run, paid by work (4.5, 6.6).
 
 ### 2.3 What gas a ground node touches
 Its own gas and its cell's share of the air. **Under standing liquid** only the gas dissolved there, renewed through

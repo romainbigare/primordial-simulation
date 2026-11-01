@@ -15,9 +15,9 @@ const YEARS: u64 = 15;
 /// The numbers are the means of the years from this one to `YEARS`.
 const FROM: u64 = 6;
 /// The key numbers: the land's ground temperature, its warmest and coldest month, rain on land, the heat-absorbing gas,
-/// the light-eaters' mass and members (the first `HELD`, held to the noise), and the length of the rivers, km (river
-/// cells times the cells' side).
-const KEYS: [&str; 8] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "root_0_kg", "plant_members", "river_km"];
+/// the cover's mass and the starting cover's capture area, m² (the first `HELD`, held to the noise), and the length of
+/// the rivers, km (river cells times the cells' side).
+const KEYS: [&str; 8] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "cover_kg", "root_0_cover_area", "river_km"];
 const HELD: usize = 7;
 
 /// The `KEYS` at the end of each year from `FROM` of the island of `seed`, on its squares or in quarters (`fine`).

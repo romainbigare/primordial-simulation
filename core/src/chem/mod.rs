@@ -110,7 +110,7 @@ pub struct Chemistry {
     pub build: Option<Reaction>,
     /// The other solids bodies can build, each a conversion like `build` whose first output is the solid (`Body::share`).
     pub builds: Vec<Reaction>,
-    /// Mole fractions of the starting air, per substance (empty: none known), for the cost of catalysts (`Body::prepare`).
+    /// Mole fractions of the starting air, per substance (empty: none known), for its heat capacity (`Chemistry::air_cp`).
     pub air: Vec<f64>,
     /// What follows from the fields above, made at its first use (not saved)
     #[serde(skip)]

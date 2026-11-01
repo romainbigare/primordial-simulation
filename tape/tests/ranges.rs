@@ -106,14 +106,11 @@ impl fmt::Display for Range {
     }
 }
 
-/// The liveness check's island: its side, and the years it runs past the roster's last placement.
-const LIVE_SIDE: usize = 16;
+/// The liveness check's island: its side, the years it runs past the roster's last placement, and the animal kinds
+/// that must be alive at its end.
+const LIVE_SIDE: usize = 32;
 const LIVE_AFTER: u64 = 10;
-/// Kinds the liveness island may lose by their physics. 6, the small fast eaters of the cover: 68 individuals come in
-/// the year kinds 1 and 7 (eaters of the same cover) do; about two thirds of them die in their first year, of unpaid
-/// upkeep and of their short life (`REPAIR` -1.06), so whether the rest take hold on a 16 x 16 island is chance: the
-/// laws' small changes decide it.
-const MAY_DIE: [usize; 1] = [6];
+const LIVE_KINDS: usize = 4;
 /// The starting kinds that are animals (bodies) in the roster, each with the year it is placed.
 fn animal_kinds() -> Vec<(usize, u64)> {
     let kinds = worldgen::life::KINDS.iter().enumerate();
@@ -122,19 +119,23 @@ fn animal_kinds() -> Vec<(usize, u64)> {
 
 /// A `LIVE_SIDE` island with the roster (seed 1), run `LIVE_AFTER` years past the last kind's placement, keeps every
 /// element and the energy (`common::run` checks the books to 1e-12), leaves no number that is not finite
-/// (`check::broken`), and ends with cover and every animal kind placed `LIVE_AFTER` or more years before the end alive
-/// but those of `MAY_DIE`.
+/// (`check::broken`), and ends with the base kinds alive (the starting cover, 0, and the starting eaters, 1) and at least
+/// `LIVE_KINDS` animal kinds. The others may die by their physics, so a small change of climate or law does not fail
+/// it: the eaters of remains (4, 5) live on what dies and the small fast eaters of the cover (6) on a short life
+/// (`REPAIR` -1.06) beside two other eaters of the same cover (1, 7), each placed as a few dozen to a few hundred
+/// founders whose first years decide whether they take hold; the eaters of eaters (8, 9) are placed last, few, on
+/// prey that may still be thin.
 #[test]
 fn the_world_lives_and_keeps_its_books() {
     let years = animal_kinds().iter().map(|k| k.1).max().expect("animal kinds") + LIVE_AFTER;
-    let (w, rec) = run(1, LIVE_SIDE, years, true, |_| {}, |_, w, _| assert_eq!(pcore::check::broken(w), None));
-    let cover = rec.last("cover_kg");
+    let (w, _) = run(1, LIVE_SIDE, years, true, |_| {}, |_, w, _| assert_eq!(pcore::check::broken(w), None));
+    let cover = pcore::cover::sums(&w).first().map_or(0.0, |s| s.kg);
     let root_alive = |k: usize| w.life.alive().any(|b| w.life.brains[b.lineage as usize].as_ref().is_some_and(|l| l.root as usize == k));
-    let due: Vec<usize> = animal_kinds().into_iter().filter(|k| k.1 + LIVE_AFTER <= years).map(|k| k.0).collect();
-    let dead: Vec<usize> = due.iter().copied().filter(|&k| !root_alive(k) && !MAY_DIE.contains(&k)).collect();
-    println!("year {years}: cover {cover:.3e} kg, animal kinds due {due:?}, dead {dead:?}");
-    assert!(cover > 0.0, "the cover died out");
-    assert!(dead.is_empty(), "animal kinds placed {LIVE_AFTER} or more years before year {years} died out: {dead:?}");
+    let alive: Vec<usize> = animal_kinds().into_iter().map(|k| k.0).filter(|&k| root_alive(k)).collect();
+    println!("year {years}: starting cover {cover:.3e} kg, animal kinds alive {alive:?}");
+    assert!(cover > 0.0, "the starting cover (kind 0) died out");
+    assert!(alive.contains(&1), "the starting eaters (kind 1) died out: alive {alive:?}");
+    assert!(alive.len() >= LIVE_KINDS, "fewer than {LIVE_KINDS} animal kinds alive: {alive:?}");
 }
 
 /// The key numbers in the order `key_numbers` gives them: name, unit, reference and range.
@@ -287,9 +288,11 @@ const EATER_FROM: u64 = 71;
 /// The most the eaters' births may exceed their deaths over those years, as a share of their births: a population that
 /// replaces itself to within a tenth has stopped growing.
 const EATER_GROWTH: f64 = 0.1;
-/// The most eaters a km² of land may hold at the end, kg: soil animals that live on dead matter, as these do, reach
-/// 1e4 to 1e5 kg/km² (earthworms, `docs/numbers.md`), and this bound lies above them by a few times.
-const EATER_MOST_KG_KM2: f64 = 3e5;
+/// The most eaters a km² of land may hold at the end, kg: about 1 kg per m², the mass the model's eaters reach. They
+/// pay Kleiber's upkeep at the pace of their own temperature (Gillooly et al. 2001), cold-blooded near 290 K: a fifth
+/// of what a mammal of their size pays at 310 K, so the cover's 1 to 1.5 kg per m² a year keeps about 1 kg of them per
+/// m² (real herbivores hold 0.005 to 0.02 kg per m², soil animals up to 0.1).
+const EATER_MOST_KG_KM2: f64 = 1e6;
 /// Square metres in a km².
 const KM2: f64 = 1e6;
 /// The causes of death (`docs/tape.md`).

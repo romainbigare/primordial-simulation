@@ -1,4 +1,4 @@
-//! A month of the cover of each cell of a domain (laws.md 4.2): it catches light and runs its light reaction, pays its
+//! A month of the cover of each cell of a domain (laws.md 4.5): it catches light and runs its light reaction, pays its
 //! upkeep by burning its fuel, loses what is unpaid, worn out or frozen, builds from its fuel and the minerals of the
 //! ground (fixing what it lacks if it can), and sends seeds out. Everything it takes and gives is booked through the
 //! domain's moves, with its heat; its own side it books itself.

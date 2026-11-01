@@ -81,7 +81,7 @@ worn edges, structures, true colour (r, g, b).
 | `births`, `died_<cause>` | 1/yr | members born; died by cause (`lack`, `phase`, `spent`, `taken`, `broken`, `age`) |
 | `lineages`, `lineages_ever`, `updates` | , , 1/yr | brain lineages alive and ever; body updates |
 | `busiest_domain` | | the busiest domain's share of a batch's body updates (its due bodies over all of the batch's), the year's mean over its batches: how evenly the domains share the work |
-| `cat_<r>` | log10 | mean catalyst gene of reaction r over all members (mixes kinds; read the per-kind columns) |
+| `cat_<r>` | log10 | mean diet gene of reaction r over all members (on above 0: the body runs or digests by that reaction; mixes kinds, read the per-kind columns) |
 
 **Brains and kinds**
 
@@ -138,7 +138,7 @@ members; for a kind of cover by its built cover.
 | `alloc`, `child`, `brood` | , log10, | genes of reproduction; brood as a share of the mass |
 | `copy_log`, `heat`, `repair`, `wet_gene` | log10 | gene means |
 | `hidden`, `keep_t` | , K | gene means |
-| `cat_<r>`, `cat_<r>_on` | log10, | catalyst gene of reaction r over the members that carry it on; share that do |
+| `cat_<r>`, `cat_<r>_on` | log10, | diet gene of reaction r over the members that carry it on (above 0); share that do |
 | `slots`, `cover_kg`, `cover_area` | , kg, m²/m² | a kind of cover: its slots, its mass, its capture area per m² of land |
 | `cover_light`, `cover_leaf`, `cover_walls`, `cover_store`, `cover_moist`, `cover_repair`, `cover_fix` | log10 | the means of its genes (`cover::LIGHT` ...) |
 | `cover_frost`, `cover_seed` | K, | the means of its frost and seed genes |

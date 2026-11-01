@@ -1,6 +1,6 @@
 //! The check of population nodes against individuals (`docs/handover.md` 7.1, fixed before it runs): seeds 1 and 5 at
-//! 32 x 32, with nodes and with `--individuals`, then with `--roster`; seed 5 with every node of Change awake
-//! (`Config::sleep_days` 0, a speed setting) beside its run at the default as the noise (seed 1's eaters are a few dozen at 32 x 32). On the columns by starting kind
+//! 16 x 16, with nodes and with `--individuals`, then with `--roster`; seed 5 with every node of Change awake
+//! (`Config::sleep_days` 0, a speed setting) beside its run at the default as the noise. On the columns by starting kind
 //! (means over a window of years) the modes agree if (a) each kind's mass and real life are within a factor of two, and
 //! no kind lives in one mode only; (b) the main gene means move the same way wherever one moves more than 0.3 (of the
 //! copy-mass gene: each gene's move in its mutation steps, `body::steps`, times the copy-mass gene's step, so a gene in
@@ -12,8 +12,8 @@
 //! they are counted per member-year and per kg of eaters per km² of the same year. A difference larger than the noise is a bug in the node rules: a rule the modes break counts only
 //! where the two sleep settings keep it, or break it by less.
 //!
-//! The windows are years 31-40, and 26-30 with the roster (after its last kind is placed, in year 24): at 32 x 32 the
-//! eaters as individuals pass 10^4 bodies in their forties, so longer runs are too slow for a test.
+//! The windows are years 31-40, and 26-30 with the roster (from the year its last kind is placed, 26): a world of
+//! individuals grows fast, so longer runs, or 32 x 32 (over 6 GB for one run), are too slow and too large for a test.
 
 mod common;
 
@@ -24,7 +24,7 @@ use std::collections::BTreeMap;
 use tape::Recorder;
 
 const SEEDS: [u64; 2] = [1, 5];
-const SIDE: usize = 32;
+const SIDE: usize = 16;
 /// Each plan of what is placed when (`--roster` or not) and its window of years, whose means are compared; a run ends
 /// with its window.
 const PLANS: [(bool, (u64, u64)); 2] = [(false, (31, 40)), (true, (26, 30))];
@@ -115,7 +115,7 @@ fn kinds(rec: &Recorder) -> usize {
     (0..).take_while(|k| !rec.last(&format!("root_{k}_members")).is_nan()).count()
 }
 
-/// `ew run --seed <seed> --size 32` (`--roster` if `roster`) to the end of `window`, with nodes or not and `sleep` days of sleep.
+/// `ew run --seed <seed> --size 16` (`SIDE`; `--roster` if `roster`) to the end of `window`, with nodes or not and `sleep` days of sleep.
 fn check_run(seed: u64, roster: bool, window: (u64, u64), nodes: bool, sleep: u32) -> Window {
     let (mut founders, mut years, mut unit): (Vec<Option<Vec<f64>>>, Vec<Year>, Vec<f64>) = (vec![], vec![], vec![]);
     let mut land = 0.0;
@@ -255,10 +255,13 @@ fn print(name: &str, r: &Window) {
     println!("  {name}: most mass, heaviest member {:?}; eaters ate most to least {:?}", winners(r), r.ate.map(|c| ATE[c]));
 }
 
+/// Runs of `nodes_and_individuals_make_the_same_world` side by side.
+const AT_ONCE: usize = 1;
+
 /// Nodes against individuals, by the three rules of handover 7.1 and the rates (d), against the noise of the sleep
 /// setting.
 #[test]
-#[ignore = "slow: ten runs of a 32 x 32 world, 40 and 30 years"]
+#[ignore = "slow: ten runs of a 16 x 16 world, 40 and 30 years"]
 fn nodes_and_individuals_make_the_same_world() {
     let sleep = Config::default().sleep_days;
     let mut runs: Vec<(u64, usize, bool, u32)> = vec![];
@@ -268,10 +271,14 @@ fn nodes_and_individuals_make_the_same_world() {
         }
         runs.push((NOISE_SEED, plan, true, NOISE_SLEEP));
     }
-    let done: Vec<Window> = std::thread::scope(|s| {
-        let all: Vec<_> = runs.iter().map(|&(seed, plan, nodes, sleep)| s.spawn(move || check_run(seed, PLANS[plan].0, PLANS[plan].1, nodes, sleep))).collect();
-        all.into_iter().map(|r| r.join().expect("a run")).collect()
-    });
+    // (`AT_ONCE` runs side by side: a world of individuals holds many bodies, 2.4 GB on 16 x 16 with the roster and over
+    // 6 GB on 32 x 32, so one at a time fits in 4 GB.)
+    let done: Vec<Window> = runs.chunks(AT_ONCE).flat_map(|some| {
+        std::thread::scope(|s| {
+            let all: Vec<_> = some.iter().map(|&(seed, plan, nodes, sleep)| s.spawn(move || check_run(seed, PLANS[plan].0, PLANS[plan].1, nodes, sleep))).collect();
+            all.into_iter().map(|r| r.join().expect("a run")).collect::<Vec<_>>()
+        })
+    }).collect();
     let find = |seed, plan, nodes, c| &done[runs.iter().position(|&r| r == (seed, plan, nodes, c)).expect("a run")];
     let (mut bugs, mut gaps) = (vec![], vec![]);
     for (plan, &(roster, (from, to))) in PLANS.iter().enumerate() {

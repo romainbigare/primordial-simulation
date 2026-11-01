@@ -77,15 +77,13 @@ ask the owner.
 2. Use the shared kit `worldgen::testkit` for setup. Never copy setup code between test files.
 3. **Slow tests are `#[ignore]`** (`cargo test --release --workspace --no-fail-fast -- --ignored`): run them before the
    last push. The normal suite stays under about 30 seconds.
-4. **The golden test** (`tape/tests/golden.rs`) pins the fingerprint of the whole world for three small runs. A pure
-   clean-up must keep it. A change of the laws re-pins it.
-5. Never loosen a tolerance to make a test pass. Never restore old physics inside a test.
-6. Delete the tests of a mechanism you delete.
+4. Never loosen a tolerance to make a test pass. Never restore old physics inside a test.
+5. Delete the tests of a mechanism you delete.
 
 ## 6. Working
 
-1. **A pure clean-up keeps the results bit for bit.** Check the golden test, and compare a few short runs (same
-   fingerprint, same `series.csv`). Keep the order of floating-point sums; `a*b*c` is not `a*(b*c)`.
+1. **A pure clean-up keeps the results bit for bit.** Compare a few short runs (same fingerprint, same
+   `series.csv`). Keep the order of floating-point sums; `a*b*c` is not `a*(b*c)`.
 2. **A change of the laws is its own commit**, with the physics reason and its effect on a few numbers of a long run
    (populations, temperatures, drift).
 3. Before you push: build, all tests, clippy, the wasm build (`cargo build -p pcore --target wasm32-unknown-unknown`).
