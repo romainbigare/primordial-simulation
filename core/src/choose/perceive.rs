@@ -116,6 +116,10 @@ pub(super) fn perceive(w: &World, d: &Chunk, b: &Body, nseen: usize, rng: &mut R
     }
 }
 
+/// A brain's inputs of its own state besides its stores, before its cell's features (`inputs`): its warmth, its size
+/// and the season's sine and cosine.
+pub const OWN: usize = 4;
+
 /// The brain's inputs (laws.md 5.2), of a body of cell `cell` that has `lived` its update at `temp` K, with `mem`
 /// numbers of memory: its stores against their minimums, its warmth, its size and the season, its cell's features,
 /// what Bond senses, its memory.

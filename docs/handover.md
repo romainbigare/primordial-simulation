@@ -388,7 +388,7 @@ Having children is not a choice: it is physics (Section 6.4). There is no "farm"
 
 **Signals.** A signal has no meaning at first. Meaning comes from learning. If signals become useful, a language-like system may emerge.
 
-**Planning** (not built yet): bodies learn a small model of "what happens if I do X" and look a few steps ahead. This makes long plans much easier to find. Taming an animal, for example, pays off only after many seasons.
+**Planning** (a first step is built: a look-ahead of one step with the critic, `docs/laws.md` 5.3): bodies learn a small model of "what happens if I do X" and look a few steps ahead. This makes long plans much easier to find. Taming an animal, for example, pays off only after many seasons.
 
 **Implementation:**
 - A small neural network per body: a base per lineage, rows that are genes of each body, plus what the body (or its population node) learned. Keep the brain code apart from the rest, so it can be swapped.

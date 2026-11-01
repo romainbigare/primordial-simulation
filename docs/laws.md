@@ -587,6 +587,9 @@ own cell, as they are when it decides (their looks and well-being), from a rando
 cover hide them. Up to 3 parts of its cell.
 
 ### 5.3 Actions
+**Planning, one step ahead** (`choose::plan`): before it draws, a body adds to the score of each move the critic's
+value (5.4) of the state it would be in in the cell the move leads to (its own state, that cell's features in place of
+its own cell's) less its value where it is, times `plan_weight` (1 per unit of well-being); off in a null run.
 One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;
 a node spreads its members over its `MOST_ACTS` (4) likeliest actions (the moves counted as one; a speed setting) by
 their chances brought back to a sum of 1 (`spread::top_chances`), and its brain learns from those chances, so the

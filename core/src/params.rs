@@ -154,6 +154,9 @@ pub struct Physics {
     pub shape_noise: f32,
     /// Weight of well-being one month (one update) ahead against well-being now
     pub discount: f32,
+    /// Weight in a move's score of the critic's value of the state it would be in in the cell it steps into, over
+    /// staying, per unit of well-being
+    pub plan_weight: f32,
     /// Share of the way a watcher's rows move toward the watched one's
     pub blend: f32,
     /// Weight of the newest value in a learner's running mean squares: of a row's steps, and of the critic's errors
@@ -315,6 +318,7 @@ impl Default for Physics {
             keep_min: 2.0,
             shape_noise: 0.5,
             discount: 0.9,
+            plan_weight: 1.0,
             blend: 0.3,
             learn_beta: 0.1,
             learn_most: 0.5,

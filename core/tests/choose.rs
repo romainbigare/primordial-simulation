@@ -284,3 +284,55 @@ fn moving_costs_the_real_cost_of_transport() {
     // The real figure, 10.7 m^-0.32 J per kg per m, at 30 kg is 3.6: c_move 3 is the same order.
     assert!(p.c_move > 0.7 * 10.7 * 30f64.powf(-0.32) && p.c_move < 1.0 * 10.7 * 30f64.powf(-0.32));
 }
+
+/// The share of the moves of a body into the one neighbour of its cell that holds cover, over many seeds, where its
+/// critic values the cover's fuel and body matter of the cell it is in (one hidden unit reads that feature, and the
+/// critic weighs that unit) and its moves otherwise score alike (no weight on any feature of a direction), with
+/// `plan_weight` set to `weight`; and the count of neighbours.
+fn toward_cover(weight: f32) -> (f64, usize) {
+    let (mut w, i) = start();
+    let cells = w.mesh.cells();
+    let around: Vec<usize> = (0..pcore::space::COMPASS).filter_map(|d| cells.way(i, d).map(|e| cells.adj_cell()[e] as usize)).collect();
+    let j = around.iter().copied().find(|&j| w.is_land(j)).expect("a land neighbour");
+    testkit::cover(&mut w, j, 2.0);
+    w.cfg.phys.plan_weight = weight;
+    let brain = Brain { fixed: [OFF; pcore::brain::FIXED], dir: testkit::ON, verbs: [OFF; pcore::brain::VERBS + pcore::brain::OVERBS], weights: 0.0, ..Brain::neutral() };
+    let mut line = testkit::Line::new(&mut w, &brain, 1);
+    let s = w.life.brains[line.lineage as usize].as_ref().expect("the lineage").shape;
+    let at = w.chem.ns() + pcore::choose::OWN + pcore::choose::EDIBLE;
+    w.life.brains[line.lineage as usize].as_mut().expect("the lineage").base[at] = 3.0;
+    line.rows[s.critic() * s.r()] = 5.0;
+    let mut b = line.founder(&mut w, 1, i);
+    let m = b.mass(&w.chem);
+    scale(&mut w, &mut b, testkit::EATER_KG / m);
+    (b.genes[pcore::body::DISPERSE], b.genes[LEARN]) = (0.0, LEARN_OFF);
+    b.prepare(&w.chem, &w.cfg);
+    let id = b.id;
+    w.add(b);
+    pcore::survey::survey(&mut w);
+    let id = w.life.alive().find(|b| b.lineage == line.lineage).map_or(id, |b| b.id);
+    let (mut moved, mut there) = (0.0, 0.0);
+    for seed in 0..TRIALS {
+        let mut t = w.clone();
+        t.seed = seed;
+        pcore::survey::batch(&mut t);
+        let Some(h) = t.life.find(id) else { continue };
+        let at = t.life[h].cell as usize;
+        (moved, there) = (moved + (at != i) as u8 as f64, there + (at == j) as u8 as f64);
+    }
+    (there / moved.max(1.0), around.len())
+}
+
+/// Seeds of `toward_cover`.
+const TRIALS: u64 = 200;
+
+/// One step of look-ahead (laws.md 5.3): a body whose critic values the cover of its cell steps into the one neighbour
+/// that holds cover far more often than chance (one in the count of its neighbours); with `plan_weight` 0, about as
+/// often as chance.
+#[test]
+fn a_body_whose_critic_values_cover_moves_toward_it() {
+    let ((planned, n), (blind, _)) = (toward_cover(1.0), toward_cover(0.0));
+    let chance = 1.0 / n as f64;
+    assert!(planned > 3.0 * chance, "with planning {planned:.3} of the moves go to the cover, chance {chance:.3}");
+    assert!(blind < 2.0 * chance, "without planning {blind:.3} of the moves go to the cover, chance {chance:.3}");
+}

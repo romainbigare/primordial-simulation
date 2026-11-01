@@ -62,7 +62,7 @@ impl Shape {
         self.form() + FORM_OUT
     }
     /// The row that estimates how well-being will go from here (the critic).
-    pub(crate) fn critic(&self) -> usize {
+    pub fn critic(&self) -> usize {
         self.learned() + self.mem
     }
     pub fn rows(&self) -> usize {

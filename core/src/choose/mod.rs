@@ -18,7 +18,7 @@ pub use perceive::cells;
 pub(crate) use spread::land_act;
 
 use perceive::{perceive, Face, HEIGHT, LN_LEAF, LN_MASS, T, WB_SCALE};
-pub use perceive::{DEAD, EDIBLE, NCELL, SIGHTS, WET};
+pub use perceive::{DEAD, EDIBLE, NCELL, OWN, SIGHTS, WET};
 
 use crate::body::{Body, Lived};
 use crate::brain::{self, ln, score, squash, Shape, Thought, ANCHOR, DIG, FIXED, FORM, FORM_OUT, OVERBS, PUT, RELEASE, REST, TAKE, TAKE_FROM, VERBS, WATCH};
@@ -42,7 +42,7 @@ const TO_BODY: usize = FIXED + MOVES;
 const TO_PART: usize = TO_BODY + VERBS * MAX_SEEN;
 /// Inputs of a brain besides one per substance and its memory: its warmth, size and the season, its cell's features,
 /// and what Bond senses.
-pub(crate) const INPUTS: usize = 4 + NCELL + bond::SENSE;
+pub(crate) const INPUTS: usize = OWN + NCELL + bond::SENSE;
 
 /// Working memory of `act`, kept from body to body.
 #[derive(Default)]
@@ -90,6 +90,9 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: 
     brain::think(d.at(b.cell as usize).brains.rows(b.brain, s), s, z, &mut t.thought);
     learn::learn(w, b, &mut d.brains(b.cell as usize).mind(b.brain, s), s, (wb, &t.thought.h));
     options(w, d, b, (s, sight), (pm, b.volume(&w.chem, temp) / b.n()), &mut c, t);
+    if let Some(lin) = d.brain(w, b.lineage) {
+        plan(w, (&lin.base, d.at(b.cell as usize).brains.rows(b.brain, s)), s, z, b.cell as usize, &mut c);
+    }
     pick(d, &mut c, &mut rng);
     let (form, zn) = noise(w, b, s, t, &mut rng);
     b.wb = wb;
@@ -159,6 +162,26 @@ fn options(w: &World, ch: &Chunk, b: &Body, (s, sight): (Shape, usize), (pm, vol
         if c.room.is_none() {
             c.logit[RELEASE] = f32::NEG_INFINITY;
         }
+    }
+}
+
+/// One step of look-ahead (laws.md 5.3): the critic's value of the state the body would be in in each cell it can step
+/// into (its own state with that cell's features in place of its own cell's: the sums of its hidden layer `z` moved by
+/// the base's weights on the difference), less its value here, times `Physics::plan_weight`, added to the score of the
+/// move there. `brain`: the lineage's base and the body's rows. Off in a null run.
+fn plan(w: &World, (base, rows): (&[f32], &[f32]), s: Shape, z: &[f32], i: usize, c: &mut Choice) {
+    let weight = w.cfg.phys.plan_weight;
+    if w.cfg.null || weight == 0.0 || s.h == 0 {
+        return;
+    }
+    let (at, own, critic) = (w.chem.ns() + OWN, w.life.feat(i, 1), &rows[s.critic() * s.r()..(s.critic() + 1) * s.r()]);
+    let value = |f: &[f32; NCELL]| {
+        let moved = |m: usize| z[m] + base[m * s.ni + at..m * s.ni + at + NCELL].iter().zip(f.iter().zip(own)).map(|(w, (x, o))| w * (x - o)).sum::<f32>();
+        critic[s.h] + (0..s.h).map(|m| critic[m] * squash(moved(m))).sum::<f32>()
+    };
+    let here = value(own);
+    for d in (0..MOVES).filter(|&d| c.to[d] != usize::MAX) {
+        c.logit[FIXED + d] += weight * (value(w.life.feat(c.to[d], 1)) - here);
     }
 }
 
