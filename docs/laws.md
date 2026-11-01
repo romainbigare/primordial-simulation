@@ -45,7 +45,8 @@ free solid has rotted by then (it rots in about a week, 2.1). Every body decides
 **Bodies, chunks and the serial pass** (`life`, `survey::batch`). Each ground cell stores its bodies in the order they
 came (`life::Cell`), each a record of fixed size (its stores and genes in place, 6.1, 4.1), and their brains, one block
 each in the cell's array (`life::Brains`: the rows, the moving averages of learning and the last trace), reused when
-freed; a body that moves takes its block to the array of the cell it enters. A body's id is the cell it was placed in
+freed and packed again once the freed blocks hold half the array (a snapshot keeps them packed, none free); a body that
+moves takes its block to the array of the cell it enters. A body's id is the cell it was placed in
 and that cell's count of bodies placed (children, split
 halves, parts of nodes acting apart); it never changes, and its random draws are keyed by it. The cells
 are cut into `Config::chunks` runs of neighbouring indices, the same for any number of threads. **The parallel pass**:

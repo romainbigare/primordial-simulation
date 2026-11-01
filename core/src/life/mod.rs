@@ -151,7 +151,8 @@ impl Life {
         &self.cells[i].cover
     }
     /// The holes the pass left are closed: each cell keeps its living bodies in their order, and a body or a part that
-    /// is gone from the cell it was noted in leaves `moved` or `parts_moved`.
+    /// is gone from the cell it was noted in leaves `moved` or `parts_moved`. A cell whose freed brain blocks hold much
+    /// of its array packs it (`Brains::pack`).
     pub(crate) fn compact(&mut self) {
         let Life { cells, moved, parts_moved, .. } = self;
         parts_moved.retain(|&id, &mut i| cells[i as usize].parts.iter().any(|p| p.id == id));
@@ -162,6 +163,9 @@ impl Life {
                 }
             }
             c.bodies.retain(|b| b.alive);
+        }
+        for c in cells.iter_mut().filter(|c| c.brains.sparse()) {
+            c.brains.pack(c.bodies.iter_mut().map(|b| &mut b.brain));
         }
     }
     /// Body `id` is now stored in cell `i` (`find`).

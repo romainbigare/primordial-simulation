@@ -1,10 +1,15 @@
 //! The brains of a cell's bodies (laws.md 0): each body with a brain has one block of numbers in its cell's array: its
 //! brain rows, then per learned row the moving average of the squares of its learning steps (`brain::learn`), then the
 //! trace of its last decision (`choose::trace`). A block freed is reused by the next of its length, so no body needs an
-//! allocation of its own; the chunk of the cell is the one writer of its blocks.
+//! allocation of its own; once the freed blocks hold `FREED_SHARE` of the array, the living blocks are packed again
+//! (`pack`). The chunk of the cell is the one writer of its blocks.
 
 use crate::brain::Shape;
 use serde::{Deserialize, Serialize};
+
+/// A cell's brains are packed (`Brains::pack`) once the blocks freed hold more than this share of its array: so its
+/// array holds at most twice what its bodies' brains need, and packing costs at most a copy of what was freed.
+const FREED_SHARE: f64 = 0.5;
 
 /// A body's block in its cell's brains (`Brains`): where it starts, and its length (0: no brain).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,17 +39,60 @@ pub struct Mind<'a> {
     pub trace: &'a mut [f32],
 }
 
-/// The blocks of the brains of a cell's bodies, and the blocks freed.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+/// The blocks of the brains of a cell's bodies, the blocks freed, and how many numbers these hold.
+#[derive(Clone, Debug, Default)]
 pub struct Brains {
     v: Vec<f32>,
     free: Vec<Block>,
+    freed: usize,
 }
 
 impl Brains {
+    /// The brains of a cell as a snapshot keeps them (`packed`): its bodies' blocks one after another, none free.
+    pub(crate) fn from_packed(v: Vec<f32>) -> Brains {
+        Brains { v, ..Default::default() }
+    }
+    /// The numbers of the blocks `held` (each living body's of the cell, in the cell's order) one after another, and the
+    /// block of each there: none if they lie so already (no block free, none out of that order).
+    pub(crate) fn packed(&self, held: &[Block]) -> Option<(Vec<f32>, Vec<Block>)> {
+        let mut at = 0;
+        let in_order = held.iter().filter(|b| b.some()).all(|b| {
+            let ok = b.at as usize == at;
+            at += b.len as usize;
+            ok
+        });
+        if in_order && at == self.v.len() {
+            return None;
+        }
+        let mut v = Vec::with_capacity(at);
+        let blocks = held.iter().map(|&b| {
+            if !b.some() {
+                return b;
+            }
+            v.extend_from_slice(self.of(b));
+            Block { at: (v.len() - b.len as usize) as u32, len: b.len }
+        });
+        let blocks = blocks.collect();
+        Some((v, blocks))
+    }
+    /// Whether the blocks freed hold more than `FREED_SHARE` of the array, so that it should be packed (`pack`).
+    pub(crate) fn sparse(&self) -> bool {
+        self.freed as f64 > FREED_SHARE * self.v.len() as f64
+    }
+    /// The living blocks `held` (each living body's of the cell) are packed one after another in their order (`packed`),
+    /// each body's block moved with its numbers; no block is left free, and the array keeps no room beyond them.
+    pub(crate) fn pack<'a>(&mut self, held: impl Iterator<Item = &'a mut Block>) {
+        let mut held: Vec<&mut Block> = held.collect();
+        let blocks: Vec<Block> = held.iter().map(|b| **b).collect();
+        if let Some((v, moved)) = self.packed(&blocks) {
+            held.iter_mut().zip(moved).for_each(|(b, m)| **b = m);
+            *self = Brains::from_packed(v);
+        }
+    }
     /// A block of `len` numbers: the last freed of that length, or a new one at the end.
     fn grab(&mut self, len: usize) -> Block {
         if let Some(x) = self.free.iter().rposition(|f| f.len as usize == len) {
+            self.freed -= len;
             return self.free.swap_remove(x);
         }
         self.v.resize(self.v.len() + len, 0.0);
@@ -77,6 +125,7 @@ impl Brains {
     pub(crate) fn free(&mut self, b: Block) {
         if b.some() {
             self.free.push(b);
+            self.freed += b.len as usize;
         }
     }
     /// The rows of block `b` of a brain of shape `s` (none for no brain).
@@ -133,6 +182,10 @@ impl Brains {
         let c = self.grab(b.len as usize);
         self.v.copy_within(b.at as usize..(b.at + b.len) as usize, c.at as usize);
         c
+    }
+    /// The numbers of all blocks, freed ones too (what a snapshot keeps once they are `packed`).
+    pub(crate) fn numbers(&self) -> &[f32] {
+        &self.v
     }
     /// All the numbers of block `b`, to carry to another cell (`take_in`).
     pub(crate) fn all(&self, b: Block) -> &[f32] {
