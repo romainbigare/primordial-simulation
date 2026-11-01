@@ -71,7 +71,7 @@ fn grazing_takes_from_the_cover() {
     let (mut w, i) = start();
     assert!(cover::place(&mut w, i, genes(), 0, 1.0));
     let b = eater(&mut w, i, pcore::brain::TAKE, 1.0);
-    w.add(b, 1);
+    w.add(b);
     let books = Books::now(&w);
     w.take_counters();
     w.events.clear();

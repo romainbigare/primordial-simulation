@@ -1,6 +1,6 @@
 //! Law 4: Copy. Reproduction is a share of a surplus. A mature body puts the share `ALLOC` of what it builds (`grow`)
 //! into a brood, and whenever the brood covers the matter of a child, a child is made (`copy`) at the body's update,
-//! whatever its brain does (a node at most once in `Config::lump_days`, `due`). A child's genes are its parent's plus
+//! whatever its brain does. A child's genes are its parent's plus
 //! small noise, or with two parents each gene is one parent's (`mix`). A population node keeps how its members differ
 //! (`Body::spread`, `Body::row_spread`); its children join a young node of their kind where they start, or start one,
 //! which grows up as a whole (`kin`). Only individuals' children start new lineages. With `Config::nodes` off bodies with a brain are never nodes: their children start as individuals and join
@@ -17,7 +17,7 @@ use crate::chem::Chemistry;
 use crate::event::{Event, EventKind};
 use crate::lineage::{resized, sizes_of, wanted};
 use crate::nodes::{add, may_be_node, open, Lot, COUNT_SLACK};
-use crate::rng::{self, Purpose, Rng};
+use crate::rng::{Purpose, Rng};
 use crate::space::COMPASS;
 use crate::outbox::Entry;
 use crate::store::{Class, Node};
@@ -46,13 +46,13 @@ struct Births {
 }
 
 /// A mature body makes children whenever its brood covers one: an individual whole children of one parent or two, a
-/// node fractional members of one parent beyond `BROOD_HELD`, at most once in `Config::lump_days` (`due`); a share
+/// node fractional members of one parent beyond `BROOD_HELD`; a share
 /// `DISPERSE` starts in a neighbour cell (laws.md 4.2-4.4). Returns whether any were made.
 pub fn copy(w: &World, d: &mut Domain, b: &mut Body) -> bool {
     let (chem, n, mc) = (&w.chem, b.n(), b.k.copy_mass);
     let Some(mi) = chem.matter() else { return false };
     let node = n > 1.0;
-    if !b.adult(chem) || node && !due(w, b) {
+    if !b.adult(chem) {
         return false;
     }
     let mm = chem.subs[mi].molar_mass;
@@ -85,13 +85,9 @@ pub fn copy(w: &World, d: &mut Domain, b: &mut Body) -> bool {
         Some(j) => (j, m),
         None => (i, 0.0),
     };
-    // A node all of whose children would wait (under one member, all staying, no young node to join) makes none now
-    // and keeps its turn; else this is its turn (`due`).
-    if node {
-        if m == 0.0 && births < 1.0 && kin(w, d, i, b.lineage, (&b.genes, &b.spread), false).is_none() {
-            return false;
-        }
-        b.lump_at = w.batch() + (w.cfg.lump_days / w.cfg.batch_days) as u64;
+    // A node all of whose children would wait (under one member, all staying, no young node to join) makes none now.
+    if node && m == 0.0 && births < 1.0 && kin(w, d, i, b.lineage, (&b.genes, &b.spread), false).is_none() {
+        return false;
     }
     let mut made = false;
     if m > 0.0 {
@@ -103,20 +99,6 @@ pub fn copy(w: &World, d: &mut Domain, b: &mut Body) -> bool {
         made |= emit(w, d, b, &litter, i, births - m, &mut r);
     }
     made
-}
-
-/// Whether node `b` may make children at this update: `Config::lump_days` or more after its last (`Body::lump_at`).
-/// One that never made any waits for the first batch of its phase (a hash of its id), so that nodes made together
-/// (founders) do not make theirs at the same batches ever after. A node makes all its brood covers at its first update
-/// that may; its brood fills at every update and leaves with members who die (`Body::lose`). So `vary`, the rows and
-/// the join run once in `lump_days`. A part split off a node keeps its turn, and a node keeps its own when others join
-/// it.
-fn due(w: &World, b: &mut Body) -> bool {
-    let (per, now) = ((w.cfg.lump_days / w.cfg.batch_days) as u64, w.batch());
-    if b.lump_at == 0 {
-        b.lump_at = now + (per - (now + rng::mix(b.id)) % per) % per;
-    }
-    now >= b.lump_at
 }
 
 /// Children that start in another cell than their parent's (`emit`), in the outbox until the batch ends (`land_litter`): their

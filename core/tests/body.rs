@@ -10,18 +10,16 @@ use worldgen::testkit::{add, died, dry_lands, eater, hold_ground, kg, moved, out
 /// Days the takes from the ground run for (`matter_taken_from_outside_is_digested_into_the_solid`).
 const TAKE_DAYS: usize = 50;
 
-/// Body `s` until its next update, the ground of its cell held at `t` K each day; returns the body after it.
+/// Body `s` until its next update (the first the bodies' month runs), the ground of its cell held at `t` K each day;
+/// returns the body after it.
 fn after_update(w: &mut World, s: Handle, t: f64) -> Body {
-    let (id, last) = (w.life[s].id, w.life[s].last);
-    let i = w.life[s].cell as usize;
-    loop {
+    let (id, i, updates) = (w.life[s].id, w.life[s].cell as usize, w.counts.updates);
+    while w.counts.updates == updates {
         hold_ground(w, i, t);
         pcore::day(w);
-        let h = w.life.find(id).expect("the body lives");
-        if w.life[h].last != last {
-            return w.life[h].clone();
-        }
     }
+    let h = w.life.find(id).unwrap_or_else(|| panic!("the body died on day {}", w.day()));
+    w.life[h].clone()
 }
 
 /// A resting eater (a brain that only rests) of `copy` kg copy mass on dry land, its ground held at `t` K: placed.
@@ -29,7 +27,7 @@ fn resting(t: f64) -> (World, Handle) {
     let (mut w, i) = start();
     let b = eater(&mut w, i, brain::REST, 1.0);
     hold_ground(&mut w, i, t);
-    let s = w.add(b, 1);
+    let s = w.add(b);
     (w, s)
 }
 
@@ -152,7 +150,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
         // Only matter on the ground to take: it takes neither the liquid nor the solid.
         (b.genes[lay.upt + LIQUID], b.genes[lay.upt + RICH]) = (-0.1, -0.1);
         let (rich0, matter0, size0) = (b.store[RICH], b.store[MATTER], b.size(&w.chem));
-        let s = w.add(b, 1);
+        let s = w.add(b);
         let books = Books::now(&w);
         // (What the body took from the ground, by the events, not what left it: dead matter on the ground also rots.)
         let mut took = 0.0;
@@ -250,7 +248,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         scale(w, &mut b, count);
         b.count = count;
         b.prepare(&w.chem, &w.cfg);
-        w.add(b, 1)
+        w.add(b)
     };
     // A node of members at repair 0 alone in one cell; one at repair 0.5 and a hundred individuals at repair 0 in the
     // other (an individual's death is of one member, a node's of a share).
@@ -275,7 +273,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     let per_kg = |w: &mut pcore::World, s: Handle| {
         let mut b = std::mem::take(&mut w.life[s]);
         b.prepare(&w.chem, &w.cfg);
-        let (d, m) = (b.interval(w) as f64, b.mass(&w.chem));
+        let (d, m) = (w.cfg.update_days(), b.mass(&w.chem));
         let (u, act) = (pcore::body::upkeep(w, &b, d, m, b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys)) / (d * b.built(&w.chem)), b.activity(&w.chem, &w.cfg.phys));
         w.life[s] = b;
         (u, act)
@@ -288,7 +286,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     // A life of 38 days at gene 0, 10^0.5 ua / ub times that at 0.5. Each counts its days from its last update.
     let (life, x) = (38.0, 10f64.sqrt() * ua / ub);
     w.cfg.phys.e_life = life * ua;
-    let (books, n0, every) = (Books::now(&w), w.life[sa].count, w.life[sa].interval(&w) as f64);
+    let (books, n0, every) = (Books::now(&w), w.life[sa].count, w.cfg.update_days());
     let from: Vec<f64> = [sa, sb].iter().chain(&ones).map(|&s| w.life[s].last).collect();
     let day0 = w.day() as f64;
     let mut deaths = Vec::new();

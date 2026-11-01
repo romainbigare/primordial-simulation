@@ -177,7 +177,7 @@ pub fn eater_nodes(w: &mut World, members: f64) -> Vec<Handle> {
     dry_lands(w).into_iter().map(|i| {
         let b = line.founder(w, 1, i);
         let b = node_of(w, b, members);
-        w.add(b, 1)
+        w.add(b)
     }).collect()
 }
 
@@ -287,7 +287,7 @@ pub fn warm(w: &mut World, b: &mut Body, t: f64) {
 
 /// Body `b` placed and taken out again, prepared, to call the laws on directly: where it is stored, and the body.
 pub fn out(w: &mut World, b: Body) -> (Handle, Body) {
-    let s = w.add(b, 1);
+    let s = w.add(b);
     pcore::survey::survey(w, false);
     w.time += DAY_S;
     let mut b = std::mem::take(&mut w.life[s]);

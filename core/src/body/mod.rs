@@ -1,5 +1,5 @@
-//! Bodies: nodes that hold substances, heat and genes, each with an id that never changes (`life`). A body updates every
-//! `interval` days and integrates the time since at its update (`live`; laws.md 6).
+//! Bodies: nodes that hold substances, heat and genes, each with an id that never changes (`life`). A body updates once
+//! a month and integrates the time since at its update (`live`; laws.md 6).
 
 mod death;
 mod exchange;
@@ -62,8 +62,6 @@ pub struct Body {
     /// The body it was copied from (id; 0 for a founder) and its day of birth
     pub parent: u64,
     pub born: u64,
-    /// Batch of its next update (`Life::schedule`)
-    pub due: u64,
     /// Day of the last update; for a node, the mean by members of the days its members' time was last integrated from
     /// (members who joined since count from when they came, `nodes::rejoin`)
     pub last: f64,
@@ -82,8 +80,6 @@ pub struct Body {
     pub wet: u64,
     /// Body matter built for children and held back, mol (part of `store`, not of the body: `size`, `built`; laws.md 4.2)
     pub brood: f64,
-    /// For a node: the first batch of the world's clock at which it may make children (`copy::due`; 0: not set)
-    pub lump_at: u64,
     /// Visible traits: mass kg, light-capture area m² (none: bodies catch no light), strength, colour (3 bands), height
     /// m (`height`)
     pub vis: [f32; 7],
@@ -104,8 +100,6 @@ pub struct Body {
     /// Well-being at the last decision; the trace of that decision for learning
     pub wb: f32,
     pub trace: Vec<f32>,
-    /// The day of its last decision (any body); for a node, what its members repeat until its next decision (`choose::Habit`)
-    pub habit: Option<crate::choose::Habit>,
     /// It has a move queued in the batch running, or is a node's part with a part act queued (`outbox`): it stays in
     /// its cell until then, but the others there no longer deal with it (laws.md 0); false outside a batch, not saved
     #[serde(skip)]
@@ -120,8 +114,6 @@ pub struct Body {
 pub struct Consts {
     /// 10 to the power of the coat gene (`HEAT`)
     pub heat: f64,
-    /// Days between the updates its `INTERVAL` gene asks for, a whole number of batches (`Body::interval`)
-    pub interval: u64,
     /// The reactions of its diet that release heat, with the heat per unit, J (not those that keep a part of a fuel's
     /// heat, `Chemistry::keeps`)
     pub burn: Vec<(usize, f64)>,
@@ -204,20 +196,6 @@ impl Body {
         let held = self.store.iter().enumerate().filter(|x| *x.1 != 0.0);
         held.map(|(k, a)| a * chem.molar_volume(k, chem.phase_in(k, t, |j| self.store[j]))).sum()
     }
-    /// Days between its updates, a whole number of batches (`Config::batch_days`): its `INTERVAL` gene.
-    pub fn interval(&self, _w: &crate::World) -> u64 {
-        self.k.interval
-    }
-    /// How many of the intervals its `INTERVAL` gene asks for one update spans.
-    pub(crate) fn paces(&self, w: &crate::World) -> f64 {
-        self.interval(w) as f64 / self.k.interval as f64
-    }
-    /// The share that dies in an update when `f` would die in one interval of its gene: the rate -ln(1 - f) per
-    /// interval over `paces` intervals, so as many die in a time whatever the length of the updates.
-    pub(crate) fn over_span(&self, f: f64, w: &crate::World) -> f64 {
-        let d = self.paces(w);
-        if d == 1.0 { f } else { 1.0 - (1.0 - f).powf(d) }
-    }
     /// Work `k` out from the genes and the settings, at every change of the genes.
     pub fn prepare(&mut self, chem: &Chemistry, cfg: &crate::Config) {
         let p = &cfg.phys;
@@ -230,9 +208,6 @@ impl Body {
         k.broken = (0..nr).filter(|&r| on(r)).flat_map(|r| &chem.reactions[r].inputs).fold(0, |m, p| m | 1 << p.0);
         k.upt.clear();
         k.upt.extend((0..chem.ns()).filter(|&x| self.genes[lay.upt + x] > 0.0).map(|x| (x, self.genes[lay.upt + x])));
-        // The gene's days to the nearest whole batch, at least one, so every update starts a batch.
-        let batch = cfg.batch_days as f64;
-        k.interval = ((self.dec(INTERVAL).clamp(MIN_INTERVAL, MAX_INTERVAL) / batch).round().max(1.0) * batch) as u64;
         (k.heat, k.copy_mass) = (self.dec(HEAT), self.dec(COPY_MASS));
         k.tissue = (k.copy_mass / p.m_ref).powf(p.intake_exp - 1.0);
         k.pace_ref = k.burn.first().map_or(1.0, |&(r, _)| chem.reactions[r].arrhenius(p.t_cat));

@@ -250,7 +250,7 @@ fn yearly_series_has_the_measures_per_starting_kind() {
     let col = |n: &str, r: &Vec<f64>| r[head.iter().position(|h| *h == n).unwrap_or_else(|| panic!("no column {n}"))];
     let kinds: Vec<usize> = (0..8).filter(|k| head.contains(&format!("root_{k}_members").as_str())).collect();
     assert!(!kinds.is_empty());
-    for name in ["births", "life_real", "mass", "copy_mass", "matter", "body", "copy_log", "interval", "hidden", "repair", "died_age", "alloc", "child", "brood"] {
+    for name in ["births", "life_real", "mass", "copy_mass", "matter", "body", "copy_log", "hidden", "repair", "died_age", "alloc", "child", "brood"] {
         assert!(head.contains(&format!("root_{}_{name}", kinds[0]).as_str()), "{name}");
     }
     for r in &rows {
@@ -379,7 +379,8 @@ fn resume_into_the_same_folder_continues_the_tape() {
     assert_eq!(years, ["0", "1", "2", "3", "4"]);
     assert!(series[0].contains("eat_animals") && series[0].contains("worn_new"));
     for (row, (resumed, unbroken)) in series.iter().zip(&whole.2).enumerate() {
-        assert_eq!(resumed, unbroken, "series row {row}");
+        let diff: Vec<&str> = series[0].split(',').zip(resumed.split(',').zip(unbroken.split(','))).filter(|(_, (a, b))| a != b).map(|(h, _)| h).collect();
+        assert_eq!(resumed, unbroken, "series row {row}: {diff:?}");
     }
     assert_eq!(std::fs::read_to_string(dir.join("months.csv")).unwrap(), whole_months);
     assert_eq!(months, (0..=4 * mpy).map(|i| (i / mpy, i % mpy)).collect::<Vec<_>>());

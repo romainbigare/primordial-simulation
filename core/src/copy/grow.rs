@@ -16,8 +16,7 @@ pub fn grow(w: &World, d: &mut Domain, b: &mut Body, days: f64, t: f64) -> bool 
     // The matter a body of the size of maturity is made of: the living body is its matter over 1 - `WET_TISSUE` (`Body::built`).
     let full = b.k.copy_mass * n * (1.0 - WET_TISSUE);
     let needs = if b.adult(chem) { 0.0 } else { (full - b.matter_kg(chem)).max(0.0) };
-    let (ivl, dry) = (b.interval(w) as f64, b.activity(chem, &w.cfg.phys));
-    let room0 = allowance(w, b, t, days.min(ivl), dry);
+    let room0 = allowance(w, b, t, days, b.activity(chem, &w.cfg.phys));
     // The other solids it builds first, each with its share (`Body::share`) of the allowance, and up to the level that
     // share makes of its matter (`Body::level`), by the same work; then matter with the rest.
     let (mut room, mut built) = (room0, false);
@@ -60,7 +59,7 @@ fn allowance(w: &World, b: &Body, t: f64, days: f64, dry: f64) -> f64 {
 const LEAST_MADE: f64 = 1e-12;
 
 /// One conversion of growth (`Chemistry::build` or one of `Chemistry::builds`) at `t` K: up to `most` kg of its first
-/// output with `room` J of the work allowance, as far as its fuel spares after an interval's upkeep and its stores
+/// output with `room` J of the work allowance, as far as its fuel spares after a month's upkeep and its stores
 /// reach (`reach`); a gas it makes leaves to the air with its heat and its latent heat, and it keeps its temperature.
 /// Returns the kg made: none below `LEAST_MADE` of `full` (kg of matter of the size of maturity; 0 for the other
 /// solids).
@@ -69,7 +68,7 @@ fn convert(w: &World, d: &mut Domain, b: &mut Body, bl: &Reaction, room: f64, mo
     if room <= 0.0 || most <= 0.0 {
         return 0.0;
     }
-    let (chem, p, ivl) = (&w.chem, &w.cfg.phys, b.interval(w) as f64);
+    let (chem, p, month) = (&w.chem, &w.cfg.phys, w.cfg.update_days());
     let m = bl.outputs[0].0 as usize;
     // (A unit of growth makes `nu0` mol of what it makes; chemistry 0: 1.)
     let (nu0, mm, mass) = (bl.outputs[0].1 as f64, chem.subs[m].molar_mass, b.mass(chem));
@@ -78,7 +77,7 @@ fn convert(w: &World, d: &mut Domain, b: &mut Body, bl: &Reaction, room: f64, mo
     let (ins, outs) = (&bl.inputs, &bl.outputs);
     let fuel = ins.iter().map(|&(k, nu)| nu as f64 * b.heat_of(chem, k as usize, t)).sum::<f64>() / (mm * nu0);
     let per_kg = p.c_copy + fuel - b.heat_of(chem, m, t) / mm;
-    let spare = (b.fuel(chem, t) - body::upkeep(w, b, ivl, mass, t, b.activity(chem, p))).max(0.0);
+    let spare = (b.fuel(chem, t) - body::upkeep(w, b, month, mass, t, b.activity(chem, p))).max(0.0);
     let (floors, reach) = reach(chem, p, b, bl, t);
     let kg = (room / p.c_copy).min(spare / per_kg.max(1e-300)).min(reach).min(most);
     if kg <= LEAST_MADE * full.max(LEAST_MADE * mass) || !body::pay(w, d, b, p.c_copy * kg) {

@@ -65,9 +65,9 @@ fn processes(w: &World) -> [(Every, Run); 11] {
         // (The cover's month reads Flow's state, built in full at a month's start, and the air as its step left it.)
         (from_start(cal.month), (Stage::Bodies, "cover", |w, _| survey::cover(w))),
         (physics, (Stage::Change, "change", |w, s| change::step(w, s as f64))),
-        // (Bond's own spans are months, `bond::step`; the bodies' intervals whole batches of days, `survey::batch`.)
+        // (Bond's own spans are months, `bond::step`; every body updates once a month, `survey::batch`.)
         (from_start(cal.month), (Stage::Parts, "bond", |w, _| bond::step(w))),
-        (days(cfg, cfg.batch_days), (Stage::Bodies, "body batch", |w, _| survey::batch(w, false))),
+        (from_start(cal.month), (Stage::Bodies, "body batch", |w, _| survey::batch(w, false))),
     ]
 }
 

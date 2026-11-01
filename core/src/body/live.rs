@@ -199,7 +199,7 @@ fn check_stores(w: &World, d: &mut Domain, b: &mut Body, tmp: &mut LiveTmp) -> R
     };
     let f = (0..ns).filter(|&k| key(k)).map(frozen).fold(0.0, f64::max);
     if f > 0.0 {
-        if f >= 1.0 - 1e-9 || !lose_share(w, d, b, b.over_span(f, w), PHASE, &mut tmp.dead, &th) {
+        if f >= 1.0 - 1e-9 || !lose_share(w, d, b, f, PHASE, &mut tmp.dead, &th) {
             return Err(PHASE);
         }
         return Ok(b.thermal(&w.chem));

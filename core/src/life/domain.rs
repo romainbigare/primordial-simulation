@@ -1,16 +1,16 @@
 //! A domain (laws.md 0): the cells under one air node and all that its bodies' updates write. Body code runs on a domain
 //! taken out of the world (`(&World, &mut Domain)`), in the parallel phase of a batch and in every serial step
-//! (`World::in_domain`) alike: it writes its bodies, their lists, its ring, the store's view (`store::Moves`), its
+//! (`World::in_domain`) alike: it writes its bodies, their lists, the store's view (`store::Moves`), its
 //! events and counters, its outbox, and the lineages and born rows it makes (provisional, `registry`) and the changes of
 //! their holders; the world settles them when the domain is back (`World::settle`). What lands in its cells
 //! (`Life::cross`) is its own too.
 
-use super::{free_place, Handle, Held, ID_SHIFT, RING};
+use super::{free_place, Handle, Held, ID_SHIFT};
 use crate::{body::Body, event::Event, lineage::Lineage, outbox::Entry, store::Moves, Counters, World};
 use std::collections::BTreeMap;
 
 /// The cells under one air node, how many bodies were placed in it, the bodies of its cells (their slots, the last freed
-/// taken first, each cell's list and the ring of their updates), and what its bodies' updates wrote.
+/// taken first, and each cell's list), and what its bodies' updates wrote.
 #[derive(Clone, Debug, Default)]
 pub struct Domain {
     /// Its place among the domains, and its cells in order (`Level::children` of its air node)
@@ -24,8 +24,6 @@ pub struct Domain {
     pub(crate) at: Vec<Vec<Handle>>,
     /// The slot of each body stored in it, by id
     pub(super) table: BTreeMap<u64, u32>,
-    /// Updates due, by batch modulo RING: body ids (`Body::due`)
-    pub(super) ring: Vec<Vec<u64>>,
     /// Per cell (by its order in `cells`): the energy movers spent pushing through its bodies since the last survey,
     /// which then breaks them, J (`choose::wear`)
     pub pushed: Vec<f64>,
@@ -80,16 +78,15 @@ impl Domain {
     pub(crate) fn set_count(&mut self, b: &mut Body, count: f64) {
         b.count = count;
     }
-    /// Place a new body in its cell on `day`; it first updates in batch `due`.
-    pub(crate) fn add(&mut self, mut b: Body, day: u64, due: u64) -> Handle {
+    /// Place a new body in its cell on `day`; it first updates at the next month's start.
+    pub(crate) fn add(&mut self, mut b: Body, day: u64) -> Handle {
         self.placed += 1;
         assert!(self.placed < 1 << ID_SHIFT, "domain {} placed 2^{ID_SHIFT} bodies: its ids would run into the next domain's", self.index);
         (b.id, b.alive, b.last, b.count) = ((self.index as u64) << ID_SHIFT | self.placed, true, day as f64, b.n());
-        self.schedule(due, &mut b);
         self.enter(&b);
         self.store(b)
     }
-    /// Store body `b` (counted in its lineage and born rows, its id set, its next update filed): in a free slot, its
+    /// Store body `b` (counted in its lineage and born rows, its id set): in a free slot, its
     /// cell's list and the id table.
     pub(super) fn store(&mut self, b: Body) -> Handle {
         let h = Handle { domain: self.index, slot: free_place(&mut self.bodies, &mut self.free) as u32 };
@@ -113,13 +110,12 @@ impl Domain {
         self.bodies[h.slot as usize] = Body::default();
         self.free.push(h.slot);
     }
-    /// Body `b`, which moved into its cell from another, is stored here, its update due filed here.
+    /// Body `b`, which moved into its cell from another, is stored here.
     pub(crate) fn arrive(&mut self, b: Body) -> Handle {
-        self.ring[(b.due % RING) as usize].push(b.id);
         self.arrived.push(b.id);
         self.store(b)
     }
-    /// At the end of its task: each body with a move queued (`Entry::Go`) leaves its storage and its ring, and goes with
+    /// At the end of its task: each body with a move queued (`Entry::Go`) leaves its storage, and goes with
     /// its move; a move whose body died or joined another since is dropped.
     pub(crate) fn post(&mut self) {
         let mut out = std::mem::take(&mut self.out);
@@ -138,15 +134,9 @@ impl Domain {
     pub fn cross(&mut self, k: usize, members: f32, pushed: f64) {
         (self.crossings[k], self.pushed[k]) = (self.crossings[k] + members, self.pushed[k] + pushed);
     }
-    /// Body `b`, taken out of `h` in cell `i`, leaves its storage and its ring, to be stored again elsewhere (`arrive`).
+    /// Body `b`, taken out of `h` in cell `i`, leaves its storage, to be stored again elsewhere (`arrive`).
     pub(super) fn depart(&mut self, h: Handle, b: &Body, i: usize) {
         self.unstore(h, b.id, i);
-        self.ring[(b.due % RING) as usize].retain(|&y| y != b.id);
-    }
-    /// File the next update of body `b` in batch `due`.
-    pub(crate) fn schedule(&mut self, due: u64, b: &mut Body) {
-        b.due = due;
-        self.ring[(due % RING) as usize].push(b.id);
     }
     /// Body `b` queued a part act of its own but a let-go or an anchor (`bond::LET_GO`, `TORN`, `ANCHORS`) in the update
     /// running: it does not split in it (`nodes::split`; a queued move leaves it `Body::leaving`).
@@ -154,7 +144,7 @@ impl Domain {
         let mine = |e: &Entry| matches!(e, Entry::Act { id, on, .. } if *id == b.id && on.as_ref().map_or(true, |x| x.0 < crate::bond::LET_GO));
         self.out[self.began.min(self.out.len())..].iter().any(mine)
     }
-    /// Place body `c` made by a law on the world's day, its first update after its interval; its visible traits are
+    /// Place body `c` made by a law on the world's day, its first update at the next month's start; its visible traits are
     /// worked out from what it holds now, so others see it before its first update.
     pub(crate) fn place(&mut self, w: &World, mut c: Body) -> Handle {
         c.prepare(&w.chem, &w.cfg);
@@ -164,8 +154,7 @@ impl Domain {
     /// already.
     pub(crate) fn place_part(&mut self, w: &World, mut c: Body) -> Handle {
         self.see(w, &mut c);
-        let due = w.due_in(c.interval(w));
-        self.add(c, w.day(), due)
+        self.add(c, w.day())
     }
     /// What others see of body `b` is worked out again (`Body::visible`).
     pub(crate) fn see(&mut self, w: &World, b: &mut Body) {

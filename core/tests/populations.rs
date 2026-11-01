@@ -31,7 +31,7 @@ fn pair(w: &mut World, i: usize, gap: f32) -> (Handle, Body, Handle) {
     }
     let rows = w.life.born(&b).iter().map(|x| x + 1.0).collect();
     w.life.genomes[b.genome as usize].rows = rows;
-    let sb = w.add(b, 1);
+    let sb = w.add(b);
     let (sa, a) = out(w, a);
     (sa, a, sb)
 }
@@ -185,7 +185,7 @@ fn unlike_bodies_never_mix() {
     for g in lay.cat..lay.min {
         near.genes[g] = BASE + 1.0 * STEP;
     }
-    w.add(near, 1);
+    w.add(near);
     let kids = copies(&mut w, &mut a, 60);
     let (mut a_n, mut far) = (0, 0);
     for c in &kids {
@@ -235,8 +235,6 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     worldgen::testkit::eater_nodes(&mut w, 50.0);
-    // (A node may make children at every update: `lump_days` of one batch.)
-    w.cfg.lump_days = w.cfg.batch_days;
     let books = Books::now(&w);
     let s = live(&w).into_iter().find(|&s| w.life[s].count > 10.0).expect("a node");
     let mut b = std::mem::take(&mut w.life[s]);
@@ -290,8 +288,6 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     let mut w = small_world();
     worldgen::testkit::eater_nodes(&mut w, 50.0);
     (w.cfg.phys.c_copy, w.cfg.crowd) = (0.0, 64);
-    // (A node may make children at every update: `lump_days` of one batch.)
-    w.cfg.lump_days = w.cfg.batch_days;
     let lay = Layout::of(&w.chem);
     // Every gene's spread at the split threshold, (alike step)² π / 8 + step² (`body::most`).
     let inv = body::steps(&lay, &vec![1.0; lay.len]);
@@ -356,7 +352,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     let i = testkit::dry_land(&w);
     let b = founder(&mut w, 1, i, &Brain::neutral());
     let b = testkit::node_of(&mut w, b, 2000.0);
-    let s = w.add(b, 1);
+    let s = w.add(b);
     assert!(w.life[s].count > 1000.0, "a node");
     // A spread of one step in the copy mass (0.2), in the gas gene (0.3) and in a catalyst gene; and one in the
     // light-capture gene, so each is seen with its own leaf area (near its wall: its noise shrinks, so it is not
@@ -423,7 +419,7 @@ fn joining_a_node_keeps_members_and_weighs_genes_by_them() {
     let (o, before) = (w.life[t].clone(), life_totals(&w).0);
     let mut c = o.clone();
     (c.count, c.genes) = (1.4, o.genes.iter().map(|g| g + 0.1).collect());
-    let s = w.add(c, 1);
+    let s = w.add(c);
     w.in_domain(w.life[t].cell as usize, |w, d| nodes::merge(w, d, s, t));
     let (after, node) = (life_totals(&w).0, &w.life[t]);
     assert!((after - (before + 1.4)).abs() < 1e-12 * after && (node.count - 4.4).abs() < 1e-12, "members {before} + 1.4 then {after}");
@@ -488,7 +484,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         node.store[w.chem.matter().expect("matter")] *= 0.5;
         node.e *= 5.0;
         w.life[s].genes[DISPERSE] = 0.0;
-        let t = w.add(node, 1);
+        let t = w.add(node);
         // One child: its parent is mature (its copy mass is half its body, `Body::built`, which maturity reads, so it stays
         // mature with the brood out of its body whatever its sprayed `CHILD` gene).
         let (was, before) = (live(&w), life_totals(&w));
@@ -561,7 +557,7 @@ fn individuals_window(seed: u64) -> (f64, usize) {
     let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i && animal(w, b)).count();
     while here(&w) < w.cfg.crowd + 4 {
         let b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
-        w.add(b, 1);
+        w.add(b);
     }
     let n = here(&w);
     pcore::survey::survey(&mut w, false);

@@ -17,43 +17,34 @@ pub const STRENGTH: usize = 1;
 pub const CHILD: usize = 2;
 /// Mass needed before copying, log10 kg
 pub const COPY_MASS: usize = 3;
-/// Days between updates, log10 (kept between `MIN_INTERVAL` and `MAX_INTERVAL`)
-pub const INTERVAL: usize = 4;
 /// Mutation size, log10
-pub const MUT: usize = 5;
+pub const MUT: usize = 4;
 /// Learning rate of the brain within a life, log10 (off at the lower end)
-pub const LEARN: usize = 6;
+pub const LEARN: usize = 5;
 /// Sizes of the brain and the senses (each rounded): hidden units (0..64; 0 is no brain), memory numbers (0..12),
 /// bodies perceived (1..6), sight in cells (1..4) (`lineage::resize`).
-pub const HIDDEN: usize = 7;
-pub const MEMORY: usize = 8;
-pub const SEEN: usize = 9;
-pub const SIGHT: usize = 10;
+pub const HIDDEN: usize = 6;
+pub const MEMORY: usize = 7;
+pub const SEEN: usize = 8;
+pub const SIGHT: usize = 9;
 /// Share of the children that start in a neighbour cell, 0..1 (for an individual, the chance)
-pub const DISPERSE: usize = 11;
+pub const DISPERSE: usize = 10;
 /// Repair, log10: a body wears out at `Physics::e_life` x 10^gene per kg; each unit doubles the repair share of upkeep
-pub const REPAIR: usize = 12;
+pub const REPAIR: usize = 11;
 /// The child's key liquid, log10 of the factor on its provisions: below 0, dry and nearly dormant children
-pub const WET: usize = 13;
+pub const WET: usize = 12;
 /// Share of what a mature body builds that goes to its brood (`Body::brood`), 0..1
-pub const ALLOC: usize = 14;
+pub const ALLOC: usize = 13;
 /// The temperature below which the body burns on demand to keep warm, K (`live::keep_warm`)
-pub const KEEP_T: usize = 15;
+pub const KEEP_T: usize = 14;
 /// The temperature above which the body evaporates its key liquid to keep cool, K (`live::keep_warm`); between the two
 /// it does neither
-pub const COOL_T: usize = 16;
-pub const NSCALAR: usize = 17;
+pub const COOL_T: usize = 15;
+pub const NSCALAR: usize = 16;
 /// A rate gene (`LEARN`) at or below this is off: the lower end of its range, -4, less a margin for rounding.
 const GENE_OFF: f32 = -3.9;
 /// The genes of the sizes of brain and senses.
 pub const BRAIN_SIZES: [usize; 4] = [HIDDEN, MEMORY, SEEN, SIGHT];
-
-/// Shortest (a speed setting) and longest interval between updates, days.
-pub(crate) const MIN_INTERVAL: f64 = 5.0;
-pub(crate) const MAX_INTERVAL: f64 = 360.0;
-/// log10 of `MIN_INTERVAL` (log10 5 = 1 - log10 2) and of `MAX_INTERVAL` (log10 360): the range of the `INTERVAL` gene.
-const LOG_MIN_INTERVAL: f32 = 1.0 - LOG10_2;
-const LOG_MAX_INTERVAL: f32 = 2.556_302_5;
 
 /// log10 of one half: the largest child, a share of its parent's copy mass (`CHILD`).
 pub(crate) const LOG_HALF: f32 = -LOG10_2;
@@ -88,7 +79,6 @@ const fn scalar(g: usize) -> (f32, f32, f32) {
         WET => (0.05, -3.0, 0.5),
         ALLOC => (0.05, 0.0, 1.0),
         COPY_MASS => (0.2, -3.0, 6.0),
-        INTERVAL => (0.2, LOG_MIN_INTERVAL, LOG_MAX_INTERVAL),
         MUT => (0.2, -3.0, 0.0),
         LEARN => (0.2, -4.0, 0.0),
         // Down to no brain: below 0.5 it rounds to 0 hidden units; the room below 0 lets a node's mean reach it.

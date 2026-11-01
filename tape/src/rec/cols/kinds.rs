@@ -13,9 +13,8 @@ use pcore::World;
 use std::collections::BTreeSet;
 
 /// The genes averaged per kind: gene, column name and unit.
-const GENES: [(usize, &str, &str); 6] = [
+const GENES: [(usize, &str, &str); 5] = [
     (body::COPY_MASS, "copy_log", "log10"),
-    (body::INTERVAL, "interval", "log10"),
     (body::HIDDEN, "hidden", "1"),
     (body::HEAT, "heat", "log10"),
     (body::KEEP_T, "keep_t", "K"),
@@ -106,10 +105,11 @@ impl Heavy {
     }
 }
 
-/// Years a member of `b` (of mass `m`, kg) lives at its upkeep now: `e_life` × 10^`REPAIR` per kg of living body over its upkeep.
+/// Years a member of `b` (of mass `m`, kg) lives at its upkeep now while active: `e_life` × 10^`REPAIR` per kg of living
+/// body over its upkeep at an activity of 1 (a dormant body pays nearly nothing, so its life would be unbounded).
 fn life_years(w: &World, b: &Body, m: f64) -> f64 {
-    let d = b.interval(w) as f64;
-    w.cfg.phys.e_life * b.dec(body::REPAIR) * b.built(&w.chem).max(1e-9 * m) * d / body::upkeep(w, b, d, m, b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys)).max(1e-300) / w.days_per_year() as f64
+    let d = w.cfg.update_days();
+    w.cfg.phys.e_life * b.dec(body::REPAIR) * b.built(&w.chem).max(1e-9 * m) * d / body::upkeep(w, b, d, m, b.temp(&w.chem), 1.0).max(1e-300) / w.days_per_year() as f64
 }
 
 impl Recorder {

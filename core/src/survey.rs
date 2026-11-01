@@ -164,13 +164,11 @@ fn traffic(w: &mut World) {
 /// With `reversed`, the domains of the parallel phase start in reversed order: only for the test that this order (and
 /// which thread runs a domain) changes nothing.
 pub fn batch(w: &mut World, reversed: bool) {
-    let due = w.life.take_due(w.batch());
-    if due.is_empty() {
+    let life = &w.life;
+    let mut list: Vec<(usize, usize, u64, bool)> = life.alive().map(|b| (life.domain_of(b.cell as usize), b.cell as usize, b.id, b.hold.is_some() || b.inside.is_some())).collect();
+    if list.is_empty() {
         return;
     }
-    let life = &w.life;
-    let at = |id: u64| life.find(id).map(|s| &life[s]).map(|b| (life.domain_of(b.cell as usize), b.cell as usize, id, b.hold.is_some() || b.inside.is_some()));
-    let mut list: Vec<(usize, usize, u64, bool)> = due.into_iter().filter_map(at).collect();
     list.sort_unstable();
     // The busiest domain's share of the batch's updates (`Counters::busiest_share`).
     let most = list.chunk_by(|a, b| a.0 == b.0).map(|d| d.len()).max().unwrap_or(0);
@@ -254,6 +252,5 @@ fn update(w: &World, d: &mut Domain, (cell, id): (usize, u64), (tmp, act): &mut 
     crate::lineage::resize(w, d, &mut b);
     crate::nodes::split(w, d, &mut b);
     d.see(w, &mut b);
-    d.schedule(w.due_in(b.interval(w)), &mut b);
     d[s] = b;
 }

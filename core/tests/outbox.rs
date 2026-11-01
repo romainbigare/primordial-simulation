@@ -46,15 +46,13 @@ const CROWD: usize = 96;
 #[test]
 fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     let (mut w, i) = start();
-    // (A node may make children at every update: `lump_days` of one batch.)
-    w.cfg.lump_days = w.cfg.batch_days;
     let j = w.mesh.cells().around(i).1[0] as usize;
     let books = Books::now(&w);
     let rest = |w: &mut World| eater(w, i, brain::REST, 1.0);
 
     // Moves of a body that died before its batch ended.
     let (e, at_j) = (rest(&mut w), w.life.in_cell(j));
-    let a = w.add(e, 1);
+    let a = w.add(e);
     for kin in [false, true] {
         let id = w.life[a].id;
         w.in_domain(i, |_, d| d.out.push(Entry::Go { id, from: i as u32, to: j as u32, pushed: 1.0, lane: 1.0, carries: false, kin, body: None }));
@@ -67,7 +65,7 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     // into the parent's brood, or to the ground of its cell if it died.
     for dies in [false, true] {
         let n = dispersing(&mut w, i, 0.6);
-        let s = w.add(n, 1);
+        let s = w.add(n);
         let mut n = std::mem::take(&mut w.life[s]);
         n.brood = n.brooded(&w.chem);
         let (id, before) = (n.id, [n.store[MATTER], n.brood, n.e]);
@@ -88,7 +86,7 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
 
     // Watches of a body that died, and by a body no longer of the lineage it watched in.
     let (e, f, g) = (rest(&mut w), rest(&mut w), rest(&mut w));
-    let (by, of, gone) = (w.add(e, 1), w.add(f, 1), w.add(g, 1));
+    let (by, of, gone) = (w.add(e), w.add(f), w.add(g));
     let (rows, lineage, ids) = (w.life[by].rows.clone(), w.life[by].lineage, [by, of, gone].map(|h| w.life[h].id));
     kill(&mut w, gone);
     w.in_domain(i, |_, d| d.out.push(Entry::Watch { by: ids[0], n: 1.0, lineage, of: ids[2] }));
@@ -100,7 +98,7 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     let p = plate(&mut w, i, 5.0, false);
     let (part, kg) = (bond::id(&w, p), w.parts.parts[p].mass(&w.chem));
     let e = rest(&mut w);
-    let (a, c_handle) = (w.add(e, 1), w.cfg.phys.c_handle);
+    let (a, c_handle) = (w.add(e), w.cfg.phys.c_handle);
     let id = w.life[a].id;
     w.cfg.phys.c_handle = 1e30;
     w.in_domain(i, |_, d| d.out.push(Entry::Act { id, on: Ok((1, part)), node: None }));
@@ -114,7 +112,7 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     bond::link(&mut w, p, bond::GROUND, 1e9);
     let e = rest(&mut w);
     let n = node_of(&mut w, e, 5.0);
-    let s = w.add(n, 1);
+    let s = w.add(n);
     let parts = w.in_domain(w.life[s].cell as usize, |w, d| nodes::open(w, d, s, 2));
     let (node, count) = (w.life[s].id, w.life[s].count);
     let ids: Vec<u64> = parts.iter().map(|&h| w.life[h].id).collect();
@@ -142,17 +140,17 @@ fn a_holder_killed_in_the_parallel_phase_lets_go_in_the_serial_phase() {
     let mut h = eater(&mut w, i, brain::REST, 1.0);
     scale(&mut w, &mut h, 0.01);
     h.hold = Some(bond::id(&w, p));
-    let h = w.add(h, 300);
+    let h = w.add(h);
     let id = w.life[h].id;
     w.parts.parts[p].held = id;
     let mut t = founder(&mut w, 1, i, &Brain::verb(brain::TAKE_FROM));
     let m = t.mass(&w.chem);
     scale(&mut w, &mut t, EATER_KG / m);
     (t.genes[DISPERSE], t.genes[COPY_MASS]) = (0.0, 1.0);
-    w.add(t, 1);
+    w.add(t);
     w.cfg.phys.sweep *= 1e9;
     for _ in 0..10 {
-        w.time += w.cfg.batch_days as u64 * DAY_S;
+        w.time += w.cfg.days_per_month as u64 * DAY_S;
         pcore::survey::batch(&mut w, false);
     }
     assert!(w.life.find(id).is_none(), "the taker did not kill the holder");
@@ -187,23 +185,23 @@ fn the_order_of_the_domains_changes_nothing() {
     let land = dry_lands(&w);
     let at = |k: usize| land[(2 * k + 1) * land.len() / 10];
     let n = dispersing(&mut w, at(0), 3.0);
-    let parent = w.add(n, 1);
+    let parent = w.add(n);
     let root = w.life.brain(w.life[parent].lineage).expect("the parent has a brain").root;
     let watcher = founder(&mut w, 1, at(1), &Brain::verb(brain::WATCH));
-    w.add(watcher, 1);
+    w.add(watcher);
     let (p, q) = (plate(&mut w, at(2), 5.0, false), plate(&mut w, at(3), 5.0, false));
     bond::link(&mut w, p, bond::GROUND, 1e9);
     let grabber = founder(&mut w, 1, at(2), &Brain::verb(brain::VERBS));
-    w.add(grabber, 1);
+    w.add(grabber);
     let mut holder = eater(&mut w, at(3), brain::REST, 1.0);
     holder.hold = Some(bond::id(&w, q));
-    let holder = w.add(holder, 1);
+    let holder = w.add(holder);
     let (holder, last) = (w.life[holder].id, w.life[holder].last);
     w.parts.parts[q].held = holder;
     let r = plate(&mut w, at(4), 5.0, false);
     let mut anchorer = eater(&mut w, at(4), brain::ANCHOR, 1.0);
     anchorer.hold = Some(bond::id(&w, r));
-    let anchorer = w.add(anchorer, 1);
+    let anchorer = w.add(anchorer);
     let anchorer = w.life[anchorer].id;
     w.parts.parts[r].held = anchorer;
     // A holder in a cell of its own with a part, and two alike nodes of one lineage whose born rows differ.
@@ -213,16 +211,16 @@ fn the_order_of_the_domains_changes_nothing() {
     let s = plate(&mut w, x, 5.0, false);
     let mut doomed = eater(&mut w, x, brain::REST, 1.0);
     doomed.hold = Some(bond::id(&w, s));
-    let doomed = w.add(doomed, 300);
+    let doomed = w.add(doomed);
     let doomed_id = w.life[doomed].id;
     w.parts.parts[s].held = doomed_id;
     let e = eater(&mut w, m, brain::REST, 1.0);
     let (big, mut small) = (node_of(&mut w, e.clone(), 8.0), node_of(&mut w, e, 4.0));
     let rows = [w.life.born(&big).to_vec(), w.life.born(&small).iter().map(|r| r + 0.5).collect()];
     small.genome = w.life.new_genome(rows[1].clone());
-    let big = w.add(big, 300);
+    let big = w.add(big);
     let big = w.life[big].id;
-    w.add(small, 300);
+    w.add(small);
     // Members of a node who move from a cell of one domain into a node of their kind in the next domain, whose born rows
     // differ (their move queued as their update would).
     let edge = |a: usize, b: usize| w.life.domain_of(a) != w.life.domain_of(b) && w.mesh.cells().link(a, b).is_some();
@@ -232,7 +230,7 @@ fn the_order_of_the_domains_changes_nothing() {
     kind.genome = w.life.new_genome(w.life.born(&mover).iter().map(|r| r - 0.5).collect());
     kind.cell = b as u32;
     let kind_rows = [w.life.born(&mover).to_vec(), w.life.born(&kind).to_vec()];
-    let (mover, kind) = (w.add(mover, 300), w.add(kind, 300));
+    let (mover, kind) = (w.add(mover), w.add(kind));
     let (mover, kind) = (w.life[mover].id, w.life[kind].id);
     w.in_domain(a, |_, d| d.out.push(Entry::Go { id: mover, from: a as u32, to: b as u32, pushed: 0.0, lane: 0.0, carries: false, kin: true, body: None }));
     // Two cells of different domains next to a third, each with many dispersing nodes: each node sends its litter in
@@ -251,7 +249,7 @@ fn the_order_of_the_domains_changes_nothing() {
     for c in [from, from_other] {
         for _ in 0..CROWD {
             let n = dispersing(&mut w, c, 3.0);
-            let h = w.add(n, 1);
+            let h = w.add(n);
             parents.insert(w.life[h].id, w.life.domain_of(c));
         }
     }
@@ -289,7 +287,7 @@ fn the_order_of_the_domains_changes_nothing() {
                     from.entry(b.cell).or_default().push(parents[&b.parent]);
                 }
                 met |= from.values().any(|d| d.iter().any(|&k| k != d[0]));
-                v.time += v.cfg.batch_days as u64 * DAY_S;
+                v.time += v.cfg.days_per_month as u64 * DAY_S;
                 pcore::survey::survey(&mut v, reversed);
             }
             (v, (first, met))

@@ -72,23 +72,21 @@ pub fn seed(w: &mut World, which: usize) -> String {
     seed_with(w, which, &Seeding::default())
 }
 
-/// What was placed, for the seeding line: bodies, members and kg; the ranges of the light and burning genes
-/// and of the copy-mass gene; and the range, sum and sum of squares of the bias of taking from a body (none without a
+/// What was placed, for the seeding line: bodies, members and kg; the ranges of the burning gene and of the copy-mass
+/// gene; and the range, sum and sum of squares of the bias of taking from a body (none without a
 /// brain).
 struct Placed {
     bodies: usize,
     members: f64,
     kg: f64,
-    cat: [(f32, f32); 2],
+    burn: (f32, f32),
     copy_mass: (f32, f32),
     take: (f32, f32, f64, f64),
 }
 
 impl Placed {
-    fn add(&mut self, w: &World, b: &Body, cat: [usize; 2], take: Option<usize>) {
-        for (c, g) in self.cat.iter_mut().zip(cat) {
-            *c = (c.0.min(b.genes[g]), c.1.max(b.genes[g]));
-        }
+    fn add(&mut self, w: &World, b: &Body, burn: usize, take: Option<usize>) {
+        self.burn = (self.burn.0.min(b.genes[burn]), self.burn.1.max(b.genes[burn]));
         self.copy_mass = (self.copy_mass.0.min(b.genes[body::COPY_MASS]), self.copy_mass.1.max(b.genes[body::COPY_MASS]));
         if let Some(x) = take.map(|k| w.life.born(b)[k]) {
             self.take = (self.take.0.min(x), self.take.1.max(x), self.take.2 + x as f64, self.take.3 + (x * x) as f64);
@@ -139,7 +137,7 @@ fn field(w: &mut World, which: usize, kind: &Kind, f: &Field, how: &Seeding) -> 
 
 /// Place the bodies of row `b` of kind `which`.
 fn bodies(w: &mut World, which: usize, kind: &Kind, b: &Bodies, how: &Seeding) -> String {
-    let Some((r_light, _, _, burn)) = w.chem.life_roles() else { return String::new() };
+    let Some((_, _, _, burn)) = w.chem.life_roles() else { return String::new() };
     pcore::survey::survey(w, false);
     let mut r = Rng::new(w.seed, w.day(), which as u64, Purpose::Brain);
     let hand = b.hand.filter(|_| how.hand);
@@ -150,7 +148,7 @@ fn bodies(w: &mut World, which: usize, kind: &Kind, b: &Bodies, how: &Seeding) -
     let lay = Layout::of(&w.chem);
     // One action bias, "take from a body": its range and spread over the bodies placed (a brain's only).
     let take = (shape.h > 0).then(|| shape.verb(brain::TAKE_FROM) * shape.r() + shape.h);
-    let mut p = Placed { bodies: 0, members: 0.0, kg: 0.0, cat: [(f32::MAX, f32::MIN); 2], copy_mass: (f32::MAX, f32::MIN), take: (f32::MAX, f32::MIN, 0.0, 0.0) };
+    let mut p = Placed { bodies: 0, members: 0.0, kg: 0.0, burn: (f32::MAX, f32::MIN), copy_mass: (f32::MAX, f32::MIN), take: (f32::MAX, f32::MIN, 0.0, 0.0) };
     for i in 0..w.mesh.cells().n() {
         let lives = w.life.in_cell(i) > 0 || w.life.sum(i)[1] > 0.0;
         if !open_land(w, i) || r.f64() >= b.chance || (!b.anywhere && !lives) {
@@ -160,9 +158,8 @@ fn bodies(w: &mut World, which: usize, kind: &Kind, b: &Bodies, how: &Seeding) -
             let id = founder_id(which, i, k);
             let genome = shared.unwrap_or_else(|| sprayed(w, b, shape, &rows, how, hand, id));
             let Some(body) = make_with(w, which, i, lineage, genome, how.rounds, if hand { 0.0 } else { GENE_SPRAY_DECADES }, id) else { return String::new() };
-            p.add(w, &body, [lay.cat + r_light, lay.cat + burn], take);
-            let delay = 1 + r.below(body.interval(w) as usize) as u64;
-            w.add(body, delay);
+            p.add(w, &body, lay.cat + burn, take);
+            w.add(body);
         }
     }
     line(w, kind, b, how, hand, &p)
@@ -211,7 +208,7 @@ fn sprayed(w: &mut World, kind: &Bodies, shape: Shape, rows: &[f32], how: &Seedi
 fn line(w: &World, kind: &Kind, b: &Bodies, how: &Seeding, hand: bool, p: &Placed) -> String {
     let sc = &b.scalars;
     let (fuel, liq, mat) = split(b.store, KEEP_LIQUID as f64, w.chem.matter_roles().is_some());
-    let name = format!("{} (adults: members of {:.4} kg, their body at their copy mass of {:.4} kg, every {:.0} days, strength {}, repair {}, starting mass {:.1}% energy-rich solid, {:.1}% liquid, {:.1}% body matter, a child's body {:.2} of its parent's copy mass (CHILD gene {}), {:.0}% of what a mature body builds to offspring (ALLOC gene {}))", kind.name, 10f64.powf(sc[body::COPY_MASS] as f64) / (1.0 - if mat > 0.0 { b.store } else { 0.0 }), 10f32.powf(sc[body::COPY_MASS]), 10f32.powf(sc[body::INTERVAL]), sc[body::STRENGTH], sc[body::REPAIR], 100.0 * fuel, 100.0 * liq, 100.0 * mat, 10f32.powf(sc[body::CHILD]), sc[body::CHILD], 100.0 * sc[body::ALLOC], sc[body::ALLOC]);
+    let name = format!("{} (adults: members of {:.4} kg, their body at their copy mass of {:.4} kg, strength {}, repair {}, starting mass {:.1}% energy-rich solid, {:.1}% liquid, {:.1}% body matter, a child's body {:.2} of its parent's copy mass (CHILD gene {}), {:.0}% of what a mature body builds to offspring (ALLOC gene {}))", kind.name, 10f64.powf(sc[body::COPY_MASS] as f64) / (1.0 - if mat > 0.0 { b.store } else { 0.0 }), 10f32.powf(sc[body::COPY_MASS]), sc[body::STRENGTH], sc[body::REPAIR], 100.0 * fuel, 100.0 * liq, 100.0 * mat, 10f32.powf(sc[body::CHILD]), sc[body::CHILD], 100.0 * sc[body::ALLOC], sc[body::ALLOC]);
     let brain = match (hand, lineage::sizes(sc)[0] == 0) {
         (_, true) => "no brain (HIDDEN gene 0: no decisions)",
         (true, _) => "hand-set brain biases (initial condition)",
@@ -227,16 +224,14 @@ fn line(w: &World, kind: &Kind, b: &Bodies, how: &Seeding, hand: bool, p: &Place
     };
     let bias = if p.take.0 > p.take.1 { String::new() } else { format!("; bias of taking from a body {:.2}..{:.2} (mean {m:.2}, sd {:.2})", p.take.0, p.take.1, (p.take.3 / n - m * m).max(0.0).sqrt()) };
     format!(
-        "year {:.1}: placed {} {name} ({:.3e} members, {:.3e} kg) with {brain}, {} rounds of mutation each{spray}; light gene {:.2}..{:.2}, burn gene {:.2}..{:.2}, copy-mass gene {:.2}..{:.2}{bias}",
+        "year {:.1}: placed {} {name} ({:.3e} members, {:.3e} kg) with {brain}, {} rounds of mutation each{spray}; burn gene {:.2}..{:.2}, copy-mass gene {:.2}..{:.2}{bias}",
         w.year(),
         p.bodies,
         p.members,
         p.kg,
         how.rounds,
-        p.cat[0].0,
-        p.cat[0].1,
-        p.cat[1].0,
-        p.cat[1].1,
+        p.burn.0,
+        p.burn.1,
         p.copy_mass.0,
         p.copy_mass.1,
     )

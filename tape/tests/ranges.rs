@@ -12,11 +12,7 @@
 //! light-eaters' dry mass they hold as their stored solid.
 //!
 //! The sleep of Change's nodes is a speed tool: a small world with life keeps the chemistry's key numbers
-//! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2. So is
-//! the pace of population nodes: the same world keeps its life's key numbers with every node at its own `INTERVAL`
-//! gene (`Config::node_days` 0), and with the setting x2 and /2. So are the batches of bodies: three worlds keep the
-//! mean of their life's key numbers with bodies in batches of 2 days (`Config::batch_days`). Both are judged on the
-//! mean of seeds 1 to 3 against the noise of that mean.
+//! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2.
 //!
 //! The eaters live: at 48 x 48 they still have members at year 100 in seeds 1, 2 and 3, after the booms and busts
 //! that year 30 hides; they have stopped growing by their last ten years, and none hold more than a few times the
@@ -209,24 +205,6 @@ fn yearly(seed: u64, columns: &[&str], set: impl Fn(&mut Config)) -> Vec<Vec<f64
     years
 }
 
-/// The mean over the seeds of `runs` (each run's yearly values, as `yearly` gives them), year by year.
-fn seed_mean(runs: &[Vec<Vec<f64>>]) -> Vec<Vec<f64>> {
-    let seeds = runs.len() as f64;
-    (0..runs[0].len()).map(|y| (0..runs[0][y].len()).map(|q| runs.iter().map(|r| r[y][q]).sum::<f64>() / seeds).collect()).collect()
-}
-
-/// The seeds' mean of each year of the sleep test's world, for each of `settings` (`set` applies one to a `Config`),
-/// with one run for each setting and seed side by side: `columns` as `yearly` gives them. One seed's years can spread
-/// far less than the seeds' runs differ, so one seed's spread is no measure of the noise; the seeds' mean, with the
-/// spread of that mean, is. Seeds are `SEEDS`, as in the key numbers.
-fn seeds_mean_by_setting<S: Copy + Send>(columns: &[&str], settings: &[S], set: impl Fn(&mut Config, S) + Sync) -> Vec<Vec<Vec<f64>>> {
-    let set = &set;
-    std::thread::scope(|s| {
-        let runs: Vec<Vec<_>> = settings.iter().map(|&setting| SEEDS.iter().map(|&seed| s.spawn(move || yearly(seed, columns, |c| set(c, setting)))).collect()).collect();
-        runs.into_iter().map(|seeds| seed_mean(&seeds.into_iter().map(|r| r.join().expect("a run")).collect::<Vec<_>>())).collect()
-    })
-}
-
 /// For each of `columns`, the mean over the years of each run of `runs` after the first, against the first's: it must
 /// move by less than its noise, the spread of the first run's values over those years. Prints each; returns the
 /// columns and settings (named by `name`) that moved more. The noise is the year-to-year range, trend included: for
@@ -274,27 +252,6 @@ fn the_sleep_of_change_keeps_the_chemistry() {
     });
     let out = off_by_noise(&CHEMISTRY, &runs, &settings, &[("air_3", GAS_SLEEP_BIAS)], |(days, wake)| format!("sleep {days} days, wake at {wake}"));
     assert!(out.is_empty(), "the sleep changed: {out:?}");
-}
-
-/// Life's key numbers (series columns): the members and the mass of the light-eaters, the births of the year, the life
-/// light-eaters live, and the heat-absorbing gas they take from the air.
-const LIFE: [&str; 5] = ["plant_members", "root_0_kg", "births", "root_0_life_real", "air_3"];
-
-/// The short batch of the batch test: 2 days, under the shortest interval (`MIN_INTERVAL`, 5 days), so an interval
-/// keeps its gene's days to within a day; it divides the physics step, the month and the pace of nodes.
-const SHORT_BATCH_DAYS: u32 = 2;
-
-/// Bodies updated in batches of `SHORT_BATCH_DAYS` against in batches of `Config::batch_days` (`docs/numbers.md`, speed
-/// settings; the batch cannot be doubled, as it is the physics step), on seeds 1, 2 and 3 as the key numbers: the mean
-/// over the seeds of each of life's key numbers over the last years moves by less than the noise of that mean, the
-/// spread over those years of the seeds' mean with the short batches.
-#[test]
-#[ignore = "slow: six 8-year runs of a 32 x 32 world with life"]
-fn the_batches_of_bodies_keep_life() {
-    let settings = [SHORT_BATCH_DAYS, Config::default().batch_days];
-    let runs = seeds_mean_by_setting(&LIFE, &settings, |c, days| c.batch_days = days);
-    let out = off_by_noise(&LIFE, &runs, &settings, &[], |days| format!("batches of {days} days, mean of seeds {SEEDS:?}"));
-    assert!(out.is_empty(), "the batches changed life: {out:?}");
 }
 
 /// The world of the eaters' check: its side, its years, and the first of its last years, over which the eaters must

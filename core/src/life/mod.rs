@@ -1,6 +1,6 @@
-//! The registry of bodies: their storage, ids and cells, lineages and born rows (`registry`), the rings of updates due
-//! and the outboxes. The cells are cut into domains, the cells under one air node (`domain::Domain`); each domain
-//! stores the bodies of its cells, their lists, its ring and its outbox, what moved into its cells, and finds the
+//! The registry of bodies: their storage, ids and cells, lineages and born rows (`registry`), and the outboxes. The
+//! cells are cut into domains, the cells under one air node (`domain::Domain`); each domain stores the bodies of its
+//! cells, their lists and its outbox, what moved into its cells, and finds the
 //! bodies by id. A body's id is the domain it was placed in and that domain's count of bodies placed; it never changes,
 //! wherever the body is stored. A body that moves to a cell of another domain moves to that domain's storage.
 
@@ -12,7 +12,7 @@ pub use domain::Domain;
 pub use registry::Genome;
 pub(crate) use registry::Held;
 
-use crate::body::{Body, MAX_INTERVAL};
+use crate::body::Body;
 use crate::lineage::Lineage;
 use crate::outbox::Entry;
 use crate::space::Mesh;
@@ -20,9 +20,6 @@ use crate::survey::{Face, Faces};
 use crate::{World, AIR};
 use std::collections::BTreeMap;
 
-/// Updates are kept in a ring of this many batches: more than the longest interval is in batches (`MAX_INTERVAL`) with
-/// a batch of one day, the shortest.
-const RING: u64 = 384;
 /// A body's id is the domain it was placed in shifted left by this many bits, plus that domain's count of bodies placed
 /// then (from 1, so no body has id 0; it stays below 2^this, `Domain::add`).
 const ID_SHIFT: u32 = 40;
@@ -134,26 +131,14 @@ impl Life {
         self.domains.get(self.away.get(&id).map_or((id >> ID_SHIFT) as usize, |&d| d as usize))?.find(id)
     }
     /// The first break of the storage, if any: a cell's list that holds a body of another cell or stored in another
-    /// domain, an id table that points elsewhere, or a living body not filed exactly once in the rings, in its domain's
-    /// at its due batch (`check::broken`).
+    /// domain, or an id table that points elsewhere (`check::broken`).
     pub fn unsound(&self) -> Option<String> {
-        // Each id filed in the rings: how many times, and the domain and ring slot where it was filed last.
-        let mut filed: BTreeMap<u64, (usize, usize, usize)> = BTreeMap::new();
-        for (d, x) in self.domains.iter().enumerate() {
-            for (k, slot) in x.ring.iter().enumerate() {
-                for &id in slot {
-                    let e = filed.entry(id).or_default();
-                    *e = (e.0 + 1, d, k);
-                }
-            }
-        }
         for (d, x) in self.domains.iter().enumerate() {
             for (&cell, list) in x.cells.iter().zip(&x.at) {
                 for &h in list {
                     let b = &self[h];
-                    let ring = filed.get(&b.id) == Some(&(1, d, (b.due % RING) as usize));
-                    if h.domain as usize != d || b.cell != cell || !b.alive || self.find(b.id) != Some(h) || !ring {
-                        return Some(format!("body {} at {h:?} in the list of cell {cell} (domain {d}): its cell {}, filed {ring}", b.id, b.cell));
+                    if h.domain as usize != d || b.cell != cell || !b.alive || self.find(b.id) != Some(h) {
+                        return Some(format!("body {} at {h:?} in the list of cell {cell} (domain {d}): its cell {}", b.id, b.cell));
                     }
                 }
             }
@@ -201,27 +186,21 @@ impl Life {
         life.cut((0..air.n()).map(|j| air.children(j).to_vec()).collect());
         life
     }
-    /// The domains are `cells` (each a list of cells; together every cell once): their cell lists and rings sized.
+    /// The domains are `cells` (each a list of cells; together every cell once): their cell lists sized.
     fn cut(&mut self, cells: Vec<Vec<u32>>) {
         self.cell_in = vec![(0, 0); cells.iter().map(|c| c.len()).sum()];
         for (d, c) in cells.iter().enumerate() {
             c.iter().enumerate().for_each(|(k, &i)| self.cell_in[i as usize] = (d as u32, k as u32));
         }
         let domain = |(d, cells): (usize, Vec<u32>)| {
-            let (at, ring) = (vec![Vec::new(); cells.len()], vec![Vec::new(); RING as usize]);
+            let at = vec![Vec::new(); cells.len()];
             let (pushed, crossings) = (vec![0.0; cells.len()], vec![0.0; cells.len()]);
             let cover = crate::cover::Cover::new(cells.len());
-            Domain { index: d as u32, at, ring, pushed, crossings, cover, cells, ..Default::default() }
+            Domain { index: d as u32, at, pushed, crossings, cover, cells, ..Default::default() }
         };
         self.sums = cells.iter().map(|c| Sums { rows: vec![[0.0; crate::survey::ROW]; c.len()], live: true }).collect();
         self.domains = cells.into_iter().enumerate().map(domain).collect();
         self.faces = vec![Faces::default(); self.domains.len()];
-    }
-    /// The ids of the bodies due in `batch`, taken out of the rings, domain by domain (some may have left the world
-    /// since).
-    pub(crate) fn take_due(&mut self, batch: u64) -> Vec<u64> {
-        let k = (batch % RING) as usize;
-        self.domains.iter_mut().flat_map(|d| std::mem::take(&mut d.ring[k])).collect()
     }
     /// Domain `k` ran: its moves wait to be booked and its outbox to be taken.
     pub(crate) fn mark(&mut self, k: usize) {
@@ -273,21 +252,10 @@ impl std::ops::IndexMut<Handle> for Life {
 }
 
 impl World {
-    /// The batch the world is in: whole batches since the start (`Config::batch_days`).
-    pub fn batch(&self) -> u64 {
-        self.day() / self.cfg.batch_days as u64
-    }
-    /// The first batch that starts `delay` days from now or later (`delay` 1 to `MAX_INTERVAL`): never the batch the
-    /// world is in, so a body placed during a batch updates in a later one.
-    pub(crate) fn due_in(&self, delay: u64) -> u64 {
-        (self.day() + delay.clamp(1, MAX_INTERVAL as u64)).div_ceil(self.cfg.batch_days as u64)
-    }
-    /// Place body `b` made outside the laws (a founder, an edit), its first update in the first batch `delay` days on or
-    /// later.
-    pub fn add(&mut self, mut b: Body, delay: u64) -> Handle {
+    /// Place body `b` made outside the laws (a founder, an edit); it first updates at the next month's start.
+    pub fn add(&mut self, mut b: Body) -> Handle {
         b.prepare(&self.chem, &self.cfg);
-        let due = self.due_in(delay);
-        self.in_domain(b.cell as usize, |w, d| d.add(b, w.day(), due))
+        self.in_domain(b.cell as usize, |w, d| d.add(b, w.day()))
     }
 }
 

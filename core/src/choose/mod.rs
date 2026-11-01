@@ -24,7 +24,6 @@ use crate::rng::{Purpose, Rng};
 use crate::space::COMPASS;
 use crate::survey::Face;
 use crate::{bond, lanes, life::{Domain, Handle}, World};
-use serde::{Deserialize, Serialize};
 
 /// Features of a neighbour direction and of a perceived body.
 pub(crate) const NF: usize = 10;
@@ -77,18 +76,9 @@ struct Choice {
 
 /// A body's decision at its update: perceive, think and learn from the last decision, score the options, emit the
 /// signal; an individual draws one option, keeps its trace and acts, a node spreads its members over them (`spread`).
-/// A node decides at the update nearest to `Config::think_days` after its last decision (`thinks`); at its other
-/// updates it acts by its habit (`spread::repeat`). An individual decides at every update.
+/// Every body decides at each update, once a month.
 pub fn act(w: &World, d: &mut Domain, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
     let mut rng = Rng::new(w.seed, w.day(), b.id, Purpose::Choose);
-    if b.habit.as_ref().is_some_and(|h| b.n() > 1.0 && !thinks(w, b, h.day)) {
-        let h = b.habit.take().expect("a habit");
-        spread::repeat(w, d, b, &h, &mut rng);
-        b.habit = Some(h);
-        return;
-    }
-    // The intervals of its gene since its last decision (one at its first), over which the decision's rates run.
-    let since = b.habit.as_ref().map_or(1.0, |h| (w.day() - h.day) as f64 / b.k.interval as f64);
     // Mass and heat capacity are as `body::live` just left them.
     let temp = b.temp(&w.chem);
     // A brain perceives sizes per member.
@@ -102,46 +92,24 @@ pub fn act(w: &World, d: &mut Domain, b: &mut Body, lived: &Lived, t: &mut ActTm
     let mut c = perceive(w, d, b, nseen, &mut rng);
     inputs(w, b, lived, temp, &c, &mut t.input);
     brain::think(&lin.base, &b.rows, s, &t.input, &mut t.thought);
-    learn::learn(w, b, s, (wb, since), &t.thought.h);
+    learn::learn(w, b, s, wb, &t.thought.h);
     walk(w, b.cell as usize, sight, t);
     options(w, b, s, (pm, b.volume(&w.chem, temp) / b.n()), &mut c, t);
     pick(d, &mut c, &mut rng);
     let (form, z) = noise(w, b, s, t, &mut rng);
-    (b.wb, b.habit) = (wb, Some(habit(w, &c)));
+    b.wb = wb;
     let k = Kit { s, t, z, form, wb: &now };
     if b.n() > 1.0 {
-        spread::spread(w, d, b, &c, &k, since, &mut rng);
+        spread::spread(w, d, b, &c, &k, &mut rng);
     } else {
         b.trace = trace(w, b, &c, &k, c.a, 0.0);
         act_as(w, d, b, &c, &k, (c.a, None), &mut rng);
     }
 }
 
-/// What a node's members repeat between its decisions (`choose::act`, `spread::repeat`): the day of its last decision,
-/// and its chances then to take from the ground and from each body it saw in its cell (by id).
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Habit {
-    pub(super) day: u64,
-    pub(super) take: f32,
-    pub(super) prey: Vec<(u64, f32)>,
-}
-
-/// The habit of decision `c`, made today.
-fn habit(w: &World, c: &Choice) -> Habit {
-    let from = |q: usize| (c.seen[q].0.id, c.p[TO_BODY + q * VERBS + TAKE_FROM]);
-    let prey = (0..c.nseen).filter(|&q| c.seen[q].1).map(from).filter(|x| x.1 > 0.0).collect();
-    Habit { day: w.day(), take: c.p[TAKE], prey }
-}
-
 /// Body `id` as it is now, if it lives, is in body `b`'s cell and is not leaving it.
 fn here(d: &Domain, b: &Body, id: u64) -> Option<Handle> {
     d.find(id).filter(|&o| d[o].alive && !d[o].leaving && d[o].cell == b.cell)
-}
-
-/// Whether node `b`, whose last decision was on day `last`, decides at this update: the one nearest to
-/// `Config::think_days` after it, so this one unless its next update lies nearer.
-fn thinks(w: &World, b: &Body, last: u64) -> bool {
-    2 * (w.day() - last) + b.interval(w) >= 2 * w.cfg.think_days as u64
 }
 
 /// What the actions of one decision share besides its options: the brain's shape and what it thought, the noise drawn

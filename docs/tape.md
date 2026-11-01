@@ -131,12 +131,12 @@ members; for a kind of cover by its built cover.
 | Column | Unit | Meaning |
 |---|---|---|
 | `members`, `kg`, `bodies` | , kg, | members, their mass, bodies |
-| `life`, `life_real` | yr | the life the genes allow at the upkeep now (the age law's wear of the built body); members standing over deaths in the year |
+| `life`, `life_real` | yr | the life the genes allow at the upkeep now while active (the age law's wear of the built body); members standing over deaths in the year |
 | `births`, `mixed`, `died_<cause>` | 1/yr, , 1/yr | births; share with two parents; deaths by cause (they sum to the world columns) |
 | `mass`, `copy_mass`, `body`, `matter` | kg, kg, kg, | mean member mass, copy mass, body (`Body::size`); body matter's share of the mass |
 | `activity`, `dry` | | mean activity; share below 0.5 |
 | `alloc`, `child`, `brood` | , log10, | genes of reproduction; brood as a share of the mass |
-| `copy_log`, `interval`, `heat`, `repair`, `wet_gene` | log10 | gene means |
+| `copy_log`, `heat`, `repair`, `wet_gene` | log10 | gene means |
 | `hidden`, `keep_t` | , K | gene means |
 | `cat_<r>`, `cat_<r>_on` | log10, | catalyst gene of reaction r over the members that carry it on; share that do |
 | `slots`, `cover_kg`, `cover_area` | , kg, m²/m² | a kind of cover: its slots, its mass, its capture area per m² of land |

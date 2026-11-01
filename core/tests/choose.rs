@@ -6,12 +6,11 @@
 //! the ground) just west of the strip, with a neutral brain. Over its first 200 decisions, with learning on against
 //! off, over many seeds. Its children are taken out at once.
 
-use pcore::body::{self, Layout, INTERVAL, LEARN};
+use pcore::body::{self, Layout, LEARN};
 use pcore::rng::{Purpose, Rng};
-use pcore::brain::{REST, TAKE};
 use pcore::World;
 use pcore::store::{Class, Node};
-use worldgen::testkit::{self, dry_land, eater_of, founder, moved, node_of, put_kg_m2, scale, set_amount, set_heat, start, took_from_ground, Books, Brain, LIQUID, MATTER, MILD_LAT, OFF, RICH};
+use worldgen::testkit::{self, dry_land, founder, moved, scale, set_amount, set_heat, start, Books, Brain, LIQUID, MATTER, MILD_LAT, OFF, RICH};
 
 /// The scene's grid.
 const W: usize = 12;
@@ -75,13 +74,12 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     let mut b = founder(&mut w, 1, start, &brain);
     let f = BODY_KG / b.mass(&w.chem);
     scale(&mut w, &mut b, f);
-    // A third of the fuel of a starting eater, so that what it takes, not what it carries, decides how long it lives.
-    let fuel = -2.0 / 3.0 * testkit::kg(&w, &b, RICH);
+    // Twice the fuel of a starting eater: it lives some months on what it carries, and on what it takes after.
+    let fuel = testkit::kg(&w, &b, RICH);
     testkit::add(&mut w, &mut b, RICH, fuel);
-    // Decisions every 10 days: the shortest interval, 5 days, rounded to one batch (`Config::batch_days`).
-    (b.genes[LEARN], b.genes[INTERVAL]) = (learn, 0.7);
+    b.genes[LEARN] = learn;
     // (It is found by its id: it is stored elsewhere when it steps into another domain.)
-    let slot = w.add(b, 1);
+    let slot = w.add(b);
     let id = w.life[slot].id;
     let strip: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| i % W >= STRIP).collect();
     let strip: Vec<(usize, f64)> = strip.into_iter().map(|i| (i, w.g(RICH, i))).collect();
@@ -248,19 +246,18 @@ fn a_body_gives_its_stores_but_not_its_body() {
     let lay = Layout::of(&w.chem);
     // Brains that only give to a body they see, and that only rest.
     let mut giver = founder(&mut w, 1, i, &Brain::verb(brain::GIVE));
-    // No safe minimums, and a long interval (316 days), so that one give may move all it holds.
+    // No safe minimums, so that one give may move all it holds.
     giver.genes[lay.min..lay.upt].fill(-0.1);
-    giver.genes[INTERVAL] = 2.5;
     let mut taker = founder(&mut w, 1, i, &Brain::only(brain::REST));
     taker.genes[lay.keep..].fill(0.95);
     // (Body matter given is digested into the solid, so it fills the taker's room for the solid (`Body::digest_room`):
     // room for all the giver's solid and matter, 2 kg per kg of body.)
     taker.genes[lay.keep + RICH] = 2.0;
     let (m0, fuel0) = (giver.store[MATTER], giver.store[RICH]);
-    let g = w.add(giver, 1);
-    w.add(taker, 1);
+    let g = w.add(giver);
+    w.add(taker);
     // Days until the first batch after the placing has run.
-    for _ in 0..=w.cfg.batch_days {
+    for _ in 0..=w.cfg.days_per_month {
         pcore::day(&mut w);
         for b in w.life.alive() {
             assert!(b.mass(&w.chem) >= 1e-3 * b.n(), "an empty body is alive: energy {}, stores {:?}", b.e, b.store);
@@ -285,48 +282,4 @@ fn moving_costs_the_real_cost_of_transport() {
     assert!((p.walk(0.18) / p.walk(44.0) - (0.18f64 / 44.0).powf(-0.32)).abs() < 1e-9);
     // The real figure, 10.7 m^-0.32 J per kg per m, at 30 kg is 3.6: c_move 3 is the same order.
     assert!(p.c_move > 0.7 * 10.7 * 30f64.powf(-0.32) && p.c_move < 1.0 * 10.7 * 30f64.powf(-0.32));
-}
-
-/// A node of 50 eaters of brain `brain` (a 10-day gene, mature at 1,000 t) on ground with 3 kg/m² of matter, for 90 days
-/// (its first update a batch on) with a decision every `think_days` days at the least: the updates, the decisions, the
-/// updates with a take from the ground, and the kg taken from it. The books are kept.
-fn node_takes(brain: &Brain, think_days: u32) -> (u64, f64, u64, f64) {
-    let (mut w, i) = start();
-    w.cfg.think_days = think_days;
-    put_kg_m2(&mut w, MATTER, i, 3.0);
-    let mut b = eater_of(&mut w, i, brain, 6.0);
-    (b.genes[INTERVAL], b.genes[LEARN]) = (1.0, LEARN_OFF);
-    b.prepare(&w.chem, &w.cfg);
-    let node = node_of(&mut w, b, 50.0);
-    w.add(node, 1);
-    let (books, mut took_on_update, mut kg) = (Books::now(&w), 0, 0.0);
-    for _ in 0..90 {
-        let u = w.counts.updates;
-        w.events.clear();
-        pcore::day(&mut w);
-        kg += took_from_ground(&w);
-        took_on_update += (w.counts.updates > u && took_from_ground(&w) > 0.0) as u64;
-    }
-    books.assert_kept(&w, 1e-9);
-    (w.counts.updates, w.counts.decisions, took_on_update, kg)
-}
-
-/// A node with a brain decides about every `think_days` days (`Config::think_days`) and 0 is a decision at every update;
-/// between decisions its members take from the ground by the chance of the last, so it takes as much as when it decides
-/// at every update. The brain's chance to take is clearly under 1, so a habit that ignored it would take more.
-#[test]
-fn a_node_decides_every_think_days_and_takes_between() {
-    // With weights of 0 its chances are its biases: to take or to rest, half each, whatever it perceives and learns.
-    let mut brain = Brain { weights: 0.0, ..Brain::only(TAKE) };
-    brain.fixed[REST] = testkit::ON;
-    let (control, habit) = (node_takes(&brain, 0), node_takes(&brain, 20));
-    let sure = node_takes(&Brain { weights: 0.0, ..Brain::only(TAKE) }, 0);
-    eprintln!("every update (updates, decisions, updates with a take, kg): {control:?}; 20 days: {habit:?}; chance 1: {sure:?}");
-    assert!(control.3 < 0.75 * sure.3, "its chance to take is under 1: {} kg against {}", control.3, sure.3);
-    assert_eq!(control.0, 8, "a 10-day gene updates 8 times in 90 days, from its first batch");
-    assert_eq!(control.1, control.0 as f64, "think_days 0 decides at every update");
-    assert_eq!(habit.0, control.0, "the habit keeps the gene's updates");
-    assert!((habit.1 - habit.0 as f64 / 2.0).abs() <= 1.0, "a decision every second update, not {} of {}", habit.1, habit.0);
-    assert!(control.3 > 0.0 && habit.2 == habit.0 && control.2 == control.0, "an update without a take: {control:?}, {habit:?}");
-    assert!((habit.3 / control.3 - 1.0).abs() < 1e-3, "the habit took {} kg, the control {}", habit.3, control.3);
 }

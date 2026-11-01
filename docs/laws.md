@@ -34,24 +34,19 @@ it would be in full then), the parts of Flow that are due (air every `air_hours`
 sink of the liquid over field capacity into the bed's store; liquid and erosion every `flow_days`, always on a physics
 step; heat sideways and creep yearly) and Change; on the month's first day Bond (the turns of the parts: each
 domain's in slot order on its view, the domains on the pool, their moves booked in the order of the domains; then the
-loads of the structures one by one); every `batch_days` days (10, one air step) the bodies whose interval ends
-(`survey::batch`).
-**Intervals are whole batches**: a body's interval is its `INTERVAL` gene (5 to 360 days) rounded to the nearest whole number of batches, at least one
-(`Body::interval`), so an update always starts a batch, all the updates of a batch run at its first day, and a body
-placed during a batch first updates in a later one. So a gene of 5 to 15 days updates every 10 days, and one of 15 to
-25 days every 20: bodies whose genes differ inside one such span update alike, and none of them gets away from another
-by being quicker (5.3, the take from a body). `batch_days` divides `phys_days`, so every physics day starts a batch, after
-that day's Change and air step (at the defaults the two are 10 days, so every batch starts on a physics day): the bodies
-of a batch read the ground and the air as that day's Change and air step left them, and what bodies leave on the ground
-in a batch (the free solid they shed, remains) goes through a whole step of Change before the next batch's bodies can
-take it, so most of the free solid has rotted by then (it rots in about a week, 2.1). Each run stands for the time to
-its next. A population node with a brain runs its whole update at its gene's pace but decides only about every `think_days` (20), and acts by its
-last decision's habit between (5.3).
+loads of the structures one by one); then the bodies (`survey::batch`).
+**Every body updates once a month**, at the month's first day, after that day's Change, air step and Bond: one batch
+holds every living body, and a body placed during it first updates at the next month's start. Each update integrates
+the time since the body's last (`Body::last`): its upkeep, drink, heat, growth and the most it takes or breaks go by
+those days, so the month is a time step, not a calendar: a season's change comes from temperature (6.2). The bodies
+read the ground and the air as that day's Change and air step left them, and what they leave on the ground (the free
+solid they shed, remains) goes through the month's steps of Change before the next batch can take it, so most of the
+free solid has rotted by then (it rots in about a week, 2.1). Every body decides at every update (5.3).
 **Bodies and their order** (`life`): the cells are cut into domains, the cells under one air node; each domain stores
 the bodies of its cells, and a body that moves into a cell of another domain moves to its storage. A body's id is the
 domain it was placed in and that domain's count of bodies placed (children, split halves, parts of nodes acting apart,
 members drawn); it never changes, and its random draws are keyed by it. The bodies
-due in a batch update domain by domain, cell by cell, and in a cell by id; sums over bodies go domain by domain, cell by
+of a batch update domain by domain, cell by cell, and in a cell by id; sums over bodies go domain by domain, cell by
 cell, each cell's bodies in the order they came. No order depends on where a body is stored.
 **What a body sees in a batch** (`survey::batch`). At a batch's start each living body leaves a face (`survey::Faces`:
 its id, members, visible traits, signal, well-being, and the room it is in), domain by domain, cell by cell. A body
@@ -386,7 +381,7 @@ through breaks what its energy pays for (6.8).
 Files: `core/src/copy/` (`mix`, `grow`), `nodes.rs`, `body/genes.rs`, `lineage.rs`; the cover in `core/src/cover/` (4.5).
 
 ### 4.1 Genes
-17 scalar genes (`body::Layout`; `HEAT`, `STRENGTH`, `CHILD`, `COPY_MASS`, `INTERVAL`, `MUT`, `LEARN`, the brain sizes
+16 scalar genes (`body::Layout`; `HEAT`, `STRENGTH`, `CHILD`, `COPY_MASS`, `MUT`, `LEARN`, the brain sizes
 `HIDDEN`, `MEMORY`, `SEEN`, `SIGHT`, and `DISPERSE`, `REPAIR`, `WET`, `ALLOC`, `KEEP_T`, `COOL_T`; meanings in
 `body/genes.rs`), a diet gene per reaction (on above 0), per substance a safe minimum, an uptake and
 a keep gene, and the born brain rows. **Mutation** (`body::vary`): parent's gene plus noise of one step × 10^`MUT`,
@@ -398,11 +393,8 @@ gene within `alike` steps; it decides who mixes, joins and merges.
 A body is **mature** (`Body::adult`) when its living body per member reaches `COPY_MASS`; then growth (6.6) puts the
 share `ALLOC` into a **brood** (`Body::brood`), matter held for children that leaves with the body's matter in the same
 share (`Body::lose`). Whenever the brood covers a child, children are made (`copy::copy`) whatever the brain does:
-bodies copy by physics only. An individual makes them at its update; a node at most once in `lump_days` (30), at its
-first update that may (`copy::due`), all that its brood covers then. A node's first children wait for the first batch of
-its own phase (a hash of its id), so nodes made together do not make theirs at the same batches; no turn is tied to a
-date (a month is the clock's step, not a season). A node whose children would all wait (below) keeps its turn. A part
-split off a node keeps the node's turn; a node that others join keeps its own. The brood fills at every update and
+bodies copy by physics only, at the body's update (once a month), all that its brood covers then. The brood fills at
+every update and
 leaves with members who die. A child has a body of 10^`CHILD` × the copy mass,
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
 dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member
@@ -441,9 +433,7 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
 - **Splitting** (`nodes::split`): a node whose halves would no longer be alike splits along its widest gene if its cell
   has room; selection then acts between the halves. Means are kept exactly.
 - **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
-- **Pace** (`Body::interval`): every interval is a whole number of batches (0); rules per interval are rates over the
-  update. A node with a brain updates at its gene's pace, its body as at every update, but its brain is slower: it
-  decides at the update nearest to `think_days` after its last decision, and acts by habit at the others (5.3).
+- **Pace**: every node updates and decides once a month, as an individual does (0).
 - **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage. A
   body with no brain does not mutate its brain-size genes (`body::vary`): they do nothing without one, so a brain
   arises only in a lineage founded with one (decision 72). An
@@ -518,16 +508,9 @@ faces, 0: looks, signals, well-being, past dealings); up to 3 parts. Walls and c
 
 ### 5.3 Actions
 One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;
-a node spreads its members over the actions by those chances (`choose::spread`). An individual decides at every update.
-**A node decides about every `think_days`** (20): at the update nearest to that many days after its last decision
-(this one, unless its next update lies nearer). At its other updates it acts by its **habit** (`spread::repeat`): the
-shares of its members that took from the ground and from each body of its cell at its last decision (its chances
-then, `choose::Habit`) take again as at a decision, sized by the update's interval, from a body only while it lives
-in the cell; it perceives, thinks and learns nothing, and moves, puts, gives, watches and acts on parts only at
-decisions. Its body's update (upkeep with one decision's cost, physics, growth,
-children, maturing) runs at every update, as at its gene's pace. At a decision the members that move leave as one
-group: count × the sum of the chances to go in every direction × the intervals of its gene since its last decision,
-at most all (less than one member: one member with that chance; fewer than one member left behind: the whole node,
+a node spreads its members over the actions by those chances (`choose::spread`). Every body decides at every update,
+once a month. The members of a node that move leave as one group: count × the sum of the chances to go in every
+direction, at most all (less than one member: one member with that chance; fewer than one member left behind: the whole node,
 with the chance that keeps the mean at count × that share), all in the one direction drawn by its chance over the sum,
 so each direction gets its share of members on average, in groups. A
 group splits off only if the cell it enters has room and the node bears the `bump` share of its weight
@@ -544,9 +527,7 @@ of; not what it cannot use, nor the key liquids it drinks, 6.4): per kg of suppl
 minerals it builds of count in s as food does: one search finds all it uses, so rich ground shortens it. Another body's
 members lie over the cell like the ground's food: a bite reaches those the swept area holds (one individual body
 whole, by one draw with the chance the area holds it, whether a node or an individual takes it; of a node, less than one member is one whole member met with that chance:
-it takes, tears and pays that meeting's outcome times the chance), limited by force against theirs; a quicker body
-escapes with chance 1 - its interval / the taker's (intervals in whole batches, 0: two bodies of genes of 5 to 15 days
-both update every 10 days, so neither gets away from the other). **Giving** (`Body::spare`) is of what the other uses, of stores only (no
+it takes, tears and pays that meeting's outcome times the chance), limited by force against theirs. **Giving** (`Body::spare`) is of what the other uses, of stores only (no
 matter, brood, built solids or key liquid below level), above `keep_min` × their minimum, at most what the members met
 could take.
 
@@ -554,7 +535,7 @@ could take.
 **Well-being** (`Body::wellbeing_at`): the energy its stores could release, in decisions' worth, less how near it is
 to its limits; no reward is hand-shaped. **Within a life** (`choose::learn`, `brain::learn`): a policy gradient
 against the critic (actor-critic) on the change of its own well-being since its last decision, the critic's estimate
-from now discounted by `discount` per interval of its gene since then (`discount^since`), at its `LEARN` rate, in units
+from now discounted by `discount` (one month), at its `LEARN` rate, in units
 of the root of the critic's running mean square of errors; that mean and each row's mean square of steps both weigh the newest value
 by `learn_beta`. A node learns as from one
 member drawn among those who stayed, with the node's change plus how much more its part's action raised it than the
@@ -567,7 +548,7 @@ same sizes, less the less alike they are, times the share of the watcher's membe
 mean by members). **Signals**: 2 numbers a decision with
 noise (`signal_noise`), meaningless at first, at an upkeep (`c_signal`). **Memory**: up to 4 others and how dealings
 went (`Body::note`, `Body::recall`). **Thinking** (`Physics::think`) costs by brain size and mass^0.25 one decision per
-update (a node's habit updates too), so a long interval saves it. **Null run** (`--null`): no learning or imitation, rows frozen, genes still evolve.
+update, once a month. **Null run** (`--null`): no learning or imitation, rows frozen, genes still evolve.
 
 ## 6. Bodies
 Files: `core/src/body/`, `copy::grow`. Bodies are the eaters (animals); the light-eaters are the cover (4.5).
@@ -625,7 +606,7 @@ kills the share frozen (`PHASE`); **boiling** kills.
 ### 6.6 Growth
 `copy::grow`. Its fuel and minerals become matter at `c_copy` of work per kg, paid by burning (`body::pay`), as far as
 all allow: the **allowance** (`c_build` × supply / `m_ref` × days × activity), the **spare** (what its fuel can release
-beyond an interval's upkeep), and its stores down to their minimums. Built solids (frame, lime) come first by their
+beyond a month's upkeep), and its stores down to their minimums. Built solids (frame, lime) come first by their
 share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing

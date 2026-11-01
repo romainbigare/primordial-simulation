@@ -24,7 +24,7 @@ fn used_kg(w: &World, b: &Body, m: &[f64]) -> f64 {
 /// holds, which is the share of another body's members it holds and may be less than one member: of one individual
 /// body, the chance it holds it.
 fn intake(w: &World, b: &Body, from: impl Fn(usize) -> f64) -> (f64, f64) {
-    let (p, area, days) = (&w.cfg.phys, w.mesh.cells().area()[b.cell as usize], b.interval(w) as f64);
+    let (p, area, days) = (&w.cfg.phys, w.mesh.cells().area()[b.cell as usize], w.cfg.update_days());
     let t = b.temp(&w.chem);
     let wants = b.k.upt.iter().filter(|&&(k, _)| b.uses(&w.chem, k, t));
     let lying: f64 = wants.map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum();
@@ -45,7 +45,7 @@ pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
     let free = |k: usize| if chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k).max(0.0) } else { 0.0 };
     let cover: [f64; crate::units::MAX_SUBSTANCES] = parts.as_ref().map_or([0.0; crate::units::MAX_SUBSTANCES], |p| d.cover.amounts(p, kc));
     let lying = |k: usize| free(k) + cover[k];
-    let mut m = b.wanted(chem, b.paces(w), lying, intake(w, b, lying).0, b.mass(chem));
+    let mut m = b.wanted(chem, lying, intake(w, b, lying).0, b.mass(chem));
     let grazed: Vec<f64> = m.iter().enumerate().map(|(k, &a)| if cover[k] > 0.0 { (a * cover[k] / lying(k)).min(a).min(cover[k]) } else { 0.0 }).collect();
     let (all, kg) = (parts.as_ref().map_or(0.0, |p| d.cover.amounts(p, kc).iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()), chem.mass_of(&grazed));
     let breaking = parts.as_ref().filter(|_| kg > 0.0).map_or(0.0, |p| d.cover.breaking(chem, &w.cfg, p, kc, (kg / all.max(1e-300)).min(1.0)));
@@ -108,8 +108,7 @@ fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body,
 /// Take from another body in the cell by uptake selectivity, by the intake law (`intake`: its members spread over the
 /// cell, a node is found as the ground is), as far as its stores' room and its force against the other's allow. It
 /// reaches what the members its area holds hold (an individual, by any taker: all of it, with the chance its area
-/// holds it), and a quicker body gets away with chance 1 - its interval / the taker's (the taker has paid; of a node's
-/// members, that share). The bite tears each member it reaches (`body::wound`; laws.md 6.8). A bite that reaches
+/// holds it). The bite tears each member it reaches (`body::wound`; laws.md 6.8). A bite that reaches
 /// less than one member of a node meets one whole member with that chance: it takes, tears and pays what that meeting
 /// would, times the chance, the expected outcome of an individual's draw.
 pub fn take_body(w: &World, d: &mut Domain, b: &mut Body, s: Handle, rng: &mut Rng) {
@@ -117,17 +116,14 @@ pub fn take_body(w: &World, d: &mut Domain, b: &mut Body, s: Handle, rng: &mut R
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
     let (kg, swept) = intake(w, b, |k| o.store[k]);
-    // One draw finds an individual prey and, over the chance it was found, lets it get away (`hit`).
-    let u = rng.f64();
-    let one = o.n() <= 1.0;
-    let (reached, u) = if !one { (swept, u) } else if u < swept { (1.0, u / swept) } else { return };
+    // One draw finds an individual prey.
+    let reached = if o.n() > 1.0 { swept } else if rng.f64() < swept { 1.0 } else { return };
     // The share of the members a meeting reaches (at least one whole member) and the chance of that meeting.
     let per = reached.max(1.0 / o.n());
     let chance = reached / per;
-    let m = b.wanted(&w.chem, b.paces(w), |k| per * o.store[k], kg * fb / (fb + fo + 1e-30), mb);
+    let m = b.wanted(&w.chem, |k| per * o.store[k], kg * fb / (fb + fo + 1e-30), mb);
     let resist = 1.0 + lanes::thickness(w, w.life.sum(b.cell as usize)[1], w.mesh.cells().area()[b.cell as usize]);
-    let away = (1.0 - o.interval(w) as f64 / b.interval(w) as f64).max(0.0);
-    let hit = reached * if !one { 1.0 - away } else { (u >= away) as u8 as f64 };
+    let hit = reached;
     // The bite tears this share of the body of each member it reaches; the stores they held spill in proportion, less
     // what the taker took (all they held, if they die).
     let (built, got) = (per * o.built(&w.chem), w.chem.mass_of(&m));
@@ -160,10 +156,10 @@ pub(super) fn give(w: &World, d: &mut Domain, b: &mut Body, s: Handle) {
     let spare = |k: usize| b.spare(chem, &w.cfg.phys, k, (size, mass));
     let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
     let o = &d[s];
-    let (mo, paces, met, t) = (o.mass(chem), o.paces(w), b.n().min(o.n()), o.temp(chem));
-    let share = (w.cfg.phys.take * b.interval(w) as f64 * o.supply(&w.chem, &w.cfg.phys, t) * met / o.n() / all.max(1e-9)).min(met / b.n());
-    let mut m: Vec<f64> = (0..chem.ns()).map(|k| if o.uses(chem, k, t) { (spare(k) * share).min(o.room(chem, paces, k, mo) * met / o.n()) } else { 0.0 }).collect();
-    o.digest_room(chem, paces, &mut m, mo);
+    let (mo, met, t) = (o.mass(chem), b.n().min(o.n()), o.temp(chem));
+    let share = (w.cfg.phys.take * w.cfg.update_days() * o.supply(&w.chem, &w.cfg.phys, t) * met / o.n() / all.max(1e-9)).min(met / b.n());
+    let mut m: Vec<f64> = (0..chem.ns()).map(|k| if o.uses(chem, k, t) { (spare(k) * share).min(o.room(chem, k, mo) * met / o.n()) } else { 0.0 }).collect();
+    o.digest_room(chem, &mut m, mo);
     let got = w.chem.mass_of(&m);
     if got <= 0.0 || !body::pay(w, d, b, w.cfg.phys.c_handle * got) {
         return;

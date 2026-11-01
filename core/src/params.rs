@@ -39,12 +39,6 @@ pub struct Config {
     pub wake_share: f64,
     /// Speed setting: the longest a ground or air node's reactions sleep, days (0: every node reacts every step)
     pub sleep_days: u32,
-    /// Speed setting: bodies update in batches of this many days; an interval is a whole number of batches (`Body::interval`)
-    pub batch_days: u32,
-    /// Speed setting: a population node makes its children at most once in a window of this many days (`copy::copy`)
-    pub lump_days: u32,
-    /// Speed setting: a population node with a brain decides about every this many days and acts by habit between (`choose::act`; 0: every update)
-    pub think_days: u32,
 
     // Ground and air physics
     /// Depth of ground that exchanges heat with the surface, m
@@ -149,7 +143,7 @@ pub struct Physics {
     pub layer: f64,
     /// Density of bodies, kg/m³
     pub rho_body: f64,
-    /// Most a body takes per day of its interval, as a share of the mass it takes by (`Body::supply`)
+    /// Most a body takes per day, as a share of the mass it takes by (`Body::supply`)
     pub take: f64,
     /// Exponent of a member's body mass that its supply (intake, building, leaf) goes with (`Body::equiv`)
     pub intake_exp: f64,
@@ -163,7 +157,7 @@ pub struct Physics {
     pub shape_noise: f32,
     /// Spread of the signal around its mean
     pub signal_noise: f32,
-    /// Weight of well-being one interval of its gene ahead against well-being now
+    /// Weight of well-being one month (one update) ahead against well-being now
     pub discount: f32,
     /// Share of the way a watcher's rows move toward the watched one's
     pub blend: f32,
@@ -197,7 +191,7 @@ pub struct Physics {
     pub grip: f64,
     /// Push of a mover on each structure of a cell, and the push its own force must give to move, share of its weight
     pub bump: f64,
-    /// Most bonded ground a body breaks per day of its interval, as a share of its mass
+    /// Most bonded ground a body breaks per day, as a share of its mass
     pub dig: f64,
     /// Liquid deeper than this is crossed afloat by a body holding a structure the liquid holds up, m
     pub deep: f64,
@@ -262,7 +256,7 @@ const MOVE_EXP: f64 = -0.32;
 
 impl Physics {
     /// Energy of one decision of a brain of cost `c` (`Lineage::cost`) for a member of `m` kg, J: weakly more for a
-    /// bigger body; paid per decision, so it pushes bodies toward long intervals.
+    /// bigger body; paid per decision, once a month.
     pub(crate) fn think(&self, c: f64, m: f64) -> f64 {
         c * self.m_ref * (m / self.m_ref).sqrt().sqrt()
     }
@@ -377,6 +371,10 @@ impl Config {
         let month = self.days_per_month as u64 * DAY_S;
         Calendar { day: DAY_S, month, year: month * self.months_per_year as u64 }
     }
+    /// Days between a body's updates: every body updates once a month, at its start (`survey::batch`).
+    pub fn update_days(&self) -> f64 {
+        self.days_per_month as f64
+    }
     /// Check a run's settings before it starts: the time steps, and the numbers of the physics the laws need in range.
     pub fn validate(&self) -> Result<(), String> {
         let (d, h, f, p) = (self.phys_days, self.air_hours, self.flow_days, &self.phys);
@@ -385,12 +383,6 @@ impl Config {
         // The air's step is booked whole as it runs: a longer one would book its moves ahead of the physics steps.
         let divides = (d as u64 * self.calendar().day).is_multiple_of(h as u64 * HOUR_S);
         require(divides, || format!("the air's step ({h} hours) must divide the physics step ({d} days)"))?;
-        // A batch is a whole number of days that starts every body's update: it fits in the physics step and the month,
-        // and nodes' intervals are whole batches.
-        let b = self.batch_days;
-        require(b > 0 && d.is_multiple_of(b) && self.days_per_month.is_multiple_of(b), || format!("batch_days ({b}) must be at least 1 and divide phys_days ({d}) and days_per_month ({})", self.days_per_month))?;
-        let lump = self.lump_days;
-        require(lump > 0 && lump.is_multiple_of(b), || format!("lump_days ({lump}) must be a whole number of batches ({b} days), at least one"))?;
         // A liquid step of more than a month counts its own period from the start (`schedule::days`).
         let (f, m) = (f, self.days_per_month);
         require(f <= m || f.is_multiple_of(m), || format!("flow_days ({f}) over a month must be a whole number of months ({m} days)"))?;
@@ -432,9 +424,6 @@ impl Default for Config {
             crowd: 4,
             wake_share: 0.05,
             sleep_days: 90,
-            batch_days: 10,
-            lump_days: 30,
-            think_days: 20,
             skin_m: 2.0,
             air_top_m: 10_000.0,
             sensible: 10.0,

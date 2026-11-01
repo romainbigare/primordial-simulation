@@ -73,7 +73,7 @@ pub fn force(w: &World, b: &Body) -> f64 {
 
 /// Verb `v` toward part `p`: hold, take from, put to, join the held part to, break, enter; or anchor it (`ANCHORS`).
 pub fn act(w: &mut World, b: &mut Body, v: usize, p: usize) {
-    let (mb, days) = (b.mass(&w.chem), b.interval(w) as f64);
+    let (mb, days) = (b.mass(&w.chem), w.cfg.update_days());
     match v {
         0 => {
             if w.parts.parts[p].held == NOBODY && pay(w, b, w.cfg.phys.grab * w.cfg.phys.c_handle * w.parts.parts[p].mass(&w.chem)) {
@@ -123,7 +123,7 @@ pub fn act(w: &mut World, b: &mut Body, v: usize, p: usize) {
 /// time and its stores have room for. Walls taken below `min_kg` fall apart (`fall_apart`): the rest goes to the ground.
 fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let pt = &w.parts.parts[p];
-    let m = b.wanted(&w.chem, b.paces(w), |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mb);
+    let m = b.wanted(&w.chem, |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mb);
     let got = w.chem.mass_of(&m);
     if got <= 0.0 || !pay(w, b, w.cfg.phys.c_handle * got) {
         return;
@@ -250,7 +250,7 @@ pub fn dig(w: &World, d: &mut Domain, b: &mut Body) {
     if vol <= 0.0 {
         return;
     }
-    let most = w.cfg.phys.dig * b.interval(w) as f64 * mb;
+    let most = w.cfg.phys.dig * w.cfg.update_days() * mb;
     let m: Vec<f64> = (0..chem.ns())
         .map(|k| {
             let (a, s) = (d.moves.amount(w, Node::new(Class::Bed, i), k), &chem.subs[k]);

@@ -2,11 +2,11 @@
 //! rebuilds. Two parents and population nodes: `populations.rs`.
 
 use pcore::life::Handle;
-use pcore::body::{Layout, ALLOC, BRAIN_SIZES, CHILD, COOL_T, COPY_MASS, DISPERSE, KEEP_T, REPAIR};
+use pcore::body::{Layout, ALLOC, BRAIN_SIZES, CHILD, COOL_T, COPY_MASS, DISPERSE, KEEP_T};
 use pcore::body::{MUT, STRENGTH};
 use pcore::rng::{Purpose, Rng};
 use pcore::units::DAY_S;
-use pcore::{body, brain, copy, nodes, World};
+use pcore::{body, brain, copy, World};
 use worldgen::testkit::{self, add, children, eater, kg, only_the_solid, out, put, put_kg_m2, scale, start, took_used, Books, BURN, DISSOLVED, LIQUID, MATTER, RICH};
 use pcore::store::Class;
 
@@ -40,7 +40,7 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     // (Counts of the chemistry's growth: the solid in, the liquid out.)
     let bl = w.chem.build.as_ref().expect("growth");
     let (n_rich, n_liquid) = (bl.inputs.iter().find(|p| p.0 as usize == RICH).expect("the solid").1 as f64, bl.outputs.iter().find(|p| p.0 as usize == LIQUID).expect("the liquid").1 as f64);
-    let days = b.interval(&w) as f64;
+    let days = w.cfg.update_days();
     assert!(testkit::moved(&mut w, (b.cell as usize, Handle::default()), |w, d| testkit::grow(w, d, &mut b, days)), "it did not grow");
     let (x, c_copy) = (b.store[MATTER] - matter0, w.cfg.phys.c_copy);
     assert!(x > 0.0);
@@ -75,7 +75,7 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
 }
 
 /// Building takes time: with fuel and spare in plenty, a body builds `c_build` x its supply / `m_ref` x the days of
-/// its interval over `c_copy` kg of matter in an update, no more; twice the allowance builds twice the matter. A
+/// a month over `c_copy` kg of matter in an update, no more; twice the allowance builds twice the matter. A
 /// mature body (its body at or past its copy mass) builds as much and puts the share `ALLOC` of it into its brood: at
 /// 1 its body stays what it was.
 #[test]
@@ -88,7 +88,7 @@ fn growth_is_limited_by_c_build() {
         scale(&mut w, &mut b, 5.0);
         let (s, mut b) = out(&mut w, b);
         let m0 = b.store[MATTER];
-        let days = b.interval(&w) as f64;
+        let days = w.cfg.update_days();
         let room = w.cfg.phys.c_build * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)) / w.cfg.phys.m_ref * days / w.cfg.phys.c_copy;
         let (built0, grew) = (b.built(&w.chem), testkit::moved(&mut w, (b.cell as usize, Handle::default()), |w, d| testkit::grow(w, d, &mut b, days)));
         let kg_matter = (b.store[MATTER] - m0) * w.chem.subs[MATTER].molar_mass;
@@ -110,7 +110,7 @@ fn growth_is_limited_by_c_build() {
 }
 
 /// Building takes what the body can spare: after what it pays and converts, its reactions must still be able to
-/// release its upkeep over an interval. A body with little fuel builds less than its allowance and keeps that; one
+/// release its upkeep over a month. A body with little fuel builds less than its allowance and keeps that; one
 /// with none builds nothing.
 #[test]
 fn growth_is_limited_by_what_the_body_can_spare() {
@@ -126,7 +126,7 @@ fn growth_is_limited_by_what_the_body_can_spare() {
         let out_kg = (1.0 - keep) * kg(&w, &b, RICH);
         add(&mut w, &mut b, RICH, -out_kg);
         let (s, mut b) = out(&mut w, b);
-        let days = b.interval(&w) as f64;
+        let days = w.cfg.update_days();
         let m0 = b.store[MATTER];
         let grew = testkit::moved(&mut w, (b.cell as usize, Handle::default()), |w, d| testkit::grow(w, d, &mut b, days));
         let built = (b.store[MATTER] - m0) * w.chem.subs[MATTER].molar_mass;
@@ -159,7 +159,7 @@ fn storing_the_solid_costs_no_build() {
     add(&mut w, &mut b, RICH, 100.0);
     assert!(b.size(&w.chem) > 20.0);
     let (_, mut b) = out(&mut w, b);
-    let (stores, heat, days) = (b.store.clone(), b.e, b.interval(&w) as f64);
+    let (stores, heat, days) = (b.store.clone(), b.e, w.cfg.update_days());
     assert!(!testkit::moved(&mut w, (b.cell as usize, Handle::default()), |w, d| testkit::grow(w, d, &mut b, days)) && b.store == stores && b.e == heat, "a body with no allowance built");
 
     // A body taking the solid from the ground, with no allowance to build.
@@ -175,7 +175,7 @@ fn storing_the_solid_costs_no_build() {
     let out_kg = 0.5 * kg(&w, &b, RICH);
     add(&mut w, &mut b, RICH, -out_kg);
     let (rich0, matter0) = (kg(&w, &b, RICH), kg(&w, &b, MATTER));
-    let s = w.add(b, 1);
+    let s = w.add(b);
     let books = Books::now(&w);
     let mut took = 0.0;
     for _ in 0..30 {
@@ -258,8 +258,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     // and members stay what they were but for what they gave, the mean member of the node is what it was, and the
     // children who left got what those who stayed got.
     let (mut w, i) = start();
-    // (A node may make children at every update: `lump_days` of one batch.)
-    (w.cfg.phys.c_copy, w.cfg.lump_days) = (1e18, w.cfg.batch_days);
+    w.cfg.phys.c_copy = 1e18;
     let mut n = eater(&mut w, i, brain::REST, 10f32.log10());
     (n.genes[CHILD], n.genes[DISPERSE]) = (-std::f32::consts::LOG10_2, 1.0 / 3.0);
     scale(&mut w, &mut n, 5.0);
@@ -298,8 +297,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
 #[test]
 fn a_mature_nodes_children_gather_in_its_young_node() {
     let (mut w, i) = start();
-    // (A node may make children at every update: `lump_days` of one batch.)
-    (w.cfg.phys.c_copy, w.cfg.lump_days) = (1e18, w.cfg.batch_days);
+    w.cfg.phys.c_copy = 1e18;
     let mut n = eater(&mut w, i, brain::REST, 10f32.log10());
     // Children of 0.3 of the copy mass: 3 kg a body, a quarter of that matter (h 0.75).
     (n.genes[CHILD], n.genes[DISPERSE]) = (0.3f32.log10(), 0.0);
@@ -307,7 +305,7 @@ fn a_mature_nodes_children_gather_in_its_young_node() {
     n.count = 5.0;
     let (mm, h) = (w.chem.subs[MATTER].molar_mass, 0.75);
     let child_mol = 3.0 * (1.0 - h) / mm;
-    let s = w.add(n, 1);
+    let s = w.add(n);
     let books = Books::now(&w);
     w.time += DAY_S;
     pcore::survey::survey(&mut w, false);
@@ -323,7 +321,7 @@ fn a_mature_nodes_children_gather_in_its_young_node() {
         // The mean member of the node is what it was, and mature.
         assert!(n.adult(&w.chem) && (n.built(&w.chem) / n.n() - before).abs() < 1e-9 * before, "round {round}: the mean member fell: {before} -> {}", n.built(&w.chem) / n.n());
         w.life[s] = n;
-        w.time += w.cfg.lump_days as u64 * DAY_S;
+        w.time += w.cfg.days_per_month as u64 * DAY_S;
     }
     // All three broods are in one young node.
     let kids: Vec<Handle> = w.life.living().map(|x| x.0).filter(|&k| k != s).collect();
@@ -336,120 +334,6 @@ fn a_mature_nodes_children_gather_in_its_young_node() {
     pcore::survey::survey(&mut w, false);
     assert_eq!(w.life.alive().count(), 2, "the young merged into the mature node");
     books.assert_kept(&w, 1e-9);
-}
-
-/// A mature node of five members in cell `i` whose children are a tenth of its copy mass (1 kg a body), none
-/// dispersing, its brood half a child more than the members hold (`copy::BROOD_HELD`), placed; and the matter of a
-/// child, mol.
-fn node_of_small_children(w: &mut World, i: usize) -> (Handle, f64) {
-    let mut n = eater(w, i, brain::REST, 10f32.log10());
-    (n.genes[CHILD], n.genes[DISPERSE]) = (-1.0, 0.0);
-    scale(w, &mut n, 5.0);
-    n.count = 5.0;
-    let child = (1.0 - 0.75) / w.chem.subs[MATTER].molar_mass;
-    n.brood = (copy::BROOD_HELD * 5.0 + 0.5) * child;
-    (w.add(n, 1), child)
-}
-
-/// The first day of a batch after the world's day.
-fn next_batch(w: &World) -> u64 {
-    let batch = w.cfg.batch_days as u64;
-    (w.time / DAY_S).div_ceil(batch) * batch + batch
-}
-
-/// Node `s` at day `day`: its brood gains `child`, and it may make children (`copy::copy`); whether it made any.
-fn update_brood(w: &mut World, s: Handle, child: f64, day: u64) -> bool {
-    w.time = day * DAY_S;
-    let mut n = std::mem::take(&mut w.life[s]);
-    n.brood += child;
-    n.prepare(&w.chem, &w.cfg);
-    let made = w.in_domain(n.cell as usize, |w, d| copy::copy(w, d, &mut n));
-    w.life[s] = n;
-    made
-}
-
-/// Days at which the node of `a_node_makes_its_children_at_most_once_in_lump_days` updates: gaps of one, two and three
-/// batches, as an interval gene that changes between updates gives.
-const LUMP_TEST_DAYS: [u64; 14] = [0, 10, 20, 30, 50, 60, 70, 90, 100, 130, 140, 150, 160, 180];
-
-/// A node makes its children at most once in `Config::lump_days`, all its brood covers then (laws.md 4.2). A mature
-/// node whose brood gains a child at every update, updated on `LUMP_TEST_DAYS`: no two of its births are under
-/// `lump_days` apart; the first come within `lump_days`, and after them it makes children at every update `lump_days`
-/// or more after its last (none skipped). It makes as many as at every update (`lump_days` one batch), less what its
-/// brood holds since its last births, at most two. A node with a full brood that joins it (`nodes::merge`) just after
-/// its births, and the half split off it then (`nodes::split`), make none until `lump_days` after them, and then make
-/// some. Members, matter and energy are kept.
-#[test]
-fn a_node_makes_its_children_at_most_once_in_lump_days() {
-    let run = |lump: u32| {
-        let (mut w, i) = start();
-        (w.cfg.phys.c_copy, w.cfg.lump_days) = (1e18, lump);
-        let (s, child) = node_of_small_children(&mut w, i);
-        pcore::survey::survey(&mut w, false);
-        let (books, t0) = (Books::now(&w), next_batch(&w));
-        let made: Vec<u64> = LUMP_TEST_DAYS.into_iter().filter(|&day| update_brood(&mut w, s, child, t0 + day)).map(|day| t0 + day).collect();
-        books.assert_kept(&w, 1e-9);
-        let young: f64 = w.life.alive().filter(|b| b.id != w.life[s].id).map(|b| b.count).sum();
-        let held = w.life[s].brood / child - copy::BROOD_HELD * 5.0;
-        (made, young, held, (w, s, child, t0))
-    };
-    let (every, born, left, _) = run(10);
-    let (made, lumped, held, (mut w, s, child, t0)) = run(30);
-    println!("every update: {} births, {born:.3} members; in lumps: births on days {made:?}, {lumped:.3} members, {held:.3} waiting", every.len());
-    assert!(every.len() == LUMP_TEST_DAYS.len() && left.abs() < 1e-6, "lump_days of one batch: children at {every:?}, {left} waiting");
-    let lump = w.cfg.lump_days as u64;
-    assert!(made[0] < t0 + lump && made.windows(2).all(|x| x[1] - x[0] >= lump), "births on days {made:?}");
-    for day in LUMP_TEST_DAYS.map(|day| t0 + day) {
-        let last = made.iter().filter(|&&x| x < day).max();
-        assert_eq!(made.contains(&day), last.is_none_or(|x| day - x >= lump) && day >= made[0], "day {day}: births on days {made:?}");
-    }
-    assert!((lumped + held - born).abs() < 1e-6 * born && held < 2.0 + 1e-6, "{lumped} born and {held} waiting against {born}");
-
-    // Births on day `t`; another node with a full brood joins it, and it splits in two along a gene that copy does not
-    // read (`REPAIR`, the halves many steps apart).
-    let t = (made.last().unwrap() + lump).next_multiple_of(10);
-    assert!(update_brood(&mut w, s, child, t), "no births on day {t}");
-    let i = w.life[s].cell as usize;
-    let (other, _) = node_of_small_children(&mut w, i);
-    w.life[other].brood += 3.0 * child;
-    w.in_domain(i, |w, d| nodes::merge(w, d, other, s));
-    let before: Vec<Handle> = w.life.living().map(|x| x.0).collect();
-    let mut n = std::mem::take(&mut w.life[s]);
-    n.spread = vec![0.0; n.genes.len()];
-    n.spread[REPAIR] = 1e2;
-    w.in_domain(n.cell as usize, |w, d| nodes::split(w, d, &mut n));
-    w.life[s] = n;
-    let half = w.life.living().map(|x| x.0).find(|x| !before.contains(x)).expect("not split");
-    for day in [t + 10, t + 20, t + lump] {
-        let made = [s, half].map(|x| update_brood(&mut w, x, child, day));
-        assert_eq!(made, [day >= t + lump; 2], "day {day} after births on day {t}: the node and the half made children {made:?}");
-    }
-}
-
-/// How far the lumps of one batch may lie from their even share of a year's in `no_batch_holds_a_pulse_of_births`, as a
-/// share of it: under the gap a phase held by twice as many nodes as another would make (a third).
-const PULSE: f64 = 0.25;
-
-/// No world-wide pulse of births: a node's first children wait for a batch of its own phase (`copy::due`). Thirty
-/// mature nodes on land cells, placed together, whose broods gain a child at every batch, updated at every batch for a
-/// window and a year: in the year each batch holds its even share of the lumps to within `PULSE` of it (one phase that
-/// every node shared would put three times that share in one batch and none in the next two; phases held 2:1 would
-/// put 4/3 and 2/3 of it).
-#[test]
-fn no_batch_holds_a_pulse_of_births() {
-    let (mut w, _) = start();
-    w.cfg.phys.c_copy = 1e18;
-    let land: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).take(30).collect();
-    let nodes: Vec<(Handle, f64)> = land.iter().map(|&i| node_of_small_children(&mut w, i)).collect();
-    pcore::survey::survey(&mut w, false);
-    let (t0, batch) = (next_batch(&w), w.cfg.batch_days as u64);
-    let (first, year) = ((w.cfg.lump_days as u64 / batch) as usize, (w.days_per_year() / batch) as usize);
-    let lumps: Vec<f64> = (0..first + year).map(|k| nodes.iter().filter(|&&(s, child)| update_brood(&mut w, s, child, t0 + k as u64 * batch)).count() as f64).collect();
-    let lumps = &lumps[first..];
-    let even = lumps.iter().sum::<f64>() / year as f64;
-    println!("lumps by batch over a year: {lumps:?}");
-    assert!(even * year as f64 >= 12.0 * nodes.len() as f64, "{even} lumps a batch of {} nodes", nodes.len());
-    assert!(lumps.iter().all(|x| (x / even - 1.0).abs() <= PULSE), "a batch holds more or less than {PULSE} off its even share {even:.2}: {lumps:?}");
 }
 
 /// A mature body splits what it builds in an update by `ALLOC`: the share to its brood, the rest its own growth; one
@@ -465,7 +349,7 @@ fn a_mature_body_splits_its_building_by_alloc() {
         b.genes[ALLOC] = alloc;
         let (s, mut b) = out(&mut w, b);
         let (m0, built0, mm) = (b.store[MATTER], b.built(&w.chem), w.chem.subs[MATTER].molar_mass);
-        let days = b.interval(&w) as f64;
+        let days = w.cfg.update_days();
         assert!(testkit::moved(&mut w, (b.cell as usize, Handle::default()), |w, d| testkit::grow(w, d, &mut b, days)), "it did not build");
         let made = (b.store[MATTER] - m0) * mm;
         let (brood, grown) = (b.brood * mm, (b.built(&w.chem) - built0) * (1.0 - 0.75));
@@ -519,7 +403,7 @@ fn an_immature_body_never_reproduces() {
     let mut b = immature(&mut w, i);
     // (Fuel for a life of building: 60 kg more of it.)
     add(&mut w, &mut b, RICH, 60.0);
-    let s = w.add(b, 1);
+    let s = w.add(b);
     let (mut grown_up, mut born_before, mut born) = (None, 0.0, 0.0);
     for d in 0..400 {
         feed_minerals(&mut w, s);
@@ -560,7 +444,7 @@ fn a_hurt_body_rebuilds_within_its_allowance_and_is_immature_until_healed() {
     testkit::moved(&mut w, (i, Handle::default()), |w, d| pcore::choose::wear(w, d, i, energy));
     let mut b = std::mem::take(&mut w.life[v]);
     assert!(!b.adult(&w.chem), "a body torn by 40% is still mature: {} kg", b.built(&w.chem));
-    let days = b.interval(&w) as f64;
+    let days = w.cfg.update_days();
     // (Counted in all the matter it holds: the update that crosses maturity puts a share of what it builds into a brood.)
     let (mut last, mut updates) = (kg(&w, &b, MATTER), 0);
     while !b.adult(&w.chem) && updates < 2000 {
@@ -588,7 +472,7 @@ fn reproducing_updates_keep_elements_and_energy() {
     // Children of 0.1 of the copy mass (0.5 kg) from a mature body of 21 kg.
     (b.genes[CHILD], b.genes[ALLOC]) = (-1.0, 0.8);
     let id = {
-        let s = w.add(b, 1);
+        let s = w.add(b);
         w.life[s].id
     };
     let books = Books::now(&w);
@@ -638,8 +522,8 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         (b.genes[COPY_MASS], w.cfg.phys.e_life) = (1.645, 1e30);
         let (s, b0) = out(&mut w, b);
         w.life[s] = b0;
-        // The year starts at the body's first batch, so its first update is on the first day.
-        w.time = w.life[s].due * w.cfg.batch_days as u64 * DAY_S;
+        // The year starts at a month's start, so its first update is on the first day.
+        w.time = w.time.next_multiple_of(w.cfg.calendar().month);
         let area = w.mesh.cells().area()[0];
         let joule = -w.chem.dh(BURN) / w.chem.reactions[BURN].inputs.iter().find(|x| x.0 as usize == RICH).unwrap().1 as f64 / w.chem.subs[RICH].molar_mass;
         let (mut built, mut takes, mut ups) = (Vec::new(), vec![0.0; 360], vec![0.0; 360]);
@@ -712,7 +596,7 @@ fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
     let (s, mut b) = out(&mut w, b);
     let books = Books::now(&w);
     let before: Vec<f64> = mats.iter().chain([&MATTER]).map(|&k| kg(&w, &b, k)).collect();
-    let days = b.interval(&w) as f64;
+    let days = w.cfg.update_days();
     assert!(testkit::moved(&mut w, (b.cell as usize, Handle::default()), |w, d| testkit::grow(w, d, &mut b, days)));
     let made: Vec<f64> = mats.iter().chain([&MATTER]).zip(&before).map(|(&k, x)| kg(&w, &b, k) - x).collect();
     let all: f64 = made.iter().sum();
@@ -741,7 +625,7 @@ fn growth_stops_without_a_mineral_and_goes_on_with_them() {
     let b = eater(&mut w, i, brain::REST, 6.0);
     let (_, b) = out(&mut w, b);
     assert!(minerals.iter().all(|&(k, _)| b.store[k] > 0.0), "a starting body holds the minerals its matter was made of");
-    let days = b.interval(&w) as f64;
+    let days = w.cfg.update_days();
     // With them it builds, and for the matter made it spends each by its count.
     let m0 = b.store[m];
     let mut with = b.clone();
@@ -799,7 +683,7 @@ fn crowded_individuals_merge_into_a_node() {
     let placed = w.cfg.crowd + 4;
     for _ in 0..placed - w.life.alive().filter(|b| b.cell as usize == i && b.lineage == lineage).count() {
         let b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
-        w.add(b, 1);
+        w.add(b);
     }
     // At the month's start (looked at before they act: within the month the node may give its members up one at a time
     // to the actions of Bond, as the draws go).
@@ -824,7 +708,7 @@ fn crowd_bounds_the_nodes_of_a_cell() {
     for x in 0..3 * w.cfg.crowd {
         let mut b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
         b.genes[pcore::body::COPY_MASS] += 0.3 * x as f32;
-        w.add(b, 1);
+        w.add(b);
     }
     let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.n()).collect::<Vec<f64>>();
     let before: f64 = here(&w).iter().sum();

@@ -1,13 +1,13 @@
 //! What a snapshot keeps of `Life` (`Saved`) and how it is written and read back.
 
-use super::{Genome, Life, ID_SHIFT, RING};
+use super::{Genome, Life, ID_SHIFT};
 use crate::body::Body;
 use crate::lineage::Lineage;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
 
 /// What a snapshot keeps of `Life`: per domain its cells, its count of bodies placed, what moved into its cells and its
-/// living bodies in the order of `Life::alive`; the lineages and born rows. Where bodies are stored, the ring and the id
+/// living bodies in the order of `Life::alive`; the lineages and born rows. Where bodies are stored and the id
 /// table follow from the bodies, and the survey's caches are rebuilt (`Life::sum`). Written from the world's own
 /// (borrowed), read back as new (owned).
 #[derive(Serialize, Deserialize)]
@@ -59,7 +59,6 @@ impl<'de> Deserialize<'de> for Life {
                 if (b.id >> ID_SHIFT) as usize != d {
                     life.away.insert(b.id, d as u32);
                 }
-                life.domains[d].ring[(b.due % RING) as usize].push(b.id);
                 life.domains[d].store(b);
             }
         }

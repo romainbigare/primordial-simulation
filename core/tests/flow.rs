@@ -799,7 +799,7 @@ fn lane_scene() -> (World, usize, usize, Handle) {
         worldgen::testkit::cover(&mut w, cell, COVER);
     }
     let m = line.founder(&mut w, 1, a);
-    let slot = w.add(m, 1);
+    let slot = w.add(m);
     (w, a, a + 1, slot)
 }
 
