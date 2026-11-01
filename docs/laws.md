@@ -472,7 +472,7 @@ chance).
   (4.3). Then a node joins a larger
   one of another lineage of its stage, room and part whose genes are alike (`body::alike`, on the means) and whose
   brain has the same sizes: its members take that brain, its born rows and its lineage, and its rows become the mean by
-  members (`merge_taking`). This merge is
+  members (`nodes::merge`). This merge is
   a speed tool with physical side effects: the joiners' members drop the structure they held, which stays in the cell
   for any body to take, and a lineage's brain spreads to alike bodies of another. Selection acts between cells and
   lineages, not within a cell.
