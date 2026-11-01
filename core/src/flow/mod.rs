@@ -9,6 +9,7 @@ mod land;
 mod liquid;
 mod potential;
 mod scratch;
+mod spare;
 mod basin;
 pub(crate) use air::air_temp;
 pub use air::{column, declination, glow, insolation, scale_height};

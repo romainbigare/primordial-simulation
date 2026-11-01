@@ -94,10 +94,12 @@ pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
 /// (`basin::find`).
 pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     let n = w.mesh.cells().n();
-    let mut rows = vec![0.0; n * STATE_ROW];
+    let mut rows = std::mem::take(&mut s.spare.state);
+    rows.resize(n * STATE_ROW, 0.0);
     let sr = &*s;
     crate::par::rows(&mut rows, STATE_ROW, || (), |_, i, row| node_state(w, sr, i, full, row));
     rows.chunks_exact(STATE_ROW).enumerate().for_each(|(i, r)| take_row(s, i, r));
+    s.spare.state = rows;
     if full {
         s.basin = super::basin::find(w, s);
     }
@@ -141,6 +143,8 @@ fn node_state(w: &World, s: &Scratch, i: usize, full: bool, row: &mut [f64]) {
     let ci = s.state.loose.iter().fold(skin, |c, &k| c + amt(k) * s.sp[k].cp);
     let same = s.cap.get(i).is_some_and(|&c| (ci - c).abs() <= CAP_SAME * ci);
     let (c, e, Latent { held, lo, hi, molten: was, .. }) = (ci.max(1.0), w.store.heat(Class::Ground)[i], s.latent[i]);
+    // Nothing found anew and no new surface, until said.
+    (row[3], row[12]) = (0.0, 0.0);
     row[..3].copy_from_slice(&[skin, ci, (e - held) / c]);
     if !full && same && e >= lo && e < hi {
         return;

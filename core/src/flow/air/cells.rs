@@ -69,6 +69,10 @@ impl Response {
     pub(super) fn width(nx: usize) -> usize {
         FIXED + (UP + nx) * (2 + nx)
     }
+    /// Its rows, for the next step's room (`spare::Spare`).
+    pub(super) fn rows(self) -> Vec<f64> {
+        self.rows
+    }
     /// Fixed output `o` of cell `i`.
     pub(super) fn fixed(&self, i: usize, o: usize) -> f64 {
         self.rows[i * Self::width(self.nx) + o]
@@ -107,8 +111,8 @@ impl Response {
     }
 }
 
-/// Each cell's response over the step (`Response`), in parallel with `threads`.
-pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>]) -> Response {
+/// Each cell's response over the step (`Response`), in parallel with `threads`, its rows in `room` (`spare::Spare`).
+pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Response {
     let (n, nx, na) = (cx.w.mesh.cells().n(), cx.act.len(), cx.w.mesh.level(AIR).n());
     let mut seen = vec![0.0; n * (1 + nx)];
     for (i, air) in seen.chunks_exact_mut(1 + nx).enumerate() {
@@ -116,7 +120,9 @@ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>]) -> Response {
         (0..nx).for_each(|y| air[1 + y] = lerp(cx.s, &cx.x0[y * na..(y + 1) * na], i));
     }
     let width = Response::width(nx);
-    let mut rows = vec![0.0; n * width];
+    // Every cell's row is written: alone, or of a patch.
+    let mut rows = room;
+    rows.resize(n * width, 0.0);
     // The low basin under each air node solves one surface (`surf::patches`); the other cells each their own.
     let mut alone = vec![true; n];
     patches.iter().flatten().for_each(|&i| alone[i as usize] = false);

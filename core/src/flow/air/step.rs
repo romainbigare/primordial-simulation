@@ -44,12 +44,14 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     let na = w.mesh.level(AIR).n();
     let t0: Vec<f64> = (0..na).map(|j| air_temp(w.store.heat(Class::Air)[j], s.state.gas.iter().map(|&k| w.store.amounts(Class::Air)[k * na + j] * s.sp[k].cp).sum())).collect();
     let x0: Vec<f64> = act.iter().flat_map(|ac| w.store.amounts(Class::Air)[ac.k * na..(ac.k + 1) * na].iter().copied()).collect();
+    let room = std::mem::take(&mut s.spare.response);
     let cx = Ctx { w, s, act: &act, t0: &t0, x0: &x0, dt, decl: &decl };
-    let response = respond(&cx, &patches);
+    let response = respond(&cx, &patches, room);
     let ground = response.ground(&cx, wet(w, s, &act, &t0));
     let mean = run(w, s, &act, &ground, dt);
     let rain = landed(&act, ground.wet(), &mean);
     book(w, s, (&act, &response, &rain), &mean, dt);
+    s.spare.response = response.rows();
 }
 
 /// The gases that leave the ground or may condense (not those of `henry`, which dissolve), with their saturation

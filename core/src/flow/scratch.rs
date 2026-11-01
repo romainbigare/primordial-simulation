@@ -196,6 +196,8 @@ pub struct Scratch {
     pub(super) cond: Vec<bool>,
     pub(super) hk: Vec<f64>,
     pub(super) split: Vec<f64>,
+    /// Room the passes keep from step to step (`spare::Spare`).
+    pub(super) spare: super::spare::Spare,
 }
 
 /// Only the state is saved (`Scratch`).
