@@ -146,6 +146,34 @@ fn with_no_partner_a_child_has_one_parent() {
     assert_eq!(mixed(&w), (0.0, 5.0));
 }
 
+/// Two parents only where brains are big (laws.md 4.3): an individual beside a mature alike node of another lineage in
+/// its cell has children of two parents if its lineage's brain has `MATE_HIDDEN` hidden units or more, of one below
+/// that. (Two alike individuals of one small-brained lineage are no pair: they merge into a node at the month's start.)
+#[test]
+fn only_individuals_of_big_brains_have_two_parents() {
+    for hidden in [copy::MATE_HIDDEN - 1, copy::MATE_HIDDEN] {
+        let (mut w, i) = start();
+        let brain = Brain { hidden, ..Brain::only(brain::REST) };
+        let mature = |w: &mut World| {
+            let mut b = founder(w, 1, i, &brain);
+            (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS], b.genes[MUT], b.genes[CHILD]) = (0.0, 0.0, 1.0, -3.0, -3.0);
+            b.prepare(&w.chem, &w.cfg);
+            b
+        };
+        let partner = mature(&mut w);
+        let partner = worldgen::testkit::node_of(&mut w, partner, 5.0);
+        w.add(partner);
+        let a = mature(&mut w);
+        let (_, mut a) = out(&mut w, a);
+        assert_eq!(a.count, 1.0, "an individual");
+        w.events.clear();
+        copies(&mut w, &mut a, 10);
+        let (two, all) = mixed(&w);
+        println!("{hidden} hidden units: {two} of {all} children of two parents");
+        assert_eq!((two, all), if hidden >= copy::MATE_HIDDEN { (10.0, 10.0) } else { (0.0, 10.0) });
+    }
+}
+
 /// Bodies that are not alike never mix: a partner more than `phys.alike` steps away in a gene is not one, however
 /// near in the others; at the limit it is; and of two it takes the more alike.
 #[test]

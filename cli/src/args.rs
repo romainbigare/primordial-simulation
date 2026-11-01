@@ -20,7 +20,7 @@ pub const USAGE: &str = "usage:
     --spray N             rounds of mutation of every founder (20)
     --fixers X            share of the starting light-eaters that carry the fixing gene (0.1)
     --neutral-eaters      animals start with neutral brains, not hand-set biases
-    --no-mix              children have one parent, not two
+
     --null                learning and imitation off, brain rows frozen: the run to compare a seed with
     --sun X               the sun's strength, times the default (1)
     --absorber X          the heat-absorbing gases of the air at the start, times chemistry 0's (1)
@@ -94,7 +94,7 @@ impl Args {
         let c = &mut w.cfg;
         c.sun *= self.get("--sun", 1.0);
         c.null = self.has("--null");
-        c.two_parents = !self.has("--no-mix");
+
         worldgen::terrain::scale_absorbers(w, self.get("--absorber", 1.0));
     }
 

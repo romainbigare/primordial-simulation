@@ -69,8 +69,7 @@ pub struct Config {
     pub hard_min: f64,
 
     // Run switches (control runs to compare with)
-    /// A mature body's children may have a second, alike parent (off, `--no-mix`: one parent)
-    pub two_parents: bool,
+
     /// A null run: no learning, no imitation, born rows and brain bases never change at a copy or a merge
     pub null: bool,
 
@@ -436,7 +435,7 @@ impl Default for Config {
             regrow: 1e-9,
             creep: 6.3e-11,
             hard_min: 0.05,
-            two_parents: true,
+
             null: false,
             phys: Physics::default(),
         }

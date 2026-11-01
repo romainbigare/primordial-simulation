@@ -428,14 +428,17 @@ update (for an individual, that chance), where they land when the batch ends (0)
 join waits in the brood, or, landed in a neighbour cell, goes back into it.
 
 ### 4.3 Two parents
-A mature individual takes the most alike mature **partner** in its cell (`copy::mix::partner`); each gene and born row
-of the children is one parent's, drawn evenly, then mutated (`mix`, `mix_rows`). The partner gives nothing. Without a
-partner, one parent. Bodies not alike never mix, so **kinds are the groups that mix**. A node's children have one
-parent: its members mix inside it (one variance per gene and no covariances is free recombination, Bulmer 1971).
-`--no-mix` is the control.
+Only where brains are big: a mature individual (a body of count 1) of a lineage whose brain has at least `MATE_HIDDEN`
+(8) hidden units (`copy::mates`) takes the most alike mature **partner** in its cell (`copy::mix::partner`); each gene
+and born row of the children is one parent's, drawn evenly, then mutated (`mix`, `mix_rows`). The partner gives
+nothing. Without a partner, one parent. Bodies not alike never mix, so **kinds are the groups that mix**. Any other
+body's children have one parent: a node's members mix inside it (one variance per gene and no covariances is free
+recombination, Bulmer 1971), and so do the members of a small brain's node.
 
 ### 4.4 Population nodes
-A node is one body for many members (handover 7.1): a speed tool that must give the patterns of individuals.
+Every body is a node: one body for many members, and a node of one member is an individual in the same maths (one
+rule of death, of taking, of children for both: what a share of a node's members does, an individual does with that
+chance).
 - **Exact members** (`nodes::Lot` for every split, `nodes::rejoin` for every join, inside `nodes::add` for merges and
   births): members, stores, heat and brood split by shares and join as sums; genes, sizes and rows become means by
   members; the spread per gene (`Body::spread`, `Body::row_spread`) and of the sizes (`Body::size_spread`) pools each
@@ -448,7 +451,8 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
   or start one; a young node matures as a whole when its mean member reaches the copy mass.
 - **Merging** (`nodes::crowd`, monthly): the bodies of one lineage and stage in a cell, in the room of the same
   structure (its root) or none and holding the same structure or nothing (`nodes::Kin`), join the largest of them,
-  where that is a node or they are more than `PAIR` (2: a pair of individuals may mate). Then a node joins a larger
+  where that is a node, they are more than `PAIR` (2: a pair of individuals may mate) or their individuals may not mate
+  (4.3). Then a node joins a larger
   one of another lineage of its stage, room and part whose genes are alike (`body::alike`, on the means) and whose
   brain has the same sizes: its members take that brain, its born rows and its lineage (`merge_taking`). This merge is
   a speed tool with physical side effects: the joiners' members drop the structure they held, which stays in the cell

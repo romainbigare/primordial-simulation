@@ -11,9 +11,9 @@ use pcore::store::Class;
 /// and which start the animals and the light-eaters had.
 pub fn config(w: &World, how: &Seeding) -> String {
     let run = if w.cfg.null { "NULL RUN (learning off, imitation off, brain rows frozen)" } else { "real run" };
-    let parents = if w.cfg.two_parents { "on (a mature alike body of the cell is a second parent)" } else { "OFF (--no-mix: one parent)" };
+
     let animals = if how.hand { "HAND-SET eater biases (default; --neutral-eaters for neutral brains)" } else { "NEUTRAL brains (--neutral-eaters)" };
-    format!("config: seed {}, {}x{}, {run}, two parents {parents}, start: animals {animals}, light-eaters as cover", w.seed, w.map.w, w.map.h)
+    format!("config: seed {}, {}x{}, {run}, start: animals {animals}, light-eaters as cover", w.seed, w.map.w, w.map.h)
 }
 
 /// The liquid's store at the start, set at balance with the air (`Reactor::balance`): what each reversible pair makes,

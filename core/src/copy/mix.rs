@@ -6,14 +6,21 @@ use crate::rng::{Purpose, Rng};
 use crate::{life::{Chunk, Handle}, World};
 use crate::brain;
 
+/// The hidden units a lineage's brain needs for its individuals to have children of two parents (a level of detail
+/// spent where brains are big; a node's members and small brains mix inside their node, laws.md 4.3).
+pub const MATE_HIDDEN: usize = 8;
+
+/// Whether the children of body `b` may have two parents: it is an individual (count 1) of a lineage whose brain has at
+/// least `MATE_HIDDEN` hidden units.
+pub(crate) fn mates(w: &World, d: &Chunk, b: &Body) -> bool {
+    b.count <= 1.0 && d.shape_of(w, b.lineage).is_some_and(|s| s.h >= MATE_HIDDEN)
+}
+
 /// The partner of body `b` (taken out of its slot) for its children: another body of its cell that is mature
 /// (`Body::adult`) and alike to it (`body::alike`), the most alike of them (the least squared gap in steps,
 /// `body::distance`), a keyed random pick among equals; never itself. None: the children are copies of one parent. It
-/// takes nothing from the partner. `Config::two_parents` off: none.
+/// takes nothing from the partner.
 pub(super) fn partner(w: &World, d: &Chunk, b: &Body, r: &mut Rng) -> Option<Handle> {
-    if !w.cfg.two_parents {
-        return None;
-    }
     let (lay, lim) = (Layout::of(&w.chem), w.cfg.phys.alike);
     // Among equals the one with the least key (a draw keyed by the call and its id, not by the order of the cell's list).
     let (mut best, mut pick, draw) = (f32::INFINITY, None, r.u64());

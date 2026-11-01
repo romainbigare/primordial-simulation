@@ -86,18 +86,19 @@ fn kin_of(w: &World, o: &Body) -> Kin {
     (o.lineage, o.adult(&w.chem), room(w, o).map(|r| r.0), held(w, o).map(|p| w.parts.parts[p].root as usize))
 }
 
-/// Individuals of one `Kin` a cell keeps apart (a pair may mate, `copy::partner`); past this many, with no node of
-/// theirs, they merge into one (a speed setting).
+/// Individuals of one `Kin` a cell keeps apart where they may mate (a pair, `copy::mates`); past this many, with no node
+/// of theirs, they merge into one (a speed setting).
 const PAIR: usize = 2;
 
-/// Each body of cell `i` that may be a node, largest first (equals in the cell's order), joins the largest of its
-/// `Kin`, where that is a node or its kind has more than `PAIR` bodies there. Returns the bodies left, largest first.
+/// Each body of cell `i`, largest first (equals in the cell's order), joins the largest of its `Kin`, where that is a
+/// node, its kind has more than `PAIR` bodies there or its individuals may not mate (`copy::mates`). Returns the bodies
+/// left, largest first.
 fn join_kin(w: &World, d: &mut Chunk, i: usize) -> Vec<Handle> {
     let b = &*d;
     let mut list: Vec<(u64, Handle)> = b.cell(i).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
     list.sort_by_key(|x| x.0);
     let kind: Vec<Kin> = list.iter().map(|&(_, s)| kin_of(w, &b[s])).collect();
-    let many = |x: usize| b[list[x].1].n() > 1.0 || kind.iter().filter(|&&k| k == kind[x]).count() > PAIR;
+    let many = |x: usize| !crate::copy::mates(w, b, &b[list[x].1]) || kind.iter().filter(|&&k| k == kind[x]).count() > PAIR;
     let head: Vec<usize> = (0..list.len()).map(|x| (0..x).find(|&y| kind[y] == kind[x] && many(y)).unwrap_or(x)).collect();
     for x in (0..list.len()).filter(|&x| head[x] != x) {
         merge(w, d, list[x].1, list[head[x]].1);

@@ -21,6 +21,8 @@ use crate::rng::{Purpose, Rng};
 use crate::space::COMPASS;
 use crate::life::Entry;
 use crate::{life::{Chunk, Handle}, World};
+pub use mix::MATE_HIDDEN;
+pub(crate) use mix::mates;
 use mix::{mix, mix_rows, partner};
 
 /// The brood a node holds besides what makes children, in children per member. Its members each fill their own brood and
@@ -64,7 +66,7 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
     let id = b.id;
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Mutate);
     let i = b.cell as usize;
-    let mate = if node { None } else { partner(w, d, b, &mut r) };
+    let mate = if mates(w, d, b) { partner(w, d, b, &mut r) } else { None };
     // Children that start in the neighbour cell of a compass direction drawn (no link that way: none): of a node, the
     // share `DISPERSE` of its births, however few (less than one member with no node to join there waits in the brood,
     // as the stayers do, `emit`), all of one update the same way, as the children of one call cost one `emit`; an
