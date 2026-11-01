@@ -93,7 +93,10 @@ pub(super) fn sums(w: &World, s: &mut Scratch) {
     (s.nt, s.capa, s.mass) = (vec![0.0; na], vec![0.0; na], vec![0.0; na]);
     for &k in &s.state.gas {
         let sp = s.sp[k];
-        let bodies = w.store.amounts(Class::Bodies)[k * n..(k + 1) * n].iter().zip(parent).map(|(&a, &j)| (j as usize, a));
+        // The bodies' nodes hold gas only between the air's steps (`book::up_from_bodies`): skip the array when it is empty.
+        let held = &w.store.amounts(Class::Bodies)[k * n..(k + 1) * n];
+        let held = if held.iter().any(|&a| a != 0.0) { held } else { &[] };
+        let bodies = held.iter().zip(parent).map(|(&a, &j)| (j as usize, a));
         for (j, a) in w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied().enumerate().chain(bodies) {
             s.nt[j] += a;
             s.capa[j] += a * sp.cp;

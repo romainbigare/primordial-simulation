@@ -102,9 +102,9 @@ impl Response {
                             g.near.len() - 1
                         }
                     };
-                    let slope = &mut g.slope[at * per..(at + 1) * per];
-                    for o in 0..outs {
-                        (0..outs).for_each(|v| slope[o * outs + v] += wt * row[out(o) * (2 + nx) + 1 + v]);
+                    for (o, slope) in g.slope[at * per..(at + 1) * per].chunks_exact_mut(outs).enumerate() {
+                        let by = &row[out(o) * (2 + nx) + 1..out(o) * (2 + nx) + 1 + outs];
+                        slope.iter_mut().zip(by).for_each(|(d, r)| *d += wt * r);
                     }
                 }
             }
@@ -117,16 +117,18 @@ impl Response {
 /// Each cell's response over the step (`Response`), in parallel with `threads`.
 pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>]) -> Response {
     let (n, nx, na) = (cx.w.mesh.cells().n(), cx.act.len(), cx.w.mesh.level(AIR).n());
-    let seen: Vec<f64> = (0..n)
-        .flat_map(|i| std::iter::once(lerp(cx.s, cx.t0, i)).chain((0..nx).map(move |y| lerp(cx.s, &cx.x0[y * na..(y + 1) * na], i))))
-        .collect();
+    let mut seen = vec![0.0; n * (1 + nx)];
+    for (i, air) in seen.chunks_exact_mut(1 + nx).enumerate() {
+        air[0] = lerp(cx.s, cx.t0, i);
+        (0..nx).for_each(|y| air[1 + y] = lerp(cx.s, &cx.x0[y * na..(y + 1) * na], i));
+    }
     let width = Response::width(nx);
     let mut rows = vec![0.0; n * width];
     // The low basin under each air node solves one surface (`surf::patches`); the other cells each their own.
     let mut alone = vec![true; n];
     patches.iter().flatten().for_each(|&i| alone[i as usize] = false);
     // Each task keeps the last latitude and its mean sunlight over the step: neighbouring cells often share a latitude.
-    crate::par::rows(&mut rows, width, || (f64::NAN, 0.0), |(lat, q), i, row| {
+    crate::par::rows(&mut rows, width, || (f64::NAN, 0.0, Work::default()), |(lat, q, work), i, row| {
         if !alone[i] {
             return;
         }
@@ -135,8 +137,8 @@ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>]) -> Response {
             (*lat, *q) = (at, sunlight(cx.w, cx.decl, at));
         }
         let ground = Surf::of_cell(cx, i, *q);
-        let (p, carry, fixed) = exchange(cx, &ground, &seen[i * (1 + nx)..(i + 1) * (1 + nx)], &mut row[FIXED..]);
-        put(&p, &carry, &mut row[FIXED..]);
+        let fixed = exchange(cx, &ground, &seen[i * (1 + nx)..(i + 1) * (1 + nx)], &mut row[FIXED..], work);
+        put(&work.p, &work.carry, &mut row[FIXED..]);
         row[..FIXED].copy_from_slice(&fixed);
     });
     for (cells, block) in patches.iter().zip(crate::par::map(patches, |cells| patch_rows(cx, cells, &seen))) {
@@ -155,7 +157,7 @@ pub(super) fn sunlight(w: &World, decl: &[f64], lat: f64) -> f64 {
 /// sees moves in the step: its temperature by up to `AIR_SWING_K`, each gas between none and twice what it held at the
 /// start (`seen`). What evaporates of each gas stays within what the cell holds of it; then the heat over its link and
 /// to space, with what each mol carries (`carry`), within its heat and the sunlight it absorbs, `sun`, J.
-fn hold(cx: &Ctx, g: &Surf, (seen, sun): (&[f64], f64), carry: &[[f64; 2]], p: &mut [f64]) {
+fn hold(cx: &Ctx, g: &Surf, (seen, sun): (&[f64], f64), carry: &[[f64; 2]], (p, loss): (&mut [f64], &mut Vec<f64>)) {
     let (nx, stride) = (cx.act.len(), 2 + cx.act.len());
     // The share of a row's slopes that keeps its value within `most` however far the air moves.
     let keep = |r: &[f64], most: f64| {
@@ -167,8 +169,9 @@ fn hold(cx: &Ctx, g: &Surf, (seen, sun): (&[f64], f64), carry: &[[f64; 2]], p: &
         let k = keep(r, g.amt[ac.k]);
         r[1..].iter_mut().for_each(|d| *d *= k);
     }
-    let loss: Vec<f64> = (0..stride).map(|v| p[TO_AIR * stride + v] + p[TO_SPACE * stride + v] + carry.iter().enumerate().map(|(y, c)| p[(GAS + y) * stride + v] * c[0]).sum::<f64>()).collect();
-    let k = keep(&loss, g.heat + sun);
+    loss.clear();
+    loss.extend((0..stride).map(|v| p[TO_AIR * stride + v] + p[TO_SPACE * stride + v] + carry.iter().enumerate().map(|(y, c)| p[(GAS + y) * stride + v] * c[0]).sum::<f64>()));
+    let k = keep(loss, g.heat + sun);
     if k < 1.0 {
         p.chunks_mut(stride).for_each(|r| r[1..].iter_mut().for_each(|d| *d *= k));
     }
@@ -197,16 +200,28 @@ pub(super) fn put(p: &[f64], carry: &[[f64; 2]], out: &mut [f64]) {
     }
 }
 
+/// The buffers of one task's exchanges (`exchange`), kept from cell to cell: its active gases as their evaporation reads
+/// them (`Vapour`), what each evaporates (`Vapour::evaporate`), its parts (`put`), what each mol of each gas carries
+/// (`carried`), and the heat it may lose (`hold`).
+#[derive(Default)]
+pub(super) struct Work {
+    gas: Vec<Vapour>,
+    ev: Vec<[f64; 3]>,
+    pub(super) p: Vec<f64>,
+    pub(super) carry: Vec<[f64; 2]>,
+    loss: Vec<f64>,
+}
+
 /// The exchange of the ground `g` over the step under the air it sees, `air` (its temperature, K, then each active gas,
-/// mol): its changing outputs with their slopes into `out` (`Response`); returned, its parts (`put`) and what each mol
-/// of each gas carries (`carried`), and its fixed outputs. Sunlight past the clouds, what the cover intercepts less the share its light reaction
+/// mol): its changing outputs with their slopes into `out` (`Response`); into `work`, its parts (`put`) and what each
+/// mol of each gas carries (`carried`); returned, its fixed outputs. Sunlight past the clouds, what the cover intercepts less the share its light reaction
 /// stores (set aside for it, laws.md 1.4); the surface balance with what evaporates, by Newton's steps about its end
 /// temperature, under the reflectance its surface has at the step's start; where a soft cover lies, under the
 /// reflectance it ends the step with, as backward Euler takes it (`end_reflectance`): from the start's, each guess
 /// followed to the end it gives, and halved between two once a guess and its end cross, until they agree, so a cover
 /// that melts away darkens the ground in its step. The slopes come from the last balance on the branch it ended on
 /// (`Air::moves`), held to what the cell holds (`hold`).
-pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], out: &mut [f64]) -> (Vec<f64>, Vec<[f64; 2]>, [f64; FIXED]) {
+pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], out: &mut [f64], work: &mut Work) -> [f64; FIXED] {
     let (w, s, dt, act) = (cx.w, cx.s, cx.dt, cx.act);
     let (na, j, area) = (w.mesh.level(AIR).n(), g.j, g.area);
     let (adt, tl, sun) = (area * dt, at_height(air[0], g.gam, g.head, g.zair), g.sun * (1.0 - s.state.cloud[j][0]));
@@ -220,7 +235,10 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], out: &mut [f64]) -> (Vec
     let rad = Air { tl, f, down: glow(f, tl, lay), slope: glow_slope(f, tl, lay) };
     // The share of the air it sees that lies over it (`over_cell`).
     let over = area / g.seen_area;
-    let gas: Vec<Vapour> = act.iter().enumerate().map(|(y, &ac)| Vapour::of(cx, g, ac, air[1 + y], over * R_GAS * tl / (area * s.hk[ac.gi * na + j]))).collect();
+    let Work { gas, ev, p, carry, loss } = work;
+    gas.clear();
+    gas.extend(act.iter().enumerate().map(|(y, &ac)| Vapour::of(cx, g, ac, air[1 + y], over * R_GAS * tl / (area * s.hk[ac.gi * na + j]))));
+    let gas = &*gas;
     // The balance with what evaporates linearised about `t0`.
     let balance = |t0: f64, sw: f64| {
         let (mut gain, mut slope) = (0.0, 0.0);
@@ -250,26 +268,28 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], out: &mut [f64]) -> (Vec
     let (nx, stride) = (act.len(), 2 + act.len());
     // The parts (`TO_AIR`) under the reflectance `alb`, what evaporates at the end temperature, with their slopes: the
     // air's temperature moves the air touching the cell and each gas's partial pressure, a gas's amount its own.
-    let parts = |alb: f64| {
+    let parts = |alb: f64, p: &mut Vec<f64>, ev: &mut Vec<[f64; 3]>| {
         let bal = solve(sw(alb));
-        let ev: Vec<[f64; 3]> = gas.iter().map(|g| g.evaporate(s, bal.ts, dt)).collect();
-        let mut p = vec![0.0; (GAS + nx) * stride];
+        ev.clear();
+        ev.extend(gas.iter().map(|g| g.evaporate(s, bal.ts, dt)));
+        p.clear();
+        p.resize((GAS + nx) * stride, 0.0);
         (p[TO_AIR * stride], p[TO_SPACE * stride]) = (bal.to_air, bal.to_space);
         ev.iter().enumerate().for_each(|(y, e)| p[(GAS + y) * stride] = e[0]);
         for v in 0..1 + nx {
             // How the air's change `v` moves each gas's partial pressure, Pa per K or per mol.
             let dpa = |y: usize| if v == 0 { gas[y].pa / tl } else if v == 1 + y { gas[y].per } else { 0.0 };
-            let dgain = -gas.iter().zip(&ev).enumerate().map(|(y, (g, e))| g.lat(e[2] * dpa(y))).sum::<f64>() / adt;
+            let dgain = -gas.iter().zip(ev.iter()).enumerate().map(|(y, (g, e))| g.lat(e[2] * dpa(y))).sum::<f64>() / adt;
             let [dts, d_air, d_space] = rad.moves(g, dt, w.cfg.sensible, &bal, (if v == 0 { 1.0 } else { 0.0 }, dgain));
             (p[TO_AIR * stride + 1 + v], p[TO_SPACE * stride + 1 + v]) = (d_air, d_space);
             ev.iter().enumerate().for_each(|(y, e)| p[(GAS + y) * stride + 1 + v] = e[1] * dts + e[2] * dpa(y));
         }
-        p
     };
-    let carry: Vec<[f64; 2]> = act.iter().map(|ac| carried(cx, g, ac.k)).collect();
+    carry.clear();
+    carry.extend(act.iter().map(|ac| carried(cx, g, ac.k)));
     let (mut alb, mut lo, mut hi) = (g.alb, f64::NAN, f64::NAN);
-    let mut p = parts(alb);
-    put(&p, &carry, out);
+    parts(alb, p, ev);
+    put(p, carry, out);
     for _ in 1..if g.cover[2] > 0.0 { REFLECT_ROUNDS } else { 1 } {
         let end = end_reflectance(cx, g.cell, (adt * sw(alb), out));
         if (end - alb).abs() < REFLECT_STILL {
@@ -277,12 +297,12 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], out: &mut [f64]) -> (Vec
         }
         (lo, hi) = if end > alb { (alb, hi) } else { (lo, alb) };
         alb = if lo.is_nan() || hi.is_nan() { end } else { 0.5 * (lo + hi) };
-        p = parts(alb);
-        put(&p, &carry, out);
+        parts(alb, p, ev);
+        put(p, carry, out);
     }
-    hold(cx, g, (air, adt * sw(alb)), &carry, &mut p);
+    hold(cx, g, (air, adt * sw(alb)), carry, (p, loss));
     let per_area = if cover > 0.0 { cover / a } else { 1.0 };
-    (p, carry, [adt * sw(alb), sun * per_area * dt, kept * adt])
+    [adt * sw(alb), sun * per_area * dt, kept * adt]
 }
 
 /// The reflectance of the surface of ground node `i` (a soft cover's: never a patch's, `surf::patches`) at the end of the step whose sunlight and outputs (`exchange`) are

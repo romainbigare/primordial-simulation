@@ -356,8 +356,9 @@ pub(super) fn apply(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], moves: 
             x.class.iter().for_each(|&c| x.ks.iter().for_each(|&k| into(c, k)));
         }
         moves.iter().for_each(|m| [m.from.class, m.to.class].iter().for_each(|&c| into(c, m.k)));
-        for x in fluxes {
-            // Per link the mass that goes each way, summed over its substances in their order.
+        for x in fluxes.iter().filter(|x| !x.ks.is_empty()) {
+            // Per link the mass that goes each way, summed over its substances in their order (a flux of heat alone
+            // carries none).
             let links = x.a.len();
             let (mut ab, mut ba) = (vec![0.0; links], vec![0.0; links]);
             for (q, &k) in x.ks.iter().enumerate() {

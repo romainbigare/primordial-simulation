@@ -5,7 +5,7 @@
 //! it (`Vapour`).
 
 use super::super::{basin::one_surface, land::{boil_off, NONE}, scratch::Latent, Scratch};
-use super::cells::{exchange, put, sunlight, Ctx, Response, FIXED, GAS, KEPT, LIGHT, SUN, TO_AIR, TO_SPACE};
+use super::cells::{exchange, put, sunlight, Ctx, Response, Work, FIXED, GAS, KEPT, LIGHT, SUN, TO_AIR, TO_SPACE};
 use super::exchange::bucket;
 use super::lerp;
 use super::step::Active;
@@ -147,17 +147,20 @@ pub(super) fn patch_rows(cx: &Ctx, cells: &[u32], seen: &[f64]) -> Vec<f64> {
         air.iter_mut().zip(&seen[i as usize * (1 + nx)..]).for_each(|(a, &x)| *a += x * m.area / g.area);
     }
     let mut out = vec![0.0; width - FIXED];
-    let (p, carry, fixed) = exchange(cx, &g, &air, &mut out);
-    let mut rows = vec![0.0; cells.len() * width];
+    let mut work = Work::default();
+    let fixed = exchange(cx, &g, &air, &mut out, &mut work);
+    let (p, carry) = (&work.p, &work.carry);
+    let (mut rows, mut part) = (vec![0.0; cells.len() * width], Vec::with_capacity(p.len()));
     for (m, row) in members.iter().zip(rows.chunks_exact_mut(width)) {
         let heat = m.cap / g.cap;
-        let mut part = p.clone();
+        part.clear();
+        part.extend_from_slice(p);
         part[TO_AIR * stride..(TO_SPACE + 1) * stride].iter_mut().for_each(|x| *x *= heat);
         for (y, ac) in cx.act.iter().enumerate() {
             let share = if g.amt[ac.k] > 0.0 { m.amt[ac.k] / g.amt[ac.k] } else { 0.0 };
             part[(GAS + y) * stride..(GAS + y + 1) * stride].iter_mut().for_each(|x| *x *= share);
         }
-        put(&part, &carry, &mut row[FIXED..]);
+        put(&part, carry, &mut row[FIXED..]);
         (row[SUN], row[LIGHT], row[KEPT]) = (fixed[SUN] * heat, fixed[LIGHT], fixed[KEPT] * heat);
     }
     rows
