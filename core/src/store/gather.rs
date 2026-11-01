@@ -103,7 +103,7 @@ impl Moves {
             row.extend((0..ns).map(|k| [st.amounts(c)[k * n + i], 0.0]));
         }
         row.extend((0..ns).map(|k| [f * st.amounts(Class::Air)[k * na + j], 0.0]));
-        row.extend((0..ns).map(|k| [f * w.a_seen(k, j), 0.0]));
+        row.extend((0..ns).map(|k| [f * air_seen(w, k, j), 0.0]));
         row.extend([st.heat(Class::Ground)[i], st.heat(Class::Bodies)[i], f * st.heat(Class::Air)[j]].map(|e| [e, 0.0]));
         let start = at * row.len();
         self.view.splice(start..start, row);
@@ -241,7 +241,7 @@ impl Moves {
     pub(crate) fn seen<'a>(&'a self, w: &'a World, j: usize) -> impl Fn(usize) -> f64 + 'a {
         let (at, f) = self.own_of(Node::air(j)).unwrap_or((None, 1.0));
         let at = at.map(|at| at + Row(self.ns).seen());
-        move |k| at.map_or_else(|| f * w.a_seen(k, j), |at| self.view[at + k][0])
+        move |k| at.map_or_else(|| f * air_seen(w, k, j), |at| self.view[at + k][0])
     }
     /// Temperature of air node `j` as the cell running sees it, K (`World::t_air`).
     pub(crate) fn t_air(&self, w: &World, j: usize) -> f64 {
@@ -266,6 +266,16 @@ impl Moves {
         }
         (mol, took)
     }
+}
+
+/// What bodies and parts see of substance `k` in air node `j` (`World::a_seen`): as the parallel pass running found it at
+/// its start (`Life::air_seen`), or as the store holds it now.
+#[inline]
+fn air_seen(w: &World, k: usize, j: usize) -> f64 {
+    w.life.air_seen.get(j * w.chem.ns() + k).copied().unwrap_or_else(|| w.a_seen(k, j))
+}
+
+impl Moves {
     /// Its changes to the arrays of booker `b` (`store::book_by_array`): the change of each number the view holds of
     /// them, cell by cell in the order of their indices.
     pub(crate) fn book_into(&self, b: &mut Booker) {

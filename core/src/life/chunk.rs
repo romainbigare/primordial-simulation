@@ -182,9 +182,14 @@ pub(crate) fn run<T: Send, S>(w: &mut World, work: Vec<T>, load: usize, init: im
         items.push((Chunk::new(b[k], mine), t));
         rest = after;
     }
+    // (What the cells see of their air nodes, worked out once per air node; the store does not change while it runs.)
+    let ns = w.chem.ns();
+    let seen: Vec<f64> = (0..w.mesh.level(crate::AIR).n() * ns).map(|x| w.a_seen(x % ns, x / ns)).collect();
+    w.life.air_seen = seen;
     let world = &*w;
     crate::par::each_init(&mut items, load, || init(world), |s, (c, t)| f(world, c, t, s));
     let (done, work): (Vec<Written>, Vec<T>) = items.into_iter().map(|(c, t)| (c.written, t)).unzip();
+    w.life.air_seen.clear();
     w.life.cells = cells;
     w.take_chunks(done);
     work

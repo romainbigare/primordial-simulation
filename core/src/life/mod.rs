@@ -86,6 +86,9 @@ pub struct Life {
     free_genomes: Vec<u32>,
     /// A batch runs: the faces are those of its start
     pub(crate) batch: bool,
+    /// While a parallel pass runs (`life::run`): what bodies and parts see in each air node as the store held it at the
+    /// pass's start (`World::a_seen`, [air node * substances + k]), the same for every cell under it; else empty
+    pub(crate) air_seen: Vec<f64>,
 }
 
 impl Life {
