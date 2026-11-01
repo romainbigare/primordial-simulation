@@ -78,7 +78,7 @@ impl Recorder {
         row.push("updates", "1/yr", w.counts.updates.saturating_sub(self.updates) as f64);
         // How evenly the domains share a batch's updates (D2's load): the busiest domain's share, the year's mean.
         let [batches, busiest] = self.year.busiest;
-        row.push("busiest_domain", "1", busiest / batches.max(1.0));
+        row.push("busiest_chunk", "1", busiest / batches.max(1.0));
         // The mean catalyst gene (log10 speed-up; below 0 counts as off, 0) of each reaction over the live members:
         // which reactions life speeds up.
         let (nr, cat) = (w.chem.reactions.len(), pcore::body::Layout::of(&w.chem).cat);

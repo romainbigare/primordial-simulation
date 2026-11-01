@@ -56,7 +56,7 @@ pub struct Moves {
     /// Whose update it is (a body, a part or a cover), one end of every move; none when none runs
     who: Option<Node>,
     ns: usize,
-    /// The cells taken into the view and their air nodes, in the order taken
+    /// The cells taken into the view and their air nodes, in the order of the cells (their rows in that order)
     cells: Vec<(u32, u32)>,
     /// The cell of the update running, its air node and the start of its row
     own: Option<(usize, usize, usize)>,
@@ -76,25 +76,29 @@ impl Moves {
             return;
         }
         let j = w.mesh.up(i, 0, AIR);
-        // (Cells are mostly taken in order: a cell past the last taken is new.)
-        let taken = if self.cells.last().is_none_or(|c| (c.0 as usize) < i) { None } else { self.cells.iter().position(|c| c.0 as usize == i) };
-        let at = taken.unwrap_or_else(|| self.take_in(w, i, j));
+        // (Cells are mostly taken in order: a cell past the last taken is new and goes last.)
+        let at = self.cells.partition_point(|c| (c.0 as usize) < i);
+        if self.cells.get(at).is_none_or(|c| c.0 as usize != i) {
+            self.take_in(w, (i, j), at);
+        }
         self.own = Some((i, j, at * Row(self.ns).len()));
     }
-    /// Cell `i`, under air node `j`, is taken into the view from the store; its place among the cells taken.
-    fn take_in(&mut self, w: &World, i: usize, j: usize) -> usize {
+    /// Cell `i`, under air node `j`, is taken into the view from the store, at place `at` among the cells taken.
+    fn take_in(&mut self, w: &World, (i, j): (usize, usize), at: usize) {
         let (st, n, na, ns) = (&w.store, w.mesh.cells().n(), w.mesh.level(AIR).n(), w.chem.ns());
         self.ns = ns;
         let f = w.mesh.share(i, AIR);
+        let mut row = Vec::with_capacity(Row(ns).len());
         for c in [Class::Ground, Class::Bed, Class::Bodies] {
-            self.view.extend((0..ns).map(|k| [st.amounts(c)[k * n + i], 0.0]));
+            row.extend((0..ns).map(|k| [st.amounts(c)[k * n + i], 0.0]));
         }
-        self.view.extend((0..ns).map(|k| [f * st.amounts(Class::Air)[k * na + j], 0.0]));
-        self.view.extend((0..ns).map(|k| [f * w.a_seen(k, j), 0.0]));
-        self.view.extend([st.heat(Class::Ground)[i], st.heat(Class::Bodies)[i], f * st.heat(Class::Air)[j]].map(|e| [e, 0.0]));
-        self.cells.push((i as u32, j as u32));
-        self.far.push([0.0; 2]);
-        self.cells.len() - 1
+        row.extend((0..ns).map(|k| [f * st.amounts(Class::Air)[k * na + j], 0.0]));
+        row.extend((0..ns).map(|k| [f * w.a_seen(k, j), 0.0]));
+        row.extend([st.heat(Class::Ground)[i], st.heat(Class::Bodies)[i], f * st.heat(Class::Air)[j]].map(|e| [e, 0.0]));
+        let start = at * row.len();
+        self.view.splice(start..start, row);
+        self.cells.insert(at, (i as u32, j as u32));
+        self.far.insert(at, [0.0; 2]);
     }
     /// Whether it gathered anything to book.
     pub(crate) fn gathered(&self) -> bool {
@@ -239,17 +243,11 @@ impl Moves {
         }
         (mol, took)
     }
-    /// The cells taken, by index, with their place among the cells taken: in the order of their indices.
-    fn in_order(&self) -> Vec<(u32, u32, usize)> {
-        let mut v: Vec<_> = self.cells.iter().enumerate().map(|(x, &(i, j))| (i, j, x)).collect();
-        v.sort_unstable();
-        v
-    }
     /// Its changes to the arrays of booker `b` (`store::book_by_array`): the change of each number the view holds of
     /// them, cell by cell in the order of their indices.
     pub(crate) fn book_into(&self, b: &mut Booker) {
         let (row, len, class, ks) = (Row(self.ns), b.len, b.class, b.ks.clone());
-        for (i, j, x) in self.in_order() {
+        for (x, &(i, j)) in self.cells.iter().enumerate() {
             let (start, index) = (x * row.len(), if class == Class::Air { j } else { i } as usize);
             let mut add = |at: usize, to: usize| {
                 let d = self.view[start + at][1];
@@ -267,6 +265,6 @@ impl Moves {
     /// `f` of the potential energy each cell taken gained by its lifts and the heat its ground could not give, J, in the
     /// order of their indices.
     pub(crate) fn each_cell(&self, mut f: impl FnMut(f64, f64)) {
-        self.in_order().into_iter().for_each(|(_, _, x)| f(self.far[x][0], self.far[x][1]));
+        self.far.iter().for_each(|x| f(x[0], x[1]));
     }
 }

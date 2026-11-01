@@ -8,7 +8,7 @@ orderings) is said once, in the code's doc comments; the code is the truth. Numb
 maths in `solve/` (`spread`, `downhill`, `band`); nodes and books in `store/`, `world.rs`, `check.rs`; ground heat in
 `ground.rs`; settings in `params.rs`, constants in `units.rs`; bodies in `body/`, `life.rs`, `nodes.rs`, `lineage.rs`,
 `brain.rs`; the cells as bodies see them in `survey.rs`; paths in `lanes.rs`; keyed random numbers in `rng.rs`; the
-tape's events in `event.rs`; threads in `par.rs` (the same results with and without).
+tape's events in `event.rs`; threads in `par.rs` (the same results with and without, on any count of threads).
 
 **Words.** A **cell** is a square of the map (2 km on the island, latitude-longitude on a globe) or a quarter of one
 in a refined region. A **node** is anything that holds stuff: a cell's ground, an air column, a body, a part. A
@@ -26,14 +26,14 @@ quarters, linked to a square beside them at the distance between centres across 
 across it passes exactly.
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
-(`schedule::month`), each for the whole month: the survey (`survey::survey`: one task per domain on the pool with the
+(`schedule::month`), each for the whole month: the survey (`survey::survey`: one task per chunk on the pool with the
 feature `threads`, in each of its cells the wear of movers, the monthly merge, the shade and the sums; a death or a merge
-that lets go of a part queues that in the domain's outbox, applied after the tasks as in a batch; it rebuilds Flow's
+that lets go of a part queues that for the serial pass, as in a batch; it rebuilds Flow's
 state in full for the cells' surroundings, and Flow's own pass leaves it then); Flow: the air in steps of
 `AIR_STEP_DAYS` (10 days, three a month, each at its own time in the month), after each the sink of the liquid over
 field capacity into the bed's store; then the liquid and erosion; heat sideways and creep yearly; the cover's month;
-Change; Bond (the turns of the parts: each domain's in slot order on its view, the domains on the pool, their moves booked in the order of the domains; then the
-loads of the structures one by one); then the bodies (`survey::batch`).
+Change; Bond (the turns of the parts: each chunk's cell by cell, in a cell in slot order, on its view, the chunks on the
+pool; then the loads of the structures one by one); then the bodies (`survey::batch`).
 **Every body updates once a month**, at the month's start, after the month's Flow, Change and Bond: one batch
 holds every living body, and a body placed during it first updates at the next month's start. Each update integrates
 the time since the body's last (`Body::last`): its upkeep, drink, heat, growth and the most it takes or breaks go by
@@ -41,61 +41,42 @@ those days, so the month is a time step, not a calendar: a season's change comes
 read the ground and the air as the month's Change and last air step left them, and what they leave on the ground (the
 free solid they shed, remains) goes through the next month's Change before the next batch can take it, so most of the
 free solid has rotted by then (it rots in about a week, 2.1). Every body decides at every update (5.3).
-**Bodies and their order** (`life`): the cells are cut into domains, the cells under one air node; each domain stores
-the bodies of its cells, and a body that moves into a cell of another domain moves to its storage. A body's id is the
-domain it was placed in and that domain's count of bodies placed (children, split halves, parts of nodes acting apart,
-members drawn); it never changes, and its random draws are keyed by it. The bodies
-of a batch update domain by domain, cell by cell, and in a cell by id; sums over bodies go domain by domain, cell by
-cell, each cell's bodies in the order they came. No order depends on where a body is stored.
-**What a body sees in a batch** (`survey::batch`). At a batch's start each living body leaves a face (`survey::Faces`:
-its id, members, visible traits, signal, well-being, and the room it is in), domain by domain, cell by cell. A body
-perceives the others only by these faces, as they were then, whatever they did in the batch since; a body placed in the batch is seen from
-the next. It takes from or gives to a body it saw only if that body still lives, is still in its cell and is not
-leaving it; the partner of its children and the cover over its cell are the bodies there now. It reads the store
-through its domain's view (`store::Moves`): the ground, bed and bodies' node of each cell of its domain and its air
-node, as the moves of the bodies before it in the batch left them; a node of another domain as it was at the batch's
-start.
-**A batch's two phases** (`survey::batch`, `outbox`). Body code runs on a domain taken out of the world
-(`life::Domain`), the world read only: it writes the domain's bodies and lists, its store view and moves, its events
-and counters and its outbox; the lineages and born rows it makes get provisional ids of the domain, and the changes of
-their holders wait there. When the domain is back the world settles (`World::settle`): its events and counters are
-added, those ids made global in the order made; the holders' changes are added at once outside a batch, at its end in
-one, and a lineage left with no body dies out, born rows left with no holder are freed. Every serial step, a body or
-part law run on its own (a part act, `copy::back`), runs so
-too, on the domain of its cell (`World::in_domain`). First the parallel phase: the bodies due that hold no part and are
-inside none update, each domain on a thread of the pool with the feature `threads` (`survey::run`, the domains with
-the most updates first), one after another without it or when the phase is small (`par::SERIAL_BELOW`). What an
-update does outside it goes to its domain's outbox
-(`outbox::Entry`), in the order made: every move to another cell, inside the domain or across its edge (`choose::go`
-pays and queues it), children who start in another cell (`copy::emit` takes them from the parent), a watch, and every
-act on a part (Bond's verbs, form and anchoring among them; a body that lets go of its part, or dies or joins another
-holding one, lets go there too). A body
-with a move queued, or a node's part with a part act queued, is **leaving** (`Body::leaving`): it stays in its old
-cell until the batch ends, where the rest of its update runs, but it does not mature, and the others there neither see
-it in their cell nor take from it, give to it, join it or mix with it. A body with a move queued, or a part act but a let-go or an anchor, does not
-split in that update; when its domain's task ends, a body with a move queued leaves the domain's storage with its move
-(`Domain::post`). Then, in a fixed order: the domains back, and the world settles, domain by domain. Then the landing
-phase (`outbox::land`): the moves and the litters land, each in the domain of the cell it goes to, in the order of the
-domains they come from and then the order made, each domain on its own on the pool as in the parallel phase; beside
-them in the same call the moves of the domains that ran are booked, each array of the store by one task in domain
-order (each number a domain's moves touched gets their sum once, `store::book_by_array`; a landing reads no store);
-the domains back, and the world settles once. Then one by one, each a serial step: the other entries of the outboxes (watches, part acts), domain
-by domain in the order made, then what landing and applying queued, the same way (in each round the moves gathered
-before are booked first, beside its landings); the bodies that hold or are inside a
-part, whole updates in domain and body order, each a serial step on its domain with its view opened fresh and booked
-after it, its own outbox delivered after it in the same phases; last the holders' changes added in domain order. Each
-entry is applied by its law on the bodies and parts as they are then. A move lands (`choose::land_move`): the body
-enters the cell with its marks of light and rain, carries what it holds if it paid to (else it lets go of it), counts
-in the crossings of the cell's domain, and its push breaks the bodies there at the next survey; members of a node who
-moved join their kind there (`copy::kin`); after the landings its push reaches the structures there, the structure it
+**Bodies, chunks and the serial pass** (`life`, `survey::batch`). Each ground cell stores its bodies in the order they
+came (`life::Cell`). A body's id is the cell it was placed in and that cell's count of bodies placed (children, split
+halves, parts of nodes acting apart, members drawn); it never changes, and its random draws are keyed by it. The cells
+are cut into `Config::chunks` runs of neighbouring indices, the same for any number of threads. **The parallel pass**:
+each chunk is one task on the pool (`life::run`), its cells taken out of the world, the world read only; in each cell
+in order, each body that holds no part and is inside none updates, in the order they came (a body placed in the pass
+first updates at the next month). A body perceives the others only by their faces (`survey::Faces`: id, members,
+visible traits, signal, well-being, room), made at the batch's start; it takes from or gives to a body it saw only if
+that body still lives and is not leaving its cell. **A cell's view of the store** (`store::Moves`): its ground, bed and
+bodies' node as the store held them at the pass's start with its own moves since, and **its share of its air node**
+(`Mesh::share`, its area over the air node's) of the air's amounts and heat: a cell never takes more than that, so the
+cells under one air node never overdraw it together (the cover's month and the parts' turns read the air the same
+way). Any other node it reads as the store held it at the pass's start. What an update does outside its cell is
+queued (`life::Entry`): a move to another cell (`choose::go` pays it), children who start in another cell
+(`copy::emit`), a watch, an act on a part (Bond's verbs; a body that lets go of its part, dies or joins another lets go
+there too). A body with a move queued, or a node's part with a part act queued, is **leaving** (`Body::leaving`): it
+stays in its cell until the serial pass, but it does not mature or split, and the others there do not deal with it.
+The lineages and born rows a chunk makes have ids of the chunk until it ends, when they are named in the order made.
+When the chunks end the world takes their events, counters and queues chunk by chunk, and books their moves (each
+array of the store by one task, the changes cell by cell in the order of the cells, `store::book_by_array`), so every
+sum runs in the order of the cells and the world is the same for any count of threads and of chunks. **The serial
+pass** (`life::land`): the queue in rounds, each a serial step on one cell (`World::in_cell`): first the moves and the
+litters land, then the watches and the part acts, in the order queued; what they queue is the next round's. Then the
+bodies that hold or are inside a part update whole, one by one in the order of the cells, each followed by what it
+queued. Last the holders of each lineage and born rows are counted from the bodies (`Life::recount`): a lineage left
+with none dies out, born rows left with none are freed. Each entry is applied by its law on the bodies and parts as
+they are then. A move lands (`choose::land_move`): the body enters the cell, carries what it holds if it paid to (else
+it lets go of it), counts in the cell's crossings, and its push breaks the bodies there at the next survey; members of
+a node who moved join their kind there (`copy::kin`); then its push reaches the structures there, the structure it
 carries comes along, and it clears the lane (`Entry::Passed`). A litter joins its kind there or starts a body, and its
-birth is recorded then (`copy::land_litter`). A watch blends by the share of the watcher's
-members who watched (5.5). A part act runs whole on a part in the body's cell (`choose::land_act`); a node's part then comes back
-to its node if it holds nothing, is inside nothing, and the node is in its cell and not leaving it. An entry whose body or target is gone does nothing: a move
-of a body that died (its cost was paid), a watch whose watcher is no longer of its lineage, a part act no longer
-possible or that cannot be paid; less than one member of a node's children with no node to join goes back, after the
-landings, into the parent's brood, or to the ground of the parent's cell if it died (`copy::back`). So a body is seen as it was at the batch's start,
-and every move to another cell, every watch and every act on a part lands at the batch's end.
+birth is recorded then (`copy::land_litter`). A watch blends by the share of the watcher's members who watched (5.5). A
+part act runs whole on a part in the body's cell (`choose::land_act`); a node's part then comes back to its node if it
+holds nothing, is inside nothing, and the node is in its cell and not leaving it. An entry whose body or target is
+gone does nothing: a move of a body that died (its cost was paid), a watch whose watcher is no longer of its lineage,
+a part act no longer possible or that cannot be paid; less than one member of a node's children with no node to join
+goes back into the parent's brood, or to the ground of the parent's cell if it died (`copy::back`).
 
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.
@@ -110,8 +91,8 @@ gives its heat to where the matter lands (`store::fall_heat`); the other side of
 world's matter gained, one number of the store (`Store::lifted`). So every element and the energy are kept;
 `check::drift` checks it yearly against `check::DRIFT` (1e-9).
 **No overdraw.** A law never asks a node for more than it holds; where it could, it cuts that node's own outgoing
-links (`solve::sweep::within`), never a whole field. A body takes no more than its domain's view holds, what the
-bodies before it in the batch left (checked in debug builds). `apply` and `book_by_array` only add and set rounding below zero to zero, counted
+links (`solve::sweep::within`), never a whole field. A body takes no more than its cell's view holds, what the
+bodies before it in the pass left (checked in debug builds). `apply` and `book_by_array` only add and set rounding below zero to zero, counted
 (`Counters::rounded`). A body takes ground heat no further than `T_FLOOR` (`World::take_from_ground`).
 
 ## 1. Flow: stuff moves from high push to low push
@@ -352,8 +333,8 @@ A **part** is a made object (solid walls, the liquid in its hollow, heat, 3 size
 (`bond::form`, `c_form` per kg, at most `form` of its mass). A **bond** (`bond::Bonds`) joins two parts or a part and
 the bed; its strength comes from the weaker material and the contact area (`tensile`, `joint`), at `c_join` per m². A
 **structure** is the parts joined by bonds and moves as one. Parts take their cell's temperature monthly. A part's turn
-is a step on its domain like a body's: it reads and writes the domain's view of the store, so a part sees what the parts
-before it in its domain left in the air and the ground (`bond/month.rs`). A part whose walls fall under `min_kg` falls
+is a step on its cell like a body's: it reads and writes the cell's view of the store, so a part sees what the parts
+before it in its cell left in its share of the air and in the ground (`bond/month.rs`). A part whose walls fall under `min_kg` falls
 apart (`bond::fall_apart`): all it holds, its walls, the liquid in its hollow and its heat, goes to its cell's ground,
 whether its walls ran off in its turn (it is freed after the turns) or a body took them (`bond::verbs::take`).
 
@@ -463,10 +444,10 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
 amounts of four substances of chemistry 0 per cell (the fuel 5 its light reaction makes, body matter 22, its walls 25
 and the hard solid 10: `cover::Parts`, found from the chemistry's roles) and 9 genes (`cover::LIGHT`, `LEAF`, `WALLS`,
 `STORE`, `FROST`, `MOIST`, `SEED`, `REPAIR`, `FIX`; ranges in `cover::RANGE`). The cover of a cell is a node of the
-store (`Class::Cover`) whose law books its own side; it is kept in the domain of its cell (`Domain::cover`), so the
-cell's domain is its one writer. Its temperature is its ground's: at the end of each month it trades heat with its
+store (`Class::Cover`) whose law books its own side; it is kept with the cell's bodies (`life::Cell::cover`), so the
+chunk of the cell is its one writer. Its temperature is its ground's: at the end of each month it trades heat with its
 ground to that temperature. **One month** (`cover::step`, its own process after the air's step at a month's start, one
-task per domain), slot by slot, the tallest (most walls per m²) first:
+task per chunk), slot by slot, the tallest (most walls per m²) first:
 - **Light**: the light the cell caught since its last month per m² of capture area (`World::light`), on its capture
   area (10^`LEAF` m² per kg of built cover) less what it reflects (its parts' colours by volume), shared among its
   kinds by height (Beer's law, `math::shade`); under standing liquid times e^(−depth / `light_depth`).
@@ -500,8 +481,8 @@ task per domain), slot by slot, the tallest (most walls per m²) first:
   one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
   not pay: what a kg more would store with the light at the bottom of its layer (`math::shade`) is less than a kg's
   upkeep, so the slot is **full** (`Cover::full`) and stops thickening where its lowest leaves would not pay for
-  themselves (Monsi and Saeki 1953; Hirose 2005). When every domain has had its month the seeds land (`cover::land`),
-  domain by domain in the order made: they join the most alike slot of their starting kind in the cell (every gene
+  themselves (Monsi and Saeki 1953; Hirose 2005). When every cell has had its month the seeds land (`cover::land`),
+  cell by cell in the order made: they join the most alike slot of their starting kind in the cell (every gene
   within `APART` (0.5) × `alike` steps, `cover::distance`; the genes the mean by built cover; they die if that slot is
   full), else an empty slot, else the lightest slot if they outweigh its built cover (whose cover dies as remains);
   else they die as remains. So a variant farther than that from its kind founds a slot of its own and competes with
@@ -511,7 +492,7 @@ task per domain), slot by slot, the tallest (most walls per m²) first:
 - **What it takes and gives**: liquids and minerals from and to its ground with their heat; gases from the air (with
   their heat at the air's temperature and their latent heat) and to its cell's bodies' node (with theirs), as bodies
   breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 21,
-  26). Every move is booked through the domain's moves (`store::Moves`).
+  26). Every move is booked through the cell's view (`store::Moves`), its gas within the cell's share of the air.
 - **Eaten and broken**: an animal's take from the place takes from its ground and its cover by one search
   (`feed::take_node`, 5.3), paying to break what it takes of the cover (`Cover::breaking`, as a bite pays); movers that
   push through a cell break the cover by its share of the cell's mass, as they break bodies (6.8, `choose::wear`).
@@ -590,8 +571,8 @@ update, once a month. **Null run** (`--null`): no learning or imitation, rows fr
 ## 6. Bodies
 Files: `core/src/body/`, `copy::grow`. Bodies are the eaters (animals); the light-eaters are the cover (4.5).
 `body::live` runs an update in stages: upkeep, drinking, heat, store checks, growth and children, shedding; then the
-decision. Its trades are gathered as moves and booked with its batch's, each number of the store once per domain
-(`store::Moves`, 0), so nodes and individuals take alike, never more than is there.
+decision. Its trades are gathered as moves on its cell's view and booked when its chunk ends (`store::Moves`, 0), so
+nodes and individuals take alike, never more than is there.
 
 ### 6.1 What a body is
 **Stores**: every substance (all members together) and heat; in practice its fuel (5, and 6 for a diet that burns
@@ -664,7 +645,7 @@ a share of a node's members kills an individual with that chance.
 `body/death.rs`. **A bite** (`take_body`) tears from each member reached the share taken and pays to break it (3.6);
 matter breaks first and spills its stores; in a node those members lose it (grazing) or die (`body::wound`). **Pushing
 through** (`choose::wear`) breaks what its energy pays for: the energy movers spent in a cell is kept until the next
-survey (`Domain::pushed`, of the cell's domain); then each body there, a mover that stayed too, takes its share by mass and loses what that
+survey (`life::Cell::pushed`); then each body there, a mover that stayed too, takes its share by mass and loses what that
 breaks of it, each of its members alike. So a cell's bodies are worn once a survey, not once for each move into it.
 A member dies when `lethal` of its body is torn at once; a hurt adult is
 immature until healed. **Starving** (`starved`): a body below its copy mass that did not rebuild what it lost keeps

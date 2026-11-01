@@ -30,8 +30,8 @@ snapshot.
 
 **Raw events** (`core/src/event.rs`): born (with kind, one or two parents), died (with cause, kind,
 the light catalyst of the dead), took, gave, watched, bond made or broken, first time a substance appears. Only physical facts; the viewer shows the first appearances.
-Took, gave and watched name bodies by their id (`Body::id`): the domain the body was placed in (the cells under one
-air node, in the order of the air nodes) times 2^40, plus that domain's count of bodies placed then (1, 2, ...: children,
+Took, gave and watched name bodies by their id (`Body::id`): the cell the body was placed in times 2^40, plus that
+cell's count of bodies placed then (1, 2, ...: children,
 split halves, parts of nodes acting apart, members drawn, founders). An id never
 changes and is never given again, wherever the body goes.
 
@@ -80,7 +80,7 @@ worn edges, structures, true colour (r, g, b).
 | `dead_<k>` | kg/m² | dead fuel, matter and built solids on the ground of the land |
 | `births`, `died_<cause>` | 1/yr | members born; died by cause (`lack`, `phase`, `spent`, `taken`, `broken`, `age`) |
 | `lineages`, `lineages_ever`, `updates` | , , 1/yr | brain lineages alive and ever; body updates |
-| `busiest_domain` | | the busiest domain's share of a batch's body updates (its due bodies over all of the batch's), the year's mean over its batches: how evenly the domains share the work |
+| `busiest_chunk` | | the busiest chunk's share of a batch's body updates in the parallel pass (its bodies over all of the pass's), the year's mean over its batches: how evenly the chunks share the work |
 | `cat_<r>` | log10 | mean diet gene of reaction r over all members (on above 0: the body runs or digests by that reaction; mixes kinds, read the per-kind columns) |
 
 **Brains and kinds**
