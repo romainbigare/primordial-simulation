@@ -300,7 +300,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
         w.time += DAY_S;
         assert!(w.in_cell(c.cell as usize, |w, d| copy::copy(w, d, &mut c)), "no children");
         // (They land in the next cell, as at a batch's end.)
-        life::deliver(&mut w);
+        life::land(&mut w);
         (joined, tries) = (joined + (live(&w).len() == n0) as u32, tries + 1);
         w.events.clear();
     }

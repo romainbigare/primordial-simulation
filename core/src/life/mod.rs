@@ -8,9 +8,8 @@ mod registry;
 mod saved;
 
 pub use chunk::Chunk;
-pub(crate) use chunk::{bounds, chunks, run, A_BODY};
-pub use cross::{deliver, Entry};
-pub(crate) use cross::land;
+pub(crate) use chunk::{bounds, chunks, run};
+pub use cross::{land, Entry};
 pub use registry::Genome;
 
 use crate::body::Body;

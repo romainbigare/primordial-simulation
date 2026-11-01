@@ -51,7 +51,7 @@ fn turns(w: &mut World, react: bool) -> Vec<usize> {
     for (cell, slot) in order {
         work[bounds.partition_point(|&b| b <= cell) - 1].push(Turn { slot, cell, part: std::mem::take(&mut w.parts.parts[slot]), gone: false });
     }
-    // A turn that only settles costs about a microsecond, less than a pool call: it counts no work, so the runner keeps
+    // A turn that only sheds and warms costs about a microsecond, less than a pool call: it counts no work, so the runner keeps
     // the chunks on the calling thread; the reactions are the work.
     let load = if react { work.iter().map(Vec::len).sum() } else { 0 };
     let init = |w: &World| react.then(|| (Reactor::new(&w.chem, &w.cfg), vec![0.0; w.chem.ns()]));
@@ -61,7 +61,7 @@ fn turns(w: &mut World, react: bool) -> Vec<usize> {
             if let Some((rc, pool)) = scratch {
                 react_part(w, d, rc, (&mut t.part, t.cell), pool, dt);
             }
-            t.gone = settle(w, d, &mut t.part, t.cell);
+            t.gone = shed_and_warm(w, d, &mut t.part, t.cell);
             if t.gone {
                 fall_apart(w, d, t.slot, &mut t.part);
             }
@@ -95,12 +95,12 @@ fn react_part(w: &World, d: &mut Chunk, rc: &mut Reactor, (p, i): (&mut Part, us
     p.e += gas.q_in - q_out;
     let m = &mut d.moves;
     m.give(w, Node::air(j), 0, 0.0, q_out);
-    m.take(Node::air(j), 0, 0.0, gas.q_in);
+    m.take(w, Node::air(j), 0, 0.0, gas.q_in);
     m.give(w, Node::ground(i), 0, 0.0, gas.back);
     let cap = m.heat_cap_ground(w, i);
     let paid = share(m.take_from_ground(w, i, (0, 0.0, 0.0), gas.pay, cap).1, gas.pay);
     // The heat of the gas that goes to the ground goes with it.
-    m.take(Node::air(j), 0, 0.0, q_out * (1.0 - paid));
+    m.take(w, Node::air(j), 0, 0.0, q_out * (1.0 - paid));
     m.give(w, Node::ground(i), 0, 0.0, q_out * (1.0 - paid));
     send_gas(&rc.dpool, paid, |k, sent, kept| {
         m.give(w, Node::ground(i), k, kept, 0.0);
@@ -112,7 +112,7 @@ fn react_part(w: &World, d: &mut Chunk, rc: &mut Reactor, (p, i): (&mut Part, us
 
 /// Walls of part `p` of cell `i` no longer solid run off; the part takes the ground's temperature. Returns whether its
 /// walls are under `min_kg`: it falls apart (`dissolve`).
-fn settle(w: &World, d: &mut Chunk, p: &mut Part, i: usize) -> bool {
+fn shed_and_warm(w: &World, d: &mut Chunk, p: &mut Part, i: usize) -> bool {
     let (ns, chem, tg) = (w.chem.ns(), &w.chem, w.t_ground_last(i));
     let t = p.e / p.heat_cap(chem).max(1e-9);
     for k in 0..ns {

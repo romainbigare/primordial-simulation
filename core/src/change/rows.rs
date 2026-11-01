@@ -1,6 +1,6 @@
 //! The rows of a step of Change: each due node of a class reacts into a row of numbers (what its reactions changed, the
-//! gas it gives its air node, its heat and lift, and how long it sleeps). The nodes of one block (a domain: those under
-//! one air node) are one task of the domain runner (`par::longest_first`); the tasks make rows and book nothing
+//! gas it gives its air node, its heat and lift, and how long it sleeps). The nodes of one block (those under
+//! one air node) are one task of the pool (`par::longest_first`); the tasks make rows and book nothing
 //! (`Rows::book`).
 
 use super::Reactor;
@@ -32,10 +32,10 @@ pub(super) struct Rows {
     pub(super) blocks: Vec<Block>,
 }
 
-/// A block with due nodes: its domain (for ground nodes, their air node), where its nodes end in `Rows::nodes`, and
+/// A block with due nodes: where it is (for ground nodes, their air node), where its nodes end in `Rows::nodes`, and
 /// the lift their gas costs the air node, J, summed in the order of the nodes.
 pub(super) struct Block {
-    pub(super) domain: usize,
+    pub(super) at: usize,
     end: usize,
     pub(super) lift: f64,
 }
@@ -68,15 +68,15 @@ impl Rows {
     pub(super) fn make(w: &World, class: Class, due: &[usize], (end, most): (u64, u64)) -> Rows {
         let (ns, parent) = (w.chem.ns(), w.mesh.cells().parent());
         let (width, len) = (ROW * ns + 1, w.store.amounts(class).len() / ns);
-        let domain_of = |i: usize| if class == Class::Ground { parent[i] as usize } else { i / NODES_PER_ITEM };
+        let block_of = |i: usize| if class == Class::Ground { parent[i] as usize } else { i / NODES_PER_ITEM };
         // A stable sort: the nodes of a block stay in the order of their indices.
         let mut nodes = due.to_vec();
-        nodes.sort_by_key(|&i| domain_of(i));
+        nodes.sort_by_key(|&i| block_of(i));
         let mut blocks: Vec<Block> = Vec::new();
         for (x, &i) in nodes.iter().enumerate() {
             match blocks.last_mut() {
-                Some(b) if b.domain == domain_of(i) => b.end = x + 1,
-                _ => blocks.push(Block { domain: domain_of(i), end: x + 1, lift: 0.0 }),
+                Some(b) if b.at == block_of(i) => b.end = x + 1,
+                _ => blocks.push(Block { at: block_of(i), end: x + 1, lift: 0.0 }),
             }
         }
         let mut data = vec![0.0; nodes.len() * width];
@@ -88,7 +88,7 @@ impl Rows {
                 let (mine, tail) = std::mem::take(&mut rest).split_at_mut((b.end - from) * width);
                 let list = &nodes[from..b.end];
                 (rest, from) = (tail, b.end);
-                (b.domain, list.len().div_ceil(NODES_PER_ITEM), (list, mine, &mut b.lift))
+                (b.at, list.len().div_ceil(NODES_PER_ITEM), (list, mine, &mut b.lift))
             })
             .collect();
         let held = || Held { amt: vec![0.0; ns], pool: vec![0.0; ns] };

@@ -76,7 +76,7 @@ impl Columns<'_> {
         let (ns, len, width) = (self.ns, b.len, self.rows.width);
         for (block, rows) in self.rows.by_block() {
             for row in rows.chunks_exact(width) {
-                b.column(|q| (ks.start + q) * len + block.domain, &row[ns + ks.start..ns + ks.end], 1.0);
+                b.column(|q| (ks.start + q) * len + block.at, &row[ns + ks.start..ns + ks.end], 1.0);
             }
         }
     }
@@ -87,11 +87,11 @@ impl Columns<'_> {
         for (block, rows) in self.rows.by_block() {
             for k in 0..ns {
                 for row in rows.chunks_exact(width).filter(|row| row[ns + k] != 0.0) {
-                    b.add(block.domain, heat_received(row[2 * ns + k], row[ns + k], self.more[k]));
+                    b.add(block.at, heat_received(row[2 * ns + k], row[ns + k], self.more[k]));
                 }
             }
             if block.lift != 0.0 {
-                b.add(block.domain, -block.lift);
+                b.add(block.at, -block.lift);
             }
         }
     }

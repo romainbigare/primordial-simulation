@@ -4,7 +4,7 @@
 //! its cells (their bodies, cover and sums), its view of the store (`store::Moves`: each cell sees only itself and its
 //! share of its air node), its events and counters, the lineages and born rows it makes (named when it ends,
 //! `registry`) and what its bodies do to other cells (`cross::Entry`). When it ends the world takes all that, chunk by
-//! chunk, so every sum runs in the order of the cells (`World::settle`).
+//! chunk, so every sum runs in the order of the cells (`World::take_chunks`).
 
 use super::{Cell, Handle, ID_SHIFT};
 use crate::lineage::Lineage;
@@ -12,10 +12,19 @@ use crate::store::{book_by_array, Class, Moves, Node};
 use crate::{body::Body, event::Event, Counters, World};
 use super::cross::Entry;
 
-/// A run of cells, from cell `first`, and what body code wrote on them.
+/// A run of cells and what body code wrote besides them (`Written`, which the chunk reads as its own fields).
 pub struct Chunk<'a> {
-    first: usize,
     cells: &'a mut [Cell],
+    written: Written,
+}
+
+/// What body code wrote on a chunk's cells besides the cells: the world takes it when the chunk ends
+/// (`World::take_chunks`).
+#[derive(Default)]
+pub struct Written {
+    /// The chunk's first cell and its count of cells
+    first: usize,
+    len: usize,
     /// The view of the store of its cells and the moves gathered on it
     pub moves: Moves,
     /// What its bodies did to other cells and to parts, in the order made
@@ -29,26 +38,23 @@ pub struct Chunk<'a> {
     arrived: Vec<(u64, u32)>,
 }
 
-/// What a chunk wrote besides its cells, once it ended: the world takes it (`World::settle`).
-pub(crate) struct Done {
-    first: usize,
-    len: usize,
-    moves: Moves,
-    out: Vec<Entry>,
-    events: Vec<Event>,
-    counts: Counters,
-    brains: Vec<Lineage>,
-    genomes: Vec<Vec<f32>>,
-    arrived: Vec<(u64, u32)>,
+impl std::ops::Deref for Chunk<'_> {
+    type Target = Written;
+    fn deref(&self) -> &Written {
+        &self.written
+    }
+}
+
+impl std::ops::DerefMut for Chunk<'_> {
+    fn deref_mut(&mut self) -> &mut Written {
+        &mut self.written
+    }
 }
 
 impl<'a> Chunk<'a> {
     fn new(first: usize, cells: &'a mut [Cell]) -> Chunk<'a> {
-        Chunk { first, cells, moves: Moves::default(), out: Vec::new(), events: Vec::new(), counts: Counters::default(), brains: Vec::new(), genomes: Vec::new(), arrived: Vec::new() }
-    }
-    fn done(self) -> Done {
-        let Chunk { first, cells, moves, out, events, counts, brains, genomes, arrived } = self;
-        Done { first, len: cells.len(), moves, out, events, counts, brains, genomes, arrived }
+        let len = cells.len();
+        Chunk { cells, written: Written { first, len, ..Default::default() } }
     }
     /// Its cells, by index.
     pub fn cells(&self) -> std::ops::Range<usize> {
@@ -71,7 +77,7 @@ impl<'a> Chunk<'a> {
     }
     /// The cover of its cell `i`, its view and its counters, each apart (`cover::step`).
     pub(crate) fn cover_with(&mut self, i: usize) -> (&mut crate::cover::Cover, &mut Moves, &mut Counters) {
-        (&mut self.cells[i - self.first].cover, &mut self.moves, &mut self.counts)
+        (&mut self.cells[i - self.written.first].cover, &mut self.written.moves, &mut self.written.counts)
     }
     /// Place a new body in its cell on `day`; it first updates at the next month's start.
     pub(crate) fn add(&mut self, mut b: Body, day: u64) -> Handle {
@@ -95,7 +101,7 @@ impl<'a> Chunk<'a> {
     }
     /// Body `b`, which moved into its cell from another, is stored here.
     pub(crate) fn arrive(&mut self, b: Body) -> Handle {
-        self.arrived.push((b.id, b.cell));
+        self.written.arrived.push((b.id, b.cell));
         self.store(b)
     }
     /// `members` members entered its cell `i` in a move that spent `pushed` J pushing through its bodies
@@ -153,7 +159,7 @@ pub(crate) fn chunks(w: &World) -> usize {
 
 /// Run `f` on each chunk with what `work` gives it (one item per chunk, `count`), which `f` may change, and a scratch
 /// made by `init` once per thread, on the pool (`par::each_init`; on the calling thread when `load`, the phase's count of
-/// work, is small). The cells are taken out of the world meanwhile, and the world settles after (`World::settle`):
+/// work, is small). The cells are taken out of the world meanwhile, and the world takes what they wrote after (`World::take_chunks`):
 /// what the chunks did to other cells is queued (`Life::queued`). Returns `work`.
 pub(crate) fn run<T: Send, S>(w: &mut World, work: Vec<T>, load: usize, init: impl Fn(&World) -> S + Sync + Send, f: impl Fn(&World, &mut Chunk, &mut T, &mut S) + Sync + Send) -> Vec<T> {
     let b = bounds(w);
@@ -168,45 +174,39 @@ pub(crate) fn run<T: Send, S>(w: &mut World, work: Vec<T>, load: usize, init: im
     }
     let world = &*w;
     crate::par::each_init(&mut items, load, || init(world), |s, (c, t)| f(world, c, t, s));
-    let (done, work): (Vec<Done>, Vec<T>) = items.into_iter().map(|(c, t)| (c.done(), t)).unzip();
+    let (done, work): (Vec<Written>, Vec<T>) = items.into_iter().map(|(c, t)| (c.written, t)).unzip();
     w.life.cells = cells;
-    w.settle(done);
+    w.take_chunks(done);
     work
 }
 
-/// The node in whose name a serial step moves for a body outside its update (`World::as_body`): the store books no
+/// The node in whose name a serial step moves for a body outside its update (`World::in_cell`): the store books no
 /// body's side of a move, so a body node of any index serves.
-pub(crate) const A_BODY: Node = Node { class: Class::Body, index: 0 };
+const A_BODY: Node = Node { class: Class::Body, index: 0 };
 
 /// The classes whose nodes a chunk's view holds, which its booking writes.
 const VIEWED: [Class; 4] = [Class::Ground, Class::Air, Class::Bed, Class::Bodies];
 
 impl World {
     /// A serial step on cell `i`: its life is taken out of the world into a chunk of its own, `f` runs on it as body
-    /// code runs on a chunk of the pool, it is put back, and the world settles (`settle`).
+    /// code runs on a chunk of the pool, its moves in the name of a body (`A_BODY`) unless `f` opens them for another
+    /// node, it is put back, and the world takes what it wrote (`take_chunks`).
     pub fn in_cell<R>(&mut self, i: usize, f: impl FnOnce(&World, &mut Chunk) -> R) -> R {
         let mut one = [std::mem::take(&mut self.life.cells[i])];
         let mut c = Chunk::new(i, &mut one);
+        c.moves.open(self, i, A_BODY);
         let r = f(self, &mut c);
-        let done = c.done();
+        let done = c.written;
         let [cell] = one;
         self.life.cells[i] = cell;
-        self.settle(vec![done]);
+        self.take_chunks(vec![done]);
         r
-    }
-    /// A serial step on cell `i` for a body outside its update (a part act, children back to the ground): `in_cell`, the
-    /// moves in the name of a body (whose side its law books).
-    pub fn as_body<R>(&mut self, i: usize, f: impl FnOnce(&World, &mut Chunk) -> R) -> R {
-        self.in_cell(i, |w, d| {
-            d.moves.open(w, i, A_BODY);
-            f(w, d)
-        })
     }
     /// The world takes what chunks `done` wrote, chunk by chunk in order: their events and counters, where the bodies
     /// that moved into their cells are stored (`Life::find`), the lineages and born rows they made named (`Life::name`),
     /// their moves booked (each array of the store by one task, the chunks' changes in their order and each chunk's in the
     /// order of its cells, `store::book_by_array`), and what they did to other cells queued (`Life::queued`).
-    pub(crate) fn settle(&mut self, mut done: Vec<Done>) {
+    pub(crate) fn take_chunks(&mut self, mut done: Vec<Written>) {
         for d in &mut done {
             self.events.append(&mut d.events);
             self.counts.add(&mut d.counts);

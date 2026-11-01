@@ -5,7 +5,7 @@
 //! nor its air node with the other cells under it. A move changes only the nodes of the cell running, the potential
 //! energy of lifts (summed apart per cell, `Store::lifted`), and a body, a part or a cover, whose law books its side. The
 //! view keeps beside each number its change since it was taken, which the booking adds to the store once
-//! (`World::settle`): what a body reads differs from what is booked by less than `ROUNDING`.
+//! (`World::take_chunks`): what a body reads differs from what is booked by less than `ROUNDING`.
 
 use super::apply::ROUNDING;
 use super::{heat_received, held_more, Booker, Class, Move, Node};
@@ -58,8 +58,9 @@ pub struct Moves {
     ns: usize,
     /// The cells taken into the view and their air nodes, in the order of the cells (their rows in that order)
     cells: Vec<(u32, u32)>,
-    /// The cell of the update running, its air node and the start of its row
-    own: Option<(usize, usize, usize)>,
+    /// The cell of the update running: its index, its air node, its share of that node (`Mesh::share`) and the start of
+    /// its row once it is taken (the first move of the cell takes it; until then a read reads the store)
+    own: Option<(usize, usize, f64, Option<usize>)>,
     /// The rows of the cells taken (`Row`), each number with its change since it was taken from the store
     view: Vec<[f64; 2]>,
     /// Per cell taken: the potential energy its lifts gained less what its falls gave back (`Store::lifted`), and the
@@ -77,19 +78,26 @@ impl Moves {
         if self.own.is_some_and(|o| o.0 == i) {
             return;
         }
-        let j = w.mesh.up(i, 0, AIR);
-        // (Cells are mostly taken in order: a cell past the last taken is new and goes last.)
-        let at = self.cells.partition_point(|c| (c.0 as usize) < i);
-        if self.cells.get(at).is_none_or(|c| c.0 as usize != i) {
-            self.take_in(w, (i, j), at);
-        }
-        self.own = Some((i, j, at * Row(self.ns).len()));
+        let at = self.cells.binary_search_by_key(&(i as u32), |c| c.0).ok().map(|x| x * Row(self.ns).len());
+        self.own = Some((i, w.mesh.up(i, 0, AIR), w.mesh.share(i, AIR), at));
     }
-    /// Cell `i`, under air node `j`, is taken into the view from the store, at place `at` among the cells taken.
-    fn take_in(&mut self, w: &World, (i, j): (usize, usize), at: usize) {
+    /// The start of the row of the cell running, which is taken into the view from the store if it was not.
+    fn own_row_mut(&mut self, w: &World) -> usize {
+        let (i, j, f, at) = self.own.expect(RUNNING);
+        at.unwrap_or_else(|| {
+            // (Cells are mostly taken in order: a cell past the last taken is new and goes last.)
+            let x = self.cells.partition_point(|c| (c.0 as usize) < i);
+            self.take_in(w, (i, j, f), x);
+            let at = x * Row(self.ns).len();
+            self.own = Some((i, j, f, Some(at)));
+            at
+        })
+    }
+    /// Cell `i`, under air node `j` of which it has the share `f`, is taken into the view from the store, at place `at`
+    /// among the cells taken.
+    fn take_in(&mut self, w: &World, (i, j, f): (usize, usize, f64), at: usize) {
         let (st, n, na, ns) = (&w.store, w.mesh.cells().n(), w.mesh.level(AIR).n(), w.chem.ns());
         self.ns = ns;
-        let f = w.mesh.share(i, AIR);
         let mut row = Vec::with_capacity(Row(ns).len());
         for c in [Class::Ground, Class::Bed, Class::Bodies] {
             row.extend((0..ns).map(|k| [st.amounts(c)[k * n + i], 0.0]));
@@ -114,26 +122,26 @@ impl Moves {
         *x = [x[0] + d, x[1] + d];
         self.changed = true;
     }
-    /// The start of the row of the cell running if node `x` is one of its nodes (its ground, bed, bodies' node or air
-    /// node).
+    /// If node `x` is one of the nodes of the cell running (its ground, bed, bodies' node or air node): the start of its
+    /// row if it was taken, and the share of the store's numbers of `x` it sees (of its air node its share, else all).
     #[inline(always)]
-    fn own_row(&self, x: Node) -> Option<usize> {
-        let (i, j, at) = self.own?;
+    fn own_of(&self, x: Node) -> Option<(Option<usize>, f64)> {
+        let (i, j, f, at) = self.own?;
         match x.class {
-            Class::Ground | Class::Bed | Class::Bodies => (x.index == i).then_some(at),
-            Class::Air => (x.index == j).then_some(at),
+            Class::Ground | Class::Bed | Class::Bodies => (x.index == i).then_some((at, 1.0)),
+            Class::Air => (x.index == j).then_some((at, f)),
             _ => None,
         }
     }
-    /// The start of the row that a move of node `x` changes: none for a part, a body or a cover. Panics on a node of
-    /// the store that is not of the cell running.
+    /// The start of the row that a move of node `x` changes, taken in if it was not: none for a part, a body or a cover.
+    /// Panics on a node of the store that is not of the cell running.
     #[inline(always)]
-    fn row_of(&self, x: Node) -> Option<usize> {
+    fn row_of(&mut self, w: &World, x: Node) -> Option<usize> {
         if matches!(x.class, Class::Part | Class::Body | Class::Cover) {
             return None;
         }
-        assert!(self.own.is_some(), "{RUNNING}");
-        Some(self.own_row(x).unwrap_or_else(|| panic!("a move of {x:?}, outside the cell running")))
+        assert!(self.own_of(x).is_some(), "a move of {x:?}, outside the cell running");
+        Some(self.own_row_mut(w))
     }
     /// Node `x`, at row `at`, gains `mol` of substance `k` and `heat` J (one end of a move).
     #[inline(always)]
@@ -155,15 +163,15 @@ impl Moves {
     pub(crate) fn gather(&mut self, w: &World, m: Move) {
         let into = heat_received(m.heat, m.mol, held_more(&w.chem, m.from.class, m.to.class, m.k as usize));
         for (x, mol, heat) in [(m.from, -m.mol, -m.heat), (m.to, m.mol, into)] {
-            if let Some(at) = self.row_of(x) {
+            if let Some(at) = self.row_of(w, x) {
                 self.end((x, at), m.k as usize, mol, heat);
             }
         }
     }
     /// `mol` of substance `k` and `heat` J go from node `x` of the store to the one whose update it is, gathered as
     /// `gather` gathers that move (the updater's end is its law's).
-    pub(crate) fn take(&mut self, x: Node, k: usize, mol: f64, heat: f64) {
-        if let Some(at) = self.row_of(x) {
+    pub(crate) fn take(&mut self, w: &World, x: Node, k: usize, mol: f64, heat: f64) {
+        if let Some(at) = self.row_of(w, x) {
             self.end((x, at), k, -mol, -heat);
         }
     }
@@ -171,7 +179,7 @@ impl Moves {
     /// gathered as `gather` gathers that move.
     pub(crate) fn give(&mut self, w: &World, x: Node, k: usize, mol: f64, heat: f64) {
         let who = self.who.expect(RUNNING);
-        if let Some(at) = self.row_of(x) {
+        if let Some(at) = self.row_of(w, x) {
             self.end((x, at), k, mol, heat_received(heat, mol, held_more(&w.chem, who.class, x.class, k)));
         }
     }
@@ -179,7 +187,7 @@ impl Moves {
     /// `x` of the store, each as `give` gives it.
     pub(crate) fn give_all(&mut self, w: &World, x: Node, m: &[f64], heat: f64) {
         let who = self.who.expect(RUNNING);
-        let Some(at) = self.row_of(x) else { return };
+        let Some(at) = self.row_of(w, x) else { return };
         for (k, &a) in m.iter().enumerate().filter(|e| *e.1 != 0.0) {
             self.end((x, at), k, a, heat_received(0.0, a, held_more(&w.chem, who.class, x.class, k)));
         }
@@ -189,13 +197,13 @@ impl Moves {
     /// into the air with the lift (laws.md 1.5); the giver pays its latent heat. Negative, `-m` mol come down from its
     /// cell's air node, from `lift` J/kg below its mean height, giving the lift back to the air.
     pub(crate) fn gas(&mut self, w: &World, k: usize, m: f64, lift: f64) {
-        let ((i, j, at), who) = (self.own.expect(RUNNING), self.who.expect(RUNNING));
+        let ((i, j, ..), who) = (self.own.expect(RUNNING), self.who.expect(RUNNING));
         if m > 0.0 {
             self.give(w, Node::bodies(i), k, m, m * held_more(&w.chem, who.class, Class::Bodies, k));
         } else {
             // The fall gives the air its lift back, from the potential energy.
-            self.take(Node::air(j), k, -m, 0.0);
-            let e = m * w.chem.subs[k].molar_mass * lift;
+            self.take(w, Node::air(j), k, -m, 0.0);
+            let (e, at) = (m * w.chem.subs[k].molar_mass * lift, self.own_row_mut(w));
             self.alter(at + Row(self.ns).heat(Class::Air), -e, false);
             self.far[at / Row(self.ns).len()][0] += e;
             self.changed = true;
@@ -210,20 +218,23 @@ impl Moves {
     /// at `k`. One look-up of the view for a node read substance by substance.
     #[inline]
     pub(crate) fn amounts<'a>(&'a self, w: &'a World, x: Node) -> impl Fn(usize) -> f64 + 'a {
-        let own = self.own_row(x).map(|at| at + Row(self.ns).amounts(x.class));
+        let (at, f) = self.own_of(x).unwrap_or((None, 1.0));
+        let at = at.map(|at| at + Row(self.ns).amounts(x.class));
         let (store, n) = (w.store.amounts(x.class), if x.class == Class::Air { w.mesh.level(AIR).n() } else { w.mesh.cells().n() });
-        move |k| own.map_or_else(|| store[k * n + x.index], |at| self.view[at + k][0])
+        move |k| at.map_or_else(|| f * store[k * n + x.index], |at| self.view[at + k][0])
     }
     /// Heat of node `x` (a ground node, an air node or a bodies' node) as the cell running sees it, J.
     pub(crate) fn heat(&self, w: &World, x: Node) -> f64 {
-        self.own_row(x).map_or_else(|| w.store.heat(x.class)[x.index], |at| self.view[at + Row(self.ns).heat(x.class)][0])
+        let (at, f) = self.own_of(x).unwrap_or((None, 1.0));
+        at.map_or_else(|| f * w.store.heat(x.class)[x.index], |at| self.view[at + Row(self.ns).heat(x.class)][0])
     }
     /// What bodies and parts see in air node `j` (`World::a_seen`) as the cell running sees it (its share, if it is the
     /// cell's own): of substance `k`, mol, at `k`.
     #[inline]
     pub(crate) fn seen<'a>(&'a self, w: &'a World, j: usize) -> impl Fn(usize) -> f64 + 'a {
-        let at = self.own_row(Node::air(j)).map(|at| at + Row(self.ns).seen());
-        move |k| at.map_or_else(|| w.a_seen(k, j), |at| self.view[at + k][0])
+        let (at, f) = self.own_of(Node::air(j)).unwrap_or((None, 1.0));
+        let at = at.map(|at| at + Row(self.ns).seen());
+        move |k| at.map_or_else(|| f * w.a_seen(k, j), |at| self.view[at + k][0])
     }
     /// Temperature of air node `j` as the cell running sees it, K (`World::t_air`).
     pub(crate) fn t_air(&self, w: &World, j: usize) -> f64 {
@@ -239,12 +250,12 @@ impl Moves {
     pub(crate) fn take_from_ground(&mut self, w: &World, i: usize, (k, d, cp): (usize, f64, f64), want: f64, cap: f64) -> (f64, f64) {
         // A share x of both leaves it e - x want - (cap - x d cp) T_FLOOR above the floor.
         let took = if want > 0.0 { want * share(heat_above_floor(self.heat(w, Node::ground(i)), cap), want - d * cp * T_FLOOR) } else { want };
-        let at = self.row_of(Node::ground(i)).expect("a ground node");
+        let at = self.row_of(w, Node::ground(i)).expect("a ground node");
         self.far[at / Row(self.ns).len()][1] += want - took;
         self.changed = true;
         let mol = d * share(took, want);
         if mol != 0.0 || took != 0.0 {
-            self.take(Node::ground(i), k, mol, took);
+            self.take(w, Node::ground(i), k, mol, took);
         }
         (mol, took)
     }

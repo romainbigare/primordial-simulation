@@ -211,7 +211,7 @@ pub(crate) fn back(w: &mut World, x: Litter) {
         (p.e, p.brood) = (p.e + c.e, p.brood + c.store[mi]);
     } else {
         c.cell = from;
-        w.as_body(from as usize, |w, d| remains(w, d, &c));
+        w.in_cell(from as usize, |w, d| remains(w, d, &c));
     }
 }
 

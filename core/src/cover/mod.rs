@@ -50,7 +50,7 @@ pub const NG: usize = 9;
 /// A fixing gene at or below this is off.
 pub const FIX_OFF: f32 = -10.0;
 /// The share of `Physics::alike` within which seeds join a slot of their kind and slots of a cell merge
-/// (`seed::settle`, `grow::merge_alike`); seeds farther from every slot of their kind found one of their own, so a
+/// (`seed::lodge`, `grow::merge_alike`); seeds farther from every slot of their kind found one of their own, so a
 /// variant keeps its genes apart and competes for light by height with the others (a rule of the model).
 pub const APART: f32 = 0.5;
 
@@ -211,7 +211,7 @@ pub(crate) fn lose(w: &crate::World, d: &mut crate::life::Chunk, p: &Parts, i: u
 
 /// Place `kg` per m² of cover of genes `genes` and starting kind `root` in cell `i`, an edit booked from the outside
 /// node (`World::cross`): its built cover at the shares of its genes, its fuel at its `STORE` gene, at the cell's
-/// ground temperature; it settles as seeds do (`seed`). False if it found no slot (nothing is placed then).
+/// ground temperature; it lodges as seeds do (`seed::lodge`). False if it found no slot (nothing is placed then).
 pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
     let Some(p) = Parts::of(&w.chem) else { return false };
     let (mm, t, alike) = (p.mm(&w.chem), w.t_ground_last(i), w.cfg.phys.alike);
@@ -222,7 +222,7 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     let s = Seed { to: i as u32, mol, genes, root, heat };
     let c = &mut w.life.cells[i].cover;
     let was = c.temp(&w.chem, &p);
-    match seed::settle(c, &mm, &s, alike) {
+    match seed::lodge(c, &mm, &s, alike) {
         seed::Landed::Dead => return false,
         seed::Landed::In => {}
         // What it outweighed goes to the ground as remains, with its heat.

@@ -269,7 +269,7 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     let (mut w, h, i, p, mut b) = take_scene();
     let (books, id) = (Books::now(&w), b.id);
     bond::act(&mut w, &mut b, 1, p);
-    w.as_body(i, |w, d| die(w, d, h, b, LACK));
+    w.in_cell(i, |w, d| die(w, d, h, b, LACK));
     assert!(!w.parts.parts[p].alive && w.life.find(id).is_none(), "the part or the body is still there");
     books.assert_within(&w, 1e-9, 1e-9);
 }
@@ -295,7 +295,7 @@ fn a_carried_structure_leaves_its_other_holders_behind() {
     }
     let (mover, other) = (ids[0], ids[1]);
     w.in_cell(i, |_, d| d.out.push(Entry::Go { id: mover, from: i as u32, to: j as u32, pushed: 0.0, lane: 0.0, carries: true, kin: false }));
-    pcore::life::deliver(&mut w);
+    pcore::life::land(&mut w);
     let (m, o) = (w.life.find(mover).expect("the mover"), w.life.find(other).expect("the other holder"));
     assert!(w.life[m].cell as usize == j && bond::held(&w, &w.life[m]) == Some(p), "the mover does not hold its part in its new cell");
     assert!(bond::cell(&w, p) == j && bond::cell(&w, q) == j, "the structure stayed behind");

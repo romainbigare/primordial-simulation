@@ -76,7 +76,7 @@ impl Recorder {
         row.push("lineages", "1", life.lineages() as f64);
         row.push("lineages_ever", "1", life.brains.len() as f64);
         row.push("updates", "1/yr", w.counts.updates.saturating_sub(self.updates) as f64);
-        // How evenly the domains share a batch's updates (D2's load): the busiest domain's share, the year's mean.
+        // How evenly the chunks share the parallel pass of a batch: the busiest chunk's share of its updates, the year's mean.
         let [batches, busiest] = self.year.busiest;
         row.push("busiest_chunk", "1", busiest / batches.max(1.0));
         // The mean catalyst gene (log10 speed-up; below 0 counts as off, 0) of each reaction over the live members:

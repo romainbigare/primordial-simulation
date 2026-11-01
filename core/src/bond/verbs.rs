@@ -32,7 +32,7 @@ pub(crate) fn let_go(w: &World, d: &mut Chunk, b: &mut Body, load: bool) {
 
 /// Body `b` (taken out of its slot) pays `cost` J (`body::pay`) in a serial step on its cell.
 fn pay(w: &mut World, b: &mut Body, cost: f64) -> bool {
-    w.as_body(b.cell as usize, |w, d| body::pay(w, d, b, cost))
+    w.in_cell(b.cell as usize, |w, d| body::pay(w, d, b, cost))
 }
 
 /// Body `b` (taken out of its slot) lets go of the part it holds in a serial step, if the part is still held by it,

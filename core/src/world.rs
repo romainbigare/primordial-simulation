@@ -36,7 +36,7 @@ pub struct Counters {
 }
 
 impl Counters {
-    /// The counts `c` of a chunk are added (`World::settle`), and start again. Every field is named, so a new one
+    /// The counts `c` of a chunk are added (`World::take_chunks`), and start again. Every field is named, so a new one
     /// cannot be left out. A chunk counts per cell in its cells (`Cell::crossings`, `Cell::pushed`), so its `traffic`
     /// stays empty (checked in debug builds).
     pub(crate) fn add(&mut self, c: &mut Counters) {

@@ -1,4 +1,4 @@
-//! Booking by array: many sources of changes (the views of the chunks that ran, `World::settle`; the rows of a law) are
+//! Booking by array: many sources of changes (the views of the chunks that ran, `World::take_chunks`; the rows of a law) are
 //! added to the store with one task for each block of its arrays (the amounts of a few substances of a class, or its
 //! heat), so each number has one writer (CLAUDE.md 3.6) and gets its changes in the order of the sources, whatever
 //! thread runs the task. It adds as `apply` adds, counts the rounding it sets to zero and checks it as `apply` checks.

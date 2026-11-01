@@ -332,7 +332,7 @@ fn book(w: &World, moves: &mut Moves, c: &mut Cover, p: &Parts, (i, j, t): (usiz
     let chem = &w.chem;
     let mm = p.mm(chem);
     let (mut e, lift, ta, ground) = (c.e + set_aside + b.heat, w.lift(i), moves.t_air(w, j), Node::ground(i));
-    moves.take(Node::bodies(i), 0, 0.0, set_aside);
+    moves.take(w, Node::bodies(i), 0, 0.0, set_aside);
     let mut dead = b.dead;
     for x in 0..SLOTS {
         if c.root[x] != NO_ROOT && c.built(&mm, x) <= EMPTY_KG {
@@ -350,14 +350,14 @@ fn book(w: &World, moves: &mut Moves, c: &mut Cover, p: &Parts, (i, j, t): (usiz
         if chem.phase(kk, t) == Phase::Gas {
             moves.gas(w, kk, -m, lift);
             if m > 0.0 {
-                moves.take(Node::air(j), 0, 0.0, m * s.cp * ta);
+                moves.take(w, Node::air(j), 0, 0.0, m * s.cp * ta);
                 e += m * (s.cp * ta + s.latent_gas());
             } else {
                 moves.give(w, Node::bodies(i), 0, 0.0, -m * s.cp * t);
                 e += m * (s.cp * t + s.latent_gas());
             }
         } else if m > 0.0 {
-            moves.take(ground, kk, m, 0.0);
+            moves.take(w, ground, kk, m, 0.0);
             e += moves.take_from_ground(w, i, (0, 0.0, 0.0), held(kk, m), cap).1;
         } else {
             moves.give(w, ground, kk, -m, held(kk, -m));

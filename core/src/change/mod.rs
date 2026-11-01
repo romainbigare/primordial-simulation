@@ -19,7 +19,7 @@ use rows::Rows;
 
 /// Run Law 2 for the step of `dt` seconds at the temperatures of the last flow step: each ground node, then each air
 /// node, that is due, for all the time since it last reacted, from the world as it was before its class reacted. The
-/// nodes of a class react apart (`Rows::make`, by domain, in parallel with `threads`), each into its row, and the rows
+/// nodes of a class react apart (`Rows::make`, block by block, in parallel with `threads`), each into its row, and the rows
 /// are booked after the call (`Rows::book`). Then each sleeps (`Reactor::rest`, at most `sleep_days`).
 pub fn step(w: &mut World, dt: f64) {
     crate::flow::ensure(w);

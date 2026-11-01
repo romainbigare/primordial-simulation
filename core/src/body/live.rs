@@ -96,7 +96,8 @@ fn drink(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
         }
         let cp = chem.subs[k].cp;
         let want = x * (cp * tg + chem.subs[k].lf);
-        let (got, heat) = d.moves.take_from_ground(w, i, (k, x, cp), want, d.moves.heat_cap_ground(w, i));
+        let cap = d.moves.heat_cap_ground(w, i);
+        let (got, heat) = d.moves.take_from_ground(w, i, (k, x, cp), want, cap);
         (b.store[k], b.e) = (b.store[k] + got, b.e + heat);
     }
 }

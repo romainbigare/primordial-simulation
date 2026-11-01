@@ -77,7 +77,7 @@ fn burn_at(w: &World, d: &mut Chunk, b: &mut Body, cost: f64, t: f64) -> f64 {
                 b.e -= dn * (s.cp * t + s.latent_gas());
             } else {
                 d.moves.gas(w, k, dn, lift);
-                d.moves.take(Node::air(j), 0, 0.0, -dn * s.cp * ta);
+                d.moves.take(w, Node::air(j), 0, 0.0, -dn * s.cp * ta);
                 b.e -= dn * (s.cp * ta + s.latent_gas());
             }
         }

@@ -28,7 +28,7 @@ pub fn land(w: &mut World) {
             let i = s.to as usize;
             let c = &mut w.life.cells[i].cover;
             let t = c.temp(&w.chem, &p);
-            let (mol, heat) = match settle(c, &mm, &s, alike) {
+            let (mol, heat) = match lodge(c, &mm, &s, alike) {
                 Landed::In => continue,
                 Landed::Dead => (s.mol, s.heat),
                 Landed::Out(m) => {
@@ -45,7 +45,7 @@ pub fn land(w: &mut World) {
     apply(w, &[], &moves);
 }
 
-/// Where seeds went (`settle`): into the cell's cover, nowhere (they die), or into a slot whose cover they outweighed
+/// Where seeds went (`lodge`): into the cell's cover, nowhere (they die), or into a slot whose cover they outweighed
 /// (its amounts, mol of each part, die).
 pub(super) enum Landed {
     In,
@@ -53,10 +53,10 @@ pub(super) enum Landed {
     Out([f64; NP]),
 }
 
-/// Seeds `s` settle in cover `c`, with their heat: into the most alike slot of their starting kind
+/// Seeds `s` lodge in cover `c`, with their heat: into the most alike slot of their starting kind
 /// within `APART` × `alike` steps (they die if it is full: one more kg there would not pay, `Cover::full`), else an
 /// empty slot, or the lightest slot if they outweigh its built cover, which dies.
-pub(super) fn settle(c: &mut Cover, mm: &[f64; NP], s: &Seed, alike: f32) -> Landed {
+pub(super) fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, alike: f32) -> Landed {
     let kg = built_kg(mm, &s.mol);
     let kin = (0..SLOTS).filter(|&x| c.root[x] == s.root);
     let near = kin.map(|x| (distance(&c.genes[x], &s.genes), x)).filter(|e| e.0 <= APART * alike).min_by(|a, b| a.0.total_cmp(&b.0));

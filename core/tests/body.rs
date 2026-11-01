@@ -203,7 +203,7 @@ fn a_cell_left_with_no_bodies_holds_nothing_at_the_next_survey() {
     let all: Vec<Handle> = w.life.cell(i).collect();
     for h in all {
         let b = std::mem::take(&mut w.life[h]);
-        w.as_body(i, |w, d| body::die(w, d, h, b, body::LACK));
+        w.in_cell(i, |w, d| body::die(w, d, h, b, body::LACK));
     }
     pcore::survey::survey(&mut w);
     assert!(w.life.sum(i).iter().all(|&x| x == 0.0), "the emptied cell still holds something");

@@ -29,16 +29,11 @@ pub enum Entry {
     Act { id: u64, on: Result<(usize, NodeId), [f32; 2]>, node: Option<u64> },
 }
 
-/// What is queued is applied (`land`): after a serial step, or by a test.
-pub fn deliver(w: &mut World) {
-    land(w);
-}
-
 /// The queue is taken and applied in rounds until nothing is left: in each, first the moves and the litters land
 /// (`land_all`) and what the moves did to the lanes and the structures follows them (`Entry::Passed`), so a part act
 /// finds a carried structure where it went; then the other entries one by one in the order queued. What they queue in
 /// turn is the next round's.
-pub(crate) fn land(w: &mut World) {
+pub fn land(w: &mut World) {
     loop {
         let all = std::mem::take(&mut w.life.queued);
         if all.is_empty() {
