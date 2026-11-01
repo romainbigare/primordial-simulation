@@ -2,9 +2,9 @@
 //! (`drain::springs`); what may run off runs down the cells in one pass in the order of a priority flood
 //! (`solve::downhill`), doing work on its bed; then the liquid under the surface moves (`drain::under`).
 
-use super::{bare_share, drain::{springs, under}, follow, land::{lift, solid, stand, wet, NONE}, range, year_weight, Scratch};
+use super::{bare_share, drain::{springs, under}, follow, land::{lift, solid, stand, wet, NONE}, potential::apply, range, year_weight, Scratch};
 use crate::solve::sweep::HALF_WAY;
-use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed}, store::{apply, fall_heat, Class, LinkFlux, Move, Node}, units::T_FLOOR, World};
+use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed}, store::{Class, LinkFlux, Move, Node}, units::T_FLOOR, World};
 
 /// Least bond strength wear divides by.
 const STRENGTH_MIN: f64 = 0.05;
@@ -38,7 +38,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
     ks.sort_unstable();
     ks.dedup();
     let before: Vec<f64> = ks.iter().flat_map(|&k| w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().copied()).collect();
-    apply(w, fluxes, &[]);
+    apply(w, s, fluxes, &[]);
     for (q, &k) in ks.iter().enumerate() {
         for (i, (&now, &was)) in w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().zip(&before[q * n..(q + 1) * n]).enumerate().filter(|p| p.1 .0 != p.1 .1) {
             s.note(k, i, now - was, w.mesh.cells().area()[i]);
@@ -91,7 +91,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
     let adj = Adjacency { start: cells.start(), link: cells.adj_link(), other: cells.adj_cell(), a: cells.a() };
     let mut order = std::mem::take(&mut s.order);
     order.update(&adj, &s.z, |i| head(&q, i));
-    let (mut power, mut sent, mut worn, mut outs) = (vec![0.0; n], vec![0.0; n], vec![0.0; n], Vec::new());
+    let (mut sent, mut worn, mut outs) = (vec![0.0; n], vec![0.0; n], Vec::new());
     // A land cell, as `World::is_land` says: its solid surface above 0 m (Flow's state of it).
     let (land, mut off_land): (Vec<bool>, Vec<f64>) = (s.z.iter().map(|&z| z > 0.0).collect(), vec![0.0; n]);
     let mut crossed = Crossed::default();
@@ -146,10 +146,6 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         let bedwork = if land[i] { g * drop * kg(q, 0..nl) * ph.hide[1] / (ph.hide[1] + left) } else { 0.0 };
         worn[i] = load(ww, ss, i, q, (nl..rows, &sol), bedwork, out);
         q[heat] = ks.iter().enumerate().map(|(r, &k)| q[r] * (ss.sp[k].cp * t + if r < nl { ss.sp[k].lf } else { 0.0 })).sum();
-        power[i] = g * drop * kg(q, 0..rows);
-        // The head lost on the way out heats what runs out: booked to the node (`store::fall_heat`), it leaves with the
-        // liquid (as under the surface, `drain::under`), so a node the liquid runs out of keeps none of the fall's heat.
-        q[heat] += if out > 0.0 { power[i] / out } else { 0.0 };
         // What leaves a land cell for cells that are not land runs off the land.
         let off = (0..share.len()).filter(|&k| land[i] && !land[cells.around(i).1[k] as usize]).map(|k| share[k]);
         let liquid = q[..nl].iter().sum::<f64>();
@@ -161,7 +157,6 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
     let (a, b, mol) = by_link(&crossed, rows + 2, &col_of, (cells.a(), cells.b()));
     let at = kinds.len() * a.len();
     book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &kinds, mol: &mol[..at], heat: &mol[at..] }]);
-    fall_heat(w, Class::Ground, &power);
     s.order = order;
     let (ema, mut broke) = (year_weight(w, dt), Vec::new());
     for i in 0..n {
@@ -171,7 +166,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
             wear(w, s, i, worn[i], &mut broke);
         }
     }
-    apply(w, &[], &broke);
+    apply(w, s, &[], &broke);
 }
 
 /// The crossings of a pass as the columns of a link flux, row `r` in column `col_of[r]`: the links that carried

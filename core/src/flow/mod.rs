@@ -7,9 +7,11 @@ mod creep;
 mod drain;
 mod land;
 mod liquid;
+mod potential;
 mod scratch;
 pub(crate) use air::air_temp;
 pub use air::{column, declination, glow, insolation, scale_height};
+pub use potential::total as potential;
 pub use scratch::Scratch;
 pub(crate) use scratch::FlowView;
 
@@ -21,7 +23,7 @@ use scratch::tables;
 /// one: the state of ground and air nodes from the world now, which the other laws read (in full at each month's start,
 /// so a world resumed there goes on as an unbroken one; the survey builds it in full then, `built_now`).
 pub fn state(w: &mut World, full: bool) {
-    with(w, |w, s| {
+    with(w, true, |w, s| {
         ground_now(w, s, full);
         air::sums(w, s);
         (0..w.mesh.level(AIR).n()).for_each(|j| s.ta[j] = air_temp(w.store.heat(Class::Air)[j], s.capa[j]));
@@ -48,7 +50,7 @@ pub(crate) fn built_now(w: &World) -> bool {
 /// date unless the `state` process just did; the heat of the bodies' nodes that the cover does not claim, which goes
 /// back to the ground first, `survey::release`, then warms it from the next state).
 pub fn air(w: &mut World, dt: f64) {
-    with(w, |w, s| {
+    with(w, true, |w, s| {
         crate::survey::release(w);
         if s.built_at != Some(w.time) {
             ground_now(w, s, false);
@@ -60,17 +62,17 @@ pub fn air(w: &mut World, dt: f64) {
 
 /// Liquid over field capacity sinks into the bed's store for `dt` seconds (`drain::sink`).
 pub fn sink(w: &mut World, dt: f64) {
-    with(w, |w, s| drain::sink(w, s, dt));
+    with(w, true, |w, s| drain::sink(w, s, dt));
 }
 
 /// Liquid with its drainage and its work on the bed for `dt` seconds (`liquid::liquid`).
 pub fn liquid(w: &mut World, dt: f64) {
-    with(w, |w, s| liquid::liquid(w, s, dt));
+    with(w, true, |w, s| liquid::liquid(w, s, dt));
 }
 
 /// Heat conducted sideways through the ground (`land::conduct`), then creep (`creep::creep`), for `dt` seconds.
 pub fn creep(w: &mut World, dt: f64) {
-    with(w, |w, s| {
+    with(w, true, |w, s| {
         land::conduct(w, s, dt);
         creep::creep(w, s, dt);
     });
@@ -78,34 +80,41 @@ pub fn creep(w: &mut World, dt: f64) {
 
 /// The slow ground and the substances present are rechecked (`scratch::refresh`).
 pub fn refresh(w: &mut World) {
-    with(w, |w, s| scratch::refresh(w, s));
+    with(w, false, |w, s| scratch::refresh(w, s));
 }
 
 /// Build the working memory of the law where it is missing (`with`).
 pub(crate) fn ensure(w: &mut World) {
-    with(w, |_, _| {});
+    with(w, false, |_, _| {});
 }
 
 /// Run `f` on the world and the law's working memory, built first where it is missing (a new or loaded world): its
-/// tables, a new world's state, and its caches from the world now, as at a liquid step.
-fn with(w: &mut World, f: impl FnOnce(&mut World, &mut Scratch)) {
+/// tables, a new world's state, and its caches from the world now, as at a liquid step. Where `f` moves matter, or the
+/// caches of a world with a state are built (its phases may change), its lifts and falls are booked (`potential::Lifts`).
+fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
     let n = w.mesh.cells().n();
     let mut s = std::mem::take(&mut w.scratch);
     if s.near.len() != n {
         tables(w, &mut s);
     }
-    if s.state.tg.len() != n {
+    let fresh = s.state.tg.len() != n;
+    if fresh {
         scratch::refresh(w, &mut s);
         // A new world's ground nodes, before its first step: no plateau, no clouds.
         let st = &mut s.state;
         (st.tg, st.pk, st.phi, st.cloud) = (vec![0.0; n], vec![land::NONE; n], vec![0.0; n], vec![[0.0; 2]; w.mesh.level(AIR).n()]);
     }
-    if s.cap.len() != n {
+    let build = s.cap.len() != n;
+    s.lifts = (!fresh && (moving || build)).then(|| potential::Lifts::start(w, &s));
+    if build {
         scratch::room(w, &mut s);
         ground_state(w, &mut s, true);
         air::state(w, &mut s);
     }
     f(w, &mut s);
+    if let Some(lifts) = s.lifts.take() {
+        lifts.book(w, &s);
+    }
     w.scratch = s;
 }
 

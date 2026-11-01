@@ -3,7 +3,8 @@
 
 use super::super::{land::wet, Scratch};
 use super::touching;
-use crate::{chem::Chemistry, math::one_minus_exp, store::{apply, fall_heat, Batch, Class}, units::R_GAS, AIR, World};
+use super::super::potential::apply;
+use crate::{chem::Chemistry, math::one_minus_exp, store::{Batch, Class}, units::R_GAS, AIR, World};
 
 /// Entries of the table of a saturation pressure (`Sat`) per K.
 const SAT_PER_K: f64 = 20.0;
@@ -83,7 +84,7 @@ pub(super) fn cloud((cloud, cloud_ir): (f64, f64), (m, mr): (f64, f64), area: f6
 /// step (laws.md 1.5), each node in parallel with `threads`. Dissolving frees the vaporisation enthalpy into the node;
 /// coming out takes it back. What crosses is booked in one call: a link from each ground node that takes or gives some
 /// to its air node with the mol of each gas (+ up) and the heat that leaves the ground, no air node giving more than it
-/// holds (in the order of the cells), and the lift of the gas, paid by the air (`store::fall_heat`); the next state of the ground nodes
+/// holds (in the order of the cells), and the lift of the gas, paid by the air (`potential`); the next state of the ground nodes
 /// (`land::ground_state`) reads what they then hold.
 pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64)) {
     let (n, na, nh) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), henry.len());
@@ -111,7 +112,7 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
         }
     });
     let ks: Vec<u16> = henry.iter().map(|h| h.1 as u16).collect();
-    let (parent, mut links, mut lift) = (w.mesh.cells().parent(), Batch::new([Class::Ground, Class::Air], &ks), vec![0.0; na]);
+    let (parent, mut links) = (w.mesh.cells().parent(), Batch::new([Class::Ground, Class::Air], &ks));
     // What each air node holds of each gas as the crossing leaves it, mol (`[x * na + j]`).
     let mut left: Vec<f64> = henry.iter().flat_map(|h| w.store.amounts(Class::Air)[h.1 * na..(h.1 + 1) * na].iter().copied()).collect();
     for (i, &j) in parent.iter().enumerate() {
@@ -122,12 +123,10 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
             // node; `-m` mol go up from the ground node into its air node, and the ground node's state follows.
             let tq = if m > 0.0 { s.ta[j] } else { s.state.tg[i] };
             links.add((i, j), k as u16, (-m, -m * (sp.cp * tq + sp.lf + sp.lv)));
-            lift[j] -= m * sp.mm * s.view().lift(i, j, w.cfg.gravity);
             left[x * na + j] -= m;
         }
     }
-    apply(w, &[links.flux()], &[]);
-    fall_heat(w, Class::Air, &lift.iter().map(|q| -q).collect::<Vec<f64>>());
+    apply(w, s, &[links.flux()], &[]);
     for &(_, k) in henry {
         if (0..n).any(|i| w.store.amounts(Class::Ground)[k * n + i] > 0.0) {
             s.add_loose(k, true);

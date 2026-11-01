@@ -58,9 +58,9 @@ pub(crate) struct FlowView<'a> {
     pub tg: &'a [f64],
     pub skin: &'a [f64],
     pub head: &'a [f64],
-    /// Per air node: its temperature, K; the mean height of its air, m
+    /// Per air node: its temperature, K; the mean height of its ground, m
     pub ta: &'a [f64],
-    pub zair: &'a [f64],
+    pub za: &'a [f64],
     /// Per ground node: the fusion enthalpy held off a plateau, and the substance on its plateau (or `NONE`)
     latent: &'a [Latent],
     pk: &'a [usize],
@@ -81,10 +81,11 @@ impl FlowView<'_> {
     pub(crate) fn moist(&self, i: usize, p: &crate::Physics) -> f64 {
         p.wetness((self.head[i] - self.z[i]).max(0.0))
     }
-    /// Energy to lift a kg from the head of ground node `i` to the mean height of its air node `j`, J/kg.
+    /// Energy to lift a kg from the head of ground node `i` into its air node `j`, J/kg: to the air node's mean ground
+    /// (`potential`).
     #[inline]
     pub(crate) fn lift(&self, i: usize, j: usize, g: f64) -> f64 {
-        g * (self.zair[j] - self.head[i])
+        g * (self.za[j] - self.head[i])
     }
     /// Fusion enthalpy ground node `i` holds at energy `e`, J, by Flow's last solve of its plateaus: off a plateau what is
     /// molten; on one, also what the energy above the plateau at heat capacity `c` melts of `lat(k)`.
@@ -130,6 +131,8 @@ pub struct Scratch {
     pub(super) state: State,
     /// The substances present changed: rebuild the state of ground and air at the next step.
     pub(super) stale: bool,
+    /// The part of Flow under way, whose lifts and falls are booked at its end (`potential::Lifts`).
+    pub(super) lifts: Option<super::potential::Lifts>,
     /// The time of the last full build of the state of ground nodes, s.
     pub(super) full_at: Option<u64>,
     /// The time the state of ground nodes was last brought up to date, s (`flow::ground_now`).
@@ -203,7 +206,7 @@ impl Scratch {
     }
     /// For Law 2, from the last flow step (`flow::ensure` builds it where Flow has not run).
     pub(crate) fn view(&self) -> FlowView<'_> {
-        FlowView { tg: &self.state.tg, skin: &self.skin, head: &self.head, ta: &self.ta, zair: &self.zair, latent: &self.latent, pk: &self.state.pk, z: &self.z, pd: &self.pd }
+        FlowView { tg: &self.state.tg, skin: &self.skin, head: &self.head, ta: &self.ta, za: &self.za, latent: &self.latent, pk: &self.state.pk, z: &self.z, pd: &self.pd }
     }
     /// Loose substances that may be liquid between `tmin` and `tmax`, K, or (with `dissolved`) gases dissolved in it.
     pub(super) fn liquids(&self, chem: &Chemistry, (tmin, tmax): (f64, f64), dissolved: bool) -> Vec<usize> {

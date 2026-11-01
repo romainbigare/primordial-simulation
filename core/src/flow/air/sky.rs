@@ -3,8 +3,8 @@
 use crate::{World, AIR};
 
 impl World {
-    /// Energy to lift a kg from ground cell `i` into its air node, J/kg: from the ground's head to the air's mean height,
-    /// paid by the air's heat (its expansion does the work), and given back to the air by a fall (laws.md 1.5).
+    /// Energy to lift a kg from ground cell `i` into its air node, J/kg: from the ground's head to the air node's mean
+    /// ground, paid by the air's heat, and given back by a fall (laws.md 0, "The books").
     pub(crate) fn lift(&self, i: usize) -> f64 {
         self.scratch.view().lift(i, self.mesh.up(i, 0, AIR), self.cfg.gravity)
     }

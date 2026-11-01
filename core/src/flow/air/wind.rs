@@ -116,18 +116,17 @@ pub(super) fn even(w: &World, s: &Scratch, blocks: &[Vec<u32>], (x, e): (&mut [f
             e[j] += d;
             e[hub] -= d;
             moved.heat[p] += d;
-            lift((hub, j), kg, (s, g), e, &mut moved.paid);
+            lift((hub, j), kg, (s, g), e);
             p += 1;
         }
     }
 }
 
-/// `kg` of mass moves from node `a` to node `b` (back where negative): the node it enters pays its lift from its heat.
-fn lift((a, b): (usize, usize), kg: f64, (s, g): (&Scratch, f64), e: &mut [f64], paid: &mut [f64]) {
+/// `kg` of mass moves from node `a` to node `b` (back where negative): the node it enters pays its lift from its heat,
+/// from the mean ground of the node it leaves to its own (`potential`).
+fn lift((a, b): (usize, usize), kg: f64, (s, g): (&Scratch, f64), e: &mut [f64]) {
     let (from, to) = if kg > 0.0 { (a, b) } else { (b, a) };
-    let q = g * kg.abs() * (s.zair[to] - s.zair[from]);
-    e[to] -= q;
-    paid[to] += q;
+    e[to] -= g * kg.abs() * (s.za[to] - s.za[from]);
 }
 
 /// One day of `dd` seconds of the wind over the links between blocks (`border`), each from the air at the day's start:
@@ -202,6 +201,6 @@ pub(super) fn wind(w: &World, s: &Scratch, (push, links, border): (&Pushes, &Lin
         e[ia] -= d[ng];
         e[ib] += d[ng];
         moved.heat[p] += d[ng];
-        lift((ia, ib), kg, (s, g), e, &mut moved.paid);
+        lift((ia, ib), kg, (s, g), e);
     }
 }

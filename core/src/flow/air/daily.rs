@@ -56,8 +56,8 @@ impl Ground {
 
 /// What the air level does over a step: per node its mean temperature, K, and the heat it sends to space, J; per gas
 /// of the air and node (`[gi * na + j]`) its mean amount, mol; per active gas and node what rains, mol, the fusion
-/// enthalpy it keeps as it falls liquid, J, and the saturation ratio it rains at, a mean by rain; per node the energy rain's fall
-/// gives its air, J; and what moves between nodes (`Moved`).
+/// enthalpy it keeps as it falls liquid, J, and the saturation ratio it rains at, a mean by rain; and what moves between
+/// nodes (`Moved`).
 pub(super) struct Mean {
     pub(super) t: Vec<f64>,
     pub(super) space: Vec<f64>,
@@ -65,19 +65,16 @@ pub(super) struct Mean {
     pub(super) rain: Vec<f64>,
     pub(super) rain_fusion: Vec<f64>,
     pub(super) ratio: Vec<f64>,
-    pub(super) fall: Vec<f64>,
     pub(super) moved: Moved,
 }
 
 /// What moves between pairs of air nodes over a step (the links between blocks, then each block's other nodes from its
-/// hub): per gas of the air and pair (`[gi * pairs + p]`) mol from `a` to `b`, and per pair the heat, J; and per node
-/// the lift its heat pays for the mass that enters it, J (a fall gives it back).
+/// hub): per gas of the air and pair (`[gi * pairs + p]`) mol from `a` to `b`, and per pair the heat, J.
 pub(super) struct Moved {
     pub(super) a: Vec<u32>,
     pub(super) b: Vec<u32>,
     pub(super) mol: Vec<f64>,
     pub(super) heat: Vec<f64>,
-    pub(super) paid: Vec<f64>,
 }
 
 /// The air nodes in blocks that eddies even out within a day: squares on the map of side
@@ -115,9 +112,9 @@ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f
         b.extend_from_slice(&nodes[1..]);
     }
     let pairs = a.len();
-    let moved = Moved { a, b, mol: vec![0.0; ng * pairs], heat: vec![0.0; pairs], paid: vec![0.0; na] };
+    let moved = Moved { a, b, mol: vec![0.0; ng * pairs], heat: vec![0.0; pairs] };
     let v = |len: usize| vec![0.0; len];
-    let mut out = Mean { t: v(na), space: v(na), x: v(ng * na), rain: v(nx * na), rain_fusion: v(nx * na), ratio: v(nx * na), fall: v(na), moved };
+    let mut out = Mean { t: v(na), space: v(na), x: v(ng * na), rain: v(nx * na), rain_fusion: v(nx * na), ratio: v(nx * na), moved };
     let mut x: Vec<f64> = s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
     let mut e = w.store.heat(Class::Air).to_vec();
     for _ in 0..days as usize {
@@ -171,10 +168,10 @@ impl Together {
 /// mean over the day, and each node gets what its cells' law gives at it (`Ground::gives`: their heat radiation,
 /// sensible heat and the gas they evaporate), so the book, which takes each cell's law at the step's mean air
 /// (`cells::Response::at`), gives the air just what its days did. Rain frees its vaporisation enthalpy (and its fusion
-/// enthalpy where the air at the node's mean ground is below the gas's melting point: snow), its fall heating the air;
-/// the node's layers send heat to space (`glow`).
+/// enthalpy where the air at the node's mean ground is below the gas's melting point: snow); the node's layers send
+/// heat to space (`glow`).
 fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, one): (&[Vec<u32>], &Together), (x, e): (&mut [f64], &mut [f64]), (dd, dt): (f64, f64), out: &mut Mean) {
-    let (air, na, nx, share, g) = (w.mesh.level(AIR), e.len(), act.len(), dd / dt, w.cfg.gravity);
+    let (air, na, nx, share) = (w.mesh.level(AIR), e.len(), act.len(), dd / dt);
     let t = warmth(w, s, (act, ground), (blocks, one), (x, e), (dd, dt));
     let ts: Vec<f64> = (0..na).map(|j| at_height(t[j], s.gam[j], s.za[j], s.zair[j])).collect();
     let [mean, rain, ratio] = vapour(w, s, (act, ground), (blocks, one), (x, &t, &ts), (dd, dt));
@@ -191,12 +188,11 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
             if m > 0.0 {
                 // The rain leaves the air frozen or liquid as the air at the node's mean ground is, at the temperature of
                 // the air touching the cells it falls on (`rain_air`, as the book lands it), the air paying what warms
-                // it on the way down, and its fall to the node's mean ground heats the air.
-                let (liquid, fall) = (if ts[j] < sp.melt { 0.0 } else { sp.lf }, m * sp.mm * g * (s.zair[j] - s.za[j]));
+                // it on the way down.
+                let liquid = if ts[j] < sp.melt { 0.0 } else { sp.lf };
                 let tr = rain_air(s, ground.wet(), (y, j, ratio[i]), &t).unwrap_or(ts[j]);
-                e[j] += m * (sp.lv + sp.lf - liquid - sp.cp * tr) + fall;
+                e[j] += m * (sp.lv + sp.lf - liquid - sp.cp * tr);
                 (out.rain[i], out.rain_fusion[i], out.ratio[i]) = (out.rain[i] + m, out.rain_fusion[i] + m * liquid, out.ratio[i] + ratio[i]);
-                out.fall[j] += fall;
             }
         }
     }

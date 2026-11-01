@@ -85,10 +85,19 @@ than `wake_share`, then its law brings it up to date over the whole time since.
 
 **The books.** Every move takes from one node exactly what it gives another, with its heat; `store::apply` and the
 bookings of the bodies' moves and of Change's rows (`store::book_by_array`, which adds as `apply` adds) are the store's only writers, with plain sums.
-Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`). A lift is paid from
-the heat of the node that lifts (the air, for a gas going up; the ground node a store's liquid rises into) and a fall
-gives its heat to where the matter lands (`store::fall_heat`); the other side of each is the potential energy the
-world's matter gained, one number of the store (`Store::lifted`). So every element and the energy are kept;
+Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`). **Potential
+energy** is one function of what the nodes hold (`flow::potential`): a ground cell is a stack from its base up, each
+layer at its middle (its bed, its hard loose solids, its liquid with what is dissolved in it, the soft solids on top),
+its store `bed_depth` under its bed's top, filled from the bottom; an air node's matter lies at the mean surface of its
+cells, for the height of a column above its ground is in its heat (its heat capacity at constant pressure holds the
+work the column does as it rises); a bodies' node's gas at its cell's surface. In each part of Flow every move carries
+its potential energy from the height it leaves (the top of a ground node's liquid, an air node's mean surface, a
+store's table), and each node's heat takes what came in less what left less the change of its own (`store::fall_heat`):
+so a fall heats where the matter lands, a lift is paid by the node it enters (the air, for a gas going up; the ground
+node a store's liquid rises into), a column that rises as it fills pays for it, and the potential energy the world's
+matter gained is one number of the store (`Store::lifted`), the change of that function. The other laws lift a gas into
+the air from its cell's head to its air node's mean ground by the same rule (`World::lift`). So every element and the
+energy are kept;
 `check::drift` checks it yearly against `check::DRIFT` (1e-9).
 **No overdraw.** A law never asks a node for more than it holds; where it could, it cuts that node's own outgoing
 links (`solve::sweep::within`), never a whole field. A body takes no more than its cell's view holds, what the
@@ -138,9 +147,8 @@ long step ends where short ones do.
   keeps its fusion heat whatever the node's phase and leaves at the temperature of the node mixed with what came in
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node
   holds and what stays keeps that temperature. A salt is a liquid that never
-  boils (23, 24): it moves with the liquid and stays when it evaporates. Lost head heats the liquid that loses it (on
-  the surface what runs out of a node, under it where it goes) and does work (1.3); lifts and falls book on the node
-  that pays or gets them (`store::fall_heat`).
+  boils (23, 24): it moves with the liquid and stays when it evaporates. Its fall heats the node it lands in (0, "The
+  books"), and the head it loses on the way out does work (1.3).
 
 ### 1.3 Erosion and creep
 The head lost by moving liquid does work where it is lost on land (`flow::liquid::load`, `wear`; below 0 m its load
@@ -206,7 +214,7 @@ at. It lands after the step, so a cell does not evaporate it again within that s
 temperature of the air touching it (`touching`), the air paying what warms it on the way down. Where the node's air at
 its mean ground is below the gas's melting point it falls as a solid (snow) and the air keeps the fusion enthalpy its
 freezing frees; condensing frees the vaporisation enthalpy in the air. **Lift**: gas going up is lifted from the
-ground's head to the air's mean height, paid by the air's heat; rain's fall gives it back. **Dissolving**
+ground's head to its air node's mean ground, paid by the air's heat; rain's fall gives it back (0, "The books"). **Dissolving**
 (`exchange::dissolve`): a gas that cannot condense dissolves in the ground's liquid toward Henry's share, through the
 air's film (`evap`) and the liquid's (`dissolve`) in series, freeing its vaporisation enthalpy, and comes out when the
 liquid warms, thins or freezes. **Known limit:** a liquid's whole depth is one mixed layer, so a deep sea takes up gas
@@ -226,7 +234,7 @@ with its overturning at most all of it, over the links of the busier of its node
 and no node gives more of a gas than it holds (`solve::sweep::within`). **Known limit:** where a push is
 faster than a day (the pressure, always; the eddies over the short links near a pole) its links even in a day at
 most that share, so a pressure difference across many links of blocks takes days to even out. Mass that crosses is
-lifted between the nodes' mean heights by the heat of the node it enters. A cell sees its air node and three
+lifted between the nodes' mean grounds by the heat of the node it enters. A cell sees its air node and three
 neighbours bilinearly (`flow/scratch.rs`). Air moves as whole columns, so bodies use the anchored `wind_ground` (6.3).
 
 ### 1.7 Paths

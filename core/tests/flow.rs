@@ -883,3 +883,18 @@ fn the_sun_is_right_at_every_latitude() {
         }
     }
 }
+
+/// The potential energy the store books (`Store::lifted`) is the change of the matter's potential energy: over five
+/// years of a 16 x 16 island its rain, runoff, stores, creep and the air's columns move it, and the two stay within
+/// 1e-9 of the world's heat.
+#[test]
+fn the_lifted_energy_is_what_the_matter_gained() {
+    let mut w = worldgen::testkit::small_world();
+    let (p0, l0, heat) = (pcore::flow::potential(&w), w.store.lifted(), pcore::check::totals(&w).thermal);
+    for _ in 0..5 * w.cfg.months_per_year {
+        pcore::step(&mut w);
+    }
+    let (gained, lifted) = (pcore::flow::potential(&w) - p0, w.store.lifted() - l0);
+    assert!(lifted.abs() > 1e-7 * heat, "the matter moved: {lifted:e} J");
+    assert!((gained - lifted).abs() < 1e-9 * heat, "gained {gained:e} J, lifted {lifted:e} J, heat {heat:e} J");
+}

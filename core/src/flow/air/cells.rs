@@ -26,14 +26,13 @@ const REFLECT_STILL: f64 = 1e-3;
 const AIR_SWING_K: f64 = 60.0;
 
 /// The outputs of a cell's exchange that change with its air: what its air node gains over the step, J (sensible heat,
-/// the heat radiation the air absorbs less what it sends down, and the heat of the gas that goes up less its lift); the
-/// heat over its link to the air as the store books it, J (with the gas's latent heat); the heat it sends to space, J;
-/// the lift its air pays for its gas, J; then per active gas what evaporates, mol.
+/// the heat radiation the air absorbs less what it sends down, and the heat of the gas that goes up less its lift,
+/// `potential`); the heat over its link to the air as the store books it, J (with the gas's latent heat); the heat it
+/// sends to space, J; then per active gas what evaporates, mol.
 pub(super) const GAINS: usize = 0;
 pub(super) const LINK: usize = 1;
 pub(super) const SPACE: usize = 2;
-pub(super) const LIFT: usize = 3;
-pub(super) const UP: usize = 4;
+pub(super) const UP: usize = 3;
 /// The outputs that do not: the sunlight it absorbs, J; the light per unit of its cover's capture area, J/m²; the light
 /// set aside for its cover, J.
 pub(super) const SUN: usize = 0;
@@ -157,7 +156,7 @@ fn sunlight(w: &World, decl: &[f64], lat: f64) -> f64 {
 /// sees moves in the step: its temperature by up to `AIR_SWING_K`, each gas between none and twice what it held at the
 /// start (`seen`). What evaporates of each gas stays within what the cell holds of it; then the heat over its link and
 /// to space, with what each mol carries (`carry`), within its heat and the sunlight it absorbs, `sun`, J.
-fn hold(cx: &Ctx, i: usize, (seen, sun): (&[f64], f64), carry: &[[f64; 3]], p: &mut [f64]) {
+fn hold(cx: &Ctx, i: usize, (seen, sun): (&[f64], f64), carry: &[[f64; 2]], p: &mut [f64]) {
     let (w, nx) = (cx.w, cx.act.len());
     let (n, stride) = (w.mesh.cells().n(), 2 + nx);
     // The share of a row's slopes that keeps its value within `most` however far the air moves.
@@ -178,17 +177,17 @@ fn hold(cx: &Ctx, i: usize, (seen, sun): (&[f64], f64), carry: &[[f64; 3]], p: &
 }
 
 /// What a mol of active gas `k` that evaporates from cell `i` carries, J: the heat over its link as the store books it
-/// (its heat at the cell's temperature and its latent heat), what its air node gains (that heat less its latent heat and
-/// its lift), and the lift its air pays.
-fn carried(cx: &Ctx, i: usize, k: usize) -> [f64; 3] {
+/// (its heat at the cell's temperature and its latent heat), and what its air node gains (that heat less its latent heat
+/// and its lift, which its air pays).
+fn carried(cx: &Ctx, i: usize, k: usize) -> [f64; 2] {
     let (s, sp, j) = (cx.s, cx.s.sp[k], cx.w.mesh.cells().parent()[i] as usize);
     let (heat, lift) = (sp.cp * s.state.tg[i], sp.mm * s.view().lift(i, j, cx.w.cfg.gravity));
-    [heat + sp.lf + sp.lv, heat - lift, lift]
+    [heat + sp.lf + sp.lv, heat - lift]
 }
 
 /// A cell's changing outputs (`out`) from its parts (`p`), each a row of its value and its slopes, with what each mol of
 /// each gas carries (`carry`).
-fn put(p: &[f64], carry: &[[f64; 3]], out: &mut [f64]) {
+fn put(p: &[f64], carry: &[[f64; 2]], out: &mut [f64]) {
     let stride = 2 + carry.len();
     for v in 0..stride {
         let part = |r: usize| p[r * stride + v];
@@ -196,7 +195,6 @@ fn put(p: &[f64], carry: &[[f64; 3]], out: &mut [f64]) {
         out[GAINS * stride + v] = part(TO_AIR) + gas(1);
         out[LINK * stride + v] = part(TO_AIR) + gas(0);
         out[SPACE * stride + v] = part(TO_SPACE);
-        out[LIFT * stride + v] = gas(2);
         (0..carry.len()).for_each(|y| out[(UP + y) * stride + v] = part(GAS + y));
     }
 }
@@ -328,7 +326,7 @@ fn exchange(cx: &Ctx, i: usize, q: f64, air: &[f64], out: &mut [f64]) -> [f64; F
         }
         p
     };
-    let carry: Vec<[f64; 3]> = act.iter().map(|ac| carried(cx, i, ac.k)).collect();
+    let carry: Vec<[f64; 2]> = act.iter().map(|ac| carried(cx, i, ac.k)).collect();
     let (mut alb, mut lo, mut hi) = (s.alb[i], f64::NAN, f64::NAN);
     let mut p = parts(alb);
     put(&p, &carry, out);

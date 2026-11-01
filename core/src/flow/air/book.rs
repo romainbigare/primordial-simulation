@@ -3,19 +3,20 @@
 //! and the evening of blocks, the lifts and falls, and the light of the cover (`book`).
 
 use super::super::{follow, year_weight, Scratch};
-use super::cells::{Response, KEPT, LIFT, LIGHT, LINK, SPACE, SUN, UP};
+use super::super::potential::apply;
+use super::cells::{Response, KEPT, LIGHT, LINK, SPACE, SUN, UP};
 use super::daily::Mean;
 use super::rain::Landed;
 use super::exchange::cloud;
 use super::step::Active;
 use super::{lerp, sums, touching};
-use crate::store::{apply, fall_heat, Batch, Boundary, Class, LinkFlux};
+use crate::store::{Batch, Boundary, Class, LinkFlux};
 use crate::{World, AIR};
 
 /// The gas the bodies' nodes hold comes up whole into their cells' air nodes, holding its latent heat as the air does;
-/// the air pays its lift (laws.md 1.5). The bodies' nodes hold only gases of the air.
-pub(super) fn up_from_bodies(w: &mut World, s: &Scratch) {
-    let (n, g) = (w.mesh.cells().n(), w.cfg.gravity);
+/// the air pays its lift (laws.md 1.5, `potential`). The bodies' nodes hold only gases of the air.
+pub(super) fn up_from_bodies(w: &mut World, s: &mut Scratch) {
+    let n = w.mesh.cells().n();
     let held = w.store.amounts(Class::Bodies);
     let ks: Vec<u16> = s.state.gas.iter().copied().filter(|&k| held[k * n..(k + 1) * n].iter().any(|&m| m != 0.0)).map(|k| k as u16).collect();
     if ks.is_empty() {
@@ -23,23 +24,16 @@ pub(super) fn up_from_bodies(w: &mut World, s: &Scratch) {
     }
     let (cells, parent): (Vec<u32>, Vec<u32>) = ((0..n as u32).collect(), w.mesh.cells().parent().to_vec());
     let mol: Vec<f64> = ks.iter().flat_map(|&k| held[k as usize * n..(k as usize + 1) * n].iter().copied()).collect();
-    let mut lift = vec![0.0; w.mesh.level(AIR).n()];
-    for (q, &k) in ks.iter().enumerate() {
-        for (i, &j) in parent.iter().enumerate() {
-            lift[j as usize] += mol[q * n + i] * s.sp[k as usize].mm * s.view().lift(i, j as usize, g);
-        }
-    }
     let up = LinkFlux { class: [Class::Bodies, Class::Air], a: &cells, b: &parent, ks: &ks, mol: &mol, heat: &[] };
-    apply(w, &[up], &[]);
-    fall_heat(w, Class::Air, &lift.iter().map(|q| -q).collect::<Vec<f64>>());
+    apply(w, s, &[up], &[]);
 }
 
 /// Book what the step of `dt` seconds moves: over each cell's link to its air node what evaporates and its heat, at the
 /// step's mean air (`Response::at`, the law the air's days summed); over the links to each node it sees its rain
 /// (`rain`, per active gas (cell, node, mol)), reaching it at the temperature of the air touching it (`touching`), the
 /// air paying what warms it on the way down, frozen or liquid as the node's days rained it; the sunlight it absorbs and keeps
-/// for its cover, the heat it and its air send to space; the wind and the evening of blocks; and the lifts the air pays
-/// and the falls that heat it. Then the light on the cover, the clouds of what rained (which the next step's sunlight
+/// for its cover, the heat it and its air send to space; and the wind and the evening of blocks, with their lifts and
+/// falls (`potential`). Then the light on the cover, the clouds of what rained (which the next step's sunlight
 /// passes), and the tape's rain and evaporation.
 pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Active], &Response, &[Landed]), mean: &Mean, dt: f64) {
     let (n, na, nx, area) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), act.len(), w.mesh.cells().area().to_vec());
@@ -51,21 +45,15 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     let (ks, gases): (Vec<u16>, Vec<u16>) = (act.iter().map(|a| a.k as u16).collect(), s.state.gas.iter().map(|&k| k as u16).collect());
     let mol: Vec<f64> = (0..nx).flat_map(|y| (0..n).map(move |i| (y, i))).map(|(y, i)| at(i, UP + y)).collect();
     let link: Vec<f64> = (0..n).map(|i| at(i, LINK)).collect();
-    let mut paid = mean.moved.paid.clone();
-    (0..n).for_each(|i| paid[parent[i] as usize] += at(i, LIFT));
-    mean.fall.iter().zip(&mut paid).for_each(|(f, p)| *p -= f);
-    // The rain, at the air touching each cell, with the fusion enthalpy each mol of its node's rain keeps; its fall from
-    // its node's mean ground (where the day's fall ends) to the cell's head heats the cell (a lift where the head is
-    // higher), so each mol falls as far as it was lifted from.
+    // The rain, at the air touching each cell, with the fusion enthalpy each mol of its node's rain keeps.
     let mut rained = Batch::new([Class::Ground, Class::Air], &ks);
-    let (mut fell, mut below) = (vec![0.0; nx * n], vec![0.0; n]);
+    let mut fell = vec![0.0; nx * n];
     for (y, list) in rain.iter().enumerate() {
         for &(i, j, m) in list {
             let (at, sp) = (y * na + j as usize, s.sp[ks[y] as usize]);
             let per = sp.cp * touching(sr, &mean.t, i as usize) + mean.rain_fusion[at] / mean.rain[at];
             rained.add((i as usize, j as usize), ks[y], (-m, -m * per));
             fell[y * n + i as usize] += m;
-            below[i as usize] += m * sp.mm * w.cfg.gravity * (s.za[j as usize] - s.head[i as usize]);
         }
     }
     let (sun, space) = (Boundary::Sun as usize, Boundary::Space as usize);
@@ -84,9 +72,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     let up = LinkFlux { class: [Class::Ground, Class::Air], a: &cells, b: &parent, ks: &ks, mol: &mol, heat: &link };
     let m = &mean.moved;
     let wind = LinkFlux { class: [Class::Air, Class::Air], a: &m.a, b: &m.b, ks: &gases, mol: &m.mol, heat: &m.heat };
-    apply(w, &[up, rained.flux(), wind, lit.flux(), kept.flux(), cooled.flux(), sky.flux()], &[]);
-    fall_heat(w, Class::Air, &paid.iter().map(|q| -q).collect::<Vec<f64>>());
-    fall_heat(w, Class::Ground, &below);
+    apply(w, s, &[up, rained.flux(), wind, lit.flux(), kept.flux(), cooled.flux(), sky.flux()], &[]);
     for (y, ac) in act.iter().enumerate() {
         let net = |i: usize| mol[y * n + i] - fell[y * n + i];
         (0..n).any(|i| net(i) < 0.0).then(|| s.add_loose(ac.k, false));
