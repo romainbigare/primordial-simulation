@@ -773,6 +773,42 @@ fn a_blocks_low_basin_mixes_its_heat_in_a_month() {
     assert!(one > 3 * t.len() / 4, "{one} of {} cells at {mid} K: {t:?}", t.len());
 }
 
+/// The low basin under one air node takes up a gas as one liquid (laws.md 1.5): with none of it dissolved, after an air
+/// step its cells under that node that mix as one each hold the same share of their liquid (most of the cells of the
+/// node's basin), so a cell of little liquid does not reach balance before a deep one. Matter and energy are kept.
+#[test]
+fn the_low_basin_under_one_air_node_takes_up_gas_as_one_liquid() {
+    let (_, init) = worldgen::chemistry0();
+    let mut w = worldgen::testkit::small_world();
+    w.cfg.dissolve = 1.0;
+    let (n, c) = (w.mesh.cells().n(), &w.chem);
+    let k = init.air.iter().map(|p| p.0).filter(|&k| c.subs[k].boil < 250.0).max_by(|&a, &b| c.subs[a].solubility.total_cmp(&c.subs[b].solubility)).unwrap();
+    let (cells, _) = basin_under(&w, liquid_top);
+    let j = (0..w.mesh.level(AIR).n()).max_by_key(|&j| cells.iter().filter(|&&i| w.mesh.up(i, 0, AIR) == j).count()).unwrap();
+    let under: Vec<usize> = cells.iter().copied().filter(|&i| w.mesh.up(i, 0, AIR) == j).collect();
+    assert!(under.len() > 4, "{} cells of the basin under one node", under.len());
+    for &i in &cells {
+        set_amount(&mut w, Node::ground(i), k, 0.0);
+    }
+    pcore::flow::state(&mut w, true);
+    // Each cell's liquid, mol: what is molten in it and below its boiling point.
+    let liquid: Vec<f64> = under
+        .iter()
+        .map(|&i| {
+            let (t, plateau) = w.thaw_last(i);
+            (0..w.chem.ns()).filter(|&q| t < w.chem.subs[q].boil).map(|q| w.g(q, i) * w.molten(q, i, t, plateau)).sum()
+        })
+        .collect();
+    let books = Books::now(&w);
+    pcore::flow::air(&mut w, DT);
+    books.assert_within(&w, 1e-9, 1e-9);
+    let mut share: Vec<f64> = under.iter().zip(&liquid).map(|(&i, &l)| w.store.amounts(Class::Ground)[k * n + i] / l).collect();
+    share.sort_by(f64::total_cmp);
+    let mid = share[share.len() / 2];
+    let one = share.iter().filter(|&&x| (x / mid - 1.0).abs() < 1e-9).count();
+    assert!(mid > 0.0 && one > share.len() / 2, "{one} of {} cells at {mid:e} per mol: {share:?}", share.len());
+}
+
 /// Under the low basin the loose ground's pores are full and the bed's store is not drained: over a year of Flow no
 /// liquid sinks into, flows through or comes up from the stores of its cells (those a metre under its level), while the
 /// stores of the land take rain and drain.
