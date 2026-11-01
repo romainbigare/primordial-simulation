@@ -416,9 +416,7 @@ Thousands of years with millions of individual brains will not run on one comput
 - **Split** it back into individuals when the player looks closely, or when its members start to differ a lot.
 - Conservation must hold exactly when merging and splitting.
 
-Population nodes are built; how they work is in `docs/laws.md` 4.4. `ew run --individuals` turns nodes off for bodies with a brain, for the check below.
-
-**The check of nodes against individuals (M4's first job, fixed before it runs).** Seeds 1 and 5 at 32×32 for 50 years, with nodes and with `--individuals`, then with `--roster` for 30 years; one seed with `--crowd 4` and `--crowd 8` beside them as the noise. On the `root_<k>_*` columns (means of years 41–50; with the roster, of years 26–30), the modes agree if: (a) each kind's mass and real life are within a factor of two, and no kind lives in one mode only; (b) the main gene means move the same way wherever one moves more than 0.3; (c) the same kind wins (most mass, heaviest member, the order of what eaters eat). A difference larger than the `--crowd` noise is a bug in the node rules. The roster rules are read in years 26–30, after the last kind is placed; longer runs are too slow at 32×32 (the eaters as individuals pass 10⁴ bodies by year 70).
+Population nodes are built; how they work is in `docs/laws.md` 4.4. A body of count 1 is an individual in the maths: there is one set of rules for both.
 
 ### 7.2 Coarse regions
 
@@ -434,22 +432,21 @@ Not everything needs the same step. These are suggested defaults to measure and 
 |---|---|
 | Heat, air, rain, water (coarse world) | 1 month, with sub-steps if unstable |
 | Ground uplift, slow wearing | 10 to 100 years |
-| Population nodes | 1 month |
-| Individual bodies in detailed areas | 1 day |
-| Snapshots for the history tape | every 10 years (and before every god action) |
+| Bodies (population nodes and single bodies) | 1 month: one parallel pass over chunks of cells, one serial pass for what crosses cells |
+| Snapshots for the history tape | at the end of a run, every `--snapshots-every` years if asked (and before every god action) |
 
-There is **one world clock**. Fast processes in detailed areas sub-step inside a month. Seasons must exist, because they matter for food and migration.
+There is **one world clock**. A fast process in a detailed area may sub-step inside a month. Seasons must exist, because they matter for food and migration.
 
-### 7.4 Threads: domains, batches and the outbox
+### 7.4 Threads: chunks and the serial pass
 
-This is a speed tool, not a law: the history is the same with and without threads, and on any number of threads (the feature `threads` of `core`).
+This is a speed tool, not a law: the history is the same with and without threads, on any number of threads (the feature `threads` of `core`) and for any count of chunks.
 
-- The cells are cut into **domains**: the cells under one air node. A domain owns its bodies, its ring of updates and its view of the store.
-- Bodies update in **batches** of `batch_days` (10) days, one air step. In a batch each domain runs on its own thread. Body code reads the world as it was at the batch's start and writes only its own domain. What leaves the domain (a move to another cell, a litter that starts in another cell, a watch, an act on a part) waits in the domain's **outbox**. At the batch's end the moves and the litters land, each in the domain of the cell it goes to, on the pool, with the booking of the moves by array beside them; only the watches, the part acts, `Passed` and `Back` are applied one by one, in a fixed order, on one thread. Bodies that hold a part or are inside one run in a serial phase.
+- The cells are cut into **chunks**: `Config::chunks` runs of neighbouring cells, the same for any number of threads. A chunk owns its cells, their bodies, their cover and its view of the store.
+- Bodies update once a month, in one **parallel pass**: one task per chunk on the pool, the world read only, a chunk writing only its own cells. What leaves a chunk (a move to another cell, a litter that starts in another cell, a watch, an act on a part) waits in the chunk's queue. Then one **serial pass** lands the queues in a fixed order, by chunk, cell and the order queued, and the moves and litters land on the pool, each in the chunk of the cell it goes to. Bodies that hold a part or are inside one act in the serial pass.
 - Flow's air step and Change's reactors and the survey's wear, merge and shade use the same pool where a loop is large enough to pay for a call into it (30 to 55 µs).
-- How it works: `docs/laws.md` 0. On 4 cores the bodies run about 2 times faster than on one, and a whole year about 1.6 to 1.8 times; the rest stays on one thread (the entries applied one by one, the bodies that hold a part, Flow's ordered passes).
+- How it works: `docs/laws.md` 0.
 - The tape's recorder uses the same pool (`pcore::par::map`, `map_n` and `join`, under the one feature `threads` of `pcore`): its walks over bodies and cells, and the parts of a yearly row that write different columns, run side by side, and every sum is added in the order of the data, so its files are the same with and without threads.
-- A zone that needs a shorter step later (7.3), such as individuals with a short gene or smart bodies, can run several sub-batches inside one global batch of 10 days: its edge effects still land at the global batch's end. Nothing built blocks that.
+- A zone that needs a shorter step later (7.3), such as smart bodies, can run several sub-steps inside the month: its edge effects still land at the month's end. Nothing built blocks that.
 
 ---
 
@@ -473,15 +470,17 @@ core/       the five laws, world state, random numbers. No IO, no Earth words.
               and the moves of a body's or a part's update (`Moves`)
   src/clock/  time in whole seconds, the calendar, processes with periods, sleep and wake of nodes
   src/solve/  the shared maths: spread (implicit step on links), downhill, band (the air level with the wind)
+  src/life/   the bodies by cell and the chunks of cells that body code runs on (the parallel pass, the serial pass)
+  src/cover/  the plant field: the starting cover of a cell, its growth and seeding
   src/*.rs    schedule (the month), world, params (Config, Physics), ground (heat and plateaus), check (the books),
-              life (the registry of bodies), lineage, nodes (population nodes), lanes (paths), survey (the cells
-              bodies see), brain, rng, event, math, units, par
+              lineage, nodes (population nodes), lanes (paths), survey (the cells bodies see), brain, rng, event,
+              math, units, par
   tests/      one file per law (flow, change, bond, copy, choose, body), one per base part (space, store, clock,
-              solve), chemistry0, numbers
+              solve), cover, populations, damage, threads (threads and chunks change nothing), chemistry0, numbers
 worldgen/   terrain, chemistry 0 (chem0.toml) and the chemistry generator, richness checks, first life (life/), what is
               placed when (schedule.rs); the test kit (worldgen::testkit, behind the `testkit` feature)
 tape/       the recorder (rec/, its yearly columns in rec/cols/), snapshots (snapshot.rs), map layers, measures,
-              the fingerprint of a world; tests: tape.rs, golden.rs
+              the fingerprint of a world; tests: tape.rs, ranges.rs, scale.rs
 library/    the recognition library (data files); today the Earth names of chemistry 0
 cli/        headless runs (`ew run`, `ew resume`, `ew chem`, `ew numbers`; flags in args.rs), pictures; the word ban test
 web/        the 2D map viewer (TypeScript)
@@ -499,13 +498,13 @@ analyze/    not built yet (M5): pattern finder, fact cards, recognition matching
 
 ### 8.3 What the simulation records (the history tape)
 
-- **Snapshots:** every 10 years, and before every god action, save the full state, compressed (bincode, then gzip). A run can go on from any snapshot (`ew resume`).
+- **Snapshots:** at the end of a run, every `--snapshots-every` years if asked, and before every god action, save the full state, compressed (bincode, then gzip). A run can go on from any snapshot (`ew resume`).
 - **Raw physical events:** body born, body died (and cause: lacking a store, frozen or boiled, could not pay, taken, broken, age), taken from, given to, watched, bond made or broken, first time a substance appears in the world, god action applied. Only raw physical facts. **"A city was founded" is not a raw event.** The pattern finder detects that later.
 - **Summary series** every year (`series.csv`): totals per element, energy, temperatures, absorbing-gas amounts, population counts, births and deaths by cause, traffic, gifts, imitation and signals. Columns are named by index, never by Earth names (`elem_<j>`, `air_<k>`, `cat_<r>`).
 - **Columns by starting kind** (`root_<k>_*`): `<k>` is the starting kind a body descends from. Members, mass, births and deaths by cause, the life the genes allow and the life lived, and the means of the main genes, counted by members (a node of 10⁸ members counts 10⁸ times). In a roster run, read the number of kinds alive from these columns.
-- **Months** (`months.csv`): births and deaths by kind and cause each month, so seasons show.
+- **Months** (`months.csv`, with `--months`): births and deaths by kind and cause each month, so seasons show.
 - **The run's numbers** (`physics.json`): every field of `Physics` and `Config`. `ew numbers OLD NEW` prints the fields that differ between two runs, so no number changes without the reader seeing it.
-- **Viewer frames** (`world.ewf.gz`): map layers every few years, with the series and the events.
+- **Viewer frames** (`world.ewf.gz`): map layers every 10 years (`--frames-every`), with the series and the events.
 - **A null run** (`ew run --null`, column `null`): learning and imitation off, brain rows frozen, genes still evolve. Compare a real run with its null run (Section 18.3).
 
 The full list of columns is in `docs/tape.md`.
@@ -878,15 +877,14 @@ What the tests must cover:
 
 How the suite is built:
 
-- **The normal suite** (`cargo test --release --workspace`) takes about 18 seconds on 4 cores. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs` (with `populations.rs` for Copy in populations and `damage.rs` for the damage to a body), one per part of the base (`core/tests/{space, store, clock, solve}.rs`), `core/tests/outbox.rs` (the outbox and the serial phase of a batch), with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (the rows and budgets of `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run); `cli/tests/word_ban.rs` (14.4) and `cli/tests/core_size.rs` (14.3).
+- **The normal suite** (`cargo test --release --workspace`) stays under about 30 seconds on 4 cores. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs` (with `populations.rs` for Copy in populations, `damage.rs` for the damage to a body and `cover.rs` for the plant field), one per part of the base (`core/tests/{space, store, clock, solve}.rs`), `core/tests/threads.rs` (the number of threads and the count of chunks change nothing), with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (every field has a row in `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run); `tape/tests/ranges.rs`, whose test `the_world_lives_and_keeps_its_books` is the main guard (a roster island runs past its last placement, keeps every element and the energy, has no number that is not finite, and ends with the base kinds and enough animal kinds alive); `cli/tests/word_ban.rs` (14.4) and `cli/tests/writer.rs` (a run resumed into its folder leaves the files of the unbroken run).
 - **The contract between the layers** needs no test: the store's arrays are private
   fields of `store::Store`, which only `store::apply` and `store::book_by_array` (for the bodies' moves and the air's step, adding as `apply`
   adds) write, both inside the module `store`, so the compiler checks it; the sums of the boundary nodes and the
   potential are added by `Store::add_far_heat`. A test or an edit changes the
   store by moves from the outside node (`World::cross`).
 - **The test kit.** The tests share one kit: `worldgen::testkit` (a small world, founders, edits booked from the outside node, the rock of a cell, the books of a world, chemistry 0's substances by number). It is behind the `testkit` feature, which only the dev-dependencies of `core` and `tape` turn on, so it is never in a run.
-- **The golden test** (`tape/tests/golden.rs`). Three small runs (16 × 16 cells, 2 years, every starting kind) must stay whole, keep their books and end on pinned fingerprints (`tape::fingerprint`, a hash of the whole saved state). A pure clean-up keeps the fingerprints; a change of the laws re-pins them: `GOLDEN=print` prints the new values. It runs with threads in the workspace's tests (the `cli` turns them on) and must give the same fingerprints without them: `cargo test --release -p tape --test golden`.
-- **Slow tests** are marked `#[ignore]`: a century that keeps its books, the speed benchmark (`speed`), the learning scene over many seeds, long checks of genes, nodes and the island's erosion, and the key-number test (`tape/tests/ranges.rs`: ten numbers of climate, land and life of three 30-year runs). Run them before the last push of a phase (`cargo test --release --workspace --no-fail-fast -- --ignored`); there is no CI on GitHub for now.
+- **Slow tests** are marked `#[ignore]`: the learning scene over many seeds, long runs that keep their books, the island's erosion, coarse against fine (`tape/tests/scale.rs`), and the key-number tests of climate, land and life (`tape/tests/ranges.rs`). Run them before the last push of a phase (`cargo test --release --workspace --no-fail-fast -- --ignored`); there is no CI on GitHub for now.
 
 That is the core of testing, until something emerges. Reviews of the code and of the laws happen in rounds, by the agent and the owner together. What stays banned is proof machinery: receipts, proof campaigns, cross-machine determinism, replay proofs.
 
@@ -902,7 +900,7 @@ Each milestone ends with a short report for the owner, in simple English, saved 
 ### 12.5 Repeatability (cheap kind only)
 
 - Same seed, same code version and same machine/build give the same history.
-- The number of threads does not change the history: every order (of sums, of landings, of writes) is fixed by the data, never by which thread is first. The golden test checks it with and without threads.
+- The number of threads does not change the history: every order (of sums, of landings, of writes) is fixed by the data, never by which thread is first. `core/tests/threads.rs` checks it.
 - Purpose: finding bugs, and replaying a run.
 - **Do not** build identical results across machines, CPU/GPU agreement to the last bit, receipts or replay proofs.
 
@@ -998,11 +996,7 @@ All of these must be true:
 | `analyze` + `library` loader | ≤ 6,000 lines |
 | whole repository (excluding art assets and library data) | ≤ 25,000 lines through M7 |
 
-**Budget for tuned numbers.** `docs/numbers.md` has one row for every field of `Physics` and `Config` (and for the free constants outside them), with its unit, the fact it is, the real size it is anchored to and a mark: physical, anchored or tuned. A tuned number is one set so a run came out a certain way (a rule in a smaller coat, Section 2, lesson 3), or one with no real size behind it. A test (`core/tests/numbers.rs`) fails when a field has no row, when the tuned rows are more than `TUNED_BUDGET`, or when the second table, "Rules chosen for a run" (things picked for a run that are not numbers, such as the hand-set eater start and the fixing founders), has more than `RULES_BUDGET` (**3**) rows. **The rule: the counts may not grow.** A new number must be physical or anchored, or it replaces a tuned one. When a tuned number is anchored or removed, lower the budget in the test. The M7 world search varies only tuned and anchored numbers, within their anchors, never the physical ones.
-
-**Counting code size.** A comment line starts with `//` after its spaces. The test `cli/tests/core_size.rs` counts
-the code lines of `core/src` and prints them per folder (`cargo test --release -p cli --test core_size -- --nocapture`).
-Comments are not counted, so do not delete them to save lines.
+**Budget for tuned numbers.** `docs/numbers.md` has one row for every field of `Physics` and `Config` (and for the free constants outside them), with its unit, the fact it is, the real size it is anchored to and a mark: physical, anchored or tuned. A tuned number is one set so a run came out a certain way (a rule in a smaller coat, Section 2, lesson 3), or one with no real size behind it. A test (`core/tests/numbers.rs`) fails when a field has no row. **The rule: the count of tuned rows and of the rules chosen for a run (the second table, things picked for a run that are not numbers, such as the hand-set eater start and the fixing founders) may not grow.** A new number must be physical or anchored, or it replaces a tuned one. The M7 world search varies only tuned and anchored numbers, within their anchors, never the physical ones.
 
 If you hit a code budget, simplify before adding. The budgets are **goals, not hard stops**: the viewer and the pattern finder may need more than expected. If a part goes over its budget, tell the owner with the number and the reason, and keep going. Going over by 20% with a reason is fine. Going over by 3× means something is wrong (see Section 2).
 
