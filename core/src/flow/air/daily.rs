@@ -177,6 +177,8 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     let [mean, rain, ratio] = vapour(w, s, (act, ground), (blocks, one), (x, &t, &ts), (dd, dt));
     (0..s.state.gas.len() * na).for_each(|at| out.x[at] += mean[at] * share);
     let got = given(ground, act, (&t, &mean));
+    // The air each node's rain meets (`rain_air`), per active gas and node (`[y * na + j]`), on the pool.
+    let met = crate::par::map_n(nx * na, |i| (rain[i] > 0.0).then(|| rain_air(s, ground.wet(), (i / na, i % na, ratio[i]), &t)).flatten());
     for j in 0..na {
         out.t[j] += t[j] * share;
         let (sky, day) = (glow(s.absorbs[j], ts[j], &s.lay[j][1]) * air.area()[j] * dd, &got[j * (1 + nx)..(j + 1) * (1 + nx)]);
@@ -190,7 +192,7 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
                 // the air touching the cells it falls on (`rain_air`, as the book lands it), the air paying what warms
                 // it on the way down.
                 let liquid = if ts[j] < sp.melt { 0.0 } else { sp.lf };
-                let tr = rain_air(s, ground.wet(), (y, j, ratio[i]), &t).unwrap_or(ts[j]);
+                let tr = met[i].unwrap_or(ts[j]);
                 e[j] += m * (sp.lv + sp.lf - liquid - sp.cp * tr);
                 (out.rain[i], out.rain_fusion[i], out.ratio[i]) = (out.rain[i] + m, out.rain_fusion[i] + m * liquid, out.ratio[i] + ratio[i]);
             }

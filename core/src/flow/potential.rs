@@ -41,8 +41,17 @@ struct Heights {
 /// capacity at constant pressure holds the work its column does as it warms), so lifting matter into it lifts it to
 /// there. A bodies' node's gas lies at its cell's head.
 pub(super) fn potential(w: &World, s: &Scratch) -> Potential {
+    potential_of(w, s)
+}
+
+fn potential_of(w: &World, s: &Scratch) -> Potential {
     let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
-    let (n, na, ns, g, p) = (cells.n(), air.n(), w.chem.ns(), w.cfg.gravity, w.cfg.phys);
+    let (n, na, g, p) = (cells.n(), air.n(), w.cfg.gravity, w.cfg.phys);
+    // The substances Flow's last refresh found in the ground, its bed and the air, and those it added since
+    // (`scratch::refresh`): what its stores and the bodies' nodes hold comes from them.
+    let mut ks: Vec<usize> = s.state.loose.iter().chain(&s.state.bedk).chain(&s.state.gas).copied().collect();
+    ks.sort_unstable();
+    ks.dedup();
     let (ground, bed, deep, bodies) = (w.store.amounts(Class::Ground), w.store.amounts(Class::Bed), w.store.amounts(Class::Deep), w.store.amounts(Class::Bodies));
     let mut rows = vec![0.0; n.div_ceil(CELLS_PER_TASK) * CELLS_PER_TASK * ROW];
     crate::par::rows(&mut rows, CELLS_PER_TASK * ROW, || (), |_, task, out| {
@@ -52,22 +61,24 @@ pub(super) fn potential(w: &World, s: &Scratch) -> Potential {
         let mut sums = vec![[0.0; 9]; cells_of.len()];
         // Where each substance lies in its class's amounts over the task's cells (`held`: none where it holds none).
         let at = |k: usize| k * n + cells_of.start..k * n + cells_of.end;
-        for k in 0..ns {
+        let (tg, pk, phi) = (&s.state.tg[cells_of.clone()], &s.state.pk[cells_of.clone()], &s.state.phi[cells_of.clone()]);
+        for &k in &ks {
             let sp = &s.sp[k];
             if let Some(r) = held(&bed[at(k)]) {
                 sums.iter_mut().zip(r).for_each(|(x, &a)| (x[0], x[3]) = (x[0] + a * sp.mm, x[3] + a * sp.v[0]));
             }
             if let Some(r) = held(&ground[at(k)]) {
-                for ((x, &a), i) in sums.iter_mut().zip(r).zip(cells_of.clone()).filter(|p| *p.0 .1 > 0.0) {
-                    let (t, pk) = (s.state.tg[i], s.state.pk[i]);
-                    let wet = if t >= sp.boil { 1.0 } else if pk == k { s.state.phi[i] } else { (t >= sp.melt) as u8 as f64 };
-                    (x[2], x[5]) = (x[2] + a * wet * sp.mm, x[5] + if t < sp.boil { a * wet * sp.v[1] } else { 0.0 });
-                    (x[1], x[4]) = (x[1] + a * (1.0 - wet) * sp.mm, x[4] + a * (1.0 - wet) * sp.v[0]);
+                for (c, (x, &a)) in sums.iter_mut().zip(r).enumerate() {
+                    let t = tg[c];
+                    let wet = if t >= sp.boil { 1.0 } else if pk[c] == k { phi[c] } else { (t >= sp.melt) as u8 as f64 };
+                    let (wet_mol, dry_mol) = (a * wet, a - a * wet);
+                    (x[2], x[5]) = (x[2] + wet_mol * sp.mm, x[5] + if t < sp.boil { wet_mol * sp.v[1] } else { 0.0 });
+                    (x[1], x[4]) = (x[1] + dry_mol * sp.mm, x[4] + dry_mol * sp.v[0]);
                 }
             }
             if let Some(r) = held(&deep[at(k)]) {
-                for ((x, &a), i) in sums.iter_mut().zip(r).zip(cells_of.clone()) {
-                    (x[6], x[7]) = (x[6] + a * sp.mm, x[7] + if s.state.tg[i] < sp.boil { a * sp.v[1] } else { 0.0 });
+                for (c, (x, &a)) in sums.iter_mut().zip(r).enumerate() {
+                    (x[6], x[7]) = (x[6] + a * sp.mm, x[7] + if tg[c] < sp.boil { a * sp.v[1] } else { 0.0 });
                 }
             }
             if let Some(r) = held(&bodies[at(k)]) {
@@ -92,7 +103,7 @@ pub(super) fn potential(w: &World, s: &Scratch) -> Potential {
     let mut za = vec![0.0; na];
     cells.parent().iter().enumerate().for_each(|(i, &j)| za[j as usize] += head[i] * cells.area()[i]);
     za.iter_mut().zip(air.area()).for_each(|(z, a)| *z /= a);
-    let e_air = (0..na).map(|j| (0..ns).map(|k| amounts[k * na + j] * s.sp[k].mm).sum::<f64>() * g * za[j]).collect();
+    let e_air = (0..na).map(|j| ks.iter().map(|&k| amounts[k * na + j] * s.sp[k].mm).sum::<f64>() * g * za[j]).collect();
     Potential { ground: at(0), air: e_air, deep: at(1), bodies: at(4), heights: Heights { ground: head, air: za, deep: at(3) } }
 }
 
@@ -110,24 +121,27 @@ pub(super) struct Lifts {
     moved: Vec<Moved>,
 }
 
-/// A mass that went from one node to another, kg: each named by its array of `Potential` (`slot`) and its index there
-/// (the node it went to may hold no matter here).
+/// A mass that went from one node to another, kg: each named by its array of `Potential` and its index there (`slot`;
+/// the node it went to may hold no matter here, `NOWHERE`).
 #[derive(Clone, Copy, Debug)]
-struct Moved {
-    from: (usize, usize),
-    to: Option<(usize, usize)>,
+pub(super) struct Moved {
+    from: (u8, u32),
+    to: (u8, u32),
     kg: f64,
 }
 
+/// The array of `Moved::to` for a node that holds no matter here.
+const NOWHERE: u8 = u8::MAX;
+
 /// The array of `Potential` and the index of node `index` of `class`, for a class that holds matter here (the bed's
 /// matter lies in its cell's stack).
-fn slot(class: Class, index: usize) -> Option<(usize, usize)> {
+fn slot(class: Class, index: u32) -> (u8, u32) {
     match class {
-        Class::Ground | Class::Bed => Some((0, index)),
-        Class::Air => Some((1, index)),
-        Class::Deep => Some((2, index)),
-        Class::Bodies => Some((3, index)),
-        _ => None,
+        Class::Ground | Class::Bed => (0, index),
+        Class::Air => (1, index),
+        Class::Deep => (2, index),
+        Class::Bodies => (3, index),
+        _ => (NOWHERE, index),
     }
 }
 
@@ -137,7 +151,8 @@ impl Potential {
         [&self.ground, &self.air, &self.deep, &self.bodies]
     }
     /// The height the matter of node `index` of array `c` (`slot`) leaves from, m.
-    fn height(&self, (c, index): (usize, usize)) -> f64 {
+    fn height(&self, (c, index): (u8, u32)) -> f64 {
+        let index = index as usize;
         match c {
             0 | 3 => self.heights.ground[index],
             1 => self.heights.air[index],
@@ -147,55 +162,65 @@ impl Potential {
 }
 
 impl Lifts {
-    /// From the world now, whose potential energy is `known` where the last part left it so.
-    pub(super) fn start(w: &World, s: &Scratch, known: Option<Potential>) -> Lifts {
-        Lifts { start: known.unwrap_or_else(|| potential(w, s)), moved: Vec::new() }
+    /// From the world now, whose potential energy is `known` where the last part left it so, its moves gathered in
+    /// `moved` (empty; kept from part to part for its room).
+    pub(super) fn start(w: &World, s: &Scratch, known: Option<Potential>, moved: Vec<Moved>) -> Lifts {
+        Lifts { start: known.unwrap_or_else(|| potential(w, s)), moved }
     }
-    /// `mol` of a substance of molar mass `mm` go from node `from` to node `to` (back where negative).
-    fn carry(&mut self, (from, to): ((Class, usize), (Class, usize)), mm: f64, mol: f64) {
-        let (src, dst) = if mol > 0.0 { (from, to) } else { (to, from) };
-        if let Some(from) = slot(src.0, src.1) {
-            self.moved.push(Moved { from, to: slot(dst.0, dst.1), kg: mol.abs() * mm });
+    /// `kg` go from node `from` to node `to` (back where negative).
+    fn carry(&mut self, (from, to): ((Class, u32), (Class, u32)), kg: f64) {
+        let (src, dst) = if kg > 0.0 { (from, to) } else { (to, from) };
+        let (from, to) = (slot(src.0, src.1), slot(dst.0, dst.1));
+        if from.0 != NOWHERE && kg != 0.0 {
+            self.moved.push(Moved { from, to, kg: kg.abs() });
         }
     }
     /// Book the part's lifts and falls: each mass moved carries its potential energy from the height it left, the mean
     /// of its node's height at the part's start and at its end (so a node's own matter that leaves it, however much,
     /// takes what it held of it); each node's heat takes what came in less what left less the change of its own
-    /// potential energy (`store::fall_heat`, which adds their sum to `Store::lifted`). Returns the potential energy now.
-    pub(super) fn book(self, w: &mut World, s: &Scratch) -> Potential {
+    /// potential energy (`store::fall_heat`, which adds their sum to `Store::lifted`). Returns the potential energy now,
+    /// and the room of its moves, emptied.
+    pub(super) fn book(self, w: &mut World, s: &Scratch) -> (Potential, Vec<Moved>) {
         let (now, g) = (potential(w, s), w.cfg.gravity);
-        let (start, moved) = (self.start, self.moved);
+        let (start, mut moved) = (self.start, self.moved);
         let olds = start.energies();
         let mut q: [Vec<f64>; 4] = now.energies().map(|v| vec![0.0; v.len()]);
         for m in &moved {
             let e = m.kg * g * (start.height(m.from) + now.height(m.from)) / 2.0;
-            q[m.from.0][m.from.1] -= e;
-            if let Some((c, i)) = m.to {
-                q[c][i] += e;
+            q[m.from.0 as usize][m.from.1 as usize] -= e;
+            if m.to.0 != NOWHERE {
+                q[m.to.0 as usize][m.to.1 as usize] += e;
             }
         }
+        moved.clear();
         for (((class, q), old), new) in [Class::Ground, Class::Air, Class::Deep, Class::Bodies].into_iter().zip(&mut q).zip(olds).zip(now.energies()) {
             q.iter_mut().zip(old.iter().zip(new)).for_each(|(q, (o, n))| *q -= n - o);
             fall_heat(w, class, q);
         }
-        now
+        (now, moved)
     }
 }
 
-/// Book `fluxes` and `moves` (`store::apply`), and what they carry for the part of Flow under way (`Lifts`).
+/// Book `fluxes` and `moves` (`store::apply`), and what they carry for the part of Flow under way (`Lifts`): over each
+/// link the mass of all its substances that goes each way.
 pub(super) fn apply(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], moves: &[Move]) {
     if let Some(l) = s.lifts.as_mut() {
         for x in fluxes {
             let links = x.a.len();
-            for (q, &k) in x.ks.iter().enumerate() {
-                let mm = s.sp[k as usize].mm;
-                for (lk, &mol) in x.mol[q * links..(q + 1) * links].iter().enumerate().filter(|p| *p.1 != 0.0) {
-                    l.carry(((x.class[0], x.a[lk] as usize), (x.class[1], x.b[lk] as usize)), mm, mol);
+            let mm: Vec<f64> = x.ks.iter().map(|&k| s.sp[k as usize].mm).collect();
+            for lk in 0..links {
+                let (mut ab, mut ba) = (0.0, 0.0);
+                for (q, mm) in mm.iter().enumerate() {
+                    let kg = x.mol[q * links + lk] * mm;
+                    if kg > 0.0 { ab += kg } else { ba += kg }
                 }
+                let ends = ((x.class[0], x.a[lk]), (x.class[1], x.b[lk]));
+                l.carry(ends, ab);
+                l.carry(ends, ba);
             }
         }
-        for m in moves.iter().filter(|m| m.mol != 0.0) {
-            l.carry(((m.from.class, m.from.index), (m.to.class, m.to.index)), s.sp[m.k as usize].mm, m.mol);
+        for m in moves {
+            l.carry(((m.from.class, m.from.index as u32), (m.to.class, m.to.index as u32)), m.mol * s.sp[m.k as usize].mm);
         }
     }
     store::apply(w, fluxes, moves);

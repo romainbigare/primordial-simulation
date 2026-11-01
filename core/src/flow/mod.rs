@@ -19,7 +19,7 @@ use crate::{store::Class, AIR, World};
 use land::ground_state;
 use scratch::tables;
 
-/// Each part of the law (`state`, `air`, `sink`, `liquid`, `creep`, `refresh`) is a pass of the month (`schedule`). This
+/// Each part of the law (`state`, `air`, `liquid`, `creep`, `refresh`) is a pass of the month (`schedule`). This
 /// one: the state of ground and air nodes from the world now, which the other laws read (in full at each month's start,
 /// so a world resumed there goes on as an unbroken one; the survey builds it in full then, `built_now`).
 pub fn state(w: &mut World, full: bool) {
@@ -48,7 +48,8 @@ pub(crate) fn built_now(w: &World) -> bool {
 
 /// The air's step for `dt` seconds (`air::step`), booked whole, from the state of ground and air nodes (brought up to
 /// date unless the `state` process just did; the heat of the bodies' nodes that the cover does not claim, which goes
-/// back to the ground first, `survey::release`, then warms it from the next state).
+/// back to the ground first, `survey::release`, then warms it from the next state); then the liquid over field capacity
+/// sinks into the bed's store (`drain::sink`), as the rain the step brought would otherwise wait in the pores.
 pub fn air(w: &mut World, dt: f64) {
     with(w, true, |w, s| {
         crate::survey::release(w);
@@ -57,12 +58,8 @@ pub fn air(w: &mut World, dt: f64) {
         }
         air::state(w, s);
         air::step(w, s, dt);
+        drain::sink(w, s, dt);
     });
-}
-
-/// Liquid over field capacity sinks into the bed's store for `dt` seconds (`drain::sink`).
-pub fn sink(w: &mut World, dt: f64) {
-    with(w, true, |w, s| drain::sink(w, s, dt));
 }
 
 /// Liquid with its drainage and its work on the bed for `dt` seconds (`liquid::liquid`).
@@ -105,8 +102,9 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
         (st.tg, st.pk, st.phi, st.cloud) = (vec![0.0; n], vec![land::NONE; n], vec![0.0; n], vec![[0.0; 2]; w.mesh.level(AIR).n()]);
     }
     let build = s.cap.len() != n;
-    let known = s.known.take();
-    s.lifts = (!fresh && (moving || build)).then(|| potential::Lifts::start(w, &s, known));
+    let known = s.known.take().filter(|_| s.chained).map(|k| k.1);
+    let room = std::mem::take(&mut s.moved);
+    s.lifts = (!fresh && (moving || build)).then(|| potential::Lifts::start(w, &s, known, room));
     if build {
         scratch::room(w, &mut s);
         ground_state(w, &mut s, true);
@@ -114,16 +112,19 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
     }
     f(w, &mut s);
     if let Some(lifts) = s.lifts.take() {
-        let now = lifts.book(w, &s);
-        s.known = s.chained.then_some(now);
+        let (now, room) = lifts.book(w, &s);
+        (s.known, s.moved) = (Some((w.time, now)), room);
     }
     w.scratch = s;
 }
 
-/// The parts of Flow that run from now until `chain(w, false)` follow each other with nothing else between: each starts
-/// from the potential energy the last left (`potential::Lifts`), not found again.
+/// The parts of Flow that run from now until `chain(w, false)` follow each other, and the last part of Flow at the
+/// world's time now, with nothing else between: each starts from the potential energy the last left
+/// (`potential::Lifts`), not found again.
 pub fn chain(w: &mut World, on: bool) {
-    (w.scratch.chained, w.scratch.known) = (on, None);
+    let s = &mut w.scratch;
+    s.chained = on;
+    s.known = s.known.take().filter(|k| on && k.0 == w.time);
 }
 
 /// Lowest and highest of `v`.

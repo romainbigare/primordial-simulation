@@ -4,7 +4,7 @@
 use super::super::{land::wet, Scratch};
 use super::touching;
 use super::super::potential::apply;
-use crate::{chem::Chemistry, math::one_minus_exp, store::{Batch, Class}, units::R_GAS, AIR, World};
+use crate::{chem::Chemistry, math::one_minus_exp, store::{Class, LinkFlux}, units::R_GAS, AIR, World};
 
 /// Entries of the table of a saturation pressure (`Sat`) per K.
 const SAT_PER_K: f64 = 20.0;
@@ -112,21 +112,27 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
         }
     });
     let ks: Vec<u16> = henry.iter().map(|h| h.1 as u16).collect();
-    let (parent, mut links) = (w.mesh.cells().parent(), Batch::new([Class::Ground, Class::Air], &ks));
-    // What each air node holds of each gas as the crossing leaves it, mol (`[x * na + j]`).
+    let parent = w.mesh.cells().parent();
+    // What each air node holds of each gas as the crossing leaves it, mol (`[x * na + j]`); the cells that take or give
+    // some, and per gas and cell what goes up, mol, then per cell the heat that leaves the ground, J.
     let mut left: Vec<f64> = henry.iter().flat_map(|h| w.store.amounts(Class::Air)[h.1 * na..(h.1 + 1) * na].iter().copied()).collect();
-    for (i, &j) in parent.iter().enumerate() {
-        let j = j as usize;
-        for (x, &(_, k)) in henry.iter().enumerate().filter(|h| want[i * nh + h.0] != 0.0) {
+    let crossing: Vec<u32> = (0..n as u32).filter(|&i| want[i as usize * nh..(i as usize + 1) * nh].iter().any(|&m| m != 0.0)).collect();
+    let (links, mut up) = (crossing.len(), vec![0.0; (nh + 1) * crossing.len()]);
+    for (l, &i) in crossing.iter().enumerate() {
+        let (i, j) = (i as usize, parent[i as usize] as usize);
+        for (x, &(_, k)) in henry.iter().enumerate() {
             let (m, sp) = (want[i * nh + x].min(left[x * na + j]), s.sp[k]);
             // The gas brings its heat (the air's, or the ground's when it comes out) and frees its latent heat in the
             // node; `-m` mol go up from the ground node into its air node, and the ground node's state follows.
             let tq = if m > 0.0 { s.ta[j] } else { s.state.tg[i] };
-            links.add((i, j), k as u16, (-m, -m * (sp.cp * tq + sp.lf + sp.lv)));
+            up[x * links + l] = -m;
+            up[nh * links + l] -= m * (sp.cp * tq + sp.lf + sp.lv);
             left[x * na + j] -= m;
         }
     }
-    apply(w, s, &[links.flux()], &[]);
+    let to: Vec<u32> = crossing.iter().map(|&i| parent[i as usize]).collect();
+    let (mol, heat) = up.split_at(nh * links);
+    apply(w, s, &[LinkFlux { class: [Class::Ground, Class::Air], a: &crossing, b: &to, ks: &ks, mol, heat }], &[]);
     for &(_, k) in henry {
         if (0..n).any(|i| w.store.amounts(Class::Ground)[k * n + i] > 0.0) {
             s.add_loose(k, true);

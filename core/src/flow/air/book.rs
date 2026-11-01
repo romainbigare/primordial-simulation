@@ -39,12 +39,16 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     let (n, na, nx, area) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), act.len(), w.mesh.cells().area().to_vec());
     // Each cell's outputs at the mean air it saw.
     let sr = &*s;
-    let seen: Vec<f64> = (0..n).flat_map(|i| std::iter::once(lerp(sr, &mean.t, i)).chain(act.iter().map(move |ac| lerp(sr, &mean.x[ac.gi * na..(ac.gi + 1) * na], i)))).collect();
+    let mut seen = vec![0.0; n * (1 + nx)];
+    crate::par::rows(&mut seen, 1 + nx, || (), |_, i, row| {
+        row[0] = lerp(sr, &mean.t, i);
+        act.iter().enumerate().for_each(|(y, ac)| row[1 + y] = lerp(sr, &mean.x[ac.gi * na..(ac.gi + 1) * na], i));
+    });
     let at = |i: usize, o: usize| response.at(i, o, seen[i * (1 + nx)], |y| seen[i * (1 + nx) + 1 + y]);
     let (cells, parent): (Vec<u32>, Vec<u32>) = ((0..n as u32).collect(), w.mesh.cells().parent().to_vec());
     let (ks, gases): (Vec<u16>, Vec<u16>) = (act.iter().map(|a| a.k as u16).collect(), s.state.gas.iter().map(|&k| k as u16).collect());
-    let mol: Vec<f64> = (0..nx).flat_map(|y| (0..n).map(move |i| (y, i))).map(|(y, i)| at(i, UP + y)).collect();
-    let link: Vec<f64> = (0..n).map(|i| at(i, LINK)).collect();
+    let mol = crate::par::map_n(nx * n, |x| at(x % n, UP + x / n));
+    let (link, to_space) = (crate::par::map_n(n, |i| at(i, LINK)), crate::par::map_n(n, |i| at(i, SPACE)));
     // The rain, at the air touching each cell, with the fusion enthalpy each mol of its node's rain keeps.
     let mut rained = Batch::new([Class::Ground, Class::Air], &ks);
     let mut fell = vec![0.0; nx * n];
@@ -58,9 +62,9 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     }
     let (sun, space) = (Boundary::Sun as usize, Boundary::Space as usize);
     let (mut lit, mut kept, mut cooled) = (Batch::new([Class::Boundary, Class::Ground], &[]), Batch::new([Class::Boundary, Class::Bodies], &[]), Batch::new([Class::Ground, Class::Boundary], &[]));
-    for i in 0..n {
+    for (i, &out) in to_space.iter().enumerate() {
         lit.link((sun, i), response.fixed(i, SUN));
-        cooled.link((i, space), at(i, SPACE));
+        cooled.link((i, space), out);
         if response.fixed(i, KEPT) > 0.0 {
             kept.link((sun, i), response.fixed(i, KEPT));
         }

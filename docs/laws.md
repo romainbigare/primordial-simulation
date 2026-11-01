@@ -126,8 +126,8 @@ and a soft cover that melts away holds its surface at the melting point only unt
 long step ends where short ones do.
 
 ### 1.2 Liquid
-`flow::liquid`, once a month, after the air's steps. The sink into the bed's store runs after each of the air's steps
-(`flow::sink`).
+`flow::liquid`, once a month, after the air's steps. The sink into the bed's store ends each of the air's steps
+(`flow::air`).
 - **Pores first**: the loose ground's pores (`porosity`) fill first, under any soft cover; only liquid above them stands
   and has a head (`flow::land::stand`), the depth bodies and Change read.
 - **Spill levels**: a priority flood over the ground gives each cell its spill level (Barnes, Lehman and Mulla 2014;

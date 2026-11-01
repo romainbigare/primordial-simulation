@@ -18,7 +18,7 @@ fn day_month_and_season_come_from_the_seconds() {
     assert_eq!(cal.season(cal.year / 2), 0.5);
 }
 
-/// A month of `step`: the survey, Flow's state, the air and the sink into the bed's store in steps of `AIR_STEP_DAYS`,
+/// A month of `step`: the survey, Flow's state, the air (with the sink into the bed's store) in steps of `AIR_STEP_DAYS`,
 /// the liquid (with creep and the refresh at their months), the cover's month, Change, Bond, then the bodies, each
 /// once. The clock ends a whole month on, and `day_with_month_at_start` moves it by one day, the month's passes only at a month's start.
 #[test]
@@ -30,7 +30,7 @@ fn a_month_runs_its_passes_in_their_order() {
     assert_eq!(w.time, t0 + cal.month);
     let air = (w.cfg.days_per_month / pcore::AIR_STEP_DAYS) as usize;
     let flow = marks[1..].iter().take_while(|&&m| m == Stage::Flow).count();
-    assert!(marks[0] == Stage::Bodies && flow >= 2 + 2 * air, "{marks:?}");
+    assert!(marks[0] == Stage::Bodies && flow >= 2 + air, "{marks:?}");
     assert_eq!(marks[1 + flow..], [Stage::Bodies, Stage::Change, Stage::Parts, Stage::Bodies]);
     let (d, m) = (w.day(), w.month());
     pcore::day_with_month_at_start(&mut w);

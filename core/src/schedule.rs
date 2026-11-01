@@ -78,7 +78,8 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
     };
     // The survey of the cells builds Flow's state in full for their surroundings; Flow's own pass leaves it then.
     pass(w, Stage::Bodies, "survey", &|w| survey::survey(w));
-    // Flow's parts follow each other with nothing between (`flow::chain`), from here to its refresh.
+    // Flow's parts follow each other and the survey's state of Flow with nothing between (`flow::chain`), from here to
+    // its refresh.
     flow::chain(w, true);
     pass(w, Stage::Flow, "state", &|w| {
         if !flow::built_now(w) {
@@ -86,12 +87,11 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
         }
     });
     // The air in steps of `air_days`, each at its own time in the month (the sun's season), its state brought up to date
-    // first (`flow::air`); after each, the sink of the liquid over field capacity into the bed's store.
+    // first and the sink of the liquid over field capacity into the bed's store after (`flow::air`).
     let air = air_days as u64 * cal.day;
     for k in 0..len / air {
         w.time = t0 + k * air;
         pass(w, Stage::Flow, "air", &|w| flow::air(w, air as f64));
-        pass(w, Stage::Flow, "sink", &|w| flow::sink(w, air as f64));
     }
     w.time = t0;
     pass(w, Stage::Flow, "liquid", &|w| flow::liquid(w, len as f64));
