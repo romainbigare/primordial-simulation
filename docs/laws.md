@@ -474,7 +474,9 @@ task per domain), slot by slot, the tallest (most walls per m²) first:
   out as kinds build, tallest first) build body matter, walls (10^`WALLS` kg per kg of matter) and the hard solid
   (`cover_hard` kg per kg of matter) by the conversions of growth (`Chemistry::build`, `builds`), paying `c_copy` per kg
   by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (24), at
-  most 10^`FIX` mol per kg per s at the reaction's pace, paid by the reaction's fuel.
+  most 10^`FIX` mol per kg per s at the reaction's pace, paid by the reaction's fuel. The fuel past its reserve that
+  it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
+  2004), where the open world's rot takes it.
 - **Seeds**: the share `SEED` of what it builds leaves for a neighbour cell drawn (or stays where there is none), with
   one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
   not pay: what a kg more would store with the light at the bottom of its layer (`math::shade`) is less than a kg's

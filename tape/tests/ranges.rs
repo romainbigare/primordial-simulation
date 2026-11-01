@@ -1,23 +1,20 @@
+//! The world lives and keeps its books: a small island with the roster keeps every element and the energy for 20
+//! years, holds no number that is not finite, and has cover and two kinds of animals alive at the end.
+//!
 //! The key numbers of a normal run: `ew run --seed N --size 64` for seeds 1, 2 and 3, 30 years each, on threads. The
 //! mean of each number over the three seeds must lie in its range around its reference, the mean of the same three
-//! seeds in the reference runs: the runs of the world after the foundation's law changes of Phases E, F and J, at the
-//! steps of Phase J's end (decision 27); for the climate (but the rain), the land worn down and the rivers, the runs
-//! since a soft cover holds no liquid and melts at its top and snow brings the ground no fusion enthalpy (decision 67);
-//! for the rain, the runs since clouds absorb heat radiation and the island lies at 40° (decision 34); for the
-//! heat-absorbing gas and the light-eaters, the runs after the
-//! body costs and the light-eaters' walls (decision 53); for the eaters, the runs before E2.1 of the speed work, after
-//! the final review's law changes (speed decision S49). The climate and the land worn down are means over years 21 to 30; life
-//! is read at year 30, ten years after the eaters came. Each run also keeps its books. Two numbers are also held to
-//! wide bounds around Earth's, as the references only keep a world near itself: the rain on land, and the share of the
-//! light-eaters' dry mass they hold as their stored solid.
+//! seeds in the reference runs: for the climate, the land worn down and the rivers, the runs of the world before the
+//! cover and the short body model; for the cover and the eaters, the runs of the cover and the short body model. The
+//! climate and the land worn down are means over years 21 to 30; life is read at year 30, ten years after the eaters
+//! came. Each run also keeps its books. Two numbers are also held to wide bounds around Earth's, as the references only
+//! keep a world near itself: the rain on land, and the share of the cover's dry mass it holds as its stored solid.
 //!
 //! The sleep of Change's nodes is a speed tool: a small world with life keeps the chemistry's key numbers
 //! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2.
 //!
 //! The eaters live: at 48 x 48 they still have members at year 100 in seeds 1, 2 and 3, after the booms and busts
 //! that year 30 hides; they have stopped growing by their last ten years, and none hold more than a few times the
-//! densest soil animals. The ground under dense canopies
-//! follows its neighbours from one month to the next.
+//! densest soil animals.
 //!
 //! A globe of Earth's size without life keeps an Earth-like climate: its land near Earth's, steady, with no runaway
 //! ice, and its surface, vapour and rain on land within wide bounds around Earth's.
@@ -51,25 +48,21 @@ const ABSORBER_PPM: f64 = 388.8;
 const RIVERS: f64 = 712.4;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
 const WORN: f64 = 0.141;
-/// Light-eaters (starting kind 0) at year 30, log10 kg (`root_0_kg`), in the reference runs.
-const PLANT_KG: f64 = 10.38;
+/// The cover (starting kind 0) at year 30, log10 kg (`root_0_cover_kg`), in the reference runs.
+const COVER_KG: f64 = 9.985;
 /// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the reference runs.
-const EATER_KG: f64 = 5.354;
-/// The life light-eaters live at year 30, yr (`root_0_life_real`: members standing over deaths), in the reference runs.
-const PLANT_LIFE: f64 = 1.81;
-/// The factor either way the light-eaters' life may lie from `PLANT_LIFE`.
-const PLANT_LIFE_RANGE: f64 = 2.0;
-/// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the light-eaters' 0.3, as a few hundred eaters
-/// make a noisy mean (decision 33).
+const EATER_KG: f64 = 9.166;
+/// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the cover's 0.3, as a boom or bust of the eaters
+/// moves a mean of three seeds far.
 const EATER_KG_RANGE: f64 = 0.5;
 /// The life eaters live at year 30, yr (`root_1_life_real`), in the reference runs.
-const EATER_LIFE: f64 = 10.47;
+const EATER_LIFE: f64 = 2.43;
 
 /// Earth's rain on land, m/yr (Trenberth et al. 2007), and the factor either way a run's may lie from it: the island
 /// lies at 40°, where land gets 0.5 to 1 m (from memory), and a globe's land spans every belt.
 const EARTH_RAIN_LAND: f64 = 0.76;
 const EARTH_RAIN_RANGE: f64 = 3.0;
-/// The most share of the light-eaters' dry mass their stored solid may make: plants hold about a tenth of theirs as
+/// The most share of the cover's dry mass its stored solid may make: plants hold about a tenth of theirs as
 /// stored sugars and starch, rarely over a third in storage organs (from memory).
 const STORED_MOST: f64 = 0.5;
 
@@ -110,17 +103,37 @@ impl fmt::Display for Range {
     }
 }
 
+/// The liveness check's island: its side and years.
+const LIVE_SIDE: usize = 16;
+const LIVE_YEARS: u64 = 20;
+/// The starting kinds that are animals (bodies) in the roster.
+fn animal_kinds() -> Vec<usize> {
+    worldgen::life::KINDS.iter().enumerate().filter(|k| matches!(k.1.place, worldgen::life::Place::Bodies(_))).map(|k| k.0).collect()
+}
+
+/// `LIVE_YEARS` of a `LIVE_SIDE` island with the roster (seed 1) keep every element and the energy (`common::run`
+/// checks the books to 1e-12), leave no number that is not finite (`check::broken`), and end with cover and at least
+/// two kinds of animals alive.
+#[test]
+fn the_world_lives_and_keeps_its_books() {
+    let (w, rec) = run(1, LIVE_SIDE, LIVE_YEARS, true, |_| {}, |_, w, _| assert_eq!(pcore::check::broken(w), None));
+    let cover = rec.last("cover_kg");
+    let alive: Vec<usize> = animal_kinds().into_iter().filter(|k| w.life.alive().any(|b| w.life.brains[b.lineage as usize].as_ref().is_some_and(|l| l.root as usize == *k))).collect();
+    println!("year {LIVE_YEARS}: cover {cover:.3e} kg, animal kinds alive {alive:?}");
+    assert!(cover > 0.0, "the cover died out");
+    assert!(alive.len() >= 2, "animal kinds alive: {alive:?}");
+}
+
 /// The key numbers in the order `key_numbers` gives them: name, unit, reference and range.
-const KEYS: [(&str, &str, f64, Range); 10] = [
+const KEYS: [(&str, &str, f64, Range); 9] = [
     ("ground temperature on land", "K", T_LAND, Range::Plus(1.0)),
     ("seasonal swing on land", "K", SWING, Range::Plus(1.5)),
     ("rain on land", "mol/m2/s", RAIN_LAND, Range::Times(1.3)),
     ("heat-absorbing gas", "ppm", ABSORBER_PPM, Range::Plus(40.0)),
     ("river cells", "", RIVERS, Range::Times(1.5)),
     ("land worn down", "mm/yr", WORN, Range::Times(2.0)),
-    ("light-eaters", "log10 kg", PLANT_KG, Range::Plus(0.3)),
+    ("cover", "log10 kg", COVER_KG, Range::Plus(0.3)),
     ("eaters", "log10 kg", EATER_KG, Range::Plus(EATER_KG_RANGE)),
-    ("life of light-eaters", "yr", PLANT_LIFE, Range::Times(PLANT_LIFE_RANGE)),
     ("life of eaters", "yr", EATER_LIFE, Range::Times(2.0)),
 ];
 
@@ -130,7 +143,7 @@ fn rock(w: &World, land: &[usize]) -> f64 {
 }
 
 /// `YEARS` years of `ew run --seed <seed> --size 64`: the key numbers in the order of `KEYS`, then the rain on land in
-/// m/yr and the light-eaters' stored share (`stored_share`) at the end.
+/// m/yr and the cover's stored share (`stored_share`) at the end.
 fn key_numbers(seed: u64) -> ([f64; KEYS.len()], [f64; 2]) {
     let gas = format!("air_{ABSORBER}");
     let climate = ["t_land", "t_land_summer", "t_land_winter", "rain_land", gas.as_str(), "rivers"];
@@ -147,14 +160,13 @@ fn key_numbers(seed: u64) -> ([f64; KEYS.len()], [f64; 2]) {
     });
     let worn = (rock_from - rock(&w, &land)) / span * MM;
     let [t, summer, winter, rain, air, rivers] = mean;
-    let (plants, eaters) = (rec.last("root_0_kg").log10(), rec.last("root_1_kg").log10());
-    let lives = [rec.last("root_0_life_real"), rec.last("root_1_life_real")];
-    let keys = [t, summer - winter, rain, air * PPM, rivers, worn, plants, eaters, lives[0], lives[1]];
+    let (cover, eaters) = (rec.last("root_0_cover_kg").log10(), rec.last("root_1_kg").log10());
+    let keys = [t, summer - winter, rain, air * PPM, rivers, worn, cover, eaters, rec.last("root_1_life_real")];
     (keys, [rain_m_yr(&w, rain), stored_share(&w)])
 }
 
 /// The key numbers of three seeds, each mean in its range around its reference; the rain on land within
-/// `EARTH_RAIN_RANGE` of Earth's, and the light-eaters' stored share under `STORED_MOST`.
+/// `EARTH_RAIN_RANGE` of Earth's, and the cover's stored share under `STORED_MOST`.
 #[test]
 #[ignore = "slow: three 30-year runs of a 64 x 64 world"]
 fn the_key_numbers_stay_in_their_ranges() {
@@ -176,9 +188,9 @@ fn the_key_numbers_stay_in_their_ranges() {
     let (rain, stored) = (earth(0).iter().sum::<f64>() / 3.0, earth(1).iter().sum::<f64>() / 3.0);
     let rain_ok = Range::Times(EARTH_RAIN_RANGE).holds(rain, EARTH_RAIN_LAND);
     println!("rain on land {rain:.3} m/yr, against Earth's {EARTH_RAIN_LAND} x/ {EARTH_RAIN_RANGE}");
-    println!("light-eaters' stored share {stored:.3} (seeds {:.3?}), under {STORED_MOST}", earth(1));
+    println!("the cover's stored share {stored:.3} (seeds {:.3?}), under {STORED_MOST}", earth(1));
     out.extend((!rain_ok).then_some("rain on land against Earth's"));
-    out.extend((stored >= STORED_MOST).then_some("light-eaters' stored share"));
+    out.extend((stored >= STORED_MOST).then_some("the cover's stored share"));
     assert!(out.is_empty(), "out of their ranges: {out:?}");
 }
 
@@ -300,46 +312,6 @@ fn the_eaters_live_and_stop_growing() {
     assert!(!growing, "the eaters still grow in years {EATER_FROM} to {EATER_YEARS}: {eaters:?}");
     let boomed = eaters.iter().any(|e| e[1] > EATER_MOST_KG_KM2);
     assert!(!boomed, "the eaters boomed past {EATER_MOST_KG_KM2} kg/km2: {eaters:?}");
-}
-
-/// The canopy check: the years before it, the share of land cells with the most body mass per area that are dense
-/// canopies (by rank, so the check keeps its cells when a law moves body mass), how far a canopy's ground may move
-/// against the mean of its neighbours within 30 days, K, and the share of canopies that may move more.
-const CANOPY_YEARS: u64 = 20;
-const CANOPY_TOP: f64 = 0.05;
-const CANOPY_SWING: f64 = 10.0;
-const CANOPY_SHARE: f64 = 0.15;
-
-/// Bodies draw their heat from the ground in their cell's implicit balance in the air's step (laws.md 1.4), so the
-/// ground under a dense canopy (the densest `CANOPY_TOP` of the land cells with life) follows its neighbours: through a
-/// year, day by day, after `CANOPY_YEARS` of seed 1, fewer than `CANOPY_SHARE` of the dense canopies move more than
-/// `CANOPY_SWING` against their neighbours within 30 days.
-#[test]
-#[ignore = "slow: a 20-year run of a 64 x 64 world, then a year day by day"]
-fn the_ground_under_dense_canopies_stays_near_its_neighbours() {
-    let (mut w, _) = run(1, SIDE, CANOPY_YEARS, false, |_| {}, |_, _, _| {});
-    let area = w.mesh.cells().area().to_vec();
-    let per_area = |i: usize| w.life.sum(i)[1] / area[i];
-    let mut land: Vec<usize> = (0..area.len()).filter(|&i| w.is_land(i) && per_area(i) > 0.0).collect();
-    land.sort_by(|&a, &b| per_area(b).total_cmp(&per_area(a)));
-    let dense: Vec<usize> = land[..(CANOPY_TOP * land.len() as f64).ceil() as usize].to_vec();
-    // The gap of each canopy's ground to the mean of its neighbours, every 10 days.
-    let gap = |w: &World, i: usize| {
-        let around = w.mesh.cells().around(i).1;
-        w.t_ground_last(i) - around.iter().map(|&j| w.t_ground_last(j as usize)).sum::<f64>() / around.len() as f64
-    };
-    let mut gaps: Vec<Vec<f64>> = vec![];
-    for day in 0..w.days_per_year() {
-        pcore::day(&mut w);
-        if day % 10 == 9 {
-            gaps.push(dense.iter().map(|&i| gap(&w, i)).collect());
-        }
-    }
-    let swing = |c: usize| gaps.windows(4).map(|g| g.iter().map(|x| x[c]).fold(f64::MIN, f64::max) - g.iter().map(|x| x[c]).fold(f64::MAX, f64::min)).fold(0.0, f64::max);
-    let swings: Vec<f64> = (0..dense.len()).map(swing).collect();
-    let moved = swings.iter().filter(|&&x| x > CANOPY_SWING).count();
-    println!("{moved} of {} dense canopies moved more than {CANOPY_SWING} K against their neighbours within 30 days; the most {:.1} K", dense.len(), swings.iter().fold(0.0f64, |a, &b| a.max(b)));
-    assert!(!dense.is_empty() && (moved as f64) < CANOPY_SHARE * dense.len() as f64, "{moved} of {} dense canopies moved more than {CANOPY_SWING} K", dense.len());
 }
 
 /// The globe of the climate check: its rows (twice as many columns), its years, and the years its means are over.

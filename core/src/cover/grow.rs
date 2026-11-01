@@ -113,6 +113,10 @@ fn cell(w: &World, d: &mut Domain, p: &Parts, k: usize, dt: f64) {
         let pays = s[q].gain * s[q].built > cost;
         c.full[x] = !pays;
         build(w, c, p, x, (&s[q], pays), (i, t, dt), &mut ground, &mut b);
+        // The fuel it holds past its reserve when it has built what it could goes to its ground, as roots exude the
+        // fuel a plant cannot use (Jones, Hodge and Kuzyakov 2004), where the open world's rot takes it.
+        let over = (c.mol[x][FUEL] - dec(c.genes[x][STORE]) * c.built(&mm, x) / mm[FUEL]).max(0.0);
+        (c.mol[x][FUEL], b.dead[p.sub[FUEL]]) = (c.mol[x][FUEL] - over, b.dead[p.sub[FUEL]] + over);
         // What rounding left below zero is set to zero and counted (a larger overdraw is this law's fault).
         let (size, all) = (c.mol[x].iter().map(|m| m.abs()).sum::<f64>(), c.mol[x]);
         for m in c.mol[x].iter_mut().filter(|m| **m < 0.0) {
