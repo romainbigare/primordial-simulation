@@ -22,23 +22,25 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
 }
 
 /// At each month's start, one task per chunk on the pool (`life::run`), in each of its cells: what movers broke
-/// since the last (`choose::wear`), once a month the merge of alike nodes (`nodes::crowd`), and what the cell holds
-/// (`rows`). A death or a merge that lets go of a part queues that, applied after the tasks (`life::land`, laws.md 0).
+/// since the last (`choose::wear`) and what the cell holds (`rows`). A death that lets go of a part queues that,
+/// applied after the tasks (`life::land`, laws.md 0).
 /// Then the caches of the cells (`caches`), once a month the traffic and each cell's surroundings.
 pub fn survey(w: &mut World) {
     let n = w.mesh.cells().n();
     let monthly = monthly(w);
-    let lay = Layout::of(&w.chem);
     w.life.compact();
     let load = w.life.cells.iter().filter(|c| !c.bodies.is_empty()).count();
     let sums = life::run(w, rows_of(w), load, |_| (), |w, d, sums, _| {
         for i in d.cells() {
-            // (A cell with no bodies and no cover has nothing to break, merge or sum.)
+            // (A cell with no bodies and no cover has nothing to break or sum.)
             if d.at(i).bodies.is_empty() && !d.at(i).cover.any() {
                 d.at_mut(i).pushed = 0.0;
                 continue;
             }
-            worn(w, d, &lay, i, monthly);
+            let e = std::mem::take(&mut d.at_mut(i).pushed);
+            if e > 0.0 {
+                choose::wear(w, d, i, e);
+            }
         }
         d.see_changed(w);
         rows(w, d, sums);
@@ -68,22 +70,9 @@ pub fn cover(w: &mut World) {
     crate::cover::land(w);
 }
 
-/// Whether it is a month's start: the survey merges nodes, adds up the traffic and rebuilds Flow's state in full.
+/// Whether it is a month's start: the survey adds up the traffic and rebuilds Flow's state in full.
 fn monthly(w: &World) -> bool {
     w.time.is_multiple_of(w.cfg.calendar().month)
-}
-
-/// Cell `i` of chunk `d`: what movers broke since the last survey (`choose::wear`), and once a month the merge of alike
-/// nodes (`nodes::crowd`).
-fn worn(w: &World, d: &mut Chunk, lay: &Layout, i: usize, monthly: bool) {
-    let e = std::mem::take(&mut d.at_mut(i).pushed);
-    if e > 0.0 {
-        choose::wear(w, d, i, e);
-    }
-    // (Fewer than two bodies have nothing to merge.)
-    if monthly && d.cell(i).nth(1).is_some() {
-        crate::nodes::crowd(w, d, lay, i);
-    }
 }
 
 /// Per chunk, a row of zeros for each of its cells (`rows`).
@@ -163,8 +152,9 @@ fn traffic(w: &mut World) {
 /// were at the batch's start (`Faces`), the parts as they were then, and the store as their cell's moves leave it
 /// (`store::Moves`); what they do outside their cell or to a part is queued (`life::Entry`), and the lineages and born
 /// rows they make are provisional until the chunk ends. Then the serial pass (`life::land`): the moves and litters
-/// land and the other entries are applied. Last the holders of each lineage and born rows are counted: those left with
-/// none die out or are freed.
+/// land and the other entries are applied. Then the month's merge of alike nodes in each cell (`nodes::crowd`), after
+/// the moves and births, so a crowded cell ends the month with its nodes of each kind and stage. Last the holders of
+/// each lineage and born rows are counted: those left with none die out or are freed.
 pub fn batch(w: &mut World) {
     w.life.compact();
     w.life.recount();
@@ -192,6 +182,17 @@ pub fn batch(w: &mut World) {
     });
     life::land(w);
     w.life.batch = false;
+    let lay = Layout::of(&w.chem);
+    let load = w.life.cells.iter().filter(|c| c.bodies.len() > 1).count();
+    life::run(w, vec![(); life::chunks(w)], load, |_| (), |w, d, _, _| {
+        // (Fewer than two bodies have nothing to merge.)
+        for i in d.cells() {
+            if d.cell(i).nth(1).is_some() {
+                crate::nodes::crowd(w, d, &lay, i);
+            }
+        }
+    });
+    life::land(w);
     w.life.recount();
     // The bodies' visible traits from what they hold now (`Chunk::see_changed`), so a world saved after the batch,
     // whose bodies load as seen, reads at the next survey as an unbroken one does.

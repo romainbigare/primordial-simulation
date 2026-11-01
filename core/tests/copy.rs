@@ -329,9 +329,7 @@ fn a_mature_nodes_children_gather_in_its_young_node() {
     let young = &w.life[kids[0]];
     assert!((young.count - 12.0).abs() < 1e-4 && !young.adult(&w.chem), "young: {} members", young.count);
     // A month's merge: alike in genes, but the young are immature.
-    let month = w.cfg.calendar().month;
-    w.time = (w.time / month + 1) * month;
-    pcore::survey::survey(&mut w);
+    crowd(&mut w, i);
     assert_eq!(w.life.alive().count(), 2, "the young merged into the mature node");
     books.assert_kept(&w, 1e-9);
 }
@@ -669,8 +667,14 @@ fn child_has_parent_genes_plus_noise() {
     assert!(diff.iter().enumerate().all(|(g, &d)| d <= 6.0 * size * if g == KEEP_T || g == COOL_T { 5.0 } else { 1.0 }), "change too big");
 }
 
-/// Eight alike individuals in one cell merge into one population node at the next month's start; matter and energy
-/// are kept.
+/// The month's merge of cell `i` (`nodes::crowd`, at the end of each batch), and what it queued (`life::land`).
+fn crowd(w: &mut World, i: usize) {
+    w.in_cell(i, |w, d| pcore::nodes::crowd(w, d, &Layout::of(&w.chem), i));
+    pcore::life::land(w);
+}
+
+/// Eight alike individuals in one cell merge into one population node at the month's merge; matter and energy are
+/// kept.
 #[test]
 fn crowded_individuals_merge_into_a_node() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -685,16 +689,16 @@ fn crowded_individuals_merge_into_a_node() {
         let b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
         w.add(b);
     }
-    // At the month's start (looked at before they act: within the month the node may give its members up one at a time
+    // At the month's merge (looked at before they act: within the month the node may give its members up one at a time
     // to the actions of Bond, as the draws go).
-    pcore::survey::survey(&mut w);
+    crowd(&mut w, i);
     let nodes: Vec<f64> = w.life.alive().filter(|b| b.cell as usize == i && b.lineage == lineage && b.count > 1.0).map(|b| b.count).collect();
-    assert!(!nodes.is_empty(), "no node of the lineage at the month's start");
+    assert!(!nodes.is_empty(), "no node of the lineage after the month's merge");
     pcore::step(&mut w);
     books.assert_kept(&w, 1e-9);
 }
 
-/// However unlike their genes, the bodies of one lineage and stage in a cell merge at a month's start into one node
+/// However unlike their genes, the bodies of one lineage and stage in a cell merge at the month's merge into one node
 /// (twelve young bodies beside an adult founder: two); no member is lost and matter and energy are kept.
 #[test]
 fn a_cell_holds_one_node_per_kind_and_stage() {
@@ -712,7 +716,7 @@ fn a_cell_holds_one_node_per_kind_and_stage() {
     }
     let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i).map(|b| (b.lineage, b.adult(&w.chem), b.n())).collect::<Vec<_>>();
     let before: f64 = here(&w).iter().map(|x| x.2).sum();
-    pcore::survey::survey(&mut w);
+    crowd(&mut w, i);
     let after = here(&w);
     let mut kinds: Vec<(u32, bool)> = after.iter().map(|x| (x.0, x.1)).collect();
     kinds.sort_unstable();
@@ -723,64 +727,64 @@ fn a_cell_holds_one_node_per_kind_and_stage() {
 }
 
 /// A node of `n` members in cell `i`, of a lineage of its own of starting kind `root` with `hidden` hidden units, its
-/// repair gene at `repair` and a brood: placed.
-fn capped(w: &mut pcore::World, i: usize, (root, hidden): (u32, usize), repair: f32, n: f64) -> pcore::life::Handle {
+/// repair gene at `repair` and a brood, young (a copy mass a hundred times its founder's) or mature (a third of it): placed.
+fn capped(w: &mut pcore::World, i: usize, (root, hidden): (u32, usize), (repair, young): (f32, bool), n: f64) -> pcore::life::Handle {
     let brain = Brain { hidden, ..Brain::only(pcore::brain::REST) };
     let mut b = Line::new(w, &brain, root).founder(w, 1, i);
     b.genes[pcore::body::REPAIR] = repair;
+    b.genes[COPY_MASS] += if young { 2.0 } else { -0.5 };
     let mut b = node_of(w, b, n);
     brood(w, &mut b, 1.0);
     b.prepare(&w.chem, &w.cfg);
     w.add(b)
 }
 
-/// What `cell_books` gives: the members and bodies of each (starting kind, brain sizes), the bodies, three sums and the
-/// stores.
-type CellBooks = (std::collections::BTreeMap<(u32, [usize; 4]), (f64, usize)>, usize, [f64; 3], Vec<f64>);
+/// What `cell_books` gives: the members and bodies of each starting kind, the bodies of each starting kind and stage,
+/// three sums and the stores.
+type CellBooks = (std::collections::BTreeMap<u32, (f64, usize)>, std::collections::BTreeMap<(u32, bool), usize>, [f64; 3], Vec<f64>);
 
-/// The members and bodies of each (starting kind, brain sizes) in cell `i`, its bodies, and the member-weighted sums of the
-/// repair gene, of brood and of every store, and the heat, of its bodies.
+/// The members and bodies of each starting kind in cell `i`, its bodies of each starting kind and stage, and the
+/// member-weighted sums of the repair gene, of brood and of every store, and the heat, of its bodies.
 fn cell_books(w: &pcore::World, i: usize) -> CellBooks {
-    let mut by = std::collections::BTreeMap::new();
-    let (mut count, mut sums, mut store) = (0, [0.0; 3], vec![0.0; w.chem.ns()]);
+    let (mut by, mut stage) = (std::collections::BTreeMap::new(), std::collections::BTreeMap::new());
+    let (mut sums, mut store) = ([0.0; 3], vec![0.0; w.chem.ns()]);
     for b in w.life.alive().filter(|b| b.cell as usize == i) {
-        let l = w.life.brain(b.lineage).expect("a lineage");
-        let x = by.entry((l.root, pcore::lineage::sizes_of(l))).or_insert((0.0, 0));
+        let root = w.life.brain(b.lineage).expect("a lineage").root;
+        let x = by.entry(root).or_insert((0.0, 0));
         (x.0, x.1) = (x.0 + b.n(), x.1 + 1);
-        count += 1;
+        *stage.entry((root, b.adult(&w.chem))).or_insert(0) += 1;
         sums[0] += b.n() * b.genes[pcore::body::REPAIR] as f64;
         (sums[1], sums[2]) = (sums[1] + b.brood, sums[2] + b.e);
         store.iter_mut().zip(stores(w, b)).for_each(|(s, x)| *s += x);
     }
-    (by, count, sums, store)
+    (by, stage, sums, store)
 }
 
-/// The cap of a cell (`nodes::cap`): past `MAX_NODES` bodies the pair of one stage, starting kind and brain sizes
-/// nearest in genes merges, the smaller into the larger (`nodes::merge_taking` across lineages), keeping members,
-/// stores, heat, brood and the member-weighted genes; bodies of another kind or other sizes never join, and where no
-/// such pair is left the cell stays over the cap.
+/// The cap of a cell (`nodes::cap`): past `MAX_NODES` bodies each starting kind keeps one young and one mature node,
+/// whatever the lineages and brain sizes of its bodies, keeping members, stores, heat, brood and the member-weighted
+/// genes; bodies of two starting kinds never join.
 #[test]
-fn the_cap_merges_only_within_a_kind_and_brain() {
+fn a_crowded_cell_keeps_a_young_and_a_mature_node_per_kind() {
     let (mut w, i) = start();
-    let lay = pcore::body::Layout::of(&w.chem);
     assert_eq!(w.life.alive().filter(|b| b.cell as usize == i).count(), 0, "the cell starts empty");
-    // Six of one kind and brain, near in genes; two of that kind with a smaller brain and three of another kind, far
-    // apart: 11 bodies.
-    for q in 0..6 {
-        capped(&mut w, i, (1, 12), -0.4 + 0.05 * q as f32, 10.0 + q as f64);
-    }
-    for (q, &(kind, n)) in [((1, 6), 20.0), ((1, 6), 21.0), ((5, 12), 30.0), ((5, 12), 31.0), ((5, 12), 32.0)].iter().enumerate() {
-        capped(&mut w, i, kind, q as f32, n);
+    // 5 starting kinds x 4 variants (brain sizes, genes, members) x 2 stages: 40 bodies.
+    for root in [1, 5, 6, 7, 8] {
+        for (v, hidden) in [3, 6, 12, 12].into_iter().enumerate() {
+            for young in [false, true] {
+                capped(&mut w, i, (root, hidden), (-0.4 + 0.1 * v as f32, young), 10.0 + v as f64);
+            }
+        }
     }
     let books = Books::now(&w);
     let before = cell_books(&w, i);
-    w.in_cell(i, |w, d| pcore::nodes::cap(w, d, &lay, i));
+    assert!(before.1.len() == 10 && before.1.values().all(|&n| n == 4), "4 bodies of each kind and stage: {:?}", before.1);
+    w.in_cell(i, |w, d| pcore::nodes::cap(w, d, i));
     let after = cell_books(&w, i);
-    assert_eq!(after.1, pcore::nodes::MAX_NODES, "bodies after the cap");
+    assert!(after.1.values().all(|&n| n == 1), "one body of each kind and stage after the cap: {:?}", after.1);
+    assert_eq!(after.0.len(), 5, "kinds after the cap");
     for ((k, x), y) in before.0.iter().zip(after.0.values()) {
-        assert!((x.0 - y.0).abs() <= 1e-9 * x.0, "members of kind and brain {k:?}: {} then {}", x.0, y.0);
-        let merged = if k.1[0] == 12 && k.0 == 1 { 3 } else { 0 };
-        assert_eq!(x.1 - y.1, merged, "bodies of kind and brain {k:?} that merged");
+        assert!((x.0 - y.0).abs() <= 1e-9 * x.0, "members of kind {k}: {} then {}", x.0, y.0);
+        assert!(y.1 <= 2, "bodies of kind {k} after the cap: {}", y.1);
     }
     for (q, (x, y)) in before.2.iter().zip(&after.2).enumerate() {
         assert!((x - y).abs() <= 1e-6 * x.abs().max(1.0), "sum {q} (repair gene x members, brood, heat): {x} then {y}");
@@ -790,19 +794,18 @@ fn the_cap_merges_only_within_a_kind_and_brain() {
     }
     books.assert_kept(&w, 1e-9);
 
-    // Nine bodies of nine kinds and brains: no pair to merge.
+    // Nine bodies of nine kinds: none merges.
     let (mut w, i) = start();
-    for (q, kind) in [(1, 12), (1, 6), (1, 3), (5, 12), (5, 6), (6, 12), (6, 6), (7, 12), (7, 6)].into_iter().enumerate() {
-        capped(&mut w, i, kind, -0.4, 10.0 + q as f64);
+    for root in 1..10 {
+        capped(&mut w, i, (root, 12), (-0.4, false), 10.0 + root as f64);
     }
-    w.in_cell(i, |w, d| pcore::nodes::cap(w, d, &lay, i));
-    assert_eq!(cell_books(&w, i).1, 9, "a cell with no pair of one kind and brain stays over the cap");
+    w.in_cell(i, |w, d| pcore::nodes::cap(w, d, i));
+    assert_eq!(cell_books(&w, i).1.len(), 9, "a cell of nine kinds keeps its nine bodies");
 
     // Two alike nodes of two starting kinds, one stage and one brain: the monthly merge keeps them apart.
     let (mut w, i) = start();
-    capped(&mut w, i, (1, 12), -0.4, 10.0);
-    capped(&mut w, i, (5, 12), -0.4, 20.0);
-    assert!(w.time.is_multiple_of(w.cfg.calendar().month), "the survey merges at a month's start");
-    pcore::survey::survey(&mut w);
+    capped(&mut w, i, (1, 12), (-0.4, false), 10.0);
+    capped(&mut w, i, (5, 12), (-0.4, false), 20.0);
+    crowd(&mut w, i);
     assert_eq!(cell_books(&w, i).0.len(), 2, "two starting kinds merged: {:?}", cell_books(&w, i).0);
 }

@@ -27,8 +27,8 @@ across it passes exactly.
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
 (`schedule::month`), each for the whole month: the survey (`survey::survey`: one task per chunk on the pool with the
-feature `threads`, in each of its cells the wear of movers, the monthly merge, the shade and the sums; a death or a merge
-that lets go of a part queues that for the serial pass, as in a batch; it rebuilds Flow's
+feature `threads`, in each of its cells the wear of movers, the shade and the sums; a death that lets go of a part
+queues that for the serial pass, as in a batch; it rebuilds Flow's
 state in full for the cells' surroundings, and Flow's own pass leaves it then); Flow: the air in steps of
 `AIR_STEP_DAYS` (10 days, three a month, each at its own time in the month), after each the sink of the liquid over
 field capacity into the bed's store; then the liquid and erosion; heat sideways and creep yearly; the cover's month;
@@ -462,20 +462,25 @@ chance).
   than those who waited) join; what members who watched copy is applied when the batch ends (5.5).
 - **One node per kind and stage** in a cell: one lineage per node (one brain). Children join the young node of their
   lineage in their cell (`copy::kin`), and members who move join the node of their lineage and stage where they land,
-  or start one; a young node matures as a whole when its mean member reaches the copy mass.
-- **Merging** (`nodes::crowd`, monthly): the bodies of one lineage and stage in a cell, in the room of the same
+  or start one; in a cell of `MAX_NODES` bodies or more with no node of their lineage, they join the first node of
+  their starting kind and stage, taking its brain, born rows and lineage (so the cap below holds through the month); a
+  young node matures as a whole when its mean member reaches the copy mass.
+- **Merging** (`nodes::crowd`, monthly, in each cell after the batch's serial pass, one task per chunk; a merge that
+  lets go of a part queues that, as in a batch): the bodies of one lineage and stage in a cell, in the room of the same
   structure (its root) or none and holding the same structure or nothing (`nodes::Kin`), join the largest of them,
   where that is a node, they are more than `PAIR` (2: a pair of individuals may mate) or their individuals may not mate
   (4.3). Then a node joins a larger
   one of another lineage of its stage, room and part whose genes are alike (`body::alike`, on the means) and whose
-  brain has the same sizes: its members take that brain, its born rows and its lineage (`merge_taking`). This merge is
+  brain has the same sizes: its members take that brain, its born rows and its lineage, and its rows become the mean by
+  members (`merge_taking`). This merge is
   a speed tool with physical side effects: the joiners' members drop the structure they held, which stays in the cell
   for any body to take, and a lineage's brain spreads to alike bodies of another. Selection acts between cells and
   lineages, not within a cell.
-- **Two caps, speed tools.** After its merge a cell keeps at most `MAX_NODES` (8) bodies (`nodes::cap`): past them
-  the pair of one stage, one starting kind and one brain's sizes nearest in genes (in mutation steps) merges, whatever
-  its lineage, room and part, the smaller into the larger, taking its brain, born rows and lineage; where no such pair
-  is left the cell stays over the cap, so kinds and brains never mix. A starting kind keeps at most `MAX_LINEAGES` (8) living
+- **Two caps, speed tools.** A cell that holds more than `MAX_NODES` (8) bodies after its merge (`nodes::cap`) keeps
+  one young and one mature node of each starting kind: the bodies of one kind and stage join the largest of them,
+  whatever their lineage, brain sizes, room and part, taking its brain, born rows and lineage; its rows become the mean
+  by members where the brains have one shape, else they stay its own. So a crowded cell holds at most two bodies per
+  kind present, and kinds never mix. A starting kind keeps at most `MAX_LINEAGES` (8) living
   lineages (`lineage::resize`): past them a body whose sizes change joins the living lineage of its kind nearest in
   sizes, and stays in its own if that is the nearest. Both make bodies of different heritage share a brain; they
   bound the work, not a law.

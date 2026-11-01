@@ -16,7 +16,7 @@ use crate::brain::{self, row_step, shake};
 use crate::chem::{Chemistry, Stores};
 use crate::event::{Event, EventKind};
 use crate::lineage::{sizes_of, wanted};
-use crate::nodes::{add, Lot, COUNT_SLACK};
+use crate::nodes::{add, Lot, COUNT_SLACK, MAX_NODES};
 use crate::rng::{Purpose, Rng};
 use crate::space::COMPASS;
 use crate::life::Entry;
@@ -137,7 +137,7 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
         let (_, sd, left) = row_change(w, b.row_spread, m, size, r);
         let row_spread = left + sd * sd;
         d.events.push(born);
-        add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.day() as f64 }, (&genes, &spread), (b.genome, Some(b.brain), row_spread));
+        add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.day() as f64 }, (&genes, &spread), (b.lineage, b.genome, Some(b.brain), row_spread));
         return true;
     }
     let (mut rows, row_spread) = child_rows(w, d, b, l, m, size, r);
@@ -186,7 +186,7 @@ fn start(w: &World, d: &mut Chunk, mut c: Body, rows: Option<Vec<f32>>, hit: Opt
         place_child(w, d, c);
         return;
     };
-    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.genome, Some(c.brain), c.row_spread));
+    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.lineage, c.genome, Some(c.brain), c.row_spread));
     d.brains(c.cell as usize).free(c.brain);
 }
 
@@ -248,12 +248,18 @@ fn provisions(chem: &Chemistry, b: &Body, mi: usize, matter: f64, births: f64) -
 
 /// The node of `cell` of `lineage` (a node has one brain), mature or young as `mature` asks: the one node of its kind
 /// and stage the cell holds (`nodes::crowd`), which children join (the young node: they are below their parents' copy
-/// mass, and a mature node must keep its mean there) and members who moved join.
+/// mass, and a mature node must keep its mean there) and members who moved join. In a cell that holds `MAX_NODES`
+/// bodies or more, with none of `lineage`, the first of its starting kind and stage (`nodes::cap`), whose brain, born
+/// rows and lineage they take (`nodes::add`).
 pub(crate) fn kin(w: &World, d: &Chunk, cell: usize, lineage: u32, mature: bool) -> Option<Handle> {
-    d.cell(cell).find(|&s| {
-        let t = &d[s];
-        t.alive && !t.leaving && t.n() > 1.0 && t.lineage == lineage && t.adult(&w.chem) == mature
-    })
+    let root = d.brain(w, lineage).map(|l| l.root);
+    let node = |s: &Handle| {
+        let t = &d[*s];
+        t.alive && !t.leaving && t.n() > 1.0 && t.adult(&w.chem) == mature
+    };
+    let theirs = d.cell(cell).filter(node).find(|&s| d[s].lineage == lineage);
+    let crowded = || d.cell(cell).nth(MAX_NODES - 1).is_some();
+    theirs.or_else(|| crowded().then(|| d.cell(cell).filter(node).find(|&s| d.brain(w, d[s].lineage).map(|l| l.root) == root)).flatten())
 }
 
 /// The born rows of `m` children of `b` (none: they share their parent's), and the spread left among them. A share
