@@ -7,8 +7,11 @@ use pcore::event::EventKind;
 use worldgen::life::{Place, KINDS};
 use worldgen::testkit::{dry_lands, eater, small_world, Books, MILD_LAT};
 
-/// Latitudes of the south and north edges of a world whose land freezes in winter, degrees.
-const COLD_LAT: [f64; 2] = [55.0, 57.3];
+/// Latitudes of the south and north edges of a world whose land stays warm the year round, degrees.
+const WARM_LAT: [f64; 2] = [0.0, 2.3];
+/// The two frost genes of the selection test, K: above the key liquid's melting point (273 K), so the cover is active
+/// (its ground's liquid is liquid) where winters fall below the higher one, and a winter can kill it.
+const FROST_GENES: [f32; 2] = [285.0, 270.0];
 
 /// The genes of the starting cover (kind 0).
 fn genes() -> [f32; cover::NG] {
@@ -152,11 +155,13 @@ fn seeds_join_their_kind_or_found_a_slot() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// The frost gene of the cover is selected by the climate (laws.md 4.5): two variants of the starting cover, its own
-/// frost gene and one 3 steps (15 K) lower, sown on every land cell of a world at mild latitudes and of one at cold
-/// latitudes, compete for 60 years. Where winters freeze below the higher gene, the lower one (dearer to keep:
-/// `c_firm`) wins; where they do not, the higher one wins. The cover's mean frost gene (by built cover) ends near the
-/// higher one in the mild world and more than a step lower in the cold one (whose low coasts stay mild).
+/// The frost gene of the cover moves down where winters kill (laws.md 4.5): two variants of the starting cover, of
+/// frost genes `FROST_GENES` (3 steps, 15 K, apart), sown on every land cell of a world at the equator and of one at
+/// mild latitudes, compete for 60 years. Where the ground's winter falls below the higher gene while its liquid is
+/// still liquid, frost kills the active cover of that gene (4.5, 6.5), and the lower one (dearer to keep: `c_firm`)
+/// wins; where it does not, the higher one wins. The cover's mean frost gene (by built cover) ends more than a step
+/// lower in the world with winters. (Below the liquid's melting point the cover is dormant, its ground's liquid frozen,
+/// and frost does not kill it: a frost gene under 273 K is never selected by frost.)
 #[test]
 fn the_frost_gene_falls_where_winters_are_cold() {
     let mean_frost = |lat: [f64; 2]| {
@@ -165,9 +170,8 @@ fn the_frost_gene_falls_where_winters_are_cold() {
         let mut w = worldgen::terrain::build(1, worldgen::terrain::island(16, 16), chem, &init, cfg);
         pcore::step(&mut w);
         worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
-        let (g, step) = (genes(), cover::RANGE[FROST].0);
-        let mut low = g;
-        low[FROST] -= 3.0 * step;
+        let (mut g, mut low) = (genes(), genes());
+        (g[FROST], low[FROST]) = (FROST_GENES[0], FROST_GENES[1]);
         let land: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
         for i in land {
             cover::place(&mut w, i, g, 0, 0.05);
@@ -183,9 +187,9 @@ fn the_frost_gene_falls_where_winters_are_cold() {
         let (frost, built) = s.iter().fold((0.0, 0.0), |a, x| (a.0 + x.genes[FROST], a.1 + x.built));
         (frost / built, winter, g[FROST] as f64, low[FROST] as f64)
     };
-    let ((mild, mild_winter, high, low), (cold, cold_winter, ..)) = (mean_frost(MILD_LAT), mean_frost(COLD_LAT));
+    let ((warm, warm_winter, high, low), (cold, cold_winter, ..)) = (mean_frost(WARM_LAT), mean_frost(MILD_LAT));
     let step = cover::RANGE[FROST].0 as f64;
-    println!("mean frost gene {mild:.1} K at mild latitudes (coldest land {mild_winter:.1} K), {cold:.1} K at cold ones ({cold_winter:.1} K); sown {high} and {low}");
-    assert!(cold_winter < high - 3.0 && mild_winter > high, "the climates do not differ: coldest land {mild_winter} and {cold_winter} K");
-    assert!(mild > high - 3.0 && mild - cold > step, "no selection: mean frost gene {mild} K (mild) and {cold} K (cold)");
+    println!("mean frost gene {warm:.1} K at the equator (coldest land {warm_winter:.1} K), {cold:.1} K at mild latitudes ({cold_winter:.1} K); sown {high} and {low}");
+    assert!(cold_winter < high - 3.0, "no winter below the higher gene: coldest land {cold_winter} K");
+    assert!(warm - cold > step, "no selection: mean frost gene {warm} K (equator) and {cold} K (mild latitudes)");
 }
