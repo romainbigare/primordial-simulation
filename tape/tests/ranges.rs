@@ -6,8 +6,9 @@
 //! seeds in the reference runs: for the climate, the land worn down and the rivers, the runs of the world before the
 //! cover and the short body model; for the cover and the eaters, the runs of the cover and the short body model. The
 //! climate and the land worn down are means over years 21 to 30; life is read at year 30, ten years after the eaters
-//! came. Each run also keeps its books. Two numbers are also held to wide bounds around Earth's, as the references only
-//! keep a world near itself: the rain on land, and the share of the cover's dry mass it holds as its stored solid.
+//! came. Each run also keeps its books. Three numbers are also held to wide bounds around Earth's, as the references only
+//! keep a world near itself: the rain on land, the heat-absorbing gas of the air, and the share of the cover's dry mass
+//! it holds as its stored solid.
 //!
 //! The sleep of Change's nodes is a speed tool: a small world with life keeps the chemistry's key numbers
 //! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2.
@@ -42,7 +43,8 @@ const T_LAND: f64 = 289.03;
 const SWING: f64 = 12.59;
 /// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs.
 const RAIN_LAND: f64 = 3.049e-3;
-/// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs.
+/// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs: it keeps the world near itself;
+/// `EARTH_ABSORBER_PPM` holds it near Earth's.
 const ABSORBER_PPM: f64 = 258.1;
 /// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the reference runs.
 const RIVERS: f64 = 712.4;
@@ -63,6 +65,9 @@ const EATER_LIFE: f64 = 2.43;
 /// lies at 40°, where land gets 0.5 to 1 m (from memory), and a globe's land spans every belt.
 const EARTH_RAIN_LAND: f64 = 0.76;
 const EARTH_RAIN_RANGE: f64 = 3.0;
+/// The bounds of Earth's heat-absorbing gas, ppm: from the glacial air, about 180 (Petit et al. 1999), to the present,
+/// about 420.
+const EARTH_ABSORBER_PPM: [f64; 2] = [180.0, 420.0];
 /// The most share of the cover's dry mass its stored solid may make: plants hold about a tenth of theirs as
 /// stored sugars and starch, rarely over a third in storage organs (from memory).
 const STORED_MOST: f64 = 0.5;
@@ -178,7 +183,8 @@ fn key_numbers(seed: u64) -> ([f64; KEYS.len()], [f64; 2]) {
 }
 
 /// The key numbers of three seeds, each mean in its range around its reference; the rain on land within
-/// `EARTH_RAIN_RANGE` of Earth's, and the cover's stored share under `STORED_MOST`.
+/// `EARTH_RAIN_RANGE` of Earth's, the heat-absorbing gas within `EARTH_ABSORBER_PPM`, and the cover's stored share
+/// under `STORED_MOST`.
 #[test]
 #[ignore = "slow: three 30-year runs of a 64 x 64 world"]
 fn the_key_numbers_stay_in_their_ranges() {
@@ -202,6 +208,10 @@ fn the_key_numbers_stay_in_their_ranges() {
     println!("rain on land {rain:.3} m/yr, against Earth's {EARTH_RAIN_LAND} x/ {EARTH_RAIN_RANGE}");
     println!("the cover's stored share {stored:.3} (seeds {:.3?}), under {STORED_MOST}", earth(1));
     out.extend((!rain_ok).then_some("rain on land against Earth's"));
+    let gas = KEYS.iter().position(|k| k.0 == "heat-absorbing gas").expect("the gas among the keys");
+    let ppm = runs.iter().map(|r| r.0[gas]).sum::<f64>() / runs.len() as f64;
+    println!("heat-absorbing gas {ppm:.1} ppm, within Earth's {EARTH_ABSORBER_PPM:?}");
+    out.extend((!(EARTH_ABSORBER_PPM[0]..=EARTH_ABSORBER_PPM[1]).contains(&ppm)).then_some("heat-absorbing gas against Earth's"));
     out.extend((stored >= STORED_MOST).then_some("the cover's stored share"));
     assert!(out.is_empty(), "out of their ranges: {out:?}");
 }
