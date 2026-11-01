@@ -97,18 +97,30 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     let mut rows = vec![0.0; n * STATE_ROW];
     let sr = &*s;
     crate::par::rows(&mut rows, STATE_ROW, || (), |_, i, row| node_state(w, sr, i, full, row));
-    for (i, r) in rows.chunks_exact(STATE_ROW).enumerate() {
-        (s.skin[i], s.cap[i], s.state.tg[i]) = (r[0], r[1], r[2]);
-        if r[3] != 0.0 {
-            (s.state.pk[i], s.state.phi[i]) = (r[4] as usize, r[5]);
-            s.latent[i] = Latent { held: r[6], lo: r[7], hi: r[8], lat: [r[9], r[10]], molten: r[11].to_bits() };
-        }
-        if r[12] != 0.0 {
-            (s.z[i], s.head[i], s.cover[i], s.alb[i], s.pd[i]) = (r[13], r[14], [r[15], r[16], r[17]], r[18], r[19]);
-        }
-    }
+    rows.chunks_exact(STATE_ROW).enumerate().for_each(|(i, r)| take_row(s, i, r));
     if full {
         s.basin = super::basin::find(w, s);
+    }
+}
+
+/// The state of the ground nodes `cells` alone brought up to date, as `ground_state` does it.
+pub(super) fn cells_state(w: &World, s: &mut Scratch, cells: &[u32]) {
+    for &i in cells {
+        let mut row = [0.0; STATE_ROW];
+        node_state(w, s, i as usize, false, &mut row);
+        take_row(s, i as usize, &row);
+    }
+}
+
+/// Ground node `i` takes its row of `ground_state` (`STATE_ROW`).
+fn take_row(s: &mut Scratch, i: usize, r: &[f64]) {
+    (s.skin[i], s.cap[i], s.state.tg[i]) = (r[0], r[1], r[2]);
+    if r[3] != 0.0 {
+        (s.state.pk[i], s.state.phi[i]) = (r[4] as usize, r[5]);
+        s.latent[i] = Latent { held: r[6], lo: r[7], hi: r[8], lat: [r[9], r[10]], molten: r[11].to_bits() };
+    }
+    if r[12] != 0.0 {
+        (s.z[i], s.head[i], s.cover[i], s.alb[i], s.pd[i]) = (r[13], r[14], [r[15], r[16], r[17]], r[18], r[19]);
     }
 }
 

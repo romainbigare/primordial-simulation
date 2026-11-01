@@ -751,6 +751,28 @@ fn a_connected_liquid_body_stands_at_one_level() {
     assert!(hi - lo < 1e-3, "the basin stands between {lo} m and {hi} m");
 }
 
+/// The low basin of each air block mixes its heat in a month (laws.md 1.2): an island's low basin (one block) with
+/// every other cell warmed by 3 K ends a liquid step at one temperature, within a millikelvin, over most of its cells
+/// (those off their plateaus, with no cover, the same phases). Matter and energy are kept.
+#[test]
+fn a_blocks_low_basin_mixes_its_heat_in_a_month() {
+    let mut w = worldgen::testkit::small_world();
+    let (cells, _) = basin_under(&w, liquid_top);
+    for &i in cells.iter().step_by(2) {
+        let t = w.t_ground(i) + 3.0;
+        hold_ground(&mut w, i, t);
+    }
+    pcore::flow::state(&mut w, true);
+    let books = Books::now(&w);
+    pcore::flow::liquid(&mut w, LIQUID_STEP);
+    books.assert_within(&w, 1e-9, 1e-9);
+    let mut t: Vec<f64> = cells.iter().map(|&i| w.t_ground(i)).collect();
+    t.sort_by(f64::total_cmp);
+    let mid = t[t.len() / 2];
+    let one = t.iter().filter(|&&x| (x - mid).abs() < 1e-3).count();
+    assert!(one > 3 * t.len() / 4, "{one} of {} cells at {mid} K: {t:?}", t.len());
+}
+
 /// Under the low basin the loose ground's pores are full and the bed's store is not drained: over a year of Flow no
 /// liquid sinks into, flows through or comes up from the stores of its cells (those a metre under its level), while the
 /// stores of the land take rain and drain.
