@@ -32,7 +32,7 @@ write, and resumes only from a snapshot.
 the light catalyst of the dead), took, gave, watched, bond made or broken, first time a substance appears. Only physical facts; the viewer shows the first appearances.
 Took, gave and watched name bodies by their id (`Body::id`): the cell the body was placed in times 2^40, plus that
 cell's count of bodies placed then (1, 2, ...: children,
-split halves, parts of nodes acting apart, members drawn, founders). An id never
+split halves, parts of nodes acting apart, founders). An id never
 changes and is never given again, wherever the body goes.
 
 **A globe in the viewer's file.** The header has `globe` (the rows wrap east to west), `lat_north` and `lat_south` (the

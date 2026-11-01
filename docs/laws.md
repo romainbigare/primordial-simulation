@@ -47,7 +47,7 @@ came (`life::Cell`), each a record of fixed size (its stores and genes in place,
 each in the cell's array (`life::Brains`: the rows, the moving averages of learning and the last trace), reused when
 freed; a body that moves takes its block to the array of the cell it enters. A body's id is the cell it was placed in
 and that cell's count of bodies placed (children, split
-halves, parts of nodes acting apart, members drawn); it never changes, and its random draws are keyed by it. The cells
+halves, parts of nodes acting apart); it never changes, and its random draws are keyed by it. The cells
 are cut into `Config::chunks` runs of neighbouring indices, the same for any number of threads. **The parallel pass**:
 each chunk is one task on the pool (`life::run`), its cells taken out of the world, the world read only; in each cell
 in order, each body updates, in the order they came (a body placed in the pass first updates at the next month); the
