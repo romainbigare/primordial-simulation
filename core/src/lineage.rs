@@ -64,8 +64,9 @@ pub(crate) fn resized(lin: &Lineage, genes: &[f32], ns: usize, r: &mut Rng, nois
     (new != old).then(|| Lineage { shape: to, seen: new[2], sight: new[3], base: brain::rebase(&lin.base, lin.shape, to, r, noise), root: lin.root })
 }
 
-/// At its update, a body whose brain-size genes are a whole unit away from its lineage's moves to a new lineage of
-/// those sizes, its born rows and its own rows carried over with the same new weights. Moves no matter and no energy.
+/// At its update, a body whose brain-size genes are a whole unit away from its lineage's moves to a lineage of those
+/// sizes, its born rows and its own rows carried over with the same new weights: a living one of its starting kind
+/// with those sizes if there is one (it takes that one's base), else a new one. Moves no matter and no energy.
 pub fn resize(w: &World, d: &mut Domain, b: &mut Body) {
     let (ns, noise, id) = (w.chem.ns(), w.cfg.new_noise(), b.id);
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Resize);
@@ -76,7 +77,12 @@ pub fn resize(w: &World, d: &mut Domain, b: &mut Body) {
     let rerow = |x: &[f32]| brain::rerow(x, from, l.shape, &mut Rng::new(w.seed, w.day(), !id, Purpose::Resize), noise);
     let born = rerow(d.born(w, b));
     b.rows = if b.rows.is_empty() { born.clone() } else { rerow(&b.rows) };
-    let lineage = d.new_lineage(l);
+    let sizes = sizes_of(&l);
+    let kin = w.life.brains.iter().enumerate().find(|(k, x)| w.life.members[*k] > 0 && x.as_ref().is_some_and(|x| x.root == l.root && sizes_of(x) == sizes));
+    let lineage = match kin {
+        Some((k, _)) => k as u32,
+        None => d.new_lineage(l),
+    };
     d.move_to(b, lineage, born);
     // With no brain it has no decision to learn from, no memory and no signal.
     if w.life.brainless(b) {

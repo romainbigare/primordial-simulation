@@ -38,27 +38,43 @@ pub const COVER: u64 = u64::MAX - 1;
 
 /// Take loose solids and liquids from the cell's ground and from its cover (grazing) by the intake law (`intake`, one
 /// search over both), no more than its stores have room for, each substance from the two in proportion to what each
-/// holds of it. What it takes of the cover it pays to break as a bite does (`Cover::breaking`).
+/// holds of it. A bite of cover takes all its parts in the field's proportions: what the body does not use (`Body::uses`:
+/// the frame without the enzyme that splits it) it carries as bulk, which counts toward what it can take (`intake`, the
+/// gut) and leaves at its next update with what it sheds. What it takes of the cover it pays to break as a bite does
+/// (`Cover::breaking`).
 pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
     let (i, chem) = (b.cell as usize, &w.chem);
     let (tg, kc, parts) = (w.t_ground_last(i), d.slot(i), crate::cover::Parts::of(chem));
     let free = |k: usize| if chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k).max(0.0) } else { 0.0 };
     let cover: [f64; crate::units::MAX_SUBSTANCES] = parts.as_ref().map_or([0.0; crate::units::MAX_SUBSTANCES], |p| d.cover.amounts(p, kc));
     let lying = |k: usize| free(k) + cover[k];
-    let mut m = b.wanted(chem, lying, intake(w, b, lying).0, b.mass(chem));
-    let grazed: Vec<f64> = m.iter().enumerate().map(|(k, &a)| if cover[k] > 0.0 { (a * cover[k] / lying(k)).min(a).min(cover[k]) } else { 0.0 }).collect();
-    let (all, kg) = (parts.as_ref().map_or(0.0, |p| d.cover.amounts(p, kc).iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()), chem.mass_of(&grazed));
+    let gut = intake(w, b, lying).0;
+    let mut m = b.wanted(chem, lying, gut, b.mass(chem));
+    let mut grazed: Vec<f64> = m.iter().enumerate().map(|(k, &a)| if cover[k] > 0.0 { (a * cover[k] / lying(k)).min(a).min(cover[k]) } else { 0.0 }).collect();
+    // The bulk: the parts of the cover it does not use, at the share of the cover its bite took of those it uses.
+    let t = b.temp(chem);
+    let used = |k: usize| cover[k] > 0.0 && b.uses(chem, k, t);
+    let usable: f64 = (0..chem.ns()).filter(|&k| used(k)).map(|k| cover[k] * chem.subs[k].molar_mass).sum();
+    let bit = if usable > 0.0 { chem.mass_of(&grazed) / usable } else { 0.0 };
+    let mut bulk: Vec<f64> = (0..chem.ns()).map(|k| if cover[k] > 0.0 && !used(k) { cover[k] * bit } else { 0.0 }).collect();
+    // All it takes fits its gut.
+    let full = chem.mass_of(&m) + chem.mass_of(&bulk);
+    if full > gut {
+        let f = gut / full;
+        [&mut m, &mut grazed, &mut bulk].into_iter().for_each(|v| v.iter_mut().for_each(|a| *a *= f));
+    }
+    let (all, kg) = (parts.as_ref().map_or(0.0, |p| d.cover.amounts(p, kc).iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()), chem.mass_of(&grazed) + chem.mass_of(&bulk));
     let breaking = parts.as_ref().filter(|_| kg > 0.0).map_or(0.0, |p| d.cover.breaking(chem, &w.cfg, p, kc, (kg / all.max(1e-300)).min(1.0)));
-    if !body::pay(w, d, b, w.cfg.phys.c_handle * chem.mass_of(&m) + breaking) {
+    if !body::pay(w, d, b, w.cfg.phys.c_handle * (chem.mass_of(&m) + chem.mass_of(&bulk)) + breaking) {
         return;
     }
-    for (from, x) in [(u64::MAX, chem.mass_of(&m) - kg), (COVER, kg)].into_iter().filter(|e| e.1 > 0.0) {
+    for (from, x) in [(u64::MAX, chem.mass_of(&m) - chem.mass_of(&grazed)), (COVER, kg)].into_iter().filter(|e| e.1 > 0.0) {
         let part: Vec<f64> = m.iter().zip(&grazed).map(|(&a, &g)| if from == COVER { g } else { a - g }).collect();
         let ev = EventKind::Took { by: b.id, from, used: used_kg(w, b, &part) as f32 };
         d.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: x });
     }
     if let Some(p) = parts.as_ref().filter(|_| kg > 0.0) {
-        for (k, &g) in grazed.iter().enumerate().filter(|e| *e.1 > 0.0) {
+        for (k, g) in grazed.iter().zip(&bulk).map(|(g, x)| g + x).enumerate().filter(|e| e.1 > 0.0) {
             b.e += d.cover.take(chem, p, kc, k, g);
             b.store[k] += g;
         }

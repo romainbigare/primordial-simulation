@@ -161,11 +161,6 @@ pub(crate) fn spread_at(spread: &[f32], g: usize) -> f32 {
     spread.get(g).map_or(0.0, |&v| v.max(0.0))
 }
 
-/// The variance of each of the first `n` genes in a node's spread (`spread_at`).
-pub(crate) fn spreads(spread: &[f32], n: usize) -> Vec<f32> {
-    (0..n).map(|g| spread_at(spread, g)).collect()
-}
-
 /// The variance `v` a node keeps along gene `g` of mean `x`: none for a gene that is off, where differences do nothing.
 pub(crate) fn spread_kept(lay: &Layout, g: usize, x: f32, v: f32) -> f32 {
     if g >= lay.cat && x < 0.0 { 0.0 } else { v }
@@ -189,23 +184,6 @@ pub(crate) fn distance(lay: &Layout, a: &[f32], b: &[f32], reach: impl Fn(usize)
 /// Genes no more than `limit` steps apart in every gene: who mixes and which nodes merge (laws.md 4.1).
 pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
     distance(lay, a, b, |_| limit).is_some()
-}
-
-/// Standard deviations of the pooled spread, beyond `Physics::alike` steps, within which children join a node or nodes
-/// merge: small, so a node never mixes genes that individuals of two kinds would not.
-const WITHIN: f32 = 0.5;
-
-/// The most steps (of `like`, the gene's step for likeness) a gene of two bodies may be apart for one to belong to the
-/// other: `limit` plus `WITHIN` standard deviations of the sum of their variances `var`.
-pub(crate) fn within_steps(limit: f32, var: f32, like: f32) -> f32 {
-    limit + WITHIN * var.sqrt() / like
-}
-
-/// Do children of genes `genes` and spread `spread` belong to node `o` (`within_steps` in each gene alone, so kinds
-/// that differ in a few genes stay apart)?
-pub(crate) fn within(lay: &Layout, limit: f32, o: &Body, genes: &[f32], spread: &[f32]) -> bool {
-    let reach = |g: usize| within_steps(limit, spread_at(&o.spread, g) + spread_at(spread, g), like(lay, g));
-    distance(lay, &o.genes, genes, reach).is_some()
 }
 
 /// Reach of `noise` (a sum of four uniforms, centred and scaled): 2 sqrt(3).

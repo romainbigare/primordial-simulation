@@ -36,14 +36,27 @@ fn share(count: f64, chance: f64, rng: &mut Rng) -> f64 {
     }
 }
 
-/// The members of node `node` that do each option: count × chance (`share`). The members that move are one group, count
+/// The most options a node spreads its members over at a decision (a speed setting: the likeliest, the moves counted as
+/// one); its members of the others rest.
+const MOST_ACTS: usize = 4;
+
+/// The members of node `node` that do each of its `MOST_ACTS` likeliest options: count × chance (`share`). The members
+/// that move are one group, count
 /// × the sum of the chances to go in every direction, and the group takes the one direction drawn by its chance over that sum, so its option holds the
 /// group and the other directions none. A group that would leave less than one member behind is the whole node, with
 /// the chance that keeps the mean of the movers at count × chance.
 fn members(node: &Body, c: &Choice, rng: &mut Rng) -> [f64; OPTS] {
     let moves = FIXED..TO_BODY;
-    let mut x: [f64; OPTS] = std::array::from_fn(|o| if moves.contains(&o) { 0.0 } else { share(node.count, c.p[o] as f64, rng) });
     let sum: f64 = c.p[moves.clone()].iter().map(|&p| p as f64).sum();
+    // Only its `MOST_ACTS` likeliest options (the moves together one) get members; the others none.
+    let chance = |o: usize| if moves.contains(&o) { sum } else { c.p[o] as f64 };
+    let mut top: Vec<usize> = (0..OPTS).filter(|&o| !moves.contains(&o) || o == FIXED).filter(|&o| chance(o) > 0.0).collect();
+    top.sort_by(|&a, &b| chance(b).total_cmp(&chance(a)).then(a.cmp(&b)));
+    top.truncate(MOST_ACTS);
+    let mut x: [f64; OPTS] = std::array::from_fn(|o| if moves.contains(&o) || !top.contains(&o) { 0.0 } else { share(node.count, c.p[o] as f64, rng) });
+    if !top.contains(&FIXED) {
+        return x;
+    }
     let chance = sum.min(1.0);
     // (If fewer than one member would stay, the node goes whole with the chance that makes the movers count × chance.)
     let group = match node.count * chance {

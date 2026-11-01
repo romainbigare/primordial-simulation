@@ -33,8 +33,6 @@ pub struct Config {
     pub air_hours: u32,
     /// Liquid moves every this many days
     pub flow_days: u32,
-    /// Speed shortcut: past this many body nodes in a cell at a month's start the most alike merge (`nodes::crowd`)
-    pub crowd: usize,
     /// Speed setting: a sleeping node that has gained over this share of an amount it held when it fell asleep wakes
     pub wake_share: f64,
     /// Speed setting: the longest a ground or air node's reactions sleep, days (0: every node reacts every step)
@@ -207,10 +205,6 @@ pub struct Physics {
     pub c_copy: f64,
     /// Most work a member of `m_ref` kg puts into building body matter per day, J (`Body::supply`)
     pub c_build: f64,
-    /// Chance that a child starts a new lineage with a changed brain base
-    pub new_lineage: f64,
-    /// Size of that change of the base
-    pub base_noise: f32,
     /// Chance that a child's born brain rows change
     pub row_chance: f64,
     /// Step of that change per generation, times the body's mutation size
@@ -349,8 +343,6 @@ impl Default for Physics {
             afloat: 0.2,
             c_copy: 1e7,
             c_build: 1e4,
-            new_lineage: 0.001,
-            base_noise: 0.03,
             row_chance: 0.3,
             row_noise: 0.3,
             new_noise: 0.1,
@@ -434,7 +426,6 @@ impl Default for Config {
             phys_days: 10,
             air_hours: 240,
             flow_days: 60,
-            crowd: 4,
             wake_share: 0.05,
             sleep_days: 90,
             skin_m: 2.0,

@@ -65,7 +65,6 @@ Fields of `Config` that say when the model may save time (mark **speed**). The t
 | `flow_days` | days | how often liquid moves, drains and wears the ground (`flow::liquid`) | 60, two months: the drainage shares are exact over a step and the downhill pass routes all water that may run off, so a longer step moves the same water in fewer steps, and the liquid costs half of 30 days' ; the sink into the bed's store runs every physics step, so the rain does not wait for the step in the pores, where it darkened the land (+0.2 K at 60 days without it). The key numbers at 60 days: rivers 696.8 cells, land worn 0.147 mm/yr, rain on land 0.001809 mol/(m² s); against a 2-day liquid, each seed against itself, the land is +0.05 K. Always on a physics step: a whole number of them, or of months, counted from the world's start | speed |
 | `wake_share` | share | a sleeping node wakes before its alarm when one of its amounts has grown by more than this share of what it held when it fell asleep (`clock::Sleep::watch`) | the share of its inputs a calm node's own reactions may use while it sleeps (`change`, `CALM`, 0.05) | speed |
 | `sleep_days` | days | the longest a ground or air node's reactions sleep before they run for the time since (`change::step`); 0: every node reacts at every physics step | a season: a node does not react through a whole season at the temperature of another | speed |
-| `crowd` | nodes per cell | past this many body nodes in a cell at a month's start the most alike merge (unlike ones never); a node splits only while its cell has fewer than this minus one; it never bounds the members | 4; nodes must give the patterns of individuals (handover 7.1: the check takes `--crowd 4` and `8` as its noise) | speed |
 
 ## Physics
 
@@ -146,12 +145,10 @@ The four costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`, `c_signal`
 |---|---|---|---|---|
 | `c_copy` | J per kg of body matter | work to build one kg of body matter (`copy::grow`); storing fuel costs none, and a child costs its parent none (it is given matter already built) | growth in life keeps 10 to 20% of the energy it eats, so a kg of body costs about 1e7 J; a kg of matter then takes 27.3 MJ of fuel, 62% efficient (my arithmetic) | anchored |
 | `c_build` | J per day per kg^0.75 of body | most a body pays into building body matter per day: the rate at which it grows and rebuilds what it gave its children (`copy::grow`) | P/B (what bodies make a year over their standing body) of bodies at the ground's temperature, as all kinds here are: herbs turn their standing crop over about once or twice a year (from memory). P/B x 25% dry matter (`WET_TISSUE`) x `c_copy` / 365 / m^0.75: 6,800 to 13,700 at 1 kg, 8,100 to 16,300 at a 2 kg light-eater (the mass^0.75 checked, Ernest et al. 2003). 1e4 lies inside. Warm mammals' P/B is measured at 310 K and is not used (decision 51) | anchored |
-| `new_lineage` | chance per child | a child starts a new lineage with a changed base | none found | tuned, first guess |
-| `base_noise` | none | size of that change | none found | tuned, first guess |
 | `row_chance` | chance per child | a child's born brain rows change | none found | tuned, first guess |
 | `row_noise` | none | step of that change per generation, times the body's mutation size (a child that changes takes a step bigger by 1 / sqrt(`row_chance`)) | none found | tuned, first guess |
 | `new_noise` | none | spread of the weights a bigger brain adds (none in a null run) | none found | tuned, first guess |
-| `alike` | mutation steps | bodies whose genes differ by at most this in every gene are alike: they mix, merge and join; a node splits when its halves differ by more | run: 4 steps. It says who mixes, so what a kind is: not only a speed setting. To be checked against individuals at M4 | tuned |
+| `alike` | mutation steps | bodies whose genes differ by at most this in every gene are alike: they mix, and nodes of different lineages merge | run: 4 steps. It says who mixes, so what a kind is: not only a speed setting. To be checked against individuals at M4 | tuned |
 
 ### The cover (`cover`)
 
@@ -193,7 +190,6 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
 
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
-| `WITHIN` (0.5, `core/src/body/genes.rs`) | standard deviations | children may lie this far beyond `alike` (in the spreads of both) and still join a node; nodes of a full cell merge within it | run: small enough that nodes of two kinds never join. It says who is grouped with whom, as `alike` says who is alike: ×2 and ÷2 moved the eaters' life at year 30 by about a third (48 x 48, seed 2, one run each) where `--crowd 8` moved it 2% | tuned |
 | `body::MARGIN` (2) | none | well-being's margins count up to this: a key store's log share over its safe minimum, and what its reactions could release against its upkeep (`live` plans for this many upkeeps) | none found: a body twice its needs is taken as safe | tuned, first guess |
 | `PHASE_MARGIN` (5, `core/src/body/mod.rs`) | K | well-being falls as a key liquid comes within this of freezing or boiling | none found: a few kelvin, as a body's temperature swings within a day | tuned, first guess |
 | `EATER_KEEP_T`/`EATER_COOL_T` (278 and 315, `worldgen/src/life/kinds.rs`) | K | the temperatures the eaters' founders keep their bodies between (`KEEP_T`, `COOL_T`; initial conditions) | the melting point of chemistry 0's key liquid (273 K) plus, and the founders' catalysts' unfolding (`DENATURE`, 320 K) less, the margin in which well-being falls for nearness to a limit (`PHASE_MARGIN`, 5 K): an animal must keep its liquid from freezing and sweat before its enzymes unfold; at 250 K the keep gene did nothing and never moved, and the eaters froze in winter on the hills | anchored |
@@ -253,16 +249,16 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 109 rows of `Config` and `Physics` are their 109 fields.
+The 106 rows of `Config` and `Physics` are their 106 fields.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
 | anchored | 51, and 11 outside the structs | 51 fields (among them `c_basal`, `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `mix`, `light_yield`, `gas_floor`, `gas_ref`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `MAX_KEEP`, and the three decomposers' factors `open` of the chemistry (reactions 1, 21 and 26) |
-| tuned (run or reason named) | 6, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`; outside: `WITHIN`), set for an outcome (`rain_time`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
-| tuned, first guess | 38 | 34 free numbers (`wind`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `keep_min`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
+| tuned (run or reason named) | 6, and 5 outside the structs | the thresholds of who is alike and who is grouped (`alike`), set for an outcome (`rain_time`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
+| tuned, first guess | 36 | 32 free numbers (`wind`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `keep_min`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 3 | `nodes`, `two_parents`, `null` |
-| speed | 6 | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days`, `crowd` |
+| speed | 5 | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days` |
 | container | 1 | `phys` |
 
-Rows marked tuned in all: 50 (44 in the structs, 6 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.
+Rows marked tuned in all: 47 (42 in the structs, 5 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

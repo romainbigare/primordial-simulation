@@ -2,7 +2,7 @@
 //! the books, a holder killed in the parallel phase lets go of its part in the serial phase, and the order in which the
 //! domains run and the threads that run them change nothing.
 
-use pcore::body::{die, Body, BROKEN, CHILD, COPY_MASS, DISPERSE, HIDDEN, LACK};
+use pcore::body::{die, Body, BROKEN, CHILD, COPY_MASS, DISPERSE, HIDDEN, LACK, REPAIR};
 use pcore::event::EventKind;
 use pcore::life::Handle;
 use pcore::outbox::{deliver, Entry};
@@ -35,7 +35,10 @@ fn dispersing(w: &mut World, i: usize, k: f64) -> Body {
 }
 
 /// The dispersing nodes in each of the two cells next to a cell of the order test (`the_order_of_the_domains_changes_nothing`).
-const CROWD: usize = 96;
+const CROWD: usize = 7;
+/// The gap of the `REPAIR` genes of those nodes, decades: more than `alike` steps (0.8), so they stay apart at the
+/// monthly merge (each founder is of a lineage of its own).
+const REPAIR_GAP: f32 = 0.9;
 
 /// Each kind of entry fails once and changes nothing but what its failure rule says: a move of a body that died, whole
 /// or of members who would join their kind; children with no node to join and less than one member, back into their
@@ -233,9 +236,9 @@ fn the_order_of_the_domains_changes_nothing() {
     let (mover, kind) = (w.add(mover), w.add(kind));
     let (mover, kind) = (w.life[mover].id, w.life[kind].id);
     w.in_domain(a, |_, d| d.out.push(Entry::Go { id: mover, from: a as u32, to: b as u32, pushed: 0.0, lane: 0.0, carries: false, kin: true, body: None }));
-    // Two cells of different domains next to a third, each with many dispersing nodes: each node sends its litter in
-    // one of the 8 directions at random, so the litters of both cells land in the third in one batch (it fails
-    // with a chance under 1 in 100,000), however the draws of the world's history fall.
+    // Two cells of different domains next to a third, each with `CROWD` unlike dispersing nodes: each node sends its
+    // litter in one of the 8 directions at random, so the litters of both cells land in the third in one batch (over
+    // 30 batches it fails with a chance under 1 in 100,000), however the draws of the world's history fall.
     let (used, link) = ([x, m, a, b], |a: usize, b: usize| w.mesh.cells().link(a, b).is_some());
     let (from, from_other) = free
         .iter()
@@ -247,8 +250,9 @@ fn the_order_of_the_domains_changes_nothing() {
         .expect("two cells of different domains next to a third");
     let mut parents = std::collections::BTreeMap::new();
     for c in [from, from_other] {
-        for _ in 0..CROWD {
-            let n = dispersing(&mut w, c, 3.0);
+        for q in 0..CROWD {
+            let mut n = dispersing(&mut w, c, 3.0);
+            n.genes[REPAIR] = -3.0 + REPAIR_GAP * q as f32;
             let h = w.add(n);
             parents.insert(w.life[h].id, w.life.domain_of(c));
         }

@@ -1,6 +1,6 @@
 //! The check of population nodes against individuals (`docs/handover.md` 7.1, fixed before it runs): seeds 1 and 5 at
-//! 32 x 32, with nodes and with `--individuals`, then with `--roster`; seed 5 with `--crowd 8` beside its run at the
-//! default `--crowd 4` as the noise (seed 1's eaters are a few dozen at 32 x 32). On the columns by starting kind
+//! 32 x 32, with nodes and with `--individuals`, then with `--roster`; seed 5 with every node of Change awake
+//! (`Config::sleep_days` 0, a speed setting) beside its run at the default as the noise (seed 1's eaters are a few dozen at 32 x 32). On the columns by starting kind
 //! (means over a window of years) the modes agree if (a) each kind's mass and real life are within a factor of two, and
 //! no kind lives in one mode only; (b) the main gene means move the same way wherever one moves more than 0.3 (of the
 //! copy-mass gene: each gene's move in its mutation steps, `body::steps`, times the copy-mass gene's step, so a gene in
@@ -10,7 +10,7 @@
 //! with how crowded a kind is, so (d) compares them over all the years of a run, matched by the kind's kg per km² of
 //! land (`matched`). Deaths by being taken go with how many eaters hunt too (the linear part of Holling's response), so
 //! they are counted per member-year and per kg of eaters per km² of the same year. A difference larger than the noise is a bug in the node rules: a rule the modes break counts only
-//! where the two crowd settings keep it, or break it by less.
+//! where the two sleep settings keep it, or break it by less.
 //!
 //! The windows are years 31-40, and 26-30 with the roster (after its last kind is placed, in year 24): at 32 x 32 the
 //! eaters as individuals pass 10^4 bodies in their forties, so longer runs are too slow for a test.
@@ -28,9 +28,10 @@ const SIDE: usize = 32;
 /// Each plan of what is placed when (`--roster` or not) and its window of years, whose means are compared; a run ends
 /// with its window.
 const PLANS: [(bool, (u64, u64)); 2] = [(false, (31, 40)), (true, (26, 30))];
-/// The seed run at a second crowd setting, and that setting (`Config::crowd`; the default is the other).
+/// The seed run at a second setting of the sleep of Change's nodes, and that setting (`Config::sleep_days`; the
+/// default is the other).
 const NOISE_SEED: u64 = 5;
-const NOISE_CROWD: usize = 8;
+const NOISE_SLEEP: u32 = 0;
 /// The factor within which a kind's mass and real life must agree (rule a).
 const FACTOR: f64 = 2.0;
 /// A gene mean moves when it lies this far from its kind's founders, in the copy-mass gene's units (rule b,
@@ -114,11 +115,11 @@ fn kinds(rec: &Recorder) -> usize {
     (0..).take_while(|k| !rec.last(&format!("root_{k}_members")).is_nan()).count()
 }
 
-/// `ew run --seed <seed> --size 32` (`--roster` if `roster`) to the end of `window`, with nodes or not and `crowd`.
-fn check_run(seed: u64, roster: bool, window: (u64, u64), nodes: bool, crowd: usize) -> Window {
+/// `ew run --seed <seed> --size 32` (`--roster` if `roster`) to the end of `window`, with nodes or not and `sleep` days of sleep.
+fn check_run(seed: u64, roster: bool, window: (u64, u64), nodes: bool, sleep: u32) -> Window {
     let (mut founders, mut years, mut unit): (Vec<Option<Vec<f64>>>, Vec<Year>, Vec<f64>) = (vec![], vec![], vec![]);
     let mut land = 0.0;
-    run(seed, SIDE, window.1, roster, |c| (c.nodes, c.crowd) = (nodes, crowd), |y, w, rec| {
+    run(seed, SIDE, window.1, roster, |c| (c.nodes, c.sleep_days) = (nodes, sleep), |y, w, rec| {
         let col = |k: usize, name: &str| rec.last(&format!("root_{k}_{name}"));
         if unit.is_empty() {
             unit = copy_units(w);
@@ -254,21 +255,21 @@ fn print(name: &str, r: &Window) {
     println!("  {name}: most mass, heaviest member {:?}; eaters ate most to least {:?}", winners(r), r.ate.map(|c| ATE[c]));
 }
 
-/// Nodes against individuals, by the three rules of handover 7.1 and the rates (d), against the noise of the crowd
+/// Nodes against individuals, by the three rules of handover 7.1 and the rates (d), against the noise of the sleep
 /// setting.
 #[test]
 #[ignore = "slow: ten runs of a 32 x 32 world, 40 and 30 years"]
 fn nodes_and_individuals_make_the_same_world() {
-    let crowd = Config::default().crowd;
-    let mut runs: Vec<(u64, usize, bool, usize)> = vec![];
+    let sleep = Config::default().sleep_days;
+    let mut runs: Vec<(u64, usize, bool, u32)> = vec![];
     for plan in 0..PLANS.len() {
         for seed in SEEDS {
-            runs.extend([(seed, plan, true, crowd), (seed, plan, false, crowd)]);
+            runs.extend([(seed, plan, true, sleep), (seed, plan, false, sleep)]);
         }
-        runs.push((NOISE_SEED, plan, true, NOISE_CROWD));
+        runs.push((NOISE_SEED, plan, true, NOISE_SLEEP));
     }
     let done: Vec<Window> = std::thread::scope(|s| {
-        let all: Vec<_> = runs.iter().map(|&(seed, plan, nodes, crowd)| s.spawn(move || check_run(seed, PLANS[plan].0, PLANS[plan].1, nodes, crowd))).collect();
+        let all: Vec<_> = runs.iter().map(|&(seed, plan, nodes, sleep)| s.spawn(move || check_run(seed, PLANS[plan].0, PLANS[plan].1, nodes, sleep))).collect();
         all.into_iter().map(|r| r.join().expect("a run")).collect()
     });
     let find = |seed, plan, nodes, c| &done[runs.iter().position(|&r| r == (seed, plan, nodes, c)).expect("a run")];
@@ -276,13 +277,13 @@ fn nodes_and_individuals_make_the_same_world() {
     for (plan, &(roster, (from, to))) in PLANS.iter().enumerate() {
         let name = format!("{}, years {from}-{to}", if roster { "roster" } else { "default" });
         println!("{name}:");
-        let noise = (find(NOISE_SEED, plan, true, crowd), find(NOISE_SEED, plan, true, NOISE_CROWD));
-        print(&format!("seed {NOISE_SEED} crowd {NOISE_CROWD}"), noise.1);
+        let noise = (find(NOISE_SEED, plan, true, sleep), find(NOISE_SEED, plan, true, NOISE_SLEEP));
+        print(&format!("seed {NOISE_SEED} sleep {NOISE_SLEEP}"), noise.1);
         let kept = diffs(noise.0, noise.1);
         let shown: Vec<String> = kept.iter().filter(|d| breaks(d)).map(|d| format!("{}: {}", d.what, d.values)).collect();
-        println!("  noise, crowd {crowd} against {NOISE_CROWD}, breaks: {shown:?}");
+        println!("  noise, sleep {sleep} against {NOISE_SLEEP}, breaks: {shown:?}");
         for seed in SEEDS {
-            let (n, i) = (find(seed, plan, true, crowd), find(seed, plan, false, crowd));
+            let (n, i) = (find(seed, plan, true, sleep), find(seed, plan, false, sleep));
             print(&format!("seed {seed} nodes"), n);
             print(&format!("seed {seed} individuals"), i);
             let modes = diffs(n, i);

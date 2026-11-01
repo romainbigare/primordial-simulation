@@ -3,7 +3,6 @@
 use pcore::life::Handle;
 use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, HEAT, MUT, STRENGTH};
 use pcore::event::EventKind;
-use pcore::rng::{Purpose, Rng};
 use pcore::units::DAY_S;
 use pcore::{body, brain, copy, nodes, outbox, World};
 use worldgen::testkit::{self, brood, life_totals, same_totals, children, founder, out, small_world, start, Books, Brain};
@@ -65,8 +64,6 @@ fn mixed(w: &World) -> (f64, f64) {
 #[test]
 fn each_gene_and_row_of_a_child_is_one_parents() {
     let (mut w, i) = start();
-    // (No child starts a lineage of its own by chance, `Physics::new_lineage`: the lineage tested is the parents'.)
-    w.cfg.phys.new_lineage = 0.0;
     let lay = Layout::of(&w.chem);
     let (_, mut a, sb) = pair(&mut w, i, 2.0);
     let (rows_a, rows_b) = (w.life.born(&a).to_vec(), w.life.born(&w.life[sb]).to_vec());
@@ -226,12 +223,10 @@ fn live(w: &pcore::World) -> Vec<Handle> {
     w.life.living().map(|x| x.0).collect()
 }
 
-/// A mature node's children start a node of their own (they are immature, `copy::young`) that carries the variance
-/// left among them; when they join their parents' node (`nodes::merge`) its spread is widened by it; a node whose
-/// members differ so much that its halves would not be alike splits in two along that gene, keeping its members,
-/// stores, heat and pooled spread; the half placed is seen as what it holds.
+/// A mature node's children start a node of their own (they are immature) that carries the variance
+/// left among them; when they join their parents' node (`nodes::merge`) its spread is widened by it.
 #[test]
-fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
+fn a_node_spreads_with_its_children() {
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     worldgen::testkit::eater_nodes(&mut w, 50.0);
@@ -254,29 +249,10 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     assert!(c.spread.iter().all(|&v| v >= 0.0) && c.spread.iter().any(|&v| v > 0.0) && c.row_spread > 0.0, "children keep no spread");
     // Grown, they join the node (as the month's merge does): its spread is widened.
     w.in_domain(w.life[s].cell as usize, |w, d| nodes::merge(w, d, kids[0], s));
-    let mut b = std::mem::take(&mut w.life[s]);
+    let b = std::mem::take(&mut w.life[s]);
     assert!(b.count > 1.5 * n0 && b.spread.iter().any(|&v| v > 0.0) && b.row_spread > 0.0, "the merge widened nothing");
 
-    // Copy mass spread over 5 mutation steps (0.2 each): the halves are 2 sqrt(2/pi) 5 = 8 apart.
-    b.spread[COPY_MASS] = 1.0;
-    let (count, store, e, m) = (b.count, b.store.clone(), b.e, b.genes[COPY_MASS]);
-    let before = live(&w);
-    w.in_domain(b.cell as usize, |w, d| nodes::split(w, d, &mut b));
     w.life[s] = b;
-    let new: Vec<Handle> = live(&w).into_iter().filter(|x| !before.contains(x) && *x != s).collect();
-    assert_eq!(new.len(), 1, "not split in two");
-    seen_as_it_is(&w, new[0]);
-    let (a, c) = (&w.life[s], &w.life[new[0]]);
-    assert_eq!((a.count + c.count, a.lineage, a.cell), (count, c.lineage, c.cell));
-    for (k, &x) in store.iter().enumerate() {
-        assert!((a.store[k] + c.store[k] - x).abs() <= 1e-12 * x, "store {k}");
-    }
-    assert!((a.e + c.e - e).abs() <= 1e-12 * e);
-    let d = (2.0 / std::f32::consts::PI).sqrt();
-    // (Which half keeps the node's place is drawn.)
-    let (x, y) = (a.genes[COPY_MASS] - m, c.genes[COPY_MASS] - m);
-    assert!((x.abs() - d).abs() < 1e-5 && (x + y).abs() < 1e-5, "halves at {x} and {y}, not ±{d}");
-    assert!((a.spread[COPY_MASS] + d * d - 1.0).abs() < 1e-5 && a.spread == c.spread, "pooled spread not kept");
     books.assert_kept(&w, 1e-9);
 }
 
@@ -287,7 +263,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
 fn dispersing_children_of_a_varied_node_join_their_kind() {
     let mut w = small_world();
     worldgen::testkit::eater_nodes(&mut w, 50.0);
-    (w.cfg.phys.c_copy, w.cfg.crowd) = (0.0, 64);
+    w.cfg.phys.c_copy = 0.0;
     let lay = Layout::of(&w.chem);
     // Every gene's spread at the split threshold, (alike step)² π / 8 + step² (`body::most`).
     let inv = body::steps(&lay, &vec![1.0; lay.len]);
@@ -429,41 +405,6 @@ fn joining_a_node_keeps_members_and_weighs_genes_by_them() {
     }
 }
 
-/// A node that splits and joins again many times keeps its members, stores and heat to rounding, and comes back to
-/// its genes and spread (`nodes::Lot`, `nodes::add`): 10,000 splits along a gene drawn at random, each half joined
-/// back at once (`nodes::merge`), from a spread drawn at random between the split threshold and `body::most`.
-#[test]
-fn splitting_and_joining_give_the_node_back() {
-    let mut w = small_world();
-    worldgen::testkit::eater_nodes(&mut w, 50.0);
-    w.cfg.crowd = 64;
-    let books = Books::now(&w);
-    let s = live(&w).into_iter().find(|&s| w.life[s].count > 10.0).expect("a node");
-    let lay = Layout::of(&w.chem);
-    let mut r = Rng::new(1, 0, 0, Purpose::Split);
-    let (n0, before) = (w.life[s].count, life_totals(&w));
-    for _ in 0..10_000 {
-        let g = lay.cat + r.below(lay.min - lay.cat);
-        let mut b = std::mem::take(&mut w.life[s]);
-        // (A catalyst gene well clear of its walls, its spread past the split threshold and at most the most a node keeps,
-        // `body::most`, which a join does not pass.)
-        b.genes[g] = 6.0;
-        b.spread = vec![0.0; lay.len];
-        b.spread[g] = (1.0 - 0.1 * r.f64() as f32) * 0.3f32.powi(2) * (w.cfg.phys.alike.powi(2) * std::f32::consts::FRAC_PI_8 + 1.0);
-        let (genes, spread) = (b.genes.clone(), b.spread.clone());
-        let others = live(&w);
-        w.in_domain(b.cell as usize, |w, d| nodes::split(w, d, &mut b));
-        w.life[s] = b;
-        let half = live(&w).into_iter().find(|x| *x != s && !others.contains(x)).expect("split in two");
-        w.in_domain(w.life[s].cell as usize, |w, d| nodes::merge(w, d, half, s));
-        let b = &w.life[s];
-        assert!((b.genes[g] - genes[g]).abs() < 1e-5 && (b.spread[g] - spread[g]).abs() < 1e-5 * spread[g], "gene {g}: {} and {} back as {} and {}", genes[g], spread[g], b.genes[g], b.spread[g]);
-    }
-    same_totals(&before, &life_totals(&w));
-    assert!((w.life[s].count - n0).abs() < 1e-9 * n0, "members {n0} then {}", w.life[s].count);
-    books.assert_kept(&w, 1e-9);
-}
-
 /// With `Config::nodes` off an animal's children are individuals: a child joins no node, even when one of its own kind
 /// is in its cell (with nodes on it joins it), and a member whose brood covers many children has that many
 /// individuals, not a node of them. Members, stores and heat are kept.
@@ -523,12 +464,15 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
     }
 }
 
-/// With `Config::nodes` off, more than `crowd` alike animals in one cell stay individuals at the month's start (with
+/// With `Config::nodes` off, `CROWDED` alike animals in one cell stay individuals at the month's start (with
 /// nodes on they merge, `crowded_individuals_merge_into_a_node`), and over three years of the whole world no animal
 /// becomes a node; light-eaters still are nodes. The animals are hand-set eaters (as `ew run` places them, which find
 /// what they eat), so that some live and breed through the window: the check would be empty with none (neutral animal
 /// founders mostly die in their first year, and in one world all may die before they breed), so it runs three worlds
 /// (seeds 1 to 3) and asks for births in them together. Matter and energy are kept.
+/// Alike animals placed in one cell by the tests of the monthly merge.
+const CROWDED: usize = 8;
+
 #[test]
 #[ignore = "slow: three years of three 32 x 32 worlds"]
 fn individuals_mode_merges_no_animal() {
@@ -555,7 +499,7 @@ fn individuals_window(seed: u64) -> (f64, usize) {
     let a = w.life.alive().find(|b| animal(&w, b)).expect("an animal");
     let (i, lineage, genome) = (a.cell as usize, a.lineage, a.genome);
     let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i && animal(w, b)).count();
-    while here(&w) < w.cfg.crowd + 4 {
+    while here(&w) < CROWDED {
         let b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
         w.add(b);
     }

@@ -59,7 +59,7 @@ pub(crate) fn land_move(w: &World, d: &mut Domain, mut b: Body, (i, j): (usize, 
     }
     let mass = b.mass(&w.chem);
     // (Before it enters `j`, it is no node of its cell for `kin`.)
-    let t = if kin { copy::kin(w, d, j, b.lineage, (&b.genes, &b.spread), b.adult(&w.chem)) } else { None };
+    let t = if kin { copy::kin(w, d, j, b.lineage, b.adult(&w.chem)) } else { None };
     (b.cell, b.leaving, b.inside) = (j as u32, false, None);
     d.cross(w.life.cell_slot(j).1, b.n() as f32, pushed);
     d.out.push(Entry::Passed { from: i as u32, to: j as u32, lane, mass, carried: carried.map(|c| bond::id(w, c.0)) });

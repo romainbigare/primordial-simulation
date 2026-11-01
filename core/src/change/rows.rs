@@ -156,7 +156,7 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: 
     h.pool.iter_mut().enumerate().for_each(|(k, p)| *p = w.store.amounts(Class::Air)[k * na + j] * air_share);
     // The time the liquid standing over it takes to renew its gas through its film, s: depth / `dissolve` (the air's
     // side is 100 times faster or more, left out).
-    (rc.film, rc.moist) = (nodes.standing(i).0 / w.cfg.dissolve, nodes.moist(i, w.cfg.phys.field));
+    (rc.film, rc.moist) = (nodes.standing(i).0 / w.cfg.dissolve, nodes.moist(i, &w.cfg.phys));
     let cap = |amt: &[f64]| nodes.skin[i] + (0..chem.ns()).map(|k| amt[k] * chem.subs[k].cp).sum::<f64>();
     let fused = nodes.fused(i, w.store.heat(Class::Ground)[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);
     let mut e = w.store.heat(Class::Ground)[i] - fused;

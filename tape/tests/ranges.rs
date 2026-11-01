@@ -1,4 +1,4 @@
-//! The world lives and keeps its books: a small island with the roster keeps every element and the energy for 20
+//! The world lives and keeps its books: a small island with the roster keeps every element and the energy for 26
 //! years, holds no number that is not finite, and has cover and two kinds of animals alive at the end.
 //!
 //! The key numbers of a normal run: `ew run --seed N --size 64` for seeds 1, 2 and 3, 30 years each, on threads. The
@@ -105,7 +105,7 @@ impl fmt::Display for Range {
 
 /// The liveness check's island: its side and years.
 const LIVE_SIDE: usize = 16;
-const LIVE_YEARS: u64 = 20;
+const LIVE_YEARS: u64 = 26;
 /// The starting kinds that are animals (bodies) in the roster.
 fn animal_kinds() -> Vec<usize> {
     worldgen::life::KINDS.iter().enumerate().filter(|k| matches!(k.1.place, worldgen::life::Place::Bodies(_))).map(|k| k.0).collect()

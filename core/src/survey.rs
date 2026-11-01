@@ -236,7 +236,7 @@ fn update(w: &World, d: &mut Domain, (cell, id): (usize, u64), (tmp, act): &mut 
     let Some(s) = d.find(id) else { return };
     d.moves.open(w, cell, Node::new(Class::Body, s.slot as usize));
     let mut b = std::mem::take(&mut d[s]);
-    (d.counts.updates, d.began) = (d.counts.updates + 1, d.out.len());
+    d.counts.updates += 1;
     let lived = match live(w, d, &mut b, tmp) {
         Err(cause) => return die(w, d, s, b, cause),
         Ok(lived) => lived,
@@ -250,7 +250,6 @@ fn update(w: &World, d: &mut Domain, (cell, id): (usize, u64), (tmp, act): &mut 
         }
     }
     crate::lineage::resize(w, d, &mut b);
-    crate::nodes::split(w, d, &mut b);
     d.see(w, &mut b);
     d[s] = b;
 }

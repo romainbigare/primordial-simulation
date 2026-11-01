@@ -669,8 +669,8 @@ fn child_has_parent_genes_plus_noise() {
     assert!(diff.iter().enumerate().all(|(g, &d)| d <= 6.0 * size * if g == KEEP_T || g == COOL_T { 5.0 } else { 1.0 }), "change too big");
 }
 
-/// More than `cfg.crowd` alike individuals in one cell (of light-eaters, which they eat) merge into one population node
-/// at the next month's start; matter and energy are kept.
+/// Eight alike individuals in one cell merge into one population node at the next month's start; matter and energy
+/// are kept.
 #[test]
 fn crowded_individuals_merge_into_a_node() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -680,7 +680,7 @@ fn crowded_individuals_merge_into_a_node() {
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
     let a = w.life.alive().find(|b| b.count == 1.0).expect("an individual");
     let (i, lineage, genome) = (a.cell as usize, a.lineage, a.genome);
-    let placed = w.cfg.crowd + 4;
+    let placed = 8;
     for _ in 0..placed - w.life.alive().filter(|b| b.cell as usize == i && b.lineage == lineage).count() {
         let b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
         w.add(b);
@@ -694,10 +694,10 @@ fn crowded_individuals_merge_into_a_node() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// However unlike, the bodies of a cell merge at a month's start until at most `cfg.crowd` nodes are left; no member
-/// is lost and matter and energy are kept.
+/// However unlike their genes, the bodies of one lineage and stage in a cell merge at a month's start into one node; no
+/// member is lost and matter and energy are kept.
 #[test]
-fn crowd_bounds_the_nodes_of_a_cell() {
+fn a_cell_holds_one_node_per_kind_and_stage() {
     let mut w = worldgen::new_world(1, 16, 16);
     let books = Books::now(&w);
     pcore::step(&mut w);
@@ -705,16 +705,19 @@ fn crowd_bounds_the_nodes_of_a_cell() {
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
     let a = w.life.alive().find(|b| b.count == 1.0).expect("an individual");
     let (i, lineage, genome) = (a.cell as usize, a.lineage, a.genome);
-    for x in 0..3 * w.cfg.crowd {
+    for x in 0..12 {
         let mut b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
         b.genes[pcore::body::COPY_MASS] += 0.3 * x as f32;
         w.add(b);
     }
-    let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.n()).collect::<Vec<f64>>();
-    let before: f64 = here(&w).iter().sum();
+    let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i).map(|b| (b.lineage, b.adult(&w.chem), b.n())).collect::<Vec<_>>();
+    let before: f64 = here(&w).iter().map(|x| x.2).sum();
     pcore::survey::survey(&mut w, false);
     let after = here(&w);
-    assert!(after.len() <= w.cfg.crowd, "{} nodes left", after.len());
-    assert!((after.iter().sum::<f64>() - before).abs() < 1e-9 * before, "members {before} then {after:?}");
+    let mut kinds: Vec<(u32, bool)> = after.iter().map(|x| (x.0, x.1)).collect();
+    kinds.sort_unstable();
+    kinds.dedup();
+    assert_eq!(kinds.len(), after.len(), "more than one node of a kind and stage: {after:?}");
+    assert!((after.iter().map(|x| x.2).sum::<f64>() - before).abs() < 1e-9 * before, "members {before} then {after:?}");
     books.assert_kept(&w, 1e-9);
 }

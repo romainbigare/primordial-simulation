@@ -23,8 +23,6 @@ pub enum Purpose {
     Choose,
     Bond = 8,
     Chem,
-    /// The gene a node splits along (`nodes::split`)
-    Split,
     /// Whether an individual dies of a share that kills members (`body::live::lose_share`)
     Death,
     /// The order among equally alike mates (`copy::partner`)

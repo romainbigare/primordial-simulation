@@ -19,8 +19,6 @@ pub struct Counters {
     pub body_batches: f64,
     #[serde(skip)]
     pub busiest_share: f64,
-    /// Population nodes split in two since the start (`nodes::split`)
-    pub splits: f64,
     /// Body updates since the start
     pub updates: u64,
     /// Heat a ground node could not give (below `T_FLOOR`), J: whoever asked got that much less, so no energy is lost
@@ -42,9 +40,9 @@ impl Counters {
     /// one cannot be left out. A domain's own counts per cell are its fields (`Domain::crossings`, `Domain::pushed`), so
     /// its `traffic` stays empty (checked in debug builds).
     pub(crate) fn add(&mut self, c: &mut Counters) {
-        let Counters { traffic, decisions, greedy, body_batches, busiest_share, splits, updates, clamped_heat, parts, rounded, cover_lost } = std::mem::take(c);
+        let Counters { traffic, decisions, greedy, body_batches, busiest_share, updates, clamped_heat, parts, rounded, cover_lost } = std::mem::take(c);
         debug_assert!(traffic.is_empty(), "a domain counted per cell");
-        (self.updates, self.splits, self.decisions, self.greedy) = (self.updates + updates, self.splits + splits, self.decisions + decisions, self.greedy + greedy);
+        (self.updates, self.decisions, self.greedy) = (self.updates + updates, self.decisions + decisions, self.greedy + greedy);
         (self.body_batches, self.busiest_share, self.clamped_heat) = (self.body_batches + body_batches, self.busiest_share + busiest_share, self.clamped_heat + clamped_heat);
         self.add_rounded(rounded);
         self.cover_lost.iter_mut().zip(cover_lost).for_each(|(a, b)| *a += b);

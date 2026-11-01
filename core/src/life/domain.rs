@@ -36,8 +36,6 @@ pub struct Domain {
     pub(crate) inbox: Vec<Entry>,
     /// The ids of the bodies that moved into it since the world last settled (`World::settle` notes where they are)
     pub(super) arrived: Vec<u64>,
-    /// The length of `out` when the update running began (`queued`)
-    pub(crate) began: usize,
     /// The lineages and the born rows its bodies made since the world last settled, by provisional id (`PROVISIONAL`),
     /// and the changes of the holders they made: of a lineage or born rows, its id, the change (`World::settle`)
     pub(super) brains: Vec<Lineage>,
@@ -137,12 +135,6 @@ impl Domain {
     /// Body `b`, taken out of `h` in cell `i`, leaves its storage, to be stored again elsewhere (`arrive`).
     pub(super) fn depart(&mut self, h: Handle, b: &Body, i: usize) {
         self.unstore(h, b.id, i);
-    }
-    /// Body `b` queued a part act of its own but a let-go or an anchor (`bond::LET_GO`, `TORN`, `ANCHORS`) in the update
-    /// running: it does not split in it (`nodes::split`; a queued move leaves it `Body::leaving`).
-    pub(crate) fn queued(&self, b: &Body) -> bool {
-        let mine = |e: &Entry| matches!(e, Entry::Act { id, on, .. } if *id == b.id && on.as_ref().map_or(true, |x| x.0 < crate::bond::LET_GO));
-        self.out[self.began.min(self.out.len())..].iter().any(mine)
     }
     /// Place body `c` made by a law on the world's day, its first update at the next month's start; its visible traits are
     /// worked out from what it holds now, so others see it before its first update.

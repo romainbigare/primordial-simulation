@@ -3,7 +3,7 @@
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Every leaf of a document with its path (`physics.take`, `config.crowd`).
+/// Every leaf of a document with its path (`physics.take`, `config.phys_days`).
 fn leaves(prefix: &str, v: &Value, out: &mut BTreeMap<String, Value>) {
     match v {
         Value::Object(m) => m.iter().for_each(|(k, x)| leaves(&if prefix.is_empty() { k.clone() } else { format!("{prefix}.{k}") }, x, out)),

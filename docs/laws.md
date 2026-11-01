@@ -264,9 +264,9 @@ goes like a surface. **Order** is the count or `Reaction::order`. **Extent** is 
 are of the solid, so a liquid holds its fusion heat and a gas its vaporisation heat too. **Light** reactions take
 absorbed light and store `light_yield` of it. **Catalyst**: a body's own (2.4, 6.5). **Open world**
 (`Reaction::open`): in ground, liquid, air and parts live the decomposers, whose catalyst `open` works as far as the
-node is moist: 1 + (`open` − 1) × moisture (`change::open_catalyst`). Moisture is the node's liquid over
-what its pores hold at field capacity, at most 1 (`FlowView::moist`, the bucket of evaporation); a part has its cell
-ground's; an air node has none. `open` is 1 for most reactions; 200 for reaction 1 (the free sugar's rot, about a
+node is moist: 1 + (`open` − 1) × moisture (`change::open_catalyst`). Moisture is how wet the node is as living things
+feel it: d / (d + `wet_depth`), d the depth of its liquid in its pores and standing (`FlowView::moist`,
+`Physics::wetness`), so decomposers work on dry land too, slower; a part has its cell ground's; an air node has none. `open` is 1 for most reactions; 200 for reaction 1 (the free sugar's rot, about a
 week); 5 for 21 (body matter rots 3.8 times faster than the frame); 10^6 for 26 (the frame rots by the decomposers
 only: bare, a millionth of that). No decomposer works in a body (2.4).
 `change::pace` is the one formula for all nodes. **Frozen**: a bare reaction whose rate constant k exp(−Ea/T) would
@@ -386,7 +386,7 @@ Files: `core/src/copy/` (`mix`, `grow`), `nodes.rs`, `body/genes.rs`, `lineage.r
 `body/genes.rs`), a diet gene per reaction (on above 0), per substance a safe minimum, an uptake and
 a keep gene, and the born brain rows. **Mutation** (`body::vary`): parent's gene plus noise of one step × 10^`MUT`,
 within range (not the brain-size genes of a body with no brain, 4.4); born rows change with `row_chance` by
-`row_noise`; rarely (`new_lineage`) a new lineage with a changed brain base. **Likeness** (`body::alike`): every
+`row_noise`. **Likeness** (`body::alike`): every
 gene within `alike` steps; it decides who mixes, joins and merges.
 
 ### 4.2 Children come from a brood
@@ -419,26 +419,25 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
   bond (`choose::spread`) act as the node itself while the others wait aside with their share; these come back by
   `rejoin` alone: their genes and spreads are the node's, so only amounts and sizes (members who fed are now larger
   than those who waited) join; what members who watched copy is applied when the batch ends (5.5).
-- **One lineage** per node (one brain). Children join the young node of their kind in their cell when alike within
-  `alike` steps plus `WITHIN` standard deviations (`body::within`), else start one.
-- **Young nodes**: children join a young node of their kind in their cell (`copy::kin`: not mature, of their lineage
-  and alike within `alike` steps plus `WITHIN` standard deviations), or start one; a young node matures as a whole when
-  its mean member reaches the copy mass, and alike nodes of one stage merge (below).
-- **Merging** (`nodes::crowd`, monthly): alike bodies of one lineage and stage in a cell join a node of more than one
-  member if they are in the room of the same structure (its root) or none and hold the same structure or nothing
-  (`nodes::Kin`). Past `crowd` nodes a cell merges its most alike pairs of one lineage and stage while alike, whatever
-  they hold and whatever room they are in (the one that joins lets go of its part and takes the other's room); unlike
-  nodes never merge. This merge is a speed tool with a physical side effect: the joiners' members drop the structure
-  they held, which stays in the cell for any body to take, and leave or enter a room (decision 56).
-- **Splitting** (`nodes::split`): a node whose halves would no longer be alike splits along its widest gene if its cell
-  has room; selection then acts between the halves. Means are kept exactly.
+- **One node per kind and stage** in a cell: one lineage per node (one brain). Children join the young node of their
+  lineage in their cell (`copy::kin`), and members who move join the node of their lineage and stage where they land,
+  or start one; a young node matures as a whole when its mean member reaches the copy mass.
+- **Merging** (`nodes::crowd`, monthly): the bodies of one lineage and stage in a cell, in the room of the same
+  structure (its root) or none and holding the same structure or nothing (`nodes::Kin`), join the largest of them,
+  where that is a node or they are more than `PAIR` (2: a pair of individuals may mate). Then a node joins a larger
+  one of another lineage of its stage, room and part whose genes are alike (`body::alike`, on the means) and whose
+  brain has the same sizes: its members take that brain, its born rows and its lineage (`merge_taking`). This merge is
+  a speed tool with physical side effects: the joiners' members drop the structure they held, which stays in the cell
+  for any body to take, and a lineage's brain spreads to alike bodies of another. Selection acts between cells and
+  lineages, not within a cell.
 - **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
 - **Pace**: every node updates and decides once a month, as an individual does (0).
 - **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage. A
   body with no brain does not mutate its brain-size genes (`body::vary`): they do nothing without one, so a brain
   arises only in a lineage founded with one (decision 72). An
-  individual's child joins its parent's lineage when its size genes fit it, else its partner's when they fit that
-  (its rows carried over to that brain); only a child that fits neither starts a new lineage (`copy::child_lineage`).
+  individual's child joins its parent's lineage, or its partner's when its size genes fit that and not its parent's
+  (its rows carried over to that brain; `copy::child_lineage`). A lineage starts only where a body's brain-size gene
+  moves a whole unit from its lineage's (`lineage::resize`, at its update).
   `nodes::open` draws members as individuals. `--individuals` keeps bodies with a brain out of nodes (handover 7.1).
 
 ### 4.5 The cover: light-eaters as a field
@@ -516,8 +515,9 @@ faces, 0: looks, signals, well-being, past dealings); up to 3 parts. Walls and c
 
 ### 5.3 Actions
 One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;
-a node spreads its members over the actions by those chances (`choose::spread`). Every body decides at every update,
-once a month. The members of a node that move leave as one group: count × the sum of the chances to go in every
+a node spreads its members over its `MOST_ACTS` (4) likeliest actions by those chances (the moves counted as one;
+its members of the others rest, a speed setting; `choose::spread`). Every body decides at every update, once a
+month. The members of a node that move leave as one group: count × the sum of the chances to go in every
 direction, at most all (less than one member: one member with that chance; fewer than one member left behind: the whole node,
 with the chance that keeps the mean at count × that share), all in the one direction drawn by its chance over the sum,
 so each direction gets its share of members on average, in groups. A
@@ -532,7 +532,10 @@ No copy action, no "farm", "trade" or "attack": those must be patterns of these.
 per kg, of food only (`Body::uses`: what it burns, the body matter and built solids it digests, the minerals it builds
 of; not what it cannot use, nor the key liquids it drinks, 6.4): per kg of supply, Holling's type II take × s /
 (take + s), s what the swept area holds (`sweep`) of its food, so thin food takes time to find (Holling 1959). The
-minerals it builds of count in s as food does: one search finds all it uses, so rich ground shortens it. Another body's
+minerals it builds of count in s as food does: one search finds all it uses, so rich ground shortens it. **Grazing**
+(`feed::take_node`): a bite of the cover takes all its parts in the field's proportions; what the body does not use
+(the frame without the enzyme of reaction 27) is bulk that fills its gut (all it takes is at most its take × supply)
+and leaves with what it sheds at its next update, giving nothing (Van Soest 1994). Another body's
 members lie over the cell like the ground's food: a bite reaches those the swept area holds (one individual body
 whole, by one draw with the chance the area holds it, whether a node or an individual takes it; of a node, less than one member is one whole member met with that chance:
 it takes, tears and pays that meeting's outcome times the chance), limited by force against theirs. **Giving** (`Body::spare`) is of what the other uses, of stores only (no
