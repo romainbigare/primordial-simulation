@@ -63,14 +63,16 @@ When the chunks end the world takes their events, counters and queues chunk by c
 array of the store by one task, the changes cell by cell in the order of the cells, `store::book_by_array`), so every
 sum runs in the order of the cells and the world is the same for any count of threads and of chunks. **The serial
 pass** (`life::land`): the queue in rounds: first the moves and the litters land, each chunk of the cells they go to on
-the pool, in a chunk cell by cell and in a cell in the order queued; then the watches and the part acts one by one, in
-the order queued, each a serial step on one cell (`World::in_cell`); what they queue is the next round's. Last the
+the pool, in a chunk cell by cell and in a cell in the order queued, and what the moves did to the lanes and the
+structures follows at once (`Entry::Passed`), so a part act finds a carried structure where it went; then the watches
+and the part acts one by one, in the order queued, each a serial step on one cell (`World::in_cell`); what they queue is the next round's. Last the
 holders of each lineage and born rows are counted from the bodies (`Life::recount`): a lineage left
 with none dies out, born rows left with none are freed. Each entry is applied by its law on the bodies and parts as
 they are then. A move lands (`choose::land_move`): the body enters the cell, carries what it holds if it paid to (else
 it lets go of it), counts in the cell's crossings, and its push breaks the bodies there at the next survey; members of
 a node who moved join their kind there (`copy::kin`); then its push reaches the structures there, the structure it
-carries comes along, and it clears the lane (`Entry::Passed`). A litter joins its kind there or starts a body, and its
+carries comes along (any other body that held a part of it, left behind, lets go of it), and it clears the lane
+(`Entry::Passed`). A litter joins its kind there or starts a body, and its
 birth is recorded then (`copy::land_litter`). A watch blends by the share of the watcher's members who watched (5.5). A
 part act runs whole on a part in the body's cell (`choose::land_act`); a node's part then comes back to its node if it
 holds nothing, is inside nothing, and the node is in its cell and not leaving it. An entry whose body or target is

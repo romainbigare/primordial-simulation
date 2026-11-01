@@ -15,10 +15,10 @@ pub enum Entry {
     Go { id: u64, from: u32, to: u32, pushed: f64, lane: f64, carries: bool, kin: bool },
     /// Children who start in another cell (`copy::emit`)
     Litter(Box<copy::Litter>),
-    /// A body of mass `mass` kg landed in cell `to` from `from` (`choose::land_move`): it clears `lane` m² of the
+    /// Body `by` of mass `mass` kg landed in cell `to` from `from` (`choose::land_move`): it clears `lane` m² of the
     /// lane, the structure it carries (`carried`, its root) comes along, and it pushes the structures there
     /// (`bond::moved`)
-    Passed { from: u32, to: u32, lane: f64, mass: f64, carried: Option<NodeId> },
+    Passed { by: u64, from: u32, to: u32, lane: f64, mass: f64, carried: Option<NodeId> },
     /// Children who landed with no node to join and less than one member, back to their parent (`copy::back`)
     Back(Box<copy::Litter>),
     /// Body `by`, of `n` members who watched and of `lineage` then, watched body `of` (`choose::watched`)
@@ -35,7 +35,9 @@ pub fn deliver(w: &mut World) {
 }
 
 /// The queue is taken and applied in rounds until nothing is left: in each, first the moves and the litters land
-/// (`land_all`), then the other entries one by one in the order queued; what they queue in turn is the next round's.
+/// (`land_all`) and what the moves did to the lanes and the structures follows them (`Entry::Passed`), so a part act
+/// finds a carried structure where it went; then the other entries one by one in the order queued. What they queue in
+/// turn is the next round's.
 pub(crate) fn land(w: &mut World) {
     loop {
         let all = std::mem::take(&mut w.life.queued);
@@ -44,7 +46,9 @@ pub(crate) fn land(w: &mut World) {
         }
         let (landing, rest): (Vec<Entry>, Vec<Entry>) = all.into_iter().partition(|e| matches!(e, Entry::Go { .. } | Entry::Litter(_)));
         land_all(w, landing);
-        rest.into_iter().for_each(|e| apply(w, e));
+        let (passed, later): (Vec<Entry>, Vec<Entry>) = std::mem::take(&mut w.life.queued).into_iter().partition(|e| matches!(e, Entry::Passed { .. }));
+        w.life.queued = later;
+        passed.into_iter().chain(rest).for_each(|e| apply(w, e));
     }
 }
 
@@ -87,9 +91,9 @@ fn land_all(w: &mut World, landing: Vec<Entry>) {
 fn apply(w: &mut World, e: Entry) {
     match e {
         Entry::Go { .. } | Entry::Litter(_) => unreachable!("moves and litters land"),
-        Entry::Passed { from, to, lane, mass, carried } => {
+        Entry::Passed { by, from, to, lane, mass, carried } => {
             lanes::clear(w, from as usize, to as usize, lane);
-            bond::moved(w, carried, to as usize, mass);
+            bond::moved(w, (by, carried), to as usize, mass);
         }
         Entry::Back(x) => copy::back(w, *x),
         Entry::Watch { by, n, lineage, of } => choose::watched(w, by, (n, lineage), of),

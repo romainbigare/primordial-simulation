@@ -5,11 +5,11 @@ use pcore::bond::{self, GROUND};
 use pcore::body::{die, Body, COPY_MASS, LACK, STRENGTH};
 use pcore::brain;
 use pcore::chem::Phase;
-use pcore::life::Handle;
+use pcore::life::{Entry, Handle};
 use pcore::units::DAY_S;
 use pcore::store::{Class, Node};
 use pcore::World;
-use worldgen::testkit::{dry_land, part_of, plate, relocate, scale, set_amount, small_world, start as world, Books, Brain, Line, LIQUID, MINERAL};
+use worldgen::testkit::{dry_land, eater, part_of, plate, relocate, scale, set_amount, small_world, start as world, Books, Brain, Line, LIQUID, MINERAL};
 
 /// A bond breaks when the weight it bears is more than it holds: of two parts hung on an anchored one by bonds that
 /// hold 10 t weight, the one of 1 t stays and the one of 100 t falls.
@@ -272,4 +272,32 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     w.as_body(i, |w, d| die(w, d, h, b, LACK));
     assert!(!w.parts.parts[p].alive && w.life.find(id).is_none(), "the part or the body is still there");
     books.assert_within(&w, 1e-9, 1e-9);
+}
+
+/// A body that moves carrying a structure takes it to its new cell, before any part act of the serial pass; another
+/// body that held a part of it, left behind, lets go of it.
+#[test]
+fn a_carried_structure_leaves_its_other_holders_behind() {
+    let (mut w, i) = world();
+    let j = w.mesh.cells().around(i).1[0] as usize;
+    let (p, q) = (plate(&mut w, i, 1.0, false), plate(&mut w, i, 1.0, false));
+    bond::link(&mut w, p, q as u32, 1e9);
+    let mut ids = Vec::new();
+    for part in [p, q] {
+        let mut b = eater(&mut w, i, brain::REST, 1.0);
+        // (Strong enough to bear the structure it carries, `bond::carry`.)
+        b.genes[STRENGTH] = 1.0;
+        b.prepare(&w.chem, &w.cfg);
+        b.hold = Some(bond::id(&w, part));
+        let h = w.add(b);
+        w.parts.parts[part].held = w.life[h].id;
+        ids.push(w.life[h].id);
+    }
+    let (mover, other) = (ids[0], ids[1]);
+    w.in_cell(i, |_, d| d.out.push(Entry::Go { id: mover, from: i as u32, to: j as u32, pushed: 0.0, lane: 0.0, carries: true, kin: false }));
+    pcore::life::deliver(&mut w);
+    let (m, o) = (w.life.find(mover).expect("the mover"), w.life.find(other).expect("the other holder"));
+    assert!(w.life[m].cell as usize == j && bond::held(&w, &w.life[m]) == Some(p), "the mover does not hold its part in its new cell");
+    assert!(bond::cell(&w, p) == j && bond::cell(&w, q) == j, "the structure stayed behind");
+    assert!(w.life[o].hold.is_none() && w.parts.parts[q].held == bond::NOBODY, "a body left behind still holds a part of the moved structure");
 }

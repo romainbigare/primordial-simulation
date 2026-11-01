@@ -62,7 +62,7 @@ pub(crate) fn land_move(w: &World, d: &mut Chunk, mut b: Body, (i, j): (usize, u
     let t = if kin { copy::kin(w, d, j, b.lineage, b.adult(&w.chem)) } else { None };
     (b.cell, b.leaving, b.inside) = (j as u32, false, None);
     d.cross(j, b.n() as f32, pushed);
-    d.out.push(Entry::Passed { from: i as u32, to: j as u32, lane, mass, carried: carried.map(|c| bond::id(w, c.0)) });
+    d.out.push(Entry::Passed { by: b.id, from: i as u32, to: j as u32, lane, mass, carried: carried.map(|c| bond::id(w, c.0)) });
     let s = d.arrive(b);
     if let Some(t) = t {
         nodes::merge(w, d, s, t);

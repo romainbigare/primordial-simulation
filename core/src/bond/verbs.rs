@@ -1,7 +1,7 @@
 //! What bodies do to parts: hold, take, put, join, break and enter; form new parts, anchor them, dig the bonded ground,
 //! let go, and carry what they hold when they move. A body's force decides what it can hold and break.
 
-use super::{cell, dissolve, event, fall_apart, held, holder, id, link, make, move_structure, part, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
+use super::{cell, dissolve, event, fall_apart, held, holder, id, link, make, members, move_structure, part, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
 use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase}, life::{Chunk, Handle}, life::Entry, store::{Class, Move, Node, NodeId}, World};
 
 /// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the ground rests on it).
@@ -269,10 +269,18 @@ pub fn carry(w: &World, b: &Body) -> Option<(usize, f64)> {
     (!s.anchored && s.mass * w.cfg.gravity <= bears(w, b)).then_some((r, s.mass))
 }
 
-/// After a body of mass `mb` kg moved into cell `j` (`choose::land_move`): the structure it carried (`carried`, its
-/// root) comes along if it is still there; it pushes the structures there.
-pub fn moved(w: &mut World, carried: Option<NodeId>, j: usize, mb: f64) {
+/// After body `by` of mass `mb` kg moved into cell `j` (`choose::land_move`): the structure it carried (`carried`, its
+/// root) comes along if it is still there, and the other bodies that held a part of it, left behind, let go of it; it
+/// pushes the structures there.
+pub fn moved(w: &mut World, (by, carried): (u64, Option<NodeId>), j: usize, mb: f64) {
     if let Some(r) = carried.and_then(|r| part(w, r)) {
+        for p in members(w, r) {
+            if let Some(o) = holder(w, p).filter(|&o| w.life[o].id != by) {
+                let mut ob = std::mem::take(&mut w.life[o]);
+                dropped(w, &mut ob, false);
+                w.life[o] = ob;
+            }
+        }
         move_structure(w, r, j);
     }
     let push = (w.cfg.phys.bump * mb * w.cfg.gravity) as f32;
