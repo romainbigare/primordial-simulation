@@ -18,7 +18,7 @@ pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: 
     // The members of each option in the node after acting, and the change of their well-being.
     let (mut kept, mut gain, mut acted) = ([0.0; OPTS], [0f32; OPTS], 0.0);
     for o in (0..FIXED).chain(TO_BODY..OPTS).chain(FIXED..TO_BODY).filter(|&o| x[o] > 0.0) {
-        let (g, left) = if o == REST { (0.0, Some(false)) } else { part_acts(w, d, node, c, k, (o, x[o]), rng) };
+        let (g, left) = if o == REST { (0.0, Some(false)) } else { part_acts(w, d, node, (c, &q), k, (o, x[o]), rng) };
         (gain[o], kept[o], acted) = (g, if left == Some(true) { 0.0 } else { x[o] }, acted + x[o]);
         let Some(_) = left else { break };
     }
@@ -49,12 +49,23 @@ fn top_chances(c: &Choice) -> [f32; OPTS] {
     let moves = FIXED..TO_BODY;
     let sum: f32 = c.p[moves.clone()].iter().sum();
     let chance = |o: usize| if moves.contains(&o) { sum } else { c.p[o] };
-    let mut top: Vec<usize> = (0..OPTS).filter(|&o| !moves.contains(&o) || o == FIXED).filter(|&o| chance(o) > 0.0).collect();
-    top.sort_by(|&a, &b| chance(b).total_cmp(&chance(a)).then(a.cmp(&b)));
-    top.truncate(MOST_ACTS);
-    let kept: f32 = top.iter().map(|&o| chance(o)).sum();
-    let on = |o: usize| top.contains(&if moves.contains(&o) { FIXED } else { o });
-    std::array::from_fn(|o| if on(o) { c.p[o] / kept } else { 0.0 })
+    // The likeliest, kept in order (the larger chance first, the lower option of equals) as each option is seen.
+    let mut top = [(0.0f32, usize::MAX); MOST_ACTS];
+    for o in (0..OPTS).filter(|&o| !moves.contains(&o) || o == FIXED) {
+        let x = chance(o);
+        if x > 0.0 && x > top[MOST_ACTS - 1].0 {
+            let at = top.iter().position(|e| x > e.0).unwrap_or(MOST_ACTS - 1);
+            top.copy_within(at..MOST_ACTS - 1, at + 1);
+            top[at] = (x, o);
+        }
+    }
+    let kept: f32 = top.iter().map(|e| e.0).sum();
+    let mut q = [0.0; OPTS];
+    for &(_, o) in top.iter().filter(|e| e.1 != usize::MAX) {
+        let span = if o == FIXED { moves.clone() } else { o..o + 1 };
+        span.for_each(|x| q[x] = c.p[x] / kept);
+    }
+    q
 }
 
 /// The members of node `node` that do each option by the chances `p` (`top_chances`): count × chance (`share`). The
@@ -106,9 +117,10 @@ fn stays<R>(d: &mut Domain, node: &mut Body, x: f64, act: impl FnOnce(&mut Domai
 /// (`nodes::part`); unless they queued a move or a part act (`outbox`), they then come back (`nodes::rejoin`); else
 /// they live on as a body, leaving the node (`Body::leaving`), with the trace of what they did: those who move join the
 /// first node of their kind and stage where they land (`choose::land_move`), those who act on a part come back after it
-/// if they can (`land_act`). The node acts itself if less than one member would be left. Returns the change of their
-/// well-being, and whether they left the node (none: it moved whole).
-fn part_acts(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, (o, x): (usize, f64), rng: &mut Rng) -> (f32, Option<bool>) {
+/// if they can (`land_act`). The node acts itself if less than one member would be left. `q`: the node's chances
+/// (`top_chances`), which a part that leaves learns from. Returns the change of their well-being, and whether they left
+/// the node (none: it moved whole).
+fn part_acts(w: &World, d: &mut Domain, node: &mut Body, (c, q): (&Choice, &[f32; OPTS]), k: &Kit, (o, x): (usize, f64), rng: &mut Rng) -> (f32, Option<bool>) {
     let (moves, bond) = ((FIXED..TO_BODY).contains(&o), (FORM..FIXED).contains(&o) || o >= TO_PART);
     let mut acts = |d: &mut Domain, b: &mut Body, part_of: Option<u64>| {
         let before = (k.wb)(w, b);
@@ -134,8 +146,8 @@ fn part_acts(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, (o
         back(d, node, s, m);
         return (gain, Some(false));
     }
-    m.trace = trace(w, &m, c, &top_chances(c), k, o, 0.0);
-    d.see(w, &mut m);
+    m.trace = trace(w, &m, c, q, k, o, 0.0);
+    m.stale = true;
     d[s] = m;
     (gain, Some(true))
 }
@@ -169,13 +181,13 @@ pub(crate) fn land_act(w: &mut World, id: u64, on: Result<(usize, NodeId), [f32;
             return die(w, d, s, b, LACK);
         }
         let Some(t) = its else {
-            d.see(w, &mut b);
+            b.stale = true;
             d[s] = b;
             return;
         };
         let mut o = std::mem::take(&mut d[t]);
         back(d, &mut o, s, b);
-        d.see(w, &mut o);
+        o.stale = true;
         d[t] = o;
     });
 }

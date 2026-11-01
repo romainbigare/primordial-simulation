@@ -131,6 +131,20 @@ fn emit(w: &World, d: &mut Domain, b: &mut Body, l: &Births, cell: usize, m: f64
         return false;
     }
     let (store, e) = give(w, b, l, m);
+    let born = Event { day: w.day(), kind: EventKind::Born { root: d.root(w, b), mixed: l.mate.is_some() }, node: cell as u32, value: m };
+    // A node's children who stay join its young node there as amounts and means (`nodes::add`): their born rows are
+    // their parent's, the generation's change of them its variance (`row_change`), their own rows their parent's, so
+    // no child body, no draw of every row and no new born rows are made.
+    if let (true, Some(t)) = (l.node, hit) {
+        // (The noise their mean would take is their spread: `add` pools it, to `body::most`.)
+        let (_, sd, left) = row_change(w, b.row_spread, m, size, r);
+        let row_spread = left + sd * sd;
+        let from = d.born(w, b).to_vec();
+        let own = if b.rows.len() == from.len() { &b.rows } else { &from };
+        d.events.push(born);
+        add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.day() as f64 }, (&genes, &spread), (&from, own, row_spread));
+        return true;
+    }
     let (mut rows, row_spread) = child_rows(w, d, b, l, m, size, r);
     // A node's children stay in its lineage: a change of the brain's base in one child is lost in the mean of many; a
     // node whose mean sizes moved moves itself (`lineage::resize`). In another lineage they join its young node there.
@@ -155,7 +169,6 @@ fn emit(w: &World, d: &mut Domain, b: &mut Body, l: &Births, cell: usize, m: f64
         wet: b.wet,
         ..Default::default()
     };
-    let born = Event { day: w.day(), kind: EventKind::Born { root: d.root(w, b), mixed: l.mate.is_some() }, node: cell as u32, value: m };
     if !here {
         let x = Litter { c, rows, alone: l.alone, from: b.cell, born };
         d.out.push(Entry::Litter(Box::new(x)));
@@ -252,9 +265,6 @@ pub(crate) fn kin(w: &World, d: &Domain, cell: usize, lineage: u32, mature: bool
 /// a partner each row is one parent's (`mix::mix_rows`), the group's spread pooled, then the same change. In a null run
 /// the rows do not change.
 fn child_rows(w: &World, d: &Domain, b: &Body, l: &Births, m: f64, size: f32, r: &mut Rng) -> (Option<Vec<f32>>, f32) {
-    let p = &w.cfg.phys;
-    let mm = m.max(1.0) as f32;
-    let row_noise = if w.cfg.null { 0.0 } else { p.row_noise };
     let (mut pre, mut spread) = (None, b.row_spread);
     if let Some(t) = l.mate.filter(|_| !w.cfg.null) {
         if let Some((v, s)) = mix_rows(w, d, b, &d[t], m, r) {
@@ -262,17 +272,7 @@ fn child_rows(w: &World, d: &Domain, b: &Body, l: &Births, m: f64, size: f32, r:
             (pre, spread) = ((v != d.born(w, b)).then_some(v), s);
         }
     }
-    let (var, changed) = (spread + (row_noise * size).powi(2), r.f64() < p.row_chance);
-    let sd = if w.cfg.null {
-        0.0
-    } else if spread > 0.0 || mm > 1.0 {
-        (var / mm).sqrt()
-    } else if changed {
-        row_step(p, size)
-    } else {
-        0.0
-    };
-    let left = (var * (1.0 - 1.0 / mm)).min(most(row_step(p, size), p.alike));
+    let (_, sd, left) = row_change(w, spread, m, size, r);
     if sd > 0.0 {
         let mut v = pre.unwrap_or_else(|| d.born(w, b).to_vec());
         shake(&mut v, r, sd);
@@ -301,6 +301,26 @@ fn child_lineage(w: &World, d: &Domain, b: &Body, l: &Births, genes: &[f32], row
     }
 }
 
+/// The generation's change of the born rows of `m` children of a body whose rows spread `spread`, at mutation size
+/// `size`: their variance (the spread and the step of change), the noise of their mean (sd; one draw of
+/// `Physics::row_chance` decides it for one child of rows that do not spread) and the variance left among them (up to
+/// `body::most`). In a null run nothing changes.
+fn row_change(w: &World, spread: f32, m: f64, size: f32, r: &mut Rng) -> (f32, f32, f32) {
+    let (p, mm) = (&w.cfg.phys, m.max(1.0) as f32);
+    let row_noise = if w.cfg.null { 0.0 } else { p.row_noise };
+    let (var, changed) = (spread + (row_noise * size).powi(2), r.f64() < p.row_chance);
+    let sd = if w.cfg.null {
+        0.0
+    } else if spread > 0.0 || mm > 1.0 {
+        (var / mm).sqrt()
+    } else if changed {
+        row_step(p, size)
+    } else {
+        0.0
+    };
+    (var, sd, (var * (1.0 - 1.0 / mm)).min(most(row_step(p, size), p.alike)))
+}
+
 /// Children `c` of `b` that join no node start a body of their own, born with `rows` (none: its parent's). Several
 /// children together that join no node at all (`alone`) are drawn from it as individuals (`nodes::open`: each with
 /// genes and born rows of its own, drawn from their spread), the last one the body itself, with the
@@ -321,7 +341,7 @@ fn place_child(w: &World, d: &mut Domain, alone: bool, mut c: Body, rows: Option
         (c.spread, c.row_spread) = (Vec::new(), 0.0);
         d.set_count(&mut c, 1.0);
         // (The members drawn took their stores: what is seen of it is what is left.)
-        d.see(w, &mut c);
+        c.stale = true;
         d[s] = c;
     }
 }

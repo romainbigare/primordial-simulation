@@ -56,7 +56,7 @@ pub fn wound(w: &World, d: &mut Domain, h: Handle, mut b: Body, (hit, f): (f64, 
         die(w, d, h, b, cause);
         return false;
     }
-    d.see(w, &mut b);
+    b.stale = true;
     d[h] = b;
     true
 }

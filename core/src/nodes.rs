@@ -199,7 +199,7 @@ pub(crate) fn add(w: &World, d: &mut Domain, t: Handle, c: Lot, (genes, spread):
     o.spread = pooled;
     o.prepare(&w.chem, &w.cfg);
     rejoin(d, &mut o, c, Some(own));
-    d.see(w, &mut o);
+    o.stale = true;
     d[t] = o;
 }
 
@@ -255,7 +255,7 @@ pub fn open(w: &World, d: &mut Domain, h: Handle, n: usize) -> Vec<Handle> {
         }
         out.push(draw(w, d, &mut b, &mut r));
     }
-    d.see(w, &mut b);
+    b.stale = true;
     d[h] = b;
     out
 }

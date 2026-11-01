@@ -29,10 +29,11 @@ pub fn pay(w: &World, d: &mut Domain, b: &mut Body, cost: f64) -> bool {
     if cost <= 0.0 {
         return true;
     }
-    if b.fuel(&w.chem, b.temp(&w.chem)) < cost {
+    let t = b.temp(&w.chem);
+    if b.fuel(&w.chem, t) < cost {
         return false;
     }
-    burn(w, d, b, cost);
+    burn_at(w, d, b, cost, t);
     true
 }
 
@@ -42,11 +43,16 @@ pub fn pay(w: &World, d: &mut Domain, b: &mut Body, cost: f64) -> bool {
 /// goes to its stores. What it releases becomes heat in its cell's ground, as the work it pays for ends as heat there:
 /// the body keeps its temperature (`settle_heat`). Returns the energy released, J.
 pub(crate) fn burn(w: &World, d: &mut Domain, b: &mut Body, cost: f64) -> f64 {
+    burn_at(w, d, b, cost, b.temp(&w.chem))
+}
+
+/// `burn` for a body at `t` K, its temperature now.
+fn burn_at(w: &World, d: &mut Domain, b: &mut Body, cost: f64, t: f64) -> f64 {
     if cost <= 0.0 {
         return 0.0;
     }
     let (chem, i) = (&w.chem, b.cell as usize);
-    let (j, t) = (w.mesh.up(i, 0, AIR), b.temp(chem));
+    let j = w.mesh.up(i, 0, AIR);
     let (lift, ta, held) = (w.lift(i), d.moves.t_air(w, j), b.matter_mol(chem));
     let mut got = 0.0;
     for q in 0..b.k.burn.len() {

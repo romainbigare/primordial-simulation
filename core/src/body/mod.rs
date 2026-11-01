@@ -83,6 +83,10 @@ pub struct Body {
     /// Visible traits: mass kg, light-capture area m² (none: bodies catch no light), strength, colour (3 bands), height
     /// m (`height`)
     pub vis: [f32; 7],
+    /// Whether what it holds changed since its visible traits were worked out: the next survey works them out again
+    /// (`Domain::see_changed`); a saved body's are as saved
+    #[serde(skip)]
+    pub stale: bool,
     /// Its brain rows: the rows it was born with plus what it (a node: its members) learned; empty without a brain
     pub rows: Vec<f32>,
     /// Moving average of the square of its critic's error (0 until the first one), and per learned row a moving average

@@ -82,6 +82,11 @@ impl Chemistry {
     /// The roles a first body's chemistry is built on, found from the numbers: the light reaction (one that takes
     /// energy), the energy-rich solid it makes, the liquid it uses, and the reaction that burns that solid with a gas.
     pub fn life_roles(&self) -> Option<(usize, usize, usize, usize)> {
+        self.derived().roles
+    }
+
+    /// `life_roles` worked out (`Chemistry::derived`).
+    pub(super) fn find_life_roles(&self) -> Option<(usize, usize, usize, usize)> {
         let at = |k: u16| self.phase(k as usize, T_SURF);
         let r_light = (0..self.reactions.len()).find(|&r| self.reactions[r].light && self.dh(r) > 0.0)?;
         let rx = &self.reactions[r_light];
@@ -98,7 +103,11 @@ impl Chemistry {
 
     /// The fixing reaction: the one that makes a mineral of growth (`minerals`) from an element only a gas it takes brings.
     pub fn fixing(&self) -> Option<usize> {
-        let minerals = self.minerals();
+        self.derived().fixing
+    }
+
+    /// `fixing` worked out from the `minerals` of growth (`Chemistry::derived`).
+    pub(super) fn find_fixing(&self, minerals: &[(usize, f64)]) -> Option<usize> {
         let (gas, has) = (|k: u16| self.gas_at_surface(k as usize), |k: u16, e: usize| self.subs[k as usize].elems[e] > 0);
         (0..self.reactions.len()).find(|&r| {
             let i = &self.reactions[r].inputs;

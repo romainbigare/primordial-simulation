@@ -36,6 +36,7 @@ pub fn survey(w: &mut World, reversed: bool) {
     let ran: Vec<usize> = work.iter().map(|x| x.0).collect();
     run(w, work, reversed, |_| (), |w, d, s, _| {
         (0..d.cells.len()).for_each(|k| worn(w, d, &lay, k, monthly));
+        d.see_changed(w);
         rows(w, d, &mut s.rows);
         s.live = d.lives();
     });
@@ -250,6 +251,6 @@ fn update(w: &World, d: &mut Domain, (cell, id): (usize, u64), (tmp, act): &mut 
         }
     }
     crate::lineage::resize(w, d, &mut b);
-    d.see(w, &mut b);
+    b.stale = true;
     d[s] = b;
 }

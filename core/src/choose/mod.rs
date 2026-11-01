@@ -84,7 +84,8 @@ pub fn act(w: &World, d: &mut Domain, b: &mut Body, lived: &Lived, t: &mut ActTm
     // A brain perceives sizes per member.
     let pm = lived.mass / b.n();
     let think = w.cfg.phys.think(w.cfg.phys.c_brain, b.k.copy_mass);
-    let now = |w: &World, b: &Body| b.wellbeing_at(&w.chem, think, b.temp(&w.chem), lived.spare);
+    // (Well-being before and after each act at the decision's temperature: an act moves amounts, not the season.)
+    let now = |w: &World, b: &Body| b.wellbeing_at(&w.chem, think, temp, lived.spare);
     let wb = now(w, b);
     let Some(lin) = d.brain(w, b.lineage) else { return };
     let (s, nseen, sight) = (lin.shape, lin.seen.min(MAX_SEEN), lin.sight.max(1));

@@ -10,9 +10,8 @@ use crate::{bond, lanes, life::{Domain, Handle}, store::Node, World};
 /// A dealing counts in a body's memory (`Body::note`) as this many times the share of its mass moved.
 const NOTE_SCALE: f64 = 10.0;
 
-/// Mass of the amounts `m` that the body uses (`Body::uses`), kg.
-fn used_kg(w: &World, b: &Body, m: &[f64]) -> f64 {
-    let t = b.temp(&w.chem);
+/// Mass of the amounts `m` that the body at `t` K uses (`Body::uses`), kg.
+fn used_kg(w: &World, b: &Body, t: f64, m: &[f64]) -> f64 {
     m.iter().enumerate().filter(|&(k, _)| b.uses(&w.chem, k, t)).map(|(k, a)| a * w.chem.subs[k].molar_mass).sum()
 }
 
@@ -22,10 +21,9 @@ fn used_kg(w: &World, b: &Body, m: &[f64]) -> f64 {
 /// thinner it lies, the more of its time goes to finding it (Holling 1959). Only what it uses counts in s
 /// (`Body::uses`). A node's members each work their own area. Returns that, kg, and the share of the cell its area
 /// holds, which is the share of another body's members it holds and may be less than one member: of one individual
-/// body, the chance it holds it.
-fn intake(w: &World, b: &Body, from: impl Fn(usize) -> f64) -> (f64, f64) {
+/// body, the chance it holds it. `t`: the body's temperature, K.
+fn intake(w: &World, b: &Body, t: f64, from: impl Fn(usize) -> f64) -> (f64, f64) {
     let (p, area, days) = (&w.cfg.phys, w.mesh.cells().area()[b.cell as usize], w.cfg.update_days());
-    let t = b.temp(&w.chem);
     let wants = b.k.upt.iter().filter(|&&(k, _)| b.uses(&w.chem, k, t));
     let lying: f64 = wants.map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum();
     let (found, supply) = (p.sweep * lying / area, b.supply(&w.chem, p, t));
@@ -47,12 +45,11 @@ pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
     let (tg, kc, parts) = (w.t_ground_last(i), d.slot(i), crate::cover::Parts::of(chem));
     let free = |k: usize| if chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k).max(0.0) } else { 0.0 };
     let cover: [f64; crate::units::MAX_SUBSTANCES] = parts.as_ref().map_or([0.0; crate::units::MAX_SUBSTANCES], |p| d.cover.amounts(p, kc));
-    let lying = |k: usize| free(k) + cover[k];
-    let gut = intake(w, b, lying).0;
+    let (lying, t) = (|k: usize| free(k) + cover[k], b.temp(chem));
+    let gut = intake(w, b, t, lying).0;
     let mut m = b.wanted(chem, lying, gut, b.mass(chem));
     let mut grazed: Vec<f64> = m.iter().enumerate().map(|(k, &a)| if cover[k] > 0.0 { (a * cover[k] / lying(k)).min(a).min(cover[k]) } else { 0.0 }).collect();
     // The bulk: the parts of the cover it does not use, at the share of the cover its bite took of those it uses.
-    let t = b.temp(chem);
     let used = |k: usize| cover[k] > 0.0 && b.uses(chem, k, t);
     let usable: f64 = (0..chem.ns()).filter(|&k| used(k)).map(|k| cover[k] * chem.subs[k].molar_mass).sum();
     let bit = if usable > 0.0 { chem.mass_of(&grazed) / usable } else { 0.0 };
@@ -70,7 +67,7 @@ pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
     }
     for (from, x) in [(u64::MAX, chem.mass_of(&m) - chem.mass_of(&grazed)), (COVER, kg)].into_iter().filter(|e| e.1 > 0.0) {
         let part: Vec<f64> = m.iter().zip(&grazed).map(|(&a, &g)| if from == COVER { g } else { a - g }).collect();
-        let ev = EventKind::Took { by: b.id, from, used: used_kg(w, b, &part) as f32 };
+        let ev = EventKind::Took { by: b.id, from, used: used_kg(w, b, t, &part) as f32 };
         d.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: x });
     }
     if let Some(p) = parts.as_ref().filter(|_| kg > 0.0) {
@@ -133,9 +130,9 @@ fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body,
 /// would, times the chance, the expected outcome of an individual's draw.
 pub fn take_body(w: &World, d: &mut Domain, b: &mut Body, s: Handle, rng: &mut Rng) {
     let o = &d[s];
-    let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
+    let (mb, mo, tb) = (b.mass(&w.chem), o.mass(&w.chem), b.temp(&w.chem));
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
-    let (kg, swept) = intake(w, b, |k| o.store[k]);
+    let (kg, swept) = intake(w, b, tb, |k| o.store[k]);
     // One draw finds an individual prey.
     let reached = if o.n() > 1.0 { swept } else if rng.f64() < swept { 1.0 } else { return };
     // The share of the members a meeting reaches (at least one whole member) and the chance of that meeting.
@@ -160,7 +157,7 @@ pub fn take_body(w: &World, d: &mut Domain, b: &mut Body, s: Handle, rng: &mut R
     let mut rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (torn * s - a).max(0.0)).collect();
     let got = w.chem.mass_of(&m);
     transfer(&w.chem, &mut d.counts.rounded[0], &mut o, b, &m);
-    let ev = EventKind::Took { by: b.id, from: o.id, used: used_kg(w, b, &m) as f32 };
+    let ev = EventKind::Took { by: b.id, from: o.id, used: used_kg(w, b, tb, &m) as f32 };
     d.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: got });
     if body::wound(w, d, s, o, (hit, f), &mut rest, TAKEN) {
         d[s].note(b.id, -(NOTE_SCALE * got / mo) as f32);
@@ -189,7 +186,7 @@ pub(super) fn give(w: &World, d: &mut Domain, b: &mut Body, s: Handle) {
     let mut o = std::mem::take(&mut d[s]);
     transfer(&w.chem, &mut d.counts.rounded[0], b, &mut o, &m);
     o.note(b.id, (NOTE_SCALE * got / mo) as f32);
-    d.see(w, &mut o);
+    o.stale = true;
     d.events.push(Event { day: w.day(), kind: EventKind::Gave { from: b.id, to: o.id }, node: b.cell, value: got });
     d[s] = o;
 }

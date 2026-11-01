@@ -126,6 +126,9 @@ struct Derived {
     air_cp: f64,
     /// `Chemistry::burners`
     burners: Vec<(usize, f64)>,
+    /// `Chemistry::life_roles` and `Chemistry::fixing`
+    roles: Option<(usize, usize, usize, usize)>,
+    fixing: Option<usize>,
     /// `Chemistry::mixes` of each substance
     mixes: Vec<Option<Vec<(usize, bool, bool)>>>,
     /// The substances others dissolve in (`Chemistry::mixes` is some), a bit per substance
@@ -170,7 +173,8 @@ impl Chemistry {
             let solvents = (0..self.ns()).filter(|&k| mixes[k].is_some()).fold(0, |m, k| m | 1 << k);
             let materials = self.materials().fold(0, |m, k| m | 1 << k);
             let light = (0..self.reactions.len()).filter(|&r| self.reactions[r].light).collect();
-            Derived { minerals, air_cp, burners, mixes, solvents, materials, light }
+            let (roles, fixing) = (self.find_life_roles(), self.find_fixing(&minerals));
+            Derived { minerals, air_cp, burners, roles, fixing, mixes, solvents, materials, light }
         })
     }
 

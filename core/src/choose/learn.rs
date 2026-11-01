@@ -44,7 +44,7 @@ pub(super) fn learn(w: &World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
 pub(crate) fn watched(w: &mut World, by: u64, (n, lineage): (f64, u32), of: u64) {
     let (Some(s), Some(t)) = (w.life.find(by).filter(|&s| w.life[s].lineage == lineage), w.life.find(of)) else { return };
     let (mut b, o) = (std::mem::take(&mut w.life[s]), &w.life[t]);
-    let (u, v) = (o.vis, b.visible(&w.chem, &w.cfg));
+    let (u, v) = (o.visible(&w.chem, &w.cfg), b.visible(&w.chem, &w.cfg));
     let d = |a: f32, b: f32| ln(a.max(1e-9) / b.max(1e-9)).powi(2);
     let alike = (-0.5 * (d(u[0], v[0]) + d(u[1], v[1]) + ((u[2] - v[2]) / STRENGTH_STEP).powi(2))).exp();
     let alike = if w.cfg.null { 0.0 } else { w.cfg.phys.blend * alike * (n / b.n()).min(1.0) as f32 };

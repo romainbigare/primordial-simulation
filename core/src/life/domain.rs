@@ -145,12 +145,15 @@ impl Domain {
     /// `place` for a part of a node with the node's genes (`nodes::part`), whose constants (`Body::k`) follow from them
     /// already.
     pub(crate) fn place_part(&mut self, w: &World, mut c: Body) -> Handle {
-        self.see(w, &mut c);
+        c.stale = true;
         self.add(c, w.day())
     }
-    /// What others see of body `b` is worked out again (`Body::visible`).
-    pub(crate) fn see(&mut self, w: &World, b: &mut Body) {
-        b.vis = b.visible(&w.chem, &w.cfg);
+    /// The visible traits of its living bodies that changed since the last survey are worked out again
+    /// (`Body::visible`, `Body::stale`): once before what reads them, the cells' sums and the batch's faces.
+    pub(crate) fn see_changed(&mut self, w: &World) {
+        for b in self.bodies.iter_mut().filter(|b| b.alive && b.stale) {
+            (b.vis, b.stale) = (b.visible(&w.chem, &w.cfg), false);
+        }
     }
 }
 

@@ -308,10 +308,11 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     assert!(joined as f64 >= 0.95 * tries as f64, "{joined} of {tries} joined");
 }
 
-/// Body `s` is seen as what it holds now: its visible traits are those its stores, genes and members give.
+/// Body `s` is seen as what it holds now: its visible traits are those its stores, genes and members give, or it is
+/// marked to have them worked out at the next survey (`Body::stale`).
 fn seen_as_it_is(w: &World, s: Handle) {
     let b = &w.life[s];
-    assert_eq!(b.vis, b.visible(&w.chem, &w.cfg), "body {s:?} is seen as it was");
+    assert!(b.stale || b.vis == b.visible(&w.chem, &w.cfg), "body {s:?} is seen as it was");
 }
 
 /// `open` draws members of a node as individuals: they are in the node's cell, of count 1, and
