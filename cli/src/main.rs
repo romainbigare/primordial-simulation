@@ -7,7 +7,7 @@ mod render;
 mod report;
 mod writer;
 
-use args::{Args, USAGE};
+use args::{Args, FRAMES_EVERY, PICTURES_EVERY, SNAPSHOTS_EVERY, USAGE};
 use pcore::World;
 use report::Clock;
 use std::time::{Duration, Instant};
@@ -15,8 +15,8 @@ use tape::{Kept, Recorder, TAPE};
 use writer::Writer;
 use worldgen::schedule::Schedule;
 
-/// Years between snapshots (and between writes of the tape so far).
-const SNAP_EVERY: u64 = 10;
+/// Years between writes of the tape so far, so that a stopped run keeps its series and frames.
+const TAPE_EVERY: u64 = 10;
 
 /// The allocator: mimalloc (Leijen, Zorn and de Moura 2019). Bodies and their rows are made on one thread of the pool
 /// and freed on another after a move, a merge or a death. The system's allocator (glibc) frees such a block into the
@@ -67,8 +67,8 @@ fn record(rec: &mut Recorder, w: &mut World, clock: &Clock) {
     rec.record_month(w, events, taken, &clock.spent);
 }
 
-/// Simulate `--years` years: place what `plan` says when it is due, print drift and speed, and write pictures, the
-/// tape and snapshots to `--out`. A resumed run brings what its recorder kept (`kept`).
+/// Simulate `--years` years: place what `plan` says when it is due, print drift and speed, and write the tape, and
+/// pictures and snapshots if asked for, to `--out`. A resumed run brings what its recorder kept (`kept`).
 fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     // (A setting of the run, not of its world: a snapshot does not keep it.)
     w.cfg.chunks = a.get("--chunks", w.cfg.chunks);
@@ -78,14 +78,20 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     }
     let (years, every, out) = (a.get("--years", 10u64), a.get("--every", 10u64), a.get("--out", String::from("out")));
     std::fs::create_dir_all(&out).expect("create out dir");
-    let mut rec = Recorder::new(&w, a.get("--frames-every", 10u64), a.get("--monthly-years", 2u64));
+    let (pictures, snapshots) = (a.get("--pictures-every", PICTURES_EVERY), a.get("--snapshots-every", SNAPSHOTS_EVERY));
+    let mut rec = Recorder::new(&w, a.get("--frames-every", FRAMES_EVERY), a.get("--monthly-years", 2u64));
+    if a.has("--months") {
+        rec = rec.with_months_csv();
+    }
     let resumed = kept.is_some();
     if let Some(kept) = kept {
         rec.resume(&w, kept, &out).unwrap_or_else(|e| panic!("load the tape: {e}"));
     }
     let t0 = pcore::check::totals(&w);
     let y0 = w.cfg.calendar().years(w.time);
-    render::save(&w, &format!("{out}/year{y0:04}.png"));
+    if pictures > 0 {
+        render::save(&w, &format!("{out}/year{y0:04}.png"));
+    }
     let mut clock = Clock::new(y0, w.counts.updates);
     let mut writer = Writer::new();
     record(&mut rec, &mut w, &clock);
@@ -113,18 +119,23 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
             rec.finish(&out).expect("write tape");
             std::process::exit(1);
         }
-        if y % every == 0 || y == y0 + years {
+        let last = y == y0 + years;
+        if y % every == 0 || last {
             println!("{}", report::year(&w, y, &t0, &clock, &rec));
             clock.print_at(y, w.counts.updates);
+        }
+        if pictures > 0 && (y % pictures == 0 || last) {
             let t = Instant::now();
             render::save(&w, &format!("{out}/year{y:04}.png"));
             clock.spent[TAPE] += t.elapsed();
         }
-        // A snapshot with each decade and at the end, and with it the tape so far, so a stopped run keeps its series and
-        // frames. The writer thread compresses and writes them; the main thread only makes the snapshot's bytes and copies the tape.
-        if y % SNAP_EVERY == 0 || y == y0 + years {
+        // The tape so far every `TAPE_EVERY` years and at the end, and with it a snapshot at each `--snapshots-every`
+        // years and at the end. The writer thread compresses and writes them; the main thread only makes the snapshot's
+        // bytes and copies the tape.
+        let snapshot = (last || (snapshots > 0 && y % snapshots == 0)).then(|| format!("{out}/snap_{y:05}.bin.gz"));
+        if snapshot.is_some() || y % TAPE_EVERY == 0 {
             let t = Instant::now();
-            writer.start(&w, &(&plan, rec.kept()), format!("{out}/snap_{y:05}.bin.gz"), rec.tape(), out.clone());
+            writer.start(&w, &(&plan, rec.kept()), snapshot, rec.tape(), out.clone());
             clock.spent[TAPE] += t.elapsed();
         }
     }

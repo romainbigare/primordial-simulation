@@ -9,15 +9,15 @@ A mean of nothing is written `NaN` (`null` in the viewer's file, drawn as a gap)
 
 | File | What it holds |
 |---|---|
-| `snap_NNNNN.bin.gz` | every 10 years and at the end: the whole world, the run's plan of what is placed when, and what the tape keeps across years (gzip of bincode, after the tag `EWSN` and the format version); `ew resume --from` goes on from it, and a resumed tape equals the unbroken one. A snapshot is taken at a month's start, so it holds the state and no cache: what the laws build again before they read it at a month's first step (Flow's caches, `flow::Scratch`; the survey's `env` and `seen`; the survey's sums of the cells, `Life::sum`, and the numbers each body's genes give, `Body::k`, both worked out again at load, as the tape reads the sums first) is not saved |
+| `snap_NNNNN.bin.gz` | at the end of the run, and every `--snapshots-every` years if given: the whole world, the run's plan of what is placed when, and what the tape keeps across years (gzip of bincode, after the tag `EWSN` and the format version); `ew resume --from` goes on from it, and a resumed tape equals the unbroken one. A snapshot is taken at a month's start, so it holds the state and no cache: what the laws build again before they read it at a month's first step (Flow's caches, `flow::Scratch`; the survey's `env` and `seen`; the survey's sums of the cells, `Life::sum`, and the numbers each body's genes give, `Body::k`, both worked out again at load, as the tape reads the sums first) is not saved |
 | `series.csv` | one row a year, the columns below |
-| `months.csv` | one row a month (below) |
+| `months.csv` | one row a month (below); only with `--months` |
 | `physics.json` | the run's `Physics` and `Config`; `ew numbers OLD NEW` compares two runs |
-| `world.ewf.gz` | the viewer's file: `EWF2`, the header's length, the header (JSON: size, whether the world is a globe and its edge latitudes, layers, frames, series and units, events, the months rows), then the frames |
-| `yearNNNN.png` | map, temperature, rain, life and traffic every `--every` years |
+| `world.ewf.gz` | the viewer's file: `EWF2`, the header's length, the header (JSON: size, whether the world is a globe and its edge latitudes, layers, frames, series and units, events, the months rows), then the frames: one every `--frames-every` years (10), and one a month in the first `--monthly-years` years (2) |
+| `yearNNNN.png` | map, temperature, rain, life and traffic every `--pictures-every` years, at the start and at the end; none by default |
 
-**How the files are written.** At every snapshot and at the run's end the shell makes the snapshot's bytes and copies the
-tape, and a writer thread (`cli/src/writer.rs`) compresses and writes them while the world goes on: at most one job at a
+**How the files are written.** Every 10 years (`TAPE_EVERY` in `cli/src/main.rs`), at every snapshot and at the run's
+end the shell copies the tape and, at a snapshot, makes the snapshot's bytes, and a writer thread (`cli/src/writer.rs`) compresses and writes them while the world goes on: at most one job at a
 time, and the run waits for it before the next job and at its end. A write error stops the run at the end of the year
 it happens in. The job writes the tape first and the snapshot last, so a tape is never behind a snapshot, and
 `ew resume` refuses a tape whose months stop before the snapshot's. `world.ewf.gz` is written again whole (gzip at its
@@ -26,7 +26,7 @@ the writer wrote before gets only the rows added since, at its end. A file is wr
 changed (a column, or a starting kind, that is new) and at the first write of a resumed run, which cuts the file back to
 the rows the snapshot's day holds. A snapshot and the viewer's file go to a `.part` file that takes the name when whole;
 a run killed during a write leaves its `.part` file, which nothing reads. A stopped run keeps the tape up to its last
-snapshot.
+write, and resumes only from a snapshot.
 
 **Raw events** (`core/src/event.rs`): born (with kind, one or two parents), died (with cause, kind,
 the light catalyst of the dead), took, gave, watched, bond made or broken, first time a substance appears. Only physical facts; the viewer shows the first appearances.
@@ -121,7 +121,7 @@ worn edges, structures, true colour (r, g, b).
 | Column | Unit | Meaning |
 |---|---|---|
 | `ms_flow`, `ms_change`, `ms_bodies`, `ms_parts` | ms/yr | wall time in Flow, in Change, in the bodies (survey and body batches) and in the parts since the last row |
-| `ms_tape` | ms/yr | wall time of the main thread in the tape itself since the last row: the months recorded, the snapshot's bytes and the copy of the tape that go to the writer thread, and any wait for it (the writer's own time runs beside the world and is not counted). The row's own month, and the snapshot and copy made after the row (at a decade's end), land in the next row. The pictures of a year (every `--every` years) are in it; the yearly check is not timed |
+| `ms_tape` | ms/yr | wall time of the main thread in the tape itself since the last row: the months recorded, the snapshot's bytes and the copy of the tape that go to the writer thread, and any wait for it (the writer's own time runs beside the world and is not counted). The row's own month, and the snapshot and copy made after the row (at a decade's end), land in the next row. The pictures of a year (every `--pictures-every` years) are in it; the yearly check is not timed |
 
 ## `series.csv`: by starting kind
 
@@ -145,7 +145,7 @@ members; for a kind of cover by its built cover.
 
 ## `months.csv`
 
-One row a month: `year`, `month`; the bodies: `mobile` (how many), `mean_y`, `mean_z` (mean
+Written with `--months`. One row a month: `year`, `month`; the bodies: `mobile` (how many), `mean_y`, `mean_z` (mean
 row and height), `mean_dy`, `mean_dz` (mean move since last month), `inside` (inside walls), `t_mobile` (mean ground
 temperature under them, K), `spent`, `spent_y` (members died of `spent`, and their mean row); then for each starting
 kind `root_<K>_births` and `root_<K>_died_<cause>` (members in the month), so seasons of births and deaths show.

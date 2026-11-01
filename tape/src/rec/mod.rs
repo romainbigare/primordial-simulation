@@ -80,6 +80,8 @@ pub struct TapeFiles {
     months: Vec<MonthRow>,
     /// The run's `Physics` and `Config` as JSON text, written next to the series (`physics.json`)
     physics: String,
+    /// Whether `months.csv` is written (the rows are kept either way: the viewer's file holds them)
+    months_csv: bool,
 }
 
 pub struct Recorder {
@@ -118,13 +120,19 @@ impl Recorder {
             every,
             monthly,
             seen: vec![false; w.chem.ns()],
-            files: TapeFiles { shape, frames: vec![], bytes: vec![], series: vec![], log: vec![], months: vec![], physics: physics_json(w) },
+            files: TapeFiles { shape, frames: vec![], bytes: vec![], series: vec![], log: vec![], months: vec![], physics: physics_json(w), months_csv: false },
             year: YearTally::default(),
             month: MonthTally::default(),
             social: Social::default(),
             updates: 0,
             spent: Spent::default(),
         }
+    }
+
+    /// Write `months.csv` with the tape.
+    pub fn with_months_csv(mut self) -> Self {
+        self.files.months_csv = true;
+        self
     }
 
     /// What the recorder keeps across years, for a snapshot (taken at a year's end, after its row).
@@ -218,8 +226,9 @@ impl Recorder {
 }
 
 impl TapeFiles {
-    /// Write `world.ewf.gz` (viewer frames and what a resumed run reads), `physics.json`, `months.csv` and `series.csv`
-    /// into `dir`. The viewer's file is written whole each time; the two CSV files get only their new rows (`csv`), when
+    /// Write `world.ewf.gz` (viewer frames and what a resumed run reads), `physics.json`, `series.csv` and, if asked for
+    /// (`Recorder::with_months_csv`), `months.csv` into `dir`. The viewer's file is written whole each time; the CSV files
+    /// get only their new rows (`csv`), when
     /// `written` says what this caller wrote to them before.
     pub fn write(&self, dir: &Path, written: &mut Written) -> io::Result<()> {
         std::fs::create_dir_all(dir)?;

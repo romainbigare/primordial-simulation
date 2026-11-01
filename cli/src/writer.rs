@@ -1,4 +1,4 @@
-//! The writer: one thread that compresses and writes a decade's snapshot and tape while the world goes on.
+//! The writer: one thread that compresses and writes the tape, and a snapshot when one is due, while the world goes on.
 
 use pcore::World;
 use std::io;
@@ -39,17 +39,21 @@ impl Writer {
         }
     }
 
-    /// Make the bytes of a snapshot of `w` and the shell's state and take a copy of the tape, and start writing them to
-    /// the file `snapshot` and into the folder `dir`, once the last job has ended. The tape goes first and the snapshot
-    /// last, so that a tape is never behind a snapshot: a run that stops between the two files leaves a snapshot
-    /// that resumes.
-    pub fn start(&mut self, w: &World, shell: &(&Schedule, Kept), snapshot: String, tape: TapeFiles, dir: String) {
+    /// Take a copy of the tape and, if a `snapshot` file is given, make the bytes of a snapshot of `w` and the shell's
+    /// state, and start writing them into the folder `dir` and to that file, once the last job has ended. The tape goes
+    /// first and the snapshot last, so that a tape is never behind a snapshot: a run that stops between the two files
+    /// leaves a snapshot that resumes.
+    pub fn start(&mut self, w: &World, shell: &(&Schedule, Kept), snapshot: Option<String>, tape: TapeFiles, dir: String) {
         self.wait();
         let Idle { mut written, mut bytes } = self.idle.take().expect("the last job gave back its buffers");
-        tape::snapshot_bytes(w, shell, &mut bytes).expect("make the snapshot");
+        if snapshot.is_some() {
+            tape::snapshot_bytes(w, shell, &mut bytes).expect("make the snapshot");
+        }
         let job = move || {
             tape.write(Path::new(&dir), &mut written)?;
-            tape::write_snapshot(&bytes, &snapshot)?;
+            if let Some(file) = snapshot {
+                tape::write_snapshot(&bytes, &file)?;
+            }
             Ok(Idle { written, bytes })
         };
         self.job = Some(std::thread::Builder::new().name("writer".into()).spawn(job).expect("start the writer thread"));

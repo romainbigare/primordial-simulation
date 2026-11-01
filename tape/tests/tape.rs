@@ -144,6 +144,7 @@ fn frames_file_round_trip() {
     run(&mut w, 1);
     common::record(&mut rec, &mut w);
     rec.finish(&dir).unwrap();
+    assert!(!dir.join("months.csv").exists(), "months.csv is written only when asked for");
 
     let mut raw = vec![];
     GzDecoder::new(std::fs::File::open(dir.join("world.ewf.gz")).unwrap()).read_to_end(&mut raw).unwrap();
@@ -210,7 +211,7 @@ fn recording() -> &'static Recording {
             [land, w.mesh.cells().n() as f64 - land]
         };
         let mpy = w.cfg.months_per_year;
-        let mut rec = tape::Recorder::new(&w, 0, 0);
+        let mut rec = tape::Recorder::new(&w, 0, 0).with_months_csv();
         common::record(&mut rec, &mut w);
         let mut at = vec![cells(&w)];
         for m in 1..=3 * mpy {
@@ -343,7 +344,7 @@ fn resume_into_the_same_folder_continues_the_tape() {
     let dir = tmp("resume");
     let mut w = two_kinds();
     let (mpy, dpy) = (w.cfg.months_per_year as u64, w.days_per_year());
-    let mut rec = tape::Recorder::new(&w, 1, 0);
+    let mut rec = tape::Recorder::new(&w, 1, 0).with_months_csv();
     common::record(&mut rec, &mut w);
     // The third kind comes at the end of year 2, after the snapshot of year 1, in both runs.
     let late = |w: &mut World| worldgen::life::seed_with(w, 2, &worldgen::life::Seeding::neutral());
@@ -362,7 +363,7 @@ fn resume_into_the_same_folder_continues_the_tape() {
     let whole_months = std::fs::read_to_string(dir.join("months.csv")).unwrap();
 
     let (mut w, kept) = tape::load_snapshot(dir.join("snap.bin.gz")).unwrap();
-    let mut rec = tape::Recorder::new(&w, 1, 0);
+    let mut rec = tape::Recorder::new(&w, 1, 0).with_months_csv();
     rec.resume(&w, kept, &dir).unwrap();
     common::record(&mut rec, &mut w);
     for m in mpy + 1..=4 * mpy {
@@ -397,7 +398,7 @@ fn a_tape_that_stops_before_the_snapshot_is_refused() {
     let dir = tmp("stale");
     let mut w = two_kinds();
     let mpy = w.cfg.months_per_year as u64;
-    let mut rec = tape::Recorder::new(&w, 1, 0);
+    let mut rec = tape::Recorder::new(&w, 1, 0).with_months_csv();
     common::record(&mut rec, &mut w);
     for m in 1..=2 * mpy {
         run(&mut w, 1);
@@ -420,7 +421,7 @@ fn csv_files_grown_year_by_year_are_those_written_at_once() {
     for (dir, each_year) in [(&by_year, true), (&at_once, false)] {
         let mut w = two_kinds();
         let mpy = w.cfg.months_per_year as u64;
-        let (mut rec, mut written) = (tape::Recorder::new(&w, 0, 0), tape::Written::default());
+        let (mut rec, mut written) = (tape::Recorder::new(&w, 0, 0).with_months_csv(), tape::Written::default());
         common::record(&mut rec, &mut w);
         for m in 1..=3 * mpy {
             run(&mut w, 1);

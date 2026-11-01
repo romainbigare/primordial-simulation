@@ -5,15 +5,18 @@ use worldgen::life::{Seeding, FIXERS};
 use worldgen::schedule::Schedule;
 
 pub const USAGE: &str = "usage:
-  ew run      simulate a new world, write pictures and the tape to --out
+  ew run      simulate a new world, write the tape and a snapshot at the end to --out
     --seed N              world seed (1)
     --size N              cells along a side (128); of a globe, its rows from pole to pole (even)
     --globe               a globe whose rows wrap east to west, twice as many columns as rows (not an island)
     --region X,Y,W,H      the W x H cells from column X and row Y split in four (each side 2 or more; none)
     --years N             years to run (10)
-    --every N             print and draw a picture every N years (10)
+    --every N             print a line every N years (10)
     --out DIR             where the tape, pictures and snapshots go (out)
     --frames-every N      a viewer frame every N years (10)
+    --snapshots-every N   a snapshot every N years (0: only at the end)
+    --pictures-every N    a PNG picture every N years, and at the start and the end (0: none)
+    --months              also write months.csv, a row a month
     --monthly-years N     a viewer frame every month in the first N years (2)
     --life-year N         the year life starts: soil, then the kinds (2; -1: no life)
     --roster              the ten kinds of worldgen::life::ROSTER, each at its year after the first life, not the two
@@ -28,10 +31,20 @@ pub const USAGE: &str = "usage:
                           gives one world)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
-    --years N, --every N, --out DIR, --frames-every N, --monthly-years N, --chunks N   as for run
+    --years N, --every N, --out DIR, --frames-every N, --snapshots-every N, --pictures-every N, --months,
+    --monthly-years N, --chunks N   as for run
   ew chem     print chemistry 0 as a table
     --seed N              a generated chemistry instead
   ew numbers OLD NEW      the fields of Physics and Config that differ between two runs (directories or physics.json)";
+
+/// Years between viewer frames when `--frames-every` is not given.
+pub const FRAMES_EVERY: u64 = 10;
+
+/// Years between snapshots when `--snapshots-every` is not given (0: only at the end of the run).
+pub const SNAPSHOTS_EVERY: u64 = 0;
+
+/// Years between PNG pictures when `--pictures-every` is not given (0: none).
+pub const PICTURES_EVERY: u64 = 0;
 
 /// The command line's words.
 pub struct Args(pub Vec<String>);

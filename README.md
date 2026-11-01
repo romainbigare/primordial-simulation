@@ -8,7 +8,8 @@ A world that runs on five physical laws; everything else must emerge.
 - `docs/tape.md`: what a run records
 
 ```
-cargo run --release -p cli --bin ew -- run --years 300 --frames-every 5 --out out/run       # simulate: pictures, tape, snapshots
+cargo run --release -p cli --bin ew -- run --years 300 --frames-every 5 --out out/run       # simulate: the tape (series.csv, viewer frames) and a snapshot at the end
+cargo run --release -p cli --bin ew -- run --years 300 --snapshots-every 100 --pictures-every 50 --months --out out/run   # also snapshots, PNG pictures and months.csv
 cargo run --release -p cli --bin ew -- resume --from out/run/snap_00300.bin.gz --years 100 --out out/run   # go on from a snapshot
 cargo run --release -p cli --bin ew -- chem                                                   # chemistry 0 as a table
 cargo run --release -p cli --bin ew -- numbers out/a out/b                                    # the numbers two runs differ in

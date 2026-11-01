@@ -28,10 +28,10 @@ fn series_without_clocks(dir: &Path) -> Vec<Vec<String>> {
 #[test]
 fn a_run_resumed_into_its_folder_leaves_the_files_of_the_unbroken_run() {
     let (whole, broken) = (folder("whole"), folder("broken"));
-    let common = ["--size", "12", "--seed", "1", "--frames-every", "1000"];
+    let common = ["--size", "12", "--seed", "1", "--frames-every", "1000", "--months"];
     ew("run", &[&common[..], &["--years", "12"]].concat(), &whole);
     ew("run", &[&common[..], &["--years", "10"]].concat(), &broken);
-    ew("resume", &["--from", broken.join("snap_00010.bin.gz").to_str().unwrap(), "--years", "2", "--frames-every", "1000"], &broken);
+    ew("resume", &["--from", broken.join("snap_00010.bin.gz").to_str().unwrap(), "--years", "2", "--frames-every", "1000", "--months"], &broken);
     for file in ["snap_00012.bin.gz", "months.csv"] {
         assert!(std::fs::read(whole.join(file)).unwrap() == std::fs::read(broken.join(file)).unwrap(), "{file} differs");
     }
