@@ -55,15 +55,15 @@ impl Ground {
 }
 
 /// What the air level does over a step: per node its mean temperature, K, and the heat it sends to space, J; per gas
-/// of the air and node (`[gi * na + j]`) its mean amount, mol; per active gas and node what rains, mol, the heat the
-/// rain brings the ground, J, and the saturation ratio it rains at, a mean by rain; per node the energy rain's fall
+/// of the air and node (`[gi * na + j]`) its mean amount, mol; per active gas and node what rains, mol, the fusion
+/// enthalpy it keeps as it falls liquid, J, and the saturation ratio it rains at, a mean by rain; per node the energy rain's fall
 /// gives its air, J; and what moves between nodes (`Moved`).
 pub(super) struct Mean {
     pub(super) t: Vec<f64>,
     pub(super) space: Vec<f64>,
     pub(super) x: Vec<f64>,
     pub(super) rain: Vec<f64>,
-    pub(super) rain_heat: Vec<f64>,
+    pub(super) rain_fusion: Vec<f64>,
     pub(super) ratio: Vec<f64>,
     pub(super) fall: Vec<f64>,
     pub(super) moved: Moved,
@@ -117,7 +117,7 @@ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f
     let pairs = a.len();
     let moved = Moved { a, b, mol: vec![0.0; ng * pairs], heat: vec![0.0; pairs], paid: vec![0.0; na] };
     let v = |len: usize| vec![0.0; len];
-    let mut out = Mean { t: v(na), space: v(na), x: v(ng * na), rain: v(nx * na), rain_heat: v(nx * na), ratio: v(nx * na), fall: v(na), moved };
+    let mut out = Mean { t: v(na), space: v(na), x: v(ng * na), rain: v(nx * na), rain_fusion: v(nx * na), ratio: v(nx * na), fall: v(na), moved };
     let mut x: Vec<f64> = s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
     let mut e = w.store.heat(Class::Air).to_vec();
     for _ in 0..days as usize {
@@ -189,10 +189,11 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
             let (at, sp, i, m) = (ac.gi * na + j, s.sp[ac.k], y * na + j, rain[y * na + j]);
             x[at] += day[1 + y] * share - m;
             if m > 0.0 {
-                // The rain leaves the air at its temperature, frozen or liquid, and its fall heats the air.
+                // The rain leaves the air frozen or liquid at the temperature of the air at the node's mean ground, the
+                // air paying what warms it on the way down, and its fall heats the air.
                 let (liquid, fall) = (if ts[j] < sp.melt { 0.0 } else { sp.lf }, m * sp.mm * g * (s.zair[j] - s.za[j]));
-                e[j] += m * (sp.lv + sp.lf - liquid - sp.cp * t[j]) + fall;
-                (out.rain[i], out.rain_heat[i], out.ratio[i]) = (out.rain[i] + m, out.rain_heat[i] + m * (sp.cp * t[j] + liquid), out.ratio[i] + ratio[i]);
+                e[j] += m * (sp.lv + sp.lf - liquid - sp.cp * ts[j]) + fall;
+                (out.rain[i], out.rain_fusion[i], out.ratio[i]) = (out.rain[i] + m, out.rain_fusion[i] + m * liquid, out.ratio[i] + ratio[i]);
                 out.fall[j] += fall;
             }
         }

@@ -8,7 +8,7 @@ use super::daily::Mean;
 use super::rain::Landed;
 use super::exchange::cloud;
 use super::step::Active;
-use super::{lerp, sums};
+use super::{lerp, sums, touching};
 use crate::store::{apply, Batch, Boundary, Class, LinkFlux};
 use crate::{World, AIR};
 
@@ -35,7 +35,8 @@ pub(super) fn up_from_bodies(w: &mut World, s: &Scratch) {
 
 /// Book what the step of `dt` seconds moves: over each cell's link to its air node what evaporates and its heat, at the
 /// step's mean air (`Response::at`, the law the air's days summed); over the links to each node it sees its rain
-/// (`rain`, per active gas (cell, node, mol)) with the heat the node's days gave it; the sunlight it absorbs and keeps
+/// (`rain`, per active gas (cell, node, mol)), reaching it at the temperature of the air touching it (`touching`), the
+/// air paying what warms it on the way down, frozen or liquid as the node's days rained it; the sunlight it absorbs and keeps
 /// for its cover, the heat it and its air send to space; the wind and the evening of blocks; and the lifts the air pays
 /// and the falls that heat it. Then the light on the cover, the clouds of what rained (which the next step's sunlight
 /// passes), and the tape's rain and evaporation.
@@ -52,12 +53,13 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     let mut paid = mean.moved.paid.clone();
     (0..n).for_each(|i| paid[parent[i] as usize] += at(i, LIFT));
     mean.fall.iter().zip(&mut paid).for_each(|(f, p)| *p -= f);
-    // The rain, with the heat its nodes' days gave it, as each mol of a node's rain brings it.
+    // The rain, at the air touching each cell, with the fusion enthalpy each mol of its node's rain keeps.
     let mut rained = Batch::new([Class::Ground, Class::Air], &ks);
     let mut fell = vec![0.0; nx * n];
     for (y, list) in rain.iter().enumerate() {
         for &(i, j, m) in list {
-            let per = mean.rain_heat[y * na + j as usize] / mean.rain[y * na + j as usize];
+            let at = y * na + j as usize;
+            let per = s.sp[ks[y] as usize].cp * touching(sr, &mean.t, i as usize) + mean.rain_fusion[at] / mean.rain[at];
             rained.add((i as usize, j as usize), ks[y], (-m, -m * per));
             fell[y * n + i as usize] += m;
         }

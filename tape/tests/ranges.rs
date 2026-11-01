@@ -36,14 +36,12 @@ const FROM: u64 = 21;
 const PPM: f64 = 1e6;
 const MM: f64 = 1e3;
 
-/// Ground temperature on land, K (series `t_land`), in the reference runs, re-anchored on the warmth-evened air.
-const T_LAND: f64 = 288.01;
-/// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the reference runs, re-anchored on the
-/// warmth-evened air.
-const SWING: f64 = 12.87;
-/// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs, re-anchored on the
-/// warmth-evened air.
-const RAIN_LAND: f64 = 2.998e-3;
+/// Ground temperature on land, K (series `t_land`), in the reference runs.
+const T_LAND: f64 = 289.03;
+/// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the reference runs.
+const SWING: f64 = 12.59;
+/// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs.
+const RAIN_LAND: f64 = 3.049e-3;
 /// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs.
 const ABSORBER_PPM: f64 = 388.8;
 /// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the reference runs.

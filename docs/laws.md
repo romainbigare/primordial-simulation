@@ -178,7 +178,8 @@ surface balance (Newton's steps about its end temperature, with its melting plat
 start: sunlight, heat radiation, sensible heat with the air touching it and what evaporates from it by its saturation
 deficit (`air::cells::exchange`). Its slopes with the air it sees come from that same balance, on the branch it ended
 on (the implicit function theorem: on a melting plateau with the share of the step it lasts, none at a soft cover's
-cap), so the exchange is one law, linear in the air it sees. The slopes are cut so that, however that air moves in the
+cap; the reflectance is taken as fixed, though a soft cover's end reflectance moves with the air), so the exchange is
+one law, linear in the air it sees. The slopes are cut so that, however that air moves in the
 step (its temperature by up to 60 K, each gas between none and twice what it held), the cell never gives more of a gas
 than it holds, nor more heat than it holds with its sunlight (`cells::hold`). The air level then runs day by day,
 explicitly, on plain arrays of its nodes (`air::daily`): each node's exchange with its ground by that law summed over
@@ -186,10 +187,8 @@ its cells, its heat radiation to space and its rain (1.5). Each block's heat, th
 in them through the day, so the day follows them exactly, the block warming and moistening as one as the eddies even
 it, the air outside it as at the day's start; days of an hour give the same climate within 0.03 K. Then the evening of
 its block and the wind (1.6). The book takes each cell's law at the mean air of the step (`air::book`), which is what
-the days summed, so the air ends just where its days left it and no node gives more than it holds. **Known limit:** a
-step's rain lands after it (1.5), so over the 10-day step the land is drier and brighter than over 1-day steps, and
-colder: by 0.3 K on the island with life (`the_long_step_keeps_the_climate`, `tape/tests/ranges.rs`, over its 0.3 K),
-by 0.1 to 0.7 K without.
+the days summed, so the air ends just where its days left it and no node gives more than it holds. A 10-day step
+gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_the_climate`, `tape/tests/ranges.rs`).
 - **Sun** (`radiation`): the daily mean by latitude, season and day length (Berger 1978), declination sin δ = sin ε sin
   λ, the mean over the step's days. The surface reflects as its cover is at the step's start (`land::reflectance`);
   where a soft cover lies, as it is at the step's end, so a cover that melts away darkens the ground in its step. Snow
@@ -223,9 +222,10 @@ as the eddies even it, follows what its cells evaporate by their law and what it
 vapour between two of the ratios at which a cell starts or stops raining, so the day goes exactly from one such ratio
 to the next, with no smaller steps (`rain::Pool`); the air outside the block is as at the day's start. What a node
 rained in the step falls on those cells by what each would hold over its own saturation at the ratio the node rained
-at. It lands after the step, with its heat, so a cell does not evaporate it again within that step. Where the node's
-air at its mean ground is below the gas's melting point it falls as a solid (snow) and the air keeps the fusion
-enthalpy its freezing frees; condensing frees the vaporisation enthalpy in the air. **Lift**: gas going up is lifted from the
+at. It lands after the step, so a cell does not evaporate it again within that step, and it reaches each cell at the
+temperature of the air touching it (`touching`), the air paying what warms it on the way down. Where the node's air at
+its mean ground is below the gas's melting point it falls as a solid (snow) and the air keeps the fusion enthalpy its
+freezing frees; condensing frees the vaporisation enthalpy in the air. **Lift**: gas going up is lifted from the
 ground's head to the air's mean height, paid by the air's heat; rain's fall gives it back. **Dissolving**
 (`exchange::dissolve`): a gas that cannot condense dissolves in the ground's liquid toward Henry's share, through the
 air's film (`evap`) and the liquid's (`dissolve`) in series, freeing its vaporisation enthalpy, and comes out when the
