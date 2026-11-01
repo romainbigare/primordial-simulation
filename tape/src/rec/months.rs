@@ -115,7 +115,8 @@ pub(super) fn look<'a>(w: &'a World, last: &BTreeMap<u64, u32>) -> Seen<'a> {
         let mobile = Some({
             let z = z_of(b.cell as usize);
             let moved = last.get(&b.id).map_or((0.0, 0.0), |&c| (row(b.cell) - row(c), z - z_of(c as usize)));
-            Mobile { cell: b.cell, row: row(b.cell), z, inside: pcore::bond::room(w, b).is_some(), warm: t >= INSIDE_COLD_T, t, moved }
+            let inside = pcore::bond::room(w.life.cell_at(b.cell as usize), b).is_some();
+            Mobile { cell: b.cell, row: row(b.cell), z, inside, warm: t >= INSIDE_COLD_T, t, moved }
         });
         Look {
             root: w.life.brains[b.lineage as usize].as_ref().map(|l| l.root),

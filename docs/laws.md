@@ -32,8 +32,9 @@ that lets go of a part queues that for the serial pass, as in a batch; it rebuil
 state in full for the cells' surroundings, and Flow's own pass leaves it then); Flow: the air in steps of
 `AIR_STEP_DAYS` (10 days, three a month, each at its own time in the month), after each the sink of the liquid over
 field capacity into the bed's store; then the liquid and erosion; heat sideways and creep yearly; the cover's month;
-Change; Bond (the turns of the parts: each chunk's cell by cell, in a cell in slot order, on its view, the chunks on the
-pool; then the loads of the structures one by one); then the bodies (`survey::batch`).
+Change; Bond (each chunk's cell by cell, the chunks on the pool: in a cell the turns of its parts in the order of its
+list, on its view, then the loads of its structures in the order of their roots; last, one by one, the structures that
+drift to a neighbour cell); then the bodies (`survey::batch`).
 **Every body updates once a month**, at the month's start, after the month's Flow, Change and Bond: one batch
 holds every living body, and a body placed during it first updates at the next month's start. Each update integrates
 the time since the body's last (`Body::last`): its upkeep, drink, heat, growth and the most it takes or breaks go by
@@ -67,8 +68,11 @@ array of the store by one task, the changes cell by cell in the order of the cel
 sum runs in the order of the cells and the world is the same for any count of threads and of chunks. **The serial
 pass** (`life::land`): the queue in rounds: first the moves and the litters land, each chunk of the cells they go to on
 the pool, in a chunk cell by cell and in a cell in the order queued, and what the moves did to the lanes and the
-structures follows at once (`Entry::Passed`), so a part act finds a carried structure where it went; then the watches
-and the part acts one by one, in the order queued, each a serial step on one cell (`World::in_cell`); what they queue is the next round's. Last the
+structures follows at once (`Entry::Passed`, one by one: a structure that moves spans two cells), so a part act finds a
+carried structure where it went; then the part acts, each in the chunk of its cell on the pool (where its body is; a
+body's letting go of a part, where the part is), in a chunk cell by cell and in a cell in the order queued: an act on
+parts touches its cell alone, as a structure lies in one cell; then the watches and the litters that go back, one by
+one, in the order queued, each a serial step (`World::in_cell`); what they queue is the next round's. Last the
 holders of each lineage and born rows are counted from the bodies (`Life::recount`): a lineage left
 with none dies out, born rows left with none are freed. Each entry is applied by its law on the bodies and parts as
 they are then. A move lands (`choose::land_move`): the body enters the cell, carries what it holds if it paid to (else
@@ -365,14 +369,17 @@ Files: `core/src/bond/` (`verbs`, `sense`, `month`, `bonds`); also `choose::go`,
 
 ### 3.1 Parts and structures
 A **part** is a made object (solid walls, the liquid in its hollow, heat, 3 sizes, a hollowness), a store node
-(`Class::Part`) by slot and generation (`bond::id`), lying in a cell or held. A body makes one with "form"
+(`Class::Part`) stored in the list of the cell it lies in (`life::Cell::parts`), with an id that never changes: the cell
+it was made in and that cell's count of parts made (`bond::Part::id`, as a body's); held or not, it lies in the cell of
+its holder. The bonds of a cell's parts are the cell's (`life::Cell::bonds`): a structure lies in one cell, and only a
+structure that moves (carried, or drifting) spans two cells for that step, which is serial. A body makes one with "form"
 (`bond::form`, `c_form` per kg, at most `form` of its mass). A **bond** (`bond::Bonds`) joins two parts or a part and
 the bed; its strength comes from the weaker material and the contact area (`tensile`, `joint`), at `c_join` per m². A
 **structure** is the parts joined by bonds and moves as one. Parts take their cell's temperature monthly. A part's turn
 is a step on its cell like a body's: it reads and writes the cell's view of the store, so a part sees what the parts
 before it in its cell left in its share of the air and in the ground (`bond/month.rs`). A part whose walls fall under `min_kg` falls
 apart (`bond::fall_apart`): all it holds, its walls, the liquid in its hollow and its heat, goes to its cell's ground,
-whether its walls ran off in its turn (it is freed after the turns) or a body took them (`bond::verbs::take`).
+whether its walls ran off in its turn or a body took them (`bond::verbs::take`), and it is gone with its bonds.
 
 ### 3.2 Loads and failure
 Monthly (`bond/month.rs`) each bond carries the weight hanging on it, less buoyancy, plus the push of moving liquid and
@@ -573,7 +580,7 @@ group splits off only if the cell it enters has room and the node bears the `bum
 (`choose::go::can_go`). **rest**; **move** (`choose::go`:
 `walk` per kg and metre, climbing, the bodies in the way; needs force, 3.5); **take**, **put**, **give**
 (`choose/feed.rs`); **watch** (5.5); Bond's form, hold, take from or put to a part, join, break, let go, anchor, dig,
-enter (`bond/verbs.rs`). A move lands when the batch ends, and a watch and an act on a part are applied then, one by one (0).
+enter (`bond/verbs.rs`). A move lands when the batch ends, and an act on a part and a watch are applied then (0).
 No copy action, no "farm", "trade" or "attack": those must be patterns of these.
 
 **Taking** (`feed::intake`, one law for the ground and for bodies) goes by uptake genes (`Body::wanted`) at `c_handle`

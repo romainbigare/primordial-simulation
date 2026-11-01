@@ -1,7 +1,6 @@
 //! Counter-based random numbers keyed by (seed, tick, node, purpose).
 //! The same key always gives the same stream, so parts of the world can run in any order.
 
-use crate::store::NodeId;
 
 /// A bijection of 64 bits that spreads every input bit over the output (the finaliser of SplitMix64, Steele et al.
 /// 2014).
@@ -42,7 +41,7 @@ pub enum Purpose {
 
 pub struct Rng(u64);
 
-/// Tag of the stream keys by node id and seconds (`Rng::of_node`); it is never zero, so they differ from `Rng::new`.
+/// Tag of the stream keys by part id and seconds (`Rng::of_part`); it is never zero, so they differ from `Rng::new`.
 const NODE_STREAM: u64 = 0x5851f42d4c957f2d;
 
 impl Rng {
@@ -54,11 +53,10 @@ impl Rng {
     pub fn new(seed: u64, tick: u64, node: u64, purpose: Purpose) -> Self {
         Rng(mix(Self::key(seed, tick, node, purpose)))
     }
-    /// The stream of a purpose for a node (slot and generation) at a time in seconds. The id packs into one `u64` without
-    /// loss, and the tag is XORed in before the last mix (a bijection), so keys meet only by chance of 2^-64.
-    pub fn of_node(seed: u64, time: u64, id: NodeId, purpose: Purpose) -> Self {
-        let node = (id.gen as u64) << 32 | id.slot as u64;
-        Rng(mix(Self::key(seed, time, node, purpose) ^ NODE_STREAM))
+    /// The stream of a purpose for a part (its id) at a time in seconds. The tag is XORed in before the last mix (a
+    /// bijection), so its keys and those of `Rng::new` meet only by chance of 2^-64.
+    pub fn of_part(seed: u64, time: u64, id: u64, purpose: Purpose) -> Self {
+        Rng(mix(Self::key(seed, time, id, purpose) ^ NODE_STREAM))
     }
     #[inline]
     pub fn u64(&mut self) -> u64 {

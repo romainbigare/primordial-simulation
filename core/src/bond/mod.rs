@@ -1,7 +1,9 @@
 //! Law 3: Bond. Parts are nodes of the store (`Class::Part`) that bonds join into structures; a bond breaks when its
 //! load passes its strength (laws.md 3). Here: parts, structures and their graph; `bonds`: the bonds and the enclosure;
 //! `verbs`: what bodies do to parts; `sense`: what parts give a body; `month`: the monthly heat, reactions, loads and
-//! drift.
+//! drift. A part is stored in the list of the cell it lies in (`life::Cell::parts`), with the bonds of that cell's
+//! parts (`life::Cell::bonds`): a structure lies in one cell, so all that changes parts runs on that cell, in its chunk
+//! (`life::Chunk`), but a structure carried or drifting to another cell (`moved`, `month::drift`).
 
 mod bonds;
 mod month;
@@ -15,12 +17,12 @@ pub(crate) use sense::{enclosure, possible, sense, SENSE};
 pub use verbs::{act, carry, dig, force, form, moved, release, ANCHORS, LET_GO, TORN};
 pub(crate) use verbs::{bears, dropped, let_go, lever};
 
-use crate::{chem::{Chemistry, Phase}, event::{Event, EventKind}, life::{free_place, Chunk, Handle}, store::{Class, Node, NodeId}, World};
+use crate::{body::Body, chem::{Chemistry, Phase}, event::{Event, EventKind}, life::{Cell, Chunk}, store::{Class, Node}, World};
 use serde::{Deserialize, Serialize};
 
 /// Held by no body; the bonded ground (as the other end of a bond).
 pub const NOBODY: u64 = u64::MAX;
-pub const GROUND: u32 = u32::MAX;
+pub const GROUND: u64 = u64::MAX;
 /// Bond kinds (the value of bond events): body–part, part–part, part–ground; a break by load adds `LOAD`.
 pub(crate) const HELD: f64 = 0.0;
 pub(crate) const JOINED: f64 = 1.0;
@@ -34,13 +36,15 @@ const MOST_HOLLOW: f32 = 0.95;
 const ASPECT_DECADES: f64 = 2.0;
 /// Faces of a box: plates close one as wide as the longest part; the bonded ground is the last face of an anchored one.
 const BOX_FACES: f64 = 6.0;
+/// A part's id is the cell it was made in shifted left by this many bits, plus that cell's count of parts made then
+/// (from 1), as a body's (`life::Chunk::add`).
+const PART_SHIFT: u32 = 40;
 
-/// A part, at its slot among the nodes of `Class::Part`.
+/// A part, in the list of the cell it lies in.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Part {
-    pub alive: bool,
-    /// The generation of the part in its slot (its id is the slot and this): a freed slot's moves on
-    pub gen: u32,
+    /// Its id, given when it is made (`add`), which never changes
+    pub id: u64,
     /// The cell it lies in
     pub cell: u32,
     /// mol of each substance: the walls, and the liquid held in the hollow
@@ -53,8 +57,8 @@ pub struct Part {
     pub hollow: f32,
     /// Body holding it (id) or `NOBODY`
     pub held: u64,
-    /// Lowest index of its structure; that part holds the structure's numbers
-    pub root: u32,
+    /// The least id of its structure; that part holds the structure's numbers
+    pub root: u64,
     pub s: Info,
     /// Largest push this month from bodies moving through its cell (on the root), N
     pub push: f32,
@@ -83,17 +87,6 @@ pub struct Tally {
     pub formed: f64,
     pub to_parts: f64,
     pub from_parts: f64,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct Parts {
-    /// By slot (`Class::Part`); a free slot holds a part that is not alive
-    pub parts: Vec<Part>,
-    /// The free slots, the last freed first
-    free: Vec<u32>,
-    pub bonds: Bonds,
-    /// Parts in each cell, in a fixed order (sized when the world is made)
-    pub at: Vec<Vec<u32>>,
 }
 
 /// Of a part's walls: their mass, kg, and volume, m³, and by volume their hardness, bond strength (0..1) and heat
@@ -158,54 +151,51 @@ fn dims(v: f64, x: f32, h: f32) -> [f32; 3] {
     }
 }
 
-impl Parts {
-    pub fn alive(&self) -> impl Iterator<Item = &Part> {
-        self.parts.iter().filter(|p| p.alive)
+/// The place in cell `c`'s list of the part named `id`, if it lies there.
+pub fn at(c: &Cell, id: u64) -> Option<usize> {
+    c.parts.iter().position(|p| p.id == id)
+}
+
+/// The places of the parts of the structure whose root is `r` (all in one cell).
+fn members(c: &Cell, r: u64) -> Vec<usize> {
+    (0..c.parts.len()).filter(|&x| c.parts[x].root == r).collect()
+}
+
+/// The place of the root of the structure of the part at `p`.
+fn root(c: &Cell, p: usize) -> usize {
+    at(c, c.parts[p].root).expect("a structure's root lies in its cell")
+}
+
+/// Place part `p` in cell `i` of chunk `d`, the last of its list, with the next id of the cell. Returns its place.
+fn add(d: &mut Chunk, i: usize, mut p: Part) -> usize {
+    let c = d.at_mut(i);
+    c.parts_made += 1;
+    assert!(c.parts_made < 1 << PART_SHIFT, "cell {i} made 2^{PART_SHIFT} parts: their ids would run into the next cell's");
+    p.id = (i as u64) << PART_SHIFT | c.parts_made;
+    (p.root, p.cell) = (p.id, i as u32);
+    c.parts.push(p);
+    c.parts.len() - 1
+}
+
+/// Move the structure whose root is `r` from cell `from` to cell `to`, its parts and their bonds, in their order.
+fn move_structure(w: &mut World, from: usize, r: u64, to: usize) {
+    let c = &mut w.life.cells[from];
+    let ids: Vec<u64> = members(c, r).into_iter().map(|x| c.parts[x].id).collect();
+    let mut gone: Vec<Part> = Vec::with_capacity(ids.len());
+    c.parts.retain(|p| if ids.contains(&p.id) { gone.push(p.clone()); false } else { true });
+    let links = c.bonds.take(&ids);
+    let c = &mut w.life.cells[to];
+    for mut p in gone {
+        p.cell = to as u32;
+        c.parts.push(p);
     }
+    c.bonds.extend(links);
+    ids.iter().for_each(|&id| w.life.note_part_at(id, to as u32));
 }
 
-/// The id of part `p`.
-pub fn id(w: &World, p: usize) -> NodeId {
-    NodeId { slot: p as u32, gen: w.parts.parts[p].gen }
-}
-
-/// The cell part `p` lies in.
-pub fn cell(w: &World, p: usize) -> usize {
-    w.parts.parts[p].cell as usize
-}
-
-/// The part named `id`, if it still exists.
-pub fn part(w: &World, id: NodeId) -> Option<usize> {
-    w.parts.parts.get(id.slot as usize).is_some_and(|p| p.alive && p.gen == id.gen).then_some(id.slot as usize)
-}
-
-/// The parts of the structure whose root is `r` (all in one cell).
-fn members(w: &World, r: usize) -> Vec<usize> {
-    w.parts.at[cell(w, r)].iter().map(|&x| x as usize).filter(|&x| w.parts.parts[x].root as usize == r).collect()
-}
-
-/// Place part `p` in cell `i`, in the slot freed last (whose generation moved on, so an old id names nothing) or a new one.
-fn add(w: &mut World, mut p: Part, i: usize) -> usize {
-    let x = free_place(&mut w.parts.parts, &mut w.parts.free);
-    (p.alive, p.root, p.gen, p.cell) = (true, x as u32, w.parts.parts[x].gen, i as u32);
-    w.parts.at[i].push(x as u32);
-    w.parts.parts[x] = p;
-    x
-}
-
-/// Move the structure whose root is `r` to cell `to`.
-fn move_structure(w: &mut World, r: usize, to: usize) {
-    let from = cell(w, r);
-    for x in members(w, r) {
-        w.parts.at[from].retain(|&y| y as usize != x);
-        w.parts.at[to].push(x as u32);
-        w.parts.parts[x].cell = to as u32;
-    }
-}
-
-fn event(w: &mut World, made: bool, i: usize, kind: f64) {
+fn event(d: &mut Chunk, w: &World, made: bool, i: usize, kind: f64) {
     let (day, what) = (w.day(), if made { EventKind::BondMade } else { EventKind::BondBroken });
-    w.events.push(Event { day, kind: what, node: i as u32, value: kind });
+    d.events.push(Event { day, kind: what, node: i as u32, value: kind });
 }
 
 /// Strength of a bond, N, between materials of bond strength `a` and `b` over `area` m²: the weaker one's.
@@ -213,15 +203,16 @@ fn strength(w: &World, a: f64, b: f64, area: f64) -> f64 {
     a.min(b) * w.cfg.phys.tensile * w.cfg.phys.joint * area
 }
 
-/// Find the structure of part `p` again, and its numbers. Plates close a box as wide as the longest part (the ground
-/// may be its sixth face); a hollow part closes its own hollow; the structure takes the larger space and its enclosure.
-fn restructure(w: &mut World, p: usize) {
-    let mut list = vec![p];
+/// Find the structure of the part at `p` of cell `c` again, and its numbers. Plates close a box as wide as the longest
+/// part (the ground may be its sixth face); a hollow part closes its own hollow; the structure takes the larger space
+/// and its enclosure.
+fn restructure(w: &World, c: &mut Cell, p: usize) {
+    let mut list = vec![c.parts[p].id];
     let mut q = 0;
     while q < list.len() {
-        for (o, _) in w.parts.bonds.of(list[q]) {
-            if o != GROUND && !list.contains(&(o as usize)) {
-                list.push(o as usize);
+        for (o, _) in c.bonds.of(list[q]) {
+            if o != GROUND && !list.contains(&o) {
+                list.push(o);
             }
         }
         q += 1;
@@ -230,11 +221,11 @@ fn restructure(w: &mut World, p: usize) {
     // `foot`: the area of the parts' largest faces, m².
     let (mut s, mut l, mut cond, mut best, mut foot) = (Info { parts: list.len() as u32, ..Default::default() }, 0f64, 0f64, (0f64, 0f64), 0f64);
     for &x in &list {
-        let pt = &w.parts.parts[x];
+        let pt = &c.parts[at(c, x).expect("a bonded part lies in its cell")];
         let (walls, d) = (pt.walls(chem), pt.size.map(|v| v as f64));
         let (vo, face) = (pt.outer(), d[0] * d[1]);
         (s.mass, s.outer, foot) = (s.mass + pt.mass(chem), s.outer + vo, foot + face);
-        s.anchored |= w.parts.bonds.of(x).any(|b| b.0 == GROUND);
+        s.anchored |= c.bonds.of(x).any(|b| b.0 == GROUND);
         l = l.max(d[0]);
         // Across its walls: their conductivity times the face over their thickness (their volume over the face).
         cond += walls.conductivity * face * face / walls.volume.max(1e-9);
@@ -248,74 +239,93 @@ fn restructure(w: &mut World, p: usize) {
     // The walls pass the share they close; the openings `leak` over the rest of the faces of a cube of that space.
     let g = e * cond + crate::math::cube_area(w.cfg.phys.leak * (1.0 - e), space);
     (s.space, s.encl) = (space, Enclosure { closed: e as f32, g });
-    let root = *list.iter().min().expect("one part");
-    list.iter().for_each(|&x| w.parts.parts[x].root = root as u32);
-    w.parts.parts[root].s = s;
-}
-
-/// Join part `a` to part `b` (or `GROUND`) with a bond of `strength` N.
-pub fn link(w: &mut World, a: usize, b: u32, strength: f64) {
-    w.parts.bonds.add(a as u32, b, strength as f32);
-    event(w, true, cell(w, a), if b == GROUND { ANCHORED } else { JOINED });
-    restructure(w, a);
-}
-
-fn unlink(w: &mut World, a: usize, b: u32, load: bool) {
-    w.parts.bonds.remove(a as u32, b);
-    if b != GROUND {
-        restructure(w, b as usize);
+    let r = *list.iter().min().expect("one part");
+    for x in &list {
+        let y = at(c, *x).expect("a bonded part lies in its cell");
+        c.parts[y].root = r;
     }
-    let kind = if b == GROUND { ANCHORED } else { JOINED } + if load { LOAD } else { 0.0 };
-    event(w, false, cell(w, a), kind);
-    restructure(w, a);
+    let y = at(c, r).expect("its root");
+    c.parts[y].s = s;
 }
 
-/// Make a part of `wall` (mol) with `e` J in cell `i`, of elongation `x` and hollowness `h`.
-pub fn make(w: &mut World, i: usize, wall: Vec<f64>, e: f64, x: f32, h: f32) -> usize {
+/// Join the part at `a` of cell `i` of chunk `d` to the part named `b` (or `GROUND`) with a bond of `strength` N.
+fn link_in(w: &World, d: &mut Chunk, i: usize, a: usize, b: u64, strength: f64) {
+    let c = d.at_mut(i);
+    let id = c.parts[a].id;
+    c.bonds.add(id, b, strength as f32);
+    restructure(w, c, a);
+    event(d, w, true, i, if b == GROUND { ANCHORED } else { JOINED });
+}
+
+/// Break the bond between the parts named `a` and `b` (or `GROUND`) of cell `i`, by a load if `load`.
+fn unlink(w: &World, d: &mut Chunk, i: usize, a: u64, b: u64, load: bool) {
+    let c = d.at_mut(i);
+    c.bonds.remove(a, b);
+    if let Some(y) = (b != GROUND).then(|| at(c, b)).flatten() {
+        restructure(w, c, y);
+    }
+    if let Some(x) = at(c, a) {
+        restructure(w, c, x);
+    }
+    event(d, w, false, i, if b == GROUND { ANCHORED } else { JOINED } + if load { LOAD } else { 0.0 });
+}
+
+/// Join the part named `a` to the part named `b` (or `GROUND`) of its cell with a bond of `strength` N (an edit).
+pub fn link(w: &mut World, a: u64, b: u64, strength: f64) {
+    let i = w.life.part_cell(a).expect("the part");
+    w.in_cell(i, |w, d| {
+        let x = at(d.at(i), a).expect("the part");
+        link_in(w, d, i, x, b, strength);
+    });
+}
+
+/// Make a part of `wall` (mol) with `e` J in cell `i` of chunk `d`, of elongation `x` and hollowness `h`. Returns its
+/// place in the cell's list.
+pub fn make(w: &World, d: &mut Chunk, i: usize, wall: Vec<f64>, e: f64, x: f32, h: f32) -> usize {
     let (x, h) = (x.clamp(-1.0, 1.0), h.clamp(0.0, MOST_HOLLOW));
     let mut p = Part { fill: vec![0.0; wall.len()], wall, e, hollow: h, held: NOBODY, ..Default::default() };
     p.size = dims(p.walls(&w.chem).volume, x, h);
-    let s = add(w, p, i);
-    restructure(w, s);
+    let s = add(d, i, p);
+    restructure(w, d.at_mut(i), s);
     s
 }
 
-/// Part `p`, at slot `s` (taken out of it), falls apart: all it holds, its walls, the liquid in its hollow and its heat,
-/// goes to its cell's ground, moved by its own update on the view of its chunk `d`. It holds nothing from then on, until
-/// `dissolve` frees it. Both ways a part falls apart use it: its walls run off in its turn (`month::turns`), or a body
-/// takes them below `min_kg` (`verbs::take`).
-fn fall_apart(w: &World, d: &mut Chunk, s: usize, p: &mut Part) {
-    let i = p.cell as usize;
-    d.moves.open(w, i, Node::new(Class::Part, s));
-    d.moves.give_all(w, Node::ground(i), p.wall.iter().zip(&p.fill).map(|(a, f)| a + f).enumerate(), p.e);
-    p.wall.fill(0.0);
-    p.fill.fill(0.0);
-    p.e = 0.0;
+/// The part at `p` of cell `i` of chunk `d` falls apart: all it holds, its walls, the liquid in its hollow and its heat,
+/// goes to its cell's ground, moved by its own update on the chunk's view. Then it is gone (`dissolve`). Both ways a
+/// part falls apart use it: its walls run off in its turn (`month::turns`), or a body takes them below `min_kg`
+/// (`verbs::take`).
+fn fall_apart(w: &World, d: &mut Chunk, i: usize, p: usize) {
+    d.moves.open(w, i, Node::new(Class::Part, p));
+    let pt = &mut d.at_mut(i).parts[p];
+    let held: Vec<(usize, f64)> = pt.wall.iter().zip(&pt.fill).map(|(a, f)| a + f).enumerate().collect();
+    let (e, id) = (std::mem::take(&mut pt.e), pt.id);
+    pt.wall.fill(0.0);
+    pt.fill.fill(0.0);
+    d.moves.give_all(w, Node::ground(i), held, e);
+    dissolve(w, d, i, id);
 }
 
-/// A part that fell apart (`fall_apart`) is freed: its bonds are gone, and its node.
-fn dissolve(w: &mut World, s: usize) {
+/// The part named `id` of cell `i` is gone: its bonds, its holder's hold and its place in the list.
+fn dissolve(w: &World, d: &mut Chunk, i: usize, id: u64) {
     loop {
-        let Some((o, _)) = w.parts.bonds.of(s).next() else { break };
-        unlink(w, s, o, true);
+        let Some((o, _)) = d.at(i).bonds.of(id).next() else { break };
+        unlink(w, d, i, id, o, true);
     }
-    if let Some(h) = holder(w, s) {
-        w.life[h].hold = None;
+    let c = d.at_mut(i);
+    if let Some(h) = at(c, id).and_then(|p| holder(c, p)) {
+        c.bodies[h].hold = None;
     }
-    let (i, p) = (cell(w, s), std::mem::take(&mut w.parts.parts[s]));
-    w.parts.at[i].retain(|&x| x as usize != s);
-    // Its slot is free for a new part, of the next generation.
-    w.parts.parts[s].gen = p.gen + 1;
-    w.parts.free.push(s as u32);
+    c.parts.retain(|p| p.id != id);
 }
 
-/// The part body `b` holds.
-pub fn held(w: &World, b: &crate::body::Body) -> Option<usize> {
-    part(w, b.hold?)
+/// The part body `b` holds, in its cell `c`: its place there.
+pub fn held(c: &Cell, b: &Body) -> Option<usize> {
+    at(c, b.hold?)
 }
 
-/// The body holding part `p` (not one taken out of the list for its update).
-fn holder(w: &World, p: usize) -> Option<Handle> {
-    let (s, me) = (w.life.find(w.parts.parts[p].held)?, Some(id(w, p)));
-    (w.life[s].alive && w.life[s].hold == me).then_some(s)
+/// The body of cell `c` holding the part at `p`: its place in the cell's list (not one taken out of the list for its
+/// update).
+fn holder(c: &Cell, p: usize) -> Option<usize> {
+    let (by, me) = (c.parts[p].held, Some(c.parts[p].id));
+    c.bodies.iter().position(|b| b.alive && b.id == by && b.hold == me)
 }

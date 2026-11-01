@@ -81,26 +81,31 @@ fn snapshot_round_trip_mid_cycle() {
     assert_eq!(fingerprint(&b), fingerprint(&whole));
 }
 
-/// A part is a node that comes and goes: its id holds through a snapshot, and when it is gone its slot goes to the next part
-/// with a new generation, so the old id names nothing.
+/// Parts lie in the list of their cell, each with an id that never changes (laws.md 3.1): two bonded parts keep their
+/// ids and their bond through a snapshot and when their structure moves to a neighbour cell, and a part made after them
+/// gets an id of its own, so an old id names nothing once its part is gone.
 #[test]
-fn a_part_keeps_its_id_through_a_snapshot_and_its_freed_slot_gets_a_new_generation() {
+fn parts_keep_their_ids_and_bonds_in_their_cell() {
     use pcore::bond;
     let dir = tmp("snap_part");
     let mut a = worldgen::testkit::small_world();
     let i = worldgen::testkit::dry_land(&a);
-    let q = [0; 2].map(|_| worldgen::testkit::plate(&mut a, i, 10.0, false))[1];
-    let id = bond::id(&a, q);
+    let (p, q) = (worldgen::testkit::plate(&mut a, i, 10.0, false), worldgen::testkit::plate(&mut a, i, 10.0, false));
+    bond::link(&mut a, p, q, 1e9);
     save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
     let (mut b, ()) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
-    assert_eq!((bond::part(&b, id), bond::cell(&b, q)), (Some(q), i));
-    // Both fall apart in the month, as lighter than the least a part may weigh; `q`'s slot is the last freed.
+    let bonded = |w: &pcore::World, c: usize| w.life.cell_at(c).bonds.of(p).any(|l| l.0 == q);
+    assert!((b.life.part_cell(p), b.life.part_cell(q)) == (Some(i), Some(i)) && bonded(&b, i), "the parts or their bond changed in the snapshot");
+    // Their structure (its root is the least id) moves to a neighbour cell with its bond.
+    let (j, root) = (b.mesh.cells().around(i).1[0] as usize, b.life.part(q).expect("a part").root);
+    bond::moved(&mut b, (bond::NOBODY, Some(root)), (i, j), 0.0);
+    assert!((b.life.part_cell(p), b.life.part_cell(q)) == (Some(j), Some(j)) && bonded(&b, j) && !bonded(&b, i), "the structure did not move whole");
+    // Both fall apart in the month, as lighter than the least a part may weigh; a new part has a new id.
     b.cfg.phys.min_kg = 1e3;
     bond::step(&mut b);
-    assert!(b.parts.alive().next().is_none() && bond::part(&b, id).is_none(), "the old id still names a part");
+    assert!(b.life.part(p).is_none() && b.life.part(q).is_none(), "an old id still names a part");
     let r = worldgen::testkit::plate(&mut b, i, 10.0, false);
-    let new = bond::id(&b, r);
-    assert_eq!((r, new.slot, new.gen), (q, id.slot, id.gen + 1));
+    assert!(r != p && r != q && b.life.part_cell(r) == Some(i), "the new part {r} took an old id");
 }
 
 /// A roster run resumed from a snapshot taken before some of its kinds are due places them as the unbroken run does:

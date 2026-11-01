@@ -64,7 +64,7 @@ struct Choice {
     nseen: usize,
     parts: [usize; PARTS],
     nparts: usize,
-    room: Option<(usize, bond::Enclosure)>,
+    room: Option<(u64, bond::Enclosure)>,
     held: Option<usize>,
     logit: [f32; OPTS],
     p: [f32; OPTS],
@@ -92,11 +92,11 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, t: &mut ActTmp
     // (Its brain reads and writes the first `s.mem` numbers of its memory; those past them are none.)
     b.mem[s.mem..].fill(0.0);
     let mut c = perceive(w, d, b, nseen, &mut rng);
-    inputs(w, b, (lived, temp, s.mem), &c, &mut t.input);
+    inputs(w, d.at(b.cell as usize), b, (lived, temp, s.mem), &c, &mut t.input);
     brain::think(&lin.base, d.at(b.cell as usize).brains.rows(b.brain, s), s, &t.input, &mut t.thought);
     learn::learn(w, b, &mut d.brains(b.cell as usize).mind(b.brain, s), s, (wb, &t.thought.h));
     walk(w, b.cell as usize, sight, t);
-    options(w, b, s, (pm, b.volume(&w.chem, temp) / b.n()), &mut c, t);
+    options(w, d, b, s, (pm, b.volume(&w.chem, temp) / b.n()), &mut c, t);
     pick(d, &mut c, &mut rng);
     let (form, z) = noise(w, b, s, t, &mut rng);
     b.wb = wb;
@@ -128,7 +128,7 @@ struct Kit<'a> {
 
 /// The score of each option: the fixed actions, a move to each neighbour (by the weighted mean of the cells it sees
 /// that way), each verb toward each perceived body and part. `pm`: a member's mass, kg; `vol`: its volume, m³.
-fn options(w: &World, b: &Body, s: Shape, (pm, vol): (f64, f64), c: &mut Choice, t: &mut ActTmp) {
+fn options(w: &World, ch: &Chunk, b: &Body, s: Shape, (pm, vol): (f64, f64), c: &mut Choice, t: &mut ActTmp) {
     let (i, ns, out, env) = (b.cell as usize, w.chem.ns(), &t.thought.out, w.life.env[b.cell as usize]);
     c.logit[..FIXED].copy_from_slice(&out[..FIXED]);
     // What the body can take (by its uptake selectivity) in a cell, as it perceives it.
@@ -179,8 +179,9 @@ fn options(w: &World, b: &Body, s: Shape, (pm, vol): (f64, f64), c: &mut Choice,
     }
     for (q, &p) in c.parts[..c.nparts].iter().enumerate() {
         let fq = &mut c.fo[q * bond::NO..(q + 1) * bond::NO];
-        fq.copy_from_slice(&bond::features(w, b, p, pm));
-        for v in (0..OVERBS).filter(|&v| bond::possible(w, b, v, p, vol)) {
+        let cell = ch.at(i);
+        fq.copy_from_slice(&bond::features(cell, w, b, p, pm));
+        for v in (0..OVERBS).filter(|&v| bond::possible(cell, b, v, p, vol)) {
             let r = s.verb(VERBS + v);
             c.logit[TO_PART + q * OVERBS + v] = score(&out[r..r + bond::NO + 1], fq);
         }
@@ -281,11 +282,14 @@ fn act_as(w: &World, d: &mut Chunk, b: &mut Body, c: &Choice, k: &Kit, (a, part_
         PUT => feed::put(w, d, b),
         TAKE => feed::take_node(w, d, b),
         FORM => d.out.push(act(Err([k.form[0], 0.5 * (k.form[1] + 1.0)]))),
-        RELEASE => bond::release(w, d, b),
-        ANCHOR => if let Some(p) = bond::held(w, b) { d.out.push(act(Ok((bond::ANCHORS, bond::id(w, p))))) },
+        RELEASE => bond::release(d, b),
+        ANCHOR => if let Some(p) = b.hold.filter(|_| bond::held(d.at(b.cell as usize), b).is_some()) { d.out.push(act(Ok((bond::ANCHORS, p)))) },
         DIG => bond::dig(w, d, b),
         a if a < TO_BODY => go(w, d, b, c.to[a - FIXED], part_of.is_some()),
-        a if a >= TO_PART => d.out.push(act(Ok(((a - TO_PART) % OVERBS, bond::id(w, c.parts[(a - TO_PART) / OVERBS]))))),
+        a if a >= TO_PART => {
+            let part = d.at(b.cell as usize).parts[c.parts[(a - TO_PART) / OVERBS]].id;
+            d.out.push(act(Ok(((a - TO_PART) % OVERBS, part))));
+        }
         a => {
             let ((face, same), verb) = (c.seen[(a - TO_BODY) / VERBS], (a - TO_BODY) % VERBS);
             if verb == WATCH {

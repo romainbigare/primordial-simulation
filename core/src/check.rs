@@ -63,7 +63,7 @@ pub fn totals(w: &World) -> Totals {
             thermal.add(c.e);
         }
     }
-    for p in w.parts.alive() {
+    for p in w.life.parts() {
         p.wall.iter().zip(&p.fill).zip(subs.iter_mut()).for_each(|((&a, &f), s)| s.add(a + f));
         thermal.add(p.e);
     }
@@ -128,9 +128,9 @@ pub fn broken(w: &World) -> Option<String> {
         let bad = !finite || !above_0(b.e) || !above_0(b.count) || !b.store.iter().all(|&x| at_least_0(x));
         bad.then(|| format!("body {}: energy {}, members {}, stores {:?}, brain ok {finite}", b.id, b.e, b.count, b.store))
     });
-    let part = w.parts.parts.iter().enumerate().filter(|e| e.1.alive).find_map(|(s, p)| {
+    let part = w.life.parts().find_map(|p| {
         let bad = !above_0(p.e) || !p.wall.iter().chain(&p.fill).all(|&x| at_least_0(x));
-        bad.then(|| format!("part {s}: energy {}, walls {:?}, fill {:?}", p.e, p.wall, p.fill))
+        bad.then(|| format!("part {}: energy {}, walls {:?}, fill {:?}", p.id, p.e, p.wall, p.fill))
     });
     let cover = w.life.cells.iter().enumerate().find_map(|(i, x)| {
         let c = &x.cover;

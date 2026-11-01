@@ -1,14 +1,5 @@
 //! The names of the world's nodes: a fixed node (ground, air, deep, bed, bodies, boundary) by its class and index
-//! (`Node`); what comes and goes by slot and generation (`NodeId` for a part; a body has `Body::id`).
-
-use serde::{Deserialize, Serialize};
-
-/// The stable name of a part: its slot and generation (a reused slot gets a new generation, so an old id names nothing).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct NodeId {
-    pub slot: u32,
-    pub gen: u32,
-}
+//! (`Node`); what comes and goes has an id of its own (`Body::id`, `bond::Part::id`).
 
 /// How a node is stored: which arrays hold its amounts (`[k * len + index]`, mol) and its heat (`[index]`, J).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -27,7 +18,8 @@ pub enum Class {
     Bodies,
     /// A node beyond the world's boundary (`Boundary`): it holds what crossed, with a node's sign, so it may go below zero
     Boundary,
-    /// A part (`bond::Part`), at its slot in `World::parts`, named by a `NodeId`
+    /// A part (`bond::Part`): like a body it holds its own amounts and its law books its side. Its index is its place in
+    /// its cell's list (`life::Cell::parts`), a name for the length of its turn only.
     Part,
     /// A body (`body::Body`): like a part it holds its own amounts, and its law books its side of a move. Its index is
     /// its place in its cell (`life::Handle`), a name for the length of its update only: `apply` never reads a body's

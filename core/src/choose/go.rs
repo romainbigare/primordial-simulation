@@ -13,12 +13,12 @@ use crate::{bond, copy, lanes, nodes, life::{Chunk, Entry}, World};
 /// node who join their kind where they land.
 pub fn go(w: &World, d: &mut Chunk, b: &mut Body, j: usize, kin: bool) {
     let (i, mb) = (b.cell as usize, b.mass(&w.chem));
-    let carried = bond::carry(w, b);
+    let carried = bond::carry(d.at(i), w, b);
     if !can_go(w, b, j, 1.0, carried.map_or(0.0, |c| c.1)) {
         return;
     }
     if carried.is_none() {
-        bond::let_go(w, d, b, true);
+        bond::let_go(d, b, true);
     }
     let afloat = bond::afloat(w, d, b, j, mb);
     let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
@@ -48,21 +48,26 @@ pub(super) fn can_go(w: &World, b: &Body, j: usize, share: f64, load: f64) -> bo
 }
 
 /// The move of body `b` from cell `i` to `j` that `go` queued lands in `d`, the chunk of `j` in the serial pass: it
-/// enters `j` (inside no structure), carries what it holds if it paid for that (`carries`;
-/// else it lets go of it), and its push breaks the bodies there at the next survey. What it does to things no cell
-/// owns is queued (`Entry::Passed`): it pushes the structures there (`bond::moved`) and clears `lane` m² of the lane.
-/// With `kin`, the members of a node who moved join the first node of their kind and stage there (`copy::kin`).
-pub(crate) fn land_move(w: &World, d: &mut Chunk, mut b: Body, (i, j): (usize, usize), (pushed, lane): (f64, f64), (carries, kin): (bool, bool)) {
-    let carried = bond::carry(w, &b).filter(|_| carries);
+/// enters `j` (inside no structure), carries the structure it holds (`carried`: its root, as the cell it left held it)
+/// if it paid for that (`carries`; else it lets go of it), and its push breaks the bodies there at the next survey.
+/// What it does to things no cell owns is queued (`Entry::Passed`): it pushes the structures there (`bond::moved`) and
+/// clears `lane` m² of the lane. With `kin`, the members of a node who moved join the first node of their kind and
+/// stage there (`copy::kin`).
+pub(crate) fn land_move(w: &World, d: &mut Chunk, mut b: Body, (i, j, carried): (usize, usize, Option<u64>), (pushed, lane): (f64, f64), (carries, kin): (bool, bool)) {
+    let carried = carried.filter(|_| carries);
     if carried.is_none() {
-        bond::let_go(w, d, &mut b, carries);
+        // (The part it holds lies in the cell it left: it lets go of it there, in the acts' landing.)
+        if let Some(part) = b.hold.take() {
+            let verb = if carries { bond::TORN } else { bond::LET_GO };
+            d.out.push(Entry::Act { id: b.id, on: Ok((verb, part)), node: None });
+        }
     }
     let mass = b.mass(&w.chem);
     // (Before it enters `j`, it is no node of its cell for `kin`.)
     let t = if kin { copy::kin(w, d, j, b.lineage, b.adult(&w.chem)) } else { None };
     (b.cell, b.leaving, b.inside) = (j as u32, false, None);
     d.cross(j, b.n() as f32, pushed);
-    d.out.push(Entry::Passed { by: b.id, from: i as u32, to: j as u32, lane, mass, carried: carried.map(|c| bond::id(w, c.0)) });
+    d.out.push(Entry::Passed { by: b.id, from: i as u32, to: j as u32, lane, mass, carried });
     let s = d.arrive(b);
     if let Some(t) = t {
         nodes::merge(w, d, s, t);

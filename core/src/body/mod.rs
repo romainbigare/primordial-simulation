@@ -26,7 +26,7 @@ use crate::chem::{BodyChem, Chemistry, Phase, Stores};
 use crate::ground::{melting, Melting};
 use crate::life::Block;
 use crate::math::Few;
-use crate::store::NodeId;
+
 use crate::units::{BODY_REACTIONS, BODY_STORES};
 use serde::{Deserialize, Serialize};
 
@@ -98,9 +98,9 @@ pub struct Body {
     pub traced: bool,
     /// Moving average of the square of its critic's error (0 until the first one)
     pub var: f32,
-    /// The part it holds, and a part of the structure it is inside
-    pub hold: Option<NodeId>,
-    pub inside: Option<NodeId>,
+    /// The part it holds, and a part of the structure it is inside (their ids, `bond::Part::id`; both lie in its cell)
+    pub hold: Option<u64>,
+    pub inside: Option<u64>,
     /// Memory the brain reads and writes (its first numbers, as many as its lineage's brain has; the others 0); the
     /// signal emitted at the last decision
     pub mem: [f32; MEMORY_MOST],

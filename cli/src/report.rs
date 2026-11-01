@@ -89,7 +89,7 @@ pub fn year(w: &World, y: u64, t0: &Totals, clock: &Clock, rec: &Recorder) -> St
         ms[2],
         ms[3],
         ms[TAPE],
-        w.parts.alive().count(),
+        w.life.parts().count(),
         rec.last("gave"),
         rec.last("watched")
     )

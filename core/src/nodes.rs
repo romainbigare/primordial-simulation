@@ -8,7 +8,7 @@ use crate::brain::row_step;
 use crate::life::Block;
 use crate::chem::Stores;
 use crate::lineage::sizes_of;
-use crate::life::Handle;
+use crate::life::{Cell, Handle};
 use crate::{life::Chunk, World};
 
 /// The monthly merge of the bodies of cell `i` of chunk `d` (laws.md 4.4): one node per kind and stage. Each body
@@ -79,11 +79,11 @@ pub fn cap(w: &World, d: &mut Chunk, lay: &Layout, i: usize) {
 /// What a node shares with those it joins (`join_kin`): its lineage (a node has one brain), its stage (both mature or
 /// both young: a young node joins its adult kin at the merge once it matures), the structure whose room it is in (its
 /// root, as the room law counts those inside, `bond::room`) and the structure it holds (its root).
-type Kin = (u32, bool, Option<usize>, Option<usize>);
+type Kin = (u32, bool, Option<u64>, Option<u64>);
 
-/// The `Kin` of body `o`.
-fn kin_of(w: &World, o: &Body) -> Kin {
-    (o.lineage, o.adult(&w.chem), room(w, o).map(|r| r.0), held(w, o).map(|p| w.parts.parts[p].root as usize))
+/// The `Kin` of body `o` of cell `c`.
+fn kin_of(w: &World, c: &Cell, o: &Body) -> Kin {
+    (o.lineage, o.adult(&w.chem), room(c, o).map(|r| r.0), held(c, o).map(|p| c.parts[p].root))
 }
 
 /// Individuals of one `Kin` a cell keeps apart where they may mate (a pair, `copy::mates`); past this many, with no node
@@ -97,7 +97,7 @@ fn join_kin(w: &World, d: &mut Chunk, i: usize) -> Vec<Handle> {
     let b = &*d;
     let mut list: Vec<(u64, Handle)> = b.cell(i).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
     list.sort_by_key(|x| x.0);
-    let kind: Vec<Kin> = list.iter().map(|&(_, s)| kin_of(w, &b[s])).collect();
+    let kind: Vec<Kin> = list.iter().map(|&(_, s)| kin_of(w, b.at(i), &b[s])).collect();
     let many = |x: usize| !crate::copy::mates(w, b, &b[list[x].1]) || kind.iter().filter(|&&k| k == kind[x]).count() > PAIR;
     let head: Vec<usize> = (0..list.len()).map(|x| (0..x).find(|&y| kind[y] == kind[x] && many(y)).unwrap_or(x)).collect();
     for x in (0..list.len()).filter(|&x| head[x] != x) {
@@ -112,10 +112,11 @@ fn join_other(w: &World, d: &mut Chunk, lay: &Layout, heads: Vec<Handle>) {
     let heads: Vec<Handle> = heads.into_iter().filter(|&s| d[s].n() > 1.0).collect();
     let mut gone = vec![false; heads.len()];
     for x in 1..heads.len() {
-        let (a, ka) = (&d[heads[x]], kin_of(w, &d[heads[x]]));
+        let c = d.at(heads[x].cell as usize);
+        let (a, ka) = (&d[heads[x]], kin_of(w, c, &d[heads[x]]));
         let sizes = |k: u32| d.brain(w, k).map(sizes_of);
         let to = (0..x).filter(|&y| !gone[y]).find(|&y| {
-            let (t, kt) = (&d[heads[y]], kin_of(w, &d[heads[y]]));
+            let (t, kt) = (&d[heads[y]], kin_of(w, c, &d[heads[y]]));
             kt.0 != ka.0 && d.root(w, t) == d.root(w, a) && (kt.1, kt.2, kt.3) == (ka.1, ka.2, ka.3) && sizes(kt.0) == sizes(ka.0) && alike(lay, w.cfg.phys.alike, &t.genes, &a.genes)
         });
         if let Some(y) = to {
@@ -131,7 +132,7 @@ pub fn merge_taking(w: &World, d: &mut Chunk, s: Handle, t: Handle) {
     debug_assert_eq!(d.root(w, &d[s]), d.root(w, &d[t]), "a merge across starting kinds");
     let (genome, spread) = (d[t].genome, d[t].row_spread);
     let mut c = std::mem::take(&mut d[s]);
-    let_go(w, d, &mut c, false);
+    let_go(d, &mut c, false);
     add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (genome, None, spread));
     d.remove(s, &c);
 }
@@ -139,7 +140,7 @@ pub fn merge_taking(w: &World, d: &mut Chunk, s: Handle, t: Handle) {
 /// The body at `s` joins the body at `t`, of its lineage (`add`), letting go of what it holds.
 pub fn merge(w: &World, d: &mut Chunk, s: Handle, t: Handle) {
     let mut c = std::mem::take(&mut d[s]);
-    let_go(w, d, &mut c, false);
+    let_go(d, &mut c, false);
     add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.genome, Some(c.brain), c.row_spread));
     d.remove(s, &c);
 }

@@ -5,7 +5,7 @@ use super::go::can_go;
 use super::*;
 use crate::body::{die, LACK};
 use crate::life::Handle;
-use crate::store::NodeId;
+
 use crate::nodes;
 
 /// Node `node` (taken out of its slot) spreads its members over the options (`members`), and each part acts as so many members together (`part_acts`; the
@@ -161,35 +161,34 @@ fn back(d: &mut Chunk, node: &mut Body, s: Handle, mut m: Body) {
     nodes::rejoin(node, nodes::Lot::of(&mut m));
 }
 
-/// The part act body `id` queued in a batch (`life::Entry`), run whole on it and on the part as they are now: verb `on.0`
-/// to part `on.1` if that part still exists, lies in the body's cell and the act is still possible (`bond::possible`),
-/// or a part of the shape given formed; the body pays as it acts, and does nothing if it cannot. A part of node `node` then comes back to it if it holds
-/// nothing, is inside nothing, and the node is in its cell and not leaving it; else it lives on as a body.
-pub(crate) fn land_act(w: &mut World, id: u64, on: Result<(usize, NodeId), [f32; 2]>, node: Option<u64>) {
-    let Some(s) = w.life.find(id) else { return };
-    let mut b = std::mem::take(&mut w.life[s]);
+/// The part act of the body at `s` of chunk `d` queued in a batch (`life::Entry`), run whole on it and on the part as
+/// they are now, in the acts' landing (`life::land`): verb `on.0` to part `on.1` if that part still lies in the body's
+/// cell and the act is still possible (`bond::possible`), or a part of the shape given formed; the body pays as it
+/// acts, and does nothing if it cannot. A part of node `node` then comes back to it if it holds nothing, is inside
+/// nothing, and the node is in its cell and not leaving it; else it lives on as a body.
+pub(crate) fn land_act(w: &World, d: &mut Chunk, s: Handle, on: Result<(usize, u64), [f32; 2]>, node: Option<u64>) {
+    let mut b = std::mem::take(&mut d[s]);
     let i = b.cell as usize;
-    let here = |v: usize, p: usize| bond::cell(w, p) == b.cell as usize && bond::possible(w, &b, v, p, b.volume(&w.chem, b.temp(&w.chem)) / b.n());
-    match on.map(|(v, p)| (v, bond::part(w, p).filter(|&p| here(v, p)))) {
-        Err(shape) => bond::form(w, &mut b, shape),
-        Ok((v, Some(p))) => bond::act(w, &mut b, v, p),
+    d.moves.open(w, i, crate::store::Node::new(crate::store::Class::Body, s.slot as usize));
+    let vol = b.volume(&w.chem, b.temp(&w.chem)) / b.n();
+    match on.map(|(v, p)| (v, bond::at(d.at(i), p).filter(|&p| bond::possible(d.at(i), &b, v, p, vol)))) {
+        Err(shape) => bond::form(w, d, &mut b, shape),
+        Ok((v, Some(p))) => bond::act(w, d, &mut b, v, p),
         _ => {}
     }
     b.leaving = false;
-    let its = node.and_then(|n| w.life.find(n)).filter(|&t| w.life[t].cell == b.cell && !w.life[t].leaving && b.hold.is_none() && b.inside.is_none());
-    w.in_cell(i, move |w, d| {
-        // Paying can leave nothing of a member: it dies, its remains to the ground.
-        if b.empty_at(b.mass(&w.chem)) {
-            return die(w, d, s, b, LACK);
-        }
-        let Some(t) = its else {
-            b.stale = true;
-            d[s] = b;
-            return;
-        };
-        let mut o = std::mem::take(&mut d[t]);
-        back(d, &mut o, s, b);
-        o.stale = true;
-        d[t] = o;
-    });
+    // Paying can leave nothing of a member: it dies, its remains to the ground.
+    if b.empty_at(b.mass(&w.chem)) {
+        return die(w, d, s, b, LACK);
+    }
+    let its = node.and_then(|n| d.cell(i).find(|&t| d[t].id == n)).filter(|&t| !d[t].leaving && b.hold.is_none() && b.inside.is_none());
+    let Some(t) = its else {
+        b.stale = true;
+        d[s] = b;
+        return;
+    };
+    let mut o = std::mem::take(&mut d[t]);
+    back(d, &mut o, s, b);
+    o.stale = true;
+    d[t] = o;
 }

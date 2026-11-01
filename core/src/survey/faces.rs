@@ -14,7 +14,7 @@ pub struct Face {
     pub sig: [f32; SIG],
     pub wb: f32,
     /// The root of the structure it is inside and how closed its walls are (`bond::room`)
-    pub room: Option<(u32, f32)>,
+    pub room: Option<(u64, f32)>,
     /// The chance that the cover of its cell leaves it seen, exp(-a) with a its capture area per m² (`UNCOVERED` under
     /// no cover)
     pub show: f64,
@@ -49,7 +49,7 @@ pub(super) fn make(w: &mut World) {
         let cover = w.canopy[i] as f64;
         let show = if cover <= 0.0 { UNCOVERED } else { (-cover).exp() };
         for (slot, b) in c.bodies.iter().enumerate().filter(|x| x.1.alive) {
-            let room = crate::bond::room(w, b).map(|(r, e)| (r as u32, e.closed));
+            let room = crate::bond::room(c, b).map(|(r, e)| (r, e.closed));
             f.all.push(Face { id: b.id, slot: slot as u32, n: b.n(), vis: b.vis, sig: b.sig, wb: b.wb, room, show });
         }
         f.at.push(f.all.len() as u32);

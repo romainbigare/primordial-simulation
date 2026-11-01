@@ -20,13 +20,13 @@ fn bond_breaks_under_too_much_load() {
     bond::link(&mut w, top, GROUND, 1e9);
     let (light, heavy) = (plate(&mut w, i, 1e3, false), plate(&mut w, i, 1e5, false));
     // Each hangs on the anchored part by a bond that holds 10 t weight.
-    bond::link(&mut w, light, top as u32, 1e5);
-    bond::link(&mut w, heavy, top as u32, 1e5);
+    bond::link(&mut w, light, top, 1e5);
+    bond::link(&mut w, heavy, top, 1e5);
     let books = Books::now(&w);
     bond::step(&mut w);
-    let (p, bonds) = (&w.parts.parts, &w.parts.bonds);
-    assert!(bonds.of(light).any(|l| l.0 == top as u32), "the light part fell");
-    assert!(bonds.of(heavy).next().is_none() && p[heavy].root as usize == heavy, "the heavy part still hangs");
+    let bonds = &w.life.cell_at(i).bonds;
+    assert!(bonds.of(light).any(|l| l.0 == top), "the light part fell");
+    assert!(bonds.of(heavy).next().is_none() && w.life.part(heavy).expect("the heavy part").root == heavy, "the heavy part still hangs");
     books.assert_within(&w, 1e-9, 1e-9);
 }
 
@@ -44,13 +44,14 @@ fn walls_keep_a_body_warm() {
     let slot = bs.living().map(|x| x.0).filter(|&s| next(s)).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body next to the cell");
     let slot = if w.life[slot].cell as usize == i { slot } else { relocate(&mut w, slot, i) };
     // Six blocks joined around a small space, one bonded to the ground.
-    let parts: Vec<usize> = (0..6).map(|_| plate(&mut w, i, 1e3, true)).collect();
+    let parts: Vec<u64> = (0..6).map(|_| plate(&mut w, i, 1e3, true)).collect();
     bond::link(&mut w, parts[0], GROUND, 1e9);
     for p in &parts[1..] {
-        bond::link(&mut w, *p, parts[0] as u32, 1e9);
+        bond::link(&mut w, *p, parts[0], 1e9);
     }
-    let r = w.parts.parts[parts[0]].root as usize;
-    assert!(w.parts.parts[r].s.encl.closed > 0.99, "not closed: {:?}", w.parts.parts[r].s);
+    let r = w.life.part(parts[0]).expect("a part").root;
+    let s = w.life.part(r).expect("the root").s;
+    assert!(s.encl.closed > 0.99, "not closed: {s:?}");
     // Enough liquid for a month without rain.
     // It rests (the biases of its brain's action rows: resting up, every other action down), so it stays where it is put.
     let shape = w.life.brains[w.life[slot].lineage as usize].as_ref().expect("a brain").shape;
@@ -67,7 +68,7 @@ fn walls_keep_a_body_warm() {
     // (It does not grow: a warm body builds faster, at the pace of its temperature, and would burn the fuel of its month.)
     w.cfg.phys.c_build = 0.0;
     let mut inside = w.clone();
-    inside.life[slot].inside = Some(bond::id(&inside, parts[0]));
+    inside.life[slot].inside = Some(parts[0]);
     let temp = |w: &pcore::World| w.life[slot].temp(&w.chem) - w.life.env[i][0];
     pcore::step(&mut w);
     pcore::step(&mut inside);
@@ -95,10 +96,10 @@ fn a_small_body_can_make_parts_and_a_cell_holds_many() {
         let subs = w.chem.body().subs();
         (0..subs.len()).filter(|&s| w.chem.phase(subs[s], t) != Phase::Gas).for_each(|s| b.store[s] = b.store[s].max(fed[s]));
         b.e = b.energy_at(&w.chem, t);
-        bond::form(&mut w, &mut b, [0.0, 0.5]);
+        w.in_cell(i, |w, d| bond::form(w, d, &mut b, [0.0, 0.5]));
         b.hold = None;
     }
-    assert!(w.parts.at[i].len() > 6, "{} parts in the cell", w.parts.at[i].len());
+    assert!(w.life.cell_at(i).parts.len() > 6, "{} parts in the cell", w.life.cell_at(i).parts.len());
 }
 
 /// Forming pays first, and paying may burn the very solid put out: what goes out is cut to what is left, so no store
@@ -126,10 +127,10 @@ fn forming_never_takes_more_than_is_left() {
     (w.cfg.phys.min_kg, w.cfg.phys.c_form) = (0.5 * got, 0.99 * r / got);
     let books = Books::now(&w);
     let mut b = std::mem::take(&mut w.life[slot]);
-    bond::form(&mut w, &mut b, [0.0, 0.5]);
+    w.in_cell(b.cell as usize, |w, d| bond::form(w, d, &mut b, [0.0, 0.5]));
     assert!(b.store.iter().all(|&a| a >= 0.0), "{:?}", b.store);
     w.life[slot] = b;
-    assert!(w.parts.alive().count() == 1 && pcore::check::broken(&w).is_none());
+    assert!(w.life.parts().count() == 1 && pcore::check::broken(&w).is_none());
     books.assert_within(&w, 1e-9, 1e-9);
 }
 
@@ -176,13 +177,13 @@ fn a_node_acts_on_bonds_as_its_members_together() {
         let members: f64 = all.iter().map(|b| b.count).sum();
         assert!((members - n0).abs() < 1e-9 * n0, "case {case}: {members} members of {n0}");
         if case == 0 {
-            assert!(all.iter().any(|b| Some(bond::id(&w, p)) == b.hold), "nothing holds the part");
+            assert!(all.iter().any(|b| Some(p) == b.hold), "nothing holds the part");
         } else {
             let node = all.iter().find(|b| b.count > 1.0).expect("the node");
             assert!(all.iter().all(|b| b.hold.is_none()), "case {case}: a body holds a part");
             assert!(node.genes.iter().zip(&genes).all(|(a, b)| (a - b).abs() < 1e-4), "genes changed");
             assert_eq!(node.row_spread, 0.01, "the spread of the born rows changed");
-            assert!(w.parts.parts[p].held == pcore::bond::NOBODY, "the part is held");
+            assert!(w.life.part(p).expect("the part").held == pcore::bond::NOBODY, "the part is held");
         }
         books.assert_kept(&w, 1e-9);
     };
@@ -222,8 +223,8 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
         let d = now.1 - before.1;
         assert!((d - heat).abs() <= 1e-9 * heat.abs() + 1e-14 * before.1.abs(), "the ground gained {d} J of {heat}");
     };
-    let holds = |w: &World, p: usize| {
-        let pt = &w.parts.parts[p];
+    let holds = |w: &World, p: u64| {
+        let pt = w.life.part(p).expect("the part");
         (pt.wall.iter().zip(&pt.fill).map(|(a, f)| a + f).collect::<Vec<f64>>(), pt.e)
     };
 
@@ -236,7 +237,7 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     let p = new_part(&mut w, i);
     let (books, before, (held, e)) = (Books::now(&w), ground(&w, i), holds(&w, p));
     bond::step(&mut w);
-    assert!(!w.parts.parts[p].alive, "the part is still there");
+    assert!(w.life.part(p).is_none(), "the part is still there");
     gained(&w, i, &before, &held, e);
     books.assert_within(&w, 1e-9, 1e-9);
 
@@ -257,8 +258,8 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     };
     let (mut w, h, i, p, mut b) = take_scene();
     let (books, before, (held, e), (store, eb)) = (Books::now(&w), ground(&w, i), holds(&w, p), (stores(&w, &b), b.e));
-    bond::act(&mut w, &mut b, 1, p);
-    assert!(!w.parts.parts[p].alive, "the part is still there");
+    act_on(&mut w, &mut b, p);
+    assert!(w.life.part(p).is_none(), "the part is still there");
     let took: Vec<f64> = stores(&w, &b).iter().zip(&store).map(|(a, s)| a - s).collect();
     assert!(took[MINERAL] > 0.0 && took[MINERAL] < 0.5 * held[MINERAL], "it took {} mol of {}", took[MINERAL], held[MINERAL]);
     let gain: Vec<f64> = held.iter().zip(&took).map(|(a, t)| a - t).collect();
@@ -269,9 +270,9 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     // The body dies after the fall: the books are kept.
     let (mut w, h, i, p, mut b) = take_scene();
     let (books, id) = (Books::now(&w), b.id);
-    bond::act(&mut w, &mut b, 1, p);
+    act_on(&mut w, &mut b, p);
     w.in_cell(i, |w, d| die(w, d, h, b, LACK));
-    assert!(!w.parts.parts[p].alive && w.life.find(id).is_none(), "the part or the body is still there");
+    assert!(w.life.part(p).is_none() && w.life.find(id).is_none(), "the part or the body is still there");
     books.assert_within(&w, 1e-9, 1e-9);
 }
 
@@ -282,23 +283,33 @@ fn a_carried_structure_leaves_its_other_holders_behind() {
     let (mut w, i) = world();
     let j = w.mesh.cells().around(i).1[0] as usize;
     let (p, q) = (plate(&mut w, i, 1.0, false), plate(&mut w, i, 1.0, false));
-    bond::link(&mut w, p, q as u32, 1e9);
+    bond::link(&mut w, p, q, 1e9);
     let mut ids = Vec::new();
     for part in [p, q] {
         let mut b = eater(&mut w, i, brain::REST, 1.0);
         // (Strong enough to bear the structure it carries, `bond::carry`.)
         b.genes[STRENGTH] = 1.0;
         b.prepare(&w.chem, &w.cfg);
-        b.hold = Some(bond::id(&w, part));
+        b.hold = Some(part);
         let h = w.add(b);
-        w.parts.parts[part].held = w.life[h].id;
+        w.life.part_mut(part).expect("the part").held = w.life[h].id;
         ids.push(w.life[h].id);
     }
     let (mover, other) = (ids[0], ids[1]);
     w.in_cell(i, |_, d| d.out.push(Entry::Go { id: mover, from: i as u32, to: j as u32, pushed: 0.0, lane: 0.0, carries: true, kin: false }));
     pcore::life::land(&mut w);
     let (m, o) = (w.life.find(mover).expect("the mover"), w.life.find(other).expect("the other holder"));
-    assert!(w.life[m].cell as usize == j && bond::held(&w, &w.life[m]) == Some(p), "the mover does not hold its part in its new cell");
-    assert!(bond::cell(&w, p) == j && bond::cell(&w, q) == j, "the structure stayed behind");
-    assert!(w.life[o].hold.is_none() && w.parts.parts[q].held == bond::NOBODY, "a body left behind still holds a part of the moved structure");
+    let held = bond::held(w.life.cell_at(j), &w.life[m]).map(|x| w.life.cell_at(j).parts[x].id);
+    assert!(w.life[m].cell as usize == j && held == Some(p), "the mover does not hold its part in its new cell");
+    assert!(w.life.part_cell(p) == Some(j) && w.life.part_cell(q) == Some(j), "the structure stayed behind");
+    assert!(w.life[o].hold.is_none() && w.life.part(q).expect("the part").held == bond::NOBODY, "a body left behind still holds a part of the moved structure");
+}
+
+/// Body `b` (taken out of its slot) takes from the part named `p` of its cell (`bond::act`, verb 1), in a serial step.
+fn act_on(w: &mut World, b: &mut Body, p: u64) {
+    let i = b.cell as usize;
+    w.in_cell(i, |w, d| {
+        let x = bond::at(d.at(i), p).expect("the part");
+        bond::act(w, d, b, 1, x)
+    });
 }

@@ -110,7 +110,7 @@ fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, dt: f64) -> f64 
     let (chem, p, i) = (&w.chem, &w.cfg.phys, b.cell as usize);
     let tg = w.t_ground_last(i);
     let coat = b.conductance(p.m_ref, b.mass(chem));
-    let g = crate::bond::enclosure(w, d, b).map_or(coat, |x| 1.0 / (1.0 / coat + 1.0 / x.g)) * dt;
+    let g = crate::bond::enclosure(d, b).map_or(coat, |x| 1.0 / (1.0 / coat + 1.0 / x.g)) * dt;
     if g <= 0.0 {
         return b.temp(chem);
     }

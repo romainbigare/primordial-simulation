@@ -20,7 +20,7 @@ pub(crate) use book::{book_by_array, Booker};
 pub use gather::Moves;
 pub use moves::{held, held_more, LinkFlux, Move};
 pub(crate) use moves::heat_received;
-pub use nodes::{Boundary, Class, Node, NodeId, BOUNDARIES};
+pub use nodes::{Boundary, Class, Node, BOUNDARIES};
 
 use crate::World;
 use serde::{Deserialize, Serialize};

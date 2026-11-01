@@ -1,6 +1,6 @@
 //! The monthly step of parts: heat, Change, loads and failure, floating and drifting.
 
-use super::{cell, dissolve, fall_apart, holder, id, members, move_structure, restructure, sense::liquid, unlink, verbs::{bears, torn_from}, Part, GROUND};
+use super::{at, fall_apart, holder, members, move_structure, restructure, root, sense::liquid, unlink, verbs::{bears, torn_from}, GROUND};
 use crate::{change::{send_gas, GasMove, Reactor}, chem::Phase, ground::share, life::{self, Chunk}, rng::{Purpose, Rng}, space::COMPASS, store::{Class, Node}, AIR, World};
 
 /// Parts react with the air every this many months.
@@ -8,79 +8,63 @@ const REACT_MONTHS: u64 = 6;
 /// Liquid shallower than this, m, pushes no part.
 const STILL_DEPTH: f64 = 0.01;
 
-/// Monthly: heat, Change, load and failure, floating and drifting.
+/// Monthly: each chunk on the pool (`life::run`), cell by cell, the turns of the parts in the order of their cell's
+/// list: heat, and every `REACT_MONTHS` months the reactions with the air, on the chunk's view of the store; a part
+/// whose walls are gone falls apart (`fall_apart`); then the load of each structure of the cell, in the order of its
+/// root (`load`). Last the structures that drift move to their neighbour cells, in the order of the cells (`drift`).
 pub fn step(w: &mut World) {
-    if w.parts.parts.iter().all(|p| !p.alive) {
+    if w.life.cells.iter().all(|c| c.parts.is_empty()) {
         return;
     }
     let react = w.month().is_multiple_of(REACT_MONTHS);
-    for s in turns(w, react) {
-        dissolve(w, s);
-    }
-    for r in 0..w.parts.parts.len() {
-        if w.parts.parts[r].alive && w.parts.parts[r].root as usize == r {
-            if react {
-                restructure(w, r);
-            }
-            load(w, r);
-        }
-    }
-}
-
-/// A part's turn: the part (taken out of its slot while its chunk runs), its slot and cell, and whether its walls are
-/// gone.
-struct Turn {
-    slot: usize,
-    cell: usize,
-    part: Part,
-    gone: bool,
-}
-
-/// The turns of all parts: heat, and every `REACT_MONTHS` months the reactions with the air. Each chunk takes the turns
-/// of the parts of its cells, cell by cell and in a cell in slot order, on its view of the store (`store::Moves`), on
-/// the pool (`life::run`), whose moves are booked when the chunks end. A part whose walls are gone falls apart in its
-/// turn (`fall_apart`). Returns the slots of the parts that fall apart, in order: they are freed one by one
-/// (`dissolve`), as that unbonds other parts.
-fn turns(w: &mut World, react: bool) -> Vec<usize> {
     let dt = (REACT_MONTHS * w.cfg.calendar().month) as f64;
-    // The parts by their cell, then by slot.
-    let mut order: Vec<(usize, usize)> = (0..w.parts.parts.len()).filter(|&s| w.parts.parts[s].alive).map(|s| (cell(w, s), s)).collect();
-    order.sort_unstable();
-    let bounds = life::bounds(w);
-    let mut work: Vec<Vec<Turn>> = (1..bounds.len()).map(|_| Vec::new()).collect();
-    for (cell, slot) in order {
-        work[bounds.partition_point(|&b| b <= cell) - 1].push(Turn { slot, cell, part: std::mem::take(&mut w.parts.parts[slot]), gone: false });
-    }
     // A turn that only sheds and warms costs about a microsecond, less than a pool call: it counts no work, so the runner keeps
     // the chunks on the calling thread; the reactions are the work.
-    let load = if react { work.iter().map(Vec::len).sum() } else { 0 };
+    let load = if react { w.life.cells.iter().map(|c| c.parts.len()).sum() } else { 0 };
     let init = |w: &World| react.then(|| (Reactor::new(&w.chem, &w.cfg), vec![0.0; w.chem.ns()]));
-    let work = life::run(w, work, load, init, |w, d, mine, scratch| {
-        for t in mine.iter_mut() {
-            d.moves.open(w, t.cell, Node::new(Class::Part, t.slot));
-            if let Some((rc, pool)) = scratch {
-                react_part(w, d, rc, (&mut t.part, t.cell), pool, dt);
-            }
-            t.gone = shed_and_warm(w, d, &mut t.part, t.cell);
-            if t.gone {
-                fall_apart(w, d, t.slot, &mut t.part);
+    let drifts = life::run(w, vec![Vec::new(); life::chunks(w)], load, init, |w, d, drifts, scratch| {
+        let cells: Vec<usize> = d.cells().filter(|&i| !d.at(i).parts.is_empty()).collect();
+        for i in cells {
+            turns(w, d, i, scratch, dt);
+            let roots: Vec<u64> = d.at(i).parts.iter().filter(|p| p.root == p.id).map(|p| p.id).collect();
+            for r in roots {
+                let Some(x) = at(d.at(i), r) else { continue };
+                if react {
+                    restructure(w, d.at_mut(i), x);
+                }
+                if let Some(j) = load_one(w, d, i, r) {
+                    drifts.push((i, r, j));
+                }
             }
         }
     });
-    let mut gone = Vec::new();
-    for t in work.into_iter().flatten() {
-        w.parts.parts[t.slot] = t.part;
-        if t.gone {
-            gone.push(t.slot);
+    for (i, r, j) in drifts.into_iter().flatten() {
+        move_structure(w, i, r, j);
+    }
+}
+
+/// The turns of the parts of cell `i` of chunk `d`, in their order: heat, and the reactions with the air if `scratch`
+/// holds a reactor; a part whose walls are gone falls apart.
+fn turns(w: &World, d: &mut Chunk, i: usize, scratch: &mut Option<(Reactor, Vec<f64>)>, dt: f64) {
+    let ids: Vec<u64> = d.at(i).parts.iter().map(|p| p.id).collect();
+    for id in ids {
+        let Some(x) = at(d.at(i), id) else { continue };
+        d.moves.open(w, i, Node::new(Class::Part, x));
+        let mut p = std::mem::take(&mut d.at_mut(i).parts[x]);
+        if let Some((rc, pool)) = scratch {
+            react_part(w, d, rc, (&mut p, i), pool, dt);
+        }
+        let gone = shed_and_warm(w, d, &mut p, i);
+        d.at_mut(i).parts[x] = p;
+        if gone {
+            fall_apart(w, d, i, x);
         }
     }
-    gone.sort_unstable();
-    gone
 }
 
 /// Part `p` of cell `i` reacts with its share of its cell's air for `dt` s and settles the gas as a ground node does
 /// (`change::send_gas`); the ground under it pays the gas's latent heat, and gas it cannot pay for goes to the ground.
-fn react_part(w: &World, d: &mut Chunk, rc: &mut Reactor, (p, i): (&mut Part, usize), pool: &mut [f64], dt: f64) {
+fn react_part(w: &World, d: &mut Chunk, rc: &mut Reactor, (p, i): (&mut super::Part, usize), pool: &mut [f64], dt: f64) {
     let j = w.mesh.up(i, 0, AIR);
     let (lift, ta) = (w.lift(i), d.moves.t_air(w, j));
     let chem = &w.chem;
@@ -111,8 +95,8 @@ fn react_part(w: &World, d: &mut Chunk, rc: &mut Reactor, (p, i): (&mut Part, us
 }
 
 /// Walls of part `p` of cell `i` no longer solid run off; the part takes the ground's temperature. Returns whether its
-/// walls are under `min_kg`: it falls apart (`dissolve`).
-fn shed_and_warm(w: &World, d: &mut Chunk, p: &mut Part, i: usize) -> bool {
+/// walls are under `min_kg`: it falls apart.
+fn shed_and_warm(w: &World, d: &mut Chunk, p: &mut super::Part, i: usize) -> bool {
     let (ns, chem, tg) = (w.chem.ns(), &w.chem, w.t_ground_last(i));
     let t = p.e / p.heat_cap(chem).max(1e-9);
     for k in 0..ns {
@@ -131,83 +115,85 @@ fn shed_and_warm(w: &World, d: &mut Chunk, p: &mut Part, i: usize) -> bool {
     gone
 }
 
-/// Load one structure: weights less buoyancy, pushes of liquid and bodies; break what is overloaded; float and drift.
-fn load(w: &mut World, r: usize) {
-    let (list, i, g) = (members(w, r), cell(w, r), w.cfg.gravity);
-    let (depth, rho, molv) = liquid(w, i, w.stock(Node::ground(i)));
+/// Load the structure whose root is `r` in cell `i` of chunk `d`: weights less buoyancy, pushes of liquid and bodies;
+/// break what is overloaded. Returns the neighbour cell it drifts to, afloat and free (moved when the chunks end).
+fn load_one(w: &World, d: &mut Chunk, i: usize, r: u64) -> Option<usize> {
+    let (c, g) = (d.at(i), w.cfg.gravity);
+    let list = members(c, r);
+    let (depth, rho, molv) = liquid(w, i, d.moves.amounts(w, Node::ground(i)));
     let flux = w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
     // The liquid's speed through the cell, m/s: its flux over the mean width of the borders it crosses times its depth.
     let cells = w.mesh.cells();
     let (sum, borders) = cells.around(i).0.iter().map(|&l| cells.width()[l as usize]).filter(|&wd| wd > 0.0).fold((0.0, 0.0), |(s, k), wd| (s + wd, k + 1.0));
     let width = sum / borders;
     let v = if depth > STILL_DEPTH { flux / (molv * width * depth) } else { 0.0 };
-    let bump = std::mem::take(&mut w.parts.parts[r].push) as f64 / list.len() as f64;
+    let rp = at(c, r).expect("the root");
+    let bump = c.parts[rp].push as f64 / list.len() as f64;
     let (mut wt, mut push, mut lift) = (vec![0.0; list.len()], vec![0.0; list.len()], 0.0);
     for (x, &p) in list.iter().enumerate() {
-        let pt = &w.parts.parts[p];
+        let pt = &c.parts[p];
         let face = (pt.size[0] * pt.size[1]) as f64;
         let buoy = rho * g * pt.outer().min(face * depth);
         lift += buoy;
         wt[x] = (pt.mass(&w.chem) * g - buoy).max(0.0);
         push[x] = 0.5 * rho * v * v * face + bump;
     }
-    let s = w.parts.parts[r].s;
+    let s = c.parts[rp].s;
     let afloat = !s.anchored && depth > 0.0 && lift >= s.mass * g;
-    w.parts.parts[r].s.afloat = afloat;
-    let held = list.iter().copied().find(|&p| holder(w, p).is_some());
+    let held = list.iter().copied().find(|&p| holder(c, p).is_some());
     // From the supports out along the bonds, each carrying what hangs beyond it; a ground bond carries the pushes too.
-    let mut order: Vec<usize> = (0..list.len()).filter(|&x| w.parts.bonds.of(list[x]).any(|l| l.0 == GROUND)).collect();
+    let ids: Vec<u64> = list.iter().map(|&p| c.parts[p].id).collect();
+    let mut order: Vec<usize> = (0..list.len()).filter(|&x| c.bonds.of(ids[x]).any(|l| l.0 == GROUND)).collect();
     if order.is_empty() {
         order.extend(held.and_then(|h| list.iter().position(|&p| p == h)));
     }
     let mut up = vec![usize::MAX; list.len()];
     let mut q = 0;
     while q < order.len() {
-        for (o, _) in w.parts.bonds.of(list[order[q]]) {
-            if let Some(c) = list.iter().position(|&p| p as u32 == o).filter(|&c| !order.contains(&c)) {
-                up[c] = order[q];
-                order.push(c);
+        for (o, _) in c.bonds.of(ids[order[q]]) {
+            if let Some(x) = ids.iter().position(|&p| p == o).filter(|&x| !order.contains(&x)) {
+                up[x] = order[q];
+                order.push(x);
             }
         }
         q += 1;
     }
-    for &c in order.iter().rev() {
-        if up[c] != usize::MAX {
-            (wt[up[c]], push[up[c]]) = (wt[up[c]] + wt[c], push[up[c]] + push[c]);
+    for &x in order.iter().rev() {
+        if up[x] != usize::MAX {
+            (wt[up[x]], push[up[x]]) = (wt[up[x]] + wt[x], push[up[x]] + push[x]);
         }
     }
     let mut breaks = Vec::new();
-    for &c in &order {
-        for (o, st) in w.parts.bonds.of(list[c]) {
-            let hang = if o == GROUND { push[c] } else if up[c] != usize::MAX && list[up[c]] as u32 == o { wt[c] + push[c] } else { 0.0 };
+    for &x in &order {
+        for (o, st) in c.bonds.of(ids[x]) {
+            let hang = if o == GROUND { push[x] } else if up[x] != usize::MAX && ids[up[x]] == o { wt[x] + push[x] } else { 0.0 };
             if hang > st as f64 {
-                breaks.push((list[c], o));
+                breaks.push((ids[x], o));
             }
-        }
-    }
-    for (a, o) in breaks {
-        if w.parts.bonds.of(a).any(|l| l.0 == o) {
-            unlink(w, a, o, true);
         }
     }
     // The holder of a structure not resting on the ground bears what hangs on its part by its own force, or lets go.
     let x = held.filter(|_| !s.anchored).and_then(|h| list.iter().position(|&p| p == h));
-    if let Some((x, o)) = x.and_then(|x| holder(w, list[x]).map(|o| (x, o))) {
-        if wt[x] + push[x] > bears(w, &w.life[o]) {
-            torn_from(w, o);
+    let torn = x.and_then(|x| holder(c, list[x]).filter(|&o| wt[x] + push[x] > bears(w, &c.bodies[o])));
+    let c = d.at_mut(i);
+    (c.parts[rp].push, c.parts[rp].s.afloat) = (0.0, afloat);
+    for (a, o) in breaks {
+        if d.at(i).bonds.of(a).any(|l| l.0 == o) {
+            unlink(w, d, i, a, o, true);
         }
     }
-    // Afloat and free: drift to the neighbour whose liquid stands lowest.
-    if !afloat || held.is_some() || v <= 0.0 || w.parts.parts[r].root as usize != r {
-        return;
+    if let Some(o) = torn {
+        torn_from(w, d, i, o);
     }
-    let mut rng = Rng::of_node(w.seed, w.time, id(w, r), Purpose::Bond);
+    // Afloat and free: drift to the neighbour whose liquid stands lowest.
+    let c = d.at(i);
+    if !afloat || held.is_some() || v <= 0.0 || at(c, r).is_none_or(|p| root(c, p) != p) {
+        return None;
+    }
+    let mut rng = Rng::of_part(w.seed, w.time, r, Purpose::Bond);
     let head = |j: usize| w.life.env[j][2] + w.life.env[j][1];
-    let cells = w.mesh.cells();
-    let near = (0..COMPASS).filter_map(|d| cells.way(i, d).map(|e| cells.adj_cell()[e] as usize));
+    let near = (0..COMPASS).filter_map(|e| cells.way(i, e).map(|e| cells.adj_cell()[e] as usize));
     let to = near.filter(|&j| head(j) < head(i)).min_by(|&a, &b| head(a).total_cmp(&head(b)));
     // It crosses the cell's width at the liquid's speed.
-    if let Some(j) = to.filter(|_| rng.f64() < v * w.cfg.calendar().month as f64 / width) {
-        move_structure(w, r, j);
-    }
+    to.filter(|_| rng.f64() < v * w.cfg.calendar().month as f64 / width)
 }

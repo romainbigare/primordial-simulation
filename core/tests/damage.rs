@@ -44,7 +44,7 @@ struct Seen {
 /// What the body at `s` looks like.
 fn seen(w: &World, s: Handle) -> Seen {
     let b = &w.life[s];
-    Seen { built: b.built(&w.chem), matter: kg(w, b, MATTER), solid: kg(w, b, RICH), liquid: kg(w, b, LIQUID), force: bond::force(w, b) }
+    Seen { built: b.built(&w.chem), matter: kg(w, b, MATTER), solid: kg(w, b, RICH), liquid: kg(w, b, LIQUID), force: bond::force(w.life.cell_at(b.cell as usize), w, b) }
 }
 
 /// Damage: the energy of a bite (`choose::take_body`), of being pushed through (`choose::wear`) and of heat breaks body

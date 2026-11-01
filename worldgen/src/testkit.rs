@@ -410,7 +410,7 @@ pub fn loose_volume(w: &World, i: usize) -> f64 {
 
 /// A part of `kg` of the cell's most plentiful loose substance, taken from the ground at its temperature: flat, or a
 /// block if `thick`.
-pub fn plate(w: &mut World, i: usize, kg: f64, thick: bool) -> usize {
+pub fn plate(w: &mut World, i: usize, kg: f64, thick: bool) -> u64 {
     let n = w.mesh.cells().n();
     let k = (0..w.chem.ns()).max_by(|&a, &b| w.store.amounts(Class::Ground)[a * n + i].total_cmp(&w.store.amounts(Class::Ground)[b * n + i])).unwrap();
     let mut wall = vec![0.0; w.chem.ns()];
@@ -420,18 +420,22 @@ pub fn plate(w: &mut World, i: usize, kg: f64, thick: bool) -> usize {
 
 /// A part of walls `wall` holding `fill` in its hollow (mol of each substance), taken from the ground of cell `i` with
 /// their heat at its temperature, of elongation `x` and hollowness `h` (its structure's numbers count its walls only,
-/// `bond::make`, until it is restructured).
-pub fn part_of(w: &mut World, i: usize, wall: Vec<f64>, fill: Vec<f64>, x: f32, h: f32) -> usize {
+/// `bond::make`, until it is restructured). Returns its id.
+pub fn part_of(w: &mut World, i: usize, wall: Vec<f64>, fill: Vec<f64>, x: f32, h: f32) -> u64 {
     let (n, t) = (w.mesh.cells().n(), w.t_ground_last(i));
     let moved: Vec<(usize, f64, f64)> = (0..w.chem.ns()).filter(|&k| wall[k] + fill[k] > 0.0).map(|k| (k, wall[k] + fill[k], (wall[k] + fill[k]) * w.chem.subs[k].cp * t)).collect();
     for &(k, mol, _) in &moved {
         assert!(w.store.amounts(Class::Ground)[k * n + i] > mol, "the cell holds less than the part");
     }
-    let s = bond::make(w, i, wall, moved.iter().map(|m| m.2).sum(), x, h);
-    w.parts.parts[s].fill = fill;
+    let heat = moved.iter().map(|m| m.2).sum();
+    let s = w.in_cell(i, |w, d| {
+        let p = bond::make(w, d, i, wall, heat, x, h);
+        d.at_mut(i).parts[p].fill = fill;
+        p
+    });
     let moves: Vec<Move> = moved.into_iter().map(|(k, mol, heat)| Move { from: Node::ground(i), to: Node::new(Class::Part, s), k: k as u16, mol, heat }).collect();
     pcore::store::apply(w, &[], &moves);
-    s
+    w.life.cell_at(i).parts[s].id
 }
 
 /// The books of a world at a moment: its totals and its boundary nodes' (`check::totals`).

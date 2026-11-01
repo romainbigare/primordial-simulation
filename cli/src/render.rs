@@ -69,8 +69,8 @@ pub fn save(w: &World, path: &str) {
         other[b.cell as usize] += b.mass(&w.chem) / w.mesh.cells().area()[b.cell as usize];
     }
     let mut made = vec![false; w.mesh.cells().n()];
-    for x in (0..w.parts.parts.len()).filter(|&x| w.parts.parts[x].alive) {
-        made[pcore::bond::cell(w, x)] = true;
+    for p in w.life.parts() {
+        made[p.cell as usize] = true;
     }
     let (pw, ph) = (gw * s * panels + (panels - 1) * GAP, gh * s);
     let mut img = vec![255u8; pw * ph * 3];

@@ -99,7 +99,6 @@ pub struct World {
     pub counts: Counters,
     /// Bodies, and the parts they made: the sparse graph
     pub life: crate::life::Life,
-    pub parts: bond::Parts,
     /// Light-capture area of the bodies of each cell per ground area (they intercept 1 - exp(-a))
     pub canopy: Vec<f32>,
     /// Light intercepted in each cell per m² of light-capture area since the start (its bodies' mean), J/m²

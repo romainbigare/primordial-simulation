@@ -7,7 +7,7 @@ use crate::brain::{ln, REST, SIG};
 use crate::lanes::thickness;
 use crate::rng::Rng;
 use crate::survey::{Face, UNCOVERED};
-use crate::{bond, life::{Chunk, Handle}, World};
+use crate::{bond, life::{Cell, Chunk, Handle}, World};
 
 /// A brain perceives a share `x` of the body as `SHARE_SENSE` ln(x + floor): a store with the floor `STORE_FLOOR` (no
 /// store: as that floor), less its safe minimum with the floor `MIN_FLOOR`.
@@ -70,10 +70,10 @@ pub(super) fn walk(w: &World, i: usize, sight: usize, t: &mut ActTmp) {
 pub(super) fn perceive(w: &World, d: &Chunk, b: &Body, nseen: usize, rng: &mut Rng) -> Choice {
     let i = b.cell as usize;
     let (mut seen, mut cnt, side, cells) = ([(Face::default(), false); MAX_SEEN], 0, rng.below(MOVES), w.mesh.cells());
-    let room = bond::room(w, b);
+    let room = bond::room(d.at(i), b);
     // Its own room as the others' are seen, from its face (outside a batch, where there are none, as it is now).
     let face = w.life.faces_of(i).iter().find(|o| o.id == b.id);
-    let mine = face.map_or_else(|| room.map(|(r, e)| (r as u32, e.closed)), |o| o.room);
+    let mine = face.map_or_else(|| room.map(|(r, e)| (r, e.closed)), |o| o.room);
     for q in 0..9 {
         let Some(j) = (if q == 0 { Some(i) } else { cells.way(i, (side + q) % MOVES).map(|e| cells.adj_cell()[e] as usize) }) else { continue };
         // (Of its own cell, not those leaving it: they are there only until the serial pass, `Body::leaving`.)
@@ -88,9 +88,9 @@ pub(super) fn perceive(w: &World, d: &Chunk, b: &Body, nseen: usize, rng: &mut R
             }
         }
     }
-    let (held, list) = (bond::held(w, b), &w.parts.at[i][..]);
-    let (mut parts, mut np, off) = ([0usize; PARTS], 0, if list.is_empty() { 0 } else { rng.below(list.len()) });
-    for p in (0..list.len()).map(|q| list[(off + q) % list.len()] as usize).filter(|&p| Some(p) != held).take(PARTS) {
+    let (held, n) = (bond::held(d.at(i), b), d.at(i).parts.len());
+    let (mut parts, mut np, off) = ([0usize; PARTS], 0, if n == 0 { 0 } else { rng.below(n) });
+    for p in (0..n).map(|q| (off + q) % n).filter(|&p| Some(p) != held).take(PARTS) {
         (parts[np], np) = (p, np + 1);
     }
     Choice {
@@ -109,8 +109,9 @@ pub(super) fn perceive(w: &World, d: &Chunk, b: &Body, nseen: usize, rng: &mut R
     }
 }
 
-/// The brain's inputs (laws.md 5.2), of a body that has `lived` its update at `temp` K, with `mem` numbers of memory.
-pub(super) fn inputs(w: &World, b: &Body, (lived, temp, mem): (&Lived, f64, usize), c: &Choice, x: &mut Vec<f32>) {
+/// The brain's inputs (laws.md 5.2), of a body of cell `cell` that has `lived` its update at `temp` K, with `mem`
+/// numbers of memory.
+pub(super) fn inputs(w: &World, cell: &Cell, b: &Body, (lived, temp, mem): (&Lived, f64, usize), c: &Choice, x: &mut Vec<f32>) {
     let (i, ns, chem, mass) = (b.cell as usize, w.chem.ns(), &w.chem, lived.mass);
     let (env, pm) = (w.life.env[i], mass / b.n());
     let heard = c.seen[..c.nseen].iter().fold([0f32; SIG], |h, (o, _)| [0, 1].map(|k| h[k] + o.sig[k] / c.nseen as f32));
@@ -123,7 +124,7 @@ pub(super) fn inputs(w: &World, b: &Body, (lived, temp, mem): (&Lived, f64, usiz
     let (dt, canopy, sun) = ((temp - env[0]) as f32, w.canopy[i], w.season() as f32 * std::f32::consts::TAU);
     x.extend([dt / WARM_SCALE, ln(pm as f32) / LN_MASS - 1.0, ln(1.0 + canopy) / LN_CANOPY, ln(1.0 + env[1] as f32), (env[0] as f32 - T_MID) / T_SPAN, crowd, sun.sin(), sun.cos()]);
     x.extend(heard);
-    x.extend(bond::sense(w, b, pm));
+    x.extend(bond::sense(cell, w, b, pm));
     x.extend_from_slice(&b.mem[..mem]);
 }
 
@@ -131,9 +132,9 @@ pub(super) fn inputs(w: &World, b: &Body, (lived, temp, mem): (&Lived, f64, usiz
 /// are added per move, in places 0 and 6, and what the body can take there in place 8; the depth of standing liquid is
 /// in place `WET`, its parts in the last place).
 pub fn cells(w: &mut World) {
-    let (life, parts) = (&w.life, &w.parts.at);
+    let life = &w.life;
     let cellf = (0..w.mesh.cells().n()).map(|i| {
-        let (c, e, area, p) = (life.sum(i), &life.env[i], w.mesh.cells().area()[i], &parts[i]);
+        let (c, e, area, p) = (life.sum(i), &life.env[i], w.mesh.cells().area()[i], &life.cells[i].parts);
         let resist = 1.0 + thickness(w, c[1], area) as f32;
         let c = c.map(|v| v as f32);
         let n = c[0].max(1.0);

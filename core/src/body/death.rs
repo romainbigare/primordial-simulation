@@ -9,7 +9,7 @@ use crate::{bond, life::{Chunk, Handle}, World};
 
 /// Remains go to the ground node as loose amounts, with the body's heat.
 pub fn die(w: &World, d: &mut Chunk, h: Handle, mut b: Body, cause: u8) {
-    bond::let_go(w, d, &mut b, false);
+    bond::let_go(d, &mut b, false);
     remains(w, d, &b);
     let root = d.root(w, &b);
     d.events.push(Event { day: w.day(), kind: EventKind::Died { cause, root }, node: b.cell, value: b.count });

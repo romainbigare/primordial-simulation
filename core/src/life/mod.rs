@@ -49,14 +49,21 @@ pub struct Cell {
     pub cover: Cover,
     /// The brains of its bodies
     pub brains: Brains,
+    /// The parts that lie in it, in the order they came, the bonds between them (`bond`), and how many parts were made
+    /// in it so far (their ids, `bond::Part::id`)
+    pub parts: Vec<crate::bond::Part>,
+    pub bonds: crate::bond::Bonds,
+    pub(crate) parts_made: u64,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Life {
     /// The life of each ground cell (taken out of the world while body code runs on it, `chunk::run`)
     pub(crate) cells: Vec<Cell>,
-    /// The cell each body stored outside the cell it was placed in is in, by id (`find`)
+    /// The cell each body stored outside the cell it was placed in is in, by id (`find`), and so for the parts
+    /// (`part_cell`)
     moved: BTreeMap<u64, u32>,
+    parts_moved: BTreeMap<u64, u32>,
     /// What body code did outside its cell, waiting for the serial pass (`cross::land`)
     pub(crate) queued: Vec<Entry>,
     /// Per cell, from the last survey: its members, then their visible traits summed, then the energy to break all its
@@ -143,10 +150,11 @@ impl Life {
     pub fn cover(&self, i: usize) -> &Cover {
         &self.cells[i].cover
     }
-    /// The holes the pass left are closed: each cell keeps its living bodies in their order, and a body that died away
-    /// from the cell it was placed in leaves `moved`.
+    /// The holes the pass left are closed: each cell keeps its living bodies in their order, and a body or a part that
+    /// is gone from the cell it was noted in leaves `moved` or `parts_moved`.
     pub(crate) fn compact(&mut self) {
-        let Life { cells, moved, .. } = self;
+        let Life { cells, moved, parts_moved, .. } = self;
+        parts_moved.retain(|&id, &mut i| cells[i as usize].parts.iter().any(|p| p.id == id));
         for (i, c) in cells.iter_mut().enumerate().filter(|x| x.1.bodies.iter().any(|b| !b.alive)) {
             for b in c.bodies.iter().filter(|b| !b.alive && b.id != 0) {
                 if moved.get(&b.id) == Some(&(i as u32)) {
@@ -159,6 +167,33 @@ impl Life {
     /// Body `id` is now stored in cell `i` (`find`).
     fn note_at(&mut self, id: u64, i: u32) {
         if (id >> ID_SHIFT) as u32 == i { self.moved.remove(&id) } else { self.moved.insert(id, i) };
+    }
+    /// Part `id` now lies in cell `i` (`part_cell`).
+    pub(crate) fn note_part_at(&mut self, id: u64, i: u32) {
+        if (id >> ID_SHIFT) as u32 == i { self.parts_moved.remove(&id) } else { self.parts_moved.insert(id, i) };
+    }
+    /// The cell the part with id `id` lies in, if it exists: the one it was made in, unless its structure moved.
+    pub fn part_cell(&self, id: u64) -> Option<usize> {
+        let i = self.parts_moved.get(&id).map_or((id >> ID_SHIFT) as usize, |&c| c as usize);
+        self.cells.get(i)?.parts.iter().any(|p| p.id == id).then_some(i)
+    }
+    /// The part with id `id`, if it exists.
+    pub fn part(&self, id: u64) -> Option<&crate::bond::Part> {
+        let i = self.part_cell(id)?;
+        self.cells[i].parts.iter().find(|p| p.id == id)
+    }
+    /// The part with id `id`, to change (an edit), if it exists.
+    pub fn part_mut(&mut self, id: u64) -> Option<&mut crate::bond::Part> {
+        let i = self.part_cell(id)?;
+        self.cells[i].parts.iter_mut().find(|p| p.id == id)
+    }
+    /// The life of cell `i`: its bodies, brains, parts and bonds, and its cover.
+    pub fn cell_at(&self, i: usize) -> &Cell {
+        &self.cells[i]
+    }
+    /// The parts of the world, cell by cell, each cell's in its order.
+    pub fn parts(&self) -> impl Iterator<Item = &crate::bond::Part> {
+        self.cells.iter().flat_map(|c| &c.parts)
     }
 }
 

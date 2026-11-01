@@ -120,8 +120,8 @@ impl<'a> Ctx<'a> {
         let mass = par::map(&bodies, |b| b.mass(&w.chem));
         let f = fields(w);
         let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: pcore::cover::per_m2(w), animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], mass };
-        for (x, p) in w.parts.parts.iter().enumerate().filter(|(_, p)| p.alive) {
-            let i = pcore::bond::cell(w, x);
+        for p in w.life.parts() {
+            let i = p.cell as usize;
             c.parts[i] += p.mass(&w.chem) / w.mesh.cells().area()[i];
         }
         for (b, &mass) in bodies.iter().zip(&c.mass) {
