@@ -1,0 +1,432 @@
+diff --git a/cli/src/main.rs b/cli/src/main.rs
+index 8731b1c..bce90da 100644
+--- a/cli/src/main.rs
++++ b/cli/src/main.rs
+@@ -102,6 +102,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
+     }
+     for y in y0 + 1..=y0 + years {
+         plan.place(&mut w).iter().for_each(|l| println!("{l}"));
++        if y == y0 + 2 { pcore::prof::reset(); } // crate::prof::
+         for _ in 0..w.cfg.months_per_year {
+             let mut t = Instant::now();
+             pcore::step_marked(&mut w, &mut |_, s| {
+@@ -154,5 +155,6 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
+     }
+     clock.spent[TAPE] += t.elapsed();
+     println!("{}", report::rivers(&w, &rec));
++    print!("{}", pcore::prof::report(years.saturating_sub(1).max(1) as f64)); // crate::prof::
+     println!("{}", report::speed(&w, years, clock.total(), settled_to - settled_from));
+ }
+diff --git a/core/src/flow/air/book.rs b/core/src/flow/air/book.rs
+index 232d465..0273615 100644
+--- a/core/src/flow/air/book.rs
++++ b/core/src/flow/air/book.rs
+@@ -15,7 +15,9 @@ use crate::{World, AIR};
+ 
+ /// The gas the bodies' nodes hold comes up whole into their cells' air nodes, holding its latent heat as the air does;
+ /// the air pays its lift (laws.md 1.5, `potential`). The bodies' nodes hold only gases of the air.
++#[inline(never)] // crate::prof::
+ pub(super) fn up_from_bodies(w: &mut World, s: &mut Scratch) {
++    let _pa_up_from_bodies = crate::prof::span("a.up_from_bodies");
+     let n = w.mesh.cells().n();
+     let held = w.store.amounts(Class::Bodies);
+     let ks: Vec<u16> = s.state.gas.iter().copied().filter(|&k| held[k * n..(k + 1) * n].iter().any(|&m| m != 0.0)).map(|k| k as u16).collect();
+@@ -35,7 +37,9 @@ pub(super) fn up_from_bodies(w: &mut World, s: &mut Scratch) {
+ /// for its cover, the heat it and its air send to space; and the wind and the evening of blocks, with their lifts and
+ /// falls (`potential`). Then the light on the cover, the clouds of what rained (which the next step's sunlight
+ /// passes), and the tape's rain and evaporation.
++#[inline(never)] // crate::prof::
+ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Active], &Response, &[Landed]), mean: &Mean, dt: f64) {
++    let _pa_book = crate::prof::span("a.book");
+     let (n, na, nx, area) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), act.len(), w.mesh.cells().area().to_vec());
+     // Each cell's outputs at the mean air it saw.
+     let sr = &*s;
+diff --git a/core/src/flow/air/cells.rs b/core/src/flow/air/cells.rs
+index 8f37167..257e5ff 100644
+--- a/core/src/flow/air/cells.rs
++++ b/core/src/flow/air/cells.rs
+@@ -86,7 +86,9 @@ impl Response {
+     /// Each node's ground (`Ground`): what its air gains and what evaporates into it, summed over its cells, with its
+     /// slopes with the air of each node they see, by the cells' shares of it (`lerp`): node by node, its cells in the
+     /// order of their indices, each node it sees where one of them first does.
++#[inline(never)] // crate::prof::
+     pub(super) fn ground(&self, cx: &Ctx, wet: Wet) -> Ground {
++    let _pa_ground = crate::prof::span("a.ground");
+         let (w, s, nx) = (cx.w, cx.s, self.nx);
+         let (air, outs, width) = (w.mesh.level(AIR), 1 + nx, Self::width(nx));
+         let per = outs * outs;
+@@ -112,7 +114,9 @@ impl Response {
+ }
+ 
+ /// Each cell's response over the step (`Response`), in parallel with `threads`, its rows in `room` (`spare::Spare`).
++#[inline(never)] // crate::prof::
+ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Response {
++    let _pa_respond = crate::prof::span("a.respond");
+     let (n, nx, na) = (cx.w.mesh.cells().n(), cx.act.len(), cx.w.mesh.level(AIR).n());
+     let mut seen = vec![0.0; n * (1 + nx)];
+     for (i, air) in seen.chunks_exact_mut(1 + nx).enumerate() {
+diff --git a/core/src/flow/air/daily.rs b/core/src/flow/air/daily.rs
+index a5f4148..5eaf442 100644
+--- a/core/src/flow/air/daily.rs
++++ b/core/src/flow/air/daily.rs
+@@ -107,7 +107,9 @@ pub(in crate::flow) fn blocks(w: &World) -> Vec<Vec<u32>> {
+ /// The air level over a step of `dt` seconds, in days: each node's exchange with its ground and its rain (`exchange`, by
+ /// the law `ground` of its cells), then each block evened out (`even`) and the wind across the links between blocks
+ /// (`wind`).
++#[inline(never)] // crate::prof::
+ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f64) -> Mean {
++    let _pa_daily = crate::prof::span("a.daily");
+     let (air, ng, nx) = (w.mesh.level(AIR), s.state.gas.len(), act.len());
+     let na = air.n();
+     let days = (dt / DAY).ceil().max(1.0);
+@@ -215,7 +217,9 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
+ }
+ 
+ /// What each node's ground gives it over the step under the air `t`, K, and `x` (`Ground::gives`), `[j * (1 + nx) + o]`.
++#[inline(never)] // crate::prof::
+ fn given(ground: &Ground, act: &[Active], (t, x): (&[f64], &[f64])) -> Vec<f64> {
++    let _pd_given = crate::prof::span("d.given");
+     let outs = 1 + act.len();
+     let (mut got, d) = (vec![0.0; t.len() * outs], ground.moved(act, (t, x)));
+     ground.gives(&d, &mut got);
+@@ -225,7 +229,9 @@ fn given(ground: &Ground, act: &[Active], (t, x): (&[f64], &[f64])) -> Vec<f64>
+ /// Each node's mean temperature over a day of `dd` seconds, K, from its air `x` (`[gi * na + j]`) and heat `e`: its
+ /// block's heat follows what its ground gives it (`Ground::gives`) and what its layers send to space (`glow`), each
+ /// linear in the block's temperature through the day (`Together::heat`, `glow_slope`), all its nodes warming alike.
++#[inline(never)] // crate::prof::
+ fn warmth(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, one): (&[Vec<u32>], &Together), (x, e): (&[f64], &[f64]), (dd, dt): (f64, f64)) -> Vec<f64> {
++    let _pd_warmth = crate::prof::span("d.warmth");
+     let (air, na) = (w.mesh.level(AIR), e.len());
+     let start = temps(s, x, e);
+     let (mut t, got, outs) = (start.clone(), given(ground, act, (&start, x)), 1 + act.len());
+@@ -250,7 +256,9 @@ fn warmth(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks,
+ /// nodes rain, of what each holds over what saturates the cells that see it in `rain_time` (`Wet`), follow the block's
+ /// vapour exactly through the day (`Pool`). With per active gas and node (`[y * na + j]`) what it rains over the day,
+ /// mol, and that times the ratio it rains at.
++#[inline(never)] // crate::prof::
+ fn vapour(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, one): (&[Vec<u32>], &Together), (x, t, ts): (&[f64], &[f64], &[f64]), (dd, dt): (f64, f64)) -> [Vec<f64>; 3] {
++    let _pd_vapour = crate::prof::span("d.vapour");
+     let (air, na, nx, nb) = (w.mesh.level(AIR), t.len(), act.len(), blocks.len());
+     let got = given(ground, act, (t, x));
+     let (mut mean, mut rain, mut ratio) = (x.to_vec(), vec![0.0; nx * na], vec![0.0; nx * na]);
+diff --git a/core/src/flow/air/exchange.rs b/core/src/flow/air/exchange.rs
+index 9ff84c4..7993b28 100644
+--- a/core/src/flow/air/exchange.rs
++++ b/core/src/flow/air/exchange.rs
+@@ -87,7 +87,9 @@ pub(super) fn cloud((cloud, cloud_ir): (f64, f64), (m, mr): (f64, f64), area: f6
+ /// holds (in the order of the cells), and the lift of the gas, paid by the air (`potential`); the next state of the ground nodes
+ /// (`land::ground_state`) reads what they then hold. The low basin under one air node takes up gas as one liquid
+ /// (`surf::patches`), each of its cells by its share of that liquid, and gives it up by what each holds of it.
++#[inline(never)] // crate::prof::
+ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64), patches: &[Vec<u32>]) {
++    let _pa_dissolve = crate::prof::span("a.dissolve");
+     let (n, na, nh) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), henry.len());
+     if nh == 0 {
+         return;
+diff --git a/core/src/flow/air/mod.rs b/core/src/flow/air/mod.rs
+index 050c1be..cceb93b 100644
+--- a/core/src/flow/air/mod.rs
++++ b/core/src/flow/air/mod.rs
+@@ -79,7 +79,9 @@ fn node_scale_height(s: &Scratch, j: usize, g: f64) -> f64 {
+ 
+ /// The state of every air node, how high each gas fills its column (a gas that would condense higher up is held near
+ /// the ground), and the layers that send its heat radiation.
++#[inline(never)] // crate::prof::
+ pub(super) fn state(w: &World, s: &mut Scratch) {
++    let _pf_air_state = crate::prof::span("f.air_state");
+     nodes(w, s);
+     heights(w, s);
+     layers(w, s);
+diff --git a/core/src/flow/air/rain.rs b/core/src/flow/air/rain.rs
+index c9c7297..202c893 100644
+--- a/core/src/flow/air/rain.rs
++++ b/core/src/flow/air/rain.rs
+@@ -172,7 +172,9 @@ impl Pool {
+ /// `a` of the node's air over it (its weight there times its area over the area it sees), past the node's saturation
+ /// ratio `e` at which the air touching the cell saturates (colder on higher ground). The node rains what its cells hold
+ /// over their saturation, summed (laws.md 1.5).
++#[inline(never)] // crate::prof::
+ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64]) -> Wet {
++    let _pa_wet = crate::prof::span("a.wet");
+     let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
+     let (n, na, nx) = (cells.n(), air.n(), act.len());
+     // Per node and active gas what saturates its air at its mean ground, per K (`[q * nx + y]`); per cell its share of
+@@ -219,7 +221,9 @@ pub(super) fn rain_air(wet: &Wet, (y, j, ratio): (usize, usize, f64), touched: &
+ 
+ /// What rains on each cell from each node it sees over the step (`Landed`), per active gas: each node's rain shared
+ /// among the cells that see it by what each would hold over its own saturation at the ratio the node rained at (`Wet`).
++#[inline(never)] // crate::prof::
+ pub(super) fn landed(act: &[Active], wet: &Wet, mean: &Mean) -> Vec<Landed> {
++    let _pa_landed = crate::prof::span("a.landed");
+     let na = wet.0.len();
+     (0..act.len())
+         .map(|x| {
+diff --git a/core/src/flow/air/step.rs b/core/src/flow/air/step.rs
+index 63b5e9e..a6d8a8f 100644
+--- a/core/src/flow/air/step.rs
++++ b/core/src/flow/air/step.rs
+@@ -28,7 +28,9 @@ pub(super) struct Active {
+ }
+ 
+ /// The air's step of `dt` seconds.
++#[inline(never)] // crate::prof::
+ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
++    let _pair_step_all = crate::prof::span("air step all");
+     up_from_bodies(w, s);
+     let (tmin, tmax) = range(&s.state.tg);
+     let henry: Vec<(usize, usize)> = s.state.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect();
+@@ -56,7 +58,9 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
+ 
+ /// The gases that leave the ground or may condense (not those of `henry`, which dissolve), with their saturation
+ /// pressures up to the warmest ground or air node plus `SAT_REACH` (`Scratch::sat`).
++#[inline(never)] // crate::prof::
+ fn active(w: &World, s: &mut Scratch, henry: &[(usize, usize)]) -> Vec<Active> {
++    let _pa_active = crate::prof::span("a.active");
+     let tmax = range(&s.state.tg).1;
+     let hi = tmax.max(range(&s.ta).1) + SAT_REACH;
+     s.sat.resize(w.chem.ns(), Default::default());
+diff --git a/core/src/flow/air/surf.rs b/core/src/flow/air/surf.rs
+index fbbf553..f0d69a6 100644
+--- a/core/src/flow/air/surf.rs
++++ b/core/src/flow/air/surf.rs
+@@ -124,7 +124,9 @@ impl Surf {
+ 
+ /// The patches of the low basin that each solve one surface balance: under each air node, the cells of the low basin that
+ /// mix as one (`basin::one_surface`), by what is molten in them; at least two cells each, in the order of their cells.
++#[inline(never)] // crate::prof::
+ pub(super) fn patches(w: &World, s: &Scratch) -> Vec<Vec<u32>> {
++    let _pa_patches = crate::prof::span("a.patches");
+     let parent = w.mesh.cells().parent();
+     let mut by: std::collections::BTreeMap<(u32, u64), Vec<u32>> = std::collections::BTreeMap::new();
+     (0..w.mesh.cells().n()).filter(|&i| one_surface(w, s, i)).for_each(|i| by.entry((parent[i], s.latent[i].molten)).or_default().push(i as u32));
+diff --git a/core/src/flow/air/wind.rs b/core/src/flow/air/wind.rs
+index d01903a..10d3a2d 100644
+--- a/core/src/flow/air/wind.rs
++++ b/core/src/flow/air/wind.rs
+@@ -89,7 +89,9 @@ fn gradient(air: &Level, v: &[f64]) -> Vec<[f64; 2]> {
+ /// overturning reads it, `wind::pushes`) is the block's; so its pressure, shares and warmth are the block's. What
+ /// moves goes from the block's hub to each other node, pairs `first` on (`Moved`); the node the mass enters pays its
+ /// lift.
++#[inline(never)] // crate::prof::
+ pub(super) fn even(w: &World, s: &Scratch, blocks: &[Vec<u32>], (x, e): (&mut [f64], &mut [f64]), first: usize, moved: &mut Moved) {
++    let _pd_even = crate::prof::span("d.even");
+     let (na, ng, pairs, g) = (e.len(), s.state.gas.len(), moved.heat.len(), w.cfg.gravity);
+     let mut p = first;
+     for nodes in blocks.iter().filter(|b| b.len() > 1) {
+@@ -137,7 +139,9 @@ fn lift((a, b): (usize, usize), kg: f64, (s, g): (&Scratch, f64), e: &mut [f64])
+ /// more of a gas than it holds (`solve::sweep::within`).
+ /// What crosses is the sender's air (by halves for the overturning: the lower half to the warmer node, the upper half
+ /// back, each with its node's heat per mol); the node the mass enters pays its lift.
++#[inline(never)] // crate::prof::
+ pub(super) fn wind(w: &World, s: &Scratch, (push, links, border): (&Pushes, &Links, &[usize]), (x, e): (&mut [f64], &mut [f64]), dd: f64, moved: &mut Moved) {
++    let _pd_wind = crate::prof::span("d.wind");
+     let (na, ng, pairs, g) = (e.len(), s.state.gas.len(), moved.heat.len(), w.cfg.gravity);
+     if border.is_empty() {
+         return;
+diff --git a/core/src/flow/basin.rs b/core/src/flow/basin.rs
+index 63abc3c..ad0dc11 100644
+--- a/core/src/flow/basin.rs
++++ b/core/src/flow/basin.rs
+@@ -60,7 +60,9 @@ fn level_of(floors: &mut [(f64, f64)], vol: f64) -> f64 {
+ /// as it leaves (`drain::liquid_heat`); mixed, it goes to the cells that hold less, by what each lacks. Booked as a link
+ /// from the cell that holds the most to each other cell of the basin, with the potential energy of what moves
+ /// (`potential`).
++#[inline(never)] // crate::prof::
+ pub(super) fn level(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64) {
++    let _pl_level = crate::prof::span("l.level");
+     let basin = std::mem::take(&mut s.basin);
+     if basin.cells.is_empty() {
+         s.basin = basin;
+diff --git a/core/src/flow/drain.rs b/core/src/flow/drain.rs
+index 431a081..6b7eb43 100644
+--- a/core/src/flow/drain.rs
++++ b/core/src/flow/drain.rs
+@@ -15,7 +15,9 @@ const PORES: usize = 1;
+ /// more than its room, with its heat, outside the low basin; its fall heats the store (`potential`). It runs after each of the air's steps, which
+ /// bring the rain: the rain would otherwise wait in the pores, darkening the ground (`land::reflectance`), until the
+ /// month's liquid step.
++#[inline(never)] // crate::prof::
+ pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
++    let _pf_sink = crate::prof::span("f.sink");
+     let (n, p, area) = (w.mesh.cells().n(), w.cfg.phys, w.mesh.cells().area());
+     let (tmin, tmax) = range(&s.state.tg);
+     let liq = s.liquids(&w.chem, (tmin, tmax), true);
+@@ -43,7 +45,9 @@ pub(super) fn liquid_heat(w: &World, s: &Scratch, liq: &[usize], i: usize, mol:
+ 
+ /// In each layer liquid flows between cells (`flows`); what a store holds over its room comes up (`come_up`). A move
+ /// takes its share of every liquid with what is dissolved and its heat; its fall heats where it goes (`potential`).
++#[inline(never)] // crate::prof::
+ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt: f64) {
++    let _pl_under = crate::prof::span("l.under");
+     let (n, p) = (w.mesh.cells().n(), w.cfg.phys);
+     // The stack of the two layers, both on the cells: the store `bed_depth` deep under the active layer of the ground
+     // (`skin_m`).
+@@ -179,7 +183,9 @@ fn come_up(w: &mut World, s: &mut Scratch, tmin: f64, share: &[f64]) -> Vec<f64>
+ /// The stores drain to the channels inside each cell outside the low basin, `hill` from the divides, by Darcy's law
+ /// down its slope: a share 1 - exp(-`bed_seep` × slope × time / (`bed_porosity` × `hill`)) comes up. Returns the
+ /// volume each node got, m³.
++#[inline(never)] // crate::prof::
+ pub(super) fn springs(w: &mut World, s: &mut Scratch, tmin: f64, slope: &[f64], dt: f64) -> Vec<f64> {
++    let _pl_springs = crate::prof::span("l.springs");
+     let p = w.cfg.phys;
+     let drain = |(&q, &basin): (&f64, &bool)| if basin { 0.0 } else { one_minus_exp(p.bed_seep * q * dt / (p.bed_porosity * p.hill)) };
+     let share: Vec<f64> = slope.iter().zip(&s.basin.is).map(drain).collect();
+diff --git a/core/src/flow/land.rs b/core/src/flow/land.rs
+index fbe29db..6bc23d4 100644
+--- a/core/src/flow/land.rs
++++ b/core/src/flow/land.rs
+@@ -92,7 +92,9 @@ pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
+ /// Heat capacity, temperature, surface, head and reflectance of every ground node, each in parallel with `threads`
+ /// (`node_state`); between full steps only nodes whose phases change get a new surface. A full build finds the basin
+ /// (`basin::find`).
++#[inline(never)] // crate::prof::
+ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
++    let _pf_ground_state = crate::prof::span("f.ground_state");
+     let n = w.mesh.cells().n();
+     let mut rows = std::mem::take(&mut s.spare.state);
+     rows.resize(n * STATE_ROW, 0.0);
+diff --git a/core/src/flow/liquid.rs b/core/src/flow/liquid.rs
+index ea31e20..0597828 100644
+--- a/core/src/flow/liquid.rs
++++ b/core/src/flow/liquid.rs
+@@ -33,7 +33,9 @@ pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64) -> Mobile
+ }
+ 
+ /// Book `fluxes` through the store, and bring the ground nodes' state up to date for what changed (`Scratch::note`).
++#[inline(never)] // crate::prof::
+ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
++    let _pl_book = crate::prof::span("l.book");
+     let n = w.mesh.cells().n();
+     let mut ks: Vec<usize> = fluxes.iter().flat_map(|x| x.ks.iter()).map(|&k| k as usize).collect();
+     ks.sort_unstable();
+@@ -72,7 +74,9 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
+ 
+ /// The slope of the surface of each ground node down its steepest way (`Level::steepest`) to the lower neighbours (by
+ /// more than `still`), 0 for none.
++#[inline(never)] // crate::prof::
+ fn slopes(w: &World, s: &Scratch) -> Vec<f64> {
++    let _pl_slopes = crate::prof::span("l.slopes");
+     let (cells, still) = (w.mesh.cells(), w.cfg.phys.still);
+     let drop = |i: usize, k: usize| Some(stand(s, i) - stand(s, cells.around(i).1[k] as usize)).filter(|&d| d > still);
+     crate::par::map_n(cells.n(), |i| cells.steepest(i, |k| drop(i, k)).map_or(0.0, |way| way.0))
+@@ -81,7 +85,9 @@ fn slopes(w: &World, s: &Scratch) -> Vec<f64> {
+ /// The liquid that may run off (what stands, what came up from the store, and the pores' drainage to the channels, a
+ /// share 1 - exp(-`seep` × slope × time / (`porosity` × `hill`))) moves down the cells in one pass (`solve::downhill`;
+ /// laws.md 1.2), with its heat; lost head heats what runs out and does work on the bed (`load`, `wear`).
++#[inline(never)] // crate::prof::
+ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope, runs): (&[f64], &[f64]), dt: f64) {
++    let _pl_surface = crate::prof::span("l.surface");
+     let (n, area, ph, g) = (w.mesh.cells().n(), w.mesh.cells().area(), w.cfg.phys, w.cfg.gravity);
+     let mob = mobile(w, s, liq, tmin);
+     // Rows that move together per node (`q[i * width + r]`): each liquid of `liq`, each load of `sol`, their heat, J, and
+diff --git a/core/src/flow/mod.rs b/core/src/flow/mod.rs
+index e17953e..5df182a 100644
+--- a/core/src/flow/mod.rs
++++ b/core/src/flow/mod.rs
+@@ -27,7 +27,9 @@ use scratch::tables;
+ /// Each part of the law (`state`, `air`, `liquid`, `creep`, `refresh`) is a pass of the month (`schedule`). This
+ /// one: the state of ground and air nodes from the world now, which the other laws read (in full at each month's start,
+ /// so a world resumed there goes on as an unbroken one; the survey builds it in full then, `built_now`).
++#[inline(never)] // crate::prof::
+ pub fn state(w: &mut World, full: bool) {
++    let _pf_state = crate::prof::span("F.state");
+     with(w, true, |w, s| {
+         ground_now(w, s, full);
+         air::sums(w, s);
+@@ -55,7 +57,9 @@ pub(crate) fn built_now(w: &World) -> bool {
+ /// date unless the `state` process just did; the heat of the bodies' nodes that the cover does not claim, which goes
+ /// back to the ground first, `survey::release`, then warms it from the next state); then the liquid over field capacity
+ /// sinks into the bed's store (`drain::sink`), as the rain the step brought would otherwise wait in the pores.
++#[inline(never)] // crate::prof::
+ pub fn air(w: &mut World, dt: f64) {
++    let _pf_air = crate::prof::span("F.air");
+     with(w, true, |w, s| {
+         crate::survey::release(w);
+         if s.built_at != Some(w.time) {
+@@ -68,12 +72,16 @@ pub fn air(w: &mut World, dt: f64) {
+ }
+ 
+ /// Liquid with its drainage and its work on the bed for `dt` seconds (`liquid::liquid`).
++#[inline(never)] // crate::prof::
+ pub fn liquid(w: &mut World, dt: f64) {
++    let _pf_liquid = crate::prof::span("F.liquid");
+     with(w, true, |w, s| liquid::liquid(w, s, dt));
+ }
+ 
+ /// Heat conducted sideways through the ground (`land::conduct`), then creep (`creep::creep`), for `dt` seconds.
++#[inline(never)] // crate::prof::
+ pub fn creep(w: &mut World, dt: f64) {
++    let _pf_creep = crate::prof::span("F.creep");
+     with(w, true, |w, s| {
+         land::conduct(w, s, dt);
+         creep::creep(w, s, dt);
+@@ -81,7 +89,9 @@ pub fn creep(w: &mut World, dt: f64) {
+ }
+ 
+ /// The slow ground and the substances present are rechecked (`scratch::refresh`).
++#[inline(never)] // crate::prof::
+ pub fn refresh(w: &mut World) {
++    let _pf_refresh = crate::prof::span("F.refresh");
+     with(w, false, |w, s| scratch::refresh(w, s));
+ }
+ 
+diff --git a/core/src/flow/potential.rs b/core/src/flow/potential.rs
+index 0e2aff4..dc53e20 100644
+--- a/core/src/flow/potential.rs
++++ b/core/src/flow/potential.rs
+@@ -64,7 +64,9 @@ struct Heights {
+ /// capacity at constant pressure holds the work its column does as it warms), so lifting matter into it lifts it to
+ /// there. A bodies' node's gas, and the matter of the cell's life (its bodies, its cover and its parts), lie at its
+ /// cell's head.
++#[inline(never)] // crate::prof::
+ fn potential(w: &World, s: &Scratch, found: Option<Found>) -> Potential {
++    let _pp_potential = crate::prof::span("p.potential");
+     let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
+     let (n, na, ns) = (cells.n(), air.n(), w.chem.ns());
+     let (ground, bed, deep, bodies) = (w.store.amounts(Class::Ground), w.store.amounts(Class::Bed), w.store.amounts(Class::Deep), w.store.amounts(Class::Bodies));
+@@ -200,7 +202,9 @@ impl Lifts {
+     /// cell's head, which the part moves with the ground's matter, not its own: what its lifts and falls give or take
+     /// is its ground node's (a bodies' node holds little heat of its own). Returns the potential energy now, and the
+     /// room of its moves, emptied.
++#[inline(never)] // crate::prof::
+     pub(super) fn book(self, w: &mut World, s: &Scratch) -> (Potential, Vec<Moved>) {
++    let _pp_lifts_book = crate::prof::span("p.lifts_book");
+         let (mut start, mut moved) = (self.start, self.moved);
+         let (now, g) = (potential(w, s, Some(std::mem::take(&mut start.found))), w.cfg.gravity);
+         let olds = start.energies();
+@@ -227,7 +231,9 @@ impl Lifts {
+ 
+ /// Book `fluxes` and `moves` (`store::apply`), and what they carry for the part of Flow under way (`Lifts`): over each
+ /// link the mass of all its substances that goes each way.
++#[inline(never)] // crate::prof::
+ pub(super) fn apply(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], moves: &[Move]) {
++    let _pp_apply = crate::prof::span("p.apply");
+     if let Some(l) = s.lifts.as_mut() {
+         let holds = &mut l.start.found.holds;
+         let mut into = |class: Class, k: u16| HELD.iter().zip(holds.iter_mut()).filter(|c| *c.0 == class).for_each(|(_, b)| *b |= 1 << k);
+diff --git a/core/src/lib.rs b/core/src/lib.rs
+index 1838bd3..ca94ad7 100644
+--- a/core/src/lib.rs
++++ b/core/src/lib.rs
+@@ -19,6 +19,7 @@ pub mod lineage;
+ mod math;
+ pub mod nodes;
+ pub mod par;
++pub mod prof; // crate::prof::
+ mod params;
+ pub mod rng;
+ mod schedule;
+diff --git a/core/src/store/apply.rs b/core/src/store/apply.rs
+index 593aa49..9820a05 100644
+--- a/core/src/store/apply.rs
++++ b/core/src/store/apply.rs
+@@ -128,7 +128,9 @@ pub(super) fn zero_rounding(v: &mut f64, rounded: &mut f64) {
+ /// Then each number below zero, the rounding of the sums, is set to zero and counted in `Counters::rounded` (handover
+ /// 12.1; checked in debug builds). Boundary nodes give all they are asked. Panics on a flux of the
+ /// wrong shape or a node beyond its class.
++#[inline(never)] // crate::prof::
+ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move]) {
++    let _ps_apply = crate::prof::span("s.apply");
+     let World { chem, counts, mesh, store, .. } = w;
+     let n = mesh.cells().n();
+     let cx = Ctx { chem, len: [n, mesh.level(AIR).n(), n, n, n, BOUNDARIES] };
