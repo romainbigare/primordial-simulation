@@ -142,9 +142,9 @@ fn traffic(w: &mut World) {
 
 /// Update every living body, all at the month's first day (laws.md 0). First the parallel pass: the cells are taken out
 /// of the world in chunks (`life::run`), and each chunk runs, on a thread of the pool with the feature `threads`, its
-/// bodies cell by cell, and in a cell in the order they came, with the world read only. They see each other as they
-/// were at the batch's start (`Faces`), the parts as they were then, and the store as their cell's moves leave it
-/// (`store::Moves`); what they do outside their cell or to a part is queued (`life::Entry`), and the lineages and born
+/// bodies cell by cell, and in a cell in the order they came, with the world read only. They see the others of their
+/// cell as they are when they decide, the parts as they were at the pass's start, and the store as their cell's moves
+/// leave it (`store::Moves`); what they do outside their cell or to a part is queued (`life::Entry`), and the lineages and born
 /// rows they make are provisional until the chunk ends. Then the serial pass (`life::land`): the moves and litters
 /// land and the other entries are applied. Then the month's merge of alike nodes in each cell (`nodes::crowd`), after
 /// the moves and births, so a crowded cell ends the month with its nodes of each kind and stage. Last the holders of
@@ -190,12 +190,13 @@ fn scratch(_: &World) -> Scratch {
     (LiveTmp::default(), choose::Minds::default(), choose::ActTmp::default())
 }
 
-/// The updates of the living bodies of chunk `d`: the physics of each, cell by cell and in a cell in the order they
-/// came (`live_one`); then the inputs of those with a brain, the sums of the hidden layers of each lineage's bodies
-/// together (`choose::Minds::sense`); then each one's decision in that order (`decide`).
+/// The updates of the living bodies of chunk `d`, cell by cell: the physics of each of the cell's bodies in the order
+/// they came (`live_one`); then the inputs of those with a brain, the sums of the hidden layers of each lineage's bodies
+/// together (`choose::Minds::sense`); then each one's decision in that order (`decide`). A cell's stages end before the
+/// next cell's begin, so what the chunk queues and the ids it makes come cell by cell, as for any count of chunks.
 fn updates(w: &World, d: &mut Chunk, (tmp, minds, act): &mut Scratch) {
-    minds.clear();
     for i in d.cells() {
+        minds.clear();
         for slot in 0..d.at(i).bodies.len() {
             let h = Handle { cell: i as u32, slot: slot as u32 };
             if d[h].alive {
@@ -204,14 +205,14 @@ fn updates(w: &World, d: &mut Chunk, (tmp, minds, act): &mut Scratch) {
                 }
             }
         }
-    }
-    minds.sense(w, d);
-    for k in 0..minds.bodies.len() {
-        let (h, id, lived) = minds.bodies[k];
-        // (A body taken from to death by another since does not decide.)
-        if d[h].alive && d[h].id == id {
-            let shape = d.shape_of(w, d[h].lineage).unwrap_or_default();
-            decide(w, d, h, &lived, minds.of(k, shape.h), act);
+        minds.sense(w, d);
+        for k in 0..minds.bodies.len() {
+            let (h, id, lived) = minds.bodies[k];
+            // (A body taken from to death by another since does not decide.)
+            if d[h].alive && d[h].id == id {
+                let shape = d.shape_of(w, d[h].lineage).unwrap_or_default();
+                decide(w, d, h, &lived, minds.of(k, shape.h), act);
+            }
         }
     }
 }

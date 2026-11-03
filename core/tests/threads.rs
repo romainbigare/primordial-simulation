@@ -7,8 +7,9 @@ use worldgen::life::{seed, ROSTER};
 use pcore::body::HIDDEN;
 use worldgen::testkit::{dry_lands, eater, set_amount, start, Books, Brain, Line, OX, RICH};
 
-/// Years the roster's world runs in the test of threads and chunks.
-const YEARS: u64 = 3;
+/// Years the roster's world runs in the test of threads and chunks: long enough for it to crowd, so that moves and
+/// litters from cells of two chunks land in one cell.
+const YEARS: u64 = 10;
 /// Eaters that move to new brain sizes in the test of chunks, and the months it runs.
 const RESIZERS: usize = 6;
 const RESIZE_MONTHS: usize = 2;

@@ -1,5 +1,5 @@
-//! The brains of a chunk's bodies, evaluated together (laws.md 5.1): every body with a brain perceives its inputs
-//! after the physics of all the chunk's bodies and before any of them acts (`Minds::sense`), and the bodies of one
+//! The brains of a cell's bodies, evaluated together (laws.md 5.1): every body with a brain perceives its inputs
+//! after the physics of all the cell's bodies and before any of them acts (`Minds::sense`), and the bodies of one
 //! lineage, whose base is one, find the sums of their hidden layers as one matrix product (`brain::sums`); each then
 //! decides in the cell's order (`act`).
 
@@ -9,7 +9,7 @@ use crate::brain;
 use crate::life::{Chunk, Handle};
 use crate::World;
 
-/// A chunk's bodies with a brain in the order they decide: each one's place, id and what its update left, and where
+/// A cell's bodies with a brain in the order they decide: each one's place, id and what its update left, and where
 /// the sums of its hidden layer lie in `z`; and the working memory of `sense`.
 #[derive(Default)]
 pub struct Minds {
