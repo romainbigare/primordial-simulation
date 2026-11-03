@@ -163,8 +163,8 @@ impl PartialEq for Low {
 impl Eq for Low {}
 
 /// Give every cell of `cells` a way down to the low ground: a priority flood from it, the lowest cell reached first,
-/// raises each new neighbour to at least its height plus `DRAIN_SLOPE` times their distance (Barnes, Lehman and Mulla
-/// 2014). Noise has closed basins that no liquid ever cut; real wet land drains. On a globe (`wrap`) the low ground is
+/// raises each new neighbour no higher than it to its height plus `DRAIN_SLOPE` times their distance (Barnes, Lehman
+/// and Mulla 2014); a higher neighbour already drains through it. Noise has closed basins that no liquid ever cut; real wet land drains. On a globe (`wrap`) the low ground is
 /// every cell below 0 m; on an island, the cells below 0 m joined to its lowest cell, so ground below 0 m inland is a
 /// closed basin too.
 fn drain(cells: &Level, z: &mut [f64], wrap: bool) {
@@ -187,7 +187,9 @@ fn drain(cells: &Level, z: &mut [f64], wrap: bool) {
             let j = j as usize;
             if !reached[j] {
                 reached[j] = true;
-                z[j] = z[j].max(h + DRAIN_SLOPE * cells.dist()[l as usize]);
+                if z[j] <= h {
+                    z[j] = h + DRAIN_SLOPE * cells.dist()[l as usize];
+                }
                 flood.push(Low(z[j], j));
             }
         }
@@ -240,20 +242,30 @@ pub fn new_world(seed: u64, w: usize, h: usize) -> World {
     new_map(seed, coarse_low(seed, island(w, h)))
 }
 
-/// `map` (of squares) with its low ground away from land in coarse cells: an air block whose squares all lie below 0 m
-/// on the terrain of `seed`, none within `LAND_RING` squares of one that does not, is one cell, split into smaller
-/// cells where it borders finer ones until cells across a border differ by one size at most (`Square::mesh`).
-pub fn coarse_low(seed: u64, mut map: Square) -> Square {
-    assert!(AIR_SCALE.is_power_of_two(), "an air block splits into halves");
+/// `map` (of squares) with its low ground away from land in coarse cells (`coarsen`): an air block whose squares all
+/// lie below 0 m on the terrain of `seed`, none within `LAND_RING` squares of one that does not, is coarse.
+fn coarse_low(seed: u64, map: Square) -> Square {
     let z = heights(seed, &map, World::mesh_of(&map, AIR_SCALE, &Config::default()).cells());
     let ring = -LAND_RING..=LAND_RING;
     let open: Vec<bool> = (0..map.n()).map(|s| ring.clone().all(|dy| ring.clone().all(|dx| map.step(s, (dx, dy)).is_none_or(|t| z[t] < 0.0)))).collect();
-    // The squares of the block of side `k` from column `x` and row `y`.
     let w = map.w;
-    let block = move |x: usize, y: usize, k: usize| (y..y + k).flat_map(move |ty| (x..x + k).map(move |tx| ty * w + tx));
-    for (x, y) in (0..map.h / AIR_SCALE).flat_map(|by| (0..w / AIR_SCALE).map(move |bx| (bx * AIR_SCALE, by * AIR_SCALE))) {
-        if block(x, y, AIR_SCALE).all(|s| open[s]) {
-            block(x, y, AIR_SCALE).for_each(|s| map.size[s] = AIR_SCALE.trailing_zeros() as u8);
+    coarsen(map, |bx, by| block(w, bx * AIR_SCALE, by * AIR_SCALE, AIR_SCALE).any(|s| !open[s]))
+}
+
+/// The squares of the block of side `k` squares from column `x` and row `y` of a map `w` squares wide.
+fn block(w: usize, x: usize, y: usize, k: usize) -> impl Iterator<Item = usize> {
+    (y..y + k).flat_map(move |ty| (x..x + k).map(move |tx| ty * w + tx))
+}
+
+/// `map` (of squares) with each whole air block that `fine(column, row)` (of the block) does not keep in squares one
+/// cell, split into smaller cells where it borders finer ones until cells across a border differ by one size at most
+/// (`Square::mesh`).
+fn coarsen(mut map: Square, fine: impl Fn(usize, usize) -> bool) -> Square {
+    assert!(AIR_SCALE.is_power_of_two(), "an air block splits into halves");
+    let (w, top) = (map.w, AIR_SCALE.trailing_zeros() as u8);
+    for (bx, by) in (0..map.h / AIR_SCALE).flat_map(|by| (0..w / AIR_SCALE).map(move |bx| (bx, by))) {
+        if !fine(bx, by) {
+            block(w, bx * AIR_SCALE, by * AIR_SCALE, AIR_SCALE).for_each(|s| map.size[s] = top);
         }
     }
     // Split a cell that borders one more than one size smaller, until none does.
@@ -264,7 +276,7 @@ pub fn coarse_low(seed: u64, mut map: Square) -> Square {
             let small = [(1, 0), (0, 1), (-1, 0), (0, -1)].iter().filter_map(|&d| map.step(s, d)).map(|t| map.size[t]).min();
             if small.is_some_and(|m| map.size[s] > m + 1) {
                 let ((x, y), k, half) = (map.xy(s), 1usize << map.size[s], map.size[s] - 1);
-                block(x - x % k, y - y % k, k).for_each(|t| map.size[t] = half);
+                block(w, x - x % k, y - y % k, k).for_each(|t| map.size[t] = half);
                 split = true;
             }
         }
@@ -272,9 +284,12 @@ pub fn coarse_low(seed: u64, mut map: Square) -> Square {
     map
 }
 
-/// A new globe of `rows` rows from a seed: terrain, chemistry 0, ground, liquid and air.
-pub fn new_globe(seed: u64, rows: usize) -> World {
-    new_map(seed, globe(rows))
+/// A new globe of `rows` rows from a seed, every cell a whole air block but in the rectangle `fine` of air blocks
+/// (column, row, columns, rows), in squares (`coarsen`): terrain, chemistry 0, ground, liquid and air.
+pub fn new_globe(seed: u64, rows: usize, fine: [usize; 4]) -> World {
+    let ([x, y, bw, bh], map) = (fine, globe(rows));
+    assert!(x + bw <= map.w / AIR_SCALE && y + bh <= map.h / AIR_SCALE, "the fine rectangle lies inside the globe's {} x {} air blocks", map.w / AIR_SCALE, map.h / AIR_SCALE);
+    new_map(seed, coarsen(map, |bx, by| (x..x + bw).contains(&bx) && (y..y + bh).contains(&by)))
 }
 
 /// A new world on `map` (an island or a globe, whose rows run from pole to pole).

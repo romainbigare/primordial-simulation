@@ -182,6 +182,11 @@ impl Level {
         let (links, cells) = self.around(i);
         cells.iter().position(|&c| c as usize == j).map(|e| links[e] as usize)
     }
+    /// The chance that what spreads `length` m from a random point of cell `i` leaves it: `length` over the side of a
+    /// square of the cell's area, at most 1.
+    pub fn reach(&self, i: usize, length: f64) -> f64 {
+        (length / self.area[i].sqrt()).min(1.0)
+    }
     /// The children of cell `i` at the next finer level (none at the finest).
     pub fn children(&self, i: usize) -> &[u32] {
         self.kid_start.get(i + 1).map_or(&[], |&e| &self.kids[self.kid_start[i] as usize..e as usize])

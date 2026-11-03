@@ -134,6 +134,8 @@ pub struct Physics {
     pub rho_pass: f64,
     /// Width of the passage a mover clears through bodies, m
     pub lane: f64,
+    /// How far seeds and dispersing children travel, m
+    pub spread_m: f64,
     /// The bodies of a cell must fit in a layer this thick over it, m
     pub layer: f64,
     /// Density of bodies, kg/m³
@@ -295,6 +297,7 @@ impl Default for Physics {
             c_move: 3.0,
             rho_pass: 5.0,
             lane: 1.0,
+            spread_m: 2000.0,
             layer: 10.0,
             rho_body: 1e3,
             take: 0.01042,

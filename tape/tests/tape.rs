@@ -185,7 +185,7 @@ fn frames_file_round_trip() {
 #[test]
 fn a_globe_file_names_its_shape_and_its_means_are_by_area() {
     let dir = tmp("globe");
-    let (rows, mut w) = (8, worldgen::terrain::new_globe(1, 8));
+    let (rows, mut w) = (8, worldgen::terrain::new_globe(1, 8, [0; 4]));
     let mut rec = tape::Recorder::new(&w, 1, 0);
     common::record(&mut rec, &mut w);
     for _ in 0..w.cfg.months_per_year {

@@ -416,7 +416,7 @@ const GLOBE_ICE: f64 = 0.25;
 #[test]
 #[ignore = "slow: a 100-year run of a 64 x 32 globe without life"]
 fn a_globe_without_life_keeps_an_earth_like_climate() {
-    let mut w = worldgen::terrain::new_globe(1, GLOBE_ROWS);
+    let mut w = worldgen::terrain::new_globe(1, GLOBE_ROWS, [0; 4]);
     worldgen::terrain::scale_absorbers(&mut w, 1.0);
     let mut rec = tape::Recorder::new(&w, 0, 0);
     common::record(&mut rec, &mut w);

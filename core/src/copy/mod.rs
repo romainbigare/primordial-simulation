@@ -70,7 +70,8 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Mutate);
     let i = b.cell as usize;
     let mate = if mates(w, d, b) { partner(w, d, b, &mut r) } else { None };
-    // Children that start in the neighbour cell of a compass direction drawn (no link that way: none): of a node, the
+    // Children that start in the neighbour cell of a compass direction drawn, as far as `spread_m` reaches
+    // (`Level::reach`; no link that way or out of reach: none): of a node, the
     // share `DISPERSE` of its births, however few (less than one member with no node to join there waits in the brood,
     // as the stayers do, `emit`), all of one update the same way, as the children of one call cost one `emit`; an
     // individual's go together, by that chance.
@@ -79,7 +80,12 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
     let litter = Births { matter, prov, node, mate, parent: id };
     let m = if node { disperse * births } else { (r.f64() < disperse) as u8 as f64 };
     let cells = w.mesh.cells();
-    let to = if m > 0.0 { cells.way(i, r.below(COMPASS)).map(|e| cells.adj_cell()[e] as usize) } else { None };
+    let to = if m > 0.0 {
+        let leaves = cells.reach(i, w.cfg.phys.spread_m) >= 1.0 || r.f64() < cells.reach(i, w.cfg.phys.spread_m);
+        cells.way(i, r.below(COMPASS)).filter(|_| leaves).map(|e| cells.adj_cell()[e] as usize)
+    } else {
+        None
+    };
     let (cell, m) = match to {
         _ if !node => (to.unwrap_or(i), births),
         Some(j) => (j, m),

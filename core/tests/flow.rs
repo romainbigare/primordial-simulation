@@ -952,7 +952,7 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
 /// and wind crossing the wrap of its rows.
 #[test]
 fn a_globe_keeps_its_books_round_the_wrap() {
-    let mut w = worldgen::terrain::new_globe(1, 8);
+    let mut w = worldgen::terrain::new_globe(1, 8, [0; 4]);
     let books = Books::now(&w);
     for month in 0..10 * w.cfg.months_per_year {
         pcore::step(&mut w);
@@ -967,7 +967,7 @@ fn a_globe_keeps_its_books_round_the_wrap() {
 #[test]
 #[ignore = "slow: 100 years of a 32-row globe"]
 fn a_globe_keeps_its_books_to_rounding_for_a_hundred_years() {
-    let mut w = worldgen::terrain::new_globe(1, 32);
+    let mut w = worldgen::terrain::new_globe(1, 32, [0; 4]);
     let books = Books::now(&w);
     (0..100 * w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));
     books.assert_kept(&w, 1e-9);

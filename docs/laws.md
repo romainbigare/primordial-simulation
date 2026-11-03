@@ -454,7 +454,8 @@ leaves with members who die. A child has a body of 10^`CHILD` × the copy mass,
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
 dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member
 (`copy::BROOD_HELD`), so its members' broods lie evenly between none and one child, as individuals' do. A share
-`DISPERSE` of the children starts in a neighbour cell in a random compass direction (`Level::way`), one for all of a node's children of an
+`DISPERSE` of the children starts in a neighbour cell in a random compass direction (`Level::way`), as far as
+`spread_m` reaches (`Level::reach`: always out of a 2 km square, a quarter of the time out of an 8 km one), one for all of a node's children of an
 update (for an individual, that chance), where they land when the batch ends (0). Less than one member with no node to
 join waits in the brood, or, landed in a neighbour cell, goes back into it.
 
@@ -550,8 +551,8 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   most 10^`FIX` mol per kg per s at the reaction's pace, paid by the reaction's fuel. The fuel past its reserve that
   it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
-- **Seeds**: the share `SEED` of what it builds leaves for the neighbour cell of a random compass direction (or stays
-  where there is none), with one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
+- **Seeds**: the share `SEED` of what it builds leaves for the neighbour cell of a random compass direction, as far
+  as `spread_m` reaches (`Level::reach`; or stays where there is none), with one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
   not pay: what a kg more would store with the light at the bottom of its layer (`math::shade`) is less than a kg's
   upkeep, so the slot is **full** (`Cover::full`) and stops thickening where its lowest leaves would not pay for
   themselves (Monsi and Saeki 1953; Hirose 2005). When every cell has had its month the seeds land (`cover::land`),
@@ -763,11 +764,12 @@ Placed by `worldgen` (`worldgen::schedule::Schedule`, carried by a snapshot) and
 read a kind.
 - **Terrain** (`worldgen::terrain`): an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`); a metre of
   loose ground; the sea's salt at balance (2.6); ground and air temperatures falling with latitude and height. Every
-  land cell drains from the start (`drain`): a priority flood raises closed basins to their outlet at 1 m per km
+  land cell drains from the start (`drain`): a priority flood raises closed basins (only) to their outlet at 1 m per km
   (`DRAIN_SLOPE`; Planchon and Darboux 2001), from every cell below 0 m on a globe, from those joined to the lowest
   cell on an island. On an island the open water is coarse (`coarse_low`): an air block (8 km) whose squares all lie
   below 0 m, none within a square of land (`LAND_RING`), is one cell, split where it borders finer cells until cells
-  across a border differ by one size at most; the coasts stay in 2 km squares. A cell of many squares has the mean height
+  across a border differ by one size at most; the coasts stay in 2 km squares. A globe is one cell an air block but in a
+  rectangle of air blocks in squares (`--fine`), by the same rule. A cell of many squares has the mean height
   of its squares by area.
 - **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS` rows of `Place::Field`: kg per m² and genes,
   on every open land cell by its chance), then eaters 20 years later; `--roster` places ten kinds (`ROSTER`). Founders

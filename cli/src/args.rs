@@ -9,6 +9,8 @@ pub const USAGE: &str = "usage:
     --seed N              world seed (1)
     --size N              cells along a side (128); of a globe, its rows from pole to pole (even)
     --globe               a globe whose rows wrap east to west, twice as many columns as rows (not an island)
+    --fine X,Y,W,H        on a globe, the W x H air blocks from column X and row Y in squares, the rest one cell an
+                          air block (none)
     --years N             years to run (10)
     --every N             print a line every N years (10)
     --out DIR             where the tape, pictures and snapshots go (out)
@@ -61,6 +63,12 @@ impl Args {
     /// The value after `name`, or `default`.
     pub fn get<T: std::str::FromStr>(&self, name: &str, default: T) -> T {
         self.value(name).unwrap_or(default)
+    }
+
+    /// The air blocks of `--fine X,Y,W,H` (none if it is not there or does not parse).
+    pub fn fine(&self) -> [usize; 4] {
+        let v: Option<Vec<usize>> = self.value::<String>("--fine").and_then(|f| f.split(',').map(|x| x.parse().ok()).collect());
+        v.and_then(|v| v.try_into().ok()).unwrap_or_default()
     }
 
     /// The command (the first word after the program's name).
