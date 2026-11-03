@@ -50,8 +50,7 @@ impl Reactor {
                 let eps = |rc: &Self, r: usize| {
                     let rx = &chem.reactions[r];
                     let lim = scarce(&rx.inputs, |k| rc.av[k]).0;
-                    let open = super::open_catalyst(rx.open, rc.moist);
-                    if lim > 0.0 { lim * open * rx.arrhenius(t) * rc.pace(rx, lim, &tot) } else { 0.0 }
+                    if lim > 0.0 { lim * rc.rate(rx, lim, &tot, t) } else { 0.0 }
                 };
                 made * eps(rc, f) - took * eps(rc, b)
             };

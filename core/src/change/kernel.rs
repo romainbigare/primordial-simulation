@@ -126,7 +126,7 @@ fn per(a: f64, nu: u16) -> f64 {
 /// The rate of a reaction per unit of `lim` before catalyst · k · exp(−Ea/T): its inputs' shares of their phases
 /// (`whole`) to their order, times contact over `lim` (laws.md 2.1).
 #[inline]
-pub(crate) fn pace(rx: &Reaction, lim: f64, a: impl Fn(usize) -> f64, whole: impl Fn(usize) -> f64) -> f64 {
+fn pace(rx: &Reaction, lim: f64, a: impl Fn(usize) -> f64, whole: impl Fn(usize) -> f64) -> f64 {
     let (mut x, mut e) = (1.0, f64::MAX);
     for (q, &(k, nu)) in rx.inputs.iter().enumerate() {
         let (a, n) = (a(k as usize), whole(k as usize));
@@ -138,21 +138,16 @@ pub(crate) fn pace(rx: &Reaction, lim: f64, a: impl Fn(usize) -> f64, whole: imp
 /// The decomposers' catalyst of the open world (`Reaction::open`, a factor `f`) as far as a node is wet, `a` (its
 /// moisture, `FlowView::moist`): 1 + (f - 1) a.
 #[inline]
-pub(crate) fn open_catalyst(f: f64, a: f64) -> f64 {
+fn open_catalyst(f: f64, a: f64) -> f64 {
     1.0 + (f - 1.0) * a
 }
 
-/// The rate at which the open world's decomposers rot substance `k` at `t` K where it is as moist as `moist` gives, 1/s:
-/// the reactions they speed (`Reaction::open` above 1) that take it, each at its constant (`Reaction::arrhenius`); 0,
-/// asking no moisture, where none takes it.
-pub(crate) fn open_rot(chem: &Chemistry, k: usize, t: f64, moist: impl Fn() -> f64) -> f64 {
-    let takes = |rx: &&Reaction| rx.open > 1.0 && rx.inputs.iter().any(|x| x.0 as usize == k);
-    let mut rot = chem.reactions.iter().filter(takes).peekable();
-    if rot.peek().is_none() {
-        return 0.0;
-    }
-    let a = moist();
-    rot.map(|rx| open_catalyst(rx.open, a) * rx.arrhenius(t)).sum()
+/// The rate of reaction `rx` per unit of its scarcest input `lim`, 1/s, at `t` K in a node as moist as `moist`: the
+/// open world's catalyst (`open_catalyst`) · k · exp(−Ea/T) · `pace` of the amounts `a` in their phases `whole`
+/// (laws.md 2.1). The one rate of Change, of nodes and of a part's walls (`bond/month.rs`).
+#[inline]
+pub(crate) fn rate(rx: &Reaction, lim: f64, (t, moist): (f64, f64), a: impl Fn(usize) -> f64, whole: impl Fn(usize) -> f64) -> f64 {
+    open_catalyst(rx.open, moist) * rx.arrhenius(t) * pace(rx, lim, a, whole)
 }
 
 /// 1 - exp(-z), cheap when small.
@@ -246,9 +241,9 @@ impl Reactor {
         }
     }
 
-    /// `pace` of `rx` with the amounts and phases of the last `phases`.
-    pub(super) fn pace(&self, rx: &Reaction, lim: f64, tot: &[f64; 3]) -> f64 {
-        pace(rx, lim, |k| self.av[k], |k| if self.ph[k] != Phase::Solid { tot[self.ph[k] as usize] } else { self.av[k] })
+    /// `rate` of `rx` at `t` with the amounts and phases of the last `phases`.
+    pub(super) fn rate(&self, rx: &Reaction, lim: f64, tot: &[f64; 3], t: f64) -> f64 {
+        rate(rx, lim, (t, self.moist), |k| self.av[k], |k| if self.ph[k] != Phase::Solid { tot[self.ph[k] as usize] } else { self.av[k] })
     }
 
     /// Phase and available amount of each substance at `t`, and the total of each phase (a solid is a phase of its own).
@@ -324,7 +319,7 @@ impl Reactor {
             }
             let (lim, q) = scarce(&rx.inputs, |k| self.av[k]);
             if lim > 0.0 {
-                self.kap[r] = cr * rx.arrhenius(t) * self.pace(rx, lim, tot);
+                self.kap[r] = self.rate(rx, lim, tot, t);
                 self.lim[r] = lim;
                 self.on.push(r);
                 // In a liquid or a gas the power is its order less 1, as far as it is not most of its phase.

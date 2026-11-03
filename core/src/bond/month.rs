@@ -1,7 +1,7 @@
 //! The monthly step of parts: rot and heat, loads and failure.
 
 use super::{at, fall_apart, holder, members, restructure, sense::liquid, unlink, verbs::{bears, torn_from}, GROUND};
-use crate::{change::{frac, open_rot}, chem::Phase, life::{self, Chunk}, store::{Class, Node}, World};
+use crate::{change::{frac, rate, scarce}, chem::Phase, life::{self, Chunk}, store::{Class, Node}, World, AIR};
 
 /// Liquid shallower than this, m, pushes no part.
 const STILL_DEPTH: f64 = 0.01;
@@ -47,17 +47,17 @@ fn turns(w: &World, d: &mut Chunk, i: usize, dt: f64) {
 }
 
 /// Over `dt` s, the share of the walls of part `p` of cell `i` that the open world's decomposers rot at the ground's
-/// temperature and moisture (`change::open_rot`) goes to its ground with its heat, where Change rots it on, as do the
-/// walls no longer solid; the part takes the ground's temperature. Returns whether its walls are under `min_kg`: it
-/// falls apart.
+/// temperature and moisture (`rot`) goes to its ground with its heat, where Change rots it on, as do the walls no longer
+/// solid; the part takes the ground's temperature. Returns whether its walls are under `min_kg`: it falls apart.
 fn rot_and_warm(w: &World, d: &mut Chunk, p: &mut super::Part, i: usize, dt: f64) -> bool {
     let (ns, chem, tg) = (w.chem.ns(), &w.chem, w.t_ground_last(i));
-    let (t, moist) = (p.e / p.heat_cap(chem).max(1e-9), || w.scratch.view().moist(i, &w.cfg.phys));
+    let t = p.e / p.heat_cap(chem).max(1e-9);
+    let rot = rot(w, d, &p.wall, i, tg);
     for k in 0..ns {
         if p.wall[k] <= 0.0 {
             continue;
         }
-        let off = if chem.phase_in(k, t, |j| p.wall[j]) != Phase::Solid { 1.0 } else { frac(open_rot(chem, k, tg, moist) * dt) };
+        let off = if chem.phase_in(k, t, |j| p.wall[j]) != Phase::Solid { 1.0 } else { frac(rot[k] * dt) };
         if off > 0.0 {
             let (a, q) = (off * p.wall[k], off * p.wall[k] * chem.subs[k].cp * t);
             (p.e, p.wall[k]) = (p.e - q, p.wall[k] - a);
@@ -71,6 +71,32 @@ fn rot_and_warm(w: &World, d: &mut Chunk, p: &mut super::Part, i: usize, dt: f64
     let gone = p.walls(chem).mass < w.cfg.phys.min_kg;
     p.resize(chem);
     gone
+}
+
+/// The share of each substance of the walls `wall` of a part in cell `i` at `t` K that the open world's decomposers rot,
+/// per second: each reaction they speed (`Reaction::open` above 1) at Change's rate (`change::rate`) at its cell ground's
+/// moisture, each substance of the walls a phase of its own, as a solid is in Change, and a gas it takes from its cell's
+/// air by its share there (laws.md 3.1).
+fn rot(w: &World, d: &Chunk, wall: &[f64], i: usize, t: f64) -> Vec<f64> {
+    let (ns, j) = (w.chem.ns(), w.mesh.up(i, 0, AIR));
+    let mut rot = vec![0.0; ns];
+    let mut rots = w.chem.reactions.iter().filter(|rx| rx.open > 1.0 && rx.inputs.iter().any(|x| wall[x.0 as usize] > 0.0)).peekable();
+    if rots.peek().is_none() {
+        return rot;
+    }
+    let air: Vec<f64> = (0..ns).map(|k| d.moves.amount(w, Node::air(j), k)).collect();
+    let (all, moist) = (air.iter().sum::<f64>(), w.scratch.view().moist(i, &w.cfg.phys));
+    let a = |k: usize| if wall[k] > 0.0 { wall[k] } else { air[k] };
+    let whole = |k: usize| if wall[k] > 0.0 { wall[k] } else { all };
+    for rx in rots {
+        let lim = scarce(&rx.inputs, a).0;
+        if lim > 0.0 {
+            let r = rate(rx, lim, (t, moist), a, whole);
+            // Each input of the walls goes by what the reaction uses of it.
+            rx.inputs.iter().filter(|x| wall[x.0 as usize] > 0.0).for_each(|&(k, nu)| rot[k as usize] += nu as f64 * lim * r / wall[k as usize]);
+        }
+    }
+    rot
 }
 
 /// Load the structure whose root is `r` in cell `i` of chunk `d`: weights less buoyancy, pushes of liquid and bodies;
