@@ -254,9 +254,8 @@ fn decide(w: &World, d: &mut Chunk, h: Handle, lived: &crate::body::Lived, z: &[
     if b.empty_at(b.mass(&w.chem)) {
         return die(w, d, h, b, LACK);
     }
-    // The heat of what it took and of digesting it leaves through its coat within hours, far less than a month: it
-    // comes back to the temperature it stands at (laws.md 6.3).
-    crate::body::settle_heat(w, d, &mut b, stands);
+    // The heat of what it took and of digesting it leaves through its coat before its next update (laws.md 6.3).
+    crate::body::shed_meal_heat(w, d, &mut b, stands);
     crate::lineage::resize(w, d, &mut b);
     b.stale = true;
     d[h] = b;

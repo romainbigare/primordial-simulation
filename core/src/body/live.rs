@@ -139,6 +139,19 @@ fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, dt: f64) -> f64 
     t
 }
 
+/// After its decision (`survey::decide`): the heat of what it took and of digesting it, above the temperature `stands`
+/// it stood at, leaves through its coat to its ground over the time to its next update, as `keep_warm` lets its heat go
+/// (a body of hours to days sheds it all), so its next update starts where that leaves it. A body its intake cooled
+/// stays cooler and draws no heat from its ground: its own heat warms it at its next update (`keep_warm`).
+pub(crate) fn shed_meal_heat(w: &World, d: &mut Chunk, b: &mut Body, stands: f64) {
+    let (chem, t) = (&w.chem, b.temp(&w.chem));
+    if t <= stands {
+        return;
+    }
+    let x = coat(w, d, b, b.mass(chem)).0 * w.cfg.update_days() * DAY / b.heat_cap(chem).max(1e-300);
+    settle_heat(w, d, b, stands + (t - stands) * (-x).exp());
+}
+
 /// The heat conductance of its coat and of its bare surface, each in series with the walls around it (3.4), W/K.
 fn coat(w: &World, d: &Chunk, b: &Body, mass: f64) -> (f64, f64) {
     let walls = crate::bond::enclosure(d, b).map(|x| x.g);

@@ -727,9 +727,10 @@ skin, the coat laid flat), and past that evaporates its key liquid for the exces
 enthalpy, never below its safe minimum, the vapour going to the bodies' node with its latent heat. Its upkeep goes with
 the pace of its temperature (6.2), so a warmer body makes more heat; the open coat lets that heat out, so a body's own
 heat does not drive its pace up month after month. Its heat then comes to that temperature with its ground
-(`body::settle_heat`), and so it does again after its decision (`survey::decide`): the heat of what it took and of
-digesting it leaves through its coat within hours, far less than a month, so its next update starts at the temperature
-it stands at. Its key liquids hold their fusion heat when molten (`Body::thermal`, at their own melting points).
+(`body::settle_heat`). After its decision (`live::shed_meal_heat`) the heat of what it took and of digesting it, above
+the temperature it stood at, leaves through its coat to its ground over the time to its next update by the same share
+(a body of hours to days sheds it all); a body its intake cooled stays cooler, drawing no heat from its ground, and
+its own heat warms it at its next update. Its key liquids hold their fusion heat when molten (`Body::thermal`, at their own melting points).
 
 ### 6.4 Water: drinking
 A body drinks its key liquids from its cell's ground up to the level it keeps, as far as the ground holds them liquid,
