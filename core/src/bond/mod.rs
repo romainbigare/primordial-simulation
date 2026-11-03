@@ -197,9 +197,7 @@ fn strength(w: &World, a: f64, b: f64, area: f64) -> f64 {
     a.min(b) * w.cfg.phys.tensile * w.cfg.phys.joint * area
 }
 
-/// Find the structure of the part at `p` of cell `c` again, and its numbers. Plates close a box as wide as the longest
-/// part; a hollow part closes its own hollow; the structure takes the larger space
-/// and its enclosure.
+/// Find the structure of the part at `p` of cell `c` again along the bonds, and its numbers (`numbers`).
 fn restructure(w: &World, c: &mut Cell, p: usize) {
     let mut list = vec![c.parts[p].id];
     let mut q = 0;
@@ -211,14 +209,24 @@ fn restructure(w: &World, c: &mut Cell, p: usize) {
         }
         q += 1;
     }
+    let places: Vec<usize> = list.iter().map(|&x| at(c, x).expect("a bonded part lies in its cell")).collect();
+    let r = *list.iter().min().expect("one part");
+    places.iter().for_each(|&y| c.parts[y].root = r);
+    let y = at(c, r).expect("its root");
+    c.parts[y].s = numbers(w, c, places.iter().copied());
+}
+
+/// The numbers of the structure of the parts at `places` of cell `c` (`Info`). Plates close a box as wide as the longest
+/// part; a hollow part closes its own hollow; the structure takes the larger space and its enclosure.
+fn numbers(w: &World, c: &Cell, places: impl Iterator<Item = usize>) -> Info {
     let chem = &w.chem;
     // `foot`: the area of the parts' largest faces, m².
-    let (mut s, mut l, mut cond, mut best, mut foot) = (Info { parts: list.len() as u32, ..Default::default() }, 0f64, 0f64, (0f64, 0f64), 0f64);
-    for &x in &list {
-        let pt = &c.parts[at(c, x).expect("a bonded part lies in its cell")];
+    let (mut s, mut l, mut cond, mut best, mut foot) = (Info::default(), 0f64, 0f64, (0f64, 0f64), 0f64);
+    for x in places {
+        let pt = &c.parts[x];
         let (walls, d) = (pt.walls(chem), pt.size.map(|v| v as f64));
         let (vo, face) = (pt.outer(), d[0] * d[1]);
-        (s.mass, s.outer, foot) = (s.mass + pt.mass(chem), s.outer + vo, foot + face);
+        (s.parts, s.mass, s.outer, foot) = (s.parts + 1, s.mass + pt.mass(chem), s.outer + vo, foot + face);
         l = l.max(d[0]);
         // Across its walls: their conductivity times the face over their thickness (their volume over the face).
         cond += walls.conductivity * face * face / walls.volume.max(1e-9);
@@ -227,18 +235,12 @@ fn restructure(w: &World, c: &mut Cell, p: usize) {
         }
     }
     let need = BOX_FACES * l * l;
-    let plates = if list.len() > 1 { (foot / need).min(1.0) } else { 0.0 };
+    let plates = if s.parts > 1 { (foot / need).min(1.0) } else { 0.0 };
     let (e, space) = if plates * l.powi(3) > best.1 { (plates, plates * l.powi(3)) } else { best };
     // The walls pass the share they close; the openings `leak` over the rest of the faces of a cube of that space.
     let g = e * cond + crate::math::cube_area(w.cfg.phys.leak * (1.0 - e), space);
     (s.space, s.encl) = (space, Enclosure { closed: e as f32, g });
-    let r = *list.iter().min().expect("one part");
-    for x in &list {
-        let y = at(c, *x).expect("a bonded part lies in its cell");
-        c.parts[y].root = r;
-    }
-    let y = at(c, r).expect("its root");
-    c.parts[y].s = s;
+    s
 }
 
 /// Join the part at `a` of cell `i` of chunk `d` to the part named `b` with a bond of `strength` N.
@@ -320,5 +322,8 @@ pub fn held(c: &Cell, b: &Body) -> Option<usize> {
 /// update).
 fn holder(c: &Cell, p: usize) -> Option<usize> {
     let (by, me) = (c.parts[p].held, Some(c.parts[p].id));
+    if by == NOBODY {
+        return None;
+    }
     c.bodies.iter().position(|b| b.alive && b.id == by && b.hold == me)
 }
