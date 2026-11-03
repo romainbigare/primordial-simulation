@@ -565,8 +565,8 @@ Files: `core/src/choose/` (`mod`, `perceive`, `learn`, `feed`, `go`, `spread`), 
 One hidden layer over what the body perceives and remembers. Its **base** belongs to a lineage and changes only by
 evolution; its **rows** are genes of each body: fixed action scores, shared scorers (per direction, per verb and body
 or part seen), the shape of a part, the next memory and a critic. Sizes are genes with costs: hidden units
-(0 to 64; 0 is no brain, no decisions, no cost), memory (0 to 12), bodies seen (1 to 6), sight
-(1 to 4 cells). One brain per body or node (`Body::rows`); a child starts with its born rows plus what its parent
+(0 to 64; 0 is no brain, no decisions, no cost), memory (0 to 12), bodies seen (1 to 6); sight (1 to 4 cells) costs
+nothing, as it reads another level of the same features with the same rows (5.2). One brain per body or node (`Body::rows`); a child starts with its born rows plus what its parent
 learned (`Life::inherit`). **Evaluated by lineage** (`choose::Minds`): in each cell the bodies with a brain perceive
 after the physics of all its bodies and before any acts; the inputs of each lineage's bodies lie in one buffer, and
 the sums of their hidden layers are one matrix product with the lineage's base (`brain::sums`); each body then reads its

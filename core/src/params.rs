@@ -114,8 +114,6 @@ pub struct Physics {
     pub c_memory: f64,
     /// Cost of one decision per body perceived, J per kg of a member of `m_ref` kg
     pub c_seen: f64,
-    /// Cost of one decision per square cell of sight, J per kg of a member of `m_ref` kg
-    pub c_sight: f64,
     /// Upkeep of learning, J per kg of body per day at learning rate 1
     pub c_learn: f64,
     /// Energy a kg of body turns over in its upkeep before it is worn out, at a `REPAIR` gene of 0, J/kg
@@ -294,12 +292,11 @@ impl Default for Physics {
             c_strength: 1.31e4,
             c_basal: 6.3e4,
             c_leaf: 2e3,
-            c_brain: 1e5,
+            c_brain: 8.5e4,
             m_ref: 1.0,
             c_hidden: 5e3,
             c_memory: 5e3 / 3.0,
             c_seen: 5e3,
-            c_sight: 1.5e4,
             c_learn: 1.1049e5,
             e_life: 1e9,
             c_repair: 0.25,

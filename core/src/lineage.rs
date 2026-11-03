@@ -1,6 +1,6 @@
 //! Lineages: what their bodies share (`Lineage`), the brain shape the size genes give, and moving to new sizes (`resize`).
 
-use crate::body::{Body, BRAIN_SIZES, HIDDEN, MEMORY, SEEN, SIGHT};
+use crate::body::{Body, BRAIN_SIZES, HIDDEN, MEMORY, SEEN};
 use crate::brain::{self, Shape};
 use crate::rng::{Purpose, Rng};
 use crate::{bond, choose, life::Chunk, World};
@@ -24,13 +24,14 @@ impl Lineage {
     }
     /// Energy one decision of a lineage with a brain (`brain`) or none takes, J per kg of a member of `m_ref` kg: by the
     /// body's own size genes, not the rounded sizes, so a smaller brain pays less at once and selection can lead a node's
-    /// sizes down to none.
+    /// sizes down to none. Sight costs nothing: it reads another level of the same features (`Life::feat`), with the
+    /// same inputs and rows.
     pub fn cost(brain: bool, p: &crate::Physics, genes: &[f32]) -> f64 {
         if !brain {
             return 0.0;
         }
         let g = |k: usize| genes[k].max(0.0) as f64;
-        p.c_hidden * g(HIDDEN) + p.c_memory * g(MEMORY) + p.c_seen * g(SEEN) + p.c_sight * g(SIGHT).powi(2)
+        p.c_hidden * g(HIDDEN) + p.c_memory * g(MEMORY) + p.c_seen * g(SEEN)
     }
 }
 

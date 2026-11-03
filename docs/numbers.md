@@ -81,12 +81,11 @@ The three costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`) are per k
 | `c_strength` | J per kg of body per day at strength 1 | upkeep of strength, on top of the basal | the resting muscle: skeletal muscle burns about 13 kcal per kg a day at rest in a man, about half his body's mean (Elia 1992, from memory); a body of strength 1 taken as muscular as a mammal, 40% muscle: 22 kJ per kg of body a day at 70 kg and 310 K, 63 kJ for a kind of 1 kg (Kleiber's mass^-0.25), 1.31e4 at `t_cat` (/4.80) | anchored |
 | `c_basal` | J per kg of body per day | basal upkeep every body pays; strength and catalysts are on top | Kleiber's resting metabolism, about 3e5 J a day per kg^0.75 at a mammal's 310 K, 6.3e4 at `t_cat` (checked: Kleiber 1932 and 1947; Smil 2000, Nature 403). Plants' maintenance breathing, 15 to 25 mg of sugar per g of dry mass a day (Penning de Vries 1975; McCree 1970; from memory), is 6e4 to 1e5 J per kg of living body a day at a quarter dry matter and 20 to 25 °C (my arithmetic): about the same | anchored |
 | `c_leaf` | J per m² per day | upkeep of light-capture area | run: so the starting plants pay what they were set to pay. A leaf's own breathing is about 4e4 J per m² per day (1 µmol of carbon gas per m² per s, my arithmetic), 20 times more | tuned |
-| `c_brain` | J per kg of a member of `m_ref` kg, per decision | cost of one decision of the starting brain (12 hidden, 6 memory, 3 seen, sight 1) | none found; every body decides once a month, so it is a monthly cost of the brain. The four rows below split it | tuned |
+| `c_brain` | J per kg of a member of `m_ref` kg, per decision | cost of one decision of the starting brain (12 hidden, 6 memory, 3 seen, sight 1) | none found; every body decides once a month, so it is a monthly cost of the brain. The three rows below split it (sight costs nothing: it reads another level of the same features, with no more inputs or rows) | tuned |
 | `m_ref` | kg | the one reference mass: the member at which a per-kg number is per kg (brain cost, `take`, `sweep`, the heat gene, the costs of tissue) | a unit, not a size: 1 kg | anchored |
-| `c_hidden` | J per kg of a member of `m_ref` kg, per decision | cost per hidden unit | derived: a share of `c_brain` (12 x 5e3 = 6e4 of 1e5) | tuned, first guess |
+| `c_hidden` | J per kg of a member of `m_ref` kg, per decision | cost per hidden unit | derived: a share of `c_brain` (12 x 5e3 = 6e4 of 8.5e4) | tuned, first guess |
 | `c_memory` | the same | cost per memory number | derived: a share of `c_brain` (6 x 5e3/3 = 1e4) | tuned, first guess |
 | `c_seen` | the same | cost per body perceived | derived: a share of `c_brain` (3 x 5e3 = 1.5e4) | tuned, first guess |
-| `c_sight` | the same | cost per square cell of sight | derived: a share of `c_brain` (1 x 1.5e4) | tuned, first guess |
 | `c_learn` | J per kg of body per day at learning rate 1 | upkeep of learning | none found; set at the eater founder | tuned, first guess |
 | `e_life` | J per kg | energy a kg of body turns over in its upkeep before it is worn out, at a repair gene of 0 (a body lives 10^gene times this) | Rubner 1908: many kinds that move turn over about 1,000 kJ per gram of body in a life | anchored |
 | `c_repair` | share | share of upkeep that is repair at repair 0: upkeep x (1 - c + c 2^gene), so each unit of the gene doubles it and every value of the gene has a cost | remaking a body's own matter takes 20 to 30% of resting upkeep in life | anchored |
@@ -251,16 +250,16 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 105 rows of `Config` and `Physics` are their 105 fields.
+The 104 rows of `Config` and `Physics` are their 104 fields.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
 | anchored | 53, and 11 outside the structs | 53 fields (among them `c_basal`, `plan_weight`, `dormant`, `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `mix`, `light_yield`, `gas_floor`, `gas_ref`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `MAX_KEEP`, and the three decomposers' factors `open` of the chemistry (reactions 1, 21 and 26) |
 | tuned (run or reason named) | 6, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`), set for an outcome (`rain_time`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`, the cover's starting genes) |
-| tuned, first guess | 34 | 30 free numbers (`wind`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `rho_pass`, `keep_min`, `shape_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
+| tuned, first guess | 33 | 30 free numbers (`wind`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `rho_pass`, `keep_min`, `shape_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the three `c_hidden`, `c_memory`, `c_seen`, which are the split of `c_brain` and not three numbers |
 | switch | 1 | `null` |
 | speed | 2, and 6 outside the structs | `wake_share`, `sleep_days`; outside: `Config::chunks`, a setting of the run that a snapshot does not keep (`ew --chunks`, 64: the cells cut into that many runs for the bodies' parallel passes, many more than the threads of a machine, so the pool shares out uneven runs; any count gives the same world), the air's step `schedule::AIR_STEP_DAYS` (10 days, three a month: against 1-day steps the land within 0.3 K, `the_long_step_keeps_the_climate`), the caps `MAX_NODES`, `MAX_LINEAGES`, `MOST_ACTS`, and `copy::MATE_HIDDEN` (8 hidden units: two parents only for individuals of a brain that big, a level of detail) |
 | container | 1 | `phys` |
 
-Rows marked tuned in all: 49 (40 in the structs, 9 outside: also `cover::RANGE`, `cover::APART` and the mass classes `SMALL_KG`, `BIG_KG`, first guesses). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.
+Rows marked tuned in all: 48 (39 in the structs, 9 outside: also `cover::RANGE`, `cover::APART` and the mass classes `SMALL_KG`, `BIG_KG`, first guesses). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.
