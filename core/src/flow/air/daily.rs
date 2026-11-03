@@ -195,9 +195,11 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     // touching each place it falls on.
     let touched = ground.wet().touched(s, &t, &rain);
     let met = crate::par::map_n(nx * na, |i| (rain[i] > 0.0).then(|| rain_air(ground.wet(), (i / na, i % na, ratio[i]), &touched)).flatten());
+    // What each node's layers send to space over the day, J, on the pool.
+    let sky = crate::par::map_n(na, |j| glow(s.absorbs[j], ts[j], &s.lay[j][1]) * air.area()[j] * dd);
     for j in 0..na {
         out.t[j] += t[j] * share;
-        let (sky, day) = (glow(s.absorbs[j], ts[j], &s.lay[j][1]) * air.area()[j] * dd, &got[j * (1 + nx)..(j + 1) * (1 + nx)]);
+        let (sky, day) = (sky[j], &got[j * (1 + nx)..(j + 1) * (1 + nx)]);
         e[j] += day[0] * share - sky;
         out.space[j] += sky;
         for (y, ac) in act.iter().enumerate() {
@@ -231,13 +233,17 @@ fn warmth(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, 
     let (air, na) = (w.mesh.level(AIR), e.len());
     let start = temps(s, x, e);
     let (mut t, got) = (start.clone(), given(ground, act, (&start, x), 0..1));
+    // Per node what its layers send to space, W, and its slope with the temperature, W/K, on the pool.
+    let sky = crate::par::map_n(na, |j| {
+        let (f, lay, area, ts) = (s.absorbs[j], &s.lay[j][1], air.area()[j], at_height(start[j], s.gam[j], s.za[j], s.zair[j]));
+        [glow(f, ts, lay) * area, glow_slope(f, ts, lay) * area]
+    });
     for (b, nodes) in blocks.iter().enumerate() {
         let (mut rate, mut slope, mut capa) = (0.0, -one.heat[b] / dt, 0.0);
         for &j in nodes {
             let j = j as usize;
-            let (f, lay, area, ts) = (s.absorbs[j], &s.lay[j][1], air.area()[j], at_height(start[j], s.gam[j], s.za[j], s.zair[j]));
-            rate += got[j] / dt - glow(f, ts, lay) * area;
-            slope += glow_slope(f, ts, lay) * area;
+            rate += got[j] / dt - sky[j][0];
+            slope += sky[j][1];
             capa += s.state.gas.iter().enumerate().map(|(q, &k)| x[q * na + j] * s.sp[k].cp).sum::<f64>();
         }
         let per = 1.0 / capa.max(f64::MIN_POSITIVE);
@@ -255,24 +261,30 @@ fn warmth(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, 
 fn vapour(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, one): (&[Vec<u32>], &Together), (x, t, ts): (&[f64], &[f64], &[f64]), (dd, dt): (f64, f64)) -> [Vec<f64>; 3] {
     let (air, na, nx, nb) = (w.mesh.level(AIR), t.len(), act.len(), blocks.len());
     let got = given(ground, act, (t, x), 1..1 + nx);
-    let (mut mean, mut rain, mut ratio) = (x.to_vec(), vec![0.0; nx * na], vec![0.0; nx * na]);
-    for (y, ac) in act.iter().enumerate() {
+    // Per active gas and block (`[y * nb + b]`), each on the pool: the block's vapour at the day's start and its mean
+    // over the day, mol, and per node of the block what it rains and that times its ratio (`Pool::day`).
+    let mut days: Vec<(usize, [f64; 2], [Vec<f64>; 2])> = (0..nx * nb).map(|i| (i, [0.0; 2], Default::default())).collect();
+    crate::par::each_init(&mut days, nx * na, || (), |_, (i, sums, [fell, at])| {
+        let (y, b) = (*i / nb, *i % nb);
+        let (ac, nodes) = (&act[y], &blocks[b]);
         let full = |j: usize| if ac.cond { (s.sat[ac.k].at(ts[j]) * air.area()[j] * s.hk[ac.gi * na + j] / (R_GAS * ts[j])).max(0.0) } else { 0.0 };
-        for (b, nodes) in blocks.iter().enumerate() {
-            let held = |j: u32| x[ac.gi * na + j as usize];
-            let all: f64 = nodes.iter().map(|&j| held(j)).sum();
-            let gives: f64 = nodes.iter().map(|&j| got[j as usize * nx + y]).sum();
-            let slope = one.gas[y * nb + b];
-            let v: Vec<f64> = nodes.iter().map(|&j| one.v[j as usize]).collect();
-            let off = nodes.iter().zip(&v).map(|(&j, v)| held(j) - v * all).collect();
-            let pool = Pool { c: gives - slope * all, s: slope, v, off, full: nodes.iter().map(|&j| full(j as usize)).collect() };
-            let (mut fell, mut at) = (vec![0.0; nodes.len()], vec![0.0; nodes.len()]);
-            let mid = pool.day((&ground.wet, y, nodes), all, (dd, dt, w.cfg.rain_time), (&mut fell, &mut at));
-            for (q, &j) in nodes.iter().enumerate() {
-                let j = j as usize;
-                mean[ac.gi * na + j] = held(j as u32) + pool.v[q] * (mid - all);
-                (rain[y * na + j], ratio[y * na + j]) = (fell[q], at[q]);
-            }
+        let held = |j: u32| x[ac.gi * na + j as usize];
+        let all: f64 = nodes.iter().map(|&j| held(j)).sum();
+        let gives: f64 = nodes.iter().map(|&j| got[j as usize * nx + y]).sum();
+        let slope = one.gas[y * nb + b];
+        let v: Vec<f64> = nodes.iter().map(|&j| one.v[j as usize]).collect();
+        let off = nodes.iter().zip(&v).map(|(&j, v)| held(j) - v * all).collect();
+        let pool = Pool { c: gives - slope * all, s: slope, v, off, full: nodes.iter().map(|&j| full(j as usize)).collect() };
+        (*fell, *at) = (vec![0.0; nodes.len()], vec![0.0; nodes.len()]);
+        *sums = [all, pool.day((&ground.wet, y, nodes), all, (dd, dt, w.cfg.rain_time), (fell, at))];
+    });
+    let (mut mean, mut rain, mut ratio) = (x.to_vec(), vec![0.0; nx * na], vec![0.0; nx * na]);
+    for (i, [all, mid], [fell, at]) in &days {
+        let (y, nodes) = (i / nb, &blocks[i % nb]);
+        for (q, &j) in nodes.iter().enumerate() {
+            let (j, at_x) = (j as usize, act[y].gi * na + j as usize);
+            mean[at_x] = x[at_x] + one.v[j] * (mid - all);
+            (rain[y * na + j], ratio[y * na + j]) = (fell[q], at[q]);
         }
     }
     [mean, rain, ratio]
