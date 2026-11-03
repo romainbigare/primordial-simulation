@@ -766,8 +766,8 @@ read a kind.
   (`DRAIN_SLOPE`; Planchon and Darboux 2001), from every cell below 0 m on a globe, from those joined to the lowest
   cell on an island. On an island the open water is coarse (`coarse_low`): an air block (8 km) whose squares all lie
   below 0 m, none within a square of land (`LAND_RING`), is one cell, split where it borders finer cells until cells
-  across a border differ by one size at most; the coasts stay in 2 km squares. A cell of many squares reads the same
-  noise at its centre.
+  across a border differ by one size at most; the coasts stay in 2 km squares. A cell of many squares has the mean height
+  of its squares by area.
 - **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS` rows of `Place::Field`: kg per m² and genes,
   on every open land cell by its chance), then eaters 20 years later; `--roster` places ten kinds (`ROSTER`). Founders
   are adults on land under at most half a metre of liquid; mass 30% fuel (60% for the two big slow eater kinds).

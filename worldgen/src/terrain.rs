@@ -8,7 +8,7 @@ use pcore::flow::scale_height;
 use pcore::life::Life;
 use pcore::rng::{Purpose, Rng};
 use pcore::space::square::Square;
-use pcore::space::Level;
+use pcore::space::{Level, Mesh};
 use pcore::store::{Boundary, Class, Links, Node, Store};
 use pcore::units::P_REF;
 use pcore::{Config, Counters, World, AIR};
@@ -79,7 +79,7 @@ fn fbm(seed: u64, p: &[f64], octaves: u32) -> f64 {
 
 /// Where cell `i` of `map` lies in the noise at `per_cell` units a square: on a flat map its centre, in squares, less
 /// half a square (a square's column and row); on a globe the point over its centre on a sphere `per_cell` units a
-/// square round its equator (no seam where the rows wrap). A cell of many squares reads the noise at its centre.
+/// square round its equator (no seam where the rows wrap).
 fn spot(map: &Square, cells: &Level, i: usize, per_cell: f64) -> Vec<f64> {
     if !map.wrap {
         return cells.centre()[i].iter().map(|&c| (c / map.side - 0.5) * per_cell).collect();
@@ -103,9 +103,9 @@ fn height(above: f64) -> f64 {
     if above > 0.0 { above.powf(1.3) * 3600.0 } else { above * 1500.0 }.max(-800.0)
 }
 
-/// Height of each cell of `map`, m (zero is the reference level). An island's rise falls away from the middle of the
-/// map to a level of 0.3; a globe's level leaves the share `LAND_SHARE` of its area above it.
-pub fn heights(seed: u64, map: &Square, cells: &Level) -> Vec<f64> {
+/// Height of each cell of `cells` on `map`, m (zero is the reference level). An island's rise falls away from the
+/// middle of the map to a level of 0.3; a globe's level leaves the share `LAND_SHARE` of its area above it.
+fn heights(seed: u64, map: &Square, cells: &Level) -> Vec<f64> {
     let per_cell = ACROSS / map.w.max(map.h) as f64;
     let rise: Vec<f64> = (0..cells.n()).map(|i| relief(seed, &spot(map, cells, i, per_cell))).collect();
     if !map.wrap {
@@ -127,6 +127,19 @@ pub fn heights(seed: u64, map: &Square, cells: &Level) -> Vec<f64> {
     });
     let level = level.map_or(0.0, |&i| rise[i]);
     rise.iter().map(|&r| height(r - level)).collect()
+}
+
+/// Height of each cell of `mesh` on `map` (its rows between the latitudes of `cfg`), m: the mean by area of the heights
+/// of its squares (`heights`), so a cell of many squares holds the ground and the low liquid its squares would.
+fn cell_heights(seed: u64, map: &Square, mesh: &Mesh, cfg: &Config) -> Vec<f64> {
+    let squares = World::mesh_of(&Square::new(map.w, map.h, map.side, map.wrap), AIR_SCALE, cfg);
+    let (z, area) = (heights(seed, map, squares.cells()), squares.cells().area());
+    let mut hz = vec![0.0; mesh.cells().n()];
+    for s in 0..map.n() {
+        let c = mesh.cell_of(s);
+        hz[c] += area[s] / mesh.cells().area()[c] * z[s];
+    }
+    hz
 }
 
 /// A cell waiting in the flood of `drain`, by its height: the lowest first, then the lowest index.
@@ -271,7 +284,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
     }
     let mesh = World::mesh_of(&map, AIR_SCALE, &cfg);
     let (n, na, ns) = (mesh.cells().n(), mesh.level(AIR).n(), chem.ns());
-    let mut hz = heights(seed, &map, mesh.cells());
+    let mut hz = cell_heights(seed, &map, &mesh, &cfg);
     drain(mesh.cells(), &mut hz, map.wrap);
     let mut ground = vec![0.0; ns * n];
     let mut bed = vec![0.0; ns * n];

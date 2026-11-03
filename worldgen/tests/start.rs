@@ -1,4 +1,5 @@
-//! The starting state worldgen makes: the dissolved mineral in the low ground's liquid, and the soil given when life starts.
+//! The starting state worldgen makes: coarse cells only under the low liquid, the dissolved mineral in the low ground's
+//! liquid, and the soil given when life starts.
 
 use pcore::{World, AIR};
 use pcore::store::Class;
@@ -9,6 +10,21 @@ fn total(w: &World, k: usize) -> f64 {
     let n = w.mesh.cells().n();
     // (With the store of the bed under the ground, where drained liquid takes what is dissolved in it.)
     w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().sum::<f64>() + w.store.amounts(Class::Deep).get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) + w.life.alive().map(|b| b.store[k]).sum::<f64>()
+}
+
+/// An island's coarse cells (more than one square) all lie below 0 m, in its low basin's liquid, on islands of five
+/// seeds.
+#[test]
+fn coarse_cells_lie_under_the_low_liquid() {
+    for seed in 1..=5 {
+        let w = worldgen::new_world(seed, 128, 128);
+        let cells = w.mesh.cells();
+        let coarse: Vec<usize> = (0..cells.n()).filter(|&i| cells.area()[i] > 1.5 * w.map.side * w.map.side).collect();
+        assert!(!coarse.is_empty(), "seed {seed}: coarse cells");
+        for i in coarse {
+            assert!(w.surface_z(i) < 0.0 && !w.is_land(i), "seed {seed}: coarse cell {i} at {} m", w.surface_z(i));
+        }
+    }
 }
 
 /// The world starts with the dissolved mineral in the liquid of its low ground and none on dry land.
