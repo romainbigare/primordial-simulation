@@ -9,6 +9,9 @@ use crate::{solve::sweep::{within, HALF_WAY}, space::Level, units::R_GAS, Config
 /// A fit of a gradient whose neighbours nearly line up (the determinant below this share of the product of its
 /// diagonal) is made along each axis alone.
 const SINGULAR: f64 = 1e-9;
+/// The most parts a day of the wind is cut into (`wind`); a link that needs more (the short links round a pole) moves
+/// at most what evens it in each part.
+const MAX_PARTS: f64 = 8.0;
 
 /// The links of the air level that share a border (width above 0), with their ends.
 pub(super) struct Links {
@@ -34,9 +37,9 @@ pub(super) struct Pushes {
 }
 
 /// Three pushes on each link: the column's pressure, evened in the time sound takes to cross it (Lamb waves, Lindzen
-/// 1990, 9.2); overturning by the warmth difference, the lower half toward the warmer node at `wind` per K, turned by
-/// the rotation at the link's latitude; and eddy mixing (`mix` × width / length). From the air of each node as the
-/// last state left it (`Scratch::nt`, `capa`, `mass`, `ta`).
+/// 1990, 9.2); overturning by the warmth difference across a cell `overturn_m` wide, the lower half toward the warmer
+/// node at `wind` per K, turned by the rotation at the link's latitude; and eddy mixing (`mix` × width / length). From
+/// the air of each node as the last state left it (`Scratch::nt`, `capa`, `mass`, `ta`).
 pub(super) fn pushes(cfg: &Config, s: &Scratch, air: &Level, links: &Links) -> Pushes {
     let na = air.n();
     let warmth: Vec<f64> = (0..na).map(|j| s.ta[j] + s.gam[j] * s.zair[j]).collect();
@@ -49,7 +52,11 @@ pub(super) fn pushes(cfg: &Config, s: &Scratch, air: &Level, links: &Links) -> P
         let (ab, ga, gb) = (air.offset(a, b), grad[a], grad[b]);
         let across = ((ga[0] + gb[0]) * ab[1] - (ga[1] + gb[1]) * ab[0]) / 2.0;
         p.mix.push(cfg.mix * rho * depth * wd / d);
-        p.over.push(cfg.wind * (warmth[b] - warmth[a] + turn * across) * rho * wd * depth / 2.0);
+        // A cell `overturn_m` wide turns over at the speed of its warmth difference, `overturn_m / d` times the link's;
+        // what it carries across is its warmth difference, which the link's air carries if the link swaps
+        // `overturn_m / d` times as much again: so the heat does not depend on the link's length `d`.
+        let cells = (cfg.overturn_m / d).powi(2);
+        p.over.push(cfg.wind * (warmth[b] - warmth[a] + turn * across) * cells * rho * wd * depth / 2.0);
         // p = c n with c = RT/V; sound crosses the link in d / sqrt(gamma R T / M), gamma = cp / (cp - R) per mol.
         let c = |j: usize| R_GAS * s.ta[j] / s.vol[j];
         let sound = |j: usize| {
@@ -130,36 +137,67 @@ fn lift((a, b): (usize, usize), kg: f64, (s, g): (&Scratch, f64), e: &mut [f64])
     e[to] -= g * kg.abs() * (s.za[to] - s.za[from]);
 }
 
-/// One day of `dd` seconds of the wind over the links between blocks (`border`), each from the air at the day's start:
-/// the evening of pressure, the eddies and the overturning, each at most what evens its link in the day; each link's
-/// pressure at most half of that, and its eddies with its overturning at most all of it, over the links of the busier
-/// of its nodes, so the day is stable for any rates while a link far from that limit keeps its own; and no node gives
-/// more of a gas than it holds (`solve::sweep::within`).
-/// What crosses is the sender's air (by halves for the overturning: the lower half to the warmer node, the upper half
-/// back, each with its node's heat per mol); the node the mass enters pays its lift.
-pub(super) fn wind(w: &World, s: &Scratch, (push, links, border): (&Pushes, &Links, &[usize]), (x, e): (&mut [f64], &mut [f64]), dd: f64, moved: &mut Moved) {
-    let (na, ng, pairs, g) = (e.len(), s.state.gas.len(), moved.heat.len(), w.cfg.gravity);
-    if border.is_empty() {
-        return;
-    }
-    let t = temps(s, x, e);
-    let sum = |f: &dyn Fn(usize, usize) -> f64, j: usize| (0..ng).map(|q| f(q, j)).sum::<f64>();
+/// Each node's air, mol, and its upper and lower halves (`Scratch::split`), from the amounts `x`.
+fn halves(s: &Scratch, x: &[f64], na: usize) -> [Vec<f64>; 3] {
+    let sum = |f: &dyn Fn(usize, usize) -> f64, j: usize| (0..s.state.gas.len()).map(|q| f(q, j)).sum::<f64>();
     let nt: Vec<f64> = (0..na).map(|j| sum(&|q, j| x[q * na + j], j)).collect();
     let upper: Vec<f64> = (0..na).map(|j| sum(&|q, j| x[q * na + j] * s.split[q * na + j], j)).collect();
     let lower: Vec<f64> = (0..na).map(|j| nt[j] - upper[j]).collect();
+    [nt, upper, lower]
+}
+
+/// The rates of link `l` (`Links`) at the air `[nt, upper, lower]` (`halves`), 1/s: of its eddies and of its
+/// overturning, as shares a second of what evens the link.
+fn rates(push: &Pushes, links: &Links, l: usize, [nt, upper, lower]: &[Vec<f64>; 3]) -> [f64; 2] {
+    let (ia, ib, o) = (links.a[l] as usize, links.b[l] as usize, push.over[l]);
+    let (from, to) = if o > 0.0 { (ia, ib) } else { (ib, ia) };
+    [push.mix[l] * (1.0 / nt[ia] + 1.0 / nt[ib]), o.abs() / lower[from].min(upper[to]).max(f64::MIN_POSITIVE)]
+}
+
+/// The links of each air node among `border`.
+fn links_of(links: &Links, border: &[usize], na: usize) -> Vec<usize> {
+    let mut of = vec![0usize; na];
+    border.iter().for_each(|&l| [links.a[l], links.b[l]].iter().for_each(|&j| of[j as usize] += 1));
+    of
+}
+
+/// One day of `dd` seconds of the wind over the links between blocks (`border`), in parts of equal length, each from
+/// the air at its start (`part`): as many as the busiest link needs for its eddies with its overturning to move at most
+/// what evens it over the links of the busier of its nodes (at most `MAX_PARTS`), so they carry what their rates say
+/// however short the links.
+pub(super) fn wind(w: &World, s: &Scratch, (push, links, border): (&Pushes, &Links, &[usize]), (x, e): (&mut [f64], &mut [f64]), dd: f64, moved: &mut Moved) {
+    if border.is_empty() {
+        return;
+    }
+    let (air, of) = (halves(s, x, e.len()), links_of(links, border, e.len()));
+    let busy = |l: usize| of[links.a[l] as usize].max(of[links.b[l] as usize]) as f64;
+    let most = border.iter().map(|&l| busy(l) * rates(push, links, l, &air).iter().sum::<f64>()).fold(0.0, f64::max);
+    let parts = (dd * most).ceil().clamp(1.0, MAX_PARTS);
+    for _ in 0..parts as usize {
+        part(w, s, (push, links, border), (x, e), dd / parts, moved);
+    }
+}
+
+/// A part of a day of `dd` seconds of the wind (`wind`), from the air at its start: the evening of pressure, the eddies
+/// and the overturning, each at most what evens its link in the part; each link's pressure at most half of that, and
+/// its eddies with its overturning at most all of it, over the links of the busier of its nodes, so the part is stable
+/// for any rates; and no node gives more of a gas than it holds (`solve::sweep::within`).
+/// What crosses is the sender's air (by halves for the overturning: the lower half to the warmer node, the upper half
+/// back, each with its node's heat per mol); the node the mass enters pays its lift.
+fn part(w: &World, s: &Scratch, (push, links, border): (&Pushes, &Links, &[usize]), (x, e): (&mut [f64], &mut [f64]), dd: f64, moved: &mut Moved) {
+    let (na, ng, pairs, g) = (e.len(), s.state.gas.len(), moved.heat.len(), w.cfg.gravity);
+    let t = temps(s, x, e);
+    let air = halves(s, x, na);
+    let [nt, upper, lower] = &air;
     let c: Vec<f64> = (0..na).map(|j| R_GAS * t[j] / s.vol[j]).collect();
-    // Each link's share of what evens it in the day, by pressure, eddies and overturning; and each node's links.
-    let mut links_of = vec![0usize; na];
-    border.iter().for_each(|&l| [links.a[l], links.b[l]].iter().for_each(|&j| links_of[j as usize] += 1));
+    // Each link's share of what evens it in the part, by pressure, eddies and overturning; and each node's links.
+    let links_of = links_of(links, border, na);
     let shares: Vec<[f64; 3]> = border
         .iter()
         .map(|&l| {
-            let (ia, ib, o) = (links.a[l] as usize, links.b[l] as usize, push.over[l]);
-            let (from, to) = if o > 0.0 { (ia, ib) } else { (ib, ia) };
-            let even = (dd * push.even[l] * (c[ia] + c[ib])).min(1.0);
-            let mix = (dd * push.mix[l] * (1.0 / nt[ia] + 1.0 / nt[ib])).min(1.0);
-            let over = (dd * o.abs() / lower[from].min(upper[to]).max(f64::MIN_POSITIVE)).min(1.0);
-            [even, mix, over]
+            let (ia, ib) = (links.a[l] as usize, links.b[l] as usize);
+            let [mix, over] = rates(push, links, l, &air).map(|r| (dd * r).min(1.0));
+            [(dd * push.even[l] * (c[ia] + c[ib])).min(1.0), mix, over]
         })
         .collect();
     let (x0, e0, width) = (x.to_vec(), e.to_vec(), ng + 1);

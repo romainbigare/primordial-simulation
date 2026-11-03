@@ -47,8 +47,10 @@ pub struct Config {
     pub evap: f64,
     /// Transfer speed of a dissolving gas on the liquid's side of its surface (in series with `evap`), m/s
     pub dissolve: f64,
-    /// Overturning air speed per K of warmth difference between neighbouring air nodes, m/s per K
+    /// Overturning air speed per K of warmth difference across an overturning cell, m/s per K
     pub wind: f64,
+    /// Width of the air's overturning cells, m
+    pub overturn_m: f64,
     /// Mixing of neighbouring air columns by eddies, m²/s
     pub mix: f64,
     /// Condensation in the air at which its cloud reflects half of what its droplets can, mol/(m² s)
@@ -408,6 +410,7 @@ impl Default for Config {
             evap: 0.006,
             dissolve: 5e-5,
             wind: 0.25,
+            overturn_m: 3.3e6,
             mix: 1e6,
             cloud: 1.2e-2,
             cloud_ir: 6.7,

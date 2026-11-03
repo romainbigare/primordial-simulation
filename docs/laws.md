@@ -269,15 +269,19 @@ in months and warms over centuries; a real one is the other way round.
 300 km (Taylor 1922, `daily::BLOCK_DAY`): the air nodes lie in blocks of that side on the map, and each day every gas of
 a block is shared among its nodes by their volumes and its heat so that each has the block's warmth (its temperature
 raised to a common height by the block's drop with height), so its pressure, shares and warmth are the block's. An
-island smaller than a block (the islands of 64 and 128 cells) is one block, and has no wind: only the evening. Across the links between blocks gas moves by three pushes, each day from the air at its
-start, explicit: the column's pressure (p = nRT/V), evened in the time sound takes to cross the link (Lamb waves,
-Lindzen 1990); overturning, the lower half flowing to the warmer column and the upper half back at `wind` per K,
-turned by the planet's rotation (`rotation`), vapour crowding low; and eddies mixing the columns (`mix`, width over
-length). Each moves at most what evens its link in a day; each link's pressure at most half of that, and its eddies
-with its overturning at most all of it, over the links of the busier of its nodes, so the day is stable for any rates;
-and no node gives more of a gas than it holds (`solve::sweep::within`). **Known limit:** where a push is
-faster than a day (the pressure, always; the eddies over the short links near a pole) its links even in a day at
-most that share, so a pressure difference across many links of blocks takes days to even out. Mass that crosses is
+island smaller than a block (the islands of 64 and 128 cells) is one block, and has no wind: only the evening. Across the links between blocks gas moves by three pushes, explicit, in parts of the day
+each from the air at its start: the column's pressure (p = nRT/V), evened in the time sound takes to cross the link
+(Lamb waves, Lindzen 1990); overturning, the lower half flowing to the warmer column and the upper half back at
+`wind` per K of the warmth difference across an overturning cell (`overturn_m`, 3,300 km), turned by the planet's
+rotation (`rotation`), vapour crowding low; and eddies mixing the columns (`mix`, width over length). A link of
+length d swaps (`overturn_m` / d)² as much air as a cell wide, each mol carrying the link's difference, so the
+overturning, like the eddies, carries the same heat whatever the size of the air nodes. The day is cut into as many
+parts (at most `wind::MAX_PARTS`, 8) as its busiest link needs for its eddies with its overturning to move at most
+what evens it over the links of the busier of its nodes; each push moves at most what evens its link in a part, each
+link's pressure at most half of that; and no node gives more of a gas than it holds (`solve::sweep::within`).
+**Known limit:** where a push is faster than that (the pressure, always; the eddies over the short links near a
+pole) its links even in a part at most that share, so a pressure difference across many links of blocks takes days
+to even out. Mass that crosses is
 lifted between the nodes' mean grounds by the heat of the node it enters. A cell sees its air node and three
 neighbours bilinearly (`flow/scratch.rs`). Air moves as whole columns, so bodies use the anchored `wind_ground` (6.3).
 
