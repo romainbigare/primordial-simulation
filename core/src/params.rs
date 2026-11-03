@@ -383,6 +383,10 @@ impl Config {
         require(p.dormancy > 1.0, || format!("dormancy ({}) must be above 1", p.dormancy))?;
         // The bed and the skin of its top are layers of matter: a thickness of zero would give a node no heat capacity.
         require(self.skin_m > 0.0 && p.bed_depth > 0.0, || format!("skin_m ({}) and bed_depth ({}) must be above 0", self.skin_m, p.bed_depth))?;
+        // A body's surface and the still air at it give its bare conductance (`Body::bare`): both above 0; a coat adds
+        // insulation, never less than none.
+        let (meeh, air, coat) = (p.meeh, p.r_air, p.r_coat);
+        require(meeh > 0.0 && air > 0.0 && coat >= 0.0 && coat.is_finite(), || format!("meeh ({meeh}) and r_air ({air}) must be above 0, r_coat ({coat}) at least 0"))?;
         let light = p.light_yield;
         require(light > 0.0 && light <= 1.0, || format!("light_yield ({light}) must be above 0 and at most 1"))
     }

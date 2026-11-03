@@ -4,7 +4,8 @@
 //! The key numbers of a normal run: `ew run --seed N --size 64` for seeds 1, 2 and 3, 30 years each, on threads. The
 //! mean of each number over the three seeds must lie in its range around its reference, the mean of the same three
 //! seeds in the reference runs: for the climate, the land worn down and the rivers, the runs of the world before the
-//! cover and the short body model; for the cover and the eaters, the runs of the cover and the short body model. The
+//! cover and the short body model; for the cover, the runs of the cover and the short body model; for the eaters, the
+//! runs of the bodies' heat law as it is (laws.md 6.3), as their mass follows their temperature. The
 //! climate and the land worn down are means over years 21 to 30; life is read at year 30, ten years after the eaters
 //! came. Each run also keeps its books. Three numbers are also held to wide bounds around Earth's, as the references only
 //! keep a world near itself: the rain on land, the heat-absorbing gas of the air, and the share of the cover's dry mass
