@@ -44,6 +44,10 @@ impl Square {
     pub fn xy(&self, i: usize) -> (usize, usize) {
         (i % self.w, i / self.w)
     }
+    /// The squares in the cell whose north-west square is `s`.
+    pub fn squares(&self, s: usize) -> f64 {
+        (1u64 << (2 * self.size[s])) as f64
+    }
     /// Neighbour of square `i` by offset, if inside the map (round the globe east and west).
     #[inline]
     pub fn step(&self, i: usize, d: (i32, i32)) -> Option<usize> {

@@ -28,10 +28,8 @@ const T_SPAN: f32 = 15.0;
 const DZ_SCALE: f32 = 200.0;
 /// ln of the light-capture area per mass of a perceived body.
 pub(super) const LN_LEAF: f32 = 5.0;
-/// ln(1 + the members of a cell per `COUNT_AREA`).
+/// ln(1 + the members of a cell per square of the map).
 const LN_MEMBERS: f32 = 10.0;
-/// The area a cell's counts (members, parts, members that moved in) are taken over, m²: a square of the island (2 km).
-const COUNT_AREA: f64 = 4e6;
 /// A perceived body's well-being.
 pub(super) const WB_SCALE: f32 = 4.0;
 /// The members of the three classes of animals of a cell's features weigh below `SMALL_KG`, up to `BIG_KG`, and more
@@ -43,7 +41,7 @@ const BIG_KG: f32 = 100.0;
 /// surface height, the shade of its cover, the mass of each slot of its cover and of the cover's fuel and body matter
 /// (what most diets eat), the fuel and body matter loose on its ground, the mass of its animals in three classes of
 /// member mass, their members and mean strength, how hard it is to push through, its parts, and the members that moved
-/// in last month; masses per m² as ln(1 + kg/m²), counts per `COUNT_AREA`.
+/// in last month; masses per m² as ln(1 + kg/m²), counts per square of the map (`Square::squares`).
 pub const T: usize = 0;
 pub const WET: usize = 1;
 pub const HEIGHT: usize = 2;
@@ -168,7 +166,7 @@ pub fn cells(w: &mut World) {
         for class in 0..3 {
             f[ANIMALS + class] = ln(1.0 + f[ANIMALS + class] / area as f32);
         }
-        let per = COUNT_AREA / area;
+        let per = 1.0 / w.map.squares(w.mesh.corner(i));
         f[MEMBERS] = ln(1.0 + (c[0] * per) as f32) / LN_MEMBERS;
         f[STRENGTH] = (c[3] / c[0].max(1.0)) as f32;
         f[RESIST] = ln(1.0 + thickness(w, c[1], area) as f32);
