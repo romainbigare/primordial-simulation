@@ -3,7 +3,7 @@
 //! every join.
 
 use crate::bond::{held, let_go, room};
-use crate::body::{self, alike, most, range, spread_at, spread_kept, Body, Layout};
+use crate::body::{self, alike, most, range, spread_at, spread_kept, Body, Layout, BRAIN_SIZES};
 use crate::brain::row_step;
 use crate::life::Block;
 use crate::chem::Stores;
@@ -14,7 +14,8 @@ use crate::{life::Chunk, World};
 /// The monthly merge of the bodies of cell `i` of chunk `d` (laws.md 4.4): one node per kind and stage. Each body
 /// joins the largest of its `Kin` (`join_kin`); then a node joins a larger one of another lineage of its stage, room
 /// and part whose genes are alike (`body::alike`, on the means) and whose brain has the same sizes, taking its brain and
-/// lineage (`join_other`); then a cell over `MAX_NODES` bodies keeps one young and one mature node per kind (`cap`).
+/// lineage (`join_other`); then a cell over `MAX_NODES` bodies keeps one young and one mature node per kind and room
+/// (`cap`).
 pub fn crowd(w: &World, d: &mut Chunk, lay: &Layout, i: usize) {
     let heads = join_kin(w, d, i);
     join_other(w, d, lay, heads);
@@ -25,10 +26,10 @@ pub fn crowd(w: &World, d: &mut Chunk, lay: &Layout, i: usize) {
 /// node (a speed setting).
 pub const MAX_NODES: usize = 8;
 
-/// If cell `i` holds more than `MAX_NODES` bodies, the bodies of each starting kind (`Lineage::root`) and stage join
-/// the largest of them (equals: the first in the cell's order), whatever their lineage, brain sizes, room and part,
-/// taking its brain, born rows and lineage when that is another (`merge`): the cell then holds at most a young
-/// and a mature node of each kind present.
+/// If cell `i` holds more than `MAX_NODES` bodies, the bodies of each starting kind (`Lineage::root`), stage and room
+/// (the structure whose room they are in, or none) join the largest of them (equals: the first in the cell's order),
+/// whatever their lineage, brain sizes and part, taking its brain, born rows and lineage when that is another
+/// (`merge`): the cell then holds at most a young and a mature node of each kind present in each room.
 pub fn cap(w: &World, d: &mut Chunk, i: usize) {
     let mut left: Vec<Handle> = d.cell(i).collect();
     if left.len() <= MAX_NODES {
@@ -36,9 +37,9 @@ pub fn cap(w: &World, d: &mut Chunk, i: usize) {
     }
     // (A stable sort: equals keep the cell's order.)
     left.sort_by(|&s, &t| d[t].n().total_cmp(&d[s].n()));
-    let mut heads: Vec<((u32, bool), Handle)> = Vec::new();
+    let mut heads: Vec<((u32, bool, Option<u64>), Handle)> = Vec::new();
     for s in left {
-        let kind = (d.root(w, &d[s]), d[s].adult(&w.chem));
+        let kind = (d.root(w, &d[s]), d[s].adult(&w.chem), room(d.at(i), &d[s]).map(|r| r.0));
         match heads.iter().find(|h| h.0 == kind) {
             Some(&(_, t)) => merge(w, d, s, t),
             None => heads.push((kind, s)),
@@ -145,8 +146,9 @@ pub(crate) enum Own<'a> {
 /// Members `c` join the body at `t` with genes and spread `genes` and rows `rows` (their lineage, the genome of their
 /// born rows, their own rows, none: `t`'s, and their row spread): amounts add up (`rejoin`), genes and own rows become
 /// the means by members and the spreads pool around them; `t` keeps its born rows, the joiners' gap to them pooled
-/// into its row spread (laws.md 4.4). Members of another lineage (of its starting kind) take `t`'s brain, born rows and
-/// lineage: its own rows become the mean by members where the brains have one shape, else they stay `t`'s.
+/// into its row spread (laws.md 4.4). Members of another lineage (of its starting kind) take `t`'s brain, born rows,
+/// lineage and brain-size genes (`BRAIN_SIZES`, with their spread): its own rows become the mean by members where the
+/// brains have one shape, else they stay `t`'s.
 pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread): (&[f32], &[f32]), (lineage, genome, own, row_spread): (u32, u32, Option<Own>, f32)) {
     let mut o = std::mem::take(&mut d[t]);
     let (other, theirs) = (lineage != o.lineage, genome);
@@ -167,8 +169,9 @@ pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread): 
     let mut pooled = std::mem::take(&mut o.spread);
     pooled.resize(o.genes.len(), 0.0);
     for (g, (x, v)) in o.genes.iter_mut().zip(pooled.iter_mut()).enumerate() {
-        let mean = mix(*x, genes[g]);
-        *v = spread_kept(&lay, g, mean, pool(v.max(0.0), spread_at(spread, g), (genes[g] - *x).powi(2), range(&lay, g).0));
+        let (y, u) = if other && BRAIN_SIZES.contains(&g) { (*x, v.max(0.0)) } else { (genes[g], spread_at(spread, g)) };
+        let mean = mix(*x, y);
+        *v = spread_kept(&lay, g, mean, pool(v.max(0.0), u, (y - *x).powi(2), range(&lay, g).0));
         *x = mean;
     }
     o.spread = pooled;

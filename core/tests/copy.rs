@@ -768,7 +768,7 @@ fn cell_books(w: &pcore::World, i: usize) -> CellBooks {
 
 /// The cap of a cell (`nodes::cap`): past `MAX_NODES` bodies each starting kind keeps one young and one mature node,
 /// whatever the lineages and brain sizes of its bodies, keeping members, stores, heat, brood and the member-weighted
-/// genes; bodies of two starting kinds never join.
+/// genes, but the brain-size genes, which are the node's; bodies of two starting kinds never join.
 #[test]
 fn a_crowded_cell_keeps_a_young_and_a_mature_node_per_kind() {
     let (mut w, i) = start();
@@ -788,6 +788,8 @@ fn a_crowded_cell_keeps_a_young_and_a_mature_node_per_kind() {
     let after = cell_books(&w, i);
     assert!(after.1.values().all(|&n| n == 1), "one body of each kind and stage after the cap: {:?}", after.1);
     assert_eq!(after.0.len(), 5, "kinds after the cap");
+    let sized = |b: &pcore::body::Body| b.genes[pcore::body::HIDDEN] == w.life.brain(b.lineage).expect("a lineage").shape.h as f32;
+    assert!(w.life.alive().filter(|b| b.cell as usize == i).all(sized), "joiners of another lineage keep the node's brain sizes");
     for ((k, x), y) in before.0.iter().zip(after.0.values()) {
         assert!((x.0 - y.0).abs() <= 1e-9 * x.0, "members of kind {k}: {} then {}", x.0, y.0);
         assert!(y.1 <= 2, "bodies of kind {k} after the cap: {}", y.1);

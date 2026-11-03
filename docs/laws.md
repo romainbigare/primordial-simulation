@@ -464,8 +464,8 @@ chance).
 - **One node per kind and stage** in a cell: one lineage per node (one brain). Children join the young node of their
   lineage in their cell (`copy::kin`), and members who move join the node of their lineage and stage where they land,
   or start one; in a cell of `MAX_NODES` bodies or more with no node of their lineage, they join the first node of
-  their starting kind and stage, taking its brain, born rows and lineage (so the cap below holds through the month); a
-  young node matures as a whole when its mean member reaches the copy mass.
+  their starting kind and stage, taking its brain, born rows, lineage and brain-size genes (so the cap below holds
+  through the month); a young node matures as a whole when its mean member reaches the copy mass.
 - **Merging** (`nodes::crowd`, monthly, in each cell after the batch's serial pass, one task per chunk; a merge that
   lets go of a part queues that, as in a batch): the bodies of one lineage and stage in a cell, in the room of the same
   structure (its root) or none and holding the same structure or nothing (`nodes::Kin`), join the largest of them,
@@ -473,15 +473,15 @@ chance).
   (4.3). Then a node joins a larger
   one of another lineage of its stage, room and part whose genes are alike (`body::alike`, on the means) and whose
   brain has the same sizes: its members take that brain, its born rows and its lineage, and its rows become the mean by
-  members (`nodes::merge`). This merge is
+  members (`nodes::merge`); members of another lineage keep the node's brain-size genes, so no merge moves its sizes. This merge is
   a speed tool with physical side effects: the joiners' members drop the structure they held, which stays in the cell
   for any body to take, and a lineage's brain spreads to alike bodies of another. Selection acts between cells and
   lineages, not within a cell.
 - **Two caps, speed tools.** A cell that holds more than `MAX_NODES` (8) bodies after its merge (`nodes::cap`) keeps
-  one young and one mature node of each starting kind: the bodies of one kind and stage join the largest of them,
-  whatever their lineage, brain sizes, room and part, taking its brain, born rows and lineage; its rows become the mean
-  by members where the brains have one shape, else they stay its own. So a crowded cell holds at most two bodies per
-  kind present, and kinds never mix. A starting kind keeps at most `MAX_LINEAGES` (8) living
+  one young and one mature node of each starting kind in each room (or outside any): the bodies of one kind, stage and
+  room join the largest of them, whatever their lineage, brain sizes and part, taking its brain, born rows, lineage and
+  brain-size genes; its rows become the mean by members where the brains have one shape, else they stay its own. So a
+  crowded cell holds at most two bodies per kind present and room, and kinds never mix. A starting kind keeps at most `MAX_LINEAGES` (8) living
   lineages (`lineage::resize`): past them a body whose sizes change joins the living lineage of its kind nearest in
   sizes, and stays in its own if that is the nearest. Both make bodies of different heritage share a brain; they
   bound the work, not a law.
