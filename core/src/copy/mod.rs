@@ -7,11 +7,14 @@
 //! own (`lineage::resize`).
 
 mod grow;
+mod litter;
 mod mix;
 
 pub use grow::grow;
+pub use litter::Litter;
+pub(crate) use litter::{back, land_litter};
 
-use crate::body::{most, mutation_size, remains, vary, Body, Layout, CHILD, DISPERSE, WET, WET_TISSUE};
+use crate::body::{most, mutation_size, vary, Body, Layout, CHILD, DISPERSE, WET, WET_TISSUE};
 use crate::brain::{self, row_step, shake};
 use crate::chem::{Chemistry, Stores};
 use crate::event::{Event, EventKind};
@@ -98,18 +101,6 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
     made
 }
 
-/// Children that start in another cell than their parent's (`emit`), queued until the serial pass (`land_litter`): their
-/// body (in the cell they start in), their born rows (none: their parent's), their brain (`life::Brains::all`, to take
-/// into their cell's brains), the cell their parent was in, and their birth.
-#[derive(Clone, Debug)]
-pub struct Litter {
-    pub(crate) c: Body,
-    rows: Option<Vec<f32>>,
-    brain: Vec<f32>,
-    from: u32,
-    born: Event,
-}
-
 /// `m` children of `b` start in `cell`: their genes, stores, heat and rows, booked on the young node of their kind and
 /// lineage there (`kin`), or a body of their own (`place_child`). Less than one member of a node's children with no
 /// node to join waits in the brood (false). Children who start in another cell are a litter that lands when the batch
@@ -129,18 +120,25 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
     }
     let (store, e) = give(w, b, l, m);
     let born = Event { day: w.day(), kind: EventKind::Born { root: d.root(w, b), mixed: l.mate.is_some() }, node: cell as u32, value: m };
-    // A node's children who stay join its young node there as amounts and means (`nodes::add`): their born rows are
-    // their parent's, the generation's change of them its variance (`row_change`), their own rows their parent's; the
-    // young node keeps its born rows, so no child body, no draw of every row and no new born rows are made.
-    if let (true, Some(t)) = (l.node, hit) {
-        // (The noise their mean would take is their spread: `add` pools it, to `body::most`.)
-        let (_, sd, left) = row_change(w, b.row_spread, m, size, r);
-        let row_spread = left + sd * sd;
-        d.events.push(born);
-        add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.day() as f64 }, (&genes, &spread), (b.lineage, b.genome, Some(Own::Block(b.brain)), row_spread));
+    let (pre, sd, left) = child_rows(w, d, b, l, m, size, r);
+    // Children of their parent's lineage and born rows but for the generation's change of them (`row_change`) who join
+    // a node, or start in another cell, get no born rows of their own: joining a node as amounts and means
+    // (`nodes::add`), their born rows are their parent's, the change their spread, their own rows their parent's (the
+    // node keeps its born rows); a litter draws the change where it lands, if it starts a body there (`land_litter`).
+    let theirs = l.node || d.brain(w, b.lineage).is_none_or(|x| wanted(x, &genes) == sizes_of(x));
+    if pre.is_none() && theirs && (hit.is_some() || !here) {
+        if let Some(t) = hit {
+            d.events.push(born);
+            add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.day() as f64 }, (&genes, &spread), (b.lineage, b.genome, Some(Own::Block(b.brain)), left + sd * sd));
+            return true;
+        }
+        let (lineage, genome, parent, wet) = (b.lineage, b.genome, l.parent, b.wet);
+        let c = Body { cell: cell as u32, count: m, lineage, parent, born: w.day(), last: w.day() as f64, store, e, genes, spread, row_spread: left, genome, wet, ..Default::default() };
+        let brain = d.brains(b.cell as usize).all(b.brain).to_vec();
+        d.out.push(Entry::Litter(Box::new(Litter { c, rows: None, brain, change: Some(sd), from: b.cell, born })));
         return true;
     }
-    let (mut rows, row_spread) = child_rows(w, d, b, l, m, size, r);
+    let (mut rows, row_spread) = (shaken(w, d, b, pre, sd, r), left);
     // A node's children stay in its lineage: a change of the brain's base in one child is lost in the mean of many; a
     // node whose mean sizes moved moves itself (`lineage::resize`). In another lineage they join its young node there.
     let lineage = if l.node { b.lineage } else { child_lineage(w, d, b, l, &genes, &mut rows, r) };
@@ -168,7 +166,7 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
         let brains = d.brains(b.cell as usize);
         let x = brains.all(c.brain).to_vec();
         brains.free(std::mem::take(&mut c.brain));
-        d.out.push(Entry::Litter(Box::new(Litter { c, rows, brain: x, from: b.cell, born })));
+        d.out.push(Entry::Litter(Box::new(Litter { c, rows, brain: x, change: None, from: b.cell, born })));
         return true;
     }
     d.events.push(born);
@@ -188,35 +186,6 @@ fn start(w: &World, d: &mut Chunk, mut c: Body, rows: Option<Vec<f32>>, hit: Opt
     };
     add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.lineage, c.genome, Some(Own::Block(c.brain)), c.row_spread));
     d.brains(c.cell as usize).free(c.brain);
-}
-
-/// A litter (`emit`) lands in the serial pass (laws.md 0) in `d`, the chunk of its cell: it joins the young
-/// node of its kind and lineage there (`kin`) or starts a body of its own (`start`), and its birth is recorded. Less
-/// than one member (of a node's children: an individual's are whole) with no node to join goes back (`back`).
-pub(crate) fn land_litter(w: &World, d: &mut Chunk, x: Litter) {
-    let i = x.c.cell as usize;
-    let hit = kin(w, d, i, x.c.lineage, false);
-    if hit.is_none() && x.c.count < 1.0 {
-        return d.out.push(Entry::Back(Box::new(x)));
-    }
-    let Litter { mut c, rows, brain, born, .. } = x;
-    c.brain = d.brains(i).take_in(&brain);
-    d.events.push(born);
-    start(w, d, c, rows, hit);
-}
-
-/// Children of a litter who found no node to join (`land_litter`) go back into their parent's brood if the parent
-/// lives; else what they hold goes to the ground of the cell their parent was in, as remains do (`body::remains`).
-pub(crate) fn back(w: &mut World, x: Litter) {
-    let Litter { mut c, from, .. } = x;
-    if let Some(p) = w.life.find(c.parent) {
-        let (mi, p) = (Body::matter_at(&w.chem).unwrap_or(0), &mut w.life[p]);
-        p.store.iter_mut().zip(&c.store).for_each(|(a, x)| *a += x);
-        (p.e, p.brood) = (p.e + c.e, p.brood + c.store[mi]);
-    } else {
-        c.cell = from;
-        w.in_cell(from as usize, |w, d| remains(w, d, &c));
-    }
 }
 
 /// The stores and heat of `m` children of `b`, taken from it: the matter
@@ -262,13 +231,13 @@ pub(crate) fn kin(w: &World, d: &Chunk, cell: usize, lineage: u32, mature: bool)
     theirs.or_else(|| crowded().then(|| d.cell(cell).filter(node).find(|&s| d.brain(w, d[s].lineage).map(|l| l.root) == root)).flatten())
 }
 
-/// The born rows of `m` children of `b` (none: they share their parent's), and the spread left among them. A share
-/// `Physics::row_chance` of children change theirs by a step (`brain::row_step`), else share their parent's. Children
-/// drawn from a node whose rows differ, or a group of them, get the mean of the group drawn (noise of that variance and
-/// the generation's change, over `m`) and keep the variance left among them (up to `body::most`, as a node keeps). With
-/// a partner each row is one parent's (`mix::mix_rows`), the group's spread pooled, then the same change. In a null run
-/// the rows do not change.
-fn child_rows(w: &World, d: &Chunk, b: &Body, l: &Births, m: f64, size: f32, r: &mut Rng) -> (Option<Vec<f32>>, f32) {
+/// The born rows of `m` children of `b` before the generation's change (none: their parent's), the noise of that change
+/// (sd, `shaken` draws it) and the spread left among them. A share `Physics::row_chance` of children change theirs by a
+/// step (`brain::row_step`), else share their parent's. Children drawn from a node whose rows differ, or a group of
+/// them, get the mean of the group drawn (noise of that variance and the generation's change, over `m`) and keep the
+/// variance left among them (up to `body::most`, as a node keeps). With a partner each row is one parent's
+/// (`mix::mix_rows`), the group's spread pooled, then the same change. In a null run the rows do not change.
+fn child_rows(w: &World, d: &Chunk, b: &Body, l: &Births, m: f64, size: f32, r: &mut Rng) -> (Option<Vec<f32>>, f32, f32) {
     let (mut pre, mut spread) = (None, b.row_spread);
     if let Some(t) = l.mate.filter(|_| !w.cfg.null) {
         if let Some((v, s)) = mix_rows(w, d, b, &d[t], m, r) {
@@ -277,12 +246,18 @@ fn child_rows(w: &World, d: &Chunk, b: &Body, l: &Births, m: f64, size: f32, r: 
         }
     }
     let (_, sd, left) = row_change(w, spread, m, size, r);
-    if sd > 0.0 {
-        let mut v = pre.unwrap_or_else(|| d.born(w, b).to_vec());
-        shake(&mut v, r, sd);
-        return (Some(v), left);
+    (pre, sd, left)
+}
+
+/// The born rows `pre` of children of `b` (none: their parent's) with the generation's change of noise `sd` drawn
+/// (`child_rows`); none if they are their parent's still.
+fn shaken(w: &World, d: &Chunk, b: &Body, pre: Option<Vec<f32>>, sd: f32, r: &mut Rng) -> Option<Vec<f32>> {
+    if sd <= 0.0 {
+        return pre;
     }
-    (pre, left)
+    let mut v = pre.unwrap_or_else(|| d.born(w, b).to_vec());
+    shake(&mut v, r, sd);
+    Some(v)
 }
 
 /// The lineage of an individual's child: its parent's if its brain-size genes fit it (no size a whole unit away,

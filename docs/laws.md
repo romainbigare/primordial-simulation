@@ -416,7 +416,7 @@ of soft tissue and each built solid, E their Young's modulus (`modulus`); it ord
 through breaks what its energy pays for (6.8).
 
 ## 4. Copy: a piece of the graph is copied, with small changes
-Files: `core/src/copy/` (`mix`, `grow`), `nodes.rs`, `body/genes.rs`, `lineage.rs`; the cover in `core/src/cover/` (4.5).
+Files: `core/src/copy/` (`mix`, `grow`, `litter`), `nodes.rs`, `body/genes.rs`, `lineage.rs`; the cover in `core/src/cover/` (4.5).
 
 ### 4.1 Genes
 16 scalar genes (`body::Layout`; `HEAT`, `STRENGTH`, `CHILD`, `COPY_MASS`, `MUT`, `LEARN`, the brain sizes
@@ -425,7 +425,9 @@ Files: `core/src/copy/` (`mix`, `grow`), `nodes.rs`, `body/genes.rs`, `lineage.r
 keep gene (6.1; in place, `body::Genes`), and the born brain rows. **Mutation** (`body::vary`): parent's gene plus
 noise of one step × 10^`MUT`,
 within range (not the brain-size genes of a body with no brain, 4.4); born rows change with `row_chance` by
-`row_noise`. **Likeness** (`body::alike`): every
+`row_noise`. Children of their parent's born rows and lineage who join a node keep their parent's born rows: the
+change is their spread, pooled into the node's row spread (4.4); a litter draws it only where it starts a body
+(`copy::land_litter`). **Likeness** (`body::alike`): every
 gene within `alike` steps; it decides who mixes, joins and merges.
 
 ### 4.2 Children come from a brood
