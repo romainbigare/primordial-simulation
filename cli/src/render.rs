@@ -77,10 +77,10 @@ pub fn save(w: &World, path: &str) {
     let (pw, ph) = (gw * s * panels + (panels - 1) * GAP, gh * s);
     let mut img = vec![255u8; pw * ph * 3];
     // A pixel block for each square of the map, of its cell.
-    for s in 0..w.map.n() {
-        let ((x, y), i) = (w.map.xy(s), w.mesh.cell_of(s));
+    for sq in 0..w.map.n() {
+        let ((x, y), i) = (w.map.xy(sq), w.mesh.cell_of(sq));
         let cols = [
-            map_pixel(w, &f, s),
+            map_pixel(w, &f, sq),
             ramp(&[(240.0, [40, 40, 160]), (273.0, [200, 220, 255]), (288.0, [250, 220, 120]), (305.0, [200, 40, 30])], f.t[i]),
             // Condensed substance falling, mol/(m² year), on a log scale (1e4 is about 0.2 m of liquid).
             ramp(&[(3.0, [235, 225, 200]), (4.0, [190, 200, 140]), (4.5, [110, 180, 110]), (5.0, [40, 110, 170]), (5.5, [20, 40, 120])], (w.rain[i] as f64 * YEAR_S).max(1.0).log10()),
@@ -91,7 +91,7 @@ pub fn save(w: &World, path: &str) {
             // Bodies moving into the cell per year, on a log scale, over the map in grey.
             {
                 let t = w.counts.traffic.get(i).copied().unwrap_or(0.0) as f64;
-                let g = map_pixel(w, &f, s).map(|v| v / 3 + 40);
+                let g = map_pixel(w, &f, sq).map(|v| v / 3 + 40);
                 if t < 1.0 { g } else { ramp(&[(0.0, [90, 70, 120]), (1.0, [200, 60, 160]), (2.0, [255, 160, 40]), (3.0, [255, 255, 200])], t.log10()) }
             },
         ];
