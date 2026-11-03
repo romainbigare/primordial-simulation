@@ -8,6 +8,9 @@ use super::Scratch;
 use crate::store::{self, fall_heat, Class, LinkFlux, Move};
 use crate::{World, AIR};
 
+/// Cells of a task of `potential`: it walks the amounts of each substance over them in turn.
+const CELLS_PER_TASK: usize = 256;
+
 /// The potential energy of the nodes of each class that holds matter, J (the bed's lies in its cell's stack), and the
 /// heights their matter leaves from (`Heights`).
 #[derive(Clone, Debug)]
@@ -60,18 +63,53 @@ struct Heights {
 /// node's matter lies at the mean head of its cells: the height of its column above that is in its heat (its heat
 /// capacity at constant pressure holds the work its column does as it warms), so lifting matter into it lifts it to
 /// there. A bodies' node's gas, and the matter of the cell's life (its bodies, its cover and its parts), lie at its
-/// cell's head. With `last`, a potential and the cells that changed since it (`Lifts::changed`), the other cells keep
-/// their numbers there: a cell's numbers are a function of what its nodes hold and of their phases alone.
-fn potential(w: &World, s: &Scratch, found: Option<Found>, last: Option<(&Potential, &[bool])>) -> Potential {
+/// cell's head.
+fn potential(w: &World, s: &Scratch, found: Option<Found>) -> Potential {
     let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
     let (n, na, ns) = (cells.n(), air.n(), w.chem.ns());
+    let (ground, bed, deep, bodies) = (w.store.amounts(Class::Ground), w.store.amounts(Class::Bed), w.store.amounts(Class::Deep), w.store.amounts(Class::Bodies));
     let found = found.unwrap_or_else(|| Found::of(w, s));
+    let (life, holds) = (&found.life, found.holds);
     let same = Same::of(s);
-    let mut rows = vec![0.0; n * ROW];
-    crate::par::rows(&mut rows, ROW, || (), |_, i, row| match last {
-        Some((p, changed)) if !changed[i] => row.copy_from_slice(&[p.ground[i], p.deep[i], p.heights.ground[i], p.heights.deep[i], p.bodies[i]]),
-        _ => row.copy_from_slice(&stack(w, &layers(w, s, (&found, &same), i), i)),
+    let mut rows = vec![0.0; n.div_ceil(CELLS_PER_TASK) * CELLS_PER_TASK * ROW];
+    crate::par::rows(&mut rows, CELLS_PER_TASK * ROW, || (), |_, task, out| {
+        let cells_of = task * CELLS_PER_TASK..((task + 1) * CELLS_PER_TASK).min(n);
+        let mut sums = vec![[0.0; LAYERS]; cells_of.len()];
+        // Where each substance lies in its class's amounts over the task's cells (`held`: none where it holds none).
+        let at = |k: usize| k * n + cells_of.start..k * n + cells_of.end;
+        for k in 0..ns {
+            let (sp, has) = (&s.sp[k], |c: usize| holds[c] >> k & 1 == 1);
+            if let Some(r) = has(1).then(|| held(&bed[at(k)])).flatten() {
+                sums.iter_mut().zip(r).for_each(|(x, &a)| bed_layer(x, sp, a));
+            }
+            if let Some(r) = has(0).then(|| held(&ground[at(k)])).flatten() {
+                let each = sums.iter_mut().zip(r);
+                match same[k] {
+                    // What `ground_layers` gives where the phase is the same in every node.
+                    Same::Gas => each.for_each(|(x, &a)| x[2] += a * sp.mm),
+                    Same::Liquid => each.for_each(|(x, &a)| (x[2], x[5]) = (x[2] + a * sp.mm, x[5] + a * sp.v[1])),
+                    Same::Solid => each.for_each(|(x, &a)| (x[1], x[4]) = (x[1] + a * sp.mm, x[4] + a * sp.v[0])),
+                    Same::Varies => each.zip(cells_of.clone()).for_each(|((x, &a), i)| ground_layers(x, s, (k, i), a)),
+                }
+            }
+            if let Some(r) = has(2).then(|| held(&deep[at(k)])).flatten() {
+                let each = sums.iter_mut().zip(r);
+                match same[k] {
+                    Same::Gas => each.for_each(|(x, &a)| x[6] += a * sp.mm),
+                    Same::Liquid | Same::Solid => each.for_each(|(x, &a)| (x[6], x[7]) = (x[6] + a * sp.mm, x[7] + a * sp.v[1])),
+                    Same::Varies => each.zip(cells_of.clone()).for_each(|((x, &a), i)| deep_layer(x, sp, s.state.tg[i], a)),
+                }
+            }
+            if let Some(r) = has(3).then(|| held(&bodies[at(k)])).flatten() {
+                sums.iter_mut().zip(r).for_each(|(x, &a)| x[HEAD] += a * sp.mm);
+            }
+        }
+        for ((x, i), row) in sums.iter_mut().zip(cells_of.clone()).zip(out.chunks_exact_mut(ROW)) {
+            x[HEAD] += life[i];
+            row.copy_from_slice(&stack(w, x, i));
+        }
     });
+    rows.truncate(n * ROW);
     let at = |c: usize| rows.iter().skip(c).step_by(ROW).copied().collect::<Vec<f64>>();
     let (head, amounts, g) = (at(2), w.store.amounts(Class::Air), w.cfg.gravity);
     let mut za = vec![0.0; na];
@@ -81,59 +119,18 @@ fn potential(w: &World, s: &Scratch, found: Option<Found>, last: Option<(&Potent
     Potential { ground: at(0), air: e_air, deep: at(1), bodies: at(4), heights: Heights { ground: head, air: za, deep: at(3) }, found }
 }
 
-/// What ground cell `i`'s stack is made of (`LAYERS`): what its nodes hold of each substance their class may hold
-/// (`Found::holds`), each in its phase (`Same`, else `ground_layers`), and its life at its head (`Found::life`).
-fn layers(w: &World, s: &Scratch, (found, same): (&Found, &[Same]), i: usize) -> [f64; LAYERS] {
-    let n = w.mesh.cells().n();
-    let [ground, bed, deep, bodies] = HELD.map(|c| w.store.amounts(c));
-    let mut x = [0.0; LAYERS];
-    for (k, sp) in s.sp.iter().enumerate().take(w.chem.ns()) {
-        let has = |c: usize| found.holds[c] >> k & 1 == 1;
-        if has(1) {
-            bed_layer(&mut x, sp, bed[k * n + i]);
-        }
-        if has(0) {
-            let a = ground[k * n + i];
-            match same[k] {
-                // What `ground_layers` gives where the phase is the same in every node.
-                Same::Gas => x[2] += a * sp.mm,
-                Same::Liquid => (x[2], x[5]) = (x[2] + a * sp.mm, x[5] + a * sp.v[1]),
-                Same::Solid => (x[1], x[4]) = (x[1] + a * sp.mm, x[4] + a * sp.v[0]),
-                Same::Varies => ground_layers(&mut x, s, (k, i), a),
-            }
-        }
-        if has(2) {
-            let a = deep[k * n + i];
-            match same[k] {
-                Same::Gas => x[6] += a * sp.mm,
-                Same::Liquid | Same::Solid => (x[6], x[7]) = (x[6] + a * sp.mm, x[7] + a * sp.v[1]),
-                Same::Varies => deep_layer(&mut x, sp, s.state.tg[i], a),
-            }
-        }
-        if has(3) {
-            x[HEAD] += bodies[k * n + i] * sp.mm;
-        }
-    }
-    x[HEAD] += found.life[i];
-    x
-}
-
 /// The potential energy of the world's matter, J (`potential`), from Flow's state of its ground.
 pub fn total(w: &World) -> f64 {
-    let p = potential(w, &w.scratch, None, None);
+    let p = potential(w, &w.scratch, None);
     [&p.ground, &p.air, &p.deep, &p.bodies].iter().flat_map(|v| v.iter()).sum()
 }
 
-/// A part of Flow being booked: the potential energy of every node at its start, the mass its moves carried so far
-/// (`carry`), the cells whose nodes' matter they moved (`stir`), and the phases of the ground nodes at its start
-/// (`State`'s temperature, plateau and molten share), from which `changed` finds the cells whose potential may have
-/// changed.
+/// A part of Flow being booked: the potential energy of every node at its start, and the mass its moves carried so far
+/// (`carry`).
 #[derive(Clone, Debug)]
 pub(super) struct Lifts {
     start: Potential,
     moved: Vec<Moved>,
-    stirred: Vec<bool>,
-    phases: (Vec<f64>, Vec<usize>, Vec<f64>),
 }
 
 /// A mass that went from one node to another, kg: each named by its array of `Potential` and its index there (`slot`;
@@ -182,25 +179,7 @@ impl Lifts {
     /// From the world now, whose potential energy is `known` where the last part left it so, its moves gathered in
     /// `moved` (empty; kept from part to part for its room).
     pub(super) fn start(w: &World, s: &Scratch, known: Option<Potential>, moved: Vec<Moved>) -> Lifts {
-        let (start, stirred) = (known.unwrap_or_else(|| potential(w, s, None, None)), vec![false; w.mesh.cells().n()]);
-        Lifts { start, moved, stirred, phases: (s.state.tg.clone(), s.state.pk.clone(), s.state.phi.clone()) }
-    }
-    /// The cells whose nodes' matter a move changed (`stir`) or whose ground node's phases may have changed: its plateau or
-    /// its molten share changed, or its temperature passed a melting or boiling point (all the stack reads of it,
-    /// `ground_layers`, `deep_layer`).
-    fn changed(&self, s: &Scratch) -> Vec<bool> {
-        let mut points: Vec<f64> = s.sp.iter().flat_map(|p| [p.melt, p.boil]).collect();
-        points.sort_unstable_by(f64::total_cmp);
-        let under = |t: f64| points.partition_point(|&p| p <= t);
-        let (tg, pk, phi) = &self.phases;
-        let st = &s.state;
-        (0..self.stirred.len()).map(|i| self.stirred[i] || pk[i] != st.pk[i] || phi[i] != st.phi[i] || (tg[i] != st.tg[i] && under(tg[i]) != under(st.tg[i]))).collect()
-    }
-    /// The matter of ground cell `index` moved, in a node of `class` (one that lies in its stack, `HELD`).
-    fn stir(&mut self, class: Class, index: usize) {
-        if HELD.contains(&class) {
-            self.stirred[index] = true;
-        }
+        Lifts { start: known.unwrap_or_else(|| potential(w, s, None)), moved }
     }
     /// `kg` go from node `from` to node `to` (back where negative).
     fn carry(&mut self, (from, to): ((Class, u32), (Class, u32)), kg: f64) {
@@ -222,9 +201,8 @@ impl Lifts {
     /// is its ground node's (a bodies' node holds little heat of its own). Returns the potential energy now, and the
     /// room of its moves, emptied.
     pub(super) fn book(self, w: &mut World, s: &Scratch) -> (Potential, Vec<Moved>) {
-        let changed = self.changed(s);
         let (mut start, mut moved) = (self.start, self.moved);
-        let (now, g) = (potential(w, s, Some(std::mem::take(&mut start.found)), Some((&start, &changed))), w.cfg.gravity);
+        let (now, g) = (potential(w, s, Some(std::mem::take(&mut start.found))), w.cfg.gravity);
         let olds = start.energies();
         let mut q: [Vec<f64>; 4] = now.energies().map(|v| vec![0.0; v.len()]);
         for m in &moved {
@@ -271,20 +249,19 @@ pub(super) fn apply(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], moves: 
             }
             let (ca, cb) = (slot(x.class[0], 0).0, slot(x.class[1], 0).0);
             for (lk, (ab, ba)) in ab.into_iter().zip(ba).enumerate() {
-                if (0..x.ks.len()).any(|q| x.mol[q * links + lk] != 0.0) {
-                    l.stir(x.class[0], x.a[lk] as usize);
-                    l.stir(x.class[1], x.b[lk] as usize);
-                }
                 let ends = ((ca, x.a[lk]), (cb, x.b[lk]));
                 l.carry_slots(ends, ab);
                 l.carry_slots(ends, ba);
             }
         }
-        for m in moves.iter().filter(|m| m.mol != 0.0) {
-            l.stir(m.from.class, m.from.index);
-            l.stir(m.to.class, m.to.index);
+        for m in moves {
             l.carry(((m.from.class, m.from.index as u32), (m.to.class, m.to.index as u32)), m.mol * s.sp[m.k as usize].mm);
         }
     }
     store::apply(w, fluxes, moves);
+}
+
+/// `v`, where it holds anything.
+fn held(v: &[f64]) -> Option<&[f64]> {
+    Some(v).filter(|r| r.iter().any(|&a| a != 0.0))
 }

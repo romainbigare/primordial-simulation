@@ -109,10 +109,7 @@ table, each the mean of the part's start and end, so a lake that drains whole ta
 node's heat takes what came in less what left less the change of its own (`store::fall_heat`):
 so a fall heats where the matter lands, a lift is paid by the node it enters (the air, for a gas going up; the ground
 node a store's liquid rises into), a column that rises as it fills pays for it, and the potential energy the world's
-matter gained is one number of the store (`Store::lifted`), the change of that function. At a part's end that function
-is found again only in the cells it changed: a cell an end of a move of matter booked in the part (`potential::apply`),
-or whose ground node's plateau or molten share changed or whose temperature passed a melting or boiling point; any
-other cell's numbers are what they were, as they depend on its amounts and phases alone. The other laws lift a gas into
+matter gained is one number of the store (`Store::lifted`), the change of that function. The other laws lift a gas into
 the air from its cell's head to its air node's mean ground by the same rule (`World::lift`); a ground node that reacts
 (Change) pays what its stack gains, and its gas leaves from its head (`change::booking`). So every element and the
 energy are kept;
