@@ -1,6 +1,6 @@
 //! The table of starting kinds: the genes each starts with, and where, when and how many are placed.
 
-use pcore::body::{COOL_T, COPY_MASS, DISPERSE, HEAT, HIDDEN, KEEP_T, LEARN, MEMORY, NSCALAR, REPAIR, SEEN, SIGHT, STRENGTH};
+use pcore::body::{COOL_T, COPY_MASS, DISPERSE, HIDDEN, KEEP_T, LEARN, MEMORY, NSCALAR, REPAIR, SEEN, SIGHT, STRENGTH};
 use pcore::{brain, cover};
 
 /// One row of the table of starting kinds: its name, when it is placed, and what is placed.
@@ -61,10 +61,11 @@ const fn with<const N: usize>(mut s: [f32; N], d: &[(usize, f32)]) -> [f32; N] {
     s
 }
 
-/// The genes every kind of bodies starts with unless its row says otherwise: HEAT 3.5 (no coat: its bare surface,
-/// `Body::bare`), CHILD -0.523 (a child 0.3 of the copy mass), MUT -1.2, HIDDEN 12, MEMORY 6, SEEN 3, SIGHT 1, ALLOC 0.8,
-/// KEEP_T 250 K and COOL_T 320 K (outside what the island has: they do nothing at the start).
-const BASE: [f32; NSCALAR] = [3.5, 0.0, -0.523, 0.0, -1.2, 0.0, 12.0, 6.0, 3.0, 1.0, 0.0, 0.0, 0.0, 0.8, 250.0, 320.0];
+/// The genes every kind of bodies starts with unless its row says otherwise: HEAT 0.5 (half the best coat: 0.57 m² K/W
+/// in all, about a flat pelt over still air, so selection can move it either way), CHILD -0.523 (a child 0.3 of the copy
+/// mass), MUT -1.2, HIDDEN 12, MEMORY 6, SEEN 3, SIGHT 1, ALLOC 0.8, KEEP_T 250 K and COOL_T 320 K (outside what the
+/// island has: they do nothing at the start).
+const BASE: [f32; NSCALAR] = [0.5, 0.0, -0.523, 0.0, -1.2, 0.0, 12.0, 6.0, 3.0, 1.0, 0.0, 0.0, 0.0, 0.8, 250.0, 320.0];
 
 /// The cover of the starting light-eaters: a light capacity that a full summer's light about fills at a capture area of
 /// 5 m² per kg (a herb's 20 m² per kg of leaf, a quarter of it leaf), walls as much as its matter (cell walls are about
@@ -82,12 +83,11 @@ const LIGHT: Kind = Kind { name: "light-eaters", year: 0, place: Place::Field(Fi
 const EATER_KEEP_T: f32 = 278.0;
 const EATER_COOL_T: f32 = 315.0;
 
-/// Eaters: fast burning, take the energy-rich solid from the ground, the cover and bodies, learning on, a fur coat
-/// (`HEAT` -1.0: 0.97 W/K for a member of 30 kg, near a mammal's least, 0.94, Herreid and Kessel 1967), keep warm and cool (`EATER_KEEP_T`, `EATER_COOL_T`); individuals, two in some cells
-/// where life already is.
+/// Eaters: fast burning, take the energy-rich solid from the ground, the cover and bodies, learning on, keep warm and
+/// cool (`EATER_KEEP_T`, `EATER_COOL_T`); individuals, two in some cells where life already is.
 const EATER_BODIES: Bodies = Bodies {
     anywhere: false,
-    scalars: with(BASE, &[(HEAT, -1.0), (STRENGTH, 0.6), (COPY_MASS, 1.645), (LEARN, 0.0), (DISPERSE, 0.1), (REPAIR, -0.4), (KEEP_T, EATER_KEEP_T), (COOL_T, EATER_COOL_T)]),
+    scalars: with(BASE, &[(STRENGTH, 0.6), (COPY_MASS, 1.645), (LEARN, 0.0), (DISPERSE, 0.1), (REPAIR, -0.4), (KEEP_T, EATER_KEEP_T), (COOL_T, EATER_COOL_T)]),
     cat: [-1.0, 2.6],
     upt: [0.3, 1.0],
     per: 2,

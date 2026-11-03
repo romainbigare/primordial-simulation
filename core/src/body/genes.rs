@@ -11,8 +11,7 @@ use std::f32::consts::{FRAC_PI_8, LOG10_2};
 // Scalar genes, then one per reaction bodies may run (a diet: on above 0, it burns or digests what that reaction takes)
 // and three per store (safe minimum as a share of mass; take selectivity; most share of mass kept), in the order of
 // `Chemistry::body`: `Layout`. Below zero a gene is off.
-/// Heat conductance through its coat, log10 W/(K kg) for a member of `Physics::m_ref` kg; with mass^(2/3), within what
-/// a coat can be (`Body::conductance`)
+/// Its coat, 0..1: the share of the best coat it grows (0: bare skin; `Body::conductance`)
 pub const HEAT: usize = 0;
 /// Strength, 0..1
 pub const STRENGTH: usize = 1;
@@ -80,7 +79,7 @@ const SCALARS: [(f32, f32, f32); NSCALAR] = {
 
 const fn scalar(g: usize) -> (f32, f32, f32) {
     match g {
-        HEAT => (0.3, -2.5, 3.5),
+        HEAT => (0.05, 0.0, 1.0),
         STRENGTH => (0.1, 0.0, 1.0),
         CHILD => (0.1, -6.0, LOG_HALF),
         WET => (0.05, -3.0, 0.5),

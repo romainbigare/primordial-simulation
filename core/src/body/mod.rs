@@ -115,8 +115,6 @@ pub struct Body {
 /// Numbers that follow from a body's genes, kept to save time.
 #[derive(Clone, Debug, Default)]
 pub struct Consts {
-    /// 10 to the power of the coat gene (`HEAT`)
-    pub heat: f64,
     /// The reactions of its diet that release heat, with the heat per unit, J (not those that keep a part of a fuel's
     /// heat, `Chemistry::keeps`; only those bodies may run, `Chemistry::body`)
     pub burn: Few<(usize, f64), BODY_REACTIONS>,
@@ -236,7 +234,7 @@ impl Body {
         k.fuel = k.burn.iter().flat_map(|x| &chem.reactions[x.0].inputs).fold(0, |m, p| m | 1 << p.0);
         k.broken = bc.reactions().iter().filter(|&&r| on(r)).flat_map(|&r| &chem.reactions[r].inputs).fold(0, |m, p| m | 1 << p.0);
         k.upt = (0..bc.n()).filter(|&s| self.genes[lay.upt + s] > 0.0).map(|s| (bc.subs()[s], self.genes[lay.upt + s])).collect();
-        (k.heat, k.copy_mass) = (self.dec(HEAT), self.dec(COPY_MASS));
+        k.copy_mass = self.dec(COPY_MASS);
         k.tissue = (k.copy_mass / p.m_ref).powf(p.intake_exp - 1.0);
         k.pace_ref = k.burn.first().map_or(1.0, |&(r, _)| chem.reactions[r].arrhenius(p.t_cat));
         self.k = k;

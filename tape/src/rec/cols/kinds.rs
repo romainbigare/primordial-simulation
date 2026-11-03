@@ -16,7 +16,7 @@ use std::collections::BTreeSet;
 const GENES: [(usize, &str, &str); 5] = [
     (body::COPY_MASS, "copy_log", "log10"),
     (body::HIDDEN, "hidden", "1"),
-    (body::HEAT, "heat", "log10"),
+    (body::HEAT, "heat", "1"),
     (body::KEEP_T, "keep_t", "K"),
     (body::REPAIR, "repair", "log10"),
 ];

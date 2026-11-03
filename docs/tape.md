@@ -135,7 +135,8 @@ members; for a kind of cover by its built cover.
 | `mass`, `copy_mass`, `body`, `matter` | kg, kg, kg, | mean member mass, copy mass, body (`Body::size`); body matter's share of the mass |
 | `activity`, `dry` | | mean activity; share below 0.5 |
 | `alloc`, `child`, `brood` | , log10, | genes of reproduction; brood as a share of the mass |
-| `copy_log`, `heat`, `repair`, `wet_gene` | log10 | gene means |
+| `copy_log`, `repair`, `wet_gene` | log10 | gene means |
+| `heat` | | gene mean: the share of the best coat (`HEAT`) |
 | `hidden`, `keep_t` | , K | gene means |
 | `cat_<r>`, `cat_<r>_on` | log10, | diet gene of reaction r over the members that carry it on (above 0); share that do |
 | `slots`, `cover_kg`, `cover_area` | , kg, m²/m² | a kind of cover: its slots, its mass, its capture area per m² of land |

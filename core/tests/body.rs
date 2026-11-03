@@ -240,8 +240,8 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         let mut b = line.founder(w, 1, i);
         // (And they do not learn: a body that learns from its well-being may learn to walk away in the months of the test.)
         (b.genes[STRENGTH], b.genes[DISPERSE], b.genes[REPAIR], b.genes[LEARN]) = (0.0, 0.0, repair, -6.0);
-        // (No coat: they stand at their ground's temperature, which holds their pace, whatever heat they make.)
-        b.genes[pcore::body::HEAT] = 3.5;
+        // (No coat: bare skin holds them near their ground's temperature, which holds their pace.)
+        b.genes[pcore::body::HEAT] = 0.0;
         b.genes[COPY_MASS] -= std::f32::consts::LOG10_2;
         // A node of `count` such members (its matter and energy booked as an edit), with three times the fuel.
         let fuel = 2.0 * kg(w, &b, RICH);

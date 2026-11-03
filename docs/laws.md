@@ -711,11 +711,10 @@ the work becomes heat in its cell's ground, and the body keeps its temperature. 
 
 ### 6.3 Heat
 A body's temperature follows its ground's (`live::keep_warm`): the heat its upkeep released over the update leaves
-through its coat (`HEAT`, × mass^(2/3), `Body::conductance`; in series with the walls around it, 3.4), so it stands
-that much above the ground. Each member has the surface `meeh` × its mass^(2/3) (Meeh 1879); its coat insulates it
-at most `r_coat` (fur and the tissue under it: a mammal's least conductance, Herreid and Kessel 1967) over the still
-air at its surface (`r_air`), and at
-least by that air alone (its bare surface, `Body::bare`). Below its `KEEP_T` gene it burns what its coat loses at
+through its coat (`Body::conductance`; in series with the walls around it, 3.4), so it stands that much above the
+ground. Each member has the surface `meeh` × its mass^(2/3) (Meeh 1879); its coat insulates it by the still air at its
+surface (`r_air`) and the share `HEAT` (0 to 1) of the best coat, `r_coat` (fur and the tissue under it: a mammal's
+least conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). Below its `KEEP_T` gene it burns what its coat loses at
 `KEEP_T` beyond that heat; above its `COOL_T` gene it opens its coat as far as it needs to stand there, up to its bare
 surface (blood to the skin, the coat laid flat), and past that evaporates its key liquid for the excess, at the
 liquid's vaporisation enthalpy, never below its safe minimum, the vapour going to the bodies' node with its latent

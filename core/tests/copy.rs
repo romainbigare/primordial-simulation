@@ -514,8 +514,8 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
             *c *= cost;
         }
         let mut b = eater(&mut w, i, brain::TAKE, 0.0);
-        // A body that sheds its heat freely, so that only its energy limits it.
-        (b.genes[STRENGTH], b.genes[ALLOC], b.genes[pcore::body::HEAT]) = (1.0, 0.0, 3.0);
+        // A body that sheds its heat freely (bare skin), so that only its energy limits it.
+        (b.genes[STRENGTH], b.genes[ALLOC], b.genes[pcore::body::HEAT]) = (1.0, 0.0, 0.0);
         // The eater founder's size of maturity: tissue costs per kg go by it across kinds (Kleiber). It does not die of age.
         (b.genes[COPY_MASS], w.cfg.phys.e_life) = (1.645, 1e30);
         let (s, b0) = out(&mut w, b);
