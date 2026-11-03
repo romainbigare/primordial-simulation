@@ -638,8 +638,8 @@ mean, so its brain moves as an individual's does. **Across lives**: evolution of
 the lineage it watched in, the watcher's rows move part way (`blend`) toward the watched one's, if the brains have the
 same sizes, less the less alike they are, times the share of the watcher's members now who watched (for a node, the
 mean by members). **Memory**: the brain's memory numbers (`MEMORY`), which it reads and writes at each decision.
-**Signals and the memory of others are parked** until a kind can plan: no body emits a signal or remembers whom it
-dealt with. **Thinking** (`Physics::think`) costs by brain size and mass^0.25 one decision per
+**Signals and the memory of others are parked**: no body emits a signal or remembers whom it dealt with; the brain's
+memory numbers are its only memory. **Thinking** (`Physics::think`) costs by brain size and mass^0.25 one decision per
 update, once a month. **Null run** (`--null`): no learning or imitation, rows frozen, genes still evolve.
 
 ## 6. Bodies

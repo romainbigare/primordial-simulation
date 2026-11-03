@@ -133,7 +133,7 @@ impl<'a> Chunk<'a> {
         self.add(c, w.day())
     }
     /// The visible traits of its living bodies that changed since the last survey are worked out again
-    /// (`Body::visible`, `Body::stale`): once before what reads them, the cells' sums and the batch's faces.
+    /// (`Body::visible`, `Body::stale`): once before what reads them, the cells' sums and the batch.
     pub(crate) fn see_changed(&mut self, w: &World) {
         for b in self.cells.iter_mut().flat_map(|c| &mut c.bodies).filter(|b| b.alive && b.stale) {
             (b.vis, b.stale) = (b.visible(&w.chem, &w.cfg), false);

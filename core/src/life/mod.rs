@@ -1,5 +1,5 @@
 //! The registry of bodies (laws.md 0): the bodies of each ground cell (`Cell`), with ids each cell gives, found by id;
-//! the faces they show in a batch; the caches of the last survey; the lineages and born rows (`registry`). Body code
+//! the caches of the last survey; the lineages and born rows (`registry`). Body code
 //! runs on chunks of cells (`chunk`), and what it does to other cells waits in a queue for the serial pass (`cross`).
 
 mod brains;

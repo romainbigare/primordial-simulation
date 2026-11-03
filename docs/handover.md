@@ -442,7 +442,7 @@ There is **one world clock**. A fast process in a detailed area may sub-step ins
 This is a speed tool, not a law: the history is the same with and without threads, on any number of threads (the feature `threads` of `core`) and for any count of chunks.
 
 - The cells are cut into **chunks**: `Config::chunks` runs of neighbouring cells, the same for any number of threads. A chunk owns its cells, their bodies, their cover and its view of the store.
-- Bodies update once a month, in one **parallel pass**: one task per chunk on the pool, the world read only, a chunk writing only its own cells. What leaves a chunk (a move to another cell, a litter that starts in another cell, a watch, an act on a part) waits in the chunk's queue. Then one **serial pass** lands the queues in a fixed order, by chunk, cell and the order queued, and the moves and litters land on the pool, each in the chunk of the cell it goes to. Bodies that hold a part or are inside one act in the serial pass.
+- Bodies update once a month, in one **parallel pass**: one task per chunk on the pool, the world read only, a chunk writing only its own cells. What leaves a chunk (a move to another cell, a litter that starts in another cell, a watch, an act on a part) waits in the chunk's queue. A chunk updates its bodies cell by cell, all the stages of one cell before the next, so its queue, its events and the lineages and born rows it makes come in the order of the cells, whatever the chunks. Then one **serial pass** lands the queues in that order (by the cell each lands in, then the order queued), the moves and litters on the pool, each in the chunk of the cell it goes to; the acts on parts run there too.
 - Flow's air step and Change's reactors and the survey's wear, merge and shade use the same pool where a loop is large enough to pay for a call into it (30 to 55 µs).
 - How it works: `docs/laws.md` 0.
 - The tape's recorder uses the same pool (`pcore::par::map`, `map_n` and `join`, under the one feature `threads` of `pcore`): its walks over bodies and cells, and the parts of a yearly row that write different columns, run side by side, and every sum is added in the order of the data, so its files are the same with and without threads.
@@ -500,7 +500,7 @@ analyze/    not built yet (M5): pattern finder, fact cards, recognition matching
 
 - **Snapshots:** at the end of a run, every `--snapshots-every` years if asked, and before every god action, save the full state, compressed (bincode, then gzip). A run can go on from any snapshot (`ew resume`).
 - **Raw physical events:** body born, body died (and cause: lacking a store, frozen or boiled, could not pay, taken, broken, age), taken from, given to, watched, bond made or broken, first time a substance appears in the world, god action applied. Only raw physical facts. **"A city was founded" is not a raw event.** The pattern finder detects that later.
-- **Summary series** every year (`series.csv`): totals per element, energy, temperatures, absorbing-gas amounts, population counts, births and deaths by cause, traffic, gifts, imitation and signals. Columns are named by index, never by Earth names (`elem_<j>`, `air_<k>`, `cat_<r>`).
+- **Summary series** every year (`series.csv`): totals per element, energy, temperatures, absorbing-gas amounts, population counts, births and deaths by cause, traffic, gifts and imitation. Columns are named by index, never by Earth names (`elem_<j>`, `air_<k>`, `cat_<r>`).
 - **Columns by starting kind** (`root_<k>_*`): `<k>` is the starting kind a body descends from. Members, mass, births and deaths by cause, the life the genes allow and the life lived, and the means of the main genes, counted by members (a node of 10⁸ members counts 10⁸ times). In a roster run, read the number of kinds alive from these columns.
 - **Months** (`months.csv`, with `--months`): births and deaths by kind and cause each month, so seasons show.
 - **The run's numbers** (`physics.json`): every field of `Physics` and `Config`. `ew numbers OLD NEW` prints the fields that differ between two runs, so no number changes without the reader seeing it.
@@ -900,7 +900,7 @@ Each milestone ends with a short report for the owner, in simple English, saved 
 ### 12.5 Repeatability (cheap kind only)
 
 - Same seed, same code version and same machine/build give the same history.
-- The number of threads does not change the history: every order (of sums, of landings, of writes) is fixed by the data, never by which thread is first. `core/tests/threads.rs` checks it.
+- Neither the number of threads nor the count of chunks changes the history: every order (of sums, of landings, of writes, of new ids) is fixed by the data, never by which thread is first or where a chunk ends. `core/tests/threads.rs` checks it on a world crowded enough that two chunks land in one cell. (The tape's yearly sums of counters, added chunk by chunk, can differ in their last digits; the world does not.)
 - Purpose: finding bugs, and replaying a run.
 - **Do not** build identical results across machines, CPU/GPU agreement to the last bit, receipts or replay proofs.
 
