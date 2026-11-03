@@ -1,7 +1,7 @@
 //! The working memory of Flow (`Scratch`), its tables, and the recheck of what is present (`refresh`).
 
 use super::{air, land::NONE, range};
-use crate::{chem::Chemistry, solve::downhill::Order, store::Class, AIR, World};
+use crate::{chem::Chemistry, solve::downhill::Order, space::square::Square, store::Class, AIR, World};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Numbers of one substance Flow reads often (from `chem::Substance`).
@@ -172,9 +172,9 @@ pub struct Scratch {
     pub(super) basin: super::basin::Basin,
     /// The table of the saturation pressure of each substance, as far up as the exchange has asked (`air::Sat`).
     pub(super) sat: Vec<air::Sat>,
-    /// The four nearest air nodes of each ground cell on the square map, and their weights (`air::lerp`).
-    pub(super) near: Vec<[u32; 4]>,
-    pub(super) wt: Vec<[f64; 4]>,
+    /// The air nodes each ground cell reads, and their weights (`air::lerp`; a slot of no weight reads nothing).
+    pub(super) near: Vec<[u32; air::SEES]>,
+    pub(super) wt: Vec<[f64; air::SEES]>,
     /// Which cells see each air node and which nodes each node's cells see (`air::Corners`).
     pub(super) corners: air::Corners,
     /// The area of the air each ground cell sees (`air::lerp`), m²; and how much colder than that air at its mean
@@ -335,13 +335,15 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
             refl: [mean(b.refl[0]), mean(b.refl[1])],
         })
         .collect();
-    // A cell reads its air node and the three next to it on its side of the node's centre, bilinearly on the map (round
-    // a globe's wrap); along an axis with no node on its side, its own alone, paired with the node on the other side.
+    // A square of the map reads its air node and the three next to it on its side of the node's centre, bilinearly on
+    // the map (round a globe's wrap); along an axis with no node on its side, its own alone, paired with the node on the
+    // other side. A cell reads what its squares read, by their areas, so each node's air is read once in all.
     let (mesh, air) = (&w.mesh, w.mesh.level(AIR));
-    (s.near, s.wt) = (0..mesh.cells().n())
+    let squares = World::mesh_of(&Square::new(w.map.w, w.map.h, w.map.side, w.map.wrap), w.air_scale, &w.cfg);
+    let reads: Vec<([u32; 4], [f64; 4])> = (0..w.map.n())
         .map(|i| {
-            let p = mesh.up(i, 0, AIR);
-            let o = mesh.on_map((AIR, p), (0, i));
+            let p = squares.up(i, 0, AIR);
+            let o = squares.on_map((AIR, p), (0, i));
             // The node next to `p` in compass direction `d` (none: `p`).
             let node = |d: Option<usize>| d.and_then(|d| air.way(p, d)).map_or(p, |e| air.adj_cell()[e] as usize);
             // Along axis `x` (0 east, 1 south): the directions from `p` of the nodes before and after the cell (none:
@@ -361,7 +363,18 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
             let at = |ew: Option<usize>, ns: Option<usize>| node(match (ew, ns) { (Some(0), Some(6)) => Some(7), (Some(a), Some(b)) => Some((a + b) / 2), (a, b) => a.or(b) }) as u32;
             ([at(xs[0], ys[0]), at(xs[1], ys[0]), at(xs[0], ys[1]), at(xs[1], ys[1])], [(1.0 - tx) * (1.0 - ty), tx * (1.0 - ty), (1.0 - tx) * ty, tx * ty])
         })
-        .unzip();
+        .collect();
+    (s.near, s.wt) = (0..mesh.cells().n()).map(|i| ([mesh.up(i, 0, AIR) as u32; air::SEES], [0.0; air::SEES])).unzip();
+    let mut used = vec![0; mesh.cells().n()];
+    for (sq, (nodes, wts)) in reads.iter().enumerate() {
+        let i = mesh.cell_of(sq);
+        let (near, wt, share) = (&mut s.near[i], &mut s.wt[i], squares.cells().area()[sq] / mesh.cells().area()[i]);
+        for (&q, &x) in nodes.iter().zip(wts).filter(|r| *r.1 > 0.0) {
+            let c = (0..used[i]).find(|&c| near[c] == q).unwrap_or(used[i]);
+            assert!(c < air::SEES, "a cell reads at most `SEES` air nodes");
+            (near[c], wt[c], used[i]) = (q, wt[c] + share * x, used[i].max(c + 1));
+        }
+    }
     s.seen = (0..mesh.cells().n()).map(|i| air::lerp(s, air.area(), i)).collect();
     s.corners = air::Corners::of(air, &s.near, &s.wt);
 }

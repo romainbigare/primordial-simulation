@@ -39,11 +39,13 @@ pub(crate) fn air_temp(e: f64, capa: f64) -> f64 {
     e / capa.max(CAPA_MIN)
 }
 
-/// The air seen by ground cell `i`: a node field interpolated from the four nearest nodes.
+/// The most air nodes a ground cell reads: the 3 x 3 round its own, for a cell as wide as an air block (`Scratch::near`).
+pub(super) const SEES: usize = 9;
+
+/// The air seen by ground cell `i`: a node field interpolated from the nodes it reads.
 #[inline]
 pub(super) fn lerp(s: &Scratch, v: &[f64], i: usize) -> f64 {
-    let (j, w) = (&s.near[i], &s.wt[i]);
-    w[0] * v[j[0] as usize] + w[1] * v[j[1] as usize] + w[2] * v[j[2] as usize] + w[3] * v[j[3] as usize]
+    s.near[i].iter().zip(&s.wt[i]).map(|(&j, &w)| w * v[j as usize]).sum()
 }
 
 /// The share of the air ground cell `i` sees that lies over it: its area over the area of the air it sees (`lerp`).

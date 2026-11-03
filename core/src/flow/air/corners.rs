@@ -1,9 +1,10 @@
 //! Which air nodes each ground cell sees and which cells see each air node (`air::lerp`), found once from the map.
 
+use super::SEES;
 use crate::space::Level;
 
-/// The cells that see each air node, and the nodes each node's cells see, from the four nearest air nodes of each
-/// ground cell and their weights (`Scratch::near`, `wt`; a corner of no weight sees nothing).
+/// The cells that see each air node, and the nodes each node's cells see, from the air nodes each ground cell reads
+/// and their weights (`Scratch::near`, `wt`; a corner of no weight sees nothing).
 #[derive(Clone, Debug, Default)]
 pub(in crate::flow) struct Corners {
     /// Per air node, the cells that see it and the corner they see it at, in the order of the cells: entries
@@ -15,14 +16,14 @@ pub(in crate::flow) struct Corners {
     /// list it sees there (`cells::Response::ground`).
     pub(super) sees_at: Vec<usize>,
     pub(super) sees: Vec<u32>,
-    pub(super) entry: Vec<[u32; 4]>,
+    pub(super) entry: Vec<[u32; SEES]>,
 }
 
 impl Corners {
-    /// From the four nearest air nodes of each ground cell, `near`, and their weights, `wt`, on the air level `air`.
-    pub(in crate::flow) fn of(air: &Level, near: &[[u32; 4]], wt: &[[f64; 4]]) -> Corners {
+    /// From the air nodes each ground cell reads, `near`, and their weights, `wt`, on the air level `air`.
+    pub(in crate::flow) fn of(air: &Level, near: &[[u32; SEES]], wt: &[[f64; SEES]]) -> Corners {
         let (n, na) = (near.len(), air.n());
-        let corners = |i: usize| (0..4).filter(move |&c| wt[i][c] > 0.0);
+        let corners = |i: usize| (0..SEES).filter(move |&c| wt[i][c] > 0.0);
         let mut by_at = vec![0; na + 1];
         (0..n).for_each(|i| corners(i).for_each(|c| by_at[near[i][c] as usize + 1] += 1));
         (0..na).for_each(|q| by_at[q + 1] += by_at[q]);
@@ -34,7 +35,7 @@ impl Corners {
                 next[q] += 1;
             }
         }
-        let (mut sees_at, mut sees, mut entry) = (vec![0], Vec::new(), vec![[0u32; 4]; n]);
+        let (mut sees_at, mut sees, mut entry) = (vec![0], Vec::new(), vec![[0u32; SEES]; n]);
         for j in 0..na {
             let first = sees.len();
             for &i in air.children(j) {
@@ -53,7 +54,7 @@ impl Corners {
     }
     /// The air nodes the cells `cells` of one air node see (`air::lerp`, weights `wt`), by their areas `area`: per entry
     /// of the node's list (`sees`), its weight, the weights summing to one.
-    pub(in crate::flow) fn by_area(&self, wt: &[[f64; 4]], area: &[f64], cells: &[u32]) -> Vec<(u32, f64)> {
+    pub(in crate::flow) fn by_area(&self, wt: &[[f64; SEES]], area: &[f64], cells: &[u32]) -> Vec<(u32, f64)> {
         let all: f64 = cells.iter().map(|&i| area[i as usize]).sum();
         let mut by: Vec<(u32, f64)> = Vec::new();
         for &i in cells {
