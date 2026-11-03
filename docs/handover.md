@@ -469,7 +469,7 @@ core/       the five laws, world state, random numbers. No IO, no Earth words.
               which adds as `apply` adds),
               and the moves of a body's or a part's update (`Moves`)
   src/clock/  time in whole seconds, the calendar, processes with periods, sleep and wake of nodes
-  src/solve/  the shared maths: spread (implicit step on links), downhill, band (the air level with the wind)
+  src/solve/  the shared maths: sweep (explicit step on links), downhill, line (implicit step along lines of links)
   src/life/   the bodies by cell and the chunks of cells that body code runs on (the parallel pass, the serial pass)
   src/cover/  the plant field: the starting cover of a cell, its growth and seeding
   src/*.rs    schedule (the month), world, params (Config, Physics), ground (heat and plateaus), check (the books),

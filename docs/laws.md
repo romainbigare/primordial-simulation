@@ -271,21 +271,24 @@ a block is shared among its nodes by their volumes and its heat so that each has
 raised to a common height by the block's drop with height), so its pressure, shares and warmth are the block's. An
 island smaller than a block (the islands of 64 and 128 cells) is one block, and has no wind: only the evening. Across the links between blocks gas moves by three pushes, each day from the air at
 its start. **Pressure** (p = nRT/V), evened in the time sound takes to cross the link (Lamb waves, Lindzen 1990),
-explicitly: the sender's air, each link at most half of what evens it over the links of the busier of its nodes, and no
-node giving more of a gas than it holds (`solve::sweep::within`). **Known limit:** sound is faster than that, so a
-pressure difference across many links of blocks takes days to even out. **Eddies** mix the columns (`mix`, width over
-length), each mol with its node's heat. **Overturning**: the lower half flows to the warmer column and the upper half
-back, a mass flux of `wind` per K/m of the warmth gradient along the link (its difference over its length), turned by
-the planet's rotation (`rotation`), through half the link's cross-section, so it does not depend on the size of the
-nodes. Each half carries the air of the node it leaves, vapour crowding low, and the upper half holds more heat per mol
-than the lower by the rise of the static energy cp T + M g z over half the column's depth, (M g - cp gam) × depth / 2,
-gam the column's drop with height: so the heat it carries is set by the columns, not by the difference of two nodes,
-and none where the air cools with height as fast as dry air rising (Neelin and Held 1987). The eddies and the
-overturning are one implicit (backward Euler) step a day at the rates of the air step's start, first along the lines
-the links between blocks make east and west, then along those north and south, each line solved exactly
-(`solve::line`: Thomas; a ring by Sherman and Morrison): stable at any rate, no node goes below zero, and the day keeps
-its rates on any grid. **Known limit:** as a half carries its node's air, on coarse nodes the overturning also mixes
-the two, as eddies of about its speed times half the length of the link would. Mass that crosses is
+explicitly: the sender's air, each link at most half of what evens it over the count of links of the busier of its
+nodes, so no node gives more than half of each gas it holds. **Known limit:** sound is faster than that, so a pressure
+difference across many links of blocks takes days to even out. **Eddies** mix the columns (`mix`, width over length),
+each mol with its node's heat. **Overturning**: the lower half flows to the warmer column and the upper half back, a
+mass flux of `wind` per K/m of the warmth gradient along the link (its difference over its length), turned by the
+planet's rotation (`rotation`), through half the link's cross-section, so it does not depend on the size of the nodes.
+Each half carries the air of the node it leaves, vapour crowding low, each mol with its node's heat per mol, and the
+upper half holds more heat per mol than the lower by the rise of the static energy cp T + M g z over half the column's
+depth, (M g - cp gam) × depth / 2, gam the column's drop with height (none where the air cools with height as fast as
+dry air rising; Neelin and Held 1987). So the heat it carries a second is its mass flux times the difference of the
+two nodes' heat per mol, less that rise: the first part grows with the length of the link, the second does not.
+**Known limit:** as a half carries its node's air, on coarse nodes the overturning also mixes the two, as eddies of
+about its speed times half the length of the link would. The eddies and the overturning are one implicit (backward
+Euler) step a day, first along the lines the links between blocks make east and west, then along those north and south,
+each line solved exactly (`solve::line`: Thomas; a ring by Sherman and Morrison): stable at any rate, no gas of a node
+goes below zero, and the day keeps its rates on any grid. **Known limit:** their rates per mol a node holds are those
+of the air step's start (10 days), so a node whose air grows or shrinks within the step moves a little more or less
+of it than its rates say. Mass that crosses is
 lifted between the nodes' mean grounds by the heat of the node it enters. A cell sees its air node and three
 neighbours bilinearly (`flow/scratch.rs`). Air moves as whole columns, so bodies use the anchored `wind_ground` (6.3).
 

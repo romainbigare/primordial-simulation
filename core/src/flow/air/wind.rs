@@ -56,7 +56,7 @@ pub(super) fn pushes(cfg: &Config, s: &Scratch, air: &Level, links: &Links) -> P
         let across = ((ga[0] + gb[0]) * ab[1] - (ga[1] + gb[1]) * ab[0]) / 2.0;
         p.mix.push(cfg.mix * rho * depth * wd / d);
         // A mass flux by the gradient, the link's difference over its length `d`, through its half cross-section, so
-        // it does not depend on `d`; nor does the heat it carries (`rise`), set by the column.
+        // it does not depend on `d`.
         p.over.push(cfg.wind * (warmth[b] - warmth[a] + turn * across) / d * rho * wd * depth / 2.0);
         p.rise.push((rise(a) + rise(b)) / 2.0 * depth / 2.0);
         // p = c n with c = RT/V; sound crosses the link in d / sqrt(gamma R T / M), gamma = cp / (cp - R) per mol.
@@ -139,13 +139,11 @@ fn lift((a, b): (usize, usize), kg: f64, (s, g): (&Scratch, f64), e: &mut [f64])
     e[to] -= g * kg.abs() * (s.za[to] - s.za[from]);
 }
 
-/// The lines (`solve::line`) that the links between blocks make, by their place in `border` (as `Moved` holds their
-/// ends): those that run east and west, then those that run north and south.
-pub(super) fn lines(air: &Level, border: &[usize], (a, b): (&[u32], &[u32])) -> [Lines; 2] {
-    let east = |p: &usize| {
-        let o = air.offset(a[*p] as usize, b[*p] as usize);
-        o[0].abs() > o[1].abs()
-    };
+/// The lines (`solve::line`) that the links between blocks (`border`, of `links`) make, by their place in `border` (as
+/// `Moved` holds their ends `a`, `b`): those east and west, then those north and south, as every link of the air that
+/// shares a border runs (`Square::mesh`).
+pub(super) fn lines(air: &Level, (links, border): (&Links, &[usize]), (a, b): (&[u32], &[u32])) -> [Lines; 2] {
+    let east = |p: &usize| [0, 4].iter().any(|&d| air.way(a[*p] as usize, d).is_some_and(|e| air.adj_link()[e] as usize == links.id[border[*p]]));
     let (zonal, meridional): (Vec<usize>, Vec<usize>) = (0..border.len()).partition(east);
     [zonal, meridional].map(|chosen| line::lines(a, b, &chosen, air.n()))
 }

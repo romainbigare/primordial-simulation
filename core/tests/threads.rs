@@ -74,6 +74,23 @@ fn the_threads_and_the_chunks_change_nothing() {
     }
 }
 
+/// A small globe (8 x 4 air nodes, each its own block, so the wind runs on every link and its gases and heat on the
+/// pool) a year on 1 and on 4 threads: the same world.
+#[test]
+fn the_threads_change_nothing_in_the_wind() {
+    let year = |threads: usize| {
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().expect("a pool");
+        pool.install(|| {
+            let mut w = worldgen::terrain::new_globe(1, 16, [0; 4]);
+            for _ in 0..w.cfg.months_per_year {
+                pcore::step(&mut w);
+            }
+            serde_json::to_string(&w).expect("a world serialises")
+        })
+    };
+    assert!(year(1) == year(4), "4 threads changed the globe");
+}
+
 /// Bodies in every land cell under one air node that holds little of the gas they burn with, on ground that holds little
 /// of what they eat: each cell takes no more than its ground holds and its share of the air (the cells lie in several
 /// chunks), so nothing is overdrawn and the books are kept.

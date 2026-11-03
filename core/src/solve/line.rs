@@ -1,6 +1,7 @@
 //! Line: one implicit (backward Euler) step of linear flows along paths and rings of nodes, solved exactly. A link
 //! from `a` to `b` passes `ca y_a - cb y_b + k` per second (`ca`, `cb` at least 0), `y` the values at the step's end,
-//! so a step of any length is stable and keeps what is not negative so (Patankar 1980, 4.3); a path is solved by the
+//! so a step of any length is stable and, with no constant flows `k`, keeps what is not negative so (Patankar 1980,
+//! 4.3); a path is solved by the
 //! Thomas algorithm, a ring with the correction of Sherman and Morrison (Press et al. 2007, 2.7.2).
 
 /// Paths and rings of nodes: the nodes of each in order, then the link between each node and the next (a ring's last
@@ -11,14 +12,14 @@ pub struct Lines {
     at: Vec<[usize; 2]>,
 }
 
-/// The lines that the links `chosen` (of `a`, `b`) make on `n` nodes, each node on at most two of them: the paths, then
+/// The lines that the links `chosen` (of `a`, `b`) make on `n` nodes, each node on at most two of them (as a cell's
+/// links in two opposite compass directions are, `space::Level::way`): the paths, then
 /// the rings, each from its lowest node.
 pub fn lines(a: &[u32], b: &[u32], chosen: &[usize], n: usize) -> Lines {
     let mut on: Vec<Vec<usize>> = vec![Vec::new(); n];
     for &l in chosen {
         [a[l], b[l]].iter().for_each(|&j| on[j as usize].push(l));
     }
-    assert!(on.iter().all(|e| e.len() <= 2), "a node lies on at most two links of a line");
     let (mut seen, mut out) = (vec![false; n], Lines { nodes: Vec::new(), links: Vec::new(), at: vec![[0, 0]] });
     for ends in [1, 2] {
         for j in (0..n).filter(|&j| on[j].len() == ends) {
@@ -42,7 +43,6 @@ pub fn lines(a: &[u32], b: &[u32], chosen: &[usize], n: usize) -> Lines {
     }
     out
 }
-
 
 /// One implicit step of `dt` seconds along `lines` under the flows of their links (`ca`, `cb`, indexed by link),
 /// factored once (`factor`) for any values and constant flows (`solve`). Row i of all lines in a row reads

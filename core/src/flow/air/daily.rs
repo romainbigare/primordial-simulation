@@ -124,7 +124,7 @@ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f
         b.extend_from_slice(&nodes[1..]);
     }
     let pairs = a.len();
-    let lines = lines(air, &border, (&a, &b));
+    let lines = lines(air, (&links, &border), (&a, &b));
     let moved = Moved { a, b, mol: vec![0.0; ng * pairs], heat: vec![0.0; pairs] };
     let v = |len: usize| vec![0.0; len];
     let mut out = Mean { t: v(na), space: v(na), x: v(ng * na), rain: v(nx * na), rain_fusion: v(nx * na), ratio: v(nx * na), moved };

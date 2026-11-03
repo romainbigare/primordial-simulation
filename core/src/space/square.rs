@@ -95,7 +95,12 @@ impl Square {
         let blocks = self.level(&squares, &(0..self.n() as u32).collect::<Vec<u32>>(), south, north).coarser(&(0..self.n()).map(block).collect::<Vec<u32>>());
         let corner: Vec<u32> = tiles.iter().map(|t| self.idx(t.x, t.y) as u32).collect();
         let parent = corner.iter().map(|&s| block(s as usize)).collect();
-        Mesh::of(self.level(&tiles, &cell, south, north), blocks, parent, cell, corner)
+        let mesh = Mesh::of(self.level(&tiles, &cell, south, north), blocks, parent, cell, corner);
+        // The wind runs along the lines of the blocks east and west, and north and south (`flow::air::wind::lines`).
+        let air = mesh.level(1);
+        let along = |i: usize, d: usize| air.way(i, d).is_none_or(|e| air.width()[air.adj_link()[e] as usize] == 0.0);
+        assert!((0..air.n()).all(|i| [1, 3, 5, 7].iter().all(|&d| along(i, d))), "a block shares a border only east, south, west and north");
+        mesh
     }
     /// The level of the cells `tiles` (`cell`: the cell of each square), longitudes east from 0 by the degrees of
     /// latitude per row (a whole turn on a globe). Each cell links to the cells across its east side and its south side

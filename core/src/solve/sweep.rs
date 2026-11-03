@@ -34,7 +34,7 @@ pub fn sweep(net: &Net, x: &[f64], dt: f64, have: &[f64]) -> Vec<f64> {
 
 /// Where a node would give more than it holds (`held`), cuts each flux that leaves it by the share it holds of all that
 /// leaves it; only those nodes' outgoing fluxes change (laws.md 0, "No overdraw").
-pub fn within(a: &[u32], b: &[u32], flux: &mut [f64], held: &[f64]) {
+fn within(a: &[u32], b: &[u32], flux: &mut [f64], held: &[f64]) {
     let mut out = vec![0.0; held.len()];
     for ((&i, &j), &f) in a.iter().zip(b).zip(flux.iter()) {
         if f > 0.0 {
