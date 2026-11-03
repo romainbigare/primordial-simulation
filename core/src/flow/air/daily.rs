@@ -4,13 +4,13 @@
 
 use super::super::Scratch;
 use super::rain::{rain_air, Pool, Wet};
-use super::wind::{even, pushes, wind, Links};
+use super::wind::{even, lines, pushes, wind, Implicit, Links};
 use super::{air_temp, at_height, radiation::{glow, glow_slope}, step::Active};
 use crate::{math::mean_passed, store::Class, units::{DAY, R_GAS}, World, AIR};
 use std::collections::BTreeMap;
 
 /// The time in which eddies even out a block of air, s: the air's day, so a block's side is the distance a diffusion of
-/// `mix` spreads in it, sqrt(`mix` × this) (Taylor 1922), about 300 km (`blocks`).
+/// `mix` spreads in it, sqrt(`mix` × this) (Taylor 1922), about 340 km (`blocks`).
 const BLOCK_DAY: f64 = DAY;
 
 /// What the ground under each air node gives it over a step, as its cells' one law (`cells::Response::ground`): per
@@ -124,15 +124,17 @@ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f
         b.extend_from_slice(&nodes[1..]);
     }
     let pairs = a.len();
+    let lines = lines(air, &border, (&a, &b));
     let moved = Moved { a, b, mol: vec![0.0; ng * pairs], heat: vec![0.0; pairs] };
     let v = |len: usize| vec![0.0; len];
     let mut out = Mean { t: v(na), space: v(na), x: v(ng * na), rain: v(nx * na), rain_fusion: v(nx * na), ratio: v(nx * na), moved };
     let mut x: Vec<f64> = s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
     let mut e = w.store.heat(Class::Air).to_vec();
+    let imp = Implicit::of(s, (&push, &border, &lines), (&out.moved.a, &out.moved.b), &x, dd);
     for _ in 0..days as usize {
         exchange(w, s, (act, ground), (&blocks, &one), (&mut x, &mut e), (dd, dt), &mut out);
         even(w, s, &blocks, (&mut x, &mut e), border.len(), &mut out.moved);
-        wind(w, s, (&push, &links, &border), (&mut x, &mut e), dd, &mut out.moved);
+        wind(w, s, (&push, &border, &lines, &imp), (&mut x, &mut e), dd, &mut out.moved);
     }
     out.ratio.iter_mut().zip(&out.rain).filter(|e| *e.1 > 0.0).for_each(|(r, m)| *r /= m);
     out

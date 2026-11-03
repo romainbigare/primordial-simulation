@@ -5,7 +5,7 @@ orderings) is said once, in the code's doc comments; the code is the truth. Numb
 `docs/numbers.md`, what a run records in `docs/tape.md`.
 
 **Where the code is** (`core/src/`): time in `clock/` and `schedule.rs`; the shape of the world in `space/`; shared
-maths in `solve/` (`spread`, `downhill`, `band`); nodes and books in `store/`, `world.rs`, `check.rs`; ground heat in
+maths in `solve/` (`sweep`, `downhill`, `line`); nodes and books in `store/`, `world.rs`, `check.rs`; ground heat in
 `ground.rs`; settings in `params.rs`, constants in `units.rs`; bodies in `body/`, `life.rs`, `nodes.rs`, `lineage.rs`,
 `brain.rs`; the cells as bodies see them in `survey.rs`; paths in `lanes.rs`; keyed random numbers in `rng.rs`; the
 tape's events in `event.rs`; threads in `par.rs` (the same results with and without, on any count of threads).
@@ -266,22 +266,26 @@ in months and warms over centuries; a real one is the other way round.
 
 ### 1.6 Wind
 `flow::air::wind`, `daily`. Eddies (`mix`) even out the air within a day over the distance sqrt(`mix` × day), about
-300 km (Taylor 1922, `daily::BLOCK_DAY`): the air nodes lie in blocks of that side on the map, and each day every gas of
+340 km (Taylor 1922, `daily::BLOCK_DAY`): the air nodes lie in blocks of that side on the map, and each day every gas of
 a block is shared among its nodes by their volumes and its heat so that each has the block's warmth (its temperature
 raised to a common height by the block's drop with height), so its pressure, shares and warmth are the block's. An
-island smaller than a block (the islands of 64 and 128 cells) is one block, and has no wind: only the evening. Across the links between blocks gas moves by three pushes, explicit, in parts of the day
-each from the air at its start: the column's pressure (p = nRT/V), evened in the time sound takes to cross the link
-(Lamb waves, Lindzen 1990); overturning, the lower half flowing to the warmer column and the upper half back at
-`wind` per K of the warmth difference across an overturning cell (`overturn_m`, 3,300 km), turned by the planet's
-rotation (`rotation`), vapour crowding low; and eddies mixing the columns (`mix`, width over length). A link of
-length d swaps (`overturn_m` / d)² as much air as a cell wide, each mol carrying the link's difference, so the
-overturning, like the eddies, carries the same heat whatever the size of the air nodes. The day is cut into as many
-parts (at most `wind::MAX_PARTS`, 8) as its busiest link needs for its eddies with its overturning to move at most
-what evens it over the links of the busier of its nodes; each push moves at most what evens its link in a part, each
-link's pressure at most half of that; and no node gives more of a gas than it holds (`solve::sweep::within`).
-**Known limit:** where a push is faster than that (the pressure, always; the eddies over the short links near a
-pole) its links even in a part at most that share, so a pressure difference across many links of blocks takes days
-to even out. Mass that crosses is
+island smaller than a block (the islands of 64 and 128 cells) is one block, and has no wind: only the evening. Across the links between blocks gas moves by three pushes, each day from the air at
+its start. **Pressure** (p = nRT/V), evened in the time sound takes to cross the link (Lamb waves, Lindzen 1990),
+explicitly: the sender's air, each link at most half of what evens it over the links of the busier of its nodes, and no
+node giving more of a gas than it holds (`solve::sweep::within`). **Known limit:** sound is faster than that, so a
+pressure difference across many links of blocks takes days to even out. **Eddies** mix the columns (`mix`, width over
+length), each mol with its node's heat. **Overturning**: the lower half flows to the warmer column and the upper half
+back, a mass flux of `wind` per K/m of the warmth gradient along the link (its difference over its length), turned by
+the planet's rotation (`rotation`), through half the link's cross-section, so it does not depend on the size of the
+nodes. Each half carries the air of the node it leaves, vapour crowding low, and the upper half holds more heat per mol
+than the lower by the rise of the static energy cp T + M g z over half the column's depth, (M g - cp gam) × depth / 2,
+gam the column's drop with height: so the heat it carries is set by the columns, not by the difference of two nodes,
+and none where the air cools with height as fast as dry air rising (Neelin and Held 1987). The eddies and the
+overturning are one implicit (backward Euler) step a day at the rates of the air step's start, first along the lines
+the links between blocks make east and west, then along those north and south, each line solved exactly
+(`solve::line`: Thomas; a ring by Sherman and Morrison): stable at any rate, no node goes below zero, and the day keeps
+its rates on any grid. **Known limit:** as a half carries its node's air, on coarse nodes the overturning also mixes
+the two, as eddies of about its speed times half the length of the link would. Mass that crosses is
 lifted between the nodes' mean grounds by the heat of the node it enters. A cell sees its air node and three
 neighbours bilinearly (`flow/scratch.rs`). Air moves as whole columns, so bodies use the anchored `wind_ground` (6.3).
 

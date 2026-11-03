@@ -109,3 +109,32 @@ fn the_order_follows_the_spill_levels() {
         assert_eq!([1, 2, 3, 4, 6].map(|i| order.outlet[i] as usize), [2, 3, 4, 5, 7], "the way out of each level stretch and of the pit");
     }
 }
+
+// ---- line: the implicit step along paths and rings ----
+
+use pcore::solve::line::{factor, lines, solve};
+
+/// A line step is backward Euler: on a ring of five nodes and a path of three, with uneven flows (some links named
+/// from their far end) and a step a hundred times past any explicit limit, the end values meet
+/// y = x + dt (in - out) at those values, so what the nodes hold is kept, and none goes below zero.
+#[test]
+fn a_line_step_is_backward_euler_and_keeps_the_books() {
+    // Ring 0-1-2-3-4-0, path 5-6-7; link 3 runs from 4 back to 3.
+    let (a, b) = (vec![0u32, 1, 2, 4, 4, 5, 7], vec![1u32, 2, 3, 3, 0, 6, 6]);
+    let (ca, cb) = (vec![2.0, 0.5, 1.0, 3.0, 0.2, 1.5, 0.7], vec![0.3, 1.0, 2.5, 0.1, 1.2, 0.4, 2.0]);
+    let k = [0.1, -0.2, 0.0, 0.3, 0.05, -0.1, 0.2];
+    let x = [5.0, 1.0, 3.0, 0.0, 2.0, 4.0, 0.5, 1.0];
+    let ls = lines(&a, &b, &(0..7).collect::<Vec<_>>(), 8);
+    let dt = 100.0;
+    for k in [None, Some(&k[..])] {
+        let mut y = [0.0; 8];
+        solve(&ls, &factor(&ls, &a, (&ca, &cb), dt), &a, k, &x, &mut y);
+        let flow = |l: usize| ca[l] * y[a[l] as usize] - cb[l] * y[b[l] as usize] + k.map_or(0.0, |k| k[l]);
+        for (j, (&x, &y)) in x.iter().zip(&y).enumerate() {
+            let net: f64 = (0..7).map(|l| if b[l] as usize == j { flow(l) } else if a[l] as usize == j { -flow(l) } else { 0.0 }).sum();
+            assert!((y - x - dt * net).abs() < 1e-9 * (1.0 + x.abs()), "node {j}: {y} from {x}");
+        }
+        assert!((y.iter().sum::<f64>() - x.iter().sum::<f64>()).abs() < 1e-9, "the books");
+        assert!(k.is_some() || y.iter().all(|&v| v >= 0.0), "no value below zero: {y:?}");
+    }
+}
