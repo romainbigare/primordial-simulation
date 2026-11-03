@@ -7,8 +7,9 @@ use crate::store::{Class, Node};
 use crate::{bond, copy, lanes, nodes, life::{Chunk, Entry}, World};
 
 /// Move to a neighbour, if its force gives the push a mover makes (`bump`; laws.md 3.5): cost by its whole mass at the
-/// real cost of transport (`Physics::walk`), the distance, the climb and the bodies in the way (`lanes::resist`). The part spent pushing through bodies breaks them (`wear`) and clears the lane. A node moves as one. It pays
-/// now and lands in the serial pass (`land_move`); until then it is leaving (`Body::leaving`). With `kin`, it is members of a
+/// real cost of transport (`Physics::walk`), the distance, the climb and the bodies in the way (`lanes::resist`). The
+/// part spent pushing through bodies breaks them (`wear`) and clears the lane. A node moves as one. It pays now and
+/// lands in the serial pass (`land_move`); until then it is leaving (`Body::leaving`). With `kin`, it is members of a
 /// node who join their kind where they land.
 pub fn go(w: &World, d: &mut Chunk, b: &mut Body, j: usize, kin: bool) {
     let (i, mb) = (b.cell as usize, b.mass(&w.chem));

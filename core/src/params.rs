@@ -182,7 +182,7 @@ pub struct Physics {
     pub grip: f64,
     /// Push of a mover on each structure of a cell, and the push its own force must give to move, share of its weight
     pub bump: f64,
-    /// Liquid deeper than this is crossed afloat by a body holding a structure the liquid holds up, m
+    /// Liquid deeper than this holds up a body and the structure it holds, so none stands over it (`bond::afloat`), m
     pub deep: f64,
 
     // Copy

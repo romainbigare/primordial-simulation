@@ -34,12 +34,13 @@ pub(super) fn liquid(w: &World, i: usize, g: impl Fn(usize) -> f64) -> (f64, f64
     if v > 0.0 { (env[1], m / v, mol / v) } else { (0.0, 0.0, 0.0) }
 }
 
-/// Is body `b` (mass `mb`) held up in cell `j`'s liquid: does the liquid that its volume and the structure it holds
-/// displace weigh as much as they do (Archimedes, as for parts)? Not where the liquid is shallower than `deep`.
-pub fn afloat(w: &World, d: &Chunk, b: &Body, j: usize, mb: f64) -> bool {
-    let c = d.at(b.cell as usize);
+/// Is body `b` held up in its cell's liquid: does the liquid that its volume and the structure it holds displace weigh
+/// as much as they do (Archimedes, as for parts)? Not where the liquid is shallower than `deep`.
+fn afloat(w: &World, d: &Chunk, b: &Body) -> bool {
+    let (i, mb) = (b.cell as usize, b.mass(&w.chem));
+    let c = d.at(i);
     let s = held(c, b).map(|p| c.parts[root(c, p)].s);
-    let (depth, rho, _) = liquid(w, j, d.moves.amounts(w, Node::ground(j)));
+    let (depth, rho, _) = liquid(w, i, d.moves.amounts(w, Node::ground(i)));
     if depth < w.cfg.phys.deep {
         return false;
     }
@@ -49,7 +50,7 @@ pub fn afloat(w: &World, d: &Chunk, b: &Body, j: usize, mb: f64) -> bool {
 
 /// Depth of liquid over a body: none while afloat.
 pub fn depth(w: &World, d: &Chunk, b: &Body, depth: f64) -> f64 {
-    if depth > 0.0 && afloat(w, d, b, b.cell as usize, b.mass(&w.chem)) { 0.0 } else { depth }
+    if depth > 0.0 && afloat(w, d, b) { 0.0 } else { depth }
 }
 
 /// Numbers a body perceives of what it holds and of the walls around it (`sense`).

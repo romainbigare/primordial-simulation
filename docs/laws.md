@@ -404,8 +404,8 @@ Structures do not drift; only a body carries one (3.5).
 Holding is a bond whose strength is the body's **force**, strength gene × living body × gravity × `grip`
 (`bond::bears`); a body holds only while its force bears the structure's weight. Fuel adds no force; a hurt body is
 weaker. A body is **afloat** where the liquid is deeper than `deep` and what it and its structure displace weighs as
-much as they do (Archimedes): no liquid stands over it (`bond::depth`). Digging the bed and a
-held part as a lever are parked until a brain uses them.
+much as they do (Archimedes): no liquid stands over it (`bond::depth`). No body digs the
+bed, and a held part adds nothing to a body's force.
 
 ### 3.4 Containment
 Walls that close a space make an **inside** (`bond::room`) joined to its cell by one link (`bond::Enclosure`): heat

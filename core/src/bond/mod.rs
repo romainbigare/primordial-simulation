@@ -12,7 +12,7 @@ mod verbs;
 
 pub use bonds::{Bonds, Enclosure};
 pub use month::step;
-pub use sense::{afloat, depth, features, room};
+pub use sense::{depth, features, room};
 pub(crate) use sense::{enclosure, possible, sense, SENSE};
 pub use verbs::{act, bears, carry, form, moved, release, LET_GO, TORN};
 pub(crate) use verbs::{dropped, let_go};

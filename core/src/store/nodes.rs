@@ -10,7 +10,7 @@ pub enum Class {
     Air,
     /// The store of the bed under a cell: its liquid and what is dissolved in it, and its heat (`flow::drain`)
     Deep,
-    /// The bonded ground under a cell: amounts only (its skin's heat is its ground node's); wear and digging break it
+    /// The bonded ground under a cell: amounts only (its skin's heat is its ground node's); wear breaks it
     /// into its ground node
     Bed,
     /// The bodies' node of a cell: the light and heat set aside for its bodies between their updates, J, and the gas its
