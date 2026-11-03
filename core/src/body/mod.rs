@@ -1,5 +1,5 @@
 //! Bodies: nodes that hold substances, heat and genes, each with an id that never changes (`life`). A body updates once
-//! a month and integrates the time since at its update (`live`; laws.md 6).
+//! a month, a slow one once in two (`Body::slow`), and integrates the time since at its update (`live`; laws.md 6).
 
 mod death;
 mod exchange;
@@ -18,6 +18,7 @@ pub(crate) use death::{remains, to_ground, torn_to_death};
 pub use genes::*;
 pub(crate) use live::{live, LiveTmp};
 pub use live::Lived;
+pub use metab::SLOW_MONTHS;
 pub use pay::{pay, upkeep};
 pub(crate) use pay::settle_heat;
 

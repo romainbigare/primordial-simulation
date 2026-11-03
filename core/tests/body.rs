@@ -268,10 +268,12 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     for _ in 0..60 {
         day(&mut w, &mut settle);
     }
+    // (At their ground's `t_cat` they are slow: they update every two months, `Body::slow`.)
+    let every = (pcore::body::SLOW_MONTHS * w.cfg.days_per_month as u64) as f64;
     let per_kg = |w: &mut pcore::World, s: Handle| {
         let mut b = std::mem::take(&mut w.life[s]);
         b.prepare(&w.chem, &w.cfg);
-        let (d, m) = (w.cfg.update_days(), b.mass(&w.chem));
+        let (d, m) = (every, b.mass(&w.chem));
         let (u, act) = (pcore::body::upkeep(w, &b, d, m, b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys)) / (d * b.built(&w.chem)), b.activity(&w.chem, &w.cfg.phys));
         w.life[s] = b;
         (u, act)
@@ -284,7 +286,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     // A life of 38 days at gene 0, 10^0.5 ua / ub times that at 0.5. Each counts its days from its last update.
     let (life, x) = (38.0, 10f64.sqrt() * ua / ub);
     w.cfg.phys.e_life = life * ua;
-    let (books, n0, every) = (Books::now(&w), w.life[sa].count, w.cfg.update_days());
+    let (books, n0) = (Books::now(&w), w.life[sa].count);
     let from: Vec<f64> = [sa, sb].iter().chain(&ones).map(|&s| w.life[s].last).collect();
     let day0 = w.day() as f64;
     let mut deaths = Vec::new();
@@ -315,9 +317,10 @@ fn bodies_die_of_age_by_their_rate_of_living() {
 }
 
 /// Frost kills in proportion to the cold and to activity (laws.md 6.5): a node of 10,000 resting eaters with no fuel
-/// to keep warm, on ground half `frost_k` below its key liquid's melting point, loses the share (melt - T) / `frost_k`
-/// of its members at its update, T the temperature it stands at (its ground's: it keeps no warmth, in a bare coat), about
-/// half; the same node half dry (its activity a) loses a times that share. Both live, and matter and energy are kept.
+/// to keep warm, on ground half `frost_k` below its key liquid's melting point, loses the share f = (melt - T) /
+/// `frost_k` of its members in a month, T the temperature it stands at (its ground's: it keeps no warmth, in a bare
+/// coat), about half; the same node half dry (its activity a) loses a times that share. Over an update of d days it
+/// loses 1 - (1 - f)^(d / month). Both live, and matter and energy are kept.
 #[test]
 fn frost_kills_in_proportion_to_activity() {
     let lost = |dry: bool| {
@@ -337,15 +340,21 @@ fn frost_kills_in_proportion_to_activity() {
         b.prepare(&w.chem, &w.cfg);
         let a = b.activity(&w.chem, &w.cfg.phys);
         w.life[s] = b;
-        let (books, n0) = (Books::now(&w), w.life[s].count);
+        let (books, n0, last) = (Books::now(&w), w.life[s].count, w.life[s].last);
         let t = w.chem.subs[LIQUID].melt - 0.5 * w.cfg.phys.frost_k;
+        w.events.clear();
         let b = after_update(&mut w, s, t);
         books.assert_kept(&w, 1e-9);
-        (1.0 - b.count / n0, a)
+        // The members frost killed, and the months its update covered (at least a day).
+        let frozen = died(&w, PHASE);
+        let months = (b.last - last).max(1.0) / w.cfg.days_per_month as f64;
+        (frozen / n0, a, months)
     };
-    let ((wet, a_wet), (dry, a_dry)) = (lost(false), lost(true));
-    println!("lost {wet:.4} wet (activity {a_wet:.3}), {dry:.4} half dry (activity {a_dry:.3})");
+    let ((wet, a_wet, m_wet), (dry, a_dry, m_dry)) = (lost(false), lost(true));
+    let over = |f: f64, months: f64| 1.0 - (1.0 - f).powf(months);
+    let (ramp_wet, ramp_dry) = (over(0.5, m_wet), over(0.5 * a_dry, m_dry));
+    println!("lost {wet:.4} wet (activity {a_wet:.3}, {m_wet:.3} months; ramp {ramp_wet:.4}), {dry:.5} half dry (activity {a_dry:.3}; ramp {ramp_dry:.5})");
     assert!(a_wet > 0.999 && a_dry < 0.9, "activities {a_wet} and {a_dry}");
-    assert!((0.45..=0.5).contains(&wet), "the wet node lost {wet}, against a ramp of 0.5 at the ground's temperature");
-    assert!((dry / wet / a_dry - 1.0).abs() < 0.1, "the dry node lost {dry} against {wet} x {a_dry}");
+    assert!(wet <= ramp_wet * (1.0 + 1e-9) && wet >= 0.9 * ramp_wet, "the wet node lost {wet}, against a ramp of {ramp_wet} at the ground's temperature");
+    assert!((dry / ramp_dry - 1.0).abs() < 0.1, "the dry node lost {dry} against {ramp_dry}");
 }

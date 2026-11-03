@@ -85,7 +85,7 @@ struct Choice {
 
 /// A body's decision at its update, from the sums of its hidden layer `z` (`Minds::sense`): perceive the bodies and
 /// parts of its cell, think and learn from the last decision, score the options; an individual draws one option, keeps
-/// its trace and acts, a node spreads its members over them (`spread`). Every body decides at each update, once a month.
+/// its trace and acts, a node spreads its members over them (`spread`). Every body decides at each update (`Body::due`).
 pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: &mut ActTmp) {
     let mut rng = Rng::new(w.seed, w.day(), b.id, Purpose::Choose);
     let temp = b.temp(&w.chem);
@@ -177,7 +177,7 @@ fn options(w: &World, ch: &Chunk, b: &Body, (s, sight): (Shape, usize), (pm, vol
 
 /// One step of look-ahead (laws.md 5.3): the critic's value of the state the body would be in in each cell it can step
 /// into (its own state with that cell's features in place of its own cell's: the sums of its hidden layer `z` moved by
-/// the base's weights on the difference) less its value here, where staying keeps it, both one month ahead
+/// the base's weights on the difference) less its value here, where staying keeps it, both one update ahead
 /// (`Physics::discount`, as the critic learns it): γ(V(s') − V(s)), times `Physics::plan_weight`, added to the score of
 /// the move there. `brain`: the lineage, its base and the body's rows. The base's weights on a cell's features are
 /// worked out once per lineage and cell in a chunk (`ActTmp::on_at`). Off in a null run.

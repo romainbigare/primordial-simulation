@@ -94,6 +94,8 @@ pub struct Physics {
     pub wet_depth: f64,
     /// Temperature at which upkeep measures catalyst capacity and the costs are anchored, K
     pub t_cat: f64,
+    /// Temperature of a warm-blooded body: a body at half its pace there or slower updates every two months (`Body::slow`), K
+    pub t_warm: f64,
     /// Spread of a cell's microclimate: below a freezing point the frozen share of a body's or the cover's members grows from 0 to 1 over this, K
     pub frost_k: f64,
     /// Each this many K of the `DENATURE` gene over `t_firm` adds the catalysts' upkeep once more, K
@@ -152,7 +154,7 @@ pub struct Physics {
     pub keep_min: f64,
     /// Spread of the shape of a part made around its mean
     pub shape_noise: f32,
-    /// Weight of well-being one month (one update) ahead against well-being now
+    /// Weight of well-being one update ahead against well-being now
     pub discount: f32,
     /// Weight in a move's score of the critic's gain from stepping into a cell (`choose::plan`), per unit of well-being
     pub plan_weight: f32,
@@ -239,7 +241,7 @@ const MOVE_EXP: f64 = -0.32;
 
 impl Physics {
     /// Energy of one decision of a brain of cost `c` (`Lineage::cost`) for a member of `m` kg, J: weakly more for a
-    /// bigger body; paid per decision, once a month.
+    /// bigger body; paid per decision, once an update.
     pub(crate) fn think(&self, c: f64, m: f64) -> f64 {
         c * self.m_ref * (m / self.m_ref).sqrt().sqrt()
     }
@@ -278,6 +280,7 @@ impl Default for Physics {
             gas_ref: 3.8e-4,
             wet_depth: 0.01,
             t_cat: T_SURF,
+            t_warm: 310.0,
             frost_k: 3.0,
             c_firm: 20.0,
             c_strength: 1.31e4,
@@ -355,10 +358,6 @@ impl Config {
     pub fn calendar(&self) -> Calendar {
         let month = self.days_per_month as u64 * DAY_S;
         Calendar { day: DAY_S, month, year: month * self.months_per_year as u64 }
-    }
-    /// Days between a body's updates: every body updates once a month, at its start (`survey::batch`).
-    pub fn update_days(&self) -> f64 {
-        self.days_per_month as f64
     }
     /// Check a run's settings before it starts: the time steps, and the numbers of the physics the laws need in range.
     pub fn validate(&self) -> Result<(), String> {

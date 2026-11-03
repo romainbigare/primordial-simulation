@@ -58,7 +58,7 @@ fn walls_keep_a_body_warm() {
     let r = w.life.part(parts[0]).expect("a part").root;
     let s = w.life.part(r).expect("the root").s;
     assert!(s.encl.closed > 0.99, "not closed: {s:?}");
-    // Enough liquid for a month without rain.
+    // Enough liquid for two months without rain.
     // It rests (the biases of its brain's action rows: resting up, every other action down), so it stays where it is put.
     let shape = w.life.brains[w.life[slot].lineage as usize].as_ref().expect("a brain").shape;
     let rows = (0..pcore::brain::FIXED).chain([shape.dir()]).chain((0..pcore::brain::VERBS + pcore::brain::OVERBS).map(|v| shape.verb(v)));
@@ -76,8 +76,11 @@ fn walls_keep_a_body_warm() {
     let mut inside = w.clone();
     inside.life[slot].inside = Some(parts[0]);
     let temp = |w: &pcore::World| w.life[slot].temp(&w.chem) - w.life.env[i][0];
-    pcore::step(&mut w);
-    pcore::step(&mut inside);
+    // (Until both have updated: a slow body updates once in `SLOW_MONTHS` months.)
+    for _ in 0..pcore::body::SLOW_MONTHS {
+        pcore::step(&mut w);
+        pcore::step(&mut inside);
+    }
     assert!(w.life[slot].alive && inside.life[slot].alive);
     println!("inside {:.2} K, outside {:.2} K above the ground", temp(&inside), temp(&w));
     assert!(temp(&inside) > temp(&w) + 1.0, "inside {} K, outside {} K above the ground", temp(&inside), temp(&w));
@@ -174,9 +177,13 @@ fn a_node_acts_on_bonds_as_its_members_together() {
         b.count *= few;
         let (n0, genes) = (b.count, b.genes);
         w.add(b);
-        pcore::survey::survey(&mut w);
-        w.time += w.cfg.days_per_month as u64 * DAY_S;
-        pcore::survey::batch(&mut w);
+        // (Month by month until its first update: a slow body updates once in `SLOW_MONTHS` months.)
+        let updates = w.counts.updates;
+        while w.counts.updates == updates {
+            pcore::survey::survey(&mut w);
+            w.time += w.cfg.days_per_month as u64 * DAY_S;
+            pcore::survey::batch(&mut w);
+        }
         let all: Vec<&Body> = w.life.alive().filter(|b| b.lineage == l).collect();
         let members: f64 = all.iter().map(|b| b.count).sum();
         assert!((members - n0).abs() < 1e-9 * n0, "case {case}: {members} members of {n0}");

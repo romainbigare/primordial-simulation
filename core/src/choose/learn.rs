@@ -14,7 +14,7 @@ const CRITIC_FLOOR: f32 = 1e-3;
 const STRENGTH_STEP: f32 = 0.2;
 
 /// Learn from the last decision (actor-critic): the change of well-being since (for a node, of the member its trace
-/// stands for, `choose::spread`) plus the estimate from now, discounted once (one month), less the estimate then. The critic moves toward it; the learned rows move along the decision's trace by it, in units
+/// stands for, `choose::spread`) plus the estimate from now, discounted once (one update), less the estimate then. The critic moves toward it; the learned rows move along the decision's trace by it, in units
 /// of its spread, times the learning rate (`brain::learn`).
 pub(super) fn learn(w: &World, b: &mut Body, m: &mut Mind, s: Shape, (wb, now): (f32, &[f32])) {
     let (l, lr, cr, nh) = (s.learned(), b.learn_rate(), s.critic() * s.r(), s.h);

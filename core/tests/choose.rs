@@ -74,9 +74,10 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     let mut b = founder(&mut w, 1, start, &brain);
     let f = BODY_KG / b.mass(&w.chem);
     scale(&mut w, &mut b, f);
-    // Twice the fuel of a starting eater: it lives some months on what it carries, and on what it takes after.
+    // Four times the fuel of a starting eater: it lives some updates on what it carries (a slow body's update is two
+    // months), and on what it takes after.
     let fuel = testkit::kg(&w, &b, RICH);
-    testkit::add(&mut w, &mut b, RICH, fuel);
+    testkit::add(&mut w, &mut b, RICH, 3.0 * fuel);
     b.genes[LEARN] = learn;
     // (It is found by its id: it is stored elsewhere when it steps into another domain.)
     let slot = w.add(b);
@@ -257,8 +258,8 @@ fn a_body_gives_its_stores_but_not_its_body() {
     let (m0, fuel0) = (giver.amount(w.chem.body(), MATTER), giver.amount(w.chem.body(), RICH));
     let g = w.add(giver);
     w.add(taker);
-    // Days until the first batch after the placing has run.
-    for _ in 0..=w.cfg.days_per_month {
+    // Days until the giver has updated after the placing: a slow body updates once in `SLOW_MONTHS` months.
+    for _ in 0..=pcore::body::SLOW_MONTHS as u32 * w.cfg.days_per_month {
         pcore::day_with_month_at_start(&mut w);
         for b in w.life.alive() {
             assert!(b.mass(&w.chem) >= 1e-3 * b.n(), "an empty body is alive: energy {}, stores {:?}", b.e, b.store);

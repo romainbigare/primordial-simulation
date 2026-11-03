@@ -22,7 +22,7 @@ fn used_kg(w: &World, b: &Body, t: f64, m: &Stores) -> f64 {
 /// holds, which is the share of another body's members it holds and may be less than one member: of one individual
 /// body, the chance it holds it. `t`: the body's temperature, K.
 fn intake(w: &World, b: &Body, t: f64, from: impl Fn(usize) -> f64) -> (f64, f64) {
-    let (p, area, days) = (&w.cfg.phys, w.mesh.cells().area()[b.cell as usize], w.cfg.update_days());
+    let (p, area, days) = (&w.cfg.phys, w.mesh.cells().area()[b.cell as usize], b.ahead(w));
     let wants = b.k.upt.iter().filter(|&&(k, _)| b.uses(&w.chem, k, t));
     let lying: f64 = wants.map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum();
     let (found, supply) = (p.sweep * lying / area, b.supply(&w.chem, p, t));
@@ -174,7 +174,7 @@ pub(super) fn give(w: &World, d: &mut Chunk, b: &mut Body, s: Handle) {
     let all: f64 = (0..bc.n()).map(|q| spare(q) * bc.mm[q]).sum();
     let o = &d[s];
     let (mo, met, t) = (o.mass(chem), b.n().min(o.n()), o.temp(chem));
-    let share = (w.cfg.phys.take * w.cfg.update_days() * o.supply(&w.chem, &w.cfg.phys, t) * met / o.n() / all.max(1e-9)).min(met / b.n());
+    let share = (w.cfg.phys.take * b.ahead(w) * o.supply(&w.chem, &w.cfg.phys, t) * met / o.n() / all.max(1e-9)).min(met / b.n());
     let mut m: Stores = std::array::from_fn(|q| if q < bc.n() && o.uses(chem, bc.subs()[q], t) { (spare(q) * share).min(o.room(chem, q, mo) * met / o.n()) } else { 0.0 });
     o.digest_room(chem, &mut m, mo);
     let got = bc.mass_of(&m);
