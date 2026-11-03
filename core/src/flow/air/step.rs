@@ -1,4 +1,4 @@
-//! One step of the air (laws.md 1.4): the gas of the bodies' nodes comes up and gases dissolve; each cell's response to
+//! One step of the air (laws.md 1.4): the gas of the bodies' nodes comes up; each cell's response to
 //! the air it sees is found (`cells::respond`); the air level runs day by day under its cells' law summed per node
 //! (`daily::run`); and all of it is booked whole, each cell's exchange at the step's mean air (`book`).
 
@@ -9,7 +9,7 @@ use super::air_temp;
 use super::cells::{respond, Ctx};
 use super::rain::{landed, wet};
 use super::daily::run;
-use super::exchange::dissolve;
+use super::exchange::henry;
 use super::surf::patches;
 use super::radiation::declination;
 use crate::{store::Class, units::DAY, World, AIR};
@@ -30,16 +30,15 @@ pub(super) struct Active {
 /// The air's step of `dt` seconds.
 pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     up_from_bodies(w, s);
-    let (tmin, tmax) = range(&s.state.tg);
-    let henry: Vec<(usize, usize)> = s.state.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect();
+    let tmin = range(&s.state.tg).0;
+    // The gases that dissolve (at the liquid step) do not leave the ground.
+    let act = active(w, s, &henry(w, s, tmin));
     // The low basin under each air node faces the air as one surface (`surf::patches`).
     let patches = patches(w, s);
-    dissolve(w, s, dt, &henry, (tmin, tmax), &patches);
-    let act = active(w, s, &henry);
     // The sun's declination at the middle of each day of the step.
     let days = (dt / DAY).ceil().max(1.0) as usize;
     let decl: Vec<f64> = (0..days).map(|d| declination(w.cfg.tilt, w.cfg.calendar().season(w.time + ((d as f64 + 0.5) * dt / days as f64) as u64))).collect();
-    // The air at the step's start, after the bodies' gas and what dissolved: per node its temperature, K, and per active
+    // The air at the step's start, after the bodies' gas: per node its temperature, K, and per active
     // gas and node its amount, mol.
     let na = w.mesh.level(AIR).n();
     let t0: Vec<f64> = (0..na).map(|j| air_temp(w.store.heat(Class::Air)[j], s.state.gas.iter().map(|&k| w.store.amounts(Class::Air)[k * na + j] * s.sp[k].cp).sum())).collect();

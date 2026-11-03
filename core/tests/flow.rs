@@ -773,9 +773,9 @@ fn a_blocks_low_basin_mixes_its_heat_in_a_month() {
     assert!(one > 3 * t.len() / 4, "{one} of {} cells at {mid} K: {t:?}", t.len());
 }
 
-/// The low basin under one air node takes up a gas as one liquid (laws.md 1.5): with none of it dissolved, after an air
-/// step its cells under that node that mix as one each hold the same share of their liquid (most of the cells of the
-/// node's basin), so a cell of little liquid does not reach balance before a deep one. Matter and energy are kept.
+/// The low basin under one air node takes up a gas as one liquid (laws.md 1.5): with none of it dissolved, after a
+/// liquid step its cells under that node that mix as one each hold the same share of their liquid (most of the cells of
+/// the node's basin), so a cell of little liquid does not reach balance before a deep one. Matter and energy are kept.
 #[test]
 fn the_low_basin_under_one_air_node_takes_up_gas_as_one_liquid() {
     let (_, init) = worldgen::chemistry0();
@@ -791,6 +791,9 @@ fn the_low_basin_under_one_air_node_takes_up_gas_as_one_liquid() {
         set_amount(&mut w, Node::ground(i), k, 0.0);
     }
     pcore::flow::state(&mut w, true);
+    let books = Books::now(&w);
+    pcore::flow::liquid(&mut w, DT);
+    books.assert_within(&w, 1e-9, 1e-9);
     // Each cell's liquid, mol: what is molten in it and below its boiling point.
     let liquid: Vec<f64> = under
         .iter()
@@ -799,9 +802,6 @@ fn the_low_basin_under_one_air_node_takes_up_gas_as_one_liquid() {
             (0..w.chem.ns()).filter(|&q| t < w.chem.subs[q].boil).map(|q| w.g(q, i) * w.molten(q, i, t, plateau)).sum()
         })
         .collect();
-    let books = Books::now(&w);
-    pcore::flow::air(&mut w, DT);
-    books.assert_within(&w, 1e-9, 1e-9);
     let mut share: Vec<f64> = under.iter().zip(&liquid).map(|(&i, &l)| w.store.amounts(Class::Ground)[k * n + i] / l).collect();
     share.sort_by(f64::total_cmp);
     let mid = share[share.len() / 2];

@@ -16,7 +16,7 @@ mod wind;
 
 pub(super) use corners::Corners;
 pub(super) use daily::blocks;
-pub(super) use exchange::Sat;
+pub(super) use exchange::{dissolve, Sat};
 pub(crate) use radiation::LAYERS;
 pub use radiation::{column, declination, glow, insolation};
 pub(super) use step::step;

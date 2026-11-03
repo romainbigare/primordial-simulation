@@ -139,7 +139,7 @@ and a soft cover that melts away holds its surface at the melting point only unt
 long step ends where short ones do.
 
 ### 1.2 Liquid
-`flow::liquid`, once a month, after the air's steps. The sink into the bed's store ends each of the air's steps
+`flow::liquid`, once a month, after the air's steps; last, gases dissolve in the liquid (1.5). The sink into the bed's store ends each of the air's steps
 (`flow::air`).
 - **Pores first**: the loose ground's pores (`porosity`) fill first, under any soft cover; only liquid above them stands
   and has a head (`flow::land::stand`), the depth bodies and Change read.
@@ -188,8 +188,7 @@ loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hard
 and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 22.
 
 ### 1.4 The air's step, the sun and the bodies' share
-`flow::air::step`, every `AIR_STEP_DAYS` (10). First the gas of the bodies' nodes comes up into their air nodes and gases
-dissolve (1.5). Then each cell's exchange over the step with the air it sees is solved once (the sea under one air
+`flow::air::step`, every `AIR_STEP_DAYS` (10). First the gas of the bodies' nodes comes up into their air nodes. Then each cell's exchange over the step with the air it sees is solved once (the sea under one air
 node as one surface, below), in its own implicit surface balance (Newton's steps about its end temperature, with its melting plateaus, 1.1), at the air of the step's
 start: sunlight, heat radiation, sensible heat with the air touching it and what evaporates from it by its saturation
 deficit (`air::cells::exchange`). Its slopes with the air it sees come from that same balance, on the branch it ended
@@ -248,7 +247,8 @@ temperature of the air touching it (`touching`), the air paying what warms it on
 its mean ground is below the gas's melting point it falls as a solid (snow) and the air keeps the fusion enthalpy its
 freezing frees; condensing frees the vaporisation enthalpy in the air. **Lift**: gas going up is lifted from the
 ground's head to its air node's mean ground, paid by the air's heat; rain's fall gives it back (0, "The books"). **Dissolving**
-(`exchange::dissolve`): a gas that cannot condense dissolves in the ground's liquid toward Henry's share, through the
+(`exchange::dissolve`, once a month, at the end of the liquid step, over the month, under the air of the last air
+step's start): a gas that cannot condense dissolves in the ground's liquid toward Henry's share, through the
 air's film (`evap`) and the liquid's (`dissolve`) in series, freeing its vaporisation enthalpy, and comes out when the
 liquid warms, thins or freezes. The sea under one air node (1.4) takes it up as one liquid, each cell by its share of that
 liquid, and gives it up by what each holds of it. **Known limit:** a liquid's whole depth is one mixed layer, so a deep sea takes up gas

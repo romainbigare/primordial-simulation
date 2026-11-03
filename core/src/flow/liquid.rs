@@ -59,7 +59,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
     }
 }
 
-/// One liquid step of `dt` seconds.
+/// One liquid step of `dt` seconds; last, the gases of the air dissolve in the liquid where it lies (`air::dissolve`).
 pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
     let (tmin, tmax) = range(&s.state.tg);
     let liq = s.liquids(&w.chem, (tmin, tmax), true);
@@ -68,6 +68,7 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
     surface(w, s, (&liq, tmin), (&slope, &runs), dt);
     under(w, s, &liq, tmin, dt);
     super::basin::level(w, s, &liq, tmin);
+    super::air::dissolve(w, s, dt);
 }
 
 /// The slope of the surface of each ground node down its steepest way (`Level::steepest`) to the lower neighbours (by

@@ -1,7 +1,8 @@
 //! The exchange of ground nodes with the air: evaporation, condensation (rain and cloud), and gases dissolving in the
 //! ground's liquid; and how what dissolves is booked (`Crossing`).
 
-use super::super::{land::{boil_off, wet}, Scratch};
+use super::super::{land::{boil_off, wet}, range, Scratch};
+use super::surf::patches;
 use super::touching;
 use super::super::potential::apply;
 use crate::{chem::Chemistry, math::one_minus_exp, store::{Class, LinkFlux}, units::R_GAS, AIR, World};
@@ -79,19 +80,29 @@ pub(super) fn cloud((cloud, cloud_ir): (f64, f64), (m, mr): (f64, f64), area: f6
     if m > 0.0 { [x / (1.0 + x) * mr / m, cloud_ir * x] } else { [0.0; 2] }
 }
 
+/// The gases of the air that cannot condense on the ground, colder than `tmin` K at its coldest, and dissolve in its
+/// liquid: each with its index in `State::gas`.
+pub(super) fn henry(w: &World, s: &Scratch, tmin: f64) -> Vec<(usize, usize)> {
+    s.state.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect()
+}
+
 /// Gases that cannot condense on the ground (`henry`) dissolve in each ground node's liquid toward Henry's share and
 /// come out as it warms, thins or freezes, through the air's film and the liquid's in series, solved exactly over the
-/// step (laws.md 1.5), each node in parallel with `threads`. Dissolving frees the vaporisation enthalpy into the node;
+/// `dt` seconds of a month, at the liquid step (laws.md 1.5): the air changes its gases over years, and the low basin takes
+/// months to take them up. Each node in parallel with `threads`, under the air of the last air step's start. Dissolving frees the vaporisation enthalpy into the node;
 /// coming out takes it back. What crosses is booked in one call: a link from each ground node that takes or gives some
 /// to its air node with the mol of each gas (+ up) and the heat that leaves the ground, no air node giving more than it
 /// holds (in the order of the cells), and the lift of the gas, paid by the air (`potential`); the next state of the ground nodes
 /// (`land::ground_state`) reads what they then hold. The low basin under one air node takes up gas as one liquid
 /// (`surf::patches`), each of its cells by its share of that liquid, and gives it up by what each holds of it.
-pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64), patches: &[Vec<u32>]) {
+pub(in crate::flow) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64) {
+    let (tmin, tmax) = range(&s.state.tg);
+    let henry = &henry(w, s, tmin)[..];
     let (n, na, nh) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), henry.len());
     if nh == 0 {
         return;
     }
+    let patches = &patches(w, s)[..];
     let solv = s.liquids(&w.chem, (tmin, tmax), false);
     // What each ground node would take up of each gas over the step, mol (`[i * nh + x]`; negative: it comes out).
     let mut want = vec![0.0; n * nh];
