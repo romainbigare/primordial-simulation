@@ -77,11 +77,16 @@ impl Wet {
         let (node, len) = (&self.nodes[j], self.nodes[j].cell.len());
         &node.steps[x * len..(x + 1) * len]
     }
-    /// The air touching each place under air nodes at `t`, K (`touching`; none for a cell of a patch), by place.
-    pub(super) fn touched(&self, s: &Scratch, t: &[f64]) -> Vec<f64> {
-        let n = self.place_of.len();
-        let mut v = crate::par::map_n(n, |i| if self.place_of[i] as usize == i { touching(s, t, i) } else { 0.0 });
-        v.extend(self.patches.iter().map(|p| p.touching(s, t)));
+    /// The air touching each place a node that rains falls on (`rain`, per active gas and node, `[y * na + j]`, mol)
+    /// under air nodes at `t`, K (`touching`; 0 elsewhere and for a cell of a patch), by place: `rain_air` reads no other.
+    pub(super) fn touched(&self, s: &Scratch, t: &[f64], rain: &[f64]) -> Vec<f64> {
+        let (n, na) = (self.place_of.len(), self.nodes.len());
+        let mut wet = vec![false; n + self.patches.len()];
+        for (i, _) in rain.iter().enumerate().filter(|r| *r.1 > 0.0) {
+            self.nodes[i % na].cell.iter().for_each(|&p| wet[p as usize] = true);
+        }
+        let mut v = crate::par::map_n(n, |i| if wet[i] { touching(s, t, i) } else { 0.0 });
+        v.extend(self.patches.iter().zip(&wet[n..]).map(|(p, &on)| if on { p.touching(s, t) } else { 0.0 }));
         v
     }
 }

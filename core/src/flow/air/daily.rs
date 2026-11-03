@@ -192,8 +192,8 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     (0..s.state.gas.len() * na).for_each(|at| out.x[at] += mean[at] * share);
     let got = given(ground, act, (&t, &mean), 0..1 + nx);
     // The air each node's rain meets (`rain_air`), per active gas and node (`[y * na + j]`), on the pool, from the air
-    // touching each cell.
-    let touched = if rain.iter().any(|&m| m > 0.0) { ground.wet().touched(s, &t) } else { Vec::new() };
+    // touching each place it falls on.
+    let touched = ground.wet().touched(s, &t, &rain);
     let met = crate::par::map_n(nx * na, |i| (rain[i] > 0.0).then(|| rain_air(ground.wet(), (i / na, i % na, ratio[i]), &touched)).flatten());
     for j in 0..na {
         out.t[j] += t[j] * share;
