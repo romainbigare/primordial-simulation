@@ -65,7 +65,7 @@ impl Brains {
         if in_order && at == self.v.len() {
             return None;
         }
-        let mut v = Vec::with_capacity(self.v.len());
+        let mut v = Vec::with_capacity(self.v.capacity());
         let blocks = held.iter().map(|&b| {
             if !b.some() {
                 return b;
