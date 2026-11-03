@@ -68,9 +68,6 @@ pub struct Moves {
     far: Vec<[f64; 2]>,
     /// Whether a move changed a number of it since it was made
     changed: bool,
-    /// The heat capacity of a ground node as the view holds it (`heat_cap_ground`), until a move changes its amounts or
-    /// its bed's: the cell and J/K
-    ground_cap: Option<(usize, f64)>,
 }
 
 impl Moves {
@@ -156,9 +153,6 @@ impl Moves {
         debug_assert!(heat == 0.0 || x.class != Class::Bed, "heat moved to the bed, which holds none");
         let row = Row(self.ns);
         if mol != 0.0 {
-            if matches!(x.class, Class::Ground | Class::Bed) {
-                self.ground_cap = None;
-            }
             let node = at + row.amounts(x.class);
             self.alter(node + k, mol, Some(node..node + self.ns));
             // (The air node and the bodies' node are what bodies see of the air.)
@@ -244,15 +238,9 @@ impl Moves {
     pub(crate) fn t_air(&self, w: &World, j: usize) -> f64 {
         crate::flow::air_temp(self.heat(w, Node::air(j)), w.cap_air(self.seen(w, j)))
     }
-    /// Heat capacity of ground node `i`'s active layer as the cell running sees it, J/K (`World::heat_cap_ground`), found
-    /// again only after a move changed its amounts or its bed's.
-    pub(crate) fn heat_cap_ground(&mut self, w: &World, i: usize) -> f64 {
-        if let Some((_, cap)) = self.ground_cap.filter(|c| c.0 == i) {
-            return cap;
-        }
-        let cap = w.heat_cap_of(i, self.amounts(w, Node::ground(i)), self.amounts(w, Node::new(Class::Bed, i)));
-        self.ground_cap = Some((i, cap));
-        cap
+    /// Heat capacity of ground node `i`'s active layer as the cell running sees it, J/K (`World::heat_cap_ground`).
+    pub(crate) fn heat_cap_ground(&self, w: &World, i: usize) -> f64 {
+        w.heat_cap_of(i, self.amounts(w, Node::ground(i)), self.amounts(w, Node::new(Class::Bed, i)))
     }
     /// `d` mol of substance `k` and `want` J from ground node `i` to the one whose update it is: no more heat than the
     /// node holds above `T_FLOOR`, and as much less of the mol; what it could not give is counted. A negative `want` is
