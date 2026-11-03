@@ -407,7 +407,7 @@ impl Default for Config {
             sensible: 10.0,
             evap: 0.006,
             dissolve: 5e-5,
-            wind: 6.6e4,
+            wind: 4e5,
             mix: 1.3e6,
             cloud: 1.2e-2,
             cloud_ir: 6.7,
