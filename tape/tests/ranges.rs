@@ -5,9 +5,9 @@
 //! mean of each number over the three seeds must lie in its range around its reference, the mean of the same three
 //! seeds in the reference runs: for the climate, the land worn down and the rivers, the runs of the world before the
 //! cover and the short body model; for the cover, the runs of the cover and the short body model; for the eaters, the
-//! runs of the bodies' heat law as it is (laws.md 6.3), as their mass follows their temperature. The
-//! climate and the land worn down are means over years 21 to 30; life is read at year 30, ten years after the eaters
-//! came. Each run also keeps its books. Three numbers are also held to wide bounds around Earth's, as the references only
+//! runs of the node floor (`Physics::node_floor`) on the bodies' heat law as it is (laws.md 6.3). The
+//! climate and the land worn down are means over years 21 to 30; the eaters' mass and life are means over years 26 to
+//! 30, as the eaters, placed at year 22, still boom then (their mass grows two to three times a year). Each run also keeps its books. Three numbers are also held to wide bounds around Earth's, as the references only
 //! keep a world near itself: the rain on land, the heat-absorbing gas of the air, and the share of the cover's dry mass
 //! it holds as its stored solid.
 //!
@@ -34,6 +34,8 @@ const SIDE: usize = 64;
 const YEARS: u64 = 30;
 /// The climate is the mean of the years from this one to `YEARS`; the land worn down is over the same years.
 const FROM: u64 = 21;
+/// The eaters' mass and life are the means of their yearly values from this year to `YEARS`.
+const EATERS_FROM: u64 = 26;
 /// Parts per million in one; millimetres in a metre.
 const PPM: f64 = 1e6;
 const MM: f64 = 1e3;
@@ -53,14 +55,15 @@ const RIVERS: f64 = 712.4;
 const WORN: f64 = 0.3179;
 /// The cover (starting kind 0) at year 30, log10 kg (`root_0_cover_kg`), in the reference runs.
 const COVER_KG: f64 = 9.985;
-/// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the reference runs: a guard that the world stays near
+/// Eaters (starting kind 1) over years `EATERS_FROM` to 30, the mean of log10 kg (`root_1_kg`), in the reference runs: a guard that the world stays near
 /// itself, not a target (real herbivores and soil animals weigh far less, a few times 1e4 kg per km²).
-const EATER_KG: f64 = 8.498;
+const EATER_KG: f64 = 7.622;
 /// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the cover's 0.3, as a boom or bust of the eaters
 /// moves a mean of three seeds far.
 const EATER_KG_RANGE: f64 = 0.5;
-/// The life eaters live at year 30, yr (`root_1_life_real`), in the reference runs.
-const EATER_LIFE: f64 = 2.43;
+/// The life eaters live over years `EATERS_FROM` to 30, the mean of the yearly values, yr (`root_1_life_real`), in the
+/// reference runs.
+const EATER_LIFE: f64 = 3.350;
 
 /// Earth's rain on land, m/yr (Trenberth et al. 2007), and the factor either way a run's may lie from it: the island
 /// lies at 40°, where land gets 0.5 to 1 m (from memory), and a globe's land spans every belt.
@@ -165,8 +168,8 @@ fn rock(w: &World, land: &[usize]) -> f64 {
 fn key_numbers(seed: u64) -> ([f64; KEYS.len()], [f64; 2]) {
     let gas = format!("air_{ABSORBER}");
     let climate = ["t_land", "t_land_summer", "t_land_winter", "rain_land", gas.as_str(), "rivers"];
-    let (mut mean, mut land, mut rock_from) = ([0.0; 6], vec![], 0.0);
-    let span = (YEARS - FROM + 1) as f64;
+    let (mut mean, mut land, mut rock_from, mut eaters) = ([0.0; 6], vec![], 0.0, [0.0; 2]);
+    let (span, late) = ((YEARS - FROM + 1) as f64, (YEARS - EATERS_FROM + 1) as f64);
     let (w, rec) = run(seed, SIDE, YEARS, false, |_| {}, |y, w, rec| {
         if y == FROM - 1 {
             land = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
@@ -175,11 +178,15 @@ fn key_numbers(seed: u64) -> ([f64; KEYS.len()], [f64; 2]) {
         if y >= FROM {
             mean.iter_mut().zip(climate).for_each(|(m, c)| *m += rec.last(c) / span);
         }
+        if y >= EATERS_FROM {
+            eaters[0] += rec.last("root_1_kg").log10() / late;
+            eaters[1] += rec.last("root_1_life_real") / late;
+        }
     });
     let worn = (rock_from - rock(&w, &land)) / span * MM;
     let [t, summer, winter, rain, air, rivers] = mean;
-    let (cover, eaters) = (rec.last("root_0_cover_kg").log10(), rec.last("root_1_kg").log10());
-    let keys = [t, summer - winter, rain, air * PPM, rivers, worn, cover, eaters, rec.last("root_1_life_real")];
+    let cover = rec.last("root_0_cover_kg").log10();
+    let keys = [t, summer - winter, rain, air * PPM, rivers, worn, cover, eaters[0], eaters[1]];
     (keys, [rain_m_yr(&w, rain), stored_share(&w)])
 }
 
