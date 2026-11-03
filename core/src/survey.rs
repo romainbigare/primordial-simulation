@@ -248,11 +248,15 @@ fn live_one(w: &World, d: &mut Chunk, h: Handle, tmp: &mut LiveTmp) -> Option<cr
 fn decide(w: &World, d: &mut Chunk, h: Handle, lived: &crate::body::Lived, z: &[f32], act: &mut choose::ActTmp) {
     d.moves.open(w, h.cell as usize, Node::new(Class::Body, h.slot as usize));
     let mut b = std::mem::take(&mut d[h]);
+    let stands = b.temp(&w.chem);
     choose::act(w, d, &mut b, lived, z, act);
     // An action can leave nothing of a member: it dies at once, before another body deals with it.
     if b.empty_at(b.mass(&w.chem)) {
         return die(w, d, h, b, LACK);
     }
+    // The heat of what it took and of digesting it leaves through its coat within hours, far less than a month: it
+    // comes back to the temperature it stands at (laws.md 6.3).
+    crate::body::settle_heat(w, d, &mut b, stands);
     crate::lineage::resize(w, d, &mut b);
     b.stale = true;
     d[h] = b;

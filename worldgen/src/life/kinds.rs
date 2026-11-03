@@ -61,9 +61,9 @@ const fn with<const N: usize>(mut s: [f32; N], d: &[(usize, f32)]) -> [f32; N] {
     s
 }
 
-/// The genes every kind of bodies starts with unless its row says otherwise: HEAT 3.5 (no coat), CHILD -0.523 (a
-/// child 0.3 of the copy mass), MUT -1.2, HIDDEN 12, MEMORY 6, SEEN 3, SIGHT 1, ALLOC 0.8, KEEP_T 250 K and COOL_T 320 K
-/// (outside what the island has: they do nothing at the start).
+/// The genes every kind of bodies starts with unless its row says otherwise: HEAT 3.5 (no coat: its bare surface,
+/// `Body::bare`), CHILD -0.523 (a child 0.3 of the copy mass), MUT -1.2, HIDDEN 12, MEMORY 6, SEEN 3, SIGHT 1, ALLOC 0.8,
+/// KEEP_T 250 K and COOL_T 320 K (outside what the island has: they do nothing at the start).
 const BASE: [f32; NSCALAR] = [3.5, 0.0, -0.523, 0.0, -1.2, 0.0, 12.0, 6.0, 3.0, 1.0, 0.0, 0.0, 0.0, 0.8, 250.0, 320.0];
 
 /// The cover of the starting light-eaters: a light capacity that a full summer's light about fills at a capture area of
@@ -82,8 +82,10 @@ const LIGHT: Kind = Kind { name: "light-eaters", year: 0, place: Place::Field(Fi
 const EATER_KEEP_T: f32 = 278.0;
 const EATER_COOL_T: f32 = 315.0;
 
-/// Eaters: fast burning, take the energy-rich solid from the ground, the cover and bodies, learning on, a fur coat (`HEAT` -1.0: 0.8 W/K for a member of 30 kg; fur passes 0.94, Herreid and Kessel 1967), keep warm
-/// and cool (`EATER_KEEP_T`, `EATER_COOL_T`); individuals, two in some cells where life already is.
+/// Eaters: fast burning, take the energy-rich solid from the ground, the cover and bodies, learning on, a fur coat
+/// (`HEAT` -1.0, past the best a coat insulates, so the best: 1.7 W/K for a member of 30 kg, where a mammal's least is
+/// 0.94, Herreid and Kessel 1967), keep warm and cool (`EATER_KEEP_T`, `EATER_COOL_T`); individuals, two in some cells
+/// where life already is.
 const EATER_BODIES: Bodies = Bodies {
     anywhere: false,
     scalars: with(BASE, &[(HEAT, -1.0), (STRENGTH, 0.6), (COPY_MASS, 1.645), (LEARN, 0.0), (DISPERSE, 0.1), (REPAIR, -0.4), (KEEP_T, EATER_KEEP_T), (COOL_T, EATER_COOL_T)]),

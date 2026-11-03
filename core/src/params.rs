@@ -140,6 +140,12 @@ pub struct Physics {
     pub layer: f64,
     /// Density of bodies, kg/m³
     pub rho_body: f64,
+    /// Surface of a body per kg^(2/3) of a member (Meeh), m²/kg^(2/3)
+    pub meeh: f64,
+    /// Most heat insulation of a coat, m² K/W
+    pub r_fur: f64,
+    /// Heat insulation of the still air at a surface, m² K/W
+    pub r_air: f64,
     /// Most a body takes per day, as a share of the mass it takes by (`Body::supply`)
     pub take: f64,
     /// Exponent of a member's body mass that its supply (intake, building, leaf) goes with (`Body::equiv`)
@@ -300,6 +306,9 @@ impl Default for Physics {
             spread_m: 2000.0,
             layer: 10.0,
             rho_body: 1e3,
+            meeh: 0.1,
+            r_fur: 0.45,
+            r_air: 0.12,
             take: 0.01042,
             sweep: 1.0,
             intake_exp: 0.75,

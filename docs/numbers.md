@@ -103,6 +103,9 @@ The three costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`) are per k
 | `spread_m` | m | how far seeds and dispersing children travel: they leave their cell with the chance `spread_m` over the side of a square of its area, at most 1 (`Level::reach`) | the laws were set on 2 km squares, where every seed and dispersing child left its cell; from a cell of 8 km a quarter leave in a month | tuned |
 | `layer` | m | the bodies of a cell must fit in a layer this thick over it | a tall plant, about 10 m; a ceiling far above real cover (a forest holds under 100 kg/m², this allows 10,000) | anchored |
 | `rho_body` | kg/m³ | density of bodies | living matter is about the density of liquid, 1,000 | physical |
+| `meeh` | m² per kg^(2/3) | surface of a member per its mass^(2/3), through which its coat passes heat (`Body::bare`) | Meeh's rule for mammals, about 0.1 m² at 1 kg (Meeh 1879; Kleiber 1961, from memory) | anchored |
+| `r_fur` | m² K/W | the most a coat insulates, over the still air at its surface: a coat gene past it gives no more (`Body::conductance`) | the best arctic furs, 4 to 7 cm, insulate about 0.4 to 0.5 (Scholander, Walters, Hock and Irving 1950, from memory): 0.45 | anchored |
+| `r_air` | m² K/W | insulation of the still air at a surface: the bare surface a warm body opens its coat to (`Body::bare`) | heat leaves a still surface by convection and radiation at about 8 W/(m² K) (Campbell and Norman 1998, from memory): 0.12 | anchored |
 | `take` | share per day | most a body can take per day of the mass it takes by, per kg at `m_ref` | real food intake is 1 to 5% of body mass a day (unchecked), measured on mammals at their body's 310 K; at `t_cat` 1/4.80 of the value at 310 K, as `c_strength`. At 310 K a 57 kg eater takes at most 1.8% of its mass a day, about 2.7 times Kleiber's resting need: a real appetite (my arithmetic) | anchored |
 | `intake_exp` | none | what a member takes, sweeps, receives and builds, and its leaf, go with its living body (`Body::supply`) to this power | Kleiber's 0.75 (checked: production of 305 mammals goes with mass^0.755, 95% range 0.73 to 0.78, Ernest et al. 2003, Ecology Letters 6: 990); the supply in West, Brown and Enquist's growth law (2001) | anchored |
 | `sweep` | m² per kg per day | area a body works per day per kg of its mass that works, at `m_ref` | run: set for eaters to live, not a rate measured on an animal. A 30 kg body (12.8 kg-equivalents) works about 390 m² in a month (30 days) at `t_cat` | tuned |
@@ -248,12 +251,12 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 99 rows of `Config` and `Physics` are their 99 fields.
+The 102 rows of `Config` and `Physics` are their 102 fields.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
-| anchored | 51, and 12 outside the structs | 51 fields (among them `c_basal`, `dormant`, `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `wind`, `light_yield`, `gas_floor`, `gas_ref`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE`, `MAX_KEEP` and the founders' learning rate, and the three decomposers' factors `open` of the chemistry (reactions 1, 7 and 12) |
+| anchored | 54, and 12 outside the structs | 54 fields (among them `c_basal`, `meeh`, `r_fur`, `r_air`, `dormant`, `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `wind`, `light_yield`, `gas_floor`, `gas_ref`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE`, `MAX_KEEP` and the founders' learning rate, and the three decomposers' factors `open` of the chemistry (reactions 1, 7 and 12) |
 | tuned (run or reason named) | 6, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`), set for an outcome (`rain_time`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`, the cover's starting genes) |
 | tuned, first guess | 30 | 27 free numbers (`mix`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `rho_pass`, `keep_min`, `shape_noise`, `blend`, `plan_weight`, `learn_most`, the Bond numbers `joint` to `deep`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the three `c_hidden`, `c_memory`, `c_seen`, which are the split of `c_brain` and not three numbers |
 | switch | 1 | `null` |

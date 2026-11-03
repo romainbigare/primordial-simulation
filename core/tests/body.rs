@@ -2,7 +2,7 @@
 //! warm by burning and cool by evaporating), its key liquid (drinking, frost, boiling), digestion and its age. Damage:
 //! `damage.rs`.
 
-use pcore::body::{self, Body, Layout, COOL_T, HEAT, KEEP_T, PHASE};
+use pcore::body::{self, Body, Layout, COOL_T, KEEP_T, PHASE};
 use pcore::life::Handle;
 use pcore::{brain, World, AIR};
 use worldgen::testkit::{add, died, dry_lands, eater, held_day, hold_ground, kg, node_of, out, put_kg_m2, scale, small_world, start, stores, took_from_ground, Books, Brain, Line, LIQUID, MATTER, RICH};
@@ -329,9 +329,11 @@ fn frost_kills_in_proportion_to_activity() {
             let liquid = kg(&w, &b, LIQUID);
             add(&mut w, &mut b, LIQUID, -0.5 * liquid);
         }
-        // No warmth of its own: it keeps none, and a bare coat (10^3 the conductance of none) holds it at its ground's
+        // No warmth of its own: it keeps none, and it makes no heat (no upkeep), so it stands at its ground's
         // temperature.
-        (b.genes[KEEP_T], b.genes[HEAT]) = (200.0, 3.0);
+        let p = &mut w.cfg.phys;
+        (p.c_basal, p.c_strength, p.c_learn, p.c_brain, p.c_hidden, p.c_memory, p.c_seen) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        b.genes[KEEP_T] = 200.0;
         b.prepare(&w.chem, &w.cfg);
         let mut b = node_of(&mut w, b, 10_000.0);
         b.prepare(&w.chem, &w.cfg);

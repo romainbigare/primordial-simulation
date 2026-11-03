@@ -101,15 +101,19 @@ fn drink(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     }
 }
 
-/// Its heat over the time `dt` s (laws.md 6.3): the heat its upkeep released leaves through its coat (`HEAT`, in series
-/// with the walls around it, 3.4) to its ground, so it stands that much above the ground. Below its `KEEP_T` gene it
-/// burns what its coat loses at that temperature beyond it; above its `COOL_T` gene it evaporates its key liquid for the
-/// excess, at its latent heat, never below its safe minimum. It then stands at that temperature (`settle_heat`).
+/// Its heat over the time `dt` s (laws.md 6.3): the heat its upkeep released leaves through its coat (`HEAT`,
+/// `Body::conductance`; in series with the walls around it, 3.4) to its ground, so it stands that much above the ground.
+/// Below its `KEEP_T` gene it burns what its coat loses at that temperature beyond it. Above its `COOL_T` gene it opens
+/// its coat as far as it needs to stand there, up to its bare surface (`Body::bare`: blood to the skin, the coat laid
+/// flat; Scholander et al. 1950), and past that evaporates its key liquid for the excess, at its latent heat, never
+/// below its safe minimum. It then stands at that temperature (`settle_heat`).
 fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, dt: f64) -> f64 {
     let (chem, p, i) = (&w.chem, &w.cfg.phys, b.cell as usize);
-    let tg = w.t_ground_last(i);
-    let coat = b.conductance(p.m_ref, b.mass(chem));
-    let g = crate::bond::enclosure(d, b).map_or(coat, |x| 1.0 / (1.0 / coat + 1.0 / x.g)) * dt;
+    let (tg, mass) = (w.t_ground_last(i), b.mass(chem));
+    let walls = crate::bond::enclosure(d, b).map(|x| x.g);
+    // The conductance through a coat of conductance `c` and the walls, over the time, J/K.
+    let through = |c: f64| walls.map_or(c, |x| 1.0 / (1.0 / c + 1.0 / x)) * dt;
+    let (g, open) = (through(b.conductance(p, mass)), through(b.bare(p, mass)));
     if g <= 0.0 {
         return b.temp(chem);
     }
@@ -118,7 +122,10 @@ fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, dt: f64) -> f64 
     let t = if free < keep {
         tg + (heat + burn(w, d, b, g * (keep - tg) - heat)) / g
     } else if free > cool {
-        tg + (heat - evaporate(w, d, b, heat - g * (cool - tg))) / g
+        // (On ground at or above its `COOL_T` it opens all the way.)
+        let opened = if cool > tg { (heat / (cool - tg)).clamp(g, open) } else { open };
+        let t_open = tg + heat / opened;
+        if t_open > cool { tg + (heat - evaporate(w, d, b, heat - opened * (cool - tg))) / opened } else { t_open }
     } else {
         free
     };
