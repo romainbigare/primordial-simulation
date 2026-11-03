@@ -20,7 +20,8 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
 /// At each month's start, one task per chunk on the pool (`life::run`), in each of its cells: what movers broke
 /// since the last (`choose::wear`) and what the cell holds (`rows`). A death that lets go of a part queues that,
 /// applied after the tasks (`life::land`, laws.md 0).
-/// Then the caches of the cells (`caches`), once a month the traffic and each cell's surroundings.
+/// Then the caches of the cells (`caches`), once a month the traffic and each cell's surroundings, and the cells'
+/// features (`choose::cells`); both read the members that moved in since the last survey, and that count starts again.
 pub fn survey(w: &mut World) {
     let n = w.mesh.cells().n();
     let monthly = monthly(w);
@@ -53,6 +54,8 @@ pub fn survey(w: &mut World) {
         w.life.env = (0..n).map(|i| env_of(w, i)).collect();
     }
     choose::cells(w);
+    // (The members that moved in since the last survey are read by both; the count starts again.)
+    w.life.cells.iter_mut().for_each(|c| c.crossings = 0.0);
 }
 
 /// Once a month, after Flow's state is built in full: the cover's month (`cover::step`) in each cell that holds any,
@@ -134,9 +137,8 @@ fn traffic(w: &mut World) {
     let World { life, counts, cfg, mesh, .. } = w;
     counts.traffic.resize(mesh.cells().n(), 0.0);
     let a = 1.0 / cfg.months_per_year as f32;
-    for (t, c) in counts.traffic.iter_mut().zip(&mut life.cells) {
+    for (t, c) in counts.traffic.iter_mut().zip(&life.cells) {
         *t += a * (c.crossings * cfg.months_per_year as f32 - *t);
-        c.crossings = 0.0;
     }
 }
 
@@ -190,8 +192,8 @@ fn scratch(_: &World) -> Scratch {
     (LiveTmp::default(), choose::Minds::default(), choose::ActTmp::default())
 }
 
-/// The updates of the living bodies of chunk `d`, cell by cell: the physics of each of the cell's bodies in the order
-/// they came (`live_one`); then the inputs of those with a brain, the sums of the hidden layers of each lineage's bodies
+/// The updates of the living bodies of chunk `d`, cell by cell: the physics of each of its bodies in the order they
+/// came (`live_one`); then the inputs of those with a brain, the sums of the hidden layers of each lineage's bodies
 /// together (`choose::Minds::sense`); then each one's decision in that order (`decide`). A cell's stages end before the
 /// next cell's begin, so what the chunk queues and the ids it makes come cell by cell, as for any count of chunks.
 fn updates(w: &World, d: &mut Chunk, (tmp, minds, act): &mut Scratch) {
