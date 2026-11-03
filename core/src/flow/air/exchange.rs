@@ -92,8 +92,8 @@ pub(super) fn henry(w: &World, s: &Scratch, tmin: f64) -> Vec<(usize, usize)> {
 /// months to take them up. Each node in parallel with `threads`, under the air of the last air step's start. Dissolving frees the vaporisation enthalpy into the node;
 /// coming out takes it back. What crosses is booked in one call: a link from each ground node that takes or gives some
 /// to its air node with the mol of each gas (+ up) and the heat that leaves the ground, no air node giving more than it
-/// holds (in the order of the cells), and the lift of the gas, paid by the air (`potential`); the next state of the ground nodes
-/// (`land::ground_state`) reads what they then hold. The low basin under one air node takes up gas as one liquid
+/// holds (in the order of the cells), and the lift of the gas, paid by the air (`potential`); each ground node notes what it
+/// took up (`Scratch::hold`). The low basin under one air node takes up gas as one liquid
 /// (`surf::patches`), each of its cells by its share of that liquid, and gives it up by what each holds of it.
 pub(in crate::flow) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64) {
     let (tmin, tmax) = range(&s.state.tg);
@@ -171,6 +171,10 @@ pub(in crate::flow) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64) {
         if (0..n).any(|i| w.store.amounts(Class::Ground)[k * n + i] > 0.0) {
             s.add_loose(k, true);
         }
+    }
+    // Each ground node's heat capacity and fusion enthalpy follow what it took up (it takes no room).
+    for (x, &(_, k)) in henry.iter().enumerate() {
+        crossing.iter().zip(&mol[x * links..(x + 1) * links]).for_each(|(&i, &m)| s.hold(k, i as usize, -m));
     }
 }
 

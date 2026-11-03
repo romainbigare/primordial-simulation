@@ -6,8 +6,6 @@ use crate::{chem::Phase, ground::{heat_above_floor, melting, skin_of, Melting}, 
 
 /// No substance on a melting plateau (`Scratch::pk`).
 pub(super) const NONE: usize = usize::MAX;
-/// A node whose heat capacity changed by less than this share keeps its state off a plateau.
-const CAP_SAME: f64 = 1e-9;
 
 /// Molten share of substance `k` in ground node `i` (liquid, or gas above boiling).
 #[inline]
@@ -40,10 +38,11 @@ pub(super) fn rise(p: &Sp, t: f64, liq: bool, m: f64, area: f64) -> [f64; 2] {
     }
 }
 
-/// Raise (or lower) the surface of ground node `i` by `[solid, head]` m, and mark it for a new surface.
+/// Raise (or lower) the surface of ground node `i` by `[solid, head]` m, counted toward its next surface
+/// (`Scratch::shift`).
 #[inline]
 pub(super) fn lift(s: &mut Scratch, i: usize, [dz, dh]: [f64; 2]) {
-    s.latent[i].hi = f64::MIN;
+    s.shift[i] += dz.abs() + dh.abs();
     s.z[i] += dz;
     s.head[i] += dh;
 }
@@ -91,17 +90,28 @@ pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
 
 /// Heat capacity, temperature, surface, head and reflectance of every ground node: each takes its heat capacities from
 /// the amounts now (`capacities`; other laws move matter between liquid steps, and a stale capacity would read a node
-/// far too hot or cold) and its temperature by its energy alone (`steady`); the others are found anew (`node_state`),
-/// in parallel with `threads`. A full build finds every node anew, and the basin (`basin::find`).
+/// far too hot or cold) and its temperature by its energy alone (`steady`); a node off its plateaus whose temperature
+/// left the span between them, or that is on one, is found anew, and one whose surface moved (`moved`) gets a new
+/// surface (`node_state`), in parallel with `threads`. A full build finds every node anew, and the basin
+/// (`basin::find`).
 pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     let n = w.mesh.cells().n();
     let caps = capacities(w, s, 0..n);
-    let anew: Vec<u32> = (0..n).filter(|&i| !steady(w, s, i, caps[i]) || full).map(|i| i as u32).collect();
+    let mut anew = Vec::new();
+    for (i, &cap) in caps.iter().enumerate() {
+        let thaw = !steady(w, s, i, cap) || full;
+        if thaw || moved(w, s, i) {
+            anew.push((i as u32, thaw));
+        }
+    }
     let mut rows = std::mem::take(&mut s.spare.state);
     rows.resize(anew.len() * STATE_ROW, 0.0);
     let sr = &*s;
-    crate::par::rows(&mut rows, STATE_ROW, || (), |_, q, row| node_state(w, sr, anew[q] as usize, (caps[anew[q] as usize][1], full), row));
-    anew.iter().zip(rows.chunks_exact(STATE_ROW)).for_each(|(&i, r)| take_row(s, i as usize, r));
+    crate::par::rows(&mut rows, STATE_ROW, || (), |_, q, row| {
+        let (i, thaw) = (anew[q].0 as usize, anew[q].1);
+        node_state(w, sr, i, (caps[i][1], thaw, full), row)
+    });
+    anew.iter().zip(rows.chunks_exact(STATE_ROW)).for_each(|(&(i, _), r)| take_row(s, i as usize, r));
     s.spare.state = rows;
     if full {
         s.basin = super::basin::find(w, s);
@@ -112,12 +122,23 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
 pub(super) fn cells_state(w: &World, s: &mut Scratch, cells: &[u32]) {
     let caps = capacities(w, s, cells.iter().map(|&i| i as usize));
     for (&i, &cap) in cells.iter().zip(&caps) {
-        if !steady(w, s, i as usize, cap) {
+        let thaw = !steady(w, s, i as usize, cap);
+        if thaw || moved(w, s, i as usize) {
             let mut row = [0.0; STATE_ROW];
-            node_state(w, s, i as usize, (cap[1], false), &mut row);
+            node_state(w, s, i as usize, (cap[1], thaw, false), &mut row);
             take_row(s, i as usize, &row);
         }
     }
+}
+
+/// A ground node's surface is found again once its solid surface and its head have moved since it was last found
+/// (`Scratch::shift`) by this share of the depth that hides half of what lies under a soft solid (`hide`) and the liquid
+/// standing on it: then its reflectance may have moved by about this share.
+const SURFACE_SHARE: f64 = 1e-2;
+
+/// Has the surface of ground node `i` moved enough to be found again (`SURFACE_SHARE`)?
+fn moved(w: &World, s: &Scratch, i: usize) -> bool {
+    s.shift[i] >= SURFACE_SHARE * (w.cfg.phys.hide[0] + (s.head[i] - s.pd[i] - s.z[i]).max(0.0))
 }
 
 /// The heat capacity of the skin of the bed of each ground node of `cells` and its own, J/K (`ground::skin_cap`, then
@@ -138,21 +159,23 @@ fn capacities(w: &World, s: &Scratch, cells: impl Iterator<Item = usize> + Clone
     caps
 }
 
-/// Ground node `i` takes its heat capacities `[skin, own]` (`capacities`) and its temperature by its energy alone. Is
-/// that all its state, as it stays off its plateaus with the same capacity and its energy in the span that keeps it
-/// there?
+/// Ground node `i` takes its heat capacities `[skin, own]` (`capacities`) and its temperature by its energy and the
+/// fusion enthalpy it holds (`Scratch::note` keeps it as matter moves). Does it stay off its plateaus, its temperature
+/// in the span between the melting points of the last solve (`Latent::span`)?
 fn steady(w: &World, s: &mut Scratch, i: usize, [skin, cap]: [f64; 2]) -> bool {
-    let (same, e, Latent { held, lo, hi, .. }) = ((cap - s.cap[i]).abs() <= CAP_SAME * cap, w.store.heat(Class::Ground)[i], s.latent[i]);
-    (s.skin[i], s.cap[i], s.state.tg[i]) = (skin, cap, (e - held) / cap.max(1.0));
-    same && e >= lo && e < hi
+    let (e, l) = (w.store.heat(Class::Ground)[i], s.latent[i]);
+    let t = (e - l.held) / cap.max(1.0);
+    (s.skin[i], s.cap[i], s.state.tg[i]) = (skin, cap, t);
+    s.state.pk[i] == NONE && t >= l.span[0] && t < l.span[1]
 }
 
 /// Ground node `i` takes its row of `node_state` (`STATE_ROW`).
 fn take_row(s: &mut Scratch, i: usize, r: &[f64]) {
     (s.state.tg[i], s.state.pk[i], s.state.phi[i]) = (r[0], r[1] as usize, r[2]);
-    s.latent[i] = Latent { held: r[3], lo: r[4], hi: r[5], lat: [r[6], r[7]], molten: r[8].to_bits() };
+    s.latent[i] = Latent { held: r[3], span: [r[4], r[5]], lat: [r[6], r[7]], molten: r[8].to_bits() };
     if r[9] != 0.0 {
         (s.z[i], s.head[i], s.cover[i], s.alb[i], s.pd[i]) = (r[10], r[11], [r[12], r[13], r[14]], r[15], r[16]);
+        s.shift[i] = 0.0;
     }
 }
 
@@ -161,18 +184,29 @@ fn take_row(s: &mut Scratch, i: usize, r: &[f64]) {
 /// surface and head, m, its soft cover (`Scratch::cover`), its reflectance and its pore space as a depth, m.
 const STATE_ROW: usize = 17;
 
-/// The row of ground node `i` of heat capacity `cap`, J/K, found anew (`STATE_ROW`): where it stands on its plateaus
-/// (`thaw_at`), with a new surface where its phases changed or with `full` (`surface_of`).
-fn node_state(w: &World, s: &Scratch, i: usize, (cap, full): (f64, bool), row: &mut [f64]) {
+/// The row of ground node `i` of heat capacity `cap`, J/K (`STATE_ROW`): with `thaw`, where it stands on its plateaus
+/// found anew (`thaw_at`), else as it is; with a new surface where its phases changed, its surface moved (`moved`), or
+/// with `full` (`surface_of`).
+fn node_state(w: &World, s: &Scratch, i: usize, (cap, thaw, full): (f64, bool, bool), row: &mut [f64]) {
     let n = w.mesh.cells().n();
     let amt = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
     let melt = melts(w, s, amt);
-    let th = thaw_at(s, cap.max(1.0), w.store.heat(Class::Ground)[i], amt, &melt);
-    let (pk, phi) = th.on.unwrap_or((NONE, s.state.phi[i]));
-    row[..10].copy_from_slice(&[th.t, pk as f64, phi, th.held, th.lo, th.hi, th.lat[0], th.lat[1], f64::from_bits(th.bits), 0.0]);
-    if full || s.state.pk[i] != NONE || pk != NONE || th.bits != s.latent[i].molten {
+    let l = s.latent[i];
+    let (t, pk, phi, l) = if thaw {
+        let c = cap.max(1.0);
+        let th = thaw_at(s, c, w.store.heat(Class::Ground)[i], amt, &melt);
+        let (pk, phi) = th.on.unwrap_or((NONE, s.state.phi[i]));
+        // The span off the plateaus, as temperatures: `melting` gives the energies at the points below and above.
+        let span = [if th.lo > f64::MIN { (th.lo - th.held) / c } else { f64::NEG_INFINITY }, if th.hi < f64::MAX { (th.hi - th.held) / c } else { f64::INFINITY }];
+        (th.t, pk, phi, Latent { held: th.held, span, lat: th.lat, molten: th.bits })
+    } else {
+        (s.state.tg[i], NONE, s.state.phi[i], l)
+    };
+    row[..10].copy_from_slice(&[t, pk as f64, phi, l.held, l.span[0], l.span[1], l.lat[0], l.lat[1], f64::from_bits(l.molten), 0.0]);
+    if full || s.state.pk[i] != NONE || pk != NONE || l.molten != s.latent[i].molten || moved(w, s, i) {
+        let molten = |k: usize| if k == pk { phi } else { (l.molten >> k & 1) as f64 };
         row[9] = 1.0;
-        row[10..].copy_from_slice(&surface_of(w, s, i, th.t, |k| th.molten(k), &melt));
+        row[10..].copy_from_slice(&surface_of(w, s, i, t, molten, &melt));
     }
 }
 

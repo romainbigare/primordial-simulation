@@ -126,10 +126,10 @@ pub(super) fn level(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64) {
 }
 
 /// Does cell `i` mix as one with the low basin under its air block (`mix_heat`) and face the air as one surface with
-/// the basin under its air node (`air::surf`)? A cell of the low basin off its melting plateaus (and whose state is
-/// not stale), with no soft cover and no cover of bodies.
+/// the basin under its air node (`air::surf`)? A cell of the low basin off its melting plateaus, with no soft cover and
+/// no cover of bodies.
 pub(super) fn one_surface(w: &World, s: &Scratch, i: usize) -> bool {
-    s.basin.is[i] && s.state.pk[i] == NONE && s.latent[i].hi != f64::MIN && s.cover[i][2] <= 0.0 && w.canopy[i] <= 0.0
+    s.basin.is[i] && s.state.pk[i] == NONE && s.cover[i][2] <= 0.0 && w.canopy[i] <= 0.0
 }
 
 /// The low basin under each air block mixes its heat in a month: its cells that mix as one (`one_surface`), with the same

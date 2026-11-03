@@ -142,11 +142,11 @@ impl Surface<'_> {
         let (mut ts, mut give) = if g.pk != NONE { plateau(t, ((1.0 - phi) * fusion, phi * fusion)) } else { (surface(t, free, tc)[0], surface(t, free, tc)[1]) };
         // Off a plateau, the node's end temperature past the melting point below or above it.
         let end = t + net(ts) / c;
-        if g.pk == NONE && l.hi != f64::MIN {
-            if l.lo > f64::MIN && end < (l.lo - l.held) / c {
-                (ts, give) = plateau((l.lo - l.held) / c, (f64::INFINITY, l.lat[0]));
-            } else if l.hi < f64::MAX && end > (l.hi - l.held) / c {
-                (ts, give) = plateau((l.hi - l.held) / c, (l.lat[1], f64::INFINITY));
+        if g.pk == NONE {
+            if end < l.span[0] {
+                (ts, give) = plateau(l.span[0], (f64::INFINITY, l.lat[0]));
+            } else if end > l.span[1] {
+                (ts, give) = plateau(l.span[1], (l.lat[1], f64::INFINITY));
             }
         }
         let (up, hs) = flux(ts);

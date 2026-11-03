@@ -84,8 +84,11 @@ impl Surf {
         let cap: f64 = cells.iter().map(|c| c.cap).sum();
         let by_area = |f: fn(&Surf) -> f64| cells.iter().map(|c| f(c) * c.area).sum::<f64>() / area;
         let sum = |f: fn(&Surf) -> f64| cells.iter().map(f).sum::<f64>();
-        // A bound of the plateaus the cells are kept between: their sum, or none where they have none there.
-        let bound = |f: fn(&Latent) -> f64, none: f64| if cells.iter().any(|c| f(&c.latent) == none) { none } else { cells.iter().map(|c| f(&c.latent)).sum() };
+        // A bound of the plateaus the cells are kept between: their mean by heat capacity, or none where one has none there.
+        let bound = |b: usize| {
+            let none = cells.iter().any(|c| c.latent.span[b].is_infinite());
+            if none { cells[0].latent.span[b] } else { cells.iter().map(|c| c.latent.span[b] * c.cap).sum::<f64>() / cap.max(f64::MIN_POSITIVE) }
+        };
         let first = &cells[0];
         let mut amt = [0.0; MAX_SUBSTANCES];
         cells.iter().for_each(|c| amt.iter_mut().zip(&c.amt).for_each(|(a, x)| *a += x));
@@ -103,8 +106,7 @@ impl Surf {
             cap,
             latent: Latent {
                 held: sum(|c| c.latent.held),
-                lo: bound(|l| l.lo, f64::MIN),
-                hi: bound(|l| l.hi, f64::MAX),
+                span: [bound(0), bound(1)],
                 lat: [sum(|c| c.latent.lat[0]), sum(|c| c.latent.lat[1])],
                 molten: first.latent.molten,
             },

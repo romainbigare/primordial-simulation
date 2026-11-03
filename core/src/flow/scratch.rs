@@ -27,15 +27,15 @@ pub(super) struct Sp {
     pub(super) refl: [f64; 2],
 }
 
-/// The fusion enthalpy a ground node holds off a plateau, and the energies between which it holds it.
+/// The fusion enthalpy a ground node holds off a plateau, and the temperatures between which it holds it.
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct Latent {
     /// Fusion enthalpy held by what is molten, J
     pub(super) held: f64,
-    /// The node keeps `held` while its energy is in [`lo`, `hi`), J (`hi` is `f64::MIN` on a plateau or when stale), and
-    /// the fusion enthalpy of the plateaus there, J
-    pub(super) lo: f64,
-    pub(super) hi: f64,
+    /// Off a plateau, the node keeps `held` while its temperature is in [`span[0]`, `span[1]`), K: the melting points
+    /// below and above as its last solve found them (none: infinite; empty before its first); and the fusion
+    /// enthalpy of the plateaus there, J
+    pub(super) span: [f64; 2],
     pub(super) lat: [f64; 2],
     /// What is at or over its melting point, one bit per substance (`melted`)
     pub(super) molten: u64,
@@ -154,6 +154,9 @@ pub struct Scratch {
     /// Height of the solid surface, and of the surface of all the liquid (pores filled first), m.
     pub(super) z: Vec<f64>,
     pub(super) head: Vec<f64>,
+    /// How far the solid surface and the head of each ground node moved since its surface was last found, m
+    /// (`land::lift`).
+    pub(super) shift: Vec<f64>,
     /// Pore space of the loose ground, as a depth of liquid over the cell, m: the first liquid fills it.
     pub(super) pd: Vec<f64>,
     /// Reflectance of the ground's surface.
@@ -303,7 +306,8 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
 /// Room for the caches of every ground and air node (`ensure` then builds them).
 pub(super) fn room(w: &World, s: &mut Scratch) {
     let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
-    s.latent = vec![Latent { held: 0.0, lo: 0.0, hi: f64::MIN, lat: [0.0; 2], molten: 0 }; n];
+    s.latent = vec![Latent { held: 0.0, span: [f64::INFINITY, f64::NEG_INFINITY], lat: [0.0; 2], molten: 0 }; n];
+    s.shift = vec![0.0; n];
     for v in [&mut s.skin, &mut s.cap, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb] {
         *v = vec![0.0; n];
     }

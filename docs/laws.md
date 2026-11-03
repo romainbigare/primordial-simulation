@@ -136,7 +136,11 @@ year is far below the explicit limit.
 melting point (lowered by solutes, 2.5) until that substance has all frozen or melted. A node whose heat melts or
 freezes all of it within a step stays there only for the share of the step that takes, then goes on from that point,
 and a soft cover that melts away holds its surface at the melting point only until it is gone (`air::radiation`), so a
-long step ends where short ones do.
+long step ends where short ones do. The state of a node is found in full at each month's start; between, it is solved again only on a
+plateau or when its temperature leaves the span between the melting points its last solve found, and its surface
+(soft cover, reflectance, pores) is found again once it moved by 1% of the depth that hides half of a soft cover with
+the liquid standing on it (`land::ground_state`). As matter moves, its heat capacity and fusion enthalpy follow
+(`Scratch::note`).
 
 ### 1.2 Liquid
 `flow::liquid`, once a month, after the air's steps; last, gases dissolve in the liquid (1.5). The sink into the bed's store ends each of the air's steps
