@@ -3,7 +3,7 @@
 //! to about one.
 
 use super::{Choice, MAX_SEEN, MOVES, NT, OPTS, PARTS};
-use crate::body::{Body, Layout, Lived};
+use crate::body::{Body, Layout};
 use crate::brain::{ln, REST};
 use crate::lanes::thickness;
 use crate::rng::Rng;
@@ -120,11 +120,11 @@ pub(super) fn perceive(w: &World, d: &Chunk, b: &Body, nseen: usize, rng: &mut R
 /// and the season's sine and cosine.
 pub const OWN: usize = 4;
 
-/// The brain's inputs (laws.md 5.2), of a body of cell `cell` that has `lived` its update at `temp` K, with `mem`
-/// numbers of memory: its stores against their minimums, its warmth, its size and the season, its cell's features,
-/// what Bond senses, its memory.
-pub(super) fn inputs(w: &World, cell: &Cell, b: &Body, (lived, temp, mem): (&Lived, f64, usize), x: &mut Vec<f32>) {
-    let (i, ns, chem, mass) = (b.cell as usize, w.chem.ns(), &w.chem, lived.mass);
+/// The brain's inputs (laws.md 5.2), of a body of cell `cell` at `temp` K, with `mem` numbers of memory, as it is when
+/// it perceives: its stores against their minimums, its warmth, its size and the season, its cell's features, what
+/// Bond senses, its memory.
+pub(super) fn inputs(w: &World, cell: &Cell, b: &Body, (temp, mem): (f64, usize), x: &mut Vec<f32>) {
+    let (i, ns, chem, mass) = (b.cell as usize, w.chem.ns(), &w.chem, b.mass(&w.chem));
     let pm = mass / b.n();
     x.clear();
     let (none, min, bc) = (SHARE_SENSE * ln(STORE_FLOOR), Layout::of(chem).min, chem.body());

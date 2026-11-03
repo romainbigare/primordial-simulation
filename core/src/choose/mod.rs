@@ -76,10 +76,9 @@ struct Choice {
 /// its trace and acts, a node spreads its members over them (`spread`). Every body decides at each update, once a month.
 pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: &mut ActTmp) {
     let mut rng = Rng::new(w.seed, w.day(), b.id, Purpose::Choose);
-    // Mass and heat capacity are as `body::live` just left them.
     let temp = b.temp(&w.chem);
-    // A brain perceives sizes per member.
-    let pm = lived.mass / b.n();
+    // A brain perceives sizes per member, as the body is when it decides.
+    let pm = b.mass(&w.chem) / b.n();
     let think = w.cfg.phys.think(w.cfg.phys.c_brain, b.k.copy_mass);
     // (Well-being before and after each act at the decision's temperature: an act moves amounts, not the season.)
     let now = |w: &World, b: &Body| b.wellbeing_at(&w.chem, think, temp, lived.spare);

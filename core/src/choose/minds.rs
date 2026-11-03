@@ -44,9 +44,8 @@ impl Minds {
             let s = lin.shape;
             x.clear();
             for &(_, k) in group {
-                let (h, _, lived) = &bodies[k];
-                let b = &d[*h];
-                inputs(w, d.at(h.cell as usize), b, (lived, b.temp(&w.chem), s.mem), one);
+                let b = &d[bodies[k].0];
+                inputs(w, d.at(b.cell as usize), b, (b.temp(&w.chem), s.mem), one);
                 x.extend_from_slice(one);
             }
             brain::sums(&lin.base, s, x, sums);

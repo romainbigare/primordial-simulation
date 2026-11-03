@@ -23,8 +23,6 @@ pub(crate) struct LiveTmp {
 pub struct Lived {
     /// What its fuel could release over the time against its upkeep (well-being counts it up to `MARGIN`)
     pub spare: f64,
-    /// Its mass as its update leaves it, after it sheds (valid until its stores change)
-    pub mass: f64,
 }
 
 /// The update of body `b` over the time since its last: upkeep paid by burning (the share unpaid dies, `SPENT`, and the
@@ -50,7 +48,8 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) ->
     if b.brood > 0.0 {
         crate::copy::copy(w, d, b);
     }
-    Ok(Lived { spare, mass: shed(w, d, b) })
+    shed(w, d, b);
+    Ok(Lived { spare })
 }
 
 /// Upkeep over the time: what its fuel releases is paid (`burn`), the share left unpaid dies, and so does the share its
@@ -229,8 +228,8 @@ fn starve(w: &World, d: &mut Chunk, b: &mut Body, th: &Melting, dead: &mut Store
 }
 
 /// What it sheds to the ground with its heat: minerals, built solids and key liquids past their level, and anything
-/// else it neither burns nor is made of. Returns its mass after.
-fn shed(w: &World, d: &mut Chunk, b: &mut Body) -> f64 {
+/// else it neither burns nor is made of.
+fn shed(w: &World, d: &mut Chunk, b: &mut Body) {
     let (chem, mass) = (&w.chem, b.mass(&w.chem));
     let th = b.thermal(chem);
     let t = th.t;
@@ -248,7 +247,5 @@ fn shed(w: &World, d: &mut Chunk, b: &mut Body) -> f64 {
     }
     if sheds {
         to_ground(w, d, b, &th, &over);
-        return b.mass(&w.chem);
     }
-    mass
 }
