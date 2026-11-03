@@ -55,7 +55,7 @@ const WORN: f64 = 0.3179;
 const COVER_KG: f64 = 9.985;
 /// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the reference runs: a guard that the world stays near
 /// itself, not a target (real herbivores and soil animals weigh far less, a few times 1e4 kg per km²).
-const EATER_KG: f64 = 7.291;
+const EATER_KG: f64 = 8.498;
 /// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the cover's 0.3, as a boom or bust of the eaters
 /// moves a mean of three seeds far.
 const EATER_KG_RANGE: f64 = 0.5;
