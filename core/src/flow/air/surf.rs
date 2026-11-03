@@ -87,8 +87,7 @@ impl Surf {
         let (area, cap) = (sum(&|i| area_of[i]), sum(&|i| s.cap[i]));
         let by_area = |v: &[f64]| sum(&|i| v[i] * area_of[i]) / area;
         let by_cap = |f: &dyn Fn(usize) -> f64| sum(&|i| f(i) * s.cap[i]) / cap.max(f64::MIN_POSITIVE);
-        let near = &s.corners.sees;
-        let seen = |v: &[f64]| sees.iter().map(|&(at, wt)| wt * v[near[at as usize] as usize]).sum::<f64>();
+        let seen = |v: &[f64]| s.corners.mean(sees, v);
         // A bound of the plateaus the cells are kept between: their mean by heat capacity, or none where one has none there.
         let bound = |b: usize| if cells.iter().any(|&i| s.latent[i as usize].span[b].is_infinite()) { s.latent[first].span[b] } else { by_cap(&|i| s.latent[i].span[b]) };
         let ground = w.store.amounts(Class::Ground);
@@ -138,7 +137,7 @@ pub(super) fn patches(w: &World, s: &Scratch) -> Vec<Vec<u32>> {
 /// The answer of one patch to the air it sees (`cells::Response`): its cells, in order; its parts (`cells::put`) at the
 /// air it sees at the step's start, `air`, with their slopes, what each mol of each gas carries, and its changing outputs
 /// from them; its fixed outputs; per cell its share of the heat parts (by heat capacity, so they warm alike) and of each
-/// active gas (by what it holds of it), `[c * (1 + nx) + v]`; and the air it sees: per entry of its node's list
+/// active gas (by what it holds of it; by area where none holds any), `[c * (1 + nx) + v]`; and the air it sees: per entry of its node's list
 /// (`air::Corners::sees`), the weight of that node, its cells' weights there by their areas.
 pub(super) struct Patch {
     pub(super) cells: Vec<u32>,
@@ -157,21 +156,10 @@ impl Patch {
     pub(super) fn of(cx: &Ctx, cells: &[u32]) -> Patch {
         let (s, nx, na) = (cx.s, cx.act.len(), cx.w.mesh.level(AIR).n());
         let (n, lats, area) = (cx.w.mesh.cells().n(), cx.w.mesh.cells().lat(), cx.w.mesh.cells().area());
-        let all: f64 = cells.iter().map(|&i| area[i as usize]).sum();
-        let mut sees: Vec<(u32, f64)> = Vec::new();
-        for &i in cells {
-            for (&at, &wt) in s.corners.entry[i as usize].iter().zip(&s.wt[i as usize]).filter(|e| *e.1 > 0.0) {
-                let wt = wt * area[i as usize] / all;
-                match sees.iter_mut().find(|e| e.0 == at) {
-                    Some(e) => e.1 += wt,
-                    None => sees.push((at, wt)),
-                }
-            }
-        }
+        let (all, sees) = (cells.iter().map(|&i| area[i as usize]).sum::<f64>(), s.corners.by_area(&s.wt, area, cells));
         // Its sunlight: at its mean latitude by area.
         let g = Surf::of_patch(cx, cells, sunlight(cx.w, cx.decl, cells.iter().map(|&i| lats[i as usize] * area[i as usize]).sum::<f64>() / all), &sees);
-        let near = &s.corners.sees;
-        let mean = |v: &[f64]| sees.iter().map(|&(at, wt)| wt * v[near[at as usize] as usize]).sum::<f64>();
+        let mean = |v: &[f64]| s.corners.mean(&sees, v);
         let air: Vec<f64> = std::iter::once(mean(cx.t0)).chain((0..nx).map(|y| mean(&cx.x0[y * na..(y + 1) * na]))).collect();
         let mut work = Work::default();
         let fixed = exchange(cx, &g, &air, &mut work);
@@ -181,7 +169,8 @@ impl Patch {
         let ground = cx.w.store.amounts(Class::Ground);
         for &i in cells {
             share.push(s.cap[i as usize] / g.cap);
-            share.extend(cx.act.iter().map(|ac| if g.amt[ac.k] > 0.0 { ground[ac.k * n + i as usize] / g.amt[ac.k] } else { 0.0 }));
+            // Where none of its cells holds a gas, what condenses of it lands by area.
+            share.extend(cx.act.iter().map(|ac| if g.amt[ac.k] > 0.0 { ground[ac.k * n + i as usize] / g.amt[ac.k] } else { area[i as usize] / all }));
         }
         Patch { cells: cells.to_vec(), air, parts: work.p, carry: work.carry, out, fixed, share, sees }
     }

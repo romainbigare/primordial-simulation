@@ -246,14 +246,15 @@ a ratio to the node's, so the day sums them in rising order. In the air's day th
 as the eddies even it, follows what its cells evaporate by their law and what its nodes rain: both are linear in the
 vapour between two of the ratios at which a cell starts or stops raining, so the day goes exactly from one such ratio
 to the next, with no smaller steps (`rain::Pool`); the air outside the block is as at the day's start. What a node
-rained in the step falls on those cells by what each would hold over its own saturation at the ratio the node rained
+rained in the step falls on those cells (the sea under one air node as one place, 1.4) by what each would hold over its own saturation at the ratio the node rained
 at. It lands after the step, so a cell does not evaporate it again within that step, and it reaches each cell at the
 temperature of the air touching it (`touching`), the air paying what warms it on the way down. Where the node's air at
 its mean ground is below the gas's melting point it falls as a solid (snow) and the air keeps the fusion enthalpy its
 freezing frees; condensing frees the vaporisation enthalpy in the air. **Lift**: gas going up is lifted from the
 ground's head to its air node's mean ground, paid by the air's heat; rain's fall gives it back (0, "The books"). **Dissolving**
-(`exchange::dissolve`, once a month, at the end of the liquid step, over the month, under the air of the last air
-step's start): a gas that cannot condense dissolves in the ground's liquid toward Henry's share, through the
+(`exchange::dissolve`, once a month, at the end of the liquid step, over the month, at the ground's temperature as the
+liquid step leaves it and under the air of the last air step's start; the gases that dissolve are chosen at the month's
+start and evaporate in no air step of it): a gas that cannot condense dissolves in the ground's liquid toward Henry's share, through the
 air's film (`evap`) and the liquid's (`dissolve`) in series, freeing its vaporisation enthalpy, and comes out when the
 liquid warms, thins or freezes. The sea under one air node (1.4) takes it up as one liquid, each cell by its share of that
 liquid, and gives it up by what each holds of it. **Known limit:** a liquid's whole depth is one mixed layer, so a deep sea takes up gas

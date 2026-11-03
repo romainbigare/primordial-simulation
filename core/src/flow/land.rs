@@ -92,8 +92,8 @@ pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
 /// the amounts now (`capacities`; other laws move matter between liquid steps, and a stale capacity would read a node
 /// far too hot or cold) and its temperature by its energy alone (`steady`); a node off its plateaus whose temperature
 /// left the span between them, or that is on one, is found anew, and one whose surface moved (`moved`) gets a new
-/// surface (`node_state`), in parallel with `threads`. A full build finds every node anew, and the basin
-/// (`basin::find`).
+/// surface (`node_state`), in parallel with `threads`. A full build finds every node anew, the basin (`basin::find`)
+/// and the gases that dissolve in the month (`air::henry`).
 pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     let n = w.mesh.cells().n();
     let caps = capacities(w, s, 0..n);
@@ -115,6 +115,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     s.spare.state = rows;
     if full {
         s.basin = super::basin::find(w, s);
+        s.henry = super::air::henry(w, s, super::range(&s.state.tg).0);
     }
 }
 

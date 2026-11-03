@@ -164,6 +164,8 @@ pub struct Scratch {
     /// Of the soft solid cover: heat resistance (depth / conductivity), m² K / W; melting point (infinite with none), K;
     /// depth, m.
     pub(super) cover: Vec<[f64; 3]>,
+    /// The gases that dissolve in the ground's liquid this month (`air::henry`), each with its index in `State::gas`.
+    pub(super) henry: Vec<(usize, usize)>,
     /// The order of the liquid's pass, by a priority flood over the ground (`liquid`).
     pub(super) order: Order,
     /// The basin, as the last full build of the state of ground nodes found it (`basin::find`).

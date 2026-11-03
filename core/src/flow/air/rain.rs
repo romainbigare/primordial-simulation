@@ -18,8 +18,8 @@ pub(super) struct Wet {
 }
 
 /// A patch of the low basin as its rain finds it, one surface (`surf::patches`): its cells with the share of its area
-/// each holds, the air nodes its cells see with their weights by area (`lerp`), and how much colder than that air the air
-/// touching it is, a mean by area, K (`Scratch::cool`).
+/// each holds, the air nodes its cells see with their weights by area (`Corners::by_area`), and how much colder than that
+/// air the air touching it is, a mean by area, K (`Scratch::cool`).
 pub(super) struct Place {
     cells: Vec<u32>,
     area: Vec<f64>,
@@ -31,23 +31,13 @@ impl Place {
     /// The patch of the cells `cells`.
     fn of(w: &World, s: &Scratch, cells: &[u32]) -> Place {
         let area = w.mesh.cells().area();
-        let all: f64 = cells.iter().map(|&i| area[i as usize]).sum();
-        let mut sees: Vec<(u32, f64)> = Vec::new();
-        for &i in cells {
-            for (&q, &wt) in s.near[i as usize].iter().zip(&s.wt[i as usize]).filter(|e| *e.1 > 0.0) {
-                let wt = wt * area[i as usize] / all;
-                match sees.iter_mut().find(|e| e.0 == q) {
-                    Some(e) => e.1 += wt,
-                    None => sees.push((q, wt)),
-                }
-            }
-        }
+        let (all, sees) = (cells.iter().map(|&i| area[i as usize]).sum::<f64>(), s.corners.by_area(&s.wt, area, cells));
         let cool = cells.iter().map(|&i| s.cool[i as usize] * area[i as usize] / all).sum();
         Place { cells: cells.to_vec(), area: cells.iter().map(|&i| area[i as usize] / all).collect(), sees, cool }
     }
     /// The air touching it under air nodes at `t`, K (`touching`, by area).
-    fn touching(&self, t: &[f64]) -> f64 {
-        (self.sees.iter().map(|&(q, wt)| wt * t[q as usize]).sum::<f64>() - self.cool).max(1.0)
+    fn touching(&self, s: &Scratch, t: &[f64]) -> f64 {
+        (s.corners.mean(&self.sees, t) - self.cool).max(1.0)
     }
 }
 
@@ -91,7 +81,7 @@ impl Wet {
     pub(super) fn touched(&self, s: &Scratch, t: &[f64]) -> Vec<f64> {
         let n = self.place_of.len();
         let mut v = crate::par::map_n(n, |i| if self.place_of[i] as usize == i { touching(s, t, i) } else { 0.0 });
-        v.extend(self.patches.iter().map(|p| p.touching(t)));
+        v.extend(self.patches.iter().map(|p| p.touching(s, t)));
         v
     }
 }
@@ -242,7 +232,7 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64], patches: &
         }
     });
     for (p, row) in places.iter().zip(sat[n * nx..].chunks_exact_mut(nx)) {
-        let (tl, seen) = (p.touching(t0), p.cells.iter().zip(&p.area).map(|(&i, a)| s.seen[i as usize] * a).sum::<f64>());
+        let (tl, seen) = (p.touching(s, t0), p.cells.iter().zip(&p.area).map(|(&i, a)| s.seen[i as usize] * a).sum::<f64>());
         act.iter().zip(row).for_each(|(ac, r)| *r = s.sat[ac.k].at(tl) / tl * seen);
     }
     // The cells that see each node, in the order of the cells: their entries `at[q]..at[q + 1]` (cell, corner); a

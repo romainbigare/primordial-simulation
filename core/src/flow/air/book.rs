@@ -29,7 +29,7 @@ pub(super) fn up_from_bodies(w: &mut World, s: &mut Scratch) {
 }
 
 /// Book what the step of `dt` seconds moves: over each cell's link to its air node what evaporates and its heat, at the
-/// step's mean air (`Response::at`, the law the air's days summed); over the links to each node it sees its rain
+/// step's mean air (`Response::booked`, the law the air's days summed); over the links to each node it sees its rain
 /// (`rain`, per active gas (cell, node, mol)), reaching it at the temperature of the air touching it (`touching`), the
 /// air paying what warms it on the way down, frozen or liquid as the node's days rained it; the sunlight it absorbs and keeps
 /// for its cover, the heat it and its air send to space; and the wind and the evening of blocks, with their lifts and

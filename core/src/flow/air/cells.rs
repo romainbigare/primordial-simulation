@@ -1,7 +1,7 @@
 //! The cells and their air (laws.md 1.4, 1.5): each cell's exchange over a step with the air it sees, solved once in its
 //! own implicit surface balance at the air of the step's start and taken as linear in that air, its slopes from that
 //! balance on the branch it ended on (`exchange`). The air level's days sum that one law over each node's cells
-//! (`Response::ground`), and the book takes each cell's at the step's mean air (`Response::at`), so the air and its
+//! (`Response::ground`), and the book takes each cell's at the step's mean air (`Response::booked`), so the air and its
 //! cells agree.
 
 use super::super::land::{layers, melts, reflectance, thaw_at};
@@ -131,19 +131,20 @@ impl Response {
                 }
             }
         });
-        let near = &s.corners.sees;
+        let stride = 2 + nx;
+        let (mut parts, mut each) = (vec![0.0; (GAS + nx) * stride], vec![0.0; (UP + nx) * stride]);
         for p in &self.patches {
-            let mean = |v: &[f64]| p.sees.iter().map(|&(at, wt)| wt * v[near[at as usize] as usize]).sum::<f64>();
+            let mean = |v: &[f64]| s.corners.mean(&p.sees, v);
             let (dt, dx): (f64, Vec<f64>) = (mean(t) - p.air[0], (0..nx).map(|y| mean(x[y]) - p.air[1 + y]).collect());
-            let stride = 2 + nx;
             let part = |r: usize| p.parts[r * stride] + p.parts[r * stride + 1] * dt + (0..nx).map(|y| p.parts[r * stride + 2 + y] * dx[y]).sum::<f64>();
-            let (to_air, to_space, gas): (f64, f64, Vec<f64>) = (part(TO_AIR), part(TO_SPACE), (0..nx).map(|y| part(GAS + y)).collect());
+            let at: Vec<f64> = (0..GAS + nx).map(part).collect();
+            // Each cell's parts, its shares of the patch's (`Patch::share`), as its outputs (`put`).
             for (&i, share) in p.cells.iter().zip(p.share.chunks_exact(1 + nx)) {
-                let row = &mut out[i as usize * (UP + nx)..(i as usize + 1) * (UP + nx)];
-                let up: Vec<f64> = (0..nx).map(|y| gas[y] * share[1 + y]).collect();
-                let carried = |c: usize| up.iter().zip(&p.carry).map(|(m, h)| m * h[c]).sum::<f64>();
-                (row[GAINS], row[LINK], row[SPACE]) = (to_air * share[0] + carried(1), to_air * share[0] + carried(0), to_space * share[0]);
-                row[UP..].copy_from_slice(&up);
+                for (r, &v) in at.iter().enumerate() {
+                    parts[r * stride] = v * if r < GAS { share[0] } else { share[1 + r - GAS] };
+                }
+                put(&parts, &p.carry, &mut each);
+                out[i as usize * (UP + nx)..(i as usize + 1) * (UP + nx)].iter_mut().enumerate().for_each(|(o, v)| *v = each[o * stride]);
             }
         }
         out

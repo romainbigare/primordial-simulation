@@ -179,7 +179,7 @@ impl Together {
 /// it exactly through the day, as the eddies even it, the air outside it as at the day's start. The day's air is its
 /// mean over the day, and each node gets what its cells' law gives at it (`Ground::gives`: their heat radiation,
 /// sensible heat and the gas they evaporate), so the book, which takes each cell's law at the step's mean air
-/// (`cells::Response::at`), gives the air just what its days did. Rain frees its vaporisation enthalpy (and its fusion
+/// (`cells::Response::booked`), gives the air just what its days did. Rain frees its vaporisation enthalpy (and its fusion
 /// enthalpy where the air at the node's mean ground is below the gas's melting point: snow); the node's layers send
 /// heat to space (`glow`).
 fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, one): (&[Vec<u32>], &Together), (x, e): (&mut [f64], &mut [f64]), (dd, dt): (f64, f64), out: &mut Mean) {

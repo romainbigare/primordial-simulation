@@ -9,7 +9,6 @@ use super::air_temp;
 use super::cells::{respond, Ctx};
 use super::rain::{landed, wet};
 use super::daily::run;
-use super::exchange::henry;
 use super::surf::patches;
 use super::radiation::declination;
 use crate::{store::Class, units::DAY, World, AIR};
@@ -30,9 +29,9 @@ pub(super) struct Active {
 /// The air's step of `dt` seconds.
 pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     up_from_bodies(w, s);
-    let tmin = range(&s.state.tg).0;
     // The gases that dissolve (at the liquid step) do not leave the ground.
-    let act = active(w, s, &henry(w, s, tmin));
+    let henry = s.henry.clone();
+    let act = active(w, s, &henry);
     // The low basin under each air node faces the air as one surface (`surf::patches`).
     let patches = patches(w, s);
     // The sun's declination at the middle of each day of the step.

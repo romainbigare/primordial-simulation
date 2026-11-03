@@ -51,4 +51,24 @@ impl Corners {
         }
         Corners { by_at, by, sees_at, sees, entry }
     }
+    /// The air nodes the cells `cells` of one air node see (`air::lerp`, weights `wt`), by their areas `area`: per entry
+    /// of the node's list (`sees`), its weight, the weights summing to one.
+    pub(in crate::flow) fn by_area(&self, wt: &[[f64; 4]], area: &[f64], cells: &[u32]) -> Vec<(u32, f64)> {
+        let all: f64 = cells.iter().map(|&i| area[i as usize]).sum();
+        let mut by: Vec<(u32, f64)> = Vec::new();
+        for &i in cells {
+            for (&at, &w) in self.entry[i as usize].iter().zip(&wt[i as usize]).filter(|e| *e.1 > 0.0) {
+                let w = w * area[i as usize] / all;
+                match by.iter_mut().find(|e| e.0 == at) {
+                    Some(e) => e.1 += w,
+                    None => by.push((at, w)),
+                }
+            }
+        }
+        by
+    }
+    /// The mean of the node field `v` by the weights `by` (`by_area`).
+    pub(in crate::flow) fn mean(&self, by: &[(u32, f64)], v: &[f64]) -> f64 {
+        by.iter().map(|&(at, w)| w * v[self.sees[at as usize] as usize]).sum()
+    }
 }

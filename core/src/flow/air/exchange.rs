@@ -81,25 +81,27 @@ pub(super) fn cloud((cloud, cloud_ir): (f64, f64), (m, mr): (f64, f64), area: f6
 }
 
 /// The gases of the air that cannot condense on the ground, colder than `tmin` K at its coldest, and dissolve in its
-/// liquid: each with its index in `State::gas`.
-pub(super) fn henry(w: &World, s: &Scratch, tmin: f64) -> Vec<(usize, usize)> {
+/// liquid, each with its index in `State::gas`: chosen once a month, at the full state of the ground (`Scratch::henry`).
+pub(in crate::flow) fn henry(w: &World, s: &Scratch, tmin: f64) -> Vec<(usize, usize)> {
     s.state.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect()
 }
 
-/// Gases that cannot condense on the ground (`henry`) dissolve in each ground node's liquid toward Henry's share and
+/// The gases chosen for the month (`Scratch::henry`) dissolve in each ground node's liquid toward Henry's share and
 /// come out as it warms, thins or freezes, through the air's film and the liquid's in series, solved exactly over the
-/// `dt` seconds of a month, at the liquid step (laws.md 1.5): the air changes its gases over years, and the low basin takes
-/// months to take them up. Each node in parallel with `threads`, under the air of the last air step's start. Dissolving frees the vaporisation enthalpy into the node;
-/// coming out takes it back. What crosses is booked in one call: a link from each ground node that takes or gives some
-/// to its air node with the mol of each gas (+ up) and the heat that leaves the ground, no air node giving more than it
-/// holds (in the order of the cells), and the lift of the gas, paid by the air (`potential`); each ground node notes what it
-/// took up (`Scratch::hold`). The low basin under one air node takes up gas as one liquid
+/// `dt` seconds of a month, at the end of the liquid step (laws.md 1.5): the air changes its gases over years, and the
+/// low basin takes months to take them up. Each node in parallel with `threads`, at its temperature as the liquid step
+/// leaves it (`State::tg`) and under the air of the last air step's start. Dissolving frees the vaporisation enthalpy
+/// into the node; coming out takes it back. What crosses is booked in one call: a link from each ground node that takes
+/// or gives some to its air node with the mol of each gas (+ up) and the heat that leaves the ground, no air node giving
+/// more than it holds (in the order of the cells), and the lift of the gas, paid by the air (`potential`); each ground
+/// node notes what it took up (`Scratch::hold`). The low basin under one air node takes up gas as one liquid
 /// (`surf::patches`), each of its cells by its share of that liquid, and gives it up by what each holds of it.
 pub(in crate::flow) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64) {
     let (tmin, tmax) = range(&s.state.tg);
-    let henry = &henry(w, s, tmin)[..];
+    let henry = &std::mem::take(&mut s.henry)[..];
     let (n, na, nh) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), henry.len());
     if nh == 0 {
+        s.henry = henry.to_vec();
         return;
     }
     let patches = &patches(w, s)[..];
@@ -176,6 +178,7 @@ pub(in crate::flow) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64) {
     for (x, &(_, k)) in henry.iter().enumerate() {
         crossing.iter().zip(&mol[x * links..(x + 1) * links]).for_each(|(&i, &m)| s.hold(k, i as usize, -m));
     }
+    s.henry = henry.to_vec();
 }
 
 /// The liquid a ground takes up gas into (`take_up`): its area, m², temperature, K, the air touching it, K, its air
