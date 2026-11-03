@@ -1,5 +1,5 @@
 //! The cover: the light-eaters as a field (laws.md 4). Each ground cell holds up to `SLOTS` kinds of cover, each the
-//! amounts of a few substances (`Parts`: the fuel its light reaction makes, body matter, and the two solids it builds)
+//! amounts of a few substances (`Parts`: the fuel its light reaction makes, body matter, and the solid it builds)
 //! and a small vector of genes, as plain arrays per cell (`Cover`). Once a month each cell's cover catches light,
 //! runs its light reaction, pays its upkeep, fixes, builds and dies (`grow`), and sends seeds to a neighbour cell
 //! (`seed`); alike kinds share a slot. The cover of a cell is a node of the store (`Class::Cover`) whose law books its
@@ -20,12 +20,11 @@ use serde::{Deserialize, Serialize};
 /// Kinds of cover a cell holds at most.
 pub const SLOTS: usize = 4;
 /// The parts of the cover (`Parts`), by their place in `Cover::mol`: the fuel its light reaction makes, its body
-/// matter, the solid it builds of the fuel alone (its walls) and the solid it builds of a mineral.
-pub const NP: usize = 4;
+/// matter, and the solid it builds of the fuel alone (its walls).
+pub const NP: usize = 3;
 pub const FUEL: usize = 0;
 pub const MATTER: usize = 1;
 pub const WALL: usize = 2;
-pub const HARD: usize = 3;
 
 // The genes of a kind of cover (laws.md 4.5).
 /// Capacity of the light reaction, log10 mol per kg of built cover per s at `t_cat` (at a moisture need of 1)
@@ -74,14 +73,11 @@ pub struct Parts {
 }
 
 impl Parts {
-    /// The parts in `chem`: none unless it has the roles of life, body matter and two built solids, one built of the
-    /// fuel alone.
+    /// The parts in `chem`: none unless it has the roles of life, body matter and a solid built of the fuel alone.
     pub fn of(chem: &Chemistry) -> Option<Parts> {
         let ((light, rich, liquid, burn), matter) = (chem.life_roles()?, chem.matter()?);
-        let alone = |b: &crate::chem::Reaction| b.inputs.iter().all(|p| p.0 as usize == rich);
-        let wall = chem.builds.iter().find(|b| alone(b))?.outputs[0].0 as usize;
-        let hard = chem.builds.iter().find(|b| !alone(b))?.outputs[0].0 as usize;
-        Some(Parts { sub: [rich, matter, wall, hard], light, burn, fix: chem.fixing(), liquid })
+        let wall = chem.builds.iter().find(|b| b.inputs.iter().all(|p| p.0 as usize == rich))?.outputs[0].0 as usize;
+        Some(Parts { sub: [rich, matter, wall], light, burn, fix: chem.fixing(), liquid })
     }
     /// The molar mass of each part, kg/mol.
     pub fn mm(&self, chem: &Chemistry) -> [f64; NP] {
@@ -215,9 +211,9 @@ pub(crate) fn lose(w: &crate::World, d: &mut crate::life::Chunk, p: &Parts, i: u
 pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
     let Some(p) = Parts::of(&w.chem) else { return false };
     let (mm, t, alike) = (p.mm(&w.chem), w.t_ground_last(i), w.cfg.phys.alike);
-    let fm = 1.0 / (1.0 + dec(genes[WALLS]) + w.cfg.phys.cover_hard);
+    let fm = 1.0 / (1.0 + dec(genes[WALLS]));
     let built = kg * w.mesh.cells().area()[i] / (1.0 + dec(genes[STORE]));
-    let mol = [built * dec(genes[STORE]) / mm[FUEL], built * fm / mm[MATTER], built * fm * dec(genes[WALLS]) / mm[WALL], built * fm * w.cfg.phys.cover_hard / mm[HARD]];
+    let mol = [built * dec(genes[STORE]) / mm[FUEL], built * fm / mm[MATTER], built * fm * dec(genes[WALLS]) / mm[WALL]];
     let heat = (0..NP).map(|q| mol[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * t;
     let s = Seed { to: i as u32, mol, genes, root, heat };
     let c = &mut w.life.cells[i].cover;
@@ -241,9 +237,9 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     true
 }
 
-/// The built cover of amounts `m` (mol of each part): body matter and solids, kg.
+/// The built cover of amounts `m` (mol of each part): body matter and walls, kg.
 pub fn built_kg(mm: &[f64; NP], m: &[f64; NP]) -> f64 {
-    m[MATTER] * mm[MATTER] + m[WALL] * mm[WALL] + m[HARD] * mm[HARD]
+    m[MATTER] * mm[MATTER] + m[WALL] * mm[WALL]
 }
 
 /// Genes `g` after one generation's mutation of size `size` (`Physics::cover_mut`): each moves by noise of its step

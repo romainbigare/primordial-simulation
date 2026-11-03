@@ -7,7 +7,7 @@ use pcore::body::{MUT, STRENGTH};
 use pcore::rng::{Purpose, Rng};
 use pcore::units::DAY_S;
 use pcore::{body, brain, copy, World};
-use worldgen::testkit::{self, add, brood, children, eater, kg, node_of, only_the_solid, out, put, put_kg_m2, scale, start, stores, took_used, Books, Brain, Line, BURN, DISSOLVED, LIQUID, MATTER, RICH};
+use worldgen::testkit::{self, add, brood, children, eater, kg, node_of, only_the_solid, out, put, put_kg_m2, scale, start, stores, took_used, Books, Brain, Line, BURN, LIQUID, MATTER, RICH};
 use pcore::store::Class;
 
 /// A body given the minerals growth is built of up to the level it keeps (booked as an edit): what a test that builds
@@ -573,23 +573,21 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
     assert!(cheap[n - 1] > 1.5 * full[n - 1], "a body with cheaper tissue grows larger: {} against {}", cheap[n - 1], full[n - 1]);
 }
 
-/// Growth builds each solid a body can build besides matter (`Chemistry::builds`) in the share its keep gene of it sets
-/// (`Body::share`), by the same work, the gas the rock's making gives off going to the air, elements and energy kept;
-/// and what it is built of holds it up and resists breaking: soft tissue alone holds a body low, a frame raises it
-/// (`Body::height`) and costs more to break (`Body::breaking`).
+/// Growth builds the solid a body can build besides matter (`Chemistry::builds`, the frame) in the share its keep gene
+/// of it sets (`Body::share`), by the same work, elements and energy kept; and what it is built of holds it up and
+/// resists breaking: soft tissue alone holds a body low, a frame raises it (`Body::height`) and costs more to break
+/// (`Body::breaking`).
 #[test]
-fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
+fn growth_builds_the_frame_in_its_share_and_it_holds_a_body_up() {
     let (mut w, i) = start();
     let lay = Layout::of(&w.chem);
     let mats: Vec<usize> = w.chem.materials().collect();
     let mut b = eater(&mut w, i, brain::REST, 6.0);
-    // Shares of 0.2 and 0.1, none of either held yet, the dissolved mineral the rock is made of in plenty.
-    for (&k, s) in mats.iter().zip([0.2, 0.1]) {
-        b.genes[lay.keep + w.chem.body().place(k).expect("a store")] = s;
-        let held = kg(&w, &b, k);
-        add(&mut w, &mut b, k, -held);
-    }
-    add(&mut w, &mut b, DISSOLVED, 1.0);
+    // A share of 0.2, none of it held yet.
+    assert_eq!(mats.len(), 1, "one built solid: {mats:?}");
+    b.genes[lay.keep + w.chem.body().place(mats[0]).expect("a store")] = 0.2;
+    let held = kg(&w, &b, mats[0]);
+    add(&mut w, &mut b, mats[0], -held);
     let (s, mut b) = out(&mut w, b);
     let books = Books::now(&w);
     let before: Vec<f64> = mats.iter().chain([&MATTER]).map(|&k| kg(&w, &b, k)).collect();
@@ -597,8 +595,8 @@ fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
     assert!(w.in_cell(b.cell as usize, |w, d| testkit::grow(w, d, &mut b, days)));
     let made: Vec<f64> = mats.iter().chain([&MATTER]).zip(&before).map(|(&k, x)| kg(&w, &b, k) - x).collect();
     let all: f64 = made.iter().sum();
-    println!("built {made:.4?} kg (frame, rock, matter)");
-    assert!((made[0] / all - 0.2).abs() < 0.01 && (made[1] / all - 0.1).abs() < 0.01, "shares {:.3} and {:.3}", made[0] / all, made[1] / all);
+    println!("built {made:.4?} kg (frame, matter)");
+    assert!((made[0] / all - 0.2).abs() < 0.01, "share {:.3}", made[0] / all);
     // The same body of soft tissue alone, and with 1 kg of frame (5% of its mass).
     let (mut soft, mut hard) = (b.clone(), b.clone());
     mats.iter().for_each(|&k| (*soft.store_of(&w.chem, k), *hard.store_of(&w.chem, k)) = (0.0, 0.0));
@@ -610,8 +608,8 @@ fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// A body without a mineral cannot build body matter (not a gram of it, whichever of the two is missing); with both, it
-/// builds, and each falls by its count for the matter made; with a part of one, the matter made binds to it in
+/// A body without a mineral of its matter cannot build body matter (not a gram of it, whichever is missing); with them,
+/// it builds, and each falls by its count for the matter made; with a part of one, the matter made binds to it in
 /// proportion.
 #[test]
 fn growth_stops_without_a_mineral_and_goes_on_with_them() {

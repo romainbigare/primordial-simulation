@@ -151,10 +151,6 @@ ir = 0.0
 sol = 0.0
 cond = 2.5
 hf = -1207
-# docs/numbers.md: "modulus of substances 10, 13 and 9".
-modulus = 70
-# docs/numbers.md: "rupture of substances 10, 13 and 9".
-rupture = 100
 
 # 10: body matter, what bodies are built of (`build`), holding the energy of what it is made of: docs/numbers.md, "substance 10".
 [[s]] # 10
@@ -170,9 +166,9 @@ ir = 0.0
 sol = 0.0
 cond = 0.2
 hf = -18675.0
-# Living soft tissue with its liquid: docs/numbers.md, "modulus of substances 10, 13 and 9".
+# Living soft tissue with its liquid: docs/numbers.md, "modulus of substances 10 and 13".
 modulus = 0.001
-# Living soft tissue: docs/numbers.md, "rupture of substances 10, 13 and 9".
+# Living soft tissue: docs/numbers.md, "rupture of substances 10 and 13".
 rupture = 1
 
 # 11: a mineral that exists only dissolved in the liquid, its store of the gas of reaction 8: docs/numbers.md, "substance 11".
@@ -220,9 +216,9 @@ ir = 0.0
 sol = 0.0
 cond = 0.2
 hf = -986
-# docs/numbers.md: "modulus of substances 10, 13 and 9".
+# docs/numbers.md: "modulus of substances 10 and 13".
 modulus = 30
-# docs/numbers.md: "rupture of substances 10, 13 and 9".
+# docs/numbers.md: "rupture of substances 10 and 13".
 rupture = 120
 
 # Reactions: i/o = [[substance, count]], k 1/s, ea K, ord the power of each input in the rate law (`Reaction::ord`).
@@ -336,15 +332,11 @@ ea = 7760
 i = [[5,118],[12,3]]
 o = [[10,1],[0,26]]
 
-# The other solids bodies build (`Chemistry::builds`), the first output each: the frame 13 of 5, and 9 of the dissolved
-# mineral 11: docs/numbers.md, "Chemistry::builds".
+# The other solid bodies build (`Chemistry::builds`), its first output: the frame 13 of 5: docs/numbers.md,
+# "Chemistry::builds".
 [[builds]]
 i = [[5,6]]
 o = [[13,1],[0,1]]
-
-[[builds]]
-i = [[11,1]]
-o = [[9,1],[3,1],[0,1]]
 
 # Starting world: [substance, fraction]; soil: [substance, mol per m2 of land] (`Init::soil`): docs/numbers.md, "soil".
 [init]

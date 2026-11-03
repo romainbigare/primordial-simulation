@@ -3,7 +3,7 @@
 //! ground (fixing what it lacks if it can), and sends seeds out. Everything it takes and gives is booked through the
 //! chunk's moves, with its heat; its own side it books itself.
 
-use super::{dec, distance, Cover, Parts, Seed, APART, EMPTY_KG, FIX, FIX_OFF, FROST, FUEL, HARD, LIGHT, MATTER, NG, NO_ROOT, NP, REPAIR, SEED, SLOTS, STORE, WALL, WALLS, MOIST};
+use super::{dec, distance, Cover, Parts, Seed, APART, EMPTY_KG, FIX, FIX_OFF, FROST, FUEL, LIGHT, MATTER, NG, NO_ROOT, NP, REPAIR, SEED, SLOTS, STORE, WALL, WALLS, MOIST};
 use crate::body::{AGE, PHASE, SPENT};
 use crate::chem::{Chemistry, Phase, Reaction};
 use crate::rng::{Purpose, Rng};
@@ -225,8 +225,8 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
 }
 
 /// Slot `x` builds what its fuel over its reserve (`STORE`) and the minerals of its ground (`ground`, mol, shared out
-/// as slots build) allow, by the conversions of growth (`Chemistry::build`, `builds`) at its shares (`WALLS`,
-/// `Physics::cover_hard`), paying `c_copy` per kg by burning fuel; a fixer (`FIX`) makes the mineral it lacks, at its
+/// as slots build) allow, by the conversions of growth (`Chemistry::build`, `builds`) at its share of walls (`WALLS`),
+/// paying `c_copy` per kg by burning fuel; a fixer (`FIX`) makes the mineral it lacks, at its
 /// capacity, paid by the fixing reaction's fuel. The share `SEED` of what it builds leaves as seeds for a neighbour
 /// cell across a border drawn by its width (`Seed`), with a generation's mutation; all of it where one more kg would
 /// not pay its upkeep (`pays` false: its light at the bottom of its layer is under its compensation point), so a cover
@@ -235,11 +235,10 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
 fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool), (i, t, dt): (usize, f64, f64), ground: &mut [f64; MAX_SUBSTANCES], b: &mut Books) {
     let (chem, ph, g) = (&w.chem, &w.cfg.phys, c.genes[x]);
     let (Some(bl), mm) = (chem.build.as_ref(), p.mm(chem)) else { return };
-    let conv = |q: usize| chem.builds.iter().find(|r| r.outputs[0].0 as usize == p.sub[q]);
-    let (Some(wall), Some(hard)) = (conv(WALL), conv(HARD)) else { return };
+    let Some(wall) = chem.builds.iter().find(|r| r.outputs[0].0 as usize == p.sub[WALL]) else { return };
     // Per kg built: the units of each conversion, and what they take.
-    let fm = 1.0 / (1.0 + dec(g[WALLS]) + ph.cover_hard);
-    let units = [(bl, fm / mm[MATTER] / bl.outputs[0].1 as f64), (wall, dec(g[WALLS]) * fm / mm[WALL] / wall.outputs[0].1 as f64), (hard, ph.cover_hard * fm / mm[HARD] / hard.outputs[0].1 as f64)];
+    let fm = 1.0 / (1.0 + dec(g[WALLS]));
+    let units = [(bl, fm / mm[MATTER] / bl.outputs[0].1 as f64), (wall, dec(g[WALLS]) * fm / mm[WALL] / wall.outputs[0].1 as f64)];
     let mut need = [0.0; MAX_SUBSTANCES];
     units.iter().for_each(|(rx, u)| rx.inputs.iter().for_each(|&(k, n)| need[k as usize] += n as f64 * u));
     let burn = &chem.reactions[p.burn];
@@ -284,7 +283,7 @@ fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool)
     let seed = if pays { g[SEED].clamp(0.0, 1.0) as f64 } else { 1.0 };
     if seed > 0.0 {
         let mut mol = [0.0; NP];
-        for q in [MATTER, WALL, HARD] {
+        for q in [MATTER, WALL] {
             mol[q] = (c.mol[x][q] - before[q]).max(0.0) * seed;
             c.mol[x][q] -= mol[q];
         }

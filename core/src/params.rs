@@ -204,8 +204,6 @@ pub struct Physics {
     pub c_light: f64,
     /// Mutation size of the cover's genes per generation, times each gene's step
     pub cover_mut: f32,
-    /// The solid the cover builds of a mineral (`cover::HARD`), kg per kg of its body matter
-    pub cover_hard: f64,
 
     // Flow, as ground cover and moving liquid feel it
     /// Thickness of a layer that hides half of what lies below it: [soft solid, liquid, loose], m
@@ -329,7 +327,6 @@ impl Default for Physics {
             alike: 4.0,
             c_light: 0.1,
             cover_mut: 0.063,
-            cover_hard: 0.02,
             hide: [0.2, 0.5, 0.02],
             soft: 0.75,
             still: 0.01,

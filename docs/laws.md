@@ -363,7 +363,7 @@ One fixed Earth-like chemistry until M7 (handover 6.0): 6 elements, 14 substance
 | 5 | energy-rich solid, the light reaction's product and the main fuel (≈ sugar) |
 | 6 | fat-like store |
 | 7, 8 | rock: sand and common rock (≈ SiO2, CaSiO3) |
-| 9 | lime (≈ CaCO3), rock and a solid bodies build |
+| 9 | lime (≈ CaCO3), rock |
 | 10 | body matter (≈ tissue): C118H196N6O101 |
 | 11 | the rock salt, lives dissolved (≈ Ca(HCO3)2) |
 | 12 | the nitrogen mineral, lives dissolved |
@@ -373,8 +373,8 @@ Reactions: 0 light to sugar; 1 burning sugar (its rot in the open world); 2 and 
 methane; 5 rotting to methane; 6 rock weathering; 7 rotting or burning body matter (gives back the nitrogen mineral); 8 and 9 the lime–salt pair; 10 fixing nitrogen; 11 the nitrogen mineral breaking down when hot; 12 rotting
 of the frame; 13 splitting the frame into sugar (needs an enzyme). Dead matter rots in moist open ground at a litter
 constant (12: about a quarter a year at 290 K; 7: about one a year). **Growth** (`Chemistry::build`, bodies only, paid by
-work): matter from 118 sugar + 3 nitrogen mineral; frame from 6 sugar; lime from 1 rock salt.
-`Chemistry::minerals` are growth's inputs no reaction burns (12), `materials` the solids bodies build (13, 9).
+work): matter from 118 sugar + 3 nitrogen mineral; frame from 6 sugar.
+`Chemistry::minerals` are growth's inputs no reaction burns (12), `materials` the solids bodies build (13).
 The air's carbon gas (3) settles where the cover's light reaction takes it up as fast as rot and burning give it back:
 the world has no source of it (an input from below, as volcanoes give, would be an edit from outside the laws, and is
 not built).
@@ -514,8 +514,8 @@ chance).
 
 ### 4.5 The cover: light-eaters as a field
 `core/src/cover/`. The light-eaters are not bodies: each cell holds up to `SLOTS` (4) kinds of **cover**, each the
-amounts of four substances of chemistry 0 per cell (the fuel 5 its light reaction makes, body matter 10, its walls 13
-and the hard solid 9: `cover::Parts`, found from the chemistry's roles) and 9 genes (`cover::LIGHT`, `LEAF`, `WALLS`,
+amounts of three substances of chemistry 0 per cell (the fuel 5 its light reaction makes, body matter 10 and its walls
+13: `cover::Parts`, found from the chemistry's roles) and 9 genes (`cover::LIGHT`, `LEAF`, `WALLS`,
 `STORE`, `FROST`, `MOIST`, `SEED`, `REPAIR`, `FIX`; ranges in `cover::RANGE`). The cover of a cell is a node of the
 store (`Class::Cover`) whose law books its own side; it is kept with the cell's bodies (`life::Cell::cover`), so the
 chunk of the cell is its one writer. Its temperature is its ground's: at the end of each month it trades heat with its
@@ -544,9 +544,8 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   over (built cover × `e_life` × 10^`REPAIR`), as bodies wear (6.7). **Frost**: below its `FROST` gene the share min(1, (`FROST` − T) / `frost_k`) × a
   dies (`PHASE`).
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
-  out as kinds build, tallest first) build body matter, walls (10^`WALLS` kg per kg of matter) and the hard solid
-  (`cover_hard` kg per kg of matter) by the conversions of growth (`Chemistry::build`, `builds`), paying `c_copy` per kg
-  by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
+  out as kinds build, tallest first) build body matter and walls (10^`WALLS` kg per kg of matter) by the conversions of growth (`Chemistry::build`,
+  `builds`), paying `c_copy` per kg by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
   most 10^`FIX` mol per kg per s at the reaction's pace, paid by the reaction's fuel. The fuel past its reserve that
   it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
@@ -667,7 +666,7 @@ nodes and individuals take alike, never more than is there.
 **Stores** (all members together) and heat. A body holds only the substances of bodies (`Chemistry::body`, one
 place each in a fixed array): the liquid and the energy-rich solid of life's roles and every substance growth and the
 other built solids take or make that is not a gas at the surface; in chemistry 0 the key liquid (0), the fuel (5), the
-body matter (10), the mineral (12), the rock salt lime is built of (11) and the two built solids (13, 9). It runs only the reactions whose every
+body matter (10), the mineral (12) and the built solid (13). It runs only the reactions whose every
 substance is one of these or a gas, taking at least one of these; what such a reaction makes that it cannot hold leaves
 it as a gas. **Body matter** is what it is built of; its **living
 body** (`Body::built`) is matter less brood, over 1 − `WET_TISSUE`. Taking, building, upkeep and force go by the living
@@ -722,7 +721,7 @@ gene (4.5). **Boiling** kills.
 ### 6.6 Growth
 `copy::grow`. Its fuel and minerals become matter at `c_copy` of work per kg, paid by burning (`body::pay`), as far as
 all allow: the **allowance** (`c_build` × supply / `m_ref` × days × activity), the **spare** (what its fuel can release
-beyond a month's upkeep), and its stores down to their minimums. Built solids (frame, lime) come first by their
+beyond a month's upkeep), and its stores down to their minimums. Built solids (the frame) come first by their
 share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing
