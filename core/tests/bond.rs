@@ -43,6 +43,9 @@ fn walls_keep_a_body_warm() {
     let next = |s: Handle| bs[s].cell as usize == i || w.mesh.cells().link(bs[s].cell as usize, i).is_some();
     let slot = bs.living().map(|x| x.0).filter(|&s| next(s)).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body next to the cell");
     let slot = if w.life[slot].cell as usize == i { slot } else { relocate(&mut w, slot, i) };
+    // (A lineage of its own, the same brain: it joins no body of its kind in cell `i` at the month's merge.)
+    let own = w.life.brains[w.life[slot].lineage as usize].clone().expect("a brain");
+    w.life[slot].lineage = w.life.new_lineage(own);
     // Six blocks joined around a small space, one bonded to the ground.
     let parts: Vec<u64> = (0..6).map(|_| plate(&mut w, i, 1e3, true)).collect();
     bond::link(&mut w, parts[0], GROUND, 1e9);
@@ -136,14 +139,13 @@ fn forming_never_takes_more_than_is_left() {
 
 /// The members of a node who do an action of Bond (all of them, when its brain gives it every chance) act together, as
 /// one body of so many members (`choose::spread`). Strong enough together (its brain only holds parts, and their force
-/// bears the part's weight), they hold the part and live on holding it; else (too weak to bear it, or their brain only
-/// breaks the ground) the node holds nothing and is as it was: its members, genes and the spread of its born rows.
+/// bears the part's weight), they hold the part and live on holding it; else (too weak to bear it) the node holds
+/// nothing and is as it was: its members, genes and the spread of its born rows.
 #[test]
 fn a_node_acts_on_bonds_as_its_members_together() {
     // 0: holds a part of 5 kg, members at strength about 1 (they bear about 200 N, the part weighs 49 N); 1: the same at
-    // strength 0 (they bear nothing); 2: breaks the ground.
+    // strength 0 (they bear nothing).
     let scene = |case: u8| {
-        let hold = case < 2;
         let mut w = small_world();
         // (No member dies of age here, so the node's count is exact.)
         w.cfg.phys.e_life = 1e30;
@@ -151,8 +153,7 @@ fn a_node_acts_on_bonds_as_its_members_together() {
         let i = dry_land(&w);
         // A part of 5 kg of the cell's most plentiful loose substance.
         let p = plate(&mut w, i, 5.0, false);
-        let brain = if hold { Brain::verb(brain::VERBS) } else { Brain::only(brain::DIG) };
-        let line = Line::new(&mut w, &brain, 0);
+        let line = Line::new(&mut w, &Brain::verb(brain::VERBS), 0);
         let (l, b) = (line.lineage, line.founder(&mut w, 1, i));
         let mut b = worldgen::testkit::node_of(&mut w, b, 800.0);
         (b.spread, b.row_spread) = (pcore::body::Genes::filled(0.01, b.genes.len()), 0.01);
@@ -161,7 +162,7 @@ fn a_node_acts_on_bonds_as_its_members_together() {
         (b.genes[COPY_MASS], b.genes[pcore::body::ALLOC]) = (b.genes[COPY_MASS] - 1.0, 0.0);
         if case == 0 {
             (b.genes[STRENGTH], b.genes[COPY_MASS], b.count) = (1.0, 1.0, b.count / 40.0);
-        } else if case == 1 {
+        } else {
             b.genes[STRENGTH] = 0.0;
         }
         // (Twenty members of the same size: in case 1 too weak together to bear the part.)
@@ -189,7 +190,6 @@ fn a_node_acts_on_bonds_as_its_members_together() {
     };
     scene(0);
     scene(1);
-    scene(2);
 }
 
 /// A part whose walls fall under `min_kg` falls apart, and all it still holds goes to its cell's ground: its walls, the

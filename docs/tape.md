@@ -113,7 +113,7 @@ worn edges, structures, true colour (r, g, b).
 | `bonds_joined`, `bonds_ground`, `structures`, `enclosed` | | bonds between parts and to the ground; structures of more than one part; enclosed ones |
 | `made_held`, `made_joined`, `made_ground`, `bonds_broken`, `bonds_failed` | 1/yr | bonds made by kind; broken by bodies; failed by load |
 | `inside_now`, `inside_cold`, `inside_warm`, `cold_months` | , , , 1/yr | bodies inside walls now; share of the eaters' body-months inside in the cold and the warm; their cold months |
-| `holding_liquid`, `liquid_held`, `afloat`, `afloat_moves` | , kg, , 1/yr | parts holding liquid and how much; structures afloat; moves afloat |
+| `holding_liquid`, `liquid_held` | , kg | parts holding liquid and how much |
 
 **Time per process** (measured by the shell, never by the core; NaN in the first row and in a run with no clock)
 

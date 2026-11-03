@@ -24,7 +24,7 @@ pub enum Entry {
     Back(Box<copy::Litter>),
     /// Body `by`, of `n` members who watched and of `lineage` then, watched body `of` (`choose::watched`)
     Watch { by: u64, n: f64, lineage: u32, of: u64 },
-    /// Body `id` does verb `on.0` to the part with id `on.1` (`bond::act`; `bond::ANCHORS` anchors it; `bond::LET_GO`
+    /// Body `id` does verb `on.0` to the part with id `on.1` (`bond::act`; `bond::LET_GO`
     /// and `bond::TORN` let go of it, `bond::dropped`), or forms a part of the shape given (`bond::form`), as a part of
     /// node `node` if any (`choose::land_act`)
     Act { id: u64, on: Result<(usize, u64), [f32; 2]>, node: Option<u64> },

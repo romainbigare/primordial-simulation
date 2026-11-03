@@ -125,14 +125,10 @@ The three costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`) are per k
 | `leak` | W/(m² K) | heat passed through an opening | free and light-wind exchange at a surface, 5 to 25 (unchecked) | anchored |
 | `form` | share | most of its mass a body puts into one part | none found | tuned, first guess |
 | `min_kg` | kg | walls lighter than this fall apart | none found | tuned, first guess |
-| `lever` | none | a held part multiplies a body's force by 1 + lever x hardness x m / (m + `lever_ref` x body mass) | none found | tuned, first guess |
-| `lever_ref` | share of built mass | a held part of this share of the holder's built mass gives half its full lever | none found; a hand tool of 1 to 3 kg is 2% to 5% of a 60 kg person (from memory) | tuned, first guess |
 | `grab` | share | the work of taking hold of a part, as a share of the work of handling its mass (`c_handle`) | none found | tuned, first guess |
 | `grip` | share of weight | force of a body of strength 1 | none found; animals push and pull about their own weight (unchecked) | tuned, first guess |
 | `bump` | share of weight | push of a body moving through a cell on each structure there; also the push its own force must give for it to move (`choose::go`) | none found; the starting plants (force 0.025 of their weight) stay put | tuned, first guess |
-| `dig` | share per day | most bonded ground a body breaks per day, as a share of its mass | none found | tuned, first guess |
 | `deep` | m | in liquid deeper than this a body the liquid holds up, with the structure it holds, floats (`bond::afloat`) | none found | tuned, first guess |
-| `afloat` | share | the cost of crossing afloat, as a share of the cost of walking | none found | tuned, first guess |
 
 ### Copy
 
@@ -250,16 +246,16 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 104 rows of `Config` and `Physics` are their 104 fields.
+The 100 rows of `Config` and `Physics` are their 100 fields.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
 | anchored | 52, and 11 outside the structs | 52 fields (among them `c_basal`, `dormant`, `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `mix`, `light_yield`, `gas_floor`, `gas_ref`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `MAX_KEEP`, and the three decomposers' factors `open` of the chemistry (reactions 1, 21 and 26) |
 | tuned (run or reason named) | 6, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`), set for an outcome (`rain_time`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`, the cover's starting genes) |
-| tuned, first guess | 34 | 31 free numbers (`wind`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `rho_pass`, `keep_min`, `shape_noise`, `blend`, `plan_weight`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the three `c_hidden`, `c_memory`, `c_seen`, which are the split of `c_brain` and not three numbers |
+| tuned, first guess | 30 | 27 free numbers (`wind`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `rho_pass`, `keep_min`, `shape_noise`, `blend`, `plan_weight`, `learn_most`, the Bond numbers `joint` to `deep`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the three `c_hidden`, `c_memory`, `c_seen`, which are the split of `c_brain` and not three numbers |
 | switch | 1 | `null` |
 | speed | 2, and 6 outside the structs | `wake_share`, `sleep_days`; outside: `Config::chunks`, a setting of the run that a snapshot does not keep (`ew --chunks`, 64: the cells cut into that many runs for the bodies' parallel passes, many more than the threads of a machine, so the pool shares out uneven runs; any count gives the same world), the air's step `schedule::AIR_STEP_DAYS` (10 days, three a month: against 1-day steps the land within 0.3 K, `the_long_step_keeps_the_climate`), the caps `MAX_NODES`, `MAX_LINEAGES`, `MOST_ACTS`, and `copy::MATE_HIDDEN` (8 hidden units: two parents only for individuals of a brain that big, a level of detail) |
 | container | 1 | `phys` |
 
-Rows marked tuned in all: 49 (40 in the structs, 9 outside: also `cover::RANGE`, `cover::APART` and the mass classes `SMALL_KG`, `BIG_KG`, first guesses). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.
+Rows marked tuned in all: 45 (36 in the structs, 9 outside: also `cover::RANGE`, `cover::APART` and the mass classes `SMALL_KG`, `BIG_KG`, first guesses). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

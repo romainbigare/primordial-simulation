@@ -6,7 +6,7 @@ use crate::chem::{Chemistry, Phase, Stores};
 use crate::event::{Event, EventKind};
 use crate::rng::Rng;
 use crate::units::MAX_SUBSTANCES;
-use crate::{bond, lanes, life::{Chunk, Handle}, store::Node, World};
+use crate::{lanes, life::{Chunk, Handle}, store::Node, World};
 
 /// Mass of the amounts `m` (mol of each store) that the body at `t` K uses (`Body::uses`), kg.
 fn used_kg(w: &World, b: &Body, t: f64, m: &Stores) -> f64 {
@@ -133,8 +133,7 @@ fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body,
 pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, s: Handle, rng: &mut Rng) {
     let (o, bc) = (&d[s], w.chem.body());
     let (mb, tb) = (b.mass(&w.chem), b.temp(&w.chem));
-    let c = d.at(b.cell as usize);
-    let (fb, fo) = (b.gene(STRENGTH) * bond::lever(c, w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(c, w, o) * o.built(&w.chem) / o.n());
+    let (fb, fo) = (b.gene(STRENGTH) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * o.built(&w.chem) / o.n());
     let (kg, swept) = intake(w, b, tb, |k| o.amount(bc, k));
     // One draw finds an individual prey.
     let reached = if o.n() > 1.0 { swept } else if rng.f64() < swept { 1.0 } else { return };

@@ -8,7 +8,7 @@
 //! (`World::take_chunks`): what a body reads differs from what is booked by less than `ROUNDING`.
 
 use super::apply::ROUNDING;
-use super::{heat_received, held_more, Booker, Class, Move, Node};
+use super::{heat_received, held_more, Booker, Class, Node};
 use crate::ground::{heat_above_floor, share};
 use crate::units::T_FLOOR;
 use crate::{World, AIR};
@@ -165,24 +165,15 @@ impl Moves {
             self.alter(e, heat, Some(e..e + 1));
         }
     }
-    /// Gather move `m` of the update running: the view changes as `apply` would change the store.
-    pub(crate) fn gather(&mut self, w: &World, m: Move) {
-        let into = heat_received(m.heat, m.mol, held_more(&w.chem, m.from.class, m.to.class, m.k as usize));
-        for (x, mol, heat) in [(m.from, -m.mol, -m.heat), (m.to, m.mol, into)] {
-            if let Some(at) = self.row_of(w, x) {
-                self.end((x, at), m.k as usize, mol, heat);
-            }
-        }
-    }
     /// `mol` of substance `k` and `heat` J go from node `x` of the store to the one whose update it is, gathered as
-    /// `gather` gathers that move (the updater's end is its law's).
+    /// `apply` would change the store (the updater's end is its law's).
     pub(crate) fn take(&mut self, w: &World, x: Node, k: usize, mol: f64, heat: f64) {
         if let Some(at) = self.row_of(w, x) {
             self.end((x, at), k, -mol, -heat);
         }
     }
     /// `mol` of substance `k` and `heat` J go from the one whose update it is to node `x` of the store (`held_more` aside),
-    /// gathered as `gather` gathers that move.
+    /// gathered as `apply` would change the store.
     pub(crate) fn give(&mut self, w: &World, x: Node, k: usize, mol: f64, heat: f64) {
         let who = self.who.expect(RUNNING);
         if let Some(at) = self.row_of(w, x) {

@@ -33,8 +33,7 @@ state in full for the cells' surroundings, and Flow's own pass leaves it then); 
 `AIR_STEP_DAYS` (10 days, three a month, each at its own time in the month), after each the sink of the liquid over
 field capacity into the bed's store; then the liquid and erosion; heat sideways and creep yearly; the cover's month;
 Change; Bond (each chunk's cell by cell, the chunks on the pool: in a cell the turns of its parts in the order of its
-list, on its view, then the loads of its structures in the order of their roots; last, one by one, the structures that
-drift to a neighbour cell); then the bodies (`survey::batch`).
+list, on its view, then the loads of its structures in the order of their roots); then the bodies (`survey::batch`).
 **Every body updates once a month**, at the month's start, after the month's Flow, Change and Bond: one batch
 holds every living body, and a body placed during it first updates at the next month's start. Each update integrates
 the time since the body's last (`Body::last`): its upkeep, drink, heat, growth and the most it takes or breaks go by
@@ -380,7 +379,7 @@ A **part** is a made object (solid walls, the liquid in its hollow, heat, 3 size
 (`Class::Part`) stored in the list of the cell it lies in (`life::Cell::parts`), with an id that never changes: the cell
 it was made in and that cell's count of parts made (`bond::Part::id`, as a body's); held or not, it lies in the cell of
 its holder. The bonds of a cell's parts are the cell's (`life::Cell::bonds`): a structure lies in one cell, and only a
-structure that moves (carried, or drifting) spans two cells for that step, which is serial. A body makes one with "form"
+structure that moves (carried) spans two cells for that step, which is serial. A body makes one with "form"
 (`bond::form`, `c_form` per kg, at most `form` of its mass). A **bond** (`bond::Bonds`) joins two parts or a part and
 the bed; its strength comes from the weaker material and the contact area (`tensile`, `joint`), at `c_join` per m². A
 **structure** is the parts joined by bonds and moves as one. A part runs no reactions. Monthly (`bond/month.rs`) the
@@ -393,16 +392,15 @@ whether its walls ran off in its turn or a body took them (`bond::verbs::take`),
 
 ### 3.2 Loads and failure
 Monthly (`bond/month.rs`) each bond carries the weight hanging on it, less buoyancy, plus the push of moving liquid and
-of bodies passing (`bump` of their weight); past its strength it breaks, and what has no support lies on the ground. A
-structure the liquid holds up drifts down the liquid's slope (`bond::afloat`) with the chance that the liquid crosses
-the cell in the month.
+of bodies passing (`bump` of their weight); past its strength it breaks, and what has no support lies on the ground.
+Structures do not drift; only a body carries one (3.5).
 
-### 3.3 Holding, digging, floating
+### 3.3 Holding, floating
 Holding is a bond whose strength is the body's **force**, strength gene × living body × gravity × `grip`
-(`bond::force`), with a lever for a held part (`bond::lever`); a body holds only while its force bears the structure's
-weight. Fuel adds no force; a hurt body is weaker. **Digging** (`bond::dig`) breaks the bed by force and time. A body
-is **afloat** where the liquid is deeper than `deep` and what it and its structure displace weighs as much as they do
-(Archimedes): it reaches no ground, and crosses at `afloat` of walking's cost.
+(`bond::bears`); a body holds only while its force bears the structure's weight. Fuel adds no force; a hurt body is
+weaker. A body is **afloat** where the liquid is deeper than `deep` and what it and its structure displace weighs as
+much as they do (Archimedes): no liquid stands over it (`bond::depth`). Digging the bed, anchoring a part to it and a
+held part as a lever are parked until a brain uses them.
 
 ### 3.4 Containment
 Walls that close a space make an **inside** (`bond::room`) joined to its cell by one link (`bond::Enclosure`): heat
@@ -612,7 +610,7 @@ so each direction gets its share of members on average, in groups. A
 group splits off only if the cell it enters has room and the node bears the `bump` share of its weight
 (`choose::go::can_go`). **rest**; **move** (`choose::go`:
 `walk` per kg and metre, climbing, the bodies in the way; needs force, 3.5); **take**, **put**, **give**
-(`choose/feed.rs`); **watch** (5.5); Bond's form, hold, take from or put to a part, join, break, let go, anchor, dig,
+(`choose/feed.rs`); **watch** (5.5); Bond's form, hold, take from or put to a part, join, break, let go,
 enter (`bond/verbs.rs`). A move lands when the batch ends, and an act on a part and a watch are applied then (0).
 No copy action, no "farm", "trade" or "attack": those must be patterns of these.
 

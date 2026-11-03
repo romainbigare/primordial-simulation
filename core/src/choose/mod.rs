@@ -21,7 +21,7 @@ use perceive::{perceive, Face, HEIGHT, LN_LEAF, LN_MASS, T, WB_SCALE};
 pub use perceive::{DEAD, EDIBLE, NCELL, OWN, SIGHTS, WET};
 
 use crate::body::{Body, Lived};
-use crate::brain::{self, ln, score, squash, Shape, Thought, ANCHOR, DIG, FIXED, FORM, FORM_OUT, OVERBS, PUT, RELEASE, REST, TAKE, TAKE_FROM, VERBS, WATCH};
+use crate::brain::{self, ln, score, squash, Shape, Thought, FIXED, FORM, FORM_OUT, OVERBS, PUT, RELEASE, REST, TAKE, TAKE_FROM, VERBS, WATCH};
 use crate::life::Entry;
 use crate::rng::{Purpose, Rng};
 use crate::space::COMPASS;
@@ -158,11 +158,8 @@ fn options(w: &World, ch: &Chunk, b: &Body, (s, sight): (Shape, usize), (pm, vol
             c.logit[TO_PART + q * OVERBS + v] = score(&out[r..r + bond::NO + 1], fq);
         }
     }
-    if c.held.is_none() {
-        c.logit[ANCHOR] = f32::NEG_INFINITY;
-        if c.room.is_none() {
-            c.logit[RELEASE] = f32::NEG_INFINITY;
-        }
+    if c.held.is_none() && c.room.is_none() {
+        c.logit[RELEASE] = f32::NEG_INFINITY;
     }
 }
 
@@ -274,8 +271,6 @@ fn act_as(w: &World, d: &mut Chunk, b: &mut Body, c: &Choice, k: &Kit, (a, part_
         TAKE => feed::take_node(w, d, b),
         FORM => d.out.push(act(Err([k.form[0], 0.5 * (k.form[1] + 1.0)]))),
         RELEASE => bond::release(d, b),
-        ANCHOR => if let Some(p) = b.hold.filter(|_| bond::held(d.at(b.cell as usize), b).is_some()) { d.out.push(act(Ok((bond::ANCHORS, p)))) },
-        DIG => bond::dig(w, d, b),
         a if a < TO_BODY => go(w, d, b, c.to[a - FIXED], part_of.is_some()),
         a if a >= TO_PART => {
             let part = d.at(b.cell as usize).parts[c.parts[(a - TO_PART) / OVERBS]].id;

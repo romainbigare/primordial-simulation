@@ -38,7 +38,5 @@ impl Recorder {
         row.push("cold_months", "1/yr", y.inside[0][0]);
         row.push("holding_liquid", "1", filled.len() as f64);
         row.push("liquid_held", "kg", filled.iter().sum());
-        row.push("afloat", "1", roots.iter().filter(|r| r.s.afloat).count() as f64);
-        row.push("afloat_moves", "1/yr", t.afloat);
     }
 }

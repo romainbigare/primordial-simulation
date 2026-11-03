@@ -7,8 +7,7 @@ use crate::store::{Class, Node};
 use crate::{bond, copy, lanes, nodes, life::{Chunk, Entry}, World};
 
 /// Move to a neighbour, if its force gives the push a mover makes (`bump`; laws.md 3.5): cost by its whole mass at the
-/// real cost of transport (`Physics::walk`), the distance, the climb and the bodies in the way (`lanes::resist`); less
-/// afloat. The part spent pushing through bodies breaks them (`wear`) and clears the lane. A node moves as one. It pays
+/// real cost of transport (`Physics::walk`), the distance, the climb and the bodies in the way (`lanes::resist`). The part spent pushing through bodies breaks them (`wear`) and clears the lane. A node moves as one. It pays
 /// now and lands in the serial pass (`land_move`); until then it is leaving (`Body::leaving`). With `kin`, it is members of a
 /// node who join their kind where they land.
 pub fn go(w: &World, d: &mut Chunk, b: &mut Body, j: usize, kin: bool) {
@@ -20,15 +19,13 @@ pub fn go(w: &World, d: &mut Chunk, b: &mut Body, j: usize, kin: bool) {
     if carried.is_none() {
         bond::let_go(d, b, true);
     }
-    let afloat = bond::afloat(w, d, b, j, mb);
-    let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
+    let climb = (w.life.env[j][2] - w.life.env[i][2]).max(0.0);
     let resist = lanes::resist(w, i, j);
     let mass = mb + carried.map_or(0.0, |c| c.1);
-    let cost = mass * (w.cfg.phys.walk(mb / b.n()) * w.mesh.cells().dist()[lanes::link(w, i, j)] + w.cfg.gravity * climb) * resist * if afloat { w.cfg.phys.afloat } else { 1.0 };
+    let cost = mass * (w.cfg.phys.walk(mb / b.n()) * w.mesh.cells().dist()[lanes::link(w, i, j)] + w.cfg.gravity * climb) * resist;
     if !body::pay(w, d, b, cost) {
         return;
     }
-    d.counts.parts.afloat += afloat as u8 as f64;
     // What it spends pushing through the bodies there breaks them at the next survey (`wear`) and clears the lane: the
     // ground whose cover that energy breaks.
     let (pushed, all) = (cost * (1.0 - 1.0 / resist), w.life.sum(j)[7]);

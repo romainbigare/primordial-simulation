@@ -5,16 +5,14 @@
 use crate::rng::Rng;
 use serde::{Deserialize, Serialize};
 
-/// The fixed actions, by their rows: rest; put to the node; take from it; form a part; let go (or leave the inside);
-/// join the held part to the ground; break the bonded ground. No copy: children come from the brood.
+/// The fixed actions, by their rows: rest; put to the node; take from it; form a part; let go (or leave the inside).
+/// No copy: children come from the brood.
 pub const REST: usize = 0;
 pub const PUT: usize = 1;
 pub const TAKE: usize = 2;
 pub const FORM: usize = 3;
 pub const RELEASE: usize = 4;
-pub const ANCHOR: usize = 5;
-pub const DIG: usize = 6;
-pub const FIXED: usize = 7;
+pub const FIXED: usize = 5;
 /// Verbs toward a perceived body: take from it, put to it, watch it.
 pub const TAKE_FROM: usize = 0;
 pub const GIVE: usize = 1;

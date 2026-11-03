@@ -49,7 +49,7 @@ pub(super) type Hand = ([f32; brain::FIXED], f32, f32, [f32; brain::VERBS + brai
 /// The eaters' founders take from the place (its ground and its cover, 1) before they bite a body (0.5), and keep out
 /// of deep standing liquid, as a land animal that sinks does: the weight -1 on ln(1 + depth / m) makes a move's odds
 /// fall as 1 / (1 + depth / m).
-const H_EATER: Hand = ([0.0, -3.0, 1.0, -2.5, -2.0, -2.5, -3.0], -1.0, -1.0, [0.5, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0]);
+const H_EATER: Hand = ([0.0, -3.0, 1.0, -2.5, -2.0], -1.0, -1.0, [0.5, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0]);
 
 /// `s` with the genes of `d` (gene, value) set.
 const fn with<const N: usize>(mut s: [f32; N], d: &[(usize, f32)]) -> [f32; N] {

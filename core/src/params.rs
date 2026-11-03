@@ -176,22 +176,14 @@ pub struct Physics {
     pub form: f64,
     /// Walls lighter than this fall apart (so a part is made of at least this), kg
     pub min_kg: f64,
-    /// A held part multiplies a body's force by 1 + lever · hardness · m / (m + `lever_ref` · body mass)
-    pub lever: f64,
-    /// Share of a body's built mass at which a held part gives half its full lever
-    pub lever_ref: f64,
     /// Work to take hold of a part, as a share of the work of handling its mass (`c_handle`)
     pub grab: f64,
     /// Force of a body of strength 1, as a share of its weight
     pub grip: f64,
     /// Push of a mover on each structure of a cell, and the push its own force must give to move, share of its weight
     pub bump: f64,
-    /// Most bonded ground a body breaks per day, as a share of its mass
-    pub dig: f64,
     /// Liquid deeper than this is crossed afloat by a body holding a structure the liquid holds up, m
     pub deep: f64,
-    /// Cost of crossing afloat, as a share of the cost of walking
-    pub afloat: f64,
 
     // Copy
     /// Work to make one kg of body matter, J (`copy::grow`)
@@ -325,14 +317,10 @@ impl Default for Physics {
             leak: 25.0,
             form: 0.1,
             min_kg: 1.0,
-            lever: 3.0,
-            lever_ref: 0.05,
             grab: 0.1,
             grip: 0.5,
             bump: 0.05,
-            dig: 0.01,
             deep: 0.5,
-            afloat: 0.2,
             c_copy: 1e7,
             c_build: 1e4,
             row_chance: 0.3,

@@ -47,7 +47,7 @@ impl Counters {
         self.add_rounded(rounded);
         self.cover_lost.iter_mut().zip(cover_lost).for_each(|(a, b)| *a += b);
         let p = &mut self.parts;
-        (p.afloat, p.formed, p.to_parts, p.from_parts) = (p.afloat + parts.afloat, p.formed + parts.formed, p.to_parts + parts.to_parts, p.from_parts + parts.from_parts);
+        (p.formed, p.to_parts, p.from_parts) = (p.formed + parts.formed, p.to_parts + parts.to_parts, p.from_parts + parts.from_parts);
     }
     /// What a booking set from just below zero to zero is added (`Counters::rounded`): mol, and J.
     pub(crate) fn add_rounded(&mut self, [mol, heat]: [f64; 2]) {

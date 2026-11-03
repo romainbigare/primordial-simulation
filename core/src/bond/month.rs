@@ -1,7 +1,7 @@
-//! The monthly step of parts: rot and heat, loads and failure, floating and drifting.
+//! The monthly step of parts: rot and heat, loads and failure.
 
-use super::{at, fall_apart, holder, members, move_structure, restructure, root, sense::liquid, unlink, verbs::{bears, torn_from}, GROUND};
-use crate::{change::{frac, open_rot}, chem::Phase, life::{self, Chunk}, rng::{Purpose, Rng}, space::COMPASS, store::{Class, Node}, World};
+use super::{at, fall_apart, holder, members, restructure, sense::liquid, unlink, verbs::{bears, torn_from}, GROUND};
+use crate::{change::{frac, open_rot}, chem::Phase, life::{self, Chunk}, store::{Class, Node}, World};
 
 /// Liquid shallower than this, m, pushes no part.
 const STILL_DEPTH: f64 = 0.01;
@@ -9,15 +9,14 @@ const STILL_DEPTH: f64 = 0.01;
 /// Monthly: each chunk on the pool (`life::run`), cell by cell, the turns of the parts in the order of their cell's
 /// list: what of its walls rots or is no longer solid goes to the ground, and it takes the ground's temperature, on the
 /// chunk's view of the store; a part whose walls are gone falls apart (`fall_apart`); then each structure of the cell,
-/// in the order of its root, finds its numbers again and bears its load (`load_one`). Last the structures that drift
-/// move to their neighbour cells, in the order of the cells.
+/// in the order of its root, finds its numbers again and bears its load (`load_one`).
 pub fn step(w: &mut World) {
     if w.life.cells.iter().all(|c| c.parts.is_empty()) {
         return;
     }
     let dt = w.cfg.calendar().month as f64;
     let load = w.life.cells.iter().map(|c| c.parts.len()).sum();
-    let drifts = life::run(w, vec![Vec::new(); life::chunks(w)], load, |_| (), |w, d, drifts, _| {
+    life::run(w, vec![(); life::chunks(w)], load, |_| (), |w, d, _, _| {
         let cells: Vec<usize> = d.cells().filter(|&i| !d.at(i).parts.is_empty()).collect();
         for i in cells {
             turns(w, d, i, dt);
@@ -25,15 +24,10 @@ pub fn step(w: &mut World) {
             for r in roots {
                 let Some(x) = at(d.at(i), r) else { continue };
                 restructure(w, d.at_mut(i), x);
-                if let Some(j) = load_one(w, d, i, r) {
-                    drifts.push((i, r, j));
-                }
+                load_one(w, d, i, r);
             }
         }
     });
-    for (i, r, j) in drifts.into_iter().flatten() {
-        move_structure(w, i, r, j);
-    }
 }
 
 /// The turns of the parts of cell `i` of chunk `d` over `dt` s, in their order (`rot_and_warm`); a part whose walls are
@@ -80,8 +74,8 @@ fn rot_and_warm(w: &World, d: &mut Chunk, p: &mut super::Part, i: usize, dt: f64
 }
 
 /// Load the structure whose root is `r` in cell `i` of chunk `d`: weights less buoyancy, pushes of liquid and bodies;
-/// break what is overloaded. Returns the neighbour cell it drifts to, afloat and free (moved when the chunks end).
-fn load_one(w: &World, d: &mut Chunk, i: usize, r: u64) -> Option<usize> {
+/// break what is overloaded.
+fn load_one(w: &World, d: &mut Chunk, i: usize, r: u64) {
     let (c, g) = (d.at(i), w.cfg.gravity);
     let list = members(c, r);
     let (depth, rho, molv) = liquid(w, i, d.moves.amounts(w, Node::ground(i)));
@@ -93,17 +87,15 @@ fn load_one(w: &World, d: &mut Chunk, i: usize, r: u64) -> Option<usize> {
     let v = if depth > STILL_DEPTH { flux / (molv * width * depth) } else { 0.0 };
     let rp = at(c, r).expect("the root");
     let bump = c.parts[rp].push as f64 / list.len() as f64;
-    let (mut wt, mut push, mut lift) = (vec![0.0; list.len()], vec![0.0; list.len()], 0.0);
+    let (mut wt, mut push) = (vec![0.0; list.len()], vec![0.0; list.len()]);
     for (x, &p) in list.iter().enumerate() {
         let pt = &c.parts[p];
         let face = (pt.size[0] * pt.size[1]) as f64;
         let buoy = rho * g * pt.outer().min(face * depth);
-        lift += buoy;
         wt[x] = (pt.mass(&w.chem) * g - buoy).max(0.0);
         push[x] = 0.5 * rho * v * v * face + bump;
     }
     let s = c.parts[rp].s;
-    let afloat = !s.anchored && depth > 0.0 && lift >= s.mass * g;
     let held = list.iter().copied().find(|&p| holder(c, p).is_some());
     // From the supports out along the bonds, each carrying what hangs beyond it; a ground bond carries the pushes too.
     let ids: Vec<u64> = list.iter().map(|&p| c.parts[p].id).collect();
@@ -140,7 +132,7 @@ fn load_one(w: &World, d: &mut Chunk, i: usize, r: u64) -> Option<usize> {
     let x = held.filter(|_| !s.anchored).and_then(|h| list.iter().position(|&p| p == h));
     let torn = x.and_then(|x| holder(c, list[x]).filter(|&o| wt[x] + push[x] > bears(w, &c.bodies[o])));
     let c = d.at_mut(i);
-    (c.parts[rp].push, c.parts[rp].s.afloat) = (0.0, afloat);
+    c.parts[rp].push = 0.0;
     for (a, o) in breaks {
         if d.at(i).bonds.of(a).any(|l| l.0 == o) {
             unlink(w, d, i, a, o, true);
@@ -149,15 +141,4 @@ fn load_one(w: &World, d: &mut Chunk, i: usize, r: u64) -> Option<usize> {
     if let Some(o) = torn {
         torn_from(w, d, i, o);
     }
-    // Afloat and free: drift to the neighbour whose liquid stands lowest.
-    let c = d.at(i);
-    if !afloat || held.is_some() || v <= 0.0 || at(c, r).is_none_or(|p| root(c, p) != p) {
-        return None;
-    }
-    let mut rng = Rng::of_part(w.seed, w.time, r, Purpose::Bond);
-    let head = |j: usize| w.life.env[j][2] + w.life.env[j][1];
-    let near = (0..COMPASS).filter_map(|e| cells.way(i, e).map(|e| cells.adj_cell()[e] as usize));
-    let to = near.filter(|&j| head(j) < head(i)).min_by(|&a, &b| head(a).total_cmp(&head(b)));
-    // It crosses the cell's width at the liquid's speed.
-    to.filter(|_| rng.f64() < v * w.cfg.calendar().month as f64 / width)
 }

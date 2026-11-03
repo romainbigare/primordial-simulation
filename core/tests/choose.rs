@@ -69,7 +69,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     // A neutral brain: small random weights, no bias among resting, putting, taking from the ground and moving (which
     // all start equally likely); the actions on parts and on other bodies kept rare, as they are not part of this
     // scene. The body scaled to `BODY_KG` (booked as an edit).
-    let brain = Brain { fixed: [0.0, 0.0, 0.0, OFF, OFF, OFF, OFF], verbs: [OFF; pcore::brain::VERBS + pcore::brain::OVERBS], seed, ..Brain::neutral() };
+    let brain = Brain { fixed: [0.0, 0.0, 0.0, OFF, OFF], verbs: [OFF; pcore::brain::VERBS + pcore::brain::OVERBS], seed, ..Brain::neutral() };
     let start = w.map.idx(STRIP - 1, H / 2);
     let mut b = founder(&mut w, 1, start, &brain);
     let f = BODY_KG / b.mass(&w.chem);

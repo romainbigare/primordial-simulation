@@ -1,9 +1,9 @@
 //! Law 3: Bond. Parts are nodes of the store (`Class::Part`) that bonds join into structures; a bond breaks when its
 //! load passes its strength (laws.md 3). Here: parts, structures and their graph; `bonds`: the bonds and the enclosure;
-//! `verbs`: what bodies do to parts; `sense`: what parts give a body; `month`: the monthly rot, heat, loads and
-//! drift. A part is stored in the list of the cell it lies in (`life::Cell::parts`), with the bonds of that cell's
-//! parts (`life::Cell::bonds`): a structure lies in one cell, so all that changes parts runs on that cell, in its chunk
-//! (`life::Chunk`), but a structure carried or drifting to another cell (`moved`, `month::drift`).
+//! `verbs`: what bodies do to parts; `sense`: what parts give a body; `month`: the monthly rot, heat and loads. A part
+//! is stored in the list of the cell it lies in (`life::Cell::parts`), with the bonds of that cell's parts
+//! (`life::Cell::bonds`): a structure lies in one cell, so all that changes parts runs on that cell, in its chunk
+//! (`life::Chunk`), but a structure carried to another cell (`moved`).
 
 mod bonds;
 mod month;
@@ -14,8 +14,8 @@ pub use bonds::{Bonds, Enclosure};
 pub use month::step;
 pub use sense::{afloat, depth, features, room};
 pub(crate) use sense::{enclosure, possible, sense, SENSE};
-pub use verbs::{act, carry, dig, force, form, moved, release, ANCHORS, LET_GO, TORN};
-pub(crate) use verbs::{bears, dropped, let_go, lever};
+pub use verbs::{act, bears, carry, form, moved, release, LET_GO, TORN};
+pub(crate) use verbs::{dropped, let_go};
 
 use crate::{body::Body, chem::{Chemistry, Phase}, event::{Event, EventKind}, life::{Cell, Chunk}, store::{Class, Node}, World};
 use serde::{Deserialize, Serialize};
@@ -75,15 +75,12 @@ pub struct Info {
     pub space: f64,
     pub encl: Enclosure,
     pub anchored: bool,
-    /// Held up by the liquid around it (as of the last month)
-    pub afloat: bool,
 }
 
 /// What bodies did with parts since the shell last read it (not saved).
 #[derive(Clone, Debug, Default)]
 pub struct Tally {
-    /// Moves into deep liquid afloat; parts formed; kg put into and taken from parts
-    pub afloat: f64,
+    /// Parts formed; kg put into and taken from parts
     pub formed: f64,
     pub to_parts: f64,
     pub from_parts: f64,

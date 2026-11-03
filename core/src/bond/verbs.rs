@@ -1,9 +1,9 @@
-//! What bodies do to parts: hold, take, put, join, break and enter; form new parts, anchor them, dig the bonded ground,
-//! let go, and carry what they hold when they move. A body's force decides what it can hold and break. Each act runs on
+//! What bodies do to parts: hold, take, put, join, break and enter; form new parts, let go, and carry what they hold
+//! when they move. A body's force decides what it can hold and break. Each act runs on
 //! the body's cell in its chunk (`life::Chunk`), the body taken out of its slot.
 
-use super::{at, event, fall_apart, held, holder, link_in, make, members, move_structure, restructure, root, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
-use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase, Stores}, life::{Cell, Chunk}, life::Entry, store::{Class, Move, Node}, World};
+use super::{at, event, fall_apart, held, holder, link_in, make, members, move_structure, restructure, root, sense::room, strength, unlink, HELD, LOAD, NOBODY};
+use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase, Stores}, life::{Cell, Chunk}, life::Entry, World};
 use crate::units::BODY_STORES;
 
 /// Body `b` takes hold of the part at `p` of its cell if it bears the weight of its structure (one bonded to the
@@ -20,11 +20,10 @@ fn grab(w: &World, d: &mut Chunk, b: &mut Body, p: usize) {
     event(d, w, true, i, HELD);
 }
 
-/// The verbs of the part acts by which a body lets go of its part (`let_go`), or by a load (`TORN`), and bonds its
-/// part to the ground (`ANCHORS`, `anchor`), after the verbs of `act`: parts change only in the acts' landing.
+/// The verbs of the part acts by which a body lets go of its part (`let_go`), or by a load (`TORN`), after the verbs of
+/// `act`: parts change only in the acts' landing.
 pub const LET_GO: usize = OVERBS;
 pub const TORN: usize = OVERBS + 1;
-pub const ANCHORS: usize = OVERBS + 2;
 
 /// Let go of the held part (also when the body dies or joins another), broken off by a load if `load`: a part act
 /// queued for the landing of the acts (`dropped`, applied to that part if that body still holds it). The body holds
@@ -61,27 +60,14 @@ pub(super) fn torn_from(w: &World, d: &mut Chunk, i: usize, o: usize) {
     d.at_mut(i).bodies[o] = ob;
 }
 
-/// What a held part multiplies a body's force by: more for a hard part, up to the body's size (`c`: its cell).
-pub(crate) fn lever(c: &Cell, w: &World, b: &Body) -> f64 {
-    held(c, b).map_or(1.0, |p| {
-        let walls = c.parts[p].walls(&w.chem);
-        1.0 + w.cfg.phys.lever * walls.hardness * walls.mass / (walls.mass + w.cfg.phys.lever_ref * b.built(&w.chem))
-    })
-}
-
-/// Weight a body bears by its own force, N (a held lever does not lift itself). Force goes with its living body
-/// (`Body::built`), so a hurt body is weaker and fuel adds no strength.
-pub(crate) fn bears(w: &World, b: &Body) -> f64 {
+/// Weight a body bears by its own force, N, which is also the force it pushes or pulls with. Force goes with its living
+/// body (`Body::built`), so a hurt body is weaker and fuel adds no strength.
+pub fn bears(w: &World, b: &Body) -> f64 {
     b.gene(STRENGTH) * b.built(&w.chem) * w.cfg.gravity * w.cfg.phys.grip
 }
 
-/// Force a body pushes or pulls with, N (of its body, as `bears`; `c`: its cell).
-pub fn force(c: &Cell, w: &World, b: &Body) -> f64 {
-    bears(w, b) * lever(c, w, b)
-}
-
-/// Verb `v` toward the part at `p` of body `b`'s cell: hold, take from, put to, join the held part to, break, enter; or
-/// anchor it (`ANCHORS`). The body pays as it acts (`body::pay`, on its cell's view), and does nothing if it cannot.
+/// Verb `v` toward the part at `p` of body `b`'s cell: hold, take from, put to, join the held part to, break, enter. The
+/// body pays as it acts (`body::pay`, on its cell's view), and does nothing if it cannot.
 pub fn act(w: &World, d: &mut Chunk, b: &mut Body, v: usize, p: usize) {
     let (mb, days, i) = (b.mass(&w.chem), w.cfg.update_days(), b.cell as usize);
     match v {
@@ -105,14 +91,14 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, v: usize, p: usize) {
             }
         }
         4 => {
-            let f = force(d.at(i), w, b);
+            let f = bears(w, b);
             if !body::pay(w, d, b, f) {
                 return;
             }
             let c = d.at(i);
             let id = c.parts[p].id;
             if let Some(o) = holder(c, p) {
-                if f > force(c, w, &c.bodies[o]) {
+                if f > bears(w, &c.bodies[o]) {
                     torn_from(w, d, i, o);
                 }
             } else if let Some((o, s)) = c.bonds.of(id).min_by(|a, b| a.1.total_cmp(&b.1)) {
@@ -121,7 +107,6 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, v: usize, p: usize) {
                 }
             }
         }
-        ANCHORS => anchor(w, d, b),
         _ => {
             let c = d.at(i);
             let (r, id) = (c.parts[p].root, c.parts[p].id);
@@ -235,50 +220,6 @@ pub fn form(w: &World, d: &mut Chunk, b: &mut Body, shape: [f32; 2]) {
 /// Let go of the held part; with nothing held, leave the inside.
 pub fn release(d: &mut Chunk, b: &mut Body) {
     if held(d.at(b.cell as usize), b).is_some() { let_go(d, b, false) } else { b.inside = None }
-}
-
-/// Bond the held part to the cell's bonded ground and let go of it.
-pub fn anchor(w: &World, d: &mut Chunk, b: &mut Body) {
-    let i = b.cell as usize;
-    let Some(p) = held(d.at(i), b) else { return };
-    let bed = |k: usize| d.moves.amount(w, Node::new(Class::Bed, i), k);
-    let (v, sv) = (0..w.chem.ns()).fold((0.0, 0.0), |(v, sv), k| {
-        let vol = bed(k) * w.chem.molar_volume(k, Phase::Solid);
-        (v + vol, sv + vol * w.chem.subs[k].strength)
-    });
-    let pt = &d.at(i).parts[p];
-    let ac = pt.contact();
-    let s = strength(w, pt.walls(&w.chem).strength, sv / v.max(1e-12), ac);
-    if v > 0.0 && body::pay(w, d, b, w.cfg.phys.c_join * ac) {
-        link_in(w, d, i, p, GROUND, s);
-        drop_held(w, d, b, false);
-    }
-}
-
-/// Break bonded ground with force: each substance weaker than the body's strength (times a held part's lever) comes
-/// loose, the more the weaker, as far as `dig` × its living body allows in the time.
-pub fn dig(w: &World, d: &mut Chunk, b: &mut Body) {
-    let (i, mb) = (b.cell as usize, b.built(&w.chem));
-    let (lev, chem) = (lever(d.at(i), w, b), &w.chem);
-    let f = b.gene(STRENGTH) * lev;
-    let vol: f64 = (0..chem.ns()).map(|k| d.moves.amount(w, Node::new(Class::Bed, i), k) * chem.molar_volume(k, Phase::Solid)).sum();
-    if vol <= 0.0 {
-        return;
-    }
-    let most = w.cfg.phys.dig * w.cfg.update_days() * mb;
-    let m: Vec<f64> = (0..chem.ns())
-        .map(|k| {
-            let (a, s) = (d.moves.amount(w, Node::new(Class::Bed, i), k), &chem.subs[k]);
-            if f <= s.strength || a <= 0.0 { 0.0 } else { (most * a * chem.molar_volume(k, Phase::Solid) / vol * (1.0 - s.strength / f) / s.molar_mass).min(a) }
-        })
-        .collect();
-    let got = w.chem.mass_of(&m);
-    if !body::pay(w, d, b, w.cfg.phys.c_handle * got) {
-        return;
-    }
-    for (k, &a) in m.iter().enumerate() {
-        d.moves.gather(w, Move { from: Node::new(Class::Bed, i), to: Node::ground(i), k: k as u16, mol: a, heat: 0.0 });
-    }
 }
 
 /// Before a body moves: the structure it holds (its root's id) and its mass, if it can carry it (if not, it lets go by a
