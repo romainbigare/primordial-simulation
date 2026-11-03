@@ -32,8 +32,9 @@ pub(super) const LN_LEAF: f32 = 5.0;
 const LN_MEMBERS: f32 = 10.0;
 /// A perceived body's well-being.
 pub(super) const WB_SCALE: f32 = 4.0;
-/// The members of the three classes of animals of a cell's vector weigh below `SMALL_KG`, up to `BIG_KG`, and more.
-const SMALL_KG: f32 = 3.0;
+/// The members of the three classes of animals of a cell's features weigh below `SMALL_KG`, up to `BIG_KG`, and more
+/// (`docs/numbers.md`).
+const SMALL_KG: f32 = 1.0;
 const BIG_KG: f32 = 100.0;
 
 /// The features of a cell (`cells`): its ground temperature, the depth of its standing liquid (ln(1 + depth / m)), its

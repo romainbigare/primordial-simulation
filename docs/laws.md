@@ -577,7 +577,7 @@ Local (`choose/perceive.rs`). **Each cell's features** (`choose::cells`, once a 
 every brain, 18 numbers each scaled to about one): its ground temperature, the depth of its standing liquid, its
 surface height, the shade of its cover, the mass per m² of each slot of its cover and of the cover's fuel and body
 matter (what most diets eat), the fuel and body matter loose on its ground, the mass per m² of its animals in three
-classes of member mass (below 3 kg, to 100 kg, above), their members and mean strength, how hard it is to push
+classes of member mass (below 1 kg, to 100 kg, above), their members and mean strength, how hard it is to push
 through, its parts and the members that moved in last month. The same features smoothed over each cell and its
 neighbours once, twice and three times make what a body of sight 2, 3 and 4 sees of a cell it would step into (the
 mean of the cells about that many links around it, `Life::feat`). **A brain's inputs**: its own stores against their
