@@ -19,32 +19,35 @@ const A_BODY: Node = Node { class: Class::Body, index: 0 };
 
 /// Substances of chemistry 0: the common liquid.
 pub const LIQUID: usize = 0;
-/// The gas the fixing reaction (24) takes from the air.
+/// The gas the fixing reaction (10) takes from the air.
 pub const FIX_GAS: usize = 1;
 /// The gas the energy-rich solid burns with.
 pub const OX: usize = 2;
 /// The heat-absorbing gas.
 pub const ABSORBER: usize = 3;
-/// A gas that burns with `OX` (reaction 8).
+/// A gas that burns with `OX` (reaction 4).
 pub const BURNING_GAS: usize = 4;
 /// The energy-rich solid the light reaction makes.
 pub const RICH: usize = 5;
-/// The rock that dissolves in the liquid with the absorbing gas (reactions 22 and 23).
-pub const ROCK: usize = 10;
-/// What `ROCK` leaves when it gives off the absorbing gas (reaction 15).
-pub const BURNT_ROCK: usize = 11;
+/// The rock that dissolves in the liquid with the absorbing gas (reactions 8 and 9).
+pub const ROCK: usize = 9;
 /// Body matter.
-pub const MATTER: usize = 22;
+pub const MATTER: usize = 10;
 /// The mineral that exists only dissolved in the liquid, its store of the absorbing gas.
-pub const DISSOLVED: usize = 23;
+pub const DISSOLVED: usize = 11;
 /// The mineral of the fixed gas.
-pub const MINERAL: usize = 24;
+pub const MINERAL: usize = 12;
 /// The frame, a solid bodies build.
-pub const FRAME: usize = 25;
+pub const FRAME: usize = 13;
 /// The reaction that burns the energy-rich solid with `OX`.
 pub const BURN: usize = 1;
+/// The reactions that dissolve `ROCK` with the heat-absorbing gas and the liquid into `DISSOLVED`, and settle it back.
+pub const DISSOLVING: usize = 8;
+pub const SETTLING: usize = 9;
+/// The element of `ROCK` (its cation).
+pub const ROCK_ELEMENT: usize = 5;
 /// The reaction that breaks `MINERAL` down when hot (its fixed element goes back to the air as `FIX_GAS`).
-pub const MINERAL_BREAKS: usize = 25;
+pub const MINERAL_BREAKS: usize = 11;
 
 /// Latitudes of the south and north edges of the world most tests stand in, degrees: a low latitude whose first winter
 /// is mild (about 290 K), so the tests' bodies live through it; real runs place the island by `Config::lat_south`.

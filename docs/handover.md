@@ -236,7 +236,7 @@ A random chemistry can be dead or boring, and finding out can waste weeks. So fo
 - Some pairs of hard solids **mix into a harder solid** (needed for alloy-like materials).
 - The range of melting points and bond strengths is wide (needed for a variety of tools and structures).
 
-**Chemistry 0 as built** (`worldgen/src/chem0.toml`: 9 elements, 26 substances, 28 reactions) also has what life needs: a **body matter** that bodies build from the energy-rich solid by a growth conversion (`Chemistry::build`), so the fuel a body stores and the tissue it is built of are different matter; two **minerals** that body matter needs (a nitrogen mineral and the rock element's salt, both living dissolved in the liquid); and two more **solids bodies can build** (a frame and lime, `Chemistry::builds`). A random chemistry has none of these yet (its bodies do not grow); a generator that makes them is for M7. The roles and reactions are listed in `docs/laws.md` (2.7).
+**Chemistry 0 as built** (`worldgen/src/chem0.toml`: 6 elements, 14 substances, 14 reactions) also has what life needs: a **body matter** that bodies build from the energy-rich solid by a growth conversion (`Chemistry::build`), so the fuel a body stores and the tissue it is built of are different matter; two **minerals** that body matter needs (a nitrogen mineral and the rock element's salt, both living dissolved in the liquid); and two more **solids bodies can build** (a frame and lime, `Chemistry::builds`). A random chemistry has none of these yet (its bodies do not grow); a generator that makes them is for M7. The roles and reactions are listed in `docs/laws.md` (2.7).
 
 Later, add a **world search** (Section 13, M7): generate hundreds of worlds and keep the ones where most new things happen.
 

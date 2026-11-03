@@ -180,7 +180,7 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
   keeps its fusion heat whatever the node's phase and leaves at the temperature of the node mixed with what came in
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node
   holds and what stays keeps that temperature. A salt is a liquid that never
-  boils (23, 24): it moves with the liquid and stays when it evaporates. Its fall heats the node it lands in (0, "The
+  boils (11, 12): it moves with the liquid and stays when it evaporates. Its fall heats the node it lands in (0, "The
   books"), and the head it loses on the way out does work (1.3).
 
 ### 1.3 Erosion and creep
@@ -190,7 +190,7 @@ m³ of loose solids per J (dropping what is over capacity, so load settles where
 load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears** `wear` m³ of
 bed per J over its strength into loose ground. **Creep** (`flow::creep`, yearly, out of land cells):
 loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope. Bodies hold the ground: carrying
-and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 22.
+and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 8.
 
 ### 1.4 The air's step, the sun and the bodies' share
 `flow::air::step`, every `AIR_STEP_DAYS` (10). First the gas of the bodies' nodes comes up into their air nodes. Then each cell's exchange over the step with the air it sees is solved once (the sea under one air
@@ -307,7 +307,7 @@ reaction bodies may run, 6.1) switch its burnings and what it digests on or off 
 node is moist: 1 + (`open` − 1) × moisture (`change::open_catalyst`). Moisture is how wet the node is as living things
 feel it: d / (d + `wet_depth`), d the depth of its liquid in its pores and standing (`FlowView::moist`,
 `Physics::wetness`), so decomposers work on dry land too, slower; an air node has none. `open` is 1 for most reactions; 200 for reaction 1 (the free sugar's rot, about a
-week); 5 for 21 (body matter rots 3.8 times faster than the frame); 10^6 for 26 (the frame rots by the decomposers
+week); 5 for 7 (body matter rots 3.8 times faster than the frame); 10^6 for 12 (the frame rots by the decomposers
 only: bare, a millionth of that). No decomposer works in a body (2.4).
 `change::rate` (catalyst × k exp(−Ea/T) × the shares and contact of `pace`) is the one rate of all nodes and of a part's
 walls (3.1). **Frozen**: a bare reaction whose rate constant k exp(−Ea/T) would
@@ -330,7 +330,7 @@ made·τ/eq) / (1 + used·τ/eq). So dead matter on the sea floor rots as fast a
 ### 2.4 Change inside bodies
 Bodies run no reactor: they run three conversions of the chemistry, each booked by its stoichiometry. **Burning** on
 demand to pay their costs (the reactions of their diet that release heat, `Chemistry::burners`: in chemistry 0 the
-fuel's, reaction 1, and the body matter's, 21), as far as their fuel and their air node's gases allow (`body::burn`).
+fuel's, reaction 1, and the body matter's, 7), as far as their fuel and their air node's gases allow (`body::burn`).
 **Growth** by `Chemistry::build` and `builds` (6.6). **Digestion** (`Body::digest`): the reverse of growth for matter
 taken in. A body's diet is its reaction genes: on above 0, it burns or digests what that reaction takes (`Body::uses`).
 The light reaction runs only in the cover (4.5), the decomposers' reactions only in the open world (2.1).
@@ -338,8 +338,8 @@ The light reaction runs only in the cover (4.5), the decomposers' reactions only
 ### 2.5 Phases and the freezing law
 Solid, liquid or gas by melting and boiling points (`Chemistry::phase`). A liquid's melting point in a mixture falls by
 the ideal-solution law (`Chemistry::melt_in`): 1/T = 1/Tm − R · ln(x) / Lf, x the solvent's share among itself and
-its solutes. Only the solvent (the most abundant liquid) is lowered; solutes are liquids melting below it (the salts 23
-and 24, the fat 6); ice and liquid count together, so it freezes at one point. One law for bodies, ground plateaus,
+its solutes. Only the solvent (the most abundant liquid) is lowered; solutes are liquids melting below it (the salts 11
+and 12, the fat 6); ice and liquid count together, so it freezes at one point. One law for bodies, ground plateaus,
 ice cover (`World::thaw`), parts and Change; bodies freeze their key liquids at the liquids' own melting points (6.3).
 **Latent heat**: a gas in the air holds its melting and boiling heat (`Substance::latent_gas`), paid or got as it
 enters or leaves; a body holds the fusion heat of its molten key liquids (`Body::thermal`), and liquid it takes or
@@ -347,12 +347,12 @@ gives carries it (`Body::heat_with`).
 
 ### 2.6 Pairs at balance and the sea's carbon
 `change::reversible` finds each pair of reactions where one undoes the other; `Reactor::balance` finds from the
-chemistry alone where a pair goes at equal rates. In chemistry 0: 22 makes the dissolved salt 23 from lime, the carbon
-gas and the liquid; 23 turns it back. Wet cells start at that balance (`worldgen::terrain`), so the sea holds several
+chemistry alone where a pair goes at equal rates. In chemistry 0: 8 makes the dissolved salt 11 from lime, the carbon
+gas and the liquid; 9 turns it back. Wet cells start at that balance (`worldgen::terrain`), so the sea holds several
 times the air's carbon and gives it back when the air thins, with no rule for the sea.
 
 ### 2.7 Chemistry 0 in short
-One fixed Earth-like chemistry until M7 (handover 6.0): 9 elements, 26 substances, 28 reactions, numbers only in
+One fixed Earth-like chemistry until M7 (handover 6.0): 6 elements, 14 substances, 14 reactions, numbers only in
 `core` and `worldgen`; Earth names in `library/chem0.toml`. Molar masses are sums over elements, so reactions keep mass.
 
 | Number | Role (≈ Earth name, for reading only) |
@@ -361,18 +361,20 @@ One fixed Earth-like chemistry until M7 (handover 6.0): 9 elements, 26 substance
 | 1–4 | air gases: inert, oxidising, carbon gas, methane-like (≈ N2, O2, CO2, CH4) |
 | 5 | energy-rich solid, the light reaction's product and the main fuel (≈ sugar) |
 | 6 | fat-like store |
-| 10 | lime (≈ CaCO3), rock and a solid bodies build |
-| 22 | body matter (≈ tissue): C120H196N6O106Ca |
-| 23 | the rock salt, lives dissolved (≈ Ca(HCO3)2) |
-| 24 | the nitrogen mineral, lives dissolved |
-| 25 | the frame, a solid bodies build (≈ cellulose) |
+| 7, 8 | rock: sand and common rock (≈ SiO2, CaSiO3) |
+| 9 | lime (≈ CaCO3), rock and a solid bodies build |
+| 10 | body matter (≈ tissue): C120H196N6O106Ca |
+| 11 | the rock salt, lives dissolved (≈ Ca(HCO3)2) |
+| 12 | the nitrogen mineral, lives dissolved |
+| 13 | the frame, a solid bodies build (≈ cellulose) |
 
-Reactions: 0 light to sugar; 1 burning sugar (its rot in the open world); 21 rotting or burning body matter (gives
-back the nitrogen mineral and lime); 22 and 23 the lime–salt pair; 24 fixing nitrogen; 25 the nitrogen mineral
-breaking down when hot; 26 rotting of the frame; 27 splitting the frame into sugar (needs an enzyme). Dead matter rots
-in moist open ground at a litter constant (26: about a quarter a year at 290 K; 21: about one a year). **Growth** (`Chemistry::build`, bodies only, paid by
+Reactions: 0 light to sugar; 1 burning sugar (its rot in the open world); 2 and 3 burning and making fat; 4 burning
+methane; 5 rotting to methane; 6 rock weathering; 7 rotting or burning body matter (gives back the nitrogen mineral
+and lime); 8 and 9 the lime–salt pair; 10 fixing nitrogen; 11 the nitrogen mineral breaking down when hot; 12 rotting
+of the frame; 13 splitting the frame into sugar (needs an enzyme). Dead matter rots in moist open ground at a litter
+constant (12: about a quarter a year at 290 K; 7: about one a year). **Growth** (`Chemistry::build`, bodies only, paid by
 work): matter from 118 sugar + 3 nitrogen mineral + 1 rock salt; frame from 6 sugar; lime from 1 rock salt.
-`Chemistry::minerals` are growth's inputs no reaction burns (24, 23), `materials` the solids bodies build (25, 10).
+`Chemistry::minerals` are growth's inputs no reaction burns (12, 11), `materials` the solids bodies build (13, 9).
 The air's carbon gas (3) settles where the cover's light reaction takes it up as fast as rot and burning give it back:
 the world has no source of it (an input from below, as volcanoes give, would be an edit from outside the laws, and is
 not built).
@@ -512,8 +514,8 @@ chance).
 
 ### 4.5 The cover: light-eaters as a field
 `core/src/cover/`. The light-eaters are not bodies: each cell holds up to `SLOTS` (4) kinds of **cover**, each the
-amounts of four substances of chemistry 0 per cell (the fuel 5 its light reaction makes, body matter 22, its walls 25
-and the hard solid 10: `cover::Parts`, found from the chemistry's roles) and 9 genes (`cover::LIGHT`, `LEAF`, `WALLS`,
+amounts of four substances of chemistry 0 per cell (the fuel 5 its light reaction makes, body matter 10, its walls 13
+and the hard solid 9: `cover::Parts`, found from the chemistry's roles) and 9 genes (`cover::LIGHT`, `LEAF`, `WALLS`,
 `STORE`, `FROST`, `MOIST`, `SEED`, `REPAIR`, `FIX`; ranges in `cover::RANGE`). The cover of a cell is a node of the
 store (`Class::Cover`) whose law books its own side; it is kept with the cell's bodies (`life::Cell::cover`), so the
 chunk of the cell is its one writer. Its temperature is its ground's: at the end of each month it trades heat with its
@@ -544,7 +546,7 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
   out as kinds build, tallest first) build body matter, walls (10^`WALLS` kg per kg of matter) and the hard solid
   (`cover_hard` kg per kg of matter) by the conversions of growth (`Chemistry::build`, `builds`), paying `c_copy` per kg
-  by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (24), at
+  by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
   most 10^`FIX` mol per kg per s at the reaction's pace, paid by the reaction's fuel. The fuel past its reserve that
   it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
@@ -562,8 +564,8 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   `core/tests/cover.rs`).
 - **What it takes and gives**: liquids and minerals from and to its ground with their heat; gases from the air (with
   their heat at the air's temperature and their latent heat) and to its cell's bodies' node (with theirs), as bodies
-  breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 21,
-  26). Every move is booked through the cell's view (`store::Moves`), its gas within the cell's share of the air.
+  breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 7,
+  12). Every move is booked through the cell's view (`store::Moves`), its gas within the cell's share of the air.
 - **Eaten and broken**: an animal's take from the place takes from its ground and its cover by one search
   (`feed::take_node`, 5.3), paying to break what it takes of the cover (`Cover::breaking`, as a bite pays); movers that
   push through a cell break the cover by its share of the cell's mass, as they break bodies (6.8, `choose::wear`).
@@ -627,7 +629,7 @@ of; not what it cannot use, nor the key liquids it drinks, 6.4): per kg of suppl
 (take + s), s what the swept area holds (`sweep`) of its food, so thin food takes time to find (Holling 1959). The
 minerals it builds of count in s as food does: one search finds all it uses, so rich ground shortens it. **Grazing**
 (`feed::take_node`): a bite of the cover takes all its parts in the field's proportions; what the body does not use
-(the frame without the enzyme of reaction 27) is bulk that fills its gut (all it takes is at most its take × supply)
+(the frame without the enzyme of reaction 13) is bulk that fills its gut (all it takes is at most its take × supply)
 and passes through it to the ground at once with its heat, giving nothing and never becoming the body's own frame
 (a gut passage of days, Van Soest 1994). Another body's
 members lie over the cell like the ground's food: a bite reaches those the swept area holds (one individual body
@@ -665,7 +667,7 @@ nodes and individuals take alike, never more than is there.
 **Stores** (all members together) and heat. A body holds only the substances of bodies (`Chemistry::body`, one
 place each in a fixed array): the liquid and the energy-rich solid of life's roles and every substance growth and the
 other built solids take or make that is not a gas at the surface; in chemistry 0 the key liquid (0), the fuel (5), the
-body matter (22), the two minerals (23, 24) and the two built solids (25, 10). It runs only the reactions whose every
+body matter (10), the two minerals (11, 12) and the two built solids (13, 9). It runs only the reactions whose every
 substance is one of these or a gas, taking at least one of these; what such a reaction makes that it cannot hold leaves
 it as a gas. **Body matter** is what it is built of; its **living
 body** (`Body::built`) is matter less brood, over 1 − `WET_TISSUE`. Taking, building, upkeep and force go by the living
@@ -746,14 +748,14 @@ Causes: `LACK`, `PHASE`, `SPENT`, `TAKEN`, `BROKEN`, `AGE`; at death all goes to
 
 ### 6.9 Materials and minerals in bodies
 Built solids count in mass and height, not living body; children get them, gifts never give them. Bodies get
-minerals by digestion (the cover from its ground, 4.5); what is past its level it sheds. Fixing (24) runs in the cover
+minerals by digestion (the cover from its ground, 4.5); what is past its level it sheds. Fixing (10) runs in the cover
 only (4.5).
 
 ## 7. Soil and minerals
 The minerals (`Chemistry::minerals`) live in the ground's liquid and move with it, so rain washes them to low ground
-and the sea and fertility differs by place. **Nitrogen mineral (24)**: placed when life starts (`worldgen::life::soil`)
-on land under less than half a metre of liquid; then only fixing adds it, rotting (21) returns it, heat (25) sends it
-to the air. **Rock salt (23)**: made in wet cells from lime (22), turned back by 23, near balance (2.6).
+and the sea and fertility differs by place. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
+on land under less than half a metre of liquid; then only fixing adds it, rotting (7) returns it, heat (11) sends it
+to the air. **Rock salt (11)**: made in wet cells from lime (8), turned back by 9, near balance (2.6).
 
 ## 8. Starting conditions (not laws)
 Placed by `worldgen` (`worldgen::schedule::Schedule`, carried by a snapshot) and printed by every run; the laws never

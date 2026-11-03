@@ -4,15 +4,11 @@
 use pcore::change::reversible;
 use pcore::chem::Phase;
 use pcore::units::T_SURF;
-use worldgen::testkit::{ABSORBER, BURNT_ROCK, DISSOLVED, FIX_GAS, LIQUID, MATTER, MINERAL, OX, RICH, ROCK};
+use worldgen::testkit::{ABSORBER, DISSOLVED, DISSOLVING, FIX_GAS, LIQUID, MATTER, MINERAL, OX, RICH, ROCK, ROCK_ELEMENT, SETTLING};
 
-/// Elements of chemistry 0: the one in the heat-absorbing gas and the energy-rich solid, the fixed gas's, and the rock's.
+/// Elements of chemistry 0: the one in the heat-absorbing gas and the energy-rich solid, and the fixed gas's.
 const SOLID_ELEMENT: usize = 1;
 const FIX_ELEMENT: usize = 2;
-const ROCK_ELEMENT: usize = 5;
-/// The reactions that dissolve the rock with the heat-absorbing gas and the liquid, and settle it back.
-const DISSOLVING: usize = 22;
-const SETTLING: usize = 23;
 
 /// What the chemistry says: body matter holds one atom of the fixed gas's element to 20 of the solid's (120 and 6 in
 /// its formula unit) and one atom of the rock element, 1.16% of its mass, in the range of the dry matter of land plants
@@ -28,9 +24,9 @@ fn the_chemistry_balances_and_fixing_costs_what_fixers_respire() {
     assert_eq!((m, minerals.to_vec()), (MATTER, vec![(MINERAL, 3.0), (DISSOLVED, 1.0)]));
     let elems = &chem.subs[m].elems;
     assert_eq!((elems[SOLID_ELEMENT], elems[FIX_ELEMENT], elems[ROCK_ELEMENT]), (120, 6, 1));
-    // Its mass share: the rock element's mass found from the burnt rock (56 g a mol) less the half of the burning gas
-    // it holds (16 g).
-    let rock = chem.subs[BURNT_ROCK].molar_mass - chem.subs[OX].molar_mass / 2.0;
+    // Its mass share: the rock element's mass found from the rock (100 g a mol) less the heat-absorbing gas it holds
+    // (44 g) and the half of the burning gas (16 g).
+    let rock = chem.subs[ROCK].molar_mass - chem.subs[ABSORBER].molar_mass - chem.subs[OX].molar_mass / 2.0;
     let share = rock / chem.subs[m].molar_mass;
     println!("the rock element is {:.2}% of the dry matter ({} g of {} g)", 100.0 * share, 1e3 * rock, 1e3 * chem.subs[m].molar_mass);
     assert!(share > 0.005 && share < 0.02, "{share}");
@@ -38,7 +34,7 @@ fn the_chemistry_balances_and_fixing_costs_what_fixers_respire() {
     // the liquid, with no gain or loss of heat in a body (its liquids hold their fusion enthalpy); nothing goes to the air
     // (the dissolved mineral's gas goes into the matter).
     let build = chem.build.as_ref().expect("growth");
-    assert_eq!((build.inputs.as_slice(), build.outputs.as_slice()), (&[(5, 118), (24, 3), (23, 1)][..], &[(22, 1), (0, 27)][..]));
+    assert_eq!((build.inputs.as_slice(), build.outputs.as_slice()), (&[(RICH as u16, 118), (MINERAL as u16, 3), (DISSOLVED as u16, 1)][..], &[(MATTER as u16, 1), (LIQUID as u16, 27)][..]));
     let fused = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * chem.fused_heat(k as usize, T_SURF, |_| 0.0)).sum::<f64>();
     let growth = chem.dh_of(build) + fused(&build.outputs) - fused(&build.inputs);
     assert!(growth.abs() < 1.0, "growth takes {growth} J");

@@ -44,14 +44,14 @@ fn liquid_m3(w: &World, i: usize) -> f64 {
     w.store.amounts(Class::Ground)[LIQUID * w.mesh.cells().n() + i] * w.chem.molar_volume(LIQUID, Phase::Liquid)
 }
 
-/// A hot node held at a melting point with little fusion enthalpy left: radiating for a whole step at that
-/// temperature would take more heat than it holds. It leaves the plateau and cools by its heat capacity, toward the
+/// A hot node held at a melting point far above the air's with little fusion enthalpy left: radiating for a whole step
+/// at that temperature would take more heat than it holds. It leaves the plateau and cools by its heat capacity, toward the
 /// balance with sunlight and the air, not down to the floor.
 #[test]
 fn hot_plateau_cools_but_not_to_the_floor() {
     let mut w = worldgen::new_world(3, 16, 16);
     let (ns, area) = (w.chem.ns(), w.mesh.cells().area()[0]);
-    let k = (0..ns).find(|&k| (700.0..1000.0).contains(&w.chem.subs[k].melt)).expect("a substance melting near 850 K");
+    let k = (0..ns).find(|&k| (400.0..1000.0).contains(&w.chem.subs[k].melt)).expect("a substance melting far above the air");
     let i = top(&w);
     (0..ns).for_each(|x| set_amount(&mut w, Node::ground(i), x, 0.0));
     set_amount(&mut w, Node::ground(i), k, area);

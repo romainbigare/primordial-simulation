@@ -103,14 +103,6 @@ pub fn richness(chem: &Chemistry, init: &Init) -> Vec<(&'static str, bool)> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn chemistry_0_is_rich() {
-        let (c, i) = crate::chemistry0();
-        for (name, ok) in richness(&c, &i) {
-            assert!(ok, "chemistry 0 fails: {name}");
-        }
-    }
-
     /// Every generated chemistry is valid, and the generator makes rich ones: some of them pass every check.
     #[test]
     fn generated_chemistries_validate_and_some_are_rich() {

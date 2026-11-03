@@ -5,7 +5,7 @@ use pcore::change::{self, Reactor};
 use pcore::chem::{Chemistry, Phase};
 use pcore::store::{Class, Node};
 use pcore::units::{DAY, DAY_S, P_REF, R_GAS, T_SURF};
-use worldgen::testkit::{empty_cell, hold_ground, in_all, loose_volume, set_amount, set_heat, BURN, BURNING_GAS, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, FRAME, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{empty_cell, hold_ground, in_all, loose_volume, set_amount, set_heat, BURN, BURNING_GAS, DISSOLVING, SETTLING, ROCK_ELEMENT, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, FRAME, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
 use pcore::AIR;
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
@@ -15,12 +15,6 @@ fn cfg() -> pcore::Config {
 
 /// A heat capacity so large that a node's temperature stays put, J/K.
 const HUGE_CAP: f64 = 1e12;
-/// The element of the rock (its cation), and the reaction that makes the dissolved mineral of the rock, the gas and
-/// the liquid.
-const ROCK_ELEMENT: usize = 5;
-const DISSOLVING: usize = 22;
-/// The reaction that turns the dissolved mineral back into them.
-const SETTLING: usize = 23;
 /// Moles of liquid in 1 m³ of it.
 const MOL_PER_M3: f64 = 1000.0 / 0.018;
 

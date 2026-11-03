@@ -5,10 +5,10 @@
 # 101 kPa of it at 298 K; for a solid that melts above the ground's warmth: the mole fraction of its solution at saturation,
 # which moves with the liquid), cond W/(m K), hf kJ/mol of the solid (of a substance that is liquid at 290 K: its measured value less lf; gas:
 # less lf and lv), lv/lf kJ/mol (none: Trouton's and Richards's rules), modulus GPa, rupture MPa. Where a number is derived, the derivation is in docs/numbers.md.
-element_masses = [1, 12, 14, 16, 28, 40, 55.85, 63.5, 118.7]
+element_masses = [1, 12, 14, 16, 28, 40]
 
 [[s]] # 0
-e = [2,0,0,1,0,0,0,0,0]
+e = [2,0,0,1,0,0]
 cp = 75
 melt = 273
 boil = 373
@@ -25,7 +25,7 @@ lv = 40.7
 lf = 6.0
 
 [[s]] # 1
-e = [0,0,2,0,0,0,0,0,0]
+e = [0,0,2,0,0,0]
 cp = 29
 melt = 63
 boil = 77
@@ -39,7 +39,7 @@ cond = 0.03
 hf = -7.3745
 
 [[s]] # 2
-e = [0,0,0,2,0,0,0,0,0]
+e = [0,0,0,2,0,0]
 cp = 29
 melt = 54
 boil = 90
@@ -53,7 +53,7 @@ cond = 0.03
 hf = -8.433
 
 [[s]] # 3
-e = [0,1,0,2,0,0,0,0,0]
+e = [0,1,0,2,0,0]
 cp = 37
 melt = 194
 boil = 195
@@ -68,7 +68,7 @@ cond = 0.02
 hf = -412.503
 
 [[s]] # 4
-e = [4,1,0,0,0,0,0,0,0]
+e = [4,1,0,0,0,0]
 cp = 35
 melt = 91
 boil = 112
@@ -83,7 +83,7 @@ cond = 0.03
 hf = -85.5205
 
 [[s]] # 5
-e = [2,1,0,1,0,0,0,0,0]
+e = [2,1,0,1,0,0]
 cp = 40
 melt = 460
 boil = 700
@@ -97,7 +97,7 @@ cond = 0.2
 hf = -212
 
 [[s]] # 6
-e = [2,1,0,0,0,0,0,0,0]
+e = [2,1,0,0,0,0]
 cp = 30
 melt = 260
 boil = 600
@@ -111,21 +111,7 @@ cond = 0.15
 hf = -27.47
 
 [[s]] # 7
-e = [0,1,0,0,0,0,0,0,0]
-cp = 8.5
-melt = 3900
-boil = 4100
-rho = [2000, 2000]
-hard = 0.15
-str = 0.1
-refl = [[0.04,0.04,0.04],[0.04,0.04,0.04]]
-ir = 0.0
-sol = 0.0
-cond = 2.0
-hf = 0
-
-[[s]] # 8
-e = [0,0,0,2,1,0,0,0,0]
+e = [0,0,0,2,1,0]
 cp = 44
 melt = 1986
 boil = 2500
@@ -138,8 +124,8 @@ sol = 0.0
 cond = 1.4
 hf = -911
 
-[[s]] # 9
-e = [0,0,0,3,1,1,0,0,0]
+[[s]] # 8
+e = [0,0,0,3,1,1]
 cp = 86
 melt = 1800
 boil = 3000
@@ -152,8 +138,8 @@ sol = 0.0
 cond = 2.0
 hf = -1635
 
-[[s]] # 10
-e = [0,1,0,3,0,1,0,0,0]
+[[s]] # 9
+e = [0,1,0,3,0,1]
 cp = 82
 melt = 1600
 boil = 3000
@@ -165,168 +151,14 @@ ir = 0.0
 sol = 0.0
 cond = 2.5
 hf = -1207
-# docs/numbers.md: "modulus of substances 22, 25 and 10".
+# docs/numbers.md: "modulus of substances 10, 13 and 9".
 modulus = 70
-# docs/numbers.md: "rupture of substances 22, 25 and 10".
+# docs/numbers.md: "rupture of substances 10, 13 and 9".
 rupture = 100
 
-[[s]] # 11
-e = [0,0,0,1,0,1,0,0,0]
-cp = 43
-melt = 2886
-boil = 3120
-rho = [3340, 3000]
-hard = 0.4
-str = 0.2
-refl = [[0.90,0.90,0.88],[0.8,0.8,0.8]]
-ir = 0.0
-sol = 0.01
-cond = 1.0
-hf = -635
-
-[[s]] # 12
-e = [2,0,0,2,0,1,0,0,0]
-cp = 87
-melt = 853
-boil = 3000
-rho = [2210, 2000]
-hard = 0.2
-str = 0.3
-refl = [[0.92,0.92,0.90],[0.8,0.8,0.8]]
-ir = 0.0
-sol = 0.02
-cond = 1.0
-hf = -986
-
-[[s]] # 13
-e = [0,0,0,3,0,0,2,0,0]
-cp = 104
-melt = 1838
-boil = 3000
-rho = [5240, 4500]
-hard = 0.6
-str = 0.5
-refl = [[0.45,0.18,0.10],[0.3,0.1,0.05]]
-ir = 0.0
-sol = 0.0
-cond = 3.0
-hf = -824
-
-[[s]] # 14
-e = [0,0,0,0,0,0,1,0,0]
-cp = 25
-melt = 1811
-boil = 3134
-rho = [7870, 6980]
-hard = 0.65
-str = 0.85
-refl = [[0.55,0.55,0.56],[0.9,0.6,0.3]]
-ir = 0.0
-sol = 0.0
-cond = 80
-hf = 0
-
-[[s]] # 15
-e = [0,1,0,0,0,0,20,0,0]
-cp = 508
-melt = 1700
-boil = 3100
-rho = [7850, 6900]
-hard = 0.9
-str = 0.95
-refl = [[0.60,0.60,0.62],[0.9,0.6,0.3]]
-ir = 0.0
-sol = 0.0
-cond = 50
-hf = -10
-
-[[s]] # 16
-e = [0,0,0,1,0,0,0,1,0]
-cp = 42
-melt = 1600
-boil = 2300
-rho = [6310, 5000]
-hard = 0.35
-str = 0.4
-refl = [[0.15,0.35,0.25],[0.1,0.2,0.15]]
-ir = 0.0
-sol = 0.0
-cond = 3.0
-hf = -157
-
-[[s]] # 17
-e = [0,0,0,0,0,0,0,1,0]
-cp = 24.4
-melt = 1358
-boil = 2835
-rho = [8960, 8020]
-hard = 0.35
-str = 0.7
-refl = [[0.75,0.45,0.30],[0.9,0.5,0.3]]
-ir = 0.0
-sol = 0.0
-cond = 400
-hf = 0
-
-[[s]] # 18
-e = [0,0,0,2,0,0,0,0,1]
-cp = 53
-melt = 1900
-boil = 2100
-rho = [6950, 6000]
-hard = 0.65
-str = 0.5
-refl = [[0.30,0.28,0.25],[0.3,0.3,0.3]]
-ir = 0.0
-sol = 0.0
-cond = 3.0
-hf = -578
-
-[[s]] # 19
-e = [0,0,0,0,0,0,0,0,1]
-cp = 27
-melt = 505
-boil = 2875
-rho = [7300, 6990]
-hard = 0.15
-str = 0.3
-refl = [[0.70,0.70,0.72],[0.8,0.8,0.8]]
-ir = 0.0
-sol = 0.0
-cond = 67
-hf = 0
-
-[[s]] # 20
-e = [0,0,0,0,0,0,0,7,1]
-cp = 198
-melt = 1220
-boil = 2800
-rho = [8800, 7800]
-hard = 0.6
-str = 0.85
-refl = [[0.72,0.55,0.35],[0.9,0.6,0.3]]
-ir = 0.0
-sol = 0.0
-cond = 60
-hf = -15
-
-[[s]] # 21
-e = [0,1,0,1,0,0,0,0,0]
-cp = 29
-melt = 68
-boil = 82
-rho = [930, 790]
-hard = 0.0
-str = 0.0
-refl = [[0.9,0.9,0.9],[0.9,0.9,0.9]]
-ir = 0.0
-sol = 1.7e-5
-cond = 0.03
-hf = -118.362
-
-# 22: body matter, what bodies are built of (`build`), holding the energy of what it is made of: docs/numbers.md, "substance 22".
-[[s]] # 22
-e = [196,120,6,106,0,1,0,0,0]
+# 10: body matter, what bodies are built of (`build`), holding the energy of what it is made of: docs/numbers.md, "substance 10".
+[[s]] # 10
+e = [196,120,6,106,0,1]
 cp = 4266
 melt = 1500
 boil = 3000
@@ -338,14 +170,14 @@ ir = 0.0
 sol = 0.0
 cond = 0.2
 hf = -20315.8
-# Living soft tissue with its liquid: docs/numbers.md, "modulus of substances 22, 25 and 10".
+# Living soft tissue with its liquid: docs/numbers.md, "modulus of substances 10, 13 and 9".
 modulus = 0.001
-# Living soft tissue: docs/numbers.md, "rupture of substances 22, 25 and 10".
+# Living soft tissue: docs/numbers.md, "rupture of substances 10, 13 and 9".
 rupture = 1
 
-# 23: a mineral that exists only dissolved in the liquid, its store of the gas of reaction 22: docs/numbers.md, "substance 23".
-[[s]] # 23
-e = [2,2,0,6,0,1,0,0,0]
+# 11: a mineral that exists only dissolved in the liquid, its store of the gas of reaction 8: docs/numbers.md, "substance 11".
+[[s]] # 11
+e = [2,2,0,6,0,1]
 cp = 194
 melt = 271
 boil = 3000
@@ -358,9 +190,9 @@ sol = 0.0
 cond = 0.6
 hf = -1929.3745
 
-# 24: the mineral of the gas reaction 24 fixes (1), that gas's only way into body matter: docs/numbers.md, "substance 24".
-[[s]] # 24
-e = [4,0,2,3,0,0,0,0,0]
+# 12: the mineral of the gas reaction 10 fixes (1), that gas's only way into body matter: docs/numbers.md, "substance 12".
+[[s]] # 12
+e = [4,0,2,3,0,0]
 cp = 140
 melt = 255
 boil = 3000
@@ -374,9 +206,9 @@ cond = 0.6
 hf = -370.9
 lf = 5.9
 
-# 25: the frame, a solid bodies build of 6 units of the energy-rich solid (5, `builds`): docs/numbers.md, "substance 25".
-[[s]] # 25
-e = [10,6,0,5,0,0,0,0,0]
+# 13: the frame, a solid bodies build of 6 units of the energy-rich solid (5, `builds`): docs/numbers.md, "substance 13".
+[[s]] # 13
+e = [10,6,0,5,0,0]
 cp = 210
 melt = 1500
 boil = 3000
@@ -388,9 +220,9 @@ ir = 0.0
 sol = 0.0
 cond = 0.2
 hf = -986
-# docs/numbers.md: "modulus of substances 22, 25 and 10".
+# docs/numbers.md: "modulus of substances 10, 13 and 9".
 modulus = 30
-# docs/numbers.md: "rupture of substances 22, 25 and 10".
+# docs/numbers.md: "rupture of substances 10, 13 and 9".
 rupture = 120
 
 # Reactions: i/o = [[substance, count]], k 1/s, ea K, ord the power of each input in the rate law (`Reaction::ord`).
@@ -423,186 +255,102 @@ k = 1e-3
 ea = 9000
 
 [[r]] # 4
-i = [[5,1]]
-o = [[7,1],[0,1]]
-k = 1e6
-ea = 12000
-
-[[r]] # 5
-i = [[7,1],[2,1]]
-o = [[3,1]]
-k = 1e5
-ea = 20000
-
-[[r]] # 6
-i = [[21,2],[2,1]]
-o = [[3,2]]
-k = 1e5
-ea = 10000
-
-[[r]] # 7
-i = [[7,2],[2,1]]
-o = [[21,2]]
-k = 1e6
-ea = 22000
-
-[[r]] # 8
 i = [[4,1],[2,2]]
 o = [[3,1],[0,2]]
 k = 5e6
 ea = 8000
 
-[[r]] # 9
+[[r]] # 5
 i = [[5,2]]
 o = [[4,1],[3,1]]
 k = 1e2
 ea = 7760
 
-[[r]] # 10
-i = [[13,1],[21,3]]
-o = [[14,2],[3,3]]
-k = 1e8
-ea = 20000
-
-[[r]] # 11
-i = [[16,1],[21,1]]
-o = [[17,1],[3,1]]
-k = 1e6
-ea = 14000
-
-[[r]] # 12
-i = [[18,1],[21,2]]
-o = [[19,1],[3,2]]
-k = 1e7
-ea = 16000
-
-[[r]] # 13
-i = [[17,7],[19,1]]
-o = [[20,1]]
-k = 1e7
-ea = 18000
-
-[[r]] # 14
-i = [[14,20],[7,1]]
-o = [[15,1]]
-k = 1e8
-ea = 26000
-
-[[r]] # 15
-i = [[10,1]]
-o = [[11,1],[3,1]]
-k = 1e8
-ea = 22000
-
-[[r]] # 16
-i = [[11,1],[0,1]]
-o = [[12,1]]
-k = 1.0
-ea = 4000
-
-[[r]] # 17
-i = [[12,1],[3,1]]
-o = [[10,1],[0,1]]
-k = 0.1
-ea = 6000
-
-[[r]] # 18
-i = [[9,1],[3,1]]
-o = [[10,1],[8,1]]
+[[r]] # 6
+i = [[8,1],[3,1]]
+o = [[9,1],[7,1]]
 k = 0.01
 ea = 9000
 
-[[r]] # 19
-i = [[14,4],[2,3]]
-o = [[13,2]]
-k = 0.1
-ea = 7000
-
-[[r]] # 20
-i = [[17,2],[2,1]]
-o = [[16,2]]
-k = 0.1
-ea = 8000
-
-# 21: burning body matter, orders 1 and 6 (`ord`); in the open world the decomposers rot it 5 times faster:
-# docs/numbers.md, "reaction 21".
-[[r]] # 21
-i = [[22,1],[2,118]]
-o = [[3,119],[0,92],[24,3],[10,1]]
+# 7: burning body matter, orders 1 and 6 (`ord`); in the open world the decomposers rot it 5 times faster:
+# docs/numbers.md, "reaction 7".
+[[r]] # 7
+i = [[10,1],[2,118]]
+o = [[3,119],[0,92],[12,3],[9,1]]
 ord = [1,6]
 k = 2.28e9
 ea = 9000
 open = 5
 
-# 22 and 23: the liquid's store of the gas of 22, both ways, at balance with the air (`pcore::change::Reactor::balance`):
-# docs/numbers.md, "reaction 22" and "reaction 23".
-[[r]] # 22
-i = [[10,1],[3,1],[0,1]]
-o = [[23,1]]
+# 8 and 9: the liquid's store of the gas of 8, both ways, at balance with the air (`pcore::change::Reactor::balance`):
+# docs/numbers.md, "reaction 8" and "reaction 9".
+[[r]] # 8
+i = [[9,1],[3,1],[0,1]]
+o = [[11,1]]
 k = 1.62e-2
 ea = 2800
 
-[[r]] # 23
-i = [[23,3]]
-o = [[10,3],[3,3],[0,3]]
+[[r]] # 9
+i = [[11,3]]
+o = [[9,3],[3,3],[0,3]]
 k = 1.8e12
 ea = 7647
 
 
-# 24: fixing the gas 1 into the mineral 24, paid by the fuel it burns, whose element 1 all goes back as the gas 3; it
-# keeps energy (`Chemistry::keeps`); written for two of the gas 1: docs/numbers.md, "reaction 24".
-[[r]] # 24
+# 10: fixing the gas 1 into the mineral 12, paid by the fuel it burns, whose element 1 all goes back as the gas 3; it
+# keeps energy (`Chemistry::keeps`); written for two of the gas 1: docs/numbers.md, "reaction 10".
+[[r]] # 10
 i = [[1,2],[5,28],[2,29]]
-o = [[24,2],[3,28],[0,24]]
+o = [[12,2],[3,28],[0,24]]
 ord = [1,1,1]
 k = 8e-8
 ea = 6600
 
-# 25: the mineral 24 breaking down hot, its gas back to the air: docs/numbers.md, "reaction 25".
-[[r]] # 25
-i = [[24,2]]
+# 11: the mineral 12 breaking down hot, its gas back to the air: docs/numbers.md, "reaction 11".
+[[r]] # 11
+i = [[12,2]]
 o = [[1,2],[0,4],[2,1]]
 k = 2.6e9
 ea = 20000
 
-# 26: the frame rots, by the decomposers of the open world only (a million times faster there, as reaction 1 bare):
-# docs/numbers.md, "reaction 26".
-[[r]] # 26
-i = [[25,1],[2,6]]
+# 12: the frame rots, by the decomposers of the open world only (a million times faster there, as reaction 1 bare):
+# docs/numbers.md, "reaction 12".
+[[r]] # 12
+i = [[13,1],[2,6]]
 o = [[3,6],[0,5]]
 ord = [1,1]
 k = 1.72e-2
 ea = 7760
 open = 1e6
 
-# 27: an enzyme splits the frame into the energy-rich solid; nothing without a catalyst: docs/numbers.md, "reaction 27".
-[[r]] # 27
-i = [[25,1],[0,1]]
+# 13: an enzyme splits the frame into the energy-rich solid; nothing without a catalyst: docs/numbers.md, "reaction 13".
+[[r]] # 13
+i = [[13,1],[0,1]]
 o = [[5,6]]
 k = 9.6e-4
 ea = 7760
 
-# Growth (`Chemistry::build`), no reaction of the open world: body matter (the first output) of 5, 24 and 23, paid by work
+# Growth (`Chemistry::build`), no reaction of the open world: body matter (the first output) of 5, 12 and 11, paid by work
 # (Copy): docs/numbers.md, "Chemistry::build".
 [build]
-i = [[5,118],[24,3],[23,1]]
-o = [[22,1],[0,27]]
+i = [[5,118],[12,3],[11,1]]
+o = [[10,1],[0,27]]
 
-# The other solids bodies build (`Chemistry::builds`), the first output each: the frame 25 of 5, and 10 of the dissolved
-# mineral 23: docs/numbers.md, "Chemistry::builds".
+# The other solids bodies build (`Chemistry::builds`), the first output each: the frame 13 of 5, and 9 of the dissolved
+# mineral 11: docs/numbers.md, "Chemistry::builds".
 [[builds]]
 i = [[5,6]]
-o = [[25,1],[0,1]]
+o = [[13,1],[0,1]]
 
 [[builds]]
-i = [[23,1]]
-o = [[10,1],[3,1],[0,1]]
+i = [[11,1]]
+o = [[9,1],[3,1],[0,1]]
 
 # Starting world: [substance, fraction]; soil: [substance, mol per m2 of land] (`Init::soil`): docs/numbers.md, "soil".
 [init]
 air = [[1,0.78],[2,0.21],[3,0.0004],[4,1.8e-6],[0,0.004]]
 low = 0
-bed = [[9,0.7],[8,0.2],[10,0.1]]
-loose = [[8,0.5],[9,0.4],[10,0.1]]
-deposits = [[13,0.03],[16,0.01],[18,0.005],[7,0.02]]
-soil = [[24,0.357]]
+bed = [[8,0.7],[7,0.2],[9,0.1]]
+loose = [[7,0.5],[8,0.4],[9,0.1]]
+deposits = []
+soil = [[12,0.357]]

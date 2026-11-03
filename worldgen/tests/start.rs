@@ -2,10 +2,7 @@
 
 use pcore::{World, AIR};
 use pcore::store::Class;
-
-/// Substances of chemistry 0: the common liquid, and the mineral that exists only dissolved in it.
-const LIQUID: usize = 0;
-const DISSOLVED: usize = 23;
+use worldgen::testkit::{DISSOLVED, LIQUID};
 
 /// All of substance `k` in the world's ground and bodies, mol.
 fn total(w: &World, k: usize) -> f64 {
