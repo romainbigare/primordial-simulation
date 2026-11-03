@@ -83,8 +83,7 @@ const EATER_KEEP_T: f32 = 278.0;
 const EATER_COOL_T: f32 = 315.0;
 
 /// Eaters: fast burning, take the energy-rich solid from the ground, the cover and bodies, learning on, a fur coat
-/// (`HEAT` -1.0, past the best a coat insulates, so the best: 1.7 W/K for a member of 30 kg, where a mammal's least is
-/// 0.94, Herreid and Kessel 1967), keep warm and cool (`EATER_KEEP_T`, `EATER_COOL_T`); individuals, two in some cells
+/// (`HEAT` -1.0: 0.97 W/K for a member of 30 kg, near a mammal's least, 0.94, Herreid and Kessel 1967), keep warm and cool (`EATER_KEEP_T`, `EATER_COOL_T`); individuals, two in some cells
 /// where life already is.
 const EATER_BODIES: Bodies = Bodies {
     anywhere: false,

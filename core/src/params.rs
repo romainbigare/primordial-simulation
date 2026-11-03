@@ -142,8 +142,8 @@ pub struct Physics {
     pub rho_body: f64,
     /// Surface of a body per kg^(2/3) of a member (Meeh), m²/kg^(2/3)
     pub meeh: f64,
-    /// Most heat insulation of a coat, m² K/W
-    pub r_fur: f64,
+    /// Most heat insulation of a body's coat (fur and the tissue under it), over the still air at its surface, m² K/W
+    pub r_coat: f64,
     /// Heat insulation of the still air at a surface, m² K/W
     pub r_air: f64,
     /// Most a body takes per day, as a share of the mass it takes by (`Body::supply`)
@@ -307,7 +307,7 @@ impl Default for Physics {
             layer: 10.0,
             rho_body: 1e3,
             meeh: 0.1,
-            r_fur: 0.45,
+            r_coat: 0.9,
             r_air: 0.12,
             take: 0.01042,
             sweep: 1.0,
