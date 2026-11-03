@@ -150,30 +150,36 @@ pub fn score(c: &[f32], f: &[f32]) -> f32 {
     c[0] + c[1..].iter().zip(f).map(|(a, b)| a * b).sum::<f32>()
 }
 
-/// Add `a · coef[r] · [h, 1]` to each row `r` (the critic's), the step kept below 0.1.
+/// Add `a · coef[r] · [h, 1] / (1 + |h|²)` to each row `r` (the critic's), the step kept below 0.1: the normalised
+/// least-mean-squares rule (Nagumo and Noda 1967), so a step corrects the share `a` of the row's error whatever the scale
+/// of the hidden layer.
 pub fn fit(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32) {
     const MAX_STEP: f32 = 0.1;
     let hh = 1.0 + h.iter().map(|x| x * x).sum::<f32>();
-    let size = a.abs() * (coef.iter().map(|c| c * c).sum::<f32>() * hh).sqrt();
-    let a = if size > MAX_STEP { a * MAX_STEP / size } else { a };
+    let per = a / hh;
+    let size = per.abs() * (coef.iter().map(|c| c * c).sum::<f32>() * hh).sqrt();
+    let per = if size > MAX_STEP { per * MAX_STEP / size } else { per };
     for (r, &c) in rows.chunks_exact_mut(h.len() + 1).zip(coef) {
         if c != 0.0 {
-            step(r, h, a * c);
+            step(r, h, per * c);
         }
     }
 }
 
-/// Move each learned row `r` by `lr · g / rms · [h, 1]`, `g = a · coef[r]` its share of the step and `rms` the root of
-/// a moving average of its squares (`ms`), capped at `most · lr`: a row that rarely matters learns as fast when it does.
+/// Move each learned row `r` by `lr · g / rms · [h, 1] / (1 + |h|²)`, `g = a · coef[r]` its share of the step and `rms`
+/// the root of a moving average of its squares (`ms`), capped at `most · lr`: a row that rarely matters learns as fast
+/// when it does. The normalised least-mean-squares rule (Nagumo and Noda 1967): the rate `lr` is the share of the
+/// row's error a step corrects (stable below 2), whatever the scale of the hidden layer.
 pub fn learn(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32, lr: f32, ms: &mut [f32], (beta, most): (f32, f32)) {
     debug_assert_eq!(ms.len(), coef.len(), "a moving average per learned row");
+    let per = lr / (1.0 + h.iter().map(|x| x * x).sum::<f32>());
     for ((r, &c), v) in rows.chunks_exact_mut(h.len() + 1).zip(coef).zip(ms.iter_mut()) {
         let g = a * c;
         if g == 0.0 {
             continue;
         }
         *v += beta * (g * g - *v);
-        step(r, h, lr * (g / v.sqrt()).clamp(-most, most));
+        step(r, h, per * (g / v.sqrt()).clamp(-most, most));
     }
 }
 

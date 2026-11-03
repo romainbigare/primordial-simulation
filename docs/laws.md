@@ -644,7 +644,9 @@ could take.
 to its limits; no reward is hand-shaped. **Within a life** (`choose::learn`, `brain::learn`): a policy gradient
 against the critic (actor-critic) on the change of its own well-being since its last decision, the critic's estimate
 from now discounted by `discount` (one month), at its `LEARN` rate, in units
-of the root of the critic's running mean square of errors; that mean and each row's mean square of steps both weigh the newest value
+of the root of the critic's running mean square of errors, each step over 1 + the hidden layer's square (the
+normalised least-mean-squares rule, Nagumo and Noda 1967): the rate is the share of a row's error a step corrects,
+whatever the scale of the hidden layer or the number of the brain's inputs; that mean and each row's mean square of steps both weigh the newest value
 by `learn_beta`. A node learns as from one
 member drawn among those who stayed, with the node's change plus how much more its part's action raised it than the
 mean, so its brain moves as an individual's does. **Across lives**: evolution of born rows and base.

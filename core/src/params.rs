@@ -288,7 +288,7 @@ impl Default for Physics {
             c_hidden: 5e3,
             c_memory: 5e3 / 3.0,
             c_seen: 5e3,
-            c_learn: 1.1049e5,
+            c_learn: 1.1049e4,
             e_life: 1e9,
             c_repair: 0.25,
             dormancy: 5.7,

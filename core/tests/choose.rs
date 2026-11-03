@@ -21,8 +21,8 @@ const STRIP_MOL: f64 = 20.0;
 /// The body's mass, kg.
 const BODY_KG: f64 = 30.0;
 const DECISIONS: usize = 200;
-/// Learning rate genes (log10): on, and off.
-const LEARN_ON: f32 = -1.0;
+/// Learning rate genes (log10): on (the eaters' founders'), and off.
+const LEARN_ON: f32 = 0.0;
 const LEARN_OFF: f32 = -4.0;
 
 /// The scene's world for `seed`: flat and mild (`MILD_LAT`), every cell a copy of one dry land cell, the strip added on top.
