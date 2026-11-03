@@ -165,7 +165,8 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
 - **Running off** (`solve::downhill`): each cell but the sea's sends its liquid down its steepest way by D-infinity
   (Tarboton 1997; `Level::steepest`): two neighbours next in compass order make a triangle with the centre, the plane
   through their drops gives its slope and way, and the steepest triangle shares the liquid between its two neighbours
-  by angle. What reaches a sea cell stays there and joins the sea.
+  by angle. To a neighbour already passed it sends at most what levels the two heads, whatever their areas. What
+  reaches a sea cell stays there and joins the sea.
 - **Pore water** flows by Darcy's law (one explicit `solve::sweep` on the liquid table, the store's too): `seep` ×
   saturated thickness × width / distance, at most half of what would level two cells, and no cell giving more than it
   holds over field capacity; pores at or under field capacity (`field`) give nothing. Over cells of kilometres a

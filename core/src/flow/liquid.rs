@@ -4,7 +4,6 @@
 //! at one level (`basin::level`).
 
 use super::{bare_share, drain::{springs, under}, follow, land::{lift, solid, stand, wet, NONE}, potential::apply, range, year_weight, Scratch};
-use crate::solve::sweep::HALF_WAY;
 use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed}, store::{Class, LinkFlux, Move, Node}, units::T_FLOOR, World};
 
 /// Least bond strength wear divides by.
@@ -117,7 +116,8 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         if sv <= 0.0 {
             return;
         }
-        // Each lower neighbour: the drop toward it, how far the head may fall toward it, and the fall of the head.
+        // Each lower neighbour: the drop toward it, the volume that may move toward it (to a neighbour already passed, what
+        // levels the two heads, whatever their areas), and the fall of the head.
         // The surface of a cell whose liquid stands is its head; of one its liquid passes on through, its ground (a
         // neighbour still to come holds the head back only by what it keeps). Liquid passing on never goes back to a
         // neighbour already passed; it takes the steepest way down (`Level::steepest`), and on level ground the flood's
@@ -127,7 +127,8 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         for (k, j) in cells.around(i).1.iter().map(|&j| j as usize).enumerate() {
             let (hj, passed) = (head(q, j), order.before(j, i));
             let (from, to) = (if passed { top } else { hd }, if passed || order.stands[j] { hj } else { ss.z[j] });
-            let (down, room) = (from - to > ph.still, if passed { HALF_WAY * (from - to) } else { hd - to.max(zi) });
+            let room = if passed { (from - to) * (area[i] * area[j] / (area[i] + area[j])) } else { (hd - to.max(zi)) * area[i] };
+            let down = from - to > ph.still;
             if down && j == order.outlet[i] as usize {
                 way = Some([(k, 1.0), (k, 0.0)]);
             }
@@ -136,7 +137,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         let Some(ways) = cells.steepest(i, |k| outs[k].0).map(|w| w.1).or(way) else { return };
         let (mut out, mut drop) = (0.0, 0.0);
         for (k, f) in ways.into_iter().filter(|p| p.1 > 0.0) {
-            share[k] = (sv * f).min(area[i] * outs[k].1) / sv;
+            share[k] = (sv * f).min(outs[k].1) / sv;
             (out, drop) = (out + share[k], drop + share[k] * outs[k].2);
         }
         // The node's heat capacity and fusion enthalpy with what came in. Liquid that came in holds its fusion enthalpy
