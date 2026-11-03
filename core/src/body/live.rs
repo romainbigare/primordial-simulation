@@ -108,9 +108,10 @@ fn drink(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
 /// closed room, whose walls pass little, moves only part way. Below its `KEEP_T` gene it burns what holds it at that
 /// temperature at the end. Above its `COOL_T` gene it opens its coat as far as it needs to stand there, up to its bare
 /// surface (`Body::bare`: blood to the skin, the coat laid flat; Scholander et al. 1950), and past that evaporates its key
-/// liquid for the excess, at its latent heat, never below its safe minimum. It then stands at that temperature
-/// (`settle_heat`): what it gains from its ground there is never more than the heat it released, unless the ground is
-/// the warmer.
+/// liquid for the excess, at its latent heat, never below its safe minimum. Its key liquid boils at its boiling point:
+/// past it the heat boils it off, below its safe minimum too, and holds the body there while it lasts. It then stands at
+/// that temperature (`settle_heat`): what it gains from its ground there is never more than the heat it released,
+/// unless the ground is the warmer.
 fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, dt: f64) -> f64 {
     let (chem, tg, t0) = (&w.chem, w.t_ground_last(b.cell as usize), b.temp(&w.chem));
     let (coat, bare) = coat(w, d, b, b.mass(chem));
@@ -124,17 +125,19 @@ fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, dt: f64) -> f64 
     let end = |x: f64, q: f64| t0 + (tg + q / x - t0) * reach(x);
     let holds = |x: f64, t: f64| x * ((t - t0) / reach(x) + t0 - tg);
     let (keep, cool) = (b.gene(KEEP_T), b.gene(COOL_T));
-    let free = end(g, heat);
-    let t = if free < keep {
-        end(g, heat + burn(w, d, b, holds(g, keep) - heat))
-    } else if free > cool {
+    // The conductance it passes its heat through, J/K, and the heat that leaves by it, J.
+    let (x, q) = if end(g, heat) < keep {
+        (g, heat + burn(w, d, b, holds(g, keep) - heat))
+    } else if end(g, heat) > cool {
         // (On ground at or above its `COOL_T` it opens all the way.)
         let opened = if cool > tg { (heat / (cool - tg)).clamp(g, open) } else { open };
-        let t_open = end(opened, heat);
-        if t_open > cool { end(opened, heat - evaporate(w, d, b, heat - holds(opened, cool))) } else { t_open }
+        (opened, if end(opened, heat) > cool { heat - evaporate(w, d, b, heat - holds(opened, cool), true) } else { heat })
     } else {
-        free
+        (g, heat)
     };
+    let boil = b.wet_ks().map(|s| chem.subs[chem.body().subs()[s]].boil).fold(f64::INFINITY, f64::min);
+    let q = if end(x, q) > boil { q - evaporate(w, d, b, q - holds(x, boil), false) } else { q };
+    let t = end(x, q);
     settle_heat(w, d, b, t);
     t
 }
@@ -160,17 +163,18 @@ fn coat(w: &World, d: &Chunk, b: &Body, mass: f64) -> (f64, f64) {
     (through(b.conductance(p, mass)), through(b.bare(p, mass)))
 }
 
-/// It evaporates its key liquids to take `q` J away, at each one's vaporisation enthalpy, never below its safe minimum:
-/// the vapour goes to its cell's bodies' node with its heat and its latent heat (`Moves::gas`). Returns the heat taken
-/// away, J.
-fn evaporate(w: &World, d: &mut Chunk, b: &mut Body, q: f64) -> f64 {
+/// It evaporates its key liquids to take `q` J away, at each one's vaporisation enthalpy, never below its safe minimum
+/// when it sweats (`spare`; boiling takes all): the vapour goes to its cell's bodies' node with its heat and its latent
+/// heat (`Moves::gas`). Returns the heat taken away, J.
+fn evaporate(w: &World, d: &mut Chunk, b: &mut Body, q: f64, spare: bool) -> f64 {
     let (chem, i) = (&w.chem, b.cell as usize);
     let (lay, t, size, lift) = (Layout::of(chem), b.temp(chem), b.size(chem), w.lift(i));
     let mut taken = 0.0;
     for p in b.wet_ks() {
         let k = chem.body().subs()[p];
         let s = &chem.subs[k];
-        let free = (b.store[p] - b.gene(lay.min + p).max(0.0) * size / s.molar_mass).max(0.0);
+        let kept = if spare { b.gene(lay.min + p).max(0.0) * size / s.molar_mass } else { 0.0 };
+        let free = (b.store[p] - kept).max(0.0);
         let x = free.min((q - taken) / s.lv);
         if x <= 0.0 {
             continue;
