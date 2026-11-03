@@ -52,8 +52,9 @@ impl Brains {
     pub(crate) fn from_packed(v: Vec<f32>) -> Brains {
         Brains { v, ..Default::default() }
     }
-    /// The numbers of the blocks `held` (each living body's of the cell, in the cell's order) one after another, and the
-    /// block of each there: none if they lie so already (no block free, none out of that order).
+    /// The numbers of the blocks `held` (each living body's of the cell, in the cell's order) one after another, in an
+    /// array with the room of this one, and the block of each there: none if they lie so already (no block free, none
+    /// out of that order).
     pub(crate) fn packed(&self, held: &[Block]) -> Option<(Vec<f32>, Vec<Block>)> {
         let mut at = 0;
         let in_order = held.iter().filter(|b| b.some()).all(|b| {
@@ -64,7 +65,7 @@ impl Brains {
         if in_order && at == self.v.len() {
             return None;
         }
-        let mut v = Vec::with_capacity(at);
+        let mut v = Vec::with_capacity(self.v.len());
         let blocks = held.iter().map(|&b| {
             if !b.some() {
                 return b;
@@ -80,7 +81,8 @@ impl Brains {
         self.freed as f64 > FREED_SHARE * self.v.len() as f64
     }
     /// The living blocks `held` (each living body's of the cell) are packed one after another in their order (`packed`),
-    /// each body's block moved with its numbers; no block is left free, and the array keeps no room beyond them.
+    /// each body's block moved with its numbers; no block is left free, and the array keeps the room it had, so the
+    /// blocks taken next need no new memory and no copy of the array.
     pub(crate) fn pack<'a>(&mut self, held: impl Iterator<Item = &'a mut Block>) {
         let mut held: Vec<&mut Block> = held.collect();
         let blocks: Vec<Block> = held.iter().map(|b| **b).collect();
