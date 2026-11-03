@@ -158,8 +158,8 @@ rupture = 100
 
 # 10: body matter, what bodies are built of (`build`), holding the energy of what it is made of: docs/numbers.md, "substance 10".
 [[s]] # 10
-e = [196,120,6,106,0,1]
-cp = 4266
+e = [196,118,6,101,0,0]
+cp = 4088
 melt = 1500
 boil = 3000
 rho = [1500, 1300]
@@ -169,7 +169,7 @@ refl = [[0.35,0.30,0.20],[0.30,0.25,0.15]]
 ir = 0.0
 sol = 0.0
 cond = 0.2
-hf = -20315.8
+hf = -18675.0
 # Living soft tissue with its liquid: docs/numbers.md, "modulus of substances 10, 13 and 9".
 modulus = 0.001
 # Living soft tissue: docs/numbers.md, "rupture of substances 10, 13 and 9".
@@ -276,7 +276,7 @@ ea = 9000
 # docs/numbers.md, "reaction 7".
 [[r]] # 7
 i = [[10,1],[2,118]]
-o = [[3,119],[0,92],[12,3],[9,1]]
+o = [[3,118],[0,92],[12,3]]
 ord = [1,6]
 k = 2.28e9
 ea = 9000
@@ -330,11 +330,11 @@ o = [[5,6]]
 k = 9.6e-4
 ea = 7760
 
-# Growth (`Chemistry::build`), no reaction of the open world: body matter (the first output) of 5, 12 and 11, paid by work
+# Growth (`Chemistry::build`), no reaction of the open world: body matter (the first output) of 5 and 12, paid by work
 # (Copy): docs/numbers.md, "Chemistry::build".
 [build]
-i = [[5,118],[12,3],[11,1]]
-o = [[10,1],[0,27]]
+i = [[5,118],[12,3]]
+o = [[10,1],[0,26]]
 
 # The other solids bodies build (`Chemistry::builds`), the first output each: the frame 13 of 5, and 9 of the dissolved
 # mineral 11: docs/numbers.md, "Chemistry::builds".

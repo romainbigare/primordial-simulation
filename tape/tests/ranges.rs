@@ -222,10 +222,9 @@ const SLEEP_SIDE: usize = 32;
 const SLEEP_YEARS: u64 = 8;
 const SLEEP_FROM: u64 = 5;
 
-/// The chemistry's key numbers (series columns): the heat-absorbing gas (the carbon of the air), the two minerals in the
-/// ground of land and of sea (24, the mineral of the fixed gas, and 23, the salt of the rock), and the dead body matter
-/// and lime.
-const CHEMISTRY: [&str; 7] = ["air_3", "min0_land", "min0_sea", "min1_land", "min1_sea", "dead_22", "dead_10"];
+/// The chemistry's key numbers (series columns): the heat-absorbing gas (the carbon of the air), the mineral in the
+/// ground of land and of sea (12, the mineral of the fixed gas), and the dead body matter and lime.
+const CHEMISTRY: [&str; 5] = ["air_3", "min0_land", "min0_sea", "dead_10", "dead_9"];
 
 /// The `columns` at the end of each year from `SLEEP_FROM` of the sleep test's world of `seed` with the settings `set`
 /// makes.

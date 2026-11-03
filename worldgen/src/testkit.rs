@@ -242,12 +242,6 @@ pub fn in_all(w: &World, k: usize) -> f64 {
     w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().sum::<f64>() + w.store.amounts(Class::Deep).get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) + w.life.alive().map(|b| b.store[k]).sum::<f64>()
 }
 
-/// The rock element (element 5) outside body matter on the ground of cell `i`, mol.
-pub fn rock_outside_matter(w: &World, i: usize) -> f64 {
-    let n = w.mesh.cells().n();
-    (0..w.chem.ns()).filter(|&k| k != MATTER).map(|k| w.chem.subs[k].elems[5] as f64 * w.store.amounts(Class::Ground)[k * n + i]).sum()
-}
-
 /// Thickness of rock-making solids (those that melt above 1000 K, but body matter, which chars before it melts) in the
 /// loose ground of cell `i` and the bed below it, m, and the mean softness (1 / (hardness + `Config::hard_min`)) of the loose ones, by
 /// volume.

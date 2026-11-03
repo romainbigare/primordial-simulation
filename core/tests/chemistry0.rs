@@ -4,52 +4,44 @@
 use pcore::change::reversible;
 use pcore::chem::Phase;
 use pcore::units::T_SURF;
-use worldgen::testkit::{ABSORBER, DISSOLVED, DISSOLVING, FIX_GAS, LIQUID, MATTER, MINERAL, OX, RICH, ROCK, ROCK_ELEMENT, SETTLING};
+use worldgen::testkit::{ABSORBER, DISSOLVED, DISSOLVING, FIX_GAS, LIQUID, MATTER, MINERAL, RICH, ROCK, ROCK_ELEMENT, SETTLING};
 
 /// Elements of chemistry 0: the one in the heat-absorbing gas and the energy-rich solid, and the fixed gas's.
 const SOLID_ELEMENT: usize = 1;
 const FIX_ELEMENT: usize = 2;
 
-/// What the chemistry says: body matter holds one atom of the fixed gas's element to 20 of the solid's (120 and 6 in
-/// its formula unit) and one atom of the rock element, 1.16% of its mass, in the range of the dry matter of land plants
-/// (0.5 to 2%); it is made of 118 of the energy-rich solid, 3 of the fixed mineral and 1 of the dissolved one without
-/// a gain or loss of heat, and burns for 16.0 MJ a kg giving the fixed gas's element back as its mineral and the rock
-/// element as the rock; the minerals live dissolved in the liquid; fixing the gas burns what real fixers respire for it
+/// What the chemistry says: body matter holds one atom of the fixed gas's element to 20 of the solid's (118 and 6 in
+/// its formula unit) and none of the rock element; it is made of 118 of the energy-rich solid and 3 of the fixed
+/// mineral without a gain or loss of heat, and burns for 16.7 MJ a kg giving the fixed gas's element back as its
+/// mineral; the minerals live dissolved in the liquid; fixing the gas burns what real fixers respire for it
 /// and gives all the solid's element back as the heat-absorbing gas; every reaction and growth balance in elements.
 #[test]
 fn the_chemistry_balances_and_fixing_costs_what_fixers_respire() {
     let (chem, _) = worldgen::chemistry0();
     assert!(chem.validate().is_ok());
     let (m, minerals) = (chem.matter().expect("matter"), chem.minerals());
-    assert_eq!((m, minerals.to_vec()), (MATTER, vec![(MINERAL, 3.0), (DISSOLVED, 1.0)]));
+    assert_eq!((m, minerals.to_vec()), (MATTER, vec![(MINERAL, 3.0)]));
     let elems = &chem.subs[m].elems;
-    assert_eq!((elems[SOLID_ELEMENT], elems[FIX_ELEMENT], elems[ROCK_ELEMENT]), (120, 6, 1));
-    // Its mass share: the rock element's mass found from the rock (100 g a mol) less the heat-absorbing gas it holds
-    // (44 g) and the half of the burning gas (16 g).
-    let rock = chem.subs[ROCK].molar_mass - chem.subs[ABSORBER].molar_mass - chem.subs[OX].molar_mass / 2.0;
-    let share = rock / chem.subs[m].molar_mass;
-    println!("the rock element is {:.2}% of the dry matter ({} g of {} g)", 100.0 * share, 1e3 * rock, 1e3 * chem.subs[m].molar_mass);
-    assert!(share > 0.005 && share < 0.02, "{share}");
-    // Growth: 118 of the energy-rich solid, 3 of the fixed mineral and 1 of the dissolved one make 1 of matter and 27 of
-    // the liquid, with no gain or loss of heat in a body (its liquids hold their fusion enthalpy); nothing goes to the air
-    // (the dissolved mineral's gas goes into the matter).
+    assert_eq!((elems[SOLID_ELEMENT], elems[FIX_ELEMENT], elems[ROCK_ELEMENT]), (118, 6, 0));
+    // Growth: 118 of the energy-rich solid and 3 of the fixed mineral make 1 of matter and 26 of the liquid, with no
+    // gain or loss of heat in a body (its liquids hold their fusion enthalpy); nothing goes to the air.
     let build = chem.build.as_ref().expect("growth");
-    assert_eq!((build.inputs.as_slice(), build.outputs.as_slice()), (&[(RICH as u16, 118), (MINERAL as u16, 3), (DISSOLVED as u16, 1)][..], &[(MATTER as u16, 1), (LIQUID as u16, 27)][..]));
+    assert_eq!((build.inputs.as_slice(), build.outputs.as_slice()), (&[(RICH as u16, 118), (MINERAL as u16, 3)][..], &[(MATTER as u16, 1), (LIQUID as u16, 26)][..]));
     let fused = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * chem.fused_heat(k as usize, T_SURF, |_| 0.0)).sum::<f64>();
     let growth = chem.dh_of(build) + fused(&build.outputs) - fused(&build.inputs);
     assert!(growth.abs() < 1.0, "growth takes {growth} J");
     assert!(build.outputs.iter().all(|p| p.0 == m as u16 || chem.phase(p.0 as usize, 290.0) == Phase::Liquid));
-    // Rotting: 55,124.7 kJ a mol (16.0 MJ a kg), from and to the states found at the surface (`Chemistry::dh_at`).
+    // Rotting: 55,165.0 kJ a mol (16.7 MJ a kg), from and to the states found at the surface (`Chemistry::dh_at`).
     let burn = (0..chem.reactions.len()).find(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m) && chem.reactions[r].outputs.iter().any(|p| p.0 as usize == MINERAL)).expect("rotting");
     let heat = -chem.dh_at(burn, T_SURF);
-    assert!((heat / 55124.7e3 - 1.0).abs() < 1e-6, "body matter burns for {heat} J a mol");
+    assert!((heat / 55165.0e3 - 1.0).abs() < 1e-6, "body matter burns for {heat} J a mol");
     let per_kg = heat / chem.subs[m].molar_mass / 1e6;
     println!("body matter burns for {per_kg:.2} MJ/kg");
     assert!(per_kg > 15.5 && per_kg < 17.0, "{per_kg} MJ/kg");
-    // Rotting gives back the fixed mineral (3 a mol) and the rock (1 a mol), and none of the dissolved mineral (no liquid
-    // goes in); it takes only the matter and gases.
+    // Rotting gives back the fixed mineral (3 a mol), and neither the rock nor the dissolved mineral; it takes only the
+    // matter and gases.
     let out = |k: usize| chem.reactions[burn].outputs.iter().find(|p| p.0 as usize == k).map_or(0, |p| p.1);
-    assert!(out(MINERAL) == 3 && out(ROCK) == 1 && out(DISSOLVED) == 0);
+    assert!(out(MINERAL) == 3 && out(ROCK) == 0 && out(DISSOLVED) == 0);
     assert!(chem.reactions[burn].inputs.iter().all(|p| p.0 as usize == m || chem.phase(p.0 as usize, 290.0) == Phase::Gas));
     // The dissolved mineral lives in the liquid and never boils; only the reaction that undoes its making takes it.
     assert!(chem.phase(DISSOLVED, 290.0) == Phase::Liquid && chem.subs[DISSOLVED].boil > 2000.0);

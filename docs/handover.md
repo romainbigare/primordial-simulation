@@ -110,7 +110,7 @@ What went wrong:
 | Damage | Hits break body matter; abilities read the living body; healing is growth |
 | Mixing | Children may have two parents; only alike bodies mix, so kinds are the groups that mix |
 | Warmth | A body keeps a temperature only by genes it pays for (`KEEP_T`, `COOL_T`); one heat network for every body |
-| Soil | The ground holds liquid in pores. Two minerals (nitrogen and the rock element) come from plain chemistry, so fertility differs by place |
+| Soil | The ground holds liquid in pores. One mineral (nitrogen) comes from plain chemistry, so fertility differs by place |
 | Nitrogen fixers | A tenth of the starting light-eaters carry the gene that fixes the air's nitrogen: an initial condition from real floras (a rule chosen for a run, Section 14.3) |
 | Carbon | The sea holds carbon by plain chemistry and starts at balance with the air |
 | Law 2 | One rate law (mass action with the contact of the phases) in the open world and in bodies; a catalyst is slowed by its own product |
@@ -236,7 +236,7 @@ A random chemistry can be dead or boring, and finding out can waste weeks. So fo
 - Some pairs of hard solids **mix into a harder solid** (needed for alloy-like materials).
 - The range of melting points and bond strengths is wide (needed for a variety of tools and structures).
 
-**Chemistry 0 as built** (`worldgen/src/chem0.toml`: 6 elements, 14 substances, 14 reactions) also has what life needs: a **body matter** that bodies build from the energy-rich solid by a growth conversion (`Chemistry::build`), so the fuel a body stores and the tissue it is built of are different matter; two **minerals** that body matter needs (a nitrogen mineral and the rock element's salt, both living dissolved in the liquid); and two more **solids bodies can build** (a frame and lime, `Chemistry::builds`). A random chemistry has none of these yet (its bodies do not grow); a generator that makes them is for M7. The roles and reactions are listed in `docs/laws.md` (2.7).
+**Chemistry 0 as built** (`worldgen/src/chem0.toml`: 6 elements, 14 substances, 14 reactions) also has what life needs: a **body matter** that bodies build from the energy-rich solid by a growth conversion (`Chemistry::build`), so the fuel a body stores and the tissue it is built of are different matter; one **mineral** that body matter needs (a nitrogen mineral, living dissolved in the liquid); and two more **solids bodies can build** (a frame and lime, `Chemistry::builds`). A random chemistry has none of these yet (its bodies do not grow); a generator that makes them is for M7. The roles and reactions are listed in `docs/laws.md` (2.7).
 
 Later, add a **world search** (Section 13, M7): generate hundreds of worlds and keep the ones where most new things happen.
 

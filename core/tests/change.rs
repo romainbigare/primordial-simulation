@@ -5,7 +5,7 @@ use pcore::change::{self, Reactor};
 use pcore::chem::{Chemistry, Phase};
 use pcore::store::{Class, Node};
 use pcore::units::{DAY, DAY_S, P_REF, R_GAS, T_SURF};
-use worldgen::testkit::{empty_cell, hold_ground, in_all, loose_volume, set_amount, set_heat, BURN, BURNING_GAS, DISSOLVING, SETTLING, ROCK_ELEMENT, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, FRAME, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{empty_cell, hold_ground, in_all, loose_volume, set_amount, set_heat, BURN, BURNING_GAS, DISSOLVING, SETTLING, node_totals, open_air, put, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, FRAME, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
 use pcore::AIR;
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
@@ -428,11 +428,10 @@ fn the_pores_of_the_land_hold_the_dissolved_mineral_where_rock_and_liquid_meet()
     assert!(ratio[ratio.len() / 2] > 0.5 && ratio[ratio.len() / 2] < 2.0, "the cells' mineral is far from its balance: {}", ratio[ratio.len() / 2]);
 }
 
-/// Dead matter gives the minerals back: in the open at 290 K it rots (0.2 a year, its litter constant) and every mol
-/// that goes leaves three of the fixed gas's mineral and one of the rock (the rock element, which has no liquid here
-/// to dissolve in) and none of the gas; burning hot (1000 K) the mineral it leaves breaks down as it is made, and
-/// most of the fixed gas's element goes to the air as the gas, while the rock element stays in the solids (the rock,
-/// then what the heat makes of it). Elements and energy are kept exactly.
+/// Dead matter gives its mineral back: in the open at 290 K it rots (0.2 a year, its litter constant) and every mol
+/// that goes leaves three of the fixed gas's mineral and none of the gas; burning hot (1000 K) the mineral it leaves
+/// breaks down as it is made, and most of the fixed gas's element goes to the air as the gas. Elements and energy are
+/// kept exactly.
 #[test]
 fn rotting_gives_the_minerals_back_and_burning_hot_gives_the_gas_to_the_air() {
     let (chem, init) = worldgen::chemistry0();
@@ -451,28 +450,22 @@ fn rotting_gives_the_minerals_back_and_burning_hot_gives_the_gas_to_the_air() {
             assert!((el1[j] - el0[j]).abs() <= 1e-9 * el0[j].max(1.0), "element {j}: {} -> {}", el0[j], el1[j]);
         }
         assert!((en1 - en0).abs() <= 1e-9 * en0.abs(), "energy {en0} -> {en1}");
-        // The rock element outside the matter (mol), by the elements of what is left.
-        let rock: f64 = (0..chem.ns()).filter(|&k| k != MATTER).map(|k| chem.subs[k].elems[ROCK_ELEMENT] as f64 * n[k]).sum();
-        (1000.0 - n[MATTER], n[MINERAL], gas[FIX_GAS] - gas0[FIX_GAS], n[ROCK], rock)
+        (1000.0 - n[MATTER], n[MINERAL], gas[FIX_GAS] - gas0[FIX_GAS])
     };
-    let (lost, back, gas, rock_back, rock) = run(290.0, 365.0 * DAY);
-    println!("a year at 290 K: {lost:.2} mol of matter rotted, {back:.2} mol of the mineral back, {rock_back:.2} mol of the rock, {gas:.4} mol of the gas");
+    let (lost, back, gas) = run(290.0, 365.0 * DAY);
+    println!("a year at 290 K: {lost:.2} mol of matter rotted, {back:.2} mol of the mineral back, {gas:.4} mol of the gas");
     assert!(lost > 170.0 && lost < 205.0, "{lost}");
     assert!((back / (3.0 * lost) - 1.0).abs() < 1e-6 && gas.abs() < 1e-6 * lost, "mineral {back}, gas {gas}");
-    // (A little of the rock meets the liquid the rotting makes and the gas, and dissolves: the rock element is counted
-    // in all that is left, and the rock itself is held to 1%.)
-    assert!((rock_back / lost - 1.0).abs() < 1e-2 && (rock / lost - 1.0).abs() < 1e-6, "rock {rock_back}, the rock element {rock}, for {lost} mol of matter");
-    let (lost, back, gas, _, rock) = run(1000.0, 1e5);
-    println!("hot, 1000 K: {lost:.1} mol of matter burned, {back:.1} mol of the mineral, {gas:.1} mol of the gas, {rock:.1} mol of the rock element");
+    let (lost, back, gas) = run(1000.0, 1e5);
+    println!("hot, 1000 K: {lost:.1} mol of matter burned, {back:.1} mol of the mineral, {gas:.1} mol of the gas");
     assert!(lost > 990.0, "{lost}");
     assert!(gas > 0.8 * 3.0 * lost && back < 0.2 * 3.0 * lost, "mineral {back}, gas {gas} for {lost} mol of matter");
-    assert!((rock / lost - 1.0).abs() < 1e-6, "the rock element {rock} for {lost} mol of matter");
 }
 
-/// Dead matter on the ground returns its minerals to the ground: in a world with no body, a year, the matter that went
+/// Dead matter on the ground returns its mineral to the ground: in a world with no body, a year, the matter that went
 /// is in the fixed gas's mineral three for one (the mineral dissolves and runs with the liquid: it is counted over the
-/// whole ground) and in the rock element outside the matter one for one, more than the same world without the matter
-/// makes (the open air fixes next to nothing); elements and energy are kept.
+/// whole ground), more than the same world without the matter makes (the open air fixes next to nothing); elements and
+/// energy are kept.
 #[test]
 fn dead_matter_on_the_ground_returns_the_minerals_to_the_ground() {
     let (mut w, i) = start();
@@ -483,21 +476,18 @@ fn dead_matter_on_the_ground_returns_the_minerals_to_the_ground() {
     for _ in 0..12 {
         pcore::step(&mut twin);
     }
-    let (bare, bare_rock) = (in_all(&twin, MINERAL) - bare, rock_outside_matter(&twin, i));
+    let bare = in_all(&twin, MINERAL) - bare;
     put(&mut w, MATTER, i, 1e8);
     let books = Books::now(&w);
     let (m_before, n_before) = (in_all(&w, MATTER), in_all(&w, MINERAL));
     for _ in 0..12 {
         pcore::step(&mut w);
     }
-    let (lost, gained, rock) = (m_before - in_all(&w, MATTER), in_all(&w, MINERAL) - n_before - bare, rock_outside_matter(&w, i) - bare_rock);
+    let (lost, gained) = (m_before - in_all(&w, MATTER), in_all(&w, MINERAL) - n_before - bare);
     assert!(bare >= 0.0 && bare < 1e-3 * lost, "the open fixed {bare} mol in a year");
-    println!("a year on the ground: {lost:.0} of {m_before:.0} mol of matter rotted, {gained:.0} mol of the mineral back, {rock:.0} mol of the rock element more than the twin's cell");
+    println!("a year on the ground: {lost:.0} of {m_before:.0} mol of matter rotted, {gained:.0} mol of the mineral back");
     assert!(lost > 0.02 * m_before, "it did not rot: {lost}");
     assert!((gained / (per * lost) - 1.0).abs() < 1e-4, "the mineral {gained} for the matter {lost}");
-    // (In the cell, to a tenth: the dissolved mineral the rotting's gas and liquid make of the rock moves with the
-    // liquid, to and from the cells around; the books of elements are exact.)
-    assert!((rock / lost - 1.0).abs() < 0.1, "the rock element {rock} for the matter {lost}");
     books.assert_kept(&w, 1e-9);
 }
 

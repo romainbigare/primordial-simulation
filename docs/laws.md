@@ -363,18 +363,17 @@ One fixed Earth-like chemistry until M7 (handover 6.0): 6 elements, 14 substance
 | 6 | fat-like store |
 | 7, 8 | rock: sand and common rock (≈ SiO2, CaSiO3) |
 | 9 | lime (≈ CaCO3), rock and a solid bodies build |
-| 10 | body matter (≈ tissue): C120H196N6O106Ca |
+| 10 | body matter (≈ tissue): C118H196N6O101 |
 | 11 | the rock salt, lives dissolved (≈ Ca(HCO3)2) |
 | 12 | the nitrogen mineral, lives dissolved |
 | 13 | the frame, a solid bodies build (≈ cellulose) |
 
 Reactions: 0 light to sugar; 1 burning sugar (its rot in the open world); 2 and 3 burning and making fat; 4 burning
-methane; 5 rotting to methane; 6 rock weathering; 7 rotting or burning body matter (gives back the nitrogen mineral
-and lime); 8 and 9 the lime–salt pair; 10 fixing nitrogen; 11 the nitrogen mineral breaking down when hot; 12 rotting
+methane; 5 rotting to methane; 6 rock weathering; 7 rotting or burning body matter (gives back the nitrogen mineral); 8 and 9 the lime–salt pair; 10 fixing nitrogen; 11 the nitrogen mineral breaking down when hot; 12 rotting
 of the frame; 13 splitting the frame into sugar (needs an enzyme). Dead matter rots in moist open ground at a litter
 constant (12: about a quarter a year at 290 K; 7: about one a year). **Growth** (`Chemistry::build`, bodies only, paid by
-work): matter from 118 sugar + 3 nitrogen mineral + 1 rock salt; frame from 6 sugar; lime from 1 rock salt.
-`Chemistry::minerals` are growth's inputs no reaction burns (12, 11), `materials` the solids bodies build (13, 9).
+work): matter from 118 sugar + 3 nitrogen mineral; frame from 6 sugar; lime from 1 rock salt.
+`Chemistry::minerals` are growth's inputs no reaction burns (12), `materials` the solids bodies build (13, 9).
 The air's carbon gas (3) settles where the cover's light reaction takes it up as fast as rot and burning give it back:
 the world has no source of it (an input from below, as volcanoes give, would be an edit from outside the laws, and is
 not built).
@@ -667,7 +666,7 @@ nodes and individuals take alike, never more than is there.
 **Stores** (all members together) and heat. A body holds only the substances of bodies (`Chemistry::body`, one
 place each in a fixed array): the liquid and the energy-rich solid of life's roles and every substance growth and the
 other built solids take or make that is not a gas at the surface; in chemistry 0 the key liquid (0), the fuel (5), the
-body matter (10), the two minerals (11, 12) and the two built solids (13, 9). It runs only the reactions whose every
+body matter (10), the mineral (12), the rock salt lime is built of (11) and the two built solids (13, 9). It runs only the reactions whose every
 substance is one of these or a gas, taking at least one of these; what such a reaction makes that it cannot hold leaves
 it as a gas. **Body matter** is what it is built of; its **living
 body** (`Body::built`) is matter less brood, over 1 − `WET_TISSUE`. Taking, building, upkeep and force go by the living
@@ -755,7 +754,8 @@ only (4.5).
 The minerals (`Chemistry::minerals`) live in the ground's liquid and move with it, so rain washes them to low ground
 and the sea and fertility differs by place. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
 on land under less than half a metre of liquid; then only fixing adds it, rotting (7) returns it, heat (11) sends it
-to the air. **Rock salt (11)**: made in wet cells from lime (8), turned back by 9, near balance (2.6).
+to the air. Body matter holds no rock element: the **rock salt (11)** is rock chemistry, made in wet cells from lime
+(8), turned back by 9, near balance (2.6).
 
 ## 8. Starting conditions (not laws)
 Placed by `worldgen` (`worldgen::schedule::Schedule`, carried by a snapshot) and printed by every run; the laws never
