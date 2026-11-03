@@ -6,7 +6,7 @@ follows; `review/big-look.md` says why. The spec is `docs/handover.md`; where it
 
 ## 1. Where the code stands
 
-- `main` = `claude/handover-implementation-yw7dgd` = `fe6a543d`. It builds; the fast suite, the 11 slow tests, clippy
+- `main` = `claude/handover-implementation-yw7dgd` = `6699a7d6`. It builds; the fast suite, the 11 slow tests, clippy
   and the wasm build pass. Every package on it had an adversarial review and its blocking findings fixed.
 - Speed, with life, 30-year means (the machine was not always quiet):
 
@@ -38,13 +38,21 @@ follows; `review/big-look.md` says why. The spec is `docs/handover.md`; where it
   overturning are one backward-Euler day solved by lines (`solve/line.rs`). Both globes hold about 288 to 291 K, ice
   0.09 to 0.13, poleward transport 4.2 / 5.4 / 2.8 PW at 22.5° / 45° / 67.5°.
 
-## 3. Open choices for the owner (asked, not answered)
+- **After the owner's two yeses.** The cells exchange with the air every 15 days (one step a month warms winters
+  0.8 K, past the owner's 0.5 K; the jump appears only between 15 and 30 days, cause not found: untested are the
+  month-start ground state, Change, the cover's month, the soil-water sink). Slow bodies every two months was built
+  and reverted: a body burns fuel at the same rate in time, so half the decisions halved its learning.
+- **Body heat.** Bodies reached 365 to 14,000 K (an unbounded coat, the pace from the month's start, dead members'
+  heat through survivors, no heat-capacity limit, bodies bigger than their room counted inside it). Now the coat is a
+  share up to a mammal's least conductance (Herreid and Kessel 1967), the temperature moves by 1 − e^(−g·dt/C), a
+  body only sheds heat after its decision, and none passes its liquid's boiling point. On the roster only 2 to 4
+  kinds live at year 40 (were 7): the founders were set under the runaway heat. A life round should look at it.
 
-1. Cells exchange with the air once a month, not three times: about 3 times cheaper for the cells' part of Flow; the
-   last round measured the seasons 0.5 K softer.
-2. Slow bodies (cold-blooded kinds) update every two months.
+## 3. Next
 
-Without these, or a simpler body, the island will not reach 0.15 s: small cuts give 5 to 10% each now.
+Small cuts give 5 to 10% each now; the island needs about 10 times. Levers left: a simpler body (an update is about
+113,000 instructions), the one-step month's cause, `daily::given` once a day (notes in the WP7 agent's report: the
+rain pool's per-cell steps are the nonlinear part).
 
 ## 4. Known problems
 
