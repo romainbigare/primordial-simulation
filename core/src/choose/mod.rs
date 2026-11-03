@@ -52,6 +52,18 @@ pub struct ActTmp {
     pub feat: Vec<f32>,
     /// The sums of the hidden layer without the body's own cell's features (`plan`)
     plan: Vec<f32>,
+    /// The base's weights on a cell's features, per hidden unit, worked out once per lineage and cell in a chunk
+    /// (`plan`): where each lies in `on_sums`
+    on_at: std::collections::HashMap<(u32, u32), usize>,
+    on_sums: Vec<f32>,
+}
+
+impl ActTmp {
+    /// A new chunk: the sums of `plan` of the last are not its (its lineages' ids are its own).
+    pub fn new_chunk(&mut self) {
+        self.on_at.clear();
+        self.on_sums.clear();
+    }
 }
 
 /// One decision: what the body perceives, its options with their scores and features, their chances and the action drawn.
@@ -92,7 +104,7 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: 
     learn::learn(w, b, &mut d.brains(b.cell as usize).mind(b.brain, s), s, (wb, &t.thought.h));
     options(w, d, b, (s, sight), (pm, b.volume(&w.chem, temp) / b.n()), &mut c, t);
     if let Some(lin) = d.brain(w, b.lineage) {
-        plan(w, (&lin.base, d.at(b.cell as usize).brains.rows(b.brain, s)), s, z, b.cell as usize, &mut c, &mut t.plan);
+        plan(w, (b.lineage, &lin.base, d.at(b.cell as usize).brains.rows(b.brain, s)), s, z, b.cell as usize, &mut c, t);
     }
     pick(d, &mut c, &mut rng);
     let (form, zn) = noise(w, b, s, t, &mut rng);
@@ -167,21 +179,30 @@ fn options(w: &World, ch: &Chunk, b: &Body, (s, sight): (Shape, usize), (pm, vol
 /// into (its own state with that cell's features in place of its own cell's: the sums of its hidden layer `z` moved by
 /// the base's weights on the difference) less its value here, where staying keeps it, both one month ahead
 /// (`Physics::discount`, as the critic learns it): γ(V(s') − V(s)), times `Physics::plan_weight`, added to the score of
-/// the move there. `brain`: the lineage's base and the body's rows. Off in a null run.
-fn plan(w: &World, (base, rows): (&[f32], &[f32]), s: Shape, z: &[f32], i: usize, c: &mut Choice, at_here: &mut Vec<f32>) {
+/// the move there. `brain`: the lineage, its base and the body's rows. The base's weights on a cell's features are
+/// worked out once per lineage and cell in a chunk (`ActTmp::on_at`). Off in a null run.
+fn plan(w: &World, (lineage, base, rows): (u32, &[f32], &[f32]), s: Shape, z: &[f32], i: usize, c: &mut Choice, t: &mut ActTmp) {
     let (weight, discount) = (w.cfg.phys.plan_weight, w.cfg.phys.discount);
     if w.cfg.null || weight == 0.0 || s.h == 0 {
         return;
     }
-    let (at, own, critic) = (w.chem.ns() + OWN, w.life.feat(i, 1), &rows[s.critic() * s.r()..(s.critic() + 1) * s.r()]);
-    // The base's weights on the cell's features, of hidden unit `m`; the sums without its own cell's.
-    let on = |m: usize| &base[m * s.ni + at..m * s.ni + at + NCELL];
+    let (at, critic) = (w.chem.ns() + OWN, &rows[s.critic() * s.r()..(s.critic() + 1) * s.r()]);
+    let ActTmp { plan: at_here, on_at, on_sums, .. } = t;
+    // The base's weights on the features of cell `j`, of each hidden unit: where they lie in `on_sums`.
+    let mut on = |j: usize| *on_at.entry((lineage, j as u32)).or_insert_with(|| {
+        let x = on_sums.len();
+        on_sums.extend((0..s.h).map(|m| brain::dot(&base[m * s.ni + at..m * s.ni + at + NCELL], w.life.feat(j, 1))));
+        x
+    });
+    // The sums without its own cell's.
+    let own = on(i);
+    let to: [Option<usize>; MOVES] = std::array::from_fn(|d| (c.to[d] != usize::MAX).then(|| on(c.to[d])));
     at_here.clear();
-    at_here.extend((0..s.h).map(|m| z[m] - brain::dot(on(m), own)));
-    let value = |f: &[f32]| critic[s.h] + (0..s.h).map(|m| critic[m] * squash(at_here[m] + brain::dot(on(m), f))).sum::<f32>();
+    at_here.extend((0..s.h).map(|m| z[m] - on_sums[own + m]));
+    let value = |x: usize| critic[s.h] + (0..s.h).map(|m| critic[m] * squash(at_here[m] + on_sums[x + m])).sum::<f32>();
     let here = critic[s.h] + (0..s.h).map(|m| critic[m] * squash(z[m])).sum::<f32>();
-    for d in (0..MOVES).filter(|&d| c.to[d] != usize::MAX) {
-        c.logit[FIXED + d] += weight * discount * (value(w.life.feat(c.to[d], 1)) - here);
+    for (d, x) in to.iter().enumerate().filter_map(|(d, x)| Some((d, (*x)?))) {
+        c.logit[FIXED + d] += weight * discount * (value(x) - here);
     }
 }
 

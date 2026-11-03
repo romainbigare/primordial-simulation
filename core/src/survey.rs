@@ -197,6 +197,7 @@ fn scratch(_: &World) -> Scratch {
 /// together (`choose::Minds::sense`); then each one's decision in that order (`decide`). A cell's stages end before the
 /// next cell's begin, so what the chunk queues and the ids it makes come cell by cell, as for any count of chunks.
 fn updates(w: &World, d: &mut Chunk, (tmp, minds, act): &mut Scratch) {
+    act.new_chunk();
     for i in d.cells() {
         minds.clear();
         for slot in 0..d.at(i).bodies.len() {
