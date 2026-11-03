@@ -32,7 +32,7 @@ built from the squares, the same whatever the sizes of the cells.
 feature `threads`, in each of its cells the wear of movers, the shade and the sums; a death that lets go of a part
 queues that for the serial pass, as in a batch; it rebuilds Flow's
 state in full for the cells' surroundings, and Flow's own pass leaves it then); Flow: the air in steps of
-`AIR_STEP_DAYS` (10 days, three a month, each at its own time in the month), after each the sink of the liquid over
+`AIR_STEP_DAYS` (15 days, two a month, each at its own time in the month), after each the sink of the liquid over
 field capacity into the bed's store; then the liquid and erosion; heat sideways and creep yearly; the cover's month;
 Change; Bond (each chunk's cell by cell, the chunks on the pool: in a cell the turns of its parts in the order of its
 list, on its view, then the loads of its structures in the order of their roots); then the bodies (`survey::batch`).
@@ -195,7 +195,7 @@ across each border by its width (none across a corner). Bodies hold the ground: 
 and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 8.
 
 ### 1.4 The air's step, the sun and the bodies' share
-`flow::air::step`, every `AIR_STEP_DAYS` (10). First the gas of the bodies' nodes comes up into their air nodes. Then each cell's exchange over the step with the air it sees is solved once (the sea under one air
+`flow::air::step`, every `AIR_STEP_DAYS` (15). First the gas of the bodies' nodes comes up into their air nodes. Then each cell's exchange over the step with the air it sees is solved once (the sea under one air
 node as one surface, below), in its own implicit surface balance (Newton's steps about its end temperature, with its melting plateaus, 1.1), at the air of the step's
 start: sunlight, heat radiation, sensible heat with the air touching it and what evaporates from it by its saturation
 deficit (`air::cells::exchange`). Its slopes with the air it sees come from that same balance, on the branch it ended
@@ -209,7 +209,7 @@ its cells, its heat radiation to space and its rain (1.5). Each block's heat, th
 in them through the day, so the day follows them exactly, the block warming and moistening as one as the eddies even
 it, the air outside it as at the day's start; days of an hour give the same climate within 0.03 K. Then the evening of
 its block and the wind (1.6). The book takes each cell's law at the mean air of the step (`air::book`), which is what
-the days summed, so the air ends just where its days left it and no node gives more than it holds. A 10-day step
+the days summed, so the air ends just where its days left it and no node gives more than it holds. A 15-day step
 gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_the_climate`, `tape/tests/ranges.rs`).
 - **Sun** (`radiation`): the daily mean by latitude, season and day length (Berger 1978), declination sin δ = sin ε sin
   λ, the mean over the step's days. The surface reflects as its cover is at the step's start (`land::reflectance`);
@@ -287,7 +287,7 @@ about its speed times half the length of the link would. The eddies and the over
 Euler) step a day, first along the lines the links between blocks make east and west, then along those north and south,
 each line solved exactly (`solve::line`: Thomas; a ring by Sherman and Morrison): stable at any rate, no gas of a node
 goes below zero, and the day keeps its rates on any grid. **Known limit:** their rates per mol a node holds are those
-of the air step's start (10 days), so a node whose air grows or shrinks within the step moves a little more or less
+of the air step's start (15 days), so a node whose air grows or shrinks within the step moves a little more or less
 of it than its rates say. Mass that crosses is
 lifted between the nodes' mean grounds by the heat of the node it enters. A cell sees its air node and three
 neighbours bilinearly (`flow/scratch.rs`). Air moves as whole columns, so bodies use the anchored `wind_ground` (6.3).

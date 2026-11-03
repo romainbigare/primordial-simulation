@@ -5,7 +5,7 @@ use crate::{bond, change, check, flow, survey, world::World};
 /// The air runs in steps of this many days, a whole number of them in a month: each cell's exchange over a step is
 /// solved once and taken as linear in its air (`flow::air`), so a longer step smooths the seasons. The long-step test
 /// anchors it (`the_long_step_keeps_the_climate`: these steps against 1-day steps, the land within 0.3 K).
-pub const AIR_STEP_DAYS: u32 = 10;
+pub const AIR_STEP_DAYS: u32 = 15;
 /// Heat conducted sideways and creep, with the lanes' regrowth, run once in this many months, for all that time: on
 /// cells of kilometres both are slow, far below the limit of an explicit step.
 const CREEP_MONTHS: u64 = 12;

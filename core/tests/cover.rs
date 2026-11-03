@@ -24,12 +24,12 @@ fn cover_kg(w: &pcore::World) -> f64 {
     cover::sums(w).iter().map(|s| s.kg).sum()
 }
 
-/// A small world with its soil, after a month (Flow's state built), and a dry land cell that rain reaches.
+/// A small world with its soil, after a month (Flow's state built), and the dry land cell that rain reaches most.
 fn start() -> (pcore::World, usize) {
     let mut w = small_world();
     pcore::step(&mut w);
     worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
-    let i = dry_lands(&w).into_iter().find(|&i| w.rain[i] > 0.0).expect("dry land with rain");
+    let i = dry_lands(&w).into_iter().filter(|&i| w.rain[i] > 0.0).max_by(|&a, &b| w.rain[a].total_cmp(&w.rain[b])).expect("dry land with rain");
     (w, i)
 }
 
