@@ -189,7 +189,8 @@ settles and it wears nothing): it **carries** up to `carry`
 m³ of loose solids per J (dropping what is over capacity, so load settles where flow slows), and with the work its
 load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears** `wear` m³ of
 bed per J over its strength into loose ground. **Creep** (`flow::creep`, yearly, out of land cells):
-loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope. Bodies hold the ground: carrying
+loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope,
+across each border by its width (none across a corner). Bodies hold the ground: carrying
 and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 8.
 
 ### 1.4 The air's step, the sun and the bodies' share
@@ -452,7 +453,7 @@ leaves with members who die. A child has a body of 10^`CHILD` × the copy mass,
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
 dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member
 (`copy::BROOD_HELD`), so its members' broods lie evenly between none and one child, as individuals' do. A share
-`DISPERSE` of the children starts in a neighbour cell in a random direction, one for all of a node's children of an
+`DISPERSE` of the children starts in a neighbour cell across a border drawn by its width (`Level::across`), one for all of a node's children of an
 update (for an individual, that chance), where they land when the batch ends (0). Less than one member with no node to
 join waits in the brood, or, landed in a neighbour cell, goes back into it.
 
@@ -549,7 +550,7 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   most 10^`FIX` mol per kg per s at the reaction's pace, paid by the reaction's fuel. The fuel past its reserve that
   it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
-- **Seeds**: the share `SEED` of what it builds leaves for a neighbour cell drawn (or stays where there is none), with
+- **Seeds**: the share `SEED` of what it builds leaves for a neighbour cell across a border drawn by its width, with
   one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
   not pay: what a kg more would store with the light at the bottom of its layer (`math::shade`) is less than a kg's
   upkeep, so the slot is **full** (`Cover::full`) and stops thickening where its lowest leaves would not pay for
@@ -592,9 +593,9 @@ every brain, 18 numbers each scaled to about one): its ground temperature, the d
 surface height, the shade of its cover, the mass per m² of each slot of its cover and of the cover's fuel and body
 matter (what most diets eat), the fuel and body matter loose on its ground, the mass per m² of its animals in three
 classes of member mass (below 1 kg, to 100 kg, above), their members and mean strength, how hard it is to push
-through, its parts and the members that moved in last month. The same features smoothed over each cell and its
-neighbours once, twice and three times make what a body of sight 2, 3 and 4 sees of a cell it would step into (the
-mean of the cells about that many links around it, `Life::feat`). **A brain's inputs**: its own stores against their
+through, its parts and the members that moved in last month (the counts per area, as in a square of 2 km). The same
+features smoothed over each cell and its neighbours once, twice and three times make what a body of sight 2, 3 and 4
+sees of a cell it would step into (the mean by area of the cells about that many links around it, `Life::feat`). **A brain's inputs**: its own stores against their
 minimums, its warmth, size and the season, its own cell's features, what Bond senses (3.4), its memory. **Each
 direction** with a link: the features of the cell it leads to as its sight sees it, the temperature and height as
 differences from its own cell's, and how hard its link is to pass (`lanes::resist`). **Bodies**: up to `SEEN` of its
@@ -764,7 +765,10 @@ read a kind.
   loose ground; the sea's salt at balance (2.6); ground and air temperatures falling with latitude and height. Every
   land cell drains from the start (`drain`): a priority flood raises closed basins to their outlet at 1 m per km
   (`DRAIN_SLOPE`; Planchon and Darboux 2001), from every cell below 0 m on a globe, from those joined to the lowest
-  cell on an island. A cell of many squares reads the same noise at its centre.
+  cell on an island. On an island the open water is coarse (`coarse_low`): an air block (8 km) whose squares all lie
+  below 0 m, none within a square of land (`LAND_RING`), is one cell, split where it borders finer cells until cells
+  across a border differ by one size at most; the coasts stay in 2 km squares. A cell of many squares reads the same
+  noise at its centre.
 - **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS` rows of `Place::Field`: kg per m² and genes,
   on every open land cell by its chance), then eaters 20 years later; `--roster` places ten kinds (`ROSTER`). Founders
   are adults on land under at most half a metre of liquid; mass 30% fuel (60% for the two big slow eater kinds).

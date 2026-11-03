@@ -19,6 +19,8 @@ use std::f64::consts::{PI, TAU};
 /// Cell size of an island, m, and ground cells per air node along a side.
 const CELL_M: f64 = 2000.0;
 const AIR_SCALE: usize = 4;
+/// The squares below 0 m round the land that stay squares on an island (`coarse_low`), so its edges stay sharp.
+const LAND_RING: i32 = 1;
 /// A globe's radius, m, and the share of its area above the level 0 m: those of the one planet known (Earth: mean
 /// radius 6,371 km, land 29% of the surface).
 const RADIUS_M: f64 = 6.371e6;
@@ -219,9 +221,42 @@ pub fn new_map(seed: u64, map: Square) -> World {
     build(seed, map, chem, &init, Config::default())
 }
 
-/// A new island from a seed: terrain, chemistry 0, ground, liquid and air.
+/// A new island from a seed, its low ground away from land in coarse cells (`coarse_low`): terrain, chemistry 0, ground,
+/// liquid and air.
 pub fn new_world(seed: u64, w: usize, h: usize) -> World {
-    new_map(seed, island(w, h))
+    new_map(seed, coarse_low(seed, island(w, h)))
+}
+
+/// `map` (of squares) with its low ground away from land in coarse cells: an air block whose squares all lie below 0 m
+/// on the terrain of `seed`, none within `LAND_RING` squares of one that does not, is one cell, split into smaller
+/// cells where it borders finer ones until cells across a border differ by one size at most (`Square::mesh`).
+pub fn coarse_low(seed: u64, mut map: Square) -> Square {
+    assert!(AIR_SCALE.is_power_of_two(), "an air block splits into halves");
+    let z = heights(seed, &map, World::mesh_of(&map, AIR_SCALE, &Config::default()).cells());
+    let ring = -LAND_RING..=LAND_RING;
+    let open: Vec<bool> = (0..map.n()).map(|s| ring.clone().all(|dy| ring.clone().all(|dx| map.step(s, (dx, dy)).is_none_or(|t| z[t] < 0.0)))).collect();
+    // The squares of the block of side `k` from column `x` and row `y`.
+    let w = map.w;
+    let block = move |x: usize, y: usize, k: usize| (y..y + k).flat_map(move |ty| (x..x + k).map(move |tx| ty * w + tx));
+    for (x, y) in (0..map.h / AIR_SCALE).flat_map(|by| (0..w / AIR_SCALE).map(move |bx| (bx * AIR_SCALE, by * AIR_SCALE))) {
+        if block(x, y, AIR_SCALE).all(|s| open[s]) {
+            block(x, y, AIR_SCALE).for_each(|s| map.size[s] = AIR_SCALE.trailing_zeros() as u8);
+        }
+    }
+    // Split a cell that borders one more than one size smaller, until none does.
+    let mut split = true;
+    while split {
+        split = false;
+        for s in 0..map.n() {
+            let small = [(1, 0), (0, 1), (-1, 0), (0, -1)].iter().filter_map(|&d| map.step(s, d)).map(|t| map.size[t]).min();
+            if small.is_some_and(|m| map.size[s] > m + 1) {
+                let ((x, y), k, half) = (map.xy(s), 1usize << map.size[s], map.size[s] - 1);
+                block(x - x % k, y - y % k, k).for_each(|t| map.size[t] = half);
+                split = true;
+            }
+        }
+    }
+    map
 }
 
 /// A new globe of `rows` rows from a seed: terrain, chemistry 0, ground, liquid and air.

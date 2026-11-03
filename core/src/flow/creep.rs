@@ -5,8 +5,8 @@ use crate::{store::{Batch, Class}, World};
 
 /// Yearly: loose solids creep to lower neighbours, link by link, each from what the links before it left, booked in one
 /// call, out of land cells (`on_land`) down their slopes; then bodies spread back into cleared links (`lanes::regrow`). Over each link they creep from the higher node
-/// `a` to `b` with their heat, and the fall heats `b` (`potential`); they cross a border as wide as the side of the smaller of the two
-/// cells (a quarter's beside a refined square), across a corner too.
+/// `a` to `b` with their heat, and the fall heats `b` (`potential`); they cross the border of the link by its width (none
+/// across a corner), whatever the sizes of the two cells.
 pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area());
     let sol = s.solids(range(&s.state.tg).0);
@@ -25,10 +25,10 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
         let (i, j) = (i as usize, j as usize);
         let (a, b) = if s.z[i] > s.z[j] { (i, j) } else { (j, i) };
         let dz = s.z[a] - s.z[b];
-        if !from[a] || mob[a] <= 0.0 || dz <= 0.0 {
+        if !from[a] || mob[a] <= 0.0 || dz <= 0.0 || cells.width()[l] <= 0.0 {
             continue;
         }
-        let r = w.cfg.creep * dz / cells.dist()[l] * area[a].min(area[b]).sqrt() * dt / area[a] * bare_share(w, a);
+        let r = w.cfg.creep * dz / cells.dist()[l] * cells.width()[l] * dt / area[a] * bare_share(w, a);
         // At most what levels the two surfaces: creep goes down the slope, never past flat.
         let f = (dz * area[a] * area[b] / (area[a] + area[b]) / (r * mob[a])).min(1.0);
         let (ta, tb) = (s.state.tg[a], s.state.tg[b]);

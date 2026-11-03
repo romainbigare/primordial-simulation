@@ -51,7 +51,7 @@ fn the_soil_is_given_to_the_land_and_booked() {
 }
 
 /// The air starts lying as Flow's law has it: each air node's column, against the column at height 0 (`terrain::air_column`), is thinner
-/// by exp(-z / H) over its cells' mean height z, H the scale height of its own air (`flow::scale_height`, from its
+/// by exp(-z / H) over its cells' mean height z by area, H the scale height of its own air (`flow::scale_height`, from its
 /// temperature and the mean molar mass of its gases).
 #[test]
 fn the_starting_air_thins_with_height_by_its_own_scale_height() {
@@ -59,16 +59,15 @@ fn the_starting_air_thins_with_height_by_its_own_scale_height() {
     let (chem, init) = worldgen::chemistry0();
     let (n, na, g) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.cfg.gravity);
     let column = worldgen::terrain::air_column(&chem, &init, g);
-    let (mut z, mut cells) = (vec![0.0; na], vec![0.0; na]);
+    let (mut z, air_area) = (vec![0.0; na], w.mesh.level(AIR).area());
     for i in 0..n {
-        z[w.mesh.up(i, 0, AIR)] += w.surface_z(i).max(0.0);
-        cells[w.mesh.up(i, 0, AIR)] += 1.0;
+        z[w.mesh.up(i, 0, AIR)] += w.surface_z(i).max(0.0) * w.mesh.cells().area()[i];
     }
     let mut high = 0;
     for j in 0..na {
         let (mol, kg) = (0..w.chem.ns()).fold((0.0, 0.0), |(m, kg), k| (m + w.store.amounts(Class::Air)[k * na + j], kg + w.store.amounts(Class::Air)[k * na + j] * w.chem.subs[k].molar_mass));
-        let (zj, h) = (z[j] / cells[j], pcore::flow::scale_height(w.t_air(j), mol, kg, g));
-        let ratio = mol / (column * w.mesh.cells().area()[0] * cells[j]);
+        let (zj, h) = (z[j] / air_area[j], pcore::flow::scale_height(w.t_air(j), mol, kg, g));
+        let ratio = mol / (column * air_area[j]);
         assert!((ratio / (-zj / h).exp() - 1.0).abs() < 1e-6, "node {j}: {ratio} of the column at height 0, at {zj} m, scale height {h} m");
         high += (zj > 500.0) as usize;
     }

@@ -206,11 +206,11 @@ fn a_globe_file_names_its_shape_and_its_means_are_by_area() {
 
 /// The recording the series tests read: `world` with the soil and the life of `fed`, recorded month by month for three
 /// years, with the reaction that breaks the fixed mineral down (`MINERAL_BREAKS`) off, so that the mineral in all stays
-/// what the soil gave; its folder, and the land and low-ground cells at each yearly row.
+/// what the soil gave; its folder, and the area of the land and of the low ground at each yearly row, m².
 struct Recording {
     w: World,
     dir: std::path::PathBuf,
-    cells: Vec<[f64; 2]>,
+    areas: Vec<[f64; 2]>,
 }
 
 fn recording() -> &'static Recording {
@@ -222,23 +222,24 @@ fn recording() -> &'static Recording {
         worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
         // (No cover fixes: the mineral's whole is then kept.)
         fed(&mut w);
-        let cells = |w: &World| {
-            let land = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).count() as f64;
-            [land, w.mesh.cells().n() as f64 - land]
+        let areas = |w: &World| {
+            let area = w.mesh.cells().area();
+            let land: f64 = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).map(|i| area[i]).sum();
+            [land, area.iter().sum::<f64>() - land]
         };
         let mpy = w.cfg.months_per_year;
         let mut rec = tape::Recorder::new(&w, 0, 0).with_months_csv();
         common::record(&mut rec, &mut w);
-        let mut at = vec![cells(&w)];
+        let mut at = vec![areas(&w)];
         for m in 1..=3 * mpy {
             run(&mut w, 1);
             common::record(&mut rec, &mut w);
             if m % mpy == 0 {
-                at.push(cells(&w));
+                at.push(areas(&w));
             }
         }
         rec.finish(&dir).unwrap();
-        Recording { w, dir, cells: at }
+        Recording { w, dir, areas: at }
     })
 }
 
@@ -495,7 +496,7 @@ fn null_run_freezes_the_brain_rows() {
 /// down is off).
 #[test]
 fn yearly_series_counts_the_minerals() {
-    let Recording { w, dir, cells: at } = recording();
+    let Recording { w, dir, areas: at } = recording();
     let csv = std::fs::read_to_string(dir.join("series.csv")).unwrap();
     let mut lines = csv.lines();
     let head: Vec<&str> = lines.next().unwrap().split(',').collect();
@@ -507,9 +508,9 @@ fn yearly_series_counts_the_minerals() {
     assert!(col("min0_land", first) > 0.015 && col("min0_land", first) <= 0.0286 + 1e-6, "{}", col("min0_land", first));
     assert_eq!(col("min0_sea", first), 0.0);
     assert!(!head.iter().any(|h| h.starts_with("min1_")), "one mineral");
-    let (mm, area) = (w.chem.subs[w.chem.minerals()[0].0].molar_mass, w.mesh.cells().area()[0]);
-    let all = |r: &Vec<f64>, c: [f64; 2]| {
-        let ground = (col("min0_land", r) * c[0].max(1.0) + col("min0_sea", r) * c[1].max(1.0)) * area / mm / 1e9;
+    let mm = w.chem.subs[w.chem.minerals()[0].0].molar_mass;
+    let all = |r: &Vec<f64>, a: [f64; 2]| {
+        let ground = (col("min0_land", r) * a[0] + col("min0_sea", r) * a[1]) / mm / 1e9;
         ground + ["min0_dead_land", "min0_dead_sea", "min0_bodies", "min0_cover", "min0_parts", "min0_deep"].iter().map(|c| col(c, r)).sum::<f64>()
     };
     for (r, &c) in rows.iter().zip(at) {

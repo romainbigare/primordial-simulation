@@ -522,7 +522,6 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         w.life[s] = b0;
         // The year starts at a month's start, so its first update is on the first day.
         w.time = w.time.next_multiple_of(w.cfg.calendar().month);
-        let area = w.mesh.cells().area()[0];
         let joule = -w.chem.dh(BURN) / w.chem.reactions[BURN].inputs.iter().find(|x| x.0 as usize == RICH).unwrap().1 as f64 / w.chem.subs[RICH].molar_mass;
         let (mut built, mut takes, mut ups) = (Vec::new(), vec![0.0; 360], vec![0.0; 360]);
         for day in 0..360usize {
@@ -530,7 +529,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
             // is in, as it has a brain and may step to a neighbour.
             let i = w.life[s].cell as usize;
             for k in [RICH, LIQUID] {
-                let a = (100.0 * area / w.chem.subs[k].molar_mass - w.g(k, i)).max(0.0);
+                let a = (100.0 * w.mesh.cells().area()[i] / w.chem.subs[k].molar_mass - w.g(k, i)).max(0.0);
                 put(&mut w, k, i, a);
             }
             // And the minerals growth is built of: this is a test of the energy ceiling, so its roots find them in plenty

@@ -28,8 +28,10 @@ const T_SPAN: f32 = 15.0;
 const DZ_SCALE: f32 = 200.0;
 /// ln of the light-capture area per mass of a perceived body.
 pub(super) const LN_LEAF: f32 = 5.0;
-/// ln(1 + the members of a cell).
+/// ln(1 + the members of a cell per `COUNT_AREA`).
 const LN_MEMBERS: f32 = 10.0;
+/// The area a cell's counts (members, parts, members that moved in) are taken over, m²: a square of the island (2 km).
+const COUNT_AREA: f64 = 4e6;
 /// A perceived body's well-being.
 pub(super) const WB_SCALE: f32 = 4.0;
 /// The members of the three classes of animals of a cell's features weigh below `SMALL_KG`, up to `BIG_KG`, and more
@@ -41,7 +43,7 @@ const BIG_KG: f32 = 100.0;
 /// surface height, the shade of its cover, the mass of each slot of its cover and of the cover's fuel and body matter
 /// (what most diets eat), the fuel and body matter loose on its ground, the mass of its animals in three classes of
 /// member mass, their members and mean strength, how hard it is to push through, its parts, and the members that moved
-/// in last month; masses per m² as ln(1 + kg/m²).
+/// in last month; masses per m² as ln(1 + kg/m²), counts per `COUNT_AREA`.
 pub const T: usize = 0;
 pub const WET: usize = 1;
 pub const HEIGHT: usize = 2;
@@ -139,7 +141,7 @@ pub(super) fn inputs(w: &World, cell: &Cell, b: &Body, (temp, mem): (f64, usize)
 }
 
 /// Once a month, after the survey: the features of every cell (`NCELL`, the same for every brain), then each level of
-/// `SIGHTS` the last smoothed over each cell and its neighbours (`Life::feat`).
+/// `SIGHTS` the last smoothed over each cell and its neighbours, by area (`Life::feat`).
 pub fn cells(w: &mut World) {
     let (n, life, chem) = (w.mesh.cells().n(), &w.life, &w.chem);
     let parts = crate::cover::Parts::of(chem);
@@ -166,23 +168,25 @@ pub fn cells(w: &mut World) {
         for class in 0..3 {
             f[ANIMALS + class] = ln(1.0 + f[ANIMALS + class] / area as f32);
         }
-        f[MEMBERS] = ln(1.0 + c[0] as f32) / LN_MEMBERS;
+        let per = COUNT_AREA / area;
+        f[MEMBERS] = ln(1.0 + (c[0] * per) as f32) / LN_MEMBERS;
         f[STRENGTH] = (c[3] / c[0].max(1.0)) as f32;
         f[RESIST] = ln(1.0 + thickness(w, c[1], area) as f32);
-        (f[PARTS_HERE], f[CROSSED]) = (ln(1.0 + cell.parts.len() as f32), ln(1.0 + cell.crossings));
+        (f[PARTS_HERE], f[CROSSED]) = (ln(1.0 + (cell.parts.len() as f64 * per) as f32), ln(1.0 + (cell.crossings as f64 * per) as f32));
         f
     }).collect();
-    // Each level the last smoothed over each cell and its neighbours.
+    // Each level the last smoothed over each cell and its neighbours, each by its area (over the cell's own).
     let cells = w.mesh.cells();
     for level in 1..SIGHTS {
         let last = &feat[(level - 1) * n..level * n];
         let next: Vec<[f32; NCELL]> = (0..n).map(|i| {
-            let around = cells.around(i).1;
-            let mut f = last[i];
-            for &j in around {
-                f.iter_mut().zip(&last[j as usize]).for_each(|(a, b)| *a += b);
+            let (mut f, mut sum) = (last[i], 1.0);
+            for &j in cells.around(i).1 {
+                let by = (cells.area()[j as usize] / cells.area()[i]) as f32;
+                f.iter_mut().zip(&last[j as usize]).for_each(|(a, b)| *a += by * b);
+                sum += by;
             }
-            f.map(|v| v / (1 + around.len()) as f32)
+            f.map(|v| v / sum)
         }).collect();
         feat.extend(next);
     }

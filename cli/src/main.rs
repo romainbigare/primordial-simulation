@@ -39,8 +39,7 @@ fn main() {
     match args.command() {
         "run" => {
             let (size, seed) = (args.get("--size", 128usize), args.get("--seed", 1u64));
-            let map = if args.has("--globe") { worldgen::terrain::globe(size) } else { worldgen::terrain::island(size, size) };
-            let mut w = worldgen::terrain::new_map(seed, map);
+            let mut w = if args.has("--globe") { worldgen::terrain::new_globe(seed, size) } else { worldgen::new_world(seed, size, size) };
             args.apply(&mut w);
             let plan = args.schedule();
             drive(w, &args, plan, None);

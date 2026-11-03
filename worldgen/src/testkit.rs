@@ -14,6 +14,12 @@ use pcore::store::{Boundary, Class, Move, Node};
 use pcore::units::DAY_S;
 use pcore::{Config, World};
 
+/// An island of `w × h` squares from a seed, each cell a square (`terrain::island`): for the tests that read the map's
+/// lattice.
+pub fn squares(seed: u64, w: usize, h: usize) -> World {
+    crate::terrain::new_map(seed, crate::terrain::island(w, h))
+}
+
 /// A body an edit changes (its own end of the moves of an edit, which it books itself; `World::cross`).
 const A_BODY: Node = Node { class: Class::Body, index: 0 };
 
