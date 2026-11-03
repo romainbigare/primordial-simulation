@@ -37,7 +37,7 @@ pub fn cap(w: &World, d: &mut Chunk, i: usize) {
     }
     // (A stable sort: equals keep the cell's order.)
     left.sort_by(|&s, &t| d[t].n().total_cmp(&d[s].n()));
-    let mut heads: Vec<((u32, bool, Option<u64>), Handle)> = Vec::new();
+    let mut heads: Vec<(_, Handle)> = Vec::new();
     for s in left {
         let kind = (d.root(w, &d[s]), d[s].adult(&w.chem), room(d.at(i), &d[s]).map(|r| r.0));
         match heads.iter().find(|h| h.0 == kind) {
