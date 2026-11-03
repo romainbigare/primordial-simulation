@@ -20,8 +20,7 @@ pub enum Purpose {
     /// A child's genes and its mate (`copy::copy`)
     Mutate = 5,
     Choose,
-    Bond = 8,
-    Chem,
+    Chem = 9,
     /// Whether an individual dies of a share that kills members (`body::live::lose_share`)
     Death,
     /// The order among equally alike mates (`copy::partner`)
@@ -41,9 +40,6 @@ pub enum Purpose {
 
 pub struct Rng(u64);
 
-/// Tag of the stream keys by part id and seconds (`Rng::of_part`); it is never zero, so they differ from `Rng::new`.
-const NODE_STREAM: u64 = 0x5851f42d4c957f2d;
-
 impl Rng {
     fn key(seed: u64, tick: u64, node: u64, purpose: Purpose) -> u64 {
         mix(seed ^ mix(tick.wrapping_add(0x9e3779b97f4a7c15)))
@@ -52,11 +48,6 @@ impl Rng {
     /// The stream of a purpose at a day and a node index.
     pub fn new(seed: u64, tick: u64, node: u64, purpose: Purpose) -> Self {
         Rng(mix(Self::key(seed, tick, node, purpose)))
-    }
-    /// The stream of a purpose for a part (its id) at a time in seconds. The tag is XORed in before the last mix (a
-    /// bijection), so its keys and those of `Rng::new` meet only by chance of 2^-64.
-    pub fn of_part(seed: u64, time: u64, id: u64, purpose: Purpose) -> Self {
-        Rng(mix(Self::key(seed, time, id, purpose) ^ NODE_STREAM))
     }
     #[inline]
     pub fn u64(&mut self) -> u64 {

@@ -191,22 +191,6 @@ fn random_changes_keep_the_books() {
     assert!(w.counts.rounded[0] <= 1e-12 * mol && w.counts.rounded[1] <= 1e-12 * t1.thermal, "rounded {:?}", w.counts.rounded);
 }
 
-/// A stream keyed by part id and seconds differs for every part of its key and from the stream keyed by day and index.
-#[test]
-fn part_streams_are_apart() {
-    let first = |mut r: Rng| r.u64();
-    let base = first(Rng::of_part(1, 86_400, 3, Purpose::Choose));
-    assert_eq!(base, first(Rng::of_part(1, 86_400, 3, Purpose::Choose)));
-    let others = [
-        first(Rng::of_part(2, 86_400, 3, Purpose::Choose)),
-        first(Rng::of_part(1, 86_401, 3, Purpose::Choose)),
-        first(Rng::of_part(1, 86_400, 4, Purpose::Choose)),
-        first(Rng::of_part(1, 86_400, 3, Purpose::Bond)),
-        first(Rng::new(1, 86_400, 3, Purpose::Choose)),
-    ];
-    assert!(others.iter().all(|&x| x != base));
-}
-
 /// Each crossing of the boundary keeps the books: matter and heat from outside (a move, and an edit), light in from the
 /// sun, heat out to space.
 #[test]
