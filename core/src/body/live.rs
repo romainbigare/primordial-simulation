@@ -53,13 +53,13 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) ->
 }
 
 /// Upkeep over the time: what its fuel releases is paid (`burn`), the share left unpaid dies, and so does the share its
-/// wear gives (`lose_share`). Returns the heat it released, J, and its spare: what its fuel could release against its
-/// upkeep, up to `MARGIN`.
+/// wear gives (`lose_share`). Returns the heat its surviving members released, J (those who died shed theirs through
+/// their own surface while they lived), and its spare: what its fuel could release against its upkeep, up to `MARGIN`.
 fn settle_upkeep(w: &World, d: &mut Chunk, b: &mut Body, days: f64, mass: f64, tmp: &mut LiveTmp) -> Result<(f64, f64), u8> {
     let (chem, t, act) = (&w.chem, b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys));
     let cost = upkeep(w, b, days, mass, t, act);
     let spare = b.fuel(chem, t).min(MARGIN * cost) / cost.max(1e-300);
-    let paid = burn(w, d, b, cost);
+    let (paid, n0) = (burn(w, d, b, cost), b.n());
     // Wear: the energy its upkeep turns over per kg of the body that is built (the tissue that wears, not the fuel it
     // carries), over what it can turn over in its life (`Physics::e_life`). Its members die at the rate of the wear: over
     // the time the share 1 - e^-wear of them (an individual, with that chance), so they live that life on average,
@@ -74,7 +74,7 @@ fn settle_upkeep(w: &World, d: &mut Chunk, b: &mut Body, days: f64, mass: f64, t
             return Err(cause);
         }
     }
-    Ok((paid, spare))
+    Ok((paid * b.n() / n0, spare))
 }
 
 /// It drinks its key liquids from its cell's ground up to the level it keeps (`Body::level`), as far as the ground holds
