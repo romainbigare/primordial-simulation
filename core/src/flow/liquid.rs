@@ -17,13 +17,14 @@ pub(super) struct Mobile {
     pub(super) vol: Vec<f64>,
 }
 
-/// The mobile liquid of every ground node, of the liquids `liq`; what boils below the coldest node, `tmin`, is gas.
-pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64) -> Mobile {
+/// The mobile liquid of the ground nodes where `on(i)` (none elsewhere), of the liquids `liq`; what boils below the
+/// coldest node, `tmin`, is gas.
+pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64, on: impl Fn(usize) -> bool) -> Mobile {
     let n = w.mesh.cells().n();
     let mut m = Mobile { mol: vec![0.0; liq.len() * n], vol: vec![0.0; n] };
     for (q, &k) in liq.iter().enumerate() {
         let gas = s.sp[k].boil <= tmin;
-        for i in 0..n {
+        for i in (0..n).filter(|&i| on(i)) {
             let a = w.store.amounts(Class::Ground)[k * n + i] * if gas { 1.0 } else { wet(s, k, i) };
             m.mol[q * n + i] = a;
             m.vol[i] += if gas { 0.0 } else { a * s.sp[k].v[1] };
@@ -72,11 +73,11 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
 }
 
 /// The slope of the surface of each ground node down its steepest way (`Level::steepest`) to the lower neighbours (by
-/// more than `still`), 0 for none.
+/// more than `still`), 0 for none; and for the low basin, whose liquid stands at one level and drains to no channel.
 fn slopes(w: &World, s: &Scratch) -> Vec<f64> {
     let (cells, still) = (w.mesh.cells(), w.cfg.phys.still);
     let drop = |i: usize, k: usize| Some(stand(s, i) - stand(s, cells.around(i).1[k] as usize)).filter(|&d| d > still);
-    crate::par::map_n(cells.n(), |i| cells.steepest(i, |k| drop(i, k)).map_or(0.0, |way| way.0))
+    crate::par::map_n(cells.n(), |i| if s.basin.is[i] { 0.0 } else { cells.steepest(i, |k| drop(i, k)).map_or(0.0, |way| way.0) })
 }
 
 /// The liquid that may run off (what stands, what came up from the store, and the pores' drainage to the channels, a
@@ -84,7 +85,7 @@ fn slopes(w: &World, s: &Scratch) -> Vec<f64> {
 /// laws.md 1.2), with its heat; lost head heats what runs out and does work on the bed (`load`, `wear`).
 fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope, runs): (&[f64], &[f64]), dt: f64) {
     let (n, area, ph, g) = (w.mesh.cells().n(), w.mesh.cells().area(), w.cfg.phys, w.cfg.gravity);
-    let mob = mobile(w, s, liq, tmin);
+    let mob = mobile(w, s, liq, tmin, |_| true);
     // Rows that move together per node (`q[i * width + r]`): each liquid of `liq`, each load of `sol`, their heat, J, and
     // the liquid's volume, m³.
     let sol = s.solids(tmin);

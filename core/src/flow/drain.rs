@@ -19,7 +19,7 @@ pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, p, area) = (w.mesh.cells().n(), w.cfg.phys, w.mesh.cells().area());
     let (tmin, tmax) = range(&s.state.tg);
     let liq = s.liquids(&w.chem, (tmin, tmax), true);
-    let (mob, held) = (mobile(w, s, &liq, tmin), stores(w, s, tmin));
+    let (mob, held) = (mobile(w, s, &liq, tmin, |i| !s.basin.is[i]), stores(w, s, tmin));
     // The cells where liquid sinks, and the share of their mobile liquid that does.
     let mut sinks = Vec::new();
     for i in (0..n).filter(|&i| !s.basin.is[i]) {
@@ -48,7 +48,8 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
     // The stack of the two layers, both on the cells: the store `bed_depth` deep under the active layer of the ground
     // (`skin_m`).
     let stack = Stack::new(&w.mesh, &[0, 0]);
-    let (mob, held) = (mobile(w, s, liq, tmin), stores(w, s, tmin));
+    // The low basin moves no liquid under its surface: its mobile liquid is not needed.
+    let (mob, held) = (mobile(w, s, liq, tmin, |i| !s.basin.is[i]), stores(w, s, tmin));
     let (a, b, flux) = flows(w, s, &stack, (&mob, &held), dt);
     let links = a.len();
     // What the volumes carry: the share of the sender's mobile liquid, at its temperature, or of its store.
