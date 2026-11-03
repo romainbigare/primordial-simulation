@@ -5,14 +5,12 @@
 
 mod balance;
 mod booking;
-mod gas;
 mod kernel;
 mod rows;
 
 pub use balance::reversible;
-pub(crate) use gas::{send_gas, GasMove};
 pub use kernel::Reactor;
-pub(crate) use kernel::{open_catalyst, terms};
+pub(crate) use kernel::{frac, open_catalyst, open_rot, terms};
 
 use crate::{store::Class, AIR, World};
 use rows::Rows;

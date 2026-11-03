@@ -295,10 +295,10 @@ goes like a surface. **Order** is the count or `Reaction::order`. **Extent** is 
 are of the solid, so a liquid holds its fusion heat and a gas its vaporisation heat too. **Light** reactions take
 absorbed light and store `light_yield` of it. **Catalyst**: a body runs no reactor: its diet genes (one per
 reaction bodies may run, 6.1) switch its burnings and what it digests on or off (2.4, 6.2, 6.7). **Open world**
-(`Reaction::open`): in ground, liquid, air and parts live the decomposers, whose catalyst `open` works as far as the
+(`Reaction::open`): in ground, liquid and air live the decomposers (parts rot by their rate, 3.1), whose catalyst `open` works as far as the
 node is moist: 1 + (`open` − 1) × moisture (`change::open_catalyst`). Moisture is how wet the node is as living things
 feel it: d / (d + `wet_depth`), d the depth of its liquid in its pores and standing (`FlowView::moist`,
-`Physics::wetness`), so decomposers work on dry land too, slower; a part has its cell ground's; an air node has none. `open` is 1 for most reactions; 200 for reaction 1 (the free sugar's rot, about a
+`Physics::wetness`), so decomposers work on dry land too, slower; an air node has none. `open` is 1 for most reactions; 200 for reaction 1 (the free sugar's rot, about a
 week); 5 for 21 (body matter rots 3.8 times faster than the frame); 10^6 for 26 (the frame rots by the decomposers
 only: bare, a millionth of that). No decomposer works in a body (2.4).
 `change::pace` is the one formula for all nodes. **Frozen**: a bare reaction whose rate constant k exp(−Ea/T) would
@@ -309,8 +309,8 @@ tolerance.
 **Ground and air nodes** (`change::step`, `Reactor::react`) react when due over all the time since, at Flow's last
 temperature (a plateau's fusion heat set aside), then sleep until their reactions would use 5% of an input or warm
 them 0.5 K, at most `sleep_days`. The nodes under one air node react as one task (a block), each into a row of what its reactions changed and the gas it gives its air node; the rows are booked after the call, each array of the store by one task (`change/booking.rs`, `store::book_by_array`), so an air node gets the gas of its ground nodes in the order of their cells whatever thread ran them. Gas a ground node takes or gives
-(what its reactions made less what the node itself gained, so it never gives more than it holds) crosses to its air node with its heat and latent heat (parts and bodies the same, `change/gas.rs`). **Parts** react
-every 6 months (`bond::step`); **bodies** burn and digest by their diet (2.4); **growth** is a conversion bodies and
+(what its reactions made less what the node itself gained, so it never gives more than it holds) crosses to its air node with its heat and latent heat. **Parts** react not: their walls rot to the ground (3.1);
+**bodies** burn and digest by their diet (2.4); **growth** is a conversion bodies and
 the cover run, paid by work (4.5, 6.6).
 
 ### 2.3 What gas a ground node touches
@@ -379,9 +379,11 @@ its holder. The bonds of a cell's parts are the cell's (`life::Cell::bonds`): a 
 structure that moves (carried, or drifting) spans two cells for that step, which is serial. A body makes one with "form"
 (`bond::form`, `c_form` per kg, at most `form` of its mass). A **bond** (`bond::Bonds`) joins two parts or a part and
 the bed; its strength comes from the weaker material and the contact area (`tensile`, `joint`), at `c_join` per m². A
-**structure** is the parts joined by bonds and moves as one. Parts take their cell's temperature monthly. A part's turn
-is a step on its cell like a body's: it reads and writes the cell's view of the store, so a part sees what the parts
-before it in its cell left in its share of the air and in the ground (`bond/month.rs`). A part whose walls fall under `min_kg` falls
+**structure** is the parts joined by bonds and moves as one. A part runs no reactions. Monthly (`bond/month.rs`) the
+share of its walls the open world's decomposers would rot at its cell ground's temperature and moisture in the month
+(the reactions they speed that take that material, `change::open_rot`) goes to its cell's ground with its heat, where
+Change rots it on, as do walls no longer solid; then it takes its cell's temperature. A part's turn is a step on its
+cell like a body's, on the cell's view of the store. A part whose walls fall under `min_kg` falls
 apart (`bond::fall_apart`): all it holds, its walls, the liquid in its hollow and its heat, goes to its cell's ground,
 whether its walls ran off in its turn or a body took them (`bond::verbs::take`), and it is gone with its bonds.
 

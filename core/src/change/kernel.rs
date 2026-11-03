@@ -142,6 +142,19 @@ pub(crate) fn open_catalyst(f: f64, a: f64) -> f64 {
     1.0 + (f - 1.0) * a
 }
 
+/// The rate at which the open world's decomposers rot substance `k` at `t` K where it is as moist as `moist` gives, 1/s:
+/// the reactions they speed (`Reaction::open` above 1) that take it, each at its constant (`Reaction::arrhenius`); 0,
+/// asking no moisture, where none takes it.
+pub(crate) fn open_rot(chem: &Chemistry, k: usize, t: f64, moist: impl Fn() -> f64) -> f64 {
+    let takes = |rx: &&Reaction| rx.open > 1.0 && rx.inputs.iter().any(|x| x.0 as usize == k);
+    let mut rot = chem.reactions.iter().filter(takes).peekable();
+    if rot.peek().is_none() {
+        return 0.0;
+    }
+    let a = moist();
+    rot.map(|rx| open_catalyst(rx.open, a) * rx.arrhenius(t)).sum()
+}
+
 /// 1 - exp(-z), cheap when small.
 #[inline]
 pub(crate) fn frac(z: f64) -> f64 {

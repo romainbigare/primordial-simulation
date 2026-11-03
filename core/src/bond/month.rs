@@ -1,37 +1,30 @@
-//! The monthly step of parts: heat, Change, loads and failure, floating and drifting.
+//! The monthly step of parts: rot and heat, loads and failure, floating and drifting.
 
 use super::{at, fall_apart, holder, members, move_structure, restructure, root, sense::liquid, unlink, verbs::{bears, torn_from}, GROUND};
-use crate::{change::{send_gas, GasMove, Reactor}, chem::Phase, ground::share, life::{self, Chunk}, rng::{Purpose, Rng}, space::COMPASS, store::{Class, Node}, AIR, World};
+use crate::{change::{frac, open_rot}, chem::Phase, life::{self, Chunk}, rng::{Purpose, Rng}, space::COMPASS, store::{Class, Node}, World};
 
-/// Parts react with the air every this many months.
-const REACT_MONTHS: u64 = 6;
 /// Liquid shallower than this, m, pushes no part.
 const STILL_DEPTH: f64 = 0.01;
 
 /// Monthly: each chunk on the pool (`life::run`), cell by cell, the turns of the parts in the order of their cell's
-/// list: heat, and every `REACT_MONTHS` months the reactions with the air, on the chunk's view of the store; a part
-/// whose walls are gone falls apart (`fall_apart`); then the load of each structure of the cell, in the order of its
-/// root (`load`). Last the structures that drift move to their neighbour cells, in the order of the cells (`drift`).
+/// list: what of its walls rots or is no longer solid goes to the ground, and it takes the ground's temperature, on the
+/// chunk's view of the store; a part whose walls are gone falls apart (`fall_apart`); then each structure of the cell,
+/// in the order of its root, finds its numbers again and bears its load (`load_one`). Last the structures that drift
+/// move to their neighbour cells, in the order of the cells.
 pub fn step(w: &mut World) {
     if w.life.cells.iter().all(|c| c.parts.is_empty()) {
         return;
     }
-    let react = w.month().is_multiple_of(REACT_MONTHS);
-    let dt = (REACT_MONTHS * w.cfg.calendar().month) as f64;
-    // A turn that only sheds and warms costs about a microsecond, less than a pool call: it counts no work, so the runner keeps
-    // the chunks on the calling thread; the reactions are the work.
-    let load = if react { w.life.cells.iter().map(|c| c.parts.len()).sum() } else { 0 };
-    let init = |w: &World| react.then(|| (Reactor::new(&w.chem, &w.cfg), vec![0.0; w.chem.ns()]));
-    let drifts = life::run(w, vec![Vec::new(); life::chunks(w)], load, init, |w, d, drifts, scratch| {
+    let dt = w.cfg.calendar().month as f64;
+    let load = w.life.cells.iter().map(|c| c.parts.len()).sum();
+    let drifts = life::run(w, vec![Vec::new(); life::chunks(w)], load, |_| (), |w, d, drifts, _| {
         let cells: Vec<usize> = d.cells().filter(|&i| !d.at(i).parts.is_empty()).collect();
         for i in cells {
-            turns(w, d, i, scratch, dt);
+            turns(w, d, i, dt);
             let roots: Vec<u64> = d.at(i).parts.iter().filter(|p| p.root == p.id).map(|p| p.id).collect();
             for r in roots {
                 let Some(x) = at(d.at(i), r) else { continue };
-                if react {
-                    restructure(w, d.at_mut(i), x);
-                }
+                restructure(w, d.at_mut(i), x);
                 if let Some(j) = load_one(w, d, i, r) {
                     drifts.push((i, r, j));
                 }
@@ -43,18 +36,15 @@ pub fn step(w: &mut World) {
     }
 }
 
-/// The turns of the parts of cell `i` of chunk `d`, in their order: heat, and the reactions with the air if `scratch`
-/// holds a reactor; a part whose walls are gone falls apart.
-fn turns(w: &World, d: &mut Chunk, i: usize, scratch: &mut Option<(Reactor, Vec<f64>)>, dt: f64) {
+/// The turns of the parts of cell `i` of chunk `d` over `dt` s, in their order (`rot_and_warm`); a part whose walls are
+/// gone falls apart.
+fn turns(w: &World, d: &mut Chunk, i: usize, dt: f64) {
     let ids: Vec<u64> = d.at(i).parts.iter().map(|p| p.id).collect();
     for id in ids {
         let Some(x) = at(d.at(i), id) else { continue };
         d.moves.open(w, i, Node::new(Class::Part, x));
         let mut p = std::mem::take(&mut d.at_mut(i).parts[x]);
-        if let Some((rc, pool)) = scratch {
-            react_part(w, d, rc, (&mut p, i), pool, dt);
-        }
-        let gone = shed_and_warm(w, d, &mut p, i);
+        let gone = rot_and_warm(w, d, &mut p, i, dt);
         d.at_mut(i).parts[x] = p;
         if gone {
             fall_apart(w, d, i, x);
@@ -62,47 +52,21 @@ fn turns(w: &World, d: &mut Chunk, i: usize, scratch: &mut Option<(Reactor, Vec<
     }
 }
 
-/// Part `p` of cell `i` reacts with its share of its cell's air for `dt` s and settles the gas as a ground node does
-/// (`change::send_gas`); the ground under it pays the gas's latent heat, and gas it cannot pay for goes to the ground.
-fn react_part(w: &World, d: &mut Chunk, rc: &mut Reactor, (p, i): (&mut super::Part, usize), pool: &mut [f64], dt: f64) {
-    let j = w.mesh.up(i, 0, AIR);
-    let (lift, ta) = (w.lift(i), d.moves.t_air(w, j));
-    let chem = &w.chem;
-    pool.iter_mut().enumerate().for_each(|(k, p)| *p = d.moves.amount(w, Node::air(j), k));
-    let fixed: f64 = p.fill.iter().zip(&chem.subs).map(|(a, x)| a * x.cp).sum();
-    // It lies on its cell's ground, as moist as that.
-    rc.moist = w.scratch.view().moist(i, &w.cfg.phys);
-    rc.react(chem, &mut p.wall, Some(pool), &mut p.e, fixed, dt);
-    let gas = GasMove::of(chem, &rc.dpool, ta);
-    let c = p.heat_cap(chem);
-    let q_out = p.e.max(0.0) * gas.c_out / (c + gas.c_out).max(1e-9);
-    p.e += gas.q_in - q_out;
-    let m = &mut d.moves;
-    m.give(w, Node::air(j), 0, 0.0, q_out);
-    m.take(w, Node::air(j), 0, 0.0, gas.q_in);
-    m.give(w, Node::ground(i), 0, 0.0, gas.back);
-    let cap = m.heat_cap_ground(w, i);
-    let paid = share(m.take_from_ground(w, i, (0, 0.0, 0.0), gas.pay, cap).1, gas.pay);
-    // The heat of the gas that goes to the ground goes with it.
-    m.take(w, Node::air(j), 0, 0.0, q_out * (1.0 - paid));
-    m.give(w, Node::ground(i), 0, 0.0, q_out * (1.0 - paid));
-    send_gas(&rc.dpool, paid, |k, sent, kept| {
-        m.give(w, Node::ground(i), k, kept, 0.0);
-        if sent != 0.0 {
-            m.gas(w, k, sent, lift);
-        }
-    });
-}
-
-/// Walls of part `p` of cell `i` no longer solid run off; the part takes the ground's temperature. Returns whether its
-/// walls are under `min_kg`: it falls apart.
-fn shed_and_warm(w: &World, d: &mut Chunk, p: &mut super::Part, i: usize) -> bool {
+/// Over `dt` s, the share of the walls of part `p` of cell `i` that the open world's decomposers rot at the ground's
+/// temperature and moisture (`change::open_rot`) goes to its ground with its heat, where Change rots it on, as do the
+/// walls no longer solid; the part takes the ground's temperature. Returns whether its walls are under `min_kg`: it
+/// falls apart.
+fn rot_and_warm(w: &World, d: &mut Chunk, p: &mut super::Part, i: usize, dt: f64) -> bool {
     let (ns, chem, tg) = (w.chem.ns(), &w.chem, w.t_ground_last(i));
-    let t = p.e / p.heat_cap(chem).max(1e-9);
+    let (t, moist) = (p.e / p.heat_cap(chem).max(1e-9), || w.scratch.view().moist(i, &w.cfg.phys));
     for k in 0..ns {
-        if p.wall[k] > 0.0 && chem.phase_in(k, t, |j| p.wall[j]) != Phase::Solid {
-            let (a, q) = (p.wall[k], p.wall[k] * chem.subs[k].cp * t);
-            (p.e, p.wall[k]) = (p.e - q, 0.0);
+        if p.wall[k] <= 0.0 {
+            continue;
+        }
+        let off = if chem.phase_in(k, t, |j| p.wall[j]) != Phase::Solid { 1.0 } else { frac(open_rot(chem, k, tg, moist) * dt) };
+        if off > 0.0 {
+            let (a, q) = (off * p.wall[k], off * p.wall[k] * chem.subs[k].cp * t);
+            (p.e, p.wall[k]) = (p.e - q, p.wall[k] - a);
             d.moves.give(w, Node::ground(i), k, a, q);
         }
     }

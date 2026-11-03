@@ -9,7 +9,7 @@ use pcore::life::{Entry, Handle};
 use pcore::units::DAY_S;
 use pcore::store::{Class, Node};
 use pcore::World;
-use worldgen::testkit::{dry_land, eater, part_of, plate, relocate, scale, set_amount, small_world, start as world, stores, Books, Brain, Line, LIQUID, MINERAL};
+use worldgen::testkit::{dry_land, eater, part_of, plate, relocate, scale, set_amount, small_world, start as world, stores, Books, Brain, Line, FRAME, LIQUID, MINERAL, ROCK};
 
 /// A bond breaks when the weight it bears is more than it holds: of two parts hung on an anchored one by bonds that
 /// hold 10 t weight, the one of 1 t stays and the one of 100 t falls.
@@ -228,12 +228,8 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
         (pt.wall.iter().zip(&pt.fill).map(|(a, f)| a + f).collect::<Vec<f64>>(), pt.e)
     };
 
-    // Its monthly turn (in a month without reactions with the air).
+    // Its monthly turn.
     let (mut w, i) = world();
-    let month = w.cfg.calendar().month;
-    if w.month() % 6 == 0 {
-        w.time += month;
-    }
     let p = new_part(&mut w, i);
     let (books, before, (held, e)) = (Books::now(&w), ground(&w, i), holds(&w, p));
     bond::step(&mut w);
@@ -273,6 +269,30 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     act_on(&mut w, &mut b, p);
     w.in_cell(i, |w, d| die(w, d, h, b, LACK));
     assert!(w.life.part(p).is_none() && w.life.find(id).is_none(), "the part or the body is still there");
+    books.assert_within(&w, 1e-9, 1e-9);
+}
+
+/// A part rots: each month the share of its walls the open world's decomposers rot at its cell ground's temperature
+/// and moisture goes to that ground, where Change rots it on; the books are kept. A part of the frame rots; one of rock,
+/// which no decomposer takes, does not.
+#[test]
+fn a_part_rots_to_its_ground() {
+    let (mut w, i) = world();
+    let (ns, n) = (w.chem.ns(), w.mesh.cells().n());
+    let walls = |k: usize, kg: f64, w: &mut World| {
+        let mut wall = vec![0.0; ns];
+        wall[k] = kg / w.chem.subs[k].molar_mass;
+        let a = w.store.amounts(Class::Ground)[k * n + i];
+        set_amount(w, Node::ground(i), k, a + 2.0 * wall[k]);
+        part_of(w, i, wall, vec![0.0; ns], 0.0, 0.0)
+    };
+    let (frame, rock) = (walls(FRAME, 1e3, &mut w), walls(ROCK, 1e3, &mut w));
+    let held = |w: &World, p: u64, k: usize| w.life.part(p).expect("the part").wall[k];
+    let (books, f0, r0) = (Books::now(&w), held(&w, frame, FRAME), held(&w, rock, ROCK));
+    bond::step(&mut w);
+    let lost = 1.0 - held(&w, frame, FRAME) / f0;
+    assert!(lost > 0.0 && lost < 1.0, "the frame lost {lost} of its walls in a month");
+    assert_eq!(held(&w, rock, ROCK), r0, "the rock rotted");
     books.assert_within(&w, 1e-9, 1e-9);
 }
 
