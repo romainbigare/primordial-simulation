@@ -226,9 +226,11 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   it does not claim goes back to the ground before each air step (`survey::release`).
 - **The sea as one surface** (`air::surf`): under each air node the sea's cells that mix as one (1.2) face the air as
   one surface: one balance with their summed area, heat, heat capacity and gases, at their mean temperature (by heat
-  capacity), reflectance, height and air (by area) and the sunlight of their mean latitude. Each cell takes its share of
-  what it gives: of the heat by its heat capacity, so they warm alike, and of each gas by what it holds of it, so none
-  gives more than it holds.
+  capacity), reflectance, height and air (by area) and the sunlight of their mean latitude. It answers the air as one
+  (`surf::Patch`): its law, linear in the air it sees (its cells' weights by area), is summed into its node once, and
+  the book takes it once, at the mean of that air over the step. Each cell takes its share of what it gives: of the heat
+  by its heat capacity, so they warm alike, and of each gas by what it holds of it, so none gives more than it holds.
+  Its rain falls on it as on one place, at the air touching it by area, shared to its cells by area (1.5).
 - **Gas from bodies and the cover** goes into the bodies' node with its latent heat; the air's step takes it up with
   its lift.
 - **Shade**: the cover's kinds share its light by height (4.5); bodies catch no light.

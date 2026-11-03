@@ -10,7 +10,7 @@ use super::daily::Ground;
 use super::rain::Wet;
 use super::radiation::{glow, glow_slope, insolation, Air, Surface};
 use super::step::Active;
-use super::surf::{patch_rows, Surf, Vapour};
+use super::surf::{Patch, Surf, Vapour};
 use super::{at_height, lerp};
 use crate::{math::one_minus_exp, store::Class, units::{MAX_SUBSTANCES, R_GAS}, World, AIR};
 
@@ -57,12 +57,16 @@ pub(super) struct Ctx<'a> {
     pub(super) decl: &'a [f64],
 }
 
-/// Each cell's response to the air it sees: per cell the fixed outputs, then each changing output's value at the air it
-/// sees at the step's start, its slope per K of that air, and per mol of each active gas there; and that air.
+/// Each cell's response to the air it sees: per cell the fixed outputs, then, of a cell alone, each changing output's
+/// value at the air it sees at the step's start, its slope per K of that air, and per mol of each active gas there; and
+/// that air. The low basin under each air node answers as one (`Patch`): its cells hold only their fixed outputs.
 pub(super) struct Response {
     nx: usize,
     rows: Vec<f64>,
     seen: Vec<f64>,
+    patches: Vec<Patch>,
+    /// Per cell: does it answer alone (not in a patch)?
+    alone: Vec<bool>,
 }
 
 impl Response {
@@ -77,15 +81,10 @@ impl Response {
     pub(super) fn fixed(&self, i: usize, o: usize) -> f64 {
         self.rows[i * Self::width(self.nx) + o]
     }
-    /// Output `o` of cell `i` under the air it sees: at temperature `t`, K, with `x(y)` mol of each active gas `y`.
-    pub(super) fn at(&self, i: usize, o: usize, t: f64, x: impl Fn(usize) -> f64) -> f64 {
-        let (nx, seen) = (self.nx, &self.seen[i * (1 + self.nx)..]);
-        let r = &self.rows[i * Self::width(nx) + FIXED + o * (2 + nx)..];
-        r[0] + r[1] * (t - seen[0]) + (0..nx).map(|y| r[2 + y] * (x(y) - seen[1 + y])).sum::<f64>()
-    }
-    /// Each node's ground (`Ground`): what its air gains and what evaporates into it, summed over its cells, with its
-    /// slopes with the air of each node they see, by the cells' shares of it (`lerp`): node by node, its cells in the
-    /// order of their indices, each node it sees where one of them first does.
+    /// Each node's ground (`Ground`): what its air gains and what evaporates into it, summed over its cells alone and its
+    /// patches, with its slopes with the air of each node they see, by their shares of it (`lerp`; a patch's by its
+    /// cells' areas): node by node, its cells alone in the order of their indices, then its patches; each node it sees
+    /// where one of its cells first does.
     pub(super) fn ground(&self, cx: &Ctx, wet: Wet) -> Ground {
         let (w, s, nx) = (cx.w, cx.s, self.nx);
         let (air, outs, width) = (w.mesh.level(AIR), 1 + nx, Self::width(nx));
@@ -94,38 +93,78 @@ impl Response {
         let c = &s.corners;
         (g.near, g.at, g.slope) = (c.sees.clone(), c.sees_at.clone(), vec![0.0; c.sees.len() * per]);
         let out = |o: usize| if o == 0 { GAINS } else { UP + o - 1 };
-        for j in 0..air.n() {
-            for &i in air.children(j) {
-                let (i, row) = (i as usize, &self.rows[i as usize * width + FIXED..(i as usize + 1) * width]);
-                (0..outs).for_each(|o| g.base[j * outs + o] += row[out(o) * (2 + nx)]);
-                for (&at, &wt) in c.entry[i].iter().zip(&s.wt[i]).filter(|e| *e.1 > 0.0) {
-                    let at = at as usize;
-                    for (o, slope) in g.slope[at * per..(at + 1) * per].chunks_exact_mut(outs).enumerate() {
-                        let by = &row[out(o) * (2 + nx) + 1..out(o) * (2 + nx) + 1 + outs];
-                        slope.iter_mut().zip(by).for_each(|(d, r)| *d += wt * r);
-                    }
+        // Its outputs `row` (as `put` lays them out) into node `j`, its slopes into each entry of the node's list by weight.
+        let mut add = |j: usize, row: &[f64], sees: &mut dyn Iterator<Item = (usize, f64)>| {
+            (0..outs).for_each(|o| g.base[j * outs + o] += row[out(o) * (2 + nx)]);
+            for (at, wt) in sees {
+                for (o, slope) in g.slope[at * per..(at + 1) * per].chunks_exact_mut(outs).enumerate() {
+                    let by = &row[out(o) * (2 + nx) + 1..out(o) * (2 + nx) + 1 + outs];
+                    slope.iter_mut().zip(by).for_each(|(d, r)| *d += wt * r);
                 }
             }
+        };
+        for j in 0..air.n() {
+            for &i in air.children(j).iter().filter(|&&i| self.alone[i as usize]) {
+                let i = i as usize;
+                let corners = c.entry[i].iter().zip(&s.wt[i]).filter(|e| *e.1 > 0.0).map(|(&at, &wt)| (at as usize, wt));
+                add(j, &self.rows[i * width + FIXED..(i + 1) * width], &mut corners.into_iter());
+            }
+        }
+        for p in &self.patches {
+            add(w.mesh.cells().parent()[p.cells[0] as usize] as usize, &p.out, &mut p.sees.iter().map(|&(at, wt)| (at as usize, wt)));
         }
         g
+    }
+    /// Each cell's changing outputs at the mean air of the step, as the book takes them (`[i * (UP + nx) + o]`): `t`
+    /// per node, K, and `x[y]` per active gas, mol per node. A cell alone at the air it sees (`lerp`); a patch's at the
+    /// air its cells see, by their areas, its parts shared to its cells (`Patch::share`).
+    pub(super) fn booked(&self, s: &Scratch, t: &[f64], x: &[&[f64]]) -> Vec<f64> {
+        let (nx, width) = (self.nx, Self::width(self.nx));
+        let mut out = vec![0.0; self.alone.len() * (UP + nx)];
+        crate::par::rows(&mut out, UP + nx, || (), |_, i, row| {
+            if self.alone[i] {
+                let seen = &self.seen[i * (1 + nx)..(i + 1) * (1 + nx)];
+                let (t, x) = (lerp(s, t, i) - seen[0], (0..nx).map(|y| lerp(s, x[y], i) - seen[1 + y]).collect::<Vec<f64>>());
+                for (o, v) in row.iter_mut().enumerate() {
+                    let r = &self.rows[i * width + FIXED + o * (2 + nx)..];
+                    *v = r[0] + r[1] * t + (0..nx).map(|y| r[2 + y] * x[y]).sum::<f64>();
+                }
+            }
+        });
+        let near = &s.corners.sees;
+        for p in &self.patches {
+            let mean = |v: &[f64]| p.sees.iter().map(|&(at, wt)| wt * v[near[at as usize] as usize]).sum::<f64>();
+            let (dt, dx): (f64, Vec<f64>) = (mean(t) - p.air[0], (0..nx).map(|y| mean(x[y]) - p.air[1 + y]).collect());
+            let stride = 2 + nx;
+            let part = |r: usize| p.parts[r * stride] + p.parts[r * stride + 1] * dt + (0..nx).map(|y| p.parts[r * stride + 2 + y] * dx[y]).sum::<f64>();
+            let (to_air, to_space, gas): (f64, f64, Vec<f64>) = (part(TO_AIR), part(TO_SPACE), (0..nx).map(|y| part(GAS + y)).collect());
+            for (&i, share) in p.cells.iter().zip(p.share.chunks_exact(1 + nx)) {
+                let row = &mut out[i as usize * (UP + nx)..(i as usize + 1) * (UP + nx)];
+                let up: Vec<f64> = (0..nx).map(|y| gas[y] * share[1 + y]).collect();
+                let carried = |c: usize| up.iter().zip(&p.carry).map(|(m, h)| m * h[c]).sum::<f64>();
+                (row[GAINS], row[LINK], row[SPACE]) = (to_air * share[0] + carried(1), to_air * share[0] + carried(0), to_space * share[0]);
+                row[UP..].copy_from_slice(&up);
+            }
+        }
+        out
     }
 }
 
 /// Each cell's response over the step (`Response`), in parallel with `threads`, its rows in `room` (`spare::Spare`).
 pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Response {
     let (n, nx, na) = (cx.w.mesh.cells().n(), cx.act.len(), cx.w.mesh.level(AIR).n());
+    // The low basin under each air node solves one surface (`surf::patches`); the other cells each their own.
+    let mut alone = vec![true; n];
+    patches.iter().flatten().for_each(|&i| alone[i as usize] = false);
     let mut seen = vec![0.0; n * (1 + nx)];
-    for (i, air) in seen.chunks_exact_mut(1 + nx).enumerate() {
+    for (i, air) in seen.chunks_exact_mut(1 + nx).enumerate().filter(|e| alone[e.0]) {
         air[0] = lerp(cx.s, cx.t0, i);
         (0..nx).for_each(|y| air[1 + y] = lerp(cx.s, &cx.x0[y * na..(y + 1) * na], i));
     }
     let width = Response::width(nx);
-    // Every cell's row is written: alone, or of a patch.
+    // Every cell's fixed outputs are written: alone, or of a patch.
     let mut rows = room;
     rows.resize(n * width, 0.0);
-    // The low basin under each air node solves one surface (`surf::patches`); the other cells each their own.
-    let mut alone = vec![true; n];
-    patches.iter().flatten().for_each(|&i| alone[i as usize] = false);
     // Each task keeps the last latitude and its mean sunlight over the step: neighbouring cells often share a latitude.
     crate::par::rows(&mut rows, width, || (f64::NAN, 0.0, Work::default()), |(lat, q, work), i, row| {
         if !alone[i] {
@@ -140,10 +179,14 @@ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Respons
         put(&work.p, &work.carry, &mut row[FIXED..]);
         row[..FIXED].copy_from_slice(&fixed);
     });
-    for (cells, block) in patches.iter().zip(crate::par::map(patches, |cells| patch_rows(cx, cells, &seen))) {
-        cells.iter().zip(block.chunks_exact(width)).for_each(|(&i, r)| rows[i as usize * width..(i as usize + 1) * width].copy_from_slice(r));
+    let patches = crate::par::map(patches, |cells| Patch::of(cx, cells));
+    for p in &patches {
+        for (&i, share) in p.cells.iter().zip(p.share.chunks_exact(1 + nx)) {
+            let heat = share[0];
+            rows[i as usize * width..i as usize * width + FIXED].copy_from_slice(&[p.fixed[SUN] * heat, p.fixed[LIGHT], p.fixed[KEPT] * heat]);
+        }
     }
-    Response { nx, rows, seen }
+    Response { nx, rows, seen, patches, alone }
 }
 
 /// The mean sunlight at the top of the air at latitude `lat`, degrees, over the days of the step, their sun's

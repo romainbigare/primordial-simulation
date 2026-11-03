@@ -46,7 +46,7 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     let room = std::mem::take(&mut s.spare.response);
     let cx = Ctx { w, s, act: &act, t0: &t0, x0: &x0, dt, decl: &decl };
     let response = respond(&cx, &patches, room);
-    let ground = response.ground(&cx, wet(w, s, &act, &t0));
+    let ground = response.ground(&cx, wet(w, s, &act, &t0, &patches));
     let mean = run(w, s, &act, &ground, dt);
     let rain = landed(&act, ground.wet(), &mean);
     book(w, s, (&act, &response, &rain), &mean, dt);

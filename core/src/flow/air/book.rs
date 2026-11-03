@@ -9,7 +9,7 @@ use super::daily::Mean;
 use super::rain::Landed;
 use super::exchange::cloud;
 use super::step::Active;
-use super::{lerp, sums, touching};
+use super::{sums, touching};
 use crate::store::{Batch, Boundary, Class, LinkFlux};
 use crate::{World, AIR};
 
@@ -39,12 +39,9 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     let (n, na, nx, area) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), act.len(), w.mesh.cells().area().to_vec());
     // Each cell's outputs at the mean air it saw.
     let sr = &*s;
-    let mut seen = vec![0.0; n * (1 + nx)];
-    crate::par::rows(&mut seen, 1 + nx, || (), |_, i, row| {
-        row[0] = lerp(sr, &mean.t, i);
-        act.iter().enumerate().for_each(|(y, ac)| row[1 + y] = lerp(sr, &mean.x[ac.gi * na..(ac.gi + 1) * na], i));
-    });
-    let at = |i: usize, o: usize| response.at(i, o, seen[i * (1 + nx)], |y| seen[i * (1 + nx) + 1 + y]);
+    let xs: Vec<&[f64]> = act.iter().map(|ac| &mean.x[ac.gi * na..(ac.gi + 1) * na]).collect();
+    let out = response.booked(sr, &mean.t, &xs);
+    let at = |i: usize, o: usize| out[i * (UP + nx) + o];
     let (cells, parent): (Vec<u32>, Vec<u32>) = ((0..n as u32).collect(), w.mesh.cells().parent().to_vec());
     let (ks, gases): (Vec<u16>, Vec<u16>) = (act.iter().map(|a| a.k as u16).collect(), s.state.gas.iter().map(|&k| k as u16).collect());
     let mol = crate::par::map_n(nx * n, |x| at(x % n, UP + x / n));

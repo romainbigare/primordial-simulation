@@ -5,7 +5,7 @@
 use super::super::Scratch;
 use super::rain::{rain_air, Pool, Wet};
 use super::wind::{even, pushes, wind, Links};
-use super::{air_temp, at_height, radiation::{glow, glow_slope}, step::Active, touching};
+use super::{air_temp, at_height, radiation::{glow, glow_slope}, step::Active};
 use crate::{math::mean_passed, store::Class, units::{DAY, R_GAS}, World, AIR};
 use std::collections::BTreeMap;
 
@@ -191,7 +191,7 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     let got = given(ground, act, (&t, &mean));
     // The air each node's rain meets (`rain_air`), per active gas and node (`[y * na + j]`), on the pool, from the air
     // touching each cell.
-    let touched = if rain.iter().any(|&m| m > 0.0) { crate::par::map_n(w.mesh.cells().n(), |i| touching(s, &t, i)) } else { Vec::new() };
+    let touched = if rain.iter().any(|&m| m > 0.0) { ground.wet().touched(s, &t) } else { Vec::new() };
     let met = crate::par::map_n(nx * na, |i| (rain[i] > 0.0).then(|| rain_air(ground.wet(), (i / na, i % na, ratio[i]), &touched)).flatten());
     for j in 0..na {
         out.t[j] += t[j] * share;
