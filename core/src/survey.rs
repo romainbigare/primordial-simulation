@@ -142,10 +142,9 @@ fn traffic(w: &mut World) {
     }
 }
 
-/// Update every living body due this month (`Body::due`: all but the slow ones whose month it is not), all at the
-/// month's first day (laws.md 0). First the parallel pass: the cells are taken out of the world in chunks
-/// (`life::run`), and each chunk runs, on a thread of the pool with the feature `threads`, its due bodies cell by cell,
-/// and in a cell in the order they came, with the world read only. They see the others of their
+/// Update every living body, all at the month's first day (laws.md 0). First the parallel pass: the cells are taken out
+/// of the world in chunks (`life::run`), and each chunk runs, on a thread of the pool with the feature `threads`, its
+/// bodies cell by cell, and in a cell in the order they came, with the world read only. They see the others of their
 /// cell as they are when they decide, the parts as they were at the pass's start, and the store as their cell's moves
 /// leave it (`store::Moves`); what they do outside their cell or to a part is queued (`life::Entry`), and the lineages and born
 /// rows they make are provisional until the chunk ends. Then the serial pass (`life::land`): the moves and litters
@@ -157,18 +156,16 @@ pub fn batch(w: &mut World) {
     w.life.recount();
     let bounds = life::bounds(w);
     let mut per = vec![0usize; bounds.len() - 1];
-    w.life.living().filter(|(_, b)| b.due(w)).for_each(|(h, _)| per[bounds.partition_point(|&b| b <= h.cell as usize) - 1] += 1);
+    w.life.living().for_each(|(h, _)| per[bounds.partition_point(|&b| b <= h.cell as usize) - 1] += 1);
     let all: usize = per.iter().sum();
-    if w.life.living().next().is_none() {
+    if all == 0 {
         return;
     }
-    if all > 0 {
-        // The busiest chunk's share of the batch's updates (`Counters::busiest_share`).
-        let c = &mut w.counts;
-        (c.busiest_share, c.body_batches) = (c.busiest_share + *per.iter().max().unwrap_or(&0) as f64 / all as f64, c.body_batches + 1.0);
-        life::run(w, per, all, scratch, |w, d, _, s| updates(w, d, s));
-        life::land(w);
-    }
+    // The busiest chunk's share of the batch's updates (`Counters::busiest_share`).
+    let c = &mut w.counts;
+    (c.busiest_share, c.body_batches) = (c.busiest_share + *per.iter().max().unwrap_or(&0) as f64 / all.max(1) as f64, c.body_batches + 1.0);
+    life::run(w, per, all, scratch, |w, d, _, s| updates(w, d, s));
+    life::land(w);
     let lay = Layout::of(&w.chem);
     let load = w.life.cells.iter().filter(|c| c.bodies.len() > 1).count();
     life::run(w, vec![(); life::chunks(w)], load, |_| (), |w, d, _, _| {
@@ -205,7 +202,7 @@ fn updates(w: &World, d: &mut Chunk, (tmp, minds, act): &mut Scratch) {
         minds.clear();
         for slot in 0..d.at(i).bodies.len() {
             let h = Handle { cell: i as u32, slot: slot as u32 };
-            if d[h].alive && d[h].due(w) {
+            if d[h].alive {
                 if let Some(lived) = live_one(w, d, h, tmp) {
                     minds.bodies.push((h, d[h].id, lived));
                 }

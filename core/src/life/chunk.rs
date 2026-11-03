@@ -79,7 +79,7 @@ impl<'a> Chunk<'a> {
     pub(crate) fn cover_with(&mut self, i: usize) -> (&mut crate::cover::Cover, &mut Moves, &mut Counters) {
         (&mut self.cells[i - self.written.first].cover, &mut self.written.moves, &mut self.written.counts)
     }
-    /// Place a new body in its cell on `day`; it first updates at the next month's start it is due (`Body::due`).
+    /// Place a new body in its cell on `day`; it first updates at the next month's start.
     pub(crate) fn add(&mut self, mut b: Body, day: u64) -> Handle {
         let i = b.cell as usize;
         let c = self.at_mut(i);
@@ -120,8 +120,8 @@ impl<'a> Chunk<'a> {
         let c = self.at_mut(i);
         (c.crossings, c.pushed) = (c.crossings + members, c.pushed + pushed);
     }
-    /// Place body `c` made by a law on the world's day, its first update at the next month's start it is due; its visible
-    /// traits are worked out from what it holds now, so others see it before its first update.
+    /// Place body `c` made by a law on the world's day, its first update at the next month's start; its visible traits are
+    /// worked out from what it holds now, so others see it before its first update.
     pub(crate) fn place(&mut self, w: &World, mut c: Body) -> Handle {
         c.prepare(&w.chem, &w.cfg);
         self.place_part(w, c)

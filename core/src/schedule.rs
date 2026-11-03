@@ -105,7 +105,7 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
     // The cover's month reads Flow's state and the air as its last step left it.
     pass(w, Stage::Bodies, "cover", &survey::cover);
     pass(w, Stage::Change, "change", &|w| change::step(w, len as f64));
-    // Bond's own spans are months (`bond::step`); a body updates once a month, a slow one once in two (`survey::batch`).
+    // Bond's own spans are months (`bond::step`); every body updates once a month (`survey::batch`).
     pass(w, Stage::Parts, "bond", &bond::step);
     pass(w, Stage::Bodies, "body batch", &|w| survey::batch(w));
 }

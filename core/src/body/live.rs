@@ -39,7 +39,7 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) ->
     let (heat, spare) = settle_upkeep(w, d, b, days, mass, tmp)?;
     drink(w, d, b, days);
     let stands = keep_warm(w, d, b, heat, days * DAY);
-    let th = check_stores(w, d, b, stands, days, tmp)?;
+    let th = check_stores(w, d, b, stands, tmp)?;
     crate::copy::grow(w, d, b, days, th.t);
     if !starved(w, d, b, from, &mut tmp.dead) {
         return Err(SPENT);
@@ -182,9 +182,9 @@ fn lose_share(w: &World, d: &mut Chunk, b: &mut Body, f: f64, cause: u8, dead: &
 
 /// A store below its safe minimum kills it (a node: its poorest members, `starve`); a boiled key liquid kills it; below
 /// a key liquid's melting point the share of its members that freezes at `stands` K, the temperature its heat holds it
-/// at over its ground (`keep_warm`, not the melting plateau its liquid passes on the way), dies in each month of the
-/// `days` since its last update (laws.md 6.5). Returns the plateau state it is left at.
-fn check_stores(w: &World, d: &mut Chunk, b: &mut Body, stands: f64, days: f64, tmp: &mut LiveTmp) -> Result<Melting, u8> {
+/// at over its ground (`keep_warm`, not the melting plateau its liquid passes on the way), dies (laws.md 6.5). Returns
+/// the plateau state it is left at.
+fn check_stores(w: &World, d: &mut Chunk, b: &mut Body, stands: f64, tmp: &mut LiveTmp) -> Result<Melting, u8> {
     let mass = b.mass(&w.chem);
     let mut th = b.thermal(&w.chem);
     if b.lacking(&w.chem, mass, th.t) {
@@ -198,12 +198,10 @@ fn check_stores(w: &World, d: &mut Chunk, b: &mut Body, stands: f64, days: f64, 
         return Err(PHASE);
     }
     // Its members' microclimates spread over `frost_k` around the temperature it stands at: below the melting point the
-    // share (melt - T) / `frost_k` of them freezes in a month, as far as they are active (a dormant body holds little
-    // free liquid); the share 1 - (1 - that)^months over the months since its last update.
+    // share (melt - T) / `frost_k` of them freezes, as far as they are active (a dormant body holds little free liquid).
     let act = b.activity(chem, &w.cfg.phys);
     let frozen = |s: usize| ((chem.subs[subs[s]].melt - stands) / w.cfg.phys.frost_k).clamp(0.0, 1.0) * act;
-    let monthly = b.wet_ks().map(frozen).fold(0.0, f64::max);
-    let f = 1.0 - (1.0 - monthly).powf(days / w.cfg.days_per_month as f64);
+    let f = b.wet_ks().map(frozen).fold(0.0, f64::max);
     if f > 0.0 {
         if f >= 1.0 - 1e-9 || !lose_share(w, d, b, f, PHASE, &mut tmp.dead, &th) {
             return Err(PHASE);

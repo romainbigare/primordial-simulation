@@ -216,7 +216,7 @@ impl std::ops::IndexMut<Handle> for Life {
 }
 
 impl World {
-    /// Place body `b` made outside the laws (a founder, an edit); it first updates at the next month's start it is due.
+    /// Place body `b` made outside the laws (a founder, an edit); it first updates at the next month's start.
     pub fn add(&mut self, mut b: Body) -> Handle {
         b.prepare(&self.chem, &self.cfg);
         self.in_cell(b.cell as usize, |w, d| {

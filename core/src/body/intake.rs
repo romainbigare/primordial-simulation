@@ -14,8 +14,8 @@ impl Body {
         if built { self.k.broken >> k & 1 == 1 } else { self.burns_at(chem, k, t) || chem.minerals().iter().any(|m| m.0 == k) }
     }
 
-    /// The room of its store `s` in one update, mol: up to its level, so a store in use refills to its level at an update
-    /// of any length (laws.md 6.7).
+    /// The room of its store `s` in one update, mol: up to its level, so a store in use refills at a level a month
+    /// (laws.md 6.7).
     pub(crate) fn room(&self, chem: &Chemistry, s: usize, mass: f64) -> f64 {
         (self.level(chem, s, mass) - self.store[s]).max(0.0)
     }

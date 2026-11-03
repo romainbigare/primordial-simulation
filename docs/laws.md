@@ -36,23 +36,13 @@ state in full for the cells' surroundings, and Flow's own pass leaves it then); 
 field capacity into the bed's store; then the liquid and erosion; heat sideways and creep yearly; the cover's month;
 Change; Bond (each chunk's cell by cell, the chunks on the pool: in a cell the turns of its parts in the order of its
 list, on its view, then the loads of its structures in the order of their roots); then the bodies (`survey::batch`).
-**A body updates once a month, a slow body once in two months** (`Body::due`), at the month's start, after the
-month's Flow, Change and Bond: one batch holds every body due, and a body placed during it first updates at the next
-month it is due. A body is **slow** (`Body::slow`) when, at its temperature, it lives no more in two months than in
-one month at a warm-blooded body's temperature (`t_warm`: its pace, 6.2, is at most half of its pace there) and its fuel
-pays its upkeep over the two months: its stores change no faster over two months than a warm body's over one, and it
-lives through them on what it holds. Its temperature and its stores decide it, not its kind: a body that stands warm by
-its own heat or keeps warm by its genes (6.3), or holds little fuel, updates each month. Slow bodies take turns fixed by
-their ids: one updates in the months whose count since the start, plus its id, is even, so each month holds about half
-of them and costs about the same, for any count of threads and chunks. Each update integrates the time since the
-body's last (`Body::last`): its upkeep, drink, heat, wear, frost, growth and brood go by those days; what it takes,
-gives and keeps for its upkeep goes by the days to its next update as its state now says (`Body::ahead`); its stores
-hold no more than their levels at once, so a slow body that takes fills them as a fast one does (6.7). So the month is
-a time step, not a calendar: a season's change comes from temperature (6.2). The bodies read the ground and the air as
-the month's Change and last air step left them, and what they leave on the ground (the free solid they shed, remains)
-goes through the next month's Change before the next batch can take it, so most of the free solid has rotted by then
-(it rots in about a week, 2.1). Every body decides once at each update (5.3): a slow body moves at most one link in two
-months, as it lives at half a warm body's pace or less.
+**Every body updates once a month**, at the month's start, after the month's Flow, Change and Bond: one batch
+holds every living body, and a body placed during it first updates at the next month's start. Each update integrates
+the time since the body's last (`Body::last`): its upkeep, drink, heat, growth and the most it takes or breaks go by
+those days, so the month is a time step, not a calendar: a season's change comes from temperature (6.2). The bodies
+read the ground and the air as the month's Change and last air step left them, and what they leave on the ground (the
+free solid they shed, remains) goes through the next month's Change before the next batch can take it, so most of the
+free solid has rotted by then (it rots in about a week, 2.1). Every body decides at every update (5.3).
 **Bodies, chunks and the serial pass** (`life`, `survey::batch`). Each ground cell stores its bodies in the order they
 came (`life::Cell`), each a record of fixed size (its stores and genes in place, 6.1, 4.1), and their brains, one block
 each in the cell's array (`life::Brains`: the rows, the moving averages of learning and the last trace), reused when
@@ -469,7 +459,7 @@ gene within `alike` steps; it decides who mixes, joins and merges.
 A body is **mature** (`Body::adult`) when its living body per member reaches `COPY_MASS`; then growth (6.6) puts the
 share `ALLOC` into a **brood** (`Body::brood`), matter held for children that leaves with the body's matter in the same
 share (`Body::lose`). Whenever the brood covers a child, children are made (`copy::copy`) whatever the brain does:
-bodies copy by physics only, at the body's update (0), all that its brood covers then. The brood fills at
+bodies copy by physics only, at the body's update (once a month), all that its brood covers then. The brood fills at
 every update and
 leaves with members who die. A child has a body of 10^`CHILD` × the copy mass,
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
@@ -524,7 +514,7 @@ chance).
   sizes, and stays in its own if that is the nearest. Both make bodies of different heritage share a brain; they
   bound the work, not a law.
 - **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
-- **Pace**: every node updates and decides as an individual does: once a month, or once in two if it is slow (0).
+- **Pace**: every node updates and decides once a month, as an individual does (0).
 - **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage. A
   body with no brain does not mutate its brain-size genes (`body::vary`): they do nothing without one, so a brain
   arises only in a lineage founded with one (decision 72). An
@@ -627,14 +617,14 @@ cover hide them. Up to 3 parts of its cell.
 ### 5.3 Actions
 **Planning, one step ahead** (`choose::plan`): before it draws, a body adds to the score of each move the critic's
 value (5.4) of the state it would be in in the cell the move leads to (its own state, that cell's features in place of
-its own cell's) less its value where it is, which staying keeps, both one update ahead as the critic learns
+its own cell's) less its value where it is, which staying keeps, both one month ahead as the critic learns
 (`discount`): γ(V(s') − V(s)), times `plan_weight` (1 per unit of well-being); off in a null run.
 One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;
 a node spreads its members over its `MOST_ACTS` (4) likeliest actions (the moves counted as one; a speed setting) by
 their chances brought back to a sum of 1 (`spread::top_chances`), and its brain learns from those chances, so the
 gradient's mean is 0; members drawn for no action rest and count in the mean the advantage is measured from
-(`choose::spread`). Every body decides at every update (0).
-The members of a node that move leave as one group: count × the sum of the chances to go in every
+(`choose::spread`). Every body decides at every update, once a
+month. The members of a node that move leave as one group: count × the sum of the chances to go in every
 direction, at most all (less than one member: one member with that chance; fewer than one member left behind: the whole node,
 with the chance that keeps the mean at count × that share), all in the one direction drawn by its chance over the sum,
 so each direction gets its share of members on average, in groups. A
@@ -664,7 +654,7 @@ could take.
 **Well-being** (`Body::wellbeing_at`): the energy its stores could release, in decisions' worth, less how near it is
 to its limits; no reward is hand-shaped. **Within a life** (`choose::learn`, `brain::learn`): a policy gradient
 against the critic (actor-critic) on the change of its own well-being since its last decision, the critic's estimate
-from now discounted by `discount` (one update), at its `LEARN` rate, in units
+from now discounted by `discount` (one month), at its `LEARN` rate, in units
 of the root of the critic's running mean square of errors, each step over 1 + the hidden layer's square (the
 normalised least-mean-squares rule, Nagumo and Noda 1967): the rate is the share of a row's error a step corrects,
 whatever the scale of the hidden layer or the number of the brain's inputs; that mean and each row's mean square of steps both weigh the newest value
@@ -679,7 +669,7 @@ same sizes, less the less alike they are, times the share of the watcher's membe
 mean by members). **Memory**: the brain's memory numbers (`MEMORY`), which it reads and writes at each decision.
 **Signals and the memory of others are parked**: no body emits a signal or remembers whom it dealt with; the brain's
 memory numbers are its only memory. **Thinking** (`Physics::think`) costs by brain size and mass^0.25 one decision per
-update (0). **Null run** (`--null`): no learning or imitation, rows frozen, genes still evolve.
+update, once a month. **Null run** (`--null`): no learning or imitation, rows frozen, genes still evolve.
 
 ## 6. Bodies
 Files: `core/src/body/`, `copy::grow`. Bodies are the eaters (animals); the light-eaters are the cover (4.5).
@@ -739,20 +729,18 @@ allowance: a dry body pays almost nothing and can hardly act; it wears at an act
 so a dormant body lives about 50 times its active life, as dry seeds and spores do. **Frost** (`live::check_stores`): its members
 stand in microclimates that spread over `frost_k` (3 K) around the temperature T its heat holds it at over its ground
 (6.3; not the melting plateau its liquid passes on the way), so below a key liquid's melting point
-the share min(1, (melt − T) / `frost_k`) × a freezes and dies in a month (`PHASE`; over an update of n months
-1 − (1 − that)^n), an individual with that chance: a dormant body
+the share min(1, (melt − T) / `frost_k`) × a freezes and dies (`PHASE`), an individual with that chance: a dormant body
 (little free liquid) lives through frost, as seeds and spores do; the cover freezes by the same law below its `FROST`
 gene (4.5). **Boiling** kills.
 
 ### 6.6 Growth
 `copy::grow`. Its fuel and minerals become matter at `c_copy` of work per kg, paid by burning (`body::pay`), as far as
 all allow: the **allowance** (`c_build` × supply / `m_ref` × days × activity), the **spare** (what its fuel can release
-beyond its upkeep to its next update, `Body::ahead`), and its stores down to their minimums. Built solids (the frame) come first by their
+beyond a month's upkeep), and its stores down to their minimums. Built solids (the frame) come first by their
 share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing
-Intake at most `take` × supply a day (5.3), into its stores up to their levels (`Body::room`), whatever the days to its
-next update. **Digestion** (`Body::digest`): matter taken is broken back into what it
+Intake at most `take` × supply a day (5.3). **Digestion** (`Body::digest`): matter taken is broken back into what it
 was built of, so food enters as fuel, and only if its diet breaks it (`Body::uses`). **Minimums**
 (`Body::lacking`): a store below its minimum kills (`LACK`), except a fuel, whose minimum is a reserve. **Shedding**
 (`shed`): minerals, built solids and key liquid past level, and anything it neither burns nor is made of. **Ageing**:

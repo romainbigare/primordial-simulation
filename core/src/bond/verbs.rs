@@ -68,7 +68,7 @@ pub fn bears(w: &World, b: &Body) -> f64 {
 /// Verb `v` toward the part at `p` of body `b`'s cell: hold, take from, put to, join the held part to, break, enter. The
 /// body pays as it acts (`body::pay`, on its cell's view), and does nothing if it cannot.
 pub fn act(w: &World, d: &mut Chunk, b: &mut Body, v: usize, p: usize) {
-    let (mb, days, i) = (b.mass(&w.chem), b.ahead(w), b.cell as usize);
+    let (mb, days, i) = (b.mass(&w.chem), w.cfg.update_days(), b.cell as usize);
     match v {
         0 => {
             let pt = &d.at(i).parts[p];
