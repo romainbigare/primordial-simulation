@@ -7,6 +7,7 @@ use super::{dec, distance, Cover, Parts, Seed, APART, EMPTY_KG, FIX, FIX_OFF, FR
 use crate::body::{AGE, PHASE, SPENT};
 use crate::chem::{Chemistry, Phase, Reaction};
 use crate::rng::{Purpose, Rng};
+use crate::space::COMPASS;
 use crate::store::{Class, Moves, Node};
 use crate::units::{DAY, MAX_SUBSTANCES};
 use crate::{life::Chunk, World, AIR};
@@ -228,9 +229,9 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
 /// as slots build) allow, by the conversions of growth (`Chemistry::build`, `builds`) at its share of walls (`WALLS`),
 /// paying `c_copy` per kg by burning fuel; a fixer (`FIX`) makes the mineral it lacks, at its
 /// capacity, paid by the fixing reaction's fuel. The share `SEED` of what it builds leaves as seeds for a neighbour
-/// cell across a border drawn by its width (`Seed`), with a generation's mutation; all of it where one more kg would
-/// not pay its upkeep (`pays` false: its light at the bottom of its layer is under its compensation point), so a cover
-/// stops thickening where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005).
+/// cell drawn (`Seed`), with a generation's mutation; all of it where one more kg would not pay its upkeep (`pays`
+/// false: its light at the bottom of its layer is under its compensation point), so a cover stops thickening where its
+/// lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005).
 #[allow(clippy::too_many_arguments)]
 fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool), (i, t, dt): (usize, f64, f64), ground: &mut [f64; MAX_SUBSTANCES], b: &mut Books) {
     let (chem, ph, g) = (&w.chem, &w.cfg.phys, c.genes[x]);
@@ -291,7 +292,7 @@ fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool)
         b.heat -= heat;
         let mut r = Rng::new(w.seed, w.month(), (i * SLOTS + x) as u64, Purpose::Cover);
         let cells = w.mesh.cells();
-        let to = cells.across(i, r.f64()).unwrap_or(i);
+        let to = cells.way(i, r.below(COMPASS)).map_or(i, |e| cells.adj_cell()[e] as usize);
         let genes = super::mutate(&g, ph.cover_mut, &mut r);
         c.seeds.push(Seed { to: to as u32, mol, genes, root: c.root[x], heat });
     }

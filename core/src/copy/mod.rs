@@ -21,6 +21,7 @@ use crate::event::{Event, EventKind};
 use crate::lineage::{sizes_of, wanted};
 use crate::nodes::{add, Lot, Own, COUNT_SLACK, MAX_NODES};
 use crate::rng::{Purpose, Rng};
+use crate::space::COMPASS;
 use crate::life::Entry;
 use crate::{life::{Chunk, Handle}, World};
 pub use mix::MATE_HIDDEN;
@@ -69,7 +70,7 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Mutate);
     let i = b.cell as usize;
     let mate = if mates(w, d, b) { partner(w, d, b, &mut r) } else { None };
-    // Children that start in the neighbour cell across a border drawn by its width (`Level::across`): of a node, the
+    // Children that start in the neighbour cell of a compass direction drawn (no link that way: none): of a node, the
     // share `DISPERSE` of its births, however few (less than one member with no node to join there waits in the brood,
     // as the stayers do, `emit`), all of one update the same way, as the children of one call cost one `emit`; an
     // individual's go together, by that chance.
@@ -78,7 +79,7 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
     let litter = Births { matter, prov, node, mate, parent: id };
     let m = if node { disperse * births } else { (r.f64() < disperse) as u8 as f64 };
     let cells = w.mesh.cells();
-    let to = if m > 0.0 { cells.across(i, r.f64()) } else { None };
+    let to = if m > 0.0 { cells.way(i, r.below(COMPASS)).map(|e| cells.adj_cell()[e] as usize) } else { None };
     let (cell, m) = match to {
         _ if !node => (to.unwrap_or(i), births),
         Some(j) => (j, m),

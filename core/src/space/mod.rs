@@ -182,20 +182,6 @@ impl Level {
         let (links, cells) = self.around(i);
         cells.iter().position(|&c| c as usize == j).map(|e| links[e] as usize)
     }
-    /// The cell across a border of cell `i`, drawn by `u` in [0, 1): each border by its share of the width of all the
-    /// cell's borders, so what spreads out of a cell crosses each border by its width whatever the sizes of the cells.
-    pub fn across(&self, i: usize, u: f64) -> Option<usize> {
-        let (links, cells) = self.around(i);
-        let (mut left, mut pick) = (u * links.iter().map(|&l| self.width[l as usize]).sum::<f64>(), None);
-        // The border where the widths summed in link order pass the draw (the last, if rounding leaves some over).
-        for (e, &l) in links.iter().enumerate().filter(|&(_, &l)| self.width[l as usize] > 0.0) {
-            (left, pick) = (left - self.width[l as usize], Some(cells[e] as usize));
-            if left < 0.0 {
-                break;
-            }
-        }
-        pick
-    }
     /// The children of cell `i` at the next finer level (none at the finest).
     pub fn children(&self, i: usize) -> &[u32] {
         self.kid_start.get(i + 1).map_or(&[], |&e| &self.kids[self.kid_start[i] as usize..e as usize])
