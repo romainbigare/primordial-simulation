@@ -710,20 +710,23 @@ the work becomes heat in its cell's ground, and the body keeps its temperature. 
 (`SPENT`).
 
 ### 6.3 Heat
-A body's temperature follows its ground's (`live::keep_warm`): the heat its upkeep released over the update leaves
-through its coat (`Body::conductance`; in series with the walls around it, 3.4), so it stands that much above the
-ground. Each member has the surface `meeh` × its mass^(2/3) (Meeh 1879); its coat insulates it by the still air at its
-surface (`r_air`) and the share `HEAT` (0 to 1) of the best coat, `r_coat` (fur and the tissue under it: a mammal's
-least conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). Below its `KEEP_T` gene it burns what its coat loses at
-`KEEP_T` beyond that heat; above its `COOL_T` gene it opens its coat as far as it needs to stand there, up to its bare
-surface (blood to the skin, the coat laid flat), and past that evaporates its key liquid for the excess, at the
-liquid's vaporisation enthalpy, never below its safe minimum, the vapour going to the bodies' node with its latent
-heat. Its upkeep goes with the pace of its temperature (6.2), so a warmer body makes more heat; the open coat lets
-that heat out, so a body's own heat does not drive its pace up month after month. Its heat then comes to that
-temperature with its ground (`body::settle_heat`), and so it does again after its decision (`survey::decide`): the
-heat of what it took and of digesting it leaves through its coat within hours, far less than a month, so its next
-update starts at the temperature it stands at. Its key liquids hold their fusion heat when molten (`Body::thermal`, at their own
-melting points).
+A body's temperature follows its ground's (`live::keep_warm`): the heat its surviving members' upkeep released over
+the update leaves through its coat (`Body::conductance`; in series with the walls around it, 3.4) to the ground. Each
+member has the surface `meeh` × its mass^(2/3) (Meeh 1879); its coat insulates it by the still air at its surface
+(`r_air`) and the share `HEAT` (0 to 1) of the best coat, `r_coat` (fur and the tissue under it: a mammal's least
+conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). Its temperature moves from where it is
+toward where that heat holds it (the ground's, plus the heat over the coat's conductance) by the share 1 - e^(-g dt /
+C) its heat capacity C lets it go in the time: a body's own time C / g is hours to days, but a large node in a closed
+room, whose walls pass little, moves only part way in a month. So what it gains from its ground is never more than the
+heat it released, unless the ground is the warmer. Below its `KEEP_T` gene it burns what holds it at `KEEP_T` at the
+end; above its `COOL_T` gene it opens its coat as far as it needs to stand there, up to its bare surface (blood to the
+skin, the coat laid flat), and past that evaporates its key liquid for the excess, at the liquid's vaporisation
+enthalpy, never below its safe minimum, the vapour going to the bodies' node with its latent heat. Its upkeep goes with
+the pace of its temperature (6.2), so a warmer body makes more heat; the open coat lets that heat out, so a body's own
+heat does not drive its pace up month after month. Its heat then comes to that temperature with its ground
+(`body::settle_heat`), and so it does again after its decision (`survey::decide`): the heat of what it took and of
+digesting it leaves through its coat within hours, far less than a month, so its next update starts at the temperature
+it stands at. Its key liquids hold their fusion heat when molten (`Body::thermal`, at their own melting points).
 
 ### 6.4 Water: drinking
 A body drinks its key liquids from its cell's ground up to the level it keeps, as far as the ground holds them liquid,

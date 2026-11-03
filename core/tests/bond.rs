@@ -73,6 +73,9 @@ fn walls_keep_a_body_warm() {
     b.e = b.energy_at(&w.chem, t);
     // (It does not grow: a warm body builds faster, at the pace of its temperature, and would burn the fuel of its month.)
     w.cfg.phys.c_build = 0.0;
+    // (Its update integrates a month, as in a run, not the day since it was placed: the walls slow how fast its heat
+    // follows the ground, so a day shows only part of the warmth they keep.)
+    w.life[slot].last -= w.cfg.update_days();
     let mut inside = w.clone();
     inside.life[slot].inside = Some(parts[0]);
     let temp = |w: &pcore::World| w.life[slot].temp(&w.chem) - w.life.env[i][0];

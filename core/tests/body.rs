@@ -5,7 +5,7 @@
 use pcore::body::{self, Body, Layout, COOL_T, KEEP_T, PHASE};
 use pcore::life::Handle;
 use pcore::{brain, World, AIR};
-use worldgen::testkit::{add, died, dry_lands, eater, held_day, hold_ground, kg, node_of, out, put_kg_m2, scale, small_world, start, stores, took_from_ground, Books, Brain, Line, LIQUID, MATTER, RICH};
+use worldgen::testkit::{add, died, dry_lands, eater, held_day, hold_ground, kg, node_of, out, put_kg_m2, scale, small_world, start, stores, took_from_ground, warm, Books, Brain, Line, LIQUID, MATTER, RICH};
 
 /// Days the takes from the ground run for (`matter_taken_from_outside_is_digested_into_the_solid`).
 const TAKE_DAYS: usize = 50;
@@ -338,9 +338,11 @@ fn frost_kills_in_proportion_to_activity() {
         let mut b = node_of(&mut w, b, 10_000.0);
         b.prepare(&w.chem, &w.cfg);
         let a = b.activity(&w.chem, &w.cfg.phys);
+        // It starts at the ground's temperature: a day is too short for the node's heat to follow its ground there.
+        let t = w.chem.subs[LIQUID].melt - 0.5 * w.cfg.phys.frost_k;
+        warm(&mut w, &mut b, t);
         w.life[s] = b;
         let (books, n0) = (Books::now(&w), w.life[s].count);
-        let t = w.chem.subs[LIQUID].melt - 0.5 * w.cfg.phys.frost_k;
         let b = after_update(&mut w, s, t);
         books.assert_kept(&w, 1e-9);
         (1.0 - b.count / n0, a)

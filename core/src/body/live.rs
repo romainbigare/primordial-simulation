@@ -101,36 +101,49 @@ fn drink(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     }
 }
 
-/// Its heat over the time `dt` s (laws.md 6.3): the heat its upkeep released leaves through its coat (`HEAT`,
-/// `Body::conductance`; in series with the walls around it, 3.4) to its ground, so it stands that much above the ground.
-/// Below its `KEEP_T` gene it burns what its coat loses at that temperature beyond it. Above its `COOL_T` gene it opens
-/// its coat as far as it needs to stand there, up to its bare surface (`Body::bare`: blood to the skin, the coat laid
-/// flat; Scholander et al. 1950), and past that evaporates its key liquid for the excess, at its latent heat, never
-/// below its safe minimum. It then stands at that temperature (`settle_heat`).
+/// Its heat over the time `dt` s (laws.md 6.3): the heat its upkeep released leaves through its coat (`coat`) to its
+/// ground. Its temperature moves from where it is toward where that heat holds it, tg + heat / g, by the share
+/// 1 - e^(-g / C) its heat capacity C lets it go in the time: a body of hours to days gets there; a large node in a
+/// closed room, whose walls pass little, moves only part way. Below its `KEEP_T` gene it burns what holds it at that
+/// temperature at the end. Above its `COOL_T` gene it opens its coat as far as it needs to stand there, up to its bare
+/// surface (`Body::bare`: blood to the skin, the coat laid flat; Scholander et al. 1950), and past that evaporates its key
+/// liquid for the excess, at its latent heat, never below its safe minimum. It then stands at that temperature
+/// (`settle_heat`): what it gains from its ground there is never more than the heat it released, unless the ground is
+/// the warmer.
 fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, dt: f64) -> f64 {
-    let (chem, p, i) = (&w.chem, &w.cfg.phys, b.cell as usize);
-    let (tg, mass) = (w.t_ground_last(i), b.mass(chem));
-    let walls = crate::bond::enclosure(d, b).map(|x| x.g);
-    // The conductance through a coat of conductance `c` and the walls, over the time, J/K.
-    let through = |c: f64| walls.map_or(c, |x| 1.0 / (1.0 / c + 1.0 / x)) * dt;
-    let (g, open) = (through(b.conductance(p, mass)), through(b.bare(p, mass)));
+    let (chem, tg, t0) = (&w.chem, w.t_ground_last(b.cell as usize), b.temp(&w.chem));
+    let (coat, bare) = coat(w, d, b, b.mass(chem));
+    let (g, open, cap) = (coat * dt, bare * dt, b.heat_cap(chem));
     if g <= 0.0 {
-        return b.temp(chem);
+        return t0;
     }
+    // The share of the way to its steady temperature it goes in the time through `x` J/K, and where it ends with the
+    // heat `q` J; the heat that ends it at `t` K.
+    let reach = |x: f64| one_minus_exp(x / cap.max(1e-300)).max(1e-300);
+    let end = |x: f64, q: f64| t0 + (tg + q / x - t0) * reach(x);
+    let holds = |x: f64, t: f64| x * ((t - t0) / reach(x) + t0 - tg);
     let (keep, cool) = (b.gene(KEEP_T), b.gene(COOL_T));
-    let free = tg + heat / g;
+    let free = end(g, heat);
     let t = if free < keep {
-        tg + (heat + burn(w, d, b, g * (keep - tg) - heat)) / g
+        end(g, heat + burn(w, d, b, holds(g, keep) - heat))
     } else if free > cool {
         // (On ground at or above its `COOL_T` it opens all the way.)
         let opened = if cool > tg { (heat / (cool - tg)).clamp(g, open) } else { open };
-        let t_open = tg + heat / opened;
-        if t_open > cool { tg + (heat - evaporate(w, d, b, heat - opened * (cool - tg))) / opened } else { t_open }
+        let t_open = end(opened, heat);
+        if t_open > cool { end(opened, heat - evaporate(w, d, b, heat - holds(opened, cool))) } else { t_open }
     } else {
         free
     };
     settle_heat(w, d, b, t);
     t
+}
+
+/// The heat conductance of its coat and of its bare surface, each in series with the walls around it (3.4), W/K.
+fn coat(w: &World, d: &Chunk, b: &Body, mass: f64) -> (f64, f64) {
+    let walls = crate::bond::enclosure(d, b).map(|x| x.g);
+    let through = |c: f64| walls.map_or(c, |x| 1.0 / (1.0 / c + 1.0 / x));
+    let p = &w.cfg.phys;
+    (through(b.conductance(p, mass)), through(b.bare(p, mass)))
 }
 
 /// It evaporates its key liquids to take `q` J away, at each one's vaporisation enthalpy, never below its safe minimum:
