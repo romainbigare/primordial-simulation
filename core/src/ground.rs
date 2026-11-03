@@ -16,6 +16,12 @@ pub(crate) fn skin_cap(chem: &Chemistry, cfg: &Config, area: f64, ks: impl IntoI
         c += b(k) * chem.subs[k].cp;
         v += b(k) * chem.molar_volume(k, chem::Phase::Solid);
     }
+    skin_of(cfg, area, c, v)
+}
+
+/// Heat capacity of the skin of a bed of `area` m² whose bonded amounts hold `c` J/K in `v` m³ (`skin_cap`), J/K.
+#[inline]
+pub(crate) fn skin_of(cfg: &Config, area: f64, c: f64, v: f64) -> f64 {
     if v > 0.0 { c / v * cfg.skin_m * area } else { 0.0 }
 }
 

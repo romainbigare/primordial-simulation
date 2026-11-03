@@ -2,7 +2,7 @@
 //! heads, and heat conducted sideways (`conduct`).
 
 use super::{on_land, scratch::{Latent, Scratch, Sp}};
-use crate::{ground::{heat_above_floor, melting, Melting}, solve::sweep::{sweep, Net}, store::{apply, Class, LinkFlux}, units::{MAX_SUBSTANCES, T_FLOOR}, World};
+use crate::{chem::Phase, ground::{heat_above_floor, melting, skin_of, Melting}, solve::sweep::{sweep, Net}, store::{apply, Class, LinkFlux}, units::{MAX_SUBSTANCES, T_FLOOR}, World};
 
 /// No substance on a melting plateau (`Scratch::pk`).
 pub(super) const NONE: usize = usize::MAX;
@@ -89,16 +89,19 @@ pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
     s.state.tg[i].min((w.store.heat(Class::Ground)[i] - s.latent[i].held) / s.cap[i].max(1.0)).max(T_FLOOR)
 }
 
-/// Heat capacity, temperature, surface, head and reflectance of every ground node, each in parallel with `threads`
-/// (`node_state`); between full steps only nodes whose phases change get a new surface. A full build finds the basin
-/// (`basin::find`).
+/// Heat capacity, temperature, surface, head and reflectance of every ground node: each takes its heat capacities from
+/// the amounts now (`capacities`; other laws move matter between liquid steps, and a stale capacity would read a node
+/// far too hot or cold) and its temperature by its energy alone (`steady`); the others are found anew (`node_state`),
+/// in parallel with `threads`. A full build finds every node anew, and the basin (`basin::find`).
 pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     let n = w.mesh.cells().n();
+    let caps = capacities(w, s, 0..n);
+    let anew: Vec<u32> = (0..n).filter(|&i| !steady(w, s, i, caps[i]) || full).map(|i| i as u32).collect();
     let mut rows = std::mem::take(&mut s.spare.state);
-    rows.resize(n * STATE_ROW, 0.0);
+    rows.resize(anew.len() * STATE_ROW, 0.0);
     let sr = &*s;
-    crate::par::rows(&mut rows, STATE_ROW, || (), |_, i, row| node_state(w, sr, i, full, row));
-    rows.chunks_exact(STATE_ROW).enumerate().for_each(|(i, r)| take_row(s, i, r));
+    crate::par::rows(&mut rows, STATE_ROW, || (), |_, q, row| node_state(w, sr, anew[q] as usize, (caps[anew[q] as usize][1], full), row));
+    anew.iter().zip(rows.chunks_exact(STATE_ROW)).for_each(|(&i, r)| take_row(s, i as usize, r));
     s.spare.state = rows;
     if full {
         s.basin = super::basin::find(w, s);
@@ -107,55 +110,69 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
 
 /// The state of the ground nodes `cells` alone brought up to date, as `ground_state` does it.
 pub(super) fn cells_state(w: &World, s: &mut Scratch, cells: &[u32]) {
-    for &i in cells {
-        let mut row = [0.0; STATE_ROW];
-        node_state(w, s, i as usize, false, &mut row);
-        take_row(s, i as usize, &row);
+    let caps = capacities(w, s, cells.iter().map(|&i| i as usize));
+    for (&i, &cap) in cells.iter().zip(&caps) {
+        if !steady(w, s, i as usize, cap) {
+            let mut row = [0.0; STATE_ROW];
+            node_state(w, s, i as usize, (cap[1], false), &mut row);
+            take_row(s, i as usize, &row);
+        }
     }
 }
 
-/// Ground node `i` takes its row of `ground_state` (`STATE_ROW`).
+/// The heat capacity of the skin of the bed of each ground node of `cells` and its own, J/K (`ground::skin_cap`, then
+/// its loose amounts in order), summed substance by substance over the nodes.
+fn capacities(w: &World, s: &Scratch, cells: impl Iterator<Item = usize> + Clone) -> Vec<[f64; 2]> {
+    let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area());
+    // Per node the heat capacity of its bonded amounts, J/K, and their volume, m³.
+    let mut bed = vec![[0.0; 2]; cells.clone().count()];
+    for &k in &s.state.bedk {
+        let (cp, v, b) = (w.chem.subs[k].cp, w.chem.molar_volume(k, Phase::Solid), &w.store.amounts(Class::Bed)[k * n..(k + 1) * n]);
+        cells.clone().zip(&mut bed).for_each(|(i, x)| (x[0], x[1]) = (x[0] + b[i] * cp, x[1] + b[i] * v));
+    }
+    let mut caps: Vec<[f64; 2]> = cells.clone().zip(&bed).map(|(i, x)| [skin_of(&w.cfg, area[i], x[0], x[1]); 2]).collect();
+    for &k in &s.state.loose {
+        let (cp, a) = (s.sp[k].cp, &w.store.amounts(Class::Ground)[k * n..(k + 1) * n]);
+        cells.clone().zip(&mut caps).for_each(|(i, c)| c[1] += a[i] * cp);
+    }
+    caps
+}
+
+/// Ground node `i` takes its heat capacities `[skin, own]` (`capacities`) and its temperature by its energy alone. Is
+/// that all its state, as it stays off its plateaus with the same capacity and its energy in the span that keeps it
+/// there?
+fn steady(w: &World, s: &mut Scratch, i: usize, [skin, cap]: [f64; 2]) -> bool {
+    let (same, e, Latent { held, lo, hi, .. }) = ((cap - s.cap[i]).abs() <= CAP_SAME * cap, w.store.heat(Class::Ground)[i], s.latent[i]);
+    (s.skin[i], s.cap[i], s.state.tg[i]) = (skin, cap, (e - held) / cap.max(1.0));
+    same && e >= lo && e < hi
+}
+
+/// Ground node `i` takes its row of `node_state` (`STATE_ROW`).
 fn take_row(s: &mut Scratch, i: usize, r: &[f64]) {
-    (s.skin[i], s.cap[i], s.state.tg[i]) = (r[0], r[1], r[2]);
-    if r[3] != 0.0 {
-        (s.state.pk[i], s.state.phi[i]) = (r[4] as usize, r[5]);
-        s.latent[i] = Latent { held: r[6], lo: r[7], hi: r[8], lat: [r[9], r[10]], molten: r[11].to_bits() };
-    }
-    if r[12] != 0.0 {
-        (s.z[i], s.head[i], s.cover[i], s.alb[i], s.pd[i]) = (r[13], r[14], [r[15], r[16], r[17]], r[18], r[19]);
+    (s.state.tg[i], s.state.pk[i], s.state.phi[i]) = (r[0], r[1] as usize, r[2]);
+    s.latent[i] = Latent { held: r[3], lo: r[4], hi: r[5], lat: [r[6], r[7]], molten: r[8].to_bits() };
+    if r[9] != 0.0 {
+        (s.z[i], s.head[i], s.cover[i], s.alb[i], s.pd[i]) = (r[10], r[11], [r[12], r[13], r[14]], r[15], r[16]);
     }
 }
 
-/// The numbers of a node's row in `ground_state`: the heat capacity of its skin and its own, J/K; its temperature, K;
-/// whether it was found anew, then its plateau's substance (`NONE` as is) and molten share, and its `Latent` (the bits
-/// of what is molten as an f64's bits); whether it has a new surface, then its solid surface and head, m, its soft
-/// cover (`Scratch::cover`), its reflectance and its pore space as a depth, m.
-const STATE_ROW: usize = 20;
+/// The numbers of a node's row in `node_state`: its temperature, K; its plateau's substance (`NONE` as is) and molten
+/// share, and its `Latent` (the bits of what is molten as an f64's bits); whether it has a new surface, then its solid
+/// surface and head, m, its soft cover (`Scratch::cover`), its reflectance and its pore space as a depth, m.
+const STATE_ROW: usize = 17;
 
-/// The row of ground node `i` (`STATE_ROW`): its heat capacity from the amounts now (other laws move matter between
-/// liquid steps, and a stale capacity would read a node far too hot or cold); off its plateaus, where its capacity is
-/// the same and its energy in the span that keeps it there, its temperature by its energy alone; else where it stands
-/// on its plateaus (`thaw_at`), with a new surface where its phases changed (`surface_of`).
-fn node_state(w: &World, s: &Scratch, i: usize, full: bool, row: &mut [f64]) {
-    let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[i]);
+/// The row of ground node `i` of heat capacity `cap`, J/K, found anew (`STATE_ROW`): where it stands on its plateaus
+/// (`thaw_at`), with a new surface where its phases changed or with `full` (`surface_of`).
+fn node_state(w: &World, s: &Scratch, i: usize, (cap, full): (f64, bool), row: &mut [f64]) {
+    let n = w.mesh.cells().n();
     let amt = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
-    let skin = crate::ground::skin_cap(&w.chem, &w.cfg, area, s.state.bedk.iter().copied(), |k| w.store.amounts(Class::Bed)[k * n + i]);
-    let ci = s.state.loose.iter().fold(skin, |c, &k| c + amt(k) * s.sp[k].cp);
-    let same = s.cap.get(i).is_some_and(|&c| (ci - c).abs() <= CAP_SAME * ci);
-    let (c, e, Latent { held, lo, hi, molten: was, .. }) = (ci.max(1.0), w.store.heat(Class::Ground)[i], s.latent[i]);
-    // Nothing found anew and no new surface, until said.
-    (row[3], row[12]) = (0.0, 0.0);
-    row[..3].copy_from_slice(&[skin, ci, (e - held) / c]);
-    if !full && same && e >= lo && e < hi {
-        return;
-    }
     let melt = melts(w, s, amt);
-    let th = thaw_at(s, c, e, amt, &melt);
+    let th = thaw_at(s, cap.max(1.0), w.store.heat(Class::Ground)[i], amt, &melt);
     let (pk, phi) = th.on.unwrap_or((NONE, s.state.phi[i]));
-    row[2..12].copy_from_slice(&[th.t, 1.0, pk as f64, phi, th.held, th.lo, th.hi, th.lat[0], th.lat[1], f64::from_bits(th.bits)]);
-    if full || s.state.pk[i] != NONE || pk != NONE || th.bits != was {
-        row[12] = 1.0;
-        row[13..].copy_from_slice(&surface_of(w, s, i, th.t, |k| th.molten(k), &melt));
+    row[..10].copy_from_slice(&[th.t, pk as f64, phi, th.held, th.lo, th.hi, th.lat[0], th.lat[1], f64::from_bits(th.bits), 0.0]);
+    if full || s.state.pk[i] != NONE || pk != NONE || th.bits != s.latent[i].molten {
+        row[9] = 1.0;
+        row[10..].copy_from_slice(&surface_of(w, s, i, th.t, |k| th.molten(k), &melt));
     }
 }
 
