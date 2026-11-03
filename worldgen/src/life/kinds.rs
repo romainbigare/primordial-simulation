@@ -61,11 +61,12 @@ const fn with<const N: usize>(mut s: [f32; N], d: &[(usize, f32)]) -> [f32; N] {
     s
 }
 
-/// The genes every kind of bodies starts with unless its row says otherwise: HEAT 0.5 (half the best coat: 0.57 m² K/W
-/// in all, about a flat pelt over still air, so selection can move it either way), CHILD -0.523 (a child 0.3 of the copy
-/// mass), MUT -1.2, HIDDEN 12, MEMORY 6, SEEN 3, SIGHT 1, ALLOC 0.8, KEEP_T 250 K and COOL_T 320 K (outside what the
-/// island has: they do nothing at the start).
-const BASE: [f32; NSCALAR] = [0.5, 0.0, -0.523, 0.0, -1.2, 0.0, 12.0, 6.0, 3.0, 1.0, 0.0, 0.0, 0.0, 0.8, 250.0, 320.0];
+/// The genes every kind of bodies starts with unless its row says otherwise: HEAT 0.9 (0.93 m² K/W in all, near a
+/// mammal's least conductance, Herreid and Kessel 1967, as the coat gene is the closed coat and a warm body opens it
+/// on its own: below the best, so selection can move it either way), CHILD -0.523 (a child 0.3 of the copy mass), MUT
+/// -1.2, HIDDEN 12, MEMORY 6, SEEN 3, SIGHT 1, ALLOC 0.8, KEEP_T 250 K and COOL_T 320 K (outside what the island has:
+/// they do nothing at the start).
+const BASE: [f32; NSCALAR] = [0.9, 0.0, -0.523, 0.0, -1.2, 0.0, 12.0, 6.0, 3.0, 1.0, 0.0, 0.0, 0.0, 0.8, 250.0, 320.0];
 
 /// The cover of the starting light-eaters: a light capacity that a full summer's light about fills at a capture area of
 /// 5 m² per kg (a herb's 20 m² per kg of leaf, a quarter of it leaf), walls as much as its matter (cell walls are about
