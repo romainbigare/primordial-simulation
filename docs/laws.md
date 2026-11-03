@@ -426,7 +426,10 @@ bed, and a held part adds nothing to a body's force.
 ### 3.4 Containment
 Walls that close a space make an **inside** (`bond::room`) joined to its cell by one link (`bond::Enclosure`): heat
 passes the walls (conductivity × face / thickness) and the openings (`leak` per m²), light and rain only the openings.
-A body inside exchanges through that link in series with its own surface. "Shelter" is only this low conductance.
+A body inside exchanges through that link in series with its own surface. "Shelter" is only this low conductance. A
+body enters only where it fits (its volume within the space the walls close, with the bodies already there), and one
+that outgrows the space, by growth or by members joining it, is no longer inside (`bond::leave_outgrown`, at its
+update).
 
 ### 3.5 Moving needs force
 A mover pushes what it passes with `bump` of its weight, so it moves only if its force is at least `bump` × its whole

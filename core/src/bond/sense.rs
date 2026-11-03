@@ -14,6 +14,16 @@ pub fn room(c: &Cell, b: &Body) -> Option<(u64, Enclosure)> {
     (r.s.encl.closed > 0.0).then_some((r.id, r.s.encl))
 }
 
+/// A body that has outgrown the structure it is inside (by growth or by members joining it), its volume past the space
+/// the walls close, is no longer inside it: it enters only where it fits (`verbs::act`), and it stays only while it does.
+pub(crate) fn leave_outgrown(w: &World, d: &Chunk, b: &mut Body) {
+    let c = d.at(b.cell as usize);
+    let Some(p) = b.inside.and_then(|id| at(c, id)) else { return };
+    if c.parts[root(c, p)].s.space < b.volume(&w.chem, b.temp(&w.chem)) {
+        b.inside = None;
+    }
+}
+
 /// For a body's update: the link between it and the outside through the walls around it, its share of their
 /// enclosure among the bodies inside.
 pub(crate) fn enclosure(d: &Chunk, b: &Body) -> Option<Enclosure> {

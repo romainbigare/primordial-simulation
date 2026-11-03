@@ -38,6 +38,7 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) ->
     }
     let (heat, spare) = settle_upkeep(w, d, b, days, mass, tmp)?;
     drink(w, d, b, days);
+    crate::bond::leave_outgrown(w, d, b);
     let stands = keep_warm(w, d, b, heat, days * DAY);
     let th = check_stores(w, d, b, stands, tmp)?;
     crate::copy::grow(w, d, b, days, th.t);
