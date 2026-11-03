@@ -35,13 +35,12 @@ pub(super) fn liquid(w: &World, i: usize, g: impl Fn(usize) -> f64) -> (f64, f64
 }
 
 /// Is body `b` (mass `mb`) held up in cell `j`'s liquid: does the liquid that its volume and the structure it holds
-/// displace weigh as much as they do (Archimedes, as for parts)? Not where the liquid is shallower than `deep`, nor
-/// holding a structure bonded to the ground.
+/// displace weigh as much as they do (Archimedes, as for parts)? Not where the liquid is shallower than `deep`.
 pub fn afloat(w: &World, d: &Chunk, b: &Body, j: usize, mb: f64) -> bool {
     let c = d.at(b.cell as usize);
     let s = held(c, b).map(|p| c.parts[root(c, p)].s);
     let (depth, rho, _) = liquid(w, j, d.moves.amounts(w, Node::ground(j)));
-    if depth < w.cfg.phys.deep || s.is_some_and(|s| s.anchored) {
+    if depth < w.cfg.phys.deep {
         return false;
     }
     let (outer, mass) = s.map_or((0.0, 0.0), |s| (s.outer, s.mass));
@@ -70,14 +69,14 @@ pub(crate) fn sense(c: &Cell, w: &World, b: &Body, mb: f64) -> [f32; SENSE] {
 }
 
 /// What a body perceives of the part at `p` of its cell `c`: ln mass ratio, hardness, hollowness, ln length, how closed
-/// its structure is, anchored, held, the share the body would take.
+/// its structure is, held, the share the body would take.
 pub fn features(c: &Cell, w: &World, b: &Body, p: usize, mb: f64) -> [f32; NO] {
     let (pt, chem) = (&c.parts[p], &w.chem);
     let s = &c.parts[root(c, p)].s;
     let m = pt.mass(chem);
     let want: f64 = b.k.upt.iter().map(|&(k, u)| u as f64 * (pt.wall[k] + pt.fill[k]) * chem.subs[k].molar_mass).sum();
     let ln = crate::brain::ln;
-    [ln((m / mb) as f32) / LN_MASS, pt.walls(chem).hardness as f32, pt.hollow, ln(pt.size[0]) / LN_SIZE_SCALE, s.encl.closed, s.anchored as u8 as f32, (pt.held != NOBODY) as u8 as f32, (want / m.max(1e-9)) as f32]
+    [ln((m / mb) as f32) / LN_MASS, pt.walls(chem).hardness as f32, pt.hollow, ln(pt.size[0]) / LN_SIZE_SCALE, s.encl.closed, (pt.held != NOBODY) as u8 as f32, (want / m.max(1e-9)) as f32]
 }
 
 /// Can verb `v` be done to the part at `p` of body `b`'s cell `c` at all (as the body sees it)?

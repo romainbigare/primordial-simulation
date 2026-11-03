@@ -1,7 +1,7 @@
 //! Law 3 (Bond): parts and the bonds between them, structures and the shelter they give, and the bodies that make
 //! and hold parts.
 
-use pcore::bond::{self, GROUND};
+use pcore::bond;
 use pcore::body::{die, Body, COPY_MASS, LACK, STRENGTH};
 use pcore::brain;
 use pcore::chem::Phase;
@@ -11,15 +11,19 @@ use pcore::store::{Class, Node};
 use pcore::World;
 use worldgen::testkit::{dry_land, eater, part_of, plate, relocate, scale, set_amount, small_world, start as world, stores, Books, Brain, Line, FRAME, LIQUID, MINERAL, ROCK};
 
-/// A bond breaks when the weight it bears is more than it holds: of two parts hung on an anchored one by bonds that
-/// hold 10 t weight, the one of 1 t stays and the one of 100 t falls.
+/// A bond breaks when the weight it bears is more than it holds: of two parts hung on a held one by bonds that hold
+/// 10 t weight, the one of 1 t stays and the one of 100 t falls.
 #[test]
 fn bond_breaks_under_too_much_load() {
     let (mut w, i) = world();
     let top = plate(&mut w, i, 1e3, false);
-    bond::link(&mut w, top, GROUND, 1e9);
+    let mut b = eater(&mut w, i, brain::REST, 1.0);
+    b.hold = Some(top);
+    let h = w.add(b);
+    let id = w.life[h].id;
+    w.life.part_mut(top).expect("the part").held = id;
     let (light, heavy) = (plate(&mut w, i, 1e3, false), plate(&mut w, i, 1e5, false));
-    // Each hangs on the anchored part by a bond that holds 10 t weight.
+    // Each hangs on the held part by a bond that holds 10 t weight.
     bond::link(&mut w, light, top, 1e5);
     bond::link(&mut w, heavy, top, 1e5);
     let books = Books::now(&w);
@@ -46,9 +50,8 @@ fn walls_keep_a_body_warm() {
     // (A lineage of its own, the same brain: it joins no body of its kind in cell `i` at the month's merge.)
     let own = w.life.brains[w.life[slot].lineage as usize].clone().expect("a brain");
     w.life[slot].lineage = w.life.new_lineage(own);
-    // Six blocks joined around a small space, one bonded to the ground.
+    // Six blocks joined around a small space.
     let parts: Vec<u64> = (0..6).map(|_| plate(&mut w, i, 1e3, true)).collect();
-    bond::link(&mut w, parts[0], GROUND, 1e9);
     for p in &parts[1..] {
         bond::link(&mut w, *p, parts[0], 1e9);
     }

@@ -6,13 +6,12 @@ use super::{at, event, fall_apart, held, holder, link_in, make, members, move_st
 use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase, Stores}, life::{Cell, Chunk}, life::Entry, World};
 use crate::units::BODY_STORES;
 
-/// Body `b` takes hold of the part at `p` of its cell if it bears the weight of its structure (one bonded to the
-/// ground rests on it).
+/// Body `b` takes hold of the part at `p` of its cell if it bears the weight of its structure.
 fn grab(w: &World, d: &mut Chunk, b: &mut Body, p: usize) {
     let (i, bears) = (b.cell as usize, bears(w, b));
     let c = d.at_mut(i);
     let s = c.parts[root(c, p)].s;
-    if !s.anchored && s.mass * w.cfg.gravity > bears {
+    if s.mass * w.cfg.gravity > bears {
         return;
     }
     c.parts[p].held = b.id;
@@ -227,7 +226,7 @@ pub fn release(d: &mut Chunk, b: &mut Body) {
 pub fn carry(c: &Cell, w: &World, b: &Body) -> Option<(u64, f64)> {
     let r = root(c, held(c, b)?);
     let s = c.parts[r].s;
-    (!s.anchored && s.mass * w.cfg.gravity <= bears(w, b)).then_some((c.parts[r].id, s.mass))
+    (s.mass * w.cfg.gravity <= bears(w, b)).then_some((c.parts[r].id, s.mass))
 }
 
 /// After body `by` of mass `mb` kg moved from cell `i` into cell `j` (`choose::land_move`): the structure it carried

@@ -20,21 +20,19 @@ pub(crate) use verbs::{dropped, let_go};
 use crate::{body::Body, chem::{Chemistry, Phase}, event::{Event, EventKind}, life::{Cell, Chunk}, store::{Class, Node}, World};
 use serde::{Deserialize, Serialize};
 
-/// Held by no body; the bonded ground (as the other end of a bond).
+/// Held by no body.
 pub const NOBODY: u64 = u64::MAX;
-pub const GROUND: u64 = u64::MAX;
-/// Bond kinds (the value of bond events): body–part, part–part, part–ground; a break by load adds `LOAD`.
+/// Bond kinds (the value of bond events): body–part, part–part; a break by load adds `LOAD`.
 pub(crate) const HELD: f64 = 0.0;
 pub(crate) const JOINED: f64 = 1.0;
-pub(crate) const ANCHORED: f64 = 2.0;
-pub const LOAD: f64 = 3.0;
+pub const LOAD: f64 = 2.0;
 /// Features of a perceived part.
-pub(crate) const NO: usize = 8;
+pub(crate) const NO: usize = 7;
 /// Most hollowness of a part (a share of its outer volume).
 const MOST_HOLLOW: f32 = 0.95;
 /// An elongation of 1 (or -1) is an aspect of 10 to this power (100).
 const ASPECT_DECADES: f64 = 2.0;
-/// Faces of a box: plates close one as wide as the longest part; the bonded ground is the last face of an anchored one.
+/// Faces of a box: plates close one as wide as the longest part.
 const BOX_FACES: f64 = 6.0;
 /// A part's id is the cell it was made in shifted left by this many bits, plus that cell's count of parts made then
 /// (from 1), as a body's (`life::Chunk::add`).
@@ -74,7 +72,6 @@ pub struct Info {
     /// The space its walls close (m³), and the link between it and the cell
     pub space: f64,
     pub encl: Enclosure,
-    pub anchored: bool,
 }
 
 /// What bodies did with parts since the shell last read it (not saved).
@@ -201,14 +198,14 @@ fn strength(w: &World, a: f64, b: f64, area: f64) -> f64 {
 }
 
 /// Find the structure of the part at `p` of cell `c` again, and its numbers. Plates close a box as wide as the longest
-/// part (the ground may be its sixth face); a hollow part closes its own hollow; the structure takes the larger space
+/// part; a hollow part closes its own hollow; the structure takes the larger space
 /// and its enclosure.
 fn restructure(w: &World, c: &mut Cell, p: usize) {
     let mut list = vec![c.parts[p].id];
     let mut q = 0;
     while q < list.len() {
         for (o, _) in c.bonds.of(list[q]) {
-            if o != GROUND && !list.contains(&o) {
+            if !list.contains(&o) {
                 list.push(o);
             }
         }
@@ -222,7 +219,6 @@ fn restructure(w: &World, c: &mut Cell, p: usize) {
         let (walls, d) = (pt.walls(chem), pt.size.map(|v| v as f64));
         let (vo, face) = (pt.outer(), d[0] * d[1]);
         (s.mass, s.outer, foot) = (s.mass + pt.mass(chem), s.outer + vo, foot + face);
-        s.anchored |= c.bonds.of(x).any(|b| b.0 == GROUND);
         l = l.max(d[0]);
         // Across its walls: their conductivity times the face over their thickness (their volume over the face).
         cond += walls.conductivity * face * face / walls.volume.max(1e-9);
@@ -230,7 +226,7 @@ fn restructure(w: &World, c: &mut Cell, p: usize) {
             best = (pt.hollow as f64, pt.hollow as f64 * vo);
         }
     }
-    let need = if s.anchored { BOX_FACES - 1.0 } else { BOX_FACES } * l * l;
+    let need = BOX_FACES * l * l;
     let plates = if list.len() > 1 { (foot / need).min(1.0) } else { 0.0 };
     let (e, space) = if plates * l.powi(3) > best.1 { (plates, plates * l.powi(3)) } else { best };
     // The walls pass the share they close; the openings `leak` over the rest of the faces of a cube of that space.
@@ -245,29 +241,29 @@ fn restructure(w: &World, c: &mut Cell, p: usize) {
     c.parts[y].s = s;
 }
 
-/// Join the part at `a` of cell `i` of chunk `d` to the part named `b` (or `GROUND`) with a bond of `strength` N.
+/// Join the part at `a` of cell `i` of chunk `d` to the part named `b` with a bond of `strength` N.
 fn link_in(w: &World, d: &mut Chunk, i: usize, a: usize, b: u64, strength: f64) {
     let c = d.at_mut(i);
     let id = c.parts[a].id;
     c.bonds.add(id, b, strength as f32);
     restructure(w, c, a);
-    event(d, w, true, i, if b == GROUND { ANCHORED } else { JOINED });
+    event(d, w, true, i, JOINED);
 }
 
-/// Break the bond between the parts named `a` and `b` (or `GROUND`) of cell `i`, by a load if `load`.
+/// Break the bond between the parts named `a` and `b` of cell `i`, by a load if `load`.
 fn unlink(w: &World, d: &mut Chunk, i: usize, a: u64, b: u64, load: bool) {
     let c = d.at_mut(i);
     c.bonds.remove(a, b);
-    if let Some(y) = (b != GROUND).then(|| at(c, b)).flatten() {
+    if let Some(y) = at(c, b) {
         restructure(w, c, y);
     }
     if let Some(x) = at(c, a) {
         restructure(w, c, x);
     }
-    event(d, w, false, i, if b == GROUND { ANCHORED } else { JOINED } + if load { LOAD } else { 0.0 });
+    event(d, w, false, i, JOINED + if load { LOAD } else { 0.0 });
 }
 
-/// Join the part named `a` to the part named `b` (or `GROUND`) of its cell with a bond of `strength` N (an edit).
+/// Join the part named `a` to the part named `b` of its cell with a bond of `strength` N (an edit).
 pub fn link(w: &mut World, a: u64, b: u64, strength: f64) {
     let i = w.life.part_cell(a).expect("the part");
     w.in_cell(i, |w, d| {

@@ -383,8 +383,7 @@ A **part** is a made object (solid walls, the liquid in its hollow, heat, 3 size
 it was made in and that cell's count of parts made (`bond::Part::id`, as a body's); held or not, it lies in the cell of
 its holder. The bonds of a cell's parts are the cell's (`life::Cell::bonds`): a structure lies in one cell, and only a
 structure that moves (carried) spans two cells for that step, which is serial. A body makes one with "form"
-(`bond::form`, `c_form` per kg, at most `form` of its mass). A **bond** (`bond::Bonds`) joins two parts or a part and
-the bed; its strength comes from the weaker material and the contact area (`tensile`, `joint`), at `c_join` per m². A
+(`bond::form`, `c_form` per kg, at most `form` of its mass). A **bond** (`bond::Bonds`) joins two parts; its strength comes from the weaker material and the contact area (`tensile`, `joint`), at `c_join` per m². A
 **structure** is the parts joined by bonds and moves as one. A part runs no reactions. Monthly (`bond/month.rs`) the
 share of its walls the open world's decomposers would rot in the month (`bond/month.rs::rot`: each reaction they speed,
 `open` above 1, at the rate of Change, `change::rate`, at its cell ground's temperature and moisture, each substance of
@@ -395,15 +394,16 @@ apart (`bond::fall_apart`): all it holds, its walls, the liquid in its hollow an
 whether its walls ran off in its turn or a body took them (`bond::verbs::take`), and it is gone with its bonds.
 
 ### 3.2 Loads and failure
-Monthly (`bond/month.rs`) each bond carries the weight hanging on it, less buoyancy, plus the push of moving liquid and
-of bodies passing (`bump` of their weight); past its strength it breaks, and what has no support lies on the ground.
+Monthly (`bond/month.rs`), from the part a body holds out along the bonds, each bond carries the weight hanging on it,
+less buoyancy, plus the push of moving liquid and of bodies passing (`bump` of their weight); past its strength it
+breaks. A structure no body holds lies on the ground and bears no load.
 Structures do not drift; only a body carries one (3.5).
 
 ### 3.3 Holding, floating
 Holding is a bond whose strength is the body's **force**, strength gene × living body × gravity × `grip`
 (`bond::bears`); a body holds only while its force bears the structure's weight. Fuel adds no force; a hurt body is
 weaker. A body is **afloat** where the liquid is deeper than `deep` and what it and its structure displace weighs as
-much as they do (Archimedes): no liquid stands over it (`bond::depth`). Digging the bed, anchoring a part to it and a
+much as they do (Archimedes): no liquid stands over it (`bond::depth`). Digging the bed and a
 held part as a lever are parked until a brain uses them.
 
 ### 3.4 Containment

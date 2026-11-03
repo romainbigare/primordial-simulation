@@ -1,6 +1,6 @@
 //! The monthly step of parts: rot and heat, loads and failure.
 
-use super::{at, fall_apart, holder, members, restructure, sense::liquid, unlink, verbs::{bears, torn_from}, GROUND};
+use super::{at, fall_apart, holder, members, restructure, sense::liquid, unlink, verbs::{bears, torn_from}};
 use crate::{change::{frac, rate, scarce}, chem::Phase, life::{self, Chunk}, store::{Class, Node}, World, AIR};
 
 /// Liquid shallower than this, m, pushes no part.
@@ -50,14 +50,13 @@ fn turns(w: &World, d: &mut Chunk, i: usize, dt: f64) {
 /// temperature and moisture (`rot`) goes to its ground with its heat, where Change rots it on, as do the walls no longer
 /// solid; the part takes the ground's temperature. Returns whether its walls are under `min_kg`: it falls apart.
 fn rot_and_warm(w: &World, d: &mut Chunk, p: &mut super::Part, i: usize, dt: f64) -> bool {
-    let (ns, chem, tg) = (w.chem.ns(), &w.chem, w.t_ground_last(i));
+    let (chem, tg) = (&w.chem, w.t_ground_last(i));
     let t = p.e / p.heat_cap(chem).max(1e-9);
-    let rot = rot(w, d, &p.wall, i, tg);
-    for k in 0..ns {
+    for (k, rot) in rot(w, d, &p.wall, i, tg).into_iter().enumerate() {
         if p.wall[k] <= 0.0 {
             continue;
         }
-        let off = if chem.phase_in(k, t, |j| p.wall[j]) != Phase::Solid { 1.0 } else { frac(rot[k] * dt) };
+        let off = if chem.phase_in(k, t, |j| p.wall[j]) != Phase::Solid { 1.0 } else { frac(rot * dt) };
         if off > 0.0 {
             let (a, q) = (off * p.wall[k], off * p.wall[k] * chem.subs[k].cp * t);
             (p.e, p.wall[k]) = (p.e - q, p.wall[k] - a);
@@ -99,8 +98,9 @@ fn rot(w: &World, d: &Chunk, wall: &[f64], i: usize, t: f64) -> Vec<f64> {
     rot
 }
 
-/// Load the structure whose root is `r` in cell `i` of chunk `d`: weights less buoyancy, pushes of liquid and bodies;
-/// break what is overloaded.
+/// Load the structure whose root is `r` in cell `i` of chunk `d`: weights less buoyancy, pushes of liquid and bodies,
+/// from the part a body holds out along the bonds; break what is overloaded. A structure no body holds rests on the
+/// ground and bears no load.
 fn load_one(w: &World, d: &mut Chunk, i: usize, r: u64) {
     let (c, g) = (d.at(i), w.cfg.gravity);
     let list = members(c, r);
@@ -121,14 +121,13 @@ fn load_one(w: &World, d: &mut Chunk, i: usize, r: u64) {
         wt[x] = (pt.mass(&w.chem) * g - buoy).max(0.0);
         push[x] = 0.5 * rho * v * v * face + bump;
     }
-    let s = c.parts[rp].s;
-    let held = list.iter().copied().find(|&p| holder(c, p).is_some());
-    // From the supports out along the bonds, each carrying what hangs beyond it; a ground bond carries the pushes too.
+    let Some(h) = list.iter().position(|&p| holder(c, p).is_some()) else {
+        d.at_mut(i).parts[rp].push = 0.0;
+        return;
+    };
+    // From the held part out along the bonds, each carrying what hangs beyond it.
     let ids: Vec<u64> = list.iter().map(|&p| c.parts[p].id).collect();
-    let mut order: Vec<usize> = (0..list.len()).filter(|&x| c.bonds.of(ids[x]).any(|l| l.0 == GROUND)).collect();
-    if order.is_empty() {
-        order.extend(held.and_then(|h| list.iter().position(|&p| p == h)));
-    }
+    let mut order = vec![h];
     let mut up = vec![usize::MAX; list.len()];
     let mut q = 0;
     while q < order.len() {
@@ -148,15 +147,14 @@ fn load_one(w: &World, d: &mut Chunk, i: usize, r: u64) {
     let mut breaks = Vec::new();
     for &x in &order {
         for (o, st) in c.bonds.of(ids[x]) {
-            let hang = if o == GROUND { push[x] } else if up[x] != usize::MAX && ids[up[x]] == o { wt[x] + push[x] } else { 0.0 };
+            let hang = if up[x] != usize::MAX && ids[up[x]] == o { wt[x] + push[x] } else { 0.0 };
             if hang > st as f64 {
                 breaks.push((ids[x], o));
             }
         }
     }
-    // The holder of a structure not resting on the ground bears what hangs on its part by its own force, or lets go.
-    let x = held.filter(|_| !s.anchored).and_then(|h| list.iter().position(|&p| p == h));
-    let torn = x.and_then(|x| holder(c, list[x]).filter(|&o| wt[x] + push[x] > bears(w, &c.bodies[o])));
+    // The holder bears what hangs on its part by its own force, or lets go.
+    let torn = holder(c, list[h]).filter(|&o| wt[h] + push[h] > bears(w, &c.bodies[o]));
     let c = d.at_mut(i);
     c.parts[rp].push = 0.0;
     for (a, o) in breaks {

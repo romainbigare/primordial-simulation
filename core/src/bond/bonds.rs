@@ -2,8 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-/// The bonds of a cell's parts, each once, in the order they were made: bond `l` joins part `a[l]` to part `b[l]` (ids;
-/// or to the bonded ground of the cell, `GROUND`) and holds `strength[l]` N.
+/// The bonds of a cell's parts, each once, in the order they were made: bond `l` joins part `a[l]` to part `b[l]` (ids)
+/// and holds `strength[l]` N.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Bonds {
     pub a: Vec<u64>,
@@ -49,9 +49,9 @@ impl Bonds {
         self.b.extend(o.b);
         self.strength.extend(o.strength);
     }
-    /// How many bonds there are: to the ground if `ground`, else between parts.
-    pub fn count(&self, ground: bool) -> usize {
-        self.b.iter().filter(|&&o| (o == super::GROUND) == ground).count()
+    /// How many bonds there are.
+    pub fn count(&self) -> usize {
+        self.a.len()
     }
 }
 

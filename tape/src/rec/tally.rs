@@ -62,8 +62,8 @@ pub(super) struct YearTally {
     /// kg of what they use (`Body::uses`) that bodies that are not light-eaters took: from light-eaters, from others, from the
     /// ground
     pub intake: [f64; 3],
-    /// Bonds made by kind (held, joined, anchored); broken by bodies; failed by load
-    pub made: [f64; 3],
+    /// Bonds made by kind (held, joined); broken by bodies; failed by load
+    pub made: [f64; 2],
     pub broken: f64,
     pub failed: f64,
     /// Body-months of bodies that are not light-eaters, [cold, warm] x [all, inside walls]
@@ -157,7 +157,7 @@ impl Recorder {
                 }
                 y.intake[source] += used as f64;
             }
-            EventKind::BondMade => y.made[(e.value as usize).min(2)] += 1.0,
+            EventKind::BondMade => y.made[(e.value as usize).min(1)] += 1.0,
             EventKind::BondBroken if e.value >= pcore::bond::LOAD => y.failed += 1.0,
             EventKind::BondBroken => y.broken += 1.0,
         }
