@@ -7,7 +7,7 @@ use super::rain::{rain_air, Pool, Wet};
 use super::wind::{even, lines, pushes, wind, Implicit, Links};
 use super::{air_temp, at_height, radiation::{glow, glow_slope}, step::Active};
 use crate::{math::mean_passed, store::Class, units::{DAY, R_GAS}, World, AIR};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, ops::Range};
 
 /// The time in which eddies even out a block of air, s: the air's day, so a block's side is the distance a diffusion of
 /// `mix` spreads in it, sqrt(`mix` × this) (Taylor 1922), about 340 km (`blocks`).
@@ -49,20 +49,20 @@ impl Ground {
         }
         d
     }
-    /// What each node gets over the whole step under the air that is `d` from the step's start (`moved`), into `got`
-    /// (`[j * (1 + nx) + o]`, as `base`): a few products per node, so on the calling thread.
-    fn gives(&self, d: &[f64], got: &mut [f64]) {
+    /// What each node gets over the whole step of the outputs `os` under the air that is `d` from the step's start
+    /// (`moved`), into `got` (`[j * os.len() + o - os.start]`): per node, on the pool.
+    fn gives(&self, d: &[f64], os: Range<usize>, got: &mut [f64]) {
         let outs = 1 + self.nx;
-        got.copy_from_slice(&self.base);
-        for (j, at) in self.at.windows(2).enumerate() {
-            for e in at[0]..at[1] {
+        crate::par::rows(got, os.len(), || (), |_, j, row| {
+            row.copy_from_slice(&self.base[j * outs + os.start..j * outs + os.end]);
+            for e in self.at[j]..self.at[j + 1] {
                 let (q, r) = (self.near[e] as usize * outs, e * outs * outs);
-                for o in 0..outs {
+                for (g, o) in row.iter_mut().zip(os.clone()) {
                     let r = r + o * outs;
-                    got[j * outs + o] += self.slope[r] * d[q] + (1..outs).map(|v| self.slope[r + v] * d[q + v]).sum::<f64>();
+                    *g += self.slope[r] * d[q] + (1..outs).map(|v| self.slope[r + v] * d[q + v]).sum::<f64>();
                 }
             }
-        }
+        });
     }
 }
 
@@ -190,7 +190,7 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     let ts: Vec<f64> = (0..na).map(|j| at_height(t[j], s.gam[j], s.za[j], s.zair[j])).collect();
     let [mean, rain, ratio] = vapour(w, s, (act, ground), (blocks, one), (x, &t, &ts), (dd, dt));
     (0..s.state.gas.len() * na).for_each(|at| out.x[at] += mean[at] * share);
-    let got = given(ground, act, (&t, &mean));
+    let got = given(ground, act, (&t, &mean), 0..1 + nx);
     // The air each node's rain meets (`rain_air`), per active gas and node (`[y * na + j]`), on the pool, from the air
     // touching each cell.
     let touched = if rain.iter().any(|&m| m > 0.0) { ground.wet().touched(s, &t) } else { Vec::new() };
@@ -216,11 +216,11 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     }
 }
 
-/// What each node's ground gives it over the step under the air `t`, K, and `x` (`Ground::gives`), `[j * (1 + nx) + o]`.
-fn given(ground: &Ground, act: &[Active], (t, x): (&[f64], &[f64])) -> Vec<f64> {
-    let outs = 1 + act.len();
-    let (mut got, d) = (vec![0.0; t.len() * outs], ground.moved(act, (t, x)));
-    ground.gives(&d, &mut got);
+/// What each node's ground gives it over the step under the air `t`, K, and `x` (`Ground::gives`), of the outputs `os`
+/// only (0 its heat, 1 + y its active gas `y`), `[j * os.len() + o - os.start]`.
+fn given(ground: &Ground, act: &[Active], (t, x): (&[f64], &[f64]), os: Range<usize>) -> Vec<f64> {
+    let (mut got, d) = (vec![0.0; t.len() * os.len()], ground.moved(act, (t, x)));
+    ground.gives(&d, os, &mut got);
     got
 }
 
@@ -230,13 +230,13 @@ fn given(ground: &Ground, act: &[Active], (t, x): (&[f64], &[f64])) -> Vec<f64> 
 fn warmth(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, one): (&[Vec<u32>], &Together), (x, e): (&[f64], &[f64]), (dd, dt): (f64, f64)) -> Vec<f64> {
     let (air, na) = (w.mesh.level(AIR), e.len());
     let start = temps(s, x, e);
-    let (mut t, got, outs) = (start.clone(), given(ground, act, (&start, x)), 1 + act.len());
+    let (mut t, got) = (start.clone(), given(ground, act, (&start, x), 0..1));
     for (b, nodes) in blocks.iter().enumerate() {
         let (mut rate, mut slope, mut capa) = (0.0, -one.heat[b] / dt, 0.0);
         for &j in nodes {
             let j = j as usize;
             let (f, lay, area, ts) = (s.absorbs[j], &s.lay[j][1], air.area()[j], at_height(start[j], s.gam[j], s.za[j], s.zair[j]));
-            rate += got[j * outs] / dt - glow(f, ts, lay) * area;
+            rate += got[j] / dt - glow(f, ts, lay) * area;
             slope += glow_slope(f, ts, lay) * area;
             capa += s.state.gas.iter().enumerate().map(|(q, &k)| x[q * na + j] * s.sp[k].cp).sum::<f64>();
         }
@@ -254,14 +254,14 @@ fn warmth(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, 
 /// mol, and that times the ratio it rains at.
 fn vapour(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, one): (&[Vec<u32>], &Together), (x, t, ts): (&[f64], &[f64], &[f64]), (dd, dt): (f64, f64)) -> [Vec<f64>; 3] {
     let (air, na, nx, nb) = (w.mesh.level(AIR), t.len(), act.len(), blocks.len());
-    let got = given(ground, act, (t, x));
+    let got = given(ground, act, (t, x), 1..1 + nx);
     let (mut mean, mut rain, mut ratio) = (x.to_vec(), vec![0.0; nx * na], vec![0.0; nx * na]);
     for (y, ac) in act.iter().enumerate() {
         let full = |j: usize| if ac.cond { (s.sat[ac.k].at(ts[j]) * air.area()[j] * s.hk[ac.gi * na + j] / (R_GAS * ts[j])).max(0.0) } else { 0.0 };
         for (b, nodes) in blocks.iter().enumerate() {
             let held = |j: u32| x[ac.gi * na + j as usize];
             let all: f64 = nodes.iter().map(|&j| held(j)).sum();
-            let gives: f64 = nodes.iter().map(|&j| got[j as usize * (1 + nx) + 1 + y]).sum();
+            let gives: f64 = nodes.iter().map(|&j| got[j as usize * nx + y]).sum();
             let slope = one.gas[y * nb + b];
             let v: Vec<f64> = nodes.iter().map(|&j| one.v[j as usize]).collect();
             let off = nodes.iter().zip(&v).map(|(&j, v)| held(j) - v * all).collect();
