@@ -109,9 +109,9 @@ fn drink(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
 /// temperature at the end. Above its `COOL_T` gene it opens its coat as far as it needs to stand there, up to its bare
 /// surface (`Body::bare`: blood to the skin, the coat laid flat; Scholander et al. 1950), and past that evaporates its key
 /// liquid for the excess, at its latent heat, never below its safe minimum. Its key liquid boils at its boiling point:
-/// past it the heat boils it off, below its safe minimum too, and holds the body there while it lasts. It then stands at
-/// that temperature (`settle_heat`): what it gains from its ground there is never more than the heat it released,
-/// unless the ground is the warmer.
+/// past it the heat boils it off, below its safe minimum too, and holds the body there; one that boils dry dies there.
+/// It then stands at that temperature (`settle_heat`): what it gains from its ground there is never more than the heat
+/// it released, unless the ground is the warmer.
 fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, dt: f64) -> f64 {
     let (chem, tg, t0) = (&w.chem, w.t_ground_last(b.cell as usize), b.temp(&w.chem));
     let (coat, bare) = coat(w, d, b, b.mass(chem));
@@ -137,7 +137,8 @@ fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, dt: f64) -> f64 
     };
     let boil = b.wet_ks().map(|s| chem.subs[chem.body().subs()[s]].boil).fold(f64::INFINITY, f64::min);
     let q = if end(x, q) > boil { q - evaporate(w, d, b, q - holds(x, boil), false) } else { q };
-    let t = end(x, q);
+    // (One that boils dry dies there, `check_stores`: it stands no warmer, and the rest of its heat stays in its ground.)
+    let t = end(x, q).min(boil);
     settle_heat(w, d, b, t);
     t
 }

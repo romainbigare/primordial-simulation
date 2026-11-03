@@ -726,7 +726,7 @@ end; above its `COOL_T` gene it opens its coat as far as it needs to stand there
 skin, the coat laid flat), and past that evaporates its key liquid for the excess, at the liquid's vaporisation
 enthalpy, never below its safe minimum, the vapour going to the bodies' node with its latent heat. Its key liquid boils
 at its boiling point: past it the heat boils the liquid off, below its safe minimum too, and holds the body there while
-it lasts (a wet body never stands above it). Its upkeep goes with
+it lasts; one that boils dry dies there (`check_stores`), the rest of its heat staying in its ground. Its upkeep goes with
 the pace of its temperature (6.2), so a warmer body makes more heat; the open coat lets that heat out, so a body's own
 heat does not drive its pace up month after month. Its heat then comes to that temperature with its ground
 (`body::settle_heat`). After its decision (`live::shed_meal_heat`) the heat of what it took and of digesting it, above
