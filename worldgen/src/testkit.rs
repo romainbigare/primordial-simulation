@@ -186,6 +186,14 @@ pub fn cover(w: &mut World, i: usize, kg: f64) {
     assert!(pcore::cover::place(w, i, f.genes, 0, kg), "no room for cover in cell {i}");
 }
 
+/// `kg` per m² of the cover of starting kind 0 on every dry land cell (`cover`; the cells' surroundings from the last
+/// survey): what eaters placed then find to take from their first month.
+pub fn cover_lands(w: &mut World, kg: f64) {
+    for i in dry_lands(w) {
+        cover(w, i, kg);
+    }
+}
+
 /// Body `b` made `f` times as big: its stores and heat (booked as an edit).
 pub fn scale(w: &mut World, b: &mut Body, f: f64) {
     let more: Vec<(usize, f64)> = pcore::body::each(&w.chem, &b.store).map(|(k, a)| (k, (f - 1.0) * a)).collect();

@@ -24,6 +24,19 @@ fn run(w: &mut World, months: u32) {
     }
 }
 
+/// Cover added on every dry land cell for the eaters of `fed`, kg per m²: with it they live through the first years and
+/// breed, their numbers flat or growing, not kept by the luck of a few founders.
+const FOOD_KG: f64 = 2.0;
+
+/// `w` with two kinds of life that live on: the light-eaters (none of them fixing) with `FOOD_KG` more of their cover
+/// on the dry land, and the eaters with the hand-set brains of `ew run`.
+fn fed(w: &mut World) {
+    let how = worldgen::life::Seeding { fixers: 0.0, ..Default::default() };
+    worldgen::life::seed_with(w, 0, &how);
+    worldgen::testkit::cover_lands(w, FOOD_KG);
+    worldgen::life::seed_with(w, 1, &how);
+}
+
 /// The world with two kinds of life: light-eaters and eaters with neutral brains.
 fn two_kinds() -> World {
     let mut w = world();
@@ -191,10 +204,9 @@ fn a_globe_file_names_its_shape_and_its_means_are_by_area() {
     assert!((rec.last("t_ground") - by_area).abs() < 1e-9, "{} against {by_area}", rec.last("t_ground"));
 }
 
-/// The recording the series tests read: `world` with the soil, the light-eaters (none of them fixing) and the eaters
-/// (neutral brains), recorded month by month for three years, with the reaction that breaks the fixed mineral down
-/// (`MINERAL_BREAKS`) off, so that the mineral in all stays what the soil gave; its folder, and the land and low-ground
-/// cells at each yearly row.
+/// The recording the series tests read: `world` with the soil and the life of `fed`, recorded month by month for three
+/// years, with the reaction that breaks the fixed mineral down (`MINERAL_BREAKS`) off, so that the mineral in all stays
+/// what the soil gave; its folder, and the land and low-ground cells at each yearly row.
 struct Recording {
     w: World,
     dir: std::path::PathBuf,
@@ -209,8 +221,7 @@ fn recording() -> &'static Recording {
         w.chem.reactions[worldgen::testkit::MINERAL_BREAKS].k = 0.0;
         worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
         // (No cover fixes: the mineral's whole is then kept.)
-        worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding { fixers: 0.0, ..Default::default() });
-        worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
+        fed(&mut w);
         let cells = |w: &World| {
             let land = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).count() as f64;
             [land, w.mesh.cells().n() as f64 - land]
@@ -454,17 +465,14 @@ fn csv_files_grown_year_by_year_are_those_written_at_once() {
 
 /// A null run: with life about and copies made, nobody learns (the bodies' own adjustments stay
 /// zero) and every born row is a mean of the starting ones (inside their range, as a node's rows
-/// are the means of its members'); in the real run of the same world they are neither. The
-/// light-eaters here are of a test lineage with a brain (their own kind has none), so that many
-/// copies carry rows.
+/// are the means of its members'); in the real run of the same world they are neither. The eaters
+/// (`fed`) breed within its months, so that many copies carry rows.
 #[test]
 fn null_run_freezes_the_brain_rows() {
     let go = |null: bool| {
         let mut w = world();
         w.cfg.null = null;
-        worldgen::life::seed(&mut w, 0);
-        pcore::survey::survey(&mut w);
-        worldgen::life::seed(&mut w, 1);
+        fed(&mut w);
         let start: Vec<&Vec<f32>> = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).map(|g| &g.rows).collect();
         let (lo, hi): (Vec<f32>, Vec<f32>) = (0..start[0].len()).map(|k| start.iter().fold((f32::MAX, f32::MIN), |m, r| (m.0.min(r[k]), m.1.max(r[k])))).unzip();
         run(&mut w, 72);
