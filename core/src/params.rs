@@ -152,8 +152,7 @@ pub struct Physics {
     pub shape_noise: f32,
     /// Weight of well-being one month (one update) ahead against well-being now
     pub discount: f32,
-    /// Weight in a move's score of the critic's value of the state it would be in in the cell it steps into, over
-    /// staying, per unit of well-being
+    /// Weight in a move's score of the critic's gain from stepping into a cell (`choose::plan`), per unit of well-being
     pub plan_weight: f32,
     /// Share of the way a watcher's rows move toward the watched one's
     pub blend: f32,
