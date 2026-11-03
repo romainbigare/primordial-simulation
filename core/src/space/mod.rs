@@ -188,16 +188,33 @@ impl Level {
     }
 }
 
-/// A mesh: its levels, the finest first.
+/// A mesh: its levels, the finest first, and how its cells lie on the squares of the map.
 #[derive(Clone, Debug, Default)]
 pub struct Mesh {
     levels: Vec<Level>,
+    /// The cell of the finest level that holds each square of the map, and the north-west square of each cell
+    holder: Vec<u32>,
+    corner: Vec<u32>,
 }
 
 impl Mesh {
-    /// A mesh of one level.
-    pub(crate) fn of(cells: Level) -> Mesh {
-        Mesh { levels: vec![cells] }
+    /// A mesh of the level `cells` and a coarser level (`Level::coarser` of a level of the same map), given each cell's
+    /// parent at it, the cell of each square of the map and the north-west square of each cell.
+    pub(crate) fn of(mut cells: Level, (mut coarse, links): (Level, Vec<LinkSpec>), parent: Vec<u32>, holder: Vec<u32>, corner: Vec<u32>) -> Mesh {
+        assert!(parent.len() == cells.n() && corner.len() == cells.n(), "a parent and a north-west square for each cell");
+        (coarse.kid_start, coarse.kids) = compress(coarse.n(), parent.iter().enumerate().map(|(c, &p)| (p, c as u32)));
+        assert!(coarse.kid_start.windows(2).all(|s| s[0] < s[1]), "each coarse cell has a child");
+        cells.parent = parent;
+        coarse.join(links);
+        Mesh { levels: vec![cells, coarse], holder, corner }
+    }
+    /// The cell of the finest level that holds square `s` of the map.
+    pub fn cell_of(&self, s: usize) -> usize {
+        self.holder[s] as usize
+    }
+    /// The north-west square of cell `i` of the finest level.
+    pub fn corner(&self, i: usize) -> usize {
+        self.corner[i] as usize
     }
     pub fn levels(&self) -> usize {
         self.levels.len()
@@ -230,14 +247,6 @@ impl Mesh {
         }
         [p.radius * east_of(p.lon[i], q.lon[j]).to_radians(), p.radius * (p.lat[i] - q.lat[j]).to_radians()]
     }
-    /// Add a coarser level over the coarsest, given each cell's parent (`Level::coarser`).
-    pub(crate) fn coarsen(&mut self, parent: Vec<u32>) {
-        let fine = self.levels.last_mut().expect("a mesh has a level");
-        let (mut coarse, links) = fine.coarser(&parent);
-        fine.parent = parent;
-        coarse.join(links);
-        self.levels.push(coarse);
-    }
 }
 
 impl Level {
@@ -248,8 +257,6 @@ impl Level {
         let fine = self;
         assert_eq!(parent.len(), fine.n(), "one parent for each cell");
         let m = parent.iter().max().map_or(0, |&p| p as usize + 1);
-        let (kid_start, kids) = compress(m, parent.iter().enumerate().map(|(c, &p)| (p, c as u32)));
-        assert!(kid_start.windows(2).all(|s| s[0] < s[1]), "each coarse cell has a child");
         let (mut area, mut centre, mut lat, mut lon) = (vec![0.0; m], vec![[0.0; 2]; m], vec![0.0; m], vec![0.0; m]);
         for (c, &p) in parent.iter().enumerate() {
             let (p, ac) = (p as usize, fine.area[c]);
@@ -258,12 +265,13 @@ impl Level {
             lat[p] += ac * fine.lat[c];
             lon[p] += ac * fine.lon[c];
         }
+        assert!(area.iter().all(|&a| a > 0.0), "each coarse cell has a child");
         for p in 0..m {
             centre[p] = [centre[p][0] / area[p], centre[p][1] / area[p]];
             lat[p] /= area[p];
             lon[p] /= area[p];
         }
-        let mut coarse = Level::of_cells(area, centre, (lat, lon), fine.radius);
+        let coarse = Level::of_cells(area, centre, (lat, lon), fine.radius);
         let mut pairs: Vec<(u32, u32, f64)> = (0..fine.a.len())
             .map(|l| (parent[fine.a[l] as usize], parent[fine.b[l] as usize], fine.width[l]))
             .filter(|&(pa, pb, _)| pa != pb)
@@ -280,7 +288,6 @@ impl Level {
                 }
             }
         }
-        (coarse.kid_start, coarse.kids) = (kid_start, kids);
         (coarse, links)
     }
 }

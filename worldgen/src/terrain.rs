@@ -77,7 +77,7 @@ fn fbm(seed: u64, p: &[f64], octaves: u32) -> f64 {
 
 /// Where cell `i` of `map` lies in the noise at `per_cell` units a square: on a flat map its centre, in squares, less
 /// half a square (a square's column and row); on a globe the point over its centre on a sphere `per_cell` units a
-/// square round its equator (no seam where the rows wrap). A refined region's quarters read the noise at their centres.
+/// square round its equator (no seam where the rows wrap). A cell of many squares reads the noise at its centre.
 fn spot(map: &Square, cells: &Level, i: usize, per_cell: f64) -> Vec<f64> {
     if !map.wrap {
         return cells.centre()[i].iter().map(|&c| (c / map.side - 0.5) * per_cell).collect();
@@ -205,12 +205,12 @@ pub fn scale_absorbers(w: &mut World, factor: f64) {
 
 /// The map of an island of `w × h` cells.
 pub fn island(w: usize, h: usize) -> Square {
-    Square { w, h, side: CELL_M, wrap: false, region: None }
+    Square::new(w, h, CELL_M, false)
 }
 
 /// The map of a globe of `rows` rows from pole to pole, with twice as many columns, so a cell is square at the equator.
 pub fn globe(rows: usize) -> Square {
-    Square { w: 2 * rows, h: rows, side: PI * RADIUS_M / rows as f64, wrap: true, region: None }
+    Square::new(2 * rows, rows, PI * RADIUS_M / rows as f64, true)
 }
 
 /// A new world on `map` from a seed: terrain, chemistry 0, ground, liquid and air.
@@ -280,7 +280,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
         zmean[j] /= air_area[j];
         // At the latitude of the first cell of a row near the middle of the node's block.
         let y = (j / map.w.div_ceil(AIR_SCALE)) * AIR_SCALE + AIR_SCALE / 2;
-        let lat = mesh.cells().lat()[map.idx(0, y.min(map.h - 1))];
+        let lat = mesh.cells().lat()[mesh.cell_of(map.idx(0, y.min(map.h - 1)))];
         // A node's temperature is its air's at the column's mean height (`flow::air`), which lies higher the warmer the
         // air: it starts at the starting temperature there, the height taken twice from the scale height it gives.
         let at_mean = |t: f64| {

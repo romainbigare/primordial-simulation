@@ -1,5 +1,5 @@
-//! Space: the square mesh has the map's squares (areas, links, the air as a coarser level), and stacks give each cell
-//! its column of nodes.
+//! Space: the mesh of a map has its cells (areas, links, the air as a coarser level), cells of many squares among
+//! them, and stacks give each cell its column of nodes.
 
 use pcore::{World, AIR};
 use pcore::space::square::Square;
@@ -12,8 +12,9 @@ const SCALE: usize = 4;
 /// Two maps: one the air blocks fit, one they do not (10 x 7 leaves narrow blocks along the south and east edges).
 fn maps() -> [(Square, Mesh); 2] {
     [(16, 16), (10, 7)].map(|(w, h)| {
-        let sq = Square { w, h, side: SIDE, wrap: false, region: None };
-        (sq, sq.mesh(&[SCALE], 31.0, 33.3))
+        let sq = Square::new(w, h, SIDE, false);
+        let mesh = sq.mesh(SCALE, 31.0, 33.3);
+        (sq, mesh)
     })
 }
 
@@ -91,8 +92,9 @@ fn air_of_is_the_parent_at_the_air_level_and_levels_agree() {
 #[test]
 fn the_compass_of_a_square_is_its_eight_neighbours() {
     const GRID: [(i32, i32); 8] = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)];
-    let globe = Square { w: 16, h: 8, side: SIDE, wrap: true, region: None };
-    for (sq, mesh) in maps().into_iter().chain([(globe, globe.mesh(&[SCALE], -90.0, 90.0))]) {
+    let globe = Square::new(16, 8, SIDE, true);
+    let round = globe.mesh(SCALE, -90.0, 90.0);
+    for (sq, mesh) in maps().into_iter().chain([(globe, round)]) {
         let lv = mesh.cells();
         for (i, (d, &g)) in (0..sq.n()).flat_map(|i| GRID.iter().enumerate().map(move |dg| (i, dg))) {
             assert_eq!(lv.way(i, d).map(|e| lv.adj_cell()[e] as usize), sq.step(i, g), "cell {i}, direction {d}");
@@ -119,8 +121,8 @@ fn a_stack_numbers_each_layer_after_the_one_below() {
 #[test]
 fn a_globe_covers_its_sphere_and_wraps_east_to_west() {
     let (rows, radius) = (8, 1e6);
-    let sq = Square { w: 2 * rows, h: rows, side: std::f64::consts::PI * radius / rows as f64, wrap: true, region: None };
-    let mesh = sq.mesh(&[SCALE], -90.0, 90.0);
+    let sq = Square::new(2 * rows, rows, std::f64::consts::PI * radius / rows as f64, true);
+    let mesh = sq.mesh(SCALE, -90.0, 90.0);
     let sphere = 4.0 * std::f64::consts::PI * radius * radius;
     for l in 0..mesh.levels() {
         let total: f64 = mesh.level(l).area().iter().sum();
@@ -140,61 +142,91 @@ fn a_globe_covers_its_sphere_and_wraps_east_to_west() {
     }
 }
 
-/// A refined region, on a flat map and on a globe: its squares in quarters that cover them, each cell under its
-/// square's air block; each square keeps its borders with the others (a square beside the region shares its side with
-/// two quarters, half a side each), and a square and a quarter link only across a border, as far apart as their
-/// centres across it.
+/// The side of each block of `SCALE` x `SCALE` squares as a power of 2 squares, row by row: a map of cells of three
+/// sizes.
+fn sized(mut sq: Square, blocks: &[&[u8]]) -> Square {
+    for s in 0..sq.n() {
+        let (x, y) = sq.xy(s);
+        sq.size[s] = blocks[y / SCALE][x / SCALE];
+    }
+    sq
+}
+
+/// Two maps of cells of 1, 2 and 4 squares on a side, one flat and one a globe (wrapping a block of cells of 2
+/// beside one of 1), with their latitudes.
+fn mixed() -> [(Square, f64, f64); 2] {
+    let flat = sized(Square::new(16, 12, SIDE, false), &[&[1, 1, 1, 2], &[1, 0, 0, 1], &[1, 1, 1, 1]]);
+    let globe = sized(Square::new(16, 8, SIDE, true), &[&[1, 2, 1, 0], &[0, 1, 0, 0]]);
+    [(flat, 31.0, 33.3), (globe, -90.0, 90.0)]
+}
+
+/// The side of cell `i` of `mesh` on `sq`, squares.
+fn side_of(sq: &Square, mesh: &Mesh, i: usize) -> usize {
+    1 << sq.size[mesh.corner(i)]
+}
+
+/// Cells of many sizes, on a flat map and on a globe: numbered by their north-west squares row by row, each covers its
+/// squares and lies under their air block, the air level is that of the squares; each cell keeps the borders of its
+/// squares with the others, cells of two sizes link only across a border, as far apart as their centres across it,
+/// and a corner links only cells of one size.
 #[test]
-fn a_refined_region_splits_its_squares_in_four_and_keeps_the_borders() {
-    let flat = Square { w: 10, h: 7, side: SIDE, wrap: false, region: Some([3, 2, 4, 3]) };
-    let globe = Square { w: 16, h: 8, side: SIDE, wrap: true, region: Some([0, 0, 3, 2]) };
-    for (sq, south, north) in [(flat, 31.0, 33.3), (globe, -90.0, 90.0)] {
-        let (mesh, plain) = (sq.mesh(&[SCALE], south, north), Square { region: None, ..sq }.mesh(&[SCALE], south, north));
-        let (lv, [_, _, rw, rh]) = (mesh.cells(), sq.region.expect("a region"));
-        assert_eq!(lv.n(), sq.n() + 3 * rw * rh);
+fn cells_of_many_sizes_cover_their_squares_and_keep_the_borders() {
+    for (sq, south, north) in mixed() {
+        let (mesh, plain) = (sq.mesh(SCALE, south, north), Square::new(sq.w, sq.h, sq.side, sq.wrap).mesh(SCALE, south, north));
+        let lv = mesh.cells();
         links_once(lv);
         links_once(mesh.level(AIR));
-        let mut area = vec![0.0; sq.n()];
-        for i in 0..lv.n() {
-            area[sq.square_of(i)] += lv.area()[i];
-            assert_eq!(mesh.up(i, 0, AIR), plain.up(sq.square_of(i), 0, AIR), "cell {i} under its square's air block");
+        assert!((1..lv.n()).all(|i| mesh.corner(i - 1) < mesh.corner(i)), "numbered by their north-west squares");
+        let mut area = vec![0.0; lv.n()];
+        for s in 0..sq.n() {
+            area[mesh.cell_of(s)] += plain.cells().area()[s];
+            assert_eq!(mesh.up(mesh.cell_of(s), 0, AIR), plain.up(s, 0, AIR), "square {s} under its air block");
         }
+        assert!((0..lv.n()).all(|i| mesh.cell_of(mesh.corner(i)) == i));
         let near = |a: f64, b: f64| (a / b - 1.0).abs() < 1e-12;
-        assert!((0..sq.n()).all(|s| near(area[s], plain.cells().area()[s])), "the quarters cover their square");
-        let quarter = |i: usize| lv.area()[i] < 0.5 * plain.cells().area()[sq.square_of(i)];
-        let mut border = vec![0.0; plain.cells().a().len()];
-        for l in 0..lv.a().len() {
-            let (a, b) = (lv.a()[l] as usize, lv.b()[l] as usize);
-            if let Some(p) = plain.cells().link(sq.square_of(a), sq.square_of(b)) {
-                border[p] += lv.width()[l];
-            }
-            if quarter(a) != quarter(b) {
-                assert!(lv.width()[l] > 0.0, "no corner links a square and a quarter");
-                if !sq.wrap {
-                    assert!(near(lv.dist()[l], 0.75 * SIDE), "a square's centre lies three quarters of its side from a quarter's across their border");
-                }
+        assert!((0..lv.n()).all(|i| near(area[i], lv.area()[i])), "the cells cover their squares");
+        let (air, plain_air) = (mesh.level(AIR), plain.level(AIR));
+        assert!(air.n() == plain_air.n() && (0..air.n()).all(|j| near(air.area()[j], plain_air.area()[j])), "the air level is that of the squares");
+        assert!(air.width().iter().zip(plain_air.width()).all(|(&a, &b)| a == b || near(a, b)), "with the borders of the squares");
+        let mut border = vec![0.0; lv.a().len()];
+        for p in 0..plain.cells().a().len() {
+            let (a, b) = (mesh.cell_of(plain.cells().a()[p] as usize), mesh.cell_of(plain.cells().b()[p] as usize));
+            if a != b && plain.cells().width()[p] > 0.0 {
+                border[lv.link(a, b).expect("cells across a border link")] += plain.cells().width()[p];
             }
         }
-        assert!(border.iter().zip(plain.cells().width()).all(|(&b, &w)| b == w || near(b, w)), "each square keeps its borders");
+        assert!(border.iter().zip(lv.width()).all(|(&b, &w)| b == w || near(b, w)), "each cell keeps the borders of its squares");
+        for l in 0..lv.a().len() {
+            let (ka, kb) = (side_of(&sq, &mesh, lv.a()[l] as usize), side_of(&sq, &mesh, lv.b()[l] as usize));
+            if lv.width()[l] == 0.0 {
+                assert_eq!(ka, kb, "a corner links cells of one size");
+            } else if !sq.wrap {
+                assert!(near(lv.dist()[l], (ka + kb) as f64 / 2.0 * SIDE), "centres lie half their sides apart across a border");
+            }
+        }
     }
 }
 
 /// The steepest way down (`Level::steepest`, D-infinity) of a tilted flat surface is its own slope on squares and on
-/// the quarters of a refined region alike, so the way liquid runs does not depend on the size of the cells; on
-/// squares a surface falling 30° south of east sends a third east and two thirds south-east (Tarboton 1997).
+/// cells of many sizes alike, so the way liquid runs does not depend on the size of the cells; on squares a surface
+/// falling 30° south of east sends a third east and two thirds south-east (Tarboton 1997).
 #[test]
 fn the_steepest_way_down_a_tilted_surface_is_its_slope_on_any_cells() {
     let fall = [0.02 * 30f64.to_radians().cos(), 0.02 * 30f64.to_radians().sin()];
-    let plain = Square { w: 10, h: 7, side: SIDE, wrap: false, region: None };
-    for sq in [plain, Square { region: Some([3, 2, 4, 3]), ..plain }] {
-        let mesh = sq.mesh(&[SCALE], 31.0, 33.3);
+    let [(flat, south, north), _] = mixed();
+    for sq in [Square::new(flat.w, flat.h, SIDE, false), flat] {
+        let mesh = sq.mesh(SCALE, south, north);
         let lv = mesh.cells();
         let h = |i: usize| -(fall[0] * lv.centre()[i][0] + fall[1] * lv.centre()[i][1]);
-        for i in (0..lv.n()).filter(|&i| sq.step(sq.square_of(i), (1, 1)).is_some() && sq.step(sq.square_of(i), (-1, -1)).is_some()) {
+        let inside = |i: usize| {
+            let ((x, y), k) = (sq.xy(mesh.corner(i)), side_of(&sq, &mesh, i));
+            x > 0 && y > 0 && x + k < sq.w && y + k < sq.h
+        };
+        for i in (0..lv.n()).filter(|&i| inside(i)) {
             let drop = |k: usize| Some(h(i) - h(lv.around(i).1[k] as usize)).filter(|&d| d > 0.0);
             let (slope, ways) = lv.steepest(i, drop).expect("a way down");
             assert!((slope / fall[0].hypot(fall[1]) - 1.0).abs() < 1e-12, "cell {i}: slope {slope}");
-            if sq.region.is_none() {
+            if lv.n() == sq.n() {
                 let share = |d: usize| ways.iter().filter(|w| lv.way(i, d) == Some(lv.start()[i] as usize + w.0)).map(|w| w.1).sum::<f64>();
                 assert!((share(0) - 1.0 / 3.0).abs() < 1e-12 && (share(1) - 2.0 / 3.0).abs() < 1e-12, "cell {i}: {ways:?}");
             }

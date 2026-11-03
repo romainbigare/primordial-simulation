@@ -10,8 +10,8 @@ maths in `solve/` (`spread`, `downhill`, `band`); nodes and books in `store/`, `
 `brain.rs`; the cells as bodies see them in `survey.rs`; paths in `lanes.rs`; keyed random numbers in `rng.rs`; the
 tape's events in `event.rs`; threads in `par.rs` (the same results with and without, on any count of threads).
 
-**Words.** A **cell** is a square of the map (2 km on the island, latitude-longitude on a globe) or a quarter of one
-in a refined region. A **node** is anything that holds stuff: a cell's ground, an air column, a body, a part. A
+**Words.** A **cell** is a square of the map (2 km on the island, latitude-longitude on a globe) or a block of 2 x 2
+or 4 x 4 of them. A **node** is anything that holds stuff: a cell's ground, an air column, a body, a part. A
 **body** is a living node with genes and maybe a brain; a **member** is one living thing in it (one member: an
 **individual**; many: a **population node**). A **gene** is a number a body inherits, often log10 (1 means ×10) and
 "off" below 0. The **key liquid** is the liquid a body's chemistry runs in (substance 0). **Light-eaters** (plant-like)
@@ -21,9 +21,11 @@ are not bodies but the **cover** of each cell, a field (4.5); bodies are **eater
 **The map** (`space/`, `World::mesh`): cells, links with widths and headings, and a coarser air level. The laws step
 only on links. Each link takes one of 8 compass directions (`Level::way`), so the brain's 8 directions hold everywhere.
 An island of 2 km squares, or a globe (`--globe`) of latitude-longitude squares on a sphere of 6,371 km whose rows wrap
-east to west. A rectangle may be refined at the start (`--region`, `Square::refine`): each square becomes four
-quarters, linked to a square beside them at the distance between centres across the border, so a steady change
-across it passes exactly.
+east to west. One builder makes every cell (`Square::mesh`): a cell is a block of 1, 2 or 4 squares on a side inside
+one air block (`Square::size`), and cells across a border differ by one size at most. Cells link across a border by
+its width, as far apart as their centres across it, so a steady change across a border of two sizes passes exactly;
+across a corner (width 0) only where four cells of one size meet, so no cell has more than 8 links. The air level is
+built from the squares, the same whatever the sizes of the cells.
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
 (`schedule::month`), each for the whole month: the survey (`survey::survey`: one task per chunk on the pool with the
@@ -760,7 +762,7 @@ read a kind.
   loose ground; the sea's salt at balance (2.6); ground and air temperatures falling with latitude and height. Every
   land cell drains from the start (`drain`): a priority flood raises closed basins to their outlet at 1 m per km
   (`DRAIN_SLOPE`; Planchon and Darboux 2001), from every cell below 0 m on a globe, from those joined to the lowest
-  cell on an island. Quarters read the same noise at their own centres.
+  cell on an island. A cell of many squares reads the same noise at its centre.
 - **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS` rows of `Place::Field`: kg per m² and genes,
   on every open land cell by its chance), then eaters 20 years later; `--roster` places ten kinds (`ROSTER`). Founders
   are adults on land under at most half a metre of liquid; mass 30% fuel (60% for the two big slow eater kinds).

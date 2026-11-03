@@ -193,7 +193,7 @@ fn warm_air_spreads() {
 #[test]
 fn a_hot_spot_spreads_through_the_ground_at_its_diffusivity() {
     let mut w = worldgen::new_world(3, 16, 16);
-    let (n, ns, g) = (w.mesh.cells().n(), w.chem.ns(), w.map);
+    let (n, ns, g) = (w.mesh.cells().n(), w.chem.ns(), w.map.clone());
     let land = (0..n).find(|&i| w.surface_z(i) > 0.0).expect("land");
     let (mut cp, mut vol, mut kv) = (0.0, 0.0, 0.0);
     for k in 0..ns {
@@ -229,17 +229,21 @@ fn a_hot_spot_spreads_through_the_ground_at_its_diffusivity() {
     books.assert_within(&w, 1e-9, 1e-9);
 }
 
-/// Heat crosses the border of a refined region by the border's width over the distance across it: on even bed
+/// Heat crosses the border between cells of two sizes by the border's width over the distance across it: on even bed
 /// everywhere with no loose ground, ground warmer to the east at a fixed rate (as much heat flows into each cell as
-/// out) stays so in the cells away from the map's edges, inside the region, beside it and across its border, while a
-/// region whose quarters read a square's width or the distance between centres would not. An even temperature stays
-/// even.
+/// out) stays so in the cells away from the map's edges, in squares, in cells of 2 x 2 squares and across their
+/// borders, while cells that read a square's width or the distance between centres would not. An even temperature
+/// stays even.
 #[test]
-fn heat_crosses_the_border_of_a_refined_region_by_its_width() {
+fn heat_crosses_the_border_between_cells_of_two_sizes_by_its_width() {
     const GRAD: f64 = 1e-3;
-    // A region from the north edge of the map to the south: its borders run north to south, across the warming.
-    let map = pcore::space::square::Square { region: Some([5, 0, 6, 16]), ..worldgen::terrain::island(16, 16) };
-    let mut w = worldgen::terrain::new_map(3, map);
+    // Squares from the north edge of the map to the south between cells of 2 x 2 squares: their borders run north to
+    // south, across the warming.
+    let mut map = worldgen::terrain::island(24, 16);
+    for s in 0..map.n() {
+        map.size[s] = u8::from(!(8..16).contains(&map.xy(s).0));
+    }
+    let mut w = worldgen::terrain::new_map(3, map.clone());
     let (n, ns, area) = (w.mesh.cells().n(), w.chem.ns(), w.mesh.cells().area().to_vec());
     let land = (0..n).find(|&i| w.surface_z(i) > 0.0 && area[i] == map.side * map.side).expect("land");
     // Per m² of the bed: heat capacity, volume, and volume times conductivity.
@@ -256,7 +260,7 @@ fn heat_crosses_the_border_of_a_refined_region_by_its_width() {
     let x = |w: &World, i: usize| w.mesh.cells().centre()[i][0];
     let dt = 0.01 * map.side * map.side * cp / kv;
     let side_heat = kv / vol * w.cfg.skin_m * map.side * GRAD * dt;
-    let away = |w: &World, i: usize| (4.0 * map.side..=12.0 * map.side).contains(&x(w, i));
+    let away = |w: &World, i: usize| (4.0 * map.side..=20.0 * map.side).contains(&x(w, i));
     for even in [true, false] {
         for i in 0..n {
             let t = 300.0 + if even { 0.0 } else { GRAD * x(&w, i) };

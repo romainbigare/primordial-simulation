@@ -1,8 +1,7 @@
-//! Coarse against fine: the laws do not depend on the size of the cells. The same island of 32 x 32 squares of 2 km,
-//! once on its squares and once with every square in quarters (64 x 64 cells of 1 km, a refined region over the whole
-//! map), each seed against itself: the mean over the seeds of what the quarters move each key number per area (the
-//! mean of its last years) is less than its year-to-year spread on the squares (the mean over the seeds of its highest
-//! less its lowest yearly value). The length of the rivers is printed, not held: it still moves by more than its noise
+//! Coarse against fine: the laws do not depend on the size of the cells. The same island of 64 x 64 squares of 1 km,
+//! once in cells of 2 x 2 squares (32 x 32 cells of 2 km) and once on its squares, each seed against itself: the mean
+//! over the seeds of what the squares move each key number per area (the mean of its last years) is less than its
+//! year-to-year spread in the coarse cells (the mean over the seeds of its highest less its lowest yearly value). The length of the rivers is printed, not held: it still moves by more than its noise
 //! (decision 31).
 
 mod common;
@@ -20,11 +19,13 @@ const FROM: u64 = 6;
 const KEYS: [&str; 8] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "cover_kg", "root_0_cover_area", "river_km"];
 const HELD: usize = 7;
 
-/// The `KEYS` at the end of each year from `FROM` of the island of `seed`, on its squares or in quarters (`fine`).
+/// The `KEYS` at the end of each year from `FROM` of the island of `seed`, in cells of 2 x 2 squares or on its
+/// squares (`fine`).
 fn keys(seed: u64, fine: bool) -> Vec<[f64; KEYS.len()]> {
-    let mut map = worldgen::terrain::island(SIDE, SIDE);
-    map.region = fine.then_some([0, 0, SIDE, SIDE]);
-    let km = map.side / if fine { 2.0 } else { 1.0 } / 1e3;
+    let island = worldgen::terrain::island(2 * SIDE, 2 * SIDE);
+    let mut map = pcore::space::square::Square::new(island.w, island.h, island.side / 2.0, false);
+    map.size.fill(u8::from(!fine));
+    let km = map.side * if fine { 1.0 } else { 2.0 } / 1e3;
     let mut years = vec![];
     run_on(worldgen::terrain::new_map(seed, map), YEARS, false, |_| {}, |y, _, rec| {
         if y >= FROM {
@@ -35,9 +36,9 @@ fn keys(seed: u64, fine: bool) -> Vec<[f64; KEYS.len()]> {
 }
 
 #[test]
-#[ignore = "slow: three 15-year runs of a 32 x 32 island with life, and three of it in quarters"]
+#[ignore = "slow: three 15-year runs of a 32 x 32 island with life, and three of it on 64 x 64 squares"]
 fn the_laws_do_not_depend_on_the_size_of_the_cells() {
-    // Per seed, [squares, quarters], all side by side.
+    // Per seed, [coarse, fine], all side by side.
     let runs: Vec<[Vec<[f64; KEYS.len()]>; 2]> = std::thread::scope(|s| {
         let runs: Vec<_> = SEEDS.iter().map(|&seed| [false, true].map(|fine| s.spawn(move || keys(seed, fine)))).collect();
         runs.into_iter().map(|pair| pair.map(|r| r.join().expect("a run"))).collect()
@@ -47,12 +48,12 @@ fn the_laws_do_not_depend_on_the_size_of_the_cells() {
     for (q, name) in KEYS.iter().enumerate() {
         let mean = |run: &[[f64; KEYS.len()]]| run.iter().map(|y| y[q]).sum::<f64>() / run.len() as f64;
         let spread = |run: &[[f64; KEYS.len()]]| run.iter().map(|y| y[q]).fold(f64::MIN, f64::max) - run.iter().map(|y| y[q]).fold(f64::MAX, f64::min);
-        let offs: Vec<f64> = runs.iter().map(|[squares, quarters]| mean(quarters) - mean(squares)).collect();
-        let (off, limit) = (offs.iter().sum::<f64>() / seeds, runs.iter().map(|[squares, _]| spread(squares)).sum::<f64>() / seeds);
+        let offs: Vec<f64> = runs.iter().map(|[coarse, fine]| mean(fine) - mean(coarse)).collect();
+        let (off, limit) = (offs.iter().sum::<f64>() / seeds, runs.iter().map(|[coarse, _]| spread(coarse)).sum::<f64>() / seeds);
         let ok = off.abs() <= limit || q >= HELD;
-        let squares: Vec<String> = runs.iter().map(|[squares, _]| format!("{:.4e}", mean(squares))).collect();
+        let coarse: Vec<String> = runs.iter().map(|[coarse, _]| format!("{:.4e}", mean(coarse))).collect();
         let by_seed: Vec<String> = offs.iter().map(|x| format!("{x:.3e}")).collect();
-        println!("{name}: off by {off:.3e} (seeds {by_seed:?}) in quarters from the squares (seeds {squares:?}), limit {limit:.3e}{}", if off.abs() <= limit { "" } else if ok { ": out, not held" } else { ": OUT" });
+        println!("{name}: off by {off:.3e} (seeds {by_seed:?}) on squares from the coarse cells (seeds {coarse:?}), limit {limit:.3e}{}", if off.abs() <= limit { "" } else if ok { ": out, not held" } else { ": OUT" });
         if !ok {
             out.push(*name);
         }

@@ -120,7 +120,7 @@ pub const AIR: usize = 1;
 impl World {
     /// The mesh of `map`, air nodes over blocks of `air_scale`² squares, its rows between the latitudes of `cfg`.
     pub fn mesh_of(map: &Square, air_scale: usize, cfg: &Config) -> Mesh {
-        map.mesh(&[air_scale], cfg.lat_south, cfg.lat_north)
+        map.mesh(air_scale, cfg.lat_south, cfg.lat_north)
     }
     /// Hand the shell the raw events since it last asked, and start the list again.
     pub fn drain_events(&mut self) -> Vec<Event> {
