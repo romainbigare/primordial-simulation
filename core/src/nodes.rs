@@ -14,8 +14,8 @@ use crate::{life::Chunk, World};
 /// The monthly merge of the bodies of cell `i` of chunk `d` (laws.md 4.4): one node per kind and stage. Each body
 /// joins the largest of its `Kin` (`join_kin`); then a node joins a larger one of another lineage of its stage, room
 /// and part whose genes are alike (`body::alike`, on the means) and whose brain has the same sizes, taking its brain and
-/// lineage (`join_other`); then a cell over `MAX_NODES` bodies keeps one young and one mature node per kind and room
-/// (`cap`).
+/// lineage (`join_other`); then the small bodies of each kind, stage and room join its largest, and a cell over
+/// `MAX_NODES` bodies keeps one young and one mature node per kind and room (`cap`).
 pub fn crowd(w: &World, d: &mut Chunk, lay: &Layout, i: usize) {
     let heads = join_kin(w, d, i);
     join_other(w, d, lay, heads);
@@ -26,22 +26,23 @@ pub fn crowd(w: &World, d: &mut Chunk, lay: &Layout, i: usize) {
 /// node (a speed setting).
 pub const MAX_NODES: usize = 8;
 
-/// If cell `i` holds more than `MAX_NODES` bodies, the bodies of each starting kind (`Lineage::root`), stage and room
-/// (the structure whose room they are in, or none) join the largest of them (equals: the first in the cell's order),
-/// whatever their lineage, brain sizes and part, taking its brain, born rows and lineage when that is another
-/// (`merge`): the cell then holds at most a young and a mature node of each kind present in each room.
+/// The bodies of each starting kind (`Lineage::root`), stage and room (the structure whose room they are in, or none) of
+/// cell `i`, largest first (equals: the first in the cell's order): one with fewer members than `Physics::node_floor`
+/// of the largest joins it, and in a cell of more than `MAX_NODES` bodies every one does, whatever their lineage, brain
+/// sizes and part, taking its brain, born rows and lineage when that is another (`merge`; the part a joiner held stays in
+/// the cell, held by none). Past `MAX_NODES` the cell then holds at most a young and a mature node of each kind present
+/// in each room.
 pub fn cap(w: &World, d: &mut Chunk, i: usize) {
     let mut left: Vec<Handle> = d.cell(i).collect();
-    if left.len() <= MAX_NODES {
-        return;
-    }
+    let all = left.len() > MAX_NODES;
     // (A stable sort: equals keep the cell's order.)
     left.sort_by(|&s, &t| d[t].n().total_cmp(&d[s].n()));
     let mut heads: Vec<(_, Handle)> = Vec::new();
     for s in left {
         let kind = (d.root(w, &d[s]), d[s].adult(&w.chem), room(d.at(i), &d[s]).map(|r| r.0));
         match heads.iter().find(|h| h.0 == kind) {
-            Some(&(_, t)) => merge(w, d, s, t),
+            Some(&(_, t)) if all || d[s].count < w.cfg.phys.node_floor * d[t].count => merge(w, d, s, t),
+            Some(_) => {}
             None => heads.push((kind, s)),
         }
     }

@@ -206,6 +206,8 @@ pub struct Physics {
     pub new_noise: f32,
     /// Nodes of a cell whose genes differ by at most this many mutation steps merge (`body::alike`)
     pub alike: f32,
+    /// A body under this share of the members of the largest of its kind, stage and room in its cell joins it (`cap`)
+    pub node_floor: f64,
 
     // The cover (`cover`)
     /// Upkeep of the cover's light capacity, as a share of what that capacity could store in the time
@@ -337,6 +339,7 @@ impl Default for Physics {
             row_noise: 0.3,
             new_noise: 0.1,
             alike: 4.0,
+            node_floor: 0.01,
             c_light: 0.1,
             cover_mut: 0.063,
             hide: [0.2, 0.5, 0.02],
@@ -387,6 +390,8 @@ impl Config {
         // insulation, never less than none.
         let (meeh, air, coat) = (p.meeh, p.r_air, p.r_coat);
         require(meeh > 0.0 && air > 0.0 && coat >= 0.0 && coat.is_finite(), || format!("meeh ({meeh}) and r_air ({air}) must be above 0, r_coat ({coat}) at least 0"))?;
+        let floor = p.node_floor;
+        require((0.0..1.0).contains(&floor), || format!("node_floor ({floor}) must be at least 0 and below 1"))?;
         let light = p.light_yield;
         require(light > 0.0 && light <= 1.0, || format!("light_yield ({light}) must be above 0 and at most 1"))
     }

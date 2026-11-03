@@ -144,6 +144,7 @@ The three costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`) are per k
 | `row_noise` | none | step of that change per generation, times the body's mutation size (a child that changes takes a step bigger by 1 / sqrt(`row_chance`)) | none found | tuned, first guess |
 | `new_noise` | none | spread of the weights a bigger brain adds (none in a null run) | none found | tuned, first guess |
 | `alike` | mutation steps | bodies whose genes differ by at most this in every gene are alike: they mix, and nodes of different lineages merge | run: 4 steps. It says who mixes, so what a kind is: not only a speed setting. To be checked against individuals at M4 | tuned |
+| `node_floor` | share of members | a body with fewer members than this share of the largest body of its kind, stage and room in its cell joins it at the monthly merge, letting go of the part it holds (`nodes::cap`) | run, 128 x 128 island, 100 years from year 45 against none: at year 45 the 29% of the bodies under 1% hold 0.04% of the members; the bodies are 26% fewer over the first 25 years and 6% over the last 45, the members within 3%, the land within 0.05 K | speed |
 
 ### The cover (`cover`)
 
@@ -251,7 +252,7 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 102 rows of `Config` and `Physics` are their 102 fields.
+The 103 rows of `Config` and `Physics` are their 103 fields.
 
 | mark | rows | which |
 |---|---|---|
@@ -260,7 +261,7 @@ The 102 rows of `Config` and `Physics` are their 102 fields.
 | tuned (run or reason named) | 6, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`), set for an outcome (`rain_time`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`, the cover's starting genes) |
 | tuned, first guess | 30 | 27 free numbers (`mix`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `rho_pass`, `keep_min`, `shape_noise`, `blend`, `plan_weight`, `learn_most`, the Bond numbers `joint` to `deep`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the three `c_hidden`, `c_memory`, `c_seen`, which are the split of `c_brain` and not three numbers |
 | switch | 1 | `null` |
-| speed | 2, and 6 outside the structs | `wake_share`, `sleep_days`; outside: `Config::chunks`, a setting of the run that a snapshot does not keep (`ew --chunks`, 64: the cells cut into that many runs for the bodies' parallel passes, many more than the threads of a machine, so the pool shares out uneven runs; any count gives the same world), the air's step `schedule::AIR_STEP_DAYS` (15 days, two a month: against 1-day steps the land within 0.3 K, `the_long_step_keeps_the_climate`), the caps `MAX_NODES`, `MAX_LINEAGES`, `MOST_ACTS`, and `copy::MATE_HIDDEN` (8 hidden units: two parents only for individuals of a brain that big, a level of detail) |
+| speed | 3, and 6 outside the structs | `wake_share`, `sleep_days`, `node_floor`; outside: `Config::chunks`, a setting of the run that a snapshot does not keep (`ew --chunks`, 64: the cells cut into that many runs for the bodies' parallel passes, many more than the threads of a machine, so the pool shares out uneven runs; any count gives the same world), the air's step `schedule::AIR_STEP_DAYS` (15 days, two a month: against 1-day steps the land within 0.3 K, `the_long_step_keeps_the_climate`), the caps `MAX_NODES`, `MAX_LINEAGES`, `MOST_ACTS`, and `copy::MATE_HIDDEN` (8 hidden units: two parents only for individuals of a brain that big, a level of detail) |
 | container | 1 | `phys` |
 
 Rows marked tuned in all: 45 (36 in the structs, 9 outside: also `cover::RANGE`, `cover::APART` and the mass classes `SMALL_KG`, `BIG_KG`, first guesses). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

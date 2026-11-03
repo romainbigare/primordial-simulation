@@ -807,6 +807,19 @@ fn a_crowded_cell_keeps_a_young_and_a_mature_node_per_kind() {
     w.in_cell(i, |w, d| pcore::nodes::cap(w, d, i));
     assert_eq!(cell_books(&w, i).1.len(), 9, "a cell of nine kinds keeps its nine bodies");
 
+    // Under `MAX_NODES` a body of a kind and stage under the floor of the largest joins it; one over the floor stays.
+    let (mut w, i) = start();
+    let floor = 1000.0 * w.cfg.phys.node_floor;
+    for n in [1000.0, 0.5 * floor, 2.0 * floor] {
+        capped(&mut w, i, (1, 12), (-0.4, false), n);
+    }
+    let books = Books::now(&w);
+    w.in_cell(i, |w, d| pcore::nodes::cap(w, d, i));
+    let after = cell_books(&w, i);
+    assert_eq!(after.1.values().sum::<usize>(), 2, "the small body joined, the other stayed: {:?}", after.1);
+    assert!((after.0[&1].0 - (1000.0 + 2.5 * floor)).abs() <= 1e-9 * 1000.0, "members kept: {}", after.0[&1].0);
+    books.assert_kept(&w, 1e-9);
+
     // Two alike nodes of two starting kinds, one stage and one brain: the monthly merge keeps them apart.
     let (mut w, i) = start();
     capped(&mut w, i, (1, 12), (-0.4, false), 10.0);
