@@ -109,7 +109,7 @@ The three costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`) are per k
 | `keep_min` | times | a body keeps this many times the safe minimum of each store it gives away (`choose::give`) or puts out to parts (`bond::verbs`) | none found: a margin over the minimum below which it dies | tuned, first guess |
 | `shape_noise` | none | spread of the shape of a part made, around its mean | none found | tuned, first guess |
 | `discount` | none | weight of well-being one month (one update) ahead against well-being now | the usual 0.9 of learning machines | anchored |
-| `plan_weight` | per unit of well-being | weight in a move's score of the critic's gain from the step, γV(s') − V(s) (`choose::plan`) | none found: 1, a unit of well-being as a unit of log-odds; well-being and a score are not one unit, and the actor learns the same gain | tuned, first guess |
+| `plan_weight` | per unit of well-being | weight in a move's score of the critic's gain from the step over staying, γ(V(s') − V(s)) (`choose::plan`) | none found: 1, a unit of well-being as a unit of log-odds; well-being and a score are not one unit, and the actor learns the same gain | tuned, first guess |
 | `blend` | share | share of the way a watcher's rows move toward the watched one's | none found | tuned, first guess |
 | `learn_beta` | share | weight of the newest value in a learner's running mean squares: of a learned row's steps, and of the critic's errors | the usual 0.1 of a running average in learning machines | anchored |
 | `learn_most` | learning-rate units | the most a row moves in one step | none found | tuned, first guess |

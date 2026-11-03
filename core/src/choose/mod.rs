@@ -168,9 +168,9 @@ fn options(w: &World, ch: &Chunk, b: &Body, (s, sight): (Shape, usize), (pm, vol
 
 /// One step of look-ahead (laws.md 5.3): the critic's value of the state the body would be in in each cell it can step
 /// into (its own state with that cell's features in place of its own cell's: the sums of its hidden layer `z` moved by
-/// the base's weights on the difference), one month ahead (`Physics::discount`, as the critic learns it), less its value
-/// here: γV(s') − V(s), times `Physics::plan_weight`, added to the score of the move there. `brain`: the lineage's base
-/// and the body's rows. Off in a null run.
+/// the base's weights on the difference) less its value here, where staying keeps it, both one month ahead
+/// (`Physics::discount`, as the critic learns it): γ(V(s') − V(s)), times `Physics::plan_weight`, added to the score of
+/// the move there. `brain`: the lineage's base and the body's rows. Off in a null run.
 fn plan(w: &World, (base, rows): (&[f32], &[f32]), s: Shape, z: &[f32], i: usize, c: &mut Choice, at_here: &mut Vec<f32>) {
     let (weight, discount) = (w.cfg.phys.plan_weight, w.cfg.phys.discount);
     if w.cfg.null || weight == 0.0 || s.h == 0 {
@@ -184,7 +184,7 @@ fn plan(w: &World, (base, rows): (&[f32], &[f32]), s: Shape, z: &[f32], i: usize
     let value = |f: &[f32]| critic[s.h] + (0..s.h).map(|m| critic[m] * squash(at_here[m] + brain::dot(on(m), f))).sum::<f32>();
     let here = critic[s.h] + (0..s.h).map(|m| critic[m] * squash(z[m])).sum::<f32>();
     for d in (0..MOVES).filter(|&d| c.to[d] != usize::MAX) {
-        c.logit[FIXED + d] += weight * (discount * value(w.life.feat(c.to[d], 1)) - here);
+        c.logit[FIXED + d] += weight * discount * (value(w.life.feat(c.to[d], 1)) - here);
     }
 }
 
