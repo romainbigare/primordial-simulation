@@ -171,6 +171,26 @@ fn a_hot_pool_boils_only_what_its_heat_pays() {
     assert!(left > 0.99 && t > w.chem.subs[k].boil - 5.0, "{left} of the pool left, at {t} K");
 }
 
+/// A land node far over a liquid's boiling point (`FAR_K`), its pool (`POOL_M` deep) most of its heat capacity, gives
+/// its air no more heat than it holds, where boiling all the pool away with its own heat would take more (laws.md 0,
+/// "No overdraw"): no heat is rounded away and the books are kept.
+#[test]
+fn a_pool_far_over_its_boiling_point_gives_no_more_than_it_holds() {
+    const FAR_K: f64 = 9000.0;
+    const POOL_M: f64 = 10.0;
+    let ((mut w, i), k) = (worldgen::testkit::start(), LIQUID);
+    let pool = POOL_M * w.mesh.cells().area()[i] / w.chem.molar_volume(k, Phase::Liquid);
+    set_amount(&mut w, Node::ground(i), k, pool);
+    let e = w.energy_ground(i, w.chem.subs[k].boil + FAR_K);
+    set_heat(&mut w, Node::ground(i), e);
+    let (books, rounded) = (Books::now(&w), w.counts.rounded[1]);
+    pcore::flow::state(&mut w, true);
+    pcore::flow::air(&mut w, DT);
+    books.assert_within(&w, 1e-9, 1e-9);
+    let lost = w.counts.rounded[1] - rounded;
+    assert!(lost <= 1e-9 * e, "{lost:e} J of {e:e} J rounded away");
+}
+
 /// A warmer air node gives its heat to its neighbours.
 #[test]
 fn warm_air_spreads() {

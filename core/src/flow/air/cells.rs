@@ -12,7 +12,7 @@ use super::radiation::{glow, glow_slope, insolation, Air, Surface};
 use super::step::Active;
 use super::surf::{Patch, Surf, Vapour};
 use super::{at_height, lerp};
-use crate::{math::one_minus_exp, store::Class, units::{MAX_SUBSTANCES, R_GAS}, World, AIR};
+use crate::{math::one_minus_exp, store::Class, units::{MAX_SUBSTANCES, R_GAS, T_FLOOR}, World, AIR};
 
 /// A ground node's surface balance is solved again about the temperature it gives, up to this many times, until that
 /// moves by less than `SURFACE_STILL_K`, K.
@@ -196,10 +196,13 @@ pub(super) fn sunlight(w: &World, decl: &[f64], lat: f64) -> f64 {
     decl.iter().map(|&d| insolation(w.cfg.sun, lat.to_radians(), d)).sum::<f64>() / decl.len() as f64
 }
 
-/// Holds the slopes of the parts of the ground `g` (`p`, `exchange`) so that it gives no more than it holds however the air it
-/// sees moves in the step: its temperature by up to `AIR_SWING_K`, each gas between none and twice what it held at the
-/// start (`seen`). What evaporates of each gas stays within what the cell holds of it; then the heat over its link and
-/// to space, with what each mol carries (`carry`), within its heat and the sunlight it absorbs, `sun`, J.
+/// Holds the parts of the ground `g` (`p`, `exchange`) so that it gives no more than it holds however the air it sees
+/// moves in the step: its temperature by up to `AIR_SWING_K`, each gas between none and twice what it held at the start
+/// (`seen`). What evaporates of each gas stays within what the cell holds of it; then the heat over its link and to
+/// space, with what each mol carries (`carry`), within its heat and the sunlight it absorbs, `sun`, J. Where it would
+/// give more than that already at the air of the step's start (a node far over a boiling point: its balance counts the
+/// heat capacity of what boils away, which leaves with its own heat), all its parts are cut to what it holds over its
+/// heat at `T_FLOOR`, the coldest a draw may take a ground node.
 fn hold(cx: &Ctx, g: &Surf, (seen, sun): (&[f64], f64), carry: &[[f64; 2]], (p, loss): (&mut [f64], &mut Vec<f64>)) {
     let (nx, stride) = (cx.act.len(), 2 + cx.act.len());
     // The share of a row's slopes that keeps its value within `most` however far the air moves.
@@ -212,9 +215,16 @@ fn hold(cx: &Ctx, g: &Surf, (seen, sun): (&[f64], f64), carry: &[[f64; 2]], (p, 
         let k = keep(r, g.amt[ac.k]);
         r[1..].iter_mut().for_each(|d| *d *= k);
     }
+    let lost = |p: &[f64], v: usize| p[TO_AIR * stride + v] + p[TO_SPACE * stride + v] + carry.iter().enumerate().map(|(y, c)| p[(GAS + y) * stride + v] * c[0]).sum::<f64>();
+    let (mut most, now) = (g.heat + sun, lost(p, 0));
+    if now > most {
+        most = (most - g.cap * T_FLOOR).max(0.0);
+        let cut = most / now;
+        p.iter_mut().for_each(|x| *x *= cut);
+    }
     loss.clear();
-    loss.extend((0..stride).map(|v| p[TO_AIR * stride + v] + p[TO_SPACE * stride + v] + carry.iter().enumerate().map(|(y, c)| p[(GAS + y) * stride + v] * c[0]).sum::<f64>()));
-    let k = keep(loss, g.heat + sun);
+    loss.extend((0..stride).map(|v| lost(p, v)));
+    let k = keep(loss, most);
     if k < 1.0 {
         p.chunks_mut(stride).for_each(|r| r[1..].iter_mut().for_each(|d| *d *= k));
     }
