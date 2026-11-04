@@ -9,6 +9,9 @@ use crate::{math::{mean_decay, mean_passed}, World, AIR};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
+/// The work of the air touching a place (`touching`), in instructions, as the pool's rule counts it (`par::pays`).
+const TOUCH_WORK: usize = 90;
+
 /// Where each air node's rain falls, as of the step's start (`wet`): per node its entries (`Seen`), each a place: a
 /// cell alone (its index) or a patch of the low basin (`n` + its index in `patches`, `Place`); and per cell its place.
 pub(super) struct Wet {
@@ -85,7 +88,7 @@ impl Wet {
         for (i, _) in rain.iter().enumerate().filter(|r| *r.1 > 0.0) {
             self.nodes[i % na].cell.iter().for_each(|&p| wet[p as usize] = true);
         }
-        let mut v = crate::par::map_n(n, |i| if wet[i] { touching(s, t, i) } else { 0.0 });
+        let mut v = crate::par::map_n_of(n, wet.iter().filter(|&&w| w).count() * TOUCH_WORK, |i| if wet[i] { touching(s, t, i) } else { 0.0 });
         v.extend(self.patches.iter().zip(&wet[n..]).map(|(p, &on)| if on { p.touching(s, t) } else { 0.0 }));
         v
     }

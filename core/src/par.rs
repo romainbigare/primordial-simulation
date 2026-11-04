@@ -32,6 +32,29 @@ pub fn rows<S>(out: &mut [f64], width: usize, init: impl Fn() -> S + Sync + Send
     }
 }
 
+/// The least work, in instructions, that the other threads could take from a phase for it to go to the pool: a pool
+/// call costs 30 to 55 µs, some 10^5 instructions, and four threads save three quarters of what they share.
+pub const POOL_WORK: usize = 200_000;
+
+/// Does a phase pay for a pool call (`POOL_WORK`), where the other threads could take `work` instructions of it?
+pub fn pays(work: usize) -> bool {
+    cfg!(feature = "threads") && work >= POOL_WORK
+}
+
+/// `rows`, on the calling thread where its `work` instructions do not pay for a pool call (`pays`).
+pub fn rows_of<S>(out: &mut [f64], width: usize, work: usize, init: impl Fn() -> S + Sync + Send, f: impl Fn(&mut S, usize, &mut [f64]) + Sync + Send) {
+    if pays(work) || width == 0 {
+        return rows(out, width, init, f);
+    }
+    let mut st = init();
+    out.chunks_mut(width).enumerate().for_each(|(i, row)| f(&mut st, i, row));
+}
+
+/// `map_n`, on the calling thread where its `work` instructions do not pay for a pool call (`pays`).
+pub fn map_n_of<R: Send>(n: usize, work: usize, f: impl Fn(usize) -> R + Sync + Send) -> Vec<R> {
+    if pays(work) { map_n(n, f) } else { (0..n).map(f).collect() }
+}
+
 /// The least work of a phase that goes to the pool, counted in its items of work (updates, cells surveyed, views
 /// booked): a pool call costs 30 to 55 µs, more than a few updates, so a smaller phase runs on
 /// the calling thread.

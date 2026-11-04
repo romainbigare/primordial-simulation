@@ -13,6 +13,14 @@ use std::{collections::BTreeMap, ops::Range};
 /// `mix` spreads in it, sqrt(`mix` × this) (Taylor 1922), about 340 km (`blocks`).
 const BLOCK_DAY: f64 = DAY;
 
+/// The work of the day's steps, as the pool's rule counts it (`par::pays`), in instructions: a multiply-add of
+/// `Ground::gives`; a node's heat radiation to space (`glow`); and per node and per entry of a node whose gas rains, of
+/// the vapour's day (`Pool::day`) and of the air its rain meets (`rain_air`).
+const GIVE_WORK: usize = 7;
+const GLOW_WORK: usize = 80;
+const DAY_WORK: usize = 50;
+const MET_WORK: usize = 25;
+
 /// What the ground under each air node gives it over a step, as its cells' one law (`cells::Response::ground`): per
 /// node and output (what its air gains, J, then what evaporates of each active gas, mol, `[j * (1 + nx) + o]`) its
 /// value at the air of the step's start (`t0`, K, per node; `x0`, mol, `[y * na + j]` per active gas), and per node
@@ -63,7 +71,7 @@ impl Ground {
     /// `gives` for `N` outputs per node (`1 + nx`): each node's slopes with each node it sees, and that node's air, are
     /// arrays of a size fixed at compile time, so the sums unroll (a third of the instructions of `gives_any`).
     fn gives_of<const N: usize>(&self, d: &[f64], os: Range<usize>, got: &mut [f64]) {
-        crate::par::rows(got, os.len(), || (), |_, j, row| {
+        crate::par::rows_of(got, os.len(), self.near.len() * os.len() * N * GIVE_WORK, || (), |_, j, row| {
             row.copy_from_slice(&self.base[j * N + os.start..j * N + os.end]);
             let (near, slope) = (&self.near[self.at[j]..self.at[j + 1]], &self.slope[self.at[j] * N * N..self.at[j + 1] * N * N]);
             for (&q, by) in near.iter().zip(slope.chunks_exact(N * N)) {
@@ -77,7 +85,7 @@ impl Ground {
     }
     /// `gives` for `n` outputs per node, any count, the sums in the same order.
     fn gives_any(&self, n: usize, d: &[f64], os: Range<usize>, got: &mut [f64]) {
-        crate::par::rows(got, os.len(), || (), |_, j, row| {
+        crate::par::rows_of(got, os.len(), self.near.len() * os.len() * n * GIVE_WORK, || (), |_, j, row| {
             row.copy_from_slice(&self.base[j * n + os.start..j * n + os.end]);
             for e in self.at[j]..self.at[j + 1] {
                 let (q, r) = (self.near[e] as usize * n, e * n * n);
@@ -218,9 +226,10 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     // The air each node's rain meets (`rain_air`), per active gas and node (`[y * na + j]`), on the pool, from the air
     // touching each place it falls on.
     let touched = ground.wet().touched(s, &t, &rain);
-    let met = crate::par::map_n(nx * na, |i| (rain[i] > 0.0).then(|| rain_air(ground.wet(), (i / na, i % na, ratio[i]), &touched)).flatten());
+    let work = (0..nx * na).filter(|&i| rain[i] > 0.0).map(|i| ground.wet().nodes[i % na].cell.len()).sum::<usize>() * MET_WORK;
+    let met = crate::par::map_n_of(nx * na, work, |i| (rain[i] > 0.0).then(|| rain_air(ground.wet(), (i / na, i % na, ratio[i]), &touched)).flatten());
     // What each node's layers send to space over the day, J, on the pool.
-    let sky = crate::par::map_n(na, |j| glow(s.absorbs[j], ts[j], &s.lay[j][1]) * air.area()[j] * dd);
+    let sky = crate::par::map_n_of(na, na * GLOW_WORK, |j| glow(s.absorbs[j], ts[j], &s.lay[j][1]) * air.area()[j] * dd);
     for j in 0..na {
         out.t[j] += t[j] * share;
         let (sky, day) = (sky[j], &got[j * (1 + nx)..(j + 1) * (1 + nx)]);
@@ -258,7 +267,7 @@ fn warmth(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, 
     let start = temps(s, x, e);
     let (mut t, got) = (start.clone(), given(ground, act, (&start, x), 0..1));
     // Per node what its layers send to space, W, and its slope with the temperature, W/K, on the pool.
-    let sky = crate::par::map_n(na, |j| {
+    let sky = crate::par::map_n_of(na, na * GLOW_WORK, |j| {
         let (f, lay, area, ts) = (s.absorbs[j], &s.lay[j][1], air.area()[j], at_height(start[j], s.gam[j], s.za[j], s.zair[j]));
         [glow(f, ts, lay) * area, glow_slope(f, ts, lay) * area]
     });
@@ -288,7 +297,10 @@ fn vapour(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, 
     // Per active gas and block (`[y * nb + b]`), each on the pool: the block's vapour at the day's start and its mean
     // over the day, mol, and per node of the block what it rains and that times its ratio (`Pool::day`).
     let mut days: Vec<(usize, [f64; 2], [Vec<f64>; 2])> = (0..nx * nb).map(|i| (i, [0.0; 2], Default::default())).collect();
-    crate::par::each_init(&mut days, nx * na, || (), |_, (i, sums, [fell, at])| {
+    // The work of each, and what the other threads could take of it: all but the largest.
+    let work: Vec<usize> = days.iter().map(|d| blocks[d.0 % nb].iter().map(|&j| 1 + if act[d.0 / nb].cond { ground.wet.nodes[j as usize].cell.len() } else { 0 }).sum::<usize>() * DAY_WORK).collect();
+    let spare = work.iter().sum::<usize>() - work.iter().max().copied().unwrap_or(0);
+    let day = |(i, sums, [fell, at]): &mut (usize, [f64; 2], [Vec<f64>; 2])| {
         let (y, b) = (*i / nb, *i % nb);
         let (ac, nodes) = (&act[y], &blocks[b]);
         let full = |j: usize| if ac.cond { (s.sat[ac.k].at(ts[j]) * air.area()[j] * s.hk[ac.gi * na + j] / (R_GAS * ts[j])).max(0.0) } else { 0.0 };
@@ -301,7 +313,12 @@ fn vapour(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, 
         let pool = Pool { c: gives - slope * all, s: slope, v, off, full: nodes.iter().map(|&j| full(j as usize)).collect() };
         (*fell, *at) = (vec![0.0; nodes.len()], vec![0.0; nodes.len()]);
         *sums = [all, pool.day((&ground.wet, y, nodes), all, (dd, dt, w.cfg.rain_time), (fell, at))];
-    });
+    };
+    if crate::par::pays(spare) {
+        crate::par::each_init(&mut days, nx * na, || (), |_, d| day(d));
+    } else {
+        days.iter_mut().for_each(day);
+    }
     let (mut mean, mut rain, mut ratio) = (x.to_vec(), vec![0.0; nx * na], vec![0.0; nx * na]);
     for (i, [all, mid], [fell, at]) in &days {
         let (y, nodes) = (i / nb, &blocks[i % nb]);
