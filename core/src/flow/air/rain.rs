@@ -56,10 +56,15 @@ pub(super) struct Seen {
 }
 
 impl Seen {
-    /// From its cells, their shares and per active gas their ratios.
-    pub(super) fn new(cell: Vec<u32>, share: Vec<f64>, ratio: Vec<f64>) -> Seen {
+    /// From its cells, their shares and per active gas their ratios; for a gas that cannot rain (`rains`) no entries
+    /// in order (nothing reads them: `Pool::day` follows only nodes whose gas may condense), zeros.
+    pub(super) fn new(cell: Vec<u32>, share: Vec<f64>, ratio: Vec<f64>, rains: &[bool]) -> Seen {
         let mut steps = Vec::with_capacity(ratio.len());
-        for by in ratio.chunks(cell.len().max(1)) {
+        for (by, &rain) in ratio.chunks(cell.len().max(1)).zip(rains) {
+            if !rain {
+                steps.resize(steps.len() + by.len(), [0.0; 3]);
+                continue;
+            }
             let mut order: Vec<(f64, f64)> = by.iter().copied().zip(share.iter().copied()).collect();
             order.sort_unstable_by(|p, q| p.0.total_cmp(&q.0));
             let mut sum = [0.0; 2];
@@ -284,7 +289,7 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64], patches: &
     }
     // The cells that see each node, in the order of the cells: their entries `at[q]..at[q + 1]` (cell, corner); a
     // patch's at its first.
-    let (at, by) = (&s.corners.by_at, &s.corners.by);
+    let (at, by, rains) = (&s.corners.by_at, &s.corners.by, act.iter().map(|ac| ac.cond).collect::<Vec<bool>>());
     let nodes = crate::par::map_n(na, |q| {
         let (mut place, mut share, mut first) = (Vec::new(), Vec::new(), Vec::<(u32, usize)>::new());
         for &(i, c) in &by[at[q]..at[q + 1]] {
@@ -301,7 +306,7 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64], patches: &
         }
         let (sat, node, places) = (&sat, &node, &place);
         let ratio = (0..nx).flat_map(|y| places.iter().map(move |&p| sat[p as usize * nx + y] / air.area()[q] / node[q * nx + y])).collect();
-        Seen::new(place, share, ratio)
+        Seen::new(place, share, ratio, &rains)
     });
     Wet { nodes, patches: places, place_of }
 }
@@ -354,7 +359,7 @@ mod tests {
     /// what rains.
     #[test]
     fn a_block_follows_its_ground_and_its_rain_through_the_day() {
-        let wet = Wet { nodes: vec![Seen::new(vec![0, 1], vec![0.3, 0.7], vec![1.1, 0.9]), Seen::new(vec![2], vec![1.0], vec![0.95])], patches: vec![], place_of: vec![0, 1, 2] };
+        let wet = Wet { nodes: vec![Seen::new(vec![0, 1], vec![0.3, 0.7], vec![1.1, 0.9], &[true]), Seen::new(vec![2], vec![1.0], vec![0.95], &[true])], patches: vec![], place_of: vec![0, 1, 2] };
         let pool = Pool { c: 3.0, s: -0.1, v: vec![0.6, 0.4], off: vec![0.0, 0.0], full: vec![1.0, 0.8] };
         let (dd, dt, tau, x0) = (1e5, 1e5, 2e4, 1.0);
         let mut room = Room::default();
