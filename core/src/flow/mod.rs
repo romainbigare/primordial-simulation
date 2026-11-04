@@ -109,8 +109,8 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
     }
     let build = s.cap.len() != n;
     if s.lifts.is_none() && !fresh && (moving || build) {
-        let room = std::mem::take(&mut s.moved);
-        s.lifts = Some(potential::Lifts::start(w, &s, room));
+        let (known, room) = (s.known.take().filter(|_| s.chained).map(|k| k.1), std::mem::take(&mut s.moved));
+        s.lifts = Some(potential::Lifts::start(w, &s, known, room));
     }
     if build {
         scratch::room(w, &mut s);
@@ -127,19 +127,22 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
 /// Book the lifts and falls of the parts of Flow under way (`potential::Lifts`), if any.
 fn book(w: &mut World, s: &mut Scratch) {
     if let Some(lifts) = s.lifts.take() {
-        s.moved = lifts.book(w, s);
+        let (now, room) = lifts.book(w, s);
+        (s.known, s.moved) = (Some((w.time, now)), room);
     }
 }
 
-/// The parts of Flow that run from now until `chain(w, false)` follow each other with nothing else between: their lifts
-/// and falls are booked once, at its end (`potential::Lifts`), each mass at the mean of its node's heights at the
-/// start and at the end of them all.
+/// The parts of Flow that run from now until `chain(w, false)` follow each other, and the last part of Flow at the
+/// world's time now, with nothing else between: their lifts and falls are booked once, at its end (`potential::Lifts`),
+/// each mass at the mean of its node's heights at the start and at the end of them all, from the potential energy the
+/// last part left (not found again).
 pub fn chain(w: &mut World, on: bool) {
     let mut s = std::mem::take(&mut w.scratch);
     if !on {
         book(w, &mut s);
     }
     s.chained = on;
+    s.known = s.known.take().filter(|k| on && k.0 == w.time);
     w.scratch = s;
 }
 
