@@ -52,14 +52,38 @@ impl Ground {
     /// What each node gets over the whole step of the outputs `os` under the air that is `d` from the step's start
     /// (`moved`), into `got` (`[j * os.len() + o - os.start]`): per node, on the pool.
     fn gives(&self, d: &[f64], os: Range<usize>, got: &mut [f64]) {
-        let outs = 1 + self.nx;
+        match 1 + self.nx {
+            1 => self.gives_of::<1>(d, os, got),
+            2 => self.gives_of::<2>(d, os, got),
+            3 => self.gives_of::<3>(d, os, got),
+            4 => self.gives_of::<4>(d, os, got),
+            n => self.gives_any(n, d, os, got),
+        }
+    }
+    /// `gives` for `N` outputs per node (`1 + nx`): each node's slopes with each node it sees, and that node's air, are
+    /// arrays of a size fixed at compile time, so the sums unroll (a third of the instructions of `gives_any`).
+    fn gives_of<const N: usize>(&self, d: &[f64], os: Range<usize>, got: &mut [f64]) {
         crate::par::rows(got, os.len(), || (), |_, j, row| {
-            row.copy_from_slice(&self.base[j * outs + os.start..j * outs + os.end]);
-            for e in self.at[j]..self.at[j + 1] {
-                let (q, r) = (self.near[e] as usize * outs, e * outs * outs);
+            row.copy_from_slice(&self.base[j * N + os.start..j * N + os.end]);
+            let (near, slope) = (&self.near[self.at[j]..self.at[j + 1]], &self.slope[self.at[j] * N * N..self.at[j + 1] * N * N]);
+            for (&q, by) in near.iter().zip(slope.chunks_exact(N * N)) {
+                let dq: &[f64; N] = d[q as usize * N..q as usize * N + N].try_into().expect("N numbers");
                 for (g, o) in row.iter_mut().zip(os.clone()) {
-                    let r = r + o * outs;
-                    *g += self.slope[r] * d[q] + (1..outs).map(|v| self.slope[r + v] * d[q + v]).sum::<f64>();
+                    let s: &[f64; N] = by[o * N..o * N + N].try_into().expect("N numbers");
+                    *g += s[0] * dq[0] + (1..N).map(|v| s[v] * dq[v]).sum::<f64>();
+                }
+            }
+        });
+    }
+    /// `gives` for `n` outputs per node, any count, the sums in the same order.
+    fn gives_any(&self, n: usize, d: &[f64], os: Range<usize>, got: &mut [f64]) {
+        crate::par::rows(got, os.len(), || (), |_, j, row| {
+            row.copy_from_slice(&self.base[j * n + os.start..j * n + os.end]);
+            for e in self.at[j]..self.at[j + 1] {
+                let (q, r) = (self.near[e] as usize * n, e * n * n);
+                for (g, o) in row.iter_mut().zip(os.clone()) {
+                    let r = r + o * n;
+                    *g += self.slope[r] * d[q] + (1..n).map(|v| self.slope[r + v] * d[q + v]).sum::<f64>();
                 }
             }
         });
