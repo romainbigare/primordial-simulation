@@ -11,48 +11,43 @@ pub fn adopt_thread() {
     }
 }
 
-/// Fill `out` in rows of `width` numbers, row `i` by `f(state, i, row)` with a scratch `state` from `init` per task.
-/// The rows are cut into tasks only as far as other threads are idle (work stealing): a row may cost a few
-/// multiplications or a balance solved by iteration, and a fixed size of task suited only one of them.
-pub fn rows<S>(out: &mut [f64], width: usize, init: impl Fn() -> S + Sync + Send, f: impl Fn(&mut S, usize, &mut [f64]) + Sync + Send) {
-    if width == 0 || out.is_empty() {
-        return;
-    }
-    #[cfg(feature = "threads")]
-    {
-        use rayon::prelude::*;
-        out.par_chunks_mut(width).enumerate().for_each_init(init, |st, (i, row)| f(st, i, row));
-    }
-    #[cfg(not(feature = "threads"))]
-    {
-        let mut st = init();
-        for (i, row) in out.chunks_mut(width).enumerate() {
-            f(&mut st, i, row);
-        }
-    }
-}
-
-/// The least work, in instructions, that the other threads could take from a phase for it to go to the pool: a pool
-/// call costs 30 to 55 µs, some 10^5 instructions, and four threads save three quarters of what they share.
+/// The least work, in instructions, that the other threads could take from a phase for it to go to the pool (`pays`):
+/// a pool call costs 30 to 55 µs, some 10^5 instructions, and four threads save three quarters of what they share.
 pub const POOL_WORK: usize = 200_000;
 
-/// Does a phase pay for a pool call (`POOL_WORK`), where the other threads could take `work` instructions of it?
+/// The work of a phase whose cost is not counted, for `rows` and `map_n`: it goes to the pool.
+pub const UNCOUNTED: usize = usize::MAX;
+
+/// Does a phase pay for a pool call (`POOL_WORK`), where the other threads could take `work` instructions of it
+/// (`shareable`)?
 pub fn pays(work: usize) -> bool {
     cfg!(feature = "threads") && work >= POOL_WORK
 }
 
-/// `rows`, on the calling thread where its `work` instructions do not pay for a pool call (`pays`).
-pub fn rows_of<S>(out: &mut [f64], width: usize, work: usize, init: impl Fn() -> S + Sync + Send, f: impl Fn(&mut S, usize, &mut [f64]) + Sync + Send) {
-    if pays(work) || width == 0 {
-        return rows(out, width, init, f);
-    }
-    let mut st = init();
-    out.chunks_mut(width).enumerate().for_each(|(i, row)| f(&mut st, i, row));
+/// What the other threads could take of a phase whose items cost `work` instructions each: all but the largest, which
+/// one thread does alone.
+pub fn shareable(work: impl IntoIterator<Item = usize>) -> usize {
+    let (all, most) = work.into_iter().fold((0, 0), |(all, most): (usize, usize), x| (all.saturating_add(x), most.max(x)));
+    all - most
 }
 
-/// `map_n`, on the calling thread where its `work` instructions do not pay for a pool call (`pays`).
-pub fn map_n_of<R: Send>(n: usize, work: usize, f: impl Fn(usize) -> R + Sync + Send) -> Vec<R> {
-    if pays(work) { map_n(n, f) } else { (0..n).map(f).collect() }
+/// Fill `out` in rows of `width` numbers, row `i` by `f(state, i, row)` with a scratch `state` from `init` per task: on
+/// the pool where the other threads could take `work` instructions of it (`pays`), else in order on the calling thread.
+/// The rows are cut into tasks only as far as other threads are idle (work stealing): a row may cost a few
+/// multiplications or a balance solved by iteration, and a fixed size of task suited only one of them.
+pub fn rows<S>(out: &mut [f64], width: usize, work: usize, init: impl Fn() -> S + Sync + Send, f: impl Fn(&mut S, usize, &mut [f64]) + Sync + Send) {
+    if width == 0 || out.is_empty() {
+        return;
+    }
+    #[cfg(feature = "threads")]
+    if pays(work) {
+        use rayon::prelude::*;
+        return out.par_chunks_mut(width).enumerate().for_each_init(init, |st, (i, row)| f(st, i, row));
+    }
+    #[cfg(not(feature = "threads"))]
+    let _ = work;
+    let mut st = init();
+    out.chunks_mut(width).enumerate().for_each(|(i, row)| f(&mut st, i, row));
 }
 
 /// The least work of a phase that goes to the pool, counted in its items of work (updates, cells surveyed, views
@@ -104,14 +99,16 @@ pub fn map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync + Send) -> 
     items.iter().map(f).collect()
 }
 
-/// `f(i)` for `i` in `0..n`, in parallel, in order.
-pub fn map_n<R: Send>(n: usize, f: impl Fn(usize) -> R + Sync + Send) -> Vec<R> {
+/// `f(i)` for `i` in `0..n`, in order: on the pool where the other threads could take `work` instructions of it
+/// (`pays`), else on the calling thread.
+pub fn map_n<R: Send>(n: usize, work: usize, f: impl Fn(usize) -> R + Sync + Send) -> Vec<R> {
     #[cfg(feature = "threads")]
-    {
+    if pays(work) {
         use rayon::prelude::*;
-        (0..n).into_par_iter().with_min_len(MIN_TASK).map(f).collect()
+        return (0..n).into_par_iter().with_min_len(MIN_TASK).map(f).collect();
     }
     #[cfg(not(feature = "threads"))]
+    let _ = work;
     (0..n).map(f).collect()
 }
 

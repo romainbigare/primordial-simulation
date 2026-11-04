@@ -88,7 +88,7 @@ impl Life {
     }
     /// The mass of the life of each cell (`kg`).
     pub(super) fn every(&self, w: &World, sp: &[Sp]) -> Vec<f64> {
-        crate::par::map_n(w.mesh.cells().n(), |i| self.kg(w, sp, i))
+        crate::par::map_n(w.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.kg(w, sp, i))
     }
     /// The mass of the life of cell `i`, kg: its living bodies, its cover and its parts.
     pub(super) fn kg(&self, w: &World, sp: &[Sp], i: usize) -> f64 {

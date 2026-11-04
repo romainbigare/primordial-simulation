@@ -118,7 +118,7 @@ impl Recorder {
         let seen = self.files.series.iter().filter(|c| c.name.starts_with("root_") && c.name.ends_with("_members")).count();
         let mut kinds = vec![Kind::new(nr); seen.max(y.kinds.len())];
         let bodies: Vec<&Body> = w.life.alive().collect();
-        let heavy = par::map_n(bodies.len(), |q| Heavy::of(c, q, bodies[q]));
+        let heavy = par::map_n(bodies.len(), par::UNCOUNTED, |q| Heavy::of(c, q, bodies[q]));
         for (b, h) in bodies.iter().zip(&heavy) {
             if let Some(l) = &w.life.brains[b.lineage as usize] {
                 let k = l.root as usize;

@@ -107,7 +107,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     let mut rows = std::mem::take(&mut s.spare.state);
     rows.resize(anew.len() * STATE_ROW, 0.0);
     let sr = &*s;
-    crate::par::rows(&mut rows, STATE_ROW, || (), |_, q, row| {
+    crate::par::rows(&mut rows, STATE_ROW, crate::par::UNCOUNTED, || (), |_, q, row| {
         let (i, thaw) = (anew[q].0 as usize, anew[q].1);
         node_state(w, sr, i, (caps[i][1], thaw, full), row)
     });

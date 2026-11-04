@@ -44,8 +44,8 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     let at = |i: usize, o: usize| out[i * (UP + nx) + o];
     let (cells, parent): (Vec<u32>, Vec<u32>) = ((0..n as u32).collect(), w.mesh.cells().parent().to_vec());
     let (ks, gases): (Vec<u16>, Vec<u16>) = (act.iter().map(|a| a.k as u16).collect(), s.state.gas.iter().map(|&k| k as u16).collect());
-    let mol = crate::par::map_n(nx * n, |x| at(x % n, UP + x / n));
-    let (link, to_space) = (crate::par::map_n(n, |i| at(i, LINK)), crate::par::map_n(n, |i| at(i, SPACE)));
+    let mol = crate::par::map_n(nx * n, crate::par::UNCOUNTED, |x| at(x % n, UP + x / n));
+    let (link, to_space) = (crate::par::map_n(n, crate::par::UNCOUNTED, |i| at(i, LINK)), crate::par::map_n(n, crate::par::UNCOUNTED, |i| at(i, SPACE)));
     // The rain, at the air touching each cell, with the fusion enthalpy each mol of its node's rain keeps.
     let mut rained = Batch::new([Class::Ground, Class::Air], &ks);
     let mut fell = vec![0.0; nx * n];

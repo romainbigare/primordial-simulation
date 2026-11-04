@@ -40,7 +40,7 @@ pub struct Fields {
 type Cell = (f64, f64, f64, f64, f64, [f64; 3]);
 
 pub fn fields(w: &World) -> Fields {
-    let cells = par::map_n(w.mesh.cells().n(), |i| cell(w, i));
+    let cells = par::map_n(w.mesh.cells().n(), par::UNCOUNTED, |i| cell(w, i));
     let mut f = Fields { z: vec![], depth: vec![], ice: vec![], loose: vec![], t: vec![], rgb: vec![] };
     for (z, depth, ice, loose, t, rgb) in cells {
         f.z.push(z);
@@ -129,7 +129,7 @@ impl<'a> Ctx<'a> {
             c.animals[i] += mass / w.mesh.cells().area()[i];
             c.bodies[i] += 1.0;
         }
-        (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), |j| air_column(w, j)).into_iter().unzip();
+        (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c
     }
     fn air(&self, i: usize) -> usize {

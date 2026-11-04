@@ -113,7 +113,7 @@ pub(in crate::flow) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64) {
     patches.iter().flatten().for_each(|&i| alone[i as usize] = false);
     let (area, ground) = (wr.mesh.cells().area(), wr.store.amounts(Class::Ground));
     let liquid = |i: usize| solv.iter().fold((0.0, 0.0), |(l, v), &k| (l + ground[k * n + i] * wet(sr, k, i), v + ground[k * n + i] * wet(sr, k, i) * sr.sp[k].v[1]));
-    crate::par::rows(&mut want, nh, || (), |_, i, row| {
+    crate::par::rows(&mut want, nh, crate::par::UNCOUNTED, || (), |_, i, row| {
         if alone[i] {
             let pool = Liquid { area: area[i], t: sr.state.tg[i], tl: touching(sr, &sr.ta, i), j: wr.mesh.cells().parent()[i] as usize, cap: sr.cap[i], lv: liquid(i) };
             take_up(wr, sr, &pool, |k| ground[k * n + i], (henry, dt), row);

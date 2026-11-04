@@ -93,7 +93,8 @@ impl Wet {
         for (i, _) in rain.iter().enumerate().filter(|r| *r.1 > 0.0) {
             self.nodes[i % na].cell.iter().for_each(|&p| wet[p as usize] = true);
         }
-        let mut v = crate::par::map_n_of(n, wet.iter().filter(|&&w| w).count() * TOUCH_WORK, |i| if wet[i] { touching(s, t, i) } else { 0.0 });
+        let work = wet[..n].iter().filter(|&&w| w).count().saturating_sub(1) * TOUCH_WORK;
+        let mut v = crate::par::map_n(n, work, |i| if wet[i] { touching(s, t, i) } else { 0.0 });
         v.extend(self.patches.iter().zip(&wet[n..]).map(|(p, &on)| if on { p.touching(s, t) } else { 0.0 }));
         v
     }
@@ -121,16 +122,18 @@ impl Ord for Break {
 /// What a block's vapour of one gas keeps from day to day of a step (`Pool::day`): per node of the block the piece of
 /// its entries it stood at when its last day ended, where the next day's search starts (the ratios move little in a
 /// day); the day's lists of its raining nodes, their pieces, the times and sums of their last changes, and the ratios
-/// ahead; and per node of the block what it rained in the day, mol, and that times its ratio.
+/// ahead; per node of the block what it rained in the day, mol, and that times its ratio; and the ratios its last day
+/// crossed, the work it may take (`daily::vapour`).
 #[derive(Default)]
 pub(super) struct Room {
-    piece: Vec<usize>,
+    ended: Vec<usize>,
     raining: Vec<usize>,
     k: Vec<usize>,
     since: Vec<[f64; 2]>,
     ahead: BinaryHeap<Break>,
     pub(super) rain: Vec<f64>,
     pub(super) ratio: Vec<f64>,
+    pub(super) events: usize,
 }
 
 /// A block's vapour of one active gas over a day (`daily::exchange`): what its ground gives, `c + s X` mol over the step for `X`
@@ -153,8 +156,9 @@ impl Pool {
     /// day, mol, returned; each node's rain, mol, and that times the ratio it falls at, in `room` (`Room::rain`,
     /// `Room::ratio`, by node of the block).
     pub(super) fn day(&self, (wet, y, nodes): (&Wet, usize, &[u32]), x0: f64, (dd, dt, tau): (f64, f64, f64), room: &mut Room) -> f64 {
-        let Room { piece, raining, k, since, ahead, rain, ratio } = room;
-        piece.resize(nodes.len(), 0);
+        let Room { ended, raining, k, since, ahead, rain, ratio, events } = room;
+        ended.resize(nodes.len(), 0);
+        *events = 0;
         raining.clear();
         raining.extend((0..nodes.len()).filter(|&q| self.full[q] > 0.0));
         [&mut *rain, &mut *ratio].into_iter().for_each(|v| {
@@ -164,13 +168,13 @@ impl Pool {
         let steps = |q: usize| wet.steps(y, nodes[q] as usize);
         let sums = |q: usize, k: usize| if k == 0 { [0.0; 2] } else { [steps(q)[k - 1][1], steps(q)[k - 1][2]] };
         // Each raining node's entries below its ratio now, a ratio it stands at counted below where the vapour rises,
-        // found from where its last day ended (`Room::piece`); and the rain then, (a x + b) / tau mol/s.
+        // found from where its last day ended (`Room::ended`); and the rain then, (a x + b) / tau mol/s.
         let below = |up: bool, k: &mut Vec<usize>| {
             k.clear();
             k.extend(raining.iter().map(|&q| {
                 let (r, st) = ((self.v[q] * x0 + self.off[q]) / self.full[q], steps(q));
                 let under = |c: &[f64; 3]| if up { c[0] <= r } else { c[0] < r };
-                let mut p = piece[q].min(st.len());
+                let mut p = ended[q].min(st.len());
                 while p < st.len() && under(&st[p]) {
                     p += 1;
                 }
@@ -242,6 +246,7 @@ impl Pool {
             x = to;
             if let Some(n) = ahead.peek().filter(|b| sign * b.0 == to).map(|b| b.1) {
                 ahead.pop();
+                *events += 1;
                 flush(n, k[n], (time, sum), &mut since[n]);
                 let old = terms(raining[n], k[n]);
                 k[n] = if up { k[n] + 1 } else { k[n] - 1 };
@@ -251,7 +256,7 @@ impl Pool {
             }
         }
         (0..raining.len()).for_each(|n| flush(n, k[n], (time, sum), &mut since[n]));
-        raining.iter().zip(k.iter()).for_each(|(&q, &k)| piece[q] = k);
+        raining.iter().zip(k.iter()).for_each(|(&q, &k)| ended[q] = k);
         sum / dd
     }
 }
@@ -277,7 +282,7 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64], patches: &
     }
     let places: Vec<Place> = patches.iter().map(|c| Place::of(w, s, c)).collect();
     let mut sat = vec![0.0; (n + places.len()) * nx];
-    crate::par::rows(&mut sat[..n * nx], nx, || (), |_, i, row| {
+    crate::par::rows(&mut sat[..n * nx], nx, crate::par::UNCOUNTED, || (), |_, i, row| {
         if place_of[i] as usize == i {
             let (tl, seen) = (touching(s, t0, i), s.seen[i]);
             act.iter().zip(row).for_each(|(ac, r)| *r = s.sat[ac.k].at(tl) / tl * seen);
@@ -290,7 +295,7 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64], patches: &
     // The cells that see each node, in the order of the cells: their entries `at[q]..at[q + 1]` (cell, corner); a
     // patch's at its first.
     let (at, by, rains) = (&s.corners.by_at, &s.corners.by, act.iter().map(|ac| ac.cond).collect::<Vec<bool>>());
-    let nodes = crate::par::map_n(na, |q| {
+    let nodes = crate::par::map_n(na, crate::par::UNCOUNTED, |q| {
         let (mut place, mut share, mut first) = (Vec::new(), Vec::new(), Vec::<(u32, usize)>::new());
         for &(i, c) in &by[at[q]..at[q + 1]] {
             let (p, a) = (place_of[i as usize], s.wt[i as usize][c as usize] * over_cell(w, s, i as usize));

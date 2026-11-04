@@ -76,7 +76,7 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
 fn slopes(w: &World, s: &Scratch) -> Vec<f64> {
     let (cells, still) = (w.mesh.cells(), w.cfg.phys.still);
     let drop = |i: usize, k: usize| Some(stand(s, i) - stand(s, cells.around(i).1[k] as usize)).filter(|&d| d > still);
-    crate::par::map_n(cells.n(), |i| if s.basin.is[i] { 0.0 } else { cells.steepest(i, |k| drop(i, k)).map_or(0.0, |way| way.0) })
+    crate::par::map_n(cells.n(), crate::par::UNCOUNTED, |i| if s.basin.is[i] { 0.0 } else { cells.steepest(i, |k| drop(i, k)).map_or(0.0, |way| way.0) })
 }
 
 /// The liquid that may run off (what stands, what came up from the store, and the pores' drainage to the channels, a

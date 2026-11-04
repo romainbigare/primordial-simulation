@@ -1,7 +1,8 @@
 //! The potential energy of the world's matter (laws.md 0, "The books"): one function of what the nodes hold and of the
 //! ground's phases (`potential`), with the heights each node's matter leaves from (`Heights`); and its booking around
-//! each part of Flow (`Lifts`): each move carries its potential energy from the height it leaves, and each node's heat
-//! takes what came in less what left less the change of its own, so `Store::lifted` is the change of that function.
+//! a part of Flow, or the parts of a month's Flow as one (`Lifts`, `flow::chain`): each move carries its potential
+//! energy from the height it leaves, and each node's heat takes what came in less what left less the change of its own,
+//! so `Store::lifted` is the change of that function.
 
 use super::stack::{bed_layer, deep_layer, ground_layers, stack, Life, Same, HEAD, LAYERS, ROW};
 use super::Scratch;
@@ -72,7 +73,7 @@ fn potential(w: &World, s: &Scratch, found: Option<Found>) -> Potential {
     let (life, holds) = (&found.life, found.holds);
     let same = Same::of(s);
     let mut rows = vec![0.0; n.div_ceil(CELLS_PER_TASK) * CELLS_PER_TASK * ROW];
-    crate::par::rows(&mut rows, CELLS_PER_TASK * ROW, || (), |_, task, out| {
+    crate::par::rows(&mut rows, CELLS_PER_TASK * ROW, crate::par::UNCOUNTED, || (), |_, task, out| {
         let cells_of = task * CELLS_PER_TASK..((task + 1) * CELLS_PER_TASK).min(n);
         let mut sums = vec![[0.0; LAYERS]; cells_of.len()];
         // Where each substance lies in its class's amounts over the task's cells (`held`: none where it holds none).
@@ -125,8 +126,8 @@ pub fn total(w: &World) -> f64 {
     [&p.ground, &p.air, &p.deep, &p.bodies].iter().flat_map(|v| v.iter()).sum()
 }
 
-/// A part of Flow being booked: the potential energy of every node at its start, and the mass its moves carried so far
-/// (`carry`).
+/// A part of Flow being booked, or the parts that follow each other (`flow::chain`): the potential energy of every node
+/// at their start, and the mass their moves carried so far (`carry`).
 #[derive(Clone, Debug)]
 pub(super) struct Lifts {
     start: Potential,
@@ -194,12 +195,12 @@ impl Lifts {
         }
     }
     /// Book the part's lifts and falls (or those of the parts that follow each other, `flow::chain`): each mass moved
-    /// carries its potential energy from the height it left, the mean of its node's height at the start and at the end (so a node's own matter that leaves it, however much,
-    /// takes what it held of it); each node's heat takes what came in less what left less the change of its own
-    /// potential energy (`store::fall_heat`, which adds their sum to `Store::lifted`). A bodies' node's gas lies at its
-    /// cell's head, which the part moves with the ground's matter, not its own: what its lifts and falls give or take
-    /// is its ground node's (a bodies' node holds little heat of its own). Returns the potential energy now, and the
-    /// room of its moves, emptied.
+    /// carries its potential energy from the height it left, the mean of its node's height at the start and at the end
+    /// (so a node's own matter that leaves it, however much, takes what it held of it); each node's heat takes what
+    /// came in less what left less the change of its own potential energy (`store::fall_heat`, which adds their sum to
+    /// `Store::lifted`). A bodies' node's gas lies at its cell's head, which the part moves with the ground's matter,
+    /// not its own: what its lifts and falls give or take is its ground node's (a bodies' node holds little heat of its
+    /// own). Returns the potential energy now, and the room of its moves, emptied.
     pub(super) fn book(self, w: &mut World, s: &Scratch) -> (Potential, Vec<Moved>) {
         let (mut start, mut moved) = (self.start, self.moved);
         let (now, g) = (potential(w, s, Some(std::mem::take(&mut start.found))), w.cfg.gravity);

@@ -99,7 +99,7 @@ pub(super) fn look<'a>(w: &'a World, last: &BTreeMap<u64, u32>) -> Seen<'a> {
     // The surface heights of the last survey (`Life::env`, not saved), or, before the first survey of a resumed world,
     // from the amounts (`World::surface_z`), each cell's once.
     let cells = w.mesh.cells().n();
-    let fresh: Vec<f64> = if w.life.env.len() < cells { par::map_n(cells, |i| w.surface_z(i)) } else { Vec::new() };
+    let fresh: Vec<f64> = if w.life.env.len() < cells { par::map_n(cells, par::UNCOUNTED, |i| w.surface_z(i)) } else { Vec::new() };
     let z_of = |i: usize| w.life.env.get(i).map_or_else(|| fresh[i], |e| e[2]);
     let bodies: Vec<&Body> = w.life.alive().collect();
     // The ground's temperature as the bodies feel it (`World::t_ground_last`), each cell's once.
@@ -149,7 +149,7 @@ impl Recorder {
         s.took.retain(|&id, _| w.life.find(id).is_some());
         // The land's mean ground temperature this month (the land is listed again each year).
         if y.t_land.is_empty() {
-            let land = par::map_n(cells, |i| w.is_land(i));
+            let land = par::map_n(cells, par::UNCOUNTED, |i| w.is_land(i));
             y.land = (0..cells).filter(|&i| land[i]).map(|i| i as u32).collect();
         }
         y.t_land.push(area_mean(y.land.iter().map(|&i| (ground_t[i as usize], w.mesh.cells().area()[i as usize]))));

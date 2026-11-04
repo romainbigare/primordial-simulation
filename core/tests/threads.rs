@@ -91,6 +91,29 @@ fn the_threads_change_nothing_in_the_wind() {
     assert!(year(1) == year(4), "4 threads changed the globe");
 }
 
+/// Months the worlds of the pool's test run (`the_threads_change_nothing_where_the_air_pays_for_the_pool`).
+const POOL_MONTHS: usize = 2;
+
+/// Worlds just big enough that the air's day sends its counted phases to the pool (`par::pays`): a 128 x 128 island
+/// (what the ground gives, the air its rain meets and the air touching its places) and a globe of 64 rows (the vapour's
+/// days, each node its own block). `POOL_MONTHS` months of each on 1 and on 4 threads: the same worlds.
+#[test]
+fn the_threads_change_nothing_where_the_air_pays_for_the_pool() {
+    let months = |threads: usize| {
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().expect("a pool");
+        pool.install(|| {
+            let mut worlds = [worldgen::new_world(1, 128, 128), worldgen::terrain::new_globe(1, 64, [0; 4])];
+            for w in &mut worlds {
+                for _ in 0..POOL_MONTHS {
+                    pcore::step(w);
+                }
+            }
+            worlds.map(|w| serde_json::to_string(&w).expect("a world serialises"))
+        })
+    };
+    assert!(months(1) == months(4), "4 threads changed the island or the globe");
+}
+
 /// Bodies in every land cell under one air node that holds little of the gas they burn with, on ground that holds little
 /// of what they eat: each cell takes no more than its ground holds and its share of the air (the cells lie in several
 /// chunks), so nothing is overdrawn and the books are kept.

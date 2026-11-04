@@ -121,7 +121,7 @@ impl Response {
     pub(super) fn booked(&self, s: &Scratch, t: &[f64], x: &[&[f64]]) -> Vec<f64> {
         let (nx, width) = (self.nx, Self::width(self.nx));
         let mut out = vec![0.0; self.alone.len() * (UP + nx)];
-        crate::par::rows(&mut out, UP + nx, || (), |_, i, row| {
+        crate::par::rows(&mut out, UP + nx, crate::par::UNCOUNTED, || (), |_, i, row| {
             if self.alone[i] {
                 let seen = &self.seen[i * (1 + nx)..(i + 1) * (1 + nx)];
                 let (t, x) = (lerp(s, t, i) - seen[0], (0..nx).map(|y| lerp(s, x[y], i) - seen[1 + y]).collect::<Vec<f64>>());
@@ -167,7 +167,7 @@ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Respons
     let mut rows = room;
     rows.resize(n * width, 0.0);
     // Each task keeps the last latitude and its mean sunlight over the step: neighbouring cells often share a latitude.
-    crate::par::rows(&mut rows, width, || (f64::NAN, 0.0, Work::default()), |(lat, q, work), i, row| {
+    crate::par::rows(&mut rows, width, crate::par::UNCOUNTED, || (f64::NAN, 0.0, Work::default()), |(lat, q, work), i, row| {
         if !alone[i] {
             return;
         }

@@ -7,18 +7,26 @@ use super::rain::{rain_air, Pool, Room, Wet};
 use super::wind::{even, lines, pushes, wind, Implicit, Links};
 use super::{air_temp, at_height, radiation::{glow, glow_slope}, step::Active};
 use crate::{math::mean_passed, store::Class, units::{DAY, R_GAS}, World, AIR};
-use std::{collections::BTreeMap, ops::Range};
+use std::collections::BTreeMap;
 
 /// The time in which eddies even out a block of air, s: the air's day, so a block's side is the distance a diffusion of
 /// `mix` spreads in it, sqrt(`mix` × this) (Taylor 1922), about 340 km (`blocks`).
 const BLOCK_DAY: f64 = DAY;
 
-/// The work of the day's steps, as the pool's rule counts it (`par::pays`), in instructions: a multiply-add of
-/// `Ground::gives`; a node's heat radiation to space (`glow`); and per node and per entry of a node whose gas rains, of
-/// the vapour's day (`Pool::day`) and of the air its rain meets (`rain_air`).
+/// Instructions of a multiply-add of `Ground::gives_of`, its products unrolled (`par::pays`).
 const GIVE_WORK: usize = 7;
+/// Instructions of a multiply-add of `Ground::gives_any`, its products in a loop (`par::pays`).
+const GIVE_ANY_WORK: usize = 17;
+/// Instructions of a node's heat radiation to space (`glow`, `par::pays`).
 const GLOW_WORK: usize = 80;
-const DAY_WORK: usize = 50;
+/// Instructions of the vapour's day (`Pool::day`, `par::pays`) per node and active gas (its saturation and sums), about
+/// 760 a raining node-day in all with the next two on a settled island.
+const DAY_NODE_WORK: usize = 100;
+/// Instructions of the vapour's day per node of a gas that may condense (its piece of entries, rate and rain).
+const DAY_RAIN_WORK: usize = 500;
+/// Instructions of the vapour's day per ratio it crosses (`rain::Break`, kept in a heap), as its last day crossed.
+const DAY_EVENT_WORK: usize = 300;
+/// Instructions of the air a node's rain meets, per entry of a node that rains (`rain_air`, `par::pays`).
 const MET_WORK: usize = 25;
 
 /// What the ground under each air node gives it over a step, as its cells' one law (`cells::Response::ground`): per
@@ -57,39 +65,44 @@ impl Ground {
         }
         d
     }
-    /// What each node gets over the whole step of the outputs `os` under the air that is `d` from the step's start
-    /// (`moved`), into `got` (`[j * os.len() + o - os.start]`): per node, on the pool.
-    fn gives(&self, d: &[f64], os: Range<usize>, got: &mut [f64]) {
+    /// What each node gets over the whole step under the air that is `d` from the step's start (`moved`), into `got`
+    /// (`[j * (1 + nx) + o]`): per node, on the pool where it pays.
+    fn gives(&self, d: &[f64], got: &mut [f64]) {
         match 1 + self.nx {
-            1 => self.gives_of::<1>(d, os, got),
-            2 => self.gives_of::<2>(d, os, got),
-            3 => self.gives_of::<3>(d, os, got),
-            4 => self.gives_of::<4>(d, os, got),
-            n => self.gives_any(n, d, os, got),
+            1 => self.gives_of::<1>(d, got),
+            2 => self.gives_of::<2>(d, got),
+            3 => self.gives_of::<3>(d, got),
+            4 => self.gives_of::<4>(d, got),
+            n => self.gives_any(n, d, got),
         }
+    }
+    /// What the other threads could take of `gives` (`par::shareable`), at `cost` instructions a multiply-add of `n`
+    /// outputs per node.
+    fn shareable(&self, n: usize, cost: usize) -> usize {
+        crate::par::shareable(self.at.windows(2).map(|e| (e[1] - e[0]) * n * n * cost))
     }
     /// `gives` for `N` outputs per node (`1 + nx`): each node's slopes with each node it sees, and that node's air, are
     /// arrays of a size fixed at compile time, so the sums unroll (a third of the instructions of `gives_any`).
-    fn gives_of<const N: usize>(&self, d: &[f64], os: Range<usize>, got: &mut [f64]) {
-        crate::par::rows_of(got, os.len(), self.near.len() * os.len() * N * GIVE_WORK, || (), |_, j, row| {
-            row.copy_from_slice(&self.base[j * N + os.start..j * N + os.end]);
+    fn gives_of<const N: usize>(&self, d: &[f64], got: &mut [f64]) {
+        crate::par::rows(got, N, self.shareable(N, GIVE_WORK), || (), |_, j, row| {
+            row.copy_from_slice(&self.base[j * N..j * N + N]);
             let (near, slope) = (&self.near[self.at[j]..self.at[j + 1]], &self.slope[self.at[j] * N * N..self.at[j + 1] * N * N]);
             for (&q, by) in near.iter().zip(slope.chunks_exact(N * N)) {
                 let dq: &[f64; N] = d[q as usize * N..q as usize * N + N].try_into().expect("N numbers");
-                for (g, o) in row.iter_mut().zip(os.clone()) {
-                    let s: &[f64; N] = by[o * N..o * N + N].try_into().expect("N numbers");
+                for (g, s) in row.iter_mut().zip(by.chunks_exact(N)) {
+                    let s: &[f64; N] = s.try_into().expect("N numbers");
                     *g += s[0] * dq[0] + (1..N).map(|v| s[v] * dq[v]).sum::<f64>();
                 }
             }
         });
     }
     /// `gives` for `n` outputs per node, any count, the sums in the same order.
-    fn gives_any(&self, n: usize, d: &[f64], os: Range<usize>, got: &mut [f64]) {
-        crate::par::rows_of(got, os.len(), self.near.len() * os.len() * n * GIVE_WORK, || (), |_, j, row| {
-            row.copy_from_slice(&self.base[j * n + os.start..j * n + os.end]);
+    fn gives_any(&self, n: usize, d: &[f64], got: &mut [f64]) {
+        crate::par::rows(got, n, self.shareable(n, GIVE_ANY_WORK), || (), |_, j, row| {
+            row.copy_from_slice(&self.base[j * n..j * n + n]);
             for e in self.at[j]..self.at[j + 1] {
                 let (q, r) = (self.near[e] as usize * n, e * n * n);
-                for (g, o) in row.iter_mut().zip(os.clone()) {
+                for (g, o) in row.iter_mut().zip(0..n) {
                     let r = r + o * n;
                     *g += self.slope[r] * d[q] + (1..n).map(|v| self.slope[r + v] * d[q + v]).sum::<f64>();
                 }
@@ -231,16 +244,16 @@ impl Together {
     }
     /// What the ground gives each node (`got`, `[j * (1 + nx) + o]`), moved by its blocks' warming `warm`, K per block.
     fn warmed(&self, got: &mut [f64], warm: &[f64]) {
-        self.moved(got, |row, b| row[0] * warm[b]);
+        self.shift(got, |row, b| row[0] * warm[b]);
     }
     /// What the ground gives each node (`got`), moved by a change `dx` of its blocks' vapour (`[y * nb + b]`, mol),
     /// shared by volume.
     fn shared(&self, got: &mut [f64], dx: &[f64]) {
         let nb = self.heat.len();
-        self.moved(got, |row, b| row[1..].iter().enumerate().map(|(y, s)| s * dx[y * nb + b]).sum::<f64>());
+        self.shift(got, |row, b| row[1..].iter().enumerate().map(|(y, s)| s * dx[y * nb + b]).sum::<f64>());
     }
-    /// `got` moved per node, output and block seen by `by(slopes of the output, block)`.
-    fn moved(&self, got: &mut [f64], by: impl Fn(&[f64], usize) -> f64) {
+    /// `got` shifted per node, output and block seen by `by(slopes of the output, block)`.
+    fn shift(&self, got: &mut [f64], by: impl Fn(&[f64], usize) -> f64) {
         let outs = self.outs;
         for (j, row) in got.chunks_exact_mut(outs).enumerate() {
             for k in self.seen_at[j]..self.seen_at[j + 1] {
@@ -264,7 +277,7 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     // What the ground gives at the day's start (`given`); at the day's warmth (`Together::warmed`) as the vapour reads
     // it; at the day's mean vapour too (`Together::shared`), as the day books it: the ground's law is linear in the air.
     let start = temps(s, x, e);
-    let mut got = given(ground, act, (&start, x), 0..1 + nx);
+    let mut got = given(ground, act, (&start, x));
     let (t, warm) = warmth(w, s, blocks, one, (x, &start, &got), (dd, dt));
     one.warmed(&mut got, &warm);
     let ts: Vec<f64> = (0..na).map(|j| at_height(t[j], s.gam[j], s.za[j], s.zair[j])).collect();
@@ -274,10 +287,10 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     // The air each node's rain meets (`rain_air`), per active gas and node (`[y * na + j]`), on the pool, from the air
     // touching each place it falls on.
     let touched = ground.wet().touched(s, &t, &rain);
-    let work = (0..nx * na).filter(|&i| rain[i] > 0.0).map(|i| ground.wet().nodes[i % na].cell.len()).sum::<usize>() * MET_WORK;
-    let met = crate::par::map_n_of(nx * na, work, |i| (rain[i] > 0.0).then(|| rain_air(ground.wet(), (i / na, i % na, ratio[i]), &touched)).flatten());
+    let work = crate::par::shareable((0..nx * na).filter(|&i| rain[i] > 0.0).map(|i| ground.wet().nodes[i % na].cell.len() * MET_WORK));
+    let met = crate::par::map_n(nx * na, work, |i| (rain[i] > 0.0).then(|| rain_air(ground.wet(), (i / na, i % na, ratio[i]), &touched)).flatten());
     // What each node's layers send to space over the day, J, on the pool.
-    let sky = crate::par::map_n_of(na, na * GLOW_WORK, |j| glow(s.absorbs[j], ts[j], &s.lay[j][1]) * air.area()[j] * dd);
+    let sky = crate::par::map_n(na, na.saturating_sub(1) * GLOW_WORK, |j| glow(s.absorbs[j], ts[j], &s.lay[j][1]) * air.area()[j] * dd);
     for j in 0..na {
         out.t[j] += t[j] * share;
         let (sky, day) = (sky[j], &got[j * (1 + nx)..(j + 1) * (1 + nx)]);
@@ -299,11 +312,11 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     }
 }
 
-/// What each node's ground gives it over the step under the air `t`, K, and `x` (`Ground::gives`), of the outputs `os`
-/// only (0 its heat, 1 + y its active gas `y`), `[j * os.len() + o - os.start]`.
-fn given(ground: &Ground, act: &[Active], (t, x): (&[f64], &[f64]), os: Range<usize>) -> Vec<f64> {
-    let (mut got, d) = (vec![0.0; t.len() * os.len()], ground.moved(act, (t, x)));
-    ground.gives(&d, os, &mut got);
+/// What each node's ground gives it over the step under the air `t`, K, and `x` (`Ground::gives`): per node its heat,
+/// then each active gas, `[j * (1 + nx) + o]`.
+fn given(ground: &Ground, act: &[Active], (t, x): (&[f64], &[f64])) -> Vec<f64> {
+    let (mut got, d) = (vec![0.0; t.len() * (1 + act.len())], ground.moved(act, (t, x)));
+    ground.gives(&d, &mut got);
     got
 }
 
@@ -316,7 +329,7 @@ fn warmth(w: &World, s: &Scratch, blocks: &[Vec<u32>], one: &Together, (x, start
     let outs = got.len() / na.max(1);
     let (mut t, mut warms) = (start.to_vec(), Vec::with_capacity(blocks.len()));
     // Per node what its layers send to space, W, and its slope with the temperature, W/K, on the pool.
-    let sky = crate::par::map_n_of(na, na * GLOW_WORK, |j| {
+    let sky = crate::par::map_n(na, na.saturating_sub(1) * GLOW_WORK, |j| {
         let (f, lay, area, ts) = (s.absorbs[j], &s.lay[j][1], air.area()[j], at_height(start[j], s.gam[j], s.za[j], s.zair[j]));
         [glow(f, ts, lay) * area, glow_slope(f, ts, lay) * area]
     });
@@ -347,9 +360,11 @@ fn vapour(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, 
     // Per active gas and block (`[y * nb + b]`), each on the pool: the block's vapour at the day's start and its mean
     // over the day, mol, and per node of the block what it rains and that times its ratio (`Pool::day`).
     let mut days: Vec<(usize, [f64; 2], &mut Room)> = rooms.iter_mut().enumerate().map(|(i, room)| (i, [0.0; 2], room)).collect();
-    // The work of each, and what the other threads could take of it: all but the largest.
-    let work: Vec<usize> = days.iter().map(|d| blocks[d.0 % nb].iter().map(|&j| 1 + if act[d.0 / nb].cond { ground.wet.nodes[j as usize].cell.len() } else { 0 }).sum::<usize>() * DAY_WORK).collect();
-    let spare = work.iter().sum::<usize>() - work.iter().max().copied().unwrap_or(0);
+    // What the other threads could take of them: per node, per node of a gas that may condense, and per ratio crossed.
+    let shareable = crate::par::shareable(days.iter().map(|(i, _, room)| {
+        let nodes = blocks[i % nb].len();
+        nodes * DAY_NODE_WORK + if act[i / nb].cond { nodes * DAY_RAIN_WORK + room.events * DAY_EVENT_WORK } else { 0 }
+    }));
     let day = |(i, sums, room): &mut (usize, [f64; 2], &mut Room)| {
         let (y, b) = (*i / nb, *i % nb);
         let (ac, nodes) = (&act[y], &blocks[b]);
@@ -363,7 +378,7 @@ fn vapour(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, 
         let pool = Pool { c: gives - slope * all, s: slope, v, off, full: nodes.iter().map(|&j| full(j as usize)).collect() };
         *sums = [all, pool.day((&ground.wet, y, nodes), all, (dd, dt, w.cfg.rain_time), room)];
     };
-    if crate::par::pays(spare) {
+    if crate::par::pays(shareable) {
         crate::par::each_init(&mut days, nx * na, || (), |_, d| day(d));
     } else {
         days.iter_mut().for_each(day);
