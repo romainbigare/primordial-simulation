@@ -131,12 +131,10 @@ pub struct Scratch {
     pub(super) state: State,
     /// The substances present changed: rebuild the state of ground and air at the next step.
     pub(super) stale: bool,
-    /// The part of Flow under way, whose lifts and falls are booked at its end (`potential::Lifts`); whether the parts
-    /// follow each other with nothing between (`flow::chain`); and the world's time and potential energy as the last
-    /// part left them.
+    /// The parts of Flow under way, whose lifts and falls are booked at their end (`potential::Lifts`); and whether the
+    /// parts follow each other with nothing between (`flow::chain`), booked as one.
     pub(super) lifts: Option<super::potential::Lifts>,
     pub(super) chained: bool,
-    pub(super) known: Option<(u64, super::potential::Potential)>,
     /// Room for the moves of a part of Flow (`potential::Lifts`), kept from part to part.
     pub(super) moved: Vec<super::potential::Moved>,
     /// The time of the last full build of the state of ground nodes, s.

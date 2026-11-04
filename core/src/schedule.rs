@@ -78,8 +78,8 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
     };
     // The survey of the cells builds Flow's state in full for their surroundings; Flow's own pass leaves it then.
     pass(w, Stage::Bodies, "survey", &|w| survey::survey(w));
-    // Flow's parts follow each other and the survey's state of Flow with nothing between (`flow::chain`), from here to
-    // its refresh.
+    // Flow's parts follow each other with nothing between, from here to its refresh: their lifts and falls are booked
+    // once (`flow::chain`).
     flow::chain(w, true);
     pass(w, Stage::Flow, "state", &|w| {
         if !flow::built_now(w) {

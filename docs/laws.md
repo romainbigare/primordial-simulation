@@ -103,9 +103,10 @@ layer at its middle (its bed, its loose solids, its liquid with what is dissolve
 1.1), its store `bed_depth` under its bed's top, filled from the bottom; an air node's matter lies at the mean head of
 its cells, for the height of a column above its ground is in its heat (its heat capacity at constant pressure holds
 the work the column does as it rises); a bodies' node's gas and the matter of a cell's life (its bodies, its cover, its
-parts) at its cell's head. In each part of Flow every move
-carries its potential energy from the height it leaves (a ground node's head, an air node's mean head, a store's
-table, each the mean of the part's start and end, so a lake that drains whole takes along what it held), and each
+parts) at its cell's head. In each month's Flow (its parts follow each other, `flow::chain`, and are booked as one)
+every move carries its potential energy from the height it leaves (a ground node's head, an air node's mean head, a
+store's table, each the mean of the month's Flow's start and end, so a lake that drains whole takes along what it
+held), and each
 node's heat takes what came in less what left less the change of its own (`store::fall_heat`):
 so a fall heats where the matter lands, a lift is paid by the node it enters (the air, for a gas going up; the ground
 node a store's liquid rises into), a column that rises as it fills pays for it, and the potential energy the world's

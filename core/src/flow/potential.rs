@@ -176,10 +176,9 @@ impl Potential {
 }
 
 impl Lifts {
-    /// From the world now, whose potential energy is `known` where the last part left it so, its moves gathered in
-    /// `moved` (empty; kept from part to part for its room).
-    pub(super) fn start(w: &World, s: &Scratch, known: Option<Potential>, moved: Vec<Moved>) -> Lifts {
-        Lifts { start: known.unwrap_or_else(|| potential(w, s, None)), moved }
+    /// From the world now, its moves gathered in `moved` (empty; kept from part to part for its room).
+    pub(super) fn start(w: &World, s: &Scratch, moved: Vec<Moved>) -> Lifts {
+        Lifts { start: potential(w, s, None), moved }
     }
     /// `kg` go from node `from` to node `to` (back where negative).
     fn carry(&mut self, (from, to): ((Class, u32), (Class, u32)), kg: f64) {
@@ -193,14 +192,13 @@ impl Lifts {
             self.moved.push(Moved { from, to, kg: kg.abs() });
         }
     }
-    /// Book the part's lifts and falls: each mass moved carries its potential energy from the height it left, the mean
-    /// of its node's height at the part's start and at its end (so a node's own matter that leaves it, however much,
+    /// Book the part's lifts and falls (or those of the parts that follow each other, `flow::chain`): each mass moved
+    /// carries its potential energy from the height it left, the mean of its node's height at the start and at the end (so a node's own matter that leaves it, however much,
     /// takes what it held of it); each node's heat takes what came in less what left less the change of its own
     /// potential energy (`store::fall_heat`, which adds their sum to `Store::lifted`). A bodies' node's gas lies at its
     /// cell's head, which the part moves with the ground's matter, not its own: what its lifts and falls give or take
-    /// is its ground node's (a bodies' node holds little heat of its own). Returns the potential energy now, and the
-    /// room of its moves, emptied.
-    pub(super) fn book(self, w: &mut World, s: &Scratch) -> (Potential, Vec<Moved>) {
+    /// is its ground node's (a bodies' node holds little heat of its own). Returns the room of its moves, emptied.
+    pub(super) fn book(self, w: &mut World, s: &Scratch) -> Vec<Moved> {
         let (mut start, mut moved) = (self.start, self.moved);
         let (now, g) = (potential(w, s, Some(std::mem::take(&mut start.found))), w.cfg.gravity);
         let olds = start.energies();
@@ -221,7 +219,7 @@ impl Lifts {
         for (class, q) in [(Class::Ground, ground), (Class::Air, air), (Class::Deep, deep)] {
             fall_heat(w, class, q);
         }
-        (now, moved)
+        moved
     }
 }
 

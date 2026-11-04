@@ -92,7 +92,8 @@ pub(crate) fn ensure(w: &mut World) {
 
 /// Run `f` on the world and the law's working memory, built first where it is missing (a new or loaded world): its
 /// tables, a new world's state, and its caches from the world now, as at a liquid step. Where `f` moves matter, or the
-/// caches of a world with a state are built (its phases may change), its lifts and falls are booked (`potential::Lifts`).
+/// caches of a world with a state are built (its phases may change), its lifts and falls are booked (`potential::Lifts`):
+/// at its end, or at the end of the parts that follow each other (`chain`).
 fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
     let n = w.mesh.cells().n();
     let mut s = std::mem::take(&mut w.scratch);
@@ -107,29 +108,39 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
         (st.tg, st.pk, st.phi, st.cloud) = (vec![0.0; n], vec![land::NONE; n], vec![0.0; n], vec![[0.0; 2]; w.mesh.level(AIR).n()]);
     }
     let build = s.cap.len() != n;
-    let known = s.known.take().filter(|_| s.chained).map(|k| k.1);
-    let room = std::mem::take(&mut s.moved);
-    s.lifts = (!fresh && (moving || build)).then(|| potential::Lifts::start(w, &s, known, room));
+    if s.lifts.is_none() && !fresh && (moving || build) {
+        let room = std::mem::take(&mut s.moved);
+        s.lifts = Some(potential::Lifts::start(w, &s, room));
+    }
     if build {
         scratch::room(w, &mut s);
         ground_state(w, &mut s, true);
         air::state(w, &mut s);
     }
     f(w, &mut s);
-    if let Some(lifts) = s.lifts.take() {
-        let (now, room) = lifts.book(w, &s);
-        (s.known, s.moved) = (Some((w.time, now)), room);
+    if !s.chained {
+        book(w, &mut s);
     }
     w.scratch = s;
 }
 
-/// The parts of Flow that run from now until `chain(w, false)` follow each other, and the last part of Flow at the
-/// world's time now, with nothing else between: each starts from the potential energy the last left
-/// (`potential::Lifts`), not found again.
+/// Book the lifts and falls of the parts of Flow under way (`potential::Lifts`), if any.
+fn book(w: &mut World, s: &mut Scratch) {
+    if let Some(lifts) = s.lifts.take() {
+        s.moved = lifts.book(w, s);
+    }
+}
+
+/// The parts of Flow that run from now until `chain(w, false)` follow each other with nothing else between: their lifts
+/// and falls are booked once, at its end (`potential::Lifts`), each mass at the mean of its node's heights at the
+/// start and at the end of them all.
 pub fn chain(w: &mut World, on: bool) {
-    let s = &mut w.scratch;
+    let mut s = std::mem::take(&mut w.scratch);
+    if !on {
+        book(w, &mut s);
+    }
     s.chained = on;
-    s.known = s.known.take().filter(|k| on && k.0 == w.time);
+    w.scratch = s;
 }
 
 /// Lowest and highest of `v`.
