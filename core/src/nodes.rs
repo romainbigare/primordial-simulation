@@ -163,7 +163,7 @@ pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread): 
     // to them goes into its spread around them. (Born rows of one genome have no gap.)
     let gap = if o.genome == genome { 0.0 } else {
         let (was, born) = (d.born_of(w, o.genome), d.born_of(w, genome));
-        was.iter().zip(born).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / was.len().max(1) as f32
+        crate::brain::square_gap(was, born) / was.len().max(1) as f32
     };
     let step = row_step(p, body::mutation_size(&o.genes));
     o.row_spread = ((1.0 - a) * o.row_spread + a * (row_spread + gap)).min(most(step, p.alike));

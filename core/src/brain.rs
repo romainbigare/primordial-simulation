@@ -82,12 +82,25 @@ pub struct Thought {
 /// Dot product in 8 lanes (so it can use vector instructions).
 #[inline]
 pub fn dot(a: &[f32], b: &[f32]) -> f32 {
+    lanes(a, b, |x, y| x * y)
+}
+
+/// The sum of the squared differences of `a` and `b`, in 8 lanes.
+#[inline]
+pub(crate) fn square_gap(a: &[f32], b: &[f32]) -> f32 {
+    lanes(a, b, |x, y| (y - x) * (y - x))
+}
+
+/// The sum of `f` over the pairs of `a` and `b` in 8 lanes, each summed in order, then the lanes and the rest.
+#[inline]
+fn lanes(a: &[f32], b: &[f32], f: impl Fn(f32, f32) -> f32) -> f32 {
+    debug_assert_eq!(a.len(), b.len(), "pairs of numbers");
     let mut acc = [0f32; 8];
     let (ca, cb) = (a.chunks_exact(8), b.chunks_exact(8));
-    let tail: f32 = ca.remainder().iter().zip(cb.remainder()).map(|(x, y)| x * y).sum();
+    let tail: f32 = ca.remainder().iter().zip(cb.remainder()).map(|(&x, &y)| f(x, y)).sum();
     for (p, q) in ca.zip(cb) {
         for l in 0..8 {
-            acc[l] += p[l] * q[l];
+            acc[l] += f(p[l], q[l]);
         }
     }
     acc.iter().sum::<f32>() + tail
