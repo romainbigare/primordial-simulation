@@ -732,8 +732,13 @@ fn a_cell_holds_one_node_per_kind_and_stage() {
 /// A node of `n` members in cell `i`, of a lineage of its own of starting kind `root` with `hidden` hidden units, its
 /// repair gene at `repair` and a brood, young (a copy mass a hundred times its founder's) or mature (a third of it): placed.
 fn capped(w: &mut pcore::World, i: usize, (root, hidden): (u32, usize), (repair, young): (f32, bool), n: f64) -> pcore::life::Handle {
-    let brain = Brain { hidden, ..Brain::only(pcore::brain::REST) };
-    let mut b = Line::new(w, &brain, root).founder(w, 1, i);
+    let line = Line::new(w, &Brain { hidden, ..Brain::only(pcore::brain::REST) }, root);
+    capped_of(w, i, &line, (repair, young), n)
+}
+
+/// A node as `capped` places it, of lineage `line`.
+fn capped_of(w: &mut pcore::World, i: usize, line: &Line, (repair, young): (f32, bool), n: f64) -> pcore::life::Handle {
+    let mut b = line.founder(w, 1, i);
     b.genes[pcore::body::REPAIR] = repair;
     b.genes[COPY_MASS] += if young { 2.0 } else { -0.5 };
     let mut b = node_of(w, b, n);
@@ -807,17 +812,26 @@ fn a_crowded_cell_keeps_a_young_and_a_mature_node_per_kind() {
     w.in_cell(i, |w, d| pcore::nodes::cap(w, d, i));
     assert_eq!(cell_books(&w, i).1.len(), 9, "a cell of nine kinds keeps its nine bodies");
 
-    // Under `MAX_NODES` a body of a kind and stage under the floor of the largest joins it; one over the floor stays.
+    // Under `MAX_NODES` a body of one lineage and stage under the floor of the largest joins it and lets go of its part,
+    // which stays in the cell held by none; one over the floor, one of another lineage and an individual that may mate
+    // (12 hidden units) stay.
     let (mut w, i) = start();
     let floor = 1000.0 * w.cfg.phys.node_floor;
-    for n in [1000.0, 0.5 * floor, 2.0 * floor] {
-        capped(&mut w, i, (1, 12), (-0.4, false), n);
-    }
+    let line = Line::new(&mut w, &Brain { hidden: 12, ..Brain::only(pcore::brain::REST) }, 1);
+    let small = [1000.0, 0.5 * floor, 2.0 * floor, 1.0].map(|n| capped_of(&mut w, i, &line, (-0.4, false), n))[1];
+    capped(&mut w, i, (1, 12), (-0.4, false), 0.5 * floor);
+    let part = testkit::plate(&mut w, i, 1.0, false);
+    w.life[small].hold = Some(part);
+    w.life.part_mut(part).expect("the part").held = w.life[small].id;
     let books = Books::now(&w);
     w.in_cell(i, |w, d| pcore::nodes::cap(w, d, i));
+    pcore::life::land(&mut w);
     let after = cell_books(&w, i);
-    assert_eq!(after.1.values().sum::<usize>(), 2, "the small body joined, the other stayed: {:?}", after.1);
-    assert!((after.0[&1].0 - (1000.0 + 2.5 * floor)).abs() <= 1e-9 * 1000.0, "members kept: {}", after.0[&1].0);
+    assert_eq!(after.1.values().sum::<usize>(), 4, "the small body of the lineage joined, the others stayed: {:?}", after.1);
+    assert!((after.0[&1].0 - (1001.0 + 3.0 * floor)).abs() <= 1e-9 * 1000.0, "members kept: {}", after.0[&1].0);
+    let c = w.life.cell_at(i);
+    assert!(c.parts.iter().any(|p| p.id == part && p.held == pcore::bond::NOBODY), "the part let go stays in its cell, held by none");
+    assert!(w.life.alive().all(|b| b.hold != Some(part)), "no body holds the part let go");
     books.assert_kept(&w, 1e-9);
 
     // Two alike nodes of two starting kinds, one stage and one brain: the monthly merge keeps them apart.

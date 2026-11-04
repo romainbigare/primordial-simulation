@@ -206,7 +206,7 @@ pub struct Physics {
     pub new_noise: f32,
     /// Nodes of a cell whose genes differ by at most this many mutation steps merge (`body::alike`)
     pub alike: f32,
-    /// A body under this share of the members of the largest of its kind, stage and room in its cell joins it (`cap`)
+    /// A body under this share of the members of the largest of its lineage, stage and room in its cell joins it (`cap`)
     pub node_floor: f64,
 
     // The cover (`cover`)

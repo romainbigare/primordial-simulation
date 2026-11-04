@@ -510,17 +510,18 @@ chance).
   a speed tool with physical side effects: the joiners' members drop the structure they held, which stays in the cell
   for any body to take, and a lineage's brain spreads to alike bodies of another. Selection acts between cells and
   lineages, not within a cell.
-- **Three caps, speed tools.** After its merge (`nodes::cap`) a body with fewer members than `node_floor` (1%) of the
-  largest body of its starting kind, stage and room (or outside any) in its cell joins that one; a cell that holds more
-  than `MAX_NODES` (8) bodies keeps one young and one mature node of each starting kind in each room: the bodies of one
-  kind, stage and room join the largest of them. Either way whatever their lineage, brain sizes and part, taking its
-  brain, born rows, lineage and brain-size genes; its rows become the mean by members where the brains have one shape,
-  else they stay its own; members, stores, heat and brood join as sums, and a part the joiner held stays in its cell,
-  held by none. So a small group (a few members who took a part, children who landed by a node) does not cost an
-  update of its own, and a crowded cell holds at most two bodies per kind present and room, and kinds never mix. A starting kind keeps at most `MAX_LINEAGES` (8) living
+- **Three caps, speed tools.** After its merge (`nodes::cap`) a cell that holds more than `MAX_NODES` (8) bodies keeps
+  one young and one mature node of each starting kind in each room (or outside any): the bodies of one kind, stage and
+  room join the largest of them, whatever their lineage, brain sizes and part, taking its brain, born rows, lineage and
+  brain-size genes; its rows become the mean by members where the brains have one shape, else they stay its own. In any
+  other cell a body with fewer members than `node_floor` (1%) of the largest body of its lineage, stage and room joins
+  that one, unless it may mate (`copy::mates`, 4.3). Either way members, stores, heat and brood join as sums, and a part
+  the joiner held stays in its cell, held by none. So a small group (a few members who took a part) does not cost an
+  update of its own, while a pair that may mate and a lineage just founded stay apart; a crowded cell holds at most two
+  bodies per kind present and room, and kinds never mix. A starting kind keeps at most `MAX_LINEAGES` (8) living
   lineages (`lineage::resize`): past them a body whose sizes change joins the living lineage of its kind nearest in
-  sizes, and stays in its own if that is the nearest. Both make bodies of different heritage share a brain; they
-  bound the work, not a law.
+  sizes, and stays in its own if that is the nearest. The cap of a crowded cell and the cap of lineages make bodies of
+  different heritage share a brain; the three caps bound the work, not a law.
 - **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
 - **Pace**: every node updates and decides once a month, as an individual does (0).
 - **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage. A
