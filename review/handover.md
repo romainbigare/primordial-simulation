@@ -6,19 +6,15 @@ follows; `review/big-look.md` says why. The spec is `docs/handover.md`; where it
 
 ## 1. Where the code stands
 
-- `main` = `claude/handover-implementation-yw7dgd` = `6699a7d6`. It builds; the fast suite, the 11 slow tests, clippy
+- `main` = `claude/handover-implementation-yw7dgd` = `3711eb44`. It builds; the fast suite, the slow tests, clippy
   and the wasm build pass. Every package on it had an adversarial review and its blocking findings fixed.
-- Speed, with life, 30-year means (the machine was not always quiet):
-
-| World | Cells | ms a year |
-|---|---|---|
-| 128 x 128 island | 9,163 (open water in 8 km cells) | about 1,390 (2,160 over the last 3 years) |
-| Globe of 64 x 32 air nodes | 6,080 | about 1,080 (1,220 over the last 3) |
-
-  The goal is 0.15 s a year for the island on 4 cores, and the planet in the island's time. The planet part is met.
-  The island is about 10 times off.
-- Costs: Flow about 16,500 instructions per cell per 10-day step (before the coarse open water); a body update about
-  113,000. Both are spread wide; no part is above about 15%.
+- Speed, 128 x 128 island (9,163 cells), quiet machine, 4 cores, 45 years: 1,698 ms a year on average, **2,533 ms a
+  year over years 42 to 45** (settled, about 16,000 bodies): bodies 1,495, Flow 734, tape 136, Change 105, parts 93.
+  Years before 22 have no animals, so a 30-year mean hides the settled cost. The goal is 150 ms: about 17 times off.
+  The globe of 64 x 32 air nodes runs in about the island's time (that goal is met).
+- Costs (callgrind, one thread): Flow about 86,000 instructions per cell-month; the bodies' batch about 100,000 per
+  node update. The bodies are bound by memory traffic (about 500 last-level misses a decision), not instructions:
+  Part B cut 12% of their instructions and none of their time.
 - `core/src` about 11,600 code lines.
 
 ## 2. What this round did
@@ -48,11 +44,23 @@ follows; `review/big-look.md` says why. The spec is `docs/handover.md`; where it
   body only sheds heat after its decision, and none passes its liquid's boiling point. On the roster only 2 to 4
   kinds live at year 40 (were 7): the founders were set under the runaway heat. A life round should look at it.
 
+- **Parts A and B (design, review, build, review, fix).** Flow: fixed-size arrays in the ground's response, the pool
+  only where its work pays (`par::pays`), the ground law once a day, the month's Flow booked as one, the vapour search
+  from yesterday's place: Flow 101k → 86k per cell-month. Bodies: blocks written once, unread rows skipped, children
+  who stay keep their parent's born rows. Measured and rejected: rows per lineage as a delta (the delta is dense),
+  one scorer for the part verbs (35% of learning), one node per lineage with a mass spread (today's node-mean rule
+  already matches the McKendrick-von Foerster steady state: 22% of births reach adulthood), lumpier litters (the
+  founders die on the 32 x 32 island; diff in git history of the session, not committed).
+- **Two book bugs found by 100-year runs:** a pit could send its liquid back upstream, so it circled for a century and
+  fell 5 km at once (fixed: a pit spills by its way out); a cell far over a boiling point could give more heat than it
+  held (fixed in `hold()`).
+
 ## 3. Next
 
-Small cuts give 5 to 10% each now; the island needs about 10 times. Levers left: a simpler body (an update is about
-113,000 instructions), the one-step month's cause, `daily::given` once a day (notes in the WP7 agent's report: the
-rain pool's per-cell steps are the nonlinear part).
+Cuts inside this design are used up (each now gives 5 to 15%, and the bodies are bound by memory). The island's
+goal needs a new design of a body update: today it streams about 32 KB of brain rows and stores per decision. Ideas:
+rows in f16 (born rows are read-only), one decision per node that does not copy rows into the view, fewer nodes per
+cell. Flow's rest is spread: the cells' surface balance 10k, the liquid 20k, the air book, `wet`, state.
 
 ## 4. Known problems
 
@@ -64,6 +72,10 @@ rain pool's per-cell steps are the nonlinear part).
 - On coarse globes there are few, very large land cells (23 bodies on the 32-row globe); a move of one link is 625 km.
 - The eaters are heavy (about 1 kg per m² of land); the carbon settles near 260 ppm with life (no carbon source).
 - The sight gene now costs nothing (it adds no work); selection on it is only by what it shows.
+- A cell of a sea patch pays its share of the patch's heat by heat capacity; a cell far off its patch's temperature
+  (9,000 K in a probe) can overdraw another cell of the patch. Patches are evened monthly, so no run reaches it.
+- In its own cell a node's born rows no longer change (children who stay keep them); they vary only through litters
+  that start bodies in other cells (selection between cells, laws.md).
 
 ## 5. How to work (keep)
 
