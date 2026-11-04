@@ -17,8 +17,10 @@ pub(super) fn spread(w: &World, d: &mut Chunk, node: &mut Body, c: &Choice, k: &
     let x = members(node, &q, rng);
     // The members of each option in the node after acting, and the change of their well-being.
     let (mut kept, mut gain, mut acted) = ([0.0; OPTS], [0f32; OPTS], 0.0);
+    // (Until a part's acting changes the node, each member's well-being is the node's at the decision, `Body::wb`.)
+    let mut fresh = true;
     for o in (0..FIXED).chain(TO_BODY..OPTS).chain(FIXED..TO_BODY).filter(|&o| x[o] > 0.0) {
-        let (g, left) = if o == REST { (0.0, Some(false)) } else { part_acts(w, d, node, (c, &q), k, (o, x[o]), rng) };
+        let (g, left) = if o == REST { (0.0, Some(false)) } else { part_acts(w, d, node, (c, &q), k, (o, x[o]), (&mut fresh, rng)) };
         (gain[o], kept[o], acted) = (g, if left == Some(true) { 0.0 } else { x[o] }, acted + x[o]);
         let Some(_) = left else { break };
     }
@@ -118,19 +120,24 @@ fn stays<R>(d: &mut Chunk, node: &mut Body, x: f64, act: impl FnOnce(&mut Chunk,
 /// they live on as a body, leaving the node (`Body::leaving`), with the trace of what they did: those who move join the
 /// first node of their kind and stage where they land (`choose::land_move`), those who act on a part come back after it
 /// if they can (`land_act`). The node acts itself if less than one member would be left. `q`: the node's chances
-/// (`top_chances`), which a part that leaves learns from. Returns the change of their well-being, and whether they left
-/// the node (none: it moved whole).
-fn part_acts(w: &World, d: &mut Chunk, node: &mut Body, (c, q): (&Choice, &[f32; OPTS]), k: &Kit, (o, x): (usize, f64), rng: &mut Rng) -> (f32, Option<bool>) {
+/// (`top_chances`), which a part that leaves learns from. While `fresh`, no part's acting has changed the node yet, so
+/// the members' well-being before they act is the node's at its decision (`Body::wb`: a split leaves each member's
+/// share alike); it is false once one has. Returns the change of their well-being, and whether they left the node
+/// (none: it moved whole).
+fn part_acts(w: &World, d: &mut Chunk, node: &mut Body, (c, q): (&Choice, &[f32; OPTS]), k: &Kit, (o, x): (usize, f64), (fresh, rng): (&mut bool, &mut Rng)) -> (f32, Option<bool>) {
     let (moves, bond) = ((FIXED..TO_BODY).contains(&o), (FORM..FIXED).contains(&o) || o >= TO_PART);
+    let first = *fresh;
     let mut acts = |d: &mut Chunk, b: &mut Body, part_of: Option<u64>| {
-        let before = (k.wb)(w, b);
+        let before = if first { b.wb } else { (k.wb)(w, b) };
         act_as(w, d, b, c, k, (o, part_of), rng);
         (k.wb)(w, b) - before
     };
     if !(moves || bond) {
+        *fresh = false;
         return (stays(d, node, x, |d, b| acts(d, b, None)), Some(false));
     }
     if node.count - x < 1.0 {
+        *fresh = false;
         return (acts(d, node, None), (!node.leaving).then_some(false));
     }
     let f = x / node.count;
@@ -144,6 +151,7 @@ fn part_acts(w: &World, d: &mut Chunk, node: &mut Body, (c, q): (&Choice, &[f32;
     let gain = acts(d, &mut m, Some(node.id));
     if !m.leaving {
         back(d, node, s, m);
+        *fresh = false;
         return (gain, Some(false));
     }
     // (It lives on as a body: a brain of its own, the node's, with the trace of what it did. Movers carry its numbers in
