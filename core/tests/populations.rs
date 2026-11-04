@@ -251,8 +251,8 @@ fn live(w: &pcore::World) -> Vec<Handle> {
     w.life.living().map(|x| x.0).collect()
 }
 
-/// A mature node's children start a node of their own (they are immature) that carries the variance
-/// left among them; when they join their parents' node (`nodes::merge`) its spread is widened by it.
+/// A mature node's children start a node of their own (they are immature) with its born rows, that carries the
+/// variance left among them; when they join their parents' node (`nodes::merge`) its spread is widened by it.
 #[test]
 fn a_node_spreads_with_its_children() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -275,6 +275,7 @@ fn a_node_spreads_with_its_children() {
     let c = &w.life[kids[0]];
     assert!((c.count - n0).abs() < 1e-6 * n0 && !c.adult(&w.chem), "{} young members", c.count);
     assert!(c.spread.iter().all(|&v| v >= 0.0) && c.spread.iter().any(|&v| v > 0.0) && c.row_spread > 0.0, "children keep no spread");
+    assert_eq!(c.genome, w.life[s].genome, "the young node keeps its parents' born rows");
     // Grown, they join the node (as the month's merge does): its spread is widened.
     w.in_cell(w.life[s].cell as usize, |w, d| nodes::merge(w, d, kids[0], s));
     let b = std::mem::take(&mut w.life[s]);

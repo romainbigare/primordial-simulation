@@ -140,7 +140,9 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
             add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.day() as f64 }, (&genes, &spread), (lineage, genome, Some(Own::Block(b.brain)), left + sd * sd));
             return true;
         }
-        let row_spread = if here { left + sd * sd } else { left };
+        // (Up to `body::most`, as a join keeps a node's row spread, `nodes::add`.)
+        let p = &w.cfg.phys;
+        let row_spread = if here { (left + sd * sd).min(most(row_step(p, size), p.alike)) } else { left };
         let mut c = Body { cell: cell as u32, count: m, lineage, parent, born: w.day(), last: w.day() as f64, store, e, genes, spread, row_spread, genome, wet, ..Default::default() };
         if here {
             d.events.push(born);
