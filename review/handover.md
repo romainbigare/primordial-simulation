@@ -50,7 +50,7 @@ follows; `review/big-look.md` says why. The spec is `docs/handover.md`; where it
   who stay keep their parent's born rows. Measured and rejected: rows per lineage as a delta (the delta is dense),
   one scorer for the part verbs (35% of learning), one node per lineage with a mass spread (today's node-mean rule
   already matches the McKendrick-von Foerster steady state: 22% of births reach adulthood), lumpier litters (the
-  founders die on the 32 x 32 island; diff in git history of the session, not committed).
+  founders die on the 32 x 32 island; not committed).
 - **Two book bugs found by 100-year runs:** a pit could send its liquid back upstream, so it circled for a century and
   fell 5 km at once (fixed: a pit spills by its way out); a cell far over a boiling point could give more heat than it
   held (fixed in `hold()`).
