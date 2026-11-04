@@ -30,6 +30,8 @@ pub fn step(w: &mut World) {
 /// apart (`fall_apart`).
 fn turns(w: &World, d: &mut Chunk, i: usize, dt: f64) {
     let (chem, tg) = (&w.chem, w.t_ground_last(i));
+    // (Opened first: `rot` reads the cell's own share of its air.)
+    d.moves.open(w, i, Node::new(Class::Part, 0));
     let share: Vec<f64> = rot(w, d, i, tg).into_iter().map(|r| frac(r * dt)).collect();
     // What goes to the ground of each substance: mol, then J.
     let mut off = vec![[0.0; 2]; chem.ns()];
@@ -47,7 +49,6 @@ fn turns(w: &World, d: &mut Chunk, i: usize, dt: f64) {
             }
         }
     }
-    d.moves.open(w, i, Node::new(Class::Part, 0));
     for (k, &[a, q]) in off.iter().enumerate().filter(|o| o.1[0] > 0.0) {
         d.moves.give(w, Node::ground(i), k, a, q);
     }
@@ -93,7 +94,7 @@ fn warm(w: &World, d: &mut Chunk, i: usize, tg: f64) {
 /// moisture, the substance of the walls a phase of its own, as a solid is in Change, and the other inputs taken from
 /// its cell's air by their share there. The walls are the scarce input (a part holds far less than its cell's air), so
 /// the rot is first order in them and one share fits every part of the cell (laws.md 3.1): it is found for one mol, of
-/// the substances the cell's walls hold.
+/// the substances the cell's walls hold. The moves of cell `i` are open (`Moves::open`), so the air read is its share.
 fn rot(w: &World, d: &Chunk, i: usize, t: f64) -> Vec<f64> {
     let (ns, j) = (w.chem.ns(), w.mesh.up(i, 0, AIR));
     let (mut rot, mut held) = (vec![0.0; ns], vec![false; ns]);
