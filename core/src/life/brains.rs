@@ -48,8 +48,11 @@ pub struct Brains {
 }
 
 impl Brains {
-    /// The brains of a cell as a snapshot keeps them (`packed`): its bodies' blocks one after another, none free.
-    pub(crate) fn from_packed(v: Vec<f32>) -> Brains {
+    /// The brains of a cell as a snapshot keeps them (`packed`): its bodies' blocks one after another, none free, in an
+    /// array with room for 1 / (1 - `FREED_SHARE`) times its blocks (what an array holds when it is packed), so the
+    /// blocks taken next need no copy of the array (an array `pack` made has that room already).
+    pub(crate) fn from_packed(mut v: Vec<f32>) -> Brains {
+        v.reserve((v.len() as f64 * FREED_SHARE / (1.0 - FREED_SHARE)) as usize);
         Brains { v, ..Default::default() }
     }
     /// The numbers of the blocks `held` (each living body's of the cell, in the cell's order) one after another, in an
@@ -91,14 +94,19 @@ impl Brains {
             *self = Brains::from_packed(v);
         }
     }
-    /// A block of `len` numbers: the last freed of that length, or a new one at the end.
-    fn grab(&mut self, len: usize) -> Block {
+    /// A block of `len` numbers: the last freed of that length, filled by `fill`, or a new one at the end, made by
+    /// `append` adding its numbers to the array (so a new block is written once).
+    fn grab(&mut self, len: usize, fill: impl FnOnce(&mut [f32], usize), append: impl FnOnce(&mut Vec<f32>)) -> Block {
         if let Some(x) = self.free.iter().rposition(|f| f.len as usize == len) {
             self.freed -= len;
-            return self.free.swap_remove(x);
+            let b = self.free.swap_remove(x);
+            fill(&mut self.v, b.at as usize);
+            return b;
         }
-        self.v.resize(self.v.len() + len, 0.0);
-        Block { at: (self.v.len() - len) as u32, len: len as u32 }
+        let at = self.v.len();
+        append(&mut self.v);
+        debug_assert_eq!(self.v.len(), at + len, "a new block of its length");
+        Block { at: at as u32, len: len as u32 }
     }
     /// The numbers of block `b`.
     #[inline]
@@ -117,11 +125,15 @@ impl Brains {
             return Block::default();
         }
         debug_assert_eq!(rows.len(), p[0], "rows of the brain's shape");
-        let b = self.grab(p.iter().sum());
-        let all = self.of_mut(b);
-        all[..p[0]].copy_from_slice(rows);
-        all[p[0]..].fill(0.0);
-        b
+        let (len, rest) = (p.iter().sum(), p[1] + p[2]);
+        let fill = |v: &mut [f32], at: usize| {
+            v[at..at + p[0]].copy_from_slice(rows);
+            v[at + p[0]..at + len].fill(0.0);
+        };
+        self.grab(len, fill, |v| {
+            v.extend_from_slice(rows);
+            v.resize(v.len() + rest, 0.0);
+        })
     }
     /// Block `b` is free for another body.
     pub(crate) fn free(&mut self, b: Block) {
@@ -195,9 +207,8 @@ impl Brains {
         if !b.some() {
             return b;
         }
-        let c = self.grab(b.len as usize);
-        self.v.copy_within(b.at as usize..(b.at + b.len) as usize, c.at as usize);
-        c
+        let from = b.at as usize..(b.at + b.len) as usize;
+        self.grab(b.len as usize, |v, at| v.copy_within(from.clone(), at), |v| v.extend_from_within(from.clone()))
     }
     /// The numbers of all blocks, freed ones too (what a snapshot keeps once they are `packed`).
     pub(crate) fn numbers(&self) -> &[f32] {
@@ -212,8 +223,6 @@ impl Brains {
         if all.is_empty() {
             return Block::default();
         }
-        let b = self.grab(all.len());
-        self.of_mut(b).copy_from_slice(all);
-        b
+        self.grab(all.len(), |v, at| v[at..at + all.len()].copy_from_slice(all), |v| v.extend_from_slice(all))
     }
 }

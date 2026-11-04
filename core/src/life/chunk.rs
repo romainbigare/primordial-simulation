@@ -52,9 +52,12 @@ impl std::ops::DerefMut for Chunk<'_> {
 }
 
 impl<'a> Chunk<'a> {
-    fn new(first: usize, cells: &'a mut [Cell]) -> Chunk<'a> {
+    /// A chunk of `cells` from cell `first`, its view with room for all of them (`ns` substances).
+    fn new(first: usize, cells: &'a mut [Cell], ns: usize) -> Chunk<'a> {
         let len = cells.len();
-        Chunk { cells, written: Written { first, len, ..Default::default() } }
+        let mut written = Written { first, len, ..Default::default() };
+        written.moves.reserve(len, ns);
+        Chunk { cells, written }
     }
     /// Its cells, by index.
     pub fn cells(&self) -> std::ops::Range<usize> {
@@ -179,7 +182,7 @@ pub(crate) fn run<T: Send, S>(w: &mut World, work: Vec<T>, load: usize, init: im
     let mut rest = &mut cells[..];
     for (k, t) in work.into_iter().enumerate() {
         let (mine, after) = rest.split_at_mut(b[k + 1] - b[k]);
-        items.push((Chunk::new(b[k], mine), t));
+        items.push((Chunk::new(b[k], mine, w.chem.ns()), t));
         rest = after;
     }
     // (What the cells see of their air nodes, worked out once per air node; the store does not change while it runs.)
@@ -208,7 +211,7 @@ impl World {
     /// node, it is put back, and the world takes what it wrote (`take_chunks`).
     pub fn in_cell<R>(&mut self, i: usize, f: impl FnOnce(&World, &mut Chunk) -> R) -> R {
         let mut one = [std::mem::take(&mut self.life.cells[i])];
-        let mut c = Chunk::new(i, &mut one);
+        let mut c = Chunk::new(i, &mut one, self.chem.ns());
         c.moves.open(self, i, A_BODY);
         let r = f(self, &mut c);
         let done = c.written;

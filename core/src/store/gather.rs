@@ -98,17 +98,25 @@ impl Moves {
     fn take_in(&mut self, w: &World, (i, j, f): (usize, usize, f64), at: usize) {
         let (st, n, na, ns) = (&w.store, w.mesh.cells().n(), w.mesh.level(AIR).n(), w.chem.ns());
         self.ns = ns;
-        let mut row = Vec::with_capacity(Row(ns).len());
+        // (The row is written at the end of the view, then moved into its place if that is not the end.)
+        let end = self.view.len();
+        let row = &mut self.view;
         for c in [Class::Ground, Class::Bed, Class::Bodies] {
             row.extend((0..ns).map(|k| [st.amounts(c)[k * n + i], 0.0]));
         }
         row.extend((0..ns).map(|k| [f * st.amounts(Class::Air)[k * na + j], 0.0]));
         row.extend((0..ns).map(|k| [f * air_seen(w, k, j), 0.0]));
         row.extend([st.heat(Class::Ground)[i], st.heat(Class::Bodies)[i], f * st.heat(Class::Air)[j]].map(|e| [e, 0.0]));
-        let start = at * row.len();
-        self.view.splice(start..start, row);
+        let added = self.view.len() - end;
+        self.view[at * Row(ns).len()..].rotate_right(added);
         self.cells.insert(at, (i as u32, j as u32));
         self.far.insert(at, [0.0; 2]);
+    }
+    /// Room for the rows of `cells` cells of `ns` substances, so taking them in never copies the view.
+    pub(crate) fn reserve(&mut self, cells: usize, ns: usize) {
+        self.view.reserve(cells * Row(ns).len());
+        self.cells.reserve(cells);
+        self.far.reserve(cells);
     }
     /// Whether it gathered anything to book.
     pub(crate) fn gathered(&self) -> bool {
