@@ -100,7 +100,7 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: 
     // (Its brain reads and writes the first `s.mem` numbers of its memory; those past them are none.)
     b.mem[s.mem..].fill(0.0);
     let mut c = perceive(w, d, b, nseen, &mut rng);
-    brain::think(d.at(b.cell as usize).brains.rows(b.brain, s), s, z, &mut t.thought);
+    brain::think(d.at(b.cell as usize).brains.rows(b.brain, s), s, z, &mut t.thought, read(s, &c));
     learn::learn(w, b, &mut d.brains(b.cell as usize).mind(b.brain, s), s, (wb, &t.thought.h));
     options(w, d, b, (s, sight), (pm, b.volume(&w.chem, temp) / b.n()), &mut c, t);
     if let Some(lin) = d.brain(w, b.lineage) {
@@ -116,6 +116,14 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: 
         b.traced = trace(w, b, &c, (&c.p, c.a, 0.0), &k, d.brains(b.cell as usize).mind(b.brain, s).trace);
         act_as(w, d, b, &c, &k, (c.a, None), &mut rng);
     }
+}
+
+/// Which rows of a brain of shape `s` decision `c` reads: all but the verbs toward bodies when it sees none and the
+/// verbs toward parts when it sees none (`options`).
+fn read(s: Shape, c: &Choice) -> impl Fn(usize) -> bool {
+    let (bodies, parts) = (s.verb(0)..s.verb(VERBS), s.verb(VERBS)..s.form());
+    let (any_body, any_part) = (c.nseen > 0, c.nparts > 0);
+    move |q| (any_body || !bodies.contains(&q)) && (any_part || !parts.contains(&q))
 }
 
 /// The body of face `o` of body `b`'s cell as it is now, if it lives and is not leaving it.
@@ -208,6 +216,7 @@ fn plan(w: &World, (lineage, base, rows): (u32, &[f32], &[f32]), s: Shape, z: &[
 
 /// Draw one action by its score (a softmax); with no option open, rest.
 fn pick(d: &mut Chunk, c: &mut Choice, rng: &mut Rng) {
+    debug_assert!(!c.logit.iter().any(|l| l.is_nan()), "a score from a row not worked out (`read`)");
     let top = c.logit.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
     if top == f32::NEG_INFINITY {
         (c.p, c.a) = ([0.0; OPTS], REST);

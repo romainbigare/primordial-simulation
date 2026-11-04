@@ -104,17 +104,26 @@ pub(crate) fn sums(base: &[f32], s: Shape, xs: &[f32], z: &mut Vec<f32>) {
     }
 }
 
-/// What a body with rows `rows` thinks from the sums of its hidden layer `z` (`sums`): its hidden layer and every row's
-/// value.
-pub(crate) fn think(rows: &[f32], s: Shape, z: &[f32], t: &mut Thought) {
+/// What a row's value is when it is not worked out (`think`): never read; in a debug build not a number, so a read
+/// shows.
+const NOT_READ: f32 = if cfg!(debug_assertions) { f32::NAN } else { 0.0 };
+
+/// What a body with rows `rows` thinks from the sums of its hidden layer `z` (`sums`): its hidden layer and the value of
+/// every row that `read` says is read (the others `NOT_READ`).
+pub(crate) fn think(rows: &[f32], s: Shape, z: &[f32], t: &mut Thought, read: impl Fn(usize) -> bool) {
     t.h.clear();
     t.h.extend(z.iter().map(|&v| squash(v)));
-    // The rows four at a time (four sums that do not wait on each other), then the rest.
+    // The rows four at a time (four sums that do not wait on each other; four none of which is read skipped), then the
+    // rest.
     t.out.clear();
     let (n, r) = (s.h, s.r());
     let h = &t.h[..n];
     let mut quads = rows.chunks_exact(4 * r);
-    for q in &mut quads {
+    for (k, q) in (&mut quads).enumerate() {
+        if !(4 * k..4 * k + 4).any(&read) {
+            t.out.extend([NOT_READ; 4]);
+            continue;
+        }
         let (r0, r1, r2, r3) = (&q[..n], &q[r..r + n], &q[2 * r..2 * r + n], &q[3 * r..3 * r + n]);
         let mut acc = [q[n], q[r + n], q[2 * r + n], q[3 * r + n]];
         for m in 0..n {
