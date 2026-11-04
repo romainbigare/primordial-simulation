@@ -5,7 +5,7 @@ use super::{kin, start};
 use crate::body::{remains, Body};
 use crate::brain::shake;
 use crate::event::Event;
-use crate::life::{Brains, Chunk, Entry};
+use crate::life::{Block, Chunk, Entry};
 use crate::nodes::{add, Lot, Own};
 use crate::rng::{Purpose, Rng};
 use crate::World;
@@ -13,7 +13,7 @@ use crate::World;
 /// Children that start in another cell than their parent's (`emit`), queued until the serial pass (`land_litter`): their
 /// body (in the cell they start in), their born rows (none: their parent's), their brain (`life::Brains::all`, to take
 /// into their cell's brains), the generation's change of their born rows still to draw (`row_change`; then their brain
-/// is their parent's), the cell their parent was in, and their birth.
+/// is their parent's rows alone, all a join reads), the cell their parent was in, and their birth.
 #[derive(Clone, Debug)]
 pub struct Litter {
     pub(crate) c: Body,
@@ -47,20 +47,16 @@ pub(crate) fn land_litter(w: &World, d: &mut Chunk, x: Litter) {
         return add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.lineage, c.genome, Some(Own::Carried(&brain)), row_spread));
     }
     let key = || Rng::new(w.seed, w.day(), !c.parent, Purpose::Mutate);
-    if let Some(s) = d.shape_of(w, c.lineage).filter(|_| !brain.is_empty()) {
-        let mind = Brains::split(&mut brain, s);
-        if sd > 0.0 {
-            shake(mind.rows, &mut key(), sd);
-        }
-        mind.ms.fill(0.0);
-        mind.trace.fill(0.0);
+    let shape = d.shape_of(w, c.lineage).filter(|_| !brain.is_empty());
+    if shape.is_some() && sd > 0.0 {
+        shake(&mut brain, &mut key(), sd);
     }
     let rows = (sd > 0.0).then(|| {
         let mut v = d.born_of(w, c.genome).to_vec();
         shake(&mut v, &mut key(), sd);
         v
     });
-    c.brain = d.brains(i).take_in(&brain);
+    c.brain = shape.map_or_else(Block::default, |s| d.brains(i).alloc(s, &brain));
     start(w, d, c, rows, None);
 }
 

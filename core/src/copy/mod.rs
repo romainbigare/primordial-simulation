@@ -148,7 +148,7 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
             place_child(w, d, c);
             return true;
         }
-        let brain = d.brains(b.cell as usize).all(b.brain).to_vec();
+        let brain = d.rows(w, b).to_vec();
         d.out.push(Entry::Litter(Box::new(Litter { c, rows: None, brain, change: Some(sd), from: b.cell, born })));
         return true;
     }
