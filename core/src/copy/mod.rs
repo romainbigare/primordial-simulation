@@ -128,18 +128,26 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
     let born = Event { day: w.day(), kind: EventKind::Born { root: d.root(w, b), mixed: l.mate.is_some() }, node: cell as u32, value: m };
     let (pre, sd, left) = child_rows(w, d, b, l, m, size, r);
     // Children of their parent's lineage and born rows but for the generation's change of them (`row_change`) who join
-    // a node, or start in another cell, get no born rows of their own: joining a node as amounts and means
-    // (`nodes::add`), their born rows are their parent's, the change their spread, their own rows their parent's (the
-    // node keeps its born rows); a litter draws the change where it lands, if it starts a body there (`land_litter`).
+    // a node, a node's children who start one in its cell, and children who start in another cell get no born rows of
+    // their own: their born rows are their parent's, the change their spread (as joiners pool it into a node's spread,
+    // `nodes::add`), their own rows their parent's; a litter draws the change where it lands, if it starts a body there
+    // (`land_litter`).
     let theirs = l.node || d.brain(w, b.lineage).is_none_or(|x| wanted(x, &genes) == sizes_of(x));
-    if pre.is_none() && theirs && (hit.is_some() || !here) {
+    if pre.is_none() && theirs && (hit.is_some() || !here || l.node) {
+        let (lineage, genome, parent, wet) = (b.lineage, b.genome, l.parent, b.wet);
         if let Some(t) = hit {
             d.events.push(born);
-            add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.day() as f64 }, (&genes, &spread), (b.lineage, b.genome, Some(Own::Block(b.brain)), left + sd * sd));
+            add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.day() as f64 }, (&genes, &spread), (lineage, genome, Some(Own::Block(b.brain)), left + sd * sd));
             return true;
         }
-        let (lineage, genome, parent, wet) = (b.lineage, b.genome, l.parent, b.wet);
-        let c = Body { cell: cell as u32, count: m, lineage, parent, born: w.day(), last: w.day() as f64, store, e, genes, spread, row_spread: left, genome, wet, ..Default::default() };
+        let row_spread = if here { left + sd * sd } else { left };
+        let mut c = Body { cell: cell as u32, count: m, lineage, parent, born: w.day(), last: w.day() as f64, store, e, genes, spread, row_spread, genome, wet, ..Default::default() };
+        if here {
+            d.events.push(born);
+            c.brain = d.inherit(w, None, lineage, b);
+            place_child(w, d, c);
+            return true;
+        }
         let brain = d.brains(b.cell as usize).all(b.brain).to_vec();
         d.out.push(Entry::Litter(Box::new(Litter { c, rows: None, brain, change: Some(sd), from: b.cell, born })));
         return true;
