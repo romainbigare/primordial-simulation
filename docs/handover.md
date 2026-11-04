@@ -423,6 +423,10 @@ Population nodes are built; how they work is in `docs/laws.md` 4.4. A body of co
 - The planet is coarse everywhere, and finer where it matters: a region of finer cells is built into the mesh at the
   start, or rebuilt at a god action. The sea lives on a coarser level, as the air does, so its cells are cheap.
 - Cells that split and join by themselves while the world runs come later, when a player must zoom anywhere.
+- A region is refined or collapsed only by a rule of the world, and every refinement is a recorded event. The camera
+  may ask for one only as a recorded input, as a god action is, so the same seed gives the same history (3.8) and a
+  run with no camera (the world search, M7) can refine too.
+- One life model at every grain: population nodes and individuals, as 7.1, on cells of any size.
 
 ### 7.3 Time steps (multi-rate)
 
@@ -436,6 +440,10 @@ Not everything needs the same step. These are suggested defaults to measure and 
 | Snapshots for the history tape | at the end of a run, every `--snapshots-every` years if asked (and before every god action) |
 
 There is **one world clock**. A fast process in a detailed area may sub-step inside a month. Seasons must exist, because they matter for food and migration.
+
+How often a body decides is a property of the body, the same at every grain; a finer region never changes it, so the
+same kind learns and pays alike everywhere (7, 6.5). A region's finer grain changes space and the steps of Flow, not
+the pace of bodies.
 
 ### 7.4 Threads: chunks and the serial pass
 
@@ -950,6 +958,9 @@ Then the owner decides one of:
 3. **Stop and polish** Part 1 as a smaller, finished thing: a living island with climate, life, trails and shelters that can be watched and poked in god mode. This is already a good result.
 
 Do not drift into Part 2 without this decision.
+
+**The decision taken:** option 1, toward the zoomable world, in the order of `review/plan.md` (the watch report is
+`docs/reports/m3.md`). Its first package is the physics that lets a held part change what an act achieves (9.4).
 
 **Interest score (for M7), suggested ingredients:**
 - number of different repeated structures
