@@ -9,9 +9,6 @@ use crate::{math::{mean_decay, mean_passed}, World, AIR};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
-/// The work of the air touching a place (`touching`), in instructions, as the pool's rule counts it (`par::pays`).
-const TOUCH_WORK: usize = 90;
-
 /// Where each air node's rain falls, as of the step's start (`wet`): per node its entries (`Seen`), each a place: a
 /// cell alone (its index) or a patch of the low basin (`n` + its index in `patches`, `Place`); and per cell its place.
 pub(super) struct Wet {
@@ -46,29 +43,66 @@ impl Place {
 
 /// One node's entries (`Wet`): the places that see it (`cell`), the share of the node's air over each, and per active gas the
 /// node's saturation ratio (its amount over what saturates it at its mean ground) past which each rains (`[y * len +
-/// e]`); and per active gas the entries in rising order of that ratio, each `[ratio, Σ share so far, Σ share × ratio so
-/// far]` (`Seen::new`).
+/// e]`); per active gas the entries in rising order of that ratio, each `[ratio, Σ share so far, Σ share × ratio so
+/// far]` (`Seen::new`); and per active gas that may rain the air its rain meets (`Touch`).
 pub(super) struct Seen {
     pub(super) cell: Vec<u32>,
     pub(super) share: Vec<f64>,
     pub(super) ratio: Vec<f64>,
     steps: Vec<[f64; 3]>,
+    touch: Touch,
+}
+
+/// The air touching a node's places, in the order of `Seen::steps`: linear in the air nodes it reads (`touching`, a
+/// patch's `Place::touching`), each place the air of the nodes `air` by its weights less its coolness. Per active gas
+/// that may rain (none for another) and entry, its row: per node of `air`, then for the coolness, the sums so far of
+/// share × weight and of share × ratio × weight (`[k * (air.len() + 1) + c]`), so the air a rain at any ratio meets is
+/// one look-up (`rain_air`).
+struct Touch {
+    air: Vec<u32>,
+    rows: Vec<Vec<[f64; 2]>>,
 }
 
 impl Seen {
-    /// From its cells, their shares and per active gas their ratios.
-    pub(super) fn new(cell: Vec<u32>, share: Vec<f64>, ratio: Vec<f64>) -> Seen {
-        let mut steps = Vec::with_capacity(ratio.len());
-        for by in ratio.chunks(cell.len().max(1)) {
-            let mut order: Vec<(f64, f64)> = by.iter().copied().zip(share.iter().copied()).collect();
-            order.sort_unstable_by(|p, q| p.0.total_cmp(&q.0));
-            let mut sum = [0.0; 2];
-            for (r, a) in order {
+    /// From its places, their shares and per active gas their ratios, and the nodes each place's touching air reads
+    /// with their weights, and its coolness (`reads`: each node and weight to its callback, the coolness returned), for
+    /// the gases that may rain (`rains`).
+    pub(super) fn new(cell: Vec<u32>, share: Vec<f64>, ratio: Vec<f64>, rains: &[bool], reads: impl Fn(u32, &mut dyn FnMut(u32, f64)) -> f64) -> Seen {
+        let len = cell.len();
+        // Each place's nodes (their places in `air`) and weights, `form[at[e]..at[e + 1]]`, and its coolness.
+        let (mut air, mut form, mut at, mut cool) = (Vec::new(), Vec::new(), vec![0], Vec::with_capacity(len));
+        for &p in &cell {
+            cool.push(reads(p, &mut |j, wt| {
+                if wt > 0.0 {
+                    let c = air.iter().position(|&a| a == j).unwrap_or_else(|| {
+                        air.push(j);
+                        air.len() - 1
+                    });
+                    form.push((c, wt));
+                }
+            }));
+            at.push(form.len());
+        }
+        let (mut steps, mut rows, width) = (Vec::with_capacity(ratio.len()), Vec::with_capacity(rains.len()), air.len() + 1);
+        for (by, &rain) in ratio.chunks(len.max(1)).zip(rains) {
+            let mut order: Vec<usize> = (0..by.len()).collect();
+            order.sort_unstable_by(|&p, &q| by[p].total_cmp(&by[q]));
+            let (mut sum, mut row, mut out) = ([0.0; 2], vec![[0.0; 2]; width], Vec::with_capacity(if rain { len * width } else { 0 }));
+            for e in order {
+                let (r, a) = (by[e], share[e]);
                 sum = [sum[0] + a, sum[1] + a * r];
                 steps.push([r, sum[0], sum[1]]);
+                if rain {
+                    for &(c, wt) in &form[at[e]..at[e + 1]] {
+                        row[c] = [row[c][0] + a * wt, row[c][1] + a * r * wt];
+                    }
+                    row[width - 1] = [row[width - 1][0] + a * cool[e], row[width - 1][1] + a * r * cool[e]];
+                    out.extend_from_slice(&row);
+                }
             }
+            rows.push(out);
         }
-        Seen { cell, share, ratio, steps }
+        Seen { cell, share, ratio, steps, touch: Touch { air, rows } }
     }
 }
 
@@ -79,18 +113,6 @@ impl Wet {
     fn steps(&self, x: usize, j: usize) -> &[[f64; 3]] {
         let (node, len) = (&self.nodes[j], self.nodes[j].cell.len());
         &node.steps[x * len..(x + 1) * len]
-    }
-    /// The air touching each place a node that rains falls on (`rain`, per active gas and node, `[y * na + j]`, mol)
-    /// under air nodes at `t`, K (`touching`; 0 elsewhere and for a cell of a patch), by place: `rain_air` reads no other.
-    pub(super) fn touched(&self, s: &Scratch, t: &[f64], rain: &[f64]) -> Vec<f64> {
-        let (n, na) = (self.place_of.len(), self.nodes.len());
-        let mut wet = vec![false; n + self.patches.len()];
-        for (i, _) in rain.iter().enumerate().filter(|r| *r.1 > 0.0) {
-            self.nodes[i % na].cell.iter().for_each(|&p| wet[p as usize] = true);
-        }
-        let mut v = crate::par::map_n_of(n, wet.iter().filter(|&&w| w).count() * TOUCH_WORK, |i| if wet[i] { touching(s, t, i) } else { 0.0 });
-        v.extend(self.patches.iter().zip(&wet[n..]).map(|(p, &on)| if on { p.touching(s, t) } else { 0.0 }));
-        v
     }
 }
 
@@ -245,7 +267,7 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64], patches: &
     }
     // The cells that see each node, in the order of the cells: their entries `at[q]..at[q + 1]` (cell, corner); a
     // patch's at its first.
-    let (at, by) = (&s.corners.by_at, &s.corners.by);
+    let (at, by, rains, patches) = (&s.corners.by_at, &s.corners.by, act.iter().map(|ac| ac.cond).collect::<Vec<bool>>(), &places);
     let nodes = crate::par::map_n(na, |q| {
         let (mut place, mut share, mut first) = (Vec::new(), Vec::new(), Vec::<(u32, usize)>::new());
         for &(i, c) in &by[at[q]..at[q + 1]] {
@@ -262,7 +284,17 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64], patches: &
         }
         let (sat, node, places) = (&sat, &node, &place);
         let ratio = (0..nx).flat_map(|y| places.iter().map(move |&p| sat[p as usize * nx + y] / air.area()[q] / node[q * nx + y])).collect();
-        Seen::new(place, share, ratio)
+        let reads = |p: u32, each: &mut dyn FnMut(u32, f64)| match (p as usize).checked_sub(n) {
+            None => {
+                s.near[p as usize].iter().zip(&s.wt[p as usize]).for_each(|(&j, &wt)| each(j, wt));
+                s.cool[p as usize]
+            }
+            Some(at) => {
+                patches[at].sees.iter().for_each(|&(e, wt)| each(s.corners.sees[e as usize], wt));
+                patches[at].cool
+            }
+        };
+        Seen::new(place, share, ratio, &rains, reads)
     });
     Wet { nodes, patches: places, place_of }
 }
@@ -270,15 +302,21 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64], patches: &
 /// What rains of one gas on each cell from each node it sees over the step: (cell, node, mol), in the order of the nodes.
 pub(super) type Landed = Vec<(u32, u32, f64)>;
 
-/// The air the rain of active gas `y` of node `j` meets on a day it rains at its saturation ratio `ratio`: the air
-/// touching the places it falls on (`touched`, per place, `Wet::touched` under the day's air), each by its share of the
-/// rain as it lands (`landed`), K; none where it falls on no place.
-pub(super) fn rain_air(wet: &Wet, (y, j, ratio): (usize, usize, f64), touched: &[f64]) -> Option<f64> {
-    let node = &wet.nodes[j];
-    let len = node.cell.len();
-    let over = |e: usize| node.share[e] * (ratio - node.ratio[y * len + e]).max(0.0);
-    let (sum, all) = (0..len).map(|e| (e, over(e))).filter(|p| p.1 > 0.0).fold((0.0, 0.0), |(sum, all), (e, o)| (sum + o * touched[node.cell[e] as usize], all + o));
-    (all > 0.0).then(|| sum / all)
+/// The air the rain of active gas `y` of node `j` meets on a day it rains at its saturation ratio `ratio` under air
+/// nodes at `t`, K: the air touching the places it falls on, each by its share of the rain as it lands (`landed`), K;
+/// none where it falls on no place. Each place's share is share × (ratio - its ratio) for the places of a ratio below,
+/// a run of the entries in rising order, so the sums of `Touch` give it at once.
+pub(super) fn rain_air(wet: &Wet, (y, j, ratio): (usize, usize, f64), t: &[f64]) -> Option<f64> {
+    let (node, steps) = (&wet.nodes[j], wet.steps(y, j));
+    let k = steps.partition_point(|c| c[0] < ratio);
+    let all = if k > 0 { ratio * steps[k - 1][1] - steps[k - 1][2] } else { 0.0 };
+    if all <= 0.0 {
+        return None;
+    }
+    let (air, width) = (&node.touch.air, node.touch.air.len() + 1);
+    let row = &node.touch.rows[y][(k - 1) * width..k * width];
+    let warm: f64 = air.iter().zip(row).map(|(&q, s)| t[q as usize] * (ratio * s[0] - s[1])).sum();
+    Some((warm - (ratio * row[width - 1][0] - row[width - 1][1])) / all)
 }
 
 /// What rains on each cell from each node it sees over the step (`Landed`), per active gas: each node's rain shared
@@ -315,7 +353,7 @@ mod tests {
     /// what rains.
     #[test]
     fn a_block_follows_its_ground_and_its_rain_through_the_day() {
-        let wet = Wet { nodes: vec![Seen::new(vec![0, 1], vec![0.3, 0.7], vec![1.1, 0.9]), Seen::new(vec![2], vec![1.0], vec![0.95])], patches: vec![], place_of: vec![0, 1, 2] };
+        let wet = Wet { nodes: vec![Seen::new(vec![0, 1], vec![0.3, 0.7], vec![1.1, 0.9], &[false], |_, _| 0.0), Seen::new(vec![2], vec![1.0], vec![0.95], &[false], |_, _| 0.0)], patches: vec![], place_of: vec![0, 1, 2] };
         let pool = Pool { c: 3.0, s: -0.1, v: vec![0.6, 0.4], off: vec![0.0, 0.0], full: vec![1.0, 0.8] };
         let (dd, dt, tau, x0) = (1e5, 1e5, 2e4, 1.0);
         let (mut rain, mut ratio) = (vec![0.0; 2], vec![0.0; 2]);
