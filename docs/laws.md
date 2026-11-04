@@ -407,7 +407,8 @@ share of its walls the open world's decomposers would rot in the month (`bond/mo
 its walls a phase of its own, as a solid is in Change, and the gas it needs taken from its cell's air by its share
 there) goes to its cell's ground with its heat, where Change rots it on, as do walls no longer solid; then it takes its
 cell's temperature. The walls are the scarce input of that rot (a part holds far less than its cell's air), so it is
-first order in them: one share per substance fits every part of a cell. The parts of a cell take their turns together,
+first order in them: one share per substance fits every part of a cell (a reaction the open world speeds takes at
+most one substance that bodies hold, and walls hold only those: `Chemistry::validate`). The parts of a cell take their turns together,
 on the cell's view of the store: one move to the ground per substance, one move of heat. A part whose walls fall under `min_kg` falls
 apart (`bond::fall_apart`): all it holds, its walls, the liquid in its hollow and its heat, goes to its cell's ground,
 whether its walls ran off in its turn or a body took them (`bond::verbs::take`), and it is gone with its bonds.

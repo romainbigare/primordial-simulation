@@ -19,6 +19,12 @@ const FIX_ELEMENT: usize = 2;
 fn the_chemistry_balances_and_fixing_costs_what_fixers_respire() {
     let (chem, _) = worldgen::chemistry0();
     assert!(chem.validate().is_ok());
+    // A reaction the open world speeds may take only one substance bodies hold (the rot of a part's walls is first order
+    // in one): with a second it is refused.
+    let (mut two, _) = worldgen::chemistry0();
+    let open = two.reactions.iter().position(|rx| rx.open > 1.0).expect("a reaction of the open world");
+    two.reactions[open].inputs.push((MATTER as u16, 1));
+    assert!(two.validate().is_err_and(|e| e.contains("bodies hold")), "{:?}", two.validate());
     let (m, minerals) = (chem.matter().expect("matter"), chem.minerals());
     assert_eq!((m, minerals.to_vec()), (MATTER, vec![(MINERAL, 3.0)]));
     let elems = &chem.subs[m].elems;

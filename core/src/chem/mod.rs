@@ -226,6 +226,10 @@ impl Chemistry {
             require(known, || format!("{name}: a substance beyond the {ns}"))?;
             require(rx.ord.len() <= rx.inputs.len(), || format!("{name}: more orders than inputs"))?;
             require(rx.open > 0.0, || format!("{name}: its speed in the open world must be above 0"))?;
+            // A part's walls hold only what bodies hold, and their rot is first order in the one input of the walls,
+            // the others taken from the air (`bond/month.rs::rot`).
+            let held = rx.inputs.iter().filter(|x| self.body().place(x.0 as usize).is_some()).count();
+            require(rx.open <= 1.0 || held <= 1, || format!("{name}: sped in the open world, it takes {held} substances bodies hold (a part's walls may hold them), at most 1"))?;
             let balanced = self.side_elems(&rx.inputs) == self.side_elems(&rx.outputs);
             require(balanced, || format!("{name} does not balance"))?;
             let (m_in, m_out) = (mass(&rx.inputs), mass(&rx.outputs));
