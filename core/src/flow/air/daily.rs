@@ -15,10 +15,11 @@ const BLOCK_DAY: f64 = DAY;
 
 /// The work of the day's steps, as the pool's rule counts it (`par::pays`), in instructions: a multiply-add of
 /// `Ground::gives`; a node's heat radiation to space (`glow`); and per node and per entry of a node whose gas rains, of
-/// the vapour's day (`Pool::day`).
+/// the vapour's day (`Pool::day`) and of the air its rain meets (`rain_air`).
 const GIVE_WORK: usize = 7;
 const GLOW_WORK: usize = 80;
 const DAY_WORK: usize = 50;
+const MET_WORK: usize = 25;
 
 /// What the ground under each air node gives it over a step, as its cells' one law (`cells::Response::ground`): per
 /// node and output (what its air gains, J, then what evaporates of each active gas, mol, `[j * (1 + nx) + o]`) its
@@ -222,6 +223,11 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     let [mean, rain, ratio] = vapour(w, s, (act, ground), (blocks, one), (x, &t, &ts), (dd, dt));
     (0..s.state.gas.len() * na).for_each(|at| out.x[at] += mean[at] * share);
     let got = given(ground, act, (&t, &mean), 0..1 + nx);
+    // The air each node's rain meets (`rain_air`), per active gas and node (`[y * na + j]`), on the pool, from the air
+    // touching each place it falls on.
+    let touched = ground.wet().touched(s, &t, &rain);
+    let work = (0..nx * na).filter(|&i| rain[i] > 0.0).map(|i| ground.wet().nodes[i % na].cell.len()).sum::<usize>() * MET_WORK;
+    let met = crate::par::map_n_of(nx * na, work, |i| (rain[i] > 0.0).then(|| rain_air(ground.wet(), (i / na, i % na, ratio[i]), &touched)).flatten());
     // What each node's layers send to space over the day, J, on the pool.
     let sky = crate::par::map_n_of(na, na * GLOW_WORK, |j| glow(s.absorbs[j], ts[j], &s.lay[j][1]) * air.area()[j] * dd);
     for j in 0..na {
@@ -237,7 +243,7 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
                 // the air touching the cells it falls on (`rain_air`, as the book lands it), the air paying what warms
                 // it on the way down.
                 let liquid = if ts[j] < sp.melt { 0.0 } else { sp.lf };
-                let tr = rain_air(ground.wet(), (y, j, ratio[i]), &t).unwrap_or(ts[j]);
+                let tr = met[i].unwrap_or(ts[j]);
                 e[j] += m * (sp.lv + sp.lf - liquid - sp.cp * tr);
                 (out.rain[i], out.rain_fusion[i], out.ratio[i]) = (out.rain[i] + m, out.rain_fusion[i] + m * liquid, out.ratio[i] + ratio[i]);
             }
