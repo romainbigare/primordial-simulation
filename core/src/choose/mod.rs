@@ -265,7 +265,11 @@ fn trace(w: &World, b: &Body, c: &Choice, (chances, a, adv): (&[f32; OPTS], usiz
     for (q, cq) in cr[..FIXED].iter_mut().enumerate() {
         *cq = g(q);
     }
+    // (An option of no chance that was not done, as a node's outside its likeliest, adds nothing: it is skipped.)
     let mut add = |row: usize, gq: f32, fq: &[f32]| {
+        if gq == 0.0 {
+            return;
+        }
         cr[row] += gq;
         for (x, f) in cr[row + 1..].iter_mut().zip(fq) {
             *x += gq * f;
