@@ -113,6 +113,21 @@ impl Ord for Break {
     }
 }
 
+/// What a block's vapour of one gas keeps from day to day of a step (`Pool::day`): per node of the block the piece of
+/// its entries it stood at when its last day ended, where the next day's search starts (the ratios move little in a
+/// day); the day's lists of its raining nodes, their pieces, the times and sums of their last changes, and the ratios
+/// ahead; and per node of the block what it rained in the day, mol, and that times its ratio.
+#[derive(Default)]
+pub(super) struct Room {
+    piece: Vec<usize>,
+    raining: Vec<usize>,
+    k: Vec<usize>,
+    since: Vec<[f64; 2]>,
+    ahead: BinaryHeap<Break>,
+    pub(super) rain: Vec<f64>,
+    pub(super) ratio: Vec<f64>,
+}
+
 /// A block's vapour of one active gas over a day (`daily::exchange`): what its ground gives, `c + s X` mol over the step for `X`
 /// mol in the block; and per node of the block its share `v` of a change of the block's vapour (by volume, as the eddies
 /// even it), its vapour apart from that, `off`, mol, and what saturates it at its mean ground, `full`, mol (none where
@@ -130,28 +145,49 @@ impl Pool {
     /// in `rain_time` `tau`: what its ground gives less what its nodes rain, each linear in the vapour between two of the
     /// ratios at which a cell starts or stops raining (`Wet::steps`), so followed exactly from one such ratio to the
     /// next, nearest first (`Break`); the vapour moves one way all day, toward the balance of the two. Its mean over the
-    /// day, mol, returned; each node's rain, mol, and that times the ratio it falls at, added to `rain` (`[node of the
-    /// block]`) and `ratio`.
-    pub(super) fn day(&self, (wet, y, nodes): (&Wet, usize, &[u32]), x0: f64, (dd, dt, tau): (f64, f64, f64), (rain, ratio): (&mut [f64], &mut [f64])) -> f64 {
-        let raining: Vec<usize> = (0..nodes.len()).filter(|&q| self.full[q] > 0.0).collect();
+    /// day, mol, returned; each node's rain, mol, and that times the ratio it falls at, in `room` (`Room::rain`,
+    /// `Room::ratio`, by node of the block).
+    pub(super) fn day(&self, (wet, y, nodes): (&Wet, usize, &[u32]), x0: f64, (dd, dt, tau): (f64, f64, f64), room: &mut Room) -> f64 {
+        let Room { piece, raining, k, since, ahead, rain, ratio } = room;
+        piece.resize(nodes.len(), 0);
+        raining.clear();
+        raining.extend((0..nodes.len()).filter(|&q| self.full[q] > 0.0));
+        [&mut *rain, &mut *ratio].into_iter().for_each(|v| {
+            v.clear();
+            v.resize(nodes.len(), 0.0);
+        });
         let steps = |q: usize| wet.steps(y, nodes[q] as usize);
         let sums = |q: usize, k: usize| if k == 0 { [0.0; 2] } else { [steps(q)[k - 1][1], steps(q)[k - 1][2]] };
-        // Each raining node's entries below its ratio now, a ratio it stands at counted below where the vapour rises; and
-        // the rain then, (a x + b) / tau mol/s.
-        let below = |up: bool| -> Vec<usize> {
-            raining.iter().map(|&q| (q, (self.v[q] * x0 + self.off[q]) / self.full[q])).map(|(q, r)| steps(q).partition_point(|c| if up { c[0] <= r } else { c[0] < r })).collect()
+        // Each raining node's entries below its ratio now, a ratio it stands at counted below where the vapour rises,
+        // found from where its last day ended (`Room::piece`); and the rain then, (a x + b) / tau mol/s.
+        let below = |up: bool, k: &mut Vec<usize>| {
+            k.clear();
+            k.extend(raining.iter().map(|&q| {
+                let (r, st) = ((self.v[q] * x0 + self.off[q]) / self.full[q], steps(q));
+                let under = |c: &[f64; 3]| if up { c[0] <= r } else { c[0] < r };
+                let mut p = piece[q].min(st.len());
+                while p < st.len() && under(&st[p]) {
+                    p += 1;
+                }
+                while p > 0 && !under(&st[p - 1]) {
+                    p -= 1;
+                }
+                p
+            }));
         };
         let terms = |q: usize, k: usize| {
             let [s1, s2] = sums(q, k);
             [self.v[q] * s1, self.off[q] * s1 - self.full[q] * s2]
         };
         let rate = |x: f64, [a, b]: [f64; 2]| (self.c + self.s * x) / dt - (a * x + b) / tau;
-        let (mut k, mut ab) = (below(true), [0.0; 2]);
-        raining.iter().zip(&k).for_each(|(&q, &k)| terms(q, k).iter().zip(&mut ab).for_each(|(t, s)| *s += t));
+        let mut ab = [0.0; 2];
+        below(true, k);
+        raining.iter().zip(k.iter()).for_each(|(&q, &k)| terms(q, k).iter().zip(&mut ab).for_each(|(t, s)| *s += t));
         let up = rate(x0, ab) > 0.0;
         if !up {
-            (k, ab) = (below(false), [0.0; 2]);
-            raining.iter().zip(&k).for_each(|(&q, &k)| terms(q, k).iter().zip(&mut ab).for_each(|(t, s)| *s += t));
+            below(false, k);
+            ab = [0.0; 2];
+            raining.iter().zip(k.iter()).for_each(|(&q, &k)| terms(q, k).iter().zip(&mut ab).for_each(|(t, s)| *s += t));
         }
         // The next ratio each node reaches, as the block's vapour there.
         let (sign, len) = (if up { -1.0 } else { 1.0 }, |q: usize| steps(q).len());
@@ -160,10 +196,12 @@ impl Pool {
             let at = if up { (k < len(q)).then(|| steps(q)[k][0]) } else { (k > 0).then(|| steps(q)[k - 1][0]) };
             at.map(|r| Break(sign * (r * self.full[q] - self.off[q]) / self.v[q], n))
         };
-        let mut ahead: BinaryHeap<Break> = (0..raining.len()).filter_map(|n| next(n, k[n])).collect();
+        ahead.clear();
+        ahead.extend((0..raining.len()).filter_map(|n| next(n, k[n])));
         // The time and the vapour's time integral so far, s and mol s, and each raining node's at its last change.
         let (mut x, mut time, mut sum) = (x0, 0.0, 0.0);
-        let mut since = vec![[0.0; 2]; raining.len()];
+        since.clear();
+        since.resize(raining.len(), [0.0; 2]);
         let mut flush = |n: usize, k: usize, (time, sum): (f64, f64), since: &mut [f64; 2]| {
             let (q, span, held) = (raining[n], time - since[0], sum - since[1]);
             if span > 0.0 {
@@ -208,6 +246,7 @@ impl Pool {
             }
         }
         (0..raining.len()).for_each(|n| flush(n, k[n], (time, sum), &mut since[n]));
+        raining.iter().zip(k.iter()).for_each(|(&q, &k)| piece[q] = k);
         sum / dd
     }
 }
@@ -308,7 +347,7 @@ pub(super) fn landed(act: &[Active], wet: &Wet, mean: &Mean) -> Vec<Landed> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Pool, Seen, Wet};
+    use super::{Pool, Room, Seen, Wet};
 
     /// A block's day (`Pool::day`) is what small steps of the same rates give: its vapour rises through the ratios at
     /// which its nodes' cells start to rain (two nodes, three cells) toward the balance of what its ground gives and
@@ -318,8 +357,9 @@ mod tests {
         let wet = Wet { nodes: vec![Seen::new(vec![0, 1], vec![0.3, 0.7], vec![1.1, 0.9]), Seen::new(vec![2], vec![1.0], vec![0.95])], patches: vec![], place_of: vec![0, 1, 2] };
         let pool = Pool { c: 3.0, s: -0.1, v: vec![0.6, 0.4], off: vec![0.0, 0.0], full: vec![1.0, 0.8] };
         let (dd, dt, tau, x0) = (1e5, 1e5, 2e4, 1.0);
-        let (mut rain, mut ratio) = (vec![0.0; 2], vec![0.0; 2]);
-        let mean = pool.day((&wet, 0, &[0, 1]), x0, (dd, dt, tau), (&mut rain, &mut ratio));
+        let mut room = Room::default();
+        let mean = pool.day((&wet, 0, &[0, 1]), x0, (dd, dt, tau), &mut room);
+        let rain = &room.rain;
         // The same by small explicit steps.
         const STEPS: usize = 1_000_000;
         let (h, mut x, mut sum, mut fell) = (dd / STEPS as f64, x0, 0.0, [0.0; 2]);
