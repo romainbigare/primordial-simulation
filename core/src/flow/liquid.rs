@@ -119,16 +119,17 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         // Each lower neighbour: the drop toward it, the volume that may move toward it (to a neighbour already passed, what
         // levels the two heads, whatever their areas), and the fall of the head.
         // The surface of a cell whose liquid stands is its head; of one its liquid passes on through, its ground (a
-        // neighbour still to come holds the head back only by what it keeps). Liquid passing on never goes back to a
-        // neighbour already passed; it takes the steepest way down (`Level::steepest`), and on level ground the flood's
-        // way out.
+        // neighbour still to come holds the head back only by what it keeps). Liquid never goes back to a neighbour already
+        // passed whose liquid passes on: that one lies upstream in the flood, and what it got would come back the next
+        // step; to one whose liquid stands it levels the two heads. It takes the steepest way down (`Level::steepest`),
+        // and on level ground the flood's way out.
         outs.clear();
         let (top, mut way) = (if order.stands[i] { hd } else { zi }, None);
         for (k, j) in cells.around(i).1.iter().map(|&j| j as usize).enumerate() {
             let (hj, passed) = (head(q, j), order.before(j, i));
             let (from, to) = (if passed { top } else { hd }, if passed || order.stands[j] { hj } else { ss.z[j] });
             let room = if passed { (from - to) * (area[i] * area[j] / (area[i] + area[j])) } else { (hd - to.max(zi)) * area[i] };
-            let down = from - to > ph.still;
+            let down = from - to > ph.still && (!passed || order.stands[j]);
             if down && j == order.outlet[i] as usize {
                 way = Some([(k, 1.0), (k, 0.0)]);
             }
