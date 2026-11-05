@@ -12,6 +12,11 @@
   <h1>Emergent World</h1>
   <div class="meta" id="meta"></div>
   <ul class="classes" id="classes"></ul>
+  <form class="live" id="live" hidden>
+    <label>seed <input id="seed" type="number" min="0" step="1" value="1"></label>
+    <label>size <input id="size" type="number" min="8" max="64" step="1" value="22"></label>
+    <button type="submit">New world</button>
+  </form>
   <label class="open">Open file<input id="file" type="file" accept=".gz,.ewf,application/gzip" hidden></label>
 </header>
 <main>
@@ -29,9 +34,9 @@
         <div class="seg speeds" id="speeds"></div>
         <span class="year" id="year"></span>
       </div>
-      <input id="chartfind" class="find" type="search" placeholder="Search charts (name or section)" aria-label="Search charts" autocomplete="off">
-      <div class="charts" id="charts"></div>
-      <div class="tl">
+      <input id="chartfind" class="find tape-only" type="search" placeholder="Search charts (name or section)" aria-label="Search charts" autocomplete="off">
+      <div class="charts tape-only" id="charts"></div>
+      <div class="tl tape-only">
         <div class="marks" id="marks"></div>
         <input id="tl" type="range" min="0" max="0" value="0" aria-label="Timeline">
         <div class="ends"><span id="y0"></span><span id="y1"></span></div>

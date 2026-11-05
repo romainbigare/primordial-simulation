@@ -40,13 +40,17 @@ export function parse(data: Uint8Array): World {
   if (String.fromCharCode(...data.subarray(0, 4)) !== 'EWF2') throw new Error('Not an EWF2 world file.');
   const jsonLen = new DataView(data.buffer, data.byteOffset).getUint32(4, true);
   const meta = JSON.parse(new TextDecoder().decode(data.subarray(8, 8 + jsonLen))) as Meta;
-  const frameBytes = meta.w * meta.h * meta.layers.length;
   const base = 8 + jsonLen;
-  const have = Math.floor((data.length - base) / frameBytes);
+  const have = Math.floor((data.length - base) / (meta.w * meta.h * meta.layers.length));
   if (have < 1) throw new Error('The file holds no complete frame.');
   meta.frames = meta.frames.slice(0, have); // tolerate a tape still being written
+  return makeWorld(meta, data, base);
+}
+
+/** A world of `meta` whose frames lie in `data` from byte `base` on. */
+export function makeWorld(meta: Meta, data: Uint8Array, base: number): World {
   return {
-    meta, data, base, frameBytes,
+    meta, data, base, frameBytes: meta.w * meta.h * meta.layers.length,
     lut: meta.layers.map(l => Float32Array.from({ length: 256 }, (_, b) => decodeByte(l, b))),
     index: new Map(meta.layers.map((l, k) => [l.name, k])),
   };

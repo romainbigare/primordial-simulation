@@ -197,6 +197,13 @@ pub fn quantise(l: &Layer, v: f64) -> u8 {
     b.round().clamp(0.0, 255.0) as u8
 }
 
+/// The frame of a world's present state, as a tape would keep it (`frame`): for a shell that shows the world live.
+pub fn frame_now(w: &World) -> Vec<u8> {
+    let mut out = Vec::with_capacity(w.map.n() * LAYERS.len());
+    frame(&Ctx::new(w), &mut out);
+    out
+}
+
 /// Append one frame: every layer in table order, a byte for each square of the map, row-major (a square shows its cell).
 pub(crate) fn frame(c: &Ctx, out: &mut Vec<u8>) {
     for l in LAYERS {
