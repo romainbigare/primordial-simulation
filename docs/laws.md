@@ -30,8 +30,9 @@ join into their parent (`World::split`, `World::join`, below), no law deciding w
 one depth at most (2:1): a split first splits each cell across a side that would border the quarters two depths coarser
 (`Square::splits`), and a join that would leave one two depths finer is refused (`Square::joins`). One builder makes
 every cell (`Square::mesh`). Cells link across a border by its width, as far apart as their centres across it, so a
-steady change across a border of two sizes passes exactly; across a corner (width 0) only where four cells of one size
-meet, so no cell has more than 8 links. The air level is built on the map's squares, the same whatever the sizes of the
+steady change across a border of two sizes passes exactly; across a corner (width 0) where four cells meet, whatever
+their sizes, the two across it one depth apart at most and neither with 8 links already (the cells in order), so the
+downhill way through a corner stays when a cell beside it splits and no cell has more than 8 links. The air level is built on the map's squares, the same whatever the sizes of the
 cells. The map's samples are its squares and its finer cells (`Square::samples`: a cell coarser than a square cut into
 its squares, a finer one as it is): each reads its air there (1.4), and a cell's starting height is the mean by area of
 the terrain on its samples (a cell finer than a square takes the height at its own centre). What needs the cell at a
@@ -224,7 +225,7 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
   liquid step moves a table a thousandth of the way to its neighbours', far below the explicit limit. Liquid above it sinks to the deep store
   (`drain::sink`, at most `seep` a second and the store's room) right after each of the air's steps, which bring the
   rain: held until the month's liquid step, it would cover and darken the ground (`land::reflectance`, 1.4) and
-  warm it. The store flows by `bed_seep`. Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
+  warm it. The store flows by `bed_seep`, sub-stepped in a cell too small for the month (`flow::deep`, 1.8). Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
   the cell's steepest slope over a hillslope of `hill` into the runoff (`flow::drain`). **None of this runs under the
   sea**: its loose ground lies under it with its pores full, and the bed's store under it is not drained, so no liquid
   sinks there, no pore or store flow reaches or leaves a sea cell, and its store feeds no channel.
@@ -348,6 +349,32 @@ neighbours bilinearly (`flow/scratch.rs`). Air moves as whole columns, so bodies
 which breaks them (6.8) and clears the link (`lanes::clear`) of the ground whose cover that energy breaks (the energy
 over the cell's breaking energy per m²); a cleared link is cheaper (`lanes::resist`) and grows back yearly
 (`lanes::regrow`, `regrow`). This one rule is what can make paths.
+
+### 1.8 The step by the size
+An explicit step is safe while `dt Σ g / cap` of each node stays within `solve::sweep::LIMIT` (1/2: no pattern changes
+sign in a step). For a diffusion of D m²/s on a cell of side Δ with four borders that is 4 D dt / Δ² ≤ 1/2, so a step
+of `dt` is safe down to Δ = √(8 D dt). On the island (month 2.59e6 s, year 3.11e7 s; the finest cell, `DEPTH_MOST`,
+125 m):
+
+| Process | Step | D or rate | Safe down to |
+|---|---|---|---|
+| Pore flow, Darcy (`seep`) | month | `seep` × 1 m of loose ground / `porosity`: 9e-6 m²/s | 14 m |
+| The bed's store, Darcy (`bed_seep`) | month | `bed_seep` × the depth it fills / `bed_porosity`: 4.5e-3 m²/s full (30 m) | 305 m full; 125 m to 5 m filled, 250 m to 20 m |
+| Heat sideways (`land::conduct`) | year | k / (ρ c) of the active layer, about 1.1e-6 m²/s | 17 m |
+| Creep (`creep`) | year | `creep` × softness × 1 m: 1.3e-9 m²/s for the softest solid | 0.6 m |
+| Erosion and carrying (`carry`, `wear`) | month | the bed lowers `carry` ρ g Q per m of drop a step; at the largest river of the 64 x 64 island (Q 1.9e8 m³ a month) under half the drop to the next cell | 9 m |
+| Runoff (`solve::downhill`) | month | one pass in the flood's order: liquid crosses the map in one step | any size |
+| The sea's levelling (`basin`) | month | one level, found exactly | any size |
+| The air's exchange with a cell (`air::cells`) | 15 days | implicit in the cell, per m²; the air's days run on the blocks | any size |
+
+The drain to the channels inside a cell (`hill`), the sink into the store and what comes up are exact for any step in
+the cell itself. So only the bed's store passes its limit, in a cell under 305 m whose store is deep (measured at the
+most depth: 3.0 in cells of 125 m with full stores, 0.85 in cells of 250 m): such a cell and its links take
+`solve::sweep::steps` sub-steps inside the liquid's month, each from the stores as the sub-steps leave them, the cells
+beside them held as the month starts; each link's sum is booked once by both its cells (a flux register, Berger and
+Colella 1989), and the other links step once with what each cell's sub-stepped links left it (`flow::deep`). The coarse
+cells keep their step, and the books close as every move is booked on both sides. On a globe the finest cell is tens
+of km, far above every limit.
 
 ## 2. Change: substances react inside nodes, faster when hot
 Files: `core/src/change/` (the reactor), `core/src/chem/` (chemistry and its physics), `worldgen/src/chem0.toml`.

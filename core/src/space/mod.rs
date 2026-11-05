@@ -5,10 +5,8 @@
 //! cells of the finest level are the leaves of a tree under each cell of the air level (`tree`).
 
 pub mod square;
-pub mod stack;
 pub mod tree;
 
-pub use stack::Stack;
 pub use tree::{Leaf, Tree};
 
 use std::f64::consts::TAU;

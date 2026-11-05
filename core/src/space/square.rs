@@ -3,12 +3,13 @@
 //! the tape's frames show one each. The cells of the map are the leaves of a tree under each air
 //! block of `scale` squares a side (`tree`), of any depth down to `DEPTH_MOST`, numbered by their north-west corners row
 //! by row; two cells that share a border differ by one depth at most. Cells link across a border, by its width, as far
-//! apart as their centres across it; and across a corner (width 0) only where four cells of one size meet, so heat and
-//! pore liquid cross only real borders while the downhill path of surface liquid may use all 8 ways, and no cell has
-//! more than 8 links. On a globe the cells of a row narrow toward the poles, and no link crosses a pole.
+//! apart as their centres across it; and across a corner (width 0) where four cells meet, whatever their sizes, the two
+//! across it one depth apart at most, so heat and pore liquid cross only real borders while the downhill path of surface
+//! liquid may use all 8 ways, and a cell refined beside a corner leaves no pit there. No cell has more than 8 links: a
+//! corner links its two cells unless one of them has 8 already (the cells in order). On a globe the cells of a row narrow toward the poles, and no link crosses a pole.
 
 use super::tree::{self, Leaf, Refused, Tree, BLOCK, DEPTH_MOST};
-use super::{Level, LinkSpec, Mesh};
+use super::{Level, LinkSpec, Mesh, COMPASS};
 use serde::{Deserialize, Serialize};
 use std::f64::consts::{SQRT_2, TAU};
 
@@ -194,9 +195,24 @@ impl Square {
         };
         let centre = |t: &Leaf| [mid(t.x, t.side()) * self.side, mid(t.y, t.side()) * self.side];
         let lon = |t: &Leaf| mid(t.x, t.side()) * if self.wrap { 360.0 / self.w as f64 } else { row };
-        let at = |x: u32, y: u32| tree.at(x as i64, y as i64);
-        // Whether cell `c` is the leaf of side `k` at column `x` (round the globe) and row `y`.
-        let is = |c: Option<usize>, x: u32, y: u32, k: u32| c.is_some_and(|c| (leaves[c].x, leaves[c].y, leaves[c].side()) == (x % wide, y, k));
+        // The cells north-west, north-east, south-west and south-east of the point at column `px` (round the globe) and
+        // row `py`, where it is a corner of all four: four cells meet there.
+        let round = |px: i64, py: u32| -> Option<[usize; 4]> {
+            let q = [(-1, -1), (0, -1), (-1, 0), (0, 0)].map(|(dx, dy)| tree.at(px + dx, py as i64 + dy));
+            let q = [q[0]?, q[1]?, q[2]?, q[3]?];
+            let corner = |c: usize, east: bool, south: bool| {
+                let l = &leaves[c];
+                ((if east { l.x } else { l.x + l.side() }) % wide, if south { l.y } else { l.y + l.side() }) == (px.rem_euclid(wide as i64) as u32, py)
+            };
+            (corner(q[0], false, false) && corner(q[1], true, false) && corner(q[2], false, true) && corner(q[3], true, true)).then_some(q)
+        };
+        // How far apart the centres of two cells across a corner on row `py` are, their sides summing to `k`.
+        let apart = |k: u32, py: u32| {
+            let d = sq(k) / 2.0;
+            if self.wrap { (d * self.side).hypot(across(edge(py)) * d) } else { (d * self.side) * SQRT_2 }
+        };
+        // Each cell's links across its sides, then with those across its corners as they come.
+        let mut links_of: Vec<usize> = leaves.iter().map(|t| tree::SIDES.iter().map(|&way| tree.beside(t, way).count()).sum()).collect();
         let mut links: Vec<LinkSpec> = Vec::new();
         for (i, t) in leaves.iter().enumerate() {
             let (k, x, y) = (t.side(), t.x, t.y);
@@ -215,14 +231,15 @@ impl Square {
                 let (from, to) = (x.max(o.x), (x + k).min(o.x + o.side()));
                 push(j, self.side * (sq(k + o.side()) / 2.0), across(edge(y + k)) * sq(to - from));
             }
-            let diagonal = if self.wrap { (sq(k) * self.side).hypot(across(edge(y + k)) * sq(k)) } else { (sq(k) * self.side) * SQRT_2 };
-            let below = is(at(x, y + k), x, y + k, k);
-            if below && is(at(x + k, y), x + k, y, k) && is(at(x + k, y + k), x + k, y + k, k) {
-                push(at(x + k, y + k).expect("a cell"), diagonal, 0.0);
-            }
-            let west = (x >= k || self.wrap).then(|| (x + wide - k) % wide);
-            if let Some(wx) = west.filter(|&wx| below && is(at(wx, y), wx, y, k) && is(at(wx, y + k), wx, y + k, k)) {
-                push(at(wx, y + k).expect("a cell"), diagonal, 0.0);
+            // Across its south-east corner to the cell south-east of it, then across its south-west corner to the cell
+            // south-west of it, where four cells meet, the two differ by one depth at most and neither has `COMPASS`
+            // links yet.
+            for (px, other) in [(x as i64 + k as i64, 3), (x as i64, 2)] {
+                let j = round(px, y + k).map(|q| q[other]).filter(|&j| t.depth.abs_diff(leaves[j].depth) <= 1 && links_of[i] < COMPASS && links_of[j] < COMPASS);
+                if let Some(j) = j {
+                    (links_of[i], links_of[j]) = (links_of[i] + 1, links_of[j] + 1);
+                    push(j, apart(k + leaves[j].side(), y + k), 0.0);
+                }
             }
         }
         let place = (leaves.iter().map(|t| lat(mid(t.y, t.side()))).collect(), leaves.iter().map(lon).collect());

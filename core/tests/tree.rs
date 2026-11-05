@@ -1,7 +1,8 @@
 //! The tree of cells while a world runs (laws.md 0): between steps a cell splits into its quarters and four quarters
 //! join into their parent (`World::split`, `World::join`), cells across a border one depth apart at most, the books
 //! exact and the relief a join flattens given back by its split; the life of a cell (its nodes, individuals, parts and
-//! cover) is shared out to the quarters and gathered again, every element, the energy and the members kept.
+//! cover) is shared out to the quarters and gathered again, every element, the energy and the members kept. A region
+//! split keeps the climate of the unsplit world (spec 5.2).
 
 use pcore::body::Body;
 use pcore::check;
@@ -339,4 +340,136 @@ fn run_living(rounds: usize) {
     let cells = places(&w, busiest);
     let lost = run_splits(&mut w, cells, rounds);
     println!("the most a join sent to the ground: {lost:.3e} of its quarters' cover; bodies {} in {} cells, members {:?}", w.life.alive().count(), w.mesh.cells().n(), members(&w));
+}
+
+/// Where `climate` gives the store of the bed.
+const STORE: usize = 2;
+/// Which cells of a world a climate is the mean of (`climate`).
+type Pick<'a> = &'a dyn Fn(&World, usize) -> bool;
+
+/// The climate of the cells of `w` that `pick` takes, means by area: the ground's temperature, K; the liquid on and in the
+/// ground and in the bed's store (`STORE`), mol/m²; the rain and what rises, mol/(m² s) (moving averages over a year).
+fn climate(w: &World, pick: Pick) -> [f64; 5] {
+    let cells = w.mesh.cells();
+    let (mut sum, mut area) = ([0.0; 5], 0.0);
+    for i in (0..cells.n()).filter(|&i| pick(w, i)) {
+        let a = cells.area()[i];
+        let v = [w.t_ground_last(i) * a, w.store.amounts(Class::Ground)[i], w.store.amounts(Class::Deep)[i], w.rain[i] as f64 * a, w.evap[i] as f64 * a];
+        sum.iter_mut().zip(v).for_each(|(s, x)| *s += x);
+        area += a;
+    }
+    sum.map(|s| s / area)
+}
+
+/// Whether leaf `l` lies inside one of the leaves `region` (or is one).
+fn inside(region: &[Leaf], l: &Leaf) -> bool {
+    region.iter().any(|r| l.x >= r.x && l.x < r.x + r.side() && l.y >= r.y && l.y < r.y + r.side())
+}
+
+/// `w` with each of the leaves `region` split `depths` depths down (and the cells beside them as 2:1 asks).
+fn split_down(mut w: World, region: &[Leaf], depths: u8) -> World {
+    for r in region {
+        for depth in r.depth..r.depth + depths {
+            for l in r.split(depth).collect::<Vec<_>>() {
+                if w.map.cell(l).is_some() {
+                    w.split(l).expect("a split");
+                }
+            }
+        }
+    }
+    w
+}
+
+/// The months an even region runs before it splits, and after.
+const EVEN_MONTHS: usize = 12;
+/// How far the climate of an even region split may stray from the unsplit one's, a share of each number but the store
+/// of the bed (`climate`): its cells differ only by their latitude and the air they see.
+const EVEN_SHARE: f64 = 1e-6;
+/// The same for the store of the bed: the store flows down the differences of the stores of the block's squares (the
+/// runoff over the plateau feeds some more than others), which the cells of 500 m resolve (2e-3 in a year; 1e-6 with no
+/// flow of the store).
+const STORE_SHARE: f64 = 1e-2;
+
+/// The climate does not depend on the size of the cells where nothing in them differs (spec 5.2): on the small island
+/// with all its land one even plateau (each land cell holding per m² what one does), a block of 2 x 2 squares in its
+/// middle split two depths (into cells of 500 m, those beside it into cells of 1 km) keeps, after a year, the climate
+/// (`climate`) of the block and of the island within `EVEN_SHARE` of each number (`STORE_SHARE` for the store).
+#[test]
+fn an_even_region_split_two_depths_keeps_its_climate() {
+    let mut w = world();
+    let (n, like) = (w.mesh.cells().n(), testkit::dry_land(&w));
+    let land: Vec<usize> = (0..n).filter(|&i| w.is_land(i)).collect();
+    let area = w.mesh.cells().area().to_vec();
+    for &i in &land {
+        for class in [Class::Ground, Class::Bed, Class::Deep] {
+            for k in 0..w.chem.ns() {
+                let mol = w.store.amounts(class)[k * n + like] * area[i] / area[like];
+                testkit::set_amount(&mut w, pcore::store::Node::new(class, i), k, mol);
+            }
+            if let Some(&e) = w.store.heat(class).get(like) {
+                testkit::set_heat(&mut w, pcore::store::Node::new(class, i), e * area[i] / area[like]);
+            }
+        }
+    }
+    (0..EVEN_MONTHS).for_each(|_| pcore::step(&mut w));
+    w.drain_events();
+    // The block of 2 x 2 squares at the middle of the map, aligned to its size.
+    let side = 2 * leaf(&w, 0).side();
+    let block = [Leaf { x: (w.map.w as u32 / 2) / 2 * side, y: (w.map.h as u32 / 2) / 2 * side, depth: w.map.square_depth() - 1 }];
+    assert!(block[0].quarters().iter().all(|&q| w.map.cell(q).is_some_and(|i| land.contains(&i))), "the block is four squares of land");
+    let mut fine = split_down(w.clone(), &block, 2);
+    for _ in 0..EVEN_MONTHS {
+        pcore::step(&mut w);
+        pcore::step(&mut fine);
+    }
+    let picks: [(&str, Pick); 2] = [("the block", &|w, i| inside(&block, &leaf(w, i))), ("the island", &|_, _| true)];
+    for (what, pick) in picks {
+        let (coarse, split) = (climate(&w, pick), climate(&fine, pick));
+        let off: Vec<f64> = coarse.iter().zip(&split).map(|(a, b)| (b / a - 1.0).abs()).collect();
+        println!("{what}: unsplit {coarse:?}, off by {off:?}");
+        assert!(off.iter().enumerate().all(|(q, &x)| x <= if q == STORE { STORE_SHARE } else { EVEN_SHARE }), "{what}: unsplit {coarse:?}, split {split:?}");
+    }
+    assert_eq!(check::broken(&fine), None);
+}
+
+/// The coastal squares `the_split_coast_keeps_its_climate` splits, and the years it runs.
+const COAST_SQUARES: usize = 6;
+const COAST_YEARS: usize = 10;
+/// How far the split run's ground temperature may stray from the unsplit one's, K, on the land and in the split region;
+/// and its rain over the island, a share. The quarters are flat, so a slope becomes steps: the stores and the pores of
+/// a region drain at its edges, not inside, and it holds more liquid (its store 2.3 times, its evaporation 5% more in
+/// ten years), while the land and the rain move by 0.004 K and 0.06%.
+const COAST_LAND_K: f64 = 0.02;
+const COAST_REGION_K: f64 = 0.05;
+const COAST_RAIN: f64 = 2e-3;
+
+/// The coarse and the fine form give the same climate (spec 5.2): the 22 x 22 island without life, its first
+/// `COAST_SQUARES` coastal squares (land with a cell under 0 m across a side) in its west half split two depths after a
+/// year, runs `COAST_YEARS` years beside the unsplit island; the ground temperature of the land and of the region, and
+/// the rain, stay within `COAST_LAND_K`, `COAST_REGION_K` and `COAST_RAIN`, and the books close.
+#[test]
+#[ignore = "slow: two 10-year runs of the 22 x 22 island"]
+fn the_split_coast_keeps_its_climate() {
+    let mut w = worldgen::new_world(1, 22, 22);
+    (0..w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));
+    w.drain_events();
+    let cells = w.mesh.cells();
+    let coast = |i: usize| w.is_land(i) && cells.around(i).0.iter().zip(cells.around(i).1).any(|(&l, &j)| cells.width()[l as usize] > 0.0 && !w.is_land(j as usize));
+    let west = |l: &Leaf| l.x < w.map.w as u32 / 2 * l.side();
+    let region: Vec<Leaf> = (0..cells.n()).filter(|&i| coast(i)).map(|i| leaf(&w, i)).filter(|l| l.depth == w.map.square_depth() && west(l)).take(COAST_SQUARES).collect();
+    let mut fine = split_down(w.clone(), &region, 2);
+    let books = Books::now(&fine);
+    for _ in 0..COAST_YEARS * w.cfg.months_per_year as usize {
+        pcore::step(&mut w);
+        pcore::step(&mut fine);
+        w.drain_events();
+        fine.drain_events();
+    }
+    let (land, near): (Pick, Pick) = (&|w, i| w.is_land(i), &|w, i| inside(&region, &leaf(w, i)));
+    let [a, b, ra, rb, all_a, all_b] = [(&w, land), (&fine, land), (&w, near), (&fine, near), (&w, &|_, _| true), (&fine, &|_, _| true)].map(|(w, pick)| climate(w, pick));
+    println!("land {:+.4} K, the region {:+.4} K, rain {:+.3e}, the region's store {:+.3e} and what rises {:+.3e}", b[0] - a[0], rb[0] - ra[0], all_b[3] / all_a[3] - 1.0, rb[STORE] / ra[STORE] - 1.0, rb[4] / ra[4] - 1.0);
+    assert!((b[0] - a[0]).abs() < COAST_LAND_K, "the land's ground {} K against {} K", b[0], a[0]);
+    assert!((rb[0] - ra[0]).abs() < COAST_REGION_K, "the region's ground {} K against {} K", rb[0], ra[0]);
+    assert!((all_b[3] / all_a[3] - 1.0).abs() < COAST_RAIN, "rain {} against {}", all_b[3], all_a[3]);
+    books.assert_kept(&fine, check::DRIFT);
 }
