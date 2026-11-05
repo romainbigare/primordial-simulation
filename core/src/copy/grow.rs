@@ -5,12 +5,21 @@ use crate::chem::{Chemistry, Phase, Reaction};
 use crate::store::Node;
 use crate::{life::Chunk, World};
 
+/// What growth did over an update (`grow`).
+#[derive(Clone, Copy, Default)]
+pub struct Grew {
+    /// Whether it built anything
+    pub built: bool,
+    /// The share of the update, at its end, over which its brood filled: growth builds at one rate over the update,
+    /// first what its maturity lacks, then the brood its share (0: it filled none)
+    pub filling: f64,
+}
+
 /// Growth: a member builds body matter, paid by work, as far as its allowance, its spare, its fuel and the stores it
-/// converts allow; past its copy mass a share `ALLOC` goes into the brood (laws.md 6.6). It stands at `t` K. Returns
-/// whether it built anything.
-pub fn grow(w: &World, d: &mut Chunk, b: &mut Body, days: f64, t: f64) -> bool {
+/// converts allow; past its copy mass a share `ALLOC` goes into the brood (laws.md 6.6). It stands at `t` K.
+pub fn grow(w: &World, d: &mut Chunk, b: &mut Body, days: f64, t: f64) -> Grew {
     let chem = &w.chem;
-    let Some(bl) = chem.build.as_ref() else { return false };
+    let Some(bl) = chem.build.as_ref() else { return Grew::default() };
     let (m, n) = (bl.outputs[0].0 as usize, b.n());
     b.brood = b.brooded(chem);
     // The matter a body of the size of maturity is made of: the living body is its matter over 1 - `WET_TISSUE` (`Body::built`).
@@ -30,7 +39,8 @@ pub fn grow(w: &World, d: &mut Chunk, b: &mut Body, days: f64, t: f64) -> bool {
     let made = convert(w, d, b, bl, room, f64::MAX, full, t);
     // What it made: up to what its maturity lacks it is body, of the rest the share `ALLOC` is brood.
     b.brood += (made - made.min(needs)) * b.gene_in_range(ALLOC) / w.chem.subs[m].molar_mass;
-    built || made > 0.0
+    let filling = if made > needs { 1.0 - needs / made } else { 0.0 };
+    Grew { built: built || made > 0.0, filling }
 }
 
 /// The kg of the first output of conversion `bl` body `b` at `t` K could make of its stores: each input must cover what

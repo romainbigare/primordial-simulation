@@ -30,7 +30,8 @@ pub struct Lived {
 
 /// The update of body `b` over the time since its last: its drink, upkeep paid by burning (the share unpaid dies,
 /// `SPENT`, and the share its wear gives, `AGE`), its heat (`keep_warm`), the checks of its stores, growth
-/// (`copy::grow`), children (`copy::copy`) and what it sheds. Returns what it left for its decision, or a death cause.
+/// (`copy::grow`), children (`copy::copy`, born through the time as growth filled the brood) and what it sheds. Returns
+/// what it left for its decision, or a death cause.
 pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) -> Result<Lived, u8> {
     let days = (w.days_now() - b.last).max(1.0);
     b.last = w.days_now();
@@ -44,13 +45,14 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) ->
     crate::bond::leave_outgrown(w, d, b);
     let stands = keep_warm(w, d, b, heat, days * DAY);
     let t = check_stores(w, d, b, (stands, days), tmp)?;
-    crate::copy::grow(w, d, b, days, t);
+    let before = b.brooded(&w.chem);
+    let filling = crate::copy::grow(w, d, b, days, t).filling;
     if !starved(w, d, b, from, &mut tmp.dead) {
         return Err(SPENT);
     }
     // Offspring are made whenever the brood covers a child, by physics, whatever its brain does (`copy::copy`).
     if b.brood > 0.0 {
-        crate::copy::copy(w, d, b);
+        crate::copy::copy(w, d, b, crate::copy::Fill { before, filling, days });
     }
     shed(w, d, b);
     Ok(Lived { spare, days, released: heat })

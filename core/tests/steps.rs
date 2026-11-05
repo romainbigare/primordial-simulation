@@ -257,7 +257,7 @@ fn sight_and_children_reach_as_far_from_a_fine_cell() {
         n.genes[DISPERSE] = 1.0;
         testkit::brood(&w, &mut n, 4.0);
         let (s, mut n) = testkit::out(&mut w, n);
-        assert!(w.in_cell(i, |w, d| pcore::copy::copy(w, d, &mut n)), "the node makes children");
+        assert!(w.in_cell(i, |w, d| testkit::copy(w, d, &mut n)), "the node makes children");
         let id = n.id;
         w.life[s] = n;
         pcore::life::land(&mut w);
@@ -360,9 +360,9 @@ const SWING_K: f64 = 15.0;
 /// heat to a warm state (its heat over its coat past the warmth at which its pace feeds itself); at each month's end it
 /// holds the same temperature in a square and in its 16 cells of 500 m (four updates a month) within
 /// `HELD_K`, and turns in the same month: its own time C / g is hours, so each update ends at the stable state its
-/// heat leads to from where it stood (`live::standing`), in one step or in four. Its children are off: a month's births
-/// join a young node at their birth size, which then holds less heat per area of coat for a month than a quarter's
-/// births leave it in its cells (laws.md 6.3), a step of how life enters a node, not of heat.
+/// heat leads to from where it stood (`live::standing`), in one step or in four. Its children are off: the update in which
+/// it turns warm pays a step of the warm pace from food taken at the cold one, so on a month its brood comes a month
+/// later than on quarter months (laws.md 6.3), a step of the take law, not of heat.
 #[test]
 fn a_node_holds_its_heat_alike_through_a_cold_year() {
     let cold = || {

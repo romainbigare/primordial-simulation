@@ -217,7 +217,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     let (before, ground0, built0, size0, temp0) = (stores(&w, &b), w.store.heat(Class::Ground).iter().sum::<f64>(), b.built(&w.chem), b.size(&w.chem), b.temp(&w.chem));
     assert!(b.adult(&w.chem), "the parent is mature: built {} kg", built0);
     w.time += DAY_S;
-    assert!(w.in_cell(b.cell as usize, |w, d| copy::copy(w, d, &mut b)), "no child");
+    assert!(w.in_cell(b.cell as usize, |w, d| testkit::copy(w, d, &mut b)), "no child");
     let kids = children(&w, b.id);
     // Two whole children (an individual's), the rest of the brood waits for the next.
     let born: f64 = kids.iter().map(|&k| w.life[k].count).sum();
@@ -251,7 +251,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     assert!((b.built(&w.chem) - built0).abs() < 1e-9 * built0, "the parent's body fell: {built0} -> {}", b.built(&w.chem));
     assert!(b.size(&w.chem) >= size0 * (1.0 - 1e-9), "the parent's size fell: {size0} -> {}", b.size(&w.chem));
     // With less than a child in the brood it makes none.
-    assert!(!w.in_cell(b.cell as usize, |w, d| copy::copy(w, d, &mut b)));
+    assert!(!w.in_cell(b.cell as usize, |w, d| testkit::copy(w, d, &mut b)));
     w.life[s] = b;
     books.assert_kept(&w, 1e-9);
 
@@ -272,7 +272,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     assert!(n.adult(&w.chem), "the node is mature: built {} kg a member", n.built(&w.chem) / n.n());
     w.time += DAY_S;
     let at = w.life.alive().count();
-    assert!(w.in_cell(n.cell as usize, |w, d| copy::copy(w, d, &mut n)));
+    assert!(w.in_cell(n.cell as usize, |w, d| testkit::copy(w, d, &mut n)));
     w.life[s] = std::mem::take(&mut n);
     // (Those who start in the neighbour cell land there from the outbox.)
     pcore::life::land(&mut w);
@@ -318,7 +318,7 @@ fn a_mature_nodes_children_gather_in_its_young_node() {
         n.brood = (4.0 + copy::BROOD_HELD * 5.0) * child_mol;
         assert!(n.adult(&w.chem), "round {round}: the node is mature: {} kg", n.built(&w.chem) / n.n());
         let before = n.built(&w.chem) / n.n();
-        assert!(w.in_cell(n.cell as usize, |w, d| copy::copy(w, d, &mut n)), "round {round}: no children");
+        assert!(w.in_cell(n.cell as usize, |w, d| testkit::copy(w, d, &mut n)), "round {round}: no children");
         assert_eq!(n.count, 5.0);
         // The mean member of the node is what it was, and mature.
         assert!(n.adult(&w.chem) && (n.built(&w.chem) / n.n() - before).abs() < 1e-9 * before, "round {round}: the mean member fell: {before} -> {}", n.built(&w.chem) / n.n());
@@ -396,7 +396,7 @@ fn an_immature_body_never_reproduces() {
     assert!(!b.adult(&w.chem));
     let at = w.life.alive().count();
     w.time += DAY_S;
-    assert!(!w.in_cell(b.cell as usize, |w, d| copy::copy(w, d, &mut b)) && w.life.alive().count() == at, "an immature body had children");
+    assert!(!w.in_cell(b.cell as usize, |w, d| testkit::copy(w, d, &mut b)) && w.life.alive().count() == at, "an immature body had children");
     // Updates: it builds with all it has and has no brood and no child until it is mature.
     let (mut w, i) = start();
     w.cfg.phys.c_build = 1e5;

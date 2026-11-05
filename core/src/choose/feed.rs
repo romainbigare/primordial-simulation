@@ -113,6 +113,16 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     b.digest(chem, Body::matter_at(chem).map_or(0.0, |s| m[s]), &mut d.counts.rounded[0]);
 }
 
+/// Body `b` takes from its cell's ground for `days` d of its step that no act fills (`take_node`; laws.md 5.3), and the
+/// heat of that meal fades as a meal's does (`body::fade_meal_heat`, drawing back at most what its upkeep releases
+/// while it eats).
+pub(crate) fn eat_for(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
+    let stands = b.temp(&w.chem);
+    take_node(w, d, b, days);
+    let warm = body::ahead(w, b, b.mass(&w.chem)) * days / w.step_days(b.cell as usize);
+    body::fade_meal_heat(w, d, b, stands, warm);
+}
+
 /// Release stores above the level the body keeps (`Body::level`) to the cell's ground.
 pub(super) fn put(w: &World, d: &mut Chunk, b: &mut Body) {
     let (mass, bc) = (b.mass(&w.chem), w.chem.body());

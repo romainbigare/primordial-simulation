@@ -84,8 +84,9 @@ halves, parts of nodes acting apart, `life::new_id`); it never changes, and its 
 finds its cell through one table from serial to index (`Life::at_serial`). The cells
 are cut into `Config::chunks` runs of neighbouring indices, the same for any number of threads. **The parallel pass**:
 each chunk is one task on the pool (`life::run`), its cells taken out of the world, the world read only; in each cell
-in order (of the cells that step), the physics of each body, in the order they came (a body placed in the pass first
-updates at its cell's next step);
+in order (of the cells that step), the physics of each body, the mature ones first and then the young, each in the order
+they came (`survey::mature_first`: the children a body makes join their young node before its update, 4.2; a body
+placed in the pass first updates at its cell's next step);
 then every body with a brain perceives its inputs and the bodies of each lineage find their hidden layers together
 (5.1); then each decides and acts, in the same order, and after them the children who started a body of their own in
 the cell during its updates (`body::newborn`: no time behind them, so they feed from their birth to the cell's next
@@ -667,9 +668,18 @@ gene within `alike` steps; it decides who mixes, joins and merges.
 A body is **mature** (`Body::adult`) when its living body per member reaches `COPY_MASS`; then growth (6.6) puts the
 share `ALLOC` into a **brood** (`Body::brood`), matter held for children that leaves with the body's matter in the same
 share (`Body::lose`). Whenever the brood covers a child, children are made (`copy::copy`) whatever the brain does:
-bodies copy by physics only, at the body's update (at its cell's step, 0), all that its brood covers then. The brood fills at
-every update and
-leaves with members who die. A child has a body of 10^`CHILD` × the copy mass,
+bodies copy by physics only, at the body's update (at its cell's step, 0), all that its brood covers then. The brood
+leaves with members who die. **Born through the update**: growth builds at one rate over an update, first what the
+body's maturity lacks, then the brood its share, so the brood fills evenly over that part of the update and the
+children are born through it as it covers them (`copy::Fill`): a node's members evenly from the time the brood passed
+what it holds back, an individual's whole children each when the brood reached it, those it covered before at the
+update's start. A child counts its time from its birth (`Body::last`): from then to now it takes what lies in its cell
+by the take law, as a body does for the part of its step no act fills (5.3; `copy::feed`), and the first update that
+integrates it, its young node's or its own, runs it from its birth by the laws of every body (members who join a node
+count from when they came, `nodes::rejoin`). In a cell the mature bodies update before the young
+(`survey::mature_first`), so the children of an update join their young node before its update of the same time: by
+the step's end they have eaten, grown and paid inside it, in its heat, whatever the step. A child has a body of
+10^`CHILD` × the copy mass,
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
 dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member
 (`copy::BROOD_HELD`), so its members' broods lie evenly between none and one child, as individuals' do. A share
@@ -680,7 +690,9 @@ left crosses whole, into the last with the share of its side left (four cells on
 far in metres whatever the cells; one way for all of a node's children of an update (for an individual, that chance),
 where they land when the batch ends (0). Less than one member with no node to
 join waits in the brood, or, landed in a neighbour cell, goes back into it. Children who start a body in their parent's cell decide at
-once (0), so they take what feeds them to the cell's next step; those who join a young node share its decision.
+once (0), so they take what feeds them to the cell's next step; those who join a young node share its decision; a
+litter where it lands takes what lies there to that cell's next step, as a mover does (`copy::land_litter`), and then
+joins or starts a body.
 
 ### 4.3 Two parents
 Only where brains are big: a mature individual (a body of count 1) of a lineage whose brain has at least `MATE_HIDDEN`
@@ -1011,9 +1023,11 @@ pace's rise, Ea / T² of it per K, feeds the heat faster than the coat lets it o
 `COOL_T`, where its coat opens; below that it lies cold, or at its `KEEP_T` by burning. Its time C / g is hours to a day, far less than any step, so each update ends at the stable state its heat
 leads to from where it stood (`live::standing`), and a node turns between the two in the same month on a monthly step
 as on four quarter-month steps (a cold year of a node of adults: within 0.21 K, `core/tests/steps.rs`). A node's
-births are a step of their own here: a month's children join its young node at their birth size, so for a month that
-node holds less heat per area of coat than a quarter's children leave it in finer cells, and in a cold winter it can lie
-cold where the finer ones stay warm. Its key liquids hold their fusion heat at any temperature (`Body::fused`): a body
+children are born through its update and live from their birth inside their young node, in its heat (4.2). What a
+monthly step still changes is the warming in spring: the update in which a node turns warm pays a month of the warm
+pace from food taken at the cold one (the take law goes by the pace at the decision, 5.3), so its growth and its brood
+stop for that month, against a quarter in cells of 500 m; its children come a month later, and a young node of a thin
+coat that is a month behind can stay cold through a summer in which the finer ones turn warm. Its key liquids hold their fusion heat at any temperature (`Body::fused`): a body
 has no melting plateau, so its temperature is its heat over its heat capacity, that heat set aside (2.5).
 
 ### 6.4 Water: drinking

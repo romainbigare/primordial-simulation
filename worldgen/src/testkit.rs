@@ -393,10 +393,16 @@ pub fn flow_step(w: &mut World, dt: f64) {
     pcore::flow::state(w, false);
 }
 
+/// Body `b` makes the children its brood covers, all born now (`copy::copy`, of a brood no update filled). Returns
+/// whether it made any.
+pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
+    pcore::copy::copy(w, d, b, pcore::copy::Fill { before: b.brood, filling: 0.0, days: 0.0 })
+}
+
 /// Body `b` grows for `days` days at its temperature (`copy::grow`). Returns whether it built anything.
 pub fn grow(w: &World, d: &mut Chunk, b: &mut Body, days: f64) -> bool {
     let t = b.temp(&w.chem);
-    pcore::copy::grow(w, d, b, days, t)
+    pcore::copy::grow(w, d, b, days, t).built
 }
 
 /// Energy body `b`'s fuel can release at its temperature now, J (the most `body::pay` could pay).
