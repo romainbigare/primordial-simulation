@@ -213,7 +213,8 @@ fn sight_and_children_reach_as_far_from_a_fine_cell() {
 /// splits that square, and the months the two are then compared over.
 const SETTLE: usize = 12;
 const YEAR: usize = 12;
-/// Members of that node, and the cover placed on its square and the land around it, kg per m²: food for its years.
+/// Members of that node, and the cover placed on its square and the land around it, kg per m²: what it takes for its
+/// years.
 const MEMBERS: f64 = 200.0;
 const COVER_KG_M2: f64 = 0.3;
 
@@ -254,19 +255,20 @@ fn node_year(fine: bool) -> [f64; 5] {
 /// Death causes (`body::LACK` to `body::AGE`).
 const CAUSES: u8 = 6;
 /// How far what the node does in a year in the square's cells may stray from what it does in the square, a share
-/// (measured: 2.5% at most, of its members, what it took and those born), and its mean temperature, K (measured: 0.005).
+/// (measured: 2.5% at most, of its members, what it took and those born), and its mean temperature, K (measured:
+/// 0.005).
 const LIVES_ALIKE: f64 = 0.05;
 const WARMTH_K: f64 = 0.05;
 
-/// One law of life at every grain (spec 5.2): a node of one kind that only takes (no member leaves its square), settled a
-/// year on cover in a square of 2 km, then a year there and in the same world with the square split two depths (16
-/// cells of 500 m, stepping a quarter month): its members at the end, what it took and the members born alike within
-/// `LIVES_ALIKE`, and its temperature within `WARMTH_K`. Its heat over an update is the mean of the exact solution at
-/// the pace that holds (laws.md 6.3), it drinks first (6.4), and what it takes feeds it to its next update within its
-/// stores' room for that time (5.3): so a month of a coarse body is four quarter months of a fine one. The members that
-/// died are printed, not held: children who start a node of their own live on what their parent gave them until their
-/// cell's next step, a month in the square and a quarter in its cells, so more of them die in the square (measured: 23%
-/// more deaths there).
+/// One law of life at every size of cell (spec 5.2): a node of one kind that only takes (no member leaves its square),
+/// settled a year on cover in a square of 2 km, then a year there and in the same world with the square split two
+/// depths (16 cells of 500 m, stepping a quarter month): its members at the end, what it took and the members born
+/// alike within `LIVES_ALIKE`, and its temperature within `WARMTH_K`. Its heat over an update is the mean of the exact
+/// solution at the pace that holds (laws.md 6.3), it drinks first (6.4), and what it takes feeds it to its next update
+/// within its stores' room for that time (5.3): so a month of a coarse body is four quarter months of a fine one. The
+/// members that died are printed, not held: children who start a node of their own live on what their parent gave them
+/// until their cell's next step, a month in the square and a quarter in its cells, so more of them die in the square
+/// (measured: 23% more deaths there).
 #[test]
 fn a_node_lives_alike_in_a_square_and_in_its_cells() {
     let [coarse, fine] = [false, true].map(node_year);
