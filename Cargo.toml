@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["core", "worldgen", "tape", "cli", "wasm"]
+members = ["core", "worldgen", "tape", "analyze", "cli", "wasm"]
 
 [workspace.package]
 edition = "2021"

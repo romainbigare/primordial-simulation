@@ -77,17 +77,26 @@ impl TapeFiles {
     }
 }
 
+/// Read the viewer's file `path` whole: its header and the bytes of its frames (`layers::frame`, one after another).
+pub fn read_viewer_file(path: &Path) -> io::Result<(Value, Vec<u8>)> {
+    let bad = |e: &str| io::Error::new(io::ErrorKind::InvalidData, format!("{}: {e}", path.display()));
+    let mut raw = vec![];
+    GzDecoder::new(std::fs::File::open(path)?).read_to_end(&mut raw)?;
+    let n = raw.get(4..8).map_or(0, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize);
+    let head = raw.get(8..8 + n).filter(|_| raw.starts_with(MAGIC)).ok_or_else(|| bad("not a tape"))?;
+    let head = serde_json::from_slice(head)?;
+    Ok((head, raw.split_off(8 + n)))
+}
+
 impl Recorder {
     /// Load what an earlier run of this world wrote to `dir`, up to the world's day: frames, events, series rows and
     /// month rows (nothing if `dir` holds no file; an error if its months stop before the world's).
     pub(super) fn read_ewf(&mut self, dir: &Path, w: &World) -> io::Result<()> {
-        let Ok(f) = std::fs::File::open(dir.join(FILE)) else { return Ok(()) };
+        if !dir.join(FILE).exists() {
+            return Ok(());
+        }
         let bad = |e: &str| io::Error::new(io::ErrorKind::InvalidData, format!("{}: {e}", dir.display()));
-        let mut raw = vec![];
-        GzDecoder::new(f).read_to_end(&mut raw)?;
-        let n = raw.get(4..8).map_or(0, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize);
-        let head = raw.get(8..8 + n).filter(|_| raw.starts_with(MAGIC)).ok_or_else(|| bad("not a tape"))?;
-        let g: Value = serde_json::from_slice(head)?;
+        let (g, frame_bytes) = read_viewer_file(&dir.join(FILE))?;
         let s = self.files.shape;
         if [g["w"].as_u64(), g["h"].as_u64(), g["seed"].as_u64(), g["days_per_year"].as_u64()] != [s.w as u64, s.h as u64, s.seed, s.days_per_year].map(Some) {
             return Err(bad("the tape is of another world"));
@@ -98,11 +107,11 @@ impl Recorder {
         let day = |e: &Value| e["day"].as_u64().unwrap_or(u64::MAX);
         let (frames, events) = (list("frames")?, list("events")?);
         let frame = s.w * s.h * LAYERS.len();
-        if raw.len() - 8 - n != frame * frames.len() {
+        if frame_bytes.len() != frame * frames.len() {
             return Err(bad("the frames do not fit the tape's size"));
         }
         self.files.frames = frames.iter().map(day).take_while(|&d| d <= w.day()).collect();
-        self.files.bytes = raw[8 + n..8 + n + frame * self.files.frames.len()].to_vec();
+        self.files.bytes = frame_bytes[..frame * self.files.frames.len()].to_vec();
         self.files.log = events.iter().take_while(|e| day(e) <= w.day()).map(|e| (day(e), e["text"].as_str().unwrap_or("").to_string())).collect();
         // Series: the rows of years up to this one (a null is a written NaN). A column with no value yet is left out, as
         // the unbroken run had it then; it comes back with its first value (`Recorder::append`).
