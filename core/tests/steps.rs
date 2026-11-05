@@ -2,7 +2,7 @@
 //! cell 2^k times finer a month over 2^k; the bodies of the finer cells step again inside the month, each update over
 //! the time since its last, and the books close through those sub-steps.
 
-use pcore::body::{Body, Layout, COOL_T, DISPERSE, KEEP_T, STRENGTH};
+use pcore::body::{Body, Layout, ALLOC, COOL_T, DISPERSE, HEAT, KEEP_T, STRENGTH};
 use pcore::space::Leaf;
 use pcore::event::EventKind;
 use pcore::{brain, World};
@@ -277,18 +277,20 @@ const YEAR: usize = 12;
 const MEMBERS: f64 = 200.0;
 const COVER_KG_M2: f64 = 0.3;
 
-/// What the node of `a_node_lives_alike_in_a_square_and_in_its_cells` does over the year after it settled, in its
-/// square or in the square split two depths (`fine`): its members at the end, the kg it took of what it uses, the
-/// members born and the members that died, and its mean temperature by members at the months' ends, K.
-fn node_year(fine: bool) -> [f64; 5] {
-    let mut w = testkit::small_world();
+/// A node of `MEMBERS` that only takes and keeps its children in its square, its genes as `set` leaves them, settled
+/// `SETTLE` months on `cover` kg per m² in the first dry square of `w`, then a year there or in that square split two
+/// depths (`fine`): per month, its members at the month's end, the kg it took of what it uses, the members born and the
+/// members that died, and its mean temperature by members at the month's end, K; and whether no body left the square
+/// (a member's move has a chance near none, not none).
+fn node_months(fine: bool, mut w: World, cover: f64, set: fn(&mut Body)) -> (Vec<[f64; 5]>, bool) {
     let square = w.map.leaves()[testkit::dry_land(&w)];
     let i = w.map.cell(square).expect("the square");
     let near: Vec<usize> = std::iter::once(i).chain(w.mesh.cells().around(i).1.iter().map(|&j| j as usize)).filter(|&c| w.is_land(c)).collect();
-    near.iter().for_each(|&c| testkit::cover(&mut w, c, COVER_KG_M2));
+    near.iter().for_each(|&c| testkit::cover(&mut w, c, cover));
     let line = testkit::Line::new(&mut w, &Brain::only(brain::TAKE), 1);
     let mut b = line.founder(&mut w, 1, i);
     b.genes[DISPERSE] = 0.0;
+    set(&mut b);
     b.prepare(&w.chem, &w.cfg);
     let b = testkit::node_of(&mut w, b, MEMBERS);
     w.add(b);
@@ -296,19 +298,25 @@ fn node_year(fine: bool) -> [f64; 5] {
     if fine {
         testkit::split_down(&mut w, &[square], 2);
     }
-    let (mut year, mut warmth) = ([0.0; 5], 0.0);
-    for _ in 0..YEAR {
+    let months = (0..YEAR).map(|_| {
         w.drain_events();
         pcore::step(&mut w);
-        (year[1], year[2]) = (year[1] + testkit::took_used(&w), year[2] + testkit::born(&w));
-        year[3] += (0..CAUSES).map(|c| testkit::died(&w, c)).sum::<f64>();
         let members: f64 = w.life.alive().map(|b| b.n()).sum();
-        warmth += w.life.alive().map(|b| b.temp(&w.chem) * b.n()).sum::<f64>() / members / YEAR as f64;
-    }
+        let warmth = w.life.alive().map(|b| b.temp(&w.chem) * b.n()).sum::<f64>() / members;
+        [members, testkit::took_used(&w), testkit::born(&w), (0..CAUSES).map(|c| testkit::died(&w, c)).sum::<f64>(), warmth]
+    }).collect();
     let inside = |l: Leaf| l.x >= square.x && l.x < square.x + square.side() && l.y >= square.y && l.y < square.y + square.side();
-    assert!(w.life.alive().all(|b| inside(w.map.leaves()[b.cell as usize])), "a body left the square");
-    (year[0], year[4]) = (w.life.alive().map(|b| b.n()).sum(), warmth);
-    year
+    (months, w.life.alive().all(|b| inside(w.map.leaves()[b.cell as usize])))
+}
+
+/// What the node of `a_node_lives_alike_in_a_square_and_in_its_cells` (`node_months` on `COVER_KG_M2` in the small
+/// world, with children) does over the year after it settled: its members at the end, the kg it took of what it uses,
+/// the members born and the members that died, and its mean temperature by members at the months' ends, K.
+fn node_year(fine: bool) -> [f64; 5] {
+    let (months, stayed) = node_months(fine, testkit::small_world(), COVER_KG_M2, |_| ());
+    assert!(stayed, "a body left the square");
+    let sum = |q: usize| months.iter().map(|m| m[q]).sum::<f64>();
+    [months[YEAR - 1][0], sum(1), sum(2), sum(3), sum(4) / YEAR as f64]
 }
 
 /// Death causes (`body::LACK` to `body::AGE`).
@@ -335,4 +343,36 @@ fn a_node_lives_alike_in_a_square_and_in_its_cells() {
         assert!((fine[q] / coarse[q] - 1.0).abs() < LIVES_ALIKE, "{what}: {} in the cells against {} in the square", fine[q], coarse[q]);
     }
     assert!((fine[4] - coarse[4]).abs() < WARMTH_K, "{} K in the cells against {} K in the square", fine[4], coarse[4]);
+}
+
+/// The cover the node of `a_node_holds_its_heat_alike_through_a_cold_year` takes, kg per m²: plenty for its year; and
+/// its coat (`HEAT`), thinner than the founders' 0.9, so its winter turns it cold.
+const PLENTY_KG_M2: f64 = 3.0;
+const THIN_COAT: f32 = 0.6;
+/// How far its temperature at a month's end may stray between the square and its cells, K (measured: 0.21, in the month
+/// it warms from 284 K to 305 K), and the least swing between its coldest and warmest month that shows it crossed
+/// between its two states.
+const HELD_K: f64 = 0.5;
+const SWING_K: f64 = 15.0;
+
+/// The heat law at every size (laws.md 6.3): on the island of the real runs, whose winter is cold, a node of adults
+/// with plenty of cover lies cold through its winter (held at its `KEEP_T` by burning) and in spring warms on its own
+/// heat to a warm state (its heat over its coat past the warmth at which its pace feeds itself); at each month's end it
+/// holds the same temperature in a square and in its 16 cells of 500 m (four updates a month) within
+/// `HELD_K`, and turns in the same month: its own time C / g is hours, so each update ends at the stable state its
+/// heat leads to from where it stood (`live::standing`), in one step or in four. Its children are off: a month's births
+/// join a young node at their birth size, which then holds less heat per area of coat for a month than a quarter's
+/// births leave it in its cells (laws.md 6.3), a step of how life enters a node, not of heat.
+#[test]
+fn a_node_holds_its_heat_alike_through_a_cold_year() {
+    let cold = || {
+        let mut w = worldgen::new_world(1, 16, 16);
+        pcore::step(&mut w);
+        w
+    };
+    let [coarse, fine] = [false, true].map(|f| node_months(f, cold(), PLENTY_KG_M2, |b| (b.genes[ALLOC], b.genes[HEAT]) = (0.0, THIN_COAT)).0.iter().map(|m| m[4]).collect::<Vec<f64>>());
+    println!("a cold year in a square: {coarse:.2?} K; in its cells: {fine:.2?} K");
+    let swing = coarse.iter().cloned().fold(f64::MIN, f64::max) - coarse.iter().cloned().fold(f64::MAX, f64::min);
+    assert!(swing > SWING_K, "the node stays in one state all year: {coarse:?}");
+    assert!(coarse.iter().zip(&fine).all(|(c, f)| (c - f).abs() < HELD_K), "{fine:?} K in the cells against {coarse:?} K in the square");
 }

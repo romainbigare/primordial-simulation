@@ -978,8 +978,16 @@ over the time to its next update (its cell's step) by the share e^(-g dt / C): t
 coat to its ground; a meal colder than the body is warmed by the body's own heat as it eats, drawn back from its
 ground, which its upkeep's heat went to, at most the heat its upkeep released over the update. So a body of hours to
 days starts its next update where it stood, and a month's meal taken at once cools it no more than the meals of four
-short steps. Its key liquids hold their fusion heat at any temperature (`Body::fused`): a body has no melting plateau,
-so its temperature is its heat over its heat capacity, that heat set aside (2.5).
+short steps. **Two states, one at every step.** As its pace rises with its temperature, a body whose own heat over its
+coat warms it past the ground by more than T² / Ea (about 12 K for chemistry 0's main burning, Ea 7,760 K: there the
+pace's rise, Ea / T² of it per K, feeds the heat faster than the coat lets it out) runs on to a warm state, at most its
+`COOL_T`, where its coat opens; below that it lies cold, or at its `KEEP_T` by burning. Its time C / g is hours to a day, far less than any step, so each update ends at the stable state its heat
+leads to from where it stood (`live::standing`), and a node turns between the two in the same month on a monthly step
+as on four quarter-month steps (a cold year of a node of adults: within 0.21 K, `core/tests/steps.rs`). A node's
+births are a step of their own here: a month's children join its young node at their birth size, so for a month that
+node holds less heat per area of coat than a quarter's children leave it in finer cells, and in a cold winter it can lie
+cold where the finer ones stay warm. Its key liquids hold their fusion heat at any temperature (`Body::fused`): a body
+has no melting plateau, so its temperature is its heat over its heat capacity, that heat set aside (2.5).
 
 ### 6.4 Water: drinking
 A body drinks its key liquids from its cell's ground up to the level it keeps, as far as the ground holds them liquid,
