@@ -47,7 +47,7 @@ pub(crate) fn land_litter(w: &World, d: &mut Chunk, x: Litter) {
     };
     if let Some(t) = hit {
         let row_spread = c.row_spread + sd * sd;
-        return add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.lineage, c.genome, Some(Own::Carried(&brain)), row_spread));
+        return add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread, c.body_spread), (c.lineage, c.genome, Some(Own::Carried(&brain)), row_spread));
     }
     let key = || Rng::new(w.seed, w.day(), !c.parent, Purpose::Mutate);
     let shape = d.shape_of(w, c.lineage).filter(|_| !brain.is_empty());

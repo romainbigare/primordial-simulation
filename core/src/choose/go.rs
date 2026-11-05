@@ -80,7 +80,7 @@ pub(crate) fn land_move(w: &World, d: &mut Chunk, (mut b, brain): (Body, &[f32])
         super::feed::eat_for(w, d, &mut b, eats);
     }
     match t.filter(|_| b.hold.is_none()) {
-        Some(t) => nodes::add(w, d, t, nodes::Lot::of(&mut b), (&b.genes, &b.spread), (b.lineage, b.genome, Some(nodes::Own::Carried(brain)), b.row_spread)),
+        Some(t) => nodes::add(w, d, t, nodes::Lot::of(&mut b), (&b.genes, &b.spread, b.body_spread), (b.lineage, b.genome, Some(nodes::Own::Carried(brain)), b.row_spread)),
         None => {
             b.brain = d.brains(j).take_in(brain);
             d.arrive(b);

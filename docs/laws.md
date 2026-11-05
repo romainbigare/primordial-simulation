@@ -690,7 +690,8 @@ they join or start (4.4); a litter draws it only where it starts a body (`copy::
 gene within `alike` steps; it decides who mixes, joins and merges.
 
 ### 4.2 Children come from a brood
-A body is **mature** (`Body::adult`) when its living body per member reaches `COPY_MASS`; then growth (6.6) puts the
+A body is **mature** (`Body::adult`) when its living body per member reaches `COPY_MASS` (a young node's members each
+when theirs does, 4.4); then growth (6.6) puts the
 share `ALLOC` into a **brood** (`Body::brood`), matter held for children that leaves with the body's matter in the same
 share (`Body::lose`). Whenever the brood covers a child, children are made (`copy::copy`) whatever the brain does:
 bodies copy by physics only, at each sub-step of the body's update (its physiological step, 0), all that its brood
@@ -734,8 +735,8 @@ rule of death, of taking, of children for both: what a share of a node's members
 chance).
 - **Exact members** (`nodes::Lot` for every split, `nodes::rejoin` for every join, inside `nodes::add` for merges and
   births): members, stores, heat and brood split by shares and join as sums; genes, sizes and own rows become means by
-  members, and the spread per gene (`Body::spread`) pools each one's spread and its gap to the new mean; a node keeps
-  its born rows, and its row spread (`Body::row_spread`) pools the joiners' spread and their gap to them. Members of a node with a brain that take any action but a move or a
+  members, and the spread per gene (`Body::spread`) pools each one's spread and its gap to the new mean, as the
+  spread of its members' living body (`Body::body_spread`) pools around the mean member's; a node keeps its born rows, and its row spread (`Body::row_spread`) pools the joiners' spread and their gap to them. Members of a node with a brain that take any action but a move or a
   bond (`choose::spread`) act as the node itself while the others wait aside with their share; these come back by
   `rejoin` alone: their genes and spreads are the node's, so only amounts and sizes (members who fed are now larger
   than those who waited) join; what members who watched copy is applied when the batch ends (5.5).
@@ -743,7 +744,17 @@ chance).
   lineage in their cell (`copy::kin`), and members who move join the node of their lineage and stage where they land,
   or start one; in a cell of `MAX_NODES` bodies or more with no node of their lineage, they join the first node of
   their starting kind and stage, taking its brain, born rows, lineage and brain-size genes (so the cap below holds
-  through the month); a young node matures as a whole when its mean member reaches the copy mass.
+  through the month).
+- **Maturity by share** (`copy::mature`): a young node's members mature as each reaches the copy mass, not all at once
+  when its mean does. At the end of each sub-step of its physics, the members past the copy mass move to the mature
+  node of its lineage in its cell (`copy::kin`), or start one with a copy of its brain if there is none and they are
+  at least one member (fewer wait), by `nodes::Lot` (members, stores, heat and brood exact): the flux across the size
+  of maturity of a McKendrick–von Foerster population (McKendrick 1926; von Foerster 1959). The node's sizes are taken
+  as spread evenly over the width their variance (`Body::body_spread`) gives around its mean member, at most from
+  nothing to twice the mean; the movers are the share of that even spread past the copy mass, holding the larger
+  share of the amounts their larger bodies hold, and each part keeps its own even spread. Members grow alike in a
+  sub-step, so growth moves the spread up as it is; children who join at their birth size widen it. At least one
+  member stays young. A node of members all alike matures whole when its mean does, as an individual does.
 - **Merging** (`nodes::crowd`, monthly, in each cell after the batch's serial pass, one task per chunk; a merge that
   lets go of a part queues that, as in a batch): the bodies of one lineage and stage in a cell, in the room of the same
   structure (its root) or none and holding the same structure or nothing (`nodes::Kin`), join the largest of them,

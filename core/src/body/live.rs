@@ -35,8 +35,8 @@ pub struct Lived {
 /// The physics of body `b` over the time since its last update (`Body::last`) to `at` s, the end of a sub-step of its
 /// update (`survey::updates`; laws.md 6): its drink, upkeep paid by burning (the share unpaid dies, `SPENT`, and the
 /// share its wear gives, `AGE`), its heat (`keep_warm`), the checks of its stores, growth (`copy::grow`), children
-/// (`copy::copy`, born through the time as growth filled the brood) and what it sheds. Returns what it left for its
-/// decision, or a death cause.
+/// (`copy::copy`, born through the time as growth filled the brood), what it sheds and, of a young node, the members
+/// that matured (`copy::mature`). Returns what it left for its decision, or a death cause.
 pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp, at: u64) -> Result<Lived, u8> {
     let cal = w.cfg.calendar();
     let now = at as f64 / cal.day as f64;
@@ -62,6 +62,8 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp, at
         crate::copy::copy(w, d, b, crate::copy::Fill { before, filling, days, at });
     }
     shed(w, d, b);
+    // A young node's members who reached the copy mass join its mature node (`copy::mature`).
+    crate::copy::mature(w, d, b);
     Ok(Lived { spare, released: heat })
 }
 

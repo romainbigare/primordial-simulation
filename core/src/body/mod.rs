@@ -79,6 +79,9 @@ pub struct Body {
     /// number for every row
     pub spread: Genes,
     pub row_spread: f32,
+    /// How a node's members differ in size: the variance of their living body around the mean member's
+    /// (`member_body`), kg²; its young members mature by it (`copy::mature`)
+    pub body_spread: f32,
     /// The brain rows it was born with (genes too), in `Life::genomes`
     pub genome: u32,
     /// Key stores (safe minimum > 0) that were liquid at birth, one bit per store

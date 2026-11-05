@@ -3,19 +3,21 @@
 //! body's update, whatever its brain does, born through it as the brood filled and counting its time from then
 //! (`born`). A
 //! child's genes are its parent's plus small noise, or with two parents each gene is one parent's (`mix`). A population node keeps how its members differ
-//! (`Body::spread`, `Body::row_spread`); its children join a young node of their kind where they start, or start one,
-//! which grows up as a whole (`kin`). A lineage starts only where a body's brain-size genes move a whole unit from its
+//! (`Body::spread`, `Body::row_spread`, `Body::body_spread`); its children join a young node of their kind where they
+//! start, or start one (`kin`), whose members join the mature node as each reaches the copy mass (`mature`). A lineage starts only where a body's brain-size genes move a whole unit from its
 //! own (`lineage::resize`).
 
 mod born;
 mod grow;
 mod litter;
+mod mature;
 mod mix;
 
 pub use born::Fill;
 pub use grow::{grow, Grew};
 pub use litter::Litter;
 pub(crate) use litter::{back, land_litter};
+pub(crate) use mature::mature;
 
 use crate::body::{most, mutation_size, vary, Body, Layout, CHILD, DISPERSE, WET, WET_TISSUE};
 use crate::brain::{self, row_step, shake};
@@ -163,7 +165,7 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
     if pre.is_none() && theirs && (hit.is_some() || !here || l.node) {
         if let Some(t) = hit {
             d.events.push(born);
-            add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.lineage, c.genome, Some(Own::Block(b.brain)), left + sd * sd));
+            add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread, c.body_spread), (c.lineage, c.genome, Some(Own::Block(b.brain)), left + sd * sd));
             return true;
         }
         // (Up to `body::most`, as a join keeps a node's row spread, `nodes::add`.)
@@ -210,7 +212,7 @@ fn start(w: &World, d: &mut Chunk, mut c: Body, rows: Option<Vec<f32>>, hit: Opt
         place_child(w, d, c);
         return;
     };
-    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.lineage, c.genome, Some(Own::Block(c.brain)), c.row_spread));
+    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread, c.body_spread), (c.lineage, c.genome, Some(Own::Block(c.brain)), c.row_spread));
     d.brains(c.cell as usize).free(c.brain);
 }
 

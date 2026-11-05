@@ -106,7 +106,7 @@ pub fn merge(w: &World, d: &mut Chunk, s: Handle, t: Handle) {
     debug_assert_eq!(d.root(w, &d[s]), d.root(w, &d[t]), "a merge across starting kinds");
     let mut c = std::mem::take(&mut d[s]);
     let_go(d, &mut c, false);
-    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.lineage, c.genome, Some(Own::Block(c.brain)), c.row_spread));
+    add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread, c.body_spread), (c.lineage, c.genome, Some(Own::Block(c.brain)), c.row_spread));
     d.remove(s, &c);
 }
 
@@ -147,13 +147,13 @@ pub(crate) enum Own<'a> {
     Carried(&'a [f32]),
 }
 
-/// Members `c` join the body at `t` with genes and spread `genes` and rows `rows` (their lineage, the genome of their
-/// born rows, their own rows, none: `t`'s, and their row spread): amounts add up (`rejoin`), genes and own rows become
-/// the means by members and the spreads pool around them; `t` keeps its born rows, the joiners' gap to them pooled
+/// Members `c` join the body at `t` with genes and spread `genes`, the spread of their size `sizes` (`Body::body_spread`)
+/// and rows `rows` (their lineage, the genome of their born rows, their own rows, none: `t`'s, and their row spread):
+/// amounts add up (`rejoin`), genes, sizes and own rows become the means by members and the spreads pool around them; `t` keeps its born rows, the joiners' gap to them pooled
 /// into its row spread (laws.md 4.4). Members of another lineage (of its starting kind) take `t`'s brain, born rows,
 /// lineage and brain-size genes (`BRAIN_SIZES`, with their spread): its own rows become the mean by members where the
 /// brains have one shape, else they stay `t`'s.
-pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread): (&[f32], &[f32]), (lineage, genome, own, row_spread): (u32, u32, Option<Own>, f32)) {
+pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread, sizes): (&[f32], &[f32], f32), (lineage, genome, own, row_spread): (u32, u32, Option<Own>, f32)) {
     let mut o = std::mem::take(&mut d[t]);
     let (other, theirs) = (lineage != o.lineage, genome);
     let (genome, row_spread) = if other { (o.genome, o.row_spread) } else { (genome, row_spread) };
@@ -184,15 +184,21 @@ pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread): 
     if let (Some(own), Some(s)) = (own, d.shape_of(w, o.lineage)) {
         d.blend_learned(w, (o.cell as usize, o.brain), own, (o.genome, theirs), s, a);
     }
+    // The spread of their sizes pools with the gap of their mean member to the node's: the living body the join adds is
+    // theirs.
+    let (before, members, joiners) = (o.built(&w.chem), o.count.max(1e-300), c.count.max(1e-300));
     rejoin(&mut o, c);
+    let gap = ((o.built(&w.chem) - before) / joiners - before / members) as f32;
+    o.body_spread = (1.0 - a) * o.body_spread + a * sizes + a * (1.0 - a) * gap * gap;
     o.stale = true;
     d[t] = o;
 }
 
 /// Members `c` with the genes and spreads of body `o` join it (taken out of its slot): the members of a node who waited
 /// aside while the others acted, a part of a node that moved or bonded and came back to its cell (both
-/// `choose::spread`), or joiners after `add` pooled their genes and rows. Amounts add up; the last day and the share
-/// that is busy become the means by members. `o`'s visible traits are the caller's to work out again (`Chunk::see`).
+/// `choose::spread`), or joiners after `add` pooled their genes, sizes and rows. Amounts add up; the last day and the
+/// share that is busy become the means by members; the spread of sizes stays (members who came back built nothing
+/// apart: they differ from the others only by what they ate, not by their body). `o`'s visible traits are the caller's to work out again (`Chunk::see`).
 pub(crate) fn rejoin(o: &mut Body, c: Lot) {
     let share = c.count / (o.count + c.count);
     o.last += share * (c.last - o.last);
