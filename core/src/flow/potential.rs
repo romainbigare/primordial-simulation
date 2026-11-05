@@ -174,6 +174,13 @@ pub(crate) fn potential_of(w: &World, cells: &[usize], air: usize) -> f64 {
     cells.iter().map(|&i| row(i)).map(|r| r[0] + r[1] + r[4]).sum::<f64>() + e_air
 }
 
+/// The head of each ground cell now, m, as `potential` stacks it (`row_of`), by Flow's state of the ground: the height
+/// its matter leaves from.
+pub(super) fn heads(w: &World, s: &Scratch) -> Vec<f64> {
+    let same = Same::of(s);
+    crate::par::map_n(w.mesh.cells().n(), crate::par::UNCOUNTED, |i| row_of(w, s, &same, i, (|_, _| 0.0, 0.0))[2])
+}
+
 /// The mean head of the cells of air node `j`, m, where its matter lies (`potential`), by the phases of `s`.
 fn mean_head(w: &World, s: &Scratch, same: &[Same], j: usize) -> f64 {
     let (level, area) = (w.mesh.level(AIR), w.mesh.cells().area());

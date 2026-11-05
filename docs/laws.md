@@ -341,9 +341,13 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node
   holds and what stays keeps that temperature. A salt is a liquid that never
   boils (11, 12): it moves with the liquid and stays when it evaporates. Its fall heats the node it lands in (0, "The
-  books"): in the pass, from the head it leaves to the head it lands at (as the booking has them at its start), so
-  what runs on from there takes its share of that heat along as the liquid does, and the booking at the end gives the
-  node only the rest (`Lifts::give`). The head it loses on the way out does work (1.3).
+  books"): in the pass, from the height it leaves to the head it lands at, so what runs on from there takes its share
+  of that heat along as the liquid does, and the booking at the end gives the node only the rest (`Lifts::give`). The
+  heights are the booking's: the head it lands at as at the booking's start, and the height it leaves the mean of its
+  cell's head then and at the end, as the pass leaves it (`liquid::give_falls`: the head at the pass's start,
+  `potential::heads`, and what the cell kept and the loads it took and left). So a column that runs off whole falls from
+  its middle, and the booking takes back from no node heat the pass gave and the liquid took on (0, "No overdraw"). The
+  head it loses on the way out does work (1.3).
 
 ### 1.3 Erosion and creep
 The head lost by moving liquid does work where it is lost on land (`flow::liquid::load`, `wear`; below 0 m its load
