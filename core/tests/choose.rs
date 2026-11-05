@@ -155,14 +155,14 @@ fn report(on: &Tally, off: &Tally) -> String {
     )
 }
 
-/// Over 400 seeds the body that learns lives to make more decisions than the one that does not, by more than three
+/// Over 800 seeds the body that learns lives to make more decisions than the one that does not, by more than three
 /// standard errors of the difference of their means: it learns to take what it finds and to stay where it is. Of all
 /// its decisions a clearly larger share is made on the strip. (Whether its moves go toward the richer cells is a
 /// smaller effect, which needs the seeds of the slow version.)
 #[test]
-#[ignore = "slow: 800 runs of the learning scene, and fewer seeds lose the three standard errors"]
+#[ignore = "slow: 1,600 runs of the learning scene, and fewer seeds lose the three standard errors"]
 fn a_body_that_learns_lives_on_what_it_can_take() {
-    let (on, off) = (measure(LEARN_ON, 400), measure(LEARN_OFF, 400));
+    let (on, off) = (measure(LEARN_ON, 800), measure(LEARN_OFF, 800));
     let ((life_on, e_on), (life_off, e_off)) = (mean_and_error(&on.lives), mean_and_error(&off.lives));
     let se = (e_on * e_on + e_off * e_off).sqrt();
     let report = format!("{}; decisions per body {life_on:.1} and {life_off:.1}, standard error of the difference {se:.1}", report(&on, &off));
