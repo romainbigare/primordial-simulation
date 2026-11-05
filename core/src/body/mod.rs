@@ -95,7 +95,7 @@ pub struct Body {
     /// learning steps (`brain::learn`); the trace of its last decision, which holds one if `traced`
     pub brain: Block,
     pub traced: bool,
-    /// Moving average of the square of its critic's error (0 until the first one)
+    /// Moving average of the square of its critic's error per month (0 until the first one)
     pub var: f32,
     /// The part it holds, and a part of the structure it is inside (their ids, `bond::Part::id`; both lie in its cell)
     pub hold: Option<u64>,

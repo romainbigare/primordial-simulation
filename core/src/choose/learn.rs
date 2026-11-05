@@ -8,7 +8,7 @@ use crate::math::Span;
 use crate::event::{Event, EventKind};
 use crate::World;
 
-/// The floor of the root of the critic's moving mean square of its errors (`Body::var`), of a month's error.
+/// The floor of the root of the critic's moving mean square of its errors per month (`Body::var`).
 const CRITIC_FLOOR: f32 = 1e-3;
 /// A body copies less of one whose strength differs by this much (one standard deviation, as one of ln mass).
 const STRENGTH_STEP: f32 = 0.2;
@@ -17,9 +17,10 @@ const STRENGTH_STEP: f32 = 0.2;
 /// of the member its trace stands for, `choose::spread`) plus the estimate from now, discounted over that time
 /// (`discount` per month), less the estimate then. That error is of the time: the change and the discount over it. The
 /// critic moves by the share `LEARN` of it, so it learns alike per second whatever the pace of decisions (continuous-time
-/// TD learning, Doya 2000). The learned rows move along the decision's trace by it in units of its spread, which is of
-/// the time too: their step is the learning rate per month over the time (`brain::learn`). The spread's moving average
-/// weighs the newest error by `learn_beta` per month.
+/// TD learning, Doya 2000). The learned rows move along the decision's trace by it in units of the spread of the error
+/// per month (the error over the time in months), so a short step's error is weighed against the spread of the same
+/// rate, not of a longer step's error: their step is the learning rate per month over the time (`brain::learn`). The
+/// spread's moving average weighs the newest error by `learn_beta` per month.
 pub(super) fn learn(w: &World, b: &mut Body, m: &mut Mind, s: Shape, (wb, now): (f32, &[f32]), span: Span) {
     let (l, lr, cr, nh) = (s.learned(), b.learn_rate(), s.critic() * s.r(), s.h);
     if !b.traced || m.trace.len() != nh + l + 1 || lr <= 0.0 {
@@ -30,12 +31,13 @@ pub(super) fn learn(w: &World, b: &mut Body, m: &mut Mind, s: Shape, (wb, now): 
     let (h, c) = m.trace.split_at(nh);
     let v = |x: &[f32]| m.rows[cr + nh] + brain::dot(&m.rows[cr..cr + nh], x);
     let delta = wb - b.wb + c[l] + span.weight(p.discount) * v(now) - v(h);
-    // The critic's errors are averaged as the rows' steps are (`learn_beta`). An error too big for a number teaches
-    // nothing.
+    // The critic's errors per month are averaged as the rows' steps are (`learn_beta`). An error too big for a number
+    // teaches nothing.
     let beta = span.share(p.learn_beta);
-    let var = if b.var > 0.0 { b.var + beta * (delta * delta - b.var) } else { delta * delta };
-    let (rate, floor) = (span.amount(lr as f64) as f32, span.amount(CRITIC_FLOOR as f64) as f32);
-    let a = rate * delta / (var.sqrt() + floor);
+    let per_month = delta / span.0 as f32;
+    let var = if b.var > 0.0 { b.var + beta * (per_month * per_month - b.var) } else { per_month * per_month };
+    let rate = span.amount(lr as f64) as f32;
+    let a = rate * per_month / (var.sqrt() + CRITIC_FLOOR);
     if !(a.is_finite() && var.is_finite()) {
         return;
     }

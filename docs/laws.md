@@ -849,8 +849,9 @@ row's error a month's step corrects, whatever the scale of the hidden layer or t
 mean and each row's mean square of steps both weigh the newest value by `learn_beta` per month (1 − (1 − β)^(t / month)).
 **Per second**: a body learns alike over a year whatever the pace of its decisions. The critic's error is of the time
 (the change of well-being and the discount over it), so the critic corrects the rate's share of it at each decision
-(continuous-time TD learning, Doya 2000); the rows' step, in units of that error's spread, is the rate times t / month,
-as are the floor of the spread and the critic's largest step. t is the time its update integrated (0). A node learns
+(continuous-time TD learning, Doya 2000); the rows' step is the rate times t / month, in units of the spread of the
+error per month (the error over t / month, its floor a share per month), so a short step's error is weighed against the
+spread of the same rate, not of a longer step's error; the critic's largest step is the rate times t / month too. t is the time its update integrated (0). A node learns
 as from one member drawn among those who stayed, with the node's change plus how much more its part's action raised it
 than the mean, so its brain moves as an individual's does. **Across lives**: evolution of born rows and base.
 
