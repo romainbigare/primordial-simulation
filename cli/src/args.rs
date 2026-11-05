@@ -1,5 +1,6 @@
 //! The command line: `ew COMMAND --name value ...`, the usage text, and what the flags set.
 
+use pcore::refine::Camera;
 use pcore::World;
 use worldgen::life::{Seeding, FIXERS};
 use worldgen::schedule::Schedule;
@@ -30,10 +31,17 @@ pub const USAGE: &str = "usage:
     --absorber X          the heat-absorbing gases of the air at the start, times chemistry 0's (1)
     --chunks N            a speed setting: the cells cut into N runs for the bodies' parallel passes (64; any count
                           gives one world)
+    --cells N             a speed setting: the most cells the map may hold while refinement splits the cells of most
+                          interest and joins those of least at each month's start (0: the cells stay as built)
+    --finest N            a speed setting: the finest depth below its air block refinement takes a cell to (4; a
+                          square of an island is depth 2, its quarter depth 3)
+    --camera FILE         the camera's path refinement follows (none): a line a change, MONTH X Y W H DEPTH (from
+                          month MONTH on, the window from column X and row Y, W x H squares, asks for cells of DEPTH),
+                          or MONTH alone (the camera goes away); # starts a comment
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
     --years N, --every N, --out DIR, --frames-every N, --snapshots-every N, --pictures-every N, --months,
-    --monthly-years N, --chunks N   as for run
+    --monthly-years N, --chunks N   as for run (the snapshot keeps --cells, --finest and the rest of the camera's path)
   ew chem     print chemistry 0 as a table
     --seed N              a generated chemistry instead
   ew numbers OLD NEW      the fields of Physics and Config that differ between two runs (directories or physics.json)";
@@ -102,12 +110,13 @@ impl Args {
         Ok(())
     }
 
-    /// Set what the flags of `ew run` change in a new world: the sun, the switches, the
-    /// heat-absorbing gases.
+    /// Set what the flags of `ew run` change in a new world: the sun, the switches, the budget of cells and its
+    /// floor, the heat-absorbing gases.
     pub fn apply(&self, w: &mut World) {
         let c = &mut w.cfg;
         c.sun *= self.get("--sun", 1.0);
         c.null = self.has("--null");
+        (c.cell_budget, c.finest_depth) = (self.get("--cells", c.cell_budget), self.get("--finest", c.finest_depth));
 
         worldgen::terrain::scale_absorbers(w, self.get("--absorber", 1.0));
     }
@@ -119,9 +128,15 @@ impl Args {
         Seeding { hand, rounds: self.get("--spray", 20), fixers: self.get("--fixers", FIXERS) }
     }
 
-    /// What is placed when (`--life-year`, `--roster`, and the seeding flags).
-    pub fn schedule(&self) -> Schedule {
+    /// The run's plan: what is placed when (`--life-year`, `--roster`, and the seeding flags), and the camera's path
+    /// (`--camera`); an error if its file cannot be read.
+    pub fn schedule(&self) -> Result<Schedule, String> {
         let year = |name: &str, default: i64| u64::try_from(self.get(name, default)).ok();
-        Schedule::new(year("--life-year", 2), self.has("--roster"), self.seeding())
+        let mut plan = Schedule::new(year("--life-year", 2), self.has("--roster"), self.seeding());
+        if let Some(file) = self.value::<String>("--camera") {
+            let text = std::fs::read_to_string(&file).map_err(|e| format!("{file}: {e}"))?;
+            plan.camera = text.parse::<Camera>().map_err(|e| format!("{file}: {e}"))?;
+        }
+        Ok(plan)
     }
 }

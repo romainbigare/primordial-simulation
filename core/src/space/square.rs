@@ -154,6 +154,12 @@ impl Square {
     pub fn row(&self, i: usize) -> f64 {
         self.leaves[i].y as f64 / self.unit() as f64
     }
+    /// The west, north, east and south edges of cell `i`, in squares from the map's north-west corner.
+    pub fn bounds(&self, i: usize) -> [f64; 4] {
+        let (l, unit) = (&self.leaves[i], self.unit() as f64);
+        let [x, y, s] = [l.x, l.y, l.side()].map(|v| v as f64 / unit);
+        [x, y, x + s, y + s]
+    }
     /// The tree of the cells.
     fn tree(&self) -> Tree {
         let (across, down) = self.extent();

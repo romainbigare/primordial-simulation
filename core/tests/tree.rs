@@ -11,10 +11,10 @@ use pcore::space::square::Square;
 use pcore::space::tree::{Refused as Shape, DEPTH_MOST};
 use pcore::space::Leaf;
 use pcore::store::Class;
-use pcore::{brain, World, AIR};
+use pcore::{brain, World};
 use std::collections::BTreeMap;
 use worldgen::life::{Place, KINDS};
-use worldgen::testkit::{self, Books};
+use worldgen::testkit::{self, sound, Books};
 
 /// The small world, its events taken: a world without life, at a month's start.
 fn world() -> World {
@@ -45,18 +45,6 @@ fn difference(a: &serde_json::Value, b: &serde_json::Value, path: &str) -> Optio
         (Object(x), Object(y)) if x.len() == y.len() => x.iter().find_map(|(k, p)| y.get(k).map_or(Some(format!("{path}/{k} missing")), |q| difference(p, q, &format!("{path}/{k}")))),
         _ => (a != b).then(|| format!("{path}: {a} against {b}")),
     }
-}
-
-/// Nothing is broken, cells across a border differ by one depth at most, and the cells under each air node cover it
-/// (`Mesh::share` sums to 1).
-fn sound(w: &World) {
-    assert_eq!(check::broken(w), None);
-    let (cells, leaves) = (w.mesh.cells(), w.map.leaves());
-    let border = (0..cells.a().len()).filter(|&l| cells.width()[l] > 0.0);
-    assert!(border.clone().all(|l| leaves[cells.a()[l] as usize].depth.abs_diff(leaves[cells.b()[l] as usize].depth) <= 1), "2:1 across every border");
-    let mut cover = vec![0.0; w.mesh.level(AIR).n()];
-    (0..cells.n()).for_each(|i| cover[w.mesh.up(i, 0, AIR)] += w.mesh.share(i, AIR));
-    assert!(cover.iter().all(|s| (s - 1.0).abs() < 1e-12), "the cells under each air node cover it: {cover:?}");
 }
 
 /// What the nodes of cell `i` hold: each amount of each class of its nodes, then their heat.
@@ -102,20 +90,49 @@ fn a_split_then_its_join_gives_back_the_world() {
 fn a_join_then_its_split_gives_back_the_quarters() {
     let mut w = world();
     let parent = leaf(&w, testkit::dry_land(&w)).parent().expect("a square has a parent");
+    let rest = unflattened(&w);
+    let relief = join_then_split(&mut w, parent);
+    assert!(relief > 0.0, "a join of uneven quarters flattens their stacks: relief {relief} J");
+    assert!((unflattened(&w) - rest).abs() <= 1e-12 * w.store.lifted().abs().max(relief), "the potential energy kept: {} J", unflattened(&w) - rest);
+}
+
+/// How far over the key liquid's boiling point `a_join_then_its_split_gives_back_quarters_of_two_phases` heats a
+/// quarter, K.
+const BOILING_BY: f64 = 20.0;
+
+/// The same where the key liquid of one quarter boils (its ground heated over the boiling point) and the joined cell's
+/// mean temperature is under it: a stack's phases are those of its heat, so the join and the split see the same
+/// stacks, and the split gives no heat the quarters did not hold.
+#[test]
+fn a_join_then_its_split_gives_back_quarters_of_two_phases() {
+    let mut w = world();
+    let parent = leaf(&w, testkit::dry_land(&w)).parent().expect("a square has a parent");
+    let hot = w.map.cell(parent.quarters()[0]).expect("a square");
+    let boil = w.chem.subs[testkit::LIQUID].boil;
+    let e = w.energy_ground(hot, boil + BOILING_BY);
+    testkit::set_heat(&mut w, pcore::store::Node::ground(hot), e);
+    pcore::flow::state(&mut w, true);
+    let mean = parent.quarters().iter().map(|&q| w.t_ground(w.map.cell(q).expect("a square"))).sum::<f64>() / 4.0;
+    assert!(w.t_ground(hot) > boil && mean < boil, "one quarter boils ({} K), their mean ({mean} K) does not", w.t_ground(hot));
+    join_then_split(&mut w, parent);
+}
+
+/// Join the quarters of `parent` of `w` and split it again at once: each quarter holds what it held (4 ε), and the
+/// books do not move. Returns the join's relief.
+fn join_then_split(w: &mut World, parent: Leaf) -> f64 {
     let kids = parent.quarters().map(|q| w.map.cell(q).expect("a square"));
-    let (held, books, rest) = (kids.map(|i| holds(&w, i)), Books::now(&w), unflattened(&w));
+    let (held, books) = (kids.map(|i| holds(w, i)), Books::now(w));
     w.join(parent).expect("four squares join");
     let relief = w.joined[w.map.cell(parent).expect("the joined cell")].as_ref().expect("its record").relief;
-    assert!(relief > 0.0, "a join of uneven quarters flattens their stacks: relief {relief} J");
     assert_eq!(w.split(parent), Ok(vec![parent]));
-    sound(&w);
+    sound(w);
     for (q, held) in parent.quarters().iter().zip(&held) {
-        let now = holds(&w, w.map.cell(*q).expect("a quarter"));
+        let now = holds(w, w.map.cell(*q).expect("a quarter"));
         let worst = now.iter().zip(held).map(|(&x, &y)| (x - y).abs() / y.abs().max(f64::MIN_POSITIVE)).fold(0.0, f64::max);
         assert!(worst <= 4.0 * f64::EPSILON / 2.0, "quarter {q:?} back within {worst:e}");
     }
-    assert!((unflattened(&w) - rest).abs() <= 1e-12 * w.store.lifted().abs().max(relief), "the potential energy kept: {} J", unflattened(&w) - rest);
-    books.assert_kept(&w, 1e-12);
+    books.assert_kept(w, 1e-12);
+    relief
 }
 
 /// Months of splits and joins, the world stepping between them: down two depths and back on land, at the coast and on a

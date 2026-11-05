@@ -467,6 +467,18 @@ pub fn part_of(w: &mut World, i: usize, wall: Vec<f64>, fill: Vec<f64>, x: f32, 
     w.life.cell_at(i).parts[s].id
 }
 
+/// Nothing is broken, cells across a border differ by one depth at most, and the cells under each air node cover it
+/// (`Mesh::share` sums to 1): the tree of cells after splits and joins (`World::split`, `World::join`).
+pub fn sound(w: &World) {
+    assert_eq!(check::broken(w), None);
+    let (cells, leaves) = (w.mesh.cells(), w.map.leaves());
+    let border = (0..cells.a().len()).filter(|&l| cells.width()[l] > 0.0);
+    assert!(border.clone().all(|l| leaves[cells.a()[l] as usize].depth.abs_diff(leaves[cells.b()[l] as usize].depth) <= 1), "2:1 across every border");
+    let mut cover = vec![0.0; w.mesh.level(pcore::AIR).n()];
+    (0..cells.n()).for_each(|i| cover[w.mesh.up(i, 0, pcore::AIR)] += w.mesh.share(i, pcore::AIR));
+    assert!(cover.iter().all(|s| (s - 1.0).abs() < 1e-12), "the cells under each air node cover it: {cover:?}");
+}
+
 /// The books of a world at a moment: its totals and its boundary nodes' (`check::totals`).
 pub struct Books(Totals);
 

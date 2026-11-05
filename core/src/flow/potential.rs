@@ -138,13 +138,22 @@ pub fn total(w: &World) -> f64 {
 }
 
 /// The potential energy of the matter of ground cells `cells` (their stacks, stores and heads) and of air node `air`,
-/// J (`potential`): what a split or a join of cells under `air` changes (`World::split`). None before Flow first built
-/// the state of the ground (its first booking finds the function then).
+/// J (`potential`): what a split or a join of cells under `air` changes (`World::split`). The phases in `cells` are
+/// those of their heat (`World::thaw`), not of Flow's state: a remap gives a made cell its parent's temperature or its
+/// quarters' mean, whose phases (a liquid or its gas, which stacks far higher) need not be its heat's, so a join and
+/// the split that gives its quarters back see the same stacks. None before Flow first built the state of the ground
+/// (its first booking finds the function then).
 pub(crate) fn potential_of(w: &World, cells: &[usize], air: usize) -> f64 {
     if w.scratch.state.tg.len() != w.mesh.cells().n() {
         return 0.0;
     }
-    let p = potential(w, &scratch_of(w), None);
+    let sp = if w.scratch.sp.is_empty() { super::scratch::substances(&w.chem) } else { w.scratch.sp.clone() };
+    let mut s = Scratch { state: w.scratch.state.clone(), sp, ..Default::default() };
+    for &i in cells {
+        let (t, on) = w.thaw(i);
+        (s.state.tg[i], (s.state.pk[i], s.state.phi[i])) = (t, on.unwrap_or((super::land::NONE, 0.0)));
+    }
+    let p = potential(w, &s, None);
     cells.iter().map(|&i| p.ground[i] + p.deep[i] + p.bodies[i]).sum::<f64>() + p.air[air]
 }
 

@@ -50,10 +50,12 @@ pub extern "C" fn new_world(seed: u32, size: u32) -> u32 {
     0
 }
 
-/// Step one month; at a year's start first place what the schedule says is due.
+/// Step one month: first refine the cells by the plan's camera path (`World::refine`), then at a year's start place
+/// what the schedule says is due.
 #[no_mangle]
 pub extern "C" fn step_month() {
     with(|l| {
+        l.world.refine(&l.plan.camera);
         if l.world.month() % l.world.cfg.months_per_year as u64 == 0 {
             l.plan.place(&mut l.world);
         }
