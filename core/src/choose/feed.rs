@@ -101,10 +101,7 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body) {
             continue;
         }
         // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
-        let cp = chem.subs[k].cp;
-        let heat = want * (cp * tg + chem.fused_heat(k, tg, |j| d.moves.amount(w, Node::ground(i), j)));
-        let cap = d.moves.heat_cap_ground(w, i);
-        let (got, took) = d.moves.take_from_ground(w, i, (k, want, cp), heat, cap);
+        let (got, took) = d.moves.take_loose(w, i, (k, want), tg);
         (b.store[s], b.e, m[s]) = (b.store[s] + got, b.e + took, got + grazed[s]);
     }
     b.digest(chem, Body::matter_at(chem).map_or(0.0, |s| m[s]), &mut d.counts.rounded[0]);

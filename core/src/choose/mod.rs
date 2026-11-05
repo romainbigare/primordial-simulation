@@ -303,7 +303,7 @@ fn act_as(w: &World, d: &mut Chunk, b: &mut Body, c: &Choice, k: &Kit, (a, part_
         REST => {}
         PUT => feed::put(w, d, b),
         TAKE => feed::take_node(w, d, b),
-        FORM => d.out.push(act(Err([k.form[0], 0.5 * (k.form[1] + 1.0)]))),
+        FORM => d.out.push(act(Err([k.form[0], 0.5 * (k.form[1] + 1.0), 0.5 * (k.form[2] + 1.0)]))),
         RELEASE => bond::release(d, b),
         a if a < TO_BODY => go(w, d, b, c.to[a - FIXED], part_of.is_some()),
         a if a >= TO_PART => {

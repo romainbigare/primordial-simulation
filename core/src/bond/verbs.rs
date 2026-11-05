@@ -4,6 +4,7 @@
 
 use super::{at, blunt, edge, edge_leaves, event, Edge, fall_apart, held, holder, link_in, make, members, move_structure, restructure, root, sense::room, strength, unlink, HELD, LOAD, NOBODY};
 use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase, Stores}, life::{Cell, Chunk}, life::Entry, World};
+use crate::store::Node;
 use crate::units::BODY_STORES;
 
 /// Body `b` takes hold of the part at `p` of its cell if it bears the weight of its structure.
@@ -212,27 +213,45 @@ fn give_up(chem: &Chemistry, b: &mut Body, m: &Stores) -> (Stores, f64) {
     (m, q)
 }
 
-/// Put the solids it holds above what it keeps (`Body::kept`) out as a new part (up to `form` of the body's mass, at least
-/// `min_kg`), shaped by the brain; the body holds it if its hands are free and its force bears it.
-pub fn form(w: &World, d: &mut Chunk, b: &mut Body, shape: [f32; 2]) {
+/// Make a new part of up to `form` of the body's mass, at least `min_kg`, shaped by the brain: `shape` is its
+/// elongation, its hollowness and the share `g` of its walls the body picks up from the loose solids of its cell's
+/// ground. The share 1 − g is of the solids it holds above what it keeps (`Body::kept`); the share g is of the ground's
+/// solids in their proportions, as far as the ground holds them, with their heat (`Moves::take_loose`), handled at
+/// `c_handle` per kg besides the `c_form` of shaping. The body holds it if its hands are free and its force bears it.
+pub fn form(w: &World, d: &mut Chunk, b: &mut Body, shape: [f32; 3]) {
     let i = b.cell as usize;
     let (chem, mb, t, bc) = (&w.chem, b.mass(&w.chem), b.temp(&w.chem), w.chem.body());
-    let size = b.size(chem);
+    let (size, g, most) = (b.size(chem), (shape[2] as f64).clamp(0.0, 1.0), w.cfg.phys.form * mb);
     let spare: Stores = std::array::from_fn(|s| if s < bc.n() && b.phase_of(chem, s, t) == Phase::Solid { (b.store[s] - b.kept(chem, &w.cfg.phys, s, size)).max(0.0) } else { 0.0 });
     let all = bc.mass_of(&spare);
-    let f = (w.cfg.phys.form * mb / all.max(1e-9)).min(1.0);
-    let wall = spare.map(|a| a * f);
-    let got = bc.mass_of(&wall);
-    if got < w.cfg.phys.min_kg || !body::pay(w, d, b, w.cfg.phys.c_form * got) {
+    let f = ((1.0 - g) * most / all.max(1e-9)).min(1.0);
+    let own = spare.map(|a| a * f);
+    let tg = w.t_ground_last(i);
+    let loose = loose_solids(w, d, i, tg);
+    let lying: f64 = loose.iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum();
+    let up = (g * most).min(lying);
+    let got = bc.mass_of(&own) + up;
+    if got < w.cfg.phys.min_kg || !body::pay(w, d, b, w.cfg.phys.c_form * got + w.cfg.phys.c_handle * up) {
         return;
     }
-    let (wall, e) = give_up(chem, b, &wall);
-    let wall = bc.spread_out(&wall)[..chem.ns()].to_vec();
+    let (own, mut e) = give_up(chem, b, &own);
+    let mut wall = bc.spread_out(&own)[..chem.ns()].to_vec();
+    for (k, &a) in loose.iter().enumerate().filter(|x| *x.1 > 0.0) {
+        let (mol, heat) = d.moves.take_loose(w, i, (k, a * up / lying), tg);
+        (wall[k], e) = (wall[k] + mol, e + heat);
+    }
     let p = make(w, d, i, wall, e, shape[0], shape[1]);
     d.counts.parts.formed += 1.0;
     if held(d.at(i), b).is_none() {
         grab(w, d, b, p);
     }
+}
+
+/// The loose solids of the ground of cell `i` as the chunk's view holds them, mol of each substance: those solid there
+/// at its temperature `tg` K, in its mixture (`Chemistry::phase_in`).
+fn loose_solids(w: &World, d: &Chunk, i: usize, tg: f64) -> Vec<f64> {
+    let g = d.moves.amounts(w, Node::ground(i));
+    (0..w.chem.ns()).map(|k| if w.chem.phase_in(k, tg, &g) == Phase::Solid { g(k).max(0.0) } else { 0.0 }).collect()
 }
 
 /// Let go of the held part; with nothing held, leave the inside.

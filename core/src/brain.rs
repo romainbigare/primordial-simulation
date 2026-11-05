@@ -20,8 +20,8 @@ pub const WATCH: usize = 2;
 pub const VERBS: usize = 3;
 /// Verbs toward a perceived part: hold, take from, put to, join the held part to, break its bonds, enter its inside.
 pub const OVERBS: usize = 6;
-/// Outputs for the shape of a part made: elongation, hollowness.
-pub(crate) const FORM_OUT: usize = 2;
+/// Outputs for a part made: elongation, hollowness, the share of its walls picked up from the ground (`bond::form`).
+pub(crate) const FORM_OUT: usize = 3;
 
 /// Sizes of a brain: hidden units, memory numbers, inputs (the memory last), direction, body and part features. A row
 /// is `h` weights, then a bias.

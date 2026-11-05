@@ -250,6 +250,15 @@ impl Moves {
     pub(crate) fn heat_cap_ground(&self, w: &World, i: usize) -> f64 {
         w.heat_cap_of(i, self.amounts(w, Node::ground(i)), self.amounts(w, Node::new(Class::Bed, i)))
     }
+    /// `d` mol of loose substance `k` from ground node `i`, at its temperature `tg` K, to the one whose update it is, with
+    /// the heat it holds there (and its fusion enthalpy if it is molten): as far as the ground can give that heat
+    /// (`take_from_ground`). Returns the mol and the heat that moved.
+    pub(crate) fn take_loose(&mut self, w: &World, i: usize, (k, d): (usize, f64), tg: f64) -> (f64, f64) {
+        let cp = w.chem.subs[k].cp;
+        let heat = d * (cp * tg + w.chem.fused_heat(k, tg, |j| self.amount(w, Node::ground(i), j)));
+        let cap = self.heat_cap_ground(w, i);
+        self.take_from_ground(w, i, (k, d, cp), heat, cap)
+    }
     /// `d` mol of substance `k` and `want` J from ground node `i` to the one whose update it is: no more heat than the
     /// node holds above `T_FLOOR`, and as much less of the mol; what it could not give is counted. A negative `want` is
     /// heat given to the node, whole. Returns the mol and the heat that moved.

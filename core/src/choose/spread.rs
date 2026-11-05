@@ -182,7 +182,7 @@ fn back(d: &mut Chunk, node: &mut Body, s: Handle, mut m: Body) {
 /// cell and the act is still possible (`bond::possible`), or a part of the shape given formed; the body pays as it
 /// acts, and does nothing if it cannot. A part of node `node` then comes back to it if it holds nothing, is inside
 /// nothing, and the node is in its cell and not leaving it; else it lives on as a body.
-pub(crate) fn land_act(w: &World, d: &mut Chunk, s: Handle, on: Result<(usize, u64), [f32; 2]>, node: Option<u64>) {
+pub(crate) fn land_act(w: &World, d: &mut Chunk, s: Handle, on: Result<(usize, u64), [f32; 3]>, node: Option<u64>) {
     let mut b = std::mem::take(&mut d[s]);
     let i = b.cell as usize;
     d.moves.open(w, i, crate::store::Node::new(crate::store::Class::Body, s.slot as usize));

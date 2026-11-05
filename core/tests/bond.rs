@@ -105,7 +105,7 @@ fn a_small_body_can_make_parts_and_a_cell_holds_many() {
         let subs = w.chem.body().subs();
         (0..subs.len()).filter(|&s| w.chem.phase(subs[s], t) != Phase::Gas).for_each(|s| b.store[s] = b.store[s].max(fed[s]));
         b.e = b.energy_at(&w.chem, t);
-        w.in_cell(i, |w, d| bond::form(w, d, &mut b, [0.0, 0.5]));
+        w.in_cell(i, |w, d| bond::form(w, d, &mut b, [0.0, 0.5, 0.0]));
         b.hold = None;
     }
     assert!(w.life.cell_at(i).parts.len() > 6, "{} parts in the cell", w.life.cell_at(i).parts.len());
@@ -136,11 +136,55 @@ fn forming_never_takes_more_than_is_left() {
     (w.cfg.phys.min_kg, w.cfg.phys.c_form) = (0.5 * got, 0.99 * r / got);
     let books = Books::now(&w);
     let mut b = std::mem::take(&mut w.life[slot]);
-    w.in_cell(b.cell as usize, |w, d| bond::form(w, d, &mut b, [0.0, 0.5]));
+    w.in_cell(b.cell as usize, |w, d| bond::form(w, d, &mut b, [0.0, 0.5, 0.0]));
     assert!(b.store.iter().all(|&a| a >= 0.0), "{:?}", b.store);
     w.life[slot] = b;
     assert!(w.life.parts().count() == 1 && pcore::check::broken(&w).is_none());
     books.assert_within(&w, 1e-9, 1e-9);
+}
+
+/// A body may make a part of what lies on its ground: the share of its walls its brain asks for is of the ground's loose
+/// solids in their proportions, with their heat, never more than the ground holds. On land that is mostly rock, harder
+/// than any body, so the part is an edge that cuts a body like its maker. The books close.
+#[test]
+fn a_body_picks_up_its_walls_from_the_ground() {
+    // A starting eater forms a flat part wholly of the ground (`all`: as much as it likes, for free): the world, the
+    // eater, the ground's loose solids before (mol), the eater's mass then and the part.
+    let scene = |all: bool| {
+        let (mut w, i) = world();
+        if all {
+            (w.cfg.phys.form, w.cfg.phys.c_form, w.cfg.phys.c_handle) = (1e30, 0.0, 0.0);
+        }
+        let (n, ns, t) = (w.mesh.cells().n(), w.chem.ns(), w.t_ground_last(i));
+        let loose: Vec<f64> = (0..ns).map(|k| if w.chem.phase(k, t) == Phase::Solid { w.store.amounts(Class::Ground)[k * n + i] } else { 0.0 }).collect();
+        // (Strong enough to hold the part it makes.)
+        let mut b = eater(&mut w, i, brain::REST, 1.0);
+        b.genes[STRENGTH] = 0.5;
+        let s = place(&mut w, b);
+        let (books, mut b) = (Books::now(&w), std::mem::take(&mut w.life[s]));
+        let mb = b.mass(&w.chem);
+        w.in_cell(i, |w, d| bond::form(w, d, &mut b, [-1.0, 0.0, 1.0]));
+        w.life[s] = b;
+        books.assert_kept(&w, 1e-9);
+        let p = w.life.cell_at(i).parts.last().expect("a part").clone();
+        (w, s, loose, mb, p)
+    };
+    let (w, s, loose, mb, p) = scene(false);
+    let lying: Vec<usize> = (0..loose.len()).filter(|&k| loose[k] > 0.0).collect();
+    let share = |k: usize| p.wall[k] / loose[k];
+    assert!((0..loose.len()).all(|k| p.wall[k] == 0.0 || loose[k] > 0.0), "the walls hold what does not lie on the ground");
+    assert!(lying.iter().all(|&k| (share(k) / share(lying[0]) - 1.0).abs() < 1e-9), "the walls are not in the ground's proportions");
+    let kg = p.walls(&w.chem).mass;
+    assert!((kg / (w.cfg.phys.form * mb) - 1.0).abs() < 1e-9, "a part of {kg} kg from a body of {mb}");
+    let i = w.life[s].cell as usize;
+    let edge = bond::edge(w.life.cell_at(i), &w, &w.life[s]).expect("it holds an edge");
+    assert!(p.walls(&w.chem).hardness > 0.2 && w.life[s].cut_by(&w.chem, &w.cfg, &edge) < 1.0, "the ground's part does not cut a body");
+    // Asking for more than lies there takes all of it, and no more.
+    let (w, s, loose, _, p) = scene(true);
+    let (n, i) = (w.mesh.cells().n(), w.life[s].cell as usize);
+    for k in (0..loose.len()).filter(|&k| loose[k] > 0.0) {
+        assert!((p.wall[k] / loose[k] - 1.0).abs() < 1e-9 && w.store.amounts(Class::Ground)[k * n + i].abs() < 1e-9 * loose[k], "substance {k}: {} of {} mol", p.wall[k], loose[k]);
+    }
 }
 
 /// The members of a node who do an action of Bond (all of them, when its brain gives it every chance) act together, as

@@ -419,7 +419,7 @@ serial of the cell it was made in and that cell's count of parts made (`bond::Pa
 it lies in the cell of
 its holder. The bonds of a cell's parts are the cell's (`life::Cell::bonds`): a structure lies in one cell, and only a
 structure that moves (carried) spans two cells for that step, which is serial. A body makes one with "form"
-(`bond::form`, `c_form` per kg, at most `form` of its mass). A **bond** (`bond::Bonds`) joins two parts; its strength comes from the weaker material and the contact area (`tensile`, `joint`), at `c_join` per m². A
+(`bond::form`, `c_form` per kg, at most `form` of its mass): of the solids it holds above what it keeps and, in the share its brain sets, of the loose solids of its cell's ground in their proportions, as far as the ground holds them, with their heat, at `c_handle` per kg more (on land mostly rock, so the part is hard, 3.3). A **bond** (`bond::Bonds`) joins two parts; its strength comes from the weaker material and the contact area (`tensile`, `joint`), at `c_join` per m². A
 **structure** is the parts joined by bonds and moves as one. A part runs no reactions. Monthly (`bond/month.rs`) the
 share of its walls the open world's decomposers would rot in the month (`bond/month.rs::rot`: each reaction they speed,
 `open` above 1, at the rate of Change, `change::rate`, at its cell ground's temperature and moisture, each substance of
@@ -462,7 +462,7 @@ volume `abrade` × W / H of its walls, W the work done through it, H = `TABOR` �
 relation for ductile solids, used for every solid: rock is in truth far harder, a known limit), each substance in its
 share, to its cell's ground with its heat, in the landing of the acts on parts (`bond::blunted`); under `min_kg` the part
 falls apart. In chemistry 0 body matter and the frame have the same scratch hardness (0.2), so no part of them cuts a
-body or the cover: only rock (substances 7 to 9, 0.35 to 0.7) does. Pushing through (6.8) gains nothing from an edge: it
+body or the cover: only rock (substances 7 to 9, 0.35 to 0.7) does, which a body picks up from its ground (3.1). Pushing through (6.8) gains nothing from an edge: it
 pools all movers' energy in a cell.
 
 ### 3.4 Containment
@@ -640,7 +640,7 @@ Files: `core/src/choose/` (`mod`, `perceive`, `learn`, `feed`, `go`, `spread`), 
 ### 5.1 The brain
 One hidden layer over what the body perceives and remembers. Its **base** belongs to a lineage and changes only by
 evolution; its **rows** are genes of each body: fixed action scores, shared scorers (per direction, per verb and body
-or part seen), the shape of a part, the next memory and a critic. Sizes are genes with costs: hidden units
+or part seen), the shape of a part and the share of it picked up from the ground, the next memory and a critic. Sizes are genes with costs: hidden units
 (0 to 64; 0 is no brain, no decisions, no cost), memory (0 to 12), bodies seen (1 to 6); sight (1 to 4 cells) costs
 nothing, as it reads another level of the same features with the same rows (5.2). One brain per body or node (`Body::rows`); a child starts with its born rows plus what its parent
 learned (`Life::inherit`). **Evaluated by lineage** (`choose::Minds`): in each cell the bodies with a brain perceive

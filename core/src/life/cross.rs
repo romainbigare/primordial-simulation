@@ -27,7 +27,7 @@ pub enum Entry {
     /// Body `id` does verb `on.0` to the part with id `on.1` (`bond::act`; `bond::LET_GO`
     /// and `bond::TORN` let go of it, `bond::dropped`), or forms a part of the shape given (`bond::form`), as a part of
     /// node `node` if any (`choose::land_act`)
-    Act { id: u64, on: Result<(usize, u64), [f32; 2]>, node: Option<u64> },
+    Act { id: u64, on: Result<(usize, u64), [f32; 3]>, node: Option<u64> },
     /// The part with id `part` did `work` J with its edge and wears (`bond::blunted`), an act on that part
     Blunted { part: u64, work: f64 },
 }
