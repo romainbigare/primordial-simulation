@@ -72,10 +72,11 @@ struct Look {
     mobile: Option<Mobile>,
 }
 
-/// A body that is not a light-eater: its place, whether it is inside walls and on warm ground, the ground's
-/// temperature (K), and how far it moved since the last month (rows, height; none if it was not counted then).
+/// A body that is not a light-eater: its place (its cell's serial, `Life::serial`, its row and height), whether it is
+/// inside walls and on warm ground, the ground's temperature (K), and how far it moved since the last month (rows,
+/// height; none if it was not counted then, or its cell then has split or joined since).
 struct Mobile {
-    cell: u32,
+    serial: u32,
     row: f64,
     z: f64,
     inside: bool,
@@ -92,7 +93,7 @@ pub(super) struct Seen<'a> {
 }
 
 /// Look at the world for the month's count: it reads the world and the cells the mobile bodies were in at the last
-/// month (`Social::last`), and changes nothing.
+/// month, by serial (`Social::last`), and changes nothing.
 pub(super) fn look<'a>(w: &'a World, last: &BTreeMap<u64, u32>) -> Seen<'a> {
     // The row of the map of a cell (at its north-west corner).
     let row = |i: u32| w.map.row(i as usize);
@@ -108,9 +109,10 @@ pub(super) fn look<'a>(w: &'a World, last: &BTreeMap<u64, u32>) -> Seen<'a> {
         let t = ground_t[b.cell as usize];
         let mobile = Some({
             let z = z_of(b.cell as usize);
-            let moved = last.get(&b.id).map_or((0.0, 0.0), |&c| (row(b.cell) - row(c), z - z_of(c as usize)));
+            let was = last.get(&b.id).and_then(|&s| w.life.at(s)).map(|c| c as u32);
+            let moved = was.map_or((0.0, 0.0), |c| (row(b.cell) - row(c), z - z_of(c as usize)));
             let inside = pcore::bond::room(w.life.cell_at(b.cell as usize), b).is_some();
-            Mobile { cell: b.cell, row: row(b.cell), z, inside, warm: t >= INSIDE_COLD_T, t, moved }
+            Mobile { serial: w.life.serial(b.cell as usize), row: row(b.cell), z, inside, warm: t >= INSIDE_COLD_T, t, moved }
         });
         Look {
             root: w.life.brains[b.lineage as usize].as_ref().map(|l| l.root),
@@ -136,7 +138,7 @@ impl Recorder {
                 bump(&mut y.stand, root as usize, look.members);
             }
             let Some(m) = &look.mobile else { continue };
-            mobile.push((b.id, m.cell));
+            mobile.push((b.id, m.serial));
             let c = &mut y.inside[m.warm as usize];
             (c[0], c[1], inside, tm) = (c[0] + 1.0, c[1] + m.inside as u8 as f64, inside + m.inside as u8 as f64, tm + m.t);
             n += 1.0;
@@ -147,12 +149,12 @@ impl Recorder {
         s.last = mobile.into_iter().collect();
         // What the bodies that left the world took is forgotten.
         s.took.retain(|&id, _| w.life.find(id).is_some());
-        // The land's mean ground temperature this month (the land is listed again each year).
-        if y.t_land.is_empty() {
+        // The land's mean ground temperature this month (the land is listed again each year, and when the cells change).
+        let land = y.land.get_or_insert_with(|| {
             let land = par::map_n(cells, par::UNCOUNTED, |i| w.is_land(i));
-            y.land = (0..cells).filter(|&i| land[i]).map(|i| i as u32).collect();
-        }
-        y.t_land.push(area_mean(y.land.iter().map(|&i| (ground_t[i as usize], w.mesh.cells().area()[i as usize]))));
+            (0..cells).filter(|&i| land[i]).map(|i| i as u32).collect()
+        });
+        y.t_land.push(area_mean(land.iter().map(|&i| (ground_t[i as usize], w.mesh.cells().area()[i as usize]))));
         let (year, month) = year_month(w);
         let mean = sum.map(|v| v / n.max(1.0));
         let [sp, sy] = std::mem::take(&mut self.month.spent);

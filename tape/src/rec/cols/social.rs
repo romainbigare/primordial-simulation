@@ -30,12 +30,21 @@ impl Recorder {
         let all: f64 = order.iter().map(|&i| traffic[i] as f64).sum();
         let on_top: f64 = top.iter().map(|&i| traffic[i] as f64).sum();
         let (s, decade) = (&mut self.social, w.cfg.calendar().years(w.time).is_multiple_of(DECADE));
+        // (Cells by their serials, which a split or a join of cells does not change: a cell that split or joined since is
+        // not among the old.)
+        let serial = |i: usize| life.serial(i);
         if decade && !top.is_empty() {
-            let old: BTreeSet<usize> = s.top.iter().copied().collect();
-            s.persist = if old.is_empty() { f64::NAN } else { top.iter().filter(|i| old.contains(i)).count() as f64 / top.len() as f64 };
-            s.top = top.to_vec();
+            let old: BTreeSet<u32> = s.top.iter().copied().collect();
+            s.persist = if old.is_empty() { f64::NAN } else { top.iter().filter(|&&i| old.contains(&serial(i))).count() as f64 / top.len() as f64 };
+            s.top = top.iter().map(|&i| serial(i)).collect();
         }
-        let now: Vec<u32> = (0..w.links.cleared.len()).filter(|&l| pcore::lanes::eased(w, l) > WORN_EASE).map(|l| l as u32).collect();
+        let cells = w.mesh.cells();
+        let edge = |l: usize| {
+            let (a, b) = (serial(cells.a()[l] as usize), serial(cells.b()[l] as usize));
+            (a.min(b), a.max(b))
+        };
+        let mut now: Vec<(u32, u32)> = (0..w.links.cleared.len()).filter(|&l| pcore::lanes::eased(w, l) > WORN_EASE).map(edge).collect();
+        now.sort_unstable();
         let fresh = now.iter().filter(|e| s.worn.binary_search(e).is_err()).count() as f64;
         if decade {
             s.worn_persist = if s.worn_old.is_empty() { f64::NAN } else { s.worn_old.iter().filter(|e| now.binary_search(e).is_ok()).count() as f64 / s.worn_old.len() as f64 };

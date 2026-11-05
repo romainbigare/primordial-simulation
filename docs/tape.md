@@ -34,7 +34,9 @@ into its quarters or joined from them (named by its serial, with its depth; coun
 Took, gave and watched name bodies by their id (`Body::id`): the serial of the cell the body was placed in (laws.md
 0) times 2^40, plus that cell's count of bodies placed then (1, 2, ...: children,
 split halves, parts of nodes acting apart, founders). An id never
-changes and is never given again, wherever the body goes.
+changes and is never given again, wherever the body goes. What the recorder keeps across months and years of cells
+(where each body was at the last month, the busiest cells and the worn edges a decade ago) names them by serial, so a
+split or a join of other cells leaves it whole; the land is listed again after a split or a join.
 
 **A globe in the viewer's file.** The header has `globe` (the rows wrap east to west), `lat_north` and `lat_south` (the
 latitudes of the north and south edges, degrees; 90 and -90 on a globe). The grid is the map: row `y` of `h` lies at

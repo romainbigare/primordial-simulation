@@ -46,9 +46,9 @@ pub(super) struct YearTally {
     pub stand: Vec<f64>,
     pub months: f64,
     /// The land's mean ground temperature at each month end, K, and the land cells it is of (listed at the first
-    /// month of the year, `World::is_land`)
+    /// month of the year and again after a split or a join of cells, `World::is_land`; none until then)
     pub t_land: Vec<f64>,
-    pub land: Vec<u32>,
+    pub land: Option<Vec<u32>>,
     /// Watch events, of them within a lineage; watchers per watched body
     pub watched: f64,
     pub kin_watched: f64,
@@ -93,14 +93,16 @@ pub(super) struct MonthTally {
 /// What the recorder keeps across years of what bodies do (a snapshot carries it: `Kept`).
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub(super) struct Social {
-    /// The cell of each body that is not a light-eater at the last month, by id (for movement by month)
+    /// The cell of each body that is not a light-eater at the last month, by id (for movement by month); cells by their
+    /// serials (`Life::serial`), which a split or a join does not change
     pub last: BTreeMap<u64, u32>,
     /// The busiest cells at the last decade, and the share of them still busiest then
-    pub top: Vec<usize>,
+    pub top: Vec<u32>,
     pub persist: f64,
-    /// Worn edges last year and at the last decade, and the share of the decade's still worn
-    pub worn: Vec<u32>,
-    pub worn_old: Vec<u32>,
+    /// Worn edges last year and at the last decade (each the serials of its two cells, the lower first, in order), and
+    /// the share of the decade's still worn
+    pub worn: Vec<(u32, u32)>,
+    pub worn_old: Vec<(u32, u32)>,
     pub worn_persist: f64,
     /// What each living body took from other bodies in its life, by id, kg: from light-eaters, from the others
     pub took: BTreeMap<u64, [f32; 2]>,
@@ -163,8 +165,9 @@ impl Recorder {
             EventKind::BondMade => y.made[(e.value as usize).min(1)] += 1.0,
             EventKind::BondBroken if e.value >= pcore::bond::LOAD => y.failed += 1.0,
             EventKind::BondBroken => y.broken += 1.0,
-            EventKind::Split => y.splits += 1.0,
-            EventKind::Join => y.joins += 1.0,
+            // (The cells change: the land is listed again.)
+            EventKind::Split => (y.splits, y.land) = (y.splits + 1.0, None),
+            EventKind::Join => (y.joins, y.land) = (y.joins + 1.0, None),
         }
     }
 }

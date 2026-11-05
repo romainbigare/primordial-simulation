@@ -243,6 +243,14 @@ impl Life {
     pub fn cell_at(&self, i: usize) -> &Cell {
         &self.cells[i]
     }
+    /// The serial of cell `i` (`Cell::serial`), a name that a split or a join of other cells does not change.
+    pub fn serial(&self, i: usize) -> u32 {
+        self.cells[i].serial
+    }
+    /// The index now of the cell of serial `s`; none once it split or joined.
+    pub fn at(&self, s: u32) -> Option<usize> {
+        index_of(&self.at_serial, s as u64)
+    }
     /// The parts of the world, cell by cell, each cell's in its order.
     pub fn parts(&self) -> impl Iterator<Item = &crate::bond::Part> {
         self.cells.iter().flat_map(|c| &c.parts)
@@ -252,7 +260,13 @@ impl Life {
 /// The index now of the cell the body or part named `id` was placed or made in, by the index of the cell of each serial
 /// (`Life::at_serial`; none once that cell is gone): the one way from an id to a cell.
 fn origin(at_serial: &[u32], id: u64) -> Option<usize> {
-    at_serial.get((id >> ID_SHIFT) as usize).filter(|&&i| i != GONE).map(|&i| i as usize)
+    index_of(at_serial, id >> ID_SHIFT)
+}
+
+/// The index now of the cell of serial `s`, by the index of the cell of each serial (`Life::at_serial`); none once that
+/// cell is gone.
+fn index_of(at_serial: &[u32], s: u64) -> Option<usize> {
+    at_serial.get(s as usize).filter(|&&i| i != GONE).map(|&i| i as usize)
 }
 
 /// The handles of the living bodies of `c`, cell `i`, in the order they came.
