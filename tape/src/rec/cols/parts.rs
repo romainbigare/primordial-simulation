@@ -6,7 +6,7 @@ use pcore::bond::{self, Part};
 use pcore::World;
 
 /// A structure counts as enclosed from this closure of its walls (`Enclosure::closed`).
-const ENCLOSED: f32 = 0.5;
+pub const ENCLOSED: f32 = 0.5;
 
 impl Recorder {
     pub(super) fn parts_cols(&self, w: &World, row: &mut Row) {

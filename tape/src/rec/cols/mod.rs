@@ -4,6 +4,7 @@
 mod brains;
 mod kinds;
 mod parts;
+pub use parts::ENCLOSED;
 mod social;
 mod time;
 mod world;

@@ -504,7 +504,7 @@ library/    the recognition library (data files); today the Earth names of chemi
 cli/        headless runs (`ew run`, `ew resume`, `ew chem`, `ew numbers`; flags in args.rs), pictures; the word ban test
 wasm/       the core as WebAssembly for the live viewer: a small shell of `extern "C"` exports (`ew-wasm`)
 web/        the 2D map viewer (TypeScript): plays a tape, or runs a live world in a worker
-analyze/    not built yet (M5): pattern finder, fact cards, recognition matching, interest score
+analyze/    the pattern finder (`ew-analyze`): fact cards from a run's folder (docs/analyze.md); not built yet (M5): recognition matching, interest score
 ```
 
 ### 8.2 Core rules (must)

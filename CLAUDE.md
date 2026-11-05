@@ -11,6 +11,7 @@ ask the owner.
 | How each law works now | `docs/laws.md` |
 | Every free number: unit, anchor, mark (physical, anchored, tuned) | `docs/numbers.md` |
 | What the tape records | `docs/tape.md` |
+| The fact cards made from a tape | `docs/analyze.md` |
 | The latest look at the project | `review/big-look.md` |
 | The laws | `core/src/<law>/` (`flow`, `change`, `bond`, `copy`, `choose`), bodies in `core/src/body/` |
 | Physical constants and units | `core/src/units.rs` |

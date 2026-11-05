@@ -19,6 +19,8 @@ use std::io;
 use std::path::Path;
 use std::time::Duration;
 pub use csv::Written;
+pub use ewf::read_viewer_file;
+pub use cols::ENCLOSED;
 use tally::{MonthTally, Social, YearTally};
 use pcore::store::Class;
 

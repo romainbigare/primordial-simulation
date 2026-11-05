@@ -7,5 +7,5 @@ mod rec;
 mod snapshot;
 
 pub use layers::{dry_land_flux, fields, frame_now, pixels, quantise, Fields, LAYERS, RIVER_WEB, STANDING_M};
-pub use rec::{Kept, Recorder, Spent, TapeFiles, Written, TAPE};
+pub use rec::{read_viewer_file, Kept, Recorder, Spent, TapeFiles, Written, ENCLOSED, TAPE};
 pub use snapshot::{fingerprint, load_snapshot, read_snapshot, snapshot_bytes, write_snapshot};
