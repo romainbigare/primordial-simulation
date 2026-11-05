@@ -82,3 +82,26 @@ of a law is its own commit with its effect on a long run.
 | 14 | The planet as the coarse tree with refined places; then god mode; then the world search | later rounds | high |
 
 WP0, WP2, WP4 and WP5 run side by side; WP3 follows WP2 (both change bodies).
+
+## 5. Where each package stands
+
+| WP | State |
+|---|---|
+| 0, 1 | Done: `docs/reports/m3.md`; the spec holds the decisions |
+| 2 | Done: a held edge harder than what it breaks concentrates force; a body may pick up the ground's loose rock; what lies alone is buried (5 mm a year) |
+| 3 | Done: no melting plateau and no height in bodies; little speed (two thirds of a body's month is its decision) |
+| 4 | Done: ids by cell serial; `World::remap` moves every per-cell number in one place |
+| 5 | Done: the core as wasm in a worker; zoom refines where the player looks |
+| 6 | Done: a sparse tree of cells down to 1/64 of an air block |
+| 7 | Done: split and join with exact books; the quarters take the world's own terrain, paid by each cell's relief |
+| 8 | Done: Flow agrees between fine and coarse cells; only the bed's store sub-steps |
+| 9 | Done: learning, discount and brain cost per second; acts take time, a mover eats for the rest of its step |
+| 10 | Done: life shares out and gathers across split and join |
+| 11 | Done: refinement by an interest score under a budget; the camera a recorded input; one linking a month |
+| 12 | Next: needs the births of a node to enter through the step (in work) |
+| 13 | Done: `analyze/` with three detectors |
+| 14 | Later rounds |
+
+Open items: about 3e5 parts lie on a 64 x 64 island by year 300 (each costs work monthly); the roster's animals are
+about 17 times fewer than before the body fixes, because the old numbers lived on a step artifact (paying upkeep cold,
+eating warm); refinement still costs about 4.6 ms a change.
