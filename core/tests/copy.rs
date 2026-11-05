@@ -495,39 +495,62 @@ fn reproducing_updates_keep_elements_and_energy() {
 /// The temperature the ground of the growing body is held at, K: mild, under the 295 K over which it evaporates.
 const GROWTH_GROUND_K: f64 = 289.0;
 
+/// The ceilings of `growth_stops_where_upkeep_meets_what_the_body_can_take`, as the living body there over the body's
+/// own at the start: near its size (dear tissue) and many times it (cheap tissue).
+const CEILING_NEAR: f64 = 1.25;
+const CEILING_FAR: f64 = 4096.0;
+
+/// The factor on the costs of tissue (`c_basal`, `c_strength`, `c_learn`) that puts the ceiling of body `b` at `ceiling`
+/// times its living body: there what it can take a day, `take` x its supply x the energy of a kg of the fuel (`joule`,
+/// J), meets its upkeep, whose tissue goes with its body^1.0 and whose brain with its mass^0.25 (`Physics::think`),
+/// while its supply goes with its body^0.75 (`Body::equiv`). Both at its temperature, so the pace drops out.
+fn tissue_costs_for(w: &mut World, b: &body::Body, ceiling: f64, joule: f64) -> f64 {
+    let (t, mass) = (b.temp(&w.chem), b.mass(&w.chem));
+    let take = w.cfg.phys.take * b.supply(&w.chem, &w.cfg.phys, t) * joule;
+    let all = body::upkeep(w, b, 1.0, mass, t, 1.0);
+    let costs = (w.cfg.phys.c_basal, w.cfg.phys.c_strength, w.cfg.phys.c_learn);
+    (w.cfg.phys.c_basal, w.cfg.phys.c_strength, w.cfg.phys.c_learn) = (0.0, 0.0, 0.0);
+    let brain = body::upkeep(w, b, 1.0, mass, t, 1.0);
+    (w.cfg.phys.c_basal, w.cfg.phys.c_strength, w.cfg.phys.c_learn) = costs;
+    (take * ceiling.powf(-0.25) - brain * ceiling.powf(-0.75)) / (all - brain)
+}
+
 /// Body size by an energy ceiling, not a cap: what a body takes goes with its mass^0.75 (`Body::equiv`) and the cost
 /// of keeping its tissue with its body^1.0 (`body::upkeep`), so growth, which builds only from the spare after upkeep
 /// (`copy::grow`), stops where the two meet, a size the body's own costs set. An eater (ALLOC 0: it builds only for
 /// itself; strength 1; building fast, so that the allowance never binds) in a place with all the fuel it can take, at
-/// every update, for 360 days. With twice the starting costs of tissue the ceiling is near its size: it
-/// levels off (under a quarter more body between the 100th and the 300th day) and in its last 100 days takes about what
-/// it pays to keep what it has; with a quarter of the starting costs, a ceiling many times higher, it is still growing
-/// fast and ends larger.
+/// every update, for 360 days. With costs of tissue that put its ceiling a quarter above its size at the start
+/// (`CEILING_NEAR`, `tissue_costs_for`) it levels off (under a quarter more body between the 100th and the 300th day)
+/// and in its last 100 days takes about what it pays to keep what it has; with costs that put the ceiling far above
+/// (`CEILING_FAR`), it is still growing fast and ends larger.
 #[test]
 fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
     use pcore::event::EventKind;
-    let run = |cost: f64| {
+    let run = |ceiling: f64| {
         let (mut w, i) = start();
         w.cfg.tilt = 0.0;
         // The open world's decomposers do not rot the fuel laid for it (`Reaction::open` 1): an update that starts a
         // batch on a physics day comes after Change has reacted what lies on the ground over its whole step (laws.md 0),
         // and the free solid rots in about a week.
         w.chem.reactions[BURN].open = 1.0;
-        // Building never binds; the costs of keeping tissue are `cost` times the starting ones.
+        // Building never binds.
         w.cfg.phys.c_build = 1e7;
-        for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn] {
-            *c *= cost;
-        }
         let mut b = eater(&mut w, i, brain::TAKE, 0.0);
         // A body that sheds its heat freely (bare skin), so that only its energy limits it.
         (b.genes[STRENGTH], b.genes[ALLOC], b.genes[pcore::body::HEAT]) = (1.0, 0.0, 0.0);
         // The eater founder's size of maturity: tissue costs per kg go by it across kinds (Kleiber). It does not die of age.
         (b.genes[COPY_MASS], w.cfg.phys.e_life) = (1.645, 1e30);
+        b.prepare(&w.chem, &w.cfg);
+        let joule = -w.chem.dh(BURN) / w.chem.reactions[BURN].inputs.iter().find(|x| x.0 as usize == RICH).unwrap().1 as f64 / w.chem.subs[RICH].molar_mass;
+        // The costs of tissue that put its ceiling at `ceiling` times its body.
+        let cost = tissue_costs_for(&mut w, &b, ceiling, joule);
+        for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn] {
+            *c *= cost;
+        }
         let (s, b0) = out(&mut w, b);
         w.life[s] = b0;
         // The year starts at a month's start, so its first update is on the first day.
         w.time = w.time.next_multiple_of(w.cfg.calendar().month);
-        let joule = -w.chem.dh(BURN) / w.chem.reactions[BURN].inputs.iter().find(|x| x.0 as usize == RICH).unwrap().1 as f64 / w.chem.subs[RICH].molar_mass;
         let (mut built, mut takes, mut ups) = (Vec::new(), vec![0.0; 360], vec![0.0; 360]);
         for day in 0..360usize {
             // Fuel and liquid in plenty: 100 kg per m² of each on its cell at every update (booked as an edit); the cell it
@@ -559,11 +582,11 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
             }
         }
         let ratio = takes[260..].iter().sum::<f64>() / ups[260..].iter().sum::<f64>();
-        println!("costs x {cost}: body (kg) every 50 days {built:.1?}; in the last 100 days it took {ratio:.2} times its upkeep");
+        println!("ceiling x {ceiling} (costs of tissue x {cost:.3}): body (kg) every 50 days {built:.1?}; in the last 100 days it took {ratio:.2} times its upkeep");
         (built, ratio)
     };
-    let (full, r_full) = run(2.0);
-    let (cheap, r_cheap) = run(0.25);
+    let (full, r_full) = run(CEILING_NEAR);
+    let (cheap, r_cheap) = run(CEILING_FAR);
     let n = full.len();
     // Relative growth between the 100th and the 300th day (the first days only fill the body with the liquid it keeps).
     let rel = |x: &[f64]| x[5] / x[1] - 1.0;
