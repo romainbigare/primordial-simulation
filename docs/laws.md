@@ -129,14 +129,14 @@ places between them, not their links; the mesh is linked once at the change's en
 change left as they were keeps what it remembers, a link of a cell it made nothing. A quarter holds its share of each number its parent held (the
 amounts and the heat of each of its nodes, the volumes Flow keeps of its ground, what its sleep held, the moving
 averages per cell, `remap::Made::held`) and its parent's numbers that do not add up (the moving averages per m², the
-temperature and the plateau, the means of its bed, the sleep's alarm and the time it was brought up to date); a joined
-cell holds the sum of its quarters' and the mean by area of the others (its plateau where all share it, its bed's means
-by volume, the first alarm and the earliest time brought up to date, so its law skips no time). The share is by area,
-the same temperature in each (flat quarters), unless a join made the cell: a join keeps each quarter's share of each
-amount of each node, of each heat and of each volume (`remap::Joined`, saved per cell), and the split of that cell gives
-the quarters back as they were (to the rounding of x · share). The next full build of Flow's state finds each cell's
-temperature and plateaus from its heat. **Life across a split and a join** (`life/tree.rs`, one life model at every
-grain: bodies and parts are records that hold their own amounts, so they move with nothing to book). A split's
+means of its bed, the sleep's alarm and the time it was brought up to date); a joined cell holds the sum of its
+quarters' and the mean by area of the others (its bed's means by volume, the first alarm and the earliest time brought
+up to date, so its law skips no time). The share is by area, the same temperature in each (flat quarters), unless a
+join made the cell: a join keeps each quarter's share of each amount of each node, of each heat and of each volume
+(`remap::Joined`, saved per cell), and the split of that cell gives the quarters back as they were (to the rounding of
+x · share). A made cell's temperature and plateau in Flow's state are those of its heat (`World::thawed`). **Life
+across a split and a join** (`life/tree.rs`, one life model at every grain: bodies and parts are records that hold
+their own amounts, so they move with nothing to book). A split's
 quarters are flat copies, so a node of at least one member per quarter's share leaves in each other quarter a node of
 that share of its members, stores, heat and brood (`nodes::part`: its genes, spreads, lineage and born rows, an id of
 that quarter, and a brain block there with the node's rows); what is not cut goes whole to one quarter, drawn by area
@@ -148,16 +148,17 @@ bodies (each with its brain block), parts and bonds in the order of the quarters
 of its kind. Ids never change (`Life::index` finds each again); a merge that lets go of a part names the cell by its
 index in its event, so the shell takes the events before the next split or join.
 **Relief**: a join that makes one flat cell of quarters of different heights lowers the potential energy of the stacks
-(the function of "The books" below, `flow::potential_of`, each cell's phases those of its heat, `World::thaw`, not of
-Flow's state, which a remap gives a made cell from its parent or as its quarters' mean: a quarter whose liquid boils
-stacks far higher than at the joined cell's temperature, and the split that gives it back must see it so); the joined
-cell keeps that drop as its relief, J, a part of
+(the function of "The books" below, `flow::potential_of`, by Flow's state, which a remap gives a made cell from its
+heat, `World::thawed`, not from its parent or as its quarters' mean: a quarter whose liquid boils stacks far higher than
+at the joined cell's temperature, and the split that gives it back must see it so); the joined cell keeps that drop as
+its relief, J, a part of
 `Store::lifted` held apart from the stacks, with the relief its quarters kept from their own joins (their shares are not
 kept). The split of a joined cell gives the relief back: what the restored quarters' stacks hold over the cell's comes
 from it, and what is left over (or short) goes to the quarters' ground heat by their shares (`store::fall_heat`, which
 books it against `Store::lifted`). A split of a cell no join made makes flat quarters, whose stacks hold what the cell's
-did. So a join moves no energy, a split moves only what `fall_heat` books, and `check::drift`, which reads
-`Store::lifted`, closes through any sequence of splits and joins. No law changes the cells.
+did. So a join moves no energy, a split moves only what `fall_heat` books, and `check::drift`, which reads the stacks
+and the reliefs, closes through any sequence of splits and joins; the cover a join's cells cannot hold goes to its
+ground as remains, booked as life's remains are (`store::life_moved`). No law changes the cells.
 **Refinement** (`refine/`, `World::refine`) decides which cells split and join: a setting for speed, not a law (no
 law reads its score). The shell calls it at each month's start, before the survey, once it took the month's events
 and before it places life by the plan. With no budget (`Config::cell_budget` 0, every run's default) it does nothing:
@@ -201,9 +202,10 @@ energy** is one function of what the nodes hold (`flow::potential`): a ground ce
 layer at its middle (its bed, its loose solids, its liquid with what is dissolved in it, as its head stacks them,
 1.1), its store `bed_depth` under its bed's top, filled from the bottom; an air node's matter lies at the mean head of
 its cells, for the height of a column above its ground is in its heat (its heat capacity at constant pressure holds
-the work the column does as it rises); a bodies' node's gas and the matter of a cell's life (its bodies, its cover, its
-parts) at its cell's head. The parts of a month's Flow after the survey (state, the air's steps, liquid, creep,
-refresh) follow each other with nothing between (`flow::chain`) and are booked as one at their end; the survey's own
+the work the column does as it rises); a bodies' node's gas and the matter of a cell's life (its bodies, its cover
+with the seeds it sends until they land, its parts) at its cell's head. The parts of a month's Flow after the survey
+(state, the air's steps, liquid, creep, refresh) follow each other with nothing between (`flow::chain`) and are
+booked as one at their end; the survey's own
 build of Flow's state, and a part run alone, are booked at their own end. In each booking every move carries its
 potential energy from the height it leaves (a ground node's head, an air node's mean head, a store's table, each the
 mean of the booking's start and end, so a lake that drains whole takes along what it held), and each node's heat takes
@@ -214,9 +216,20 @@ node a store's liquid rises into), a column that rises as it fills pays for it, 
 matter gained is one number of the store (`Store::lifted`), the change of that function. Within a month's Flow the later
 air steps and the liquid read the heat before the month's lifts and falls are paid. The other laws lift a gas into
 the air from its cell's head to its air node's mean ground by the same rule (`World::lift`); a ground node that reacts
-(Change) pays what its stack gains, and its gas leaves from its head (`change::booking`). So every element and the
-energy are kept;
-`check::drift` checks it yearly against `check::DRIFT` (1e-9).
+(Change) pays what its stack and the air over it gain (`flow::gain`: a head that rises lifts its air node's matter by
+the cell's share of the node's area), and its gas leaves from its head (`change::booking`). **Life and its ground**:
+life's matter counts with its ground node, as Flow books it. What life gives its ground or takes from it (remains, shed
+matter, the gut's bulk, the cover's losses and what it takes up, parts that fall apart, edges' wear, drinking, grazing,
+rock picked up) gains the potential energy that the function finds between the cell as it was and as it is, the matter
+from the head into the stack or back with what that raises or lowers above it and the air over the cell
+(`flow::gain`), and the ground node's heat pays it (`store::life_moved`, for the moves of a view of the store and those
+`store::apply` books from a node of life): a fall heats the ground it lands in, a lift is paid by the ground it leaves.
+Life that goes to another cell's head (a body that moves and the structure it carries, a litter, seeds) carries its
+potential energy from the head it left, and the ground it lands on takes the difference (`store::life_went`). An edit
+(`World::cross`) takes the potential energy of what it places from its boundary node. So every element and the energy
+are kept; `check::drift` checks it yearly against `check::DRIFT` (1e-9), with the potential energy as the function of
+what the nodes hold and the relief the joins keep (`check::Totals::potential`), not as `Store::lifted` books it, so a
+move that books no lift or fall shows.
 **No overdraw.** A law never asks a node for more than it holds; where it could, it cuts that node's own outgoing
 links (`solve::sweep::within`), never a whole field. A body takes no more than its cell's view holds, what the
 bodies before it in the pass left (checked in debug builds). `apply` and `book_by_array` only add and set rounding below zero to zero, counted

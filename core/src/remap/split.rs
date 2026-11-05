@@ -111,9 +111,7 @@ impl World {
         self.renew((map, mesh), from, c);
         if let (Some(r), Some(before)) = (record, before) {
             let give = r.relief - (crate::flow::potential_of(self, &kids, air) - before);
-            let mut q = vec![0.0; self.mesh.cells().n()];
-            kids.iter().zip(0..).for_each(|(&c, k)| q[c] = give * r.share(Of::Heat(Class::Ground), k));
-            fall_heat(self, Class::Ground, &q);
+            fall_heat(self, Class::Ground, kids.iter().zip(0..).map(|(&c, k)| (c, give * r.share(Of::Heat(Class::Ground), k))));
         }
         self.events.push(Event { day: self.day(), kind: EventKind::Split, node: serial, value: leaf.depth as f64 });
         self.seen(&kids);

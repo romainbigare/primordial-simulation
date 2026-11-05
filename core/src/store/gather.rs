@@ -303,6 +303,17 @@ impl Moves {
             }
         }
     }
+    /// Per cell taken whose ground or bed it changed, in the order of their indices: what they gained of each substance
+    /// `k`, mol, its ground's at `k` and its bed's at `ns + k`. Every move of a view is one of the life of its cell
+    /// (`store::life_moved`).
+    pub(crate) fn fell(&self) -> impl Iterator<Item = (usize, Vec<f64>)> + '_ {
+        let (row, ns) = (Row(self.ns), self.ns);
+        self.cells.iter().enumerate().filter_map(move |(x, &(i, _))| {
+            let of = |c: Class| (0..ns).map(move |k| self.view[x * row.len() + row.amounts(c) + k][1]);
+            let d: Vec<f64> = of(Class::Ground).chain(of(Class::Bed)).collect();
+            d.iter().any(|&v| v != 0.0).then_some((i as usize, d))
+        })
+    }
     /// `f` of the potential energy each cell taken gained by its lifts and the heat its ground could not give, J, in the
     /// order of their indices.
     pub(crate) fn each_cell(&self, mut f: impl FnMut(f64, f64)) {

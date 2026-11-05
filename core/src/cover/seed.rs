@@ -17,15 +17,17 @@ pub(crate) struct Seed {
     pub heat: f64,
 }
 
-/// Land the seeds of every cell's last month (`Cover::seeds`), cell by cell in the order made; those that find no
-/// slot, and the cover they outweigh, go to the ground of their cell as remains, booked at once.
+/// Land the seeds of every cell's last month (`Cover::seeds`), cell by cell in the order made, with the potential energy
+/// of the heads they leave and land at (`store::life_went`); those that find no slot, and the cover they outweigh, go to
+/// the ground of their cell as remains, booked at once.
 pub fn land(w: &mut World) {
     let Some(p) = Parts::of(&w.chem) else { return };
     let (mm, alike) = (p.mm(&w.chem), w.cfg.phys.alike);
-    let mut moves = Vec::new();
+    let (mut moves, mut went) = (Vec::new(), Vec::new());
     for from in 0..w.life.cells.len() {
         for s in std::mem::take(&mut w.life.cells[from].cover.seeds) {
             let i = s.to as usize;
+            went.push((from, i, (0..NP).map(|q| s.mol[q] * mm[q]).sum()));
             let c = &mut w.life.cells[i].cover;
             let t = c.temp(&w.chem, &p);
             let (mol, heat) = match lodge(c, &mm, &s, alike) {
@@ -42,6 +44,7 @@ pub fn land(w: &mut World) {
             moves.push(Move { from: cover, to: Node::ground(i), k: 0, mol: 0.0, heat });
         }
     }
+    crate::store::life_went(w, &went);
     apply(w, &[], &moves);
 }
 

@@ -1159,7 +1159,8 @@ fn the_sun_is_right_at_every_latitude() {
 
 /// The potential energy the store books (`Store::lifted`) is the change of the matter's potential energy: over five
 /// years of a 16 x 16 island with the roster's life its rain, runoff, stores, creep, the air's columns, Change and the
-/// matter its life takes and gives move it, and the two stay within 1e-9 of the world's heat.
+/// matter its life takes and gives and carries from cell to cell move it, and the two stay within 1e-6 of what it
+/// gained (what is left: gas lifted between the heads Flow's state last found).
 #[test]
 fn the_lifted_energy_is_what_the_matter_gained() {
     let mut w = worldgen::testkit::squares(1, 16, 16);
@@ -1167,12 +1168,12 @@ fn the_lifted_energy_is_what_the_matter_gained() {
     for &k in &worldgen::life::ROSTER {
         worldgen::life::seed(&mut w, k);
     }
-    let (p0, l0, heat) = (pcore::flow::potential(&w), w.store.lifted(), pcore::check::totals(&w).thermal);
+    let (p0, l0, heat) = (pcore::flow::potential(&w).expect("Flow's state"), w.store.lifted(), pcore::check::totals(&w).thermal);
     for _ in 0..5 * w.cfg.months_per_year {
         pcore::step(&mut w);
     }
     assert!(w.life.alive().count() > 0, "nothing lives");
-    let (gained, lifted) = (pcore::flow::potential(&w) - p0, w.store.lifted() - l0);
+    let (gained, lifted) = (pcore::flow::potential(&w).expect("Flow's state") - p0, w.store.lifted() - l0);
     assert!(lifted.abs() > 1e-7 * heat, "the matter moved: {lifted:e} J");
-    assert!((gained - lifted).abs() < 1e-9 * heat, "gained {gained:e} J, lifted {lifted:e} J, heat {heat:e} J");
+    assert!((gained - lifted).abs() < 1e-6 * lifted.abs(), "gained {gained:e} J, lifted {lifted:e} J");
 }

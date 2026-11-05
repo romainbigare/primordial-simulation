@@ -62,6 +62,7 @@ pub(crate) fn land_move(w: &World, d: &mut Chunk, (mut b, brain): (Body, &[f32])
         }
     }
     let mass = b.mass(&w.chem);
+    d.went(i, j, mass);
     // (Before it enters `j`, it is no node of its cell for `kin`.)
     let t = if kin { copy::kin(w, d, j, b.lineage, b.adult(&w.chem)) } else { None };
     (b.cell, b.leaving, b.inside) = (j as u32, false, None);

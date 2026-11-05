@@ -134,5 +134,7 @@ impl World {
         scratch.remap(c, joined);
         *watch = c.apply_made(std::mem::take(watch), Default::default, |_, m, at| crate::refine::Watch::made(m, at));
         *joined = c.apply(std::mem::take(joined), || None);
+        let made: Vec<usize> = c.sources().iter().enumerate().filter(|s| matches!(s.1, Source::Made(_))).map(|s| s.0).collect();
+        self.thawed(&made);
     }
 }

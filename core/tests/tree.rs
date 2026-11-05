@@ -58,14 +58,16 @@ fn holds(w: &World, i: usize) -> Vec<f64> {
 /// The world's potential energy less what the stacks hold now and what the joins keep as relief: a split or a join
 /// changes none of it (`Store::lifted`).
 fn unflattened(w: &World) -> f64 {
-    w.store.lifted() - pcore::flow::potential(w) - w.joined.iter().flatten().map(|r| r.relief).sum::<f64>()
+    w.store.lifted() - pcore::flow::potential(w).expect("Flow's state") - w.joined.iter().flatten().map(|r| r.relief).sum::<f64>()
 }
 
 /// A cell split into flat quarters (each a quarter of what it held, at its temperature) and joined again is the world
-/// it was, every number of it, bit for bit; each change is an event naming the cell by its serial.
+/// it was, every number of it, bit for bit, where Flow's state of the ground is its heat's (a cell a remap makes takes
+/// the state of its heat, `World::thawed`); each change is an event naming the cell by its serial.
 #[test]
 fn a_split_then_its_join_gives_back_the_world() {
     let mut w = world();
+    pcore::flow::state(&mut w, true);
     let (i, n) = (testkit::dry_land(&w), w.mesh.cells().n());
     let (l, before, held, first) = (leaf(&w, i), saved(&w), holds(&w, i), w.life.serial(i));
     assert_eq!(w.split(l), Ok(vec![l]));

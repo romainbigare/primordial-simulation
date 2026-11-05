@@ -2,8 +2,9 @@
 //! volume of each of its layers from what its nodes hold in their phases, the matter of its life at its head, and the
 //! potential energy and heights they make.
 
+use super::potential::{deep_of, ground_of};
 use super::{land::NONE, scratch::Sp, Scratch};
-use crate::{store::Class, World};
+use crate::{store::Class, World, AIR};
 
 /// Numbers of a ground cell's row in `potential`: the potential energy of its stack and of its bed's store, J; the
 /// heights its liquid and its store's liquid reach, m; and the potential energy of the matter at its head, J.
@@ -90,7 +91,8 @@ impl Life {
     pub(super) fn every(&self, w: &World, sp: &[Sp]) -> Vec<f64> {
         crate::par::map_n(w.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.kg(w, sp, i))
     }
-    /// The mass of the life of cell `i`, kg: its living bodies, its cover and its parts.
+    /// The mass of the life of cell `i`, kg: its living bodies, its cover with the seeds it sends out until they land
+    /// (`cover::land`), and its parts.
     pub(super) fn kg(&self, w: &World, sp: &[Sp], i: usize) -> f64 {
         let cell = w.life.cell_at(i);
         let mut kg = 0.0;
@@ -98,7 +100,8 @@ impl Life {
             kg += self.body.iter().zip(&b.store).map(|(&k, &a)| a * sp[k].mm).sum::<f64>();
         }
         if let Some(sub) = self.cover {
-            kg += cell.cover.mol.iter().flat_map(|m| m.iter().zip(sub)).map(|(&a, k)| a * sp[k].mm).sum::<f64>();
+            let (c, seeds) = (&cell.cover, cell.cover.seeds.iter().map(|s| &s.mol));
+            kg += c.mol.iter().chain(seeds).flat_map(|m| m.iter().zip(sub)).map(|(&a, k)| a * sp[k].mm).sum::<f64>();
         }
         for p in &cell.parts {
             kg += p.wall.iter().zip(&p.fill).zip(sp).map(|((&a, &f), sp)| (a + f) * sp.mm).sum::<f64>();
@@ -107,23 +110,37 @@ impl Life {
     }
 }
 
-/// What the potential energy of ground cell `i` and the matter at its head gains, J, when its ground's amounts change
-/// by `d(k)` mol, by Flow's state of its ground (`potential`): how a change inside a node moves its stack.
-pub(crate) fn stack_gain(w: &World, i: usize, d: impl Fn(usize) -> f64) -> f64 {
-    let (s, n, ns) = (&w.scratch, w.mesh.cells().n(), w.chem.ns());
-    let at = |class: Class, k: usize| w.store.amounts(class)[k * n + i];
-    let mut x = [0.0; LAYERS];
+/// The row of `potential` (`ROW`) of ground cell `i` alone, its nodes changed by `d(class, k)` mol of substance `k`
+/// (its ground, its bed, its store and its bodies' node) and `life` kg at its head (the mass of its life, `Life::kg`):
+/// its layers as `potential` adds them up, substance by substance, so the same numbers come out.
+pub(super) fn row_of(w: &World, s: &Scratch, same: &[Same], i: usize, (d, life): (impl Fn(Class, usize) -> f64, f64)) -> [f64; ROW] {
+    let (n, mut x) = (w.mesh.cells().n(), [0.0; LAYERS]);
+    let at = |class: Class, k: usize| w.store.amounts(class)[k * n + i] + d(class, k);
     for (k, sp) in s.sp.iter().enumerate() {
         bed_layer(&mut x, sp, at(Class::Bed, k));
-        deep_layer(&mut x, sp, s.state.tg[i], at(Class::Deep, k));
+        ground_of(&mut x, s, same[k], (k, i), at(Class::Ground, k));
+        deep_of(&mut x, s, same[k], (k, i), at(Class::Deep, k));
         x[HEAD] += at(Class::Bodies, k) * sp.mm;
     }
-    x[HEAD] += Life::of(w).kg(w, &s.sp, i);
-    let (mut before, mut after) = (x, x);
-    for k in 0..ns {
-        ground_layers(&mut before, s, (k, i), at(Class::Ground, k));
-        ground_layers(&mut after, s, (k, i), at(Class::Ground, k) + d(k));
+    x[HEAD] += life;
+    stack(w, &x, i)
+}
+
+/// What the potential energy of the world's matter gains, J, when the nodes of ground cell `i` change by `d(class, k)`
+/// mol of substance `k` (its ground, its bed, its store and its bodies' node) and the mass of its life by `life` kg, by
+/// Flow's state of its ground (`potential`): its stack, its store and the matter at its head, and its air node's matter,
+/// which lies at the mean head of its cells, so it rises by the cell's share of that node's area of what the head rises.
+/// None before Flow first built the state of the ground (`potential::stated`).
+pub(crate) fn gain(w: &World, i: usize, d: impl Fn(Class, usize) -> f64, life: f64) -> f64 {
+    let (na, ns) = (w.mesh.level(AIR).n(), w.chem.ns());
+    if !super::potential::stated(w) {
+        return 0.0;
     }
-    let (a, b) = (stack(w, &after, i), stack(w, &before, i));
-    a[0] + a[4] - b[0] - b[4]
+    let s = super::potential::scratch_of(w);
+    // (Each substance in its phase in this node: `Same::of` would read every node.)
+    let (same, kg) = (vec![Same::Varies; ns], Life::of(w).kg(w, &s.sp, i));
+    let (a, b) = (row_of(w, &s, &same, i, (d, kg + life)), row_of(w, &s, &same, i, (|_, _| 0.0, kg)));
+    let (j, amounts) = (w.mesh.up(i, 0, AIR), w.store.amounts(Class::Air));
+    let air: f64 = (0..ns).map(|k| amounts[k * na + j] * s.sp[k].mm).sum();
+    (a[0] + a[1] + a[4]) - (b[0] + b[1] + b[4]) + air * w.cfg.gravity * (a[2] - b[2]) * w.mesh.share(i, AIR)
 }
