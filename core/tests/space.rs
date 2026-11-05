@@ -1,6 +1,9 @@
 //! Space: the mesh of a map has its cells (areas, links, the air as a coarser level), cells of many squares among
-//! them, and stacks give each cell its column of nodes.
+//! them, and stacks give each cell its column of nodes; what the world keeps per cell and per link follows a change of
+//! the cells (`World::remap`).
 
+use pcore::remap::{Remap, Renumber};
+use pcore::store::Class;
 use pcore::{World, AIR};
 use pcore::space::square::Square;
 use pcore::space::{Level, Mesh, Stack};
@@ -232,4 +235,97 @@ fn the_steepest_way_down_a_tilted_surface_is_its_slope_on_any_cells() {
             }
         }
     }
+}
+
+/// Months a world of bodies and a part lives before its cells are renumbered: long enough that each per-cell array holds
+/// numbers (the nodes' sleep, the traffic, Flow's state).
+const LIVED_MONTHS: usize = 3;
+
+/// The small world with its cover and eaters and a part in a dry cell, after `LIVED_MONTHS` months, its events taken.
+fn lived() -> World {
+    let mut w = worldgen::testkit::small_world();
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
+    let i = worldgen::testkit::dry_land(&w);
+    worldgen::testkit::plate(&mut w, i, 1.0, true);
+    (0..LIVED_MONTHS).for_each(|_| pcore::step(&mut w));
+    w.drain_events();
+    w
+}
+
+/// The whole saved state of `w`.
+fn saved(w: &World) -> serde_json::Value {
+    serde_json::to_value(w).expect("a world serialises")
+}
+
+/// Cells and links renumbered (`World::remap`): each cell holds at its new number what it held, its bodies and parts
+/// are found there by their ids, and its serial goes with it; renumbered back, the world is what it was, bit for bit.
+#[test]
+fn a_world_renumbered_and_back_is_the_same() {
+    let w = lived();
+    let (n, links) = (w.mesh.cells().n(), w.mesh.cells().a().len());
+    let to: Vec<u32> = (0..n).map(|j| ((7 * j + 3) % n) as u32).collect();
+    let mut back = vec![0; n];
+    to.iter().enumerate().for_each(|(j, &i)| back[i as usize] = j as u32);
+    let reversed: Vec<Option<u32>> = (0..links as u32).rev().map(Some).collect();
+    let remap = |from: &[u32]| Remap { cells: Renumber::new(n, from.iter().copied().map(Some).collect()), links: Renumber::new(links, reversed.clone()) };
+    let before = saved(&w);
+    let mut v = w.clone();
+    v.remap(&remap(&to));
+    let (a, b) = (w.store.amounts(Class::Ground), v.store.amounts(Class::Ground));
+    assert!((0..w.chem.ns() * n).all(|x| b[x] == a[x / n * n + to[x % n] as usize]), "each ground holds what its cell held");
+    assert_eq!(v.life.unsound(), None);
+    assert!(w.life.alive().all(|x| v.life.find(x.id).map(|h| h.cell) == Some(back[x.cell as usize])), "each body is found in its cell");
+    assert!(w.life.parts().count() > 0 && w.life.parts().all(|p| v.life.part_cell(p.id) == Some(back[p.cell as usize] as usize)), "each part is found in its cell");
+    let cells = saved(&v)["life"]["cells"].clone();
+    assert!((0..n).all(|j| cells[j]["serial"] == to[j]), "a cell's serial goes with it");
+    v.remap(&remap(&back));
+    assert_eq!(saved(&v), before);
+}
+
+/// The saved state's arrays (by their path) of one number per cell of `n` cells, or of blocks of them, with the count
+/// of blocks: all but the map's squares and what lies inside the life of a cell.
+fn per_cell(x: &serde_json::Value, n: usize, path: &str, out: &mut Vec<(String, usize)>) {
+    if ["/map", "/life/cells/"].iter().any(|p| path.starts_with(p)) {
+        return;
+    }
+    let inner: Vec<(String, &serde_json::Value)> = match x {
+        serde_json::Value::Array(v) => {
+            if !v.is_empty() && v.len().is_multiple_of(n) {
+                out.push((path.to_string(), v.len() / n));
+            }
+            v.iter().enumerate().map(|(k, y)| (format!("{path}/{k}"), y)).collect()
+        }
+        serde_json::Value::Object(m) => m.iter().map(|(k, y)| (format!("{path}/{k}"), y)).collect(),
+        _ => Vec::new(),
+    };
+    inner.into_iter().for_each(|(p, y)| per_cell(y, n, &p, out));
+}
+
+/// A cell appended holds nothing and takes the next serial, and every array of one number per cell has one more; taken
+/// away again, it leaves the world as it was but for that serial, which no cell takes again.
+#[test]
+fn a_new_cell_takes_a_serial_never_given_again() {
+    let w = lived();
+    let (n, ns, links) = (w.mesh.cells().n(), w.chem.ns(), w.mesh.cells().a().len());
+    let same_links = || Renumber::new(links, (0..links as u32).map(Some).collect());
+    let grown = Remap { cells: Renumber::new(n, (0..n as u32).map(Some).chain([None]).collect()), links: same_links() };
+    let shrunk = Remap { cells: Renumber::new(n + 1, (0..n as u32).map(Some).collect()), links: same_links() };
+    let (mut v, mut old) = (w.clone(), Vec::new());
+    per_cell(&saved(&w), n, "", &mut old);
+    for round in 0..2 {
+        v.remap(&grown);
+        let mut new = Vec::new();
+        per_cell(&saved(&v), n + 1, "", &mut new);
+        assert!(!old.is_empty() && new == old, "the arrays of one number per cell, before {old:?}, after {new:?}");
+        let (a, b) = (w.store.amounts(Class::Ground), v.store.amounts(Class::Ground));
+        assert!((0..ns).all(|k| b[k * (n + 1) + n] == 0.0 && (0..n).all(|i| b[k * (n + 1) + i] == a[k * n + i])), "the old cells keep what they held, the new one holds nothing");
+        let cell = saved(&v)["life"]["cells"][n].clone();
+        assert_eq!((cell["serial"].as_u64(), cell["bodies"].as_array().map(Vec::len)), (Some((n + round) as u64), Some(0)));
+        v.remap(&shrunk);
+    }
+    let (mut a, mut b) = (saved(&w), saved(&v));
+    let next = |x: &mut serde_json::Value| x["life"].as_object_mut().and_then(|l| l.remove("next_serial")).and_then(|s| s.as_u64());
+    assert_eq!((next(&mut a), next(&mut b)), (Some(n as u64), Some(n as u64 + 2)));
+    assert_eq!(a, b);
 }

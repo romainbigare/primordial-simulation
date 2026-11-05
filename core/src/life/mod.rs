@@ -197,6 +197,25 @@ impl Life {
             c.brains.pack(c.bodies.iter_mut().map(|b| &mut b.brain));
         }
     }
+    /// The life of each cell and the survey's caches of it follow their cells (`World::remap`): a new cell has no life
+    /// and the next serial; each living body and part takes its cell's new index, and the ids find their cells again
+    /// (`index`). It runs between passes.
+    pub(crate) fn remap(&mut self, r: &crate::remap::Renumber) {
+        let Life { cells, next_serial, at_serial: _, moved: _, parts_moved: _, queued, sums, absorb, keep, env, feat, brains: _, members: _, genomes: _, free_genomes: _, air_seen } = self;
+        assert!(queued.is_empty() && air_seen.is_empty(), "a remap runs between passes");
+        *cells = r.apply(std::mem::take(cells), || {
+            *next_serial += 1;
+            Cell { serial: *next_serial - 1, ..Default::default() }
+        });
+        for (i, c) in cells.iter_mut().enumerate() {
+            c.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.cell = i as u32);
+            c.parts.iter_mut().for_each(|p| p.cell = i as u32);
+        }
+        (*sums, *env) = (r.apply(std::mem::take(sums), || [0.0; ROW]), r.apply(std::mem::take(env), || [0.0; 3]));
+        (*absorb, *keep) = (r.apply(std::mem::take(absorb), || 0.0), r.apply(std::mem::take(keep), || 0.0));
+        *feat = r.apply(std::mem::take(feat), || [0.0; crate::choose::NCELL]);
+        self.index();
+    }
     /// Body `id` is now stored in cell `i` (`find`).
     fn note_at(&mut self, id: u64, i: u32) {
         if origin(&self.at_serial, id) == Some(i as usize) { self.moved.remove(&id) } else { self.moved.insert(id, i) };

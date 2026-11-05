@@ -4,7 +4,8 @@ What each law does, its rule, its physical reason and where it lives. How the co
 orderings) is said once, in the code's doc comments; the code is the truth. Numbers, units and anchors are in
 `docs/numbers.md`, what a run records in `docs/tape.md`.
 
-**Where the code is** (`core/src/`): time in `clock/` and `schedule.rs`; the shape of the world in `space/`; shared
+**Where the code is** (`core/src/`): time in `clock/` and `schedule.rs`; the shape of the world in `space/`, and how
+what it keeps per cell follows a change of the cells in `remap.rs`; shared
 maths in `solve/` (`sweep`, `downhill`, `line`); nodes and books in `store/`, `world.rs`, `check.rs`; ground heat in
 `ground.rs`; settings in `params.rs`, constants in `units.rs`; bodies in `body/`, `life.rs`, `nodes.rs`, `lineage.rs`,
 `brain.rs`; the cells as bodies see them in `survey.rs`; paths in `lanes.rs`; keyed random numbers in `rng.rs`; the
@@ -92,6 +93,11 @@ gone does nothing: a move of a body that died (its cost was paid), a watch whose
 a part act no longer possible or that cannot be paid; less than one member of a node's children with no node to join
 goes back into the parent's brood, or to the ground of the parent's cell if it died (`copy::back`).
 
+**The cell table** (`remap.rs`): what the world keeps per cell of the finest level (the store's nodes of a cell and
+their sleep, its life, Flow's state of its ground, its moving averages) and per link of it follows a change of the
+cells in one place (`World::remap`, between steps): each number moves with its cell or link, an old cell no new one
+names is gone, and a new cell holds nothing and takes the next serial, so every id still finds its body or part. No
+law changes the cells.
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.
 **One ground temperature**: every law and the tape read that of Flow's last step (`World::t_ground_last`).

@@ -124,6 +124,17 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
     w.scratch = s;
 }
 
+impl Scratch {
+    /// The state of each ground node follows its cell (`World::remap`), a new cell's that of a new world's (no plateau,
+    /// `with`); the caches are dropped, as a loaded world's, and rebuilt at the next step.
+    pub(crate) fn remap(&mut self, r: &crate::remap::Renumber) {
+        let scratch::State { tg, pk, phi, cloud: _, loose: _, fixed: _, vary: _, fix, bed, bedk: _, gas: _ } = &mut self.state;
+        (*tg, *pk, *phi) = (r.apply(std::mem::take(tg), || 0.0), r.apply(std::mem::take(pk), || land::NONE), r.apply(std::mem::take(phi), || 0.0));
+        (*fix, *bed) = (r.apply(std::mem::take(fix), || [0.0; 2]), r.apply(std::mem::take(bed), scratch::Bed::default));
+        *self = Scratch { state: std::mem::take(&mut self.state), ..Default::default() };
+    }
+}
+
 /// Book the lifts and falls of the parts of Flow under way (`potential::Lifts`), if any.
 fn book(w: &mut World, s: &mut Scratch) {
     if let Some(lifts) = s.lifts.take() {
