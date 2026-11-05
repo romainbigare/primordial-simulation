@@ -19,12 +19,13 @@ const SAT_LOWEST: f64 = 1.0;
 pub(in crate::flow) struct Sat(Vec<f64>);
 
 impl Sat {
-    /// Reaches `hi` + `SAT_MARGIN` K at least for substance `k`.
+    /// Reaches `hi` + `SAT_MARGIN` K for substance `k`, and no further: entries are added or dropped at its top, so where
+    /// `at` stops depends on `hi` alone, not on how far up earlier steps asked (a loaded world's table is new).
     pub(super) fn fit(&mut self, chem: &Chemistry, k: usize, hi: f64) {
         let len = ((hi + SAT_MARGIN - SAT_LOWEST) * SAT_PER_K) as usize + 2;
-        if self.0.len() < len {
-            self.0 = (0..len).map(|i| chem.p_sat(k, SAT_LOWEST + i as f64 / SAT_PER_K)).collect();
-        }
+        self.0.truncate(len);
+        let from = self.0.len();
+        self.0.extend((from..len).map(|i| chem.p_sat(k, SAT_LOWEST + i as f64 / SAT_PER_K)));
     }
     pub(super) fn at(&self, t: f64) -> f64 {
         let x = ((t - SAT_LOWEST) * SAT_PER_K).clamp(0.0, (self.0.len() - 2) as f64);
