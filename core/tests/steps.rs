@@ -2,7 +2,7 @@
 //! cell 2^k times finer a month over 2^k; the bodies of the finer cells step again inside the month, each update over
 //! the time since its last, and the books close through those sub-steps.
 
-use pcore::body::{Body, Layout, COOL_T, KEEP_T, STRENGTH};
+use pcore::body::{Body, Layout, COOL_T, DISPERSE, KEEP_T, STRENGTH};
 use pcore::space::Leaf;
 use pcore::{brain, World};
 use worldgen::testkit::{self, kg, Books, Brain, MATTER, RICH};
@@ -60,11 +60,10 @@ fn the_books_close_through_the_sub_steps() {
 /// month's meals leave it as it was.
 const LYING: f64 = 1.0;
 
-/// The small world after a month (so its cells have their surroundings), with its first dry square unsplit, or that
-/// square and the squares around it split two depths (`fine`: cells of 500 m, stepping a quarter of a month), and
-/// `LYING` on the ground of the square's cells. Returns the world and the cell a body starts in: the square, or a fine
-/// cell of its second row and column.
-fn scene(fine: bool) -> (World, usize) {
+/// The small world with its first dry square unsplit, or that square and the squares around it split two depths
+/// (`fine`: cells of 500 m, stepping a quarter of a month). Returns the world and the cell a body starts in: the square,
+/// or a fine cell of its second row and column.
+fn split(fine: bool) -> (World, usize) {
     let mut w = testkit::small_world();
     let square = w.map.leaves()[testkit::dry_land(&w)];
     if fine {
@@ -73,13 +72,19 @@ fn scene(fine: bool) -> (World, usize) {
         let around: Vec<Leaf> = near.map(|j| w.map.leaves()[j]).filter(|l| l.depth == square.depth).collect();
         testkit::split_down(&mut w, &around, 2);
     }
-    pcore::step(&mut w);
-    let depth = if fine { square.depth + 2 } else { square.depth };
-    let mine: Vec<usize> = square.split(depth).map(|l| w.map.cell(l).expect("a cell of the square")).collect();
-    mine.iter().for_each(|&c| testkit::put_kg_m2(&mut w, RICH, c, LYING));
     let quarter = square.side() / 4;
-    let start = if fine { Leaf { x: square.x + quarter, y: square.y + quarter, depth } } else { square };
+    let start = if fine { Leaf { x: square.x + quarter, y: square.y + quarter, depth: square.depth + 2 } } else { square };
     let start = w.map.cell(start).expect("the start");
+    (w, start)
+}
+
+/// `split` after a month (so its cells have their surroundings), with `LYING` on the ground of the square's cells.
+fn scene(fine: bool) -> (World, usize) {
+    let (mut w, start) = split(fine);
+    pcore::step(&mut w);
+    let square = w.map.leaves()[start].parent().filter(|_| fine).and_then(|q| q.parent()).unwrap_or(w.map.leaves()[start]);
+    let mine: Vec<usize> = square.split(w.map.leaves()[start].depth).map(|l| w.map.cell(l).expect("a cell of the square")).collect();
+    mine.iter().for_each(|&c| testkit::put_kg_m2(&mut w, RICH, c, LYING));
     (w, start)
 }
 
@@ -157,4 +162,49 @@ fn a_body_lives_alike_in_a_cell_split_two_depths() {
     };
     let [coarse, fine] = [false, true].map(|f| second_month(f, mover)[3]);
     assert!((coarse - 1.0).abs() < 1e-3 && (fine - 4.0).abs() < 1e-3, "moves a month: {coarse} in the square, {fine} in the fine cells");
+}
+
+/// How far what a body of sight 2 and more sees from a cell split two depths may stray from what it sees from the
+/// square (the features are scaled to about one; the two worlds' climates differ by about 1e-6 after a month).
+const SEEN_OFF: f32 = 1e-4;
+
+/// The distance from the centre of cell `i` of `w` to that of cell `j`, m.
+fn apart(w: &World, i: usize, j: usize) -> f64 {
+    let o = w.mesh.cells().offset(i, j);
+    o[0].hypot(o[1])
+}
+
+/// What a body sees and where its children land reach as far in metres from a cell of 500 m as from a square of 2 km:
+/// the features a body of sight 2 to `SIGHTS` sees of a fine cell are those of the square that holds it, within
+/// `SEEN_OFF`; the children who leave a node there land `spread_m` away (2 km across a side, its √2 times across a
+/// corner), four fine cells or one square on.
+#[test]
+fn sight_and_children_reach_as_far_from_a_fine_cell() {
+    // (Seen just after the split, surveyed, before the liquid of the fine cells finds its own ways.)
+    let [(coarse, i), (fine, j)] = [false, true].map(|f| {
+        let (mut w, i) = split(f);
+        pcore::survey::survey(&mut w);
+        (w, i)
+    });
+    for sight in 2..=pcore::choose::SIGHTS {
+        let (a, b) = (coarse.life.feat(i, sight), fine.life.feat(j, sight));
+        let off = a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0, f32::max);
+        assert!(off < SEEN_OFF, "sight {sight}: {b:?} from the fine cell against {a:?} from the square");
+    }
+    for (mut w, i) in [false, true].map(scene) {
+        w.cfg.phys.c_copy = 1e18;
+        let one = testkit::eater(&mut w, i, brain::REST, 1.0);
+        let mut n = testkit::node_of(&mut w, one, 5.0);
+        n.genes[DISPERSE] = 1.0;
+        testkit::brood(&w, &mut n, 4.0);
+        let (s, mut n) = testkit::out(&mut w, n);
+        assert!(w.in_cell(i, |w, d| pcore::copy::copy(w, d, &mut n)), "the node makes children");
+        let id = n.id;
+        w.life[s] = n;
+        pcore::life::land(&mut w);
+        let kids = testkit::children(&w, id);
+        let far = |h: &pcore::life::Handle| apart(&w, i, w.life[*h].cell as usize);
+        let side = w.cfg.phys.spread_m;
+        assert!(!kids.is_empty() && kids.iter().all(|h| [side, side * std::f64::consts::SQRT_2].iter().any(|d| (far(h) - d).abs() < 1.0)), "children land {:?} m away", kids.iter().map(far).collect::<Vec<_>>());
+    }
 }

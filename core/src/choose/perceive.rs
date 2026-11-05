@@ -56,7 +56,8 @@ const PARTS_HERE: usize = RESIST + 1;
 const CROSSED: usize = PARTS_HERE + 1;
 pub const NCELL: usize = CROSSED + 1;
 /// The levels of the cells' features (`Life::feat`): the cells' own, then smoothed once to `SIGHTS - 1` times over
-/// their neighbours, what a body of sight 1 to `SIGHTS` sees of the cell it would step into.
+/// their neighbours (a cell finer than a square as the square that holds it, `regions`), what a body of sight 1 to
+/// `SIGHTS` sees of the cell it would step into.
 pub const SIGHTS: usize = 4;
 
 /// What a body perceives of another of its cell that it may act on: its id, its place in the cell's list
@@ -137,8 +138,8 @@ pub(super) fn inputs(w: &World, cell: &Cell, b: &Body, (temp, mem): (f64, usize)
     x.extend_from_slice(&b.mem[..mem]);
 }
 
-/// Once a month, after the survey: the features of every cell (`NCELL`, the same for every brain), then each level of
-/// `SIGHTS` the last smoothed over each cell and its neighbours, by area (`Life::feat`).
+/// After each survey, at a month's start and at each sub-step (`survey::substeps`): the features of every cell (`NCELL`,
+/// the same for every brain), then the levels of `SIGHTS` past the first (`sights`, `Life::feat`).
 pub fn cells(w: &mut World) {
     let (n, life, chem) = (w.mesh.cells().n(), &w.life, &w.chem);
     let parts = crate::cover::Parts::of(chem);
@@ -178,20 +179,79 @@ pub fn cells(w: &mut World) {
         (f[PARTS_HERE], f[CROSSED]) = (ln(1.0 + (cell.parts.len() as f64 * per) as f32), ln(1.0 + (cell.crossings as f64 * monthly * across) as f32));
         f
     }).collect();
-    // Each level the last smoothed over each cell and its neighbours, each by its area (over the cell's own).
-    let cells = w.mesh.cells();
-    for level in 1..SIGHTS {
-        let last = &feat[(level - 1) * n..level * n];
-        let next: Vec<[f32; NCELL]> = (0..n).map(|i| {
-            let (mut f, mut sum) = (last[i], 1.0);
-            for &j in cells.around(i).1 {
-                let by = (cells.area()[j as usize] / cells.area()[i]) as f32;
-                f.iter_mut().zip(&last[j as usize]).for_each(|(a, b)| *a += by * b);
+    sights(w, &mut feat);
+    w.life.feat = feat;
+}
+
+/// The cells a body of sight 2 and more sees as one (`sights`): each cell alone, but a cell finer than a square of the
+/// map with the others of the square that holds it, so what a body sees past the cell it would step into reaches as far
+/// in metres from a fine cell as from a square. Returns the region of each cell, and the cells of each region in order,
+/// the regions in the order of their first cells.
+fn regions(w: &World) -> (Vec<usize>, Vec<Vec<usize>>) {
+    let (square, mut of, mut list) = (w.map.square_depth(), std::collections::BTreeMap::new(), Vec::<Vec<usize>>::new());
+    let region = (w.map.leaves().iter().enumerate()).map(|(i, l)| {
+        let mut up = *l;
+        while up.depth > square {
+            up = up.parent().expect("a cell finer than a square lies in one");
+        }
+        let r = *of.entry(up).or_insert_with(|| {
+            list.push(Vec::new());
+            list.len() - 1
+        });
+        list[r].push(i);
+        r
+    });
+    (region.collect(), list)
+}
+
+/// The cells across the four corners of cell `i`, if it is finer than a square or a square beside one, one depth apart
+/// from it at most, a cell finer than a square counted as its square (as `regions` sees it): those a corner of the
+/// squares would link it to (`Square::mesh`), where the links of fine cells, at most 8, leave some out; so a region of
+/// fine cells has the squares across its corners around it as a square does.
+fn across_corners(w: &World, i: usize) -> impl Iterator<Item = usize> + '_ {
+    let (leaves, square) = (w.map.leaves(), w.map.square_depth());
+    let (l, finer) = (leaves[i], |j: &u32| leaves[*j as usize].depth > square);
+    let (x, y, s) = (l.x as i64, l.y as i64, l.side() as i64);
+    let near = l.depth > square || (l.depth == square && w.mesh.cells().around(i).1.iter().any(finer));
+    let corners = [(x - 1, y - 1), (x + s, y - 1), (x - 1, y + s), (x + s, y + s)].into_iter().filter(move |_| near);
+    corners.filter_map(|(a, b)| w.mesh.tree().at(a, b)).filter(move |&k| w.map.leaves()[k].depth.min(square).abs_diff(square) <= 1)
+}
+
+/// The levels of `SIGHTS` past the first, after the cells' own features `feat`: each level the last smoothed over each
+/// region of cells (`regions`: its cells' mean by area) and the regions around it, each by its area over the region's
+/// own; a cell sees its region's (`Life::feat`).
+fn sights(w: &World, feat: &mut Vec<[f32; NCELL]>) {
+    let (cells, (region, list)) = (w.mesh.cells(), regions(w));
+    let area: Vec<f64> = list.iter().map(|c| if c.len() == 1 { cells.area()[c[0]] } else { c.iter().map(|&i| cells.area()[i]).sum() }).collect();
+    // The regions around each, each once, in the order of its cells' links.
+    let around: Vec<Vec<usize>> = (list.iter().enumerate()).map(|(r, c)| {
+        let mut near = Vec::new();
+        for q in c.iter().flat_map(|&i| cells.around(i).1.iter().map(|&j| j as usize).chain(across_corners(w, i))).map(|j| region[j]) {
+            if q != r && !near.contains(&q) {
+                near.push(q);
+            }
+        }
+        near
+    }).collect();
+    let mean = |c: &[usize], a: f64| {
+        let mut f = [0f32; NCELL];
+        for &i in c {
+            f.iter_mut().zip(&feat[i]).for_each(|(x, y)| *x += (cells.area()[i] / a) as f32 * y);
+        }
+        f
+    };
+    let mut last: Vec<[f32; NCELL]> = list.iter().zip(&area).map(|(c, &a)| if c.len() == 1 { feat[c[0]] } else { mean(c, a) }).collect();
+    for _ in 1..SIGHTS {
+        let next: Vec<[f32; NCELL]> = (0..list.len()).map(|r| {
+            let (mut f, mut sum) = (last[r], 1.0);
+            for &q in &around[r] {
+                let by = (area[q] / area[r]) as f32;
+                f.iter_mut().zip(&last[q]).for_each(|(a, b)| *a += by * b);
                 sum += by;
             }
             f.map(|v| v / sum)
         }).collect();
-        feat.extend(next);
+        feat.extend(region.iter().map(|&r| next[r]));
+        last = next;
     }
-    w.life.feat = feat;
 }

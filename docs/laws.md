@@ -584,9 +584,12 @@ leaves with members who die. A child has a body of 10^`CHILD` × the copy mass,
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
 dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member
 (`copy::BROOD_HELD`), so its members' broods lie evenly between none and one child, as individuals' do. A share
-`DISPERSE` of the children starts in a neighbour cell in a random compass direction (`Level::way`), as far as
-`spread_m` reaches (`Level::reach`: always out of a 2 km square, a quarter of the time out of an 8 km one), one for all of a node's children of an
-update (for an individual, that chance), where they land when the batch ends (0). Less than one member with no node to
+`DISPERSE` of the children starts `spread_m` away in a random compass direction (`copy::dispersed`, `Level::way`):
+out of its cell with the chance that what spreads that far from a point of it leaves it (`Level::reach`: always out of
+a 2 km square, a quarter of the time out of an 8 km one), and on the same way through each further cell the length
+left crosses whole, into the last with the share of its side left (four cells on from a cell of 500 m), so they go as
+far in metres whatever the cells; one way for all of a node's children of an update (for an individual, that chance),
+where they land when the batch ends (0). Less than one member with no node to
 join waits in the brood, or, landed in a neighbour cell, goes back into it.
 
 ### 4.3 Two parents
@@ -635,7 +638,11 @@ chance).
   bodies per kind present and room, and kinds never mix. A starting kind keeps at most `MAX_LINEAGES` (8) living
   lineages (`lineage::resize`): past them a body whose sizes change joins the living lineage of its kind nearest in
   sizes, and stays in its own if that is the nearest. The cap of a crowded cell and the cap of lineages make bodies of
-  different heritage share a brain; the three caps bound the work, not a law.
+  different heritage share a brain; the three caps bound the work, not a law. They count per cell, not per m²: a cell
+  is the unit of the work a run's budget of cells pays for, so a finer cell holds as many nodes, and a region split
+  holds more per m², as its detail asks. So do the pair that may mate, a watch, a room and a gift: bodies meet who share
+  a cell, and a fine cell's bodies meet each other more often (each step) among fewer; a law of meeting by the area
+  swept, as the bite has (5.3), would make that alike per m², and is not built.
 - **Split and join of cells** (0): a node splits by area into the quarters of its cell (`nodes::part`, one node per
   quarter, each with a copy of its brain), unless it has fewer members than one per quarter, when it goes whole to one
   quarter drawn by area, as an individual does; a joined cell's bodies merge at once by the monthly merge and its caps.
@@ -688,8 +695,8 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   most 10^`FIX` mol per kg per s at the reaction's pace, paid by the reaction's fuel. The fuel past its reserve that
   it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
-- **Seeds**: the share `SEED` of what it builds leaves for the neighbour cell of a random compass direction, as far
-  as `spread_m` reaches (`Level::reach`; or stays where there is none), with one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
+- **Seeds**: the share `SEED` of what it builds leaves `spread_m` away in a random compass direction, as children do
+  (`copy::dispersed`, 4.2; or stays where there is none), with one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
   not pay: what a kg more would store with the light at the bottom of its layer (`math::shade`) is less than a kg's
   upkeep, so the slot is **full** (`Cover::full`) and stops thickening where its lowest leaves would not pay for
   themselves (Monsi and Saeki 1953; Hirose 2005). When every cell has had its month the seeds land (`cover::land`),
@@ -740,7 +747,11 @@ through, its parts and the members that moved in per month (in the last month at
 start inside it; the counts per square of the map, so a cell of many squares counts as one of its squares, and the
 members that moved in per square's side of its border, for what crosses a border goes with its length). The same
 features smoothed over each cell and its neighbours once, twice and three times make what a body of sight 2, 3 and 4
-sees of a cell it would step into (the mean by area of the cells about that many links around it, `Life::feat`). **A brain's inputs**: its own stores against their
+sees of a cell it would step into (the mean by area of the cells about that many links around it, `Life::feat`); a
+cell finer than a square of the map counts in that as its square, whose features are its cells' mean by area and whose
+neighbours are the squares around it (`perceive::regions`), so what a body sees past the cell it would step into
+reaches as far in metres from a fine cell as from a square (sight 1, the cell itself, is one step in either). Cells
+coarser than a square (the open water of an island) see by their links. **A brain's inputs**: its own stores against their
 minimums, its warmth, size and the season, its own cell's features, what Bond senses (3.4), its memory. **Each
 direction** with a link: the features of the cell it leads to as its sight sees it, the temperature and height as
 differences from its own cell's, and how hard its link is to pass (`lanes::resist`). **Bodies**: up to `SEEN` of its

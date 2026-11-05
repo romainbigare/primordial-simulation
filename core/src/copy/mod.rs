@@ -101,13 +101,22 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
     made
 }
 
-/// Where what disperses from cell `i` lands (children, `copy`; seeds, `cover`): the neighbour cell in a compass direction
-/// drawn (`Level::way`), left with the chance that what spreads `spread_m` from a point of `i` leaves it
-/// (`Level::reach`); none where it stays or no link goes that way. The chance is drawn first, then the direction.
+/// Where what disperses from cell `i` lands (children, `copy`; seeds, `cover`), `spread_m` away whatever the size of the
+/// cells: it leaves `i` with the chance that what spreads that far from a point of `i` does (`Level::reach`), into the
+/// neighbour cell in a compass direction drawn (`Level::way`); what is left of `spread_m` past the side of each cell it
+/// crossed carries it on the same way, into the next with the share of its side that is left, so from cells of a
+/// quarter of a square's side it goes four cells. None where it stays or no link goes that way. The chance of leaving
+/// is drawn first, then the direction, then each further share.
 pub(crate) fn dispersed(w: &World, i: usize, r: &mut Rng) -> Option<usize> {
     let (cells, length) = (w.mesh.cells(), w.cfg.phys.spread_m);
     let leaves = cells.reach(i, length) >= 1.0 || r.f64() < cells.reach(i, length);
-    cells.way(i, r.below(COMPASS)).filter(|_| leaves).map(|e| cells.adj_cell()[e] as usize)
+    let way = r.below(COMPASS);
+    let (mut at, mut left) = (cells.way(i, way).filter(|_| leaves).map(|e| cells.adj_cell()[e] as usize)?, length - cells.area()[i].sqrt());
+    while left > 0.0 {
+        let Some(e) = cells.way(at, way).filter(|_| cells.reach(at, left) >= 1.0 || r.f64() < cells.reach(at, left)) else { break };
+        (left, at) = (left - cells.area()[at].sqrt(), cells.adj_cell()[e] as usize);
+    }
+    Some(at)
 }
 
 /// `m` children of `b` start in `cell`: their genes, stores, heat and rows, booked on the young node of their kind and
