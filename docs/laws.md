@@ -131,7 +131,10 @@ bodies (each with its brain block), parts and bonds in the order of the quarters
 of its kind. Ids never change (`Life::index` finds each again); a merge that lets go of a part names the cell by its
 index in its event, so the shell takes the events before the next split or join.
 **Relief**: a join that makes one flat cell of quarters of different heights lowers the potential energy of the stacks
-(the function of "The books" below, `flow::potential_of`); the joined cell keeps that drop as its relief, J, a part of
+(the function of "The books" below, `flow::potential_of`, each cell's phases those of its heat, `World::thaw`, not of
+Flow's state, which a remap gives a made cell from its parent or as its quarters' mean: a quarter whose liquid boils
+stacks far higher than at the joined cell's temperature, and the split that gives it back must see it so); the joined
+cell keeps that drop as its relief, J, a part of
 `Store::lifted` held apart from the stacks, with the relief its quarters kept from their own joins (their shares are not
 kept). The split of a joined cell gives the relief back: what the restored quarters' stacks hold over the cell's comes
 from it, and what is left over (or short) goes to the quarters' ground heat by their shares (`store::fall_heat`, which

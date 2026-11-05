@@ -102,20 +102,49 @@ fn a_split_then_its_join_gives_back_the_world() {
 fn a_join_then_its_split_gives_back_the_quarters() {
     let mut w = world();
     let parent = leaf(&w, testkit::dry_land(&w)).parent().expect("a square has a parent");
+    let rest = unflattened(&w);
+    let relief = join_then_split(&mut w, parent);
+    assert!(relief > 0.0, "a join of uneven quarters flattens their stacks: relief {relief} J");
+    assert!((unflattened(&w) - rest).abs() <= 1e-12 * w.store.lifted().abs().max(relief), "the potential energy kept: {} J", unflattened(&w) - rest);
+}
+
+/// How far over the key liquid's boiling point `a_join_then_its_split_gives_back_quarters_of_two_phases` heats a
+/// quarter, K.
+const BOILING_BY: f64 = 20.0;
+
+/// The same where the key liquid of one quarter boils (its ground heated over the boiling point) and the joined cell's
+/// mean temperature is under it: a stack's phases are those of its heat, so the join and the split see the same
+/// stacks, and the split gives no heat the quarters did not hold.
+#[test]
+fn a_join_then_its_split_gives_back_quarters_of_two_phases() {
+    let mut w = world();
+    let parent = leaf(&w, testkit::dry_land(&w)).parent().expect("a square has a parent");
+    let hot = w.map.cell(parent.quarters()[0]).expect("a square");
+    let boil = w.chem.subs[testkit::LIQUID].boil;
+    let e = w.energy_ground(hot, boil + BOILING_BY);
+    testkit::set_heat(&mut w, pcore::store::Node::ground(hot), e);
+    pcore::flow::state(&mut w, true);
+    let mean = parent.quarters().iter().map(|&q| w.t_ground(w.map.cell(q).expect("a square"))).sum::<f64>() / 4.0;
+    assert!(w.t_ground(hot) > boil && mean < boil, "one quarter boils ({} K), their mean ({mean} K) does not", w.t_ground(hot));
+    join_then_split(&mut w, parent);
+}
+
+/// Join the quarters of `parent` of `w` and split it again at once: each quarter holds what it held (4 ε), and the
+/// books do not move. Returns the join's relief.
+fn join_then_split(w: &mut World, parent: Leaf) -> f64 {
     let kids = parent.quarters().map(|q| w.map.cell(q).expect("a square"));
-    let (held, books, rest) = (kids.map(|i| holds(&w, i)), Books::now(&w), unflattened(&w));
+    let (held, books) = (kids.map(|i| holds(w, i)), Books::now(w));
     w.join(parent).expect("four squares join");
     let relief = w.joined[w.map.cell(parent).expect("the joined cell")].as_ref().expect("its record").relief;
-    assert!(relief > 0.0, "a join of uneven quarters flattens their stacks: relief {relief} J");
     assert_eq!(w.split(parent), Ok(vec![parent]));
-    sound(&w);
+    sound(w);
     for (q, held) in parent.quarters().iter().zip(&held) {
-        let now = holds(&w, w.map.cell(*q).expect("a quarter"));
+        let now = holds(w, w.map.cell(*q).expect("a quarter"));
         let worst = now.iter().zip(held).map(|(&x, &y)| (x - y).abs() / y.abs().max(f64::MIN_POSITIVE)).fold(0.0, f64::max);
         assert!(worst <= 4.0 * f64::EPSILON / 2.0, "quarter {q:?} back within {worst:e}");
     }
-    assert!((unflattened(&w) - rest).abs() <= 1e-12 * w.store.lifted().abs().max(relief), "the potential energy kept: {} J", unflattened(&w) - rest);
-    books.assert_kept(&w, 1e-12);
+    books.assert_kept(w, 1e-12);
+    relief
 }
 
 /// Months of splits and joins, the world stepping between them: down two depths and back on land, at the coast and on a
