@@ -102,9 +102,10 @@ each chunk is one task on the pool (`life::run`), its cells taken out of the wor
 in order (of the cells that step), first the physics to now of a body whose physics is behind; then every body with a
 brain perceives its inputs and the bodies of each lineage find their hidden layers together (5.1); then each decides
 and acts, the mature ones first and then the young, each in the order they came; then the sub-steps of the step
-ahead, at each every body not leaving the cell in that order (`survey::mature_first`: the children a body makes join
-their young node before its sub-step of the same time, 4.2; a child that starts a body of its own runs the sub-steps
-after its birth); then the next cell. So what a chunk queues, and the lineages
+ahead, at each first the meal of every body not leaving the cell (but at the first, whose meal its decision gave),
+then the physics of each, both in that order (`survey::mature_first`: the children a body makes join their young node
+before its sub-step of the same time, 4.2; a child that starts a body of its own runs the sub-steps after its birth):
+so at every sub-step the bodies of a cell all eat before any lives it, as at a decision; then the next cell. So what a chunk queues, and the lineages
 and born rows it makes, come cell by cell whatever the chunks. The parts it reads are as they were at the pass's start. A body perceives the others of its own cell as they are when it
 decides (5.2); it takes from or gives to a body it saw only if that body still lives and is not leaving its cell. **A cell's view of the store** (`store::Moves`): its ground, bed and
 bodies' node as the store held them at the pass's start with its own moves since, and **its share of its air node**
@@ -703,9 +704,10 @@ covered before at the sub-step's start. A child counts its time from its birth (
 then to the sub-step's end it takes what lies in its cell by the take law, as a body does for the part of its step no
 act fills (5.3; `copy::feed`), and the first sub-step that integrates it, its young node's or its own, runs it from its
 birth by the laws of every body (members who join a node count from when they came, `nodes::rejoin`). In a cell the
-mature bodies run each sub-step before the young (`survey::mature_first`), so the children of a sub-step join their
-young node before its sub-step of the same time: they eat, grow and pay inside it, in its heat, at every sub-step
-after, whatever the step. A child has a body of
+mature bodies run each sub-step before the young (`survey::mature_first`), all after every body there took its meal
+for it, so the children of a sub-step join their young node, fed from their birth, after its meal and before its
+sub-step of the same time, as in a cell whose step is the sub-step: they grow and pay inside it, in its heat, and
+eat with it at every sub-step after, whatever the step. A child has a body of
 10^`CHILD` × the copy mass,
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
 dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member

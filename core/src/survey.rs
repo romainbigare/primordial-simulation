@@ -274,9 +274,12 @@ fn updates(w: &World, d: &mut Chunk, stepping: &(dyn Fn(usize) -> bool + Sync), 
 /// (`Body::last`), so a body's physics runs alike in every cell: at each, every living body of the cell not leaving it
 /// whose physics reached less than the sub-step's end, the mature ones first, each in the order they came
 /// (`mature_first`: the children a mature body makes join their young node before its sub-step of the same time, which
-/// runs them from their birth, `copy::copy`), runs it (`live_one`). A body that ran the sub-step before, or was placed
-/// during it (a child that starts a body of its own, fed to its end at birth, `copy::feed`), first takes its meal for
-/// the sub-step (`choose::meal`); one whose physics starts here ate for its first sub-step when it decided or landed.
+/// runs them from their birth, `copy::copy`), runs it (`live_one`). Before any runs it, each that ran the sub-step
+/// before, or was placed during it (a child that starts a body of its own, fed to its end at birth, `copy::feed`),
+/// takes its meal for the sub-step (`meal_one`), in the same order: so at every sub-step the bodies of a cell eat before
+/// any lives it, as at a decision, where all decide and eat before the physics runs, and the children born in the
+/// sub-step, fed from their birth, join a young node that has eaten for it. One whose physics starts here ate for its
+/// first sub-step when it decided or landed.
 fn physics(w: &World, d: &mut Chunk, i: usize, (tmp, subs): (&mut LiveTmp, &mut Subs), to: u64) {
     let (sub, day) = (w.phys_step(i), w.cfg.calendar().day as f64);
     let Subs { fed, order } = subs;
@@ -290,14 +293,19 @@ fn physics(w: &World, d: &mut Chunk, i: usize, (tmp, subs): (&mut LiveTmp, &mut 
         let held = d.at(i).bodies.len();
         fed.resize(held, true);
         mature_first(w, d, i, held, order);
+        let runs = |d: &Chunk, h: Handle| d[h].alive && !d[h].leaving && d[h].last < at as f64 / day;
         for &slot in order.iter() {
             let h = Handle { cell: i as u32, slot: slot as u32 };
-            if !d[h].alive || d[h].leaving || d[h].last >= at as f64 / day {
-                continue;
+            if runs(d, h) && fed[slot] {
+                meal_one(w, d, h, sub as f64 / day);
             }
-            let meal = if fed[slot] { sub as f64 / day } else { 0.0 };
-            fed[slot] = true;
-            live_one(w, d, h, tmp, (at, meal));
+        }
+        for &slot in order.iter() {
+            let h = Handle { cell: i as u32, slot: slot as u32 };
+            if runs(d, h) {
+                fed[slot] = true;
+                live_one(w, d, h, tmp, at);
+            }
         }
     }
 }
@@ -310,15 +318,19 @@ fn mature_first(w: &World, d: &Chunk, i: usize, before: usize, order: &mut Vec<u
     order.extend((0..before).filter(mature).chain((0..before).filter(|s| !mature(s))));
 }
 
-/// A sub-step of the living body at `h` in chunk `d` to `at` s, the same in every cell: its meal for the `meal` d of
-/// the sub-step, if any (`choose::meal`), then its physics (`body::live`), or its death, dated by its sub-step. It
-/// leaves what the sub-step left for the body's next decision (`Body::lived`).
-fn live_one(w: &World, d: &mut Chunk, h: Handle, tmp: &mut LiveTmp, (at, meal): (u64, f64)) {
+/// The meal of the living body at `h` in chunk `d` for the `days` d of a sub-step (`choose::meal`).
+fn meal_one(w: &World, d: &mut Chunk, h: Handle, days: f64) {
     d.moves.open(w, h.cell as usize, Node::new(Class::Body, h.slot as usize));
     let mut b = std::mem::take(&mut d[h]);
-    if meal > 0.0 {
-        choose::meal(w, d, &mut b, meal);
-    }
+    choose::meal(w, d, &mut b, days);
+    d[h] = b;
+}
+
+/// A sub-step of the living body at `h` in chunk `d` to `at` s, the same in every cell: its physics (`body::live`), or
+/// its death, dated by its sub-step. It leaves what the sub-step left for the body's next decision (`Body::lived`).
+fn live_one(w: &World, d: &mut Chunk, h: Handle, tmp: &mut LiveTmp, at: u64) {
+    d.moves.open(w, h.cell as usize, Node::new(Class::Body, h.slot as usize));
+    let mut b = std::mem::take(&mut d[h]);
     match live(w, d, &mut b, tmp, at) {
         Err(cause) => {
             perish(w, d, &mut b, (cause, tmp.day));
