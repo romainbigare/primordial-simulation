@@ -297,7 +297,7 @@ impl Default for Physics {
             frost_k: 3.0,
             c_firm: 20.0,
             c_strength: 1.12e4,
-            c_basal: 5.34e4,
+            c_basal: 4.22e4,
             c_leaf: 2e3,
             c_brain: 8.5e4,
             m_ref: 1.0,

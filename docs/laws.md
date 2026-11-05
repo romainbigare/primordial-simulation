@@ -898,6 +898,8 @@ hour pays over a year what one that decides every month pays (`Config::span`).
 
 Costs go by the kg while supply goes with mass^0.75 (West, Brown and Enquist 1997), so a body grows until keeping what
 it has takes all it can supply: its costs set its size, not a cap; across kinds adults pay Kleiber's mass^0.75.
+Kleiber's resting rate is a mammal's, its muscles included: a body of strength 1, as muscular as a mammal, pays it
+with its basal and strength costs together (`c_basal`, `c_strength`).
 **Pace** (`Body::pace`): the bare rate law of its main burning, k e^(−Ea/T), over its value at `t_cat`; supply and
 upkeep follow it, so seasons come from temperature, not a calendar. **Paying** (`body::pay`, `body::burn`): its
 burnings run on demand as far as its fuel and the air's gases allow; the gas they take comes from its air node and the
