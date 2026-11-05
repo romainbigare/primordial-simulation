@@ -4,8 +4,8 @@
 //! The key numbers of a normal run: `ew run --seed N --size 64` for seeds 1, 2 and 3, 30 years each, on threads. The
 //! mean of each number over the three seeds must lie in its range around its reference, the mean of the same three
 //! seeds in the reference runs: for the climate, the land worn down and the rivers, the runs of the world before the
-//! cover and the short body model; for the cover, the runs of the cover and the short body model; for the eaters, the
-//! runs of the node floor (`Physics::node_floor`) on the bodies' heat law as it is (laws.md 6.3). The
+//! cover and the short body model; for the cover and the eaters, the runs of the bodies' laws alike at every step (a
+//! body pays its upkeep at the temperature it stands at, laws.md 6.3; children who start a body decide at birth, 0). The
 //! climate and the land worn down are means over years 21 to 30; the eaters' mass and life are means over years 26 to
 //! 30, as the eaters, placed at year 22, still boom then (their mass grows two to three times a year). Each run also keeps its books. Three numbers are also held to wide bounds around Earth's, as the references only
 //! keep a world near itself: the rain on land, the heat-absorbing gas of the air, and the share of the cover's dry mass
@@ -54,16 +54,16 @@ const RIVERS: f64 = 712.4;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
 const WORN: f64 = 0.3179;
 /// The cover (starting kind 0) at year 30, log10 kg (`root_0_cover_kg`), in the reference runs.
-const COVER_KG: f64 = 9.985;
+const COVER_KG: f64 = 9.667;
 /// Eaters (starting kind 1) over years `EATERS_FROM` to 30, the mean of log10 kg (`root_1_kg`), in the reference runs: a guard that the world stays near
 /// itself, not a target (real herbivores and soil animals weigh far less, a few times 1e4 kg per km²).
-const EATER_KG: f64 = 7.622;
+const EATER_KG: f64 = 8.888;
 /// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the cover's 0.3, as a boom or bust of the eaters
 /// moves a mean of three seeds far.
 const EATER_KG_RANGE: f64 = 0.5;
 /// The life eaters live over years `EATERS_FROM` to 30, the mean of the yearly values, yr (`root_1_life_real`), in the
 /// reference runs.
-const EATER_LIFE: f64 = 3.350;
+const EATER_LIFE: f64 = 1.053;
 
 /// Earth's rain on land, m/yr (Trenberth et al. 2007), and the factor either way a run's may lie from it: the island
 /// lies at 40°, where land gets 0.5 to 1 m (from memory), and a globe's land spans every belt.
@@ -302,10 +302,9 @@ const EATER_FROM: u64 = 71;
 /// The most the eaters' births may exceed their deaths over those years, as a share of their births: a population that
 /// replaces itself to within a tenth has stopped growing.
 const EATER_GROWTH: f64 = 0.1;
-/// The most eaters a km² of land may hold at the end, kg: about 1 kg per m², the mass the model's eaters reach. They
-/// pay Kleiber's upkeep at the pace of their own temperature (Gillooly et al. 2001), cold-blooded near 290 K: a fifth
-/// of what a mammal of their size pays at 310 K, so the cover's 1 to 1.5 kg per m² a year keeps about 1 kg of them per
-/// m² (real herbivores hold 0.005 to 0.02 kg per m², soil animals up to 0.1).
+/// The most eaters a km² of land may hold at the end, kg: about 1 kg per m². They pay Kleiber's upkeep at the pace of
+/// the temperature they stand at (Gillooly et al. 2001), so the cover's 1 to 1.5 kg per m² a year keeps far less of
+/// them than that; a guard against a boom (real herbivores hold 0.005 to 0.02 kg per m², soil animals up to 0.1).
 const EATER_MOST_KG_KM2: f64 = 1e6;
 /// Square metres in a km².
 const KM2: f64 = 1e6;
