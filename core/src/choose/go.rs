@@ -76,10 +76,7 @@ pub(crate) fn land_move(w: &World, d: &mut Chunk, (mut b, brain): (Body, &[f32])
     if eats > 0.0 {
         // (The store books no body's side of a move: a body node of any index serves a body out of its slot.)
         d.moves.open(w, j, Node::new(Class::Body, 0));
-        let stands = b.temp(&w.chem);
-        super::feed::take_node(w, d, &mut b, eats);
-        let warm = body::ahead(w, &b, b.mass(&w.chem)) * eats / w.step_days(j);
-        body::fade_meal_heat(w, d, &mut b, stands, warm);
+        super::feed::eat_for(w, d, &mut b, eats);
     }
     match t.filter(|_| b.hold.is_none()) {
         Some(t) => nodes::add(w, d, t, nodes::Lot::of(&mut b), (&b.genes, &b.spread), (b.lineage, b.genome, Some(nodes::Own::Carried(brain)), b.row_spread)),

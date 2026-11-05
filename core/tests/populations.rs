@@ -40,7 +40,7 @@ fn copies(w: &mut World, a: &mut Body, n: usize) -> Vec<Body> {
     for _ in 0..n {
         w.time += DAY_S;
         brood(w, a, 1.0);
-        assert!(w.in_cell(a.cell as usize, |w, d| copy::copy(w, d, a)), "no child");
+        assert!(w.in_cell(a.cell as usize, |w, d| worldgen::testkit::copy(w, d, a)), "no child");
     }
     let out: Vec<Body> = children(w, a.id).into_iter().map(|k| w.life[k].clone()).collect();
     assert_eq!(out.len(), n);
@@ -267,7 +267,7 @@ fn a_node_spreads_with_its_children() {
     let n0 = b.count;
     brood(&w, &mut b, n0);
     let before = live(&w);
-    assert!(b.spread.is_empty() && w.in_cell(b.cell as usize, |w, d| copy::copy(w, d, &mut b)), "no children");
+    assert!(b.spread.is_empty() && w.in_cell(b.cell as usize, |w, d| worldgen::testkit::copy(w, d, &mut b)), "no children");
     assert_eq!(b.count, n0, "the children joined their mature parents");
     w.life[s] = b;
     let kids: Vec<Handle> = live(&w).into_iter().filter(|x| !before.contains(x) && *x != s).collect();
@@ -327,7 +327,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
         brood(&w, &mut c, 2.0);
         let n0 = live(&w).len();
         w.time += DAY_S;
-        assert!(w.in_cell(c.cell as usize, |w, d| copy::copy(w, d, &mut c)), "no children");
+        assert!(w.in_cell(c.cell as usize, |w, d| worldgen::testkit::copy(w, d, &mut c)), "no children");
         // (They land in the next cell, as at a batch's end.)
         life::land(&mut w);
         (joined, tries) = (joined + (live(&w).len() == n0) as u32, tries + 1);

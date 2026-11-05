@@ -1,16 +1,18 @@
 //! Law 4: Copy. Reproduction is a share of a surplus. A mature body puts the share `ALLOC` of what it builds (`grow`)
 //! into a brood, and whenever the brood covers the matter of a child, a child is made (`copy`) at the body's update,
-//! whatever its brain does. A child's genes are its parent's plus
-//! small noise, or with two parents each gene is one parent's (`mix`). A population node keeps how its members differ
+//! whatever its brain does, born through the update as the brood filled and counting its time from then (`born`). A
+//! child's genes are its parent's plus small noise, or with two parents each gene is one parent's (`mix`). A population node keeps how its members differ
 //! (`Body::spread`, `Body::row_spread`); its children join a young node of their kind where they start, or start one,
 //! which grows up as a whole (`kin`). A lineage starts only where a body's brain-size genes move a whole unit from its
 //! own (`lineage::resize`).
 
+mod born;
 mod grow;
 mod litter;
 mod mix;
 
-pub use grow::grow;
+pub use born::Fill;
+pub use grow::{grow, Grew};
 pub use litter::Litter;
 pub(crate) use litter::{back, land_litter};
 
@@ -27,6 +29,7 @@ use crate::{life::{Chunk, Handle}, World};
 pub use mix::MATE_HIDDEN;
 pub(crate) use mix::mates;
 use mix::{mix, mix_rows, partner};
+use born::feed;
 
 /// The brood a node holds besides what makes children, in children per member. Its members each fill their own brood and
 /// make a child when it covers one, so their broods lie evenly between none and one child (the renewal of each one's
@@ -36,19 +39,20 @@ pub const BROOD_HELD: f64 = 0.5;
 
 /// What the children of one `copy` share: each one's matter, mol (its body is that over 1 - `WET_TISSUE`), and its
 /// provisions, mol of each store (none of the matter: `provisions`); whether the parent is a
-/// node; the partner; and the parent's id.
+/// node; the partner; the parent's id; and their mean age at the update's end, d (`Fill::age`).
 struct Births {
     matter: f64,
     prov: Stores,
     node: bool,
     mate: Option<Handle>,
     parent: u64,
+    age: f64,
 }
 
 /// A mature body makes children whenever its brood covers one: an individual whole children of one parent or two, a
-/// node fractional members of one parent beyond `BROOD_HELD`; a share
-/// `DISPERSE` starts in a neighbour cell (laws.md 4.2-4.4). Returns whether any were made.
-pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
+/// node fractional members of one parent beyond `BROOD_HELD`, each born when the brood its update filled (`fill`)
+/// covered it; a share `DISPERSE` starts in a neighbour cell (laws.md 4.2-4.4). Returns whether any were made.
+pub fn copy(w: &World, d: &mut Chunk, b: &mut Body, fill: Fill) -> bool {
     let (chem, n, mc) = (&w.chem, b.n(), b.k.copy_mass);
     let Some(mi) = Body::matter_at(chem) else { return false };
     let node = n > 1.0;
@@ -61,11 +65,12 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
     // its brood holds beyond `BROOD_HELD`.
     let body = 10f64.powf(b.gene_in_range(CHILD)) * mc;
     let matter = body * (1.0 - WET_TISSUE) / mm;
-    let k = b.brood / matter;
-    let births = if node { k - BROOD_HELD * n } else { (k + COUNT_SLACK).floor() };
+    let (k, held) = (b.brood / matter, if node { BROOD_HELD * n } else { 0.0 });
+    let births = if node { k - held } else { (k + COUNT_SLACK).floor() };
     if births <= 0.0 {
         return false;
     }
+    let age = fill.age(b.brood, (held * matter, matter, births), node);
     let id = b.id;
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Mutate);
     let i = b.cell as usize;
@@ -77,7 +82,7 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
     // individual's go together, by that chance.
     let disperse = b.gene_in_range(DISPERSE);
     let prov = provisions(&w.chem, b, mi, matter, births);
-    let litter = Births { matter, prov, node, mate, parent: id };
+    let litter = Births { matter, prov, node, mate, parent: id, age };
     let m = if node { disperse * births } else { (r.f64() < disperse) as u8 as f64 };
     let to = if m > 0.0 { dispersed(w, i, &mut r) } else { None };
     let (cell, m) = match to {
@@ -120,9 +125,9 @@ pub(crate) fn dispersed(w: &World, i: usize, r: &mut Rng) -> Option<usize> {
 }
 
 /// `m` children of `b` start in `cell`: their genes, stores, heat and rows, booked on the young node of their kind and
-/// lineage there (`kin`), or a body of their own (`place_child`). Less than one member of a node's children with no
-/// node to join waits in the brood (false). Children who start in another cell are a litter that lands when the batch
-/// ends (`land_litter`).
+/// lineage there (`kin`), or a body of their own (`place_child`), fed from their birth to now and their time counted
+/// from it (`feed`). Less than one member of a node's children with no node to join waits in the brood (false).
+/// Children who start in another cell are a litter that lands when the batch ends (`land_litter`).
 fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64, r: &mut Rng) -> bool {
     let mixed = l.mate.map(|t| mix(b, &d[t], m, r));
     let (from, pooled) = mixed.as_ref().map_or((&b.genes, &b.spread), |x| (&x.0, &x.1));
@@ -138,27 +143,30 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
     }
     let (store, e) = give(w, b, l, m);
     let born = Event { day: w.day(), kind: EventKind::Born { root: d.root(w, b), mixed: l.mate.is_some() }, node: cell as u32, value: m };
+    // Born through the update (`Fill::age`) in their parent's cell, they feed there from their birth to now (`feed`).
+    let mut c = Body { cell: b.cell, count: m, lineage: b.lineage, parent: l.parent, born: w.day(), store, e, genes, spread, genome: b.genome, wet: b.wet, ..Default::default() };
+    c.prepare(&w.chem, &w.cfg);
+    feed(w, d, &mut c, l.age);
+    c.cell = cell as u32;
     let (pre, sd, left) = child_rows(w, d, b, l, m, size, r);
     // Children of their parent's lineage and born rows but for the generation's change of them (`row_change`) who join
     // a node, a node's children who start one in its cell, and children who start in another cell get no born rows of
     // their own: their born rows are their parent's, the change their spread (as joiners pool it into a node's spread,
     // `nodes::add`), their own rows their parent's; a litter draws the change where it lands, if it starts a body there
     // (`land_litter`).
-    let theirs = l.node || d.brain(w, b.lineage).is_none_or(|x| wanted(x, &genes) == sizes_of(x));
+    let theirs = l.node || d.brain(w, b.lineage).is_none_or(|x| wanted(x, &c.genes) == sizes_of(x));
     if pre.is_none() && theirs && (hit.is_some() || !here || l.node) {
-        let (lineage, genome, parent, wet) = (b.lineage, b.genome, l.parent, b.wet);
         if let Some(t) = hit {
             d.events.push(born);
-            add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.days_now() }, (&genes, &spread), (lineage, genome, Some(Own::Block(b.brain)), left + sd * sd));
+            add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread), (c.lineage, c.genome, Some(Own::Block(b.brain)), left + sd * sd));
             return true;
         }
         // (Up to `body::most`, as a join keeps a node's row spread, `nodes::add`.)
         let p = &w.cfg.phys;
-        let row_spread = if here { (left + sd * sd).min(most(row_step(p, size), p.alike)) } else { left };
-        let mut c = Body { cell: cell as u32, count: m, lineage, parent, born: w.day(), last: w.days_now(), store, e, genes, spread, row_spread, genome, wet, ..Default::default() };
+        c.row_spread = if here { (left + sd * sd).min(most(row_step(p, size), p.alike)) } else { left };
         if here {
             d.events.push(born);
-            c.brain = d.inherit(w, None, lineage, b);
+            c.brain = d.inherit(w, None, c.lineage, b);
             place_child(w, d, c);
             return true;
         }
@@ -166,30 +174,15 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
         d.out.push(Entry::Litter(Box::new(Litter { c, rows: None, brain, change: Some(sd), from: b.cell, born })));
         return true;
     }
-    let (mut rows, row_spread) = (shaken(w, d, b, pre, sd, r), left);
+    let mut rows = shaken(w, d, b, pre, sd, r);
     // A node's children stay in its lineage: a change of the brain's base in one child is lost in the mean of many; a
     // node whose mean sizes moved moves itself (`lineage::resize`). In another lineage they join its young node there.
-    let lineage = if l.node { b.lineage } else { child_lineage(w, d, b, l, &genes, &mut rows, r) };
-    let hit = if lineage == b.lineage || !here { hit } else { kin(w, d, cell, lineage, false) };
+    if !l.node {
+        c.lineage = child_lineage(w, d, b, l, &c.genes, &mut rows, r);
+    }
+    let hit = if c.lineage == b.lineage || !here { hit } else { kin(w, d, cell, c.lineage, false) };
     // Their brain: their born rows plus what their parent learned.
-    let brain = d.inherit(w, rows.as_deref(), lineage, b);
-    let mut c = Body {
-        cell: cell as u32,
-        count: m,
-        lineage,
-        parent: l.parent,
-        born: w.day(),
-        last: w.days_now(),
-        store,
-        e,
-        genes,
-        spread,
-        row_spread,
-        genome: b.genome,
-        brain,
-        wet: b.wet,
-        ..Default::default()
-    };
+    (c.brain, c.row_spread) = (d.inherit(w, rows.as_deref(), c.lineage, b), left);
     if !here {
         let brains = d.brains(b.cell as usize);
         let x = brains.all(c.brain).to_vec();
@@ -328,11 +321,14 @@ fn row_change(w: &World, spread: f32, m: f64, size: f32, r: &mut Rng) -> (f32, f
     (var, sd, (var * (1.0 - 1.0 / mm)).min(most(row_step(p, size), p.alike)))
 }
 
-/// Children `c` that join no node start a body of their own.
+/// Children `c` that join no node start a body of their own, its time counted from their birth.
 fn place_child(w: &World, d: &mut Chunk, mut c: Body) {
     // Its key liquids first: `place` works out its visible traits, which read the body (`Body::size`) through them. (A
     // parent that survived a freezing is still wet in the sense of its key liquids: its child's are kept though it is
     // born frozen.)
     c.wet = c.key_liquids(&w.chem, c.temp(&w.chem)) | (c.wet & c.key_mask(&w.chem));
-    d.place(w, c);
+    // (`place` starts a body's time now; theirs counts from their birth, `feed`.)
+    let birth = c.last;
+    let h = d.place(w, c);
+    d[h].last = birth;
 }

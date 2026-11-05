@@ -160,13 +160,14 @@ pub fn batch(w: &mut World) {
 
 /// Update every living body of the cells `steps` marks (every cell with none). First the parallel pass: the cells are
 /// taken out of the world in chunks (`life::run`), and each chunk runs, on a thread of the pool with the feature
-/// `threads`, the bodies of those of its cells cell by cell, and in a cell in the order they came, with the world read
-/// only. They see the others of their cell as they are when they decide, the parts as they were at the pass's start, and
-/// the store as their cell's moves leave it (`store::Moves`); what they do outside their cell or to a part is queued
-/// (`life::Entry`), and the lineages and born rows they make are provisional until the chunk ends. Then the serial pass
-/// (`life::land`): the moves and litters land and the other entries are applied. Then the merge of alike nodes in each of
-/// those cells (`nodes::crowd`), after the moves and births, so a crowded cell ends its step with its nodes of each kind
-/// and stage. Last the holders of each lineage and born rows are counted: those left with none die out or are freed.
+/// `threads`, the bodies of those of its cells cell by cell, and in a cell the mature ones first, each in the order
+/// they came (`mature_first`), with the world read only. They see the others of their cell as they are when they
+/// decide, the parts as they were at the pass's start, and the store as their cell's moves leave it (`store::Moves`);
+/// what they do outside their cell or to a part is queued (`life::Entry`), and the lineages and born rows they make are
+/// provisional until the chunk ends. Then the serial pass (`life::land`): the moves and litters land and the other
+/// entries are applied. Then the merge of alike nodes in each of those cells (`nodes::crowd`), after the moves and
+/// births, so a crowded cell ends its step with its nodes of each kind and stage. Last the holders of each lineage and
+/// born rows are counted: those left with none die out or are freed.
 fn batch_of(w: &mut World, steps: Option<&[bool]>) {
     let stepping = |i: usize| steps.is_none_or(|s| s[i]);
     w.life.compact();
@@ -210,16 +211,16 @@ fn scratch(_: &World) -> Scratch {
 }
 
 /// The updates of the living bodies of the cells of chunk `d` that step (`stepping`), cell by cell: the physics of each
-/// of its bodies in the order they came (`live_one`); then the inputs of those with a brain, the sums of the hidden
-/// layers of each lineage's bodies together (`choose::Minds::sense`); then each one's decision in that order (`decide`).
-/// A cell's stages end before the next cell's begin, so what the chunk queues and the ids it makes come cell by cell, as
-/// for any count of chunks.
+/// of its bodies, the mature ones first (`mature_first`, `live_one`); then the inputs of those with a brain, the sums
+/// of the hidden layers of each lineage's bodies together (`choose::Minds::sense`); then each one's decision in that
+/// order (`decide`). A cell's stages end before the next cell's begin, so what the chunk queues and the ids it makes
+/// come cell by cell, as for any count of chunks.
 fn updates(w: &World, d: &mut Chunk, stepping: &(dyn Fn(usize) -> bool + Sync), (tmp, minds, act): &mut Scratch) {
     act.new_chunk();
     for i in d.cells().filter(|&i| stepping(i)) {
         minds.clear();
         let before = d.at(i).bodies.len();
-        for slot in 0..before {
+        for slot in mature_first(w, d, i, before) {
             let h = Handle { cell: i as u32, slot: slot as u32 };
             if d[h].alive {
                 if let Some(lived) = live_one(w, d, h, tmp) {
@@ -244,6 +245,14 @@ fn updates(w: &World, d: &mut Chunk, stepping: &(dyn Fn(usize) -> bool + Sync), 
             }
         }
     }
+}
+
+/// The first `before` slots of cell `i` of chunk `d` in the order their bodies update: the mature ones first, then the
+/// young, each in the order they came. So the children a mature body makes join their young node before its update of
+/// the same time, which runs them from their birth (`copy::copy`).
+fn mature_first(w: &World, d: &Chunk, i: usize, before: usize) -> Vec<usize> {
+    let mature = |s: &usize| d[Handle { cell: i as u32, slot: *s as u32 }].adult(&w.chem);
+    (0..before).filter(mature).chain((0..before).filter(|s| !mature(s))).collect()
 }
 
 /// The physics of the living body at `h` in chunk `d` (`body::live`), or its death. A body with no brain takes no

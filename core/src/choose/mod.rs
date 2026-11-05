@@ -11,6 +11,7 @@ mod spread;
 
 pub use feed::{take_body, COVER};
 pub use go::{go, wear};
+pub(crate) use feed::eat_for;
 pub(crate) use go::land_move;
 pub(crate) use learn::watched;
 pub use minds::Minds;
