@@ -17,7 +17,7 @@ pub use minds::Minds;
 pub use perceive::cells;
 pub(crate) use spread::land_act;
 
-use perceive::{perceive, Face, HEIGHT, LN_LEAF, LN_MASS, T, WB_SCALE};
+use perceive::{perceive, Face, HEIGHT, LN_MASS, T, WB_SCALE};
 pub use perceive::{DEAD, EDIBLE, NCELL, OWN, SIGHTS, WET};
 
 use crate::body::{Body, Lived};
@@ -30,7 +30,7 @@ use crate::{bond, lanes, life::{Chunk, Handle}, World};
 /// Features of a neighbour direction (those of the cell it leads to, `perceive::cells`, and how hard its link is to
 /// pass) and of a perceived body.
 pub(crate) const NF: usize = NCELL + 1;
-pub(crate) const NT: usize = 7;
+pub(crate) const NT: usize = 6;
 /// Most bodies perceived (the `SEEN` gene sets how many); parts perceived; moves (one per compass direction of the
 /// mesh's links, `Level::way`); options.
 const MAX_SEEN: usize = 6;
@@ -165,7 +165,7 @@ fn options(w: &World, ch: &Chunk, b: &Body, (s, sight): (Shape, usize), (pm, vol
     for (q, o) in c.seen[..c.nseen].iter().enumerate() {
         let v = o.vis;
         let fq = &mut c.fb[q * NT..(q + 1) * NT];
-        fq.copy_from_slice(&[ln(v[0] / pm as f32) / LN_MASS, ln(v[1] / v[0]) / LN_LEAF, v[2], v[3], v[4], v[5], o.wb / WB_SCALE]);
+        fq.copy_from_slice(&[ln(v[0] / pm as f32) / LN_MASS, v[1], v[2], v[3], v[4], o.wb / WB_SCALE]);
         for verb in 0..VERBS {
             c.logit[TO_BODY + q * VERBS + verb] = score(&out[s.verb(verb)..s.verb(verb) + NT + 1], fq);
         }

@@ -48,6 +48,8 @@ const PHASE_MARGIN: f32 = 5.0;
 pub const WET_TISSUE: f64 = 0.75;
 /// Most numbers of a brain's memory (the top of the `MEMORY` gene's range).
 pub const MEMORY_MOST: usize = 12;
+/// The visible traits of a body (`Body::vis`).
+pub const VIS: usize = 5;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Body {
@@ -81,8 +83,8 @@ pub struct Body {
     pub wet: u32,
     /// Body matter built for children and held back, mol (part of `store`, not of the body: `size`, `built`; laws.md 4.2)
     pub brood: f64,
-    /// Visible traits: mass kg, light-capture area m² (none: bodies catch no light), strength, colour (3 bands)
-    pub vis: [f32; 6],
+    /// Visible traits: mass kg, strength, colour (3 bands)
+    pub vis: [f32; VIS],
     /// Whether what it holds changed since its visible traits were worked out: the next survey works them out again
     /// (`Chunk::see_changed`); a saved body's are as saved
     #[serde(skip)]
@@ -222,7 +224,7 @@ impl Body {
         self.k = k;
     }
     /// Visible traits of one member (`Body::vis`); the colour is the reflectance of the stores by volume.
-    pub fn visible(&self, chem: &Chemistry) -> [f32; 6] {
+    pub fn visible(&self, chem: &Chemistry) -> [f32; VIS] {
         let (m1, t, bc) = (self.mass(chem) / self.n(), self.temp(chem), chem.body());
         let (mut v, mut c) = (1e-12, [0.0; 3]);
         for (&k, &a) in bc.subs().iter().zip(&self.store).filter(|x| *x.1 > 0.0) {
@@ -235,7 +237,7 @@ impl Body {
                 }
             }
         }
-        [m1 as f32, 0.0, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
+        [m1 as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
     }
     /// Well-being at `t` (laws.md 5.4): the log of the energy its reactions could release from a member's stores in
     /// months' worth of thinking (`think`, J), less its nearness to its limits: key stores to their minimums and

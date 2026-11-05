@@ -10,8 +10,7 @@ use crate::World;
 
 /// The floor of the root of the critic's moving mean square of its errors (`Body::var`), of a month's error.
 const CRITIC_FLOOR: f32 = 1e-3;
-/// A body copies less of one whose strength differs by this much (one standard deviation, as one of ln mass or ln
-/// capture area).
+/// A body copies less of one whose strength differs by this much (one standard deviation, as one of ln mass).
 const STRENGTH_STEP: f32 = 0.2;
 
 /// Learn from the last decision (actor-critic) over the time since, `span`: the change of well-being since (for a node,
@@ -55,7 +54,7 @@ pub(crate) fn watched(w: &mut World, by: u64, (n, lineage): (f64, u32), of: u64)
     let (b, o) = (std::mem::take(&mut w.life[s]), &w.life[t]);
     let (u, v) = (o.visible(&w.chem), b.visible(&w.chem));
     let d = |a: f32, b: f32| ln(a.max(1e-9) / b.max(1e-9)).powi(2);
-    let alike = (-0.5 * (d(u[0], v[0]) + d(u[1], v[1]) + ((u[2] - v[2]) / STRENGTH_STEP).powi(2))).exp();
+    let alike = (-0.5 * (d(u[0], v[0]) + ((u[1] - v[1]) / STRENGTH_STEP).powi(2))).exp();
     let alike = if w.cfg.null { 0.0 } else { w.cfg.span(w.cfg.update_days()).share(w.cfg.phys.blend) * alike * (n / b.n()).min(1.0) as f32 };
     let (same, of) = ((o.lineage == b.lineage) as u8 as f64, o.id);
     let o = o.clone();

@@ -26,8 +26,6 @@ const T_MID: f32 = 285.0;
 const T_SPAN: f32 = 15.0;
 /// The surface height, m.
 const DZ_SCALE: f32 = 200.0;
-/// ln of the light-capture area per mass of a perceived body.
-pub(super) const LN_LEAF: f32 = 5.0;
 /// ln(1 + the members of a cell per square of the map).
 const LN_MEMBERS: f32 = 10.0;
 /// A perceived body's well-being.
@@ -67,7 +65,7 @@ pub const SIGHTS: usize = 4;
 pub(super) struct Face {
     pub id: u64,
     pub slot: u32,
-    pub vis: [f32; 6],
+    pub vis: [f32; crate::body::VIS],
     pub wb: f32,
 }
 

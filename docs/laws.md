@@ -662,8 +662,8 @@ sees of a cell it would step into (the mean by area of the cells about that many
 minimums, its warmth, size and the season, its own cell's features, what Bond senses (3.4), its memory. **Each
 direction** with a link: the features of the cell it leads to as its sight sees it, the temperature and height as
 differences from its own cell's, and how hard its link is to pass (`lanes::resist`). **Bodies**: up to `SEEN` of its
-own cell, as they are when it decides (their looks and well-being), from a random place in the cell's list; walls and
-cover hide them. Up to 3 parts of its cell. Of a part, held or seen, it reads its mass against its own, its walls'
+own cell, as they are when it decides (their looks: a member's mass over its own, strength and colour; and their
+well-being), from a random place in the cell's list; walls and cover hide them. Up to 3 parts of its cell. Of a part, held or seen, it reads its mass against its own, its walls'
 scratch hardness, its hollowness and its edge: ln of its walls' thickness over its own width (`bond::sense`,
 `bond::features`), the share an edge would leave of breaking a body like itself (3.3).
 
