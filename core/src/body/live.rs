@@ -22,6 +22,8 @@ pub(crate) struct LiveTmp {
 pub struct Lived {
     /// What its fuel could release over the time against its upkeep (well-being counts it up to `MARGIN`)
     pub spare: f64,
+    /// The time the update integrated, since its last, d: what its brain pays for and learns over (laws.md 5.4)
+    pub days: f64,
 }
 
 /// The update of body `b` over the time since its last: upkeep paid by burning (the share unpaid dies, `SPENT`, and the
@@ -49,7 +51,7 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) ->
         crate::copy::copy(w, d, b);
     }
     shed(w, d, b);
-    Ok(Lived { spare })
+    Ok(Lived { spare, days })
 }
 
 /// Upkeep over the time: what its fuel releases is paid (`burn`), the share left unpaid dies, and so does the share its

@@ -172,15 +172,17 @@ pub fn score(c: &[f32], f: &[f32]) -> f32 {
     c[0] + c[1..].iter().zip(f).map(|(a, b)| a * b).sum::<f32>()
 }
 
-/// Add `a · coef[r] · [h, 1] / (1 + |h|²)` to each row `r` (the critic's), the step kept below 0.1: the normalised
+/// The largest step of the critic's rows in a month (`fit`).
+pub(crate) const MAX_FIT: f32 = 0.1;
+
+/// Add `a · coef[r] · [h, 1] / (1 + |h|²)` to each row `r` (the critic's), the step kept below `most`: the normalised
 /// least-mean-squares rule (Nagumo and Noda 1967), so a step corrects the share `a` of the row's error whatever the scale
 /// of the hidden layer.
-pub fn fit(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32) {
-    const MAX_STEP: f32 = 0.1;
+pub fn fit(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32, most: f32) {
     let hh = 1.0 + h.iter().map(|x| x * x).sum::<f32>();
     let per = a / hh;
     let size = per.abs() * (coef.iter().map(|c| c * c).sum::<f32>() * hh).sqrt();
-    let per = if size > MAX_STEP { per * MAX_STEP / size } else { per };
+    let per = if size > most { per * most / size } else { per };
     for (r, &c) in rows.chunks_exact_mut(h.len() + 1).zip(coef) {
         if c != 0.0 {
             step(r, h, per * c);
@@ -191,7 +193,8 @@ pub fn fit(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32) {
 /// Move each learned row `r` by `lr · g / rms · [h, 1] / (1 + |h|²)`, `g = a · coef[r]` its share of the step and `rms`
 /// the root of a moving average of its squares (`ms`), capped at `most · lr`: a row that rarely matters learns as fast
 /// when it does. The normalised least-mean-squares rule (Nagumo and Noda 1967): the rate `lr` is the share of the
-/// row's error a step corrects (stable below 2), whatever the scale of the hidden layer.
+/// row's error a step corrects (stable below 2), whatever the scale of the hidden layer; the caller gives it for the
+/// time of the step (`choose::learn`).
 pub fn learn(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32, lr: f32, ms: &mut [f32], (beta, most): (f32, f32)) {
     debug_assert_eq!(ms.len(), coef.len(), "a moving average per learned row");
     let per = lr / (1.0 + h.iter().map(|x| x * x).sum::<f32>());

@@ -22,10 +22,10 @@ impl Lineage {
     pub fn none(&self) -> bool {
         self.shape.h == 0
     }
-    /// Energy one decision of a lineage with a brain (`brain`) or none takes, J per kg of a member of `m_ref` kg: by the
-    /// body's own size genes, not the rounded sizes, so a smaller brain pays less at once and selection can lead a node's
-    /// sizes down to none. Sight costs nothing: it reads another level of the same features (`Life::feat`), with the
-    /// same inputs and rows.
+    /// Energy a month of thinking of a lineage with a brain (`brain`) or none takes, J per kg of a member of `m_ref` kg:
+    /// by the body's own size genes, not the rounded sizes, so a smaller brain pays less at once and selection can lead a
+    /// node's sizes down to none. Sight costs nothing: it reads another level of the same features (`Life::feat`), with
+    /// the same inputs and rows.
     pub fn cost(brain: bool, p: &crate::Physics, genes: &[f32]) -> f64 {
         if !brain {
             return 0.0;

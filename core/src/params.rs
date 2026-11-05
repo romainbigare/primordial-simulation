@@ -1,7 +1,7 @@
 //! The settings of a world (`Config`) and the free numbers of its laws (`Physics`). What each
 //! number is anchored to is in `docs/numbers.md`, one row per field.
 
-use crate::{clock::Calendar, units::{DAY_S, T_SURF}};
+use crate::{clock::Calendar, math::Span, units::{DAY, DAY_S, T_SURF}};
 use serde::{Deserialize, Serialize};
 
 /// The settings of a world: the planet, the calendar and time steps, the physics of its ground
@@ -106,15 +106,15 @@ pub struct Physics {
     pub c_basal: f64,
     /// Upkeep of light-capture area, J per m² per day
     pub c_leaf: f64,
-    /// Cost of one decision of the starting brain, J per kg of a member of `m_ref` kg (`Physics::think`)
+    /// Cost of a month of thinking of the starting brain, J per kg of a member of `m_ref` kg (`Physics::think`)
     pub c_brain: f64,
     /// The one reference mass at which a per-kg number is per kg, kg
     pub m_ref: f64,
-    /// Cost of one decision per hidden unit, J per kg of a member of `m_ref` kg
+    /// Cost of a month of thinking per hidden unit, J per kg of a member of `m_ref` kg
     pub c_hidden: f64,
-    /// Cost of one decision per memory number, J per kg of a member of `m_ref` kg
+    /// Cost of a month of thinking per memory number, J per kg of a member of `m_ref` kg
     pub c_memory: f64,
-    /// Cost of one decision per body perceived, J per kg of a member of `m_ref` kg
+    /// Cost of a month of thinking per body perceived, J per kg of a member of `m_ref` kg
     pub c_seen: f64,
     /// Upkeep of learning, J per kg of body per day at learning rate 1
     pub c_learn: f64,
@@ -160,13 +160,13 @@ pub struct Physics {
     pub keep_min: f64,
     /// Spread of the shape of a part made around its mean
     pub shape_noise: f32,
-    /// Weight of well-being one month (one update) ahead against well-being now
+    /// Weight of well-being one month ahead against well-being now, per month
     pub discount: f32,
     /// Weight in a move's score of the critic's gain from stepping into a cell (`choose::plan`), per unit of well-being
     pub plan_weight: f32,
-    /// Share of the way a watcher's rows move toward the watched one's
+    /// Share of the way a watcher's rows move toward the watched one's, per month of watching
     pub blend: f32,
-    /// Weight of the newest value in a learner's running mean squares: of a row's steps, and of the critic's errors
+    /// Weight per month of the newest value in a learner's running mean squares (of a row's steps, of its errors)
     pub learn_beta: f32,
     /// Most a row moves in one step, in units of the learning rate
     pub learn_most: f32,
@@ -250,8 +250,8 @@ const MOVE_REF: f64 = 30.0;
 const MOVE_EXP: f64 = -0.32;
 
 impl Physics {
-    /// Energy of one decision of a brain of cost `c` (`Lineage::cost`) for a member of `m` kg, J: weakly more for a
-    /// bigger body; paid per decision, once a month.
+    /// Energy of a month of thinking of a brain of cost `c` (`Lineage::cost`) for a member of `m` kg, J: weakly more for
+    /// a bigger body; paid by the time (`body::upkeep`), whatever the pace of its decisions.
     pub(crate) fn think(&self, c: f64, m: f64) -> f64 {
         c * self.m_ref * (m / self.m_ref).sqrt().sqrt()
     }
@@ -376,6 +376,11 @@ impl Config {
     /// Days between a body's updates: every body updates once a month, at its start (`survey::batch`).
     pub fn update_days(&self) -> f64 {
         self.days_per_month as f64
+    }
+    /// `days` d in the world's months (`calendar`): the time the rates of a body's brain are anchored at, a month
+    /// (laws.md 5.4), over which a rate goes as a share, a weight or an amount (`Span`).
+    pub(crate) fn span(&self, days: f64) -> Span {
+        Span(days * DAY / self.calendar().month as f64)
     }
     /// Check a run's settings before it starts: the time steps, and the numbers of the physics the laws need in range.
     pub fn validate(&self) -> Result<(), String> {

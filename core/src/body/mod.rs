@@ -238,8 +238,8 @@ impl Body {
         [m1 as f32, 0.0, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
     }
     /// Well-being at `t` (laws.md 5.4): the log of the energy its reactions could release from a member's stores in
-    /// decisions' worth (`think`, J), less its nearness to its limits: key stores to their minimums and reactions to upkeep
-    /// (`spare`), in `MARGIN` form, and key liquids to freezing or boiling.
+    /// months' worth of thinking (`think`, J), less its nearness to its limits: key stores to their minimums and
+    /// reactions to upkeep (`spare`), in `MARGIN` form, and key liquids to freezing or boiling.
     pub(crate) fn wellbeing_at(&self, chem: &Chemistry, think: f64, t: f64, spare: f64) -> f32 {
         let (lay, mass, bc) = (Layout::of(chem), self.size(chem), chem.body());
         let mut w = ln(1.0 + (self.fuel(chem, t) / self.n() / think) as f32) + ln(spare.clamp(MARGIN_MIN, MARGIN) as f32 / MARGIN as f32);
