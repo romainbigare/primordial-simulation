@@ -204,9 +204,15 @@ pub fn frame_now(w: &World) -> Vec<u8> {
     out
 }
 
-/// Append one frame: every layer in table order, a byte for each square of the map, row-major (a square shows its cell).
+/// The cell each square of the map shows, row by row: the one that holds its centre (`Square::point`).
+pub fn pixels(w: &World) -> Vec<usize> {
+    (0..w.map.n()).map(|s| w.mesh.tree().cell_at(w.map.point(s))).collect()
+}
+
+/// Append one frame: every layer in table order, a byte for each square of the map, row-major (`pixels`).
 pub(crate) fn frame(c: &Ctx, out: &mut Vec<u8>) {
+    let cells = pixels(c.w);
     for l in LAYERS {
-        out.extend((0..c.w.map.n()).map(|s| quantise(l, (l.val)(c, c.w.mesh.cell_of(s)))));
+        out.extend(cells.iter().map(|&i| quantise(l, (l.val)(c, i))));
     }
 }

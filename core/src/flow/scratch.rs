@@ -1,7 +1,7 @@
 //! The working memory of Flow (`Scratch`), its tables, and the recheck of what is present (`refresh`).
 
 use super::{air, land::NONE, range};
-use crate::{chem::Chemistry, solve::downhill::Order, space::square::Square, store::Class, AIR, World};
+use crate::{chem::Chemistry, solve::downhill::Order, store::Class, AIR, World};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Numbers of one substance Flow reads often (from `chem::Substance`).
@@ -335,12 +335,13 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
             refl: [mean(b.refl[0]), mean(b.refl[1])],
         })
         .collect();
-    // A square of the map reads its air node and the three next to it on its side of the node's centre, bilinearly on
-    // the map (round a globe's wrap); along an axis with no node on its side, its own alone, paired with the node on the
-    // other side. A cell reads what its squares read, by their areas, so each node's air is read once in all.
-    let (mesh, air) = (&w.mesh, w.mesh.level(AIR));
-    let squares = World::mesh_of(&Square::new(w.map.w, w.map.h, w.map.side, w.map.wrap), w.air_scale, &w.cfg);
-    let reads: Vec<([u32; 4], [f64; 4])> = (0..w.map.n())
+    // A sample of the map (`Square::samples`: a square, or a cell finer than one) reads its air node and the three next
+    // to it on its side of the node's centre, bilinearly on the map (round a globe's wrap); along an axis with no node
+    // on its side, its own alone, paired with the node on the other side. A cell reads what its samples read, by their
+    // areas, so each node's air is read once in all.
+    let (mesh, air, samples) = (&w.mesh, w.mesh.level(AIR), w.map.samples());
+    let squares = World::mesh_of(&samples, &w.cfg);
+    let reads: Vec<([u32; 4], [f64; 4])> = (0..squares.cells().n())
         .map(|i| {
             let p = squares.up(i, 0, AIR);
             let o = squares.on_map((AIR, p), (0, i));
@@ -367,7 +368,7 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
     (s.near, s.wt) = (0..mesh.cells().n()).map(|i| ([mesh.up(i, 0, AIR) as u32; air::SEES], [0.0; air::SEES])).unzip();
     let mut used = vec![0; mesh.cells().n()];
     for (sq, (nodes, wts)) in reads.iter().enumerate() {
-        let i = mesh.cell_of(sq);
+        let i = mesh.tree().cell_at(samples.leaves()[sq].corner());
         let (near, wt, share) = (&mut s.near[i], &mut s.wt[i], squares.cells().area()[sq] / mesh.cells().area()[i]);
         for (&q, &x) in nodes.iter().zip(wts).filter(|r| *r.1 > 0.0) {
             let c = (0..used[i]).find(|&c| near[c] == q).unwrap_or(used[i]);

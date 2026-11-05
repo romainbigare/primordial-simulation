@@ -71,9 +71,8 @@ pub struct Taken {
 pub struct World {
     pub cfg: Config,
     pub chem: Chemistry,
-    /// The map of squares the world is laid out on, and the ground cells along a side of the block under each air node
+    /// The map of squares the world is laid out on, its air blocks and the tree of its cells under them
     pub map: Square,
-    pub air_scale: usize,
     /// The shape of the world: its cells are the ground nodes, those of level `AIR` the air nodes (built from `map`, not saved)
     #[serde(skip)]
     pub mesh: Mesh,
@@ -118,9 +117,9 @@ pub struct World {
 pub const AIR: usize = 1;
 
 impl World {
-    /// The mesh of `map`, air nodes over blocks of `air_scale`² squares, its rows between the latitudes of `cfg`.
-    pub fn mesh_of(map: &Square, air_scale: usize, cfg: &Config) -> Mesh {
-        map.mesh(air_scale, cfg.lat_south, cfg.lat_north)
+    /// The mesh of `map`, an air node over each of its blocks, its rows between the latitudes of `cfg`.
+    pub fn mesh_of(map: &Square, cfg: &Config) -> Mesh {
+        map.mesh(cfg.lat_south, cfg.lat_north)
     }
     /// Hand the shell the raw events since it last asked, and start the list again.
     pub fn drain_events(&mut self) -> Vec<Event> {

@@ -56,7 +56,7 @@ impl World {
     /// runs between steps, once the shell took the events; the caller gives the world the map and the mesh of its new
     /// cells. Flow's caches are dropped, as a loaded world's, and rebuilt at the next step.
     pub fn remap(&mut self, r: &Remap) {
-        let World { cfg: _, chem: _, map: _, air_scale: _, mesh: _, seed: _, time, sleep, store, base_z: _, rain, liquid_flux, evap, off_land, counts, life, canopy, light, rained, links, events, scratch } = self;
+        let World { cfg: _, chem: _, map: _, mesh: _, seed: _, time, sleep, store, base_z: _, rain, liquid_flux, evap, off_land, counts, life, canopy, light, rained, links, events, scratch } = self;
         assert!(events.is_empty(), "a remap runs between steps, once the shell took the events");
         for v in [rain, liquid_flux, evap, off_land, canopy, &mut counts.traffic] {
             *v = r.cells.apply(std::mem::take(v), || 0.0);

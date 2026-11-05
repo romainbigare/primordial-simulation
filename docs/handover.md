@@ -480,7 +480,7 @@ core/       the five laws, world state, random numbers. No IO, no Earth words.
   src/body/   bodies: genes, tissue, metabolism, exchange, the update, its physics, paying, death, intake
   src/chem/   the chemistry: its data, its physics (phases, melting), the roles of reactions
   src/space/  the shape of the world: the mesh (cells, links, levels; flat or on a sphere), the square map (an island,
-              or a globe whose rows wrap east to west), stacks of layers
+              or a globe whose rows wrap east to west), the tree of cells under each air block, stacks of layers
   src/store/  the names of the nodes (a fixed node by class and index, among them the bed and the bodies' node of
               each cell; a part by slot and generation), what the fixed ones hold (`Store`: private arrays, read
               through methods), the boundary nodes sun, space and outside, the one way to change them (`apply`:

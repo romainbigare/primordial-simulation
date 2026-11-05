@@ -94,8 +94,8 @@ pub(super) struct Seen<'a> {
 /// Look at the world for the month's count: it reads the world and the cells the mobile bodies were in at the last
 /// month (`Social::last`), and changes nothing.
 pub(super) fn look<'a>(w: &'a World, last: &BTreeMap<u64, u32>) -> Seen<'a> {
-    // The row of the map of a cell (of its north-west square).
-    let row = |i: u32| w.map.xy(w.mesh.corner(i as usize)).1 as f64;
+    // The row of the map of a cell (at its north-west corner).
+    let row = |i: u32| w.map.row(i as usize);
     // The surface heights of the last survey (`Life::env`, not saved), or, before the first survey of a resumed world,
     // from the amounts (`World::surface_z`), each cell's once.
     let cells = w.mesh.cells().n();
