@@ -159,10 +159,13 @@ moved since the last month (of at least `MASS_FLOOR`) over `MASS_SHARE`, what it
 season, faster on land than under liquid, so its departures mark the coasts each season, not an event. Then, the
 lowest first (ties by the least serial), each four quarters of one leaf, built no coarser than it (`Watch::built`)
 and with no finer cell across a side, join while the cells are over the budget or all four score under `JOIN_AT`
-(1/4: a cell does not flap); then, the highest first, each cell of `SPLIT_AT` (1) or more coarser than the floor
-(`Config::finest_depth`) splits if its split, with the splits 2:1 forces, keeps the cells within the budget. A split
-the camera asks for (its term alone is 1 or more) may first join the quietest quartets the camera does not see, nor
-a cell beside them (a split there would split their join again, 2:1), to make room: what is looked at comes first. A month makes at most `MOST_CHANGES` (32) splits and joins. The events of
+(1/4: a cell does not flap); then, those the camera asks for (its term alone is 1 or more) first, then the highest
+first, each cell of `SPLIT_AT` (1) or more coarser than the floor (`Config::finest_depth`) splits if its split, with
+the splits 2:1 forces, keeps the cells within the budget. A split the camera asks for may first join the quietest
+quartets the camera does not see, nor a cell beside them (a split there would split their join again, 2:1), to make
+room: what is looked at comes first. As the camera's splits come first, a cell joined to make room for them takes the
+room back only once the camera asks for no more: at a full budget the cells settle with the camera's window at its
+asked depth, and change only as the window moves. A month makes at most `MOST_CHANGES` (32) splits and joins. The events of
 a join's merge name their cell by index, which the next change renumbers: they wait with their cell's leaf and come
 back at the end of the month's changes naming the cell that then holds that place.
 **The camera** (`refine::Camera`) is an input of the run: from given months on, a window of the map in squares and

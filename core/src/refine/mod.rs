@@ -51,10 +51,12 @@ struct Month {
 impl World {
     /// Refine the cells at a month's start, before its survey, once the shell took the events (laws.md 0): score each
     /// cell (`score`), with the shot of `camera` in force this month; then, the quietest first, join each quartet whose
-    /// four quarters all score under `JOIN_AT`, or while the cells are over the budget; then, the highest score first
-    /// (ties by serial), split each cell scoring `SPLIT_AT` or more above the floor whose split (with those the 2:1 rule
-    /// forces) keeps the cells within the budget. A split the camera asks for may first join the quietest quartets it
-    /// does not see, nor a cell beside them, to make room: what is looked at comes first. A cell joins no coarser than it was built. At most
+    /// four quarters all score under `JOIN_AT`, or while the cells are over the budget; then, those the camera asks for
+    /// first, then the highest score first (ties by serial), split each cell scoring `SPLIT_AT` or more above the floor
+    /// whose split (with those the 2:1 rule forces) keeps the cells within the budget. A split the camera asks for may
+    /// first join the quietest quartets it does not see, nor a cell beside them, to make room: what is looked at comes
+    /// first, and what it took room from does not take it back while the camera asks. A cell joins no coarser than it
+    /// was built. At most
     /// `MOST_CHANGES` a month. The events of a join's merge name their cell by index, which the next change renumbers:
     /// they wait with their cell's leaf and come back at the end naming the cell that then holds its place.
     /// Each change is an event (`World::split`, `World::join`). Returns the splits and joins made; none with no budget.
@@ -98,7 +100,8 @@ impl World {
         m.made
     }
 
-    /// The cells that want to split, the highest score first: those of `SPLIT_AT` or more above the floor.
+    /// The cells that want to split, those the camera asks for first, then the highest score first: those of `SPLIT_AT`
+    /// or more above the floor.
     fn wants(&self, score: &[Score]) -> Vec<Want> {
         let floor = self.cfg.finest_depth;
         let leaves = self.map.leaves();
@@ -106,7 +109,7 @@ impl World {
             .filter(|(i, s)| s.all >= SPLIT_AT && leaves[*i].depth < floor)
             .map(|(i, s)| Want { score: s.all, serial: self.life.serial(i), leaf: leaves[i], asked: s.camera >= SPLIT_AT })
             .collect();
-        wants.sort_by(|a, b| b.score.total_cmp(&a.score).then(a.serial.cmp(&b.serial)));
+        wants.sort_by(|a, b| b.asked.cmp(&a.asked).then(b.score.total_cmp(&a.score)).then(a.serial.cmp(&b.serial)));
         wants
     }
 
