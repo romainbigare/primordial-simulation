@@ -469,8 +469,11 @@ fn reproducing_updates_keep_elements_and_energy() {
     let (mut w, i) = start();
     w.cfg.phys.c_build = 1e5;
     let mut b = eater(&mut w, i, brain::REST, 5f32.log10());
-    // Children of 0.1 of the copy mass (0.5 kg) from a mature body of 21 kg.
+    // Children of 0.1 of the copy mass (0.5 kg) from a mature body of 21 kg, with fuel for its months at the pace its own
+    // heat holds it at.
     (b.genes[CHILD], b.genes[ALLOC]) = (-1.0, 0.8);
+    let fuel = kg(&w, &b, RICH);
+    add(&mut w, &mut b, RICH, 2.0 * fuel);
     let id = {
         let s = w.add(b);
         w.life[s].id

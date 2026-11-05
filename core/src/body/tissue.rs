@@ -104,6 +104,10 @@ impl Body {
     pub(crate) fn wet_ks(&self) -> impl Iterator<Item = usize> {
         crate::math::ones(self.wet as u64)
     }
+    /// The lowest boiling point of its key liquids, K (none: infinite).
+    pub(crate) fn boiling(&self, chem: &Chemistry) -> f64 {
+        self.wet_ks().map(|s| chem.subs[chem.body().subs()[s]].boil).fold(f64::INFINITY, f64::min)
+    }
     /// The key liquids it holds, kg, and the most share of its mass it keeps of any (its keep gene, 0..`MAX_KEEP`).
     pub fn wet_h(&self, chem: &Chemistry) -> (f64, f64) {
         let (keep, bc) = (Layout::of(chem).keep, chem.body());

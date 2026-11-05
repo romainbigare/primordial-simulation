@@ -60,10 +60,11 @@ in a batch of the same passes; the other cells do nothing then. A body placed du
 cell's next step; one that moves into a cell of another step lands in the serial pass and first updates at its new
 cell's next step. Flow, Change and Bond keep their steps (1.8). Each update integrates
 the time since the body's last (`Body::last`; of a node, the mean by members, `nodes::rejoin`, so members who joined it
-since count less): its upkeep, its brain's cost and learning (5.4), drink, heat, frost (6.5), growth and what it takes,
-gives and does to parts (5.3) go by those days, per m² of its cell where it searches, and what looks ahead to its next
-update (the fuel growth keeps back for its upkeep, 6.6; the heat of a meal let out, 6.3; the look-ahead of a plan, 5.3)
-by its cell's step (`World::step_days`), so a step is a time step, not a calendar: a season's change comes from
+since count less): its upkeep, its brain's cost and learning (5.4), drink, heat, frost (6.5) and growth go by those
+days, and what looks ahead to its next update (what it takes, gives and does to parts, 5.3, per m² of its cell where it
+searches, and the room its stores keep for that time; the fuel growth keeps back for its upkeep, 6.6; the heat of a meal
+let out, 6.3; the look-ahead of a plan, 5.3) by its cell's step (`World::step_days`), so a step is a time step, not a
+calendar: a season's change comes from
 temperature (6.2). The bodies
 read the ground and the air as the month's Change and last air step left them, and what they leave on the ground (the
 free solid they shed, remains) goes through the next month's Change before the next batch can take it, so most of the
@@ -127,7 +128,9 @@ names is gone, and a new cell holds nothing and takes the next serial, so every 
 between two cells that both stay keeps what it remembers. A quarter holds its share of each number its parent held (the
 amounts and the heat of each of its nodes, the volumes Flow keeps of its ground, what its sleep held, the moving
 averages per cell, `remap::Made::held`) and its parent's numbers that do not add up (the moving averages per m², the
-temperature and the plateau, the means of its bed, the sleep's alarm and the time it was brought up to date); a joined
+temperature and the plateau, the means of its bed, the sleep's alarm and the time it was brought up to date, and the
+ground temperature, liquid depth and height its bodies read until the next survey, `Life::env`, so a founder placed
+there at once starts at its ground's temperature); a joined
 cell holds the sum of its quarters' and the mean by area of the others (its plateau where all share it, its bed's means
 by volume, the first alarm and the earliest time brought up to date, so its law skips no time). The share is by area,
 the same temperature in each (flat quarters), unless a join made the cell: a join keeps each quarter's share of each
@@ -672,7 +675,9 @@ chance).
   sizes, and stays in its own if that is the nearest. The cap of a crowded cell and the cap of lineages make bodies of
   different heritage share a brain; the three caps bound the work, not a law. They count per cell, not per m²: a cell
   is the unit of the work a run's budget of cells pays for, so a finer cell holds as many nodes, and a region split
-  holds more per m², as its detail asks. So do the pair that may mate, a watch, a room and a gift: bodies meet who share
+  holds more per m², as its detail asks: a cap per m² would leave a fine cell less than one node of a kind and stage,
+  and what the members of a kind do does not go by how many nodes hold them (a node a year in a square and in its
+  cells split two depths, one node of each stage in each cell, lives alike: `core/tests/steps.rs`). So do the pair that may mate, a watch, a room and a gift: bodies meet who share
   a cell, and a fine cell's bodies meet each other more often (each step) among fewer; a law of meeting by the area
   swept, as the bite has (5.3), would make that alike per m², and is not built.
 - **Split and join of cells** (0): a node splits by area into the quarters of its cell (`nodes::part`, one node per
@@ -825,8 +830,13 @@ members lie over the cell like the ground's food: a bite reaches those the swept
 whole, by one draw with the chance the area holds it, whether a node or an individual takes it; of a node, less than one member is one whole member met with that chance:
 it takes, tears and pays that meeting's outcome times the chance), limited by force against theirs. **Giving** (`Body::spare`) is of what the other uses, of stores only (no
 matter, brood, built solids or key liquid below level), above `keep_min` × their minimum, at most what the members met
-could take. Taking, the bite and giving go by the time the update integrated (0): a body of a finer cell searches its
-smaller cell for a shorter step, so the share of the cell its area holds is the same per m² and per day.
+could take. Taking, the bite, giving and the acts on parts go by the time to the body's next update, its cell's step
+(`World::step_days`): what it takes now feeds it until then, as the upkeep of that time is paid from it at its next
+update (0); a body of a finer cell searches its smaller cell for a shorter step, so the share of the cell its area holds
+is the same per m² and per day. **The room of its stores over the update** (`Body::room`): it takes up to the level of
+each store and, of a store it burns, what its upkeep burns of it until its next update (`body::ahead`, at its
+temperature and activity now), as a sequence of short steps each eats what it burnt: so one meal of a month is the
+meals of four quarter months, not one store's room.
 
 ### 5.4 Learning
 **Well-being** (`Body::wellbeing_at`): the energy its stores could release, in months' worth of its starting brain's
@@ -855,7 +865,7 @@ time of each update (6.2), whatever the pace of its decisions. **Null run** (`--
 
 ## 6. Bodies
 Files: `core/src/body/`, `copy::grow`. Bodies are the eaters (animals); the light-eaters are the cover (4.5).
-`body::live` runs an update in stages: upkeep, drinking, heat, store checks, growth and children, shedding; then the
+`body::live` runs an update in stages: drinking, upkeep, heat, store checks, growth and children, shedding; then the
 decision. Its trades are gathered as moves on its cell's view and booked when its chunk ends (`store::Moves`, 0), so
 nodes and individuals take alike, never more than is there.
 
@@ -899,28 +909,38 @@ A body's temperature follows its ground's (`live::keep_warm`): the heat its surv
 the update leaves through its coat (`Body::conductance`; in series with the walls around it, 3.4) to the ground. Each
 member has the surface `meeh` × its mass^(2/3) (Meeh 1879); its coat insulates it by the still air at its surface
 (`r_air`) and the share `HEAT` (0 to 1) of the best coat, `r_coat` (fur and the tissue under it: a mammal's least
-conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). Its temperature moves from where it is
-toward where that heat holds it (the ground's, plus the heat over the coat's conductance) by the share 1 - e^(-g dt /
-C) its heat capacity C lets it go in the time: a body's own time C / g is hours to days, but a large node in a closed
-room, whose walls pass little, moves only part way in a month. So what it gains from its ground is never more than the
-heat it released, unless the ground is the warmer. Below its `KEEP_T` gene it burns what holds it at `KEEP_T` at the
-end; above its `COOL_T` gene it opens its coat as far as it needs to stand there, up to its bare surface (blood to the
-skin, the coat laid flat), and past that evaporates its key liquid for the excess, at the liquid's vaporisation
-enthalpy, never below its safe minimum, the vapour going to the bodies' node with its latent heat. Its key liquid boils
-at its boiling point: past it the heat boils the liquid off, below its safe minimum too, and holds the body there while
-it lasts; one that boils dry dies there (`check_stores`), the rest of its heat staying in its ground. Its upkeep goes with
-the pace of its temperature (6.2), so a warmer body makes more heat; the open coat lets that heat out, so a body's own
-heat does not drive its pace up month after month. Its heat then comes to that temperature with its ground
-(`body::settle_heat`). After its decision (`live::shed_meal_heat`) the heat of what it took and of digesting it, above
-the temperature it stood at, leaves through its coat to its ground over the time to its next update (its cell's step)
-by the same share
-(a body of hours to days sheds it all); a body its intake cooled stays cooler, drawing no heat from its ground, and
-its own heat warms it at its next update. Its key liquids hold their fusion heat at any temperature (`Body::fused`):
-a body has no melting plateau, so its temperature is its heat over its heat capacity, that heat set aside (2.5).
+conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). Its heat balance over the time dt,
+C dT/dt = P - g (T - tg) (Newton's law of cooling; an animal's energy budget, Porter and Gates 1969; `live::Balance`),
+moves its temperature from where it is toward where that heat holds it (the ground's, plus the heat over the coat's
+conductance) by the share 1 - e^(-g dt / C) its heat capacity C lets it go in the time: a body's own time C / g is hours
+to days, but a large node in a closed room, whose walls pass little, moves only part way in a month. So what it gains
+from its ground is never more than the heat it released, unless the ground is the warmer. Below its `KEEP_T` gene it
+burns what holds it at `KEEP_T` at the end; above its `COOL_T` gene it opens its coat as far as it needs to stand there,
+up to its bare surface (blood to the skin, the coat laid flat), and past that evaporates its key liquid for the excess,
+at the liquid's vaporisation enthalpy, never below its safe minimum, the vapour going to the bodies' node with its
+latent heat (`live::hold`). Its key liquid boils at its boiling point: past it the heat boils the liquid off, below its
+safe minimum too, and holds the body there while it lasts; one that boils dry dies there (`check_stores`), the rest of
+its heat staying in its ground. **The temperature it stands at** (`live::standing`): its upkeep over the update goes
+with the pace (6.2) of its mean temperature over the time, the mean of that exact solution with the heat the upkeep
+releases, held by its genes as above; as that heat goes with the pace, the temperature is a fixed point, found from
+where the body is the way its heat moves it (the next equilibrium up or down). So a body of hours to days pays its
+update at the temperature it stands at, not the one it started at, alike in one update of a month or in four of a
+quarter month; the open coat lets the heat of a warmer pace out, so a body's own heat does not drive its pace up for
+ever. Its heat then comes to the temperature the balance ends at with its ground (`body::settle_heat`). After its
+decision (`live::fade_meal_heat`) what it took and digesting it moved its temperature by, from where it stood, fades
+over the time to its next update (its cell's step) by the share e^(-g dt / C): the heat of a meal leaves through its
+coat to its ground; a meal colder than the body is warmed by the body's own heat as it eats, drawn back from its
+ground, which its upkeep's heat went to, at most the heat its upkeep released over the update. So a body of hours to
+days starts its next update where it stood, and a month's meal taken at once cools it no more than the meals of four
+short steps. Its key liquids hold their fusion heat at any temperature (`Body::fused`): a body has no melting plateau,
+so its temperature is its heat over its heat capacity, that heat set aside (2.5).
 
 ### 6.4 Water: drinking
 A body drinks its key liquids from its cell's ground up to the level it keeps, as far as the ground holds them liquid,
-each day at most its uptake gene's share of that level, paying `c_handle` per kg; they come with their heat. It
+each day at most its uptake gene's share of that level, paying `c_handle` per kg; they come with their heat. It drinks
+first in its update (`live::drink`), as it drinks while it sweats, builds and gives its children their share over the
+time: its upkeep and its building go at the activity (6.5) of what it could drink, not of what its last update's
+growth, children and sweat left, so a month's update and four of a quarter month run alike. It
 catches no rain and has no roots: its minerals come from what it digests (6.9).
 
 ### 6.5 Activity and dormancy
@@ -942,7 +962,8 @@ beyond its upkeep to its next update, its cell's step), and its stores down to t
 share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing
-Intake at most `take` × supply a day (5.3). **Digestion** (`Body::digest`): matter taken is broken back into what it
+Intake at most `take` × supply a day (5.3), over the time to its next update, within the room of its stores
+for that time (`Body::room`: their levels and what its upkeep burns of them until then). **Digestion** (`Body::digest`): matter taken is broken back into what it
 was built of, so food enters as fuel, and only if its diet breaks it (`Body::uses`). **Minimums**
 (`Body::lacking`): a store below its minimum kills (`LACK`), except a fuel, whose minimum is a reserve. **Shedding**
 (`shed`): minerals, built solids and key liquid past level, and anything it neither burns nor is made of. **Ageing**:

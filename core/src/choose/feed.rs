@@ -14,8 +14,8 @@ fn used_kg(w: &World, b: &Body, t: f64, m: &Stores) -> f64 {
     bc.subs().iter().zip(m).enumerate().filter(|&(_, (&k, _))| b.uses(&w.chem, k, t)).map(|(s, (_, a))| a * bc.mm[s]).sum()
 }
 
-/// The intake law of bodies, one for the ground and for other bodies: what body `b` can take in its update of `days` d
-/// (the time it integrates, `Lived::days`) from what lies over its cell, `from` mol of each substance, per m² of its
+/// The intake law of bodies, one for the ground and for other bodies: what body `b` can take over `days` d (the time to
+/// its next update, its cell's step, which what it takes feeds) from what lies over its cell, `from` mol of each substance, per m² of its
 /// cell. Per day per kg-equivalent of its supply it takes Holling's type II
 /// response to what the area it works (`sweep`) holds of what it takes, s, up to `take`: take s / (take + s), so the
 /// thinner it lies, the more of its time goes to finding it (Holling 1959). Only what it uses counts in s
@@ -40,7 +40,7 @@ pub const COVER: u64 = u64::MAX - 1;
 /// the frame without the enzyme that splits it) is bulk, which counts toward what it can take (`intake`, the gut) and
 /// passes through it to the ground at once, with its heat (a gut passage of days, within the update's step: it never
 /// becomes the body's own frame). What it takes of the cover it pays to break as a bite does (`Cover::breaking`), less
-/// what a held edge saves (`bond::Edge`), which wears by the work it does. `days`: the time its update integrates.
+/// what a held edge saves (`bond::Edge`), which wears by the work it does. `days`: the time to its next update.
 pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     let (i, chem, bc) = (b.cell as usize, &w.chem, w.chem.body());
     let (tg, parts) = (w.t_ground_last(i), crate::cover::Parts::of(chem));
@@ -53,7 +53,7 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
         let ground = d.moves.amounts(w, Node::ground(i));
         let lying = |k: usize| (if chem.phase(k, tg) != Phase::Gas { ground(k).max(0.0) } else { 0.0 }) + cover[k];
         let gut = intake(w, b, (t, days), lying).0;
-        let m = b.wanted(chem, lying, gut, b.mass(chem));
+        let m = b.wanted(w, lying, gut, b.mass(chem));
         let grazed: Stores = std::array::from_fn(|s| if of_cover(s) > 0.0 { (m[s] * of_cover(s) / lying(bc.subs()[s])).min(m[s]).min(of_cover(s)) } else { 0.0 });
         (gut, m, grazed)
     };
@@ -144,7 +144,7 @@ fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body,
 /// less than one member of a node meets one whole member with that chance: it takes, tears and pays what that meeting
 /// would, times the chance, the expected outcome of an individual's draw. A held edge (`bond::Edge`) leaves the share
 /// `left` of the force and the energy the bite needs to break the other, and wears by the work done through it. `days`:
-/// the time its update integrates.
+/// the time to its next update.
 pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, (s, days): (Handle, f64), rng: &mut Rng) {
     let (o, bc) = (&d[s], w.chem.body());
     let (mb, tb) = (b.mass(&w.chem), b.temp(&w.chem));
@@ -158,7 +158,7 @@ pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, (s, days): (Handle, f64
     // The share of the members a meeting reaches (at least one whole member) and the chance of that meeting.
     let per = reached.max(1.0 / o.n());
     let chance = reached / per;
-    let m = b.wanted(&w.chem, |k| per * o.amount(bc, k), kg * fb / (fb + fo + 1e-30), mb);
+    let m = b.wanted(w, |k| per * o.amount(bc, k), kg * fb / (fb + fo + 1e-30), mb);
     let resist = 1.0 + lanes::thickness(w, w.life.sum(b.cell as usize)[1], w.mesh.cells().area()[b.cell as usize]);
     let hit = reached;
     // The bite tears this share of the body of each member it reaches; the stores they held spill in proportion, less
@@ -188,7 +188,7 @@ pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, (s, days): (Handle, f64
 }
 
 /// Give to another body in the cell what it can spare (`Body::spare`, laws.md 5.3), up to what the members it meets could
-/// take in the time its update integrates, `days`, and have room for (each of its members meets one of the other's, as
+/// take in the time to its next update, `days`, and have room for (each of its members meets one of the other's, as
 /// many as both have).
 pub(super) fn give(w: &World, d: &mut Chunk, b: &mut Body, (s, days): (Handle, f64)) {
     let (chem, bc) = (&w.chem, w.chem.body());
@@ -197,9 +197,10 @@ pub(super) fn give(w: &World, d: &mut Chunk, b: &mut Body, (s, days): (Handle, f
     let all: f64 = (0..bc.n()).map(|q| spare(q) * bc.mm[q]).sum();
     let o = &d[s];
     let (mo, met, t) = (o.mass(chem), b.n().min(o.n()), o.temp(chem));
+    let ahead = body::ahead(w, o, mo);
     let share = (w.cfg.phys.take * days * o.supply(&w.chem, &w.cfg.phys, t) * met / o.n() / all.max(1e-9)).min(met / b.n());
-    let mut m: Stores = std::array::from_fn(|q| if q < bc.n() && o.uses(chem, bc.subs()[q], t) { (spare(q) * share).min(o.room(chem, q, mo) * met / o.n()) } else { 0.0 });
-    o.digest_room(chem, &mut m, mo);
+    let mut m: Stores = std::array::from_fn(|q| if q < bc.n() && o.uses(chem, bc.subs()[q], t) { (spare(q) * share).min(o.room(chem, q, mo, ahead) * met / o.n()) } else { 0.0 });
+    o.digest_room(chem, &mut m, mo, ahead);
     let got = bc.mass_of(&m);
     if got <= 0.0 || !body::pay(w, d, b, w.cfg.phys.c_handle * got) {
         return;

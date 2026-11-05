@@ -181,8 +181,8 @@ fn back(d: &mut Chunk, node: &mut Body, s: Handle, mut m: Body) {
 
 /// The part act of the body at `s` of chunk `d` queued in a batch (`life::Entry`), run whole on it and on the part as
 /// they are now, in the acts' landing (`life::land`): verb `on.0` to part `on.1` if that part still lies in the body's
-/// cell and the act is still possible (`bond::possible`), or a part of the shape given formed, over the time its update
-/// integrated, `days`; the body pays as it acts, and does nothing if it cannot. A part of node `node` then comes back to
+/// cell and the act is still possible (`bond::possible`), or a part of the shape given formed, over the time to its next
+/// update, `days`; the body pays as it acts, and does nothing if it cannot. A part of node `node` then comes back to
 /// it if it holds nothing, is inside nothing, and the node is in its cell and not leaving it; else it lives on as a body.
 pub(crate) fn land_act(w: &World, d: &mut Chunk, s: Handle, (on, days): (Result<(usize, u64), [f32; 3]>, f64), node: Option<u64>) {
     let mut b = std::mem::take(&mut d[s]);

@@ -52,7 +52,10 @@ impl Life {
             c.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.cell = i as u32);
             c.parts.iter_mut().for_each(|p| p.cell = i as u32);
         }
-        (*sums, *env) = (r.apply(std::mem::take(sums), || [0.0; ROW]), r.apply(std::mem::take(env), || [0.0; 3]));
+        *sums = r.apply(std::mem::take(sums), || [0.0; ROW]);
+        // A quarter reads its parent's ground temperature, liquid depth and height (flat quarters), a joined cell their
+        // mean by area, until the next survey reads them from Flow's state (`survey::env_of`).
+        *env = r.apply_made(std::mem::take(env), || [0.0; 3], |_, m, at| std::array::from_fn(|x| m.mean(|i| at(i)[x])));
         (*absorb, *keep) = (r.apply(std::mem::take(absorb), || 0.0), r.apply(std::mem::take(keep), || 0.0));
         *feat = r.apply(std::mem::take(feat), || [0.0; crate::choose::NCELL]);
         self.index();

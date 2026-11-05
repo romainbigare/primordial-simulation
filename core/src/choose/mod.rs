@@ -110,7 +110,7 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: 
     pick(d, &mut c, &mut rng);
     let (form, zn) = noise(w, b, s, t, &mut rng);
     b.wb = wb;
-    let k = Kit { s, t, z: zn, form, wb: &now, days: lived.days };
+    let k = Kit { s, t, z: zn, form, wb: &now, days: lived.days, ahead: w.step_days(b.cell as usize) };
     if b.n() > 1.0 {
         spread::spread(w, d, b, &c, &k, &mut rng);
     } else {
@@ -135,8 +135,9 @@ fn here(d: &Chunk, b: &Body, o: &Face) -> Option<Handle> {
 
 /// What the actions of one decision share besides its options: the brain's shape and what it thought, the noise drawn
 /// for the shape of a part made, that shape (`noise`), the well-being of a body now (`Body::wellbeing_at`, at a
-/// decision's cost and the margin of the body's reactions over its upkeep), and the time its update integrated, d
-/// (`Lived::days`), which what it takes, gives and does to parts goes by.
+/// decision's cost and the margin of the body's reactions over its upkeep), the time its update integrated, d
+/// (`Lived::days`), which a watch goes by, and the time to its next update, d (its cell's step, `World::step_days`),
+/// which what it takes, gives and does to parts goes by: what it takes now feeds it until then (laws.md 5.3).
 struct Kit<'a> {
     s: Shape,
     t: &'a ActTmp,
@@ -144,6 +145,7 @@ struct Kit<'a> {
     form: [f32; FORM_OUT],
     wb: &'a dyn Fn(&World, &Body) -> f32,
     days: f64,
+    ahead: f64,
 }
 
 /// The score of each option: the fixed actions, a move to each neighbour (by the features of the cell it leads to as a
@@ -302,11 +304,11 @@ fn trace(w: &World, b: &Body, c: &Choice, (chances, a, adv): (&[f32; OPTS], usiz
 /// part that queued one of these but a watch leaves the node until it is applied (`Body::leaving`).
 fn act_as(w: &World, d: &mut Chunk, b: &mut Body, c: &Choice, k: &Kit, (a, part_of): (usize, Option<u64>), rng: &mut Rng) {
     b.leaving |= part_of.is_some() && (a == FORM || a >= TO_PART);
-    let act = |on| Entry::Act { id: b.id, on, node: part_of, days: k.days };
+    let act = |on| Entry::Act { id: b.id, on, node: part_of, days: k.ahead };
     match a {
         REST => {}
         PUT => feed::put(w, d, b),
-        TAKE => feed::take_node(w, d, b, k.days),
+        TAKE => feed::take_node(w, d, b, k.ahead),
         FORM => d.out.push(act(Err([k.form[0], 0.5 * (k.form[1] + 1.0), 0.5 * (k.form[2] + 1.0)]))),
         RELEASE => bond::release(d, b),
         a if a < TO_BODY => go(w, d, b, c.to[a - FIXED], part_of.is_some()),
@@ -320,7 +322,7 @@ fn act_as(w: &World, d: &mut Chunk, b: &mut Body, c: &Choice, k: &Kit, (a, part_
                 return d.out.push(Entry::Watch { by: b.id, n: b.n(), lineage: b.lineage, of: face.id, days: k.days });
             }
             let Some(o) = here(d, b, &face) else { return };
-            if verb == TAKE_FROM { take_body(w, d, b, (o, k.days), rng) } else { feed::give(w, d, b, (o, k.days)) }
+            if verb == TAKE_FROM { take_body(w, d, b, (o, k.ahead), rng) } else { feed::give(w, d, b, (o, k.ahead)) }
         }
     }
 }

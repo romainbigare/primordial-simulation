@@ -62,22 +62,25 @@ fn unflattened(w: &World) -> f64 {
 }
 
 /// A cell split into flat quarters (each a quarter of what it held, at its temperature) and joined again is the world
-/// it was, every number of it, bit for bit; each change is an event naming the cell by its serial.
+/// it was, every number of it, bit for bit; each change is an event naming the cell by its serial. Each quarter reads
+/// its cell's ground temperature, liquid depth and height at once (`Life::env`), and the joined cell their mean.
 #[test]
 fn a_split_then_its_join_gives_back_the_world() {
     let mut w = world();
     let (i, n) = (testkit::dry_land(&w), w.mesh.cells().n());
-    let (l, before, held, first) = (leaf(&w, i), saved(&w), holds(&w, i), w.life.serial(i));
+    let (l, before, held, first, env) = (leaf(&w, i), saved(&w), holds(&w, i), w.life.serial(i), w.life.env[i]);
     assert_eq!(w.split(l), Ok(vec![l]));
     assert_eq!(w.mesh.cells().n(), n + 3);
     sound(&w);
     for q in l.quarters() {
         let j = w.map.cell(q).expect("a quarter");
         assert!(holds(&w, j).iter().zip(&held).all(|(&x, &y)| x == y / 4.0), "quarter {q:?} holds a quarter of what its cell held");
+        assert_eq!(w.life.env[j], env, "quarter {q:?} reads its cell's surroundings");
     }
     w.join(l).expect("its quarters join");
     assert_eq!(difference(&saved(&w), &before, ""), None);
     let j = w.map.cell(l).expect("the joined cell");
+    assert_eq!(w.life.env[j], env, "the joined cell reads its quarters' mean");
     let events: Vec<_> = w.drain_events().into_iter().map(|e| (e.kind, e.node)).collect();
     assert_eq!(events, [(EventKind::Split, first), (EventKind::Join, w.life.serial(j))]);
     assert!(w.life.serial(j) > first, "the joined cell takes a serial never given before");

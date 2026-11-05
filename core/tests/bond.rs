@@ -2,7 +2,7 @@
 //! and hold parts.
 
 use pcore::bond;
-use pcore::body::{die, Body, COPY_MASS, LACK, STRENGTH};
+use pcore::body::{die, Body, COOL_T, COPY_MASS, HEAT, LACK, STRENGTH};
 use pcore::brain;
 use pcore::chem::Phase;
 use pcore::life::{Entry, Handle};
@@ -71,6 +71,9 @@ fn walls_keep_a_body_warm() {
     let t = b.temp(&w.chem);
     *b.store_of(&w.chem, k) *= 1.3;
     b.e = b.energy_at(&w.chem, t);
+    // (A bare body that never opens a coat or sweats: where its own heat holds it is the walls' to say, not its genes'.)
+    (b.genes[HEAT], b.genes[COOL_T]) = (0.0, 400.0);
+    b.prepare(&w.chem, &w.cfg);
     // (It does not grow: a warm body builds faster, at the pace of its temperature, and would burn the fuel of its month.)
     w.cfg.phys.c_build = 0.0;
     // (Its update integrates a month, as in a run, not the day since it was placed: the walls slow how fast its heat
@@ -236,6 +239,8 @@ fn a_node_acts_on_bonds_as_its_members_together() {
         // (Mature past their copy mass, so the matter that rots is not starving, and putting nothing into a brood, so they
         // do not copy.)
         (b.genes[COPY_MASS], b.genes[pcore::body::ALLOC]) = (b.genes[COPY_MASS] - 1.0, 0.0);
+        // (Bare, its own heat holds it near its ground, at a slow pace: it pays its month from the fuel it was placed with.)
+        b.genes[HEAT] = 0.0;
         if case == 0 {
             (b.genes[STRENGTH], b.genes[COPY_MASS], b.count) = (1.0, 1.0, b.count / 40.0);
         } else {
