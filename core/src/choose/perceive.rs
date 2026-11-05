@@ -166,7 +166,7 @@ pub fn cells(w: &mut World) {
         for class in 0..3 {
             f[ANIMALS + class] = ln(1.0 + f[ANIMALS + class] / area as f32);
         }
-        let per = 1.0 / w.map.squares(w.mesh.corner(i));
+        let per = 1.0 / w.map.squares(i);
         f[MEMBERS] = ln(1.0 + (c[0] * per) as f32) / LN_MEMBERS;
         f[STRENGTH] = (c[3] / c[0].max(1.0)) as f32;
         f[RESIST] = ln(1.0 + thickness(w, c[1], area) as f32);

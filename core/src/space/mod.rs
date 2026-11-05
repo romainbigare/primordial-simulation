@@ -1,12 +1,15 @@
 //! Space: the shape of the world, and nothing else. A mesh is levels of cells (area, centre, latitude, longitude) and
 //! links (two cells, the distance between centres, the width of their border); each cell but at the coarsest level has
 //! a parent. A level lies on a flat map or on a sphere. Each link of a cell takes one of its compass directions (`way`).
-//! Links are plain arrays, each once (`a < b`), with each cell's links in compressed lists, so solvers take slices.
+//! Links are plain arrays, each once (`a < b`), with each cell's links in compressed lists, so solvers take slices. The
+//! cells of the finest level are the leaves of a tree under each cell of the air level (`tree`).
 
 pub mod square;
 pub mod stack;
+pub mod tree;
 
 pub use stack::Stack;
+pub use tree::{Leaf, Tree};
 
 use std::f64::consts::TAU;
 
@@ -193,33 +196,28 @@ impl Level {
     }
 }
 
-/// A mesh: its levels, the finest first, and how its cells lie on the squares of the map.
+/// A mesh: its levels, the finest first, and the tree of the cells of the finest level, which finds the cell at a point
+/// of the map.
 #[derive(Clone, Debug, Default)]
 pub struct Mesh {
     levels: Vec<Level>,
-    /// The cell of the finest level that holds each square of the map, and the north-west square of each cell
-    holder: Vec<u32>,
-    corner: Vec<u32>,
+    tree: Tree,
 }
 
 impl Mesh {
     /// A mesh of the level `cells` and a coarser level (`Level::coarser` of a level of the same map), given each cell's
-    /// parent at it, the cell of each square of the map and the north-west square of each cell.
-    pub(crate) fn of(mut cells: Level, (mut coarse, links): (Level, Vec<LinkSpec>), parent: Vec<u32>, holder: Vec<u32>, corner: Vec<u32>) -> Mesh {
-        assert!(parent.len() == cells.n() && corner.len() == cells.n(), "a parent and a north-west square for each cell");
+    /// parent at it and the tree of the cells.
+    pub(crate) fn of(mut cells: Level, (mut coarse, links): (Level, Vec<LinkSpec>), parent: Vec<u32>, tree: Tree) -> Mesh {
+        assert_eq!(parent.len(), cells.n(), "a parent for each cell");
         (coarse.kid_start, coarse.kids) = compress(coarse.n(), parent.iter().enumerate().map(|(c, &p)| (p, c as u32)));
         assert!(coarse.kid_start.windows(2).all(|s| s[0] < s[1]), "each coarse cell has a child");
         cells.parent = parent;
         coarse.join(links);
-        Mesh { levels: vec![cells, coarse], holder, corner }
+        Mesh { levels: vec![cells, coarse], tree }
     }
-    /// The cell of the finest level that holds square `s` of the map.
-    pub fn cell_of(&self, s: usize) -> usize {
-        self.holder[s] as usize
-    }
-    /// The north-west square of cell `i` of the finest level.
-    pub fn corner(&self, i: usize) -> usize {
-        self.corner[i] as usize
+    /// The tree of the cells of the finest level.
+    pub fn tree(&self) -> &Tree {
+        &self.tree
     }
     pub fn levels(&self) -> usize {
         self.levels.len()

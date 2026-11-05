@@ -22,11 +22,17 @@ are not bodies but the **cover** of each cell, a field (4.5); bodies are **eater
 **The map** (`space/`, `World::mesh`): cells, links with widths and headings, and a coarser air level. The laws step
 only on links. Each link takes one of 8 compass directions (`Level::way`), so the brain's 8 directions hold everywhere.
 An island of 2 km squares, or a globe (`--globe`) of latitude-longitude squares on a sphere of 6,371 km whose rows wrap
-east to west. One builder makes every cell (`Square::mesh`): a cell is a block of 1, 2 or 4 squares on a side inside
-one air block (`Square::size`), and cells across a border differ by one size at most. Cells link across a border by
-its width, as far apart as their centres across it, so a steady change across a border of two sizes passes exactly;
-across a corner (width 0) only where four cells of one size meet, so no cell has more than 8 links. The air level is
-built from the squares, the same whatever the sizes of the cells.
+east to west; an air block is 4 x 4 squares. The cells are a sparse tree under each air block (`space/tree.rs`): the
+block is the root, a cell is a leaf at any depth down to 1/64 of the block's side (`DEPTH_MOST`), and only the leaves
+are kept (`Square::leaves`), numbered by their north-west corners row by row; a square is depth 2. Today's worlds start
+with cells of 1, 2 or 4 squares on a side (worldgen); no law splits or joins them yet. Cells across a border differ by
+one depth at most (2:1). One builder makes every cell (`Square::mesh`). Cells link across a border by its width, as far
+apart as their centres across it, so a steady change across a border of two sizes passes exactly; across a corner
+(width 0) only where four cells of one size meet, so no cell has more than 8 links. The map's samples are its squares
+(`Square::samples`: a cell coarser than a square cut into its squares, a finer one as it is): the air level is built
+on them, the same whatever the sizes of the cells, and a cell's starting height is the mean by area of the terrain on
+its samples (a cell finer than a square takes the height at its own centre). What needs the cell at a point (the tape's
+frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
 (`schedule::month`), each for the whole month: the survey (`survey::survey`: one task per chunk on the pool with the

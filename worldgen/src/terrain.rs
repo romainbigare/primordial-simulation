@@ -1,6 +1,7 @@
 //! Terrain: an island or a globe with mountains, and the starting state of ground, low liquid and air.
 
 use crate::chemistry::{chemistry0, Init};
+use crate::drain::drain;
 
 use pcore::change::Reactor;
 use pcore::chem::{Chemistry, Phase};
@@ -12,8 +13,6 @@ use pcore::space::{Level, Mesh};
 use pcore::store::{Boundary, Class, Links, Node, Store};
 use pcore::units::P_REF;
 use pcore::{Config, Counters, World, AIR};
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
 use std::f64::consts::{PI, TAU};
 
 /// Cell size of an island, m, and ground cells per air node along a side.
@@ -37,9 +36,6 @@ pub const LOOSE_M: f64 = 1.0;
 const T_EQUATOR: f64 = 302.0;
 const POLE_DROP: f64 = 45.0;
 const LAPSE: f64 = 0.0065;
-/// The least slope of ground raised to fill a closed basin, m per m: liquid still runs across the filled floor
-/// (Planchon and Darboux 2001).
-const DRAIN_SLOPE: f64 = 1e-3;
 /// Low ground starts this many K above the melting point of its liquid, so it is molten.
 const MOLTEN_MARGIN: f64 = 2.0;
 
@@ -130,70 +126,18 @@ fn heights(seed: u64, map: &Square, cells: &Level) -> Vec<f64> {
 }
 
 /// Height of each cell of `mesh` on `map` (its rows between the latitudes of `cfg`), m: the mean by area of the heights
-/// of its squares (`heights`), so a cell of many squares holds the ground and the low liquid its squares would.
+/// of its samples (`heights` on `Square::samples`), so a cell of many squares holds the ground and the low liquid its
+/// squares would, and a cell finer than a square takes the height at its own centre.
 fn cell_heights(seed: u64, map: &Square, mesh: &Mesh, cfg: &Config) -> Vec<f64> {
-    let squares = World::mesh_of(&Square::new(map.w, map.h, map.side, map.wrap), AIR_SCALE, cfg);
-    let (z, area) = (heights(seed, map, squares.cells()), squares.cells().area());
+    let samples = map.samples();
+    let sampled = World::mesh_of(&samples, cfg);
+    let (z, area) = (heights(seed, map, sampled.cells()), sampled.cells().area());
     let mut hz = vec![0.0; mesh.cells().n()];
-    for s in 0..map.n() {
-        let c = mesh.cell_of(s);
+    for (s, leaf) in samples.leaves().iter().enumerate() {
+        let c = mesh.tree().cell_at(leaf.corner());
         hz[c] += area[s] / mesh.cells().area()[c] * z[s];
     }
     hz
-}
-
-/// A cell waiting in the flood of `drain`, by its height: the lowest first, then the lowest index.
-struct Low(f64, usize);
-
-impl Ord for Low {
-    fn cmp(&self, o: &Self) -> Ordering {
-        o.0.total_cmp(&self.0).then(o.1.cmp(&self.1))
-    }
-}
-impl PartialOrd for Low {
-    fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
-        Some(self.cmp(o))
-    }
-}
-impl PartialEq for Low {
-    fn eq(&self, o: &Self) -> bool {
-        self.cmp(o) == Ordering::Equal
-    }
-}
-impl Eq for Low {}
-
-/// Give every cell of `cells` a way down to the low ground: a priority flood from it, the lowest cell reached first,
-/// raises each new neighbour no higher than it to its height plus `DRAIN_SLOPE` times their distance (Barnes, Lehman
-/// and Mulla 2014); a higher neighbour already drains through it. Noise has closed basins that no liquid ever cut; real wet land drains. On a globe (`wrap`) the low ground is
-/// every cell below 0 m; on an island, the cells below 0 m joined to its lowest cell, so ground below 0 m inland is a
-/// closed basin too.
-fn drain(cells: &Level, z: &mut [f64], wrap: bool) {
-    let mut reached: Vec<bool> = z.iter().map(|&h| h < 0.0 && wrap).collect();
-    let lowest = (0..z.len()).min_by(|&a, &b| z[a].total_cmp(&z[b])).filter(|&i| !wrap && z[i] < 0.0);
-    let mut low: Vec<usize> = lowest.into_iter().collect();
-    low.iter().for_each(|&i| reached[i] = true);
-    while let Some(i) = low.pop() {
-        for &j in cells.around(i).1 {
-            if z[j as usize] < 0.0 && !reached[j as usize] {
-                reached[j as usize] = true;
-                low.push(j as usize);
-            }
-        }
-    }
-    let mut flood: BinaryHeap<Low> = (0..z.len()).filter(|&i| reached[i]).map(|i| Low(z[i], i)).collect();
-    while let Some(Low(h, i)) = flood.pop() {
-        let (links, near) = cells.around(i);
-        for (&l, &j) in links.iter().zip(near) {
-            let j = j as usize;
-            if !reached[j] {
-                reached[j] = true;
-                if z[j] <= h {
-                    z[j] = h + DRAIN_SLOPE * cells.dist()[l as usize];
-                }
-                flood.push(Low(z[j], j));
-            }
-        }
-    }
 }
 
 /// Air over a m² at 0 m, mol: the reference pressure over the weight of a mol of the starting air (`Init::air`).
@@ -222,12 +166,12 @@ pub fn scale_absorbers(w: &mut World, factor: f64) {
 
 /// The map of an island of `w × h` cells.
 pub fn island(w: usize, h: usize) -> Square {
-    Square::new(w, h, CELL_M, false)
+    Square::new(w, h, CELL_M, false, AIR_SCALE)
 }
 
 /// The map of a globe of `rows` rows from pole to pole, with twice as many columns, so a cell is square at the equator.
 pub fn globe(rows: usize) -> Square {
-    Square::new(2 * rows, rows, PI * RADIUS_M / rows as f64, true)
+    Square::new(2 * rows, rows, PI * RADIUS_M / rows as f64, true, AIR_SCALE)
 }
 
 /// A new world on `map` from a seed: terrain, chemistry 0, ground, liquid and air.
@@ -245,7 +189,7 @@ pub fn new_world(seed: u64, w: usize, h: usize) -> World {
 /// `map` (of squares) with its low ground away from land in coarse cells (`coarsen`): an air block whose squares all
 /// lie below 0 m on the terrain of `seed`, none within `LAND_RING` squares of one that does not, is coarse.
 fn coarse_low(seed: u64, map: Square) -> Square {
-    let z = heights(seed, &map, World::mesh_of(&map, AIR_SCALE, &Config::default()).cells());
+    let z = heights(seed, &map, World::mesh_of(&map, &Config::default()).cells());
     let ring = -LAND_RING..=LAND_RING;
     let open: Vec<bool> = (0..map.n()).map(|s| ring.clone().all(|dy| ring.clone().all(|dx| map.step(s, (dx, dy)).is_none_or(|t| z[t] < 0.0)))).collect();
     let w = map.w;
@@ -258,30 +202,11 @@ fn block(w: usize, x: usize, y: usize, k: usize) -> impl Iterator<Item = usize> 
 }
 
 /// `map` (of squares) with each whole air block that `fine(column, row)` (of the block) does not keep in squares one
-/// cell, split into smaller cells where it borders finer ones until cells across a border differ by one size at most
-/// (`Square::mesh`).
-fn coarsen(mut map: Square, fine: impl Fn(usize, usize) -> bool) -> Square {
-    assert!(AIR_SCALE.is_power_of_two(), "an air block splits into halves");
-    let (w, top) = (map.w, AIR_SCALE.trailing_zeros() as u8);
-    for (bx, by) in (0..map.h / AIR_SCALE).flat_map(|by| (0..w / AIR_SCALE).map(move |bx| (bx, by))) {
-        if !fine(bx, by) {
-            block(w, bx * AIR_SCALE, by * AIR_SCALE, AIR_SCALE).for_each(|s| map.size[s] = top);
-        }
-    }
-    // Split a cell that borders one more than one size smaller, until none does.
-    let mut split = true;
-    while split {
-        split = false;
-        for s in 0..map.n() {
-            let small = [(1, 0), (0, 1), (-1, 0), (0, -1)].iter().filter_map(|&d| map.step(s, d)).map(|t| map.size[t]).min();
-            if small.is_some_and(|m| map.size[s] > m + 1) {
-                let ((x, y), k, half) = (map.xy(s), 1usize << map.size[s], map.size[s] - 1);
-                block(w, x - x % k, y - y % k, k).for_each(|t| map.size[t] = half);
-                split = true;
-            }
-        }
-    }
-    map
+/// cell, split into smaller cells where it borders finer ones until cells across a border differ by one depth at most
+/// (`Square::balanced`).
+fn coarsen(map: Square, fine: impl Fn(usize, usize) -> bool) -> Square {
+    let (whole, square) = ((map.w / map.scale, map.h / map.scale), map.square_depth());
+    map.by_blocks(|bx, by| if bx < whole.0 && by < whole.1 && !fine(bx, by) { 0 } else { square }).balanced()
 }
 
 /// A new globe of `rows` rows from a seed, every cell a whole air block but in the rectangle `fine` of air blocks
@@ -297,7 +222,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
     if map.wrap {
         (cfg.lat_south, cfg.lat_north) = (-90.0, 90.0);
     }
-    let mesh = World::mesh_of(&map, AIR_SCALE, &cfg);
+    let mesh = World::mesh_of(&map, &cfg);
     let (n, na, ns) = (mesh.cells().n(), mesh.level(AIR).n(), chem.ns());
     let mut hz = cell_heights(seed, &map, &mesh, &cfg);
     drain(mesh.cells(), &mut hz, map.wrap);
@@ -342,8 +267,8 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
     for j in 0..na {
         zmean[j] /= air_area[j];
         // At the latitude of the first cell of a row near the middle of the node's block.
-        let y = (j / map.w.div_ceil(AIR_SCALE)) * AIR_SCALE + AIR_SCALE / 2;
-        let lat = mesh.cells().lat()[mesh.cell_of(map.idx(0, y.min(map.h - 1)))];
+        let y = mesh.tree().block_xy(j).1 * map.scale + map.scale / 2;
+        let lat = mesh.cells().lat()[mesh.tree().cell_at(map.point(map.idx(0, y.min(map.h - 1))))];
         // A node's temperature is its air's at the column's mean height (`flow::air`), which lies higher the warmer the
         // air: it starts at the starting temperature there, the height taken twice from the scale height it gives.
         let at_mean = |t: f64| {
@@ -364,7 +289,6 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
         cfg,
         chem,
         map,
-        air_scale: AIR_SCALE,
         mesh,
         seed,
         time: 0,

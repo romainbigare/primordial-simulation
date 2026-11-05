@@ -133,7 +133,7 @@ impl Recorder {
                     bump(&mut m.deaths, NC * root as usize + c, e.value);
                 }
                 if cause == SPENT {
-                    m.spent = [m.spent[0] + e.value, m.spent[1] + e.value * w.map.xy(w.mesh.corner(e.node as usize)).1 as f64];
+                    m.spent = [m.spent[0] + e.value, m.spent[1] + e.value * w.map.row(e.node as usize)];
                 }
             }
             EventKind::Watched { by, of } => {

@@ -1,6 +1,7 @@
 //! World generation: chemistry, terrain and the starting state.
 
 pub mod chemistry;
+mod drain;
 pub mod generate;
 pub mod life;
 pub mod richness;

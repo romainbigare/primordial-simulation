@@ -138,12 +138,12 @@ pub(super) struct Moved {
 /// sqrt(`mix` × `BLOCK_DAY`), in whole nodes, at least one. Each block's nodes, its hub first, in the order of their
 /// squares. An island smaller than a block is one block.
 pub(in crate::flow) fn blocks(w: &World) -> Vec<Vec<u32>> {
-    let (air, map) = (w.mesh.level(AIR), &w.map);
+    let air = w.mesh.level(AIR);
     let spacing = (air.area().iter().sum::<f64>() / air.n() as f64).sqrt();
-    let side = w.air_scale * ((w.cfg.mix * BLOCK_DAY).sqrt() / spacing).max(1.0) as usize;
+    let side = ((w.cfg.mix * BLOCK_DAY).sqrt() / spacing).max(1.0) as usize;
     let mut of: BTreeMap<(usize, usize), Vec<u32>> = BTreeMap::new();
     for j in 0..air.n() {
-        let (x, y) = map.xy(w.mesh.corner(air.children(j)[0] as usize));
+        let (x, y) = w.mesh.tree().block_xy(j);
         of.entry((y / side, x / side)).or_default().push(j as u32);
     }
     of.into_values().collect()

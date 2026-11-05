@@ -23,8 +23,9 @@ const HELD: usize = 7;
 /// squares (`fine`).
 fn keys(seed: u64, fine: bool) -> Vec<[f64; KEYS.len()]> {
     let island = worldgen::terrain::island(2 * SIDE, 2 * SIDE);
-    let mut map = pcore::space::square::Square::new(island.w, island.h, island.side / 2.0, false);
-    map.size.fill(u8::from(!fine));
+    let map = pcore::space::square::Square::new(island.w, island.h, island.side / 2.0, false, island.scale);
+    let square = map.square_depth();
+    let map = map.by_blocks(|_, _| if fine { square } else { square - 1 });
     let km = map.side * if fine { 1.0 } else { 2.0 } / 1e3;
     let mut years = vec![];
     run_on(worldgen::terrain::new_map(seed, map), YEARS, false, |_| {}, |y, _, rec| {

@@ -47,8 +47,8 @@ map repeating east and west, and a cell's latitude and longitude in the inspect 
 `mass_land`) are weighted by cell area, as the cells of a globe differ in area (`measure::area_mean`). Counts of cells
 (`rivers`, the cover's median) are of cells (a cell of many squares counts one).
 
-**Map layers** in the frames (`tape/src/layers.rs`, one byte a square of the map, row by row; a square shows its cell,
-as do the PNG pictures): height, liquid depth, ice, liquid flux, loose
+**Map layers** in the frames (`tape/src/layers.rs`, one byte a square of the map, row by row; a square shows the cell
+that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid depth, ice, liquid flux, loose
 ground, ground and air temperature, rain, vapour, absorber, the cover's and the bodies' mass per m², bodies, traffic,
 worn edges, structures, true colour (r, g, b).
 

@@ -196,7 +196,7 @@ fn a_pool_far_over_its_boiling_point_gives_no_more_than_it_holds() {
 fn warm_air_spreads() {
     let mut cold = worldgen::testkit::squares(3, 16, 16);
     let mut warm = cold.clone();
-    let j = cold.map.w.div_ceil(cold.air_scale) + 1;
+    let j = cold.map.w.div_ceil(cold.map.scale) + 1;
     set_heat(&mut warm, Node::air(j), 1.2 * cold.store.heat(Class::Air)[j]);
     let books = Books::now(&warm);
     let excess = warm.t_air(j) - cold.t_air(j);
@@ -259,10 +259,9 @@ fn heat_crosses_the_border_between_cells_of_two_sizes_by_its_width() {
     const GRAD: f64 = 1e-3;
     // Squares from the north edge of the map to the south between cells of 2 x 2 squares: their borders run north to
     // south, across the warming.
-    let mut map = worldgen::terrain::island(24, 16);
-    for s in 0..map.n() {
-        map.size[s] = u8::from(!(8..16).contains(&map.xy(s).0));
-    }
+    let island = worldgen::terrain::island(24, 16);
+    let (scale, square) = (island.scale, island.square_depth());
+    let map = island.by_blocks(|bx, _| if (8..16).contains(&(bx * scale)) { square } else { square - 1 });
     let mut w = worldgen::terrain::new_map(3, map.clone());
     let (n, ns, area) = (w.mesh.cells().n(), w.chem.ns(), w.mesh.cells().area().to_vec());
     let land = (0..n).find(|&i| w.surface_z(i) > 0.0 && area[i] == map.side * map.side).expect("land");
