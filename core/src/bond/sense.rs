@@ -101,11 +101,13 @@ pub fn features(c: &Cell, w: &World, b: &Body, p: usize, mb: f64) -> [f32; NO] {
 /// Can verb `v` be done to the part at `p` of body `b`'s cell `c` at all (as the body sees it)?
 pub(crate) fn possible(c: &Cell, b: &Body, v: usize, p: usize, vol: f64) -> bool {
     let pt = &c.parts[p];
-    let s = &c.parts[root(c, p)].s;
     match v {
         0 => pt.held == NOBODY,
         3 => held(c, b).is_some_and(|h| c.parts[h].root != pt.root),
-        5 => s.encl.closed > 0.0 && s.space >= vol && room(c, b).is_none_or(|r| r.0 != pt.root),
+        5 => {
+            let s = &c.parts[root(c, p)].s;
+            s.encl.closed > 0.0 && s.space >= vol && room(c, b).is_none_or(|r| r.0 != pt.root)
+        }
         _ => true,
     }
 }

@@ -137,7 +137,11 @@ impl Part {
     }
     /// Keep the shape when the walls change.
     fn resize(&mut self, chem: &Chemistry) {
-        let (v, vo) = (self.walls(chem).volume, self.outer());
+        self.fit(self.walls(chem).volume);
+    }
+    /// Keep the shape around walls of volume `v`, m³ (`resize`, their volume known).
+    fn fit(&mut self, v: f64) {
+        let vo = self.outer();
         if vo > 0.0 {
             let f = (v / (1.0 - self.hollow as f64) / vo).cbrt() as f32;
             self.size = self.size.map(|d| d * f);
@@ -167,9 +171,13 @@ fn members(c: &Cell, r: u64) -> Vec<usize> {
     (0..c.parts.len()).filter(|&x| c.parts[x].root == r).collect()
 }
 
-/// The place of the root of the structure of the part at `p`.
+/// The place of the root of the structure of the part at `p` (`p` itself if it is the root).
 fn root(c: &Cell, p: usize) -> usize {
-    at(c, c.parts[p].root).expect("a structure's root lies in its cell")
+    let r = c.parts[p].root;
+    if r == c.parts[p].id {
+        return p;
+    }
+    at(c, r).expect("a structure's root lies in its cell")
 }
 
 /// Place part `p` in cell `i` of chunk `d`, the last of its list, with the next id of the cell (`life::new_id`, as a
@@ -225,18 +233,17 @@ fn restructure(w: &World, c: &mut Cell, p: usize) {
     let r = *list.iter().min().expect("one part");
     places.iter().for_each(|&y| c.parts[y].root = r);
     let y = at(c, r).expect("its root");
-    c.parts[y].s = numbers(w, c, places.iter().copied());
+    c.parts[y].s = numbers(w, places.iter().map(|&x| (&c.parts[x], c.parts[x].walls(&w.chem))));
 }
 
-/// The numbers of the structure of the parts at `places` of cell `c` (`Info`). Plates close a box as wide as the longest
-/// part; a hollow part closes its own hollow; the structure takes the larger space and its enclosure.
-fn numbers(w: &World, c: &Cell, places: impl Iterator<Item = usize>) -> Info {
+/// The numbers of the structure of the parts `of`, each with its walls (`Info`). Plates close a box as wide as the
+/// longest part; a hollow part closes its own hollow; the structure takes the larger space and its enclosure.
+fn numbers<'a>(w: &World, of: impl Iterator<Item = (&'a Part, Walls)>) -> Info {
     let chem = &w.chem;
     // `foot`: the area of the parts' largest faces, m².
     let (mut s, mut l, mut cond, mut best, mut foot) = (Info::default(), 0f64, 0f64, (0f64, 0f64), 0f64);
-    for x in places {
-        let pt = &c.parts[x];
-        let (walls, d) = (pt.walls(chem), pt.size.map(|v| v as f64));
+    for (pt, walls) in of {
+        let d = pt.size.map(|v| v as f64);
         let (vo, face) = (pt.outer(), d[0] * d[1]);
         (s.parts, s.mass, s.outer, foot) = (s.parts + 1, s.mass + pt.mass(chem), s.outer + vo, foot + face);
         l = l.max(d[0]);
@@ -313,9 +320,11 @@ fn fall_apart(w: &World, d: &mut Chunk, i: usize, p: usize) {
 }
 
 /// The share `f(k, t, walls)` of each substance `k` of the walls of part `p` leaves them with its heat at the part's
-/// temperature `t` (the walls as they are by then): its mol and J are added to `off`, one entry per substance.
-fn shed(chem: &Chemistry, p: &mut Part, f: impl Fn(usize, f64, &[f64]) -> f64, off: &mut [[f64; 2]]) {
-    let t = p.e / p.heat_cap(chem).max(1e-9);
+/// temperature `t` (the walls as they are by then): its mol and J are added to `off`, one entry per substance. Returns
+/// the part's heat capacity after, J/K.
+fn shed(chem: &Chemistry, p: &mut Part, f: impl Fn(usize, f64, &[f64]) -> f64, off: &mut [[f64; 2]]) -> f64 {
+    let cap = p.heat_cap(chem);
+    let (t, mut changed) = (p.e / cap.max(1e-9), false);
     for (k, o) in off.iter_mut().enumerate() {
         if p.wall[k] <= 0.0 {
             continue;
@@ -323,10 +332,11 @@ fn shed(chem: &Chemistry, p: &mut Part, f: impl Fn(usize, f64, &[f64]) -> f64, o
         let f = f(k, t, &p.wall);
         if f > 0.0 {
             let (a, q) = (f * p.wall[k], f * p.wall[k] * chem.subs[k].cp * t);
-            (p.e, p.wall[k]) = (p.e - q, p.wall[k] - a);
+            (p.e, p.wall[k], changed) = (p.e - q, p.wall[k] - a, true);
             *o = [o[0] + a, o[1] + q];
         }
     }
+    if changed { p.heat_cap(chem) } else { cap }
 }
 
 /// What parts of cell `i` shed (`shed`: mol and J per substance) goes to its ground, one move per substance, on the

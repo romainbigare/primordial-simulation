@@ -282,9 +282,8 @@ pub fn moved(w: &mut World, (by, carried): (u64, Option<u64>), (i, j): (usize, u
         move_structure(w, i, r, j);
     }
     let push = (w.cfg.phys.bump * mb * w.cfg.gravity) as f32;
-    let c = &mut w.life.cells[j];
-    for x in 0..c.parts.len() {
-        let r = root(c, x);
-        c.parts[r].push = c.parts[r].push.max(push);
+    // (Each structure's root lies in its cell and holds its push.)
+    for r in w.life.cells[j].parts.iter_mut().filter(|p| p.root == p.id) {
+        r.push = r.push.max(push);
     }
 }
