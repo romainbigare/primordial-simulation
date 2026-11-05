@@ -94,7 +94,8 @@ pub struct Life {
     pub absorb: Vec<f32>,
     /// Per cell, from the last survey: the share of that absorbed light set aside for its bodies' light reactions
     pub keep: Vec<f32>,
-    /// Per cell, from the last monthly survey: ground temperature, liquid depth, surface height
+    /// Per cell, from the last monthly survey (a split's quarters their parent's, a joined cell its quarters' mean by area):
+    /// ground temperature, liquid depth, surface height
     pub env: Vec<[f64; 3]>,
     /// Per cell, from the last survey: its features as every brain perceives them, then the same smoothed over the
     /// neighbours once to `choose::SIGHTS - 1` times (`choose::cells`, read by `feat`)

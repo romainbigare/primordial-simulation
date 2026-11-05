@@ -127,7 +127,9 @@ names is gone, and a new cell holds nothing and takes the next serial, so every 
 between two cells that both stay keeps what it remembers. A quarter holds its share of each number its parent held (the
 amounts and the heat of each of its nodes, the volumes Flow keeps of its ground, what its sleep held, the moving
 averages per cell, `remap::Made::held`) and its parent's numbers that do not add up (the moving averages per m², the
-temperature and the plateau, the means of its bed, the sleep's alarm and the time it was brought up to date); a joined
+temperature and the plateau, the means of its bed, the sleep's alarm and the time it was brought up to date, and the
+ground temperature, liquid depth and height its bodies read until the next survey, `Life::env`, so a founder placed
+there at once starts at its ground's temperature); a joined
 cell holds the sum of its quarters' and the mean by area of the others (its plateau where all share it, its bed's means
 by volume, the first alarm and the earliest time brought up to date, so its law skips no time). The share is by area,
 the same temperature in each (flat quarters), unless a join made the cell: a join keeps each quarter's share of each
