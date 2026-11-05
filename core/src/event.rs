@@ -19,6 +19,11 @@ pub enum EventKind {
     Took { by: u64, from: u64, used: f32 },
     BondMade,
     BondBroken,
+    /// The cell of serial `node` (not its index: a split or a join renumbers the cells) split into its quarters (value:
+    /// its depth below its air block; `World::split`)
+    Split,
+    /// The cell of serial `node` was joined from its quarters (value: its depth; `World::join`)
+    Join,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]

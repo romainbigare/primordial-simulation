@@ -50,6 +50,10 @@ impl Recorder {
         row.push("runoff_sea", "mol/m2/s", land.iter().map(|&i| w.off_land[i] as f64).sum::<f64>() / land_area);
         // Rivers as the web viewer draws them.
         row.push("rivers", "1", dry_land_flux(w, &c.f).iter().filter(|&&q| q > RIVER_WEB).count() as f64);
+        // The cells, and those split and joined in the year.
+        row.push("cells", "1", w.mesh.cells().n() as f64);
+        row.push("splits", "1/yr", self.year.splits);
+        row.push("joins", "1/yr", self.year.joins);
         // Bodies (nodes and individuals), their members and their nodes; the slots of cover and its mass.
         let (members, nodes) = life.alive().fold((0.0, 0.0), |(m, n), b| (m + b.n(), n + (b.n() > 1.0) as u8 as f64));
         row.push("bodies", "1", life.alive().count() as f64);

@@ -106,6 +106,8 @@ pub struct World {
     pub rained: Vec<f64>,
     /// What the links of the cell level remember (`store::Links`)
     pub links: crate::store::Links,
+    /// Of each cell a join made, what it keeps of its quarters for its split (`remap::Joined`); none for the others
+    pub joined: Vec<Option<crate::remap::Joined>>,
     /// Raw physical facts since the shell last drained them (not part of the saved state)
     #[serde(skip)]
     pub events: Vec<Event>,

@@ -304,6 +304,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
 
         canopy: vec![0.0; n],
         links,
+        joined: vec![None; n],
         light: vec![0.0; n],
         rained: vec![0.0; n],
         events: Vec::new(),

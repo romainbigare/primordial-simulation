@@ -315,10 +315,10 @@ pub(super) fn room(w: &World, s: &mut Scratch) {
     s.cover = vec![[0.0; 3]; n];
 }
 
-/// Tables of the map and the chemistry alone (not saved): substance constants, and the four air nodes each cell reads.
-pub(super) fn tables(w: &World, s: &mut Scratch) {
+/// The numbers of each substance Flow reads often (`Sp`).
+pub(super) fn substances(chem: &Chemistry) -> Vec<Sp> {
     let mean = |v: [f32; 3]| v.iter().map(|&x| x as f64).sum::<f64>() / 3.0;
-    s.sp = (w.chem.subs.iter())
+    (chem.subs.iter())
         .map(|b| Sp {
             cp: b.cp,
             mm: b.molar_mass,
@@ -330,7 +330,12 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
             boil: b.boil,
             refl: [mean(b.refl[0]), mean(b.refl[1])],
         })
-        .collect();
+        .collect()
+}
+
+/// Tables of the map and the chemistry alone (not saved): substance constants, and the four air nodes each cell reads.
+pub(super) fn tables(w: &World, s: &mut Scratch) {
+    s.sp = substances(&w.chem);
     // A sample of the map (`Square::samples`: a square, or a cell finer than one) reads its air node and the three next
     // to it on its side of the node's centre, bilinearly on the map (round a globe's wrap); along an axis with no node
     // on its side, its own alone, paired with the node on the other side. A cell reads what its samples read, by their
