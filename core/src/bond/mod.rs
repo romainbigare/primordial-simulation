@@ -1,16 +1,20 @@
 //! Law 3: Bond. Parts are nodes of the store (`Class::Part`) that bonds join into structures; a bond breaks when its
 //! load passes its strength (laws.md 3). Here: parts, structures and their graph; `bonds`: the bonds and the enclosure;
-//! `verbs`: what bodies do to parts; `sense`: what parts give a body; `month`: the monthly rot, heat and loads. A part
-//! is stored in the list of the cell it lies in (`life::Cell::parts`), with the bonds of that cell's parts
-//! (`life::Cell::bonds`): a structure lies in one cell, so all that changes parts runs on that cell, in its chunk
-//! (`life::Chunk`), but a structure carried to another cell (`moved`).
+//! `verbs`: what bodies do to parts; `edge`: how a held part's edge changes what breaking takes; `sense`: what parts
+//! give a body; `month`: the monthly rot, heat and loads. A part is stored in the list of the cell it lies in
+//! (`life::Cell::parts`), with the bonds of that cell's parts (`life::Cell::bonds`): a structure lies in one cell, so
+//! all that changes parts runs on that cell, in its chunk (`life::Chunk`), but a structure carried to another cell
+//! (`moved`).
 
 mod bonds;
+mod edge;
 mod month;
 mod sense;
 mod verbs;
 
 pub use bonds::{Bonds, Enclosure};
+pub use edge::{blunt, edge, edge_leaves, Edge};
+pub(crate) use edge::blunted;
 pub use month::step;
 pub use sense::{depth, features, room};
 pub(crate) use sense::{enclosure, leave_outgrown, possible, sense, SENSE};
@@ -27,7 +31,7 @@ pub(crate) const HELD: f64 = 0.0;
 pub(crate) const JOINED: f64 = 1.0;
 pub const LOAD: f64 = 2.0;
 /// Features of a perceived part.
-pub(crate) const NO: usize = 7;
+pub(crate) const NO: usize = 8;
 /// Most hollowness of a part (a share of its outer volume).
 const MOST_HOLLOW: f32 = 0.95;
 /// An elongation of 1 (or -1) is an aspect of 10 to this power (100).
@@ -78,10 +82,12 @@ pub struct Tally {
     pub formed: f64,
     pub to_parts: f64,
     pub from_parts: f64,
+    /// kg taken from bodies and the cover by bites an edge cut (`Edge`)
+    pub edged: f64,
 }
 
-/// Of a part's walls: their mass, kg, and volume, m³, and by volume their hardness, bond strength (0..1) and heat
-/// conductivity, W/(m K).
+/// Of a part's walls: their mass, kg, and volume, m³, and by volume their hardness, bond strength (0..1), heat
+/// conductivity, W/(m K), and breaking stress, Pa (the rule of mixtures).
 #[derive(Clone, Copy, Debug)]
 pub struct Walls {
     pub mass: f64,
@@ -89,6 +95,7 @@ pub struct Walls {
     pub hardness: f64,
     pub strength: f64,
     pub conductivity: f64,
+    pub rupture: f64,
 }
 
 impl Part {
@@ -103,13 +110,19 @@ impl Part {
     }
     /// Its walls' numbers (`Walls`).
     pub fn walls(&self, chem: &Chemistry) -> Walls {
-        let mut r = [0.0; 5];
+        let mut r = [0.0; 6];
         for (k, &a) in self.wall.iter().enumerate().filter(|p| *p.1 > 0.0) {
             let (s, v) = (&chem.subs[k], a * chem.molar_volume(k, Phase::Solid));
-            r = [r[0] + a * s.molar_mass, r[1] + v, r[2] + v * s.hardness, r[3] + v * s.strength, r[4] + v * s.conductivity];
+            r = [r[0] + a * s.molar_mass, r[1] + v, r[2] + v * s.hardness, r[3] + v * s.strength, r[4] + v * s.conductivity, r[5] + v * s.rupture];
         }
         let v = r[1].max(1e-12);
-        Walls { mass: r[0], volume: r[1], hardness: r[2] / v, strength: r[3] / v, conductivity: r[4] / v }
+        Walls { mass: r[0], volume: r[1], hardness: r[2] / v, strength: r[3] / v, conductivity: r[4] / v, rupture: r[5] / v }
+    }
+    /// The thickness of its walls, m: their volume over half its outer surface (a plate's thickness, half a rod's width,
+    /// twice a hollow box's wall).
+    pub fn thickness(&self, chem: &Chemistry) -> f64 {
+        let d = self.size.map(|x| x as f64);
+        2.0 * self.walls(chem).volume / (2.0 * (d[0] * d[1] + d[1] * d[2] + d[2] * d[0])).max(1e-30)
     }
     /// Liquid volume its hollow can still take, m³.
     pub fn room(&self, chem: &Chemistry) -> f64 {
@@ -295,6 +308,31 @@ fn fall_apart(w: &World, d: &mut Chunk, i: usize, p: usize) {
     pt.fill.fill(0.0);
     d.moves.give_all(w, Node::ground(i), held, e);
     dissolve(w, d, i, id);
+}
+
+/// The share `f(k, t, walls)` of each substance `k` of the walls of part `p` leaves them with its heat at the part's
+/// temperature `t` (the walls as they are by then): its mol and J are added to `off`, one entry per substance.
+fn shed(chem: &Chemistry, p: &mut Part, f: impl Fn(usize, f64, &[f64]) -> f64, off: &mut [[f64; 2]]) {
+    let t = p.e / p.heat_cap(chem).max(1e-9);
+    for (k, o) in off.iter_mut().enumerate() {
+        if p.wall[k] <= 0.0 {
+            continue;
+        }
+        let f = f(k, t, &p.wall);
+        if f > 0.0 {
+            let (a, q) = (f * p.wall[k], f * p.wall[k] * chem.subs[k].cp * t);
+            (p.e, p.wall[k]) = (p.e - q, p.wall[k] - a);
+            *o = [o[0] + a, o[1] + q];
+        }
+    }
+}
+
+/// What parts of cell `i` shed (`shed`: mol and J per substance) goes to its ground, one move per substance, on the
+/// chunk's view opened for them.
+fn to_ground(w: &World, d: &mut Chunk, i: usize, off: &[[f64; 2]]) {
+    for (k, &[a, q]) in off.iter().enumerate().filter(|o| o.1[0] > 0.0) {
+        d.moves.give(w, Node::ground(i), k, a, q);
+    }
 }
 
 /// The part named `id` of cell `i` is gone: its bonds, its holder's hold and its place in the list.

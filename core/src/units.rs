@@ -24,6 +24,9 @@ pub const T_SOL: f64 = 298.0;
 /// A typical surface temperature, K: where catalysts' upkeep is measured and phases are judged for the start.
 pub const T_SURF: f64 = 290.0;
 
+/// A solid's indentation hardness over its yield stress (Tabor 1951, measured on ductile solids; used for every solid).
+pub const TABOR: f64 = 3.0;
+
 /// The coldest a ground node may be taken by drawing heat from it, K.
 pub const T_FLOOR: f64 = 3.0;
 

@@ -6,7 +6,7 @@ use crate::chem::{Chemistry, Phase, Stores};
 use crate::event::{Event, EventKind};
 use crate::rng::Rng;
 use crate::units::MAX_SUBSTANCES;
-use crate::{lanes, life::{Chunk, Handle}, store::Node, World};
+use crate::{bond, lanes, life::{Chunk, Handle}, store::Node, World};
 
 /// Mass of the amounts `m` (mol of each store) that the body at `t` K uses (`Body::uses`), kg.
 fn used_kg(w: &World, b: &Body, t: f64, m: &Stores) -> f64 {
@@ -38,7 +38,8 @@ pub const COVER: u64 = u64::MAX - 1;
 /// holds of it. A bite of cover takes all its parts in the field's proportions: what the body does not use (`Body::uses`:
 /// the frame without the enzyme that splits it) is bulk, which counts toward what it can take (`intake`, the gut) and
 /// passes through it to the ground at once, with its heat (a gut passage of days, within the update's month: it never
-/// becomes the body's own frame). What it takes of the cover it pays to break as a bite does (`Cover::breaking`).
+/// becomes the body's own frame). What it takes of the cover it pays to break as a bite does (`Cover::breaking`), less
+/// what a held edge saves (`bond::Edge`), which wears by the work it does.
 pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body) {
     let (i, chem, bc) = (b.cell as usize, &w.chem, w.chem.body());
     let (tg, parts) = (w.t_ground_last(i), crate::cover::Parts::of(chem));
@@ -63,8 +64,18 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body) {
     }
     let (all, kg) = (parts.as_ref().map_or(0.0, |p| d.at(i).cover.amounts(p).iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()), bc.mass_of(&grazed) + bc.mass_of(&bulk));
     let breaking = parts.as_ref().filter(|_| kg > 0.0).map_or(0.0, |p| d.at(i).cover.breaking(chem, &w.cfg, p, (kg / all.max(1e-300)).min(1.0)));
-    if !body::pay(w, d, b, w.cfg.phys.c_handle * (bc.mass_of(&m) + bc.mass_of(&bulk)) + breaking) {
+    let edge = bond::edge(d.at(i), w, b).filter(|_| breaking > 0.0);
+    let area = w.mesh.cells().area()[i];
+    let (left, through) = match (&edge, &parts) {
+        (Some(e), Some(p)) => bond::edge_leaves(b.n(), d.at(i).cover.cut_by(chem, &w.cfg, p, e, area)),
+        _ => (1.0, 0.0),
+    };
+    if !body::pay(w, d, b, w.cfg.phys.c_handle * (bc.mass_of(&m) + bc.mass_of(&bulk)) + left * breaking) {
         return;
+    }
+    if let Some(e) = edge.filter(|_| through > 0.0) {
+        bond::blunt(d, &e, through * breaking);
+        d.counts.parts.edged += kg;
     }
     for (from, x) in [(u64::MAX, bc.mass_of(&m) - bc.mass_of(&grazed)), (COVER, kg)].into_iter().filter(|e| e.1 > 0.0) {
         let part: Stores = std::array::from_fn(|s| if from == COVER { grazed[s] } else { m[s] - grazed[s] });
@@ -129,11 +140,15 @@ fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body,
 /// reaches what the members its area holds hold (an individual, by any taker: all of it, with the chance its area
 /// holds it). The bite tears each member it reaches (`body::wound`; laws.md 6.8). A bite that reaches
 /// less than one member of a node meets one whole member with that chance: it takes, tears and pays what that meeting
-/// would, times the chance, the expected outcome of an individual's draw.
+/// would, times the chance, the expected outcome of an individual's draw. A held edge (`bond::Edge`) leaves the share
+/// `left` of the force and the energy the bite needs to break the other, and wears by the work done through it.
 pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, s: Handle, rng: &mut Rng) {
     let (o, bc) = (&d[s], w.chem.body());
     let (mb, tb) = (b.mass(&w.chem), b.temp(&w.chem));
-    let (fb, fo) = (b.gene(STRENGTH) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * o.built(&w.chem) / o.n());
+    let edge = bond::edge(d.at(b.cell as usize), w, b);
+    let (left, through) = edge.as_ref().map_or((1.0, 0.0), |e| bond::edge_leaves(b.n(), o.cut_by(&w.chem, &w.cfg, e)));
+    // (Its force goes as far as `1 / left` of it would bluntly.)
+    let (fb, fo) = (b.gene(STRENGTH) * b.built(&w.chem) / b.n() / left, o.gene(STRENGTH) * o.built(&w.chem) / o.n());
     let (kg, swept) = intake(w, b, tb, |k| o.amount(bc, k));
     // One draw finds an individual prey.
     let reached = if o.n() > 1.0 { swept } else if rng.f64() < swept { 1.0 } else { return };
@@ -149,9 +164,14 @@ pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, s: Handle, rng: &mut Rn
     let eaten = Body::matter_at(&w.chem).map_or(0.0, |k| if o.store[k] > 0.0 { m[k] / (per * o.store[k]) } else { 0.0 });
     let f = (got / built.max(1e-30)).max(eaten).min(1.0);
     // The taker pays to handle what it takes and to break the share it tears (`Body::breaking`).
-    let cost = (w.cfg.phys.c_handle * got * resist + o.breaking(&w.chem, &w.cfg, f * per)) * chance;
+    let breaking = o.breaking(&w.chem, &w.cfg, f * per);
+    let cost = (w.cfg.phys.c_handle * got * resist + left * breaking) * chance;
     if !body::pay(w, d, b, cost) || hit <= 0.0 {
         return;
+    }
+    if let Some(e) = edge.filter(|_| through > 0.0) {
+        bond::blunt(d, &e, through * breaking * chance);
+        d.counts.parts.edged += got * hit / per;
     }
     let mut o = std::mem::take(&mut d[s]);
     let m = m.map(|a| a * hit / per);

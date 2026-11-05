@@ -110,6 +110,7 @@ worn edges, structures, true colour (r, g, b).
 |---|---|---|
 | `parts`, `parts_held`, `parts_mass`, `parts_formed` | , , t, 1/yr | made objects, of them held; their mass; formed in the year |
 | `put_to_parts`, `taken_from_parts` | kg/yr | stores put into and taken from parts |
+| `edge_kg` | kg/yr | what bites took from bodies and the cover where a held edge cut (laws.md 3.3) |
 | `bonds_joined`, `structures`, `enclosed` | | bonds between parts; structures of more than one part; enclosed ones |
 | `made_held`, `made_joined`, `bonds_broken`, `bonds_failed` | 1/yr | bonds made by kind; broken by bodies; failed by load |
 | `inside_now`, `inside_cold`, `inside_warm`, `cold_months` | , , , 1/yr | bodies inside walls now; share of the eaters' body-months inside in the cold and the warm; their cold months |

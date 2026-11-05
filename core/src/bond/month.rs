@@ -1,6 +1,6 @@
 //! The monthly step of parts: rot and heat, loads and failure.
 
-use super::{fall_apart, holder, numbers, sense::liquid, unlink, verbs::{bears, torn_from}};
+use super::{fall_apart, holder, numbers, sense::liquid, shed, to_ground, unlink, verbs::{bears, torn_from}};
 use crate::{change::{frac, rate, scarce}, chem::Phase, life::{self, Chunk}, store::{Class, Node}, World, AIR};
 
 /// Liquid shallower than this, m, pushes no part.
@@ -36,22 +36,9 @@ fn turns(w: &World, d: &mut Chunk, i: usize, dt: f64) {
     // What goes to the ground of each substance: mol, then J.
     let mut off = vec![[0.0; 2]; chem.ns()];
     for p in d.at_mut(i).parts.iter_mut() {
-        let t = p.e / p.heat_cap(chem).max(1e-9);
-        for k in 0..chem.ns() {
-            if p.wall[k] <= 0.0 {
-                continue;
-            }
-            let f = if chem.phase_in(k, t, |j| p.wall[j]) != Phase::Solid { 1.0 } else { share[k] };
-            if f > 0.0 {
-                let (a, q) = (f * p.wall[k], f * p.wall[k] * chem.subs[k].cp * t);
-                (p.e, p.wall[k]) = (p.e - q, p.wall[k] - a);
-                off[k] = [off[k][0] + a, off[k][1] + q];
-            }
-        }
+        shed(chem, p, |k, t, wall| if chem.phase_in(k, t, |j| wall[j]) != Phase::Solid { 1.0 } else { share[k] }, &mut off);
     }
-    for (k, &[a, q]) in off.iter().enumerate().filter(|o| o.1[0] > 0.0) {
-        d.moves.give(w, Node::ground(i), k, a, q);
-    }
+    to_ground(w, d, i, &off);
     warm(w, d, i, tg);
     let mut x = 0;
     while x < d.at(i).parts.len() {

@@ -28,6 +28,8 @@ pub enum Entry {
     /// and `bond::TORN` let go of it, `bond::dropped`), or forms a part of the shape given (`bond::form`), as a part of
     /// node `node` if any (`choose::land_act`)
     Act { id: u64, on: Result<(usize, u64), [f32; 2]>, node: Option<u64> },
+    /// The part with id `part` did `work` J with its edge and wears (`bond::blunted`), an act on that part
+    Blunted { part: u64, work: f64 },
 }
 
 /// The queue is taken and applied in rounds until nothing is left: in each, first the moves and the litters land
@@ -45,7 +47,7 @@ pub fn land(w: &mut World) {
         let (passed, later): (Vec<Entry>, Vec<Entry>) = std::mem::take(&mut w.life.queued).into_iter().partition(|e| matches!(e, Entry::Passed { .. }));
         w.life.queued = later;
         passed.into_iter().for_each(|e| apply(w, e));
-        let (acts, rest): (Vec<Entry>, Vec<Entry>) = rest.into_iter().partition(|e| matches!(e, Entry::Act { .. }));
+        let (acts, rest): (Vec<Entry>, Vec<Entry>) = rest.into_iter().partition(|e| matches!(e, Entry::Act { .. } | Entry::Blunted { .. }));
         act_all(w, acts);
         rest.into_iter().for_each(|e| apply(w, e));
     }
@@ -95,15 +97,15 @@ fn land_all(w: &mut World, landing: Vec<Entry>) {
 }
 
 /// The acts on parts, each in the chunk of its cell on the pool (`life::run`), in a chunk cell by cell and in a cell in
-/// the order queued: letting go of a part where the part lies (`bond::dropped`), any other where its body is
-/// (`choose::land_act`). An act on parts touches its cell alone (a structure lies in one cell). One whose body is gone
-/// does nothing.
+/// the order queued: letting go of a part and its edge's wear where the part lies (`bond::dropped`, `bond::blunted`),
+/// any other where its body is (`choose::land_act`). An act on parts touches its cell alone (a structure lies in one
+/// cell). One whose body or part is gone does nothing.
 fn act_all(w: &mut World, acts: Vec<Entry>) {
     let bounds = life::bounds(w);
     let mut per: Vec<Vec<(u32, usize, Entry)>> = (1..bounds.len()).map(|_| Vec::new()).collect();
     for (x, e) in acts.into_iter().enumerate() {
         let cell = match &e {
-            Entry::Act { on: Ok((bond::LET_GO | bond::TORN, p)), .. } => w.life.part_cell(*p),
+            Entry::Act { on: Ok((bond::LET_GO | bond::TORN, p)), .. } | Entry::Blunted { part: p, .. } => w.life.part_cell(*p),
             Entry::Act { id, .. } => w.life.find(*id).map(|h| h.cell as usize),
             _ => unreachable!("only acts on parts"),
         };
@@ -114,7 +116,14 @@ fn act_all(w: &mut World, acts: Vec<Entry>) {
     per.iter_mut().for_each(|v| v.sort_by_key(|x| (x.0, x.1)));
     life::run(w, per, load, |_| (), |w, d, list, _| {
         for (cell, _, e) in list.drain(..) {
-            let Entry::Act { id, on, node } = e else { continue };
+            let (id, on, node) = match e {
+                Entry::Act { id, on, node } => (id, on, node),
+                Entry::Blunted { part, work } => {
+                    bond::blunted(w, d, cell as usize, part, work);
+                    continue;
+                }
+                _ => continue,
+            };
             match on {
                 Ok((v @ (bond::LET_GO | bond::TORN), p)) => bond::dropped(w, d, cell as usize, (id, p), v == bond::TORN),
                 _ => {
@@ -130,7 +139,7 @@ fn act_all(w: &mut World, acts: Vec<Entry>) {
 /// Entry `e`, of those that do not land and are no acts on parts, is applied.
 fn apply(w: &mut World, e: Entry) {
     match e {
-        Entry::Go { .. } | Entry::Litter(_) | Entry::Act { .. } => unreachable!("moves, litters and acts land"),
+        Entry::Go { .. } | Entry::Litter(_) | Entry::Act { .. } | Entry::Blunted { .. } => unreachable!("moves, litters and acts land"),
         Entry::Passed { by, from, to, lane, mass, carried } => {
             lanes::clear(w, from as usize, to as usize, lane);
             bond::moved(w, (by, carried), (from as usize, to as usize), mass);

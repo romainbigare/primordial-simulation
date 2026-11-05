@@ -2,11 +2,10 @@
 
 use pcore::life::Handle;
 use pcore::body::{self, Body, COPY_MASS, STRENGTH};
-use pcore::rng::{Purpose, Rng};
 use pcore::store::Class;
 use pcore::units::DAY_S;
 use pcore::{bond, brain, choose, World};
-use worldgen::testkit::{node_of, eater, died, kg, place, scale, start, Books, LIQUID, MATTER, RICH};
+use worldgen::testkit::{bite, node_of, eater, died, kg, place, scale, start, Books, LIQUID, MATTER, RICH};
 
 /// A world with a dry land cell where a bite costs no handling, and the area a taker works does not bind (a node's
 /// members are reached as an individual is).
@@ -22,14 +21,6 @@ fn resting(w: &mut World, i: usize, copy: f32, strength: f32) -> Body {
     let mut b = eater(w, i, brain::REST, copy);
     b.genes[STRENGTH] = strength;
     b
-}
-
-/// Body `a` bites body `v` once.
-fn bite(w: &mut World, a: Handle, v: Handle) {
-    let mut b = std::mem::take(&mut w.life[a]);
-    let r = &mut Rng::new(1, w.day(), 7, Purpose::Choose);
-    w.in_cell(b.cell as usize, |w, d| choose::take_body(w, d, &mut b, v, r));
-    w.life[a] = b;
 }
 
 /// What a body looked like: its body, its matter, solid and liquid (kg), and its force.

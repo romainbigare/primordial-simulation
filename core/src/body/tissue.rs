@@ -163,7 +163,17 @@ impl Body {
     /// its soft tissue (`built` at `rho_body`) and each solid it builds.
     pub fn solids(&self, chem: &Chemistry, cfg: &crate::Config) -> [f64; 3] {
         let bc = chem.body();
-        solids_of(chem, cfg, self.built(chem), |k| self.amount(bc, k))
+        solids_of(chem, cfg, self.built(chem), |k| self.amount(bc, k), |_| 1.0)
+    }
+    /// How wide a member is, m: the cube root of the volume it is built of (`solids`).
+    pub fn width(&self, chem: &Chemistry, cfg: &crate::Config) -> f64 {
+        (self.solids(chem, cfg)[0] / self.n()).cbrt()
+    }
+    /// The share of the energy to break it, and of the force, that the edge `e` leaves: each material as `Edge::cut`
+    /// says for a member's width (laws.md 3.3).
+    pub fn cut_by(&self, chem: &Chemistry, cfg: &crate::Config, e: &crate::bond::Edge) -> f64 {
+        let (bc, blunt, width) = (chem.body(), self.solids(chem, cfg)[2], self.width(chem, cfg));
+        solids_of(chem, cfg, self.built(chem), |k| self.amount(bc, k), |k| e.cut(chem, k, width))[2] / blunt.max(1e-300)
     }
     /// A member's height, m: what it is built of holds up against its own weight. A column buckles past h³ = `GREENHILL`
     /// E I / w (Greenhill 1881; real stems near a quarter of it, McMahon 1973); one round section (I = A² / 4π, A = V / h)
@@ -203,10 +213,11 @@ impl Body {
 }
 
 /// What a living thing of `built` kg of soft tissue (`Body::built`) and `mol(k)` of each solid it builds is built of:
-/// [volume m³, Σ volume × Young's modulus, Σ volume × breaking stress], its soft tissue at `rho_body`.
-pub fn solids_of(chem: &Chemistry, cfg: &crate::Config, built: f64, mol: impl Fn(usize) -> f64) -> [f64; 3] {
+/// [volume m³, Σ volume × Young's modulus, Σ volume × breaking stress × `cut(k)`], its soft tissue at `rho_body` (as
+/// substance `chem.matter()`). `cut(k)`: the share of the energy to break substance `k` that is spent (1 blunt).
+pub fn solids_of(chem: &Chemistry, cfg: &crate::Config, built: f64, mol: impl Fn(usize) -> f64, cut: impl Fn(usize) -> f64) -> [f64; 3] {
     let Some(m) = chem.matter() else { return [0.0; 3] };
     let soft = built.max(0.0) / cfg.phys.rho_body;
-    let of = |v: f64, s: &crate::chem::Substance| [v, v * s.modulus, v * s.rupture];
-    chem.materials().map(|k| of(mol(k).max(0.0) * chem.subs[k].molar_mass / chem.subs[k].density[0], &chem.subs[k])).fold(of(soft, &chem.subs[m]), |a, x| [a[0] + x[0], a[1] + x[1], a[2] + x[2]])
+    let of = |v: f64, k: usize| [v, v * chem.subs[k].modulus, v * chem.subs[k].rupture * cut(k)];
+    chem.materials().map(|k| of(mol(k).max(0.0) * chem.subs[k].molar_mass / chem.subs[k].density[0], k)).fold(of(soft, m), |a, x| [a[0] + x[0], a[1] + x[1], a[2] + x[2]])
 }

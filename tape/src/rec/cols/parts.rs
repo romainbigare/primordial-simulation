@@ -21,6 +21,7 @@ impl Recorder {
         row.push("parts_formed", "1/yr", t.formed);
         row.push("put_to_parts", "kg/yr", t.to_parts);
         row.push("taken_from_parts", "kg/yr", t.from_parts);
+        row.push("edge_kg", "kg/yr", t.edged);
         row.push("bonds_joined", "1", links);
         row.push("structures", "1", roots.iter().filter(|r| r.s.parts > 1).count() as f64);
         row.push("enclosed", "1", roots.iter().filter(|r| r.s.encl.closed >= ENCLOSED).count() as f64);

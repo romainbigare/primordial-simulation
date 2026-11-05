@@ -410,7 +410,7 @@ the world has no source of it (an input from below, as volcanoes give, would be 
 not built).
 
 ## 3. Bond: things can be joined, joins break when pushed too hard
-Files: `core/src/bond/` (`verbs`, `sense`, `month`, `bonds`); also `choose::go`, `Body::height`, `Body::breaking`.
+Files: `core/src/bond/` (`verbs`, `edge`, `sense`, `month`, `bonds`); also `choose::go`, `Body::height`, `Body::breaking`.
 
 ### 3.1 Parts and structures
 A **part** is a made object (solid walls, the liquid in its hollow, heat, 3 sizes, a hollowness), a store node
@@ -445,8 +445,25 @@ Structures do not drift; only a body carries one (3.5).
 Holding is a bond whose strength is the body's **force**, strength gene × living body × gravity × `grip`
 (`bond::bears`); a body holds only while its force bears the structure's weight. Fuel adds no force; a hurt body is
 weaker. A body is **afloat** where the liquid is deeper than `deep` and what it and its structure displace weighs as
-much as they do (Archimedes): no liquid stands over it (`bond::depth`). No body digs the
-bed, and a held part adds nothing to a body's force.
+much as they do (Archimedes): no liquid stands over it (`bond::depth`). No body digs the bed.
+
+**A held edge concentrates force** (`bond/edge.rs`). Without one a body breaks matter bluntly: it gives way through its
+whole width (3.6). Pressed with the edge of a held part, only a zone as wide as the edge gives way (Atkins 2009): for
+each material k of what is broken, the energy and the force fall to the share c_k = min(1, e / l), e the thickness of
+the part's walls (their volume over half its outer surface, `Part::thickness`), l the width of what is broken (a member
+of a body, `Body::width`; the cover, its volume per m²; a joint, the root of its contact area), where the edge is
+harder than that material (scratch hardness, `Substance::hardness`: an indenter marks only what is softer, Tabor 1951),
+else c_k = 1. Over a thing, c̄ = Σ V σ c_k / Σ V σ (`Body::cut_by`, `Cover::cut_by`). A node's part is in one member's
+hand, so it leaves the node 1 − (1 − c̄) / n (`bond::edge_leaves`). A bite pays that share of the breaking and its
+force counts 1 / that share against the other's (`feed::take_body`); grazing pays it of breaking the cover
+(`feed::take_node`); breaking a bond (verb 4) needs it of the bond's strength, from an edge of another structure. A part
+whose walls have no breaking stress holds no edge. **The edge wears** by Archard's law (Archard 1953): it loses the
+volume `abrade` × W / H of its walls, W the work done through it, H = `TABOR` × their breaking stress (Tabor's
+relation for ductile solids, used for every solid: rock is in truth far harder, a known limit), each substance in its
+share, to its cell's ground with its heat, in the landing of the acts on parts (`bond::blunted`); under `min_kg` the part
+falls apart. In chemistry 0 body matter and the frame have the same scratch hardness (0.2), so no part of them cuts a
+body or the cover: only rock (substances 7 to 9, 0.35 to 0.7) does. Pushing through (6.8) gains nothing from an edge: it
+pools all movers' energy in a cell.
 
 ### 3.4 Containment
 Walls that close a space make an **inside** (`bond::room`) joined to its cell by one link (`bond::Enclosure`): heat
@@ -466,7 +483,7 @@ its cost does not happen either, and the body has let go of what it cannot carry
 **Height** (`Body::height`), by Greenhill's self-buckling column: h⁴ = 7.837 / 4π × (Σ E·V) × V / (m·g), V the volume
 of soft tissue and each built solid, E their Young's modulus (`modulus`); it orders light and rain (1.4). **Breaking**
 (`Body::breaking`) a share f takes f × Σ V × each material's breaking stress (`rupture`): a bite pays it, pushing
-through breaks what its energy pays for (6.8).
+through breaks what its energy pays for (6.8). This is blunt breaking; a held edge needs less (3.3).
 
 ## 4. Copy: a piece of the graph is copied, with small changes
 Files: `core/src/copy/` (`mix`, `grow`, `litter`), `nodes.rs`, `body/genes.rs`, `lineage.rs`; the cover in `core/src/cover/` (4.5).
@@ -644,7 +661,9 @@ minimums, its warmth, size and the season, its own cell's features, what Bond se
 direction** with a link: the features of the cell it leads to as its sight sees it, the temperature and height as
 differences from its own cell's, and how hard its link is to pass (`lanes::resist`). **Bodies**: up to `SEEN` of its
 own cell, as they are when it decides (their looks and well-being), from a random place in the cell's list; walls and
-cover hide them. Up to 3 parts of its cell.
+cover hide them. Up to 3 parts of its cell. Of a part, held or seen, it reads its mass against its own, its walls'
+scratch hardness, its hollowness and its edge: ln of its walls' thickness over its own width (`bond::sense`,
+`bond::features`), the share an edge would leave of breaking a body like itself (3.3).
 
 ### 5.3 Actions
 **Planning, one step ahead** (`choose::plan`): before it draws, a body adds to the score of each move the critic's
@@ -794,7 +813,8 @@ the time since dies (`AGE`), in nodes as in individuals. **One rule of death** (
 a share of a node's members kills an individual with that chance.
 
 ### 6.8 Damage
-`body/death.rs`. **A bite** (`take_body`) tears from each member reached the share taken and pays to break it (3.6);
+`body/death.rs`. **A bite** (`take_body`) tears from each member reached the share taken and pays to break it (3.6;
+less with a held edge, whose force then counts for more, 3.3);
 matter breaks first and spills its stores; in a node those members lose it (grazing) or die (`body::wound`). **Pushing
 through** (`choose::wear`) breaks what its energy pays for: the energy movers spent in a cell is kept until the next
 survey (`life::Cell::pushed`); then each body there, a mover that stayed too, takes its share by mass and loses what that

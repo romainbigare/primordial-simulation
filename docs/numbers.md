@@ -133,6 +133,7 @@ The three costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`) are per k
 | `grip` | share of weight | force of a body of strength 1 | none found; animals push and pull about their own weight (unchecked) | tuned, first guess |
 | `bump` | share of weight | push of a body moving through a cell on each structure there; also the push its own force must give for it to move (`choose::go`) | none found; the starting plants (force 0.025 of their weight) stay put | tuned, first guess |
 | `deep` | m | in liquid deeper than this a body the liquid holds up, with the structure it holds, floats (`bond::afloat`) | none found | tuned, first guess |
+| `abrade` | none | Archard's wear coefficient K of a held edge: it loses K × work / H of its walls, H = `TABOR` × their breaking stress (`bond::blunted`) | unlubricated pairs of unlike solids wear at K 1e-7 to 1e-4 (Archard and Hirst 1956; Rabinowicz 1995; from memory); 1e-5 the middle on a log scale | anchored |
 
 ### Copy
 
@@ -190,6 +191,7 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
 | `EATER_KEEP_T`/`EATER_COOL_T` (278 and 315, `worldgen/src/life/kinds.rs`) | K | the temperatures the eaters' founders keep their bodies between (`KEEP_T`, `COOL_T`; initial conditions) | the melting point of chemistry 0's key liquid (273 K) plus, and the founders' catalysts' unfolding (`DENATURE`, 320 K) less, the margin in which well-being falls for nearness to a limit (`PHASE_MARGIN`, 5 K): an animal must keep its liquid from freezing and sweat before its enzymes unfold; at 250 K the keep gene did nothing and never moved, and the eaters froze in winter on the hills | anchored |
 | `body::WET_TISSUE` (0.75) | share | the liquid share of living tissue: a kg of body matter makes 1 / (1 - this) kg of living body (`Body::built`), whatever liquid the body holds | lean animal tissue is 0.7 to 0.75 liquid, herbs 0.8 to 0.9 (from memory) | anchored |
 | `body::MAX_KEEP` (0.95, `core/src/body/tissue.rs`) | share | the most share of a body its keep gene of a key liquid, or the solids it builds together, may make up (the level goes with share / (1 - share), so it must stay below 1) | the wettest bodies, jellies, are about 95% liquid (from memory) | anchored |
+| `pcore::units::TABOR` (3) | none | a solid's indentation hardness over its yield stress: the hardness of an edge in Archard's law (`bond::blunted`) is this times its breaking stress | Tabor 1951, measured on ductile solids; for brittle rock the real hardness is far higher than 3 times its tensile strength, so an edge of rock wears faster here than a real one (a known limit) | physical |
 | `pcore::units::T_SURF` (290) | K | typical surface temperature: where the starting kinds' reactions, the richness checks and `ew chem` look at phases | the same as `t_cat` | anchored |
 | `MOVE_REF` (30 kg) and `MOVE_EXP` (-0.32), `core/src/params.rs` | kg; none | the mass at which `c_move` is the cost of moving, and the exponent of the cost of transport in the mover's mass (`Physics::walk`) | Taylor et al. 1982 (see `c_move`) | anchored |
 | `Kind::store` of the roster (0.3; 0.6 for the two big slow eater kinds) | share of mass | the energy-rich solid a starting member holds as fuel; the rest is liquid and body matter | run: see "the roster's stores" above | tuned |
@@ -240,6 +242,8 @@ Chemistry 0 (`worldgen/src/chem0.toml`) is data, not a struct of numbers, so it 
 | reaction 13, an enzyme splits the frame | C6H10O5 + H2O -> 6 CH2O, k 9.6e-4 /s, Ea 7,760 K; no heat in or out | nothing without a catalyst: 2.3e-15 /s at 290 K. A body whose diet gene for it is on takes frame in (`Body::uses`) but runs no reaction on it: it carries it as a built solid and sheds it past its level; no founder has it | the spontaneous hydrolysis of the bond between sugar units, 4.7e-15 /s at 25 °C (Wolfenden, Lu and Young 1998, from memory) |
 | `modulus` of substances 10 and 13 | 1 MPa and 30 GPa | Young's modulus of what bodies build: soft tissue with its liquid and the frame (`Body::height`) | soft tissue 0.1 to 10 MPa, the middle on a log scale; tree stems about 10 GPa along their fibres at 500 kg/m³, so the cell wall at 1,500 about 30 (from memory) |
 | `rupture` of substances 10 and 13 | 1 and 120 MPa | the stress each breaks at: the energy to break a body (`Body::breaking`) | soft tissue 0.1 to 10 MPa; tree stems 40 to 50 MPa in compression at 500 kg/m³, so the cell wall about 120 (from memory) |
+| `rupture` of substances 7, 8 and 9 | 10, 15 and 7 MPa | the stress the rock solids break at in tension: an edge of them has a hardness for Archard's law (`TABOR` × this, `bond::Edge`) | physical: tensile strength of rock, sandstone and quartzite 4 to 25 MPa, basalt and granite 7 to 25, limestone 5 to 25 (Jaeger, Cook and Zimmerman 2007, from memory) |
+| `hard` of substances 10 and 13 | 0.2 and 0.2 | the scratch hardness of soft tissue and of the frame: an edge cuts only what is softer than itself (`Edge::cut`), so no part of body matter or the frame cuts a body | as the file gives them; that the two are equal is a fact of chemistry 0, not set for an outcome |
 
 ## Real figures to compare runs with
 
@@ -252,12 +256,12 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 103 rows of `Config` and `Physics` are their 103 fields.
+The 104 rows of `Config` and `Physics` are their 104 fields.
 
 | mark | rows | which |
 |---|---|---|
-| physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
-| anchored | 54, and 12 outside the structs | 54 fields (among them `c_basal`, `meeh`, `r_coat`, `r_air`, `dormant`, `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `wind`, `light_yield`, `gas_floor`, `gas_ref`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE`, `MAX_KEEP` and the founders' learning rate, and the three decomposers' factors `open` of the chemistry (reactions 1, 7 and 12) |
+| physical | 4, and 1 outside the structs | `sun`, `tilt`, `gravity`, `rho_body`; outside: `TABOR` |
+| anchored | 55, and 12 outside the structs | 55 fields (among them `c_basal`, `meeh`, `r_coat`, `r_air`, `dormant`, `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `wind`, `light_yield`, `gas_floor`, `gas_ref`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear`, `creep` and `abrade`) and the constants `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE`, `MAX_KEEP` and the founders' learning rate, and the three decomposers' factors `open` of the chemistry (reactions 1, 7 and 12) |
 | tuned (run or reason named) | 6, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`), set for an outcome (`rain_time`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`, the cover's starting genes) |
 | tuned, first guess | 30 | 27 free numbers (`mix`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `rho_pass`, `keep_min`, `shape_noise`, `blend`, `plan_weight`, `learn_most`, the Bond numbers `joint` to `deep`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the three `c_hidden`, `c_memory`, `c_seen`, which are the split of `c_brain` and not three numbers |
 | switch | 1 | `null` |

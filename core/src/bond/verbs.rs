@@ -1,8 +1,8 @@
 //! What bodies do to parts: hold, take, put, join, break and enter; form new parts, let go, and carry what they hold
-//! when they move. A body's force decides what it can hold and break. Each act runs on
-//! the body's cell in its chunk (`life::Chunk`), the body taken out of its slot.
+//! when they move. A body's force decides what it can hold and break, and a held edge how far it goes (`edge`). Each
+//! act runs on the body's cell in its chunk (`life::Chunk`), the body taken out of its slot.
 
-use super::{at, event, fall_apart, held, holder, link_in, make, members, move_structure, restructure, root, sense::room, strength, unlink, HELD, LOAD, NOBODY};
+use super::{at, blunt, edge, edge_leaves, event, Edge, fall_apart, held, holder, link_in, make, members, move_structure, restructure, root, sense::room, strength, unlink, HELD, LOAD, NOBODY};
 use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase, Stores}, life::{Cell, Chunk}, life::Entry, World};
 use crate::units::BODY_STORES;
 
@@ -101,8 +101,12 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, v: usize, p: usize) {
                     torn_from(w, d, i, o);
                 }
             } else if let Some((o, s)) = c.bonds.of(id).min_by(|a, b| a.1.total_cmp(&b.1)) {
-                if f > s as f64 {
+                let ((left, through), edge) = joint_left(w, c, b, p, o);
+                if f > left * s as f64 {
                     unlink(w, d, i, id, o, false);
+                }
+                if let Some(e) = edge.filter(|_| through > 0.0) {
+                    blunt(d, &e, through * f);
                 }
             }
         }
@@ -115,6 +119,21 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, v: usize, p: usize) {
                 b.inside = Some(id);
             }
         }
+    }
+}
+
+/// What a held edge of another structure than its own leaves body `b` of the force to break the joint between the
+/// part at `p` of its cell `c` and the part named `o` (`Edge::cut_joint`: the softer walls, the smaller contact), as
+/// `edge_leaves` gives it, and that edge; with none, all.
+fn joint_left(w: &World, c: &Cell, b: &Body, p: usize, o: u64) -> ((f64, f64), Option<Edge>) {
+    let edge = edge(c, w, b).filter(|_| held(c, b).is_none_or(|h| c.parts[h].root != c.parts[p].root));
+    match (&edge, at(c, o)) {
+        (Some(e), Some(q)) => {
+            let (a, z) = (&c.parts[p], &c.parts[q]);
+            let cut = e.cut_joint((a.walls(&w.chem).hardness, z.walls(&w.chem).hardness), a.contact().min(z.contact()));
+            (edge_leaves(b.n(), cut), edge)
+        }
+        _ => ((1.0, 0.0), None),
     }
 }
 

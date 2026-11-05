@@ -192,6 +192,8 @@ pub struct Physics {
     pub bump: f64,
     /// Liquid deeper than this holds up a body and the structure it holds, so none stands over it (`bond::afloat`), m
     pub deep: f64,
+    /// Archard's wear coefficient of an edge: volume worn times hardness over the work it does
+    pub abrade: f64,
 
     // Copy
     /// Work to make one kg of body matter, J (`copy::grow`)
@@ -333,6 +335,7 @@ impl Default for Physics {
             grip: 0.5,
             bump: 0.05,
             deep: 0.5,
+            abrade: 1e-5,
             c_copy: 1e7,
             c_build: 1e4,
             row_chance: 0.3,

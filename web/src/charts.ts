@@ -17,7 +17,7 @@ const SECTIONS: [string, RegExp][] = [
   ['Brains', /^(learned|greedy|hidden|memory|seen|sight|mi_)/],
   ['Movement and paths', /^(crossings|traffic_|worn_|mass_top2|mass_land)/],
   ['Imitation and giving', /^(watched|spread_max|gave|ate_)/],
-  ['Parts and structures', /^(parts|put_to_parts|taken_from_parts|bonds_|structures|enclosed|made_|inside_|cold_months|holding_liquid|liquid_held)/],
+  ['Parts and structures', /^(parts|put_to_parts|taken_from_parts|edge_kg|bonds_|structures|enclosed|made_|inside_|cold_months|holding_liquid|liquid_held)/],
   ['Catalysts', /^cat_/],
   ['Time per process', /^ms_/],
 ];

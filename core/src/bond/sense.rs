@@ -64,30 +64,38 @@ pub fn depth(w: &World, d: &Chunk, b: &Body, depth: f64) -> f64 {
 }
 
 /// Numbers a body perceives of what it holds and of the walls around it (`sense`).
-pub(crate) const SENSE: usize = 5;
+pub(crate) const SENSE: usize = 6;
 
-/// What a body perceives of what it holds (whether, ln mass ratio, hardness, hollowness) and of the walls around it, in
-/// its cell `c`. The mass ratio reads one unit up, so holding nothing (0) fades into holding a part 1,100 times lighter.
+/// How a body perceives the edge of the part at `p` of its cell `c`: the ln of its walls' thickness over a member's
+/// width (`Body::width`), the share an edge leaves of what breaking a body like itself takes (`Edge::cut`); 0 for a
+/// part as thick as the body is wide.
+fn edge_seen(c: &Cell, w: &World, b: &Body, p: usize) -> f32 {
+    crate::brain::ln((c.parts[p].thickness(&w.chem) / b.width(&w.chem, &w.cfg).max(1e-30)) as f32) / LN_SIZE_SCALE
+}
+
+/// What a body perceives of what it holds (whether, ln mass ratio, hardness, hollowness, its edge) and of the walls
+/// around it, in its cell `c`. The mass ratio reads one unit up, so holding nothing (0) fades into holding a part 1,100
+/// times lighter.
 pub(crate) fn sense(c: &Cell, w: &World, b: &Body, mb: f64) -> [f32; SENSE] {
     let mut x = [0f32; SENSE];
     if let Some(p) = held(c, b) {
         let pt = &c.parts[p];
         let walls = pt.walls(&w.chem);
-        x[..4].copy_from_slice(&[1.0, crate::brain::ln((walls.mass / mb) as f32) / LN_MASS + 1.0, walls.hardness as f32, pt.hollow]);
+        x[..5].copy_from_slice(&[1.0, crate::brain::ln((walls.mass / mb) as f32) / LN_MASS + 1.0, walls.hardness as f32, pt.hollow, edge_seen(c, w, b, p)]);
     }
-    x[4] = room(c, b).map_or(0.0, |r| r.1.closed);
+    x[5] = room(c, b).map_or(0.0, |r| r.1.closed);
     x
 }
 
-/// What a body perceives of the part at `p` of its cell `c`: ln mass ratio, hardness, hollowness, ln length, how closed
-/// its structure is, held, the share the body would take.
+/// What a body perceives of the part at `p` of its cell `c`: ln mass ratio, hardness, hollowness, ln length, its edge
+/// (`edge_seen`), how closed its structure is, held, the share the body would take.
 pub fn features(c: &Cell, w: &World, b: &Body, p: usize, mb: f64) -> [f32; NO] {
     let (pt, chem) = (&c.parts[p], &w.chem);
     let s = &c.parts[root(c, p)].s;
     let m = pt.mass(chem);
     let want: f64 = b.k.upt.iter().map(|&(k, u)| u as f64 * (pt.wall[k] + pt.fill[k]) * chem.subs[k].molar_mass).sum();
     let ln = crate::brain::ln;
-    [ln((m / mb) as f32) / LN_MASS, pt.walls(chem).hardness as f32, pt.hollow, ln(pt.size[0]) / LN_SIZE_SCALE, s.encl.closed, (pt.held != NOBODY) as u8 as f32, (want / m.max(1e-9)) as f32]
+    [ln((m / mb) as f32) / LN_MASS, pt.walls(chem).hardness as f32, pt.hollow, ln(pt.size[0]) / LN_SIZE_SCALE, edge_seen(c, w, b, p), s.encl.closed, (pt.held != NOBODY) as u8 as f32, (want / m.max(1e-9)) as f32]
 }
 
 /// Can verb `v` be done to the part at `p` of body `b`'s cell `c` at all (as the body sees it)?

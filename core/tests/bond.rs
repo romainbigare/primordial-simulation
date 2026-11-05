@@ -9,7 +9,7 @@ use pcore::life::{Entry, Handle};
 use pcore::units::DAY_S;
 use pcore::store::{Class, Node};
 use pcore::World;
-use worldgen::testkit::{dry_land, eater, part_of, plate, relocate, scale, set_amount, small_world, start as world, stores, Books, Brain, Line, FRAME, LIQUID, MINERAL, ROCK};
+use worldgen::testkit::{bite, dry_land, eater, node_of, part_of, place, plate, relocate, scale, set_amount, small_world, start as world, stores, Books, Brain, Line, FRAME, LIQUID, MATTER, MINERAL, ROCK};
 
 /// A bond breaks when the weight it bears is more than it holds: of two parts hung on a held one by bonds that hold
 /// 10 t weight, the one of 1 t stays and the one of 100 t falls.
@@ -329,6 +329,73 @@ fn a_carried_structure_leaves_its_other_holders_behind() {
     assert!(w.life[m].cell as usize == j && held == Some(p), "the mover does not hold its part in its new cell");
     assert!(w.life.part_cell(p) == Some(j) && w.life.part_cell(q) == Some(j), "the structure stayed behind");
     assert!(w.life[o].hold.is_none() && w.life.part(q).expect("the part").held == bond::NOBODY, "a body left behind still holds a part of the moved structure");
+}
+
+/// An edge concentrates force (laws.md 3.3). A taker holding a flat plate of rock (scratch hardness 0.35, above body
+/// matter's and the frame's 0.2) needs the share c of the energy and force to break its prey: the plate's thickness
+/// over a member's width. Against an equal force its bite takes more. A plate of the frame and body matter, no harder
+/// than the tissue (a fact of chemistry 0), changes nothing and does not wear. The rock wears by Archard's law,
+/// `abrade` × work / (`TABOR` × breaking stress), its walls to the ground; the books close.
+#[test]
+fn an_edge_cuts_only_what_is_softer_than_it() {
+    // The share the law gives for a prey `o` and an edge `thick` m thick harder than all it is built of.
+    let law = |w: &World, o: &Body, thick: f64| (thick / o.width(&w.chem, &w.cfg)).min(1.0);
+    // One bite with a flat plate of 5 kg of each of substances `of` held (none: nothing held): the world, its cell, the
+    // taker, the share the edge leaves and the law's, the kg taken and the volume of walls worn.
+    let scene = |of: &[usize]| {
+        let (mut w, i) = world();
+        w.cfg.phys.sweep = 1e12;
+        let ns = w.chem.ns();
+        let mut a = eater(&mut w, i, brain::REST, 1.0);
+        let mut v = eater(&mut w, i, brain::REST, 1.0);
+        (a.genes[STRENGTH], v.genes[STRENGTH]) = (0.5, 0.5);
+        let v = node_of(&mut w, v, 10.0);
+        let part = (!of.is_empty()).then(|| {
+            let mut wall = vec![0.0; ns];
+            for &k in of {
+                wall[k] = 5.0 / w.chem.subs[k].molar_mass;
+                let have = w.store.amounts(Class::Ground)[k * w.mesh.cells().n() + i];
+                set_amount(&mut w, Node::ground(i), k, have + 2.0 * wall[k]);
+            }
+            part_of(&mut w, i, wall, vec![0.0; ns], -1.0, 0.0)
+        });
+        a.hold = part;
+        let (a, v) = (place(&mut w, a), place(&mut w, v));
+        if let Some(p) = part {
+            w.life.part_mut(p).expect("the part").held = w.life[a].id;
+        }
+        let books = Books::now(&w);
+        let c = bond::edge(w.life.cell_at(i), &w, &w.life[a]).map_or(1.0, |e| w.life[v].cut_by(&w.chem, &w.cfg, &e));
+        let thick = part.map_or(f64::INFINITY, |p| w.life.part(p).expect("the part").thickness(&w.chem));
+        let expected = law(&w, &w.life[v], thick);
+        let walls = |w: &World| part.map_or(0.0, |p| w.life.part(p).expect("the part").walls(&w.chem).volume);
+        let before = walls(&w);
+        w.events.clear();
+        bite(&mut w, a, v);
+        pcore::life::land(&mut w);
+        let got: f64 = w.events.iter().map(|e| if let pcore::event::EventKind::Took { .. } = e.kind { e.value } else { 0.0 }).sum();
+        books.assert_kept(&w, 1e-9);
+        let worn = before - walls(&w);
+        (w, (i, a), [c, expected], got, worn)
+    };
+    let (_, _, [c0, _], none, _) = scene(&[]);
+    let (_, _, [c_frame, _], frame, worn_frame) = scene(&[FRAME, MATTER]);
+    let (mut w, (i, a), [c, expected], rock, worn) = scene(&[ROCK]);
+    assert!(c0 == 1.0 && c_frame == 1.0 && frame == none && worn_frame == 0.0, "the frame cut: c {c_frame}, took {frame} kg of {none}, wore {worn_frame} m³");
+    println!("rock: c {c:.4}; took {rock:.4} kg, blunt {none:.4} kg; wore {worn:e} m³");
+    assert!(c < 0.99 && (c - expected).abs() < 1e-9, "c {c}, the law gives {expected}");
+    assert!(rock > none && worn > 0.0, "the rock took {rock} kg (blunt {none}) and wore {worn} m³");
+    // Archard's law on its own: the edge does 1 GJ of work.
+    let id = w.life[a].hold.expect("it holds the rock");
+    let (books, edge) = (Books::now(&w), bond::edge(w.life.cell_at(i), &w, &w.life[a]).expect("the rock is an edge"));
+    let held = |w: &World| w.life.part(id).expect("the rock").wall[ROCK];
+    let (before, work) = (held(&w), 1e9);
+    w.in_cell(i, |_, d| bond::blunt(d, &edge, work));
+    pcore::life::land(&mut w);
+    let s = &w.chem.subs[ROCK];
+    let archard = w.cfg.phys.abrade * work / (pcore::units::TABOR * s.rupture) * s.density[0] / s.molar_mass;
+    assert!(((before - held(&w)) / archard - 1.0).abs() < 1e-9, "wore {} mol, Archard's law {archard}", before - held(&w));
+    books.assert_kept(&w, 1e-9);
 }
 
 /// Body `b` (taken out of its slot) takes from the part named `p` of its cell (`bond::act`, verb 1), in a serial step.
