@@ -74,7 +74,9 @@ const NOISE_SEEDS: [u64; 2] = [1, 2];
 /// The numbers compared, each the mean of the years after the split: the animals' mass, kg, the cover's, kg, and the
 /// starting kinds alive (in bodies or cover), the first `LIFE_HELD`, held to the noise; then in the region (where its
 /// bodies step four times a month once it is split) the animals' mass, kg, their members and their mean temperature by
-/// members, K, printed, not held: the split region's animals are fewer and warmer.
+/// members, K, printed, not held: the unsplit region holds next to no animals in the years after the split (they die
+/// out there), so the gap between its seeds is no band. One body law at every grain is held where a node lives on:
+/// `core/tests/steps.rs`.
 const LIFE: [&str; 6] = ["animal_kg", "cover_kg", "kinds_alive", "region_animal_kg", "region_members", "region_t"];
 const LIFE_HELD: usize = 3;
 

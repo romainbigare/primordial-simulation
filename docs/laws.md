@@ -670,7 +670,9 @@ chance).
   sizes, and stays in its own if that is the nearest. The cap of a crowded cell and the cap of lineages make bodies of
   different heritage share a brain; the three caps bound the work, not a law. They count per cell, not per m²: a cell
   is the unit of the work a run's budget of cells pays for, so a finer cell holds as many nodes, and a region split
-  holds more per m², as its detail asks. So do the pair that may mate, a watch, a room and a gift: bodies meet who share
+  holds more per m², as its detail asks: a cap per m² would leave a fine cell less than one node of a kind and stage,
+  and what the members of a kind do does not go by how many nodes hold them (a node a year in a square and in its
+  cells split two depths, one node of each stage in each cell, lives alike: `core/tests/steps.rs`). So do the pair that may mate, a watch, a room and a gift: bodies meet who share
   a cell, and a fine cell's bodies meet each other more often (each step) among fewer; a law of meeting by the area
   swept, as the bite has (5.3), would make that alike per m², and is not built.
 - **Split and join of cells** (0): a node splits by area into the quarters of its cell (`nodes::part`, one node per
