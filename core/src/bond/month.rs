@@ -1,6 +1,6 @@
 //! The monthly step of parts: rot and heat, burial, loads and failure.
 
-use super::{fall_apart, holder, loose_solids, numbers, sense::liquid, shed, to_ground, unlink, verbs::{bears, torn_from}, NOBODY};
+use super::{fall_apart, holder, loose_solids, numbers, sense::liquid, shed, to_ground, unlink, verbs::{bears, torn_from}, Walls, NOBODY};
 use crate::{change::{frac, rate, scarce}, chem::Phase, life::{self, Chunk}, store::{Class, Node}, World, AIR};
 
 /// Liquid shallower than this, m, pushes no part.
@@ -17,8 +17,8 @@ pub fn step(w: &mut World) {
     life::run(w, vec![(); life::chunks(w)], load, |_| (), |w, d, _, _| {
         let cells: Vec<usize> = d.cells().filter(|&i| !d.at(i).parts.is_empty()).collect();
         for i in cells {
-            turns(w, d, i, dt);
-            loads(w, d, i);
+            let walls = turns(w, d, i, dt);
+            loads(w, d, i, &walls);
         }
     });
 }
@@ -28,30 +28,32 @@ pub fn step(w: &mut World) {
 /// of a substance no longer solid, go to the ground with their heat, where Change rots them on, one move per substance;
 /// then the parts take the ground's temperature, one move of heat (`warm`), and those lying alone sink (`bury`); a part
 /// whose walls are under `min_kg`, or buried past its smallest size, falls apart into the ground (`fall_apart`).
-fn turns(w: &World, d: &mut Chunk, i: usize, dt: f64) {
+/// Returns the walls of the parts left, in their order.
+fn turns(w: &World, d: &mut Chunk, i: usize, dt: f64) -> Vec<Walls> {
     let (chem, tg) = (&w.chem, w.t_ground_last(i));
     // (Opened first: `rot` reads the cell's own share of its air.)
     d.moves.open(w, i, Node::new(Class::Part, 0));
     let share: Vec<f64> = rot(w, d, i, tg).into_iter().map(|r| frac(r * dt)).collect();
-    // What goes to the ground of each substance: mol, then J.
+    // What goes to the ground of each substance: mol, then J; each part's heat capacity after.
     let mut off = vec![[0.0; 2]; chem.ns()];
-    for p in d.at_mut(i).parts.iter_mut() {
-        shed(chem, p, |k, t, wall| if chem.phase_in(k, t, |j| wall[j]) != Phase::Solid { 1.0 } else { share[k] }, &mut off);
-    }
+    let caps: Vec<f64> = d.at_mut(i).parts.iter_mut().map(|p| shed(chem, p, |k, t, wall| if chem.phase_in(k, t, |j| wall[j]) != Phase::Solid { 1.0 } else { share[k] }, &mut off)).collect();
     to_ground(w, d, i, &off);
-    warm(w, d, i, tg);
+    warm(w, d, i, tg, &caps);
     bury(w, d, i, (tg, dt));
-    let mut x = 0;
+    let (mut x, mut kept) = (0, Vec::with_capacity(caps.len()));
     while x < d.at(i).parts.len() {
         let p = &mut d.at_mut(i).parts[x];
-        let gone = p.walls(chem).mass < w.cfg.phys.min_kg || p.buried >= p.size[2];
-        p.resize(chem);
+        let walls = p.walls(chem);
+        let gone = walls.mass < w.cfg.phys.min_kg || p.buried >= p.size[2];
+        p.fit(walls.volume);
         if gone {
             fall_apart(w, d, i, x);
         } else {
+            kept.push(walls);
             x += 1;
         }
     }
+    kept
 }
 
 /// Flow's mixing of the loose ground (laws.md 1.3; bioturbation, Darwin 1881): each part of cell `i` of chunk `d` that
@@ -61,32 +63,33 @@ fn bury(w: &World, d: &mut Chunk, i: usize, (tg, dt): (f64, f64)) {
     let loose = loose_solids(w, d, i, tg);
     let volume: f64 = loose.iter().enumerate().map(|(k, a)| a * w.chem.molar_volume(k, Phase::Solid)).sum();
     let depth = (volume / w.mesh.cells().area()[i]) as f32;
-    let c = d.at_mut(i);
-    let lone: Vec<bool> = c.parts.iter().map(|p| p.held == NOBODY && c.bonds.of(p.id).next().is_none()).collect();
-    for (p, _) in c.parts.iter_mut().zip(lone).filter(|x| x.1) {
-        p.buried = (p.buried + (w.cfg.bury * dt) as f32).min(depth);
+    let (c, sink) = (d.at_mut(i), (w.cfg.bury * dt) as f32);
+    // The parts a bond joins, by id.
+    let mut bonded: Vec<u64> = c.bonds.a.iter().chain(&c.bonds.b).copied().collect();
+    bonded.sort_unstable();
+    for p in c.parts.iter_mut().filter(|p| p.held == NOBODY && bonded.binary_search(&p.id).is_err()) {
+        p.buried = (p.buried + sink).min(depth);
     }
 }
 
-/// The parts of cell `i` of chunk `d` take its ground's temperature `tg`, K, as one move of heat with the ground: all
-/// each wants, unless the ground cannot give that much (`Moves::take_from_ground`); then what it gives goes to the
-/// parts that warm, by what each wants.
-fn warm(w: &World, d: &mut Chunk, i: usize, tg: f64) {
-    let chem = &w.chem;
+/// The parts of cell `i` of chunk `d`, of heat capacities `caps` (J/K), take its ground's temperature `tg`, K, as one
+/// move of heat with the ground: all each wants, unless the ground cannot give that much (`Moves::take_from_ground`);
+/// then what it gives goes to the parts that warm, by what each wants.
+fn warm(w: &World, d: &mut Chunk, i: usize, tg: f64, caps: &[f64]) {
     let (mut up, mut down) = (0.0, 0.0);
-    for p in &d.at(i).parts {
-        let want = p.heat_cap(chem) * tg - p.e;
+    for (p, cap) in d.at(i).parts.iter().zip(caps) {
+        let want = cap * tg - p.e;
         if want > 0.0 {
             up += want;
         } else {
             down -= want;
         }
     }
-    let cap = d.moves.heat_cap_ground(w, i);
-    let got = d.moves.take_from_ground(w, i, (0, 0.0, 0.0), up - down, cap).1;
+    let ground = d.moves.heat_cap_ground(w, i);
+    let got = d.moves.take_from_ground(w, i, (0, 0.0, 0.0), up - down, ground).1;
     let short = got != up - down;
-    for p in d.at_mut(i).parts.iter_mut() {
-        let e1 = p.heat_cap(chem) * tg;
+    for (p, cap) in d.at_mut(i).parts.iter_mut().zip(caps) {
+        let e1 = cap * tg;
         p.e = if short && e1 > p.e { p.e + (e1 - p.e) * (got + down) / up } else { e1 };
     }
 }
@@ -99,8 +102,10 @@ fn warm(w: &World, d: &mut Chunk, i: usize, tg: f64) {
 /// the substances the cell's walls hold. The moves of cell `i` are open (`Moves::open`), so the air read is its share.
 fn rot(w: &World, d: &Chunk, i: usize, t: f64) -> Vec<f64> {
     let (ns, j) = (w.chem.ns(), w.mesh.up(i, 0, AIR));
-    let (mut rot, mut held) = (vec![0.0; ns], vec![false; ns]);
-    d.at(i).parts.iter().for_each(|p| p.wall.iter().zip(&mut held).for_each(|(&a, h)| *h |= a > 0.0));
+    let (mut rot, parts) = (vec![0.0; ns], &d.at(i).parts);
+    // Of each substance an open reaction takes, whether a part's walls hold it (the others are not read).
+    let takes = |k: usize| w.chem.reactions.iter().any(|rx| rx.open > 1.0 && rx.inputs.iter().any(|x| x.0 as usize == k));
+    let held: Vec<bool> = (0..ns).map(|k| takes(k) && parts.iter().any(|p| p.wall[k] > 0.0)).collect();
     let mut rots = w.chem.reactions.iter().filter(|rx| rx.open > 1.0 && rx.inputs.iter().any(|x| held[x.0 as usize])).peekable();
     if rots.peek().is_none() {
         return rot;
@@ -122,28 +127,34 @@ fn rot(w: &World, d: &Chunk, i: usize, t: f64) -> Vec<f64> {
 }
 
 /// Each structure of cell `i` of chunk `d`, in the order of its root in the cell's list: its numbers found again from
-/// its parts (`numbers`: their walls changed in their turns, their bonds did not), and its load (`load_one`).
-fn loads(w: &World, d: &mut Chunk, i: usize) {
+/// its parts, their walls `walls` in the order of the list (`numbers`: their walls changed in their turns, their bonds
+/// did not), and its load (`load_one`).
+fn loads(w: &World, d: &mut Chunk, i: usize, walls: &[Walls]) {
     let c = d.at(i);
-    // The cell's parts by structure, (root, place), each structure's in the order of the list.
-    let mut by: Vec<(u64, usize)> = c.parts.iter().enumerate().map(|(x, p)| (p.root, x)).collect();
-    by.sort_unstable();
+    // The parts that are not the root of their structure, (root, place), by root and place.
+    let mut joined: Vec<(u64, usize)> = c.parts.iter().enumerate().filter(|x| x.1.root != x.1.id).map(|(x, p)| (p.root, x)).collect();
+    joined.sort_unstable();
     let roots: Vec<usize> = (0..c.parts.len()).filter(|&x| c.parts[x].root == c.parts[x].id).collect();
+    let mut of = Vec::new();
     for x in roots {
         let r = d.at(i).parts[x].id;
-        let of = &by[by.partition_point(|e| e.0 < r)..by.partition_point(|e| e.0 <= r)];
+        // Its parts in the order of the list: the root and those joined to it.
+        of.clear();
+        of.push(x);
+        of.extend(joined[joined.partition_point(|e| e.0 < r)..joined.partition_point(|e| e.0 <= r)].iter().map(|e| e.1));
+        of.sort_unstable();
         let c = d.at_mut(i);
-        c.parts[x].s = numbers(w, c, of.iter().map(|e| e.1));
-        load_one(w, d, i, (x, of));
+        c.parts[x].s = numbers(w, of.iter().map(|&y| (&c.parts[y], walls[y])));
+        load_one(w, d, i, (x, &of));
     }
 }
 
 /// Load the structure whose root is at `rp` in cell `i` of chunk `d`, its parts at `of` (`loads`): weights less
 /// buoyancy, pushes of liquid and bodies, from the part a body holds out along the bonds; break what is overloaded. A
 /// structure no body holds rests on the ground and bears no load.
-fn load_one(w: &World, d: &mut Chunk, i: usize, (rp, of): (usize, &[(u64, usize)])) {
+fn load_one(w: &World, d: &mut Chunk, i: usize, (rp, of): (usize, &[usize])) {
     let (c, g) = (d.at(i), w.cfg.gravity);
-    let Some(h) = of.iter().position(|e| holder(c, e.1).is_some()) else {
+    let Some(h) = of.iter().position(|&p| holder(c, p).is_some()) else {
         d.at_mut(i).parts[rp].push = 0.0;
         return;
     };
@@ -154,10 +165,9 @@ fn load_one(w: &World, d: &mut Chunk, i: usize, (rp, of): (usize, &[(u64, usize)
     let (sum, borders) = cells.around(i).0.iter().map(|&l| cells.width()[l as usize]).filter(|&wd| wd > 0.0).fold((0.0, 0.0), |(s, k), wd| (s + wd, k + 1.0));
     let width = sum / borders;
     let v = if depth > STILL_DEPTH { flux / (molv * width * depth) } else { 0.0 };
-    let list: Vec<usize> = of.iter().map(|e| e.1).collect();
-    let bump = c.parts[rp].push as f64 / list.len() as f64;
-    let (mut wt, mut push) = (vec![0.0; list.len()], vec![0.0; list.len()]);
-    for (x, &p) in list.iter().enumerate() {
+    let bump = c.parts[rp].push as f64 / of.len() as f64;
+    let (mut wt, mut push) = (vec![0.0; of.len()], vec![0.0; of.len()]);
+    for (x, &p) in of.iter().enumerate() {
         let pt = &c.parts[p];
         let face = (pt.size[0] * pt.size[1]) as f64;
         let buoy = rho * g * pt.outer().min(face * depth);
@@ -165,9 +175,9 @@ fn load_one(w: &World, d: &mut Chunk, i: usize, (rp, of): (usize, &[(u64, usize)
         push[x] = 0.5 * rho * v * v * face + bump;
     }
     // From the held part out along the bonds, each carrying what hangs beyond it.
-    let ids: Vec<u64> = list.iter().map(|&p| c.parts[p].id).collect();
+    let ids: Vec<u64> = of.iter().map(|&p| c.parts[p].id).collect();
     let mut order = vec![h];
-    let mut up = vec![usize::MAX; list.len()];
+    let mut up = vec![usize::MAX; of.len()];
     let mut q = 0;
     while q < order.len() {
         for (o, _) in c.bonds.of(ids[order[q]]) {
@@ -193,7 +203,7 @@ fn load_one(w: &World, d: &mut Chunk, i: usize, (rp, of): (usize, &[(u64, usize)
         }
     }
     // The holder bears what hangs on its part by its own force, or lets go.
-    let torn = holder(c, list[h]).filter(|&o| wt[h] + push[h] > bears(w, &c.bodies[o]));
+    let torn = holder(c, of[h]).filter(|&o| wt[h] + push[h] > bears(w, &c.bodies[o]));
     let c = d.at_mut(i);
     c.parts[rp].push = 0.0;
     for (a, o) in breaks {
