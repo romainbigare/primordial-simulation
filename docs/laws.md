@@ -123,8 +123,10 @@ their sleep, its life, Flow's state of its ground, its moving averages) and per 
 cells in one place (`World::remap`, between steps): each number moves with its cell or link, an old cell no new one
 names is gone, and a new cell holds nothing and takes the next serial, so every id still finds its body or part.
 **Split and join** (`remap/split.rs`, at a month's start, the events taken; one remap each, an event each, `Split` and
-`Join`, naming the parent by its serial). The cells a split or a join makes are new, with new serials, and a link
-between two cells that both stay keeps what it remembers. A quarter holds its share of each number its parent held (the
+`Join`, naming the parent by its serial). The cells a split or a join makes are new, with new serials. The splits and
+joins of one change (`remap::Change`: a split with those 2:1 forces, a join, or a month's refinement) read the cells'
+places between them, not their links; the mesh is linked once at the change's end, and a link between two cells the
+change left as they were keeps what it remembers, a link of a cell it made nothing. A quarter holds its share of each number its parent held (the
 amounts and the heat of each of its nodes, the volumes Flow keeps of its ground, what its sleep held, the moving
 averages per cell, `remap::Made::held`) and its parent's numbers that do not add up (the moving averages per m², the
 temperature and the plateau, the means of its bed, the sleep's alarm and the time it was brought up to date); a joined
@@ -169,10 +171,13 @@ moved since the last month (of at least `MASS_FLOOR`) over `MASS_SHARE`, what it
 season, faster on land than under liquid, so its departures mark the coasts each season, not an event. Then, the
 lowest first (ties by the least serial), each four quarters of one leaf, built no coarser than it (`Watch::built`)
 and with no finer cell across a side, join while the cells are over the budget or all four score under `JOIN_AT`
-(1/4: a cell does not flap); then, the highest first, each cell of `SPLIT_AT` (1) or more coarser than the floor
-(`Config::finest_depth`) splits if its split, with the splits 2:1 forces, keeps the cells within the budget. A split
-the camera asks for (its term alone is 1 or more) may first join the quietest quartets the camera does not see, nor
-a cell beside them (a split there would split their join again, 2:1), to make room: what is looked at comes first. A month makes at most `MOST_CHANGES` (32) splits and joins. The events of
+(1/4: a cell does not flap); then, those the camera asks for (its term alone is 1 or more) first, then the highest
+first, each cell of `SPLIT_AT` (1) or more coarser than the floor (`Config::finest_depth`) splits if its split, with
+the splits 2:1 forces, keeps the cells within the budget. A split the camera asks for may first join the quietest
+quartets the camera does not see, nor a cell beside them (a split there would split their join again, 2:1), to make
+room: what is looked at comes first. As the camera's splits come first, a cell joined to make room for them takes the
+room back only once the camera asks for no more: at a full budget the cells settle with the camera's window at its
+asked depth, and change only as the window moves. A month makes at most `MOST_CHANGES` (32) splits and joins. The events of
 a join's merge name their cell by index, which the next change renumbers: they wait with their cell's leaf and come
 back at the end of the month's changes naming the cell that then holds that place.
 **The camera** (`refine::Camera`) is an input of the run: from given months on, a window of the map in squares and
@@ -202,7 +207,8 @@ refresh) follow each other with nothing between (`flow::chain`) and are booked a
 build of Flow's state, and a part run alone, are booked at their own end. In each booking every move carries its
 potential energy from the height it leaves (a ground node's head, an air node's mean head, a store's table, each the
 mean of the booking's start and end, so a lake that drains whole takes along what it held), and each node's heat takes
-what came in less what left less the change of its own (`store::fall_heat`):
+what came in less what left less the change of its own (`store::fall_heat`; less what a part gave it on the way,
+as the liquid's pass gives the heat of its falls to what lands, 1.2):
 so a fall heats where the matter lands, a lift is paid by the node it enters (the air, for a gas going up; the ground
 node a store's liquid rises into), a column that rises as it fills pays for it, and the potential energy the world's
 matter gained is one number of the store (`Store::lifted`), the change of that function. Within a month's Flow the later
@@ -259,11 +265,16 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
   `downhill::Order`), starting from the sea (from the lowest cell where there is none). Liquid stands below it (or in
   the lowest basin where there is no sea); elsewhere it passes on, counting as no higher than its ground, so it crosses
   the map in one step while depressions fill and spill. Lakes (closed basins above the sea) fill and spill this way.
+  The pass goes by falling spill level, and at one level the cell the flood reached last first, so each cell comes
+  before its way out whether its liquid stands or passes on: a river crosses a lake in the step it reaches it.
 - **Running off** (`solve::downhill`): each cell but the sea's sends its liquid down its steepest way by D-infinity
   (Tarboton 1997; `Level::steepest`): two neighbours next in compass order make a triangle with the centre, the plane
   through their drops gives its slope and way, and the steepest triangle shares the liquid between its two neighbours
   by angle. To a neighbour already passed whose liquid stands it sends at most what levels the two heads, whatever
-  their areas; to one already passed whose liquid passes on (upstream in the flood) it sends none, so a pit over its
+  their areas, and no more than fills it to its spill level; a neighbour still to come whose liquid stands holds it
+  back no higher than its spill level (what stands over that passes on). What the steepest way cannot take runs down
+  the other ways, the steepest first, each as far as it takes, so a month's river through a small cell stands in no
+  column; to one already passed whose liquid passes on (upstream in the flood) it sends none, so a pit over its
   rim spills by its way out. What reaches a sea cell stays there and joins the sea.
 - **Pore water** flows by Darcy's law (one explicit `solve::sweep` on the liquid table, the store's too): `seep` ×
   saturated thickness × width / distance, at most half of what would level two cells, and no cell giving more than it
@@ -280,7 +291,9 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node
   holds and what stays keeps that temperature. A salt is a liquid that never
   boils (11, 12): it moves with the liquid and stays when it evaporates. Its fall heats the node it lands in (0, "The
-  books"), and the head it loses on the way out does work (1.3).
+  books"): in the pass, from the head it leaves to the head it lands at (as the booking has them at its start), so
+  what runs on from there takes its share of that heat along as the liquid does, and the booking at the end gives the
+  node only the rest (`Lifts::give`). The head it loses on the way out does work (1.3).
 
 ### 1.3 Erosion and creep
 The head lost by moving liquid does work where it is lost on land (`flow::liquid::load`, `wear`; below 0 m its load

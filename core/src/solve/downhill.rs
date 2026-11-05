@@ -2,7 +2,7 @@
 //! (the ground without the liquid that may run off), from the lowest cell at the head of its liquid, gives each cell
 //! its spill level: the lowest level from which liquid there can reach the lowest cell (Barnes, Lehman and Mulla 2014).
 //! Liquid runs from higher levels to lower ones, and at one level from where it stands (below the spill level) out
-//! through the cells the flood reached earlier, so the pass by falling level, standing liquid first, then the last
+//! through the cells the flood reached earlier, so the pass by falling level, at one level the last
 //! reached first, is a topological order of its links: one pass carries liquid across the map while depressions fill
 //! and spill, and a level stretch drains toward its outlet. Where a basin is given, the flood starts from it instead: its
 //! cells are reached first, at the head of their liquid, and the pass does not visit them, so what reaches one stays
@@ -33,6 +33,8 @@ pub struct Order {
     pub stands: Vec<bool>,
     /// The cell from which the flood reached each cell: its way out (`u32::MAX` for the lowest cell).
     pub outlet: Vec<u32>,
+    /// Each cell's spill level, m: the lowest level from which its liquid reaches the lowest cell.
+    pub spill: Vec<f64>,
 }
 
 /// A key that sorts levels from the lowest up: the bits of `h` in the total order of `f64::total_cmp`.
@@ -68,14 +70,15 @@ impl Order {
         // The basin's liquid stands, and no cell is visited after it.
         self.stands = (0..n).map(|i| floor[i] < level[i] || level[i] <= low).collect();
         basin.iter().for_each(|&c| self.stands[c as usize] = true);
-        // The pass: the highest level first; at one level the standing liquid first, highest head first (as liquid levels
-        // out), then the cells it passes on through, the last reached first (`r`: the order the flood reached them in).
-        let key = |(r, &c): (usize, &u32)| (!rising(level[c as usize]), !self.stands[c as usize], if self.stands[c as usize] { !rising(head(c as usize)) } else { !(r as u64) }, c);
+        // The pass: the highest level first; at one level the last reached first (`r`: the order the flood reached them
+        // in), so each cell comes before the cell it was reached from, its way out, whether its liquid stands or passes.
+        let key = |(r, &c): (usize, &u32)| (!rising(level[c as usize]), !(r as u64), c);
         let mut keys: Vec<_> = self.cells.iter().enumerate().map(key).collect();
         keys.sort_unstable();
-        self.cells = keys.iter().map(|k| k.3).collect();
+        self.cells = keys.iter().map(|k| k.2).collect();
         self.rank = vec![u32::MAX; n];
         self.cells.iter().enumerate().for_each(|(r, &c)| self.rank[c as usize] = r as u32);
+        self.spill = level;
     }
 
     /// Is cell `a` visited before cell `b` (so it is passed when `b` is visited)?

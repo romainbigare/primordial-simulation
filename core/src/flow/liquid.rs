@@ -3,11 +3,15 @@
 //! (`solve::downhill`), doing work on its bed; the liquid under the surface moves (`drain::under`); and the basin stands
 //! at one level (`basin::level`).
 
-use super::{bare_share, drain::{springs, under}, follow, land::{lift, solid, stand, wet, NONE}, potential::apply, range, year_weight, Scratch};
-use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed}, store::{Class, LinkFlux, Move, Node}, units::T_FLOOR, World};
+use super::{bare_share, drain::{springs, under}, follow, land::{lift, solid, stand, wet, NONE}, potential::{apply, Lifts}, range, year_weight, Scratch};
+use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed}, space::Level, store::{Class, LinkFlux, Move, Node}, units::T_FLOOR, World};
 
 /// Least bond strength wear divides by.
 const STRENGTH_MIN: f64 = 0.05;
+
+/// What a cell's liquid finds toward a neighbour in the pass (`surface`): the drop, m, where it is a way down; the
+/// volume that may move there, m³; and the fall of its head, m.
+type Toward = (Option<f64>, f64, f64);
 
 /// The mobile liquid of every ground node: of each liquid `liq[q]`, `mol[q * n + i]` (its liquid share; all of a
 /// dissolved gas), and its volume `vol[i]`, m³ (dissolved gas adds none).
@@ -106,40 +110,50 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
     let adj = Adjacency { start: cells.start(), link: cells.adj_link(), other: cells.adj_cell(), a: cells.a() };
     let mut order = std::mem::take(&mut s.order);
     order.update(&adj, &s.z, |i| head(&q, i), &s.basin.cells);
-    let (mut sent, mut worn, mut outs) = (vec![0.0; n], vec![0.0; n], Vec::new());
+    let (mut sent, mut worn, mut outs, mut rest) = (vec![0.0; n], vec![0.0; n], Vec::<Toward>::new(), Vec::new());
     // A land cell, as `World::is_land` says: its solid surface above 0 m (Flow's state of it).
     let (land, mut off_land): (Vec<bool>, Vec<f64>) = (s.z.iter().map(|&z| z > 0.0).collect(), vec![0.0; n]);
-    let mut crossed = Crossed::default();
+    let (mut crossed, mut given) = (Crossed::default(), vec![0.0; n]);
     let (ww, ss) = (&*w, &*s);
     pass(&order, &adj, &mut q, &mut crossed, |i, q, share| {
         let (zi, hd, sv) = (ss.z[i], head(q, i), q[i * width + vol]);
         if sv <= 0.0 {
             return;
         }
-        // Each lower neighbour: the drop toward it, the volume that may move toward it (to a neighbour already passed, what
-        // levels the two heads, whatever their areas), and the fall of the head.
-        // The surface of a cell whose liquid stands is its head; of one its liquid passes on through, its ground (a
-        // neighbour still to come holds the head back only by what it keeps). Liquid never goes back to a neighbour already
-        // passed whose liquid passes on: that one lies upstream in the flood, and what it got would come back the next
-        // step; to one whose liquid stands it levels the two heads. It takes the steepest way down (`Level::steepest`),
-        // and on level ground the flood's way out.
+        // Each lower neighbour: the drop toward it, the volume that may move toward it (to a neighbour already passed,
+        // what levels the two heads, whatever their areas, up to its spill level), and the fall of the head.
+        // The surface of a cell whose liquid stands is its head, but no higher than its spill level (what stands over it
+        // passes on); of one its liquid passes on through, its ground (a neighbour still to come holds the head back only
+        // by what it keeps). Liquid never goes back to a neighbour already passed whose liquid passes on: that one lies
+        // upstream in the flood, and what it got would come back the next step; to one whose liquid stands it levels the
+        // two heads, but no higher than that one's spill level: what stands over it would pass on, and that one has
+        // passed. It takes the steepest way down (`Level::steepest`), and on level ground the flood's way out; what that
+        // way cannot take runs down the others (`run_on`).
         outs.clear();
         let (top, mut way) = (if order.stands[i] { hd } else { zi }, None);
         for (k, j) in cells.around(i).1.iter().map(|&j| j as usize).enumerate() {
             let (hj, passed) = (head(q, j), order.before(j, i));
-            let (from, to) = (if passed { top } else { hd }, if passed || order.stands[j] { hj } else { ss.z[j] });
-            let room = if passed { (from - to) * (area[i] * area[j] / (area[i] + area[j])) } else { (hd - to.max(zi)) * area[i] };
-            let down = from - to > ph.still && (!passed || order.stands[j]);
+            let to = match (passed, order.stands[j]) {
+                (true, _) => hj,
+                (false, true) => hj.min(order.spill[j]),
+                (false, false) => ss.z[j],
+            };
+            let from = if passed { top } else { hd };
+            let room = if passed { ((from - to) * (area[i] * area[j] / (area[i] + area[j]))).min((order.spill[j] - hj) * area[j]) } else { (hd - to.max(zi)) * area[i] };
+            let down = from - to > ph.still && (!passed || order.stands[j]) && room > 0.0;
             if down && j == order.outlet[i] as usize {
                 way = Some([(k, 1.0), (k, 0.0)]);
             }
             outs.push((down.then_some((top - to).max(0.0)), room, (hd - hj).max(0.0)));
         }
         let Some(ways) = cells.steepest(i, |k| outs[k].0).map(|w| w.1).or(way) else { return };
-        let (mut out, mut drop) = (0.0, 0.0);
+        let (mut out, mut drop, mut short) = (0.0, 0.0, false);
         for (k, f) in ways.into_iter().filter(|p| p.1 > 0.0) {
             share[k] = (sv * f).min(outs[k].1) / sv;
-            (out, drop) = (out + share[k], drop + share[k] * outs[k].2);
+            (out, drop, short) = (out + share[k], drop + share[k] * outs[k].2, short || sv * f > outs[k].1);
+        }
+        if short {
+            (out, drop) = run_on(cells, i, (&outs, &mut rest), share, sv, (out, drop));
         }
         // The node's heat capacity and fusion enthalpy with what came in. Liquid that came in holds its fusion enthalpy
         // as it passes, whatever the node's own phase (its heat brought it); a load holds none.
@@ -149,31 +163,40 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
             let d = q[cell.start + r] - was[r];
             (c, held) = (c + d * ss.sp[k].cp, held + if r < nl { d * ss.sp[k].lf } else { 0.0 });
         }
-        let q = &mut q[cell];
-        // The temperature of the node mixed with what came in, at which what runs out leaves: off a melting plateau its
-        // energy over its fusion enthalpy and heat capacity; on one, what it gains or loses on the plateau's
-        // temperature melts or freezes the plateau's substance first (`FlowView::fused`), and only the rest warms or
-        // cools it. So the liquid passing on leaves at a temperature the node pays for, and what stays keeps it.
-        let lat = match ss.state.pk[i] { NONE => 0.0, k => ww.store.amounts(Class::Ground)[k * n + i] * ss.sp[k].lf };
-        let x = ww.store.heat(Class::Ground)[i] + q[heat] - held - c * ss.state.tg[i];
-        let t = (ss.state.tg[i] + (x.min(0.0) + (x - lat).max(0.0)) / c.max(1.0)).max(T_FLOOR);
-        let kg = |q: &[f64], rs: std::ops::Range<usize>| rs.map(|r| q[r] * ss.sp[ks[r]].mm).sum::<f64>();
-        // The work, on the bed below the liquid left standing (which hides it); none below 0 m, where the load
-        // settles.
-        let left = sv * (1.0 - out) / area[i];
-        let bedwork = if land[i] { g * drop * kg(q, 0..nl) * ph.hide[1] / (ph.hide[1] + left) } else { 0.0 };
-        worn[i] = load(ww, ss, i, q, (nl..rows, &sol), bedwork, out);
-        q[heat] = ks.iter().enumerate().map(|(r, &k)| q[r] * (ss.sp[k].cp * t + if r < nl { ss.sp[k].lf } else { 0.0 })).sum();
-        // What leaves a land cell for cells that are not land runs off the land.
-        let off = (0..share.len()).filter(|&k| land[i] && !land[cells.around(i).1[k] as usize]).map(|k| share[k]);
-        let liquid = q[..nl].iter().sum::<f64>();
-        (sent[i], off_land[i]) = (out * liquid, off.sum::<f64>() * liquid);
+        let carried = {
+            let q = &mut q[cell];
+            // The temperature of the node mixed with what came in, at which what runs out leaves: off a melting plateau
+            // its energy over its fusion enthalpy and heat capacity; on one, what it gains or loses on the plateau's
+            // temperature melts or freezes the plateau's substance first (`FlowView::fused`), and only the rest warms
+            // or cools it. So the liquid passing on leaves at a temperature the node pays for, and what stays keeps it.
+            let lat = match ss.state.pk[i] { NONE => 0.0, k => ww.store.amounts(Class::Ground)[k * n + i] * ss.sp[k].lf };
+            let x = ww.store.heat(Class::Ground)[i] + q[heat] - held - c * ss.state.tg[i];
+            let t = (ss.state.tg[i] + (x.min(0.0) + (x - lat).max(0.0)) / c.max(1.0)).max(T_FLOOR);
+            let kg = |q: &[f64], rs: std::ops::Range<usize>| rs.map(|r| q[r] * ss.sp[ks[r]].mm).sum::<f64>();
+            // The work, on the bed below the liquid left standing (which hides it); none below 0 m, where the load
+            // settles.
+            let left = sv * (1.0 - out) / area[i];
+            let bedwork = if land[i] { g * drop * kg(q, 0..nl) * ph.hide[1] / (ph.hide[1] + left) } else { 0.0 };
+            worn[i] = load(ww, ss, i, q, (nl..rows, &sol), bedwork, out);
+            q[heat] = ks.iter().enumerate().map(|(r, &k)| q[r] * (ss.sp[k].cp * t + if r < nl { ss.sp[k].lf } else { 0.0 })).sum();
+            // What leaves a land cell for cells that are not land runs off the land.
+            let off = (0..share.len()).filter(|&k| land[i] && !land[cells.around(i).1[k] as usize]).map(|k| share[k]);
+            let liquid = q[..nl].iter().sum::<f64>();
+            (sent[i], off_land[i]) = (out * liquid, off.sum::<f64>() * liquid);
+            kg(q, 0..rows)
+        };
+        if let Some(l) = ss.lifts.as_ref() {
+            give_falls(l, cells, (i, share, carried * g), (q, width, heat), &mut given);
+        }
     });
     // The crossings as a link flux: each substance once (liquid and load rows of one substance share it), then the heat.
     let kinds: Vec<u16> = liq.iter().chain(sol.iter().filter(|k| !liq.contains(k))).map(|&k| k as u16).collect();
     let col_of: Vec<usize> = ks.iter().map(|&k| kinds.iter().position(|&x| x as usize == k).unwrap_or(0)).chain([kinds.len()]).collect();
     let (a, b, mol) = by_link(&crossed, rows + 2, &col_of, (cells.a(), cells.b()));
     let at = kinds.len() * a.len();
+    if let Some(l) = s.lifts.as_mut() {
+        l.give(w, &given);
+    }
     book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &kinds, mol: &mol[..at], heat: &mol[at..] }]);
     s.order = order;
     let (ema, mut broke) = (year_weight(w, dt), Vec::new());
@@ -185,6 +208,36 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         }
     }
     apply(w, s, &[], &broke);
+}
+
+/// What the steepest way of cell `i` cannot take (`share`, of `out` of its `sv` m³, the head falling by `drop`) runs
+/// down its other ways (`outs`: the drop, the room and the fall of the head toward each), the steepest first, each as
+/// far as it takes. Returns the share that leaves and the fall of the head, as `out` and `drop`.
+fn run_on(cells: &Level, i: usize, (outs, rest): (&[Toward], &mut Vec<usize>), share: &mut [f64], sv: f64, (mut out, mut drop): (f64, f64)) -> (f64, f64) {
+    let slope = |k: usize| {
+        let u = cells.offset(i, cells.around(i).1[k] as usize);
+        outs[k].0.unwrap_or(0.0) / u[0].hypot(u[1])
+    };
+    rest.clear();
+    rest.extend((0..outs.len()).filter(|&k| outs[k].0.is_some() && outs[k].1 > share[k] * sv));
+    rest.sort_by(|&a, &b| slope(b).total_cmp(&slope(a)).then(a.cmp(&b)));
+    for &k in rest.iter() {
+        let more = ((1.0 - out) * sv).min(outs[k].1 - share[k] * sv) / sv;
+        (share[k], out, drop) = (share[k] + more, out + more, drop + more * outs[k].2);
+    }
+    (out, drop)
+}
+
+/// The fall of what cell `i` sends down each way (its share `share[k]` of what runs out, `weight` N), from its head to
+/// the lower head of the cell it lands in, as the booking of Flow's lifts and falls has them at its start (`l`), heats
+/// what lands there (the heat row `q[j * width + heat]`, and `given[j]`, J): what runs on from there takes its share
+/// along, as the liquid that brought it would.
+fn give_falls(l: &Lifts, cells: &Level, (i, share, weight): (usize, &[f64], f64), (q, width, heat): (&mut [f64], usize, usize), given: &mut [f64]) {
+    for (k, &j) in cells.around(i).1.iter().enumerate().filter(|p| share[p.0] > 0.0) {
+        let j = j as usize;
+        let e = share[k] * weight * (l.head_at_start(i) - l.head_at_start(j)).max(0.0);
+        (q[j * width + heat], given[j]) = (q[j * width + heat] + e, given[j] + e);
+    }
 }
 
 /// The crossings of a pass as the columns of a link flux, row `r` in column `col_of[r]`: the links that carried
