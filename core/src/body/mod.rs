@@ -16,7 +16,7 @@ pub use death::{die, wound};
 use death::thin;
 pub(crate) use death::{remains, to_ground, torn_to_death};
 pub use genes::*;
-pub(crate) use live::{live, fade_meal_heat, LiveTmp};
+pub(crate) use live::{live, fade_meal_heat, newborn, LiveTmp};
 pub use live::Lived;
 pub use pay::{pay, upkeep};
 pub(crate) use pay::ahead;

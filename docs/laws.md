@@ -83,7 +83,9 @@ each chunk is one task on the pool (`life::run`), its cells taken out of the wor
 in order (of the cells that step), the physics of each body, in the order they came (a body placed in the pass first
 updates at its cell's next step);
 then every body with a brain perceives its inputs and the bodies of each lineage find their hidden layers together
-(5.1); then each decides and acts, in the same order; then the next cell. So what a chunk queues, and the lineages
+(5.1); then each decides and acts, in the same order, and after them the children who started a body of their own in
+the cell during its updates (`body::newborn`: no time behind them, so they feed from their birth to the cell's next
+step, whatever its length); then the next cell. So what a chunk queues, and the lineages
 and born rows it makes, come cell by cell whatever the chunks. The parts it reads are as they were at the pass's start. A body perceives the others of its own cell as they are when it
 decides (5.2); it takes from or gives to a body it saw only if that body still lives and is not leaving its cell. **A cell's view of the store** (`store::Moves`): its ground, bed and
 bodies' node as the store held them at the pass's start with its own moves since, and **its share of its air node**
@@ -625,7 +627,8 @@ a 2 km square, a quarter of the time out of an 8 km one), and on the same way th
 left crosses whole, into the last with the share of its side left (four cells on from a cell of 500 m), so they go as
 far in metres whatever the cells; one way for all of a node's children of an update (for an individual, that chance),
 where they land when the batch ends (0). Less than one member with no node to
-join waits in the brood, or, landed in a neighbour cell, goes back into it.
+join waits in the brood, or, landed in a neighbour cell, goes back into it. Children who start a body in their parent's cell decide at
+once (0), so they take what feeds them to the cell's next step; those who join a young node share its decision.
 
 ### 4.3 Two parents
 Only where brains are big: a mature individual (a body of count 1) of a lineage whose brain has at least `MATE_HIDDEN`

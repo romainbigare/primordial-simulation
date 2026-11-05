@@ -218,12 +218,20 @@ fn updates(w: &World, d: &mut Chunk, stepping: &(dyn Fn(usize) -> bool + Sync), 
     act.new_chunk();
     for i in d.cells().filter(|&i| stepping(i)) {
         minds.clear();
-        for slot in 0..d.at(i).bodies.len() {
+        let before = d.at(i).bodies.len();
+        for slot in 0..before {
             let h = Handle { cell: i as u32, slot: slot as u32 };
             if d[h].alive {
                 if let Some(lived) = live_one(w, d, h, tmp) {
                     minds.bodies.push((h, d[h].id, lived));
                 }
+            }
+        }
+        // Children who started a body of their own in the cell during these updates decide at once, with the others.
+        for slot in before..d.at(i).bodies.len() {
+            let h = Handle { cell: i as u32, slot: slot as u32 };
+            if d[h].alive && !w.life.brainless(&d[h]) {
+                minds.bodies.push((h, d[h].id, crate::body::newborn(w, &d[h])));
             }
         }
         minds.sense(w, d);

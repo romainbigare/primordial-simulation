@@ -255,7 +255,7 @@ fn node_year(fine: bool) -> [f64; 5] {
 /// Death causes (`body::LACK` to `body::AGE`).
 const CAUSES: u8 = 6;
 /// How far what the node does in a year in the square's cells may stray from what it does in the square, a share
-/// (measured: 2.5% at most, of its members, what it took and those born), and its mean temperature, K (measured:
+/// (measured: 0.9% at most, of its members, what it took and those born), and its mean temperature, K (measured:
 /// 0.005).
 const LIVES_ALIKE: f64 = 0.05;
 const WARMTH_K: f64 = 0.05;
@@ -265,10 +265,9 @@ const WARMTH_K: f64 = 0.05;
 /// depths (16 cells of 500 m, stepping a quarter month): its members at the end, what it took and the members born
 /// alike within `LIVES_ALIKE`, and its temperature within `WARMTH_K`. Its heat over an update is the mean of the exact
 /// solution at the pace that holds (laws.md 6.3), it drinks first (6.4), and what it takes feeds it to its next update
-/// within its stores' room for that time (5.3): so a month of a coarse body is four quarter months of a fine one. The
-/// members that died are printed, not held: children who start a node of their own live on what their parent gave them
-/// until their cell's next step, a month in the square and a quarter in its cells, so more of them die in the square
-/// (measured: 23% more deaths there).
+/// within its stores' room for that time (5.3), and children who start a node of their own decide at their birth, so
+/// they feed from then to their cell's next step (0): so a month of a coarse body is four quarter months of a fine one.
+/// The members that died, fewer than a tenth of those born, are printed, not held (measured: 4% more in the cells).
 #[test]
 fn a_node_lives_alike_in_a_square_and_in_its_cells() {
     let [coarse, fine] = [false, true].map(node_year);

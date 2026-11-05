@@ -56,6 +56,15 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) ->
     Ok(Lived { spare, days, released: heat })
 }
 
+/// What a body that came into its cell during the pass, a child who starts a body of its own, leaves for the decision it
+/// takes at once (`survey::updates`): no time integrated, and its spare against its upkeep to its next update. So it
+/// feeds from its birth to its cell's next step, as the child of a short step does.
+pub(crate) fn newborn(w: &World, b: &Body) -> Lived {
+    let cost = super::pay::ahead(w, b, b.mass(&w.chem));
+    let spare = b.fuel(&w.chem, b.temp(&w.chem)).min(MARGIN * cost) / cost.max(1e-300);
+    Lived { spare, days: 0.0, released: 0.0 }
+}
+
 /// Upkeep over the time, at the temperature it stands at then (`standing`): what its fuel releases is paid (`burn`), the
 /// share left unpaid dies, and so does the share its wear gives (`lose_share`). Returns the heat its surviving members
 /// released, J (those who died shed theirs through their own surface while they lived), and its spare: what its fuel
