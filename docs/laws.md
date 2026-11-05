@@ -865,12 +865,27 @@ gradient's mean is 0; members drawn for no action rest and count in the mean the
 direction, at most all (less than one member: one member with that chance; fewer than one member left behind: the whole node,
 with the chance that keeps the mean at count × that share), all in the one direction drawn by its chance over the sum,
 so each direction gets its share of members on average, in groups. A
-group splits off only if the cell it enters has room and the node bears the `bump` share of its weight
-(`choose::go::can_go`). **rest**; **move** (`choose::go`:
+group moves only if the cell it enters has room and it bears the `bump` share of its weight (`choose::go::can_go`);
+else it takes food where it is for its step and comes back. **rest**; **move** (`choose::go`:
 `walk` per kg and metre, climbing, the bodies in the way; needs force, 3.5); **take**, **put**, **give**
 (`choose/feed.rs`); **watch** (5.5); Bond's form, hold, take from or put to a part, join, break, let go,
 enter (`bond/verbs.rs`). A move lands when the batch ends, and an act on a part and a watch are applied then (0).
 No copy action, no "farm", "trade" or "attack": those must be patterns of these.
+
+**An act takes time** (`choose::act_as`): the step is the body's time to its next update, and the act drawn takes what
+it needs of it. A move takes the walk: its distance at the body's walking speed (`Physics::speed`: every size walks at
+one Froude number v² / (g L) = 0.25, L the side of a cube of a member's volume, the dynamic similarity of Alexander and
+Jayes 1983; 0.9 m/s at 30 kg, so a link of 2 km takes 40 minutes). Putting down and letting go take none. Every other
+act (take, rest, give, a bite, a watch, Bond's acts on parts) fills the step: what it takes, gives and does goes by the
+time it is given. For the rest of its step a body takes food where it ends by the take law (`feed::take_node`): a mover
+where it lands (`choose::land_move`, for the time from its landing to that cell's next step, `World::days_to_step`,
+less its walk), one that puts down or lets go, or whose move fails, where it is. So a monthly mover and four
+quarter-month movers walk as far and eat as much, in expectation, and a move gives up an hour of eating, not a step.
+The default is to eat, not to rest, because the take law already holds a body's hunger: it takes nothing when its
+stores are full (their room, below) and pays to handle only what it takes, so eating while it does nothing else is
+physics, not a choice made for the brain; the brain still chooses what fills the step (rest is its own act, all the
+step), and learns from what a move brings where it lands. A node's members share their time by the same rule
+(`choose::spread`, 4.4): what a share of its members does with its step, an individual does with that chance.
 
 **Taking** (`feed::intake`, one law for the ground and for bodies) goes by uptake genes (`Body::wanted`) at `c_handle`
 per kg, of food only (`Body::uses`: what it burns, the body matter and built solids it digests, the minerals it builds
@@ -990,8 +1005,16 @@ over the time to its next update (its cell's step) by the share e^(-g dt / C): t
 coat to its ground; a meal colder than the body is warmed by the body's own heat as it eats, drawn back from its
 ground, which its upkeep's heat went to, at most the heat its upkeep released over the update. So a body of hours to
 days starts its next update where it stood, and a month's meal taken at once cools it no more than the meals of four
-short steps. Its key liquids hold their fusion heat at any temperature (`Body::fused`): a body has no melting plateau,
-so its temperature is its heat over its heat capacity, that heat set aside (2.5).
+short steps. **Two states, one at every step.** As its pace rises with its temperature, a body whose own heat over its
+coat warms it past the ground by more than T² / Ea (about 12 K for chemistry 0's main burning, Ea 7,760 K: there the
+pace's rise, Ea / T² of it per K, feeds the heat faster than the coat lets it out) runs on to a warm state, at most its
+`COOL_T`, where its coat opens; below that it lies cold, or at its `KEEP_T` by burning. Its time C / g is hours to a day, far less than any step, so each update ends at the stable state its heat
+leads to from where it stood (`live::standing`), and a node turns between the two in the same month on a monthly step
+as on four quarter-month steps (a cold year of a node of adults: within 0.21 K, `core/tests/steps.rs`). A node's
+births are a step of their own here: a month's children join its young node at their birth size, so for a month that
+node holds less heat per area of coat than a quarter's children leave it in finer cells, and in a cold winter it can lie
+cold where the finer ones stay warm. Its key liquids hold their fusion heat at any temperature (`Body::fused`): a body
+has no melting plateau, so its temperature is its heat over its heat capacity, that heat set aside (2.5).
 
 ### 6.4 Water: drinking
 A body drinks its key liquids from its cell's ground up to the level it keeps, as far as the ground holds them liquid,

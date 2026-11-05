@@ -302,16 +302,31 @@ fn trace(w: &World, b: &Body, c: &Choice, (chances, a, adv): (&[f32; OPTS], usiz
 /// Body `b` (taken out of its slot), a part of node `part_of` if any (`spread`), does option `a`. Forming a part, acting
 /// on one and watching are queued (`life::Entry`), applied in the serial pass; so is a move (`go`). A node's
 /// part that queued one of these but a watch leaves the node until it is applied (`Body::leaving`).
+///
+/// An act takes the time it needs of the step (laws.md 5.3): a move its walk, putting down and letting go none, every
+/// other act the whole step, which what it takes, gives and does to parts goes by. The rest of the step it takes what
+/// lies at its place by the take law (`feed::take_node`), where it ends: a mover where it lands (`land_move`), one
+/// whose move fails where it is.
 fn act_as(w: &World, d: &mut Chunk, b: &mut Body, c: &Choice, k: &Kit, (a, part_of): (usize, Option<u64>), rng: &mut Rng) {
     b.leaving |= part_of.is_some() && (a == FORM || a >= TO_PART);
     let act = |on| Entry::Act { id: b.id, on, node: part_of, days: k.ahead };
     match a {
         REST => {}
-        PUT => feed::put(w, d, b),
+        PUT => {
+            feed::put(w, d, b);
+            feed::take_node(w, d, b, k.ahead);
+        }
         TAKE => feed::take_node(w, d, b, k.ahead),
         FORM => d.out.push(act(Err([k.form[0], 0.5 * (k.form[1] + 1.0), 0.5 * (k.form[2] + 1.0)]))),
-        RELEASE => bond::release(d, b),
-        a if a < TO_BODY => go(w, d, b, c.to[a - FIXED], part_of.is_some()),
+        RELEASE => {
+            bond::release(d, b);
+            feed::take_node(w, d, b, k.ahead);
+        }
+        a if a < TO_BODY => {
+            if !go(w, d, b, c.to[a - FIXED], part_of.is_some()) {
+                feed::take_node(w, d, b, k.ahead);
+            }
+        }
         a if a >= TO_PART => {
             let part = d.at(b.cell as usize).parts[c.parts[(a - TO_PART) / OVERBS]].id;
             d.out.push(act(Ok(((a - TO_PART) % OVERBS, part))));

@@ -252,6 +252,8 @@ pub struct Physics {
 const MOVE_REF: f64 = 30.0;
 /// Exponent of the cost of transport per kg and m in the mover's mass (Taylor et al. 1982).
 const MOVE_EXP: f64 = -0.32;
+/// The Froude number v² / (g L) a body walks at (Alexander 1989: mammals of any size walk near 0.25, run past 0.5).
+const WALK_FROUDE: f64 = 0.25;
 
 impl Physics {
     /// Energy of a month of thinking of a brain of cost `c` (`Lineage::cost`) for a member of `m` kg, J: weakly more for
@@ -263,6 +265,12 @@ impl Physics {
     /// m1^-0.32 J per kg per m (Taylor et al. 1982), scaled to `c_move` at `MOVE_REF`. Climbing is the weight lifted.
     pub fn walk(&self, m1: f64) -> f64 {
         self.c_move * (m1 / MOVE_REF).powf(MOVE_EXP)
+    }
+    /// The speed a member of `m1` kg walks at under `gravity` m/s², m/s: bodies of every size move alike at one Froude
+    /// number v² / (g L), `WALK_FROUDE` (the dynamic similarity of Alexander and Jayes 1983), its length L the side of
+    /// a cube of its volume (`rho_body`): 0.9 m/s for 30 kg, 1.6 m/s for a tonne.
+    pub fn speed(&self, m1: f64, gravity: f64) -> f64 {
+        (WALK_FROUDE * gravity * (m1.max(0.0) / self.rho_body).cbrt()).sqrt()
     }
     /// The factor on upkeep of a repair gene (log10): its repair share `c_repair` doubles for each unit.
     pub fn repair(&self, gene: f64) -> f64 {
