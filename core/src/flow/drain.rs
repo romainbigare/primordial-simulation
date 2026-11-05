@@ -32,9 +32,14 @@ pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
     book(w, s, &[LinkFlux { class: [Class::Ground, Class::Deep], a: &down, b: &down, ks: &liq16, mol: &sunk.0, heat: &sunk.1 }]);
 }
 
-/// The heat of `mol` of the liquids `liq` leaving ground node `i`, at the node's temperature now, J.
+/// The heat of `mol` of the liquids `liq` leaving ground node `i`, at the node's temperature now, J (`liquid_heat_at`).
 pub(super) fn liquid_heat(w: &World, s: &Scratch, liq: &[usize], i: usize, mol: &[f64]) -> f64 {
-    let t = t_now(w, s, i);
+    liquid_heat_at(s, liq, t_now(w, s, i), mol)
+}
+
+/// The heat of `mol` of the liquids `liq` at `t` K, J: each its heat capacity times `t` and the fusion enthalpy it
+/// holds as a liquid.
+pub(super) fn liquid_heat_at(s: &Scratch, liq: &[usize], t: f64, mol: &[f64]) -> f64 {
     liq.iter().zip(mol).map(|(&k, m)| m * (s.sp[k].cp * t + s.sp[k].lf)).sum()
 }
 

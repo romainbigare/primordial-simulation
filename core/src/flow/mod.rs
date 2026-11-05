@@ -17,6 +17,7 @@ mod basin;
 pub(crate) use air::air_temp;
 pub use air::{column, declination, glow, insolation, scale_height};
 pub use potential::total as potential;
+pub(crate) use basin::stand_level;
 pub(crate) use potential::{air_head, potential_of, stated};
 pub(crate) use stack::gain;
 pub use scratch::Scratch;

@@ -94,8 +94,10 @@ impl World {
     /// cell's and the quarters' reliefs. Where a join made the cell, by its record (`Joined`), and each quarter takes back
     /// its relief; what is left (or short) goes to the quarters' ground heat by their shares (`store::fall_heat`, which
     /// books it against `Store::lifted`). Else by area but the bed, which stands as the terrain inside the cell does,
-    /// drained (`World::uneven`), each quarter with the relief of the terrain inside it and its share by area of what is
-    /// left: the potential energy of the pits the drainage filled, which the ground finer than the quarters still holds.
+    /// drained (`World::uneven`), and the liquid that stood over the cell's pores stands at one level over the quarters'
+    /// floors (`flow::stand_level`); each quarter with the relief of the terrain inside it and its share by area of what
+    /// is left: the potential energy of the pits the drainage filled and what the liquid gave up as it found its level,
+    /// which the ground finer than the quarters still holds.
     /// Before Flow first built the state of the ground the stacks' potential energy is not found: the quarters are flat,
     /// each with its share of the relief by area.
     fn split_one(&mut self, leaf: Leaf, c: &mut Change) {
@@ -116,6 +118,9 @@ impl World {
             })
             .collect();
         self.renew((map, mesh), from, c);
+        if uneven.is_some() {
+            crate::flow::stand_level(self, &kids);
+        }
         let kept = record.as_ref().map(|r| r.kept).or(uneven.as_ref().map(|u| u.relief));
         if let Some(kept) = kept {
             let left = relief - (crate::flow::potential_of(self, &kids, air) - before) - sum4(kept);

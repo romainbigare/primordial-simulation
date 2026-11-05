@@ -360,17 +360,17 @@ pub fn split_down(w: &mut World, region: &[Leaf], depths: u8) {
     }
 }
 
-/// `split_down` with no relief in the cells it splits, so their quarters are flat: the same ground at two sizes, for
-/// scenes that compare a cell with its quarters.
+/// `split_down` with no relief in the cells it splits (those 2:1 splits first too), so their quarters are flat: the
+/// same ground at two sizes, for scenes that compare a cell with its quarters.
 pub fn split_flat(w: &mut World, region: &[Leaf], depths: u8) {
     w.drain_events();
     for r in region {
         for depth in r.depth..r.depth + depths {
-            for l in r.split(depth).collect::<Vec<_>>() {
-                if let Some(i) = w.map.cell(l) {
+            for l in r.split(depth).filter(|&l| w.map.cell(l).is_some()).collect::<Vec<_>>() {
+                for i in w.map.splits(l).expect("a split").into_iter().filter_map(|s| w.map.cell(s)) {
                     w.relief[i] = 0.0;
-                    w.split(l).expect("a split");
                 }
+                w.split(l).expect("a split");
             }
         }
     }

@@ -165,17 +165,22 @@ is the same account at every size: a cell's is its quarters' and that of their m
 cell no join made** gives its quarters the terrain inside it (`World::uneven`): each quarter's bed surface is the cell's
 mean bed surface now plus the terrain's mean height over the quarter less the mean over the four, so the cell's bed
 keeps its volume and its mean (what wear and creep did since the start stays in the mean); the bed's substances go to
-the quarters in the cell's proportions; the loose ground, the liquid (Flow moves it at the next step), the store and
-every other number stay per m². The quarters then drain, as the world's cells drain from the start (8): a priority
+the quarters in the cell's proportions; the loose ground, the liquid its pores hold, the store and every other number
+stay per m². The quarters then drain, as the world's cells drain from the start (8): a priority
 flood from the cells round them as they stand (`space::drain`) raises a quarter in a closed pit to its outlet, and all
 are lowered alike until their mean is the cell's again (`World::drained`). Noise has pits that no liquid ever cut: split
 undrained, the 1,024 cells of 500 m of the 64 x 64 island's first four blocks of land had 15 pits, and in two years
 2.5 m of liquid stood on them on the mean, 47 months of their rain (the unsplit blocks, 6 mm); drained, 5 pits and
 1.6 m, most of it in basins of several cells whose rims a later split of the cells round them made, and in cells under
-0 m at the coast, which join the low basin. The stacks then gain ρ g Σ a d² / 2, d each quarter's departure (what lies
-on the bed rises and falls with it by area, and the air over the cell keeps its mean height); each quarter's relief is
-the terrain's inside it and its share by area of what the cell's relief has left: the potential energy of the pits
-drained, which the ground finer than the quarters still holds (a split gives it no heat). Where the cell's relief is
+0 m at the coast, which join the low basin. Then the liquid that stood over the cell's pores stands where it would on
+the quarters' floors (`flow::stand_level`): it fills them from the lowest up to one level, as the sea's levelling does
+(1.2), each quarter keeping its pores full, so a quarter raised above that level is dry and none runs off at once; each
+move takes its share of every liquid with what is dissolved and its heat at the node's temperature, from the quarter
+that holds the most to each other (`store::apply`). The stacks then gain ρ g Σ a d² / 2, d each quarter's departure (what
+lies on the bed rises and falls with it by area, and the air over the cell keeps its mean height), less what the liquid
+gives up as it finds its level; each quarter's relief is the terrain's inside it and its share by area of what the
+cell's relief has left: the potential energy of the pits drained and what the liquid gave up, which the ground finer
+than the quarters still holds (a split gives it no heat). Where the cell's relief is
 less than these need (a drained pit stands higher than the terrain: 7% of the splits there), the departures (and the
 terrain below them) are scaled down until it pays, and so that each quarter keeps a bed. **A join** that makes one flat
 cell of quarters of
@@ -300,8 +305,9 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
   a month, after the runoff has reached it, all the sea's liquid stands at one level, found from all of it and the
   floors of its cells (each solid surface less its pore space, which the liquid fills first; sorted, so the level is
   exact). Each sea cell that holds more than its depth under that level gives the share of its liquid over it, with
-  that share of its heat; mixed, it goes to the cells that hold less, by what each lacks. **Known limit:** the sea's
-  slope under wind and rotation is not modelled, and what levels it crosses the sea at once. **The sea of each air
+  that share of its heat; mixed, it goes to the cells that hold less, by what each lacks (`basin::share_out`; a split
+  stands the liquid over its quarters' pores at one level the same way, 0). **Known limit:** the sea's slope under
+  wind and rotation is not modelled, and what levels it crosses the sea at once. **The sea of each air
   block mixes its heat in a month** (`basin::mix_heat`): then its cells off their melting plateaus, with no soft cover
   or cover of bodies and the same phases, each take the block's temperature (their heat apart from the fusion enthalpy
   each holds, over their heat capacity; their floor's top too, which is part of each cell's ground node).
