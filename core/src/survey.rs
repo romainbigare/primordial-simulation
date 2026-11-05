@@ -103,7 +103,9 @@ fn cell_row(w: &World, d: &Chunk, i: usize) -> [f64; ROW] {
     for b in cell.bodies.iter().filter(|b| b.alive) {
         let m = b.n();
         row[0] += m;
-        row[1..7].iter_mut().zip(&b.vis).for_each(|(x, &v)| *x += v as f64 * m);
+        // (Its mass, then its strength and colour past the capture area, `row[2]`: bodies catch no light.)
+        row[1] += b.vis[0] as f64 * m;
+        row[3..7].iter_mut().zip(&b.vis[1..]).for_each(|(x, &v)| *x += v as f64 * m);
         row[7] += b.breaking(&w.chem, &w.cfg, 1.0);
     }
     row

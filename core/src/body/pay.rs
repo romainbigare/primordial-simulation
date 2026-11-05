@@ -7,15 +7,15 @@ use crate::{life::Chunk, lineage::Lineage, World, AIR};
 
 /// Upkeep over `days` of a body of `mass` kg at `t` K, J (laws.md 6.2): per kg of living body its basal, strength and
 /// learning costs, times (copy mass)^(`intake_exp` - 1) so adults pay Kleiber's mass^0.75 while one body grows
-/// until keeping its tissue takes all it can supply (West, Brown and Enquist 2001); one decision per member; times
-/// repair, its activity `dry` (`Body::activity`, read by the caller) and the pace of its burning at its temperature
-/// (`Body::pace`).
+/// until keeping its tissue takes all it can supply (West, Brown and Enquist 2001); its brain per member over the time
+/// (`Physics::think` per month, `Config::span`); times repair, its activity `dry` (`Body::activity`, read by the caller)
+/// and the pace of its burning at its temperature (`Body::pace`).
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64, t: f64, dry: f64) -> f64 {
     let p = &w.cfg.phys;
     let mind = if w.life.brainless(b) { 0.0 } else { p.c_learn * b.learn_rate() as f64 };
     let think = w.life.has_brain(b.lineage).map_or(p.c_brain, |brain| Lineage::cost(brain, p, &b.genes));
     let tissue = b.built(&w.chem) * b.k.tissue;
-    let u = days * tissue * (p.c_basal + p.c_strength * b.gene(STRENGTH) + mind) + p.think(think, mass / b.n()) * b.n();
+    let u = days * tissue * (p.c_basal + p.c_strength * b.gene(STRENGTH) + mind) + w.cfg.span(days).amount(p.think(think, mass / b.n())) * b.n();
     u * p.repair(b.gene(REPAIR)) * dry * b.pace(&w.chem, t)
 }
 

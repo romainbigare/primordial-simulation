@@ -7,6 +7,31 @@ pub(crate) fn one_minus_exp(x: f64) -> f64 {
     -(-x).exp_m1()
 }
 
+/// A time as a multiple of the time a rate is anchored at (the rates of Choose: a month, `Config::span`), and each kind
+/// of rate over it. At exactly 1 each gives the anchored number itself, bit for bit.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Span(pub f64);
+
+impl Span {
+    /// A share `a` per anchor time that composes, as the weight of the newest value in a moving average: 1 - (1 - a)^t,
+    /// written a - (1 - a) (e^((t - 1) ln(1 - a)) - 1) so that it is `a` itself at t = 1. A share of 1 stays 1.
+    pub fn share(self, a: f32) -> f32 {
+        if a >= 1.0 {
+            return a;
+        }
+        let a64 = a as f64;
+        (a64 - (1.0 - a64) * ((self.0 - 1.0) * (-a64).ln_1p()).exp_m1()) as f32
+    }
+    /// A weight `g` per anchor time that multiplies, as a discount: g^t.
+    pub fn weight(self, g: f32) -> f32 {
+        (g as f64).powf(self.0) as f32
+    }
+    /// An amount `x` per anchor time that adds, as a cost or a step: x t.
+    pub fn amount(self, x: f64) -> f64 {
+        x * self.0
+    }
+}
+
 /// The bits set in `bits`, lowest first: a set of a few of 64 things (substances, key liquids) visited without the rest.
 #[inline]
 pub(crate) fn ones(mut bits: u64) -> impl Iterator<Item = usize> {

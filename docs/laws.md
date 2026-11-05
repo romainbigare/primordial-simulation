@@ -49,8 +49,10 @@ Change; Bond (each chunk's cell by cell, the chunks on the pool: in a cell the t
 list, on its view, then the loads of its structures in the order of their roots); then the bodies (`survey::batch`).
 **Every body updates once a month**, at the month's start, after the month's Flow, Change and Bond: one batch
 holds every living body, and a body placed during it first updates at the next month's start. Each update integrates
-the time since the body's last (`Body::last`): its upkeep, drink, heat, growth and the most it takes or breaks go by
-those days, so the month is a time step, not a calendar: a season's change comes from temperature (6.2). The bodies
+the time since the body's last (`Body::last`; of a node, the mean by members, `nodes::rejoin`, so members who joined it
+since count less): its upkeep, its brain's cost and learning (5.4), drink, heat and growth go by those days, and what
+it takes, gives and does to parts by the step of its update (`Config::update_days`, a month), so the month is a time
+step, not a calendar: a season's change comes from temperature (6.2). The bodies
 read the ground and the air as the month's Change and last air step left them, and what they leave on the ground (the
 free solid they shed, remains) goes through the next month's Change before the next batch can take it, so most of the
 free solid has rotted by then (it rots in about a week, 2.1). Every body decides at every update (5.3).
@@ -727,16 +729,16 @@ sees of a cell it would step into (the mean by area of the cells about that many
 minimums, its warmth, size and the season, its own cell's features, what Bond senses (3.4), its memory. **Each
 direction** with a link: the features of the cell it leads to as its sight sees it, the temperature and height as
 differences from its own cell's, and how hard its link is to pass (`lanes::resist`). **Bodies**: up to `SEEN` of its
-own cell, as they are when it decides (their looks and well-being), from a random place in the cell's list; walls and
-cover hide them. Up to 3 parts of its cell. Of a part, held or seen, it reads its mass against its own, its walls'
+own cell, as they are when it decides (their looks: a member's mass over its own, strength and colour; and their
+well-being), from a random place in the cell's list; walls and cover hide them. Up to 3 parts of its cell. Of a part, held or seen, it reads its mass against its own, its walls'
 scratch hardness, its hollowness and its edge: ln of its walls' thickness over its own width (`bond::sense`,
 `bond::features`), the share an edge would leave of breaking a body like itself (3.3).
 
 ### 5.3 Actions
 **Planning, one step ahead** (`choose::plan`): before it draws, a body adds to the score of each move the critic's
 value (5.4) of the state it would be in in the cell the move leads to (its own state, that cell's features in place of
-its own cell's) less its value where it is, which staying keeps, both one month ahead as the critic learns
-(`discount`): γ(V(s') − V(s)), times `plan_weight` (1 per unit of well-being); off in a null run.
+its own cell's) less its value where it is, which staying keeps, both at its next decision, a step of its update
+ahead (`discount` over it, as the critic learns): γ(V(s') − V(s)), times `plan_weight` (1 per unit of well-being); off in a null run.
 One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;
 a node spreads its members over its `MOST_ACTS` (4) likeliest actions (the moves counted as one; a speed setting) by
 their chances brought back to a sum of 1 (`spread::top_chances`), and its brain learns from those chances, so the
@@ -769,25 +771,29 @@ matter, brood, built solids or key liquid below level), above `keep_min` × thei
 could take.
 
 ### 5.4 Learning
-**Well-being** (`Body::wellbeing_at`): the energy its stores could release, in decisions' worth, less how near it is
-to its limits; no reward is hand-shaped. **Within a life** (`choose::learn`, `brain::learn`): a policy gradient
-against the critic (actor-critic) on the change of its own well-being since its last decision, the critic's estimate
-from now discounted by `discount` (one month), at its `LEARN` rate, in units
-of the root of the critic's running mean square of errors, each step over 1 + the hidden layer's square (the
-normalised least-mean-squares rule, Nagumo and Noda 1967): the rate is the share of a row's error a step corrects,
-whatever the scale of the hidden layer or the number of the brain's inputs; that mean and each row's mean square of steps both weigh the newest value
-by `learn_beta`. A node learns as from one
-member drawn among those who stayed, with the node's change plus how much more its part's action raised it than the
-mean, so its brain moves as an individual's does. **Across lives**: evolution of born rows and base.
+**Well-being** (`Body::wellbeing_at`): the energy its stores could release, in months' worth of its starting brain's
+thinking, less how near it is to its limits; no reward is hand-shaped. **Within a life** (`choose::learn`,
+`brain::learn`): a policy gradient against the critic (actor-critic) on the change of its own well-being since its last
+decision, the critic's estimate from now discounted over the time since (`discount` per month, so `discount`^(t /
+month)), at its `LEARN` rate, in units of the root of the critic's running mean square of errors, each step over 1 +
+the hidden layer's square (the normalised least-mean-squares rule, Nagumo and Noda 1967): the rate is the share of a
+row's error a month's step corrects, whatever the scale of the hidden layer or the number of the brain's inputs; that
+mean and each row's mean square of steps both weigh the newest value by `learn_beta` per month (1 − (1 − β)^(t / month)).
+**Per second**: a body learns alike over a year whatever the pace of its decisions. The critic's error is of the time
+(the change of well-being and the discount over it), so the critic corrects the rate's share of it at each decision
+(continuous-time TD learning, Doya 2000); the rows' step, in units of that error's spread, is the rate times t / month,
+as are the floor of the spread and the critic's largest step. t is the time its update integrated (0). A node learns
+as from one member drawn among those who stayed, with the node's change plus how much more its part's action raised it
+than the mean, so its brain moves as an individual's does. **Across lives**: evolution of born rows and base.
 
 ### 5.5 Imitation and memory
 **Watching** (`choose::learn::watched`) costs the turn; when the batch ends, if both live and the watcher is still of
-the lineage it watched in, the watcher's rows move part way (`blend`) toward the watched one's, if the brains have the
+the lineage it watched in, the watcher's rows move part way (`blend` per month, over its turn: a step of its update) toward the watched one's, if the brains have the
 same sizes, less the less alike they are, times the share of the watcher's members now who watched (for a node, the
 mean by members). **Memory**: the brain's memory numbers (`MEMORY`), which it reads and writes at each decision.
 **Signals and the memory of others are parked**: no body emits a signal or remembers whom it dealt with; the brain's
-memory numbers are its only memory. **Thinking** (`Physics::think`) costs by brain size and mass^0.25 one decision per
-update, once a month. **Null run** (`--null`): no learning or imitation, rows frozen, genes still evolve.
+memory numbers are its only memory. **Thinking** (`Physics::think`) costs by brain size and mass^0.25 per month, paid by the
+time of each update (6.2), whatever the pace of its decisions. **Null run** (`--null`): no learning or imitation, rows frozen, genes still evolve.
 
 ## 6. Bodies
 Files: `core/src/body/`, `copy::grow`. Bodies are the eaters (animals); the light-eaters are the cover (4.5).
@@ -814,9 +820,12 @@ their capture area is 0.
 
 ```
 tissue = living body × (copy mass / m_ref)^(intake_exp − 1)
-upkeep = [ days × tissue × (c_basal + c_strength·STRENGTH + learning) + one decision ]
+upkeep = [ days × tissue × (c_basal + c_strength·STRENGTH + learning) + days / month × thinking × members ]
          × repair (1 − c_repair + c_repair·2^REPAIR) × activity × pace(T)
 ```
+
+Thinking (`Physics::think`) is a month's cost of the brain: a body pays it by the time, so one that decides every
+hour pays over a year what one that decides every month pays (`Config::span`).
 
 Costs go by the kg while supply goes with mass^0.75 (West, Brown and Enquist 1997), so a body grows until keeping what
 it has takes all it can supply: its costs set its size, not a cap; across kinds adults pay Kleiber's mass^0.75.

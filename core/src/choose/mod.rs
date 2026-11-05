@@ -17,7 +17,7 @@ pub use minds::Minds;
 pub use perceive::cells;
 pub(crate) use spread::land_act;
 
-use perceive::{perceive, Face, HEIGHT, LN_LEAF, LN_MASS, T, WB_SCALE};
+use perceive::{perceive, Face, HEIGHT, LN_MASS, T, WB_SCALE};
 pub use perceive::{DEAD, EDIBLE, NCELL, OWN, SIGHTS, WET};
 
 use crate::body::{Body, Lived};
@@ -30,7 +30,7 @@ use crate::{bond, lanes, life::{Chunk, Handle}, World};
 /// Features of a neighbour direction (those of the cell it leads to, `perceive::cells`, and how hard its link is to
 /// pass) and of a perceived body.
 pub(crate) const NF: usize = NCELL + 1;
-pub(crate) const NT: usize = 7;
+pub(crate) const NT: usize = 6;
 /// Most bodies perceived (the `SEEN` gene sets how many); parts perceived; moves (one per compass direction of the
 /// mesh's links, `Level::way`); options.
 const MAX_SEEN: usize = 6;
@@ -91,6 +91,7 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: 
     let temp = b.temp(&w.chem);
     // A brain perceives sizes per member, as the body is when it decides.
     let pm = b.mass(&w.chem) / b.n();
+    // (Well-being counts its energy in months of the starting brain's thinking, a unit whatever the pace of decisions.)
     let think = w.cfg.phys.think(w.cfg.phys.c_brain, b.k.copy_mass);
     // (Well-being before and after each act at the decision's temperature: an act moves amounts, not the season.)
     let now = |w: &World, b: &Body| b.wellbeing_at(&w.chem, think, temp, lived.spare);
@@ -101,7 +102,7 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: 
     b.mem[s.mem..].fill(0.0);
     let mut c = perceive(w, d, b, nseen, &mut rng);
     brain::think(d.at(b.cell as usize).brains.rows(b.brain, s), s, z, &mut t.thought, read(s, &c));
-    learn::learn(w, b, &mut d.brains(b.cell as usize).mind(b.brain, s), s, (wb, &t.thought.h));
+    learn::learn(w, b, &mut d.brains(b.cell as usize).mind(b.brain, s), s, (wb, &t.thought.h), w.cfg.span(lived.days));
     options(w, d, b, (s, sight), (pm, b.volume(&w.chem, temp) / b.n()), &mut c, t);
     if let Some(lin) = d.brain(w, b.lineage) {
         plan(w, (b.lineage, &lin.base, d.at(b.cell as usize).brains.rows(b.brain, s)), s, z, b.cell as usize, &mut c, t);
@@ -164,7 +165,7 @@ fn options(w: &World, ch: &Chunk, b: &Body, (s, sight): (Shape, usize), (pm, vol
     for (q, o) in c.seen[..c.nseen].iter().enumerate() {
         let v = o.vis;
         let fq = &mut c.fb[q * NT..(q + 1) * NT];
-        fq.copy_from_slice(&[ln(v[0] / pm as f32) / LN_MASS, ln(v[1] / v[0]) / LN_LEAF, v[2], v[3], v[4], v[5], o.wb / WB_SCALE]);
+        fq.copy_from_slice(&[ln(v[0] / pm as f32) / LN_MASS, v[1], v[2], v[3], v[4], o.wb / WB_SCALE]);
         for verb in 0..VERBS {
             c.logit[TO_BODY + q * VERBS + verb] = score(&out[s.verb(verb)..s.verb(verb) + NT + 1], fq);
         }
@@ -185,12 +186,13 @@ fn options(w: &World, ch: &Chunk, b: &Body, (s, sight): (Shape, usize), (pm, vol
 
 /// One step of look-ahead (laws.md 5.3): the critic's value of the state the body would be in in each cell it can step
 /// into (its own state with that cell's features in place of its own cell's: the sums of its hidden layer `z` moved by
-/// the base's weights on the difference) less its value here, where staying keeps it, both one month ahead
-/// (`Physics::discount`, as the critic learns it): γ(V(s') − V(s)), times `Physics::plan_weight`, added to the score of
-/// the move there. `brain`: the lineage, its base and the body's rows. The base's weights on a cell's features are
-/// worked out once per lineage and cell in a chunk (`ActTmp::on_at`). Off in a null run.
+/// the base's weights on the difference) less its value here, where staying keeps it, both at its next decision, a step
+/// of its update ahead (`Config::update_days`; `Physics::discount` over it, as the critic learns it): γ(V(s') − V(s)),
+/// times `Physics::plan_weight`, added to the score of the move there. `brain`: the lineage, its base and the body's
+/// rows. The base's weights on a cell's features are worked out once per lineage and cell in a chunk
+/// (`ActTmp::on_at`). Off in a null run.
 fn plan(w: &World, (lineage, base, rows): (u32, &[f32], &[f32]), s: Shape, z: &[f32], i: usize, c: &mut Choice, t: &mut ActTmp) {
-    let (weight, discount) = (w.cfg.phys.plan_weight, w.cfg.phys.discount);
+    let (weight, discount) = (w.cfg.phys.plan_weight, w.cfg.span(w.cfg.update_days()).weight(w.cfg.phys.discount));
     if w.cfg.null || weight == 0.0 || s.h == 0 {
         return;
     }
