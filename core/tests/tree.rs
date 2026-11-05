@@ -383,17 +383,9 @@ fn inside(region: &[Leaf], l: &Leaf) -> bool {
     region.iter().any(|r| l.x >= r.x && l.x < r.x + r.side() && l.y >= r.y && l.y < r.y + r.side())
 }
 
-/// `w` with each of the leaves `region` split `depths` depths down (and the cells beside them as 2:1 asks).
+/// `w` with each of the leaves `region` split `depths` depths down (`testkit::split_down`).
 fn split_down(mut w: World, region: &[Leaf], depths: u8) -> World {
-    for r in region {
-        for depth in r.depth..r.depth + depths {
-            for l in r.split(depth).collect::<Vec<_>>() {
-                if w.map.cell(l).is_some() {
-                    w.split(l).expect("a split");
-                }
-            }
-        }
-    }
+    testkit::split_down(&mut w, region, depths);
     w
 }
 

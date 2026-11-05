@@ -79,13 +79,7 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
     let prov = provisions(&w.chem, b, mi, matter, births);
     let litter = Births { matter, prov, node, mate, parent: id };
     let m = if node { disperse * births } else { (r.f64() < disperse) as u8 as f64 };
-    let cells = w.mesh.cells();
-    let to = if m > 0.0 {
-        let leaves = cells.reach(i, w.cfg.phys.spread_m) >= 1.0 || r.f64() < cells.reach(i, w.cfg.phys.spread_m);
-        cells.way(i, r.below(COMPASS)).filter(|_| leaves).map(|e| cells.adj_cell()[e] as usize)
-    } else {
-        None
-    };
+    let to = if m > 0.0 { dispersed(w, i, &mut r) } else { None };
     let (cell, m) = match to {
         _ if !node => (to.unwrap_or(i), births),
         Some(j) => (j, m),
@@ -105,6 +99,24 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body) -> bool {
         made |= emit(w, d, b, &litter, i, births - m, &mut r);
     }
     made
+}
+
+/// Where what disperses from cell `i` lands (children, `copy`; seeds, `cover`), `spread_m` away whatever the size of the
+/// cells: it leaves `i` with the chance that what spreads that far from a point of `i` does (`Level::reach`), into the
+/// neighbour cell in a compass direction drawn (`Level::way`); what is left of `spread_m` past the side of each cell it
+/// crossed carries it on the same way, into the next with the share of its side that is left, so from cells of a
+/// quarter of a square's side it goes four cells. None where it stays or no link goes that way. The chance of leaving
+/// is drawn first, then the direction, then each further share.
+pub(crate) fn dispersed(w: &World, i: usize, r: &mut Rng) -> Option<usize> {
+    let (cells, length) = (w.mesh.cells(), w.cfg.phys.spread_m);
+    let leaves = cells.reach(i, length) >= 1.0 || r.f64() < cells.reach(i, length);
+    let way = r.below(COMPASS);
+    let (mut at, mut left) = (cells.way(i, way).filter(|_| leaves).map(|e| cells.adj_cell()[e] as usize)?, length - cells.area()[i].sqrt());
+    while left > 0.0 {
+        let Some(e) = cells.way(at, way).filter(|_| cells.reach(at, left) >= 1.0 || r.f64() < cells.reach(at, left)) else { break };
+        (left, at) = (left - cells.area()[at].sqrt(), cells.adj_cell()[e] as usize);
+    }
+    Some(at)
 }
 
 /// `m` children of `b` start in `cell`: their genes, stores, heat and rows, booked on the young node of their kind and
@@ -137,13 +149,13 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
         let (lineage, genome, parent, wet) = (b.lineage, b.genome, l.parent, b.wet);
         if let Some(t) = hit {
             d.events.push(born);
-            add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.day() as f64 }, (&genes, &spread), (lineage, genome, Some(Own::Block(b.brain)), left + sd * sd));
+            add(w, d, t, Lot { count: m, store, e, brood: 0.0, last: w.days_now() }, (&genes, &spread), (lineage, genome, Some(Own::Block(b.brain)), left + sd * sd));
             return true;
         }
         // (Up to `body::most`, as a join keeps a node's row spread, `nodes::add`.)
         let p = &w.cfg.phys;
         let row_spread = if here { (left + sd * sd).min(most(row_step(p, size), p.alike)) } else { left };
-        let mut c = Body { cell: cell as u32, count: m, lineage, parent, born: w.day(), last: w.day() as f64, store, e, genes, spread, row_spread, genome, wet, ..Default::default() };
+        let mut c = Body { cell: cell as u32, count: m, lineage, parent, born: w.day(), last: w.days_now(), store, e, genes, spread, row_spread, genome, wet, ..Default::default() };
         if here {
             d.events.push(born);
             c.brain = d.inherit(w, None, lineage, b);
@@ -167,7 +179,7 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
         lineage,
         parent: l.parent,
         born: w.day(),
-        last: w.day() as f64,
+        last: w.days_now(),
         store,
         e,
         genes,

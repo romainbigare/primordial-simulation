@@ -271,7 +271,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     let per_kg = |w: &mut pcore::World, s: Handle| {
         let mut b = std::mem::take(&mut w.life[s]);
         b.prepare(&w.chem, &w.cfg);
-        let (d, m) = (w.cfg.update_days(), b.mass(&w.chem));
+        let (d, m) = (w.cfg.days_per_month as f64, b.mass(&w.chem));
         let (u, act) = (pcore::body::upkeep(w, &b, d, m, b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys)) / (d * b.built(&w.chem)), b.activity(&w.chem, &w.cfg.phys));
         w.life[s] = b;
         (u, act)
@@ -284,7 +284,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     // A life of 38 days at gene 0, 10^0.5 ua / ub times that at 0.5. Each counts its days from its last update.
     let (life, x) = (38.0, 10f64.sqrt() * ua / ub);
     w.cfg.phys.e_life = life * ua;
-    let (books, n0, every) = (Books::now(&w), w.life[sa].count, w.cfg.update_days());
+    let (books, n0, every) = (Books::now(&w), w.life[sa].count, w.cfg.days_per_month as f64);
     let from: Vec<f64> = [sa, sb].iter().chain(&ones).map(|&s| w.life[s].last).collect();
     let day0 = w.day() as f64;
     let mut deaths = Vec::new();
@@ -314,10 +314,11 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// Frost kills in proportion to the cold and to activity (laws.md 6.5): a node of 10,000 resting eaters with no fuel
-/// to keep warm, on ground half `frost_k` below its key liquid's melting point, loses the share (melt - T) / `frost_k`
-/// of its members at its update, T the temperature it stands at (its ground's: it keeps no warmth, in a bare coat), about
-/// half; the same node half dry (its activity a) loses a times that share. Both live, and matter and energy are kept.
+/// Frost kills in proportion to the cold and to activity, per unit of time (laws.md 6.5): a node of 10,000 resting
+/// eaters with no fuel to keep warm, on ground half `frost_k` below its key liquid's melting point, loses at its update
+/// of a day what the share (melt - T) / `frost_k` a month gives over a day (1 - (1 - that)^(day / month)), T the
+/// temperature it stands at (its ground's: it keeps no warmth, in a bare coat), about half a month; the same node half
+/// dry (its activity a) loses a times that share a month. Both live, and matter and energy are kept.
 #[test]
 fn frost_kills_in_proportion_to_activity() {
     let lost = |dry: bool| {
@@ -347,9 +348,12 @@ fn frost_kills_in_proportion_to_activity() {
         books.assert_kept(&w, 1e-9);
         (1.0 - b.count / n0, a)
     };
+    // (The update integrates the day since the node was placed: the shares a month of what it lost in that day.)
+    let month = pcore::Config::default().days_per_month as f64;
     let ((wet, a_wet), (dry, a_dry)) = (lost(false), lost(true));
-    println!("lost {wet:.4} wet (activity {a_wet:.3}), {dry:.4} half dry (activity {a_dry:.3})");
+    let (wet, dry) = (1.0 - (1.0 - wet).powf(month), 1.0 - (1.0 - dry).powf(month));
+    println!("lost {wet:.4} a month wet (activity {a_wet:.3}), {dry:.4} half dry (activity {a_dry:.3})");
     assert!(a_wet > 0.999 && a_dry < 0.9, "activities {a_wet} and {a_dry}");
-    assert!((0.45..=0.5).contains(&wet), "the wet node lost {wet}, against a ramp of 0.5 at the ground's temperature");
+    assert!((0.45..=0.5).contains(&wet), "the wet node lost {wet} a month, against a ramp of 0.5 at the ground's temperature");
     assert!((dry / wet / a_dry - 1.0).abs() < 0.1, "the dry node lost {dry} against {wet} x {a_dry}");
 }

@@ -58,7 +58,7 @@ pub(crate) fn land_move(w: &World, d: &mut Chunk, (mut b, brain): (Body, &[f32])
         // (The part it holds lies in the cell it left: it lets go of it there, in the acts' landing.)
         if let Some(part) = b.hold.take() {
             let verb = if carries { bond::TORN } else { bond::LET_GO };
-            d.out.push(Entry::Act { id: b.id, on: Ok((verb, part)), node: None });
+            d.out.push(Entry::Act { id: b.id, on: Ok((verb, part)), node: None, days: 0.0 });
         }
     }
     let mass = b.mass(&w.chem);

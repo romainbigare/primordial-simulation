@@ -47,13 +47,24 @@ state in full for the cells' surroundings, and Flow's own pass leaves it then); 
 `AIR_STEP_DAYS` (15 days, two a month, each at its own time in the month), after each the sink of the liquid over
 field capacity into the bed's store; then the liquid and erosion; heat sideways and creep yearly; the cover's month;
 Change; Bond (each chunk's cell by cell, the chunks on the pool: in a cell the turns of its parts in the order of its
-list, on its view, then the loads of its structures in the order of their roots); then the bodies (`survey::batch`).
-**Every body updates once a month**, at the month's start, after the month's Flow, Change and Bond: one batch
-holds every living body, and a body placed during it first updates at the next month's start. Each update integrates
+list, on its view, then the loads of its structures in the order of their roots); then the bodies (`survey::batch`)
+and their sub-steps (`survey::substeps`). **The step follows the size** (`survey/steps.rs`): a body's step lets it
+cross at most one cell, as a move is one link a decision. A square of the map (`Square::square_depth`; 2 km on the
+island) steps a month (the pace the numbers of bodies are anchored at), so a cell 2^k times finer steps a month over 2^k
+(`World::body_step`: 15 days at 1 km, 7.5 at 500 m, 1.875 at 125 m), a square or a coarser cell a month; a step is a
+whole number of seconds and at least a day (a cell finer than that steps as the finest that keeps both). **Every
+body updates at the month's start**, after the month's Flow, Change and Bond: one batch holds every living body. Then
+at the end of each sub-step of the finest cells' step the cells whose step ends there are surveyed again (what movers
+broke there; in every cell its numbers and features, as the moves and meals since left them) and their bodies update
+in a batch of the same passes; the other cells do nothing then. A body placed during a batch first updates at its
+cell's next step; one that moves into a cell of another step lands in the serial pass and first updates at its new
+cell's next step. Flow, Change and Bond keep their steps (1.8). Each update integrates
 the time since the body's last (`Body::last`; of a node, the mean by members, `nodes::rejoin`, so members who joined it
-since count less): its upkeep, its brain's cost and learning (5.4), drink, heat and growth go by those days, and what
-it takes, gives and does to parts by the step of its update (`Config::update_days`, a month), so the month is a time
-step, not a calendar: a season's change comes from temperature (6.2). The bodies
+since count less): its upkeep, its brain's cost and learning (5.4), drink, heat, frost (6.5), growth and what it takes,
+gives and does to parts (5.3) go by those days, per m² of its cell where it searches, and what looks ahead to its next
+update (the fuel growth keeps back for its upkeep, 6.6; the heat of a meal let out, 6.3; the look-ahead of a plan, 5.3)
+by its cell's step (`World::step_days`), so a step is a time step, not a calendar: a season's change comes from
+temperature (6.2). The bodies
 read the ground and the air as the month's Change and last air step left them, and what they leave on the ground (the
 free solid they shed, remains) goes through the next month's Change before the next batch can take it, so most of the
 free solid has rotted by then (it rots in about a week, 2.1). Every body decides at every update (5.3).
@@ -68,7 +79,8 @@ halves, parts of nodes acting apart, `life::new_id`); it never changes, and its 
 finds its cell through one table from serial to index (`Life::at_serial`). The cells
 are cut into `Config::chunks` runs of neighbouring indices, the same for any number of threads. **The parallel pass**:
 each chunk is one task on the pool (`life::run`), its cells taken out of the world, the world read only; in each cell
-in order, the physics of each body, in the order they came (a body placed in the pass first updates at the next month);
+in order (of the cells that step), the physics of each body, in the order they came (a body placed in the pass first
+updates at its cell's next step);
 then every body with a brain perceives its inputs and the bodies of each lineage find their hidden layers together
 (5.1); then each decides and acts, in the same order; then the next cell. So what a chunk queues, and the lineages
 and born rows it makes, come cell by cell whatever the chunks. The parts it reads are as they were at the pass's start. A body perceives the others of its own cell as they are when it
@@ -593,15 +605,18 @@ gene within `alike` steps; it decides who mixes, joins and merges.
 A body is **mature** (`Body::adult`) when its living body per member reaches `COPY_MASS`; then growth (6.6) puts the
 share `ALLOC` into a **brood** (`Body::brood`), matter held for children that leaves with the body's matter in the same
 share (`Body::lose`). Whenever the brood covers a child, children are made (`copy::copy`) whatever the brain does:
-bodies copy by physics only, at the body's update (once a month), all that its brood covers then. The brood fills at
+bodies copy by physics only, at the body's update (at its cell's step, 0), all that its brood covers then. The brood fills at
 every update and
 leaves with members who die. A child has a body of 10^`CHILD` × the copy mass,
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
 dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member
 (`copy::BROOD_HELD`), so its members' broods lie evenly between none and one child, as individuals' do. A share
-`DISPERSE` of the children starts in a neighbour cell in a random compass direction (`Level::way`), as far as
-`spread_m` reaches (`Level::reach`: always out of a 2 km square, a quarter of the time out of an 8 km one), one for all of a node's children of an
-update (for an individual, that chance), where they land when the batch ends (0). Less than one member with no node to
+`DISPERSE` of the children starts `spread_m` away in a random compass direction (`copy::dispersed`, `Level::way`):
+out of its cell with the chance that what spreads that far from a point of it leaves it (`Level::reach`: always out of
+a 2 km square, a quarter of the time out of an 8 km one), and on the same way through each further cell the length
+left crosses whole, into the last with the share of its side left (four cells on from a cell of 500 m), so they go as
+far in metres whatever the cells; one way for all of a node's children of an update (for an individual, that chance),
+where they land when the batch ends (0). Less than one member with no node to
 join waits in the brood, or, landed in a neighbour cell, goes back into it.
 
 ### 4.3 Two parents
@@ -650,12 +665,16 @@ chance).
   bodies per kind present and room, and kinds never mix. A starting kind keeps at most `MAX_LINEAGES` (8) living
   lineages (`lineage::resize`): past them a body whose sizes change joins the living lineage of its kind nearest in
   sizes, and stays in its own if that is the nearest. The cap of a crowded cell and the cap of lineages make bodies of
-  different heritage share a brain; the three caps bound the work, not a law.
+  different heritage share a brain; the three caps bound the work, not a law. They count per cell, not per m²: a cell
+  is the unit of the work a run's budget of cells pays for, so a finer cell holds as many nodes, and a region split
+  holds more per m², as its detail asks. So do the pair that may mate, a watch, a room and a gift: bodies meet who share
+  a cell, and a fine cell's bodies meet each other more often (each step) among fewer; a law of meeting by the area
+  swept, as the bite has (5.3), would make that alike per m², and is not built.
 - **Split and join of cells** (0): a node splits by area into the quarters of its cell (`nodes::part`, one node per
   quarter, each with a copy of its brain), unless it has fewer members than one per quarter, when it goes whole to one
   quarter drawn by area, as an individual does; a joined cell's bodies merge at once by the monthly merge and its caps.
 - **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
-- **Pace**: every node updates and decides once a month, as an individual does (0).
+- **Pace**: every node updates and decides at its cell's step, as an individual does (0).
 - **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage. A
   body with no brain does not mutate its brain-size genes (`body::vary`): they do nothing without one, so a brain
   arises only in a lineage founded with one (decision 72). An
@@ -703,8 +722,8 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   most 10^`FIX` mol per kg per s at the reaction's pace, paid by the reaction's fuel. The fuel past its reserve that
   it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
-- **Seeds**: the share `SEED` of what it builds leaves for the neighbour cell of a random compass direction, as far
-  as `spread_m` reaches (`Level::reach`; or stays where there is none), with one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
+- **Seeds**: the share `SEED` of what it builds leaves `spread_m` away in a random compass direction, as children do
+  (`copy::dispersed`, 4.2; or stays where there is none), with one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
   not pay: what a kg more would store with the light at the bottom of its layer (`math::shade`) is less than a kg's
   upkeep, so the slot is **full** (`Cover::full`) and stops thickening where its lowest leaves would not pay for
   themselves (Monsi and Saeki 1953; Hirose 2005). When every cell has had its month the seeds land (`cover::land`),
@@ -745,14 +764,21 @@ the sums of their hidden layers are one matrix product with the lineage's base (
 own rows from its hidden layer (`brain::think`) and learns on its own.
 
 ### 5.2 Perception
-Local (`choose/perceive.rs`). **Each cell's features** (`choose::cells`, once a month after the survey, the same for
+Local (`choose/perceive.rs`). **Each cell's features** (`choose::cells`, after each survey, at a month's start and at
+each sub-step (0), the same for
 every brain, 18 numbers each scaled to about one): its ground temperature, the depth of its standing liquid, its
 surface height, the shade of its cover, the mass per m² of each slot of its cover and of the cover's fuel and body
 matter (what most diets eat), the fuel and body matter loose on its ground, the mass per m² of its animals in three
 classes of member mass (below 1 kg, to 100 kg, above), their members and mean strength, how hard it is to push
-through, its parts and the members that moved in last month (the counts per square of the map, so a cell of many squares counts as one of its squares). The same
+through, its parts and the members that moved in per month (in the last month at a month's start, since the month's
+start inside it; the counts per square of the map, so a cell of many squares counts as one of its squares, and the
+members that moved in per square's side of its border, for what crosses a border goes with its length). The same
 features smoothed over each cell and its neighbours once, twice and three times make what a body of sight 2, 3 and 4
-sees of a cell it would step into (the mean by area of the cells about that many links around it, `Life::feat`). **A brain's inputs**: its own stores against their
+sees of a cell it would step into (the mean by area of the cells about that many links around it, `Life::feat`); a
+cell finer than a square of the map counts in that as its square, whose features are its cells' mean by area and whose
+neighbours are the squares around it (`perceive::regions`), so what a body sees past the cell it would step into
+reaches as far in metres from a fine cell as from a square (sight 1, the cell itself, is one step in either). Cells
+coarser than a square (the open water of an island) see by their links. **A brain's inputs**: its own stores against their
 minimums, its warmth, size and the season, its own cell's features, what Bond senses (3.4), its memory. **Each
 direction** with a link: the features of the cell it leads to as its sight sees it, the temperature and height as
 differences from its own cell's, and how hard its link is to pass (`lanes::resist`). **Bodies**: up to `SEEN` of its
@@ -764,14 +790,13 @@ scratch hardness, its hollowness and its edge: ln of its walls' thickness over i
 ### 5.3 Actions
 **Planning, one step ahead** (`choose::plan`): before it draws, a body adds to the score of each move the critic's
 value (5.4) of the state it would be in in the cell the move leads to (its own state, that cell's features in place of
-its own cell's) less its value where it is, which staying keeps, both at its next decision, a step of its update
-ahead (`discount` over it, as the critic learns): γ(V(s') − V(s)), times `plan_weight` (1 per unit of well-being); off in a null run.
+its own cell's) less its value where it is, which staying keeps, both at its next decision, its cell's step ahead
+(`discount` over it, as the critic learns): γ(V(s') − V(s)), times `plan_weight` (1 per unit of well-being); off in a null run.
 One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;
 a node spreads its members over its `MOST_ACTS` (4) likeliest actions (the moves counted as one; a speed setting) by
 their chances brought back to a sum of 1 (`spread::top_chances`), and its brain learns from those chances, so the
 gradient's mean is 0; members drawn for no action rest and count in the mean the advantage is measured from
-(`choose::spread`). Every body decides at every update, once a
-month. The members of a node that move leave as one group: count × the sum of the chances to go in every
+(`choose::spread`). Every body decides at every update, at its cell's step (0). The members of a node that move leave as one group: count × the sum of the chances to go in every
 direction, at most all (less than one member: one member with that chance; fewer than one member left behind: the whole node,
 with the chance that keeps the mean at count × that share), all in the one direction drawn by its chance over the sum,
 so each direction gets its share of members on average, in groups. A
@@ -795,7 +820,8 @@ members lie over the cell like the ground's food: a bite reaches those the swept
 whole, by one draw with the chance the area holds it, whether a node or an individual takes it; of a node, less than one member is one whole member met with that chance:
 it takes, tears and pays that meeting's outcome times the chance), limited by force against theirs. **Giving** (`Body::spare`) is of what the other uses, of stores only (no
 matter, brood, built solids or key liquid below level), above `keep_min` × their minimum, at most what the members met
-could take.
+could take. Taking, the bite and giving go by the time the update integrated (0): a body of a finer cell searches its
+smaller cell for a shorter step, so the share of the cell its area holds is the same per m² and per day.
 
 ### 5.4 Learning
 **Well-being** (`Body::wellbeing_at`): the energy its stores could release, in months' worth of its starting brain's
@@ -815,7 +841,7 @@ than the mean, so its brain moves as an individual's does. **Across lives**: evo
 
 ### 5.5 Imitation and memory
 **Watching** (`choose::learn::watched`) costs the turn; when the batch ends, if both live and the watcher is still of
-the lineage it watched in, the watcher's rows move part way (`blend` per month, over its turn: a step of its update) toward the watched one's, if the brains have the
+the lineage it watched in, the watcher's rows move part way (`blend` per month, over its turn: the time its update integrated) toward the watched one's, if the brains have the
 same sizes, less the less alike they are, times the share of the watcher's members now who watched (for a node, the
 mean by members). **Memory**: the brain's memory numbers (`MEMORY`), which it reads and writes at each decision.
 **Signals and the memory of others are parked**: no body emits a signal or remembers whom it dealt with; the brain's
@@ -881,7 +907,8 @@ it lasts; one that boils dry dies there (`check_stores`), the rest of its heat s
 the pace of its temperature (6.2), so a warmer body makes more heat; the open coat lets that heat out, so a body's own
 heat does not drive its pace up month after month. Its heat then comes to that temperature with its ground
 (`body::settle_heat`). After its decision (`live::shed_meal_heat`) the heat of what it took and of digesting it, above
-the temperature it stood at, leaves through its coat to its ground over the time to its next update by the same share
+the temperature it stood at, leaves through its coat to its ground over the time to its next update (its cell's step)
+by the same share
 (a body of hours to days sheds it all); a body its intake cooled stays cooler, drawing no heat from its ground, and
 its own heat warms it at its next update. Its key liquids hold their fusion heat at any temperature (`Body::fused`):
 a body has no melting plateau, so its temperature is its heat over its heat capacity, that heat set aside (2.5).
@@ -897,14 +924,16 @@ allowance: a dry body pays almost nothing and can hardly act; it wears at an act
 so a dormant body lives about 50 times its active life, as dry seeds and spores do. **Frost** (`live::check_stores`): its members
 stand in microclimates that spread over `frost_k` (3 K) around the temperature T its heat holds it at over its ground
 (6.3), so below a key liquid's melting point
-the share min(1, (melt − T) / `frost_k`) × a freezes and dies (`PHASE`), an individual with that chance: a dormant body
+the share f = min(1, (melt − T) / `frost_k`) × a freezes and dies (`PHASE`) in a month, a share that composes: over
+the t its update integrates 1 − (1 − f)^(t / month) (`Span::share64`), so a cold spell kills alike in one update or in
+many; an individual dies with that chance. A dormant body
 (little free liquid) lives through frost, as seeds and spores do; the cover freezes by the same law below its `FROST`
 gene (4.5). **Boiling** kills.
 
 ### 6.6 Growth
 `copy::grow`. Its fuel and minerals become matter at `c_copy` of work per kg, paid by burning (`body::pay`), as far as
 all allow: the **allowance** (`c_build` × supply / `m_ref` × days × activity), the **spare** (what its fuel can release
-beyond a month's upkeep), and its stores down to their minimums. Built solids (the frame) come first by their
+beyond its upkeep to its next update, its cell's step), and its stores down to their minimums. Built solids (the frame) come first by their
 share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing

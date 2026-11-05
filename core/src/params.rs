@@ -377,10 +377,6 @@ impl Config {
         let month = self.days_per_month as u64 * DAY_S;
         Calendar { day: DAY_S, month, year: month * self.months_per_year as u64 }
     }
-    /// Days between a body's updates: every body updates once a month, at its start (`survey::batch`).
-    pub fn update_days(&self) -> f64 {
-        self.days_per_month as f64
-    }
     /// `days` d in the world's months (`calendar`): the time the rates of a body's brain are anchored at, a month
     /// (laws.md 5.4), over which a rate goes as a share, a weight or an amount (`Span`).
     pub(crate) fn span(&self, days: f64) -> Span {

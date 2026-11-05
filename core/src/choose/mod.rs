@@ -85,7 +85,7 @@ struct Choice {
 
 /// A body's decision at its update, from the sums of its hidden layer `z` (`Minds::sense`): perceive the bodies and
 /// parts of its cell, think and learn from the last decision, score the options; an individual draws one option, keeps
-/// its trace and acts, a node spreads its members over them (`spread`). Every body decides at each update, once a month.
+/// its trace and acts, a node spreads its members over them (`spread`). Every body decides at each update, at its cell's step.
 pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: &mut ActTmp) {
     let mut rng = Rng::new(w.seed, w.day(), b.id, Purpose::Choose);
     let temp = b.temp(&w.chem);
@@ -110,7 +110,7 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: 
     pick(d, &mut c, &mut rng);
     let (form, zn) = noise(w, b, s, t, &mut rng);
     b.wb = wb;
-    let k = Kit { s, t, z: zn, form, wb: &now };
+    let k = Kit { s, t, z: zn, form, wb: &now, days: lived.days };
     if b.n() > 1.0 {
         spread::spread(w, d, b, &c, &k, &mut rng);
     } else {
@@ -134,14 +134,16 @@ fn here(d: &Chunk, b: &Body, o: &Face) -> Option<Handle> {
 }
 
 /// What the actions of one decision share besides its options: the brain's shape and what it thought, the noise drawn
-/// for the shape of a part made, that shape (`noise`), and the well-being of a body now
-/// (`Body::wellbeing_at`, at a decision's cost and the margin of the body's reactions over its upkeep).
+/// for the shape of a part made, that shape (`noise`), the well-being of a body now (`Body::wellbeing_at`, at a
+/// decision's cost and the margin of the body's reactions over its upkeep), and the time its update integrated, d
+/// (`Lived::days`), which what it takes, gives and does to parts goes by.
 struct Kit<'a> {
     s: Shape,
     t: &'a ActTmp,
     z: [f32; FORM_OUT],
     form: [f32; FORM_OUT],
     wb: &'a dyn Fn(&World, &Body) -> f32,
+    days: f64,
 }
 
 /// The score of each option: the fixed actions, a move to each neighbour (by the features of the cell it leads to as a
@@ -187,12 +189,12 @@ fn options(w: &World, ch: &Chunk, b: &Body, (s, sight): (Shape, usize), (pm, vol
 /// One step of look-ahead (laws.md 5.3): the critic's value of the state the body would be in in each cell it can step
 /// into (its own state with that cell's features in place of its own cell's: the sums of its hidden layer `z` moved by
 /// the base's weights on the difference) less its value here, where staying keeps it, both at its next decision, a step
-/// of its update ahead (`Config::update_days`; `Physics::discount` over it, as the critic learns it): γ(V(s') − V(s)),
+/// of its cell's step ahead (`World::step_days`; `Physics::discount` over it, as the critic learns it): γ(V(s') − V(s)),
 /// times `Physics::plan_weight`, added to the score of the move there. `brain`: the lineage, its base and the body's
 /// rows. The base's weights on a cell's features are worked out once per lineage and cell in a chunk
 /// (`ActTmp::on_at`). Off in a null run.
 fn plan(w: &World, (lineage, base, rows): (u32, &[f32], &[f32]), s: Shape, z: &[f32], i: usize, c: &mut Choice, t: &mut ActTmp) {
-    let (weight, discount) = (w.cfg.phys.plan_weight, w.cfg.span(w.cfg.update_days()).weight(w.cfg.phys.discount));
+    let (weight, discount) = (w.cfg.phys.plan_weight, w.cfg.span(w.step_days(i)).weight(w.cfg.phys.discount));
     if w.cfg.null || weight == 0.0 || s.h == 0 {
         return;
     }
@@ -300,11 +302,11 @@ fn trace(w: &World, b: &Body, c: &Choice, (chances, a, adv): (&[f32; OPTS], usiz
 /// part that queued one of these but a watch leaves the node until it is applied (`Body::leaving`).
 fn act_as(w: &World, d: &mut Chunk, b: &mut Body, c: &Choice, k: &Kit, (a, part_of): (usize, Option<u64>), rng: &mut Rng) {
     b.leaving |= part_of.is_some() && (a == FORM || a >= TO_PART);
-    let act = |on| Entry::Act { id: b.id, on, node: part_of };
+    let act = |on| Entry::Act { id: b.id, on, node: part_of, days: k.days };
     match a {
         REST => {}
         PUT => feed::put(w, d, b),
-        TAKE => feed::take_node(w, d, b),
+        TAKE => feed::take_node(w, d, b, k.days),
         FORM => d.out.push(act(Err([k.form[0], 0.5 * (k.form[1] + 1.0), 0.5 * (k.form[2] + 1.0)]))),
         RELEASE => bond::release(d, b),
         a if a < TO_BODY => go(w, d, b, c.to[a - FIXED], part_of.is_some()),
@@ -315,10 +317,10 @@ fn act_as(w: &World, d: &mut Chunk, b: &mut Body, c: &Choice, k: &Kit, (a, part_
         a => {
             let (face, verb) = (c.seen[(a - TO_BODY) / VERBS], (a - TO_BODY) % VERBS);
             if verb == WATCH {
-                return d.out.push(Entry::Watch { by: b.id, n: b.n(), lineage: b.lineage, of: face.id });
+                return d.out.push(Entry::Watch { by: b.id, n: b.n(), lineage: b.lineage, of: face.id, days: k.days });
             }
             let Some(o) = here(d, b, &face) else { return };
-            if verb == TAKE_FROM { take_body(w, d, b, o, rng) } else { feed::give(w, d, b, o) }
+            if verb == TAKE_FROM { take_body(w, d, b, (o, k.days), rng) } else { feed::give(w, d, b, (o, k.days)) }
         }
     }
 }

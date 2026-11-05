@@ -22,12 +22,13 @@ pub enum Entry {
     Passed { by: u64, from: u32, to: u32, lane: f64, mass: f64, carried: Option<u64> },
     /// Children who landed with no node to join and less than one member, back to their parent (`copy::back`)
     Back(Box<copy::Litter>),
-    /// Body `by`, of `n` members who watched and of `lineage` then, watched body `of` (`choose::watched`)
-    Watch { by: u64, n: f64, lineage: u32, of: u64 },
+    /// Body `by`, of `n` members who watched and of `lineage` then, watched body `of` over its update of `days` d
+    /// (`choose::watched`)
+    Watch { by: u64, n: f64, lineage: u32, of: u64, days: f64 },
     /// Body `id` does verb `on.0` to the part with id `on.1` (`bond::act`; `bond::LET_GO`
     /// and `bond::TORN` let go of it, `bond::dropped`), or forms a part of the shape given (`bond::form`), as a part of
-    /// node `node` if any (`choose::land_act`)
-    Act { id: u64, on: Result<(usize, u64), [f32; 3]>, node: Option<u64> },
+    /// node `node` if any (`choose::land_act`); what it takes or puts goes by its update of `days` d (none to let go)
+    Act { id: u64, on: Result<(usize, u64), [f32; 3]>, node: Option<u64>, days: f64 },
     /// The part with id `part` did `work` J with its edge and wears (`bond::blunted`), an act on that part
     Blunted { part: u64, work: f64 },
 }
@@ -116,8 +117,8 @@ fn act_all(w: &mut World, acts: Vec<Entry>) {
     per.iter_mut().for_each(|v| v.sort_by_key(|x| (x.0, x.1)));
     life::run(w, per, load, |_| (), |w, d, list, _| {
         for (cell, _, e) in list.drain(..) {
-            let (id, on, node) = match e {
-                Entry::Act { id, on, node } => (id, on, node),
+            let (id, on, node, days) = match e {
+                Entry::Act { id, on, node, days } => (id, on, node, days),
                 Entry::Blunted { part, work } => {
                     bond::blunted(w, d, cell as usize, part, work);
                     continue;
@@ -128,7 +129,7 @@ fn act_all(w: &mut World, acts: Vec<Entry>) {
                 Ok((v @ (bond::LET_GO | bond::TORN), p)) => bond::dropped(w, d, cell as usize, (id, p), v == bond::TORN),
                 _ => {
                     let Some(s) = d.cell(cell as usize).find(|&h| d[h].id == id) else { continue };
-                    choose::land_act(w, d, s, on, node);
+                    choose::land_act(w, d, s, (on, days), node);
                 }
             }
         }
@@ -145,6 +146,6 @@ fn apply(w: &mut World, e: Entry) {
             bond::moved(w, (by, carried), (from as usize, to as usize), mass);
         }
         Entry::Back(x) => copy::back(w, *x),
-        Entry::Watch { by, n, lineage, of } => choose::watched(w, by, (n, lineage), of),
+        Entry::Watch { by, n, lineage, of, days } => choose::watched(w, by, (n, lineage), (of, days)),
     }
 }

@@ -10,6 +10,7 @@ use pcore::event::EventKind;
 use pcore::life::{land, Chunk, Entry, Handle};
 use pcore::lineage::{self, Lineage};
 use pcore::rng::{Purpose, Rng};
+use pcore::space::Leaf;
 use pcore::store::{Boundary, Class, Move, Node};
 use pcore::units::DAY_S;
 use pcore::{Config, World};
@@ -341,6 +342,28 @@ pub fn relocate(w: &mut World, h: Handle, j: usize) -> Handle {
     w.life.find(id).expect("the body landed")
 }
 
+/// `w` with each of the leaves `region` split `depths` depths down (`World::split`, which first splits the cells beside
+/// them as 2:1 asks), its events taken first, as the shell takes them before a split.
+pub fn split_down(w: &mut World, region: &[Leaf], depths: u8) {
+    w.drain_events();
+    for r in region {
+        for depth in r.depth..r.depth + depths {
+            for l in r.split(depth).collect::<Vec<_>>() {
+                if w.map.cell(l).is_some() {
+                    w.split(l).expect("a split");
+                }
+            }
+        }
+    }
+}
+
+/// The cells of the first air node of `w` whose cells are all land: a region to split.
+pub fn land_block(w: &World) -> Vec<Leaf> {
+    let air = w.mesh.level(pcore::AIR);
+    let j = (0..air.n()).find(|&j| air.children(j).iter().all(|&i| w.is_land(i as usize))).expect("an air node over land only");
+    air.children(j).iter().map(|&i| w.map.leaves()[i as usize]).collect()
+}
+
 /// Every part of Flow but creep once, for `dt` seconds, in the clock's order: the state rebuilt in full, the air's step
 /// with the sink into the bed's store, liquid, and the refresh; then the state the step leaves. A law of Flow on its own.
 pub fn flow_step(w: &mut World, dt: f64) {
@@ -395,11 +418,12 @@ pub fn same_totals(a: &(f64, Vec<f64>, f64), b: &(f64, Vec<f64>, f64)) {
     }
 }
 
-/// The body at `a` bites the body at `v` once (`choose::take_body`), out of its slot meanwhile.
+/// The body at `a` bites the body at `v` once (`choose::take_body`) over its cell's step, out of its slot meanwhile.
 pub fn bite(w: &mut World, a: Handle, v: Handle) {
     let mut b = std::mem::take(&mut w.life[a]);
     let r = &mut Rng::new(1, w.day(), 7, Purpose::Choose);
-    w.in_cell(b.cell as usize, |w, d| pcore::choose::take_body(w, d, &mut b, v, r));
+    let days = w.step_days(b.cell as usize);
+    w.in_cell(b.cell as usize, |w, d| pcore::choose::take_body(w, d, &mut b, (v, days), r));
     w.life[a] = b;
 }
 

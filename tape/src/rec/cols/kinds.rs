@@ -107,7 +107,7 @@ impl Heavy {
 /// Years a member of `b` (of mass `m`, kg) lives at its upkeep now while active: `e_life` × 10^`REPAIR` per kg of living
 /// body over its upkeep at an activity of 1 (a dormant body pays nearly nothing, so its life would be unbounded).
 fn life_years(w: &World, b: &Body, m: f64) -> f64 {
-    let d = w.cfg.update_days();
+    let d = w.step_days(b.cell as usize);
     w.cfg.phys.e_life * b.dec(body::REPAIR) * b.built(&w.chem).max(1e-9 * m) * d / body::upkeep(w, b, d, m, b.temp(&w.chem), 1.0).max(1e-300) / w.days_per_year() as f64
 }
 

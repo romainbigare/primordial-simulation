@@ -13,14 +13,19 @@ pub(crate) fn one_minus_exp(x: f64) -> f64 {
 pub struct Span(pub f64);
 
 impl Span {
-    /// A share `a` per anchor time that composes, as the weight of the newest value in a moving average: 1 - (1 - a)^t,
-    /// written a - (1 - a) (e^((t - 1) ln(1 - a)) - 1) so that it is `a` itself at t = 1. A share of 1 stays 1.
+    /// A share `a` per anchor time that composes, as the weight of the newest value in a moving average: 1 - (1 - a)^t
+    /// (`share64`).
     pub fn share(self, a: f32) -> f32 {
+        self.share64(a as f64) as f32
+    }
+    /// A share `a` per anchor time that composes, as the members a cold spell kills or the weight of the newest value in
+    /// a moving average: 1 - (1 - a)^t, written a - (1 - a) (e^((t - 1) ln(1 - a)) - 1) so that it is `a` itself at
+    /// t = 1. A share of 1 stays 1.
+    pub fn share64(self, a: f64) -> f64 {
         if a >= 1.0 {
             return a;
         }
-        let a64 = a as f64;
-        (a64 - (1.0 - a64) * ((self.0 - 1.0) * (-a64).ln_1p()).exp_m1()) as f32
+        a - (1.0 - a) * ((self.0 - 1.0) * (-a).ln_1p()).exp_m1()
     }
     /// A weight `g` per anchor time that multiplies, as a discount: g^t.
     pub fn weight(self, g: f32) -> f32 {

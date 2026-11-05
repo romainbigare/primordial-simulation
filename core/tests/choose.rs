@@ -256,6 +256,8 @@ fn a_body_gives_its_stores_but_not_its_body() {
     taker.genes[lay.keep + w.chem.body().place(RICH).expect("a store")] = 2.0;
     let (m0, fuel0) = (giver.amount(w.chem.body(), MATTER), giver.amount(w.chem.body(), RICH));
     let g = w.add(giver);
+    // (Its updates integrate a month, as in a run, not the day since it was placed.)
+    w.life[g].last -= w.cfg.days_per_month as f64;
     w.add(taker);
     // Days until the first batch after the placing has run.
     for _ in 0..=w.cfg.days_per_month {

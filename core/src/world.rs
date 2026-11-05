@@ -144,6 +144,10 @@ impl World {
     pub fn day(&self) -> u64 {
         self.cfg.calendar().days(self.time)
     }
+    /// Days since the start, with their fraction: the time a body's update integrates from (`Body::last`)
+    pub fn days_now(&self) -> f64 {
+        self.time as f64 / self.cfg.calendar().day as f64
+    }
     /// Whole months since the start
     pub fn month(&self) -> u64 {
         self.cfg.calendar().months(self.time)

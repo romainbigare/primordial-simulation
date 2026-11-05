@@ -279,7 +279,7 @@ impl World {
             if !b.brain.some() {
                 b.brain = d.new_brain(w, &b);
             }
-            d.add(b, w.day())
+            d.add(b, w.days_now())
         })
     }
 }
