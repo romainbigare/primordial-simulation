@@ -852,7 +852,7 @@ time of each update (6.2), whatever the pace of its decisions. **Null run** (`--
 
 ## 6. Bodies
 Files: `core/src/body/`, `copy::grow`. Bodies are the eaters (animals); the light-eaters are the cover (4.5).
-`body::live` runs an update in stages: upkeep, drinking, heat, store checks, growth and children, shedding; then the
+`body::live` runs an update in stages: drinking, upkeep, heat, store checks, growth and children, shedding; then the
 decision. Its trades are gathered as moves on its cell's view and booked when its chunk ends (`store::Moves`, 0), so
 nodes and individuals take alike, never more than is there.
 
@@ -917,7 +917,10 @@ a body has no melting plateau, so its temperature is its heat over its heat capa
 
 ### 6.4 Water: drinking
 A body drinks its key liquids from its cell's ground up to the level it keeps, as far as the ground holds them liquid,
-each day at most its uptake gene's share of that level, paying `c_handle` per kg; they come with their heat. It
+each day at most its uptake gene's share of that level, paying `c_handle` per kg; they come with their heat. It drinks
+first in its update (`live::drink`), as it drinks while it sweats, builds and gives its children their share over the
+time: its upkeep and its building go at the activity (6.5) of what it could drink, not of what its last update's
+growth, children and sweat left, so a month's update and four of a quarter month run alike. It
 catches no rain and has no roots: its minerals come from what it digests (6.9).
 
 ### 6.5 Activity and dormancy

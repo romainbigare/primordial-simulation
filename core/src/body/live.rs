@@ -26,9 +26,9 @@ pub struct Lived {
     pub days: f64,
 }
 
-/// The update of body `b` over the time since its last: upkeep paid by burning (the share unpaid dies, `SPENT`, and the
-/// share its wear gives, `AGE`), its drink, its heat (`keep_warm`), the checks of its stores, growth (`copy::grow`),
-/// children (`copy::copy`) and what it sheds. Returns what it left for its decision, or a death cause.
+/// The update of body `b` over the time since its last: its drink, upkeep paid by burning (the share unpaid dies,
+/// `SPENT`, and the share its wear gives, `AGE`), its heat (`keep_warm`), the checks of its stores, growth
+/// (`copy::grow`), children (`copy::copy`) and what it sheds. Returns what it left for its decision, or a death cause.
 pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) -> Result<Lived, u8> {
     let days = (w.days_now() - b.last).max(1.0);
     b.last = w.days_now();
@@ -37,8 +37,8 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) ->
     if b.empty_at(mass) {
         return Err(LACK);
     }
-    let (heat, spare) = settle_upkeep(w, d, b, days, mass, tmp)?;
     drink(w, d, b, days);
+    let (heat, spare) = settle_upkeep(w, d, b, days, b.mass(&w.chem), tmp)?;
     crate::bond::leave_outgrown(w, d, b);
     let stands = keep_warm(w, d, b, heat, days * DAY);
     let t = check_stores(w, d, b, (stands, days), tmp)?;
@@ -79,9 +79,10 @@ fn settle_upkeep(w: &World, d: &mut Chunk, b: &mut Body, days: f64, mass: f64, t
     Ok((paid * b.n() / n0, spare))
 }
 
-/// It drinks its key liquids from its cell's ground up to the level it keeps (`Body::level`), as far as the ground holds
-/// them liquid, each day at most its uptake gene's share of that level, paying to handle them (`c_handle` per kg); they
-/// come with their heat.
+/// First in its update, it drinks its key liquids from its cell's ground up to the level it keeps (`Body::level`), as
+/// it drinks while it loses and builds over the time: its update runs at the activity of what it could drink then
+/// (`Body::activity`), whatever the length of the update. As far as the ground holds them liquid, each day at most its
+/// uptake gene's share of that level, paying to handle them (`c_handle` per kg); they come with their heat.
 fn drink(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     let (chem, p, i) = (&w.chem, &w.cfg.phys, b.cell as usize);
     let (lay, tg, mass) = (Layout::of(chem), w.t_ground_last(i), b.mass(chem));
