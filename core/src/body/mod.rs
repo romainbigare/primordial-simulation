@@ -23,7 +23,6 @@ pub(crate) use pay::settle_heat;
 
 use crate::brain::ln;
 use crate::chem::{BodyChem, Chemistry, Phase, Stores};
-use crate::ground::{melting, Melting};
 use crate::life::Block;
 use crate::math::Few;
 
@@ -82,9 +81,8 @@ pub struct Body {
     pub wet: u32,
     /// Body matter built for children and held back, mol (part of `store`, not of the body: `size`, `built`; laws.md 4.2)
     pub brood: f64,
-    /// Visible traits: mass kg, light-capture area m² (none: bodies catch no light), strength, colour (3 bands), height
-    /// m (`height`)
-    pub vis: [f32; 7],
+    /// Visible traits: mass kg, light-capture area m² (none: bodies catch no light), strength, colour (3 bands)
+    pub vis: [f32; 6],
     /// Whether what it holds changed since its visible traits were worked out: the next survey works them out again
     /// (`Chunk::see_changed`); a saved body's are as saved
     #[serde(skip)]
@@ -177,40 +175,24 @@ impl Body {
     pub fn store_of(&mut self, chem: &Chemistry, k: usize) -> &mut f64 {
         &mut self.store[chem.body().place(k).expect("bodies hold it")]
     }
-    /// Its temperature, K (`thermal`).
+    /// Its temperature, K: its heat less the fusion enthalpy its key liquids hold (`fused`), over its heat capacity.
     pub fn temp(&self, chem: &Chemistry) -> f64 {
-        self.thermal(chem).t
+        (self.e - self.fused(chem, &self.store)) / self.heat_cap(chem).max(1e-9)
     }
-    /// Where the body stands on the melting of its key liquids (`ground::melting`, at each one's own melting point, by
-    /// the place of each among its stores): its molten key liquids hold their fusion enthalpy in `e`; its other stores
-    /// hold their sensible heat only (laws.md 6.3).
-    pub fn thermal(&self, chem: &Chemistry) -> Melting {
+    /// The fusion enthalpy amounts `m` (mol of each store) hold: of the key liquids among them, J. A body holds its key
+    /// liquids molten at any temperature: frost kills a share of its members (laws.md 6.5); it has no melting plateau.
+    pub(crate) fn fused(&self, chem: &Chemistry, m: &Stores) -> f64 {
         let subs = chem.body().subs();
-        let (mut ks, mut m) = ([(0.0, 0usize, 0.0); BODY_STORES], 0);
-        for s in self.wet_ks().filter(|&s| self.store[s] > 0.0 && chem.subs[subs[s]].lf > 0.0) {
-            let x = &chem.subs[subs[s]];
-            (ks[m], m) = ((x.melt, s, self.store[s] * x.lf), m + 1);
-        }
-        ks[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
-        melting(self.heat_cap(chem).max(1e-9), self.e, ks[..m].iter().copied())
+        self.wet_ks().map(|s| m[s] * chem.subs[subs[s]].lf).sum()
     }
-    /// The fusion enthalpy amounts `m` (mol of each store) hold at the plateau state `th` (`thermal`): of the key liquids
-    /// among them, as far as they are molten, J.
-    pub(crate) fn fused_of(&self, chem: &Chemistry, th: &Melting, m: &Stores) -> f64 {
-        let subs = chem.body().subs();
-        let molten = |s: usize| if th.bits >> s & 1 == 1 { th.molten(s) } else { (th.t >= chem.subs[subs[s]].melt) as u8 as f64 };
-        self.wet_ks().filter(|&s| m[s] > 0.0).map(|s| m[s] * chem.subs[subs[s]].lf * molten(s)).sum()
-    }
-    /// Its energy at `t`, its key liquids at or over their melting point molten, J: the inverse of `temp` off a plateau.
+    /// Its energy at `t`, J: the inverse of `temp`.
     pub fn energy_at(&self, chem: &Chemistry, t: f64) -> f64 {
-        let subs = chem.body().subs();
-        let fused: f64 = self.wet_ks().filter(|&s| t >= chem.subs[subs[s]].melt).map(|s| self.store[s] * chem.subs[subs[s]].lf).sum();
-        self.heat_cap(chem) * t + fused
+        self.heat_cap(chem) * t + self.fused(chem, &self.store)
     }
-    /// The heat that leaves with amounts `m` (mol of each store) at the plateau state `th`, with their molten shares'
-    /// fusion enthalpy, J.
-    pub(crate) fn heat_with(&self, chem: &Chemistry, th: &Melting, m: &Stores) -> f64 {
-        chem.body().heat_cap_of(m) * th.t + self.fused_of(chem, th, m)
+    /// The heat that leaves with amounts `m` (mol of each store) at its temperature, with the fusion enthalpy of its key
+    /// liquids among them, J.
+    pub(crate) fn heat_with(&self, chem: &Chemistry, m: &Stores) -> f64 {
+        chem.body().heat_cap_of(m) * self.temp(chem) + self.fused(chem, m)
     }
     /// The phase of its store `s` at `t`: of its substance, or liquid where its liquid holds what lowers its melting point
     /// (`Chemistry::phase_in`).
@@ -240,7 +222,7 @@ impl Body {
         self.k = k;
     }
     /// Visible traits of one member (`Body::vis`); the colour is the reflectance of the stores by volume.
-    pub fn visible(&self, chem: &Chemistry, cfg: &crate::Config) -> [f32; 7] {
+    pub fn visible(&self, chem: &Chemistry) -> [f32; 6] {
         let (m1, t, bc) = (self.mass(chem) / self.n(), self.temp(chem), chem.body());
         let (mut v, mut c) = (1e-12, [0.0; 3]);
         for (&k, &a) in bc.subs().iter().zip(&self.store).filter(|x| *x.1 > 0.0) {
@@ -253,7 +235,7 @@ impl Body {
                 }
             }
         }
-        [m1 as f32, 0.0, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32, self.height(chem, cfg) as f32]
+        [m1 as f32, 0.0, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
     }
     /// Well-being at `t` (laws.md 5.4): the log of the energy its reactions could release from a member's stores in
     /// decisions' worth (`think`, J), less its nearness to its limits: key stores to their minimums and reactions to upkeep

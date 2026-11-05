@@ -150,16 +150,16 @@ impl Cover {
     /// The energy to break the share `f` of it, J: its soft tissue (as a body's, with its liquid) and its solids by
     /// their breaking stresses (`body::solids_of`).
     pub fn breaking(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts, f: f64) -> f64 {
-        f * self.solids(chem, cfg, p, |_| 1.0)[2]
+        f * self.solids(chem, cfg, p, |_| 1.0)[1]
     }
     /// The share of the energy to break it, and of the force, that the edge `e` leaves: each material as `Edge::cut`
     /// says for the depth of its layer, its volume over the cell's `area` m² (laws.md 3.3).
     pub fn cut_by(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts, e: &crate::bond::Edge, area: f64) -> f64 {
-        let [v, _, blunt] = self.solids(chem, cfg, p, |_| 1.0);
-        self.solids(chem, cfg, p, |k| e.cut(chem, k, v / area))[2] / blunt.max(1e-300)
+        let [v, blunt] = self.solids(chem, cfg, p, |_| 1.0);
+        self.solids(chem, cfg, p, |k| e.cut(chem, k, v / area))[1] / blunt.max(1e-300)
     }
     /// What it is built of (`body::solids_of`), the energy to break substance `k` times `cut(k)`.
-    fn solids(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts, cut: impl Fn(usize) -> f64) -> [f64; 3] {
+    fn solids(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts, cut: impl Fn(usize) -> f64) -> [f64; 2] {
         let sum = |q: usize| self.mol.iter().map(|m| m[q]).sum::<f64>();
         let built = sum(MATTER) * chem.subs[p.sub[MATTER]].molar_mass / (1.0 - WET_TISSUE);
         crate::body::solids_of(chem, cfg, built, |s| p.sub.iter().position(|&q| q == s).map_or(0.0, sum), cut)

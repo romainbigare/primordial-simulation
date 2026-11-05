@@ -370,11 +370,12 @@ The light reaction runs only in the cover (4.5), the decomposers' reactions only
 Solid, liquid or gas by melting and boiling points (`Chemistry::phase`). A liquid's melting point in a mixture falls by
 the ideal-solution law (`Chemistry::melt_in`): 1/T = 1/Tm − R · ln(x) / Lf, x the solvent's share among itself and
 its solutes. Only the solvent (the most abundant liquid) is lowered; solutes are liquids melting below it (the salts 11
-and 12, the fat 6); ice and liquid count together, so it freezes at one point. One law for bodies, ground plateaus,
-ice cover (`World::thaw`), parts and Change; bodies freeze their key liquids at the liquids' own melting points (6.3).
-**Latent heat**: a gas in the air holds its melting and boiling heat (`Substance::latent_gas`), paid or got as it
-enters or leaves; a body holds the fusion heat of its molten key liquids (`Body::thermal`), and liquid it takes or
-gives carries it (`Body::heat_with`).
+and 12, the fat 6); ice and liquid count together, so it freezes at one point. One law for the stores of bodies,
+ground plateaus, ice cover (`World::thaw`), parts and Change; a body's frost goes by its key liquids' own melting
+points (6.5). **Latent heat**: a gas in the air holds its melting and boiling heat (`Substance::latent_gas`), paid or
+got as it enters or leaves; a body holds the fusion heat of its key liquids at any temperature (`Body::fused`: it has
+no melting plateau, frost kills a share of its members instead, 6.5), and liquid it takes or gives carries it
+(`Body::heat_with`).
 
 ### 2.6 Pairs at balance and the sea's carbon
 `change::reversible` finds each pair of reactions where one undoes the other; `Reactor::balance` finds from the
@@ -410,7 +411,7 @@ the world has no source of it (an input from below, as volcanoes give, would be 
 not built).
 
 ## 3. Bond: things can be joined, joins break when pushed too hard
-Files: `core/src/bond/` (`verbs`, `edge`, `sense`, `month`, `bonds`); also `choose::go`, `Body::height`, `Body::breaking`.
+Files: `core/src/bond/` (`verbs`, `edge`, `sense`, `month`, `bonds`); also `choose::go`, `Body::breaking`.
 
 ### 3.1 Parts and structures
 A **part** is a made object (solid walls, the liquid in its hollow, heat, 3 sizes, a hollowness), a store node
@@ -479,11 +480,10 @@ mass and load × gravity (`choose::go`). The starting plants are too weak to mov
 changes nothing: a body lets go of what it cannot carry only once it can step. A move that passes both but cannot pay
 its cost does not happen either, and the body has let go of what it cannot carry before it was asked to pay.
 
-### 3.6 What a body is built of holds it up and resists breaking
-**Height** (`Body::height`), by Greenhill's self-buckling column: h⁴ = 7.837 / 4π × (Σ E·V) × V / (m·g), V the volume
-of soft tissue and each built solid, E their Young's modulus (`modulus`); it orders light and rain (1.4). **Breaking**
-(`Body::breaking`) a share f takes f × Σ V × each material's breaking stress (`rupture`): a bite pays it, pushing
-through breaks what its energy pays for (6.8). This is blunt breaking; a held edge needs less (3.3).
+### 3.6 What a body is built of resists breaking
+**Breaking** (`Body::breaking`) a share f takes f × Σ V × each material's breaking stress (`rupture`), V the volume of
+soft tissue and each built solid: a bite pays it, pushing through breaks what its energy pays for (6.8). This is blunt
+breaking; a held edge needs less (3.3).
 
 ## 4. Copy: a piece of the graph is copied, with small changes
 Files: `core/src/copy/` (`mix`, `grow`, `litter`), `nodes.rs`, `body/genes.rs`, `lineage.rs`; the cover in `core/src/cover/` (4.5).
@@ -736,8 +736,8 @@ body matter (10), the mineral (12) and the built solid (13). It runs only the re
 substance is one of these or a gas, taking at least one of these; what such a reaction makes that it cannot hold leaves
 it as a gas. **Body matter** is what it is built of; its **living
 body** (`Body::built`) is matter less brood, over 1 − `WET_TISSUE`. Taking, building, upkeep and force go by the living
-body; fuel and extra liquid are carried, and storing fuel costs no work. `Body::size` (with its liquid) sets height,
-volume and minimums; `Body::mass` (everything) moving and load. **Levels** (`Body::level`): the key liquid h / (1 − h)
+body; fuel and extra liquid are carried, and storing fuel costs no work. `Body::size` (with its liquid) sets the
+minimums; `Body::mass` (everything) moving and load. **Levels** (`Body::level`): the key liquid h / (1 − h)
 of matter (h its keep gene), a built solid its share of matter, others keep gene × kg of living body; a full store is
 satiety. **Supply** (`Body::supply`): living body^`intake_exp` from `m_ref` × its pace (6.2). Bodies catch no light:
 their capture area is 0.
@@ -780,7 +780,8 @@ heat does not drive its pace up month after month. Its heat then comes to that t
 (`body::settle_heat`). After its decision (`live::shed_meal_heat`) the heat of what it took and of digesting it, above
 the temperature it stood at, leaves through its coat to its ground over the time to its next update by the same share
 (a body of hours to days sheds it all); a body its intake cooled stays cooler, drawing no heat from its ground, and
-its own heat warms it at its next update. Its key liquids hold their fusion heat when molten (`Body::thermal`, at their own melting points).
+its own heat warms it at its next update. Its key liquids hold their fusion heat at any temperature (`Body::fused`):
+a body has no melting plateau, so its temperature is its heat over its heat capacity, that heat set aside (2.5).
 
 ### 6.4 Water: drinking
 A body drinks its key liquids from its cell's ground up to the level it keeps, as far as the ground holds them liquid,
@@ -792,7 +793,7 @@ catches no rain and has no roots: its minerals come from what it digests (6.9).
 allowance: a dry body pays almost nothing and can hardly act; it wears at an activity of at least `dormant` (0.02),
 so a dormant body lives about 50 times its active life, as dry seeds and spores do. **Frost** (`live::check_stores`): its members
 stand in microclimates that spread over `frost_k` (3 K) around the temperature T its heat holds it at over its ground
-(6.3; not the melting plateau its liquid passes on the way), so below a key liquid's melting point
+(6.3), so below a key liquid's melting point
 the share min(1, (melt − T) / `frost_k`) × a freezes and dies (`PHASE`), an individual with that chance: a dormant body
 (little free liquid) lives through frost, as seeds and spores do; the cover freezes by the same law below its `FROST`
 gene (4.5). **Boiling** kills.
@@ -826,7 +827,7 @@ with even chances in one update or many (`SPENT`).
 Causes: `LACK`, `PHASE`, `SPENT`, `TAKEN`, `BROKEN`, `AGE`; at death all goes to the ground (`body::die`).
 
 ### 6.9 Materials and minerals in bodies
-Built solids count in mass and height, not living body; children get them, gifts never give them. Bodies get
+Built solids count in mass and breaking, not living body; children get them, gifts never give them. Bodies get
 minerals by digestion (the cover from its ground, 4.5); what is past its level it sheds. Fixing (10) runs in the cover
 only (4.5).
 

@@ -46,9 +46,6 @@ struct S {
     /// kJ/mol; none: Trouton's rule (`TROUTON`), and Richards's rule (`RICHARDS`) for `lf`
     lv: Option<f64>,
     lf: Option<f64>,
-    /// GPa (`Substance::modulus`); optional in the file (none: 0)
-    #[serde(default)]
-    modulus: f64,
     /// MPa (`Substance::rupture`); optional in the file (none: 0)
     #[serde(default)]
     rupture: f64,
@@ -116,7 +113,6 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
             hf: s.hf * 1000.0,
             lv: s.lv.map_or(TROUTON * s.boil, |l| l * 1000.0),
             lf: s.lf.map_or(RICHARDS * s.melt, |l| l * 1000.0),
-            modulus: s.modulus * 1e9,
             rupture: s.rupture * 1e6,
         })
         .collect();

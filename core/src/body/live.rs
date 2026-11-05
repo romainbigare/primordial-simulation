@@ -4,7 +4,6 @@
 use super::pay::{burn, settle_heat, upkeep};
 use super::{thin, to_ground, Body, Layout, AGE, COOL_T, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
 use crate::chem::{Phase, Stores};
-use crate::ground::Melting;
 use crate::math::one_minus_exp;
 use crate::rng::{Purpose, Rng};
 use crate::store::Node;
@@ -40,8 +39,8 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) ->
     drink(w, d, b, days);
     crate::bond::leave_outgrown(w, d, b);
     let stands = keep_warm(w, d, b, heat, days * DAY);
-    let th = check_stores(w, d, b, stands, tmp)?;
-    crate::copy::grow(w, d, b, days, th.t);
+    let t = check_stores(w, d, b, stands, tmp)?;
+    crate::copy::grow(w, d, b, days, t);
     if !starved(w, d, b, from, &mut tmp.dead) {
         return Err(SPENT);
     }
@@ -71,7 +70,7 @@ fn settle_upkeep(w: &World, d: &mut Chunk, b: &mut Body, days: f64, mass: f64, t
     let worn = wearing / (b.built(chem).max(1e-9 * mass) * w.cfg.phys.e_life * b.dec(REPAIR));
     let short = if cost > 0.0 { 1.0 - paid / cost } else { 0.0 };
     for (f, cause) in [(short, SPENT), (one_minus_exp(worn), AGE)] {
-        if f > 1e-9 && !lose_share(w, d, b, f, cause, &mut tmp.dead, &b.thermal(chem)) {
+        if f > 1e-9 && !lose_share(w, d, b, f, cause, &mut tmp.dead) {
             return Err(cause);
         }
     }
@@ -200,40 +199,33 @@ fn starved(w: &World, d: &mut Chunk, b: &mut Body, from: f64, dead: &mut Stores)
     let a = -std::f64::consts::LN_2 / (1.0 - w.cfg.phys.lethal).ln();
     // (A body with no body left has starved whatever it was.)
     let f = if now > 0.0 { 1.0 - (now / was).min(1.0).powf(a) } else { 1.0 };
-    // (Its plateau state is worked out only if it loses a share.)
-    let th = (f > 1e-9).then(|| b.thermal(&w.chem));
-    th.is_none_or(|th| lose_share(w, d, b, f, SPENT, dead, &th))
+    f <= 1e-9 || lose_share(w, d, b, f, SPENT, dead)
 }
 
 /// Draws of death a body may take in a day, one for each cause (`Rng` keyed by the day and the cause).
 const CAUSES: u64 = 8;
 
-/// The share `f` of the members of body `b`, at the plateau state `th`, dies of `cause`: a node loses that
-/// share, with that share of every store (`thin`); an individual dies with that chance. One rule for both, so a node is
-/// the average of its members. False if it dies (a node: less than one member is left).
-fn lose_share(w: &World, d: &mut Chunk, b: &mut Body, f: f64, cause: u8, dead: &mut Stores, th: &Melting) -> bool {
+/// The share `f` of the members of body `b` dies of `cause`: a node loses that share, with that share of every store
+/// (`thin`); an individual dies with that chance. One rule for both, so a node is the average of its members. False if
+/// it dies (a node: less than one member is left).
+fn lose_share(w: &World, d: &mut Chunk, b: &mut Body, f: f64, cause: u8, dead: &mut Stores) -> bool {
     if b.n() <= 1.0 {
         return Rng::new(w.seed, w.day() * CAUSES + cause as u64, b.id, Purpose::Death).f64() >= f;
     }
     *dead = b.store.map(|a| a * f);
-    thin(w, d, b, f, dead, cause, th)
+    thin(w, d, b, f, dead, cause)
 }
 
 /// A store below its safe minimum kills it (a node: its poorest members, `starve`); a boiled key liquid kills it; below
 /// a key liquid's melting point the share of its members that freezes at `stands` K, the temperature its heat holds it
-/// at over its ground (`keep_warm`, not the melting plateau its liquid passes on the way), dies (laws.md 6.5). Returns
-/// the plateau state it is left at.
-fn check_stores(w: &World, d: &mut Chunk, b: &mut Body, stands: f64, tmp: &mut LiveTmp) -> Result<Melting, u8> {
+/// at over its ground (`keep_warm`), dies (laws.md 6.5). Returns the temperature it is left at, K.
+fn check_stores(w: &World, d: &mut Chunk, b: &mut Body, stands: f64, tmp: &mut LiveTmp) -> Result<f64, u8> {
     let mass = b.mass(&w.chem);
-    let mut th = b.thermal(&w.chem);
-    if b.lacking(&w.chem, mass, th.t) {
-        if !(b.n() > 1.0 && !b.empty_at(mass) && starve(w, d, b, &th, &mut tmp.dead)) {
-            return Err(LACK);
-        }
-        th = b.thermal(&w.chem);
+    if b.lacking(&w.chem, mass, b.temp(&w.chem)) && !(b.n() > 1.0 && !b.empty_at(mass) && starve(w, d, b, &mut tmp.dead)) {
+        return Err(LACK);
     }
-    let (chem, subs) = (&w.chem, w.chem.body().subs());
-    if b.wet_ks().any(|s| th.t > chem.subs[subs[s]].boil) {
+    let (chem, subs, t) = (&w.chem, w.chem.body().subs(), b.temp(&w.chem));
+    if b.wet_ks().any(|s| t > chem.subs[subs[s]].boil) {
         return Err(PHASE);
     }
     // Its members' microclimates spread over `frost_k` around the temperature it stands at: below the melting point the
@@ -242,19 +234,19 @@ fn check_stores(w: &World, d: &mut Chunk, b: &mut Body, stands: f64, tmp: &mut L
     let frozen = |s: usize| ((chem.subs[subs[s]].melt - stands) / w.cfg.phys.frost_k).clamp(0.0, 1.0) * act;
     let f = b.wet_ks().map(frozen).fold(0.0, f64::max);
     if f > 0.0 {
-        if f >= 1.0 - 1e-9 || !lose_share(w, d, b, f, PHASE, &mut tmp.dead, &th) {
+        if f >= 1.0 - 1e-9 || !lose_share(w, d, b, f, PHASE, &mut tmp.dead) {
             return Err(PHASE);
         }
-        return Ok(b.thermal(&w.chem));
+        return Ok(b.temp(&w.chem));
     }
-    Ok(th)
+    Ok(t)
 }
 
-/// A node at the plateau state `th` short of key stores: the members poorest in them die (members differ around the
-/// mean), so the survivors keep those stores and the dead take their share of the rest. The share that dies is the least
-/// that lifts every key store to its safe minimum; false if that is all of them.
-fn starve(w: &World, d: &mut Chunk, b: &mut Body, th: &Melting, dead: &mut Stores) -> bool {
-    let t = th.t;
+/// A node short of key stores: the members poorest in them die (members differ around the mean), so the survivors keep
+/// those stores and the dead take their share of the rest. The share that dies is the least that lifts every key store
+/// to its safe minimum; false if that is all of them.
+fn starve(w: &World, d: &mut Chunk, b: &mut Body, dead: &mut Stores) -> bool {
+    let t = b.temp(&w.chem);
     let (chem, lay, bc) = (&w.chem, Layout::of(&w.chem), w.chem.body());
     let x = |s: usize| b.store[s] * bc.mm[s];
     // (Safe minimums are shares of the body; the survivors, a share `live` of the members, have that share of it.)
@@ -263,15 +255,13 @@ fn starve(w: &World, d: &mut Chunk, b: &mut Body, th: &Melting, dead: &mut Store
     let live = (0..bc.n()).filter(short).map(|s| x(s) / (b.gene(lay.min + s) * size).max(1e-30)).fold(1.0, f64::min);
     let f = 1.0 - live.max(0.0);
     *dead = std::array::from_fn(|s| if s < bc.n() && !short(&s) { b.store[s] * f } else { 0.0 });
-    f < 1.0 && thin(w, d, b, f, dead, LACK, th) && !b.lacking(&w.chem, b.mass(&w.chem), b.temp(&w.chem))
+    f < 1.0 && thin(w, d, b, f, dead, LACK) && !b.lacking(&w.chem, b.mass(&w.chem), b.temp(&w.chem))
 }
 
 /// What it sheds to the ground with its heat: minerals, built solids and key liquids past their level, and anything
 /// else it neither burns nor is made of.
 fn shed(w: &World, d: &mut Chunk, b: &mut Body) {
-    let (chem, mass) = (&w.chem, b.mass(&w.chem));
-    let th = b.thermal(chem);
-    let t = th.t;
+    let (chem, mass, t) = (&w.chem, b.mass(&w.chem), b.temp(&w.chem));
     let (minerals, subs, matter) = (chem.minerals(), chem.body().subs(), chem.matter());
     let (mut over, mut sheds) = ([0.0f64; BODY_STORES], false);
     for (s, (x, &k)) in over.iter_mut().zip(subs).enumerate() {
@@ -285,6 +275,6 @@ fn shed(w: &World, d: &mut Chunk, b: &mut Body) {
         }
     }
     if sheds {
-        to_ground(w, d, b, &th, &over);
+        to_ground(w, d, b, &over);
     }
 }

@@ -89,8 +89,7 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body) {
         }
         d.counts.cover_lost[TAKEN as usize] += kg;
         if bulk.iter().any(|&x| x > 0.0) {
-            let th = b.thermal(chem);
-            body::to_ground(w, d, b, &th, &bulk);
+            body::to_ground(w, d, b, &bulk);
         }
     }
     for (s, &k) in bc.subs().iter().enumerate() {
@@ -115,14 +114,13 @@ pub(super) fn put(w: &World, d: &mut Chunk, b: &mut Body) {
         return;
     }
     let m: Stores = std::array::from_fn(|s| m[s].min(b.store[s]));
-    let th = b.thermal(&w.chem);
-    body::to_ground(w, d, b, &th, &m);
+    body::to_ground(w, d, b, &m);
 }
 
 /// Move amounts `m` (mol of each store) from `from` to `to`, with their heat and their share of `from`'s brood; `to`
 /// digests the body matter among them (`Body::digest`, its rounding counted in `rounded`).
 fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body, m: &Stores) {
-    let q = from.heat_with(chem, &from.thermal(chem), m);
+    let q = from.heat_with(chem, m);
     from.lose(chem, m);
     for (s, &a) in m.iter().enumerate() {
         to.store[s] += a;

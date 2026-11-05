@@ -57,8 +57,6 @@ pub struct Substance {
     pub lf: f64,
     /// Formation enthalpy of the solid, J/mol (a liquid holds `lf` more in its holder's heat, a gas also `lv`)
     pub hf: f64,
-    /// Young's modulus of the solid as a material, Pa (0: none given; body matter: soft tissue with its liquid)
-    pub modulus: f64,
     /// The stress at which the solid as a material breaks, Pa (0: none given; body matter: soft tissue with its liquid)
     pub rupture: f64,
 }

@@ -206,13 +206,13 @@ fn start(w: &World, d: &mut Chunk, mut c: Body, rows: Option<Vec<f32>>, hit: Opt
 
 /// The stores and heat of `m` children of `b`, taken from it: the matter
 /// of all `m` from the brood and their provisions (`Births::prov`), each at most what it holds; their heat that of
-/// its temperature on the heat capacity they got, with the fusion enthalpy of what they got molten (`Body::heat_with`),
-/// so they start as warm as their parent (a dry child would else be much hotter, a wet one colder).
+/// its temperature on the heat capacity they got, with the fusion enthalpy of the key liquids they got
+/// (`Body::heat_with`), so they start as warm as their parent (a dry child would else be much hotter, a wet one colder).
 fn give(w: &World, b: &mut Body, l: &Births, m: f64) -> (Stores, f64) {
     let mi = Body::matter_at(&w.chem).unwrap_or(0);
     let take = (m * l.matter).min(b.store[mi]);
     let store: Stores = std::array::from_fn(|s| if s == mi { take } else { (l.prov[s] * m).min(b.store[s]) });
-    let e = b.heat_with(&w.chem, &b.thermal(&w.chem), &store);
+    let e = b.heat_with(&w.chem, &store);
     b.e -= e;
     for (a, x) in b.store.iter_mut().zip(&store) {
         *a -= x;

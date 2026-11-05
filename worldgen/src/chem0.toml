@@ -4,7 +4,7 @@
 # the amount; none: always in proportion), sol mole fraction (for a gas that cannot condense on the ground: dissolved under
 # 101 kPa of it at 298 K; for a solid that melts above the ground's warmth: the mole fraction of its solution at saturation,
 # which moves with the liquid), cond W/(m K), hf kJ/mol of the solid (of a substance that is liquid at 290 K: its measured value less lf; gas:
-# less lf and lv), lv/lf kJ/mol (none: Trouton's and Richards's rules), modulus GPa, rupture MPa. Where a number is derived, the derivation is in docs/numbers.md.
+# less lf and lv), lv/lf kJ/mol (none: Trouton's and Richards's rules), rupture MPa. Where a number is derived, the derivation is in docs/numbers.md.
 element_masses = [1, 12, 14, 16, 28, 40]
 
 [[s]] # 0
@@ -172,8 +172,6 @@ ir = 0.0
 sol = 0.0
 cond = 0.2
 hf = -18675.0
-# Living soft tissue with its liquid: docs/numbers.md, "modulus of substances 10 and 13".
-modulus = 0.001
 # Living soft tissue: docs/numbers.md, "rupture of substances 10 and 13".
 rupture = 1
 
@@ -222,8 +220,6 @@ ir = 0.0
 sol = 0.0
 cond = 0.2
 hf = -986
-# docs/numbers.md: "modulus of substances 10 and 13".
-modulus = 30
 # docs/numbers.md: "rupture of substances 10 and 13".
 rupture = 120
 

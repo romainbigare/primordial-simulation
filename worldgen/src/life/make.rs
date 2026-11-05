@@ -119,7 +119,7 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
     // them.
     b.wet = b.key_liquids(chem, t);
     b.e = b.energy_at(chem, t);
-    b.vis = b.visible(chem, &w.cfg);
+    b.vis = b.visible(chem);
     book_body(w, &b);
     Some(b)
 }

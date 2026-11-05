@@ -574,11 +574,10 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
 }
 
 /// Growth builds the solid a body can build besides matter (`Chemistry::builds`, the frame) in the share its keep gene
-/// of it sets (`Body::share`), by the same work, elements and energy kept; and what it is built of holds it up and
-/// resists breaking: soft tissue alone holds a body low, a frame raises it (`Body::height`) and costs more to break
-/// (`Body::breaking`).
+/// of it sets (`Body::share`), by the same work, elements and energy kept; and what it is built of resists breaking: a
+/// frame makes a body cost more to break than soft tissue alone (`Body::breaking`).
 #[test]
-fn growth_builds_the_frame_in_its_share_and_it_holds_a_body_up() {
+fn growth_builds_the_frame_in_its_share_and_it_resists_breaking() {
     let (mut w, i) = start();
     let lay = Layout::of(&w.chem);
     let mats: Vec<usize> = w.chem.materials().collect();
@@ -601,9 +600,9 @@ fn growth_builds_the_frame_in_its_share_and_it_holds_a_body_up() {
     let (mut soft, mut hard) = (b.clone(), b.clone());
     mats.iter().for_each(|&k| (*soft.store_of(&w.chem, k), *hard.store_of(&w.chem, k)) = (0.0, 0.0));
     *hard.store_of(&w.chem, mats[0]) = 1.0 / w.chem.subs[mats[0]].molar_mass;
-    let (h_soft, h, e_soft, e) = (soft.height(&w.chem, &w.cfg), hard.height(&w.chem, &w.cfg), soft.breaking(&w.chem, &w.cfg, 1.0), hard.breaking(&w.chem, &w.cfg, 1.0));
-    println!("height {h_soft:.2} m of soft tissue alone, {h:.2} m with 1 kg of frame; breaking it all {e_soft:.0} J and {e:.0} J");
-    assert!(h_soft < 1.5 && h > 2.0 * h_soft && e > 2.0 * e_soft);
+    let (e_soft, e) = (soft.breaking(&w.chem, &w.cfg, 1.0), hard.breaking(&w.chem, &w.cfg, 1.0));
+    println!("breaking it all: {e_soft:.0} J of soft tissue alone, {e:.0} J with 1 kg of frame");
+    assert!(e > 2.0 * e_soft);
     w.life[s] = b;
     books.assert_kept(&w, 1e-9);
 }

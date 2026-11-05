@@ -115,7 +115,7 @@ What went wrong:
 | Carbon | The sea holds carbon by plain chemistry and starts at balance with the air |
 | Law 2 | One rate law (mass action with the contact of the phases) in the open world and in bodies; a catalyst is slowed by its own product |
 | Moving | Moving needs force |
-| Materials | Bodies are built of several materials; physics reads the material (height, breaking, digestion) |
+| Materials | Bodies are built of several materials; physics reads the material (breaking, digestion) |
 | Freezing | One freezing law for bodies, ground, lakes and the sea |
 | The start | What is placed at the start is an initial condition and every run prints it. Animals start with hand-set brain biases, plants with no brain (`HIDDEN` 0: their life is their body's physics), founders as adults |
 | Waits | Natural fire starts wait for M4. Disease (bodies inside bodies) waits until after M4 |
@@ -223,7 +223,7 @@ A random chemistry can be dead or boring, and finding out can waste weeks. So fo
 | melting point, boiling point | phase: solid / liquid / gas at a given temperature |
 | density (per phase) | volume, buoyancy, layering |
 | hardness and bond strength (solid) | Bond law, cutting, wear |
-| Young's modulus and the stress it breaks at (solid as a material) | how high what a body is built of holds it, the energy to break it |
+| the stress it breaks at (solid as a material) | the energy to break what a body is built of |
 | reflectance in 3 visible bands | colour on screen, how much sunlight is reflected |
 | absorption of outgoing heat radiation (gas), and the column amount past which it grows only as the square root of the amount (its bands fill up, a stand-in for the logarithm of real gases) | greenhouse effect |
 | solubility in each liquid | dissolving, carrying |

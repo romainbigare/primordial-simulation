@@ -67,7 +67,7 @@ fn walls_keep_a_body_warm() {
     }
     let b = &mut w.life[slot];
     let k = (0..w.chem.ns()).max_by(|&x, &y| b.amount(w.chem.body(), x).total_cmp(&b.amount(w.chem.body(), y))).unwrap();
-    // (At the body's temperature, with the fusion enthalpy a molten store holds: `Body::energy_at`.)
+    // (At the body's temperature, with the fusion enthalpy its key liquids hold: `Body::energy_at`.)
     let t = b.temp(&w.chem);
     *b.store_of(&w.chem, k) *= 1.3;
     b.e = b.energy_at(&w.chem, t);

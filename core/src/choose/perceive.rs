@@ -67,7 +67,7 @@ pub const SIGHTS: usize = 4;
 pub(super) struct Face {
     pub id: u64,
     pub slot: u32,
-    pub vis: [f32; 7],
+    pub vis: [f32; 6],
     pub wb: f32,
 }
 

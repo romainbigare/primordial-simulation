@@ -138,7 +138,7 @@ impl<'a> Chunk<'a> {
     /// (`Body::visible`, `Body::stale`): once before what reads them, the cells' sums and the batch.
     pub(crate) fn see_changed(&mut self, w: &World) {
         for b in self.cells.iter_mut().flat_map(|c| &mut c.bodies).filter(|b| b.alive && b.stale) {
-            (b.vis, b.stale) = (b.visible(&w.chem, &w.cfg), false);
+            (b.vis, b.stale) = (b.visible(&w.chem), false);
         }
     }
 }

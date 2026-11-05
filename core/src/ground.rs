@@ -25,7 +25,7 @@ pub(crate) fn skin_of(cfg: &Config, area: f64, c: f64, v: f64) -> f64 {
     if v > 0.0 { c / v * cfg.skin_m * area } else { 0.0 }
 }
 
-/// Where a ground node or a body of heat capacity `c` (J/K) and energy `e` (J) stands among its melting plateaus.
+/// Where a ground node of heat capacity `c` (J/K) and energy `e` (J) stands among its melting plateaus.
 pub struct Melting {
     /// Temperature, K
     pub t: f64,
@@ -52,7 +52,7 @@ impl Melting {
     }
 }
 
-/// Temperature of a node or body of heat capacity `c` and energy `e` whose molten amounts hold their fusion enthalpy:
+/// Temperature of a node of heat capacity `c` and energy `e` whose molten amounts hold their fusion enthalpy:
 /// `melts` gives, in melting order, each substance's point there and its fusion enthalpy, J. It stays at a melting point
 /// until that substance has all frozen or melted (laws.md 1.1).
 pub(crate) fn melting(c: f64, e: f64, melts: impl IntoIterator<Item = (f64, usize, f64)>) -> Melting {

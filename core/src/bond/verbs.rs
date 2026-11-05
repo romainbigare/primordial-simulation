@@ -207,7 +207,7 @@ fn put(w: &World, d: &mut Chunk, b: &mut Body, p: usize, mb: f64, days: f64) {
 /// share of its heat. Returns what it gave and that heat, J.
 fn give_up(chem: &Chemistry, b: &mut Body, m: &Stores) -> (Stores, f64) {
     let m: Stores = std::array::from_fn(|s| m[s].min(b.store[s]));
-    let q = b.heat_with(chem, &b.thermal(chem), &m);
+    let q = b.heat_with(chem, &m);
     b.store.iter_mut().zip(&m).for_each(|(s, a)| *s -= a);
     b.e -= q;
     (m, q)
