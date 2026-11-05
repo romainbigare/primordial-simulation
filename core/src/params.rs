@@ -102,7 +102,7 @@ pub struct Physics {
     pub t_cat: f64,
     /// Spread of a cell's microclimate: below a freezing point the frozen share of a body's or the cover's members grows from 0 to 1 over this, K
     pub frost_k: f64,
-    /// Each this many K of the `DENATURE` gene over `t_firm` adds the catalysts' upkeep once more, K
+    /// K of the cover's frost tolerance below its key liquid's melting point that add its light capacity's upkeep again
     pub c_firm: f64,
     /// Upkeep of strength, J per kg of body per day at strength 1
     pub c_strength: f64,
