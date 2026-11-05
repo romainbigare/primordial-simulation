@@ -35,10 +35,11 @@ pub fn state(w: &mut World, full: bool) {
     });
 }
 
-/// The state of ground nodes (`ground_state`): only what changed since it was last rebuilt, or every node with `full` or
-/// when a refresh changed what is present. A full build notes the time it was made (`built_now`).
+/// The state of ground nodes (`ground_state`): only what changed since it was last rebuilt, or every node with `full`
+/// (each month's start, after the month's refresh changed what is present) or when the caches are new. A full build
+/// notes the time it was made (`built_now`).
 fn ground_now(w: &World, s: &mut Scratch, full: bool) {
-    let full = full || std::mem::take(&mut s.stale) || s.lay.len() != w.mesh.level(AIR).n();
+    let full = full || s.lay.len() != w.mesh.level(AIR).n();
     ground_state(w, s, full);
     s.built_at = Some(w.time);
     if full {

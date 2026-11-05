@@ -39,10 +39,15 @@ pub fn write_snapshot(bytes: &[u8], path: impl AsRef<Path>) -> io::Result<()> {
     crate::gzfile::write_gzip(path.as_ref(), &[bytes])
 }
 
-/// Load a snapshot of this format version; caches come back empty and are rebuilt (the mesh from the map, each body's
-/// numbers from its genes, each cell's sums of its bodies that the tape reads before the first survey).
+/// Load a snapshot file of this format version (`read_snapshot`).
 pub fn load_snapshot<P: DeserializeOwned>(path: impl AsRef<Path>) -> io::Result<(World, P)> {
-    let mut z = BufReader::with_capacity(BUFFER, GzDecoder::new(std::fs::File::open(path)?));
+    read_snapshot(BufReader::with_capacity(BUFFER, GzDecoder::new(std::fs::File::open(path)?)))
+}
+
+/// Read the bytes of a snapshot of this format version (`snapshot_bytes`) from `z`; caches come back empty and are
+/// rebuilt (the mesh from the map, each body's numbers from its genes, each cell's sums of its bodies that the tape
+/// reads before the first survey).
+pub fn read_snapshot<P: DeserializeOwned>(mut z: impl Read) -> io::Result<(World, P)> {
     let mut head = [0u8; 8];
     z.read_exact(&mut head).map_err(|e| bad(format!("not a snapshot ({e})")))?;
     if head[..4] != SNAPSHOT_TAG {

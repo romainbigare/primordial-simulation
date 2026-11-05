@@ -129,8 +129,6 @@ pub(super) struct State {
 #[derive(Clone, Debug, Default)]
 pub struct Scratch {
     pub(super) state: State,
-    /// The substances present changed: rebuild the state of ground and air at the next step.
-    pub(super) stale: bool,
     /// The parts of Flow under way, whose lifts and falls are booked at their end (`potential::Lifts`); whether the
     /// parts follow each other with nothing between (`flow::chain`), booked as one; and the world's time and potential
     /// energy as the last booking left them.
@@ -282,9 +280,7 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
     // A substance the air holds less of than the rounding of its sums is no gas of it: the air's step leaves it be.
     let (air, all) = (w.store.amounts(Class::Air), w.store.amounts(Class::Air).iter().sum::<f64>());
     let in_air = |k: usize| air[k * na..(k + 1) * na].iter().sum::<f64>() > f64::EPSILON * all;
-    let gas = (0..ns).filter(|&k| in_air(k) || (s.state.loose.contains(&k) && up(k))).collect();
-    s.stale |= gas != s.state.gas;
-    s.state.gas = gas;
+    s.state.gas = (0..ns).filter(|&k| in_air(k) || (s.state.loose.contains(&k) && up(k))).collect();
     s.state.fix = vec![[0.0; 2]; n];
     for &k in &s.state.fixed {
         let (v, r) = (s.sp[k].v[0], s.sp[k].refl[0]);

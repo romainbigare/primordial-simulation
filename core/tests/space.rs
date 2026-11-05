@@ -258,6 +258,39 @@ fn saved(w: &World) -> serde_json::Value {
     serde_json::to_value(w).expect("a world serialises")
 }
 
+/// Months of the lived world at whose start the identity remap runs, one after the other (a year: each month of the
+/// refreshes and of the creep of Flow); and the months each remapped world goes on for.
+const REMAPPED: usize = 12;
+const AFTER_REMAP: usize = 12;
+
+/// A remap that changes nothing drops Flow's caches, as a load does: stepping on from it, at any month of the slow cycles,
+/// gives the world of no remap, bit for bit.
+#[test]
+fn the_identity_remap_changes_no_step() {
+    let mut w = lived();
+    let (n, links) = (w.mesh.cells().n(), w.mesh.cells().a().len());
+    let same = Remap { cells: Renumber::new(n, (0..n as u32).map(Some).collect()), links: Renumber::new(links, (0..links as u32).map(Some).collect()) };
+    let month = |w: &mut World| {
+        pcore::step(w);
+        w.drain_events();
+    };
+    // The worlds remapped and still going on, the first remapped first.
+    let mut remapped = std::collections::VecDeque::new();
+    for m in 0..REMAPPED + AFTER_REMAP - 1 {
+        if m < REMAPPED {
+            let mut v = w.clone();
+            v.remap(&same);
+            remapped.push_back(v);
+        }
+        remapped.iter_mut().for_each(month);
+        month(&mut w);
+        if m + 1 >= AFTER_REMAP {
+            let v = remapped.pop_front().expect("a world remapped a year ago");
+            assert!(saved(&v) == saved(&w), "remapped at month {}, then {AFTER_REMAP} months", w.cfg.calendar().months(v.time) - AFTER_REMAP as u64);
+        }
+    }
+}
+
 /// Cells and links renumbered (`World::remap`): each cell holds at its new number what it held, its bodies and parts
 /// are found there by their ids, and its serial goes with it; renumbered back, the world is what it was, bit for bit.
 #[test]

@@ -1,5 +1,5 @@
-//! The tape: snapshots (in the middle of the slow cycles, refused without their header, carrying the schedule), the
-//! viewer file, the yearly series and the monthly rows, resuming into the same folder, and the null run.
+//! The tape: snapshots (at each month's start through the slow cycles, refused without their header, carrying the
+//! schedule), the viewer file, the yearly series and the monthly rows, resuming into the same folder, and the null run.
 
 use flate2::read::GzDecoder;
 use pcore::{step, World};
@@ -72,26 +72,37 @@ fn a_file_without_the_snapshot_header_is_refused() {
     assert!(e.to_string().contains("not a snapshot"), "{e}");
 }
 
-/// Save and load in the middle of the slow cycles of Flow (refresh, work, creep) with life and a cleared lane about:
-/// the tape can read the lanes before the resumed run's first survey, and the resumed run must give the same history
-/// as the unbroken one.
+/// Months saved at, from the start: past a creep (once a year) and four refreshes (once in three months) of Flow.
+const SAVED: usize = 14;
+/// Months each resumed run goes on for: through a creep and the refreshes.
+const RESUMED: usize = 12;
+
+/// Save and load at each month's start through the slow cycles of Flow (refresh, creep) with life and a cleared lane
+/// about: the loaded world is the saved one, the tape can read the lanes before the resumed run's first survey, and
+/// each resumed run gives the same history as the unbroken one, month by month.
 #[test]
-fn snapshot_round_trip_mid_cycle() {
-    let dir = tmp("snap_mid");
-    let (mut a, mut whole) = (world(), world());
-    for w in [&mut a, &mut whole] {
-        worldgen::life::seed(w, 0);
-        worldgen::life::seed_with(w, 1, &worldgen::life::Seeding::neutral());
-        w.links.cleared[0] = 1.0;
+fn snapshot_round_trip_at_every_month() {
+    let mut w = two_kinds();
+    w.links.cleared[0] = 1.0;
+    let (mut saved, mut whole) = (vec![], vec![]);
+    for m in 0..SAVED + RESUMED {
+        if m < SAVED {
+            let mut bytes = vec![];
+            tape::snapshot_bytes(&w, &(), &mut bytes).unwrap();
+            saved.push((fingerprint(&w), bytes));
+        }
+        step(&mut w);
+        whole.push(fingerprint(&w));
     }
-    run(&mut a, 17);
-    save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
-    let (mut b, ()) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
-    assert_eq!(fingerprint(&a), fingerprint(&b));
-    assert!(pcore::lanes::eased(&b, 0) >= 1.0, "the lane's ease, from the rebuilt sums");
-    run(&mut b, 14);
-    run(&mut whole, 31);
-    assert_eq!(fingerprint(&b), fingerprint(&whole));
+    for (m, (at, bytes)) in saved.iter().enumerate() {
+        let (mut b, ()) = tape::read_snapshot(&bytes[..]).unwrap();
+        assert_eq!(fingerprint(&b), *at, "the world loaded at month {m}");
+        assert!(pcore::lanes::eased(&b, 0) >= 1.0, "the lane's ease at month {m}, from the rebuilt sums");
+        for (k, unbroken) in whole[m..m + RESUMED].iter().enumerate() {
+            step(&mut b);
+            assert_eq!(fingerprint(&b), *unbroken, "saved at month {m}, resumed for {} months", k + 1);
+        }
+    }
 }
 
 /// Parts lie in the list of their cell, each with an id that never changes (laws.md 3.1): two bonded parts keep their
@@ -519,3 +530,4 @@ fn yearly_series_counts_the_minerals() {
     let last = rows.last().unwrap();
     assert!(col("min0_land", last) > 0.0 && col("min0_dead_land", last) > 0.0 && col("min0_bodies", last) > 0.0);
 }
+
