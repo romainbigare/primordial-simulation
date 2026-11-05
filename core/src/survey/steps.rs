@@ -29,6 +29,12 @@ impl World {
     pub fn step_days(&self, i: usize) -> f64 {
         self.body_step(i) as f64 / self.cfg.calendar().day as f64
     }
+    /// The time from now to the next step of cell `i`, d: its step at its own update, and what is left of it when a
+    /// body of a finer cell moves in during it (laws.md 0).
+    pub fn days_to_step(&self, i: usize) -> f64 {
+        let step = self.body_step(i);
+        (step - self.time % step) as f64 / self.cfg.calendar().day as f64
+    }
 }
 
 /// After the month's batch (`batch`), from the month's start: the sub-steps of the finest cells' step, each at the time it

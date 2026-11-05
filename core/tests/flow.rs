@@ -1045,7 +1045,11 @@ fn lane_scene() -> (World, usize, usize, Handle) {
     for cell in [a, a + 1] {
         worldgen::testkit::cover(&mut w, cell, COVER);
     }
-    let m = line.founder(&mut w, 1, a);
+    // (It takes nothing where it lands: the scene moves it many times at one moment of the world, not about eating.)
+    let mut m = line.founder(&mut w, 1, a);
+    let lay = body::Layout::of(&w.chem);
+    (0..w.chem.body().n()).for_each(|s| m.genes[lay.upt + s] = -1.0);
+    m.prepare(&w.chem, &w.cfg);
     let slot = w.add(m);
     (w, a, a + 1, slot)
 }

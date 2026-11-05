@@ -1,7 +1,8 @@
 //! A node's decision as a spread of actions (handover 7.1): its members spread over the options by the chances its
-//! brain gives them, the chances an individual draws from, and each part acts as so many members would.
+//! brain gives them, the chances an individual draws from, and each part acts as so many members would. Each member's
+//! step is shared as an individual's is (`act_as`): its act takes the time it needs and it takes from its place for the
+//! rest where it ends, so the share of the members and the share of their time follow one rule (laws.md 4.4).
 
-use super::go::can_go;
 use super::*;
 use crate::body::{die, LACK};
 use crate::life::Handle;
@@ -143,10 +144,6 @@ fn part_acts(w: &World, d: &mut Chunk, node: &mut Body, (c, q): (&Choice, &[f32;
         return (acts(d, node, None), (!node.leaving).then_some(false));
     }
     let f = x / node.count;
-    // (A move that cannot happen splits nothing.)
-    if moves && !can_go(w, node, c.to[o - FIXED], f, 0.0) {
-        return (0.0, Some(false));
-    }
     let part = nodes::part(node, f, f);
     let s = d.place_part(w, part);
     let mut m = std::mem::take(&mut d[s]);

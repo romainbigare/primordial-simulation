@@ -398,7 +398,7 @@ fn a_carried_structure_leaves_its_other_holders_behind() {
         ids.push(w.life[h].id);
     }
     let (mover, other) = (ids[0], ids[1]);
-    w.in_cell(i, |_, d| d.out.push(Entry::Go { id: mover, from: i as u32, to: j as u32, pushed: 0.0, lane: 0.0, carries: true, kin: false, brain: Vec::new() }));
+    w.in_cell(i, |_, d| d.out.push(Entry::Go { id: mover, from: i as u32, to: j as u32, pushed: 0.0, lane: 0.0, carries: true, kin: false, eats: 0.0, brain: Vec::new() }));
     pcore::life::land(&mut w);
     let (m, o) = (w.life.find(mover).expect("the mover"), w.life.find(other).expect("the other holder"));
     let held = bond::held(w.life.cell_at(j), &w.life[m]).map(|x| w.life.cell_at(j).parts[x].id);
