@@ -11,10 +11,10 @@ use pcore::space::square::Square;
 use pcore::space::tree::{Refused as Shape, DEPTH_MOST};
 use pcore::space::Leaf;
 use pcore::store::Class;
-use pcore::{brain, World, AIR};
+use pcore::{brain, World};
 use std::collections::BTreeMap;
 use worldgen::life::{Place, KINDS};
-use worldgen::testkit::{self, Books};
+use worldgen::testkit::{self, sound, Books};
 
 /// The small world, its events taken: a world without life, at a month's start.
 fn world() -> World {
@@ -45,18 +45,6 @@ fn difference(a: &serde_json::Value, b: &serde_json::Value, path: &str) -> Optio
         (Object(x), Object(y)) if x.len() == y.len() => x.iter().find_map(|(k, p)| y.get(k).map_or(Some(format!("{path}/{k} missing")), |q| difference(p, q, &format!("{path}/{k}")))),
         _ => (a != b).then(|| format!("{path}: {a} against {b}")),
     }
-}
-
-/// Nothing is broken, cells across a border differ by one depth at most, and the cells under each air node cover it
-/// (`Mesh::share` sums to 1).
-fn sound(w: &World) {
-    assert_eq!(check::broken(w), None);
-    let (cells, leaves) = (w.mesh.cells(), w.map.leaves());
-    let border = (0..cells.a().len()).filter(|&l| cells.width()[l] > 0.0);
-    assert!(border.clone().all(|l| leaves[cells.a()[l] as usize].depth.abs_diff(leaves[cells.b()[l] as usize].depth) <= 1), "2:1 across every border");
-    let mut cover = vec![0.0; w.mesh.level(AIR).n()];
-    (0..cells.n()).for_each(|i| cover[w.mesh.up(i, 0, AIR)] += w.mesh.share(i, AIR));
-    assert!(cover.iter().all(|s| (s - 1.0).abs() < 1e-12), "the cells under each air node cover it: {cover:?}");
 }
 
 /// What the nodes of cell `i` hold: each amount of each class of its nodes, then their heat.

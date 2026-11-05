@@ -1,4 +1,4 @@
-//! Quick PNG pictures of a world: map, temperature, rain and life side by side.
+//! Quick PNG pictures of a world: map, temperature, rain, life, traffic and the depth of the cells side by side.
 
 use pcore::World;
 use tape::{fields, pixels, Fields, STANDING_M};
@@ -11,7 +11,7 @@ pub const RIVER_PNG: f64 = 3.0e4;
 const ICE_M: f64 = 0.05;
 /// Pixels per cell, the panels side by side and the gap between them.
 const PX: usize = 3;
-const PANELS: usize = 5;
+const PANELS: usize = 6;
 const GAP: usize = 4;
 /// Seconds of a year for the rain panel (1e4 mol/(m² year) is about 0.2 m of liquid).
 const YEAR_S: f64 = 3.15e7;
@@ -95,6 +95,12 @@ pub fn save(w: &World, path: &str) {
                 let t = w.counts.traffic.get(i).copied().unwrap_or(0.0) as f64;
                 let g = map_pixel(w, &f, &cells, sq).map(|v| v / 3 + 40);
                 if t < 1.0 { g } else { ramp(&[(0.0, [90, 70, 120]), (1.0, [200, 60, 160]), (2.0, [255, 160, 40]), (3.0, [255, 255, 200])], t.log10()) }
+            },
+            // The depth of the cell at the square's centre against a square's: coarser dark, a square light grey, each
+            // depth finer warmer (refinement, `World::refine`).
+            {
+                let finer = w.map.leaves()[i].depth as f64 - w.map.square_depth() as f64;
+                ramp(&[(-2.0, [60, 60, 70]), (0.0, [200, 200, 200]), (1.0, [250, 210, 80]), (2.0, [230, 110, 30]), (3.0, [170, 20, 20])], finer)
             },
         ];
         for (p, c) in cols.iter().enumerate() {

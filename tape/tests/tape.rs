@@ -1,5 +1,5 @@
 //! The tape: snapshots (at each month's start through the slow cycles, refused without their header, carrying the
-//! schedule), the viewer file, the yearly series and the monthly rows, resuming into the same folder, and the null run.
+//! schedule and its camera path), the viewer file, the yearly series and the monthly rows, resuming into the same folder, and the null run.
 
 use flate2::read::GzDecoder;
 use pcore::{step, World};
@@ -139,6 +139,42 @@ fn a_world_split_and_saved_goes_on_as_the_unbroken_one() {
     }
 }
 
+/// A run whose cells a camera path refines (a window crossing the land under a budget of cells), saved mid-run with
+/// its plan and resumed, goes on as the unbroken run, month by month: the snapshot keeps the budget, the floor and what
+/// refinement keeps of each cell, and the plan the rest of the camera's path.
+#[test]
+fn a_refined_run_saved_mid_run_goes_on_as_the_unbroken_one() {
+    use pcore::refine::{Camera, Shot};
+    use worldgen::schedule::Schedule;
+    let mut w = two_kinds();
+    w.drain_events();
+    let (built, depth) = (w.mesh.cells().n(), w.map.square_depth() + 2);
+    (w.cfg.cell_budget, w.cfg.finest_depth) = (built as u32 * 5 / 4, depth);
+    let land: Vec<usize> = (0..built).filter(|&i| w.is_land(i)).collect();
+    let shot = |k: usize, month: u64| {
+        let [x, y, ..] = w.map.bounds(land[k * land.len() / 3]);
+        Shot { month, x, y, w: 3.0, h: 3.0, depth }
+    };
+    let mut plan = Schedule::new(None, false, worldgen::life::Seeding::default());
+    plan.camera = Camera { shots: vec![shot(0, 0), shot(1, SAVED as u64 / 2), shot(2, SAVED as u64 + 2)] };
+    let month = |w: &mut World, plan: &Schedule| {
+        w.refine(&plan.camera);
+        step(w);
+        w.drain_events();
+    };
+    (0..SAVED).for_each(|_| month(&mut w, &plan));
+    assert!(w.mesh.cells().n() > built, "the camera refined the cells");
+    let mut bytes = vec![];
+    tape::snapshot_bytes(&w, &plan, &mut bytes).unwrap();
+    let (mut b, back): (World, Schedule) = tape::read_snapshot(&bytes[..]).unwrap();
+    assert_eq!(back.camera, plan.camera, "the snapshot carries the camera's path");
+    for m in 0..RESUMED {
+        month(&mut w, &plan);
+        month(&mut b, &back);
+        assert_eq!(fingerprint(&b), fingerprint(&w), "resumed for {} months", m + 1);
+    }
+}
+
 /// Parts lie in the list of their cell, each with an id that never changes (laws.md 3.1): two bonded parts keep their
 /// ids and their bond through a snapshot and when their structure moves to a neighbour cell, and a part made after them
 /// gets an id of its own, so an old id names nothing once its part is gone.
@@ -197,12 +233,14 @@ fn a_resumed_run_places_the_kinds_still_due() {
     assert_eq!(fingerprint(&b), fingerprint(&whole));
 }
 
-/// The viewer file holds its header (the layers, the frames, the events) and a byte per cell, layer and frame.
+/// The viewer file holds its header (the layers, the frames, the events, the run's camera path) and a byte per cell,
+/// layer and frame.
 #[test]
 fn frames_file_round_trip() {
     let dir = tmp("frames");
     let mut w = world();
-    let mut rec = tape::Recorder::new(&w, 1, 1);
+    let camera: pcore::refine::Camera = "0 2 3 4 4 3\n12 # away\n".parse().unwrap();
+    let mut rec = tape::Recorder::new(&w, 1, 1).with_camera(&camera);
     common::record(&mut rec, &mut w);
     run(&mut w, 1);
     common::record(&mut rec, &mut w);
@@ -223,6 +261,7 @@ fn frames_file_round_trip() {
     let first = tape::quantise(z, world().surface_z(100));
     assert_eq!(raw[8 + n + 100], first);
     assert!(meta["events"].as_array().unwrap().iter().any(|e| e["text"].as_str().unwrap().contains("first appears")));
+    assert_eq!(meta["camera"], serde_json::to_value(&camera.shots).unwrap(), "the camera's path");
 }
 
 /// The viewer file says whether the world is a globe and the latitudes of its edges, and the world's means of a globe are

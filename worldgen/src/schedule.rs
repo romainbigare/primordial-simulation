@@ -1,8 +1,10 @@
-//! What is placed in a world, and when: the soil and the starting kinds once life starts.
-//! These are initial conditions, reported with every result. A snapshot carries the schedule, so a resumed run
-//! places what is still due as the unbroken run does.
+//! The plan of a run: what is placed in a world, and when (the soil and the starting kinds once life starts), and the
+//! camera's path, which refinement reads (`World::refine`). These are inputs of the run, reported with every result. A
+//! snapshot carries the schedule, so a resumed run places what is still due and follows the rest of the camera's path
+//! as the unbroken run does.
 
 use crate::life::{self, Seeding, KINDS, ROSTER};
+use pcore::refine::Camera;
 use pcore::World;
 use serde::{Deserialize, Serialize};
 
@@ -17,15 +19,17 @@ pub struct Schedule {
     pub kinds: Vec<(usize, u64)>,
     /// How the kinds are placed
     pub seeding: Seeding,
+    /// The camera's path (none: refinement by the other terms of the score alone)
+    pub camera: Camera,
 }
 
 impl Schedule {
     /// Life from year `life` on: the soil, then the two starting kinds, or with `roster` the kinds of `ROSTER`, each at
-    /// its `Kind::year` after the first life.
+    /// its `Kind::year` after the first life; no camera.
     pub fn new(life: Option<u64>, roster: bool, seeding: Seeding) -> Self {
         let rows: &[usize] = if roster { &ROSTER } else { &TWO };
         let kinds = life.map_or(vec![], |y| rows.iter().map(|&k| (k, y + KINDS[k].year)).collect());
-        Schedule { life, kinds, seeding }
+        Schedule { life, kinds, seeding, camera: Camera::default() }
     }
 
     /// Place what is due in the world's year now (call at the start of each year): the soil, then the kinds in their

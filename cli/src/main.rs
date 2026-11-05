@@ -11,7 +11,7 @@ use args::{Args, FRAMES_EVERY, PICTURES_EVERY, SNAPSHOTS_EVERY, USAGE};
 use pcore::World;
 use report::Clock;
 use std::time::Instant;
-use tape::{Kept, Recorder, TAPE};
+use tape::{Kept, Recorder, REFINE, TAPE};
 use writer::Writer;
 use worldgen::schedule::Schedule;
 
@@ -41,12 +41,15 @@ fn main() {
             let (size, seed) = (args.get("--size", 128usize), args.get("--seed", 1u64));
             let mut w = if args.has("--globe") { worldgen::terrain::new_globe(seed, size, args.fine()) } else { worldgen::new_world(seed, size, size) };
             args.apply(&mut w);
-            let plan = args.schedule();
+            let plan = args.schedule().unwrap_or_else(|e| {
+                eprintln!("ew: {e}");
+                std::process::exit(2);
+            });
             drive(w, &args, plan, None);
         }
         "resume" => {
-            // The snapshot carries the plan of its run (what is still due is placed when it is due) and what its
-            // recorder kept across years.
+            // The snapshot carries the plan of its run (what is still due is placed when it is due, the camera's path
+            // goes on) and what its recorder kept across years.
             let from = args.get("--from", String::new());
             let (w, (plan, kept)) = tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}"));
             drive(w, &args, plan, Some(kept));
@@ -65,8 +68,9 @@ fn record(rec: &mut Recorder, w: &mut World, clock: &Clock) {
     rec.record_month(w, events, taken, &clock.spent);
 }
 
-/// Simulate `--years` years: place what `plan` says when it is due, print drift and speed, and write the tape, and
-/// pictures and snapshots if asked for, to `--out`. A resumed run brings what its recorder kept (`kept`).
+/// Simulate `--years` years: at each month's start refine the cells by `plan`'s camera path (`World::refine`), then
+/// place what `plan` says when it is due; print drift and speed, and write the tape, and pictures and snapshots if
+/// asked for, to `--out`. A resumed run brings what its recorder kept (`kept`).
 fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     // (A setting of the run, not of its world: a snapshot does not keep it.)
     w.cfg.chunks = a.get("--chunks", w.cfg.chunks);
@@ -77,7 +81,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     let (years, every, out) = (a.get("--years", 10u64), a.get("--every", 10u64), a.get("--out", String::from("out")));
     std::fs::create_dir_all(&out).expect("create out dir");
     let (pictures, snapshots) = (a.get("--pictures-every", PICTURES_EVERY), a.get("--snapshots-every", SNAPSHOTS_EVERY));
-    let mut rec = Recorder::new(&w, a.get("--frames-every", FRAMES_EVERY), a.get("--monthly-years", 2u64));
+    let mut rec = Recorder::new(&w, a.get("--frames-every", FRAMES_EVERY), a.get("--monthly-years", 2u64)).with_camera(&plan.camera);
     if a.has("--months") {
         rec = rec.with_months_csv();
     }
@@ -99,8 +103,14 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
         report::balances(&w).iter().for_each(|l| println!("{l}"));
     }
     for y in y0 + 1..=y0 + years {
-        plan.place(&mut w).iter().for_each(|l| println!("{l}"));
-        for _ in 0..w.cfg.months_per_year {
+        for month in 0..w.cfg.months_per_year {
+            // Refinement first: a split or a join needs the events taken, and placing makes some.
+            let t = Instant::now();
+            w.refine(&plan.camera);
+            clock.spent[REFINE] += t.elapsed();
+            if month == 0 {
+                plan.place(&mut w).iter().for_each(|l| println!("{l}"));
+            }
             let mut t = Instant::now();
             pcore::step_marked(&mut w, &mut |_, s| {
                 clock.spent[s as usize] += t.elapsed();

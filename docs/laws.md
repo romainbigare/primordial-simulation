@@ -5,7 +5,8 @@ orderings) is said once, in the code's doc comments; the code is the truth. Numb
 `docs/numbers.md`, what a run records in `docs/tape.md`.
 
 **Where the code is** (`core/src/`): time in `clock/` and `schedule.rs`; the shape of the world in `space/`, and how
-what it keeps per cell follows a change of the cells, a split and a join in `remap/`; shared
+what it keeps per cell follows a change of the cells, a split and a join in `remap/`, and which cells split and join in
+`refine/`; shared
 maths in `solve/` (`sweep`, `downhill`, `line`); nodes and books in `store/`, `world.rs`, `check.rs`; ground heat in
 `ground.rs`; settings in `params.rs`, constants in `units.rs`; bodies in `body/`, `life.rs`, `nodes.rs`, `lineage.rs`,
 `brain.rs`; the cells as bodies see them in `survey.rs`; paths in `lanes.rs`; keyed random numbers in `rng.rs`; the
@@ -26,7 +27,7 @@ east to west; an air block is 4 x 4 squares. The cells are a sparse tree under e
 block is the root, a cell is a leaf at any depth down to 1/64 of the block's side (`DEPTH_MOST`), and only the leaves
 are kept (`Square::leaves`), numbered by their north-west corners row by row; a square is depth 2. Today's worlds start
 with cells of 1, 2 or 4 squares on a side (worldgen); between steps a cell may split into its quarters and four quarters
-join into their parent (`World::split`, `World::join`, below), no law deciding when yet. Cells across a border differ by
+join into their parent (`World::split`, `World::join`, below), when refinement asks (below). Cells across a border differ by
 one depth at most (2:1): a split first splits each cell across a side that would border the quarters two depths coarser
 (`Square::splits`), and a join that would leave one two depths finer is refused (`Square::joins`). One builder makes
 every cell (`Square::mesh`). Cells link across a border by its width, as far apart as their centres across it, so a
@@ -141,6 +142,29 @@ from it, and what is left over (or short) goes to the quarters' ground heat by t
 books it against `Store::lifted`). A split of a cell no join made makes flat quarters, whose stacks hold what the cell's
 did. So a join moves no energy, a split moves only what `fall_heat` books, and `check::drift`, which reads
 `Store::lifted`, closes through any sequence of splits and joins. No law changes the cells.
+**Refinement** (`refine/`, `World::refine`) decides which cells split and join: a setting for speed, not a law (no
+law reads its score). The shell calls it at each month's start, before the survey, once it took the month's events
+and before it places life by the plan. With no budget (`Config::cell_budget` 0, every run's default) it does nothing:
+the cells stay as built. Else each cell has a score, a sum of four terms each about 1 in a cell worth refining
+(`refine/score.rs`): the camera's, inside the window of the camera's shot of the month, 2^(asked depth - depth - 1)
+(1 a depth coarser than asked, twice that for each depth coarser, 1/2 at the asked depth, which keeps the cell; none
+finer than asked or outside the window); brains, the members of bodies whose brain has hidden units per m² over
+`BRAINS_M2`; parts and bonds per m² over `PARTS_M2`; and change, the share by which the cell's animal mass per m²
+moved since the last month (of at least `MASS_FLOOR`) over `MASS_SHARE`, what it held then kept per cell in
+`World::watch`, which follows the cells through the remap. The ground's temperature is no term: it moves with the
+season, faster on land than under liquid, so its departures mark the coasts each season, not an event. Then, the
+lowest first (ties by the least serial), each four quarters of one leaf, built no coarser than it (`Watch::built`)
+and with no finer cell across a side, join while the cells are over the budget or all four score under `JOIN_AT`
+(1/4: a cell does not flap); then, the highest first, each cell of `SPLIT_AT` (1) or more coarser than the floor
+(`Config::finest_depth`) splits if its split, with the splits 2:1 forces, keeps the cells within the budget. A split
+the camera asks for (its term alone is 1 or more) may first join the quietest quartets the camera does not see, nor
+a cell beside them (a split there would split their join again, 2:1), to make room: what is looked at comes first. A month makes at most `MOST_CHANGES` (32) splits and joins. The events of
+a join's merge name their cell by index, which the next change renumbers: they wait with their cell's leaf and come
+back at the end of the month's changes naming the cell that then holds that place.
+**The camera** (`refine::Camera`) is an input of the run: from given months on, a window of the map in squares and
+the depth it asks for. It is part of the run's plan (`worldgen::schedule`), so a snapshot carries it, and the tape
+holds it (`docs/tape.md`). The score is worked out cell by cell in order and the changes made one at a time, so the
+same seed and the same camera path give the same world on any count of threads.
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.
 **One ground temperature**: every law and the tape read that of Flow's last step (`World::t_ground_last`).

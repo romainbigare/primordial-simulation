@@ -35,6 +35,10 @@ pub struct Config {
     /// a setting of the run, not saved)
     #[serde(skip, default = "default_chunks")]
     pub chunks: u32,
+    /// Speed setting: the most cells a run may hold while refinement splits and joins them (0: the cells stay as built)
+    pub cell_budget: u32,
+    /// Speed setting: the finest depth below its air block refinement takes a cell to (the floor on the step)
+    pub finest_depth: u8,
 
     // Ground and air physics
     /// Depth of ground that exchanges heat with the surface, m
@@ -384,6 +388,8 @@ impl Config {
         let air = crate::schedule::AIR_STEP_DAYS;
         require(m > 0 && m.is_multiple_of(air), || format!("days_per_month ({m}) must be a whole number of the air's steps ({air} days)"))?;
         require(self.chunks > 0, || "chunks must be at least 1".to_string())?;
+        let (finest, most) = (self.finest_depth, crate::space::tree::DEPTH_MOST);
+        require(finest <= most, || format!("finest_depth ({finest}) must be at most {most}, the tree's"))?;
         let wake = self.wake_share;
         require(wake > 0.0 && wake.is_finite(), || format!("wake_share ({wake}) must be above 0"))?;
         // `dormancy` above 1 (`body::exchange::closing` divides by n - 1); `light_yield` in (0, 1] (a light reaction takes
@@ -425,6 +431,8 @@ impl Default for Config {
             wake_share: 0.05,
             sleep_days: 90,
             chunks: default_chunks(),
+            cell_budget: 0,
+            finest_depth: 4,
             skin_m: 2.0,
             air_top_m: 10_000.0,
             sensible: 10.0,
