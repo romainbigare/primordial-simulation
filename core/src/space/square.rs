@@ -172,19 +172,28 @@ impl Square {
         assert!(!self.wrap || (self.w >= 3 && self.w.is_multiple_of(self.scale)), "a globe's row has 3 cells or more, in whole blocks");
         let (tree, squares) = (self.tree(), Square::new(self.w, self.h, self.side, self.wrap, self.scale));
         let block = |l: &Leaf| tree.block(l.x, l.y) as u32;
-        let blocks = squares.level(&squares.tree(), south, north).coarser(&squares.leaves.iter().map(block).collect::<Vec<u32>>());
-        let parent = self.leaves.iter().map(block).collect();
-        let mesh = Mesh::of(self.level(&tree, south, north), blocks, parent, tree);
+        let (mut blocks, links) = squares.level(&squares.tree(), south, north, true).coarser(&squares.leaves.iter().map(block).collect::<Vec<u32>>());
+        blocks.join(links);
+        let mesh = self.mesh_over(blocks, south, north, true);
         // The wind runs along the lines of the blocks east and west, and north and south (`flow::air::wind::lines`).
         let air = mesh.level(1);
         let along = |i: usize, d: usize| air.way(i, d).is_none_or(|e| air.width()[air.adj_link()[e] as usize] == 0.0);
         assert!((0..air.n()).all(|i| [1, 3, 5, 7].iter().all(|&d| along(i, d))), "a block shares a border only east, south, west and north");
         mesh
     }
+    /// The mesh of the map over `blocks`, the level of its air blocks with their links, which the sizes of the cells do
+    /// not change (`mesh`): what a change of the cells builds. With `linked` false its cells have their places and the
+    /// ends of their links but are not linked yet (`Level::ends`), as a change of the cells reads them between its
+    /// splits and joins (`World::split`).
+    pub fn mesh_over(&self, blocks: Level, south: f64, north: f64, linked: bool) -> Mesh {
+        let tree = self.tree();
+        let parent = self.leaves.iter().map(|l| tree.block(l.x, l.y) as u32).collect();
+        Mesh::of(self.level(&tree, south, north, linked), blocks, parent, tree)
+    }
     /// The level of the cells (`tree`: their tree), longitudes east from 0 by the degrees of latitude per row (a whole
     /// turn on a globe). Each cell links to the cells across its east side and its south side (north to south, west to
-    /// east), then to those across its south-east and south-west corners.
-    fn level(&self, tree: &Tree, south: f64, north: f64) -> Level {
+    /// east), then to those across its south-east and south-west corners; with `linked` false, only their ends.
+    fn level(&self, tree: &Tree, south: f64, north: f64, linked: bool) -> Level {
         let (leaves, unit, row, wide) = (&self.leaves, self.unit() as f64, (north - south) / self.h as f64, self.extent().0);
         // A length in leaves of the most depth, in squares.
         let sq = |u: u32| u as f64 / unit;
@@ -218,6 +227,8 @@ impl Square {
             if self.wrap { (d * self.side).hypot(across(edge(py)) * d) } else { (d * self.side) * SQRT_2 }
         };
         // Each cell's links across its sides, then with those across its corners as they come.
+        let place = (leaves.iter().map(|t| lat(mid(t.y, t.side()))).collect(), leaves.iter().map(lon).collect());
+        let mut cells = Level::of_cells(leaves.iter().map(area).collect(), leaves.iter().map(centre).collect(), place, if self.wrap { radius } else { 0.0 });
         let mut links_of: Vec<usize> = leaves.iter().map(|t| tree::SIDES.iter().map(|&way| tree.beside(t, way).count()).sum()).collect();
         let mut links: Vec<LinkSpec> = Vec::new();
         for (i, t) in leaves.iter().enumerate() {
@@ -248,9 +259,11 @@ impl Square {
                 }
             }
         }
-        let place = (leaves.iter().map(|t| lat(mid(t.y, t.side()))).collect(), leaves.iter().map(lon).collect());
-        let mut cells = Level::of_cells(leaves.iter().map(area).collect(), leaves.iter().map(centre).collect(), place, if self.wrap { radius } else { 0.0 });
-        cells.join(links);
+        if linked {
+            cells.join(links);
+        } else {
+            cells.ends(links);
+        }
         cells
     }
 }

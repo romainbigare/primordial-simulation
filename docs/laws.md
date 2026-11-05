@@ -111,8 +111,10 @@ their sleep, its life, Flow's state of its ground, its moving averages) and per 
 cells in one place (`World::remap`, between steps): each number moves with its cell or link, an old cell no new one
 names is gone, and a new cell holds nothing and takes the next serial, so every id still finds its body or part.
 **Split and join** (`remap/split.rs`, at a month's start, the events taken; one remap each, an event each, `Split` and
-`Join`, naming the parent by its serial). The cells a split or a join makes are new, with new serials, and a link
-between two cells that both stay keeps what it remembers. A quarter holds its share of each number its parent held (the
+`Join`, naming the parent by its serial). The cells a split or a join makes are new, with new serials. The splits and
+joins of one change (`remap::Change`: a split with those 2:1 forces, a join, or a month's refinement) read the cells'
+places between them, not their links; the mesh is linked once at the change's end, and a link between two cells the
+change left as they were keeps what it remembers, a link of a cell it made nothing. A quarter holds its share of each number its parent held (the
 amounts and the heat of each of its nodes, the volumes Flow keeps of its ground, what its sleep held, the moving
 averages per cell, `remap::Made::held`) and its parent's numbers that do not add up (the moving averages per m², the
 temperature and the plateau, the means of its bed, the sleep's alarm and the time it was brought up to date); a joined

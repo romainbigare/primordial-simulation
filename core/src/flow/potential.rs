@@ -85,22 +85,10 @@ fn potential(w: &World, s: &Scratch, found: Option<Found>) -> Potential {
                 sums.iter_mut().zip(r).for_each(|(x, &a)| bed_layer(x, sp, a));
             }
             if let Some(r) = has(0).then(|| held(&ground[at(k)])).flatten() {
-                let each = sums.iter_mut().zip(r);
-                match same[k] {
-                    // What `ground_layers` gives where the phase is the same in every node.
-                    Same::Gas => each.for_each(|(x, &a)| x[2] += a * sp.mm),
-                    Same::Liquid => each.for_each(|(x, &a)| (x[2], x[5]) = (x[2] + a * sp.mm, x[5] + a * sp.v[1])),
-                    Same::Solid => each.for_each(|(x, &a)| (x[1], x[4]) = (x[1] + a * sp.mm, x[4] + a * sp.v[0])),
-                    Same::Varies => each.zip(cells_of.clone()).for_each(|((x, &a), i)| ground_layers(x, s, (k, i), a)),
-                }
+                sums.iter_mut().zip(r).zip(cells_of.clone()).for_each(|((x, &a), i)| ground_of(x, s, same[k], (k, i), a));
             }
             if let Some(r) = has(2).then(|| held(&deep[at(k)])).flatten() {
-                let each = sums.iter_mut().zip(r);
-                match same[k] {
-                    Same::Gas => each.for_each(|(x, &a)| x[6] += a * sp.mm),
-                    Same::Liquid | Same::Solid => each.for_each(|(x, &a)| (x[6], x[7]) = (x[6] + a * sp.mm, x[7] + a * sp.v[1])),
-                    Same::Varies => each.zip(cells_of.clone()).for_each(|((x, &a), i)| deep_layer(x, sp, s.state.tg[i], a)),
-                }
+                sums.iter_mut().zip(r).zip(cells_of.clone()).for_each(|((x, &a), i)| deep_of(x, s, same[k], (k, i), a));
             }
             if let Some(r) = has(3).then(|| held(&bodies[at(k)])).flatten() {
                 sums.iter_mut().zip(r).for_each(|(x, &a)| x[HEAD] += a * sp.mm);
@@ -119,6 +107,47 @@ fn potential(w: &World, s: &Scratch, found: Option<Found>) -> Potential {
     za.iter_mut().zip(air.area()).for_each(|(z, a)| *z /= a);
     let e_air = (0..na).map(|j| (0..ns).map(|k| amounts[k * na + j] * s.sp[k].mm).sum::<f64>() * g * za[j]).collect();
     Potential { ground: at(0), air: e_air, deep: at(1), bodies: at(4), heights: Heights { ground: head, air: za, deep: at(3) }, found }
+}
+
+/// `a` mol of substance `k` in ground node `i`, in its phase (`ground_layers`), where its phase is the same in every node
+/// (`same`) without looking.
+#[inline(always)]
+fn ground_of(x: &mut [f64; LAYERS], s: &Scratch, same: Same, (k, i): (usize, usize), a: f64) {
+    let sp = &s.sp[k];
+    match same {
+        Same::Gas => x[2] += a * sp.mm,
+        Same::Liquid => (x[2], x[5]) = (x[2] + a * sp.mm, x[5] + a * sp.v[1]),
+        Same::Solid => (x[1], x[4]) = (x[1] + a * sp.mm, x[4] + a * sp.v[0]),
+        Same::Varies => ground_layers(x, s, (k, i), a),
+    }
+}
+
+/// `a` mol of substance `k` in the store under ground node `i` (`deep_layer`), where its phase is the same in every node
+/// (`same`) without looking.
+#[inline(always)]
+fn deep_of(x: &mut [f64; LAYERS], s: &Scratch, same: Same, (k, i): (usize, usize), a: f64) {
+    let sp = &s.sp[k];
+    match same {
+        Same::Gas => x[6] += a * sp.mm,
+        Same::Liquid | Same::Solid => (x[6], x[7]) = (x[6] + a * sp.mm, x[7] + a * sp.v[1]),
+        Same::Varies => deep_layer(x, sp, s.state.tg[i], a),
+    }
+}
+
+/// The row of `potential` (`ROW`) of ground cell `i` alone: its layers as `potential` adds them up, substance by
+/// substance, so the same numbers come out.
+fn row_of(w: &World, s: &Scratch, same: &[Same], life: &Life, i: usize) -> [f64; ROW] {
+    let (n, mut x) = (w.mesh.cells().n(), [0.0; LAYERS]);
+    let [ground, bed, deep, bodies] = HELD.map(|c| w.store.amounts(c));
+    for (k, sp) in s.sp.iter().enumerate() {
+        let at = k * n + i;
+        bed_layer(&mut x, sp, bed[at]);
+        ground_of(&mut x, s, same[k], (k, i), ground[at]);
+        deep_of(&mut x, s, same[k], (k, i), deep[at]);
+        x[HEAD] += bodies[at] * sp.mm;
+    }
+    x[HEAD] += life.kg(w, &s.sp, i);
+    stack(w, &x, i)
 }
 
 /// Flow's working memory as `potential` reads it: the world's, or its state with the table of the substances where a
@@ -141,20 +170,27 @@ pub fn total(w: &World) -> f64 {
 /// J (`potential`): what a split or a join of cells under `air` changes (`World::split`). The phases in `cells` are
 /// those of their heat (`World::thaw`), not of Flow's state: a remap gives a made cell its parent's temperature or its
 /// quarters' mean, whose phases (a liquid or its gas, which stacks far higher) need not be its heat's, so a join and
-/// the split that gives its quarters back see the same stacks. None before Flow first built the state of the ground
+/// the split that gives its quarters back see the same stacks. It reads those cells and the cells under `air` alone
+/// (`row_of`), as `potential` reads them. None before Flow first built the state of the ground
 /// (its first booking finds the function then).
 pub(crate) fn potential_of(w: &World, cells: &[usize], air: usize) -> f64 {
     if w.scratch.state.tg.len() != w.mesh.cells().n() {
         return 0.0;
     }
-    let sp = if w.scratch.sp.is_empty() { super::scratch::substances(&w.chem) } else { w.scratch.sp.clone() };
-    let mut s = Scratch { state: w.scratch.state.clone(), sp, ..Default::default() };
+    let (sp, st) = (if w.scratch.sp.is_empty() { super::scratch::substances(&w.chem) } else { w.scratch.sp.clone() }, &w.scratch.state);
+    let mut s = Scratch { state: super::scratch::State { tg: st.tg.clone(), pk: st.pk.clone(), phi: st.phi.clone(), ..Default::default() }, sp, ..Default::default() };
     for &i in cells {
         let (t, on) = w.thaw(i);
         (s.state.tg[i], (s.state.pk[i], s.state.phi[i])) = (t, on.unwrap_or((super::land::NONE, 0.0)));
     }
-    let p = potential(w, &s, None);
-    cells.iter().map(|&i| p.ground[i] + p.deep[i] + p.bodies[i]).sum::<f64>() + p.air[air]
+    // The rows of `cells` and the mean head of `air` over its cells, as `potential` finds them.
+    let (same, life, (level, g)) = (Same::of(&s), Life::of(w), (w.mesh.level(AIR), w.cfg.gravity));
+    let row = |i: usize| row_of(w, &s, &same, &life, i);
+    let area = w.mesh.cells().area();
+    let za = level.children(air).iter().map(|&i| i as usize).fold(0.0, |z, i| z + row(i)[2] * area[i]) / level.area()[air];
+    let (amounts, na) = (w.store.amounts(Class::Air), level.n());
+    let e_air = (0..w.chem.ns()).map(|k| amounts[k * na + air] * s.sp[k].mm).sum::<f64>() * g * za;
+    cells.iter().map(|&i| row(i)).map(|r| r[0] + r[1] + r[4]).sum::<f64>() + e_air
 }
 
 /// A part of Flow being booked, or the parts that follow each other (`flow::chain`): the potential energy of every node

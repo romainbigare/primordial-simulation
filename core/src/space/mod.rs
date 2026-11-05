@@ -82,6 +82,11 @@ impl Level {
         assert!(centre.len() == n && lat.len() == n && lon.len() == n, "a level needs a centre, a latitude and a longitude for each cell");
         Level { area, centre, lat, lon, radius, start: vec![0; n + 1], ..Default::default() }
     }
+    /// The ends of `links` alone (`a < b`), the cells not joined by them: what a change of the cells reads between its
+    /// splits and joins (`Square::mesh_over`).
+    pub(crate) fn ends(&mut self, links: Vec<LinkSpec>) {
+        (self.a, self.b) = links.into_iter().map(|(a, b, ..)| (a, b)).unzip();
+    }
     /// Join the cells by `links`, each once (`a < b`).
     pub(crate) fn join(&mut self, links: Vec<LinkSpec>) {
         let n = self.n();
@@ -98,15 +103,17 @@ impl Level {
     /// links nearest a direction first, so a square's 8 neighbours take the 8 directions even where a globe's rows
     /// narrow toward a pole.
     fn points(&self, i: usize) -> [u32; COMPASS] {
-        let (r, eighths) = (self.start[i] as usize..self.start[i + 1] as usize, |e: usize| self.heading[e][1].atan2(self.heading[e][0]) / (TAU / COMPASS as f64));
+        let r = self.start[i] as usize..self.start[i + 1] as usize;
         assert!(r.len() <= COMPASS, "a cell has at most one link in each compass direction");
+        // Each entry with its bearing, in eighths of a turn.
+        let mut order: Vec<(usize, f64)> = r.map(|e| (e, self.heading[e][1].atan2(self.heading[e][0]) / (TAU / COMPASS as f64))).collect();
         // How far bearing `x` lies from direction `d`, in eighths of a turn either way.
         let off = |x: f64, d: usize| (x - d as f64).rem_euclid(COMPASS as f64).min((d as f64 - x).rem_euclid(COMPASS as f64));
-        let mut order: Vec<usize> = r.collect();
-        order.sort_by(|&p, &q| (eighths(p) - eighths(p).round()).abs().total_cmp(&(eighths(q) - eighths(q).round()).abs()));
+        order.sort_by(|p, q| (p.1 - p.1.round()).abs().total_cmp(&(q.1 - q.1.round()).abs()));
         let mut points = [NONE; COMPASS];
-        for e in order {
-            let d = (0..COMPASS).filter(|&d| points[d] == NONE).min_by(|&p, &q| off(eighths(e), p).total_cmp(&off(eighths(e), q)));
+        for (e, x) in order {
+            let away: [f64; COMPASS] = std::array::from_fn(|d| off(x, d));
+            let d = (0..COMPASS).filter(|&d| points[d] == NONE).min_by(|&p, &q| away[p].total_cmp(&away[q]));
             points[d.expect("a free direction")] = e as u32;
         }
         points
@@ -203,14 +210,13 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    /// A mesh of the level `cells` and a coarser level (`Level::coarser` of a level of the same map), given each cell's
-    /// parent at it and the tree of the cells.
-    pub(crate) fn of(mut cells: Level, (mut coarse, links): (Level, Vec<LinkSpec>), parent: Vec<u32>, tree: Tree) -> Mesh {
+    /// A mesh of the level `cells` and a coarser level with its links (`Level::coarser` of a level of the same map),
+    /// given each cell's parent at it and the tree of the cells.
+    pub(crate) fn of(mut cells: Level, mut coarse: Level, parent: Vec<u32>, tree: Tree) -> Mesh {
         assert_eq!(parent.len(), cells.n(), "a parent for each cell");
         (coarse.kid_start, coarse.kids) = compress(coarse.n(), parent.iter().enumerate().map(|(c, &p)| (p, c as u32)));
         assert!(coarse.kid_start.windows(2).all(|s| s[0] < s[1]), "each coarse cell has a child");
         cells.parent = parent;
-        coarse.join(links);
         Mesh { levels: vec![cells, coarse], tree }
     }
     /// The tree of the cells of the finest level.

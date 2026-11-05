@@ -126,6 +126,11 @@ impl World {
     pub fn mesh_of(map: &Square, cfg: &Config) -> Mesh {
         map.mesh(cfg.lat_south, cfg.lat_north)
     }
+    /// The mesh of `map`, a change of the world's cells, over the world's level of air blocks, which the cells' sizes do
+    /// not change; its cells linked or not yet (`Square::mesh_over`).
+    pub(crate) fn mesh_for(&self, map: &Square, linked: bool) -> Mesh {
+        map.mesh_over(self.mesh.level(AIR).clone(), self.cfg.lat_south, self.cfg.lat_north, linked)
+    }
     /// Hand the shell the raw events since it last asked, and start the list again.
     pub fn drain_events(&mut self) -> Vec<Event> {
         std::mem::take(&mut self.events)

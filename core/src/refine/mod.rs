@@ -10,6 +10,7 @@ pub use camera::{Camera, Shot};
 pub use score::Watch;
 
 use crate::event::{Event, EventKind};
+use crate::remap::Change;
 use crate::space::Leaf;
 use crate::World;
 use score::{Score, JOIN_AT, SPLIT_AT};
@@ -36,13 +37,15 @@ struct Quartet {
     seen: bool,
 }
 
-/// The month's refinement as it goes: the cells now, the budget, the changes made, and the events of the joins'
-/// merges with the leaf of the cell each names (`World::join_in`).
+/// The month's refinement as it goes: the cells now, the budget, the changes made, the events of the joins' merges
+/// with the leaf of the cell each names (`World::join_quartet`), and the change of the cells they make, one for the
+/// month (`Change`).
 struct Month {
     cells: usize,
     budget: usize,
     made: usize,
     held: Vec<(Event, Leaf)>,
+    change: Change,
 }
 
 impl World {
@@ -66,28 +69,29 @@ impl World {
         let (score, now) = score::scores(self, camera.at(self.month()));
         self.watch = now;
         let (wants, quartets) = (self.wants(&score), self.quartets(&score));
-        let mut m = Month { cells: n, budget: self.cfg.cell_budget as usize, made: 0, held: Vec::new() };
+        let mut m = Month { cells: n, budget: self.cfg.cell_budget as usize, made: 0, held: Vec::new(), change: self.change() };
         let mut next = 0;
         while let Some(q) = quartets.get(next).filter(|q| m.made < MOST_CHANGES && (m.cells > m.budget || q.top < JOIN_AT)) {
             next += 1;
-            self.join_in(q, &mut m);
+            self.join_quartet(q, &mut m);
         }
         let mut room = quartets[next..].iter().filter(|q| !q.seen);
         for s in &wants {
             let Ok(mut forced) = self.map.splits(s.leaf) else { continue };
             while s.asked && m.cells + 3 * forced.len() > m.budget && m.made + forced.len() < MOST_CHANGES {
                 let Some(q) = room.next() else { break };
-                self.join_in(q, &mut m);
+                self.join_quartet(q, &mut m);
                 forced = self.map.splits(s.leaf).expect("a cell the camera sees joins with no quartet it does not see");
             }
             if m.made + forced.len() > MOST_CHANGES {
                 break;
             }
             if m.cells + 3 * forced.len() <= m.budget {
-                let made = self.split(s.leaf).expect("a split the tree allows").len();
+                let made = self.split_in(s.leaf, &mut m.change).expect("a split the tree allows").len();
                 (m.cells, m.made) = (m.cells + 3 * made, m.made + made);
             }
         }
+        self.changed(m.change);
         let tree = self.mesh.tree();
         let back: Vec<Event> = m.held.into_iter().map(|(e, l)| Event { node: tree.cell_at(l.corner()) as u32, ..e }).collect();
         self.events.extend(back);
@@ -133,8 +137,8 @@ impl World {
 
     /// Join quartet `q` if the tree allows it, counted in `m`; the events of its merge (each naming a cell by its
     /// index) wait in `m` with their cell's leaf, as a remap takes only splits and joins.
-    fn join_in(&mut self, q: &Quartet, m: &mut Month) {
-        if self.join(q.parent).is_ok() {
+    fn join_quartet(&mut self, q: &Quartet, m: &mut Month) {
+        if self.join_in(q.parent, &mut m.change).is_ok() {
             (m.cells, m.made) = (m.cells - 3, m.made + 1);
         }
         let (kept, merged): (Vec<Event>, Vec<Event>) = std::mem::take(&mut self.events).into_iter().partition(|e| matches!(e.kind, EventKind::Split | EventKind::Join));

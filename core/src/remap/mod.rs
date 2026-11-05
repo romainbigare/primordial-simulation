@@ -11,6 +11,7 @@ mod made;
 mod split;
 
 pub use made::{Joined, Made};
+pub(crate) use split::Change;
 pub(crate) use made::{mean_by, Of, FLOW_HELD};
 
 use crate::event::EventKind;
@@ -107,9 +108,15 @@ impl World {
     /// gives the world the map and the mesh of its new cells. Flow's caches are dropped, as a loaded world's, and rebuilt
     /// at the next step.
     pub fn remap(&mut self, r: &Remap) {
-        let World { cfg: _, chem, map: _, mesh: _, seed, time, sleep, store, base_z: _, rain, liquid_flux, evap, off_land, counts, life, canopy, light, rained, links, joined, watch, events, scratch } = self;
+        self.remap_cells(&r.cells);
+        self.links.remap(&r.links);
+    }
+
+    /// `remap` of the cells alone (`Renumber`): what the links remember stays as it is, for the links to take their new
+    /// numbers once the change of the cells under way has its mesh (`World::split`).
+    pub(crate) fn remap_cells(&mut self, c: &Renumber) {
+        let World { cfg: _, chem, map: _, mesh: _, seed, time, sleep, store, base_z: _, rain, liquid_flux, evap, off_land, counts, life, canopy, light, rained, links: _, joined, watch, events, scratch } = self;
         assert!(events.iter().all(|e| matches!(e.kind, EventKind::Split | EventKind::Join)), "a remap runs between steps, once the shell took the events");
-        let c = &r.cells;
         // Per m² of a cell: its parent's in each quarter, the quarters' mean by area in a joined cell.
         for v in [rain, evap, canopy] {
             *v = c.apply_made(std::mem::take(v), || 0.0, |_, m, at| m.mean(|i| at(i) as f64) as f32);
@@ -125,7 +132,6 @@ impl World {
         sleep.remap(c, *time, joined);
         life.remap(c, *seed, chem);
         scratch.remap(c, joined);
-        links.remap(&r.links);
         *watch = c.apply_made(std::mem::take(watch), Default::default, |_, m, at| crate::refine::Watch::made(m, at));
         *joined = c.apply(std::mem::take(joined), || None);
     }
