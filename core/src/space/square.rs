@@ -7,7 +7,7 @@
 //! pore liquid cross only real borders while the downhill path of surface liquid may use all 8 ways, and no cell has
 //! more than 8 links. On a globe the cells of a row narrow toward the poles, and no link crosses a pole.
 
-use super::tree::{self, Leaf, Tree, BLOCK};
+use super::tree::{self, Leaf, Refused, Tree, BLOCK, DEPTH_MOST};
 use super::{Level, LinkSpec, Mesh};
 use serde::{Deserialize, Serialize};
 use std::f64::consts::{SQRT_2, TAU};
@@ -60,6 +60,56 @@ impl Square {
     /// The cells, in order.
     pub fn leaves(&self) -> &[Leaf] {
         &self.leaves
+    }
+    /// The cell that is leaf `l`, if one is.
+    pub fn cell(&self, l: Leaf) -> Option<usize> {
+        self.leaves.binary_search(&l).ok()
+    }
+    /// The splits that split cell `l` into its quarters with cells across a border one depth apart at most after each
+    /// (2:1), in order: first each cell across a side of `l` coarser than it (it would border the quarters two depths
+    /// coarser), by its own splits, then `l`. Refuses a leaf that is no cell, or one of the most depth.
+    pub fn splits(&self, l: Leaf) -> Result<Vec<Leaf>, Refused> {
+        self.cell(l).ok_or(Refused::NoCell)?;
+        if l.depth >= DEPTH_MOST {
+            return Err(Refused::Deepest);
+        }
+        let (mut map, mut done) = (self.clone(), Vec::new());
+        map.split_balanced(l, &mut done);
+        Ok(done)
+    }
+    /// Split cell `l` as `splits` says, each split made noted in `done`.
+    fn split_balanced(&mut self, l: Leaf, done: &mut Vec<Leaf>) {
+        let coarser = |m: &Square| {
+            let tree = m.tree();
+            tree::SIDES.iter().flat_map(|&way| tree.beside(&l, way)).map(|c| m.leaves[c]).find(|o| o.depth < l.depth)
+        };
+        while let Some(o) = coarser(self) {
+            self.split_balanced(o, done);
+        }
+        *self = self.split(l);
+        done.push(l);
+    }
+    /// The map with cell `l` split into its quarters.
+    pub fn split(&self, l: Leaf) -> Square {
+        let leaves = self.leaves.iter().copied().filter(|&c| c != l).chain(l.quarters()).collect();
+        self.clone().with(leaves)
+    }
+    /// The four quarters of leaf `parent`, as cells, if joining them keeps 2:1: no cell across a side of `parent` more
+    /// than one depth finer than it (`Tree::beside` finds one where there is one).
+    pub fn joins(&self, parent: Leaf) -> Result<[usize; 4], Refused> {
+        let kids = (parent.depth < DEPTH_MOST).then(|| parent.quarters().map(|q| self.cell(q))).ok_or(Refused::NoCell)?;
+        let kids = kids.iter().copied().collect::<Option<Vec<usize>>>().ok_or(Refused::NoCell)?;
+        let tree = self.tree();
+        if tree::SIDES.iter().any(|&way| tree.beside(&parent, way).any(|c| self.leaves[c].depth > parent.depth + 1)) {
+            return Err(Refused::Unbalanced);
+        }
+        Ok([kids[0], kids[1], kids[2], kids[3]])
+    }
+    /// The map with the quarters of `parent` joined into it.
+    pub fn join(&self, parent: Leaf) -> Square {
+        let quarters = parent.quarters();
+        let leaves = self.leaves.iter().copied().filter(|c| !quarters.contains(c)).chain([parent]).collect();
+        self.clone().with(leaves)
     }
     /// The depth of a square below its air block.
     pub fn square_depth(&self) -> u8 {

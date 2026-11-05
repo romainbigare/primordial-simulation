@@ -37,6 +37,27 @@ impl Leaf {
         let (n, side) = (1u32 << (depth - self.depth), BLOCK >> depth);
         (0..n).flat_map(move |r| (0..n).map(move |c| Leaf { y: self.y + r * side, x: self.x + c * side, depth }))
     }
+    /// The leaf it is a quarter of (none for an air block, a root).
+    pub fn parent(&self) -> Option<Leaf> {
+        let side = BLOCK >> self.depth.checked_sub(1)?;
+        Some(Leaf { y: self.y / side * side, x: self.x / side * side, depth: self.depth - 1 })
+    }
+    /// Its four quarters, row by row (a leaf above the most depth).
+    pub fn quarters(self) -> [Leaf; 4] {
+        let mut q = self.split(self.depth + 1);
+        std::array::from_fn(|_| q.next().expect("a leaf has four quarters"))
+    }
+}
+
+/// Why the tree refuses a split or a join of cells (`Square::splits`, `Square::joins`), changing nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Refused {
+    /// The leaf to split is no cell, or the quarters to join are not four cells
+    NoCell,
+    /// The cell to split is of the most depth (`DEPTH_MOST`)
+    Deepest,
+    /// The join would leave a cell across a side of the joined cell more than one depth finer than it (2:1)
+    Unbalanced,
 }
 
 /// The ways across the sides of a leaf: east, south, west and north, (east, south).
