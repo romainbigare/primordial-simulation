@@ -168,6 +168,11 @@ planet → regions → cells → groups / bodies → parts
 - Collapse where nothing interesting happens. Expand where something changes fast, or where the player looks closely.
 - **Conservation must hold exactly across collapse and expand.** The total of every element and the total energy must be the same before and after.
 
+- **One kind of cell at every size.** A cell splits into 4 children or joins back into one, and the same laws run at
+  every size, with the cell's size and its step as inputs of each law (adaptive mesh refinement, Berger and Oliger
+  1984). The step of a cell lets nothing cross more than one cell; where a fine cell meets a coarse one, the fine side
+  sums what it sends and the coarse side books that sum once (Berger and Colella 1989). The plan is `review/plan.md`.
+
 This is the main tool for speed. Do not build it first (see milestones). Build the detailed form first, then the collapsed form, and check that both give similar patterns.
 
 ### 5.3 Storage
@@ -393,7 +398,7 @@ Having children is not a choice: it is physics (Section 6.4). There is no "farm"
 **Implementation:**
 - A small neural network per body: a base per lineage, rows that are genes of each body, plus what the body (or its population node) learned. Keep the brain code apart from the rest, so it can be swapped.
 - **One brain per body or population node.** Each body has its own brain rows; a population node's members share the node's.
-- **A brain has a size and a cost.** Its sizes are genes, and zero is a size: a body with no hidden units takes no decisions and pays nothing for a brain. A brain is paid per decision, so a body that decides less often pays less (a speed incentive dressed as physics, kept on purpose).
+- **A brain has a size and a cost.** Its sizes are genes, and zero is a size: a body with no hidden units takes no decisions and pays nothing for a brain. A brain is paid and learns per second of its pace, not per decision, so a body that decides every hour in a fine cell and every month in a coarse one pays and learns alike over a year (7.3; `review/plan.md` WP9).
 - Simple learning is enough to start: a policy gradient against a learned baseline (actor-critic), plus evolution.
 
 ### 6.6 What is deliberately NOT a law
@@ -422,11 +427,15 @@ Population nodes are built; how they work is in `docs/laws.md` 4.4. A body of co
 
 - The planet is coarse everywhere, and finer where it matters: a region of finer cells is built into the mesh at the
   start, or rebuilt at a god action. The sea lives on a coarser level, as the air does, so its cells are cheap.
-- Cells that split and join by themselves while the world runs come later, when a player must zoom anywhere.
-- A region is refined or collapsed only by a rule of the world, and every refinement is a recorded event. The camera
-  may ask for one only as a recorded input, as a god action is, so the same seed gives the same history (3.8) and a
-  run with no camera (the world search, M7) can refine too.
-- One life model at every grain: population nodes and individuals, as 7.1, on cells of any size.
+- Cells split and join by themselves while the world runs (5.2), so a player can zoom anywhere.
+- **Detail follows a budget.** A run has a fixed count of active cells (a number of the run, never the machine's
+  clock). Each cell has an interest score: the camera, how fast things change there, brains, parts and bonds, rare
+  events. Each month the cells of the highest score split and those of the lowest join, until the budget is full.
+  Every split and join is a recorded event.
+- The camera is an input of the run, recorded in the tape as a god action is, so the same seed and the same camera
+  path give the same history (3.8). A run with no camera (the world search, M7) refines by the other terms.
+- One life model at every grain: a group of `n` members (7.1) on cells of any size; it splits as its cell splits,
+  down to `n` = 1, and joins as its cells join.
 
 ### 7.3 Time steps (multi-rate)
 
@@ -441,9 +450,11 @@ Not everything needs the same step. These are suggested defaults to measure and 
 
 There is **one world clock**. A fast process in a detailed area may sub-step inside a month. Seasons must exist, because they matter for food and migration.
 
-How often a body decides is a property of the body, the same at every grain; a finer region never changes it, so the
-same kind learns and pays alike everywhere (7, 6.5). A region's finer grain changes space and the steps of Flow, not
-the pace of bodies.
+**The step follows the size.** A cell steps so that nothing crosses more than one cell in a step: big cells once a
+month, a fine cell more often. The one world clock moves at the pace of the finest cell, so zooming in slows time by
+itself. A body's learning, its discount and its brain's cost are per second (6.5), so the same kind learns and pays
+alike at every grain. A run of many years sets the finest size its year budget allows, so a long headless run never
+falls to hour steps.
 
 ### 7.4 Threads: chunks and the serial pass
 
