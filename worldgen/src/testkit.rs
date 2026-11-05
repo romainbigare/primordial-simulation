@@ -21,8 +21,11 @@ pub fn squares(seed: u64, w: usize, h: usize) -> World {
     crate::terrain::new_map(seed, crate::terrain::island(w, h))
 }
 
-/// A body an edit changes (its own end of the moves of an edit, which it books itself; `World::cross`).
-const A_BODY: Node = Node { class: Class::Body, index: 0 };
+/// Body `b` as the node an edit changes, named by its cell (its own end of the moves of an edit, which it books itself;
+/// `World::cross`).
+fn edited(b: &Body) -> Node {
+    Node::new(Class::Body, b.cell as usize)
+}
 
 /// Substances of chemistry 0: the common liquid.
 pub const LIQUID: usize = 0;
@@ -217,7 +220,7 @@ pub fn cover_lands(w: &mut World, kg: f64) {
 /// Body `b` made `f` times as big: its stores and heat (booked as an edit).
 pub fn scale(w: &mut World, b: &mut Body, f: f64) {
     let more: Vec<(usize, f64)> = pcore::body::each(&w.chem, &b.store).map(|(k, a)| (k, (f - 1.0) * a)).collect();
-    w.cross((Boundary::Outside, A_BODY), more, (f - 1.0) * b.e);
+    w.cross((Boundary::Outside, edited(b)), more, (f - 1.0) * b.e);
     b.store.iter_mut().for_each(|a| *a *= f);
     b.e *= f;
 }
@@ -227,7 +230,7 @@ pub fn add(w: &mut World, b: &mut Body, k: usize, kg: f64) {
     let (a, t, e0) = (kg / w.chem.subs[k].molar_mass, b.temp(&w.chem), b.e);
     *b.store_of(&w.chem, k) += a;
     b.e = b.energy_at(&w.chem, t);
-    w.cross((Boundary::Outside, A_BODY), [(k, a)], b.e - e0);
+    w.cross((Boundary::Outside, edited(b)), [(k, a)], b.e - e0);
 }
 
 /// What body `b` holds, mol of each substance.
@@ -318,7 +321,7 @@ pub fn set_amount(w: &mut World, x: Node, k: usize, mol: f64) {
 /// Body `b` brought to `t` K (booked as an edit).
 pub fn warm(w: &mut World, b: &mut Body, t: f64) {
     let e = b.energy_at(&w.chem, t);
-    w.cross((Boundary::Outside, A_BODY), [], e - b.e);
+    w.cross((Boundary::Outside, edited(b)), [], e - b.e);
     b.e = e;
 }
 

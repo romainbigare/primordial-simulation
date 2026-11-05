@@ -36,6 +36,9 @@ pub struct Written {
     pub(super) genomes: Vec<Vec<f32>>,
     /// The bodies that moved into its cells, by id, with their cell
     arrived: Vec<(u64, u32)>,
+    /// The life that came into its cells from another cell's head, in the order landed: that cell, its own, kg
+    /// (`store::life_went`)
+    went: Vec<(usize, usize, f64)>,
 }
 
 impl std::ops::Deref for Chunk<'_> {
@@ -116,6 +119,10 @@ impl<'a> Chunk<'a> {
     pub(crate) fn arrive(&mut self, b: Body) -> Handle {
         self.written.arrived.push((b.id, b.cell));
         self.store(b)
+    }
+    /// `kg` of life came from the head of cell `from` to its cell `to` (`store::life_went`).
+    pub(crate) fn went(&mut self, from: usize, to: usize, kg: f64) {
+        self.written.went.push((from, to, kg));
     }
     /// `members` members entered its cell `i` in a move that spent `pushed` J pushing through its bodies
     /// (`choose::land_move`).
@@ -223,7 +230,9 @@ impl World {
     /// The world takes what chunks `done` wrote, chunk by chunk in order: their events and counters, where the bodies
     /// that moved into their cells are stored (`Life::find`), the lineages and born rows they made named (`Life::name`),
     /// their moves booked (each array of the store by one task, the chunks' changes in their order and each chunk's in the
-    /// order of its cells, `store::book_by_array`), and what they did to other cells queued (`Life::queued`).
+    /// order of its cells, `store::book_by_array`) with the potential energy of what life gave its ground or took from it
+    /// (`store::life_moved`) and of the life that came from another cell (`store::life_went`), and what they did to other
+    /// cells queued (`Life::queued`).
     pub(crate) fn take_chunks(&mut self, mut done: Vec<Written>) {
         for d in &mut done {
             self.events.append(&mut d.events);
@@ -239,12 +248,20 @@ impl World {
             let (ns, work) = (self.chem.ns(), open.len());
             let rounded = book_by_array(&mut self.store, ns, &VIEWED, work, |b| open.iter().for_each(|m| m.book_into(b)));
             self.counts.add_rounded(rounded);
-            for m in open {
+            for m in &open {
                 m.each_cell(|lift, short| {
                     self.store.lift(lift);
                     self.counts.clamped_heat += short;
                 });
             }
+            let fell: Vec<(usize, Vec<f64>)> = open.iter().flat_map(|m| m.fell()).collect();
+            if !fell.is_empty() {
+                crate::store::life_moved(self, &fell);
+            }
+        }
+        let went: Vec<(usize, usize, f64)> = done.iter().flat_map(|d| d.went.iter().copied()).collect();
+        if !went.is_empty() {
+            crate::store::life_went(self, &went);
         }
         done.into_iter().for_each(|d| self.life.queued.extend(d.out));
     }

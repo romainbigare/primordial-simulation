@@ -89,6 +89,11 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     if let Some(kept) = kept {
         rec.resume(&w, kept, &out).unwrap_or_else(|e| panic!("load the tape: {e}"));
     }
+    // A new world's ground gets Flow's state from its heat first, so the books read the potential energy of its matter
+    // from the start (`check::Totals::potential`); a resumed one holds it.
+    if !resumed {
+        pcore::flow::state(&mut w, true);
+    }
     let t0 = pcore::check::totals(&w);
     let y0 = w.cfg.calendar().years(w.time);
     if pictures > 0 {

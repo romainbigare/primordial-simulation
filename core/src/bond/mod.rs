@@ -191,13 +191,16 @@ fn add(d: &mut Chunk, i: usize, mut p: Part) -> usize {
     c.parts.len() - 1
 }
 
-/// Move the structure whose root is `r` from cell `from` to cell `to`, its parts and their bonds, in their order.
+/// Move the structure whose root is `r` from cell `from` to cell `to`, its parts and their bonds, in their order, with
+/// the potential energy of the heads it leaves and lands at (`store::life_went`).
 fn move_structure(w: &mut World, from: usize, r: u64, to: usize) {
     let c = &mut w.life.cells[from];
     let ids: Vec<u64> = members(c, r).into_iter().map(|x| c.parts[x].id).collect();
     let mut gone: Vec<Part> = Vec::with_capacity(ids.len());
     c.parts.retain(|p| if ids.contains(&p.id) { gone.push(p.clone()); false } else { true });
     let links = c.bonds.take(&ids);
+    let kg = gone.iter().map(|p| p.mass(&w.chem)).sum();
+    crate::store::life_went(w, &[(from, to, kg)]);
     let c = &mut w.life.cells[to];
     for mut p in gone {
         p.cell = to as u32;

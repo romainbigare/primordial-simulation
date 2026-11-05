@@ -6,7 +6,7 @@ use pcore::check;
 use pcore::rng::{Purpose, Rng};
 use pcore::store::{apply, held, fall_heat, Boundary, Class, LinkFlux, Move, Node, BOUNDARIES};
 use pcore::{World, AIR};
-use worldgen::testkit::{put, set_amount, small_world, Books, LIQUID, ROCK};
+use worldgen::testkit::{eater, put, scale, set_amount, small_world, start, Books, LIQUID, ROCK};
 
 /// Random changes the books test makes, in all (rounds of `PER_ROUND`).
 const CHANGES: usize = 1_000_000;
@@ -50,15 +50,17 @@ fn what_passes_through_a_node_needs_nothing_held() {
 }
 
 /// A link may join the nodes of two classes: liquid and its heat cross the vertical link from a ground node into its
-/// deep store, and the books are kept.
+/// deep store, the store takes the heat of the fall (as Flow books it, `fall_heat`), and the books are kept.
 #[test]
 fn a_link_joins_a_ground_node_to_its_store() {
-    let mut w = small_world();
-    let (n, i) = (w.mesh.cells().n(), 3);
+    let (mut w, i) = start();
+    let n = w.mesh.cells().n();
     let (have, deep, heat) = (w.g(LIQUID, i), w.store.amounts(Class::Deep)[LIQUID * n + i], 1e-3 * w.store.heat(Class::Ground)[i]);
-    let books = Books::now(&w);
-    let cell = [i as u32];
+    let (books, potential) = (Books::now(&w), |w: &World| pcore::flow::potential(w).expect("Flow's state"));
+    let (cell, before) = ([i as u32], potential(&w));
     apply(&mut w, &[LinkFlux { class: [Class::Ground, Class::Deep], a: &cell, b: &cell, ks: &[LIQUID as u16], mol: &[have / 2.0], heat: &[heat] }], &[]);
+    let fell = before - potential(&w);
+    fall_heat(&mut w, Class::Deep, [(i, fell)]);
     books.assert_kept(&w, 1e-9);
     assert!((w.g(LIQUID, i) - have / 2.0).abs() <= 1e-12 * have && (w.store.amounts(Class::Deep)[LIQUID * n + i] - deep - have / 2.0).abs() <= 1e-12 * have);
 }
@@ -78,7 +80,7 @@ fn a_gas_that_rises_pays_its_latent_heat_and_its_lift() {
     apply(&mut w, &[rise], &[]);
     let mut paid = vec![0.0; w.mesh.level(AIR).n()];
     paid[j as usize] = -lift;
-    fall_heat(&mut w, Class::Air, &paid);
+    fall_heat(&mut w, Class::Air, paid.iter().copied().enumerate());
     books.assert_kept(&w, 1e-9);
     let near = |x: f64, y: f64, of: f64| (x - y).abs() <= 1e-12 * of;
     assert!(near(w.store.heat(Class::Air)[j as usize] - e_air, heat - m * latent - lift, e_air) && near(e_ground - w.store.heat(Class::Ground)[i], heat, e_ground));
@@ -203,5 +205,25 @@ fn what_crosses_the_boundary_keeps_the_books() {
     let q = 1e-3 * w.store.heat(Class::Air)[0];
     w.cross((Boundary::Sun, Node::ground(2)), [], q);
     w.cross((Boundary::Space, Node::air(0)), [], -q);
+    books.assert_kept(&w, 1e-9);
+}
+
+/// Life's matter lies at its cell's head and its ground's in the stack: the remains of a body fall from the head into
+/// the stack, raising what lies above them and the air over the cell, and the ground's heat pays what that gains
+/// (`store::life_moved`), so the potential energy of what the nodes hold (`flow::potential`) changes as `Store::lifted`
+/// books it, and the books close on it.
+#[test]
+fn remains_carry_their_potential_energy_into_the_ground() {
+    let (mut w, i) = start();
+    let mut b = eater(&mut w, i, pcore::brain::REST, 0.0);
+    // (Heavy enough that its fall shows above the rounding of a sum over the world.)
+    scale(&mut w, &mut b, 1e8);
+    let h = w.add(b);
+    let (books, p0, l0) = (Books::now(&w), pcore::flow::potential(&w).expect("Flow's state"), w.store.lifted());
+    let b = std::mem::take(&mut w.life[h]);
+    w.in_cell(i, |w, d| pcore::body::die(w, d, h, b, pcore::body::LACK));
+    let (gained, lifted) = (pcore::flow::potential(&w).expect("Flow's state") - p0, w.store.lifted() - l0);
+    assert!(gained.abs() > 1e9, "the remains moved the matter: {gained:e} J");
+    assert!((gained - lifted).abs() < 1e-6 * gained.abs(), "gained {gained:e} J, booked {lifted:e} J");
     books.assert_kept(&w, 1e-9);
 }

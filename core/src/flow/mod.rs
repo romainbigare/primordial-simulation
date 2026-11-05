@@ -17,8 +17,8 @@ mod basin;
 pub(crate) use air::air_temp;
 pub use air::{column, declination, glow, insolation, scale_height};
 pub use potential::total as potential;
-pub(crate) use potential::potential_of;
-pub(crate) use stack::stack_gain;
+pub(crate) use potential::{air_head, potential_of};
+pub(crate) use stack::gain;
 pub use scratch::Scratch;
 pub(crate) use scratch::FlowView;
 
@@ -128,18 +128,18 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
 }
 
 impl Scratch {
-    /// The state of each ground node follows its cell (`World::remap`), a new cell's that of a new world's (no plateau,
-    /// `with`); the caches are dropped, as a loaded world's, and rebuilt at the next step. A quarter a split made takes
-    /// its parent's temperature and plateau, its share of the volumes of its fixed solids and of its bed (`volumes`,
-    /// `Made::held`) and its bed's means; a joined cell the mean of its quarters' temperatures and molten shares by area,
-    /// their plateau where all are on it, the sum of their volumes and the means of their beds by volume. The next full
-    /// build of the state (each month's start) finds the temperature and the plateaus from the heat.
+    /// The state of each ground node follows its cell (`World::remap`), a new cell's and a made cell's that of a new
+    /// world's (no plateau, `with`; a made cell's temperature and plateau are then those of its heat, `World::thawed`);
+    /// the caches are dropped, as a loaded world's, and rebuilt at the next step. A quarter a split made takes its share
+    /// of the volumes of its fixed solids and of its bed (`volumes`, `Made::held`) and its bed's means; a joined cell the
+    /// sum of its quarters' volumes and the means of their beds by volume. The next full build of the state (each
+    /// month's start) finds the temperature and the plateaus from the heat.
     pub(crate) fn remap(&mut self, r: &crate::remap::Renumber, joined: &[Option<crate::remap::Joined>]) {
         use crate::remap::Of;
         let scratch::State { tg, pk, phi, cloud: _, loose: _, fixed: _, vary: _, fix, bed, bedk: _, gas: _ } = &mut self.state;
-        *tg = r.apply_made(std::mem::take(tg), || 0.0, |_, m, at| m.mean(at));
-        *pk = r.apply_made(std::mem::take(pk), || land::NONE, |_, m, at| m.pick(at, |k| if k.iter().all(|&x| x == k[0]) { k[0] } else { land::NONE }));
-        *phi = r.apply_made(std::mem::take(phi), || 0.0, |_, m, at| m.mean(at));
+        *tg = r.apply(std::mem::take(tg), || 0.0);
+        *pk = r.apply(std::mem::take(pk), || land::NONE);
+        *phi = r.apply(std::mem::take(phi), || 0.0);
         *fix = r.apply_made(std::mem::take(fix), || [0.0; 2], |_, m, at| [0, 1].map(|x| m.held(joined, Some(Of::Flow(x)), |i| at(i)[x])));
         *bed = r.apply_made(std::mem::take(bed), scratch::Bed::default, |_, m, at| {
             let vol = m.held(joined, Some(Of::Flow(2)), |i| at(i).vol);
@@ -147,6 +147,23 @@ impl Scratch {
             scratch::Bed { vol, ..m.pick(at, |b| scratch::Bed { vol: 0.0, refl: by_vol(b, |x| x.refl), cond: by_vol(b, |x| x.cond) }) }
         });
         *self = Scratch { state: std::mem::take(&mut self.state), ..Default::default() };
+    }
+}
+
+impl World {
+    /// The ground nodes of the cells a remap made (`made`) take the temperature and the plateau of their heat
+    /// (`World::thaw`), not their parent's or their quarters' mean: the phases of their stacks are their heat's, as the
+    /// potential energy of their matter reads them (`potential`), so a join and the split that gives its quarters back
+    /// see the stacks their heat holds. None before Flow first built the state of the ground.
+    pub(crate) fn thawed(&mut self, made: &[usize]) {
+        if !potential::stated(self) {
+            return;
+        }
+        let at: Vec<_> = made.iter().map(|&i| (i, self.thaw(i))).collect();
+        let st = &mut self.scratch.state;
+        for (i, (t, on)) in at {
+            (st.tg[i], (st.pk[i], st.phi[i])) = (t, on.unwrap_or((land::NONE, 0.0)));
+        }
     }
 }
 

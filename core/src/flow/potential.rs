@@ -4,7 +4,7 @@
 //! energy from the height it leaves, and each node's heat takes what came in less what left less the change of its own,
 //! so `Store::lifted` is the change of that function.
 
-use super::stack::{bed_layer, deep_layer, ground_layers, stack, Life, Same, HEAD, LAYERS, ROW};
+use super::stack::{bed_layer, deep_layer, ground_layers, row_of, stack, Life, Same, HEAD, LAYERS, ROW};
 use super::Scratch;
 use crate::store::{self, fall_heat, Class, LinkFlux, Move};
 use crate::{World, AIR};
@@ -64,8 +64,8 @@ struct Heights {
 /// and its plateau (`State`); its store lies `bed_depth` under its bed's top, filled from the bottom (`drain`). An air
 /// node's matter lies at the mean head of its cells: the height of its column above that is in its heat (its heat
 /// capacity at constant pressure holds the work its column does as it warms), so lifting matter into it lifts it to
-/// there. A bodies' node's gas, and the matter of the cell's life (its bodies, its cover and its parts), lie at its
-/// cell's head.
+/// there. A bodies' node's gas, and the matter of the cell's life (its bodies, its cover with its seeds until they land,
+/// and its parts), lie at its cell's head.
 fn potential(w: &World, s: &Scratch, found: Option<Found>) -> Potential {
     let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
     let (n, na, ns) = (cells.n(), air.n(), w.chem.ns());
@@ -85,22 +85,10 @@ fn potential(w: &World, s: &Scratch, found: Option<Found>) -> Potential {
                 sums.iter_mut().zip(r).for_each(|(x, &a)| bed_layer(x, sp, a));
             }
             if let Some(r) = has(0).then(|| held(&ground[at(k)])).flatten() {
-                let each = sums.iter_mut().zip(r);
-                match same[k] {
-                    // What `ground_layers` gives where the phase is the same in every node.
-                    Same::Gas => each.for_each(|(x, &a)| x[2] += a * sp.mm),
-                    Same::Liquid => each.for_each(|(x, &a)| (x[2], x[5]) = (x[2] + a * sp.mm, x[5] + a * sp.v[1])),
-                    Same::Solid => each.for_each(|(x, &a)| (x[1], x[4]) = (x[1] + a * sp.mm, x[4] + a * sp.v[0])),
-                    Same::Varies => each.zip(cells_of.clone()).for_each(|((x, &a), i)| ground_layers(x, s, (k, i), a)),
-                }
+                sums.iter_mut().zip(r).zip(cells_of.clone()).for_each(|((x, &a), i)| ground_of(x, s, same[k], (k, i), a));
             }
             if let Some(r) = has(2).then(|| held(&deep[at(k)])).flatten() {
-                let each = sums.iter_mut().zip(r);
-                match same[k] {
-                    Same::Gas => each.for_each(|(x, &a)| x[6] += a * sp.mm),
-                    Same::Liquid | Same::Solid => each.for_each(|(x, &a)| (x[6], x[7]) = (x[6] + a * sp.mm, x[7] + a * sp.v[1])),
-                    Same::Varies => each.zip(cells_of.clone()).for_each(|((x, &a), i)| deep_layer(x, sp, s.state.tg[i], a)),
-                }
+                sums.iter_mut().zip(r).zip(cells_of.clone()).for_each(|((x, &a), i)| deep_of(x, s, same[k], (k, i), a));
             }
             if let Some(r) = has(3).then(|| held(&bodies[at(k)])).flatten() {
                 sums.iter_mut().zip(r).for_each(|(x, &a)| x[HEAD] += a * sp.mm);
@@ -121,9 +109,34 @@ fn potential(w: &World, s: &Scratch, found: Option<Found>) -> Potential {
     Potential { ground: at(0), air: e_air, deep: at(1), bodies: at(4), heights: Heights { ground: head, air: za, deep: at(3) }, found }
 }
 
+/// `a` mol of substance `k` in ground node `i`, in its phase (`ground_layers`), where its phase is the same in every node
+/// (`same`) without looking.
+#[inline(always)]
+pub(super) fn ground_of(x: &mut [f64; LAYERS], s: &Scratch, same: Same, (k, i): (usize, usize), a: f64) {
+    let sp = &s.sp[k];
+    match same {
+        Same::Gas => x[2] += a * sp.mm,
+        Same::Liquid => (x[2], x[5]) = (x[2] + a * sp.mm, x[5] + a * sp.v[1]),
+        Same::Solid => (x[1], x[4]) = (x[1] + a * sp.mm, x[4] + a * sp.v[0]),
+        Same::Varies => ground_layers(x, s, (k, i), a),
+    }
+}
+
+/// `a` mol of substance `k` in the store under ground node `i` (`deep_layer`), where its phase is the same in every node
+/// (`same`) without looking.
+#[inline(always)]
+pub(super) fn deep_of(x: &mut [f64; LAYERS], s: &Scratch, same: Same, (k, i): (usize, usize), a: f64) {
+    let sp = &s.sp[k];
+    match same {
+        Same::Gas => x[6] += a * sp.mm,
+        Same::Liquid | Same::Solid => (x[6], x[7]) = (x[6] + a * sp.mm, x[7] + a * sp.v[1]),
+        Same::Varies => deep_layer(x, sp, s.state.tg[i], a),
+    }
+}
+
 /// Flow's working memory as `potential` reads it: the world's, or its state with the table of the substances where a
 /// remap or a load dropped the caches.
-fn scratch_of(w: &World) -> Cow<'_, Scratch> {
+pub(super) fn scratch_of(w: &World) -> Cow<'_, Scratch> {
     if w.scratch.sp.is_empty() {
         Cow::Owned(Scratch { state: w.scratch.state.clone(), sp: super::scratch::substances(&w.chem), ..Default::default() })
     } else {
@@ -131,30 +144,50 @@ fn scratch_of(w: &World) -> Cow<'_, Scratch> {
     }
 }
 
-/// The potential energy of the world's matter, J (`potential`), from Flow's state of its ground.
-pub fn total(w: &World) -> f64 {
-    let p = potential(w, &scratch_of(w), None);
-    [&p.ground, &p.air, &p.deep, &p.bodies].iter().flat_map(|v| v.iter()).sum()
+/// Whether Flow built the state of the ground, whose phases the potential energy reads (`potential`): not before its
+/// first build, which finds the function then.
+pub(super) fn stated(w: &World) -> bool {
+    w.scratch.state.tg.len() == w.mesh.cells().n()
+}
+
+/// The potential energy of the world's matter, J (`potential`), from Flow's state of its ground; none before Flow
+/// built it (`stated`).
+pub fn total(w: &World) -> Option<f64> {
+    let p = stated(w).then(|| potential(w, &scratch_of(w), None))?;
+    Some([&p.ground, &p.air, &p.deep, &p.bodies].iter().flat_map(|v| v.iter()).sum())
 }
 
 /// The potential energy of the matter of ground cells `cells` (their stacks, stores and heads) and of air node `air`,
-/// J (`potential`): what a split or a join of cells under `air` changes (`World::split`). The phases in `cells` are
-/// those of their heat (`World::thaw`), not of Flow's state: a remap gives a made cell its parent's temperature or its
-/// quarters' mean, whose phases (a liquid or its gas, which stacks far higher) need not be its heat's, so a join and
-/// the split that gives its quarters back see the same stacks. None before Flow first built the state of the ground
-/// (its first booking finds the function then).
+/// J (`potential`): what a split or a join of cells under `air` changes (`World::split`). It reads those cells and the
+/// cells under `air` alone (`row_of`), as `potential` reads them, by Flow's state of the ground, which gives a cell a
+/// remap made the phases of its heat (`World::thawed`). None before Flow first built the state (`stated`).
 pub(crate) fn potential_of(w: &World, cells: &[usize], air: usize) -> f64 {
-    if w.scratch.state.tg.len() != w.mesh.cells().n() {
+    if !stated(w) {
         return 0.0;
     }
-    let sp = if w.scratch.sp.is_empty() { super::scratch::substances(&w.chem) } else { w.scratch.sp.clone() };
-    let mut s = Scratch { state: w.scratch.state.clone(), sp, ..Default::default() };
-    for &i in cells {
-        let (t, on) = w.thaw(i);
-        (s.state.tg[i], (s.state.pk[i], s.state.phi[i])) = (t, on.unwrap_or((super::land::NONE, 0.0)));
+    let s = scratch_of(w);
+    // The rows of `cells` and the mean head of `air` over its cells, as `potential` finds them.
+    let (same, life, (level, g)) = (Same::of(&s), Life::of(w), (w.mesh.level(AIR), w.cfg.gravity));
+    let row = |i: usize| row_of(w, &s, &same, i, (|_, _| 0.0, life.kg(w, &s.sp, i)));
+    let (amounts, na, za) = (w.store.amounts(Class::Air), level.n(), mean_head(w, &s, &same, air));
+    let e_air = (0..w.chem.ns()).map(|k| amounts[k * na + air] * s.sp[k].mm).sum::<f64>() * g * za;
+    cells.iter().map(|&i| row(i)).map(|r| r[0] + r[1] + r[4]).sum::<f64>() + e_air
+}
+
+/// The mean head of the cells of air node `j`, m, where its matter lies (`potential`), by the phases of `s`.
+fn mean_head(w: &World, s: &Scratch, same: &[Same], j: usize) -> f64 {
+    let (level, area) = (w.mesh.level(AIR), w.mesh.cells().area());
+    level.children(j).iter().map(|&i| i as usize).fold(0.0, |z, i| z + row_of(w, s, same, i, (|_, _| 0.0, 0.0))[2] * area[i]) / level.area()[j]
+}
+
+/// The mean head of the cells of air node `j`, m, by Flow's state of the ground (`potential`): the height of matter that
+/// enters it. None before Flow first built the state of the ground (`stated`).
+pub(crate) fn air_head(w: &World, j: usize) -> f64 {
+    if !stated(w) {
+        return 0.0;
     }
-    let p = potential(w, &s, None);
-    cells.iter().map(|&i| p.ground[i] + p.deep[i] + p.bodies[i]).sum::<f64>() + p.air[air]
+    let s = scratch_of(w);
+    mean_head(w, &s, &Same::of(&s), j)
 }
 
 /// A part of Flow being booked, or the parts that follow each other (`flow::chain`): the potential energy of every node
@@ -163,6 +196,7 @@ pub(crate) fn potential_of(w: &World, cells: &[usize], air: usize) -> f64 {
 pub(super) struct Lifts {
     start: Potential,
     moved: Vec<Moved>,
+    given: Vec<f64>,
 }
 
 /// A mass that went from one node to another, kg: each named by its array of `Potential` and its index there (`slot`;
@@ -211,7 +245,18 @@ impl Lifts {
     /// From the world now, whose potential energy is `known` where the last part left it so, its moves gathered in
     /// `moved` (empty; kept from part to part for its room).
     pub(super) fn start(w: &World, s: &Scratch, known: Option<Potential>, moved: Vec<Moved>) -> Lifts {
-        Lifts { start: known.unwrap_or_else(|| potential(w, s, None)), moved }
+        Lifts { start: known.unwrap_or_else(|| potential(w, s, None)), moved, given: Vec::new() }
+    }
+    /// The height ground node `i`'s matter left from at the start, m (its head).
+    pub(super) fn head_at_start(&self, i: usize) -> f64 {
+        self.start.heights.ground[i]
+    }
+    /// Heat of falls given on the way to the ground nodes the matter lands in, `q[i]` J (`store::fall_heat`, against
+    /// `Store::lifted`), so what passes on takes its share; the booking at the end gives them only the rest.
+    pub(super) fn give(&mut self, w: &mut World, q: &[f64]) {
+        fall_heat(w, Class::Ground, q.iter().copied().enumerate());
+        self.given.resize(q.len(), 0.0);
+        self.given.iter_mut().zip(q).for_each(|(g, &x)| *g += x);
     }
     /// `kg` go from node `from` to node `to` (back where negative).
     fn carry(&mut self, (from, to): ((Class, u32), (Class, u32)), kg: f64) {
@@ -233,7 +278,7 @@ impl Lifts {
     /// not its own: what its lifts and falls give or take is its ground node's (a bodies' node holds little heat of its
     /// own). Returns the potential energy now, and the room of its moves, emptied.
     pub(super) fn book(self, w: &mut World, s: &Scratch) -> (Potential, Vec<Moved>) {
-        let (mut start, mut moved) = (self.start, self.moved);
+        let (mut start, mut moved, given) = (self.start, self.moved, self.given);
         let (now, g) = (potential(w, s, Some(std::mem::take(&mut start.found))), w.cfg.gravity);
         let olds = start.energies();
         let mut q: [Vec<f64>; 4] = now.energies().map(|v| vec![0.0; v.len()]);
@@ -250,8 +295,9 @@ impl Lifts {
         }
         let [ground, air, deep, bodies] = &mut q;
         ground.iter_mut().zip(bodies.iter_mut()).for_each(|(g, b)| *g += std::mem::take(b));
+        ground.iter_mut().zip(&given).for_each(|(g, given)| *g -= given);
         for (class, q) in [(Class::Ground, ground), (Class::Air, air), (Class::Deep, deep)] {
-            fall_heat(w, class, q);
+            fall_heat(w, class, q.iter().copied().enumerate());
         }
         (now, moved)
     }

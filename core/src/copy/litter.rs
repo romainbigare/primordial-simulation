@@ -36,7 +36,8 @@ pub(crate) fn land_litter(w: &World, d: &mut Chunk, x: Litter) {
     if hit.is_none() && x.c.count < 1.0 {
         return d.out.push(Entry::Back(Box::new(x)));
     }
-    let Litter { mut c, rows, mut brain, change, born, .. } = x;
+    let Litter { mut c, rows, mut brain, change, born, from } = x;
+    d.went(from as usize, i, c.mass(&w.chem));
     d.events.push(born);
     let Some(sd) = change else {
         c.brain = d.brains(i).take_in(&brain);

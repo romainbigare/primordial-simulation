@@ -274,7 +274,8 @@ fn a_node_acts_on_bonds_as_its_members_together() {
 }
 
 /// A part whose walls fall under `min_kg` falls apart, and all it still holds goes to its cell's ground: its walls, the
-/// liquid in its hollow and its heat. So in its monthly turn, and when a body takes from it (what the body took aside).
+/// liquid in its hollow and its heat, with what their fall from the cell's head frees of the potential energy
+/// (`Store::lifted`). So in its monthly turn, and when a body takes from it (what the body took aside).
 #[test]
 fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     // A hollow part of 5 t of the mineral holding 100 kg of the liquid, in cell `i`; walls under `min_kg` from now on.
@@ -312,10 +313,10 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     // Its monthly turn.
     let (mut w, i) = world();
     let p = new_part(&mut w, i);
-    let (books, before, (held, e)) = (Books::now(&w), ground(&w, i), holds(&w, p));
+    let (books, before, (held, e), lifted) = (Books::now(&w), ground(&w, i), holds(&w, p), w.store.lifted());
     bond::step(&mut w);
     assert!(w.life.part(p).is_none(), "the part is still there");
-    gained(&w, i, &before, &held, e);
+    gained(&w, i, &before, &held, e - (w.store.lifted() - lifted));
     books.assert_within(&w, 1e-9, 1e-9);
 
     // A take: a body takes some of the mineral (it takes nothing else, and pays nothing). A world with the body (taken
@@ -334,13 +335,13 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
         (w, h, i, p, b)
     };
     let (mut w, h, i, p, mut b) = take_scene();
-    let (books, before, (held, e), (store, eb)) = (Books::now(&w), ground(&w, i), holds(&w, p), (stores(&w, &b), b.e));
+    let (books, before, (held, e), (store, eb), lifted) = (Books::now(&w), ground(&w, i), holds(&w, p), (stores(&w, &b), b.e), w.store.lifted());
     act_on(&mut w, &mut b, p);
     assert!(w.life.part(p).is_none(), "the part is still there");
     let took: Vec<f64> = stores(&w, &b).iter().zip(&store).map(|(a, s)| a - s).collect();
     assert!(took[MINERAL] > 0.0 && took[MINERAL] < 0.5 * held[MINERAL], "it took {} mol of {}", took[MINERAL], held[MINERAL]);
     let gain: Vec<f64> = held.iter().zip(&took).map(|(a, t)| a - t).collect();
-    gained(&w, i, &before, &gain, e - (b.e - eb));
+    gained(&w, i, &before, &gain, e - (b.e - eb) - (w.store.lifted() - lifted));
     w.life[h] = b;
     books.assert_within(&w, 1e-9, 1e-9);
 

@@ -24,8 +24,8 @@ fn open_land(w: &World, i: usize) -> bool {
     w.is_land(i) && survey::env_of(w, i)[1] <= MAX_STANDING_M
 }
 
-/// Book a new body like an edit: its stores and its heat, from outside the world.
+/// Book a new body like an edit: its stores and its heat, from outside the world, at its cell's head.
 fn book_body(w: &mut World, b: &Body) {
     let held: Vec<(usize, f64)> = pcore::body::each(&w.chem, &b.store).collect();
-    w.cross((Boundary::Outside, Node::new(Class::Body, 0)), held, b.e);
+    w.cross((Boundary::Outside, Node::new(Class::Body, b.cell as usize)), held, b.e);
 }

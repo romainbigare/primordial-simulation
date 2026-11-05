@@ -48,9 +48,9 @@ impl Rows {
     }
 
     /// Per row of ground nodes, what its node's heat gives the potential energy, J: its gas leaves from its head (the
-    /// air pays the rest of its lift, `rows`), and its reactions and the gas it gave move the matter of its stack
-    /// (`flow::stack_gain`); none for the rows of air nodes, whose matter all lies at their mean ground (laws.md 0, "The
-    /// books").
+    /// air pays the rest of its lift, `rows`), and its reactions and the gas it gave move the matter of its stack and
+    /// the air over it (`flow::gain`); none for the rows of air nodes, whose matter all lies at their mean ground
+    /// (laws.md 0, "The books").
     fn fall(&self, w: &World) -> Vec<f64> {
         if self.class != Class::Ground {
             return Vec::new();
@@ -59,7 +59,7 @@ impl Rows {
         let rows: Vec<(usize, &[f64])> = self.each().collect();
         crate::par::map(&rows, |&(i, row)| {
             let up: f64 = (0..ns).map(|k| row[ns + k] * w.chem.subs[k].molar_mass).sum();
-            -(crate::flow::stack_gain(w, i, |k| row[k] - row[ns + k]) + up * g * head[i])
+            -(crate::flow::gain(w, i, |c, k| if c == Class::Ground { row[k] - row[ns + k] } else { 0.0 }, 0.0) + up * g * head[i])
         })
     }
 }

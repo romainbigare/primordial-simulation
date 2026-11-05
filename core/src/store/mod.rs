@@ -13,6 +13,7 @@ pub mod moves;
 pub mod nodes;
 
 pub use apply::{apply, fall_heat};
+pub(crate) use apply::{life_moved, life_went};
 pub(crate) use apply::ROUNDING;
 pub use links::Links;
 pub use batch::Batch;
@@ -76,10 +77,27 @@ impl Store {
 
 impl World {
     /// `(k, mol)` of substances and `heat` J cross into node `to` from boundary node `b` (out where negative): an edit.
+    /// A node of life (a body, a part, a cover) is named by its cell. The boundary node gives the potential energy the
+    /// matter has where it lies (`placed`), against `Store::lifted`.
     pub fn cross(&mut self, (b, to): (Boundary, Node), mol: impl IntoIterator<Item = (usize, f64)>, heat: f64) {
         let from = Node::new(Class::Boundary, b as usize);
         let mut moves: Vec<Move> = mol.into_iter().map(|(k, m)| Move { from, to, k: k as u16, mol: m, heat: 0.0 }).collect();
+        let lift = self.placed(to, &moves);
         moves.push(Move { from, to, k: 0, mol: 0.0, heat });
         apply(self, &[], &moves);
+        fall_heat(self, Class::Boundary, [(b as usize, -lift)]);
+    }
+    /// What the potential energy of the world's matter gains when `moves` put their amounts into node `to`, J
+    /// (`flow::potential`): a ground cell's nodes and its life change its stack and the air over it (`flow::gain`), an
+    /// air node's matter lies at the mean head of its cells (`flow::air_head`).
+    fn placed(&self, to: Node, moves: &[Move]) -> f64 {
+        let kg: f64 = moves.iter().map(|m| m.mol * self.chem.subs[m.k as usize].molar_mass).sum();
+        let d = |c: Class, k: usize| if c == to.class { moves.iter().filter(|m| m.k as usize == k).map(|m| m.mol).sum() } else { 0.0 };
+        match to.class {
+            Class::Ground | Class::Bed | Class::Deep | Class::Bodies => crate::flow::gain(self, to.index, d, 0.0),
+            Class::Body | Class::Part | Class::Cover => crate::flow::gain(self, to.index, |_, _| 0.0, kg),
+            Class::Air => kg * self.cfg.gravity * crate::flow::air_head(self, to.index),
+            Class::Boundary => 0.0,
+        }
     }
 }

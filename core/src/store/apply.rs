@@ -177,20 +177,26 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move]) {
     for s in low {
         zero_rounding(&mut books[s.arr][s.at], &mut counts.rounded[s.arr % 2]);
     }
+    let fell = from_life(chem.ns(), moves);
+    if !fell.is_empty() {
+        life_moved(w, &fell);
+    }
 }
 
-/// The heat a fall gives each node of `class` that matter lands in, or a lift takes from the node that pays it, `q[i]`
-/// J (negative for a lift), booked on that node, and its other side on the potential energy of the world's matter
-/// (`Store::lifted`), summed apart and added once (laws.md 0, "The books"). A lift never takes more than its node
-/// holds; what rounding leaves below zero is set to zero and counted (`Counters::rounded`).
-pub fn fall_heat(w: &mut World, class: Class, q: &[f64]) {
+/// The heat a fall gives each node of `class` that matter lands in, or a lift takes from the node that pays it, `(i,
+/// q)`: `q` J to node `i` (negative for a lift), in the order given, booked on that node, and its other side on the
+/// potential energy of the world's matter (`Store::lifted`), summed apart and added once (laws.md 0, "The books"). A
+/// lift never takes more than its node holds; what rounding leaves below zero is set to zero and counted
+/// (`Counters::rounded`), but of a boundary node, which gives all it is asked.
+pub fn fall_heat(w: &mut World, class: Class, q: impl IntoIterator<Item = (usize, f64)>) {
     let World { store, counts, .. } = w;
-    let mut fell = 0.0;
-    for (i, (v, &d)) in store.heat[class as usize].iter_mut().zip(q).enumerate().filter(|p| *p.1 .1 != 0.0) {
+    let (heat, mut fell) = (&mut store.heat[class as usize], 0.0);
+    for (i, d) in q.into_iter().filter(|p| p.1 != 0.0) {
+        let v = &mut heat[i];
         let was = *v;
         *v += d;
         fell += d;
-        if *v < 0.0 {
+        if *v < 0.0 && class != Class::Boundary {
             if cfg!(debug_assertions) {
                 overdraw_check(*v, was.abs(), [d, d.abs()], (class, i));
             }
@@ -198,4 +204,58 @@ pub fn fall_heat(w: &mut World, class: Class, q: &[f64]) {
         }
     }
     store.lifted -= fell;
+}
+
+/// Matter that moved between the life of ground cells and their ground or bed, now booked: per cell `i`, `d[k]` and
+/// `d[ns + k]` mol of substance `k` its ground and its bed gained from its life (gave it where negative). Life's matter
+/// lies at its cell's head, and its potential energy counts with its ground node, as Flow books it (`flow::potential`),
+/// so the ground node's heat takes what the move gave the potential energy of the world's matter back (`flow::gain`:
+/// the cell as it was, its life heavier by the mass its ground and bed gained): a fall from the head heats the ground
+/// it lands in, a lift to the head is paid by the ground it leaves (`fall_heat`, against `Store::lifted`), and the
+/// stack and the air over it that the move raises or lowers are paid alike (laws.md 0, "The books").
+pub(crate) fn life_moved(w: &mut World, d: &[(usize, Vec<f64>)]) {
+    let ns = w.chem.ns();
+    let back = |(i, d): &(usize, Vec<f64>)| {
+        let kg: f64 = (0..ns).map(|k| (d[k] + d[ns + k]) * w.chem.subs[k].molar_mass).sum();
+        let undo = |c: Class, k: usize| match c {
+            Class::Ground => -d[k],
+            Class::Bed => -d[ns + k],
+            _ => 0.0,
+        };
+        (*i, crate::flow::gain(w, *i, undo, kg))
+    };
+    let q: Vec<(usize, f64)> = d.iter().map(back).collect();
+    fall_heat(w, Class::Ground, q);
+}
+
+/// Life's matter that went from the head of one ground cell to another's, `(from, to, kg)` in the order given (a body
+/// that moved and the structure it carried, a litter, seeds), now booked: it carries its potential energy from the head
+/// it left, and the ground node of the cell it lands in takes what that holds over what it holds at its new head
+/// (`flow::gain` of `kg` at each head): a fall heats that ground, a climb is paid by it (`fall_heat`, against
+/// `Store::lifted`).
+pub(crate) fn life_went(w: &mut World, went: &[(usize, usize, f64)]) {
+    let at = |i: usize, kg: f64| crate::flow::gain(w, i, |_, _| 0.0, kg);
+    let q: Vec<(usize, f64)> = went.iter().filter(|x| x.0 != x.1 && x.2 != 0.0).map(|&(from, to, kg)| (to, at(from, kg) - at(to, kg))).collect();
+    fall_heat(w, Class::Ground, q);
+}
+
+/// The moves of `moves` between a node of life (a body, a part, a cover) and a ground or bed node, per ground cell in
+/// the order of the cells: what its ground (`[k]`) and its bed (`[ns + k]`) gained of each substance `k`, mol
+/// (`life_moved`).
+fn from_life(ns: usize, moves: &[Move]) -> Vec<(usize, Vec<f64>)> {
+    let life = |c: Class| matches!(c, Class::Body | Class::Part | Class::Cover);
+    let mut d: std::collections::BTreeMap<usize, Vec<f64>> = Default::default();
+    for m in moves.iter().filter(|m| m.mol != 0.0) {
+        for (x, other, mol) in [(m.to, m.from, m.mol), (m.from, m.to, -m.mol)] {
+            let at = match x.class {
+                Class::Ground => 0,
+                Class::Bed => ns,
+                _ => continue,
+            };
+            if life(other.class) {
+                d.entry(x.index).or_insert_with(|| vec![0.0; 2 * ns])[at + m.k as usize] += mol;
+            }
+        }
+    }
+    d.into_iter().collect()
 }

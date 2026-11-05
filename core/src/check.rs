@@ -10,8 +10,11 @@ pub struct Totals {
     pub thermal: f64,
     /// J, chemical energy held in substances (formation enthalpies, and the latent heat held in the air and the bodies' nodes)
     pub chemical: f64,
-    /// J, potential energy the world's matter gained since the start (`Store::lifted`)
-    pub potential: f64,
+    /// J, the potential energy the world's matter gained since the start as the store books it (`Store::lifted`)
+    pub lifted: f64,
+    /// J, the potential energy of the world's matter as its nodes hold it (`flow::potential`) and the relief the joins
+    /// keep (`remap::Joined`); none before Flow built the state of the ground it reads
+    pub potential: Option<f64>,
     /// J, the energy each boundary node holds (`store::Boundary`): its heat and its amounts' formation enthalpy
     pub boundary_energy: [f64; BOUNDARIES],
     /// mol of each element the boundary nodes hold
@@ -79,7 +82,8 @@ pub fn totals(w: &World) -> Totals {
         chem.add_elems(k, a, &mut boundary_elems);
         boundary_energy[b] += a * chem.subs[k].hf;
     }
-    Totals { elems, thermal: thermal.get(), chemical: chemical.get(), potential: w.store.lifted(), boundary_energy, boundary_elems }
+    let potential = crate::flow::potential(w).map(|p| p + w.joined.iter().flatten().map(|r| r.relief).sum::<f64>());
+    Totals { elems, thermal: thermal.get(), chemical: chemical.get(), lifted: w.store.lifted(), potential, boundary_energy, boundary_elems }
 }
 
 /// The relative drift of element `j` from `start` to `now`, signed: its change less what the boundary nodes gave.
@@ -91,13 +95,19 @@ pub fn elem_drift(now: &Totals, start: &Totals, j: usize) -> f64 {
 /// long run.
 pub const DRIFT: f64 = 1e-9;
 
-/// Compare now with a start point: the world's elements and energy change only by what the boundary nodes gave it.
-/// Returns the worst relative drift of elements and of energy.
+/// Compare now with a start point: the world's elements and energy change only by what the boundary nodes gave it, its
+/// potential energy as its nodes hold it (`Totals::potential`), so a move that books no lift or fall shows; as the store
+/// booked it where Flow had built no state of the ground then. Returns the worst relative drift of elements and of
+/// energy.
 pub fn drift(w: &World, start: &Totals) -> (f64, f64) {
     let now = totals(w);
     let worst_e = (0..start.elems.len()).map(|j| elem_drift(&now, start, j).abs()).fold(0.0, f64::max);
     let given: [f64; BOUNDARIES] = std::array::from_fn(|b| start.boundary_energy[b] - now.boundary_energy[b]);
-    let change = (now.thermal + now.chemical + now.potential) - (start.thermal + start.chemical + start.potential);
+    let gained = match (now.potential, start.potential) {
+        (Some(now), Some(start)) => now - start,
+        _ => now.lifted - start.lifted,
+    };
+    let change = (now.thermal + now.chemical) - (start.thermal + start.chemical) + gained;
     let scale = given[Boundary::Sun as usize].abs().max(start.thermal.abs()).max(1.0);
     (worst_e, (change - given.iter().sum::<f64>()).abs() / scale)
 }
