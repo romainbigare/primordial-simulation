@@ -7,7 +7,6 @@ use super::{dec, distance, Cover, Parts, Seed, APART, EMPTY_KG, FIX, FIX_OFF, FR
 use crate::body::{AGE, PHASE, SPENT};
 use crate::chem::{Chemistry, Phase, Reaction};
 use crate::rng::{Purpose, Rng};
-use crate::space::COMPASS;
 use crate::store::{Class, Moves, Node};
 use crate::units::{DAY, MAX_SUBSTANCES};
 use crate::{life::Chunk, World, AIR};
@@ -291,9 +290,7 @@ fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool)
         let heat = (0..NP).map(|q| mol[q] * chem.subs[p.sub[q]].cp * t).sum::<f64>();
         b.heat -= heat;
         let mut r = Rng::new(w.seed, w.month(), (i * SLOTS + x) as u64, Purpose::Cover);
-        let cells = w.mesh.cells();
-        let leaves = cells.reach(i, ph.spread_m) >= 1.0 || r.f64() < cells.reach(i, ph.spread_m);
-        let to = cells.way(i, r.below(COMPASS)).filter(|_| leaves).map_or(i, |e| cells.adj_cell()[e] as usize);
+        let to = crate::copy::dispersed(w, i, &mut r).unwrap_or(i);
         let genes = super::mutate(&g, ph.cover_mut, &mut r);
         c.seeds.push(Seed { to: to as u32, mol, genes, root: c.root[x], heat });
     }

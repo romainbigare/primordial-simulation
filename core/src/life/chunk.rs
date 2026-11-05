@@ -82,12 +82,13 @@ impl<'a> Chunk<'a> {
     pub(crate) fn cover_with(&mut self, i: usize) -> (&mut crate::cover::Cover, &mut Moves, &mut Counters) {
         (&mut self.cells[i - self.written.first].cover, &mut self.written.moves, &mut self.written.counts)
     }
-    /// Place a new body in its cell on `day`; it first updates at the next month's start.
-    pub(crate) fn add(&mut self, mut b: Body, day: u64) -> Handle {
+    /// Place a new body in its cell at `days` d from the start (`World::days_now`); it first updates at its cell's next
+    /// step.
+    pub(crate) fn add(&mut self, mut b: Body, days: f64) -> Handle {
         let i = b.cell as usize;
         let c = self.at_mut(i);
         c.placed += 1;
-        (b.id, b.alive, b.last, b.count) = (super::new_id(c.serial, c.placed), true, day as f64, b.n());
+        (b.id, b.alive, b.last, b.count) = (super::new_id(c.serial, c.placed), true, days, b.n());
         self.store(b)
     }
     /// Store body `b` at the end of its cell's list.
@@ -132,7 +133,7 @@ impl<'a> Chunk<'a> {
     /// already.
     pub(crate) fn place_part(&mut self, w: &World, mut c: Body) -> Handle {
         c.stale = true;
-        self.add(c, w.day())
+        self.add(c, w.days_now())
     }
     /// The visible traits of its living bodies that changed since the last survey are worked out again
     /// (`Body::visible`, `Body::stale`): once before what reads them, the cells' sums and the batch.

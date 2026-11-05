@@ -30,8 +30,8 @@ pub struct Lived {
 /// share its wear gives, `AGE`), its drink, its heat (`keep_warm`), the checks of its stores, growth (`copy::grow`),
 /// children (`copy::copy`) and what it sheds. Returns what it left for its decision, or a death cause.
 pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) -> Result<Lived, u8> {
-    let days = (w.day() as f64 - b.last).max(1.0);
-    b.last = w.day() as f64;
+    let days = (w.days_now() - b.last).max(1.0);
+    b.last = w.days_now();
     let (mass, from) = (b.mass(&w.chem), b.member_body(&w.chem));
     // With nothing left of a member there is no heat capacity to hold a temperature: it dies.
     if b.empty_at(mass) {
