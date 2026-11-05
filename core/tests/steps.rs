@@ -70,7 +70,7 @@ fn split(fine: bool) -> (World, usize) {
         let (cells, i) = (w.mesh.cells(), w.map.cell(square).expect("the square"));
         let near = std::iter::once(i).chain(cells.around(i).1.iter().map(|&j| j as usize));
         let around: Vec<Leaf> = near.map(|j| w.map.leaves()[j]).filter(|l| l.depth == square.depth).collect();
-        testkit::split_down(&mut w, &around, 2);
+        testkit::split_flat(&mut w, &around, 2);
     }
     let quarter = square.side() / 4;
     let start = if fine { Leaf { x: square.x + quarter, y: square.y + quarter, depth: square.depth + 2 } } else { square };
@@ -235,7 +235,7 @@ fn node_year(fine: bool) -> [f64; 5] {
     w.add(b);
     (0..SETTLE).for_each(|_| pcore::step(&mut w));
     if fine {
-        testkit::split_down(&mut w, &[square], 2);
+        testkit::split_flat(&mut w, &[square], 2);
     }
     let (mut year, mut warmth) = ([0.0; 5], 0.0);
     for _ in 0..YEAR {

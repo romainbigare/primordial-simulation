@@ -36,7 +36,11 @@ their sizes, the two across it one depth apart at most and neither with 8 links 
 downhill way through a corner stays when a cell beside it splits and no cell has more than 8 links. The air level is built on the map's squares, the same whatever the sizes of the
 cells. The map's samples are its squares and its finer cells (`Square::samples`: a cell coarser than a square cut into
 its squares, a finer one as it is): each reads its air there (1.4), and a cell's starting height is the mean by area of
-the terrain on its samples (a cell finer than a square takes the height at its own centre). What needs the cell at a
+the terrain on its samples (a cell finer than a square takes the height at its own centre). **The terrain**
+(`space::terrain`) is one function of the world's seed and a point of the map, at any size: value noise summed over
+octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to heights, an island's falling away from
+the middle of its map; the world keeps what it needs beside its seed and its map (`World::terrain`: the rise its level
+0 m lies at), so a split finds the ground finer than its cell (below). What needs the cell at a
 point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
@@ -136,12 +140,13 @@ means of its bed, the sleep's alarm and the time it was brought up to date, and 
 and height its bodies read until the next survey, `Life::env`, so a founder placed there at once starts at its
 ground's temperature); a joined cell holds the sum of its quarters' and the mean by area of the others (its bed's means
 by volume, the first alarm and the earliest time brought up to date, so its law skips no time). The share is by area,
-the same temperature in each (flat quarters), unless a join made the cell: a join keeps each quarter's share of each
-amount of each node, of each heat and of each volume (`remap::Joined`, saved per cell), and the split of that cell gives
-the quarters back as they were (to the rounding of x · share). A made cell's temperature and plateau in Flow's state
-are those of its heat (`World::thawed`). **Life across a split and a join** (`life/tree.rs`, one life model at every
-grain: bodies and parts are records that hold their own amounts, so they move with nothing to book). A split's
-quarters are flat copies, so a node of at least one member per quarter's share leaves in each other quarter a node of
+the same temperature in each, but the bed's, which stands as the terrain inside the cell does (**relief**, below),
+unless a join made the cell: a join keeps each quarter's share of each amount of each node, of each heat and of each
+volume, and its relief (`remap::Joined`, saved per cell), and the split of that cell gives the quarters back as they
+were (to the rounding of x · share). A made cell's temperature and plateau in Flow's state are those of its heat
+(`World::thawed`). **Life across a split and a join** (`life/tree.rs`, one life model at every grain: bodies and parts
+are records that hold their own amounts, so they move with nothing to book). A split shares
+life by area, so a node of at least one member per quarter's share leaves in each other quarter a node of
 that share of its members, stores, heat and brood (`nodes::part`: its genes, spreads, lineage and born rows, an id of
 that quarter, and a brain block there with the node's rows); what is not cut goes whole to one quarter, drawn by area
 by a draw keyed by its id and the split cell's serial (`rng::Purpose::Quarter`; a cell splits once): an individual, a
@@ -151,16 +156,38 @@ bodies (each with its brain block), parts and bonds in the order of the quarters
 (4.5) and its bodies then merge as the monthly merge does (`nodes::crowd`, 4.4), so it holds no more nodes than a cell
 of its kind. Ids never change (`Life::index` finds each again); a merge that lets go of a part names the cell by its
 index in its event, so the shell takes the events before the next split or join.
-**Relief**: a join that makes one flat cell of quarters of different heights lowers the potential energy of the stacks
-(the function of "The books" below, `flow::potential_of`, by Flow's state, which a remap gives a made cell from its
-heat, `World::thawed`, not from its parent or as its quarters' mean: a quarter whose liquid boils stacks far higher than
-at the joined cell's temperature, and the split that gives it back must see it so); the joined cell keeps that drop as
-its relief, J, a part of
-`Store::lifted` held apart from the stacks, with the relief its quarters kept from their own joins (their shares are not
-kept). The split of a joined cell gives the relief back: what the restored quarters' stacks hold over the cell's comes
-from it, and what is left over (or short) goes to the quarters' ground heat by their shares (`store::fall_heat`, which
-books it against `Store::lifted`). A split of a cell no join made makes flat quarters, whose stacks hold what the cell's
-did. So a join moves no energy, a split moves only what `fall_heat` books, and `check::drift`, which reads the stacks
+**Relief** (`World::relief`, J, one number per cell in the cell table, `remap/relief.rs`): the potential energy the
+ground of a cell holds inside it over its flat form, a part of the world's potential energy held apart from the
+stacks (the function of "The books" below). Every cell holds it from the start: a bed standing at the terrain's heights
+at the cells of the most depth inside it holds ρ g Σ a (h − h̄)² / 2 more than a flat bed of its volume (each column of
+area a and height h holds ρ g a h² / 2 over its base), ρ the density of the cell's bed (`World::relief_at_build`). It
+is the same account at every size: a cell's is its quarters' and that of their means about its own. **A split of a
+cell no join made** gives its quarters the terrain inside it (`World::uneven`): each quarter's bed surface is the cell's
+mean bed surface now plus the terrain's mean height over the quarter less the mean over the four, so the cell's bed
+keeps its volume and its mean (what wear and creep did since the start stays in the mean); the bed's substances go to
+the quarters in the cell's proportions; the loose ground, the liquid (Flow moves it at the next step), the store and
+every other number stay per m². The quarters then drain, as the world's cells drain from the start (8): a priority
+flood from the cells round them as they stand (`space::drain`) raises a quarter in a closed pit to its outlet, and all
+are lowered alike until their mean is the cell's again (`World::drained`). Noise has pits that no liquid ever cut: split
+undrained, the 1,024 cells of 500 m of the 64 x 64 island's first four blocks of land had 15 pits, and in two years
+2.5 m of liquid stood on them on the mean, 47 months of their rain (the unsplit blocks, 6 mm); drained, 5 pits and
+1.6 m, most of it in basins of several cells whose rims a later split of the cells round them made, and in cells under
+0 m at the coast, which join the low basin. The stacks then gain ρ g Σ a d² / 2, d each quarter's departure (what lies
+on the bed rises and falls with it by area, and the air over the cell keeps its mean height); each quarter's relief is
+the terrain's inside it and its share by area of what the cell's relief has left: the potential energy of the pits
+drained, which the ground finer than the quarters still holds (a split gives it no heat). Where the cell's relief is
+less than these need (a drained pit stands higher than the terrain: 7% of the splits there), the departures (and the
+terrain below them) are scaled down until it pays, and so that each quarter keeps a bed. **A join** that makes one flat
+cell of quarters of
+different heights lowers the potential energy of the stacks (`flow::potential_of`, by Flow's state, which a remap gives
+a made cell from its heat, `World::thawed`, not from its parent or as its quarters' mean: a quarter whose liquid boils
+stacks far higher than at the joined cell's temperature, and the split that gives it back must see it so); the joined
+cell's relief is its quarters' and that drop, and its record keeps each quarter's relief (not the records of their own
+joins), so its split gives the quarters back with their reliefs: the cell's relief pays what the quarters' stacks hold
+over the cell's and the quarters' reliefs, and what is left over (or short: rounding) goes to the quarters' ground heat
+by their shares (`store::fall_heat`, which books it against `Store::lifted`). Before Flow first built the state of the ground (a world as built, before its first step)
+the stacks' potential energy is not found: a split then makes flat quarters, each with its share of the relief by
+area. So a join moves no energy, a split moves only what `fall_heat` books, and `check::drift`, which reads the stacks
 and the reliefs, closes through any sequence of splits and joins; the cover a join's cells cannot hold goes to its
 ground as remains, booked as life's remains are (`store::life_moved`). No law changes the cells.
 **Refinement** (`refine/`, `World::refine`) decides which cells split and join: a setting for speed, not a law (no
@@ -232,7 +259,7 @@ Life that goes to another cell's head (a body that moves and the structure it ca
 potential energy from the head it left, and the ground it lands on takes the difference (`store::life_went`). An edit
 (`World::cross`) takes the potential energy of what it places from its boundary node. So every element and the energy
 are kept; `check::drift` checks it yearly against `check::DRIFT` (1e-9), with the potential energy as the function of
-what the nodes hold and the relief the joins keep (`check::Totals::potential`), not as `Store::lifted` books it, so a
+what the nodes hold and the cells' reliefs (`check::Totals::potential`), not as `Store::lifted` books it, so a
 move that books no lift or fall shows.
 **No overdraw.** A law never asks a node for more than it holds; where it could, it cuts that node's own outgoing
 links (`solve::sweep::within`), never a whole field. A body takes no more than its cell's view holds, what the
@@ -1030,10 +1057,12 @@ to the air. Body matter holds no rock element: the **rock salt (11)** is rock ch
 ## 8. Starting conditions (not laws)
 Placed by `worldgen` (`worldgen::schedule::Schedule`, carried by a snapshot) and printed by every run; the laws never
 read a kind.
-- **Terrain** (`worldgen::terrain`): an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`); a metre of
-  loose ground; the sea's salt at balance (2.6); ground and air temperatures falling with latitude and height. Every
-  land cell drains from the start (`drain`): a priority flood raises closed basins (only) to their outlet at 1 m per km
-  (`DRAIN_SLOPE`; Planchon and Darboux 2001), from every cell below 0 m on a globe, from those joined to the lowest
+- **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on and which a
+  split reads later: an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
+  `World::terrain`); each cell's relief inside it from it (0, "Relief"); a metre of loose ground; the sea's salt at
+  balance (2.6); ground and air temperatures falling with latitude and height. Every land cell drains from the start
+  (`space::drain`, as a split's quarters do, 0): a priority flood raises closed basins (only) to their outlet at 1 m per
+  km (`DRAIN_SLOPE`; Planchon and Darboux 2001), from every cell below 0 m on a globe, from those joined to the lowest
   cell on an island. On an island the open water is coarse (`coarse_low`): an air block (8 km) whose squares all lie
   below 0 m, none within a square of land (`LAND_RING`), is one cell, split where it borders finer cells until cells
   across a border differ by one size at most; the coasts stay in 2 km squares. A globe is one cell an air block but in a

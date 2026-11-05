@@ -17,7 +17,7 @@ mod basin;
 pub(crate) use air::air_temp;
 pub use air::{column, declination, glow, insolation, scale_height};
 pub use potential::total as potential;
-pub(crate) use potential::{air_head, potential_of};
+pub(crate) use potential::{air_head, potential_of, stated};
 pub(crate) use stack::gain;
 pub use scratch::Scratch;
 pub(crate) use scratch::FlowView;
@@ -142,7 +142,7 @@ impl Scratch {
         *phi = r.apply(std::mem::take(phi), || 0.0);
         *fix = r.apply_made(std::mem::take(fix), || [0.0; 2], |_, m, at| [0, 1].map(|x| m.held(joined, Some(Of::Flow(x)), |i| at(i)[x])));
         *bed = r.apply_made(std::mem::take(bed), scratch::Bed::default, |_, m, at| {
-            let vol = m.held(joined, Some(Of::Flow(2)), |i| at(i).vol);
+            let vol = m.held(joined, Some(Of::Flow(crate::remap::FLOW_BED)), |i| at(i).vol);
             let by_vol = |b: [scratch::Bed; 4], of: fn(&scratch::Bed) -> f64| crate::remap::mean_by(b.map(|x| of(&x)), b.map(|x| x.vol));
             scratch::Bed { vol, ..m.pick(at, |b| scratch::Bed { vol: 0.0, refl: by_vol(b, |x| x.refl), cond: by_vol(b, |x| x.cond) }) }
         });

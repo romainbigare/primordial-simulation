@@ -1,11 +1,13 @@
 //! The tree of cells while a world runs (laws.md 0): between steps a cell splits into its quarters and four quarters
 //! join into their parent (`World::split`, `World::join`), cells across a border one depth apart at most, the books
-//! exact and the relief a join flattens given back by its split; the life of a cell (its nodes, individuals, parts and
+//! exact, a split's quarters standing as the terrain inside their cell does, paid by its relief, and the relief a join
+//! flattens given back by its split; the life of a cell (its nodes, individuals, parts and
 //! cover) is shared out to the quarters and gathered again, every element, the energy and the members kept. A region
 //! split keeps the climate of the unsplit world (spec 5.2).
 
 use pcore::body::Body;
 use pcore::check;
+use pcore::chem::Phase;
 use pcore::event::EventKind;
 use pcore::space::square::Square;
 use pcore::space::tree::{Refused as Shape, DEPTH_MOST};
@@ -28,21 +30,25 @@ fn leaf(w: &World, i: usize) -> Leaf {
     w.map.leaves()[i]
 }
 
-/// The saved state of `w` but its life (a split or a join gives its cells new serials) and the records of its joins.
+/// The saved state of `w` but its life (a split or a join gives its cells new serials), the records of its joins and
+/// the reliefs.
 fn saved(w: &World) -> serde_json::Value {
     let mut v = serde_json::to_value(w).expect("a world serialises");
     let o = v.as_object_mut().expect("an object");
-    o.remove("life");
-    o.remove("joined");
+    ["life", "joined", "relief"].iter().for_each(|k| _ = o.remove(*k));
     v
 }
 
-/// The first place where `a` and `b` differ, by its path, and the two there.
-fn difference(a: &serde_json::Value, b: &serde_json::Value, path: &str) -> Option<String> {
-    use serde_json::Value::{Array, Object};
+/// The first place where `a` and `b` differ by more than `tol` of a number, by its path, and the two there.
+fn difference(a: &serde_json::Value, b: &serde_json::Value, path: &str, tol: f64) -> Option<String> {
+    use serde_json::Value::{Array, Number, Object};
     match (a, b) {
-        (Array(x), Array(y)) if x.len() == y.len() => x.iter().zip(y).enumerate().find_map(|(k, (p, q))| difference(p, q, &format!("{path}/{k}"))),
-        (Object(x), Object(y)) if x.len() == y.len() => x.iter().find_map(|(k, p)| y.get(k).map_or(Some(format!("{path}/{k} missing")), |q| difference(p, q, &format!("{path}/{k}")))),
+        (Array(x), Array(y)) if x.len() == y.len() => x.iter().zip(y).enumerate().find_map(|(k, (p, q))| difference(p, q, &format!("{path}/{k}"), tol)),
+        (Object(x), Object(y)) if x.len() == y.len() => x.iter().find_map(|(k, p)| y.get(k).map_or(Some(format!("{path}/{k} missing")), |q| difference(p, q, &format!("{path}/{k}"), tol))),
+        (Number(x), Number(y)) if x.is_f64() && y.is_f64() => {
+            let (x, y) = (x.as_f64().expect("a number"), y.as_f64().expect("a number"));
+            ((x - y).abs() > tol * x.abs().max(y.abs())).then(|| format!("{path}: {x} against {y}"))
+        }
         _ => (a != b).then(|| format!("{path}: {a} against {b}")),
     }
 }
@@ -55,21 +61,24 @@ fn holds(w: &World, i: usize) -> Vec<f64> {
     amounts.chain(classes.iter().filter_map(|&c| w.store.heat(c).get(i).copied())).collect()
 }
 
-/// The world's potential energy less what the stacks hold now and what the joins keep as relief: a split or a join
-/// changes none of it (`Store::lifted`).
+/// The world's potential energy less what the stacks hold now and the cells' reliefs: a split or a join changes none
+/// of it (`Store::lifted`).
 fn unflattened(w: &World) -> f64 {
-    w.store.lifted() - pcore::flow::potential(w).expect("Flow's state") - w.joined.iter().flatten().map(|r| r.relief).sum::<f64>()
+    w.store.lifted() - pcore::flow::potential(w).expect("Flow's state") - w.relief.iter().sum::<f64>()
 }
 
-/// A cell split into flat quarters (each a quarter of what it held, at its temperature) and joined again is the world
-/// it was, every number of it, bit for bit, where Flow's state of the ground is its heat's (a cell a remap makes takes
-/// the state of its heat, `World::thawed`); each change is an event naming the cell by its serial. Each quarter reads
-/// its cell's ground temperature, liquid depth and height at once (`Life::env`), and the joined cell their mean.
+/// A cell with no relief (its ground flat inside it) split into flat quarters (each a quarter of what it held, at
+/// its temperature) and joined again is the world it was, every number of it, where Flow's state of the ground is its
+/// heat's (a cell a remap makes takes the state of its heat, `World::thawed`): bit for bit but the ground's heat, which
+/// takes the rounding of the stacks' potential energy (`TIGHT`); each change is an event naming the cell by its serial.
+/// Each quarter reads its cell's ground temperature, liquid depth and height at once (`Life::env`), and the joined cell
+/// their mean.
 #[test]
 fn a_split_then_its_join_gives_back_the_world() {
     let mut w = world();
     pcore::flow::state(&mut w, true);
     let (i, n) = (testkit::dry_land(&w), w.mesh.cells().n());
+    w.relief[i] = 0.0;
     let (l, before, held, first, env) = (leaf(&w, i), saved(&w), holds(&w, i), w.life.serial(i), w.life.env[i]);
     assert_eq!(w.split(l), Ok(vec![l]));
     assert_eq!(w.mesh.cells().n(), n + 3);
@@ -80,7 +89,7 @@ fn a_split_then_its_join_gives_back_the_world() {
         assert_eq!(w.life.env[j], env, "quarter {q:?} reads its cell's surroundings");
     }
     w.join(l).expect("its quarters join");
-    assert_eq!(difference(&saved(&w), &before, ""), None);
+    assert_eq!(difference(&saved(&w), &before, "", TIGHT), None);
     let j = w.map.cell(l).expect("the joined cell");
     assert_eq!(w.life.env[j], env, "the joined cell reads its quarters' mean");
     let events: Vec<_> = w.drain_events().into_iter().map(|e| (e.kind, e.node)).collect();
@@ -128,7 +137,7 @@ fn join_then_split(w: &mut World, parent: Leaf) -> f64 {
     let kids = parent.quarters().map(|q| w.map.cell(q).expect("a square"));
     let (held, books) = (kids.map(|i| holds(w, i)), Books::now(w));
     w.join(parent).expect("four squares join");
-    let relief = w.joined[w.map.cell(parent).expect("the joined cell")].as_ref().expect("its record").relief;
+    let relief = w.relief[w.map.cell(parent).expect("the joined cell")];
     assert_eq!(w.split(parent), Ok(vec![parent]));
     sound(w);
     for (q, held) in parent.quarters().iter().zip(&held) {
@@ -139,6 +148,89 @@ fn join_then_split(w: &mut World, parent: Leaf) -> f64 {
     books.assert_kept(w, 1e-12);
     relief
 }
+
+/// The top of the bed of cell `i`, m: its bonded amounts as solids over its area, from the base up.
+fn bed_top(w: &World, i: usize) -> f64 {
+    let v: f64 = (0..w.chem.ns()).map(|k| w.b(k, i) * w.chem.molar_volume(k, Phase::Solid)).sum();
+    w.base_z + v / w.mesh.cells().area()[i]
+}
+
+/// The ground's heat of cells `cells`, J.
+fn ground_heat(w: &World, cells: &[usize]) -> f64 {
+    cells.iter().map(|&i| w.store.heat(Class::Ground)[i]).sum()
+}
+
+/// The least spread of the quarters' bed tops a split of a land square gives, m: the terrain's relief inside 2 km.
+const UNEVEN_M: f64 = 1.0;
+
+/// A split of a land cell no join made gives its quarters the terrain inside it, drained: their beds stand at different
+/// heights whose mean by area is the cell's, each has a neighbour no higher than it, the books close (`TIGHT`), and the
+/// cell's relief is what the stacks gain and the quarters' reliefs (to the rounding of the world's potential energy),
+/// none of it heat.
+#[test]
+fn a_split_gives_its_quarters_the_terrain() {
+    let mut w = world();
+    let i = testkit::dry_land(&w);
+    let (l, books, relief, top) = (leaf(&w, i), Books::now(&w), w.relief[i], bed_top(&w, i));
+    let (stacks, heat) = (pcore::flow::potential(&w).expect("Flow's state"), ground_heat(&w, &[i]));
+    w.split(l).expect("a split");
+    sound(&w);
+    books.assert_kept(&w, TIGHT);
+    let kids = l.quarters().map(|q| w.map.cell(q).expect("a quarter"));
+    let (tops, area) = (kids.map(|j| bed_top(&w, j)), kids.map(|j| w.mesh.cells().area()[j]));
+    let mean = tops.iter().zip(area).map(|(t, a)| t * a).sum::<f64>() / area.iter().sum::<f64>();
+    let spread = tops.iter().fold(f64::MIN, |a, &b| a.max(b)) - tops.iter().fold(f64::MAX, |a, &b| a.min(b));
+    let (spent, kept, warmed) = (pcore::flow::potential(&w).expect("Flow's state") - stacks, kids.map(|j| w.relief[j]).iter().sum::<f64>(), ground_heat(&w, &kids) - heat);
+    println!("bed tops {tops:?} m (the cell's {top} m); relief {relief:.4e} J: the stacks {spent:.4e}, the quarters {kept:.4e}, the heat {warmed:.3e}");
+    assert!((mean - top).abs() <= TIGHT * top.abs() && spread > UNEVEN_M, "the quarters' beds at {tops:?} m about the cell's {top} m");
+    assert!((spent + kept - relief).abs() <= TIGHT * stacks.abs() && warmed.abs() <= TIGHT * heat, "the relief pays what the split gains, {warmed:e} J to heat");
+    let drains = |j: usize| w.mesh.cells().around(j).1.iter().any(|&o| w.surface_z(o as usize) <= w.surface_z(j));
+    assert!(kids.iter().all(|&j| drains(j)), "each quarter drains");
+}
+
+/// A split, its join and its split again give the same quarters: each amount to the rounding of x · share and each heat
+/// to that of the stacks' potential energy (`TIGHT`), and each one's relief, from the record of the join; the joined
+/// cell's relief is theirs and what it flattened.
+#[test]
+fn a_split_its_join_and_its_split_give_the_same_quarters() {
+    let mut w = world();
+    let l = leaf(&w, testkit::dry_land(&w));
+    let books = Books::now(&w);
+    w.split(l).expect("a split");
+    let kids = |w: &World| l.quarters().map(|q| w.map.cell(q).expect("a quarter"));
+    let (held, relief) = (kids(&w).map(|i| holds(&w, i)), kids(&w).map(|i| w.relief[i]));
+    w.join(l).expect("its quarters join");
+    let joined = w.relief[w.map.cell(l).expect("the joined cell")];
+    assert!(joined > relief.iter().sum::<f64>(), "a join of uneven quarters flattens their stacks: {joined} J over {relief:?}");
+    w.split(l).expect("a split again");
+    sound(&w);
+    for ((i, held), r) in kids(&w).iter().zip(&held).zip(relief) {
+        let worst = holds(&w, *i).iter().zip(held).map(|(&x, &y)| (x - y).abs() / y.abs().max(f64::MIN_POSITIVE)).fold(0.0, f64::max);
+        assert!(worst <= TIGHT && w.relief[*i] == r, "quarter {i} back within {worst:e}, relief {} J against {r} J", w.relief[*i]);
+    }
+    books.assert_kept(&w, TIGHT);
+}
+
+/// The relief is one account at every size (`Terrain::inside`): a cell's spread of heights is its quarters' and the
+/// spread of the quarters' means about its own, to rounding (`TIGHT`); a cell's relief as built is its spread times the
+/// weight of a m³ of its bed (ρ g, between `BED_WEIGHT`).
+#[test]
+fn the_relief_of_a_cell_is_its_quarters_and_what_lies_between() {
+    let w = world();
+    let (lat, map) = ((w.cfg.lat_south, w.cfg.lat_north), &w.map);
+    let low = (0..w.mesh.cells().n()).find(|&i| !w.is_land(i) && w.relief[i] > 0.0).expect("a cell under 0 m above the floor of the terrain");
+    for i in [testkit::dry_land(&w), low] {
+        let l = leaf(&w, i);
+        let (mean, spread) = w.terrain.inside(w.seed, map, l, lat);
+        let between: f64 = l.quarters().iter().map(|q| (map.place_of(q, lat.0, lat.1).0, w.terrain.inside(w.seed, map, *q, lat))).map(|(a, (m, s))| s + a * (m - mean) * (m - mean) / 2.0).sum();
+        println!("cell {i}: mean {mean:.2} m, spread {spread:.4e} m⁴, relief {:.4e} J", w.relief[i]);
+        assert!((between - spread).abs() <= TIGHT * spread, "cell {i}: the quarters' {between:e} against the cell's {spread:e}");
+        assert!((BED_WEIGHT[0]..BED_WEIGHT[1]).contains(&(w.relief[i] / spread)), "cell {i}: relief {} J of a spread of {spread} m⁴", w.relief[i]);
+    }
+}
+
+/// The weight of a m³ of a bed, N: rock of 2000 to 4000 kg/m³ under 9.81 m/s².
+const BED_WEIGHT: [f64; 2] = [2e4, 4e4];
 
 /// Months of splits and joins, the world stepping between them: down two depths and back on land, at the coast and on a
 /// cell under 0 m, the books within `check::DRIFT`, nothing below zero or NaN, 2:1 kept.
@@ -161,7 +253,7 @@ fn years_of_splits_and_joins_keep_the_books() {
 /// Cell `land`, the first cell of the coast and the first cell under 0 m of `w`, as leaves.
 fn places(w: &World, land: usize) -> [Leaf; 3] {
     let coast = (0..w.mesh.cells().n()).find(|&i| w.is_land(i) && w.mesh.cells().around(i).1.iter().any(|&j| !w.is_land(j as usize))).expect("a coast");
-    let low = (0..w.mesh.cells().n()).find(|&i| !w.is_land(i)).expect("a cell under 0 m");
+    let low = (0..w.mesh.cells().n()).find(|&i| !w.is_land(i) && w.relief[i] > 0.0).expect("a cell under 0 m above the floor of the terrain");
     [land, coast, low].map(|i| leaf(w, i))
 }
 
@@ -222,7 +314,7 @@ fn the_tree_keeps_cells_one_depth_apart() {
     let before = saved(&w);
     assert_eq!(w.join(made[0]), Err(Shape::Unbalanced));
     assert_eq!(w.join(l.parent().expect("a parent")), Err(Shape::NoCell));
-    assert_eq!(difference(&saved(&w), &before, ""), None);
+    assert_eq!(difference(&saved(&w), &before, "", 0.0), None);
     let deepest = Square::new(4, 4, 2000.0, false, 4).by_blocks(|_, _| DEPTH_MOST);
     assert_eq!(deepest.splits(deepest.leaves()[0]), Err(Shape::Deepest));
 }
@@ -405,9 +497,10 @@ const EVEN_SHARE: f64 = 1e-6;
 const STORE_SHARE: f64 = 1e-2;
 
 /// The climate does not depend on the size of the cells where nothing in them differs (spec 5.2): on the small island
-/// with all its land one even plateau (each land cell holding per m² what one does), a block of 2 x 2 squares in its
-/// middle split two depths (into cells of 500 m, those beside it into cells of 1 km) keeps, after a year, the climate
-/// (`climate`) of the block and of the island within `EVEN_SHARE` of each number (`STORE_SHARE` for the store).
+/// with all its land one even plateau (each land cell holding per m² what one does, with no relief inside it), a block
+/// of 2 x 2 squares in its middle split two depths (into cells of 500 m, those beside it into cells of 1 km) keeps, after
+/// a year, the climate (`climate`) of the block and of the island within `EVEN_SHARE` of each number (`STORE_SHARE` for
+/// the store).
 #[test]
 fn an_even_region_split_two_depths_keeps_its_climate() {
     let mut w = world();
@@ -415,6 +508,7 @@ fn an_even_region_split_two_depths_keeps_its_climate() {
     let land: Vec<usize> = (0..n).filter(|&i| w.is_land(i)).collect();
     let area = w.mesh.cells().area().to_vec();
     for &i in &land {
+        w.relief[i] = 0.0;
         for class in [Class::Ground, Class::Bed, Class::Deep] {
             for k in 0..w.chem.ns() {
                 let mol = w.store.amounts(class)[k * n + like] * area[i] / area[like];
@@ -457,10 +551,11 @@ const COAST_LAND_K: f64 = 0.02;
 const COAST_REGION_K: f64 = 0.05;
 const COAST_RAIN: f64 = 2e-3;
 
-/// The coarse and the fine form give the same climate (spec 5.2): the 22 x 22 island without life, its first
-/// `COAST_SQUARES` coastal squares (land with a cell under 0 m across a side) in its west half split two depths after a
-/// year, runs `COAST_YEARS` years beside the unsplit island; the ground temperature of the land and of the region, and
-/// the rain, stay within `COAST_LAND_K`, `COAST_REGION_K` and `COAST_RAIN`, and the books close.
+/// The coarse and the fine form of the same ground give the same climate (spec 5.2): the 22 x 22 island without life,
+/// its first `COAST_SQUARES` coastal squares (land with a cell under 0 m across a side) in its west half split two
+/// depths after a year into flat quarters (no relief inside the cells: the laws at two sizes, not a finer terrain), runs
+/// `COAST_YEARS` years beside the unsplit island; the ground temperature of the land and of the region, and the rain,
+/// stay within `COAST_LAND_K`, `COAST_REGION_K` and `COAST_RAIN`, and the books close.
 #[test]
 #[ignore = "slow: two 10-year runs of the 22 x 22 island"]
 fn the_split_coast_keeps_its_climate() {
@@ -471,7 +566,9 @@ fn the_split_coast_keeps_its_climate() {
     let coast = |i: usize| w.is_land(i) && cells.around(i).0.iter().zip(cells.around(i).1).any(|(&l, &j)| cells.width()[l as usize] > 0.0 && !w.is_land(j as usize));
     let west = |l: &Leaf| l.x < w.map.w as u32 / 2 * l.side();
     let region: Vec<Leaf> = (0..cells.n()).filter(|&i| coast(i)).map(|i| leaf(&w, i)).filter(|l| l.depth == w.map.square_depth() && west(l)).take(COAST_SQUARES).collect();
-    let mut fine = split_down(w.clone(), &region, 2);
+    let mut flat = w.clone();
+    flat.relief.iter_mut().for_each(|r| *r = 0.0);
+    let mut fine = split_down(flat, &region, 2);
     let books = Books::now(&fine);
     for _ in 0..COAST_YEARS * w.cfg.months_per_year as usize {
         pcore::step(&mut w);

@@ -108,6 +108,11 @@ pub struct World {
     pub links: crate::store::Links,
     /// Of each cell a join made, what it keeps of its quarters for its split (`remap::Joined`); none for the others
     pub joined: Vec<Option<crate::remap::Joined>>,
+    /// The potential energy the ground of each cell holds inside it over its flat form, J (`remap::relief`): a part
+    /// of the world's potential energy held apart from the stacks (laws.md 0)
+    pub relief: Vec<f64>,
+    /// The terrain the world was built on, which a split reads (`space::terrain`)
+    pub terrain: crate::space::terrain::Terrain,
     /// What refinement keeps of each cell for its next month (`refine::Watch`); empty until the first refinement, and
     /// with no budget of cells (`Config::cell_budget`)
     pub watch: Vec<crate::refine::Watch>,

@@ -146,7 +146,7 @@ pub(super) fn scratch_of(w: &World) -> Cow<'_, Scratch> {
 
 /// Whether Flow built the state of the ground, whose phases the potential energy reads (`potential`): not before its
 /// first build, which finds the function then.
-pub(super) fn stated(w: &World) -> bool {
+pub(crate) fn stated(w: &World) -> bool {
     w.scratch.state.tg.len() == w.mesh.cells().n()
 }
 

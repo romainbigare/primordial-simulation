@@ -9,6 +9,7 @@
 //! corner links its two cells unless one of them has 8 already (the cells in order). On a globe the cells of a row narrow toward the poles, and no link crosses a pole.
 
 use super::tree::{self, Leaf, Refused, Tree, BLOCK, DEPTH_MOST};
+use super::terrain::Place;
 use super::{Level, LinkSpec, Mesh, COMPASS};
 use serde::{Deserialize, Serialize};
 use std::f64::consts::{SQRT_2, TAU};
@@ -198,6 +199,20 @@ impl Square {
         let parent = self.leaves.iter().map(|l| tree.block(l.x, l.y) as u32).collect();
         Mesh::of(self.level(&tree, south, north, linked), blocks, parent, tree)
     }
+    /// The area of leaf `t`, m², and its centre (`Place`), its rows between latitudes `south` (row `h`) and `north` (row
+    /// 0): longitudes east from 0 by the degrees of latitude per row (a whole turn on a globe).
+    pub fn place_of(&self, t: &Leaf, south: f64, north: f64) -> (f64, Place) {
+        let (unit, row) = (self.unit() as f64, (north - south) / self.h as f64);
+        let sq = |u: u32| u as f64 / unit;
+        let mid = |from: u32, k: u32| sq(from) + sq(k) / 2.0;
+        // On a globe: the sphere's radius, m, and the latitude of the north edge of row `y`, radians.
+        let (radius, edge) = (self.side / row.to_radians(), |y: u32| (north - row * sq(y)).to_radians());
+        let k = sq(t.side());
+        let area = if self.wrap { radius * radius * TAU / self.w as f64 * k * (edge(t.y).sin() - edge(t.y + t.side()).sin()) } else { (k * self.side) * (k * self.side) };
+        let centre = [mid(t.x, t.side()) * self.side, mid(t.y, t.side()) * self.side];
+        let lon = mid(t.x, t.side()) * if self.wrap { 360.0 / self.w as f64 } else { row };
+        (area, Place { centre, lat: north + (south - north) * mid(t.y, t.side()) / self.h as f64, lon })
+    }
     /// The level of the cells (`tree`: their tree), longitudes east from 0 by the degrees of latitude per row (a whole
     /// turn on a globe). Each cell links to the cells across its east side and its south side (north to south, west to
     /// east), then to those across its south-east and south-west corners; with `linked` false, only their ends.
@@ -212,12 +227,6 @@ impl Square {
         // The length of the circle of latitude `phi` (radians) across one column, m: a side on the flat map.
         let across = |phi: f64| if self.wrap { radius * phi.cos() * TAU / self.w as f64 } else { self.side };
         let mid = |from: u32, k: u32| sq(from) + sq(k) / 2.0;
-        let area = |t: &Leaf| {
-            let k = sq(t.side());
-            if self.wrap { radius * radius * TAU / self.w as f64 * k * (edge(t.y).sin() - edge(t.y + t.side()).sin()) } else { (k * self.side) * (k * self.side) }
-        };
-        let centre = |t: &Leaf| [mid(t.x, t.side()) * self.side, mid(t.y, t.side()) * self.side];
-        let lon = |t: &Leaf| mid(t.x, t.side()) * if self.wrap { 360.0 / self.w as f64 } else { row };
         // The cells north-west, north-east, south-west and south-east of the point at column `px` (round the globe) and
         // row `py`, where it is a corner of all four: four cells meet there.
         let round = |px: i64, py: u32| -> Option<[usize; 4]> {
@@ -234,9 +243,10 @@ impl Square {
             let d = sq(k) / 2.0;
             if self.wrap { (d * self.side).hypot(across(edge(py)) * d) } else { (d * self.side) * SQRT_2 }
         };
+        let placed: Vec<(f64, Place)> = leaves.iter().map(|t| self.place_of(t, south, north)).collect();
+        let place = (placed.iter().map(|p| p.1.lat).collect(), placed.iter().map(|p| p.1.lon).collect());
+        let mut cells = Level::of_cells(placed.iter().map(|p| p.0).collect(), placed.iter().map(|p| p.1.centre).collect(), place, if self.wrap { radius } else { 0.0 });
         // Each cell's links across its sides, then with those across its corners as they come.
-        let place = (leaves.iter().map(|t| lat(mid(t.y, t.side()))).collect(), leaves.iter().map(lon).collect());
-        let mut cells = Level::of_cells(leaves.iter().map(area).collect(), leaves.iter().map(centre).collect(), place, if self.wrap { radius } else { 0.0 });
         let mut links_of: Vec<usize> = leaves.iter().map(|t| tree::SIDES.iter().map(|&way| tree.beside(t, way).count()).sum()).collect();
         let mut links: Vec<LinkSpec> = Vec::new();
         for (i, t) in leaves.iter().enumerate() {

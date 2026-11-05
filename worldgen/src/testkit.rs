@@ -360,6 +360,22 @@ pub fn split_down(w: &mut World, region: &[Leaf], depths: u8) {
     }
 }
 
+/// `split_down` with no relief in the cells it splits, so their quarters are flat: the same ground at two sizes, for
+/// scenes that compare a cell with its quarters.
+pub fn split_flat(w: &mut World, region: &[Leaf], depths: u8) {
+    w.drain_events();
+    for r in region {
+        for depth in r.depth..r.depth + depths {
+            for l in r.split(depth).collect::<Vec<_>>() {
+                if let Some(i) = w.map.cell(l) {
+                    w.relief[i] = 0.0;
+                    w.split(l).expect("a split");
+                }
+            }
+        }
+    }
+}
+
 /// The cells of the first air node of `w` whose cells are all land: a region to split.
 pub fn land_block(w: &World) -> Vec<Leaf> {
     let air = w.mesh.level(pcore::AIR);

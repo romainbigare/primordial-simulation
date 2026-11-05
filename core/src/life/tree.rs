@@ -38,7 +38,7 @@ impl Life {
         let mut splits: BTreeMap<u32, [(usize, f64); 4]> = BTreeMap::new();
         for (j, f) in r.sources().iter().enumerate() {
             match *f {
-                Source::Made(Made::Quarter { parent, q, area }) => splits.entry(parent).or_default()[q as usize] = (j, area),
+                Source::Made(Made::Quarter { parent, q, area, .. }) => splits.entry(parent).or_default()[q as usize] = (j, area),
                 Source::Made(Made::Join { kids, area }) => gather(&mut cells[j], kids.map(&mut gone), area, (chem, j)),
                 _ => {}
             }
