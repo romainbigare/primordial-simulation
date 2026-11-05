@@ -30,8 +30,8 @@ write, and resumes only from a snapshot.
 
 **Raw events** (`core/src/event.rs`): born (with kind, one or two parents), died (with cause, kind,
 the light catalyst of the dead), took, gave, watched, bond made or broken, first time a substance appears. Only physical facts; the viewer shows the first appearances.
-Took, gave and watched name bodies by their id (`Body::id`): the cell the body was placed in times 2^40, plus that
-cell's count of bodies placed then (1, 2, ...: children,
+Took, gave and watched name bodies by their id (`Body::id`): the serial of the cell the body was placed in (laws.md
+0) times 2^40, plus that cell's count of bodies placed then (1, 2, ...: children,
 split halves, parts of nodes acting apart, founders). An id never
 changes and is never given again, wherever the body goes.
 

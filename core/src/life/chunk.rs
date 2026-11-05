@@ -6,7 +6,7 @@
 //! `registry`) and what its bodies do to other cells (`cross::Entry`). When it ends the world takes all that, chunk by
 //! chunk, so every sum runs in the order of the cells (`World::take_chunks`).
 
-use super::{Cell, Handle, ID_SHIFT};
+use super::{Cell, Handle};
 use crate::lineage::Lineage;
 use crate::store::{book_by_array, Class, Moves, Node};
 use crate::{body::Body, event::Event, Counters, World};
@@ -87,8 +87,7 @@ impl<'a> Chunk<'a> {
         let i = b.cell as usize;
         let c = self.at_mut(i);
         c.placed += 1;
-        assert!(c.placed < 1 << ID_SHIFT, "cell {i} placed 2^{ID_SHIFT} bodies: its ids would run into the next cell's");
-        (b.id, b.alive, b.last, b.count) = ((i as u64) << ID_SHIFT | c.placed, true, day as f64, b.n());
+        (b.id, b.alive, b.last, b.count) = (super::new_id(c.serial, c.placed), true, day as f64, b.n());
         self.store(b)
     }
     /// Store body `b` at the end of its cell's list.

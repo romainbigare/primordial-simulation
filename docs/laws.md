@@ -47,9 +47,11 @@ free solid has rotted by then (it rots in about a week, 2.1). Every body decides
 came (`life::Cell`), each a record of fixed size (its stores and genes in place, 6.1, 4.1), and their brains, one block
 each in the cell's array (`life::Brains`: the rows, the moving averages of learning and the last trace), reused when
 freed and packed again once the freed blocks hold half the array (a snapshot keeps them packed, none free); a body that
-moves takes its block to the array of the cell it enters. A body's id is the cell it was placed in
-and that cell's count of bodies placed (children, split
-halves, parts of nodes acting apart); it never changes, and its random draws are keyed by it. The cells
+moves takes its block to the array of the cell it enters. Each cell has a **serial** (`life::Cell::serial`), given
+when the cell is made, that never changes and is never given again (the world keeps the next free one); its index may
+change. A body's id is the serial of the cell it was placed in and that cell's count of bodies placed (children, split
+halves, parts of nodes acting apart, `life::new_id`); it never changes, and its random draws are keyed by it. An id
+finds its cell through one table from serial to index (`Life::at_serial`). The cells
 are cut into `Config::chunks` runs of neighbouring indices, the same for any number of threads. **The parallel pass**:
 each chunk is one task on the pool (`life::run`), its cells taken out of the world, the world read only; in each cell
 in order, the physics of each body, in the order they came (a body placed in the pass first updates at the next month);
@@ -400,8 +402,9 @@ Files: `core/src/bond/` (`verbs`, `sense`, `month`, `bonds`); also `choose::go`,
 
 ### 3.1 Parts and structures
 A **part** is a made object (solid walls, the liquid in its hollow, heat, 3 sizes, a hollowness), a store node
-(`Class::Part`) stored in the list of the cell it lies in (`life::Cell::parts`), with an id that never changes: the cell
-it was made in and that cell's count of parts made (`bond::Part::id`, as a body's); held or not, it lies in the cell of
+(`Class::Part`) stored in the list of the cell it lies in (`life::Cell::parts`), with an id that never changes: the
+serial of the cell it was made in and that cell's count of parts made (`bond::Part::id`, as a body's, 0); held or not,
+it lies in the cell of
 its holder. The bonds of a cell's parts are the cell's (`life::Cell::bonds`): a structure lies in one cell, and only a
 structure that moves (carried) spans two cells for that step, which is serial. A body makes one with "form"
 (`bond::form`, `c_form` per kg, at most `form` of its mass). A **bond** (`bond::Bonds`) joins two parts; its strength comes from the weaker material and the contact area (`tensile`, `joint`), at `c_join` per m². A
