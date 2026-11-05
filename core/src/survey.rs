@@ -1,5 +1,6 @@
 //! The bodies seen from their cells: at each month's start what each cell holds and the shade of its bodies
-//! (`survey`), and each month every body's update, in a parallel and a serial pass (`batch`).
+//! (`survey`), and every body's update, in a parallel and a serial pass (`batch`), at the month's start and again inside
+//! it in the cells finer than a square (`steps`).
 
 use crate::body::{die, live, Layout, LiveTmp, LACK};
 use crate::life::{self, Chunk, Handle};
@@ -7,7 +8,9 @@ use crate::store::{Class, Node};
 use crate::{choose, World};
 
 mod draws;
+mod steps;
 pub(crate) use draws::release;
+pub use steps::substeps;
 
 
 /// Temperature, depth of the standing liquid and surface height of a ground cell, as Flow's last step left them (once
@@ -17,18 +20,35 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
     [w.t_ground_last(i), d, z]
 }
 
-/// At each month's start, one task per chunk on the pool (`life::run`), in each of its cells: what movers broke
-/// since the last (`choose::wear`) and what the cell holds (`rows`). A death that lets go of a part queues that,
-/// applied after the tasks (`life::land`, laws.md 0).
-/// Then the caches of the cells (`caches`), once a month the traffic and each cell's surroundings, and the cells'
-/// features (`choose::cells`); both read the members that moved in since the last survey, and that count starts again.
+/// At each month's start: what movers broke and what each cell holds (`break_and_sum`). Then the caches of the cells
+/// (`caches`), once a month the traffic and each cell's surroundings, and the cells' features (`choose::cells`); both
+/// read the members that moved in since the last month's survey, and that count starts again.
 pub fn survey(w: &mut World) {
     let n = w.mesh.cells().n();
     let monthly = monthly(w);
+    break_and_sum(w, None);
+    caches(w);
+    if monthly && w.time > 0 {
+        traffic(w);
+    }
+    if monthly || w.life.env.len() != n {
+        // From Flow's state rebuilt in full, as at a month's start, so a resumed run reads what an unbroken one does.
+        crate::flow::state(w, true);
+        w.life.env = (0..n).map(|i| env_of(w, i)).collect();
+    }
+    choose::cells(w);
+    // (The members that moved in since the last survey are read by both; the count starts again.)
+    w.life.cells.iter_mut().for_each(|c| c.crossings = 0.0);
+}
+
+/// One task per chunk on the pool (`life::run`): in each cell `steps` marks (every cell with none), what movers broke
+/// since its last survey (`choose::wear`); then in every cell the visible traits that changed and what it holds
+/// (`rows`). A death that lets go of a part queues that, applied after the tasks (`life::land`, laws.md 0).
+fn break_and_sum(w: &mut World, steps: Option<&[bool]>) {
     w.life.compact();
     let load = w.life.cells.iter().filter(|c| !c.bodies.is_empty()).count();
     let sums = life::run(w, rows_of(w), load, |_| (), |w, d, sums, _| {
-        for i in d.cells() {
+        for i in d.cells().filter(|&i| steps.is_none_or(|s| s[i])) {
             // (A cell with no bodies and no cover has nothing to break or sum.)
             if d.at(i).bodies.is_empty() && !d.at(i).cover.any() {
                 d.at_mut(i).pushed = 0.0;
@@ -44,18 +64,6 @@ pub fn survey(w: &mut World) {
     });
     w.life.sums = sums.concat();
     life::land(w);
-    caches(w);
-    if monthly && w.time > 0 {
-        traffic(w);
-    }
-    if monthly || w.life.env.len() != n {
-        // From Flow's state rebuilt in full, as at a month's start, so a resumed run reads what an unbroken one does.
-        crate::flow::state(w, true);
-        w.life.env = (0..n).map(|i| env_of(w, i)).collect();
-    }
-    choose::cells(w);
-    // (The members that moved in since the last survey are read by both; the count starts again.)
-    w.life.cells.iter_mut().for_each(|c| c.crossings = 0.0);
 }
 
 /// Once a month, after Flow's state is built in full: the cover's month (`cover::step`) in each cell that holds any,
@@ -144,21 +152,28 @@ fn traffic(w: &mut World) {
     }
 }
 
-/// Update every living body, all at the month's first day (laws.md 0). First the parallel pass: the cells are taken out
-/// of the world in chunks (`life::run`), and each chunk runs, on a thread of the pool with the feature `threads`, its
-/// bodies cell by cell, and in a cell in the order they came, with the world read only. They see the others of their
-/// cell as they are when they decide, the parts as they were at the pass's start, and the store as their cell's moves
-/// leave it (`store::Moves`); what they do outside their cell or to a part is queued (`life::Entry`), and the lineages and born
-/// rows they make are provisional until the chunk ends. Then the serial pass (`life::land`): the moves and litters
-/// land and the other entries are applied. Then the month's merge of alike nodes in each cell (`nodes::crowd`), after
-/// the moves and births, so a crowded cell ends the month with its nodes of each kind and stage. Last the holders of
-/// each lineage and born rows are counted: those left with none die out or are freed.
+/// Update every living body at the month's start (laws.md 0; the bodies of finer cells step again inside the month,
+/// `substeps`): `batch_of` every cell.
 pub fn batch(w: &mut World) {
+    batch_of(w, None);
+}
+
+/// Update every living body of the cells `steps` marks (every cell with none). First the parallel pass: the cells are
+/// taken out of the world in chunks (`life::run`), and each chunk runs, on a thread of the pool with the feature
+/// `threads`, the bodies of those of its cells cell by cell, and in a cell in the order they came, with the world read
+/// only. They see the others of their cell as they are when they decide, the parts as they were at the pass's start, and
+/// the store as their cell's moves leave it (`store::Moves`); what they do outside their cell or to a part is queued
+/// (`life::Entry`), and the lineages and born rows they make are provisional until the chunk ends. Then the serial pass
+/// (`life::land`): the moves and litters land and the other entries are applied. Then the merge of alike nodes in each of
+/// those cells (`nodes::crowd`), after the moves and births, so a crowded cell ends its step with its nodes of each kind
+/// and stage. Last the holders of each lineage and born rows are counted: those left with none die out or are freed.
+fn batch_of(w: &mut World, steps: Option<&[bool]>) {
+    let stepping = |i: usize| steps.is_none_or(|s| s[i]);
     w.life.compact();
     w.life.recount();
     let bounds = life::bounds(w);
     let mut per = vec![0usize; bounds.len() - 1];
-    w.life.living().for_each(|(h, _)| per[bounds.partition_point(|&b| b <= h.cell as usize) - 1] += 1);
+    w.life.living().filter(|(h, _)| stepping(h.cell as usize)).for_each(|(h, _)| per[bounds.partition_point(|&b| b <= h.cell as usize) - 1] += 1);
     let all: usize = per.iter().sum();
     if all == 0 {
         return;
@@ -166,13 +181,13 @@ pub fn batch(w: &mut World) {
     // The busiest chunk's share of the batch's updates (`Counters::busiest_share`).
     let c = &mut w.counts;
     (c.busiest_share, c.body_batches) = (c.busiest_share + *per.iter().max().unwrap_or(&0) as f64 / all.max(1) as f64, c.body_batches + 1.0);
-    life::run(w, per, all, scratch, |w, d, _, s| updates(w, d, s));
+    life::run(w, per, all, scratch, |w, d, _, s| updates(w, d, &stepping, s));
     life::land(w);
     let lay = Layout::of(&w.chem);
-    let load = w.life.cells.iter().filter(|c| c.bodies.len() > 1).count();
+    let load = w.life.cells.iter().enumerate().filter(|(i, c)| stepping(*i) && c.bodies.len() > 1).count();
     life::run(w, vec![(); life::chunks(w)], load, |_| (), |w, d, _, _| {
         // (Fewer than two bodies have nothing to merge.)
-        for i in d.cells() {
+        for i in d.cells().filter(|&i| stepping(i)) {
             if d.cell(i).nth(1).is_some() {
                 crate::nodes::crowd(w, d, &lay, i);
             }
@@ -194,13 +209,14 @@ fn scratch(_: &World) -> Scratch {
     (LiveTmp::default(), choose::Minds::default(), choose::ActTmp::default())
 }
 
-/// The updates of the living bodies of chunk `d`, cell by cell: the physics of each of its bodies in the order they
-/// came (`live_one`); then the inputs of those with a brain, the sums of the hidden layers of each lineage's bodies
-/// together (`choose::Minds::sense`); then each one's decision in that order (`decide`). A cell's stages end before the
-/// next cell's begin, so what the chunk queues and the ids it makes come cell by cell, as for any count of chunks.
-fn updates(w: &World, d: &mut Chunk, (tmp, minds, act): &mut Scratch) {
+/// The updates of the living bodies of the cells of chunk `d` that step (`stepping`), cell by cell: the physics of each
+/// of its bodies in the order they came (`live_one`); then the inputs of those with a brain, the sums of the hidden
+/// layers of each lineage's bodies together (`choose::Minds::sense`); then each one's decision in that order (`decide`).
+/// A cell's stages end before the next cell's begin, so what the chunk queues and the ids it makes come cell by cell, as
+/// for any count of chunks.
+fn updates(w: &World, d: &mut Chunk, stepping: &(dyn Fn(usize) -> bool + Sync), (tmp, minds, act): &mut Scratch) {
     act.new_chunk();
-    for i in d.cells() {
+    for i in d.cells().filter(|&i| stepping(i)) {
         minds.clear();
         for slot in 0..d.at(i).bodies.len() {
             let h = Handle { cell: i as u32, slot: slot as u32 };

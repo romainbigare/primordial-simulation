@@ -10,6 +10,7 @@ use pcore::event::EventKind;
 use pcore::life::{land, Chunk, Entry, Handle};
 use pcore::lineage::{self, Lineage};
 use pcore::rng::{Purpose, Rng};
+use pcore::space::Leaf;
 use pcore::store::{Boundary, Class, Move, Node};
 use pcore::units::DAY_S;
 use pcore::{Config, World};
@@ -339,6 +340,28 @@ pub fn relocate(w: &mut World, h: Handle, j: usize) -> Handle {
     w.in_cell(from as usize, |_, d| d.out.push(Entry::Go { id, from, to: j as u32, pushed: 0.0, lane: 0.0, carries: false, kin: false, brain: Vec::new() }));
     land(w);
     w.life.find(id).expect("the body landed")
+}
+
+/// `w` with each of the leaves `region` split `depths` depths down (`World::split`, which first splits the cells beside
+/// them as 2:1 asks), its events taken first, as the shell takes them before a split.
+pub fn split_down(w: &mut World, region: &[Leaf], depths: u8) {
+    w.drain_events();
+    for r in region {
+        for depth in r.depth..r.depth + depths {
+            for l in r.split(depth).collect::<Vec<_>>() {
+                if w.map.cell(l).is_some() {
+                    w.split(l).expect("a split");
+                }
+            }
+        }
+    }
+}
+
+/// The cells of the first air node of `w` whose cells are all land: a region to split.
+pub fn land_block(w: &World) -> Vec<Leaf> {
+    let air = w.mesh.level(pcore::AIR);
+    let j = (0..air.n()).find(|&j| air.children(j).iter().all(|&i| w.is_land(i as usize))).expect("an air node over land only");
+    air.children(j).iter().map(|&i| w.map.leaves()[i as usize]).collect()
 }
 
 /// Every part of Flow but creep once, for `dt` seconds, in the clock's order: the state rebuilt in full, the air's step

@@ -144,6 +144,10 @@ pub fn cells(w: &mut World) {
     let mm = parts.as_ref().map(|p| p.mm(chem));
     let ln_kg = |kg: f64, area: f64| ln(1.0 + (kg / area) as f32);
     let ground = w.store.amounts(Class::Ground);
+    // The members that moved in since the last month's survey, per month: they came in the last month at a month's
+    // start, and since the month's start inside it (`survey::substeps`).
+    let month = w.cfg.calendar().month;
+    let monthly = match w.time % month { 0 => 1.0, t => month as f64 / t as f64 };
     let mut feat: Vec<[f32; NCELL]> = (0..n).map(|i| {
         let (c, e, area, cell) = (life.sum(i), &life.env[i], w.mesh.cells().area()[i], &life.cells[i]);
         let mut f = [0f32; NCELL];
@@ -168,7 +172,7 @@ pub fn cells(w: &mut World) {
         f[MEMBERS] = ln(1.0 + (c[0] * per) as f32) / LN_MEMBERS;
         f[STRENGTH] = (c[3] / c[0].max(1.0)) as f32;
         f[RESIST] = ln(1.0 + thickness(w, c[1], area) as f32);
-        (f[PARTS_HERE], f[CROSSED]) = (ln(1.0 + (cell.parts.len() as f64 * per) as f32), ln(1.0 + (cell.crossings as f64 * per) as f32));
+        (f[PARTS_HERE], f[CROSSED]) = (ln(1.0 + (cell.parts.len() as f64 * per) as f32), ln(1.0 + (cell.crossings as f64 * monthly * per) as f32));
         f
     }).collect();
     // Each level the last smoothed over each cell and its neighbours, each by its area (over the cell's own).

@@ -74,24 +74,6 @@ const NOISE_SEEDS: [u64; 2] = [1, 2];
 /// starting kinds alive (in bodies or cover).
 const LIFE: [&str; 3] = ["animal_kg", "cover_kg", "kinds_alive"];
 
-/// The first air node of `w` whose cells are all land: the region that splits.
-fn region(w: &World) -> usize {
-    let air = w.mesh.level(pcore::AIR);
-    (0..air.n()).find(|&j| air.children(j).iter().all(|&i| w.is_land(i as usize))).expect("an air node over land only")
-}
-
-/// Each cell under air node `j` split into its quarters, and each of those into theirs (`World::split`, which first
-/// splits the cells beside them as 2:1 asks).
-fn split_region(w: &mut World, j: usize) {
-    let leaves: Vec<pcore::space::Leaf> = w.mesh.level(pcore::AIR).children(j).iter().map(|&i| w.map.leaves()[i as usize]).collect();
-    for &l in &leaves {
-        w.split(l).expect("a cell of the region splits");
-    }
-    for q in leaves.iter().flat_map(|l| l.quarters()) {
-        w.split(q).expect("a quarter of the region splits");
-    }
-}
-
 /// The `LIFE` numbers of `w`.
 fn life(w: &World) -> [f64; LIFE.len()] {
     let animals: f64 = w.life.alive().map(|b| b.mass(&w.chem)).sum();
@@ -105,10 +87,10 @@ fn life(w: &World) -> [f64; LIFE.len()] {
 /// depths at the end of year `SPLIT_AT` if `split`.
 fn life_years(seed: u64, split: bool) -> Vec<[f64; LIFE.len()]> {
     let w = worldgen::new_world(seed, REGION_SIDE, REGION_SIDE);
-    let (j, at) = (region(&w), SPLIT_AT * w.cfg.calendar().year);
+    let (region, at) = (worldgen::testkit::land_block(&w), SPLIT_AT * w.cfg.calendar().year);
     let step = move |w: &mut World| {
         if split && w.time == at {
-            split_region(w, j);
+            worldgen::testkit::split_down(w, &region, 2);
         }
         pcore::step(w);
     };

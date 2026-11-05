@@ -445,7 +445,7 @@ Not everything needs the same step. These are suggested defaults to measure and 
 |---|---|
 | Heat, air, rain, water (coarse world) | 1 month, with sub-steps if unstable |
 | Ground uplift, slow wearing | 10 to 100 years |
-| Bodies (population nodes and single bodies) | 1 month: one parallel pass over chunks of cells, one serial pass for what crosses cells |
+| Bodies (population nodes and single bodies) | their cell's step: 1 month for a square (2 km on the island) or a coarser cell, a month / 2^k for a cell 2^k finer, so none crosses more than one cell a step; each step one parallel pass over chunks of cells, one serial pass for what crosses cells |
 | Snapshots for the history tape | at the end of a run, every `--snapshots-every` years if asked (and before every god action) |
 
 There is **one world clock**. A fast process in a detailed area may sub-step inside a month. Seasons must exist, because they matter for food and migration.
@@ -461,11 +461,11 @@ falls to hour steps.
 This is a speed tool, not a law: the history is the same with and without threads, on any number of threads (the feature `threads` of `core`) and for any count of chunks.
 
 - The cells are cut into **chunks**: `Config::chunks` runs of neighbouring cells, the same for any number of threads. A chunk owns its cells, their bodies, their cover and its view of the store.
-- Bodies update once a month, in one **parallel pass**: one task per chunk on the pool, the world read only, a chunk writing only its own cells. What leaves a chunk (a move to another cell, a litter that starts in another cell, a watch, an act on a part) waits in the chunk's queue. A chunk updates its bodies cell by cell, all the stages of one cell before the next, so its queue, its events and the lineages and born rows it makes come in the order of the cells, whatever the chunks. Then one **serial pass** lands the queues in that order (by the cell each lands in, then the order queued), the moves and litters on the pool, each in the chunk of the cell it goes to; the acts on parts run there too.
+- Bodies update at their cell's step (7.3), each step in one **parallel pass**: one task per chunk on the pool, the world read only, a chunk writing only its own cells. What leaves a chunk (a move to another cell, a litter that starts in another cell, a watch, an act on a part) waits in the chunk's queue. A chunk updates its bodies cell by cell, all the stages of one cell before the next, so its queue, its events and the lineages and born rows it makes come in the order of the cells, whatever the chunks. Then one **serial pass** lands the queues in that order (by the cell each lands in, then the order queued), the moves and litters on the pool, each in the chunk of the cell it goes to; the acts on parts run there too.
 - Flow's air step and Change's reactors and the survey's wear, merge and shade use the same pool where a loop is large enough to pay for a call into it (30 to 55 µs).
 - How it works: `docs/laws.md` 0.
 - The tape's recorder uses the same pool (`pcore::par::map`, `map_n` and `join`, under the one feature `threads` of `pcore`): its walks over bodies and cells, and the parts of a yearly row that write different columns, run side by side, and every sum is added in the order of the data, so its files are the same with and without threads.
-- A zone that needs a shorter step later (7.3), such as smart bodies, can run several sub-steps inside the month: its edge effects still land at the month's end. Nothing built blocks that.
+- The bodies of cells finer than a square run sub-steps inside the month (7.3), each a parallel pass and a serial pass of its own over the cells that step then (`survey::substeps`).
 
 ---
 
