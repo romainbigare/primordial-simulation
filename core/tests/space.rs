@@ -22,6 +22,38 @@ fn maps() -> [(Square, Mesh); 2] {
     })
 }
 
+/// Where four cells meet at a point (each has a corner there), the two across it link, unless they differ by more than
+/// a depth or one of them has 8 links already; a link of no width joins two cells that meet only at a point; no cell has
+/// more than 8 links.
+fn corners(sq: &Square, mesh: &Mesh) {
+    let (lv, leaves, unit) = (mesh.cells(), sq.leaves(), BLOCK / SCALE as u32);
+    let (across, down) = (sq.w as u32 * unit, sq.h as u32 * unit);
+    let links = |i: usize| lv.around(i).0.len();
+    assert!((0..lv.n()).all(|i| links(i) <= 8), "no cell has more than 8 links");
+    // Leaf `l` has a corner at (`x`, `y`), on its east (`east`) or west side and its south (`south`) or north side.
+    let corner = |l: &Leaf, (x, y): (u32, u32), east: bool, south: bool| {
+        ((l.x + if east { l.side() } else { 0 }) % across, l.y + if south { l.side() } else { 0 }) == (x % across, y)
+    };
+    for l in 0..lv.a().len() {
+        let (p, q) = (&leaves[lv.a()[l] as usize], &leaves[lv.b()[l] as usize]);
+        let touch = |p: &Leaf, q: &Leaf| [(true, true), (true, false)].iter().any(|&(e, s)| corner(p, (q.x, if s { q.y } else { q.y + q.side() }), e, s));
+        assert!(lv.width()[l] > 0.0 || touch(p, q) || touch(q, p), "a link of no width joins cells that meet at a point");
+    }
+    for c in leaves {
+        let (x, y) = (c.x + c.side(), c.y + c.side());
+        if y >= down || (!sq.wrap && x >= across) {
+            continue;
+        }
+        let at = |dx: u32, dy: u32| mesh.tree().cell_at([(x + across - dx) % across, y - dy]);
+        let [nw, ne, sw, se] = [at(1, 1), at(0, 1), at(1, 0), at(0, 0)];
+        let meet = corner(&leaves[ne], (x, y), false, true) && corner(&leaves[sw], (x, y), true, false) && corner(&leaves[se], (x, y), false, false);
+        for (i, j) in [(nw, se), (ne, sw)].into_iter().filter(|_| meet) {
+            let near = leaves[i].depth.abs_diff(leaves[j].depth) <= 1;
+            assert!(lv.link(i, j).is_some() || !near || links(i) == 8 || links(j) == 8, "the cells across a corner where four meet link");
+        }
+    }
+}
+
 /// Each link once, its ends `a < b`; the adjacency lists exactly the links at each cell.
 fn links_once(lv: &Level) {
     let pairs: BTreeSet<(u32, u32)> = lv.a().iter().zip(lv.b()).map(|(&a, &b)| (a, b)).collect();
@@ -162,8 +194,8 @@ fn tile(sq: &Square, i: usize) -> ((usize, usize), usize) {
 
 /// Cells of many sizes, on a flat map and on a globe: numbered by their north-west squares row by row, each covers its
 /// squares and lies under their air block, the air level is that of the squares; each cell keeps the borders of its
-/// squares with the others, cells of two sizes link only across a border, as far apart as their centres across it,
-/// and a corner links only cells of one size.
+/// squares with the others, cells of two sizes link across a border as far apart as their centres across it, and
+/// across a corner where four cells meet (`corners`).
 #[test]
 fn cells_of_many_sizes_cover_their_squares_and_keep_the_borders() {
     for (sq, south, north) in mixed() {
@@ -171,6 +203,7 @@ fn cells_of_many_sizes_cover_their_squares_and_keep_the_borders() {
         let lv = mesh.cells();
         links_once(lv);
         links_once(mesh.level(AIR));
+        corners(&sq, &mesh);
         let corner = |i: usize| sq.idx(tile(&sq, i).0 .0, tile(&sq, i).0 .1);
         assert!((1..lv.n()).all(|i| corner(i - 1) < corner(i)), "numbered by their north-west squares");
         let cell_of = |s: usize| mesh.tree().cell_at(sq.point(s));
@@ -195,9 +228,7 @@ fn cells_of_many_sizes_cover_their_squares_and_keep_the_borders() {
         assert!(border.iter().zip(lv.width()).all(|(&b, &w)| b == w || near(b, w)), "each cell keeps the borders of its squares");
         for l in 0..lv.a().len() {
             let (ka, kb) = (tile(&sq, lv.a()[l] as usize).1, tile(&sq, lv.b()[l] as usize).1);
-            if lv.width()[l] == 0.0 {
-                assert_eq!(ka, kb, "a corner links cells of one size");
-            } else if !sq.wrap {
+            if lv.width()[l] > 0.0 && !sq.wrap {
                 assert!(near(lv.dist()[l], (ka + kb) as f64 / 2.0 * SIDE), "centres lie half their sides apart across a border");
             }
         }
@@ -207,7 +238,8 @@ fn cells_of_many_sizes_cover_their_squares_and_keep_the_borders() {
 /// A tree of three depths in one air block (a fine north-west corner, its finest cells half a square on a side): its
 /// cells tile the block, each found at its corner; cells across a border differ by one depth at most and link across
 /// it as far apart as their centres across it; each cell's links are as wide as its sides inside the map, so each
-/// border's width is the same seen from either side; a corner links only cells of one size.
+/// border's width is the same seen from either side; across a corner where four cells meet the two across it link
+/// (`corners`), as far apart as their centres.
 #[test]
 fn a_tree_of_three_depths_keeps_the_borders_and_the_area_of_its_block() {
     // The block in quarters, the north-west one in quarters, and the north-west one of those in quarters.
@@ -220,6 +252,7 @@ fn a_tree_of_three_depths_keeps_the_borders_and_the_area_of_its_block() {
     let (lv, cells) = (mesh.cells(), sq.leaves());
     assert_eq!([1, 2, 3].map(|d| cells.iter().filter(|l| l.depth == d).count()), [3, 3, 4]);
     links_once(lv);
+    corners(&sq, &mesh);
     let block = SCALE as f64 * SIDE;
     assert_eq!(lv.area().iter().sum::<f64>(), block * block, "the cells cover their block");
     assert_eq!(mesh.level(AIR).area(), [block * block]);
@@ -232,7 +265,7 @@ fn a_tree_of_three_depths_keeps_the_borders_and_the_area_of_its_block() {
         assert!(cells[a].depth.abs_diff(cells[b].depth) <= 1, "cells across a border differ by one depth at most");
         let way = lv.offset(a, b);
         if lv.width()[l] == 0.0 {
-            assert_eq!(cells[a].depth, cells[b].depth, "a corner links cells of one size");
+            assert!((lv.dist()[l] / way[0].hypot(way[1]) - 1.0).abs() < 1e-12, "as far apart as their centres across the corner");
             continue;
         }
         assert_eq!(lv.dist()[l], way[0].abs().max(way[1].abs()), "as far apart as their centres across the border");

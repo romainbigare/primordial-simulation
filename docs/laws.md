@@ -30,8 +30,9 @@ join into their parent (`World::split`, `World::join`, below), no law deciding w
 one depth at most (2:1): a split first splits each cell across a side that would border the quarters two depths coarser
 (`Square::splits`), and a join that would leave one two depths finer is refused (`Square::joins`). One builder makes
 every cell (`Square::mesh`). Cells link across a border by its width, as far apart as their centres across it, so a
-steady change across a border of two sizes passes exactly; across a corner (width 0) only where four cells of one size
-meet, so no cell has more than 8 links. The air level is built on the map's squares, the same whatever the sizes of the
+steady change across a border of two sizes passes exactly; across a corner (width 0) where four cells meet, whatever
+their sizes, the two across it one depth apart at most and neither with 8 links already (the cells in order), so the
+downhill way through a corner stays when a cell beside it splits and no cell has more than 8 links. The air level is built on the map's squares, the same whatever the sizes of the
 cells. The map's samples are its squares and its finer cells (`Square::samples`: a cell coarser than a square cut into
 its squares, a finer one as it is): each reads its air there (1.4), and a cell's starting height is the mean by area of
 the terrain on its samples (a cell finer than a square takes the height at its own centre). What needs the cell at a
