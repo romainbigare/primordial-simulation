@@ -163,6 +163,7 @@ pub(crate) fn potential_of(w: &World, cells: &[usize], air: usize) -> f64 {
 pub(super) struct Lifts {
     start: Potential,
     moved: Vec<Moved>,
+    given: Vec<f64>,
 }
 
 /// A mass that went from one node to another, kg: each named by its array of `Potential` and its index there (`slot`;
@@ -211,7 +212,18 @@ impl Lifts {
     /// From the world now, whose potential energy is `known` where the last part left it so, its moves gathered in
     /// `moved` (empty; kept from part to part for its room).
     pub(super) fn start(w: &World, s: &Scratch, known: Option<Potential>, moved: Vec<Moved>) -> Lifts {
-        Lifts { start: known.unwrap_or_else(|| potential(w, s, None)), moved }
+        Lifts { start: known.unwrap_or_else(|| potential(w, s, None)), moved, given: Vec::new() }
+    }
+    /// The height ground node `i`'s matter left from at the start, m (its head).
+    pub(super) fn head_at_start(&self, i: usize) -> f64 {
+        self.start.heights.ground[i]
+    }
+    /// Heat of falls given on the way to the ground nodes the matter lands in, `q[i]` J (`store::fall_heat`, against
+    /// `Store::lifted`), so what passes on takes its share; the booking at the end gives them only the rest.
+    pub(super) fn give(&mut self, w: &mut World, q: &[f64]) {
+        fall_heat(w, Class::Ground, q);
+        self.given.resize(q.len(), 0.0);
+        self.given.iter_mut().zip(q).for_each(|(g, &x)| *g += x);
     }
     /// `kg` go from node `from` to node `to` (back where negative).
     fn carry(&mut self, (from, to): ((Class, u32), (Class, u32)), kg: f64) {
@@ -233,7 +245,7 @@ impl Lifts {
     /// not its own: what its lifts and falls give or take is its ground node's (a bodies' node holds little heat of its
     /// own). Returns the potential energy now, and the room of its moves, emptied.
     pub(super) fn book(self, w: &mut World, s: &Scratch) -> (Potential, Vec<Moved>) {
-        let (mut start, mut moved) = (self.start, self.moved);
+        let (mut start, mut moved, given) = (self.start, self.moved, self.given);
         let (now, g) = (potential(w, s, Some(std::mem::take(&mut start.found))), w.cfg.gravity);
         let olds = start.energies();
         let mut q: [Vec<f64>; 4] = now.energies().map(|v| vec![0.0; v.len()]);
@@ -250,6 +262,7 @@ impl Lifts {
         }
         let [ground, air, deep, bodies] = &mut q;
         ground.iter_mut().zip(bodies.iter_mut()).for_each(|(g, b)| *g += std::mem::take(b));
+        ground.iter_mut().zip(&given).for_each(|(g, given)| *g -= given);
         for (class, q) in [(Class::Ground, ground), (Class::Air, air), (Class::Deep, deep)] {
             fall_heat(w, class, q);
         }

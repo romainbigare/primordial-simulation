@@ -185,7 +185,8 @@ refresh) follow each other with nothing between (`flow::chain`) and are booked a
 build of Flow's state, and a part run alone, are booked at their own end. In each booking every move carries its
 potential energy from the height it leaves (a ground node's head, an air node's mean head, a store's table, each the
 mean of the booking's start and end, so a lake that drains whole takes along what it held), and each node's heat takes
-what came in less what left less the change of its own (`store::fall_heat`):
+what came in less what left less the change of its own (`store::fall_heat`; less what a part gave it on the way,
+as the liquid's pass gives the heat of its falls to what lands, 1.2):
 so a fall heats where the matter lands, a lift is paid by the node it enters (the air, for a gas going up; the ground
 node a store's liquid rises into), a column that rises as it fills pays for it, and the potential energy the world's
 matter gained is one number of the store (`Store::lifted`), the change of that function. Within a month's Flow the later
@@ -242,11 +243,16 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
   `downhill::Order`), starting from the sea (from the lowest cell where there is none). Liquid stands below it (or in
   the lowest basin where there is no sea); elsewhere it passes on, counting as no higher than its ground, so it crosses
   the map in one step while depressions fill and spill. Lakes (closed basins above the sea) fill and spill this way.
+  The pass goes by falling spill level, and at one level the cell the flood reached last first, so each cell comes
+  before its way out whether its liquid stands or passes on: a river crosses a lake in the step it reaches it.
 - **Running off** (`solve::downhill`): each cell but the sea's sends its liquid down its steepest way by D-infinity
   (Tarboton 1997; `Level::steepest`): two neighbours next in compass order make a triangle with the centre, the plane
   through their drops gives its slope and way, and the steepest triangle shares the liquid between its two neighbours
   by angle. To a neighbour already passed whose liquid stands it sends at most what levels the two heads, whatever
-  their areas; to one already passed whose liquid passes on (upstream in the flood) it sends none, so a pit over its
+  their areas, and no more than fills it to its spill level; a neighbour still to come whose liquid stands holds it
+  back no higher than its spill level (what stands over that passes on). What the steepest way cannot take runs down
+  the other ways, the steepest first, each as far as it takes, so a month's river through a small cell stands in no
+  column; to one already passed whose liquid passes on (upstream in the flood) it sends none, so a pit over its
   rim spills by its way out. What reaches a sea cell stays there and joins the sea.
 - **Pore water** flows by Darcy's law (one explicit `solve::sweep` on the liquid table, the store's too): `seep` ×
   saturated thickness × width / distance, at most half of what would level two cells, and no cell giving more than it
@@ -263,7 +269,9 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node
   holds and what stays keeps that temperature. A salt is a liquid that never
   boils (11, 12): it moves with the liquid and stays when it evaporates. Its fall heats the node it lands in (0, "The
-  books"), and the head it loses on the way out does work (1.3).
+  books"): in the pass, from the head it leaves to the head it lands at (as the booking has them at its start), so
+  what runs on from there takes its share of that heat along as the liquid does, and the booking at the end gives the
+  node only the rest (`Lifts::give`). The head it loses on the way out does work (1.3).
 
 ### 1.3 Erosion and creep
 The head lost by moving liquid does work where it is lost on land (`flow::liquid::load`, `wear`; below 0 m its load

@@ -829,6 +829,37 @@ fn a_pit_over_its_rim_spills_by_its_way_out() {
     assert!(kept < KEPT * over, "{kept:e} of {over:e} m³ over the rims stayed around the pits");
 }
 
+/// Runoff through a pool of small cells passes on in one liquid step, and the heat of its fall goes on with it
+/// (laws.md 1.2): the island's highest square cut into 16 cells of a quarter of its side, its 12 outer cells raised by
+/// `RIM_M` of rock (its way out, one of them, by half that) around a pool of 4, and a month's runoff (`RUNOFF_M` over a
+/// small cell) poured on the pool's cell farthest from the way out. After the step no small cell holds more than `RIM_M`
+/// of it, and none is more than `FALL_K` warmer: the runoff took the heat of its fall along. Matter and energy are kept.
+#[test]
+fn runoff_crosses_a_pool_of_small_cells_and_takes_its_fall_along() {
+    const RIM_M: f64 = 0.5;
+    const RUNOFF_M: f64 = 400.0;
+    const FALL_K: f64 = 5.0;
+    let mut w = worldgen::testkit::squares(1, 32, 32);
+    (w.cfg.phys.porosity, w.cfg.phys.seep, w.cfg.evap) = (0.0, 0.0, 0.0);
+    let square = w.map.leaves()[top(&w)];
+    w.split(square).expect("a split");
+    square.quarters().iter().for_each(|&q| _ = w.split(q).expect("a split"));
+    // The small cells row by row, (r, c) of 4 x 4.
+    let small: Vec<usize> = (0..16).map(|x| (x / 4, x % 4)).map(|(r, c)| w.map.cell(square.quarters()[r / 2 * 2 + c / 2].quarters()[r % 2 * 2 + c % 2]).expect("a small cell")).collect();
+    let (area, rock_m3) = (w.mesh.cells().area()[small[0]], 1.0 / w.chem.molar_volume(worldgen::testkit::ROCK, Phase::Solid));
+    let (pool, way_out, far) = ([5, 6, 9, 10], 1, 10);
+    for x in (0..16).filter(|x| !pool.contains(x)) {
+        put(&mut w, worldgen::testkit::ROCK, small[x], if x == way_out { 0.5 } else { 1.0 } * RIM_M * area * rock_m3);
+    }
+    pour(&mut w, small[far], RUNOFF_M * area);
+    let (books, t0) = (Books::now(&w), small.iter().map(|&i| w.t_ground(i)).collect::<Vec<f64>>());
+    flow_step(&mut w, LIQUID_STEP);
+    books.assert_within(&w, 1e-9, 1e-9);
+    let deepest = small.iter().map(|&i| liquid_m3(&w, i) / area).fold(0.0, f64::max);
+    let warmest = small.iter().zip(&t0).map(|(&i, t)| w.t_ground(i) - t).fold(f64::MIN, f64::max);
+    assert!(deepest < RIM_M && warmest < FALL_K, "a small cell holds {deepest} m of the runoff, one is {warmest} K warmer");
+}
+
 /// The height the liquid of cell `i` stands at, m: its solid surface, and above it the liquid over what its pores hold.
 fn liquid_top(w: &World, i: usize) -> f64 {
     let (t, plateau) = w.thaw_last(i);
