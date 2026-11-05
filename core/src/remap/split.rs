@@ -1,11 +1,12 @@
 //! Split and join of cells between steps, at a month's start (laws.md 0): the tree's change (`Square::splits`,
 //! `Square::joins`), one remap of the cell table each (`World::remap_cells`, which shares out and gathers the life of
-//! the cells, `Life::remap`), the relief a join flattens kept and a split's given back, and an event each. A joined
-//! cell's cover lands by the cover's rule and its bodies merge as the monthly merge does. The splits and joins of one
-//! change (`Change`: one split or join, or a month's refinement) read the cells' places between them, not their links:
-//! the mesh is linked, and the links take their new numbers, once at its end (`World::changed`).
+//! the cells, `Life::remap`), the relief a join flattens kept and a split's spent on its quarters' terrain or given
+//! back, and an event each. A joined cell's cover lands by the cover's rule and its bodies merge as the monthly merge
+//! does. The splits and joins of one change (`Change`: one split or join, or a month's refinement) read the cells'
+//! places between them, not their links: the mesh is linked, and the links take their new numbers, once at its end
+//! (`World::changed`).
 
-use super::{Joined, Made, Of, Renumber, Source};
+use super::{sum4, Joined, Made, Of, Renumber, Source};
 use crate::event::{Event, EventKind};
 use crate::space::{square::Square, tree::Refused, Leaf, Mesh};
 use crate::store::{fall_heat, Class};
@@ -54,12 +55,11 @@ impl World {
     }
 
     /// Join the quarters of `parent` into it (`Square::joins`), one remap: it holds their sum, and keeps each one's
-    /// shares and, as its relief, what the join flattens (the potential energy of their stacks less its own) with the
-    /// relief they kept from their own joins (`Joined`). Their life comes together (`Life::remap`); then the slots of
-    /// their cover land in its cover as seeds do (`cover::land`: what finds no slot goes to its ground as remains) and
-    /// its bodies merge (`merge_in`). A merge that lets go of a part records that in an event naming the cell by its
-    /// index, so the shell takes the events before the next split or join. Refused where the tree refuses it. One
-    /// change.
+    /// shares and relief (`Joined`); its relief is theirs and what the join flattens (the potential energy of their
+    /// stacks less its own). Their life comes together (`Life::remap`); then the slots of their cover land in its cover
+    /// as seeds do (`cover::land`: what finds no slot goes to its ground as remains) and its bodies merge (`merge_in`). A
+    /// merge that lets go of a part records that in an event naming the cell by its index, so the shell takes the events
+    /// before the next split or join. Refused where the tree refuses it. One change.
     pub fn join(&mut self, parent: Leaf) -> Result<(), Refused> {
         let mut c = self.change();
         let made = self.join_in(parent, &mut c);
@@ -72,16 +72,15 @@ impl World {
         let kids = self.map.joins(parent)?;
         let air = self.mesh.cells().parent()[kids[0]] as usize;
         let before = crate::flow::potential_of(self, &kids, air);
-        let kept: f64 = kids.iter().filter_map(|&i| self.joined[i].as_ref()).map(|r| r.relief).sum();
         let map = self.map.join(parent);
         let mesh = self.mesh_for(&map, false);
         let j = map.cell(parent).expect("the joined cell");
         let area = kids.map(|i| self.mesh.cells().area()[i] / mesh.cells().area()[j]);
-        let mut record = Joined::of(self, kids, area);
+        let record = Joined::of(self, kids, area);
         let made = Source::Made(Made::Join { kids: kids.map(|i| i as u32), area });
         let from = map.leaves().iter().map(|&l| if l == parent { made } else { Source::Old(self.map.cell(l).expect("a cell") as u32) }).collect();
         self.renew((map, mesh), from, c);
-        record.relief = kept + before - crate::flow::potential_of(self, &[j], air);
+        self.relief[j] = sum4(record.kept) + before - crate::flow::potential_of(self, &[j], air);
         self.joined[j] = Some(record);
         self.events.push(Event { day: self.day(), kind: EventKind::Join, node: self.life.cells[j].serial, value: parent.depth as f64 });
         crate::cover::land(self);
@@ -90,28 +89,42 @@ impl World {
         Ok(())
     }
 
-    /// Split cell `leaf` into its quarters, one remap: each holds its share of what the cell held, by the cell's record
-    /// where a join made it (`Joined`), else by area (flat quarters: the potential energy of the stacks does not
-    /// change), and its share of the cell's life (`Life::remap`). A record's split gives back its relief less what the
-    /// quarters' stacks hold over the cell's, to the quarters' ground heat by their shares of it (`store::fall_heat`,
-    /// which books it against `Store::lifted`).
+    /// Split cell `leaf` into its quarters, one remap: each holds its share of what the cell held (`Made::held`), and
+    /// its share of the cell's life (`Life::remap`); the cell's relief pays what the quarters' stacks hold over the
+    /// cell's and the quarters' reliefs. Where a join made the cell, by its record (`Joined`), and each quarter takes back
+    /// its relief; what is left (or short) goes to the quarters' ground heat by their shares (`store::fall_heat`, which
+    /// books it against `Store::lifted`). Else by area but the bed, which stands as the terrain inside the cell does,
+    /// drained (`World::uneven`), each quarter with the relief of the terrain inside it and its share by area of what is
+    /// left: the potential energy of the pits the drainage filled, which the ground finer than the quarters still holds.
+    /// Before Flow first built the state of the ground the stacks' potential energy is not found: the quarters are flat,
+    /// each with its share of the relief by area.
     fn split_one(&mut self, leaf: Leaf, c: &mut Change) {
         let i = self.map.cell(leaf).expect("a cell");
         let (air, record, serial) = (self.mesh.cells().parent()[i] as usize, self.joined[i].clone(), self.life.cells[i].serial);
-        let before = record.as_ref().map(|_| crate::flow::potential_of(self, &[i], air));
+        let (relief, before) = (self.relief[i], crate::flow::potential_of(self, &[i], air));
         let (map, quarters) = (self.map.split(leaf), leaf.quarters());
         let mesh = self.mesh_for(&map, false);
-        let from = (map.leaves().iter().enumerate())
-            .map(|(j, &l)| match quarters.iter().position(|&q| q == l) {
-                Some(q) => Source::Made(Made::Quarter { parent: i as u32, q: q as u8, area: mesh.cells().area()[j] / self.mesh.cells().area()[i] }),
+        let kids = quarters.map(|q| map.cell(q).expect("a quarter"));
+        let share = kids.map(|j| mesh.cells().area()[j] / self.mesh.cells().area()[i]);
+        let old = |j: usize| quarters.iter().all(|&q| q != map.leaves()[j]).then(|| self.map.cell(map.leaves()[j]).expect("a cell"));
+        let uneven = (record.is_none() && crate::flow::stated(self)).then(|| self.uneven((i, leaf), (mesh.cells(), kids), old));
+        let bed = uneven.as_ref().map_or(share, |u| u.bed);
+        let from = (map.leaves().iter())
+            .map(|&l| match quarters.iter().position(|&q| q == l) {
+                Some(q) => Source::Made(Made::Quarter { parent: i as u32, q: q as u8, area: share[q], bed: bed[q] }),
                 None => Source::Old(self.map.cell(l).expect("a cell") as u32),
             })
             .collect();
-        let kids = quarters.map(|q| map.cell(q).expect("a quarter"));
         self.renew((map, mesh), from, c);
-        if let (Some(r), Some(before)) = (record, before) {
-            let give = r.relief - (crate::flow::potential_of(self, &kids, air) - before);
-            fall_heat(self, Class::Ground, kids.iter().zip(0..).map(|(&c, k)| (c, give * r.share(Of::Heat(Class::Ground), k))));
+        let kept = record.as_ref().map(|r| r.kept).or(uneven.as_ref().map(|u| u.relief));
+        if let Some(kept) = kept {
+            let left = relief - (crate::flow::potential_of(self, &kids, air) - before) - sum4(kept);
+            if let Some(r) = &record {
+                kids.iter().zip(kept).for_each(|(&j, k)| self.relief[j] = k);
+                fall_heat(self, Class::Ground, kids.iter().zip(0..).map(|(&j, q)| (j, left * r.share(Of::Heat(Class::Ground), q))));
+            } else {
+                kids.iter().zip(kept).zip(share).for_each(|((&j, k), a)| self.relief[j] = k + left * a);
+            }
         }
         self.events.push(Event { day: self.day(), kind: EventKind::Split, node: serial, value: leaf.depth as f64 });
         self.seen(&kids);

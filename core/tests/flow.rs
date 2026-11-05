@@ -475,8 +475,8 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
 /// The depth a full store of the bed fills in `the_store_of_small_cells_spreads_in_a_month_as_in_thirty_days`, m.
 const HUMP_M: f64 = 25.0;
 
-/// The store of the bed flows between cells of 125 m in one month as in thirty days: on a flat square split down to the
-/// most depth, its cells' stores empty but one filled `HUMP_M`, one month of the liquid leaves the store of that cell and
+/// The store of the bed flows between cells of 125 m in one month as in thirty days: on a flat square (no relief inside
+/// the cells) split down to the most depth, its cells' stores empty but one filled `HUMP_M`, one month of the liquid leaves the store of that cell and
 /// of its neighbours within a tenth of `HUMP_M` of thirty daily steps. One explicit step of the month would take
 /// dt Σ g / cap = 2.5, 5 times the most a step may (`sweep::LIMIT`), and empty the full store into its neighbours; the
 /// cell and its links sub-step inside the month (laws.md 1, the step by the size), and the books are kept.
@@ -484,6 +484,7 @@ const HUMP_M: f64 = 25.0;
 fn the_store_of_small_cells_spreads_in_a_month_as_in_thirty_days() {
     let mut w = worldgen::testkit::small_world();
     w.drain_events();
+    w.relief.iter_mut().for_each(|r| *r = 0.0);
     let square = w.map.leaves()[worldgen::testkit::dry_land(&w)];
     for depth in square.depth..pcore::space::tree::DEPTH_MOST {
         for l in square.split(depth).collect::<Vec<_>>() {

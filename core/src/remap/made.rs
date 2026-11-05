@@ -9,8 +9,9 @@ use serde::{Deserialize, Serialize};
 /// A cell a split or a join made of old cells (`Source::Made`).
 #[derive(Clone, Copy, Debug)]
 pub enum Made {
-    /// Quarter `q` (row by row) of old cell `parent`, `area` of its area
-    Quarter { parent: u32, q: u8, area: f64 },
+    /// Quarter `q` (row by row) of old cell `parent`, `area` of its area and `bed` of its bed (its area's share of a
+    /// flat cell's)
+    Quarter { parent: u32, q: u8, area: f64, bed: f64 },
     /// The join of old cells `kids`, its quarters row by row, each `area[q]` of its area
     Join { kids: [u32; 4], area: [f64; 4] },
 }
@@ -24,8 +25,16 @@ pub(crate) enum Of {
     Flow(usize),
 }
 
-/// The volumes Flow keeps of a ground node that a cell holds (`flow::volumes`).
+/// The volumes Flow keeps of a ground node that a cell holds (`flow::volumes`), and which of them is its bed's.
 pub(crate) const FLOW_HELD: usize = 3;
+pub(crate) const FLOW_BED: usize = 2;
+
+impl Of {
+    /// Whether it is a number of the cell's bed (its amounts, its volume), which a quarter holds by its share of the bed.
+    fn of_bed(self) -> bool {
+        matches!(self, Of::Amount(Class::Bed, _) | Of::Flow(FLOW_BED))
+    }
+}
 
 impl Made {
     /// The old cells it reads.
@@ -36,12 +45,13 @@ impl Made {
         }
     }
     /// What it holds of a number a cell holds, `at(i)` old cell `i`'s: a quarter its share, by its parent's record of
-    /// `of` (`joined`, `Joined::share`) where it has one, else by area; a joined cell the sum of its quarters', in order.
+    /// `of` (`joined`, `Joined::share`) where it has one, else by its share of the bed for a number of the bed and by
+    /// area for the others; a joined cell the sum of its quarters', in order.
     pub(crate) fn held(&self, joined: &[Option<Joined>], of: Option<Of>, at: impl Fn(u32) -> f64) -> f64 {
         match *self {
-            Made::Quarter { parent, q, area } => {
+            Made::Quarter { parent, q, area, bed } => {
                 let record = of.zip(joined.get(parent as usize).and_then(Option::as_ref));
-                at(parent) * record.map_or(area, |(of, r)| r.share(of, q))
+                at(parent) * record.map_or(if of.is_some_and(Of::of_bed) { bed } else { area }, |(of, r)| r.share(of, q))
             }
             Made::Join { kids, .. } => sum4(kids.map(at)),
         }
@@ -61,7 +71,7 @@ impl Made {
 }
 
 /// The sum of four numbers in pairs, so four equal ones (a cell's flat quarters) give it exactly.
-fn sum4(x: [f64; 4]) -> f64 {
+pub(crate) fn sum4(x: [f64; 4]) -> f64 {
     (x[0] + x[1]) + (x[2] + x[3])
 }
 
@@ -73,18 +83,17 @@ pub(crate) fn mean_by(x: [f64; 4], wt: [f64; 4]) -> f64 {
 }
 
 /// What a join keeps of its quarters (laws.md 0): each quarter's share of each number the cell holds (`Of`), and the
-/// relief the join flattened: the potential energy the quarters' stacks held over the joined cell's, J, which a split
-/// gives back (`World::split`). It is a part of `Store::lifted`, held apart from the potential energy of the stacks.
+/// relief each held (`World::relief`), J, which its split gives back (`World::split`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Joined {
     /// Each quarter's share, row by row, of each number (`Joined::share`)
     shares: Vec<[f64; 4]>,
-    pub relief: f64,
+    pub kept: [f64; 4],
 }
 
 impl Joined {
     /// The shares of quarters `kids` (each `area[q]` of the joined cell's area) in the world before their join: each
-    /// one's part of the four's sum, by area where they hold none. Its relief is the join's to find (`World::join`).
+    /// one's part of the four's sum, by area where they hold none, and the relief of each.
     pub(crate) fn of(w: &World, kids: [usize; 4], area: [f64; 4]) -> Joined {
         let (n, ns) = (w.mesh.cells().n(), w.chem.ns());
         let flow = kids.map(|i| crate::flow::volumes(w, i));
@@ -102,7 +111,7 @@ impl Joined {
             push(if h.is_empty() { [0.0; 4] } else { kids.map(|i| h[i]) });
         }
         (0..FLOW_HELD).for_each(|x| push(flow.map(|v| v.map_or(0.0, |v| v[x]))));
-        Joined { shares, relief: 0.0 }
+        Joined { shares, kept: kids.map(|i| w.relief[i]) }
     }
     /// Quarter `q`'s share of `of`.
     pub(crate) fn share(&self, of: Of, q: u8) -> f64 {

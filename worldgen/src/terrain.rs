@@ -239,6 +239,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
         canopy: vec![0.0; n],
         links,
         joined: vec![None; n],
+        relief: vec![0.0; n],
         terrain,
         watch: Vec::new(),
         light: vec![0.0; n],
@@ -277,5 +278,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
     let mut e_ground = heat(&world, Class::Ground);
     balanced.iter().for_each(|&(i, t)| e_ground[i] = world.energy_ground(i, t));
     world.store = rebuild(&world, amounts(&world, Class::Ground), e_ground);
+    // The relief of the terrain inside each cell (laws.md 0).
+    world.relief = world.relief_at_build();
     world
 }

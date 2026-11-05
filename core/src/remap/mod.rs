@@ -1,18 +1,19 @@
 //! The cell table (laws.md 0): what the saved world keeps per cell of the finest level, and per link of it, follows a
 //! change of the cells in one place (`World::remap`): cells renumbered, a cell split into its quarters, quarters joined
 //! into their parent (`split`). Per cell: `World::rain`, `liquid_flux`, `evap`, `off_land`, `canopy`, `light`, `rained`,
-//! `joined`, what refinement keeps (`watch`); the store's nodes of each cell (`Class::CELLS`) and their sleep; the life
-//! of each cell and the survey's caches of it (`life::Cell`, `Life::sum`); Flow's state of each ground node; the traffic
-//! (`Counters::traffic`). Per link: what the links remember (`store::Links`). A remap only moves numbers, and shares or
-//! sums them for the cells a split or a join made (`made`; the bodies, parts and cover of a cell as wholes,
-//! `Life::remap`): what a new cell holds is its law's to give.
+//! `joined`, `relief`, what refinement keeps (`watch`); the store's nodes of each cell (`Class::CELLS`) and
+//! their sleep; the life of each cell and the survey's caches of it (`life::Cell`, `Life::sum`); Flow's state of each
+//! ground node; the traffic (`Counters::traffic`). Per link: what the links remember (`store::Links`). A remap only
+//! moves numbers, and shares or sums them for the cells a split or a join made (`made`; the bodies, parts and cover of a
+//! cell as wholes, `Life::remap`): what a new cell holds is its law's to give.
 
 mod made;
+mod relief;
 mod split;
 
 pub use made::{Joined, Made};
 pub(crate) use split::Change;
-pub(crate) use made::{mean_by, Of, FLOW_HELD};
+pub(crate) use made::{mean_by, sum4, Of, FLOW_BED, FLOW_HELD};
 
 use crate::event::EventKind;
 use crate::World;
@@ -115,7 +116,7 @@ impl World {
     /// `remap` of the cells alone (`Renumber`): what the links remember stays as it is, for the links to take their new
     /// numbers once the change of the cells under way has its mesh (`World::split`).
     pub(crate) fn remap_cells(&mut self, c: &Renumber) {
-        let World { cfg: _, chem, map: _, mesh: _, seed, time, sleep, store, base_z: _, rain, liquid_flux, evap, off_land, counts, life, canopy, light, rained, links: _, joined, terrain: _, watch, events, scratch } = self;
+        let World { cfg: _, chem, map: _, mesh: _, seed, time, sleep, store, base_z: _, rain, liquid_flux, evap, off_land, counts, life, canopy, light, rained, links: _, joined, relief, terrain: _, watch, events, scratch } = self;
         assert!(events.iter().all(|e| matches!(e.kind, EventKind::Split | EventKind::Join)), "a remap runs between steps, once the shell took the events");
         // Per m² of a cell: its parent's in each quarter, the quarters' mean by area in a joined cell.
         for v in [rain, evap, canopy] {
@@ -128,6 +129,8 @@ impl World {
         for v in [liquid_flux, off_land, &mut counts.traffic] {
             *v = c.apply_made(std::mem::take(v), || 0.0, |_, m, at| m.held(joined, None, |i| at(i) as f64) as f32);
         }
+        // (A split or a join then gives its cells their relief, `World::split`.)
+        *relief = c.apply_made(std::mem::take(relief), || 0.0, |_, m, at| m.held(joined, None, at));
         store.remap(c, joined);
         sleep.remap(c, *time, joined);
         life.remap(c, *seed, chem);

@@ -1,7 +1,8 @@
 //! The terrain (laws.md 0 and 8): the height of the ground at any point of the map, one function of the world's seed,
 //! its map and its level (`Terrain`), at any size. Value noise summed over octaves (fractal noise), with ridges, its
 //! domain warped so coasts and ridges bend (Perlin 1985; Musgrave 1989), raised to heights; an island falls away from
-//! the middle of its map. It gives the cells their starting heights (`worldgen`).
+//! the middle of its map. It gives the cells their starting heights (`worldgen`), and a split the ground its cell held
+//! finer than the cell (`World::split`).
 
 use super::square::Square;
 use super::{Leaf, Level};
