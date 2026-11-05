@@ -60,7 +60,9 @@ map repeating east and west, and a cell's latitude and longitude in the inspect 
 **Map layers** in the frames (`tape/src/layers.rs`, one byte a square of the map, row by row; a square shows the cell
 that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid depth, ice, liquid flux, loose
 ground, ground and air temperature, rain, vapour, absorber, the cover's and the bodies' mass per m², bodies, traffic,
-worn edges, structures, true colour (r, g, b).
+worn edges, structures, true colour (r, g, b). The tape holds whole-map frames only. The live viewer also asks for
+the layers of a window of the map as a raster of pixels (`tape::frame_window`): each pixel shows the cell that holds its
+centre, so cells finer than a square are seen; it is shown over the whole-map frame and is not recorded.
 
 ## `series.csv`: the world
 

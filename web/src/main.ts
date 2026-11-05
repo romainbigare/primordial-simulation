@@ -1,8 +1,8 @@
-import { World, gunzip, parse, plane, fmt, fmtYear, unitText, latOf, lonOf } from './data';
+import { World, makeWorld, gunzip, parse, plane, fmt, fmtYear, unitText, latOf, lonOf } from './data';
 import { CLASSES, PATH_LAYER, paint, rampFor, rampCss } from './earth';
-import { MapView } from './map';
+import { MapView, View } from './map';
 import { Charts } from './charts';
-import { Live } from './live';
+import { Live, Look, Stats } from './live';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const LABELS: Record<string, string> = {
@@ -15,13 +15,22 @@ const SPEEDS = [1, 2, 4, 8, 16, 32];
 /** The live world's speeds, months of the world per second of real time. */
 const LIVE_SPEEDS = [3, 12, 36, 120, Infinity];
 const LIVE_SIZE = 22;
+/** The zoom (1: the map fits) from which the page asks the core for finer cells. */
+const FINE_ZOOM = 1.8;
+/** Pixels a cell of the depth asked for takes on screen, about. */
+const FINE_CELL_PX = 6;
+/** Time the view rests before the core is told where it looks, ms. */
+const LOOK_MS = 150;
 
 let world: World | null = null;
 let live: Live | null = null;
 let frame = 0, speed = 4, playing = false, view = 'earth', layer: string | null = null, paths = false;
 let cls = new Uint8Array(0);
 
-const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspect());
+const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspect(), v => lookSoon(v));
+/** The raster of the window the camera looks at (finer than a square) as a world of its own, and what paints it. */
+let fine: { world: World; img: ImageData; cls: Uint8Array; at: [number, number, number, number] } | null = null;
+let lookTimer = 0, looking = '';
 const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
 
 // ---- loading
@@ -101,6 +110,10 @@ function repaint(): void {
   if (!world) return;
   paint(world, frame, layer ?? view, map.img!, cls, paths);
   map.commit();
+  if (fine) {
+    paint(fine.world, 0, layer ?? view, fine.img, fine.cls, false);
+    map.setFine(fine.img, fine.at);
+  }
   inspect();
 }
 
@@ -223,13 +236,67 @@ async function startLive(): Promise<void> {
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
     ready: () => newWorld(),
-    world: w => { world = w; setup(w); },
-    frame: () => { if (live === l) setFrame(0); },
+    world: w => { world = w; looking = ''; fine = null; map.setFine(null); setup(w); showStats(l.stats); },
+    frame: (stats, raster) => {
+      if (live !== l) return;
+      showRaster(raster);
+      showStats(stats);
+      setFrame(0);
+    },
     error: text => { playing = false; syncUi(); say(text); },
   });
   setMode(true);
   say('Making the world…');
 }
+/** The camera follows the view once it rests: from `FINE_ZOOM` on, the core is asked for cells of the depth whose cells take about `FINE_CELL_PX` pixels, and for a raster of the window at the pixel of its finest cell. */
+function lookSoon(v: View): void {
+  if (!live || !world) return;
+  clearTimeout(lookTimer);
+  lookTimer = window.setTimeout(() => lookAt(v), LOOK_MS);
+}
+function lookAt(v: View): void {
+  const m = world?.meta;
+  if (!live || !m || m.square_depth === undefined || m.finest_depth === undefined) return;
+  const fineDepth = Math.min(m.finest_depth, m.square_depth + Math.floor(Math.log2(v.s / FINE_CELL_PX)));
+  const grain = 2 ** (m.finest_depth - m.square_depth); // finest cells along a square
+  let look: Look | null = null;
+  if (v.zoom >= FINE_ZOOM && fineDepth > m.square_depth && v.w > 0 && v.h > 0) {
+    const x = Math.floor(v.x * grain) / grain, y = Math.floor(v.y * grain) / grain;
+    const across = Math.ceil((v.x + v.w) * grain) - x * grain, down = Math.ceil((v.y + v.h) * grain) - y * grain;
+    look = { x, y, w: across / grain, h: down / grain, depth: fineDepth, across, down };
+  }
+  const key = JSON.stringify(look);
+  if (key === looking) return;
+  looking = key;
+  if (!look) { fine = null; map.setFine(null); }
+  live.look(look);
+}
+
+/** Keep the raster of the camera's window that came with a frame (none: the camera looks at nothing finer). */
+function showRaster(raster: { look: Look; data: Uint8Array } | null): void {
+  if (!raster || !world) { fine = null; map.setFine(null); return; }
+  const { look, data } = raster, m = world.meta;
+  const meta = { ...m, w: look.across, h: look.down, cell_m: m.cell_m * (look.w / look.across), frames: [m.frames[0]] };
+  const same = fine && fine.img.width === look.across && fine.img.height === look.down;
+  fine = {
+    world: makeWorld(meta, data, 0),
+    img: same ? fine!.img : new ImageData(look.across, look.down),
+    cls: same ? fine!.cls : new Uint8Array(look.across * look.down),
+    at: [look.x, look.y, look.w, look.h],
+  };
+}
+
+/** The date, the pace and the cells: the world steps slower by itself while there are fine cells. */
+function showStats(s: Stats): void {
+  const el = $('stats'), m = world?.meta;
+  if (!live || !m) { el.hidden = true; return; }
+  const y = m.frames[0].year, day = Math.floor((y - Math.floor(y)) * m.days_per_year) + 1;
+  const finest = m.square_depth === undefined ? '' : s.finest <= m.square_depth ? 'squares' : `${fmt(m.cell_m / 2 ** (s.finest - m.square_depth))} m`;
+  el.hidden = false;
+  el.innerHTML = [['date', `year ${Math.floor(y)}, day ${day}`], ['pace', `${playing ? fmt(s.pace) : '0'} of ${speed === Infinity ? 'max' : speed} months/s`],
+    ['cells', String(s.cells)], ['finest', `depth ${s.finest} (${finest})`]].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
+}
+
 function newWorld(): void {
   const seed = Math.max(0, Math.floor(+$<HTMLInputElement>('seed').value) || 0);
   const size = Math.min(64, Math.max(8, Math.floor(+$<HTMLInputElement>('size').value) || LIVE_SIZE));

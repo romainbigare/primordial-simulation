@@ -264,6 +264,44 @@ fn frames_file_round_trip() {
     assert_eq!(meta["camera"], serde_json::to_value(&camera.shots).unwrap(), "the camera's path");
 }
 
+/// A window of the map is a raster of the cell that holds each pixel's centre: over the whole map at one pixel a square it
+/// is the frame of the present state, and over a square whose cell is split it shows the four quarters, which the
+/// whole-map frame shows by the one that holds the square's centre.
+#[test]
+fn a_window_shows_the_cells_finer_than_a_square() {
+    let mut w = world();
+    run(&mut w, 1);
+    w.drain_events();
+    let (across, down) = (w.map.w, w.map.h);
+    let whole = [0.0, 0.0, across as f64, down as f64];
+    assert_eq!(tape::frame_window(&w, whole, across, down), tape::frame_now(&w), "the whole map is the frame of the present state");
+    let land = worldgen::testkit::dry_land(&w);
+    let leaf = w.map.leaves()[land];
+    w.split(leaf).expect("a split");
+    let quarters = leaf.quarters().map(|q| w.map.cell(q).expect("a quarter"));
+    for (&q, kg) in quarters.iter().zip([0.5, 5.0, 50.0, 200.0]) {
+        worldgen::testkit::cover(&mut w, q, kg);
+    }
+    let plants = tape::LAYERS.iter().position(|l| l.name == "plants").expect("a layer of plants");
+    let [x0, y0, x1, _] = w.map.bounds(quarters[0]);
+    let (side, n) = (x1 - x0, across * down);
+    let seen = |window: [f64; 4], px: usize| {
+        let f = tape::frame_window(&w, window, px, px);
+        let mut bytes = f[plants * px * px..(plants + 1) * px * px].to_vec();
+        bytes.sort_unstable();
+        bytes.dedup();
+        bytes
+    };
+    assert_eq!(seen([x0, y0, 2.0 * side, 2.0 * side], 2).len(), 4, "the window shows the four quarters");
+    let square = tape::frame_now(&w);
+    let (x, y) = (x0.floor() as usize, y0.floor() as usize);
+    let of = |cell: usize| {
+        let [west, north, ..] = w.map.bounds(cell);
+        square[plants * n + y * across + x] == tape::frame_window(&w, [west, north, side, side], 1, 1)[plants]
+    };
+    assert_eq!(quarters.iter().filter(|&&q| of(q)).count(), 1, "the whole-map frame shows the square by one quarter");
+}
+
 /// The viewer file says whether the world is a globe and the latitudes of its edges, and the world's means of a globe are
 /// by area (its rows narrow toward the poles): `t_ground` is the area-weighted mean of the cells' ground temperature.
 #[test]

@@ -2,6 +2,11 @@
 const LAT_STEP = 30; // degrees between a globe's lines of latitude
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+/** The part of the map in view: its window in squares (clipped to the map), the pixels a square takes, and the zoom (1: the map fits). */
+export interface View { x: number; y: number; w: number; h: number; s: number; zoom: number }
+/** The most pixels a square takes on screen. */
+const MOST_SCALE = 200;
+
 export class MapView {
   img: ImageData | null = null;
   hover = -1;
@@ -14,8 +19,11 @@ export class MapView {
   /** Edge latitudes (degrees) of a globe, whose columns wrap east to west; null for an island. */
   private globe: { north: number; south: number } | null = null;
   private raf = 0;
+  /** A raster of a window of the map, finer than its squares, drawn over the map at its place (x, y, w, h in squares). */
+  private fine: { cv: HTMLCanvasElement; at: [number, number, number, number] } | null = null;
+  private seen = '';
 
-  constructor(private cv: HTMLCanvasElement, private onHover: (i: number) => void, private onPick: (i: number) => void) {
+  constructor(private cv: HTMLCanvasElement, private onHover: (i: number) => void, private onPick: (i: number) => void, private onView: (v: View) => void = () => {}) {
     this.ctx = cv.getContext('2d')!;
     new ResizeObserver(() => { this.resize(); this.invalidate(); }).observe(cv);
     const ptrs = new Map<number, { x: number; y: number }>();
@@ -51,6 +59,25 @@ export class MapView {
     this.resize(); this.fit();
   }
 
+  /** Show `img` (a raster of the window `at`: x, y, w, h in squares) over the map, or nothing. */
+  setFine(img: ImageData | null, at: [number, number, number, number] = [0, 0, 0, 0]): void {
+    if (!img) this.fine = null;
+    else {
+      const cv = this.fine?.cv ?? document.createElement('canvas');
+      cv.width = img.width; cv.height = img.height;
+      cv.getContext('2d')!.putImageData(img, 0, 0);
+      this.fine = { cv, at };
+    }
+    this.invalidate();
+  }
+
+  /** The part of the map in view. */
+  view(): View {
+    const { cam, w, h } = this, x0 = Math.max(0, -cam.ox / cam.s), y0 = Math.max(0, -cam.oy / cam.s);
+    const x1 = Math.min(w, (this.cv.clientWidth - cam.ox) / cam.s), y1 = Math.min(h, (this.cv.clientHeight - cam.oy) / cam.s);
+    return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0), s: cam.s, zoom: cam.s / this.fitScale() };
+  }
+
   commit(): void { this.off.getContext('2d')!.putImageData(this.img!, 0, 0); this.invalidate(); }
 
   fit(): void {
@@ -80,7 +107,7 @@ export class MapView {
   private setHover(i: number): void { if (i !== this.hover) { this.hover = i; this.onHover(i); this.invalidate(); } }
 
   private zoomAt(px: number, py: number, k: number): void {
-    const c = this.cam, s = Math.min(Math.max(c.s * k, this.fitScale() * 0.5), 90);
+    const c = this.cam, s = Math.min(Math.max(c.s * k, this.fitScale() * 0.5), MOST_SCALE);
     c.ox = px - ((px - c.ox) / c.s) * s; c.oy = py - ((py - c.oy) / c.s) * s; c.s = s;
     this.fitted = false; this.invalidate();
   }
@@ -103,6 +130,11 @@ export class MapView {
     // Copies meet on whole device pixels, so no thin line shows between them.
     const edge = (k: number) => Math.round((ox + k * span) * d) / d;
     xs.forEach((_, k) => ctx.drawImage(this.off, edge(k), oy, edge(k + 1) - edge(k), h * s));
+    if (this.fine) {
+      const [fx, fy, fw, fh] = this.fine.at;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(this.fine.cv, ox + fx * s, oy + fy * s, fw * s, fh * s);
+    }
     if (this.globe) this.latitudeLines(ox, oy, xs.length * span);
     for (const [i, col] of [[this.pick, '#fff'], [this.hover, '#000']] as const) {
       if (i < 0) continue;
@@ -110,6 +142,8 @@ export class MapView {
       for (const x of xs) ctx.strokeRect(x + (i % w) * s - 0.5, oy + Math.floor(i / w) * s - 0.5, s + 1, s + 1);
     }
     this.scaleBar();
+    const v = this.view(), key = [v.x, v.y, v.w, v.h, v.s].join();
+    if (key !== this.seen) { this.seen = key; this.onView(v); }
   }
 
   /** A globe's lines of latitude every LAT_STEP degrees (the equator heavier), named at the map's west edge. */

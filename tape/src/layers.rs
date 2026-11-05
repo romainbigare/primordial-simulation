@@ -204,14 +204,36 @@ pub fn frame_now(w: &World) -> Vec<u8> {
     out
 }
 
+/// The layers of a window of the map as a raster of `across` x `down` pixels (a byte each, every layer in table order,
+/// row-major): the window from column `x` and row `y` of the map, `w` squares wide and `h` high, each pixel showing the
+/// cell that holds its centre (`raster`), so cells finer than a square are seen. A shell shows it where the camera looks.
+pub fn frame_window(world: &World, window: [f64; 4], across: usize, down: usize) -> Vec<u8> {
+    let c = Ctx::new(world);
+    let mut out = Vec::with_capacity(across * down * LAYERS.len());
+    layers(&c, &raster(world, window, across, down), &mut out);
+    out
+}
+
+/// The cell each pixel of an `across` x `down` raster of `window` (column, row, width and height in squares) shows,
+/// row by row: the one that holds its centre.
+fn raster(w: &World, [x, y, wide, high]: [f64; 4], across: usize, down: usize) -> Vec<usize> {
+    let tree = w.mesh.tree();
+    let at = |k: usize, n: usize, from: f64, span: f64| from + (k as f64 + 0.5) * span / n as f64;
+    (0..across * down).map(|p| tree.cell_at(w.map.point_at(at(p % across, across, x, wide), at(p / across, down, y, high)))).collect()
+}
+
 /// The cell each square of the map shows, row by row: the one that holds its centre (`Square::point`).
 pub fn pixels(w: &World) -> Vec<usize> {
-    (0..w.map.n()).map(|s| w.mesh.tree().cell_at(w.map.point(s))).collect()
+    raster(w, [0.0, 0.0, w.map.w as f64, w.map.h as f64], w.map.w, w.map.h)
 }
 
 /// Append one frame: every layer in table order, a byte for each square of the map, row-major (`pixels`).
 pub(crate) fn frame(c: &Ctx, out: &mut Vec<u8>) {
-    let cells = pixels(c.w);
+    layers(c, &pixels(c.w), out);
+}
+
+/// Append every layer in table order, a byte for each of `cells` (the cell each pixel shows).
+fn layers(c: &Ctx, cells: &[usize], out: &mut Vec<u8>) {
     for l in LAYERS {
         out.extend(cells.iter().map(|&i| quantise(l, (l.val)(c, i))));
     }

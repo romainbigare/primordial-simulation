@@ -178,7 +178,12 @@ back at the end of the month's changes naming the cell that then holds that plac
 **The camera** (`refine::Camera`) is an input of the run: from given months on, a window of the map in squares and
 the depth it asks for. It is part of the run's plan (`worldgen::schedule`), so a snapshot carries it, and the tape
 holds it (`docs/tape.md`). The score is worked out cell by cell in order and the changes made one at a time, so the
-same seed and the same camera path give the same world on any count of threads.
+same seed and the same camera path give the same world on any count of threads. **The live viewer's camera**: when the
+player zooms or pans, the page sends the window in view and the depth the zoom calls for (cells of about 6 screen pixels,
+from a zoom of 1.8 times the fit on) to the core (`set_camera`), which adds a shot at the month about to be stepped to the
+run's camera path, as `ew run --camera` reads one; zooming out sends a window of no area. The live world refines at
+each month's start (`World::refine`) under a budget of 1500 cells and no finer than depth 4, so the world steps slower
+by itself while fine cells are in view.
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.
 **One ground temperature**: every law and the tape read that of Flow's last step (`World::t_ground_last`).

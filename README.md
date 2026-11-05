@@ -28,5 +28,10 @@ gives the camera's path, one line a change: `MONTH X Y W H DEPTH` (from month MO
 row Y, W x H squares, asks for cells of DEPTH; a square is depth 2), or `MONTH` alone (the camera goes away). The path
 is an input of the run: the snapshot and the tape keep it, so the same seed and path give the same world.
 
+In the live viewer, zooming in on the map refines the world there: the page sends the window in view and the depth the
+zoom calls for to the core as a shot of the camera's path, and the map shows the fine cells over the whole-map frame (a
+budget of 1500 cells, none finer than depth 4). The world steps slower by itself while fine cells are in view; the page
+shows the date, the months per second it reaches, the cells and the finest depth. Refinement runs while the world plays.
+
 By default the animals start with hand-set brain biases (`--neutral-eaters` for neutral brains) and the
 light-eaters with no brain.

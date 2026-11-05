@@ -142,8 +142,16 @@ impl Square {
     /// The point at the centre of square `s` (`Tree::cell_at`), in leaves of the most depth: the one whose north-west
     /// corner it is.
     pub fn point(&self, s: usize) -> [u32; 2] {
-        let ((x, y), u) = (self.xy(s), self.unit());
-        [x as u32 * u + u / 2, y as u32 * u + u / 2]
+        let (x, y) = self.xy(s);
+        self.point_at(x as f64 + 0.5, y as f64 + 0.5)
+    }
+    /// The point at column `x` and row `y` of the map, in squares from its north-west corner (a fraction is inside a
+    /// square), in leaves of the most depth; a place off the map is the nearest edge's, east and west round a globe.
+    pub fn point_at(&self, x: f64, y: f64) -> [u32; 2] {
+        let (across, down) = self.extent();
+        let u = self.unit() as f64;
+        let x = if self.wrap { x.rem_euclid(self.w as f64) } else { x };
+        [(x * u).floor().clamp(0.0, (across - 1) as f64) as u32, (y * u).floor().clamp(0.0, (down - 1) as f64) as u32]
     }
     /// The squares in cell `i` (a share of one in a cell finer than a square).
     pub fn squares(&self, i: usize) -> f64 {

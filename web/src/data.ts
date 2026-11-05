@@ -6,6 +6,8 @@ export interface Meta {
   /** A globe: rows run pole to pole, columns wrap east to west; rows are evenly spread from lat_north to lat_south (degrees). */
   globe: boolean; lat_north: number; lat_south: number;
   layers: Layer[];
+  /** The live world only: the depth of a square below its air block, and the finest depth refinement takes a cell to. */
+  square_depth?: number; finest_depth?: number;
   frames: { day: number; year: number }[];
   /** One value a year per column; null where the tape wrote NaN (none that year). */
   series: Record<string, (number | null)[]>;
