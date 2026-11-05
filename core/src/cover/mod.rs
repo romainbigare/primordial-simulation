@@ -2,11 +2,13 @@
 //! amounts of a few substances (`Parts`: the fuel its light reaction makes, body matter, and the solid it builds)
 //! and a small vector of genes, as plain arrays per cell (`Cover`). Once a month each cell's cover catches light,
 //! runs its light reaction, pays its upkeep, fixes, builds and dies (`grow`), and sends seeds to a neighbour cell
-//! (`seed`); alike kinds share a slot. The cover of a cell is a node of the store (`Class::Cover`) whose law books its
-//! own side; animals graze it (`choose::feed`) and movers break it (`choose::wear`).
+//! (`seed`); alike kinds share a slot. A split of a cell shares its cover out, and a join gathers it (`tree`). The
+//! cover of a cell is a node of the store (`Class::Cover`) whose law books its own side; animals graze it
+//! (`choose::feed`) and movers break it (`choose::wear`).
 
 mod grow;
 mod seed;
+mod tree;
 
 pub use grow::step;
 pub use seed::land;

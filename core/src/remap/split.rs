@@ -1,39 +1,32 @@
 //! Split and join of cells between steps, at a month's start (laws.md 0): the tree's change (`Square::splits`,
-//! `Square::joins`), one remap of the cell table each (`World::remap`), the relief a join flattens kept and a split's
-//! given back, and an event each.
+//! `Square::joins`), one remap of the cell table each (`World::remap`, which shares out and gathers the life of the
+//! cells, `Life::remap`), the relief a join flattens kept and a split's given back, and an event each. A joined cell's
+//! cover lands by the cover's rule and its bodies merge as the monthly merge does.
 
 use super::{Joined, Made, Of, Remap, Renumber, Source};
 use crate::event::{Event, EventKind};
-use crate::space::{square::Square, tree, Leaf, Mesh};
+use crate::space::{square::Square, tree::Refused, Leaf, Mesh};
 use crate::store::{fall_heat, Class};
 use crate::World;
-
-/// Why a split or a join is refused, changing nothing.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Refused {
-    /// The tree refuses it (`space::tree::Refused`)
-    Shape(tree::Refused),
-    /// The cell holds life (bodies, cover or parts), which does not follow a split or a join yet
-    Life(usize),
-}
 
 impl World {
     /// Split cell `leaf` into its quarters (`Square::splits`): first each cell across a side that would border them two
     /// depths coarser, by its own splits, each split a remap of its own (`split_one`). Returns the splits made, in
-    /// order. Refused where the tree refuses it or a cell to split holds life.
+    /// order. Refused where the tree refuses it.
     pub fn split(&mut self, leaf: Leaf) -> Result<Vec<Leaf>, Refused> {
-        let splits = self.map.splits(leaf).map_err(Refused::Shape)?;
-        self.lifeless(splits.iter().filter_map(|&l| self.map.cell(l)))?;
+        let splits = self.map.splits(leaf)?;
         splits.iter().for_each(|&l| self.split_one(l));
         Ok(splits)
     }
 
     /// Join the quarters of `parent` into it (`Square::joins`), one remap: it holds their sum, and keeps each one's
     /// shares and, as its relief, what the join flattens (the potential energy of their stacks less its own) with the
-    /// relief they kept from their own joins (`Joined`). Refused where the tree refuses it or a quarter holds life.
+    /// relief they kept from their own joins (`Joined`). Their life comes together (`Life::remap`); then the slots of
+    /// their cover land in its cover as seeds do (`cover::land`: what finds no slot goes to its ground as remains) and
+    /// its bodies merge (`merge_in`). A merge that lets go of a part records that in an event naming the cell by its
+    /// index, so the shell takes the events before the next split or join. Refused where the tree refuses it.
     pub fn join(&mut self, parent: Leaf) -> Result<(), Refused> {
-        let kids = self.map.joins(parent).map_err(Refused::Shape)?;
-        self.lifeless(kids)?;
+        let kids = self.map.joins(parent)?;
         let air = self.mesh.cells().parent()[kids[0]] as usize;
         let before = crate::flow::potential_of(self, &kids, air);
         let kept: f64 = kids.iter().filter_map(|&i| self.joined[i].as_ref()).map(|r| r.relief).sum();
@@ -48,13 +41,17 @@ impl World {
         record.relief = kept + before - crate::flow::potential_of(self, &[j], air);
         self.joined[j] = Some(record);
         self.events.push(Event { day: self.day(), kind: EventKind::Join, node: self.life.cells[j].serial, value: parent.depth as f64 });
+        crate::cover::land(self);
+        self.merge_in(j);
+        self.seen(&[j]);
         Ok(())
     }
 
     /// Split cell `leaf` into its quarters, one remap: each holds its share of what the cell held, by the cell's record
     /// where a join made it (`Joined`), else by area (flat quarters: the potential energy of the stacks does not
-    /// change). A record's split gives back its relief less what the quarters' stacks hold over the cell's, to the
-    /// quarters' ground heat by their shares of it (`store::fall_heat`, which books it against `Store::lifted`).
+    /// change), and its share of the cell's life (`Life::remap`). A record's split gives back its relief less what the
+    /// quarters' stacks hold over the cell's, to the quarters' ground heat by their shares of it (`store::fall_heat`,
+    /// which books it against `Store::lifted`).
     fn split_one(&mut self, leaf: Leaf) {
         let i = self.map.cell(leaf).expect("a cell");
         let (air, record, serial) = (self.mesh.cells().parent()[i] as usize, self.joined[i].clone(), self.life.cells[i].serial);
@@ -76,6 +73,7 @@ impl World {
             fall_heat(self, Class::Ground, &q);
         }
         self.events.push(Event { day: self.day(), kind: EventKind::Split, node: serial, value: leaf.depth as f64 });
+        self.seen(&kids);
     }
 
     /// The world on `map` and its `mesh`, its cells from the old ones by `from` (`Renumber`), each link between two old
@@ -89,12 +87,25 @@ impl World {
         self.remap(&r);
     }
 
-    /// Refused where one of `cells` holds life: a living body, cover or a part.
-    fn lifeless(&self, cells: impl IntoIterator<Item = usize>) -> Result<(), Refused> {
-        let lives = |i: &usize| {
-            let c = self.life.cell_at(*i);
-            c.bodies.iter().any(|b| b.alive) || c.cover.any() || !c.parts.is_empty()
-        };
-        cells.into_iter().find(lives).map_or(Ok(()), |i| Err(Refused::Life(i)))
+    /// The bodies of joined cell `i` merge as the monthly merge leaves a cell (`nodes::crowd`), so it holds no more
+    /// nodes than a cell of its kind would; the parts they let go of are let go of (`life::land`).
+    fn merge_in(&mut self, i: usize) {
+        let lay = crate::body::Layout::of(&self.chem);
+        self.in_cell(i, |w, d| {
+            // (Fewer than two bodies have nothing to merge.)
+            if d.cell(i).nth(1).is_some() {
+                crate::nodes::crowd(w, d, &lay, i);
+            }
+        });
+        crate::life::land(self);
+    }
+
+    /// After a split or a join, as after the month's batch (`survey::batch`): the holders of each lineage and born rows
+    /// are counted from the bodies, and the visible traits of the bodies of `cells` worked out from what they hold
+    /// (`Chunk::see_changed`), so a world saved now goes on as the unbroken one.
+    fn seen(&mut self, cells: &[usize]) {
+        self.life.compact();
+        self.life.recount();
+        cells.iter().for_each(|&i| self.in_cell(i, |w, d| d.see_changed(w)));
     }
 }

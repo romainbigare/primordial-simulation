@@ -19,7 +19,7 @@ impl Bonds {
             Some((other, self.strength[l]))
         })
     }
-    pub(super) fn add(&mut self, a: u64, b: u64, strength: f32) {
+    pub(crate) fn add(&mut self, a: u64, b: u64, strength: f32) {
         self.a.push(a);
         self.b.push(b);
         self.strength.push(strength);
@@ -44,7 +44,7 @@ impl Bonds {
         out
     }
     /// Bonds `o` join these, after them.
-    pub(super) fn extend(&mut self, o: Bonds) {
+    pub(crate) fn extend(&mut self, o: Bonds) {
         self.a.extend(o.a);
         self.b.extend(o.b);
         self.strength.extend(o.strength);

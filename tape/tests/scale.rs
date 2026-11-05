@@ -2,11 +2,13 @@
 //! once in cells of 2 x 2 squares (32 x 32 cells of 2 km) and once on its squares, each seed against itself: the mean
 //! over the seeds of what the squares move each key number per area (the mean of its last years) is less than its
 //! year-to-year spread in the coarse cells (the mean over the seeds of its highest less its lowest yearly value). The length of the rivers is printed, not held: it still moves by more than its noise
-//! (decision 31).
+//! (decision 31). And the life of a roster island whose region splits while it runs stays within the noise of the
+//! unsplit island (`life_does_not_depend_on_a_split_region`).
 
 mod common;
 
 use common::run_on;
+use pcore::World;
 
 const SEEDS: [u64; 3] = [1, 2, 3];
 const SIDE: usize = 32;
@@ -60,4 +62,86 @@ fn the_laws_do_not_depend_on_the_size_of_the_cells() {
         }
     }
     assert!(out.is_empty(), "the size of the cells changed: {out:?}");
+}
+
+/// The roster island of the check of a split region (spec 5.2 for life): its side in cells, its years, the year at
+/// whose end its region splits, and the seeds of the unsplit runs that measure the noise.
+const REGION_SIDE: usize = 32;
+const REGION_YEARS: u64 = 50;
+const SPLIT_AT: u64 = 25;
+const NOISE_SEEDS: [u64; 2] = [1, 2];
+/// The numbers compared, each the mean of the years after the split: the animals' mass, kg, the cover's, kg, and the
+/// starting kinds alive (in bodies or cover).
+const LIFE: [&str; 3] = ["animal_kg", "cover_kg", "kinds_alive"];
+
+/// The first air node of `w` whose cells are all land: the region that splits.
+fn region(w: &World) -> usize {
+    let air = w.mesh.level(pcore::AIR);
+    (0..air.n()).find(|&j| air.children(j).iter().all(|&i| w.is_land(i as usize))).expect("an air node over land only")
+}
+
+/// Each cell under air node `j` split into its quarters, and each of those into theirs (`World::split`, which first
+/// splits the cells beside them as 2:1 asks).
+fn split_region(w: &mut World, j: usize) {
+    let leaves: Vec<pcore::space::Leaf> = w.mesh.level(pcore::AIR).children(j).iter().map(|&i| w.map.leaves()[i as usize]).collect();
+    for &l in &leaves {
+        w.split(l).expect("a cell of the region splits");
+    }
+    for q in leaves.iter().flat_map(|l| l.quarters()) {
+        w.split(q).expect("a quarter of the region splits");
+    }
+}
+
+/// The `LIFE` numbers of `w`.
+fn life(w: &World) -> [f64; LIFE.len()] {
+    let animals: f64 = w.life.alive().map(|b| b.mass(&w.chem)).sum();
+    let cover: f64 = pcore::cover::sums(w).iter().map(|s| s.kg).sum();
+    let mut kinds: std::collections::BTreeSet<u32> = w.life.alive().filter_map(|b| w.life.brain(b.lineage).map(|l| l.root)).collect();
+    kinds.extend(pcore::cover::slots(w).map(|s| s.0));
+    [animals, cover, kinds.len() as f64]
+}
+
+/// The `LIFE` numbers at the end of each year after `SPLIT_AT` of the roster island of `seed`, its region split two
+/// depths at the end of year `SPLIT_AT` if `split`.
+fn life_years(seed: u64, split: bool) -> Vec<[f64; LIFE.len()]> {
+    let w = worldgen::new_world(seed, REGION_SIDE, REGION_SIDE);
+    let (j, at) = (region(&w), SPLIT_AT * w.cfg.calendar().year);
+    let step = move |w: &mut World| {
+        if split && w.time == at {
+            split_region(w, j);
+        }
+        pcore::step(w);
+    };
+    let mut years = vec![];
+    common::run_stepped(w, REGION_YEARS, true, |_| {}, step, |y, w, _| {
+        if y > SPLIT_AT {
+            years.push(life(w));
+        }
+    });
+    years
+}
+
+/// Spec 5.2 for life: a roster island whose region of one air node splits two depths (its cells a quarter of the side
+/// of the others) at the end of year `SPLIT_AT` keeps its animals' mass, its cover's mass and its kinds alive (the means
+/// of the years after) within the noise of the unsplit island: the larger of the gap between the means of two seeds and
+/// the mean of their year-to-year spreads (highest less lowest yearly value).
+#[test]
+#[ignore = "slow: three 50-year roster runs of a 32 x 32 island, one with a region split two depths at year 25"]
+fn life_does_not_depend_on_a_split_region() {
+    let [a, b, split] = std::thread::scope(|s| {
+        let runs = [(NOISE_SEEDS[0], false), (NOISE_SEEDS[1], false), (NOISE_SEEDS[0], true)].map(|(seed, cut)| s.spawn(move || life_years(seed, cut)));
+        runs.map(|r| r.join().expect("a run"))
+    });
+    let mut out = vec![];
+    for (q, name) in LIFE.iter().enumerate() {
+        let mean = |run: &[[f64; LIFE.len()]]| run.iter().map(|y| y[q]).sum::<f64>() / run.len() as f64;
+        let spread = |run: &[[f64; LIFE.len()]]| run.iter().map(|y| y[q]).fold(f64::MIN, f64::max) - run.iter().map(|y| y[q]).fold(f64::MAX, f64::min);
+        let (gap, years) = ((mean(&a) - mean(&b)).abs(), (spread(&a) + spread(&b)) / 2.0);
+        let (off, noise) = (mean(&split) - mean(&a), gap.max(years));
+        println!("{name}: unsplit {:.4e} (seed {}: {:.4e}), split {:.4e}, off by {off:.3e}; noise {noise:.3e} (seeds {gap:.3e}, years {years:.3e})", mean(&a), NOISE_SEEDS[1], mean(&b), mean(&split));
+        if off.abs() > noise {
+            out.push(*name);
+        }
+    }
+    assert!(out.is_empty(), "the split region changed the life: {out:?}");
 }

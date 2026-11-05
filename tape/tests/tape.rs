@@ -105,15 +105,16 @@ fn snapshot_round_trip_at_every_month() {
     }
 }
 
-/// A world whose cells split (a coast down two depths) and joined (four squares of land, its record and relief kept),
-/// saved at a month's start and loaded, is the saved one and goes on as the unbroken one, month by month through the
-/// slow cycles of Flow, and its joined cell splits back alike.
+/// A world with life whose cells split (a coast with bodies down two depths) and joined (four squares of land, its
+/// record and relief kept), saved at a month's start and loaded, is the saved one and goes on as the unbroken one, month
+/// by month through the slow cycles of Flow, and its joined cell splits back alike.
 #[test]
 fn a_world_split_and_saved_goes_on_as_the_unbroken_one() {
-    let mut w = world();
+    let mut w = two_kinds();
     run(&mut w, 1);
+    w.drain_events();
     let n = w.mesh.cells().n();
-    let coast = (0..n).find(|&i| w.is_land(i) && w.mesh.cells().around(i).1.iter().any(|&j| !w.is_land(j as usize))).expect("a coast");
+    let coast = (0..n).find(|&i| w.is_land(i) && w.life.in_cell(i) > 0 && w.mesh.cells().around(i).1.iter().any(|&j| !w.is_land(j as usize))).expect("a coast with bodies");
     let l = w.map.leaves()[coast];
     w.split(l).expect("a split");
     w.split(l.quarters()[0]).expect("a split two depths down");
@@ -132,6 +133,9 @@ fn a_world_split_and_saved_goes_on_as_the_unbroken_one() {
         step(&mut w);
         step(&mut b);
         assert_eq!(fingerprint(&b), fingerprint(&w), "resumed for {} months", m + 1);
+        // (The shell takes the events after each month.)
+        w.drain_events();
+        b.drain_events();
     }
 }
 

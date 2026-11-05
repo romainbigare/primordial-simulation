@@ -1,15 +1,18 @@
 //! The tree of cells while a world runs (laws.md 0): between steps a cell splits into its quarters and four quarters
 //! join into their parent (`World::split`, `World::join`), cells across a border one depth apart at most, the books
-//! exact and the relief a join flattens given back by its split; a cell with life refuses for now.
+//! exact and the relief a join flattens given back by its split; the life of a cell (its nodes, individuals, parts and
+//! cover) is shared out to the quarters and gathered again, every element, the energy and the members kept.
 
+use pcore::body::Body;
 use pcore::check;
 use pcore::event::EventKind;
-use pcore::remap::Refused;
 use pcore::space::square::Square;
 use pcore::space::tree::{Refused as Shape, DEPTH_MOST};
 use pcore::space::Leaf;
 use pcore::store::Class;
-use pcore::{World, AIR};
+use pcore::{brain, World, AIR};
+use std::collections::BTreeMap;
+use worldgen::life::{Place, KINDS};
 use worldgen::testkit::{self, Books};
 
 /// The small world, its events taken: a world without life, at a month's start.
@@ -17,11 +20,6 @@ fn world() -> World {
     let mut w = testkit::small_world();
     w.drain_events();
     w
-}
-
-/// The serial of cell `i` (`life::Cell::serial`).
-fn serial(w: &World, i: usize) -> u64 {
-    serde_json::to_value(&w.life).expect("life serialises")["cells"][i]["serial"].as_u64().expect("a serial")
 }
 
 /// The leaf of cell `i`.
@@ -80,7 +78,7 @@ fn unflattened(w: &World) -> f64 {
 fn a_split_then_its_join_gives_back_the_world() {
     let mut w = world();
     let (i, n) = (testkit::dry_land(&w), w.mesh.cells().n());
-    let (l, before, held, first) = (leaf(&w, i), saved(&w), holds(&w, i), serial(&w, i));
+    let (l, before, held, first) = (leaf(&w, i), saved(&w), holds(&w, i), w.life.serial(i));
     assert_eq!(w.split(l), Ok(vec![l]));
     assert_eq!(w.mesh.cells().n(), n + 3);
     sound(&w);
@@ -92,8 +90,8 @@ fn a_split_then_its_join_gives_back_the_world() {
     assert_eq!(difference(&saved(&w), &before, ""), None);
     let j = w.map.cell(l).expect("the joined cell");
     let events: Vec<_> = w.drain_events().into_iter().map(|e| (e.kind, e.node)).collect();
-    assert_eq!(events, [(EventKind::Split, first as u32), (EventKind::Join, serial(&w, j) as u32)]);
-    assert!(serial(&w, j) > first, "the joined cell takes a serial never given before");
+    assert_eq!(events, [(EventKind::Split, first), (EventKind::Join, w.life.serial(j))]);
+    assert!(w.life.serial(j) > first, "the joined cell takes a serial never given before");
 }
 
 /// Four quarters of different heights joined and split again hold what they held, each amount and heat to the rounding
@@ -123,28 +121,45 @@ fn a_join_then_its_split_gives_back_the_quarters() {
 /// cell under 0 m, the books within `check::DRIFT`, nothing below zero or NaN, 2:1 kept.
 #[test]
 fn splits_and_joins_between_steps_keep_the_books() {
-    run_splits(&mut world(), 1);
+    let mut w = world();
+    let cells = places(&w, testkit::dry_land(&w));
+    run_splits(&mut w, cells, 1);
 }
 
 /// `splits_and_joins_between_steps_keep_the_books` for years.
 #[test]
 #[ignore]
 fn years_of_splits_and_joins_keep_the_books() {
-    run_splits(&mut world(), 12);
+    let mut w = world();
+    let cells = places(&w, testkit::dry_land(&w));
+    run_splits(&mut w, cells, 12);
 }
 
-/// `rounds` rounds of splits and joins of `w`, a month between each change.
-fn run_splits(w: &mut World, rounds: usize) {
-    let books = Books::now(w);
-    let land = testkit::dry_land(w);
+/// Cell `land`, the first cell of the coast and the first cell under 0 m of `w`, as leaves.
+fn places(w: &World, land: usize) -> [Leaf; 3] {
     let coast = (0..w.mesh.cells().n()).find(|&i| w.is_land(i) && w.mesh.cells().around(i).1.iter().any(|&j| !w.is_land(j as usize))).expect("a coast");
     let low = (0..w.mesh.cells().n()).find(|&i| !w.is_land(i)).expect("a cell under 0 m");
-    let cells = [land, coast, low].map(|i| leaf(w, i));
+    [land, coast, low].map(|i| leaf(w, i))
+}
+
+/// `rounds` rounds of splits and joins of `cells` of `w`, a month between each change: each split, then its first
+/// quarter split again (which first splits the cells beside it), then those joined back in turn, then the cell. Returns
+/// the largest share of its quarters' cover that a join sent to the ground (the slots that found no slot in the joined
+/// cell, `cover::land`).
+fn run_splits(w: &mut World, cells: [Leaf; 3], rounds: usize) -> f64 {
+    let books = Books::now(w);
+    let mut lost = 0.0f64;
     let month = |w: &mut World| {
         pcore::step(w);
         w.drain_events();
         sound(w);
         books.assert_kept(w, check::DRIFT);
+    };
+    let mut join = |w: &mut World, l: Leaf| {
+        let before: f64 = l.quarters().iter().map(|&q| cover_kg(w, w.map.cell(q).expect("a quarter"))).sum();
+        w.join(l).expect("the join of what a split made");
+        let after = cover_kg(w, w.map.cell(l).expect("the joined cell"));
+        lost = lost.max(if before > 0.0 { 1.0 - after / before } else { 0.0 });
     };
     for _ in 0..rounds {
         for &l in &cells {
@@ -154,14 +169,19 @@ fn run_splits(w: &mut World, rounds: usize) {
             let forced = w.split(fine).expect("a split two depths down");
             assert_eq!(forced.last(), Some(&fine));
             month(w);
-            for &f in forced.iter().rev() {
-                w.join(f).expect("the join of what a split made");
-            }
+            forced.iter().rev().for_each(|&f| join(w, f));
             month(w);
-            w.join(l).expect("the join back");
+            join(w, l);
             month(w);
         }
     }
+    lost
+}
+
+/// The cover of cell `i`, kg.
+fn cover_kg(w: &World, i: usize) -> f64 {
+    let (c, mm) = (w.life.cover(i), pcore::cover::Parts::of(&w.chem).expect("the cover's parts").mm(&w.chem));
+    c.held().map(|x| c.kg(&mm, x)).sum()
 }
 
 /// A split two depths below its neighbours first splits them (and theirs), so cells across a border differ by one depth
@@ -177,26 +197,146 @@ fn the_tree_keeps_cells_one_depth_apart() {
     assert!(made.len() > 1 && made.last() == Some(&fine) && made[..made.len() - 1].iter().all(|o| o.depth == l.depth), "the squares beside it split first: {made:?}");
     sound(&w);
     let before = saved(&w);
-    assert_eq!(w.join(made[0]), Err(Refused::Shape(Shape::Unbalanced)));
-    assert_eq!(w.join(l.parent().expect("a parent")), Err(Refused::Shape(Shape::NoCell)));
+    assert_eq!(w.join(made[0]), Err(Shape::Unbalanced));
+    assert_eq!(w.join(l.parent().expect("a parent")), Err(Shape::NoCell));
     assert_eq!(difference(&saved(&w), &before, ""), None);
     let deepest = Square::new(4, 4, 2000.0, false, 4).by_blocks(|_, _| DEPTH_MOST);
     assert_eq!(deepest.splits(deepest.leaves()[0]), Err(Shape::Deepest));
 }
 
-/// A cell whose life holds a body, cover or a part refuses to split or to join, and nothing changes.
-#[test]
-fn a_cell_with_life_refuses_to_split() {
+/// The members of the node of `with_life`.
+const NODE: f64 = 40.0;
+/// How near the books and the members stay through a split and a join, relative: the rounding of x · share.
+const TIGHT: f64 = 1e-12;
+
+/// The members of the living bodies by starting kind (`Lineage::root`).
+fn members(w: &World) -> BTreeMap<u32, f64> {
+    let mut m = BTreeMap::new();
+    w.life.alive().for_each(|b| *m.entry(w.life.brain(b.lineage).expect("a lineage").root).or_insert(0.0) += b.count);
+    m
+}
+
+/// The members of each kind are those of `then`, within `TIGHT`.
+fn same_members(w: &World, then: &BTreeMap<u32, f64>) {
+    let now = members(w);
+    assert!(now.len() == then.len() && then.iter().all(|(k, x)| (now[k] - x).abs() <= TIGHT * x), "members by kind {then:?}, now {now:?}");
+}
+
+/// The slots of cover of cell `i` that hold cover, by starting kind: mol of each part.
+fn slots(w: &World, i: usize) -> BTreeMap<u32, [f64; pcore::cover::NP]> {
+    let c = w.life.cover(i);
+    c.held().map(|x| (c.root[x], c.mol[x])).collect()
+}
+
+/// The small world with life in its first dry land cell: a node of `NODE` eaters and an individual eater, with brains,
+/// the individual holding a part bonded to another (a structure), and cover of two kinds (`KINDS` rows 0 and 2).
+/// Returns the world, the cell, the ids of the node and of the individual, and the ids of the parts.
+fn with_life() -> (World, usize, [u64; 2], [u64; 2]) {
     let mut w = world();
-    let lands = testkit::dry_lands(&w);
-    let body = testkit::eater(&mut w, lands[0], pcore::brain::REST, 0.0);
-    w.add(body);
-    testkit::cover(&mut w, lands[1], 1.0);
-    testkit::plate(&mut w, lands[2], 1.0, true);
-    let before = serde_json::to_value(&w).expect("a world serialises");
-    for &i in &lands[..3] {
-        assert_eq!(w.split(leaf(&w, i)), Err(Refused::Life(i)));
-        assert!(matches!(w.join(leaf(&w, i).parent().expect("a parent")), Err(Refused::Life(_))));
+    let i = testkit::dry_land(&w);
+    testkit::cover(&mut w, i, 1.0);
+    let Place::Field(f) = &KINDS[2].place else { unreachable!("kind 2 is cover") };
+    assert!(pcore::cover::place(&mut w, i, f.genes, 2, 0.5), "room for a second kind of cover");
+    let parts = [testkit::plate(&mut w, i, 10.0, false), testkit::plate(&mut w, i, 10.0, true)];
+    pcore::bond::link(&mut w, parts[0], parts[1], 1e9);
+    let node = testkit::eater(&mut w, i, brain::REST, 0.0);
+    let node = testkit::node_of(&mut w, node, NODE);
+    let node = w.add(node);
+    let mut one = testkit::eater(&mut w, i, brain::REST, 0.0);
+    one.hold = Some(parts[0]);
+    let one = w.add(one);
+    let ids = [w.life[node].id, w.life[one].id];
+    w.life.part_mut(parts[0]).expect("the part").held = ids[1];
+    w.drain_events();
+    (w, i, ids, parts)
+}
+
+/// A cell with a node, an individual holding a structure and cover of two kinds, split and joined again, keeps every
+/// element, the energy and the members of each kind (`TIGHT`). Split, each quarter holds a quarter of the node, with
+/// the node's brain rows, and a quarter of each kind of cover; the individual and its structure lie whole in one
+/// quarter. Every id finds its body or part, and once joined the cell holds its cover as it was.
+#[test]
+fn life_follows_a_split_and_its_join() {
+    let (mut w, i, [node, one], parts) = with_life();
+    let (books, kinds, l, cover) = (Books::now(&w), members(&w), leaf(&w, i), slots(&w, i));
+    let (rows, lineage) = (w.life.rows_of(&w.life[w.life.find(node).expect("the node")]).to_vec(), w.life[w.life.find(node).expect("the node")].lineage);
+    w.split(l).expect("a cell with life splits");
+    sound(&w);
+    books.assert_kept(&w, TIGHT);
+    same_members(&w, &kinds);
+    let h = w.life.find(one).expect("the individual");
+    assert_eq!(w.life[h].count, 1.0, "the individual is not cut");
+    assert!(parts.iter().all(|&p| w.life.part_cell(p) == Some(h.cell as usize)), "its structure goes with it");
+    assert!(w.life.find(node).is_some(), "the node keeps its id");
+    for q in l.quarters() {
+        let c = w.map.cell(q).expect("a quarter");
+        let shares: Vec<&Body> = w.life.cell(c).map(|s| &w.life[s]).filter(|b| b.lineage == lineage).collect();
+        assert!(shares.len() == 1 && (shares[0].count - NODE / 4.0).abs() <= TIGHT * NODE, "a quarter of the node in quarter {q:?}");
+        assert_eq!(w.life.rows_of(shares[0]), &rows[..], "with the node's rows");
+        let near = |a: f64, b: f64| (a - b).abs() <= TIGHT * b;
+        assert!(slots(&w, c).len() == 2 && slots(&w, c).iter().all(|(k, m)| (0..m.len()).all(|x| near(m[x], cover[k][x] / 4.0))), "a quarter of each kind of cover");
     }
-    assert_eq!(difference(&serde_json::to_value(&w).expect("a world serialises"), &before, ""), None);
+    w.join(l).expect("its quarters join");
+    sound(&w);
+    books.assert_kept(&w, TIGHT);
+    same_members(&w, &kinds);
+    let j = w.map.cell(l).expect("the joined cell");
+    assert!(w.life.find(one).is_some_and(|h| h.cell as usize == j) && parts.iter().all(|&p| w.life.part_cell(p) == Some(j)), "the individual and its parts in the joined cell");
+    let now = slots(&w, j);
+    assert!(now.len() == 2 && now.iter().all(|(k, m)| (0..m.len()).all(|x| (m[x] - cover[k][x]).abs() <= TIGHT * cover[k][x])), "the cover as it was: {now:?} against {cover:?}");
+}
+
+/// A split cuts no individual and no node of fewer members than one per quarter's share: each lies whole in one
+/// quarter, drawn by area, so the individuals of a cell spread over its quarters; a larger node lies in each quarter, its
+/// members there summing to its own.
+#[test]
+fn a_split_cuts_no_individual() {
+    let mut w = world();
+    let i = testkit::dry_land(&w);
+    let counts = [1.0; 12].into_iter().chain([3.5, 4.0, NODE]);
+    let made: Vec<(u32, f64)> = counts.map(|n| {
+        let b = testkit::eater(&mut w, i, brain::REST, 0.0);
+        let b = if n > 1.0 { testkit::node_of(&mut w, b, n) } else { b };
+        let h = w.add(b);
+        (w.life[h].lineage, n)
+    }).collect();
+    w.split(leaf(&w, i)).expect("a split");
+    let mut cells = std::collections::BTreeSet::new();
+    for &(lineage, n) in &made {
+        let of: Vec<&Body> = w.life.alive().filter(|b| b.lineage == lineage).collect();
+        let sum: f64 = of.iter().map(|b| b.count).sum();
+        assert!((sum - n).abs() <= TIGHT * n, "a node of {n} keeps its members: {sum}");
+        assert_eq!(of.len(), if n * 0.25 >= 1.0 { 4 } else { 1 }, "a body of {n} members lies in {} quarters", of.len());
+        if n == 1.0 {
+            assert_eq!(of[0].count, 1.0, "an individual is not cut");
+            cells.insert(of[0].cell);
+        }
+    }
+    assert!(cells.len() > 1, "the individuals spread over the quarters: {cells:?}");
+}
+
+/// Months of splits and joins of cells with life (the land cell with the most bodies, the coast, a cell under 0 m) on a
+/// living island, the world stepping between them: the books within `check::DRIFT`, nothing below zero or NaN, 2:1
+/// kept; the largest share of its quarters' cover a join sends to the ground is printed.
+#[test]
+fn splits_and_joins_of_cells_with_life_keep_the_books() {
+    run_living(1);
+}
+
+/// `splits_and_joins_of_cells_with_life_keep_the_books` for years.
+#[test]
+#[ignore]
+fn years_of_splits_and_joins_with_life_keep_the_books() {
+    run_living(6);
+}
+
+/// `rounds` rounds of `run_splits` on a living island of 22 x 22 cells after 3 months.
+fn run_living(rounds: usize) {
+    let mut w = testkit::living(22, 3);
+    w.drain_events();
+    let busiest = (0..w.mesh.cells().n()).filter(|&i| w.life.cover(i).any()).max_by_key(|&i| (w.life.in_cell(i), std::cmp::Reverse(i))).expect("a cell");
+    assert!(w.life.in_cell(busiest) > 1 && w.life.cover(busiest).any(), "a cell of bodies and cover");
+    let cells = places(&w, busiest);
+    let lost = run_splits(&mut w, cells, rounds);
+    println!("the most a join sent to the ground: {lost:.3e} of its quarters' cover; bodies {} in {} cells, members {:?}", w.life.alive().count(), w.mesh.cells().n(), members(&w));
 }

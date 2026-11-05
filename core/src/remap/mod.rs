@@ -4,14 +4,14 @@
 //! `joined`; the store's nodes of each cell (`Class::CELLS`) and their sleep; the life of each cell and the survey's
 //! caches of it (`life::Cell`, `Life::sum`); Flow's state of each ground node; the traffic (`Counters::traffic`). Per
 //! link: what the links remember (`store::Links`). A remap only moves numbers, and shares or sums them for the cells a
-//! split or a join made (`made`): what a new cell holds is its law's to give.
+//! split or a join made (`made`; the bodies, parts and cover of a cell as wholes, `Life::remap`): what a new cell holds
+//! is its law's to give.
 
 mod made;
 mod split;
 
 pub use made::{Joined, Made};
 pub(crate) use made::{mean_by, Of, FLOW_HELD};
-pub use split::Refused;
 
 use crate::event::EventKind;
 use crate::World;
@@ -50,6 +50,10 @@ impl Renumber {
         let mut read = from.iter().filter_map(|f| if let Source::Made(m) = f { Some(m.old()) } else { None }).flatten();
         assert!(read.all(|i| (i as usize) < old && !taken[i as usize]), "a made item reads old items that are gone");
         Renumber { old, from }
+    }
+    /// What each new item holds, in order.
+    pub(crate) fn sources(&self) -> &[Source] {
+        &self.from
     }
     /// `v`, in blocks of one number per old item (`[block * old + item]`; with no old items, one block), as blocks of one
     /// per new item: each number moves with its item, and a new item, or one a split or a join made, takes `empty()`.
@@ -97,12 +101,13 @@ impl World {
     /// The cells and links of the finest level take their new numbers (`Remap`): every number the world keeps per cell
     /// or per link (the cell table, `remap`) moves with its cell or link; a new cell holds nothing, its life none, with
     /// the next serial (laws.md 0); a cell a split or a join made (`Made`) holds its share or its sum of what the cells it
-    /// came from held, a number per area theirs or their mean, its life none, with the next serial. Every field of the
-    /// world is named here, so a new one cannot be left out. It runs between steps, once the shell took the events (but
-    /// splits and joins, which name their cell by its serial); the caller gives the world the map and the mesh of its
-    /// new cells. Flow's caches are dropped, as a loaded world's, and rebuilt at the next step.
+    /// came from held, a number per area theirs or their mean, and their life shared out or gathered (`Life::remap`),
+    /// with the next serial. Every field of the world is named here, so a new one cannot be left out. It runs between
+    /// steps, once the shell took the events (but splits and joins, which name their cell by its serial); the caller
+    /// gives the world the map and the mesh of its new cells. Flow's caches are dropped, as a loaded world's, and rebuilt
+    /// at the next step.
     pub fn remap(&mut self, r: &Remap) {
-        let World { cfg: _, chem: _, map: _, mesh: _, seed: _, time, sleep, store, base_z: _, rain, liquid_flux, evap, off_land, counts, life, canopy, light, rained, links, joined, events, scratch } = self;
+        let World { cfg: _, chem, map: _, mesh: _, seed, time, sleep, store, base_z: _, rain, liquid_flux, evap, off_land, counts, life, canopy, light, rained, links, joined, events, scratch } = self;
         assert!(events.iter().all(|e| matches!(e.kind, EventKind::Split | EventKind::Join)), "a remap runs between steps, once the shell took the events");
         let c = &r.cells;
         // Per m² of a cell: its parent's in each quarter, the quarters' mean by area in a joined cell.
@@ -118,7 +123,7 @@ impl World {
         }
         store.remap(c, joined);
         sleep.remap(c, *time, joined);
-        life.remap(c);
+        life.remap(c, *seed, chem);
         scratch.remap(c, joined);
         links.remap(&r.links);
         *joined = c.apply(std::mem::take(joined), || None);

@@ -201,9 +201,9 @@ pub(crate) fn rejoin(o: &mut Body, c: Lot) {
 }
 
 /// Share `f` of node `b`'s members and share `fa` of each of its stores, of its brood and of its heat as a new body
-/// (not placed, `Lot::split`); lineage, genome, genes and their constants, link and memory as the node's; no brain of
-/// its own (it acts on the node's decision, and gets a copy of the node's brain if it leaves, `choose::spread`);
-/// holding nothing, inside nothing.
+/// (not placed, `Lot::split`); lineage, genome, genes and their constants, link and memory as the node's; no brain block
+/// of its own (one acting on the node's decision gets a copy of the node's brain if it leaves, `choose::spread`; a
+/// node's share in a quarter of its split cell gets one there, `life::tree`); holding nothing, inside nothing.
 pub(crate) fn part(b: &mut Body, f: f64, fa: f64) -> Body {
     let lot = Lot::split(b, f, fa);
     Body { count: lot.count, store: lot.store, e: lot.e, brood: lot.brood, hold: None, inside: None, leaving: false, brain: Block::default(), traced: false, ..b.clone() }

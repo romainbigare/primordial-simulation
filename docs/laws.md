@@ -117,7 +117,18 @@ by volume, the first alarm and the earliest time brought up to date, so its law 
 the same temperature in each (flat quarters), unless a join made the cell: a join keeps each quarter's share of each
 amount of each node, of each heat and of each volume (`remap::Joined`, saved per cell), and the split of that cell gives
 the quarters back as they were (to the rounding of x · share). The next full build of Flow's state finds each cell's
-temperature and plateaus from its heat. A cell with life (bodies, cover, parts) refuses to split or join for now.
+temperature and plateaus from its heat. **Life across a split and a join** (`life/tree.rs`, one life model at every
+grain: bodies and parts are records that hold their own amounts, so they move with nothing to book). A split's
+quarters are flat copies, so a node of at least one member per quarter's share leaves in each other quarter a node of
+that share of its members, stores, heat and brood (`nodes::part`: its genes, spreads, lineage and born rows, an id of
+that quarter, and a brain block there with the node's rows); what is not cut goes whole to one quarter, drawn by area
+by a draw keyed by its id and the split cell's serial (`rng::Purpose::Quarter`; a cell splits once): an individual, a
+node of fewer members, and a structure with its bonds and the bodies that hold it or are inside it (structures held
+and lived in together go together, drawn by their least root); the cover by area (4.5). A join gathers its quarters'
+bodies (each with its brain block), parts and bonds in the order of the quarters; its cover lands by the cover's rule
+(4.5) and its bodies then merge as the monthly merge does (`nodes::crowd`, 4.4), so it holds no more nodes than a cell
+of its kind. Ids never change (`Life::index` finds each again); a merge that lets go of a part names the cell by its
+index in its event, so the shell takes the events before the next split or join.
 **Relief**: a join that makes one flat cell of quarters of different heights lowers the potential energy of the stacks
 (the function of "The books" below, `flow::potential_of`); the joined cell keeps that drop as its relief, J, a part of
 `Store::lifted` held apart from the stacks, with the relief its quarters kept from their own joins (their shares are not
@@ -584,6 +595,9 @@ chance).
   lineages (`lineage::resize`): past them a body whose sizes change joins the living lineage of its kind nearest in
   sizes, and stays in its own if that is the nearest. The cap of a crowded cell and the cap of lineages make bodies of
   different heritage share a brain; the three caps bound the work, not a law.
+- **Split and join of cells** (0): a node splits by area into the quarters of its cell (`nodes::part`, one node per
+  quarter, each with a copy of its brain), unless it has fewer members than one per quarter, when it goes whole to one
+  quarter drawn by area, as an individual does; a joined cell's bodies merge at once by the monthly merge and its caps.
 - **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
 - **Pace**: every node updates and decides once a month, as an individual does (0).
 - **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage. A
@@ -652,6 +666,10 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
 - **Eaten and broken**: an animal's take from the place takes from its ground and its cover by one search
   (`feed::take_node`, 5.3), paying to break what it takes of the cover (`Cover::breaking`, as a bite pays); movers that
   push through a cell break the cover by its share of the cell's mass, as they break bodies (6.8, `choose::wear`).
+- **Split and join of cells** (`cover/tree.rs`, 0): each quarter of a split takes each slot's amounts and the heat by
+  its share of the area, the genes, kind and `full` copied, the light mark per m² as it was. A joined cell takes its
+  quarters' slots as seeds with their heat, which land by the seeds' rule (`seed::lodge`): alike slots join, and what
+  finds no slot dies as remains on its ground; its light mark is the quarters' mean by area.
 - **What it is to the rest**: its mass, capture area, the light it absorbs and the energy to break it are one more
   body of the cell in the survey's sums (`Life::sum`), so it shades, holds the ground (1.3), hides bodies, slows
   movers and makes lanes (1.7) as bodies do.

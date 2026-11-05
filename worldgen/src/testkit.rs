@@ -69,6 +69,16 @@ pub fn small_world() -> World {
     w
 }
 
+/// An island of `side` x `side` cells of seed 1 with the two kinds of `ew run` placed at its start as `ew run` places
+/// them (the soil, the light-eaters, the eaters: `life::seed`), after `months` months.
+pub fn living(side: usize, months: u32) -> World {
+    let mut w = crate::new_world(1, side, side);
+    crate::life::soil(&mut w, &crate::chemistry0().1.soil);
+    [0, 1].iter().for_each(|&k| _ = crate::life::seed(&mut w, k));
+    (0..months).for_each(|_| pcore::step(&mut w));
+    w
+}
+
 /// The land cells with no liquid standing on them.
 pub fn dry_lands(w: &World) -> Vec<usize> {
     (0..w.mesh.cells().n()).filter(|&i| w.is_land(i) && w.life.env[i][1] < 1e-3).collect()

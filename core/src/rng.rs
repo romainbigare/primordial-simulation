@@ -36,6 +36,8 @@ pub enum Purpose {
     Fixer,
     /// Where a slot of cover sends its seeds, and their mutation (`cover::grow`)
     Cover,
+    /// The quarter a body or a structure goes to whole when its cell splits (`life::tree`)
+    Quarter,
 }
 
 pub struct Rng(u64);
