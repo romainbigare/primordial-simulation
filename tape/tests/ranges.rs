@@ -54,16 +54,16 @@ const RIVERS: f64 = 712.4;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
 const WORN: f64 = 0.3179;
 /// The cover (starting kind 0) at year 30, log10 kg (`root_0_cover_kg`), in the reference runs.
-const COVER_KG: f64 = 9.667;
+const COVER_KG: f64 = 9.165;
 /// Eaters (starting kind 1) over years `EATERS_FROM` to 30, the mean of log10 kg (`root_1_kg`), in the reference runs: a guard that the world stays near
 /// itself, not a target (real herbivores and soil animals weigh far less, a few times 1e4 kg per km²).
-const EATER_KG: f64 = 8.888;
+const EATER_KG: f64 = 8.863;
 /// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the cover's 0.3, as a boom or bust of the eaters
 /// moves a mean of three seeds far.
 const EATER_KG_RANGE: f64 = 0.5;
 /// The life eaters live over years `EATERS_FROM` to 30, the mean of the yearly values, yr (`root_1_life_real`), in the
 /// reference runs.
-const EATER_LIFE: f64 = 1.053;
+const EATER_LIFE: f64 = 0.701;
 
 /// Earth's rain on land, m/yr (Trenberth et al. 2007), and the factor either way a run's may lie from it: the island
 /// lies at 40°, where land gets 0.5 to 1 m (from memory), and a globe's land spans every belt.
