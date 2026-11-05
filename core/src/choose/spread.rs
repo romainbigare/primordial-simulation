@@ -122,15 +122,17 @@ fn stays<R>(d: &mut Chunk, node: &mut Body, x: f64, act: impl FnOnce(&mut Chunk,
 /// if they can (`land_act`). The node acts itself if less than one member would be left. `q`: the node's chances
 /// (`top_chances`), which a part that leaves learns from. While `fresh`, no part's acting has changed the node yet, so
 /// the members' well-being before they act is the node's at its decision (`Body::wb`: a split leaves each member's
-/// share alike); it is false once one has. Returns the change of their well-being, and whether they left the node
-/// (none: it moved whole).
+/// share alike); it is false once one has. Returns the change of their well-being (none worked out for a part that
+/// leaves: it counts in no mean and is never the member drawn, `spread`), and whether they left the node (none: it moved
+/// whole).
 fn part_acts(w: &World, d: &mut Chunk, node: &mut Body, (c, q): (&Choice, &[f32; OPTS]), k: &Kit, (o, x): (usize, f64), (fresh, rng): (&mut bool, &mut Rng)) -> (f32, Option<bool>) {
     let (moves, bond) = ((FIXED..TO_BODY).contains(&o), (FORM..FIXED).contains(&o) || o >= TO_PART);
     let first = *fresh;
     let mut acts = |d: &mut Chunk, b: &mut Body, part_of: Option<u64>| {
-        let before = if first { b.wb } else { (k.wb)(w, b) };
+        // (A part that forms a part or acts on one always leaves, `act_as`.)
+        let before = if first || (part_of.is_some() && (o == FORM || o >= TO_PART)) { b.wb } else { (k.wb)(w, b) };
         act_as(w, d, b, c, k, (o, part_of), rng);
-        (k.wb)(w, b) - before
+        if part_of.is_some() && b.leaving { 0.0 } else { (k.wb)(w, b) - before }
     };
     if !(moves || bond) {
         *fresh = false;

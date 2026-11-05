@@ -5,7 +5,7 @@ use crate::body::{self, Body, STRENGTH, TAKEN};
 use crate::chem::{Chemistry, Phase, Stores};
 use crate::event::{Event, EventKind};
 use crate::rng::Rng;
-use crate::units::MAX_SUBSTANCES;
+use crate::units::{BODY_STORES, MAX_SUBSTANCES};
 use crate::{bond, lanes, life::{Chunk, Handle}, store::Node, World};
 
 /// Mass of the amounts `m` (mol of each store) that the body at `t` K uses (`Body::uses`), kg.
@@ -43,26 +43,32 @@ pub const COVER: u64 = u64::MAX - 1;
 pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body) {
     let (i, chem, bc) = (b.cell as usize, &w.chem, w.chem.body());
     let (tg, parts) = (w.t_ground_last(i), crate::cover::Parts::of(chem));
-    let free = |k: usize| if chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k).max(0.0) } else { 0.0 };
     let cover: [f64; MAX_SUBSTANCES] = parts.as_ref().map_or([0.0; MAX_SUBSTANCES], |p| d.at(i).cover.amounts(p));
-    let (lying, t) = (|k: usize| free(k) + cover[k], b.temp(chem));
-    let gut = intake(w, b, t, lying).0;
-    let mut m = b.wanted(chem, lying, gut, b.mass(chem));
     // (The cover's parts are among the stores of bodies: its fuel, matter and built solids.)
-    let of_cover = |s: usize| bc.subs().get(s).map_or(0.0, |&k| cover[k]);
-    let mut grazed: Stores = std::array::from_fn(|s| if of_cover(s) > 0.0 { (m[s] * of_cover(s) / lying(bc.subs()[s])).min(m[s]).min(of_cover(s)) } else { 0.0 });
+    let (of_cover, t) = (|s: usize| bc.subs().get(s).map_or(0.0, |&k| cover[k]), b.temp(chem));
+    // What it would take and of it what it would graze, by what lies on the ground (one look-up of the ground's view)
+    // and in the cover.
+    let (gut, mut m, mut grazed) = {
+        let ground = d.moves.amounts(w, Node::ground(i));
+        let lying = |k: usize| (if chem.phase(k, tg) != Phase::Gas { ground(k).max(0.0) } else { 0.0 }) + cover[k];
+        let gut = intake(w, b, t, lying).0;
+        let m = b.wanted(chem, lying, gut, b.mass(chem));
+        let grazed: Stores = std::array::from_fn(|s| if of_cover(s) > 0.0 { (m[s] * of_cover(s) / lying(bc.subs()[s])).min(m[s]).min(of_cover(s)) } else { 0.0 });
+        (gut, m, grazed)
+    };
     // The bulk: the parts of the cover it does not use, at the share of the cover its bite took of those it uses.
-    let used = |s: usize| of_cover(s) > 0.0 && b.uses(chem, bc.subs()[s], t);
-    let usable: f64 = (0..bc.n()).filter(|&s| used(s)).map(|s| of_cover(s) * bc.mm[s]).sum();
+    let used: [bool; BODY_STORES] = std::array::from_fn(|s| of_cover(s) > 0.0 && b.uses(chem, bc.subs()[s], t));
+    let usable: f64 = (0..bc.n()).filter(|&s| used[s]).map(|s| of_cover(s) * bc.mm[s]).sum();
     let bit = if usable > 0.0 { bc.mass_of(&grazed) / usable } else { 0.0 };
-    let mut bulk: Stores = std::array::from_fn(|s| if of_cover(s) > 0.0 && !used(s) { of_cover(s) * bit } else { 0.0 });
+    let mut bulk: Stores = std::array::from_fn(|s| if of_cover(s) > 0.0 && !used[s] { of_cover(s) * bit } else { 0.0 });
     // All it takes fits its gut.
     let full = bc.mass_of(&m) + bc.mass_of(&bulk);
     if full > gut {
         let f = gut / full;
         [&mut m, &mut grazed, &mut bulk].into_iter().for_each(|v| v.iter_mut().for_each(|a| *a *= f));
     }
-    let (all, kg) = (parts.as_ref().map_or(0.0, |p| d.at(i).cover.amounts(p).iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()), bc.mass_of(&grazed) + bc.mass_of(&bulk));
+    // (The cover has not changed since `cover` was read.)
+    let (all, kg) = (parts.as_ref().map_or(0.0, |_| cover.iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()), bc.mass_of(&grazed) + bc.mass_of(&bulk));
     let breaking = parts.as_ref().filter(|_| kg > 0.0).map_or(0.0, |p| d.at(i).cover.breaking(chem, &w.cfg, p, (kg / all.max(1e-300)).min(1.0)));
     let edge = bond::edge(d.at(i), w, b).filter(|_| breaking > 0.0);
     let area = w.mesh.cells().area()[i];
