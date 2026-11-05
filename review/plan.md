@@ -95,13 +95,13 @@ WP0, WP2, WP4 and WP5 run side by side; WP3 follows WP2 (both change bodies).
 | 6 | Done: a sparse tree of cells down to 1/64 of an air block |
 | 7 | Done: split and join with exact books; the quarters take the world's own terrain, paid by each cell's relief |
 | 8 | Done: Flow agrees between fine and coarse cells; only the bed's store sub-steps |
-| 9 | Done: learning, discount and brain cost per second; acts take time, a mover eats for the rest of its step |
+| 9 | Done: learning, discount and brain cost per second; acts take time, a mover eats for the rest of its step; a body decides at its cell's step and lives in sub-steps of a week; children are born through the update; a young node's members mature one by one |
 | 10 | Done: life shares out and gathers across split and join |
 | 11 | Done: refinement by an interest score under a budget; the camera a recorded input; one linking a month |
-| 12 | Next: needs the births of a node to enter through the step (in work) |
+| 12 | Next: the first watch at fine grain |
 | 13 | Done: `analyze/` with three detectors |
 | 14 | Later rounds |
 
-Open items: about 3e5 parts lie on a 64 x 64 island by year 300 (each costs work monthly); the roster's animals are
-about 17 times fewer than before the body fixes, because the old numbers lived on a step artifact (paying upkeep cold,
-eating warm); refinement still costs about 4.6 ms a change.
+Open items: parts pile up (2e4 to 3e5 on a 64 x 64 island by year 300; each costs work monthly); the animals' numbers
+swing by orders of magnitude between seeds, by whether a boom of one kind comes; refinement still costs about 4.6 ms a
+change; a settled 64 x 64 year costs about 1 s on 4 cores.
