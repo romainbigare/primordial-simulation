@@ -49,7 +49,7 @@ Change; Bond (each chunk's cell by cell, the chunks on the pool: in a cell the t
 list, on its view, then the loads of its structures in the order of their roots); then the bodies (`survey::batch`)
 and their sub-steps (`survey::substeps`). **The step follows the size** (`survey/steps.rs`): a body's step lets it
 cross at most one cell, as a move is one link a decision. A square of the map (`Square::square_depth`; 2 km on the
-island) steps a month, today's pace and speed limit, so a cell 2^k times finer steps a month over 2^k
+island) steps a month (the pace the numbers of bodies are anchored at), so a cell 2^k times finer steps a month over 2^k
 (`World::body_step`: 15 days at 1 km, 7.5 at 500 m, 1.875 at 125 m), a square or a coarser cell a month; a step is a
 whole number of seconds and at least a day (a cell finer than that steps as the finest that keeps both). **Every
 body updates at the month's start**, after the month's Flow, Change and Bond: one batch holds every living body. Then

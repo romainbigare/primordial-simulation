@@ -1,8 +1,8 @@
 //! The step follows the size (laws.md 0): a body's step lets it cross at most one cell. A move is one link a decision,
-//! and a square of the map (`Square::square_depth`: 2 km on the island) steps a month, today's pace and speed limit, so
-//! a cell 2^k times finer than a square steps a month over 2^k and a square or a coarser cell a month. The month's batch
-//! updates every body at its start (`batch`); then the bodies of the finer cells step again inside the month
-//! (`substeps`), each over the time since its own last update (`Body::last`).
+//! and a square of the map (`Square::square_depth`: 2 km on the island) steps a month (the pace the numbers of bodies
+//! are anchored at), so a cell 2^k times finer than a square steps a month over 2^k and a square or a coarser cell a
+//! month. The month's batch updates every body at its start (`batch`); then the bodies of the finer cells step again
+//! inside the month (`substeps`), each over the time since its own last update (`Body::last`).
 
 use super::{batch_of, break_and_sum};
 use crate::units::DAY_S;
