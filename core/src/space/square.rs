@@ -1,5 +1,5 @@
 //! A map of squares, numbered row by row from the north-west corner (x east, y south): flat, or a globe of squares in
-//! latitude and longitude whose rows wrap east to west. The air level is built on the squares (`Square::samples`), and
+//! latitude and longitude whose rows wrap east to west. The air level is built on the squares (`Square::mesh`), and
 //! the tape's frames show one each. The cells of the map are the leaves of a tree under each air
 //! block of `scale` squares a side (`tree`), of any depth down to `DEPTH_MOST`, numbered by their north-west corners row
 //! by row; two cells that share a border differ by one depth at most. Cells link across a border, by its width, as far
@@ -159,13 +159,13 @@ impl Square {
         Tree::new(&self.leaves, across, down, self.wrap)
     }
     /// The mesh of the map: its cells, rows spread from latitude `north` (row 0) to `south`, and a coarser level of the
-    /// air blocks, numbered row by row, built from the map's samples (`samples`) so it does not depend on the sizes of the
-    /// cells.
+    /// air blocks, numbered row by row, built from the map's squares so it does not depend on the sizes of the cells (four
+    /// blocks link across their corner where four squares meet there, whatever cells lie at it).
     pub fn mesh(&self, south: f64, north: f64) -> Mesh {
         assert!(!self.wrap || (self.w >= 3 && self.w.is_multiple_of(self.scale)), "a globe's row has 3 cells or more, in whole blocks");
-        let (tree, samples) = (self.tree(), self.samples());
+        let (tree, squares) = (self.tree(), Square::new(self.w, self.h, self.side, self.wrap, self.scale));
         let block = |l: &Leaf| tree.block(l.x, l.y) as u32;
-        let blocks = samples.level(&samples.tree(), south, north).coarser(&samples.leaves.iter().map(block).collect::<Vec<u32>>());
+        let blocks = squares.level(&squares.tree(), south, north).coarser(&squares.leaves.iter().map(block).collect::<Vec<u32>>());
         let parent = self.leaves.iter().map(block).collect();
         let mesh = Mesh::of(self.level(&tree, south, north), blocks, parent, tree);
         // The wind runs along the lines of the blocks east and west, and north and south (`flow::air::wind::lines`).
