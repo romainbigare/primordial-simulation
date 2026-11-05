@@ -115,7 +115,7 @@ impl World {
     /// `remap` of the cells alone (`Renumber`): what the links remember stays as it is, for the links to take their new
     /// numbers once the change of the cells under way has its mesh (`World::split`).
     pub(crate) fn remap_cells(&mut self, c: &Renumber) {
-        let World { cfg: _, chem, map: _, mesh: _, seed, time, sleep, store, base_z: _, rain, liquid_flux, evap, off_land, counts, life, canopy, light, rained, links: _, joined, watch, events, scratch } = self;
+        let World { cfg: _, chem, map: _, mesh: _, seed, time, sleep, store, base_z: _, rain, liquid_flux, evap, off_land, counts, life, canopy, light, rained, links: _, joined, terrain: _, watch, events, scratch } = self;
         assert!(events.iter().all(|e| matches!(e.kind, EventKind::Split | EventKind::Join)), "a remap runs between steps, once the shell took the events");
         // Per m² of a cell: its parent's in each quarter, the quarters' mean by area in a joined cell.
         for v in [rain, evap, canopy] {

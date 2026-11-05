@@ -2,9 +2,12 @@
 //! links (two cells, the distance between centres, the width of their border); each cell but at the coarsest level has
 //! a parent. A level lies on a flat map or on a sphere. Each link of a cell takes one of its compass directions (`way`).
 //! Links are plain arrays, each once (`a < b`), with each cell's links in compressed lists, so solvers take slices. The
-//! cells of the finest level are the leaves of a tree under each cell of the air level (`tree`).
+//! cells of the finest level are the leaves of a tree under each cell of the air level (`tree`). The height of the ground
+//! at any point of the map is one function of the world's seed (`terrain`).
 
+pub mod drain;
 pub mod square;
+pub mod terrain;
 pub mod tree;
 
 pub use tree::{Leaf, Tree};

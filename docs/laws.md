@@ -36,7 +36,11 @@ their sizes, the two across it one depth apart at most and neither with 8 links 
 downhill way through a corner stays when a cell beside it splits and no cell has more than 8 links. The air level is built on the map's squares, the same whatever the sizes of the
 cells. The map's samples are its squares and its finer cells (`Square::samples`: a cell coarser than a square cut into
 its squares, a finer one as it is): each reads its air there (1.4), and a cell's starting height is the mean by area of
-the terrain on its samples (a cell finer than a square takes the height at its own centre). What needs the cell at a
+the terrain on its samples (a cell finer than a square takes the height at its own centre). **The terrain**
+(`space::terrain`) is one function of the world's seed and a point of the map, at any size: value noise summed over
+octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to heights, an island's falling away from
+the middle of its map; the world keeps what it needs beside its seed and its map (`World::terrain`: the rise its level
+0 m lies at). What needs the cell at a
 point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
@@ -1004,9 +1008,10 @@ to the air. Body matter holds no rock element: the **rock salt (11)** is rock ch
 ## 8. Starting conditions (not laws)
 Placed by `worldgen` (`worldgen::schedule::Schedule`, carried by a snapshot) and printed by every run; the laws never
 read a kind.
-- **Terrain** (`worldgen::terrain`): an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`); a metre of
+- **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on: an island, or a
+  globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in `World::terrain`); a metre of
   loose ground; the sea's salt at balance (2.6); ground and air temperatures falling with latitude and height. Every
-  land cell drains from the start (`drain`): a priority flood raises closed basins (only) to their outlet at 1 m per km
+  land cell drains from the start (`space::drain`): a priority flood raises closed basins (only) to their outlet at 1 m per km
   (`DRAIN_SLOPE`; Planchon and Darboux 2001), from every cell below 0 m on a globe, from those joined to the lowest
   cell on an island. On an island the open water is coarse (`coarse_low`): an air block (8 km) whose squares all lie
   below 0 m, none within a square of land (`LAND_RING`), is one cell, split where it borders finer cells until cells
