@@ -66,16 +66,17 @@ fn the_laws_do_not_depend_on_the_size_of_the_cells() {
 }
 
 /// The roster island of the check of a split region (spec 5.2 for life): its side in cells, its years, the year at
-/// whose end its region splits, and the seeds, each run unsplit and split, whose two unsplit runs measure the noise.
+/// whose end its region splits, and the seeds, each run unsplit and split, whose unsplit runs measure the noise: the
+/// range of their means (two seeds give one gap, which two runs that happen to agree make no band at all).
 const REGION_SIDE: usize = 32;
 const REGION_YEARS: u64 = 50;
 const SPLIT_AT: u64 = 25;
-const NOISE_SEEDS: [u64; 2] = [1, 2];
+const NOISE_SEEDS: [u64; 4] = [1, 2, 3, 4];
 /// The numbers compared, each the mean of the years after the split: the animals' mass, kg, the cover's, kg, and the
 /// starting kinds alive (in bodies or cover), the first `LIFE_HELD`, held to the noise; then in the region (where its
 /// bodies step four times a month once it is split) the animals' mass, kg, their members and their mean temperature by
-/// members, K, printed, not held: the region is one air node of a small island, whose two seeds hold animals fifty
-/// times apart there, so the gap between its seeds is no band. One body law at every grain is held where a node lives
+/// members, K, printed, not held: the region is one air node of a small island, whose seeds hold animals fifty times
+/// apart there, so the range of its seeds is no band. One body law at every grain is held where a node lives
 /// on: `core/tests/steps.rs`.
 const LIFE: [&str; 6] = ["animal_kg", "cover_kg", "kinds_alive", "region_animal_kg", "region_members", "region_t"];
 const LIFE_HELD: usize = 3;
@@ -120,22 +121,26 @@ fn life_years(seed: u64, split: bool) -> Vec<[f64; LIFE.len()]> {
 /// Spec 5.2 for life: a roster island whose region of one air node splits two depths (its cells a quarter of the side
 /// of the others, its bodies stepping four times a month) at the end of year `SPLIT_AT` keeps its animals' mass, its
 /// cover's mass and its kinds alive (the means of the years after) within the noise of the unsplit island: the mean over
-/// two seeds of what the split moves each number by is less than the gap between the unsplit means of the two seeds.
+/// the seeds of what the split moves each number by is less than the range of the unsplit means of the seeds (their
+/// highest less their lowest).
 /// The life in the region is printed (`LIFE`).
 #[test]
-#[ignore = "slow: four 50-year roster runs of a 32 x 32 island, two with a region split two depths at year 25"]
+#[ignore = "slow: eight 50-year roster runs of a 32 x 32 island, four with a region split two depths at year 25"]
 fn life_does_not_depend_on_a_split_region() {
-    let [a, b, a_split, b_split] = std::thread::scope(|s| {
-        let runs = [(NOISE_SEEDS[0], false), (NOISE_SEEDS[1], false), (NOISE_SEEDS[0], true), (NOISE_SEEDS[1], true)].map(|(seed, cut)| s.spawn(move || life_years(seed, cut)));
-        runs.map(|r| r.join().expect("a run"))
+    let [unsplit, split] = std::thread::scope(|s| {
+        let runs = [false, true].map(|cut| NOISE_SEEDS.map(|seed| s.spawn(move || life_years(seed, cut))));
+        runs.map(|r| r.map(|r| r.join().expect("a run")))
     });
     let mut out = vec![];
     for (q, name) in LIFE.iter().enumerate() {
         let mean = |run: &[[f64; LIFE.len()]]| run.iter().map(|y| y[q]).sum::<f64>() / run.len() as f64;
-        let offs = [mean(&a_split) - mean(&a), mean(&b_split) - mean(&b)];
-        let (off, noise) = ((offs[0] + offs[1]) / 2.0, (mean(&a) - mean(&b)).abs());
+        let (base, cut) = (unsplit.each_ref().map(|r| mean(r)), split.each_ref().map(|r| mean(r)));
+        let offs: Vec<f64> = cut.iter().zip(&base).map(|(c, u)| c - u).collect();
+        let off = offs.iter().sum::<f64>() / offs.len() as f64;
+        let noise = base.iter().cloned().fold(f64::MIN, f64::max) - base.iter().cloned().fold(f64::MAX, f64::min);
         let held = if q >= LIFE_HELD { ", not held" } else if off.abs() > noise { ": OUT" } else { "" };
-        println!("{name}: unsplit {:.4e} and {:.4e} (seeds {NOISE_SEEDS:?}), split {:.4e} and {:.4e}, off by {off:.3e} ({:.3e}, {:.3e}); noise {noise:.3e}{held}", mean(&a), mean(&b), mean(&a_split), mean(&b_split), offs[0], offs[1]);
+        let list = |v: &[f64]| v.iter().map(|x| format!("{x:.4e}")).collect::<Vec<_>>().join(", ");
+        println!("{name}: unsplit [{}] (seeds {NOISE_SEEDS:?}), split [{}], off by {off:.3e} ([{}]); noise {noise:.3e}{held}", list(&base), list(&cut), list(&offs));
         if q < LIFE_HELD && off.abs() > noise {
             out.push(*name);
         }
