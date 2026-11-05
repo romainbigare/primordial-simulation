@@ -143,6 +143,32 @@ fn forming_never_takes_more_than_is_left() {
     books.assert_within(&w, 1e-9, 1e-9);
 }
 
+/// What lies alone on the ground is buried (laws.md 1.3): a lone flat plate of rock sinks `bury` m/s into the loose
+/// ground and, buried past its smallest size, joins its cell's ground, its walls and its heat; two plates joined by a
+/// bond stay on top. The books close.
+#[test]
+fn a_lone_part_is_buried_in_the_ground() {
+    let (mut w, i) = world();
+    let ns = w.chem.ns();
+    let rock = |w: &mut World| {
+        let mut wall = vec![0.0; ns];
+        wall[ROCK] = 1.0 / w.chem.subs[ROCK].molar_mass;
+        part_of(w, i, wall, vec![0.0; ns], -1.0, 0.0)
+    };
+    let (lone, a, b) = (rock(&mut w), rock(&mut w), rock(&mut w));
+    bond::link(&mut w, a, b, 1e9);
+    let size = w.life.part(lone).expect("the plate").size[2] as f64;
+    let months = (size / (w.cfg.bury * w.cfg.calendar().month as f64)).ceil() as usize;
+    let books = Books::now(&w);
+    for m in 0..months {
+        assert!(w.life.part(lone).is_some(), "buried after {m} of {months} months");
+        bond::step(&mut w);
+    }
+    assert!(w.life.part(lone).is_none(), "the plate is on the ground after {months} months");
+    assert!(w.life.part(a).is_some() && w.life.part(b).is_some(), "the joined plates were buried");
+    books.assert_kept(&w, 1e-9);
+}
+
 /// A body may make a part of what lies on its ground: the share of its walls its brain asks for is of the ground's loose
 /// solids in their proportions, with their heat, never more than the ground holds. On land that is mostly rock, harder
 /// than any body, so the part is an edge that cuts a body like its maker. The books close.

@@ -210,7 +210,7 @@ load leaves free (the free share of that capacity: the cover effect, Sklar and D
 bed per J over its strength into loose ground. **Creep** (`flow::creep`, yearly, out of land cells):
 loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope,
 across each border by its width (none across a corner). Bodies hold the ground: carrying
-and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 8.
+and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 8. **Burial**: the loose ground mixes over what lies on it (bioturbation, Darwin 1881), so a part no body holds and no bond joins sinks `bury` m/s into it, no deeper than the loose ground is, and once buried past its smallest outer size it joins its cell's ground (`bond/month.rs::bury`, 3.1).
 
 ### 1.4 The air's step, the sun and the bodies' share
 `flow::air::step`, every `AIR_STEP_DAYS` (15). First the gas of the bodies' nodes comes up into their air nodes. Then each cell's exchange over the step with the air it sees is solved once (the sea under one air
@@ -433,7 +433,7 @@ their turns together, on the cell's view of the store: one move to the ground pe
 ground cannot give it all (it gives no heat below `T_FLOOR`, `Moves::take_from_ground`), the parts that cool still
 reach its temperature and those that warm share what it gives and what the others gave, each by what it wants. A part
 whose walls fall under `min_kg` falls apart (`bond::fall_apart`): all it holds, its walls, the liquid in its hollow and its heat, goes to its cell's ground,
-whether its walls ran off in its turn or a body took them (`bond::verbs::take`), and it is gone with its bonds.
+whether its walls ran off in its turn or a body took them (`bond::verbs::take`), and it is gone with its bonds; so does a part buried past its smallest outer size (1.3), while a bonded structure stays on top.
 
 ### 3.2 Loads and failure
 Monthly (`bond/month.rs`), from the part a body holds out along the bonds, each bond carries the weight hanging on it,

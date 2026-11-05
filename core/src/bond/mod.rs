@@ -61,6 +61,8 @@ pub struct Part {
     pub s: Info,
     /// Largest push this month from bodies moving through its cell (on the root), N
     pub push: f32,
+    /// How deep it has sunk into its cell's loose ground while it lay there alone, m (`month::bury`)
+    pub buried: f32,
 }
 
 /// Numbers of a structure.
@@ -296,9 +298,9 @@ pub fn make(w: &World, d: &mut Chunk, i: usize, wall: Vec<f64>, e: f64, x: f32, 
 }
 
 /// The part at `p` of cell `i` of chunk `d` falls apart: all it holds, its walls, the liquid in its hollow and its heat,
-/// goes to its cell's ground, moved by its own update on the chunk's view. Then it is gone (`dissolve`). Both ways a
-/// part falls apart use it: its walls run off in its turn (`month::turns`), or a body takes them below `min_kg`
-/// (`verbs::take`).
+/// goes to its cell's ground, moved by its own update on the chunk's view. Then it is gone (`dissolve`). Every way a
+/// part falls apart uses it: its walls run off or it is buried in its turn (`month::turns`), a body takes them below
+/// `min_kg` (`verbs::take`), or its edge wears them away (`edge::blunted`).
 fn fall_apart(w: &World, d: &mut Chunk, i: usize, p: usize) {
     d.moves.open(w, i, Node::new(Class::Part, p));
     let pt = &mut d.at_mut(i).parts[p];
@@ -333,6 +335,13 @@ fn to_ground(w: &World, d: &mut Chunk, i: usize, off: &[[f64; 2]]) {
     for (k, &[a, q]) in off.iter().enumerate().filter(|o| o.1[0] > 0.0) {
         d.moves.give(w, Node::ground(i), k, a, q);
     }
+}
+
+/// The loose solids of the ground of cell `i` as the chunk's view holds them, mol of each substance: those solid there
+/// at its temperature `tg` K, in its mixture (`Chemistry::phase_in`).
+fn loose_solids(w: &World, d: &Chunk, i: usize, tg: f64) -> Vec<f64> {
+    let g = d.moves.amounts(w, Node::ground(i));
+    (0..w.chem.ns()).map(|k| if w.chem.phase_in(k, tg, &g) == Phase::Solid { g(k).max(0.0) } else { 0.0 }).collect()
 }
 
 /// The part named `id` of cell `i` is gone: its bonds, its holder's hold and its place in the list.

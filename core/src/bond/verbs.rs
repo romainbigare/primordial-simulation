@@ -2,9 +2,8 @@
 //! when they move. A body's force decides what it can hold and break, and a held edge how far it goes (`edge`). Each
 //! act runs on the body's cell in its chunk (`life::Chunk`), the body taken out of its slot.
 
-use super::{at, blunt, edge, edge_leaves, event, Edge, fall_apart, held, holder, link_in, make, members, move_structure, restructure, root, sense::room, strength, unlink, HELD, LOAD, NOBODY};
+use super::{at, blunt, edge, edge_leaves, event, Edge, fall_apart, held, holder, link_in, loose_solids, make, members, move_structure, restructure, root, sense::room, strength, unlink, HELD, LOAD, NOBODY};
 use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase, Stores}, life::{Cell, Chunk}, life::Entry, World};
-use crate::store::Node;
 use crate::units::BODY_STORES;
 
 /// Body `b` takes hold of the part at `p` of its cell if it bears the weight of its structure.
@@ -15,7 +14,8 @@ fn grab(w: &World, d: &mut Chunk, b: &mut Body, p: usize) {
     if s.mass * w.cfg.gravity > bears {
         return;
     }
-    c.parts[p].held = b.id;
+    // (Held, it is out of the ground.)
+    (c.parts[p].held, c.parts[p].buried) = (b.id, 0.0);
     b.hold = Some(c.parts[p].id);
     event(d, w, true, i, HELD);
 }
@@ -245,13 +245,6 @@ pub fn form(w: &World, d: &mut Chunk, b: &mut Body, shape: [f32; 3]) {
     if held(d.at(i), b).is_none() {
         grab(w, d, b, p);
     }
-}
-
-/// The loose solids of the ground of cell `i` as the chunk's view holds them, mol of each substance: those solid there
-/// at its temperature `tg` K, in its mixture (`Chemistry::phase_in`).
-fn loose_solids(w: &World, d: &Chunk, i: usize, tg: f64) -> Vec<f64> {
-    let g = d.moves.amounts(w, Node::ground(i));
-    (0..w.chem.ns()).map(|k| if w.chem.phase_in(k, tg, &g) == Phase::Solid { g(k).max(0.0) } else { 0.0 }).collect()
 }
 
 /// Let go of the held part; with nothing held, leave the inside.

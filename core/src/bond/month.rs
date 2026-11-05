@@ -1,6 +1,6 @@
-//! The monthly step of parts: rot and heat, loads and failure.
+//! The monthly step of parts: rot and heat, burial, loads and failure.
 
-use super::{fall_apart, holder, numbers, sense::liquid, shed, to_ground, unlink, verbs::{bears, torn_from}};
+use super::{fall_apart, holder, loose_solids, numbers, sense::liquid, shed, to_ground, unlink, verbs::{bears, torn_from}, NOBODY};
 use crate::{change::{frac, rate, scarce}, chem::Phase, life::{self, Chunk}, store::{Class, Node}, World, AIR};
 
 /// Liquid shallower than this, m, pushes no part.
@@ -26,8 +26,8 @@ pub fn step(w: &mut World) {
 /// The turns of the parts of cell `i` of chunk `d` over `dt` s, in their order, on the chunk's view of the store: the
 /// share of each substance of its walls that the open world's decomposers rot (`rot`, one share for the cell), and all
 /// of a substance no longer solid, go to the ground with their heat, where Change rots them on, one move per substance;
-/// then the parts take the ground's temperature, one move of heat (`warm`); a part whose walls are under `min_kg` falls
-/// apart (`fall_apart`).
+/// then the parts take the ground's temperature, one move of heat (`warm`), and those lying alone sink (`bury`); a part
+/// whose walls are under `min_kg`, or buried past its smallest size, falls apart into the ground (`fall_apart`).
 fn turns(w: &World, d: &mut Chunk, i: usize, dt: f64) {
     let (chem, tg) = (&w.chem, w.t_ground_last(i));
     // (Opened first: `rot` reads the cell's own share of its air.)
@@ -40,16 +40,31 @@ fn turns(w: &World, d: &mut Chunk, i: usize, dt: f64) {
     }
     to_ground(w, d, i, &off);
     warm(w, d, i, tg);
+    bury(w, d, i, (tg, dt));
     let mut x = 0;
     while x < d.at(i).parts.len() {
         let p = &mut d.at_mut(i).parts[x];
-        let gone = p.walls(chem).mass < w.cfg.phys.min_kg;
+        let gone = p.walls(chem).mass < w.cfg.phys.min_kg || p.buried >= p.size[2];
         p.resize(chem);
         if gone {
             fall_apart(w, d, i, x);
         } else {
             x += 1;
         }
+    }
+}
+
+/// Flow's mixing of the loose ground (laws.md 1.3; bioturbation, Darwin 1881): each part of cell `i` of chunk `d` that
+/// no body holds and no bond joins sinks `bury` × `dt` m into the loose ground at `tg` K, no deeper than that ground is
+/// (its loose solids' volume over the cell's area). A structure stays on top while it is bonded.
+fn bury(w: &World, d: &mut Chunk, i: usize, (tg, dt): (f64, f64)) {
+    let loose = loose_solids(w, d, i, tg);
+    let volume: f64 = loose.iter().enumerate().map(|(k, a)| a * w.chem.molar_volume(k, Phase::Solid)).sum();
+    let depth = (volume / w.mesh.cells().area()[i]) as f32;
+    let c = d.at_mut(i);
+    let lone: Vec<bool> = c.parts.iter().map(|p| p.held == NOBODY && c.bonds.of(p.id).next().is_none()).collect();
+    for (p, _) in c.parts.iter_mut().zip(lone).filter(|x| x.1) {
+        p.buried = (p.buried + (w.cfg.bury * dt) as f32).min(depth);
     }
 }
 

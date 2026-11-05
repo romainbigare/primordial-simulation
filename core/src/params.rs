@@ -67,6 +67,8 @@ pub struct Config {
     pub creep: f64,
     /// Added to a solid's hardness before its softness, 1 / (hardness + this), is taken
     pub hard_min: f64,
+    /// Speed at which the mixing of the loose ground buries what lies on it alone, m/s
+    pub bury: f64,
 
     // Run switches (control runs to compare with)
 
@@ -438,6 +440,7 @@ impl Default for Config {
             regrow: 1e-9,
             creep: 6.3e-11,
             hard_min: 0.05,
+            bury: 1.6e-10,
 
             null: false,
             phys: Physics::default(),
