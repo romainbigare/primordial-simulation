@@ -34,9 +34,6 @@ const MOST_HOLLOW: f32 = 0.95;
 const ASPECT_DECADES: f64 = 2.0;
 /// Faces of a box: plates close one as wide as the longest part.
 const BOX_FACES: f64 = 6.0;
-/// A part's id is the cell it was made in shifted left by this many bits, plus that cell's count of parts made then
-/// (from 1), as a body's (`life::Chunk::add`).
-const PART_SHIFT: u32 = 40;
 
 /// A part, in the list of the cell it lies in.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -160,12 +157,12 @@ fn root(c: &Cell, p: usize) -> usize {
     at(c, c.parts[p].root).expect("a structure's root lies in its cell")
 }
 
-/// Place part `p` in cell `i` of chunk `d`, the last of its list, with the next id of the cell. Returns its place.
+/// Place part `p` in cell `i` of chunk `d`, the last of its list, with the next id of the cell (`life::new_id`, as a
+/// body's). Returns its place.
 fn add(d: &mut Chunk, i: usize, mut p: Part) -> usize {
     let c = d.at_mut(i);
     c.parts_made += 1;
-    assert!(c.parts_made < 1 << PART_SHIFT, "cell {i} made 2^{PART_SHIFT} parts: their ids would run into the next cell's");
-    p.id = (i as u64) << PART_SHIFT | c.parts_made;
+    p.id = crate::life::new_id(c.serial, c.parts_made);
     (p.root, p.cell) = (p.id, i as u32);
     c.parts.push(p);
     c.parts.len() - 1

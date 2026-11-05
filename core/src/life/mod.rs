@@ -21,9 +21,18 @@ use crate::survey::ROW;
 use crate::World;
 use std::collections::BTreeMap;
 
-/// A body's id is the cell it was placed in shifted left by this many bits, plus that cell's count of bodies placed
-/// then (from 1, so no body has id 0; it stays below 2^this, `Chunk::add`).
+/// The id of a body or a part is the serial of the cell it was placed or made in shifted left by this many bits, plus
+/// that cell's count of bodies placed or of parts made then (`new_id`).
 const ID_SHIFT: u32 = 40;
+/// In `Life::at_serial`: a serial whose cell is gone.
+const GONE: u32 = u32::MAX;
+
+/// The id of the body placed, or the part made, as the `count`-th of its kind in the cell of serial `serial`: from 1, so
+/// no id is 0, and below 2^`ID_SHIFT`, so it does not run into the next serial's.
+pub(crate) fn new_id(serial: u32, count: u64) -> u64 {
+    assert!(count < 1 << ID_SHIFT && (serial as u64) < 1 << (u64::BITS - ID_SHIFT), "cell serial {serial} placed or made 2^{ID_SHIFT}: its ids would run out");
+    (serial as u64) << ID_SHIFT | count
+}
 
 /// Where a body is stored: its cell and its place in that cell's list. It holds until the pass ends (`Life::compact`);
 /// a body is named for longer by its id.
@@ -33,11 +42,14 @@ pub struct Handle {
     pub slot: u32,
 }
 
-/// The life of one ground cell: its bodies, in the order they came (one that died or left stays as a hole, not alive,
-/// until the pass ends, so a handle holds through a pass), how many bodies were placed in it, its cover, and what the
-/// movers did there.
+/// The life of one ground cell: its serial, its bodies, in the order they came (one that died or left stays as a hole,
+/// not alive, until the pass ends, so a handle holds through a pass), how many bodies were placed in it, its cover, and
+/// what the movers did there.
 #[derive(Clone, Debug, Default)]
 pub struct Cell {
+    /// The cell's name for the ids of what is placed or made in it (`new_id`): given when the cell is made, it never
+    /// changes and is never given again, while its index may (`Life::at_serial`)
+    pub(crate) serial: u32,
     pub(crate) bodies: Vec<Body>,
     /// Bodies placed in it so far (children, split halves, parts of nodes, members drawn, founders)
     placed: u64,
@@ -60,6 +72,10 @@ pub struct Cell {
 pub struct Life {
     /// The life of each ground cell (taken out of the world while body code runs on it, `chunk::run`)
     pub(crate) cells: Vec<Cell>,
+    /// The serial the next cell made takes (`Cell::serial`), and the index of the cell of each serial given (`GONE` once
+    /// that cell is gone), rebuilt from the cells (`Life::index`)
+    next_serial: u32,
+    at_serial: Vec<u32>,
     /// The cell each body stored outside the cell it was placed in is in, by id (`find`), and so for the parts
     /// (`part_cell`)
     moved: BTreeMap<u64, u32>,
@@ -93,10 +109,27 @@ pub struct Life {
 }
 
 impl Life {
-    /// No bodies yet on `mesh`.
+    /// No bodies yet on `mesh`; each cell's serial is its index.
     pub fn new(mesh: &Mesh) -> Life {
         let n = mesh.cells().n();
-        Life { cells: vec![Cell::default(); n], sums: vec![[0.0; ROW]; n], ..Default::default() }
+        let cells = (0..n).map(|i| Cell { serial: i as u32, ..Default::default() }).collect();
+        let mut life = Life { cells, next_serial: n as u32, sums: vec![[0.0; ROW]; n], ..Default::default() };
+        life.index();
+        life
+    }
+    /// The index of the cell of each serial, and where the bodies and parts stored outside the cell they were placed or
+    /// made in are (`moved`, `parts_moved`), are found from the cells.
+    fn index(&mut self) {
+        let Life { cells, next_serial, at_serial, moved, parts_moved, .. } = self;
+        *at_serial = vec![GONE; *next_serial as usize];
+        cells.iter().enumerate().for_each(|(i, c)| at_serial[c.serial as usize] = i as u32);
+        moved.clear();
+        parts_moved.clear();
+        for (i, c) in cells.iter().enumerate() {
+            let away = |id: u64| origin(at_serial, id) != Some(i);
+            moved.extend(c.bodies.iter().filter(|b| b.alive && away(b.id)).map(|b| (b.id, i as u32)));
+            parts_moved.extend(c.parts.iter().filter(|p| away(p.id)).map(|p| (p.id, i as u32)));
+        }
     }
     /// The living bodies with their handles, cell by cell, each cell's in the order they came.
     pub fn living(&self) -> impl Iterator<Item = (Handle, &Body)> {
@@ -120,7 +153,7 @@ impl Life {
     }
     /// Where the body with id `id` is stored, if it lives: in the cell it was placed in, unless it moved away.
     pub fn find(&self, id: u64) -> Option<Handle> {
-        self.find_in(self.moved.get(&id).map_or((id >> ID_SHIFT) as usize, |&c| c as usize), id)
+        self.find_in(self.moved.get(&id).map_or_else(|| origin(&self.at_serial, id), |&c| Some(c as usize))?, id)
     }
     /// Where the living body with id `id` is stored in cell `i`, if it is there.
     pub(crate) fn find_in(&self, i: usize, id: u64) -> Option<Handle> {
@@ -164,17 +197,36 @@ impl Life {
             c.brains.pack(c.bodies.iter_mut().map(|b| &mut b.brain));
         }
     }
+    /// The life of each cell and the survey's caches of it follow their cells (`World::remap`): a new cell has no life
+    /// and the next serial; each living body and part takes its cell's new index, and the ids find their cells again
+    /// (`index`). It runs between passes.
+    pub(crate) fn remap(&mut self, r: &crate::remap::Renumber) {
+        let Life { cells, next_serial, at_serial: _, moved: _, parts_moved: _, queued, sums, absorb, keep, env, feat, brains: _, members: _, genomes: _, free_genomes: _, air_seen } = self;
+        assert!(queued.is_empty() && air_seen.is_empty(), "a remap runs between passes");
+        *cells = r.apply(std::mem::take(cells), || {
+            *next_serial += 1;
+            Cell { serial: *next_serial - 1, ..Default::default() }
+        });
+        for (i, c) in cells.iter_mut().enumerate() {
+            c.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.cell = i as u32);
+            c.parts.iter_mut().for_each(|p| p.cell = i as u32);
+        }
+        (*sums, *env) = (r.apply(std::mem::take(sums), || [0.0; ROW]), r.apply(std::mem::take(env), || [0.0; 3]));
+        (*absorb, *keep) = (r.apply(std::mem::take(absorb), || 0.0), r.apply(std::mem::take(keep), || 0.0));
+        *feat = r.apply(std::mem::take(feat), || [0.0; crate::choose::NCELL]);
+        self.index();
+    }
     /// Body `id` is now stored in cell `i` (`find`).
     fn note_at(&mut self, id: u64, i: u32) {
-        if (id >> ID_SHIFT) as u32 == i { self.moved.remove(&id) } else { self.moved.insert(id, i) };
+        if origin(&self.at_serial, id) == Some(i as usize) { self.moved.remove(&id) } else { self.moved.insert(id, i) };
     }
     /// Part `id` now lies in cell `i` (`part_cell`).
     pub(crate) fn note_part_at(&mut self, id: u64, i: u32) {
-        if (id >> ID_SHIFT) as u32 == i { self.parts_moved.remove(&id) } else { self.parts_moved.insert(id, i) };
+        if origin(&self.at_serial, id) == Some(i as usize) { self.parts_moved.remove(&id) } else { self.parts_moved.insert(id, i) };
     }
     /// The cell the part with id `id` lies in, if it exists: the one it was made in, unless its structure moved.
     pub fn part_cell(&self, id: u64) -> Option<usize> {
-        let i = self.parts_moved.get(&id).map_or((id >> ID_SHIFT) as usize, |&c| c as usize);
+        let i = self.parts_moved.get(&id).map_or_else(|| origin(&self.at_serial, id), |&c| Some(c as usize))?;
         self.cells.get(i)?.parts.iter().any(|p| p.id == id).then_some(i)
     }
     /// The part with id `id`, if it exists.
@@ -195,6 +247,12 @@ impl Life {
     pub fn parts(&self) -> impl Iterator<Item = &crate::bond::Part> {
         self.cells.iter().flat_map(|c| &c.parts)
     }
+}
+
+/// The index now of the cell the body or part named `id` was placed or made in, by the index of the cell of each serial
+/// (`Life::at_serial`; none once that cell is gone): the one way from an id to a cell.
+fn origin(at_serial: &[u32], id: u64) -> Option<usize> {
+    at_serial.get((id >> ID_SHIFT) as usize).filter(|&&i| i != GONE).map(|&i| i as usize)
 }
 
 /// The handles of the living bodies of `c`, cell `i`, in the order they came.

@@ -61,6 +61,14 @@ impl Store {
     pub fn heat(&self, class: Class) -> &[f64] {
         self.heat.get(class as usize).map_or(&[], |v| v)
     }
+    /// The nodes of each cell (`Class::CELLS`) follow their cells (`World::remap`): a new cell's hold nothing.
+    pub(crate) fn remap(&mut self, r: &crate::remap::Renumber) {
+        for c in Class::CELLS {
+            for v in [&mut self.amounts[c as usize], &mut self.heat[c as usize]] {
+                *v = r.apply(std::mem::take(v), || 0.0);
+            }
+        }
+    }
 }
 
 impl World {

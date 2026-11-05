@@ -91,6 +91,20 @@ impl Sleep {
         self.0.get(class as usize).is_none_or(|a| a.count == 0)
     }
 
+    /// The nodes of each cell (`Class::CELLS`) of a class whose law has run follow their cells (`World::remap`): a new
+    /// cell's is due at `now`, as every node is before its law first runs.
+    pub(crate) fn remap(&mut self, r: &crate::remap::Renumber, now: u64) {
+        for c in Class::CELLS {
+            let Alarms { alarm, since, asleep, count, held } = self.of(c);
+            if alarm.is_empty() {
+                continue;
+            }
+            (*alarm, *since) = (r.apply(std::mem::take(alarm), || now), r.apply(std::mem::take(since), || now));
+            (*asleep, *held) = (r.apply(std::mem::take(asleep), || true), r.apply(std::mem::take(held), || 0.0));
+            *count = asleep.iter().filter(|&&a| a).count();
+        }
+    }
+
     /// The time node `i` of `class` was last brought up to date, s.
     pub fn since(&self, class: Class, i: usize) -> u64 {
         self.0[class as usize].since[i]

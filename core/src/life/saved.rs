@@ -6,12 +6,14 @@ use crate::lineage::Lineage;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
 
-/// What a snapshot keeps of `Life`: per cell what `SavedCell` keeps; the lineages and born rows. Where bodies that moved
-/// are follows from the bodies, and the survey's caches are rebuilt (`Life::sum`). Written from the world's own
+/// What a snapshot keeps of `Life`: per cell what `SavedCell` keeps; the serial the next cell made takes; the lineages
+/// and born rows. The index of each serial and where bodies that moved are follow from the cells (`Life::index`), and
+/// the survey's caches are rebuilt (`Life::sum`). Written from the world's own
 /// (borrowed, each cell made as it is written, `Cells`), read back as new (owned, `Saved`).
 #[derive(Serialize)]
 struct Saving<'a> {
     cells: Cells<'a>,
+    next_serial: u32,
     brains: &'a [Option<Lineage>],
     members: &'a [u32],
     genomes: &'a [Genome],
@@ -22,6 +24,7 @@ struct Saving<'a> {
 #[derive(Deserialize)]
 struct Saved {
     cells: Vec<SavedCell<'static>>,
+    next_serial: u32,
     brains: Vec<Option<Lineage>>,
     members: Vec<u32>,
     genomes: Vec<Genome>,
@@ -38,12 +41,13 @@ impl Serialize for Cells<'_> {
     }
 }
 
-/// A cell as a snapshot keeps it: its count of bodies placed, the energy movers spent pushing through its bodies since
+/// A cell as a snapshot keeps it: its serial, its count of bodies placed, the energy movers spent pushing through its bodies since
 /// the last survey and the members that moved into it since the last month, its cover, its living bodies in order and
 /// their brains (their blocks one after another, none free: `Brains::packed`), its parts in order with their bonds, and
 /// its count of parts made.
 #[derive(Serialize, Deserialize)]
 struct SavedCell<'a> {
+    serial: u32,
     placed: u64,
     pushed: f64,
     crossings: f32,
@@ -65,13 +69,13 @@ impl<'a> SavedCell<'a> {
             None => (living.into_iter().map(Cow::Borrowed).collect(), Cow::Borrowed(c.brains.numbers())),
             Some((v, blocks)) => (living.into_iter().zip(blocks).map(|(b, k)| Cow::Owned(Body { brain: k, ..b.clone() })).collect(), Cow::Owned(v)),
         };
-        SavedCell { placed: c.placed, pushed: c.pushed, crossings: c.crossings, cover: Cow::Borrowed(&c.cover), bodies, brains, parts: Cow::Borrowed(&c.parts), bonds: Cow::Borrowed(&c.bonds), parts_made: c.parts_made }
+        SavedCell { serial: c.serial, placed: c.placed, pushed: c.pushed, crossings: c.crossings, cover: Cow::Borrowed(&c.cover), bodies, brains, parts: Cow::Borrowed(&c.parts), bonds: Cow::Borrowed(&c.bonds), parts_made: c.parts_made }
     }
 }
 
 impl Serialize for Life {
     fn serialize<S: Serializer>(&self, to: S) -> Result<S::Ok, S::Error> {
-        Saving { cells: Cells(&self.cells), brains: &self.brains, members: &self.members, genomes: &self.genomes, free_genomes: &self.free_genomes }.serialize(to)
+        Saving { cells: Cells(&self.cells), next_serial: self.next_serial, brains: &self.brains, members: &self.members, genomes: &self.genomes, free_genomes: &self.free_genomes }.serialize(to)
     }
 }
 
@@ -79,15 +83,13 @@ impl Serialize for Life {
 impl<'de> Deserialize<'de> for Life {
     fn deserialize<D: Deserializer<'de>>(from: D) -> Result<Self, D::Error> {
         let x = Saved::deserialize(from)?;
-        let mut life = Life { brains: x.brains, members: x.members, genomes: x.genomes, free_genomes: x.free_genomes, ..Default::default() };
-        for (i, c) in x.cells.into_iter().enumerate() {
-            let bodies: Vec<Body> = c.bodies.into_iter().map(Cow::into_owned).collect();
-            bodies.iter().for_each(|b| life.note_at(b.id, i as u32));
-            let parts = c.parts.into_owned();
-            parts.iter().for_each(|p| life.note_part_at(p.id, i as u32));
+        let mut life = Life { next_serial: x.next_serial, brains: x.brains, members: x.members, genomes: x.genomes, free_genomes: x.free_genomes, ..Default::default() };
+        for c in x.cells {
+            let (bodies, parts) = (c.bodies.into_iter().map(Cow::into_owned).collect(), c.parts.into_owned());
             let (cover, brains, bonds) = (c.cover.into_owned(), Brains::from_packed(c.brains.into_owned()), c.bonds.into_owned());
-            life.cells.push(Cell { bodies, placed: c.placed, pushed: c.pushed, crossings: c.crossings, cover, brains, parts, bonds, parts_made: c.parts_made });
+            life.cells.push(Cell { serial: c.serial, bodies, placed: c.placed, pushed: c.pushed, crossings: c.crossings, cover, brains, parts, bonds, parts_made: c.parts_made });
         }
+        life.index();
         life.sums = vec![[0.0; crate::survey::ROW]; life.cells.len()];
         Ok(life)
     }
