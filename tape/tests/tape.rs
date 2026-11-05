@@ -105,6 +105,36 @@ fn snapshot_round_trip_at_every_month() {
     }
 }
 
+/// A world whose cells split (a coast down two depths) and joined (four squares of land, its record and relief kept),
+/// saved at a month's start and loaded, is the saved one and goes on as the unbroken one, month by month through the
+/// slow cycles of Flow, and its joined cell splits back alike.
+#[test]
+fn a_world_split_and_saved_goes_on_as_the_unbroken_one() {
+    let mut w = world();
+    run(&mut w, 1);
+    let n = w.mesh.cells().n();
+    let coast = (0..n).find(|&i| w.is_land(i) && w.mesh.cells().around(i).1.iter().any(|&j| !w.is_land(j as usize))).expect("a coast");
+    let l = w.map.leaves()[coast];
+    w.split(l).expect("a split");
+    w.split(l.quarters()[0]).expect("a split two depths down");
+    let land: Vec<_> = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).map(|i| w.map.leaves()[i]).collect();
+    let joined = land.iter().find_map(|q| q.parent().filter(|&p| w.join(p).is_ok())).expect("four squares of land join");
+    w.drain_events();
+    let mut bytes = vec![];
+    tape::snapshot_bytes(&w, &(), &mut bytes).unwrap();
+    let (mut b, ()) = tape::read_snapshot(&bytes[..]).unwrap();
+    assert_eq!(fingerprint(&b), fingerprint(&w), "the world loaded");
+    for m in 0..=RESUMED {
+        if m == RESUMED {
+            w.split(joined).expect("the joined cell splits");
+            b.split(joined).expect("the joined cell splits");
+        }
+        step(&mut w);
+        step(&mut b);
+        assert_eq!(fingerprint(&b), fingerprint(&w), "resumed for {} months", m + 1);
+    }
+}
+
 /// Parts lie in the list of their cell, each with an id that never changes (laws.md 3.1): two bonded parts keep their
 /// ids and their bond through a snapshot and when their structure moves to a neighbour cell, and a part made after them
 /// gets an id of its own, so an old id names nothing once its part is gone.

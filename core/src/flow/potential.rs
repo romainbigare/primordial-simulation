@@ -8,6 +8,7 @@ use super::stack::{bed_layer, deep_layer, ground_layers, stack, Life, Same, HEAD
 use super::Scratch;
 use crate::store::{self, fall_heat, Class, LinkFlux, Move};
 use crate::{World, AIR};
+use std::borrow::Cow;
 
 /// Cells of a task of `potential`: it walks the amounts of each substance over them in turn.
 const CELLS_PER_TASK: usize = 256;
@@ -120,10 +121,31 @@ fn potential(w: &World, s: &Scratch, found: Option<Found>) -> Potential {
     Potential { ground: at(0), air: e_air, deep: at(1), bodies: at(4), heights: Heights { ground: head, air: za, deep: at(3) }, found }
 }
 
+/// Flow's working memory as `potential` reads it: the world's, or its state with the table of the substances where a
+/// remap or a load dropped the caches.
+fn scratch_of(w: &World) -> Cow<'_, Scratch> {
+    if w.scratch.sp.is_empty() {
+        Cow::Owned(Scratch { state: w.scratch.state.clone(), sp: super::scratch::substances(&w.chem), ..Default::default() })
+    } else {
+        Cow::Borrowed(&w.scratch)
+    }
+}
+
 /// The potential energy of the world's matter, J (`potential`), from Flow's state of its ground.
 pub fn total(w: &World) -> f64 {
-    let p = potential(w, &w.scratch, None);
+    let p = potential(w, &scratch_of(w), None);
     [&p.ground, &p.air, &p.deep, &p.bodies].iter().flat_map(|v| v.iter()).sum()
+}
+
+/// The potential energy of the matter of ground cells `cells` (their stacks, stores and heads) and of air node `air`,
+/// J (`potential`): what a split or a join of cells under `air` changes (`World::split`). None before Flow first built
+/// the state of the ground (its first booking finds the function then).
+pub(crate) fn potential_of(w: &World, cells: &[usize], air: usize) -> f64 {
+    if w.scratch.state.tg.len() != w.mesh.cells().n() {
+        return 0.0;
+    }
+    let p = potential(w, &scratch_of(w), None);
+    cells.iter().map(|&i| p.ground[i] + p.deep[i] + p.bodies[i]).sum::<f64>() + p.air[air]
 }
 
 /// A part of Flow being booked, or the parts that follow each other (`flow::chain`): the potential energy of every node

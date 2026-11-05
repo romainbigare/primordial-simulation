@@ -29,7 +29,8 @@ a run killed during a write leaves its `.part` file, which nothing reads. A stop
 write, and resumes only from a snapshot.
 
 **Raw events** (`core/src/event.rs`): born (with kind, one or two parents), died (with cause, kind,
-the light catalyst of the dead), took, gave, watched, bond made or broken, first time a substance appears. Only physical facts; the viewer shows the first appearances.
+the light catalyst of the dead), took, gave, watched, bond made or broken, first time a substance appears, a cell split
+into its quarters or joined from them (named by its serial, with its depth; counted in `splits` and `joins`). Only physical facts; the viewer shows the first appearances.
 Took, gave and watched name bodies by their id (`Body::id`): the serial of the cell the body was placed in (laws.md
 0) times 2^40, plus that cell's count of bodies placed then (1, 2, ...: children,
 split halves, parts of nodes acting apart, founders). An id never
@@ -71,6 +72,7 @@ worn edges, structures, true colour (r, g, b).
 | `rain`, `rain_land` | mol/m²/s | mean rain, and on land (a moving average over about a year) |
 | `evap_land`, `runoff_sea` | mol/m²/s | on land, what rises into the air less what condenses on the ground, and what runs over the surface into cells under the sea's level, per m² of land (moving averages over about a year): with `rain_land` the land's water budget |
 | `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) with a liquid flux over the web viewer's threshold (`tape::RIVER_WEB`) |
+| `cells`, `splits`, `joins` | , 1/yr, 1/yr | the cells of the map at the year's end; cells split into their quarters and cells joined from them in the year (`World::split`, `World::join`) |
 | `bodies` | | bodies (nodes and individuals) |
 | `cover_slots`, `cover_kg` | , kg | slots of cover in the world (`cover::SLOTS` a cell at most), and its mass |
 | `cover_died_<cause>` | kg/yr | cover that died in the year by cause: `spent` (upkeep unpaid), `age`, `phase` (frost), `taken` (eaten), `broken` (by movers) |

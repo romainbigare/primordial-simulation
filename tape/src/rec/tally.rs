@@ -66,6 +66,9 @@ pub(super) struct YearTally {
     pub made: [f64; 2],
     pub broken: f64,
     pub failed: f64,
+    /// Cells split into their quarters, and joined from them (`World::split`, `World::join`)
+    pub splits: f64,
+    pub joins: f64,
     /// Body-months of bodies that are not light-eaters, [cold, warm] x [all, inside walls]
     pub inside: [[f64; 2]; 2],
     /// The core's tallies of the year, taken at the yearly row: decisions drawn and those where the action drawn had
@@ -160,6 +163,8 @@ impl Recorder {
             EventKind::BondMade => y.made[(e.value as usize).min(1)] += 1.0,
             EventKind::BondBroken if e.value >= pcore::bond::LOAD => y.failed += 1.0,
             EventKind::BondBroken => y.broken += 1.0,
+            EventKind::Split => y.splits += 1.0,
+            EventKind::Join => y.joins += 1.0,
         }
     }
 }

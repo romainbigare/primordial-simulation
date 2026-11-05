@@ -92,15 +92,20 @@ impl Sleep {
     }
 
     /// The nodes of each cell (`Class::CELLS`) of a class whose law has run follow their cells (`World::remap`): a new
-    /// cell's is due at `now`, as every node is before its law first runs.
-    pub(crate) fn remap(&mut self, r: &crate::remap::Renumber, now: u64) {
+    /// cell's is due at `now`, as every node is before its law first runs. A quarter sleeps as its parent did; a joined
+    /// cell until the first alarm of its quarters, brought up to date when the first of them was, so its law skips no
+    /// time; what they held when they fell asleep is shared or summed as their amounts are (`Made::held`).
+    pub(crate) fn remap(&mut self, r: &crate::remap::Renumber, now: u64, joined: &[Option<crate::remap::Joined>]) {
+        let first = |t: [u64; 4]| t.into_iter().min().expect("four quarters");
         for c in Class::CELLS {
             let Alarms { alarm, since, asleep, count, held } = self.of(c);
             if alarm.is_empty() {
                 continue;
             }
-            (*alarm, *since) = (r.apply(std::mem::take(alarm), || now), r.apply(std::mem::take(since), || now));
-            (*asleep, *held) = (r.apply(std::mem::take(asleep), || true), r.apply(std::mem::take(held), || 0.0));
+            *alarm = r.apply_made(std::mem::take(alarm), || now, |_, m, at| m.pick(at, first));
+            *since = r.apply_made(std::mem::take(since), || now, |_, m, at| m.pick(at, first));
+            *asleep = r.apply_made(std::mem::take(asleep), || true, |_, m, at| m.pick(at, |a| a.iter().all(|&x| x)));
+            *held = r.apply_made(std::mem::take(held), || 0.0, |k, m, at| m.held(joined, Some(crate::remap::Of::Amount(c, k)), at));
             *count = asleep.iter().filter(|&&a| a).count();
         }
     }

@@ -5,7 +5,7 @@ orderings) is said once, in the code's doc comments; the code is the truth. Numb
 `docs/numbers.md`, what a run records in `docs/tape.md`.
 
 **Where the code is** (`core/src/`): time in `clock/` and `schedule.rs`; the shape of the world in `space/`, and how
-what it keeps per cell follows a change of the cells in `remap.rs`; shared
+what it keeps per cell follows a change of the cells, a split and a join in `remap/`; shared
 maths in `solve/` (`sweep`, `downhill`, `line`); nodes and books in `store/`, `world.rs`, `check.rs`; ground heat in
 `ground.rs`; settings in `params.rs`, constants in `units.rs`; bodies in `body/`, `life.rs`, `nodes.rs`, `lineage.rs`,
 `brain.rs`; the cells as bodies see them in `survey.rs`; paths in `lanes.rs`; keyed random numbers in `rng.rs`; the
@@ -25,14 +25,17 @@ An island of 2 km squares, or a globe (`--globe`) of latitude-longitude squares 
 east to west; an air block is 4 x 4 squares. The cells are a sparse tree under each air block (`space/tree.rs`): the
 block is the root, a cell is a leaf at any depth down to 1/64 of the block's side (`DEPTH_MOST`), and only the leaves
 are kept (`Square::leaves`), numbered by their north-west corners row by row; a square is depth 2. Today's worlds start
-with cells of 1, 2 or 4 squares on a side (worldgen); no law splits or joins them yet. Cells across a border differ by
-one depth at most (2:1). One builder makes every cell (`Square::mesh`). Cells link across a border by its width, as far
-apart as their centres across it, so a steady change across a border of two sizes passes exactly; across a corner
-(width 0) only where four cells of one size meet, so no cell has more than 8 links. The map's samples are its squares
-(`Square::samples`: a cell coarser than a square cut into its squares, a finer one as it is): the air level is built
-on them, the same whatever the sizes of the cells, and a cell's starting height is the mean by area of the terrain on
-its samples (a cell finer than a square takes the height at its own centre). What needs the cell at a point (the tape's
-frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
+with cells of 1, 2 or 4 squares on a side (worldgen); between steps a cell may split into its quarters and four quarters
+join into their parent (`World::split`, `World::join`, below), no law deciding when yet. Cells across a border differ by
+one depth at most (2:1): a split first splits each cell across a side that would border the quarters two depths coarser
+(`Square::splits`), and a join that would leave one two depths finer is refused (`Square::joins`). One builder makes
+every cell (`Square::mesh`). Cells link across a border by its width, as far apart as their centres across it, so a
+steady change across a border of two sizes passes exactly; across a corner (width 0) only where four cells of one size
+meet, so no cell has more than 8 links. The air level is built on the map's squares, the same whatever the sizes of the
+cells. The map's samples are its squares and its finer cells (`Square::samples`: a cell coarser than a square cut into
+its squares, a finer one as it is): each reads its air there (1.4), and a cell's starting height is the mean by area of
+the terrain on its samples (a cell finer than a square takes the height at its own centre). What needs the cell at a
+point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
 (`schedule::month`), each for the whole month: the survey (`survey::survey`: one task per chunk on the pool with the
@@ -99,11 +102,30 @@ gone does nothing: a move of a body that died (its cost was paid), a watch whose
 a part act no longer possible or that cannot be paid; less than one member of a node's children with no node to join
 goes back into the parent's brood, or to the ground of the parent's cell if it died (`copy::back`).
 
-**The cell table** (`remap.rs`): what the world keeps per cell of the finest level (the store's nodes of a cell and
+**The cell table** (`remap/`): what the world keeps per cell of the finest level (the store's nodes of a cell and
 their sleep, its life, Flow's state of its ground, its moving averages) and per link of it follows a change of the
 cells in one place (`World::remap`, between steps): each number moves with its cell or link, an old cell no new one
-names is gone, and a new cell holds nothing and takes the next serial, so every id still finds its body or part. No
-law changes the cells.
+names is gone, and a new cell holds nothing and takes the next serial, so every id still finds its body or part.
+**Split and join** (`remap/split.rs`, at a month's start, the events taken; one remap each, an event each, `Split` and
+`Join`, naming the parent by its serial). The cells a split or a join makes are new, with new serials, and a link
+between two cells that both stay keeps what it remembers. A quarter holds its share of each number its parent held (the
+amounts and the heat of each of its nodes, the volumes Flow keeps of its ground, what its sleep held, the moving
+averages per cell, `remap::Made::held`) and its parent's numbers that do not add up (the moving averages per m², the
+temperature and the plateau, the means of its bed, the sleep's alarm and the time it was brought up to date); a joined
+cell holds the sum of its quarters' and the mean by area of the others (its plateau where all share it, its bed's means
+by volume, the first alarm and the earliest time brought up to date, so its law skips no time). The share is by area,
+the same temperature in each (flat quarters), unless a join made the cell: a join keeps each quarter's share of each
+amount of each node, of each heat and of each volume (`remap::Joined`, saved per cell), and the split of that cell gives
+the quarters back as they were (to the rounding of x · share). The next full build of Flow's state finds each cell's
+temperature and plateaus from its heat. A cell with life (bodies, cover, parts) refuses to split or join for now.
+**Relief**: a join that makes one flat cell of quarters of different heights lowers the potential energy of the stacks
+(the function of "The books" below, `flow::potential_of`); the joined cell keeps that drop as its relief, J, a part of
+`Store::lifted` held apart from the stacks, with the relief its quarters kept from their own joins (their shares are not
+kept). The split of a joined cell gives the relief back: what the restored quarters' stacks hold over the cell's comes
+from it, and what is left over (or short) goes to the quarters' ground heat by their shares (`store::fall_heat`, which
+books it against `Store::lifted`). A split of a cell no join made makes flat quarters, whose stacks hold what the cell's
+did. So a join moves no energy, a split moves only what `fall_heat` books, and `check::drift`, which reads
+`Store::lifted`, closes through any sequence of splits and joins. No law changes the cells.
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.
 **One ground temperature**: every law and the tape read that of Flow's last step (`World::t_ground_last`).
