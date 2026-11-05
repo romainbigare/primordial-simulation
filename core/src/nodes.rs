@@ -23,14 +23,15 @@ pub fn crowd(w: &World, d: &mut Chunk, lay: &Layout, i: usize) {
 }
 
 /// Bodies a cell keeps at most after its monthly merge; past them each starting kind keeps one young and one mature
-/// node (a speed setting).
+/// node in each room, and past them again across its rooms (`across_rooms`; a speed setting).
 pub const MAX_NODES: usize = 8;
 
 /// In a cell `i` of more than `MAX_NODES` bodies, the bodies of each starting kind (`Lineage::root`), stage and room (the
 /// structure whose room they are in, or none) join the largest of them (equals: the first in the cell's order), whatever
 /// their lineage, brain sizes and part, taking its brain, born rows and lineage when that is another (`merge`; the part a
 /// joiner held stays in the cell, held by none): the cell then holds at most a young and a mature node of each kind
-/// present in each room. In any other cell a body of one lineage, stage and room with fewer members than
+/// present in each room, and if that is still more than `MAX_NODES` bodies, the rooms are bounded too (`across_rooms`).
+/// In any other cell a body of one lineage, stage and room with fewer members than
 /// `Physics::node_floor` of the largest of them joins it, unless it may mate (`copy::mates`).
 pub fn cap(w: &World, d: &mut Chunk, i: usize) {
     let mut left: Vec<Handle> = d.cell(i).collect();
@@ -43,6 +44,31 @@ pub fn cap(w: &World, d: &mut Chunk, i: usize) {
         let kind = (d.root(w, b), b.adult(&w.chem), room(d.at(i), b).map(|r| r.0), (!all).then_some(b.lineage));
         match heads.iter().find(|h| h.0 == kind) {
             Some(&(_, t)) if all || (b.count < w.cfg.phys.node_floor * d[t].count && !crate::copy::mates(w, d, b)) => merge(w, d, s, t),
+            Some(_) => {}
+            None => heads.push((kind, s)),
+        }
+    }
+    if all {
+        across_rooms(w, d, i);
+    }
+}
+
+/// A cell `i` that still holds more than `MAX_NODES` bodies after `cap` (bodies of a kind and stage in the rooms of many
+/// structures): its `MAX_NODES` largest stay, and each body past them joins the largest of its starting kind and stage
+/// there, whatever their rooms (`merge`, as in `cap`), or stays if it is the largest of its kind and stage. The joiners'
+/// members leave their room for that body's, where they stay while they fit (`bond::leave_outgrown`).
+fn across_rooms(w: &World, d: &mut Chunk, i: usize) {
+    let mut left: Vec<Handle> = d.cell(i).collect();
+    if left.len() <= MAX_NODES {
+        return;
+    }
+    // (A stable sort: equals keep the cell's order.)
+    left.sort_by(|&s, &t| d[t].n().total_cmp(&d[s].n()));
+    let mut heads: Vec<((u32, bool), Handle)> = Vec::new();
+    for (k, s) in left.into_iter().enumerate() {
+        let kind = (d.root(w, &d[s]), d[s].adult(&w.chem));
+        match heads.iter().find(|h| h.0 == kind) {
+            Some(&(_, t)) if k >= MAX_NODES => merge(w, d, s, t),
             Some(_) => {}
             None => heads.push((kind, s)),
         }

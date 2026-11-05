@@ -771,12 +771,17 @@ chance).
 - **Three caps, speed tools.** After its merge (`nodes::cap`) a cell that holds more than `MAX_NODES` (8) bodies keeps
   one young and one mature node of each starting kind in each room (or outside any): the bodies of one kind, stage and
   room join the largest of them, whatever their lineage, brain sizes and part, taking its brain, born rows, lineage and
-  brain-size genes; its rows become the mean by members where the brains have one shape, else they stay its own. In any
+  brain-size genes; its rows become the mean by members where the brains have one shape, else they stay its own. A
+  cell that still holds more than `MAX_NODES` bodies (a kind in the rooms of many structures) bounds its rooms too
+  (`nodes::across_rooms`): its `MAX_NODES` largest bodies stay, and each one past them joins the largest of its kind and
+  stage in the cell whatever their rooms, its members leaving their room for that body's, where they stay while they
+  fit (3.4), unless it is the largest of its kind and stage. In any
   other cell a body with fewer members than `node_floor` (1%) of the largest body of its lineage, stage and room joins
   that one, unless it may mate (`copy::mates`, 4.3). Either way members, stores, heat and brood join as sums, and a part
   the joiner held stays in its cell, held by none. So a small group (a few members who took a part) does not cost an
   update of its own, while a pair that may mate and a lineage just founded stay apart; a crowded cell holds at most two
-  bodies per kind present and room, and kinds never mix. A starting kind keeps at most `MAX_LINEAGES` (8) living
+  bodies per kind present and room, and at most `MAX_NODES` and two per kind present across its rooms, and kinds never
+  mix. A starting kind keeps at most `MAX_LINEAGES` (8) living
   lineages (`lineage::resize`): past them a body whose sizes change joins the living lineage of its kind nearest in
   sizes, and stays in its own if that is the nearest. The cap of a crowded cell and the cap of lineages make bodies of
   different heritage share a brain; the three caps bound the work, not a law. They count per cell, not per m²: a cell
