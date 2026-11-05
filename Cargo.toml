@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["core", "worldgen", "tape", "cli"]
+members = ["core", "worldgen", "tape", "cli", "wasm"]
 
 [workspace.package]
 edition = "2021"
@@ -19,3 +19,9 @@ opt-level = 1
 
 [profile.dev.package."*"]
 opt-level = 3
+
+# The page's WebAssembly (`web/package.json`, `npm run wasm`): no debug info, so the file stays small.
+[profile.wasm]
+inherits = "release"
+debug = 0
+strip = true

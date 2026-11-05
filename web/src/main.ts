@@ -2,6 +2,7 @@ import { World, gunzip, parse, plane, fmt, fmtYear, unitText, latOf, lonOf } fro
 import { CLASSES, PATH_LAYER, paint, rampFor, rampCss } from './earth';
 import { MapView } from './map';
 import { Charts } from './charts';
+import { Live } from './live';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const LABELS: Record<string, string> = {
@@ -11,8 +12,12 @@ const LABELS: Record<string, string> = {
 const ORDER = Object.keys(LABELS);
 const label = (n: string) => LABELS[n] ?? (n[0].toUpperCase() + n.slice(1).replace(/_/g, ' '));
 const SPEEDS = [1, 2, 4, 8, 16, 32];
+/** The live world's speeds, months of the world per second of real time. */
+const LIVE_SPEEDS = [3, 12, 36, 120, Infinity];
+const LIVE_SIZE = 22;
 
 let world: World | null = null;
+let live: Live | null = null;
 let frame = 0, speed = 4, playing = false, view = 'earth', layer: string | null = null, paths = false;
 let cls = new Uint8Array(0);
 
@@ -21,12 +26,29 @@ const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(ye
 
 // ---- loading
 async function load(buf: ArrayBuffer): Promise<void> {
+  let next: World;
   try {
-    world = parse(await gunzip(buf));
+    next = parse(await gunzip(buf));
   } catch (e) { return say(String(e instanceof Error ? e.message : e)); }
+  live?.stop(); live = null;
+  world = next;
+  setMode(false);
   setup(world);
 }
 const say = (t: string) => { $('msg').textContent = t; $('msg').hidden = !t; };
+
+/** The live world or a tape: what only one of them has is shown, and the speeds are its own. */
+function setMode(isLive: boolean): void {
+  $('live').hidden = !isLive;
+  document.querySelectorAll<HTMLElement>('.tape-only').forEach(el => (el.hidden = isLive));
+  speed = isLive ? LIVE_SPEEDS[1] : 4;
+  $('speeds').replaceChildren(...(isLive ? LIVE_SPEEDS : SPEEDS).map(s => {
+    const b = button(isLive ? (s === Infinity ? 'max' : `${s} mo/s`) : `×${s}`, () => { speed = s; live?.rate(s); syncUi(); });
+    b.dataset.speed = String(s);
+    return b;
+  }));
+  live?.rate(speed);
+}
 
 function setup(w: World): void {
   const m = w.meta;
@@ -39,7 +61,7 @@ function setup(w: World): void {
   const sorted = [...names.filter(n => ORDER.includes(n)).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)), ...names.filter(n => !ORDER.includes(n))];
   $('layers').replaceChildren(...sorted.map(n => button(label(n), () => setLayer(layer === n ? null : n), n)));
   const years = m.frames.map(f => f.year), last = years.length - 1;
-  charts.set(m.series, m.series_units, years);
+  if (!live) charts.set(m.series, m.series_units, years);
   const tl = $<HTMLInputElement>('tl');
   tl.max = String(last); tl.disabled = last < 1;
   $('y0').textContent = `year ${fmtYear(years[0])}`; $('y1').textContent = `year ${fmtYear(years[last])}`;
@@ -54,6 +76,7 @@ function setup(w: World): void {
   $('paths').hidden = !w.index.has(PATH_LAYER);
   playing = false; layer = null; paths = false;
   setFrame(0); setLayer(null); syncUi();
+  if (live) togglePlay();
 }
 
 function nearestFrame(year: number): number {
@@ -68,8 +91,9 @@ function setFrame(f: number): void {
   const y = world.meta.frames[frame].year;
   $<HTMLInputElement>('tl').value = String(frame);
   $('year').textContent = `Year ${fmtYear(y)}`;
+  document.body.dataset.year = String(y);
   const hy = document.getElementById('hy'); if (hy) hy.textContent = fmtYear(y);
-  charts.setYear(y);
+  if (!live) charts.setYear(y);
   repaint();
 }
 
@@ -144,7 +168,7 @@ function tip(at: HTMLElement, text: string): void {
 let last = 0, acc = 0;
 function loop(now: number): void {
   const dt = Math.min((now - last) / 1000, 0.25); last = now;
-  if (playing && world) {
+  if (playing && world && !live) {
     acc += dt * speed;
     if (acc >= 1) {
       const n = Math.floor(acc); acc -= n;
@@ -156,6 +180,7 @@ function loop(now: number): void {
 }
 function togglePlay(): void {
   if (!world) return;
+  if (live) { playing = !playing; live.play(playing); return syncUi(); }
   if (!playing && frame >= world.meta.frames.length - 1) setFrame(0);
   playing = !playing; acc = 0; syncUi();
 }
@@ -165,7 +190,6 @@ $('play').onclick = togglePlay;
 $('fit').onclick = () => map.fit();
 $('paths').onclick = () => { paths = !paths; syncUi(); repaint(); };
 $<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
-$('speeds').replaceChildren(...SPEEDS.map(s => { const b = button(`×${s}`, () => { speed = s; syncUi(); }); b.dataset.speed = String(s); return b; }));
 document.querySelectorAll<HTMLElement>('#views button').forEach(b => (b.onclick = () => setView(b.dataset.view!)));
 $<HTMLInputElement>('tl').oninput = e => setFrame(+(e.target as HTMLInputElement).value);
 $<HTMLInputElement>('file').onchange = e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) f.arrayBuffer().then(load); };
@@ -188,9 +212,38 @@ addEventListener('drop', e => { e.preventDefault(); depth = 0; $('drop').hidden 
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { charts.draw(); map.invalidate(); });
 $('classes').innerHTML = CLASSES.map(([n, c]) => `<li><s style="background:${c}"></s>${n}</li>`).join('');
 
+// ---- start
+/** The live world: the core's WebAssembly (ew.wasm, beside the page) in a worker; the seed and size from the page. */
+async function startLive(): Promise<void> {
+  const wasm = await fetch('ew.wasm').then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`ew.wasm: ${r.status}`))));
+  const q = new URLSearchParams(location.search);
+  $<HTMLInputElement>('seed').value = q.get('seed') ?? '1';
+  $<HTMLInputElement>('size').value = q.get('size') ?? String(LIVE_SIZE);
+  live?.stop();
+  world = null;
+  const l = live = new Live($('worker-src').textContent ?? '', wasm, {
+    ready: () => newWorld(),
+    world: w => { world = w; setup(w); },
+    frame: () => { if (live === l) setFrame(0); },
+    error: text => { playing = false; syncUi(); say(text); },
+  });
+  setMode(true);
+  say('Making the world…');
+}
+function newWorld(): void {
+  const seed = Math.max(0, Math.floor(+$<HTMLInputElement>('seed').value) || 0);
+  const size = Math.min(64, Math.max(8, Math.floor(+$<HTMLInputElement>('size').value) || LIVE_SIZE));
+  playing = false;
+  say('Making the world…');
+  live?.newWorld(seed, size);
+}
+$('live').onsubmit = e => { e.preventDefault(); newWorld(); };
+
 requestAnimationFrame(loop);
 const embedded = document.getElementById('world-data')?.textContent?.trim();
-const url = new URLSearchParams(location.search).get('f') ?? 'world.ewf.gz';
+const url = new URLSearchParams(location.search).get('f');
+const waiting = () => say('Drop a .ewf.gz file here, or use “Open file”.');
 if (embedded) load(Uint8Array.from(atob(embedded), c => c.charCodeAt(0)).buffer);
-else fetch(url).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${url}: ${r.status}`))))
-  .then(load, () => say('Drop a .ewf.gz file here, or use “Open file”.'));
+else if (url) fetch(url).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${url}: ${r.status}`))))
+  .then(load, waiting);
+else startLive().catch(waiting);

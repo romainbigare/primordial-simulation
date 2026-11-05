@@ -15,7 +15,8 @@ cargo run --release -p cli --bin ew -- chem                                     
 cargo run --release -p cli --bin ew -- numbers out/a out/b                                    # the numbers two runs differ in
 cargo run --release -p cli --bin ew                                                           # every command and flag
 cargo run --release -p cli --no-default-features --bin ew -- run ...                         # flow and change without threads (same hash)
-cd web && npm run build && cp ../out/run/world.ewf.gz dist/                                   # viewer: open dist/index.html via a local server
+cd web && npm run build && npm run wasm && python3 -m http.server --directory dist           # live viewer: open http://localhost:8000 (the core runs in a worker; seed and size on the page)
+cd web && npm run build && cp ../out/run/world.ewf.gz dist/                                   # tape viewer: open http://localhost:8000/?f=world.ewf.gz, or drop a file on the page
 ```
 
 Speed: `ew run --size 128 --years 1000` on 4 cores: 2.1 s per year, measured over 20 years (`--years 20 --every 1000 --frames-every 1000`; 2.2 s per year over the last 2 of them, 16,384 cells, no bodies yet), on 2026-11-01 with a load average of 1.9 (`uptime`). Every run prints its own speed line at the end.

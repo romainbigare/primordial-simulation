@@ -502,7 +502,8 @@ tape/       the recorder (rec/, its yearly columns in rec/cols/), snapshots (sna
               the fingerprint of a world; tests: tape.rs, ranges.rs, scale.rs
 library/    the recognition library (data files); today the Earth names of chemistry 0
 cli/        headless runs (`ew run`, `ew resume`, `ew chem`, `ew numbers`; flags in args.rs), pictures; the word ban test
-web/        the 2D map viewer (TypeScript)
+wasm/       the core as WebAssembly for the live viewer: a small shell of `extern "C"` exports (`ew-wasm`)
+web/        the 2D map viewer (TypeScript): plays a tape, or runs a live world in a worker
 analyze/    not built yet (M5): pattern finder, fact cards, recognition matching, interest score
 ```
 
@@ -532,7 +533,7 @@ The full list of columns is in `docs/tape.md`.
 
 - **Native CLI:** runs worlds headless, writes tapes, runs batches of many worlds, runs the world search.
 - **Game:** the core runs as WebAssembly in a Web Worker, so the screen never freezes. The viewer receives state as transferable arrays.
-- **Early prototype shortcut:** the native CLI writes tape files, and a simple web page loads and plays them. Move to the in-browser worker when god mode needs live interaction (M6).
+- **Early prototype shortcut:** the native CLI writes tape files, and a simple web page loads and plays them. The live viewer (`wasm/`, a shell of plain `extern "C"` exports that runs the core in a Web Worker and posts the frames of the tape as transferable arrays) exists before M6; god mode (M6) adds the live interaction.
 
 ---
 
