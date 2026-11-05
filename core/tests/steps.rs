@@ -208,3 +208,71 @@ fn sight_and_children_reach_as_far_from_a_fine_cell() {
         assert!(!kids.is_empty() && kids.iter().all(|h| [side, side * std::f64::consts::SQRT_2].iter().any(|d| (far(h) - d).abs() < 1.0)), "children land {:?} m away", kids.iter().map(far).collect::<Vec<_>>());
     }
 }
+
+/// Months a node of `a_node_lives_alike_in_a_square_and_in_its_cells` settles in its square before one of two worlds
+/// splits that square, and the months the two are then compared over.
+const SETTLE: usize = 12;
+const YEAR: usize = 12;
+/// Members of that node, and the cover placed on its square and the land around it, kg per m²: food for its years.
+const MEMBERS: f64 = 200.0;
+const COVER_KG_M2: f64 = 0.3;
+
+/// What the node of `a_node_lives_alike_in_a_square_and_in_its_cells` does over the year after it settled, in its
+/// square or in the square split two depths (`fine`): its members at the end, the kg it took of what it uses, the
+/// members born and the members that died, and its mean temperature by members at the months' ends, K.
+fn node_year(fine: bool) -> [f64; 5] {
+    let mut w = testkit::small_world();
+    let square = w.map.leaves()[testkit::dry_land(&w)];
+    let i = w.map.cell(square).expect("the square");
+    let near: Vec<usize> = std::iter::once(i).chain(w.mesh.cells().around(i).1.iter().map(|&j| j as usize)).filter(|&c| w.is_land(c)).collect();
+    near.iter().for_each(|&c| testkit::cover(&mut w, c, COVER_KG_M2));
+    let line = testkit::Line::new(&mut w, &Brain::only(brain::TAKE), 1);
+    let mut b = line.founder(&mut w, 1, i);
+    b.genes[DISPERSE] = 0.0;
+    b.prepare(&w.chem, &w.cfg);
+    let b = testkit::node_of(&mut w, b, MEMBERS);
+    w.add(b);
+    (0..SETTLE).for_each(|_| pcore::step(&mut w));
+    if fine {
+        testkit::split_down(&mut w, &[square], 2);
+    }
+    let (mut year, mut warmth) = ([0.0; 5], 0.0);
+    for _ in 0..YEAR {
+        w.drain_events();
+        pcore::step(&mut w);
+        (year[1], year[2]) = (year[1] + testkit::took_used(&w), year[2] + testkit::born(&w));
+        year[3] += (0..CAUSES).map(|c| testkit::died(&w, c)).sum::<f64>();
+        let members: f64 = w.life.alive().map(|b| b.n()).sum();
+        warmth += w.life.alive().map(|b| b.temp(&w.chem) * b.n()).sum::<f64>() / members / YEAR as f64;
+    }
+    let inside = |l: Leaf| l.x >= square.x && l.x < square.x + square.side() && l.y >= square.y && l.y < square.y + square.side();
+    assert!(w.life.alive().all(|b| inside(w.map.leaves()[b.cell as usize])), "a body left the square");
+    (year[0], year[4]) = (w.life.alive().map(|b| b.n()).sum(), warmth);
+    year
+}
+
+/// Death causes (`body::LACK` to `body::AGE`).
+const CAUSES: u8 = 6;
+/// How far what the node does in a year in the square's cells may stray from what it does in the square, a share
+/// (measured: 2.5% at most, of its members, what it took and those born), and its mean temperature, K (measured: 0.005).
+const LIVES_ALIKE: f64 = 0.05;
+const WARMTH_K: f64 = 0.05;
+
+/// One law of life at every grain (spec 5.2): a node of one kind that only takes (no member leaves its square), settled a
+/// year on cover in a square of 2 km, then a year there and in the same world with the square split two depths (16
+/// cells of 500 m, stepping a quarter month): its members at the end, what it took and the members born alike within
+/// `LIVES_ALIKE`, and its temperature within `WARMTH_K`. Its heat over an update is the mean of the exact solution at
+/// the pace that holds (laws.md 6.3), it drinks first (6.4), and what it takes feeds it to its next update within its
+/// stores' room for that time (5.3): so a month of a coarse body is four quarter months of a fine one. The members that
+/// died are printed, not held: children who start a node of their own live on what their parent gave them until their
+/// cell's next step, a month in the square and a quarter in its cells, so more of them die in the square (measured: 23%
+/// more deaths there).
+#[test]
+fn a_node_lives_alike_in_a_square_and_in_its_cells() {
+    let [coarse, fine] = [false, true].map(node_year);
+    println!("a year in a square: {coarse:.4?}; in its cells: {fine:.4?} (members, took kg, born, died, K)");
+    for (q, what) in ["members", "took", "born"].iter().enumerate() {
+        assert!((fine[q] / coarse[q] - 1.0).abs() < LIVES_ALIKE, "{what}: {} in the cells against {} in the square", fine[q], coarse[q]);
+    }
+    assert!((fine[4] - coarse[4]).abs() < WARMTH_K, "{} K in the cells against {} K in the square", fine[4], coarse[4]);
+}

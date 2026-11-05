@@ -19,6 +19,13 @@ pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64, t: f64, dry: f64) -> f6
     u * p.repair(b.gene(REPAIR)) * dry * b.pace(&w.chem, t)
 }
 
+/// What body `b` of `mass` kg burns from now to its next update, J: its upkeep over its cell's step
+/// (`World::step_days`) at its temperature and activity now.
+pub(crate) fn ahead(w: &World, b: &Body, mass: f64) -> f64 {
+    let (chem, days) = (&w.chem, w.step_days(b.cell as usize));
+    upkeep(w, b, days, mass, b.temp(chem), b.activity(chem, &w.cfg.phys))
+}
+
 /// Pay `cost` J, all or nothing: false, and nothing paid, if its fuel cannot release that much (`burn`).
 pub fn pay(w: &World, d: &mut Chunk, b: &mut Body, cost: f64) -> bool {
     if cost <= 0.0 {

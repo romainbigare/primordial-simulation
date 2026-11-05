@@ -27,7 +27,8 @@ pub enum Entry {
     Watch { by: u64, n: f64, lineage: u32, of: u64, days: f64 },
     /// Body `id` does verb `on.0` to the part with id `on.1` (`bond::act`; `bond::LET_GO`
     /// and `bond::TORN` let go of it, `bond::dropped`), or forms a part of the shape given (`bond::form`), as a part of
-    /// node `node` if any (`choose::land_act`); what it takes or puts goes by its update of `days` d (none to let go)
+    /// node `node` if any (`choose::land_act`); what it takes or puts goes by the `days` d to its next update (none to
+    /// let go)
     Act { id: u64, on: Result<(usize, u64), [f32; 3]>, node: Option<u64>, days: f64 },
     /// The part with id `part` did `work` J with its edge and wears (`bond::blunted`), an act on that part
     Blunted { part: u64, work: f64 },

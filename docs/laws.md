@@ -60,10 +60,11 @@ in a batch of the same passes; the other cells do nothing then. A body placed du
 cell's next step; one that moves into a cell of another step lands in the serial pass and first updates at its new
 cell's next step. Flow, Change and Bond keep their steps (1.8). Each update integrates
 the time since the body's last (`Body::last`; of a node, the mean by members, `nodes::rejoin`, so members who joined it
-since count less): its upkeep, its brain's cost and learning (5.4), drink, heat, frost (6.5), growth and what it takes,
-gives and does to parts (5.3) go by those days, per m² of its cell where it searches, and what looks ahead to its next
-update (the fuel growth keeps back for its upkeep, 6.6; the heat of a meal let out, 6.3; the look-ahead of a plan, 5.3)
-by its cell's step (`World::step_days`), so a step is a time step, not a calendar: a season's change comes from
+since count less): its upkeep, its brain's cost and learning (5.4), drink, heat, frost (6.5) and growth go by those
+days, and what looks ahead to its next update (what it takes, gives and does to parts, 5.3, per m² of its cell where it
+searches, and the room its stores keep for that time; the fuel growth keeps back for its upkeep, 6.6; the heat of a meal
+let out, 6.3; the look-ahead of a plan, 5.3) by its cell's step (`World::step_days`), so a step is a time step, not a
+calendar: a season's change comes from
 temperature (6.2). The bodies
 read the ground and the air as the month's Change and last air step left them, and what they leave on the ground (the
 free solid they shed, remains) goes through the next month's Change before the next batch can take it, so most of the
@@ -822,8 +823,13 @@ members lie over the cell like the ground's food: a bite reaches those the swept
 whole, by one draw with the chance the area holds it, whether a node or an individual takes it; of a node, less than one member is one whole member met with that chance:
 it takes, tears and pays that meeting's outcome times the chance), limited by force against theirs. **Giving** (`Body::spare`) is of what the other uses, of stores only (no
 matter, brood, built solids or key liquid below level), above `keep_min` × their minimum, at most what the members met
-could take. Taking, the bite and giving go by the time the update integrated (0): a body of a finer cell searches its
-smaller cell for a shorter step, so the share of the cell its area holds is the same per m² and per day.
+could take. Taking, the bite, giving and the acts on parts go by the time to the body's next update, its cell's step
+(`World::step_days`): what it takes now feeds it until then, as the upkeep of that time is paid from it at its next
+update (0); a body of a finer cell searches its smaller cell for a shorter step, so the share of the cell its area holds
+is the same per m² and per day. **The room of its stores over the update** (`Body::room`): it takes up to the level of
+each store and, of a store it burns, what its upkeep burns of it until its next update (`body::ahead`, at its
+temperature and activity now), as a sequence of short steps each eats what it burnt: so one meal of a month is the
+meals of four quarter months, not one store's room.
 
 ### 5.4 Learning
 **Well-being** (`Body::wellbeing_at`): the energy its stores could release, in months' worth of its starting brain's
@@ -949,7 +955,8 @@ beyond its upkeep to its next update, its cell's step), and its stores down to t
 share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing
-Intake at most `take` × supply a day (5.3). **Digestion** (`Body::digest`): matter taken is broken back into what it
+Intake at most `take` × supply a day (5.3), over the time to its next update, within the room of its stores
+for that time (`Body::room`: their levels and what its upkeep burns of them until then). **Digestion** (`Body::digest`): matter taken is broken back into what it
 was built of, so food enters as fuel, and only if its diet breaks it (`Body::uses`). **Minimums**
 (`Body::lacking`): a store below its minimum kills (`LACK`), except a fuel, whose minimum is a reserve. **Shedding**
 (`shed`): minerals, built solids and key liquid past level, and anything it neither burns nor is made of. **Ageing**:

@@ -67,7 +67,7 @@ pub fn bears(w: &World, b: &Body) -> f64 {
 }
 
 /// Verb `v` toward the part at `p` of body `b`'s cell: hold, take from, put to, join the held part to, break, enter;
-/// what it takes or puts goes by the time its update integrated, `days`. The body pays as it acts (`body::pay`, on its
+/// what it takes or puts goes by the time to its next update, `days`. The body pays as it acts (`body::pay`, on its
 /// cell's view), and does nothing if it cannot.
 pub fn act(w: &World, d: &mut Chunk, b: &mut Body, v: usize, (p, days): (usize, f64)) {
     let (mb, i) = (b.mass(&w.chem), b.cell as usize);
@@ -145,7 +145,7 @@ fn joint_left(w: &World, c: &Cell, b: &Body, p: usize, o: u64) -> ((f64, f64), O
 fn take(w: &World, d: &mut Chunk, b: &mut Body, p: usize, mb: f64, days: f64) {
     let (i, bc) = (b.cell as usize, w.chem.body());
     let pt = &d.at(i).parts[p];
-    let m = b.wanted(&w.chem, |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mb);
+    let m = b.wanted(w, |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mb);
     let got = bc.mass_of(&m);
     if got <= 0.0 || !body::pay(w, d, b, w.cfg.phys.c_handle * got) {
         return;

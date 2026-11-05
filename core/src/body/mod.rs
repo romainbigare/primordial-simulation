@@ -19,6 +19,7 @@ pub use genes::*;
 pub(crate) use live::{live, fade_meal_heat, LiveTmp};
 pub use live::Lived;
 pub use pay::{pay, upkeep};
+pub(crate) use pay::ahead;
 pub(crate) use pay::settle_heat;
 
 use crate::brain::ln;
