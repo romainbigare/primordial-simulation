@@ -188,6 +188,51 @@ fn a_split_gives_its_quarters_the_terrain() {
     assert!(kids.iter().all(|&j| drains(j)), "each quarter drains");
 }
 
+/// The liquid of cell `i` as a depth over its area, m, and the depth its pores hold, m (the volume of its loose solids
+/// times `porosity`).
+fn liquid_and_pores(w: &World, i: usize) -> (f64, f64) {
+    let (t, area) = (w.t_ground(i), w.mesh.cells().area()[i]);
+    let liquid: f64 = (0..w.chem.ns()).filter(|&k| w.chem.phase(k, t) == Phase::Liquid).map(|k| w.g(k, i) * w.chem.molar_volume(k, Phase::Liquid)).sum();
+    (liquid / area, w.cfg.phys.porosity * testkit::loose_volume(w, i) / area)
+}
+
+/// A split of the cell under 0 m of the most relief puts its liquid where it would stand on its quarters' floors: each
+/// keeps its pores full (the least liquid a quarter holds is what the pores of its loose ground hold), and what stood
+/// over them fills the quarters from the lowest up to one level, so a quarter is under that level or dry above it. The
+/// books close (`TIGHT`), and the cell's relief pays what the stacks gain and the quarters' reliefs, none of it heat.
+#[test]
+fn a_split_stands_its_liquid_at_one_level() {
+    let mut w = world();
+    let n = w.mesh.cells().n();
+    let i = (0..n).filter(|&i| !w.is_land(i)).max_by(|&a, &b| w.relief[a].total_cmp(&w.relief[b])).expect("a cell under 0 m");
+    let (l, books, relief) = (leaf(&w, i), Books::now(&w), w.relief[i]);
+    let (stacks, heat) = (pcore::flow::potential(&w).expect("Flow's state"), ground_heat(&w, &[i]));
+    w.split(l).expect("a split");
+    sound(&w);
+    books.assert_kept(&w, TIGHT);
+    let kids = l.quarters().map(|q| w.map.cell(q).expect("a quarter"));
+    let (spent, kept, warmed) = (pcore::flow::potential(&w).expect("Flow's state") - stacks, kids.map(|j| w.relief[j]).iter().sum::<f64>(), ground_heat(&w, &kids) - heat);
+    assert!((spent + kept - relief).abs() <= TIGHT * stacks.abs() && warmed.abs() <= TIGHT * heat, "the relief pays what the split gains, {warmed:e} J to heat");
+    // Each quarter's solid surface and liquid, m; what the pores of each hold (the least liquid of a quarter), and the
+    // level of what stands over them.
+    let at = kids.map(|j| (w.surface_z(j), liquid_and_pores(&w, j)));
+    let pores = at.iter().map(|x| x.1 .0).fold(f64::MAX, f64::min);
+    let level = at.iter().filter(|x| x.1 .0 > pores + LEVEL_M).map(|&(z, (liquid, _))| z + liquid - pores).fold(f64::MIN, f64::max);
+    println!("quarters (surface, (liquid, pores)) {at:?} m: the level {level:.2} m");
+    assert!((pores - at[0].1 .1).abs() <= PORES * pores, "the pores full: {pores} m of {} m", at[0].1 .1);
+    assert!(at.iter().any(|x| x.0 < level) && at.iter().any(|x| x.0 > level), "the scene has wet quarters and dry ones");
+    for &(z, (liquid, _)) in &at {
+        let (wet, dry) = ((z + liquid - pores - level).abs() <= LEVEL_M, liquid - pores <= LEVEL_M && z >= level);
+        assert!(wet || dry, "a quarter at {z} m with {liquid} m of liquid: under the level or dry above it");
+    }
+}
+
+/// How near one level the liquid of the quarters stands, m.
+const LEVEL_M: f64 = 1e-6;
+/// How near the depth the pores of the loose ground hold the least liquid of a quarter is, relative (Flow's state
+/// counts the fixed solids apart).
+const PORES: f64 = 1e-4;
+
 /// A split, its join and its split again give the same quarters: each amount to the rounding of x · share and each heat
 /// to that of the stacks' potential energy (`TIGHT`), and each one's relief, from the record of the join; the joined
 /// cell's relief is theirs and what it flattened.

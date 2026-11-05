@@ -114,6 +114,8 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
     // A land cell, as `World::is_land` says: its solid surface above 0 m (Flow's state of it).
     let (land, mut off_land): (Vec<bool>, Vec<f64>) = (s.z.iter().map(|&z| z > 0.0).collect(), vec![0.0; n]);
     let (mut crossed, mut given) = (Crossed::default(), vec![0.0; n]);
+    // The heads now, where the pass starts, as the booking of Flow's lifts and falls stacks them (`give_falls`).
+    let heads = s.lifts.as_ref().map(|_| super::potential::heads(w, s));
     let (ww, ss) = (&*w, &*s);
     pass(&order, &adj, &mut q, &mut crossed, |i, q, share| {
         let (zi, hd, sv) = (ss.z[i], head(q, i), q[i * width + vol]);
@@ -163,8 +165,10 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
             let d = q[cell.start + r] - was[r];
             (c, held) = (c + d * ss.sp[k].cp, held + if r < nl { d * ss.sp[k].lf } else { 0.0 });
         }
-        let carried = {
+        let (carried, rise) = {
             let q = &mut q[cell];
+            let loads = |q: &[f64]| (nl..rows).map(|r| q[r] * ss.sp[ks[r]].v[0]).sum::<f64>();
+            let came = loads(q);
             // The temperature of the node mixed with what came in, at which what runs out leaves: off a melting plateau
             // its energy over its fusion enthalpy and heat capacity; on one, what it gains or loses on the plateau's
             // temperature melts or freezes the plateau's substance first (`FlowView::fused`), and only the rest warms
@@ -183,10 +187,12 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
             let off = (0..share.len()).filter(|&k| land[i] && !land[cells.around(i).1[k] as usize]).map(|k| share[k]);
             let liquid = q[..nl].iter().sum::<f64>();
             (sent[i], off_land[i]) = (out * liquid, off.sum::<f64>() * liquid);
-            kg(q, 0..rows)
+            // How far its head rises over the pass, m: the liquid it keeps less what it held at the start, and the loads
+            // that came in less those that leave (all it picked up came from it).
+            (kg(q, 0..rows), (sv * (1.0 - out) - was[vol] + came - out * loads(q)) / area[i])
         };
-        if let Some(l) = ss.lifts.as_ref() {
-            give_falls(l, cells, (i, share, carried * g), (q, width, heat), &mut given);
+        if let (Some(l), Some(heads)) = (ss.lifts.as_ref(), heads.as_ref()) {
+            give_falls(l, cells, (i, share, carried * g), heads[i] + rise, (q, width, heat), &mut given);
         }
     });
     // The crossings as a link flux: each substance once (liquid and load rows of one substance share it), then the heat.
@@ -228,14 +234,17 @@ fn run_on(cells: &Level, i: usize, (outs, rest): (&[Toward], &mut Vec<usize>), s
     (out, drop)
 }
 
-/// The fall of what cell `i` sends down each way (its share `share[k]` of what runs out, `weight` N), from its head to
-/// the lower head of the cell it lands in, as the booking of Flow's lifts and falls has them at its start (`l`), heats
-/// what lands there (the heat row `q[j * width + heat]`, and `given[j]`, J): what runs on from there takes its share
-/// along, as the liquid that brought it would.
-fn give_falls(l: &Lifts, cells: &Level, (i, share, weight): (usize, &[f64], f64), (q, width, heat): (&mut [f64], usize, usize), given: &mut [f64]) {
+/// The fall of what cell `i` sends down each way (its share `share[k]` of what runs out, `weight` N), from the height it
+/// leaves to the lower head of the cell it lands in, heats what lands there (the heat row `q[j * width + heat]`, and
+/// `given[j]`, J): what runs on from there takes its share along, as the liquid that brought it would. The heights are
+/// the booking's (`l`, `Lifts::book`): the head it lands at as at the booking's start, and the height it leaves the
+/// mean of its cell's head then and at the end, `end` m, as the pass leaves it. So the booking takes back from what it
+/// lands in no heat the pass gave it, and a column that runs off whole falls from its middle.
+fn give_falls(l: &Lifts, cells: &Level, (i, share, weight): (usize, &[f64], f64), end: f64, (q, width, heat): (&mut [f64], usize, usize), given: &mut [f64]) {
+    let from = (l.head_at_start(i) + end) / 2.0;
     for (k, &j) in cells.around(i).1.iter().enumerate().filter(|p| share[p.0] > 0.0) {
         let j = j as usize;
-        let e = share[k] * weight * (l.head_at_start(i) - l.head_at_start(j)).max(0.0);
+        let e = share[k] * weight * (from - l.head_at_start(j)).max(0.0);
         (q[j * width + heat], given[j]) = (q[j * width + heat] + e, given[j] + e);
     }
 }

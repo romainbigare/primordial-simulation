@@ -5,6 +5,7 @@ use pcore::life::Handle;
 use pcore::chem::Phase;
 use pcore::store::{Boundary, Class, Node};
 use pcore::units::DAY;
+use pcore::space::tree::DEPTH_MOST;
 use pcore::{body, brain, choose, lanes, World, AIR};
 use worldgen::testkit::{flow_step, ground_of, hold_ground, loose_volume as loose, put, set_amount, set_heat, Books, Brain, Line, DISSOLVED, LIQUID, MINERAL, OFF, RICH};
 
@@ -859,6 +860,27 @@ fn runoff_crosses_a_pool_of_small_cells_and_takes_its_fall_along() {
     let deepest = small.iter().map(|&i| liquid_m3(&w, i) / area).fold(0.0, f64::max);
     let warmest = small.iter().zip(&t0).map(|(&i, t)| w.t_ground(i) - t).fold(f64::MIN, f64::max);
     assert!(deepest < RIM_M && warmest < FALL_K, "a small cell holds {deepest} m of the runoff, one is {warmest} K warmer");
+}
+
+/// A column of liquid that runs off whole in one liquid step falls from its middle (laws.md 1.2): `COLUMN_M` poured on
+/// a cell of the most depth on the small world's highest square runs off down the island, and the pass gives what it
+/// lands in the heat of its fall from the mean of the column's head before and after, as the booking of Flow's lifts and
+/// falls takes it, so the booking takes no heat back from the cells it ran through (it had gone on with the liquid). No
+/// heat is rounded away (an overdraw) and the books are kept.
+#[test]
+fn a_column_that_runs_off_whole_falls_from_its_middle() {
+    const COLUMN_M: f64 = 2000.0;
+    let mut w = worldgen::testkit::small_world();
+    let square = w.map.leaves()[top(&w)];
+    worldgen::testkit::split_down(&mut w, &[square], DEPTH_MOST - square.depth);
+    let i = w.map.cell(square.split(DEPTH_MOST).next().expect("a leaf")).expect("a cell of the most depth");
+    let area = w.mesh.cells().area()[i];
+    pour(&mut w, i, COLUMN_M * area);
+    let (books, rounded, mass) = (Books::now(&w), w.counts.rounded[1], liquid_m3(&w, i) / w.chem.molar_volume(LIQUID, Phase::Liquid) * w.chem.subs[LIQUID].molar_mass);
+    flow_step(&mut w, LIQUID_STEP);
+    books.assert_within(&w, 1e-9, 1e-9);
+    let (left, lost, fall) = (liquid_m3(&w, i) / area, w.counts.rounded[1] - rounded, mass * w.cfg.gravity * COLUMN_M / 2.0);
+    assert!(left < 1.0 && lost <= 1e-9 * fall, "{left} m of the column left, {lost:e} J of heat rounded away against its fall of {fall:e} J");
 }
 
 /// The height the liquid of cell `i` stands at, m: its solid surface, and above it the liquid over what its pores hold.
