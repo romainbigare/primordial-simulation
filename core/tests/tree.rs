@@ -303,7 +303,8 @@ fn places(w: &World, land: usize) -> [Leaf; 3] {
 }
 
 /// `rounds` rounds of splits and joins of `cells` of `w`, a month between each change: each split, then its first
-/// quarter split again (which first splits the cells beside it), then those joined back in turn, then the cell. Returns
+/// quarter split again (which first splits the cells beside it), then those joined back in turn, then the cell; the
+/// events of each change taken before the next (`World::drain_events`, as the shell does). Returns
 /// the largest share of its quarters' cover that a join sent to the ground (the slots that found no slot in the joined
 /// cell, `cover::land`).
 fn run_splits(w: &mut World, cells: [Leaf; 3], rounds: usize) -> f64 {
@@ -318,6 +319,9 @@ fn run_splits(w: &mut World, cells: [Leaf; 3], rounds: usize) -> f64 {
     let mut join = |w: &mut World, l: Leaf| {
         let before: f64 = l.quarters().iter().map(|&q| cover_kg(w, w.map.cell(q).expect("a quarter"))).sum();
         w.join(l).expect("the join of what a split made");
+        // (The events of a join's merge are taken before the next change, as the shell takes a month's and
+        // `World::refine` sets a join's aside: `World::remap` runs only once they are.)
+        w.drain_events();
         let after = cover_kg(w, w.map.cell(l).expect("the joined cell"));
         lost = lost.max(if before > 0.0 { 1.0 - after / before } else { 0.0 });
     };
