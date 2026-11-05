@@ -39,7 +39,8 @@ const BIG_KG: f32 = 100.0;
 /// surface height, the shade of its cover, the mass of each slot of its cover and of the cover's fuel and body matter
 /// (what most diets eat), the fuel and body matter loose on its ground, the mass of its animals in three classes of
 /// member mass, their members and mean strength, how hard it is to push through, its parts, and the members that moved
-/// in last month; masses per m² as ln(1 + kg/m²), counts per square of the map (`Square::squares`).
+/// in per month; masses per m² as ln(1 + kg/m²), counts per square of the map (`Square::squares`), the members that
+/// moved in per square's side of its border.
 pub const T: usize = 0;
 pub const WET: usize = 1;
 pub const HEIGHT: usize = 2;
@@ -168,11 +169,13 @@ pub fn cells(w: &mut World) {
         for class in 0..3 {
             f[ANIMALS + class] = ln(1.0 + f[ANIMALS + class] / area as f32);
         }
-        let per = 1.0 / w.map.squares(i);
+        // (Counts per square of the map's area; the members that moved in per square's side of its border, for what
+        // crosses a border goes with its length.)
+        let (per, across) = (1.0 / w.map.squares(i), 1.0 / w.map.squares(i).sqrt());
         f[MEMBERS] = ln(1.0 + (c[0] * per) as f32) / LN_MEMBERS;
         f[STRENGTH] = (c[3] / c[0].max(1.0)) as f32;
         f[RESIST] = ln(1.0 + thickness(w, c[1], area) as f32);
-        (f[PARTS_HERE], f[CROSSED]) = (ln(1.0 + (cell.parts.len() as f64 * per) as f32), ln(1.0 + (cell.crossings as f64 * monthly * per) as f32));
+        (f[PARTS_HERE], f[CROSSED]) = (ln(1.0 + (cell.parts.len() as f64 * per) as f32), ln(1.0 + (cell.crossings as f64 * monthly * across) as f32));
         f
     }).collect();
     // Each level the last smoothed over each cell and its neighbours, each by its area (over the cell's own).

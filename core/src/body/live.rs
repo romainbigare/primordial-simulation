@@ -41,7 +41,7 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) ->
     drink(w, d, b, days);
     crate::bond::leave_outgrown(w, d, b);
     let stands = keep_warm(w, d, b, heat, days * DAY);
-    let t = check_stores(w, d, b, stands, tmp)?;
+    let t = check_stores(w, d, b, (stands, days), tmp)?;
     crate::copy::grow(w, d, b, days, t);
     if !starved(w, d, b, from, &mut tmp.dead) {
         return Err(SPENT);
@@ -145,7 +145,8 @@ fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, dt: f64) -> f64 
 }
 
 /// After its decision (`survey::decide`): the heat of what it took and of digesting it, above the temperature `stands`
-/// it stood at, leaves through its coat to its ground over the time to its next update, as `keep_warm` lets its heat go
+/// it stood at, leaves through its coat to its ground over the time to its next update (its cell's step,
+/// `World::step_days`), as `keep_warm` lets its heat go
 /// (a body of hours to days sheds it all), so its next update starts where that leaves it. A body its intake cooled
 /// stays cooler and draws no heat from its ground: its own heat warms it at its next update (`keep_warm`).
 pub(crate) fn shed_meal_heat(w: &World, d: &mut Chunk, b: &mut Body, stands: f64) {
@@ -153,7 +154,7 @@ pub(crate) fn shed_meal_heat(w: &World, d: &mut Chunk, b: &mut Body, stands: f64
     if t <= stands {
         return;
     }
-    let x = coat(w, d, b, b.mass(chem)).0 * w.cfg.update_days() * DAY / b.heat_cap(chem).max(1e-300);
+    let x = coat(w, d, b, b.mass(chem)).0 * w.step_days(b.cell as usize) * DAY / b.heat_cap(chem).max(1e-300);
     settle_heat(w, d, b, stands + (t - stands) * (-x).exp());
 }
 
@@ -220,8 +221,9 @@ fn lose_share(w: &World, d: &mut Chunk, b: &mut Body, f: f64, cause: u8, dead: &
 
 /// A store below its safe minimum kills it (a node: its poorest members, `starve`); a boiled key liquid kills it; below
 /// a key liquid's melting point the share of its members that freezes at `stands` K, the temperature its heat holds it
-/// at over its ground (`keep_warm`), dies (laws.md 6.5). Returns the temperature it is left at, K.
-fn check_stores(w: &World, d: &mut Chunk, b: &mut Body, stands: f64, tmp: &mut LiveTmp) -> Result<f64, u8> {
+/// at over its ground (`keep_warm`), over the `days` d its update integrates, dies (laws.md 6.5). Returns the
+/// temperature it is left at, K.
+fn check_stores(w: &World, d: &mut Chunk, b: &mut Body, (stands, days): (f64, f64), tmp: &mut LiveTmp) -> Result<f64, u8> {
     let mass = b.mass(&w.chem);
     if b.lacking(&w.chem, mass, b.temp(&w.chem)) && !(b.n() > 1.0 && !b.empty_at(mass) && starve(w, d, b, &mut tmp.dead)) {
         return Err(LACK);
@@ -231,10 +233,12 @@ fn check_stores(w: &World, d: &mut Chunk, b: &mut Body, stands: f64, tmp: &mut L
         return Err(PHASE);
     }
     // Its members' microclimates spread over `frost_k` around the temperature it stands at: below the melting point the
-    // share (melt - T) / `frost_k` of them freezes, as far as they are active (a dormant body holds little free liquid).
+    // share (melt - T) / `frost_k` of them freezes in a month, as far as they are active (a dormant body holds little
+    // free liquid); over the time a share per month that composes, 1 - (1 - that)^(t / month), so a cold spell kills
+    // alike in one update or in many (`Span::share64`).
     let act = b.activity(chem, &w.cfg.phys);
     let frozen = |s: usize| ((chem.subs[subs[s]].melt - stands) / w.cfg.phys.frost_k).clamp(0.0, 1.0) * act;
-    let f = b.wet_ks().map(frozen).fold(0.0, f64::max);
+    let f = w.cfg.span(days).share64(b.wet_ks().map(frozen).fold(0.0, f64::max));
     if f > 0.0 {
         if f >= 1.0 - 1e-9 || !lose_share(w, d, b, f, PHASE, &mut tmp.dead) {
             return Err(PHASE);

@@ -59,9 +59,11 @@ in a batch of the same passes; the other cells do nothing then. A body placed du
 cell's next step; one that moves into a cell of another step lands in the serial pass and first updates at its new
 cell's next step. Flow, Change and Bond keep their steps (1.8). Each update integrates
 the time since the body's last (`Body::last`; of a node, the mean by members, `nodes::rejoin`, so members who joined it
-since count less): its upkeep, its brain's cost and learning (5.4), drink, heat and growth go by those days, and what
-it takes, gives and does to parts by the step of its update (`Config::update_days`, a month), so the month is a time
-step, not a calendar: a season's change comes from temperature (6.2). The bodies
+since count less): its upkeep, its brain's cost and learning (5.4), drink, heat, frost (6.5), growth and what it takes,
+gives and does to parts (5.3) go by those days, per m² of its cell where it searches, and what looks ahead to its next
+update (the fuel growth keeps back for its upkeep, 6.6; the heat of a meal let out, 6.3; the look-ahead of a plan, 5.3)
+by its cell's step (`World::step_days`), so a step is a time step, not a calendar: a season's change comes from
+temperature (6.2). The bodies
 read the ground and the air as the month's Change and last air step left them, and what they leave on the ground (the
 free solid they shed, remains) goes through the next month's Change before the next batch can take it, so most of the
 free solid has rotted by then (it rots in about a week, 2.1). Every body decides at every update (5.3).
@@ -735,7 +737,8 @@ surface height, the shade of its cover, the mass per m² of each slot of its cov
 matter (what most diets eat), the fuel and body matter loose on its ground, the mass per m² of its animals in three
 classes of member mass (below 1 kg, to 100 kg, above), their members and mean strength, how hard it is to push
 through, its parts and the members that moved in per month (in the last month at a month's start, since the month's
-start inside it; the counts per square of the map, so a cell of many squares counts as one of its squares). The same
+start inside it; the counts per square of the map, so a cell of many squares counts as one of its squares, and the
+members that moved in per square's side of its border, for what crosses a border goes with its length). The same
 features smoothed over each cell and its neighbours once, twice and three times make what a body of sight 2, 3 and 4
 sees of a cell it would step into (the mean by area of the cells about that many links around it, `Life::feat`). **A brain's inputs**: its own stores against their
 minimums, its warmth, size and the season, its own cell's features, what Bond senses (3.4), its memory. **Each
@@ -749,8 +752,8 @@ scratch hardness, its hollowness and its edge: ln of its walls' thickness over i
 ### 5.3 Actions
 **Planning, one step ahead** (`choose::plan`): before it draws, a body adds to the score of each move the critic's
 value (5.4) of the state it would be in in the cell the move leads to (its own state, that cell's features in place of
-its own cell's) less its value where it is, which staying keeps, both at its next decision, a step of its update
-ahead (`discount` over it, as the critic learns): γ(V(s') − V(s)), times `plan_weight` (1 per unit of well-being); off in a null run.
+its own cell's) less its value where it is, which staying keeps, both at its next decision, its cell's step ahead
+(`discount` over it, as the critic learns): γ(V(s') − V(s)), times `plan_weight` (1 per unit of well-being); off in a null run.
 One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;
 a node spreads its members over its `MOST_ACTS` (4) likeliest actions (the moves counted as one; a speed setting) by
 their chances brought back to a sum of 1 (`spread::top_chances`), and its brain learns from those chances, so the
@@ -779,7 +782,8 @@ members lie over the cell like the ground's food: a bite reaches those the swept
 whole, by one draw with the chance the area holds it, whether a node or an individual takes it; of a node, less than one member is one whole member met with that chance:
 it takes, tears and pays that meeting's outcome times the chance), limited by force against theirs. **Giving** (`Body::spare`) is of what the other uses, of stores only (no
 matter, brood, built solids or key liquid below level), above `keep_min` × their minimum, at most what the members met
-could take.
+could take. Taking, the bite and giving go by the time the update integrated (0): a body of a finer cell searches its
+smaller cell for a shorter step, so the share of the cell its area holds is the same per m² and per day.
 
 ### 5.4 Learning
 **Well-being** (`Body::wellbeing_at`): the energy its stores could release, in months' worth of its starting brain's
@@ -799,7 +803,7 @@ than the mean, so its brain moves as an individual's does. **Across lives**: evo
 
 ### 5.5 Imitation and memory
 **Watching** (`choose::learn::watched`) costs the turn; when the batch ends, if both live and the watcher is still of
-the lineage it watched in, the watcher's rows move part way (`blend` per month, over its turn: a step of its update) toward the watched one's, if the brains have the
+the lineage it watched in, the watcher's rows move part way (`blend` per month, over its turn: the time its update integrated) toward the watched one's, if the brains have the
 same sizes, less the less alike they are, times the share of the watcher's members now who watched (for a node, the
 mean by members). **Memory**: the brain's memory numbers (`MEMORY`), which it reads and writes at each decision.
 **Signals and the memory of others are parked**: no body emits a signal or remembers whom it dealt with; the brain's
@@ -865,7 +869,8 @@ it lasts; one that boils dry dies there (`check_stores`), the rest of its heat s
 the pace of its temperature (6.2), so a warmer body makes more heat; the open coat lets that heat out, so a body's own
 heat does not drive its pace up month after month. Its heat then comes to that temperature with its ground
 (`body::settle_heat`). After its decision (`live::shed_meal_heat`) the heat of what it took and of digesting it, above
-the temperature it stood at, leaves through its coat to its ground over the time to its next update by the same share
+the temperature it stood at, leaves through its coat to its ground over the time to its next update (its cell's step)
+by the same share
 (a body of hours to days sheds it all); a body its intake cooled stays cooler, drawing no heat from its ground, and
 its own heat warms it at its next update. Its key liquids hold their fusion heat at any temperature (`Body::fused`):
 a body has no melting plateau, so its temperature is its heat over its heat capacity, that heat set aside (2.5).
@@ -881,14 +886,16 @@ allowance: a dry body pays almost nothing and can hardly act; it wears at an act
 so a dormant body lives about 50 times its active life, as dry seeds and spores do. **Frost** (`live::check_stores`): its members
 stand in microclimates that spread over `frost_k` (3 K) around the temperature T its heat holds it at over its ground
 (6.3), so below a key liquid's melting point
-the share min(1, (melt − T) / `frost_k`) × a freezes and dies (`PHASE`), an individual with that chance: a dormant body
+the share f = min(1, (melt − T) / `frost_k`) × a freezes and dies (`PHASE`) in a month, a share that composes: over
+the t its update integrates 1 − (1 − f)^(t / month) (`Span::share64`), so a cold spell kills alike in one update or in
+many; an individual dies with that chance. A dormant body
 (little free liquid) lives through frost, as seeds and spores do; the cover freezes by the same law below its `FROST`
 gene (4.5). **Boiling** kills.
 
 ### 6.6 Growth
 `copy::grow`. Its fuel and minerals become matter at `c_copy` of work per kg, paid by burning (`body::pay`), as far as
 all allow: the **allowance** (`c_build` × supply / `m_ref` × days × activity), the **spare** (what its fuel can release
-beyond a month's upkeep), and its stores down to their minimums. Built solids (the frame) come first by their
+beyond its upkeep to its next update, its cell's step), and its stores down to their minimums. Built solids (the frame) come first by their
 share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing

@@ -418,11 +418,12 @@ pub fn same_totals(a: &(f64, Vec<f64>, f64), b: &(f64, Vec<f64>, f64)) {
     }
 }
 
-/// The body at `a` bites the body at `v` once (`choose::take_body`), out of its slot meanwhile.
+/// The body at `a` bites the body at `v` once (`choose::take_body`) over its cell's step, out of its slot meanwhile.
 pub fn bite(w: &mut World, a: Handle, v: Handle) {
     let mut b = std::mem::take(&mut w.life[a]);
     let r = &mut Rng::new(1, w.day(), 7, Purpose::Choose);
-    w.in_cell(b.cell as usize, |w, d| pcore::choose::take_body(w, d, &mut b, v, r));
+    let days = w.step_days(b.cell as usize);
+    w.in_cell(b.cell as usize, |w, d| pcore::choose::take_body(w, d, &mut b, (v, days), r));
     w.life[a] = b;
 }
 

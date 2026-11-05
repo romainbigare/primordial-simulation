@@ -75,7 +75,7 @@ fn walls_keep_a_body_warm() {
     w.cfg.phys.c_build = 0.0;
     // (Its update integrates a month, as in a run, not the day since it was placed: the walls slow how fast its heat
     // follows the ground, so a day shows only part of the warmth they keep.)
-    w.life[slot].last -= w.cfg.update_days();
+    w.life[slot].last -= w.cfg.days_per_month as f64;
     let mut inside = w.clone();
     inside.life[slot].inside = Some(parts[0]);
     let temp = |w: &pcore::World| w.life[slot].temp(&w.chem) - w.life.env[i][0];
@@ -473,6 +473,6 @@ fn act_on(w: &mut World, b: &mut Body, p: u64) {
     let i = b.cell as usize;
     w.in_cell(i, |w, d| {
         let x = bond::at(d.at(i), p).expect("the part");
-        bond::act(w, d, b, 1, x)
+        bond::act(w, d, b, 1, (x, w.step_days(i)))
     });
 }

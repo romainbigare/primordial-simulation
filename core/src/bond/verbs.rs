@@ -32,7 +32,7 @@ pub(crate) fn let_go(d: &mut Chunk, b: &mut Body, load: bool) {
     let c = d.at(b.cell as usize);
     if let Some(p) = held(c, b) {
         let part = c.parts[p].id;
-        d.out.push(Entry::Act { id: b.id, on: Ok((if load { TORN } else { LET_GO }, part)), node: None });
+        d.out.push(Entry::Act { id: b.id, on: Ok((if load { TORN } else { LET_GO }, part)), node: None, days: 0.0 });
     }
     b.hold = None;
 }
@@ -66,10 +66,11 @@ pub fn bears(w: &World, b: &Body) -> f64 {
     b.gene(STRENGTH) * b.built(&w.chem) * w.cfg.gravity * w.cfg.phys.grip
 }
 
-/// Verb `v` toward the part at `p` of body `b`'s cell: hold, take from, put to, join the held part to, break, enter. The
-/// body pays as it acts (`body::pay`, on its cell's view), and does nothing if it cannot.
-pub fn act(w: &World, d: &mut Chunk, b: &mut Body, v: usize, p: usize) {
-    let (mb, days, i) = (b.mass(&w.chem), w.cfg.update_days(), b.cell as usize);
+/// Verb `v` toward the part at `p` of body `b`'s cell: hold, take from, put to, join the held part to, break, enter;
+/// what it takes or puts goes by the time its update integrated, `days`. The body pays as it acts (`body::pay`, on its
+/// cell's view), and does nothing if it cannot.
+pub fn act(w: &World, d: &mut Chunk, b: &mut Body, v: usize, (p, days): (usize, f64)) {
+    let (mb, i) = (b.mass(&w.chem), b.cell as usize);
     match v {
         0 => {
             let pt = &d.at(i).parts[p];

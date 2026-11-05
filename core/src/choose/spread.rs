@@ -181,17 +181,17 @@ fn back(d: &mut Chunk, node: &mut Body, s: Handle, mut m: Body) {
 
 /// The part act of the body at `s` of chunk `d` queued in a batch (`life::Entry`), run whole on it and on the part as
 /// they are now, in the acts' landing (`life::land`): verb `on.0` to part `on.1` if that part still lies in the body's
-/// cell and the act is still possible (`bond::possible`), or a part of the shape given formed; the body pays as it
-/// acts, and does nothing if it cannot. A part of node `node` then comes back to it if it holds nothing, is inside
-/// nothing, and the node is in its cell and not leaving it; else it lives on as a body.
-pub(crate) fn land_act(w: &World, d: &mut Chunk, s: Handle, on: Result<(usize, u64), [f32; 3]>, node: Option<u64>) {
+/// cell and the act is still possible (`bond::possible`), or a part of the shape given formed, over the time its update
+/// integrated, `days`; the body pays as it acts, and does nothing if it cannot. A part of node `node` then comes back to
+/// it if it holds nothing, is inside nothing, and the node is in its cell and not leaving it; else it lives on as a body.
+pub(crate) fn land_act(w: &World, d: &mut Chunk, s: Handle, (on, days): (Result<(usize, u64), [f32; 3]>, f64), node: Option<u64>) {
     let mut b = std::mem::take(&mut d[s]);
     let i = b.cell as usize;
     d.moves.open(w, i, crate::store::Node::new(crate::store::Class::Body, s.slot as usize));
     let vol = b.volume(&w.chem, b.temp(&w.chem)) / b.n();
     match on.map(|(v, p)| (v, bond::at(d.at(i), p).filter(|&p| bond::possible(d.at(i), &b, v, p, vol)))) {
         Err(shape) => bond::form(w, d, &mut b, shape),
-        Ok((v, Some(p))) => bond::act(w, d, &mut b, v, p),
+        Ok((v, Some(p))) => bond::act(w, d, &mut b, v, (p, days)),
         _ => {}
     }
     b.leaving = false;

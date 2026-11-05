@@ -46,16 +46,16 @@ pub(super) fn learn(w: &World, b: &mut Body, m: &mut Mind, s: Shape, (wb, now): 
 
 /// Body `by` watched body `of` in a batch (it cost the turn; `n` of its members watched, of `lineage` then), applied
 /// in the serial pass (`life::land`) on both as they are then, if both live and it is still of that lineage: its rows move
-/// part of the way toward the other's (`blend` per month, over the turn: a step of its update, `Config::update_days`)
+/// part of the way toward the other's (`blend` per month, over the turn: the time its update integrated, `days`)
 /// if the brains have the same sizes, less the less alike the bodies are, as a body can only copy what its own body can
 /// do, and by the share of its members now who watched (a node's rows are the mean of its members').
-pub(crate) fn watched(w: &mut World, by: u64, (n, lineage): (f64, u32), of: u64) {
+pub(crate) fn watched(w: &mut World, by: u64, (n, lineage): (f64, u32), (of, days): (u64, f64)) {
     let (Some(s), Some(t)) = (w.life.find(by).filter(|&s| w.life[s].lineage == lineage), w.life.find(of)) else { return };
     let (b, o) = (std::mem::take(&mut w.life[s]), &w.life[t]);
     let (u, v) = (o.visible(&w.chem), b.visible(&w.chem));
     let d = |a: f32, b: f32| ln(a.max(1e-9) / b.max(1e-9)).powi(2);
     let alike = (-0.5 * (d(u[0], v[0]) + ((u[1] - v[1]) / STRENGTH_STEP).powi(2))).exp();
-    let alike = if w.cfg.null { 0.0 } else { w.cfg.span(w.cfg.update_days()).share(w.cfg.phys.blend) * alike * (n / b.n()).min(1.0) as f32 };
+    let alike = if w.cfg.null { 0.0 } else { w.cfg.span(days).share(w.cfg.phys.blend) * alike * (n / b.n()).min(1.0) as f32 };
     let (same, of) = ((o.lineage == b.lineage) as u8 as f64, o.id);
     let o = o.clone();
     w.life.blend_rows(&b, &o, alike);
