@@ -1,9 +1,8 @@
 //! Sweep: one explicit step of anything that moves from high to low along links and fills nodes. A link passes
 //! `g (x_a - x_b)` per second, a node holds `cap x`: over a step each link carries `dt g (x_a - x_b)` of the values at
 //! the step's start (explicit Euler), at most `HALF_WAY` of what would level its two nodes (so two nodes linked alone
-//! never cross), and
-//! no node gives more than it holds (`within`). It is stable where `dt g / cap` is small, as for the liquid under the
-//! ground and the heat through it at their steps (laws.md 1.1, 1.2).
+//! never cross), and no node gives more than it holds (`within`). It is safe where `dt Σ g / cap` of each node is within
+//! `LIMIT`; `steps` says how many steps a node needs to stay so (laws.md 1, the step by the size).
 
 use crate::ground::share;
 
@@ -30,6 +29,22 @@ pub fn sweep(net: &Net, x: &[f64], dt: f64, have: &[f64]) -> Vec<f64> {
         .collect();
     within(net.a, net.b, &mut flux, have);
     flux
+}
+
+/// The most `dt Σ g / cap` an explicit step of a node may take: half of where its own weight in its next value,
+/// 1 - dt Σ g / cap, reaches 0 (Patankar 1980, 4.3), so no pattern of the values changes sign in a step and a hump
+/// spreads without turning into a pit.
+pub const LIMIT: f64 = 0.5;
+
+/// The steps each node of `net` needs to cover `dt` seconds within `LIMIT`: dt Σ g / cap over its links, rounded up (at
+/// least 1).
+pub fn steps(net: &Net, dt: f64) -> Vec<u32> {
+    let mut g = vec![0.0; net.cap.len()];
+    for ((&i, &j), &gl) in net.a.iter().zip(net.b).zip(net.g) {
+        g[i as usize] += gl;
+        g[j as usize] += gl;
+    }
+    g.iter().zip(net.cap).map(|(&g, &cap)| ((dt * g / cap / LIMIT).ceil() as u32).max(1)).collect()
 }
 
 /// Where a node would give more than it holds (`held`), cuts each flux that leaves it by the share it holds of all that

@@ -472,6 +472,59 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
     assert_eq!(held, none, "under field capacity the pores gave {} m³", held - none);
 }
 
+/// The depth a full store of the bed fills in `the_store_of_small_cells_spreads_in_a_month_as_in_thirty_days`, m.
+const HUMP_M: f64 = 25.0;
+
+/// The store of the bed flows between cells of 125 m in one month as in thirty days: on a flat square split down to the
+/// most depth, its cells' stores empty but one filled `HUMP_M`, one month of the liquid leaves the store of that cell and
+/// of its neighbours within a tenth of `HUMP_M` of thirty daily steps. One explicit step of the month would take
+/// dt Σ g / cap = 2.5, 5 times the most a step may (`sweep::LIMIT`), and empty the full store into its neighbours; the
+/// cell and its links sub-step inside the month (laws.md 1, the step by the size), and the books are kept.
+#[test]
+fn the_store_of_small_cells_spreads_in_a_month_as_in_thirty_days() {
+    let mut w = worldgen::testkit::small_world();
+    w.drain_events();
+    let square = w.map.leaves()[worldgen::testkit::dry_land(&w)];
+    for depth in square.depth..pcore::space::tree::DEPTH_MOST {
+        for l in square.split(depth).collect::<Vec<_>>() {
+            if w.map.cell(l).is_some() {
+                w.split(l).expect("a split");
+            }
+        }
+    }
+    let fine: Vec<usize> = square.split(pcore::space::tree::DEPTH_MOST).map(|l| w.map.cell(l).expect("a cell of the most depth")).collect();
+    let side = (fine.len() as f64).sqrt() as usize;
+    let hump = fine[side / 2 * side + side / 2];
+    let (p, mv, sp) = (w.cfg.phys, w.chem.molar_volume(LIQUID, Phase::Liquid), &w.chem.subs[LIQUID]);
+    let full = HUMP_M * p.bed_porosity * w.mesh.cells().area()[hump] / mv;
+    let warm = full * (sp.cp * 290.0 + sp.lf);
+    for &i in &fine {
+        (0..w.chem.ns()).for_each(|k| set_amount(&mut w, Node::new(Class::Deep, i), k, 0.0));
+        let (mol, heat) = if i == hump { (full, warm) } else { (0.0, 0.0) };
+        set_amount(&mut w, Node::new(Class::Deep, i), LIQUID, mol);
+        set_heat(&mut w, Node::new(Class::Deep, i), heat);
+    }
+    pcore::flow::state(&mut w, true);
+    let books = Books::now(&w);
+    // The depth the store of the hump and of each cell across its sides fills, m.
+    let filled = |w: &World| -> Vec<f64> {
+        let (links, others) = w.mesh.cells().around(hump);
+        let near = links.iter().zip(others).filter(|p| w.mesh.cells().width()[*p.0 as usize] > 0.0).map(|p| *p.1 as usize);
+        std::iter::once(hump).chain(near).map(|i| store_m3(w, i) / (p.bed_porosity * w.mesh.cells().area()[i])).collect()
+    };
+    let (mut month, mut days, len) = (w.clone(), w, pcore::Config::default().calendar().month as f64);
+    pcore::flow::liquid(&mut month, len);
+    for _ in 0..month.cfg.days_per_month {
+        pcore::flow::liquid(&mut days, DAY);
+        pcore::flow::state(&mut days, false);
+    }
+    let (a, b) = (filled(&month), filled(&days));
+    println!("the hump and its neighbours, m: in a month {a:.2?}, in thirty days {b:.2?}");
+    assert_eq!(a.len(), 5);
+    assert!(a.iter().zip(&b).all(|(x, y)| (x - y).abs() < 0.1 * HUMP_M), "in a month {a:?}, in thirty days {b:?}");
+    books.assert_within(&month, 1e-9, 1e-9);
+}
+
 /// Darcy's law across a 2 km cell moves under 0.02% of its pores a year (`seep`, a metre of ground, a slope of 1 in
 /// 1,000), but the liquid drains inside the cell to its channels, `hill` from the divides: a full store of the bed on a
 /// sloping cell loses a share 1 - exp(-`bed_seep` x slope x time / (`bed_porosity` x `hill`)) of it in a step, which runs

@@ -1,13 +1,12 @@
 //! Space: the mesh of a map has its cells (areas, links, the air as a coarser level), cells of many squares among
-//! them, and stacks give each cell its column of nodes; what the world keeps per cell and per link follows a change of
-//! the cells (`World::remap`).
+//! them; what the world keeps per cell and per link follows a change of the cells (`World::remap`).
 
 use pcore::remap::{Remap, Renumber};
 use pcore::store::Class;
 use pcore::{World, AIR};
 use pcore::space::square::Square;
 use pcore::space::tree::BLOCK;
-use pcore::space::{Leaf, Level, Mesh, Stack};
+use pcore::space::{Leaf, Level, Mesh};
 use std::collections::BTreeSet;
 
 const SIDE: f64 = 2000.0;
@@ -135,20 +134,6 @@ fn the_compass_of_a_square_is_its_eight_neighbours() {
         for (i, (d, &g)) in (0..sq.n()).flat_map(|i| GRID.iter().enumerate().map(move |dg| (i, dg))) {
             assert_eq!(lv.way(i, d).map(|e| lv.adj_cell()[e] as usize), sq.step(i, g), "cell {i}, direction {d}");
         }
-    }
-}
-
-/// A stack numbers each layer's nodes after the layer below: a deep store and the ground on the squares, the air on its
-/// coarser level.
-#[test]
-fn a_stack_numbers_each_layer_after_the_one_below() {
-    let [_, (sq, mesh)] = maps();
-    let st = Stack::new(&mesh, &[0, 0, 1]);
-    let (n, na) = (sq.n(), mesh.level(1).n());
-    assert_eq!(st.nodes(), 2 * n + na);
-    for i in 0..n {
-        let (deep, ground, air) = (st.node(0, i), st.node(1, i), st.node(2, mesh.up(i, 0, 1)));
-        assert_eq!((deep, ground, air), (i, n + i, 2 * n + mesh.up(i, 0, 1)));
     }
 }
 
