@@ -40,7 +40,8 @@ pub const COVER: u64 = u64::MAX - 1;
 /// the frame without the enzyme that splits it) is bulk, which counts toward what it can take (`intake`, the gut) and
 /// passes through it to the ground at once, with its heat (a gut passage of days, within the update's step: it never
 /// becomes the body's own frame). What it takes of the cover it pays to break as a bite does (`Cover::breaking`), less
-/// what a held edge saves (`bond::Edge`), which wears by the work it does. `days`: the time to its next update.
+/// what a held edge saves (`bond::Edge`), which wears by the work it does. `days`: the time the meal feeds it, to its
+/// next meal (laws.md 5.3).
 pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     let (i, chem, bc) = (b.cell as usize, &w.chem, w.chem.body());
     let (tg, parts) = (w.t_ground_last(i), crate::cover::Parts::of(chem));
@@ -53,7 +54,7 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
         let ground = d.moves.amounts(w, Node::ground(i));
         let lying = |k: usize| (if chem.phase(k, tg) != Phase::Gas { ground(k).max(0.0) } else { 0.0 }) + cover[k];
         let gut = intake(w, b, (t, days), lying).0;
-        let m = b.wanted(w, lying, gut, b.mass(chem));
+        let m = b.wanted(w, lying, (gut, days), b.mass(chem));
         let grazed: Stores = std::array::from_fn(|s| if of_cover(s) > 0.0 { (m[s] * of_cover(s) / lying(bc.subs()[s])).min(m[s]).min(of_cover(s)) } else { 0.0 });
         (gut, m, grazed)
     };
@@ -119,8 +120,21 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
 pub(crate) fn eat_for(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     let stands = b.temp(&w.chem);
     take_node(w, d, b, days);
-    let warm = body::ahead(w, b, b.mass(&w.chem)) * days / w.step_days(b.cell as usize);
+    let warm = body::ahead(w, b, b.mass(&w.chem), days);
     body::fade_meal_heat(w, d, b, stands, warm);
+}
+
+/// The meal of body `b` at a sub-step of its update after its first (`survey::updates`): what its members whose act
+/// leaves their step to eating take by the take law for the sub-step's `days` d (`eat_for`), as the meal of its
+/// decision took for the first (laws.md 5.3). The share `Body::busy` of its members, whose act fills the step, takes
+/// none: of a node, its other members eat as a part of it apart (`spread::stays`); a body with no brain takes none, as
+/// it takes no decision.
+pub(crate) fn meal(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
+    if w.life.brainless(b) || b.busy >= 1.0 {
+        return;
+    }
+    let eat = b.count * (1.0 - b.busy as f64);
+    super::spread::stays(d, b, eat, |d, b| eat_for(w, d, b, days));
 }
 
 /// Release stores above the level the body keeps (`Body::level`) to the cell's ground.
@@ -168,7 +182,7 @@ pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, (s, days): (Handle, f64
     // The share of the members a meeting reaches (at least one whole member) and the chance of that meeting.
     let per = reached.max(1.0 / o.n());
     let chance = reached / per;
-    let m = b.wanted(w, |k| per * o.amount(bc, k), kg * fb / (fb + fo + 1e-30), mb);
+    let m = b.wanted(w, |k| per * o.amount(bc, k), (kg * fb / (fb + fo + 1e-30), days), mb);
     let resist = 1.0 + lanes::thickness(w, w.life.sum(b.cell as usize)[1], w.mesh.cells().area()[b.cell as usize]);
     let hit = reached;
     // The bite tears this share of the body of each member it reaches; the stores they held spill in proportion, less
@@ -207,7 +221,7 @@ pub(super) fn give(w: &World, d: &mut Chunk, b: &mut Body, (s, days): (Handle, f
     let all: f64 = (0..bc.n()).map(|q| spare(q) * bc.mm[q]).sum();
     let o = &d[s];
     let (mo, met, t) = (o.mass(chem), b.n().min(o.n()), o.temp(chem));
-    let ahead = body::ahead(w, o, mo);
+    let ahead = body::ahead(w, o, mo, days);
     let share = (w.cfg.phys.take * days * o.supply(&w.chem, &w.cfg.phys, t) * met / o.n() / all.max(1e-9)).min(met / b.n());
     let mut m: Stores = std::array::from_fn(|q| if q < bc.n() && o.uses(chem, bc.subs()[q], t) { (spare(q) * share).min(o.room(chem, q, mo, ahead) * met / o.n()) } else { 0.0 });
     o.digest_room(chem, &mut m, mo, ahead);

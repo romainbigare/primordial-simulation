@@ -4,12 +4,10 @@
 use super::{kin, start};
 use crate::body::{remains, Body};
 use crate::brain::shake;
-use crate::choose::eat_for;
 use crate::event::Event;
 use crate::life::{Block, Chunk, Entry};
 use crate::nodes::{add, Lot, Own};
 use crate::rng::{Purpose, Rng};
-use crate::store::{Class, Node};
 use crate::World;
 
 /// Children that start in another cell than their parent's (`emit`), queued until the serial pass (`land_litter`): their
@@ -26,9 +24,10 @@ pub struct Litter {
     pub(super) born: Event,
 }
 
-/// A litter (`emit`) lands in the serial pass (laws.md 0) in `d`, the chunk of its cell: its birth is recorded, it
-/// takes what lies there to the cell's next step, and it joins the young node of its kind and lineage there (`kin`) or
-/// starts a body of its own (`start`). Less than one member (of a node's children: an individual's are whole) with no
+/// A litter (`emit`) lands in the serial pass (laws.md 0) in `d`, the chunk of its cell: its birth is recorded, and it
+/// joins the young node of its kind and lineage there (`kin`) or starts a body of its own (`start`); it ate to the end
+/// of the sub-step it was born in (`feed`), and its physics runs on from its birth after the landing
+/// (`survey::batch_of`). Less than one member (of a node's children: an individual's are whole) with no
 /// node to join goes back (`back`). A litter whose change of its born rows is still to draw joins as `emit` joins such
 /// children; starting a body, it draws the change of its born rows and the same of its parent's rows it carries (what
 /// its parent learned on top, as `Chunk::inherit` gives), keyed by the parent's id turned over, with no moving averages
@@ -42,13 +41,6 @@ pub(crate) fn land_litter(w: &World, d: &mut Chunk, x: Litter) {
     let Litter { mut c, rows, mut brain, change, born, from } = x;
     d.went(from as usize, i, c.mass(&w.chem));
     d.events.push(born);
-    // Where it lands it takes what lies there for the time to that cell's next step, as a mover does
-    // (`choose::land_move`; a body with no brain takes none).
-    if !w.life.brainless(&c) {
-        // (The store books no body's side of this: a body node of any index serves a body out of its slot.)
-        d.moves.open(w, i, Node::new(Class::Body, 0));
-        eat_for(w, d, &mut c, w.days_to_step(i));
-    }
     let Some(sd) = change else {
         c.brain = d.brains(i).take_in(&brain);
         return start(w, d, c, rows, hit);

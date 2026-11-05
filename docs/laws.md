@@ -60,16 +60,31 @@ whole number of seconds and at least a day (a cell finer than that steps as the 
 body updates at the month's start**, after the month's Flow, Change and Bond: one batch holds every living body. Then
 at the end of each sub-step of the finest cells' step the cells whose step ends there are surveyed again (what movers
 broke there; in every cell its numbers and features, as the moves and meals since left them) and their bodies update
-in a batch of the same passes; the other cells do nothing then. A body placed during a batch first updates at its
-cell's next step; one that moves into a cell of another step lands in the serial pass and first updates at its new
-cell's next step. Flow, Change and Bond keep their steps (1.8). Each update integrates
-the time since the body's last (`Body::last`; of a node, the mean by members, `nodes::rejoin`, so members who joined it
-since count less): its upkeep, its brain's cost and learning (5.4), drink, heat, frost (6.5) and growth go by those
-days, and what looks ahead to its next update (what it takes, gives and does to parts, 5.3, per m² of its cell where it
-searches, and the room its stores keep for that time; the fuel growth keeps back for its upkeep, 6.6; the heat of a meal
-let out, 6.3; the look-ahead of a plan, 5.3) by its cell's step (`World::step_days`), so a step is a time step, not a
-calendar: a season's change comes from
-temperature (6.2). The bodies
+in a batch of the same passes; the other cells do nothing then. Flow, Change and Bond keep their steps (1.8).
+**An update: a decision, then the physics of the step ahead in sub-steps** (`survey::updates`). A body decides once
+at each of its cell's steps (5.3), and then its own physics runs over the step ahead, to its cell's next step, in
+sub-steps of one **physiological step** (`World::phys_step`: 7.5 days, a quarter of a month, or the cell's step
+where that is shorter): a square's body runs four, a body of a cell of 500 m one, each by the same laws (`body::live`:
+drink, upkeep, heat, frost, growth, the brood and births, wear; 6), and before each but the first it eats by the take
+law for the sub-step as far as its act leaves its members to eating (`choose::meal`, `Body::busy`; its decision's
+meal fed the first, 5.3). So a body's physiology does not depend on its cell's step: a month of a square's body is the
+four quarter months of a body in a cell of 500 m, and the thresholds of a body (its warm or cold state, maturity, the
+brood covering a child) are crossed at the same sub-step whatever the step. The physiological step is a body's own
+time: a meal (its stores' room holds what it burns until its next meal), the filling of its brood to a child and its
+turn between its cold and warm state are days to weeks. Each sub-step integrates the time from where the body's
+physics reached (`Body::last`; of a node, the mean by members, `nodes::rejoin`, so members who joined it since count
+less) to its end: upkeep and the brain's cost, drink, heat, frost (6.5), growth and wear go by those days; the death
+draws of an individual are keyed by the sub-step's day and deaths and births are dated by it (`Calendar::day_ending`).
+After a batch every body's physics has reached its cell's next step, so bodies of every cell size stand at the same
+time after it, in the surroundings of the month their physics ran in. A body that lands in a cell in the serial pass
+(a mover, a litter) runs its physics on from where it reached to that cell's next step in a pass after the landing
+(`survey::batch_of`), as the bodies there did; one with no physics behind it (a founder) first decides by its spare
+now (`body::newborn`). Its learning and its watch go by the time since its last decision (`Body::decided`, 5.4).
+What looks ahead goes by the time to its next meal or step: what it takes by the take law, and the room its stores
+keep, by the physiological step; what it gives, bites and does to parts by its cell's step (5.3); the fuel growth
+keeps back for its upkeep to its next meal (6.6); the heat of a meal let out, 6.3; the look-ahead of a plan by the
+cell's step (5.3). So a step is a time step, not a calendar: a season's change comes from temperature (6.2). The
+bodies
 read the ground and the air as the month's Change and last air step left them, and what they leave on the ground (the
 free solid they shed, remains) goes through the next month's Change before the next batch can take it, so most of the
 free solid has rotted by then (it rots in about a week, 2.1). Every body decides at every update (5.3).
@@ -84,13 +99,12 @@ halves, parts of nodes acting apart, `life::new_id`); it never changes, and its 
 finds its cell through one table from serial to index (`Life::at_serial`). The cells
 are cut into `Config::chunks` runs of neighbouring indices, the same for any number of threads. **The parallel pass**:
 each chunk is one task on the pool (`life::run`), its cells taken out of the world, the world read only; in each cell
-in order (of the cells that step), the physics of each body, the mature ones first and then the young, each in the order
-they came (`survey::mature_first`: the children a body makes join their young node before its update, 4.2; a body
-placed in the pass first updates at its cell's next step);
-then every body with a brain perceives its inputs and the bodies of each lineage find their hidden layers together
-(5.1); then each decides and acts, in the same order, and after them the children who started a body of their own in
-the cell during its updates (`body::newborn`: no time behind them, so they feed from their birth to the cell's next
-step, whatever its length); then the next cell. So what a chunk queues, and the lineages
+in order (of the cells that step), first the physics to now of a body whose physics is behind; then every body with a
+brain perceives its inputs and the bodies of each lineage find their hidden layers together (5.1); then each decides
+and acts, the mature ones first and then the young, each in the order they came; then the sub-steps of the step
+ahead, at each every body not leaving the cell in that order (`survey::mature_first`: the children a body makes join
+their young node before its sub-step of the same time, 4.2; a child that starts a body of its own runs the sub-steps
+after its birth); then the next cell. So what a chunk queues, and the lineages
 and born rows it makes, come cell by cell whatever the chunks. The parts it reads are as they were at the pass's start. A body perceives the others of its own cell as they are when it
 decides (5.2); it takes from or gives to a body it saw only if that body still lives and is not leaving its cell. **A cell's view of the store** (`store::Moves`): its ground, bed and
 bodies' node as the store held them at the pass's start with its own moves since, and **its share of its air node**
@@ -105,7 +119,8 @@ The lineages and born rows a chunk makes have ids of the chunk until it ends, wh
 When the chunks end the world takes their events, counters and queues chunk by chunk, and books their moves (each
 array of the store by one task, the changes cell by cell in the order of the cells, `store::book_by_array`), so every
 sum runs in the order of the cells and the world is the same for any count of threads and of chunks. **The serial
-pass** (`life::land`): the queue in rounds: first the moves and the litters land, each chunk of the cells they go to on
+pass** (`life::land`; after it a pass brings the physics of the bodies that landed to their cell's next step, and
+its queue lands in turn, `survey::batch_of`): the queue in rounds: first the moves and the litters land, each chunk of the cells they go to on
 the pool, in a chunk cell by cell and in a cell in the order queued, and what the moves did to the lanes and the
 structures follows at once (`Entry::Passed`, one by one: a structure that moves spans two cells), so a part act finds a
 carried structure where it went; then the part acts, each in the chunk of its cell on the pool (where its body is; a
@@ -678,17 +693,18 @@ gene within `alike` steps; it decides who mixes, joins and merges.
 A body is **mature** (`Body::adult`) when its living body per member reaches `COPY_MASS`; then growth (6.6) puts the
 share `ALLOC` into a **brood** (`Body::brood`), matter held for children that leaves with the body's matter in the same
 share (`Body::lose`). Whenever the brood covers a child, children are made (`copy::copy`) whatever the brain does:
-bodies copy by physics only, at the body's update (at its cell's step, 0), all that its brood covers then. The brood
-leaves with members who die. **Born through the update**: growth builds at one rate over an update, first what the
-body's maturity lacks, then the brood its share, so the brood fills evenly over that part of the update and the
-children are born through it as it covers them (`copy::Fill`): a node's members evenly from the time the brood passed
-what it holds back, an individual's whole children each when the brood reached it, those it covered before at the
-update's start. A child counts its time from its birth (`Body::last`): from then to now it takes what lies in its cell
-by the take law, as a body does for the part of its step no act fills (5.3; `copy::feed`), and the first update that
-integrates it, its young node's or its own, runs it from its birth by the laws of every body (members who join a node
-count from when they came, `nodes::rejoin`). In a cell the mature bodies update before the young
-(`survey::mature_first`), so the children of an update join their young node before its update of the same time: by
-the step's end they have eaten, grown and paid inside it, in its heat, whatever the step. A child has a body of
+bodies copy by physics only, at each sub-step of the body's update (its physiological step, 0), all that its brood
+covers then. The brood leaves with members who die. **Born through the sub-step**: growth builds at one rate over a
+sub-step, first what the body's maturity lacks, then the brood its share, so the brood fills evenly over that part of
+the sub-step and the children are born through it as it covers them (`copy::Fill`): a node's members evenly from the
+time the brood passed what it holds back, an individual's whole children each when the brood reached it, those it
+covered before at the sub-step's start. A child counts its time from its birth (`Body::last`, `Body::decided`): from
+then to the sub-step's end it takes what lies in its cell by the take law, as a body does for the part of its step no
+act fills (5.3; `copy::feed`), and the first sub-step that integrates it, its young node's or its own, runs it from its
+birth by the laws of every body (members who join a node count from when they came, `nodes::rejoin`). In a cell the
+mature bodies run each sub-step before the young (`survey::mature_first`), so the children of a sub-step join their
+young node before its sub-step of the same time: they eat, grow and pay inside it, in its heat, at every sub-step
+after, whatever the step. A child has a body of
 10^`CHILD` × the copy mass,
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
 dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member
@@ -699,10 +715,10 @@ a 2 km square, a quarter of the time out of an 8 km one), and on the same way th
 left crosses whole, into the last with the share of its side left (four cells on from a cell of 500 m), so they go as
 far in metres whatever the cells; one way for all of a node's children of an update (for an individual, that chance),
 where they land when the batch ends (0). Less than one member with no node to
-join waits in the brood, or, landed in a neighbour cell, goes back into it. Children who start a body in their parent's cell decide at
-once (0), so they take what feeds them to the cell's next step; those who join a young node share its decision; a
-litter where it lands takes what lies there to that cell's next step, as a mover does (`copy::land_litter`), and then
-joins or starts a body.
+join waits in the brood, or, landed in a neighbour cell, goes back into it. Children who start a body in their parent's
+cell run the sub-steps after their birth, eating by the take law, and first decide at the cell's next step; those who
+join a young node share its decisions; a litter lands, joins or starts a body (`copy::land_litter`), and its physics
+runs on from its birth to that cell's next step after the landing (0).
 
 ### 4.3 Two parents
 Only where brains are big: a mature individual (a body of count 1) of a lineage whose brain has at least `MATE_HIDDEN`
@@ -898,11 +914,14 @@ No copy action, no "farm", "trade" or "attack": those must be patterns of these.
 it needs of it. A move takes the walk: its distance at the body's walking speed (`Physics::speed`: every size walks at
 one Froude number v² / (g L) = 0.25, L the side of a cube of a member's volume, the dynamic similarity of Alexander and
 Jayes 1983; 0.9 m/s at 30 kg, so a link of 2 km takes 40 minutes). Putting down and letting go take none. Every other
-act (take, rest, give, a bite, a watch, Bond's acts on parts) fills the step: what it takes, gives and does goes by the
-time it is given. For the rest of its step a body takes food where it ends by the take law (`feed::take_node`): a mover
-where it lands (`choose::land_move`, for the time from its landing to that cell's next step, `World::days_to_step`,
-less its walk), one that puts down or lets go, or whose move fails, where it is. So a monthly mover and four
-quarter-month movers walk as far and eat as much, in expectation, and a move gives up an hour of eating, not a step.
+act (rest, give, a bite, a watch, Bond's acts on parts) fills the step (`Body::busy`): what it gives, bites and does
+goes by the time it is given. Taking leaves the step to eating. For the rest of its step a body takes food where it
+ends by the take law (`feed::take_node`): a mover where it lands (`choose::land_move`, for the time from its landing
+to that cell's next sub-step, `World::days_to_phys`, less its walk), one that takes, puts down or lets go, or whose
+move fails, where it is: at the decision for its first sub-step of physics, and before each later sub-step for that
+one (`feed::meal`; a node's members as the share of them whose act leaves the step to eating, 0). So a monthly mover
+and four quarter-month movers walk as far and eat as much, in expectation, and a move gives up an hour of eating, not
+a step.
 The default is to eat, not to rest, because the take law already holds a body's hunger: it takes nothing when its
 stores are full (their room, below) and pays to handle only what it takes, so eating while it does nothing else is
 physics, not a choice made for the brain; the brain still chooses what fills the step (rest is its own act, all the
@@ -922,13 +941,14 @@ members lie over the cell like the ground's food: a bite reaches those the swept
 whole, by one draw with the chance the area holds it, whether a node or an individual takes it; of a node, less than one member is one whole member met with that chance:
 it takes, tears and pays that meeting's outcome times the chance), limited by force against theirs. **Giving** (`Body::spare`) is of what the other uses, of stores only (no
 matter, brood, built solids or key liquid below level), above `keep_min` × their minimum, at most what the members met
-could take. Taking, the bite, giving and the acts on parts go by the time to the body's next update, its cell's step
-(`World::step_days`): what it takes now feeds it until then, as the upkeep of that time is paid from it at its next
-update (0); a body of a finer cell searches its smaller cell for a shorter step, so the share of the cell its area holds
-is the same per m² and per day. **The room of its stores over the update** (`Body::room`): it takes up to the level of
-each store and, of a store it burns, what its upkeep burns of it until its next update (`body::ahead`, at its
-temperature and activity now), as a sequence of short steps each eats what it burnt: so one meal of a month is the
-meals of four quarter months, not one store's room.
+could take. The bite, giving and the acts on parts go by the time to the body's next update, its cell's step
+(`World::step_days`); taking by the take law by the time to its next meal, its physiological step (0): what it takes
+then feeds it until then, as the upkeep of that time is paid from it in the sub-step that follows; a body of a finer
+cell searches its smaller cell for a shorter step, so the share of the cell its area holds is the same per m² and per
+day. **The room of its stores for a meal** (`Body::room`): it takes up to the level of each store and, of a store it
+burns, what its upkeep burns of it for the time the meal feeds it (`body::ahead`, at its temperature and activity now),
+as a sequence of short steps each eats what it burnt: so one meal of a week is the meals of shorter ones, not one
+store's room.
 
 ### 5.4 Learning
 **Well-being** (`Body::wellbeing_at`): the energy its stores could release, in months' worth of its starting brain's
@@ -943,13 +963,13 @@ mean and each row's mean square of steps both weigh the newest value by `learn_b
 (the change of well-being and the discount over it), so the critic corrects the rate's share of it at each decision
 (continuous-time TD learning, Doya 2000); the rows' step is the rate times t / month, in units of the spread of the
 error per month (the error over t / month, its floor a share per month), so a short step's error is weighed against the
-spread of the same rate, not of a longer step's error; the critic's largest step is the rate times t / month too. t is the time its update integrated (0). A node learns
+spread of the same rate, not of a longer step's error; the critic's largest step is the rate times t / month too. t is the time since its last decision (`Body::decided`, 0). A node learns
 as from one member drawn among those who stayed, with the node's change plus how much more its part's action raised it
 than the mean, so its brain moves as an individual's does. **Across lives**: evolution of born rows and base.
 
 ### 5.5 Imitation and memory
 **Watching** (`choose::learn::watched`) costs the turn; when the batch ends, if both live and the watcher is still of
-the lineage it watched in, the watcher's rows move part way (`blend` per month, over its turn: the time its update integrated) toward the watched one's, if the brains have the
+the lineage it watched in, the watcher's rows move part way (`blend` per month, over its turn: the time since its last decision) toward the watched one's, if the brains have the
 same sizes, less the less alike they are, times the share of the watcher's members now who watched (for a node, the
 mean by members). **Memory**: the brain's memory numbers (`MEMORY`), which it reads and writes at each decision.
 **Signals and the memory of others are parked**: no body emits a signal or remembers whom it dealt with; the brain's
@@ -958,9 +978,12 @@ time of each update (6.2), whatever the pace of its decisions. **Null run** (`--
 
 ## 6. Bodies
 Files: `core/src/body/`, `copy::grow`. Bodies are the eaters (animals); the light-eaters are the cover (4.5).
-`body::live` runs an update in stages: drinking, upkeep, heat, store checks, growth and children, shedding; then the
-decision. Its trades are gathered as moves on its cell's view and booked when its chunk ends (`store::Moves`, 0), so
-nodes and individuals take alike, never more than is there.
+A body's update is its decision, then its physics over the step ahead in sub-steps of its physiological step, a
+week (`World::phys_step`, `survey::updates`; 0), each with a meal but the first, which its decision gave it.
+`body::live` runs a sub-step in stages: drinking, upkeep, heat, store checks, growth and children, shedding. So every
+law of this section runs over a week in every cell, whatever the cell's step. Its trades are gathered as moves on its
+cell's view and booked when its chunk ends (`store::Moves`, 0), so nodes and individuals take alike, never more than
+is there.
 
 ### 6.1 What a body is
 **Stores** (all members together) and heat. A body holds only the substances of bodies (`Chemistry::body`, one
@@ -1001,52 +1024,49 @@ the work becomes heat in its cell's ground, and the body keeps its temperature. 
 
 ### 6.3 Heat
 A body's temperature follows its ground's (`live::keep_warm`): the heat its surviving members' upkeep released over
-the update leaves through its coat (`Body::conductance`; in series with the walls around it, 3.4) to the ground. Each
+the sub-step leaves through its coat (`Body::conductance`; in series with the walls around it, 3.4) to the ground. Each
 member has the surface `meeh` × its mass^(2/3) (Meeh 1879); its coat insulates it by the still air at its surface
 (`r_air`) and the share `HEAT` (0 to 1) of the best coat, `r_coat` (fur and the tissue under it: a mammal's least
 conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). Its heat balance over the time dt,
 C dT/dt = P - g (T - tg) (Newton's law of cooling; an animal's energy budget, Porter and Gates 1969; `live::Balance`),
 moves its temperature from where it is toward where that heat holds it (the ground's, plus the heat over the coat's
 conductance) by the share 1 - e^(-g dt / C) its heat capacity C lets it go in the time: a body's own time C / g is hours
-to days, but a large node in a closed room, whose walls pass little, moves only part way in a month. So what it gains
+to days, but a large node in a closed room, whose walls pass little, moves only part way in a week. So what it gains
 from its ground is never more than the heat it released, unless the ground is the warmer. Below its `KEEP_T` gene it
 burns what holds it at `KEEP_T` at the end; above its `COOL_T` gene it opens its coat as far as it needs to stand there,
 up to its bare surface (blood to the skin, the coat laid flat), and past that evaporates its key liquid for the excess,
-at the liquid's vaporisation enthalpy, never below its safe minimum, the vapour going to the bodies' node with its
-latent heat (`live::hold`). Its key liquid boils at its boiling point: past it the heat boils the liquid off, below its
+at the liquid's vaporisation enthalpy, never below its safe minimum, drinking as it sweats what its uptake leaves it
+for the sub-step (6.4), the vapour going to the bodies' node with its latent heat (`live::hold`). Its key liquid boils at its boiling point: past it the heat boils the liquid off, below its
 safe minimum too, and holds the body there while it lasts; one that boils dry dies there (`check_stores`), the rest of
-its heat staying in its ground. **The temperature it stands at** (`live::standing`): its upkeep over the update goes
+its heat staying in its ground. **The temperature it stands at** (`live::standing`): its upkeep over the sub-step goes
 with the pace (6.2) of its mean temperature over the time, the mean of that exact solution with the heat the upkeep
 releases, held by its genes as above; as that heat goes with the pace, the temperature is a fixed point, found from
 where the body is the way its heat moves it (the next equilibrium up or down). So a body of hours to days pays its
-update at the temperature it stands at, not the one it started at, alike in one update of a month or in four of a
-quarter month; the open coat lets the heat of a warmer pace out, so a body's own heat does not drive its pace up for
-ever. Its heat then comes to the temperature the balance ends at with its ground (`body::settle_heat`). After its
-decision (`live::fade_meal_heat`) what it took and digesting it moved its temperature by, from where it stood, fades
-over the time to its next update (its cell's step) by the share e^(-g dt / C): the heat of a meal leaves through its
-coat to its ground; a meal colder than the body is warmed by the body's own heat as it eats, drawn back from its
-ground, which its upkeep's heat went to, at most the heat its upkeep released over the update. So a body of hours to
-days starts its next update where it stood, and a month's meal taken at once cools it no more than the meals of four
-short steps. **Two states, one at every step.** As its pace rises with its temperature, a body whose own heat over its
+sub-step at the temperature it stands at, not the one it started at; the open coat lets the heat of a warmer pace out, so a body's own heat does not drive its pace up for
+ever. Its heat then comes to the temperature the balance ends at with its ground (`body::settle_heat`). After a
+meal, its decision's or a sub-step's (`live::fade_meal_heat`), what it took and digesting it moved its temperature
+by, from where it stood, fades over the time to its next physics (its physiological step) by the share e^(-g dt / C):
+the heat of a meal leaves through its coat to its ground; a meal colder than the body is warmed by the body's own heat
+as it eats, drawn back from its ground, which its upkeep's heat went to, at most the heat its upkeep released over the
+sub-step. So a body of hours to days starts its next sub-step where it stood. **Two states, one at every step.** As its pace rises with its temperature, a body whose own heat over its
 coat warms it past the ground by more than T² / Ea (about 12 K for chemistry 0's main burning, Ea 7,760 K: there the
 pace's rise, Ea / T² of it per K, feeds the heat faster than the coat lets it out) runs on to a warm state, at most its
-`COOL_T`, where its coat opens; below that it lies cold, or at its `KEEP_T` by burning. Its time C / g is hours to a day, far less than any step, so each update ends at the stable state its heat
-leads to from where it stood (`live::standing`), and a node turns between the two in the same month on a monthly step
-as on four quarter-month steps (a cold year of a node of adults: within 0.21 K, `core/tests/steps.rs`). A node's
-children are born through its update and live from their birth inside their young node, in its heat (4.2). What a
-monthly step still changes is the warming in spring: the update in which a node turns warm pays a month of the warm
-pace from food taken at the cold one (the take law goes by the pace at the decision, 5.3), so its growth and its brood
-stop for that month, against a quarter in cells of 500 m; its children come a month later, and a young node of a thin
-coat that is a month behind can stay cold through a summer in which the finer ones turn warm. Its key liquids hold their fusion heat at any temperature (`Body::fused`): a body
+`COOL_T`, where its coat opens; below that it lies cold, or at its `KEEP_T` by burning. Its time C / g is hours to a
+day, far less than a sub-step, so each sub-step ends at the stable state its heat leads to from where it stood
+(`live::standing`), and as it eats at each sub-step by the take law at the pace it stands at then (5.3), a node that
+turns warm in spring eats at the warm pace from the next week on, in a square as in its cells of 500 m. A node's
+children are born through its sub-steps and live from their birth inside their young node, in its heat (4.2). Its
+key liquids hold their fusion heat at any temperature (`Body::fused`): a body
 has no melting plateau, so its temperature is its heat over its heat capacity, that heat set aside (2.5).
 
 ### 6.4 Water: drinking
 A body drinks its key liquids from its cell's ground up to the level it keeps, as far as the ground holds them liquid,
 each day at most its uptake gene's share of that level, paying `c_handle` per kg; they come with their heat. It drinks
-first in its update (`live::drink`), as it drinks while it sweats, builds and gives its children their share over the
-time: its upkeep and its building go at the activity (6.5) of what it could drink, not of what its last update's
-growth, children and sweat left, so a month's update and four of a quarter month run alike. It
-catches no rain and has no roots: its minerals come from what it digests (6.9).
+first in its sub-step (`live::drink`), as it drinks while it sweats, builds and gives its children their share over
+the time: its upkeep and its building go at the activity (6.5) of what it could drink, not of what its last
+sub-step's growth, children and sweat left. What its uptake leaves of the sub-step's days it drinks as it sweats
+(`live::evaporate`), so in a sub-step it sweats what it would drink and sweat in shorter ones, not one fill of its
+level. It catches no rain and has no roots: its minerals come from what it digests (6.9).
 
 ### 6.5 Activity and dormancy
 `Body::activity`: a = min(1, l / l*)^`dormancy`, l the key liquid, l* its level. It multiplies upkeep and the building
@@ -1055,20 +1075,21 @@ so a dormant body lives about 50 times its active life, as dry seeds and spores 
 stand in microclimates that spread over `frost_k` (3 K) around the temperature T its heat holds it at over its ground
 (6.3), so below a key liquid's melting point
 the share f = min(1, (melt − T) / `frost_k`) × a freezes and dies (`PHASE`) in a month, a share that composes: over
-the t its update integrates 1 − (1 − f)^(t / month) (`Span::share64`), so a cold spell kills alike in one update or in
-many; an individual dies with that chance. A dormant body
+the t its sub-step integrates 1 − (1 − f)^(t / month) (`Span::share64`), so a cold spell kills alike in one sub-step
+or in many; an individual dies with that chance. A dormant body
 (little free liquid) lives through frost, as seeds and spores do; the cover freezes by the same law below its `FROST`
 gene (4.5). **Boiling** kills.
 
 ### 6.6 Growth
 `copy::grow`. Its fuel and minerals become matter at `c_copy` of work per kg, paid by burning (`body::pay`), as far as
 all allow: the **allowance** (`c_build` × supply / `m_ref` × days × activity), the **spare** (what its fuel can release
-beyond its upkeep to its next update, its cell's step), and its stores down to their minimums. Built solids (the frame) come first by their
+beyond its upkeep to its next meal, its physiological step), and its stores down to their minimums. Built solids (the frame) come first by their
 share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing
-Intake at most `take` × supply a day (5.3), over the time to its next update, within the room of its stores
-for that time (`Body::room`: their levels and what its upkeep burns of them until then). **Digestion** (`Body::digest`): matter taken is broken back into what it
+Intake at most `take` × supply a day (5.3), over the time a meal feeds it (to its next meal, or for a bite to its next
+update), within the room of its stores for that time (`Body::room`: their levels and what its upkeep burns of them
+until then). **Digestion** (`Body::digest`): matter taken is broken back into what it
 was built of, so food enters as fuel, and only if its diet breaks it (`Body::uses`). **Minimums**
 (`Body::lacking`): a store below its minimum kills (`LACK`), except a fuel, whose minimum is a reserve. **Shedding**
 (`shed`): minerals, built solids and key liquid past level, and anything it neither burns nor is made of. **Ageing**:

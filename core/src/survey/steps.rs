@@ -2,7 +2,8 @@
 //! and a square of the map (`Square::square_depth`: 2 km on the island) steps a month (the pace the numbers of bodies
 //! are anchored at), so a cell 2^k times finer than a square steps a month over 2^k and a square or a coarser cell a
 //! month. The month's batch updates every body at its start (`batch`); then the bodies of the finer cells step again
-//! inside the month (`substeps`), each over the time since its own last update (`Body::last`).
+//! inside the month (`substeps`), each over the time since its own last update (`Body::last`). A body's own physics
+//! runs in sub-steps of one physiological step in every cell (`World::phys_step`), its decisions at its cell's step.
 
 use super::{batch_of, break_and_sum};
 use crate::units::DAY_S;
@@ -11,15 +12,23 @@ use crate::{choose, World};
 /// A body's step is at least this long, s (a day: the draws of the laws of bodies are keyed by the day, `World::day`),
 /// and a whole number of seconds; a cell too fine for that steps as the finest cell that keeps both.
 const STEP_LEAST_S: u64 = DAY_S;
+/// The halvings of the month that give a body's physiological step, 7.5 days (`World::phys_step`): the step its own
+/// physics integrates in, the same in every cell. Its own times are a meal (its stores' room holds what it burns until
+/// its next meal), the filling of its brood to a child and its turn between a cold and a warm state as its pace runs
+/// away with its heat (laws.md 6.3), days to weeks; a step of a month crosses those thresholds once for a month at the
+/// state it started in, and one of a week follows them as a cell of 500 m does, at four times the physics.
+const PHYS_HALVINGS: u32 = 2;
 
 impl World {
-    /// The halvings of the month that give the bodies' step of cell `i`: its depth below a square of the map (none for a
-    /// square or a coarser cell), at most as many as keep the step a whole number of seconds and at least
-    /// `STEP_LEAST_S`.
-    pub fn halvings(&self, i: usize) -> u32 {
+    /// The most halvings of the month that keep a step a whole number of seconds and at least `STEP_LEAST_S`.
+    fn most_halvings(&self) -> u32 {
         let month = self.cfg.calendar().month;
-        let most = (0..month.trailing_zeros()).take_while(|&k| month >> (k + 1) >= STEP_LEAST_S).count() as u32;
-        (self.map.leaves()[i].depth.saturating_sub(self.map.square_depth()) as u32).min(most)
+        (0..month.trailing_zeros()).take_while(|&k| month >> (k + 1) >= STEP_LEAST_S).count() as u32
+    }
+    /// The halvings of the month that give the bodies' step of cell `i`: its depth below a square of the map (none for a
+    /// square or a coarser cell), at most `most_halvings`.
+    pub fn halvings(&self, i: usize) -> u32 {
+        (self.map.leaves()[i].depth.saturating_sub(self.map.square_depth()) as u32).min(self.most_halvings())
     }
     /// The bodies' step of cell `i`, s: the month over 2^`halvings`.
     pub fn body_step(&self, i: usize) -> u64 {
@@ -29,11 +38,20 @@ impl World {
     pub fn step_days(&self, i: usize) -> f64 {
         self.body_step(i) as f64 / self.cfg.calendar().day as f64
     }
-    /// The time from now to the next step of cell `i`, d: its step at its own update, and what is left of it when a
-    /// body of a finer cell moves in during it (laws.md 0).
-    pub fn days_to_step(&self, i: usize) -> f64 {
-        let step = self.body_step(i);
-        (step - self.time % step) as f64 / self.cfg.calendar().day as f64
+    /// The physiological step of the bodies of cell `i`, s: the month over 2^`PHYS_HALVINGS`, or the cell's step where
+    /// that is shorter. An update runs its body's physics in sub-steps of it, each with a meal (`survey::updates`).
+    pub fn phys_step(&self, i: usize) -> u64 {
+        self.cfg.calendar().month >> self.halvings(i).max(PHYS_HALVINGS.min(self.most_halvings()))
+    }
+    /// The physiological step of cell `i`, d: the time from a meal of its bodies to the next.
+    pub fn phys_days(&self, i: usize) -> f64 {
+        self.phys_step(i) as f64 / self.cfg.calendar().day as f64
+    }
+    /// The time from now to the next sub-step of cell `i`, d: what a body that lands there during a batch eats for
+    /// (laws.md 0, 5.3).
+    pub fn days_to_phys(&self, i: usize) -> f64 {
+        let sub = self.phys_step(i);
+        (sub - self.time % sub) as f64 / self.cfg.calendar().day as f64
     }
 }
 

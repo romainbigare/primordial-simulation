@@ -10,8 +10,8 @@ use worldgen::testkit::{add, died, dry_lands, eater, held_day, hold_ground, kg, 
 /// Days the takes from the ground run for (`matter_taken_from_outside_is_digested_into_the_solid`).
 const TAKE_DAYS: usize = 50;
 
-/// Body `s` until its next update (the first the bodies' month runs), the ground of its cell held at `t` K each day;
-/// returns the body after it.
+/// Body `s` until its next update (the first the bodies' month runs: its decision, then its physics over the month
+/// ahead in sub-steps), the ground of its cell held at `t` K each day; returns the body after it.
 fn after_update(w: &mut World, s: Handle, t: f64) -> Body {
     let (id, i, updates) = (w.life[s].id, w.life[s].cell as usize, w.counts.updates);
     while w.counts.updates == updates {
@@ -73,15 +73,20 @@ fn an_animal_keeps_warm_by_burning_fuel() {
     assert!(cold > 1.2 * warm, "it burnt {cold} mol in the cold, {warm} in the warm");
 }
 
-/// A body on hot ground keeps cool by evaporating its key liquid (`COOL_T`): after an update it stands at its `COOL_T`
-/// gene and holds less liquid; the vapour went to the air with its latent heat, and the books are kept.
+/// A body on hot ground keeps cool by evaporating its key liquid (`COOL_T`): after an update it stands below its ground
+/// and holds less liquid than the level it drinks to (on wet ground it drinks as it sweats, laws.md 6.4); the vapour
+/// went to the air with its latent heat, and the books are kept.
 #[test]
 fn an_animal_keeps_cool_by_evaporating() {
     let (mut w, s) = resting(330.0);
-    let (books, liquid0) = (Books::now(&w), w.life[s].amount(w.chem.body(), LIQUID));
+    let i = w.life[s].cell as usize;
+    put_kg_m2(&mut w, LIQUID, i, 50.0);
+    let books = Books::now(&w);
     let b = after_update(&mut w, s, 330.0);
-    println!("on ground at 330 K it stands at {:.2} K (cools from {} K), liquid {liquid0:.2} -> {:.2} mol", b.temp(&w.chem), b.gene(COOL_T), b.amount(w.chem.body(), LIQUID));
-    assert!(b.temp(&w.chem) < 330.0 && b.amount(w.chem.body(), LIQUID) < liquid0, "no cooling");
+    let (chem, at) = (&w.chem, w.chem.body().place(LIQUID).expect("a store"));
+    let (liquid, level) = (b.amount(chem.body(), LIQUID), b.level(chem, at, b.mass(chem)));
+    println!("on ground at 330 K it stands at {:.2} K (cools from {} K), liquid {liquid:.2} mol against its level {level:.2}", b.temp(chem), b.gene(COOL_T));
+    assert!(b.temp(chem) < 330.0 && liquid < level, "no cooling");
     books.assert_kept(&w, 1e-9);
 }
 
@@ -94,8 +99,6 @@ fn a_body_drinks_its_liquid_from_the_ground() {
     put_kg_m2(&mut w, LIQUID, i, 50.0);
     let dry = 0.5 * w.life[s].amount(w.chem.body(), LIQUID);
     let mut b = std::mem::take(&mut w.life[s]);
-    // (Nor does it evaporate to keep cool: the drink is what this is about.)
-    b.genes[COOL_T] = 360.0;
     let kg_dry = dry * w.chem.subs[LIQUID].molar_mass;
     add(&mut w, &mut b, LIQUID, -kg_dry);
     let low = b.amount(w.chem.body(), LIQUID);
@@ -215,9 +218,9 @@ fn a_cell_left_with_no_bodies_holds_nothing_at_the_next_survey() {
 }
 
 /// Living wears a body: its members die at the rate of the energy their upkeep turns over per kg, over `e_life` x
-/// 10^REPAIR, so they live that life on average: a node loses the share 1 - e^-wear of its members at each update, an
-/// individual dies with that chance. More repair: a longer life (10 times per unit) at a higher upkeep (the repair
-/// share, a quarter at gene 0, doubles per unit). Matter and energy are kept.
+/// 10^REPAIR, so they live that life on average: a node loses the share 1 - e^-wear of its members at each sub-step of
+/// its updates, an individual dies with that chance. More repair: a longer life (10 times per unit) at a higher upkeep
+/// (the repair share, a quarter at gene 0, doubles per unit). Matter and energy are kept.
 #[test]
 fn bodies_die_of_age_by_their_rate_of_living() {
     use pcore::body::{AGE, COPY_MASS, DISPERSE, LEARN, REPAIR, STRENGTH};
@@ -284,18 +287,18 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     println!("upkeep per kg of body and day: {ua:.1}, {ub:.1}, an individual {ui:.1} J");
     // (The repair gene costs 0.75 + 0.25 x 2^0.5 times as much at 0.5.)
     assert!(((ub / ab) / (ua / aa) / (0.75 + 0.25 * 2f64.sqrt()) - 1.0).abs() < 0.03 && ((ui / ai) / (ua / aa) - 1.0).abs() < 0.07, "upkeep per kg {ua} {ub} {ui}");
-    // A life of 38 days at gene 0, 10^0.5 ua / ub times that at 0.5. Each counts its days from its last update.
+    // A life of 38 days at gene 0, 10^0.5 ua / ub times that at 0.5. Each counts its days from where its physics reached.
     let (life, x) = (38.0, 10f64.sqrt() * ua / ub);
     w.cfg.phys.e_life = life * ua;
-    let (books, n0, every) = (Books::now(&w), w.life[sa].count, w.cfg.days_per_month as f64);
+    let (books, n0, every) = (Books::now(&w), w.life[sa].count, w.phys_days(cells[1]));
     let from: Vec<f64> = [sa, sb].iter().chain(&ones).map(|&s| w.life[s].last).collect();
     let day0 = w.day() as f64;
     let mut deaths = Vec::new();
     for _ in 0..240 {
         day(&mut w, &mut deaths);
     }
-    // A node's mean life: the days its members lived over those who died; it loses a share at each update of members
-    // who die evenly between updates, so over a span they live dead / ln(n / (n - dead)) times its days.
+    // A node's mean life: the days its members lived over those who died; it loses a share at each sub-step of members
+    // who die evenly between sub-steps, so over a span they live dead / ln(n / (n - dead)) times its days.
     let node_life = |cell: usize, t0: f64| {
         let (mut n, mut t, mut lived) = (n0, t0, 0.0);
         for &(_, d, dead) in deaths.iter().filter(|x| x.0 == cell && x.2 != 1.0) {
@@ -304,8 +307,8 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         lived / (n0 - n)
     };
     let (la, lb) = (node_life(cells[1], from[0]), node_life(cells[0], from[1]));
-    // The individuals dead of age in one life: each dies at an update with the chance its wear since gives, so by day
-    // `life` one that updated last at u has died with the chance 1 - e^-((u - its first day) / its life).
+    // The individuals dead of age in one life: each dies at a sub-step with the chance its wear since gives, so by day
+    // `life` one whose physics reached u has died with the chance 1 - e^-((u - its first day) / its life).
     let (li, by) = (life * ua / ui, day0 + life);
     let chance = |f: f64| -(-((by - f) / every).floor() * every / li).exp_m1();
     let expected: f64 = from[2..].iter().map(|&f| chance(f)).sum();
@@ -318,10 +321,10 @@ fn bodies_die_of_age_by_their_rate_of_living() {
 }
 
 /// Frost kills in proportion to the cold and to activity, per unit of time (laws.md 6.5): a node of 10,000 resting
-/// eaters with no fuel to keep warm, on ground half `frost_k` below its key liquid's melting point, loses at its update
-/// of a day what the share (melt - T) / `frost_k` a month gives over a day (1 - (1 - that)^(day / month)), T the
-/// temperature it stands at (its ground's: it keeps no warmth, in a bare coat), about half a month; the same node half
-/// dry (its activity a) loses a times that share a month. Both live, and matter and energy are kept.
+/// eaters with no fuel to keep warm, on ground half `frost_k` below its key liquid's melting point, loses over its
+/// update of a month, in its sub-steps, the share (melt - T) / `frost_k` (each sub-step 1 - (1 - that)^(its days /
+/// month)), T the temperature it stands at (its ground's: it keeps no warmth, in a bare coat), about half; the same
+/// node half dry (its activity a) loses a times that share. Both live, and matter and energy are kept.
 #[test]
 fn frost_kills_in_proportion_to_activity() {
     let lost = |dry: bool| {
@@ -342,7 +345,7 @@ fn frost_kills_in_proportion_to_activity() {
         let mut b = node_of(&mut w, b, 10_000.0);
         b.prepare(&w.chem, &w.cfg);
         let a = b.activity(&w.chem, &w.cfg.phys);
-        // It starts at the ground's temperature: a day is too short for the node's heat to follow its ground there.
+        // It starts at the ground's temperature.
         let t = w.chem.subs[LIQUID].melt - 0.5 * w.cfg.phys.frost_k;
         warm(&mut w, &mut b, t);
         w.life[s] = b;
@@ -351,10 +354,8 @@ fn frost_kills_in_proportion_to_activity() {
         books.assert_kept(&w, 1e-9);
         (1.0 - b.count / n0, a)
     };
-    // (The update integrates the day since the node was placed: the shares a month of what it lost in that day.)
-    let month = pcore::Config::default().days_per_month as f64;
+    // (Its first update integrates the month ahead.)
     let ((wet, a_wet), (dry, a_dry)) = (lost(false), lost(true));
-    let (wet, dry) = (1.0 - (1.0 - wet).powf(month), 1.0 - (1.0 - dry).powf(month));
     println!("lost {wet:.4} a month wet (activity {a_wet:.3}), {dry:.4} half dry (activity {a_dry:.3})");
     assert!(a_wet > 0.999 && a_dry < 0.9, "activities {a_wet} and {a_dry}");
     assert!((0.45..=0.5).contains(&wet), "the wet node lost {wet} a month, against a ramp of 0.5 at the ground's temperature");

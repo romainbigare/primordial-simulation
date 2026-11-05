@@ -70,8 +70,9 @@ fn allowance(w: &World, b: &Body, t: f64, days: f64, dry: f64) -> f64 {
 const LEAST_MADE: f64 = 1e-12;
 
 /// One conversion of growth (`Chemistry::build` or one of `Chemistry::builds`) at `t` K: up to `most` kg of its first
-/// output with `room` J of the work allowance, as far as its fuel spares after its upkeep to its next update (its
-/// cell's step, `World::step_days`) and its stores reach (`reach`); a gas it makes leaves to the air with its heat and its latent heat, and it keeps its temperature.
+/// output with `room` J of the work allowance, as far as its fuel spares after its upkeep to its next meal (its
+/// physiological step, `World::phys_days`) and its stores reach (`reach`); a gas it makes leaves to the air with its
+/// heat and its latent heat, and it keeps its temperature.
 /// Returns the kg made: none below `LEAST_MADE` of `full` (kg of matter of the size of maturity; 0 for the other
 /// solids).
 #[allow(clippy::too_many_arguments)]
@@ -79,7 +80,7 @@ fn convert(w: &World, d: &mut Chunk, b: &mut Body, bl: &Reaction, room: f64, mos
     if room <= 0.0 || most <= 0.0 {
         return 0.0;
     }
-    let (chem, p, ahead) = (&w.chem, &w.cfg.phys, w.step_days(b.cell as usize));
+    let (chem, p, ahead) = (&w.chem, &w.cfg.phys, w.phys_days(b.cell as usize));
     let m = bl.outputs[0].0 as usize;
     // (A unit of growth makes `nu0` mol of what it makes; chemistry 0: 1.)
     let (nu0, mm, mass) = (bl.outputs[0].1 as f64, chem.subs[m].molar_mass, b.mass(chem));

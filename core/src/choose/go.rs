@@ -12,8 +12,8 @@ use crate::{bond, copy, lanes, nodes, life::{Chunk, Entry}, World};
 /// part spent pushing through bodies breaks them (`wear`) and clears the lane. A node moves as one. It pays now and
 /// lands in the serial pass (`land_move`); until then it is leaving (`Body::leaving`). The walk takes the time the
 /// distance takes at its speed (`Physics::speed`), and it eats where it lands for the rest of the time to that cell's
-/// next step (`World::days_to_step`; laws.md 5.3). With `kin`, it is members of a node who join their kind where they
-/// land. False if it cannot move (no room there, too weak, or too poor to pay): it stays.
+/// next sub-step (`World::days_to_phys`), and at each later one (laws.md 5.3). With `kin`, it is members of a node who
+/// join their kind where they land. False if it cannot move (no room there, too weak, or too poor to pay): it stays.
 pub fn go(w: &World, d: &mut Chunk, b: &mut Body, j: usize, kin: bool) -> bool {
     let (i, mb) = (b.cell as usize, b.mass(&w.chem));
     let carried = bond::carry(d.at(i), w, b);
@@ -34,7 +34,7 @@ pub fn go(w: &World, d: &mut Chunk, b: &mut Body, j: usize, kin: bool) -> bool {
     // ground whose cover that energy breaks.
     let (pushed, all) = (cost * (1.0 - 1.0 / resist), w.life.sum(j)[7]);
     let lane = if all > 0.0 { pushed * w.mesh.cells().area()[j] / all } else { 0.0 };
-    let eats = (w.days_to_step(j) - dist / p.speed(m1, w.cfg.gravity) / DAY).max(0.0);
+    let eats = (w.days_to_phys(j) - dist / p.speed(m1, w.cfg.gravity) / DAY).max(0.0);
     b.leaving = true;
     d.out.push(Entry::Go { id: b.id, from: i as u32, to: j as u32, pushed, lane, carries: carried.is_some(), kin, eats, brain: Vec::new() });
     true
@@ -53,8 +53,9 @@ fn can_go(w: &World, b: &Body, j: usize, load: f64) -> bool {
 /// holds (`carried`: its root, as the cell it left held it) if it paid for that (`carries`; else it lets go of it), and
 /// its push breaks the bodies there at the next survey. What it does to things no cell owns is queued
 /// (`Entry::Passed`): it pushes the structures there (`bond::moved`) and clears `lane` m² of the lane. There it takes
-/// from the ground for the `eats` d the walk left of its step (`take_node`; laws.md 5.3), and the heat of that meal
-/// fades as a meal's does (`body::fade_meal_heat`, drawing back at most what its upkeep releases while it eats). With
+/// from the ground for the `eats` d the walk left of its sub-step (`take_node`; laws.md 5.3), and the heat of that meal
+/// fades as a meal's does (`body::fade_meal_heat`, drawing back at most what its upkeep releases while it eats); its
+/// physics runs on to that cell's next step after the landing (`survey::batch_of`). With
 /// `kin`, the members of a node who moved join the first node of their kind and stage there (`copy::kin`) as an
 /// amount, their genes and rows (`nodes::add`), not as a body; else it is stored there with its brain.
 pub(crate) fn land_move(w: &World, d: &mut Chunk, (mut b, brain): (Body, &[f32]), (i, j, carried): (usize, usize, Option<u64>), (pushed, lane, eats): (f64, f64, f64), (carries, kin): (bool, bool)) {

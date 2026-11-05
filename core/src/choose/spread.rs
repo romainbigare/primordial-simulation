@@ -28,8 +28,12 @@ pub(super) fn spread(w: &World, d: &mut Chunk, node: &mut Body, c: &Choice, k: &
     // The members who did nothing (none drawn for them, or their option not reached) rest, at no gain, and count in
     // the mean as those who rested.
     kept[REST] += (node.count - acted).max(0.0);
-    let mean = kept.iter().zip(&gain).map(|(n, &g)| n * g as f64).sum::<f64>() / kept.iter().sum::<f64>().max(f64::MIN_POSITIVE);
-    let mut u = rng.f64() * kept.iter().sum::<f64>();
+    // The share of the members kept whose act fills the step (`busy`): they take nothing by the take law until the
+    // node's next decision (`feed::meal`).
+    let all = kept.iter().sum::<f64>();
+    node.busy = if all > 0.0 { ((0..OPTS).filter(|&o| busy(o)).map(|o| kept[o]).sum::<f64>() / all) as f32 } else { 0.0 };
+    let mean = kept.iter().zip(&gain).map(|(n, &g)| n * g as f64).sum::<f64>() / all.max(f64::MIN_POSITIVE);
+    let mut u = rng.f64() * all;
     let a = (0..OPTS).find(|&o| { u -= kept[o]; u < 0.0 }).unwrap_or(REST);
     node.traced = trace(w, node, c, (&q, a, gain[a] - mean as f32), k, d.brains(node.cell as usize).mind(node.brain, k.s).trace);
 }
@@ -101,7 +105,7 @@ fn members(node: &Body, p: &[f32; OPTS], rng: &mut Rng) -> [f64; OPTS] {
 /// `x` members of node `node` (taken out of its slot) that stay in its cell act by `act` as the node itself: the whole
 /// node if less than one member would be left, else holding and inside nothing while the others wait aside with their
 /// share of its amounts (`nodes::Lot::split`), and then come back (`nodes::rejoin`: amounts and sizes by members).
-fn stays<R>(d: &mut Chunk, node: &mut Body, x: f64, act: impl FnOnce(&mut Chunk, &mut Body) -> R) -> R {
+pub(super) fn stays<R>(d: &mut Chunk, node: &mut Body, x: f64, act: impl FnOnce(&mut Chunk, &mut Body) -> R) -> R {
     if node.count - x < 1.0 {
         return act(d, node);
     }

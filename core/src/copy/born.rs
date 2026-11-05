@@ -1,18 +1,20 @@
-//! Children are born through their parent's update, as its brood fills (`Fill`), and feed and count their time from
-//! their birth (`feed`).
+//! Children are born through each sub-step of their parent's update, as its brood fills (`Fill`), and feed and count
+//! their time from their birth (`feed`).
 
 use crate::body::Body;
 use crate::choose::eat_for;
 use crate::{life::Chunk, World};
 
-/// How the brood of a body filled over its update (`body::live`): what it held before growth, mol, the days the update
-/// integrated, and the share of them, at their end, over which growth filled it (`Grew::filling`). Growth builds at one
-/// rate over an update, so the brood filled evenly over that share.
+/// How the brood of a body filled over a sub-step of its update (`body::live`): what it held before growth, mol, the
+/// days the sub-step integrated, the share of them, at their end, over which growth filled it (`Grew::filling`), and
+/// the time the sub-step ends at, s. Growth builds at one rate over a sub-step, so the brood filled evenly over that
+/// share.
 #[derive(Clone, Copy)]
 pub struct Fill {
     pub before: f64,
     pub filling: f64,
     pub days: f64,
+    pub at: u64,
 }
 
 impl Fill {
@@ -41,13 +43,14 @@ impl Fill {
     }
 }
 
-/// Children `c` (a body not placed, in their parent's cell) born `age` d before now: their time is counted from their
-/// birth (`Body::last`), so the first update that integrates them, their node's (`nodes::rejoin`: members who join
-/// count from when they came) or their own, runs them from then by the update of every body; and from their birth to
-/// now they take what lies there by the take law, as a body does for the part of its step no act fills
-/// (`choose::eat_for`; laws.md 5.3; a body with no brain takes none, as it takes no decision).
-pub(super) fn feed(w: &World, d: &mut Chunk, c: &mut Body, age: f64) {
-    c.last = w.days_now() - age;
+/// Children `c` (a body not placed, in their parent's cell) born `age` d before `now`, the end of their parent's
+/// sub-step, d: their time is counted from their birth (`Body::last`), so the first sub-step that integrates them,
+/// their node's (`nodes::rejoin`: members who join count from when they came) or their own, runs them from then by the
+/// physics of every body; and from their birth to `now` they take what lies there by the take law, as a body does for
+/// the part of its step no act fills (`choose::eat_for`; laws.md 5.3; a body with no brain takes none, as it takes no
+/// decision), and at each later sub-step as any body does (`choose::meal`).
+pub(super) fn feed(w: &World, d: &mut Chunk, c: &mut Body, (now, age): (f64, f64)) {
+    (c.last, c.decided) = (now - age, now - age);
     if age > 0.0 && !w.life.brainless(c) {
         eat_for(w, d, c, age);
     }

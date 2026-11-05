@@ -1,5 +1,5 @@
-//! Bodies: nodes that hold substances, heat and genes, each with an id that never changes (`life`). A body updates once
-//! a month and integrates the time since at its update (`live`; laws.md 6).
+//! Bodies: nodes that hold substances, heat and genes, each with an id that never changes (`life`). A body decides at
+//! each of its cell's steps, and its physics runs over the step ahead in sub-steps of a week (`live`; laws.md 0, 6).
 
 mod death;
 mod exchange;
@@ -9,12 +9,13 @@ mod live;
 mod metab;
 mod pay;
 mod tissue;
+mod drink;
 
 pub use tissue::solids_of;
 
 pub use death::{die, wound};
 use death::thin;
-pub(crate) use death::{remains, to_ground, torn_to_death};
+pub(crate) use death::{perish, remains, to_ground, torn_to_death};
 pub use genes::*;
 pub(crate) use live::{live, fade_meal_heat, newborn, LiveTmp};
 pub use live::Lived;
@@ -104,6 +105,13 @@ pub struct Body {
     pub mem: [f32; MEMORY_MOST],
     /// Well-being at the last decision
     pub wb: f32,
+    /// What its last sub-step left for its decision (`survey::updates`), and the day of its last decision (of its
+    /// placing or birth before its first)
+    pub lived: Lived,
+    pub decided: f64,
+    /// The share of its members whose act at its last decision fills its step (rest, a bite, a gift, a watch, an act on
+    /// a part): they take nothing by the take law at the later sub-steps of its update (`choose::meal`; laws.md 5.3)
+    pub busy: f32,
     /// It has a move queued in the batch running, or is a node's part with a part act queued (`life::Entry`): it stays in
     /// its cell until then, but the others there no longer deal with it (laws.md 0); false outside a batch, not saved
     #[serde(skip)]

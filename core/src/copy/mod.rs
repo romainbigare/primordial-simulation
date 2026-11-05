@@ -1,6 +1,7 @@
 //! Law 4: Copy. Reproduction is a share of a surplus. A mature body puts the share `ALLOC` of what it builds (`grow`)
-//! into a brood, and whenever the brood covers the matter of a child, a child is made (`copy`) at the body's update,
-//! whatever its brain does, born through the update as the brood filled and counting its time from then (`born`). A
+//! into a brood, and whenever the brood covers the matter of a child, a child is made (`copy`) at each sub-step of the
+//! body's update, whatever its brain does, born through it as the brood filled and counting its time from then
+//! (`born`). A
 //! child's genes are its parent's plus small noise, or with two parents each gene is one parent's (`mix`). A population node keeps how its members differ
 //! (`Body::spread`, `Body::row_spread`); its children join a young node of their kind where they start, or start one,
 //! which grows up as a whole (`kin`). A lineage starts only where a body's brain-size genes move a whole unit from its
@@ -39,7 +40,8 @@ pub const BROOD_HELD: f64 = 0.5;
 
 /// What the children of one `copy` share: each one's matter, mol (its body is that over 1 - `WET_TISSUE`), and its
 /// provisions, mol of each store (none of the matter: `provisions`); whether the parent is a
-/// node; the partner; the parent's id; and their mean age at the update's end, d (`Fill::age`).
+/// node; the partner; the parent's id; their mean age at the sub-step's end, d (`Fill::age`); and the time that ends at,
+/// s (`Fill::at`).
 struct Births {
     matter: f64,
     prov: Stores,
@@ -47,6 +49,7 @@ struct Births {
     mate: Option<Handle>,
     parent: u64,
     age: f64,
+    at: u64,
 }
 
 /// A mature body makes children whenever its brood covers one: an individual whole children of one parent or two, a
@@ -72,7 +75,7 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body, fill: Fill) -> bool {
     }
     let age = fill.age(b.brood, (held * matter, matter, births), node);
     let id = b.id;
-    let mut r = Rng::new(w.seed, w.day(), id, Purpose::Mutate);
+    let mut r = Rng::new(w.seed, w.cfg.calendar().day_ending(fill.at), id, Purpose::Mutate);
     let i = b.cell as usize;
     let mate = if mates(w, d, b) { partner(w, d, b, &mut r) } else { None };
     // Children that start in the neighbour cell of a compass direction drawn, as far as `spread_m` reaches
@@ -82,7 +85,7 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body, fill: Fill) -> bool {
     // individual's go together, by that chance.
     let disperse = b.gene_in_range(DISPERSE);
     let prov = provisions(&w.chem, b, mi, matter, births);
-    let litter = Births { matter, prov, node, mate, parent: id, age };
+    let litter = Births { matter, prov, node, mate, parent: id, age, at: fill.at };
     let m = if node { disperse * births } else { (r.f64() < disperse) as u8 as f64 };
     let to = if m > 0.0 { dispersed(w, i, &mut r) } else { None };
     let (cell, m) = match to {
@@ -142,11 +145,13 @@ fn emit(w: &World, d: &mut Chunk, b: &mut Body, l: &Births, cell: usize, m: f64,
         return false;
     }
     let (store, e) = give(w, b, l, m);
-    let born = Event { day: w.day(), kind: EventKind::Born { root: d.root(w, b), mixed: l.mate.is_some() }, node: cell as u32, value: m };
-    // Born through the update (`Fill::age`) in their parent's cell, they feed there from their birth to now (`feed`).
-    let mut c = Body { cell: b.cell, count: m, lineage: b.lineage, parent: l.parent, born: w.day(), store, e, genes, spread, genome: b.genome, wet: b.wet, ..Default::default() };
+    let (cal, day) = (w.cfg.calendar(), w.cfg.calendar().day_ending(l.at));
+    let born = Event { day, kind: EventKind::Born { root: d.root(w, b), mixed: l.mate.is_some() }, node: cell as u32, value: m };
+    // Born through the sub-step (`Fill::age`) in their parent's cell, they feed there from their birth to its end
+    // (`feed`).
+    let mut c = Body { cell: b.cell, count: m, lineage: b.lineage, parent: l.parent, born: day, store, e, genes, spread, genome: b.genome, wet: b.wet, ..Default::default() };
     c.prepare(&w.chem, &w.cfg);
-    feed(w, d, &mut c, l.age);
+    feed(w, d, &mut c, (l.at as f64 / cal.day as f64, l.age));
     c.cell = cell as u32;
     let (pre, sd, left) = child_rows(w, d, b, l, m, size, r);
     // Children of their parent's lineage and born rows but for the generation's change of them (`row_change`) who join
@@ -330,5 +335,5 @@ fn place_child(w: &World, d: &mut Chunk, mut c: Body) {
     // (`place` starts a body's time now; theirs counts from their birth, `feed`.)
     let birth = c.last;
     let h = d.place(w, c);
-    d[h].last = birth;
+    (d[h].last, d[h].decided) = (birth, birth);
 }

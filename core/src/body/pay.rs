@@ -19,10 +19,9 @@ pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64, t: f64, dry: f64) -> f6
     u * p.repair(b.gene(REPAIR)) * dry * b.pace(&w.chem, t)
 }
 
-/// What body `b` of `mass` kg burns from now to its next update, J: its upkeep over its cell's step
-/// (`World::step_days`) at its temperature and activity now.
-pub(crate) fn ahead(w: &World, b: &Body, mass: f64) -> f64 {
-    let (chem, days) = (&w.chem, w.step_days(b.cell as usize));
+/// What body `b` of `mass` kg burns over the next `days` d, J: its upkeep at its temperature and activity now.
+pub(crate) fn ahead(w: &World, b: &Body, mass: f64, days: f64) -> f64 {
+    let chem = &w.chem;
     upkeep(w, b, days, mass, b.temp(chem), b.activity(chem, &w.cfg.phys))
 }
 

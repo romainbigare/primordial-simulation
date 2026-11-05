@@ -2,7 +2,7 @@
 //! (`survey`), and every body's update, in a parallel and a serial pass (`batch`), at the month's start and again inside
 //! it in the cells finer than a square (`steps`).
 
-use crate::body::{die, live, Layout, LiveTmp, LACK};
+use crate::body::{die, live, perish, Layout, Lived, LiveTmp, LACK};
 use crate::life::{self, Chunk, Handle};
 use crate::store::{Class, Node};
 use crate::{choose, World};
@@ -165,7 +165,8 @@ pub fn batch(w: &mut World) {
 /// decide, the parts as they were at the pass's start, and the store as their cell's moves leave it (`store::Moves`);
 /// what they do outside their cell or to a part is queued (`life::Entry`), and the lineages and born rows they make are
 /// provisional until the chunk ends. Then the serial pass (`life::land`): the moves and litters land and the other
-/// entries are applied. Then the merge of alike nodes in each of those cells (`nodes::crowd`), after the moves and
+/// entries are applied; then the bodies that landed run their physics on to their cell's next step, a parallel pass,
+/// and what that queues lands. Then the merge of alike nodes in each of those cells (`nodes::crowd`), after the moves and
 /// births, so a crowded cell ends its step with its nodes of each kind and stage. Last the holders of each lineage and
 /// born rows are counted: those left with none die out or are freed.
 fn batch_of(w: &mut World, steps: Option<&[bool]>) {
@@ -183,6 +184,16 @@ fn batch_of(w: &mut World, steps: Option<&[bool]>) {
     let c = &mut w.counts;
     (c.busiest_share, c.body_batches) = (c.busiest_share + *per.iter().max().unwrap_or(&0) as f64 / all.max(1) as f64, c.body_batches + 1.0);
     life::run(w, per, all, scratch, |w, d, _, s| updates(w, d, &stepping, s));
+    life::land(w);
+    // The bodies that landed in a cell in the serial pass (movers, litters) run their physics on to its next step, as
+    // the bodies there did (`physics`); what that queues lands after. (A body whose physics reached it does nothing.)
+    let load = w.life.cells.iter().filter(|c| !c.bodies.is_empty()).count();
+    life::run(w, vec![(); life::chunks(w)], load, scratch, |w, d, _, (tmp, _, _, subs)| {
+        for i in d.cells() {
+            let step = w.body_step(i);
+            physics(w, d, i, (tmp, subs), w.time - w.time % step + step);
+        }
+    });
     life::land(w);
     let lay = Layout::of(&w.chem);
     let load = w.life.cells.iter().enumerate().filter(|(i, c)| stepping(*i) && c.bodies.len() > 1).count();
@@ -203,36 +214,41 @@ fn batch_of(w: &mut World, steps: Option<&[bool]>) {
 }
 
 /// The scratch of a chunk's updates, made once per thread and used for each chunk it runs.
-type Scratch = (LiveTmp, choose::Minds, choose::ActTmp);
+type Scratch = (LiveTmp, choose::Minds, choose::ActTmp, Subs);
 
 /// A new scratch of a chunk's updates.
 fn scratch(_: &World) -> Scratch {
-    (LiveTmp::default(), choose::Minds::default(), choose::ActTmp::default())
+    (LiveTmp::default(), choose::Minds::default(), choose::ActTmp::default(), Subs::default())
 }
 
-/// The updates of the living bodies of the cells of chunk `d` that step (`stepping`), cell by cell: the physics of each
-/// of its bodies, the mature ones first (`mature_first`, `live_one`); then the inputs of those with a brain, the sums
-/// of the hidden layers of each lineage's bodies together (`choose::Minds::sense`); then each one's decision in that
-/// order (`decide`). A cell's stages end before the next cell's begin, so what the chunk queues and the ids it makes
-/// come cell by cell, as for any count of chunks.
-fn updates(w: &World, d: &mut Chunk, stepping: &(dyn Fn(usize) -> bool + Sync), (tmp, minds, act): &mut Scratch) {
+/// Per slot of the cell whose bodies run sub-steps (`physics`): whether it ate up to the start of the sub-step; and the
+/// slots in the order they run (`mature_first`).
+#[derive(Default)]
+struct Subs {
+    fed: Vec<bool>,
+    order: Vec<usize>,
+}
+
+/// The updates of the living bodies of the cells of chunk `d` that step (`stepping`), cell by cell (laws.md 0): first
+/// the physics to now of those whose physics is behind (they came into the cell since its last step, `physics`); then
+/// the inputs of those with a brain, the sums of the hidden layers of each lineage's bodies together
+/// (`choose::Minds::sense`); then each one's decision, the mature ones first, each in the order they came (`decide`);
+/// then the physics of every body over its step ahead, to the cell's next step (`physics`), and a body with no brain,
+/// which takes no decision, ends its update with its lineage (`lineage::resize`). A cell's stages end before the next
+/// cell's begin, so what the chunk queues and the ids it makes come cell by cell, as for any count of chunks.
+fn updates(w: &World, d: &mut Chunk, stepping: &(dyn Fn(usize) -> bool + Sync), (tmp, minds, act, subs): &mut Scratch) {
     act.new_chunk();
     for i in d.cells().filter(|&i| stepping(i)) {
+        physics(w, d, i, (tmp, subs), w.time);
         minds.clear();
-        let before = d.at(i).bodies.len();
-        for slot in mature_first(w, d, i, before) {
+        mature_first(w, d, i, d.at(i).bodies.len(), &mut subs.order);
+        for &slot in &subs.order {
             let h = Handle { cell: i as u32, slot: slot as u32 };
-            if d[h].alive {
-                if let Some(lived) = live_one(w, d, h, tmp) {
-                    minds.bodies.push((h, d[h].id, lived));
-                }
-            }
-        }
-        // Children who started a body of their own in the cell during these updates decide at once, with the others.
-        for slot in before..d.at(i).bodies.len() {
-            let h = Handle { cell: i as u32, slot: slot as u32 };
+            d.counts.updates += d[h].alive as u64;
             if d[h].alive && !w.life.brainless(&d[h]) {
-                minds.bodies.push((h, d[h].id, crate::body::newborn(w, &d[h])));
+                // (A body with no physics behind it since it was placed, a founder, has its spare now.)
+                let lived = if d[h].last > d[h].decided { d[h].lived } else { crate::body::newborn(w, &d[h]) };
+                minds.bodies.push((h, d[h].id, lived));
             }
         }
         minds.sense(w, d);
@@ -244,52 +260,92 @@ fn updates(w: &World, d: &mut Chunk, stepping: &(dyn Fn(usize) -> bool + Sync), 
                 decide(w, d, h, &lived, minds.of(k, shape.h), act);
             }
         }
-    }
-}
-
-/// The first `before` slots of cell `i` of chunk `d` in the order their bodies update: the mature ones first, then the
-/// young, each in the order they came. So the children a mature body makes join their young node before its update of
-/// the same time, which runs them from their birth (`copy::copy`).
-fn mature_first(w: &World, d: &Chunk, i: usize, before: usize) -> Vec<usize> {
-    let mature = |s: &usize| d[Handle { cell: i as u32, slot: *s as u32 }].adult(&w.chem);
-    (0..before).filter(mature).chain((0..before).filter(|s| !mature(s))).collect()
-}
-
-/// The physics of the living body at `h` in chunk `d` (`body::live`), or its death. A body with no brain takes no
-/// decision: its update ends with its lineage (`lineage::resize`). Returns what its update left for its decision, if
-/// it has a brain.
-fn live_one(w: &World, d: &mut Chunk, h: Handle, tmp: &mut LiveTmp) -> Option<crate::body::Lived> {
-    d.moves.open(w, h.cell as usize, Node::new(Class::Body, h.slot as usize));
-    let mut b = std::mem::take(&mut d[h]);
-    d.counts.updates += 1;
-    let lived = match live(w, d, &mut b, tmp) {
-        Err(cause) => {
-            die(w, d, h, b, cause);
-            return None;
+        physics(w, d, i, (tmp, subs), w.time + w.body_step(i));
+        for h in d.cell(i).filter(|&h| w.life.brainless(&d[h])).collect::<Vec<_>>() {
+            let mut b = std::mem::take(&mut d[h]);
+            crate::lineage::resize(w, d, &mut b);
+            d[h] = b;
         }
-        Ok(lived) => lived,
-    };
-    let brain = !w.life.brainless(&b);
-    if !brain {
-        crate::lineage::resize(w, d, &mut b);
     }
-    b.stale = true;
-    d[h] = b;
-    brain.then_some(lived)
 }
 
-/// The decision of the body at `h` in chunk `d` from the sums of its hidden layer `z` (`choose::act`), its lineage
-/// (`lineage::resize`); or its death, if an action left nothing of a member.
-fn decide(w: &World, d: &mut Chunk, h: Handle, lived: &crate::body::Lived, z: &[f32], act: &mut choose::ActTmp) {
+/// The physics of the bodies of cell `i` of chunk `d` to `to` s (laws.md 0, 6), in sub-steps of its physiological step
+/// (`World::phys_step`) on the times that step back from `to`, from the earliest a body's physics reached
+/// (`Body::last`), so a body's physics runs alike in every cell: at each, every living body of the cell not leaving it
+/// whose physics reached less than the sub-step's end, the mature ones first, each in the order they came
+/// (`mature_first`: the children a mature body makes join their young node before its sub-step of the same time, which
+/// runs them from their birth, `copy::copy`), runs it (`live_one`). A body that ran the sub-step before, or was placed
+/// during it (a child that starts a body of its own, fed to its end at birth, `copy::feed`), first takes its meal for
+/// the sub-step (`choose::meal`); one whose physics starts here ate for its first sub-step when it decided or landed.
+fn physics(w: &World, d: &mut Chunk, i: usize, (tmp, subs): (&mut LiveTmp, &mut Subs), to: u64) {
+    let (sub, day) = (w.phys_step(i), w.cfg.calendar().day as f64);
+    let Subs { fed, order } = subs;
+    let end = to as f64 / day;
+    let first = d.cell(i).filter(|&h| !d[h].leaving).map(|h| d[h].last).fold(end, f64::min);
+    let parts = (((end - first) * day).round() as u64).div_ceil(sub);
+    fed.clear();
+    fed.resize(d.at(i).bodies.len(), false);
+    for k in 1..=parts {
+        let at = to - (parts - k) * sub;
+        let held = d.at(i).bodies.len();
+        fed.resize(held, true);
+        mature_first(w, d, i, held, order);
+        for &slot in order.iter() {
+            let h = Handle { cell: i as u32, slot: slot as u32 };
+            if !d[h].alive || d[h].leaving || d[h].last >= at as f64 / day {
+                continue;
+            }
+            let meal = if fed[slot] { sub as f64 / day } else { 0.0 };
+            fed[slot] = true;
+            live_one(w, d, h, tmp, (at, meal));
+        }
+    }
+}
+
+/// The first `before` slots of cell `i` of chunk `d`, into `order`, in the order their bodies run: the mature ones
+/// first, then the young, each in the order they came.
+fn mature_first(w: &World, d: &Chunk, i: usize, before: usize, order: &mut Vec<usize>) {
+    let mature = |s: &usize| d[Handle { cell: i as u32, slot: *s as u32 }].adult(&w.chem);
+    order.clear();
+    order.extend((0..before).filter(mature).chain((0..before).filter(|s| !mature(s))));
+}
+
+/// A sub-step of the living body at `h` in chunk `d` to `at` s, the same in every cell: its meal for the `meal` d of
+/// the sub-step, if any (`choose::meal`), then its physics (`body::live`), or its death, dated by its sub-step. It
+/// leaves what the sub-step left for the body's next decision (`Body::lived`).
+fn live_one(w: &World, d: &mut Chunk, h: Handle, tmp: &mut LiveTmp, (at, meal): (u64, f64)) {
     d.moves.open(w, h.cell as usize, Node::new(Class::Body, h.slot as usize));
     let mut b = std::mem::take(&mut d[h]);
-    let stands = b.temp(&w.chem);
-    choose::act(w, d, &mut b, lived, z, act);
+    if meal > 0.0 {
+        choose::meal(w, d, &mut b, meal);
+    }
+    match live(w, d, &mut b, tmp, at) {
+        Err(cause) => {
+            perish(w, d, &mut b, (cause, tmp.day));
+            d.remove(h, &b);
+        }
+        Ok(lived) => {
+            (b.lived, b.stale) = (lived, true);
+            d[h] = b;
+        }
+    }
+}
+
+/// The decision of the body at `h` in chunk `d` from the sums of its hidden layer `z` and what its physics since its
+/// last decision left (`lived`; `choose::act`), its lineage (`lineage::resize`); or its death, if an action left nothing
+/// of a member.
+fn decide(w: &World, d: &mut Chunk, h: Handle, lived: &Lived, z: &[f32], act: &mut choose::ActTmp) {
+    d.moves.open(w, h.cell as usize, Node::new(Class::Body, h.slot as usize));
+    let mut b = std::mem::take(&mut d[h]);
+    let (stands, days) = (b.temp(&w.chem), w.days_now() - b.decided);
+    // (Its parts that act apart count their time from this decision too.)
+    b.decided = w.days_now();
+    choose::act(w, d, &mut b, (lived, days), z, act);
     // An action can leave nothing of a member: it dies at once, before another body deals with it.
     if b.empty_at(b.mass(&w.chem)) {
         return die(w, d, h, b, LACK);
     }
-    // What it took and digesting it moved its temperature by fades before its next update (laws.md 6.3).
+    // What it took and digesting it moved its temperature by fades before its physics (laws.md 6.3).
     crate::body::fade_meal_heat(w, d, &mut b, stands, lived.released);
     crate::lineage::resize(w, d, &mut b);
     b.stale = true;

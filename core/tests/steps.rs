@@ -2,7 +2,7 @@
 //! cell 2^k times finer a month over 2^k; the bodies of the finer cells step again inside the month, each update over
 //! the time since its last, and the books close through those sub-steps.
 
-use pcore::body::{Body, Layout, ALLOC, COOL_T, DISPERSE, HEAT, KEEP_T, STRENGTH};
+use pcore::body::{Body, Layout, COOL_T, DISPERSE, HEAT, KEEP_T, STRENGTH};
 use pcore::space::Leaf;
 use pcore::event::EventKind;
 use pcore::{brain, World};
@@ -26,8 +26,8 @@ fn the_step_follows_the_size() {
 /// Months a living island runs with a block split two depths in `the_books_close_through_the_sub_steps`.
 const SPLIT_MONTHS: usize = 6;
 
-/// A body in a cell split two depths updates four times a month, at the month's start and at each quarter of it, its
-/// last update a quarter of a month before the next month's start; on a living island with a block of land split two
+/// A body in a cell split two depths updates four times a month, at the month's start and at each quarter of it, and
+/// the physics of its last update reaches the next month's start; on a living island with a block of land split two
 /// depths (its bodies stepping inside the months, moving in and out of it) the books close within `check::DRIFT`.
 #[test]
 fn the_books_close_through_the_sub_steps() {
@@ -40,11 +40,11 @@ fn the_books_close_through_the_sub_steps() {
     let b = testkit::eater(&mut w, i, brain::REST, 6.0);
     let h = w.add(b);
     let id = w.life[h].id;
-    let (updates, month) = (w.counts.updates, w.cfg.calendar().month);
+    let updates = w.counts.updates;
     pcore::step(&mut w);
     let h = w.life.find(id).expect("the eater lives");
     assert_eq!(w.counts.updates - updates, 4, "four updates in a month");
-    assert_eq!(w.life[h].last, (w.time - month / 4) as f64 / w.cfg.calendar().day as f64, "the last a quarter of a month ago");
+    assert_eq!(w.life[h].last, w.time as f64 / w.cfg.calendar().day as f64, "its physics reaches the next month's start");
 
     let mut w = testkit::living(16, 2);
     let region = testkit::land_block(&w);
@@ -330,11 +330,11 @@ const WARMTH_K: f64 = 0.05;
 /// One law of life at every size of cell (spec 5.2): a node of one kind that only takes (no member leaves its square),
 /// settled a year on cover in a square of 2 km, then a year there and in the same world with the square split two
 /// depths (16 cells of 500 m, stepping a quarter month): its members at the end, what it took and the members born
-/// alike within `LIVES_ALIKE`, and its temperature within `WARMTH_K`. Its heat over an update is the mean of the exact
-/// solution at the pace that holds (laws.md 6.3), it drinks first (6.4), and what it takes feeds it to its next update
-/// within its stores' room for that time (5.3), and children who start a node of their own decide at their birth, so
-/// they feed from then to their cell's next step (0): so a month of a coarse body is four quarter months of a fine one.
-/// The members that died, fewer than a tenth of those born, are printed, not held (measured: 4% more in the cells).
+/// alike within `LIVES_ALIKE`, and its temperature within `WARMTH_K`. After each decision its physics runs over the
+/// step ahead in sub-steps of a week in both, each with a meal by the take law within its stores' room for the week
+/// (laws.md 0, 5.3); its heat over a sub-step is the mean of the exact solution at the pace that holds (6.3), it drinks
+/// first (6.4), and its children are born through the sub-steps and live the rest of them (4.2): so a month of a
+/// coarse body is four quarter months of a fine one. The members that died are printed, not held.
 #[test]
 fn a_node_lives_alike_in_a_square_and_in_its_cells() {
     let [coarse, fine] = [false, true].map(node_year);
@@ -349,9 +349,8 @@ fn a_node_lives_alike_in_a_square_and_in_its_cells() {
 /// its coat (`HEAT`), thinner than the founders' 0.9, so its winter turns it cold.
 const PLENTY_KG_M2: f64 = 3.0;
 const THIN_COAT: f32 = 0.6;
-/// How far its temperature at a month's end may stray between the square and its cells, K (measured: 0.21, in the month
-/// it warms from 284 K to 305 K), and the least swing between its coldest and warmest month that shows it crossed
-/// between its two states.
+/// How far its temperature at a month's end may stray between the square and its cells, K (measured: 0.45, in its
+/// autumn), and the least swing between its coldest and warmest month that shows it crossed between its two states.
 const HELD_K: f64 = 0.5;
 const SWING_K: f64 = 15.0;
 
@@ -360,9 +359,8 @@ const SWING_K: f64 = 15.0;
 /// heat to a warm state (its heat over its coat past the warmth at which its pace feeds itself); at each month's end it
 /// holds the same temperature in a square and in its 16 cells of 500 m (four updates a month) within
 /// `HELD_K`, and turns in the same month: its own time C / g is hours, so each update ends at the stable state its
-/// heat leads to from where it stood (`live::standing`), in one step or in four. Its children are off: the update in which
-/// it turns warm pays a step of the warm pace from food taken at the cold one, so on a month its brood comes a month
-/// later than on quarter months (laws.md 6.3), a step of the take law, not of heat.
+/// heat leads to from where it stood (`live::standing`), in one step or in four; its children are born and live in the
+/// same sub-steps of a week (laws.md 0, 6).
 #[test]
 fn a_node_holds_its_heat_alike_through_a_cold_year() {
     let cold = || {
@@ -370,7 +368,7 @@ fn a_node_holds_its_heat_alike_through_a_cold_year() {
         pcore::step(&mut w);
         w
     };
-    let [coarse, fine] = [false, true].map(|f| node_months(f, cold(), PLENTY_KG_M2, |b| (b.genes[ALLOC], b.genes[HEAT]) = (0.0, THIN_COAT)).0.iter().map(|m| m[4]).collect::<Vec<f64>>());
+    let [coarse, fine] = [false, true].map(|f| node_months(f, cold(), PLENTY_KG_M2, |b| b.genes[HEAT] = THIN_COAT).0.iter().map(|m| m[4]).collect::<Vec<f64>>());
     println!("a cold year in a square: {coarse:.2?} K; in its cells: {fine:.2?} K");
     let swing = coarse.iter().cloned().fold(f64::MIN, f64::max) - coarse.iter().cloned().fold(f64::MAX, f64::min);
     assert!(swing > SWING_K, "the node stays in one state all year: {coarse:?}");

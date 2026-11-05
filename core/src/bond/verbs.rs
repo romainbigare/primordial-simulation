@@ -145,7 +145,7 @@ fn joint_left(w: &World, c: &Cell, b: &Body, p: usize, o: u64) -> ((f64, f64), O
 fn take(w: &World, d: &mut Chunk, b: &mut Body, p: usize, mb: f64, days: f64) {
     let (i, bc) = (b.cell as usize, w.chem.body());
     let pt = &d.at(i).parts[p];
-    let m = b.wanted(w, |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mb);
+    let m = b.wanted(w, |k| pt.wall[k] + pt.fill[k], (w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), days), mb);
     let got = bc.mass_of(&m);
     if got <= 0.0 || !body::pay(w, d, b, w.cfg.phys.c_handle * got) {
         return;

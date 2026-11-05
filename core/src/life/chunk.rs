@@ -91,7 +91,7 @@ impl<'a> Chunk<'a> {
         let i = b.cell as usize;
         let c = self.at_mut(i);
         c.placed += 1;
-        (b.id, b.alive, b.last, b.count) = (super::new_id(c.serial, c.placed), true, days, b.n());
+        (b.id, b.alive, b.last, b.decided, b.count) = (super::new_id(c.serial, c.placed), true, days, days, b.n());
         self.store(b)
     }
     /// Store body `b` at the end of its cell's list.

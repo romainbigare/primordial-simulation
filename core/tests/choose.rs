@@ -340,61 +340,77 @@ fn a_body_whose_critic_values_cover_moves_toward_it() {
     assert!(blind < 2.0 * chance, "without planning {blind:.3} of the moves go to the cover, chance {chance:.3}");
 }
 
-/// How far a body updated twice at half a month may be from one updated once at a month, as a share of the month's:
-/// in what it pays, and in what each part of its brain learns (`a_brain_pays_and_learns_per_second`).
+/// How far a body that decides twice a month may be from one that decides once, as a share of the month's: in what it
+/// pays, and in what each part of its brain learns (`a_brain_pays_and_learns_per_second`).
 const PAYS: f64 = 0.01;
 const LEARNS: f64 = 0.1;
 /// Months a body settles for before it is compared (`a_brain_pays_and_learns_per_second`).
 const SETTLE: usize = 3;
 
-/// A brain pays and learns per second (laws.md 5.4, 6.2): a resting body updated twice at half a month pays and learns
-/// as one updated once at a month. Its upkeep is a time integral: two half months of it are a month's to rounding (a
-/// decision paid per update would add a month of thought). Its critic's error is of the time (the change of its
-/// well-being and the discount over it) and its rows' rate is per month over the time, so two half steps differ from
-/// one only at second order, the step times how its state moved between them (its hidden layer moves a few hundredths
-/// in half a month: the season, its memory, its stores): within `LEARNS` of the month's, where rates per decision
-/// would learn about twice as much and a critic's share composed over the time about half as much.
-#[test]
-fn a_brain_pays_and_learns_per_second() {
+/// A resting body that builds nothing, with fuel for many months, of the first dry square of the small world, or of
+/// its north-west quarter (`half`: split one depth, a cell of 1 km that steps half a month), placed; with its id.
+fn learner(half: bool) -> (World, u64) {
     let (mut w, i) = start();
     // (It builds nothing, so no child is born in the time: it pays its upkeep and its brain.)
     w.cfg.phys.c_build = 0.0;
+    let square = w.map.leaves()[i];
+    if half {
+        testkit::split_flat(&mut w, &[square], 1);
+    }
+    // (Its cells' surroundings, for both alike.)
+    pcore::survey::survey(&mut w);
+    let i = w.map.cell(pcore::space::Leaf { depth: square.depth + half as u8, ..square }).expect("its cell");
     let mut b = testkit::eater(&mut w, i, pcore::brain::REST, 1.0);
     b.genes[LEARN] = -1.0;
-    // Fuel for many months.
     let fuel = testkit::kg(&w, &b, RICH);
     testkit::add(&mut w, &mut b, RICH, 4.0 * fuel);
     let h = w.add(b);
-    let (id, month) = (w.life[h].id, w.cfg.calendar().month);
-    let (b, t) = (&w.life[h], w.cfg.phys.t_cat);
+    let id = w.life[h].id;
+    (w, id)
+}
+
+/// A brain pays and learns per second (laws.md 5.4, 6.2): a resting body in a cell of 1 km, which decides every half
+/// month, pays and learns over a month as one in a square of 2 km, which decides once a month; the physics of both runs
+/// in the same sub-steps. Its upkeep is a time integral: two half months of it are a month's to rounding (a decision
+/// paid per update would add a month of thought). Its critic's error is of the time (the change of its well-being and
+/// the discount over it) and its rows' rate is per month over the time, so two half steps differ from one only at
+/// second order, the step times how its state moved between them (its hidden layer moves a few hundredths in half a
+/// month: the season, its memory, its stores): within `LEARNS` of the month's, where rates per decision would learn
+/// about twice as much and a critic's share composed over the time about half as much.
+#[test]
+fn a_brain_pays_and_learns_per_second() {
+    let ((mut w, id), (mut half, id_half)) = (learner(false), learner(true));
+    let (b, t, month) = (&w.life[w.life.find(id).expect("the body")], w.cfg.phys.t_cat, w.cfg.calendar().month);
     let (one, two) = (body::upkeep(&w, b, 30.0, b.mass(&w.chem), t, 1.0), 2.0 * body::upkeep(&w, b, 15.0, b.mass(&w.chem), t, 1.0));
     assert!((one - two).abs() <= 1e-12 * one, "upkeep over a month {one} J, over two halves {two} J");
+    // Each updates at each of its cell's steps (`survey::batch`, every body), from `t0` to `to`.
+    let steps = |w: &mut World, step: u64, to: u64| {
+        while w.time < to {
+            w.time += step;
+            pcore::survey::batch(w);
+        }
+    };
     // Months for it to settle at the temperature its heat holds it at, and its learning at its moving averages; its
     // last decision leaves the trace it learns from at the next.
-    pcore::survey::batch(&mut w);
-    for _ in 0..SETTLE {
-        w.time += month;
-        pcore::survey::batch(&mut w);
+    let t0 = w.time + SETTLE as u64 * month;
+    for (w, step) in [(&mut w, month), (&mut half, month / 2)] {
+        pcore::survey::batch(w);
+        steps(w, step, t0);
     }
-    let (t0, mut half) = (w.time, w.clone());
-    let at = |w: &World| {
+    let at = |w: &World, id: u64| {
         let b = &w.life[w.life.find(id).expect("the body lives")];
         (testkit::release(w, b), w.life.rows_of(b).to_vec(), w.life.brain(b.lineage).expect("a brain").shape)
     };
-    let (fuel0, rows0, s) = at(&w);
-    w.time = t0 + month;
-    pcore::survey::batch(&mut w);
-    for t in [t0 + month / 2, t0 + month] {
-        half.time = t;
-        pcore::survey::batch(&mut half);
-    }
-    let ((fuel_one, rows_one, _), (fuel_two, rows_two, _)) = (at(&w), at(&half));
-    let (paid_one, paid_two) = (fuel0 - fuel_one, fuel0 - fuel_two);
+    let ((fuel0_one, rows0_one, s), (fuel0_two, rows0_two, _)) = (at(&w, id), at(&half, id_half));
+    steps(&mut w, month, t0 + month);
+    steps(&mut half, month / 2, t0 + month);
+    let ((fuel_one, rows_one, _), (fuel_two, rows_two, _)) = (at(&w, id), at(&half, id_half));
+    let (paid_one, paid_two) = (fuel0_one - fuel_one, fuel0_two - fuel_two);
     // What the actor's rows and the critic's learned in a month and in two half months, and how far apart.
-    let part = |rows: &[f32], r: std::ops::Range<usize>| rows[r.clone()].iter().zip(&rows0[r]).map(|(a, b)| (a - b) as f64).collect::<Vec<f64>>();
+    let part = |rows: &[f32], rows0: &[f32], r: std::ops::Range<usize>| rows[r.clone()].iter().zip(&rows0[r]).map(|(a, b)| (a - b) as f64).collect::<Vec<f64>>();
     let norm = |x: &[f64]| x.iter().map(|v| v * v).sum::<f64>().sqrt();
     for (what, r) in [("rows", 0..s.learned() * s.r()), ("critic", s.critic() * s.r()..(s.critic() + 1) * s.r())] {
-        let (one, two) = (part(&rows_one, r.clone()), part(&rows_two, r));
+        let (one, two) = (part(&rows_one, &rows0_one, r.clone()), part(&rows_two, &rows0_two, r));
         let gap: Vec<f64> = one.iter().zip(&two).map(|(a, b)| a - b).collect();
         println!("{what}: learned {:.4e} in a month, {:.4e} in two halves, apart by {:.4e}", norm(&one), norm(&two), norm(&gap));
         assert!(norm(&one) > 0.0 && norm(&gap) < LEARNS * norm(&one), "{what}: {:.4e} apart of {:.4e}", norm(&gap), norm(&one));

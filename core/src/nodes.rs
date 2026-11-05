@@ -111,13 +111,15 @@ pub fn merge(w: &World, d: &mut Chunk, s: Handle, t: Handle) {
 }
 
 /// What splits and joins as an amount when members move between nodes, split by shares with the remainder kept so the
-/// parts add up: count, mol of each store, heat (J), brood (mol), and their last day.
+/// parts add up: count, mol of each store, heat (J), brood (mol), their last day and their share that is busy
+/// (`Body::busy`).
 pub(crate) struct Lot {
     pub count: f64,
     pub store: Stores,
     pub e: f64,
     pub brood: f64,
     pub last: f64,
+    pub busy: f32,
 }
 
 impl Lot {
@@ -127,14 +129,14 @@ impl Lot {
     pub(crate) fn split(b: &mut Body, f: f64, fa: f64) -> Lot {
         let store = b.store.map(|a| fa * a);
         b.store.iter_mut().zip(&store).for_each(|(a, x)| *a -= x);
-        let c = Lot { count: f * b.count, store, e: fa * b.e, brood: fa * b.brood, last: b.last };
+        let c = Lot { count: f * b.count, store, e: fa * b.e, brood: fa * b.brood, last: b.last, busy: b.busy };
         (b.e, b.brood) = (b.e - c.e, b.brood - c.brood);
         b.count -= c.count;
         c
     }
     /// All that body `c` holds (its stores taken out of it).
     pub(crate) fn of(c: &mut Body) -> Lot {
-        Lot { count: c.count, store: std::mem::take(&mut c.store), e: c.e, brood: c.brood, last: c.last }
+        Lot { count: c.count, store: std::mem::take(&mut c.store), e: c.e, brood: c.brood, last: c.last, busy: c.busy }
     }
 }
 
@@ -189,11 +191,12 @@ pub(crate) fn add(w: &World, d: &mut Chunk, t: Handle, c: Lot, (genes, spread): 
 
 /// Members `c` with the genes and spreads of body `o` join it (taken out of its slot): the members of a node who waited
 /// aside while the others acted, a part of a node that moved or bonded and came back to its cell (both
-/// `choose::spread`), or joiners after `add` pooled their genes and rows. Amounts add up; the last day becomes the mean
-/// by members. `o`'s visible traits are the caller's to work out again (`Chunk::see`).
+/// `choose::spread`), or joiners after `add` pooled their genes and rows. Amounts add up; the last day and the share
+/// that is busy become the means by members. `o`'s visible traits are the caller's to work out again (`Chunk::see`).
 pub(crate) fn rejoin(o: &mut Body, c: Lot) {
     let share = c.count / (o.count + c.count);
     o.last += share * (c.last - o.last);
+    o.busy += share as f32 * (c.busy - o.busy);
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     o.brood += c.brood;
     o.e += c.e;

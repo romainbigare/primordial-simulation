@@ -11,7 +11,7 @@ mod spread;
 
 pub use feed::{take_body, COVER};
 pub use go::{go, wear};
-pub(crate) use feed::eat_for;
+pub(crate) use feed::{eat_for, meal};
 pub(crate) use go::land_move;
 pub(crate) use learn::watched;
 pub use minds::Minds;
@@ -86,8 +86,9 @@ struct Choice {
 
 /// A body's decision at its update, from the sums of its hidden layer `z` (`Minds::sense`): perceive the bodies and
 /// parts of its cell, think and learn from the last decision, score the options; an individual draws one option, keeps
-/// its trace and acts, a node spreads its members over them (`spread`). Every body decides at each update, at its cell's step.
-pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: &mut ActTmp) {
+/// its trace and acts, a node spreads its members over them (`spread`). Every body decides at each update, at its cell's
+/// step; `lived` is what its last sub-step left, `days` the time since its last decision, d, which it learns over.
+pub fn act(w: &World, d: &mut Chunk, b: &mut Body, (lived, days): (&Lived, f64), z: &[f32], t: &mut ActTmp) {
     let mut rng = Rng::new(w.seed, w.day(), b.id, Purpose::Choose);
     let temp = b.temp(&w.chem);
     // A brain perceives sizes per member, as the body is when it decides.
@@ -103,7 +104,7 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: 
     b.mem[s.mem..].fill(0.0);
     let mut c = perceive(w, d, b, nseen, &mut rng);
     brain::think(d.at(b.cell as usize).brains.rows(b.brain, s), s, z, &mut t.thought, read(s, &c));
-    learn::learn(w, b, &mut d.brains(b.cell as usize).mind(b.brain, s), s, (wb, &t.thought.h), w.cfg.span(lived.days));
+    learn::learn(w, b, &mut d.brains(b.cell as usize).mind(b.brain, s), s, (wb, &t.thought.h), w.cfg.span(days));
     options(w, d, b, (s, sight), (pm, b.volume(&w.chem, temp) / b.n()), &mut c, t);
     if let Some(lin) = d.brain(w, b.lineage) {
         plan(w, (b.lineage, &lin.base, d.at(b.cell as usize).brains.rows(b.brain, s)), s, z, b.cell as usize, &mut c, t);
@@ -111,7 +112,8 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, lived: &Lived, z: &[f32], t: 
     pick(d, &mut c, &mut rng);
     let (form, zn) = noise(w, b, s, t, &mut rng);
     b.wb = wb;
-    let k = Kit { s, t, z: zn, form, wb: &now, days: lived.days, ahead: w.step_days(b.cell as usize) };
+    let i = b.cell as usize;
+    let k = Kit { s, t, z: zn, form, wb: &now, days, ahead: w.step_days(i), meal: w.phys_days(i) };
     if b.n() > 1.0 {
         spread::spread(w, d, b, &c, &k, &mut rng);
     } else {
@@ -136,9 +138,11 @@ fn here(d: &Chunk, b: &Body, o: &Face) -> Option<Handle> {
 
 /// What the actions of one decision share besides its options: the brain's shape and what it thought, the noise drawn
 /// for the shape of a part made, that shape (`noise`), the well-being of a body now (`Body::wellbeing_at`, at a
-/// decision's cost and the margin of the body's reactions over its upkeep), the time its update integrated, d
-/// (`Lived::days`), which a watch goes by, and the time to its next update, d (its cell's step, `World::step_days`),
-/// which what it takes, gives and does to parts goes by: what it takes now feeds it until then (laws.md 5.3).
+/// decision's cost and the margin of the body's reactions over its upkeep), the time since its last decision, d, which
+/// a watch goes by, the time to its next update, d (its cell's step, `World::step_days`), which
+/// what it gives, bites and does to parts goes by, and its physiological step, d (`World::phys_days`), which a meal by
+/// the take law feeds it for: the next sub-step's physics of its update follows it, and each later one has its own
+/// meal (`feed::meal`; laws.md 5.3).
 struct Kit<'a> {
     s: Shape,
     t: &'a ActTmp,
@@ -147,6 +151,7 @@ struct Kit<'a> {
     wb: &'a dyn Fn(&World, &Body) -> f32,
     days: f64,
     ahead: f64,
+    meal: f64,
 }
 
 /// The score of each option: the fixed actions, a move to each neighbour (by the features of the cell it leads to as a
@@ -300,32 +305,40 @@ fn trace(w: &World, b: &Body, c: &Choice, (chances, a, adv): (&[f32; OPTS], usiz
     true
 }
 
+/// Whether option `a` fills the step (rest, a bite, a gift, a watch, Bond's acts on parts): its members take nothing by
+/// the take law until their next decision. Putting down, letting go, taking and a move leave the step to eating.
+fn busy(a: usize) -> bool {
+    !(matches!(a, PUT | TAKE | RELEASE) || (FIXED..TO_BODY).contains(&a))
+}
+
 /// Body `b` (taken out of its slot), a part of node `part_of` if any (`spread`), does option `a`. Forming a part, acting
 /// on one and watching are queued (`life::Entry`), applied in the serial pass; so is a move (`go`). A node's
 /// part that queued one of these but a watch leaves the node until it is applied (`Body::leaving`).
 ///
 /// An act takes the time it needs of the step (laws.md 5.3): a move its walk, putting down and letting go none, every
-/// other act the whole step, which what it takes, gives and does to parts goes by. The rest of the step it takes what
-/// lies at its place by the take law (`feed::take_node`), where it ends: a mover where it lands (`land_move`), one
-/// whose move fails where it is.
+/// other act the whole step (`busy`), which what it gives, bites and does to parts goes by. The rest of the step it
+/// takes what lies at its place by the take law (`feed::take_node`), where it ends: a mover where it lands
+/// (`land_move`), one whose move fails where it is; now for its physiological step, and at each later sub-step of its
+/// update for that (`feed::meal`, by `Body::busy`).
 fn act_as(w: &World, d: &mut Chunk, b: &mut Body, c: &Choice, k: &Kit, (a, part_of): (usize, Option<u64>), rng: &mut Rng) {
     b.leaving |= part_of.is_some() && (a == FORM || a >= TO_PART);
+    b.busy = busy(a) as u8 as f32;
     let act = |on| Entry::Act { id: b.id, on, node: part_of, days: k.ahead };
     match a {
         REST => {}
         PUT => {
             feed::put(w, d, b);
-            feed::take_node(w, d, b, k.ahead);
+            feed::take_node(w, d, b, k.meal);
         }
-        TAKE => feed::take_node(w, d, b, k.ahead),
+        TAKE => feed::take_node(w, d, b, k.meal),
         FORM => d.out.push(act(Err([k.form[0], 0.5 * (k.form[1] + 1.0), 0.5 * (k.form[2] + 1.0)]))),
         RELEASE => {
             bond::release(d, b);
-            feed::take_node(w, d, b, k.ahead);
+            feed::take_node(w, d, b, k.meal);
         }
         a if a < TO_BODY => {
             if !go(w, d, b, c.to[a - FIXED], part_of.is_some()) {
-                feed::take_node(w, d, b, k.ahead);
+                feed::take_node(w, d, b, k.meal);
             }
         }
         a if a >= TO_PART => {
