@@ -24,6 +24,8 @@ pub struct Lived {
     pub spare: f64,
     /// The time the update integrated, since its last, d: what its brain pays for and learns over (laws.md 5.4)
     pub days: f64,
+    /// The heat its upkeep released over the update, J: the most it draws back to warm a cold meal (`fade_meal_heat`)
+    pub released: f64,
 }
 
 /// The update of body `b` over the time since its last: its drink, upkeep paid by burning (the share unpaid dies,
@@ -51,14 +53,16 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp) ->
         crate::copy::copy(w, d, b);
     }
     shed(w, d, b);
-    Ok(Lived { spare, days })
+    Ok(Lived { spare, days, released: heat })
 }
 
-/// Upkeep over the time: what its fuel releases is paid (`burn`), the share left unpaid dies, and so does the share its
-/// wear gives (`lose_share`). Returns the heat its surviving members released, J (those who died shed theirs through
-/// their own surface while they lived), and its spare: what its fuel could release against its upkeep, up to `MARGIN`.
+/// Upkeep over the time, at the temperature it stands at then (`standing`): what its fuel releases is paid (`burn`), the
+/// share left unpaid dies, and so does the share its wear gives (`lose_share`). Returns the heat its surviving members
+/// released, J (those who died shed theirs through their own surface while they lived), and its spare: what its fuel
+/// could release against its upkeep, up to `MARGIN`.
 fn settle_upkeep(w: &World, d: &mut Chunk, b: &mut Body, days: f64, mass: f64, tmp: &mut LiveTmp) -> Result<(f64, f64), u8> {
-    let (chem, t, act) = (&w.chem, b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys));
+    let (chem, act) = (&w.chem, b.activity(&w.chem, &w.cfg.phys));
+    let t = standing(w, d, b, (days, mass), act);
     let cost = upkeep(w, b, days, mass, t, act);
     let spare = b.fuel(chem, t).min(MARGIN * cost) / cost.max(1e-300);
     let (paid, n0) = (burn(w, d, b, cost), b.n());
@@ -77,6 +81,101 @@ fn settle_upkeep(w: &World, d: &mut Chunk, b: &mut Body, days: f64, mass: f64, t
         }
     }
     Ok((paid * b.n() / n0, spare))
+}
+
+/// The temperature its fixed point is found to, K, and the most rounds it takes (`standing`).
+const STAND_TOL: f64 = 1e-3;
+const STAND_ROUNDS: usize = 64;
+
+/// The temperature body `b` stands at over its update of `days` d, K: the pace of its upkeep (laws.md 6.3). Its heat
+/// balance (`Balance`; an animal's energy budget, Porter and Gates 1969) takes it from where it is toward where the heat
+/// its upkeep releases holds it, as `keep_warm` holds it (`hold`), and over the time it stands at the mean of that exact
+/// solution. Its upkeep goes with the pace of that mean (`Body::pace`), so the temperature is a fixed point, found from
+/// where it is the way its heat moves it (the next equilibrium up or down). A body of hours to days stands where its
+/// heat holds it whatever the length of its update; one in a closed room, whose walls pass little, moves only part way.
+fn standing(w: &World, d: &Chunk, b: &Body, (days, mass): (f64, f64), act: f64) -> f64 {
+    let (chem, bal) = (&w.chem, Balance::of(w, b));
+    let (coat, bare) = coat(w, d, b, mass);
+    let (g, open) = (coat * days * DAY, bare * days * DAY);
+    if g <= 0.0 {
+        return bal.t0;
+    }
+    // (Upkeep is its pace times what does not depend on the temperature; what it can release bounds its heat.)
+    let (per_pace, fuel) = (upkeep(w, b, days, mass, bal.t0, act) / b.pace(chem, bal.t0), b.fuel(chem, bal.t0));
+    let (limits, boil) = ((b.gene(KEEP_T), b.gene(COOL_T)), b.boiling(chem));
+    let at = |t: f64| {
+        let q = (per_pace * b.pace(chem, t)).min(fuel);
+        let h = hold(&bal, (g, open), q, limits);
+        bal.mean(h.x, bal.end(h.x, q + h.more - h.sweat).min(boil))
+    };
+    let mut t = bal.t0;
+    for _ in 0..STAND_ROUNDS {
+        let next = at(t);
+        if (next - t).abs() < STAND_TOL {
+            return next;
+        }
+        t = next;
+    }
+    t
+}
+
+/// The heat balance of a body over a time (laws.md 6.3): C dT/dt = (q - x (T - tg)) / dt from `t0` K toward its ground
+/// at `tg` K (Newton's law of cooling), C its heat capacity `cap`, J/K, with a heat `q` J released over the time and a
+/// conductance `x` over the time, J/K. Its exact solution goes the share 1 - e^(-x / C) of the way to tg + q / x.
+struct Balance {
+    t0: f64,
+    tg: f64,
+    cap: f64,
+}
+
+impl Balance {
+    /// Of body `b` now, over its cell's ground as Flow's last step left it.
+    fn of(w: &World, b: &Body) -> Balance {
+        Balance { t0: b.temp(&w.chem), tg: w.t_ground_last(b.cell as usize), cap: b.heat_cap(&w.chem).max(1e-300) }
+    }
+    /// The share of the way to its steady temperature it goes through `x`.
+    fn reach(&self, x: f64) -> f64 {
+        one_minus_exp(x / self.cap).max(1e-300)
+    }
+    /// Where it ends with the heat `q` through `x`, K.
+    fn end(&self, x: f64, q: f64) -> f64 {
+        self.t0 + (self.tg + q / x - self.t0) * self.reach(x)
+    }
+    /// The heat that ends it at `t` K through `x`, J.
+    fn holds(&self, x: f64, t: f64) -> f64 {
+        x * ((t - self.t0) / self.reach(x) + self.t0 - self.tg)
+    }
+    /// Its mean temperature over the time on its way to `t` K through `x`: of its steady temperature s,
+    /// s + (t0 - s) (1 - e^(-x / C)) C / x.
+    fn mean(&self, x: f64, t: f64) -> f64 {
+        let s = self.t0 + (t - self.t0) / self.reach(x);
+        s + (self.t0 - s) * self.reach(x) * self.cap / x
+    }
+}
+
+/// How a body holds its temperature with a heat (`hold`): the conductance it passes heat through over the time, J/K, the
+/// heat it burns more to stay at its `KEEP_T` gene and the heat it sweats away to stay at its `COOL_T` gene, J.
+struct Held {
+    x: f64,
+    more: f64,
+    sweat: f64,
+}
+
+/// How a body of `bal`, its coat passing `g` J/K and its bare surface `open` over the time, holds its temperature
+/// between `keep` and `cool` K with the heat `q` J: below `keep` it burns what holds it there at the end; above `cool` it
+/// opens its coat as far as it needs to stand there, up to its bare surface (`Body::bare`: blood to the skin, the coat
+/// laid flat; Scholander et al. 1950), and past that sweats the excess away. (On ground at or above `cool` it opens all
+/// the way.)
+fn hold(bal: &Balance, (g, open): (f64, f64), q: f64, (keep, cool): (f64, f64)) -> Held {
+    if bal.end(g, q) < keep {
+        Held { x: g, more: bal.holds(g, keep) - q, sweat: 0.0 }
+    } else if bal.end(g, q) > cool {
+        let opened = if cool > bal.tg { (q / (cool - bal.tg)).clamp(g, open) } else { open };
+        let sweat = if bal.end(opened, q) > cool { q - bal.holds(opened, cool) } else { 0.0 };
+        Held { x: opened, more: 0.0, sweat }
+    } else {
+        Held { x: g, more: 0.0, sweat: 0.0 }
+    }
 }
 
 /// First in its update, it drinks its key liquids from its cell's ground up to the level it keeps (`Body::level`), as
@@ -106,57 +205,49 @@ fn drink(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
 
 /// Its heat over the time `dt` s (laws.md 6.3): the heat its upkeep released leaves through its coat (`coat`) to its
 /// ground. Its temperature moves from where it is toward where that heat holds it, tg + heat / g, by the share
-/// 1 - e^(-g / C) its heat capacity C lets it go in the time: a body of hours to days gets there; a large node in a
-/// closed room, whose walls pass little, moves only part way. Below its `KEEP_T` gene it burns what holds it at that
-/// temperature at the end. Above its `COOL_T` gene it opens its coat as far as it needs to stand there, up to its bare
-/// surface (`Body::bare`: blood to the skin, the coat laid flat; Scholander et al. 1950), and past that evaporates its key
-/// liquid for the excess, at its latent heat, never below its safe minimum. Its key liquid boils at its boiling point:
-/// past it the heat boils it off, below its safe minimum too, and holds the body there; one that boils dry dies there.
-/// It then stands at that temperature (`settle_heat`): what it gains from its ground there is never more than the heat
-/// it released, unless the ground is the warmer.
+/// 1 - e^(-g / C) its heat capacity C lets it go in the time (`Balance`): a body of hours to days gets there; a large node
+/// in a closed room, whose walls pass little, moves only part way. Below its `KEEP_T` gene it burns what holds it at
+/// that temperature at the end; above its `COOL_T` gene it opens its coat and sweats (`hold`), evaporating its key liquid
+/// at its latent heat, never below its safe minimum. Its key liquid boils at its boiling point: past it the heat boils it
+/// off, below its safe minimum too, and holds the body there; one that boils dry dies there. It then stands at that
+/// temperature (`settle_heat`): what it gains from its ground there is never more than the heat it released, unless the
+/// ground is the warmer.
 fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, dt: f64) -> f64 {
-    let (chem, tg, t0) = (&w.chem, w.t_ground_last(b.cell as usize), b.temp(&w.chem));
+    let (chem, bal) = (&w.chem, Balance::of(w, b));
     let (coat, bare) = coat(w, d, b, b.mass(chem));
-    let (g, open, cap) = (coat * dt, bare * dt, b.heat_cap(chem));
+    let (g, open) = (coat * dt, bare * dt);
     if g <= 0.0 {
-        return t0;
+        return bal.t0;
     }
-    // The share of the way to its steady temperature it goes in the time through `x` J/K, and where it ends with the
-    // heat `q` J; the heat that ends it at `t` K.
-    let reach = |x: f64| one_minus_exp(x / cap.max(1e-300)).max(1e-300);
-    let end = |x: f64, q: f64| t0 + (tg + q / x - t0) * reach(x);
-    let holds = |x: f64, t: f64| x * ((t - t0) / reach(x) + t0 - tg);
-    let (keep, cool) = (b.gene(KEEP_T), b.gene(COOL_T));
     // The conductance it passes its heat through, J/K, and the heat that leaves by it, J.
-    let (x, q) = if end(g, heat) < keep {
-        (g, heat + burn(w, d, b, holds(g, keep) - heat))
-    } else if end(g, heat) > cool {
-        // (On ground at or above its `COOL_T` it opens all the way.)
-        let opened = if cool > tg { (heat / (cool - tg)).clamp(g, open) } else { open };
-        (opened, if end(opened, heat) > cool { heat - evaporate(w, d, b, heat - holds(opened, cool), true) } else { heat })
+    let h = hold(&bal, (g, open), heat, (b.gene(KEEP_T), b.gene(COOL_T)));
+    let q = if h.more > 0.0 {
+        heat + burn(w, d, b, h.more)
+    } else if h.sweat > 0.0 {
+        heat - evaporate(w, d, b, h.sweat, true)
     } else {
-        (g, heat)
+        heat
     };
-    let boil = b.wet_ks().map(|s| chem.subs[chem.body().subs()[s]].boil).fold(f64::INFINITY, f64::min);
-    let q = if end(x, q) > boil { q - evaporate(w, d, b, q - holds(x, boil), false) } else { q };
+    let boil = b.boiling(chem);
+    let q = if bal.end(h.x, q) > boil { q - evaporate(w, d, b, q - bal.holds(h.x, boil), false) } else { q };
     // (One that boils dry dies there, `check_stores`: it stands no warmer, and the rest of its heat stays in its ground.)
-    let t = end(x, q).min(boil);
+    let t = bal.end(h.x, q).min(boil);
     settle_heat(w, d, b, t);
     t
 }
 
-/// After its decision (`survey::decide`): the heat of what it took and of digesting it, above the temperature `stands`
-/// it stood at, leaves through its coat to its ground over the time to its next update (its cell's step,
-/// `World::step_days`), as `keep_warm` lets its heat go
-/// (a body of hours to days sheds it all), so its next update starts where that leaves it. A body its intake cooled
-/// stays cooler and draws no heat from its ground: its own heat warms it at its next update (`keep_warm`).
-pub(crate) fn shed_meal_heat(w: &World, d: &mut Chunk, b: &mut Body, stands: f64) {
+/// After its decision (`survey::decide`): what it took and digesting it moved its temperature from `stands`, where its
+/// update left it. Over the time to its next update (its cell's step, `World::step_days`) that difference fades by the
+/// share e^(-g dt / C), as `keep_warm` lets its heat go: the heat of a meal leaves through its coat to its ground, and
+/// a meal colder than the body is warmed by its own heat as it eats, drawn back from its ground, which its upkeep's heat
+/// went to (`released`, J, the most it draws). So a body of hours to days stands at `stands` again, and a month's meal
+/// eaten at once cools it no more than the meals of the same month in short steps.
+pub(crate) fn fade_meal_heat(w: &World, d: &mut Chunk, b: &mut Body, stands: f64, released: f64) {
     let (chem, t) = (&w.chem, b.temp(&w.chem));
-    if t <= stands {
-        return;
-    }
-    let x = coat(w, d, b, b.mass(chem)).0 * w.step_days(b.cell as usize) * DAY / b.heat_cap(chem).max(1e-300);
-    settle_heat(w, d, b, stands + (t - stands) * (-x).exp());
+    let cap = b.heat_cap(chem).max(1e-300);
+    let x = coat(w, d, b, b.mass(chem)).0 * w.step_days(b.cell as usize) * DAY / cap;
+    let to = stands + (t - stands) * (-x).exp();
+    settle_heat(w, d, b, if to > t { t + (to - t).min(released.max(0.0) / cap) } else { to });
 }
 
 /// The heat conductance of its coat and of its bare surface, each in series with the walls around it (3.4), W/K.

@@ -52,11 +52,14 @@ fn upkeep_goes_by_kleiber_and_by_the_pace_of_temperature() {
 }
 
 /// A body on cold ground keeps warm by burning its fuel (`KEEP_T`): after an update it stands at its `KEEP_T` gene,
-/// above the ground, and burnt more than on warm ground; the books are kept.
+/// above the ground, and burnt more than one that stands there on warm ground (its `COOL_T` gene at its `KEEP_T`, so
+/// its pace is the same); the books are kept.
 #[test]
 fn an_animal_keeps_warm_by_burning_fuel() {
     let burnt = |t: f64| {
         let (mut w, s) = resting(t);
+        let b = &mut w.life[s];
+        b.genes[COOL_T] = b.genes[KEEP_T];
         let books = Books::now(&w);
         let fuel0 = w.life[s].amount(w.chem.body(), RICH);
         let b = after_update(&mut w, s, t);

@@ -6,7 +6,7 @@
 //! the ground) just west of the strip, with a neutral brain. Over its first 200 decisions, with learning on against
 //! off, over many seeds. Its children are taken out at once.
 
-use pcore::body::{self, Layout, LEARN};
+use pcore::body::{self, Layout, HEAT, LEARN};
 use pcore::rng::{Purpose, Rng};
 use pcore::World;
 use pcore::store::{Class, Node};
@@ -249,16 +249,17 @@ fn a_body_gives_its_stores_but_not_its_body() {
     let mut giver = founder(&mut w, 1, i, &Brain::verb(brain::GIVE));
     // No safe minimums, so that one give may move all it holds.
     giver.genes[lay.min..lay.upt].fill(-0.1);
+    // (Bare, its own heat holds it near its ground, at a slow pace: it pays its months and has stores to give.)
+    giver.genes[HEAT] = 0.0;
     let mut taker = founder(&mut w, 1, i, &Brain::only(brain::REST));
     taker.genes[lay.keep..].fill(0.95);
     // (Body matter given is digested into the solid, so it fills the taker's room for the solid (`Body::digest_room`):
     // room for all the giver's solid and matter, 2 kg per kg of body.)
     taker.genes[lay.keep + w.chem.body().place(RICH).expect("a store")] = 2.0;
     let (m0, fuel0) = (giver.amount(w.chem.body(), MATTER), giver.amount(w.chem.body(), RICH));
-    let g = w.add(giver);
-    // (Its updates integrate a month, as in a run, not the day since it was placed.)
-    w.life[g].last -= w.cfg.days_per_month as f64;
-    w.add(taker);
+    let (g, t) = (w.add(giver), w.add(taker));
+    // (Their updates integrate a month, as in a run, not the day since they were placed.)
+    [g, t].into_iter().for_each(|s| w.life[s].last -= w.cfg.days_per_month as f64);
     // Days until the first batch after the placing has run.
     for _ in 0..=w.cfg.days_per_month {
         pcore::day_with_month_at_start(&mut w);
@@ -356,6 +357,8 @@ const SETTLE: usize = 3;
 #[test]
 fn a_brain_pays_and_learns_per_second() {
     let (mut w, i) = start();
+    // (It builds nothing, so no child is born in the time: it pays its upkeep and its brain.)
+    w.cfg.phys.c_build = 0.0;
     let mut b = testkit::eater(&mut w, i, pcore::brain::REST, 1.0);
     b.genes[LEARN] = -1.0;
     // Fuel for many months.

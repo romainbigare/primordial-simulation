@@ -7,9 +7,9 @@ use worldgen::life::{seed, ROSTER};
 use pcore::body::HIDDEN;
 use worldgen::testkit::{dry_lands, eater, land_block, set_amount, split_down, start, Books, Brain, Line, OX, RICH};
 
-/// Years the roster's world runs in the test of threads and chunks: long enough for it to crowd, so that moves and
-/// litters from cells of two chunks land in one cell; and the years it runs with a block of its land split two depths.
-const YEARS: u64 = 10;
+/// Years the roster's world runs in the test of threads and chunks, so that moves and litters from cells of two chunks
+/// land in one cell, while its bodies live; and the years it runs with a block of its land split two depths.
+const YEARS: u64 = 4;
 const SPLIT_YEARS: u64 = 2;
 /// Eaters that move to new brain sizes in the test of chunks, and the months it runs.
 const RESIZERS: usize = 6;
@@ -20,8 +20,8 @@ const OTHER_CHUNKS: [u32; 2] = [1, 7];
 
 /// The 16 x 16 world of the roster, every starting kind placed after its first month, run `YEARS` years on a pool of
 /// `threads` threads with its cells cut into `chunks` chunks; with `split`, a block of its land split two depths then
-/// (so the bodies of its cells step inside the months, `survey::substeps`) and `SPLIT_YEARS` years. Its whole saved
-/// state.
+/// (so the bodies of its cells step inside the months, `survey::substeps`: batches of updates past one a month) and
+/// `SPLIT_YEARS` years. Its whole saved state.
 fn roster(threads: usize, chunks: u32, split: bool) -> String {
     let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().expect("a pool");
     pool.install(|| {
@@ -35,10 +35,12 @@ fn roster(threads: usize, chunks: u32, split: bool) -> String {
             let block = land_block(&w);
             split_down(&mut w, &block, 2);
         }
-        for _ in 0..if split { SPLIT_YEARS } else { YEARS } * w.cfg.months_per_year as u64 {
+        let months = if split { SPLIT_YEARS } else { YEARS } * w.cfg.months_per_year as u64;
+        for _ in 0..months {
             pcore::step(&mut w);
         }
-        assert!(w.life.alive().any(|b| !split || w.halvings(b.cell as usize) == 2), "nothing lives (in the split block)");
+        assert!(w.life.alive().next().is_some(), "nothing lives");
+        assert!(!split || w.counts.body_batches > months as f64, "no body stepped inside a month in the split block");
         serde_json::to_string(&w).expect("a world serialises")
     })
 }

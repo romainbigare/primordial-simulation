@@ -896,24 +896,31 @@ A body's temperature follows its ground's (`live::keep_warm`): the heat its surv
 the update leaves through its coat (`Body::conductance`; in series with the walls around it, 3.4) to the ground. Each
 member has the surface `meeh` × its mass^(2/3) (Meeh 1879); its coat insulates it by the still air at its surface
 (`r_air`) and the share `HEAT` (0 to 1) of the best coat, `r_coat` (fur and the tissue under it: a mammal's least
-conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). Its temperature moves from where it is
-toward where that heat holds it (the ground's, plus the heat over the coat's conductance) by the share 1 - e^(-g dt /
-C) its heat capacity C lets it go in the time: a body's own time C / g is hours to days, but a large node in a closed
-room, whose walls pass little, moves only part way in a month. So what it gains from its ground is never more than the
-heat it released, unless the ground is the warmer. Below its `KEEP_T` gene it burns what holds it at `KEEP_T` at the
-end; above its `COOL_T` gene it opens its coat as far as it needs to stand there, up to its bare surface (blood to the
-skin, the coat laid flat), and past that evaporates its key liquid for the excess, at the liquid's vaporisation
-enthalpy, never below its safe minimum, the vapour going to the bodies' node with its latent heat. Its key liquid boils
-at its boiling point: past it the heat boils the liquid off, below its safe minimum too, and holds the body there while
-it lasts; one that boils dry dies there (`check_stores`), the rest of its heat staying in its ground. Its upkeep goes with
-the pace of its temperature (6.2), so a warmer body makes more heat; the open coat lets that heat out, so a body's own
-heat does not drive its pace up month after month. Its heat then comes to that temperature with its ground
-(`body::settle_heat`). After its decision (`live::shed_meal_heat`) the heat of what it took and of digesting it, above
-the temperature it stood at, leaves through its coat to its ground over the time to its next update (its cell's step)
-by the same share
-(a body of hours to days sheds it all); a body its intake cooled stays cooler, drawing no heat from its ground, and
-its own heat warms it at its next update. Its key liquids hold their fusion heat at any temperature (`Body::fused`):
-a body has no melting plateau, so its temperature is its heat over its heat capacity, that heat set aside (2.5).
+conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). Its heat balance over the time dt,
+C dT/dt = P - g (T - tg) (Newton's law of cooling; an animal's energy budget, Porter and Gates 1969; `live::Balance`),
+moves its temperature from where it is toward where that heat holds it (the ground's, plus the heat over the coat's
+conductance) by the share 1 - e^(-g dt / C) its heat capacity C lets it go in the time: a body's own time C / g is hours
+to days, but a large node in a closed room, whose walls pass little, moves only part way in a month. So what it gains
+from its ground is never more than the heat it released, unless the ground is the warmer. Below its `KEEP_T` gene it
+burns what holds it at `KEEP_T` at the end; above its `COOL_T` gene it opens its coat as far as it needs to stand there,
+up to its bare surface (blood to the skin, the coat laid flat), and past that evaporates its key liquid for the excess,
+at the liquid's vaporisation enthalpy, never below its safe minimum, the vapour going to the bodies' node with its
+latent heat (`live::hold`). Its key liquid boils at its boiling point: past it the heat boils the liquid off, below its
+safe minimum too, and holds the body there while it lasts; one that boils dry dies there (`check_stores`), the rest of
+its heat staying in its ground. **The temperature it stands at** (`live::standing`): its upkeep over the update goes
+with the pace (6.2) of its mean temperature over the time, the mean of that exact solution with the heat the upkeep
+releases, held by its genes as above; as that heat goes with the pace, the temperature is a fixed point, found from
+where the body is the way its heat moves it (the next equilibrium up or down). So a body of hours to days pays its
+update at the temperature it stands at, not the one it started at, alike in one update of a month or in four of a
+quarter month; the open coat lets the heat of a warmer pace out, so a body's own heat does not drive its pace up for
+ever. Its heat then comes to the temperature the balance ends at with its ground (`body::settle_heat`). After its
+decision (`live::fade_meal_heat`) what it took and digesting it moved its temperature by, from where it stood, fades
+over the time to its next update (its cell's step) by the share e^(-g dt / C): the heat of a meal leaves through its
+coat to its ground; a meal colder than the body is warmed by the body's own heat as it eats, drawn back from its
+ground, which its upkeep's heat went to, at most the heat its upkeep released over the update. So a body of hours to
+days starts its next update where it stood, and a month's meal taken at once cools it no more than the meals of four
+short steps. Its key liquids hold their fusion heat at any temperature (`Body::fused`): a body has no melting plateau,
+so its temperature is its heat over its heat capacity, that heat set aside (2.5).
 
 ### 6.4 Water: drinking
 A body drinks its key liquids from its cell's ground up to the level it keeps, as far as the ground holds them liquid,
