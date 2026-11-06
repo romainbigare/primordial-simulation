@@ -29,9 +29,9 @@ impl World {
     fn terrain_in(&self, l: Leaf) -> (f64, f64) {
         self.terrain.inside(self.seed, &self.map, l, (self.cfg.lat_south, self.cfg.lat_north))
     }
-    /// The relief of each cell of a world as built, J: a bed standing at the terrain's heights at the leaves of the most
-    /// depth inside it holds ρ g Σ a (h − h̄)² / 2 more potential energy than a flat bed of its volume (each leaf's column
-    /// of area a and height h, from the base up, holds ρ g a h² / 2 over the base's), ρ the density of the cell's bed.
+    /// The relief of each cell of a world as built, J: a bed standing at the terrain's heights inside it holds
+    /// ρ g ∫ (h − h̄)² / 2 more potential energy than a flat bed of its volume (`Terrain::inside`; each column of area a
+    /// and height h, from the base up, holds ρ g a h² / 2 over the base's), ρ the density of the cell's bed.
     pub fn relief_at_build(&self) -> Vec<f64> {
         crate::par::map_n(self.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.bed_weight(i) * self.terrain_in(self.map.leaves()[i]).1)
     }

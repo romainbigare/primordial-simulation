@@ -2,11 +2,13 @@
 //! its map and its level (`Terrain`), at any size. Value noise summed over octaves (fractal noise), with ridges, its
 //! domain warped so coasts and ridges bend (Perlin 1985; Musgrave 1989), raised to heights; an island falls away from
 //! the middle of its map. It gives the cells their starting heights (`worldgen`), and a split the ground its cell held
-//! finer than the cell (`World::split`).
+//! finer than the cell (`World::split`). Below `SAMPLE_DEPTH` the ground goes on as a midpoint displacement that
+//! continues the noise's octaves (`Terrain::inside`), so a cell of any depth has a mean height and a relief.
 
 use super::square::Square;
+use super::tree::BLOCK;
 use super::{Leaf, Level};
-use crate::rng::{Purpose, Rng};
+use crate::rng::{mix, Purpose, Rng};
 use serde::{Deserialize, Serialize};
 use std::f64::consts::TAU;
 
@@ -146,27 +148,99 @@ fn height_of(above: f64) -> f64 {
     if above > 0.0 { above.powf(LAND_POWER) * LAND_M } else { above * LOW_M }.max(FLOOR_M)
 }
 
+/// How fast `height_of` climbs with the rise at `above`, m per unit of rise (none on the floor).
+fn height_slope(above: f64) -> f64 {
+    if height_of(above) <= FLOOR_M {
+        0.0
+    } else if above > 0.0 {
+        LAND_M * LAND_POWER * above.powf(LAND_POWER - 1.0)
+    } else {
+        LOW_M
+    }
+}
+
+/// The mean square slope of smooth value noise of `dims` dimensions along one axis, per unit of its lattice:
+/// (1/5) (26/35)^(dims − 1). Along an axis the noise is (1 − s) a + s b, s = 3t² − 2t³, between corners of variance
+/// 1/12, so its slope s'(t) (b − a) has E[s'²] = 6/5 and E[(b − a)²] = 1/6; each other axis weighs its two corners by
+/// (1 − s)² + s², 26/35 on the mean.
+fn slope_variance(dims: i32) -> f64 {
+    0.2 * (26.0f64 / 35.0).powi(dims - 1)
+}
+
+/// The rms slope of the rise, per m, that each octave of the base noise (`fbm`) adds on `map`: octave o has the weight
+/// 2^−o over the octaves' sum and 2^o lattice units per unit of the noise, so each adds the same slope (a fractal of
+/// Hurst exponent 1), `BASE_WEIGHT` / sum × √(2 · `slope_variance`) per unit along the ground (two ways across it); the noise has
+/// `ACROSS` / (the longer side, in squares) units a square, flat or round.
+fn octave_slope(map: &Square) -> f64 {
+    let (dims, sum) = (if map.wrap { 3 } else { 2 }, 2.0 - 0.5f64.powi(OCTAVES[1] as i32 - 1));
+    BASE_WEIGHT / sum * (2.0 * slope_variance(dims)).sqrt() * ACROSS / map.w.max(map.h) as f64 / map.side
+}
+
+/// The departures of the means of the four quarters (of areas `area`, m², row by row) of leaf `l` from its mean, m:
+/// four normal draws keyed by the leaf, less their mean by area, scaled so their variance by area is exactly `var`, m².
+fn displace(seed: u64, l: Leaf, area: [f64; 4], var: f64) -> [f64; 4] {
+    let mut r = Rng::new(seed, l.depth as u64, mix(l.x ^ mix(l.y)), Purpose::Detail);
+    let z: [f64; 4] = std::array::from_fn(|_| r.normal());
+    let whole: f64 = area.iter().sum();
+    let mean = (0..4).map(|q| area[q] * z[q]).sum::<f64>() / whole;
+    let d = z.map(|x| x - mean);
+    let spread = (0..4).map(|q| area[q] * d[q] * d[q]).sum::<f64>() / whole;
+    if spread > 0.0 { d.map(|x| x * (var / spread).sqrt()) } else { [0.0; 4] }
+}
+
 impl Terrain {
-    /// The height of the ground at `place` of `map` for `seed`, m (0 m is the reference level): its rise over the level;
-    /// on an island (a flat map) less the fall from the middle of the map.
-    pub fn height(&self, seed: u64, map: &Square, place: Place) -> f64 {
+    /// The rise of the ground at `place` of `map` for `seed` over the level; on an island (a flat map) less the fall
+    /// from the middle of the map.
+    fn above(&self, seed: u64, map: &Square, place: Place) -> f64 {
         let r = rise(seed, map, place);
         if map.wrap {
-            return height_of(r - self.level);
+            return r - self.level;
         }
         // How far the place lies from the middle of the map along each axis, in sides.
         let middle = |c: f64, len: usize| c / map.side / len as f64 - 0.5;
         let (dx, dy) = (middle(place.centre[0], map.w), middle(place.centre[1], map.h));
-        height_of(r - ((dx * dx + dy * dy).sqrt() * FALL_BY).powf(FALL_POWER) - self.level)
+        r - ((dx * dx + dy * dy).sqrt() * FALL_BY).powf(FALL_POWER) - self.level
     }
-    /// The terrain inside leaf `l` of `map` (its rows between latitudes `south` and `north`), sampled at the centres of
-    /// its leaves of `SAMPLE_DEPTH` (itself, if finer): their mean height by area, m, and the spread of their heights
-    /// about it, Σ a (h − mean)² / 2, m⁴ (a bed of density ρ standing at those heights holds ρ g times that more
-    /// potential energy than a flat one of its volume).
+    /// The height of the ground at `place` of `map` for `seed`, m (0 m is the reference level).
+    pub fn height(&self, seed: u64, map: &Square, place: Place) -> f64 {
+        height_of(self.above(seed, map, place))
+    }
+    /// The height at `place`, m, and the rms slope G of the ground there finer than `SAMPLE_DEPTH`: the slope an octave
+    /// of the base noise adds (`octave_slope`) times how fast the height climbs with the rise there.
+    fn sample(&self, seed: u64, map: &Square, place: Place) -> (f64, f64) {
+        let above = self.above(seed, map, place);
+        (height_of(above), height_slope(above) * octave_slope(map))
+    }
+    /// The terrain inside leaf `l` of `map` (its rows between latitudes `south` and `north`): its mean height by area,
+    /// m, and the spread of its heights about it, ∫ (h − mean)² / 2 over its area, m⁴ (a bed of density ρ standing at
+    /// those heights holds ρ g times that more potential energy than a flat one of its volume).
+    ///
+    /// The noise is sampled at the centres of the leaves of `SAMPLE_DEPTH`. Below them the ground goes on as a midpoint
+    /// displacement (Fournier, Fussell and Carpenter 1982) that continues the base noise's octaves: the means of the
+    /// quarters of a leaf of side ℓ (north to south) depart from its mean by draws keyed by the leaf (`displace`), of
+    /// variance by area exactly G² ℓ² / 16 (that of the quarters of flat ground tilted at slope G), G the slope at its sample
+    /// (`sample`). So the variance below a leaf of side ℓ is G² ℓ² (1 + 1/4 + 1/16 + ...) / 16 = G² ℓ² / 12, and its
+    /// spread A G² ℓ² / 24. A leaf of `SAMPLE_DEPTH` or coarser: the mean of its samples, and their spread about it
+    /// with that below each; a finer one: its sample's height with its ancestors' departures down to it, and the spread
+    /// below it. Each sum is exact, so a leaf's spread is its quarters' and that of their means about its own.
     pub fn inside(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64)) -> (f64, f64) {
-        let fine: Vec<(f64, f64)> = l.split(SAMPLE_DEPTH.max(l.depth)).map(|f| map.place_of(&f, south, north)).map(|(a, p)| (a, self.height(seed, map, p))).collect();
-        let (area, sum) = fine.iter().fold((0.0, 0.0), |(a, s), &(da, h)| (a + da, s + da * h));
-        let mean = sum / area;
-        (mean, fine.iter().map(|&(a, h)| a * (h - mean) * (h - mean)).sum::<f64>() / 2.0)
+        let below = |area: f64, g: f64, depth: u8| area * (g * map.length(depth)).powi(2) / 24.0;
+        if l.depth <= SAMPLE_DEPTH {
+            let fine: Vec<(f64, (f64, f64))> = l.split(SAMPLE_DEPTH).map(|f| map.place_of(&f, south, north)).map(|(a, p)| (a, self.sample(seed, map, p))).collect();
+            let (area, sum) = fine.iter().fold((0.0, 0.0), |(a, s), &(da, (h, _))| (a + da, s + da * h));
+            let mean = sum / area;
+            let spread = fine.iter().map(|&(a, (h, _))| a * (h - mean) * (h - mean)).sum::<f64>() / 2.0;
+            return (mean, spread + fine.iter().map(|&(a, (_, g))| below(a, g, SAMPLE_DEPTH)).sum::<f64>());
+        }
+        let side = BLOCK >> SAMPLE_DEPTH;
+        let mut at = Leaf { x: l.x / side * side, y: l.y / side * side, depth: SAMPLE_DEPTH };
+        let (mut h, g) = self.sample(seed, map, map.place_of(&at, south, north).1);
+        while at.depth < l.depth {
+            let quarters = at.quarters();
+            let d = displace(seed, at, quarters.map(|q| map.place_of(&q, south, north).0), (g * map.length(at.depth) / 4.0).powi(2));
+            let k = quarters.iter().position(|q| q.x <= l.x && l.x < q.x + q.side() && q.y <= l.y && l.y < q.y + q.side()).expect("a quarter holds the leaf");
+            (h, at) = (h + d[k], quarters[k]);
+        }
+        (h, below(map.place_of(&l, south, north).0, g, l.depth))
     }
 }

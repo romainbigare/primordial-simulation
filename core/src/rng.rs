@@ -38,6 +38,8 @@ pub enum Purpose {
     Cover,
     /// The quarter a body or a structure goes to whole when its cell splits (`life::tree`)
     Quarter,
+    /// The departures of the quarters of a leaf from its mean height below the terrain's samples (`space::terrain`)
+    Detail,
 }
 
 pub struct Rng(u64);

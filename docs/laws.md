@@ -42,7 +42,19 @@ the terrain on its samples (a cell finer than a square takes the height at its o
 (`space::terrain`) is one function of the world's seed and a point of the map, at any size: value noise summed over
 octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to heights, an island's falling away from
 the middle of its map; the world keeps what it needs beside its seed and its map (`World::terrain`: the rise its level
-0 m lies at), so a split finds the ground finer than its cell (below). What needs the cell at a
+0 m lies at), so a split finds the ground finer than its cell (below). The noise's finest octave is 670 m on the
+64 x 64 island and 200 km on a globe; it is sampled at the centres of the leaves of `SAMPLE_DEPTH` (1/64 of a block:
+125 m on the island, 20 km on a globe of 64 rows), and below them the ground goes on as a midpoint displacement
+(Fournier, Fussell and Carpenter 1982) that continues the noise's octaves (`Terrain::inside`): the means of the
+quarters of a leaf of side ℓ depart from its mean by four normal draws keyed by the leaf, made to a variance by area of
+exactly G² ℓ² / 16 (the quarters of flat ground tilted at slope G). G is the rms slope one octave of the base noise adds (octave o
+weighs 2^−o and is 2^o times as fine, so each adds the same slope, a fractal of Hurst exponent 1): the base's weight over
+the octaves' sum times √(2 (1/5) (26/35)^(D−1)) per unit of the noise (the mean square slope of value noise of D
+dimensions eased by 3t² − 2t³), times the noise's units per m, times how fast the height climbs with the rise at the
+sample (none on the floor). So a leaf has a mean height at any depth, its ancestors' departures added to its sample's
+height, and the ground below a leaf of side ℓ holds the variance G² ℓ² / 12. On the 64 x 64 island G is up to about 0.05 on high land
+(a cell of 8 m departs from its parent's mean by about 0.2 m); on a globe of 64 rows about 1e-4, so its streets are flat: the
+noise holds no finer detail there. What needs the cell at a
 point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
@@ -178,9 +190,11 @@ index in its event, so the shell takes the events before the next split or join.
 **Relief** (`World::relief`, J, one number per cell in the cell table, `remap/relief.rs`): the potential energy the
 ground of a cell holds inside it over its flat form, a part of the world's potential energy held apart from the
 stacks (the function of "The books" below). Every cell holds it from the start: a bed standing at the terrain's heights
-at the cells of the most depth inside it holds ρ g Σ a (h − h̄)² / 2 more than a flat bed of its volume (each column of
-area a and height h holds ρ g a h² / 2 over its base), ρ the density of the cell's bed (`World::relief_at_build`). It
-is the same account at every size: a cell's is its quarters' and that of their means about its own. **A split of a
+inside it holds ρ g ∫ (h − h̄)² / 2 more than a flat bed of its volume (each column of area a and height h holds
+ρ g a h² / 2 over its base), ρ the density of the cell's bed (`World::relief_at_build`): over the samples inside a cell
+of `SAMPLE_DEPTH` or coarser, Σ a (h − h̄)² / 2 and each sample's A G² ℓ² / 24 below it; a finer cell A G² ℓ² / 24 alone
+(`Terrain::inside`). It is the same account at every size, to rounding: a cell's is its quarters' and that of their
+means about its own, as the departures are made to that variance exactly. **A split of a
 cell no join made** gives its quarters the terrain inside it (`World::uneven`): each quarter's bed surface is the cell's
 mean bed surface now plus the terrain's mean height over the quarter less the mean over the four, so the cell's bed
 keeps its volume and its mean (what wear and creep did since the start stays in the mean); the bed's substances go to

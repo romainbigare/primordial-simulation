@@ -155,6 +155,10 @@ impl Square {
         let x = if self.wrap { x.rem_euclid(self.w as f64) } else { x };
         [(x * u).floor().clamp(0.0, (across - 1) as f64) as u64, (y * u).floor().clamp(0.0, (down - 1) as f64) as u64]
     }
+    /// The side of a leaf of `depth` from north to south, m.
+    pub fn length(&self, depth: u8) -> f64 {
+        self.side * (BLOCK >> depth) as f64 / self.unit() as f64
+    }
     /// The squares in cell `i` (a share of one in a cell finer than a square).
     pub fn squares(&self, i: usize) -> f64 {
         let k = self.leaves[i].side() as f64 / self.unit() as f64;

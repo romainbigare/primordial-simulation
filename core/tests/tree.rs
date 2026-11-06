@@ -10,6 +10,7 @@ use pcore::check;
 use pcore::chem::Phase;
 use pcore::event::EventKind;
 use pcore::space::square::Square;
+use pcore::space::terrain::SAMPLE_DEPTH;
 use pcore::space::tree::{Refused as Shape, DEPTH_MOST};
 use pcore::space::Leaf;
 use pcore::store::Class;
@@ -256,20 +257,24 @@ fn a_split_its_join_and_its_split_give_the_same_quarters() {
     books.assert_kept(&w, TIGHT);
 }
 
-/// The relief is one account at every size (`Terrain::inside`): a cell's spread of heights is its quarters' and the
-/// spread of the quarters' means about its own, to rounding (`TIGHT`); a cell's relief as built is its spread times the
-/// weight of a m³ of its bed (ρ g, between `BED_WEIGHT`).
+/// The relief is one account at every size (`Terrain::inside`): a leaf's spread of heights is its quarters' and the
+/// spread of the quarters' means about its own, to rounding (`TIGHT`), for a cell, a leaf coarser than the terrain's
+/// samples, one of their depth and one below them, where the ground goes on as a midpoint displacement; a cell's relief
+/// as built is its spread times the weight of a m³ of its bed (ρ g, between `BED_WEIGHT`).
 #[test]
 fn the_relief_of_a_cell_is_its_quarters_and_what_lies_between() {
     let w = world();
     let (lat, map) = ((w.cfg.lat_south, w.cfg.lat_north), &w.map);
     let low = (0..w.mesh.cells().n()).find(|&i| !w.is_land(i) && w.relief[i] > 0.0).expect("a cell under 0 m above the floor of the terrain");
     for i in [testkit::dry_land(&w), low] {
-        let l = leaf(&w, i);
-        let (mean, spread) = w.terrain.inside(w.seed, map, l, lat);
-        let between: f64 = l.quarters().iter().map(|q| (map.place_of(q, lat.0, lat.1).0, w.terrain.inside(w.seed, map, *q, lat))).map(|(a, (m, s))| s + a * (m - mean) * (m - mean) / 2.0).sum();
-        println!("cell {i}: mean {mean:.2} m, spread {spread:.4e} m⁴, relief {:.4e} J", w.relief[i]);
-        assert!((between - spread).abs() <= TIGHT * spread, "cell {i}: the quarters' {between:e} against the cell's {spread:e}");
+        let cell = leaf(&w, i);
+        for l in [cell.depth, SAMPLE_DEPTH - 1, SAMPLE_DEPTH, SAMPLE_DEPTH + 2].map(|d| cell.split(d).last().expect("a leaf")) {
+            let (mean, spread) = w.terrain.inside(w.seed, map, l, lat);
+            let between: f64 = l.quarters().iter().map(|q| (map.place_of(q, lat.0, lat.1).0, w.terrain.inside(w.seed, map, *q, lat))).map(|(a, (m, s))| s + a * (m - mean) * (m - mean) / 2.0).sum();
+            println!("cell {i}, depth {}: mean {mean:.2} m, spread {spread:.4e} m⁴", l.depth);
+            assert!((between - spread).abs() <= TIGHT * spread, "cell {i}, depth {}: the quarters' {between:e} against the leaf's {spread:e}", l.depth);
+        }
+        let spread = w.terrain.inside(w.seed, map, cell, lat).1;
         assert!((BED_WEIGHT[0]..BED_WEIGHT[1]).contains(&(w.relief[i] / spread)), "cell {i}: relief {} J of a spread of {spread} m⁴", w.relief[i]);
     }
 }
