@@ -92,7 +92,7 @@ WP0, WP2, WP4 and WP5 run side by side; WP3 follows WP2 (both change bodies).
 | 3 | Done: no melting plateau and no height in bodies; little speed (two thirds of a body's month is its decision) |
 | 4 | Done: ids by cell serial; `World::remap` moves every per-cell number in one place |
 | 5 | Done: the core as wasm in a worker; zoom refines where the player looks |
-| 6 | Done: a sparse tree of cells down to 1/64 of an air block |
+| 6 | Done: a sparse tree of cells down to 1/2^24 of an air block, the relief below the terrain's samples a midpoint displacement |
 | 7 | Done: split and join with exact books; the quarters take the world's own terrain, paid by each cell's relief |
 | 8 | Done: Flow agrees between fine and coarse cells; only the bed's store sub-steps |
 | 9 | Done: learning, discount and brain cost per second; acts take time, a mover eats for the rest of its step; a body decides at its cell's step and lives in sub-steps of a week; children are born through the update; a young node's members mature one by one |

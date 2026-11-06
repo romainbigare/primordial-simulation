@@ -249,7 +249,7 @@ split shares out, so the quarters' terms sum to the cell's (a density would grow
 of one part would never join); change is a share, the same in quarters that changed alike and less in one that holds
 little against the floor; the camera's halves at each depth. So a cell splits until each holds about one unit, and no
 further. Then, the lowest first (ties by the least serial), each four quarters of one leaf, built no coarser than it
-(`Watch::built`) and with no finer cell across a side, join while the cells are over the budget or the cell they would
+(`Watch::built`), join (one with a finer cell across a side once that cell joined, 2:1) while the cells are over the budget or the cell they would
 make scores under `JOIN_AT` (its brains and parts the sum of theirs, its change that of their masses summed, its
 camera's term twice their highest; 1/4: a cell joins only once it holds four times less than a split asks, so it does
 not flap); then, those the camera asks for (its term alone is 1 or more) first, then the highest first, each cell of
@@ -260,7 +260,13 @@ split the camera asks for may first join the quietest
 quartets the camera does not see, nor a cell beside them (a split there would split their join again, 2:1), to make
 room: what is looked at comes first. As the camera's splits come first, a cell joined to make room for them takes the
 room back only once the camera asks for no more: at a full budget the cells settle with the camera's window at its
-asked depth, and change only as the window moves. A month makes at most `MOST_CHANGES` (32) splits and joins. The events of
+asked depth, and change only as the window moves. The quarters of a split the camera asks for that it asks for in turn
+(their camera term alone 1 or more) split next, before any other cell, so a zoom goes down many depths in a month: from
+the island's 2 km squares to a window of 7.8 m in one month (29 splits), from a globe's air blocks of 1,250 km to
+9.5 m in three (65 splits). The joins go on in the same way (`refine/join.rs`): a quartet the tree refuses for 2:1
+is tried again once a finer cell beside it joined, and the quartet of a cell a join made joins in turn if the cell it
+would make (its score its quarters' merged) scores under `JOIN_AT`, so the cells of a window let go join back in a
+month or a few. A month makes at most `MOST_CHANGES` (32) splits and joins. The events of
 a join's merge name their cell by index, which the next change renumbers: they wait with their cell's leaf and come
 back at the end of the month's changes naming the cell that then holds that place.
 **The camera** (`refine::Camera`) is an input of the run: from given months on, a window of the map in squares and

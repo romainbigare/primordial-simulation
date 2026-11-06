@@ -427,7 +427,9 @@ Population nodes are built; how they work is in `docs/laws.md` 4.4. A body of co
 
 - The planet is coarse everywhere, and finer where it matters: a region of finer cells is built into the mesh at the
   start, or rebuilt at a god action. The sea lives on a coarser level, as the air does, so its cells are cheap.
-- Cells split and join by themselves while the world runs (5.2), so a player can zoom anywhere.
+- Cells split and join by themselves while the world runs (5.2), so a player can zoom anywhere: a cell may be as
+  fine as 1/2^24 of its air block (7.5 cm under a globe's block of 1,250 km), and its hidden relief below the
+  terrain's samples is a midpoint displacement that continues the noise (`docs/laws.md` 0).
 - **Detail follows a budget.** A run has a fixed count of active cells (a number of the run, never the machine's
   clock). Each cell has an interest score: the camera, how fast things change there, brains, parts and bonds, rare
   events. Each month the cells of the highest score split and those of the lowest join, until the budget is full.
