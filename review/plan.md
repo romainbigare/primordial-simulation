@@ -97,11 +97,15 @@ WP0, WP2, WP4 and WP5 run side by side; WP3 follows WP2 (both change bodies).
 | 8 | Done: Flow agrees between fine and coarse cells; only the bed's store sub-steps |
 | 9 | Done: learning, discount and brain cost per second; acts take time, a mover eats for the rest of its step; a body decides at its cell's step and lives in sub-steps of a week; children are born through the update; a young node's members mature one by one |
 | 10 | Done: life shares out and gathers across split and join |
-| 11 | Done: refinement by an interest score under a budget; the camera a recorded input; one linking a month |
-| 12 | Next: the first watch at fine grain |
+| 11 | Done: refinement by an interest score under a budget (a cell's score falls as it splits, so it settles); the camera a recorded input; one linking a month |
+| 12 | Done: `docs/reports/fine.md`: nothing new appears at fine grain; grain gives more decisions, not new kinds of decision. The gaps (shelter in the cold, building, tools) point at perception, memory and learning |
 | 13 | Done: `analyze/` with three detectors |
 | 14 | Later rounds |
 
 Open items: parts pile up (2e4 to 3e5 on a 64 x 64 island by year 300; each costs work monthly); the animals' numbers
 swing by orders of magnitude between seeds, by whether a boom of one kind comes; refinement still costs about 4.6 ms a
-change; a settled 64 x 64 year costs about 1 s on 4 cores.
+change; a settled 64 x 64 year costs about 1 s on 4 cores, 3 to 7 s with refinement; in a debug build one Flow test
+rounds a store's heat to -3e-5 J.
+
+The next decision is the owner's (spec 13.1): a fixed time on Choose (what bodies sense, remember and learn), or
+the planet (WP14).
