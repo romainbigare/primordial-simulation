@@ -24,13 +24,24 @@ pub(crate) fn leave_outgrown(w: &World, d: &Chunk, b: &mut Body) {
     }
 }
 
-/// For a body's update: the link between it and the outside through the walls around it, its share of their
-/// enclosure among the bodies inside.
-pub(crate) fn enclosure(d: &Chunk, b: &Body) -> Option<Enclosure> {
+/// The air of the room a body is inside, as its update finds it (laws.md 3.4): the conductance of the walls and openings
+/// between that air and the outside, W/K, and how far the heat of the other bodies inside holds it above the outside, K.
+pub(crate) struct RoomAir {
+    pub g: f64,
+    pub rise: f64,
+}
+
+/// For a body's update: the air of the room it is inside (`RoomAir`). The heat that leaves the bodies inside through
+/// their coats warms that air, and it passes the walls and openings to the outside: in its steady state the air stands
+/// above the outside by the heat of all of them over the walls' conductance. Its own time, its heat capacity (about
+/// 1.2 kJ per m³ and K) over that conductance, is seconds to minutes, far below a sub-step, so it stands there at every
+/// sub-step and holds no heat of its own: what the bodies lose reaches their ground, as outside. A body reads the
+/// others as their last sub-step left them (`Lived::lost`), and its own heat passes its coat and the walls in series.
+pub(crate) fn room_air(d: &Chunk, b: &Body) -> Option<RoomAir> {
     let (i, c) = (b.cell as usize, d.at(b.cell as usize));
     let (r, e) = room(c, b)?;
-    let others = d.cell(i).filter(|&o| d[o].alive && room(c, &d[o]).is_some_and(|x| x.0 == r)).count();
-    Some(Enclosure { g: e.g / (others + 1) as f64, ..e })
+    let others: f64 = d.cell(i).map(|o| &d[o]).filter(|o| o.alive && room(c, o).is_some_and(|x| x.0 == r)).map(|o| o.lived.lost).sum();
+    Some(RoomAir { g: e.g, rise: others / e.g.max(1e-300) })
 }
 
 /// Standing liquid on cell `i` whose ground holds `g` mol of each substance: depth m, density kg/m³, mol per m³.

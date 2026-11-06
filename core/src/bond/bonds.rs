@@ -61,6 +61,6 @@ impl Bonds {
 pub struct Enclosure {
     /// How closed the walls are around the space inside (0..1): light and rain pass by 1 - this
     pub closed: f32,
-    /// Heat conductance between the inside and the outside, W/K
+    /// Heat conductance between the air inside and the outside, through the walls and the openings, W/K
     pub g: f64,
 }
