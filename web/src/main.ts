@@ -21,6 +21,11 @@ const FINE_ZOOM = 1.8;
 const FINE_CELL_PX = 6;
 /** Time the view rests before the core is told where it looks, ms. */
 const LOOK_MS = 150;
+/** Minutes without input (a zoom, a pan, a click, a key) after which the page sends the camera away, as a camera change
+ * the run records: the core then joins the fine cells back, and the world runs at the coarse pace again. */
+const IDLE_MINUTES = 3;
+/** How often the page checks for that, ms. */
+const IDLE_CHECK_MS = 1000;
 
 let world: World | null = null;
 let live: Live | null = null;
@@ -31,6 +36,8 @@ const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspe
 /** The raster of the window the camera looks at (finer than a square) as a world of its own, and what paints it. */
 let fine: { world: World; img: ImageData; cls: Uint8Array; at: [number, number, number, number] } | null = null;
 let lookTimer = 0, looking = '';
+/** When the player last gave input (performance.now, ms), and whether the camera was sent away for lack of it. */
+let lastInput = performance.now(), idle = false;
 const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
 
 // ---- loading
@@ -256,9 +263,9 @@ function lookSoon(v: View): void {
 }
 function lookAt(v: View): void {
   const m = world?.meta;
-  if (!live || !m || m.square_depth === undefined || m.finest_depth === undefined) return;
+  if (!live || !m || m.square_depth === undefined || m.finest_depth === undefined || idle) return;
   const fineDepth = Math.min(m.finest_depth, m.square_depth + Math.floor(Math.log2(v.s / FINE_CELL_PX)));
-  const grain = 2 ** (m.finest_depth - m.square_depth); // finest cells along a square
+  const grain = 2 ** (fineDepth - m.square_depth); // cells of the depth asked along a square
   let look: Look | null = null;
   if (v.zoom >= FINE_ZOOM && fineDepth > m.square_depth && v.w > 0 && v.h > 0) {
     const x = Math.floor(v.x * grain) / grain, y = Math.floor(v.y * grain) / grain;
@@ -271,6 +278,23 @@ function lookAt(v: View): void {
   if (!look) { fine = null; map.setFine(null); }
   live.look(look);
 }
+
+/** Input from the player: the camera follows the view again if it was sent away. */
+function touched(): void {
+  lastInput = performance.now();
+  if (!idle) return;
+  idle = false; looking = '';
+  lookAt(map.view());
+  if (live) showStats(live.stats);
+}
+for (const kind of ['pointerdown', 'wheel', 'keydown']) addEventListener(kind, touched, { capture: true, passive: true });
+/** After `IDLE_MINUTES` without input the camera goes away: the fine raster goes and the core is told to look at nothing. */
+setInterval(() => {
+  if (!live || !world || idle || performance.now() - lastInput < IDLE_MINUTES * 60_000) return;
+  idle = true;
+  if (looking !== JSON.stringify(null)) { looking = JSON.stringify(null); fine = null; map.setFine(null); live.look(null); }
+  showStats(live.stats);
+}, IDLE_CHECK_MS);
 
 /** Keep the raster of the camera's window that came with a frame (none: the camera looks at nothing finer). */
 function showRaster(raster: { look: Look; data: Uint8Array } | null): void {
@@ -294,7 +318,8 @@ function showStats(s: Stats): void {
   const finest = m.square_depth === undefined ? '' : s.finest <= m.square_depth ? 'squares' : `${fmt(m.cell_m / 2 ** (s.finest - m.square_depth))} m`;
   el.hidden = false;
   el.innerHTML = [['date', `year ${Math.floor(y)}, day ${day}`], ['pace', `${playing ? fmt(s.pace) : '0'} of ${speed === Infinity ? 'max' : speed} months/s`],
-    ['cells', String(s.cells)], ['finest', `depth ${s.finest} (${finest})`]].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
+    ['cells', String(s.cells)], ['finest', `depth ${s.finest} (${finest})`],
+    ['camera', idle ? `away: no input for ${IDLE_MINUTES} min` : `goes away after ${IDLE_MINUTES} min without input`]].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
 }
 
 function newWorld(): void {

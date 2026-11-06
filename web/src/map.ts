@@ -4,8 +4,8 @@ const css = (name: string) => getComputedStyle(document.documentElement).getProp
 
 /** The part of the map in view: its window in squares (clipped to the map), the pixels a square takes, and the zoom (1: the map fits). */
 export interface View { x: number; y: number; w: number; h: number; s: number; zoom: number }
-/** The most pixels a square takes on screen. */
-const MOST_SCALE = 200;
+/** The most pixels a square takes on screen: 1 m a pixel on a square of 2 km, so cells of a street take several. */
+const MOST_SCALE = 2000;
 
 export class MapView {
   img: ImageData | null = null;

@@ -18,8 +18,9 @@ const SPRAY_ROUNDS: u32 = 20;
 /// The most cells the live map holds while refinement splits them: about twice an island of 32 x 32 squares (about
 /// 800 cells), which a worker steps in a browser at a usable pace.
 const CELL_BUDGET: u32 = 1500;
-/// The finest depth below its air block refinement takes a cell to in the live world: 500 m on a 2 km island.
-const FINEST_DEPTH: u8 = 4;
+/// The finest depth below its air block refinement takes a cell to in the live world: 7.8 m on a 2 km island, a
+/// street, whose bodies step every 2.8 hours.
+const FINEST_DEPTH: u8 = 10;
 
 /// The world, what is placed when, and the bytes last handed to the page (it reads them until the next call).
 struct Live {

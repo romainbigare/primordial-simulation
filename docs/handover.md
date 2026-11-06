@@ -435,7 +435,9 @@ Population nodes are built; how they work is in `docs/laws.md` 4.4. A body of co
   events. Each month the cells of the highest score split and those of the lowest join, until the budget is full.
   Every split and join is a recorded event.
 - The camera is an input of the run, recorded in the tape as a god action is, so the same seed and the same camera
-  path give the same history (3.8). A run with no camera (the world search, M7) refines by the other terms.
+  path give the same history (3.8). A run with no camera (the world search, M7) refines by the other terms. The live
+  viewer sends the camera away after a few minutes without input, as a recorded change of the camera, so a world
+  left alone joins its fine cells and speeds up again.
 - One life model at every grain: a group of `n` members (7.1) on cells of any size; it splits as its cell splits,
   down to `n` = 1, and joins as its cells join.
 
