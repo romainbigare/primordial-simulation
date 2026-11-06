@@ -41,6 +41,10 @@ const CROWN_LOW = 3, CROWN_RISE = 12, CROWN_WOOD = 15, CROWN_SIZES = [4, 8, 14];
 const MARK_M: Partial<Record<Kind, number>> = { shrubs: 1.5, grass: 0.25, steppe: 0.5, tundra: 0.35 };
 /** The pixels a mark takes from which its pattern starts to show, and from which it shows fully. */
 const FADE_PX = [0.7, 2];
+/** The share of the view's width and height the picture of the textures reaches beyond each edge. */
+const MARGIN = 0.3;
+/** How strongly the textures cover the map, so its hill shading still shows through. */
+const COVER_ALPHA = 0.85;
 /** The kinds in the order they are drawn: the low under the tall. */
 const KIND_ORDER: Kind[] = ['grass', 'steppe', 'tundra', 'shrubs', 'woodland', 'forest', 'jungle'];
 
@@ -100,6 +104,8 @@ export class Vegetation {
   private scratch = document.createElement('canvas');
   private patterns = new Map<HTMLCanvasElement, CanvasPattern>();
   private key = '';
+  /** The map's corner the picture was made for. */
+  private at: [number, number] = [0, 0];
   private version = 0;
   /** A number that changes when the map's cover changes. */
   private mapSum = NaN;
@@ -150,18 +156,20 @@ export class Vegetation {
     const W = ctx.canvas.clientWidth, H = ctx.canvas.clientHeight, d = window.devicePixelRatio || 1, ppm = s / this.cellM;
     // Nothing to draw while the largest marks take less than a pixel.
     if (CROWN_SIZES[CROWN_SIZES.length - 1] * ppm < FADE_PX[0]) return;
-    const key = [ox, oy, s, W, H, d, this.version, this.style].join();
-    if (key !== this.key) {
-      this.key = key;
-      for (const c of [this.cache, this.scratch]) { c.width = Math.round(W * d); c.height = Math.round(H * d); }
-      const out = this.cache.getContext('2d')!;
+    // The picture reaches `MARGIN` of the view beyond each edge, so a pan within it only moves the picture.
+    const mx = Math.round(W * MARGIN), my = Math.round(H * MARGIN), cw = W + 2 * mx, ch = H + 2 * my;
+    const key = [s, W, H, d, this.version, this.style].join();
+    if (key !== this.key || Math.abs(ox - this.at[0]) > mx || Math.abs(oy - this.at[1]) > my) {
+      this.key = key; this.at = [ox, oy];
+      for (const c of [this.cache, this.scratch]) { c.width = Math.round(cw * d); c.height = Math.round(ch * d); }
+      const out = this.cache.getContext('2d')!, [px, py] = [ox + mx, oy + my];
       out.setTransform(d, 0, 0, d, 0, 0);
-      const fineRect = this.fine ? rectOf(this.fine.at, ox, oy, s) : null;
-      const covers = fineRect !== null && fineRect[0] <= 0 && fineRect[1] <= 0 && fineRect[0] + fineRect[2] >= W && fineRect[1] + fineRect[3] >= H;
-      if (!covers) this.paint(out, this.map, ox, oy, s, ppm, W, H, fineRect);
-      if (this.fine) this.paint(out, this.fine, ox, oy, s, ppm, W, H, null);
+      const fineRect = this.fine ? rectOf(this.fine.at, px, py, s) : null;
+      const covers = fineRect !== null && fineRect[0] <= 0 && fineRect[1] <= 0 && fineRect[0] + fineRect[2] >= cw && fineRect[1] + fineRect[3] >= ch;
+      if (!covers) this.paint(out, this.map, px, py, s, ppm, cw, ch, fineRect);
+      if (this.fine) this.paint(out, this.fine, px, py, s, ppm, cw, ch, null);
     }
-    ctx.drawImage(this.cache, 0, 0, W, H);
+    ctx.drawImage(this.cache, ox - this.at[0] - mx, oy - this.at[1] - my, cw, ch);
   }
 
   /** Paint grid `g` onto `out`, leaving out the screen rectangle `hole`: each of its layers whose marks show, per level
@@ -178,7 +186,7 @@ export class Vegetation {
       if (fade <= 0) continue;
       const tile = tileOf(layer.kind, this.style), size = sizeFor(tile, px), k = px / (tile.mark / 2 ** size);
       // Each size of mark has its own place of the pattern, so two sizes blended do not line up.
-      const shift = ((layer.mark * 0.618034) % 1) * 512 * k;
+      const shift = ((layer.mark * 0.618034) % 1) * tile.side * k;
       layer.levels.forEach((mask, level) => {
         if (!mask) return;
         sc.globalCompositeOperation = 'source-over';
@@ -190,7 +198,7 @@ export class Vegetation {
           sc.globalCompositeOperation = op; sc.fillStyle = p; sc.fillRect(x0, y0, x1 - x0, y1 - y0);
         }
         if (hole) { sc.globalCompositeOperation = 'destination-out'; sc.fillRect(hole[0], hole[1], hole[2], hole[3]); }
-        out.globalAlpha = fade;
+        out.globalAlpha = fade * COVER_ALPHA;
         out.drawImage(this.scratch, x0 * d, y0 * d, (x1 - x0) * d, (y1 - y0) * d, x0, y0, x1 - x0, y1 - y0);
       });
     }

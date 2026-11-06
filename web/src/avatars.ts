@@ -22,7 +22,7 @@ const SHAPE_PX = 3, DOT_PX = 1;
 /** Members drawn as shapes or dots at most in a frame; past it, the same share of each node is drawn. */
 const MOST_SHOWN = 20000;
 /** Stipple dots a square pixel holds at most, their size, px, and how strong they are, from few members a dot to many. */
-const STIPPLE_PER_PX2 = 0.08, STIPPLE_PX = 1, STIPPLE_ALPHA = [0.3, 0.6];
+const STIPPLE_PER_PX2 = 0.04, STIPPLE_PX = 1, STIPPLE_ALPHA = [0.2, 0.4];
 /** How strong a soft dot is. */
 const DOT_ALPHA = 0.85;
 /** A part smaller than this, px, is not drawn; up to `SHAPE_PX` it is a dot. */
