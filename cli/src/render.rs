@@ -2,20 +2,17 @@
 //! one panel of a window of the map (`window`).
 
 use pcore::World;
-use tape::{fields, pixels, raster, Fields, STANDING_M};
+use tape::{fields, is_river, pixels, raster, Fields, STANDING_M};
 
 type Rgb = [u8; 3];
 
-/// Liquid flux over which a dry land cell is a river in these pictures, mol/s (the web viewer's is `tape::RIVER_WEB`).
-pub const RIVER_PNG: f64 = 3.0e4;
 /// Ice thicker than this covers the map, m.
 const ICE_M: f64 = 0.05;
 /// Pixels per cell, the panels side by side and the gap between them.
 const PX: usize = 3;
 /// The panels of the pictures of a world, in the order they are drawn side by side.
 const SIDE_BY_SIDE: usize = 6;
-/// The panels `ew view` draws: those of the pictures and the land with no river drawn over it (on a coarse cell every
-/// land square is over the river flux, so the map shows no relief there).
+/// The panels `ew view` draws: those of the pictures and the land with no river drawn over it.
 pub const PANELS: [&str; 7] = ["map", "temperature", "rain", "life", "traffic", "depth", "land"];
 const GAP: usize = 4;
 /// Seconds of a year for the rain panel (1e4 mol/(m² year) is about 0.2 m of liquid).
@@ -95,23 +92,23 @@ impl<'a> Look<'a> {
     /// `beside` it (west and north), `step` m away.
     fn map(&self, i: usize, (west, north): (usize, usize), step: f64, rivers: bool) -> Rgb {
         let (w, f) = (self.w, &self.f);
-        let flux = if rivers { w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64 } else { 0.0 };
+        let river = rivers && is_river(w, i);
         let shade = (1.0 - (((f.z[west] - f.z[i]) + (f.z[north] - f.z[i])) / step) * 6.0).clamp(0.6, 1.3);
         let c = if f.ice[i] > ICE_M {
             [240, 244, 250]
         } else if f.depth[i] > STANDING_M {
             // Standing liquid: shallow light, deep dark.
             ramp(&[(1.0, [90, 160, 215]), (30.0, [50, 110, 190]), (200.0, [25, 60, 140]), (800.0, [10, 30, 80])], f.depth[i])
-        } else if flux > RIVER_PNG {
+        } else if river {
             // Flowing liquid, mol/s, on a log scale.
-            ramp(&[(4.5, [120, 175, 225]), (5.5, [50, 110, 215]), (6.5, [20, 50, 170])], flux.log10())
+            ramp(&[(4.5, [120, 175, 225]), (5.5, [50, 110, 215]), (6.5, [20, 50, 170])], (w.liquid_flux[i] as f64).log10())
         } else {
             ramp(
                 &[(0.0, [120, 160, 90]), (400.0, [150, 170, 100]), (1000.0, [170, 150, 110]), (1800.0, [140, 120, 105]), (2600.0, [200, 200, 200])],
                 f.z[i],
             )
         };
-        let shade = if f.depth[i] > STANDING_M || flux > RIVER_PNG { 1.0 } else { shade };
+        let shade = if f.depth[i] > STANDING_M || river { 1.0 } else { shade };
         c.map(|v| (v as f64 * shade).clamp(0.0, 255.0) as u8)
     }
 }

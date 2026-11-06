@@ -768,7 +768,7 @@ Each cell is one pixel (or one small tile when zoomed in). Its colour comes from
 |---|---|---|
 | deep sea / shallow sea | liquid depth, connected to the large liquid body | dark blue / light blue |
 | lake | liquid in a closed low area | mid blue |
-| river | cell with high, lasting liquid flow | bright blue line |
+| river | cell that carries much more liquid than its own area sheds (`tape::is_river`) | bright blue line |
 | snow / ice | frozen liquid covering the ground | white |
 | bare rock / mountain | high, steep, little plant cover | grey, with shading |
 | desert | dry, little plant cover | sand |

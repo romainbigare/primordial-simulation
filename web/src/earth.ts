@@ -44,7 +44,10 @@ function ramp(r: RGB[], t: number, o: number[]): void {
 const mix = (o: number[], c: RGB, t: number) => { for (let k = 0; k < 3; k++) o[k] += (c[k] - o[k]) * t; };
 
 const WET = 2; // metres of liquid that make a cell water
-const RIVER_LOG = [3.6, 4.3]; // log10 flux (mol/s) over which a river fades in
+// A river carries at least RIVER_CATCH (10) times what its own area sheds (the `catch` layer) and RIVER_FLOOR (9e3) mol/s:
+// tape/src/layers.rs RIVER_CATCH and RIVER_FLOOR (keep the three in step). It fades in over these log10 spans, half at the value.
+const RIVER_CATCH_LOG = [0.7, 1.3];
+const RIVER_FLOOR_LOG = [3.6, 4.3];
 const L = [-0.588, -0.588, 0.647]; // light from the north-west
 const EXAGGERATE = 6;
 const SEA_SHARE = 0.01; // a wet region of a globe with this share of the cells is sea, a smaller one a lake
@@ -82,7 +85,7 @@ const PATH = rgb('#e8590c');
 export function paint(w: World, f: number, mode: string, img: ImageData, cls: Uint8Array, paths: boolean): void {
   const { w: W, h: H, cell_m, globe } = w.meta;
   const z = decode(w, f, 'z'), depth = decode(w, f, 'depth'), ice = decode(w, f, 'ice'), tg = decode(w, f, 't_ground');
-  const flux = decode(w, f, 'flux'), plants = plane(w, f, 'plants');
+  const flux = decode(w, f, 'flux'), catchment = decode(w, f, 'catch'), plants = plane(w, f, 'plants');
   const tr = plane(w, f, 'true_r'), tgc = plane(w, f, 'true_g'), tb = plane(w, f, 'true_b');
   const over = ['earth', 'true'].includes(mode) ? null : plane(w, f, mode);
   const overLut = over ? w.lut[w.index.get(mode)!] : null;
@@ -130,8 +133,7 @@ export function paint(w: World, f: number, mode: string, img: ImageData, cls: Ui
       const snow = iceI;
       mix(c, SNOW, snow); if (snow > 0.5) cls[i] = ICE;
       k = 0.8 + 0.3 * snow;
-      // A river fades in over log10 flux 3.6 to 4.3 (mol/s), half at about 9e3: tape/src/layers.rs RIVER_WEB.
-      river = smooth(RIVER_LOG[0], RIVER_LOG[1], Math.log10(flux[i] + 1)) * (1 - 0.6 * snow);
+      river = Math.min(smooth(RIVER_CATCH_LOG[0], RIVER_CATCH_LOG[1], Math.log10(catchment[i] + 1)), smooth(RIVER_FLOOR_LOG[0], RIVER_FLOOR_LOG[1], Math.log10(flux[i] + 1))) * (1 - 0.6 * snow);
     }
     const m = clamp(1 + (shade - 1) * k, 0.5, 1.45);
     for (let j = 0; j < 3; j++) c[j] *= m;

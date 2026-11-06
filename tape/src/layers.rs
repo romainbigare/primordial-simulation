@@ -83,14 +83,30 @@ fn cell(w: &World, i: usize) -> Cell {
 
 /// Liquid deeper than this stands (a basin), m; shallower, it may flow as a river.
 pub const STANDING_M: f64 = 1.0;
-/// Liquid flux over which a dry land cell is a river in the web viewer, mol/s: web/src/earth.ts fades a river in over
-/// log10 flux 3.6 to 4.3, half at about this (keep the two in step).
-pub const RIVER_WEB: f64 = 9.0e3;
+/// A river carries at least this many times the liquid its own area sheds (`catchment`): an accumulation threshold, how
+/// drainage networks are drawn (O'Callaghan and Mark 1984). web/src/earth.ts fades a river in about it (keep the two in step).
+pub const RIVER_CATCH: f64 = 10.0;
+/// A river carries at least this liquid flux, mol/s, so a dry cell with a trickle from upstream is none. web/src/earth.ts
+/// fades a river in about it (keep the two in step).
+pub const RIVER_FLOOR: f64 = 9.0e3;
+/// Net rain below this, mol/m²/s, counts as this in `catchment` (a cell that sheds nothing of its own, its flux all from upstream).
+const SHED_MIN: f64 = 1e-6;
 
-/// The liquid flux of each dry land cell (land under no more than `STANDING_M` of liquid), mol/s: where a river may be.
-pub fn dry_land_flux(w: &World, f: &Fields) -> Vec<f64> {
-    let dry = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i) && f.depth[i] <= STANDING_M);
-    dry.map(|i| w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64).collect()
+/// The upstream area cell `i` drains, in units of its own: its liquid flux over what its own area sheds (rain less
+/// evaporation, per m²), 1 for a cell with only its own runoff. It does not depend on the cell's size.
+pub fn catchment(w: &World, i: usize) -> f64 {
+    let shed = (w.rain[i] as f64 - w.evap[i] as f64).max(SHED_MIN) * w.mesh.cells().area()[i];
+    w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64 / shed
+}
+
+/// Whether cell `i` is a river: its flux is over `RIVER_FLOOR` and its `catchment` over `RIVER_CATCH`.
+pub fn is_river(w: &World, i: usize) -> bool {
+    w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64 > RIVER_FLOOR && catchment(w, i) > RIVER_CATCH
+}
+
+/// The dry land cells (land under no more than `STANDING_M` of liquid) that are rivers (`is_river`).
+pub fn river_count(w: &World, f: &Fields) -> usize {
+    (0..w.mesh.cells().n()).filter(|&i| w.is_land(i) && f.depth[i] <= STANDING_M && is_river(w, i)).count()
 }
 
 /// Everything a layer, and a row of the series, may read.
@@ -169,6 +185,7 @@ pub const LAYERS: &[Layer] = &[
     l("depth", "m", "log", 0.01, 3000.0, |c, i| c.f.depth[i]),
     l("ice", "m", "log", 0.001, 100.0, |c, i| c.f.ice[i]),
     l("flux", "mol/s", "log", 1.0, 1e7, |c, i| c.w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64),
+    l("catch", "1", "log", 1.0, 1e5, |c, i| catchment(c.w, i)),
     l("loose", "m", "log", 0.01, 100.0, |c, i| c.f.loose[i]),
     l("t_ground", "K", "lin", 220.0, 330.0, |c, i| c.f.t[i]),
     l("t_air", "K", "lin", 220.0, 330.0, |c, i| c.t_air[c.air(i)]),

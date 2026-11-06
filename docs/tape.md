@@ -58,8 +58,9 @@ map repeating east and west, and a cell's latitude and longitude in the inspect 
 (`rivers`, the cover's median) are of cells (a cell of many squares counts one).
 
 **Map layers** in the frames (`tape/src/layers.rs`, one byte a square of the map, row by row; a square shows the cell
-that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid depth, ice, liquid flux, loose
-ground, ground and air temperature, rain, vapour, absorber, the cover's and the bodies' mass per m², bodies, traffic,
+that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid depth, ice, liquid flux, `catch` (the upstream area a cell drains
+in units of its own: its liquid flux over its rain less evaporation times its area, so a river reads the same at any cell
+size), loose ground, ground and air temperature, rain, vapour, absorber, the cover's and the bodies' mass per m², bodies, traffic,
 worn edges, structures, true colour (r, g, b). The tape holds whole-map frames only. The live viewer also asks for
 the layers of a window of the map as a raster of pixels (`tape::frame_window`): each pixel shows the cell that holds its
 centre, so cells finer than a square are seen; it is shown over the whole-map frame and is not recorded. Close up it also asks
@@ -87,7 +88,7 @@ space it closes) with the bonds; it is drawn as avatars and is not recorded.
 | `ice_land` | km³ | frozen cover on land |
 | `rain`, `rain_land` | mol/m²/s | mean rain, and on land (a moving average over about a year) |
 | `evap_land`, `runoff_sea` | mol/m²/s | on land, what rises into the air less what condenses on the ground, and what runs over the surface into cells under the sea's level, per m² of land (moving averages over about a year): with `rain_land` the land's water budget |
-| `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) with a liquid flux over the web viewer's threshold (`tape::RIVER_WEB`) |
+| `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) that are rivers (`tape::is_river`): a liquid flux over `tape::RIVER_FLOOR` and over `tape::RIVER_CATCH` times what the cell's own area sheds (`catch`). The viewers and the report count the same way |
 | `cells`, `splits`, `joins` | , 1/yr, 1/yr | the cells of the map at the year's end; cells split into their quarters and cells joined from them in the year (`World::split`, `World::join`, as refinement asks, `World::refine`) |
 | `bodies` | | bodies (nodes and individuals) |
 | `cover_slots`, `cover_kg` | , kg | slots of cover in the world (`cover::SLOTS` a cell at most), and its mass |

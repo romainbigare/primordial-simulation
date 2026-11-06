@@ -49,8 +49,8 @@ const RAIN_LAND: f64 = 3.049e-3;
 /// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs: it keeps the world near itself;
 /// `EARTH_ABSORBER_PPM` holds it near Earth's.
 const ABSORBER_PPM: f64 = 258.1;
-/// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the reference runs.
-const RIVERS: f64 = 712.4;
+/// Dry land cells that are rivers (`rivers`, `tape::is_river`), in the reference runs.
+const RIVERS: f64 = 395.7;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
 const WORN: f64 = 0.3179;
 /// The cover (starting kind 0) at year 30, log10 kg (`root_0_cover_kg`), in the reference runs.

@@ -2,7 +2,7 @@
 //! deaths, dead matter, the heat-absorbing gases and the catalysts life carries.
 
 use super::{Row, GIGA};
-use crate::layers::{dry_land_flux, Ctx, COVER_MIN, RIVER_WEB};
+use crate::layers::{river_count, Ctx, COVER_MIN};
 use crate::measure::area_mean;
 use crate::rec::{Recorder, CAUSES};
 use pcore::{World, AIR};
@@ -49,7 +49,7 @@ impl Recorder {
         let land_area = land.iter().map(|&i| area[i]).sum::<f64>().max(f64::MIN_POSITIVE);
         row.push("runoff_sea", "mol/m2/s", land.iter().map(|&i| w.off_land[i] as f64).sum::<f64>() / land_area);
         // Rivers as the web viewer draws them.
-        row.push("rivers", "1", dry_land_flux(w, &c.f).iter().filter(|&&q| q > RIVER_WEB).count() as f64);
+        row.push("rivers", "1", river_count(w, &c.f) as f64);
         // The cells, and those split and joined in the year.
         row.push("cells", "1", w.mesh.cells().n() as f64);
         row.push("splits", "1/yr", self.year.splits);
