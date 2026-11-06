@@ -2,7 +2,7 @@
 //! warm by burning and cool by evaporating), its key liquid (drinking, frost, boiling), digestion and its age. Damage:
 //! `damage.rs`.
 
-use pcore::body::{self, Body, Layout, COOL_T, KEEP_T, PHASE};
+use pcore::body::{self, Body, Layout, COOL_T, HEAT, KEEP_T, PHASE};
 use pcore::life::Handle;
 use pcore::{brain, World, AIR};
 use worldgen::testkit::{add, died, dry_lands, eater, held_day, hold_ground, kg, node_of, out, put_kg_m2, scale, small_world, start, stores, took_from_ground, warm, Books, Brain, Line, LIQUID, MATTER, RICH};
@@ -108,6 +108,49 @@ fn a_body_drinks_its_liquid_from_the_ground() {
     println!("liquid {low:.2} -> {:.2} mol", b.amount(w.chem.body(), LIQUID));
     assert!(b.amount(w.chem.body(), LIQUID) > low + 5.0, "it did not drink");
     books.assert_kept(&w, 1e-9);
+}
+
+/// The first cell below 0 m whose standing liquid is deeper than twice the height of a body of `EATER_KG`.
+fn deep_cell(w: &World) -> usize {
+    let side = w.cfg.phys.side(worldgen::testkit::EATER_KG);
+    (0..w.mesh.cells().n()).find(|&i| !w.is_land(i) && w.life.env[i][1] > 2.0 * side).expect("a cell of deep liquid")
+}
+
+/// A body in liquid deeper than its height passes its heat to the liquid (laws.md 6.3): through the liquid's film and
+/// the share `wet_coat` of its coat. A resting eater that drinks none and keeps warm at 285 K, in deep liquid and on dry
+/// land, each ground held at 275 K: each loses through each m² of its coat (`meeh` × mass^(2/3)) per K over its ground
+/// what its insulation passes there, 1 / (`r_air` + coat) in the air and 1 / (`r_liquid` + `wet_coat` × coat) in the
+/// liquid, about six times as much: between what its last sub-step's loss gives over the surface it had at the start of
+/// its update and at its end, as it burns its fuel through it. The books are kept.
+#[test]
+fn a_body_in_deep_liquid_loses_its_heat_to_the_liquid() {
+    let per_m2_k = |wet: bool| {
+        let (mut w, land) = start();
+        let i = if wet { deep_cell(&w) } else { land };
+        let mut b = eater(&mut w, i, brain::REST, 1.0);
+        (b.genes[KEEP_T], b.genes[COOL_T]) = (285.0, 295.0);
+        // (It drinks no cold liquid, whose warming would add to what leaves through its coat.)
+        b.genes[Layout::of(&w.chem).upt + w.chem.body().place(LIQUID).expect("a store")] = 0.0;
+        b.prepare(&w.chem, &w.cfg);
+        hold_ground(&mut w, i, 275.0);
+        let mass = b.mass(&w.chem);
+        let s = w.add(b);
+        let books = Books::now(&w);
+        let b = after_update(&mut w, s, 275.0);
+        books.assert_kept(&w, 1e-9);
+        let t = b.temp(&w.chem);
+        assert!((t - 285.0).abs() < 0.5, "it keeps warm at 285 K, not {t} K");
+        let per = |m: f64| b.lived.lost / (w.cfg.phys.meeh * m.powf(2.0 / 3.0)) / (t - 275.0);
+        (per(mass), per(b.mass(&w.chem)), b.gene(HEAT).clamp(0.0, 1.0) * w.cfg.phys.r_coat)
+    };
+    let ((dry_lo, dry_hi, coat), (wet_lo, wet_hi, _)) = (per_m2_k(false), per_m2_k(true));
+    let p = pcore::Physics::default();
+    let (air, liquid) = (1.0 / (p.r_air + coat), 1.0 / (p.r_liquid + p.wet_coat * coat));
+    println!("W per m² and K: on land {dry_lo:.3} to {dry_hi:.3} (its insulation passes {air:.3}), in deep liquid {wet_lo:.3} to {wet_hi:.3} ({liquid:.3})");
+    assert!(liquid > 4.0 * air, "a wet coat passes {liquid}, a dry one {air}");
+    for (lo, hi, want) in [(dry_lo, dry_hi, air), (wet_lo, wet_hi, liquid)] {
+        assert!(lo <= want * (1.0 + 1e-3) && want <= hi * (1.0 + 1e-3), "it lost {lo} to {hi} W per m² and K, not {want}");
+    }
 }
 
 /// Its key liquid frozen kills it: a body with no fuel to keep warm on ground below the liquid's melting point dies of

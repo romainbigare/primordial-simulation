@@ -693,8 +693,11 @@ Structures do not drift; only a body carries one (3.5).
 ### 3.3 Holding, floating
 Holding is a bond whose strength is the body's **force**, strength gene × living body × gravity × `grip`
 (`bond::bears`); a body holds only while its force bears the structure's weight. Fuel adds no force; a hurt body is
-weaker. A body is **afloat** where the liquid is deeper than `deep` and what it and its structure displace weighs as
-much as they do (Archimedes): no liquid stands over it (`bond::depth`). No body digs the bed.
+weaker. **In liquid** (`bond::immersed`): the share of a member's height under its cell's standing liquid is the depth
+over its height, at most 1; its height is its size, the side of a cube of its volume (`Physics::side`, 0.31 m at
+30 kg). A body rides the structure it holds dry, at the surface, where the liquid is deeper than its height and what
+that structure displaces weighs as much as both (Archimedes). That share passes its heat to the liquid, not the air
+(6.3). No body digs the bed.
 
 **A held edge concentrates force** (`bond/edge.rs`). Without one a body breaks matter bluntly: it gives way through its
 whole width (3.6). Pressed with the edge of a held part, only a zone as wide as the edge gives way (Atkins 2009): for
@@ -1117,7 +1120,12 @@ of its room, which the others there hold above the ground, through its coat in s
 ends in its ground either way. Each
 member has the surface `meeh` × its mass^(2/3) (Meeh 1879); its coat insulates it by the still air at its surface
 (`r_air`) and the share `HEAT` (0 to 1) of the best coat, `r_coat` (fur and the tissue under it: a mammal's least
-conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). Its heat balance over the time dt,
+conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). **In liquid** the share of its height
+under its cell's standing liquid (3.3) passes heat through the liquid's film, `r_liquid` (free convection in liquids,
+50 to 1,000 W/(m² K) against about 8 at still air; Incropera and DeWitt 2002), and the share `wet_coat` of its coat,
+whose still air the liquid displaces (furs immersed keep about a tenth of their insulation; Scholander et al. 1950):
+a body of 30 kg with the founders' coat passes 1.0 W/K in the air and 5.8 W/K swimming, so to keep warm in cold liquid
+it burns about six times what it burns in air as cold. Its heat balance over the time dt,
 C dT/dt = P - g (T - tg) (Newton's law of cooling; an animal's energy budget, Porter and Gates 1969; `live::Balance`),
 moves its temperature from where it is toward where that heat holds it (its surroundings', tg, plus the heat over the
 coat's conductance) by the share 1 - e^(-g dt / C) its heat capacity C lets it go in the time: a body's own time C / g is hours

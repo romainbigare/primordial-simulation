@@ -55,23 +55,22 @@ pub(super) fn liquid(w: &World, i: usize, g: impl Fn(usize) -> f64) -> (f64, f64
     if v > 0.0 { (env[1], m / v, mol / v) } else { (0.0, 0.0, 0.0) }
 }
 
-/// Is body `b` held up in its cell's liquid: does the liquid that its volume and the structure it holds displace weigh
-/// as much as they do (Archimedes, as for parts)? Not where the liquid is shallower than `deep`.
-fn afloat(w: &World, d: &Chunk, b: &Body) -> bool {
-    let (i, mb) = (b.cell as usize, b.mass(&w.chem));
-    let c = d.at(i);
-    let s = held(c, b).map(|p| c.parts[root(c, p)].s);
-    let (depth, rho, _) = liquid(w, i, d.moves.amounts(w, Node::ground(i)));
-    if depth < w.cfg.phys.deep {
-        return false;
+/// The share of a member's height (`Physics::side`) of body `b` under the standing liquid of cell `i` (its own, or one
+/// it steps into, `choose::go`; laws.md 3.3): the depth over its height, at most 1. None where it rides the structure it
+/// holds, of its own cell: where the liquid is deeper than its height and what that structure displaces weighs as much
+/// as both (Archimedes, as for parts), it rides it dry, at the surface.
+pub(crate) fn immersed(w: &World, d: &Chunk, b: &Body, i: usize) -> f64 {
+    let depth = w.life.env[i][1];
+    if depth <= 0.0 {
+        return 0.0;
     }
-    let (outer, mass) = s.map_or((0.0, 0.0), |s| (s.outer, s.mass));
-    rho * (b.volume(&w.chem, b.temp(&w.chem)) + outer) >= mb + mass
-}
-
-/// Depth of liquid over a body: none while afloat.
-pub fn depth(w: &World, d: &Chunk, b: &Body, depth: f64) -> f64 {
-    if depth > 0.0 && afloat(w, d, b) { 0.0 } else { depth }
+    let (mb, c) = (b.mass(&w.chem), d.at(b.cell as usize));
+    let side = w.cfg.phys.side(mb / b.n());
+    let rides = depth > side && held(c, b).is_some_and(|p| {
+        let s = &c.parts[root(c, p)].s;
+        liquid(w, i, d.moves.amounts(w, Node::ground(i))).1 * s.outer >= mb + s.mass
+    });
+    if rides { 0.0 } else { (depth / side.max(1e-9)).min(1.0) }
 }
 
 /// Numbers a body perceives of what it holds and of the walls around it (`sense`).
