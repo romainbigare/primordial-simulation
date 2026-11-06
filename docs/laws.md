@@ -218,16 +218,22 @@ and before it places life by the plan. With no budget (`Config::cell_budget` 0, 
 the cells stay as built. Else each cell has a score, a sum of four terms each about 1 in a cell worth refining
 (`refine/score.rs`): the camera's, inside the window of the camera's shot of the month, 2^(asked depth - depth - 1)
 (1 a depth coarser than asked, twice that for each depth coarser, 1/2 at the asked depth, which keeps the cell; none
-finer than asked or outside the window); brains, the members of bodies whose brain has hidden units per m² over
-`BRAINS_M2`; parts and bonds per m² over `PARTS_M2`; and change, the share by which the cell's animal mass per m²
-moved since the last month (of at least `MASS_FLOOR`) over `MASS_SHARE`, what it held then kept per cell in
-`World::watch`, which follows the cells through the remap. The ground's temperature is no term: it moves with the
-season, faster on land than under liquid, so its departures mark the coasts each season, not an event. Then, the
-lowest first (ties by the least serial), each four quarters of one leaf, built no coarser than it (`Watch::built`)
-and with no finer cell across a side, join while the cells are over the budget or all four score under `JOIN_AT`
-(1/4: a cell does not flap); then, those the camera asks for (its term alone is 1 or more) first, then the highest
-first, each cell of `SPLIT_AT` (1) or more coarser than the floor (`Config::finest_depth`) splits if its split, with
-the splits 2:1 forces, keeps the cells within the budget. A split the camera asks for may first join the quietest
+finer than asked or outside the window); brains, the members in the cell of bodies whose brain has hidden units over
+`BRAINS_UNIT`; parts, its parts and bonds over `PARTS_UNIT`; and change, the share by which the cell's animal mass
+moved since the last month (of at least `MASS_FLOOR`, a mass) over `MASS_SHARE`, what it held then kept per cell in
+`World::watch` (per m²), which follows the cells through the remap. The ground's temperature is no term: it moves with
+the season, faster on land than under liquid, so its departures mark the coasts each season, not an event. **The score
+settles**: for the same things in a cell, no quarter scores more than the cell. Brains and parts are counts, which a
+split shares out, so the quarters' terms sum to the cell's (a density would grow four times at each split, and a cell
+of one part would never join); change is a share, the same in quarters that changed alike and less in one that holds
+little against the floor; the camera's halves at each depth. So a cell splits until each holds about one unit, and no
+further. Then, the lowest first (ties by the least serial), each four quarters of one leaf, built no coarser than it
+(`Watch::built`) and with no finer cell across a side, join while the cells are over the budget or the cell they would
+make scores under `JOIN_AT` (its brains and parts the sum of theirs, its change that of their masses summed, its
+camera's term twice their highest; 1/4: a cell joins only once it holds four times less than a split asks, so it does
+not flap); then, those the camera asks for (its term alone is 1 or more) first, then the highest first, each cell of
+`SPLIT_AT` (1) or more coarser than the floor (`Config::finest_depth`) splits if its split, with the splits 2:1 forces,
+keeps the cells within the budget. A split the camera asks for may first join the quietest
 quartets the camera does not see, nor a cell beside them (a split there would split their join again, 2:1), to make
 room: what is looked at comes first. As the camera's splits come first, a cell joined to make room for them takes the
 room back only once the camera asks for no more: at a full budget the cells settle with the camera's window at its

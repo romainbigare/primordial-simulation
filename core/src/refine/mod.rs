@@ -7,7 +7,7 @@ mod camera;
 mod score;
 
 pub use camera::{Camera, Shot};
-pub use score::Watch;
+pub use score::{Watch, PARTS_UNIT};
 
 use crate::event::{Event, EventKind};
 use crate::remap::Change;
@@ -28,10 +28,11 @@ struct Want {
     asked: bool,
 }
 
-/// Four quarters that may join into `parent`: the highest of their scores, their least serial (ties go to the least),
-/// and whether the camera sees any of them or a cell beside them (a split there would split their join again, 2:1).
+/// Four quarters that may join into `parent`: the score of the cell they would make (`score::joined`), their least
+/// serial (ties go to the least), and whether the camera sees any of them or a cell beside them (a split there would
+/// split their join again, 2:1).
 struct Quartet {
-    top: f64,
+    score: f64,
     serial: u32,
     parent: Leaf,
     seen: bool,
@@ -50,11 +51,11 @@ struct Month {
 
 impl World {
     /// Refine the cells at a month's start, before its survey, once the shell took the events (laws.md 0): score each
-    /// cell (`score`), with the shot of `camera` in force this month; then, the quietest first, join each quartet whose
-    /// four quarters all score under `JOIN_AT`, or while the cells are over the budget; then, those the camera asks for
-    /// first, then the highest score first (ties by serial), split each cell scoring `SPLIT_AT` or more above the floor
-    /// whose split (with those the 2:1 rule forces) keeps the cells within the budget. A split the camera asks for may
-    /// first join the quietest quartets it does not see, nor a cell beside them, to make room: what is looked at comes
+    /// cell (`score`), with the shot of `camera` in force this month; then, the quietest first, join each quartet that
+    /// would make a cell scoring under `JOIN_AT`, or while the cells are over the budget; then, those the camera asks
+    /// for first, then the highest score first (ties by serial), split each cell scoring `SPLIT_AT` or more above the
+    /// floor whose split (with those the 2:1 rule forces) keeps the cells within the budget. A split the camera asks for
+    /// may first join the quietest quartets it does not see, nor a cell beside them, to make room: what is looked at comes
     /// first, and what it took room from does not take it back while the camera asks. A cell joins no coarser than it
     /// was built. At most
     /// `MOST_CHANGES` a month. The events of a join's merge name their cell by index, which the next change renumbers:
@@ -73,7 +74,7 @@ impl World {
         let (wants, quartets) = (self.wants(&score), self.quartets(&score));
         let mut m = Month { cells: n, budget: self.cfg.cell_budget as usize, made: 0, held: Vec::new(), change: self.change() };
         let mut next = 0;
-        while let Some(q) = quartets.get(next).filter(|q| m.made < MOST_CHANGES && (m.cells > m.budget || q.top < JOIN_AT)) {
+        while let Some(q) = quartets.get(next).filter(|q| m.made < MOST_CHANGES && (m.cells > m.budget || q.score < JOIN_AT)) {
             next += 1;
             self.join_quartet(q, &mut m);
         }
@@ -113,8 +114,9 @@ impl World {
         wants
     }
 
-    /// The quartets that may join, the quietest first: four cells that are the quarters of one leaf, built no coarser
-    /// than it, none with a cell across a side finer than itself (the joined cell would border one two depths finer).
+    /// The quartets that may join, the one that would make the quietest cell first: four cells that are the quarters of
+    /// one leaf, built no coarser than it, none with a cell across a side finer than itself (the joined cell would border
+    /// one two depths finer).
     fn quartets(&self, score: &[Score]) -> Vec<Quartet> {
         let (cells, leaves) = (self.mesh.cells(), self.map.leaves());
         let beside = |i: usize| {
@@ -129,12 +131,12 @@ impl World {
                 let kids = parent.quarters().map(|q| self.map.cell(q));
                 let kids = [kids[0]?, kids[1]?, kids[2]?, kids[3]?];
                 let joins = kids.iter().all(|&k| self.watch[k].built <= parent.depth && !fine_beside(k));
-                let top = kids.iter().map(|&k| score[k].all).fold(f64::NEG_INFINITY, f64::max);
+                let joined = score::joined(kids.map(|k| &score[k]));
                 let serial = kids.iter().map(|&k| self.life.serial(k)).min().expect("four quarters");
-                joins.then_some(Quartet { top, serial, parent, seen: kids.iter().any(|&k| seen(k)) })
+                joins.then_some(Quartet { score: joined, serial, parent, seen: kids.iter().any(|&k| seen(k)) })
             })
             .collect();
-        quartets.sort_by(|a, b| a.top.total_cmp(&b.top).then(a.serial.cmp(&b.serial)));
+        quartets.sort_by(|a, b| a.score.total_cmp(&b.score).then(a.serial.cmp(&b.serial)));
         quartets
     }
 
