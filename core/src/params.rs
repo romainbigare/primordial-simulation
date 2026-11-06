@@ -279,14 +279,14 @@ impl Physics {
     pub fn speed(&self, m1: f64, gravity: f64) -> f64 {
         (WALK_FROUDE * gravity * self.side(m1)).sqrt()
     }
-    /// Energy to move one kg one metre through liquid of density `rho` kg/m³ for a member of `m1` kg, the share `wet` of
-    /// its height under it, J, under `gravity` m/s²: the drag on the face it pushes, ½ `rho` `DRAG` (`wet` L²) v² at its
-    /// walking speed (`speed`), L its size (`side`), over the share `MUSCLE` of its burning that its muscles turn into
-    /// that work. At one Froude number the same for every size: 5.2 J at `wet` 1 in a liquid as dense as bodies, against
+    /// Energy to move one kg one metre through liquid of density `rho` kg/m³ at `v` m/s for a member of `m1` kg, the
+    /// share `wet` of its height under it, J: the drag on the face it pushes, ½ `rho` `DRAG` (`wet` L²) v², L its size
+    /// (`side`), over the share `MUSCLE` of its burning that its muscles turn into that work. At its walking speed
+    /// (`speed`), one Froude number, the same for every size: 5.2 J at `wet` 1 in a liquid as dense as bodies, against
     /// the walk's 3.0 at 30 kg and 1.0 at a tonne; a body not built to swim pays several times on land's cost to cross
     /// liquid (Williams 1999).
-    pub fn drag(&self, m1: f64, wet: f64, rho: f64, gravity: f64) -> f64 {
-        let (side, v) = (self.side(m1), self.speed(m1, gravity));
+    pub fn drag(&self, m1: f64, wet: f64, rho: f64, v: f64) -> f64 {
+        let side = self.side(m1);
         0.5 * rho * DRAG * wet * side * side * v * v / (m1.max(1e-9) * MUSCLE)
     }
     /// The size of a member of `m1` kg, m: the side of a cube of its volume (`rho_body`). It is how high it stands, how

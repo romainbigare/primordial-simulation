@@ -182,8 +182,9 @@ pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, (s, days): (Handle, f64
     let (mb, tb) = (b.mass(&w.chem), b.temp(&w.chem));
     let edge = bond::edge(d.at(b.cell as usize), w, b);
     let (left, through) = edge.as_ref().map_or((1.0, 0.0), |e| bond::edge_leaves(b.n(), o.cut_by(&w.chem, &w.cfg, e)));
-    // (Its force goes as far as `1 / left` of it would bluntly.)
-    let (fb, fo) = (b.gene(STRENGTH) * b.built(&w.chem) / b.n() / left, o.gene(STRENGTH) * o.built(&w.chem) / o.n());
+    // (Its force goes as far as `1 / left` of it would bluntly; each one's with the vigour of its temperature.)
+    let force = |x: &Body| x.gene(STRENGTH) * x.built(&w.chem) / x.n() * x.vigour(&w.chem, x.temp(&w.chem));
+    let (fb, fo) = (force(b) / left, force(o));
     let (kg, swept) = intake(w, b, (tb, days), |k| o.amount(bc, k));
     // One draw finds an individual prey.
     let reached = if o.n() > 1.0 { swept } else if rng.f64() < swept { 1.0 } else { return };

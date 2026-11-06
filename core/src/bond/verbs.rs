@@ -61,9 +61,10 @@ pub(super) fn torn_from(w: &World, d: &mut Chunk, i: usize, o: usize) {
 }
 
 /// Weight a body bears by its own force, N, which is also the force it pushes or pulls with. Force goes with its living
-/// body (`Body::built`), so a hurt body is weaker and fuel adds no strength.
+/// body (`Body::built`), so a hurt body is weaker and fuel adds no strength, and with the vigour of its temperature
+/// (`Body::vigour`), so a cold body is weaker.
 pub fn bears(w: &World, b: &Body) -> f64 {
-    b.gene(STRENGTH) * b.built(&w.chem) * w.cfg.gravity * w.cfg.phys.grip
+    b.gene(STRENGTH) * b.built(&w.chem) * w.cfg.gravity * w.cfg.phys.grip * b.vigour(&w.chem, b.temp(&w.chem))
 }
 
 /// Verb `v` toward the part at `p` of body `b`'s cell: hold, take from, put to, join the held part to, break, enter;

@@ -691,9 +691,12 @@ breaks. A structure no body holds lies on the ground and bears no load.
 Structures do not drift; only a body carries one (3.5).
 
 ### 3.3 Holding, floating
-Holding is a bond whose strength is the body's **force**, strength gene × living body × gravity × `grip`
-(`bond::bears`); a body holds only while its force bears the structure's weight. Fuel adds no force; a hurt body is
-weaker. **In liquid** (`bond::wading`): the share of a member's height under its cell's standing liquid is the depth
+Holding is a bond whose strength is the body's **force**, strength gene × living body × gravity × `grip` × its
+vigour (`bond::bears`); a body holds only while its force bears the structure's weight. Fuel adds no force; a hurt body
+is weaker, and so is a cold one: its **vigour** (`Body::vigour`) is its pace (6.2) at its temperature, at most 1, as
+muscle's power falls with temperature by the rate law of what powers it (a Q10 of 2 to 3; Bennett 1990). In chemistry 0
+a body at 280 K has 0.38 of its force, at 260 K 0.05; at and above `t_cat` (290 K), where the force and the walk are
+anchored, all of it. A bite's force (`feed::take_body`) is each one's force with its vigour. **In liquid** (`bond::wading`): the share of a member's height under its cell's standing liquid is the depth
 over its height, at most 1; its height is its size, the side of a cube of its volume (`Physics::side`, 0.31 m at
 30 kg). Where the liquid is deeper than its height a member swims: it breathes its air (2.4), so it keeps to the
 surface, and the ground and the cover lie within its reach only as deep as its height and its reach, each its size
@@ -1014,7 +1017,8 @@ a mover (3.5).
 **An act takes time** (`choose::act_as`): the step is the body's time to its next update, and the act drawn takes what
 it needs of it. A move takes the walk: its distance at the body's walking speed (`Physics::speed`: every size walks at
 one Froude number v² / (g L) = 0.25, L the side of a cube of a member's volume, the dynamic similarity of Alexander and
-Jayes 1983; 0.9 m/s at 30 kg, so a link of 2 km takes 40 minutes). Putting down and letting go take none. Every other
+Jayes 1983; 0.9 m/s at 30 kg, so a link of 2 km takes 40 minutes) times its vigour (3.3): a cold body walks slower,
+and through liquid pays the drag of its slower speed. Putting down and letting go take none. Every other
 act (rest, give, a bite, a watch, Bond's acts on parts) fills the step (`Body::busy`): what it gives, bites and does
 goes by the time it is given. Taking leaves the step to eating. For the rest of its step a body takes food where it
 ends by the take law (`feed::take_node`): a mover where it lands (`choose::land_move`, for the time from its landing
@@ -1119,7 +1123,9 @@ it has takes all it can supply: its costs set its size, not a cap; across kinds 
 Kleiber's resting rate is a mammal's, its muscles included: a body of strength 1, as muscular as a mammal, pays it
 with its basal and strength costs together (`c_basal`, `c_strength`).
 **Pace** (`Body::pace`): the bare rate law of its main burning, k e^(−Ea/T), over its value at `t_cat`; supply and
-upkeep follow it, so seasons come from temperature, not a calendar. **Paying** (`body::pay`, `body::burn`): its
+upkeep follow it, so seasons come from temperature, not a calendar: a cold body takes, builds and pays less per day.
+Its force and its walking speed follow it below `t_cat` (its vigour, 3.3): a cold body pays little, and is weak and
+slow. **Paying** (`body::pay`, `body::burn`): its
 burnings run on demand as far as its fuel and the air's gases allow; the gas they take comes from its air node and the
 gas they make goes to its cell's bodies' node, each with its heat and latent heat (gas exchange is free: no pores);
 the work becomes heat in its cell's ground, and the body keeps its temperature. The unpaid share of upkeep dies

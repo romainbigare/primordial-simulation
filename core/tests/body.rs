@@ -196,6 +196,8 @@ fn burnt_per_m(wet: bool) -> f64 {
     let mut b = eater(&mut w, i, brain::REST, 1.0);
     b.genes[STRENGTH] = 0.6;
     b.prepare(&w.chem, &w.cfg);
+    // (Warm, so it walks at its full speed: `Body::vigour`.)
+    warm(&mut w, &mut b, 300.0);
     let s = w.add(b);
     let books = Books::now(&w);
     let mut m = std::mem::take(&mut w.life[s]);
@@ -217,9 +219,32 @@ fn a_body_pays_the_drag_of_the_liquid_it_moves_through() {
     let (land, deep) = (burnt_per_m(false), burnt_per_m(true));
     let p = pcore::Physics::default();
     let m1 = worldgen::testkit::EATER_KG;
-    let at = |rho: f64| 1.0 + p.drag(m1, 1.0, rho, 9.81) / p.walk(m1);
+    let at = |rho: f64| 1.0 + p.drag(m1, 1.0, rho, p.speed(m1, 9.81)) / p.walk(m1);
     println!("per metre it burnt {land:.3e} mol on land, {deep:.3e} in deep liquid: x{:.2} (x{:.2} to x{:.2})", deep / land, at(900.0), at(1100.0));
     assert!(deep / land > at(900.0) && deep / land < at(1100.0), "in deep liquid it paid x{} of the land's cost of a metre", deep / land);
+}
+
+/// A cold body is weak (laws.md 3.5): its force goes with the vigour of its temperature, its pace at most 1
+/// (`Body::vigour`). An eater of strength 0.6 bears its pace's share of its warm force at 260 K, too little to give the
+/// push of a mover (`bump`), and stays; warm, it moves.
+#[test]
+fn a_cold_body_is_weak() {
+    let (mut w, i) = start();
+    let j = w.mesh.cells().around(i).1[0] as usize;
+    let mut b = eater(&mut w, i, brain::REST, 1.0);
+    b.genes[STRENGTH] = 0.6;
+    b.prepare(&w.chem, &w.cfg);
+    let at = |w: &mut World, b: &Body, t: f64| {
+        let mut b = b.clone();
+        warm(w, &mut b, t);
+        let force = pcore::bond::bears(w, &b);
+        let moved = w.in_cell(i, |w, d| pcore::choose::go(w, d, &mut b, j, false));
+        (force, moved, b.pace(&w.chem, t))
+    };
+    let ((warm_f, warm_moved, _), (cold_f, cold_moved, pace)) = (at(&mut w, &b, 300.0), at(&mut w, &b, 260.0));
+    println!("force {warm_f:.1} N at 300 K, {cold_f:.2} N at 260 K (pace {pace:.3})");
+    assert!((cold_f / warm_f - pace).abs() < 1e-9 && pace < 0.1, "at 260 K x{} of its force, its pace {pace}", cold_f / warm_f);
+    assert!(warm_moved && !cold_moved, "warm it moved: {warm_moved}, cold: {cold_moved}");
 }
 
 /// Its key liquid frozen kills it: a body with no fuel to keep warm on ground below the liquid's melting point dies of
