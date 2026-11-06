@@ -196,7 +196,7 @@ function marksOf(st: Stand, mpp: number): { per: number; size: number; lift: num
   return { per: 1 / area, size, lift };
 }
 
-/** Paint the marks of `grids` in a view of `W` x `H` px at `mpp` metres a pixel of the first grid: in each tile,
+/** Paint the marks of `grids` in a view of `W` x `H` px at `mpp` metres a screen pixel: in each tile,
  * candidates at the densest a stand of its neighbourhood holds, each kept by the blended cover where it falls (its
  * cover share, its openness, and its own stand's density over the candidates'), so patterns fade into each other and
  * into the shore as the map's colours do; at most `MOST_MARKS`. Crowns are drawn back to front over all tiles. */
@@ -204,30 +204,30 @@ function paintGrids(c: CanvasRenderingContext2D, grids: Grid[], mpp: number, W: 
   type Mark = { x: number; y: number; st: Stand; m: { size: number; lift: number }; r: number };
   const marks: Mark[] = [];
   grids.forEach((g, k) => {
-    const f = g.field, later = grids.slice(k + 1), gm = mpp * (g.px / grids[0].px);
+    const f = g.field, later = grids.slice(k + 1);
     const covered = (sx: number, sy: number) => later.some(o => sx >= o.x && sy >= o.y && sx < o.x + o.px * o.field.w && sy < o.y + o.py * o.field.h);
     const x0 = Math.max(0, Math.floor(-g.x / g.px)), y0 = Math.max(0, Math.floor(-g.y / g.py));
     const x1 = Math.min(f.w, Math.ceil((W - g.x) / g.px)), y1 = Math.min(f.h, Math.ceil((H - g.y) / g.py));
-    const dense = (x: number, y: number) => {
-      let most = 0;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-        const nx = x + dx, ny = y + dy, i = ny * f.w + nx;
-        if (nx < 0 || ny < 0 || nx >= f.w || ny >= f.h || !f.open[i]) continue;
-        const st = stand(f.kg[i], f.wood[i], f.leaf[i], f.t[i], f.rain[i]);
-        if (st) most = Math.max(most, marksOf(st, gm).per);
-      }
-      return most;
-    };
+    // The density of each tile's own stand, then the densest of each tile's neighbourhood.
+    const bw = x1 - x0 + 2, own = new Float32Array(bw * (y1 - y0 + 2));
+    for (let y = y0 - 1; y <= y1; y++) for (let x = x0 - 1; x <= x1; x++) {
+      const i = y * f.w + x;
+      if (x < 0 || y < 0 || x >= f.w || y >= f.h || !f.open[i]) continue;
+      const st = stand(f.kg[i], f.wood[i], f.leaf[i], f.t[i], f.rain[i]);
+      if (st) own[(y - y0 + 1) * bw + x - x0 + 1] = marksOf(st, mpp).per;
+    }
     for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
-      const per = dense(x, y);
+      let per = 0;
+      for (let dy = 0; dy < 3; dy++) for (let dx = 0; dx < 3; dx++) per = Math.max(per, own[(y - y0 + dy) * bw + x - x0 + dx]);
       if (per <= 0) continue;
-      const r = seeded((g.seed + y * 65521 + x * 31) >>> 0), n = Math.round(per * g.px * g.py);
+      // As many candidates as the densest stand holds on the tile, the fraction kept by chance.
+      const r = seeded((g.seed + y * 65521 + x * 31) >>> 0), want = per * g.px * g.py, n = Math.floor(want) + (r() < want % 1 ? 1 : 0);
       for (let q = 0; q < n; q++) {
         const u = x + r(), v = y + r(), keep = r(), sx = g.x + u * g.px, sy = g.y + v * g.py;
         if (covered(sx, sy)) continue;
         const { stand: st, open } = sample(f, u, v, g.tint);
         if (!st) continue;
-        const m = marksOf(st, gm);
+        const m = marksOf(st, mpp);
         if (keep < st.closed * open * (m.per / per)) marks.push({ x: sx, y: sy, st, m, r: r() });
       }
     }
