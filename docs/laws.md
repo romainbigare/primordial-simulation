@@ -233,7 +233,9 @@ make scores under `JOIN_AT` (its brains and parts the sum of theirs, its change 
 camera's term twice their highest; 1/4: a cell joins only once it holds four times less than a split asks, so it does
 not flap); then, those the camera asks for (its term alone is 1 or more) first, then the highest first, each cell of
 `SPLIT_AT` (1) or more coarser than the floor (`Config::finest_depth`) splits if its split, with the splits 2:1 forces,
-keeps the cells within the budget. A split the camera asks for may first join the quietest
+keeps the cells within the budget, until none can (the least makes 3 cells more): at a full budget a month tries no
+split, and a split is worked out only where the least it makes (the cell and each coarser one across a side) fits. A
+split the camera asks for may first join the quietest
 quartets the camera does not see, nor a cell beside them (a split there would split their join again, 2:1), to make
 room: what is looked at comes first. As the camera's splits come first, a cell joined to make room for them takes the
 room back only once the camera asks for no more: at a full budget the cells settle with the camera's window at its

@@ -11,6 +11,7 @@ pub use score::{Watch, PARTS_UNIT};
 
 use crate::event::{Event, EventKind};
 use crate::remap::Change;
+use crate::space::tree::SIDES;
 use crate::space::Leaf;
 use crate::World;
 use score::{Score, JOIN_AT, SPLIT_AT};
@@ -54,11 +55,11 @@ impl World {
     /// cell (`score`), with the shot of `camera` in force this month; then, the quietest first, join each quartet that
     /// would make a cell scoring under `JOIN_AT`, or while the cells are over the budget; then, those the camera asks
     /// for first, then the highest score first (ties by serial), split each cell scoring `SPLIT_AT` or more above the
-    /// floor whose split (with those the 2:1 rule forces) keeps the cells within the budget. A split the camera asks for
-    /// may first join the quietest quartets it does not see, nor a cell beside them, to make room: what is looked at comes
-    /// first, and what it took room from does not take it back while the camera asks. A cell joins no coarser than it
-    /// was built. At most
-    /// `MOST_CHANGES` a month. The events of a join's merge name their cell by index, which the next change renumbers:
+    /// floor whose split (with those the 2:1 rule forces) keeps the cells within the budget, until no split can (the
+    /// least makes 3 cells more); a split is worked out only where the least it makes fits (`least_splits`). A split
+    /// the camera asks for may first join the quietest quartets it does not see, nor a cell beside them, to make room:
+    /// what is looked at comes first, and what it took room from does not take it back while the camera asks. A cell
+    /// joins no coarser than it was built. At most `MOST_CHANGES` a month. The events of a join's merge name their cell by index, which the next change renumbers:
     /// they wait with their cell's leaf and come back at the end naming the cell that then holds its place.
     /// Each change is an event (`World::split`, `World::join`). Returns the splits and joins made; none with no budget.
     pub fn refine(&mut self, camera: &Camera) -> usize {
@@ -78,8 +79,19 @@ impl World {
             next += 1;
             self.join_quartet(q, &mut m);
         }
-        let mut room = quartets[next..].iter().filter(|q| !q.seen);
+        let mut room = quartets[next..].iter().filter(|q| !q.seen).peekable();
         for s in &wants {
+            if m.cells + 3 > m.budget && (!s.asked || room.peek().is_none()) {
+                break;
+            }
+            let Some(least) = self.least_splits(s.leaf) else { continue };
+            if m.made + least > MOST_CHANGES {
+                break;
+            }
+            // (A split that cannot fit is not worked out.)
+            if !s.asked && m.cells + 3 * least > m.budget {
+                continue;
+            }
             let Ok(mut forced) = self.map.splits(s.leaf) else { continue };
             while s.asked && m.cells + 3 * forced.len() > m.budget && m.made + forced.len() < MOST_CHANGES {
                 let Some(q) = room.next() else { break };
@@ -99,6 +111,17 @@ impl World {
         let back: Vec<Event> = m.held.into_iter().map(|(e, l)| Event { node: tree.cell_at(l.corner()) as u32, ..e }).collect();
         self.events.extend(back);
         m.made
+    }
+
+    /// The least splits a split of cell `leaf` makes (`Square::splits`), if it is a cell: itself, and each coarser
+    /// cell across one of its sides, which the 2:1 rule splits first, by the tree of the cells as they are now.
+    fn least_splits(&self, leaf: Leaf) -> Option<usize> {
+        let (tree, leaves) = (self.mesh.tree(), self.map.leaves());
+        self.map.cell(leaf)?;
+        let mut coarser: Vec<usize> = SIDES.iter().flat_map(|&way| tree.beside(&leaf, way)).filter(|&c| leaves[c].depth < leaf.depth).collect();
+        coarser.sort_unstable();
+        coarser.dedup();
+        Some(1 + coarser.len())
     }
 
     /// The cells that want to split, those the camera asks for first, then the highest score first: those of `SPLIT_AT`
