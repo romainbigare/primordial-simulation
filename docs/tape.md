@@ -62,8 +62,18 @@ that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid d
 in units of its own: its liquid flux over its rain less evaporation times its area, so a river reads the same at any cell
 size), loose ground, ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the bodies' mass per m², bodies, traffic,
 worn edges, structures, true colour (r, g, b). The tape holds whole-map frames only. The live viewer also asks for
-the layers of a window of the map as a raster of pixels (`tape::frame_window`): each pixel shows the cell that holds its
-centre, so cells finer than a square are seen; it is shown over the whole-map frame and is not recorded. Close up it also asks
+the window in view finer than its cells (`tape::fine`, the layout in `tape/src/fine.rs`), a pixel a leaf of a depth
+2 to 4 below the cells, at any zoom: of each pixel the ground's height, the surface of the liquid standing in the cells
+about it, and every layer blended between the cells' centres (each cell weighing a pixel by the quadratic B-spline of its distance in its own sides, Shepard 1968, so the blend is smooth with its slope) (the ground's temperature along the ground's
+height, at the rate the air cools with height, `World::air_drop`), and the way each cell's liquid runs (to the cell the
+steepest way down its head takes the most of, as the liquid law sends it). The ground of a pixel is the terrain there
+(`space::terrain`: the mean of its samples, or finer than them the midpoint displacement's departures laid on a
+quadratic continuation of the coarser heights that keeps each leaf's mean) plus an offset blended between the cells'
+centres: each cell's height less the terrain's mean over it, made so the blend keeps each cell's height as its mean.
+The terrain's samples are found once (`tape::Samples`). The viewer paints it over the whole-map frame: hill shading
+from the fine ground, the liquid where its surface lies over the fine ground (the sea's tint by the depth there),
+snow by the pixel's own temperature near the cover's melting point, rivers as lines along those ways, as wide as
+their discharge (Leopold and Maddock 1953) or wider; it is not recorded. Close up it also asks
 for the things of the cells in view (`tape::things`, the record layout in `tape/src/things.rs`): each body (members,
 a member's mass, strength, colour, coat, copy mass, the temperatures it keeps, what it takes from where, its kind,
 stage and brain, the part it holds and the structure it is inside), each slot of cover (its kind, built cover and capture area per m²

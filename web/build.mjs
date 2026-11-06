@@ -1,12 +1,13 @@
 // Inlines the compiled modules (dist/.js) and style.css into one self-contained dist/index.html.
 import { readFileSync, writeFileSync, rmSync } from 'node:fs';
 
-const order = ['data', 'earth', 'map', 'charts', 'live', 'sprites', 'vegetation', 'avatars', 'main'];
-// The live world's worker runs on its own: the page holds its script as text and starts it from a Blob.
-const worker = readFileSync('dist/.js/worker.js', 'utf8').replace(/^export \{\};$/gm, '');
-const js = order
-  .map(n => readFileSync(`dist/.js/${n}.js`, 'utf8').replace(/^import .*$/gm, '').replace(/^export \{\};$/gm, '').replace(/^export /gm, ''))
-  .join('\n');
+const order = ['data', 'earth', 'fine', 'canopy', 'map', 'charts', 'live', 'sprites', 'vegetation', 'avatars', 'main'];
+// A module as plain script: its imports and exports taken out (the modules share one scope).
+const plain = n => readFileSync(`dist/.js/${n}.js`, 'utf8').replace(/^import .*$/gm, '').replace(/^export \{\};$/gm, '').replace(/^export /gm, '');
+// The live world's worker runs on its own, with the modules it paints with: the page holds its script as text and
+// starts it from a Blob.
+const worker = ['data', 'earth', 'fine', 'canopy', 'worker'].map(plain).join('\n');
+const js = order.map(plain).join('\n');
 // The page with `before` ahead of the modules' script (which reads what comes before it as it runs).
 const page = before => readFileSync('index.html', 'utf8')
   .replace('<!--CSS-->', () => `<style>\n${readFileSync('style.css', 'utf8')}</style>`)

@@ -35,8 +35,8 @@ export function rampFor(name: string): RGB[] {
 }
 export const rampCss = (r: RGB[]) => `linear-gradient(90deg,${r.map(c => `rgb(${c})`).join(',')})`;
 
-const clamp = (x: number, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
-const smooth = (a: number, b: number, x: number) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+export const clamp = (x: number, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
+export const smooth = (a: number, b: number, x: number) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 function ramp(r: RGB[], t: number, o: number[]): void {
   const x = clamp(t) * (r.length - 1), i = Math.min(Math.floor(x), r.length - 2), f = x - i;
   for (let k = 0; k < 3; k++) o[k] = r[i][k] + (r[i + 1][k] - r[i][k]) * f;
@@ -49,7 +49,8 @@ const WET = 2; // metres of liquid that make a cell water
 const RIVER_CATCH_LOG = [0.7, 1.3];
 const RIVER_FLOOR_LOG = [3.6, 4.3];
 const L = [-0.588, -0.588, 0.647]; // light from the north-west
-const EXAGGERATE = 6;
+/** How many times steeper than it is the ground of the map, a square a pixel, is shaded. */
+export const EXAGGERATE = 6;
 const SEA_SHARE = 0.01; // a wet region of a globe with this share of the cells is sea, a smaller one a lake
 const POLE_COS = 0.25; // a globe's east-west cell width, as a share of the equator's, is not taken below this when shading
 
@@ -81,19 +82,127 @@ function oceanFill(wet: Uint8Array, W: number, H: number, globe: boolean): Uint8
 export const PATH_LAYER = 'worn';
 const PATH = rgb('#e8590c');
 
-/** Fill `img` for frame f. mode: 'earth', 'true' or a layer name. `cls` receives the map class of every cell. `paths` draws the worn links over it. */
+/** What the base map's colour of a spot reads: a cell of the map, or a pixel of a raster finer than the cells (fine.ts). */
+export interface Spot {
+  /** Depth of the liquid standing there, m; whether it is the sea's; the share of the spot it covers, 0..1 */
+  depth: number; sea: boolean; cover: number;
+  /** Snow and ice on it, 0..1 */
+  snow: number;
+  /** Ground temperature, K; the byte of the `plants` layer; the ground's height, m; its slope (rise over run) */
+  t: number; plants: number; z: number; slope: number;
+  /** The light on the ground from the north-west over the light on flat ground (`hillShade`) */
+  shade: number;
+  /** Beach sand on it and a river through it, 0..1 */
+  sand: number; river: number;
+}
+
+/** The light from the north-west on ground of slope (gx, gy) (east, south), made `exaggerate` times steeper, over the
+ * light on flat ground. */
+export function hillShade(gx: number, gy: number, exaggerate: number): number {
+  const nx = -exaggerate * gx, ny = -exaggerate * gy;
+  return ((nx * L[0] + ny * L[1] + L[2]) / Math.sqrt(nx * nx + ny * ny + 1)) / L[2];
+}
+
+const landRgb = [0, 0, 0], waterRgb = [0, 0, 0], rockRgb: RGB = [0, 0, 0], riverRgb: RGB = [0, 0, 0];
+/** The shaded colour of spot `p` into `c`, its shade's multiplier into `m[0]`; returns its map class (the water's where
+ * the liquid covers half of it or more). */
+export function colour(p: Spot, c: number[], m: number[]): number {
+  const k = clamp(p.cover);
+  let wetCls = LAKE, dryCls = DESERT, wetM = 1, dryM = 1;
+  if (k > 0) {
+    if (p.sea) { ramp(SEA, 1 - Math.exp(-p.depth / 350), waterRgb); wetCls = p.depth > 200 ? DEEP : SHALLOW; }
+    else ramp(LAKEC, 1 - Math.exp(-p.depth / 60), waterRgb);
+    mix(waterRgb, SNOW, p.snow * 0.85);
+    if (p.snow > 0.5) wetCls = ICE;
+    wetM = clamp(1 + (p.shade - 1) * (0.25 + 0.5 * p.snow), 0.5, 1.45);
+    for (let j = 0; j < 3; j++) waterRgb[j] *= wetM;
+  }
+  if (k < 1) {
+    const v = Math.sqrt(p.plants / 255);
+    ramp(VEG, v, landRgb);
+    dryCls = v < 0.3 ? DESERT : v < 0.62 ? GRASS : FOREST;
+    mix(landRgb, TUNDRA, smooth(278, 266, p.t) * 0.7);
+    mix(landRgb, UPLAND, smooth(1200, 2600, p.z) * 0.5);
+    if (p.sand > 0) mix(landRgb, SAND, p.sand);
+    const rock = Math.max(smooth(0.14, 0.42, p.slope) * smooth(150, 700, p.z), smooth(2000, 3200, p.z) * 0.85) * (1 - 0.5 * v);
+    if (rock > 0) {
+      const hi = smooth(1500, 4000, p.z);
+      for (let j = 0; j < 3; j++) rockRgb[j] = ROCK_LO[j] + (ROCK_HI[j] - ROCK_LO[j]) * hi;
+      mix(landRgb, rockRgb, rock);
+    }
+    if (rock > 0.5) dryCls = ROCK;
+    mix(landRgb, SNOW, p.snow); if (p.snow > 0.5) dryCls = ICE;
+    dryM = clamp(1 + (p.shade - 1) * (0.8 + 0.3 * p.snow), 0.5, 1.45);
+    for (let j = 0; j < 3; j++) landRgb[j] *= dryM;
+    const river = p.river * (1 - 0.6 * p.snow);
+    if (river > 0) {
+      for (let j = 0; j < 3; j++) riverRgb[j] = RIVERC[j] * (0.7 + 0.3 * dryM);
+      mix(landRgb, riverRgb, river * 0.9);
+    }
+    if (river > 0.5) dryCls = RIVER;
+  }
+  for (let j = 0; j < 3; j++) c[j] = landRgb[j] + (waterRgb[j] - landRgb[j]) * k;
+  m[0] = k >= 0.5 ? wetM : dryM;
+  return k >= 0.5 ? wetCls : dryCls;
+}
+
+/** What a view reads besides the base map: the true colour, the layer of a layer view (none in the Earth and true
+ * views), the bytes of it over which an empty spot (byte 0) fades into a full one (1: none; a blend of an empty cell and
+ * a full one fades along its own lines, not along the cells'), and the worn paths (none when not drawn). */
+export interface Over { mode: string; tr: Uint8Array; tg: Uint8Array; tb: Uint8Array; over: Uint8Array | null; lut: Float32Array | null; ramp: RGB[]; fade: number; worn: Uint8Array | null }
+export function overOf(w: World, f: number, mode: string, paths: boolean, fade = 1): Over {
+  const over = ['earth', 'true'].includes(mode) ? null : plane(w, f, mode);
+  return {
+    mode, tr: plane(w, f, 'true_r'), tg: plane(w, f, 'true_g'), tb: plane(w, f, 'true_b'),
+    over, lut: over ? w.lut[w.index.get(mode)!] : null, ramp: rampFor(mode), fade,
+    worn: paths && w.index.has(PATH_LAYER) ? plane(w, f, PATH_LAYER) : null,
+  };
+}
+
+const overRgb = [0, 0, 0];
+/** Spot `i` in view `o` over its base map colour `c` (of shade multiplier `m`), into `out` from byte `at`. */
+export function put(o: Over, i: number, c: number[], m: number, out: Uint8ClampedArray, at: number): void {
+  let [r, g, b] = c;
+  if (o.mode === 'true') {
+    const mt = clamp(1 + (m - 1) * 0.7, 0.55, 1.4);
+    r = o.tr[i] * mt; g = o.tg[i] * mt; b = o.tb[i] * mt;
+  } else if (o.over && o.lut) {
+    // Empty (byte 0): the base map faded; full: the layer's colour over a little of the base map.
+    const full = o.lut[o.over[i]] === 0 ? 0 : clamp(o.over[i] / o.fade);
+    const grey = 0.3 * r + 0.59 * g + 0.11 * b, mo = 0.72 * (0.75 + 0.25 * m);
+    ramp(o.ramp, o.over[i] / 255, overRgb);
+    r += ((r * 0.5 + grey * 0.5) * 0.6 + 100 - r) * (1 - full) + (overRgb[0] * mo - r * 0.72) * full;
+    g += ((g * 0.5 + grey * 0.5) * 0.6 + 100 - g) * (1 - full) + (overRgb[1] * mo - g * 0.72) * full;
+    b += ((b * 0.5 + grey * 0.5) * 0.6 + 100 - b) * (1 - full) + (overRgb[2] * mo - b * 0.72) * full;
+  }
+  if (o.worn && o.worn[i] > 1) { // a path (byte 1 is the uncleared ground, 1x): stronger the more cleared
+    const t = 0.4 + 0.5 * ((o.worn[i] - 1) / 254);
+    r += (PATH[0] - r) * t; g += (PATH[1] - g) * t; b += (PATH[2] - b) * t;
+  }
+  out[at] = r; out[at + 1] = g; out[at + 2] = b; out[at + 3] = 255;
+}
+
+/** How much a spot of liquid flux `flux`, mol/s, and catchment `catchment` (the `catch` layer) is a river, 0..1. */
+export const riverOf = (flux: number, catchment: number) =>
+  Math.min(smooth(RIVER_CATCH_LOG[0], RIVER_CATCH_LOG[1], Math.log10(catchment + 1)), smooth(RIVER_FLOOR_LOG[0], RIVER_FLOOR_LOG[1], Math.log10(flux + 1)));
+/** The colour of a river. */
+export const RIVER_RGB = RIVERC;
+
+/** The squares of the map that hold standing liquid, and those of them that are the sea's (a byte each). */
+export interface Wet { wet: Uint8Array; sea: Uint8Array }
+/** The wet squares and the sea of frame f. */
+export function wetOf(w: World, f: number): Wet {
+  const wet = Uint8Array.from(decode(w, f, 'depth'), d => (d >= WET ? 1 : 0));
+  return { wet, sea: oceanFill(wet, w.meta.w, w.meta.h, w.meta.globe) };
+}
+
+/** Fill `img` for frame f, a pixel a square. mode: 'earth', 'true' or a layer name. `cls` receives the map class of every
+ * square. `paths` draws the worn links over it. */
 export function paint(w: World, f: number, mode: string, img: ImageData, cls: Uint8Array, paths: boolean): void {
   const { w: W, h: H, cell_m, globe } = w.meta;
   const z = decode(w, f, 'z'), depth = decode(w, f, 'depth'), ice = decode(w, f, 'ice'), tg = decode(w, f, 't_ground');
   const flux = decode(w, f, 'flux'), catchment = decode(w, f, 'catch'), plants = plane(w, f, 'plants');
-  const tr = plane(w, f, 'true_r'), tgc = plane(w, f, 'true_g'), tb = plane(w, f, 'true_b');
-  const over = ['earth', 'true'].includes(mode) ? null : plane(w, f, mode);
-  const overLut = over ? w.lut[w.index.get(mode)!] : null;
-  const overRamp = rampFor(mode);
-  const worn = paths && w.index.has(PATH_LAYER) ? plane(w, f, PATH_LAYER) : null;
-
-  const wet = Uint8Array.from(depth, d => (d >= WET ? 1 : 0));
-  const sea = oceanFill(wet, W, H, globe);
+  const o = overOf(w, f, mode, paths), { wet, sea } = wetOf(w, f);
   const wrapX = (x: number) => (globe ? (x + W) % W : x);
   const zAt = (x: number, y: number) => z[clamp(y, 0, H - 1) * W + clamp(wrapX(x), 0, W - 1)];
   const nearSea = (x: number, y: number) => {
@@ -103,61 +212,20 @@ export function paint(w: World, f: number, mode: string, img: ImageData, cls: Ui
     }
     return false;
   };
-  const c = [0, 0, 0], out = img.data;
-
+  const c = [0, 0, 0], m = [1], out = img.data;
+  const p: Spot = { depth: 0, sea: false, cover: 0, snow: 0, t: 0, plants: 0, z: 0, slope: 0, shade: 1, sand: 0, river: 0 };
   for (let i = 0; i < W * H; i++) {
     const x = i % W, y = (i / W) | 0;
     // A globe's cells are narrower east to west towards the poles.
     const width = globe ? cell_m * Math.max(Math.cos((latOf(w.meta, y) * Math.PI) / 180), POLE_COS) : cell_m;
     const gx = (zAt(x + 1, y - 1) + 2 * zAt(x + 1, y) + zAt(x + 1, y + 1) - zAt(x - 1, y - 1) - 2 * zAt(x - 1, y) - zAt(x - 1, y + 1)) / (8 * width);
     const gy = (zAt(x - 1, y + 1) + 2 * zAt(x, y + 1) + zAt(x + 1, y + 1) - zAt(x - 1, y - 1) - 2 * zAt(x, y - 1) - zAt(x + 1, y - 1)) / (8 * cell_m);
-    const slope = Math.hypot(gx, gy), nx = -EXAGGERATE * gx, ny = -EXAGGERATE * gy;
-    const shade = ((nx * L[0] + ny * L[1] + L[2]) / Math.hypot(nx, ny, 1)) / L[2];
-    const zi = z[i], iceI = smooth(0.02, 0.5, ice[i]);
-    let k = 0.8, river = 0;
-    if (wet[i]) {
-      if (sea[i]) { ramp(SEA, 1 - Math.exp(-depth[i] / 350), c); cls[i] = depth[i] > 200 ? DEEP : SHALLOW; }
-      else { ramp(LAKEC, 1 - Math.exp(-depth[i] / 60), c); cls[i] = LAKE; }
-      mix(c, SNOW, iceI * 0.85); if (iceI > 0.5) cls[i] = ICE;
-      k = 0.25 + 0.5 * iceI;
-    } else {
-      const t = tg[i], v = Math.sqrt(plants[i] / 255);
-      ramp(VEG, v, c); cls[i] = v < 0.3 ? DESERT : v < 0.62 ? GRASS : FOREST;
-      mix(c, TUNDRA, smooth(278, 266, t) * 0.7);
-      mix(c, UPLAND, smooth(1200, 2600, zi) * 0.5);
-      const coast = nearSea(x, y);
-      if (coast) mix(c, SAND, 0.55 * (1 - smooth(0, 40, zi)));
-      const rock = Math.max(smooth(0.14, 0.42, slope) * smooth(150, 700, zi), smooth(2000, 3200, zi) * 0.85) * (1 - 0.5 * v);
-      if (rock > 0) { const hi = smooth(1500, 4000, zi); mix(c, [0, 1, 2].map(j => ROCK_LO[j] + (ROCK_HI[j] - ROCK_LO[j]) * hi) as RGB, rock); }
-      if (rock > 0.5) cls[i] = ROCK;
-      const snow = iceI;
-      mix(c, SNOW, snow); if (snow > 0.5) cls[i] = ICE;
-      k = 0.8 + 0.3 * snow;
-      river = Math.min(smooth(RIVER_CATCH_LOG[0], RIVER_CATCH_LOG[1], Math.log10(catchment[i] + 1)), smooth(RIVER_FLOOR_LOG[0], RIVER_FLOOR_LOG[1], Math.log10(flux[i] + 1))) * (1 - 0.6 * snow);
-    }
-    const m = clamp(1 + (shade - 1) * k, 0.5, 1.45);
-    for (let j = 0; j < 3; j++) c[j] *= m;
-    if (river > 0) mix(c, RIVERC.map(v => v * (0.7 + 0.3 * m)) as RGB, river * 0.9);
-    let [r, g, b] = c;
-    if (river > 0.5) cls[i] = RIVER;
-
-    if (mode === 'true') {
-      const mt = clamp(1 + (shade - 1) * 0.7, 0.55, 1.4);
-      r = tr[i] * mt; g = tgc[i] * mt; b = tb[i] * mt;
-    } else if (over && overLut) {
-      if (overLut[over[i]] === 0) { // empty: show the base map faded
-        const grey = 0.3 * r + 0.59 * g + 0.11 * b;
-        r = (r * 0.5 + grey * 0.5) * 0.6 + 100; g = (g * 0.5 + grey * 0.5) * 0.6 + 100; b = (b * 0.5 + grey * 0.5) * 0.6 + 100;
-      } else {
-        ramp(overRamp, over[i] / 255, c);
-        const mo = 0.72 * (0.75 + 0.25 * m);
-        r = c[0] * mo + r * 0.28; g = c[1] * mo + g * 0.28; b = c[2] * mo + b * 0.28;
-      }
-    }
-    if (worn && worn[i] > 1) { // a path (byte 1 is the uncleared ground, 1x): stronger the more cleared
-      const t = 0.4 + 0.5 * ((worn[i] - 1) / 254);
-      r += (PATH[0] - r) * t; g += (PATH[1] - g) * t; b += (PATH[2] - b) * t;
-    }
-    out[i * 4] = r; out[i * 4 + 1] = g; out[i * 4 + 2] = b; out[i * 4 + 3] = 255;
+    p.slope = Math.hypot(gx, gy); p.shade = hillShade(gx, gy, EXAGGERATE);
+    p.depth = depth[i]; p.sea = sea[i] === 1; p.cover = wet[i]; p.snow = smooth(0.02, 0.5, ice[i]);
+    p.t = tg[i]; p.plants = plants[i]; p.z = z[i];
+    p.sand = !wet[i] && nearSea(x, y) ? 0.55 * (1 - smooth(0, 40, z[i])) : 0;
+    p.river = wet[i] ? 0 : riverOf(flux[i], catchment[i]);
+    cls[i] = colour(p, c, m);
+    put(o, i, c, m[0], out, i * 4);
   }
 }
