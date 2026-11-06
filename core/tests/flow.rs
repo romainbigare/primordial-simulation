@@ -942,6 +942,32 @@ fn a_flood_through_a_pit_pays_its_climb_from_its_own_heat() {
     books.assert_within(&w, 1e-9, 1e-9);
 }
 
+/// A pool a flood crosses ends full to its spill level and no higher (laws.md 1.2): after the step of `flooded_pool`
+/// every cell of the pool, the pit too, stands at the sill's surface within `TOL_M` (the pit sends over the sill only
+/// what stands over it, after the pool it lies in is full), and no cell of the map holds a column more than `TOL_M` over
+/// its spill level (found again from the floors after the step: the lowest level from which its liquid reaches the
+/// low basin). Matter and energy are kept.
+#[test]
+fn a_flood_fills_a_pool_to_its_spill_level_and_no_higher() {
+    const TOL_M: f64 = 0.05;
+    let (mut w, small) = flooded_pool();
+    let books = Books::now(&w);
+    flow_step(&mut w, LIQUID_STEP);
+    let sill = w.surface_z(small[SILL]);
+    let pool: Vec<f64> = POOL.iter().map(|&x| liquid_top(&w, small[x]) - sill).collect();
+    assert!(pool.iter().all(|d| d.abs() < TOL_M), "the pool stands {pool:?} m over its sill");
+    let cells = w.mesh.cells();
+    let adj = pcore::solve::downhill::Adjacency { start: cells.start(), link: cells.adj_link(), other: cells.adj_cell(), a: cells.a() };
+    let floor: Vec<f64> = (0..cells.n()).map(|i| w.surface_z(i)).collect();
+    let (basin, _) = basin_under(&w, liquid_top);
+    let basin: Vec<u32> = basin.iter().map(|&i| i as u32).collect();
+    let mut order = pcore::solve::downhill::Order::default();
+    order.update(&adj, &floor, |i| liquid_top(&w, i), &basin);
+    let over = (0..cells.n()).filter(|i| !basin.contains(&(*i as u32))).map(|i| (liquid_top(&w, i) - order.spill[i], i)).fold((f64::MIN, 0), |a, b| if b.0 > a.0 { b } else { a });
+    assert!(over.0 < TOL_M, "cell {} stands {} m over its spill level", over.1, over.0);
+    books.assert_within(&w, 1e-9, 1e-9);
+}
+
 /// The height the liquid of cell `i` stands at, m: its solid surface, and above it the liquid over what its pores hold.
 fn liquid_top(w: &World, i: usize) -> f64 {
     let (t, plateau) = w.thaw_last(i);

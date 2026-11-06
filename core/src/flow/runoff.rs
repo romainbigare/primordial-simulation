@@ -17,6 +17,9 @@ struct Toward {
     room: f64,
     /// The fall of the cell's head, m.
     fall: f64,
+    /// The rim, m: the level the liquid sent there comes to stand at, or crosses (the ground of a cell it passes on
+    /// through), so the cell it leaves does not drain below it by that way.
+    rim: f64,
 }
 
 /// What the pass reads at each cell (`surface`): the world and Flow's state as the pass found them, the order of the
@@ -118,12 +121,14 @@ impl Pass<'_> {
 
     /// The share of cell `i`'s liquid that leaves down each way (`share`), with `outs` and `rest` as room. The surface
     /// of a cell whose liquid stands is its head, but no higher than its spill level (what stands over it passes on);
-    /// of one its liquid passes on through, its ground (a neighbour still to come holds the head back only by what it
-    /// keeps). Liquid never goes back to a neighbour already passed whose liquid passes on: that one lies upstream in the
-    /// flood, and what it got would come back the next step; to one whose liquid stands it levels the two heads, but no
-    /// higher than that one's spill level: what stands over it would pass on, and that one has passed. It takes the
-    /// steepest way down (`Level::steepest`), and on level ground the flood's way out; what that way cannot take runs
-    /// down the others (`run_on`). Returns the share that leaves and the fall of the head, m.
+    /// of one its liquid passes on through, its ground. To a neighbour still to come whose liquid passes on, the liquid
+    /// goes down to that one's ground; to one whose liquid stands, what levels the two heads, whatever their areas, and
+    /// all that stands over that one's spill level, which passes on through it. Liquid never goes back to a neighbour
+    /// already passed whose liquid passes on: that one lies upstream in the flood, and what it got would come back the
+    /// next step; to one whose liquid stands it levels the two heads, but no higher than that one's spill level: what
+    /// stands over it would pass on, and that one has passed. It takes the steepest way down (`Level::steepest`), and on
+    /// level ground the flood's way out; what that way cannot take runs down the others (`run_on`), and no way takes it
+    /// below the rim of another it used (`to_rims`). Returns the share that leaves and the fall of the head, m.
     fn ways(&self, i: usize, q: &[f64], share: &mut [f64], (outs, rest): (&mut Vec<Toward>, &mut Vec<usize>)) -> (f64, f64) {
         let (order, cells, still) = (self.order, self.w.mesh.cells(), self.w.cfg.phys.still);
         let (area, zi, hd, sv) = (cells.area(), self.s.z[i], self.head(q, i), q[i * self.width() + self.width() - 1]);
@@ -137,12 +142,18 @@ impl Pass<'_> {
                 (false, false) => self.s.z[j],
             };
             let from = if passed { top } else { hd };
-            let room = if passed { ((from - to) * (area[i] * area[j] / (area[i] + area[j]))).min((order.spill[j] - hj) * area[j]) } else { (hd - to.max(zi)) * area[i] };
+            let (room, rim) = if passed {
+                let room = ((from - to) * (area[i] * area[j] / (area[i] + area[j]))).min((order.spill[j] - hj) * area[j]);
+                (room, hj + room / area[j])
+            } else {
+                let level = if order.stands[j] { ((hd * area[i] + hj * area[j]) / (area[i] + area[j])).min(order.spill[j]) } else { to };
+                ((hd - level.max(zi)) * area[i], level.max(zi))
+            };
             let down = from - to > still && (!passed || order.stands[j]) && room > 0.0;
             if down && j == order.outlet[i] as usize {
                 way = Some([(k, 1.0), (k, 0.0)]);
             }
-            outs.push(Toward { drop: down.then_some((top - to).max(0.0)), room, fall: (hd - hj).max(0.0) });
+            outs.push(Toward { drop: down.then_some((top - to).max(0.0)), room, fall: (hd - hj).max(0.0), rim });
         }
         let Some(ways) = cells.steepest(i, |k| outs[k].drop).map(|w| w.1).or(way) else { return (0.0, 0.0) };
         let (mut out, mut drop, mut short) = (0.0, 0.0, false);
@@ -153,7 +164,7 @@ impl Pass<'_> {
         if short {
             (out, drop) = run_on(cells, i, (outs, rest), share, sv, (out, drop));
         }
-        (out, drop)
+        to_rims(outs, share, (sv, zi, area[i], still), (out, drop))
     }
 
     /// Cell `i` sends a share `out` of its liquid (`share` down each way, its head falling by `drop` m): its liquid does
@@ -225,6 +236,21 @@ fn run_on(cells: &Level, i: usize, (outs, rest): (&[Toward], &mut Vec<usize>), s
         (share[k], out, drop) = (share[k] + more, out + more, drop + more * outs[k].fall);
     }
     (out, drop)
+}
+
+/// A cell does not drain below the rim of a way it sent along (`Toward::rim`): each way's room counts all the cell
+/// holds, so together they may take it lower, and liquid would cross a rim from below it. Where the cell, which of `sv`
+/// m³ over its ground `zi` (area `a`) sends a share `out`, would end more than `still` under the highest rim of the
+/// ways it uses, each takes less (`share`), in proportion, so it ends at that rim. Returns the share that leaves and the
+/// fall of the head, as `out` and `drop`.
+fn to_rims(outs: &[Toward], share: &mut [f64], (sv, zi, a, still): (f64, f64, f64, f64), (out, drop): (f64, f64)) -> (f64, f64) {
+    let rim = outs.iter().zip(share.iter()).filter(|p| *p.1 > 0.0).map(|p| p.0.rim).fold(f64::MIN, f64::max);
+    if zi + sv * (1.0 - out) / a >= rim - still {
+        return (out, drop);
+    }
+    let less = ((sv - (rim - zi) * a) / (out * sv)).clamp(0.0, 1.0);
+    share.iter_mut().for_each(|f| *f *= less);
+    (out * less, drop * less)
 }
 
 /// The crossings of a pass as the columns of a link flux, row `r` in column `col_of[r]`: the links that carried

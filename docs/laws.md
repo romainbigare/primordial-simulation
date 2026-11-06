@@ -348,11 +348,16 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
   D-infinity (Tarboton 1997; `Level::steepest`): two neighbours next in compass order make a triangle with the centre,
   the plane through their drops gives its slope and way, and the steepest triangle shares the liquid between its two
   neighbours by angle. To a neighbour already passed whose liquid stands it sends at most what levels the two heads,
-  whatever their areas, and no more than fills it to its spill level; a neighbour still to come whose liquid stands
-  holds it back no higher than its spill level (what stands over that passes on). What the steepest way cannot take
-  runs down the other ways, the steepest first, each as far as it takes, so a month's river through a small cell
-  stands in no column; to one already passed whose liquid passes on (upstream in the flood) it sends none, so a pit
-  over its rim spills by its way out. What reaches a sea cell stays there and joins the sea.
+  whatever their areas, and no more than fills it to its spill level; to a neighbour still to come whose liquid
+  stands, what levels the two heads, whatever their areas, and all that stands over that one's spill level, which
+  passes on through it (so the cells of a pool do not empty into one of the pool still to come); to one still to come
+  whose liquid passes on, down to its ground. What the steepest way cannot take runs down the other ways, the steepest
+  first, each as far as it takes, so a month's river through a small cell stands in no column; to one already passed
+  whose liquid passes on (upstream in the flood) it sends none, so a pit over its rim spills by its way out. **A cell
+  does not drain below the rim of a way it used** (the level the liquid sent there comes to stand at, or the ground of
+  a cell it passes on through): each way's room counts all the cell holds, so where its ways together would take it
+  lower, each takes less, in proportion (`to_rims`), and no liquid crosses a rim from below it. So a pool a flood
+  crosses ends full to its spill level and no higher. What reaches a sea cell stays there and joins the sea.
 - **Pore water** flows by Darcy's law (one explicit `solve::sweep` on the liquid table, the store's too): `seep` ×
   saturated thickness × width / distance, at most half of what would level two cells, and no cell giving more than it
   holds over field capacity; pores at or under field capacity (`field`) give nothing. Over cells of kilometres a
@@ -377,10 +382,11 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
   from its middle. A cell already passed takes what lands at once, the fall to the middle of the layer it makes; a sea
   cell, the fall to its head. Where what came in left from lower than the cell is left at (a cell filled after a
   neighbour sent to it), the settling is a climb, and the liquid pays it from the heat it carries, which holds its
-  falls: no node that does not hold it pays. In the pass the liquid only goes down, to a lower surface, so a climb is
-  no more than the relief between neighbours, and the heat of a liquid would lift it a hundred kilometres (c T / g).
-  The heat of the falls lands in the ground nodes before the crossings book what runs on, and a climb is paid after
-  them, so no node gives more than it holds (0, "No overdraw"). The head it loses on the way out does work (1.3).
+  falls: no node that does not hold it pays. In the pass the liquid only goes down (to a lower surface, and over no rim
+  from below it), so a climb is no more than the relief between neighbours, and the heat of a liquid would lift it a
+  hundred kilometres (c T / g). The heat of the falls lands in the ground nodes before the crossings book what runs on,
+  and a climb is paid after them, so no node gives more than it holds (0, "No overdraw"). The head it loses on the way
+  out does work (1.3).
 
 ### 1.3 Erosion and creep
 The head lost by moving liquid does work where it is lost on land (`flow::liquid::load`, `wear`; below 0 m its load
