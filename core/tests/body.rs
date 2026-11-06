@@ -4,8 +4,9 @@
 
 use pcore::body::{self, Body, Layout, COOL_T, HEAT, KEEP_T, PHASE};
 use pcore::life::Handle;
+use pcore::event::EventKind;
 use pcore::{brain, World, AIR};
-use worldgen::testkit::{add, died, dry_lands, eater, held_day, hold_ground, kg, node_of, out, put_kg_m2, scale, small_world, start, stores, took_from_ground, warm, Books, Brain, Line, LIQUID, MATTER, RICH};
+use worldgen::testkit::{add, cover, died, dry_lands, eater, held_day, hold_ground, kg, node_of, out, put_kg_m2, scale, small_world, start, stores, took_from_ground, warm, Books, Brain, Line, LIQUID, MATTER, RICH};
 
 /// Days the takes from the ground run for (`matter_taken_from_outside_is_digested_into_the_solid`).
 const TAKE_DAYS: usize = 50;
@@ -151,6 +152,36 @@ fn a_body_in_deep_liquid_loses_its_heat_to_the_liquid() {
     for (lo, hi, want) in [(dry_lo, dry_hi, air), (wet_lo, wet_hi, liquid)] {
         assert!(lo <= want * (1.0 + 1e-3) && want <= hi * (1.0 + 1e-3), "it lost {lo} to {hi} W per m² and K, not {want}");
     }
+}
+
+/// A body takes only what lies within its reach (laws.md 5.3, 3.3): it keeps to the surface where it breathes, so under
+/// liquid deeper than its height and its reach (each its size) it takes neither the solids of the ground nor the
+/// cover. An eater that only takes, with the energy-rich solid on its ground and cover over it, takes both on dry land
+/// and nothing in deep liquid, over ten days; the books are kept.
+#[test]
+fn a_body_cannot_take_from_the_ground_under_deep_liquid() {
+    let took = |wet: bool| {
+        let (mut w, land) = start();
+        let i = if wet { deep_cell(&w) } else { land };
+        put_kg_m2(&mut w, RICH, i, 3.0);
+        cover(&mut w, i, 0.5);
+        let b = eater(&mut w, i, brain::TAKE, 6.0);
+        w.add(b);
+        let books = Books::now(&w);
+        let (mut ground, mut grazed) = (0.0, 0.0);
+        for _ in 0..TAKE_DAYS / 5 {
+            w.events.clear();
+            pcore::day_with_month_at_start(&mut w);
+            ground += took_from_ground(&w);
+            grazed += w.events.iter().map(|e| if let EventKind::Took { from: pcore::choose::COVER, .. } = e.kind { e.value } else { 0.0 }).sum::<f64>();
+        }
+        books.assert_kept(&w, 1e-9);
+        (ground, grazed)
+    };
+    let (land, deep) = (took(false), took(true));
+    println!("in ten days it took {:.3} kg from the ground and {:.3} kg of cover on land, {:.3} and {:.3} in deep liquid", land.0, land.1, deep.0, deep.1);
+    assert!(land.0 > 0.01 && land.1 > 0.01, "on land it took {} kg from the ground and {} kg of cover", land.0, land.1);
+    assert!(deep.0 == 0.0 && deep.1 == 0.0, "in deep liquid it took {} kg from the ground and {} kg of cover", deep.0, deep.1);
 }
 
 /// Its key liquid frozen kills it: a body with no fuel to keep warm on ground below the liquid's melting point dies of

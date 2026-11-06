@@ -693,11 +693,13 @@ Structures do not drift; only a body carries one (3.5).
 ### 3.3 Holding, floating
 Holding is a bond whose strength is the body's **force**, strength gene × living body × gravity × `grip`
 (`bond::bears`); a body holds only while its force bears the structure's weight. Fuel adds no force; a hurt body is
-weaker. **In liquid** (`bond::immersed`): the share of a member's height under its cell's standing liquid is the depth
+weaker. **In liquid** (`bond::wading`): the share of a member's height under its cell's standing liquid is the depth
 over its height, at most 1; its height is its size, the side of a cube of its volume (`Physics::side`, 0.31 m at
-30 kg). A body rides the structure it holds dry, at the surface, where the liquid is deeper than its height and what
-that structure displaces weighs as much as both (Archimedes). That share passes its heat to the liquid, not the air
-(6.3). No body digs the bed.
+30 kg). Where the liquid is deeper than its height a member swims: it breathes its air (2.4), so it keeps to the
+surface, and the ground and the cover lie within its reach only as deep as its height and its reach, each its size
+(no gene lets a body dive; 5.3). A body rides the structure it holds dry, at the surface, where the liquid is deeper
+than its height and what that structure displaces weighs as much as both (Archimedes): it reaches down its reach
+alone. The share under the liquid passes its heat to the liquid, not the air (6.3). No body digs the bed.
 
 **A held edge concentrates force** (`bond/edge.rs`). Without one a body breaks matter bluntly: it gives way through its
 whole width (3.6). Pressed with the edge of a held part, only a zone as wide as the edge gives way (Atkins 2009): for
@@ -1024,7 +1026,9 @@ per kg, of food only (`Body::uses`: what it burns, the body matter and built sol
 of; not what it cannot use, nor the key liquids it drinks, 6.4): per kg of supply, Holling's type II take × s /
 (take + s), s what the swept area holds (`sweep`) of its food, so thin food takes time to find (Holling 1959). The
 minerals it builds of count in s as food does: one search finds all it uses, so rich ground shortens it. **Grazing**
-(`feed::take_node`): a bite of the cover takes all its parts in the field's proportions; what the body does not use
+(`feed::take_node`): it reaches what lies within its reach (3.3): under liquid deeper than its height and its reach,
+neither the cover nor the solids of the ground, only what is liquid there. A bite of the cover takes all its parts in
+the field's proportions; what the body does not use
 (the frame without the enzyme of reaction 13) is bulk that fills its gut (all it takes is at most its take × supply)
 and passes through it to the ground at once with its heat, giving nothing and never becoming the body's own frame
 (a gut passage of days, Van Soest 1994). Another body's
@@ -1186,8 +1190,8 @@ beyond its upkeep to its next meal, its physiological step), and its stores down
 share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing
-Intake at most `take` × supply a day (5.3), over the time a meal feeds it (to its next meal, or for a bite to its next
-update), within the room of its stores for that time (`Body::room`: their levels and what its upkeep burns of them
+Intake at most `take` × supply a day, of what lies within its reach (5.3), over the time a meal feeds it (to its next
+meal, or for a bite to its next update), within the room of its stores for that time (`Body::room`: their levels and what its upkeep burns of them
 until then). **Digestion** (`Body::digest`): matter taken is broken back into what it
 was built of, so food enters as fuel, and only if its diet breaks it (`Body::uses`). **Minimums**
 (`Body::lacking`): a store below its minimum kills (`LACK`), except a fuel, whose minimum is a reserve. **Shedding**

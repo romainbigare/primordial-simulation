@@ -12,14 +12,14 @@ pub(super) struct Around {
 }
 
 /// Outside, its surroundings are its cell's ground as Flow's last step left it, and the standing liquid on it: the share
-/// of its height under the liquid (`bond::immersed`) passes its heat to the liquid, the rest to the air. Inside walls they
+/// of its height under the liquid (`bond::wading`) passes its heat to the liquid, the rest to the air. Inside walls they
 /// are the outside, raised by the heat the other bodies inside give the room's air (`bond::room_air`), through its coat
 /// in series with the walls and openings between that air and the outside: its own heat warms the air too.
 pub(super) fn around(w: &World, d: &Chunk, b: &Body, mass: f64) -> Around {
     let (p, tg) = (&w.cfg.phys, w.t_ground_last(b.cell as usize));
     match crate::bond::room_air(d, b) {
         None => {
-            let wet = crate::bond::immersed(w, d, b, b.cell as usize);
+            let wet = crate::bond::wading(w, d, b, b.cell as usize).share;
             Around { t: tg, coat: b.conductance(p, mass, wet), bare: b.bare(p, mass, wet) }
         }
         Some(air) => {
