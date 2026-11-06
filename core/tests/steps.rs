@@ -2,7 +2,7 @@
 //! cell 2^k times finer a month over 2^k; the bodies of the finer cells step again inside the month, each update over
 //! the time since its last, and the books close through those sub-steps.
 
-use pcore::body::{Body, Layout, COOL_T, DISPERSE, HEAT, KEEP_T, STRENGTH};
+use pcore::body::{Body, Layout, COOL_T, DISPERSE, HEAT, KEEP_T, LEARN, STRENGTH};
 use pcore::space::Leaf;
 use pcore::event::EventKind;
 use pcore::{brain, World};
@@ -277,6 +277,9 @@ const YEAR: usize = 12;
 const MEMBERS: f64 = 200.0;
 const COVER_KG_M2: f64 = 0.3;
 
+/// The learning gene of that node: off, so its brain stays one that only takes (what it would learn is no law of cells).
+const LEARN_OFF: f32 = -4.0;
+
 /// A node of `MEMBERS` that only takes and keeps its children in its square, its genes as `set` leaves them, settled
 /// `SETTLE` months on `cover` kg per m² in the first dry square of `w`, then a year there or in that square split two
 /// depths (`fine`): per month, its members at the month's end, the kg it took of what it uses, the members born and the
@@ -291,6 +294,7 @@ fn node_months(fine: bool, mut w: World, cover: f64, set: fn(&mut Body)) -> (Vec
     let line = testkit::Line::new(&mut w, &Brain::only(brain::TAKE), 1);
     let mut b = line.founder(&mut w, 1, i);
     b.genes[DISPERSE] = 0.0;
+    b.genes[LEARN] = LEARN_OFF;
     set(&mut b);
     b.prepare(&w.chem, &w.cfg);
     let b = testkit::node_of(&mut w, b, MEMBERS);
@@ -330,8 +334,8 @@ fn node_year(fine: bool) -> [f64; 5] {
 /// Death causes (`body::LACK` to `body::AGE`).
 const CAUSES: u8 = 6;
 /// How far what the node does in a year in the square's cells may stray from what it does in the square, a share
-/// (measured: 0.9% at most, of its members, what it took and those born), and its mean temperature, K (measured:
-/// 0.005).
+/// (measured: 2.0% at most, of its members, what it took and those born), and its mean temperature, K (measured:
+/// 0.002).
 const LIVES_ALIKE: f64 = 0.05;
 const WARMTH_K: f64 = 0.05;
 

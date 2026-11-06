@@ -7,7 +7,7 @@ use pcore::brain::{self, FIXED, OVERBS, VERBS};
 use pcore::check::{self, Totals};
 use pcore::chem::{Chemistry, Phase};
 use pcore::event::EventKind;
-use pcore::life::{land, Chunk, Entry, Handle};
+use pcore::life::{Chunk, Handle};
 use pcore::lineage::{self, Lineage};
 use pcore::rng::{Purpose, Rng};
 use pcore::space::Leaf;
@@ -333,16 +333,6 @@ pub fn out(w: &mut World, b: Body) -> (Handle, Body) {
     let mut b = std::mem::take(&mut w.life[s]);
     b.prepare(&w.chem, &w.cfg);
     (s, b)
-}
-
-/// The body at `h` moves to the neighbour cell `j` at no cost, by the landing of a move (`Entry::Go`; `life::land`): where
-/// it is stored then. The move counts in the cell's crossings, and it pushes the structures there (it clears a lane).
-pub fn relocate(w: &mut World, h: Handle, j: usize) -> Handle {
-    let (id, from) = (w.life[h].id, w.life[h].cell);
-    assert!(w.mesh.cells().link(from as usize, j).is_some(), "relocate: cell {j} is not a neighbour of cell {from}, where the body is");
-    w.in_cell(from as usize, |_, d| d.out.push(Entry::Go { id, from, to: j as u32, pushed: 0.0, lane: 0.0, carries: false, kin: false, eats: 0.0, brain: Vec::new() }));
-    land(w);
-    w.life.find(id).expect("the body landed")
 }
 
 /// `w` with each of the leaves `region` split `depths` depths down (`World::split`, which first splits the cells beside

@@ -5,11 +5,11 @@ use pcore::bond;
 use pcore::body::{die, Body, COOL_T, COPY_MASS, HEAT, LACK, STRENGTH};
 use pcore::brain;
 use pcore::chem::Phase;
-use pcore::life::{Entry, Handle};
+use pcore::life::Entry;
 use pcore::units::DAY_S;
 use pcore::store::{Class, Node};
 use pcore::World;
-use worldgen::testkit::{bite, dry_land, eater, node_of, part_of, place, plate, relocate, scale, set_amount, small_world, start as world, stores, Books, Brain, Line, FRAME, LIQUID, MATTER, MINERAL, ROCK};
+use worldgen::testkit::{bite, dry_land, eater, node_of, part_of, place, plate, scale, set_amount, small_world, start as world, stores, Books, Brain, Line, FRAME, LIQUID, MATTER, MINERAL, ROCK};
 
 /// A bond breaks when the weight it bears is more than it holds: of two parts hung on a held one by bonds that hold
 /// 10 t weight, the one of 1 t stays and the one of 100 t falls.
@@ -38,15 +38,14 @@ fn bond_breaks_under_too_much_load() {
 /// body's surface) ends a month warmer over the ground than the same body outside.
 #[test]
 fn walls_keep_a_body_warm() {
-    let (mut w, i) = world();
+    let (mut w, _) = world();
     worldgen::life::seed(&mut w, 0);
     worldgen::life::seed(&mut w, 1);
-    // The same body outside and inside: one that does not capture light (its upkeep warms it), from the warmest place
-    // among the cells next to cell `i` (a body steps to a neighbour).
+    // The same body outside and inside: one that does not capture light (its upkeep warms it), the warmest of those
+    // placed, in its cell `i`.
     let bs = &w.life;
-    let next = |s: Handle| bs[s].cell as usize == i || w.mesh.cells().link(bs[s].cell as usize, i).is_some();
-    let slot = bs.living().map(|x| x.0).filter(|&s| next(s)).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body next to the cell");
-    let slot = if w.life[slot].cell as usize == i { slot } else { relocate(&mut w, slot, i) };
+    let slot = bs.living().map(|x| x.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body");
+    let i = w.life[slot].cell as usize;
     // (A lineage of its own, the same brain: it joins no body of its kind in cell `i` at the month's merge.)
     let own = w.life.brains[w.life[slot].lineage as usize].clone().expect("a brain");
     w.life[slot].lineage = w.life.new_lineage(own);

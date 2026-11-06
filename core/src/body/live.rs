@@ -30,6 +30,9 @@ pub struct Lived {
     pub spare: f64,
     /// The heat its upkeep released over the sub-step, J: the most it draws back to warm a cold meal (`fade_meal_heat`)
     pub released: f64,
+    /// The heat that left it through its coat (and the walls around it) over the sub-step, J: what it released, and
+    /// burned more to keep warm, less what it sweated away (`keep_warm`), which its brain feels (`choose::perceive`)
+    pub lost: f64,
 }
 
 /// The physics of body `b` over the time since its last update (`Body::last`) to `at` s, the end of a sub-step of its
@@ -50,7 +53,7 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp, at
     drink(w, d, b, days, &mut tmp.sips);
     let (heat, spare) = settle_upkeep(w, d, b, days, b.mass(&w.chem), tmp)?;
     crate::bond::leave_outgrown(w, d, b);
-    let stands = keep_warm(w, d, b, heat, (days * DAY, &mut tmp.sips));
+    let (stands, lost) = keep_warm(w, d, b, heat, (days * DAY, &mut tmp.sips));
     let t = check_stores(w, d, b, (stands, days), tmp)?;
     let before = b.brooded(&w.chem);
     let filling = crate::copy::grow(w, d, b, days, t).filling;
@@ -64,7 +67,7 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp, at
     shed(w, d, b);
     // A young node's members who reached the copy mass join its mature node (`copy::mature`).
     crate::copy::mature(w, d, b);
-    Ok(Lived { spare, released: heat })
+    Ok(Lived { spare, released: heat, lost })
 }
 
 /// What a body with no physics behind it since it was placed (a founder) leaves for its first decision
@@ -72,7 +75,7 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp, at
 pub(crate) fn newborn(w: &World, b: &Body) -> Lived {
     let cost = super::pay::ahead(w, b, b.mass(&w.chem), w.phys_days(b.cell as usize));
     let spare = b.fuel(&w.chem, b.temp(&w.chem)).min(MARGIN * cost) / cost.max(1e-300);
-    Lived { spare, released: 0.0 }
+    Lived { spare, released: 0.0, lost: 0.0 }
 }
 
 /// Upkeep over the time, at the temperature it stands at then (`standing`): what its fuel releases is paid (`burn`), the
@@ -205,13 +208,14 @@ fn hold(bal: &Balance, (g, open): (f64, f64), q: f64, (keep, cool): (f64, f64)) 
 /// at its latent heat, never below its safe minimum, drinking as it sweats what its sub-step's `sips` allow. Its key
 /// liquid boils at its boiling point: past it the heat boils it off, below its safe minimum too, and holds the body
 /// there; one that boils dry dies there. It then stands at that temperature (`settle_heat`): what it gains from its
-/// ground there is never more than the heat it released, unless the ground is the warmer.
-fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, (dt, sips): (f64, &mut Stores)) -> f64 {
+/// ground there is never more than the heat it released, unless the ground is the warmer. Returns that temperature, K,
+/// and the heat that left it through its coat, J.
+fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, (dt, sips): (f64, &mut Stores)) -> (f64, f64) {
     let (chem, bal) = (&w.chem, Balance::of(w, b));
     let (coat, bare) = coat(w, d, b, b.mass(chem));
     let (g, open) = (coat * dt, bare * dt);
     if g <= 0.0 {
-        return bal.t0;
+        return (bal.t0, heat);
     }
     // The conductance it passes its heat through, J/K, and the heat that leaves by it, J.
     let h = hold(&bal, (g, open), heat, (b.gene(KEEP_T), b.gene(COOL_T)));
@@ -227,7 +231,7 @@ fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, (dt, sips): (f64
     // (One that boils dry dies there, `check_stores`: it stands no warmer, and the rest of its heat stays in its ground.)
     let t = bal.end(h.x, q).min(boil);
     settle_heat(w, d, b, t);
-    t
+    (t, q)
 }
 
 /// After a meal (its decision's, `survey::decide`, or one by the take law, `choose::eat_for`): what it took and
