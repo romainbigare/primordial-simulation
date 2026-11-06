@@ -148,3 +148,10 @@ each other, as a lineage is for bodies.
 2. Accept that alike objects lose their single history, as members of a node do?
 3. The order: O1 now, then Choose, then O2 to O6. Or O2 to O6 first, before any kind wants parts. I recommend the first:
    it is the lesson of spec 2 (results before machinery).
+
+**What the owner decided**
+
+1. Start quiet (O1): yes.
+2. Alike objects lose their single history, as members of a node do: yes.
+3. Order: O1 now, and O2 to O6 now too, without waiting for a kind that uses parts: the object code must become
+   simple and cheap before it is needed. O7 waits for structures that last.
