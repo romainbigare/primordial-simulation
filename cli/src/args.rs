@@ -42,6 +42,13 @@ pub const USAGE: &str = "usage:
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
     --years N, --every N, --out DIR, --frames-every N, --snapshots-every N, --pictures-every N, --months,
     --monthly-years N, --chunks N   as for run (the snapshot keeps --cells, --finest and the rest of the camera's path)
+  ew view     draw a window of a snapshot's map as a PNG, each pixel the colour of the cell that holds its centre
+    --from FILE           the snapshot (snap_NNNNN.bin.gz)
+    --window X,Y,W,H      the window from column X and row Y, W x H squares, fractions allowed (the whole map)
+    --px N                pixels across; the height follows the window (512)
+    --layer NAME          map, temperature, rain, life, traffic, depth, or land (the map with no rivers) (map)
+    --edges               darken the edges between cells
+    --out FILE            the PNG (view.png)
   ew chem     print chemistry 0 as a table
     --seed N              a generated chemistry instead
   ew numbers OLD NEW      the fields of Physics and Config that differ between two runs (directories or physics.json)";
@@ -77,6 +84,13 @@ impl Args {
     pub fn fine(&self) -> [usize; 4] {
         let v: Option<Vec<usize>> = self.value::<String>("--fine").and_then(|f| f.split(',').map(|x| x.parse().ok()).collect());
         v.and_then(|v| v.try_into().ok()).unwrap_or_default()
+    }
+
+    /// The window of `--window X,Y,W,H` in squares, or `whole` if it is not there; an error if it does not parse.
+    pub fn window(&self, whole: [f64; 4]) -> Result<[f64; 4], String> {
+        let Some(text) = self.value::<String>("--window") else { return Ok(whole) };
+        let v: Result<Vec<f64>, _> = text.split(',').map(str::parse).collect();
+        v.ok().and_then(|v| v.try_into().ok()).filter(|v: &[f64; 4]| v[2] > 0.0 && v[3] > 0.0).ok_or(format!("--window {text}: want X,Y,W,H with W and H over 0"))
     }
 
     /// The command (the first word after the program's name).

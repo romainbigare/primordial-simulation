@@ -54,9 +54,22 @@ fn main() {
             let (w, (plan, kept)) = tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}"));
             drive(w, &args, plan, Some(kept));
         }
+        "view" => view(&args),
         "chem" => chem::run(&args),
         "numbers" => numbers::run(&args.0),
         _ => unreachable!("`Args::check` passes only the commands of the usage"),
+    }
+}
+
+/// `ew view`: draw a window of a snapshot's map (`render::window`).
+fn view(a: &Args) {
+    let from = a.get("--from", String::new());
+    let (w, _): (World, (Schedule, Kept)) = tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}"));
+    let window = a.window([0.0, 0.0, w.map.w as f64, w.map.h as f64]);
+    let out = window.and_then(|win| render::window(&w, win, a.get("--px", 512usize), &a.get("--layer", String::from("map")), a.has("--edges"), &a.get("--out", String::from("view.png"))));
+    if let Err(e) = out {
+        eprintln!("ew: {e}");
+        std::process::exit(2);
     }
 }
 
