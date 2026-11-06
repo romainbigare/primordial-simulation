@@ -91,6 +91,32 @@ fn an_animal_keeps_cool_by_evaporating() {
     books.assert_kept(&w, 1e-9);
 }
 
+/// A body opens its coat only to surroundings colder than it (laws.md 6.3): on ground at 316 K, above its `COOL_T`
+/// gene (315 K), a resting eater that drinks none stands at 315 K by sweating, its coat as closed as its gene makes it,
+/// so the heat its ground gives it through each m² of its coat per K is what that coat passes, 1 / (`r_air` + coat),
+/// not the eight times as much its bare surface would let in: between what its last sub-step gives over the surface it
+/// had at the start of its update and at its end. The books are kept.
+#[test]
+fn a_coat_keeps_hotter_surroundings_out() {
+    let (mut w, s) = resting(316.0);
+    let mut b = std::mem::take(&mut w.life[s]);
+    b.genes[COOL_T] = 315.0;
+    b.genes[Layout::of(&w.chem).upt + w.chem.body().place(LIQUID).expect("a store")] = 0.0;
+    b.prepare(&w.chem, &w.cfg);
+    let mass = b.mass(&w.chem);
+    w.life[s] = b;
+    let books = Books::now(&w);
+    let b = after_update(&mut w, s, 316.0);
+    books.assert_kept(&w, 1e-9);
+    let (p, t) = (&w.cfg.phys, b.temp(&w.chem));
+    assert!((t - 315.0).abs() < 1e-6, "it stands at {t} K, not at its COOL_T");
+    let per = |m: f64| -b.lived.lost / (p.meeh * m.powf(2.0 / 3.0)) / (316.0 - t);
+    let (lo, hi) = (per(mass), per(b.mass(&w.chem)));
+    let (coat, bare) = (1.0 / (p.r_air + b.gene(HEAT).clamp(0.0, 1.0) * p.r_coat), 1.0 / p.r_air);
+    println!("at 316 K its ground gave it {lo:.3} to {hi:.3} W per m² and K (its closed coat passes {coat:.3}, bare {bare:.3})");
+    assert!(lo <= coat * (1.0 + 1e-3) && coat <= hi * (1.0 + 1e-3), "it let in {lo} to {hi} W per m² and K, not {coat}");
+}
+
 /// A body drinks its key liquid from its ground up to the level it keeps: a body that lost most of its liquid holds
 /// more after an update on wet ground.
 #[test]

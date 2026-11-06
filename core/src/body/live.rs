@@ -191,13 +191,14 @@ struct Held {
 /// How a body of `bal`, its coat passing `g` J/K and its bare surface `open` over the time, holds its temperature
 /// between `keep` and `cool` K with the heat `q` J: below `keep` it burns what holds it there at the end; above `cool` it
 /// opens its coat as far as it needs to stand there, up to its bare surface (`Body::bare`: blood to the skin, the coat
-/// laid flat; Scholander et al. 1950), and past that sweats the excess away. (On ground at or above `cool` it opens all
-/// the way.)
+/// laid flat; Scholander et al. 1950), and past that sweats the excess away. It opens its coat only to surroundings
+/// colder than it: in surroundings at or above `cool`, hotter than it stands, an open coat would let their heat in, so
+/// it keeps its coat as closed as its gene makes it and sweats.
 fn hold(bal: &Balance, (g, open): (f64, f64), q: f64, (keep, cool): (f64, f64)) -> Held {
     if bal.end(g, q) < keep {
         Held { x: g, more: bal.holds(g, keep) - q, sweat: 0.0 }
     } else if bal.end(g, q) > cool {
-        let opened = if cool > bal.tg { (q / (cool - bal.tg)).clamp(g, open) } else { open };
+        let opened = if cool > bal.tg { (q / (cool - bal.tg)).clamp(g, open) } else { g };
         let sweat = if bal.end(opened, q) > cool { q - bal.holds(opened, cool) } else { 0.0 };
         Held { x: opened, more: 0.0, sweat }
     } else {

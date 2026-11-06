@@ -1154,7 +1154,9 @@ coat's conductance) by the share 1 - e^(-g dt / C) its heat capacity C lets it g
 to days, but a large node in a closed room, whose walls pass little, moves only part way in a week. So what it gains
 from its ground is never more than the heat it released, unless the ground is the warmer. Below its `KEEP_T` gene it
 burns what holds it at `KEEP_T` at the end; above its `COOL_T` gene it opens its coat as far as it needs to stand there,
-up to its bare surface (blood to the skin, the coat laid flat), and past that evaporates its key liquid for the excess,
+up to its bare surface (blood to the skin, the coat laid flat), only while its surroundings are colder than it (in
+hotter ones an open coat lets their heat in, so it keeps its coat as closed as its gene makes it), and past that
+evaporates its key liquid for the excess,
 at the liquid's vaporisation enthalpy, never below its safe minimum, drinking as it sweats what its uptake leaves it
 for the sub-step (6.4), the vapour going to the bodies' node with its latent heat (`live::hold`); what it sweats and, below, boils off is paid by the heat that reaches it, which its ground gives back, never more than the ground holds above its floor (`live::keep_warm`). Its key liquid boils at its boiling point: past it the heat boils the liquid off, below its
 safe minimum too, and holds the body there while it lasts; one that boils dry dies there (`check_stores`), the rest of
