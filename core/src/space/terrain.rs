@@ -239,7 +239,7 @@ impl Terrain {
     }
     /// The height at `place`, m, and the rms slope the noise holds there finer than `SAMPLE_DEPTH`: the slope an octave
     /// of the base noise adds (`octave_slope`) times how fast the height climbs with the rise there.
-    fn sample(&self, seed: u64, map: &Square, place: Place) -> (f64, f64) {
+    pub fn sample(&self, seed: u64, map: &Square, place: Place) -> (f64, f64) {
         let above = self.above(seed, map, place);
         (height_of(above), height_slope(above) * octave_slope(map))
     }
@@ -268,11 +268,16 @@ impl Terrain {
         let mut at = Leaf { x: l.x / side * side, y: l.y / side * side, depth: SAMPLE_DEPTH };
         let (mut h, g) = self.sample(seed, map, map.place_of(&at, south, north).1);
         while at.depth < l.depth {
-            let quarters = at.quarters();
-            let d = displace(seed, at, quarters.map(|q| map.place_of(&q, south, north).0), (slope_at(g, map.length(at.depth)) * map.length(at.depth) / 4.0).powi(2));
+            let (quarters, d) = (at.quarters(), self.departures(seed, map, at, (south, north), g));
             let k = quarters.iter().position(|q| q.x <= l.x && l.x < q.x + q.side() && q.y <= l.y && l.y < q.y + q.side()).expect("a quarter holds the leaf");
             (h, at) = (h + d[k], quarters[k]);
         }
         (h, below(map.place_of(&l, south, north).0, g, l.depth))
+    }
+    /// The departures of the means of the quarters of leaf `l` (finer than `SAMPLE_DEPTH`, row by row) from its mean, m,
+    /// where the sample over it holds the noise slope `g` (`sample`): those of the midpoint displacement of `inside`.
+    pub fn departures(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64), g: f64) -> [f64; 4] {
+        let len = map.length(l.depth);
+        displace(seed, l, l.quarters().map(|q| map.place_of(&q, south, north).0), (slope_at(g, len) * len / 4.0).powi(2))
     }
 }

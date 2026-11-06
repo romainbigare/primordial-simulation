@@ -20,6 +20,14 @@ fn is_cover(s: &Substance) -> bool {
     s.melt > COVER_MELT.0 && s.melt < COVER_MELT.1
 }
 
+/// The melting point of the frozen cover, K: that of the substance of the cover (`is_cover`) the ground holds most of
+/// (0 where it holds none).
+pub(crate) fn cover_melt(w: &World) -> f64 {
+    let held = |k: usize| (0..w.mesh.cells().n()).map(|i| w.g(k, i)).sum::<f64>();
+    let covers = (0..w.chem.ns()).filter(|&k| is_cover(&w.chem.subs[k]));
+    covers.map(|k| (held(k), w.chem.subs[k].melt)).max_by(|a, b| a.0.total_cmp(&b.0)).map_or(0.0, |(_, melt)| melt)
+}
+
 /// Per ground cell values.
 pub struct Fields {
     /// Surface elevation, m
@@ -218,16 +226,6 @@ pub fn quantise(l: &Layer, v: f64) -> u8 {
 pub fn frame_now(w: &World) -> Vec<u8> {
     let mut out = Vec::with_capacity(w.map.n() * LAYERS.len());
     frame(&Ctx::new(w), &mut out);
-    out
-}
-
-/// The layers of a window of the map as a raster of `across` x `down` pixels (a byte each, every layer in table order,
-/// row-major): the window from column `x` and row `y` of the map, `w` squares wide and `h` high, each pixel showing the
-/// cell that holds its centre (`raster`), so cells finer than a square are seen. A shell shows it where the camera looks.
-pub fn frame_window(world: &World, window: [f64; 4], across: usize, down: usize) -> Vec<u8> {
-    let c = Ctx::new(world);
-    let mut out = Vec::with_capacity(across * down * LAYERS.len());
-    layers(&c, &raster(world, window, across, down), &mut out);
     out
 }
 

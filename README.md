@@ -36,6 +36,13 @@ in view; the page shows the date, the months per second it reaches, the cells an
 while the world plays. After 3 minutes without input the page sends the camera away (a recorded change of the camera),
 so the world joins its fine cells and runs at the coarse pace again; the next zoom, pan or click brings it back.
 
+At every zoom the live viewer draws the window in view 2 to 4 depths finer than its cells (`tape::fine`, a pixel of
+1 to 2 screen pixels, at most 360,000 of them): the ground's height from the terrain below the cells, set on each
+cell's own height, with hill shading; the liquid where its surface lies over that ground, so shores follow the ground;
+snow by the ground's own temperature; the other layers blended between the cells' centres; rivers as lines along the
+way their liquid runs. It is made again when the view rests and once a second while the world plays; the stats line
+gives its size and the time the core took to make it and the page to paint it.
+
 Close up (a square of the map at 64 pixels or more), the live viewer draws what lies in each cell one by one, from
 the numbers the core hands out (`tape::things`): animals sized by a member's mass (a log scale), bulkier and longer-legged
 the stronger, furred by their coat gene, with fangs if they bite bodies, young ones smaller; a herd (a node) as some of
