@@ -29,9 +29,9 @@ pub const MATTER: usize = 1;
 pub const WALL: usize = 2;
 
 // The genes of a kind of cover (laws.md 4.5).
-/// Capacity of the light reaction, log10 mol per kg of built cover per s at `t_cat` (at a moisture need of 1)
+/// Capacity of the light reaction, log10 mol per kg of living cover per s at `t_cat` (at a moisture need of 1)
 pub const LIGHT: usize = 0;
-/// Capture area, log10 m² per kg of built cover
+/// Capture area, log10 m² per kg of living cover
 pub const LEAF: usize = 1;
 /// Walls, log10 kg of the solid built of fuel alone per kg of body matter
 pub const WALLS: usize = 2;
@@ -45,7 +45,7 @@ pub const MOIST: usize = 5;
 pub const SEED: usize = 6;
 /// Repair, log10, as a body's `REPAIR`
 pub const REPAIR: usize = 7;
-/// Capacity of the fixing reaction, log10 mol per kg of built cover per s at `t_cat`; off at or below `FIX_OFF`
+/// Capacity of the fixing reaction, log10 mol per kg of living cover per s at `t_cat`; off at or below `FIX_OFF`
 pub const FIX: usize = 8;
 pub const NG: usize = 9;
 /// A fixing gene at or below this is off.
@@ -132,9 +132,14 @@ impl Cover {
     pub fn kg(&self, mm: &[f64; NP], x: usize) -> f64 {
         self.built(mm, x) + self.mol[x][FUEL] * mm[FUEL]
     }
+    /// The living cover of slot `x`, kg: its body matter with the liquid of living tissue, as a body's living body
+    /// (`Body::built`); its walls are a frame, which neither works nor wears (laws.md 4.5).
+    pub fn living(&self, mm: &[f64; NP], x: usize) -> f64 {
+        self.mol[x][MATTER] * mm[MATTER] / (1.0 - WET_TISSUE)
+    }
     /// Its capture area, m².
     pub fn leaf(&self, mm: &[f64; NP], x: usize) -> f64 {
-        dec(self.genes[x][LEAF]) * self.built(mm, x)
+        dec(self.genes[x][LEAF]) * self.living(mm, x)
     }
     /// The mol of substance `k` it holds (0 for a substance it is not made of).
     pub fn amount(&self, p: &Parts, k: usize) -> f64 {
@@ -163,8 +168,9 @@ impl Cover {
     /// What it is built of (`body::solids_of`), the energy to break substance `k` times `cut(k)`.
     fn solids(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts, cut: impl Fn(usize) -> f64) -> [f64; 2] {
         let sum = |q: usize| self.mol.iter().map(|m| m[q]).sum::<f64>();
-        let built = sum(MATTER) * chem.subs[p.sub[MATTER]].molar_mass / (1.0 - WET_TISSUE);
-        crate::body::solids_of(chem, cfg, built, |s| p.sub.iter().position(|&q| q == s).map_or(0.0, sum), cut)
+        let mm = p.mm(chem);
+        let living = (0..SLOTS).map(|x| self.living(&mm, x)).sum();
+        crate::body::solids_of(chem, cfg, living, |s| p.sub.iter().position(|&q| q == s).map_or(0.0, sum), cut)
     }
     /// The reflectance of the cover of slot `x`: the mean of its solid parts' three bands, by volume.
     pub fn reflectance(&self, chem: &Chemistry, p: &Parts, x: usize) -> f64 {

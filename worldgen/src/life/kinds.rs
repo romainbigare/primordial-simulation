@@ -69,12 +69,12 @@ const fn with<const N: usize>(mut s: [f32; N], d: &[(usize, f32)]) -> [f32; N] {
 const BASE: [f32; NSCALAR] = [0.9, 0.0, -0.523, 0.0, -1.2, 0.0, 12.0, 6.0, 3.0, 1.0, 0.0, 0.0, 0.0, 0.8, 250.0, 320.0];
 
 /// The cover of the starting light-eaters: a light capacity that a full summer's light about fills at a capture area of
-/// 5 m² per kg (a herb's 20 m² per kg of leaf, a quarter of it leaf), walls as much as its matter (cell walls are about
-/// half a herb's dry mass), a
-/// tenth of its built cover kept as fuel, frozen below 268 K, fully active at half the ground's field capacity, a
-/// tenth of what it builds to seeds, the fixing reaction off (`FIXERS` of the cells turn it on); 0.1 kg per m² on every
-/// land cell.
-const COVER_GENES: [f32; cover::NG] = [-4.7, 0.7, 0.0, -1.0, 268.0, -0.3, 0.1, -1.0, -11.0];
+/// 2.5 m² per kg of living cover (a herb's 20 m² per kg of leaf, a quarter of its dry mass leaf, and a kg of it dry is 2
+/// kg living: half of it matter, at a quarter dry), walls as much as its matter (cell walls are about half a herb's dry
+/// mass), a tenth of its built cover kept as fuel, frozen below 268 K, fully active at half the ground's field capacity,
+/// a tenth of what it builds to seeds, the fixing reaction off (`FIXERS` of the cells turn it on); 0.1 kg per m² on
+/// every land cell.
+const COVER_GENES: [f32; cover::NG] = [-5.0, 0.4, 0.0, -1.0, 268.0, -0.3, 0.1, -1.0, -11.0];
 const LIGHT: Kind = Kind { name: "light-eaters", year: 0, place: Place::Field(Field { genes: COVER_GENES, kg: 0.1, chance: 1.0 }) };
 
 /// The temperatures the eaters' founders keep their bodies between, K: the melting point of chemistry 0's key liquid
@@ -112,9 +112,9 @@ const fn eaters(name: &'static str, year: u64, b: Bodies) -> Kind {
 pub const KINDS: [Kind; 10] = [
     LIGHT,
     EATER,
-    // Cover, small and fast, seeds spread wide; big and slow, less capture area per kg and tall walls, seeds stay.
-    Kind { name: "small fast light-eaters", year: 0, place: Place::Field(Field { genes: with(COVER_GENES, &[(cover::LIGHT, -4.4), (cover::LEAF, 1.0), (cover::WALLS, -0.3), (cover::SEED, 0.3), (cover::REPAIR, -1.2)]), kg: 0.05, chance: 0.6 }) },
-    Kind { name: "big slow light-eaters", year: 0, place: Place::Field(Field { genes: with(COVER_GENES, &[(cover::LIGHT, -5.0), (cover::LEAF, 0.4), (cover::WALLS, 1.0), (cover::STORE, -0.7), (cover::SEED, 0.05), (cover::REPAIR, -0.5)]), kg: 0.3, chance: 0.4 }) },
+    // Cover, small and fast, seeds spread wide; big and slow, less capture area per kg built and tall walls, seeds stay.
+    Kind { name: "small fast light-eaters", year: 0, place: Place::Field(Field { genes: with(COVER_GENES, &[(cover::LIGHT, -4.83), (cover::LEAF, 0.57), (cover::WALLS, -0.3), (cover::SEED, 0.3), (cover::REPAIR, -1.2)]), kg: 0.05, chance: 0.6 }) },
+    Kind { name: "big slow light-eaters", year: 0, place: Place::Field(Field { genes: with(COVER_GENES, &[(cover::LIGHT, -4.56), (cover::LEAF, 0.84), (cover::WALLS, 1.0), (cover::STORE, -0.7), (cover::SEED, 0.05), (cover::REPAIR, -0.5)]), kg: 0.3, chance: 0.4 }) },
     // Eaters of remains on the ground, small and big: no strength, the solid first.
     eaters("small eaters of remains", 10, Bodies { scalars: with(EATER_BODIES.scalars, &[(STRENGTH, 0.0), (COPY_MASS, 0.245), (LEARN, -0.5), (DISPERSE, 0.3), (REPAIR, -1.48)]), upt: [0.2, 1.0], ..EATER_BODIES }),
     eaters("big eaters of remains", 10, Bodies { scalars: with(EATER_BODIES.scalars, &[(STRENGTH, 0.0), (COPY_MASS, 1.325), (LEARN, -0.5), (DISPERSE, 0.2), (REPAIR, -0.89)]), per: 1, chance: 0.2, ..EATER_BODIES }),
