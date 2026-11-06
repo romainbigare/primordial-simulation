@@ -210,7 +210,7 @@ impl Recorder {
         );
         let Some(c) = ctx else { return };
         if let Some(t) = taken.filter(|_| yearly) {
-            (self.year.decisions, self.year.busiest, self.year.parts, self.year.cover_lost) = ([t.decisions, t.greedy], [t.body_batches, t.busiest_share], t.parts, t.cover_lost);
+            (self.year.decisions, self.year.busiest, self.year.parts, self.year.forms, self.year.cover_lost) = ([t.decisions, t.greedy], [t.body_batches, t.busiest_share], t.parts, t.forms, t.cover_lost);
         }
         if yearly {
             self.push_series(&c, spent);

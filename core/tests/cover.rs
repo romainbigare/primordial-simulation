@@ -59,11 +59,11 @@ fn a_thick_cover_does_not_thicken() {
     let (mut w, i) = start();
     let books = Books::now(&w);
     assert!(cover::place(&mut w, i, genes(), 0, 20.0));
-    let kg0 = cover::per_m2(&w)[i];
+    let kg0 = cover::per_m2(&w, cover::Cover::kg)[i];
     for _ in 0..6 {
         pcore::step(&mut w);
     }
-    let kg = cover::per_m2(&w)[i];
+    let kg = cover::per_m2(&w, cover::Cover::kg)[i];
     println!("cover on its cell {kg0:.2} kg/m2, six months later {kg:.2} kg/m2");
     assert!(kg < kg0, "the thick cover thickened: {kg0} then {kg}");
     books.assert_kept(&w, 1e-9);

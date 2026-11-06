@@ -38,5 +38,21 @@ impl Recorder {
         row.push("cold_months", "1/yr", y.inside[0][0]);
         row.push("holding_liquid", "1", filled.len() as f64);
         row.push("liquid_held", "kg", filled.iter().sum());
+        self.form_cols(row);
+    }
+
+    /// Who drew "form" in the year (members): by starting kind (every kind seen so far keeps its column), by size
+    /// class of the brain, and by whether "form" had the top score.
+    fn form_cols(&self, row: &mut Row) {
+        let f = &self.year.forms;
+        let seen = self.files.series.iter().filter(|c| c.name.strip_prefix("form_").is_some_and(|k| k.parse::<usize>().is_ok())).count();
+        for k in 0..f.by_kind.len().max(seen) {
+            row.push(format!("form_{k}"), "1/yr", f.by_kind.get(k).copied().unwrap_or(0.0));
+        }
+        for (c, &x) in f.by_size.iter().enumerate() {
+            row.push(format!("form_size_{c}"), "1/yr", x);
+        }
+        row.push("form_learned", "1/yr", f.by_score[0]);
+        row.push("form_chance", "1/yr", f.by_score[1]);
     }
 }

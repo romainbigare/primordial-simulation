@@ -8,7 +8,7 @@
 //!   kg, coat (`HEAT`), `KEEP_T` K, `COOL_T` K, `u32` starting kind (`u32::MAX`: none), lineage, `u8` diet (`DIET_*`),
 //!   adult (1) or young (0), hidden units of its brain (at most 255), 0, `id` of the part it holds, `id` of the part of
 //!   the structure it is inside;
-//! - a slot of cover: `u32` starting kind, `f32` built cover kg/m², its 9 genes (`cover::LIGHT` to `cover::FIX`),
+//! - a slot of cover: `u32` starting kind, `f32` built cover kg/m², capture area m²/m², its 9 genes (`cover::LIGHT` to `cover::FIX`),
 //!   `u8` full (1) or not, then 3 zeros;
 //! - a part: `id`, `f32` its 3 outer sizes m (longest first), hollowness, mass kg, walls' colour (3 bands), walls'
 //!   hardness, depth buried m, `id` of the body holding it, `id` of its structure's root, the space its structure's
@@ -60,6 +60,7 @@ fn cell(w: &World, i: usize, out: &mut Out) {
         for x in slots {
             out.u32(cover.root[x]);
             out.f32(cover.built(&mm, x) / area);
+            out.f32(cover.leaf(&mm, x) / area);
             cover.genes[x][..NG].iter().for_each(|&g| out.f32(g as f64));
             out.0.extend([cover.full[x] as u8, 0, 0, 0]);
         }

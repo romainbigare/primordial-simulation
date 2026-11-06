@@ -60,13 +60,23 @@ map repeating east and west, and a cell's latitude and longitude in the inspect 
 **Map layers** in the frames (`tape/src/layers.rs`, one byte a square of the map, row by row; a square shows the cell
 that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid depth, ice, liquid flux, `catch` (the upstream area a cell drains
 in units of its own: its liquid flux over its rain less evaporation times its area, so a river reads the same at any cell
-size), loose ground, ground and air temperature, rain, vapour, absorber, the cover's and the bodies' mass per m², bodies, traffic,
+size), loose ground, ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the bodies' mass per m², bodies, traffic,
 worn edges, structures, true colour (r, g, b). The tape holds whole-map frames only. The live viewer also asks for
-the layers of a window of the map as a raster of pixels (`tape::frame_window`): each pixel shows the cell that holds its
-centre, so cells finer than a square are seen; it is shown over the whole-map frame and is not recorded. Close up it also asks
+the window in view finer than its cells (`tape::fine`, the layout in `tape/src/fine.rs`), a pixel a leaf of a depth
+2 to 4 below the cells, at any zoom: of each pixel the ground's height, the surface of the liquid standing in the cells
+about it, and every layer blended between the cells' centres (each cell weighing a pixel by the quadratic B-spline of its distance in its own sides, Shepard 1968, so the blend is smooth with its slope) (the ground's temperature along the ground's
+height, at the rate the air cools with height, `World::air_drop`), and the way each cell's liquid runs (to the cell the
+steepest way down its head takes the most of, as the liquid law sends it). The ground of a pixel is the terrain there
+(`space::terrain`: the mean of its samples, or finer than them the midpoint displacement's departures laid on a
+quadratic continuation of the coarser heights that keeps each leaf's mean) plus an offset blended between the cells'
+centres: each cell's height less the terrain's mean over it, made so the blend keeps each cell's height as its mean.
+The terrain's samples are found once (`tape::Samples`). The viewer paints it over the whole-map frame: hill shading
+from the fine ground, the liquid where its surface lies over the fine ground (the sea's tint by the depth there),
+snow by the pixel's own temperature near the cover's melting point, rivers as lines along those ways, as wide as
+their discharge (Leopold and Maddock 1953) or wider; it is not recorded. Close up it also asks
 for the things of the cells in view (`tape::things`, the record layout in `tape/src/things.rs`): each body (members,
 a member's mass, strength, colour, coat, copy mass, the temperatures it keeps, what it takes from where, its kind,
-stage and brain, the part it holds and the structure it is inside), each slot of cover (its kind, built cover per m²
+stage and brain, the part it holds and the structure it is inside), each slot of cover (its kind, built cover and capture area per m²
 and genes) and each part (sizes, hollowness, mass, its walls' colour and hardness, burial, holder, structure and the
 space it closes) with the bonds; it is drawn as avatars and is not recorded.
 
@@ -127,6 +137,9 @@ space it closes) with the bonds; it is drawn as avatars and is not recorded.
 
 | Column | Unit | Meaning |
 |---|---|---|
+| `form_<k>` | 1/yr | members that drew "form" in the year, by starting kind k (`Lineage::root`; every kind seen keeps its column) |
+| `form_size_<c>` | 1/yr | the same by size class c of the brain: 2^c to 2^(c+1) - 1 hidden units (the last class all larger) |
+| `form_learned`, `form_chance` | 1/yr | the same by whether "form" had the top score when drawn (learned) or not (chance) |
 | `parts`, `parts_held`, `parts_mass`, `parts_formed` | , , t, 1/yr | made objects, of them held; their mass; formed in the year |
 | `put_to_parts`, `taken_from_parts` | kg/yr | stores put into and taken from parts |
 | `edge_kg` | kg/yr | what bites took from bodies and the cover where a held edge cut (laws.md 3.3) |

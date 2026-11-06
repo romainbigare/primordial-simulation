@@ -1,4 +1,5 @@
-// The map canvas: one pixel per cell in an offscreen canvas, drawn with zoom and pan.
+// The map canvas: one pixel per square in an offscreen canvas, drawn with zoom and pan, and over it a raster of the
+// window in view finer than its cells (fine.ts).
 const LAT_STEP = 30; // degrees between a globe's lines of latitude
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
@@ -21,7 +22,7 @@ export class MapView {
   private globe: { north: number; south: number } | null = null;
   private raf = 0;
   /** A raster of a window of the map, finer than its squares, drawn over the map at its place (x, y, w, h in squares). */
-  private fine: { cv: HTMLCanvasElement; at: [number, number, number, number] } | null = null;
+  private fine: { cv: CanvasImageSource; at: [number, number, number, number] } | null = null;
   private seen = '';
   /** Drawn over the map (and its fine raster) at each redraw: its context, where the map's corner is and the pixels a square takes. */
   overlay: ((ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number) => void) | null = null;
@@ -62,15 +63,9 @@ export class MapView {
     this.resize(); this.fit();
   }
 
-  /** Show `img` (a raster of the window `at`: x, y, w, h in squares) over the map, or nothing. */
-  setFine(img: ImageData | null, at: [number, number, number, number] = [0, 0, 0, 0]): void {
-    if (!img) this.fine = null;
-    else {
-      const cv = this.fine?.cv ?? document.createElement('canvas');
-      cv.width = img.width; cv.height = img.height;
-      cv.getContext('2d')!.putImageData(img, 0, 0);
-      this.fine = { cv, at };
-    }
+  /** Show `cv` (a picture of the window `at`: x, y, w, h in squares) over the map, or nothing. */
+  setFine(cv: CanvasImageSource | null, at: [number, number, number, number] = [0, 0, 0, 0]): void {
+    this.fine = cv ? { cv, at } : null;
     this.invalidate();
   }
 
@@ -129,13 +124,13 @@ export class MapView {
     ctx.shadowColor = 'rgba(0,0,0,.28)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 5;
     ctx.fillStyle = '#888'; ctx.fillRect(ox, oy, xs.length * span, h * s);
     ctx.restore();
-    ctx.imageSmoothingEnabled = s * d < 6; ctx.imageSmoothingQuality = 'high';
+    // Blended between the squares' centres, as the fine raster is, so no square's edge shows.
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     // Copies meet on whole device pixels, so no thin line shows between them.
     const edge = (k: number) => Math.round((ox + k * span) * d) / d;
     xs.forEach((_, k) => ctx.drawImage(this.off, edge(k), oy, edge(k + 1) - edge(k), h * s));
     if (this.fine) {
       const [fx, fy, fw, fh] = this.fine.at;
-      ctx.imageSmoothingEnabled = false;
       ctx.drawImage(this.fine.cv, ox + fx * s, oy + fy * s, fw * s, fh * s);
     }
     this.overlay?.(ctx, ox, oy, s);

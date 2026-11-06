@@ -3,6 +3,7 @@
 //! rest, or Bond's actions; at its next decision it learns from the change of its well-being (`learn`). Laws.md 5.
 
 mod feed;
+mod forms;
 mod go;
 mod learn;
 mod minds;
@@ -10,6 +11,7 @@ mod perceive;
 mod spread;
 
 pub use feed::{take_body, COVER};
+pub use forms::{Forms, SIZE_CLASSES};
 pub use go::{go, wear};
 pub(crate) use feed::{eat_for, meal};
 pub(crate) use go::land_move;
@@ -256,6 +258,15 @@ fn noise(w: &World, b: &mut Body, s: Shape, t: &ActTmp, rng: &mut Rng) -> ([f32;
     (form, z)
 }
 
+/// Count the members of `b` that draw "form" in decision `c` (`Forms`): the lineage's starting kind and brain size, and
+/// whether "form" had the top score.
+fn count_form(w: &World, d: &mut Chunk, b: &Body, c: &Choice) {
+    let Some(lin) = d.brain(w, b.lineage) else { return };
+    let from = (lin.root, lin.shape.h);
+    let top = c.logit[FORM] >= c.logit.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    d.counts.forms.add(from, top, b.count);
+}
+
 /// The trace of the decision for learning, into `v` (the trace of the body's brain, `life::Brains`; none if the body
 /// does not learn, false): the hidden layer; per learned row how its output moves the log-chance of option `a`, what
 /// was done (for the shape the natural gradient, so its noise does not use up the step); and `adv`, how
@@ -331,7 +342,10 @@ fn act_as(w: &World, d: &mut Chunk, b: &mut Body, c: &Choice, k: &Kit, (a, part_
             feed::take_node(w, d, b, k.meal);
         }
         TAKE => feed::take_node(w, d, b, k.meal),
-        FORM => d.out.push(act(Err([k.form[0], 0.5 * (k.form[1] + 1.0), 0.5 * (k.form[2] + 1.0)]))),
+        FORM => {
+            count_form(w, d, b, c);
+            d.out.push(act(Err([k.form[0], 0.5 * (k.form[1] + 1.0), 0.5 * (k.form[2] + 1.0)])));
+        }
         RELEASE => {
             bond::release(d, b);
             feed::take_node(w, d, b, k.meal);

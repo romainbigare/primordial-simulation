@@ -14,9 +14,10 @@ use serde::{Deserialize, Serialize};
 /// The share of the cells of the starting cover that carry the gene of the fixing reaction: one in ten, as fixing plants
 /// are near a tenth of flowering species (docs/numbers.md). The gene then evolves as any other.
 pub const FIXERS: f64 = 0.1;
-/// The fixing gene of that cover (`cover::FIX`), log10 mol per kg per s: 10^-8, about 10 g of the fixed element per
-/// m² a year for a kg of cover per m², what real fixing stands fix (Cleveland et al. 1999).
-pub const FIX_GENE: f32 = -8.0;
+/// The fixing gene of that cover (`cover::FIX`), log10 mol per kg of living cover per s: 10^-8.3, about 10 g of the
+/// fixed element per m² a year for a kg of the starting cover per m² (2 kg living), what real fixing stands fix
+/// (Cleveland et al. 1999).
+pub const FIX_GENE: f32 = -8.3;
 /// Size of the random weights of a founder lineage's brain.
 const BRAIN_NOISE: f32 = 0.1;
 /// Step of one round of the spray on the bias of every row of a neutral start.
@@ -130,7 +131,7 @@ fn field(w: &mut World, which: usize, kind: &Kind, f: &Field, how: &Seeding) -> 
     }
     let g = &f.genes;
     format!(
-        "year {:.1}: placed the cover of {} on {cells} cells ({kg:.3e} kg, {:.2} kg per m2; light capacity 10^{} mol per kg per s, capture area 10^{} m2 per kg, walls 10^{} of its matter, fuel kept 10^{}, frost at {} K, active at moisture 10^{}, {:.0}% to seeds, repair {}), {} rounds of mutation each; {fixers} cells ({:.1}%) carry the fixing gene 10^{FIX_GENE} (share {} chosen before any run)",
+        "year {:.1}: placed the cover of {} on {cells} cells ({kg:.3e} kg, {:.2} kg per m2; light capacity 10^{} mol per kg living per s, capture area 10^{} m2 per kg living, walls 10^{} of its matter, fuel kept 10^{}, frost at {} K, active at moisture 10^{}, {:.0}% to seeds, repair {}), {} rounds of mutation each; {fixers} cells ({:.1}%) carry the fixing gene 10^{FIX_GENE} (share {} chosen before any run)",
         w.year(), kind.name, f.kg, g[cover::LIGHT], g[cover::LEAF], g[cover::WALLS], g[cover::STORE], g[cover::FROST], g[cover::MOIST], 100.0 * g[cover::SEED], g[cover::REPAIR], how.rounds, 100.0 * fixers as f64 / cells.max(1) as f64, how.fixers
     )
 }
