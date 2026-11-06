@@ -4,8 +4,9 @@ import { MapView, View } from './map';
 import { Charts } from './charts';
 import { Live, Look, Stats, FinePicture } from './live';
 import { FineAt } from './fine';
-import { Avatars, AVATAR_PX } from './avatars';
+import { Avatars, THINGS_PX } from './avatars';
 import { Vegetation } from './vegetation';
+import { Style } from './sprites';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const LABELS: Record<string, string> = {
@@ -51,8 +52,14 @@ let lookTimer = 0, looking = '';
 /** The things of the window in view, drawn one by one when the map is close (live world only), and the window asked for. */
 const avatars = new Avatars();
 let thingsKey = '';
-/** The cover drawn as ground patterns where it is dense (earth view only), under the avatars. */
+/** The cover drawn as textures (earth view only), under the avatars. */
 const vegetation = new Vegetation();
+/** Where the player keeps the style life is drawn in (one per viewer). */
+const LIFE_KEY = 'ew.life';
+/** How life is drawn: from above or angled, as the player last chose (from above if the browser keeps nothing). */
+let life: Style = 'above';
+try { if (localStorage.getItem(LIFE_KEY) === 'angled') life = 'angled'; } catch { /* no storage: the default */ }
+avatars.style = vegetation.style = life;
 map.overlay = (ctx, ox, oy, s) => { vegetation.draw(ctx, ox, oy, s); avatars.draw(ctx, ox, oy, s); };
 avatars.listen($<HTMLCanvasElement>('cv'), () => { inspect(); map.invalidate(); });
 /** When the player last gave input (performance.now, ms), and whether the camera was sent away for lack of it. */
@@ -157,6 +164,7 @@ function setLayer(n: string | null): void {
 
 function syncUi(): void {
   document.querySelectorAll<HTMLElement>('#views button').forEach(b => b.classList.toggle('on', !layer && b.dataset.view === view));
+  document.querySelectorAll<HTMLElement>('#life button').forEach(b => b.classList.toggle('on', b.dataset.life === life));
   document.querySelectorAll<HTMLElement>('#layers button').forEach(b => b.classList.toggle('on', b.dataset.layer === layer));
   document.querySelectorAll<HTMLElement>('#speeds button').forEach(b => b.classList.toggle('on', b.dataset.speed === String(speed)));
   $('paths').classList.toggle('on', paths);
@@ -164,6 +172,11 @@ function syncUi(): void {
 }
 
 function setView(v: string): void { view = v; layer = null; setLayer(null); }
+function setLife(style: Style): void {
+  life = avatars.style = vegetation.style = style;
+  try { localStorage.setItem(LIFE_KEY, style); } catch { /* no storage: kept for this page only */ }
+  syncUi(); map.invalidate();
+}
 
 function button(text: string, fn: () => void, layerName?: string): HTMLButtonElement {
   const b = document.createElement('button');
@@ -232,6 +245,7 @@ $('fit').onclick = () => map.fit();
 $('paths').onclick = () => { paths = !paths; syncUi(); repaint(); };
 $<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
 document.querySelectorAll<HTMLElement>('#views button').forEach(b => (b.onclick = () => setView(b.dataset.view!)));
+document.querySelectorAll<HTMLElement>('#life button').forEach(b => (b.onclick = () => setLife(b.dataset.life === 'angled' ? 'angled' : 'above')));
 $<HTMLInputElement>('tl').oninput = e => setFrame(+(e.target as HTMLInputElement).value);
 $<HTMLInputElement>('file').onchange = e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) f.arrayBuffer().then(load); };
 addEventListener('keydown', e => {
@@ -264,8 +278,8 @@ async function startLive(): Promise<void> {
   world = null; viewSent = '';
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
     ready: () => newWorld(),
-    world: w => { world = w; looking = fineAsked = ''; showFine(null); thingsKey = ''; avatars.set(null); vegetation.setThings([]); setup(w); showStats(l.stats); },
-    things: data => { if (live === l) { avatars.set(data); vegetation.setThings(avatars.list); } },
+    world: w => { world = w; looking = fineAsked = ''; showFine(null); thingsKey = ''; avatars.set(null, w.meta.cell_m); vegetation.setThings([]); setup(w); showStats(l.stats); },
+    things: data => { if (live === l && world) { avatars.set(data, world.meta.cell_m); vegetation.setThings(avatars.list); } },
     frame: (stats, picture) => {
       if (live !== l) return;
       if (picture) showFine(picture);
@@ -301,13 +315,13 @@ function fineOf(v: View): void {
   fineAsked = key;
   live.fine(at);
 }
-/** From `AVATAR_PX` pixels a square on, the core is asked for the things of the window in view, to draw them one by one. */
+/** From `THINGS_PX` pixels a square on, the core is asked for the things of the window in view, to draw them one by one. */
 function thingsOf(v: View): void {
-  const at: [number, number, number, number] | null = v.s >= AVATAR_PX && v.w > 0 && v.h > 0 ? [v.x, v.y, v.w, v.h] : null;
+  const at: [number, number, number, number] | null = v.s >= THINGS_PX && v.w > 0 && v.h > 0 ? [v.x, v.y, v.w, v.h] : null;
   const key = JSON.stringify(at);
   if (!live || key === thingsKey) return;
   thingsKey = key;
-  if (!at) { avatars.set(null); vegetation.setThings([]); }
+  if (!at) { avatars.set(null, world?.meta.cell_m ?? 1); vegetation.setThings([]); }
   live.things(at);
 }
 function lookAt(v: View): void {

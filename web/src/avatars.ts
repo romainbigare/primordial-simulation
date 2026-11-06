@@ -1,9 +1,10 @@
-// Avatars: when the map is close, what lies in each cell is drawn thing by thing (handover 10.5) from the list the core
-// hands out (tape/src/things.rs): its bodies as animals, a node as some of its members with their count, the slots of
-// its cover as plants by their density, its parts as objects. Drawn back to front by map position (10.4); hovering
-// or clicking one shows its numbers (10.8).
-import { Rgb, Sprite, animal, plant, object, paintSprite, animalLength, woodiness, display, plantLookOf, DIET_COVER, DIET_BODIES, DIET_REMAINS } from './sprites';
-import { OPEN, PLANTS_CLOSE_PX } from './vegetation';
+// Avatars: when the map is close, the bodies and parts of each cell are drawn one by one at their real size (handover
+// 10.4, 10.5), from the list the core hands out (tape/src/things.rs). Each member of a node has its own place across
+// its cell's real area, seeded by the node's id and the member's index, so it holds while the camera moves. A member
+// whose length takes `SHAPE_PX` pixels or more is drawn as its shape (sprites.ts, from above or angled), a smaller one
+// as a soft dot, and below a pixel its node as a light stipple of its members per m². Hovering or clicking one shows
+// its numbers (10.8); the plant cover is a texture (vegetation.ts).
+import { Rgb, Sprite, Style, AnimalLook, PartLook, animal, object, paintSprite, bodyLength, animalColour, woodiness, display, muted, seeded, tone, DIET_COVER, DIET_BODIES, DIET_REMAINS } from './sprites';
 
 export interface Animal { id: bigint; members: number; mass: number; living: number; strength: number; colour: Rgb; copyMass: number; coat: number; keepT: number; coolT: number; root: number; lineage: number; diet: number; adult: boolean; hidden: number; hold: bigint; inside: bigint }
 export interface Slot { root: number; kg: number; leaf: number; genes: number[]; full: boolean }
@@ -13,22 +14,23 @@ export interface CellThings { index: number; box: [number, number, number, numbe
 
 /** The cover's genes in their order (pcore::cover): their names and units for the inspect panel. */
 const COVER_GENES: [string, string][] = [['light', 'log10 mol/kg/s'], ['leaf', 'log10 m²/kg'], ['walls', 'log10 kg/kg'], ['store', 'log10 kg/kg'], ['frost', 'K'], ['moist', 'log10'], ['seed', 'share'], ['repair', 'log10'], ['fix', 'log10 mol/kg/s']];
-/** Pixels a map square takes from which avatars are drawn. */
-export const AVATAR_PX = 64;
-/** Avatars drawn at most in a frame; past it, fewer plants and members are drawn and the map's colour shows the rest. */
-const MOST_AVATARS = 3000;
-/** Members of a node drawn at most, and at least before the budget cuts it. */
-const MOST_MEMBERS = 40, FEW_MEMBERS = 3;
-/** The share of a cell's screen that its animals' footprints fill at most, and the bodies of a cell whose count is written by them (the largest). */
-const HERD_FILL = 0.35, LABELS_PER_CELL = 2;
-/** The width in pixels from which a cell writes the counts of its herds. */
-const LABEL_CELL_PX = 100;
-/** The share of `MOST_AVATARS` parts take at most. */
-const PART_SHARE = 0.25;
-/** Plants a cell draws at most per its base size squared of screen, at a closed cover. */
-const PLANTS_PER_UNIT2 = 2;
-/** Built cover, kg/m², at which grass and a forest close (cover share 1 - 1/e). */
-const GRASS_CLOSED = 0.3, FOREST_CLOSED = 4;
+/** Pixels a map square takes from which the things of the window in view are asked for and drawn. */
+export const THINGS_PX = 64;
+/** Pixels a member's length takes from which it is drawn as its shape, and from which as a soft dot (below, its node
+ * is a stipple). */
+const SHAPE_PX = 3, DOT_PX = 1;
+/** Members drawn as shapes or dots at most in a frame; past it, the same share of each node is drawn. */
+const MOST_SHOWN = 20000;
+/** Stipple dots a square pixel holds at most, their size, px, and how strong they are, from few members a dot to many. */
+const STIPPLE_PER_PX2 = 0.08, STIPPLE_PX = 1, STIPPLE_ALPHA = [0.3, 0.6];
+/** How strong a soft dot is. */
+const DOT_ALPHA = 0.85;
+/** A part smaller than this, px, is not drawn; up to `SHAPE_PX` it is a dot. */
+const PART_HIDE_PX = 1;
+/** The pointer finds a thing within this many pixels of its edge. */
+const REACH_PX = 3;
+/** A shadow is cast this share of a thing's radius to the south-east from above. */
+const SHADOW_LIFT = 0.18;
 
 /** Reads the list of things (tape::things). */
 export function readThings(data: Uint8Array): CellThings[] {
@@ -60,156 +62,217 @@ export function readThings(data: Uint8Array): CellThings[] {
 
 /** A seed from an id and a number (a member, a plant). */
 const seedOf = (id: bigint, k: number) => (Number(id & 0xffffffffn) * 2654435761 ^ Number(id >> 32n) * 40503 ^ (k + 1) * 2246822519) >>> 0;
-/** What the budget lets a frame draw: members of a node at most, and the share of each cell's parts and plants. */
-interface Share { members: number; parts: number; plants: number }
-/** Something drawn: its sprite at (x, y), and what it is for the inspect panel. */
-interface Drawn { y: number; x: number; sprite: Sprite; key: string; what: () => string }
+/** The members of node `b` drawn (its count's whole part, and one more by chance of its fraction, seeded by its id). */
+const shownOf = (b: Animal) => Math.floor(b.members) + (seeded(seedOf(b.id, -1))() < b.members % 1 ? 1 : 0);
+/** The look of a node's members. */
+const lookOf = (b: Animal): AnimalLook => ({ mass: b.mass, strength: b.strength, colour: b.colour, keepT: b.keepT, coolT: b.coolT, diet: b.diet, adult: b.adult, lineage: b.lineage });
+/** The look of a part from its record: the one place that reads a part's fields for drawing. */
+const partLook = (p: Thing): PartLook => ({ size: p.size, hollow: p.hollow, colour: p.colour, hardness: p.hardness, buried: p.buried, room: p.space > 0 && p.closed > 0.5 });
 
-/** The avatars of the window the core last described, drawn over the map, and the one under the pointer. */
+/** Members a block of a node's layout holds, about. */
+const PER_BLOCK = 16;
+/** A box in squares: west, north, east, south. */
+type Box = [number, number, number, number];
+/**
+ * The layout of node `b`'s members over `box` (its cell, or the room of a structure it is inside): a grid of `g` x `g`
+ * blocks, member m dealt to block m mod g², at a seeded place in it, heading near its node's (`herd`). So any first
+ * members cover the box evenly, and the members in a window are found by their blocks.
+ */
+interface Layout { b: Animal; box: Box; g: number; shown: number; herd: number }
+function layoutOf(b: Animal, box: Box): Layout {
+  const shown = shownOf(b);
+  return { b, box, g: Math.max(1, Math.ceil(Math.sqrt(shown / PER_BLOCK))), shown, herd: seeded(seedOf(b.id, -2))() * 2 * Math.PI };
+}
+/** The blocks of layout `l` that window `v` overlaps: their first and last columns and rows. */
+function blocksIn(l: Layout, v: Box): Box {
+  const [x0, y0, x1, y1] = l.box, g = l.g, col = (x: number) => Math.min(Math.max(Math.floor(((x - x0) / Math.max(x1 - x0, 1e-12)) * g), 0), g - 1);
+  const row = (y: number) => Math.min(Math.max(Math.floor(((y - y0) / Math.max(y1 - y0, 1e-12)) * g), 0), g - 1);
+  return v[2] < x0 || v[0] > x1 || v[3] < y0 || v[1] > y1 ? [0, 0, -1, -1] : [col(v[0]), row(v[1]), col(v[2]), row(v[3])];
+}
+/** The members of layout `l` in window `v` (squares), at most `per` a block: each with its place, squares, and heading. */
+function eachIn(l: Layout, v: Box, per: number, fn: (m: number, x: number, y: number, turn: number) => void): void {
+  const [c0, r0, c1, r1] = blocksIn(l, v), [x0, y0, x1, y1] = l.box, g = l.g, bw = (x1 - x0) / g, bh = (y1 - y0) / g;
+  for (let row = r0; row <= r1; row++) for (let col = c0; col <= c1; col++) for (let j = 0; j < per; j++) {
+    const m = row * g + col + j * g * g;
+    if (m >= l.shown) break;
+    const r = seeded(seedOf(l.b.id, m));
+    fn(m, x0 + (col + r()) * bw, y0 + (row + r()) * bh, l.herd + (r() - 0.5) * 1.6);
+  }
+}
+/** The share of layout `l`'s blocks in window `v`. */
+const shareIn = (l: Layout, v: Box) => { const [c0, r0, c1, r1] = blocksIn(l, v); return (Math.max(c1 - c0 + 1, 0) * Math.max(r1 - r0 + 1, 0)) / (l.g * l.g); };
+/** A structure's place in its cell, squares: seeded by its root. */
+function structureAt(c: CellThings, root: bigint): [number, number] {
+  const r = seeded(seedOf(root, -3)), [x0, y0, x1, y1] = c.box;
+  return [x0 + (0.1 + 0.8 * r()) * (x1 - x0), y0 + (0.1 + 0.8 * r()) * (y1 - y0)];
+}
+
+/** Something drawn that the pointer can find: its place and radius on screen, its key and its numbers. */
+interface Hit { x: number; y: number; r: number; key: string; what: () => string }
+/** A thing to draw this frame: its sprite, place, turn, and the order it is drawn in (angled: back to front). */
+interface Shape { sprite: Sprite; x: number; y: number; turn: number; lift: number; hit: Hit }
+
+/** The bodies and parts of the window the core last described, drawn over the map, and the one under the pointer. */
 export class Avatars {
   private cells: CellThings[] = [];
-  private drawn: Drawn[] = [];
-  private labels: { x: number; y: number; text: string }[] = [];
-  /** The keys of the avatar under the pointer and of the one picked. */
+  private cellM = 1;
+  private hits: Hit[] = [];
+  /** The keys of the thing under the pointer and of the one picked. */
   private over: string | null = null;
   private pinned: string | null = null;
-  /** The things and the view (corner, scale, canvas size) the layout was made for. */
-  private laid: CellThings[] | null = null;
-  private laidView = '';
+  /** The style the shapes are drawn in. */
+  style: Style = 'above';
+  /** Sprites made at a scale, by node or part and style, kept until the scale or the things change. */
+  private sprites = new Map<string, Sprite>();
+  private spriteScale = '';
+  /** The map's corner and scale (ox, oy, s) last drawn with things, or none. */
+  private drawnAt: [number, number, number] | null = null;
 
-  /** The list of things the core sent (none: nothing is drawn). */
-  set(data: Uint8Array | null): void { this.cells = data ? readThings(data) : []; }
+  /** The list of things the core sent (none: nothing is drawn), for a map whose square is `cellM` metres. */
+  set(data: Uint8Array | null, cellM: number): void { this.cells = data ? readThings(data) : []; this.cellM = cellM; this.sprites.clear(); }
   /** The cells of that list. */
   get list(): CellThings[] { return this.cells; }
 
-  /** Show the numbers of what is under the pointer on `cv`, and keep what a click picks; `changed` redraws the panel. */
+  /** Show the numbers of what is under the pointer on `cv` (else the cover of the cell under it), and keep what a click
+   * picks; `changed` redraws the panel. */
   listen(cv: HTMLCanvasElement, changed: () => void): void {
-    cv.addEventListener('pointermove', e => { const d = this.at(e.offsetX, e.offsetY); if (d !== this.over) { this.over = d; changed(); } });
+    cv.addEventListener('pointermove', e => { const d = this.at(e.offsetX, e.offsetY) ?? this.coverAt(e.offsetX, e.offsetY); if (d !== this.over) { this.over = d; changed(); } });
     cv.addEventListener('pointerleave', () => { if (this.over) { this.over = null; changed(); } });
     cv.addEventListener('click', e => { this.pinned = this.at(e.offsetX, e.offsetY); changed(); });
   }
 
-  /** The panel's text for the avatar under the pointer, else the one picked (if the pointer is off the map's cells). */
+  /** The panel's text for the thing under the pointer, else the one picked (if the pointer is off the map's cells). */
   inspect(overCell: boolean): string | null {
-    const key = this.over ?? (overCell ? null : this.pinned), d = key && this.drawn.find(x => x.key === key);
+    const key = this.over ?? (overCell ? null : this.pinned);
+    if (key?.startsWith('c')) { const c = this.cells.find(x => x.index === Number(key.slice(1))); return c ? coverText(c) : null; }
+    const d = key && this.hits.find(x => x.key === key);
     return d ? d.what() : null;
   }
 
-  /** The key of the front-most avatar at (x, y). */
+  /** The key of the cover of the smallest cell with cover under (x, y), in the view last drawn. */
+  private coverAt(x: number, y: number): string | null {
+    const v = this.drawnAt;
+    if (!v) return null;
+    const X = (x - v[0]) / v[2], Y = (y - v[1]) / v[2];
+    const c = this.cells.filter(c => c.slots.length && X >= c.box[0] && X < c.box[2] && Y >= c.box[1] && Y < c.box[3]).sort((a, b) => a.area - b.area)[0];
+    return c ? `c${c.index}` : null;
+  }
+
+  /** The key of the front-most thing within `REACH_PX` of (x, y). */
   private at(x: number, y: number): string | null {
-    for (let k = this.drawn.length - 1; k >= 0; k--) {
-      const d = this.drawn[k], [x0, y0, x1, y1] = d.sprite.box;
-      if (x >= d.x + x0 && x <= d.x + x1 && y >= d.y + y0 && y <= d.y + y1) return d.key;
+    for (let k = this.hits.length - 1; k >= 0; k--) {
+      const h = this.hits[k];
+      if (Math.hypot(x - h.x, y - h.y) <= h.r + REACH_PX) return h.key;
     }
     return null;
   }
 
-  /** Draw over the map, whose corner is at (ox, oy) and whose square takes `s` pixels: nothing below `AVATAR_PX`. The layout is kept until the things or the view change. */
+  /** The sprite `key` at scale `ppm`, made by `make` once. */
+  private sprite(key: string, ppm: number, make: () => Sprite): Sprite {
+    const scale = `${ppm},${this.style}`;
+    if (scale !== this.spriteScale) { this.sprites.clear(); this.spriteScale = scale; }
+    let s = this.sprites.get(key);
+    if (!s) { s = make(); this.sprites.set(key, s); }
+    return s;
+  }
+
+  /** Draw over the map, whose corner is at (ox, oy) and whose square takes `s` pixels: nothing below `THINGS_PX`. */
   draw(ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number): void {
-    const W = ctx.canvas.clientWidth, H = ctx.canvas.clientHeight, view = [ox, oy, s, W, H].join();
-    if (s < AVATAR_PX || !this.cells.length) { this.drawn = []; this.labels = []; this.laid = null; return; }
-    if (this.laid !== this.cells || this.laidView !== view) {
-      this.drawn = []; this.labels = []; this.laid = this.cells; this.laidView = view;
-      const unit = Math.min(Math.max(s * 0.05, 4), 18);
-      const seen = this.cells.filter(c => c.box[0] * s + ox < W && c.box[2] * s + ox > 0 && c.box[1] * s + oy < H && c.box[3] * s + oy > 0);
-      const share = this.budget(seen, s, unit);
-      for (const c of seen) this.layCell(c, [c.box[0] * s + ox, c.box[1] * s + oy, c.box[2] * s + ox, c.box[3] * s + oy], unit, share, s >= PLANTS_CLOSE_PX);
-      this.drawn.sort((a, b) => a.y - b.y);
-    }
+    this.hits = []; this.drawnAt = null;
+    if (s < THINGS_PX || !this.cells.length) return;
+    this.drawnAt = [ox, oy, s];
+    const W = ctx.canvas.clientWidth, H = ctx.canvas.clientHeight, ppm = s / this.cellM, sq = (x: number, y: number) => [ox + x * s, oy + y * s];
+    const seen = this.cells.filter(c => c.box[0] * s + ox < W && c.box[2] * s + ox > 0 && c.box[1] * s + oy < H && c.box[3] * s + oy > 0);
+    const onScreen = (x: number, y: number, r: number) => x + r > 0 && y + r > 0 && x - r < W && y - r < H;
+    // The members' layouts, and the window in view widened by a body's length.
+    const laid = seen.flatMap(c => {
+      const byId = new Map(c.parts.map(p => [p.id, p] as const)), sizes = new Map<bigint, number>();
+      for (const p of c.parts) sizes.set(p.root, Math.max(sizes.get(p.root) ?? 0, p.size[0]));
+      return c.bodies.map(b => {
+        const home = byId.get(b.inside), L = bodyLength(b.mass, b.adult), half = home ? (sizes.get(home.root) ?? 0) / this.cellM / 2 : 0;
+        const at = home && structureAt(c, home.root), box: Box = at ? [at[0] - half, at[1] - half, at[0] + half, at[1] + half] : c.box;
+        const pad = L / this.cellM;
+        return { c, l: layoutOf(b, box), L, byId, view: [-ox / s - pad, -oy / s - pad, (W - ox) / s + pad, (H - oy) / s + pad] as Box };
+      });
+    });
+    // The share of each node drawn, so the frame holds `MOST_SHOWN` shapes and dots.
+    const wanted = laid.reduce((t, d) => t + (d.L * ppm >= DOT_PX ? d.l.shown * shareIn(d.l, d.view) : 0), 0);
+    const keep = Math.min(1, MOST_SHOWN / Math.max(wanted, 1));
+    const shapes: Shape[] = [];
     ctx.save();
-    for (const d of this.drawn) paintSprite(ctx, d.sprite, d.x, d.y);
-    ctx.font = '600 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.lineJoin = 'round'; ctx.lineWidth = 3;
-    for (const l of this.labels) { ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.strokeText(l.text, l.x, l.y); ctx.fillStyle = '#fff'; ctx.fillText(l.text, l.x, l.y); }
-    for (const key of [this.pinned, this.over]) for (const d of this.drawn.filter(x => key && x.key === key)) {
-      const [x0, y0, x1, y1] = d.sprite.box;
-      ctx.strokeStyle = key === this.over ? '#000' : '#fff'; ctx.lineWidth = 1.5; ctx.strokeRect(d.x + x0 - 2, d.y + y0 - 2, x1 - x0 + 4, y1 - y0 + 4);
+    for (const c of seen) this.layParts(ctx, c, ppm, sq, onScreen, shapes);
+    for (const { c, l, L, byId, view } of laid) {
+      const b = l.b, px = L * ppm, what = () => bodyText(b, c), colour = animalColour(lookOf(b)), g2 = l.g * l.g;
+      if (px < DOT_PX) {
+        // A stipple: at most `STIPPLE_PER_PX2` dots a square pixel of its box, stronger the more members each stands for.
+        const boxPx = (l.box[2] - l.box[0]) * (l.box[3] - l.box[1]) * s * s, n = Math.min(l.shown, Math.ceil(boxPx * STIPPLE_PER_PX2));
+        const each = l.shown / Math.max(n, 1);
+        ctx.fillStyle = tone(colour, 1, STIPPLE_ALPHA[0] + (STIPPLE_ALPHA[1] - STIPPLE_ALPHA[0]) * Math.min(1, Math.log10(each) / 2));
+        eachIn(l, view, Math.ceil(n / g2), (m, X, Y) => {
+          const [x, y] = sq(X, Y);
+          ctx.fillRect(x - STIPPLE_PX / 2, y - STIPPLE_PX / 2, STIPPLE_PX, STIPPLE_PX);
+          this.hits.push({ x, y, r: STIPPLE_PX / 2, key: `b${b.id}:${m}`, what });
+        });
+        continue;
+      }
+      ctx.fillStyle = tone(colour, 1, DOT_ALPHA);
+      ctx.beginPath();
+      eachIn(l, view, Math.ceil(Math.ceil(l.shown / g2) * keep), (m, X, Y, turn) => {
+        const [x, y] = sq(X, Y);
+        if (!onScreen(x, y, px)) return;
+        const hit: Hit = { x, y, r: px / 2, key: `b${b.id}:${m}`, what };
+        if (px < SHAPE_PX) { ctx.moveTo(x + px / 2, y); ctx.arc(x, y, px / 2, 0, 2 * Math.PI); this.hits.push(hit); return; }
+        const flip = this.style === 'angled' && Math.cos(turn) < 0;
+        const sprite = this.sprite(`b${b.id}${flip ? 'f' : ''}`, ppm, () => animal(lookOf(b), ppm, this.style, flip));
+        shapes.push({ sprite, x, y, turn: this.style === 'above' ? turn : 0, lift: this.style === 'above' ? sprite.r * SHADOW_LIFT : 0, hit });
+        if (m === 0) this.heldBy(b, byId, x, y, sprite.r, ppm, shapes);
+      });
+      ctx.fill();
+    }
+    if (this.style === 'angled') shapes.sort((a, b) => a.y - b.y);
+    for (const d of shapes) { paintSprite(ctx, d.sprite, d.x, d.y, d.turn, d.lift); this.hits.push(d.hit); }
+    // The thing under the pointer and the one picked: a thin ring.
+    for (const key of [this.pinned, this.over]) for (const h of this.hits.filter(x => key && x.key === key)) {
+      ctx.strokeStyle = key === this.over ? 'rgba(0,0,0,.7)' : 'rgba(255,255,255,.9)'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(h.x, h.y, h.r + 2, 0, 2 * Math.PI); ctx.stroke();
     }
     ctx.restore();
   }
 
-  /** Members a node shows at most, and the share of each cell's parts and plants shown, so the frame holds `MOST_AVATARS`: bodies first, then parts (at most `PART_SHARE` of it), then plants. */
-  private budget(cells: CellThings[], s: number, unit: number): Share {
-    const cellPx = (c: CellThings) => (c.box[2] - c.box[0]) * (c.box[3] - c.box[1]) * s * s;
-    let members = MOST_MEMBERS;
-    const want = (k: number) => cells.reduce((t, c) => t + herds(c, cellPx(c), unit, k).reduce((u, n) => u + n, 0), 0);
-    while (members > FEW_MEMBERS && want(members) > MOST_AVATARS / 2) members--;
-    const partsWanted = cells.reduce((t, c) => t + c.parts.length, 0), partRoom = MOST_AVATARS * PART_SHARE;
-    const parts = partsWanted > partRoom ? partRoom / partsWanted : 1;
-    const room = MOST_AVATARS - want(members) - Math.min(partsWanted, partRoom);
-    const plantsWanted = cells.reduce((t, c) => t + (drawsPlants(c, s >= PLANTS_CLOSE_PX) ? c.slots.reduce((u, sl) => u + plantsIn(sl, cellPx(c), unit), 0) : 0), 0);
-    return { members, parts, plants: plantsWanted > room ? Math.max(room, 0) / plantsWanted : 1 };
-  }
-
-  /** Lay out cell `c` (at x0, y0 to x1, y1 on the screen): plants scattered by their density where its cover is open or the view `close` (else the ground pattern draws them, vegetation.ts), each structure at a place of its own (its parts side by side, the largest structures first), the bodies inside one by it, each node as a herd around a place of its own, a held part by its holder. */
-  private layCell(c: CellThings, [x0, y0, x1, y1]: number[], unit: number, share: Share, close: boolean): void {
-    const spot = (r: () => number, margin: number) => [x0 + margin + r() * Math.max(x1 - x0 - 2 * margin, 1), y0 + margin + r() * Math.max(y1 - y0 - 2 * margin, 1)];
-    if (drawsPlants(c, close)) c.slots.forEach((sl, k) => {
-      const n = Math.floor(plantsIn(sl, (x1 - x0) * (y1 - y0), unit) * share.plants), look = plantLook(sl);
-      const r = seededAt(c, 7919 * (k + 1));
-      for (let j = 0; j < n; j++) {
-        const [x, y] = spot(r, unit * 0.2), seed = (r() * 4294967296) >>> 0;
-        this.drawn.push({ x, y, sprite: plant(look, seed, unit), key: `s${c.box[0]},${c.box[1]},${k}`, what: () => slotText(sl, c) });
-      }
-    });
-    const structures = new Map<bigint, Thing[]>(), byId = new Map<bigint, Thing>(), place = new Map<bigint, [number, number]>();
+  /** The parts of cell `c` lying free: each structure at its place, its parts side by side in a row by their real
+   * lengths; a part smaller than `PART_HIDE_PX` is not drawn, one smaller than `SHAPE_PX` is a dot. */
+  private layParts(ctx: CanvasRenderingContext2D, c: CellThings, ppm: number, sq: (x: number, y: number) => number[], onScreen: (x: number, y: number, r: number) => boolean, shapes: Shape[]): void {
+    const along = new Map<bigint, number>();
     for (const p of c.parts) {
-      byId.set(p.id, p);
-      if (p.held === 0n) structures.has(p.root) ? structures.get(p.root)!.push(p) : structures.set(p.root, [p]);
-    }
-    let left = Math.ceil(c.parts.length * share.parts);
-    for (const [root, parts] of [...structures].sort((a, b) => b[1].length - a[1].length)) {
-      if (left <= 0) break;
-      const r = seededAt(c, Number(root & 0xffffn)), at = spot(r, unit) as [number, number], side = Math.ceil(Math.sqrt(parts.length));
-      place.set(root, at);
-      parts.slice(0, left).forEach((p, k) => {
-        const [i, j] = [k % side, Math.floor(k / side)];
-        this.drawn.push({ x: at[0] + (i - j) * unit * 0.45, y: at[1] + (i + j) * unit * 0.22, sprite: object(partLook(p), seedOf(p.id, 0), unit), key: `p${p.id}`, what: () => partText(p, c) });
-      });
-      left -= parts.length;
-    }
-    const counts = herds(c, (x1 - x0) * (y1 - y0), unit, share.members), labelled = new Set([...c.bodies].sort((a, b) => b.members - a.members).slice(0, LABELS_PER_CELL));
-    c.bodies.forEach((b, q) => {
-      const shown = counts[q], r = seededAt(c, seedOf(b.id, 0));
-      const room = byId.get(b.inside), home = room && place.get(room.root);
-      const [cx, cy] = home ?? spot(r, unit * 1.2), heading = r() < 0.5;
-      const spread = Math.min(unit * animalLength(b.mass) * 1.1 * Math.sqrt(shown), (x1 - x0) * 0.45);
-      const look = { mass: b.mass, strength: b.strength, colour: b.colour, coat: b.coat, keepT: b.keepT, coolT: b.coolT, diet: b.diet, hidden: b.hidden, adult: b.adult, lineage: b.lineage };
-      let first: [number, number] | null = null;
-      for (let m = 0; m < shown; m++) {
-        const a = r() * 2 * Math.PI, d = spread * Math.sqrt(r()) * (m ? 1 : 0);
-        const x = Math.min(Math.max(cx + Math.cos(a) * d, x0), x1), y = Math.min(Math.max(cy + Math.sin(a) * d * 0.6, y0), y1);
-        first ??= [x, y];
-        this.drawn.push({ x, y, sprite: animal(look, seedOf(b.id, m), unit, r() < 0.85 ? heading : !heading), key: `b${b.id}`, what: () => bodyText(b, c) });
+      if (p.held !== 0n) continue;
+      const look = partLook(p), px = look.size[0] * ppm;
+      const [hx, hy] = structureAt(c, p.root), off = along.get(p.root) ?? 0;
+      along.set(p.root, off + look.size[0] * 1.1);
+      if (px < PART_HIDE_PX) continue;
+      const [x, y] = sq(hx, hy), cx = x + (off + look.size[0] / 2) * ppm;
+      if (!onScreen(cx, y, px)) continue;
+      const hit: Hit = { x: cx, y, r: px / 2, key: `p${p.id}`, what: () => partText(p, c) };
+      if (px < SHAPE_PX) {
+        ctx.fillStyle = tone(muted(display(look.colour)), 1, DOT_ALPHA);
+        ctx.beginPath(); ctx.arc(cx, y, px / 2, 0, 2 * Math.PI); ctx.fill();
+        this.hits.push(hit);
+        continue;
       }
-      if (b.members > shown && first && labelled.has(b) && x1 - x0 >= LABEL_CELL_PX) this.labels.push({ x: cx, y: cy - unit * animalLength(b.mass) * 1.4 - spread * 0.6, text: `×${fmtCount(b.members)}` });
-      const held = byId.get(b.hold);
-      if (held && first) this.drawn.push({ x: first[0] + unit * 0.7, y: first[1] + 1, sprite: object(partLook(held), seedOf(held.id, 0), unit * 0.6), key: `p${held.id}`, what: () => partText(held, c) });
-    });
+      const sprite = this.sprite(`p${p.id}`, ppm, () => object(look, ppm, this.style)), turn = this.style === 'above' ? (seeded(seedOf(p.id, 0))() - 0.5) * 0.6 : 0;
+      shapes.push({ sprite, x: cx, y, turn, lift: this.style === 'above' ? Math.min(sprite.r, look.size[2] * ppm) * SHADOW_LIFT : 0, hit });
+    }
+  }
+
+  /** The part node `b` holds, beside its first member drawn at (x, y) of radius `r`. */
+  private heldBy(b: Animal, byId: Map<bigint, Thing>, x: number, y: number, r: number, ppm: number, shapes: Shape[]): void {
+    const held = byId.get(b.hold);
+    if (!held) return;
+    const look = partLook(held), px = look.size[0] * ppm;
+    if (px < SHAPE_PX) return;
+    const sprite = this.sprite(`p${held.id}`, ppm, () => object(look, ppm, this.style));
+    shapes.push({ sprite, x: x + r * 0.8, y, turn: 0, lift: 0, hit: { x: x + r * 0.8, y, r: px / 2, key: `p${held.id}`, what: () => `Held part: ${num(held.mass)} kg` } });
   }
 }
-
-/** Members of each of cell `c`'s bodies drawn, in a cell of `px` square pixels: each body at least one and at most `most`, the room of the cell (`HERD_FILL` of it in animals' footprints) shared by the root of their members, so a crowded cell reads as crowded, not as a heap. */
-function herds(c: CellThings, px: number, unit: number, most: number): number[] {
-  const foot = c.bodies.reduce((t, b) => t + (unit * animalLength(b.mass)) ** 2, 0) / Math.max(c.bodies.length, 1);
-  const room = Math.max(c.bodies.length, Math.floor((HERD_FILL * px) / Math.max(foot, 1))), weight = c.bodies.reduce((t, b) => t + Math.sqrt(b.members), 0);
-  return c.bodies.map(b => Math.max(1, Math.min(Math.ceil(b.members), most, Math.floor((room * Math.sqrt(b.members)) / weight))));
-}
-
-/** Plants a slot draws in a cell of `px` square pixels: by its cover share, closing at `GRASS_CLOSED` to `FOREST_CLOSED` kg/m² as it is woodier. */
-function plantsIn(sl: Slot, px: number, unit: number): number {
-  const wood = woodiness(sl.genes[2]), closed = GRASS_CLOSED + (FOREST_CLOSED - GRASS_CLOSED) * wood;
-  const share = 1 - Math.exp(-sl.kg / closed);
-  return share * PLANTS_PER_UNIT2 * px / (unit * unit * (1 + 3 * wood));
-}
-/** Whether cell `c`'s plants are drawn one by one: where its cover is open (its slots' capture area per m² absorbs less than `OPEN` of the light), or the view is close. */
-const drawsPlants = (c: CellThings, close: boolean) => close || 1 - Math.exp(-c.slots.reduce((t, sl) => t + sl.leaf, 0)) < OPEN;
-const plantLook = (sl: Slot) => plantLookOf(sl.genes, sl.kg);
-const partLook = (p: Thing) => ({ size: p.size, hollow: p.hollow, colour: p.colour, hardness: p.hardness, buried: p.buried, room: p.space > 0 && p.closed > 0.5 });
-/** A seeded stream for cell `c` by its place, so its layout holds from frame to frame. */
-const seededAt = (c: CellThings, k: number) => {
-  let a = (Math.round(c.box[0] * 4096) * 73856093 ^ Math.round(c.box[1] * 4096) * 19349663 ^ k) >>> 0;
-  return () => { a = (Math.imul(a ^ (a >>> 16), 0x45d9f3b) + 0x9e3779b9) >>> 0; return a / 4294967296; };
-};
 
 const fmtCount = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(n >= 1e4 ? 0 : 1)}k` : n >= 10 ? n.toFixed(0) : n.toFixed(1);
 const num = (v: number, d = 3) => (Math.abs(v) >= 1e4 || (Math.abs(v) < 1e-2 && v !== 0) ? v.toExponential(2) : Number(v.toPrecision(d)).toString());
@@ -219,9 +282,11 @@ const head = (title: string, c: CellThings) => `<div class="cell"><b>${title}</b
 
 function bodyText(b: Animal, c: CellThings): string {
   const eats = [[DIET_COVER, 'cover'], [DIET_BODIES, 'bodies (bites)'], [DIET_REMAINS, 'remains']].filter(([bit]) => b.diet & (bit as number)).map(x => x[1]).join(', ') || 'nothing';
+  const density = b.members / Math.max(c.area, 1e-9);
   return head(b.members > 1 ? `Herd of ${fmtCount(b.members)}` : 'Animal', c) + '<table>' + [
     row('Id', String(b.id)), row('Kind (root)', b.root === 0xffffffff ? 'none' : String(b.root)), row('Lineage', String(b.lineage)),
-    row('Stage', b.adult ? 'adult' : 'young'), row('Members', num(b.members)), row('Mass of a member', `${num(b.mass)} <u>kg</u>`),
+    row('Stage', b.adult ? 'adult' : 'young'), row('Members', num(b.members)), row('Members per km²', num(density * 1e6)),
+    row('Mass of a member', `${num(b.mass)} <u>kg</u>`), row('Length of a member', `${num(bodyLength(b.mass, b.adult))} <u>m</u>`),
     row('Living body of a member', `${num(b.living)} <u>kg</u>`), row('Copy mass', `${num(b.copyMass)} <u>kg</u>`), row('Strength', num(b.strength, 2)),
     row('Coat', num(b.coat, 2)), row('Keeps warm below', `${num(b.keepT)} <u>K</u>`), row('Cools above', `${num(b.coolT)} <u>K</u>`),
     row('Eats', eats), row('Brain', b.hidden ? `${b.hidden} hidden units` : 'none'), row('Colour', swatch(b.colour)),
@@ -229,12 +294,16 @@ function bodyText(b: Animal, c: CellThings): string {
   ].join('') + '</table>';
 }
 
-function slotText(sl: Slot, c: CellThings): string {
+/** A slot of cover in one line: its form by its walls gene, its built cover and capture area, its genes. */
+function slotLine(sl: Slot): string {
   const wood = woodiness(sl.genes[2]), form = wood < 0.2 ? 'grass' : wood < 0.5 ? 'shrubs' : 'trees';
-  return head(`Plant cover (${form})`, c) + '<table>' + [
-    row('Kind (root)', String(sl.root)), row('Built cover', `${num(sl.kg)} <u>kg/m²</u>`), row('Capture area', `${num(sl.leaf)} <u>m²/m²</u>`), row('Full', sl.full ? 'yes' : 'no'),
-    ...COVER_GENES.map(([n, u], k) => row(`Gene ${n}`, `${num(sl.genes[k])} <u>${u}</u>`)),
-  ].join('') + '</table>';
+  return `${form}, ${num(sl.kg)} <u>kg/m²</u>, ${num(sl.leaf)} <u>m²/m²</u>${sl.full ? ', full' : ''}<br><small>${COVER_GENES.map(([n, u], k) => `${n} ${num(sl.genes[k])} ${u}`).join('; ')}</small>`;
+}
+
+/** The cover of cell `c`: each slot in a line, the heaviest first. */
+function coverText(c: CellThings): string {
+  const slots = [...c.slots].sort((a, b) => b.kg - a.kg);
+  return head('Plant cover', c) + '<table>' + slots.map(sl => row(`Kind ${sl.root}`, slotLine(sl))).join('') + '</table>';
 }
 
 function partText(p: Thing, c: CellThings): string {

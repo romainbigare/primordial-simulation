@@ -754,6 +754,9 @@ The owner decided: **no 3D.** The game is a **flat 2D plan view, like a good atl
 
 This is cheaper to build, faster to draw and easier to read. It fits a world seen mostly from far away.
 
+Life and objects are drawn at their true size in metres, the plant cover as textures. Two styles exist for the
+shapes of individuals, seen from above or angled (the sprites below); the owner will choose between them.
+
 **Goals:**
 - A player understands what they see **instinctively**, without reading.
 - What is drawn is **what is really there**. The Earth view only gives it a familiar face.
@@ -786,6 +789,8 @@ Each cell is one pixel (or one small tile when zoomed in). Its colour comes from
 - Simple thresholds on physical fields decide the natural classes. Farmland and settlement come from the pattern finder and the recognition library, so they are Earth-view interpretations and get the same match badges.
 
 ### 10.4 Sprites (axonometric)
+
+Both this angled style and a view from above are built, at true size, and the owner will choose (10.1).
 
 - Small sprites drawn at a fixed angle, in one consistent style (for example clean pixel art).
 - Each library concept has a **few variants**: size tiers (small, medium, large) and **material tints** from the world (a hard mineral substance gives a stone look, a plant fibre gives thatch, colours from reflectance). So each culture's settlements look different.
