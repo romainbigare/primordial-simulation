@@ -42,7 +42,9 @@ const MARK_M: Partial<Record<Kind, number>> = { shrubs: 1.5, grass: 0.25, steppe
 /** The pixels a mark takes from which its pattern starts to show, and from which it shows fully. */
 const FADE_PX = [0.7, 2];
 /** The share of the view's width and height the picture of the textures reaches beyond each edge. */
-const MARGIN = 0.3;
+const COVER_MARGIN = 0.3;
+/** The pixels by which the fine raster may miss the view's edge and still be taken to hold it. */
+const SLACK_PX = 1;
 /** How strongly the textures cover the map, so its hill shading still shows through. */
 const COVER_ALPHA = 0.85;
 /** The kinds in the order they are drawn: the low under the tall. */
@@ -85,8 +87,9 @@ function sizesOf(st: Stand): [number, number][] {
 }
 
 /** A layer of a grid: one kind at one size of mark, m, and per level (open, closing) its colour and weight per tile,
- * as a picture of the grid's tiles, or null where no tile has any. */
-interface Layer { kind: Kind; mark: number; levels: (HTMLCanvasElement | null)[] }
+ * as a picture of the grid's tiles with the box of the tiles that hold any (first and last column and row), or null
+ * where no tile has any. */
+interface Layer { kind: Kind; mark: number; levels: ({ pic: HTMLCanvasElement; box: number[] } | null)[] }
 /** A grid of tiles on screen: its field, its window in squares, the colour of a tile's slots close up, and its layers
  * (made when its cover changes). */
 interface Grid { field: Field; at: [number, number, number, number]; tint: (i: number) => Rgb | undefined; layers: Layer[] | null }
@@ -153,33 +156,32 @@ export class Vegetation {
   /** Draw over the map, whose corner is at (ox, oy) and whose square takes `s` pixels. */
   draw(ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number): void {
     if (!this.map) return;
-    const W = ctx.canvas.clientWidth, H = ctx.canvas.clientHeight, d = window.devicePixelRatio || 1, ppm = s / this.cellM;
+    const W = ctx.canvas.clientWidth, H = ctx.canvas.clientHeight, ppm = s / this.cellM;
     // Nothing to draw while the largest marks take less than a pixel.
     if (CROWN_SIZES[CROWN_SIZES.length - 1] * ppm < FADE_PX[0]) return;
-    // The picture reaches `MARGIN` of the view beyond each edge, so a pan within it only moves the picture.
-    const mx = Math.round(W * MARGIN), my = Math.round(H * MARGIN), cw = W + 2 * mx, ch = H + 2 * my;
-    const key = [s, W, H, d, this.version, this.style].join();
+    // The picture reaches `COVER_MARGIN` of the view beyond each edge, so a pan within it only moves the picture.
+    const mx = Math.round(W * COVER_MARGIN), my = Math.round(H * COVER_MARGIN), cw = W + 2 * mx, ch = H + 2 * my;
+    const key = [s, W, H, this.version, this.style].join();
     if (key !== this.key || Math.abs(ox - this.at[0]) > mx || Math.abs(oy - this.at[1]) > my) {
       this.key = key; this.at = [ox, oy];
-      for (const c of [this.cache, this.scratch]) { c.width = Math.round(cw * d); c.height = Math.round(ch * d); }
+      for (const c of [this.cache, this.scratch]) { c.width = cw; c.height = ch; }
       const out = this.cache.getContext('2d')!, [px, py] = [ox + mx, oy + my];
-      out.setTransform(d, 0, 0, d, 0, 0);
-      const fineRect = this.fine ? rectOf(this.fine.at, px, py, s) : null;
-      const covers = fineRect !== null && fineRect[0] <= 0 && fineRect[1] <= 0 && fineRect[0] + fineRect[2] >= cw && fineRect[1] + fineRect[3] >= ch;
-      if (!covers) this.paint(out, this.map, px, py, s, ppm, cw, ch, fineRect);
-      if (this.fine) this.paint(out, this.fine, px, py, s, ppm, cw, ch, null);
+      // The fine raster where it holds the view (it is made for it), else the map's squares.
+      const f = this.fine && rectOf(this.fine.at, ox, oy, s), m = rectOf(this.map.at, ox, oy, s);
+      const holds = f && f[0] <= Math.max(m[0], 0) + SLACK_PX && f[1] <= Math.max(m[1], 0) + SLACK_PX && f[0] + f[2] >= Math.min(m[0] + m[2], W) - SLACK_PX && f[1] + f[3] >= Math.min(m[1] + m[3], H) - SLACK_PX;
+      this.paint(out, holds && this.fine ? this.fine : this.map, px, py, s, ppm, cw, ch);
     }
     ctx.drawImage(this.cache, ox - this.at[0] - mx, oy - this.at[1] - my, cw, ch);
   }
 
-  /** Paint grid `g` onto `out`, leaving out the screen rectangle `hole`: each of its layers whose marks show, per level
-   * its colours and weights blended across the screen, kept where the tile's coverage is, shaded by the tile's shading. */
-  private paint(out: CanvasRenderingContext2D, g: Grid, ox: number, oy: number, s: number, ppm: number, W: number, H: number, hole: number[] | null): void {
+  /** Paint grid `g` onto `out` (`W` x `H` px): each of its layers whose marks show, per level its colours and weights
+   * blended across the screen, kept where the tile's coverage is, shaded by the tile's shading; each only over the
+   * tiles that hold it. The picture is made a pixel a css pixel: the marks are soft, and it costs a quarter of a
+   * screen's pixels. */
+  private paint(out: CanvasRenderingContext2D, g: Grid, ox: number, oy: number, s: number, ppm: number, W: number, H: number): void {
     g.layers ??= layersOf(g.field, g.tint);
-    const [gx, gy, gw, gh] = rectOf(g.at, ox, oy, s), x0 = Math.max(gx, 0), y0 = Math.max(gy, 0), x1 = Math.min(gx + gw, W), y1 = Math.min(gy + gh, H);
-    if (x1 <= x0 || y1 <= y0) return;
-    const sc = this.scratch.getContext('2d')!, d = this.scratch.width / W;
-    sc.setTransform(d, 0, 0, d, 0, 0);
+    const [gx, gy, gw, gh] = rectOf(g.at, ox, oy, s), tx = gw / g.field.w, ty = gh / g.field.h;
+    const sc = this.scratch.getContext('2d')!;
     sc.imageSmoothingEnabled = true; sc.imageSmoothingQuality = 'high';
     for (const layer of g.layers) {
       const px = layer.mark * ppm, fade = vegSmooth(FADE_PX[0], FADE_PX[1], px);
@@ -189,17 +191,20 @@ export class Vegetation {
       const shift = ((layer.mark * 0.618034) % 1) * tile.side * k;
       layer.levels.forEach((mask, level) => {
         if (!mask) return;
+        // The tiles that hold it, one more each side for the blend, on screen.
+        const [b0, b1, b2, b3] = mask.box, x0 = Math.max(Math.floor(gx + (b0 - 1) * tx), 0), y0 = Math.max(Math.floor(gy + (b1 - 1) * ty), 0);
+        const x1 = Math.min(Math.ceil(gx + (b2 + 2) * tx), W), y1 = Math.min(Math.ceil(gy + (b3 + 2) * ty), H);
+        if (x1 <= x0 || y1 <= y0) return;
         sc.globalCompositeOperation = 'source-over';
         sc.clearRect(x0, y0, x1 - x0, y1 - y0);
-        sc.drawImage(mask, gx, gy, gw, gh);
+        sc.drawImage(mask.pic, gx, gy, gw, gh);
         for (const [op, pic] of [['destination-in', tile.cov[level][size]], ['source-atop', tile.shade[level][size]]] as const) {
           const p = this.pattern(sc, pic);
           p.setTransform(new DOMMatrix([k, 0, 0, k, ox + shift, oy + shift]));
           sc.globalCompositeOperation = op; sc.fillStyle = p; sc.fillRect(x0, y0, x1 - x0, y1 - y0);
         }
-        if (hole) { sc.globalCompositeOperation = 'destination-out'; sc.fillRect(hole[0], hole[1], hole[2], hole[3]); }
         out.globalAlpha = fade * COVER_ALPHA;
-        out.drawImage(this.scratch, x0 * d, y0 * d, (x1 - x0) * d, (y1 - y0) * d, x0, y0, x1 - x0, y1 - y0);
+        out.drawImage(this.scratch, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0);
       });
     }
     out.globalAlpha = 1;
@@ -235,7 +240,7 @@ function fieldOf(w: World, f: number, cls: Uint8Array): Field | null {
  * marks of an open cover come first, the closing ones as its cover closes past `OPEN_SHARE`), coloured by its stand,
  * tinted by its slots' genes (`tint`) close up. */
 function layersOf(f: Field, tint: (i: number) => Rgb | undefined): Layer[] {
-  const n = f.w * f.h, found = new Map<string, { kind: Kind; mark: number; data: (Uint8ClampedArray<ArrayBuffer> | null)[] }>();
+  const n = f.w * f.h, found = new Map<string, { kind: Kind; mark: number; data: (Uint8ClampedArray<ArrayBuffer> | null)[]; box: number[][] }>();
   for (let i = 0; i < n; i++) {
     if (!f.open[i]) continue;
     const st = stand(f.kg[i], f.wood[i], f.leaf[i], f.t[i], f.rain[i]);
@@ -246,21 +251,22 @@ function layersOf(f: Field, tint: (i: number) => Rgb | undefined): Layer[] {
       if (w <= 0) continue;
       const key = `${st.kind}:${mark}`;
       let l = found.get(key);
-      if (!l) { l = { kind: st.kind, mark, data: [null, null] }; found.set(key, l); }
+      if (!l) { l = { kind: st.kind, mark, data: [null, null], box: [[f.w, f.h, -1, -1], [f.w, f.h, -1, -1]] }; found.set(key, l); }
       weights.forEach((lw, level) => {
         if (lw * w <= 0) return;
-        const data = (l!.data[level] ??= new Uint8ClampedArray(4 * n));
+        const data = (l!.data[level] ??= new Uint8ClampedArray(4 * n)), b = l!.box[level], x = i % f.w, y = (i / f.w) | 0;
+        b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.max(b[2], x); b[3] = Math.max(b[3], y);
         data[4 * i] = colour[0]; data[4 * i + 1] = colour[1]; data[4 * i + 2] = colour[2]; data[4 * i + 3] = 255 * lw * w;
       });
     }
   }
-  const picture = (data: Uint8ClampedArray<ArrayBuffer> | null) => {
+  const picture = (data: Uint8ClampedArray<ArrayBuffer> | null, box: number[]) => {
     if (!data) return null;
-    const c = document.createElement('canvas');
-    c.width = f.w; c.height = f.h;
-    c.getContext('2d')!.putImageData(new ImageData(data, f.w, f.h), 0, 0);
-    return c;
+    const pic = document.createElement('canvas');
+    pic.width = f.w; pic.height = f.h;
+    pic.getContext('2d')!.putImageData(new ImageData(data, f.w, f.h), 0, 0);
+    return { pic, box };
   };
   return [...found.values()].sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.mark - b.mark)
-    .map(l => ({ kind: l.kind, mark: l.mark, levels: l.data.map(picture) }));
+    .map(l => ({ kind: l.kind, mark: l.mark, levels: l.data.map((d, k) => picture(d, l.box[k])) }));
 }

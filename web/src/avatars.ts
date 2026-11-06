@@ -29,6 +29,8 @@ const DOT_ALPHA = 0.85;
 const PART_HIDE_PX = 1;
 /** The pointer finds a thing within this many pixels of its edge. */
 const REACH_PX = 3;
+/** The share of the view's width and height the picture of the things reaches beyond each edge. */
+const THINGS_MARGIN = 0.3;
 /** A shadow is cast this share of a thing's radius to the south-east from above. */
 const SHADOW_LIFT = 0.18;
 
@@ -127,9 +129,16 @@ export class Avatars {
   private spriteScale = '';
   /** The map's corner and scale (ox, oy, s) last drawn with things, or none. */
   private drawnAt: [number, number, number] | null = null;
+  /** The picture of the things, reaching `THINGS_MARGIN` of the view beyond each edge, kept until the things, the scale or
+   * the style change or the view leaves it: its key, the map's corner it was made for, and where it lies on screen. */
+  private cache = document.createElement('canvas');
+  private key = '';
+  private madeAt: [number, number] = [0, 0];
+  private shift: [number, number] = [0, 0];
+  private version = 0;
 
   /** The list of things the core sent (none: nothing is drawn), for a map whose square is `cellM` metres. */
-  set(data: Uint8Array | null, cellM: number): void { this.cells = data ? readThings(data) : []; this.cellM = cellM; this.sprites.clear(); }
+  set(data: Uint8Array | null, cellM: number): void { this.cells = data ? readThings(data) : []; this.cellM = cellM; this.sprites.clear(); this.version++; }
   /** The cells of that list. */
   get list(): CellThings[] { return this.cells; }
 
@@ -160,6 +169,7 @@ export class Avatars {
 
   /** The key of the front-most thing within `REACH_PX` of (x, y). */
   private at(x: number, y: number): string | null {
+    x -= this.shift[0]; y -= this.shift[1];
     for (let k = this.hits.length - 1; k >= 0; k--) {
       const h = this.hits[k];
       if (Math.hypot(x - h.x, y - h.y) <= h.r + REACH_PX) return h.key;
@@ -176,12 +186,35 @@ export class Avatars {
     return s;
   }
 
-  /** Draw over the map, whose corner is at (ox, oy) and whose square takes `s` pixels: nothing below `THINGS_PX`. */
+  /** Draw over the map, whose corner is at (ox, oy) and whose square takes `s` pixels: nothing below `THINGS_PX`. A
+   * pan within the picture's margin only moves it. */
   draw(ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number): void {
-    this.hits = []; this.drawnAt = null;
-    if (s < THINGS_PX || !this.cells.length) return;
+    this.drawnAt = null;
+    if (s < THINGS_PX || !this.cells.length) { this.hits = []; return; }
     this.drawnAt = [ox, oy, s];
-    const W = ctx.canvas.clientWidth, H = ctx.canvas.clientHeight, ppm = s / this.cellM, sq = (x: number, y: number) => [ox + x * s, oy + y * s];
+    const W = ctx.canvas.clientWidth, H = ctx.canvas.clientHeight, d = window.devicePixelRatio || 1;
+    const mx = Math.round(W * THINGS_MARGIN), my = Math.round(H * THINGS_MARGIN), cw = W + 2 * mx, ch = H + 2 * my;
+    const key = [s, W, H, d, this.version, this.style].join();
+    if (key !== this.key || Math.abs(ox - this.madeAt[0]) > mx || Math.abs(oy - this.madeAt[1]) > my) {
+      this.key = key; this.madeAt = [ox, oy];
+      this.cache.width = Math.round(cw * d); this.cache.height = Math.round(ch * d);
+      const c = this.cache.getContext('2d')!;
+      c.setTransform(d, 0, 0, d, 0, 0);
+      this.render(c, ox + mx, oy + my, s, cw, ch);
+    }
+    this.shift = [ox - this.madeAt[0] - mx, oy - this.madeAt[1] - my];
+    ctx.drawImage(this.cache, this.shift[0], this.shift[1], cw, ch);
+    // The thing under the pointer and the one picked: a thin ring.
+    for (const key of [this.pinned, this.over]) for (const h of this.hits.filter(x => key && x.key === key)) {
+      ctx.strokeStyle = key === this.over ? 'rgba(0,0,0,.7)' : 'rgba(255,255,255,.9)'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(h.x + this.shift[0], h.y + this.shift[1], h.r + 2, 0, 2 * Math.PI); ctx.stroke();
+    }
+  }
+
+  /** Draw the things onto `ctx` (`W` x `H` px), the map's corner at (ox, oy), its square `s` pixels, and keep where each is. */
+  private render(ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number, W: number, H: number): void {
+    this.hits = [];
+    const ppm = s / this.cellM, sq = (x: number, y: number) => [ox + x * s, oy + y * s];
     const seen = this.cells.filter(c => c.box[0] * s + ox < W && c.box[2] * s + ox > 0 && c.box[1] * s + oy < H && c.box[3] * s + oy > 0);
     const onScreen = (x: number, y: number, r: number) => x + r > 0 && y + r > 0 && x - r < W && y - r < H;
     // The members' layouts, and the window in view widened by a body's length.
@@ -199,7 +232,6 @@ export class Avatars {
     const wanted = laid.reduce((t, d) => t + (d.L * ppm >= DOT_PX ? d.l.shown * shareIn(d.l, d.view) : 0), 0);
     const keep = Math.min(1, MOST_SHOWN / Math.max(wanted, 1));
     const shapes: Shape[] = [];
-    ctx.save();
     for (const c of seen) this.layParts(ctx, c, ppm, sq, onScreen, shapes);
     for (const { c, l, L, byId, view } of laid) {
       const b = l.b, px = L * ppm, what = () => bodyText(b, c), colour = animalColour(lookOf(b)), g2 = l.g * l.g;
@@ -231,12 +263,6 @@ export class Avatars {
     }
     if (this.style === 'angled') shapes.sort((a, b) => a.y - b.y);
     for (const d of shapes) { paintSprite(ctx, d.sprite, d.x, d.y, d.turn, d.lift); this.hits.push(d.hit); }
-    // The thing under the pointer and the one picked: a thin ring.
-    for (const key of [this.pinned, this.over]) for (const h of this.hits.filter(x => key && x.key === key)) {
-      ctx.strokeStyle = key === this.over ? 'rgba(0,0,0,.7)' : 'rgba(255,255,255,.9)'; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(h.x, h.y, h.r + 2, 0, 2 * Math.PI); ctx.stroke();
-    }
-    ctx.restore();
   }
 
   /** The parts of cell `c` lying free: each structure at its place, its parts side by side in a row by their real
