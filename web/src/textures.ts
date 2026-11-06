@@ -9,7 +9,7 @@ import { Style, seeded } from './sprites';
 export type Kind = 'grass' | 'steppe' | 'tundra' | 'shrubs' | 'woodland' | 'forest' | 'jungle';
 /** A tile: per level (0: the marks of an open cover, 1: the extra marks that close it) its coverage and shading, each
  * at sizes halving from the largest; the pixels a mark takes across at the largest size, and its side, px. */
-export interface Tile { cov: HTMLCanvasElement[][]; shade: HTMLCanvasElement[][]; mark: number; side: number }
+interface Tile { cov: HTMLCanvasElement[][]; shade: HTMLCanvasElement[][]; mark: number; side: number }
 
 /** The side of a tile at its smallest size, px. */
 const SMALLEST_PX = 16;

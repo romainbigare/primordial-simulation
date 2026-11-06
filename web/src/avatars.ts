@@ -6,10 +6,10 @@
 // its numbers (10.8); the plant cover is a texture (vegetation.ts).
 import { Rgb, Sprite, Style, AnimalLook, PartLook, animal, object, paintSprite, bodyLength, animalColour, woodiness, display, muted, seeded, tone, DIET_COVER, DIET_BODIES, DIET_REMAINS } from './sprites';
 
-export interface Animal { id: bigint; members: number; mass: number; living: number; strength: number; colour: Rgb; copyMass: number; coat: number; keepT: number; coolT: number; root: number; lineage: number; diet: number; adult: boolean; hidden: number; hold: bigint; inside: bigint }
-export interface Slot { root: number; kg: number; leaf: number; genes: number[]; full: boolean }
-export interface Thing { id: bigint; size: [number, number, number]; hollow: number; mass: number; colour: Rgb; hardness: number; buried: number; held: bigint; root: bigint; space: number; closed: number }
-export interface Bond { a: bigint; b: bigint; strength: number }
+interface Animal { id: bigint; members: number; mass: number; living: number; strength: number; colour: Rgb; copyMass: number; coat: number; keepT: number; coolT: number; root: number; lineage: number; diet: number; adult: boolean; hidden: number; hold: bigint; inside: bigint }
+interface Slot { root: number; kg: number; leaf: number; genes: number[]; full: boolean }
+interface Thing { id: bigint; size: [number, number, number]; hollow: number; mass: number; colour: Rgb; hardness: number; buried: number; held: bigint; root: bigint; space: number; closed: number }
+interface Bond { a: bigint; b: bigint; strength: number }
 export interface CellThings { index: number; box: [number, number, number, number]; area: number; bodies: Animal[]; slots: Slot[]; parts: Thing[]; bonds: Bond[] }
 
 /** The cover's genes in their order (pcore::cover): their names and units for the inspect panel. */
@@ -33,7 +33,7 @@ const REACH_PX = 3;
 const SHADOW_LIFT = 0.18;
 
 /** Reads the list of things (tape::things). */
-export function readThings(data: Uint8Array): CellThings[] {
+function readThings(data: Uint8Array): CellThings[] {
   const dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
   let at = 0;
   const u8 = () => dv.getUint8(at++), u16 = () => { at += 2; return dv.getUint16(at - 2, true); };

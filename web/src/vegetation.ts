@@ -62,7 +62,7 @@ const FOLIAGE: Record<Kind, Rgb> = {
 
 /** The stand of a place: its pattern from its cover (`kg` and `wood` kg/m², `leaf` capture area per m²) and its ground
  * temperature `t` K and rain mol/m²/s; null where there is too little to draw. */
-export function stand(kg: number, wood: number, leaf: number, t: number, rain: number): Stand | null {
+function stand(kg: number, wood: number, leaf: number, t: number, rain: number): Stand | null {
   const closed = 1 - Math.exp(-leaf);
   if (closed < BARE || kg <= 0) return null;
   let kind: Kind;

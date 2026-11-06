@@ -14,7 +14,7 @@ export interface Sprite { paths: { path: Path2D; fill: string }[]; shadow: Path2
  * keeps warm below and cools above (K), what it takes (tape::DIET_* bits), whether adult, and its lineage. */
 export interface AnimalLook { mass: number; strength: number; colour: Rgb; keepT: number; coolT: number; diet: number; adult: boolean; lineage: number }
 /** What a plant's look is made of: the cover's genes (LIGHT, LEAF, WALLS, STORE, FROST, MOIST, SEED, REPAIR, FIX) and its built cover, kg/m². */
-export interface PlantLook { light: number; leaf: number; walls: number; store: number; frost: number; moist: number; seed: number; repair: number; fix: number; kg: number }
+interface PlantLook { light: number; leaf: number; walls: number; store: number; frost: number; moist: number; seed: number; repair: number; fix: number; kg: number }
 /** What an object's look is made of: 3 outer sizes m (longest first), hollowness, walls' colour (reflectance) and
  * hardness, depth buried m, and whether its structure closes a space. */
 export interface PartLook { size: [number, number, number]; hollow: number; colour: Rgb; hardness: number; buried: number; room: boolean }
