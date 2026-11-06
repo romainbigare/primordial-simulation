@@ -23,6 +23,8 @@ const SHAPE_PX = 3, DOT_PX = 1;
 const MOST_SHOWN = 20000;
 /** Stipple dots a square pixel holds at most, their size, px, and how strong they are, from few members a dot to many. */
 const STIPPLE_PER_PX2 = 0.04, STIPPLE_PX = 1, STIPPLE_ALPHA = [0.2, 0.4];
+/** A stipple fades out over this share of its box's side towards each edge, so a crowded cell does not show as a block. */
+const STIPPLE_EDGE = 0.15;
 /** How strong a soft dot is. */
 const DOT_ALPHA = 0.85;
 /** A part smaller than this, px, is not drawn; up to `SHAPE_PX` it is a dot. */
@@ -236,15 +238,19 @@ export class Avatars {
     for (const { c, l, L, byId, view } of laid) {
       const b = l.b, px = L * ppm, what = () => bodyText(b, c), colour = animalColour(lookOf(b)), g2 = l.g * l.g;
       if (px < DOT_PX) {
-        // A stipple: at most `STIPPLE_PER_PX2` dots a square pixel of its box, stronger the more members each stands for.
+        // A stipple: at most `STIPPLE_PER_PX2` dots a square pixel of its box, stronger the more members each stands for,
+        // fading towards the box's edges.
         const boxPx = (l.box[2] - l.box[0]) * (l.box[3] - l.box[1]) * s * s, n = Math.min(l.shown, Math.ceil(boxPx * STIPPLE_PER_PX2));
         const each = l.shown / Math.max(n, 1);
         ctx.fillStyle = tone(colour, 1, STIPPLE_ALPHA[0] + (STIPPLE_ALPHA[1] - STIPPLE_ALPHA[0]) * Math.min(1, Math.log10(each) / 2));
         eachIn(l, view, Math.ceil(n / g2), (m, X, Y) => {
           const [x, y] = sq(X, Y);
+          const [x0, y0, x1, y1] = l.box, edge = Math.min(X - x0, x1 - X, Y - y0, y1 - Y) / (STIPPLE_EDGE * Math.min(x1 - x0, y1 - y0));
+          ctx.globalAlpha = Math.min(1, edge);
           ctx.fillRect(x - STIPPLE_PX / 2, y - STIPPLE_PX / 2, STIPPLE_PX, STIPPLE_PX);
           this.hits.push({ x, y, r: STIPPLE_PX / 2, key: `b${b.id}:${m}`, what });
         });
+        ctx.globalAlpha = 1;
         continue;
       }
       ctx.fillStyle = tone(colour, 1, DOT_ALPHA);
