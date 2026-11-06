@@ -364,7 +364,12 @@ fn the_tree_keeps_cells_one_depth_apart() {
     assert_eq!(w.join(made[0]), Err(Shape::Unbalanced));
     assert_eq!(w.join(l.parent().expect("a parent")), Err(Shape::NoCell));
     assert_eq!(difference(&saved(&w), &before, "", 0.0), None);
-    let deepest = Square::new(4, 4, 2000.0, false, 4).by_blocks(|_, _| DEPTH_MOST);
+    // A block split at its north-west corner down to a leaf of the most depth.
+    let mut chain = vec![Leaf { x: 0, y: 0, depth: 0 }];
+    for _ in 0..DEPTH_MOST {
+        chain = chain.into_iter().flat_map(|l| l.split(l.depth + u8::from(l.x == 0 && l.y == 0))).collect();
+    }
+    let deepest = Square::new(4, 4, 2000.0, false, 4).with(chain);
     assert_eq!(deepest.splits(deepest.leaves()[0]), Err(Shape::Deepest));
 }
 
@@ -572,7 +577,7 @@ fn an_even_region_split_two_depths_keeps_its_climate() {
     w.drain_events();
     // The block of 2 x 2 squares at the middle of the map, aligned to its size.
     let side = 2 * leaf(&w, 0).side();
-    let block = [Leaf { x: (w.map.w as u32 / 2) / 2 * side, y: (w.map.h as u32 / 2) / 2 * side, depth: w.map.square_depth() - 1 }];
+    let block = [Leaf { x: (w.map.w as u64 / 2) / 2 * side, y: (w.map.h as u64 / 2) / 2 * side, depth: w.map.square_depth() - 1 }];
     assert!(block[0].quarters().iter().all(|&q| w.map.cell(q).is_some_and(|i| land.contains(&i))), "the block is four squares of land");
     let mut fine = split_down(w.clone(), &block, 2);
     for _ in 0..EVEN_MONTHS {
@@ -613,7 +618,7 @@ fn the_split_coast_keeps_its_climate() {
     w.drain_events();
     let cells = w.mesh.cells();
     let coast = |i: usize| w.is_land(i) && cells.around(i).0.iter().zip(cells.around(i).1).any(|(&l, &j)| cells.width()[l as usize] > 0.0 && !w.is_land(j as usize));
-    let west = |l: &Leaf| l.x < w.map.w as u32 / 2 * l.side();
+    let west = |l: &Leaf| l.x < w.map.w as u64 / 2 * l.side();
     let region: Vec<Leaf> = (0..cells.n()).filter(|&i| coast(i)).map(|i| leaf(&w, i)).filter(|l| l.depth == w.map.square_depth() && west(l)).take(COAST_SQUARES).collect();
     let mut flat = w.clone();
     flat.relief.iter_mut().for_each(|r| *r = 0.0);

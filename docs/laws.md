@@ -24,8 +24,10 @@ are not bodies but the **cover** of each cell, a field (4.5); bodies are **eater
 only on links. Each link takes one of 8 compass directions (`Level::way`), so the brain's 8 directions hold everywhere.
 An island of 2 km squares, or a globe (`--globe`) of latitude-longitude squares on a sphere of 6,371 km whose rows wrap
 east to west; an air block is 4 x 4 squares. The cells are a sparse tree under each air block (`space/tree.rs`): the
-block is the root, a cell is a leaf at any depth down to 1/64 of the block's side (`DEPTH_MOST`), and only the leaves
-are kept (`Square::leaves`), numbered by their north-west corners row by row; a square is depth 2. Today's worlds start
+block is the root, a cell is a leaf at any depth down to 1/2^24 of the block's side (`DEPTH_MOST`: 0.5 mm on the
+island's block of 8 km, 7.5 cm on the 1,250 km block of a globe of 64 rows), and only the leaves are kept
+(`Square::leaves`), numbered by their north-west corners row by row, counted in leaves of the most depth as 64-bit
+numbers (a map is under 2^53 of them a side, so a place is exact as a 64-bit float); a square is depth 2. Today's worlds start
 with cells of 1, 2 or 4 squares on a side (worldgen); between steps a cell may split into its quarters and four quarters
 join into their parent (`World::split`, `World::join`, below), when refinement asks (below). Cells across a border differ by
 one depth at most (2:1): a split first splits each cell across a side that would border the quarters two depths coarser
@@ -505,8 +507,7 @@ over the cell's breaking energy per m²); a cleared link is cheaper (`lanes::res
 ### 1.8 The step by the size
 An explicit step is safe while `dt Σ g / cap` of each node stays within `solve::sweep::LIMIT` (1/2: no pattern changes
 sign in a step). For a diffusion of D m²/s on a cell of side Δ with four borders that is 4 D dt / Δ² ≤ 1/2, so a step
-of `dt` is safe down to Δ = √(8 D dt). On the island (month 2.59e6 s, year 3.11e7 s; the finest cell, `DEPTH_MOST`,
-125 m):
+of `dt` is safe down to Δ = √(8 D dt). On the island (month 2.59e6 s, year 3.11e7 s):
 
 | Process | Step | D or rate | Safe down to |
 |---|---|---|---|
@@ -525,8 +526,10 @@ most depth: 3.0 in cells of 125 m with full stores, 0.85 in cells of 250 m): suc
 `solve::sweep::steps` sub-steps inside the liquid's month, each from the stores as the sub-steps leave them, the cells
 beside them held as the month starts; each link's sum is booked once by both its cells (a flux register, Berger and
 Colella 1989), and the other links step once with what each cell's sub-stepped links left it (`flow::deep`). The coarse
-cells keep their step, and the books close as every move is booked on both sides. On a globe the finest cell is tens
-of km, far above every limit.
+cells keep their step, and the books close as every move is booked on both sides. In a cell finer than the other
+limits of the table (under about 15 m), a link of an explicit sweep carries at most half of what would level its two
+cells in a step (`sweep::HALF_WAY`): pore flow, erosion and heat there move slower than their law, never across the
+level. On a globe a square is hundreds of km and a cell needs depth 15 below its block to come under 40 m.
 
 ## 2. Change: substances react inside nodes, faster when hot
 Files: `core/src/change/` (the reactor), `core/src/chem/` (chemistry and its physics), `worldgen/src/chem0.toml`.

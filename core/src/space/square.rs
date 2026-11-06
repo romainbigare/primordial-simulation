@@ -8,7 +8,7 @@
 //! liquid may use all 8 ways, and a cell refined beside a corner leaves no pit there. No cell has more than 8 links: a
 //! corner links its two cells unless one of them has 8 already (the cells in order). On a globe the cells of a row narrow toward the poles, and no link crosses a pole.
 
-use super::tree::{self, Leaf, Refused, Tree, BLOCK, DEPTH_MOST};
+use super::tree::{self, Leaf, Refused, Tree, BLOCK, DEPTH_MOST, EXTENT_MOST};
 use super::terrain::Place;
 use super::{Level, LinkSpec, Mesh, COMPASS};
 use serde::{Deserialize, Serialize};
@@ -30,8 +30,9 @@ pub struct Square {
 impl Square {
     /// A map whose cells are its squares.
     pub fn new(w: usize, h: usize, side: f64, wrap: bool, scale: usize) -> Square {
-        assert!(scale.is_power_of_two() && scale as u32 <= BLOCK, "an air block is a power of 2 squares a side, at most {BLOCK}");
+        assert!(scale.is_power_of_two() && scale as u64 <= BLOCK, "an air block is a power of 2 squares a side, at most {BLOCK}");
         let map = Square { w, h, side, wrap, scale, leaves: Vec::new() };
+        assert!(map.extent().0.max(map.extent().1) < EXTENT_MOST, "a map is less than {EXTENT_MOST} leaves of the most depth a side");
         let depth = map.square_depth();
         map.by_blocks(|_, _| depth)
     }
@@ -118,11 +119,11 @@ impl Square {
         self.scale.trailing_zeros() as u8
     }
     /// Leaves of the most depth along a side of a square, and the map's width and height in them.
-    fn unit(&self) -> u32 {
-        BLOCK / self.scale as u32
+    fn unit(&self) -> u64 {
+        BLOCK / self.scale as u64
     }
-    fn extent(&self) -> (u32, u32) {
-        (self.w as u32 * self.unit(), self.h as u32 * self.unit())
+    fn extent(&self) -> (u64, u64) {
+        (self.w as u64 * self.unit(), self.h as u64 * self.unit())
     }
     pub fn n(&self) -> usize {
         self.w * self.h
@@ -142,17 +143,17 @@ impl Square {
     }
     /// The point at the centre of square `s` (`Tree::cell_at`), in leaves of the most depth: the one whose north-west
     /// corner it is.
-    pub fn point(&self, s: usize) -> [u32; 2] {
+    pub fn point(&self, s: usize) -> [u64; 2] {
         let (x, y) = self.xy(s);
         self.point_at(x as f64 + 0.5, y as f64 + 0.5)
     }
     /// The point at column `x` and row `y` of the map, in squares from its north-west corner (a fraction is inside a
     /// square), in leaves of the most depth; a place off the map is the nearest edge's, east and west round a globe.
-    pub fn point_at(&self, x: f64, y: f64) -> [u32; 2] {
+    pub fn point_at(&self, x: f64, y: f64) -> [u64; 2] {
         let (across, down) = self.extent();
         let u = self.unit() as f64;
         let x = if self.wrap { x.rem_euclid(self.w as f64) } else { x };
-        [(x * u).floor().clamp(0.0, (across - 1) as f64) as u32, (y * u).floor().clamp(0.0, (down - 1) as f64) as u32]
+        [(x * u).floor().clamp(0.0, (across - 1) as f64) as u64, (y * u).floor().clamp(0.0, (down - 1) as f64) as u64]
     }
     /// The squares in cell `i` (a share of one in a cell finer than a square).
     pub fn squares(&self, i: usize) -> f64 {
@@ -203,10 +204,10 @@ impl Square {
     /// 0): longitudes east from 0 by the degrees of latitude per row (a whole turn on a globe).
     pub fn place_of(&self, t: &Leaf, south: f64, north: f64) -> (f64, Place) {
         let (unit, row) = (self.unit() as f64, (north - south) / self.h as f64);
-        let sq = |u: u32| u as f64 / unit;
-        let mid = |from: u32, k: u32| sq(from) + sq(k) / 2.0;
+        let sq = |u: u64| u as f64 / unit;
+        let mid = |from: u64, k: u64| sq(from) + sq(k) / 2.0;
         // On a globe: the sphere's radius, m, and the latitude of the north edge of row `y`, radians.
-        let (radius, edge) = (self.side / row.to_radians(), |y: u32| (north - row * sq(y)).to_radians());
+        let (radius, edge) = (self.side / row.to_radians(), |y: u64| (north - row * sq(y)).to_radians());
         let k = sq(t.side());
         let area = if self.wrap { radius * radius * TAU / self.w as f64 * k * (edge(t.y).sin() - edge(t.y + t.side()).sin()) } else { (k * self.side) * (k * self.side) };
         let centre = [mid(t.x, t.side()) * self.side, mid(t.y, t.side()) * self.side];
@@ -219,27 +220,27 @@ impl Square {
     fn level(&self, tree: &Tree, south: f64, north: f64, linked: bool) -> Level {
         let (leaves, unit, row, wide) = (&self.leaves, self.unit() as f64, (north - south) / self.h as f64, self.extent().0);
         // A length in leaves of the most depth, in squares.
-        let sq = |u: u32| u as f64 / unit;
+        let sq = |u: u64| u as f64 / unit;
         // On a globe: the sphere's radius, m, and the latitude of the north edge of row `y`, radians.
-        let (radius, edge) = (self.side / row.to_radians(), |y: u32| (north - row * sq(y)).to_radians());
+        let (radius, edge) = (self.side / row.to_radians(), |y: u64| (north - row * sq(y)).to_radians());
         // The latitude `rows` rows south of the north edge of the map, degrees.
         let lat = |rows: f64| north + (south - north) * rows / self.h as f64;
         // The length of the circle of latitude `phi` (radians) across one column, m: a side on the flat map.
         let across = |phi: f64| if self.wrap { radius * phi.cos() * TAU / self.w as f64 } else { self.side };
-        let mid = |from: u32, k: u32| sq(from) + sq(k) / 2.0;
+        let mid = |from: u64, k: u64| sq(from) + sq(k) / 2.0;
         // The cells north-west, north-east, south-west and south-east of the point at column `px` (round the globe) and
         // row `py`, where it is a corner of all four: four cells meet there.
-        let round = |px: i64, py: u32| -> Option<[usize; 4]> {
+        let round = |px: i64, py: u64| -> Option<[usize; 4]> {
             let q = [(-1, -1), (0, -1), (-1, 0), (0, 0)].map(|(dx, dy)| tree.at(px + dx, py as i64 + dy));
             let q = [q[0]?, q[1]?, q[2]?, q[3]?];
             let corner = |c: usize, east: bool, south: bool| {
                 let l = &leaves[c];
-                ((if east { l.x } else { l.x + l.side() }) % wide, if south { l.y } else { l.y + l.side() }) == (px.rem_euclid(wide as i64) as u32, py)
+                ((if east { l.x } else { l.x + l.side() }) % wide, if south { l.y } else { l.y + l.side() }) == (px.rem_euclid(wide as i64) as u64, py)
             };
             (corner(q[0], false, false) && corner(q[1], true, false) && corner(q[2], false, true) && corner(q[3], true, true)).then_some(q)
         };
         // How far apart the centres of two cells across a corner on row `py` are, their sides summing to `k`.
-        let apart = |k: u32, py: u32| {
+        let apart = |k: u64, py: u64| {
             let d = sq(k) / 2.0;
             if self.wrap { (d * self.side).hypot(across(edge(py)) * d) } else { (d * self.side) * SQRT_2 }
         };

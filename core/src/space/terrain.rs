@@ -34,6 +34,9 @@ const FALL_BY: f64 = 2.0;
 const FALL_POWER: f64 = 1.6;
 /// The rise an island's level 0 m lies at.
 pub const ISLAND_LEVEL: f64 = 0.3;
+/// The depth below its air block whose leaves' centres sample the terrain inside a coarser cell (`Terrain::inside`):
+/// 1/64 of a block's side, 125 m on the island, finer than the noise's finest octave there.
+pub const SAMPLE_DEPTH: u8 = 6;
 
 /// What the terrain of a world needs beside its seed and its map: the rise its level 0 m lies at (an island's
 /// `ISLAND_LEVEL`; a globe's the one that leaves a share of its area above it, `worldgen`).
@@ -157,11 +160,11 @@ impl Terrain {
         height_of(r - ((dx * dx + dy * dy).sqrt() * FALL_BY).powf(FALL_POWER) - self.level)
     }
     /// The terrain inside leaf `l` of `map` (its rows between latitudes `south` and `north`), sampled at the centres of
-    /// its leaves of the most depth (`DEPTH_MOST`): their mean height by area, m, and the spread of their heights about
-    /// it, Σ a (h − mean)² / 2, m⁴ (a bed of density ρ standing at those heights holds ρ g times that more potential
-    /// energy than a flat one of its volume).
+    /// its leaves of `SAMPLE_DEPTH` (itself, if finer): their mean height by area, m, and the spread of their heights
+    /// about it, Σ a (h − mean)² / 2, m⁴ (a bed of density ρ standing at those heights holds ρ g times that more
+    /// potential energy than a flat one of its volume).
     pub fn inside(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64)) -> (f64, f64) {
-        let fine: Vec<(f64, f64)> = l.split(super::tree::DEPTH_MOST).map(|f| map.place_of(&f, south, north)).map(|(a, p)| (a, self.height(seed, map, p))).collect();
+        let fine: Vec<(f64, f64)> = l.split(SAMPLE_DEPTH.max(l.depth)).map(|f| map.place_of(&f, south, north)).map(|(a, p)| (a, self.height(seed, map, p))).collect();
         let (area, sum) = fine.iter().fold((0.0, 0.0), |(a, s), &(da, h)| (a + da, s + da * h));
         let mean = sum / area;
         (mean, fine.iter().map(|&(a, h)| a * (h - mean) * (h - mean)).sum::<f64>() / 2.0)

@@ -25,12 +25,12 @@ fn maps() -> [(Square, Mesh); 2] {
 /// a depth or one of them has 8 links already; a link of no width joins two cells that meet only at a point; no cell has
 /// more than 8 links.
 fn corners(sq: &Square, mesh: &Mesh) {
-    let (lv, leaves, unit) = (mesh.cells(), sq.leaves(), BLOCK / SCALE as u32);
-    let (across, down) = (sq.w as u32 * unit, sq.h as u32 * unit);
+    let (lv, leaves, unit) = (mesh.cells(), sq.leaves(), BLOCK / SCALE as u64);
+    let (across, down) = (sq.w as u64 * unit, sq.h as u64 * unit);
     let links = |i: usize| lv.around(i).0.len();
     assert!((0..lv.n()).all(|i| links(i) <= 8), "no cell has more than 8 links");
     // Leaf `l` has a corner at (`x`, `y`), on its east (`east`) or west side and its south (`south`) or north side.
-    let corner = |l: &Leaf, (x, y): (u32, u32), east: bool, south: bool| {
+    let corner = |l: &Leaf, (x, y): (u64, u64), east: bool, south: bool| {
         ((l.x + if east { l.side() } else { 0 }) % across, l.y + if south { l.side() } else { 0 }) == (x % across, y)
     };
     for l in 0..lv.a().len() {
@@ -43,7 +43,7 @@ fn corners(sq: &Square, mesh: &Mesh) {
         if y >= down || (!sq.wrap && x >= across) {
             continue;
         }
-        let at = |dx: u32, dy: u32| mesh.tree().cell_at([(x + across - dx) % across, y - dy]);
+        let at = |dx: u64, dy: u64| mesh.tree().cell_at([(x + across - dx) % across, y - dy]);
         let [nw, ne, sw, se] = [at(1, 1), at(0, 1), at(1, 0), at(0, 0)];
         let meet = corner(&leaves[ne], (x, y), false, true) && corner(&leaves[sw], (x, y), true, false) && corner(&leaves[se], (x, y), false, false);
         for (i, j) in [(nw, se), (ne, sw)].into_iter().filter(|_| meet) {
@@ -173,7 +173,7 @@ fn mixed() -> [(Square, f64, f64); 2] {
 
 /// The north-west square of cell `i` of `sq` (column, row) and its side, squares.
 fn tile(sq: &Square, i: usize) -> ((usize, usize), usize) {
-    let (leaf, unit) = (sq.leaves()[i], BLOCK / SCALE as u32);
+    let (leaf, unit) = (sq.leaves()[i], BLOCK / SCALE as u64);
     (((leaf.x / unit) as usize, (leaf.y / unit) as usize), (leaf.side() / unit) as usize)
 }
 
