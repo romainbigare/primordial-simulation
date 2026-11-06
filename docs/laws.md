@@ -1236,7 +1236,9 @@ read a kind.
   are adults on land under at most half a metre of liquid; mass 30% fuel (60% for the two big slow eater kinds).
 - **Brains**: eaters start with hand-set biases (`Seeding::hand`; `--neutral-eaters` without), since neutral founders
   die before they learn: they take from the place, its ground and its cover (1), before they bite a body (0.5), and keep
-  out of deep liquid (a move's odds fall as 1 / (1 + depth / m)). Genes and rows get a spray (`--spray`).
+  out of deep liquid (a move's odds fall as 1 / (1 + depth / m)). They score making a part at -10, so they make one only
+  by rare chance (a draw in about 1e6 decisions); learning and selection may raise it (the tape's `form_*` columns count
+  who draws it). Genes and rows get a spray (`--spray`).
 - **Fixers**: a tenth of the cells of the starting cover carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).
 - **Founder genes**: some measured from the laws (`LITTER_X`); bodies build solids at a small share (`BUILT_SHARE`);
   `HEAT`, `CHILD`, `ALLOC` the same for all; `KEEP_T` and `COOL_T` 5 K above their liquid's melting point and 5 K below where life's enzymes fail (320 K) (`EATER_KEEP_T`, `EATER_COOL_T`).
