@@ -711,8 +711,18 @@ pools all movers' energy in a cell.
 
 ### 3.4 Containment
 Walls that close a space make an **inside** (`bond::room`) joined to its cell by one link (`bond::Enclosure`): heat
-passes the walls (conductivity × face / thickness) and the openings (`leak` per m²), light and rain only the openings.
-A body inside exchanges through that link in series with its own surface. "Shelter" is only this low conductance. A
+passes the walls, each part its face over the still air on both sides of it (`r_air` a side, as ISO 6946's surface
+resistances) in series with its thickness over its conductivity, and the openings (`leak` per m²); light and rain only
+the openings. **The inside holds air** (`bond::room_air`): a share of its cell's air, not made. The heat that leaves
+the bodies inside through their coats goes into that air, and from it through the walls and openings to the outside,
+so in its steady state the air stands above the outside by the heat of all the bodies inside over the link's
+conductance. Its own time, its heat capacity (about 1.2 kJ per m³ and K) over that conductance, is seconds to minutes,
+far below a sub-step: it stands there at every sub-step and holds no heat of its own, so what the bodies lose reaches
+their ground as outside, and the books need no node for it. A body inside stands over that air, raised by the heat the
+others inside lost in their last sub-step (`Lived::lost`: those before it in the cell's order this sub-step's, the rest
+the one before), through
+its coat in series with the link: its own heat warms the air too (6.3). So several bodies in one room warm one another,
+and a node's members warm their room together. "Shelter" is only this low conductance. A
 body enters only where it fits (its volume within the space the walls close, with the bodies already there), and one
 that outgrows the space, by growth or by members joining it, is no longer inside (`bond::leave_outgrown`, at its
 update).
@@ -1096,14 +1106,16 @@ the work becomes heat in its cell's ground, and the body keeps its temperature. 
 (`SPENT`).
 
 ### 6.3 Heat
-A body's temperature follows its ground's (`live::keep_warm`): the heat its surviving members' upkeep released over
-the sub-step leaves through its coat (`Body::conductance`; in series with the walls around it, 3.4) to the ground. Each
+A body's temperature follows its surroundings' (`live::keep_warm`, `exchange::around`): the heat its surviving members'
+upkeep released over the sub-step leaves through its coat (`Body::conductance`) to its ground; inside walls to the air
+of its room, which the others there hold above the ground, through its coat in series with the walls (3.4). The heat
+ends in its ground either way. Each
 member has the surface `meeh` × its mass^(2/3) (Meeh 1879); its coat insulates it by the still air at its surface
 (`r_air`) and the share `HEAT` (0 to 1) of the best coat, `r_coat` (fur and the tissue under it: a mammal's least
 conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). Its heat balance over the time dt,
 C dT/dt = P - g (T - tg) (Newton's law of cooling; an animal's energy budget, Porter and Gates 1969; `live::Balance`),
-moves its temperature from where it is toward where that heat holds it (the ground's, plus the heat over the coat's
-conductance) by the share 1 - e^(-g dt / C) its heat capacity C lets it go in the time: a body's own time C / g is hours
+moves its temperature from where it is toward where that heat holds it (its surroundings', tg, plus the heat over the
+coat's conductance) by the share 1 - e^(-g dt / C) its heat capacity C lets it go in the time: a body's own time C / g is hours
 to days, but a large node in a closed room, whose walls pass little, moves only part way in a week. So what it gains
 from its ground is never more than the heat it released, unless the ground is the warmer. Below its `KEEP_T` gene it
 burns what holds it at `KEEP_T` at the end; above its `COOL_T` gene it opens its coat as far as it needs to stand there,
@@ -1120,11 +1132,12 @@ ever. Its heat then comes to the temperature the balance ends at with its ground
 meal, its decision's or a sub-step's (`live::fade_meal_heat`), what it took and digesting it moved its temperature
 by, from where it stood, fades over the time to its next physics (its physiological step) by the share e^(-g dt / C):
 the heat of a meal leaves through its coat to its ground; a meal colder than the body is warmed by the body's own heat
-as it eats, drawn back from its ground, which its upkeep's heat went to, at most the heat its upkeep released over the
-sub-step. So a body of hours to days starts its next sub-step where it stood. **Two states, one at every step.** As its pace rises with its temperature, a body whose own heat over its
-coat warms it past the ground by more than T² / Ea (about 12 K for chemistry 0's main burning, Ea 7,760 K: there the
-pace's rise, Ea / T² of it per K, feeds the heat faster than the coat lets it out) runs on to a warm state, at most its
-`COOL_T`, where its coat opens; below that it lies cold, or at its `KEEP_T` by burning. Its time C / g is hours to a
+as it eats, drawn back from its ground, which its upkeep's heat went to, at most what its upkeep releases over that
+time at its last sub-step's mean rate (`Lived::released`, W). So a body of hours to days starts its next sub-step where it stood. **Two states, one at every step.** As its pace rises with its temperature, a body whose own heat over its
+coat warms it past its surroundings by more than T² / Ea (about 12 K for chemistry 0's main burning, Ea 7,760 K: there
+the pace's rise, Ea / T² of it per K, feeds the heat faster than the coat lets it out) runs on to a warm state, at most
+its `COOL_T`, where its coat opens; below that it lies cold, or at its `KEEP_T` by burning. In a room the walls add to
+its coat and the others' heat warms its air, so bodies that share a closed room reach the warm state sooner. Its time C / g is hours to a
 day, far less than a sub-step, so each sub-step ends at the stable state its heat leads to from where it stood
 (`live::standing`), and as it eats at each sub-step by the take law at the pace it stands at then (5.3), a node that
 turns warm in spring eats at the warm pace from the next week on, in a square as in its cells of 500 m. A node's
