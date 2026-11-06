@@ -17,6 +17,10 @@ const STORE_FLOOR: f32 = 1e-4;
 const MIN_FLOOR: f32 = 1e-2;
 /// The body's temperature over its cell's ground, K.
 const WARM_SCALE: f32 = 10.0;
+/// The heat that left a body through its coat over the heat its upkeep released (`Lived::lost`) is perceived as its ln,
+/// within plus or minus this (a factor of 20: a body that sweats away nearly all its heat, or a nearly dormant one that
+/// burns far more than its upkeep to keep warm).
+const LOST_SPAN: f32 = 3.0;
 // ln of a mass: of a member, kg (less 1), of a perceived body's member over its own, of a cell's mean member.
 pub(super) use crate::brain::LN_MASS;
 /// ln(1 + the cover's capture area per m² of its cell, `World::canopy`) under a dense cover (10 m² per m²).
@@ -117,13 +121,15 @@ pub(super) fn perceive(w: &World, d: &Chunk, b: &Body, nseen: usize, rng: &mut R
     }
 }
 
-/// A brain's inputs of its own state besides its stores, before its cell's features (`inputs`): its warmth, its size
-/// and the season's sine and cosine.
-pub const OWN: usize = 4;
+/// A brain's inputs of its own state besides its stores, before its cell's features (`inputs`): its warmth, the heat it
+/// loses, its size and the season's sine and cosine.
+pub const OWN: usize = 5;
 
 /// The brain's inputs (laws.md 5.2), of a body of cell `cell` at `temp` K, with `mem` numbers of memory, as it is when
-/// it perceives: its stores against their minimums, its warmth, its size and the season, its cell's features, what
-/// Bond senses, its memory.
+/// it perceives: its stores against their minimums, its warmth, the heat it loses (the ln of the heat that left it
+/// through its coat over the heat its upkeep released in its last sub-step, `Lived::lost`: above 0 where it burns more
+/// to keep warm, the less so inside walls that hold its heat, below 0 where it sweats), its size and the season, its
+/// cell's features, what Bond senses, its memory.
 pub(super) fn inputs(w: &World, cell: &Cell, b: &Body, (temp, mem): (f64, usize), x: &mut Vec<f32>) {
     let (i, ns, chem, mass) = (b.cell as usize, w.chem.ns(), &w.chem, b.mass(&w.chem));
     let pm = mass / b.n();
@@ -132,7 +138,8 @@ pub(super) fn inputs(w: &World, cell: &Cell, b: &Body, (temp, mem): (f64, usize)
     let (held, least) = (|k: usize| b.amount(bc, k), |k: usize| bc.place(k).map_or(0.0, |s| b.genes[min + s].max(0.0)));
     x.extend((0..ns).map(|k| if held(k) > 0.0 { SHARE_SENSE * ln((held(k) * chem.subs[k].molar_mass / mass) as f32 + STORE_FLOOR) } else { none } - SHARE_SENSE * ln(least(k) + MIN_FLOOR)));
     let (dt, sun) = ((temp - w.life.env[i][0]) as f32, w.season() as f32 * std::f32::consts::TAU);
-    x.extend([dt / WARM_SCALE, ln(pm as f32) / LN_MASS - 1.0, sun.sin(), sun.cos()]);
+    let lost = (ln(b.lived.lost.max(0.0) as f32) - ln(b.lived.released.max(0.0) as f32)).clamp(-LOST_SPAN, LOST_SPAN);
+    x.extend([dt / WARM_SCALE, lost, ln(pm as f32) / LN_MASS - 1.0, sun.sin(), sun.cos()]);
     x.extend_from_slice(w.life.feat(i, 1));
     x.extend(bond::sense(cell, w, b, pm));
     x.extend_from_slice(&b.mem[..mem]);

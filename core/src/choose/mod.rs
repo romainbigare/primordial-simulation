@@ -41,8 +41,8 @@ const OPTS: usize = FIXED + MOVES + VERBS * MAX_SEEN + OVERBS * PARTS;
 /// The first option toward a perceived body, and toward a perceived part.
 const TO_BODY: usize = FIXED + MOVES;
 const TO_PART: usize = TO_BODY + VERBS * MAX_SEEN;
-/// Inputs of a brain besides one per substance and its memory: its warmth, size and the season, its cell's features,
-/// and what Bond senses.
+/// Inputs of a brain besides one per substance and its memory: its warmth, the heat it loses, size and the season, its
+/// cell's features, and what Bond senses.
 pub(crate) const INPUTS: usize = OWN + NCELL + bond::SENSE;
 
 /// Working memory of `act`, kept from body to body.

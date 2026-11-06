@@ -922,7 +922,9 @@ cell finer than a square of the map counts in that as its square, whose features
 neighbours are the squares around it (`perceive::regions`), so what a body sees past the cell it would step into
 reaches as far in metres from a fine cell as from a square (sight 1, the cell itself, is one step in either). Cells
 coarser than a square (the open water of an island) see by their links. **A brain's inputs**: its own stores against their
-minimums, its warmth, size and the season, its own cell's features, what Bond senses (3.4), its memory. **Each
+minimums, its warmth, the heat it loses (the ln of the heat that left it through its coat in its last sub-step over the
+heat its upkeep released, within ±3: above 0 where it burns more to keep warm, the less so inside walls, 3.4, below 0
+where it sweats; 6.3), size and the season, its own cell's features, what Bond senses (3.4), its memory. **Each
 direction** with a link: the features of the cell it leads to as its sight sees it, the temperature and height as
 differences from its own cell's, and how hard its link is to pass (`lanes::resist`). **Bodies**: up to `SEEN` of its
 own cell, as they are when it decides (their looks: a member's mass over its own, strength and colour; and their
