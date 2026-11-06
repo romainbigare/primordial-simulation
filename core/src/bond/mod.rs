@@ -1,7 +1,7 @@
 //! Law 3: Bond. Parts are nodes of the store (`Class::Part`) that bonds join into structures; a bond breaks when its
 //! load passes its strength (laws.md 3). Here: parts, structures and their graph; `bonds`: the bonds and the enclosure;
-//! `design`: the design key by which alike parts and structures find each other; `verbs`: what bodies do to parts; `edge`: how a held part's edge changes what breaking takes; `sense`: what parts
-//! give a body; `month`: the monthly rot, heat and loads. A part is stored in the list of the cell it lies in
+//! `design`: the design key by which alike parts and structures find each other; `verbs`: what bodies do to parts;
+//! `edge`: how a held part's edge changes what breaking takes; `sense`: what parts give a body; `month`: the monthly rot, heat and loads. A part is stored in the list of the cell it lies in
 //! (`life::Cell::parts`), with the bonds of that cell's parts (`life::Cell::bonds`): a structure lies in one cell, so
 //! all that changes parts runs on that cell, in its chunk (`life::Chunk`), but a structure carried to another cell
 //! (`moved`).
