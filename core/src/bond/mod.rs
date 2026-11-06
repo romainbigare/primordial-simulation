@@ -16,8 +16,8 @@ pub use bonds::{Bonds, Enclosure};
 pub use edge::{blunt, edge, edge_leaves, Edge};
 pub(crate) use edge::blunted;
 pub use month::step;
-pub use sense::{depth, features, room};
-pub(crate) use sense::{leave_outgrown, possible, room_air, sense, SENSE};
+pub use sense::{features, room};
+pub(crate) use sense::{leave_outgrown, possible, room_air, sense, wading, SENSE};
 pub use verbs::{act, bears, carry, form, moved, release, LET_GO, TORN};
 pub(crate) use verbs::{dropped, let_go};
 

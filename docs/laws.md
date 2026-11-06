@@ -691,10 +691,18 @@ breaks. A structure no body holds lies on the ground and bears no load.
 Structures do not drift; only a body carries one (3.5).
 
 ### 3.3 Holding, floating
-Holding is a bond whose strength is the body's **force**, strength gene × living body × gravity × `grip`
-(`bond::bears`); a body holds only while its force bears the structure's weight. Fuel adds no force; a hurt body is
-weaker. A body is **afloat** where the liquid is deeper than `deep` and what it and its structure displace weighs as
-much as they do (Archimedes): no liquid stands over it (`bond::depth`). No body digs the bed.
+Holding is a bond whose strength is the body's **force**, strength gene × living body × gravity × `grip` × its
+vigour (`bond::bears`); a body holds only while its force bears the structure's weight. Fuel adds no force; a hurt body
+is weaker, and so is a cold one: its **vigour** (`Body::vigour`) is its pace (6.2) at its temperature, at most 1, as
+muscle's power falls with temperature by the rate law of what powers it (a Q10 of 2 to 3; Bennett 1990). In chemistry 0
+a body at 280 K has 0.38 of its force, at 260 K 0.05; at and above `t_cat` (290 K), where the force and the walk are
+anchored, all of it. A bite's force (`feed::take_body`) is each one's force with its vigour. **In liquid** (`bond::wading`): the share of a member's height under its cell's standing liquid is the depth
+over its height, at most 1; its height is its size, the side of a cube of its volume (`Physics::side`, 0.31 m at
+30 kg). Where the liquid is deeper than its height a member swims: it breathes its air (2.4), so it keeps to the
+surface, and the ground and the cover lie within its reach only as deep as its height and its reach, each its size
+(no gene lets a body dive; 5.3). A body rides the structure it holds dry, at the surface, where the liquid is deeper
+than its height and what that structure displaces weighs as much as both (Archimedes): it reaches down its reach
+alone. The share under the liquid passes its heat to the liquid, not the air (6.3). No body digs the bed.
 
 **A held edge concentrates force** (`bond/edge.rs`). Without one a body breaks matter bluntly: it gives way through its
 whole width (3.6). Pressed with the edge of a held part, only a zone as wide as the edge gives way (Atkins 2009): for
@@ -997,15 +1005,24 @@ with the chance that keeps the mean at count × that share), all in the one dire
 so each direction gets its share of members on average, in groups. A
 group moves only if the cell it enters has room and it bears the `bump` share of its weight (`choose::go::can_go`);
 else it takes food where it is for its step and comes back. **rest**; **move** (`choose::go`:
-`walk` per kg and metre, climbing, the bodies in the way; needs force, 3.5); **take**, **put**, **give**
-(`choose/feed.rs`); **watch** (5.5); Bond's form, hold, take from or put to a part, join, break, let go,
+`walk` per kg and metre, climbing, the bodies in the way, the drag of standing liquid; needs force, 3.5); **take**,
+**put**, **give** (`choose/feed.rs`); **watch** (5.5); Bond's form, hold, take from or put to a part, join, break, let go,
 enter (`bond/verbs.rs`). A move lands when the batch ends, and an act on a part and a watch are applied then (0).
 No copy action, no "farm", "trade" or "attack": those must be patterns of these.
+
+**Moving through liquid** (`Physics::drag`): its members push the standing liquid aside, half the link in each cell, by
+the share of their height under it (3.3): per metre, for each member, ½ ρ `DRAG` (s L²) v² over `MUSCLE`, ρ the
+liquid's density, s that share, L its size, v its walking speed, `DRAG` 1.05 (a cube face on; Hoerner 1965), `MUSCLE` 0.25 (the
+share of what muscles burn that becomes work; Smith, Barclay and Loiselle 2005). At one Froude number it is the same
+for every size per kg, 5.2 J a metre in a liquid as dense as bodies, against the walk's 3.0 at 30 kg and 1.0 at a tonne: a body not
+built to swim pays several times on land's cost to cross liquid (Williams 1999). Its force must still give the push of
+a mover (3.5).
 
 **An act takes time** (`choose::act_as`): the step is the body's time to its next update, and the act drawn takes what
 it needs of it. A move takes the walk: its distance at the body's walking speed (`Physics::speed`: every size walks at
 one Froude number v² / (g L) = 0.25, L the side of a cube of a member's volume, the dynamic similarity of Alexander and
-Jayes 1983; 0.9 m/s at 30 kg, so a link of 2 km takes 40 minutes). Putting down and letting go take none. Every other
+Jayes 1983; 0.9 m/s at 30 kg, so a link of 2 km takes 40 minutes) times its vigour (3.3): a cold body walks slower,
+and through liquid pays the drag of its slower speed. Putting down and letting go take none. Every other
 act (rest, give, a bite, a watch, Bond's acts on parts) fills the step (`Body::busy`): what it gives, bites and does
 goes by the time it is given. Taking leaves the step to eating. For the rest of its step a body takes food where it
 ends by the take law (`feed::take_node`): a mover where it lands (`choose::land_move`, for the time from its landing
@@ -1025,7 +1042,9 @@ per kg, of food only (`Body::uses`: what it burns, the body matter and built sol
 of; not what it cannot use, nor the key liquids it drinks, 6.4): per kg of supply, Holling's type II take × s /
 (take + s), s what the swept area holds (`sweep`) of its food, so thin food takes time to find (Holling 1959). The
 minerals it builds of count in s as food does: one search finds all it uses, so rich ground shortens it. **Grazing**
-(`feed::take_node`): a bite of the cover takes all its parts in the field's proportions; what the body does not use
+(`feed::take_node`): it reaches what lies within its reach (3.3): under liquid deeper than its height and its reach,
+neither the cover nor the solids of the ground, only what is liquid there. A bite of the cover takes all its parts in
+the field's proportions; what the body does not use
 (the frame without the enzyme of reaction 13) is bulk that fills its gut (all it takes is at most its take × supply)
 and passes through it to the ground at once with its heat, giving nothing and never becoming the body's own frame
 (a gut passage of days, Van Soest 1994). Another body's
@@ -1108,7 +1127,9 @@ it has takes all it can supply: its costs set its size, not a cap; across kinds 
 Kleiber's resting rate is a mammal's, its muscles included: a body of strength 1, as muscular as a mammal, pays it
 with its basal and strength costs together (`c_basal`, `c_strength`).
 **Pace** (`Body::pace`): the bare rate law of its main burning, k e^(−Ea/T), over its value at `t_cat`; supply and
-upkeep follow it, so seasons come from temperature, not a calendar. **Paying** (`body::pay`, `body::burn`): its
+upkeep follow it, so seasons come from temperature, not a calendar: a cold body takes, builds and pays less per day.
+Its force and its walking speed follow it below `t_cat` (its vigour, 3.3): a cold body pays little, and is weak and
+slow. **Paying** (`body::pay`, `body::burn`): its
 burnings run on demand as far as its fuel and the air's gases allow; the gas they take comes from its air node and the
 gas they make goes to its cell's bodies' node, each with its heat and latent heat (gas exchange is free: no pores);
 the work becomes heat in its cell's ground, and the body keeps its temperature. The unpaid share of upkeep dies
@@ -1121,7 +1142,12 @@ of its room, which the others there hold above the ground, through its coat in s
 ends in its ground either way. Each
 member has the surface `meeh` × its mass^(2/3) (Meeh 1879); its coat insulates it by the still air at its surface
 (`r_air`) and the share `HEAT` (0 to 1) of the best coat, `r_coat` (fur and the tissue under it: a mammal's least
-conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). Its heat balance over the time dt,
+conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). **In liquid** the share of its height
+under its cell's standing liquid (3.3) passes heat through the liquid's film, `r_liquid` (free convection in liquids,
+50 to 1,000 W/(m² K) against about 8 at still air; Incropera and DeWitt 2002), and the share `wet_coat` of its coat,
+whose still air the liquid displaces (furs immersed keep about a tenth of their insulation; Scholander et al. 1950):
+a body of 30 kg with the founders' coat passes 1.0 W/K in the air and 5.8 W/K swimming, so to keep warm in cold liquid
+it burns about six times what it burns in air as cold. Its heat balance over the time dt,
 C dT/dt = P - g (T - tg) (Newton's law of cooling; an animal's energy budget, Porter and Gates 1969; `live::Balance`),
 moves its temperature from where it is toward where that heat holds it (its surroundings', tg, plus the heat over the
 coat's conductance) by the share 1 - e^(-g dt / C) its heat capacity C lets it go in the time: a body's own time C / g is hours
@@ -1130,7 +1156,7 @@ from its ground is never more than the heat it released, unless the ground is th
 burns what holds it at `KEEP_T` at the end; above its `COOL_T` gene it opens its coat as far as it needs to stand there,
 up to its bare surface (blood to the skin, the coat laid flat), and past that evaporates its key liquid for the excess,
 at the liquid's vaporisation enthalpy, never below its safe minimum, drinking as it sweats what its uptake leaves it
-for the sub-step (6.4), the vapour going to the bodies' node with its latent heat (`live::hold`). Its key liquid boils at its boiling point: past it the heat boils the liquid off, below its
+for the sub-step (6.4), the vapour going to the bodies' node with its latent heat (`live::hold`); what it sweats and, below, boils off is paid by the heat that reaches it, which its ground gives back, never more than the ground holds above its floor (`live::keep_warm`). Its key liquid boils at its boiling point: past it the heat boils the liquid off, below its
 safe minimum too, and holds the body there while it lasts; one that boils dry dies there (`check_stores`), the rest of
 its heat staying in its ground. **The temperature it stands at** (`live::standing`): its upkeep over the sub-step goes
 with the pace (6.2) of its mean temperature over the time, the mean of that exact solution with the heat the upkeep
@@ -1182,9 +1208,9 @@ beyond its upkeep to its next meal, its physiological step), and its stores down
 share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing
-Intake at most `take` × supply a day (5.3), over the time a meal feeds it (to its next meal, or for a bite to its next
-update), within the room of its stores for that time (`Body::room`: their levels and what its upkeep burns of them
-until then). **Digestion** (`Body::digest`): matter taken is broken back into what it
+Intake at most `take` × supply a day, of what lies within its reach (5.3), over the time a meal feeds it (to its next
+meal, or for a bite to its next update), within the room of its stores for that time (`Body::room`: their levels and
+what its upkeep burns of them until then). **Digestion** (`Body::digest`): matter taken is broken back into what it
 was built of, so food enters as fuel, and only if its diet breaks it (`Body::uses`). **Minimums**
 (`Body::lacking`): a store below its minimum kills (`LACK`), except a fuel, whose minimum is a reserve. **Shedding**
 (`shed`): minerals, built solids and key liquid past level, and anything it neither burns nor is made of. **Ageing**:

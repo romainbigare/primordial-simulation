@@ -212,9 +212,10 @@ fn hold(bal: &Balance, (g, open): (f64, f64), q: f64, (keep, cool): (f64, f64)) 
 /// that temperature at the end; above its `COOL_T` gene it opens its coat and sweats (`hold`), evaporating its key liquid
 /// at its latent heat, never below its safe minimum, drinking as it sweats what its sub-step's `sips` allow. Its key
 /// liquid boils at its boiling point: past it the heat boils it off, below its safe minimum too, and holds the body
-/// there; one that boils dry dies there. It then stands at that temperature (`settle_heat`): what it gains from its
-/// ground there is never more than the heat it released, unless the ground is the warmer. Returns that temperature, K,
-/// and the heat that left it through its coat, J.
+/// there; one that boils dry dies there. What it sweats and boils off is paid by the heat that reaches it, which its
+/// ground gives back (`settle_heat`): never more than the ground holds above its floor (`Moves::ground_heat`). It then
+/// stands at that temperature: what it gains from its ground there is never more than the heat it released, unless the
+/// ground is the warmer. Returns that temperature, K, and the heat that left it through its coat, J.
 fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, (dt, sips): (f64, &mut Stores)) -> (f64, f64) {
     let a = around(w, d, b, b.mass(&w.chem));
     let (chem, bal) = (&w.chem, Balance::of(w, b, a.t));
@@ -222,17 +223,20 @@ fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, (dt, sips): (f64
     if g <= 0.0 {
         return (bal.t0, heat);
     }
-    // The conductance it passes its heat through, J/K, and the heat that leaves by it, J.
-    let h = hold(&bal, (g, open), heat, (b.gene(KEEP_T), b.gene(COOL_T)));
+    // The conductance it passes its heat through, J/K, and the heat that leaves by it, J; what it evaporates, at most
+    // what its ground can give back.
+    let (h, i) = (hold(&bal, (g, open), heat, (b.gene(KEEP_T), b.gene(COOL_T))), b.cell as usize);
+    let mut sweat = 0.0;
     let q = if h.more > 0.0 {
         heat + burn(w, d, b, h.more)
     } else if h.sweat > 0.0 {
-        heat - evaporate(w, d, b, h.sweat, Some(sips))
+        sweat = evaporate(w, d, b, h.sweat.min(d.moves.ground_heat(w, i)), Some(sips));
+        heat - sweat
     } else {
         heat
     };
     let boil = b.boiling(chem);
-    let q = if bal.end(h.x, q) > boil { q - evaporate(w, d, b, q - bal.holds(h.x, boil), None) } else { q };
+    let q = if bal.end(h.x, q) > boil { q - evaporate(w, d, b, (q - bal.holds(h.x, boil)).min(d.moves.ground_heat(w, i) - sweat), None) } else { q };
     // (One that boils dry dies there, `check_stores`: it stands no warmer, and the rest of its heat stays in its ground.)
     let t = bal.end(h.x, q).min(boil);
     settle_heat(w, d, b, t);

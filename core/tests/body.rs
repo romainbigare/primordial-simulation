@@ -2,10 +2,11 @@
 //! warm by burning and cool by evaporating), its key liquid (drinking, frost, boiling), digestion and its age. Damage:
 //! `damage.rs`.
 
-use pcore::body::{self, Body, Layout, COOL_T, KEEP_T, PHASE};
+use pcore::body::{self, Body, Layout, COOL_T, HEAT, KEEP_T, PHASE, STRENGTH};
 use pcore::life::Handle;
+use pcore::event::EventKind;
 use pcore::{brain, World, AIR};
-use worldgen::testkit::{add, died, dry_lands, eater, held_day, hold_ground, kg, node_of, out, put_kg_m2, scale, small_world, start, stores, took_from_ground, warm, Books, Brain, Line, LIQUID, MATTER, RICH};
+use worldgen::testkit::{add, cover, died, dry_lands, eater, held_day, hold_ground, kg, node_of, out, put_kg_m2, scale, small_world, start, stores, took_from_ground, warm, Books, Brain, Line, LIQUID, MATTER, RICH};
 
 /// Days the takes from the ground run for (`matter_taken_from_outside_is_digested_into_the_solid`).
 const TAKE_DAYS: usize = 50;
@@ -108,6 +109,142 @@ fn a_body_drinks_its_liquid_from_the_ground() {
     println!("liquid {low:.2} -> {:.2} mol", b.amount(w.chem.body(), LIQUID));
     assert!(b.amount(w.chem.body(), LIQUID) > low + 5.0, "it did not drink");
     books.assert_kept(&w, 1e-9);
+}
+
+/// The first cell below 0 m whose standing liquid is deeper than twice the height of a body of `EATER_KG`.
+fn deep_cell(w: &World) -> usize {
+    let side = w.cfg.phys.side(worldgen::testkit::EATER_KG);
+    (0..w.mesh.cells().n()).find(|&i| !w.is_land(i) && w.life.env[i][1] > 2.0 * side).expect("a cell of deep liquid")
+}
+
+/// A body in liquid deeper than its height passes its heat to the liquid (laws.md 6.3): through the liquid's film and
+/// the share `wet_coat` of its coat. A resting eater that drinks none and keeps warm at 285 K, in deep liquid and on dry
+/// land, each ground held at 275 K: each loses through each m² of its coat (`meeh` × mass^(2/3)) per K over its ground
+/// what its insulation passes there, 1 / (`r_air` + coat) in the air and 1 / (`r_liquid` + `wet_coat` × coat) in the
+/// liquid, about six times as much: between what its last sub-step's loss gives over the surface it had at the start of
+/// its update and at its end, as it burns its fuel through it. The books are kept.
+#[test]
+fn a_body_in_deep_liquid_loses_its_heat_to_the_liquid() {
+    let per_m2_k = |wet: bool| {
+        let (mut w, land) = start();
+        let i = if wet { deep_cell(&w) } else { land };
+        let mut b = eater(&mut w, i, brain::REST, 1.0);
+        (b.genes[KEEP_T], b.genes[COOL_T]) = (285.0, 295.0);
+        // (It drinks no cold liquid, whose warming would add to what leaves through its coat.)
+        b.genes[Layout::of(&w.chem).upt + w.chem.body().place(LIQUID).expect("a store")] = 0.0;
+        b.prepare(&w.chem, &w.cfg);
+        hold_ground(&mut w, i, 275.0);
+        let mass = b.mass(&w.chem);
+        let s = w.add(b);
+        let books = Books::now(&w);
+        let b = after_update(&mut w, s, 275.0);
+        books.assert_kept(&w, 1e-9);
+        let t = b.temp(&w.chem);
+        assert!((t - 285.0).abs() < 0.5, "it keeps warm at 285 K, not {t} K");
+        let per = |m: f64| b.lived.lost / (w.cfg.phys.meeh * m.powf(2.0 / 3.0)) / (t - 275.0);
+        (per(mass), per(b.mass(&w.chem)), b.gene(HEAT).clamp(0.0, 1.0) * w.cfg.phys.r_coat)
+    };
+    let ((dry_lo, dry_hi, coat), (wet_lo, wet_hi, _)) = (per_m2_k(false), per_m2_k(true));
+    let p = pcore::Physics::default();
+    let (air, liquid) = (1.0 / (p.r_air + coat), 1.0 / (p.r_liquid + p.wet_coat * coat));
+    println!("W per m² and K: on land {dry_lo:.3} to {dry_hi:.3} (its insulation passes {air:.3}), in deep liquid {wet_lo:.3} to {wet_hi:.3} ({liquid:.3})");
+    assert!(liquid > 4.0 * air, "a wet coat passes {liquid}, a dry one {air}");
+    for (lo, hi, want) in [(dry_lo, dry_hi, air), (wet_lo, wet_hi, liquid)] {
+        assert!(lo <= want * (1.0 + 1e-3) && want <= hi * (1.0 + 1e-3), "it lost {lo} to {hi} W per m² and K, not {want}");
+    }
+}
+
+/// A body takes only what lies within its reach (laws.md 5.3, 3.3): it keeps to the surface where it breathes, so under
+/// liquid deeper than its height and its reach (each its size) it takes neither the solids of the ground nor the
+/// cover. An eater that only takes, with the energy-rich solid on its ground and cover over it, takes both on dry land
+/// and nothing in deep liquid, over ten days; the books are kept.
+#[test]
+fn a_body_cannot_take_from_the_ground_under_deep_liquid() {
+    let took = |wet: bool| {
+        let (mut w, land) = start();
+        let i = if wet { deep_cell(&w) } else { land };
+        put_kg_m2(&mut w, RICH, i, 3.0);
+        cover(&mut w, i, 0.5);
+        let b = eater(&mut w, i, brain::TAKE, 6.0);
+        w.add(b);
+        let books = Books::now(&w);
+        let (mut ground, mut grazed) = (0.0, 0.0);
+        for _ in 0..TAKE_DAYS / 5 {
+            w.events.clear();
+            pcore::day_with_month_at_start(&mut w);
+            ground += took_from_ground(&w);
+            grazed += w.events.iter().map(|e| if let EventKind::Took { from: pcore::choose::COVER, .. } = e.kind { e.value } else { 0.0 }).sum::<f64>();
+        }
+        books.assert_kept(&w, 1e-9);
+        (ground, grazed)
+    };
+    let (land, deep) = (took(false), took(true));
+    println!("in ten days it took {:.3} kg from the ground and {:.3} kg of cover on land, {:.3} and {:.3} in deep liquid", land.0, land.1, deep.0, deep.1);
+    assert!(land.0 > 0.01 && land.1 > 0.01, "on land it took {} kg from the ground and {} kg of cover", land.0, land.1);
+    assert!(deep.0 == 0.0 && deep.1 == 0.0, "in deep liquid it took {} kg from the ground and {} kg of cover", deep.0, deep.1);
+}
+
+/// The fuel an eater of `EATER_KG` burns per metre of a step from a cell to a neighbour no higher, both under deep
+/// liquid or both of dry land (`choose::go`), mol/m; the books are kept.
+fn burnt_per_m(wet: bool) -> f64 {
+    let (mut w, _) = start();
+    let (cells, n) = (w.mesh.cells(), w.mesh.cells().n());
+    let kind = |i: usize| if wet { !w.is_land(i) && w.life.env[i][1] > 1.0 } else { worldgen::testkit::dry_lands(&w).contains(&i) };
+    let level = |i: usize, j: usize| w.life.env[j][2] <= w.life.env[i][2];
+    let (i, j) = (0..n).flat_map(|i| cells.around(i).1.iter().map(move |&j| (i, j as usize))).find(|&(i, j)| kind(i) && kind(j) && level(i, j)).expect("two neighbours");
+    let dist = cells.dist()[cells.link(i, j).expect("neighbours")];
+    let mut b = eater(&mut w, i, brain::REST, 1.0);
+    b.genes[STRENGTH] = 0.6;
+    b.prepare(&w.chem, &w.cfg);
+    // (Warm, so it walks at its full speed: `Body::vigour`.)
+    warm(&mut w, &mut b, 300.0);
+    let s = w.add(b);
+    let books = Books::now(&w);
+    let mut m = std::mem::take(&mut w.life[s]);
+    let fuel = m.amount(w.chem.body(), RICH);
+    assert!(w.in_cell(i, |w, d| pcore::choose::go(w, d, &mut m, j, false)), "it did not move");
+    let burnt = fuel - m.amount(w.chem.body(), RICH);
+    w.life[s] = m;
+    pcore::life::land(&mut w);
+    books.assert_kept(&w, 1e-9);
+    burnt / dist
+}
+
+/// A body that wades or swims pays the drag of the liquid it pushes through (laws.md 5.3, `Physics::drag`): per kg and
+/// metre ½ ρ `DRAG` L² v² over its muscles' share, 5.2 J in a liquid as dense as it, against the walk's 3.0 at 30 kg. An
+/// eater of 30 kg burns per metre of a step between two cells under deep liquid as much more than between two cells of
+/// dry land as walk and drag over the walk, for a density of the liquid within 10% of the body's.
+#[test]
+fn a_body_pays_the_drag_of_the_liquid_it_moves_through() {
+    let (land, deep) = (burnt_per_m(false), burnt_per_m(true));
+    let p = pcore::Physics::default();
+    let m1 = worldgen::testkit::EATER_KG;
+    let at = |rho: f64| 1.0 + p.drag(m1, 1.0, rho, p.speed(m1, 9.81)) / p.walk(m1);
+    println!("per metre it burnt {land:.3e} mol on land, {deep:.3e} in deep liquid: x{:.2} (x{:.2} to x{:.2})", deep / land, at(900.0), at(1100.0));
+    assert!(deep / land > at(900.0) && deep / land < at(1100.0), "in deep liquid it paid x{} of the land's cost of a metre", deep / land);
+}
+
+/// A cold body is weak (laws.md 3.5): its force goes with the vigour of its temperature, its pace at most 1
+/// (`Body::vigour`). An eater of strength 0.6 bears its pace's share of its warm force at 260 K, too little to give the
+/// push of a mover (`bump`), and stays; warm, it moves.
+#[test]
+fn a_cold_body_is_weak() {
+    let (mut w, i) = start();
+    let j = w.mesh.cells().around(i).1[0] as usize;
+    let mut b = eater(&mut w, i, brain::REST, 1.0);
+    b.genes[STRENGTH] = 0.6;
+    b.prepare(&w.chem, &w.cfg);
+    let at = |w: &mut World, b: &Body, t: f64| {
+        let mut b = b.clone();
+        warm(w, &mut b, t);
+        let force = pcore::bond::bears(w, &b);
+        let moved = w.in_cell(i, |w, d| pcore::choose::go(w, d, &mut b, j, false));
+        (force, moved, b.pace(&w.chem, t))
+    };
+    let ((warm_f, warm_moved, _), (cold_f, cold_moved, pace)) = (at(&mut w, &b, 300.0), at(&mut w, &b, 260.0));
+    println!("force {warm_f:.1} N at 300 K, {cold_f:.2} N at 260 K (pace {pace:.3})");
+    assert!((cold_f / warm_f - pace).abs() < 1e-9 && pace < 0.1, "at 260 K x{} of its force, its pace {pace}", cold_f / warm_f);
+    assert!(warm_moved && !cold_moved, "warm it moved: {warm_moved}, cold: {cold_moved}");
 }
 
 /// Its key liquid frozen kills it: a body with no fuel to keep warm on ground below the liquid's melting point dies of

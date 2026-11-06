@@ -10,6 +10,12 @@ impl Body {
     pub fn pace(&self, chem: &Chemistry, t: f64) -> f64 {
         self.k.burn.first().map_or(1.0, |&(r, _)| chem.reactions[r].arrhenius(t.max(1.0)) / self.k.pace_ref)
     }
+    /// The share of its full force and speed its muscles give at `t`: its pace, at most 1. Muscle's power falls with
+    /// its temperature by the rate law of what powers it (a Q10 of 2 to 3; Bennett 1990), so a cold body is weak and
+    /// slow; at and above `t_cat`, where the force and the walk are anchored, it has all of them (a broad optimum).
+    pub fn vigour(&self, chem: &Chemistry, t: f64) -> f64 {
+        self.pace(chem, t).min(1.0)
+    }
     /// Digestion: `taken` mol of body matter from outside are broken back into what growth made it of as they come in,
     /// so what it eats enters as fuel, never as body; the other inputs come from its stores. Returns the units reversed.
     pub fn digest(&mut self, chem: &Chemistry, taken: f64, rounded: &mut f64) -> f64 {
