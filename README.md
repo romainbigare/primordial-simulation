@@ -12,6 +12,7 @@ cargo run --release -p cli --bin ew -- run --years 300 --frames-every 5 --out ou
 cargo run --release -p cli --bin ew -- run --years 300 --snapshots-every 100 --pictures-every 50 --months --out out/run   # also snapshots, PNG pictures and months.csv
 cargo run --release -p cli --bin ew -- run --size 64 --roster --years 50 --cells 4060 --finest 4 --camera cam.txt --out out/zoom   # refine under a budget of cells, following a camera path
 cargo run --release -p cli --bin ew -- resume --from out/run/snap_00300.bin.gz --years 100 --out out/run   # go on from a snapshot
+cargo run --release -p cli --bin ew -- view --from out/run/snap_00300.bin.gz --window 40,10,8,8 --px 800 --layer map --edges --out look.png   # a window of a snapshot's map as a PNG (fractions of a square allowed; cells finer than a pixel are seen)
 cargo run --release -p cli --bin ew -- chem                                                   # chemistry 0 as a table
 cargo run --release -p cli --bin ew -- numbers out/a out/b                                    # the numbers two runs differ in
 cargo run --release -p cli --bin ew                                                           # every command and flag

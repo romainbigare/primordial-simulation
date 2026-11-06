@@ -216,7 +216,7 @@ pub fn frame_window(world: &World, window: [f64; 4], across: usize, down: usize)
 
 /// The cell each pixel of an `across` x `down` raster of `window` (column, row, width and height in squares) shows,
 /// row by row: the one that holds its centre.
-fn raster(w: &World, [x, y, wide, high]: [f64; 4], across: usize, down: usize) -> Vec<usize> {
+pub fn raster(w: &World, [x, y, wide, high]: [f64; 4], across: usize, down: usize) -> Vec<usize> {
     let tree = w.mesh.tree();
     let at = |k: usize, n: usize, from: f64, span: f64| from + (k as f64 + 0.5) * span / n as f64;
     (0..across * down).map(|p| tree.cell_at(w.map.point_at(at(p % across, across, x, wide), at(p / across, down, y, high)))).collect()
