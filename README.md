@@ -57,7 +57,7 @@ moves. A member of 3 pixels or more is drawn as its shape, smaller as a soft dot
 stipple of its members per m². Parts are drawn at their own sizes, hidden below a pixel. Two styles draw the shapes
 (the "Life" buttons, kept per browser): from above (a body with its head, wider the stronger) or angled (a block on
 legs, as a small axonometric sprite). Hover or click one to see its numbers; the inspect panel gives a herd's count.
-The map zooms to 8 pixels a metre.
+The map zooms to 16 pixels a metre.
 
 By default the animals start with hand-set brain biases (`--neutral-eaters` for neutral brains) and the
 light-eaters with no brain.

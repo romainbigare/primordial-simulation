@@ -46,7 +46,7 @@ const STONE = 0.3;
 /** How much of its own colour's departure from grey a sprite keeps, and the lightness it is held between (0..255). */
 const MUTE = 0.7, LIGHT_LOW = 60, LIGHT_HIGH = 190;
 /** The darkness of a shadow. */
-const SHADOW = 'rgba(0,0,0,.14)';
+const SHADOW = 'rgba(0,0,0,.2)';
 
 /** A seeded stream of numbers in [0, 1) (mulberry32). */
 export function seeded(seed: number): () => number {
