@@ -69,15 +69,19 @@ list, on its view, then the loads of its structures in the order of their roots)
 and their sub-steps (`survey::substeps`). **The step follows the size** (`survey/steps.rs`): a body's step lets it
 cross at most one cell, as a move is one link a decision. A square of the map (`Square::square_depth`; 2 km on the
 island) steps a month (the pace the numbers of bodies are anchored at), so a cell 2^k times finer steps a month over 2^k
-(`World::body_step`: 15 days at 1 km, 7.5 at 500 m, 1.875 at 125 m), a square or a coarser cell a month; a step is a
-whole number of seconds and at least a day (a cell finer than that steps as the finest that keeps both). **Every
+(`World::step_grid`: 15 days at 1 km, 7.5 at 500 m, 1.875 at 125 m, 2.8 hours at 7.8 m), a square or a coarser cell
+a month. Time is whole seconds: the j-th step of a month of M s cut into 2^k ends floor(j M / 2^k) s after its start
+(`survey::Grid`), so the steps are equal down to 2.8 hours (M = 2,592,000 s = 2^8 × 10,125) and differ by a second
+below; a step is at least a second, so a cell 21 depths finer than a square or more steps every 1.2 s. The random
+draws of the bodies of a cell that steps a day or longer are keyed by the day (two of its steps never fall on one
+day); those of a cell that steps faster by the time in seconds, above every day's key (`World::key_at`). **Every
 body updates at the month's start**, after the month's Flow, Change and Bond: one batch holds every living body. Then
 at the end of each sub-step of the finest cells' step the cells whose step ends there are surveyed again (what movers
 broke there; in every cell its numbers and features, as the moves and meals since left them) and their bodies update
 in a batch of the same passes; the other cells do nothing then. Flow, Change and Bond keep their steps (1.8).
 **An update: a decision, then the physics of the step ahead in sub-steps** (`survey::updates`). A body decides once
 at each of its cell's steps (5.3), and then its own physics runs over the step ahead, to its cell's next step, in
-sub-steps of one **physiological step** (`World::phys_step`: 7.5 days, a quarter of a month, or the cell's step
+sub-steps of one **physiological step** (`World::phys_grid`: 7.5 days, a quarter of a month, or the cell's step
 where that is shorter): a square's body runs four, a body of a cell of 500 m one, each by the same laws (`body::live`:
 drink, upkeep, heat, frost, growth, the brood and births, wear; 6), and before each but the first it eats by the take
 law for the sub-step as far as its act leaves its members to eating (`choose::meal`, `Body::busy`; its decision's
@@ -87,8 +91,9 @@ brood covering a child) are crossed at the same sub-step whatever the step. The 
 time: a meal (its stores' room holds what it burns until its next meal), the filling of its brood to a child and its
 turn between its cold and warm state are days to weeks. Each sub-step integrates the time from where the body's
 physics reached (`Body::last`; of a node, the mean by members, `nodes::rejoin`, so members who joined it since count
-less) to its end: upkeep and the brain's cost, drink, heat, frost (6.5), growth and wear go by those days; the death
-draws of an individual are keyed by the sub-step's day and deaths and births are dated by it (`Calendar::day_ending`).
+less) to its end, at least a day or the physiological step where that is shorter: upkeep and the brain's cost, drink,
+heat, frost (6.5), growth and wear go by those days; the death draws of an individual are keyed by the sub-step's last
+second (`World::key_ending`) and deaths and births are dated by its day (`Calendar::day_ending`).
 After a batch every body's physics has reached its cell's next step, so bodies of every cell size stand at the same
 time after it, in the surroundings of the month their physics ran in. A body that lands in a cell in the serial pass
 (a mover, a litter) runs its physics on from where it reached to that cell's next step in a pass after the landing
@@ -1036,7 +1041,7 @@ time of each update (6.2), whatever the pace of its decisions. **Null run** (`--
 ## 6. Bodies
 Files: `core/src/body/`, `copy::grow`. Bodies are the eaters (animals); the light-eaters are the cover (4.5).
 A body's update is its decision, then its physics over the step ahead in sub-steps of its physiological step, a
-week (`World::phys_step`, `survey::updates`; 0), each with a meal but the first, which its decision gave it.
+week (`World::phys_grid`, `survey::updates`; 0), each with a meal but the first, which its decision gave it.
 `body::live` runs a sub-step in stages: drinking, upkeep, heat, store checks, growth and children, shedding. So every
 law of this section runs over a week in every cell, whatever the cell's step. Its trades are gathered as moves on its
 cell's view and booked when its chunk ends (`store::Moves`, 0), so nodes and individuals take alike, never more than

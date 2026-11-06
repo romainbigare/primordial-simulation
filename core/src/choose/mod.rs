@@ -89,7 +89,7 @@ struct Choice {
 /// its trace and acts, a node spreads its members over them (`spread`). Every body decides at each update, at its cell's
 /// step; `lived` is what its last sub-step left, `days` the time since its last decision, d, which it learns over.
 pub fn act(w: &World, d: &mut Chunk, b: &mut Body, (lived, days): (&Lived, f64), z: &[f32], t: &mut ActTmp) {
-    let mut rng = Rng::new(w.seed, w.day(), b.id, Purpose::Choose);
+    let mut rng = Rng::new(w.seed, w.key_at(b.cell as usize, w.time), b.id, Purpose::Choose);
     let temp = b.temp(&w.chem);
     // A brain perceives sizes per member, as the body is when it decides.
     let pm = b.mass(&w.chem) / b.n();

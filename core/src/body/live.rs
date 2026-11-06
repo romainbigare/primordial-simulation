@@ -16,9 +16,10 @@ use serde::{Deserialize, Serialize};
 pub(crate) struct LiveTmp {
     /// The amounts of a share of its members that die (`thin`)
     dead: Stores,
-    /// The day the sub-step running ends on (`Calendar::day_ending`): an individual's draws of death are keyed by it
-    /// (`lose_share`), and deaths are dated by it
+    /// The day the sub-step running ends on (`Calendar::day_ending`): deaths are dated by it
     pub(crate) day: u64,
+    /// The key of the draws of the sub-step running (`World::key_ending`): an individual's draws of death (`lose_share`)
+    key: u64,
     /// Mol of each key liquid it may still drink in the sub-step, after its first drink (`drink`, `evaporate`)
     sips: Stores,
 }
@@ -32,7 +33,7 @@ pub struct Lived {
     pub released: f64,
 }
 
-/// The physics of body `b` over the time since its last update (`Body::last`) to `at` s, the end of a sub-step of its
+/// The physics of body `b` over the time since its last update (`Body::last`; at least a day, or its physiological step where shorter) to `at` s, the end of a sub-step of its
 /// update (`survey::updates`; laws.md 6): its drink, upkeep paid by burning (the share unpaid dies, `SPENT`, and the
 /// share its wear gives, `AGE`), its heat (`keep_warm`), the checks of its stores, growth (`copy::grow`), children
 /// (`copy::copy`, born through the time as growth filled the brood), what it sheds and, of a young node, the members
@@ -40,8 +41,8 @@ pub struct Lived {
 pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp, at: u64) -> Result<Lived, u8> {
     let cal = w.cfg.calendar();
     let now = at as f64 / cal.day as f64;
-    let days = (now - b.last).max(1.0);
-    (b.last, tmp.day) = (now, cal.day_ending(at));
+    let days = (now - b.last).max(w.phys_days(b.cell as usize).min(1.0));
+    (b.last, tmp.day, tmp.key) = (now, cal.day_ending(at), w.key_ending(b.cell as usize, at));
     let (mass, from) = (b.mass(&w.chem), b.member_body(&w.chem));
     // With nothing left of a member there is no heat capacity to hold a temperature: it dies.
     if b.empty_at(mass) {
@@ -266,15 +267,15 @@ fn starved(w: &World, d: &mut Chunk, b: &mut Body, from: f64, tmp: &mut LiveTmp)
     f <= 1e-9 || lose_share(w, d, b, f, SPENT, tmp)
 }
 
-/// Draws of death a body may take in a day, one for each cause (`Rng` keyed by the day and the cause).
+/// Draws of death a body may take in a sub-step, one for each cause (`Rng` keyed by the sub-step and the cause).
 const CAUSES: u64 = 8;
 
 /// The share `f` of the members of body `b` dies of `cause`: a node loses that share, with that share of every store
-/// (`thin`); an individual dies with that chance, drawn by the day of its sub-step (`LiveTmp::day`). One rule for both,
+/// (`thin`); an individual dies with that chance, drawn by the key of its sub-step (`LiveTmp::key`). One rule for both,
 /// so a node is the average of its members. False if it dies (a node: less than one member is left).
 fn lose_share(w: &World, d: &mut Chunk, b: &mut Body, f: f64, cause: u8, tmp: &mut LiveTmp) -> bool {
     if b.n() <= 1.0 {
-        return Rng::new(w.seed, tmp.day * CAUSES + cause as u64, b.id, Purpose::Death).f64() >= f;
+        return Rng::new(w.seed, tmp.key * CAUSES + cause as u64, b.id, Purpose::Death).f64() >= f;
     }
     tmp.dead = b.store.map(|a| a * f);
     thin(w, d, b, f, &mut tmp.dead, (cause, tmp.day))

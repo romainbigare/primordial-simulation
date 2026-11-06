@@ -445,7 +445,7 @@ Not everything needs the same step. These are suggested defaults to measure and 
 |---|---|
 | Heat, air, rain, water (coarse world) | 1 month, with sub-steps if unstable |
 | Ground uplift, slow wearing | 10 to 100 years |
-| Bodies (population nodes and single bodies) | their cell's step: 1 month for a square (2 km on the island) or a coarser cell, a month / 2^k for a cell 2^k finer, so none crosses more than one cell a step; each step one parallel pass over chunks of cells, one serial pass for what crosses cells |
+| Bodies (population nodes and single bodies) | their cell's step: 1 month for a square (2 km on the island) or a coarser cell, a month / 2^k for a cell 2^k finer (whole seconds, at least one: 2.8 hours for 8 m on the island, 79 s for 10 m on a globe of 64 rows), so none crosses more than one cell a step; each step one parallel pass over chunks of cells, one serial pass for what crosses cells |
 | Snapshots for the history tape | at the end of a run, every `--snapshots-every` years if asked (and before every god action) |
 
 There is **one world clock**. A fast process in a detailed area may sub-step inside a month. Seasons must exist, because they matter for food and migration.
