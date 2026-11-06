@@ -1,8 +1,9 @@
-//! Repeated structures: the parts of the snapshots grouped by structure (`Part::root`), each structure hashed by its bond
-//! graph with its parts' materials and shapes cut into bands, and the copies of each hash counted.
+//! Repeated structures: the parts of the snapshots grouped by structure (`Part::root`), each structure with its design
+//! (`bond::designs`: the hash of its bond graph with its parts' materials and shapes cut into bands), and the copies of
+//! each design counted.
 
-use crate::{BANDS, ELONGATION_DECADES, REPEAT_MIN, WL_ROUNDS};
-use pcore::bond::{Part, NOBODY};
+use crate::REPEAT_MIN;
+use pcore::bond::{self, Part, NOBODY};
 use pcore::World;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
@@ -10,26 +11,6 @@ use std::io;
 use std::path::Path;
 use tape::Kept;
 use worldgen::schedule::Schedule;
-
-/// FNV-1a over the bytes of `words`: 64-bit offset basis and prime.
-fn fnv(words: &[u64]) -> u64 {
-    words.iter().flat_map(|w| w.to_le_bytes()).fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x100_0000_01b3))
-}
-
-/// The band of `x` in 0..1.
-fn band(x: f64) -> u64 {
-    ((x * BANDS as f64) as u64).min(BANDS as u64 - 1)
-}
-
-/// A part's first label: its material band (hardness, bond strength of its walls) and its shape band (hollow share,
-/// elongation of its sides).
-fn label(w: &World, p: &Part) -> u64 {
-    let walls = p.walls(&w.chem);
-    let material = band(walls.hardness) * BANDS as u64 + band(walls.strength);
-    let elongation = (p.size[0] as f64 / (p.size[2] as f64).max(1e-9)).max(1.0).log10() / ELONGATION_DECADES;
-    let shape = band(p.hollow as f64) * BANDS as u64 + band(elongation);
-    fnv(&[material, shape])
-}
 
 /// What one structure is: its hash, and its numbers.
 struct Found {
@@ -41,41 +22,20 @@ struct Found {
     held: bool,
 }
 
-/// The structures of cell `i` of `w`, each hashed by `WL_ROUNDS` rounds of neighbour hashing over its bonds.
+/// The structures of cell `i` of `w`, each with its design (`bond::designs`).
 fn cell_structures(w: &World, i: usize) -> Vec<Found> {
     let cell = w.life.cell_at(i);
-    let at: HashMap<u64, usize> = cell.parts.iter().enumerate().map(|(k, p)| (p.id, k)).collect();
-    let mut near = vec![vec![]; cell.parts.len()];
-    for (a, b) in cell.bonds.a.iter().zip(&cell.bonds.b) {
-        if let (Some(&a), Some(&b)) = (at.get(a), at.get(b)) {
-            near[a].push(b);
-            near[b].push(a);
-        }
+    let mut by_root: BTreeMap<u64, Vec<&Part>> = BTreeMap::new();
+    for p in &cell.parts {
+        by_root.entry(p.root).or_default().push(p);
     }
-    let mut labels: Vec<u64> = cell.parts.iter().map(|p| label(w, p)).collect();
-    for _ in 0..WL_ROUNDS {
-        labels = (0..labels.len())
-            .map(|k| {
-                let mut round: Vec<u64> = near[k].iter().map(|&q| labels[q]).collect();
-                round.sort_unstable();
-                round.insert(0, labels[k]);
-                fnv(&round)
-            })
-            .collect();
-    }
-    let mut by_root: BTreeMap<u64, Vec<usize>> = BTreeMap::new();
-    for (k, p) in cell.parts.iter().enumerate() {
-        by_root.entry(p.root).or_default().push(k);
-    }
+    let designs = bond::designs(&w.chem, cell);
     by_root
-        .values()
-        .map(|members| {
-            let mut own: Vec<u64> = members.iter().map(|&k| labels[k]).collect();
-            own.sort_unstable();
-            let parts: Vec<&Part> = members.iter().map(|&k| &cell.parts[k]).collect();
+        .into_iter()
+        .map(|(r, parts)| {
             let root = parts.iter().find(|p| p.id == p.root).unwrap_or(&parts[0]);
             Found {
-                hash: fnv(&own),
+                hash: designs[&r],
                 parts: parts.len(),
                 mass: parts.iter().map(|p| p.mass(&w.chem)).sum(),
                 hollow: parts.iter().map(|p| p.hollow as f64).sum::<f64>() / parts.len() as f64,

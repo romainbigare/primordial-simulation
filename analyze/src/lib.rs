@@ -25,12 +25,6 @@ const LANE_EASE: f64 = 2.0;
 const LANE_MIN_SQUARES: usize = 3;
 /// A structure is repeated when at least this many copies of it stand in the last snapshot.
 const REPEAT_MIN: usize = 2;
-/// Bands a part's hardness, bond strength (0..1), hollow share (0..1) and elongation are cut into.
-const BANDS: usize = 4;
-/// Elongation (log10 of longest over shortest side) that fills the last band.
-const ELONGATION_DECADES: f64 = 2.0;
-/// Rounds of neighbour hashing in the structure hash (Weisfeiler and Lehman; Shervashidze et al. 2011).
-const WL_ROUNDS: usize = 3;
 
 /// Read the run folder `dir` and return `{"source": {...}, "cards": [...]}`. The frames of `world.ewf.gz` give the groups
 /// and lanes; the snapshots `snap_*.bin.gz` give the structures. A run without frames or without snapshots gives no cards

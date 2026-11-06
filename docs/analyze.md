@@ -37,11 +37,12 @@ longest run).
 
 ## Cards of structures
 
-The parts of a snapshot are grouped by structure (`Part::root`). Each part gets a label from its **material band** (the
-hardness and the bond strength of its walls, each cut into `BANDS` (4) bands) and its **shape band** (hollow share and
-elongation, `BANDS` bands each). A structure is hashed by `WL_ROUNDS` (3) rounds of neighbour hashing over its bonds
-(Weisfeiler and Lehman; Shervashidze et al. 2011), then by the sorted labels: two structures with the same bond graph and
-the same bands have the same hash, wherever they lie. A structure of one part hashes its two bands.
+The parts of a snapshot are grouped by structure (`Part::root`), each with its design (`bond::designs`, laws.md 3.1):
+each part gets a label from its **material band** (the hardness and the bond strength of its walls, each cut into
+`BANDS` (4) bands) and its **shape band** (hollow share and elongation, `BANDS` bands each), and a structure is hashed by
+`WL_ROUNDS` (3) rounds of neighbour hashing over its bonds (Weisfeiler and Lehman 1968; Shervashidze et al. 2011), then
+by the sorted labels: two structures with the same bond graph and the same bands have the same hash, wherever they lie.
+A structure of one part hashes its two bands.
 
 A card is made for a hash with at least `REPEAT_MIN` (2) copies in the last snapshot.
 

@@ -669,7 +669,11 @@ it lies in the cell of
 its holder. The bonds of a cell's parts are the cell's (`life::Cell::bonds`): a structure lies in one cell, and only a
 structure that moves (carried) spans two cells for that step, which is serial. A body makes one with "form"
 (`bond::form`, `c_form` per kg, at most `form` of its mass): of the solids it holds above what it keeps and, in the share its brain sets, of the loose solids of its cell's ground in their proportions, as far as the ground holds them, with their heat, at `c_handle` per kg more (on land mostly rock, so the part is hard, 3.3). A **bond** (`bond::Bonds`) joins two parts; its strength comes from the weaker material and the contact area (`tensile`, `joint`), at `c_join` per m². A
-**structure** is the parts joined by bonds and moves as one. A part runs no reactions. Monthly (`bond/month.rs`) the
+**structure** is the parts joined by bonds and moves as one. A structure's **design** (`bond::designs`) is the hash of
+its bond graph with its parts' labels: each part's material band (the hardness and the bond strength of its walls) and
+shape band (its hollow share and the elongation of its sides), each cut into `BANDS` (4) bands, by `WL_ROUNDS` (3) rounds
+of neighbour hashing (Weisfeiler and Lehman 1968; Shervashidze et al. 2011): it is how alike objects find each other, as
+a lineage is for bodies, and the pattern finder's key (`docs/analyze.md`); it is never copied. A part runs no reactions. Monthly (`bond/month.rs`) the
 share of its walls the open world's decomposers would rot in the month (`bond/month.rs::rot`: each reaction they speed,
 `open` above 1, at the rate of Change, `change::rate`, at its cell ground's temperature and moisture, each substance of
 its walls a phase of its own, as a solid is in Change, and the gas it needs taken from its cell's air by its share
