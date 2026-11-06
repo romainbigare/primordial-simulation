@@ -11,7 +11,7 @@ impl Body {
     /// breaks them (`Consts::broken`: it digests them), and what it burns (`burns_at`) or builds of
     /// (`Chemistry::minerals`)? A solid none of its reactions takes is of no use to it, nor are the key liquids it does
     /// not burn: it drinks them (`live::drink`). All it uses are among its stores (`Chemistry::body`).
-    pub(crate) fn uses(&self, chem: &Chemistry, k: usize, t: f64) -> bool {
+    pub fn uses(&self, chem: &Chemistry, k: usize, t: f64) -> bool {
         let built = chem.matter() == Some(k) || chem.is_material(k);
         if built { self.k.broken >> k & 1 == 1 } else { self.burns_at(chem, k, t) || chem.minerals().iter().any(|m| m.0 == k) }
     }

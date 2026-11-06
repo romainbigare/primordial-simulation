@@ -62,7 +62,12 @@ that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid d
 ground, ground and air temperature, rain, vapour, absorber, the cover's and the bodies' mass per m², bodies, traffic,
 worn edges, structures, true colour (r, g, b). The tape holds whole-map frames only. The live viewer also asks for
 the layers of a window of the map as a raster of pixels (`tape::frame_window`): each pixel shows the cell that holds its
-centre, so cells finer than a square are seen; it is shown over the whole-map frame and is not recorded.
+centre, so cells finer than a square are seen; it is shown over the whole-map frame and is not recorded. Close up it also asks
+for the things of the cells in view (`tape::things`, the record layout in `tape/src/things.rs`): each body (members,
+a member's mass, strength, colour, coat, copy mass, the temperatures it keeps, what it takes from where, its kind,
+stage and brain, the part it holds and the structure it is inside), each slot of cover (its kind, built cover per m²
+and genes) and each part (sizes, hollowness, mass, its walls' colour and hardness, burial, holder, structure and the
+space it closes) with the bonds; it is drawn as avatars and is not recorded.
 
 ## `series.csv`: the world
 

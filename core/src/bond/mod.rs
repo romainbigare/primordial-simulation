@@ -89,7 +89,8 @@ pub struct Tally {
 }
 
 /// Of a part's walls: their mass, kg, and volume, m³, and by volume their hardness, bond strength (0..1), heat
-/// conductivity, W/(m K), and breaking stress, Pa (the rule of mixtures).
+/// conductivity, W/(m K), breaking stress, Pa, and colour (the solid reflectance of 3 bands, 0..1) (the rule of
+/// mixtures).
 #[derive(Clone, Copy, Debug)]
 pub struct Walls {
     pub mass: f64,
@@ -98,6 +99,7 @@ pub struct Walls {
     pub strength: f64,
     pub conductivity: f64,
     pub rupture: f64,
+    pub colour: [f64; 3],
 }
 
 impl Part {
@@ -112,13 +114,14 @@ impl Part {
     }
     /// Its walls' numbers (`Walls`).
     pub fn walls(&self, chem: &Chemistry) -> Walls {
-        let mut r = [0.0; 6];
+        let (mut r, mut c) = ([0.0; 6], [0.0; 3]);
         for (k, &a) in self.wall.iter().enumerate().filter(|p| *p.1 > 0.0) {
             let (s, v) = (&chem.subs[k], a * chem.molar_volume(k, Phase::Solid));
             r = [r[0] + a * s.molar_mass, r[1] + v, r[2] + v * s.hardness, r[3] + v * s.strength, r[4] + v * s.conductivity, r[5] + v * s.rupture];
+            c.iter_mut().zip(s.refl[0]).for_each(|(x, b)| *x += v * b as f64);
         }
         let v = r[1].max(1e-12);
-        Walls { mass: r[0], volume: r[1], hardness: r[2] / v, strength: r[3] / v, conductivity: r[4] / v, rupture: r[5] / v }
+        Walls { mass: r[0], volume: r[1], hardness: r[2] / v, strength: r[3] / v, conductivity: r[4] / v, rupture: r[5] / v, colour: c.map(|x| x / v) }
     }
     /// The thickness of its walls, m: their volume over half its outer surface (a plate's thickness, half a rod's width,
     /// twice a hollow box's wall).

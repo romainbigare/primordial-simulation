@@ -1,6 +1,7 @@
 //! The live viewer's shell: a world that the page makes and steps, as plain `extern "C"` exports (no wasm-bindgen).
 //! The page calls these from a Web Worker and reads the results from the instance's memory: `meta` is JSON in the
-//! form of a tape's header, `frame` is the bytes of one tape frame (`tape::frame_now`).
+//! form of a tape's header, `frame` is the bytes of one tape frame (`tape::frame_now`), `things` the list of what lies
+//! in the cells of a window (`tape::things`).
 
 use pcore::refine::Shot;
 use pcore::World;
@@ -139,7 +140,15 @@ pub extern "C" fn frame_window(x: f64, y: f64, w: f64, h: f64, across: u32, down
     give(bytes)
 }
 
-/// The length in bytes of what `meta` or `frame` last returned.
+/// What lies in each cell of the window from column `x` and row `y`, `w` x `h` squares: its bodies, cover and parts
+/// (`tape::things`), for the page to draw one by one.
+#[no_mangle]
+pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
+    let bytes = with(|l| tape::things(&l.world, [x, y, w, h]));
+    give(bytes)
+}
+
+/// The length in bytes of what `meta`, `frame`, `frame_window` or `things` last returned.
 #[no_mangle]
 pub extern "C" fn out_len() -> usize {
     with(|l| l.out.len())
