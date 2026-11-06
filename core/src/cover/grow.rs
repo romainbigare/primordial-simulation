@@ -102,7 +102,7 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
         }
         let act = ph.activity(moist / dec(c.genes[q][MOIST]));
         *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, ..Default::default() };
-        layers.push(((c.mol[q][WALL] * mm[WALL] / area) as f32, leaf / area, q));
+        layers.push(((c.walls(&mm, q) / area) as f32, leaf / area, q));
     }
     crate::math::shade(&mut layers, |q, f, bottom| (s[q].shade, s[q].bottom) = (f, bottom));
     let (a_abs, lit): (f64, f64) = (s.iter().map(|x| x.abs).sum(), s.iter().map(|x| x.abs * x.shade).sum());

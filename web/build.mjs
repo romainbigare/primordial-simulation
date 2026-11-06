@@ -1,7 +1,7 @@
 // Inlines the compiled modules (dist/.js) and style.css into one self-contained dist/index.html.
 import { readFileSync, writeFileSync, rmSync } from 'node:fs';
 
-const order = ['data', 'earth', 'map', 'charts', 'live', 'sprites', 'avatars', 'main'];
+const order = ['data', 'earth', 'map', 'charts', 'live', 'sprites', 'vegetation', 'avatars', 'main'];
 // The live world's worker runs on its own: the page holds its script as text and starts it from a Blob.
 const worker = readFileSync('dist/.js/worker.js', 'utf8').replace(/^export \{\};$/gm, '');
 const js = order

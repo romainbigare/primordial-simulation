@@ -2,16 +2,15 @@
 // hands out (tape/src/things.rs): its bodies as animals, a node as some of its members with their count, the slots of
 // its cover as plants by their density, its parts as objects. Drawn back to front by map position (10.4); hovering
 // or clicking one shows its numbers (10.8).
-import { Rgb, Sprite, animal, plant, object, paintSprite, animalLength, woodiness, display } from './sprites';
+import { Rgb, Sprite, animal, plant, object, paintSprite, animalLength, woodiness, display, plantLookOf, DIET_COVER, DIET_BODIES, DIET_REMAINS } from './sprites';
+import { OPEN, PLANTS_CLOSE_PX } from './vegetation';
 
 export interface Animal { id: bigint; members: number; mass: number; living: number; strength: number; colour: Rgb; copyMass: number; coat: number; keepT: number; coolT: number; root: number; lineage: number; diet: number; adult: boolean; hidden: number; hold: bigint; inside: bigint }
-export interface Slot { root: number; kg: number; genes: number[]; full: boolean }
+export interface Slot { root: number; kg: number; leaf: number; genes: number[]; full: boolean }
 export interface Thing { id: bigint; size: [number, number, number]; hollow: number; mass: number; colour: Rgb; hardness: number; buried: number; held: bigint; root: bigint; space: number; closed: number }
 export interface Bond { a: bigint; b: bigint; strength: number }
 export interface CellThings { index: number; box: [number, number, number, number]; area: number; bodies: Animal[]; slots: Slot[]; parts: Thing[]; bonds: Bond[] }
 
-/** Diet bits (tape::DIET_*): it takes from the cover, bites bodies, takes remains. */
-const EATS_COVER = 1, EATS_BODIES = 2, EATS_REMAINS = 4;
 /** The cover's genes in their order (pcore::cover): their names and units for the inspect panel. */
 const COVER_GENES: [string, string][] = [['light', 'log10 mol/kg/s'], ['leaf', 'log10 m²/kg'], ['walls', 'log10 kg/kg'], ['store', 'log10 kg/kg'], ['frost', 'K'], ['moist', 'log10'], ['seed', 'share'], ['repair', 'log10'], ['fix', 'log10 mol/kg/s']];
 /** Pixels a map square takes from which avatars are drawn. */
@@ -48,7 +47,7 @@ export function readThings(data: Uint8Array): CellThings[] {
       const root = u32(), lineage = u32(), diet = u8(), adult = u8() === 1, hidden = u8(); u8();
       return { id: i, members, mass, living, strength, colour: [r, g, b], copyMass, coat, keepT, coolT, root, lineage, diet, adult, hidden, hold: id(), inside: id() };
     });
-    const slots = Array.from({ length: ns }, (): Slot => { const root = u32(), kg = f32(), genes = f32s(9), full = u8() === 1; at += 3; return { root, kg, genes, full }; });
+    const slots = Array.from({ length: ns }, (): Slot => { const root = u32(), kg = f32(), leaf = f32(), genes = f32s(9), full = u8() === 1; at += 3; return { root, kg, leaf, genes, full }; });
     const parts = Array.from({ length: np }, (): Thing => {
       const i = id(), [l, w, t, hollow, mass, r, g, b, hardness, buried] = f32s(10);
       return { id: i, size: [l, w, t], hollow, mass, colour: [r, g, b], hardness, buried, held: id(), root: id(), space: f32(), closed: f32() };
@@ -80,6 +79,8 @@ export class Avatars {
 
   /** The list of things the core sent (none: nothing is drawn). */
   set(data: Uint8Array | null): void { this.cells = data ? readThings(data) : []; }
+  /** The cells of that list. */
+  get list(): CellThings[] { return this.cells; }
 
   /** Show the numbers of what is under the pointer on `cv`, and keep what a click picks; `changed` redraws the panel. */
   listen(cv: HTMLCanvasElement, changed: () => void): void {
@@ -112,7 +113,7 @@ export class Avatars {
       const unit = Math.min(Math.max(s * 0.05, 4), 18);
       const seen = this.cells.filter(c => c.box[0] * s + ox < W && c.box[2] * s + ox > 0 && c.box[1] * s + oy < H && c.box[3] * s + oy > 0);
       const share = this.budget(seen, s, unit);
-      for (const c of seen) this.layCell(c, [c.box[0] * s + ox, c.box[1] * s + oy, c.box[2] * s + ox, c.box[3] * s + oy], unit, share);
+      for (const c of seen) this.layCell(c, [c.box[0] * s + ox, c.box[1] * s + oy, c.box[2] * s + ox, c.box[3] * s + oy], unit, share, s >= PLANTS_CLOSE_PX);
       this.drawn.sort((a, b) => a.y - b.y);
     }
     ctx.save();
@@ -135,14 +136,14 @@ export class Avatars {
     const partsWanted = cells.reduce((t, c) => t + c.parts.length, 0), partRoom = MOST_AVATARS * PART_SHARE;
     const parts = partsWanted > partRoom ? partRoom / partsWanted : 1;
     const room = MOST_AVATARS - want(members) - Math.min(partsWanted, partRoom);
-    const plantsWanted = cells.reduce((t, c) => t + c.slots.reduce((u, sl) => u + plantsIn(sl, cellPx(c), unit), 0), 0);
+    const plantsWanted = cells.reduce((t, c) => t + (drawsPlants(c, s >= PLANTS_CLOSE_PX) ? c.slots.reduce((u, sl) => u + plantsIn(sl, cellPx(c), unit), 0) : 0), 0);
     return { members, parts, plants: plantsWanted > room ? Math.max(room, 0) / plantsWanted : 1 };
   }
 
-  /** Lay out cell `c` (at x0, y0 to x1, y1 on the screen): plants scattered by their density, each structure at a place of its own (its parts side by side, the largest structures first), the bodies inside one by it, each node as a herd around a place of its own, a held part by its holder. */
-  private layCell(c: CellThings, [x0, y0, x1, y1]: number[], unit: number, share: Share): void {
+  /** Lay out cell `c` (at x0, y0 to x1, y1 on the screen): plants scattered by their density where its cover is open or the view `close` (else the ground pattern draws them, vegetation.ts), each structure at a place of its own (its parts side by side, the largest structures first), the bodies inside one by it, each node as a herd around a place of its own, a held part by its holder. */
+  private layCell(c: CellThings, [x0, y0, x1, y1]: number[], unit: number, share: Share, close: boolean): void {
     const spot = (r: () => number, margin: number) => [x0 + margin + r() * Math.max(x1 - x0 - 2 * margin, 1), y0 + margin + r() * Math.max(y1 - y0 - 2 * margin, 1)];
-    c.slots.forEach((sl, k) => {
+    if (drawsPlants(c, close)) c.slots.forEach((sl, k) => {
       const n = Math.floor(plantsIn(sl, (x1 - x0) * (y1 - y0), unit) * share.plants), look = plantLook(sl);
       const r = seededAt(c, 7919 * (k + 1));
       for (let j = 0; j < n; j++) {
@@ -171,7 +172,8 @@ export class Avatars {
       const shown = counts[q], r = seededAt(c, seedOf(b.id, 0));
       const room = byId.get(b.inside), home = room && place.get(room.root);
       const [cx, cy] = home ?? spot(r, unit * 1.2), heading = r() < 0.5;
-      const spread = Math.min(unit * animalLength(b.mass) * 1.1 * Math.sqrt(shown), (x1 - x0) * 0.45), look = { mass: b.mass, strength: b.strength, colour: b.colour, coat: b.coat, bites: (b.diet & EATS_BODIES) !== 0, adult: b.adult };
+      const spread = Math.min(unit * animalLength(b.mass) * 1.1 * Math.sqrt(shown), (x1 - x0) * 0.45);
+      const look = { mass: b.mass, strength: b.strength, colour: b.colour, coat: b.coat, keepT: b.keepT, coolT: b.coolT, diet: b.diet, hidden: b.hidden, adult: b.adult, lineage: b.lineage };
       let first: [number, number] | null = null;
       for (let m = 0; m < shown; m++) {
         const a = r() * 2 * Math.PI, d = spread * Math.sqrt(r()) * (m ? 1 : 0);
@@ -199,7 +201,9 @@ function plantsIn(sl: Slot, px: number, unit: number): number {
   const share = 1 - Math.exp(-sl.kg / closed);
   return share * PLANTS_PER_UNIT2 * px / (unit * unit * (1 + 3 * wood));
 }
-const plantLook = (sl: Slot) => ({ light: sl.genes[0], leaf: sl.genes[1], walls: sl.genes[2], frost: sl.genes[4], fix: sl.genes[8], kg: sl.kg });
+/** Whether cell `c`'s plants are drawn one by one: where its cover is open (its slots' capture area per m² absorbs less than `OPEN` of the light), or the view is close. */
+const drawsPlants = (c: CellThings, close: boolean) => close || 1 - Math.exp(-c.slots.reduce((t, sl) => t + sl.leaf, 0)) < OPEN;
+const plantLook = (sl: Slot) => plantLookOf(sl.genes, sl.kg);
 const partLook = (p: Thing) => ({ size: p.size, hollow: p.hollow, colour: p.colour, hardness: p.hardness, buried: p.buried, room: p.space > 0 && p.closed > 0.5 });
 /** A seeded stream for cell `c` by its place, so its layout holds from frame to frame. */
 const seededAt = (c: CellThings, k: number) => {
@@ -214,7 +218,7 @@ const swatch = (c: Rgb) => `<s style="background:rgb(${display(c).map(Math.round
 const head = (title: string, c: CellThings) => `<div class="cell"><b>${title}</b><span>cell ${c.index}</span></div>`;
 
 function bodyText(b: Animal, c: CellThings): string {
-  const eats = [[EATS_COVER, 'cover'], [EATS_BODIES, 'bodies (bites)'], [EATS_REMAINS, 'remains']].filter(([bit]) => b.diet & (bit as number)).map(x => x[1]).join(', ') || 'nothing';
+  const eats = [[DIET_COVER, 'cover'], [DIET_BODIES, 'bodies (bites)'], [DIET_REMAINS, 'remains']].filter(([bit]) => b.diet & (bit as number)).map(x => x[1]).join(', ') || 'nothing';
   return head(b.members > 1 ? `Herd of ${fmtCount(b.members)}` : 'Animal', c) + '<table>' + [
     row('Id', String(b.id)), row('Kind (root)', b.root === 0xffffffff ? 'none' : String(b.root)), row('Lineage', String(b.lineage)),
     row('Stage', b.adult ? 'adult' : 'young'), row('Members', num(b.members)), row('Mass of a member', `${num(b.mass)} <u>kg</u>`),
@@ -228,7 +232,7 @@ function bodyText(b: Animal, c: CellThings): string {
 function slotText(sl: Slot, c: CellThings): string {
   const wood = woodiness(sl.genes[2]), form = wood < 0.2 ? 'grass' : wood < 0.5 ? 'shrubs' : 'trees';
   return head(`Plant cover (${form})`, c) + '<table>' + [
-    row('Kind (root)', String(sl.root)), row('Built cover', `${num(sl.kg)} <u>kg/m²</u>`), row('Full', sl.full ? 'yes' : 'no'),
+    row('Kind (root)', String(sl.root)), row('Built cover', `${num(sl.kg)} <u>kg/m²</u>`), row('Capture area', `${num(sl.leaf)} <u>m²/m²</u>`), row('Full', sl.full ? 'yes' : 'no'),
     ...COVER_GENES.map(([n, u], k) => row(`Gene ${n}`, `${num(sl.genes[k])} <u>${u}</u>`)),
   ].join('') + '</table>';
 }

@@ -4,6 +4,7 @@ import { MapView, View } from './map';
 import { Charts } from './charts';
 import { Live, Look, Stats } from './live';
 import { Avatars, AVATAR_PX } from './avatars';
+import { Vegetation } from './vegetation';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const LABELS: Record<string, string> = {
@@ -41,7 +42,9 @@ let lookTimer = 0, looking = '';
 /** The things of the window in view, drawn one by one when the map is close (live world only), and the window asked for. */
 const avatars = new Avatars();
 let thingsKey = '';
-map.overlay = (ctx, ox, oy, s) => avatars.draw(ctx, ox, oy, s);
+/** The cover drawn as ground patterns where it is dense (earth view only), under the avatars. */
+const vegetation = new Vegetation();
+map.overlay = (ctx, ox, oy, s) => { vegetation.draw(ctx, ox, oy, s); avatars.draw(ctx, ox, oy, s); };
 avatars.listen($<HTMLCanvasElement>('cv'), () => { inspect(); map.invalidate(); });
 /** When the player last gave input (performance.now, ms), and whether the camera was sent away for lack of it. */
 let lastInput = performance.now(), idle = false;
@@ -128,6 +131,8 @@ function repaint(): void {
     paint(fine.world, 0, layer ?? view, fine.img, fine.cls, false);
     map.setFine(fine.img, fine.at);
   }
+  vegetation.set(view === 'earth' && !layer ? world : null, frame, cls, fine);
+  map.invalidate();
   inspect();
 }
 
@@ -252,8 +257,8 @@ async function startLive(): Promise<void> {
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
     ready: () => newWorld(),
-    world: w => { world = w; looking = ''; fine = null; map.setFine(null); thingsKey = ''; avatars.set(null); setup(w); showStats(l.stats); },
-    things: data => { if (live === l) avatars.set(data); },
+    world: w => { world = w; looking = ''; fine = null; map.setFine(null); thingsKey = ''; avatars.set(null); vegetation.setThings([]); setup(w); showStats(l.stats); },
+    things: data => { if (live === l) { avatars.set(data); vegetation.setThings(avatars.list); } },
     frame: (stats, raster) => {
       if (live !== l) return;
       showRaster(raster);
@@ -277,7 +282,7 @@ function thingsOf(v: View): void {
   const key = JSON.stringify(at);
   if (!live || key === thingsKey) return;
   thingsKey = key;
-  if (!at) avatars.set(null);
+  if (!at) { avatars.set(null); vegetation.setThings([]); }
   live.things(at);
 }
 function lookAt(v: View): void {

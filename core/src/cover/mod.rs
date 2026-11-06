@@ -137,6 +137,10 @@ impl Cover {
     pub fn living(&self, mm: &[f64; NP], x: usize) -> f64 {
         self.mol[x][MATTER] * mm[MATTER] / (1.0 - WET_TISSUE)
     }
+    /// Its walls, kg.
+    pub fn walls(&self, mm: &[f64; NP], x: usize) -> f64 {
+        self.mol[x][WALL] * mm[WALL]
+    }
     /// Its capture area, m².
     pub fn leaf(&self, mm: &[f64; NP], x: usize) -> f64 {
         dec(self.genes[x][LEAF]) * self.living(mm, x)
@@ -311,13 +315,14 @@ pub fn totals(w: &crate::World) -> [f64; MAX_SUBSTANCES] {
     a
 }
 
-/// The cover of each ground cell, kg per m².
-pub fn per_m2(w: &crate::World) -> Vec<f64> {
+/// What the cover of each ground cell holds per m², summed over its slots by `of` (`Cover::kg`, `Cover::walls`,
+/// `Cover::leaf`).
+pub fn per_m2(w: &crate::World, of: impl Fn(&Cover, &[f64; NP], usize) -> f64) -> Vec<f64> {
     let mut out = vec![0.0; w.mesh.cells().n()];
     let Some(p) = Parts::of(&w.chem) else { return out };
     let (mm, area) = (p.mm(&w.chem), w.mesh.cells().area());
     for (i, c) in w.life.cells.iter().enumerate() {
-        out[i] = (0..SLOTS).map(|x| c.cover.kg(&mm, x)).sum::<f64>() / area[i];
+        out[i] = (0..SLOTS).map(|x| of(&c.cover, &mm, x)).sum::<f64>() / area[i];
     }
     out
 }

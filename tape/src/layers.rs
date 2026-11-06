@@ -3,6 +3,7 @@
 
 use pcore::par;
 use pcore::body::Body;
+use pcore::cover::{per_m2, Cover};
 use pcore::chem::{Phase, Substance};
 use pcore::{World, AIR};
 
@@ -117,9 +118,11 @@ pub(crate) struct Ctx<'a> {
     pub t_air: Vec<f64>,
     pub vapor: Vec<f64>,
     pub absorber: Vec<f64>,
-    /// Per ground cell: the cover's mass ("plants", `cover::per_m2`) and the bodies' ("animals", all members of each
-    /// node), kg/m²; bodies (nodes and individuals)
+    /// Per ground cell: the cover's mass ("plants", `cover::per_m2`), its walls ("wood"), kg/m², and its capture area
+    /// ("leaf"), m²/m²; the bodies' mass ("animals", all members of each node), kg/m²; bodies (nodes and individuals)
     pub plants: Vec<f64>,
+    pub wood: Vec<f64>,
+    pub leaf: Vec<f64>,
     pub animals: Vec<f64>,
     pub bodies: Vec<f64>,
     /// Per ground cell: mass of made objects (parts), kg/m²
@@ -135,7 +138,7 @@ impl<'a> Ctx<'a> {
         let bodies: Vec<&Body> = w.life.alive().collect();
         let mass = par::map(&bodies, |b| b.mass(&w.chem));
         let f = fields(w);
-        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: pcore::cover::per_m2(w), animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], mass };
+        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], mass };
         for p in w.life.parts() {
             let i = p.cell as usize;
             c.parts[i] += p.mass(&w.chem) / w.mesh.cells().area()[i];
@@ -193,6 +196,8 @@ pub const LAYERS: &[Layer] = &[
     l("vapor", "mol/m2", "log", 1.0, 1e5, |c, i| c.vapor[c.air(i)]),
     l("absorber", "1", "lin", 0.0, 5.0, |c, i| c.absorber[c.air(i)]),
     l("plants", "kg/m2", "log", 0.03, 300.0, |c, i| c.plants[i]),
+    l("wood", "kg/m2", "log", 0.01, 300.0, |c, i| c.wood[i]),
+    l("leaf", "m2/m2", "log", 0.01, 30.0, |c, i| c.leaf[i]),
     l("animals", "kg/m2", "log", 1e-4, 10.0, |c, i| c.animals[i]),
     l("bodies", "1", "lin", 0.0, 32.0, |c, i| c.bodies[i]),
     l("traffic", "1/yr", "log", 1.0, 1e4, |c, i| c.w.counts.traffic.get(i).copied().unwrap_or(0.0) as f64),
