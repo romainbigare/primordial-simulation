@@ -1,5 +1,5 @@
 //! Refinement (laws.md 0): at a month's start the cells of the highest interest (`score`) split and the quartets of
-//! the lowest join, under a budget of cells (`Config::cell_budget`) and no finer than a floor
+//! the lowest join, under a budget of cells (`Config::cell_budget`, or the cells as built while the camera rests) and no finer than a floor
 //! (`Config::finest_depth`), the camera (`camera`) an input of the run. A setting for speed, not a law: no law reads
 //! the score, and with no budget the cells stay as built.
 
@@ -82,7 +82,8 @@ impl World {
         self.watch = now;
         let (wants, quartets) = (self.wants(&score), self.quartets(&score));
         let mut wants: std::collections::VecDeque<Want> = wants.into();
-        let mut m = Month { cells: n, budget: self.cfg.cell_budget as usize, made: 0, held: Vec::new(), change: self.change() };
+        let budget = if camera.rests(self.month()) { self.cells_as_built().min(self.cfg.cell_budget as usize) } else { self.cfg.cell_budget as usize };
+        let mut m = Month { cells: n, budget, made: 0, held: Vec::new(), change: self.change() };
         let mut by_leaf: BTreeMap<Leaf, Score> = self.map.leaves().iter().copied().zip(score).collect();
         let next = self.join_quiet(&quartets, &mut by_leaf, &mut m);
         let mut room = quartets[next..].iter().filter(|q| !q.seen).peekable();
@@ -120,6 +121,13 @@ impl World {
         let back: Vec<Event> = m.held.into_iter().map(|(e, l)| Event { node: tree.cell_at(l.corner()) as u32, ..e }).collect();
         self.events.extend(back);
         m.made
+    }
+
+    /// The cells the mesh would have with every cell joined back as far as it was built: each cell counts the share
+    /// 4^(built − depth) of a built cell (`Watch::built`), so the sum is a whole number.
+    fn cells_as_built(&self) -> usize {
+        let share = |(l, w): (&Leaf, &Watch)| 0.25f64.powi(l.depth.saturating_sub(w.built) as i32);
+        self.map.leaves().iter().zip(&self.watch).map(share).sum::<f64>().round() as usize
     }
 
     /// The quarters of `leaf`, split just now, that the camera's `shot` asks to split in turn (its term alone 1 or more),

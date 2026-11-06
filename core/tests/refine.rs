@@ -32,12 +32,12 @@ fn months(w: &mut World, camera: &Camera, n: usize, mut each: impl FnMut(&World)
 /// cells of `depth`.
 fn window(w: &World, i: usize, side: f64, month: u64, depth: u8) -> Shot {
     let [x, y, ..] = w.map.bounds(i);
-    Shot { month, x, y, w: side, h: side, depth }
+    Shot { month, x, y, w: side, h: side, depth, rest: false }
 }
 
 /// The camera going away from `month` on.
 fn away(month: u64) -> Shot {
-    Shot { month, x: 0.0, y: 0.0, w: 0.0, h: 0.0, depth: 0 }
+    Shot { month, x: 0.0, y: 0.0, w: 0.0, h: 0.0, depth: 0, rest: false }
 }
 
 /// With no budget of cells (`Config::cell_budget` 0, every run's default) a camera changes nothing: a living island
@@ -120,6 +120,26 @@ fn a_pile_of_parts_refines_to_a_bounded_depth_and_joins_back() {
     assert_eq!(w.map.leaves(), &built[..], "the mesh as built");
 }
 
+/// While the camera rests the budget of cells is the cells as built: a pile of parts that split its cell is joined
+/// back with the pile still there and no split takes the room again, and the same camera path from the same world
+/// gives the same world.
+#[test]
+fn a_resting_camera_brings_the_cells_back_to_those_as_built() {
+    let mut w = testkit::small_world();
+    w.drain_events();
+    let (built, i) = (w.map.leaves().to_vec(), testkit::dry_land(&w));
+    (w.cfg.cell_budget, w.cfg.finest_depth) = (built.len() as u32 + 1000, DEPTH_MOST);
+    (0..(PILE * PARTS_UNIT) as usize).for_each(|_| _ = testkit::plate(&mut w, i, 1.0, false));
+    months(&mut w, &Camera::default(), SETTLE, |_| {});
+    assert!(w.mesh.cells().n() > built.len(), "the pile split its cell");
+    let mut twin = w.clone();
+    let camera = Camera { shots: vec![Shot { rest: true, ..away(w.month()) }] };
+    months(&mut w, &camera, SETTLE, sound);
+    assert_eq!(w.map.leaves(), &built[..], "the mesh as built, the pile still there");
+    months(&mut twin, &camera, SETTLE, |_| {});
+    assert_eq!(serde_json::to_string(&w).expect("a world"), serde_json::to_string(&twin).expect("a world"));
+}
+
 /// A camera window that crosses the land of a living island, a new place every `STRIDE` months, under a budget of
 /// `BUDGET` times the cells as built.
 const STRIDE: u64 = 2;
@@ -173,7 +193,7 @@ fn a_zoom_to_a_street_and_back_keeps_the_books_and_the_mesh() {
         (w.cfg.cell_budget, w.cfg.finest_depth) = (built.len() as u32 + 300, STREET);
         let [x, y, ..] = w.map.bounds(testkit::dry_land(&w));
         let side = 0.5f64.powi((STREET - w.map.square_depth()) as i32);
-        let shot = Shot { month: w.month(), x: x + 0.5, y: y + 0.5, w: side, h: side, depth: STREET };
+        let shot = Shot { month: w.month(), x: x + 0.5, y: y + 0.5, w: side, h: side, depth: STREET, rest: false };
         let (books, budget) = (Books::now(&w), w.cfg.cell_budget as usize);
         let month = |w: &mut World, camera: &Camera| {
             months(w, camera, 1, |w| {

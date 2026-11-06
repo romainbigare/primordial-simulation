@@ -153,7 +153,7 @@ fn a_refined_run_saved_mid_run_goes_on_as_the_unbroken_one() {
     let land: Vec<usize> = (0..built).filter(|&i| w.is_land(i)).collect();
     let shot = |k: usize, month: u64| {
         let [x, y, ..] = w.map.bounds(land[k * land.len() / 3]);
-        Shot { month, x, y, w: 3.0, h: 3.0, depth }
+        Shot { month, x, y, w: 3.0, h: 3.0, depth, rest: false }
     };
     let mut plan = Schedule::new(None, false, worldgen::life::Seeding::default());
     plan.camera = Camera { shots: vec![shot(0, 0), shot(1, SAVED as u64 / 2), shot(2, SAVED as u64 + 2)] };

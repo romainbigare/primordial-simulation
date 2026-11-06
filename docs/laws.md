@@ -47,14 +47,17 @@ the middle of its map; the world keeps what it needs beside its seed and its map
 125 m on the island, 20 km on a globe of 64 rows), and below them the ground goes on as a midpoint displacement
 (Fournier, Fussell and Carpenter 1982) that continues the noise's octaves (`Terrain::inside`): the means of the
 quarters of a leaf of side ℓ depart from its mean by four normal draws keyed by the leaf, made to a variance by area of
-exactly G² ℓ² / 16 (the quarters of flat ground tilted at slope G). G is the rms slope one octave of the base noise adds (octave o
-weighs 2^−o and is 2^o times as fine, so each adds the same slope, a fractal of Hurst exponent 1): the base's weight over
-the octaves' sum times √(2 (1/5) (26/35)^(D−1)) per unit of the noise (the mean square slope of value noise of D
-dimensions eased by 3t² − 2t³), times the noise's units per m, times how fast the height climbs with the rise at the
-sample (none on the floor). So a leaf has a mean height at any depth, its ancestors' departures added to its sample's
-height, and the ground below a leaf of side ℓ holds the variance G² ℓ² / 12. On the 64 x 64 island G is up to about 0.05 on high land
-(a cell of 8 m departs from its parent's mean by about 0.2 m); on a globe of 64 rows about 1e-4, so its streets are flat: the
-noise holds no finer detail there. What needs the cell at a
+exactly G² ℓ² / 16 (the quarters of flat ground tilted at slope G). G is the larger of two slopes. One is the noise's: the rms
+slope one octave of the base noise adds (octave o weighs 2^−o and is 2^o times as fine, so each adds the same slope, a
+fractal of Hurst exponent 1): the base's weight over the octaves' sum times √(2 (1/5) (26/35)^(D−1)) per unit of the
+noise (the mean square slope of value noise of D dimensions eased by 3t² − 2t³), times the noise's units per m, times how
+fast the height climbs with the rise at the sample (none on the floor). The other is real ground's at the scale ℓ:
+0.1 at 30 m, going as ℓ^(H−1) with H = 0.8 (`real_slope`; numbers.md), so ground the noise leaves smooth (a globe's, whose
+finest octave is tens of km) is as rough as real ground at every scale, under the sea and on ice as on land. So a leaf has
+a mean height at any depth, its ancestors' departures added to its sample's height, and the ground below a leaf holds the
+sum over its depths of G² ℓ² / 16 (`variance_below`). On the 64 x 64 island the noise's G is up to about 0.05 on high
+land, real ground's 0.09 at 62 m and 0.13 at 8 m; on a globe of 64 rows the noise's is about 1e-4 and real ground's 0.03 at 10 km
+and 0.08 at 76 m, so its streets are rough. What needs the cell at a
 point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
@@ -197,7 +200,7 @@ ground of a cell holds inside it over its flat form, a part of the world's poten
 stacks (the function of "The books" below). Every cell holds it from the start: a bed standing at the terrain's heights
 inside it holds ρ g ∫ (h − h̄)² / 2 more than a flat bed of its volume (each column of area a and height h holds
 ρ g a h² / 2 over its base), ρ the density of the cell's bed (`World::relief_at_build`): over the samples inside a cell
-of `SAMPLE_DEPTH` or coarser, Σ a (h − h̄)² / 2 and each sample's A G² ℓ² / 24 below it; a finer cell A G² ℓ² / 24 alone
+of `SAMPLE_DEPTH` or coarser, Σ a (h − h̄)² / 2 and each sample's A V / 2 below it, V the variance by area below a leaf (above); a finer cell A V / 2 alone
 (`Terrain::inside`). It is the same account at every size, to rounding: a cell's is its quarters' and that of their
 means about its own, as the departures are made to that variance exactly. **A split of a
 cell no join made** gives its quarters the terrain inside it (`World::uneven`): each quarter's bed surface is the cell's
@@ -276,9 +279,11 @@ same seed and the same camera path give the same world on any count of threads. 
 player zooms or pans, the page sends the window in view and the depth the zoom calls for (cells of about 6 screen pixels,
 from a zoom of 1.8 times the fit on) to the core (`set_camera`), which adds a shot at the month about to be stepped to the
 run's camera path, as `ew run --camera` reads one; zooming out sends a window of no area, and so does the page after
-`IDLE_MINUTES` (3) of wall-clock time with no input from the player (a zoom, a pan, a click, a key): the camera goes
-away at the month about to be stepped, a recorded change of the camera like any other, so the cells join back and the
-world runs at the coarse pace again; the next input sends the view again. The core never reads a clock. The live world
+`IDLE_MINUTES` (3) of wall-clock time with no input from the player (a zoom, a pan, a click, a key) the camera goes
+away with `rest` at the month about to be stepped, a recorded change of the camera like any other (a shot of no area
+that also sets the budget of cells to the cells as built, each cell counting 4^(built − depth) of a built cell): the
+cells join back, the quietest first, at most `MOST_CHANGES` a month, and no life-driven split takes the room, so the
+world runs at the coarse pace again; the next input sends the view again, with the page's budget. The core never reads a clock. The live world
 refines at each month's start (`World::refine`) under a budget of 1500 cells and no finer than depth 10 (7.8 m, a
 street; its bodies step every 2.8 hours), so the world steps slower by itself while fine cells are in view.
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more

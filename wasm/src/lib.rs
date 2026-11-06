@@ -76,14 +76,14 @@ pub extern "C" fn step_month() {
 
 /// Send the camera to the window from column `x` and row `y`, `w` x `h` squares, asking for cells of `depth` below
 /// their air block, from the next month on: a shot of the run's camera path (`ew run --camera`), so the run can be made
-/// again. A window of no area sends the camera away.
+/// again. A window of no area sends the camera away, and with `rest` not 0 the budget of cells back to the cells as built.
 #[no_mangle]
-pub extern "C" fn set_camera(x: f64, y: f64, w: f64, h: f64, depth: u32) {
+pub extern "C" fn set_camera(x: f64, y: f64, w: f64, h: f64, depth: u32, rest: u32) {
     with(|l| {
         let month = l.world.month();
         let shots = &mut l.plan.camera.shots;
         shots.retain(|s| s.month < month);
-        shots.push(Shot { month, x, y, w, h, depth: depth.min(u8::MAX as u32) as u8 });
+        shots.push(Shot { month, x, y, w, h, depth: depth.min(u8::MAX as u32) as u8, rest: rest != 0 });
     })
 }
 
