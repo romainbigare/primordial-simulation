@@ -62,6 +62,8 @@ pub(crate) struct Wading {
     pub share: f64,
     /// Whether the ground and what lies on it are within its reach
     pub reaches: bool,
+    /// The density of the liquid, kg/m³ (0 where none stands)
+    pub rho: f64,
 }
 
 /// How body `b` stands in the liquid of cell `i` (`Wading`): the share of its height under it is the depth over its
@@ -73,16 +75,16 @@ pub(crate) struct Wading {
 pub(crate) fn wading(w: &World, d: &Chunk, b: &Body, i: usize) -> Wading {
     let depth = w.life.env[i][1];
     if depth <= 0.0 {
-        return Wading { share: 0.0, reaches: true };
+        return Wading { share: 0.0, reaches: true, rho: 0.0 };
     }
-    let (mb, c) = (b.mass(&w.chem), d.at(b.cell as usize));
+    let (mb, c, rho) = (b.mass(&w.chem), d.at(b.cell as usize), liquid(w, i, d.moves.amounts(w, Node::ground(i))).1);
     let side = w.cfg.phys.side(mb / b.n());
     let rides = depth > side && held(c, b).is_some_and(|p| {
         let s = &c.parts[root(c, p)].s;
-        liquid(w, i, d.moves.amounts(w, Node::ground(i))).1 * s.outer >= mb + s.mass
+        rho * s.outer >= mb + s.mass
     });
     let share = if rides { 0.0 } else { (depth / side.max(1e-9)).min(1.0) };
-    Wading { share, reaches: depth <= side * if rides { 1.0 } else { 2.0 } }
+    Wading { share, reaches: depth <= side * if rides { 1.0 } else { 2.0 }, rho }
 }
 
 /// Numbers a body perceives of what it holds and of the walls around it (`sense`).

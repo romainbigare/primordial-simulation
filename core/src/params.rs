@@ -256,6 +256,11 @@ const MOVE_REF: f64 = 30.0;
 const MOVE_EXP: f64 = -0.32;
 /// The Froude number v² / (g L) a body walks at (Alexander 1989: mammals of any size walk near 0.25, run past 0.5).
 const WALK_FROUDE: f64 = 0.25;
+/// The drag coefficient of a body pushed through liquid on its face: a cube face on, 1.05 (Hoerner 1965).
+const DRAG: f64 = 1.05;
+/// The share of the energy its muscles burn that a body's work through liquid gets (muscle's efficiency about 0.25:
+/// Smith, Barclay and Loiselle 2005).
+const MUSCLE: f64 = 0.25;
 
 impl Physics {
     /// Energy of a month of thinking of a brain of cost `c` (`Lineage::cost`) for a member of `m` kg, J: weakly more for
@@ -273,6 +278,16 @@ impl Physics {
     /// a cube of its volume (`rho_body`): 0.9 m/s for 30 kg, 1.6 m/s for a tonne.
     pub fn speed(&self, m1: f64, gravity: f64) -> f64 {
         (WALK_FROUDE * gravity * self.side(m1)).sqrt()
+    }
+    /// Energy to move one kg one metre through liquid of density `rho` kg/m³ for a member of `m1` kg, the share `wet` of
+    /// its height under it, J, under `gravity` m/s²: the drag on the face it pushes, ½ `rho` `DRAG` (`wet` L²) v² at its
+    /// walking speed (`speed`), L its size (`side`), over the share `MUSCLE` of its burning that its muscles turn into
+    /// that work. At one Froude number the same for every size: 5.2 J at `wet` 1 in a liquid as dense as bodies, against
+    /// the walk's 3.0 at 30 kg and 1.0 at a tonne; a body not built to swim pays several times on land's cost to cross
+    /// liquid (Williams 1999).
+    pub fn drag(&self, m1: f64, wet: f64, rho: f64, gravity: f64) -> f64 {
+        let (side, v) = (self.side(m1), self.speed(m1, gravity));
+        0.5 * rho * DRAG * wet * side * side * v * v / (m1.max(1e-9) * MUSCLE)
     }
     /// The size of a member of `m1` kg, m: the side of a cube of its volume (`rho_body`). It is how high it stands, how
     /// far it reaches, and the length it walks by (`speed`).

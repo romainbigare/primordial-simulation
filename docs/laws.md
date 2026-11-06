@@ -998,10 +998,18 @@ with the chance that keeps the mean at count × that share), all in the one dire
 so each direction gets its share of members on average, in groups. A
 group moves only if the cell it enters has room and it bears the `bump` share of its weight (`choose::go::can_go`);
 else it takes food where it is for its step and comes back. **rest**; **move** (`choose::go`:
-`walk` per kg and metre, climbing, the bodies in the way; needs force, 3.5); **take**, **put**, **give**
-(`choose/feed.rs`); **watch** (5.5); Bond's form, hold, take from or put to a part, join, break, let go,
+`walk` per kg and metre, climbing, the bodies in the way, the drag of standing liquid; needs force, 3.5); **take**,
+**put**, **give** (`choose/feed.rs`); **watch** (5.5); Bond's form, hold, take from or put to a part, join, break, let go,
 enter (`bond/verbs.rs`). A move lands when the batch ends, and an act on a part and a watch are applied then (0).
 No copy action, no "farm", "trade" or "attack": those must be patterns of these.
+
+**Moving through liquid** (`Physics::drag`): its members push the standing liquid aside, half the link in each cell, by
+the share of their height under it (3.3): per metre, for each member, ½ ρ `DRAG` (s L²) v² over `MUSCLE`, ρ the
+liquid's density, s that share, L its size, v its walking speed, `DRAG` 1.05 (a cube face on; Hoerner 1965), `MUSCLE` 0.25 (the
+share of what muscles burn that becomes work; Smith, Barclay and Loiselle 2005). At one Froude number it is the same
+for every size per kg, 5.2 J a metre in a liquid as dense as bodies, against the walk's 3.0 at 30 kg and 1.0 at a tonne: a body not
+built to swim pays several times on land's cost to cross liquid (Williams 1999). Its force must still give the push of
+a mover (3.5).
 
 **An act takes time** (`choose::act_as`): the step is the body's time to its next update, and the act drawn takes what
 it needs of it. A move takes the walk: its distance at the body's walking speed (`Physics::speed`: every size walks at
@@ -1191,8 +1199,8 @@ share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing
 Intake at most `take` × supply a day, of what lies within its reach (5.3), over the time a meal feeds it (to its next
-meal, or for a bite to its next update), within the room of its stores for that time (`Body::room`: their levels and what its upkeep burns of them
-until then). **Digestion** (`Body::digest`): matter taken is broken back into what it
+meal, or for a bite to its next update), within the room of its stores for that time (`Body::room`: their levels and
+what its upkeep burns of them until then). **Digestion** (`Body::digest`): matter taken is broken back into what it
 was built of, so food enters as fuel, and only if its diet breaks it (`Body::uses`). **Minimums**
 (`Body::lacking`): a store below its minimum kills (`LACK`), except a fuel, whose minimum is a reserve. **Shedding**
 (`shed`): minerals, built solids and key liquid past level, and anything it neither burns nor is made of. **Ageing**:

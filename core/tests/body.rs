@@ -2,7 +2,7 @@
 //! warm by burning and cool by evaporating), its key liquid (drinking, frost, boiling), digestion and its age. Damage:
 //! `damage.rs`.
 
-use pcore::body::{self, Body, Layout, COOL_T, HEAT, KEEP_T, PHASE};
+use pcore::body::{self, Body, Layout, COOL_T, HEAT, KEEP_T, PHASE, STRENGTH};
 use pcore::life::Handle;
 use pcore::event::EventKind;
 use pcore::{brain, World, AIR};
@@ -182,6 +182,44 @@ fn a_body_cannot_take_from_the_ground_under_deep_liquid() {
     println!("in ten days it took {:.3} kg from the ground and {:.3} kg of cover on land, {:.3} and {:.3} in deep liquid", land.0, land.1, deep.0, deep.1);
     assert!(land.0 > 0.01 && land.1 > 0.01, "on land it took {} kg from the ground and {} kg of cover", land.0, land.1);
     assert!(deep.0 == 0.0 && deep.1 == 0.0, "in deep liquid it took {} kg from the ground and {} kg of cover", deep.0, deep.1);
+}
+
+/// The fuel an eater of `EATER_KG` burns per metre of a step from a cell to a neighbour no higher, both under deep
+/// liquid or both of dry land (`choose::go`), mol/m; the books are kept.
+fn burnt_per_m(wet: bool) -> f64 {
+    let (mut w, _) = start();
+    let (cells, n) = (w.mesh.cells(), w.mesh.cells().n());
+    let kind = |i: usize| if wet { !w.is_land(i) && w.life.env[i][1] > 1.0 } else { worldgen::testkit::dry_lands(&w).contains(&i) };
+    let level = |i: usize, j: usize| w.life.env[j][2] <= w.life.env[i][2];
+    let (i, j) = (0..n).flat_map(|i| cells.around(i).1.iter().map(move |&j| (i, j as usize))).find(|&(i, j)| kind(i) && kind(j) && level(i, j)).expect("two neighbours");
+    let dist = cells.dist()[cells.link(i, j).expect("neighbours")];
+    let mut b = eater(&mut w, i, brain::REST, 1.0);
+    b.genes[STRENGTH] = 0.6;
+    b.prepare(&w.chem, &w.cfg);
+    let s = w.add(b);
+    let books = Books::now(&w);
+    let mut m = std::mem::take(&mut w.life[s]);
+    let fuel = m.amount(w.chem.body(), RICH);
+    assert!(w.in_cell(i, |w, d| pcore::choose::go(w, d, &mut m, j, false)), "it did not move");
+    let burnt = fuel - m.amount(w.chem.body(), RICH);
+    w.life[s] = m;
+    pcore::life::land(&mut w);
+    books.assert_kept(&w, 1e-9);
+    burnt / dist
+}
+
+/// A body that wades or swims pays the drag of the liquid it pushes through (laws.md 5.3, `Physics::drag`): per kg and
+/// metre ½ ρ `DRAG` L² v² over its muscles' share, 5.2 J in a liquid as dense as it, against the walk's 3.0 at 30 kg. An
+/// eater of 30 kg burns per metre of a step between two cells under deep liquid as much more than between two cells of
+/// dry land as walk and drag over the walk, for a density of the liquid within 10% of the body's.
+#[test]
+fn a_body_pays_the_drag_of_the_liquid_it_moves_through() {
+    let (land, deep) = (burnt_per_m(false), burnt_per_m(true));
+    let p = pcore::Physics::default();
+    let m1 = worldgen::testkit::EATER_KG;
+    let at = |rho: f64| 1.0 + p.drag(m1, 1.0, rho, 9.81) / p.walk(m1);
+    println!("per metre it burnt {land:.3e} mol on land, {deep:.3e} in deep liquid: x{:.2} (x{:.2} to x{:.2})", deep / land, at(900.0), at(1100.0));
+    assert!(deep / land > at(900.0) && deep / land < at(1100.0), "in deep liquid it paid x{} of the land's cost of a metre", deep / land);
 }
 
 /// Its key liquid frozen kills it: a body with no fuel to keep warm on ground below the liquid's melting point dies of

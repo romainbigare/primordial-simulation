@@ -8,8 +8,10 @@ use crate::units::DAY;
 use crate::{bond, copy, lanes, nodes, life::{Chunk, Entry}, World};
 
 /// Move to a neighbour, if its force gives the push a mover makes (`bump`; laws.md 3.5): cost by its whole mass at the
-/// real cost of transport (`Physics::walk`), the distance, the climb and the bodies in the way (`lanes::resist`). The
-/// part spent pushing through bodies breaks them (`wear`) and clears the lane. A node moves as one. It pays now and
+/// real cost of transport (`Physics::walk`), the distance, the climb and the bodies in the way (`lanes::resist`), and
+/// the drag of the standing liquid its members push through (`Physics::drag`, half the link in each cell, by the share of
+/// their height under it, `bond::wading`). The part spent pushing through bodies breaks them (`wear`) and clears the
+/// lane. A node moves as one. It pays now and
 /// lands in the serial pass (`land_move`); until then it is leaving (`Body::leaving`). The walk takes the time the
 /// distance takes at its speed (`Physics::speed`), and it eats where it lands for the rest of the time to that cell's
 /// next sub-step (`World::days_to_phys`), and at each later one (laws.md 5.3). With `kin`, it is members of a node who
@@ -26,13 +28,18 @@ pub fn go(w: &World, d: &mut Chunk, b: &mut Body, j: usize, kin: bool) -> bool {
     let climb = (w.life.env[j][2] - w.life.env[i][2]).max(0.0);
     let (resist, dist) = (lanes::resist(w, i, j), w.mesh.cells().dist()[lanes::link(w, i, j)]);
     let (p, m1, mass) = (&w.cfg.phys, mb / b.n(), mb + carried.map_or(0.0, |c| c.1));
-    let cost = mass * (p.walk(m1) * dist + w.cfg.gravity * climb) * resist;
+    let push = mass * (p.walk(m1) * dist + w.cfg.gravity * climb) * resist;
+    let drag = |c: usize| {
+        let x = bond::wading(w, d, b, c);
+        p.drag(m1, x.share, x.rho, w.cfg.gravity)
+    };
+    let cost = push + mb * dist / 2.0 * (drag(i) + drag(j));
     if !body::pay(w, d, b, cost) {
         return false;
     }
     // What it spends pushing through the bodies there breaks them at the next survey (`wear`) and clears the lane: the
     // ground whose cover that energy breaks.
-    let (pushed, all) = (cost * (1.0 - 1.0 / resist), w.life.sum(j)[7]);
+    let (pushed, all) = (push * (1.0 - 1.0 / resist), w.life.sum(j)[7]);
     let lane = if all > 0.0 { pushed * w.mesh.cells().area()[j] / all } else { 0.0 };
     let eats = (w.days_to_phys(j) - dist / p.speed(m1, w.cfg.gravity) / DAY).max(0.0);
     b.leaving = true;
