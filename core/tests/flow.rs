@@ -5,7 +5,6 @@ use pcore::life::Handle;
 use pcore::chem::Phase;
 use pcore::store::{Boundary, Class, Node};
 use pcore::units::DAY;
-use pcore::space::tree::DEPTH_MOST;
 use pcore::{body, brain, choose, lanes, World, AIR};
 use worldgen::testkit::{flow_step, ground_of, hold_ground, loose_volume as loose, put, set_amount, set_heat, Books, Brain, Line, DISSOLVED, LIQUID, MINERAL, OFF, RICH};
 
@@ -13,6 +12,8 @@ use worldgen::testkit::{flow_step, ground_of, hold_ground, loose_volume as loose
 const DT: f64 = 3.0 * DAY;
 /// One liquid step.
 const LIQUID_STEP: f64 = 15.0 * DAY;
+/// The depth below its air block of a cell of 125 m on an island (1/64 of a block).
+const FINE: u8 = 6;
 
 /// The highest cell of `w`.
 fn top(w: &World) -> usize {
@@ -477,7 +478,7 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
 const HUMP_M: f64 = 25.0;
 
 /// The store of the bed flows between cells of 125 m in one month as in thirty days: on a flat square (no relief inside
-/// the cells) split down to the most depth, its cells' stores empty but one filled `HUMP_M`, one month of the liquid leaves the store of that cell and
+/// the cells) split down to cells of 125 m (`FINE`), its cells' stores empty but one filled `HUMP_M`, one month of the liquid leaves the store of that cell and
 /// of its neighbours within a tenth of `HUMP_M` of thirty daily steps. One explicit step of the month would take
 /// dt Σ g / cap = 2.5, 5 times the most a step may (`sweep::LIMIT`), and empty the full store into its neighbours; the
 /// cell and its links sub-step inside the month (laws.md 1, the step by the size), and the books are kept.
@@ -487,14 +488,14 @@ fn the_store_of_small_cells_spreads_in_a_month_as_in_thirty_days() {
     w.drain_events();
     w.relief.iter_mut().for_each(|r| *r = 0.0);
     let square = w.map.leaves()[worldgen::testkit::dry_land(&w)];
-    for depth in square.depth..pcore::space::tree::DEPTH_MOST {
+    for depth in square.depth..FINE {
         for l in square.split(depth).collect::<Vec<_>>() {
             if w.map.cell(l).is_some() {
                 w.split(l).expect("a split");
             }
         }
     }
-    let fine: Vec<usize> = square.split(pcore::space::tree::DEPTH_MOST).map(|l| w.map.cell(l).expect("a cell of the most depth")).collect();
+    let fine: Vec<usize> = square.split(FINE).map(|l| w.map.cell(l).expect("a cell of 125 m")).collect();
     let side = (fine.len() as f64).sqrt() as usize;
     let hump = fine[side / 2 * side + side / 2];
     let (p, mv, sp) = (w.cfg.phys, w.chem.molar_volume(LIQUID, Phase::Liquid), &w.chem.subs[LIQUID]);
@@ -863,7 +864,7 @@ fn runoff_crosses_a_pool_of_small_cells_and_takes_its_fall_along() {
 }
 
 /// A column of liquid that runs off whole in one liquid step falls from its middle (laws.md 1.2): `COLUMN_M` poured on
-/// a cell of the most depth on the small world's highest square runs off down the island, and the pass gives what it
+/// a cell of 125 m (`FINE`) on the small world's highest square runs off down the island, and the pass gives what it
 /// lands in the heat of its fall from the mean of the column's head before and after, as the booking of Flow's lifts and
 /// falls takes it, so the booking takes no heat back from the cells it ran through (it had gone on with the liquid). No
 /// heat is rounded away (an overdraw) and the books are kept.
@@ -872,8 +873,8 @@ fn a_column_that_runs_off_whole_falls_from_its_middle() {
     const COLUMN_M: f64 = 2000.0;
     let mut w = worldgen::testkit::small_world();
     let square = w.map.leaves()[top(&w)];
-    worldgen::testkit::split_down(&mut w, &[square], DEPTH_MOST - square.depth);
-    let i = w.map.cell(square.split(DEPTH_MOST).next().expect("a leaf")).expect("a cell of the most depth");
+    worldgen::testkit::split_down(&mut w, &[square], FINE - square.depth);
+    let i = w.map.cell(square.split(FINE).next().expect("a leaf")).expect("a cell of 125 m");
     let area = w.mesh.cells().area()[i];
     pour(&mut w, i, COLUMN_M * area);
     let (books, rounded, mass) = (Books::now(&w), w.counts.rounded[1], liquid_m3(&w, i) / w.chem.molar_volume(LIQUID, Phase::Liquid) * w.chem.subs[LIQUID].molar_mass);

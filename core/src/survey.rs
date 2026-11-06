@@ -10,7 +10,7 @@ use crate::{choose, World};
 mod draws;
 mod steps;
 pub(crate) use draws::release;
-pub use steps::substeps;
+pub use steps::{substeps, Grid};
 
 
 /// Temperature, depth of the standing liquid and surface height of a ground cell, as Flow's last step left them (once
@@ -190,8 +190,7 @@ fn batch_of(w: &mut World, steps: Option<&[bool]>) {
     let load = w.life.cells.iter().filter(|c| !c.bodies.is_empty()).count();
     life::run(w, vec![(); life::chunks(w)], load, scratch, |w, d, _, (tmp, _, _, subs)| {
         for i in d.cells() {
-            let step = w.body_step(i);
-            physics(w, d, i, (tmp, subs), w.time - w.time % step + step);
+            physics(w, d, i, (tmp, subs), w.step_grid(i).after(w.time));
         }
     });
     life::land(w);
@@ -260,7 +259,7 @@ fn updates(w: &World, d: &mut Chunk, stepping: &(dyn Fn(usize) -> bool + Sync), 
                 decide(w, d, h, &lived, minds.of(k, shape.h), act);
             }
         }
-        physics(w, d, i, (tmp, subs), w.time + w.body_step(i));
+        physics(w, d, i, (tmp, subs), w.step_grid(i).after(w.time));
         for h in d.cell(i).filter(|&h| w.life.brainless(&d[h])).collect::<Vec<_>>() {
             let mut b = std::mem::take(&mut d[h]);
             crate::lineage::resize(w, d, &mut b);
@@ -270,7 +269,7 @@ fn updates(w: &World, d: &mut Chunk, stepping: &(dyn Fn(usize) -> bool + Sync), 
 }
 
 /// The physics of the bodies of cell `i` of chunk `d` to `to` s (laws.md 0, 6), in sub-steps of its physiological step
-/// (`World::phys_step`) on the times that step back from `to`, from the earliest a body's physics reached
+/// (`World::phys_grid`) on the times that step back from `to`, from the earliest a body's physics reached
 /// (`Body::last`), so a body's physics runs alike in every cell: at each, every living body of the cell not leaving it
 /// whose physics reached less than the sub-step's end, the mature ones first, each in the order they came
 /// (`mature_first`: the children a mature body makes join their young node before its sub-step of the same time, which
@@ -281,15 +280,16 @@ fn updates(w: &World, d: &mut Chunk, stepping: &(dyn Fn(usize) -> bool + Sync), 
 /// sub-step, fed from their birth, join a young node that has eaten for it. One whose physics starts here ate for its
 /// first sub-step when it decided or landed.
 fn physics(w: &World, d: &mut Chunk, i: usize, (tmp, subs): (&mut LiveTmp, &mut Subs), to: u64) {
-    let (sub, day) = (w.phys_step(i), w.cfg.calendar().day as f64);
+    let (grid, day) = (w.phys_grid(i), w.cfg.calendar().day as f64);
     let Subs { fed, order } = subs;
     let end = to as f64 / day;
     let first = d.cell(i).filter(|&h| !d[h].leaving).map(|h| d[h].last).fold(end, f64::min);
-    let parts = (((end - first) * day).round() as u64).div_ceil(sub);
+    let last = grid.by(to);
+    let parts = last - grid.by(to.saturating_sub(((end - first) * day).round() as u64));
     fed.clear();
     fed.resize(d.at(i).bodies.len(), false);
     for k in 1..=parts {
-        let at = to - (parts - k) * sub;
+        let (from, at) = (grid.at(last - (parts - k) - 1), grid.at(last - (parts - k)));
         let held = d.at(i).bodies.len();
         fed.resize(held, true);
         mature_first(w, d, i, held, order);
@@ -297,7 +297,7 @@ fn physics(w: &World, d: &mut Chunk, i: usize, (tmp, subs): (&mut LiveTmp, &mut 
         for &slot in order.iter() {
             let h = Handle { cell: i as u32, slot: slot as u32 };
             if runs(d, h) && fed[slot] {
-                meal_one(w, d, h, sub as f64 / day);
+                meal_one(w, d, h, (at - from) as f64 / day);
             }
         }
         for &slot in order.iter() {

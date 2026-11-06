@@ -4,17 +4,19 @@
 //! the score, and with no budget the cells stay as built.
 
 mod camera;
+mod join;
 mod score;
 
 pub use camera::{Camera, Shot};
 pub use score::{Watch, PARTS_UNIT};
 
-use crate::event::{Event, EventKind};
+use crate::event::Event;
 use crate::remap::Change;
 use crate::space::tree::SIDES;
 use crate::space::Leaf;
 use crate::World;
-use score::{Score, JOIN_AT, SPLIT_AT};
+use score::{Score, SPLIT_AT};
+use std::collections::BTreeMap;
 
 /// The most splits and joins in a month (a split the 2:1 rule forces counts as one), so a month's refinement takes a
 /// bounded time; what is left waits for the next month.
@@ -29,9 +31,10 @@ struct Want {
     asked: bool,
 }
 
-/// Four quarters that may join into `parent`: the score of the cell they would make (`score::joined`), their least
+/// Four quarters that may join into `parent`: the score of the cell they would make (`score::merged`), their least
 /// serial (ties go to the least), and whether the camera sees any of them or a cell beside them (a split there would
 /// split their join again, 2:1).
+#[derive(Clone)]
 struct Quartet {
     score: f64,
     serial: u32,
@@ -58,8 +61,12 @@ impl World {
     /// floor whose split (with those the 2:1 rule forces) keeps the cells within the budget, until no split can (the
     /// least makes 3 cells more); a split is worked out only where the least it makes fits (`least_splits`). A split
     /// the camera asks for may first join the quietest quartets it does not see, nor a cell beside them, to make room:
-    /// what is looked at comes first, and what it took room from does not take it back while the camera asks. A cell
-    /// joins no coarser than it was built. At most `MOST_CHANGES` a month. The events of a join's merge name their cell by index, which the next change renumbers:
+    /// what is looked at comes first, and what it took room from does not take it back while the camera asks. The
+    /// quarters of a split the camera asks for that it asks for in turn split next, before any other (`asked_quarters`),
+    /// so a zoom goes down several depths in a month; and the joins go on with the quartets of the cells joins made
+    /// and those 2:1 refused until a finer cell beside them joined (`join_quiet`), so the cells of a window let go join
+    /// back up several depths. A cell joins no coarser than it was built. At most
+    /// `MOST_CHANGES` a month. The events of a join's merge name their cell by index, which the next change renumbers:
     /// they wait with their cell's leaf and come back at the end naming the cell that then holds its place.
     /// Each change is an event (`World::split`, `World::join`). Returns the splits and joins made; none with no budget.
     pub fn refine(&mut self, camera: &Camera) -> usize {
@@ -70,17 +77,16 @@ impl World {
         if self.watch.len() != n {
             self.watch = self.map.leaves().iter().map(|l| Watch::built(l.depth)).collect();
         }
-        let (score, now) = score::scores(self, camera.at(self.month()));
+        let shot = camera.at(self.month());
+        let (score, now) = score::scores(self, shot);
         self.watch = now;
         let (wants, quartets) = (self.wants(&score), self.quartets(&score));
+        let mut wants: std::collections::VecDeque<Want> = wants.into();
         let mut m = Month { cells: n, budget: self.cfg.cell_budget as usize, made: 0, held: Vec::new(), change: self.change() };
-        let mut next = 0;
-        while let Some(q) = quartets.get(next).filter(|q| m.made < MOST_CHANGES && (m.cells > m.budget || q.score < JOIN_AT)) {
-            next += 1;
-            self.join_quartet(q, &mut m);
-        }
+        let mut by_leaf: BTreeMap<Leaf, Score> = self.map.leaves().iter().copied().zip(score).collect();
+        let next = self.join_quiet(&quartets, &mut by_leaf, &mut m);
         let mut room = quartets[next..].iter().filter(|q| !q.seen).peekable();
-        for s in &wants {
+        while let Some(s) = wants.pop_front() {
             if m.cells + 3 > m.budget && (!s.asked || room.peek().is_none()) {
                 break;
             }
@@ -95,7 +101,7 @@ impl World {
             let Ok(mut forced) = self.map.splits(s.leaf) else { continue };
             while s.asked && m.cells + 3 * forced.len() > m.budget && m.made + forced.len() < MOST_CHANGES {
                 let Some(q) = room.next() else { break };
-                self.join_quartet(q, &mut m);
+                _ = self.join_quartet(q, &mut m);
                 forced = self.map.splits(s.leaf).expect("a cell the camera sees joins with no quartet it does not see");
             }
             if m.made + forced.len() > MOST_CHANGES {
@@ -104,6 +110,9 @@ impl World {
             if m.cells + 3 * forced.len() <= m.budget {
                 let made = self.split_in(s.leaf, &mut m.change).expect("a split the tree allows").len();
                 (m.cells, m.made) = (m.cells + 3 * made, m.made + made);
+                if let Some(shot) = shot.filter(|_| s.asked) {
+                    self.asked_quarters(s.leaf, shot).into_iter().rev().for_each(|q| wants.push_front(q));
+                }
             }
         }
         self.changed(m.change);
@@ -111,6 +120,18 @@ impl World {
         let back: Vec<Event> = m.held.into_iter().map(|(e, l)| Event { node: tree.cell_at(l.corner()) as u32, ..e }).collect();
         self.events.extend(back);
         m.made
+    }
+
+    /// The quarters of `leaf`, split just now, that the camera's `shot` asks to split in turn (its term alone 1 or more),
+    /// in order, the highest first.
+    fn asked_quarters(&self, leaf: Leaf, shot: &Shot) -> Vec<Want> {
+        let mut asked: Vec<Want> = (leaf.quarters().iter().filter_map(|&q| self.map.cell(q)))
+            .map(|i| (i, score::camera(self, i, shot)))
+            .filter(|&(_, c)| c >= SPLIT_AT)
+            .map(|(i, score)| Want { score, serial: self.life.serial(i), leaf: self.map.leaves()[i], asked: true })
+            .collect();
+        asked.sort_by(|a, b| b.score.total_cmp(&a.score).then(a.serial.cmp(&b.serial)));
+        asked
     }
 
     /// The least splits a split of cell `leaf` makes (`Square::splits`), if it is a cell: itself, and each coarser
@@ -138,39 +159,27 @@ impl World {
     }
 
     /// The quartets that may join, the one that would make the quietest cell first: four cells that are the quarters of
-    /// one leaf, built no coarser than it, none with a cell across a side finer than itself (the joined cell would border
-    /// one two depths finer).
+    /// one leaf, built no coarser than it (one with a cell across a side finer than itself joins once that cell joined,
+    /// 2:1, `join_quiet`).
     fn quartets(&self, score: &[Score]) -> Vec<Quartet> {
         let (cells, leaves) = (self.mesh.cells(), self.map.leaves());
         let beside = |i: usize| {
             let (links, other) = cells.around(i);
             links.iter().zip(other).filter(|(&l, _)| cells.width()[l as usize] > 0.0).map(|(_, &j)| j as usize)
         };
-        let fine_beside = |i: usize| beside(i).any(|j| leaves[j].depth > leaves[i].depth);
         let seen = |i: usize| score[i].camera > 0.0 || beside(i).any(|j| score[j].camera > 0.0);
         let mut quartets: Vec<Quartet> = (0..leaves.len())
             .filter_map(|i| {
                 let parent = leaves[i].parent().filter(|p| p.quarters()[0] == leaves[i])?;
                 let kids = parent.quarters().map(|q| self.map.cell(q));
                 let kids = [kids[0]?, kids[1]?, kids[2]?, kids[3]?];
-                let joins = kids.iter().all(|&k| self.watch[k].built <= parent.depth && !fine_beside(k));
-                let joined = score::joined(kids.map(|k| &score[k]));
+                let joins = kids.iter().all(|&k| self.watch[k].built <= parent.depth);
+                let joined = score::merged(kids.map(|k| &score[k])).all;
                 let serial = kids.iter().map(|&k| self.life.serial(k)).min().expect("four quarters");
                 joins.then_some(Quartet { score: joined, serial, parent, seen: kids.iter().any(|&k| seen(k)) })
             })
             .collect();
         quartets.sort_by(|a, b| a.score.total_cmp(&b.score).then(a.serial.cmp(&b.serial)));
         quartets
-    }
-
-    /// Join quartet `q` if the tree allows it, counted in `m`; the events of its merge (each naming a cell by its
-    /// index) wait in `m` with their cell's leaf, as a remap takes only splits and joins.
-    fn join_quartet(&mut self, q: &Quartet, m: &mut Month) {
-        if self.join_in(q.parent, &mut m.change).is_ok() {
-            (m.cells, m.made) = (m.cells - 3, m.made + 1);
-        }
-        let (kept, merged): (Vec<Event>, Vec<Event>) = std::mem::take(&mut self.events).into_iter().partition(|e| matches!(e.kind, EventKind::Split | EventKind::Join));
-        self.events = kept;
-        m.held.extend(merged.into_iter().map(|e| (e, self.map.leaves()[e.node as usize])));
     }
 }

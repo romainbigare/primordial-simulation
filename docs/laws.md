@@ -24,8 +24,10 @@ are not bodies but the **cover** of each cell, a field (4.5); bodies are **eater
 only on links. Each link takes one of 8 compass directions (`Level::way`), so the brain's 8 directions hold everywhere.
 An island of 2 km squares, or a globe (`--globe`) of latitude-longitude squares on a sphere of 6,371 km whose rows wrap
 east to west; an air block is 4 x 4 squares. The cells are a sparse tree under each air block (`space/tree.rs`): the
-block is the root, a cell is a leaf at any depth down to 1/64 of the block's side (`DEPTH_MOST`), and only the leaves
-are kept (`Square::leaves`), numbered by their north-west corners row by row; a square is depth 2. Today's worlds start
+block is the root, a cell is a leaf at any depth down to 1/2^24 of the block's side (`DEPTH_MOST`: 0.5 mm on the
+island's block of 8 km, 7.5 cm on the 1,250 km block of a globe of 64 rows), and only the leaves are kept
+(`Square::leaves`), numbered by their north-west corners row by row, counted in leaves of the most depth as 64-bit
+numbers (a map is under 2^53 of them a side, so a place is exact as a 64-bit float); a square is depth 2. Today's worlds start
 with cells of 1, 2 or 4 squares on a side (worldgen); between steps a cell may split into its quarters and four quarters
 join into their parent (`World::split`, `World::join`, below), when refinement asks (below). Cells across a border differ by
 one depth at most (2:1): a split first splits each cell across a side that would border the quarters two depths coarser
@@ -40,7 +42,19 @@ the terrain on its samples (a cell finer than a square takes the height at its o
 (`space::terrain`) is one function of the world's seed and a point of the map, at any size: value noise summed over
 octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to heights, an island's falling away from
 the middle of its map; the world keeps what it needs beside its seed and its map (`World::terrain`: the rise its level
-0 m lies at), so a split finds the ground finer than its cell (below). What needs the cell at a
+0 m lies at), so a split finds the ground finer than its cell (below). The noise's finest octave is 670 m on the
+64 x 64 island and 200 km on a globe; it is sampled at the centres of the leaves of `SAMPLE_DEPTH` (1/64 of a block:
+125 m on the island, 20 km on a globe of 64 rows), and below them the ground goes on as a midpoint displacement
+(Fournier, Fussell and Carpenter 1982) that continues the noise's octaves (`Terrain::inside`): the means of the
+quarters of a leaf of side ℓ depart from its mean by four normal draws keyed by the leaf, made to a variance by area of
+exactly G² ℓ² / 16 (the quarters of flat ground tilted at slope G). G is the rms slope one octave of the base noise adds (octave o
+weighs 2^−o and is 2^o times as fine, so each adds the same slope, a fractal of Hurst exponent 1): the base's weight over
+the octaves' sum times √(2 (1/5) (26/35)^(D−1)) per unit of the noise (the mean square slope of value noise of D
+dimensions eased by 3t² − 2t³), times the noise's units per m, times how fast the height climbs with the rise at the
+sample (none on the floor). So a leaf has a mean height at any depth, its ancestors' departures added to its sample's
+height, and the ground below a leaf of side ℓ holds the variance G² ℓ² / 12. On the 64 x 64 island G is up to about 0.05 on high land
+(a cell of 8 m departs from its parent's mean by about 0.2 m); on a globe of 64 rows about 1e-4, so its streets are flat: the
+noise holds no finer detail there. What needs the cell at a
 point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
@@ -55,15 +69,19 @@ list, on its view, then the loads of its structures in the order of their roots)
 and their sub-steps (`survey::substeps`). **The step follows the size** (`survey/steps.rs`): a body's step lets it
 cross at most one cell, as a move is one link a decision. A square of the map (`Square::square_depth`; 2 km on the
 island) steps a month (the pace the numbers of bodies are anchored at), so a cell 2^k times finer steps a month over 2^k
-(`World::body_step`: 15 days at 1 km, 7.5 at 500 m, 1.875 at 125 m), a square or a coarser cell a month; a step is a
-whole number of seconds and at least a day (a cell finer than that steps as the finest that keeps both). **Every
+(`World::step_grid`: 15 days at 1 km, 7.5 at 500 m, 1.875 at 125 m, 2.8 hours at 7.8 m), a square or a coarser cell
+a month. Time is whole seconds: the j-th step of a month of M s cut into 2^k ends floor(j M / 2^k) s after its start
+(`survey::Grid`), so the steps are equal down to 2.8 hours (M = 2,592,000 s = 2^8 × 10,125) and differ by a second
+below; a step is at least a second, so a cell 21 depths finer than a square or more steps every 1.2 s. The random
+draws of the bodies of a cell that steps a day or longer are keyed by the day (two of its steps never fall on one
+day); those of a cell that steps faster by the time in seconds, above every day's key (`World::key_at`). **Every
 body updates at the month's start**, after the month's Flow, Change and Bond: one batch holds every living body. Then
 at the end of each sub-step of the finest cells' step the cells whose step ends there are surveyed again (what movers
 broke there; in every cell its numbers and features, as the moves and meals since left them) and their bodies update
 in a batch of the same passes; the other cells do nothing then. Flow, Change and Bond keep their steps (1.8).
 **An update: a decision, then the physics of the step ahead in sub-steps** (`survey::updates`). A body decides once
 at each of its cell's steps (5.3), and then its own physics runs over the step ahead, to its cell's next step, in
-sub-steps of one **physiological step** (`World::phys_step`: 7.5 days, a quarter of a month, or the cell's step
+sub-steps of one **physiological step** (`World::phys_grid`: 7.5 days, a quarter of a month, or the cell's step
 where that is shorter): a square's body runs four, a body of a cell of 500 m one, each by the same laws (`body::live`:
 drink, upkeep, heat, frost, growth, the brood and births, wear; 6), and before each but the first it eats by the take
 law for the sub-step as far as its act leaves its members to eating (`choose::meal`, `Body::busy`; its decision's
@@ -73,8 +91,9 @@ brood covering a child) are crossed at the same sub-step whatever the step. The 
 time: a meal (its stores' room holds what it burns until its next meal), the filling of its brood to a child and its
 turn between its cold and warm state are days to weeks. Each sub-step integrates the time from where the body's
 physics reached (`Body::last`; of a node, the mean by members, `nodes::rejoin`, so members who joined it since count
-less) to its end: upkeep and the brain's cost, drink, heat, frost (6.5), growth and wear go by those days; the death
-draws of an individual are keyed by the sub-step's day and deaths and births are dated by it (`Calendar::day_ending`).
+less) to its end, at least a day or the physiological step where that is shorter: upkeep and the brain's cost, drink,
+heat, frost (6.5), growth and wear go by those days; the death draws of an individual are keyed by the sub-step's last
+second (`World::key_ending`) and deaths and births are dated by its day (`Calendar::day_ending`).
 After a batch every body's physics has reached its cell's next step, so bodies of every cell size stand at the same
 time after it, in the surroundings of the month their physics ran in. A body that lands in a cell in the serial pass
 (a mover, a litter) runs its physics on from where it reached to that cell's next step in a pass after the landing
@@ -176,9 +195,11 @@ index in its event, so the shell takes the events before the next split or join.
 **Relief** (`World::relief`, J, one number per cell in the cell table, `remap/relief.rs`): the potential energy the
 ground of a cell holds inside it over its flat form, a part of the world's potential energy held apart from the
 stacks (the function of "The books" below). Every cell holds it from the start: a bed standing at the terrain's heights
-at the cells of the most depth inside it holds ρ g Σ a (h − h̄)² / 2 more than a flat bed of its volume (each column of
-area a and height h holds ρ g a h² / 2 over its base), ρ the density of the cell's bed (`World::relief_at_build`). It
-is the same account at every size: a cell's is its quarters' and that of their means about its own. **A split of a
+inside it holds ρ g ∫ (h − h̄)² / 2 more than a flat bed of its volume (each column of area a and height h holds
+ρ g a h² / 2 over its base), ρ the density of the cell's bed (`World::relief_at_build`): over the samples inside a cell
+of `SAMPLE_DEPTH` or coarser, Σ a (h − h̄)² / 2 and each sample's A G² ℓ² / 24 below it; a finer cell A G² ℓ² / 24 alone
+(`Terrain::inside`). It is the same account at every size, to rounding: a cell's is its quarters' and that of their
+means about its own, as the departures are made to that variance exactly. **A split of a
 cell no join made** gives its quarters the terrain inside it (`World::uneven`): each quarter's bed surface is the cell's
 mean bed surface now plus the terrain's mean height over the quarter less the mean over the four, so the cell's bed
 keeps its volume and its mean (what wear and creep did since the start stays in the mean); the bed's substances go to
@@ -228,7 +249,7 @@ split shares out, so the quarters' terms sum to the cell's (a density would grow
 of one part would never join); change is a share, the same in quarters that changed alike and less in one that holds
 little against the floor; the camera's halves at each depth. So a cell splits until each holds about one unit, and no
 further. Then, the lowest first (ties by the least serial), each four quarters of one leaf, built no coarser than it
-(`Watch::built`) and with no finer cell across a side, join while the cells are over the budget or the cell they would
+(`Watch::built`), join (one with a finer cell across a side once that cell joined, 2:1) while the cells are over the budget or the cell they would
 make scores under `JOIN_AT` (its brains and parts the sum of theirs, its change that of their masses summed, its
 camera's term twice their highest; 1/4: a cell joins only once it holds four times less than a split asks, so it does
 not flap); then, those the camera asks for (its term alone is 1 or more) first, then the highest first, each cell of
@@ -239,7 +260,13 @@ split the camera asks for may first join the quietest
 quartets the camera does not see, nor a cell beside them (a split there would split their join again, 2:1), to make
 room: what is looked at comes first. As the camera's splits come first, a cell joined to make room for them takes the
 room back only once the camera asks for no more: at a full budget the cells settle with the camera's window at its
-asked depth, and change only as the window moves. A month makes at most `MOST_CHANGES` (32) splits and joins. The events of
+asked depth, and change only as the window moves. The quarters of a split the camera asks for that it asks for in turn
+(their camera term alone 1 or more) split next, before any other cell, so a zoom goes down many depths in a month: from
+the island's 2 km squares to a window of 7.8 m in one month (29 splits), from a globe's air blocks of 1,250 km to
+9.5 m in three (65 splits). The joins go on in the same way (`refine/join.rs`): a quartet the tree refuses for 2:1
+is tried again once a finer cell beside it joined, and the quartet of a cell a join made joins in turn if the cell it
+would make (its score its quarters' merged) scores under `JOIN_AT`, so the cells of a window let go join back in a
+month or a few. A month makes at most `MOST_CHANGES` (32) splits and joins. The events of
 a join's merge name their cell by index, which the next change renumbers: they wait with their cell's leaf and come
 back at the end of the month's changes naming the cell that then holds that place.
 **The camera** (`refine::Camera`) is an input of the run: from given months on, a window of the map in squares and
@@ -248,9 +275,12 @@ holds it (`docs/tape.md`). The score is worked out cell by cell in order and the
 same seed and the same camera path give the same world on any count of threads. **The live viewer's camera**: when the
 player zooms or pans, the page sends the window in view and the depth the zoom calls for (cells of about 6 screen pixels,
 from a zoom of 1.8 times the fit on) to the core (`set_camera`), which adds a shot at the month about to be stepped to the
-run's camera path, as `ew run --camera` reads one; zooming out sends a window of no area. The live world refines at
-each month's start (`World::refine`) under a budget of 1500 cells and no finer than depth 4, so the world steps slower
-by itself while fine cells are in view.
+run's camera path, as `ew run --camera` reads one; zooming out sends a window of no area, and so does the page after
+`IDLE_MINUTES` (3) of wall-clock time with no input from the player (a zoom, a pan, a click, a key): the camera goes
+away at the month about to be stepped, a recorded change of the camera like any other, so the cells join back and the
+world runs at the coarse pace again; the next input sends the view again. The core never reads a clock. The live world
+refines at each month's start (`World::refine`) under a budget of 1500 cells and no finer than depth 10 (7.8 m, a
+street; its bodies step every 2.8 hours), so the world steps slower by itself while fine cells are in view.
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.
 **One ground temperature**: every law and the tape read that of Flow's last step (`World::t_ground_last`).
@@ -505,8 +535,7 @@ over the cell's breaking energy per m²); a cleared link is cheaper (`lanes::res
 ### 1.8 The step by the size
 An explicit step is safe while `dt Σ g / cap` of each node stays within `solve::sweep::LIMIT` (1/2: no pattern changes
 sign in a step). For a diffusion of D m²/s on a cell of side Δ with four borders that is 4 D dt / Δ² ≤ 1/2, so a step
-of `dt` is safe down to Δ = √(8 D dt). On the island (month 2.59e6 s, year 3.11e7 s; the finest cell, `DEPTH_MOST`,
-125 m):
+of `dt` is safe down to Δ = √(8 D dt). On the island (month 2.59e6 s, year 3.11e7 s):
 
 | Process | Step | D or rate | Safe down to |
 |---|---|---|---|
@@ -525,8 +554,10 @@ most depth: 3.0 in cells of 125 m with full stores, 0.85 in cells of 250 m): suc
 `solve::sweep::steps` sub-steps inside the liquid's month, each from the stores as the sub-steps leave them, the cells
 beside them held as the month starts; each link's sum is booked once by both its cells (a flux register, Berger and
 Colella 1989), and the other links step once with what each cell's sub-stepped links left it (`flow::deep`). The coarse
-cells keep their step, and the books close as every move is booked on both sides. On a globe the finest cell is tens
-of km, far above every limit.
+cells keep their step, and the books close as every move is booked on both sides. In a cell finer than the other
+limits of the table (under about 15 m), a link of an explicit sweep carries at most half of what would level its two
+cells in a step (`sweep::HALF_WAY`): pore flow, erosion and heat there move slower than their law, never across the
+level. On a globe a square is hundreds of km and a cell needs depth 15 below its block to come under 40 m.
 
 ## 2. Change: substances react inside nodes, faster when hot
 Files: `core/src/change/` (the reactor), `core/src/chem/` (chemistry and its physics), `worldgen/src/chem0.toml`.
@@ -1021,7 +1052,7 @@ time of each update (6.2), whatever the pace of its decisions. **Null run** (`--
 ## 6. Bodies
 Files: `core/src/body/`, `copy::grow`. Bodies are the eaters (animals); the light-eaters are the cover (4.5).
 A body's update is its decision, then its physics over the step ahead in sub-steps of its physiological step, a
-week (`World::phys_step`, `survey::updates`; 0), each with a meal but the first, which its decision gave it.
+week (`World::phys_grid`, `survey::updates`; 0), each with a meal but the first, which its decision gave it.
 `body::live` runs a sub-step in stages: drinking, upkeep, heat, store checks, growth and children, shedding. So every
 law of this section runs over a week in every cell, whatever the cell's step. Its trades are gathered as moves on its
 cell's view and booked when its chunk ends (`store::Moves`, 0), so nodes and individuals take alike, never more than

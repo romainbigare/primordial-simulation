@@ -77,7 +77,7 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body, fill: Fill) -> bool {
     }
     let age = fill.age(b.brood, (held * matter, matter, births), node);
     let id = b.id;
-    let mut r = Rng::new(w.seed, w.cfg.calendar().day_ending(fill.at), id, Purpose::Mutate);
+    let mut r = Rng::new(w.seed, w.key_ending(b.cell as usize, fill.at), id, Purpose::Mutate);
     let i = b.cell as usize;
     let mate = if mates(w, d, b) { partner(w, d, b, &mut r) } else { None };
     // Children that start in the neighbour cell of a compass direction drawn, as far as `spread_m` reaches

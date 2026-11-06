@@ -427,13 +427,17 @@ Population nodes are built; how they work is in `docs/laws.md` 4.4. A body of co
 
 - The planet is coarse everywhere, and finer where it matters: a region of finer cells is built into the mesh at the
   start, or rebuilt at a god action. The sea lives on a coarser level, as the air does, so its cells are cheap.
-- Cells split and join by themselves while the world runs (5.2), so a player can zoom anywhere.
+- Cells split and join by themselves while the world runs (5.2), so a player can zoom anywhere: a cell may be as
+  fine as 1/2^24 of its air block (7.5 cm under a globe's block of 1,250 km), and its hidden relief below the
+  terrain's samples is a midpoint displacement that continues the noise (`docs/laws.md` 0).
 - **Detail follows a budget.** A run has a fixed count of active cells (a number of the run, never the machine's
   clock). Each cell has an interest score: the camera, how fast things change there, brains, parts and bonds, rare
   events. Each month the cells of the highest score split and those of the lowest join, until the budget is full.
   Every split and join is a recorded event.
 - The camera is an input of the run, recorded in the tape as a god action is, so the same seed and the same camera
-  path give the same history (3.8). A run with no camera (the world search, M7) refines by the other terms.
+  path give the same history (3.8). A run with no camera (the world search, M7) refines by the other terms. The live
+  viewer sends the camera away after a few minutes without input, as a recorded change of the camera, so a world
+  left alone joins its fine cells and speeds up again.
 - One life model at every grain: a group of `n` members (7.1) on cells of any size; it splits as its cell splits,
   down to `n` = 1, and joins as its cells join.
 
@@ -445,7 +449,7 @@ Not everything needs the same step. These are suggested defaults to measure and 
 |---|---|
 | Heat, air, rain, water (coarse world) | 1 month, with sub-steps if unstable |
 | Ground uplift, slow wearing | 10 to 100 years |
-| Bodies (population nodes and single bodies) | their cell's step: 1 month for a square (2 km on the island) or a coarser cell, a month / 2^k for a cell 2^k finer, so none crosses more than one cell a step; each step one parallel pass over chunks of cells, one serial pass for what crosses cells |
+| Bodies (population nodes and single bodies) | their cell's step: 1 month for a square (2 km on the island) or a coarser cell, a month / 2^k for a cell 2^k finer (whole seconds, at least one: 2.8 hours for 8 m on the island, 79 s for 10 m on a globe of 64 rows), so none crosses more than one cell a step; each step one parallel pass over chunks of cells, one serial pass for what crosses cells |
 | Snapshots for the history tape | at the end of a run, every `--snapshots-every` years if asked (and before every god action) |
 
 There is **one world clock**. A fast process in a detailed area may sub-step inside a month. Seasons must exist, because they matter for food and migration.

@@ -1,6 +1,7 @@
 //! Refinement while a world runs (laws.md 0): at each month's start the cells of most interest split and the quietest
 //! quartets join, under a budget of cells and no finer than a floor, the camera an input of the run. With no budget
-//! nothing changes; a camera window refines its region to the depth it asks and the cells join back once it goes; a pile
+//! nothing changes; a camera window refines its region to the depth it asks and the cells join back once it goes, down
+//! to a street and back in a month each with the books kept and the same world for the same camera path; a pile
 //! of parts refines to a depth set by its size and joins back once gone; the budget and the 2:1 rule hold and the books
 //! close through a year of refinement with life, the same world on any count of threads.
 
@@ -152,4 +153,50 @@ fn a_year_of_refinement_with_life_keeps_the_budget_and_the_books() {
         })
     };
     assert!(year(1) == year(4), "one world on 1 and on 4 threads");
+}
+
+/// The depth below its air block of a cell of a street on the small island: 7.8 m, 8 depths below its 2 km square.
+const STREET: u8 = 10;
+/// The most months the zoom to a street, and then the release, may each take (32 changes a month).
+const ZOOM_MONTHS: usize = 2;
+
+/// A zoom from the whole island to a street and back. On the small island without life, a camera window of one cell of
+/// 7.8 m (`STREET`) asking for that depth refines to it within `ZOOM_MONTHS` months, the budget and 2:1 kept; once the
+/// camera goes the cells join back to the mesh as built within as many months; the books close every month within
+/// `check::DRIFT`. The same seed and camera path give the same world.
+#[test]
+fn a_zoom_to_a_street_and_back_keeps_the_books_and_the_mesh() {
+    let run = || {
+        let mut w = testkit::small_world();
+        w.drain_events();
+        let built = w.map.leaves().to_vec();
+        (w.cfg.cell_budget, w.cfg.finest_depth) = (built.len() as u32 + 300, STREET);
+        let [x, y, ..] = w.map.bounds(testkit::dry_land(&w));
+        let side = 0.5f64.powi((STREET - w.map.square_depth()) as i32);
+        let shot = Shot { month: w.month(), x: x + 0.5, y: y + 0.5, w: side, h: side, depth: STREET };
+        let (books, budget) = (Books::now(&w), w.cfg.cell_budget as usize);
+        let month = |w: &mut World, camera: &Camera| {
+            months(w, camera, 1, |w| {
+                assert!(w.mesh.cells().n() <= budget, "{} cells over the budget of {budget}", w.mesh.cells().n());
+                sound(w);
+                books.assert_kept(w, check::DRIFT);
+            })
+        };
+        let finest = |w: &World| w.map.leaves().iter().map(|l| l.depth).max().expect("cells");
+        let mut camera = Camera { shots: vec![shot] };
+        let zoom = (1..=ZOOM_MONTHS).find(|_| {
+            month(&mut w, &camera);
+            finest(&w) == STREET
+        });
+        assert!(zoom.is_some(), "a street within {ZOOM_MONTHS} months: cells of depth {} at most", finest(&w));
+        camera.shots.push(away(w.month()));
+        let release = (1..=ZOOM_MONTHS).find(|_| {
+            month(&mut w, &camera);
+            w.map.leaves() == &built[..]
+        });
+        assert!(release.is_some(), "the mesh as built within {ZOOM_MONTHS} months of the release");
+        println!("a street in {zoom:?} months, the mesh as built {release:?} months after");
+        serde_json::to_string(&w).expect("a world")
+    };
+    assert!(run() == run(), "the same seed and camera path give the same world");
 }

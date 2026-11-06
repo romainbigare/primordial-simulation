@@ -31,8 +31,10 @@ is an input of the run: the snapshot and the tape keep it, so the same seed and 
 
 In the live viewer, zooming in on the map refines the world there: the page sends the window in view and the depth the
 zoom calls for to the core as a shot of the camera's path, and the map shows the fine cells over the whole-map frame (a
-budget of 1500 cells, none finer than depth 4). The world steps slower by itself while fine cells are in view; the page
-shows the date, the months per second it reaches, the cells and the finest depth. Refinement runs while the world plays.
+budget of 1500 cells, none finer than depth 10: 7.8 m, a street). The world steps slower by itself while fine cells are
+in view; the page shows the date, the months per second it reaches, the cells and the finest depth. Refinement runs
+while the world plays. After 3 minutes without input the page sends the camera away (a recorded change of the camera),
+so the world joins its fine cells and runs at the coarse pace again; the next zoom, pan or click brings it back.
 
 Close up (a square of the map at 64 pixels or more), the live viewer draws what lies in each cell one by one, from
 the numbers the core hands out (`tape::things`): animals sized by a member's mass (a log scale), bulkier and longer-legged

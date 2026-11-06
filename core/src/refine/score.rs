@@ -10,7 +10,7 @@
 //! four times at each split, and a cell of one part would never join); change is a share of a mass of at least
 //! `MASS_FLOOR`, the same in quarters that changed alike and less in a quarter holding little; the camera's halves at
 //! each depth. So refinement goes down until a cell holds about one unit and joins where the cell its quarters make
-//! would hold much less (`joined`).
+//! would hold much less (`merged`).
 
 use super::camera::Shot;
 use crate::remap::{sum4, Made};
@@ -89,10 +89,10 @@ pub(super) fn scores(w: &World, shot: Option<&Shot>) -> (Vec<Score>, Vec<Watch>)
 
 /// The score of the cell four quarters of scores `q` would join into: their brains and parts summed, the change of
 /// their masses summed, and the camera's twice their highest (none where they are finer than it asks).
-pub(super) fn joined(q: [&Score; 4]) -> f64 {
+pub(super) fn merged(q: [&Score; 4]) -> Score {
     let mass = [0, 1].map(|k| sum4(q.map(|s| s.mass[k])));
-    let camera = q.iter().map(|s| s.camera).fold(0.0, f64::max);
-    sum4(q.map(|s| s.held)) + change(mass) + 2.0 * camera
+    let (camera, held) = (2.0 * q.iter().map(|s| s.camera).fold(0.0, f64::max), sum4(q.map(|s| s.held)));
+    Score { all: held + change(mass) + camera, camera, held, mass }
 }
 
 /// The change term of a cell of animal mass `now` that was `was` a month before, kg (NaN: not known, none): the share
@@ -107,7 +107,7 @@ fn change([now, was]: [f64; 2]) -> f64 {
 /// The camera's term of cell `i` under `shot`: in its window, 2^(asked - depth - 1), so a cell coarser than asked
 /// splits (1 one depth coarser, more the coarser) and one of the depth asked (no finer than the floor,
 /// `Config::finest_depth`) scores 1/2 and stays; nothing outside the window or finer than asked.
-fn camera(w: &World, i: usize, s: &Shot) -> f64 {
+pub(super) fn camera(w: &World, i: usize, s: &Shot) -> f64 {
     let (asked, depth) = (s.depth.min(w.cfg.finest_depth), w.map.leaves()[i].depth);
     let wrap = if w.map.wrap { w.map.w as f64 } else { 0.0 };
     if depth > asked || !s.sees(w.map.bounds(i), wrap) {

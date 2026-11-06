@@ -8,20 +8,37 @@ use pcore::event::EventKind;
 use pcore::{brain, World};
 use worldgen::testkit::{self, kg, Books, Brain, MATTER, RICH};
 
-/// A square steps a month, a cell of half its side half a month and one of a quarter a quarter of a month, each a whole
-/// number of seconds.
+/// A square steps a month, a cell of half its side half a month and one of a quarter a quarter of a month. A cell
+/// `SHORT` depths finer steps in minutes: its steps are whole seconds, at least one, and fill the month; the draws of
+/// its bodies take a new key at each of its steps, while a square's take its day's.
 #[test]
 fn the_step_follows_the_size() {
     let mut w = testkit::small_world();
     let (i, month) = (testkit::dry_land(&w), w.cfg.calendar().month);
     let l = w.map.leaves()[i];
-    assert_eq!(w.body_step(i), month, "a square steps a month");
+    assert_eq!(w.step_grid(i).after(0), month, "a square steps a month");
+    assert_eq!(w.key_at(i, month), w.cfg.calendar().days(month), "a square's draws keyed by the day");
     testkit::split_down(&mut w, &[l], 2);
     for (depth, part) in [(l.depth + 1, 2), (l.depth + 2, 4)] {
         let cells: Vec<usize> = l.split(depth).filter_map(|c| w.map.cell(c)).collect();
-        assert!(cells.iter().all(|&c| w.body_step(c) * part == month), "a cell {part} times finer steps a month over {part}");
+        assert!(cells.iter().all(|&c| w.step_grid(c).after(0) * part == month), "a cell {part} times finer steps a month over {part}");
     }
+    let fine = l.split(l.depth + SHORT).next().expect("a leaf");
+    for depth in l.depth + 2..fine.depth {
+        w.split(l.split(depth).next().expect("a leaf")).expect("a split");
+    }
+    let c = w.map.cell(fine).expect("a cell of the chain");
+    let grid = w.step_grid(c);
+    let ends: Vec<u64> = std::iter::successors(Some(0), |&t| Some(grid.after(t))).take_while(|&t| t <= month).collect();
+    assert!(ends.len() == (1 << SHORT) + 1 && ends.last() == Some(&month), "{} steps fill the month", ends.len() - 1);
+    let step = month >> SHORT;
+    assert!(ends.windows(2).all(|t| (step..=step + 1).contains(&(t[1] - t[0]))), "steps of {step} or {} s", step + 1);
+    let keys: std::collections::BTreeSet<u64> = ends.iter().map(|&t| w.key_at(c, t)).collect();
+    assert_eq!(keys.len(), ends.len(), "a key a step");
 }
+
+/// Depths below a square of the cell of `the_step_follows_the_size` that steps in minutes.
+const SHORT: u8 = 12;
 
 /// Months a living island runs with a block split two depths in `the_books_close_through_the_sub_steps`.
 const SPLIT_MONTHS: usize = 6;
