@@ -4,8 +4,8 @@ const css = (name: string) => getComputedStyle(document.documentElement).getProp
 
 /** The part of the map in view: its window in squares (clipped to the map), the pixels a square takes, and the zoom (1: the map fits). */
 export interface View { x: number; y: number; w: number; h: number; s: number; zoom: number }
-/** The most pixels a square takes on screen. */
-const MOST_SCALE = 200;
+/** The most pixels a square takes on screen: close enough that a cell of the finest depth shows its things one by one. */
+const MOST_SCALE = 800;
 
 export class MapView {
   img: ImageData | null = null;
@@ -22,6 +22,8 @@ export class MapView {
   /** A raster of a window of the map, finer than its squares, drawn over the map at its place (x, y, w, h in squares). */
   private fine: { cv: HTMLCanvasElement; at: [number, number, number, number] } | null = null;
   private seen = '';
+  /** Drawn over the map (and its fine raster) at each redraw: its context, where the map's corner is and the pixels a square takes. */
+  overlay: ((ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number) => void) | null = null;
 
   constructor(private cv: HTMLCanvasElement, private onHover: (i: number) => void, private onPick: (i: number) => void, private onView: (v: View) => void = () => {}) {
     this.ctx = cv.getContext('2d')!;
@@ -135,6 +137,7 @@ export class MapView {
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(this.fine.cv, ox + fx * s, oy + fy * s, fw * s, fh * s);
     }
+    this.overlay?.(ctx, ox, oy, s);
     if (this.globe) this.latitudeLines(ox, oy, xs.length * span);
     for (const [i, col] of [[this.pick, '#fff'], [this.hover, '#000']] as const) {
       if (i < 0) continue;

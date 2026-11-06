@@ -787,6 +787,7 @@ Each cell is one pixel (or one small tile when zoomed in). Its colour comes from
 - Each library concept has a **few variants**: size tiers (small, medium, large) and **material tints** from the world (a hard mineral substance gives a stone look, a plant fibre gives thatch, colours from reflectance). So each culture's settlements look different.
 - Draw sprites sorted by their map position (back to front) so they overlap correctly.
 - **Unmatched things** use a generic sprite built from coloured blocks for their parts, in the same style.
+- **True-view avatars from genes:** close up, each body, plant and object is drawn from its own numbers (an animal's size from its mass, bulk and legs from its strength, coat from its heat gene, fangs if it bites; a plant's form from its walls gene; an object's block from its sizes and walls), with a little randomness seeded by its id, so a herd's members differ but read as one kind.
 - Sprite art can be hand-drawn or generated, but must keep one palette and one angle.
 
 Examples: house, hut, wall, gathering hall/temple, store, workshop, furnace, bridge, mine, boat, sailing ship, cart, car-like, plane-like, herd animals, flock, pack, people.

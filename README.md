@@ -33,5 +33,12 @@ zoom calls for to the core as a shot of the camera's path, and the map shows the
 budget of 1500 cells, none finer than depth 4). The world steps slower by itself while fine cells are in view; the page
 shows the date, the months per second it reaches, the cells and the finest depth. Refinement runs while the world plays.
 
+Close up (a square of the map at 64 pixels or more), the live viewer draws what lies in each cell one by one, from
+the numbers the core hands out (`tape::things`): animals sized by a member's mass (a log scale), bulkier and longer-legged
+the stronger, furred by their coat gene, with fangs if they bite bodies, young ones smaller; a herd (a node) as some of
+its members with its count; the cover as grass, shrubs or trees by its walls gene, as many as its density; parts as
+blocks of their sizes and walls' colour, hollow ones open, hard ones stone. Hover or click one to see its numbers.
+Farther away the map shows density and colour only.
+
 By default the animals start with hand-set brain biases (`--neutral-eaters` for neutral brains) and the
 light-eaters with no brain.

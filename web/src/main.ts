@@ -3,6 +3,7 @@ import { CLASSES, PATH_LAYER, paint, rampFor, rampCss } from './earth';
 import { MapView, View } from './map';
 import { Charts } from './charts';
 import { Live, Look, Stats } from './live';
+import { Avatars, AVATAR_PX } from './avatars';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const LABELS: Record<string, string> = {
@@ -31,6 +32,11 @@ const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspe
 /** The raster of the window the camera looks at (finer than a square) as a world of its own, and what paints it. */
 let fine: { world: World; img: ImageData; cls: Uint8Array; at: [number, number, number, number] } | null = null;
 let lookTimer = 0, looking = '';
+/** The things of the window in view, drawn one by one when the map is close (live world only), and the window asked for. */
+const avatars = new Avatars();
+let thingsKey = '';
+map.overlay = (ctx, ox, oy, s) => avatars.draw(ctx, ox, oy, s);
+avatars.listen($<HTMLCanvasElement>('cv'), () => { inspect(); map.invalidate(); });
 const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
 
 // ---- loading
@@ -149,6 +155,8 @@ function button(text: string, fn: () => void, layerName?: string): HTMLButtonEle
 // ---- inspect
 function inspect(): void {
   const el = $('inspect'), i = map.hover >= 0 ? map.hover : map.pick;
+  const thing = avatars.inspect(map.hover >= 0);
+  if (thing) { el.innerHTML = thing; return; }
   if (!world || i < 0) { el.innerHTML = '<p class="hint">Hover or tap the map.</p>'; return; }
   const { meta } = world, [name, color] = CLASSES[cls[i]];
   let rows = '';
@@ -236,7 +244,8 @@ async function startLive(): Promise<void> {
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
     ready: () => newWorld(),
-    world: w => { world = w; looking = ''; fine = null; map.setFine(null); setup(w); showStats(l.stats); },
+    world: w => { world = w; looking = ''; fine = null; map.setFine(null); thingsKey = ''; avatars.set(null); setup(w); showStats(l.stats); },
+    things: data => { if (live === l) avatars.set(data); },
     frame: (stats, raster) => {
       if (live !== l) return;
       showRaster(raster);
@@ -252,7 +261,16 @@ async function startLive(): Promise<void> {
 function lookSoon(v: View): void {
   if (!live || !world) return;
   clearTimeout(lookTimer);
-  lookTimer = window.setTimeout(() => lookAt(v), LOOK_MS);
+  lookTimer = window.setTimeout(() => { lookAt(v); thingsOf(v); }, LOOK_MS);
+}
+/** From `AVATAR_PX` pixels a square on, the core is asked for the things of the window in view, to draw them one by one. */
+function thingsOf(v: View): void {
+  const at: [number, number, number, number] | null = v.s >= AVATAR_PX && v.w > 0 && v.h > 0 ? [v.x, v.y, v.w, v.h] : null;
+  const key = JSON.stringify(at);
+  if (!live || key === thingsKey) return;
+  thingsKey = key;
+  if (!at) avatars.set(null);
+  live.things(at);
 }
 function lookAt(v: View): void {
   const m = world?.meta;

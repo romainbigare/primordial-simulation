@@ -11,6 +11,7 @@ interface Core {
   frame(): number;
   frame_window(x: number, y: number, w: number, h: number, across: number, down: number): number;
   set_camera(x: number, y: number, w: number, h: number, depth: number): void;
+  things(x: number, y: number, w: number, h: number): number;
   cells(): number;
   finest(): number;
   out_len(): number;
@@ -20,7 +21,8 @@ type Command =
   | { cmd: 'new'; seed: number; size: number }
   | { cmd: 'play'; on: boolean }
   | { cmd: 'rate'; rate: number }
-  | { cmd: 'look'; look: Look | null };
+  | { cmd: 'look'; look: Look | null }
+  | { cmd: 'things'; at: [number, number, number, number] | null };
 
 /** What the page looks at: the window in map squares (from column x and row y), the depth of cells it asks for, and the raster of it that comes back (across x down pixels). */
 interface Look { x: number; y: number; w: number; h: number; depth: number; across: number; down: number }
@@ -44,6 +46,8 @@ let timer = 0;
 /** The window the page looks at (null: the whole map only), and whether the camera is on it. */
 let look: Look | null = null;
 let cameraOn = false;
+/** The window (x, y, w, h in squares) whose things the page draws one by one (null: none). */
+let thingsAt: [number, number, number, number] | null = null;
 /** The months stepped since `since` (ms), and the pace measured over the last whole second, months per second. */
 let stepped = 0, since = 0, pace = 0;
 
@@ -57,10 +61,12 @@ function postFrame(kind: 'world' | 'frame'): void {
   const meta = kind === 'world' ? new TextDecoder().decode(bytes(c.meta(), c.out_len())) : '';
   const frame = bytes(c.frame(), c.out_len());
   const fine = look ? bytes(c.frame_window(look.x, look.y, look.w, look.h, look.across, look.down), c.out_len()) : null;
+  const things = thingsAt ? bytes(c.things(...thingsAt), c.out_len()) : null;
   const now = performance.now();
   if (now - since >= PACE_MS) { pace = (stepped * 1000) / (now - since); stepped = 0; since = now; }
   const stats = { cells: c.cells(), finest: c.finest(), pace };
-  host.postMessage({ kind, meta, frame, year: c.year(), day: c.day(), stats, look, fine }, fine ? [frame.buffer, fine.buffer] : [frame.buffer]);
+  const moved = [frame.buffer, ...(fine ? [fine.buffer] : []), ...(things ? [things.buffer] : [])];
+  host.postMessage({ kind, meta, frame, year: c.year(), day: c.day(), stats, look, fine, things }, moved);
 }
 
 function tick(): void {
@@ -97,7 +103,7 @@ host.onmessage = async e => {
     } else if (m.cmd === 'new' && core) {
       start(false);
       if (core.new_world(m.seed, m.size) !== 0) throw new Error('The world was refused.');
-      due = 0; look = null; cameraOn = false; stepped = pace = 0;
+      due = 0; look = null; cameraOn = false; thingsAt = null; stepped = pace = 0;
       postFrame('world');
     } else if (m.cmd === 'play') start(m.on);
     else if (m.cmd === 'rate') rate = m.rate;
@@ -106,6 +112,9 @@ host.onmessage = async e => {
       if (look) core.set_camera(look.x, look.y, look.w, look.h, look.depth);
       else if (cameraOn) core.set_camera(0, 0, 0, 0, 0);
       cameraOn = look !== null;
+      if (!playing) postFrame('frame');
+    } else if (m.cmd === 'things' && core) {
+      thingsAt = m.at;
       if (!playing) postFrame('frame');
     }
   } catch (err) {
