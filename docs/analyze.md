@@ -39,18 +39,19 @@ longest run).
 
 The parts of a snapshot are grouped by structure (`Part::root`), each with its design (`bond::designs`, laws.md 3.1):
 each part gets a label from its **material band** (the hardness and the bond strength of its walls, each cut into
-`BANDS` (4) bands) and its **shape band** (hollow share and elongation, `BANDS` bands each), and a structure is hashed by
+`BANDS` (4) bands), its **shape band** (hollow share and elongation, `BANDS` bands each) and its **mass band** (the
+mass of its walls in bands a factor of 2 wide), and a structure is hashed by
 `WL_ROUNDS` (3) rounds of neighbour hashing over its bonds (Weisfeiler and Lehman 1968; Shervashidze et al. 2011), then
 by the sorted labels: two structures with the same bond graph and the same bands have the same hash, wherever they lie.
-A structure of one part hashes its two bands.
+A structure of one part hashes its three bands. A lot of alike parts (laws.md 3.1) is as many copies as its count.
 
 A card is made for a hash with at least `REPEAT_MIN` (2) copies in the last snapshot.
 
 | Field | Meaning |
 |---|---|
 | `pattern_id` | `struct-<hash, 16 hex digits>` |
-| `count`, `parts` | copies in the last snapshot; parts of each |
-| `mass`, `hollow` | mean mass of a copy (kg); mean hollow share of its parts (0..1) |
+| `count`, `parts` | copies in the last snapshot (each part of a lot one, so a count may be a fraction); parts of each |
+| `mass`, `hollow` | mean mass of a copy (kg); mean hollow share of its parts (0..1); means and shares by copies |
 | `enclosed_share`, `held_share` | share of the copies that are enclosed (`tape::ENCLOSED`); share with a part held by a body |
 | `first_seen_year` | the earliest snapshot with the hash |
 | `first_seen_exact` | true when an earlier snapshot lacks the hash; false when the earliest snapshot has it already (it appeared before) |

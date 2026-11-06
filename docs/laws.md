@@ -187,9 +187,11 @@ were (to the rounding of x · share). A made cell's temperature and plateau in F
 are records that hold their own amounts, so they move with nothing to book). A split shares
 life by area, so a node of at least one member per quarter's share leaves in each other quarter a node of
 that share of its members, stores, heat and brood (`nodes::part`: its genes, spreads, lineage and born rows, an id of
-that quarter, and a brain block there with the node's rows); what is not cut goes whole to one quarter, drawn by area
+that quarter, and a brain block there with the node's rows), and a lot that lies alone (3.1) of at least one part per
+quarter's share leaves in each other quarter a lot of that share of its parts, amounts and heat (`Part::split`, an id
+of that quarter); what is not cut goes whole to one quarter, drawn by area
 by a draw keyed by its id and the split cell's serial (`rng::Purpose::Quarter`; a cell splits once): an individual, a
-node of fewer members, and a structure with its bonds and the bodies that hold it or are inside it (structures held
+node of fewer members, a lot of fewer parts, and a structure with its bonds and the bodies that hold it or are inside it (structures held
 and lived in together go together, drawn by their least root); the cover by area (4.5). A join gathers its quarters'
 bodies (each with its brain block), parts and bonds in the order of the quarters; its cover lands by the cover's rule
 (4.5) and its bodies then merge as the monthly merge does (`nodes::crowd`, 4.4), so it holds no more nodes than a cell
@@ -671,9 +673,20 @@ structure that moves (carried) spans two cells for that step, which is serial. A
 (`bond::form`, `c_form` per kg, at most `form` of its mass): of the solids it holds above what it keeps and, in the share its brain sets, of the loose solids of its cell's ground in their proportions, as far as the ground holds them, with their heat, at `c_handle` per kg more (on land mostly rock, so the part is hard, 3.3). A **bond** (`bond::Bonds`) joins two parts; its strength comes from the weaker material and the contact area (`tensile`, `joint`), at `c_join` per m². A
 **structure** is the parts joined by bonds and moves as one. A structure's **design** (`bond::designs`) is the hash of
 its bond graph with its parts' labels: each part's material band (the hardness and the bond strength of its walls) and
-shape band (its hollow share and the elongation of its sides), each cut into `BANDS` (4) bands, by `WL_ROUNDS` (3) rounds
+shape band (its hollow share and the elongation of its sides), each cut into `BANDS` (4) bands, and the band of the mass
+of its walls (`MASS_STEP`: a factor of 2, so alike parts are within 26% in size), by `WL_ROUNDS` (3) rounds
 of neighbour hashing (Weisfeiler and Lehman 1968; Shervashidze et al. 2011): it is how alike objects find each other, as
-a lineage is for bodies, and the pattern finder's key (`docs/analyze.md`); it is never copied. A part runs no reactions. Monthly (`bond/month.rs`) the
+a lineage is for bodies, and the pattern finder's key (`docs/analyze.md`); it is never copied.
+**Lots** (`bond/lots.rs`; handover 7.1 applied to objects): the alike parts that lie alone in a cell (held by no body,
+no body inside them, joined by no bond) are one record of `count` parts (`Part::count`, real, as a node's members),
+which holds the amounts and heat of all of them and the sizes and hollowness of each. Monthly, before their turns, the
+lone parts of a cell of one design and one band of burial (their depth over their smallest size, `BANDS` bands) join
+into the first of them in the cell's list, which keeps its id (`lots::join_alike`, `Part::join`): counts, amounts and
+heat add up, sizes, hollowness and depth become means by count, and the sizes fit the walls of one part. A body that
+holds or acts on a part of a lot acts on one split out of it (`lots::one_of`, `Part::split`: its share 1 / count of
+each amount and of the heat, the lot keeping the rest, so the two add up to rounding), a part of its own with the next
+id of its cell; but a break, which finds no bond in a lot. Alike parts lose their own history, as members of a node
+do, and their sizes within a band. A part runs no reactions. Monthly (`bond/month.rs`) the
 share of its walls the open world's decomposers would rot in the month (`bond/month.rs::rot`: each reaction they speed,
 `open` above 1, at the rate of Change, `change::rate`, at its cell ground's temperature and moisture, each substance of
 its walls a phase of its own, as a solid is in Change, and the gas it needs taken from its cell's air by its share
@@ -684,9 +697,18 @@ at most one substance that bodies hold, and walls hold only those: `Chemistry::v
 their turns together, on the cell's view of the store: one move to the ground per substance, one move of heat
 (`bond/month.rs::warm`). That move is what the parts that warm want less what the parts that cool give; where the
 ground cannot give it all (it gives no heat below `T_FLOOR`, `Moves::take_from_ground`), the parts that cool still
-reach its temperature and those that warm share what it gives and what the others gave, each by what it wants. A part
-whose walls fall under `min_kg` falls apart (`bond::fall_apart`): all it holds, its walls, the liquid in its hollow and its heat, goes to its cell's ground,
-whether its walls ran off in its turn or a body took them (`bond::verbs::take`), and it is gone with its bonds; so does a part buried past its smallest outer size (1.3), while a bonded structure stays on top.
+reach its temperature and those that warm share what it gives and what the others gave, each by what it wants. Rot and
+heat act on a lot's amounts as on a part's: the share is one for every part of a cell. A part whose walls (of one part
+of a lot) fall under `min_kg` falls apart (`bond::fall_apart`): all it holds, its walls, the liquid in its hollow and
+its heat, goes to its cell's ground, whether its walls ran off in its turn or a body took them (`bond::verbs::take`),
+and it is gone with its bonds; so does a part buried past its smallest outer size (1.3), while a bonded structure stays
+on top. **Burial by a share**: the depths of a lot's parts are an even spread, its mean and half width
+(`Part::buried`, `Part::spread`; one part's is 0); each month it moves down by `bury` × the month, its shallowest and
+deepest no deeper than the loose ground, and the share of the spread past the smallest size falls apart (`Part::sunk`,
+`bond::fall`), the rest then spread from the shallowest to that size, as the members of a node mature by share (4.4).
+A join pools the spreads (mean by count; variance an even spread's half width squared over 3 plus each one's gap to the
+mean), and the band of burial keeps a lot's spread within about a band, so each part is buried within a quarter of
+its time of its own.
 
 ### 3.2 Loads and failure
 Monthly (`bond/month.rs`), from the part a body holds out along the bonds, each bond carries the weight hanging on it,

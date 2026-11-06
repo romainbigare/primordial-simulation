@@ -2,7 +2,7 @@
 //! when they move. A body's force decides what it can hold and break, and a held edge how far it goes (`edge`). Each
 //! act runs on the body's cell in its chunk (`life::Chunk`), the body taken out of its slot.
 
-use super::{at, blunt, edge, edge_leaves, event, Edge, fall_apart, held, holder, link_in, loose_solids, make, members, move_structure, restructure, root, sense::room, strength, unlink, HELD, LOAD, NOBODY};
+use super::{at, blunt, edge, edge_leaves, event, Edge, fall_apart, held, holder, link_in, loose_solids, lots::one_of, make, members, move_structure, restructure, root, sense::room, strength, unlink, HELD, LOAD, NOBODY};
 use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase, Stores}, life::{Cell, Chunk}, life::Entry, World};
 use crate::units::BODY_STORES;
 
@@ -15,7 +15,7 @@ fn grab(w: &World, d: &mut Chunk, b: &mut Body, p: usize) {
         return;
     }
     // (Held, it is out of the ground.)
-    (c.parts[p].held, c.parts[p].buried) = (b.id, 0.0);
+    (c.parts[p].held, c.parts[p].buried, c.parts[p].spread) = (b.id, 0.0, 0.0);
     b.hold = Some(c.parts[p].id);
     event(d, w, true, i, HELD);
 }
@@ -67,10 +67,12 @@ pub fn bears(w: &World, b: &Body) -> f64 {
 }
 
 /// Verb `v` toward the part at `p` of body `b`'s cell: hold, take from, put to, join the held part to, break, enter;
-/// what it takes or puts goes by the time to its next update, `days`. The body pays as it acts (`body::pay`, on its
-/// cell's view), and does nothing if it cannot.
+/// what it takes or puts goes by the time to its next update, `days`. Of a lot, it acts on one part split out of it
+/// (`lots::one_of`), but a break, which finds no bond in a lot. The body pays as it acts (`body::pay`, on its cell's
+/// view), and does nothing if it cannot.
 pub fn act(w: &World, d: &mut Chunk, b: &mut Body, v: usize, (p, days): (usize, f64)) {
     let (mb, i) = (b.mass(&w.chem), b.cell as usize);
+    let p = if v == 4 { p } else { one_of(d, i, p) };
     match v {
         0 => {
             let pt = &d.at(i).parts[p];

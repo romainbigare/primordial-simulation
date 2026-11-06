@@ -183,7 +183,7 @@ pub fn cells(w: &mut World) {
         f[MEMBERS] = ln(1.0 + (c[0] * per) as f32) / LN_MEMBERS;
         f[STRENGTH] = (c[3] / c[0].max(1.0)) as f32;
         f[RESIST] = ln(1.0 + thickness(w, c[1], area) as f32);
-        (f[PARTS_HERE], f[CROSSED]) = (ln(1.0 + (cell.parts.len() as f64 * per) as f32), ln(1.0 + (cell.crossings as f64 * monthly * across) as f32));
+        (f[PARTS_HERE], f[CROSSED]) = (ln(1.0 + (cell.parts.iter().map(|p| p.count).sum::<f64>() * per) as f32), ln(1.0 + (cell.crossings as f64 * monthly * across) as f32));
         f
     }).collect();
     sights(w, &mut feat);

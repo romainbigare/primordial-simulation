@@ -140,7 +140,7 @@ fn copies_of_a_structure_are_counted() {
     let found = cards(&dir, "structure");
     assert_eq!(found.len(), 2, "{found:?}");
     let (pairs, singles) = (found.iter().find(|c| c["parts"] == 2).unwrap(), found.iter().find(|c| c["parts"] == 1).unwrap());
-    assert_eq!((pairs["count"].as_u64(), singles["count"].as_u64()), (Some(3), Some(2)));
+    assert_eq!((pairs["count"].as_f64(), singles["count"].as_f64()), (Some(3.0), Some(2.0)));
     assert_eq!((pairs["held_share"].as_f64(), pairs["enclosed_share"].as_f64()), (Some(0.0), Some(0.0)));
     assert!(pairs["mass"].as_f64().unwrap() > 0.0);
     // The pair stood at the first snapshot; the singles are new.

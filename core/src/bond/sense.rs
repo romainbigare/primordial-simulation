@@ -98,13 +98,13 @@ pub(crate) fn sense(c: &Cell, w: &World, b: &Body, mb: f64) -> [f32; SENSE] {
     x
 }
 
-/// What a body perceives of the part at `p` of its cell `c`: ln mass ratio, hardness, hollowness, ln length, its edge
-/// (`edge_seen`), how closed its structure is, held, the share the body would take.
+/// What a body perceives of the part at `p` of its cell `c` (of a lot, of one of its parts): ln mass ratio, hardness,
+/// hollowness, ln length, its edge (`edge_seen`), how closed its structure is, held, the share the body would take.
 pub fn features(c: &Cell, w: &World, b: &Body, p: usize, mb: f64) -> [f32; NO] {
     let (pt, chem) = (&c.parts[p], &w.chem);
     let s = &c.parts[root(c, p)].s;
-    let m = pt.mass(chem);
-    let want: f64 = b.k.upt.iter().map(|&(k, u)| u as f64 * (pt.wall[k] + pt.fill[k]) * chem.subs[k].molar_mass).sum();
+    let m = pt.mass(chem) / pt.count;
+    let want: f64 = b.k.upt.iter().map(|&(k, u)| u as f64 * (pt.wall[k] + pt.fill[k]) / pt.count * chem.subs[k].molar_mass).sum();
     let ln = crate::brain::ln;
     [ln((m / mb) as f32) / LN_MASS, pt.walls(chem).hardness as f32, pt.hollow, ln(pt.size[0]) / LN_SIZE_SCALE, edge_seen(c, w, b, p), s.encl.closed, (pt.held != NOBODY) as u8 as f32, (want / m.max(1e-9)) as f32]
 }

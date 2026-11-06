@@ -140,10 +140,10 @@ space it closes) with the bonds; it is drawn as avatars and is not recorded.
 | `form_<k>` | 1/yr | members that drew "form" in the year, by starting kind k (`Lineage::root`; every kind seen keeps its column) |
 | `form_size_<c>` | 1/yr | the same by size class c of the brain: 2^c to 2^(c+1) - 1 hidden units (the last class all larger) |
 | `form_learned`, `form_chance` | 1/yr | the same by whether "form" had the top score when drawn (learned) or not (chance) |
-| `parts`, `parts_held`, `parts_mass`, `parts_formed` | , , t, 1/yr | made objects, of them held; their mass; formed in the year |
+| `parts`, `part_records`, `parts_held`, `parts_mass`, `parts_formed` | , , , t, 1/yr | made objects, each part of a lot counted (laws.md 3.1); the records that hold them; of them held; their mass; formed in the year |
 | `put_to_parts`, `taken_from_parts` | kg/yr | stores put into and taken from parts |
 | `edge_kg` | kg/yr | what bites took from bodies and the cover where a held edge cut (laws.md 3.3) |
-| `bonds_joined`, `structures`, `enclosed` | | bonds between parts; structures of more than one part; enclosed ones |
+| `bonds_joined`, `structures`, `enclosed` | | bonds between parts; structures of more than one part; enclosed ones (each part of a lot one) |
 | `made_held`, `made_joined`, `bonds_broken`, `bonds_failed` | 1/yr | bonds made by kind; broken by bodies; failed by load |
 | `inside_now`, `inside_cold`, `inside_warm`, `cold_months` | , , , 1/yr | bodies inside walls now; share of the eaters' body-months inside in the cold and the warm; their cold months |
 | `holding_liquid`, `liquid_held` | , kg | parts holding liquid and how much |

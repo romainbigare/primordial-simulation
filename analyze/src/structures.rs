@@ -12,9 +12,10 @@ use std::path::Path;
 use tape::Kept;
 use worldgen::schedule::Schedule;
 
-/// What one structure is: its hash, and its numbers.
+/// What one structure is: its hash, its copies (a lot's count) and the numbers of each copy.
 struct Found {
     hash: u64,
+    copies: f64,
     parts: usize,
     mass: f64,
     hollow: f64,
@@ -36,8 +37,9 @@ fn cell_structures(w: &World, i: usize) -> Vec<Found> {
             let root = parts.iter().find(|p| p.id == p.root).unwrap_or(&parts[0]);
             Found {
                 hash: designs[&r],
+                copies: root.count,
                 parts: parts.len(),
-                mass: parts.iter().map(|p| p.mass(&w.chem)).sum(),
+                mass: parts.iter().map(|p| p.mass(&w.chem) / p.count).sum(),
                 hollow: parts.iter().map(|p| p.hollow as f64).sum::<f64>() / parts.len() as f64,
                 enclosed: root.s.encl.closed >= tape::ENCLOSED,
                 held: parts.iter().any(|p| p.held != NOBODY),
@@ -47,8 +49,9 @@ fn cell_structures(w: &World, i: usize) -> Vec<Found> {
 }
 
 /// The cards of the structures in the snapshots of `dir` (`snap_*.bin.gz`, oldest first), and the years of the snapshots.
-/// A card is of a hash with `REPEAT_MIN` copies or more in the last snapshot; its count and numbers are the last
-/// snapshot's, its first seen is the earliest snapshot with the hash.
+/// A card is of a hash with `REPEAT_MIN` copies or more in the last snapshot (a lot of alike parts counts its parts);
+/// its count and numbers (means by copies) are the last snapshot's, its first seen is the earliest snapshot with the
+/// hash.
 pub fn read(dir: &Path) -> io::Result<(Vec<Value>, Vec<f64>)> {
     let mut files: Vec<_> = std::fs::read_dir(dir)?
         .filter_map(|e| e.ok().map(|e| e.path()))
@@ -68,20 +71,21 @@ pub fn read(dir: &Path) -> io::Result<(Vec<Value>, Vec<f64>)> {
     for s in &last {
         copies.entry(s.hash).or_default().push(s);
     }
-    let share = |c: &[&Found], f: fn(&Found) -> bool| c.iter().filter(|s| f(s)).count() as f64 / c.len() as f64;
+    let all = |c: &[&Found]| c.iter().map(|s| s.copies).sum::<f64>();
+    let mean = |c: &[&Found], f: fn(&Found) -> f64| c.iter().map(|s| s.copies * f(s)).sum::<f64>() / all(c);
+    let share = |c: &[&Found], f: fn(&Found) -> bool| c.iter().filter(|s| f(s)).map(|s| s.copies).sum::<f64>() / all(c);
     let cards = copies
         .iter()
-        .filter(|(_, c)| c.len() >= REPEAT_MIN)
+        .filter(|(_, c)| all(c) >= REPEAT_MIN as f64)
         .map(|(hash, c)| {
-            let n = c.len() as f64;
             let seen = first[hash];
             let mut card = json!({
                 "pattern_id": format!("struct-{hash:016x}"),
                 "category": "structure",
-                "count": c.len(),
+                "count": all(c),
                 "parts": c[0].parts,
-                "mass": c.iter().map(|s| s.mass).sum::<f64>() / n,
-                "hollow": c.iter().map(|s| s.hollow).sum::<f64>() / n,
+                "mass": mean(c, |s| s.mass),
+                "hollow": mean(c, |s| s.hollow),
                 "enclosed_share": share(c, |s| s.enclosed),
                 "held_share": share(c, |s| s.held),
                 "first_seen_year": years[seen],
