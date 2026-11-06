@@ -1,15 +1,17 @@
 //! Law 1: Flow. Stuff moves along links from high push to low push, with loss (laws.md 1). `scratch`: the law's
-//! working memory (`spare`: room its passes keep); `land`: the state and surface of ground nodes; `liquid`, `drain`,
-//! `deep`, `basin`, `creep`; `air`: radiation, exchange and wind in one step; `potential` with `stack`: the potential
-//! energy of the matter and its booking.
+//! working memory (`spare`: room its passes keep); `land`: the state and surface of ground nodes; `liquid` (its pass,
+//! `runoff`, and the potential energy the pass carries, `falls`), `drain`, `deep`, `basin`, `creep`; `air`: radiation,
+//! exchange and wind in one step; `potential` with `stack`: the potential energy of the matter and its booking.
 
 pub(crate) mod air;
 mod creep;
 mod deep;
 mod drain;
+mod falls;
 mod land;
 mod liquid;
 mod potential;
+mod runoff;
 mod scratch;
 mod spare;
 mod stack;

@@ -269,11 +269,13 @@ with the seeds it sends until they land, its parts) at its cell's head. The part
 booked as one at their end; the survey's own
 build of Flow's state, and a part run alone, are booked at their own end. In each booking every move carries its
 potential energy from the height it leaves (a ground node's head, an air node's mean head, a store's table, each the
-mean of the booking's start and end, so a lake that drains whole takes along what it held), and each node's heat takes
-what came in less what left less the change of its own (`store::fall_heat`; less what a part gave it on the way,
-as the liquid's pass gives the heat of its falls to what lands, 1.2):
+mean of the booking's start and end, so a lake that drains whole takes along what it held), but the moves of the
+liquid's pass, which carry it from the head their cell is left at, as the pass books them (`potential::apply_carried`,
+1.2); and each node's heat takes what came in less what left less the change of its own (`store::fall_heat`; less what
+a part gave it on the way, as the liquid's pass gives the heat of its falls to the liquid that lands, 1.2):
 so a fall heats where the matter lands, a lift is paid by the node it enters (the air, for a gas going up; the ground
-node a store's liquid rises into), a column that rises as it fills pays for it, and the potential energy the world's
+node a store's liquid rises into) and a climb of the liquid in its pass by the heat the liquid carries (1.2), a column
+that rises as it fills pays for it, and the potential energy the world's
 matter gained is one number of the store (`Store::lifted`), the change of that function. Within a month's Flow the later
 air steps and the liquid read the heat before the month's lifts and falls are paid. The other laws lift a gas into
 the air from its cell's head to its air node's mean ground by the same rule (`World::lift`); a ground node that reacts
@@ -342,15 +344,15 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
   the map in one step while depressions fill and spill. Lakes (closed basins above the sea) fill and spill this way.
   The pass goes by falling spill level, and at one level the cell the flood reached last first, so each cell comes
   before its way out whether its liquid stands or passes on: a river crosses a lake in the step it reaches it.
-- **Running off** (`solve::downhill`): each cell but the sea's sends its liquid down its steepest way by D-infinity
-  (Tarboton 1997; `Level::steepest`): two neighbours next in compass order make a triangle with the centre, the plane
-  through their drops gives its slope and way, and the steepest triangle shares the liquid between its two neighbours
-  by angle. To a neighbour already passed whose liquid stands it sends at most what levels the two heads, whatever
-  their areas, and no more than fills it to its spill level; a neighbour still to come whose liquid stands holds it
-  back no higher than its spill level (what stands over that passes on). What the steepest way cannot take runs down
-  the other ways, the steepest first, each as far as it takes, so a month's river through a small cell stands in no
-  column; to one already passed whose liquid passes on (upstream in the flood) it sends none, so a pit over its
-  rim spills by its way out. What reaches a sea cell stays there and joins the sea.
+- **Running off** (`flow::runoff`, `solve::downhill`): each cell but the sea's sends its liquid down its steepest way by
+  D-infinity (Tarboton 1997; `Level::steepest`): two neighbours next in compass order make a triangle with the centre,
+  the plane through their drops gives its slope and way, and the steepest triangle shares the liquid between its two
+  neighbours by angle. To a neighbour already passed whose liquid stands it sends at most what levels the two heads,
+  whatever their areas, and no more than fills it to its spill level; a neighbour still to come whose liquid stands
+  holds it back no higher than its spill level (what stands over that passes on). What the steepest way cannot take
+  runs down the other ways, the steepest first, each as far as it takes, so a month's river through a small cell
+  stands in no column; to one already passed whose liquid passes on (upstream in the flood) it sends none, so a pit
+  over its rim spills by its way out. What reaches a sea cell stays there and joins the sea.
 - **Pore water** flows by Darcy's law (one explicit `solve::sweep` on the liquid table, the store's too): `seep` ×
   saturated thickness × width / distance, at most half of what would level two cells, and no cell giving more than it
   holds over field capacity; pores at or under field capacity (`field`) give nothing. Over cells of kilometres a
@@ -365,14 +367,20 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
   keeps its fusion heat whatever the node's phase and leaves at the temperature of the node mixed with what came in
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node
   holds and what stays keeps that temperature. A salt is a liquid that never
-  boils (11, 12): it moves with the liquid and stays when it evaporates. Its fall heats the node it lands in (0, "The
-  books"): in the pass, from the height it leaves to the head it lands at, so what runs on from there takes its share
-  of that heat along as the liquid does, and the booking at the end gives the node only the rest (`Lifts::give`). The
-  heights are the booking's: the head it lands at as at the booking's start, and the height it leaves the mean of its
-  cell's head then and at the end, as the pass leaves it (`liquid::give_falls`: the head at the pass's start,
-  `potential::heads`, and what the cell kept and the loads it took and left). So a column that runs off whole falls from
-  its middle, and the booking takes back from no node heat the pass gave and the liquid took on (0, "No overdraw"). The
-  head it loses on the way out does work (1.3).
+  boils (11, 12): it moves with the liquid and stays when it evaporates. **Its potential energy goes with it**
+  (`flow::falls`; 0, "The books"): each move carries it from the head its cell is left at, as the pass leaves it (the
+  head the booking stacks at the pass's start, `potential::heads`, and what the cell kept and the loads it took and
+  left), and the booking takes the pass's moves as carrying just that (`potential::apply_carried`). At a cell's visit
+  what came in, the cell's own column and what leaves settle: the fall of what came in to the cell's head, and of its
+  column from its middle (the mean of its head before and after) to where it is left, turns to heat in the liquid that
+  came in before it mixes with the node, so what runs on takes its share along, and a column that runs off whole falls
+  from its middle. A cell already passed takes what lands at once, the fall to the middle of the layer it makes; a sea
+  cell, the fall to its head. Where what came in left from lower than the cell is left at (a cell filled after a
+  neighbour sent to it), the settling is a climb, and the liquid pays it from the heat it carries, which holds its
+  falls: no node that does not hold it pays. In the pass the liquid only goes down, to a lower surface, so a climb is
+  no more than the relief between neighbours, and the heat of a liquid would lift it a hundred kilometres (c T / g).
+  The heat of the falls lands in the ground nodes before the crossings book what runs on, and a climb is paid after
+  them, so no node gives more than it holds (0, "No overdraw"). The head it loses on the way out does work (1.3).
 
 ### 1.3 Erosion and creep
 The head lost by moving liquid does work where it is lost on land (`flow::liquid::load`, `wear`; below 0 m its load

@@ -29,7 +29,7 @@ pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
     let down: Vec<u32> = sinks.iter().map(|c| c.0).collect();
     let sunk = carry(&sinks, &liq, |q, i| mob.mol[q * n + i], |i, _, mol| liquid_heat(w, s, &liq, i, mol));
     let liq16: Vec<u16> = liq.iter().map(|&k| k as u16).collect();
-    book(w, s, &[LinkFlux { class: [Class::Ground, Class::Deep], a: &down, b: &down, ks: &liq16, mol: &sunk.0, heat: &sunk.1 }]);
+    book(w, s, &[LinkFlux { class: [Class::Ground, Class::Deep], a: &down, b: &down, ks: &liq16, mol: &sunk.0, heat: &sunk.1 }], None);
 }
 
 /// The heat of `mol` of the liquids `liq` leaving ground node `i`, at the node's temperature now, J (`liquid_heat_at`).
@@ -61,7 +61,7 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
     let (liq16, deep16): (Vec<u16>, Vec<u16>) = (liq.iter().map(|&k| k as u16).collect(), deep.iter().map(|&k| k as u16).collect());
     let mut fluxes = vec![LinkFlux { class: [Class::Ground; 2], a: &pores.a, b: &pores.b, ks: &liq16, mol: &pores.mol, heat: &pores.heat }];
     fluxes.extend(in_stores.iter().map(|c| LinkFlux { class: [Class::Deep; 2], a: &c.a, b: &c.b, ks: &deep16, mol: &c.mol, heat: &c.heat }));
-    book(w, s, &fluxes);
+    book(w, s, &fluxes, None);
     let (held, area) = (stores(w, s, tmin), w.mesh.cells().area());
     let full = |i: usize| p.bed_porosity * p.bed_depth * area[i];
     let over: Vec<f64> = held.iter().enumerate().map(|(i, &v)| if v > full(i) { (v - full(i)) / v } else { 0.0 }).collect();
@@ -149,7 +149,7 @@ fn come_up(w: &mut World, s: &mut Scratch, tmin: f64, share: &[f64]) -> Vec<f64>
             got[i] += if sp.boil > tmin { m * sp.v[1] * wet(s, k, i) } else { 0.0 };
         }
     }
-    book(w, s, &[LinkFlux { class: [Class::Deep, Class::Ground], a: &up, b: &up, ks: &ks16, mol: &mol, heat: &heat }]);
+    book(w, s, &[LinkFlux { class: [Class::Deep, Class::Ground], a: &up, b: &up, ks: &ks16, mol: &mol, heat: &heat }], None);
     got
 }
 

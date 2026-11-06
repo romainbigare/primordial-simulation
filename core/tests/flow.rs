@@ -883,6 +883,65 @@ fn a_column_that_runs_off_whole_falls_from_its_middle() {
     assert!(left < 1.0 && lost <= 1e-9 * fall, "{left} m of the column left, {lost:e} J of heat rounded away against its fall of {fall:e} J");
 }
 
+/// The pool of `flooded_pool`, row by row in its 4 x 4 cells: the pool, its pit and the sill it spills over.
+const POOL: [usize; 4] = [5, 6, 9, 10];
+const PIT: usize = 5;
+const SILL: usize = 1;
+/// The pool's cell farthest from the sill, where the flood is poured.
+const FAR_SIDE: usize = 10;
+/// How far the pool lies under its rim, m (the sill half as far).
+const LIP_M: f64 = 2.0;
+/// How far the pit lies under the rest of the pool, m.
+const DEEP_M: f64 = 100.0;
+/// The flood, m of liquid over a small cell.
+const FLOOD_M: f64 = 5000.0;
+/// How far over the liquid's melting point the scene's ground lies, K: no ice or soft cover moves its surfaces.
+const THAWED_K: f64 = 10.0;
+
+/// A flood through a pool with a dry pit (laws.md 1.2): the island's highest square cut flat into 16 cells of a quarter
+/// of its side, raised by bonded rock (which adds the ground node no heat capacity: it lies under the skin), so that a
+/// pool of 4 (`POOL`) lies `LIP_M` under a rim of the other 12, which it spills over at the sill (`SILL`, half as
+/// high), and the pool's cell next to the sill, the pit (`PIT`), lies `DEEP_M` under the rest of the pool; the ground is
+/// `THAWED_K` over the melting point. The pool stands full to the sill but for the pit, which is dry, and the flood
+/// (`FLOOD_M` over a small cell) is poured on the pool's cell farthest from the sill. Wear and carrying are off, so the
+/// ground stays as it is. Returns the world and the small cells row by row.
+fn flooded_pool() -> (World, Vec<usize>) {
+    let mut w = worldgen::testkit::squares(1, 32, 32);
+    (w.cfg.phys.porosity, w.cfg.phys.seep, w.cfg.evap, w.cfg.wear, w.cfg.carry) = (0.0, 0.0, 0.0, 0.0, 0.0);
+    let square = w.map.leaves()[top(&w)];
+    worldgen::testkit::split_flat(&mut w, &[square], 2);
+    let small: Vec<usize> = (0..16).map(|x| (x / 4, x % 4)).map(|(r, c)| w.map.cell(square.quarters()[r / 2 * 2 + c / 2].quarters()[r % 2 * 2 + c % 2]).expect("a small cell")).collect();
+    let (n, area, rock_m3) = (w.mesh.cells().n(), w.mesh.cells().area()[small[0]], 1.0 / w.chem.molar_volume(worldgen::testkit::ROCK, Phase::Solid));
+    let thawed = w.chem.subs[LIQUID].melt + THAWED_K;
+    for (x, &i) in small.iter().enumerate() {
+        let raise = if x == PIT { 0.0 } else { DEEP_M + if x == SILL { LIP_M / 2.0 } else if POOL.contains(&x) { 0.0 } else { LIP_M } };
+        let bed = w.store.amounts(Class::Bed)[worldgen::testkit::ROCK * n + i];
+        set_amount(&mut w, Node::new(Class::Bed, i), worldgen::testkit::ROCK, bed + raise * area * rock_m3);
+        hold_ground(&mut w, i, thawed);
+    }
+    pcore::flow::refresh(&mut w);
+    POOL.iter().filter(|&&x| x != PIT).for_each(|&x| pour(&mut w, small[x], LIP_M / 2.0 * area));
+    pour(&mut w, small[FAR_SIDE], FLOOD_M * area);
+    (w, small)
+}
+
+/// A flood that fills a dry pit on its way and crosses a cold, dry sill keeps its books (laws.md 0, 1.2): the
+/// potential energy the liquid carries goes on with it, and what it would climb from where the pit held it to the sill
+/// (the pit's head rose under it as it filled) is paid from the heat the liquid carries, which holds its falls, not by
+/// the sill's ground, which holds less than that climb. No heat is rounded away (an overdraw) and the books are kept.
+#[test]
+fn a_flood_through_a_pit_pays_its_climb_from_its_own_heat() {
+    let (mut w, small) = flooded_pool();
+    let flood = liquid_m3(&w, small[FAR_SIDE]) / w.chem.molar_volume(LIQUID, Phase::Liquid) * w.chem.subs[LIQUID].molar_mass;
+    let (climb, sill_heat) = (flood * w.cfg.gravity * DEEP_M / 2.0, w.store.heat(Class::Ground)[small[SILL]]);
+    assert!(climb > sill_heat, "the scene asks the sill for {climb:e} J, it holds {sill_heat:e} J");
+    let (books, rounded) = (Books::now(&w), w.counts.rounded[1]);
+    flow_step(&mut w, LIQUID_STEP);
+    let lost = w.counts.rounded[1] - rounded;
+    assert!(lost <= 1e-9 * climb, "{lost:e} J of heat rounded away");
+    books.assert_within(&w, 1e-9, 1e-9);
+}
+
 /// The height the liquid of cell `i` stands at, m: its solid surface, and above it the liquid over what its pores hold.
 fn liquid_top(w: &World, i: usize) -> f64 {
     let (t, plateau) = w.thaw_last(i);

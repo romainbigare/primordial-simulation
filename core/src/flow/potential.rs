@@ -198,11 +198,13 @@ pub(crate) fn air_head(w: &World, j: usize) -> f64 {
 }
 
 /// A part of Flow being booked, or the parts that follow each other (`flow::chain`): the potential energy of every node
-/// at their start, and the mass their moves carried so far (`carry`).
+/// at their start, the mass their moves carried so far (`carry`), the potential energy that came into each ground node
+/// less what left by the moves a part books itself (`apply_carried`), and the heat their falls gave on the way (`give`).
 #[derive(Clone, Debug)]
 pub(super) struct Lifts {
     start: Potential,
     moved: Vec<Moved>,
+    carried: Vec<f64>,
     given: Vec<f64>,
 }
 
@@ -252,18 +254,20 @@ impl Lifts {
     /// From the world now, whose potential energy is `known` where the last part left it so, its moves gathered in
     /// `moved` (empty; kept from part to part for its room).
     pub(super) fn start(w: &World, s: &Scratch, known: Option<Potential>, moved: Vec<Moved>) -> Lifts {
-        Lifts { start: known.unwrap_or_else(|| potential(w, s, None)), moved, given: Vec::new() }
+        Lifts { start: known.unwrap_or_else(|| potential(w, s, None)), moved, carried: Vec::new(), given: Vec::new() }
     }
-    /// The height ground node `i`'s matter left from at the start, m (its head).
-    pub(super) fn head_at_start(&self, i: usize) -> f64 {
-        self.start.heights.ground[i]
-    }
-    /// Heat of falls given on the way to the ground nodes the matter lands in, `q[i]` J (`store::fall_heat`, against
-    /// `Store::lifted`), so what passes on takes its share; the booking at the end gives them only the rest.
+    /// Heat of falls given on the way to the ground nodes the matter lands in, `q[i]` J (less than none for a climb the
+    /// moving matter paid; `store::fall_heat`, against `Store::lifted`), so what passes on takes its share; the booking
+    /// at the end gives them only the rest.
     pub(super) fn give(&mut self, w: &mut World, q: &[f64]) {
         fall_heat(w, Class::Ground, q.iter().copied().enumerate());
         self.given.resize(q.len(), 0.0);
         self.given.iter_mut().zip(q).for_each(|(g, &x)| *g += x);
+    }
+    /// `e[i]` J of potential energy came into ground node `i` less what left, by moves their part books itself.
+    fn carry_energy(&mut self, e: &[f64]) {
+        self.carried.resize(e.len(), 0.0);
+        self.carried.iter_mut().zip(e).for_each(|(c, &x)| *c += x);
     }
     /// `kg` go from node `from` to node `to` (back where negative).
     fn carry(&mut self, (from, to): ((Class, u32), (Class, u32)), kg: f64) {
@@ -279,13 +283,14 @@ impl Lifts {
     }
     /// Book the part's lifts and falls (or those of the parts that follow each other, `flow::chain`): each mass moved
     /// carries its potential energy from the height it left, the mean of its node's height at the start and at the end
-    /// (so a node's own matter that leaves it, however much, takes what it held of it); each node's heat takes what
-    /// came in less what left less the change of its own potential energy (`store::fall_heat`, which adds their sum to
+    /// (so a node's own matter that leaves it, however much, takes what it held of it), but the moves a part books
+    /// itself, which carry what it says (`apply_carried`); each node's heat takes what came in less what left less the
+    /// change of its own potential energy (`store::fall_heat`, which adds their sum to
     /// `Store::lifted`). A bodies' node's gas lies at its cell's head, which the part moves with the ground's matter,
     /// not its own: what its lifts and falls give or take is its ground node's (a bodies' node holds little heat of its
     /// own). Returns the potential energy now, and the room of its moves, emptied.
     pub(super) fn book(self, w: &mut World, s: &Scratch) -> (Potential, Vec<Moved>) {
-        let (mut start, mut moved, given) = (self.start, self.moved, self.given);
+        let (mut start, mut moved, carried, given) = (self.start, self.moved, self.carried, self.given);
         let (now, g) = (potential(w, s, Some(std::mem::take(&mut start.found))), w.cfg.gravity);
         let olds = start.energies();
         let mut q: [Vec<f64>; 4] = now.energies().map(|v| vec![0.0; v.len()]);
@@ -302,6 +307,7 @@ impl Lifts {
         }
         let [ground, air, deep, bodies] = &mut q;
         ground.iter_mut().zip(bodies.iter_mut()).for_each(|(g, b)| *g += std::mem::take(b));
+        ground.iter_mut().zip(&carried).for_each(|(g, carried)| *g += carried);
         ground.iter_mut().zip(&given).for_each(|(g, given)| *g -= given);
         for (class, q) in [(Class::Ground, ground), (Class::Air, air), (Class::Deep, deep)] {
             fall_heat(w, class, q.iter().copied().enumerate());
@@ -314,12 +320,7 @@ impl Lifts {
 /// link the mass of all its substances that goes each way.
 pub(super) fn apply(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], moves: &[Move]) {
     if let Some(l) = s.lifts.as_mut() {
-        let holds = &mut l.start.found.holds;
-        let mut into = |class: Class, k: u16| HELD.iter().zip(holds.iter_mut()).filter(|c| *c.0 == class).for_each(|(_, b)| *b |= 1 << k);
-        for x in fluxes {
-            x.class.iter().for_each(|&c| x.ks.iter().for_each(|&k| into(c, k)));
-        }
-        moves.iter().for_each(|m| [m.from.class, m.to.class].iter().for_each(|&c| into(c, m.k)));
+        holds(l, fluxes, moves);
         for x in fluxes.iter().filter(|x| !x.ks.is_empty()) {
             // Per link the mass that goes each way, summed over its substances in their order (a flux of heat alone
             // carries none).
@@ -344,6 +345,26 @@ pub(super) fn apply(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], moves: 
         }
     }
     store::apply(w, fluxes, moves);
+}
+
+/// Book `fluxes` (`store::apply`), whose potential energy their part books itself: `e[i]` J came into ground node `i`
+/// less what left (the liquid's pass, `Falls`), for the part of Flow under way (`Lifts`).
+pub(super) fn apply_carried(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], e: &[f64]) {
+    if let Some(l) = s.lifts.as_mut() {
+        holds(l, fluxes, &[]);
+        l.carry_energy(e);
+    }
+    store::apply(w, fluxes, &[]);
+}
+
+/// The classes of `HELD` that `fluxes` and `moves` book into may hold their substances from now on (`Found::holds`).
+fn holds(l: &mut Lifts, fluxes: &[LinkFlux], moves: &[Move]) {
+    let holds = &mut l.start.found.holds;
+    let mut into = |class: Class, k: u16| HELD.iter().zip(holds.iter_mut()).filter(|c| *c.0 == class).for_each(|(_, b)| *b |= 1 << k);
+    for x in fluxes {
+        x.class.iter().for_each(|&c| x.ks.iter().for_each(|&k| into(c, k)));
+    }
+    moves.iter().for_each(|m| [m.from.class, m.to.class].iter().for_each(|&c| into(c, m.k)));
 }
 
 /// `v`, where it holds anything.

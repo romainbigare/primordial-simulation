@@ -74,7 +74,7 @@ pub(super) fn level(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64) {
     let (a, b, mol, heat) = share_out(&basin.cells, (&held, &vol), &want, liq.len());
     let ks: Vec<u16> = liq.iter().map(|&k| k as u16).collect();
     s.basin = basin;
-    book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &ks, mol: &mol, heat: &heat }]);
+    book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &ks, mol: &mol, heat: &heat }], None);
     // The basin's cells, which the runoff and the level moved, find their state again before their heat mixes, and
     // after it.
     let cells = std::mem::take(&mut s.basin.cells);
