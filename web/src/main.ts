@@ -23,8 +23,9 @@ const FINE_CELL_PX = 6;
 /** Time the view rests before the core is told where it looks, ms. */
 const LOOK_MS = 150;
 /** Minutes without input (a zoom, a pan, a click, a key) after which the page sends the camera away, as a camera change
- * the run records: the core then joins the fine cells back, and the world runs at the coarse pace again. */
-const IDLE_MINUTES = 3;
+ * the run records: the core then joins the fine cells back to those as built, and the world runs at the coarse pace again.
+ * The page's `?idle=MINUTES` sets it for a test. */
+const IDLE_MINUTES = Number(new URLSearchParams(location.search).get('idle')) || 3;
 /** How often the page checks for that, ms. */
 const IDLE_CHECK_MS = 1000;
 
@@ -306,11 +307,11 @@ function touched(): void {
   if (live) showStats(live.stats);
 }
 for (const kind of ['pointerdown', 'wheel', 'keydown']) addEventListener(kind, touched, { capture: true, passive: true });
-/** After `IDLE_MINUTES` without input the camera goes away: the fine raster goes and the core is told to look at nothing. */
+/** After `IDLE_MINUTES` without input the camera goes away: the fine raster goes and the core is told to look at nothing and to bring its cells back to those as built. */
 setInterval(() => {
   if (!live || !world || idle || performance.now() - lastInput < IDLE_MINUTES * 60_000) return;
   idle = true;
-  if (looking !== JSON.stringify(null)) { looking = JSON.stringify(null); fine = null; map.setFine(null); live.look(null); }
+  looking = JSON.stringify(null); fine = null; map.setFine(null); live.look(null, true);
   showStats(live.stats);
 }, IDLE_CHECK_MS);
 

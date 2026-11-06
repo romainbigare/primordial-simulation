@@ -41,8 +41,8 @@ export class Live {
   play(on: boolean): void { this.worker.postMessage({ cmd: 'play', on }); }
   /** Months of the world per second of real time. */
   rate(monthsPerSecond: number): void { this.worker.postMessage({ cmd: 'rate', rate: monthsPerSecond }); }
-  /** Look at a window (the core refines the cells there and the frames carry a raster of it), or at the whole map only. */
-  look(look: Look | null): void { this.worker.postMessage({ cmd: 'look', look }); }
+  /** Look at a window (the core refines the cells there and the frames carry a raster of it), or at the whole map only; `rest`: the camera is away and the cells go back to those as built. */
+  look(look: Look | null, rest = false): void { this.worker.postMessage({ cmd: 'look', look, rest }); }
   /** Ask with every frame for the things of a window (x, y, w, h in squares) to draw one by one, or for none. */
   things(at: [number, number, number, number] | null): void { this.worker.postMessage({ cmd: 'things', at }); }
   stop(): void { this.worker.terminate(); URL.revokeObjectURL(this.url); }

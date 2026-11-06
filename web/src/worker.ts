@@ -10,7 +10,7 @@ interface Core {
   meta(): number;
   frame(): number;
   frame_window(x: number, y: number, w: number, h: number, across: number, down: number): number;
-  set_camera(x: number, y: number, w: number, h: number, depth: number): void;
+  set_camera(x: number, y: number, w: number, h: number, depth: number, rest: number): void;
   things(x: number, y: number, w: number, h: number): number;
   cells(): number;
   finest(): number;
@@ -21,7 +21,7 @@ type Command =
   | { cmd: 'new'; seed: number; size: number }
   | { cmd: 'play'; on: boolean }
   | { cmd: 'rate'; rate: number }
-  | { cmd: 'look'; look: Look | null }
+  | { cmd: 'look'; look: Look | null; rest: boolean }
   | { cmd: 'things'; at: [number, number, number, number] | null };
 
 /** What the page looks at: the window in map squares (from column x and row y), the depth of cells it asks for, and the raster of it that comes back (across x down pixels). */
@@ -46,6 +46,8 @@ let timer = 0;
 /** The window the page looks at (null: the whole map only), and whether the camera is on it. */
 let look: Look | null = null;
 let cameraOn = false;
+/** Whether the camera was sent away to rest (the core's budget of cells is then the cells as built). */
+let resting = false;
 /** The window (x, y, w, h in squares) whose things the page draws one by one (null: none). */
 let thingsAt: [number, number, number, number] | null = null;
 /** The months stepped since `since` (ms), and the pace measured over the last whole second, months per second. */
@@ -103,15 +105,16 @@ host.onmessage = async e => {
     } else if (m.cmd === 'new' && core) {
       start(false);
       if (core.new_world(m.seed, m.size) !== 0) throw new Error('The world was refused.');
-      due = 0; look = null; cameraOn = false; thingsAt = null; stepped = pace = 0;
+      due = 0; look = null; cameraOn = false; resting = false; thingsAt = null; stepped = pace = 0;
       postFrame('world');
     } else if (m.cmd === 'play') start(m.on);
     else if (m.cmd === 'rate') rate = m.rate;
     else if (m.cmd === 'look' && core) {
       look = m.look;
-      if (look) core.set_camera(look.x, look.y, look.w, look.h, look.depth);
-      else if (cameraOn) core.set_camera(0, 0, 0, 0, 0);
+      if (look) core.set_camera(look.x, look.y, look.w, look.h, look.depth, 0);
+      else if (cameraOn || resting || m.rest) core.set_camera(0, 0, 0, 0, 0, m.rest ? 1 : 0);
       cameraOn = look !== null;
+      resting = m.rest;
       if (!playing) postFrame('frame');
     } else if (m.cmd === 'things' && core) {
       thingsAt = m.at;

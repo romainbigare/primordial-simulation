@@ -40,10 +40,10 @@ split or a join of other cells leaves it whole; the land is listed again after a
 
 **The camera's path** (`ew run --camera FILE`, `refine::Camera`) is an input of the run, as the placements of life
 are: refinement reads it at each month's start (laws.md 0), so the same seed, flags and path give the same world. The
-viewer's file holds it as `camera`, a list of shots in the order of their months, each `{month, x, y, w, h, depth}`:
+viewer's file holds it as `camera`, a list of shots in the order of their months, each `{month, x, y, w, h, depth, rest}`:
 from month `month` on (whole months since the start) the window from column `x` and row `y` of the map, `w` x `h`
 squares, asks for cells of `depth` below their air block (a square of an island is depth 2); a window of no area is
-the camera gone. A snapshot carries it in the run's plan.
+the camera gone, and with `rest` the budget of cells is the cells as built from that month on (laws.md 0). A snapshot carries it in the run's plan.
 
 **A globe in the viewer's file.** The header has `globe` (the rows wrap east to west), `lat_north` and `lat_south` (the
 latitudes of the north and south edges, degrees; 90 and -90 on a globe). The grid is the map: row `y` of `h` lies at
