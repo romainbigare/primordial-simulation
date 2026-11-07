@@ -844,11 +844,12 @@ eat with it at every sub-step after, whatever the step. A child has a body of
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
 dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member
 (`copy::BROOD_HELD`), so its members' broods lie evenly between none and one child, as individuals' do. A share
-`DISPERSE` of the children starts `spread_m` away in a random compass direction (`copy::dispersed`, `Level::way`):
-out of its cell with the chance that what spreads that far from a point of it leaves it (`Level::reach`: always out of
-a 2 km square, a quarter of the time out of an 8 km one), and on the same way through each further cell the length
-left crosses whole, into the last with the share of its side left (four cells on from a cell of 500 m), so they go as
-far in metres whatever the cells; one way for all of a node's children of an update (for an individual, that chance),
+`DISPERSE` of the children starts `spread_m` away in a random compass direction (`copy::dispersed`): from a point of
+its cell drawn evenly over it, `spread_m` east or west and north or south as the direction says, in the cell that holds
+the point reached (`Tree::at`; none if that is its own cell or off the map): the neighbour that way of a 2 km square,
+the cell four on of a cell of 500 m, out of an 8 km cell across a side a quarter of the time. So they go as far in
+metres whatever the cells, and the links of a cell (at most 8, so a cell beside finer ones lacks some directions,
+`Square`) do not turn them back; one way for all of a node's children of an update (for an individual, that chance),
 where they land when the batch ends (0). Less than one member with no node to
 join waits in the brood, or, landed in a neighbour cell, goes back into it. Children who start a body in their parent's
 cell run the sub-steps after their birth, eating by the take law, and first decide at the cell's next step; those who
@@ -983,7 +984,7 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
 - **Seeds**: the share `SEED` of what it builds leaves `spread_m` away in a random compass direction, as children do
-  (`copy::dispersed`, 4.2; or stays where there is none), with one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
+  (`copy::dispersed`, 4.2; or stays where that is its own cell or off the map), with one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
   not pay: what a kg more would store with the light at the bottom of its layer (`math::shade`) is less than a kg's
   upkeep, so the slot is **full** (`Cover::full`) and stops thickening where its lowest leaves would not pay for
   themselves (Monsi and Saeki 1953; Hirose 2005). When every cell has had its month the seeds land (`cover::land`),
