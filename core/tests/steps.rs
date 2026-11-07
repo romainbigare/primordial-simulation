@@ -298,7 +298,8 @@ const COVER_KG_M2: f64 = 0.3;
 const LEARN_OFF: f32 = -4.0;
 
 /// A node of `MEMBERS` that only takes and keeps its children in its square, its genes as `set` leaves them, settled
-/// `SETTLE` months on `cover` kg per m² in the first dry square of `w`, then a year there or in that square split two
+/// `SETTLE` months on `cover` kg per m² in the first dry square of `w`, its neighbours made flat land at its height with
+/// its liquid and soil (`testkit::flat_round`), then a year there or in that square split two
 /// depths (`fine`): per month, its members at the month's end, the kg it took of what it uses, the members born and the
 /// members that died, its mean temperature by members at the month's end, K, and that of its mature members (the
 /// mature bodies, `Body::adult`), K; and whether no body left the square (a member's move has a chance near none, not
@@ -306,6 +307,7 @@ const LEARN_OFF: f32 = -4.0;
 fn node_months(fine: bool, mut w: World, cover: f64, set: fn(&mut Body)) -> (Vec<[f64; 6]>, bool) {
     let square = w.map.leaves()[testkit::dry_land(&w)];
     let i = w.map.cell(square).expect("the square");
+    testkit::flat_round(&mut w, i);
     let near: Vec<usize> = std::iter::once(i).chain(w.mesh.cells().around(i).1.iter().map(|&j| j as usize)).filter(|&c| w.is_land(c)).collect();
     near.iter().for_each(|&c| testkit::cover(&mut w, c, cover));
     let line = testkit::Line::new(&mut w, &Brain::only(brain::TAKE), 1);
@@ -357,7 +359,9 @@ const LIVES_ALIKE: f64 = 0.05;
 const WARMTH_K: f64 = 0.05;
 
 /// One law of life at every size of cell (spec 5.2): a node of one kind that only takes (no member leaves its square),
-/// settled a year on cover in a square of 2 km, then a year there and in the same world with the square split two
+/// settled a year on cover in a square of 2 km amid flat land at its height (liquid that runs sideways on real slopes
+/// differs with the size of the cells on its own, which `tape/tests/scale.rs` checks; here only the bodies' laws are
+/// compared), then a year there and in the same world with the square split two
 /// depths (16 cells of 500 m, stepping a quarter month): its members at the end, what it took and the members born
 /// alike within `LIVES_ALIKE`, and its temperature within `WARMTH_K`. After each decision its physics runs over the
 /// step ahead in sub-steps of a week in both, each with a meal by the take law within its stores' room for the week
@@ -385,7 +389,8 @@ const THIN_COAT: f32 = 0.6;
 const HELD_K: f64 = 0.5;
 const SWING_K: f64 = 15.0;
 
-/// The heat law at every size (laws.md 6.3): on the island of the real runs, whose winter is cold, a node of adults
+/// The heat law at every size (laws.md 6.3): on the island of the real runs, whose winter is cold, in a square amid flat
+/// land at its height (as `a_node_lives_alike_in_a_square_and_in_its_cells`, so the ground differs only by the size of the cells), a node of adults
 /// with plenty of cover lies cold through its winter (held at its `KEEP_T` by burning) and in spring warms on its own
 /// heat to a warm state (its heat over its coat past the warmth at which its pace feeds itself), its mature members
 /// swinging more than `SWING_K` over the year; at each month's end its members hold the same temperature in a square and
