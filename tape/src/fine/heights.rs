@@ -2,8 +2,9 @@
 //! (`SAMPLE_DEPTH`) a leaf's height is the mean of the samples in it, as `Terrain::inside` takes it. Finer, it is the
 //! departures of the terrain's midpoint displacement (`Terrain::departures`) laid on a smooth continuation of the
 //! coarser heights: each leaf's quarters lean as the quartic through the leaf and two neighbours each way on each axis
-//! does, keeping its mean (`finer`), so the ground has no steps and its slope no kinks at the leaves' edges. A leaf's height depends on its own
-//! place only, whatever window it is found for.
+//! does, keeping its mean (`finer`), so the ground has no steps and its slope no kinks at the leaves' edges. Below
+//! `DETAIL_LEAST_M` the ground goes on as that continuation alone. A leaf's height depends on its own place only,
+//! whatever window it is found for.
 
 use pcore::space::terrain::SAMPLE_DEPTH;
 use pcore::space::tree::BLOCK;
@@ -20,6 +21,9 @@ const MARGIN: i64 = 6;
 /// quadratic through three (±(next − last) / 8) leaves kinks in the slope along the leaves' edges, which hill shading
 /// shows as dark and light ticks.
 const LEAN: [f64; 5] = [3.0 / 128.0, -22.0 / 128.0, 0.0, 22.0 / 128.0, -3.0 / 128.0];
+/// The least side of a leaf, m, on which the terrain's departures are laid: finer, the ground goes on smooth, so a view
+/// closer than a metre a pixel shows the ground's shape, not a roughness the hill shading would show as grit.
+const DETAIL_LEAST_M: f64 = 1.0;
 /// A cell's points (`Samples::points`) are the leaves this many depths below it: 8 x 8.
 pub(super) const POINT_DEPTHS: u8 = 3;
 
@@ -130,8 +134,8 @@ fn cover([x0, y0, x1, y1]: [i64; 4], of: u8, depth: u8, (across, down): (i64, i6
 /// The leaves of the depth below `p`'s over the rectangle `want` of them (inside `p`'s quarters): each quarter of a leaf
 /// of `p` takes the leaf's height, the lean of the quartic through it and two neighbours each way along each axis
 /// (`LEAN`; across both axes, the product of the two leans; a neighbour off the map is the nearest leaf on it), less that
-/// lean's mean by area, and the terrain's own departure there (`Terrain::departures`), so each leaf's quarters keep its
-/// mean.
+/// lean's mean by area, and the terrain's own departure there (`Terrain::departures`) while the quarters are at least
+/// `DETAIL_LEAST_M` a side, so each leaf's quarters keep its mean.
 fn finer(w: &World, p: &Patch, [x0, y0, x1, y1]: [i64; 4]) -> Patch {
     let (depth, lat) = (p.depth + 1, (w.cfg.lat_south, w.cfg.lat_north));
     let (cw, ch) = ((x1 - x0 + 1) as usize, (y1 - y0 + 1) as usize);
@@ -150,7 +154,7 @@ fn finer(w: &World, p: &Patch, [x0, y0, x1, y1]: [i64; 4]) -> Patch {
                 sx * ew + sy * sn + sx * sy * corners
             });
             let mean = (0..4).map(|q| area[q] * lean[q]).sum::<f64>() / area.iter().sum::<f64>();
-            let d = w.terrain.departures(w.seed, &w.map, parent, lat, g);
+            let d = if w.map.length(depth) >= DETAIL_LEAST_M { w.terrain.departures(w.seed, &w.map, parent, lat, g) } else { [0.0; 4] };
             for q in 0..4 {
                 let (cx, cy) = (2 * px + (q % 2) as i64, 2 * py + (q / 2) as i64);
                 if (x0..=x1).contains(&cx) && (y0..=y1).contains(&cy) {
