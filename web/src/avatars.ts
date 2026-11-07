@@ -7,6 +7,7 @@
 // (laws.md 3.1) is drawn part by part, each at a place seeded by the lot's id and the part's index.
 import { Rgb, Sprite, Style, AnimalLook, PartLook, animal, object, paintSprite, bodyLength, animalColour, woodiness, display, muted, seeded, seedOf, tone, DIET_COVER, DIET_BODIES, DIET_REMAINS } from './sprites';
 import { Ground, rimOver, blob } from './blob';
+import type { Under } from './map';
 
 interface Animal { id: bigint; members: number; mass: number; living: number; strength: number; colour: Rgb; copyMass: number; coat: number; keepT: number; coolT: number; root: number; lineage: number; diet: number; adult: boolean; hidden: number; hold: bigint; inside: bigint }
 interface Slot { root: number; kg: number; leaf: number; genes: number[]; full: boolean }
@@ -150,8 +151,11 @@ export class Avatars {
   private madeAt: [number, number] = [0, 0];
   private shift: [number, number] = [0, 0];
   private version = 0;
-  /** What is drawn under the things, read when their picture is made, for the blobs' colours. */
-  private ground = new Ground();
+  /** What is drawn under the things, read when their picture is made, for the blobs' colours; when it reads otherwise
+   * than before, the picture is made anew. */
+  private ground = new Ground(() => { this.key = ''; this.changed(); });
+  /** Asks the page to redraw the map and the panel (`listen`). */
+  private changed: () => void = () => {};
 
   /** The list of things the core sent (none: nothing is drawn), for a map whose square is `cellM` metres. */
   set(data: Uint8Array | null, cellM: number): void { this.cells = data ? readThings(data) : []; this.cellM = cellM; this.sprites.clear(); this.version++; }
@@ -161,6 +165,7 @@ export class Avatars {
   /** Show the numbers of what is under the pointer on `cv` (else the cover of the cell under it), and keep what a click
    * picks; `changed` redraws the panel. */
   listen(cv: HTMLCanvasElement, changed: () => void): void {
+    this.changed = changed;
     cv.addEventListener('pointermove', e => { const d = this.at(e.offsetX, e.offsetY) ?? this.coverAt(e.offsetX, e.offsetY); if (d !== this.over) { this.over = d; changed(); } });
     cv.addEventListener('pointerleave', () => { if (this.over) { this.over = null; changed(); } });
     cv.addEventListener('click', e => { this.pinned = this.at(e.offsetX, e.offsetY); changed(); });
@@ -202,9 +207,9 @@ export class Avatars {
     return s;
   }
 
-  /** Draw over the map, whose corner is at (ox, oy) and whose square takes `s` pixels: nothing below `THINGS_PX`. A
-   * pan within the picture's margin only moves it. */
-  draw(ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number): void {
+  /** Draw over the map, whose corner is at (ox, oy) and whose square takes `s` pixels, the map's colours under the view
+   * read from `under` (map.ts): nothing below `THINGS_PX`. A pan within the picture's margin only moves it. */
+  draw(ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number, under: (cssPx: number) => Promise<Under>): void {
     this.drawnAt = null;
     if (s < THINGS_PX || !this.cells.length) { this.hits = []; return; }
     this.drawnAt = [ox, oy, s];
@@ -216,7 +221,7 @@ export class Avatars {
       this.cache.width = Math.round(cw * d); this.cache.height = Math.round(ch * d);
       const c = this.cache.getContext('2d')!;
       c.setTransform(d, 0, 0, d, 0, 0);
-      this.ground.read(ctx, W, H);
+      this.ground.read(under);
       this.render(c, ox + mx, oy + my, s, cw, ch, (x, y) => this.ground.at(x - mx, y - my));
     }
     this.shift = [ox - this.madeAt[0] - mx, oy - this.madeAt[1] - my];

@@ -1,8 +1,9 @@
 import { World, gunzip, parse, plane, fmt, fmtYear, unitText, latOf, lonOf } from './data';
-import { CLASSES, PATH_LAYER, paint, rampFor, rampCss } from './earth';
+import { CLASSES, PATH_LAYER, mapFields, rampFor, rampCss } from './earth';
 import { MapView, View } from './map';
+import { MapLook } from './field-window';
 import { Charts } from './charts';
-import { Live, Look, Stats, FinePicture } from './live';
+import { Live, Look, Stats, FineWindow } from './live';
 import { FineAt } from './fine';
 import { Avatars, THINGS_PX } from './avatars';
 import { Vegetation } from './vegetation';
@@ -45,28 +46,30 @@ const IDLE_CHECK_MS = 1000;
 let world: World | null = null;
 let live: Live | null = null;
 let frame = 0, speed = 4, playing = false, view = 'earth', layer: string | null = null, paths = false;
-let cls = new Uint8Array(0);
+let cls: Uint8Array = new Uint8Array(0);
 
 const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspect(), v => lookSoon(v));
-/** The picture of the window in view finer than its cells (live world only, painted by the worker), and the window
- * asked for. */
-let fine: FinePicture | null = null, fineAsked = '';
-/** The view the worker was last told to paint its pictures in. */
-let viewSent = '';
+/** The window in view finer than its cells (live world only, its fields made by the worker), and the window asked
+ * for. */
+let fine: FineWindow | null = null, fineAsked = '';
 let lookTimer = 0, looking = '';
 /** The things of the window in view, drawn one by one when the map is close (live world only), and the window asked for. */
 const avatars = new Avatars();
 let thingsKey = '';
 /** The cover drawn as textures (earth view only), under the avatars. */
-const vegetation = new Vegetation(() => map.invalidate());
+const vegetation = new Vegetation();
 /** Where the player keeps the style life is drawn in (one per viewer). */
 const LIFE_KEY = 'ew.life';
 /** How life is drawn: from above or angled, as the player last chose (from above if the browser keeps nothing). */
 let life: Style = 'above';
 try { if (localStorage.getItem(LIFE_KEY) === 'angled') life = 'angled'; } catch { /* no storage: the default */ }
 avatars.style = vegetation.style = life;
-map.overlay = (ctx, ox, oy, s) => { vegetation.draw(ctx, ox, oy, s); avatars.draw(ctx, ox, oy, s); };
-avatars.listen($<HTMLCanvasElement>('cv'), () => { inspect(); map.invalidate(); });
+map.layer = vegetation;
+map.overlay = (ctx, ox, oy, s) => avatars.draw(ctx, ox, oy, s, px => map.under(px));
+/** Which GPU draws the map (none: the page cannot draw it). */
+let drawnWith = '';
+map.ready.then(g => { drawnWith = g ? g.kind : ''; if (!g) say('This browser has neither WebGPU nor WebGL2, so the map cannot be drawn.'); });
+avatars.listen($<HTMLCanvasElement>('cv'), () => { inspect(); map.redraw(); });
 /** When the player last gave input (performance.now, ms), and whether the camera was sent away for lack of it. */
 let lastInput = performance.now(), idle = false;
 const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
@@ -144,15 +147,27 @@ function setFrame(f: number): void {
   repaint();
 }
 
+/** Draw frame `frame` in the view shown; the map's classes come back from the GPU, and with them the cover. */
 function repaint(): void {
   if (!world) return;
-  paint(world, frame, layer ?? view, map.img!, cls, paths);
-  map.commit();
-  vegetation.set(view === 'earth' && !layer ? world : null, frame, cls);
-  map.invalidate();
-  const shown = JSON.stringify([layer ?? view, paths]);
-  if (live && shown !== viewSent) { viewSent = shown; live.view(layer ?? view, paths); }
+  const w = world, f = frame;
+  map.setMap(mapFields(w, f).fields);
+  map.setLook(mapLook(w));
+  map.mapClasses().then(c => {
+    if (world !== w) return;
+    cls = c;
+    vegetation.set(view === 'earth' && !layer ? w : null, f, cls);
+    map.invalidate(); inspect();
+  });
   inspect();
+}
+
+/** What the map draws: the view or the layer shown, and the worn paths if they are. */
+function mapLook(w: World): MapLook {
+  return {
+    mode: layer ? w.index.get(layer)! : view === 'true' ? 'true' : 'earth', ramp: layer ? rampFor(layer) : [],
+    paths: paths && w.index.has(PATH_LAYER) ? w.index.get(PATH_LAYER)! : -1,
+  };
 }
 
 function setLayer(n: string | null): void {
@@ -280,18 +295,17 @@ async function startLive(): Promise<void> {
   $<HTMLInputElement>('seed').value = q.get('seed') ?? '1';
   $<HTMLInputElement>('size').value = q.get('size') ?? String(LIVE_SIZE);
   live?.stop();
-  world = null; viewSent = '';
+  world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
     ready: () => newWorld(),
     world: w => { world = w; looking = fineAsked = ''; showFine(null); thingsKey = ''; avatars.set(null, w.meta.cell_m); vegetation.setThings([]); setup(w); showStats(l.stats); },
     things: data => { if (live === l && world) { avatars.set(data, world.meta.cell_m); vegetation.setThings(avatars.list); } },
-    frame: (stats, picture) => {
+    frame: (stats, win) => {
       if (live !== l) return;
-      if (picture) showFine(picture);
+      if (win) showFine(win);
       setFrame(0);
       showStats(stats);
     },
-    fine: picture => { if (live === l) { showFine(picture); showStats(l.stats); } },
     error: text => { playing = false; syncUi(); say(text); },
   });
   setMode(true);
@@ -364,12 +378,12 @@ setInterval(() => {
   showStats(live.stats);
 }, IDLE_CHECK_MS);
 
-/** Draw the picture of the window in view finer than its cells over the map, fading in over the last one (none: no
- * picture). The map closes the pictures it no longer shows. */
-function showFine(picture: FinePicture | null): void {
-  fine = picture;
-  map.setFine(picture ? picture.picture : null, picture ? [picture.at.x, picture.at.y, picture.at.w, picture.at.h] : undefined);
-  vegetation.setFine(picture?.cover ?? null, picture ? [picture.at.x, picture.at.y, picture.at.w, picture.at.h] : null);
+/** Draw the window in view finer than its cells over the map, fading in over the last one (none: no window). */
+function showFine(win: FineWindow | null): void {
+  fine = win;
+  const at: [number, number, number, number] | null = win ? [win.at.x, win.at.y, win.at.w, win.at.h] : null;
+  map.setFine(win ? win.fields : null, at ?? undefined, win?.at.soft);
+  vegetation.setFine(win?.cover ?? null, at);
 }
 
 /** The date, the pace and the cells: the world steps slower by itself while there are fine cells. */
@@ -381,7 +395,8 @@ function showStats(s: Stats): void {
   el.hidden = false;
   el.innerHTML = [['date', `year ${Math.floor(y)}, day ${day}`], ['pace', `${playing ? fmt(s.pace) : '0'} of ${speed === Infinity ? 'max' : speed} months/s`],
     ['cells', String(s.cells)], ['finest', `depth ${s.finest} (${finest})`],
-    ...(fine ? [['detail', `${fine.picture.width}×${fine.picture.height} px of ${fmt(m.cell_m / 2 ** (fine.at.depth - (m.square_depth ?? 0)))} m, made in ${fine.made.toFixed(0)} ms, painted in ${fine.painted.toFixed(0)} ms`]] : []),
+    ...(fine ? [['detail', `${fine.fields.w}×${fine.fields.h} px of ${fmt(m.cell_m / 2 ** (fine.at.depth - (m.square_depth ?? 0)))} m, made in ${fine.made.toFixed(0)} ms, its fields in ${fine.fieldsMs.toFixed(0)} ms`]] : []),
+    ...(drawnWith ? [['map', `drawn with ${drawnWith}`]] : []),
     ['camera', idle ? `away: no input for ${IDLE_MINUTES} min` : `goes away after ${IDLE_MINUTES} min without input`]].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
 }
 

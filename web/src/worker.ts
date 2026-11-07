@@ -1,10 +1,13 @@
 // The live world: the core as WebAssembly (wasm/src/lib.rs) in a Web Worker, so that the page never freezes.
-// It runs as a separate script, built into the page as text with data.ts, earth.ts, fine.ts and canopy.ts (build.mjs), and started
-// from a Blob. It also paints the window in view finer than its cells (fine.ts), so the page only draws the picture.
+// It runs as a separate script, built into the page as text with data.ts, fields.ts, earth.ts, fine.ts and canopy.ts
+// (build.mjs), and started from a Blob. It also makes the fields of the window in view finer than its cells (fine.ts),
+// which the page hands to the GPU.
 import { Meta, makeWorld } from './data';
-import { Wet, wetOf } from './earth';
-import { FineAt, paintFine, readFine } from './fine';
-import { FineCover, fineCover } from './canopy';
+import { wetOf } from './earth';
+import { FineAt, fineFields, readFine } from './fine';
+import { fineCover } from './canopy';
+import { fieldBuffers } from './fields';
+import type { FineWindow } from './live';
 
 interface Core {
   memory: WebAssembly.Memory;
@@ -28,8 +31,7 @@ type Command =
   | { cmd: 'rate'; rate: number }
   | { cmd: 'look'; look: Look | null; rest: boolean }
   | { cmd: 'things'; at: [number, number, number, number] | null }
-  | { cmd: 'fine'; at: FineAt | null }
-  | { cmd: 'view'; mode: string; paths: boolean };
+  | { cmd: 'fine'; at: FineAt | null };
 
 /** Where the camera looks: the window in map squares (from column x and row y) and the depth of cells it asks for. */
 interface Look { x: number; y: number; w: number; h: number; depth: number }
@@ -60,12 +62,8 @@ let resting = false;
 let thingsAt: [number, number, number, number] | null = null;
 /** The window the page draws finer than its cells (null: none), whether it waits for its raster, and when the last was made (ms). */
 let fineAt: FineAt | null = null, fineDue = false, fineLast = 0;
-/** The world's header; the last fine raster (its window, its bytes and the time the core took to make it, ms) and the
- * map's wet squares and sea at its time; and the view the page shows (a layer's name, 'earth' or 'true') and whether it
- * draws the worn paths. */
+/** The world's header. */
 let meta: Meta | null = null;
-let fine: { at: FineAt; data: Uint8Array; ms: number; wet: Wet } | null = null;
-let view = { mode: 'earth', paths: false };
 /** The months stepped since `since` (ms), and the pace measured over the last whole second, months per second. */
 let stepped = 0, since = 0, pace = 0;
 
@@ -74,35 +72,28 @@ function bytes(at: number, n: number): Uint8Array {
   return new Uint8Array(core!.memory.buffer, at, n).slice();
 }
 
-/** The last fine raster painted in the page's view, as a picture the page draws over the map, with its window, the
- * times the core took to make it and this to paint it, ms, and the cover of its pixels (canopy.ts). */
-function painted(): { at: FineAt; picture: ImageBitmap; made: number; painted: number; cover: FineCover | null } | null {
-  if (!fine || !meta) return null;
-  const t0 = performance.now(), f = readFine(meta, fine.at, fine.data);
-  const picture = paintFine(f, meta, view.mode, view.paths, fine.wet).transferToImageBitmap();
-  return { at: fine.at, picture, made: fine.ms, painted: performance.now() - t0, cover: fineCover(f) };
-}
 /** The buffers of a fine raster's message, handed over to the page. */
-const fineBuffers = (p: { picture: ImageBitmap; cover: FineCover | null }): Transferable[] => [p.picture, ...(p.cover ? [p.cover.kg, p.cover.wood, p.cover.leaf, p.cover.t, p.cover.rain, p.cover.dry].map(a => a.buffer) : [])];
+const fineBuffers = (p: FineWindow): Transferable[] => [...fieldBuffers(p.fields), ...(p.cover ? [p.cover.data, ...p.cover.mips].map(a => a.buffer) : [])];
 
 function postFrame(kind: 'world' | 'frame'): void {
   const c = core!;
   const head = kind === 'world' ? new TextDecoder().decode(bytes(c.meta(), c.out_len())) : '';
-  if (kind === 'world') { meta = JSON.parse(head) as Meta; fine = null; }
+  if (kind === 'world') meta = JSON.parse(head) as Meta;
   meta!.frames = [{ day: c.day(), year: c.year() }];
   const frame = bytes(c.frame(), c.out_len());
   const things = thingsAt ? bytes(c.things(...thingsAt), c.out_len()) : null;
-  let now = performance.now(), picture = null;
+  let now = performance.now(), win: FineWindow | null = null;
   if (fineAt && (fineDue || now - fineLast >= FINE_MS)) {
     const data = bytes(c.fine(fineAt.x, fineAt.y, fineAt.w, fineAt.h, fineAt.depth), c.out_len());
-    fine = { at: fineAt, data, ms: performance.now() - now, wet: wetOf(makeWorld(meta!, frame, 0), 0) };
-    picture = painted();
+    const made = performance.now() - now, f = readFine(meta!, fineAt, data);
+    const fields = fineFields(f, meta!, wetOf(makeWorld(meta!, frame, 0), 0));
+    win = { at: fineAt, fields, made, fieldsMs: performance.now() - now - made, cover: fineCover(f) };
     now = fineLast = performance.now(); fineDue = false;
   }
   if (now - since >= PACE_MS) { pace = (stepped * 1000) / (now - since); stepped = 0; since = now; }
   const stats = { cells: c.cells(), finest: c.finest(), pace };
-  const moved = [frame.buffer, ...(picture ? fineBuffers(picture) : []), ...(things ? [things.buffer] : [])];
-  host.postMessage({ kind, meta: head, frame, year: c.year(), day: c.day(), stats, fine: picture, things }, moved);
+  const moved = [frame.buffer, ...(win ? fineBuffers(win) : []), ...(things ? [things.buffer] : [])];
+  host.postMessage({ kind, meta: head, frame, year: c.year(), day: c.day(), stats, fine: win, things }, moved);
 }
 
 function tick(): void {
@@ -156,10 +147,6 @@ host.onmessage = async e => {
     } else if (m.cmd === 'fine' && core) {
       fineAt = m.at; fineDue = fineAt !== null;
       if (!playing && fineDue) postFrame('frame');
-    } else if (m.cmd === 'view') {
-      view = { mode: m.mode, paths: m.paths };
-      const picture = painted();
-      if (picture) host.postMessage({ kind: 'fine', fine: picture }, fineBuffers(picture));
     }
   } catch (err) {
     host.postMessage({ kind: 'error', text: String(err) }, []);

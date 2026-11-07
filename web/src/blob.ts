@@ -4,6 +4,7 @@
 // made lighter on dark ground and darker on light ground (`Ground`), so it reads on any cover. It fades in as the zoom
 // comes near the members' own size; farther out no herd is drawn. No count is drawn: the inspect panel gives it.
 import { Rgb } from './sprites';
+import type { Under } from './map';
 
 /** How many times smaller than a pixel a member may be for its node's blob to show: two doublings of the zoom. */
 const NEAR = 4;
@@ -25,27 +26,36 @@ const LEAST_SIDE_PX = 3;
 /** The ground is read every this many css pixels, as the mean over them: a blob's tone follows the ground's shading and
  * cover, not the marks of its texture. */
 const GROUND_PX = 16;
+/** A read of the ground whose lightness departs from the last by more than this, on the mean, draws the things anew. */
+const GROUND_CHANGE = 0.02;
 
-/** The lightness of what is drawn under the things: read from the map's canvas when the picture of the things is made. */
+/** The lightness of what is drawn under the things: the map's colours under the view as the GPU draws them (map.ts
+ * `under`), read a frame or so after the picture of the things asks for them, so the page never waits for the GPU. */
 export class Ground {
-  private cv = document.createElement('canvas');
-  private data: Uint8ClampedArray = new Uint8ClampedArray(4);
-  /** Read the lightness of what `ctx` holds now, a view `W` x `H` css px. */
-  read(ctx: CanvasRenderingContext2D, W: number, H: number): void {
-    const w = Math.max(1, Math.ceil(W / GROUND_PX)), h = Math.max(1, Math.ceil(H / GROUND_PX));
-    this.cv.width = w; this.cv.height = h;
-    const c = this.cv.getContext('2d', { willReadFrequently: true })!;
-    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
-    // A read covers `GROUND_PX` css px a side: the canvas holds `d` device pixels a css pixel.
-    const d = ctx.canvas.width / Math.max(W, 1);
-    c.drawImage(ctx.canvas, 0, 0, w * GROUND_PX * d, h * GROUND_PX * d, 0, 0, w, h);
-    this.data = c.getImageData(0, 0, w, h).data;
+  private u: Under = { w: 0, h: 0, rgba: new Uint8Array(0) };
+  private reading = false;
+  /** `changed` is told when a read differs from the last by more than `GROUND_CHANGE`. */
+  constructor(private changed: () => void) {}
+  /** Read the map under the view anew from `under` (one read at a time). */
+  read(under: (cssPx: number) => Promise<Under>): void {
+    if (this.reading) return;
+    this.reading = true;
+    under(GROUND_PX).then(next => {
+      this.reading = false;
+      const before = this.u.rgba;
+      let diff = next.rgba.length === before.length ? 0 : Infinity;
+      for (let i = 0; i < next.rgba.length && diff !== Infinity; i += 4) diff += Math.abs(lightness(next.rgba[i], next.rgba[i + 1], next.rgba[i + 2]) - lightness(before[i], before[i + 1], before[i + 2]));
+      this.u = next;
+      if (diff / (next.w * next.h) > GROUND_CHANGE) this.changed();
+    });
   }
-  /** The lightness (0..1) at (x, y) css px of the view, the nearest read on it where it lies off it. */
+  /** The lightness (0..1) at (x, y) css px of the view, the nearest read on it where it lies off it (none yet: the
+   * middle). */
   at(x: number, y: number): number {
-    const w = this.cv.width, h = this.cv.height;
+    const { w, h, rgba } = this.u;
+    if (!w || !h) return SPLIT;
     const i = 4 * (Math.min(Math.max(Math.floor(y / GROUND_PX), 0), h - 1) * w + Math.min(Math.max(Math.floor(x / GROUND_PX), 0), w - 1));
-    return lightness(this.data[i], this.data[i + 1], this.data[i + 2]);
+    return lightness(rgba[i], rgba[i + 1], rgba[i + 2]);
   }
 }
 

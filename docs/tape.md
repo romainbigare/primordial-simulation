@@ -80,10 +80,16 @@ the continuation alone) less the field of the terrain's means over the cells, wh
 cell's surface (where it holds standing liquid, the level that liquid fills its own ground to; where it is dry, its
 lowest ground or the liquid beside it, 10 m lower), sunk the more the smaller the field of the share of the cells that
 hold standing liquid, so the shore is where the ground drawn rises above it.
-The terrain's samples are found once (`tape::Samples`). The viewer paints it over the whole-map frame: hill shading
-from the fine ground, the liquid where its surface lies over the fine ground (the sea's tint by the depth there),
-snow by the pixel's own temperature near the cover's melting point, rivers as lines along those ways, as wide as
-their discharge (Leopold and Maddock 1953) or wider; it is not recorded. Close up it also asks
+The terrain's samples are found once (`tape::Samples`). The viewer's worker turns it into the fields the graphics
+card draws (`web/src/fields.ts`, four channels a texture, a texel a pixel): the ground's height, the liquid's
+surface over it (none near: 1000 m below) and the ground's slope east and south; the ice, the ground's temperature,
+the share of the pixel that is the sea's (in a sea square or a dry square beside one) and that is a river (the ways
+drawn as lines as wide as their discharge, Leopold and Maddock 1953, or wider); the plant cover's byte and the true
+colour; and every layer's bytes as they came. The page makes the same fields of the whole-map frame, a texel a square
+(the liquid's surface in a dry square below its ground by the depth it lacks to be wet and its height over the wet
+squares beside it). The card colours them at each screen pixel, over the whole-map frame: hill shading, the liquid
+where its surface lies over the ground (the sea's tint by the depth there), snow by the pixel's own temperature near
+the cover's melting point, the rivers; it is not recorded. Close up it also asks
 for the things of the cells in view (`tape::things`, the record layout in `tape/src/things.rs`): each body (members,
 a member's mass, strength, colour, coat, copy mass, the temperatures it keeps, what it takes from where, its kind,
 stage and brain, the part it holds and the structure it is inside), each slot of cover (its kind, built cover and capture area per m²

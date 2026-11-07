@@ -36,27 +36,43 @@ in view; the page shows the date, the months per second it reaches, the cells an
 while the world plays. After 3 minutes without input the page sends the camera away (a recorded change of the camera),
 so the world joins its fine cells and runs at the coarse pace again; the next zoom, pan or click brings it back.
 
+The map is drawn on the graphics card at the screen's own pixels: with WebGPU where the browser has it, else with
+WebGL2. The shaders are written once in WGSL (`web/shaders/`); the build (`npm run build`) checks them and writes them
+as GLSL ES 3.00 for WebGL2 too with naga, the shader translator of the wgpu project (`web/shade`, so the build needs
+cargo), and puts both in the page. The page hands the card fields, not pictures (`web/src/fields.ts`): of each square
+or pixel the ground's height and slope, the liquid's surface over the ground, the ice, the ground's temperature, the
+share that is sea and that is a river, the plant cover's byte, the true colour and every layer. The card turns them
+into colours at each pixel of the screen (`web/shaders/lib/earth.wgsl`: the Earth view, the true colour and the layer
+views, one rule for the map of the squares and for the finer window), with the light on the slopes, and the shore
+where the liquid's surface meets the ground, sharp at any zoom. It also names each square's class (sea, lake, forest...)
+for the inspect panel. Avatars, the lines of latitude, the outlines and the scale bar are drawn on a 2D canvas over it.
+While a frame takes the card longer than 16 ms, the map is drawn at fewer pixels (down to a quarter along each side)
+and stretched onto the screen, the same picture, softer; once the view rests it is drawn again at the screen's own
+pixels, a tile a frame, and shown when whole. The page never waits for the card: what it reads back (the classes, the
+colours under the avatars) comes a frame or so later.
+
 At every zoom the live viewer draws the window in view finer than its cells (`tape::fine`, a pixel of 1 to 2 screen
 pixels and no smaller than 5 cm, smoothed up closer, at most 360,000 of them), and a fifth of the view about it, so a pan
 or a zoom out shows it until the next comes: the ground's height from the terrain below the cells (smooth below a metre)
 set on the cells' heights, with hill shading; the liquid where its surface lies over that ground, so shores follow the
 ground; snow by the ground's own temperature; every value of the cells as one smooth field, built level by level of the
 cells' tree, so a cell that holds what its parent held shows no edge and a refined region looks like the cells about it
-(`tape/src/fine/pyramid.rs`); rivers as lines along the way their liquid runs. It is made again when the view rests and
-once a second while the world plays, and each new picture fades in over the last in a quarter of a second, over the map
-of the squares, its outer edge faded too, so the picture never jumps; the stats line gives its size and the time the
-core took to make it and the page to paint it.
+(`tape/src/fine/pyramid.rs`); rivers as lines along the way their liquid runs. The worker makes its fields; it is made
+again when the view rests and once a second while the world plays, and each new window fades in over the last in a
+quarter of a second, over the map of the squares, its outer edge faded too, so the picture never jumps; the stats line
+gives its size, the time the core took to make it and the worker its fields, and which of WebGPU and WebGL2 draws.
 
 The Earth view draws the plant cover as textures at its real size (`web/src/vegetation.ts`, `web/src/textures.ts`),
 over the fine raster where there is one and blended between the cells' centres as the map is: crowns where it is woody
 (shrubs, woodland, forest, a jungle where it is also warm and wet), a tree's crown 3 to 15 m across by its walls per
 m², and tufts where it is herbs (grass, steppe, tundra); as many marks as its capture area closes it (1 - e^-area). A
 kind gives way to the next over a range of each threshold, so kinds mix mark by mark, never at an edge. The marks are
-drawn per pixel on the GPU (WebGL2): each kind's marks lie on a grid fixed in the world, one mark a grid cell at a
-place, size and tone hashed from the cell, so they hold while the camera moves and never repeat or stand in rows. They
+drawn per pixel on the graphics card at every frame, a pass of the map's renderer: each kind's marks lie on a grid
+fixed in the world, one mark a grid cell at a place, size and tone hashed from the cell, so they hold while the camera
+moves and never repeat or stand in rows. They
 are coloured by the cover and, close up, by the genes of the cell's heaviest slot (hue by its light and leaf genes,
-darker if frost-hardy). A kind's marks fade in as they grow from 0.7 to 2 pixels. While the view moves, the last
-picture of the cover moves with it; it is made again once the view rests.
+darker if frost-hardy). A kind's marks fade in as they grow from 0.7 to 2 pixels. A pan, a zoom or a new frame shows
+the marks at once, never a plain colour in their place.
 
 From 64 pixels a square, the live viewer draws the bodies and parts of each cell one by one at their real size, from
 the numbers the core hands out (`tape::things`): a member is as long as 1.5 times the cube root of its volume (a body
