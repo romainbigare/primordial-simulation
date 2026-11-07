@@ -755,7 +755,9 @@ The owner decided: **no 3D.** The game is a **flat 2D plan view, like a good atl
 This is cheaper to build, faster to draw and easier to read. It fits a world seen mostly from far away.
 
 Life and objects are drawn at their true size in metres and the plant cover as textures; two styles exist for the
-shapes of individuals, seen from above or angled (10.4), and the owner will choose between them.
+shapes of individuals, seen from above (the default) or angled (10.4), and the owner will choose between them. True
+size is the owner's decision: far away, a herd shows as a stipple of its members strong enough to read; the zoom goes
+deep enough to see single animals.
 
 **Goals:**
 - A player understands what they see **instinctively**, without reading.
