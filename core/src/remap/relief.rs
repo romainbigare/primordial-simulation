@@ -37,18 +37,20 @@ impl World {
     }
     /// The quarters `kids` of cell `i` (leaf `leaf`) in the cells `cells` of the change (`old(j)`: the cell new cell `j`
     /// was, if an old one), by the terrain: each one's bed surface the cell's mean one plus its departure d, the terrain's
-    /// mean height over it less the mean over the four, then drained to the cells round them (`drained`), so the cell's
-    /// bed keeps its volume and its mean; each quarter's relief that of the terrain inside it (`relief_at_build`). The
-    /// stacks then gain ρ g Σ a d² / 2 (the loose ground, the liquid and the store stay per m², so they rise and fall
-    /// with the bed by area, and the air over the cell keeps its mean height). Where the cell's relief pays less than
-    /// that and the quarters' reliefs, the departures, and the terrain below them, are scaled down until it pays; and so
-    /// that each quarter keeps a bed.
+    /// mean height over it less the mean over the four, then, for a cell above 0 m, drained to the cells round them
+    /// (`drained`; the low basin's floor keeps its pits), so the cell's bed keeps its volume and its mean; each quarter's
+    /// relief that of the terrain inside it (`relief_at_build`). The stacks then gain ρ g Σ a d² / 2 (the loose ground,
+    /// the liquid and the store stay per m², so they rise and fall with the bed by area, and the air over the cell keeps
+    /// its mean height). Where the cell's relief pays less than that and the quarters' reliefs, the departures, and the
+    /// terrain below them, are scaled down until it pays; and so that each quarter keeps a bed.
     pub(super) fn uneven(&self, (i, leaf): (usize, Leaf), (cells, kids): (&Level, [usize; 4]), old: impl Fn(usize) -> Option<usize>) -> Uneven {
         let area = kids.map(|j| cells.area()[j]);
         let (rho_g, vol, whole) = (self.bed_weight(i), self.bed_of(i).1, sum4(area));
         let inside = leaf.quarters().map(|q| self.terrain_in(q));
         let mean = sum4(std::array::from_fn(|q| area[q] * inside[q].0)) / whole;
-        let d = self.drained(i, (cells, kids), &old, inside.map(|x| x.0 - mean));
+        let departs = inside.map(|x| x.0 - mean);
+        // Ground under 0 m, the low basin's floor, holds its pits under the basin's one level, as at the start (8).
+        let d = if self.surface_z(i) < 0.0 { departs } else { self.drained((i, leaf), (cells, kids), &old, departs) };
         let need = rho_g * sum4(std::array::from_fn(|q| area[q] * d[q] * d[q] / 2.0 + inside[q].1));
         let s = if need > self.relief[i].max(0.0) { (self.relief[i].max(0.0) / need).sqrt() } else { 1.0 };
         let thick = vol / whole;
@@ -58,23 +60,34 @@ impl World {
         Uneven { bed: bed.map(|b| b / total), relief: inside.map(|x| s * s * rho_g * x.1) }
     }
 
-    /// Departures `d` (m) of the quarters `kids` of cell `i` drained to the cells round them in `cells` (`space::drain`,
-    /// the cells across their sides and corners as they stand, `old`): a quarter the terrain leaves in a closed pit is
-    /// raised to its outlet, as the world's cells drain from the start, and all are lowered alike until their mean by
-    /// area is the cell's again (`DRAIN_ROUNDS` of Newton's steps on that mean, which falls by the share of the quarters
-    /// not raised).
-    fn drained(&self, i: usize, (cells, kids): (&Level, [usize; 4]), old: impl Fn(usize) -> Option<usize>, d: [f64; 4]) -> [f64; 4] {
-        // The quarters, then the cells round them, each with its neighbours among them and the distance to each.
-        let (mut at, mut z) = (kids.to_vec(), vec![0.0; 4]);
+    /// Departures `d` (m) of the quarters `kids` of cell `i` (leaf `leaf`) drained to the cells round them in `cells`
+    /// (`space::drain`, the cells across their sides and corners as they stand, `old`, each seen at a quarter's scale:
+    /// a cell coarser than the quarters at its height less the terrain's mean over it plus the terrain's mean over its
+    /// part beside the quarter, `Square::nearest_in`, so a quarter in a valley that runs on through a coarser cell is not
+    /// a pit): a quarter the terrain leaves in a closed pit is raised to its outlet, as the world's cells drain from the
+    /// start, and all are lowered alike until their mean by area is the cell's again (`DRAIN_ROUNDS` of Newton's steps
+    /// on that mean, which falls by the share of the quarters not raised).
+    fn drained(&self, (i, leaf): (usize, Leaf), (cells, kids): (&Level, [usize; 4]), old: impl Fn(usize) -> Option<usize>, d: [f64; 4]) -> [f64; 4] {
+        // The quarters, then the cells round them, a node for each one's link to a quarter (seen at that quarter's
+        // scale), each with its neighbours among them and the distance to each.
+        let (mut z, quarters) = (vec![0.0; 4], leaf.quarters());
         let mut near: Vec<Vec<(usize, f64)>> = vec![Vec::new(); 4];
+        let mut means: std::collections::BTreeMap<usize, f64> = Default::default();
         for (&a, &b) in cells.a().iter().zip(cells.b()) {
             let (a, b) = (a as usize, b as usize);
             let Some((q, o)) = kids.iter().position(|&k| k == a).map(|q| (q, b)).or(kids.iter().position(|&k| k == b).map(|q| (q, a))) else { continue };
-            let r = at.iter().position(|&x| x == o).unwrap_or_else(|| {
-                at.push(o);
-                z.push(self.surface_z(old(o).expect("the cells round the quarters are old ones")));
+            let r = kids.iter().position(|&x| x == o).unwrap_or_else(|| {
+                let was = old(o).expect("the cells round the quarters are old ones");
+                let l = self.map.leaves()[was];
+                let finer = if l.depth < quarters[q].depth {
+                    let mean = *means.entry(was).or_insert_with(|| self.terrain_in(l).0);
+                    self.terrain_in(self.map.nearest_in(&l, &quarters[q])).0 - mean
+                } else {
+                    0.0
+                };
+                z.push(self.surface_z(was) + finer);
                 near.push(Vec::new());
-                at.len() - 1
+                z.len() - 1
             });
             let w = cells.offset(kids[q], o);
             near[q].push((r, w[0].hypot(w[1])));

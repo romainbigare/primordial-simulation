@@ -132,8 +132,11 @@ fn a_join_then_its_split_gives_back_quarters_of_two_phases() {
     join_then_split(&mut w, parent);
 }
 
-/// Join the quarters of `parent` of `w` and split it again at once: each quarter holds what it held (4 ε), and the
-/// books do not move. Returns the join's relief.
+/// Join the quarters of `parent` of `w` and split it again at once: each quarter holds what it held, each amount to
+/// four roundings (2 ε of it), each heat to four roundings of it and of the potential energy the round trip books
+/// through it (the split gives the quarters' ground heat what the relief has left over the stacks' potential energy,
+/// `store::fall_heat`: 2 ε of the heat and of that potential energy, which is that of the quarters' stacks and their
+/// air, `flow::potential_of`); and the books do not move. Returns the join's relief.
 fn join_then_split(w: &mut World, parent: Leaf) -> f64 {
     let kids = parent.quarters().map(|q| w.map.cell(q).expect("a square"));
     let (held, books) = (kids.map(|i| holds(w, i)), Books::now(w));
@@ -141,10 +144,16 @@ fn join_then_split(w: &mut World, parent: Leaf) -> f64 {
     let relief = w.relief[w.map.cell(parent).expect("the joined cell")];
     assert_eq!(w.split(parent), Ok(vec![parent]));
     sound(w);
+    let cells = parent.quarters().map(|q| w.map.cell(q).expect("a quarter"));
+    let booked = pcore::flow::potential_of(w, &cells, w.mesh.up(cells[0], 0, pcore::AIR)).abs();
+    let amounts = w.chem.ns() * 4;
+    println!("the round trip books {booked:.4e} J of potential energy through the ground's heat");
     for (q, held) in parent.quarters().iter().zip(&held) {
         let now = holds(w, w.map.cell(*q).expect("a quarter"));
-        let worst = now.iter().zip(held).map(|(&x, &y)| (x - y).abs() / y.abs().max(f64::MIN_POSITIVE)).fold(0.0, f64::max);
-        assert!(worst <= 4.0 * f64::EPSILON / 2.0, "quarter {q:?} back within {worst:e}");
+        for (k, (&x, &y)) in now.iter().zip(held).enumerate() {
+            let of = if k < amounts { y.abs() } else { y.abs() + booked };
+            assert!((x - y).abs() <= 2.0 * f64::EPSILON * of, "quarter {q:?}, number {k}: {y:e} back as {x:e}, booked {booked:e} J");
+        }
     }
     books.assert_kept(w, 1e-12);
     relief
@@ -187,6 +196,30 @@ fn a_split_gives_its_quarters_the_terrain() {
     assert!((spent + kept - relief).abs() <= TIGHT * stacks.abs() && warmed.abs() <= TIGHT * heat, "the relief pays what the split gains, {warmed:e} J to heat");
     let drains = |j: usize| w.mesh.cells().around(j).1.iter().any(|&o| w.surface_z(o as usize) <= w.surface_z(j));
     assert!(kids.iter().all(|&j| drains(j)), "each quarter drains");
+}
+
+/// How far the ground of cell `i` stands over the terrain's mean inside it, m.
+fn over_terrain(w: &World, i: usize) -> f64 {
+    w.surface_z(i) - w.terrain.inside(w.seed, &w.map, leaf(w, i), (w.cfg.lat_south, w.cfg.lat_north)).0
+}
+
+/// The ground stands on the terrain at every size (laws.md 0, 8): a world starts with each cell at the terrain's mean
+/// over it, or over it where the start drained a closed basin, and the cells two splits make of a block of land stand
+/// at the terrain's mean over each as their cell did, to `UNEVEN_M`, but where a split drained a closed pit of the
+/// terrain at its quarters' scale (each cell round them seen at that scale, so a valley that runs on through a coarser
+/// cell is no pit): no quarter carries its cell's height as a step.
+#[test]
+fn split_cells_stand_on_the_terrain() {
+    let mut w = world();
+    let block = testkit::land_block(&w);
+    let on = |d: &[f64]| d.iter().filter(|d| d.abs() < UNEVEN_M).count() as f64 / d.len() as f64;
+    let start: Vec<f64> = (0..w.mesh.cells().n()).map(|i| over_terrain(&w, i)).collect();
+    let was: Vec<f64> = block.iter().map(|&l| over_terrain(&w, w.map.cell(l).expect("a cell"))).collect();
+    testkit::split_down(&mut w, &block, 2);
+    let kids: Vec<f64> = block.iter().zip(&was).flat_map(|(l, d)| l.split(l.depth + 2).map(|q| over_terrain(&w, w.map.cell(q).expect("a cell")) - d).collect::<Vec<f64>>()).collect();
+    println!("on the terrain: {:.3} of the cells at the start, {:.3} of the split cells beyond their cell", on(&start), on(&kids));
+    assert!(start.iter().all(|&d| d > -UNEVEN_M) && on(&start) > 0.95, "the cells start on the terrain or over it");
+    assert!(on(&kids) > 0.75, "the split cells stand on the terrain");
 }
 
 /// The liquid of cell `i` as a depth over its area, m, and the depth its pores hold, m (the volume of its loose solids

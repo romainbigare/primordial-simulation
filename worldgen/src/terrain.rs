@@ -57,19 +57,13 @@ fn heights(seed: u64, map: &Square, terrain: &Terrain, cells: &Level) -> Vec<f64
     (0..cells.n()).map(|i| terrain.height(seed, map, Place::of(cells, i))).collect()
 }
 
-/// The terrain of `mesh` on `map` (its rows between the latitudes of `cfg`), and the height of each of its cells, m: the
-/// mean by area of the heights of its samples (`heights` on `Square::samples`), so a cell of many squares holds the
-/// ground and the low liquid its squares would, and a cell finer than a square takes the height at its own centre.
+/// The terrain of `mesh` on `map` (its rows between the latitudes of `cfg`; its level found on the map's squares,
+/// `Square::samples`), and the height of each of its cells, m: the terrain's mean over it (`Terrain::inside`), the one
+/// height of the ground of a cell, which its relief stands about and its splits continue (laws.md 0).
 fn cell_heights(seed: u64, map: &Square, mesh: &Mesh, cfg: &Config) -> (Terrain, Vec<f64>) {
-    let samples = map.samples();
-    let sampled = World::mesh_of(&samples, cfg);
-    let terrain = terrain_of(seed, map, sampled.cells());
-    let (z, area) = (heights(seed, map, &terrain, sampled.cells()), sampled.cells().area());
-    let mut hz = vec![0.0; mesh.cells().n()];
-    for (s, leaf) in samples.leaves().iter().enumerate() {
-        let c = mesh.tree().cell_at(leaf.corner());
-        hz[c] += area[s] / mesh.cells().area()[c] * z[s];
-    }
+    let terrain = terrain_of(seed, map, World::mesh_of(&map.samples(), cfg).cells());
+    let lat = (cfg.lat_south, cfg.lat_north);
+    let hz = (0..mesh.cells().n()).map(|i| terrain.inside(seed, map, map.leaves()[i], lat).0).collect();
     (terrain, hz)
 }
 

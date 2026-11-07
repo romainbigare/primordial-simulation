@@ -161,7 +161,7 @@ pub fn total(w: &World) -> Option<f64> {
 /// J (`potential`): what a split or a join of cells under `air` changes (`World::split`). It reads those cells and the
 /// cells under `air` alone (`row_of`), as `potential` reads them, by Flow's state of the ground, which gives a cell a
 /// remap made the phases of its heat (`World::thawed`). None before Flow first built the state (`stated`).
-pub(crate) fn potential_of(w: &World, cells: &[usize], air: usize) -> f64 {
+pub fn potential_of(w: &World, cells: &[usize], air: usize) -> f64 {
     if !stated(w) {
         return 0.0;
     }

@@ -37,8 +37,9 @@ steady change across a border of two sizes passes exactly; across a corner (widt
 their sizes, the two across it one depth apart at most and neither with 8 links already (the cells in order), so the
 downhill way through a corner stays when a cell beside it splits and no cell has more than 8 links. The air level is built on the map's squares, the same whatever the sizes of the
 cells. The map's samples are its squares and its finer cells (`Square::samples`: a cell coarser than a square cut into
-its squares, a finer one as it is): each reads its air there (1.4), and a cell's starting height is the mean by area of
-the terrain on its samples (a cell finer than a square takes the height at its own centre). **The terrain**
+its squares, a finer one as it is): each reads its air there (1.4). A cell's starting height is the terrain's mean
+over it (`Terrain::inside`, below), the height its relief stands about and its quarters' terrain continues, so a split
+cell's quarters stand on the terrain itself, not on an offset of their parent's. **The terrain**
 (`space::terrain`) is one function of the world's seed and a point of the map, at any size: value noise summed over
 octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to heights, an island's falling away from
 the middle of its map; the world keeps what it needs beside its seed and its map (`World::terrain`: the rise its level
@@ -215,10 +216,15 @@ of `SAMPLE_DEPTH` or coarser, Σ a (h − h̄)² / 2 and each sample's A V / 2 b
 means about its own, as the departures are made to that variance exactly. **A split of a
 cell no join made** gives its quarters the terrain inside it (`World::uneven`): each quarter's bed surface is the cell's
 mean bed surface now plus the terrain's mean height over the quarter less the mean over the four, so the cell's bed
-keeps its volume and its mean (what wear and creep did since the start stays in the mean); the bed's substances go to
+keeps its volume and its mean (what wear and creep did since the start, and what the start's drainage filled, stays
+in the mean); the bed's substances go to
 the quarters in the cell's proportions; the loose ground, the liquid its pores hold, the store and every other number
-stay per m². The quarters then drain, as the world's cells drain from the start (8): a priority
-flood from the cells round them as they stand (`space::drain`) raises a quarter in a closed pit to its outlet, and all
+stay per m². The quarters of a cell above 0 m then drain, as the world's land drains from the start (8; below 0 m
+the floor of the low basin keeps its pits under the basin's one level, as at the start): a priority
+flood from the cells round them as they stand (`space::drain`), each seen at the quarters' scale (a cell coarser than
+a quarter at its height less the terrain's mean over it plus the terrain's mean over its part beside the quarter,
+`Square::nearest_in`, so a quarter in a valley that runs on through a coarser cell is no pit), raises a quarter in a
+closed pit to its outlet, and all
 are lowered alike until their mean is the cell's again (`World::drained`). Noise has pits that no liquid ever cut: split
 undrained, the 1,024 cells of 500 m of the 64 x 64 island's first four blocks of land had 15 pits, and in two years
 2.5 m of liquid stood on them on the mean, 47 months of their rain (the unsplit blocks, 6 mm); drained, 5 pits and
@@ -1317,8 +1323,8 @@ read a kind.
   cell on an island. On an island the open water is coarse (`coarse_low`): an air block (8 km) whose squares all lie
   below 0 m, none within a square of land (`LAND_RING`), is one cell, split where it borders finer cells until cells
   across a border differ by one size at most; the coasts stay in 2 km squares. A globe is one cell an air block but in a
-  rectangle of air blocks in squares (`--fine`), by the same rule. A cell of many squares has the mean height
-  of its squares by area.
+  rectangle of air blocks in squares (`--fine`), by the same rule. A cell's height is the terrain's mean over it
+  (`Terrain::inside`, 0), whatever its size.
 - **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS` rows of `Place::Field`: kg per m² and genes,
   on every open land cell by its chance), then eaters 20 years later; `--roster` places ten kinds (`ROSTER`). Founders
   are adults on land under at most half a metre of liquid; mass 30% fuel (60% for the two big slow eater kinds).
