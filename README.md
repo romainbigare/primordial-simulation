@@ -47,9 +47,13 @@ to paint it.
 The Earth view draws the plant cover as textures at its real size (`web/src/vegetation.ts`, `web/src/textures.ts`),
 over the fine raster where there is one and blended between the cells' centres as the map is: crowns where it is woody
 (shrubs, woodland, forest, a jungle where it is also warm and wet), a tree's crown 3 to 15 m across by its walls per
-m², and tufts where it is herbs (grass, steppe, tundra); as many marks as its capture area closes it (1 - e^-area). Each
-kind is one tile made once and repeated, coloured by the cover and, close up, by the genes of the cell's heaviest slot
-(hue by its light and leaf genes, darker if frost-hardy). A texture shows once its marks take about a pixel.
+m², and tufts where it is herbs (grass, steppe, tundra); as many marks as its capture area closes it (1 - e^-area). A
+kind gives way to the next over a range of each threshold, so kinds mix mark by mark, never at an edge. The marks are
+drawn per pixel on the GPU (WebGL2): each kind's marks lie on a grid fixed in the world, one mark a grid cell at a
+place, size and tone hashed from the cell, so they hold while the camera moves and never repeat or stand in rows. They
+are coloured by the cover and, close up, by the genes of the cell's heaviest slot (hue by its light and leaf genes,
+darker if frost-hardy). A kind's marks fade in as they grow from 0.7 to 2 pixels. While the view moves, the last
+picture of the cover moves with it; it is made again once the view rests.
 
 From 64 pixels a square, the live viewer draws the bodies and parts of each cell one by one at their real size, from
 the numbers the core hands out (`tape::things`): a member is as long as 1.5 times the cube root of its volume (a body
