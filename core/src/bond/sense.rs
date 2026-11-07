@@ -55,24 +55,36 @@ pub(super) fn liquid(w: &World, i: usize, g: impl Fn(usize) -> f64) -> (f64, f64
     if v > 0.0 { (env[1], m / v, mol / v) } else { (0.0, 0.0, 0.0) }
 }
 
-/// Is body `b` held up in its cell's liquid: does the liquid that its volume and the structure it holds (of a lot, all
-/// its parts) displace weigh as much as they do (Archimedes, as for parts)? Not where the liquid is shallower than
-/// `deep`.
-fn afloat(w: &World, d: &Chunk, b: &Body) -> bool {
-    let (i, mb) = (b.cell as usize, b.mass(&w.chem));
-    let c = d.at(i);
-    let s = held(c, b).map(|p| &c.parts[root(c, p)]).map(|r| (r.s.outer * r.count, r.s.mass * r.count));
-    let (depth, rho, _) = liquid(w, i, d.moves.amounts(w, Node::ground(i)));
-    if depth < w.cfg.phys.deep {
-        return false;
-    }
-    let (outer, mass) = s.unwrap_or((0.0, 0.0));
-    rho * (b.volume(&w.chem, b.temp(&w.chem)) + outer) >= mb + mass
+/// How body `b` stands in the standing liquid of cell `i` (its own, or one it steps into, `choose::go`; laws.md 3.3).
+pub(crate) struct Wading {
+    /// The share of a member's height (`Physics::side`) under the liquid: the depth over its height, at most 1; none
+    /// where it rides the structure it holds
+    pub share: f64,
+    /// Whether the ground and what lies on it are within its reach
+    pub reaches: bool,
+    /// The density of the liquid, kg/m³ (0 where none stands)
+    pub rho: f64,
 }
 
-/// Depth of liquid over a body: none while afloat.
-pub fn depth(w: &World, d: &Chunk, b: &Body, depth: f64) -> f64 {
-    if depth > 0.0 && afloat(w, d, b) { 0.0 } else { depth }
+/// How body `b` stands in the liquid of cell `i` (`Wading`): the share of its height under it is the depth over its
+/// height. Where the liquid is deeper than its height, a member swims: it breathes its air (laws.md 2.4), so it keeps
+/// to the surface, and the ground lies within its reach only as deep as its height and its reach, each its size
+/// (`Physics::side`; no gene lets it dive). It rides the structure it holds, of its own cell, where the liquid is deeper
+/// than its height and what that structure (of a lot, all its parts) displaces weighs as much as both (Archimedes, as
+/// for parts): dry, at the surface, it reaches down its reach alone.
+pub(crate) fn wading(w: &World, d: &Chunk, b: &Body, i: usize) -> Wading {
+    let depth = w.life.env[i][1];
+    if depth <= 0.0 {
+        return Wading { share: 0.0, reaches: true, rho: 0.0 };
+    }
+    let (mb, c, rho) = (b.mass(&w.chem), d.at(b.cell as usize), liquid(w, i, d.moves.amounts(w, Node::ground(i))).1);
+    let side = w.cfg.phys.side(mb / b.n());
+    let rides = depth > side && held(c, b).is_some_and(|p| {
+        let r = &c.parts[root(c, p)];
+        rho * r.s.outer * r.count >= mb + r.s.mass * r.count
+    });
+    let share = if rides { 0.0 } else { (depth / side.max(1e-9)).min(1.0) };
+    Wading { share, reaches: depth <= side * if rides { 1.0 } else { 2.0 }, rho }
 }
 
 /// Numbers a body perceives of what it holds and of the walls around it (`sense`).

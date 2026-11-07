@@ -43,22 +43,21 @@ snow by the ground's own temperature; the other layers blended between the cells
 way their liquid runs. It is made again when the view rests and once a second while the world plays; the stats line
 gives its size and the time the core took to make it and the page to paint it.
 
-From 10 pixels a square, the Earth view draws the cover as a ground pattern (`web/src/vegetation.ts`), over the fine
-raster where there is one and blended between the cells' centres as the map is: overlapping crowns where it is woody,
-darker and taller with its walls per m² (layered and greener where it is also warm and wet), fine strokes where it is
-herbs, low tufts in the cold, rare shrubs where it is thin; as dense as its capture area closes it (1 - e^-area). The
-pattern reads the cover's mass, walls and capture area per m² (the `plants`, `wood` and `leaf` layers), the ground's
-temperature and rain; close up, its colour also the genes of the cell's heaviest slot.
+The Earth view draws the plant cover as textures at its real size (`web/src/vegetation.ts`, `web/src/textures.ts`),
+over the fine raster where there is one and blended between the cells' centres as the map is: crowns where it is woody
+(shrubs, woodland, forest, a jungle where it is also warm and wet), a tree's crown 3 to 15 m across by its walls per
+m², and tufts where it is herbs (grass, steppe, tundra); as many marks as its capture area closes it (1 - e^-area). Each
+kind is one tile made once and repeated, coloured by the cover and, close up, by the genes of the cell's heaviest slot
+(hue by its light and leaf genes, darker if frost-hardy). A texture shows once its marks take about a pixel.
 
-Close up (a square of the map at 64 pixels or more), the live viewer draws what lies in each cell one by one, from
-the numbers the core hands out (`tape::things`): animals sized by a member's mass (a log scale), bulkier and longer-legged
-the stronger, rounder the earlier they keep warm and with bigger ears the earlier they cool, furred by their coat gene,
-the head by their brain, fangs if they bite bodies, a low muzzle if they only graze, a long snout if they take remains,
-their own colour drawn stronger and tinted by their lineage, young ones smaller; a herd (a node) as some of its members
-with its count; the plants of an open cover (or of any cover from 1200 pixels a square) as grass, shrubs or trees by
-their walls gene, conifers if frost-hardy, greyer if drought-hardy, with seed heads, swollen bases and thicker trunks by
-their seed, store and repair genes; parts as blocks of their sizes and walls' colour, hollow ones open, hard ones
-stone. Hover or click one to see its numbers. Farther away the map shows density and colour only.
+From 64 pixels a square, the live viewer draws the bodies and parts of each cell one by one at their real size, from
+the numbers the core hands out (`tape::things`): a member is as long as 1.5 times the cube root of its volume (a body
+as dense as water), each member at its own seeded place across its cell's real area, so it holds while the camera
+moves. A member of 3 pixels or more is drawn as its shape, smaller as a soft dot, and below a pixel its node is a light
+stipple of its members per m². Parts are drawn at their own sizes, hidden below a pixel. Two styles draw the shapes
+(the "Life" buttons, kept per browser): from above (a body with its head, wider the stronger) or angled (a block on
+legs, as a small axonometric sprite). Hover or click one to see its numbers; the inspect panel gives a herd's count.
+The map zooms to 16 pixels a metre.
 
 By default the animals start with hand-set brain biases (`--neutral-eaters` for neutral brains) and the
 light-eaters with no brain.

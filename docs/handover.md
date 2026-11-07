@@ -754,6 +754,9 @@ The owner decided: **no 3D.** The game is a **flat 2D plan view, like a good atl
 
 This is cheaper to build, faster to draw and easier to read. It fits a world seen mostly from far away.
 
+Life and objects are drawn at their true size in metres and the plant cover as textures; two styles exist for the
+shapes of individuals, seen from above or angled (10.4), and the owner will choose between them.
+
 **Goals:**
 - A player understands what they see **instinctively**, without reading.
 - What is drawn is **what is really there**. The Earth view only gives it a familiar face.

@@ -24,8 +24,8 @@ pub use lots::{held_kind, MAX_LOTS};
 pub(crate) use lots::join_held;
 pub(crate) use edge::blunted;
 pub use month::step;
-pub use sense::{depth, features, room};
-pub(crate) use sense::{leave_outgrown, possible, room_air, sense, SENSE};
+pub use sense::{features, room};
+pub(crate) use sense::{leave_outgrown, possible, room_air, sense, wading, SENSE};
 pub use verbs::{act, bears, carry, form, moved, release, LET_GO, TORN};
 pub(crate) use verbs::{dropped, let_go};
 

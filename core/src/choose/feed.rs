@@ -40,11 +40,19 @@ pub const COVER: u64 = u64::MAX - 1;
 /// the frame without the enzyme that splits it) is bulk, which counts toward what it can take (`intake`, the gut) and
 /// passes through it to the ground at once, with its heat (a gut passage of days, within the update's step: it never
 /// becomes the body's own frame). What it takes of the cover it pays to break as a bite does (`Cover::breaking`), less
-/// what a held edge saves (`bond::Edge`), which wears by the work it does. `days`: the time the meal feeds it, to its
-/// next meal (laws.md 5.3).
+/// what a held edge saves (`bond::Edge`), which wears by the work it does. It takes only what lies within its reach
+/// (`bond::wading`): under liquid deeper than its height and its reach, neither the cover nor the solids of the ground,
+/// only what is liquid there. `days`: the time the meal feeds it, to its next meal (laws.md 5.3).
 pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     let (i, chem, bc) = (b.cell as usize, &w.chem, w.chem.body());
-    let (tg, parts) = (w.t_ground_last(i), crate::cover::Parts::of(chem));
+    let (tg, reaches) = (w.t_ground_last(i), bond::wading(w, d, b, i).reaches);
+    let parts = crate::cover::Parts::of(chem).filter(|_| reaches);
+    // (What of the ground it reaches: its liquids, and its solids where it reaches the ground.)
+    let within = |k: usize| match chem.phase(k, tg) {
+        Phase::Gas => false,
+        Phase::Liquid => true,
+        Phase::Solid => reaches,
+    };
     let cover: [f64; MAX_SUBSTANCES] = parts.as_ref().map_or([0.0; MAX_SUBSTANCES], |p| d.at(i).cover.amounts(p));
     // (The cover's parts are among the stores of bodies: its fuel, matter and built solids.)
     let (of_cover, t) = (|s: usize| bc.subs().get(s).map_or(0.0, |&k| cover[k]), b.temp(chem));
@@ -52,7 +60,7 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     // and in the cover.
     let (gut, mut m, mut grazed) = {
         let ground = d.moves.amounts(w, Node::ground(i));
-        let lying = |k: usize| (if chem.phase(k, tg) != Phase::Gas { ground(k).max(0.0) } else { 0.0 }) + cover[k];
+        let lying = |k: usize| (if within(k) { ground(k).max(0.0) } else { 0.0 }) + cover[k];
         let gut = intake(w, b, (t, days), lying).0;
         let m = b.wanted(w, lying, (gut, days), b.mass(chem));
         let grazed: Stores = std::array::from_fn(|s| if of_cover(s) > 0.0 { (m[s] * of_cover(s) / lying(bc.subs()[s])).min(m[s]).min(of_cover(s)) } else { 0.0 });
@@ -101,7 +109,7 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
         }
     }
     for (s, &k) in bc.subs().iter().enumerate() {
-        let held = if chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k).max(0.0) } else { 0.0 };
+        let held = if within(k) { d.moves.amount(w, Node::ground(i), k).max(0.0) } else { 0.0 };
         let want = (m[s] - grazed[s]).min(held);
         if want <= 0.0 {
             m[s] = grazed[s];
@@ -174,8 +182,9 @@ pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, (s, days): (Handle, f64
     let (mb, tb) = (b.mass(&w.chem), b.temp(&w.chem));
     let edge = bond::edge(d.at(b.cell as usize), w, b);
     let (left, through) = edge.as_ref().map_or((1.0, 0.0), |e| e.leaves(b.n(), o.cut_by(&w.chem, &w.cfg, e)));
-    // (Its force goes as far as `1 / left` of it would bluntly.)
-    let (fb, fo) = (b.gene(STRENGTH) * b.built(&w.chem) / b.n() / left, o.gene(STRENGTH) * o.built(&w.chem) / o.n());
+    // (Its force goes as far as `1 / left` of it would bluntly; each one's with the vigour of its temperature.)
+    let force = |x: &Body| x.gene(STRENGTH) * x.built(&w.chem) / x.n() * x.vigour(&w.chem, x.temp(&w.chem));
+    let (fb, fo) = (force(b) / left, force(o));
     let (kg, swept) = intake(w, b, (tb, days), |k| o.amount(bc, k));
     // One draw finds an individual prey.
     let reached = if o.n() > 1.0 { swept } else if rng.f64() < swept { 1.0 } else { return };
