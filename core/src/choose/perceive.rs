@@ -1,13 +1,10 @@
-//! What a body perceives (laws.md 5.2): the features of each cell, worked out once a month for every cell and read by
-//! every brain (`cells`); the bodies and parts of its own cell (`perceive`); its brain's inputs (`inputs`); each scaled
-//! to about one.
+//! What a body perceives (laws.md 5.2): the features of the cells, read by every brain (`features`); the bodies and
+//! parts of its own cell (`perceive`); its brain's inputs (`inputs`); each scaled to about one.
 
 use super::{Choice, MAX_SEEN, MOVES, NT, OPTS, PARTS};
 use crate::body::{Body, Layout};
 use crate::brain::{ln, REST};
-use crate::lanes::thickness;
 use crate::rng::Rng;
-use crate::store::Class;
 use crate::{bond, life::{Cell, Chunk}, World};
 
 /// A brain perceives a share `x` of the body as `SHARE_SENSE` ln(x + floor): a store with the floor `STORE_FLOOR` (no
@@ -23,46 +20,8 @@ const WARM_SCALE: f32 = 10.0;
 const LOST_SPAN: f32 = 3.0;
 // ln of a mass: of a member, kg (less 1), of a perceived body's member over its own, of a cell's mean member.
 pub(super) use crate::brain::LN_MASS;
-/// ln(1 + the cover's capture area per m² of its cell, `World::canopy`) under a dense cover (10 m² per m²).
-const LN_CANOPY: f32 = 2.4;
-/// The ground temperature, from `T_MID` over `T_SPAN`, K.
-const T_MID: f32 = 285.0;
-const T_SPAN: f32 = 15.0;
-/// The surface height, m.
-const DZ_SCALE: f32 = 200.0;
-/// ln(1 + the members of a cell per square of the map).
-const LN_MEMBERS: f32 = 10.0;
 /// A perceived body's well-being.
 pub(super) const WB_SCALE: f32 = 4.0;
-/// The members of the three classes of animals of a cell's features weigh below `SMALL_KG`, up to `BIG_KG`, and more
-/// (`docs/numbers.md`).
-const SMALL_KG: f32 = 1.0;
-const BIG_KG: f32 = 100.0;
-
-/// The features of a cell (`cells`): its ground temperature, the depth of its standing liquid (ln(1 + depth / m)), its
-/// surface height, the shade of its cover, the mass of each slot of its cover and of the cover's fuel and body matter
-/// (what most diets eat), the fuel and body matter loose on its ground, the mass of its animals in three classes of
-/// member mass, their members and mean strength, how hard it is to push through, its parts, and the members that moved
-/// in per month; masses per m² as ln(1 + kg/m²), counts per square of the map (`Square::squares`), the members that
-/// moved in per square's side of its border.
-pub const T: usize = 0;
-pub const WET: usize = 1;
-pub const HEIGHT: usize = 2;
-const SHADE: usize = 3;
-const COVER: usize = 4;
-pub const EDIBLE: usize = COVER + crate::cover::SLOTS;
-pub const DEAD: usize = EDIBLE + 1;
-const ANIMALS: usize = DEAD + 1;
-const MEMBERS: usize = ANIMALS + 3;
-const STRENGTH: usize = MEMBERS + 1;
-const RESIST: usize = STRENGTH + 1;
-const PARTS_HERE: usize = RESIST + 1;
-const CROSSED: usize = PARTS_HERE + 1;
-pub const NCELL: usize = CROSSED + 1;
-/// The levels of the cells' features (`Life::feat`): the cells' own, then smoothed once to `SIGHTS - 1` times over
-/// their neighbours (a cell finer than a square as the square that holds it, `regions`), what a body of sight 1 to
-/// `SIGHTS` sees of the cell it would step into.
-pub const SIGHTS: usize = 4;
 
 /// What a body perceives of another of its cell that it may act on: its id, its place in the cell's list
 /// (`life::Handle::slot`, which holds through the pass), its visible traits (`Body::vis`) and its well-being at its last
@@ -143,122 +102,4 @@ pub(super) fn inputs(w: &World, cell: &Cell, b: &Body, (temp, mem): (f64, usize)
     x.extend_from_slice(w.life.feat(i, 1));
     x.extend(bond::sense(cell, w, b, pm));
     x.extend_from_slice(&b.mem[..mem]);
-}
-
-/// After each survey, at a month's start and at each sub-step (`survey::substeps`): the features of every cell (`NCELL`,
-/// the same for every brain), then the levels of `SIGHTS` past the first (`sights`, `Life::feat`).
-pub fn cells(w: &mut World) {
-    let (n, life, chem) = (w.mesh.cells().n(), &w.life, &w.chem);
-    let parts = crate::cover::Parts::of(chem);
-    let mm = parts.as_ref().map(|p| p.mm(chem));
-    let ln_kg = |kg: f64, area: f64| ln(1.0 + (kg / area) as f32);
-    let ground = w.store.amounts(Class::Ground);
-    // The members that moved in since the last month's survey, per month: they came in the last month at a month's
-    // start, and since the month's start inside it (`survey::substeps`).
-    let month = w.cfg.calendar().month;
-    let monthly = match w.time % month { 0 => 1.0, t => month as f64 / t as f64 };
-    let mut feat: Vec<[f32; NCELL]> = (0..n).map(|i| {
-        let (c, e, area, cell) = (life.sum(i), &life.env[i], w.mesh.cells().area()[i], &life.cells[i]);
-        let mut f = [0f32; NCELL];
-        (f[T], f[WET], f[HEIGHT]) = ((e[0] as f32 - T_MID) / T_SPAN, ln(1.0 + e[1] as f32), e[2] as f32 / DZ_SCALE);
-        f[SHADE] = ln(1.0 + w.canopy[i]) / LN_CANOPY;
-        if let (Some(p), Some(mm)) = (&parts, &mm) {
-            for x in 0..crate::cover::SLOTS {
-                f[COVER + x] = ln_kg(cell.cover.kg(mm, x), area);
-            }
-            let soft: f64 = (0..crate::cover::SLOTS).map(|x| cell.cover.mol[x][0] * mm[0] + cell.cover.mol[x][1] * mm[1]).sum();
-            f[EDIBLE] = ln_kg(soft, area);
-            f[DEAD] = ln_kg(p.sub[..2].iter().zip(mm).map(|(&k, m)| ground[k * n + i] * m).sum(), area);
-        }
-        for o in cell.bodies.iter().filter(|o| o.alive) {
-            let class = if o.vis[0] < SMALL_KG { 0 } else if o.vis[0] < BIG_KG { 1 } else { 2 };
-            f[ANIMALS + class] += o.vis[0] * o.n() as f32;
-        }
-        for class in 0..3 {
-            f[ANIMALS + class] = ln(1.0 + f[ANIMALS + class] / area as f32);
-        }
-        // (Counts per square of the map's area; the members that moved in per square's side of its border, for what
-        // crosses a border goes with its length.)
-        let (per, across) = (1.0 / w.map.squares(i), 1.0 / w.map.squares(i).sqrt());
-        f[MEMBERS] = ln(1.0 + (c[0] * per) as f32) / LN_MEMBERS;
-        f[STRENGTH] = (c[3] / c[0].max(1.0)) as f32;
-        f[RESIST] = ln(1.0 + thickness(w, c[1], area) as f32);
-        (f[PARTS_HERE], f[CROSSED]) = (ln(1.0 + (cell.parts.len() as f64 * per) as f32), ln(1.0 + (cell.crossings as f64 * monthly * across) as f32));
-        f
-    }).collect();
-    sights(w, &mut feat);
-    w.life.feat = feat;
-}
-
-/// The cells a body of sight 2 and more sees as one (`sights`): each cell alone, but a cell finer than a square of the
-/// map with the others of the square that holds it, so what a body sees past the cell it would step into reaches as far
-/// in metres from a fine cell as from a square. Returns the region of each cell, and the cells of each region in order,
-/// the regions in the order of their first cells.
-fn regions(w: &World) -> (Vec<usize>, Vec<Vec<usize>>) {
-    let (square, mut of, mut list) = (w.map.square_depth(), std::collections::BTreeMap::new(), Vec::<Vec<usize>>::new());
-    let region = (w.map.leaves().iter().enumerate()).map(|(i, l)| {
-        let mut up = *l;
-        while up.depth > square {
-            up = up.parent().expect("a cell finer than a square lies in one");
-        }
-        let r = *of.entry(up).or_insert_with(|| {
-            list.push(Vec::new());
-            list.len() - 1
-        });
-        list[r].push(i);
-        r
-    });
-    (region.collect(), list)
-}
-
-/// The cells across the four corners of cell `i`, if it is finer than a square or a square beside one, one depth apart
-/// from it at most, a cell finer than a square counted as its square (as `regions` sees it): those a corner of the
-/// squares would link it to (`Square::mesh`), where the links of fine cells, at most 8, leave some out; so a region of
-/// fine cells has the squares across its corners around it as a square does.
-fn across_corners(w: &World, i: usize) -> impl Iterator<Item = usize> + '_ {
-    let (leaves, square) = (w.map.leaves(), w.map.square_depth());
-    let (l, finer) = (leaves[i], |j: &u32| leaves[*j as usize].depth > square);
-    let (x, y, s) = (l.x as i64, l.y as i64, l.side() as i64);
-    let near = l.depth > square || (l.depth == square && w.mesh.cells().around(i).1.iter().any(finer));
-    let corners = [(x - 1, y - 1), (x + s, y - 1), (x - 1, y + s), (x + s, y + s)].into_iter().filter(move |_| near);
-    corners.filter_map(|(a, b)| w.mesh.tree().at(a, b)).filter(move |&k| w.map.leaves()[k].depth.min(square).abs_diff(square) <= 1)
-}
-
-/// The levels of `SIGHTS` past the first, after the cells' own features `feat`: each level the last smoothed over each
-/// region of cells (`regions`: its cells' mean by area) and the regions around it, each by its area over the region's
-/// own; a cell sees its region's (`Life::feat`).
-fn sights(w: &World, feat: &mut Vec<[f32; NCELL]>) {
-    let (cells, (region, list)) = (w.mesh.cells(), regions(w));
-    let area: Vec<f64> = list.iter().map(|c| if c.len() == 1 { cells.area()[c[0]] } else { c.iter().map(|&i| cells.area()[i]).sum() }).collect();
-    // The regions around each, each once, in the order of its cells' links.
-    let around: Vec<Vec<usize>> = (list.iter().enumerate()).map(|(r, c)| {
-        let mut near = Vec::new();
-        for q in c.iter().flat_map(|&i| cells.around(i).1.iter().map(|&j| j as usize).chain(across_corners(w, i))).map(|j| region[j]) {
-            if q != r && !near.contains(&q) {
-                near.push(q);
-            }
-        }
-        near
-    }).collect();
-    let mean = |c: &[usize], a: f64| {
-        let mut f = [0f32; NCELL];
-        for &i in c {
-            f.iter_mut().zip(&feat[i]).for_each(|(x, y)| *x += (cells.area()[i] / a) as f32 * y);
-        }
-        f
-    };
-    let mut last: Vec<[f32; NCELL]> = list.iter().zip(&area).map(|(c, &a)| if c.len() == 1 { feat[c[0]] } else { mean(c, a) }).collect();
-    for _ in 1..SIGHTS {
-        let next: Vec<[f32; NCELL]> = (0..list.len()).map(|r| {
-            let (mut f, mut sum) = (last[r], 1.0);
-            for &q in &around[r] {
-                let by = (area[q] / area[r]) as f32;
-                f.iter_mut().zip(&last[q]).for_each(|(a, b)| *a += by * b);
-                sum += by;
-            }
-            f.map(|v| v / sum)
-        }).collect();
-        feat.extend(region.iter().map(|&r| next[r]));
-        last = next;
-    }
 }

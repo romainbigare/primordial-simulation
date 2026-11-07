@@ -528,6 +528,64 @@ fn the_store_of_small_cells_spreads_in_a_month_as_in_thirty_days() {
     books.assert_within(&month, 1e-9, 1e-9);
 }
 
+/// The depth below its air block of the cells of `pore_liquid_of_small_cells_spreads_in_a_month_as_in_short_steps`:
+/// 7.8 m on the small island, past the 14 m down to which a month of pore flow is within the limit (laws.md 1.8).
+const STREET: u8 = 10;
+/// Liquid steps of that test's month of short steps.
+const MOUND_STEPS: usize = 64;
+/// How far the liquid the mound keeps after a month may stray from what it keeps after `MOUND_STEPS` steps, a share of
+/// what it held over field capacity (measured: 9%; one step of the month, not sub-stepped, 34%).
+const MOUND_OFF: f64 = 0.12;
+
+/// Pore liquid flows between cells of 7.8 m in a month as in many short steps: on a flat square split down to a street
+/// (`STREET`, the cells beside the finest split two to one), a mound of pore liquid filling the pores of one finest cell,
+/// the cells around it at field capacity, keeps after one month within `MOUND_OFF` of what it keeps after
+/// `MOUND_STEPS` steps. One explicit step of the month would take dt Σ g / cap past `sweep::LIMIT`, and move no more than
+/// half of what levels a link (`sweep::HALF_WAY`): the cell and its links sub-step inside the month (laws.md 1.8). The
+/// books are kept.
+#[test]
+fn pore_liquid_of_small_cells_spreads_in_a_month_as_in_short_steps() {
+    let mut w = worldgen::testkit::small_world();
+    w.drain_events();
+    w.relief.iter_mut().for_each(|r| *r = 0.0);
+    // Split down to the street the leaf that holds the middle of the first dry square, one depth at a time.
+    let square = w.map.leaves()[worldgen::testkit::dry_land(&w)];
+    let mid = (square.x + square.side() / 2, square.y + square.side() / 2);
+    let mut leaf = square;
+    while leaf.depth < STREET {
+        worldgen::testkit::split_flat(&mut w, &[leaf], 1);
+        leaf = leaf.split(leaf.depth + 1).find(|l| (l.x..l.x + l.side()).contains(&mid.0) && (l.y..l.y + l.side()).contains(&mid.1)).expect("a quarter");
+    }
+    (w.cfg.evap, w.cfg.rain_time, w.cfg.phys.hill) = (0.0, f64::INFINITY, 1e15);
+    let mound = w.map.cell(leaf).expect("a cell of the street");
+    let near: Vec<usize> = w.mesh.cells().around(mound).1.iter().map(|&j| j as usize).collect();
+    let (mv, field) = (w.chem.molar_volume(LIQUID, Phase::Liquid), w.cfg.phys.field);
+    for (&i, share) in std::iter::once(&mound).chain(&near).zip(std::iter::once(1.0).chain(std::iter::repeat(field))) {
+        let pores = w.cfg.phys.porosity * loose(&w, i);
+        set_amount(&mut w, Node::ground(i), LIQUID, share * pores / mv);
+        let t = w.chem.subs[LIQUID].melt + 10.0;
+        hold_ground(&mut w, i, t);
+    }
+    pcore::flow::state(&mut w, true);
+    let (books, over) = (Books::now(&w), (1.0 - field) * w.cfg.phys.porosity * loose(&w, mound));
+    let (mut month, mut short, len) = (w.clone(), w, pcore::Config::default().calendar().month as f64);
+    pcore::flow::liquid(&mut month, len);
+    for _ in 0..MOUND_STEPS {
+        pcore::flow::liquid(&mut short, len / MOUND_STEPS as f64);
+        pcore::flow::state(&mut short, false);
+    }
+    let (a, b, full) = (liquid_m3(&month, mound), liquid_m3(&short, mound), field * pore_m3(&month, mound) + over);
+    println!("the mound keeps {a:.4} m³ after a month, {b:.4} m³ after {MOUND_STEPS} steps, of {full:.4} m³ ({over:.4} m³ over field capacity)");
+    assert!(full - b > 0.2 * over, "the mound spreads: it keeps {b} m³ of {full} m³");
+    assert!((a - b).abs() < MOUND_OFF * over, "after a month {a} m³, after {MOUND_STEPS} steps {b} m³");
+    books.assert_within(&month, 1e-9, 1e-9);
+}
+
+/// The pore space of cell `i` of `w`, m³.
+fn pore_m3(w: &World, i: usize) -> f64 {
+    w.cfg.phys.porosity * loose(w, i)
+}
+
 /// Darcy's law across a 2 km cell moves under 0.02% of its pores a year (`seep`, a metre of ground, a slope of 1 in
 /// 1,000), but the liquid drains inside the cell to its channels, `hill` from the divides: a full store of the bed on a
 /// sloping cell loses a share 1 - exp(-`bed_seep` x slope x time / (`bed_porosity` x `hill`)) of it in a step, which runs

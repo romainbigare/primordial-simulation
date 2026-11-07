@@ -79,9 +79,16 @@ below; a step is at least a second, so a cell 21 depths finer than a square or m
 draws of the bodies of a cell that steps a day or longer are keyed by the day (two of its steps never fall on one
 day); those of a cell that steps faster by the time in seconds, above every day's key (`World::key_at`). **Every
 body updates at the month's start**, after the month's Flow, Change and Bond: one batch holds every living body. Then
-at the end of each sub-step of the finest cells' step the cells whose step ends there are surveyed again (what movers
-broke there; in every cell its numbers and features, as the moves and meals since left them) and their bodies update
-in a batch of the same passes; the other cells do nothing then. Flow, Change and Bond keep their steps (1.8).
+at the end of each sub-step of the finest cells' step the cells whose step ends there (listed once a month from the
+depths) are surveyed again and their bodies update in a batch of the same passes, on chunks that hold only those cells;
+the other cells do nothing then. The survey of a sub-step works out what the bodies that decide then read, as a survey
+of every cell would leave it: in each cell that steps what movers broke there; the numbers and features (5.2) of their
+cells, of the cells around them and of the regions the levels of those features read (`choose::Near`), each again only
+where a pass held the cell since it was last worked out (`life::Touched`: only a pass that holds a cell changes its
+life). The batch's serial pass works on the cells its entries go to, the physics of the bodies that landed on the cells
+bodies landed in or were left behind in (a child born late in its sub-step, a node whose new members count less), the
+merge on the cells of two bodies or more. So a sub-step's work follows the cells that step and their bodies, and the
+world is the one a survey and a batch of every cell would make. Flow, Change and Bond keep their steps (1.8).
 **An update: a decision, then the physics of the step ahead in sub-steps** (`survey::updates`). A body decides once
 at each of its cell's steps (5.3), and then its own physics runs over the step ahead, to its cell's next step, in
 sub-steps of one **physiological step** (`World::phys_grid`: 7.5 days, a quarter of a month, or the cell's step
@@ -119,9 +126,10 @@ when the cell is made, that never changes and is never given again (the world ke
 change. A body's id is the serial of the cell it was placed in and that cell's count of bodies placed (children, split
 halves, parts of nodes acting apart, `life::new_id`); it never changes, and its random draws are keyed by it. An id
 finds its cell through one table from serial to index (`Life::at_serial`). The cells
-are cut into `Config::chunks` runs of neighbouring indices, the same for any number of threads. **The parallel pass**:
+are cut into `Config::chunks` runs of neighbouring indices, the same for any number of threads; a pass on some cells
+(a sub-step's, the serial pass's) holds in each chunk only those of its run (`life::Of`). **The parallel pass**:
 each chunk is one task on the pool (`life::run`), its cells taken out of the world, the world read only; in each cell
-in order (of the cells that step), first the physics to now of a body whose physics is behind; then every body with a
+in order, first the physics to now of a body whose physics is behind; then every body with a
 brain perceives its inputs and the bodies of each lineage find their hidden layers together (5.1); then each decides
 and acts, the mature ones first and then the young, each in the order they came; then the sub-steps of the step
 ahead, at each first the meal of every body not leaving the cell (but at the first, whose meal its decision gave),
@@ -346,7 +354,7 @@ the heat that reaches the surface (`air::radiation`). A cell is **land**
 when its solid surface is above 0 m (`World::is_land`). The top `skin_m` trades heat with the surface. Heat spreads
 sideways yearly by one explicit `solve::sweep`, a link passing the harmonic mean of conductivity × thickness, times
 width over length (Patankar 1980; `flow::land::conduct`), between land cells (`flow::on_land`): rock spreads a hot spot one cell in about 70,000 years, so a
-year is far below the explicit limit.
+year is far below the explicit limit on cells of kilometres; a cell under 17 m sub-steps (1.8).
 **Melting plateaus** (`ground::melting`): a node holds the fusion enthalpy of what is molten in it, so it stays at a
 melting point (lowered by solutes, 2.5) until that substance has all frozen or melted. A node whose heat melts or
 freezes all of it within a step stays there only for the share of the step that takes, then goes on from that point,
@@ -393,13 +401,14 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
   a cell it passes on through): each way's room counts all the cell holds, so where its ways together would take it
   lower, each takes less, in proportion (`to_rims`), and no liquid crosses a rim from below it. So a pool a flood
   crosses ends full to its spill level and no higher. What reaches a sea cell stays there and joins the sea.
-- **Pore water** flows by Darcy's law (one explicit `solve::sweep` on the liquid table, the store's too): `seep` ×
+- **Pore water** flows by Darcy's law (an explicit sweep on the liquid table, the store's too, sub-stepped in a cell
+  too small for the month, 1.8): `seep` ×
   saturated thickness × width / distance, at most half of what would level two cells, and no cell giving more than it
   holds over field capacity; pores at or under field capacity (`field`) give nothing. Over cells of kilometres a
   liquid step moves a table a thousandth of the way to its neighbours', far below the explicit limit. Liquid above it sinks to the deep store
   (`drain::sink`, at most `seep` a second and the store's room) right after each of the air's steps, which bring the
   rain: held until the month's liquid step, it would cover and darken the ground (`land::reflectance`, 1.4) and
-  warm it. The store flows by `bed_seep`, sub-stepped in a cell too small for the month (`flow::deep`, 1.8). Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
+  warm it. The store flows by `bed_seep` (`flow::deep`). Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
   the cell's steepest slope over a hillslope of `hill` into the runoff (`flow::drain`). **None of this runs under the
   sea**: its loose ground lies under it with its pores full, and the bed's store under it is not drained, so no liquid
   sinks there, no pore or store flow reaches or leaves a sea cell, and its store feeds no channel.
@@ -428,7 +437,8 @@ The head lost by moving liquid does work where it is lost on land (`flow::liquid
 settles and it wears nothing): it **carries** up to `carry`
 m³ of loose solids per J (dropping what is over capacity, so load settles where flow slows), and with the work its
 load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears** `wear` m³ of
-bed per J over its strength into loose ground. **Creep** (`flow::creep`, yearly, out of land cells):
+bed per J over its strength into loose ground. In a cell too small for the month its work is what sub-steps of its
+carrying give (1.8). **Creep** (`flow::creep`, yearly, out of land cells):
 loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope,
 across each border by its width (none across a corner). Bodies hold the ground: carrying
 and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 8. **Burial**: the loose ground mixes over what lies on it (bioturbation, Darwin 1881), so a part no body holds and no bond joins sinks `bury` m/s into it, no deeper than the loose ground is, and once buried past its smallest outer size it joins its cell's ground (`bond/month.rs::bury`, 3.1).
@@ -554,15 +564,19 @@ of `dt` is safe down to Δ = √(8 D dt). On the island (month 2.59e6 s, year 3.
 | The air's exchange with a cell (`air::cells`) | 15 days | implicit in the cell, per m²; the air's days run on the blocks | any size |
 
 The drain to the channels inside a cell (`hill`), the sink into the store and what comes up are exact for any step in
-the cell itself. So only the bed's store passes its limit, in a cell under 305 m whose store is deep (measured at the
-most depth: 3.0 in cells of 125 m with full stores, 0.85 in cells of 250 m): such a cell and its links take
-`solve::sweep::steps` sub-steps inside the liquid's month, each from the stores as the sub-steps leave them, the cells
-beside them held as the month starts; each link's sum is booked once by both its cells (a flux register, Berger and
-Colella 1989), and the other links step once with what each cell's sub-stepped links left it (`flow::deep`). The coarse
-cells keep their step, and the books close as every move is booked on both sides. In a cell finer than the other
-limits of the table (under about 15 m), a link of an explicit sweep carries at most half of what would level its two
-cells in a step (`sweep::HALF_WAY`): pore flow, erosion and heat there move slower than their law, never across the
-level. On a globe a square is hundreds of km and a cell needs depth 15 below its block to come under 40 m.
+the cell itself. A cell finer than a limit of the table (the bed's store under 305 m where it is deep, measured at the
+most depth: 3.0 in cells of 125 m with full stores, 0.85 in cells of 250 m; pore flow and heat sideways under about
+15 m; carrying under 9 m at the largest river) sub-steps that law inside its step by one helper (`solve::sweep::by_size`,
+a flux register, Berger and Colella 1989): such a cell and its links take `solve::sweep::steps` sub-steps, each from
+what the sub-steps leave the cells that need them; a cell beside them stays as the step started but for its potential,
+which follows what those links brought it; each link's sum is booked once by both its cells, and the other links step
+once with what each cell's sub-stepped links left it. The store's table and the pores' (`flow::deep`, `drain::pore_flow`)
+follow what they hold, a temperature the heat it gained (`land::conduct`), and the carrying of a cell's load is a sweep
+of its surface toward those of the ways its liquid takes, which stay as the step started: its work is what the sub-steps
+carry over what one step would (`runoff::Pass::worked`), so a small cell under a river is not cut below its ways in a
+month. The coarse cells keep their step (so a default run is as before), and the books close as every move is booked on
+both sides. A mound of pore liquid in a cell of 7.8 m keeps after a month within 9% of what it keeps after 64 short
+steps (34% in one step, `pore_liquid_of_small_cells_spreads_in_a_month_as_in_short_steps`). On a globe a square is hundreds of km and a cell needs depth 15 below its block to come under 40 m.
 
 ## 2. Change: substances react inside nodes, faster when hot
 Files: `core/src/change/` (the reactor), `core/src/chem/` (chemistry and its physics), `worldgen/src/chem0.toml`.

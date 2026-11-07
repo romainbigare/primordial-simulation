@@ -285,7 +285,10 @@ impl Moves {
 /// its start (`Life::air_seen`), or as the store holds it now.
 #[inline]
 fn air_seen(w: &World, k: usize, j: usize) -> f64 {
-    w.life.air_seen.get(j * w.chem.ns() + k).copied().unwrap_or_else(|| w.a_seen(k, j))
+    match w.life.air_seen.get(j) {
+        Some(seen) => seen.get_or_init(|| (0..w.chem.ns()).map(|k| w.a_seen(k, j)).collect())[k],
+        None => w.a_seen(k, j),
+    }
 }
 
 impl Moves {

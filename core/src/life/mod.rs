@@ -8,11 +8,12 @@ mod chunk;
 mod cross;
 mod registry;
 mod saved;
+mod touched;
 mod tree;
 
 pub use brains::{Block, Brains, Mind};
 pub use chunk::Chunk;
-pub(crate) use chunk::{bounds, chunks, run};
+pub(crate) use chunk::{bounds, chunks, run, Of};
 pub use cross::{land, Entry};
 pub use registry::Genome;
 
@@ -107,8 +108,11 @@ pub struct Life {
     pub genomes: Vec<Genome>,
     free_genomes: Vec<u32>,
     /// While a parallel pass runs (`life::run`): what bodies and parts see in each air node as the store held it at the
-    /// pass's start (`World::a_seen`, [air node * substances + k]), the same for every cell under it; else empty
-    pub(crate) air_seen: Vec<f64>,
+    /// pass's start (`World::a_seen`, of each substance), the same for every cell under it, worked out where first read;
+    /// else empty
+    pub(crate) air_seen: Vec<std::sync::OnceLock<Vec<f64>>>,
+    /// The cells the passes held, which what follows a pass works on (`touched`)
+    pub(crate) touched: touched::Touched,
 }
 
 impl Life {
@@ -186,19 +190,28 @@ impl Life {
     /// is gone from the cell it was noted in leaves `moved` or `parts_moved`. A cell whose freed brain blocks hold much
     /// of its array packs it (`Brains::pack`).
     pub(crate) fn compact(&mut self) {
-        let Life { cells, moved, parts_moved, .. } = self;
-        parts_moved.retain(|&id, &mut i| cells[i as usize].parts.iter().any(|p| p.id == id));
-        for (i, c) in cells.iter_mut().enumerate().filter(|x| x.1.bodies.iter().any(|b| !b.alive)) {
-            for b in c.bodies.iter().filter(|b| !b.alive && b.id != 0) {
-                if moved.get(&b.id) == Some(&(i as u32)) {
-                    moved.remove(&b.id);
+        let Life { cells, moved, parts_moved, touched, .. } = self;
+        // (Only a pass that held a cell changes it: the cells held since the last compaction, or every cell.)
+        let list = touched.since_compact().unwrap_or_else(|| (0..cells.len() as u32).collect());
+        parts_moved.retain(|&id, &mut i| list.binary_search(&i).is_err() || cells[i as usize].parts.iter().any(|p| p.id == id));
+        for &i in &list {
+            let c = &mut cells[i as usize];
+            if c.bodies.iter().any(|b| !b.alive) {
+                for b in c.bodies.iter().filter(|b| !b.alive && b.id != 0) {
+                    if moved.get(&b.id) == Some(&i) {
+                        moved.remove(&b.id);
+                    }
                 }
+                c.bodies.retain(|b| b.alive);
             }
-            c.bodies.retain(|b| b.alive);
         }
-        for c in cells.iter_mut().filter(|c| c.brains.sparse()) {
-            c.brains.pack(c.bodies.iter_mut().map(|b| &mut b.brain));
+        for &i in &list {
+            let c = &mut cells[i as usize];
+            if c.brains.sparse() {
+                c.brains.pack(c.bodies.iter_mut().map(|b| &mut b.brain));
+            }
         }
+        touched.compacted();
     }
     /// Body `id` is now stored in cell `i` (`find`).
     fn note_at(&mut self, id: u64, i: u32) {

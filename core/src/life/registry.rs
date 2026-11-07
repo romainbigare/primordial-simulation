@@ -84,12 +84,12 @@ impl Life {
     }
     /// The lineages and born rows a chunk of `cells` made get ids of the world, in the order made, and its bodies and
     /// the entries it queued (`out`) name those (laws.md 0).
-    pub(super) fn name(&mut self, cells: std::ops::Range<usize>, (brains, genomes): (Vec<Lineage>, Vec<Vec<f32>>), out: &mut [Entry]) {
+    pub(super) fn name(&mut self, cells: impl Iterator<Item = usize>, (brains, genomes): (Vec<Lineage>, Vec<Vec<f32>>), out: &mut [Entry]) {
         let lin: Vec<u32> = brains.into_iter().map(|l| self.new_lineage(l)).collect();
         let gen: Vec<u32> = genomes.into_iter().map(|g| self.new_genome(g)).collect();
         let to = |x: u32, rows: bool| provisional(x).map_or(x, |k| if rows { gen[k] } else { lin[k] });
         let body = |b: &mut Body| (b.lineage, b.genome) = (to(b.lineage, false), to(b.genome, true));
-        self.cells[cells].iter_mut().flat_map(|c| &mut c.bodies).for_each(body);
+        cells.for_each(|i| self.cells[i].bodies.iter_mut().for_each(body));
         for e in out {
             match e {
                 Entry::Litter(x) | Entry::Back(x) => body(&mut x.c),
@@ -137,7 +137,7 @@ impl Chunk<'_> {
     pub(crate) fn new_brain(&mut self, w: &World, b: &Body) -> Block {
         let Some(s) = self.shape_of(w, b.lineage) else { return Block::default() };
         let born = provisional(b.genome).map_or_else(|| w.life.born(b), |k| &self.written.genomes[k][..]);
-        self.cells[b.cell as usize - self.written.first].brains.alloc(s, born)
+        self.cells[self.written.place(b.cell as usize)].brains.alloc(s, born)
     }
     /// The brain of a child of body `b` (taken out of its slot), of `lineage` and born with `born` (none: with `b`'s born
     /// rows), in `b`'s cell: its born rows plus what `b` learned, where the brains have one shape; else its born rows.
@@ -145,7 +145,7 @@ impl Chunk<'_> {
         let (Some(s), sb) = (self.shape_of(w, lineage), self.shape_of(w, b.lineage)) else { return Block::default() };
         let from = provisional(b.genome).map_or_else(|| w.life.born(b), |k| &self.written.genomes[k][..]);
         let born = born.unwrap_or(from);
-        let brains = &mut self.cells[b.cell as usize - self.written.first].brains;
+        let brains = &mut self.cells[self.written.place(b.cell as usize)].brains;
         let c = brains.alloc(s, born);
         if sb == Some(s) && b.brain.some() && from.len() == born.len() {
             brains.learned_onto(c, b.brain, from, s);
@@ -159,7 +159,7 @@ impl Chunk<'_> {
         let Chunk { cells, written } = self;
         let born = |g: u32| provisional(g).map_or_else(|| &w.life.genomes[g as usize].rows[..], |k| &written.genomes[k][..]);
         let (bt, bj) = (born(gt), born(gj));
-        let brains = &mut cells[i - written.first].brains;
+        let brains = &mut cells[written.place(i)].brains;
         match own {
             crate::nodes::Own::Block(b) if gt == gj => brains.blend(t, b, s, a),
             crate::nodes::Own::Block(b) => brains.blend_learned(t, b, (bt, bj), s, a),
