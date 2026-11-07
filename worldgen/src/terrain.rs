@@ -233,6 +233,7 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
         joined: vec![None; n],
         relief: vec![0.0; n],
         terrain,
+        rise_south: Vec::new(),
         watch: Vec::new(),
         light: vec![0.0; n],
         rained: vec![0.0; n],
@@ -270,7 +271,8 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
     let mut e_ground = heat(&world, Class::Ground);
     balanced.iter().for_each(|&(i, t)| e_ground[i] = world.energy_ground(i, t));
     world.store = rebuild(&world, amounts(&world, Class::Ground), e_ground);
-    // The relief of the terrain inside each cell (laws.md 0).
+    // The relief of the terrain inside each cell, and the way it faces (laws.md 0).
     world.relief = world.relief_at_build();
+    world.rise_south = world.rise_at_build();
     world
 }

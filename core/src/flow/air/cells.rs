@@ -8,7 +8,7 @@ use super::super::land::{layers, melts, reflectance, thaw_at};
 use super::super::Scratch;
 use super::daily::Ground;
 use super::rain::Wet;
-use super::radiation::{glow, glow_slope, insolation, Air, Surface};
+use super::radiation::{glow, glow_slope, on_slope, sun_by_latitude, Air, Surface};
 use super::step::Active;
 use super::surf::{Patch, Surf, Vapour};
 use super::{at_height, lerp};
@@ -167,7 +167,7 @@ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Respons
     let mut rows = room;
     rows.resize(n * width, 0.0);
     // Each task keeps the last latitude and its mean sunlight over the step: neighbouring cells often share a latitude.
-    crate::par::rows(&mut rows, width, crate::par::UNCOUNTED, || (f64::NAN, 0.0, Work::default()), |(lat, q, work), i, row| {
+    crate::par::rows(&mut rows, width, crate::par::UNCOUNTED, || (f64::NAN, [0.0; 2], Work::default()), |(lat, q, work), i, row| {
         if !alone[i] {
             return;
         }
@@ -175,7 +175,7 @@ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Respons
         if at != *lat {
             (*lat, *q) = (at, sunlight(cx.w, cx.decl, at));
         }
-        let ground = Surf::of_cell(cx, i, *q);
+        let ground = Surf::of_cell(cx, i, on_slope(*q, rise(cx, i)));
         let fixed = exchange(cx, &ground, &seen[i * (1 + nx)..(i + 1) * (1 + nx)], work);
         put(&work.p, &work.carry, &mut row[FIXED..]);
         row[..FIXED].copy_from_slice(&fixed);
@@ -191,9 +191,16 @@ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Respons
 }
 
 /// The mean sunlight at the top of the air at latitude `lat`, degrees, over the days of the step, their sun's
-/// declinations `decl`, W/m².
-pub(super) fn sunlight(w: &World, decl: &[f64], lat: f64) -> f64 {
-    decl.iter().map(|&d| insolation(w.cfg.sun, lat.to_radians(), d)).sum::<f64>() / decl.len() as f64
+/// declinations `decl`, W/m², and its slope with latitude, W/m² per radian (`sun_by_latitude`).
+pub(super) fn sunlight(w: &World, decl: &[f64], lat: f64) -> [f64; 2] {
+    let days = decl.iter().map(|&d| sun_by_latitude(w.cfg.sun, lat.to_radians(), d));
+    days.fold([0.0; 2], |a, b| [a[0] + b[0], a[1] + b[1]]).map(|x| x / decl.len() as f64)
+}
+
+/// The rise toward the south of the surface of cell `i`, m per m (`World::rise_south`): none where it lies under the
+/// low basin's liquid, which stands level (`basin`).
+fn rise(cx: &Ctx, i: usize) -> f64 {
+    if cx.s.basin.is[i] { 0.0 } else { cx.w.rise_south[i] }
 }
 
 /// Holds the parts of the ground `g` (`p`, `exchange`) so that it gives no more than it holds however the air it sees

@@ -42,6 +42,7 @@ fn scene(seed: u64) -> World {
     }
     let e = w.store.heat(Class::Ground)[land];
     (0..n).for_each(|i| set_heat(&mut w, Node::ground(i), e));
+    w.rise_south.fill(0.0);
     for i in (0..n).filter(|&i| i % W >= STRIP) {
         let rich = w.g(RICH, i) + STRIP_MOL * w.mesh.cells().area()[0];
         set_amount(&mut w, Node::ground(i), RICH, rich);
@@ -243,7 +244,8 @@ fn a_body_gives_its_stores_but_not_its_body() {
     use pcore::brain;
     use pcore::event::EventKind;
     let (mut w, i) = start();
-    w.cfg.phys.c_handle = 0.0;
+    // (On flat ground, as mild as its latitude: the pace below is set for that warmth.)
+    (w.cfg.phys.c_handle, w.rise_south[i]) = (0.0, 0.0);
     let lay = Layout::of(&w.chem);
     // Brains that only give to a body they see, and that only rest.
     let mut giver = founder(&mut w, 1, i, &Brain::verb(brain::GIVE));

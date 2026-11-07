@@ -97,13 +97,14 @@ impl World {
     /// drained (`World::uneven`), and the liquid that stood over the cell's pores stands at one level over the quarters'
     /// floors (`flow::stand_level`); each quarter with the relief of the terrain inside it and its share by area of what
     /// is left: the potential energy of the pits the drainage filled and what the liquid gave up as it found its level,
-    /// which the ground finer than the quarters still holds.
-    /// Before Flow first built the state of the ground the stacks' potential energy is not found: the quarters are flat,
-    /// each with its share of the relief by area.
+    /// which the ground finer than the quarters still holds. Each quarter faces as its ground stands (`World::rise_south`):
+    /// as it was joined, or the cell's rise plus the terrain's departure inside it at the split's scale, so their mean by
+    /// area is the cell's. Before Flow first built the state of the ground the stacks' potential energy is not found:
+    /// the quarters are flat, each with its share of the relief by area and the cell's rise.
     fn split_one(&mut self, leaf: Leaf, c: &mut Change) {
         let i = self.map.cell(leaf).expect("a cell");
         let (air, record, serial) = (self.mesh.cells().parent()[i] as usize, self.joined[i].clone(), self.life.cells[i].serial);
-        let (relief, before) = (self.relief[i], crate::flow::potential_of(self, &[i], air));
+        let (relief, before, rise) = (self.relief[i], crate::flow::potential_of(self, &[i], air), self.rise_south[i]);
         let (map, quarters) = (self.map.split(leaf), leaf.quarters());
         let mesh = self.mesh_for(&map, false);
         let kids = quarters.map(|q| map.cell(q).expect("a quarter"));
@@ -123,6 +124,15 @@ impl World {
         self.renew((map, mesh), from, c);
         if uneven.is_some() {
             crate::flow::share_ground(self, &kids, ground.quarters(&inside.soil));
+        }
+        // Each quarter faces as the ground it stands does: as it was joined, or the terrain inside it at the scale the
+        // split stands it about the cell's own (`uneven`); else flat, as the cell.
+        let rises = record.as_ref().map(|r| r.rise).or(uneven.as_ref().map(|u| {
+            let whole = self.terrain_rise(leaf);
+            quarters.map(|q| rise + u.scale * (self.terrain_rise(q) - whole))
+        }));
+        if let Some(rises) = rises {
+            kids.iter().zip(rises).for_each(|(&j, r)| self.rise_south[j] = r);
         }
         let kept = record.as_ref().map(|r| r.kept).or(uneven.as_ref().map(|u| u.relief));
         if let Some(kept) = kept {

@@ -1,7 +1,7 @@
 //! The relief a cell holds inside it (laws.md 0): the potential energy its ground holds over its flat form, as
 //! the terrain (`space::terrain`) stands inside it. Every cell holds it from the start (`World::relief_at_build`); a
 //! split of a cell no join made spends it on its quarters' terrain (`World::uneven`), and a join keeps what it flattens
-//! (`World::join`).
+//! (`World::join`). So does the way its ground faces the sun (`World::rise_south`).
 
 use super::sum4;
 use crate::chem::Phase;
@@ -35,6 +35,14 @@ impl World {
     /// and height h, from the base up, holds ρ g a h² / 2 over the base's), ρ the density of the cell's bed.
     pub fn relief_at_build(&self) -> Vec<f64> {
         crate::par::map_n(self.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.bed_weight(i) * self.terrain_in(self.map.leaves()[i]).1)
+    }
+    /// The rise toward the south of the terrain inside leaf `l`, m per m (`Terrain::rise_south`).
+    pub(super) fn terrain_rise(&self, l: Leaf) -> f64 {
+        self.terrain.rise_south(self.seed, &self.map, l, (self.cfg.lat_south, self.cfg.lat_north))
+    }
+    /// The rise toward the south of each cell of a world as built, m per m: the terrain's inside it (`terrain_rise`).
+    pub fn rise_at_build(&self) -> Vec<f64> {
+        crate::par::map_n(self.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.terrain_rise(self.map.leaves()[i]))
     }
     /// The quarters `kids` of cell `i` (leaf `leaf`) in the cells `cells` of the change, by the terrain: each one's bed
     /// surface the cell's mean one plus its departure d, the terrain's mean height over it (on the drained samples,

@@ -14,8 +14,29 @@ pub fn declination(tilt: f64, season: f64) -> f64 {
 
 /// Daily-mean sunlight at the top of the air at latitude `lat` and declination `decl`, radians, W/m² (Berger 1978).
 pub fn insolation(s0: f64, lat: f64, decl: f64) -> f64 {
+    sun_by_latitude(s0, lat, decl)[0]
+}
+
+/// `insolation` and its slope with latitude, W/m² per radian. The sun's height over flat ground at hour angle h is
+/// sin μ = sin φ sin δ + cos φ cos δ cos h, and its slope with φ is the northward part of the unit vector to the sun;
+/// the hours of daylight move with φ too, but the sun is on the horizon at their ends, so they add nothing (Leibniz).
+pub fn sun_by_latitude(s0: f64, lat: f64, decl: f64) -> [f64; 2] {
     let h0 = (-lat.tan() * decl.tan()).clamp(-1.0, 1.0).acos();
-    (s0 / PI * (h0 * lat.sin() * decl.sin() + lat.cos() * decl.cos() * h0.sin())).max(0.0)
+    let flat = (s0 / PI * (h0 * lat.sin() * decl.sin() + lat.cos() * decl.cos() * h0.sin())).max(0.0);
+    [flat, s0 / PI * (h0 * lat.cos() * decl.sin() - lat.sin() * decl.cos() * h0.sin())]
+}
+
+/// The daily-mean sunlight at the top of the air over ground that rises `rise` m per m toward the south (its mean over
+/// the ground), W/m² of its plan, from `sun` (`sun_by_latitude`). By Lambert's cosine law the beam on a surface of
+/// upward normal N = (−∂z/∂x, −∂z/∂y, 1) per m² of plan is S (s · N), s the unit vector to the sun: linear in the slope,
+/// so the sun on a ground is that on its mean slope, and the sum over a ground's parts is S (s · ẑ) over its plan, the
+/// beam that crosses it. Over the daylight hours the east-west part cancels (the morning's against the evening's) and
+/// the north-south part is the slope with latitude: a slope is flat ground moved toward the sun by its rise (the
+/// equivalent latitude, Lee 1962; Swift 1976), exactly in this plan form. An hour a face turns away from the sun counts
+/// against it, as the shadow its ridge casts on the ground beyond (the ground beyond takes the beam it misses), so
+/// the beam is kept whatever the slopes; only a ground whose day sums below zero takes none.
+pub fn on_slope(sun: [f64; 2], rise: f64) -> f64 {
+    (sun[0] + rise * sun[1]).max(0.0)
 }
 
 /// Layers of the air in `column`.

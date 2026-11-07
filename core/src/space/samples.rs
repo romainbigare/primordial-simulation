@@ -3,10 +3,11 @@
 //! that raises each closed basin of the samples to its outlet, so liquid runs off every sample of land it reaches
 //! (Planchon and Darboux 2001; Barnes, Lehman and Mulla 2014): noise has basins that no liquid ever cut. Every cell's
 //! height and relief, at the start and at each split, are means over these samples (`Terrain::inside`), so a cell and
-//! its quarters stand on the same ground at every size. They are a function of the seed and the map alone, found when
+//! its quarters stand on the same ground at every size; so is the way it faces the sun (`Terrain::rise_south`). They are a function of the seed and the map alone, found when
 //! first read and kept with the terrain, not saved.
 
 use super::drain::drain;
+use crate::math::central;
 use super::square::Square;
 use super::terrain::{Terrain, SAMPLE_DEPTH};
 use super::tree::BLOCK;
@@ -52,6 +53,24 @@ impl Terrain {
         let s = Arc::new(self.drained(seed, map, lat));
         *kept = Some(s.clone());
         s
+    }
+
+    /// The mean rise of the ground toward the south over leaf `l` of `map` for `seed` (its rows between latitudes `south`
+    /// and `north`), m per m: by area over the drained samples it covers, each its central difference north to south
+    /// (one-sided at the map's edge); a leaf finer than a sample takes its sample's. So a leaf's is its quarters' mean by
+    /// area at every depth. It is what the sun on a cell reads of the way the cell faces (`flow::on_slope`).
+    pub fn rise_south(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64)) -> f64 {
+        let s = self.samples(seed, map, (south, north));
+        let dy = map.length(SAMPLE_DEPTH);
+        let at = |f: &Leaf| {
+            let k = s.index(f);
+            central(k / s.across, s.down, |r| s.h[r * s.across + k % s.across], dy)
+        };
+        if l.depth <= SAMPLE_DEPTH {
+            let (area, sum) = l.split(SAMPLE_DEPTH).map(|f| (map.place_of(&f, south, north).0, at(&f))).fold((0.0, 0.0), |(a, by), (da, r)| (a + da, by + da * r));
+            return sum / area;
+        }
+        at(&l)
     }
 
     /// The samples of `map` for `seed`, drained: a priority flood from the low ground (on a globe every sample under

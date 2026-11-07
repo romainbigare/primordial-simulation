@@ -50,7 +50,13 @@ seed when first read, not saved): noise has basins that no liquid ever cut, so a
 Planchon and Darboux 2001; Barnes, Lehman and Mulla 2014), from every sample under 0 m on a globe and from those under
 0 m joined to the lowest on an island, the lowest first and then the least index, raises each closed basin of the
 samples to its outlet at 1 m per km (`DRAIN_SLOPE`): every cell's height and relief, at the start and at each split,
-are means over the drained samples, so a cell and its quarters stand on the same drained ground. Below the samples
+are means over the drained samples, so a cell and its quarters stand on the same drained ground. So is the way a cell
+faces the sun (1.4): its mean rise toward the south, each sample's central difference north to south (one-sided at
+the map's edge) by area, its sample's for a cell finer than one (`Terrain::rise_south`), so a cell's is its quarters'
+mean by area. It is found once, when the cell is made, and kept (`World::rise_south`): the terrain's at the build; at a
+split each quarter's is the cell's plus the terrain's departure inside it at the scale the split stands the terrain (so
+quarters made flat face as their cell does), or what it was where a join made the cell; a join's is its quarters' mean
+by area. Below the samples
 the ground goes on as a midpoint displacement
 (Fournier, Fussell and Carpenter 1982) that continues the noise's octaves (`Terrain::inside`): the means of the
 quarters of a leaf of side ℓ depart from its mean by four normal draws keyed by the leaf, made to a variance by area of
@@ -276,8 +282,10 @@ deep as it lies under it. **Each kind of cover** by its own growth law (4.5) at 
 liquid in its pores and standing there makes it (`Physics::wetness`), and a kind's light reaction there runs at its
 capacity times its activity on ground that wet (`cover::activity`); light and capacity are the cell's at every sample,
 so its share goes as that activity, and where every sample is as wet as the kind needs, or none is wet at all, it is
-even. The snow is shared evenly for now: the sunlight law does not yet read a cell's slope and facing, and the snow
-inside a cell is to come from that law. A split gives each quarter its part of each share
+even. The snow is shared evenly: the sun on a cell is that on its mean slope (1.4), right for the cell as a whole, and
+the cell's one balance melts its snow as one; a split's quarters then each take the sun of their own slope, so a
+quarter facing the sun melts its part first. Sharing the snow by the sun at the samples would need a melt at each
+sample, which nothing reads. A split gives each quarter its part of each share
 (the sum by area over its samples, `Ground::quarters`), and the shell draws inside a cell with the same shares
 (`tape::fine`), so what is seen before a zoom is what the world goes on with. A join stays a sum.
 **Refinement** (`refine/`, `World::refine`) decides which cells split and join: a setting for speed, not a law (no
@@ -500,7 +508,17 @@ its block and the wind (1.6). The book takes each cell's law at the mean air of 
 the days summed, so the air ends just where its days left it and no node gives more than it holds. A 15-day step
 gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_the_climate`, `tape/tests/ranges.rs`).
 - **Sun** (`radiation`): the daily mean by latitude, season and day length (Berger 1978), declination sin δ = sin ε sin
-  λ, the mean over the step's days. The surface reflects as its cover is at the step's start (`land::reflectance`);
+  λ, the mean over the step's days. **On a slope** (`on_slope`), per m² of the cell's plan: by Lambert's cosine law the
+  beam on ground of upward normal N = (−∂z/∂x, −∂z/∂y, 1) is S (s · N), s the unit vector to the sun, linear in the
+  slope, so a cell takes the sun of its mean slope and a square's sun is the sum of its cells'. Over the hours the sun
+  is up the east-west part cancels and the north-south part is the slope of the daily mean with latitude: Q + r ∂Q/∂φ,
+  r the cell's mean rise toward the south (section 0), the equivalent latitude of Lee (1962) and Swift (1976) in plan form. An
+  hour a face turns away from the sun counts against it, as the shadow it casts on the ground beyond, so the beam is
+  kept whatever the slopes; a cell whose day sums below zero takes none (the one place a square and its cells differ).
+  The low basin's liquid lies level and takes the flat sun. All the sunlight that passes the clouds is taken as beam:
+  a cloud is one reflectance, with no share of the sky it covers, so what passes it cannot be split into beam and
+  diffuse; diffuse light would fall on the plan as on flat ground. The cost is a product and a sum per cell a step,
+  with the slope with latitude found beside the daily mean, once per latitude. The surface reflects as its cover is at the step's start (`land::reflectance`);
   where a soft cover lies, as it is at the step's end, so a cover that melts away darkens the ground in its step. Snow
   reflects from the step after it falls.
 - **Heat radiation**: surfaces emit σT⁴; the air absorbs 1 − exp(−x), x the optical depth of the gases (each as the

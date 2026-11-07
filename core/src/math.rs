@@ -1,5 +1,5 @@
-//! Small functions of decay the laws share, members passing a level (`Pass`), an exact sum, the bits of a set, and a
-//! short list held in place (`Few`).
+//! Small functions of decay the laws share, members passing a level (`Pass`), an exact sum, the bits of a set, the
+//! slope along a line of points, and a short list held in place (`Few`).
 
 /// 1 - exp(-x), exact for small `x`: the share a first-order decay over `x` time constants takes.
 #[inline]
@@ -54,6 +54,14 @@ pub(crate) fn ones(mut bits: u64) -> impl Iterator<Item = usize> {
 #[inline]
 pub(crate) fn rounding_lost(a: f64, b: f64, s: f64) -> f64 {
     if a.abs() >= b.abs() { (a - s) + b } else { (b - s) + a }
+}
+
+/// The slope at point `i` of a line of `n` points `len` apart whose values are `f(0..n)`: central differences,
+/// one-sided at the line's ends (none on a line of one point).
+#[inline]
+pub(crate) fn central(i: usize, n: usize, f: impl Fn(usize) -> f64, len: f64) -> f64 {
+    let (lo, hi) = (i.saturating_sub(1), (i + 1).min(n - 1));
+    if hi > lo { (f(hi) - f(lo)) / (len * (hi - lo) as f64) } else { 0.0 }
 }
 
 /// `n` times the surface of a cube of volume `v`: n 6 v^(2/3), as the square of the edge (`n` first, for the order of
