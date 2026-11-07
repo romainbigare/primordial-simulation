@@ -689,8 +689,9 @@ its cell, and one that holds takes as many as it can hold (3.3); a break finds n
 speed tool: a cell keeps at most `MAX_LOTS` (16) lots of lone parts; past them its lots join again by a coarser key, the
 least band first (`lots::key`): no band of burial, then a mass band 2 to 64 times as wide, then no band of elongation,
 of hollowness, of bond strength, of hardness, and last none of mass, until they are no more; so the records of lone
-parts are at most `MAX_LOTS` a cell, whatever the parts (a world of 1e6 parts placed by an edit steps within 10% of the
-time of one of 1e3, `core/tests/lots.rs`), as `MAX_NODES` bounds the bodies (4.4). Alike parts lose their own history, as members of a node
+parts are at most `MAX_LOTS` a cell, whatever the parts, and so is the work of the monthly pass over parts, which goes
+over each record a fixed number of times (a world of 1e6 parts placed by an edit holds 16 records a cell from its first
+month on, `core/tests/lots.rs`), as `MAX_NODES` bounds the bodies (4.4). Alike parts lose their own history, as members of a node
 do, and their sizes within a band. A part runs no reactions. Monthly (`bond/month.rs`) the
 share of its walls the open world's decomposers would rot in the month (`bond/month.rs::rot`: each reaction they speed,
 `open` above 1, at the rate of Change, `change::rate`, at its cell ground's temperature and moisture, each substance of

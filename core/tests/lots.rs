@@ -131,35 +131,47 @@ fn a_node_holding_a_lot_of_edges_bites_as_its_members() {
 }
 
 /// The cost of parts follows the cells, not the parts (laws.md 3.1): a cell keeps at most `MAX_LOTS` lots of lone
-/// parts, joining the nearest designs. A world with 1e6 parts of random designs placed by an edit steps within 10% of the
-/// time of one with 1e3, each timed as the least of three runs of 60 months after a first month that joins them, and
-/// keeps every part (counted one by one) and the books.
+/// parts, joining the nearest designs, and the monthly pass over parts (`bond::step`: the join, the turns and the loads
+/// of a cell) goes over each record of its cells a fixed number of times, so its work is in proportion to the records.
+/// A world of 1e6 parts of random designs placed by an edit, whose cells hold parts of more designs than the cap, holds
+/// after the month that joins them (which goes over the 1e6 records the edit made, once) and in each of the 60 months
+/// after at most `MAX_LOTS` records a cell, as the cap allows: no part is held, bonded or lived in, the only records the
+/// cap does not join. So its records stay within `MAX_LOTS` times the cells holding parts, as a world of 1e3 parts's do,
+/// whatever the parts. The month that joins them keeps every part (counted one by one); the books are kept throughout,
+/// as thin plates are buried in the months after. The time of 60 months is printed for
+/// both, not held (a shared machine moves it).
 #[test]
-#[ignore = "slow: a world of a million parts (400 MB), and a timing"]
-fn a_million_parts_step_as_fast_as_a_thousand() {
-    // The world with `n` parts after its first month, and the seconds of its next 60 months, least of three.
-    let timed = |n: usize| {
+#[ignore = "slow: a world of a million parts (400 MB)"]
+fn a_million_parts_cost_the_records_of_the_cells() {
+    // Of the world with `n` parts: the most designs one cell holds as placed, the most records a cell held and the
+    // records summed over the 60 months after the first, the most cells that held parts, and the seconds of those months.
+    let run = |n: usize| {
         let mut w = small_world();
         scatter(&mut w, n, 1);
-        let books = Books::now(&w);
-        pcore::step(&mut w);
         let cells = w.mesh.cells().n();
-        assert!((0..cells).all(|i| w.life.cell_at(i).parts.len() <= bond::MAX_LOTS), "a cell holds more lots than the cap");
+        let designs = (0..cells).map(|i| bond::designs(&w.chem, w.life.cell_at(i)).into_values().collect::<std::collections::BTreeSet<u64>>().len()).max().unwrap_or(0);
+        let books = Books::now(&w);
+        let (mut most, mut visited, mut holding) = (0, 0, 0);
+        pcore::step(&mut w);
         let parts: f64 = w.life.parts().map(|p| p.count).sum();
-        assert!((parts - n as f64).abs() < 1e-6 * n as f64, "{parts} parts of {n}");
-        let best = (0..3)
-            .map(|_| {
-                let mut v = w.clone();
-                let start = std::time::Instant::now();
-                (0..60).for_each(|_| pcore::step(&mut v));
-                start.elapsed().as_secs_f64()
-            })
-            .fold(f64::INFINITY, f64::min);
+        assert!((parts - n as f64).abs() < 1e-6 * n as f64, "{parts} parts of {n} after the first month");
+        let start = std::time::Instant::now();
+        for _ in 0..60 {
+            most = most.max((0..cells).map(|i| w.life.cell_at(i).parts.len()).max().unwrap_or(0));
+            visited += w.life.parts().count();
+            holding = holding.max((0..cells).filter(|&i| !w.life.cell_at(i).parts.is_empty()).count());
+            pcore::step(&mut w);
+        }
+        let secs = start.elapsed().as_secs_f64();
         books.assert_within(&w, 1e-9, 1e-9);
-        (best, w.life.parts().count())
+        (designs, most, visited, holding, secs)
     };
-    let (many, records) = timed(1_000_000);
-    let (few, few_records) = timed(1_000);
-    println!("1e6 parts: {many:.3} s in {records} records; 1e3 parts: {few:.3} s in {few_records} records");
-    assert!(many < 1.1 * few, "1e6 parts step in {many} s, 1e3 in {few} s");
+    let (designs, most, visited, holding, secs) = run(1_000_000);
+    let (few_designs, few_most, few_visited, few_holding, few_secs) = run(1_000);
+    println!("1e6 parts: {designs} designs in a cell at most, {most} records, {visited} visited over 60 months in {holding} cells, {secs:.3} s");
+    println!("1e3 parts: {few_designs} designs in a cell at most, {few_most} records, {few_visited} visited over 60 months in {few_holding} cells, {few_secs:.3} s");
+    assert!(designs > bond::MAX_LOTS, "the cap does not bind: {designs} designs in a cell at most");
+    assert!(most <= bond::MAX_LOTS && few_most <= bond::MAX_LOTS, "a cell held {most} and {few_most} records, the cap {}", bond::MAX_LOTS);
+    let bound = 60 * bond::MAX_LOTS * holding;
+    assert!(visited <= bound && few_visited <= bound, "{visited} and {few_visited} records visited, the cap's bound {bound}");
 }
