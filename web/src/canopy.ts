@@ -98,13 +98,12 @@ function crownShares(wood: number): number[] {
   return s.map((_, k) => (k === i ? 1 - t : k === i + 1 ? t : 0));
 }
 
-/** What a stand puts in a texel: the density of each lattice's marks, and its trees' density, the part of it that is
- * forest and the part that is jungle. */
+/** What a stand puts in a texel for each part of its ground it closes: the share of each lattice's marks, and the
+ * share that is trees, the part of it that is forest and the part that is jungle. */
 interface Stand { marks: number[]; trees: number; forest: number; jungle: number }
 
 /** The marks of a stand whose cover holds `kg` and `wood` kg/m² and `leaf` capture area per m², whose ground is at `t` K
- * and whose rain is `rain` mol/m²/s: as many marks as its cover is closed (1 - e^-area), shared between the kinds by how
- * far it is past each of their thresholds. */
+ * and whose rain is `rain` mol/m²/s: shared between the kinds by how far it is past each of their thresholds. */
 function standOf(kg: number, wood: number, leaf: number, t: number, rain: number): Stand {
   const closed = 1 - Math.exp(-leaf), cold = 1 - past(t, TUNDRA_T, SOFT_K), desert = 1 - pastLog(closed, DESERT_CLOSED), grown = 1 - desert;
   const woody = grown * pastLog(wood / kg, WOODY), herbs = grown - woody;
@@ -113,24 +112,29 @@ function standOf(kg: number, wood: number, leaf: number, t: number, rain: number
   const jungle = forest * past(t, JUNGLE_T, SOFT_K) * pastLog(rain, JUNGLE_RAIN) * pastLog(closed, JUNGLE_CLOSED);
   // A desert is rare tundra where it is cold and rare shrubs elsewhere.
   const herbal = [herbs - tundra - steppe, tundra + desert * cold, steppe, woody - trees + desert * (1 - cold)];
-  return { marks: [...herbal, ...crownShares(wood).map(share => share * trees)].map(share => share * closed), trees: trees * closed, forest: forest * closed, jungle: jungle * closed };
+  return { marks: [...herbal, ...crownShares(wood).map(share => share * trees)], trees, forest, jungle };
 }
 
 /** The share of a mark of `size` m that stands out of liquid `depth` m deep over its foot: a plant about as tall as its
  * mark is wide stands out of shallow liquid and is under the surface in deeper. */
 const emerged = (depth: number, size: number) => 1 - smooth(0.5 * size, size, depth);
 
-/** Write into texel `i` of `out` the marks of the stands of `f` there: each stand's own (`standOf`), as many as the
- * stands hold together, those that stand under the liquid there left out. */
+/** Write into texel `i` of `out` the marks of the stands of `f` there: as many as their capture areas together close
+ * the ground (1 - e^-area, the leaves of one stand shading those of another as their own do), each stand's share of
+ * them as its share of the area, of its own kinds (`standOf`), those that stand under the liquid there left out. */
 function putStands(out: CoverField, i: number, f: CoverNumbers): void {
   const n = f.w * f.h, marks = LATTICES.map(() => 0);
+  let area = 0;
+  for (let s = 0; s < f.stands; s++) if (f.kg[s * n + i] > 0) area += Math.max(f.leaf[s * n + i], 0);
+  if (area <= 0) return;
+  const closed = (1 - Math.exp(-area)) / area;
   let wood = 0, trees = 0, forest = 0, jungle = 0;
   for (let s = 0; s < f.stands; s++) {
     const kg = f.kg[s * n + i], leaf = f.leaf[s * n + i];
     if (kg <= 0 || leaf <= 0) continue;
-    const st = standOf(kg, f.wood[s * n + i], leaf, f.t[i], f.rain[i]);
-    st.marks.forEach((m, l) => { marks[l] += m; });
-    wood += f.wood[s * n + i]; trees += st.trees; forest += st.forest; jungle += st.jungle;
+    const st = standOf(kg, f.wood[s * n + i], leaf, f.t[i], f.rain[i]), share = leaf * closed;
+    st.marks.forEach((m, l) => { marks[l] += m * share; });
+    wood += f.wood[s * n + i]; trees += st.trees * share; forest += st.forest * share; jungle += st.jungle * share;
   }
   const depth = f.depth ? f.depth[i] : 0;
   marks.forEach((m, l) => putChannel(out, i, l, m * emerged(depth, LATTICES[l].mark)));

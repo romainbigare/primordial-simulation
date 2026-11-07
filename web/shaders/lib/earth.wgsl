@@ -58,6 +58,8 @@ const FRINGE_M = 0.5;
 // shine on it from this share of soaking on.
 const WET_DARK = 0.5;
 const FILM_FROM = 0.8;
+// A bed that sends back less than this share of its light (half a display level of 255) does not show.
+const SHOWS = 0.002;
 
 // Field `t` (32-bit floats, which a sampler may not blend) at uv, blended between its texels' centres, its edge texels
 // held beyond them.
@@ -124,8 +126,8 @@ struct Spot {
   snow: f32, t: f32, plants: f32, z: f32, slope: f32, shade: f32,
   // Beach sand on it and a river through it, 0..1, and the river's depth, m.
   sand: f32, river: f32, river_depth: f32,
-  // The slope of a liquid's surface there (its ripples).
-  ripple: vec2f,
+  // Where it lies in the world, m, and the metres a pixel takes there (for the ripples of a liquid's surface).
+  at: vec2f, e: f32,
 }
 
 // The spot at uv of the fields, whose ground's height and slope are those of `h` (`spline` of `height_field`), seen
@@ -154,7 +156,8 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.sand = SAND_SHARE * s.sea * (1.0 - ease(0.0, look.z, s.over));
   s.river = m.w;
   s.river_depth = inside.y;
-  s.ripple = ripples(earth.place.xy + uv * earth.place.zw, e);
+  s.at = earth.place.xy + uv * earth.place.zw;
+  s.e = e;
   return s;
 }
 
@@ -193,8 +196,10 @@ fn colour(p: Spot) -> Shaded {
   // Under the liquid: its bed, soaked and without snow (frozen liquid lies on the surface, calm), seen through it,
   // flat: at no depth it is the soaked ground with its film of liquid.
   if (p.depth > 0.0) {
-    let bed = soil(ground_of(p, p.plants, 0.0), 1.0, lit);
-    let rgb = mix(water_over(bed, p.depth, p.ripple * (1.0 - p.snow)), SNOW, p.snow * 0.85);
+    // No bed shows through water deeper than shows any of it.
+    var bed = vec3f(0.0);
+    if (through(p.depth).b > SHOWS) { bed = soil(ground_of(p, p.plants, 0.0), 1.0, lit); }
+    let rgb = mix(water_over(bed, p.depth, ripples(p.at, p.e) * (1.0 - p.snow)), SNOW, p.snow * 0.85);
     var kind = select(LAKE, select(SHALLOW, DEEP, p.depth > DEEP_SEA_M), p.sea >= 0.5);
     if (p.snow > 0.5) { kind = ICE; }
     // The true view shades the bed's colours as far as the bed shows.
@@ -205,11 +210,14 @@ fn colour(p: Spot) -> Shaded {
   let g = ground_of(p, p.plants, p.snow);
   let s = soaked(p);
   let film = ease(FILM_FROM, 1.0, s) * g.bare;
-  var rgb = soil(g, s, lit) + film * surface_light(p.ripple * film);
+  var rgb = soil(g, s, lit);
+  let river = p.river * (1.0 - 0.6 * p.snow);
+  if (film <= 0.0 && river <= 0.0) { return Shaded(rgb, lit, g.kind); }
+  let ripple = ripples(p.at, p.e);
+  rgb += film * surface_light(ripple * film);
   var kind = g.kind;
   // A river: its water over its own bare bed.
-  let river = p.river * (1.0 - 0.6 * p.snow);
-  if (river > 0.0) { rgb = mix(rgb, water_over(soil(ground_of(p, 0.0, 0.0), 1.0, lit), p.river_depth, p.ripple), river); }
+  if (river > 0.0) { rgb = mix(rgb, water_over(soil(ground_of(p, 0.0, 0.0), 1.0, lit), p.river_depth, ripple), river); }
   if (river > 0.5) { kind = RIVER; }
   return Shaded(rgb, lit, kind);
 }
