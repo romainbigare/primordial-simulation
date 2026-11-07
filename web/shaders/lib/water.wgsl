@@ -12,8 +12,10 @@ const DEEP_WATER = vec3f(14.0, 46.0, 92.0);
 const REFLECT_UP = 0.02;
 const SKY = vec3f(205.0, 222.0, 240.0);
 const SUN = vec3f(255.0, 250.0, 235.0);
-// The sun shows in a ripple as sharply as this power of the cosine between its slope and the half-way light.
-const GLINT_POWER = 60.0;
+// The sun shows in a ripple as sharply as this power of the cosine between its slope and the half-way light, at most
+// this share of its light (the sun's disc is small: a glint is a sparkle, not a sheet).
+const GLINT_POWER = 150.0;
+const GLINT_MOST = 0.4;
 // Ripples: their longest wavelength, m, the octaves below it (each half as long), and the slope of each.
 const RIPPLE_LONGEST_M = 2.0;
 const RIPPLE_OCTAVES = 4;
@@ -57,7 +59,7 @@ fn surface_light(g: vec2f) -> vec3f {
   let fresnel = REFLECT_UP + (1.0 - REFLECT_UP) * pow(1.0 - n.z, 5.0);
   let half_way = normalize(LIGHT + vec3f(0.0, 0.0, 1.0));
   let glint = pow(max(dot(n, half_way), 0.0), GLINT_POWER);
-  return fresnel * (SKY + SUN * glint / REFLECT_UP);
+  return fresnel * SKY + GLINT_MOST * glint * SUN;
 }
 
 // The share of the light that crosses `depth` m of water down to its bed and back, for red, green and blue.

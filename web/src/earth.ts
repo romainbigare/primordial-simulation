@@ -114,7 +114,7 @@ export function seaSquares(wet: Wet, meta: Meta): Uint8Array {
 export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
   const m = w.meta, { w: W, h: H, cell_m, globe } = m, n = W * H;
   const z = decode(w, f, 'z'), depth = decode(w, f, 'depth'), ice = decode(w, f, 'ice'), tg = decode(w, f, 't_ground');
-  const flux = decode(w, f, 'flux'), catchment = decode(w, f, 'catch');
+  const flux = decode(w, f, 'flux'), catchment = decode(w, f, 'catch'), leaf = decode(w, f, 'leaf');
   const plants = plane(w, f, 'plants'), tr = plane(w, f, 'true_r'), tgr = plane(w, f, 'true_g'), tb = plane(w, f, 'true_b');
   const wet = wetOf(w, f), sea = seaSquares(wet, m);
   const wrapX = (x: number) => (globe ? (x + W) % W : x);
@@ -138,7 +138,7 @@ export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
     put4(height, i, z[i], water, gx, gy);
     put4(matter, i, ice[i], tg[i], sea[i], wet.wet[i] ? 0 : riverOf(flux[i], catchment[i]));
     put4(bytes, i, plants[i], tr[i], tgr[i], tb[i]);
-    put4(inside, i, 0, riverDepthOf(flux[i]), 0, 0);
+    put4(inside, i, 0, riverDepthOf(flux[i]), Math.exp(-leaf[i]), 0);
   }
   const o = w.base + f * w.frameBytes;
   const fields: Fields = { w: W, h: H, height, matter, bytes, inside, layers: w.data.subarray(o, o + w.frameBytes), look: [1, 0, SQUARE_BEACH_M, 1], place: [0, 0, W * cell_m, H * cell_m] };

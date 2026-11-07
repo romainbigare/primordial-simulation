@@ -83,7 +83,7 @@ export function fineFields(f: Fine, meta: Meta, wet: Wet): Fields {
   const lut = (name: string) => world.lut[world.index.get(name)!];
   const bytesOf = (name: string) => world.data.subarray(world.base + world.index.get(name)! * n, world.base + (world.index.get(name)! + 1) * n);
   const ice = bytesOf('ice'), tg = bytesOf('t_ground'), plants = bytesOf('plants'), tr = bytesOf('true_r'), tgr = bytesOf('true_g'), tb = bytesOf('true_b');
-  const iceLut = lut('ice'), tLut = lut('t_ground');
+  const iceLut = lut('ice'), tLut = lut('t_ground'), leafLut = lut('leaf'), leaf = bytesOf('leaf');
   const rivers = riverShares(f), sea = seaSquares(wet, meta);
   const height = new Float32Array(4 * n), matter = new Float32Array(4 * n), bytes = new Uint8Array(4 * n), inside = new Float32Array(4 * n);
   for (let y = 0; y < down; y++) {
@@ -99,7 +99,7 @@ export function fineFields(f: Fine, meta: Meta, wet: Wet): Fields {
       const sq = clamp(Math.floor(ys), 0, meta.h - 1) * meta.w + clamp(Math.floor(f.at.x + (x + 0.5) / per), 0, meta.w - 1);
       put4(matter, i, iceLut[ice[i]], tLut[tg[i]], sea[sq], rivers[4 * i + 3] / 255);
       put4(bytes, i, plants[i], tr[i], tgr[i], tb[i]);
-      put4(inside, i, f.wet[i], rivers[4 * i] * RIVER_DEPTH_STEP_M, 0, 0);
+      put4(inside, i, f.wet[i], rivers[4 * i] * RIVER_DEPTH_STEP_M, Math.exp(-leafLut[leaf[i]]), 0);
     }
   }
   const look: Fields['look'] = [Math.max((pxM / meta.cell_m) ** SLOPE_POWER, SLOPE_LEAST), f.melt, BEACH_M, OVER_FADE];

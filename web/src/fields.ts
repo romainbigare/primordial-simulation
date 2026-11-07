@@ -15,7 +15,8 @@ export interface Fields {
   /** Four bytes a texel: the byte of the plant cover's mass (the `plants` layer) and the true colour (r, g, b). */
   bytes: Uint8Array;
   /** Four floats a texel: how wet the ground is, 0..1 (tape/src/fine/inside.rs; 0 where the frame does not say); the
-   * depth of the river through it, m; two unused. */
+   * depth of the river through it, m; the share of the ground the plant cover leaves bare (e^-area, its capture area
+   * per m² the `leaf` layer); one unused. */
   inside: Float32Array;
   /** Every layer of the table (tape/src/layers.rs), a byte a texel, layer after layer: a layer view and the worn paths
    * read them. */

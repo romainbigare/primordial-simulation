@@ -29,7 +29,8 @@ struct Earth {
 // The byte of the layer a view draws, and of the worn paths, 0..1.
 @group(0) @binding(5) var view_field: texture_2d<f32>;
 @group(0) @binding(6) var smooth_sampler: sampler;
-// How wet the ground is, 0..1; the depth of the river through it, m.
+// How wet the ground is, 0..1; the depth of the river through it, m; the share of the ground the plant cover leaves
+// bare.
 @group(0) @binding(7) var inside_field: texture_2d<f32>;
 
 // The map classes (web/src/earth.ts CLASSES).
@@ -116,8 +117,8 @@ fn hill_shade(g: vec2f, k: f32) -> f32 {
 // What the colour of a point of the map reads.
 struct Spot {
   // The depth of the liquid standing there, m (0: none); the ground's height over the liquid's surface, m (0 under
-  // it); the share of the liquid that is the sea's; how wet the ground is, 0..1.
-  depth: f32, over: f32, sea: f32, wet: f32,
+  // it); the share of the liquid that is the sea's; how wet the ground is, 0..1, and the share of it that is bare.
+  depth: f32, over: f32, sea: f32, wet: f32, bare: f32,
   // Snow and ice on it, 0..1; the ground's temperature, K; the byte of the plant cover's mass (0..255); the ground's
   // height, m; its slope (rise over run); the light on it over the light on flat ground.
   snow: f32, t: f32, plants: f32, z: f32, slope: f32, shade: f32,
@@ -141,6 +142,7 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.over = max(-water, 0.0);
   s.sea = m.z;
   s.wet = inside.x;
+  s.bare = inside.z;
   s.t = m.y;
   let ice = ease(0.02, 0.5, m.x);
   let near = select(0.0, 1.0 - ease(SNOW_NEAR_K.x, SNOW_NEAR_K.y, abs(s.t - look.y)), look.y > 0.0);
@@ -159,14 +161,14 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
 // A spot's shaded colour (display, 0..255), its shade's multiplier and its map class.
 struct Shaded { rgb: vec3f, m: f32, kind: u32 }
 
-// The colour of the ground of spot p, unlit, with plants `plants` (their byte) and snow `snow` on it, and the share of
-// it that is bare; and its map class.
+// The colour of the ground of spot p, unlit, with plants `plants` (their byte) and snow `snow` on it, the share of it
+// that is bare (all where it has no plants) and its map class.
 struct Ground { rgb: vec3f, bare: f32, kind: u32 }
 fn ground_of(p: Spot, plants: f32, snow: f32) -> Ground {
   let v = sqrt(plants / 255.0);
   var g: Ground;
   g.rgb = ramp_plants(v);
-  g.bare = 1.0 - v;
+  g.bare = select(p.bare, 1.0, plants <= 0.0);
   g.kind = select(select(FOREST, GRASS, v < 0.62), DESERT, v < 0.3);
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
