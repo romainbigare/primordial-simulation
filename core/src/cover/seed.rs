@@ -17,6 +17,28 @@ pub(crate) struct Seed {
     pub heat: f64,
 }
 
+/// A share of a slot's seeds that stays in its cell below this is the rounding of the shares of where they land: it
+/// goes with the others.
+const STAYS_LEAST: f64 = 1e-9;
+
+/// Seeds of slot `x` (`mol` of each part, `heat` J, `genes`) shared out over the cells they land in, `lands` (cell,
+/// share; `copy::dispersed`), what stays in cell `i` last: each part as a packet of its own (`Seed`), the last taking
+/// what the others leave of each part and of the heat, so they hold all of it exactly.
+pub(super) fn send(c: &mut Cover, x: usize, (mol, heat): ([f64; NP], f64), genes: [f32; NG], (i, mut lands): (usize, Vec<(usize, f64)>)) {
+    let stays = 1.0 - lands.iter().map(|l| l.1).sum::<f64>();
+    if stays > STAYS_LEAST || lands.is_empty() {
+        lands.push((i, stays));
+    }
+    let (mut left, mut warm, last) = (mol, heat, lands.len() - 1);
+    for (k, &(j, share)) in lands.iter().enumerate() {
+        let part: [f64; NP] = std::array::from_fn(|q| if k == last { left[q] } else { (mol[q] * share).min(left[q]) });
+        let h = if k == last { warm } else { (heat * share).min(warm) };
+        (0..NP).for_each(|q| left[q] -= part[q]);
+        warm -= h;
+        c.seeds.push(Seed { to: j as u32, mol: part, genes, root: c.root[x], heat: h });
+    }
+}
+
 /// Land the seeds of every cell's last month (`Cover::seeds`), cell by cell in the order made, with the potential energy
 /// of the heads they leave and land at (`store::life_went`); those that find no slot, and the cover they outweigh, go to
 /// the ground of their cell as remains, booked at once.

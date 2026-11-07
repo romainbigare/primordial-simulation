@@ -878,11 +878,13 @@ eat with it at every sub-step after, whatever the step. A child has a body of
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
 dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member
 (`copy::BROOD_HELD`), so its members' broods lie evenly between none and one child, as individuals' do. A share
-`DISPERSE` of the children starts `spread_m` away in a random compass direction (`copy::dispersed`): from a point of
-its cell drawn evenly over it, `spread_m` east or west and north or south as the direction says, in the cell that holds
-the point reached (`Tree::at`; none if that is its own cell or off the map): the neighbour that way of a 2 km square,
-the cell four on of a cell of 500 m, out of an 8 km cell across a side a quarter of the time. So they go as far in
-metres whatever the cells, and the links of a cell (at most 8, so a cell beside finer ones lacks some directions,
+`DISPERSE` of the children starts `spread_m` away in a random compass direction (`copy::dispersed`): what disperses
+starts evenly over its cell and moves `spread_m` east or west and north or south as the direction says, so it lands
+evenly over the area of its cell shifted by that step, each cell that area overlaps holding its share by area
+(`Tree::overlaps`; what lies in its own cell or off the map stays): from a 2 km square the square beside it, alike
+over its 16 cells of 500 m if it is split; from a cell of 500 m the cell four on, or the 2 to 4 it overlaps; out of an
+8 km cell across a side a quarter of it. Whole members go together to one of those cells, drawn by its share
+(`copy::landing`), as seeds land in expectation. So they go as far in metres whatever the cells, and the links of a cell (at most 8, so a cell beside finer ones lacks some directions,
 `Square`) do not turn them back; one way for all of a node's children of an update (for an individual, that chance),
 where they land when the batch ends (0). Less than one member with no node to
 join waits in the brood, or, landed in a neighbour cell, goes back into it. Children who start a body in their parent's
@@ -1018,7 +1020,8 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
 - **Seeds**: the share `SEED` of what it builds leaves `spread_m` away in a random compass direction, as children do
-  (`copy::dispersed`, 4.2; or stays where that is its own cell or off the map), with one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
+  (`copy::dispersed`, 4.2), shared out by area over the cells it lands on, each share a packet of its own
+  (`seed::send`; what lies in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
   not pay: what a kg more would store with the light at the bottom of its layer (`math::shade`) is less than a kg's
   upkeep, so the slot is **full** (`Cover::full`) and stops thickening where its lowest leaves would not pay for
   themselves (Monsi and Saeki 1953; Hirose 2005). When every cell has had its month the seeds land (`cover::land`),
@@ -1266,7 +1269,8 @@ meal, its decision's or a sub-step's (`live::fade_meal_heat`), what it took and 
 by, from where it stood, fades over the time to its next physics (its physiological step) by the share e^(-g dt / C):
 the heat of a meal leaves through its coat to its ground; a meal colder than the body is warmed by the body's own heat
 as it eats, drawn back from its ground, which its upkeep's heat went to, at most what its upkeep releases over that
-time at its last sub-step's mean rate (`Lived::released`, W). So a body of hours to days starts its next sub-step where it stood. **Two states, one at every step.** As its pace rises with its temperature, a body whose own heat over its
+time at a mean rate, W: after its decision its last sub-step's (`Lived::released`), after a meal by the take law that
+of its upkeep over the meal (`choose::eat_for`; a newborn's or a lander's meal comes before any sub-step of its own). So a body of hours to days starts its next sub-step where it stood. **Two states, one at every step.** As its pace rises with its temperature, a body whose own heat over its
 coat warms it past its surroundings by more than T² / Ea (about 12 K for chemistry 0's main burning, Ea 7,760 K: there
 the pace's rise, Ea / T² of it per K, feeds the heat faster than the coat lets it out) runs on to a warm state, at most
 its `COOL_T`, where its coat opens; below that it lies cold, or at its `KEEP_T` by burning. In a room the walls add to

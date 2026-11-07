@@ -384,6 +384,32 @@ pub fn split_flat(w: &mut World, region: &[Leaf], depths: u8) {
     }
 }
 
+/// The cells round cell `i` made flat land at its height, with its liquid and soil: each holds per m² what `i` holds in
+/// its loose ground, its bed and the store under it, and their heat per m² (booked as edits); then Flow's slow ground is
+/// rechecked. A scene whose cell and its quarters differ only by their size: no liquid runs off a slope into or out of
+/// it sideways (on real slopes that is a law of the size of the cells itself, which `tape/tests/scale.rs` checks).
+pub fn flat_round(w: &mut World, i: usize) {
+    let (cells, ns) = (w.mesh.cells(), w.chem.ns());
+    let round: Vec<usize> = cells.around(i).1.iter().map(|&j| j as usize).collect();
+    let area = cells.area().to_vec();
+    for j in round {
+        let f = area[j] / area[i];
+        for class in [Class::Ground, Class::Bed, Class::Deep] {
+            let held = w.store.amounts(class);
+            if held.is_empty() {
+                continue;
+            }
+            let per = held.len() / ns;
+            let want: Vec<f64> = (0..ns).map(|k| f * held[k * per + i]).collect();
+            want.into_iter().enumerate().for_each(|(k, mol)| set_amount(w, Node::new(class, j), k, mol));
+            if let Some(&e) = w.store.heat(class).get(i) {
+                set_heat(w, Node::new(class, j), f * e);
+            }
+        }
+    }
+    pcore::flow::refresh(w);
+}
+
 /// The cells of the first air node of `w` whose cells are all land: a region to split.
 pub fn land_block(w: &World) -> Vec<Leaf> {
     let air = w.mesh.level(pcore::AIR);
