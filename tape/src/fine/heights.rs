@@ -27,13 +27,11 @@ const LEAN: [f64; 5] = [3.0 / 128.0, -22.0 / 128.0, 0.0, 22.0 / 128.0, -3.0 / 12
 /// The least side of a leaf, m, on which the terrain's departures are laid: finer, the ground goes on smooth, so a view
 /// closer than a metre a pixel shows the ground's shape, not a roughness the hill shading would show as grit.
 const DETAIL_LEAST_M: f64 = 1.0;
-/// A cell's points (`Samples::points`) are the leaves this many depths below it: 8 x 8.
-pub(super) const POINT_DEPTHS: u8 = 3;
 
 /// The terrain's samples of a map (the core's, drained, `Terrain::samples`, at the leaves of `SAMPLE_DEPTH`): the
 /// height, m, and the slope of the noise below it, read when first needed (the terrain does not change), with the
-/// terrain's mean height over each cell's leaf and at its points found so far, and the ground inside each cell's leaf as
-/// the core shares its means over it (`World::ground_in`).
+/// terrain's mean height over each cell's leaf found so far, and the ground inside each cell's leaf as the core shares
+/// its means over it (`World::ground_in`).
 pub struct Samples {
     /// The map's width and height in samples, and the area of a sample in each row, m²
     across: usize,
@@ -41,7 +39,6 @@ pub struct Samples {
     area: Vec<f64>,
     drained: Option<Arc<Drained>>,
     means: BTreeMap<Leaf, f64>,
-    points: BTreeMap<Leaf, Vec<f64>>,
     grounds: BTreeMap<Leaf, Ground>,
 }
 
@@ -53,7 +50,7 @@ impl Samples {
         let per = 1usize << (SAMPLE_DEPTH - sq);
         let (across, down) = (w.map.w * per, w.map.h * per);
         let area = (0..down).map(|y| w.map.place_of(&leaf(SAMPLE_DEPTH, 0, y as i64), w.cfg.lat_south, w.cfg.lat_north).0).collect();
-        Samples { across, down, area, drained: None, means: BTreeMap::new(), points: BTreeMap::new(), grounds: BTreeMap::new() }
+        Samples { across, down, area, drained: None, means: BTreeMap::new(), grounds: BTreeMap::new() }
     }
     /// Read the samples, if not yet read.
     fn fill(&mut self, w: &World) {
@@ -88,15 +85,15 @@ impl Samples {
         self.means.insert(l, h);
         h
     }
-    /// The terrain's heights at the leaves `POINT_DEPTHS` below leaf `l`, m, row by row (kept once found).
-    pub(super) fn points(&mut self, w: &World, l: Leaf) -> &[f64] {
-        if !self.points.contains_key(&l) {
-            let (k, d) = (1i64 << POINT_DEPTHS, l.depth + POINT_DEPTHS);
-            let (x, y) = ((l.x / (BLOCK >> d)) as i64, (l.y / (BLOCK >> d)) as i64);
-            let h = window(w, self, [x, y, x + k - 1, y + k - 1], d);
-            self.points.insert(l, h);
-        }
-        &self.points[&l]
+    /// The floors of leaf `l` at `depth` (no shallower): the terrain's height at each of its leaves of that depth, m,
+    /// and its share of the leaf's area.
+    pub(super) fn floors(&mut self, w: &World, l: Leaf, depth: u8) -> Vec<(f64, f64)> {
+        let k = 1i64 << (depth - l.depth);
+        let (x, y) = ((l.x / (BLOCK >> depth)) as i64, (l.y / (BLOCK >> depth)) as i64);
+        let h = window(w, self, [x, y, x + k - 1, y + k - 1], depth);
+        let row: Vec<f64> = (y..y + k).map(|r| w.map.place_of(&leaf(depth, x, r), w.cfg.lat_south, w.cfg.lat_north).0).collect();
+        let whole = k as f64 * row.iter().sum::<f64>();
+        h.iter().enumerate().map(|(p, &z)| (z, row[p / k as usize] / whole)).collect()
     }
     /// The ground inside leaf `l` (`World::ground_in`, kept once found).
     pub(super) fn ground(&mut self, w: &World, l: Leaf) -> &Ground {

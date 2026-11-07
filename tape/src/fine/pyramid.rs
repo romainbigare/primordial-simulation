@@ -9,11 +9,11 @@
 //!
 //! So the field keeps the mean of each node of the coarsest depth, and the mean of each node departs from the field's
 //! over its parent by its own departure from its parent's mean, but for the part of the field's slope across the
-//! parent that its own value does not show (`exact` keeps every cell's mean). A cell that holds its parent's value shows the parent's
-//! smooth field and no edge of its own, even where the cells beside it took very different values from their own
-//! parents; what a cell holds of its own shows at its own scale. The field is continuous with its slope, so hill
-//! shading shows no creases, and a pixel's value depends on its place only, whatever window it is found for. Nodes past
-//! the map's edge mirror those inside it; a globe's rows wrap.
+//! parent that its own value does not show. A cell that holds its parent's value shows the parent's smooth field and
+//! no edge of its own, even where the cells beside it took very different values from their own parents; what a cell
+//! holds of its own shows at its own scale. The field is continuous with its slope, so hill shading shows no creases,
+//! and a pixel's value depends on its place only, whatever window it is found for. Nodes past the map's edge mirror
+//! those inside it; a globe's rows wrap.
 
 use pcore::World;
 use std::collections::HashMap;
@@ -181,17 +181,6 @@ impl Pyramid {
 
     /// The field of the cells' values `v` at each pixel of the window, row by row (`Pyramid`).
     pub fn field(&self, v: &[f64]) -> Vec<f64> {
-        self.spread(v, false)
-    }
-
-    /// The field of the cells' values `v` that keeps the mean of every cell: each node departs from the coarser field
-    /// by all its own departure from it. For values that change smoothly from cell to cell, as the terrain's means do.
-    pub fn exact(&self, v: &[f64]) -> Vec<f64> {
-        self.spread(v, true)
-    }
-
-    /// The field of `v`, keeping every cell's mean if `exact`.
-    fn spread(&self, v: &[f64], exact: bool) -> Vec<f64> {
         let mut mean = vec![0.0; self.parent.len()];
         self.lies.iter().for_each(|&(i, j, a)| mean[j as usize] += a * v[i as usize]);
         let g = inverse();
@@ -201,7 +190,7 @@ impl Pyramid {
             let wide = lv.read.grown(1);
             let pre = coef.map(|(from, c)| finer(from, &c, wide));
             let detail = match &pre {
-                Some(pre) => self.departures(lv, &mean, pre, exact),
+                Some(pre) => self.departures(lv, &mean, pre),
                 None => lv.node.iter().map(|&j| if j == NONE { 0.0 } else { mean[j as usize] }).collect(),
             };
             let mut c = match &pre {
@@ -219,8 +208,8 @@ impl Pyramid {
 
     /// The departure each node read by level `lv` (finer than the coarsest) adds, over `lv.read` (0 where no node is),
     /// each group of four children together as `Pyramid` says, from the nodes' means `mean` and the coarser levels'
-    /// coefficients `pre` (over `lv.read` and one more each way); if `exact`, each node's mean less the coarser field's.
-    fn departures(&self, lv: &Level, mean: &[f64], pre: &[f64], exact: bool) -> Vec<f64> {
+    /// coefficients `pre` (over `lv.read` and one more each way).
+    fn departures(&self, lv: &Level, mean: &[f64], pre: &[f64]) -> Vec<f64> {
         let r = lv.read;
         let mut out = vec![0.0; r.w * r.h];
         let wide = r.grown(1);
@@ -243,7 +232,7 @@ impl Pyramid {
                 // The share of the coarser field's slope across the parent that the children's own departures show.
                 let (sp, pp) = (over(&|k| (k.mean - own) * (k.drawn - field)), over(&|k| (k.drawn - field) * (k.drawn - field)));
                 let share = if pp > 0.0 { (sp / pp).clamp(0.0, 1.0) } else { 0.0 };
-                kids.iter().for_each(|k| out[k.at] = if exact { k.mean - k.drawn } else { k.mean - own - share * (k.drawn - field) });
+                kids.iter().for_each(|k| out[k.at] = k.mean - own - share * (k.drawn - field));
             }
         }
         out

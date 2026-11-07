@@ -1,6 +1,6 @@
-//! A window finer than its cells (`tape::fine`): its ground keeps each square's height as its mean and has no steps at
-//! the cells' edges, a split that shares out its cell by area changes nothing drawn of what it shares so, it does not
-//! depend on the window, liquid stands at its own cell's level on the low ground of wet cells, and rivers run down.
+//! A window finer than its cells (`tape::fine`): its ground is the terrain, whatever the cells and the window, and a
+//! split that shares out its cell by area changes nothing drawn of what it shares so; each cell's liquid fills the
+//! terrain inside it from its lowest point, holding the cell's own, so shores lie inside cells; and rivers run down.
 
 use pcore::World;
 use tape::{fine, Samples, LAYERS};
@@ -50,60 +50,44 @@ fn window(w: &World, s: &mut Samples, at: [f64; 2], depth: u8) -> (Fine, usize) 
     (read(&fine(w, s, [at[0], at[1], 8.0, 8.0], depth), across * across), across)
 }
 
-/// Each pair of pixels next to each other in a window `across` pixels a side, and whether they lie in one cell
-/// (`cell`: the cell a pixel shows).
-fn pairs(across: usize, cell: impl Fn(usize) -> usize) -> Vec<(usize, usize, bool)> {
-    (0..across * across - across)
-        .flat_map(|p| [p + 1, p + across].into_iter().filter(move |&q| q % across != 0 || q == p + across).map(move |q| (p, q)))
-        .map(|(p, q)| (p, q, cell(p) == cell(q)))
-        .collect()
-}
-
 #[test]
-fn the_fine_ground_keeps_each_squares_height_and_shows_no_cells_edge() {
+fn the_fine_ground_is_the_terrain_whatever_the_cells_and_the_window() {
     let mut w = testkit::small_world();
     let depth = 8;
-    let before = window(&w, &mut Samples::new(&w), [4.0, 4.0], depth).0;
+    let (before, across) = window(&w, &mut Samples::new(&w), [4.0, 4.0], depth);
+    let n = across * across;
+    // The same pixels in a second window: pixel (x, y) of the first is pixel (x - 2 per, y - per) of the second.
+    let (other, _) = window(&w, &mut Samples::new(&w), [6.0, 5.0], depth);
+    let per = across / 8;
+    let moved = (per..across).flat_map(|y| (2 * per..across).map(move |x| (y * across + x, (y - per) * across + x - 2 * per)));
+    assert!(moved.into_iter().all(|(p, q)| before.ground[p] == other.ground[q]), "a pixel's ground is the same in two windows");
     // Cells of many sizes: the cell in the window's middle split down to 1/32 of a square (its neighbours split with it).
     for _ in 0..5 {
         let i = w.mesh.tree().cell_at(w.map.point_at(8.3, 8.3));
         w.split(w.map.leaves()[i]).expect("a split");
     }
-    let mut s = Samples::new(&w);
-    let f = tape::fields(&w);
-    let (got, across) = window(&w, &mut s, [4.0, 4.0], depth);
-    let n = across * across;
+    let got = window(&w, &mut Samples::new(&w), [4.0, 4.0], depth).0;
+    assert!(got.ground == before.ground, "the ground drawn does not change where cells split");
     assert!(got.inside[..n].iter().all(|w| (0.0..=1.0).contains(w)) && got.inside[n..].iter().all(|&x| x >= 0.0), "a wetness 0 to 1 and cover of none or more");
     assert!(got.make.iter().all(|&x| x >= 0.0), "walls and capture area of none or more");
-    assert!(w.map.leaves().iter().all(|l| l.depth >= w.map.square_depth()), "the coarsest cells are squares");
-    let per = (across / 8) as f64;
-    let at = |p: usize| [((p % across) as f64 + 0.5) / per, ((p / across) as f64 + 0.5) / per];
+    let at = |p: usize| [((p % across) as f64 + 0.5) / per as f64, ((p / across) as f64 + 0.5) / per as f64];
     let cell = |p: usize| w.mesh.tree().cell_at(w.map.point_at(4.0 + at(p)[0], 4.0 + at(p)[1]));
     let named: std::collections::BTreeSet<(usize, u32)> = (0..n).map(|p| (cell(p), got.cell[p])).collect();
     let (cells, numbers): (std::collections::BTreeSet<_>, std::collections::BTreeSet<_>) = named.iter().copied().unzip();
     assert!(named.len() == cells.len() && named.len() == numbers.len(), "a pixel's number names its cell");
-    // The mean of each square's pixels against the mean height by area of its cells.
-    let square = |[x, y]: [f64; 2]| y.floor() as usize * 8 + x.floor() as usize;
-    let (mut drawn, mut held) = (vec![(0.0, 0.0); 64], vec![(0.0, 0.0); 64]);
-    (0..across * across).for_each(|p| drawn[square(at(p))] = (drawn[square(at(p))].0 + got.ground[p] as f64, drawn[square(at(p))].1 + 1.0));
-    for i in 0..w.mesh.cells().n() {
-        let ([x0, y0, ..], a) = (w.map.bounds(i), w.mesh.cells().area()[i]);
-        if (4.0..12.0).contains(&x0) && (4.0..12.0).contains(&y0) {
-            let k = square([x0 - 4.0, y0 - 4.0]);
-            held[k] = (held[k].0 + a * f.z[i], held[k].1 + a);
-        }
-    }
-    let off = drawn.iter().zip(&held).map(|(d, h)| (d.0 / d.1 - h.0 / h.1).abs()).fold(0.0, f64::max);
+    // The mean of each square's pixels against the terrain's mean over the square, the height of a cell as built.
+    let lat = (w.cfg.lat_south, w.cfg.lat_north);
+    let mut drawn = vec![(0.0, 0.0); 64];
+    (0..n).for_each(|p| {
+        let k = at(p)[1].floor() as usize * 8 + at(p)[0].floor() as usize;
+        drawn[k] = (drawn[k].0 + got.ground[p] as f64, drawn[k].1 + 1.0);
+    });
+    let side = pcore::space::tree::BLOCK >> w.map.square_depth();
+    let square = |k: usize| pcore::space::Leaf { x: (4 + k as u64 % 8) * side, y: (4 + k as u64 / 8) * side, depth: w.map.square_depth() };
+    let off = (0..64).map(|k| (drawn[k].0 / drawn[k].1 - w.terrain.inside(w.seed, &w.map, square(k), lat).0).abs()).fold(0.0, f64::max);
     let relief = got.ground.iter().fold(f32::MIN, |a, &b| a.max(b)) - got.ground.iter().fold(f32::MAX, |a, &b| a.min(b));
-    // The pixels sample a square (the midpoint rule), so their mean is the field's to a thousandth of the relief.
-    assert!(off < 1e-3 * relief as f64, "a square's pixels hold its height on the mean, off by {off} m of a relief of {relief} m");
-    let pairs = pairs(across, cell);
-    // The mean step of the ground between pixels across a cell's edge and inside a cell.
-    let step = |edge: bool| {
-        let s: Vec<f64> = pairs.iter().filter(|t| t.2 != edge).map(|&(p, q, _)| (got.ground[q] - got.ground[p]).abs() as f64).collect();
-        s.iter().sum::<f64>() / s.len() as f64
-    };
-    assert!(step(true) < 1.5 * step(false), "no step of the ground at a cell's edge: {} m against {} m inside a cell", step(true), step(false));
+    // The pixels sample a square (the midpoint rule), so their mean is the terrain's to a thousandth of the relief.
+    assert!(off < 1e-3 * relief as f64, "a square's pixels hold the terrain's height on the mean, off by {off} m of a relief of {relief} m");
     // A split shares out its cell's rain by area, and here its ice and look as they were: what is drawn of them does not
     // change. (The liquid in its pores goes by the ground inside it, laws.md 0, "Inside a cell".)
     for name in ["ice", "rain", "true_r", "true_g", "true_b"] {
@@ -113,40 +97,38 @@ fn the_fine_ground_keeps_each_squares_height_and_shows_no_cells_edge() {
 }
 
 #[test]
-fn the_fine_ground_does_not_depend_on_the_window_and_liquid_stands_low() {
+fn each_cells_liquid_fills_the_terrain_drawn_inside_it_from_its_lowest_point() {
     let w = testkit::small_world();
-    let mut s = Samples::new(&w);
-    let depth = 8;
-    let ((a, across), (b, _)) = (window(&w, &mut s, [4.0, 4.0], depth), window(&w, &mut Samples::new(&w), [6.0, 5.0], depth));
+    // Pixels the leaves of the cells' own samples (`World::ground_in`), the window's cells all whole squares.
+    let depth = w.map.square_depth() + pcore::inside::DEPTHS;
+    let (got, across) = window(&w, &mut Samples::new(&w), [0.0, 0.0], depth);
     let per = across / 8;
-    // Pixel (x, y) of the first window is pixel (x - 2 per, y - per) of the second.
-    let mut most = 0.0f32;
-    for y in per..across {
-        for x in 2 * per..across {
-            most = most.max((a.ground[y * across + x] - b.ground[(y - per) * across + x - 2 * per]).abs());
-        }
-    }
-    assert_eq!(most, 0.0, "a pixel's ground is the same in two windows");
-    let f = tape::fields(&w);
-    let (got, across) = window(&w, &mut s, [0.0, 0.0], 6);
-    let per = (across / 8) as f64;
-    let cell = |p: usize| w.mesh.tree().cell_at(w.map.point_at(((p % across) as f64 + 0.5) / per, ((p / across) as f64 + 0.5) / per));
-    // The liquid drawn stands at its own cell's level (the shore moves with it, never past the cell's own ground),
-    // only in a cell that holds it standing, and a cell wholly under it holds its depth over the first `STANDING_M` on
-    // the mean (f32).
-    let mut drawn = std::collections::BTreeMap::new();
+    let cell = |p: usize| w.mesh.tree().cell_at(w.map.point_at(((p % across) as f64 + 0.5) / per as f64, ((p / across) as f64 + 0.5) / per as f64));
+    let mut shown: Vec<usize> = (0..across * across).map(cell).collect();
+    shown.sort_unstable();
+    shown.dedup();
+    assert!(shown.iter().all(|&i| w.map.leaves()[i].depth == w.map.square_depth()), "the window's cells are squares");
+    let means = pcore::flow::means(&w, &shown).expect("Flow's state of the ground");
+    // Of each cell: its ground, its level drawn, the depth drawn over it by area, and its pixels under liquid.
+    let mut drawn: Vec<(pcore::inside::Ground, f32, f64, usize)> = shown.iter().map(|&i| (w.ground_in(w.map.leaves()[i]), f32::NAN, 0.0, 0)).collect();
     for p in 0..across * across {
-        let (i, level) = (cell(p), got.water[p]);
-        assert!(level.is_nan() || f.depth[i] > tape::STANDING_M, "liquid drawn only in a cell that holds it standing");
-        let d = drawn.entry(i).or_insert((level, 0.0, 0.0, true));
-        assert!(d.0.to_bits() == level.to_bits(), "the liquid of a cell stands at one level");
-        *d = (level, d.1 + (level - got.ground[p]) as f64, d.2 + 1.0, d.3 && level > got.ground[p]);
+        let k = shown.binary_search(&cell(p)).expect("a cell shown");
+        let (g, level, depth, under) = &mut drawn[k];
+        let s = (p / across % per) * per + p % across % per;
+        assert!((got.ground[p] as f64 - g.h[s]).abs() < 1e-3, "the ground drawn is the terrain the cell's liquid stands on: {} m against {} m", got.ground[p], g.h[s]);
+        assert!(level.is_nan() || level.to_bits() == got.water[p].to_bits(), "the liquid of a cell stands at one level");
+        assert!(got.water[p].is_nan() == (means[k].stands <= 0.0), "liquid drawn in a cell that holds it standing, and only there");
+        *level = got.water[p];
+        *depth += (got.water[p] - got.ground[p]).max(0.0) as f64 * g.area[s];
+        *under += (got.water[p] > got.ground[p]) as usize;
     }
-    let under: Vec<_> = drawn.iter().filter(|d| d.1 .3).collect();
-    assert!(!under.is_empty() && under.iter().all(|(&i, d)| (d.1 / d.2 - (f.depth[i] - tape::STANDING_M)).abs() < 1e-5 * f.depth[i]), "a cell under its liquid holds its depth");
-    let deep = (0..across * across).filter(|&p| f.depth[cell(p)] > 50.0).collect::<Vec<_>>();
-    let covered = deep.iter().filter(|&&p| got.water[p] > got.ground[p]).count() as f64 / deep.len() as f64;
-    assert!(!deep.is_empty() && covered > 0.9, "the sea covers its deep cells but for some of their shores: {covered}");
+    // The liquid drawn holds the cell's standing liquid (to the f32 the heights are drawn in, a millimetre).
+    for (k, (_, _, depth, _)) in drawn.iter().enumerate() {
+        assert!((depth - means[k].stands).abs() < 1e-3, "the liquid drawn over cell {} holds its own, {depth} m against {} m", shown[k], means[k].stands);
+    }
+    let all = per * per;
+    assert!(drawn.iter().any(|d| d.3 == all) && drawn.iter().any(|d| d.3 > 0 && d.3 < all), "cells wholly under liquid, and shores inside cells");
+    let f = tape::fields(&w);
     for r in &got.ways {
         let head = |x: f32, y: f32| {
             let i = w.mesh.tree().cell_at(w.map.point_at(x as f64, y as f64));

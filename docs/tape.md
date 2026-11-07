@@ -64,26 +64,26 @@ size), loose ground, ground and air temperature, rain, vapour, absorber, the cov
 worn edges, structures, true colour (r, g, b). The tape holds whole-map frames only. The live viewer also asks for
 the window in view and a fifth of it about it, finer than its cells (`tape::fine`, the layout in `tape/src/fine/mod.rs`), a pixel a leaf of a depth
 2 to 4 below the cells, at any zoom: of each pixel the ground's height, the level of the liquid its own cell holds,
-and every layer as a smooth field of the cells' values (the ground's temperature along the ground's
-height, at the rate the air cools with height, `World::air_drop`), and the way each cell's liquid runs (to the cell the
-steepest way down its head takes the most of, as the liquid law sends it). The field (`tape/src/fine/pyramid.rs`) is
-built level by level of the cells' tree (a Laplacian pyramid, Burt and Adelson 1983): each level a quadratic B-spline
-whose mean over each node is that node's value (Unser 1999), the coarsest the nodes' means, each finer one the
-departure of each group of four children from their parent less as much of the coarser field's slope across the parent
-as their own departures show. So it keeps the mean of each node of the coarsest depth, a cell that holds what its
-parent held (as a split leaves it) is drawn at its parent's scale and shows no edge, what a cell holds of its own shows
-at its own scale, and a split that only shares out its cell changes nothing drawn. The ground of a pixel is the field of
-the cells' heights plus the terrain's shape finer than it: the terrain there (`space::terrain`: the mean of its samples,
-or finer than them the midpoint displacement's departures laid on a quartic continuation of the coarser heights that
-keeps each leaf's mean, smooth with its slope so hill shading shows no creases along the leaves' edges; below a metre
-the continuation alone) less the field of the terrain's means over the cells, which keeps each cell's mean. The liquid's
-level is its own cell's: of the liquid over its first `STANDING_M` on the mean (that much may run, as a river), the level
-it stands at when it fills the lowest points of the cell's ground first (`flow::level_of`), from a puddle in its lowest
-point on; none in a cell that holds less. So the liquid drawn lies only on the cell's ground below its level, a cell
-wholly under it holds that liquid exactly, and the shore is where the ground drawn rises above it and moves with the
-level, never by a cell's width. (Where only part of a cell is under it, the ground drawn leans with the smooth field of
-the cells' heights while the level is found on the cell's own points, so the liquid drawn may differ from it by a few
-per cent.)
+and every layer as a smooth field of the cells' values (the ground's temperature along the ground's height over its
+cell's mean, at the rate the air cools with height, `World::air_drop`), and the way each cell's liquid runs (to the cell
+the steepest way down its head takes the most of, as the liquid law sends it). The ground of a pixel is the terrain
+itself, drained (`space::terrain`): the mean of its samples, the samples whose means the cells' heights are and over
+whose shape each cell's liquid stands (`flow::curve`); finer than them, the midpoint displacement's departures laid on
+a quartic continuation of the coarser heights that keeps each leaf's mean, smooth with its slope so hill shading shows
+no creases along the leaves' edges; below a metre the continuation alone. So the ground drawn depends neither on the
+cells nor on the window, and has no edge where cells meet. The liquid's level is its own cell's: the liquid standing
+over its pores (`flow::means`) fills the ground drawn inside the cell at the pixels' grain (no finer than 128 x 128
+leaves of the cell) from the lowest up (`flow::level_of`), as the core's level does over the cell's own ground
+(`flow::levels`); none in a cell that holds none. So a pixel is under liquid where the ground drawn lies below its
+cell's level, the shore lies where that ground rises, inside the cells, and moves with the level, a puddle stands in
+the lowest ground drawn and not in every small pit, and the liquid drawn over a cell holds the cell's own at any zoom. The fields of the cells'
+values (`tape/src/fine/pyramid.rs`) are built level by level of the cells' tree (a Laplacian pyramid, Burt and Adelson
+1983): each level a quadratic B-spline whose mean over each node is that node's value (Unser 1999), the coarsest the
+nodes' means, each finer one the departure of each group of four children from their parent less as much of the
+coarser field's slope across the parent as their own departures show. So it keeps the mean of each node of the
+coarsest depth, a cell that holds what its parent held (as a split leaves it) is drawn at its parent's scale and shows
+no edge, what a cell holds of its own shows at its own scale, and a split that only shares out its cell changes nothing
+drawn.
 The terrain's samples are found once (`tape::Samples`). After the layers come **the fields inside the cells**
 (`tape/src/fine/inside.rs`), from the next multiple of 4 bytes (zero bytes pad up to it), each a plane of one f32 a
 pixel (little-endian), the pixels row by row as above, in this order:

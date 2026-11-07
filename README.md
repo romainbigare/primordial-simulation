@@ -60,10 +60,10 @@ colours under the avatars) comes a frame or so later.
 
 At every zoom the live viewer draws the window in view finer than its cells (`tape::fine`, a pixel of 1 to 2 screen
 pixels and no smaller than 5 cm, smoothed up closer, at most 360,000 of them), and a fifth of the view about it, so a pan
-or a zoom out shows it until the next comes: the ground's height from the terrain below the cells (smooth below a metre)
-set on the cells' heights, with hill shading; the liquid each cell holds standing (over the first metre, which may run
-as a river) at the level that fills its own low ground with its volume, drawn where the ground lies below that level, so a shore follows the ground and moves with
-the level; how wet the ground is and the plant cover of each slot inside each cell (`tape/src/fine/inside.rs`); snow by the ground's own temperature; every value of the cells as one smooth field, built level by level of the
+or a zoom out shows it until the next comes: the ground's height, the terrain itself (the samples the cells' heights
+and their liquid stand on, smooth below a metre), with hill shading; the liquid each cell holds standing at the level
+that fills the terrain drawn inside the cell with its volume from the lowest point up, as the core's level does, drawn where
+the ground lies below that level, so a shore follows the ground inside the cells and moves with the level; how wet the ground is and the plant cover of each slot inside each cell (`tape/src/fine/inside.rs`); snow by the ground's own temperature; every value of the cells as one smooth field, built level by level of the
 cells' tree, so a cell that holds what its parent held shows no edge and a refined region looks like the cells about it
 (`tape/src/fine/pyramid.rs`); rivers as lines along the way their liquid runs. The worker makes its fields; it is made
 again when the view rests and once a second while the world plays, and each new window fades in over the last in a
