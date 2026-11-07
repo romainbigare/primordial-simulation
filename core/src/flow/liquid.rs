@@ -3,7 +3,7 @@
 //! (`runoff::surface`), doing work on its bed; the liquid under the surface moves (`drain::under`); and the basin stands
 //! at one level (`basin::level`).
 
-use super::{drain::{springs, under}, land::{stand, wet}, potential::{apply, apply_carried}, range, runoff::surface, Scratch};
+use super::{drain::{springs, under}, land::{cells_state, stand, wet, NONE}, potential::{apply, apply_carried}, range, runoff::surface, Scratch};
 use crate::{store::{Class, LinkFlux}, World};
 
 /// The mobile liquid of every ground node: of each liquid `liq[q]`, `mol[q * n + i]` (its liquid share; all of a
@@ -59,6 +59,10 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], carried:
             }
         }
     }
+    // A node on a melting plateau finds its molten share again from its heat (`cells_state`): what moved of the
+    // plateau's substance was liquid, so the share of what stays is not the share it had.
+    let on: Vec<u32> = cells.into_iter().filter(|&i| s.state.pk[i as usize] != NONE).collect();
+    cells_state(w, s, &on);
 }
 
 /// One liquid step of `dt` seconds; last, the gases of the air dissolve in the liquid where it lies (`air::dissolve`).

@@ -193,6 +193,32 @@ fn a_pool_far_over_its_boiling_point_gives_no_more_than_it_holds() {
     assert!(lost <= 1e-9 * e, "{lost:e} J of {e:e} J rounded away");
 }
 
+/// A melting snowpack on a slope (`SNOW_M` of the liquid's solid, half molten): Flow's phases are those of its heat after
+/// the air's step, which melts more of it, and after the liquid's step, whose meltwater runs off down the slope and leaves
+/// the ice (laws.md 1.2): what the world reads as molten and standing is what the heat holds (within `SHARE`, the heat
+/// the lifts and falls of the matter book after), and none stands there.
+#[test]
+fn meltwater_runs_off_and_the_snow_keeps_the_share_its_heat_holds() {
+    const SNOW_M: f64 = 2.0;
+    const SHARE: f64 = 1e-5;
+    let mut w = worldgen::testkit::squares(3, 16, 16);
+    let (i, _) = pair(&w);
+    let snow = SNOW_M * w.mesh.cells().area()[i] / w.chem.molar_volume(LIQUID, Phase::Liquid);
+    set_amount(&mut w, Node::ground(i), LIQUID, snow);
+    let e = w.energy_ground(i, w.melt(LIQUID, i)) - 0.5 * snow * w.chem.subs[LIQUID].lf;
+    set_heat(&mut w, Node::ground(i), e);
+    let books = Books::now(&w);
+    pcore::flow::state(&mut w, true);
+    let molten = |w: &World| (w.thaw_last(i).1.expect("melting").1, w.thaw(i).1.expect("melting").1);
+    pcore::flow::air(&mut w, DT);
+    let (read, held) = molten(&w);
+    assert!((read - held).abs() < SHARE, "after the air's step: molten share {read} read, {held} held");
+    pcore::flow::liquid(&mut w, LIQUID_STEP);
+    books.assert_within(&w, 1e-9, 1e-9);
+    let ((read, held), stands) = (molten(&w), pcore::flow::means(&w, &[i]).unwrap()[0].stands);
+    assert!((read - held).abs() < SHARE && stands < 1e-9, "molten share {read} read, {held} held; {stands} m stands");
+}
+
 /// A warmer air node gives its heat to its neighbours.
 #[test]
 fn warm_air_spreads() {
@@ -963,10 +989,11 @@ const THAWED_K: f64 = 10.0;
 /// high), and the pool's cell next to the sill, the pit (`PIT`), lies `DEEP_M` under the rest of the pool; the ground is
 /// `THAWED_K` over the melting point. The pool stands full to the sill but for the pit, which is dry, and the flood
 /// (`FLOOD_M` over a small cell) is poured on the pool's cell farthest from the sill. Wear and carrying are off, so the
-/// ground stays as it is. Returns the world and the small cells row by row.
+/// ground stays as it is, and no rain falls: on the cold summit about the square it would lie as snow, raise the pool's
+/// way out and freeze in the pool. Returns the world and the small cells row by row.
 fn flooded_pool() -> (World, Vec<usize>) {
     let mut w = worldgen::testkit::squares(1, 32, 32);
-    (w.cfg.phys.porosity, w.cfg.phys.seep, w.cfg.evap, w.cfg.wear, w.cfg.carry) = (0.0, 0.0, 0.0, 0.0, 0.0);
+    (w.cfg.phys.porosity, w.cfg.phys.seep, w.cfg.evap, w.cfg.wear, w.cfg.carry, w.cfg.rain_time) = (0.0, 0.0, 0.0, 0.0, 0.0, f64::INFINITY);
     let square = w.map.leaves()[top(&w)];
     worldgen::testkit::split_flat(&mut w, &[square], 2);
     let small: Vec<usize> = (0..16).map(|x| (x / 4, x % 4)).map(|(r, c)| w.map.cell(square.quarters()[r / 2 * 2 + c / 2].quarters()[r % 2 * 2 + c % 2]).expect("a small cell")).collect();
