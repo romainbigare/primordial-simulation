@@ -54,6 +54,16 @@ pub(super) fn over_cell(w: &World, s: &Scratch, i: usize) -> f64 {
     w.mesh.cells().area()[i] / s.seen[i]
 }
 
+impl World {
+    /// How fast the air ground cell `i` sees cools with height, K/m (`lerp` of the nodes' drop with height), as the last
+    /// air step found it: what a shell takes for the ground's temperature along the relief finer than the cell. None
+    /// before the air has stepped on these cells.
+    pub fn air_drop(&self, i: usize) -> Option<f64> {
+        let s = &self.scratch;
+        (s.near.len() == self.mesh.cells().n() && s.gam.len() == self.mesh.level(AIR).n()).then(|| lerp(s, &s.gam, i))
+    }
+}
+
 /// Temperature of air at height `z`, m, that is at `t` K at its column's mean height `zair`, m, and cools by `gam` K/m.
 #[inline]
 pub(super) fn at_height(t: f64, gam: f64, z: f64, zair: f64) -> f64 {

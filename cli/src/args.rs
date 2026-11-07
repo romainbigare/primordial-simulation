@@ -37,7 +37,8 @@ pub const USAGE: &str = "usage:
                           square of an island is depth 2, its quarter depth 3)
     --camera FILE         the camera's path refinement follows (none): a line a change, MONTH X Y W H DEPTH (from
                           month MONTH on, the window from column X and row Y, W x H squares, asks for cells of DEPTH),
-                          or MONTH alone (the camera goes away); # starts a comment
+                          MONTH alone (the camera goes away), or MONTH rest (it goes away and the budget of cells
+                          comes down to the cells as built); # starts a comment
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
     --years N, --every N, --out DIR, --frames-every N, --snapshots-every N, --pictures-every N, --months,

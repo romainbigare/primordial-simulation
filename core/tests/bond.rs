@@ -481,3 +481,66 @@ fn act_on(w: &mut World, b: &mut Body, p: u64) {
         bond::act(w, d, b, 1, (x, w.step_days(i)))
     });
 }
+
+/// The ground the room scenes stand on, K: below the eaters' `KEEP_T` (278 K), above the freezing point of their key
+/// liquid.
+const COLD: f64 = 270.0;
+
+/// `n` resting eaters on ground held at `COLD`, inside a closed box of six plates of 4 kg (as a body of 40 kg makes them,
+/// `Physics::form`) or outside it, after their first update, each held at its `KEEP_T` by burning; they do not wear out.
+/// Returns the conductance of the box's walls and openings, W/K, and of each eater the heat that left it through its
+/// coat, W, its coat's conductance, W/K, and its temperature, K.
+fn room_scene(inside: bool, n: usize) -> (f64, Vec<[f64; 3]>) {
+    let (mut w, i) = world();
+    worldgen::testkit::hold_ground(&mut w, i, COLD);
+    w.cfg.phys.e_life = f64::MAX;
+    let parts: Vec<u64> = (0..6).map(|_| plate(&mut w, i, 4.0, false)).collect();
+    for p in &parts[1..] {
+        bond::link(&mut w, *p, parts[0], 1e9);
+    }
+    let s = w.life.part(parts[0]).expect("the root").s;
+    assert!(s.encl.closed > 0.99, "not closed: {s:?}");
+    let ids: Vec<u64> = (0..n).map(|_| {
+        let mut b = eater(&mut w, i, brain::REST, 1.0);
+        b.inside = inside.then_some(parts[0]);
+        let h = w.add(b);
+        w.life[h].id
+    }).collect();
+    let (books, updates) = (Books::now(&w), w.counts.updates);
+    while w.counts.updates == updates {
+        worldgen::testkit::held_day(&mut w, &[i], COLD);
+    }
+    books.assert_within(&w, 1e-9, 1e-9);
+    let p = &w.cfg.phys;
+    let bodies = ids.iter().map(|&id| {
+        let b = &w.life[w.life.find(id).expect("it lives")];
+        assert_eq!(b.inside.is_some(), inside);
+        // Its coat (`Body::conductance`): Meeh's surface over the still air at it and its coat.
+        let coat = p.meeh * b.mass(&w.chem).powf(2.0 / 3.0) / (p.r_air + b.gene(HEAT) * p.r_coat);
+        [b.lived.lost, coat, b.temp(&w.chem)]
+    }).collect();
+    (s.encl.g, bodies)
+}
+
+/// A closed room holds the heat of the bodies inside (laws.md 3.4): its air stands above the outside by the heat that
+/// leaves them through their coats over the conductance of its walls (each with the still air on both faces) and
+/// openings, and each loses through its coat what its coat passes from its `KEEP_T` to that air. So an eater inside on
+/// cold ground burns less to keep warm than one outside, and each of four inside less again (they warm one another's
+/// air); the books close.
+#[test]
+fn a_room_holds_the_heat_of_the_bodies_inside() {
+    let (_, out) = room_scene(false, 1);
+    let ([lost_out, coat_out, keep], tol) = (out[0], 0.01);
+    assert!((lost_out / (coat_out * (keep - COLD)) - 1.0).abs() < tol, "outside {out:?}");
+    let room = |n: usize| {
+        let (g, bodies) = room_scene(true, n);
+        let air = COLD + bodies.iter().map(|b| b[0]).sum::<f64>() / g;
+        for &[lost, coat, t] in &bodies {
+            assert!((lost / (coat * (t - air)) - 1.0).abs() < tol, "{n} inside: lost {lost} W, coat {coat} W/K, {t} K, air {air} K");
+        }
+        println!("{n} inside: the air {:.2} K over the ground; each loses {:.1} % less than outside", air - COLD, 100.0 * (1.0 - bodies[0][0] / lost_out));
+        (air, bodies[0][0])
+    };
+    let (one, four) = (room(1), room(4));
+    assert!(one.1 < 0.95 * lost_out && four.0 > one.0 + 1.0 && four.1 < 0.8 * one.1, "outside {lost_out} W, one {one:?}, four {four:?}");
+}

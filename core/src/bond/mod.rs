@@ -16,8 +16,8 @@ pub use bonds::{Bonds, Enclosure};
 pub use edge::{blunt, edge, edge_leaves, Edge};
 pub(crate) use edge::blunted;
 pub use month::step;
-pub use sense::{depth, features, room};
-pub(crate) use sense::{enclosure, leave_outgrown, possible, sense, SENSE};
+pub use sense::{features, room};
+pub(crate) use sense::{leave_outgrown, possible, room_air, sense, wading, SENSE};
 pub use verbs::{act, bears, carry, form, moved, release, LET_GO, TORN};
 pub(crate) use verbs::{dropped, let_go};
 
@@ -253,8 +253,9 @@ fn numbers<'a>(w: &World, of: impl Iterator<Item = (&'a Part, Walls)>) -> Info {
         let (vo, face) = (pt.outer(), d[0] * d[1]);
         (s.parts, s.mass, s.outer, foot) = (s.parts + 1, s.mass + pt.mass(chem), s.outer + vo, foot + face);
         l = l.max(d[0]);
-        // Across its walls: their conductivity times the face over their thickness (their volume over the face).
-        cond += walls.conductivity * face * face / walls.volume.max(1e-9);
+        // Across its walls: the face over their resistance in series with the still air on each side of it (`r_air`,
+        // ISO 6946's surface resistances): their thickness (their volume over the face) over their conductivity.
+        cond += face / (2.0 * w.cfg.phys.r_air + walls.volume / (face * walls.conductivity).max(1e-12));
         if pt.hollow as f64 * vo > best.1 {
             best = (pt.hollow as f64, pt.hollow as f64 * vo);
         }

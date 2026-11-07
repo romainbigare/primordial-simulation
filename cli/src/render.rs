@@ -56,7 +56,7 @@ impl<'a> Look<'a> {
         for p in w.life.parts() {
             made[p.cell as usize] = true;
         }
-        Look { w, f: fields(w), green: pcore::cover::per_m2(w), other, made }
+        Look { w, f: fields(w), green: pcore::cover::per_m2(w, pcore::cover::Cover::kg), other, made }
     }
 
     /// The colour of panel `panel` (index in `PANELS`) for cell `i`; `beside` are the cells west and north of it, `step`

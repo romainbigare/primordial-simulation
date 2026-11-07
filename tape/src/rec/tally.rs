@@ -76,6 +76,8 @@ pub(super) struct YearTally {
     pub decisions: [f64; 2],
     pub busiest: [f64; 2],
     pub parts: pcore::bond::Tally,
+    /// Members that drew "form" (`Counters::forms`)
+    pub forms: pcore::choose::Forms,
     /// Cover that died, kg, by cause (`Counters::cover_lost`)
     pub cover_lost: [f64; 6],
 }

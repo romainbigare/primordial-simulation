@@ -26,12 +26,13 @@ pub fn step(w: &World, d: &mut Chunk) {
     }
 }
 
-/// What a slot is in a month: its built cover, kg; its capture area and what of it absorbs, m²; its light per unit of
-/// absorbing area over the cover's mean, and at the bottom of its layer (`math::shade`); its activity; what one more
-/// kg of it would store in the month at the bottom of its layer, J (`light`).
+/// What a slot is in a month: its built cover and its living cover (`Cover::living`), kg; its capture area and what of
+/// it absorbs, m²; its light per unit of absorbing area over the cover's mean, and at the bottom of its layer
+/// (`math::shade`); its activity; what one more kg of it would store in the month at the bottom of its layer, J (`light`).
 #[derive(Clone, Copy, Default)]
 struct Slot {
     built: f64,
+    living: f64,
     leaf: f64,
     abs: f64,
     shade: f64,
@@ -100,8 +101,8 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
             continue;
         }
         let act = ph.activity(moist / dec(c.genes[q][MOIST]));
-        *sq = Slot { built, leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, ..Default::default() };
-        layers.push(((c.mol[q][WALL] * mm[WALL] / area) as f32, leaf / area, q));
+        *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, ..Default::default() };
+        layers.push(((c.walls(&mm, q) / area) as f32, leaf / area, q));
     }
     crate::math::shade(&mut layers, |q, f, bottom| (s[q].shade, s[q].bottom) = (f, bottom));
     let (a_abs, lit): (f64, f64) = (s.iter().map(|x| x.abs).sum(), s.iter().map(|x| x.abs * x.shade).sum());
@@ -160,8 +161,8 @@ fn light(w: &World, (moves, c): (&Moves, &mut Cover), p: &Parts, (i, j): (usize,
         let need = dec(c.genes[q][MOIST]);
         let cap = dec(c.genes[q][LIGHT]) * need * pace * s[q].act * dt;
         let lit = |f: f64| per * s[q].abs * f * ph.light_yield / dh;
-        x[q] = lit(s[q].shade).min(cap * s[q].built).max(0.0) * gas;
-        s[q].gain = if s[q].built > 0.0 { (lit(s[q].bottom) / s[q].built).min(cap).max(0.0) * gas * dh } else { 0.0 };
+        x[q] = lit(s[q].shade).min(cap * s[q].living).max(0.0) * gas;
+        s[q].gain = if s[q].built > 0.0 { (lit(s[q].bottom).min(cap * s[q].living) / s[q].built).max(0.0) * gas * dh } else { 0.0 };
     }
     let all: f64 = x.iter().sum();
     if all <= 0.0 {
@@ -192,7 +193,7 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
     // a firmer catalyst costs more).
     let cap = dec(g[LIGHT]) * dec(g[MOIST]) * chem.dh(p.light) * DAY;
     let firm = 1.0 + (chem.subs[p.liquid].melt - g[FROST] as f64).max(0.0) / ph.c_firm;
-    let active = (s.built * days * (ph.c_basal + ph.c_light * cap * firm) + ph.c_leaf * s.leaf * days) * ph.repair(g[REPAIR] as f64) * pace;
+    let active = (s.living * days * (ph.c_basal + ph.c_light * cap * firm) + ph.c_leaf * s.leaf * days) * ph.repair(g[REPAIR] as f64) * pace;
     let cost = active * s.act;
     let (units, fuel) = (cost / -chem.dh(p.burn), per_input(burn, p.sub[FUEL]).unwrap_or(1.0));
     // (What it burns is worked out first: one less a share near one would lose a small fuel to rounding.) It burns no
@@ -203,7 +204,7 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
     // Members of a field wear out at the rate of living as a body's do, a dormant one at least at `Physics::dormant` of
     // the active rate (laws.md 6.7); below its frost gene its frozen share dies as far as it is active, within
     // `frost_k` K (laws.md 6.5).
-    let worn = active * s.act.max(ph.dormant) / (s.built * ph.e_life * dec(g[REPAIR]));
+    let worn = active * s.act.max(ph.dormant) / (s.living * ph.e_life * dec(g[REPAIR])).max(1e-300);
     let frozen = if t < g[FROST] as f64 { ((g[FROST] as f64 - t) / ph.frost_k).min(1.0) * s.act } else { 0.0 };
     let mut lost = [0.0; 6];
     let mut left = 1.0;
@@ -253,7 +254,7 @@ fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool)
     let fixed = p.fix.filter(|_| g[FIX] > FIX_OFF).and_then(|r| {
         let rx = &chem.reactions[r];
         let &(m, out) = rx.outputs.iter().find(|o| need[o.0 as usize] > 0.0)?;
-        let most = (dec(g[FIX]) * s.built * rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat) * s.act * dt).min(b.room(p, rx));
+        let most = (dec(g[FIX]) * s.living * rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat) * s.act * dt).min(b.room(p, rx));
         Some((rx, m as usize, out as f64, per_input(rx, p.sub[FUEL])?, most))
     });
     let others = minerals().filter(|&k| fixed.is_none_or(|f| f.1 != k)).map(by).fold(surplus / fpk, f64::min);

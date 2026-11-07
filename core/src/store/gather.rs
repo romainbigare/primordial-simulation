@@ -246,6 +246,11 @@ impl Moves {
     pub(crate) fn t_air(&self, w: &World, j: usize) -> f64 {
         crate::flow::air_temp(self.heat(w, Node::air(j)), w.cap_air(self.seen(w, j)))
     }
+    /// Heat ground node `i` holds above its floor as the cell running sees it, J: the most it can give
+    /// (`take_from_ground`).
+    pub(crate) fn ground_heat(&self, w: &World, i: usize) -> f64 {
+        heat_above_floor(self.heat(w, Node::ground(i)), self.heat_cap_ground(w, i))
+    }
     /// Heat capacity of ground node `i`'s active layer as the cell running sees it, J/K (`World::heat_cap_ground`).
     pub(crate) fn heat_cap_ground(&self, w: &World, i: usize) -> f64 {
         w.heat_cap_of(i, self.amounts(w, Node::ground(i)), self.amounts(w, Node::new(Class::Bed, i)))

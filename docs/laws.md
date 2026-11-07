@@ -47,14 +47,17 @@ the middle of its map; the world keeps what it needs beside its seed and its map
 125 m on the island, 20 km on a globe of 64 rows), and below them the ground goes on as a midpoint displacement
 (Fournier, Fussell and Carpenter 1982) that continues the noise's octaves (`Terrain::inside`): the means of the
 quarters of a leaf of side ℓ depart from its mean by four normal draws keyed by the leaf, made to a variance by area of
-exactly G² ℓ² / 16 (the quarters of flat ground tilted at slope G). G is the rms slope one octave of the base noise adds (octave o
-weighs 2^−o and is 2^o times as fine, so each adds the same slope, a fractal of Hurst exponent 1): the base's weight over
-the octaves' sum times √(2 (1/5) (26/35)^(D−1)) per unit of the noise (the mean square slope of value noise of D
-dimensions eased by 3t² − 2t³), times the noise's units per m, times how fast the height climbs with the rise at the
-sample (none on the floor). So a leaf has a mean height at any depth, its ancestors' departures added to its sample's
-height, and the ground below a leaf of side ℓ holds the variance G² ℓ² / 12. On the 64 x 64 island G is up to about 0.05 on high land
-(a cell of 8 m departs from its parent's mean by about 0.2 m); on a globe of 64 rows about 1e-4, so its streets are flat: the
-noise holds no finer detail there. What needs the cell at a
+exactly G² ℓ² / 16 (the quarters of flat ground tilted at slope G). G is the larger of two slopes. One is the noise's: the rms
+slope one octave of the base noise adds (octave o weighs 2^−o and is 2^o times as fine, so each adds the same slope, a
+fractal of Hurst exponent 1): the base's weight over the octaves' sum times √(2 (1/5) (26/35)^(D−1)) per unit of the
+noise (the mean square slope of value noise of D dimensions eased by 3t² − 2t³), times the noise's units per m, times how
+fast the height climbs with the rise at the sample (none on the floor). The other is real ground's at the scale ℓ:
+0.1 at 30 m, going as ℓ^(H−1) with H = 0.8 (`real_slope`; numbers.md), so ground the noise leaves smooth (a globe's, whose
+finest octave is tens of km) is as rough as real ground at every scale, under the sea and on ice as on land. So a leaf has
+a mean height at any depth, its ancestors' departures added to its sample's height, and the ground below a leaf holds the
+sum over its depths of G² ℓ² / 16 (`variance_below`). On the 64 x 64 island the noise's G is up to about 0.05 on high
+land, real ground's 0.09 at 62 m and 0.13 at 8 m; on a globe of 64 rows the noise's is about 1e-4 and real ground's 0.03 at 10 km
+and 0.08 at 76 m, so its streets are rough. What needs the cell at a
 point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
@@ -205,7 +208,7 @@ ground of a cell holds inside it over its flat form, a part of the world's poten
 stacks (the function of "The books" below). Every cell holds it from the start: a bed standing at the terrain's heights
 inside it holds ρ g ∫ (h − h̄)² / 2 more than a flat bed of its volume (each column of area a and height h holds
 ρ g a h² / 2 over its base), ρ the density of the cell's bed (`World::relief_at_build`): over the samples inside a cell
-of `SAMPLE_DEPTH` or coarser, Σ a (h − h̄)² / 2 and each sample's A G² ℓ² / 24 below it; a finer cell A G² ℓ² / 24 alone
+of `SAMPLE_DEPTH` or coarser, Σ a (h − h̄)² / 2 and each sample's A V / 2 below it, V the variance by area below a leaf (above); a finer cell A V / 2 alone
 (`Terrain::inside`). It is the same account at every size, to rounding: a cell's is its quarters' and that of their
 means about its own, as the departures are made to that variance exactly. **A split of a
 cell no join made** gives its quarters the terrain inside it (`World::uneven`): each quarter's bed surface is the cell's
@@ -284,9 +287,11 @@ same seed and the same camera path give the same world on any count of threads. 
 player zooms or pans, the page sends the window in view and the depth the zoom calls for (cells of about 6 screen pixels,
 from a zoom of 1.8 times the fit on) to the core (`set_camera`), which adds a shot at the month about to be stepped to the
 run's camera path, as `ew run --camera` reads one; zooming out sends a window of no area, and so does the page after
-`IDLE_MINUTES` (3) of wall-clock time with no input from the player (a zoom, a pan, a click, a key): the camera goes
-away at the month about to be stepped, a recorded change of the camera like any other, so the cells join back and the
-world runs at the coarse pace again; the next input sends the view again. The core never reads a clock. The live world
+`IDLE_MINUTES` (3) of wall-clock time with no input from the player (a zoom, a pan, a click, a key) the camera goes
+away with `rest` at the month about to be stepped, a recorded change of the camera like any other (a shot of no area
+that also sets the budget of cells to the cells as built, each cell counting 4^(built − depth) of a built cell): the
+cells join back, the quietest first, at most `MOST_CHANGES` a month, and no life-driven split takes the room, so the
+world runs at the coarse pace again; the next input sends the view again, with the page's budget. The core never reads a clock. The live world
 refines at each month's start (`World::refine`) under a budget of 1500 cells and no finer than depth 10 (7.8 m, a
 street; its bodies step every 2.8 hours), so the world steps slower by itself while fine cells are in view.
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
@@ -694,10 +699,18 @@ breaks. A structure no body holds lies on the ground and bears no load.
 Structures do not drift; only a body carries one (3.5).
 
 ### 3.3 Holding, floating
-Holding is a bond whose strength is the body's **force**, strength gene × living body × gravity × `grip`
-(`bond::bears`); a body holds only while its force bears the structure's weight. Fuel adds no force; a hurt body is
-weaker. A body is **afloat** where the liquid is deeper than `deep` and what it and its structure displace weighs as
-much as they do (Archimedes): no liquid stands over it (`bond::depth`). No body digs the bed.
+Holding is a bond whose strength is the body's **force**, strength gene × living body × gravity × `grip` × its
+vigour (`bond::bears`); a body holds only while its force bears the structure's weight. Fuel adds no force; a hurt body
+is weaker, and so is a cold one: its **vigour** (`Body::vigour`) is its pace (6.2) at its temperature, at most 1, as
+muscle's power falls with temperature by the rate law of what powers it (a Q10 of 2 to 3; Bennett 1990). In chemistry 0
+a body at 280 K has 0.38 of its force, at 260 K 0.05; at and above `t_cat` (290 K), where the force and the walk are
+anchored, all of it. A bite's force (`feed::take_body`) is each one's force with its vigour. **In liquid** (`bond::wading`): the share of a member's height under its cell's standing liquid is the depth
+over its height, at most 1; its height is its size, the side of a cube of its volume (`Physics::side`, 0.31 m at
+30 kg). Where the liquid is deeper than its height a member swims: it breathes its air (2.4), so it keeps to the
+surface, and the ground and the cover lie within its reach only as deep as its height and its reach, each its size
+(no gene lets a body dive; 5.3). A body rides the structure it holds dry, at the surface, where the liquid is deeper
+than its height and what that structure displaces weighs as much as both (Archimedes): it reaches down its reach
+alone. The share under the liquid passes its heat to the liquid, not the air (6.3). No body digs the bed.
 
 **A held edge concentrates force** (`bond/edge.rs`). Without one a body breaks matter bluntly: it gives way through its
 whole width (3.6). Pressed with the edge of a held part, only a zone as wide as the edge gives way (Atkins 2009): for
@@ -719,8 +732,18 @@ pools all movers' energy in a cell.
 
 ### 3.4 Containment
 Walls that close a space make an **inside** (`bond::room`) joined to its cell by one link (`bond::Enclosure`): heat
-passes the walls (conductivity × face / thickness) and the openings (`leak` per m²), light and rain only the openings.
-A body inside exchanges through that link in series with its own surface. "Shelter" is only this low conductance. A
+passes the walls, each part its face over the still air on both sides of it (`r_air` a side, as ISO 6946's surface
+resistances) in series with its thickness over its conductivity, and the openings (`leak` per m²); light and rain only
+the openings. **The inside holds air** (`bond::room_air`): a share of its cell's air, not made. The heat that leaves
+the bodies inside through their coats goes into that air, and from it through the walls and openings to the outside,
+so in its steady state the air stands above the outside by the heat of all the bodies inside over the link's
+conductance. Its own time, its heat capacity (about 1.2 kJ per m³ and K) over that conductance, is seconds to minutes,
+far below a sub-step: it stands there at every sub-step and holds no heat of its own, so what the bodies lose reaches
+their ground as outside, and the books need no node for it. A body inside stands over that air, raised by the heat the
+others inside lost in their last sub-step (`Lived::lost`: those before it in the cell's order this sub-step's, the rest
+the one before), through
+its coat in series with the link: its own heat warms the air too (6.3). So several bodies in one room warm one another,
+and a node's members warm their room together. "Shelter" is only this low conductance. A
 body enters only where it fits (its volume within the space the walls close, with the bodies already there), and one
 that outgrows the space, by growth or by members joining it, is no longer inside (`bond::leave_outgrown`, at its
 update).
@@ -871,16 +894,20 @@ chance).
 `core/src/cover/`. The light-eaters are not bodies: each cell holds up to `SLOTS` (4) kinds of **cover**, each the
 amounts of three substances of chemistry 0 per cell (the fuel 5 its light reaction makes, body matter 10 and its walls
 13: `cover::Parts`, found from the chemistry's roles) and 9 genes (`cover::LIGHT`, `LEAF`, `WALLS`,
-`STORE`, `FROST`, `MOIST`, `SEED`, `REPAIR`, `FIX`; ranges in `cover::RANGE`). The cover of a cell is a node of the
+`STORE`, `FROST`, `MOIST`, `SEED`, `REPAIR`, `FIX`; ranges in `cover::RANGE`). Its **living cover** is its body
+matter with the liquid of living tissue (matter / (1 − `WET_TISSUE`), as a body's living body, 6.1, `Cover::living`);
+its walls are a frame, which pays no upkeep and does not wear (as a body's, 6.6), so its capacity, capture area,
+upkeep, wear and fixing go by its living cover, as the maintenance breathing of wood goes by its living cells (Ryan
+1990, from memory). The cover of a cell is a node of the
 store (`Class::Cover`) whose law books its own side; it is kept with the cell's bodies (`life::Cell::cover`), so the
 chunk of the cell is its one writer. Its temperature is its ground's: at the end of each month it trades heat with its
 ground to that temperature. **One month** (`cover::step`, its own process after the air's step at a month's start, one
 task per chunk), slot by slot, the tallest (most walls per m²) first:
 - **Light**: the light the cell caught since its last month per m² of capture area (`World::light`), on its capture
-  area (10^`LEAF` m² per kg of built cover) less what it reflects (its parts' colours by volume), shared among its
+  area (10^`LEAF` m² per kg of living cover) less what it reflects (its parts' colours by volume), shared among its
   kinds by height (Beer's law, `math::shade`); under standing liquid times e^(−depth / `light_depth`).
 - **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
-  10^`LIGHT` × 10^`MOIST` mol per kg of built cover per s, times the reaction's pace k e^(−Ea/T) over its value at
+  10^`LIGHT` × 10^`MOIST` mol per kg of living cover per s, times the reaction's pace k e^(−Ea/T) over its value at
   `t_cat`, times its activity a = min(1, wet / 10^`MOIST`)^`dormancy` (wet: how wet its ground is as bodies feel it,
   d / (d + `wet_depth`), d the depth of its key liquid that is liquid, in its pores and standing, `Physics::wetness`); both the light
   and the capacity limit go with the air's share x of the reaction's gas as (x − `gas_floor`) / (x + 2 `gas_floor`)
@@ -891,17 +918,17 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   gas than its cell's share holds (`grow::Books::room`). A cover that works on drier ground works more slowly: its capacity goes with its
   moisture need. The light its bodies' node set aside for it (`Cover::keep`, 1.4) pays first; what it stores beyond
   that comes from its ground, which that light warmed.
-- **Upkeep**, paid by burning its fuel (reaction 1) with the air's oxidising gas: per kg of built cover and day
+- **Upkeep**, paid by burning its fuel (reaction 1) with the air's oxidising gas: per kg of living cover and day
   `c_basal` plus `c_light` × what its capacity could store in a day (dearer by 1 + (melting point of the key liquid −
   `FROST`) / `c_firm` for a cover that stands the cold), plus `c_leaf` per m² of capture area; times its repair factor
   (`Physics::repair`), its activity and the burning's pace at T (seasons come from temperature only). The share unpaid
   dies (`SPENT`). **Wear**: the share 1 − e^−wear dies (`AGE`), wear its upkeep at an activity of at least `dormant`
-  over (built cover × `e_life` × 10^`REPAIR`), as bodies wear (6.7). **Frost**: below its `FROST` gene the share min(1, (`FROST` − T) / `frost_k`) × a
+  over (living cover × `e_life` × 10^`REPAIR`), as bodies wear (6.7). **Frost**: below its `FROST` gene the share min(1, (`FROST` − T) / `frost_k`) × a
   dies (`PHASE`).
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
   out as kinds build, tallest first) build body matter and walls (10^`WALLS` kg per kg of matter) by the conversions of growth (`Chemistry::build`,
   `builds`), paying `c_copy` per kg by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
-  most 10^`FIX` mol per kg per s at the reaction's pace, paid by the reaction's fuel. The fuel past its reserve that
+  most 10^`FIX` mol per kg of living cover per s at the reaction's pace, paid by the reaction's fuel. The fuel past its reserve that
   it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
 - **Seeds**: the share `SEED` of what it builds leaves `spread_m` away in a random compass direction, as children do
@@ -986,15 +1013,24 @@ with the chance that keeps the mean at count × that share), all in the one dire
 so each direction gets its share of members on average, in groups. A
 group moves only if the cell it enters has room and it bears the `bump` share of its weight (`choose::go::can_go`);
 else it takes food where it is for its step and comes back. **rest**; **move** (`choose::go`:
-`walk` per kg and metre, climbing, the bodies in the way; needs force, 3.5); **take**, **put**, **give**
-(`choose/feed.rs`); **watch** (5.5); Bond's form, hold, take from or put to a part, join, break, let go,
+`walk` per kg and metre, climbing, the bodies in the way, the drag of standing liquid; needs force, 3.5); **take**,
+**put**, **give** (`choose/feed.rs`); **watch** (5.5); Bond's form, hold, take from or put to a part, join, break, let go,
 enter (`bond/verbs.rs`). A move lands when the batch ends, and an act on a part and a watch are applied then (0).
 No copy action, no "farm", "trade" or "attack": those must be patterns of these.
+
+**Moving through liquid** (`Physics::drag`): its members push the standing liquid aside, half the link in each cell, by
+the share of their height under it (3.3): per metre, for each member, ½ ρ `DRAG` (s L²) v² over `MUSCLE`, ρ the
+liquid's density, s that share, L its size, v its walking speed, `DRAG` 1.05 (a cube face on; Hoerner 1965), `MUSCLE` 0.25 (the
+share of what muscles burn that becomes work; Smith, Barclay and Loiselle 2005). At one Froude number it is the same
+for every size per kg, 5.2 J a metre in a liquid as dense as bodies, against the walk's 3.0 at 30 kg and 1.0 at a tonne: a body not
+built to swim pays several times on land's cost to cross liquid (Williams 1999). Its force must still give the push of
+a mover (3.5).
 
 **An act takes time** (`choose::act_as`): the step is the body's time to its next update, and the act drawn takes what
 it needs of it. A move takes the walk: its distance at the body's walking speed (`Physics::speed`: every size walks at
 one Froude number v² / (g L) = 0.25, L the side of a cube of a member's volume, the dynamic similarity of Alexander and
-Jayes 1983; 0.9 m/s at 30 kg, so a link of 2 km takes 40 minutes). Putting down and letting go take none. Every other
+Jayes 1983; 0.9 m/s at 30 kg, so a link of 2 km takes 40 minutes) times its vigour (3.3): a cold body walks slower,
+and through liquid pays the drag of its slower speed. Putting down and letting go take none. Every other
 act (rest, give, a bite, a watch, Bond's acts on parts) fills the step (`Body::busy`): what it gives, bites and does
 goes by the time it is given. Taking leaves the step to eating. For the rest of its step a body takes food where it
 ends by the take law (`feed::take_node`): a mover where it lands (`choose::land_move`, for the time from its landing
@@ -1014,7 +1050,9 @@ per kg, of food only (`Body::uses`: what it burns, the body matter and built sol
 of; not what it cannot use, nor the key liquids it drinks, 6.4): per kg of supply, Holling's type II take × s /
 (take + s), s what the swept area holds (`sweep`) of its food, so thin food takes time to find (Holling 1959). The
 minerals it builds of count in s as food does: one search finds all it uses, so rich ground shortens it. **Grazing**
-(`feed::take_node`): a bite of the cover takes all its parts in the field's proportions; what the body does not use
+(`feed::take_node`): it reaches what lies within its reach (3.3): under liquid deeper than its height and its reach,
+neither the cover nor the solids of the ground, only what is liquid there. A bite of the cover takes all its parts in
+the field's proportions; what the body does not use
 (the frame without the enzyme of reaction 13) is bulk that fills its gut (all it takes is at most its take × supply)
 and passes through it to the ground at once with its heat, giving nothing and never becoming the body's own frame
 (a gut passage of days, Van Soest 1994). Another body's
@@ -1097,27 +1135,38 @@ it has takes all it can supply: its costs set its size, not a cap; across kinds 
 Kleiber's resting rate is a mammal's, its muscles included: a body of strength 1, as muscular as a mammal, pays it
 with its basal and strength costs together (`c_basal`, `c_strength`).
 **Pace** (`Body::pace`): the bare rate law of its main burning, k e^(−Ea/T), over its value at `t_cat`; supply and
-upkeep follow it, so seasons come from temperature, not a calendar. **Paying** (`body::pay`, `body::burn`): its
+upkeep follow it, so seasons come from temperature, not a calendar: a cold body takes, builds and pays less per day.
+Its force and its walking speed follow it below `t_cat` (its vigour, 3.3): a cold body pays little, and is weak and
+slow. **Paying** (`body::pay`, `body::burn`): its
 burnings run on demand as far as its fuel and the air's gases allow; the gas they take comes from its air node and the
 gas they make goes to its cell's bodies' node, each with its heat and latent heat (gas exchange is free: no pores);
 the work becomes heat in its cell's ground, and the body keeps its temperature. The unpaid share of upkeep dies
 (`SPENT`).
 
 ### 6.3 Heat
-A body's temperature follows its ground's (`live::keep_warm`): the heat its surviving members' upkeep released over
-the sub-step leaves through its coat (`Body::conductance`; in series with the walls around it, 3.4) to the ground. Each
+A body's temperature follows its surroundings' (`live::keep_warm`, `exchange::around`): the heat its surviving members'
+upkeep released over the sub-step leaves through its coat (`Body::conductance`) to its ground; inside walls to the air
+of its room, which the others there hold above the ground, through its coat in series with the walls (3.4). The heat
+ends in its ground either way. Each
 member has the surface `meeh` × its mass^(2/3) (Meeh 1879); its coat insulates it by the still air at its surface
 (`r_air`) and the share `HEAT` (0 to 1) of the best coat, `r_coat` (fur and the tissue under it: a mammal's least
-conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). Its heat balance over the time dt,
+conductance, Herreid and Kessel 1967); bare, by that air alone (`Body::bare`). **In liquid** the share of its height
+under its cell's standing liquid (3.3) passes heat through the liquid's film, `r_liquid` (free convection in liquids,
+50 to 1,000 W/(m² K) against about 8 at still air; Incropera and DeWitt 2002), and the share `wet_coat` of its coat,
+whose still air the liquid displaces (furs immersed keep about a tenth of their insulation; Scholander et al. 1950):
+a body of 30 kg with the founders' coat passes 1.0 W/K in the air and 5.8 W/K swimming, so to keep warm in cold liquid
+it burns about six times what it burns in air as cold. Its heat balance over the time dt,
 C dT/dt = P - g (T - tg) (Newton's law of cooling; an animal's energy budget, Porter and Gates 1969; `live::Balance`),
-moves its temperature from where it is toward where that heat holds it (the ground's, plus the heat over the coat's
-conductance) by the share 1 - e^(-g dt / C) its heat capacity C lets it go in the time: a body's own time C / g is hours
+moves its temperature from where it is toward where that heat holds it (its surroundings', tg, plus the heat over the
+coat's conductance) by the share 1 - e^(-g dt / C) its heat capacity C lets it go in the time: a body's own time C / g is hours
 to days, but a large node in a closed room, whose walls pass little, moves only part way in a week. So what it gains
 from its ground is never more than the heat it released, unless the ground is the warmer. Below its `KEEP_T` gene it
 burns what holds it at `KEEP_T` at the end; above its `COOL_T` gene it opens its coat as far as it needs to stand there,
-up to its bare surface (blood to the skin, the coat laid flat), and past that evaporates its key liquid for the excess,
+up to its bare surface (blood to the skin, the coat laid flat), only while its surroundings are colder than it (in
+hotter ones an open coat lets their heat in, so it keeps its coat as closed as its gene makes it), and past that
+evaporates its key liquid for the excess,
 at the liquid's vaporisation enthalpy, never below its safe minimum, drinking as it sweats what its uptake leaves it
-for the sub-step (6.4), the vapour going to the bodies' node with its latent heat (`live::hold`). Its key liquid boils at its boiling point: past it the heat boils the liquid off, below its
+for the sub-step (6.4), the vapour going to the bodies' node with its latent heat (`live::hold`); what it sweats and, below, boils off is paid by the heat that reaches it, which its ground gives back, never more than the ground holds above its floor (`live::keep_warm`). Its key liquid boils at its boiling point: past it the heat boils the liquid off, below its
 safe minimum too, and holds the body there while it lasts; one that boils dry dies there (`check_stores`), the rest of
 its heat staying in its ground. **The temperature it stands at** (`live::standing`): its upkeep over the sub-step goes
 with the pace (6.2) of its mean temperature over the time, the mean of that exact solution with the heat the upkeep
@@ -1128,11 +1177,12 @@ ever. Its heat then comes to the temperature the balance ends at with its ground
 meal, its decision's or a sub-step's (`live::fade_meal_heat`), what it took and digesting it moved its temperature
 by, from where it stood, fades over the time to its next physics (its physiological step) by the share e^(-g dt / C):
 the heat of a meal leaves through its coat to its ground; a meal colder than the body is warmed by the body's own heat
-as it eats, drawn back from its ground, which its upkeep's heat went to, at most the heat its upkeep released over the
-sub-step. So a body of hours to days starts its next sub-step where it stood. **Two states, one at every step.** As its pace rises with its temperature, a body whose own heat over its
-coat warms it past the ground by more than T² / Ea (about 12 K for chemistry 0's main burning, Ea 7,760 K: there the
-pace's rise, Ea / T² of it per K, feeds the heat faster than the coat lets it out) runs on to a warm state, at most its
-`COOL_T`, where its coat opens; below that it lies cold, or at its `KEEP_T` by burning. Its time C / g is hours to a
+as it eats, drawn back from its ground, which its upkeep's heat went to, at most what its upkeep releases over that
+time at its last sub-step's mean rate (`Lived::released`, W). So a body of hours to days starts its next sub-step where it stood. **Two states, one at every step.** As its pace rises with its temperature, a body whose own heat over its
+coat warms it past its surroundings by more than T² / Ea (about 12 K for chemistry 0's main burning, Ea 7,760 K: there
+the pace's rise, Ea / T² of it per K, feeds the heat faster than the coat lets it out) runs on to a warm state, at most
+its `COOL_T`, where its coat opens; below that it lies cold, or at its `KEEP_T` by burning. In a room the walls add to
+its coat and the others' heat warms its air, so bodies that share a closed room reach the warm state sooner. Its time C / g is hours to a
 day, far less than a sub-step, so each sub-step ends at the stable state its heat leads to from where it stood
 (`live::standing`), and as it eats at each sub-step by the take law at the pace it stands at then (5.3), a node that
 turns warm in spring eats at the warm pace from the next week on, in a square as in its cells of 500 m. A node's
@@ -1168,9 +1218,9 @@ beyond its upkeep to its next meal, its physiological step), and its stores down
 share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing
-Intake at most `take` × supply a day (5.3), over the time a meal feeds it (to its next meal, or for a bite to its next
-update), within the room of its stores for that time (`Body::room`: their levels and what its upkeep burns of them
-until then). **Digestion** (`Body::digest`): matter taken is broken back into what it
+Intake at most `take` × supply a day, of what lies within its reach (5.3), over the time a meal feeds it (to its next
+meal, or for a bite to its next update), within the room of its stores for that time (`Body::room`: their levels and
+what its upkeep burns of them until then). **Digestion** (`Body::digest`): matter taken is broken back into what it
 was built of, so food enters as fuel, and only if its diet breaks it (`Body::uses`). **Minimums**
 (`Body::lacking`): a store below its minimum kills (`LACK`), except a fuel, whose minimum is a reserve. **Shedding**
 (`shed`): minerals, built solids and key liquid past level, and anything it neither burns nor is made of. **Ageing**:
@@ -1222,7 +1272,9 @@ read a kind.
   are adults on land under at most half a metre of liquid; mass 30% fuel (60% for the two big slow eater kinds).
 - **Brains**: eaters start with hand-set biases (`Seeding::hand`; `--neutral-eaters` without), since neutral founders
   die before they learn: they take from the place, its ground and its cover (1), before they bite a body (0.5), and keep
-  out of deep liquid (a move's odds fall as 1 / (1 + depth / m)). Genes and rows get a spray (`--spray`).
+  out of deep liquid (a move's odds fall as 1 / (1 + depth / m)). They score making a part at -10, so they make one only
+  by rare chance (a draw in about 1e6 decisions); learning and selection may raise it (the tape's `form_*` columns count
+  who draws it). Genes and rows get a spray (`--spray`).
 - **Fixers**: a tenth of the cells of the starting cover carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).
 - **Founder genes**: some measured from the laws (`LITTER_X`); bodies build solids at a small share (`BUILT_SHARE`);
   `HEAT`, `CHILD`, `ALLOC` the same for all; `KEEP_T` and `COOL_T` 5 K above their liquid's melting point and 5 K below where life's enzymes fail (320 K) (`EATER_KEEP_T`, `EATER_COOL_T`).

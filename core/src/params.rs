@@ -152,6 +152,10 @@ pub struct Physics {
     pub r_coat: f64,
     /// Heat insulation of the still air at a surface, m² K/W
     pub r_air: f64,
+    /// Heat insulation of the still liquid at a surface (its convective film), m² K/W
+    pub r_liquid: f64,
+    /// Share of a coat's insulation it keeps in liquid, its still air displaced
+    pub wet_coat: f64,
     /// Most a body takes per day, as a share of the mass it takes by (`Body::supply`)
     pub take: f64,
     /// Exponent of a member's body mass that its supply (intake, building, leaf) goes with (`Body::equiv`)
@@ -196,8 +200,6 @@ pub struct Physics {
     pub grip: f64,
     /// Push of a mover on each structure of a cell, and the push its own force must give to move, share of its weight
     pub bump: f64,
-    /// Liquid deeper than this holds up a body and the structure it holds, so none stands over it (`bond::afloat`), m
-    pub deep: f64,
     /// Archard's wear coefficient of an edge: volume worn times hardness over the work it does
     pub abrade: f64,
 
@@ -254,6 +256,11 @@ const MOVE_REF: f64 = 30.0;
 const MOVE_EXP: f64 = -0.32;
 /// The Froude number v² / (g L) a body walks at (Alexander 1989: mammals of any size walk near 0.25, run past 0.5).
 const WALK_FROUDE: f64 = 0.25;
+/// The drag coefficient of a body pushed through liquid on its face: a cube face on, 1.05 (Hoerner 1965).
+const DRAG: f64 = 1.05;
+/// The share of the energy its muscles burn that a body's work through liquid gets (muscle's efficiency about 0.25:
+/// Smith, Barclay and Loiselle 2005).
+const MUSCLE: f64 = 0.25;
 
 impl Physics {
     /// Energy of a month of thinking of a brain of cost `c` (`Lineage::cost`) for a member of `m` kg, J: weakly more for
@@ -270,7 +277,22 @@ impl Physics {
     /// number v² / (g L), `WALK_FROUDE` (the dynamic similarity of Alexander and Jayes 1983), its length L the side of
     /// a cube of its volume (`rho_body`): 0.9 m/s for 30 kg, 1.6 m/s for a tonne.
     pub fn speed(&self, m1: f64, gravity: f64) -> f64 {
-        (WALK_FROUDE * gravity * (m1.max(0.0) / self.rho_body).cbrt()).sqrt()
+        (WALK_FROUDE * gravity * self.side(m1)).sqrt()
+    }
+    /// Energy to move one kg one metre through liquid of density `rho` kg/m³ at `v` m/s for a member of `m1` kg, the
+    /// share `wet` of its height under it, J: the drag on the face it pushes, ½ `rho` `DRAG` (`wet` L²) v², L its size
+    /// (`side`), over the share `MUSCLE` of its burning that its muscles turn into that work. At its walking speed
+    /// (`speed`), one Froude number, the same for every size: 5.2 J at `wet` 1 in a liquid as dense as bodies, against
+    /// the walk's 3.0 at 30 kg and 1.0 at a tonne; a body not built to swim pays several times on land's cost to cross
+    /// liquid (Williams 1999).
+    pub fn drag(&self, m1: f64, wet: f64, rho: f64, v: f64) -> f64 {
+        let side = self.side(m1);
+        0.5 * rho * DRAG * wet * side * side * v * v / (m1.max(1e-9) * MUSCLE)
+    }
+    /// The size of a member of `m1` kg, m: the side of a cube of its volume (`rho_body`). It is how high it stands, how
+    /// far it reaches, and the length it walks by (`speed`).
+    pub fn side(&self, m1: f64) -> f64 {
+        (m1.max(0.0) / self.rho_body).cbrt()
     }
     /// The factor on upkeep of a repair gene (log10): its repair share `c_repair` doubles for each unit.
     pub fn repair(&self, gene: f64) -> f64 {
@@ -327,6 +349,8 @@ impl Default for Physics {
             meeh: 0.1,
             r_coat: 0.9,
             r_air: 0.12,
+            r_liquid: 0.005,
+            wet_coat: 0.2,
             take: 0.0089,
             sweep: 1.0,
             intake_exp: 0.75,
@@ -348,7 +372,6 @@ impl Default for Physics {
             grab: 0.1,
             grip: 0.5,
             bump: 0.05,
-            deep: 0.5,
             abrade: 1e-5,
             c_copy: 1e7,
             c_build: 1e4,
@@ -408,8 +431,10 @@ impl Config {
         require(self.skin_m > 0.0 && p.bed_depth > 0.0, || format!("skin_m ({}) and bed_depth ({}) must be above 0", self.skin_m, p.bed_depth))?;
         // A body's surface and the still air at it give its bare conductance (`Body::bare`): both above 0; a coat adds
         // insulation, never less than none.
-        let (meeh, air, coat) = (p.meeh, p.r_air, p.r_coat);
+        let (meeh, air, coat, film, wet) = (p.meeh, p.r_air, p.r_coat, p.r_liquid, p.wet_coat);
         require(meeh > 0.0 && air > 0.0 && coat >= 0.0 && coat.is_finite(), || format!("meeh ({meeh}) and r_air ({air}) must be above 0, r_coat ({coat}) at least 0"))?;
+        // In liquid the same (`Body::conductance`): the still liquid's film above 0, a wet coat a share of a dry one.
+        require(film > 0.0 && (0.0..=1.0).contains(&wet), || format!("r_liquid ({film}) must be above 0, wet_coat ({wet}) from 0 to 1"))?;
         let floor = p.node_floor;
         require((0.0..1.0).contains(&floor), || format!("node_floor ({floor}) must be at least 0 and below 1"))?;
         let light = p.light_yield;

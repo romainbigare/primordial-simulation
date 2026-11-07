@@ -24,13 +24,24 @@ pub(crate) fn leave_outgrown(w: &World, d: &Chunk, b: &mut Body) {
     }
 }
 
-/// For a body's update: the link between it and the outside through the walls around it, its share of their
-/// enclosure among the bodies inside.
-pub(crate) fn enclosure(d: &Chunk, b: &Body) -> Option<Enclosure> {
+/// The air of the room a body is inside, as its update finds it (laws.md 3.4): the conductance of the walls and openings
+/// between that air and the outside, W/K, and how far the heat of the other bodies inside holds it above the outside, K.
+pub(crate) struct RoomAir {
+    pub g: f64,
+    pub rise: f64,
+}
+
+/// For a body's update: the air of the room it is inside (`RoomAir`). The heat that leaves the bodies inside through
+/// their coats warms that air, and it passes the walls and openings to the outside: in its steady state the air stands
+/// above the outside by the heat of all of them over the walls' conductance. Its own time, its heat capacity (about
+/// 1.2 kJ per m³ and K) over that conductance, is seconds to minutes, far below a sub-step, so it stands there at every
+/// sub-step and holds no heat of its own: what the bodies lose reaches their ground, as outside. A body reads the
+/// others as their last sub-step left them (`Lived::lost`), and its own heat passes its coat and the walls in series.
+pub(crate) fn room_air(d: &Chunk, b: &Body) -> Option<RoomAir> {
     let (i, c) = (b.cell as usize, d.at(b.cell as usize));
     let (r, e) = room(c, b)?;
-    let others = d.cell(i).filter(|&o| d[o].alive && room(c, &d[o]).is_some_and(|x| x.0 == r)).count();
-    Some(Enclosure { g: e.g / (others + 1) as f64, ..e })
+    let others: f64 = d.cell(i).map(|o| &d[o]).filter(|o| o.alive && room(c, o).is_some_and(|x| x.0 == r)).map(|o| o.lived.lost).sum();
+    Some(RoomAir { g: e.g, rise: others / e.g.max(1e-300) })
 }
 
 /// Standing liquid on cell `i` whose ground holds `g` mol of each substance: depth m, density kg/m³, mol per m³.
@@ -44,23 +55,36 @@ pub(super) fn liquid(w: &World, i: usize, g: impl Fn(usize) -> f64) -> (f64, f64
     if v > 0.0 { (env[1], m / v, mol / v) } else { (0.0, 0.0, 0.0) }
 }
 
-/// Is body `b` held up in its cell's liquid: does the liquid that its volume and the structure it holds displace weigh
-/// as much as they do (Archimedes, as for parts)? Not where the liquid is shallower than `deep`.
-fn afloat(w: &World, d: &Chunk, b: &Body) -> bool {
-    let (i, mb) = (b.cell as usize, b.mass(&w.chem));
-    let c = d.at(i);
-    let s = held(c, b).map(|p| c.parts[root(c, p)].s);
-    let (depth, rho, _) = liquid(w, i, d.moves.amounts(w, Node::ground(i)));
-    if depth < w.cfg.phys.deep {
-        return false;
-    }
-    let (outer, mass) = s.map_or((0.0, 0.0), |s| (s.outer, s.mass));
-    rho * (b.volume(&w.chem, b.temp(&w.chem)) + outer) >= mb + mass
+/// How body `b` stands in the standing liquid of cell `i` (its own, or one it steps into, `choose::go`; laws.md 3.3).
+pub(crate) struct Wading {
+    /// The share of a member's height (`Physics::side`) under the liquid: the depth over its height, at most 1; none
+    /// where it rides the structure it holds
+    pub share: f64,
+    /// Whether the ground and what lies on it are within its reach
+    pub reaches: bool,
+    /// The density of the liquid, kg/m³ (0 where none stands)
+    pub rho: f64,
 }
 
-/// Depth of liquid over a body: none while afloat.
-pub fn depth(w: &World, d: &Chunk, b: &Body, depth: f64) -> f64 {
-    if depth > 0.0 && afloat(w, d, b) { 0.0 } else { depth }
+/// How body `b` stands in the liquid of cell `i` (`Wading`): the share of its height under it is the depth over its
+/// height. Where the liquid is deeper than its height, a member swims: it breathes its air (laws.md 2.4), so it keeps
+/// to the surface, and the ground lies within its reach only as deep as its height and its reach, each its size
+/// (`Physics::side`; no gene lets it dive). It rides the structure it holds, of its own cell, where the liquid is deeper
+/// than its height and what that structure displaces weighs as much as both (Archimedes, as for parts): dry, at the
+/// surface, it reaches down its reach alone.
+pub(crate) fn wading(w: &World, d: &Chunk, b: &Body, i: usize) -> Wading {
+    let depth = w.life.env[i][1];
+    if depth <= 0.0 {
+        return Wading { share: 0.0, reaches: true, rho: 0.0 };
+    }
+    let (mb, c, rho) = (b.mass(&w.chem), d.at(b.cell as usize), liquid(w, i, d.moves.amounts(w, Node::ground(i))).1);
+    let side = w.cfg.phys.side(mb / b.n());
+    let rides = depth > side && held(c, b).is_some_and(|p| {
+        let s = &c.parts[root(c, p)].s;
+        rho * s.outer >= mb + s.mass
+    });
+    let share = if rides { 0.0 } else { (depth / side.max(1e-9)).min(1.0) };
+    Wading { share, reaches: depth <= side * if rides { 1.0 } else { 2.0 }, rho }
 }
 
 /// Numbers a body perceives of what it holds and of the walls around it (`sense`).

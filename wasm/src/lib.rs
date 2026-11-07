@@ -1,7 +1,7 @@
 //! The live viewer's shell: a world that the page makes and steps, as plain `extern "C"` exports (no wasm-bindgen).
 //! The page calls these from a Web Worker and reads the results from the instance's memory: `meta` is JSON in the
-//! form of a tape's header, `frame` is the bytes of one tape frame (`tape::frame_now`), `things` the list of what lies
-//! in the cells of a window (`tape::things`).
+//! form of a tape's header, `frame` is the bytes of one tape frame (`tape::frame_now`), `fine` a window finer than its
+//! cells (`tape::fine`), `things` the list of what lies in the cells of a window (`tape::things`).
 
 use pcore::refine::Shot;
 use pcore::World;
@@ -23,10 +23,12 @@ const CELL_BUDGET: u32 = 1500;
 /// street, whose bodies step every 2.8 hours.
 const FINEST_DEPTH: u8 = 10;
 
-/// The world, what is placed when, and the bytes last handed to the page (it reads them until the next call).
+/// The world, what is placed when, the terrain's samples found so far (`tape::Samples`), and the bytes last handed to
+/// the page (it reads them until the next call).
 struct Live {
     world: World,
     plan: Schedule,
+    samples: tape::Samples,
     out: Vec<u8>,
 }
 
@@ -47,7 +49,8 @@ fn give(bytes: Vec<u8>) -> *const u8 {
     })
 }
 
-/// Make an island of `size` x `size` cells from `seed`, with the schedule of `ew run`. Returns 0, or 1 if the world is refused.
+/// Make an island of `size` x `size` cells from `seed`, with the schedule of `ew run --roster`: the ten starting kinds,
+/// so the page shows the kinds of cover and of animals the laws can tell apart. Returns 0, or 1 if the world is refused.
 #[no_mangle]
 pub extern "C" fn new_world(seed: u32, size: u32) -> u32 {
     let mut world = worldgen::new_world(seed as u64, size as usize, size as usize);
@@ -55,8 +58,9 @@ pub extern "C" fn new_world(seed: u32, size: u32) -> u32 {
     if world.cfg.validate().is_err() {
         return 1;
     }
-    let plan = Schedule::new(Some(LIFE_YEAR), false, Seeding { hand: true, rounds: SPRAY_ROUNDS, fixers: FIXERS });
-    LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, out: vec![] }));
+    let plan = Schedule::new(Some(LIFE_YEAR), true, Seeding { hand: true, rounds: SPRAY_ROUNDS, fixers: FIXERS });
+    let samples = tape::Samples::new(&world);
+    LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, samples, out: vec![] }));
     0
 }
 
@@ -76,14 +80,14 @@ pub extern "C" fn step_month() {
 
 /// Send the camera to the window from column `x` and row `y`, `w` x `h` squares, asking for cells of `depth` below
 /// their air block, from the next month on: a shot of the run's camera path (`ew run --camera`), so the run can be made
-/// again. A window of no area sends the camera away.
+/// again. A window of no area sends the camera away, and with `rest` not 0 the budget of cells back to the cells as built.
 #[no_mangle]
-pub extern "C" fn set_camera(x: f64, y: f64, w: f64, h: f64, depth: u32) {
+pub extern "C" fn set_camera(x: f64, y: f64, w: f64, h: f64, depth: u32, rest: u32) {
     with(|l| {
         let month = l.world.month();
         let shots = &mut l.plan.camera.shots;
         shots.retain(|s| s.month < month);
-        shots.push(Shot { month, x, y, w, h, depth: depth.min(u8::MAX as u32) as u8 });
+        shots.push(Shot { month, x, y, w, h, depth: depth.min(u8::MAX as u32) as u8, rest: rest != 0 });
     })
 }
 
@@ -133,11 +137,11 @@ pub extern "C" fn frame() -> *const u8 {
     give(bytes)
 }
 
-/// The layers of a window of the map as a raster of `across` x `down` pixels (`tape::frame_window`): the window from
-/// column `x` and row `y`, `w` x `h` squares.
+/// The window from column `x` and row `y`, `w` x `h` squares, finer than its cells, a pixel a leaf of `depth`
+/// (`tape::fine`): the ground's height, the liquid's surface and the layers of each pixel, and the ways rivers run.
 #[no_mangle]
-pub extern "C" fn frame_window(x: f64, y: f64, w: f64, h: f64, across: u32, down: u32) -> *const u8 {
-    let bytes = with(|l| tape::frame_window(&l.world, [x, y, w, h], across as usize, down as usize));
+pub extern "C" fn fine(x: f64, y: f64, w: f64, h: f64, depth: u32) -> *const u8 {
+    let bytes = with(|l| tape::fine(&l.world, &mut l.samples, [x, y, w, h], depth.min(u8::MAX as u32) as u8));
     give(bytes)
 }
 
@@ -149,7 +153,7 @@ pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
     give(bytes)
 }
 
-/// The length in bytes of what `meta`, `frame`, `frame_window` or `things` last returned.
+/// The length in bytes of what `meta`, `frame`, `fine` or `things` last returned.
 #[no_mangle]
 pub extern "C" fn out_len() -> usize {
     with(|l| l.out.len())
