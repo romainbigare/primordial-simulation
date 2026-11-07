@@ -576,7 +576,7 @@ of its surface toward those of the ways its liquid takes, which stay as the step
 carry over what one step would (`runoff::Pass::worked`), so a small cell under a river is not cut below its ways in a
 month. The coarse cells keep their step (so a default run is as before), and the books close as every move is booked on
 both sides. A mound of pore liquid in a cell of 7.8 m keeps after a month within 9% of what it keeps after 64 short
-steps (34% in one step, `pore_water_of_small_cells_spreads_in_a_month_as_in_short_steps`). On a globe a square is hundreds of km and a cell needs depth 15 below its block to come under 40 m.
+steps (34% in one step, `pore_liquid_of_small_cells_spreads_in_a_month_as_in_short_steps`). On a globe a square is hundreds of km and a cell needs depth 15 below its block to come under 40 m.
 
 ## 2. Change: substances react inside nodes, faster when hot
 Files: `core/src/change/` (the reactor), `core/src/chem/` (chemistry and its physics), `worldgen/src/chem0.toml`.

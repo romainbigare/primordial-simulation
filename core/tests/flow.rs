@@ -528,7 +528,7 @@ fn the_store_of_small_cells_spreads_in_a_month_as_in_thirty_days() {
     books.assert_within(&month, 1e-9, 1e-9);
 }
 
-/// The depth below its air block of the cells of `pore_water_of_small_cells_spreads_in_a_month_as_in_short_steps`:
+/// The depth below its air block of the cells of `pore_liquid_of_small_cells_spreads_in_a_month_as_in_short_steps`:
 /// 7.8 m on the small island, past the 14 m down to which a month of pore flow is within the limit (laws.md 1.8).
 const STREET: u8 = 10;
 /// Liquid steps of that test's month of short steps.
@@ -544,7 +544,7 @@ const MOUND_OFF: f64 = 0.12;
 /// half of what levels a link (`sweep::HALF_WAY`): the cell and its links sub-step inside the month (laws.md 1.8). The
 /// books are kept.
 #[test]
-fn pore_water_of_small_cells_spreads_in_a_month_as_in_short_steps() {
+fn pore_liquid_of_small_cells_spreads_in_a_month_as_in_short_steps() {
     let mut w = worldgen::testkit::small_world();
     w.drain_events();
     w.relief.iter_mut().for_each(|r| *r = 0.0);
