@@ -299,7 +299,7 @@ pub(super) fn layers(w: &World, s: &Scratch, i: usize, t: f64, amt: impl Fn(usiz
         }
         let liq = molten(k);
         let vs = a * (1.0 - liq) * p.v[0];
-        let o = if t > w.cfg.phys.soft * p.melt { 0 } else { 4 };
+        let o = if soft_at(w, p, t) { 0 } else { 4 };
         (l[o], l[o + 1]) = (l[o] + vs, l[o + 1] + vs * p.refl[0]);
         (l[2], l[3]) = (l[2] + a * liq * p.v[1], l[3] + a * liq * p.v[1] * p.refl[1]);
         z += vs / area;
@@ -309,6 +309,12 @@ pub(super) fn layers(w: &World, s: &Scratch, i: usize, t: f64, amt: impl Fn(usiz
     }
     cover[1] = if l[0] > 0.0 { cover[1] / l[0] } else { f64::INFINITY };
     (l, z, cover)
+}
+
+/// Whether a solid of substance `p` at `t` K is soft cover lying on top of the ground (`layers`), not loose ground:
+/// warmer than the share `soft` of its melting point.
+pub(super) fn soft_at(w: &World, p: &Sp, t: f64) -> bool {
+    t > w.cfg.phys.soft * p.melt
 }
 
 /// Reflectance of ground node `i` with `layers` `l`: soft solid, liquid and loose solid, top down, each cover depth /

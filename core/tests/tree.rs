@@ -460,8 +460,9 @@ fn with_life() -> (World, usize, [u64; 2], [u64; 2]) {
 
 /// A cell with a node, an individual holding a structure and cover of two kinds, split and joined again, keeps every
 /// element, the energy and the members of each kind (`TIGHT`). Split, each quarter holds a quarter of the node, with
-/// the node's brain rows, and a quarter of each kind of cover; the individual and its structure lie whole in one
-/// quarter. Every id finds its body or part, and once joined the cell holds its cover as it was.
+/// the node's brain rows, and some of each kind of cover, the four together all of it (each kind by the places of its
+/// cell it likes, laws.md 0); the individual and its structure lie whole in one quarter. Every id finds its body or
+/// part, and once joined the cell holds its cover as it was.
 #[test]
 fn life_follows_a_split_and_its_join() {
     let (mut w, i, [node, one], parts) = with_life();
@@ -475,14 +476,17 @@ fn life_follows_a_split_and_its_join() {
     assert_eq!(w.life[h].count, 1.0, "the individual is not cut");
     assert!(parts.iter().all(|&p| w.life.part_cell(p) == Some(h.cell as usize)), "its structure goes with it");
     assert!(w.life.find(node).is_some(), "the node keeps its id");
+    let mut kinds_held: BTreeMap<u32, [f64; pcore::cover::NP]> = BTreeMap::new();
     for q in l.quarters() {
         let c = w.map.cell(q).expect("a quarter");
         let shares: Vec<&Body> = w.life.cell(c).map(|s| &w.life[s]).filter(|b| b.lineage == lineage).collect();
         assert!(shares.len() == 1 && (shares[0].count - NODE / 4.0).abs() <= TIGHT * NODE, "a quarter of the node in quarter {q:?}");
         assert_eq!(w.life.rows_of(shares[0]), &rows[..], "with the node's rows");
-        let near = |a: f64, b: f64| (a - b).abs() <= TIGHT * b;
-        assert!(slots(&w, c).len() == 2 && slots(&w, c).iter().all(|(k, m)| (0..m.len()).all(|x| near(m[x], cover[k][x] / 4.0))), "a quarter of each kind of cover");
+        assert!(slots(&w, c).len() == 2 && slots(&w, c).values().all(|m| m.iter().all(|&x| x > 0.0)), "some of each kind of cover");
+        slots(&w, c).iter().for_each(|(k, m)| (0..m.len()).for_each(|x| kinds_held.entry(*k).or_default()[x] += m[x]));
     }
+    let near = |a: f64, b: f64| (a - b).abs() <= TIGHT * b;
+    assert!(kinds_held.iter().all(|(k, m)| (0..m.len()).all(|x| near(m[x], cover[k][x]))), "the quarters hold all of each kind of cover");
     w.join(l).expect("its quarters join");
     sound(&w);
     books.assert_kept(&w, TIGHT);

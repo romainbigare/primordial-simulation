@@ -1,6 +1,6 @@
 //! The life of the cells a split or a join makes (laws.md 0, 4.4): one life model at every cell size, so only how the
-//! nodes, the parts and the cover are shared out and gathered. A split's quarters are flat copies of their parent, so a
-//! node is shared out by area (`nodes::part`), each share a node in its quarter with a brain block of the node's, and a
+//! nodes, the parts and the cover are shared out and gathered. A split shares its cover by the ground inside it (each
+//! slot by the places its kind likes, `Cover::parts`); a node is shared out by area (`nodes::part`), each share a node in its quarter with a brain block of the node's, and a
 //! lot of lone parts by count (`Part::split`); what is not cut goes whole to one quarter, drawn by area: an
 //! individual, a node of fewer members than one per quarter's share, a lot of fewer parts, and a structure with the
 //! bodies that hold it or are inside it (`share`). A join gathers its quarters' life in
@@ -10,7 +10,7 @@
 use super::{new_id, Cell, Life};
 use crate::bond::NOBODY;
 use crate::chem::Chemistry;
-use crate::cover::Cover;
+use crate::cover::{Cover, SLOTS};
 use crate::remap::{Made, Renumber, Source};
 use crate::rng::{Purpose, Rng};
 use crate::survey::ROW;
@@ -38,19 +38,19 @@ impl Life {
                 }
             })
             .collect();
-        // The quarters of each split cell, row by row, each with its share of the cell's area.
-        let mut splits: BTreeMap<u32, [(usize, f64); 4]> = BTreeMap::new();
+        // The quarters of each split cell, row by row, each with its share of the cell's area and of each slot of its cover.
+        let mut splits: BTreeMap<u32, [(usize, f64, [f64; SLOTS]); 4]> = BTreeMap::new();
         for (j, f) in r.sources().iter().enumerate() {
             match *f {
-                Source::Made(Made::Quarter { parent, q, area, .. }) => splits.entry(parent).or_default()[q as usize] = (j, area),
+                Source::Made(Made::Quarter { parent, q, area, cover, .. }) => splits.entry(parent).or_default()[q as usize] = (j, area, cover),
                 Source::Made(Made::Join { kids, area }) => gather(&mut cells[j], kids.map(&mut gone), area, (chem, j)),
                 _ => {}
             }
         }
         for (parent, quarters) in splits {
-            let mut kids = quarters.map(|(j, _)| std::mem::take(&mut cells[j]));
-            share(gone(parent), &mut kids, quarters.map(|x| x.1), seed);
-            quarters.iter().zip(kids).for_each(|(&(j, _), k)| cells[j] = k);
+            let mut kids = quarters.map(|(j, ..)| std::mem::take(&mut cells[j]));
+            share(gone(parent), &mut kids, (quarters.map(|x| x.1), quarters.map(|x| x.2)), (seed, chem));
+            quarters.iter().zip(kids).for_each(|(&(j, ..), k)| cells[j] = k);
         }
         for (i, c) in cells.iter_mut().enumerate() {
             c.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.cell = i as u32);
@@ -73,9 +73,9 @@ impl Life {
 /// whole to the quarter drawn by its id (`draw`), but a node of at least one member per quarter's share leaves in each
 /// other quarter a node of that share of its members, stores, heat and brood (`nodes::part`, its genes, spreads,
 /// lineage and born rows; an id of that quarter, and a block there holding the node's brain, rows, moving averages and
-/// trace). Each slot of the cover and its heat by area (`Cover::quarter`), and
-/// what the movers did there by area.
-fn share(mut c: Cell, kids: &mut [Cell; 4], area: [f64; 4], seed: u64) {
+/// trace). Each slot of the cover by its part of it (`cover[q]`, `Cover::parts`: by the share of its own ground the
+/// slot's kind likes) and the heat with it (`Cover::quarter`), and what the movers did there by area.
+fn share(mut c: Cell, kids: &mut [Cell; 4], (area, cover): ([f64; 4], [[f64; SLOTS]; 4]), (seed, chem): (u64, &Chemistry)) {
     let key = (seed, c.serial);
     let (root, go) = structures(&c, area, key);
     let bonds = std::mem::take(&mut c.bonds);
@@ -118,8 +118,8 @@ fn share(mut c: Cell, kids: &mut [Cell; 4], area: [f64; 4], seed: u64) {
         b.brain = kids[q].brains.take_in(all);
         kids[q].bodies.push(b);
     }
-    for (k, &a) in kids.iter_mut().zip(&area) {
-        (k.cover, k.pushed, k.crossings) = (c.cover.quarter(a), c.pushed * a, c.crossings * a as f32);
+    for ((k, &a), &f) in kids.iter_mut().zip(&area).zip(&cover) {
+        (k.cover, k.pushed, k.crossings) = (c.cover.quarter(f, a, chem), c.pushed * a, c.crossings * a as f32);
     }
 }
 

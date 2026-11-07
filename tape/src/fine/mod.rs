@@ -16,7 +16,7 @@ mod pyramid;
 
 pub use heights::Samples;
 
-use crate::layers::{catchment, cover_melt, quantise, Ctx, LAYERS, STANDING_M};
+use crate::layers::{cover_melt, quantise, Ctx, LAYERS, STANDING_M};
 use pcore::World;
 use pyramid::{Pixels, Pyramid};
 
@@ -68,7 +68,7 @@ fn fill(ground: &[f64], depth: f64) -> f64 {
 }
 
 /// A segment of a river's way: the centres of a cell and of the cell its liquid runs to (column, row, in squares), its
-/// liquid flux, mol/s, and its catchment (`catchment`).
+/// liquid flux, mol/s, and its catchment (`World::catchment`).
 type Way = [f32; 6];
 
 /// The way each of `cells` whose liquid runs (some flux, none standing) sends it: to the cell the steepest way down its
@@ -94,7 +94,7 @@ fn ways(c: &Ctx, cells: &[u32]) -> Vec<Way> {
         if w.map.wrap {
             x1 -= w.map.w as f64 * ((x1 - x0) / w.map.w as f64).round();
         }
-        out.push([x0, y0, x1, y1, flux, catchment(w, i)].map(|v| v as f32));
+        out.push([x0, y0, x1, y1, flux, w.catchment(i)].map(|v| v as f32));
     }
     out
 }

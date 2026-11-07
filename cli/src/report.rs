@@ -138,7 +138,7 @@ pub fn speed(w: &World, years: u64, total: Duration, settled: Duration) -> Strin
 /// Rivers as every viewer draws them (`tape::is_river`: dry land cells that carry more than `RIVER_CATCH` times what
 /// their own area sheds and more than `RIVER_FLOOR`), the largest catchment on land, and the mean rain on land.
 pub fn rivers(w: &World, rec: &Recorder) -> String {
-    let top = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).map(|i| tape::catchment(w, i)).fold(0.0, f64::max);
+    let top = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).map(|i| w.catchment(i)).fold(0.0, f64::max);
     let n = tape::river_count(w, &tape::fields(w));
     format!("rivers: {n} dry land cells over {RIVER_CATCH} cells' own area and {RIVER_FLOOR:.0e} mol/s, largest catchment {top:.3e} cells' own area, mean land rain {:.3e} mol/m2/s", rec.last("rain_land"))
 }

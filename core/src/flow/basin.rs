@@ -1,9 +1,9 @@
 //! The low basin (laws.md 1.2): the cells joined to the lowest cell under the level its liquid stands at hold one body of
 //! liquid with one level. `find` names them at each full build of the ground's state; `level` shares the basin's liquid
-//! by that level once a month, after the runoff has reached it; `stand_level` stands the liquid of a split's quarters
-//! at one level the same way (`share_out`).
+//! by that level once a month, after the runoff has reached it (`share_out`, by which a split's quarters share their
+//! ground too, `inside`).
 
-use super::{air::blocks, drain::{liquid_heat, liquid_heat_at}, land::{cells_state, layers, stand, wet, NONE}, liquid::book, potential::apply, Scratch};
+use super::{air::blocks, drain::liquid_heat, land::{cells_state, stand, wet, NONE}, liquid::book, potential::apply, Scratch};
 use crate::{store::{Class, LinkFlux}, World, AIR};
 use std::collections::BTreeMap;
 
@@ -41,7 +41,7 @@ pub(super) fn find(w: &World, s: &Scratch) -> Basin {
 
 /// The level at which `vol` m³ fill floors of heights and areas `floors` (m, m²), sorted here: Σ area × (level -
 /// floor) over the floors under it is `vol`, m.
-fn level_of(floors: &mut [(f64, f64)], vol: f64) -> f64 {
+pub fn level_of(floors: &mut [(f64, f64)], vol: f64) -> f64 {
     floors.sort_unstable_by(|p, q| p.0.total_cmp(&q.0));
     let (mut area, mut volume_under) = (0.0, 0.0);
     for (k, &(z, a)) in floors.iter().enumerate() {
@@ -84,48 +84,10 @@ pub(super) fn level(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64) {
     cells_state(w, s, &mixed);
 }
 
-/// The liquid that stands over the pores of the quarters `cells` a split just made (`World::split`) stands at one level
-/// over their solid surfaces, as the basin's does (`level`): each keeps what its pores hold, as its parent's were held,
-/// and what stood over them fills the quarters from the lowest up (`level_of`), with its heat as it leaves at the
-/// node's temperature (`drain::liquid_heat_at`), by `share_out`. The quarters' phases are those of their heat
-/// (`World::thawed`) before and after. No part of Flow is under way between steps: the store books the moves
-/// (`store::apply`), and the potential energy the liquid gives up is the cell's relief's (`World::split`). None before
-/// Flow first built the state of the ground.
-pub(crate) fn stand_level(w: &mut World, cells: &[usize]) {
-    if !super::potential::stated(w) {
-        return;
-    }
-    let (ks, (a, b, mol, heat)) = {
-        let s = super::potential::scratch_of(w);
-        let (n, area, por) = (w.mesh.cells().n(), w.mesh.cells().area(), w.cfg.phys.porosity);
-        let (tmin, tmax) = super::range(&s.state.tg);
-        let liq = s.liquids(&w.chem, (tmin, tmax), true);
-        let at: Vec<u32> = cells.iter().map(|&i| i as u32).collect();
-        let molten = |k: usize, i: usize| s.plateau(i).map_or(0.0, |(t, on)| w.molten(k, i, t, on));
-        let wet = |k: usize, i: usize| if s.state.tg[i] < s.sp[k].boil { molten(k, i) } else { 0.0 };
-        let (held, vol) = movable(w, &s, &liq, &at, tmin, (wet, |i, mol| liquid_heat_at(&s, &liq, s.state.tg[i], mol)));
-        // Each quarter's solid surface, m, and the volume its pores hold, m³, as Flow's state finds them (`land::layers`).
-        let ground: Vec<(f64, f64)> = (cells.iter().zip(&vol))
-            .map(|(&i, &v)| {
-                let amt = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
-                let (l, z, _) = layers(w, &s, i, s.state.tg[i], amt, |k| molten(k, i), |k| w.melt(k, i));
-                (z, v.min(por * l[4]))
-            })
-            .collect();
-        let stands: f64 = vol.iter().zip(&ground).map(|(v, g)| v - g.1).sum();
-        let mut floors: Vec<(f64, f64)> = cells.iter().zip(&ground).map(|(&i, g)| (g.0, area[i])).collect();
-        let top = level_of(&mut floors, stands);
-        let want: Vec<f64> = cells.iter().zip(&ground).map(|(&i, g)| g.1 + area[i] * (top - g.0).max(0.0)).collect();
-        (liq.iter().map(|&k| k as u16).collect::<Vec<u16>>(), share_out(&at, (&held, &vol), &want, liq.len()))
-    };
-    crate::store::apply(w, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &ks, mol: &mol, heat: &heat }], &[]);
-    w.thawed(cells);
-}
-
 /// What may move of the liquids `liq` in each cell of `cells` (`[c * (liq.len() + 1) + q]`): all of one that boils below
 /// the coldest node, `tmin` (a gas dissolved in the liquid, which takes no room), else its liquid share `wet(k, i)`,
 /// mol, then their heat as they leave, `heat(i, mol)`, J; and their volume, m³.
-fn movable(w: &World, s: &Scratch, liq: &[usize], cells: &[u32], tmin: f64, (wet, heat): (impl Fn(usize, usize) -> f64, impl Fn(usize, &[f64]) -> f64)) -> (Vec<f64>, Vec<f64>) {
+pub(super) fn movable(w: &World, s: &Scratch, liq: &[usize], cells: &[u32], tmin: f64, (wet, heat): (impl Fn(usize, usize) -> f64, impl Fn(usize, &[f64]) -> f64)) -> (Vec<f64>, Vec<f64>) {
     let (n, nl, m) = (w.mesh.cells().n(), liq.len(), cells.len());
     let width = nl + 1;
     let (mut held, mut vol) = (vec![0.0; m * width], vec![0.0; m]);
@@ -146,7 +108,7 @@ fn movable(w: &World, s: &Scratch, liq: &[usize], cells: &[u32], tmin: f64, (wet
 /// m³, come to hold `want` m³: each cell that holds more gives the share of its liquid over it, with that share of its
 /// heat; mixed, it goes to the cells that hold less, by what each lacks. As a link flux from the cell that wants the
 /// most to each other one: its ends, the mol of each liquid (`[q * links + l]`) and the heat, J, of each link.
-fn share_out(cells: &[u32], (held, vol): (&[f64], &[f64]), want: &[f64], nl: usize) -> (Vec<u32>, Vec<u32>, Vec<f64>, Vec<f64>) {
+pub(super) fn share_out(cells: &[u32], (held, vol): (&[f64], &[f64]), want: &[f64], nl: usize) -> (Vec<u32>, Vec<u32>, Vec<f64>, Vec<f64>) {
     let (m, width) = (cells.len(), nl + 1);
     // What the cells over the level give, mixed (as a row of `held`), and the volume the cells under it lack, m³.
     let (mut spare, mut lack) = (vec![0.0; width], 0.0);

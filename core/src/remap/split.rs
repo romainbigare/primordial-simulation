@@ -111,15 +111,19 @@ impl World {
         let old = |j: usize| quarters.iter().all(|&q| q != map.leaves()[j]).then(|| self.map.cell(map.leaves()[j]).expect("a cell"));
         let uneven = (record.is_none() && crate::flow::stated(self)).then(|| self.uneven((i, leaf), (mesh.cells(), kids), old));
         let bed = uneven.as_ref().map_or(share, |u| u.bed);
+        // The shares of the cell's own ground, as the split stands it (`inside`).
+        let means = crate::flow::means(self, &[i]).map_or(Default::default(), |m| m[0]);
+        let (ground, inside) = self.inside(i, uneven.as_ref().map_or(1.0, |u| u.scale), means);
+        let cover = self.life.cells[i].cover.parts(&ground, &inside, &self.cfg.phys);
         let from = (map.leaves().iter())
             .map(|&l| match quarters.iter().position(|&q| q == l) {
-                Some(q) => Source::Made(Made::Quarter { parent: i as u32, q: q as u8, area: share[q], bed: bed[q] }),
+                Some(q) => Source::Made(Made::Quarter { parent: i as u32, q: q as u8, area: share[q], bed: bed[q], cover: cover[q] }),
                 None => Source::Old(self.map.cell(l).expect("a cell") as u32),
             })
             .collect();
         self.renew((map, mesh), from, c);
         if uneven.is_some() {
-            crate::flow::stand_level(self, &kids);
+            crate::flow::share_ground(self, &kids, (ground.quarters(&inside.soil), ground.quarters(&inside.snow)));
         }
         let kept = record.as_ref().map(|r| r.kept).or(uneven.as_ref().map(|u| u.relief));
         if let Some(kept) = kept {

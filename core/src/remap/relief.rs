@@ -9,10 +9,11 @@ use crate::space::{Leaf, Level};
 use crate::World;
 
 /// What a split of a cell no join made gives its quarters by the terrain (`World::uneven`), row by row: each one's
-/// share of the bed, and its relief, J.
+/// share of the bed, and its relief, J; and the scale of the terrain's departures it stands (1 the whole terrain).
 pub(super) struct Uneven {
     pub(super) bed: [f64; 4],
     pub(super) relief: [f64; 4],
+    pub(super) scale: f64,
 }
 
 impl World {
@@ -57,7 +58,7 @@ impl World {
         let s = d.iter().filter(|&&x| x < 0.0).fold(s, |s, &x| s.min(thick / -x));
         let bed: [f64; 4] = std::array::from_fn(|q| area[q] * (thick + s * d[q]));
         let total = sum4(bed);
-        Uneven { bed: bed.map(|b| b / total), relief: inside.map(|x| s * s * rho_g * x.1) }
+        Uneven { bed: bed.map(|b| b / total), relief: inside.map(|x| s * s * rho_g * x.1), scale: s }
     }
 
     /// Departures `d` (m) of the quarters `kids` of cell `i` (leaf `leaf`) drained to the cells round them in `cells`

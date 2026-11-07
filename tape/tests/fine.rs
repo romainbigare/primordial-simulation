@@ -1,6 +1,6 @@
 //! A window finer than its cells (`tape::fine`): its ground keeps each square's height as its mean, it and the liquid's
-//! surface have no steps at the cells' edges, a split that shares out its cell changes nothing drawn, it does not depend
-//! on the window, liquid stands on the low ground of wet cells, and rivers run down.
+//! surface have no steps at the cells' edges, a split that shares out its cell by area changes nothing drawn of what it
+//! shares so, it does not depend on the window, liquid stands on the low ground of wet cells, and rivers run down.
 
 use pcore::World;
 use tape::{fine, Samples, LAYERS};
@@ -85,9 +85,10 @@ fn the_fine_ground_keeps_each_squares_height_and_shows_no_cells_edge() {
     let shore: Vec<_> = pairs.iter().filter(|&&(p, q, _)| wet(p) != wet(q)).collect();
     let (on, all) = (across_edges(&shore), across_edges(&pairs.iter().collect::<Vec<_>>()));
     assert!(!shore.is_empty() && on < all, "the shore crosses cells' edges as often as other pairs: {on} against {all}");
-    // A split shares out its cell's liquid, ice, rain and look by area: what is drawn of them does not change.
+    // A split shares out its cell's rain by area, and here its ice and look as they were: what is drawn of them does not
+    // change. (The liquid in its pores goes by the ground inside it, laws.md 0, "Inside a cell".)
     let n = across * across;
-    for name in ["depth", "ice", "rain", "true_r", "true_g", "true_b"] {
+    for name in ["ice", "rain", "true_r", "true_g", "true_b"] {
         let k = LAYERS.iter().position(|l| l.name == name).expect("a layer");
         assert!(before.bytes[k * n..(k + 1) * n] == got.bytes[k * n..(k + 1) * n], "the {name} drawn does not change where cells split");
     }

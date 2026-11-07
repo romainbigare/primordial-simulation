@@ -182,7 +182,7 @@ fn octave_slope(map: &Square) -> f64 {
 }
 
 /// The rms slope of real ground over a length `len`, m: self-affine, so it falls slowly as the length grows.
-fn real_slope(len: f64) -> f64 {
+pub(crate) fn real_slope(len: f64) -> f64 {
     REAL_SLOPE * (len / REAL_LENGTH_M).powf(HURST - 1.0)
 }
 

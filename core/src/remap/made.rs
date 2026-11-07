@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug)]
 pub enum Made {
     /// Quarter `q` (row by row) of old cell `parent`, `area` of its area and `bed` of its bed (its area's share of a
-    /// flat cell's)
-    Quarter { parent: u32, q: u8, area: f64, bed: f64 },
+    /// flat cell's), and `cover[x]` of slot `x` of its cover (`Cover::parts`)
+    Quarter { parent: u32, q: u8, area: f64, bed: f64, cover: [f64; crate::cover::SLOTS] },
     /// The join of old cells `kids`, its quarters row by row, each `area[q]` of its area
     Join { kids: [u32; 4], area: [f64; 4] },
 }
@@ -49,7 +49,7 @@ impl Made {
     /// area for the others; a joined cell the sum of its quarters', in order.
     pub(crate) fn held(&self, joined: &[Option<Joined>], of: Option<Of>, at: impl Fn(u32) -> f64) -> f64 {
         match *self {
-            Made::Quarter { parent, q, area, bed } => {
+            Made::Quarter { parent, q, area, bed, .. } => {
                 let record = of.zip(joined.get(parent as usize).and_then(Option::as_ref));
                 at(parent) * record.map_or(if of.is_some_and(Of::of_bed) { bed } else { area }, |(of, r)| r.share(of, q))
             }
