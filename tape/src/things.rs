@@ -10,9 +10,10 @@
 //!   the structure it is inside;
 //! - a slot of cover: `u32` starting kind, `f32` built cover kg/m², capture area m²/m², its 9 genes (`cover::LIGHT` to `cover::FIX`),
 //!   `u8` full (1) or not, then 3 zeros;
-//! - a part: `id`, `f32` its 3 outer sizes m (longest first), hollowness, mass kg, walls' colour (3 bands), walls'
-//!   hardness, depth buried m, `id` of the body holding it, `id` of its structure's root, the space its structure's
-//!   walls close m³, how closed they are (0..1);
+//! - a part, or a lot of alike parts (laws.md 3.1): `id`, `f32` how many parts it is (real), each one's 3 outer sizes
+//!   m (longest first), hollowness and mass kg, walls' colour (3 bands), walls' hardness, mean depth buried m, `id` of
+//!   the body holding it, `id` of its structure's root, the space its structure's walls close m³, how closed they are
+//!   (0..1);
 //! - a bond: `id` of each end, `f32` strength N.
 //!
 //! An `id` is two `u32`, its low then its high half; 0 is none.
@@ -104,13 +105,14 @@ fn diet(w: &World, b: &Body, brain: bool) -> u8 {
     (DIET_COVER * cover as u8) | (DIET_BODIES * bodies as u8) | (DIET_REMAINS * remains as u8)
 }
 
-/// The record of part `p`.
+/// The record of part `p` (a lot: of each of its parts, and their count).
 fn part(w: &World, p: &Part, out: &mut Out) {
     let walls = p.walls(&w.chem);
     out.id(p.id);
+    out.f32(p.count);
     p.size.iter().for_each(|&d| out.f32(d as f64));
     out.f32(p.hollow as f64);
-    out.f32(p.mass(&w.chem));
+    out.f32(p.mass(&w.chem) / p.count);
     walls.colour.into_iter().chain([walls.hardness, p.buried as f64]).for_each(|v| out.f32(v));
     out.id(if p.held == NOBODY { 0 } else { p.held });
     out.id(p.root);

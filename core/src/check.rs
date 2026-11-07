@@ -139,8 +139,8 @@ pub fn broken(w: &World) -> Option<String> {
         bad.then(|| format!("body {}: energy {}, members {}, stores {:?}, brain ok {finite}", b.id, b.e, b.count, b.store))
     });
     let part = w.life.parts().find_map(|p| {
-        let bad = !above_0(p.e) || !p.wall.iter().chain(&p.fill).all(|&x| at_least_0(x));
-        bad.then(|| format!("part {}: energy {}, walls {:?}, fill {:?}", p.id, p.e, p.wall, p.fill))
+        let bad = !above_0(p.e) || !above_0(p.count) || !p.wall.iter().chain(&p.fill).all(|&x| at_least_0(x));
+        bad.then(|| format!("part {}: energy {}, count {}, walls {:?}, fill {:?}", p.id, p.e, p.count, p.wall, p.fill))
     });
     let cover = w.life.cells.iter().enumerate().find_map(|(i, x)| {
         let c = &x.cover;

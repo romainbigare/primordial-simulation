@@ -2,7 +2,7 @@
 //! (`merge`, `add`), and a part of a node coming back to it (`rejoin`). Members, stores and heat are kept exactly in
 //! every join.
 
-use crate::bond::{held, let_go, room};
+use crate::bond::{held_kind, join_held, let_go, room};
 use crate::body::{self, alike, most, range, spread_at, spread_kept, Body, Layout, BRAIN_SIZES};
 use crate::brain::row_step;
 use crate::life::Block;
@@ -77,12 +77,13 @@ fn across_rooms(w: &World, d: &mut Chunk, i: usize) {
 
 /// What a node shares with those it joins (`join_kin`): its lineage (a node has one brain), its stage (both mature or
 /// both young: a young node joins its adult kin at the merge once it matures), the structure whose room it is in (its
-/// root, as the room law counts those inside, `bond::room`) and the structure it holds (its root).
-type Kin = (u32, bool, Option<u64>, Option<u64>);
+/// root, as the room law counts those inside, `bond::room`) and what it holds (`bond::held_kind`: the design of a lot,
+/// the root of a structure).
+type Kin = (u32, bool, Option<u64>, Option<(bool, u64)>);
 
 /// The `Kin` of body `o` of cell `c`.
 fn kin_of(w: &World, c: &Cell, o: &Body) -> Kin {
-    (o.lineage, o.adult(&w.chem), room(c, o).map(|r| r.0), held(c, o).map(|p| c.parts[p].root))
+    (o.lineage, o.adult(&w.chem), room(c, o).map(|r| r.0), held_kind(&w.chem, c, o))
 }
 
 /// Individuals of one `Kin` a cell keeps apart where they may mate (a pair, `copy::mates`); past this many, with no node
@@ -126,12 +127,15 @@ fn join_other(w: &World, d: &mut Chunk, lay: &Layout, heads: Vec<Handle>) {
     }
 }
 
-/// The body at `s` joins the body at `t` (`add`), letting go of what it holds; of another lineage (of its starting kind),
-/// its members take `t`'s brain, born rows and lineage.
+/// The body at `s` joins the body at `t` (`add`): the lot it holds joins `t`'s if both hold a lot of one design
+/// (`bond::join_held`), else it lets go of what it holds; of another lineage (of its starting kind), its members take
+/// `t`'s brain, born rows and lineage.
 pub fn merge(w: &World, d: &mut Chunk, s: Handle, t: Handle) {
     debug_assert_eq!(d.root(w, &d[s]), d.root(w, &d[t]), "a merge across starting kinds");
     let mut c = std::mem::take(&mut d[s]);
-    let_go(d, &mut c, false);
+    if !join_held(w, d, &mut c, t) {
+        let_go(d, &mut c, false);
+    }
     add(w, d, t, Lot::of(&mut c), (&c.genes, &c.spread, c.body_spread), (c.lineage, c.genome, Some(Own::Block(c.brain)), c.row_spread));
     d.remove(s, &c);
 }

@@ -64,8 +64,8 @@ pub struct Cell {
     pub cover: Cover,
     /// The brains of its bodies
     pub brains: Brains,
-    /// The parts that lie in it, in the order they came, the bonds between them (`bond`), and how many parts were made
-    /// in it so far (their ids, `bond::Part::id`)
+    /// The parts that lie in it (alike lone parts as one lot, `bond::Part::count`), in the order they came, the bonds
+    /// between them (`bond`), and how many parts were made in it so far (their ids, `bond::Part::id`)
     pub parts: Vec<crate::bond::Part>,
     pub bonds: crate::bond::Bonds,
     pub(crate) parts_made: u64,
