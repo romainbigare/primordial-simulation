@@ -72,9 +72,9 @@ gives its size, the time the core took to make it and the worker its fields, and
 
 The Earth view draws the plant cover as textures at its real size (`web/src/vegetation.ts`, `web/src/textures.ts`),
 over the fine raster where there is one and blended between the cells' centres as the map is; in the fine raster each
-slot of a cell is a stand of its own, its marks as dense as its own cover there (so a kind that likes wet ground stands
-in the wet ground and the shallows, and stops where its cover stops), and a mark under liquid deeper than it is wide is
-not drawn: crowns where it is woody
+slot of a cell is a stand of its own kinds where its own cover lies (so a kind that likes wet ground stands in the wet
+ground and the shallows, and stops where its cover stops), the stands closing the ground together by their summed
+capture area, each by its share of it; a mark under liquid deeper than it is wide is not drawn: crowns where it is woody
 (shrubs, woodland, forest, a jungle where it is also warm and wet), a tree's crown 3 to 15 m across by its walls per
 m², and tufts where it is herbs (grass, steppe, tundra); as many marks as its capture area closes it (1 - e^-area). A
 kind gives way to the next over a range of each threshold, so kinds mix mark by mark, never at an edge. The marks are
