@@ -7,7 +7,7 @@ use tape::{fine, Samples, LAYERS};
 use worldgen::testkit;
 
 /// What `fine` hands out for a window of `n` pixels: the river ways, the ground and the liquid's surface, the bytes of
-/// the layers, and the fields inside the cells (`INSIDE` planes of `n`: wetness, snow, the cover of each slot).
+/// the layers, and the fields inside the cells (`INSIDE` planes of `n`: wetness, the cover of each slot).
 struct Fine {
     ways: Vec<[f32; 6]>,
     ground: Vec<f32>,
@@ -16,8 +16,8 @@ struct Fine {
     inside: Vec<f32>,
 }
 
-/// The planes inside the cells: wetness, snow and one for each slot of cover.
-const INSIDE: usize = 2 + pcore::cover::SLOTS;
+/// The planes inside the cells: wetness and one for each slot of cover.
+const INSIDE: usize = 1 + pcore::cover::SLOTS;
 
 /// `b` read as `fine` lays it out: a byte a pixel for each layer, then zero bytes up to a multiple of 4, then the
 /// planes inside the cells, and nothing more.
@@ -62,7 +62,7 @@ fn the_fine_ground_keeps_each_squares_height_and_shows_no_cells_edge() {
     let f = tape::fields(&w);
     let (got, across) = window(&w, &mut s, [4.0, 4.0], depth);
     let n = across * across;
-    assert!(got.inside[..n].iter().all(|w| (0.0..=1.0).contains(w)) && got.inside[n..].iter().all(|&x| x >= 0.0), "a wetness 0 to 1, snow and cover of none or more");
+    assert!(got.inside[..n].iter().all(|w| (0.0..=1.0).contains(w)) && got.inside[n..].iter().all(|&x| x >= 0.0), "a wetness 0 to 1 and cover of none or more");
     assert!(w.map.leaves().iter().all(|l| l.depth >= w.map.square_depth()), "the coarsest cells are squares");
     let per = (across / 8) as f64;
     let at = |p: usize| [((p % across) as f64 + 0.5) / per, ((p / across) as f64 + 0.5) / per];

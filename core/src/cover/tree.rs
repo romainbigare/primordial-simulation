@@ -1,9 +1,9 @@
 //! The cover of the cells a split or a join makes (laws.md 4.5): each quarter of a split takes its part of each slot,
-//! by the share of its ground the slot's kind likes (`Cover::parts`, `inside::Inside::kind`), with the heat that goes
+//! by its growth law over the quarter's ground (`Cover::parts`, `inside::Inside::kind`), with the heat that goes
 //! with it (`Cover::quarter`); a joined cell takes the slots of its quarters as seeds that land by the cover's own rule
 //! (`Cover::gathered`, then `cover::land`).
 
-use super::{Cover, Parts, Seed, MOIST, NO_ROOT, NP, SLOTS};
+use super::{Cover, Parts, Seed, NO_ROOT, NP, SLOTS};
 use crate::chem::Chemistry;
 use crate::inside::{Ground, Inside};
 use crate::remap::mean_by;
@@ -11,11 +11,11 @@ use crate::Physics;
 
 impl Cover {
     /// The part of each slot of it that each quarter of its cell takes (row by row, slot by slot): the quarter's part of
-    /// the share of the slot's kind over the cell's ground `g` (`Inside::kind`, by its moisture gene; `Ground::quarters`),
+    /// the share of the slot's kind over the cell's ground `g` (`Inside::kind`, by its growth law; `Ground::quarters`),
     /// an empty slot's by area.
     pub(crate) fn parts(&self, g: &Ground, inside: &Inside, ph: &Physics) -> [[f64; SLOTS]; 4] {
         let each: [[f64; 4]; SLOTS] = std::array::from_fn(|x| {
-            let share = if self.root[x] == NO_ROOT { vec![1.0; g.area.len()] } else { inside.kind(g, ph, self.genes[x][MOIST]) };
+            let share = if self.root[x] == NO_ROOT { vec![1.0; g.area.len()] } else { inside.kind(g, ph, &self.genes[x]) };
             g.quarters(&share)
         });
         std::array::from_fn(|q| each.map(|p| p[q]))

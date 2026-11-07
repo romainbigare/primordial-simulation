@@ -100,7 +100,7 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
         if c.root[q] == NO_ROOT || built <= EMPTY_KG {
             continue;
         }
-        let act = ph.activity(moist / dec(c.genes[q][MOIST]));
+        let act = super::activity(ph, &c.genes[q], moist);
         *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, ..Default::default() };
         layers.push(((c.walls(&mm, q) / area) as f32, leaf / area, q));
     }

@@ -195,8 +195,8 @@ and height its bodies read until the next survey, `Life::env`, so a founder plac
 ground's temperature); a joined cell holds the sum of its quarters' and the mean by area of the others (its bed's means
 by volume, the first alarm and the earliest time brought up to date, so its law skips no time). The share is by area,
 the same temperature in each, but the bed's, which stands as the terrain inside the cell does (**relief**, below), and
-the liquid in the ground's pores and its soft cover, which go by the shares of the quarter's own ground (**inside a
-cell**, below), unless a join made the cell: a join keeps each quarter's share of each amount of each node, of each heat and of each
+the liquid in the ground's pores, which goes by the shares of the quarter's own ground (**inside a cell**, below),
+unless a join made the cell: a join keeps each quarter's share of each amount of each node, of each heat and of each
 volume, and its relief (`remap::Joined`, saved per cell), and the split of that cell gives the quarters back as they
 were (to the rounding of x · share). A made cell's temperature and plateau in Flow's state are those of its heat
 (`World::thawed`). **Life across a split and a join** (`life/tree.rs`, one life model at every grain: bodies and parts
@@ -233,10 +233,9 @@ below; `flow::share_ground`): the liquid the cell's pores held goes to the quart
 part of the soil's shares), as far as each one's pores hold; the liquid that stood over the cell's pores and what a
 quarter's pores cannot hold stand where they would on the quarters' floors (a floor is a quarter's solid surface less
 the room its pores have left, which the liquid fills first): they fill them from the lowest up to one level, as the
-sea's levelling does (1.2), so a quarter raised above that level holds none standing and none runs off at once; then
-the soft cover goes by its share (the snow's shares). Each move takes its share of every liquid with what is dissolved
-and its heat at the node's temperature, or of every soft solid with its heat, from the quarter that holds the most to
-each other (`store::apply`). The stacks then gain ρ g Σ a d² / 2, d each quarter's departure (what lies on the bed
+sea's levelling does (1.2), so a quarter raised above that level holds none standing and none runs off at once. Each
+move takes its share of every liquid with what is dissolved and its heat at the node's temperature, from the quarter
+that holds the most to each other (`store::apply`). The stacks then gain ρ g Σ a d² / 2, d each quarter's departure (what lies on the bed
 rises and falls with it by area, and the air over the cell keeps its mean height), less what the liquid gives up as it
 finds its level and what those moves give up or take; each quarter's relief is the terrain's inside it and its share
 by area of what the cell's relief has left: what the moves gave up, which the ground finer than the quarters still
@@ -254,13 +253,15 @@ the stacks' potential energy is not found: a split then makes flat quarters, eac
 area. So a join moves no energy, a split moves only what `fall_heat` books, and `check::drift`, which reads the stacks
 and the reliefs, closes through any sequence of splits and joins; the cover a join's cells cannot hold goes to its
 ground as remains, booked as life's remains are (`store::life_moved`). No law changes the cells.
-**Inside a cell** (`inside/`, handover 5.2): a cell holds means (its cover, the liquid in its soil, its snow, what
-stands on it), and one rule shares each over the cell's own ground. The ground is the terrain at a grid of 8 x 8
-samples, the leaves `inside::DEPTHS` (3) below the cell (fewer near the tree's most depth; `World::ground_in`: the
-terrain's mean over each, its height at the centre of one coarser than the terrain's samples), its departures scaled
-as the split scales the quarters' (`Ground::scaled`, 1 where the split stands no terrain). Each share is a field over
+**Inside a cell** (`inside/`, handover 5.2): a cell holds means (its cover, the liquid in its soil, what stands on
+it), and each is shared over the cell's own ground by a general law evaluated at its samples, never by a rule made for
+one thing. The ground is the terrain at a grid of 8 x 8 samples, the leaves `inside::DEPTHS` (3) below the cell (fewer
+near the tree's most depth; `World::ground_in`: the terrain's mean over each), its departures scaled as the split
+scales the quarters' (`Ground::scaled`, 1 where the split stands no terrain); what the terrain alone gives (each
+sample's slope and where the liquid runs from it) is found once, when the ground is made. Each share is a field over
 the samples whose mean by area over the cell is 1 (`Ground::share`), from the terrain, the seed and the cell's own
-numbers: no draw. **The soil**: how much liquid gathers at a sample is its wetness index ln(a / tan β) (Beven and
+numbers: no draw. **The soil**: the steady state of the soil's liquid flowing downhill by Darcy's law. How much liquid
+gathers at a sample is its wetness index ln(a / tan β) (Beven and
 Kirkby 1979), a the area that drains through it per metre of contour and β its slope, no less than real ground's
 over a sample (`terrain::real_slope`). The area drains by multiple flow directions (Quinn et al. 1991): each sample,
 highest first, passes what it gathered to every lower sample next to it by its drop over the distance times Quinn's
@@ -270,13 +271,13 @@ through a); multiple directions suit the soil's slow liquid, where the liquid la
 `World::inflow`) enters at the lowest sample of the grid's highest side and runs down the low ground (on flat ground
 it spreads evenly). As in TOPMODEL, the liquid a sample's pores hold departs from the cell's mean by `soil_m` per unit
 of the index over its level, within none and the pores full, the level found (by halving) so the mean is the cell's;
-dry pores or full ones share evenly. **The snow** goes as e^(−`snow_sun` × the direct sun on a sample over its mean
-over the cell): the cosine of the angle between the sample's ground (its slope and the way it faces) and the noon sun
-at the cell's latitude when the sun stands over the equator, none on a face turned from it. **What stands** lies at
-one level over the samples (`flow::level_of`), each as deep as it lies under it. **Each kind of cover** by its
-moisture gene (4.5): a sample is as wet as the liquid in its pores and standing there makes it (`Physics::wetness`),
-and a kind's share goes as a Gaussian of the log of that wetness about its gene, of width `moist_width` decades (a
-Gaussian response along a gradient, ter Braak and Looman 1986). A split gives each quarter its part of each share
+dry pores or full ones share evenly. **What stands** lies at one level over the samples (`flow::level_of`), each as
+deep as it lies under it. **Each kind of cover** by its own growth law (4.5) at each sample: a sample is as wet as the
+liquid in its pores and standing there makes it (`Physics::wetness`), and a kind's light reaction there runs at its
+capacity times its activity on ground that wet (`cover::activity`); light and capacity are the cell's at every sample,
+so its share goes as that activity, and where every sample is as wet as the kind needs, or none is wet at all, it is
+even. The snow is shared evenly for now: the sunlight law does not yet read a cell's slope and facing, and the snow
+inside a cell is to come from that law. A split gives each quarter its part of each share
 (the sum by area over its samples, `Ground::quarters`), and the shell draws inside a cell with the same shares
 (`tape::fine`), so what is seen before a zoom is what the world goes on with. A join stays a sum.
 **Refinement** (`refine/`, `World::refine`) decides which cells split and join: a setting for speed, not a law (no
@@ -1036,8 +1037,8 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   (`feed::take_node`, 5.3), paying to break what it takes of the cover (`Cover::breaking`, as a bite pays); movers that
   push through a cell break the cover by its share of the cell's mass, as they break bodies (6.8, `choose::wear`).
 - **Split and join of cells** (`cover/tree.rs`, 0): each quarter of a split takes its part of each slot's amounts, by
-  the share of the cell's ground the slot's kind likes (**inside a cell**, 0: the wet places for a kind of a high
-  `MOIST` gene, the dry for a low one; `Cover::parts`), and the heat by its share of the heat capacity, so each stays at
+  the slot's growth law over the cell's ground (**inside a cell**, 0: a kind that needs wet ground gathers where liquid
+  gathers; `Cover::parts`), and the heat by its share of the heat capacity, so each stays at
   the cover's temperature; the genes, kind and `full` copied, the light mark per m² as it was. A joined cell takes its
   quarters' slots as seeds with their heat, which land by the seeds' rule (`seed::lodge`): alike slots join, and what
   finds no slot dies as remains on its ground; its light mark is the quarters' mean by area.

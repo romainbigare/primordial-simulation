@@ -122,7 +122,7 @@ impl World {
             .collect();
         self.renew((map, mesh), from, c);
         if uneven.is_some() {
-            crate::flow::share_ground(self, &kids, (ground.quarters(&inside.soil), ground.quarters(&inside.snow)));
+            crate::flow::share_ground(self, &kids, ground.quarters(&inside.soil));
         }
         let kept = record.as_ref().map(|r| r.kept).or(uneven.as_ref().map(|u| u.relief));
         if let Some(kept) = kept {

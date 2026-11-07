@@ -100,10 +100,6 @@ pub struct Physics {
     pub wet_depth: f64,
     /// Liquid a point of a cell's soil holds over the cell's mean per unit of its wetness index over the cell's, m (`inside`)
     pub soil_m: f64,
-    /// Snow at a point of a cell goes as e^(−this × the direct sun on it over the cell's mean) (`inside`)
-    pub snow_sun: f64,
-    /// Width of the wetness a kind of cover likes about its moisture gene, decades (`inside`)
-    pub moist_width: f64,
     /// Temperature at which upkeep measures catalyst capacity and the costs are anchored, K
     pub t_cat: f64,
     /// Spread of a cell's microclimate: below a freezing point the frozen share of a body's or the cover's members grows from 0 to 1 over this, K
@@ -330,8 +326,6 @@ impl Default for Physics {
             gas_ref: 3.8e-4,
             wet_depth: 0.01,
             soil_m: 0.03,
-            snow_sun: 0.75,
-            moist_width: 0.25,
             t_cat: T_SURF,
             frost_k: 3.0,
             c_firm: 20.0,
@@ -444,8 +438,8 @@ impl Config {
         require(meeh > 0.0 && air > 0.0 && coat >= 0.0 && coat.is_finite(), || format!("meeh ({meeh}) and r_air ({air}) must be above 0, r_coat ({coat}) at least 0"))?;
         // In liquid the same (`Body::conductance`): the still liquid's film above 0, a wet coat a share of a dry one.
         require(film > 0.0 && (0.0..=1.0).contains(&wet), || format!("r_liquid ({film}) must be above 0, wet_coat ({wet}) from 0 to 1"))?;
-        // The shares inside a cell (`inside`) divide by these.
-        require(p.soil_m > 0.0 && p.moist_width > 0.0, || format!("soil_m ({}) and moist_width ({}) must be above 0", p.soil_m, p.moist_width))?;
+        // The soil's shares inside a cell (`inside`) divide by it.
+        require(p.soil_m > 0.0, || format!("soil_m ({}) must be above 0", p.soil_m))?;
         let floor = p.node_floor;
         require((0.0..1.0).contains(&floor), || format!("node_floor ({floor}) must be at least 0 and below 1"))?;
         let light = p.light_yield;

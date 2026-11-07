@@ -1,8 +1,9 @@
-//! Inside a cell (handover 5.2, laws.md 0): a cell holds means (its cover, the liquid in its soil, its snow, the liquid
-//! that stands on it). One rule shares each mean over the cell's own ground, from the ground's shape alone: the terrain
-//! at a grid of samples inside the cell, `DEPTHS` below it (`Ground`), the liquid that comes from upstream, and the cell's
-//! own means (`Inside`). Each share keeps its mean: its mean over the cell by area is 1. A split gives each quarter the
-//! share of its own ground (`World::split`), and a shell draws inside a cell with the same shares.
+//! Inside a cell (handover 5.2, laws.md 0): a cell holds means (its cover, the liquid in its soil, the liquid that stands
+//! on it). Each is shared over the cell's own ground by a general law evaluated at a grid of samples inside the cell,
+//! `DEPTHS` below it (`Ground`): the soil's liquid by its steady flow downhill, what stands by its level, each kind of
+//! cover by its own growth law there (`Inside`). Each share keeps its mean: its mean over the cell by area is 1. A split
+//! gives each quarter the share of its own ground (`World::split`), and a shell draws inside a cell with the same
+//! shares. What the terrain alone gives (the slopes, where the liquid runs) is found once, when the ground is made.
 
 mod shares;
 
@@ -27,7 +28,9 @@ const CONTOUR: [f64; 2] = [0.5, std::f64::consts::SQRT_2 / 4.0];
 
 /// The ground inside a cell as the terrain stands there (`World::ground_in`): per sample, row by row from the north-west,
 /// its height, m, and its share of the cell's area; the cell's leaf, the samples along its side and its area, m²; a
-/// sample's length north to south, m, and the width of each row's samples, m; the latitude of the cell's centre, degrees.
+/// sample's length north to south, m, and the width of each row's samples, m. And what the terrain alone gives, found
+/// when it is made (`Ground::found`): per sample the area of the cell that drains through it, m², the share of what
+/// comes from upstream that drains through it, and its slope, rise over run.
 #[derive(Clone, Debug)]
 pub struct Ground {
     pub h: Vec<f64>,
@@ -37,7 +40,9 @@ pub struct Ground {
     whole: f64,
     dy: f64,
     dx: Vec<f64>,
-    lat: f64,
+    drains: Vec<f64>,
+    through: Vec<f64>,
+    tan: Vec<f64>,
 }
 
 impl World {
@@ -76,7 +81,7 @@ impl World {
         let dx = (0..side).map(|r| area[r * side] / dy).collect();
         let whole: f64 = area.iter().sum();
         area.iter_mut().for_each(|a| *a /= whole);
-        Ground { h, area, leaf: l, side, whole, dy, dx, lat: self.map.place_of(&l, lat.0, lat.1).1.lat }
+        Ground { h, area, leaf: l, side, whole, dy, dx, drains: Vec::new(), through: Vec::new(), tan: Vec::new() }.found()
     }
 }
 
@@ -84,8 +89,30 @@ impl Ground {
     /// The same ground with its heights' departures from their mean scaled by `s` (a split that cannot pay for the whole
     /// terrain inside its cell scales it so, `World::uneven`; 0 is flat).
     pub fn scaled(mut self, s: f64) -> Ground {
+        if s == 1.0 {
+            return self;
+        }
         let mean: f64 = self.h.iter().zip(&self.area).map(|(h, a)| h * a).sum();
         self.h.iter_mut().for_each(|h| *h = mean + s * (*h - mean));
+        self.found()
+    }
+
+    /// The ground with what its terrain alone gives found (`Ground`): the area that drains through each sample from the
+    /// cell's own area and the share of what comes from upstream that does (`drain`; from upstream it enters at the
+    /// lowest sample of the grid's highest side, where a channel comes in, and spreads evenly on flat ground), and each
+    /// sample's slope, no less than real ground's over a sample (`real_slope`).
+    fn found(mut self) -> Ground {
+        let flat = self.h.iter().all(|&x| x == self.h[0]);
+        let mut entry = vec![0.0; self.h.len()];
+        if flat {
+            entry.clone_from(&self.area);
+        } else {
+            entry[self.entry()] = 1.0;
+        }
+        let floor = real_slope(self.dy);
+        self.drains = self.drain(self.area.iter().map(|a| a * self.whole).collect());
+        self.through = self.drain(entry);
+        self.tan = self.gradient().iter().map(|g| g[0].hypot(g[1]).max(floor)).collect();
         self
     }
 
@@ -119,24 +146,14 @@ impl Ground {
             .collect()
     }
 
-    /// How much liquid gathers at each sample: the topographic wetness index ln(a / tan β) (Beven and Kirkby 1979), a
-    /// the area that drains through the sample per metre of contour (its own and all upslope of it, over the width of a
-    /// sample) and β its slope, no less than real ground's over a sample (`real_slope`). The area drains by multiple
-    /// flow directions (Quinn et al. 1991): each sample, highest first, passes what it gathered to every lower sample
-    /// next to it by drop over distance times contour length (`CONTOUR`), so liquid spreads over a convex ridge and
-    /// gathers in a concave hollow (the curve of the ground lies in a); it spreads the soil's slow liquid as that liquid
-    /// moves, where one steepest way (D-infinity) suits the channels of the liquid law between cells. What drains to the
-    /// cell from upstream, `inflow` m², enters at the lowest sample of the cell's highest side, where a channel comes in,
-    /// and runs down the low ground from there (on flat ground it spreads evenly). A sample with no lower one keeps what
-    /// it gathered (a hollow, or the edge liquid leaves by).
-    pub fn wetness_index(&self, inflow: f64) -> Vec<f64> {
-        let n = self.h.len();
-        let flat = self.h.iter().all(|&x| x == self.h[0]);
-        let mut gathered: Vec<f64> = self.area.iter().map(|a| (self.whole + if flat { inflow } else { 0.0 }) * a).collect();
-        if !flat {
-            gathered[self.entry()] += inflow;
-        }
-        let mut order: Vec<usize> = (0..n).collect();
+    /// What gathers at each sample when `gathered` falls on the samples and runs down by multiple flow directions
+    /// (Quinn et al. 1991): each sample, highest first, passes what it gathered to every lower sample next to it by drop
+    /// over distance times contour length (`CONTOUR`), so it spreads over a convex ridge and gathers in a concave hollow;
+    /// a sample with no lower one keeps it (a hollow, or the edge it leaves by). It is the steady flow of the soil's
+    /// liquid downhill by Darcy's law, which follows the ground's slope, spread as slow flow through the soil spreads;
+    /// the liquid law's one steepest way (D-infinity) suits channels.
+    fn drain(&self, mut gathered: Vec<f64>) -> Vec<f64> {
+        let mut order: Vec<usize> = (0..self.h.len()).collect();
         order.sort_by(|&p, &q| self.h[q].total_cmp(&self.h[p]).then(p.cmp(&q)));
         for &p in &order {
             let ways: Vec<(usize, f64)> = self.around(p).filter(|&(q, _, _)| self.h[q] < self.h[p]).map(|(q, corner, d)| (q, (self.h[p] - self.h[q]) / d * CONTOUR[corner as usize])).collect();
@@ -146,9 +163,14 @@ impl Ground {
                 ways.iter().for_each(|&(q, w)| gathered[q] += a * w / sum);
             }
         }
-        let floor = real_slope(self.dy);
-        let grad = self.gradient();
-        (0..n).map(|p| (gathered[p] / (self.area[p] * self.whole).sqrt() / grad[p][0].hypot(grad[p][1]).max(floor)).ln()).collect()
+        gathered
+    }
+
+    /// How much liquid gathers at each sample: the topographic wetness index ln(a / tan β) (Beven and Kirkby 1979), a
+    /// the area that drains through the sample per metre of contour (its own and all upslope of it, and its share of
+    /// the `inflow` m² that drains to the cell from upstream, over the width of a sample) and β its slope (`found`).
+    pub fn wetness_index(&self, inflow: f64) -> Vec<f64> {
+        (0..self.h.len()).map(|p| ((self.drains[p] + inflow * self.through[p]) / (self.area[p] * self.whole).sqrt() / self.tan[p]).ln()).collect()
     }
 
     /// The lowest sample of the highest of the grid's four sides (north, east, south, west; ties the first).
@@ -158,18 +180,6 @@ impl Ground {
         let mean = |s: &[usize]| s.iter().map(|&p| self.h[p]).sum::<f64>() / s.len() as f64;
         let high = sides.iter().fold(&sides[0], |best, s| if mean(s) > mean(best) { s } else { best });
         high.iter().copied().fold(high[0], |low, p| if self.h[p] < self.h[low] { p } else { low })
-    }
-
-    /// The direct sun on each sample, over its mean over the cell: the cosine of the angle between the sample's ground
-    /// and the noon sun at the cell's latitude when the sun stands over the equator (its mean height through the year),
-    /// none on a face turned from it. A face toward the sun takes more, one turned away less.
-    pub(crate) fn sun(&self) -> Vec<f64> {
-        let (zenith, toward) = (self.lat.abs().to_radians(), self.lat.signum());
-        let lit: Vec<f64> = (self.gradient().iter())
-            .map(|g| ((zenith.cos() - g[1] * toward * zenith.sin()) / (1.0 + g[0] * g[0] + g[1] * g[1]).sqrt()).max(0.0))
-            .collect();
-        let mean = self.mean(&lit);
-        lit.iter().map(|&x| if mean > 0.0 { x / mean } else { 1.0 }).collect()
     }
 
     /// The depth over each sample of liquid that stands `depth` m deep over the cell at one level, m: it fills the

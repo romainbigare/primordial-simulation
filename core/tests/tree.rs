@@ -465,8 +465,8 @@ fn with_life() -> (World, usize, [u64; 2], [u64; 2]) {
 
 /// A cell with a node, an individual holding a structure and cover of two kinds, split and joined again, keeps every
 /// element, the energy and the members of each kind (`TIGHT`). Split, each quarter holds a quarter of the node, with
-/// the node's brain rows, and some of each kind of cover, the four together all of it (each kind by the places of its
-/// cell it likes, laws.md 0); the individual and its structure lie whole in one quarter. Every id finds its body or
+/// the node's brain rows, and of each kind of cover what its growth law gives there, the four together all of it
+/// (laws.md 0, "Inside a cell"); the individual and its structure lie whole in one quarter. Every id finds its body or
 /// part, and once joined the cell holds its cover as it was.
 #[test]
 fn life_follows_a_split_and_its_join() {
@@ -487,7 +487,7 @@ fn life_follows_a_split_and_its_join() {
         let shares: Vec<&Body> = w.life.cell(c).map(|s| &w.life[s]).filter(|b| b.lineage == lineage).collect();
         assert!(shares.len() == 1 && (shares[0].count - NODE / 4.0).abs() <= TIGHT * NODE, "a quarter of the node in quarter {q:?}");
         assert_eq!(w.life.rows_of(shares[0]), &rows[..], "with the node's rows");
-        assert!(slots(&w, c).len() == 2 && slots(&w, c).values().all(|m| m.iter().all(|&x| x > 0.0)), "some of each kind of cover");
+        assert!(slots(&w, c).len() == 2 && slots(&w, c).values().all(|m| m.iter().all(|&x| x >= 0.0)), "each kind of cover, none below 0");
         slots(&w, c).iter().for_each(|(k, m)| (0..m.len()).for_each(|x| kinds_held.entry(*k).or_default()[x] += m[x]));
     }
     let near = |a: f64, b: f64| (a - b).abs() <= TIGHT * b;

@@ -111,8 +111,8 @@ fn about(w: &World, [x0, y0, x1, y1]: [f64; 4]) -> Vec<u32> {
 /// where the ground drawn rises above it; then every layer in table
 /// order, a byte a pixel, the field of the cells' bytes (`pyramid`), the ground's temperature along the ground's height
 /// at the rate the air cools with height (`World::air_drop`); then, from a multiple of 4 bytes, what lies inside each
-/// pixel's own cell by the shares of its ground (`inside::extend`): its wetness, its snow, and the built cover of each
-/// slot of its cell, f32 planes.
+/// pixel's own cell by the shares of its ground (`inside::extend`): its wetness and the built cover of each slot of its
+/// cell, f32 planes.
 pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], depth: u8) -> Vec<u8> {
     assert!(depth >= w.map.square_depth(), "a pixel is no coarser than a square");
     let per = (1u64 << (depth - w.map.square_depth())) as f64;
