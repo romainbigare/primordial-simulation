@@ -1,4 +1,4 @@
-// The cover of each pixel of a fine raster (fine.ts), for the ground patterns drawn over it (vegetation.ts): read in
+// The cover of each pixel of a fine raster (fine.ts), for the textures of the cover drawn over it (vegetation.ts): read in
 // the worker from the raster's layers and handed to the page with its picture.
 import { decode } from './data';
 import { Fine } from './fine';
