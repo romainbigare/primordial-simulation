@@ -21,15 +21,14 @@ use crate::layers::{cover_melt, quantise, Ctx, LAYERS, STANDING_M};
 use pcore::World;
 use pyramid::{Pixels, Pyramid};
 
-/// The level of the liquid each cell holds standing (at least `STANDING_M` deep on the mean), m, NaN for one that holds
-/// none: on the cell's points (`Samples::points`: the terrain there less the terrain's mean over the cell, `terrain`, on
+/// The level of the liquid each cell holds, m, NaN for one that holds none: on the cell's points (`Samples::points`: the terrain there less the terrain's mean over the cell, `terrain`, on
 /// the cell's height `z`), the level its liquid stands at when it fills the lowest of them first (`flow::level_of`), as
 /// deep over them all as it is over the cell. So the liquid drawn lies only on the cell's ground below it, holds the
-/// cell's liquid, and its shore moves with the level as the level moves.
+/// cell's liquid, and its shore moves with the level as the level moves, from a puddle in its lowest point on.
 fn levels(w: &World, s: &mut Samples, (z, terrain): (&[f64], &[f64]), depth: &[f64]) -> Vec<f64> {
     (0..z.len())
         .map(|i| {
-            if depth[i] < STANDING_M {
+            if depth[i] <= 0.0 {
                 return f64::NAN;
             }
             let mut floors: Vec<(f64, f64)> = s.points(w, w.map.leaves()[i]).iter().map(|g| (g - terrain[i] + z[i], 1.0)).collect();
@@ -90,7 +89,7 @@ fn about(w: &World, [x0, y0, x1, y1]: [f64; 4]) -> Vec<u32> {
 /// edges' leaves of `depth` (no shallower than a square), a pixel each. Little-endian, in order: the melting point of the
 /// frozen cover, K (f32; `cover_melt`); the count of river ways (u32) and each (`Way`, 6 f32) of the cells within their
 /// own side of the window; of each pixel row by row the height of the ground, m (f32), and the level of the liquid its
-/// own cell holds standing (f32: `levels`; NaN where it holds none), so the shore drawn is where the ground drawn rises
+/// own cell holds (f32: `levels`; NaN where it holds none), so the shore drawn is where the ground drawn rises
 /// above it; then every layer in table
 /// order, a byte a pixel, the field of the cells' bytes (`pyramid`), the ground's temperature along the ground's height
 /// at the rate the air cools with height (`World::air_drop`); then, from a multiple of 4 bytes, what lies inside each

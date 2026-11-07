@@ -2,7 +2,7 @@
 // fine ground and its slope, the liquid's surface over it (so shores follow the ground, not the cells' edges), the
 // fine ground's temperature for its snow, how wet the ground is and the plant cover inside each cell
 // (tape/src/fine/inside.rs), and rivers as lines along the way their liquid runs.
-import { World, Meta, makeWorld, latOf, encodeByte } from './data';
+import { World, Meta, makeWorld, latOf } from './data';
 import { Wet, riverOf, riverWidthOf, riverDepthOf, seaSquares, clamp, POLE_COS } from './earth';
 import { Fields, put4 } from './fields';
 
@@ -22,7 +22,7 @@ export interface Fine {
   melt: number;
   /** The ways rivers run: x0, y0, x1, y1 (squares), flux (mol/s) and catchment, six numbers a way */
   ways: Float32Array;
-  /** Of each pixel: the ground's height and the level of the liquid its own cell holds standing (NaN: none), m */
+  /** Of each pixel: the ground's height and the level of the liquid its own cell holds (NaN: none), m */
   ground: Float32Array; water: Float32Array;
   /** The layers of the pixels, as a world of `across` x `down` cells with one frame */
   world: World;
@@ -52,8 +52,6 @@ export function readFine(meta: Meta, at: FineAt, data: Uint8Array): Fine {
   };
 }
 
-/** The built cover of all the slots of pixel `i` of `f`, kg/m². */
-export const coverAt = (f: Fine, i: number) => f.cover.reduce((t, c) => t + c[i], 0);
 
 /** The ground's slope over a pixel is read as a square's slope (for its shading and its rock) times its size over a
  * square's to this power, and no less than SLOPE_LEAST times it: the slope over a short run is steeper than over a long
@@ -84,8 +82,8 @@ export function fineFields(f: Fine, meta: Meta, wet: Wet): Fields {
   const { across, down, ground, water, world, per, pxM } = f, n = across * down;
   const lut = (name: string) => world.lut[world.index.get(name)!];
   const bytesOf = (name: string) => world.data.subarray(world.base + world.index.get(name)! * n, world.base + (world.index.get(name)! + 1) * n);
-  const ice = bytesOf('ice'), tg = bytesOf('t_ground'), tr = bytesOf('true_r'), tgr = bytesOf('true_g'), tb = bytesOf('true_b');
-  const iceLut = lut('ice'), tLut = lut('t_ground'), plants = meta.layers[world.index.get('plants')!];
+  const ice = bytesOf('ice'), tg = bytesOf('t_ground'), plants = bytesOf('plants'), tr = bytesOf('true_r'), tgr = bytesOf('true_g'), tb = bytesOf('true_b');
+  const iceLut = lut('ice'), tLut = lut('t_ground');
   const rivers = riverShares(f), sea = seaSquares(wet, meta);
   const height = new Float32Array(4 * n), matter = new Float32Array(4 * n), bytes = new Uint8Array(4 * n), inside = new Float32Array(4 * n);
   for (let y = 0; y < down; y++) {
@@ -100,8 +98,7 @@ export function fineFields(f: Fine, meta: Meta, wet: Wet): Fields {
       put4(height, i, ground[i], wetHere ? level - ground[i] : -NO_LIQUID_M, gx, gy);
       const sq = clamp(Math.floor(ys), 0, meta.h - 1) * meta.w + clamp(Math.floor(f.at.x + (x + 0.5) / per), 0, meta.w - 1);
       put4(matter, i, iceLut[ice[i]], tLut[tg[i]], sea[sq], rivers[4 * i + 3] / 255);
-      // The plant cover drawn is the cover inside the pixel's cell where it stands (its slots' built cover).
-      put4(bytes, i, encodeByte(plants, coverAt(f, i)), tr[i], tgr[i], tb[i]);
+      put4(bytes, i, plants[i], tr[i], tgr[i], tb[i]);
       put4(inside, i, f.wet[i], rivers[4 * i] * RIVER_DEPTH_STEP_M, 0, 0);
     }
   }
