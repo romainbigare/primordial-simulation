@@ -122,6 +122,8 @@ The owner's decision: the map must show physical things (spec 10.1, 10.9, 5.2). 
 
 | 21 | **Sun on slopes** (law change): sunlight on a cell's ground follows its slope and facing (Lambert's cosine law, the daily integral on a tilted surface by the equivalent latitude, Lee 1962); slope and facing computed once when a cell is made; snow, melt, warmth and drying by facing then follow from the energy balance; a coarse cell's total sun equals the sum over its parts (the beam crosses the cell's plan whatever the slopes); a sub-grid snow cover only if a test shows coarse and fine snow disagree beyond chance | the gate; a scene where a slope facing the sun melts its snow first; the total sun of a square equals the sum of its cells | medium |
 
+| 22 | **No rule made for one thing** (law changes, one commit each): objects lying alone are covered by the loose ground's own movement (creep, then the law of spec 19), not a burial rate of their own; liquid from upstream enters a cell where the flow crosses its border; groups of objects join only when truly alike, and the cap of groups per cell follows the cost (where nothing looks or uses them), not a fixed 16. The founders' low score for forming parts stays (the owner's decision) | the gate; the books; objects do not pile up in a 300-year run; long runs | medium |
+
 A share inside a cell comes only from a general law evaluated at the samples, never from a rule made for one thing.
 Open, after these: a law for mud and sand (spec 19).
 
