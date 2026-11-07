@@ -756,8 +756,8 @@ This is cheaper to build, faster to draw and easier to read. It fits a world see
 
 Life and objects are drawn at their true size in metres and the plant cover as textures; two styles exist for the
 shapes of individuals, seen from above (the default) or angled (10.4), and the owner will choose between them. True
-size is the owner's decision: far away, a herd shows as a stipple of its members strong enough to read; the zoom goes
-deep enough to see single animals.
+size is the owner's decision: far away no herd is drawn; one or two zoom steps before single animals show, a herd shows
+as a light, subtle blob; the zoom goes deep enough to see single animals.
 
 **Goals:**
 - A player understands what they see **instinctively**, without reading.

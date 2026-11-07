@@ -2,11 +2,11 @@
 // 10.4, 10.5), from the list the core hands out (tape/src/things.rs). Each member of a node has its own place across
 // its cell's real area, seeded by the node's id and the member's index, so it holds while the camera moves. A member
 // whose length takes `SHAPE_PX` pixels or more is drawn as its shape (sprites.ts, from above or angled), a smaller one
-// as a soft dot, and below a pixel its node as a stipple of its members per m² (stipple.ts), so a herd shows from afar.
+// as a soft dot, and a little below a pixel its node as a soft blob over its cell (blob.ts); farther out no herd shows.
 // Hovering or clicking one shows its numbers (10.8); the plant cover is a texture (vegetation.ts). A lot of alike parts
 // (laws.md 3.1) is drawn part by part, each at a place seeded by the lot's id and the part's index.
 import { Rgb, Sprite, Style, AnimalLook, PartLook, animal, object, paintSprite, bodyLength, animalColour, woodiness, display, muted, seeded, seedOf, tone, DIET_COVER, DIET_BODIES, DIET_REMAINS } from './sprites';
-import { Ground, rimOver, stipple } from './stipple';
+import { Ground, rimOver, blob } from './blob';
 
 interface Animal { id: bigint; members: number; mass: number; living: number; strength: number; colour: Rgb; copyMass: number; coat: number; keepT: number; coolT: number; root: number; lineage: number; diet: number; adult: boolean; hidden: number; hold: bigint; inside: bigint }
 interface Slot { root: number; kg: number; leaf: number; genes: number[]; full: boolean }
@@ -16,11 +16,11 @@ export interface CellThings { index: number; box: [number, number, number, numbe
 
 /** The cover's genes in their order (pcore::cover): their names and units for the inspect panel. */
 const COVER_GENES: [string, string][] = [['light', 'log10 mol/kg/s'], ['leaf', 'log10 m²/kg'], ['walls', 'log10 kg/kg'], ['store', 'log10 kg/kg'], ['frost', 'K'], ['moist', 'log10'], ['seed', 'share'], ['repair', 'log10'], ['fix', 'log10 mol/kg/s']];
-/** Pixels a map square takes from which the things of the window in view are asked for and drawn: a square of a few
- * pixels, so the herds show at every zoom that shows the map's squares as more than points. */
-export const THINGS_PX = 8;
+/** Pixels a map square takes from which the things of the window in view are asked for and drawn: below, no member
+ * takes `1 / NEAR` (blob.ts) of a pixel, so none shows, not even as a herd's blob. */
+export const THINGS_PX = 64;
 /** Pixels a member's length takes from which it is drawn as its shape, and from which as a soft dot (below, its node
- * is a stipple). */
+ * is a blob). */
 const SHAPE_PX = 3, DOT_PX = 1;
 /** A member this many pixels long or more is edged by a rim that stands out from the ground under it, so one animal
  * reads on any ground (fewer than `MOST_SHOWN` take that many pixels in a view). */
@@ -150,7 +150,7 @@ export class Avatars {
   private madeAt: [number, number] = [0, 0];
   private shift: [number, number] = [0, 0];
   private version = 0;
-  /** What is drawn under the things, read when their picture is made, for the stipples' colours. */
+  /** What is drawn under the things, read when their picture is made, for the blobs' colours. */
   private ground = new Ground();
 
   /** The list of things the core sent (none: nothing is drawn), for a map whose square is `cellM` metres. */
@@ -257,7 +257,8 @@ export class Avatars {
         const [bx0, by0] = sq(l.box[0], l.box[1]), [bx1, by1] = sq(l.box[2], l.box[3]);
         // Its cell's real area, or that of the room it is inside.
         const m2 = l.box === c.box ? c.area : (l.box[2] - l.box[0]) * (l.box[3] - l.box[1]) * this.cellM * this.cellM;
-        stipple(ctx, b.id, b.members / Math.max(m2, 1e-9), colour, [bx0, by0, bx1, by1], [0, 0, W, H], ground, (x, y, r, key) => this.hits.push({ x, y, r, key: `b${b.id}:s${key}`, what }));
+        const at = blob(ctx, b.members / Math.max(m2, 1e-9), px, colour, [bx0, by0, bx1, by1], [0, 0, W, H], ground);
+        if (at) this.hits.push({ x: at[0], y: at[1], r: at[2], key: `b${b.id}:herd`, what });
         continue;
       }
       ctx.fillStyle = tone(colour, 1, DOT_ALPHA);
