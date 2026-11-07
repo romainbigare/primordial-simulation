@@ -5,9 +5,9 @@ const css = (name: string) => getComputedStyle(document.documentElement).getProp
 
 /** The part of the map in view: its window in squares (clipped to the map), the pixels a square takes, and the zoom (1: the map fits). */
 export interface View { x: number; y: number; w: number; h: number; s: number; zoom: number }
-/** The most pixels a metre takes on screen: a body of a quarter of a metre (a member of about 5 kg) at 4 pixels, so its
- * shape shows at its real size. */
-const MOST_PX_PER_M = 16;
+/** The most pixels a metre takes on screen: a body of 0.3 m (a member of about 8 kg) at 24 pixels, so one animal shows
+ * its shape and can be picked. */
+const MOST_PX_PER_M = 80;
 
 export class MapView {
   img: ImageData | null = null;

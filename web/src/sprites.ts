@@ -47,6 +47,8 @@ const STONE = 0.3;
 const MUTE = 0.7, LIGHT_LOW = 60, LIGHT_HIGH = 190;
 /** The darkness of a shadow. */
 const SHADOW = 'rgba(0,0,0,.2)';
+/** The width of a sprite's rim, px. */
+const RIM_PX = 1;
 
 /** A seeded stream of numbers in [0, 1) (mulberry32). */
 export function seeded(seed: number): () => number {
@@ -58,6 +60,9 @@ export function seeded(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/** A seed from an id and a number (a member, a plant, a dot). */
+export const seedOf = (id: bigint, k: number) => (Number(id & 0xffffffffn) * 2654435761 ^ Number(id >> 32n) * 40503 ^ (k + 1) * 2246822519) >>> 0;
 
 /** A reflectance (linear, 0..1) as a display colour (sRGB, 0..255). */
 export const display = (c: Rgb): Rgb => c.map(v => 255 * Math.pow(Math.min(Math.max(v, 0), 1), 1 / 2.2)) as Rgb;
@@ -220,8 +225,10 @@ export function object(o: PartLook, ppm: number, style: Style): Sprite {
   return { paths: [{ path: body, fill: tone(c, 0.95) }, { path: edge, fill: tone(c, 1.15, 0.6) }, { path: inner, fill: tone(c, 0.6) }], shadow, r: Math.max(ha, hb) };
 }
 
-/** Draw sprite `s` with its anchor at (x, y), turned by `turn` (from above), its shadow cast `lift` px to the south-east. */
-export function paintSprite(ctx: CanvasRenderingContext2D, s: Sprite, x: number, y: number, turn: number, lift: number): void {
+/** Draw sprite `s` with its anchor at (x, y), turned by `turn` (from above), its shadow cast `lift` px to the south-east,
+ * and if `rim` is given, edged by a line of that colour `RIM_PX` wide outside its outline (each path stroked twice as
+ * wide before all are filled, so only the outer half of the outline's stroke shows). */
+export function paintSprite(ctx: CanvasRenderingContext2D, s: Sprite, x: number, y: number, turn: number, lift: number, rim?: string): void {
   const m = ctx.getTransform();
   if (s.shadow) {
     ctx.translate(x + lift, y + lift); ctx.rotate(turn);
@@ -229,6 +236,10 @@ export function paintSprite(ctx: CanvasRenderingContext2D, s: Sprite, x: number,
     ctx.setTransform(m);
   }
   ctx.translate(x, y); ctx.rotate(turn);
+  if (rim) {
+    ctx.strokeStyle = rim; ctx.lineWidth = 2 * RIM_PX; ctx.lineJoin = 'round';
+    for (const p of s.paths) ctx.stroke(p.path);
+  }
   for (const p of s.paths) { ctx.fillStyle = p.fill; ctx.fill(p.path); }
   ctx.setTransform(m);
 }

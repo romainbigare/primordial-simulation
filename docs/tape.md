@@ -68,7 +68,8 @@ about it, and every layer blended between the cells' centres (each cell weighing
 height, at the rate the air cools with height, `World::air_drop`), and the way each cell's liquid runs (to the cell the
 steepest way down its head takes the most of, as the liquid law sends it). The ground of a pixel is the terrain there
 (`space::terrain`: the mean of its samples, or finer than them the midpoint displacement's departures laid on a
-quadratic continuation of the coarser heights that keeps each leaf's mean) plus an offset blended between the cells'
+quartic continuation of the coarser heights that keeps each leaf's mean, smooth with its slope so hill shading shows
+no creases along the leaves' edges; below a metre the continuation alone) plus an offset blended between the cells'
 centres: each cell's height less the terrain's mean over it, made so the blend keeps each cell's height as its mean.
 The terrain's samples are found once (`tape::Samples`). The viewer paints it over the whole-map frame: hill shading
 from the fine ground, the liquid where its surface lies over the fine ground (the sea's tint by the depth there),

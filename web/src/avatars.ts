@@ -2,10 +2,11 @@
 // 10.4, 10.5), from the list the core hands out (tape/src/things.rs). Each member of a node has its own place across
 // its cell's real area, seeded by the node's id and the member's index, so it holds while the camera moves. A member
 // whose length takes `SHAPE_PX` pixels or more is drawn as its shape (sprites.ts, from above or angled), a smaller one
-// as a soft dot, and below a pixel its node as a light stipple of its members per m². Hovering or clicking one shows
-// its numbers (10.8); the plant cover is a texture (vegetation.ts). A lot of alike parts (laws.md 3.1) is drawn part
-// by part, each at a place seeded by the lot's id and the part's index.
-import { Rgb, Sprite, Style, AnimalLook, PartLook, animal, object, paintSprite, bodyLength, animalColour, woodiness, display, muted, seeded, tone, DIET_COVER, DIET_BODIES, DIET_REMAINS } from './sprites';
+// as a soft dot, and below a pixel its node as a stipple of its members per m² (stipple.ts), so a herd shows from afar.
+// Hovering or clicking one shows its numbers (10.8); the plant cover is a texture (vegetation.ts). A lot of alike parts
+// (laws.md 3.1) is drawn part by part, each at a place seeded by the lot's id and the part's index.
+import { Rgb, Sprite, Style, AnimalLook, PartLook, animal, object, paintSprite, bodyLength, animalColour, woodiness, display, muted, seeded, seedOf, tone, DIET_COVER, DIET_BODIES, DIET_REMAINS } from './sprites';
+import { Ground, rimOver, stipple } from './stipple';
 
 interface Animal { id: bigint; members: number; mass: number; living: number; strength: number; colour: Rgb; copyMass: number; coat: number; keepT: number; coolT: number; root: number; lineage: number; diet: number; adult: boolean; hidden: number; hold: bigint; inside: bigint }
 interface Slot { root: number; kg: number; leaf: number; genes: number[]; full: boolean }
@@ -15,17 +16,17 @@ export interface CellThings { index: number; box: [number, number, number, numbe
 
 /** The cover's genes in their order (pcore::cover): their names and units for the inspect panel. */
 const COVER_GENES: [string, string][] = [['light', 'log10 mol/kg/s'], ['leaf', 'log10 m²/kg'], ['walls', 'log10 kg/kg'], ['store', 'log10 kg/kg'], ['frost', 'K'], ['moist', 'log10'], ['seed', 'share'], ['repair', 'log10'], ['fix', 'log10 mol/kg/s']];
-/** Pixels a map square takes from which the things of the window in view are asked for and drawn. */
-export const THINGS_PX = 64;
+/** Pixels a map square takes from which the things of the window in view are asked for and drawn: a square of a few
+ * pixels, so the herds show at every zoom that shows the map's squares as more than points. */
+export const THINGS_PX = 8;
 /** Pixels a member's length takes from which it is drawn as its shape, and from which as a soft dot (below, its node
  * is a stipple). */
 const SHAPE_PX = 3, DOT_PX = 1;
+/** A member this many pixels long or more is edged by a rim that stands out from the ground under it, so one animal
+ * reads on any ground (fewer than `MOST_SHOWN` take that many pixels in a view). */
+const RIM_FROM_PX = 8;
 /** Members drawn as shapes or dots at most in a frame; past it, the same share of each node is drawn. */
 const MOST_SHOWN = 20000;
-/** Stipple dots a square pixel holds at most, their size, px, and how strong they are, from few members a dot to many. */
-const STIPPLE_PER_PX2 = 0.015, STIPPLE_PX = 1, STIPPLE_ALPHA = [0.2, 0.4];
-/** A stipple fades out over this share of its box's side towards each edge, so a crowded cell does not show as a block. */
-const STIPPLE_EDGE = 0.15;
 /** How strong a soft dot is. */
 const DOT_ALPHA = 0.85;
 /** A part smaller than this, px, is not drawn; up to `SHAPE_PX` it is a dot. */
@@ -67,8 +68,6 @@ function readThings(data: Uint8Array): CellThings[] {
   return cells;
 }
 
-/** A seed from an id and a number (a member, a plant). */
-const seedOf = (id: bigint, k: number) => (Number(id & 0xffffffffn) * 2654435761 ^ Number(id >> 32n) * 40503 ^ (k + 1) * 2246822519) >>> 0;
 /** The members of node `b` drawn (its count's whole part, and one more by chance of its fraction, seeded by its id). */
 const shownOf = (b: Animal) => Math.floor(b.members) + (seeded(seedOf(b.id, -1))() < b.members % 1 ? 1 : 0);
 /** The look of a node's members. */
@@ -127,7 +126,7 @@ function structureAt(c: CellThings, root: bigint): [number, number] {
 /** Something drawn that the pointer can find: its place and radius on screen, its key and its numbers. */
 interface Hit { x: number; y: number; r: number; key: string; what: () => string }
 /** A thing to draw this frame: its sprite, place, turn, and the order it is drawn in (angled: back to front). */
-interface Shape { sprite: Sprite; x: number; y: number; turn: number; lift: number; hit: Hit }
+interface Shape { sprite: Sprite; x: number; y: number; turn: number; lift: number; hit: Hit; rim?: string }
 
 /** The bodies and parts of the window the core last described, drawn over the map, and the one under the pointer. */
 export class Avatars {
@@ -151,6 +150,8 @@ export class Avatars {
   private madeAt: [number, number] = [0, 0];
   private shift: [number, number] = [0, 0];
   private version = 0;
+  /** What is drawn under the things, read when their picture is made, for the stipples' colours. */
+  private ground = new Ground();
 
   /** The list of things the core sent (none: nothing is drawn), for a map whose square is `cellM` metres. */
   set(data: Uint8Array | null, cellM: number): void { this.cells = data ? readThings(data) : []; this.cellM = cellM; this.sprites.clear(); this.version++; }
@@ -215,7 +216,8 @@ export class Avatars {
       this.cache.width = Math.round(cw * d); this.cache.height = Math.round(ch * d);
       const c = this.cache.getContext('2d')!;
       c.setTransform(d, 0, 0, d, 0, 0);
-      this.render(c, ox + mx, oy + my, s, cw, ch);
+      this.ground.read(ctx, W, H);
+      this.render(c, ox + mx, oy + my, s, cw, ch, (x, y) => this.ground.at(x - mx, y - my));
     }
     this.shift = [ox - this.madeAt[0] - mx, oy - this.madeAt[1] - my];
     ctx.drawImage(this.cache, this.shift[0], this.shift[1], cw, ch);
@@ -226,8 +228,9 @@ export class Avatars {
     }
   }
 
-  /** Draw the things onto `ctx` (`W` x `H` px), the map's corner at (ox, oy), its square `s` pixels, and keep where each is. */
-  private render(ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number, W: number, H: number): void {
+  /** Draw the things onto `ctx` (`W` x `H` px), the map's corner at (ox, oy), its square `s` pixels, and keep where each
+   * is; `ground(x, y)` is the lightness drawn under a point of `ctx`. */
+  private render(ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number, W: number, H: number, ground: (x: number, y: number) => number): void {
     this.hits = [];
     const ppm = s / this.cellM, sq = (x: number, y: number) => [ox + x * s, oy + y * s];
     const seen = this.cells.filter(c => c.box[0] * s + ox < W && c.box[2] * s + ox > 0 && c.box[1] * s + oy < H && c.box[3] * s + oy > 0);
@@ -251,19 +254,10 @@ export class Avatars {
     for (const { c, l, L, byId, view } of laid) {
       const b = l.b, px = L * ppm, what = () => bodyText(b, c), colour = animalColour(lookOf(b)), g2 = l.g * l.g;
       if (px < DOT_PX) {
-        // A stipple: at most `STIPPLE_PER_PX2` dots a square pixel of its box, stronger the more members each stands for,
-        // fading towards the box's edges.
-        const boxPx = (l.box[2] - l.box[0]) * (l.box[3] - l.box[1]) * s * s, n = Math.min(l.shown, Math.ceil(boxPx * STIPPLE_PER_PX2));
-        const each = l.shown / Math.max(n, 1);
-        ctx.fillStyle = tone(colour, 1, STIPPLE_ALPHA[0] + (STIPPLE_ALPHA[1] - STIPPLE_ALPHA[0]) * Math.min(1, Math.log10(each) / 2));
-        eachIn(l, view, Math.ceil(n / g2), (m, X, Y) => {
-          const [x, y] = sq(X, Y);
-          const [x0, y0, x1, y1] = l.box, edge = Math.min(X - x0, x1 - X, Y - y0, y1 - Y) / (STIPPLE_EDGE * Math.min(x1 - x0, y1 - y0));
-          if (edge < 1 || ctx.globalAlpha < 1) ctx.globalAlpha = Math.min(1, edge);
-          ctx.fillRect(x - STIPPLE_PX / 2, y - STIPPLE_PX / 2, STIPPLE_PX, STIPPLE_PX);
-          this.hits.push({ x, y, r: STIPPLE_PX / 2, key: `b${b.id}:${m}`, what });
-        });
-        ctx.globalAlpha = 1;
+        const [bx0, by0] = sq(l.box[0], l.box[1]), [bx1, by1] = sq(l.box[2], l.box[3]);
+        // Its cell's real area, or that of the room it is inside.
+        const m2 = l.box === c.box ? c.area : (l.box[2] - l.box[0]) * (l.box[3] - l.box[1]) * this.cellM * this.cellM;
+        stipple(ctx, b.id, b.members / Math.max(m2, 1e-9), colour, [bx0, by0, bx1, by1], [0, 0, W, H], ground, (x, y, r, key) => this.hits.push({ x, y, r, key: `b${b.id}:s${key}`, what }));
         continue;
       }
       ctx.fillStyle = tone(colour, 1, DOT_ALPHA);
@@ -275,13 +269,14 @@ export class Avatars {
         if (px < SHAPE_PX) { ctx.moveTo(x + px / 2, y); ctx.arc(x, y, px / 2, 0, 2 * Math.PI); this.hits.push(hit); return; }
         const flip = this.style === 'angled' && Math.cos(turn) < 0;
         const sprite = this.sprite(`b${b.id}${flip ? 'f' : ''}`, ppm, () => animal(lookOf(b), ppm, this.style, flip));
-        shapes.push({ sprite, x, y, turn: this.style === 'above' ? turn : 0, lift: this.style === 'above' ? sprite.r * SHADOW_LIFT : 0, hit });
+        const rim = px >= RIM_FROM_PX ? rimOver(ground(x, y)) : undefined;
+        shapes.push({ sprite, x, y, turn: this.style === 'above' ? turn : 0, lift: this.style === 'above' ? sprite.r * SHADOW_LIFT : 0, hit, rim });
         if (m === 0) this.heldBy(b, byId, x, y, sprite.r, ppm, shapes);
       });
       ctx.fill();
     }
     if (this.style === 'angled') shapes.sort((a, b) => a.y - b.y);
-    for (const d of shapes) { paintSprite(ctx, d.sprite, d.x, d.y, d.turn, d.lift); this.hits.push(d.hit); }
+    for (const d of shapes) { paintSprite(ctx, d.sprite, d.x, d.y, d.turn, d.lift, d.rim); this.hits.push(d.hit); }
   }
 
   /** The parts of cell `c` lying free: each structure at its place, its parts side by side in a row by their real
