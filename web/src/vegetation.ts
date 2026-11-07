@@ -38,8 +38,10 @@ const SOFT = 0.3, SOFT_K = 2;
 const CROWN_LOW = 3, CROWN_RISE = 12, CROWN_WOOD = 15;
 /** The pixels a mark takes from which its kind starts to show, and from which it shows fully. */
 const FADE_PX = [0.7, 2];
+/** The time the view rests before the picture is painted anew, ms. */
+const REST_MS = 150;
 /** The share of the view's width and height the picture of the textures reaches beyond each edge. */
-const COVER_MARGIN = 0.3;
+const COVER_MARGIN = 0.1;
 /** The pixels by which the fine raster may miss the view's edge and still be taken to hold it. */
 const SLACK_PX = 1;
 /** How strongly the textures cover the map, so its hill shading still shows through. */
@@ -113,16 +115,23 @@ export class Vegetation {
   private uploaded: Grid | null = null;
   private tinted = false;
   private cache = document.createElement('canvas');
-  /** Whether the cache holds a picture. */
+  /** Whether the cache holds a picture, and the view it was made for: the camera (the map's corner and the pixels a
+   * square takes) and the picture's corner on screen then, and its size, px. */
   private shown = false;
+  private made = { ox: 0, oy: 0, s: 1, x: 0, y: 0, w: 0, h: 0 };
   private key = '';
-  /** The map's corner the picture was made for. */
-  private at: [number, number] = [0, 0];
+  /** The view last drawn, and since when it has rested, ms. */
+  private seen = '';
+  private since = 0;
+  private timer = 0;
   private version = 0;
   /** A number that changes when the map's cover changes. */
   private mapSum = NaN;
   /** The style the marks are drawn in. */
   style: Style = 'above';
+
+  /** `redraw` asks the map to draw again (once the view has rested, to paint the picture anew). */
+  constructor(private redraw: () => void) {}
 
   /** The frame `f` of world `w` and its map classes `cls`; null for none (another view than the earth's, or a tape
    * without the cover's layers). */
@@ -158,23 +167,30 @@ export class Vegetation {
     this.version++;
   }
 
-  /** Draw over the map, whose corner is at (ox, oy) and whose square takes `s` pixels. */
+  /** Draw over the map, whose corner is at (ox, oy) and whose square takes `s` pixels. While the view moves, the last
+   * picture is moved and scaled with it; it is painted anew once the view has rested `REST_MS`. */
   draw(ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number): void {
     if (!this.map) return;
-    const W = ctx.canvas.clientWidth, H = ctx.canvas.clientHeight, mpp = this.cellM / s;
+    const W = ctx.canvas.clientWidth, H = ctx.canvas.clientHeight, mpp = this.cellM / s, now = performance.now();
     // Nothing to draw while the largest marks take less than a pixel.
     if (LARGEST_MARK / mpp < FADE_PX[0]) return;
     // The picture reaches `COVER_MARGIN` of the view beyond each edge, so a pan within it only moves the picture.
     const mx = Math.round(W * COVER_MARGIN), my = Math.round(H * COVER_MARGIN), cw = W + 2 * mx, ch = H + 2 * my;
-    const key = [s, W, H, this.version, this.style].join();
-    if (key !== this.key || Math.abs(ox - this.at[0]) > mx || Math.abs(oy - this.at[1]) > my) {
-      this.key = key; this.at = [ox, oy];
-      // The fine raster where it holds the view (it is made for it), else the map's squares.
-      const f = this.fine && rectOf(this.fine.at, ox, oy, s), m = rectOf(this.map.at, ox, oy, s);
-      const holds = f && f[0] <= Math.max(m[0], 0) + SLACK_PX && f[1] <= Math.max(m[1], 0) + SLACK_PX && f[0] + f[2] >= Math.min(m[0] + m[2], W) - SLACK_PX && f[1] + f[3] >= Math.min(m[1] + m[3], H) - SLACK_PX;
-      this.shown = this.paint(holds && this.fine ? this.fine : this.map, [(-mx - ox) * mpp, (-my - oy) * mpp], mpp, cw, ch);
+    const key = [s, W, H, this.version, this.style].join(), view = [ox, oy, key].join(), m = this.made;
+    if (view !== this.seen) { this.seen = view; this.since = now; }
+    if (key !== this.key || Math.abs(ox - m.ox) > mx || Math.abs(oy - m.oy) > my) {
+      const rest = REST_MS - (now - this.since);
+      if (this.shown && rest > 0) { clearTimeout(this.timer); this.timer = window.setTimeout(this.redraw, rest); }
+      else {
+        this.key = key; this.made = { ox, oy, s, x: -mx, y: -my, w: cw, h: ch };
+        // The fine raster where it holds the view (it is made for it), else the map's squares.
+        const f = this.fine && rectOf(this.fine.at, ox, oy, s), r = rectOf(this.map.at, ox, oy, s);
+        const holds = f && f[0] <= Math.max(r[0], 0) + SLACK_PX && f[1] <= Math.max(r[1], 0) + SLACK_PX && f[0] + f[2] >= Math.min(r[0] + r[2], W) - SLACK_PX && f[1] + f[3] >= Math.min(r[1] + r[3], H) - SLACK_PX;
+        this.shown = this.paint(holds && this.fine ? this.fine : this.map, [(-mx - ox) * mpp, (-my - oy) * mpp], mpp, cw, ch);
+      }
     }
-    if (this.shown) ctx.drawImage(this.cache, ox - this.at[0] - mx, oy - this.at[1] - my, cw, ch);
+    const p = this.made, k = s / p.s;
+    if (this.shown) ctx.drawImage(this.cache, ox + (p.x - p.ox) * k, oy + (p.y - p.oy) * k, p.w * k, p.h * k);
   }
 
   /** Paint the marks of grid `g` into the cache, `w` x `h` px of `mpp` m each from the world's point `at`, m: a pixel a

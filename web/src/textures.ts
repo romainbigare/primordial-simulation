@@ -55,13 +55,13 @@ precision highp float; precision highp int; precision highp sampler2DArray;
 uniform sampler2DArray uField; uniform sampler2D uTint;
 uniform float uH, uMpp, uAngled, uAlpha, uTintMix;
 uniform vec2 uFieldUv0, uFieldUvPerM, uTintUv0, uTintUvPerM;
-uniform ivec2 uBase[${N}]; uniform vec2 uFrac[${N}]; uniform float uStep[${N}], uMark[${N}], uFade[${N}];
+uniform ivec2 uBase[${N}]; uniform vec2 uFrac[${N}]; uniform float uStep[${N}], uMark[${N}], uFade[${N}], uNearLod[${N}];
 uniform vec3 uFoliage[7], uDark;
 out vec4 outColour;
 // The foliage of the trees' kinds, after those of the lattices before them.
 const int WOODLAND = ${TREES}, FOREST = ${TREES + 1}, JUNGLE = ${TREES + 2};
 // A crown is drawn 0.75 to 1.25 times its kind's size; a jungle's emergent crowns (this share) are wider by this.
-const float EMERGENT = 0.15, EMERGENT_WIDE = 1.25;
+const float EMERGENT = 0.15, EMERGENT_WIDE = 1.2;
 // An angled crown is lifted over its shadow by this share of its radius; a shadow darkens the ground this much.
 const float ANGLED_LIFT = 0.7, SHADOW = 0.35;
 // A crown's soft rim takes this share of its radius; its lit side is this much lighter (and as much again by its
@@ -70,6 +70,8 @@ const float RIM = 0.25, LIGHT = 0.14, DARK_ABOVE = 0.2, DARK_ANGLED = 0.3;
 // A tuft covers this much, is this much narrower than long, and lighter or darker by up to this; angled, its blades
 // stand this many radii tall.
 const float TUFT_COVER = 0.9, TUFT_NARROW = 0.55, TUFT_TONE = 0.25, BLADE_TALL = 1.4;
+// No part of a crown's shadow lies farther from its foot than this many radii.
+const float SHADOW_REACH = 1.4;
 
 // pcg3d (Jarzynski and Olano 2020): three random words from three.
 uvec3 pcg3d(uvec3 v) {
@@ -80,11 +82,18 @@ uvec3 pcg3d(uvec3 v) {
   return v;
 }
 vec3 rand3(ivec2 c, int k) { return vec3(pcg3d(uvec3(uvec2(c), uint(k)))) * (1.0 / 4294967296.0); }
-// The field's layer at m metres from the picture's corner; nothing outside the field.
-vec4 field(vec2 m, int layer) {
+// A cheaper hash for the first look at a cell (lowbias32, Wellons 2018): one word, read as three of 11, 11 and 10 bits.
+vec3 place(ivec2 c, int k) {
+  uint x = uint(c.x) * 0x9E3779B1u ^ uint(c.y) * 0x85EBCA77u ^ uint(k) * 0xC2B2AE3Du;
+  x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; x ^= x >> 16u;
+  return vec3(float(x & 2047u) / 2048.0, float((x >> 11u) & 2047u) / 2048.0, float(x >> 22u) / 1024.0);
+}
+// The field's layer at m metres from the picture's corner, at mip level lod (the mean of 2^lod texels square);
+// nothing outside the field.
+vec4 field(vec2 m, int layer, float lod) {
   vec2 uv = uFieldUv0 + m * uFieldUvPerM;
   if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return vec4(0.0);
-  return texture(uField, vec3(uv, float(layer)));
+  return textureLod(uField, vec3(uv, float(layer)), lod);
 }
 // Paint colour rgb with coverage a over dst (premultiplied).
 void over(inout vec4 dst, vec3 rgb, float a) { dst = vec4(rgb * a, a) + dst * (1.0 - a); }
@@ -126,38 +135,47 @@ void tuft(inout vec4 dst, vec2 p, vec2 c, float r, float tone, float turn, vec3 
   over(dst, shaded, TUFT_COVER * a * fade);
 }
 
+// The marks of lattice l over dst at p (m from the picture's corner), e m a pixel, of foliage darkened by dark and
+// tinted by tint. Called with l a constant, so each lattice's code is its own.
+void lattice(inout vec4 dst, vec2 p, int l, float e, float dark, vec4 tint) {
+  // Skip a kind that is drawn faint by none of the texels this pixel's marks could stand on.
+  if (uFade[l] <= 0.0 || field(p, l >> 2, uNearLod[l])[l & 3] <= 0.0) return;
+  // How far a mark reaches from its foot, in radii: a tuft from above its own, an angled one its blades, a crown its
+  // shadow (and an angled one its lifted crown), and an emergent crown more.
+  float S = uStep[l], reach = l < ${TUFTS} ? mix(1.0, BLADE_TALL, uAngled) : mix(SHADOW_REACH, 1.0 + ANGLED_LIFT, uAngled) * (l >= ${TREES} ? EMERGENT_WIDE : 1.0);
+  vec2 cell = floor(uFrac[l] + p / S);
+  // An angled mark stands up over its foot: also the row south of the pixel's.
+  int south = uAngled > 0.5 ? 2 : 1;
+  for (int j = -1; j <= south; j++) for (int i = -1; i <= 1; i++) {
+    vec2 k = cell + vec2(i, j);
+    ivec2 id = uBase[l] + ivec2(k);
+    vec3 h = place(id, l);
+    vec2 c = (k + h.xy - uFrac[l]) * S;
+    float r = 0.5 * uMark[l] * (0.75 + 0.5 * h.z);
+    if (length(p - c) > reach * r + e) continue;
+    vec3 g = rand3(id, l);
+    vec4 f = field(c, l >> 2, 0.0);
+    if (g.x >= f[l & 3]) continue;
+    int kind = l;
+    bool emergent = false;
+    if (l >= ${TREES}) {
+      vec4 share = field(c, 2, 0.0);
+      kind = g.y < share.r ? WOODLAND : g.y < share.r + share.g ? JUNGLE : FOREST;
+      // The rank of a mark that shows is even below its density, so its lowest ranks are a fixed share of its crowns.
+      emergent = kind == JUNGLE && g.x < EMERGENT * f[l & 3];
+    }
+    vec3 col = mix(mix(uFoliage[kind], uDark, dark), tint.rgb / max(tint.a, 1e-3), uTintMix * tint.a);
+    if (emergent) r *= EMERGENT_WIDE;
+    if (l >= ${TUFTS}) crown(dst, p, c, r, g.z, col, e, uFade[l]);
+    else tuft(dst, p, c, r, g.z, g.y * 3.14159265, col, e, uFade[l]);
+  }
+}
+
 void main() {
   vec2 p = vec2(gl_FragCoord.x, uH - gl_FragCoord.y) * uMpp;
-  float e = uMpp;
-  vec4 tint = texture(uTint, uTintUv0 + p * uTintUvPerM);
-  float dark = field(p, 1).a;
-  vec4 dst = vec4(0.0);
-  for (int l = 0; l < ${N}; l++) {
-    if (uFade[l] <= 0.0) continue;
-    float S = uStep[l];
-    vec2 cell = floor(uFrac[l] + p / S);
-    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
-      vec2 k = cell + vec2(i, j);
-      ivec2 id = uBase[l] + ivec2(k);
-      vec3 h = rand3(id, 2 * l);
-      vec2 c = (k + h.xy - uFrac[l]) * S;
-      vec4 f = field(c, l >> 2);
-      if (h.z >= f[l & 3]) continue;
-      vec3 g = rand3(id, 2 * l + 1);
-      int kind = l;
-      bool emergent = false;
-      if (l >= ${TREES}) {
-        vec4 share = field(c, 2);
-        kind = g.x < share.r ? WOODLAND : g.x < share.r + share.g ? JUNGLE : FOREST;
-        // The rank of a mark that shows is even below its density, so its low ranks are a fixed share of its crowns.
-        emergent = kind == JUNGLE && h.z < EMERGENT * f[l & 3];
-      }
-      vec3 col = mix(mix(uFoliage[kind], uDark, dark), tint.rgb / max(tint.a, 1e-3), uTintMix * tint.a);
-      float r = 0.5 * uMark[l] * (0.75 + 0.5 * g.y) * (emergent ? EMERGENT_WIDE : 1.0);
-      if (l >= ${TUFTS}) crown(dst, p, c, r, g.z, col, e, uFade[l]);
-      else tuft(dst, p, c, r, g.z, g.x * 3.14159265, col, e, uFade[l]);
-    }
-  }
+  vec4 tint = texture(uTint, uTintUv0 + p * uTintUvPerM), dst = vec4(0.0);
+  float dark = field(p, 1, 0.0).a;
+  ${LATTICES.map((_, l) => `lattice(dst, p, ${l}, uMpp, dark, tint);`).join(' ')}
   outColour = dst * uAlpha;
 }`;
 
@@ -193,7 +211,8 @@ export class CoverPainter {
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.fieldTex);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, f.w, f.h, LAYERS, 0, gl.RGBA, gl.UNSIGNED_BYTE, f.data);
-    smoothSampling(gl, gl.TEXTURE_2D_ARRAY);
+    gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
+    smoothSampling(gl, gl.TEXTURE_2D_ARRAY, true);
   }
 
   /** Read the genes' tint, `w` x `h` texels over the map: per texel its colour times its weight, and its weight (RGBA
@@ -229,14 +248,18 @@ export class CoverPainter {
     window('uField', p.field); window('uTint', p.tint);
     // Each grid's cell at the picture's corner, split into its whole number and its fraction in double precision, so
     // the GPU's single precision only counts the cells across the picture.
-    const base = new Int32Array(2 * N), frac = new Float32Array(2 * N), fade = new Float32Array(N);
+    const base = new Int32Array(2 * N), frac = new Float32Array(2 * N), fade = new Float32Array(N), near = new Float32Array(N);
+    const f = this.field, texel = Math.min(p.field[2] / f.w, p.field[3] / f.h), top = Math.floor(Math.log2(Math.max(f.w, f.h)));
     LATTICES.forEach((l, k) => {
       const step = l.mark * l.spacing;
+      // The mip level whose texels, read about a pixel, hold all the texels its marks' feet (at most two cells away)
+      // read: half a texel of it reaches two cells and a texel.
+      near[k] = Math.min(Math.max(Math.ceil(Math.log2(2 * ((2 * step) / texel + 1))), 0), top);
       for (const a of [0, 1]) { const g = p.at[a] / step; base[2 * k + a] = Math.floor(g); frac[2 * k + a] = g - Math.floor(g); }
       const px = l.mark / p.mpp, t = Math.min(Math.max((px - p.fade[0]) / (p.fade[1] - p.fade[0]), 0), 1);
       fade[k] = this.held[k] ? t * t * (3 - 2 * t) : 0;
     });
-    gl.uniform2iv(u('uBase'), base); gl.uniform2fv(u('uFrac'), frac); gl.uniform1fv(u('uFade'), fade);
+    gl.uniform2iv(u('uBase'), base); gl.uniform2fv(u('uFrac'), frac); gl.uniform1fv(u('uFade'), fade); gl.uniform1fv(u('uNearLod'), near);
     gl.uniform1fv(u('uStep'), LATTICES.map(l => l.mark * l.spacing)); gl.uniform1fv(u('uMark'), LATTICES.map(l => l.mark));
     gl.uniform3fv(u('uFoliage'), this.palette.foliage.flat().map(v => v / 255)); gl.uniform3fv(u('uDark'), this.palette.dark.map(v => v / 255));
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.fieldTex);
@@ -266,8 +289,9 @@ export class CoverPainter {
   }
 }
 
-/** Sample the bound texture blended between its texels' centres, its edge texels held beyond it. */
-function smoothSampling(gl: WebGL2RenderingContext, target: number): void {
-  gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+/** Sample the bound texture blended between its texels' centres (and its mip levels, if it has them), its edge texels
+ * held beyond it. */
+function smoothSampling(gl: WebGL2RenderingContext, target: number, mips = false): void {
+  gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, mips ? gl.LINEAR_MIPMAP_NEAREST : gl.LINEAR); gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 }

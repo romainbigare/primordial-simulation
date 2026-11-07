@@ -54,7 +54,7 @@ let lookTimer = 0, looking = '';
 const avatars = new Avatars();
 let thingsKey = '';
 /** The cover drawn as textures (earth view only), under the avatars. */
-const vegetation = new Vegetation();
+const vegetation = new Vegetation(() => map.invalidate());
 /** Where the player keeps the style life is drawn in (one per viewer). */
 const LIFE_KEY = 'ew.life';
 /** How life is drawn: from above or angled, as the player last chose (from above if the browser keeps nothing). */
