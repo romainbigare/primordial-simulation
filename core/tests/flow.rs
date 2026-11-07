@@ -118,7 +118,9 @@ const MELT_HELD: f64 = 1e-3;
 /// takes, then goes on from the melting point, and the cover's cap stops with the cover.
 #[test]
 fn a_plateau_used_up_in_one_long_step_ends_where_short_steps_end() {
-    let (w0, i) = worldgen::testkit::start();
+    let (mut w0, i) = worldgen::testkit::start();
+    // (On flat ground, under the sun of its latitude.)
+    w0.rise_south[i] = 0.0;
     let pool = PLATEAU_M * w0.mesh.cells().area()[i] / w0.chem.molar_volume(LIQUID, Phase::Liquid);
     for (sun, air, frozen) in [(1.0, 1.0, 0.9), (0.0, 0.9, 0.1)] {
         // From the melting point, a long step and short ones: the end temperature of each, and whether it ends on a plateau.
@@ -963,10 +965,12 @@ const THAWED_K: f64 = 10.0;
 /// high), and the pool's cell next to the sill, the pit (`PIT`), lies `DEEP_M` under the rest of the pool; the ground is
 /// `THAWED_K` over the melting point. The pool stands full to the sill but for the pit, which is dry, and the flood
 /// (`FLOOD_M` over a small cell) is poured on the pool's cell farthest from the sill. Wear and carrying are off, so the
-/// ground stays as it is. Returns the world and the small cells row by row.
+/// ground stays as it is, and so is rain, so only the flood moves. Returns the world and the small cells row by row.
 fn flooded_pool() -> (World, Vec<usize>) {
     let mut w = worldgen::testkit::squares(1, 32, 32);
     (w.cfg.phys.porosity, w.cfg.phys.seep, w.cfg.evap, w.cfg.wear, w.cfg.carry) = (0.0, 0.0, 0.0, 0.0, 0.0);
+    // (No rain: snow that falls in the air step and melts as the step ends stands until the next liquid step.)
+    w.cfg.rain_time = f64::INFINITY;
     let square = w.map.leaves()[top(&w)];
     worldgen::testkit::split_flat(&mut w, &[square], 2);
     let small: Vec<usize> = (0..16).map(|x| (x / 4, x % 4)).map(|(r, c)| w.map.cell(square.quarters()[r / 2 * 2 + c / 2].quarters()[r % 2 * 2 + c % 2]).expect("a small cell")).collect();
@@ -1325,6 +1329,123 @@ fn the_sun_is_right_at_every_latitude() {
             let (north, south) = (insolation(s0, lat, decl), insolation(s0, -lat, declination(tilt, season + 0.5)));
             assert!((north - south).abs() < 1e-9 * s0, "season {season}, latitude {lat}: north {north}, south {south}");
         }
+    }
+}
+
+/// The sun on a slope is Lambert's cosine law summed over the day: on ground of slope (∂z/∂x, ∂z/∂y), x east and y
+/// south, the beam per m² of plan is S (s · N), N = (−∂z/∂x, −∂z/∂y, 1), summed over the hours the sun is up (its own
+/// sunrise and sunset, which a face turned away pays as the shadow it casts) by small steps of the hour angle; the
+/// east-west slope adds nothing over a day, and the sun on a slope (`on_slope`) is that sum wherever it is above zero.
+#[test]
+fn the_sun_on_a_slope_is_lamberts_law_over_the_day() {
+    use pcore::flow::{declination, on_slope, sun_by_latitude};
+    use std::f64::consts::PI;
+    const HOURS: usize = 200_000;
+    let (s0, tilt) = (1361.0, 23.4);
+    for (lat, season) in [(0.9f64, 0.0), (0.9, 0.25), (-0.5, 0.6), (1.3, 0.45), (0.1, 0.1)] {
+        let decl: f64 = declination(tilt, season);
+        for (east, south) in [(0.0, 0.0), (0.3, 0.0), (0.0, -0.4), (-0.2, 0.25), (0.5, 0.5)] {
+            let day = (0..HOURS)
+                .map(|k| {
+                    let h = -PI + 2.0 * PI * (k as f64 + 0.5) / HOURS as f64;
+                    let up = lat.sin() * decl.sin() + lat.cos() * decl.cos() * h.cos();
+                    let (to_east, to_north) = (-decl.cos() * h.sin(), lat.cos() * decl.sin() - lat.sin() * decl.cos() * h.cos());
+                    if up > 0.0 { s0 * (up - east * to_east + south * to_north) } else { 0.0 }
+                })
+                .sum::<f64>()
+                / HOURS as f64;
+            let law = on_slope(sun_by_latitude(s0, lat, decl), south);
+            assert!((law - day.max(0.0)).abs() < 1e-4 * s0, "latitude {lat}, season {season}, slope ({east}, {south}): {law} W/m2 by the law, {day} summed");
+        }
+    }
+}
+
+/// The sun on a square of an island is the sum of the sun on its 16 cells (`on_slope`, at one latitude, so only the
+/// slopes tell them apart): a square's rise toward the south is its cells' mean by area (`Terrain::rise_south`), and
+/// the sun is linear in it, so the two differ only by what a cell, or the square, whose day sums below zero does not
+/// take: at most the sum of those parts below zero, by area, at every latitude and season.
+#[test]
+fn the_sun_on_a_square_is_the_sum_over_its_cells() {
+    use pcore::flow::{declination, on_slope, sun_by_latitude};
+    let w = worldgen::testkit::squares(1, 16, 16);
+    let (lat, map) = ((w.cfg.lat_south, w.cfg.lat_north), &w.map);
+    let rise = |l: pcore::space::Leaf| w.terrain.rise_south(w.seed, map, l, lat);
+    let (mut turned, mut steepest) = (0, 0.0f64);
+    for &square in map.leaves() {
+        let cells: Vec<(f64, f64)> = square.split(square.depth + 2).map(|l| (map.place_of(&l, lat.0, lat.1).0, rise(l))).collect();
+        let (area, whole) = (cells.iter().map(|c| c.0).sum::<f64>(), rise(square));
+        let mean = cells.iter().map(|c| c.0 * c.1).sum::<f64>() / area;
+        steepest = cells.iter().fold(steepest, |m, c| m.max(c.1.abs()));
+        assert!((mean - whole).abs() < 1e-12 * (1.0 + whole.abs()), "square {square:?}: its rise {whole}, its cells' mean {mean}");
+        for phi in [0.0f64, 35.0, 60.0, 75.0] {
+            for season in (0..12).map(|m| (m as f64 + 0.5) / 12.0) {
+                let sun = sun_by_latitude(w.cfg.sun, phi.to_radians(), declination(w.cfg.tilt, season));
+                let below = |r: f64| (-(sun[0] + r * sun[1])).max(0.0);
+                let parts = cells.iter().map(|c| c.0 * on_slope(sun, c.1)).sum::<f64>();
+                let bound = cells.iter().map(|c| c.0 * below(c.1)).sum::<f64>() + area * below(whole);
+                turned += (bound > 0.0) as usize;
+                let off = (parts - area * on_slope(sun, whole)).abs();
+                assert!(off <= bound + 1e-12 * area * w.cfg.sun, "square {square:?}, latitude {phi}, season {season}: {off:e} W off, {bound:e} W turned away");
+            }
+        }
+    }
+    assert!(steepest > 0.05 && turned > 0, "the island has slopes ({steepest}) and faces turned away ({turned})");
+}
+
+/// The frozen part of the common liquid on the ground of cell `i`, mol.
+fn frozen(w: &World, i: usize) -> f64 {
+    let (t, plateau) = w.thaw_last(i);
+    w.g(LIQUID, i) * (1.0 - w.molten(LIQUID, i, t, plateau))
+}
+
+/// Latitudes of the south and north edges of an island with snow in its spring, degrees; the months it runs first, to
+/// late winter; the snow put on the cells, kg/m²; how far they rise toward the south or fall, m per m; and the most
+/// steps of `DT` that the spring is followed for.
+const SNOW_LAT: [f64; 2] = [50.0, 52.3];
+const TO_SPRING: usize = 2;
+const SNOW_KG: f64 = 30.0;
+const FACING: f64 = 0.3;
+const MELT_STEPS: usize = 60;
+
+/// Of two cells alike but for the way they face, at one latitude under snow at the end of winter, the one that faces
+/// the equator takes more sun (`flow::on_slope`): it loses its snow first and is warmer meanwhile, with no other change.
+/// Each faces each way in turn, so nothing else tells them apart.
+#[test]
+fn a_slope_facing_the_sun_loses_its_snow_first() {
+    let (chem, init) = worldgen::chemistry0();
+    let cfg = pcore::Config { lat_south: SNOW_LAT[0], lat_north: SNOW_LAT[1], ..Default::default() };
+    let mut w0 = worldgen::terrain::build(1, worldgen::terrain::island(16, 16), chem, &init, cfg);
+    (0..TO_SPRING).for_each(|_| pcore::step(&mut w0));
+    let gw = w0.map.w;
+    let dry = worldgen::testkit::dry_lands(&w0);
+    let a = dry.iter().copied().find(|&i| i % gw + 1 < gw && dry.contains(&(i + 1))).expect("two dry land cells side by side");
+    let b = a + 1;
+    worldgen::testkit::flat_round(&mut w0, a);
+    for &i in &[a, b] {
+        worldgen::testkit::put_kg_m2(&mut w0, LIQUID, i, SNOW_KG);
+        let cold = w0.chem.subs[LIQUID].melt - 5.0;
+        hold_ground(&mut w0, i, cold);
+    }
+    for (sunny, shaded) in [(a, b), (b, a)] {
+        let mut w = w0.clone();
+        (w.rise_south[sunny], w.rise_south[shaded]) = (-FACING, FACING);
+        // The step each loses the last of its snow, and the sum of its temperatures until then.
+        let (mut gone, mut warmth) = ([None; 2], [0.0; 2]);
+        for step in 0..MELT_STEPS {
+            flow_step(&mut w, DT);
+            w.time += DT as u64;
+            for (c, &i) in [sunny, shaded].iter().enumerate() {
+                warmth[c] += w.t_ground(i);
+                if gone[c].is_none() && frozen(&w, i) <= 0.0 {
+                    gone[c] = Some(step);
+                }
+            }
+            if gone[1].is_some() {
+                break;
+            }
+        }
+        let [Some(first), Some(last)] = gone else { panic!("the snow of both melts in spring: {gone:?}") };
+        assert!(first < last && warmth[0] > warmth[1], "facing the sun: gone at step {first}, {} K; facing away: step {last}, {} K", warmth[0], warmth[1]);
     }
 }
 

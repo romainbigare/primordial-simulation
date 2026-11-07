@@ -118,6 +118,10 @@ pub struct World {
     pub relief: Vec<f64>,
     /// The terrain the world was built on, which a split reads (`space::terrain`)
     pub terrain: crate::space::terrain::Terrain,
+    /// The mean rise of the ground of each cell toward the south, m per m, which the sun on it reads (`flow::on_slope`):
+    /// the terrain's when the world is built (`World::rise_at_build`), a split's quarters' as it stands the terrain
+    /// inside them (`World::split`), a join's the mean of its quarters' by area
+    pub rise_south: Vec<f64>,
     /// What refinement keeps of each cell for its next month (`refine::Watch`); empty until the first refinement, and
     /// with no budget of cells (`Config::cell_budget`)
     pub watch: Vec<crate::refine::Watch>,

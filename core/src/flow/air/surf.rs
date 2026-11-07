@@ -12,7 +12,7 @@ use super::step::Active;
 use crate::{store::Class, units::{MAX_SUBSTANCES, R_GAS}, World, AIR};
 
 /// The ground an exchange solves (`cells::exchange`): its area, m², its air node, the area of the air it sees (`lerp`),
-/// m², and its mean sunlight at the top of the air, W/m²; that air's drop with height, K/m, and mean height, m, and
+/// m², and its mean sunlight at the top of the air, W/m² of its plan (`radiation::on_slope`); that air's drop with height, K/m, and mean height, m, and
 /// its head, m (`touching`); its temperature, K, plateau's substance and molten share; heat capacity, J/K; fusion
 /// enthalpy held and the energies it holds it between (`Latent`); soft cover (`Scratch::cover`); reflectance; pore
 /// space as a depth, m; heat, J; what it holds of each active gas, mol (`amt[k]`); the fusion enthalpy of its
@@ -44,7 +44,7 @@ pub(super) struct Surf {
 }
 
 impl Surf {
-    /// Ground cell `i` under the mean sunlight `sun` of its latitude, W/m².
+    /// Ground cell `i` under the mean sunlight `sun` of its latitude and slope, W/m² of its plan.
     pub(super) fn of_cell(cx: &Ctx, i: usize, sun: f64) -> Surf {
         let (w, s) = (cx.w, cx.s);
         let n = w.mesh.cells().n();
@@ -157,8 +157,8 @@ impl Patch {
         let (s, nx, na) = (cx.s, cx.act.len(), cx.w.mesh.level(AIR).n());
         let (n, lats, area) = (cx.w.mesh.cells().n(), cx.w.mesh.cells().lat(), cx.w.mesh.cells().area());
         let (all, sees) = (cells.iter().map(|&i| area[i as usize]).sum::<f64>(), s.corners.by_area(&s.wt, area, cells));
-        // Its sunlight: at its mean latitude by area.
-        let g = Surf::of_patch(cx, cells, sunlight(cx.w, cx.decl, cells.iter().map(|&i| lats[i as usize] * area[i as usize]).sum::<f64>() / all), &sees);
+        // Its sunlight: at its mean latitude by area, on its liquid's level surface.
+        let g = Surf::of_patch(cx, cells, sunlight(cx.w, cx.decl, cells.iter().map(|&i| lats[i as usize] * area[i as usize]).sum::<f64>() / all)[0], &sees);
         let mean = |v: &[f64]| s.corners.mean(&sees, v);
         let air: Vec<f64> = std::iter::once(mean(cx.t0)).chain((0..nx).map(|y| mean(&cx.x0[y * na..(y + 1) * na]))).collect();
         let mut work = Work::default();

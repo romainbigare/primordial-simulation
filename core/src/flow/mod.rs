@@ -18,7 +18,7 @@ mod spare;
 mod stack;
 mod basin;
 pub(crate) use air::air_temp;
-pub use air::{column, declination, glow, insolation, scale_height};
+pub use air::{column, declination, glow, insolation, on_slope, scale_height, sun_by_latitude};
 pub use potential::total as potential;
 pub use basin::level_of;
 pub use inside::means;

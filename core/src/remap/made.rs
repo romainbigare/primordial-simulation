@@ -83,17 +83,19 @@ pub(crate) fn mean_by(x: [f64; 4], wt: [f64; 4]) -> f64 {
 }
 
 /// What a join keeps of its quarters (laws.md 0): each quarter's share of each number the cell holds (`Of`), and the
-/// relief each held (`World::relief`), J, which its split gives back (`World::split`).
+/// relief each held (`World::relief`), J, and the rise toward the south of each (`World::rise_south`), m per m, which
+/// its split gives back (`World::split`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Joined {
     /// Each quarter's share, row by row, of each number (`Joined::share`)
     shares: Vec<[f64; 4]>,
     pub kept: [f64; 4],
+    pub rise: [f64; 4],
 }
 
 impl Joined {
     /// The shares of quarters `kids` (each `area[q]` of the joined cell's area) in the world before their join: each
-    /// one's part of the four's sum, by area where they hold none, and the relief of each.
+    /// one's part of the four's sum, by area where they hold none, and the relief and the rise of each.
     pub(crate) fn of(w: &World, kids: [usize; 4], area: [f64; 4]) -> Joined {
         let (n, ns) = (w.mesh.cells().n(), w.chem.ns());
         let flow = kids.map(|i| crate::flow::volumes(w, i));
@@ -111,7 +113,7 @@ impl Joined {
             push(if h.is_empty() { [0.0; 4] } else { kids.map(|i| h[i]) });
         }
         (0..FLOW_HELD).for_each(|x| push(flow.map(|v| v.map_or(0.0, |v| v[x]))));
-        Joined { shares, kept: kids.map(|i| w.relief[i]) }
+        Joined { shares, kept: kids.map(|i| w.relief[i]), rise: kids.map(|i| w.rise_south[i]) }
     }
     /// Quarter `q`'s share of `of`.
     pub(crate) fn share(&self, of: Of, q: u8) -> f64 {

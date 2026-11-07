@@ -18,7 +18,7 @@ pub(super) use corners::Corners;
 pub(super) use daily::blocks;
 pub(super) use exchange::{dissolve, henry, Sat};
 pub(crate) use radiation::LAYERS;
-pub use radiation::{column, declination, glow, insolation};
+pub use radiation::{column, declination, glow, insolation, on_slope, sun_by_latitude};
 pub(super) use step::step;
 
 use super::Scratch;

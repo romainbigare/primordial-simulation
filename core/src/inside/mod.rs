@@ -9,6 +9,7 @@ mod shares;
 
 pub use shares::{Inside, Means};
 
+use crate::math::central;
 use crate::space::terrain::real_slope;
 use crate::space::tree::DEPTH_MOST;
 use crate::space::Leaf;
@@ -135,13 +136,10 @@ impl Ground {
     fn gradient(&self) -> Vec<[f64; 2]> {
         let n = self.side;
         let at = |r: usize, c: usize| self.h[r * n + c];
-        // The slope from `lo` to `hi` along a line of samples `len` apart (none on a grid of one sample).
-        let along = |lo: usize, hi: usize, f: &dyn Fn(usize) -> f64, len: f64| if hi > lo { (f(hi) - f(lo)) / (len * (hi - lo) as f64) } else { 0.0 };
         (0..n * n)
             .map(|p| {
                 let (r, c) = (p / n, p % n);
-                let (c0, c1, r0, r1) = (c.saturating_sub(1), (c + 1).min(n - 1), r.saturating_sub(1), (r + 1).min(n - 1));
-                [along(c0, c1, &|x| at(r, x), self.dx[r]), along(r0, r1, &|y| at(y, c), self.dy)]
+                [central(c, n, |x| at(r, x), self.dx[r]), central(r, n, |y| at(y, c), self.dy)]
             })
             .collect()
     }

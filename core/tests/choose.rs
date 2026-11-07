@@ -243,7 +243,8 @@ fn a_body_gives_its_stores_but_not_its_body() {
     use pcore::brain;
     use pcore::event::EventKind;
     let (mut w, i) = start();
-    w.cfg.phys.c_handle = 0.0;
+    // (On flat ground, as mild as its latitude: the pace below is set for that warmth.)
+    (w.cfg.phys.c_handle, w.rise_south[i]) = (0.0, 0.0);
     let lay = Layout::of(&w.chem);
     // Brains that only give to a body they see, and that only rest.
     let mut giver = founder(&mut w, 1, i, &Brain::verb(brain::GIVE));
