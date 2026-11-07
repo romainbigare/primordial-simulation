@@ -1236,7 +1236,8 @@ meal, its decision's or a sub-step's (`live::fade_meal_heat`), what it took and 
 by, from where it stood, fades over the time to its next physics (its physiological step) by the share e^(-g dt / C):
 the heat of a meal leaves through its coat to its ground; a meal colder than the body is warmed by the body's own heat
 as it eats, drawn back from its ground, which its upkeep's heat went to, at most what its upkeep releases over that
-time at its last sub-step's mean rate (`Lived::released`, W). So a body of hours to days starts its next sub-step where it stood. **Two states, one at every step.** As its pace rises with its temperature, a body whose own heat over its
+time at a mean rate, W: after its decision its last sub-step's (`Lived::released`), after a meal by the take law that
+of its upkeep over the meal (`choose::eat_for`; a newborn's or a lander's meal comes before any sub-step of its own). So a body of hours to days starts its next sub-step where it stood. **Two states, one at every step.** As its pace rises with its temperature, a body whose own heat over its
 coat warms it past its surroundings by more than T² / Ea (about 12 K for chemistry 0's main burning, Ea 7,760 K: there
 the pace's rise, Ea / T² of it per K, feeds the heat faster than the coat lets it out) runs on to a warm state, at most
 its `COOL_T`, where its coat opens; below that it lies cold, or at its `KEEP_T` by burning. In a room the walls add to

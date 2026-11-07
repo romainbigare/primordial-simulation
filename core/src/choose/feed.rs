@@ -5,7 +5,7 @@ use crate::body::{self, Body, STRENGTH, TAKEN};
 use crate::chem::{Chemistry, Phase, Stores};
 use crate::event::{Event, EventKind};
 use crate::rng::Rng;
-use crate::units::{BODY_STORES, MAX_SUBSTANCES};
+use crate::units::{BODY_STORES, DAY, MAX_SUBSTANCES};
 use crate::{bond, lanes, life::{Chunk, Handle}, store::Node, World};
 
 /// Mass of the amounts `m` (mol of each store) that the body at `t` K uses (`Body::uses`), kg.
@@ -124,11 +124,11 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
 
 /// Body `b` takes from its cell's ground for `days` d of its step that no act fills (`take_node`; laws.md 5.3), and the
 /// heat of that meal fades as a meal's does (`body::fade_meal_heat`, drawing back at most what its upkeep releases
-/// while it eats).
+/// while it eats: the mean rate of its upkeep over the meal's time, W).
 pub(crate) fn eat_for(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     let stands = b.temp(&w.chem);
     take_node(w, d, b, days);
-    let warm = body::ahead(w, b, b.mass(&w.chem), days);
+    let warm = body::ahead(w, b, b.mass(&w.chem), days) / (days * DAY).max(1e-9);
     body::fade_meal_heat(w, d, b, stands, warm);
 }
 
