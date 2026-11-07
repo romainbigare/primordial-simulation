@@ -7,8 +7,9 @@
 //! own departures show (none for children that hold their parent's value, as a split leaves them; all for children that
 //! slope as the field around them does), and the departure from that slope that is their own.
 //!
-//! So the field keeps the mean of each node that holds finer cells, and of each cell but for the part of the field's
-//! slope across its parent that its own value does not show. A cell that holds its parent's value shows the parent's
+//! So the field keeps the mean of each node of the coarsest depth, and the mean of each node departs from the field's
+//! over its parent by its own departure from its parent's mean, but for the part of the field's slope across the
+//! parent that its own value does not show (`exact` keeps every cell's mean). A cell that holds its parent's value shows the parent's
 //! smooth field and no edge of its own, even where the cells beside it took very different values from their own
 //! parents; what a cell holds of its own shows at its own scale. The field is continuous with its slope, so hill
 //! shading shows no creases, and a pixel's value depends on its place only, whatever window it is found for. Nodes past
@@ -91,12 +92,10 @@ struct Level {
 }
 
 /// The tree's nodes from the coarsest cells' depth down to the window's pixels or the finest cells, whichever is
-/// coarser, each with its parent and area and whether it is drawn as a whole, and the node each cell lies in at each depth; and the levels of one window.
+/// coarser, each with its parent and area, and the node each cell lies in at each depth; and the levels of one window.
 pub(super) struct Pyramid {
     parent: Vec<u32>,
     area: Vec<f64>,
-    /// Whether a node is a cell, or holds finer cells at the finest depth drawn
-    whole: Vec<bool>,
     /// (cell, node, the cell's share of the node's area) for each cell and each depth from the coarsest cells' to its
     /// own or the finest drawn
     lies: Vec<(u32, u32, f64)>,
@@ -104,14 +103,6 @@ pub(super) struct Pyramid {
     px: Pixels,
     /// The pixels a node of the finest level holds along a side, as a power of two
     shift: u8,
-}
-
-/// How a pyramid spreads the cells' values (`Pyramid::field`, `Pyramid::exact`, `Pyramid::near`).
-#[derive(Clone, Copy, PartialEq)]
-enum Spread {
-    Slope,
-    Exact,
-    Near,
 }
 
 /// A child in a group of four (`Pyramid::departures`): its place in the grid read, its area, its mean, and the mean
@@ -138,7 +129,7 @@ impl Pyramid {
         let (map, cells) = (&w.map, w.mesh.cells());
         let (sq, depths) = (map.square_depth(), map.leaves().iter().map(|l| l.depth));
         let (top, finest) = (depths.clone().min().unwrap_or(sq), depths.max().unwrap_or(sq).min(px.depth));
-        let (mut index, mut parent, mut area, mut whole, mut lies) = (vec![HashMap::new(); (finest - top + 1) as usize], Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let (mut index, mut parent, mut area, mut lies) = (vec![HashMap::new(); (finest - top + 1) as usize], Vec::new(), Vec::new(), Vec::new());
         for (i, l) in map.leaves().iter().enumerate() {
             let (cx, cy) = ((l.x / l.side()) as i64, (l.y / l.side()) as i64);
             let mut up = NONE;
@@ -147,7 +138,6 @@ impl Pyramid {
                 let j = *index[(k - top) as usize].entry(at).or_insert_with(|| {
                     parent.push(up);
                     area.push(0.0);
-                    whole.push(k == l.depth.min(finest));
                     parent.len() as u32 - 1
                 });
                 area[j as usize] += cells.area()[i];
@@ -186,40 +176,33 @@ impl Pyramid {
             }
             Level { out, read, node, held: held.map(|[x0, y0, x1, y1]| Rect::of(x0, y0, x1, y1)) }
         });
-        Pyramid { parent, area, whole, lies, levels: levels.collect(), px, shift }
+        Pyramid { parent, area, lies, levels: levels.collect(), px, shift }
     }
 
     /// The field of the cells' values `v` at each pixel of the window, row by row (`Pyramid`).
     pub fn field(&self, v: &[f64]) -> Vec<f64> {
-        self.spread(v, Spread::Slope)
+        self.spread(v, false)
     }
 
     /// The field of the cells' values `v` that keeps the mean of every cell: each node departs from the coarser field
     /// by all its own departure from it. For values that change smoothly from cell to cell, as the terrain's means do.
     pub fn exact(&self, v: &[f64]) -> Vec<f64> {
-        self.spread(v, Spread::Exact)
+        self.spread(v, true)
     }
 
-    /// The sum at each pixel of each cell's own B-spline, of its own size, times its value `v` (at the finest depth
-    /// drawn, of the mean of the cells finer than it): no cell weighs negatively, and a value held by some cells
-    /// reaches no further than 1.5 of their sides from them. Where all cells hold 1 it is 1.
-    pub fn near(&self, v: &[f64]) -> Vec<f64> {
-        self.spread(v, Spread::Near)
-    }
-
-    /// The field of `v` (`field`, `exact`) or the sum of the cells' own B-splines (`near`).
-    fn spread(&self, v: &[f64], how: Spread) -> Vec<f64> {
+    /// The field of `v`, keeping every cell's mean if `exact`.
+    fn spread(&self, v: &[f64], exact: bool) -> Vec<f64> {
         let mut mean = vec![0.0; self.parent.len()];
         self.lies.iter().for_each(|&(i, j, a)| mean[j as usize] += a * v[i as usize]);
-        let g = if how == Spread::Near { vec![1.0] } else { inverse().to_vec() };
+        let g = inverse();
         let mut coef: Option<(Rect, Vec<f64>)> = None;
         for lv in &self.levels {
             // The coarser levels' coefficients at this depth, over the nodes read and one more each way.
             let wide = lv.read.grown(1);
             let pre = coef.map(|(from, c)| finer(from, &c, wide));
-            let detail = match (how, &pre) {
-                (Spread::Slope | Spread::Exact, Some(pre)) => self.departures(lv, &mean, pre, how == Spread::Exact),
-                _ => lv.node.iter().map(|&j| if j != NONE && (how != Spread::Near || self.whole[j as usize]) { mean[j as usize] } else { 0.0 }).collect(),
+            let detail = match &pre {
+                Some(pre) => self.departures(lv, &mean, pre, exact),
+                None => lv.node.iter().map(|&j| if j == NONE { 0.0 } else { mean[j as usize] }).collect(),
             };
             let mut c = match &pre {
                 Some(p) => (lv.out.y..=lv.out.end().1).flat_map(|y| (lv.out.x..=lv.out.end().0).map(move |x| (x, y))).map(|(x, y)| p[wide.at(x, y)]).collect(),
@@ -304,10 +287,10 @@ fn finer(from: Rect, c: &[f64], to: Rect) -> Vec<f64> {
     out
 }
 
-/// Add to `c` (over level `lv`'s nodes `out`) the coefficients of the departures `detail` (over `lv.read`): filter `g`
-/// (of an odd length, centred) along each axis of those of the nodes `held` (the others hold none).
+/// Add to `c` (over level `lv`'s nodes `out`) the coefficients of the departures `detail` (over `lv.read`): the inverse
+/// of the mean filter `g` (`inverse`) along each axis of those of the nodes `held` (the others hold none).
 fn add_filtered(lv: &Level, detail: &[f64], held: Rect, g: &[f64], c: &mut [f64]) {
-    let reach = (g.len() / 2) as i64;
+    let reach = REACH;
     let Some(span) = held.grown(reach).within(lv.out) else { return };
     let (xs, ys) = (held.x..=held.end().0, held.y..=held.end().1);
     // Along each row of `held`, at the columns of `span`.

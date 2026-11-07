@@ -70,16 +70,16 @@ steepest way down its head takes the most of, as the liquid law sends it). The f
 built level by level of the cells' tree (a Laplacian pyramid, Burt and Adelson 1983): each level a quadratic B-spline
 whose mean over each node is that node's value (Unser 1999), the coarsest the nodes' means, each finer one the
 departure of each group of four children from their parent less as much of the coarser field's slope across the parent
-as their own departures show. So it keeps the mean of each node that holds finer cells, a cell that holds what its
+as their own departures show. So it keeps the mean of each node of the coarsest depth, a cell that holds what its
 parent held (as a split leaves it) is drawn at its parent's scale and shows no edge, what a cell holds of its own shows
 at its own scale, and a split that only shares out its cell changes nothing drawn. The ground of a pixel is the field of
 the cells' heights plus the terrain's shape finer than it: the terrain there (`space::terrain`: the mean of its samples,
 or finer than them the midpoint displacement's departures laid on a quartic continuation of the coarser heights that
 keeps each leaf's mean, smooth with its slope so hill shading shows no creases along the leaves' edges; below a metre
-the continuation alone) less the field of the terrain's means over the cells. The liquid's surface is the field of each
+the continuation alone) less the field of the terrain's means over the cells, which keeps each cell's mean. The liquid's surface is the field of each
 cell's surface (where it holds standing liquid, the level that liquid fills its own ground to; where it is dry, its
-lowest ground or the liquid beside it, 10 m lower), drawn within 1.5 sides of the cells that hold some, so the shore is
-where the ground drawn rises above it.
+lowest ground or the liquid beside it, 10 m lower), sunk the more the smaller the field of the share of the cells that
+hold standing liquid, so the shore is where the ground drawn rises above it.
 The terrain's samples are found once (`tape::Samples`). The viewer paints it over the whole-map frame: hill shading
 from the fine ground, the liquid where its surface lies over the fine ground (the sea's tint by the depth there),
 snow by the pixel's own temperature near the cover's melting point, rivers as lines along those ways, as wide as

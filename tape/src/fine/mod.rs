@@ -6,7 +6,8 @@
 //! The ground of a pixel is the field of the cells' heights (erosion and all) with the terrain's own shape finer than
 //! the field laid on it: the terrain there less the field of its means over the cells. A cell split from a coarser one
 //! holds what its parent held, so each is drawn at the scale of the cell that holds it (`pyramid`): the ground keeps
-//! each square's height as its mean and each cell's own departure from its parent, and has no steps at the cells'
+//! the mean height over each node of the coarsest cells' depth and each cell's own departure from its parent, and has
+//! no steps at the cells'
 //! edges, even where the cells beside each other hold heights that differ by far more than the terrain does there; a
 //! pixel's ground does not depend on the window.
 
@@ -23,8 +24,8 @@ use pyramid::{Pixels, Pyramid};
 /// times (1 − w) / w where the share of the cells about a pixel that hold some is w, so the liquid drawn ends in the
 /// cells beside it where their ground rises, well before the share falls to none.
 const SHORE_M: f64 = 10.0;
-/// Below this share of the cells about a pixel that hold standing liquid (`Pyramid::near`), none is drawn (it would lie
-/// `SHORE_M` × 49 lower).
+/// Below this share of the cells about a pixel that hold standing liquid (the field of 1 where a cell holds some, 0
+/// where it holds none), none is drawn (it would lie `SHORE_M` × 49 lower).
 const WET_LEAST: f64 = 0.02;
 
 /// The surface of the liquid of each cell, m, on its points (`Samples::points`: the terrain there less the terrain's
@@ -118,7 +119,7 @@ fn about(w: &World, [x0, y0, x1, y1]: [f64; 4]) -> Vec<u32> {
 /// frozen cover, K (f32; `cover_melt`); the count of river ways (u32) and each (`Way`, 6 f32) of the cells within their
 /// own side of the window; of each pixel row by row the height of the ground, m (f32), and that of the surface of the
 /// liquid of the cells about it (f32: the field of their surfaces, `levels`, sunk by `SHORE_M` more the less the share of
-/// those that hold standing liquid, `Pyramid::near`; NaN where that share is below `WET_LEAST`), so the shore drawn is
+/// those that hold standing liquid; NaN where that share is below `WET_LEAST`), so the shore drawn is
 /// where the ground drawn rises above it; then every layer in table
 /// order, a byte a pixel, the field of the cells' bytes (`pyramid`), the ground's temperature along the ground's height
 /// at the rate the air cools with height (`World::air_drop`).
@@ -136,7 +137,7 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
     let (z, below) = (pyramid.field(&f.z), pyramid.exact(&terrain));
     let wet: Vec<bool> = f.depth.iter().map(|&d| d >= STANDING_M).collect();
     let surface = pyramid.field(&levels(w, samples, (&f.z, &terrain), &f.depth, &wet));
-    let wet = pyramid.near(&wet.iter().map(|&b| if b { 1.0 } else { 0.0 }).collect::<Vec<f64>>());
+    let wet = pyramid.field(&wet.iter().map(|&b| if b { 1.0 } else { 0.0 }).collect::<Vec<f64>>());
     let (t, cools) = (pyramid.field(&f.t), pyramid.field(&(0..n).map(|i| w.air_drop(i).unwrap_or(0.0)).collect::<Vec<f64>>()));
     let rivers = ways(&c, &about(w, [x, y, x + wide, y + high]));
     let pixels = across * down;
