@@ -6,7 +6,7 @@
 //! full and the store is not drained: none of this runs there.
 
 use super::{land::{bottom, filled, t_now, table, wet}, liquid::{book, mobile}, range, Scratch};
-use crate::{math::one_minus_exp, solve::sweep::{sweep, Net}, store::{Class, LinkFlux}, World};
+use crate::{math::one_minus_exp, solve::sweep::{by_size, Net}, store::{Class, LinkFlux}, World};
 
 /// Liquid over field capacity sinks into the store, at most `seep` a second (Darcy's law under its own weight) and no
 /// more than its room, with its heat, outside the low basin; its fall heats the store (`potential`). It runs after each of the air's steps, which
@@ -56,10 +56,9 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
     // What the volumes carry: the share of the sender's mobile liquid, at its temperature, or of its store.
     let deep: Vec<usize> = (0..w.chem.ns()).filter(|&k| w.store.amounts(Class::Deep)[k * n..(k + 1) * n].iter().any(|&m| m > 0.0)).collect();
     let in_stores = super::deep::flow(w, s, (&border, &a, &b), (&deep, &held), dt);
-    let flux = pore_flow(w, s, (&border, &a, &b), &mob, dt);
-    let pores = carried((&a, &b), &flux, (liq, |q, i| mob.mol[q * n + i]), &mob.vol, |i, _, mol| liquid_heat(w, s, liq, i, mol));
+    let pores = pore_flow(w, s, (&border, &a, &b), (liq, &mob), dt);
     let (liq16, deep16): (Vec<u16>, Vec<u16>) = (liq.iter().map(|&k| k as u16).collect(), deep.iter().map(|&k| k as u16).collect());
-    let mut fluxes = vec![LinkFlux { class: [Class::Ground; 2], a: &pores.a, b: &pores.b, ks: &liq16, mol: &pores.mol, heat: &pores.heat }];
+    let mut fluxes: Vec<LinkFlux> = pores.iter().map(|c| LinkFlux { class: [Class::Ground; 2], a: &c.a, b: &c.b, ks: &liq16, mol: &c.mol, heat: &c.heat }).collect();
     fluxes.extend(in_stores.iter().map(|c| LinkFlux { class: [Class::Deep; 2], a: &c.a, b: &c.b, ks: &deep16, mol: &c.mol, heat: &c.heat }));
     book(w, s, &fluxes, None);
     let (held, area) = (stores(w, s, tmin), w.mesh.cells().area());
@@ -68,27 +67,63 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
     come_up(w, s, tmin, &over);
 }
 
-/// Darcy's law through the pores of the loose ground by one explicit `sweep` over the links `border` (their ends `a`
-/// and `b`): the potential is the liquid's table, the capacity its volume per metre of head, and a link passes `seep` x
-/// the saturated thickness of its higher end x width / distance (none for pores at field capacity, held against
-/// gravity); over cells of kilometres a liquid step moves a table a thousandth of the way to its neighbours'. No pores
-/// give more than they hold over field capacity. Returns the volume through each link, m3.
-fn pore_flow(w: &World, s: &Scratch, (border, a, b): (&[usize], &[u32], &[u32]), mob: &super::liquid::Mobile, dt: f64) -> Vec<f64> {
-    let (p, cells) = (w.cfg.phys, w.mesh.cells());
-    let (n, area) = (cells.n(), cells.area());
+/// Darcy's law through the pores of the loose ground by an explicit sweep over the links `border` (their ends `a` and
+/// `b`), sub-stepped where a cell is too small for the step (`sweep::by_size`): the potential is the liquid's table,
+/// the capacity its volume per metre of head, and a link passes `seep` x the saturated thickness of its higher end x
+/// width / distance (`pore_net`); over cells of kilometres a liquid step moves a table a thousandth of the way to its
+/// neighbours'. No pores give more than they hold over field capacity. A move takes its share of the mobile liquid
+/// `mob` (of the liquids `liq`) with its heat at the node's temperature. Returns what crosses: the links stepped once,
+/// then the others.
+fn pore_flow(w: &World, s: &Scratch, links: (&[usize], &[u32], &[u32]), (liq, mob): (&[usize], &super::liquid::Mobile), dt: f64) -> Vec<Carried> {
+    let (p, cells, (_, a, b)) = (w.cfg.phys, w.mesh.cells(), links);
+    let (n, nl, area) = (cells.n(), liq.len(), cells.area());
     let x: Vec<f64> = (0..n).map(|i| table(s, i, p.porosity)).collect();
     let cap: Vec<f64> = (0..n).map(|i| area[i] * if filled(s, i, p.porosity) { 1.0 } else { p.porosity }).collect();
-    let free = |i: usize| mob.vol[i].min(s.pd[i] * area[i]) > p.field * s.pd[i] * area[i];
-    let g: Vec<f64> = (border.iter().zip(a.iter().zip(b)))
+    let g = pore_net(w, s, links, &x, &mob.vol);
+    let field = |i: usize| p.field * s.pd[i] * area[i];
+    let mol = |i: usize| (0..nl).map(|q| mob.mol[q * n + i]).collect::<Vec<f64>>();
+    let rows: Vec<f64> = mob.mol.iter().copied().chain((0..n).map(|i| liquid_heat(w, s, liq, i, &mol(i)))).collect();
+    let again = |now: &[f64], us: &[usize]| {
+        let x: Vec<f64> = (0..n).map(|i| x[i] + table_by(s, p.porosity, i, now[i] / area[i]) - table_by(s, p.porosity, i, mob.vol[i] / area[i])).collect();
+        let pick = |v: &[u32]| us.iter().map(|&u| v[u]).collect::<Vec<u32>>();
+        let g = pore_net(w, s, (&us.iter().map(|&u| links.0[u]).collect::<Vec<usize>>(), &pick(a), &pick(b)), &x, now);
+        (x, g)
+    };
+    let moved = by_size(&Net { a, b, g: &g, cap: &cap }, &x, dt, (&mob.vol, &rows), &|i, v| v - field(i), &again);
+    let fast: Vec<bool> = (0..a.len()).map(|u| moved.fast.binary_search(&u).is_ok()).collect();
+    let (sa, sb): (Vec<u32>, Vec<u32>) = (0..a.len()).filter(|&u| !fast[u]).map(|u| (a[u], b[u])).unzip();
+    let flux: Vec<f64> = (0..a.len()).filter(|&u| !fast[u]).map(|u| moved.flux[u]).collect();
+    let mut out = vec![carried((&sa, &sb), &flux, (liq, |q, i| mob.mol[q * n + i]), &mob.vol, |i, _, mol| liquid_heat(w, s, liq, i, mol))];
+    if !moved.fast.is_empty() {
+        let (fa, fb): (Vec<u32>, Vec<u32>) = moved.fast.iter().map(|&u| (a[u], b[u])).unzip();
+        let (mol, heat) = moved.rows.split_at(nl * moved.fast.len());
+        out.push(Carried { a: fa, b: fb, mol: mol.to_vec(), heat: heat.to_vec() });
+    }
+    out
+}
+
+/// Height of the liquid table of node `i` over its solid surface when it holds `d` m of mobile liquid over its area,
+/// its pores of porosity `por` holding the depth `pd`: in them, what is missing to fill them over the porosity, below
+/// the surface; over them, what stands (`land::table`).
+fn table_by(s: &Scratch, por: f64, i: usize, d: f64) -> f64 {
+    if d >= s.pd[i] { d - s.pd[i] } else { (d - s.pd[i]) / por }
+}
+
+/// The conductance of each link of `links` through the pores, m²/s, as the tables stand at `x` and the mobile liquid
+/// is `vol` m³: `seep` × the saturated thickness of its higher end × width / distance; none for pores at field capacity
+/// (held against gravity).
+fn pore_net(w: &World, s: &Scratch, (border, a, b): (&[usize], &[u32], &[u32]), x: &[f64], vol: &[f64]) -> Vec<f64> {
+    let (p, cells) = (w.cfg.phys, w.mesh.cells());
+    let area = cells.area();
+    let free = |i: usize| vol[i].min(s.pd[i] * area[i]) > p.field * s.pd[i] * area[i];
+    (border.iter().zip(a.iter().zip(b)))
         .map(|(&l, (&i, &j))| {
             let (i, j) = (i as usize, j as usize);
             let up = if x[i] >= x[j] { i } else { j };
             let thick = if free(up) { p.seep * (x[up].min(s.z[up] - s.cover[up][2]) - bottom(s, i, p.porosity).max(bottom(s, j, p.porosity))).max(0.0) } else { 0.0 };
             thick * cells.width()[l] / cells.dist()[l]
         })
-        .collect();
-    let have: Vec<f64> = (0..n).map(|i| mob.vol[i] - p.field * s.pd[i] * area[i]).collect();
-    sweep(&Net { a, b, g: &g, cap: &cap }, &x, dt, &have)
+        .collect()
 }
 
 /// What crosses the links that carry something: their ends, mol of each substance (`[q * links + l]`) and J per link.
