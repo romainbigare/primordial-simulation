@@ -68,7 +68,8 @@ about it, and every layer blended between the cells' centres (each cell weighing
 height, at the rate the air cools with height, `World::air_drop`), and the way each cell's liquid runs (to the cell the
 steepest way down its head takes the most of, as the liquid law sends it). The ground of a pixel is the terrain there
 (`space::terrain`: the mean of its samples, or finer than them the midpoint displacement's departures laid on a
-quadratic continuation of the coarser heights that keeps each leaf's mean) plus an offset blended between the cells'
+quartic continuation of the coarser heights that keeps each leaf's mean, smooth with its slope so hill shading shows
+no creases along the leaves' edges; below a metre the continuation alone) plus an offset blended between the cells'
 centres: each cell's height less the terrain's mean over it, made so the blend keeps each cell's height as its mean.
 The terrain's samples are found once (`tape::Samples`). The viewer paints it over the whole-map frame: hill shading
 from the fine ground, the liquid where its surface lies over the fine ground (the sea's tint by the depth there),
@@ -77,8 +78,9 @@ their discharge (Leopold and Maddock 1953) or wider; it is not recorded. Close u
 for the things of the cells in view (`tape::things`, the record layout in `tape/src/things.rs`): each body (members,
 a member's mass, strength, colour, coat, copy mass, the temperatures it keeps, what it takes from where, its kind,
 stage and brain, the part it holds and the structure it is inside), each slot of cover (its kind, built cover and capture area per m²
-and genes) and each part (sizes, hollowness, mass, its walls' colour and hardness, burial, holder, structure and the
-space it closes) with the bonds; it is drawn as avatars and is not recorded.
+and genes) and each part, or lot of alike parts (laws.md 3.1: its count, each part's sizes, hollowness and mass, its
+walls' colour and hardness, burial, holder, structure and the space it closes) with the bonds; it is drawn as avatars,
+a lot part by part at places keyed by its id and each part's index, and is not recorded.
 
 ## `series.csv`: the world
 
@@ -140,10 +142,10 @@ space it closes) with the bonds; it is drawn as avatars and is not recorded.
 | `form_<k>` | 1/yr | members that drew "form" in the year, by starting kind k (`Lineage::root`; every kind seen keeps its column) |
 | `form_size_<c>` | 1/yr | the same by size class c of the brain: 2^c to 2^(c+1) - 1 hidden units (the last class all larger) |
 | `form_learned`, `form_chance` | 1/yr | the same by whether "form" had the top score when drawn (learned) or not (chance) |
-| `parts`, `parts_held`, `parts_mass`, `parts_formed` | , , t, 1/yr | made objects, of them held; their mass; formed in the year |
+| `parts`, `part_records`, `parts_held`, `parts_mass`, `parts_formed` | , , , t, 1/yr | made objects, each part of a lot counted (laws.md 3.1); the records that hold them; of them held; their mass; formed in the year |
 | `put_to_parts`, `taken_from_parts` | kg/yr | stores put into and taken from parts |
 | `edge_kg` | kg/yr | what bites took from bodies and the cover where a held edge cut (laws.md 3.3) |
-| `bonds_joined`, `structures`, `enclosed` | | bonds between parts; structures of more than one part; enclosed ones |
+| `bonds_joined`, `structures`, `enclosed` | | bonds between parts; structures of more than one part; enclosed ones (each part of a lot one) |
 | `made_held`, `made_joined`, `bonds_broken`, `bonds_failed` | 1/yr | bonds made by kind; broken by bodies; failed by load |
 | `inside_now`, `inside_cold`, `inside_warm`, `cold_months` | , , , 1/yr | bodies inside walls now; share of the eaters' body-months inside in the cold and the warm; their cold months |
 | `holding_liquid`, `liquid_held` | , kg | parts holding liquid and how much |

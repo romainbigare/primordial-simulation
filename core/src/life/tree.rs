@@ -1,18 +1,20 @@
 //! The life of the cells a split or a join makes (laws.md 0, 4.4): one life model at every cell size, so only how the
 //! nodes, the parts and the cover are shared out and gathered. A split's quarters are flat copies of their parent, so a
-//! node is shared out by area (`nodes::part`), each share a node in its quarter with a brain block of the node's; what
-//! is not cut goes whole to one quarter, drawn by area: an individual, a node of fewer members than one per quarter's
-//! share, and a structure with the bodies that hold it or are inside it (`share`). A join gathers its quarters' life in
+//! node is shared out by area (`nodes::part`), each share a node in its quarter with a brain block of the node's, and a
+//! lot of lone parts by count (`Part::split`); what is not cut goes whole to one quarter, drawn by area: an
+//! individual, a node of fewer members than one per quarter's share, a lot of fewer parts, and a structure with the
+//! bodies that hold it or are inside it (`share`). A join gathers its quarters' life in
 //! their order (`gather`); its bodies merge after (`World::join`). A body or a part is a record that holds its own
 //! amounts, so it moves between cells with nothing to book.
 
 use super::{new_id, Cell, Life};
+use crate::bond::NOBODY;
 use crate::chem::Chemistry;
 use crate::cover::Cover;
 use crate::remap::{Made, Renumber, Source};
 use crate::rng::{Purpose, Rng};
 use crate::survey::ROW;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 impl Life {
     /// The life of each cell and the survey's caches of it follow their cells (`World::remap`): an old cell's moves with
@@ -66,10 +68,12 @@ impl Life {
 
 /// Cell `c`'s life shared out to its quarters `kids` (row by row, each `area[q]` of its area), each body and part in
 /// the order it lies there: each structure whole, with its bonds and the bodies that hold a part of it or are inside it,
-/// to one quarter (`structures`); each other body whole to the quarter drawn by its id (`draw`), but a node of at least
-/// one member per quarter's share leaves in each other quarter a node of that share of its members, stores, heat and
-/// brood (`nodes::part`, its genes, spreads, lineage and born rows; an id of that quarter, and a block there holding the
-/// node's brain, rows, moving averages and trace). Each slot of the cover and its heat by area (`Cover::quarter`), and
+/// to one quarter (`structures`), but a lot that lies alone of at least one part per quarter's share leaves in each other
+/// quarter a lot of that share of its parts, amounts and heat (`Part::split`, an id of that quarter); each other body
+/// whole to the quarter drawn by its id (`draw`), but a node of at least one member per quarter's share leaves in each
+/// other quarter a node of that share of its members, stores, heat and brood (`nodes::part`, its genes, spreads,
+/// lineage and born rows; an id of that quarter, and a block there holding the node's brain, rows, moving averages and
+/// trace). Each slot of the cover and its heat by area (`Cover::quarter`), and
 /// what the movers did there by area.
 fn share(mut c: Cell, kids: &mut [Cell; 4], area: [f64; 4], seed: u64) {
     let key = (seed, c.serial);
@@ -78,10 +82,23 @@ fn share(mut c: Cell, kids: &mut [Cell; 4], area: [f64; 4], seed: u64) {
     for l in 0..bonds.count() {
         kids[go[&root[&bonds.a[l]]]].bonds.add(bonds.a[l], bonds.b[l], bonds.strength[l]);
     }
-    for p in std::mem::take(&mut c.parts) {
-        kids[go[&p.root]].parts.push(p);
-    }
     let fewest = area.iter().copied().fold(f64::INFINITY, f64::min);
+    let tied: BTreeSet<u64> = bonds.a.iter().chain(&bonds.b).chain(c.bodies.iter().filter(|b| b.alive).flat_map(|b| &b.inside)).copied().collect();
+    for mut p in std::mem::take(&mut c.parts) {
+        let q = go[&p.root];
+        if p.held == NOBODY && !tied.contains(&p.id) && p.count * fewest >= 1.0 {
+            let mut left = 1.0;
+            for o in (0..4).filter(|&o| o != q) {
+                let mut k = p.split(p.count * area[o] / left);
+                left -= area[o];
+                let kid = &mut kids[o];
+                kid.parts_made += 1;
+                (k.id, k.root) = (new_id(kid.serial, kid.parts_made), new_id(kid.serial, kid.parts_made));
+                kid.parts.push(k);
+            }
+        }
+        kids[q].parts.push(p);
+    }
     for mut b in std::mem::take(&mut c.bodies).into_iter().filter(|b| b.alive) {
         let tied = [b.hold, b.inside].into_iter().flatten().find_map(|id| root.get(&id)).map(|r| go[r]);
         let q = tied.unwrap_or_else(|| draw(area, key, b.id));

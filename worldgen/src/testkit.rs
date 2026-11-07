@@ -506,6 +506,43 @@ pub fn part_of(w: &mut World, i: usize, wall: Vec<f64>, fill: Vec<f64>, x: f32, 
     w.life.cell_at(i).parts[s].id
 }
 
+/// `n` parts placed by an edit over the dry land cells of `w`, as many in each: each of the common rock, taken from its
+/// ground with its heat at its temperature, of a design drawn by a stream keyed by `seed` (1 to 1,000 kg, any
+/// elongation and hollowness), a record of its own until the parts' monthly turn joins the alike ones (laws.md 3.1).
+pub fn scatter(w: &mut World, n: usize, seed: u64) {
+    let cells = dry_lands(w);
+    let mut x = seed;
+    // SplitMix64 (Steele, Lea and Flood 2014): a draw in 0..1.
+    let mut draw = move || {
+        x = x.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = x;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        ((z ^ (z >> 31)) >> 11) as f64 / (1u64 << 53) as f64
+    };
+    let ns = w.chem.ns();
+    for (q, &i) in cells.iter().enumerate() {
+        let m = n / cells.len() + (q < n % cells.len()) as usize;
+        let ground = |w: &World, k: usize| w.store.amounts(Class::Ground)[k * w.mesh.cells().n() + i];
+        let k = ROCK;
+        let (t, mm, cp) = (w.t_ground_last(i), w.chem.subs[k].molar_mass, w.chem.subs[k].cp);
+        let made: Vec<(f64, f32, f32)> = (0..m).map(|_| (10f64.powf(3.0 * draw()) / mm, (2.0 * draw() - 1.0) as f32, (0.9 * draw()) as f32)).collect();
+        let mol: f64 = made.iter().map(|x| x.0).sum();
+        assert!(ground(w, k) > mol, "cell {i} holds less than its parts");
+        let places = w.in_cell(i, |w, d| {
+            made.iter()
+                .map(|&(a, x, h)| {
+                    let mut wall = vec![0.0; ns];
+                    wall[k] = a;
+                    bond::make(w, d, i, wall, a * cp * t, x, h)
+                })
+                .collect::<Vec<usize>>()
+        });
+        let moves: Vec<Move> = places.iter().zip(&made).map(|(&s, &(a, ..))| Move { from: Node::ground(i), to: Node::new(Class::Part, s), k: k as u16, mol: a, heat: a * cp * t }).collect();
+        pcore::store::apply(w, &[], &moves);
+    }
+}
+
 /// Nothing is broken, cells across a border differ by one depth at most, and the cells under each air node cover it
 /// (`Mesh::share` sums to 1): the tree of cells after splits and joins (`World::split`, `World::join`).
 pub fn sound(w: &World) {

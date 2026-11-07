@@ -1,7 +1,7 @@
 // Inlines the compiled modules (dist/.js) and style.css into one self-contained dist/index.html.
 import { readFileSync, writeFileSync, rmSync } from 'node:fs';
 
-const order = ['data', 'earth', 'fine', 'canopy', 'map', 'charts', 'live', 'sprites', 'textures', 'vegetation', 'avatars', 'main'];
+const order = ['data', 'earth', 'fine', 'canopy', 'map', 'charts', 'live', 'sprites', 'stipple', 'textures', 'vegetation', 'avatars', 'main'];
 // A module as plain script: its imports and exports taken out (the modules share one scope).
 const plain = n => readFileSync(`dist/.js/${n}.js`, 'utf8').replace(/^import .*$/gm, '').replace(/^export \{\};$/gm, '').replace(/^export /gm, '');
 // The live world's worker runs on its own, with the modules it paints with: the page holds its script as text and

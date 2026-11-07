@@ -70,8 +70,8 @@ pub(crate) struct Wading {
 /// height. Where the liquid is deeper than its height, a member swims: it breathes its air (laws.md 2.4), so it keeps
 /// to the surface, and the ground lies within its reach only as deep as its height and its reach, each its size
 /// (`Physics::side`; no gene lets it dive). It rides the structure it holds, of its own cell, where the liquid is deeper
-/// than its height and what that structure displaces weighs as much as both (Archimedes, as for parts): dry, at the
-/// surface, it reaches down its reach alone.
+/// than its height and what that structure (of a lot, all its parts) displaces weighs as much as both (Archimedes, as
+/// for parts): dry, at the surface, it reaches down its reach alone.
 pub(crate) fn wading(w: &World, d: &Chunk, b: &Body, i: usize) -> Wading {
     let depth = w.life.env[i][1];
     if depth <= 0.0 {
@@ -80,8 +80,8 @@ pub(crate) fn wading(w: &World, d: &Chunk, b: &Body, i: usize) -> Wading {
     let (mb, c, rho) = (b.mass(&w.chem), d.at(b.cell as usize), liquid(w, i, d.moves.amounts(w, Node::ground(i))).1);
     let side = w.cfg.phys.side(mb / b.n());
     let rides = depth > side && held(c, b).is_some_and(|p| {
-        let s = &c.parts[root(c, p)].s;
-        rho * s.outer >= mb + s.mass
+        let r = &c.parts[root(c, p)];
+        rho * r.s.outer * r.count >= mb + r.s.mass * r.count
     });
     let share = if rides { 0.0 } else { (depth / side.max(1e-9)).min(1.0) };
     Wading { share, reaches: depth <= side * if rides { 1.0 } else { 2.0 }, rho }
@@ -111,13 +111,13 @@ pub(crate) fn sense(c: &Cell, w: &World, b: &Body, mb: f64) -> [f32; SENSE] {
     x
 }
 
-/// What a body perceives of the part at `p` of its cell `c`: ln mass ratio, hardness, hollowness, ln length, its edge
-/// (`edge_seen`), how closed its structure is, held, the share the body would take.
+/// What a body perceives of the part at `p` of its cell `c` (of a lot, of one of its parts): ln mass ratio, hardness,
+/// hollowness, ln length, its edge (`edge_seen`), how closed its structure is, held, the share the body would take.
 pub fn features(c: &Cell, w: &World, b: &Body, p: usize, mb: f64) -> [f32; NO] {
     let (pt, chem) = (&c.parts[p], &w.chem);
     let s = &c.parts[root(c, p)].s;
-    let m = pt.mass(chem);
-    let want: f64 = b.k.upt.iter().map(|&(k, u)| u as f64 * (pt.wall[k] + pt.fill[k]) * chem.subs[k].molar_mass).sum();
+    let m = pt.mass(chem) / pt.count;
+    let want: f64 = b.k.upt.iter().map(|&(k, u)| u as f64 * (pt.wall[k] + pt.fill[k]) / pt.count * chem.subs[k].molar_mass).sum();
     let ln = crate::brain::ln;
     [ln((m / mb) as f32) / LN_MASS, pt.walls(chem).hardness as f32, pt.hollow, ln(pt.size[0]) / LN_SIZE_SCALE, edge_seen(c, w, b, p), s.encl.closed, (pt.held != NOBODY) as u8 as f32, (want / m.max(1e-9)) as f32]
 }

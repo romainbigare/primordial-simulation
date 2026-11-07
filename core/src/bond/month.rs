@@ -1,13 +1,13 @@
 //! The monthly step of parts: rot and heat, burial, loads and failure.
 
-use super::{fall_apart, holder, loose_solids, numbers, sense::liquid, shed, to_ground, unlink, verbs::{bears, torn_from}, Walls, NOBODY};
+use super::{fall, fall_apart, holder, lots::{hold_by_members, join_alike}, loose_solids, numbers, sense::liquid, shed, to_ground, unlink, verbs::{bears, torn_from}, Walls, NOBODY};
 use crate::{change::{frac, rate, scarce}, chem::Phase, life::{self, Chunk}, store::{Class, Node}, World, AIR};
 
 /// Liquid shallower than this, m, pushes no part.
 const STILL_DEPTH: f64 = 0.01;
 
-/// Monthly: each chunk on the pool (`life::run`), cell by cell, the turns of the cell's parts (`turns`), then its
-/// structures' loads (`loads`).
+/// Monthly: each chunk on the pool (`life::run`), cell by cell, a body that holds more parts than it has members lets
+/// go of the rest (`lots::hold_by_members`), its alike lone parts join into lots (`lots::join_alike`), then the turns of the cell's parts (`turns`), then its structures' loads (`loads`).
 pub fn step(w: &mut World) {
     if w.life.cells.iter().all(|c| c.parts.is_empty()) {
         return;
@@ -17,6 +17,8 @@ pub fn step(w: &mut World) {
     life::run(w, life::Of::All, vec![(); life::chunks(w)], load, |_| (), |w, d, _, _| {
         let cells: Vec<usize> = d.cells().filter(|&i| !d.at(i).parts.is_empty()).collect();
         for i in cells {
+            hold_by_members(d, i);
+            join_alike(w, d, i);
             let walls = turns(w, d, i, dt);
             loads(w, d, i, &walls);
         }
@@ -27,8 +29,9 @@ pub fn step(w: &mut World) {
 /// share of each substance of its walls that the open world's decomposers rot (`rot`, one share for the cell), and all
 /// of a substance no longer solid, go to the ground with their heat, where Change rots them on, one move per substance;
 /// then the parts take the ground's temperature, one move of heat (`warm`), and those lying alone sink (`bury`); a part
-/// whose walls are under `min_kg`, or buried past its smallest size, falls apart into the ground (`fall_apart`).
-/// Returns the walls of the parts left, in their order.
+/// whose walls are under `min_kg`, or buried past its smallest size, falls apart into the ground (`fall_apart`), and of
+/// a lot the share of its parts buried past it (`Part::sunk`, `fall`). Returns the walls of the parts left, in their
+/// order.
 fn turns(w: &World, d: &mut Chunk, i: usize, dt: f64) -> Vec<Walls> {
     let (chem, tg) = (&w.chem, w.t_ground_last(i));
     // (Opened first: `rot` reads the cell's own share of its air.)
@@ -44,21 +47,31 @@ fn turns(w: &World, d: &mut Chunk, i: usize, dt: f64) -> Vec<Walls> {
     while x < d.at(i).parts.len() {
         let p = &mut d.at_mut(i).parts[x];
         let walls = p.walls(chem);
-        let gone = walls.mass < w.cfg.phys.min_kg || p.buried >= p.size[2];
+        let sunk = if walls.mass / p.count < w.cfg.phys.min_kg { 1.0 } else { p.sunk() };
         p.fit(walls.volume);
-        if gone {
+        if sunk >= 1.0 {
             fall_apart(w, d, i, x);
+            continue;
+        }
+        if sunk > 0.0 {
+            // The parts left lie from the shallowest to its smallest size.
+            let (lo, s) = (p.buried - p.spread, p.size[2]);
+            (p.buried, p.spread) = (0.5 * (lo + s), 0.5 * (s - lo));
+            let k = sunk * p.count;
+            fall(w, d, i, (x, k));
+            kept.push(d.at(i).parts[x].walls(chem));
         } else {
             kept.push(walls);
-            x += 1;
         }
+        x += 1;
     }
     kept
 }
 
 /// Flow's mixing of the loose ground (laws.md 1.3; bioturbation, Darwin 1881): each part of cell `i` of chunk `d` that
 /// no body holds and no bond joins sinks `bury` × `dt` m into the loose ground at `tg` K, no deeper than that ground is
-/// (its loose solids' volume over the cell's area). A structure stays on top while it is bonded.
+/// (its loose solids' volume over the cell's area); the even spread of a lot's depths moves with it, its shallowest
+/// and its deepest no deeper than that. A structure stays on top while it is bonded.
 fn bury(w: &World, d: &mut Chunk, i: usize, (tg, dt): (f64, f64)) {
     let loose = loose_solids(w, d, i, tg);
     let volume: f64 = loose.iter().enumerate().map(|(k, a)| a * w.chem.molar_volume(k, Phase::Solid)).sum();
@@ -68,7 +81,8 @@ fn bury(w: &World, d: &mut Chunk, i: usize, (tg, dt): (f64, f64)) {
     let mut bonded: Vec<u64> = c.bonds.a.iter().chain(&c.bonds.b).copied().collect();
     bonded.sort_unstable();
     for p in c.parts.iter_mut().filter(|p| p.held == NOBODY && bonded.binary_search(&p.id).is_err()) {
-        p.buried = (p.buried + sink).min(depth);
+        let (lo, hi) = ((p.buried - p.spread + sink).min(depth), (p.buried + p.spread + sink).min(depth));
+        (p.buried, p.spread) = (0.5 * (lo + hi), 0.5 * (hi - lo));
     }
 }
 
@@ -150,8 +164,8 @@ fn loads(w: &World, d: &mut Chunk, i: usize, walls: &[Walls]) {
 }
 
 /// Load the structure whose root is at `rp` in cell `i` of chunk `d`, its parts at `of` (`loads`): weights less
-/// buoyancy, pushes of liquid and bodies, from the part a body holds out along the bonds; break what is overloaded. A
-/// structure no body holds rests on the ground and bears no load.
+/// buoyancy, pushes of liquid and bodies, from the part a body holds out along the bonds (of a lot held, all its
+/// parts); break what is overloaded. A structure no body holds rests on the ground and bears no load.
 fn load_one(w: &World, d: &mut Chunk, i: usize, (rp, of): (usize, &[usize])) {
     let (c, g) = (d.at(i), w.cfg.gravity);
     let Some(h) = of.iter().position(|&p| holder(c, p).is_some()) else {
@@ -170,9 +184,9 @@ fn load_one(w: &World, d: &mut Chunk, i: usize, (rp, of): (usize, &[usize])) {
     for (x, &p) in of.iter().enumerate() {
         let pt = &c.parts[p];
         let face = (pt.size[0] * pt.size[1]) as f64;
-        let buoy = rho * g * pt.outer().min(face * depth);
+        let buoy = rho * g * pt.outer().min(face * depth) * pt.count;
         wt[x] = (pt.mass(&w.chem) * g - buoy).max(0.0);
-        push[x] = 0.5 * rho * v * v * face + bump;
+        push[x] = 0.5 * rho * v * v * face * pt.count + bump;
     }
     // From the held part out along the bonds, each carrying what hangs beyond it.
     let ids: Vec<u64> = of.iter().map(|&p| c.parts[p].id).collect();

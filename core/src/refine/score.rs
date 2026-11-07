@@ -77,7 +77,7 @@ pub(super) fn scores(w: &World, shot: Option<&Shot>) -> (Vec<Score>, Vec<Watch>)
         .map(|i| {
             let life = w.life.cell_at(i);
             let brains: f64 = life.bodies.iter().filter(|b| b.alive && w.life.brain(b.lineage).is_some_and(|l| !l.none())).map(|b| b.count).sum();
-            let parts = (life.parts.len() + life.bonds.a.len()) as f64;
+            let parts = life.parts.iter().map(|p| p.count).sum::<f64>() + life.bonds.a.len() as f64;
             let mass = [now[i].mass, w.watch[i].mass].map(|m| m as f64 * cells.area()[i]);
             let camera = shot.map_or(0.0, |s| camera(w, i, s));
             let held = brains / BRAINS_UNIT + parts / PARTS_UNIT;
