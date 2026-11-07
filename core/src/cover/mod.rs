@@ -327,6 +327,12 @@ pub fn per_m2(w: &crate::World, of: impl Fn(&Cover, &[f64; NP], usize) -> f64) -
     out
 }
 
+/// The activity of a kind of cover of genes `genes` on ground as wet as `wet` (`Physics::wetness`): full where the
+/// ground is as wet as its moisture gene needs (`MOIST`), less as it dries (`Physics::activity`).
+pub fn activity(ph: &crate::Physics, genes: &[f32; NG], wet: f64) -> f64 {
+    ph.activity(wet / dec(genes[MOIST]))
+}
+
 /// 10 to the power of a gene.
 #[inline]
 pub fn dec(g: f32) -> f64 {

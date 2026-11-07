@@ -318,6 +318,24 @@ pub fn set_amount(w: &mut World, x: Node, k: usize, mol: f64) {
     w.cross((Boundary::Outside, x), [(k, mol)], 0.0);
 }
 
+/// Every land cell of `w` made to hold what cell `like` holds per m², in its ground, its bed and the store under it, with
+/// their heat (booked as edits, `set_amount`, `set_heat`): an even plateau, the same above and below ground.
+pub fn even_land(w: &mut World, like: usize) {
+    let n = w.mesh.cells().n();
+    let (land, area): (Vec<usize>, Vec<f64>) = ((0..n).filter(|&i| w.is_land(i)).collect(), w.mesh.cells().area().to_vec());
+    for &i in &land {
+        for class in [Class::Ground, Class::Bed, Class::Deep] {
+            for k in 0..w.chem.ns() {
+                let mol = w.store.amounts(class)[k * n + like] * area[i] / area[like];
+                set_amount(w, Node::new(class, i), k, mol);
+            }
+            if let Some(&e) = w.store.heat(class).get(like) {
+                set_heat(w, Node::new(class, i), e * area[i] / area[like]);
+            }
+        }
+    }
+}
+
 /// Body `b` brought to `t` K (booked as an edit).
 pub fn warm(w: &mut World, b: &mut Body, t: f64) {
     let e = b.energy_at(&w.chem, t);

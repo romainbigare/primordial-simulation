@@ -13,6 +13,7 @@ pub mod cover;
 pub mod event;
 pub mod flow;
 mod ground;
+pub mod inside;
 pub mod lanes;
 pub mod life;
 pub mod lineage;

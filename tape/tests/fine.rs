@@ -1,26 +1,36 @@
 //! A window finer than its cells (`tape::fine`): its ground keeps each square's height as its mean, it and the liquid's
-//! surface have no steps at the cells' edges, a split that shares out its cell changes nothing drawn, it does not depend
-//! on the window, liquid stands on the low ground of wet cells, and rivers run down.
+//! surface have no steps at the cells' edges, a split that shares out its cell by area changes nothing drawn of what it
+//! shares so, it does not depend on the window, liquid stands on the low ground of wet cells, and rivers run down.
 
 use pcore::World;
 use tape::{fine, Samples, LAYERS};
 use worldgen::testkit;
 
-/// What `fine` hands out for a window of `n` pixels.
+/// What `fine` hands out for a window of `n` pixels: the river ways, the ground and the liquid's surface, the bytes of
+/// the layers, and the fields inside the cells (`INSIDE` planes of `n`: wetness, the cover of each slot).
 struct Fine {
     ways: Vec<[f32; 6]>,
     ground: Vec<f32>,
     water: Vec<f32>,
-    layers: usize,
     bytes: Vec<u8>,
+    inside: Vec<f32>,
 }
 
+/// The planes inside the cells: wetness and one for each slot of cover.
+const INSIDE: usize = 1 + pcore::cover::SLOTS;
+
+/// `b` read as `fine` lays it out: a byte a pixel for each layer, then zero bytes up to a multiple of 4, then the
+/// planes inside the cells, and nothing more.
 fn read(b: &[u8], n: usize) -> Fine {
     let f32s = |from: usize, k: usize| (0..k).map(|i| f32::from_le_bytes(b[from + 4 * i..from + 4 * i + 4].try_into().unwrap())).collect::<Vec<f32>>();
     let rivers = u32::from_le_bytes(b[4..8].try_into().unwrap()) as usize;
     let ways = f32s(8, 6 * rivers).chunks(6).map(|c| c.try_into().unwrap()).collect();
     let at = 8 + 24 * rivers;
-    Fine { ways, ground: f32s(at, n), water: f32s(at + 4 * n, n), layers: b.len() - at - 8 * n, bytes: b[at + 8 * n..].to_vec() }
+    let (planes, end) = (at + 8 * n, at + 8 * n + LAYERS.len() * n);
+    let inside = end.next_multiple_of(4);
+    assert_eq!(b.len(), inside + 4 * INSIDE * n, "a byte a pixel for each layer, then the planes inside the cells");
+    assert!(b[end..inside].iter().all(|&x| x == 0), "zero bytes up to the planes inside the cells");
+    Fine { ways, ground: f32s(at, n), water: f32s(at + 4 * n, n), bytes: b[planes..end].to_vec(), inside: f32s(inside, INSIDE * n) }
 }
 
 /// The window from column `at[0]` and row `at[1]`, 8 x 8 squares, of `w` at `depth`, and its pixels along a side.
@@ -51,7 +61,8 @@ fn the_fine_ground_keeps_each_squares_height_and_shows_no_cells_edge() {
     let mut s = Samples::new(&w);
     let f = tape::fields(&w);
     let (got, across) = window(&w, &mut s, [4.0, 4.0], depth);
-    assert_eq!(got.layers, across * across * LAYERS.len(), "a byte a pixel for each layer");
+    let n = across * across;
+    assert!(got.inside[..n].iter().all(|w| (0.0..=1.0).contains(w)) && got.inside[n..].iter().all(|&x| x >= 0.0), "a wetness 0 to 1 and cover of none or more");
     assert!(w.map.leaves().iter().all(|l| l.depth >= w.map.square_depth()), "the coarsest cells are squares");
     let per = (across / 8) as f64;
     let at = |p: usize| [((p % across) as f64 + 0.5) / per, ((p / across) as f64 + 0.5) / per];
@@ -85,9 +96,9 @@ fn the_fine_ground_keeps_each_squares_height_and_shows_no_cells_edge() {
     let shore: Vec<_> = pairs.iter().filter(|&&(p, q, _)| wet(p) != wet(q)).collect();
     let (on, all) = (across_edges(&shore), across_edges(&pairs.iter().collect::<Vec<_>>()));
     assert!(!shore.is_empty() && on < all, "the shore crosses cells' edges as often as other pairs: {on} against {all}");
-    // A split shares out its cell's liquid, ice, rain and look by area: what is drawn of them does not change.
-    let n = across * across;
-    for name in ["depth", "ice", "rain", "true_r", "true_g", "true_b"] {
+    // A split shares out its cell's rain by area, and here its ice and look as they were: what is drawn of them does not
+    // change. (The liquid in its pores goes by the ground inside it, laws.md 0, "Inside a cell".)
+    for name in ["ice", "rain", "true_r", "true_g", "true_b"] {
         let k = LAYERS.iter().position(|l| l.name == name).expect("a layer");
         assert!(before.bytes[k * n..(k + 1) * n] == got.bytes[k * n..(k + 1) * n], "the {name} drawn does not change where cells split");
     }

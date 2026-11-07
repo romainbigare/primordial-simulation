@@ -1,6 +1,6 @@
 //! Terrain that drains (laws.md 0 and 8): a priority flood raises each closed basin of the terrain to its outlet, so
-//! liquid runs off every cell it reaches (Planchon and Darboux 2001; Barnes, Lehman and Mulla 2014). The world's cells
-//! drain from the start (`worldgen`), and a split's quarters drain to the cells round them (`World::uneven`).
+//! liquid runs off every place it reaches (Planchon and Darboux 2001; Barnes, Lehman and Mulla 2014). The terrain's
+//! samples drain by it (`space::samples`), and every cell stands on them.
 
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;

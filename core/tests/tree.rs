@@ -132,8 +132,11 @@ fn a_join_then_its_split_gives_back_quarters_of_two_phases() {
     join_then_split(&mut w, parent);
 }
 
-/// Join the quarters of `parent` of `w` and split it again at once: each quarter holds what it held (4 ε), and the
-/// books do not move. Returns the join's relief.
+/// Join the quarters of `parent` of `w` and split it again at once: each quarter holds what it held, each amount to
+/// four roundings (2 ε of it), each heat to four roundings of it and of the potential energy the round trip books
+/// through it (the split gives the quarters' ground heat what the relief has left over the stacks' potential energy,
+/// `store::fall_heat`: 2 ε of the heat and of that potential energy, which is that of the quarters' stacks and their
+/// air, `flow::potential_of`); and the books do not move. Returns the join's relief.
 fn join_then_split(w: &mut World, parent: Leaf) -> f64 {
     let kids = parent.quarters().map(|q| w.map.cell(q).expect("a square"));
     let (held, books) = (kids.map(|i| holds(w, i)), Books::now(w));
@@ -141,10 +144,16 @@ fn join_then_split(w: &mut World, parent: Leaf) -> f64 {
     let relief = w.relief[w.map.cell(parent).expect("the joined cell")];
     assert_eq!(w.split(parent), Ok(vec![parent]));
     sound(w);
+    let cells = parent.quarters().map(|q| w.map.cell(q).expect("a quarter"));
+    let booked = pcore::flow::potential_of(w, &cells, w.mesh.up(cells[0], 0, pcore::AIR)).abs();
+    let amounts = w.chem.ns() * 4;
+    println!("the round trip books {booked:.4e} J of potential energy through the ground's heat");
     for (q, held) in parent.quarters().iter().zip(&held) {
         let now = holds(w, w.map.cell(*q).expect("a quarter"));
-        let worst = now.iter().zip(held).map(|(&x, &y)| (x - y).abs() / y.abs().max(f64::MIN_POSITIVE)).fold(0.0, f64::max);
-        assert!(worst <= 4.0 * f64::EPSILON / 2.0, "quarter {q:?} back within {worst:e}");
+        for (k, (&x, &y)) in now.iter().zip(held).enumerate() {
+            let of = if k < amounts { y.abs() } else { y.abs() + booked };
+            assert!((x - y).abs() <= 2.0 * f64::EPSILON * of, "quarter {q:?}, number {k}: {y:e} back as {x:e}, booked {booked:e} J");
+        }
     }
     books.assert_kept(w, 1e-12);
     relief
@@ -187,6 +196,35 @@ fn a_split_gives_its_quarters_the_terrain() {
     assert!((spent + kept - relief).abs() <= TIGHT * stacks.abs() && warmed.abs() <= TIGHT * heat, "the relief pays what the split gains, {warmed:e} J to heat");
     let drains = |j: usize| w.mesh.cells().around(j).1.iter().any(|&o| w.surface_z(o as usize) <= w.surface_z(j));
     assert!(kids.iter().all(|&j| drains(j)), "each quarter drains");
+}
+
+/// How far the ground of cell `i` stands over the terrain's mean inside it, m.
+fn over_terrain(w: &World, i: usize) -> f64 {
+    w.surface_z(i) - w.terrain.inside(w.seed, &w.map, leaf(w, i), (w.cfg.lat_south, w.cfg.lat_north)).0
+}
+
+/// The ground stands on the drained terrain at every size (laws.md 0, 8): no sample of land is a closed pit (each has a
+/// lower neighbour), a world starts with each cell at the terrain's mean over it, and the cells two splits make of a
+/// block of land stand at the terrain's mean over each as their cell did, to `UNEVEN_M`: no quarter carries its cell's
+/// height as a step, and none is drained apart from its neighbours.
+#[test]
+fn split_cells_stand_on_the_terrain() {
+    let mut w = world();
+    let s = w.terrain.samples(w.seed, &w.map, (w.cfg.lat_south, w.cfg.lat_north));
+    let lower = |k: usize| {
+        let (r, c) = ((k / s.across) as i64, (k % s.across) as i64);
+        let near = (-1..=1i64).flat_map(|a| (-1..=1i64).map(move |b| (r + a, c + b)));
+        near.filter(|&(y, x)| (0..s.down as i64).contains(&y) && (0..s.across as i64).contains(&x)).any(|(y, x)| s.h[y as usize * s.across + x as usize] < s.h[k])
+    };
+    assert!((0..s.h.len()).filter(|&k| s.h[k] >= 0.0).all(lower), "every sample of land has a lower neighbour");
+    let block = testkit::land_block(&w);
+    let start: Vec<f64> = (0..w.mesh.cells().n()).map(|i| over_terrain(&w, i)).collect();
+    let was: Vec<f64> = block.iter().map(|&l| over_terrain(&w, w.map.cell(l).expect("a cell"))).collect();
+    testkit::split_down(&mut w, &block, 2);
+    let kids: Vec<f64> = block.iter().zip(&was).flat_map(|(l, d)| l.split(l.depth + 2).map(|q| over_terrain(&w, w.map.cell(q).expect("a cell")) - d).collect::<Vec<f64>>()).collect();
+    let most = |d: &[f64]| d.iter().fold(0.0f64, |m, x| m.max(x.abs()));
+    println!("the cells start within {} m of the terrain, the split cells within {} m beyond their cell", most(&start), most(&kids));
+    assert!(most(&start) < UNEVEN_M && most(&kids) < UNEVEN_M, "the cells stand on the terrain");
 }
 
 /// The liquid of cell `i` as a depth over its area, m, and the depth its pores hold, m (the volume of its loose solids
@@ -427,8 +465,9 @@ fn with_life() -> (World, usize, [u64; 2], [u64; 2]) {
 
 /// A cell with a node, an individual holding a structure and cover of two kinds, split and joined again, keeps every
 /// element, the energy and the members of each kind (`TIGHT`). Split, each quarter holds a quarter of the node, with
-/// the node's brain rows, and a quarter of each kind of cover; the individual and its structure lie whole in one
-/// quarter. Every id finds its body or part, and once joined the cell holds its cover as it was.
+/// the node's brain rows, and of each kind of cover what its growth law gives there, the four together all of it
+/// (laws.md 0, "Inside a cell"); the individual and its structure lie whole in one quarter. Every id finds its body or
+/// part, and once joined the cell holds its cover as it was.
 #[test]
 fn life_follows_a_split_and_its_join() {
     let (mut w, i, [node, one], parts) = with_life();
@@ -442,14 +481,17 @@ fn life_follows_a_split_and_its_join() {
     assert_eq!(w.life[h].count, 1.0, "the individual is not cut");
     assert!(parts.iter().all(|&p| w.life.part_cell(p) == Some(h.cell as usize)), "its structure goes with it");
     assert!(w.life.find(node).is_some(), "the node keeps its id");
+    let mut kinds_held: BTreeMap<u32, [f64; pcore::cover::NP]> = BTreeMap::new();
     for q in l.quarters() {
         let c = w.map.cell(q).expect("a quarter");
         let shares: Vec<&Body> = w.life.cell(c).map(|s| &w.life[s]).filter(|b| b.lineage == lineage).collect();
         assert!(shares.len() == 1 && (shares[0].count - NODE / 4.0).abs() <= TIGHT * NODE, "a quarter of the node in quarter {q:?}");
         assert_eq!(w.life.rows_of(shares[0]), &rows[..], "with the node's rows");
-        let near = |a: f64, b: f64| (a - b).abs() <= TIGHT * b;
-        assert!(slots(&w, c).len() == 2 && slots(&w, c).iter().all(|(k, m)| (0..m.len()).all(|x| near(m[x], cover[k][x] / 4.0))), "a quarter of each kind of cover");
+        assert!(slots(&w, c).len() == 2 && slots(&w, c).values().all(|m| m.iter().all(|&x| x >= 0.0)), "each kind of cover, none below 0");
+        slots(&w, c).iter().for_each(|(k, m)| (0..m.len()).for_each(|x| kinds_held.entry(*k).or_default()[x] += m[x]));
     }
+    let near = |a: f64, b: f64| (a - b).abs() <= TIGHT * b;
+    assert!(kinds_held.iter().all(|(k, m)| (0..m.len()).all(|x| near(m[x], cover[k][x]))), "the quarters hold all of each kind of cover");
     w.join(l).expect("its quarters join");
     sound(&w);
     books.assert_kept(&w, TIGHT);
@@ -550,35 +592,28 @@ const EVEN_MONTHS: usize = 12;
 /// How far the climate of an even region split may stray from the unsplit one's, a share of each number but the store
 /// of the bed (`climate`): its cells differ only by their latitude and the air they see.
 const EVEN_SHARE: f64 = 1e-6;
-/// The same for the store of the bed: the store flows down the differences of the stores of the block's squares (the
-/// runoff over the plateau feeds some more than others), which the cells of 500 m resolve (2e-3 in a year; 1e-6 with no
-/// flow of the store).
+/// The same for the store of the bed: in the year after the split the runoff over the plateau feeds some squares' stores
+/// more than others again, and the store flows down those differences, which the cells of 500 m resolve better (a sharp
+/// step falls over 500 m, not 2 km): 6e-5 in a year.
 const STORE_SHARE: f64 = 1e-2;
 
 /// The climate does not depend on the size of the cells where nothing in them differs (spec 5.2): on the small island
-/// with all its land one even plateau (each land cell holding per m² what one does, with no relief inside it), a block
-/// of 2 x 2 squares in its middle split two depths (into cells of 500 m, those beside it into cells of 1 km) keeps, after
-/// a year, the climate (`climate`) of the block and of the island within `EVEN_SHARE` of each number (`STORE_SHARE` for
-/// the store).
+/// with all its land one even plateau (each land cell holding per m² what one does in its ground, its bed and the store
+/// under it, `testkit::even_land`, with no relief inside it), made even again after a year (its runoff fed some squares'
+/// stores more than others, a difference a finer grid resolves better, so the plateau would not be even below ground), a
+/// block of 2 x 2 squares in its middle split two depths (into cells of 500 m, those beside it into cells of 1 km) keeps,
+/// after a year, the climate (`climate`) of the block and of the island within `EVEN_SHARE` of each number
+/// (`STORE_SHARE` for the store).
 #[test]
 fn an_even_region_split_two_depths_keeps_its_climate() {
     let mut w = world();
     let (n, like) = (w.mesh.cells().n(), testkit::dry_land(&w));
     let land: Vec<usize> = (0..n).filter(|&i| w.is_land(i)).collect();
-    let area = w.mesh.cells().area().to_vec();
-    for &i in &land {
-        w.relief[i] = 0.0;
-        for class in [Class::Ground, Class::Bed, Class::Deep] {
-            for k in 0..w.chem.ns() {
-                let mol = w.store.amounts(class)[k * n + like] * area[i] / area[like];
-                testkit::set_amount(&mut w, pcore::store::Node::new(class, i), k, mol);
-            }
-            if let Some(&e) = w.store.heat(class).get(like) {
-                testkit::set_heat(&mut w, pcore::store::Node::new(class, i), e * area[i] / area[like]);
-            }
-        }
-    }
+    land.iter().for_each(|&i| w.relief[i] = 0.0);
+    testkit::even_land(&mut w, like);
     (0..EVEN_MONTHS).for_each(|_| pcore::step(&mut w));
+    // A year's runoff across the plateau feeds some squares' stores more than others; made even again, below ground too.
+    testkit::even_land(&mut w, like);
     w.drain_events();
     // The block of 2 x 2 squares at the middle of the map, aligned to its size.
     let side = 2 * leaf(&w, 0).side();

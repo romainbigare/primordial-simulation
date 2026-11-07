@@ -7,6 +7,7 @@
 
 pub mod drain;
 pub mod square;
+pub mod samples;
 pub mod terrain;
 pub mod tree;
 

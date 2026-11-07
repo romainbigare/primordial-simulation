@@ -1,17 +1,35 @@
-//! The cover of the cells a split or a join makes (laws.md 4.5): a split's quarters are flat copies of their parent, so
-//! each takes its share by area of each slot and of the heat (`Cover::quarter`); a joined cell takes the slots of its
-//! quarters as seeds that land by the cover's own rule (`Cover::gathered`, then `cover::land`).
+//! The cover of the cells a split or a join makes (laws.md 4.5): each quarter of a split takes its part of each slot,
+//! by its growth law over the quarter's ground (`Cover::parts`, `inside::Inside::kind`), with the heat that goes
+//! with it (`Cover::quarter`); a joined cell takes the slots of its quarters as seeds that land by the cover's own rule
+//! (`Cover::gathered`, then `cover::land`).
 
-use super::{Cover, Parts, Seed, NP};
+use super::{Cover, Parts, Seed, NO_ROOT, NP, SLOTS};
 use crate::chem::Chemistry;
+use crate::inside::{Ground, Inside};
 use crate::remap::mean_by;
+use crate::Physics;
 
 impl Cover {
-    /// The share `a` of it, for a quarter of `a` of its cell's area: each slot's amounts and the heat by that share, its
-    /// genes, starting kind and whether it is full as they are, its light mark (per m²) and the share set aside as they
-    /// are.
-    pub(crate) fn quarter(&self, a: f64) -> Cover {
-        Cover { mol: self.mol.map(|m| m.map(|x| x * a)), e: self.e * a, seeds: Vec::new(), ..self.clone() }
+    /// The part of each slot of it that each quarter of its cell takes (row by row, slot by slot): the quarter's part of
+    /// the share of the slot's kind over the cell's ground `g` (`Inside::kind`, by its growth law; `Ground::quarters`),
+    /// an empty slot's by area.
+    pub(crate) fn parts(&self, g: &Ground, inside: &Inside, ph: &Physics) -> [[f64; SLOTS]; 4] {
+        let each: [[f64; 4]; SLOTS] = std::array::from_fn(|x| {
+            let share = if self.root[x] == NO_ROOT { vec![1.0; g.area.len()] } else { inside.kind(g, ph, &self.genes[x]) };
+            g.quarters(&share)
+        });
+        std::array::from_fn(|q| each.map(|p| p[q]))
+    }
+    /// What a quarter of its cell takes of it, of `a` of the cell's area: the part `f[x]` of each slot's amounts
+    /// (`parts`), the heat by its share of the heat capacity (so it stays at the cover's temperature; by area where it
+    /// holds none), its genes, starting kind and whether it is full as they are, its light mark (per m²) and the share set
+    /// aside as they are.
+    pub(crate) fn quarter(&self, f: [f64; SLOTS], a: f64, chem: &Chemistry) -> Cover {
+        let mut c = Cover { mol: std::array::from_fn(|x| self.mol[x].map(|m| m * f[x])), seeds: Vec::new(), ..self.clone() };
+        let cap = |x: &Cover| Parts::of(chem).map_or(0.0, |p| x.cap(chem, &p));
+        let whole = cap(self);
+        c.e = if whole > 0.0 { self.e * (cap(&c) / whole) } else { self.e * a };
+        c
     }
 
     /// The cover of cell `to` joined of quarters `kids` (row by row, each `area[q]` of its area): their light marks (per
