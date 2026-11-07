@@ -37,12 +37,15 @@ while the world plays. After 3 minutes without input the page sends the camera a
 so the world joins its fine cells and runs at the coarse pace again; the next zoom, pan or click brings it back.
 
 At every zoom the live viewer draws the window in view finer than its cells (`tape::fine`, a pixel of 1 to 2 screen
-pixels and no smaller than 5 cm, smoothed up closer, at most 360,000 of them): the ground's height from the terrain
-below the cells (smooth below a metre), set on each cell's own height, with hill shading; the liquid where its surface
-lies over that ground, so shores follow the ground; snow by the ground's own temperature; the other layers blended
-between the cells' centres; rivers as lines along the way their liquid runs. It is made again when the view rests and
-once a second while the world plays; the stats line gives its size and the time the core took to make it and the page
-to paint it.
+pixels and no smaller than 5 cm, smoothed up closer, at most 360,000 of them), and a fifth of the view about it, so a pan
+or a zoom out shows it until the next comes: the ground's height from the terrain below the cells (smooth below a metre)
+set on the cells' heights, with hill shading; the liquid where its surface lies over that ground, so shores follow the
+ground; snow by the ground's own temperature; every value of the cells as one smooth field, built level by level of the
+cells' tree, so a cell that holds what its parent held shows no edge and a refined region looks like the cells about it
+(`tape/src/fine/pyramid.rs`); rivers as lines along the way their liquid runs. It is made again when the view rests and
+once a second while the world plays, and each new picture fades in over the last in a quarter of a second, over the map
+of the squares, its outer edge faded too, so the picture never jumps; the stats line gives its size and the time the
+core took to make it and the page to paint it.
 
 The Earth view draws the plant cover as textures at its real size (`web/src/vegetation.ts`, `web/src/textures.ts`),
 over the fine raster where there is one and blended between the cells' centres as the map is: crowns where it is woody

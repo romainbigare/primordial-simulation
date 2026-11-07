@@ -1,5 +1,5 @@
 // The map canvas: one pixel per square in an offscreen canvas, drawn with zoom and pan, and over it a raster of the
-// window in view finer than its cells (fine.ts).
+// window in view finer than its cells (fine.ts), each new raster fading in over the last.
 const LAT_STEP = 30; // degrees between a globe's lines of latitude
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
@@ -8,6 +8,12 @@ export interface View { x: number; y: number; w: number; h: number; s: number; z
 /** The most pixels a metre takes on screen: a body of 0.3 m (a member of about 8 kg) at 24 pixels, so one animal shows
  * its shape and can be picked. */
 const MOST_PX_PER_M = 80;
+/** A new raster finer than the squares fades in over the last one over this long, ms, so the picture never jumps. */
+const FINE_FADE_MS = 250;
+
+/** A raster of a window of the map, finer than its squares, drawn over the map at its place (x, y, w, h in squares),
+ * and when it came (performance.now, ms). */
+interface Raster { cv: ImageBitmap; at: [number, number, number, number]; since: number }
 
 export class MapView {
   img: ImageData | null = null;
@@ -21,8 +27,8 @@ export class MapView {
   /** Edge latitudes (degrees) of a globe, whose columns wrap east to west; null for an island. */
   private globe: { north: number; south: number } | null = null;
   private raf = 0;
-  /** A raster of a window of the map, finer than its squares, drawn over the map at its place (x, y, w, h in squares). */
-  private fine: { cv: CanvasImageSource; at: [number, number, number, number] } | null = null;
+  /** The rasters drawn over the map, oldest first: the last fades in over the one before it, which then goes. */
+  private fine: Raster[] = [];
   private seen = '';
   /** Drawn over the map (and its fine raster) at each redraw: its context, where the map's corner is and the pixels a square takes. */
   overlay: ((ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number) => void) | null = null;
@@ -63,10 +69,21 @@ export class MapView {
     this.resize(); this.fit();
   }
 
-  /** Show `cv` (a picture of the window `at`: x, y, w, h in squares) over the map, or nothing. */
-  setFine(cv: CanvasImageSource | null, at: [number, number, number, number] = [0, 0, 0, 0]): void {
-    this.fine = cv ? { cv, at } : null;
+  /** Show `cv` (a picture of the window `at`: x, y, w, h in squares) over the map, fading in over the last; or nothing
+   * at once. The map closes each picture once it no longer shows it. */
+  setFine(cv: ImageBitmap | null, at: [number, number, number, number] = [0, 0, 0, 0]): void {
+    if (!cv) this.dropFine(this.fine.length);
+    else {
+      // A picture that comes while another still fades in takes its place: the one under them stays.
+      if (this.fine.length > 1) this.dropFine(this.fine.length - 1, 1);
+      this.fine.push({ cv, at, since: performance.now() });
+    }
     this.invalidate();
+  }
+
+  /** Close and forget `n` of the rasters from the `from`th. */
+  private dropFine(n: number, from = 0): void {
+    this.fine.splice(from, n).forEach(r => r.cv.close());
   }
 
   /** The part of the map in view. */
@@ -129,10 +146,15 @@ export class MapView {
     // Copies meet on whole device pixels, so no thin line shows between them.
     const edge = (k: number) => Math.round((ox + k * span) * d) / d;
     xs.forEach((_, k) => ctx.drawImage(this.off, edge(k), oy, edge(k + 1) - edge(k), h * s));
-    if (this.fine) {
-      const [fx, fy, fw, fh] = this.fine.at;
-      ctx.drawImage(this.fine.cv, ox + fx * s, oy + fy * s, fw * s, fh * s);
-    }
+    const fade = this.fine.length ? Math.min((performance.now() - this.fine[this.fine.length - 1].since) / FINE_FADE_MS, 1) : 1;
+    if (fade >= 1) this.dropFine(this.fine.length - 1);
+    this.fine.forEach((r, k) => {
+      const [fx, fy, fw, fh] = r.at;
+      ctx.globalAlpha = k === this.fine.length - 1 ? fade : 1;
+      ctx.drawImage(r.cv, ox + fx * s, oy + fy * s, fw * s, fh * s);
+    });
+    ctx.globalAlpha = 1;
+    if (fade < 1) this.invalidate();
     this.overlay?.(ctx, ox, oy, s);
     if (this.globe) this.latitudeLines(ox, oy, xs.length * span);
     for (const [i, col] of [[this.pick, '#fff'], [this.hover, '#000']] as const) {
