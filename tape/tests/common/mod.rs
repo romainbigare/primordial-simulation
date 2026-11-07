@@ -31,22 +31,32 @@ pub fn run_on(w: World, years: u64, roster: bool, set: impl Fn(&mut Config), eac
 
 /// As `run_on`, each month advanced by `step` (`pcore::step`, or a control run of it).
 #[allow(dead_code)]
-pub fn run_stepped(mut w: World, years: u64, roster: bool, set: impl Fn(&mut Config), step: impl Fn(&mut World), mut each_year: impl FnMut(u64, &World, &Recorder)) -> (World, Recorder) {
+pub fn run_stepped(mut w: World, years: u64, roster: bool, set: impl Fn(&mut Config), step: impl Fn(&mut World), each_year: impl FnMut(u64, &World, &Recorder)) -> (World, Recorder) {
     set(&mut w.cfg);
     w.cfg.validate().expect("a world `Config::validate` accepts");
     // `ew run` scales the air's heat-absorbing gases by `--absorber` (1), which sets each air node's heat again.
     worldgen::terrain::scale_absorbers(&mut w, 1.0);
-    let plan = Schedule::new(Some(LIFE_YEAR), roster, Seeding::default());
-    let (books, mut rec) = (Books::now(&w), Recorder::new(&w, 0, 0));
+    let mut rec = Recorder::new(&w, 0, 0);
     record(&mut rec, &mut w);
-    for y in 1..=years {
+    let w = go_on(w, &mut rec, years, roster, step, each_year);
+    (w, rec)
+}
+
+/// `years` more years of `w`, a world a run of `run_stepped` has brought to the end of a year, recorded by `rec`, each
+/// month advanced by `step`, as the run goes on: `each_year(year, world, recorder)` after each year, counted from the
+/// run's start. Checks the books from now to the end.
+#[allow(dead_code)]
+pub fn go_on(mut w: World, rec: &mut Recorder, years: u64, roster: bool, step: impl Fn(&mut World), mut each_year: impl FnMut(u64, &World, &Recorder)) -> World {
+    let plan = Schedule::new(Some(LIFE_YEAR), roster, Seeding::default());
+    let (books, done) = (Books::now(&w), w.cfg.calendar().years(w.time));
+    for y in done + 1..=done + years {
         plan.place(&mut w);
         for _ in 0..w.cfg.months_per_year {
             step(&mut w);
-            record(&mut rec, &mut w);
+            record(rec, &mut w);
         }
-        each_year(y, &w, &rec);
+        each_year(y, &w, rec);
     }
     books.assert_kept(&w, 1e-9);
-    (w, rec)
+    w
 }

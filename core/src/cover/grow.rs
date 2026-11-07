@@ -228,8 +228,8 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
 /// Slot `x` builds what its fuel over its reserve (`STORE`) and the minerals of its ground (`ground`, mol, shared out
 /// as slots build) allow, by the conversions of growth (`Chemistry::build`, `builds`) at its share of walls (`WALLS`),
 /// paying `c_copy` per kg by burning fuel; a fixer (`FIX`) makes the mineral it lacks, at its
-/// capacity, paid by the fixing reaction's fuel. The share `SEED` of what it builds leaves as seeds for a neighbour
-/// cell drawn, as far as `spread_m` reaches (`Level::reach`; `Seed`), with a generation's mutation; all of it where one more kg would not pay its upkeep (`pays`
+/// capacity, paid by the fixing reaction's fuel. The share `SEED` of what it builds leaves as seeds for the cell
+/// `spread_m` away in a compass direction drawn (`copy::dispersed`; `Seed`), with a generation's mutation; all of it where one more kg would not pay its upkeep (`pays`
 /// false: its light at the bottom of its layer is under its compensation point), so a cover stops thickening where its
 /// lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005).
 #[allow(clippy::too_many_arguments)]

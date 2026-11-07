@@ -80,8 +80,8 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body, fill: Fill) -> bool {
     let mut r = Rng::new(w.seed, w.key_ending(b.cell as usize, fill.at), id, Purpose::Mutate);
     let i = b.cell as usize;
     let mate = if mates(w, d, b) { partner(w, d, b, &mut r) } else { None };
-    // Children that start in the neighbour cell of a compass direction drawn, as far as `spread_m` reaches
-    // (`Level::reach`; no link that way or out of reach: none): of a node, the
+    // Children that start `spread_m` away in a compass direction drawn (`dispersed`; still in its cell or off the map:
+    // none): of a node, the
     // share `DISPERSE` of its births, however few (less than one member with no node to join there waits in the brood,
     // as the stayers do, `emit`), all of one update the same way, as the children of one call cost one `emit`; an
     // individual's go together, by that chance.
@@ -111,22 +111,23 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body, fill: Fill) -> bool {
     made
 }
 
-/// Where what disperses from cell `i` lands (children, `copy`; seeds, `cover`), `spread_m` away whatever the size of the
-/// cells: it leaves `i` with the chance that what spreads that far from a point of `i` does (`Level::reach`), into the
-/// neighbour cell in a compass direction drawn (`Level::way`); what is left of `spread_m` past the side of each cell it
-/// crossed carries it on the same way, into the next with the share of its side that is left, so from cells of a
-/// quarter of a square's side it goes four cells. None where it stays or no link goes that way. The chance of leaving
-/// is drawn first, then the direction, then each further share.
+/// The steps east and south of each compass direction (`COMPASS`, clockwise from east).
+const STEPS: [[f64; 2]; COMPASS] = [[1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [-1.0, 1.0], [-1.0, 0.0], [-1.0, -1.0], [0.0, -1.0], [1.0, -1.0]];
+
+/// Where what disperses from cell `i` lands (children, `copy`; seeds, `cover`): from a point of `i` drawn evenly over
+/// it, `spread_m` east or west and `spread_m` north or south as the compass direction drawn says (`STEPS`), in the cell
+/// that holds the point it reaches (`Tree::at`), whatever the sizes of the cells it crosses: the neighbour that way of a
+/// square of 2 km, the cell four on of a cell of 500 m, and out of a cell of 8 km across a side a quarter of the time.
+/// None where it stays in `i` or leaves the map. The direction is drawn first, then the point east and then south.
 pub(crate) fn dispersed(w: &World, i: usize, r: &mut Rng) -> Option<usize> {
-    let (cells, length) = (w.mesh.cells(), w.cfg.phys.spread_m);
-    let leaves = cells.reach(i, length) >= 1.0 || r.f64() < cells.reach(i, length);
-    let way = r.below(COMPASS);
-    let (mut at, mut left) = (cells.way(i, way).filter(|_| leaves).map(|e| cells.adj_cell()[e] as usize)?, length - cells.area()[i].sqrt());
-    while left > 0.0 {
-        let Some(e) = cells.way(at, way).filter(|_| cells.reach(at, left) >= 1.0 || r.f64() < cells.reach(at, left)) else { break };
-        (left, at) = (left - cells.area()[at].sqrt(), cells.adj_cell()[e] as usize);
-    }
-    Some(at)
+    let (leaf, length) = (w.map.leaves()[i], w.cfg.phys.spread_m);
+    let way = STEPS[r.below(COMPASS)];
+    // The cell's side in leaves of the most depth, and its length east and south, m (on a globe its rows narrow).
+    let (side, south) = (leaf.side() as f64, w.map.length(leaf.depth));
+    let size = [w.mesh.cells().area()[i] / south, south];
+    let corner = leaf.corner();
+    let to: [i64; 2] = std::array::from_fn(|a| (corner[a] as f64 + side * (r.f64() + way[a] * length / size[a])).floor() as i64);
+    w.mesh.tree().at(to[0], to[1]).filter(|&j| j != i)
 }
 
 /// `m` children of `b` start in `cell`: their genes, stores, heat and rows, booked on the young node of their kind and
