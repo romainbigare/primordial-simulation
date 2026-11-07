@@ -13,6 +13,7 @@ ask the owner.
 | What the tape records | `docs/tape.md` |
 | The fact cards made from a tape | `docs/analyze.md` |
 | The latest look at the project | `review/big-look.md` |
+| How to lead the work (for the orchestrator) | `review/orchestrator.md` |
 | The laws | `core/src/<law>/` (`flow`, `change`, `bond`, `copy`, `choose`), bodies in `core/src/body/` |
 | Physical constants and units | `core/src/units.rs` |
 | Tuned numbers | `Physics` and `Config` in `core/src/params.rs` (each with a row in `docs/numbers.md`) |
