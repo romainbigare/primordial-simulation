@@ -52,7 +52,8 @@ kind gives way to the next over a range of each threshold, so kinds mix mark by 
 drawn per pixel on the GPU (WebGL2): each kind's marks lie on a grid fixed in the world, one mark a grid cell at a
 place, size and tone hashed from the cell, so they hold while the camera moves and never repeat or stand in rows. They
 are coloured by the cover and, close up, by the genes of the cell's heaviest slot (hue by its light and leaf genes,
-darker if frost-hardy). A kind's marks fade in as they grow from 0.7 to 2 pixels.
+darker if frost-hardy). A kind's marks fade in as they grow from 0.7 to 2 pixels. While the view moves, the last
+picture of the cover moves with it; it is made again once the view rests.
 
 From 64 pixels a square, the live viewer draws the bodies and parts of each cell one by one at their real size, from
 the numbers the core hands out (`tape::things`): a member is as long as 1.5 times the cube root of its volume (a body

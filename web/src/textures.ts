@@ -1,7 +1,7 @@
 // Textures of the plant cover (vegetation.ts), drawn per pixel on the GPU (WebGL2). Each kind of mark (a tuft of grass,
 // of tundra or of steppe, a shrub, a tree's crown of 4, 8 or 14 m) lies on its own grid fixed in the world, one mark a
-// grid cell at a place, size, tone and rank hashed from the cell (Worley 1996; the hash is pcg3d, Jarzynski and Olano
-// 2020): the marks hold while the camera moves, never repeat and stand in no rows. A mark shows where its rank is below
+// grid cell at a place, size, tone and rank hashed from the cell (Worley 1996; the hashes are lowbias32, Wellons 2018,
+// and pcg3d, Jarzynski and Olano 2020): the marks hold while the camera moves, never repeat and stand in no rows. A mark shows where its rank is below
 // the density of its kind at its centre, read from the field of the cover (blended between the field's texels), so a
 // thinner cover shows fewer marks and two kinds mix mark by mark where one gives way to the other. A kind's marks fade
 // in as they grow from under a pixel. From above a crown is a soft round blob over its shadow, lit from the north-west;
@@ -20,6 +20,8 @@ const LATTICES: Lattice[] = [
   ...CROWN_SIZES.map(mark => ({ mark, spacing: 0.8 })),
 ];
 const TUFTS = 3, TREES = 4;
+/** A kind fainter than this is not drawn: it would not show, and it costs as much as one that does. */
+const FAINTEST = 0.02;
 /** The largest mark, m: nothing shows while it takes less than the pixels a mark starts to show at. */
 export const LARGEST_MARK = Math.max(...LATTICES.map(l => l.mark));
 /** The channels of a field's texel, each 0..1: the density of the marks of each lattice (in `LATTICES` order: the
@@ -60,18 +62,23 @@ uniform vec3 uFoliage[7], uDark;
 out vec4 outColour;
 // The foliage of the trees' kinds, after those of the lattices before them.
 const int WOODLAND = ${TREES}, FOREST = ${TREES + 1}, JUNGLE = ${TREES + 2};
-// A crown is drawn 0.75 to 1.25 times its kind's size; a jungle's emergent crowns (this share) are wider by this.
-const float EMERGENT = 0.15, EMERGENT_WIDE = 1.2;
-// An angled crown is lifted over its shadow by this share of its radius; a shadow darkens the ground this much.
-const float ANGLED_LIFT = 0.7, SHADOW = 0.35;
-// A crown's soft rim takes this share of its radius; its lit side is this much lighter (and as much again by its
-// tone), its far rim this much darker from above and angled.
-const float RIM = 0.25, LIGHT = 0.14, DARK_ABOVE = 0.2, DARK_ANGLED = 0.3;
-// A tuft covers this much, is this much narrower than long, and lighter or darker by up to this; angled, its blades
-// stand this many radii tall.
-const float TUFT_COVER = 0.9, TUFT_NARROW = 0.55, TUFT_TONE = 0.25, BLADE_TALL = 1.4;
+// A mark is drawn from 1 - SPREAD / 2 to 1 + SPREAD / 2 times its kind's size; a jungle's emergent crowns (this share)
+// are wider by this.
+const float SPREAD = 0.5, EMERGENT = 0.15, EMERGENT_WIDE = 1.2;
+// An angled crown is lifted over its shadow by this share of its radius; a shadow darkens the ground this much, lies
+// this many radii to the south-east of its crown from above and angled, and angled is this much flatter.
+const float ANGLED_LIFT = 0.7, SHADOW = 0.35, SHADOW_FLAT = 0.6;
+const vec2 SHADOW_ABOVE = vec2(0.25, 0.25), SHADOW_ANGLED = vec2(0.35, 0.15);
 // No part of a crown's shadow lies farther from its foot than this many radii.
 const float SHADOW_REACH = 1.4;
+// A crown's soft rim takes this share of its radius; its light falls from this many radii to the north-west of its
+// middle and fades over this many; its lit side is this much lighter (and as much again by its tone), its far rim
+// this much darker from above and angled.
+const float RIM = 0.25, LIT_SPAN = 1.2, LIGHT = 0.14, DARK_ABOVE = 0.2, DARK_ANGLED = 0.3;
+const vec2 LIT_AT = vec2(0.3, 0.35);
+// A tuft covers this much, is this much narrower than long, and lighter or darker by up to this; angled, its three
+// blades stand this many radii tall, lean this many radii either way and are this many radii wide at the foot.
+const float TUFT_COVER = 0.9, TUFT_NARROW = 0.55, TUFT_TONE = 0.25, BLADE_TALL = 1.4, BLADE_LEAN = 0.5, BLADE_WIDE = 0.25;
 
 // pcg3d (Jarzynski and Olano 2020): three random words from three.
 uvec3 pcg3d(uvec3 v) {
@@ -102,14 +109,14 @@ float disc(float d, float r, float w) { return 1.0 - smoothstep(r - w, r, d); }
 
 void crown(inout vec4 dst, vec2 p, vec2 c, float r, float tone, vec3 col, float e, float fade) {
   float lift = uAngled * r * ANGLED_LIFT;
-  vec2 s = c + r * mix(vec2(0.25, 0.25), vec2(0.35, 0.15), uAngled), sr = r * vec2(1.0, mix(0.95, 0.6, uAngled));
+  vec2 s = c + r * mix(SHADOW_ABOVE, SHADOW_ANGLED, uAngled), sr = r * vec2(1.0, mix(1.0, SHADOW_FLAT, uAngled));
   float ds = length((p - s) / sr);
   over(dst, vec3(0.0), SHADOW * fade * (1.0 - smoothstep(1.0 - RIM, 1.0, ds)));
   vec2 b = c - vec2(0.0, lift);
   float d = length(p - b), a = disc(d, r, max(RIM * r, e));
   if (a <= 0.0) return;
-  float t = clamp(length(p - b + r * vec2(0.3, 0.35)) / (1.2 * r), 0.0, 1.0);
-  vec3 lit = t < 0.5 ? mix(col, vec3(1.0), (LIGHT + 0.1 * tone) * (1.0 - 2.0 * t)) : mix(col, vec3(0.0), mix(DARK_ABOVE, DARK_ANGLED, uAngled) * (2.0 * t - 1.0));
+  float t = clamp(length(p - b + r * LIT_AT) / (LIT_SPAN * r), 0.0, 1.0);
+  vec3 lit = t < 0.5 ? mix(col, vec3(1.0), LIGHT * (1.0 + tone) * (1.0 - 2.0 * t)) : mix(col, vec3(0.0), mix(DARK_ABOVE, DARK_ANGLED, uAngled) * (2.0 * t - 1.0));
   over(dst, lit, a * fade);
 }
 
@@ -123,7 +130,7 @@ void tuft(inout vec4 dst, vec2 p, vec2 c, float r, float tone, float turn, vec3 
   float a;
   if (uAngled > 0.5) {
     float d = 1e9;
-    for (int k = -1; k <= 1; k++) d = min(d, blade(p, c, c + r * vec2(0.5 * float(k), -BLADE_TALL), 0.25 * r));
+    for (int k = -1; k <= 1; k++) d = min(d, blade(p, c, c + r * vec2(BLADE_LEAN * float(k), -BLADE_TALL), BLADE_WIDE * r));
     a = 1.0 - smoothstep(-0.5 * e, 0.5 * e, d);
   } else {
     vec2 q = mat2(cos(turn), -sin(turn), sin(turn), cos(turn)) * (p - c);
@@ -144,14 +151,17 @@ void lattice(inout vec4 dst, vec2 p, int l, float e, float dark, vec4 tint) {
   // shadow (and an angled one its lifted crown), and an emergent crown more.
   float S = uStep[l], reach = l < ${TUFTS} ? mix(1.0, BLADE_TALL, uAngled) : mix(SHADOW_REACH, 1.0 + ANGLED_LIFT, uAngled) * (l >= ${TREES} ? EMERGENT_WIDE : 1.0);
   vec2 cell = floor(uFrac[l] + p / S);
+  // No mark reaches farther than this, m: a cell whose every point is farther is not looked at.
+  float far = reach * 0.5 * uMark[l] * (1.0 + 0.5 * SPREAD) + e;
   // An angled mark stands up over its foot: also the row south of the pixel's.
   int south = uAngled > 0.5 ? 2 : 1;
   for (int j = -1; j <= south; j++) for (int i = -1; i <= 1; i++) {
-    vec2 k = cell + vec2(i, j);
+    vec2 k = cell + vec2(i, j), lo = (k - uFrac[l]) * S;
+    if (length(max(max(lo - p, p - lo - S), 0.0)) > far) continue;
     ivec2 id = uBase[l] + ivec2(k);
     vec3 h = place(id, l);
-    vec2 c = (k + h.xy - uFrac[l]) * S;
-    float r = 0.5 * uMark[l] * (0.75 + 0.5 * h.z);
+    vec2 c = lo + h.xy * S;
+    float r = 0.5 * uMark[l] * (1.0 + SPREAD * (h.z - 0.5));
     if (length(p - c) > reach * r + e) continue;
     vec3 g = rand3(id, l);
     vec4 f = field(c, l >> 2, 0.0);
@@ -159,8 +169,9 @@ void lattice(inout vec4 dst, vec2 p, int l, float e, float dark, vec4 tint) {
     int kind = l;
     bool emergent = false;
     if (l >= ${TREES}) {
-      vec4 share = field(c, 2, 0.0);
-      kind = g.y < share.r ? WOODLAND : g.y < share.r + share.g ? JUNGLE : FOREST;
+      vec4 share = field(c, ${CH.woodland >> 2}, 0.0);
+      float woodland = share[${CH.woodland & 3}], jungle = share[${CH.jungle & 3}];
+      kind = g.y < woodland ? WOODLAND : g.y < woodland + jungle ? JUNGLE : FOREST;
       // The rank of a mark that shows is even below its density, so its lowest ranks are a fixed share of its crowns.
       emergent = kind == JUNGLE && g.x < EMERGENT * f[l & 3];
     }
@@ -174,7 +185,7 @@ void lattice(inout vec4 dst, vec2 p, int l, float e, float dark, vec4 tint) {
 void main() {
   vec2 p = vec2(gl_FragCoord.x, uH - gl_FragCoord.y) * uMpp;
   vec4 tint = texture(uTint, uTintUv0 + p * uTintUvPerM), dst = vec4(0.0);
-  float dark = field(p, 1, 0.0).a;
+  float dark = field(p, ${CH.dark >> 2}, 0.0)[${CH.dark & 3}];
   ${LATTICES.map((_, l) => `lattice(dst, p, ${l}, uMpp, dark, tint);`).join(' ')}
   outColour = dst * uAlpha;
 }`;
@@ -192,11 +203,13 @@ export class CoverPainter {
   /** Whether any texel of the field holds marks of each lattice: the GPU skips those that none holds. */
   private held: boolean[] = [];
   private tint: { w: number; h: number; data: Uint8Array } | null = null;
+  /** The fence after the last picture's commands (null: none waits). */
+  private sync: WebGLSync | null = null;
 
   constructor(private palette: Palette) {
     this.gl = this.canvas.getContext('webgl2', { premultipliedAlpha: true, preserveDrawingBuffer: true, antialias: false });
     this.canvas.addEventListener('webglcontextlost', e => e.preventDefault());
-    this.canvas.addEventListener('webglcontextrestored', () => { this.program = null; this.loc.clear(); if (this.field) this.setField(this.field); if (this.tint) this.setTint(this.tint.w, this.tint.h, this.tint.data); });
+    this.canvas.addEventListener('webglcontextrestored', () => { this.program = this.sync = null; this.loc.clear(); if (this.field) this.setField(this.field); if (this.tint) this.setTint(this.tint.w, this.tint.h, this.tint.data); });
   }
 
   /** Read the cover from field `f`. */
@@ -229,7 +242,8 @@ export class CoverPainter {
     smoothSampling(gl, gl.TEXTURE_2D);
   }
 
-  /** Paint picture `p`; false when there is no GPU to paint with or nothing to read. */
+  /** Start painting picture `p` (`finished` says when it is done); false when there is no GPU to paint with or nothing
+   * to read. */
   paint(p: Paint): boolean {
     const gl = this.ready();
     if (!gl || !this.field || !this.tint) return false;
@@ -257,7 +271,8 @@ export class CoverPainter {
       near[k] = Math.min(Math.max(Math.ceil(Math.log2(2 * ((2 * step) / texel + 1))), 0), top);
       for (const a of [0, 1]) { const g = p.at[a] / step; base[2 * k + a] = Math.floor(g); frac[2 * k + a] = g - Math.floor(g); }
       const px = l.mark / p.mpp, t = Math.min(Math.max((px - p.fade[0]) / (p.fade[1] - p.fade[0]), 0), 1);
-      fade[k] = this.held[k] ? t * t * (3 - 2 * t) : 0;
+      const shown = t * t * (3 - 2 * t);
+      fade[k] = this.held[k] && shown >= FAINTEST ? shown : 0;
     });
     gl.uniform2iv(u('uBase'), base); gl.uniform2fv(u('uFrac'), frac); gl.uniform1fv(u('uFade'), fade); gl.uniform1fv(u('uNearLod'), near);
     gl.uniform1fv(u('uStep'), LATTICES.map(l => l.mark * l.spacing)); gl.uniform1fv(u('uMark'), LATTICES.map(l => l.mark));
@@ -265,6 +280,19 @@ export class CoverPainter {
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.fieldTex);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.tintTex);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+    if (this.sync) gl.deleteSync(this.sync);
+    this.sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    gl.flush();
+    return true;
+  }
+
+  /** Whether the GPU has finished the last picture (or lost it with its context), so `canvas` holds it. */
+  finished(): boolean {
+    const gl = this.gl;
+    if (!gl || !this.sync) return true;
+    if (!gl.isContextLost() && gl.getSyncParameter(this.sync, gl.SYNC_STATUS) !== gl.SIGNALED) return false;
+    if (!gl.isContextLost()) gl.deleteSync(this.sync);
+    this.sync = null;
     return true;
   }
 
