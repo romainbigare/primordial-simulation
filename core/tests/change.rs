@@ -390,7 +390,8 @@ fn the_liquid_gives_back_the_gas_it_holds_when_the_air_thins() {
 
 /// The dissolved mineral in the pores of the land: worldgen puts none on land (the ground has no liquid at the start,
 /// and a cell with no liquid holds none), and a year of rain on loose ground that is a tenth the rock makes it by the
-/// same two reactions as under the low ground's liquid: the cells whose pores hold liquid hold the mineral, in the
+/// same two reactions as under the low ground's liquid: the cells whose pores hold liquid (molten, not frozen in a snow
+/// or ice that melts) hold the mineral, in the
 /// amount at which the two go at equal rates for their liquid and the gas over them (`Reactor::balance`, to a half);
 /// a cell whose pores are dry holds none.
 #[test]
@@ -405,7 +406,8 @@ fn the_pores_of_the_land_hold_the_dissolved_mineral_where_rock_and_liquid_meet()
     let mut rc = Reactor::new(&w.chem, &w.cfg);
     let (mut wet, mut dry, mut ratio) = (0, 0, Vec::new());
     for &i in &land {
-        if w.store.amounts(Class::Ground)[LIQUID * n + i] > 1e6 {
+        let (t_last, plateau) = w.thaw_last(i);
+        if w.store.amounts(Class::Ground)[LIQUID * n + i] > 1e6 && w.molten(LIQUID, i, t_last, plateau) == 1.0 {
             // The balance at the cell's own liquid, warmth and gas.
             let (t, j) = (w.t_ground(i), w.mesh.up(i, 0, AIR));
             let mut amt: Vec<f64> = (0..w.chem.ns()).map(|k| w.store.amounts(Class::Ground)[k * n + i]).collect();

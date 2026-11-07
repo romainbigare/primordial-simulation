@@ -399,7 +399,10 @@ long step ends where short ones do. The state of a node is found in full at each
 plateau or when its temperature leaves the span between the melting points its last solve found, and its surface
 (soft cover, reflectance, pores) is found again once it moved by 1% of the depth that hides half of a soft cover with
 the liquid standing on it (`land::ground_state`). As matter moves, its heat capacity and fusion enthalpy follow
-(`Scratch::note`).
+(`Scratch::note`). The state is brought up to date after each of the air's steps, whose heat melts and freezes, before
+the sink into the bed's store and the liquid read it; and a node on a plateau that liquid left or reached finds its
+molten share again from its heat (`liquid::book`): what moved of the plateau's substance was liquid, and what stays is
+what the heat holds molten, as every law and the shell then read it.
 
 ### 1.2 Liquid
 `flow::liquid`, once a month, after the air's steps; last, gases dissolve in the liquid (1.5). The sink into the bed's store ends each of the air's steps
