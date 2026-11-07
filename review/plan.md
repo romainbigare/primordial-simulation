@@ -107,5 +107,20 @@ swing by orders of magnitude between seeds, by whether a boom of one kind comes;
 change; a settled 64 x 64 year costs about 1 s on 4 cores, 3 to 7 s with refinement; in a debug build one Flow test
 rounds a store's heat to -3e-5 J.
 
+## 6. A map of matter, not symbols
+
+The owner's decision: the map must show physical things (spec 10.1, 10.9, 5.2). In order:
+
+| WP | Goal | Done when | Risk |
+|---|---|---|---|
+| 15 | **Inside a cell** (core): one rule shares a cell's means over its ground (wetness index, slope, facing, curve, height over the liquid; each plant kind by its wetness gene); splits use it (law change) | the gate; the books across a split; `scale.rs` passes; the shares hold their means to 1e-9 | high |
+| 16 | **The map on the graphics card**: WebGPU first, WebGL2 fallback, one description of what is drawn; the worker hands fields; the Canvas2D raster goes | the gate; the same views as before at the screen's resolution; frame times | high |
+| 17 | **Water as water**: flat surface, colour by depth; the shore's wetness from dry ground to open water | pictures of the owner's shore | medium |
+| 18 | **Rivers as real water**: no river vanishes when cells are fine; channels of true width and depth; small channels from the flow on the drawn ground | a river followed from the island's view to 1 m | medium |
+| 19 | **Ground of materials**: rock, stones, soil, sand, gravel, mud, snow by slope | pictures of hills, cliffs, shores | medium |
+| 20 | **Plants as single plants**: placed by cover and the shares of WP15, each kind by wetness; crowns with form and shadow | pictures of forest edges, clearings, wet ground | medium |
+
+Open, after these: a law for mud and sand (spec 19).
+
 The next decision is the owner's (spec 13.1): a fixed time on Choose (what bodies sense, remember and learn), or
 the planet (WP14).

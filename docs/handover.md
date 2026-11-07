@@ -173,6 +173,13 @@ planet → regions → cells → groups / bodies → parts
   1984). The step of a cell lets nothing cross more than one cell; where a fine cell meets a coarse one, the fine side
   sums what it sends and the coarse side books that sum once (Berger and Colella 1989). The plan is `review/plan.md`.
 
+- **Inside a cell.** A cell holds means (its plant cover, the liquid in its soil, its snow). Inside it, one rule shares
+  each mean over the cell's own ground, from the ground's shape alone: how much water gathers at a point (its upslope
+  area over its slope, Beven and Kirkby 1979), its slope, the way it faces, its curve, and its height over the cell's
+  liquid level; and for each plant kind, how wet a place its genes like. The shares keep each mean exactly. A split
+  gives each child the share of its own ground, and the viewer draws inside a cell with the same shares, so what the
+  owner sees before a zoom is what the world goes on with.
+
 This is the main tool for speed. Do not build it first (see milestones). Build the detailed form first, then the collapsed form, and check that both give similar patterns.
 
 ### 5.3 Storage
@@ -754,6 +761,14 @@ The owner decided: **no 3D.** The game is a **flat 2D plan view, like a good atl
 
 This is cheaper to build, faster to draw and easier to read. It fits a world seen mostly from far away.
 
+The map stays a plan seen from above, but it shows matter, not symbols: water is a flat surface whose colour comes from
+its depth, the shore goes from dry ground through wet soil and mud to shallow water by the height over the liquid and
+the soil's water, rivers are channels of their true width and depth cut in the ground (hydraulic geometry, Leopold and
+Maddock 1953), small channels follow the water on the drawn ground, the ground shows its materials (rock and stones on
+steep slopes, soil, sand and gravel on shores, snow by slope), and plants are single plants placed by the plant cover
+and the inside-a-cell shares (5.2), each kind by the wetness its genes like, their crowns with form and shadow. All of
+it comes from the world's numbers and the ground's shape, seeded by place, so it holds while the camera moves.
+
 Life and objects are drawn at their true size in metres and the plant cover as textures; two styles exist for the
 shapes of individuals, seen from above (the default) or angled (10.4), and the owner will choose between them. True
 size is the owner's decision: far away no herd is drawn; one or two zoom steps before single animals show, a herd shows
@@ -835,9 +850,9 @@ Click anything to see:
 
 ### 10.9 Technology (suggested)
 
-- The base map is **one texture**: one pixel per cell, filled from the world arrays and uploaded when it changes. This is very cheap.
-- Sprites and lines are drawn with a 2D WebGL sprite library (for example PixiJS), which batches tens of thousands of sprites easily.
-- A plain HTML canvas is fine for the very first prototype.
+- The map is drawn on the graphics card: **WebGPU first, WebGL2 where WebGPU is missing**, from one description of
+  what is drawn. The worker hands over fields (height, water, wetness, materials, plants); the card draws them at the
+  screen's own resolution, with light on the slopes and a texture for each material mixed by its share.
 - Budget: about 50,000 visible sprites. Above that, show density instead.
 
 ---
@@ -1223,3 +1238,13 @@ land and rain → a few families dig a channel to water their plants
 ```
 
 At every step, other outcomes were possible.
+
+---
+
+## 19. Open items
+
+- **A law for mud and sand (sediment).** Liquid that runs fast takes up ground; where it slows, it lays it down (Exner
+  1925; transport after Meyer-Peter and Müller 1948). With it, deltas, mud flats, beaches, levees and filled valleys
+  form by themselves, and the ground below the cells follows where matter was laid down rather than a random surface.
+  It is a change of the laws (Flow on the ground), with its own books (each element of the ground moved with its heat)
+  and long runs. Until then, the drawing shows channels and wet ground from the shape of the ground only (10.1).
