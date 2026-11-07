@@ -62,15 +62,24 @@ that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid d
 in units of its own: its liquid flux over its rain less evaporation times its area, so a river reads the same at any cell
 size), loose ground, ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the bodies' mass per m², bodies, traffic,
 worn edges, structures, true colour (r, g, b). The tape holds whole-map frames only. The live viewer also asks for
-the window in view finer than its cells (`tape::fine`, the layout in `tape/src/fine.rs`), a pixel a leaf of a depth
+the window in view and a fifth of it about it, finer than its cells (`tape::fine`, the layout in `tape/src/fine/mod.rs`), a pixel a leaf of a depth
 2 to 4 below the cells, at any zoom: of each pixel the ground's height, the surface of the liquid standing in the cells
-about it, and every layer blended between the cells' centres (each cell weighing a pixel by the quadratic B-spline of its distance in its own sides, Shepard 1968, so the blend is smooth with its slope) (the ground's temperature along the ground's
+about it, and every layer as a smooth field of the cells' values (the ground's temperature along the ground's
 height, at the rate the air cools with height, `World::air_drop`), and the way each cell's liquid runs (to the cell the
-steepest way down its head takes the most of, as the liquid law sends it). The ground of a pixel is the terrain there
-(`space::terrain`: the mean of its samples, or finer than them the midpoint displacement's departures laid on a
-quartic continuation of the coarser heights that keeps each leaf's mean, smooth with its slope so hill shading shows
-no creases along the leaves' edges; below a metre the continuation alone) plus an offset blended between the cells'
-centres: each cell's height less the terrain's mean over it, made so the blend keeps each cell's height as its mean.
+steepest way down its head takes the most of, as the liquid law sends it). The field (`tape/src/fine/pyramid.rs`) is
+built level by level of the cells' tree (a Laplacian pyramid, Burt and Adelson 1983): each level a quadratic B-spline
+whose mean over each node is that node's value (Unser 1999), the coarsest the nodes' means, each finer one the
+departure of each group of four children from their parent less as much of the coarser field's slope across the parent
+as their own departures show. So it keeps the mean of each node of the coarsest depth, a cell that holds what its
+parent held (as a split leaves it) is drawn at its parent's scale and shows no edge, what a cell holds of its own shows
+at its own scale, and a split that only shares out its cell changes nothing drawn. The ground of a pixel is the field of
+the cells' heights plus the terrain's shape finer than it: the terrain there (`space::terrain`: the mean of its samples,
+or finer than them the midpoint displacement's departures laid on a quartic continuation of the coarser heights that
+keeps each leaf's mean, smooth with its slope so hill shading shows no creases along the leaves' edges; below a metre
+the continuation alone) less the field of the terrain's means over the cells, which keeps each cell's mean. The liquid's surface is the field of each
+cell's surface (where it holds standing liquid, the level that liquid fills its own ground to; where it is dry, its
+lowest ground or the liquid beside it, 10 m lower), sunk the more the smaller the field of the share of the cells that
+hold standing liquid, so the shore is where the ground drawn rises above it.
 The terrain's samples are found once (`tape::Samples`). The viewer paints it over the whole-map frame: hill shading
 from the fine ground, the liquid where its surface lies over the fine ground (the sea's tint by the depth there),
 snow by the pixel's own temperature near the cover's melting point, rivers as lines along those ways, as wide as

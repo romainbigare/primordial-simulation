@@ -31,6 +31,10 @@ const LOOK_MS = 150;
 const FINE_PX = 1;
 const FINE_LEAST_M = 0.05;
 const FINE_MOST = 360_000;
+/** The raster reaches this share of the view's width and height past each edge of the view (inside the map), so a pan
+ * or a zoom out shows it until the next comes; it fades out over the outer half of that, so the squares around it show
+ * no hard edge. */
+const FINE_MARGIN = 0.2;
 /** Minutes without input (a zoom, a pan, a click, a key) after which the page sends the camera away, as a camera change
  * the run records: the core then joins the fine cells back to those as built, and the world runs at the coarse pace again.
  * The page's `?idle=MINUTES` sets it for a test. */
@@ -299,15 +303,17 @@ function lookSoon(v: View): void {
   clearTimeout(lookTimer);
   lookTimer = window.setTimeout(() => { lookAt(v); fineOf(v); thingsOf(v); }, LOOK_MS);
 }
-/** The window in view on the leaves of the depth whose leaves take `FINE_PX` css pixels or more (no smaller than
- * `FINE_LEAST_M`, no more than `FINE_MOST` pixels): the core draws it a pixel a leaf. */
+/** The window in view and `FINE_MARGIN` about it, on the leaves of the depth whose leaves take `FINE_PX` css pixels or
+ * more (no smaller than `FINE_LEAST_M`, no more than `FINE_MOST` pixels): the core draws it a pixel a leaf. */
 function fineOf(v: View): void {
   const m = world?.meta;
   if (!live || !m || m.square_depth === undefined || v.w <= 0 || v.h <= 0) return;
+  const mx = v.w * FINE_MARGIN, my = v.h * FINE_MARGIN;
+  const x0 = Math.max(v.x - mx, 0), y0 = Math.max(v.y - my, 0), x1 = Math.min(v.x + v.w + mx, m.w), y1 = Math.min(v.y + v.h + my, m.h);
   const sq = m.square_depth, edges = (depth: number) => {
-    const per = 2 ** (depth - sq), x = Math.floor(v.x * per), y = Math.floor(v.y * per);
-    const across = Math.ceil((v.x + v.w) * per) - x, down = Math.ceil((v.y + v.h) * per) - y;
-    return { at: { x: x / per, y: y / per, w: across / per, h: down / per, depth }, pixels: across * down };
+    const per = 2 ** (depth - sq), x = Math.floor(x0 * per), y = Math.floor(y0 * per);
+    const across = Math.ceil(x1 * per) - x, down = Math.ceil(y1 * per) - y;
+    return { at: { x: x / per, y: y / per, w: across / per, h: down / per, depth, soft: Math.min(mx, my) / 2 }, pixels: across * down };
   };
   let depth = sq + Math.max(0, Math.min(Math.floor(Math.log2(m.cell_m / FINE_LEAST_M)), Math.floor(Math.log2(v.s / FINE_PX))));
   while (depth > sq && edges(depth).pixels > FINE_MOST) depth--;
@@ -358,9 +364,9 @@ setInterval(() => {
   showStats(live.stats);
 }, IDLE_CHECK_MS);
 
-/** Draw the picture of the window in view finer than its cells over the map, in place of the last one (none: no picture). */
+/** Draw the picture of the window in view finer than its cells over the map, fading in over the last one (none: no
+ * picture). The map closes the pictures it no longer shows. */
 function showFine(picture: FinePicture | null): void {
-  fine?.picture.close();
   fine = picture;
   map.setFine(picture ? picture.picture : null, picture ? [picture.at.x, picture.at.y, picture.at.w, picture.at.h] : undefined);
   vegetation.setFine(picture?.cover ?? null, picture ? [picture.at.x, picture.at.y, picture.at.w, picture.at.h] : null);

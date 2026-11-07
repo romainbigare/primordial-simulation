@@ -4,8 +4,9 @@
 import { World, Meta, makeWorld, latOf } from './data';
 import { Spot, Wet, colour, hillShade, overOf, put, riverOf, RIVER_RGB, EXAGGERATE, clamp, smooth } from './earth';
 
-/** The window of a fine raster: from column x and row y, w x h squares, a pixel a leaf of `depth`. */
-export interface FineAt { x: number; y: number; w: number; h: number; depth: number }
+/** The window of a fine raster: from column x and row y, w x h squares, a pixel a leaf of `depth`; its picture fades
+ * out over `soft` squares along each of its edges that is not the map's, so the map under it shows no hard edge. */
+export interface FineAt { x: number; y: number; w: number; h: number; depth: number; soft: number }
 
 /** A fine raster as the core hands it out. */
 export interface Fine {
@@ -117,12 +118,30 @@ export function paintFine(f: Fine, meta: Meta, mode: string, paths: boolean, wet
   }
   const cv = new OffscreenCanvas(across, down), ctx = cv.getContext('2d')!;
   ctx.putImageData(land, 0, 0);
-  if (!earth) return cv;
-  drawRivers(ctx, f);
-  const over = new OffscreenCanvas(across, down);
-  over.getContext('2d')!.putImageData(top, 0, 0);
-  ctx.drawImage(over, 0, 0);
+  if (earth) {
+    drawRivers(ctx, f);
+    const over = new OffscreenCanvas(across, down);
+    over.getContext('2d')!.putImageData(top, 0, 0);
+    ctx.drawImage(over, 0, 0);
+  }
+  soften(ctx, f, meta);
   return cv;
+}
+
+/** Fade the picture on `ctx` of raster `f` out along each edge of its window that is not the map's, over `soft`
+ * squares (fine.ts `FineAt`). */
+function soften(ctx: OffscreenCanvasRenderingContext2D, f: Fine, meta: Meta): void {
+  const { at, across, down, per } = f, band = at.soft * per;
+  if (band <= 0) return;
+  // The share kept at pixel `k` of `n` along an axis whose window starts at `from` squares and takes `w` of a map `wide`.
+  const ramp = (n: number, from: number, w: number, wide: number) => Float32Array.from({ length: n }, (_, k) => {
+    const west = from > 0 ? smooth(0, band, k + 0.5) : 1, east = from + w < wide ? smooth(0, band, n - k - 0.5) : 1;
+    return west * east;
+  });
+  const ax = ramp(across, at.x, at.w, meta.w), ay = ramp(down, at.y, at.h, meta.h);
+  const img = ctx.getImageData(0, 0, across, down), d = img.data;
+  for (let y = 0; y < down; y++) for (let x = 0; x < across; x++) d[(y * across + x) * 4 + 3] *= ax[x] * ay[y];
+  ctx.putImageData(img, 0, 0);
 }
 
 /** The rivers of `f` onto `ctx` (its pixels): each way a curve from its cell's centre to the next cell's, its middle
