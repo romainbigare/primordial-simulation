@@ -80,8 +80,8 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body, fill: Fill) -> bool {
     let mut r = Rng::new(w.seed, w.key_ending(b.cell as usize, fill.at), id, Purpose::Mutate);
     let i = b.cell as usize;
     let mate = if mates(w, d, b) { partner(w, d, b, &mut r) } else { None };
-    // Children that start `spread_m` away in a compass direction drawn (`dispersed`; still in its cell or off the map:
-    // none): of a node, the
+    // Children that start `spread_m` away in a compass direction drawn, in a cell drawn by its share (`landing`; still in
+    // its cell or off the map: none): of a node, the
     // share `DISPERSE` of its births, however few (less than one member with no node to join there waits in the brood,
     // as the stayers do, `emit`), all of one update the same way, as the children of one call cost one `emit`; an
     // individual's go together, by that chance.
@@ -89,7 +89,7 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body, fill: Fill) -> bool {
     let prov = provisions(&w.chem, b, mi, matter, births);
     let litter = Births { matter, prov, node, mate, parent: id, age, at: fill.at };
     let m = if node { disperse * births } else { (r.f64() < disperse) as u8 as f64 };
-    let to = if m > 0.0 { dispersed(w, i, &mut r) } else { None };
+    let to = if m > 0.0 { landing(w, i, &mut r) } else { None };
     let (cell, m) = match to {
         _ if !node => (to.unwrap_or(i), births),
         Some(j) => (j, m),
@@ -114,20 +114,34 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body, fill: Fill) -> bool {
 /// The steps east and south of each compass direction (`COMPASS`, clockwise from east).
 const STEPS: [[f64; 2]; COMPASS] = [[1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [-1.0, 1.0], [-1.0, 0.0], [-1.0, -1.0], [0.0, -1.0], [1.0, -1.0]];
 
-/// Where what disperses from cell `i` lands (children, `copy`; seeds, `cover`): from a point of `i` drawn evenly over
-/// it, `spread_m` east or west and `spread_m` north or south as the compass direction drawn says (`STEPS`), in the cell
-/// that holds the point it reaches (`Tree::at`), whatever the sizes of the cells it crosses: the neighbour that way of a
-/// square of 2 km, the cell four on of a cell of 500 m, and out of a cell of 8 km across a side a quarter of the time.
-/// None where it stays in `i` or leaves the map. The direction is drawn first, then the point east and then south.
-pub(crate) fn dispersed(w: &World, i: usize, r: &mut Rng) -> Option<usize> {
+/// Where what disperses from cell `i` lands (children, `copy`; seeds, `cover`): it starts evenly over `i` and moves
+/// `spread_m` east or west and `spread_m` north or south as the compass direction drawn says (`STEPS`), whatever the
+/// sizes of the cells it crosses, so it lands evenly over the area of `i` shifted by that step: `land(j, share)` for
+/// each other cell `j` that area overlaps (`Tree::overlaps`), with the share of the area that lies there. From a square
+/// of 2 km that is the 16 cells of 500 m of the square beside it alike; from a cell of 500 m, 1 to 4 cells. What lies in
+/// `i` itself or off the map has no call: it stays in `i`. Only the direction is drawn.
+pub(crate) fn dispersed(w: &World, i: usize, r: &mut Rng, mut land: impl FnMut(usize, f64)) {
     let (leaf, length) = (w.map.leaves()[i], w.cfg.phys.spread_m);
     let way = STEPS[r.below(COMPASS)];
     // The cell's side in leaves of the most depth, and its length east and south, m (on a globe its rows narrow).
     let (side, south) = (leaf.side() as f64, w.map.length(leaf.depth));
     let size = [w.mesh.cells().area()[i] / south, south];
     let corner = leaf.corner();
-    let to: [i64; 2] = std::array::from_fn(|a| (corner[a] as f64 + side * (r.f64() + way[a] * length / size[a])).floor() as i64);
-    w.mesh.tree().at(to[0], to[1]).filter(|&j| j != i)
+    let from: [f64; 2] = std::array::from_fn(|a| corner[a] as f64 + side * way[a] * length / size[a]);
+    w.mesh.tree().overlaps(from, side, |j, area| if j != i { land(j, area / (side * side)) });
+}
+
+/// The cell whole members that disperse from cell `i` land in (`dispersed`): one of the cells the dispersal reaches,
+/// drawn by its share, so they land as seeds do in expectation; none where they stay in `i`.
+fn landing(w: &World, i: usize, r: &mut Rng) -> Option<usize> {
+    let (u, mut at, mut to) = (r.f64(), 0.0, None);
+    dispersed(w, i, r, |j, share| {
+        at += share;
+        if to.is_none() && u < at {
+            to = Some(j);
+        }
+    });
+    to
 }
 
 /// `m` children of `b` start in `cell`: their genes, stores, heat and rows, booked on the young node of their kind and
