@@ -56,44 +56,71 @@ impl Part {
     }
 }
 
-/// The key by which lone parts of a cell join into a lot: the part's label (`design::label`: its material, shape and
-/// mass bands) and how far it is buried, its depth over its smallest size in `design::BANDS` bands: within a lot the
-/// depths of its parts are an even spread of about one band, so each part is buried within a band's share of its time
-/// of its own (`month::bury`).
-fn key(chem: &Chemistry, p: &Part) -> u64 {
-    design::fnv(&[design::label(chem, p), design::band(p.buried as f64 / (p.size[2] as f64).max(1e-30))])
+/// Lots a cell keeps at most after its monthly join; past them its lots join the nearest designs (`key` at a coarser
+/// level) until they are no more (a speed setting).
+pub const MAX_LOTS: usize = 16;
+
+/// Levels of `key`: the full key; with no band of burial; with the mass band 2 to 64 times wider; with no band of
+/// elongation, of hollowness, of bond strength, of hardness; and with no mass band, one lot.
+const LEVELS: usize = 13;
+
+/// The key by which lone parts of a cell join into a lot at `level` (0: alike; `LEVELS`): the bands of the part's label
+/// (`design::bands`: its material, shape and mass bands) and how far it is buried, its depth over its smallest size in
+/// `design::BANDS` bands: within a lot the depths of its parts are an even spread of about one band, so each part is
+/// buried within a band's share of its time of its own (`month::bury`). A coarser level drops the least of them first.
+fn key(chem: &Chemistry, p: &Part, level: usize) -> u64 {
+    let mut b = design::bands(chem, p);
+    let burial = if level == 0 { design::band(p.buried as f64 / (p.size[2] as f64).max(1e-30)) } else { 0 };
+    b[4] >>= (level.saturating_sub(1)).min(6);
+    // (Then the bands of elongation, hollowness, bond strength and hardness, and last the mass band.)
+    for (x, l) in [(3, 8), (2, 9), (1, 10), (0, 11), (4, 12)] {
+        if level >= l {
+            b[x] = 0;
+        }
+    }
+    design::fnv(&[design::label_of(b), burial as u64])
 }
 
 /// Monthly, before their turns: the alike parts of cell `i` of chunk `d` that lie alone (held by no body, no body inside
 /// them, joined by no bond) join, each into the first of its `key` in the cell's list (`Part::join`), which keeps its
-/// id; the list keeps its order.
+/// id; the list keeps its order. While the cell holds more than `MAX_LOTS` lots, they join again by a coarser key.
 pub(super) fn join_alike(w: &World, d: &mut Chunk, i: usize) {
     let c = d.at_mut(i);
-    if c.parts.len() < 2 {
-        return;
-    }
     // The ids of the parts that do not lie alone, sorted.
     let mut tied: Vec<u64> = c.bonds.a.iter().chain(&c.bonds.b).copied().collect();
     tied.extend(c.bodies.iter().filter(|b| b.alive).flat_map(|b| [b.hold, b.inside]).flatten());
     tied.sort_unstable();
     let lone = |p: &Part| p.held == NOBODY && tied.binary_search(&p.id).is_err();
+    for level in 0..LEVELS {
+        if level > 0 && c.parts.iter().filter(|p| lone(p)).count() <= MAX_LOTS {
+            break;
+        }
+        join_by(&w.chem, &mut c.parts, |p| lone(p).then(|| key(&w.chem, p, level)));
+    }
+}
+
+/// The parts of `parts` of a key (`key`; none: it joins nothing) join into the first of their key in the list's order.
+fn join_by(chem: &Chemistry, parts: &mut Vec<Part>, key: impl Fn(&Part) -> Option<u64>) {
+    if parts.len() < 2 {
+        return;
+    }
     // The place of the lot each part joins (its own if none).
     let mut first: HashMap<u64, usize> = HashMap::new();
-    let into: Vec<usize> = (0..c.parts.len()).map(|x| if lone(&c.parts[x]) { *first.entry(key(&w.chem, &c.parts[x])).or_insert(x) } else { x }).collect();
+    let into: Vec<usize> = (0..parts.len()).map(|x| key(&parts[x]).map_or(x, |k| *first.entry(k).or_insert(x))).collect();
     if into.iter().enumerate().all(|(x, &y)| x == y) {
         return;
     }
     let mut kept: Vec<Part> = Vec::with_capacity(first.len());
     let mut at = vec![0; into.len()];
-    for (x, p) in std::mem::take(&mut c.parts).into_iter().enumerate() {
+    for (x, p) in std::mem::take(parts).into_iter().enumerate() {
         if into[x] == x {
             at[x] = kept.len();
             kept.push(p);
         } else {
-            kept[at[into[x]]].join(&w.chem, p);
+            kept[at[into[x]]].join(chem, p);
         }
     }
-    c.parts = kept;
+    *parts = kept;
 }
 
 /// The place of `k` parts of the lot at `p` of cell `i` of chunk `d`, split out of it (`Part::split`) as a lot of their

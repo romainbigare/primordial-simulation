@@ -685,7 +685,12 @@ into the first of them in the cell's list, which keeps its id (`lots::join_alike
 heat add up, sizes, hollowness and depth become means by count, and the sizes fit the walls of one part. A body that
 acts on a part of a lot acts on one split out of it (`lots::some_of`, `Part::split`: its share 1 / count of each
 amount and of the heat, the lot keeping the rest, so the two add up to rounding), a part of its own with the next id of
-its cell, and one that holds takes as many as it can hold (3.3); a break finds no bond in a lot. Alike parts lose their own history, as members of a node
+its cell, and one that holds takes as many as it can hold (3.3); a break finds no bond in a lot. **A cap of lots**, a
+speed tool: a cell keeps at most `MAX_LOTS` (16) lots of lone parts; past them its lots join again by a coarser key, the
+least band first (`lots::key`): no band of burial, then a mass band 2 to 64 times as wide, then no band of elongation,
+of hollowness, of bond strength, of hardness, and last none of mass, until they are no more; so the records of lone
+parts are at most `MAX_LOTS` a cell, whatever the parts (a world of 1e6 parts placed by an edit steps within 10% of the
+time of one of 1e3, `core/tests/lots.rs`), as `MAX_NODES` bounds the bodies (4.4). Alike parts lose their own history, as members of a node
 do, and their sizes within a band. A part runs no reactions. Monthly (`bond/month.rs`) the
 share of its walls the open world's decomposers would rot in the month (`bond/month.rs::rot`: each reaction they speed,
 `open` above 1, at the rate of Change, `change::rate`, at its cell ground's temperature and moisture, each substance of

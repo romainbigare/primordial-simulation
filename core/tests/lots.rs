@@ -8,7 +8,7 @@ use pcore::event::EventKind;
 use pcore::life::Handle;
 use pcore::store::{Class, Node};
 use pcore::World;
-use worldgen::testkit::{bite, eater, node_of, part_of, place, set_amount, start as world, Books, ROCK};
+use worldgen::testkit::{bite, eater, node_of, part_of, place, scatter, set_amount, small_world, start as world, Books, ROCK};
 
 /// Body `b` (taken out of its slot) takes from the part named `p` of its cell (`bond::act`, verb 1), in a serial step.
 fn act_on(w: &mut World, b: &mut Body, p: u64) {
@@ -128,4 +128,38 @@ fn a_node_holding_a_lot_of_edges_bites_as_its_members() {
     println!("node: took {node:.4} kg, wore {worn_node:e} m³; individuals: took {ones:.4} kg, wore {worn_ones:e} m³");
     assert!(node > 0.0 && worn_node > 0.0, "the node took {node} kg and wore {worn_node} m³");
     assert!((node / ones - 1.0).abs() < 0.01 && (worn_node / worn_ones - 1.0).abs() < 0.01, "node {node} kg {worn_node} m³, individuals {ones} kg {worn_ones} m³");
+}
+
+/// The cost of parts follows the cells, not the parts (laws.md 3.1): a cell keeps at most `MAX_LOTS` lots of lone
+/// parts, joining the nearest designs. A world with 1e6 parts of random designs placed by an edit steps within 10% of the
+/// time of one with 1e3, each timed as the least of three runs of 60 months after a first month that joins them, and
+/// keeps every part (counted one by one) and the books.
+#[test]
+#[ignore = "slow: a world of a million parts (400 MB), and a timing"]
+fn a_million_parts_step_as_fast_as_a_thousand() {
+    // The world with `n` parts after its first month, and the seconds of its next 60 months, least of three.
+    let timed = |n: usize| {
+        let mut w = small_world();
+        scatter(&mut w, n, 1);
+        let books = Books::now(&w);
+        pcore::step(&mut w);
+        let cells = w.mesh.cells().n();
+        assert!((0..cells).all(|i| w.life.cell_at(i).parts.len() <= bond::MAX_LOTS), "a cell holds more lots than the cap");
+        let parts: f64 = w.life.parts().map(|p| p.count).sum();
+        assert!((parts - n as f64).abs() < 1e-6 * n as f64, "{parts} parts of {n}");
+        let best = (0..3)
+            .map(|_| {
+                let mut v = w.clone();
+                let start = std::time::Instant::now();
+                (0..60).for_each(|_| pcore::step(&mut v));
+                start.elapsed().as_secs_f64()
+            })
+            .fold(f64::INFINITY, f64::min);
+        books.assert_within(&w, 1e-9, 1e-9);
+        (best, w.life.parts().count())
+    };
+    let (many, records) = timed(1_000_000);
+    let (few, few_records) = timed(1_000);
+    println!("1e6 parts: {many:.3} s in {records} records; 1e3 parts: {few:.3} s in {few_records} records");
+    assert!(many < 1.1 * few, "1e6 parts step in {many} s, 1e3 in {few} s");
 }

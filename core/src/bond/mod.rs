@@ -1,12 +1,13 @@
 //! Law 3: Bond. Parts are nodes of the store (`Class::Part`) that bonds join into structures; a bond breaks when its
 //! load passes its strength (laws.md 3). Here: parts, structures and their graph; `bonds`: the bonds and the enclosure;
 //! `design`: the design key by which alike parts and structures find each other; `lots`: alike lone parts as one record;
-//! `verbs`: what bodies do to parts; `edge`: how a held part's edge changes what breaking takes; `sense`: what parts
-//! give a body; `month`: the monthly rot, heat and loads. A part is stored in the list of the cell it lies in
+//! `apart`: what goes back to the ground; `verbs`: what bodies do to parts; `edge`: how a held part's edge changes what
+//! breaking takes; `sense`: what parts give a body; `month`: the monthly rot, heat and loads. A part is stored in the list of the cell it lies in
 //! (`life::Cell::parts`), with the bonds of that cell's parts (`life::Cell::bonds`): a structure lies in one cell, so
 //! all that changes parts runs on that cell, in its chunk (`life::Chunk`), but a structure carried to another cell
 //! (`moved`).
 
+mod apart;
 mod bonds;
 mod design;
 mod edge;
@@ -15,10 +16,11 @@ mod month;
 mod sense;
 mod verbs;
 
+use apart::{fall, fall_apart, loose_solids, shed, to_ground};
 pub use bonds::{Bonds, Enclosure};
 pub use design::designs;
 pub use edge::{blunt, edge, Edge};
-pub use lots::held_kind;
+pub use lots::{held_kind, MAX_LOTS};
 pub(crate) use lots::join_held;
 pub(crate) use edge::blunted;
 pub use month::step;
@@ -27,7 +29,7 @@ pub(crate) use sense::{leave_outgrown, possible, room_air, sense, SENSE};
 pub use verbs::{act, bears, carry, form, moved, release, LET_GO, TORN};
 pub(crate) use verbs::{dropped, let_go};
 
-use crate::{body::Body, chem::{Chemistry, Phase}, event::{Event, EventKind}, life::{Cell, Chunk}, store::{Class, Node}, World};
+use crate::{body::Body, chem::{Chemistry, Phase}, event::{Event, EventKind}, life::{Cell, Chunk}, World};
 use serde::{Deserialize, Serialize};
 
 /// Held by no body.
@@ -248,10 +250,12 @@ fn restructure(w: &World, c: &mut Cell, p: usize) {
         }
         q += 1;
     }
-    let places: Vec<usize> = list.iter().map(|&x| at(c, x).expect("a bonded part lies in its cell")).collect();
+    // (The part at `p` is found without a search: a part made or split out of a lot is the last of a long list.)
+    let place = |c: &Cell, x: u64| if x == list[0] { p } else { at(c, x).expect("a bonded part lies in its cell") };
+    let places: Vec<usize> = list.iter().map(|&x| place(c, x)).collect();
     let r = *list.iter().min().expect("one part");
     places.iter().for_each(|&y| c.parts[y].root = r);
-    let y = at(c, r).expect("its root");
+    let y = place(c, r);
     c.parts[y].s = numbers(w, places.iter().map(|&x| (&c.parts[x], c.parts[x].walls(&w.chem))));
 }
 
@@ -323,72 +327,6 @@ pub fn make(w: &World, d: &mut Chunk, i: usize, wall: Vec<f64>, e: f64, x: f32, 
     let s = add(d, i, p);
     restructure(w, d.at_mut(i), s);
     s
-}
-
-/// The part at `p` of cell `i` of chunk `d` falls apart: all it holds, its walls, the liquid in its hollow and its heat,
-/// goes to its cell's ground (`fall`). Then it is gone (`dissolve`). Every way a part falls apart uses it: its walls run
-/// off or it is buried in its turn (`month::turns`), a body takes them below `min_kg` (`verbs::take`), or its edge
-/// wears them away (`edge::blunted`).
-fn fall_apart(w: &World, d: &mut Chunk, i: usize, p: usize) {
-    let (id, all) = (d.at(i).parts[p].id, d.at(i).parts[p].count);
-    fall(w, d, i, (p, all));
-    dissolve(w, d, i, id);
-}
-
-/// `k` parts of the lot at `p` of cell `i` of chunk `d` fall apart: their share of all it holds, its walls, the liquid
-/// in its hollow and its heat (`Part::split`), goes to its cell's ground, moved by its own update on the chunk's view.
-fn fall(w: &World, d: &mut Chunk, i: usize, (p, k): (usize, f64)) {
-    d.moves.open(w, i, Node::new(Class::Part, p));
-    let gone = d.at_mut(i).parts[p].split(k);
-    d.moves.give_all(w, Node::ground(i), gone.wall.iter().zip(&gone.fill).map(|(a, f)| a + f).enumerate(), gone.e);
-}
-
-/// The share `f(k, t, walls)` of each substance `k` of the walls of part `p` leaves them with its heat at the part's
-/// temperature `t` (the walls as they are by then): its mol and J are added to `off`, one entry per substance. Returns
-/// the part's heat capacity after, J/K.
-fn shed(chem: &Chemistry, p: &mut Part, f: impl Fn(usize, f64, &[f64]) -> f64, off: &mut [[f64; 2]]) -> f64 {
-    let cap = p.heat_cap(chem);
-    let (t, mut changed) = (p.e / cap.max(1e-9), false);
-    for (k, o) in off.iter_mut().enumerate() {
-        if p.wall[k] <= 0.0 {
-            continue;
-        }
-        let f = f(k, t, &p.wall);
-        if f > 0.0 {
-            let (a, q) = (f * p.wall[k], f * p.wall[k] * chem.subs[k].cp * t);
-            (p.e, p.wall[k], changed) = (p.e - q, p.wall[k] - a, true);
-            *o = [o[0] + a, o[1] + q];
-        }
-    }
-    if changed { p.heat_cap(chem) } else { cap }
-}
-
-/// What parts of cell `i` shed (`shed`: mol and J per substance) goes to its ground, one move per substance, on the
-/// chunk's view opened for them.
-fn to_ground(w: &World, d: &mut Chunk, i: usize, off: &[[f64; 2]]) {
-    for (k, &[a, q]) in off.iter().enumerate().filter(|o| o.1[0] > 0.0) {
-        d.moves.give(w, Node::ground(i), k, a, q);
-    }
-}
-
-/// The loose solids of the ground of cell `i` as the chunk's view holds them, mol of each substance: those solid there
-/// at its temperature `tg` K, in its mixture (`Chemistry::phase_in`).
-fn loose_solids(w: &World, d: &Chunk, i: usize, tg: f64) -> Vec<f64> {
-    let g = d.moves.amounts(w, Node::ground(i));
-    (0..w.chem.ns()).map(|k| if w.chem.phase_in(k, tg, &g) == Phase::Solid { g(k).max(0.0) } else { 0.0 }).collect()
-}
-
-/// The part named `id` of cell `i` is gone: its bonds, its holder's hold and its place in the list.
-fn dissolve(w: &World, d: &mut Chunk, i: usize, id: u64) {
-    loop {
-        let Some((o, _)) = d.at(i).bonds.of(id).next() else { break };
-        unlink(w, d, i, id, o, true);
-    }
-    let c = d.at_mut(i);
-    if let Some(h) = at(c, id).and_then(|p| holder(c, p)) {
-        c.bodies[h].hold = None;
-    }
-    c.parts.retain(|p| p.id != id);
 }
 
 /// The part body `b` holds, in its cell `c`: its place there.

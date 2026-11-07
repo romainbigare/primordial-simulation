@@ -24,19 +24,30 @@ pub(super) fn fnv(words: &[u64]) -> u64 {
 }
 
 /// The band of `x` in 0..1.
-pub(super) fn band(x: f64) -> u64 {
-    ((x * BANDS as f64) as u64).min(BANDS as u64 - 1)
+pub(super) fn band(x: f64) -> i64 {
+    ((x * BANDS as f64) as i64).clamp(0, BANDS as i64 - 1)
+}
+
+/// The bands of a part's label (`label`), in the order a cap of lots joins them (`lots::cap`, the last first): its
+/// walls' hardness and bond strength, its hollow share, the elongation of its sides, and the mass of the walls of one
+/// part (of a lot, `MASS_STEP`).
+pub(super) fn bands(chem: &Chemistry, p: &Part) -> [i64; 5] {
+    let walls = p.walls(chem);
+    let elongation = (p.size[0] as f64 / (p.size[2] as f64).max(1e-9)).max(1.0).log10() / ELONGATION_DECADES;
+    let mass = ((walls.mass / p.count).ln() / MASS_STEP.ln()).floor() as i64;
+    [band(walls.hardness), band(walls.strength), band(p.hollow as f64), band(elongation), mass]
 }
 
 /// A part's label: its material band (hardness, bond strength of its walls), its shape band (hollow share, elongation
-/// of its sides) and the band of the mass of the walls of one part (of a lot, `MASS_STEP`).
+/// of its sides) and its mass band (`bands`).
 pub(super) fn label(chem: &Chemistry, p: &Part) -> u64 {
-    let walls = p.walls(chem);
-    let material = band(walls.hardness) * BANDS as u64 + band(walls.strength);
-    let elongation = (p.size[0] as f64 / (p.size[2] as f64).max(1e-9)).max(1.0).log10() / ELONGATION_DECADES;
-    let shape = band(p.hollow as f64) * BANDS as u64 + band(elongation);
-    let mass = ((walls.mass / p.count).ln() / MASS_STEP.ln()).floor() as i64;
-    fnv(&[material, shape, mass as u64])
+    label_of(bands(chem, p))
+}
+
+/// The label of a part of bands `b` (`bands`).
+pub(super) fn label_of(b: [i64; 5]) -> u64 {
+    let n = BANDS as i64;
+    fnv(&[(b[0] * n + b[1]) as u64, (b[2] * n + b[3]) as u64, b[4] as u64])
 }
 
 /// The design of each structure of cell `c`, by its root's id: `WL_ROUNDS` rounds of neighbour hashing of its parts'
