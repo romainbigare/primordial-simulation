@@ -592,35 +592,28 @@ const EVEN_MONTHS: usize = 12;
 /// How far the climate of an even region split may stray from the unsplit one's, a share of each number but the store
 /// of the bed (`climate`): its cells differ only by their latitude and the air they see.
 const EVEN_SHARE: f64 = 1e-6;
-/// The same for the store of the bed: the store flows down the differences of the stores of the block's squares (the
-/// runoff over the plateau feeds some more than others), which the cells of 500 m resolve (2e-3 in a year; 1e-6 with no
-/// flow of the store).
+/// The same for the store of the bed: in the year after the split the runoff over the plateau feeds some squares' stores
+/// more than others again, and the store flows down those differences, which the cells of 500 m resolve better (a sharp
+/// step falls over 500 m, not 2 km): 6e-5 in a year.
 const STORE_SHARE: f64 = 1e-2;
 
 /// The climate does not depend on the size of the cells where nothing in them differs (spec 5.2): on the small island
-/// with all its land one even plateau (each land cell holding per m² what one does, with no relief inside it), a block
-/// of 2 x 2 squares in its middle split two depths (into cells of 500 m, those beside it into cells of 1 km) keeps, after
-/// a year, the climate (`climate`) of the block and of the island within `EVEN_SHARE` of each number (`STORE_SHARE` for
-/// the store).
+/// with all its land one even plateau (each land cell holding per m² what one does in its ground, its bed and the store
+/// under it, `testkit::even_land`, with no relief inside it), made even again after a year (its runoff fed some squares'
+/// stores more than others, a difference a finer grid resolves better, so the plateau would not be even below ground), a
+/// block of 2 x 2 squares in its middle split two depths (into cells of 500 m, those beside it into cells of 1 km) keeps,
+/// after a year, the climate (`climate`) of the block and of the island within `EVEN_SHARE` of each number
+/// (`STORE_SHARE` for the store).
 #[test]
 fn an_even_region_split_two_depths_keeps_its_climate() {
     let mut w = world();
     let (n, like) = (w.mesh.cells().n(), testkit::dry_land(&w));
     let land: Vec<usize> = (0..n).filter(|&i| w.is_land(i)).collect();
-    let area = w.mesh.cells().area().to_vec();
-    for &i in &land {
-        w.relief[i] = 0.0;
-        for class in [Class::Ground, Class::Bed, Class::Deep] {
-            for k in 0..w.chem.ns() {
-                let mol = w.store.amounts(class)[k * n + like] * area[i] / area[like];
-                testkit::set_amount(&mut w, pcore::store::Node::new(class, i), k, mol);
-            }
-            if let Some(&e) = w.store.heat(class).get(like) {
-                testkit::set_heat(&mut w, pcore::store::Node::new(class, i), e * area[i] / area[like]);
-            }
-        }
-    }
+    land.iter().for_each(|&i| w.relief[i] = 0.0);
+    testkit::even_land(&mut w, like);
     (0..EVEN_MONTHS).for_each(|_| pcore::step(&mut w));
+    // A year's runoff across the plateau feeds some squares' stores more than others; made even again, below ground too.
+    testkit::even_land(&mut w, like);
     w.drain_events();
     // The block of 2 x 2 squares at the middle of the map, aligned to its size.
     let side = 2 * leaf(&w, 0).side();
