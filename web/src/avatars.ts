@@ -22,7 +22,7 @@ const SHAPE_PX = 3, DOT_PX = 1;
 /** Members drawn as shapes or dots at most in a frame; past it, the same share of each node is drawn. */
 const MOST_SHOWN = 20000;
 /** Stipple dots a square pixel holds at most, their size, px, and how strong they are, from few members a dot to many. */
-const STIPPLE_PER_PX2 = 0.04, STIPPLE_PX = 1, STIPPLE_ALPHA = [0.2, 0.4];
+const STIPPLE_PER_PX2 = 0.015, STIPPLE_PX = 1, STIPPLE_ALPHA = [0.2, 0.4];
 /** A stipple fades out over this share of its box's side towards each edge, so a crowded cell does not show as a block. */
 const STIPPLE_EDGE = 0.15;
 /** How strong a soft dot is. */
@@ -246,7 +246,7 @@ export class Avatars {
         eachIn(l, view, Math.ceil(n / g2), (m, X, Y) => {
           const [x, y] = sq(X, Y);
           const [x0, y0, x1, y1] = l.box, edge = Math.min(X - x0, x1 - X, Y - y0, y1 - Y) / (STIPPLE_EDGE * Math.min(x1 - x0, y1 - y0));
-          ctx.globalAlpha = Math.min(1, edge);
+          if (edge < 1 || ctx.globalAlpha < 1) ctx.globalAlpha = Math.min(1, edge);
           ctx.fillRect(x - STIPPLE_PX / 2, y - STIPPLE_PX / 2, STIPPLE_PX, STIPPLE_PX);
           this.hits.push({ x, y, r: STIPPLE_PX / 2, key: `b${b.id}:${m}`, what });
         });
