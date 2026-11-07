@@ -6,6 +6,7 @@
 //! `DETAIL_LEAST_M` the ground goes on as that continuation alone. A leaf's height depends on its own place only,
 //! whatever window it is found for.
 
+use pcore::inside::Ground;
 use pcore::space::terrain::SAMPLE_DEPTH;
 use pcore::space::tree::BLOCK;
 use pcore::space::Leaf;
@@ -29,7 +30,8 @@ pub(super) const POINT_DEPTHS: u8 = 3;
 
 /// The terrain's samples of a map (`Terrain::sample` at the centres of the leaves of `SAMPLE_DEPTH`): the height, m,
 /// and the slope of the noise below it, found when first needed and kept (the terrain does not change), with the
-/// terrain's mean height over each cell's leaf and at its points found so far.
+/// terrain's mean height over each cell's leaf and at its points found so far, and the ground inside each cell's leaf as
+/// the core shares its means over it (`World::ground_in`).
 pub struct Samples {
     /// The map's width and height in samples, and the area of a sample in each row, m²
     across: usize,
@@ -39,6 +41,7 @@ pub struct Samples {
     g: Vec<f32>,
     means: BTreeMap<Leaf, f64>,
     points: BTreeMap<Leaf, Vec<f64>>,
+    grounds: BTreeMap<Leaf, Ground>,
 }
 
 impl Samples {
@@ -49,7 +52,7 @@ impl Samples {
         let per = 1usize << (SAMPLE_DEPTH - sq);
         let (across, down) = (w.map.w * per, w.map.h * per);
         let area = (0..down).map(|y| w.map.place_of(&leaf(SAMPLE_DEPTH, 0, y as i64), w.cfg.lat_south, w.cfg.lat_north).0).collect();
-        Samples { across, down, area, h: Vec::new(), g: Vec::new(), means: BTreeMap::new(), points: BTreeMap::new() }
+        Samples { across, down, area, h: Vec::new(), g: Vec::new(), means: BTreeMap::new(), points: BTreeMap::new(), grounds: BTreeMap::new() }
     }
     /// Find the samples, if not yet found.
     fn fill(&mut self, w: &World) {
@@ -95,10 +98,14 @@ impl Samples {
         }
         &self.points[&l]
     }
+    /// The ground inside leaf `l` (`World::ground_in`, kept once found).
+    pub(super) fn ground(&mut self, w: &World, l: Leaf) -> &Ground {
+        self.grounds.entry(l).or_insert_with(|| w.ground_in(l))
+    }
 }
 
 /// The leaf of `depth` at column `x` and row `y` of them.
-fn leaf(depth: u8, x: i64, y: i64) -> Leaf {
+pub(super) fn leaf(depth: u8, x: i64, y: i64) -> Leaf {
     let side = BLOCK >> depth;
     Leaf { x: x as u64 * side, y: y as u64 * side, depth }
 }

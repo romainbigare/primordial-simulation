@@ -12,6 +12,7 @@
 //! pixel's ground does not depend on the window.
 
 mod heights;
+mod inside;
 mod pyramid;
 
 pub use heights::Samples;
@@ -29,16 +30,17 @@ const SHORE_M: f64 = 10.0;
 const WET_LEAST: f64 = 0.02;
 
 /// The surface of the liquid of each cell, m, on its points (`Samples::points`: the terrain there less the terrain's
-/// mean over the cell, `terrain`, on the cell's height `z`), sorted: of one that holds standing liquid (`wet`), the
-/// level its liquid stands at when it fills the lowest of them first, as deep over them all as it is over the cell; of
+/// mean over the cell, `terrain`, on the cell's height `z`): of one that holds standing liquid (`wet`), the level its
+/// liquid stands at when it fills the lowest of them first (`flow::level_of`), as deep over them all as it is over the cell; of
 /// a dry one, its lowest point, or the mean surface of the cells beside it that hold standing liquid if lower, less
 /// `SHORE_M`, so liquid that stands beside it ends in it where its ground rises.
 fn levels(w: &World, s: &mut Samples, (z, terrain): (&[f64], &[f64]), depth: &[f64], wet: &[bool]) -> Vec<f64> {
     let held: Vec<f64> = (0..z.len())
         .map(|i| {
-            let mut ground: Vec<f64> = s.points(w, w.map.leaves()[i]).iter().map(|g| g - terrain[i] + z[i]).collect();
-            ground.sort_by(f64::total_cmp);
-            if wet[i] { fill(&ground, depth[i]) } else { ground[0] }
+            let mut floors: Vec<(f64, f64)> = s.points(w, w.map.leaves()[i]).iter().map(|g| (g - terrain[i] + z[i], 1.0)).collect();
+            let vol = depth[i] * floors.len() as f64;
+            let level = pcore::flow::level_of(&mut floors, vol);
+            if wet[i] { level } else { floors[0].0 }
         })
         .collect();
     (0..z.len())
@@ -51,20 +53,6 @@ fn levels(w: &World, s: &mut Samples, (z, terrain): (&[f64], &[f64]), depth: &[f
             level - SHORE_M
         })
         .collect()
-}
-
-/// The level liquid as deep as `depth` over ground of the heights `ground` (sorted, each of the same area) stands at
-/// when it fills the lowest first, m.
-fn fill(ground: &[f64], depth: f64) -> f64 {
-    let (mut sum, n) = (0.0, ground.len() as f64);
-    for (m, g) in ground.iter().enumerate() {
-        sum += g;
-        let level = (sum + depth * n) / (m + 1) as f64;
-        if ground.get(m + 1).is_none_or(|&next| level <= next) {
-            return level;
-        }
-    }
-    unreachable!("the ground has a point")
 }
 
 /// A segment of a river's way: the centres of a cell and of the cell its liquid runs to (column, row, in squares), its
@@ -122,7 +110,9 @@ fn about(w: &World, [x0, y0, x1, y1]: [f64; 4]) -> Vec<u32> {
 /// those that hold standing liquid; NaN where that share is below `WET_LEAST`), so the shore drawn is
 /// where the ground drawn rises above it; then every layer in table
 /// order, a byte a pixel, the field of the cells' bytes (`pyramid`), the ground's temperature along the ground's height
-/// at the rate the air cools with height (`World::air_drop`).
+/// at the rate the air cools with height (`World::air_drop`); then, from a multiple of 4 bytes, what lies inside each
+/// pixel's own cell by the shares of its ground (`inside::extend`): its wetness, its snow, and the built cover of each
+/// slot of its cell, f32 planes.
 pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], depth: u8) -> Vec<u8> {
     assert!(depth >= w.map.square_depth(), "a pixel is no coarser than a square");
     let per = (1u64 << (depth - w.map.square_depth())) as f64;
@@ -156,5 +146,8 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
         };
         out.extend(plane);
     }
+    let (tree, at) = (w.mesh.tree(), |p: usize| (((gx + (p % across) as i64) as f64 + 0.5) / per, ((gy + (p / across) as i64) as f64 + 0.5) / per));
+    let cell: Vec<u32> = (0..pixels).map(at).map(|(px, py)| tree.cell_at(w.map.point_at(px, py)) as u32).collect();
+    inside::extend(&mut out, w, samples, ([gx, gy], [across, down], depth), &cell);
     out
 }

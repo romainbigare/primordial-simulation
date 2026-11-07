@@ -80,7 +80,22 @@ the continuation alone) less the field of the terrain's means over the cells, wh
 cell's surface (where it holds standing liquid, the level that liquid fills its own ground to; where it is dry, its
 lowest ground or the liquid beside it, 10 m lower), sunk the more the smaller the field of the share of the cells that
 hold standing liquid, so the shore is where the ground drawn rises above it.
-The terrain's samples are found once (`tape::Samples`). The viewer paints it over the whole-map frame: hill shading
+The terrain's samples are found once (`tape::Samples`). After the layers come **the fields inside the cells**
+(`tape/src/fine/inside.rs`), from the next multiple of 4 bytes (zero bytes pad up to it), each a plane of one f32 a
+pixel (little-endian), the pixels row by row as above, in this order:
+
+| plane | unit | what |
+|---|---|---|
+| `wet` | 0..1 | how wet the pixel's ground is, as the cover feels it (`Physics::wetness` of the liquid in its pores and of what stands there at its cell's level) |
+| `snow` | m | the depth of its cell's soft cover (snow) times its share at the pixel |
+| `cover` 0 to 3 | kg/m² | 4 planes (`cover::SLOTS`): plane k is the built cover per m² of the k-th slot its cell holds, in the order `tape::things` lists its slots (so kind, genes and capture area are there), times that slot's share at the pixel; 0 where its cell holds fewer slots |
+
+So a window of `across` x `down` pixels after `L` layers starts these at `ceil4(8 + 24 r + 8 n + L n)` bytes, n the
+pixels and r the river ways, and they take `24 n` bytes. These are the core's own shares of each cell's means over its
+ground (laws.md 0, "Inside a cell"): the ones a split gives its quarters. Each pixel reads the cell that holds its
+centre, not a blend between cells, as the mean over the samples of that cell's 8 x 8 grid the pixel covers (the one
+that holds it, where the pixel is finer): so the pixels of a cell keep its means, and a field may step at a cell's edge.
+The viewer paints it over the whole-map frame: hill shading
 from the fine ground, the liquid where its surface lies over the fine ground (the sea's tint by the depth there),
 snow by the pixel's own temperature near the cover's melting point, rivers as lines along those ways, as wide as
 their discharge (Leopold and Maddock 1953) or wider; it is not recorded. Close up it also asks
