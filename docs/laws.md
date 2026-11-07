@@ -45,7 +45,13 @@ octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to 
 the middle of its map; the world keeps what it needs beside its seed and its map (`World::terrain`: the rise its level
 0 m lies at), so a split finds the ground finer than its cell (below). The noise's finest octave is 670 m on the
 64 x 64 island and 200 km on a globe; it is sampled at the centres of the leaves of `SAMPLE_DEPTH` (1/64 of a block:
-125 m on the island, 20 km on a globe of 64 rows), and below them the ground goes on as a midpoint displacement
+125 m on the island, 20 km on a globe of 64 rows), and **the samples drain** (`space::samples`, found once from the
+seed when first read, not saved): noise has basins that no liquid ever cut, so a priority flood (`space::drain`,
+Planchon and Darboux 2001; Barnes, Lehman and Mulla 2014), from every sample under 0 m on a globe and from those under
+0 m joined to the lowest on an island, the lowest first and then the least index, raises each closed basin of the
+samples to its outlet at 1 m per km (`DRAIN_SLOPE`): every cell's height and relief, at the start and at each split,
+are means over the drained samples, so a cell and its quarters stand on the same drained ground. Below the samples
+the ground goes on as a midpoint displacement
 (Fournier, Fussell and Carpenter 1982) that continues the noise's octaves (`Terrain::inside`): the means of the
 quarters of a leaf of side ℓ depart from its mean by four normal draws keyed by the leaf, made to a variance by area of
 exactly G² ℓ² / 16 (the quarters of flat ground tilted at slope G). G is the larger of two slopes. One is the noise's: the rms
@@ -218,20 +224,11 @@ of `SAMPLE_DEPTH` or coarser, Σ a (h − h̄)² / 2 and each sample's A V / 2 b
 means about its own, as the departures are made to that variance exactly. **A split of a
 cell no join made** gives its quarters the terrain inside it (`World::uneven`): each quarter's bed surface is the cell's
 mean bed surface now plus the terrain's mean height over the quarter less the mean over the four, so the cell's bed
-keeps its volume and its mean (what wear and creep did since the start, and what the start's drainage filled, stays
-in the mean); the bed's substances go to
+keeps its volume and its mean (what wear and creep did since the start stays in the mean); the bed's substances go
+to
 the quarters in the cell's proportions; the loose ground, the liquid its pores hold, the store and every other number
-stay per m². The quarters of a cell above 0 m then drain, as the world's land drains from the start (8; below 0 m
-the floor of the low basin keeps its pits under the basin's one level, as at the start): a priority
-flood from the cells round them as they stand (`space::drain`), each seen at the quarters' scale (a cell coarser than
-a quarter at its height less the terrain's mean over it plus the terrain's mean over its part beside the quarter,
-`Square::nearest_in`, so a quarter in a valley that runs on through a coarser cell is no pit), raises a quarter in a
-closed pit to its outlet, and all
-are lowered alike until their mean is the cell's again (`World::drained`). Noise has pits that no liquid ever cut: split
-undrained, the 1,024 cells of 500 m of the 64 x 64 island's first four blocks of land had 15 pits, and in two years
-2.5 m of liquid stood on them on the mean, 47 months of their rain (the unsplit blocks, 6 mm); drained, 5 pits and
-1.6 m, most of it in basins of several cells whose rims a later split of the cells round them made, and in cells under
-0 m at the coast, which join the low basin. Then the quarters take the shares of their own ground (**inside a cell**,
+stay per m². The quarters stand on the drained samples (above), so a basin of the noise is no basin whatever cells
+split, in whatever order; the midpoint displacement below the samples may leave small pits. Then the quarters take the shares of their own ground (**inside a cell**,
 below; `flow::share_ground`): the liquid the cell's pores held goes to the quarters' pores by its share (a quarter's
 part of the soil's shares), as far as each one's pores hold; the liquid that stood over the cell's pores and what a
 quarter's pores cannot hold stand where they would on the quarters' floors (a floor is a quarter's solid surface less
@@ -242,9 +239,8 @@ and its heat at the node's temperature, or of every soft solid with its heat, fr
 each other (`store::apply`). The stacks then gain ρ g Σ a d² / 2, d each quarter's departure (what lies on the bed
 rises and falls with it by area, and the air over the cell keeps its mean height), less what the liquid gives up as it
 finds its level and what those moves give up or take; each quarter's relief is the terrain's inside it and its share
-by area of what the cell's relief has left: the potential energy of the pits drained and what the moves gave up, which
-the ground finer than the quarters still holds (a split gives it no heat). Where the cell's relief is
-less than these need (a drained pit stands higher than the terrain: 7% of the splits there), the departures (and the
+by area of what the cell's relief has left: what the moves gave up, which the ground finer than the quarters still
+holds (a split gives it no heat). Where the cell's relief is less than these need, the departures (and the
 terrain below them) are scaled down until it pays, and so that each quarter keeps a bed. **A join** that makes one flat
 cell of quarters of
 different heights lowers the potential energy of the stacks (`flow::potential_of`, by Flow's state, which a remap gives
@@ -1350,14 +1346,13 @@ read a kind.
 - **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on and which a
   split reads later: an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
   `World::terrain`); each cell's relief inside it from it (0, "Relief"); a metre of loose ground; the sea's salt at
-  balance (2.6); ground and air temperatures falling with latitude and height. Every land cell drains from the start
-  (`space::drain`, as a split's quarters do, 0): a priority flood raises closed basins (only) to their outlet at 1 m per
-  km (`DRAIN_SLOPE`; Planchon and Darboux 2001), from every cell below 0 m on a globe, from those joined to the lowest
-  cell on an island. On an island the open water is coarse (`coarse_low`): an air block (8 km) whose squares all lie
+  balance (2.6); ground and air temperatures falling with latitude and height. The terrain's samples drain (0): a
+  priority flood raises closed basins (only) to their outlet at 1 m per km (`DRAIN_SLOPE`; Planchon and Darboux 2001),
+  from every sample below 0 m on a globe, from those joined to the lowest sample on an island. On an island the open water is coarse (`coarse_low`): an air block (8 km) whose squares all lie
   below 0 m, none within a square of land (`LAND_RING`), is one cell, split where it borders finer cells until cells
   across a border differ by one size at most; the coasts stay in 2 km squares. A globe is one cell an air block but in a
   rectangle of air blocks in squares (`--fine`), by the same rule. A cell's height is the terrain's mean over it
-  (`Terrain::inside`, 0), whatever its size.
+  (`Terrain::inside`, on the drained samples, 0), whatever its size.
 - **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS` rows of `Place::Field`: kg per m² and genes,
   on every open land cell by its chance), then eaters 20 years later; `--roster` places ten kinds (`ROSTER`). Founders
   are adults on land under at most half a metre of liquid; mass 30% fuel (60% for the two big slow eater kinds).

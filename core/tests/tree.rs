@@ -203,23 +203,28 @@ fn over_terrain(w: &World, i: usize) -> f64 {
     w.surface_z(i) - w.terrain.inside(w.seed, &w.map, leaf(w, i), (w.cfg.lat_south, w.cfg.lat_north)).0
 }
 
-/// The ground stands on the terrain at every size (laws.md 0, 8): a world starts with each cell at the terrain's mean
-/// over it, or over it where the start drained a closed basin, and the cells two splits make of a block of land stand
-/// at the terrain's mean over each as their cell did, to `UNEVEN_M`, but where a split drained a closed pit of the
-/// terrain at its quarters' scale (each cell round them seen at that scale, so a valley that runs on through a coarser
-/// cell is no pit): no quarter carries its cell's height as a step.
+/// The ground stands on the drained terrain at every size (laws.md 0, 8): no sample of land is a closed pit (each has a
+/// lower neighbour), a world starts with each cell at the terrain's mean over it, and the cells two splits make of a
+/// block of land stand at the terrain's mean over each as their cell did, to `UNEVEN_M`: no quarter carries its cell's
+/// height as a step, and none is drained apart from its neighbours.
 #[test]
 fn split_cells_stand_on_the_terrain() {
     let mut w = world();
+    let s = w.terrain.samples(w.seed, &w.map, (w.cfg.lat_south, w.cfg.lat_north));
+    let lower = |k: usize| {
+        let (r, c) = ((k / s.across) as i64, (k % s.across) as i64);
+        let near = (-1..=1i64).flat_map(|a| (-1..=1i64).map(move |b| (r + a, c + b)));
+        near.filter(|&(y, x)| (0..s.down as i64).contains(&y) && (0..s.across as i64).contains(&x)).any(|(y, x)| s.h[y as usize * s.across + x as usize] < s.h[k])
+    };
+    assert!((0..s.h.len()).filter(|&k| s.h[k] >= 0.0).all(lower), "every sample of land has a lower neighbour");
     let block = testkit::land_block(&w);
-    let on = |d: &[f64]| d.iter().filter(|d| d.abs() < UNEVEN_M).count() as f64 / d.len() as f64;
     let start: Vec<f64> = (0..w.mesh.cells().n()).map(|i| over_terrain(&w, i)).collect();
     let was: Vec<f64> = block.iter().map(|&l| over_terrain(&w, w.map.cell(l).expect("a cell"))).collect();
     testkit::split_down(&mut w, &block, 2);
     let kids: Vec<f64> = block.iter().zip(&was).flat_map(|(l, d)| l.split(l.depth + 2).map(|q| over_terrain(&w, w.map.cell(q).expect("a cell")) - d).collect::<Vec<f64>>()).collect();
-    println!("on the terrain: {:.3} of the cells at the start, {:.3} of the split cells beyond their cell", on(&start), on(&kids));
-    assert!(start.iter().all(|&d| d > -UNEVEN_M) && on(&start) > 0.95, "the cells start on the terrain or over it");
-    assert!(on(&kids) > 0.75, "the split cells stand on the terrain");
+    let most = |d: &[f64]| d.iter().fold(0.0f64, |m, x| m.max(x.abs()));
+    println!("the cells start within {} m of the terrain, the split cells within {} m beyond their cell", most(&start), most(&kids));
+    assert!(most(&start) < UNEVEN_M && most(&kids) < UNEVEN_M, "the cells stand on the terrain");
 }
 
 /// The liquid of cell `i` as a depth over its area, m, and the depth its pores hold, m (the volume of its loose solids

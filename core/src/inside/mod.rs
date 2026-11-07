@@ -8,7 +8,7 @@ mod shares;
 
 pub use shares::{Inside, Means};
 
-use crate::space::terrain::{real_slope, SAMPLE_DEPTH};
+use crate::space::terrain::real_slope;
 use crate::space::tree::DEPTH_MOST;
 use crate::space::Leaf;
 use crate::World;
@@ -61,17 +61,16 @@ impl World {
         (g, shares)
     }
 
-    /// The ground inside leaf `l` (`Ground`): the terrain's height over each sample, a leaf `DEPTHS` below `l`
-    /// (`Terrain::inside`, its mean there; the height at its centre where it is coarser than the terrain's samples).
+    /// The ground inside leaf `l` (`Ground`): the terrain's mean height over each sample, a leaf `DEPTHS` below `l`
+    /// (`Terrain::inside`).
     pub fn ground_in(&self, l: Leaf) -> Ground {
         let lat = (self.cfg.lat_south, self.cfg.lat_north);
         let depth = (l.depth + DEPTHS).min(DEPTH_MOST);
         let side = 1usize << (depth - l.depth);
         let (mut h, mut area) = (Vec::with_capacity(side * side), Vec::with_capacity(side * side));
         for s in l.split(depth) {
-            let (a, at) = self.map.place_of(&s, lat.0, lat.1);
-            h.push(if depth >= SAMPLE_DEPTH { self.terrain.inside(self.seed, &self.map, s, lat).0 } else { self.terrain.height(self.seed, &self.map, at) });
-            area.push(a);
+            h.push(self.terrain.inside(self.seed, &self.map, s, lat).0);
+            area.push(self.map.place_of(&s, lat.0, lat.1).0);
         }
         let dy = self.map.length(depth);
         let dx = (0..side).map(|r| area[r * side] / dy).collect();

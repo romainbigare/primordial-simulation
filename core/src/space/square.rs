@@ -155,17 +155,6 @@ impl Square {
         let x = if self.wrap { x.rem_euclid(self.w as f64) } else { x };
         [(x * u).floor().clamp(0.0, (across - 1) as f64) as u64, (y * u).floor().clamp(0.0, (down - 1) as f64) as u64]
     }
-    /// The leaf of `l`'s depth inside leaf `o` (no finer than `l`) nearest `l`: beside it where `o` lies across a side
-    /// or a corner of `l` (east and west round a globe).
-    pub(crate) fn nearest_in(&self, o: &Leaf, l: &Leaf) -> Leaf {
-        let (across, side) = (self.extent().0 as i128, l.side() as i128);
-        let (lx, mut ox) = (l.x as i128, o.x as i128);
-        if self.wrap && (ox - lx).abs() > across / 2 {
-            ox -= across * (ox - lx).signum();
-        }
-        let x = lx.clamp(ox, ox + o.side() as i128 - side).rem_euclid(across);
-        Leaf { x: x as u64, y: l.y.clamp(o.y, o.y + o.side() - l.side()), depth: l.depth }
-    }
     /// The side of a leaf of `depth` from north to south, m.
     pub fn length(&self, depth: u8) -> f64 {
         self.side * (BLOCK >> depth) as f64 / self.unit() as f64

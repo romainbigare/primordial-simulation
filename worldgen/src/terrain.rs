@@ -1,7 +1,6 @@
 //! Terrain: an island or a globe with mountains, and the starting state of ground, low liquid and air.
 
 use crate::chemistry::{chemistry0, Init};
-use crate::drain::drain;
 
 use pcore::change::Reactor;
 use pcore::chem::{Chemistry, Phase};
@@ -9,7 +8,7 @@ use pcore::flow::scale_height;
 use pcore::life::Life;
 use pcore::space::square::Square;
 use pcore::space::terrain::{self, Place, Terrain, ISLAND_LEVEL};
-use pcore::space::{Level, Mesh};
+use pcore::space::Level;
 use pcore::store::{Boundary, Class, Links, Node, Store};
 use pcore::units::P_REF;
 use pcore::{Config, Counters, World, AIR};
@@ -39,7 +38,7 @@ const MOLTEN_MARGIN: f64 = 2.0;
 /// `ISLAND_LEVEL`; a globe's leaves the share `LAND_SHARE` of the area of the samples above it.
 fn terrain_of(seed: u64, map: &Square, cells: &Level) -> Terrain {
     if !map.wrap {
-        return Terrain { level: ISLAND_LEVEL };
+        return Terrain::new(ISLAND_LEVEL);
     }
     let rise: Vec<f64> = (0..cells.n()).map(|i| terrain::rise(seed, map, Place::of(cells, i))).collect();
     let mut order: Vec<usize> = (0..cells.n()).collect();
@@ -49,22 +48,14 @@ fn terrain_of(seed: u64, map: &Square, cells: &Level) -> Terrain {
         above += cells.area()[i];
         above >= LAND_SHARE * total
     });
-    Terrain { level: level.map_or(0.0, |&i| rise[i]) }
+    Terrain::new(level.map_or(0.0, |&i| rise[i]))
 }
 
-/// Height of each cell of `cells` on `map` by `terrain`, m (`Terrain::height` at its centre).
-fn heights(seed: u64, map: &Square, terrain: &Terrain, cells: &Level) -> Vec<f64> {
-    (0..cells.n()).map(|i| terrain.height(seed, map, Place::of(cells, i))).collect()
-}
-
-/// The terrain of `mesh` on `map` (its rows between the latitudes of `cfg`; its level found on the map's squares,
-/// `Square::samples`), and the height of each of its cells, m: the terrain's mean over it (`Terrain::inside`), the one
-/// height of the ground of a cell, which its relief stands about and its splits continue (laws.md 0).
-fn cell_heights(seed: u64, map: &Square, mesh: &Mesh, cfg: &Config) -> (Terrain, Vec<f64>) {
-    let terrain = terrain_of(seed, map, World::mesh_of(&map.samples(), cfg).cells());
-    let lat = (cfg.lat_south, cfg.lat_north);
-    let hz = (0..mesh.cells().n()).map(|i| terrain.inside(seed, map, map.leaves()[i], lat).0).collect();
-    (terrain, hz)
+/// Height of each cell of `map` by `terrain` (its rows between the latitudes `lat`), m: the terrain's mean over it
+/// (`Terrain::inside`, on its drained samples), the one height of the ground of a cell, which its relief stands about
+/// and its splits continue (laws.md 0).
+fn heights(seed: u64, map: &Square, terrain: &Terrain, lat: (f64, f64)) -> Vec<f64> {
+    map.leaves().iter().map(|&l| terrain.inside(seed, map, l, lat).0).collect()
 }
 
 /// Air over a m² at 0 m, mol: the reference pressure over the weight of a mol of the starting air (`Init::air`).
@@ -108,16 +99,18 @@ pub fn new_map(seed: u64, map: Square) -> World {
 }
 
 /// A new island from a seed, its low ground away from land in coarse cells (`coarse_low`): terrain, chemistry 0, ground,
-/// liquid and air.
+/// liquid and air. One terrain, so its drained samples are found once.
 pub fn new_world(seed: u64, w: usize, h: usize) -> World {
-    new_map(seed, coarse_low(seed, island(w, h)))
+    let (terrain, (chem, init)) = (Terrain::new(ISLAND_LEVEL), chemistry0());
+    let map = coarse_low(seed, island(w, h), &terrain);
+    build_on(seed, map, terrain, (chem, &init), Config::default())
 }
 
 /// `map` (of squares) with its low ground away from land in coarse cells (`coarsen`): an air block whose squares all
-/// lie below 0 m on the terrain of `seed`, none within `LAND_RING` squares of one that does not, is coarse.
-fn coarse_low(seed: u64, map: Square) -> Square {
-    let cells = World::mesh_of(&map, &Config::default());
-    let z = heights(seed, &map, &terrain_of(seed, &map, cells.cells()), cells.cells());
+/// lie below 0 m on `terrain` of `seed`, none within `LAND_RING` squares of one that does not, is coarse.
+fn coarse_low(seed: u64, map: Square, terrain: &Terrain) -> Square {
+    let cfg = Config::default();
+    let z = heights(seed, &map, terrain, (cfg.lat_south, cfg.lat_north));
     let ring = -LAND_RING..=LAND_RING;
     let open: Vec<bool> = (0..map.n()).map(|s| ring.clone().all(|dy| ring.clone().all(|dx| map.step(s, (dx, dy)).is_none_or(|t| z[t] < 0.0)))).collect();
     let w = map.w;
@@ -150,10 +143,15 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
     if map.wrap {
         (cfg.lat_south, cfg.lat_north) = (-90.0, 90.0);
     }
+    let terrain = terrain_of(seed, &map, World::mesh_of(&map.samples(), &cfg).cells());
+    build_on(seed, map, terrain, (chem, init), cfg)
+}
+
+/// `build` on `terrain` (its level found on the map's squares, `terrain_of`), each cell at its height (`heights`).
+fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, &Init), cfg: Config) -> World {
     let mesh = World::mesh_of(&map, &cfg);
     let (n, na, ns) = (mesh.cells().n(), mesh.level(AIR).n(), chem.ns());
-    let (terrain, mut hz) = cell_heights(seed, &map, &mesh, &cfg);
-    drain(mesh.cells(), &mut hz, map.wrap);
+    let hz = heights(seed, &map, &terrain, (cfg.lat_south, cfg.lat_north));
     let mut ground = vec![0.0; ns * n];
     let mut bed = vec![0.0; ns * n];
     let mv = |k: usize| chem.molar_volume(k, Phase::Solid);

@@ -7,11 +7,13 @@
 //! whatever window it is found for.
 
 use pcore::inside::Ground;
+use pcore::space::samples::Samples as Drained;
 use pcore::space::terrain::SAMPLE_DEPTH;
 use pcore::space::tree::BLOCK;
 use pcore::space::Leaf;
 use pcore::World;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 /// Leaves of each depth round a window whose heights are found too: the lean of the next depth reads two each way of
 /// a leaf's parent, so a margin of M at a depth needs M / 2 + 3 at the one above.
@@ -28,8 +30,8 @@ const DETAIL_LEAST_M: f64 = 1.0;
 /// A cell's points (`Samples::points`) are the leaves this many depths below it: 8 x 8.
 pub(super) const POINT_DEPTHS: u8 = 3;
 
-/// The terrain's samples of a map (`Terrain::sample` at the centres of the leaves of `SAMPLE_DEPTH`): the height, m,
-/// and the slope of the noise below it, found when first needed and kept (the terrain does not change), with the
+/// The terrain's samples of a map (the core's, drained, `Terrain::samples`, at the leaves of `SAMPLE_DEPTH`): the
+/// height, m, and the slope of the noise below it, read when first needed (the terrain does not change), with the
 /// terrain's mean height over each cell's leaf and at its points found so far, and the ground inside each cell's leaf as
 /// the core shares its means over it (`World::ground_in`).
 pub struct Samples {
@@ -37,8 +39,7 @@ pub struct Samples {
     across: usize,
     down: usize,
     area: Vec<f64>,
-    h: Vec<f32>,
-    g: Vec<f32>,
+    drained: Option<Arc<Drained>>,
     means: BTreeMap<Leaf, f64>,
     points: BTreeMap<Leaf, Vec<f64>>,
     grounds: BTreeMap<Leaf, Ground>,
@@ -52,20 +53,19 @@ impl Samples {
         let per = 1usize << (SAMPLE_DEPTH - sq);
         let (across, down) = (w.map.w * per, w.map.h * per);
         let area = (0..down).map(|y| w.map.place_of(&leaf(SAMPLE_DEPTH, 0, y as i64), w.cfg.lat_south, w.cfg.lat_north).0).collect();
-        Samples { across, down, area, h: Vec::new(), g: Vec::new(), means: BTreeMap::new(), points: BTreeMap::new(), grounds: BTreeMap::new() }
+        Samples { across, down, area, drained: None, means: BTreeMap::new(), points: BTreeMap::new(), grounds: BTreeMap::new() }
     }
-    /// Find the samples, if not yet found.
+    /// Read the samples, if not yet read.
     fn fill(&mut self, w: &World) {
-        if !self.h.is_empty() {
-            return;
+        if self.drained.is_none() {
+            self.drained = Some(w.terrain.samples(w.seed, &w.map, (w.cfg.lat_south, w.cfg.lat_north)));
         }
-        let place = |k: usize| w.map.place_of(&leaf(SAMPLE_DEPTH, (k % self.across) as i64, (k / self.across) as i64), w.cfg.lat_south, w.cfg.lat_north).1;
-        (self.h, self.g) = (0..self.across * self.down).map(|k| w.terrain.sample(w.seed, &w.map, place(k))).map(|(h, g)| (h as f32, g as f32)).unzip();
     }
     /// The height and slope of the sample at column `x` and row `y`, the nearest on the map where it lies off it.
     fn at(&self, x: i64, y: i64) -> (f64, f64) {
         let k = y.clamp(0, self.down as i64 - 1) as usize * self.across + x.clamp(0, self.across as i64 - 1) as usize;
-        (self.h[k] as f64, self.g[k] as f64)
+        let s = self.drained.as_ref().expect("the samples read");
+        (s.h[k], s.g[k] as f64)
     }
     /// The mean height by area of the samples from column `x` and row `y`, `n` a side.
     fn mean(&self, x: i64, y: i64, n: i64) -> f64 {

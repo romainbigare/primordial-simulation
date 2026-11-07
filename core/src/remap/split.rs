@@ -108,8 +108,7 @@ impl World {
         let mesh = self.mesh_for(&map, false);
         let kids = quarters.map(|q| map.cell(q).expect("a quarter"));
         let share = kids.map(|j| mesh.cells().area()[j] / self.mesh.cells().area()[i]);
-        let old = |j: usize| quarters.iter().all(|&q| q != map.leaves()[j]).then(|| self.map.cell(map.leaves()[j]).expect("a cell"));
-        let uneven = (record.is_none() && crate::flow::stated(self)).then(|| self.uneven((i, leaf), (mesh.cells(), kids), old));
+        let uneven = (record.is_none() && crate::flow::stated(self)).then(|| self.uneven((i, leaf), (mesh.cells(), kids)));
         let bed = uneven.as_ref().map_or(share, |u| u.bed);
         // The shares of the cell's own ground, as the split stands it (`inside`).
         let means = crate::flow::means(self, &[i]).map_or(Default::default(), |m| m[0]);
