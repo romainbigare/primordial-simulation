@@ -5,18 +5,8 @@
 // channels `CH`) and the genes' tint; this sets out the grids and how strongly each kind shows.
 import { Gpu, Pass, Texture, Uniforms } from './gpu';
 import { Rgb, Style } from './sprites';
-import { CH, COVER_LAYERS, CROWN_SIZES, CoverField } from './canopy';
+import { CH, COVER_LAYERS, CoverField, LATTICES, TREES, TUFTS } from './canopy';
 
-/** A kind of mark: its size across, m, and the side of its grid cell over its size. */
-interface Lattice { mark: number; spacing: number }
-/** The kinds of mark in the order they are drawn (the low under the tall): the tufts of grass, tundra and steppe (the
- * first `TUFTS`), a shrub's crown, and the trees' crowns (from `TREES`). The spacings keep a mark within its own cell
- * and the eight about it. */
-const LATTICES: Lattice[] = [
-  { mark: 0.25, spacing: 0.9 }, { mark: 0.35, spacing: 1.1 }, { mark: 0.5, spacing: 1.6 }, { mark: 1.5, spacing: 1.1 },
-  ...CROWN_SIZES.map(mark => ({ mark, spacing: 0.8 })),
-];
-const TUFTS = 3, TREES = 4;
 /** The kinds of mark the shader holds at most (cover.wgsl `KINDS`). */
 const KINDS = 8;
 /** A kind fainter than this is not drawn: it would not show, and it costs as much as one that does. */

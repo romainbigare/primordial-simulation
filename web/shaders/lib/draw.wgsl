@@ -34,3 +34,10 @@ fn ease(a: f32, b: f32, x: f32) -> f32 {
   let t = clamp((x - a) / (b - a), 0.0, 1.0);
   return t * t * (3.0 - 2.0 * t);
 }
+
+// A random word of the grid cell c and the stream k, fixed in the world (lowbias32, Wellons 2018).
+fn lowbias(c: vec2i, k: i32) -> u32 {
+  var x = (u32(c.x) * 0x9E3779B1u) ^ (u32(c.y) * 0x85EBCA77u) ^ (u32(k) * 0xC2B2AE3Du);
+  x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; x ^= x >> 16u;
+  return x;
+}

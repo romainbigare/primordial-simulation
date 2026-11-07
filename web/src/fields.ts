@@ -14,6 +14,9 @@ export interface Fields {
   matter: Float32Array;
   /** Four bytes a texel: the byte of the plant cover's mass (the `plants` layer) and the true colour (r, g, b). */
   bytes: Uint8Array;
+  /** Four floats a texel: how wet the ground is, 0..1 (tape/src/fine/inside.rs; 0 where the frame does not say); the
+   * depth of the river through it, m; two unused. */
+  inside: Float32Array;
   /** Every layer of the table (tape/src/layers.rs), a byte a texel, layer after layer: a layer view and the worn paths
    * read them. */
   layers: Uint8Array;
@@ -21,6 +24,8 @@ export interface Fields {
    * temperature lays snow (0: the ice alone), the height up to which a sea's shore is sand, m, and the bytes of a layer
    * over which an empty texel fades into a full one. */
   look: [number, number, number, number];
+  /** Where the window lies in the world: its top-left corner and its size, m (the water's ripples are fixed there). */
+  place: [number, number, number, number];
 }
 
 /** The textures of the fields, by their binding in earth.wgsl. */
@@ -28,6 +33,7 @@ export const FIELD_TEXTURES = [
   { binding: 2, field: 'height', format: 'rgba32float' },
   { binding: 3, field: 'matter', format: 'rgba32float' },
   { binding: 4, field: 'bytes', format: 'rgba8unorm' },
+  { binding: 7, field: 'inside', format: 'rgba32float' },
 ] as const;
 
 /** Set texel `i` of a field of four channels to (a, b, c, d). */
@@ -36,4 +42,4 @@ export function put4(f: Float32Array | Uint8Array, i: number, a: number, b: numb
 }
 
 /** The buffers of `f`, to hand them from the worker to the page. */
-export const fieldBuffers = (f: Fields): ArrayBuffer[] => [f.height.buffer, f.matter.buffer, f.bytes.buffer, f.layers.buffer] as ArrayBuffer[];
+export const fieldBuffers = (f: Fields): ArrayBuffer[] => [f.height.buffer, f.matter.buffer, f.bytes.buffer, f.inside.buffer, f.layers.buffer] as ArrayBuffer[];

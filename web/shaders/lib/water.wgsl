@@ -1,0 +1,70 @@
+// Water seen from above: a flat surface over its bed. Light that reaches the bed and comes back is absorbed on the
+// way down and up (Beer–Lambert), red the most and blue the least, so the bed shows through the shallows and fades with
+// depth into the colour of deep water; the surface reflects a little of the sky by the angle it is seen at (Fresnel,
+// in Schlick's form, Schlick 1994) and the sun where a ripple faces it. A sea, a lake and a river are the same water.
+
+// The diffuse attenuation of clear water for red, green and blue light, 1/m (Jerlov's oceanic water; Pope and Fry 1997
+// for pure water), and the colour of water too deep to show its bed (display, 0..255).
+const ATTENUATION = vec3f(0.35, 0.07, 0.03);
+const DEEP_WATER = vec3f(14.0, 46.0, 92.0);
+// The share of light a liquid's surface reflects straight up (Fresnel at normal incidence, refractive index 1.33), the
+// sky's colour and the sun's (display, 0..255).
+const REFLECT_UP = 0.02;
+const SKY = vec3f(205.0, 222.0, 240.0);
+const SUN = vec3f(255.0, 250.0, 235.0);
+// The sun shows in a ripple as sharply as this power of the cosine between its slope and the half-way light.
+const GLINT_POWER = 60.0;
+// Ripples: their longest wavelength, m, the octaves below it (each half as long), and the slope of each.
+const RIPPLE_LONGEST_M = 2.0;
+const RIPPLE_OCTAVES = 4;
+const RIPPLE_SLOPE = 0.09;
+
+// Value noise at p (in its grid's cells) of stream k, -1..1, and its slope along x and y (Quilez 2017).
+fn noise(p: vec2f, k: i32) -> vec3f {
+  let i = vec2i(floor(p));
+  let f = p - floor(p);
+  let u = f * f * (3.0 - 2.0 * f);
+  let du = 6.0 * f * (1.0 - f);
+  let v = vec4f(f32(lowbias(i, k)), f32(lowbias(i + vec2i(1, 0), k)), f32(lowbias(i + vec2i(0, 1), k)), f32(lowbias(i + vec2i(1, 1), k))) * (2.0 / 4294967296.0) - 1.0;
+  let a = v.y - v.x;
+  let b = v.z - v.x;
+  let c = v.x - v.y - v.z + v.w;
+  return vec3f(v.x + a * u.x + b * u.y + c * u.x * u.y, du * vec2f(a + c * u.y, b + c * u.x));
+}
+
+// The slope (east, south) of a liquid's surface at `at`, m in the world, seen at `e` m a pixel: octaves of ripples fixed
+// in the world, each turned from the last so they stand in no grid, each fading out as it shrinks below a few pixels
+// (it would only flicker).
+fn ripples(at: vec2f, e: f32) -> vec2f {
+  var g = vec2f(0.0);
+  var wave = RIPPLE_LONGEST_M;
+  // The octave's turn from the world's axes; a turn of about 37 degrees between octaves.
+  var rot = mat2x2f(1.0, 0.0, 0.0, 1.0);
+  let turn = mat2x2f(0.8, 0.6, -0.6, 0.8);
+  for (var k = 0; k < RIPPLE_OCTAVES; k++) {
+    let shown = 1.0 - ease(wave / 8.0, wave / 2.0, e);
+    if (shown > 0.0) { g += shown * RIPPLE_SLOPE * (transpose(rot) * noise(rot * at / wave, k).yz); }
+    wave *= 0.5;
+    rot = turn * rot;
+  }
+  return g;
+}
+
+// What a liquid's surface of slope g (east, south) adds of the sky and the sun lit from the north-west (`LIGHT`), seen
+// from straight above.
+fn surface_light(g: vec2f) -> vec3f {
+  let n = normalize(vec3f(-g, 1.0));
+  let fresnel = REFLECT_UP + (1.0 - REFLECT_UP) * pow(1.0 - n.z, 5.0);
+  let half_way = normalize(LIGHT + vec3f(0.0, 0.0, 1.0));
+  let glint = pow(max(dot(n, half_way), 0.0), GLINT_POWER);
+  return fresnel * (SKY + SUN * glint / REFLECT_UP);
+}
+
+// The share of the light that crosses `depth` m of water down to its bed and back, for red, green and blue.
+fn through(depth: f32) -> vec3f { return exp(-2.0 * ATTENUATION * depth); }
+
+// Bed `bed` (display, lit) seen through `depth` m of water (0: a wet film) whose surface has slope g.
+fn water_over(bed: vec3f, depth: f32, g: vec2f) -> vec3f {
+  let t = through(depth);
+  return bed * t + DEEP_WATER * (1.0 - t) + surface_light(g);
+}

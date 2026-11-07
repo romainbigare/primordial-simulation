@@ -31,6 +31,13 @@ export function decodeByte(l: Layer, b: number): number {
   return Math.exp(a + ((b - 1) / 254) * (Math.log(l.max) - a));
 }
 
+/** The byte of value `v` in layer `l`, as the tape quantises it (tape/src/layers.rs `quantise`): `decodeByte` undone. */
+export function encodeByte(l: Layer, v: number): number {
+  const b = l.scale === 'raw' ? 255 * v : l.scale === 'lin' ? (255 * (v - l.min)) / (l.max - l.min)
+    : v < l.min ? 0 : 1 + (254 * (Math.log(v) - Math.log(l.min))) / (Math.log(l.max) - Math.log(l.min));
+  return Math.min(Math.max(Math.round(b), 0), 255);
+}
+
 export async function gunzip(buf: ArrayBuffer): Promise<Uint8Array> {
   const b = new Uint8Array(buf);
   if (b[0] !== 0x1f || b[1] !== 0x8b) return b; // already inflated (e.g. by the web server)

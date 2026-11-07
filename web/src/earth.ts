@@ -71,6 +71,14 @@ function oceanFill(wet: Uint8Array, W: number, H: number, globe: boolean): Uint8
 /** Where movers wore paths (the `worn` layer: the most cleared link of the cell), drawn over the map. */
 export const PATH_LAYER = 'worn';
 
+/** A river's width and depth grow as powers of its discharge (hydraulic geometry downstream, Leopold and Maddock 1953):
+ * width as its square root, this many m at 1 m³/s, and depth as its power `RIVER_DEPTH_POWER`, this many m at 1 m³/s; a
+ * mol of the common liquid takes LIQUID_M3 m³. */
+const RIVER_WIDTH_M = 3, RIVER_DEPTH_M = 0.3, RIVER_DEPTH_POWER = 0.4, LIQUID_M3 = 1.8e-5;
+/** The width and the depth of a river of liquid flux `flux`, mol/s, m. */
+export const riverWidthOf = (flux: number) => RIVER_WIDTH_M * Math.sqrt(flux * LIQUID_M3);
+export const riverDepthOf = (flux: number) => RIVER_DEPTH_M * (flux * LIQUID_M3) ** RIVER_DEPTH_POWER;
+
 /** How much a spot of liquid flux `flux`, mol/s, and catchment `catchment` (the `catch` layer) is a river, 0..1. */
 export const riverOf = (flux: number, catchment: number) =>
   Math.min(smooth(RIVER_CATCH_LOG[0], RIVER_CATCH_LOG[1], Math.log10(catchment + 1)), smooth(RIVER_FLOOR_LOG[0], RIVER_FLOOR_LOG[1], Math.log10(flux + 1)));
@@ -98,7 +106,8 @@ export function seaSquares(wet: Wet, meta: Meta): Uint8Array {
   });
 }
 
-/** The fields of the map's squares at frame f, a texel a square (fields.ts), and its wet squares and sea. The liquid's
+/** The fields of the map's squares at frame f, a texel a square (fields.ts), and its wet squares and sea (a frame does
+ * not say how wet the ground is: 0). The liquid's
  * surface over the ground is a wet square's depth, and in a dry square lies below its ground by the depth it lacks to
  * be wet and by its height over the surface of the wet squares beside it, so the shore drawn between a wet square and
  * a dry one lies nearer the lower. A square's slope is the Sobel gradient of the heights about it. */
@@ -109,7 +118,7 @@ export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
   const plants = plane(w, f, 'plants'), tr = plane(w, f, 'true_r'), tgr = plane(w, f, 'true_g'), tb = plane(w, f, 'true_b');
   const wet = wetOf(w, f), sea = seaSquares(wet, m);
   const wrapX = (x: number) => (globe ? (x + W) % W : x);
-  const height = new Float32Array(4 * n), matter = new Float32Array(4 * n), bytes = new Uint8Array(4 * n);
+  const height = new Float32Array(4 * n), matter = new Float32Array(4 * n), bytes = new Uint8Array(4 * n), inside = new Float32Array(4 * n);
   for (let i = 0; i < n; i++) {
     const x = i % W, y = (i / W) | 0;
     const zAt = (dx: number, dy: number) => z[clamp(y + dy, 0, H - 1) * W + clamp(wrapX(x + dx), 0, W - 1)];
@@ -129,7 +138,9 @@ export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
     put4(height, i, z[i], water, gx, gy);
     put4(matter, i, ice[i], tg[i], sea[i], wet.wet[i] ? 0 : riverOf(flux[i], catchment[i]));
     put4(bytes, i, plants[i], tr[i], tgr[i], tb[i]);
+    put4(inside, i, 0, riverDepthOf(flux[i]), 0, 0);
   }
   const o = w.base + f * w.frameBytes;
-  return { fields: { w: W, h: H, height, matter, bytes, layers: w.data.subarray(o, o + w.frameBytes), look: [1, 0, SQUARE_BEACH_M, 1] }, wet };
+  const fields: Fields = { w: W, h: H, height, matter, bytes, inside, layers: w.data.subarray(o, o + w.frameBytes), look: [1, 0, SQUARE_BEACH_M, 1], place: [0, 0, W * cell_m, H * cell_m] };
+  return { fields, wet };
 }

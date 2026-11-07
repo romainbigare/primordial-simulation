@@ -7,20 +7,26 @@ use tape::{fine, Samples, LAYERS};
 use worldgen::testkit;
 
 /// What `fine` hands out for a window of `n` pixels: the river ways, the ground and the liquid's surface, the bytes of
-/// the layers, and the fields inside the cells (`INSIDE` planes of `n`: wetness, the cover of each slot).
+/// the layers, the fields inside the cells (`INSIDE` planes of `n`: wetness, the cover of each slot), the number of
+/// each pixel's cell, and of each cell what its slots build per kg (`MAKE` numbers).
 struct Fine {
     ways: Vec<[f32; 6]>,
     ground: Vec<f32>,
     water: Vec<f32>,
     bytes: Vec<u8>,
     inside: Vec<f32>,
+    cell: Vec<u32>,
+    make: Vec<f32>,
 }
 
 /// The planes inside the cells: wetness and one for each slot of cover.
 const INSIDE: usize = 1 + pcore::cover::SLOTS;
+/// Of each cell of a window: the walls and the capture area per kg of each slot.
+const MAKE: usize = 2 * pcore::cover::SLOTS;
 
 /// `b` read as `fine` lays it out: a byte a pixel for each layer, then zero bytes up to a multiple of 4, then the
-/// planes inside the cells, and nothing more.
+/// planes inside the cells, the number of each pixel's cell, the count of the cells and what their slots build, and
+/// nothing more.
 fn read(b: &[u8], n: usize) -> Fine {
     let f32s = |from: usize, k: usize| (0..k).map(|i| f32::from_le_bytes(b[from + 4 * i..from + 4 * i + 4].try_into().unwrap())).collect::<Vec<f32>>();
     let rivers = u32::from_le_bytes(b[4..8].try_into().unwrap()) as usize;
@@ -28,9 +34,14 @@ fn read(b: &[u8], n: usize) -> Fine {
     let at = 8 + 24 * rivers;
     let (planes, end) = (at + 8 * n, at + 8 * n + LAYERS.len() * n);
     let inside = end.next_multiple_of(4);
-    assert_eq!(b.len(), inside + 4 * INSIDE * n, "a byte a pixel for each layer, then the planes inside the cells");
+    let u32s = |from: usize, k: usize| (0..k).map(|i| u32::from_le_bytes(b[from + 4 * i..from + 4 * i + 4].try_into().unwrap())).collect::<Vec<u32>>();
+    let numbers = inside + 4 * INSIDE * n;
+    let cells = u32s(numbers + 4 * n, 1)[0] as usize;
+    assert_eq!(b.len(), numbers + 4 * (n + 1 + MAKE * cells), "a byte a pixel for each layer, then the planes inside the cells and their cells");
     assert!(b[end..inside].iter().all(|&x| x == 0), "zero bytes up to the planes inside the cells");
-    Fine { ways, ground: f32s(at, n), water: f32s(at + 4 * n, n), bytes: b[planes..end].to_vec(), inside: f32s(inside, INSIDE * n) }
+    let (cell, make) = (u32s(numbers, n), f32s(numbers + 4 * (n + 1), MAKE * cells));
+    assert!(cell.iter().all(|&c| (c as usize) < cells), "each pixel in a cell of the window");
+    Fine { ways, ground: f32s(at, n), water: f32s(at + 4 * n, n), bytes: b[planes..end].to_vec(), inside: f32s(inside, INSIDE * n), cell, make }
 }
 
 /// The window from column `at[0]` and row `at[1]`, 8 x 8 squares, of `w` at `depth`, and its pixels along a side.
@@ -63,10 +74,14 @@ fn the_fine_ground_keeps_each_squares_height_and_shows_no_cells_edge() {
     let (got, across) = window(&w, &mut s, [4.0, 4.0], depth);
     let n = across * across;
     assert!(got.inside[..n].iter().all(|w| (0.0..=1.0).contains(w)) && got.inside[n..].iter().all(|&x| x >= 0.0), "a wetness 0 to 1 and cover of none or more");
+    assert!(got.make.iter().all(|&x| x >= 0.0), "walls and capture area of none or more");
     assert!(w.map.leaves().iter().all(|l| l.depth >= w.map.square_depth()), "the coarsest cells are squares");
     let per = (across / 8) as f64;
     let at = |p: usize| [((p % across) as f64 + 0.5) / per, ((p / across) as f64 + 0.5) / per];
     let cell = |p: usize| w.mesh.tree().cell_at(w.map.point_at(4.0 + at(p)[0], 4.0 + at(p)[1]));
+    let named: std::collections::BTreeSet<(usize, u32)> = (0..n).map(|p| (cell(p), got.cell[p])).collect();
+    let (cells, numbers): (std::collections::BTreeSet<_>, std::collections::BTreeSet<_>) = named.iter().copied().unzip();
+    assert!(named.len() == cells.len() && named.len() == numbers.len(), "a pixel's number names its cell");
     // The mean of each square's pixels against the mean height by area of its cells.
     let square = |[x, y]: [f64; 2]| y.floor() as usize * 8 + x.floor() as usize;
     let (mut drawn, mut held) = (vec![(0.0, 0.0); 64], vec![(0.0, 0.0); 64]);
