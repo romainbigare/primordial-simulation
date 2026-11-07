@@ -3,12 +3,13 @@
 // its cell's real area, seeded by the node's id and the member's index, so it holds while the camera moves. A member
 // whose length takes `SHAPE_PX` pixels or more is drawn as its shape (sprites.ts, from above or angled), a smaller one
 // as a soft dot, and below a pixel its node as a light stipple of its members per m². Hovering or clicking one shows
-// its numbers (10.8); the plant cover is a texture (vegetation.ts).
+// its numbers (10.8); the plant cover is a texture (vegetation.ts). A lot of alike parts (laws.md 3.1) is drawn part
+// by part, each at a place seeded by the lot's id and the part's index.
 import { Rgb, Sprite, Style, AnimalLook, PartLook, animal, object, paintSprite, bodyLength, animalColour, woodiness, display, muted, seeded, tone, DIET_COVER, DIET_BODIES, DIET_REMAINS } from './sprites';
 
 interface Animal { id: bigint; members: number; mass: number; living: number; strength: number; colour: Rgb; copyMass: number; coat: number; keepT: number; coolT: number; root: number; lineage: number; diet: number; adult: boolean; hidden: number; hold: bigint; inside: bigint }
 interface Slot { root: number; kg: number; leaf: number; genes: number[]; full: boolean }
-interface Thing { id: bigint; size: [number, number, number]; hollow: number; mass: number; colour: Rgb; hardness: number; buried: number; held: bigint; root: bigint; space: number; closed: number }
+interface Thing { id: bigint; count: number; size: [number, number, number]; hollow: number; mass: number; colour: Rgb; hardness: number; buried: number; held: bigint; root: bigint; space: number; closed: number }
 interface Bond { a: bigint; b: bigint; strength: number }
 export interface CellThings { index: number; box: [number, number, number, number]; area: number; bodies: Animal[]; slots: Slot[]; parts: Thing[]; bonds: Bond[] }
 
@@ -29,6 +30,8 @@ const STIPPLE_EDGE = 0.15;
 const DOT_ALPHA = 0.85;
 /** A part smaller than this, px, is not drawn; up to `SHAPE_PX` it is a dot. */
 const PART_HIDE_PX = 1;
+/** The parts of a lot drawn at most. */
+const MOST_OF_LOT = 2000;
 /** The pointer finds a thing within this many pixels of its edge. */
 const REACH_PX = 3;
 /** The share of the view's width and height the picture of the things reaches beyond each edge. */
@@ -55,8 +58,8 @@ function readThings(data: Uint8Array): CellThings[] {
     });
     const slots = Array.from({ length: ns }, (): Slot => { const root = u32(), kg = f32(), leaf = f32(), genes = f32s(9), full = u8() === 1; at += 3; return { root, kg, leaf, genes, full }; });
     const parts = Array.from({ length: np }, (): Thing => {
-      const i = id(), [l, w, t, hollow, mass, r, g, b, hardness, buried] = f32s(10);
-      return { id: i, size: [l, w, t], hollow, mass, colour: [r, g, b], hardness, buried, held: id(), root: id(), space: f32(), closed: f32() };
+      const i = id(), [count, l, w, t, hollow, mass, r, g, b, hardness, buried] = f32s(11);
+      return { id: i, count, size: [l, w, t], hollow, mass, colour: [r, g, b], hardness, buried, held: id(), root: id(), space: f32(), closed: f32() };
     });
     const bonds = Array.from({ length: nl }, (): Bond => ({ a: id(), b: id(), strength: f32() }));
     cells.push({ index, box, area, bodies, slots, parts, bonds });
@@ -105,6 +108,16 @@ function eachIn(l: Layout, v: Box, per: number, fn: (m: number, x: number, y: nu
 }
 /** The share of layout `l`'s blocks in window `v`. */
 const shareIn = (l: Layout, v: Box) => { const [c0, r0, c1, r1] = blocksIn(l, v); return (Math.max(c1 - c0 + 1, 0) * Math.max(r1 - r0 + 1, 0)) / (l.g * l.g); };
+/** The parts of lot `p` drawn (its count's whole part, and one more by chance of its fraction, seeded by its id), at
+ * most `MOST_OF_LOT`. */
+const partsOf = (p: Thing) => Math.min(MOST_OF_LOT, Math.floor(p.count) + (seeded(seedOf(p.id, -1))() < p.count % 1 ? 1 : 0));
+/** The place of part `m` of lot `p` lying alone in cell `c`, squares: the first at its structure's place, each other
+ * one seeded by the lot's id and its index, so a window shows the same parts at the same places. */
+function partAt(c: CellThings, p: Thing, m: number): [number, number] {
+  if (m === 0) return structureAt(c, p.root);
+  const r = seeded(seedOf(p.id, m)), [x0, y0, x1, y1] = c.box;
+  return [x0 + (0.05 + 0.9 * r()) * (x1 - x0), y0 + (0.05 + 0.9 * r()) * (y1 - y0)];
+}
 /** A structure's place in its cell, squares: seeded by its root. */
 function structureAt(c: CellThings, root: bigint): [number, number] {
   const r = seeded(seedOf(root, -3)), [x0, y0, x1, y1] = c.box;
@@ -272,26 +285,29 @@ export class Avatars {
   }
 
   /** The parts of cell `c` lying free: each structure at its place, its parts side by side in a row by their real
-   * lengths; a part smaller than `PART_HIDE_PX` is not drawn, one smaller than `SHAPE_PX` is a dot. */
+   * lengths, and the parts of a lot one by one (`partAt`); a part smaller than `PART_HIDE_PX` is not drawn, one smaller
+   * than `SHAPE_PX` is a dot. */
   private layParts(ctx: CanvasRenderingContext2D, c: CellThings, ppm: number, sq: (x: number, y: number) => number[], onScreen: (x: number, y: number, r: number) => boolean, shapes: Shape[]): void {
     const along = new Map<bigint, number>();
     for (const p of c.parts) {
       if (p.held !== 0n) continue;
       const look = partLook(p), px = look.size[0] * ppm;
-      const [hx, hy] = structureAt(c, p.root), off = along.get(p.root) ?? 0;
+      const off = along.get(p.root) ?? 0;
       along.set(p.root, off + look.size[0] * 1.1);
       if (px < PART_HIDE_PX) continue;
-      const [x, y] = sq(hx, hy), cx = x + (off + look.size[0] / 2) * ppm;
-      if (!onScreen(cx, y, px)) continue;
-      const hit: Hit = { x: cx, y, r: px / 2, key: `p${p.id}`, what: () => partText(p, c) };
-      if (px < SHAPE_PX) {
-        ctx.fillStyle = tone(muted(display(look.colour)), 1, DOT_ALPHA);
-        ctx.beginPath(); ctx.arc(cx, y, px / 2, 0, 2 * Math.PI); ctx.fill();
-        this.hits.push(hit);
-        continue;
+      for (let m = 0, n = partsOf(p); m < n; m++) {
+        const [x, y] = sq(...partAt(c, p, m)), cx = x + (m === 0 ? off + look.size[0] / 2 : 0) * ppm;
+        if (!onScreen(cx, y, px)) continue;
+        const hit: Hit = { x: cx, y, r: px / 2, key: `p${p.id}`, what: () => partText(p, c) };
+        if (px < SHAPE_PX) {
+          ctx.fillStyle = tone(muted(display(look.colour)), 1, DOT_ALPHA);
+          ctx.beginPath(); ctx.arc(cx, y, px / 2, 0, 2 * Math.PI); ctx.fill();
+          this.hits.push(hit);
+          continue;
+        }
+        const sprite = this.sprite(`p${p.id}`, ppm, () => object(look, ppm, this.style)), turn = this.style === 'above' ? (seeded(seedOf(p.id, m))() - 0.5) * 0.6 : 0;
+        shapes.push({ sprite, x: cx, y, turn, lift: this.style === 'above' ? Math.min(sprite.r, look.size[2] * ppm) * SHADOW_LIFT : 0, hit });
       }
-      const sprite = this.sprite(`p${p.id}`, ppm, () => object(look, ppm, this.style)), turn = this.style === 'above' ? (seeded(seedOf(p.id, 0))() - 0.5) * 0.6 : 0;
-      shapes.push({ sprite, x: cx, y, turn, lift: this.style === 'above' ? Math.min(sprite.r, look.size[2] * ppm) * SHADOW_LIFT : 0, hit });
     }
   }
 
@@ -302,7 +318,7 @@ export class Avatars {
     const look = partLook(held), px = look.size[0] * ppm;
     if (px < SHAPE_PX) return;
     const sprite = this.sprite(`p${held.id}`, ppm, () => object(look, ppm, this.style));
-    shapes.push({ sprite, x: x + r * 0.8, y, turn: 0, lift: 0, hit: { x: x + r * 0.8, y, r: px / 2, key: `p${held.id}`, what: () => `Held part: ${num(held.mass)} kg` } });
+    shapes.push({ sprite, x: x + r * 0.8, y, turn: 0, lift: 0, hit: { x: x + r * 0.8, y, r: px / 2, key: `p${held.id}`, what: () => `Held: ${num(held.count)} part${held.count > 1 ? 's' : ''} of ${num(held.mass)} kg` } });
   }
 }
 
@@ -340,9 +356,10 @@ function coverText(c: CellThings): string {
 
 function partText(p: Thing, c: CellThings): string {
   const bonds = c.bonds.filter(l => l.a === p.id || l.b === p.id).length;
-  return head(p.hardness >= 0.3 ? 'Object (stone)' : 'Object', c) + '<table>' + [
-    row('Id', String(p.id)), row('Sizes', `${p.size.map(v => num(v)).join(' × ')} <u>m</u>`), row('Hollow', num(p.hollow, 2)),
-    row('Mass', `${num(p.mass)} <u>kg</u>`), row('Hardness', num(p.hardness, 2)), row('Buried', `${num(p.buried)} <u>m</u>`),
+  const title = p.hardness >= 0.3 ? 'Object (stone)' : 'Object';
+  return head(p.count > 1 ? `${title}, ${fmtCount(p.count)} alike` : title, c) + '<table>' + [
+    row('Id', String(p.id)), row('Alike parts', num(p.count)), row('Sizes', `${p.size.map(v => num(v)).join(' × ')} <u>m</u>`), row('Hollow', num(p.hollow, 2)),
+    row('Mass of each', `${num(p.mass)} <u>kg</u>`), row('Hardness', num(p.hardness, 2)), row('Buried', `${num(p.buried)} <u>m</u>`),
     row('Held by', p.held ? String(p.held) : 'nobody'), row('Structure root', String(p.root)), row('Bonds', String(bonds)),
     row('Space closed', `${num(p.space)} <u>m³</u>, ${num(p.closed, 2)} closed`), row('Colour', swatch(p.colour)),
   ].join('') + '</table>';

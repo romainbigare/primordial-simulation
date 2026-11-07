@@ -77,8 +77,9 @@ their discharge (Leopold and Maddock 1953) or wider; it is not recorded. Close u
 for the things of the cells in view (`tape::things`, the record layout in `tape/src/things.rs`): each body (members,
 a member's mass, strength, colour, coat, copy mass, the temperatures it keeps, what it takes from where, its kind,
 stage and brain, the part it holds and the structure it is inside), each slot of cover (its kind, built cover and capture area per m²
-and genes) and each part (sizes, hollowness, mass, its walls' colour and hardness, burial, holder, structure and the
-space it closes) with the bonds; it is drawn as avatars and is not recorded.
+and genes) and each part, or lot of alike parts (laws.md 3.1: its count, each part's sizes, hollowness and mass, its
+walls' colour and hardness, burial, holder, structure and the space it closes) with the bonds; it is drawn as avatars,
+a lot part by part at places keyed by its id and each part's index, and is not recorded.
 
 ## `series.csv`: the world
 

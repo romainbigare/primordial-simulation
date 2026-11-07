@@ -93,9 +93,9 @@ fn a_window_lists_what_lies_in_its_cells() {
     assert_eq!(genes[WALLS], f.genes[WALLS]);
     assert_eq!(r.take::<4>(), [0; 4]);
 
-    // The part: its id, sizes longest first, mass, a colour and hardness of rock, on the ground, held by none.
+    // The part: its id and count, sizes longest first, mass, a colour and hardness of rock, on the ground, held by none.
     let p = w.life.part(part).expect("the part");
-    assert_eq!(r.id(), part);
+    assert_eq!((r.id(), r.f32()), (part, 1.0), "the part, one");
     let [l, b2, t, hollow, mass, red, green, blue, hard, buried] = r.f32s::<10>();
     assert_eq!(([l, b2, t], hollow), (p.size, p.hollow));
     assert!(l >= b2 && b2 >= t && (mass as f64 - 2.0).abs() < 1e-5, "sizes {l} {b2} {t}, {mass} kg");
@@ -107,4 +107,23 @@ fn a_window_lists_what_lies_in_its_cells() {
     // The whole map lists every cell.
     let all = tape::things(&w, [0.0, 0.0, w.map.w as f64, w.map.h as f64]);
     assert_eq!(u32::from_le_bytes(all[..4].try_into().unwrap()) as usize, w.mesh.cells().n());
+}
+
+/// Alike parts lying alone in a cell are one lot (laws.md 3.1): the window lists it once, with its count, and the
+/// sizes and mass of each of its parts, so a viewer draws its parts one by one.
+#[test]
+fn a_lot_is_listed_once_with_its_count() {
+    let (mut w, i) = testkit::start();
+    let parts: Vec<u64> = (0..5).map(|_| testkit::plate(&mut w, i, 2.0, true)).collect();
+    pcore::bond::step(&mut w);
+    let ([x0, y0, x1, y1], lot) = (w.map.bounds(i), w.life.part(parts[0]).expect("the lot"));
+    let bytes = tape::things(&w, [x0, y0, x1 - x0, y1 - y0]);
+    let mut r = Read(&bytes);
+    assert_eq!((r.u32(), r.u32()), (1, i as u32));
+    r.f32s::<5>();
+    assert_eq!([r.u16(), r.u16(), r.u16(), r.u16()], [0, 0, 1, 0], "one record of parts");
+    assert_eq!((r.id(), r.f32()), (parts[0], 5.0), "the lot and its count");
+    let [l, b, t, _hollow, mass] = r.f32s::<5>();
+    assert_eq!([l, b, t], lot.size, "the sizes of each part");
+    assert!((mass as f64 / 2.0 - 1.0).abs() < 1e-5, "the mass of each part: {mass} kg");
 }
