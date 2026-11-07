@@ -36,12 +36,13 @@ in view; the page shows the date, the months per second it reaches, the cells an
 while the world plays. After 3 minutes without input the page sends the camera away (a recorded change of the camera),
 so the world joins its fine cells and runs at the coarse pace again; the next zoom, pan or click brings it back.
 
-At every zoom the live viewer draws the window in view 2 to 4 depths finer than its cells (`tape::fine`, a pixel of
-1 to 2 screen pixels, at most 360,000 of them): the ground's height from the terrain below the cells, set on each
-cell's own height, with hill shading; the liquid where its surface lies over that ground, so shores follow the ground;
-snow by the ground's own temperature; the other layers blended between the cells' centres; rivers as lines along the
-way their liquid runs. It is made again when the view rests and once a second while the world plays; the stats line
-gives its size and the time the core took to make it and the page to paint it.
+At every zoom the live viewer draws the window in view finer than its cells (`tape::fine`, a pixel of 1 to 2 screen
+pixels and no smaller than 5 cm, smoothed up closer, at most 360,000 of them): the ground's height from the terrain
+below the cells (smooth below a metre), set on each cell's own height, with hill shading; the liquid where its surface
+lies over that ground, so shores follow the ground; snow by the ground's own temperature; the other layers blended
+between the cells' centres; rivers as lines along the way their liquid runs. It is made again when the view rests and
+once a second while the world plays; the stats line gives its size and the time the core took to make it and the page
+to paint it.
 
 The Earth view draws the plant cover as textures at its real size (`web/src/vegetation.ts`, `web/src/textures.ts`),
 over the fine raster where there is one and blended between the cells' centres as the map is: crowns where it is woody
@@ -58,8 +59,8 @@ smaller as a soft dot, and below a pixel its node is a stipple over its cell, so
 stronger the more members a m² holds (alike at every zoom, from a faint patch to a strong one), lighter than dark ground
 and darker than light ground, thinning at its edges. Parts are drawn at their own sizes, hidden below a pixel. Two
 styles draw the shapes (the "Life" buttons, kept per browser): from above (a body with its head, wider the stronger) or
-angled (a block on legs, as a small axonometric sprite). Hover or click one to see its numbers; the inspect panel gives a herd's count.
-The map zooms to 16 pixels a metre.
+angled (a block on legs, as a small axonometric sprite). Hover or click one to see its numbers; the inspect panel
+gives a herd's count. The map zooms to 80 pixels a metre, so one animal shows its shape and can be picked.
 
 By default the animals start with hand-set brain biases (`--neutral-eaters` for neutral brains) and the
 light-eaters with no brain.
