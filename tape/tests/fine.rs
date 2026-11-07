@@ -132,17 +132,18 @@ fn the_fine_ground_does_not_depend_on_the_window_and_liquid_stands_low() {
     let per = (across / 8) as f64;
     let cell = |p: usize| w.mesh.tree().cell_at(w.map.point_at(((p % across) as f64 + 0.5) / per, ((p / across) as f64 + 0.5) / per));
     // The liquid drawn stands at its own cell's level (the shore moves with it, never past the cell's own ground),
-    // only in a cell that holds some, and a cell wholly under it holds its depth on the mean (f32).
+    // only in a cell that holds it standing, and a cell wholly under it holds its depth over the first `STANDING_M` on
+    // the mean (f32).
     let mut drawn = std::collections::BTreeMap::new();
     for p in 0..across * across {
         let (i, level) = (cell(p), got.water[p]);
-        assert!(level.is_nan() || f.depth[i] > 0.0, "liquid drawn only in a cell that holds some");
+        assert!(level.is_nan() || f.depth[i] > tape::STANDING_M, "liquid drawn only in a cell that holds it standing");
         let d = drawn.entry(i).or_insert((level, 0.0, 0.0, true));
         assert!(d.0.to_bits() == level.to_bits(), "the liquid of a cell stands at one level");
         *d = (level, d.1 + (level - got.ground[p]) as f64, d.2 + 1.0, d.3 && level > got.ground[p]);
     }
     let under: Vec<_> = drawn.iter().filter(|d| d.1 .3).collect();
-    assert!(!under.is_empty() && under.iter().all(|(&i, d)| (d.1 / d.2 - f.depth[i]).abs() < 1e-5 * f.depth[i]), "a cell under its liquid holds its depth");
+    assert!(!under.is_empty() && under.iter().all(|(&i, d)| (d.1 / d.2 - (f.depth[i] - tape::STANDING_M)).abs() < 1e-5 * f.depth[i]), "a cell under its liquid holds its depth");
     let deep = (0..across * across).filter(|&p| f.depth[cell(p)] > 50.0).collect::<Vec<_>>();
     let covered = deep.iter().filter(|&&p| got.water[p] > got.ground[p]).count() as f64 / deep.len() as f64;
     assert!(!deep.is_empty() && covered > 0.9, "the sea covers its deep cells but for some of their shores: {covered}");

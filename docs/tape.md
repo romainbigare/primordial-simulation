@@ -77,12 +77,13 @@ the cells' heights plus the terrain's shape finer than it: the terrain there (`s
 or finer than them the midpoint displacement's departures laid on a quartic continuation of the coarser heights that
 keeps each leaf's mean, smooth with its slope so hill shading shows no creases along the leaves' edges; below a metre
 the continuation alone) less the field of the terrain's means over the cells, which keeps each cell's mean. The liquid's
-level is its own cell's: where the cell holds liquid, the level that liquid stands at when it fills the lowest points
-of the cell's ground first (`flow::level_of`), from a puddle in its lowest point on; none where it holds none. So the liquid
-drawn lies only on the cell's ground below its level, a cell wholly under it holds its depth, the shore is where the
-ground drawn rises above it and moves with the level, never by a cell's width. (Where only part of a cell is under it,
-the ground drawn leans with the smooth field of the cells' heights while the level is found on the cell's own points,
-so the liquid drawn differs from the cell's by a few per cent.)
+level is its own cell's: of the liquid over its first `STANDING_M` on the mean (that much may run, as a river), the level
+it stands at when it fills the lowest points of the cell's ground first (`flow::level_of`), from a puddle in its lowest
+point on; none in a cell that holds less. So the liquid drawn lies only on the cell's ground below its level, a cell
+wholly under it holds that liquid exactly, and the shore is where the ground drawn rises above it and moves with the
+level, never by a cell's width. (Where only part of a cell is under it, the ground drawn leans with the smooth field of
+the cells' heights while the level is found on the cell's own points, so the liquid drawn may differ from it by a few
+per cent.)
 The terrain's samples are found once (`tape::Samples`). After the layers come **the fields inside the cells**
 (`tape/src/fine/inside.rs`), from the next multiple of 4 bytes (zero bytes pad up to it), each a plane of one f32 a
 pixel (little-endian), the pixels row by row as above, in this order:
