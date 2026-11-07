@@ -14,7 +14,7 @@ pub fn step(w: &mut World) {
     }
     let dt = w.cfg.calendar().month as f64;
     let load = w.life.cells.iter().map(|c| c.parts.len()).sum();
-    life::run(w, vec![(); life::chunks(w)], load, |_| (), |w, d, _, _| {
+    life::run(w, life::Of::All, vec![(); life::chunks(w)], load, |_| (), |w, d, _, _| {
         let cells: Vec<usize> = d.cells().filter(|&i| !d.at(i).parts.is_empty()).collect();
         for i in cells {
             let walls = turns(w, d, i, dt);

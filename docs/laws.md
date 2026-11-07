@@ -76,9 +76,16 @@ below; a step is at least a second, so a cell 21 depths finer than a square or m
 draws of the bodies of a cell that steps a day or longer are keyed by the day (two of its steps never fall on one
 day); those of a cell that steps faster by the time in seconds, above every day's key (`World::key_at`). **Every
 body updates at the month's start**, after the month's Flow, Change and Bond: one batch holds every living body. Then
-at the end of each sub-step of the finest cells' step the cells whose step ends there are surveyed again (what movers
-broke there; in every cell its numbers and features, as the moves and meals since left them) and their bodies update
-in a batch of the same passes; the other cells do nothing then. Flow, Change and Bond keep their steps (1.8).
+at the end of each sub-step of the finest cells' step the cells whose step ends there (listed once a month from the
+depths) are surveyed again and their bodies update in a batch of the same passes, on chunks that hold only those cells;
+the other cells do nothing then. The survey of a sub-step works out what the bodies that decide then read, as a survey
+of every cell would leave it: in each cell that steps what movers broke there; the numbers and features (5.2) of their
+cells, of the cells around them and of the regions the levels of those features read (`choose::Near`), each again only
+where a pass held the cell since it was last worked out (`life::Touched`: only a pass that holds a cell changes its
+life). The batch's serial pass works on the cells its entries go to, the physics of the bodies that landed on the cells
+bodies landed in or were left behind in (a child born late in its sub-step, a node whose new members count less), the
+merge on the cells of two bodies or more. So a sub-step's work follows the cells that step and their bodies, and the
+world is the one a survey and a batch of every cell would make. Flow, Change and Bond keep their steps (1.8).
 **An update: a decision, then the physics of the step ahead in sub-steps** (`survey::updates`). A body decides once
 at each of its cell's steps (5.3), and then its own physics runs over the step ahead, to its cell's next step, in
 sub-steps of one **physiological step** (`World::phys_grid`: 7.5 days, a quarter of a month, or the cell's step
@@ -116,9 +123,10 @@ when the cell is made, that never changes and is never given again (the world ke
 change. A body's id is the serial of the cell it was placed in and that cell's count of bodies placed (children, split
 halves, parts of nodes acting apart, `life::new_id`); it never changes, and its random draws are keyed by it. An id
 finds its cell through one table from serial to index (`Life::at_serial`). The cells
-are cut into `Config::chunks` runs of neighbouring indices, the same for any number of threads. **The parallel pass**:
+are cut into `Config::chunks` runs of neighbouring indices, the same for any number of threads; a pass on some cells
+(a sub-step's, the serial pass's) holds in each chunk only those of its run (`life::Of`). **The parallel pass**:
 each chunk is one task on the pool (`life::run`), its cells taken out of the world, the world read only; in each cell
-in order (of the cells that step), first the physics to now of a body whose physics is behind; then every body with a
+in order, first the physics to now of a body whose physics is behind; then every body with a
 brain perceives its inputs and the bodies of each lineage find their hidden layers together (5.1); then each decides
 and acts, the mature ones first and then the young, each in the order they came; then the sub-steps of the step
 ahead, at each first the meal of every body not leaving the cell (but at the first, whose meal its decision gave),

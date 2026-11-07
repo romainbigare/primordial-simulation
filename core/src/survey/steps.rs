@@ -6,6 +6,7 @@
 //! runs in sub-steps of one physiological step in every cell (`World::phys_grid`), its decisions at its cell's step.
 
 use super::{batch_of, break_and_sum};
+use crate::life::{self, Of};
 use crate::{choose, World};
 
 /// A body's step is at least this long, s: the world's time is whole seconds (`Grid`).
@@ -94,30 +95,81 @@ impl World {
 }
 
 /// After the month's batch (`batch`), from the month's start: the sub-steps of the finest cells' step, each at the time it
-/// ends. At each, the cells whose step ends then are surveyed again (`break_and_sum`, with every cell's numbers and
-/// features, `choose::cells`, as the moves and meals since left them), and their bodies update (`batch_of`) on the same
-/// chunks, a parallel pass and a serial pass; the other cells do nothing. A sub-step with no living body in a cell that
-/// steps is skipped. The world's time is the month's start after.
+/// ends. At each, the cells whose step ends then (`stepping`, listed once a month from the depths) are surveyed again
+/// (`survey_near`), and their bodies update (`batch_of`) on the chunks of those cells, a parallel pass and a serial
+/// pass; the other cells do nothing. A sub-step with no living body in a cell that steps is skipped. The world's time is
+/// the month's start after.
 pub fn substeps(w: &mut World) {
     let (t0, month) = (w.time, w.cfg.calendar().month);
-    let halvings: Vec<u32> = (0..w.mesh.cells().n()).map(|i| w.halvings(i)).collect();
-    let most = halvings.iter().copied().max().unwrap_or(0);
+    let stepping = stepping(w);
+    let most = stepping.len() as u32 - 1;
     let (grid, parts) = (Grid { month, halvings: most }, 1u64 << most);
-    // The most halvings of a cell that holds a living body (none: no body lives).
-    let deepest = |w: &World| w.life.living().map(|(h, _)| halvings[h.cell as usize]).max();
-    let mut alive = deepest(w);
+    let mut near = Near { features: choose::Near::new(w), row_at: vec![0; w.mesh.cells().n()], reads: Reads::default() };
     for k in 1..parts {
         // (A cell of `h` halvings steps at every (`parts` >> h)-th sub-step: those of `most` less the trailing zeros of
         // `k` halvings or more step at `k`.)
-        if alive.is_none_or(|d| most - k.trailing_zeros() > d) {
+        let cells = &stepping[(most - k.trailing_zeros()) as usize];
+        if !cells.iter().any(|&i| w.life.in_cell(i as usize) > 0) {
             continue;
         }
-        let steps: Vec<bool> = halvings.iter().map(|&h| k.is_multiple_of(parts >> h)).collect();
         w.time = grid.at(grid.by(t0) + k);
-        break_and_sum(w, Some(&steps));
-        choose::cells(w);
-        batch_of(w, Some(&steps));
-        alive = deepest(w);
+        survey_near(w, &mut near, cells);
+        let summed = batch_of(w, Of::Only(cells));
+        summed.iter().for_each(|&i| near.row_at[i as usize] = w.life.touched.pass);
     }
     w.time = t0;
+}
+
+/// The cells that step at a sub-step of each count of halvings (`World::halvings`): those of that many or more, in
+/// order; one list a count, from none to the most of a cell.
+fn stepping(w: &World) -> Vec<Vec<u32>> {
+    let halvings: Vec<u32> = (0..w.mesh.cells().n()).map(|i| w.halvings(i)).collect();
+    let most = halvings.iter().copied().max().unwrap_or(0);
+    (0..=most).map(|h| (0..halvings.len() as u32).filter(|&i| halvings[i as usize] >= h).collect()).collect()
+}
+
+/// What the survey of a sub-step keeps from one to the next: the features (`choose::Near`) and per cell the pass
+/// (`Touched::pass`) its numbers (`Life::sum`) were last worked out at.
+struct Near {
+    features: choose::Near,
+    row_at: Vec<u64>,
+    reads: Reads,
+}
+
+/// The cells with bodies that decide at a sub-step, and what they read (`choose::Near::reads`): the same while those
+/// cells are, as the cells do not change within a month.
+#[derive(Default)]
+struct Reads {
+    deciding: Vec<u32>,
+    cells: Vec<u32>,
+    levels: Vec<Vec<usize>>,
+}
+
+/// The survey of a sub-step, of the cells `stepping`, for the bodies that decide in them, which read their own cells'
+/// numbers and features and those of the cells around them (`choose::Near::reads`): each as the survey of every cell
+/// would leave it (`break_and_sum`, `choose::cells`), but worked out only where it is read, and there only if a pass
+/// held the cell since. In each cell that steps, what movers broke (`choose::wear`); the numbers of the cells read held
+/// since they were worked out; the serial pass; the features read.
+fn survey_near(w: &mut World, near: &mut Near, stepping: &[u32]) {
+    let deciding: Vec<u32> = stepping.iter().copied().filter(|&i| w.life.in_cell(i as usize) > 0).collect();
+    if deciding != near.reads.deciding {
+        let (cells, levels) = near.features.reads(w, &deciding);
+        near.reads = Reads { deciding, cells, levels };
+    }
+    let Reads { cells: reads, levels, .. } = &near.reads;
+    let at = &w.life.touched.at;
+    let held = |i: u32| at.get(i as usize).is_none_or(|&a| a > near.row_at[i as usize]);
+    let mut cells: Vec<u32> = stepping.iter().copied().filter(|&i| w.life.cell_at(i as usize).pushed > 0.0).chain(reads.iter().copied().filter(|&i| held(i))).collect();
+    cells.sort_unstable();
+    cells.dedup();
+    let steps = |i: usize| stepping.binary_search(&(i as u32)).is_ok();
+    // (The holes the last batch left are closed whether or not a cell is surveyed: what a body perceives of its cell
+    // counts its places, `choose::perceive`.)
+    w.life.compact();
+    if !cells.is_empty() {
+        break_and_sum(w, Of::Only(&cells), &steps);
+    }
+    cells.iter().for_each(|&i| near.row_at[i as usize] = w.life.touched.pass);
+    life::land(w);
+    near.features.features(w, (reads, levels));
 }

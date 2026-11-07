@@ -21,8 +21,10 @@ impl Life {
     /// quarters' (`gather`). Each living body and part takes its cell's new index, and the ids find their cells again
     /// (`index`). It runs between passes.
     pub(crate) fn remap(&mut self, r: &Renumber, seed: u64, chem: &Chemistry) {
-        let Life { cells, next_serial, at_serial: _, moved: _, parts_moved: _, queued, sums, absorb, keep, env, feat, brains: _, members: _, genomes: _, free_genomes: _, air_seen } = self;
+        let Life { cells, next_serial, at_serial: _, moved: _, parts_moved: _, queued, sums, absorb, keep, env, feat, brains: _, members: _, genomes: _, free_genomes: _, air_seen, touched } = self;
         assert!(queued.is_empty() && air_seen.is_empty(), "a remap runs between passes");
+        // (The cells change: every one counts as held.)
+        *touched = Default::default();
         let mut old: Vec<Option<Cell>> = std::mem::take(cells).into_iter().map(Some).collect();
         let mut gone = |i: u32| old[i as usize].take().expect("an old cell goes to one new cell");
         *cells = (r.sources().iter())

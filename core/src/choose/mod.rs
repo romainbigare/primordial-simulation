@@ -6,6 +6,7 @@ mod feed;
 mod go;
 mod learn;
 mod minds;
+mod features;
 mod perceive;
 mod spread;
 
@@ -15,11 +16,14 @@ pub(crate) use feed::{eat_for, meal};
 pub(crate) use go::land_move;
 pub(crate) use learn::watched;
 pub use minds::Minds;
-pub use perceive::cells;
+pub use features::cells;
+pub(crate) use features::Near;
 pub(crate) use spread::land_act;
 
-use perceive::{perceive, Face, HEIGHT, LN_MASS, T, WB_SCALE};
-pub use perceive::{DEAD, EDIBLE, NCELL, OWN, SIGHTS, WET};
+use features::{HEIGHT, T};
+use perceive::{perceive, Face, LN_MASS, WB_SCALE};
+pub use features::{DEAD, EDIBLE, NCELL, SIGHTS, WET};
+pub use perceive::OWN;
 
 use crate::body::{Body, Lived};
 use crate::brain::{self, ln, score, squash, Shape, Thought, FIXED, FORM, FORM_OUT, OVERBS, PUT, RELEASE, REST, TAKE, TAKE_FROM, VERBS, WATCH};
