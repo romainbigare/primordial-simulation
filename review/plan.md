@@ -120,6 +120,9 @@ The owner's decision: the map must show physical things (spec 10.1, 10.9, 5.2). 
 | 19 | **Ground of materials**: rock, stones, soil, sand, gravel, mud, snow by slope | pictures of hills, cliffs, shores | medium |
 | 20 | **Plants as single plants**: placed by cover and the shares of WP15, each kind by wetness; crowns with form and shadow | pictures of forest edges, clearings, wet ground | medium |
 
+| 21 | **Sun on slopes** (law change): sunlight on a cell's ground follows its slope and facing (Lambert's cosine law, the daily integral on a tilted surface by the equivalent latitude, Lee 1962); slope and facing computed once when a cell is made; snow, melt, warmth and drying by facing then follow from the energy balance; a coarse cell's total sun equals the sum over its parts (the beam crosses the cell's plan whatever the slopes); a sub-grid snow cover only if a test shows coarse and fine snow disagree beyond chance | the gate; a scene where a slope facing the sun melts its snow first; the total sun of a square equals the sum of its cells | medium |
+
+A share inside a cell comes only from a general law evaluated at the samples, never from a rule made for one thing.
 Open, after these: a law for mud and sand (spec 19).
 
 The next decision is the owner's (spec 13.1): a fixed time on Choose (what bodies sense, remember and learn), or
