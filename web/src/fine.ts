@@ -22,7 +22,7 @@ export interface Fine {
   melt: number;
   /** The ways rivers run: x0, y0, x1, y1 (squares), flux (mol/s) and catchment, six numbers a way */
   ways: Float32Array;
-  /** Of each pixel: the ground's height and the surface of the liquid of the cells about it (NaN: none), m */
+  /** Of each pixel: the ground's height and the level of the liquid its own cell holds standing (NaN: none), m */
   ground: Float32Array; water: Float32Array;
   /** The layers of the pixels, as a world of `across` x `down` cells with one frame */
   world: World;
@@ -60,8 +60,7 @@ export const coverAt = (f: Fine, i: number) => f.cover.reduce((t, c) => t + c[i]
  * one, and the map shades and colours slopes as they look from afar. */
 const SLOPE_POWER = 0.5;
 const SLOPE_LEAST = 0.15;
-/** Where no liquid stands near a pixel, its surface is taken this far below the ground, m (the core's surface there
- * lies hundreds of metres below the ground, tape/src/fine/mod.rs `WET_LEAST`). */
+/** Where no liquid stands in a pixel's cell, its surface is taken this far below the ground, m. */
 const NO_LIQUID_M = 1000;
 /** The bytes of a layer view over which an empty pixel fades into a full one (earth.wgsl `in_view`). */
 const OVER_FADE = 64;
@@ -80,7 +79,7 @@ const BEND_STEPS = 6;
 const RIVER_LEAST = 0.05;
 
 /** The fields of fine raster `f` of the world of `meta` (fields.ts), the map's squares being wet and sea as `wet` says:
- * a pixel is in the sea where liquid stands near it and its square is in the sea (`seaSquares`). */
+ * a pixel is in the sea where its square is (`seaSquares`: a square of the sea or a dry one beside it). */
 export function fineFields(f: Fine, meta: Meta, wet: Wet): Fields {
   const { across, down, ground, water, world, per, pxM } = f, n = across * down;
   const lut = (name: string) => world.lut[world.index.get(name)!];
@@ -100,7 +99,7 @@ export function fineFields(f: Fine, meta: Meta, wet: Wet): Fields {
       const gy = (ground[y1 * across + x] - ground[y0 * across + x]) / (pxM * (y1 - y0 || 1));
       put4(height, i, ground[i], wetHere ? level - ground[i] : -NO_LIQUID_M, gx, gy);
       const sq = clamp(Math.floor(ys), 0, meta.h - 1) * meta.w + clamp(Math.floor(f.at.x + (x + 0.5) / per), 0, meta.w - 1);
-      put4(matter, i, iceLut[ice[i]], tLut[tg[i]], wetHere ? sea[sq] : 0, rivers[4 * i + 3] / 255);
+      put4(matter, i, iceLut[ice[i]], tLut[tg[i]], sea[sq], rivers[4 * i + 3] / 255);
       // The plant cover drawn is the cover inside the pixel's cell where it stands (its slots' built cover).
       put4(bytes, i, encodeByte(plants, coverAt(f, i)), tr[i], tgr[i], tb[i]);
       put4(inside, i, f.wet[i], rivers[4 * i] * RIVER_DEPTH_STEP_M, 0, 0);

@@ -127,14 +127,18 @@ struct Spot {
   ripple: vec2f,
 }
 
-// The spot at uv of the fields, whose height texel `h` is (`spline` of `height_field`), seen at `e` m a pixel.
+// The spot at uv of the fields, whose ground's height and slope are those of `h` (`spline` of `height_field`), seen
+// at `e` m a pixel.
 fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   let m = blend(matter_field, uv);
   let inside = blend(inside_field, uv);
   let look = earth.look;
   var s: Spot;
-  s.depth = max(h.y, 0.0);
-  s.over = max(-h.y, 0.0);
+  // The liquid over the ground blended between the texels, not as a spline: a spline would overshoot where a cell
+  // that holds liquid meets one that holds none.
+  let water = blend(height_field, uv).y;
+  s.depth = max(water, 0.0);
+  s.over = max(-water, 0.0);
   s.sea = m.z;
   s.wet = inside.x;
   s.t = m.y;

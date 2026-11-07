@@ -1,6 +1,6 @@
-//! A window finer than its cells (`tape::fine`): its ground keeps each square's height as its mean, it and the liquid's
-//! surface have no steps at the cells' edges, a split that shares out its cell by area changes nothing drawn of what it
-//! shares so, it does not depend on the window, liquid stands on the low ground of wet cells, and rivers run down.
+//! A window finer than its cells (`tape::fine`): its ground keeps each square's height as its mean and has no steps at
+//! the cells' edges, a split that shares out its cell by area changes nothing drawn of what it shares so, it does not
+//! depend on the window, liquid stands at its own cell's level on the low ground of wet cells, and rivers run down.
 
 use pcore::World;
 use tape::{fine, Samples, LAYERS};
@@ -104,13 +104,6 @@ fn the_fine_ground_keeps_each_squares_height_and_shows_no_cells_edge() {
         s.iter().sum::<f64>() / s.len() as f64
     };
     assert!(step(true) < 1.5 * step(false), "no step of the ground at a cell's edge: {} m against {} m inside a cell", step(true), step(false));
-    // The shore (a pixel under the liquid beside one that is not) crosses cells' edges no more often than any pair does:
-    // it follows the ground, not the cells.
-    let wet = |p: usize| got.water[p] > got.ground[p];
-    let across_edges = |of: &[&(usize, usize, bool)]| of.iter().filter(|t| !t.2).count() as f64 / of.len() as f64;
-    let shore: Vec<_> = pairs.iter().filter(|&&(p, q, _)| wet(p) != wet(q)).collect();
-    let (on, all) = (across_edges(&shore), across_edges(&pairs.iter().collect::<Vec<_>>()));
-    assert!(!shore.is_empty() && on < all, "the shore crosses cells' edges as often as other pairs: {on} against {all}");
     // A split shares out its cell's rain by area, and here its ice and look as they were: what is drawn of them does not
     // change. (The liquid in its pores goes by the ground inside it, laws.md 0, "Inside a cell".)
     for name in ["ice", "rain", "true_r", "true_g", "true_b"] {
@@ -138,6 +131,18 @@ fn the_fine_ground_does_not_depend_on_the_window_and_liquid_stands_low() {
     let (got, across) = window(&w, &mut s, [0.0, 0.0], 6);
     let per = (across / 8) as f64;
     let cell = |p: usize| w.mesh.tree().cell_at(w.map.point_at(((p % across) as f64 + 0.5) / per, ((p / across) as f64 + 0.5) / per));
+    // The liquid drawn stands at its own cell's level (the shore moves with it, never past the cell's own ground),
+    // only in a cell that holds standing liquid, and a cell wholly under it holds its depth on the mean (f32).
+    let mut drawn = std::collections::BTreeMap::new();
+    for p in 0..across * across {
+        let (i, level) = (cell(p), got.water[p]);
+        assert!(level.is_nan() || f.depth[i] >= tape::STANDING_M, "liquid drawn only in a cell that holds it standing");
+        let d = drawn.entry(i).or_insert((level, 0.0, 0.0, true));
+        assert!(d.0.to_bits() == level.to_bits(), "the liquid of a cell stands at one level");
+        *d = (level, d.1 + (level - got.ground[p]) as f64, d.2 + 1.0, d.3 && level > got.ground[p]);
+    }
+    let under: Vec<_> = drawn.iter().filter(|d| d.1 .3).collect();
+    assert!(!under.is_empty() && under.iter().all(|(&i, d)| (d.1 / d.2 - f.depth[i]).abs() < 1e-5 * f.depth[i]), "a cell under its liquid holds its depth");
     let deep = (0..across * across).filter(|&p| f.depth[cell(p)] > 50.0).collect::<Vec<_>>();
     let covered = deep.iter().filter(|&&p| got.water[p] > got.ground[p]).count() as f64 / deep.len() as f64;
     assert!(!deep.is_empty() && covered > 0.9, "the sea covers its deep cells but for some of their shores: {covered}");

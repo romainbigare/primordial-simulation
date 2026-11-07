@@ -1,6 +1,6 @@
 //! A window of the map finer than its cells, for a shell to draw (handover 10.3): at each pixel the height of the ground
-//! from the terrain below the cells (`heights`) set on the cells' own heights, the surface of the liquid that stands
-//! nearby, and every layer, each a smooth field of the cells' values (`pyramid`); and the way each cell's liquid runs.
+//! from the terrain below the cells (`heights`) set on the cells' own heights, the level of the liquid its own cell
+//! holds, and every layer, each a smooth field of the cells' values (`pyramid`); and the way each cell's liquid runs.
 //! It reads the world only.
 //!
 //! The ground of a pixel is the field of the cells' heights (erosion and all) with the terrain's own shape finer than
@@ -21,36 +21,20 @@ use crate::layers::{cover_melt, quantise, Ctx, LAYERS, STANDING_M};
 use pcore::World;
 use pyramid::{Pixels, Pyramid};
 
-/// The surface of the liquid drawn sinks by this, m, in a dry cell beside cells that hold standing liquid, and by this
-/// times (1 − w) / w where the share of the cells about a pixel that hold some is w, so the liquid drawn ends in the
-/// cells beside it where their ground rises, well before the share falls to none.
-const SHORE_M: f64 = 10.0;
-/// Below this share of the cells about a pixel that hold standing liquid (the field of 1 where a cell holds some, 0
-/// where it holds none), none is drawn (it would lie `SHORE_M` × 49 lower).
-const WET_LEAST: f64 = 0.02;
-
-/// The surface of the liquid of each cell, m, on its points (`Samples::points`: the terrain there less the terrain's
-/// mean over the cell, `terrain`, on the cell's height `z`): of one that holds standing liquid (`wet`), the level its
-/// liquid stands at when it fills the lowest of them first (`flow::level_of`), as deep over them all as it is over the cell; of
-/// a dry one, its lowest point, or the mean surface of the cells beside it that hold standing liquid if lower, less
-/// `SHORE_M`, so liquid that stands beside it ends in it where its ground rises.
-fn levels(w: &World, s: &mut Samples, (z, terrain): (&[f64], &[f64]), depth: &[f64], wet: &[bool]) -> Vec<f64> {
-    let held: Vec<f64> = (0..z.len())
-        .map(|i| {
-            let mut floors: Vec<(f64, f64)> = s.points(w, w.map.leaves()[i]).iter().map(|g| (g - terrain[i] + z[i], 1.0)).collect();
-            let vol = depth[i] * floors.len() as f64;
-            let level = pcore::flow::level_of(&mut floors, vol);
-            if wet[i] { level } else { floors[0].0 }
-        })
-        .collect();
+/// The level of the liquid each cell holds standing (at least `STANDING_M` deep on the mean), m, NaN for one that holds
+/// none: on the cell's points (`Samples::points`: the terrain there less the terrain's mean over the cell, `terrain`, on
+/// the cell's height `z`), the level its liquid stands at when it fills the lowest of them first (`flow::level_of`), as
+/// deep over them all as it is over the cell. So the liquid drawn lies only on the cell's ground below it, holds the
+/// cell's liquid, and its shore moves with the level as the level moves.
+fn levels(w: &World, s: &mut Samples, (z, terrain): (&[f64], &[f64]), depth: &[f64]) -> Vec<f64> {
     (0..z.len())
         .map(|i| {
-            if wet[i] {
-                return held[i];
+            if depth[i] < STANDING_M {
+                return f64::NAN;
             }
-            let beside: Vec<f64> = w.mesh.cells().around(i).1.iter().filter(|&&j| wet[j as usize]).map(|&j| held[j as usize]).collect();
-            let level = if beside.is_empty() { held[i] } else { held[i].min(beside.iter().sum::<f64>() / beside.len() as f64) };
-            level - SHORE_M
+            let mut floors: Vec<(f64, f64)> = s.points(w, w.map.leaves()[i]).iter().map(|g| (g - terrain[i] + z[i], 1.0)).collect();
+            let vol = depth[i] * floors.len() as f64;
+            pcore::flow::level_of(&mut floors, vol)
         })
         .collect()
 }
@@ -105,10 +89,9 @@ fn about(w: &World, [x0, y0, x1, y1]: [f64; 4]) -> Vec<u32> {
 /// A window of the map finer than its cells: the window from column `x` and row `y`, `wide` x `high` squares, on its
 /// edges' leaves of `depth` (no shallower than a square), a pixel each. Little-endian, in order: the melting point of the
 /// frozen cover, K (f32; `cover_melt`); the count of river ways (u32) and each (`Way`, 6 f32) of the cells within their
-/// own side of the window; of each pixel row by row the height of the ground, m (f32), and that of the surface of the
-/// liquid of the cells about it (f32: the field of their surfaces, `levels`, sunk by `SHORE_M` more the less the share of
-/// those that hold standing liquid; NaN where that share is below `WET_LEAST`), so the shore drawn is
-/// where the ground drawn rises above it; then every layer in table
+/// own side of the window; of each pixel row by row the height of the ground, m (f32), and the level of the liquid its
+/// own cell holds standing (f32: `levels`; NaN where it holds none), so the shore drawn is where the ground drawn rises
+/// above it; then every layer in table
 /// order, a byte a pixel, the field of the cells' bytes (`pyramid`), the ground's temperature along the ground's height
 /// at the rate the air cools with height (`World::air_drop`); then, from a multiple of 4 bytes, what lies inside each
 /// pixel's own cell by the shares of its ground (`inside::extend`): its wetness and the built cover of each slot of its
@@ -125,9 +108,7 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
     let f = &c.f;
     let terrain: Vec<f64> = (0..n).map(|i| samples.mean_of(w, w.map.leaves()[i])).collect();
     let (z, below) = (pyramid.field(&f.z), pyramid.exact(&terrain));
-    let wet: Vec<bool> = f.depth.iter().map(|&d| d >= STANDING_M).collect();
-    let surface = pyramid.field(&levels(w, samples, (&f.z, &terrain), &f.depth, &wet));
-    let wet = pyramid.field(&wet.iter().map(|&b| if b { 1.0 } else { 0.0 }).collect::<Vec<f64>>());
+    let level = levels(w, samples, (&f.z, &terrain), &f.depth);
     let (t, cools) = (pyramid.field(&f.t), pyramid.field(&(0..n).map(|i| w.air_drop(i).unwrap_or(0.0)).collect::<Vec<f64>>()));
     let rivers = ways(&c, &about(w, [x, y, x + wide, y + high]));
     let pixels = across * down;
@@ -135,8 +116,10 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
     out.extend((cover_melt(w) as f32).to_le_bytes());
     out.extend((rivers.len() as u32).to_le_bytes());
     out.extend(rivers.iter().flatten().flat_map(|v| v.to_le_bytes()));
+    let (tree, at) = (w.mesh.tree(), |p: usize| (((gx + (p % across) as i64) as f64 + 0.5) / per, ((gy + (p / across) as i64) as f64 + 0.5) / per));
+    let cell: Vec<u32> = (0..pixels).map(at).map(|(px, py)| tree.cell_at(w.map.point_at(px, py)) as u32).collect();
     let ground: Vec<f64> = (0..pixels).map(|p| z[p] + heights[p] - below[p]).collect();
-    let water = (0..pixels).map(|p| if wet[p] >= WET_LEAST { surface[p] - (1.0 - wet[p].min(1.0)) / wet[p] * SHORE_M } else { f64::NAN });
+    let water = cell.iter().map(|&i| level[i as usize]);
     out.extend(ground.iter().map(|&g| g as f32).chain(water.map(|v| v as f32)).flat_map(|v| v.to_le_bytes()));
     for l in LAYERS.iter() {
         let plane: Vec<u8> = if l.name == "t_ground" {
@@ -146,8 +129,6 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
         };
         out.extend(plane);
     }
-    let (tree, at) = (w.mesh.tree(), |p: usize| (((gx + (p % across) as i64) as f64 + 0.5) / per, ((gy + (p / across) as i64) as f64 + 0.5) / per));
-    let cell: Vec<u32> = (0..pixels).map(at).map(|(px, py)| tree.cell_at(w.map.point_at(px, py)) as u32).collect();
     inside::extend(&mut out, w, samples, ([gx, gy], [across, down], depth), &cell);
     out
 }
