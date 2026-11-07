@@ -1,8 +1,8 @@
 //! The terrain's heights below the cells as `fine` reads them (`space::terrain`). At or above the terrain's samples
 //! (`SAMPLE_DEPTH`) a leaf's height is the mean of the samples in it, as `Terrain::inside` takes it. Finer, it is the
 //! departures of the terrain's midpoint displacement (`Terrain::departures`) laid on a smooth continuation of the
-//! coarser heights: each leaf's quarters lean as the quadratic through the leaf and its neighbours on each axis does,
-//! keeping its mean (`finer`), so the ground has no steps at the leaves' edges. A leaf's height depends on its own
+//! coarser heights: each leaf's quarters lean as the quartic through the leaf and two neighbours each way on each axis
+//! does, keeping its mean (`finer`), so the ground has no steps and its slope no kinks at the leaves' edges. A leaf's height depends on its own
 //! place only, whatever window it is found for.
 
 use pcore::space::terrain::SAMPLE_DEPTH;
@@ -11,8 +11,15 @@ use pcore::space::Leaf;
 use pcore::World;
 use std::collections::BTreeMap;
 
-/// Leaves of each depth round a window whose heights are found too: the quadratic of the next depth reads one each way.
-const MARGIN: i64 = 2;
+/// Leaves of each depth round a window whose heights are found too: the lean of the next depth reads two each way of
+/// a leaf's parent, so a margin of M at a depth needs M / 2 + 3 at the one above.
+const MARGIN: i64 = 6;
+/// The weights of a leaf's neighbours from two before it to two after it along an axis (its own: 0) in the lean of its
+/// half after it: that half's mean departs from the leaf's by this sum, its half before by minus it. They are the
+/// quartic through the five means (average interpolation, Donoho 1993), whose limit is smooth with its slope; the
+/// quadratic through three (±(next − last) / 8) leaves kinks in the slope along the leaves' edges, which hill shading
+/// shows as dark and light ticks.
+const LEAN: [f64; 5] = [3.0 / 128.0, -22.0 / 128.0, 0.0, 22.0 / 128.0, -3.0 / 128.0];
 /// A cell's points (`Samples::points`) are the leaves this many depths below it: 8 x 8.
 pub(super) const POINT_DEPTHS: u8 = 3;
 
@@ -121,10 +128,10 @@ fn cover([x0, y0, x1, y1]: [i64; 4], of: u8, depth: u8, (across, down): (i64, i6
 }
 
 /// The leaves of the depth below `p`'s over the rectangle `want` of them (inside `p`'s quarters): each quarter of a leaf
-/// of `p` takes the leaf's height, the lean of the quadratic through it and its neighbours along each axis (a mean of
-/// the quarters of a leaf whose neighbours' heights are E, W, S and N leans by ±(E − W) / 8 and ±(S − N) / 8, and the
-/// corners' (SE − SW − NE + NW) / 64; a neighbour off the map is the leaf), less that lean's mean by area, and the
-/// terrain's own departure there (`Terrain::departures`), so each leaf's quarters keep its mean.
+/// of `p` takes the leaf's height, the lean of the quartic through it and two neighbours each way along each axis
+/// (`LEAN`; across both axes, the product of the two leans; a neighbour off the map is the nearest leaf on it), less that
+/// lean's mean by area, and the terrain's own departure there (`Terrain::departures`), so each leaf's quarters keep its
+/// mean.
 fn finer(w: &World, p: &Patch, [x0, y0, x1, y1]: [i64; 4]) -> Patch {
     let (depth, lat) = (p.depth + 1, (w.cfg.lat_south, w.cfg.lat_north));
     let (cw, ch) = ((x1 - x0 + 1) as usize, (y1 - y0 + 1) as usize);
@@ -133,8 +140,9 @@ fn finer(w: &World, p: &Patch, [x0, y0, x1, y1]: [i64; 4]) -> Patch {
         for px in x0 >> 1..=x1 >> 1 {
             let at = |dx: i64, dy: i64| p.near(px + dx, py + dy).0;
             let (mid, g) = p.near(px, py);
-            let (ew, sn) = ((at(1, 0) - at(-1, 0)) / 8.0, (at(0, 1) - at(0, -1)) / 8.0);
-            let corners = (at(1, 1) - at(-1, 1) - at(1, -1) + at(-1, -1)) / 64.0;
+            let along = |f: &dyn Fn(i64) -> f64| (-2..=2).map(|i| LEAN[(i + 2) as usize] * f(i)).sum::<f64>();
+            let (ew, sn) = (along(&|i| at(i, 0)), along(&|j| at(0, j)));
+            let corners = along(&|j| along(&|i| at(i, j)));
             let parent = leaf(p.depth, px, py);
             let area = parent.quarters().map(|q| w.map.place_of(&q, lat.0, lat.1).0);
             let lean: [f64; 4] = std::array::from_fn(|q| {

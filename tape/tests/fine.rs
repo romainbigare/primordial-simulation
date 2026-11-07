@@ -96,3 +96,25 @@ fn the_fine_ground_does_not_depend_on_the_window_and_liquid_stands_low() {
         assert!(head(r[0], r[1]) > head(r[2], r[3]), "a river runs down: {r:?}");
     }
 }
+
+#[test]
+fn the_fine_grounds_slope_has_no_kinks_at_the_leaves_edges() {
+    let w = testkit::small_world();
+    // A square at leaves of 1/256 of it, 16 to a sample of the terrain (`SAMPLE_DEPTH`), 4 depths of displacement below.
+    let (depth, across) = (10, 256);
+    let ground = read(&fine(&w, &mut Samples::new(&w), [7.0, 7.0, 1.0, 1.0], depth), across * across).ground;
+    // The kink of the slope at each pixel along each axis, summed by where it lies against the leaves of 8 pixels.
+    let (mut edge, mut within) = ((0.0, 0), (0.0, 0));
+    for y in 1..across - 1 {
+        for x in 1..across - 1 {
+            let at = |dx: usize, dy: usize| ground[(y + dy - 1) * across + x + dx - 1] as f64;
+            for (kink, from) in [((at(2, 1) - 2.0 * at(1, 1) + at(0, 1)).abs(), x), ((at(1, 2) - 2.0 * at(1, 1) + at(1, 0)).abs(), y)] {
+                // A kink at a leaf's edge shows at the pixels on both sides of it.
+                let t = if from % 8 == 0 || from % 8 == 7 { &mut edge } else { &mut within };
+                *t = (t.0 + kink, t.1 + 1);
+            }
+        }
+    }
+    let (edge, within) = (edge.0 / edge.1 as f64, within.0 / within.1 as f64);
+    assert!(edge < 1.1 * within, "the slope bends no more at the edges of coarser leaves: {edge} m against {within} m");
+}
