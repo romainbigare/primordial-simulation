@@ -75,7 +75,7 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     let edge = bond::edge(d.at(i), w, b).filter(|_| breaking > 0.0);
     let area = w.mesh.cells().area()[i];
     let (left, through) = match (&edge, &parts) {
-        (Some(e), Some(p)) => bond::edge_leaves(b.n(), d.at(i).cover.cut_by(chem, &w.cfg, p, e, area)),
+        (Some(e), Some(p)) => e.leaves(b.n(), d.at(i).cover.cut_by(chem, &w.cfg, p, e, area)),
         _ => (1.0, 0.0),
     };
     if !body::pay(w, d, b, w.cfg.phys.c_handle * (bc.mass_of(&m) + bc.mass_of(&bulk)) + left * breaking) {
@@ -173,7 +173,7 @@ pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, (s, days): (Handle, f64
     let (o, bc) = (&d[s], w.chem.body());
     let (mb, tb) = (b.mass(&w.chem), b.temp(&w.chem));
     let edge = bond::edge(d.at(b.cell as usize), w, b);
-    let (left, through) = edge.as_ref().map_or((1.0, 0.0), |e| bond::edge_leaves(b.n(), o.cut_by(&w.chem, &w.cfg, e)));
+    let (left, through) = edge.as_ref().map_or((1.0, 0.0), |e| e.leaves(b.n(), o.cut_by(&w.chem, &w.cfg, e)));
     // (Its force goes as far as `1 / left` of it would bluntly.)
     let (fb, fo) = (b.gene(STRENGTH) * b.built(&w.chem) / b.n() / left, o.gene(STRENGTH) * o.built(&w.chem) / o.n());
     let (kg, swept) = intake(w, b, (tb, days), |k| o.amount(bc, k));

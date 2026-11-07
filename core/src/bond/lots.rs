@@ -2,11 +2,12 @@
 //! node (laws.md 4.4; handover 7.1), so the records of parts follow the designs in each cell, not the parts. A lot
 //! holds the amounts of all its parts (their walls, the liquid in their hollows, their heat) and the shape of each one
 //! (sizes, hollowness), with the depths of its parts as an even spread (`Part::buried`, `Part::spread`). Monthly the
-//! alike lone parts of a cell join (`join_alike`); one is split out when a body holds or acts on one (`one_of`). Alike
-//! parts lose their own history, as the members of a node do.
+//! alike lone parts of a cell join (`join_alike`); a body acts on one split out of a lot (`some_of`). A node holds a
+//! lot of up to one part per member (`hold_by_members`), and the lots of alike holders join as they do
+//! (`join_held`). Alike parts lose their own history, as the members of a node do.
 
-use super::{add, design, Part, NOBODY};
-use crate::{chem::Chemistry, life::Chunk, World};
+use super::{add, at, design, held, holder, Part, NOBODY};
+use crate::{body::Body, chem::Chemistry, life::{Cell, Chunk, Handle}, World};
 use std::collections::HashMap;
 
 impl Part {
@@ -95,16 +96,55 @@ pub(super) fn join_alike(w: &World, d: &mut Chunk, i: usize) {
     c.parts = kept;
 }
 
-/// The place of one part of the lot at `p` of cell `i` of chunk `d`, split out of it (`Part::split`) as a part of its
-/// own, the last of the list, with the next id of the cell (`add`) where the lot is more than one: a body holds or acts
-/// on one part. It lies at the lot's mean depth.
-pub(crate) fn one_of(d: &mut Chunk, i: usize, p: usize) -> usize {
+/// The place of `k` parts of the lot at `p` of cell `i` of chunk `d`, split out of it (`Part::split`) as a lot of their
+/// own, held by none, the last of the list, with the next id of the cell (`add`) where the lot holds more: a body holds
+/// or acts on so many. They lie at the lot's mean depth.
+pub(crate) fn some_of(d: &mut Chunk, i: usize, p: usize, k: f64) -> usize {
     let lot = &mut d.at_mut(i).parts[p];
-    if lot.count <= 1.0 {
+    if lot.count <= k {
         return p;
     }
-    let mut one = lot.split(1.0);
-    one.spread = 0.0;
-    add(d, i, one)
+    let mut some = lot.split(k);
+    some.spread = 0.0;
+    add(d, i, some)
+}
+
+/// Monthly, before the lone parts join: a body of cell `i` of chunk `d` that holds more parts than it has members (some
+/// of them left it, died or went to another quarter of a split cell) lets go of the rest, which lie alone.
+pub(super) fn hold_by_members(d: &mut Chunk, i: usize) {
+    for p in 0..d.at(i).parts.len() {
+        let c = d.at(i);
+        let Some(o) = holder(c, p) else { continue };
+        let extra = c.parts[p].count - c.bodies[o].n();
+        if extra > 0.0 {
+            let rest = d.at_mut(i).parts[p].split(extra);
+            add(d, i, rest);
+        }
+    }
+}
+
+/// What the part body `b` holds in its cell `c` is to the monthly merge (`nodes::Kin`): of a lot no bond joins, its
+/// design and its band of mass (`design::label`), so bodies that hold alike parts merge and their lots join
+/// (`join_held`); of a part of a structure, the structure's root.
+pub fn held_kind(chem: &Chemistry, c: &Cell, b: &Body) -> Option<(bool, u64)> {
+    let p = held(c, b)?;
+    let pt = &c.parts[p];
+    Some(if c.bonds.of(pt.id).next().is_none() { (true, design::label(chem, pt)) } else { (false, pt.root) })
+}
+
+/// Body `j` (taken out of its slot) joins the body at `t` of its cell (`nodes::merge`): if both hold a lot of one kind
+/// (`held_kind`), `j`'s lot joins `t`'s (`Part::join`) and `j` holds nothing; returns whether it did.
+pub(crate) fn join_held(w: &World, d: &mut Chunk, j: &mut Body, t: Handle) -> bool {
+    let (i, c) = (j.cell as usize, d.at(j.cell as usize));
+    let kind = held_kind(&w.chem, c, j);
+    if kind.is_none_or(|k| !k.0) || kind != held_kind(&w.chem, c, &d[t]) || j.hold == d[t].hold {
+        return false;
+    }
+    let (from, to) = (j.hold.take().expect("it holds"), d[t].hold.expect("it holds"));
+    let c = d.at_mut(i);
+    let lot = c.parts.remove(at(c, from).expect("its lot"));
+    let x = at(c, to).expect("the lot it joins");
+    c.parts[x].join(&w.chem, lot);
+    true
 }
 

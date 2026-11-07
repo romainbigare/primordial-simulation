@@ -683,9 +683,9 @@ which holds the amounts and heat of all of them and the sizes and hollowness of 
 lone parts of a cell of one design and one band of burial (their depth over their smallest size, `BANDS` bands) join
 into the first of them in the cell's list, which keeps its id (`lots::join_alike`, `Part::join`): counts, amounts and
 heat add up, sizes, hollowness and depth become means by count, and the sizes fit the walls of one part. A body that
-holds or acts on a part of a lot acts on one split out of it (`lots::one_of`, `Part::split`: its share 1 / count of
-each amount and of the heat, the lot keeping the rest, so the two add up to rounding), a part of its own with the next
-id of its cell; but a break, which finds no bond in a lot. Alike parts lose their own history, as members of a node
+acts on a part of a lot acts on one split out of it (`lots::some_of`, `Part::split`: its share 1 / count of each
+amount and of the heat, the lot keeping the rest, so the two add up to rounding), a part of its own with the next id of
+its cell, and one that holds takes as many as it can hold (3.3); a break finds no bond in a lot. Alike parts lose their own history, as members of a node
 do, and their sizes within a band. A part runs no reactions. Monthly (`bond/month.rs`) the
 share of its walls the open world's decomposers would rot in the month (`bond/month.rs::rot`: each reaction they speed,
 `open` above 1, at the rate of Change, `change::rate`, at its cell ground's temperature and moisture, each substance of
@@ -719,7 +719,14 @@ Structures do not drift; only a body carries one (3.5).
 ### 3.3 Holding, floating
 Holding is a bond whose strength is the body's **force**, strength gene × living body × gravity × `grip`
 (`bond::bears`); a body holds only while its force bears the structure's weight. Fuel adds no force; a hurt body is
-weaker. A body is **afloat** where the liquid is deeper than `deep` and what it and its structure displace weighs as
+weaker. **A node holds a lot** (3.1): one part in each member's hand, so a body takes hold of as many parts of a lot as
+it has members (one for an individual), as its force bears with the weight of each one's structure, and as the lot
+holds, split out of it where they are fewer (`bond::verbs::can_hold`), and pays to handle each; at least one part (or all
+of a lot of fewer), or none. Holding, carrying (`bond::carry`), floating and the loads (3.2) go by all the parts held,
+their weight, displaced liquid and the drag of moving liquid on each. Monthly, before the lone parts join, a body that
+holds more parts than it has members (members left, died, or went to another quarter of a split cell) lets go of the
+rest, which lie alone (`lots::hold_by_members`). A member that joins its part to another (verb 3) joins one of the lot.
+A body is **afloat** where the liquid is deeper than `deep` and what it and its structure displace weighs as
 much as they do (Archimedes): no liquid stands over it (`bond::depth`). No body digs the bed.
 
 **A held edge concentrates force** (`bond/edge.rs`). Without one a body breaks matter bluntly: it gives way through its
@@ -728,8 +735,11 @@ each material k of what is broken, the energy and the force fall to the share c_
 the part's walls (their volume over half its outer surface, `Part::thickness`), l the width of what is broken (a member
 of a body, `Body::width`; the cover, its volume per m²; a joint, the root of its contact area), where the edge is
 harder than that material (scratch hardness, `Substance::hardness`: an indenter marks only what is softer, Tabor 1951),
-else c_k = 1. Over a thing, c̄ = Σ V σ c_k / Σ V σ (`Body::cut_by`, `Cover::cut_by`). A node's part is in one member's
-hand, so it leaves the node 1 − (1 − c̄) / n (`bond::edge_leaves`). A bite pays that share of the breaking and its
+else c_k = 1. Over a thing, c̄ = Σ V σ c_k / Σ V σ (`Body::cut_by`, `Cover::cut_by`). A node's parts are one in each
+of m of its n members' hands (a lot of m held, at most n), so the edges leave the node 1 − (1 − c̄) m / n
+(`Edge::leaves`), as m of its members cutting and the others breaking bluntly: a node of 100 holding 100 edges bites
+as 100 individuals each with one do (`core/tests/lots.rs`). The edges wear together, by the work done through all of
+them, on the lot's walls. A bite pays that share of the breaking and its
 force counts 1 / that share against the other's (`feed::take_body`); grazing pays it of breaking the cover
 (`feed::take_node`); breaking a bond (verb 4) needs it of the bond's strength, from an edge of another structure. A part
 whose walls have no breaking stress holds no edge. **The edge wears** by Archard's law (Archard 1953): it loses the
@@ -853,14 +863,17 @@ chance).
   member stays young. A node of members all alike matures whole when its mean does, as an individual does.
 - **Merging** (`nodes::crowd`, monthly, in each cell after the batch's serial pass, one task per chunk; a merge that
   lets go of a part queues that, as in a batch): the bodies of one lineage and stage in a cell, in the room of the same
-  structure (its root) or none and holding the same structure or nothing (`nodes::Kin`), join the largest of them,
+  structure (its root) or none and holding the same structure, parts of one design (a lot no bond joins, by its design
+  and mass band, `bond::held_kind`) or nothing (`nodes::Kin`), join the largest of them,
   where that is a node, they are more than `PAIR` (2: a pair of individuals may mate) or their individuals may not mate
   (4.3). Then a node joins a larger
   one of another lineage of its stage, room and part whose genes are alike (`body::alike`, on the means) and whose
   brain has the same sizes: its members take that brain, its born rows and its lineage, and its rows become the mean by
-  members (`nodes::merge`); members of another lineage keep the node's brain-size genes, so no merge moves its sizes. This merge is
-  a speed tool with physical side effects: the joiners' members drop the structure they held, which stays in the cell
-  for any body to take, and a lineage's brain spreads to alike bodies of another. Selection acts between cells and
+  members (`nodes::merge`); members of another lineage keep the node's brain-size genes, so no merge moves its sizes. A
+  joiner's lot joins the lot the node holds where both are of one design (`bond::join_held`), so the node holds the
+  parts its members held. This merge is
+  a speed tool with physical side effects: the joiners' members drop any other structure they held, which stays in the
+  cell for any body to take, and a lineage's brain spreads to alike bodies of another. Selection acts between cells and
   lineages, not within a cell.
 - **Three caps, speed tools.** After its merge (`nodes::cap`) a cell that holds more than `MAX_NODES` (8) bodies keeps
   one young and one mature node of each starting kind in each room (or outside any): the bodies of one kind, stage and

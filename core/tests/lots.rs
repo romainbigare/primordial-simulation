@@ -1,11 +1,14 @@
 //! Lots (laws.md 3.1): alike parts that lie alone in a cell are one record of many parts, as alike members are one
 //! node; the books stay exact as they join and split.
 
-use pcore::body::Body;
+use pcore::body::{Body, STRENGTH};
 use pcore::bond;
 use pcore::brain;
+use pcore::event::EventKind;
+use pcore::life::Handle;
+use pcore::store::{Class, Node};
 use pcore::World;
-use worldgen::testkit::{eater, part_of, place, start as world, Books, ROCK};
+use worldgen::testkit::{bite, eater, node_of, part_of, place, set_amount, start as world, Books, ROCK};
 
 /// Body `b` (taken out of its slot) takes from the part named `p` of its cell (`bond::act`, verb 1), in a serial step.
 fn act_on(w: &mut World, b: &mut Body, p: u64) {
@@ -59,4 +62,70 @@ fn alike_lone_parts_are_one_lot() {
     let all: f64 = w.life.cell_at(j).parts.iter().map(|p| p.count).sum();
     assert!(w.life.cell_at(j).parts.len() <= designs && (all - 8.0).abs() < 1e-12, "{:?} in {designs} designs", records(&w, j));
     books.assert_within(&w, 1e-9, 1e-9);
+}
+
+/// A node holds a lot of alike parts, one in each member's hand (laws.md 3.3): a node of 100 members holding a lot of
+/// 100 flat rock plates bites a large prey as 100 individuals each holding one plate do. They take as much and wear
+/// their edges as much, within 1% (the individuals bite one after the other, each a prey the others left a little
+/// smaller).
+#[test]
+fn a_node_holding_a_lot_of_edges_bites_as_its_members() {
+    const MEMBERS: usize = 100;
+    // `takers` takers of `members` members each, each holding `members` plates of 5 kg as one lot, bite a node of 1e5
+    // eaters: the kg taken and the volume of walls worn, m³.
+    let scene = |takers: usize, members: usize| {
+        let (mut w, i) = world();
+        w.cfg.phys.sweep = 1e12;
+        let (ns, mm) = (w.chem.ns(), w.chem.subs[ROCK].molar_mass);
+        let have = w.store.amounts(Class::Ground)[ROCK * w.mesh.cells().n() + i];
+        set_amount(&mut w, Node::ground(i), ROCK, have + 2.0 * MEMBERS as f64 * 5.0 / mm);
+        let mut v = eater(&mut w, i, brain::REST, 1.0);
+        v.genes[STRENGTH] = 0.5;
+        let v = node_of(&mut w, v, 1e5);
+        let v = place(&mut w, v);
+        let lots: Vec<u64> = (0..takers)
+            .map(|_| {
+                let plates: Vec<u64> = (0..members)
+                    .map(|_| {
+                        let mut wall = vec![0.0; ns];
+                        wall[ROCK] = 5.0 / mm;
+                        part_of(&mut w, i, wall, vec![0.0; ns], -1.0, 0.0)
+                    })
+                    .collect();
+                plates[0]
+            })
+            .collect();
+        // (The node's plates, lying alone, join into a lot; the individuals' are held at once.)
+        if members > 1 {
+            bond::step(&mut w);
+        }
+        let held: Vec<(Handle, u64)> = lots
+            .iter()
+            .map(|&lot| {
+                assert_eq!(w.life.part(lot).expect("the lot").count, members as f64, "the plates are not one lot");
+                let mut a = eater(&mut w, i, brain::REST, 1.0);
+                a.genes[STRENGTH] = 0.5;
+                let mut a = if members > 1 { node_of(&mut w, a, members as f64) } else { a };
+                a.hold = Some(lot);
+                let a = place(&mut w, a);
+                w.life.part_mut(lot).expect("the lot").held = w.life[a].id;
+                (a, lot)
+            })
+            .collect();
+        let walls = |w: &World| held.iter().map(|&(_, p)| w.life.part(p).expect("the lot").walls(&w.chem).volume).sum::<f64>();
+        let (books, before) = (Books::now(&w), walls(&w));
+        w.events.clear();
+        for &(a, _) in &held {
+            bite(&mut w, a, v);
+        }
+        pcore::life::land(&mut w);
+        books.assert_kept(&w, 1e-9);
+        let got: f64 = w.events.iter().map(|e| if let EventKind::Took { .. } = e.kind { e.value } else { 0.0 }).sum();
+        (got, before - walls(&w))
+    };
+    let (node, worn_node) = scene(1, MEMBERS);
+    let (ones, worn_ones) = scene(MEMBERS, 1);
+    println!("node: took {node:.4} kg, wore {worn_node:e} m³; individuals: took {ones:.4} kg, wore {worn_ones:e} m³");
+    assert!(node > 0.0 && worn_node > 0.0, "the node took {node} kg and wore {worn_node} m³");
+    assert!((node / ones - 1.0).abs() < 0.01 && (worn_node / worn_ones - 1.0).abs() < 0.01, "node {node} kg {worn_node} m³, individuals {ones} kg {worn_ones} m³");
 }

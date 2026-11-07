@@ -2,18 +2,24 @@
 //! when they move. A body's force decides what it can hold and break, and a held edge how far it goes (`edge`). Each
 //! act runs on the body's cell in its chunk (`life::Chunk`), the body taken out of its slot.
 
-use super::{at, blunt, edge, edge_leaves, event, Edge, fall_apart, held, holder, link_in, loose_solids, lots::one_of, make, members, move_structure, restructure, root, sense::room, strength, unlink, HELD, LOAD, NOBODY};
+use super::{at, blunt, edge, event, Edge, fall_apart, held, holder, link_in, loose_solids, lots::some_of, make, members, move_structure, restructure, root, sense::room, strength, unlink, HELD, LOAD, NOBODY};
 use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase, Stores}, life::{Cell, Chunk}, life::Entry, World};
 use crate::units::BODY_STORES;
 
-/// Body `b` takes hold of the part at `p` of its cell if it bears the weight of its structure.
-fn grab(w: &World, d: &mut Chunk, b: &mut Body, p: usize) {
-    let (i, bears) = (b.cell as usize, bears(w, b));
+/// How many of the parts of the lot at `p` of its cell `c` body `b` can hold (laws.md 3.3): one in each member's hand
+/// (one for an individual), as many as its force bears with the weight of each one's structure, no more than the lot
+/// holds; none if it cannot bear one (or all of a lot of fewer).
+fn can_hold(c: &Cell, w: &World, b: &Body, p: usize) -> f64 {
+    let (s, n) = (c.parts[root(c, p)].s, c.parts[p].count);
+    let k = n.min(b.n()).min(bears(w, b) / (s.mass * w.cfg.gravity).max(1e-300));
+    if k < n.min(1.0) { 0.0 } else { k }
+}
+
+/// Body `b` takes hold of `k` parts of the lot at `p` of its cell (`can_hold`), split out of it where they are fewer.
+fn grab(w: &World, d: &mut Chunk, b: &mut Body, (p, k): (usize, f64)) {
+    let i = b.cell as usize;
+    let p = some_of(d, i, p, k);
     let c = d.at_mut(i);
-    let s = c.parts[root(c, p)].s;
-    if s.mass * w.cfg.gravity > bears {
-        return;
-    }
     // (Held, it is out of the ground.)
     (c.parts[p].held, c.parts[p].buried, c.parts[p].spread) = (b.id, 0.0, 0.0);
     b.hold = Some(c.parts[p].id);
@@ -68,17 +74,17 @@ pub fn bears(w: &World, b: &Body) -> f64 {
 
 /// Verb `v` toward the part at `p` of body `b`'s cell: hold, take from, put to, join the held part to, break, enter;
 /// what it takes or puts goes by the time to its next update, `days`. Of a lot, it acts on one part split out of it
-/// (`lots::one_of`), but a break, which finds no bond in a lot. The body pays as it acts (`body::pay`, on its cell's
-/// view), and does nothing if it cannot.
+/// (`lots::some_of`), but it holds as many as it can (`can_hold`), and a break finds no bond in a lot. The body pays as
+/// it acts (`body::pay`, on its cell's view), and does nothing if it cannot.
 pub fn act(w: &World, d: &mut Chunk, b: &mut Body, v: usize, (p, days): (usize, f64)) {
     let (mb, i) = (b.mass(&w.chem), b.cell as usize);
-    let p = if v == 4 { p } else { one_of(d, i, p) };
+    let p = if v == 0 || v == 4 { p } else { some_of(d, i, p, 1.0) };
     match v {
         0 => {
-            let pt = &d.at(i).parts[p];
-            if pt.held == NOBODY && body::pay(w, d, b, w.cfg.phys.grab * w.cfg.phys.c_handle * pt.mass(&w.chem)) {
+            let (pt, k) = (&d.at(i).parts[p], can_hold(d.at(i), w, b, p));
+            if pt.held == NOBODY && k > 0.0 && body::pay(w, d, b, w.cfg.phys.grab * w.cfg.phys.c_handle * k * pt.mass(&w.chem) / pt.count) {
                 drop_held(w, d, b, false);
-                grab(w, d, b, p);
+                grab(w, d, b, (p, k));
             }
         }
         1 => take(w, d, b, p, mb, days),
@@ -90,6 +96,8 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, v: usize, (p, days): (usize, 
             let ac = a.contact().min(o.contact());
             let (s, apart, to) = (strength(w, a.walls(&w.chem).strength, o.walls(&w.chem).strength, ac), a.root != o.root, o.id);
             if apart && body::pay(w, d, b, w.cfg.phys.c_join * ac) {
+                // (Of a lot held, one part: a member puts its own to the other.)
+                let h = some_of(d, i, h, 1.0);
                 link_in(w, d, i, h, to, s);
             }
         }
@@ -128,14 +136,14 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, v: usize, (p, days): (usize, 
 
 /// What a held edge of another structure than its own leaves body `b` of the force to break the joint between the
 /// part at `p` of its cell `c` and the part named `o` (`Edge::cut_joint`: the softer walls, the smaller contact), as
-/// `edge_leaves` gives it, and that edge; with none, all.
+/// `Edge::leaves` gives it, and that edge; with none, all.
 fn joint_left(w: &World, c: &Cell, b: &Body, p: usize, o: u64) -> ((f64, f64), Option<Edge>) {
     let edge = edge(c, w, b).filter(|_| held(c, b).is_none_or(|h| c.parts[h].root != c.parts[p].root));
     match (&edge, at(c, o)) {
         (Some(e), Some(q)) => {
             let (a, z) = (&c.parts[p], &c.parts[q]);
             let cut = e.cut_joint((a.walls(&w.chem).hardness, z.walls(&w.chem).hardness), a.contact().min(z.contact()));
-            (edge_leaves(b.n(), cut), edge)
+            (e.leaves(b.n(), cut), edge)
         }
         _ => ((1.0, 0.0), None),
     }
@@ -245,8 +253,9 @@ pub fn form(w: &World, d: &mut Chunk, b: &mut Body, shape: [f32; 3]) {
     }
     let p = make(w, d, i, wall, e, shape[0], shape[1]);
     d.counts.parts.formed += 1.0;
-    if held(d.at(i), b).is_none() {
-        grab(w, d, b, p);
+    let k = can_hold(d.at(i), w, b, p);
+    if held(d.at(i), b).is_none() && k > 0.0 {
+        grab(w, d, b, (p, k));
     }
 }
 
@@ -255,12 +264,12 @@ pub fn release(d: &mut Chunk, b: &mut Body) {
     if held(d.at(b.cell as usize), b).is_some() { let_go(d, b, false) } else { b.inside = None }
 }
 
-/// Before a body moves: the structure it holds (its root's id) and its mass, if it can carry it (if not, it lets go by a
-/// load). `c`: the body's cell.
+/// Before a body moves: the structure it holds (its root's id) and its mass (of a lot, all its parts'), if it can
+/// carry it (if not, it lets go by a load). `c`: the body's cell.
 pub fn carry(c: &Cell, w: &World, b: &Body) -> Option<(u64, f64)> {
-    let r = root(c, held(c, b)?);
-    let s = c.parts[r].s;
-    (s.mass * w.cfg.gravity <= bears(w, b)).then_some((c.parts[r].id, s.mass))
+    let r = &c.parts[root(c, held(c, b)?)];
+    let kg = r.s.mass * r.count;
+    (kg * w.cfg.gravity <= bears(w, b)).then_some((r.id, kg))
 }
 
 /// After body `by` of mass `mb` kg moved from cell `i` into cell `j` (`choose::land_move`): the structure it carried

@@ -17,7 +17,9 @@ mod verbs;
 
 pub use bonds::{Bonds, Enclosure};
 pub use design::designs;
-pub use edge::{blunt, edge, edge_leaves, Edge};
+pub use edge::{blunt, edge, Edge};
+pub use lots::held_kind;
+pub(crate) use lots::join_held;
 pub(crate) use edge::blunted;
 pub use month::step;
 pub use sense::{depth, features, room};

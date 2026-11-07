@@ -55,17 +55,18 @@ pub(super) fn liquid(w: &World, i: usize, g: impl Fn(usize) -> f64) -> (f64, f64
     if v > 0.0 { (env[1], m / v, mol / v) } else { (0.0, 0.0, 0.0) }
 }
 
-/// Is body `b` held up in its cell's liquid: does the liquid that its volume and the structure it holds displace weigh
-/// as much as they do (Archimedes, as for parts)? Not where the liquid is shallower than `deep`.
+/// Is body `b` held up in its cell's liquid: does the liquid that its volume and the structure it holds (of a lot, all
+/// its parts) displace weigh as much as they do (Archimedes, as for parts)? Not where the liquid is shallower than
+/// `deep`.
 fn afloat(w: &World, d: &Chunk, b: &Body) -> bool {
     let (i, mb) = (b.cell as usize, b.mass(&w.chem));
     let c = d.at(i);
-    let s = held(c, b).map(|p| c.parts[root(c, p)].s);
+    let s = held(c, b).map(|p| &c.parts[root(c, p)]).map(|r| (r.s.outer * r.count, r.s.mass * r.count));
     let (depth, rho, _) = liquid(w, i, d.moves.amounts(w, Node::ground(i)));
     if depth < w.cfg.phys.deep {
         return false;
     }
-    let (outer, mass) = s.map_or((0.0, 0.0), |s| (s.outer, s.mass));
+    let (outer, mass) = s.unwrap_or((0.0, 0.0));
     rho * (b.volume(&w.chem, b.temp(&w.chem)) + outer) >= mb + mass
 }
 
