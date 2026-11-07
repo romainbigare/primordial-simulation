@@ -50,13 +50,15 @@ m², and tufts where it is herbs (grass, steppe, tundra); as many marks as its c
 kind is one tile made once and repeated, coloured by the cover and, close up, by the genes of the cell's heaviest slot
 (hue by its light and leaf genes, darker if frost-hardy). A texture shows once its marks take about a pixel.
 
-From 64 pixels a square, the live viewer draws the bodies and parts of each cell one by one at their real size, from
+From 8 pixels a square, the live viewer draws the bodies and parts of each cell one by one at their real size, from
 the numbers the core hands out (`tape::things`): a member is as long as 1.5 times the cube root of its volume (a body
 as dense as water), each member at its own seeded place across its cell's real area, so it holds while the camera
-moves. A member of 3 pixels or more is drawn as its shape, smaller as a soft dot, and below a pixel its node is a light
-stipple of its members per m². Parts are drawn at their own sizes, hidden below a pixel. Two styles draw the shapes
-(the "Life" buttons, kept per browser): from above (a body with its head, wider the stronger) or angled (a block on
-legs, as a small axonometric sprite). Hover or click one to see its numbers; the inspect panel gives a herd's count.
+moves. A member of 3 pixels or more is drawn as its shape (from 8 pixels with a rim that stands out from the ground),
+smaller as a soft dot, and below a pixel its node is a stipple over its cell, so a herd shows from afar: denser and
+stronger the more members a m² holds (alike at every zoom, from a faint patch to a strong one), lighter than dark ground
+and darker than light ground, thinning at its edges. Parts are drawn at their own sizes, hidden below a pixel. Two
+styles draw the shapes (the "Life" buttons, kept per browser): from above (a body with its head, wider the stronger) or
+angled (a block on legs, as a small axonometric sprite). Hover or click one to see its numbers; the inspect panel gives a herd's count.
 The map zooms to 16 pixels a metre.
 
 By default the animals start with hand-set brain biases (`--neutral-eaters` for neutral brains) and the
