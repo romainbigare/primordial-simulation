@@ -5,9 +5,9 @@ const css = (name: string) => getComputedStyle(document.documentElement).getProp
 
 /** The part of the map in view: its window in squares (clipped to the map), the pixels a square takes, and the zoom (1: the map fits). */
 export interface View { x: number; y: number; w: number; h: number; s: number; zoom: number }
-/** The most pixels a square takes on screen: 1 m a pixel on a square of 2 km, so cells of a street take several and
- * show their things one by one. */
-const MOST_SCALE = 2000;
+/** The most pixels a metre takes on screen: a body of a quarter of a metre (a member of about 5 kg) at 4 pixels, so its
+ * shape shows at its real size. */
+const MOST_PX_PER_M = 16;
 
 export class MapView {
   img: ImageData | null = null;
@@ -105,7 +105,7 @@ export class MapView {
   private setHover(i: number): void { if (i !== this.hover) { this.hover = i; this.onHover(i); this.invalidate(); } }
 
   private zoomAt(px: number, py: number, k: number): void {
-    const c = this.cam, s = Math.min(Math.max(c.s * k, this.fitScale() * 0.5), MOST_SCALE);
+    const c = this.cam, s = Math.min(Math.max(c.s * k, this.fitScale() * 0.5), MOST_PX_PER_M * this.cellM);
     c.ox = px - ((px - c.ox) / c.s) * s; c.oy = py - ((py - c.oy) / c.s) * s; c.s = s;
     this.fitted = false; this.invalidate();
   }
