@@ -5,6 +5,7 @@
 
 pub(crate) mod air;
 mod creep;
+mod curve;
 mod deep;
 mod drain;
 mod falls;
@@ -20,8 +21,8 @@ mod basin;
 pub(crate) use air::air_temp;
 pub use air::{column, declination, glow, insolation, on_slope, scale_height, sun_by_latitude};
 pub use potential::total as potential;
-pub use basin::level_of;
-pub use inside::means;
+pub use curve::level_of;
+pub use inside::{levels, lowest, means};
 pub(crate) use inside::share_ground;
 pub use potential::potential_of;
 pub(crate) use potential::{air_head, stated};
@@ -112,6 +113,9 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
     if s.near.len() != n {
         tables(w, &mut s);
     }
+    if curve::stale(w, &s) {
+        curve::build(w, &mut s);
+    }
     let fresh = s.state.tg.len() != n;
     if fresh {
         scratch::refresh(w, &mut s);
@@ -155,7 +159,7 @@ impl Scratch {
             let by_vol = |b: [scratch::Bed; 4], of: fn(&scratch::Bed) -> f64| crate::remap::mean_by(b.map(|x| of(&x)), b.map(|x| x.vol));
             scratch::Bed { vol, ..m.pick(at, |b| scratch::Bed { vol: 0.0, refl: by_vol(b, |x| x.refl), cond: by_vol(b, |x| x.cond) }) }
         });
-        *self = Scratch { state: std::mem::take(&mut self.state), ..Default::default() };
+        *self = Scratch { state: std::mem::take(&mut self.state), kept: std::mem::take(&mut self.kept), ..Default::default() };
     }
 }
 

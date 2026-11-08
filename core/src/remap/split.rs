@@ -123,8 +123,11 @@ impl World {
             .collect();
         self.renew((map, mesh), from, c);
         if uneven.is_some() {
-            crate::flow::share_ground(self, &kids, ground.quarters(&inside.soil));
+            crate::flow::share_ground(self, &kids, ground.quarters(&inside.soil), uneven.as_ref().map_or(1.0, |u| u.scale));
         }
+        // The terrain each quarter stands: what its join kept, the split's scale, or flat before Flow's state.
+        let scales = record.as_ref().map(|r| r.scales).unwrap_or([uneven.as_ref().map_or(0.0, |u| u.scale); 4]);
+        kids.iter().zip(scales).for_each(|(&j, s)| self.relief_scale[j] = s);
         // Each quarter faces as the ground it stands does: as it was joined, or the terrain inside it at the scale the
         // split stands it about the cell's own (`uneven`); else flat, as the cell.
         let rises = record.as_ref().map(|r| r.rise).or(uneven.as_ref().map(|u| {

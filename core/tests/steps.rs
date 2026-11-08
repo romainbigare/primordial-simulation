@@ -86,25 +86,18 @@ fn lying(w: &mut World, i: usize) {
     testkit::put_kg_m2(w, RICH, i, LYING);
 }
 
-/// The dry square of `w` whose neighbours are all dry land and lie nearest its height (the least of the most they
-/// differ by), so a body that moves from it finds the same ground wherever it goes.
-fn inland(w: &World) -> usize {
-    let dry = testkit::dry_lands(w);
-    let off = |i: usize| w.mesh.cells().around(i).1.iter().map(|&j| (w.life.env[j as usize][2] - w.life.env[i][2]).abs()).fold(0.0, f64::max);
-    let flat = dry.iter().copied().filter(|&i| w.mesh.cells().around(i).1.iter().all(|&j| dry.contains(&(j as usize))));
-    flat.min_by(|&a, &b| off(a).total_cmp(&off(b))).expect("an inland square")
-}
-
-/// The small world with its square `at` gives unsplit, or that square and the squares around it split two depths
-/// (`fine`: cells of 500 m, stepping a quarter of a month). Returns the world and the cell a body starts in: the square,
-/// or a fine cell of its second row and column.
-fn split(fine: bool, at: fn(&World) -> usize) -> (World, usize) {
+/// The small world with its inland square (`testkit::inland`) amid flat land at its height (`testkit::flat_round`)
+/// unsplit, or that square and the squares around it split two depths (`fine`: cells of 500 m, stepping a quarter of a
+/// month). Returns the world and the cell a body starts in: the square, or a fine cell of its second row and column.
+fn split(fine: bool) -> (World, usize) {
     let mut w = testkit::small_world();
-    let square = w.map.leaves()[at(&w)];
+    let i = testkit::inland(&w);
+    let square = w.map.leaves()[i];
+    // Flat inside, as the quarters a flat split makes: the same ground at both sizes.
+    testkit::flat_round(&mut w, i);
+    let near: Vec<usize> = std::iter::once(i).chain(w.mesh.cells().around(i).1.iter().map(|&j| j as usize)).collect();
+    let around: Vec<Leaf> = near.iter().map(|&j| w.map.leaves()[j]).filter(|l| l.depth == square.depth).collect();
     if fine {
-        let (cells, i) = (w.mesh.cells(), w.map.cell(square).expect("the square"));
-        let near = std::iter::once(i).chain(cells.around(i).1.iter().map(|&j| j as usize));
-        let around: Vec<Leaf> = near.map(|j| w.map.leaves()[j]).filter(|l| l.depth == square.depth).collect();
         testkit::split_flat(&mut w, &around, 2);
     }
     let quarter = square.side() / 4;
@@ -113,10 +106,10 @@ fn split(fine: bool, at: fn(&World) -> usize) -> (World, usize) {
     (w, start)
 }
 
-/// `split` at the square `at` gives, after a month (so its cells have their surroundings), with what `put` lays on
-/// each cell of the square and of the squares around it, so a body that moves finds it where it lands.
-fn scene(fine: bool, at: fn(&World) -> usize, put: fn(&mut World, usize)) -> (World, usize) {
-    let (mut w, start) = split(fine, at);
+/// `split` after a month (so its cells have their surroundings), with what `put` lays on each cell of the square and of
+/// the squares around it, so a body that moves finds it where it lands.
+fn scene(fine: bool, put: fn(&mut World, usize)) -> (World, usize) {
+    let (mut w, start) = split(fine);
     pcore::step(&mut w);
     let square = w.map.leaves()[start].parent().filter(|_| fine).and_then(|q| q.parent()).unwrap_or(w.map.leaves()[start]);
     let (side, depth) = (square.side(), w.map.leaves()[start].depth);
@@ -126,10 +119,10 @@ fn scene(fine: bool, at: fn(&World) -> usize, put: fn(&mut World, usize)) -> (Wo
     (w, start)
 }
 
-/// What a body that `make` makes in the start of `scene` at the first dry square does in its second month: the kg it
+/// What a body that `make` makes in the start of `scene` does in its second month: the kg it
 /// takes of what it uses (`testkit::took_used`), the share its body matter grows and the change of its fuel, kg.
 fn second_month(fine: bool, make: impl Fn(&mut World, usize) -> Body) -> [f64; 3] {
-    let (mut w, start) = scene(fine, testkit::dry_land, lying);
+    let (mut w, start) = scene(fine, lying);
     let b = make(&mut w, start);
     let h = w.add(b);
     let id = w.life[h].id;
@@ -145,13 +138,13 @@ fn second_month(fine: bool, make: impl Fn(&mut World, usize) -> Body) -> [f64; 3
     [took, after[0] / before[0] - 1.0, after[1] - before[1]]
 }
 
-/// What a strong eater that does not grow, made in the start of `scene` at the inland square (`inland`) on
+/// What a strong eater that does not grow, made in the start of `scene` on
 /// `MOVER_COVER`, its draws keyed by `seed` (`World::seed`), does in its first month, moving at every decision if
 /// `moves`, else only taking: the kg it takes of what it uses (`testkit::took_used`), the metres it walks (from cell to
 /// cell where it took in turn, centre to centre: a mover takes where it lands, `choose::land_move`) and its moves
 /// (the members that moved into cells, from the yearly traffic of the next survey, `Counters::traffic`).
 fn mover_month(fine: bool, seed: u64, moves: bool) -> [f64; 3] {
-    let (mut w, start) = scene(fine, inland, |w, c| testkit::cover(w, c, MOVER_COVER));
+    let (mut w, start) = scene(fine, |w, c| testkit::cover(w, c, MOVER_COVER));
     (w.seed, w.cfg.phys.c_build) = (seed, 0.0);
     let brain = if moves { Brain { fixed: [testkit::OFF; brain::FIXED], dir: testkit::ON, ..Brain::only(brain::REST) } } else { Brain::only(brain::TAKE) };
     let mut b = testkit::eater_of(&mut w, start, &brain, 6.0);
@@ -258,7 +251,7 @@ fn apart(w: &World, i: usize, j: usize) -> f64 {
 fn sight_and_children_reach_as_far_from_a_fine_cell() {
     // (Seen just after the split, surveyed, before the liquid of the fine cells finds its own ways.)
     let [(coarse, i), (fine, j)] = [false, true].map(|f| {
-        let (mut w, i) = split(f, testkit::dry_land);
+        let (mut w, i) = split(f);
         pcore::survey::survey(&mut w);
         (w, i)
     });
@@ -267,7 +260,7 @@ fn sight_and_children_reach_as_far_from_a_fine_cell() {
         let off = a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0, f32::max);
         assert!(off < SEEN_OFF, "sight {sight}: {b:?} from the fine cell against {a:?} from the square");
     }
-    for (mut w, i) in [false, true].map(|f| scene(f, testkit::dry_land, lying)) {
+    for (mut w, i) in [false, true].map(|f| scene(f, lying)) {
         w.cfg.phys.c_copy = 1e18;
         let one = testkit::eater(&mut w, i, brain::REST, 1.0);
         let mut n = testkit::node_of(&mut w, one, 5.0);
@@ -298,17 +291,17 @@ const COVER_KG_M2: f64 = 0.3;
 const LEARN_OFF: f32 = -4.0;
 
 /// A node of `MEMBERS` that only takes and keeps its children in its square, its genes as `set` leaves them, settled
-/// `SETTLE` months on `cover` kg per m² in the first dry square of `w`, its neighbours made flat land at its height with
-/// its liquid and soil (`testkit::flat_round`), then a year there or in that square split two
+/// `SETTLE` months on `cover` kg per m² in the inland square of `w` (`testkit::inland`), it and its neighbours made flat
+/// land at its height with its liquid and soil (`testkit::flat_round`), then a year there or in that square split two
 /// depths (`fine`): per month, its members at the month's end, the kg it took of what it uses, the members born and the
 /// members that died, its mean temperature by members at the month's end, K, and that of its mature members (the
 /// mature bodies, `Body::adult`), K; and whether no body left the square (a member's move has a chance near none, not
 /// none).
 fn node_months(fine: bool, mut w: World, cover: f64, set: fn(&mut Body)) -> (Vec<[f64; 6]>, bool) {
-    let square = w.map.leaves()[testkit::dry_land(&w)];
-    let i = w.map.cell(square).expect("the square");
+    let i = testkit::inland(&w);
+    let square = w.map.leaves()[i];
     testkit::flat_round(&mut w, i);
-    let near: Vec<usize> = std::iter::once(i).chain(w.mesh.cells().around(i).1.iter().map(|&j| j as usize)).filter(|&c| w.is_land(c)).collect();
+    let near: Vec<usize> = std::iter::once(i).chain(w.mesh.cells().around(i).1.iter().map(|&j| j as usize)).collect();
     near.iter().for_each(|&c| testkit::cover(&mut w, c, cover));
     let line = testkit::Line::new(&mut w, &Brain::only(brain::TAKE), 1);
     let mut b = line.founder(&mut w, 1, i);

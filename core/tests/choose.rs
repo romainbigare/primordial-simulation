@@ -43,6 +43,7 @@ fn scene(seed: u64) -> World {
     let e = w.store.heat(Class::Ground)[land];
     (0..n).for_each(|i| set_heat(&mut w, Node::ground(i), e));
     w.rise_south.fill(0.0);
+    (0..n).for_each(|i| testkit::flatten(&mut w, i));
     for i in (0..n).filter(|&i| i % W >= STRIP) {
         let rich = w.g(RICH, i) + STRIP_MOL * w.mesh.cells().area()[0];
         set_amount(&mut w, Node::ground(i), RICH, rich);

@@ -327,10 +327,12 @@ pub(super) fn reflectance(w: &World, s: &Scratch, i: usize, l: &[f64; 6]) -> f64
     a + seen * s.state.bed[i].refl
 }
 
-/// Head of the liquid that stands on node `i` over what its pores hold (the solid surface when none does), m.
+/// The level the liquid that stands on node `i` over what its pores hold reaches over its own ground (`curve::Curve`;
+/// its lowest ground when none does), m.
 #[inline]
 pub(super) fn stand(s: &Scratch, i: usize) -> f64 {
-    (s.head[i] - s.pd[i]).max(s.z[i])
+    let c = &s.curves[i];
+    s.z[i] + c.level((s.head[i] - s.pd[i] - s.z[i]).max(0.0) * c.area())
 }
 
 /// Whether the pores of node `i` (porosity `por`) are full: all its other liquid stands on it. Ground with no pores

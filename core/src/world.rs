@@ -116,6 +116,9 @@ pub struct World {
     /// The potential energy the ground of each cell holds inside it over its flat form, J (`remap::relief`): a part
     /// of the world's potential energy held apart from the stacks (laws.md 0)
     pub relief: Vec<f64>,
+    /// The scale of the terrain's departures the ground of each cell stands inside it (1 the whole terrain, 0 flat;
+    /// `remap::relief`), as its liquid stands on it (`flow::curve`)
+    pub relief_scale: Vec<f64>,
     /// The terrain the world was built on, which a split reads (`space::terrain`)
     pub terrain: crate::space::terrain::Terrain,
     /// The mean rise of the ground of each cell toward the south, m per m, which the sun on it reads (`flow::on_slope`):

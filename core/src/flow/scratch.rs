@@ -201,6 +201,10 @@ pub struct Scratch {
     pub(super) split: Vec<f64>,
     /// Room the passes keep from step to step (`spare::Spare`).
     pub(super) spare: super::spare::Spare,
+    /// The level-volume curve of each cell's ground (`curve::Curve`), and those found so far by leaf, kept through
+    /// remaps (`curve::build`).
+    pub(super) curves: Vec<super::curve::Curve>,
+    pub(super) kept: super::curve::Kept,
 }
 
 /// Only the state is saved (`Scratch`).

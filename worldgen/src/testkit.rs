@@ -83,14 +83,22 @@ pub fn living(side: usize, months: u32) -> World {
     w
 }
 
-/// The land cells with no liquid standing on them.
+/// The land cells with no liquid standing on them, their lowest ground above 0 m (no low ground the low basin fills).
 pub fn dry_lands(w: &World) -> Vec<usize> {
-    (0..w.mesh.cells().n()).filter(|&i| w.is_land(i) && w.life.env[i][1] < 1e-3).collect()
+    (0..w.mesh.cells().n()).filter(|&i| w.is_land(i) && w.life.env[i][1] < 1e-3 && pcore::flow::lowest(w, i) > 0.0).collect()
 }
 
 /// The first land cell with no liquid standing on it.
 pub fn dry_land(w: &World) -> usize {
     dry_lands(w).first().copied().expect("dry land")
+}
+
+/// The lowest dry land cell whose neighbours are all dry land: inland, no standing liquid beside it, and of the inland
+/// cells the one of the mildest climate (the least height), as the tests of bodies want.
+pub fn inland(w: &World) -> usize {
+    let dry = dry_lands(w);
+    let inland = dry.iter().copied().filter(|&i| w.mesh.cells().around(i).1.iter().all(|&j| dry.contains(&(j as usize))));
+    inland.min_by(|&a, &b| w.surface_z(a).total_cmp(&w.surface_z(b))).expect("an inland cell")
 }
 
 /// `small_world` and its first dry land cell.
@@ -368,6 +376,11 @@ pub fn split_down(w: &mut World, region: &[Leaf], depths: u8) {
     }
 }
 
+/// Cell `i` flat inside: no relief, and its ground standing none of the terrain's departures.
+pub fn flatten(w: &mut World, i: usize) {
+    (w.relief[i], w.relief_scale[i]) = (0.0, 0.0);
+}
+
 /// `split_down` with no relief in the cells it splits (those 2:1 splits first too), so their quarters are flat: the
 /// same ground at two sizes, for scenes that compare a cell with its quarters.
 pub fn split_flat(w: &mut World, region: &[Leaf], depths: u8) {
@@ -375,23 +388,24 @@ pub fn split_flat(w: &mut World, region: &[Leaf], depths: u8) {
     for r in region {
         for depth in r.depth..r.depth + depths {
             for l in r.split(depth).filter(|&l| w.map.cell(l).is_some()).collect::<Vec<_>>() {
-                for i in w.map.splits(l).expect("a split").into_iter().filter_map(|s| w.map.cell(s)) {
-                    w.relief[i] = 0.0;
-                }
+                let cells: Vec<usize> = w.map.splits(l).expect("a split").into_iter().filter_map(|s| w.map.cell(s)).collect();
+                cells.into_iter().for_each(|i| flatten(w, i));
                 w.split(l).expect("a split");
             }
         }
     }
 }
 
-/// The cells round cell `i` made flat land at its height, with its liquid and soil: each holds per m² what `i` holds in
-/// its loose ground, its bed and the store under it, and their heat per m² (booked as edits); then Flow's slow ground is
-/// rechecked. A scene whose cell and its quarters differ only by their size: no liquid runs off a slope into or out of
-/// it sideways (on real slopes that is a law of the size of the cells itself, which `tape/tests/scale.rs` checks).
+/// Cell `i` and the cells round it made flat land at its height, with its liquid and soil: all flat inside (`flatten`),
+/// and each round it holding per m² what `i` holds in its loose ground, its bed and the store under it, and their heat
+/// per m² (booked as edits); then Flow's slow ground is rechecked. A scene whose cell and its quarters differ only by
+/// their size: no liquid runs off a slope into or out of it sideways (on real slopes that is a law of the size of the
+/// cells itself, which `tape/tests/scale.rs` checks).
 pub fn flat_round(w: &mut World, i: usize) {
     let (cells, ns) = (w.mesh.cells(), w.chem.ns());
     let round: Vec<usize> = cells.around(i).1.iter().map(|&j| j as usize).collect();
     let area = cells.area().to_vec();
+    std::iter::once(i).chain(round.iter().copied()).for_each(|j| flatten(w, j));
     for j in round {
         let f = area[j] / area[i];
         for class in [Class::Ground, Class::Bed, Class::Deep] {

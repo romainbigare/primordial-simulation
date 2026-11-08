@@ -116,7 +116,7 @@ impl World {
     /// `remap` of the cells alone (`Renumber`): what the links remember stays as it is, for the links to take their new
     /// numbers once the change of the cells under way has its mesh (`World::split`).
     pub(crate) fn remap_cells(&mut self, c: &Renumber) {
-        let World { cfg: _, chem, map: _, mesh: _, seed, time, sleep, store, base_z: _, rain, liquid_flux, evap, off_land, counts, life, canopy, light, rained, links: _, joined, relief, terrain: _, rise_south, watch, events, scratch } = self;
+        let World { cfg: _, chem, map: _, mesh: _, seed, time, sleep, store, base_z: _, rain, liquid_flux, evap, off_land, counts, life, canopy, light, rained, links: _, joined, relief, relief_scale, terrain: _, rise_south, watch, events, scratch } = self;
         assert!(events.iter().all(|e| matches!(e.kind, EventKind::Split | EventKind::Join)), "a remap runs between steps, once the shell took the events");
         // Per m² of a cell: its parent's in each quarter, the quarters' mean by area in a joined cell.
         for v in [rain, evap, canopy] {
@@ -131,6 +131,7 @@ impl World {
         }
         // (A split or a join then gives its cells their relief, `World::split`.)
         *relief = c.apply_made(std::mem::take(relief), || 0.0, |_, m, at| m.held(joined, None, at));
+        *relief_scale = c.apply_made(std::mem::take(relief_scale), || 1.0, |_, m, at| m.mean(at));
         // Per m² of a cell too, its way of facing; a new cell is flat (a split then gives its quarters theirs).
         *rise_south = c.apply_made(std::mem::take(rise_south), || 0.0, |_, m, at| m.mean(at));
         store.remap(c, joined);

@@ -417,28 +417,38 @@ what the heat holds molten, as every law and the shell then read it.
 (`flow::air`).
 - **Pores first**: the loose ground's pores (`porosity`) fill first, under any soft cover; only liquid above them stands
   and has a head (`flow::land::stand`), the depth bodies and Change read.
-- **The sea** (`flow::basin`, the low basin): the lowest cell and the cells joined to it through cells whose solid surface lies under
-  the level its liquid stands at are the sea, found at each month's start. A connected liquid body has one level: once
-  a month, after the runoff has reached it, all the sea's liquid stands at one level, found from all of it and the
-  floors of its cells (each solid surface less its pore space, which the liquid fills first; sorted, so the level is
-  exact). Each sea cell that holds more than its depth under that level gives the share of its liquid over it, with
+- **Each cell's own ground** (`flow::curve`): what stands fills the cell's ground from its lowest point up, so its
+  head is a level over that ground, and a cell is wet where part of its ground lies under it. The ground is the
+  terrain's drained samples inside the cell (`World::ground_in`, 8 x 8), their departures from their mean laid on the
+  cell's mean surface at the scale its ground stands the terrain (`World::relief_scale`: 1 as built, what a split's relief paid
+  after): the cell's level-volume curve, found once for each leaf and its scale. A cell's liquid leaves it from its
+  lowest ground, as the terrain inside it drains: a cell whose mean lies under its neighbours' is no basin where its
+  ground drains (`flow::levels`, `flow::lowest` read it). The liquid's potential energy is still stacked at the
+  cell's mean (a climb from a cell's low ground over a neighbour's mean is paid from the liquid's heat, below).
+- **The sea** (`flow::basin`, the low basin): the lowest cell and the cells joined to it through cells whose lowest
+  ground lies under the level its liquid stands at hold its body, found at each month's start; those whose mean surface
+  lies under it are the sea (the others its shore, land with the sea in its low ground). A connected liquid body has one
+  level: once a month, after the runoff has reached it, each cell's pores keep what they hold and all the rest stands
+  at one level over the cells' own ground (`curve::level_over`, exact). Each cell that holds more than its pores and
+  what stands on its ground under that level gives the share of its liquid over it, with
   that share of its heat; mixed, it goes to the cells that hold less, by what each lacks (`basin::share_out`; a split
   stands the liquid over its quarters' pores at one level the same way, 0). **Known limit:** the sea's slope under
   wind and rotation is not modelled, and what levels it crosses the sea at once. **The sea of each air
   block mixes its heat in a month** (`basin::mix_heat`): then its cells off their melting plateaus, with no soft cover
   or cover of bodies and the same phases, each take the block's temperature (their heat apart from the fusion enthalpy
   each holds, over their heat capacity; their floor's top too, which is part of each cell's ground node).
-- **Spill levels**: a priority flood over the ground gives each cell its spill level (Barnes, Lehman and Mulla 2014;
+- **Spill levels**: a priority flood over each cell's lowest ground gives each cell its spill level (Barnes, Lehman and Mulla 2014;
   `downhill::Order`), starting from the sea (from the lowest cell where there is none). Liquid stands below it (or in
-  the lowest basin where there is no sea); elsewhere it passes on, counting as no higher than its ground, so it crosses
+  the lowest basin where there is no sea); elsewhere it passes on, counting as no higher than its lowest ground, so it crosses
   the map in one step while depressions fill and spill. Lakes (closed basins above the sea) fill and spill this way.
   The pass goes by falling spill level, and at one level the cell the flood reached last first, so each cell comes
   before its way out whether its liquid stands or passes on: a river crosses a lake in the step it reaches it.
 - **Running off** (`flow::runoff`, `solve::downhill`): each cell but the sea's sends its liquid down its steepest way by
   D-infinity (Tarboton 1997; `Level::steepest`): two neighbours next in compass order make a triangle with the centre,
   the plane through their drops gives its slope and way, and the steepest triangle shares the liquid between its two
-  neighbours by angle. To a neighbour already passed whose liquid stands it sends at most what levels the two heads,
-  whatever their areas, and no more than fills it to its spill level; to a neighbour still to come whose liquid
+  neighbours by angle. To a neighbour already passed whose liquid stands it sends at most what levels the two heads
+  over their own ground (a cell whose liquid passes on: what brings that one up to its lowest ground), and no more
+  than fills it to its spill level; to a neighbour still to come whose liquid
   stands, what levels the two heads, whatever their areas, and all that stands over that one's spill level, which
   passes on through it (so the cells of a pool do not empty into one of the pool still to come); to one still to come
   whose liquid passes on, down to its ground. What the steepest way cannot take runs down the other ways, the steepest

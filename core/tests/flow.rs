@@ -26,10 +26,10 @@ fn pore_mol(w: &World, i: usize) -> f64 {
     w.cfg.phys.porosity * loose(w, i) / w.chem.molar_volume(LIQUID, Phase::Liquid)
 }
 
-/// Two land cells side by side, both warm and dry: the higher first.
+/// Two land cells side by side, both warm and dry, their lowest ground above 0 m: the higher first.
 fn pair(w: &World) -> (usize, usize) {
     let (n, gw) = (w.mesh.cells().n(), w.map.w);
-    let warm_land = |i: usize| w.surface_z(i) > 50.0 && w.t_ground(i) > 280.0;
+    let warm_land = |i: usize| pcore::flow::lowest(w, i) > 0.0 && w.surface_z(i) > 50.0 && w.t_ground(i) > 280.0;
     let (a, b) = (0..n).filter(|i| i % gw + 1 < gw).map(|i| (i, i + 1)).find(|&(a, b)| warm_land(a) && warm_land(b)).expect("two land cells");
     if w.surface_z(a) >= w.surface_z(b) { (a, b) } else { (b, a) }
 }
@@ -1046,7 +1046,7 @@ fn a_flood_fills_a_pool_to_its_spill_level_and_no_higher() {
     assert!(pool.iter().all(|d| d.abs() < TOL_M), "the pool stands {pool:?} m over its sill");
     let cells = w.mesh.cells();
     let adj = pcore::solve::downhill::Adjacency { start: cells.start(), link: cells.adj_link(), other: cells.adj_cell(), a: cells.a() };
-    let floor: Vec<f64> = (0..cells.n()).map(|i| w.surface_z(i)).collect();
+    let floor: Vec<f64> = pcore::flow::levels(&w, &(0..cells.n()).collect::<Vec<_>>()).expect("Flow's state").iter().map(|l| l[0]).collect();
     let (basin, _) = basin_under(&w, liquid_top);
     let basin: Vec<u32> = basin.iter().map(|&i| i as u32).collect();
     let mut order = pcore::solve::downhill::Order::default();
@@ -1056,11 +1056,10 @@ fn a_flood_fills_a_pool_to_its_spill_level_and_no_higher() {
     books.assert_within(&w, 1e-9, 1e-9);
 }
 
-/// The height the liquid of cell `i` stands at, m: its solid surface, and above it the liquid over what its pores hold.
+/// The height the liquid of cell `i` stands at, m: the level the liquid over what its pores hold reaches over its own
+/// ground (its lowest ground where none stands).
 fn liquid_top(w: &World, i: usize) -> f64 {
-    let (t, plateau) = w.thaw_last(i);
-    let liquid: f64 = (0..w.chem.ns()).filter(|&k| t < w.chem.subs[k].boil).map(|k| w.g(k, i) * w.molten(k, i, t, plateau) * w.chem.molar_volume(k, Phase::Liquid)).sum();
-    w.surface_z(i) + (liquid - w.cfg.phys.porosity * loose(w, i)).max(0.0) / w.mesh.cells().area()[i]
+    pcore::flow::levels(w, &[i]).expect("Flow's state")[0][1]
 }
 
 /// The low basin of `w` under the level `top`, m: the lowest cell and the cells joined to it through cells whose solid
@@ -1432,9 +1431,10 @@ const SNOW_KG: f64 = 30.0;
 const FACING: f64 = 0.3;
 const MELT_STEPS: usize = 60;
 
-/// Of two cells alike but for the way they face, at one latitude under snow at the end of winter, the one that faces
-/// the equator takes more sun (`flow::on_slope`): it loses its snow first and is warmer meanwhile, with no other change.
-/// Each faces each way in turn, so nothing else tells them apart.
+/// Of two cells alike but for the way they face (the lowest two dry land cells side by side, flat amid flat land at one
+/// height, `testkit::flat_round`), at one latitude under snow at the end of winter, the one that faces the equator
+/// takes more sun (`flow::on_slope`): it loses its snow first and is warmer meanwhile, with no other change. Each faces
+/// each way in turn, so nothing else tells them apart.
 #[test]
 fn a_slope_facing_the_sun_loses_its_snow_first() {
     let (chem, init) = worldgen::chemistry0();
@@ -1443,7 +1443,9 @@ fn a_slope_facing_the_sun_loses_its_snow_first() {
     (0..TO_SPRING).for_each(|_| pcore::step(&mut w0));
     let gw = w0.map.w;
     let dry = worldgen::testkit::dry_lands(&w0);
-    let a = dry.iter().copied().find(|&i| i % gw + 1 < gw && dry.contains(&(i + 1))).expect("two dry land cells side by side");
+    // The lowest such pair (flat at the height of the first, `flat_round`): its spring comes first.
+    let pairs = dry.iter().copied().filter(|&i| i % gw + 1 < gw && dry.contains(&(i + 1)));
+    let a = pairs.min_by(|&x, &y| w0.surface_z(x).total_cmp(&w0.surface_z(y))).expect("two dry land cells side by side");
     let b = a + 1;
     worldgen::testkit::flat_round(&mut w0, a);
     for &i in &[a, b] {

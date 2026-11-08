@@ -2,7 +2,7 @@
 //! laws.md 1.2), with its heat and its potential energy (`Falls`); lost head heats what runs out and does work on the
 //! bed (`load`, `wear`).
 
-use super::{bare_share, falls::{Falls, Lands}, follow, land::{lift, solid, NONE}, liquid::{book, mobile}, potential::apply, year_weight, Scratch};
+use super::{bare_share, curve::{level_over, Curve}, falls::{Falls, Lands}, follow, land::{lift, solid, NONE}, liquid::{book, mobile}, potential::apply, year_weight, Scratch};
 use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed, Order}, solve::sweep::{by_size, Net, LIMIT}, space::Level, store::{Class, LinkFlux, Move, Node}, units::T_FLOOR, World};
 
 /// Least bond strength wear divides by.
@@ -73,7 +73,10 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     let (q0, cells) = (q.clone(), w.mesh.cells());
     let adj = Adjacency { start: cells.start(), link: cells.adj_link(), other: cells.adj_cell(), a: cells.a() };
     let mut order = std::mem::take(&mut s.order);
-    order.update(&adj, &s.z, |i| s.z[i] + q[i * width + vol] / area[i], &s.basin.cells);
+    // The flood runs over each cell's lowest ground, where its liquid leaves it, and its head is the level its liquid
+    // reaches over its own ground (`curve::Curve`).
+    let low: Vec<f64> = (0..n).map(|i| s.z[i] + s.curves[i].low()).collect();
+    order.update(&adj, &low, |i| s.z[i] + s.curves[i].level(q[i * width + vol]), &s.basin.cells);
     let land: Vec<bool> = s.z.iter().map(|&z| z > 0.0).collect();
     let mut falls = s.lifts.as_ref().map(|_| Falls::new(w, s));
     let (mut left, mut crossed, mut outs, mut rest) = (Vec::with_capacity(n), Crossed::default(), Vec::new(), Vec::new());
@@ -118,9 +121,9 @@ impl Pass<'_> {
         self.ks.len() + 2
     }
 
-    /// The head of cell `j` in the pass, m: its ground and the liquid that may run off over it.
+    /// The head of cell `j` in the pass, m: the level the liquid that may run off reaches over its own ground.
     fn head(&self, q: &[f64], j: usize) -> f64 {
-        self.s.z[j] + q[j * self.width() + self.width() - 1] / self.w.mesh.cells().area()[j]
+        self.s.z[j] + self.s.curves[j].level(q[j * self.width() + self.width() - 1])
     }
 
     /// The share of cell `i`'s liquid that leaves down each way (`share`), with `outs` and `rest` as room. The surface
@@ -135,23 +138,34 @@ impl Pass<'_> {
     /// below the rim of another it used (`to_rims`). Returns the share that leaves and the fall of the head, m.
     fn ways(&self, i: usize, q: &[f64], share: &mut [f64], (outs, rest): (&mut Vec<Toward>, &mut Vec<usize>)) -> (f64, f64) {
         let (order, cells, still) = (self.order, self.w.mesh.cells(), self.w.cfg.phys.still);
-        let (area, zi, hd, sv) = (cells.area(), self.s.z[i], self.head(q, i), q[i * self.width() + self.width() - 1]);
+        let (z, curve) = (&self.s.z, &self.s.curves);
+        let (zi, hd, sv) = (z[i], self.head(q, i), q[i * self.width() + self.width() - 1]);
+        let low = zi + curve[i].low();
         outs.clear();
-        let (top, mut way) = (if order.stands[i] { hd } else { zi }, None);
+        let (top, mut way) = (if order.stands[i] { hd } else { low }, None);
         for (k, j) in cells.around(i).1.iter().map(|&j| j as usize).enumerate() {
             let (hj, passed) = (self.head(q, j), order.before(j, i));
             let to = match (passed, order.stands[j]) {
                 (true, _) => hj,
                 (false, true) => hj.min(order.spill[j]),
-                (false, false) => self.s.z[j],
+                (false, false) => z[j] + curve[j].low(),
             };
             let from = if passed { top } else { hd };
+            // The level both heads come to over their own ground, the volume of each over its mean surface as it stands.
+            let level = || level_over(&[(&curve[i], zi), (&curve[j], z[j])], sv + curve[j].volume(hj - z[j]));
             let (room, rim) = if passed {
-                let room = ((from - to) * (area[i] * area[j] / (area[i] + area[j]))).min((order.spill[j] - hj) * area[j]);
-                (room, hj + room / area[j])
+                // To one passed whose liquid stands: up to the level of both, no higher than its spill level. Liquid
+                // that passes on counts as a column of the cell's area at its lowest ground (`from`), whatever its
+                // ground: it levels with that one as far as the column falls (a floor of its area under both).
+                let column = || {
+                    let (floor, a) = (to - 1.0, curve[i].area());
+                    level_over(&[(&Curve::flat(a), floor), (&curve[j], z[j])], a * (from - floor) + curve[j].volume(hj - z[j]))
+                };
+                let rim = if order.stands[i] { level() } else { column() }.min(order.spill[j]);
+                (curve[j].volume(rim - z[j]) - curve[j].volume(hj - z[j]), rim)
             } else {
-                let level = if order.stands[j] { ((hd * area[i] + hj * area[j]) / (area[i] + area[j])).min(order.spill[j]) } else { to };
-                ((hd - level.max(zi)) * area[i], level.max(zi))
+                let level = if order.stands[j] { level().min(order.spill[j]) } else { to }.max(low);
+                (sv - curve[i].volume(level - zi), level)
             };
             let down = from - to > still && (!passed || order.stands[j]) && room > 0.0;
             if down && j == order.outlet[i] as usize {
@@ -168,7 +182,7 @@ impl Pass<'_> {
         if short {
             (out, drop) = run_on(cells, i, (outs, rest), share, sv, (out, drop));
         }
-        to_rims(outs, share, (sv, zi, area[i], still), (out, drop))
+        to_rims(outs, share, (sv, zi, &curve[i], still), (out, drop))
     }
 
     /// Cell `i` sends a share `out` of its liquid (`share` down each way, its head falling by `drop` m): its liquid does
@@ -221,7 +235,7 @@ impl Pass<'_> {
         if let Some(f) = falls {
             for (k, &j) in around.iter().enumerate().filter(|p| share[p.0] > 0.0) {
                 let j = j as usize;
-                let lands = if s.basin.is[j] { Lands::Basin } else if self.order.before(i, j) { Lands::Ahead } else { Lands::Passed };
+                let lands = if s.basin.body[j] { Lands::Basin } else if self.order.before(i, j) { Lands::Ahead } else { Lands::Passed };
                 f.send((i, j), (share[k] * mass, share[k] * moved, cells.area()[j]), lands);
             }
         }
@@ -278,15 +292,15 @@ fn run_on(cells: &Level, i: usize, (outs, rest): (&[Toward], &mut Vec<usize>), s
 
 /// A cell does not drain below the rim of a way it sent along (`Toward::rim`): each way's room counts all the cell
 /// holds, so together they may take it lower, and liquid would cross a rim from below it. Where the cell, which of `sv`
-/// m³ over its ground `zi` (area `a`) sends a share `out`, would end more than `still` under the highest rim of the
-/// ways it uses, each takes less (`share`), in proportion, so it ends at that rim. Returns the share that leaves and the
-/// fall of the head, as `out` and `drop`.
-fn to_rims(outs: &[Toward], share: &mut [f64], (sv, zi, a, still): (f64, f64, f64, f64), (out, drop): (f64, f64)) -> (f64, f64) {
+/// m³ over its mean surface `zi` (on its own ground, `curve`) sends a share `out`, would end more than `still` under
+/// the highest rim of the ways it uses, each takes less (`share`), in proportion, so it ends at that rim. Returns the
+/// share that leaves and the fall of the head, as `out` and `drop`.
+fn to_rims(outs: &[Toward], share: &mut [f64], (sv, zi, curve, still): (f64, f64, &Curve, f64), (out, drop): (f64, f64)) -> (f64, f64) {
     let rim = outs.iter().zip(share.iter()).filter(|p| *p.1 > 0.0).map(|p| p.0.rim).fold(f64::MIN, f64::max);
-    if zi + sv * (1.0 - out) / a >= rim - still {
+    if zi + curve.level(sv * (1.0 - out)) >= rim - still {
         return (out, drop);
     }
-    let less = ((sv - (rim - zi) * a) / (out * sv)).clamp(0.0, 1.0);
+    let less = ((sv - curve.volume(rim - zi)) / (out * sv)).clamp(0.0, 1.0);
     share.iter_mut().for_each(|f| *f *= less);
     (out * less, drop * less)
 }

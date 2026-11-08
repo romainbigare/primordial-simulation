@@ -2,7 +2,7 @@
 //! its pores and what stands over them, by Flow's state of the ground (`means`); a split's quarters take the liquid of
 //! their pores by the shares of their own ground, and what stands at one level (`share_ground`).
 
-use super::{basin::{level_of, movable, share_out}, drain::liquid_heat_at, land::layers, potential::{scratch_of, stated}, range, Scratch};
+use super::{basin::{movable, share_out}, curve::{at_scale, curve_of, level_over, Curve}, drain::liquid_heat_at, land::layers, potential::{scratch_of, stated}, range, Scratch};
 use crate::inside::Means;
 use crate::store::{Class, LinkFlux};
 use crate::World;
@@ -52,16 +52,39 @@ pub fn means(w: &World, cells: &[usize]) -> Option<Vec<Means>> {
     Some((0..cells.len()).map(one).collect())
 }
 
+/// The height of the lowest ground of cell `i`, m: its solid surface and its own ground's lowest departure from it
+/// (`curve::Curve`), where its liquid leaves it.
+pub fn lowest(w: &World, i: usize) -> f64 {
+    w.surface_z(i) + curve_of(w, i).low()
+}
+
+/// Of each of `cells`: its lowest ground and the level the liquid standing over its pores reaches over its own ground
+/// (`curve::Curve`; its lowest ground where none stands), m, by Flow's state of the ground. None before Flow first built
+/// the state.
+pub fn levels(w: &World, cells: &[usize]) -> Option<Vec<[f64; 2]>> {
+    if !stated(w) {
+        return None;
+    }
+    let s = scratch_of(w);
+    let x = wet(w, &s, cells);
+    let one = |c: usize| {
+        let (curve, stands) = (curve_of(w, cells[c]), (x.vol[c] - x.vol[c].min(x.pores[c])).max(0.0));
+        [x.z[c] + curve.low(), x.z[c] + curve.level(stands)]
+    };
+    Some((0..cells.len()).map(one).collect())
+}
+
 /// The quarters `cells` a split just made (`World::split`), flat copies of their parent by area, take the shares of
 /// their own ground (`inside::Inside`, each quarter's part `Ground::quarters`): the liquid their pores hold by `soil`,
 /// as far as each one's pores hold it, and the liquid that stood over them and what their pores cannot hold at one
-/// level over their floors, as the basin's does (`level`; a floor is a quarter's solid surface less the room its pores
-/// have left, which the liquid fills first). Each move takes its share of every liquid with what is dissolved and its
+/// level over their own ground, as the basin's does (`level`; each quarter's curve at the terrain's `scale` the split
+/// stands, `curve::at_scale`, laid on its solid surface less the room its pores have left, which the liquid fills
+/// first). Each move takes its share of every liquid with what is dissolved and its
 /// heat at the node's temperature (`drain::liquid_heat_at`), by `share_out`, from the quarter that holds the most to
 /// each other. The quarters' phases are those of their heat (`World::thawed`) after. No part of Flow is under way
 /// between steps: the store books the moves (`store::apply`), and the potential energy they give up or take is the
 /// cell's relief's (`World::split`). None before Flow first built the state of the ground.
-pub(crate) fn share_ground(w: &mut World, cells: &[usize; 4], soil: [f64; 4]) {
+pub(crate) fn share_ground(w: &mut World, cells: &[usize; 4], soil: [f64; 4], scale: f64) {
     if !stated(w) {
         return;
     }
@@ -71,9 +94,10 @@ pub(crate) fn share_ground(w: &mut World, cells: &[usize; 4], soil: [f64; 4]) {
         let pore: f64 = x.vol.iter().zip(&x.pores).map(|(v, p)| v.min(*p)).sum();
         let kept: Vec<f64> = (0..4).map(|c| (pore * soil[c]).min(x.pores[c])).collect();
         let stands = x.vol.iter().sum::<f64>() - kept.iter().sum::<f64>();
-        let floors: Vec<(f64, f64)> = cells.iter().enumerate().map(|(c, &i)| (x.z[c] - (x.pores[c] - kept[c]) / area[i], area[i])).collect();
-        let top = level_of(&mut floors.clone(), stands);
-        let want: Vec<f64> = (0..4).map(|c| kept[c] + floors[c].1 * (top - floors[c].0).max(0.0)).collect();
+        let curves: Vec<Curve> = cells.iter().map(|&i| at_scale(w, i, scale)).collect();
+        let floor: Vec<f64> = cells.iter().enumerate().map(|(c, &i)| x.z[c] - (x.pores[c] - kept[c]) / area[i]).collect();
+        let top = level_over(&curves.iter().zip(&floor).map(|(c, &z)| (c, z)).collect::<Vec<_>>(), stands);
+        let want: Vec<f64> = (0..4).map(|c| kept[c] + curves[c].volume(top - floor[c])).collect();
         let at: Vec<u32> = cells.iter().map(|&i| i as u32).collect();
         (x.liq.iter().map(|&k| k as u16).collect::<Vec<u16>>(), share_out(&at, (&x.held, &x.vol), &want, x.liq.len()))
     };

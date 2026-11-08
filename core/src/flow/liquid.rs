@@ -3,7 +3,7 @@
 //! (`runoff::surface`), doing work on its bed; the liquid under the surface moves (`drain::under`); and the basin stands
 //! at one level (`basin::level`).
 
-use super::{drain::{springs, under}, land::{cells_state, stand, wet, NONE}, potential::{apply, apply_carried}, range, runoff::surface, Scratch};
+use super::{drain::{springs, under}, land::{cells_state, wet, NONE}, potential::{apply, apply_carried}, range, runoff::surface, Scratch};
 use crate::{store::{Class, LinkFlux}, World};
 
 /// The mobile liquid of every ground node: of each liquid `liq[q]`, `mol[q * n + i]` (its liquid share; all of a
@@ -79,8 +79,11 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
 
 /// The slope of the surface of each ground node down its steepest way (`Level::steepest`) to the lower neighbours (by
 /// more than `still`), 0 for none; and for the low basin, whose liquid stands at one level and drains to no channel.
+/// The surface is the cell's mean ground, or the liquid standing over its pores if higher: the slope its hillsides
+/// drain down to the channels inside it.
 fn slopes(w: &World, s: &Scratch) -> Vec<f64> {
     let (cells, still) = (w.mesh.cells(), w.cfg.phys.still);
-    let drop = |i: usize, k: usize| Some(stand(s, i) - stand(s, cells.around(i).1[k] as usize)).filter(|&d| d > still);
+    let surface = |i: usize| (s.head[i] - s.pd[i]).max(s.z[i]);
+    let drop = |i: usize, k: usize| Some(surface(i) - surface(cells.around(i).1[k] as usize)).filter(|&d| d > still);
     crate::par::map_n(cells.n(), crate::par::UNCOUNTED, |i| if s.basin.is[i] { 0.0 } else { cells.steepest(i, |k| drop(i, k)).map_or(0.0, |way| way.0) })
 }

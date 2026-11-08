@@ -79,7 +79,7 @@ fn a_split_then_its_join_gives_back_the_world() {
     let mut w = world();
     pcore::flow::state(&mut w, true);
     let (i, n) = (testkit::dry_land(&w), w.mesh.cells().n());
-    w.relief[i] = 0.0;
+    testkit::flatten(&mut w, i);
     let (l, before, held, first, env) = (leaf(&w, i), saved(&w), holds(&w, i), w.life.serial(i), w.life.env[i]);
     assert_eq!(w.split(l), Ok(vec![l]));
     assert_eq!(w.mesh.cells().n(), n + 3);
@@ -235,9 +235,10 @@ fn liquid_and_pores(w: &World, i: usize) -> (f64, f64) {
     (liquid / area, w.cfg.phys.porosity * testkit::loose_volume(w, i) / area)
 }
 
-/// A split of the cell under 0 m of the most relief puts its liquid where it would stand on its quarters' floors: each
-/// keeps its pores full (the least liquid a quarter holds is what the pores of its loose ground hold), and what stood
-/// over them fills the quarters from the lowest up to one level, so a quarter is under that level or dry above it. The
+/// A split of the cell under 0 m of the most relief puts its liquid where it would stand on its quarters' own ground:
+/// each keeps its pores full (the least liquid a quarter holds is what the pores of its loose ground hold), and what
+/// stood over them fills the quarters' ground from the lowest up to one level (`flow::levels`), so a quarter's liquid
+/// stands at that level or it is dry, its lowest ground above it. The
 /// books close (`TIGHT`), and the cell's relief pays what the stacks gain and the quarters' reliefs, none of it heat.
 #[test]
 fn a_split_stands_its_liquid_at_one_level() {
@@ -252,17 +253,17 @@ fn a_split_stands_its_liquid_at_one_level() {
     let kids = l.quarters().map(|q| w.map.cell(q).expect("a quarter"));
     let (spent, kept, warmed) = (pcore::flow::potential(&w).expect("Flow's state") - stacks, kids.map(|j| w.relief[j]).iter().sum::<f64>(), ground_heat(&w, &kids) - heat);
     assert!((spent + kept - relief).abs() <= TIGHT * stacks.abs() && warmed.abs() <= TIGHT * heat, "the relief pays what the split gains, {warmed:e} J to heat");
-    // Each quarter's solid surface and liquid, m; what the pores of each hold (the least liquid of a quarter), and the
-    // level of what stands over them.
-    let at = kids.map(|j| (w.surface_z(j), liquid_and_pores(&w, j)));
+    // Each quarter's solid surface, its liquid and what its pores hold, and its lowest ground and the level of what
+    // stands over its pores on its own ground, m.
+    let at = kids.map(|j| (w.surface_z(j), liquid_and_pores(&w, j), pcore::flow::levels(&w, &[j]).expect("Flow's state")[0]));
     let pores = at.iter().map(|x| x.1 .0).fold(f64::MAX, f64::min);
-    let level = at.iter().filter(|x| x.1 .0 > pores + LEVEL_M).map(|&(z, (liquid, _))| z + liquid - pores).fold(f64::MIN, f64::max);
-    println!("quarters (surface, (liquid, pores)) {at:?} m: the level {level:.2} m");
+    let level = at.iter().filter(|x| x.2[1] > x.2[0] + LEVEL_M).map(|x| x.2[1]).fold(f64::MIN, f64::max);
+    println!("quarters (surface, (liquid, pores), [lowest, level]) {at:?} m: the level {level:.2} m");
     assert!((pores - at[0].1 .1).abs() <= PORES * pores, "the pores full: {pores} m of {} m", at[0].1 .1);
-    assert!(at.iter().any(|x| x.0 < level) && at.iter().any(|x| x.0 > level), "the scene has wet quarters and dry ones");
-    for &(z, (liquid, _)) in &at {
-        let (wet, dry) = ((z + liquid - pores - level).abs() <= LEVEL_M, liquid - pores <= LEVEL_M && z >= level);
-        assert!(wet || dry, "a quarter at {z} m with {liquid} m of liquid: under the level or dry above it");
+    assert!(at.iter().any(|x| x.2[0] < level) && at.iter().any(|x| x.0 > level), "the scene has wet ground and dry ground");
+    for &(_, _, [lowest, top]) in &at {
+        let (wet, dry) = ((top - level).abs() <= LEVEL_M, top - lowest <= LEVEL_M && lowest >= level - LEVEL_M);
+        assert!(wet || dry, "a quarter of lowest ground {lowest} m and level {top} m: at the level or dry above it");
     }
 }
 
@@ -596,20 +597,30 @@ const EVEN_SHARE: f64 = 1e-6;
 /// more than others again, and the store flows down those differences, which the cells of 500 m resolve better (a sharp
 /// step falls over 500 m, not 2 km): 6e-5 in a year.
 const STORE_SHARE: f64 = 1e-2;
+/// The most a store under the block may hold of its room (`Physics::bed_porosity` × `Physics::bed_depth`) at the end:
+/// one that fills turns back what infiltrates, at a time its uneven filling sets, so the ground and what rises would
+/// take on the store's difference.
+const STORE_ROOM: f64 = 0.95;
+
+/// The dry land cell of `w` that lies lowest: a plateau at its height takes the least rain (the air rises least over
+/// it), so the stores under it keep room through the test.
+fn lowest_dry(w: &World) -> usize {
+    testkit::dry_lands(w).into_iter().min_by(|&a, &b| w.surface_z(a).total_cmp(&w.surface_z(b))).expect("dry land")
+}
 
 /// The climate does not depend on the size of the cells where nothing in them differs (spec 5.2): on the small island
-/// with all its land one even plateau (each land cell holding per m² what one does in its ground, its bed and the store
-/// under it, `testkit::even_land`, with no relief inside it), made even again after a year (its runoff fed some squares'
+/// with all its land one even plateau (each land cell holding per m² what the lowest dry land does in its ground, its
+/// bed and the store under it, `testkit::even_land`, with no relief inside it), made even again after a year (its runoff fed some squares'
 /// stores more than others, a difference a finer grid resolves better, so the plateau would not be even below ground), a
 /// block of 2 x 2 squares in its middle split two depths (into cells of 500 m, those beside it into cells of 1 km) keeps,
 /// after a year, the climate (`climate`) of the block and of the island within `EVEN_SHARE` of each number
-/// (`STORE_SHARE` for the store).
+/// (`STORE_SHARE` for the store), while no store under the block fills (`STORE_ROOM`).
 #[test]
 fn an_even_region_split_two_depths_keeps_its_climate() {
     let mut w = world();
-    let (n, like) = (w.mesh.cells().n(), testkit::dry_land(&w));
+    let (n, like) = (w.mesh.cells().n(), lowest_dry(&w));
     let land: Vec<usize> = (0..n).filter(|&i| w.is_land(i)).collect();
-    land.iter().for_each(|&i| w.relief[i] = 0.0);
+    land.iter().for_each(|&i| testkit::flatten(&mut w, i));
     testkit::even_land(&mut w, like);
     (0..EVEN_MONTHS).for_each(|_| pcore::step(&mut w));
     // A year's runoff across the plateau feeds some squares' stores more than others; made even again, below ground too.
@@ -631,6 +642,11 @@ fn an_even_region_split_two_depths_keeps_its_climate() {
         println!("{what}: unsplit {coarse:?}, off by {off:?}");
         assert!(off.iter().enumerate().all(|(q, &x)| x <= if q == STORE { STORE_SHARE } else { EVEN_SHARE }), "{what}: unsplit {coarse:?}, split {split:?}");
     }
+    let room = fine.cfg.phys.bed_porosity * fine.cfg.phys.bed_depth / fine.chem.molar_volume(testkit::LIQUID, Phase::Liquid);
+    let (cells, nf) = (fine.mesh.cells(), fine.mesh.cells().n());
+    let held = (0..nf).filter(|&i| inside(&block, &leaf(&fine, i))).map(|i| fine.store.amounts(Class::Deep)[testkit::LIQUID * nf + i] / cells.area()[i]);
+    let most = held.fold(0.0, f64::max);
+    assert!(most < STORE_ROOM * room, "a store under the block holds {most} of its {room} mol/m²");
     assert_eq!(check::broken(&fine), None);
 }
 
@@ -639,7 +655,7 @@ const COAST_SQUARES: usize = 6;
 const COAST_YEARS: usize = 10;
 /// How far the split run's ground temperature may stray from the unsplit one's, K, on the land and in the split region;
 /// and its rain over the island, a share. The quarters are flat, so a slope becomes steps: the stores and the pores of
-/// a region drain at its edges, not inside, and it holds more liquid (its store 2.3 times, its evaporation 5% more in
+/// a region drain at its edges, not inside, and it holds more liquid (its store 6.8 times, its evaporation 4.5% more in
 /// ten years), while the land and the rain move by 0.004 K and 0.06%.
 const COAST_LAND_K: f64 = 0.02;
 const COAST_REGION_K: f64 = 0.05;
@@ -647,7 +663,8 @@ const COAST_RAIN: f64 = 2e-3;
 
 /// The coarse and the fine form of the same ground give the same climate (spec 5.2): the 22 x 22 island without life,
 /// its first `COAST_SQUARES` coastal squares (land with a cell under 0 m across a side) in its west half split two
-/// depths after a year into flat quarters (no relief inside the cells: the laws at two sizes, not a finer terrain), runs
+/// depths after a year into flat quarters (every cell of both runs flat inside, `testkit::flatten`: the laws at two
+/// sizes, not a finer terrain), runs
 /// `COAST_YEARS` years beside the unsplit island; the ground temperature of the land and of the region, and the rain,
 /// stay within `COAST_LAND_K`, `COAST_REGION_K` and `COAST_RAIN`, and the books close.
 #[test]
@@ -660,9 +677,9 @@ fn the_split_coast_keeps_its_climate() {
     let coast = |i: usize| w.is_land(i) && cells.around(i).0.iter().zip(cells.around(i).1).any(|(&l, &j)| cells.width()[l as usize] > 0.0 && !w.is_land(j as usize));
     let west = |l: &Leaf| l.x < w.map.w as u64 / 2 * l.side();
     let region: Vec<Leaf> = (0..cells.n()).filter(|&i| coast(i)).map(|i| leaf(&w, i)).filter(|l| l.depth == w.map.square_depth() && west(l)).take(COAST_SQUARES).collect();
-    let mut flat = w.clone();
-    flat.relief.iter_mut().for_each(|r| *r = 0.0);
-    let mut fine = split_down(flat, &region, 2);
+    // Every cell flat inside in both runs: the same ground at two sizes.
+    (0..w.mesh.cells().n()).for_each(|i| testkit::flatten(&mut w, i));
+    let mut fine = split_down(w.clone(), &region, 2);
     let books = Books::now(&fine);
     for _ in 0..COAST_YEARS * w.cfg.months_per_year as usize {
         pcore::step(&mut w);

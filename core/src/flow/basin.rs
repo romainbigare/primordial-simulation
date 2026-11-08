@@ -1,65 +1,54 @@
-//! The low basin (laws.md 1.2): the cells joined to the lowest cell under the level its liquid stands at hold one body of
-//! liquid with one level. `find` names them at each full build of the ground's state; `level` shares the basin's liquid
+//! The low basin (laws.md 1.2): the cells joined to the lowest cell through cells whose own low ground lies under the
+//! level its liquid stands at hold one body of liquid with one level, over each one's own ground. `find` names them at each full build of the ground's state; `level` shares the basin's liquid
 //! by that level once a month, after the runoff has reached it (`share_out`, by which a split's quarters share their
 //! ground too, `inside`).
 
-use super::{air::blocks, drain::liquid_heat, land::{cells_state, stand, wet, NONE}, liquid::book, potential::apply, Scratch};
+use super::{air::blocks, curve::{level_over, Curve}, drain::liquid_heat, land::{cells_state, stand, wet, NONE}, liquid::book, potential::apply, Scratch};
 use crate::{store::{Class, LinkFlux}, World, AIR};
 use std::collections::BTreeMap;
 
-/// The basin: whether each cell is in it, and its cells in order.
+/// The basin: whether each cell holds part of its liquid body, and those cells in order; and whether each lies under its
+/// level (its mean surface under it: a cell under the body, not one of its rim).
 #[derive(Clone, Debug, Default)]
 pub(super) struct Basin {
-    pub(super) is: Vec<bool>,
+    pub(super) body: Vec<bool>,
     pub(super) cells: Vec<u32>,
+    pub(super) is: Vec<bool>,
 }
 
-/// The basin now: the lowest cell and every cell joined to it through cells whose solid surface lies under the level its
-/// liquid stands at (`land::stand`); none where the lowest cell's liquid does not stand.
+/// The basin now: the lowest cell and every cell joined to it through cells whose own low ground (`curve::Curve`) lies
+/// under the level its liquid stands at (`land::stand`), each of them under it where its mean surface is; none where
+/// the lowest cell's liquid does not stand.
 pub(super) fn find(w: &World, s: &Scratch) -> Basin {
     let cells = w.mesh.cells();
     let n = cells.n();
-    let mut basin = Basin { is: vec![false; n], cells: Vec::new() };
+    let mut basin = Basin { body: vec![false; n], cells: Vec::new(), is: vec![false; n] };
     let Some(lowest) = (0..n).min_by(|&a, &b| s.z[a].total_cmp(&s.z[b])) else { return basin };
     let top = stand(s, lowest);
     if top <= s.z[lowest] {
         return basin;
     }
-    let (mut todo, is) = (vec![lowest], &mut basin.is);
-    is[lowest] = true;
+    let (mut todo, body) = (vec![lowest], &mut basin.body);
+    body[lowest] = true;
     while let Some(i) = todo.pop() {
         for j in cells.around(i).1.iter().map(|&j| j as usize) {
-            if !is[j] && s.z[j] < top {
-                is[j] = true;
+            if !body[j] && s.z[j] + s.curves[j].low() < top {
+                body[j] = true;
                 todo.push(j);
             }
         }
     }
-    basin.cells = (0..n as u32).filter(|&i| basin.is[i as usize]).collect();
+    basin.cells = (0..n as u32).filter(|&i| basin.body[i as usize]).collect();
+    basin.is = (0..n).map(|i| basin.body[i] && s.z[i] < top).collect();
     basin
 }
 
-/// The level at which `vol` m³ fill floors of heights and areas `floors` (m, m²), sorted here: Σ area × (level -
-/// floor) over the floors under it is `vol`, m.
-pub fn level_of(floors: &mut [(f64, f64)], vol: f64) -> f64 {
-    floors.sort_unstable_by(|p, q| p.0.total_cmp(&q.0));
-    let (mut area, mut volume_under) = (0.0, 0.0);
-    for (k, &(z, a)) in floors.iter().enumerate() {
-        (area, volume_under) = (area + a, volume_under + a * z);
-        let level = (vol + volume_under) / area;
-        if floors.get(k + 1).is_none_or(|next| level <= next.0) {
-            return level;
-        }
-    }
-    f64::NAN
-}
-
 /// The basin's liquid of the liquids `liq` (what boils below the coldest node, `tmin`, is a dissolved gas) stands at one
-/// level, found from all of it and the floors of its cells (each cell's solid surface less its pore space, which the
-/// liquid fills first): that liquid body has one level (its slope under wind and rotation is not modelled). Each cell
-/// that holds more than its depth under that level gives the share of its liquid over it, with that share of its heat
-/// as it leaves (`drain::liquid_heat`); mixed, it goes to the cells that hold less, by what each lacks (`share_out`),
-/// with the potential energy of what moves (`potential`).
+/// level: each cell's pores keep what they hold, and all the rest stands over the cells' own ground (`curve::level_over`):
+/// that liquid body has one level (its slope under wind and rotation is not modelled). Each cell that holds more than
+/// its pores and what stands on its ground under that level gives the share of its liquid over it, with that share of
+/// its heat as it leaves (`drain::liquid_heat`); mixed, it goes to the cells that hold less, by what each lacks
+/// (`share_out`), with the potential energy of what moves (`potential`).
 pub(super) fn level(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64) {
     let basin = std::mem::take(&mut s.basin);
     if basin.cells.is_empty() {
@@ -68,9 +57,10 @@ pub(super) fn level(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64) {
     }
     let area = w.mesh.cells().area();
     let (held, vol) = movable(w, s, liq, &basin.cells, tmin, (|k, i| wet(s, k, i), |i, mol| liquid_heat(w, s, liq, i, mol)));
-    let floors: Vec<(f64, f64)> = basin.cells.iter().map(|&i| (s.z[i as usize] - s.pd[i as usize], area[i as usize])).collect();
-    let top = level_of(&mut floors.clone(), vol.iter().sum());
-    let want: Vec<f64> = basin.cells.iter().zip(&floors).map(|(&i, f)| area[i as usize] * (top - f.0).max(0.0)).collect();
+    let pore: Vec<f64> = basin.cells.iter().zip(&vol).map(|(&i, &v)| v.min(s.pd[i as usize] * area[i as usize])).collect();
+    let parts: Vec<(&Curve, f64)> = basin.cells.iter().map(|&i| (&s.curves[i as usize], s.z[i as usize])).collect();
+    let top = level_over(&parts, vol.iter().zip(&pore).map(|(v, p)| v - p).sum());
+    let want: Vec<f64> = parts.iter().zip(&pore).map(|((c, z), p)| p + c.volume(top - z)).collect();
     let (a, b, mol, heat) = share_out(&basin.cells, (&held, &vol), &want, liq.len());
     let ks: Vec<u16> = liq.iter().map(|&k| k as u16).collect();
     s.basin = basin;

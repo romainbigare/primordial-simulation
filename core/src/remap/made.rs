@@ -90,6 +90,8 @@ pub struct Joined {
     /// Each quarter's share, row by row, of each number (`Joined::share`)
     shares: Vec<[f64; 4]>,
     pub kept: [f64; 4],
+    /// Each quarter's relief scale (`World::relief_scale`), which its split gives back
+    pub scales: [f64; 4],
     pub rise: [f64; 4],
 }
 
@@ -113,7 +115,7 @@ impl Joined {
             push(if h.is_empty() { [0.0; 4] } else { kids.map(|i| h[i]) });
         }
         (0..FLOW_HELD).for_each(|x| push(flow.map(|v| v.map_or(0.0, |v| v[x]))));
-        Joined { shares, kept: kids.map(|i| w.relief[i]), rise: kids.map(|i| w.rise_south[i]) }
+        Joined { shares, kept: kids.map(|i| w.relief[i]), scales: kids.map(|i| w.relief_scale[i]), rise: kids.map(|i| w.rise_south[i]) }
     }
     /// Quarter `q`'s share of `of`.
     pub(crate) fn share(&self, of: Of, q: u8) -> f64 {
