@@ -347,18 +347,21 @@ than `wake_share`, then its law brings it up to date over the whole time since.
 **The books.** Every move takes from one node exactly what it gives another, with its heat; `store::apply` and the
 bookings of the bodies' moves and of Change's rows (`store::book_by_array`, which adds as `apply` adds) are the store's only writers, with plain sums.
 Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`). **Potential
-energy** is one function of what the nodes hold (`flow::potential`): a ground cell is a stack from its base up, each
-layer at its middle (its bed, its loose solids, its liquid with what is dissolved in it, as its head stacks them,
-1.1), its store `bed_depth` under its bed's top, filled from the bottom; an air node's matter lies at the mean head of
-its cells, for the height of a column above its ground is in its heat (its heat capacity at constant pressure holds
+energy** is one function of what the nodes hold (`flow::potential`): a ground cell is a stack from its base up, its bed
+and its solids each at its middle, its liquid with what is dissolved in it as Flow holds it (1.2, `stack::Column`): in
+the pores of its loose solids first, a table rising from the bed's top, and the rest standing over the cell's own
+ground (its level-volume curve) at its centroid; its store `bed_depth` under its bed's top, filled from the bottom; an
+air node's matter lies at the mean head of its cells (their solid surface and liquid as a column, as Flow's state
+stacks them), for the height of a column above its ground is in its heat (its heat capacity at constant pressure holds
 the work the column does as it rises); a bodies' node's gas and the matter of a cell's life (its bodies, its cover
 with the seeds it sends until they land, its parts) at its cell's head. The parts of a month's Flow after the survey
 (state, the air's steps, liquid, creep, refresh) follow each other with nothing between (`flow::chain`) and are
 booked as one at their end; the survey's own
 build of Flow's state, and a part run alone, are booked at their own end. In each booking every move carries its
-potential energy from the height it leaves (a ground node's head, an air node's mean head, a store's table, each the
-mean of the booking's start and end, so a lake that drains whole takes along what it held), but the moves of the
-liquid's pass, which carry it from the head their cell is left at, as the pass books them (`potential::apply_carried`,
+potential energy from the height it leaves (a ground node's liquid top, the table of its pores or the level of what
+stands; a bodies' node's head; an air node's mean head; a store's table; each the mean of the booking's start and
+end, so a lake that drains whole takes along what it held), but the moves of the liquid's pass, which carry it from the
+top their cell's liquid is left at, as the pass books them (`potential::apply_carried`,
 1.2); and each node's heat takes what came in less what left less the change of its own (`store::fall_heat`; less what
 a part gave it on the way, as the liquid's pass gives the heat of its falls to the liquid that lands, 1.2):
 so a fall heats where the matter lands, a lift is paid by the node it enters (the air, for a gas going up; the ground
@@ -424,8 +427,8 @@ what the heat holds molten, as every law and the shell then read it.
   cell's mean surface at the scale its ground stands the terrain (`World::relief_scale`: 1 as built, what a split's relief paid
   after): the cell's level-volume curve, found once for each leaf and its scale. A cell's liquid leaves it from its
   lowest ground, as the terrain inside it drains: a cell whose mean lies under its neighbours' is no basin where its
-  ground drains (`flow::levels`, `flow::lowest` read it). The liquid's potential energy is still stacked at the
-  cell's mean (a climb from a cell's low ground over a neighbour's mean is paid from the liquid's heat, below).
+  ground drains (`flow::levels`, `flow::lowest` read it). The liquid's potential energy is where it lies: in the
+  pores, and over the cell's own ground at its centroid (0, "The books").
 - **The sea** (`flow::basin`, the low basin): the lowest cell and the cells joined to it through cells whose lowest
   ground lies under the level its liquid stands at hold its body, found at each month's start; those whose mean surface
   lies under it are the sea (the others its shore, land with the sea in its low ground). A connected liquid body has one
@@ -475,14 +478,14 @@ what the heat holds molten, as every law and the shell then read it.
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node
   holds and what stays keeps that temperature. A salt is a liquid that never
   boils (11, 12): it moves with the liquid and stays when it evaporates. **Its potential energy goes with it**
-  (`flow::falls`; 0, "The books"): each move carries it from the head its cell is left at, as the pass leaves it (the
-  head the booking stacks at the pass's start, `potential::heads`, and what the cell kept and the loads it took and
-  left), and the booking takes the pass's moves as carrying just that (`potential::apply_carried`). At a cell's visit
-  what came in, the cell's own column and what leaves settle: the fall of what came in to the cell's head, and of its
-  column from its middle (the mean of its head before and after) to where it is left, turns to heat in the liquid that
-  came in before it mixes with the node, so what runs on takes its share along, and a column that runs off whole falls
-  from its middle. A cell already passed takes what lands at once, the fall to the middle of the layer it makes; a sea
-  cell, the fall to its head. Where what came in left from lower than the cell is left at (a cell filled after a
+  (`flow::falls`; 0, "The books"): each move carries it from the top its cell's liquid is left at, as the pass leaves
+  it (the liquid the booking stacks at the pass's start, `potential::columns`, with what the cell kept and the loads it
+  took and left, its top over its pores and its own ground as the curve gives it), and the booking takes the pass's
+  moves as carrying just that (`potential::apply_carried`). At a cell's visit what came in, the cell's own liquid and
+  what leaves settle: the fall of what came in to the cell's top, and of its own liquid from where it lay (the mean of
+  its top before and after) to where it is left, turns to heat in the liquid that came in before it mixes with the
+  node, so what runs on takes its share along. A cell already passed takes what lands at once, the fall to the middle
+  of the layer it makes on its top; a sea cell, the fall to its top. Where what came in left from lower than the cell is left at (a cell filled after a
   neighbour sent to it), the settling is a climb, and the liquid pays it from the heat it carries, which holds its
   falls: no node that does not hold it pays. In the pass the liquid only goes down (to a lower surface, and over no rim
   from below it), so a climb is no more than the relief between neighbours, and the heat of a liquid would lift it a

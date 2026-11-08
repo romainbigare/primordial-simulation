@@ -25,6 +25,9 @@ pub(super) struct Sp {
     pub(super) boil: f64,
     /// Mean reflectance [solid, liquid]
     pub(super) refl: [f64; 2],
+    /// The temperature over which its solid is soft cover lying on the loose ground (`Physics::soft` of its melting
+    /// point), K
+    pub(super) soft: f64,
 }
 
 /// The fusion enthalpy a ground node holds off a plateau, and the temperatures between which it holds it.
@@ -277,7 +280,7 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
     let tmax = if s.state.tg.len() == n { range(&s.state.tg).1 } else { (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) };
     let up = |k: usize| may_evaporate(w, k, tmax);
     s.state.loose = (0..ns).filter(|&k| any(w.store.amounts(Class::Ground), n, k)).collect();
-    s.state.fixed = s.state.loose.iter().copied().filter(|&k| w.cfg.phys.soft * s.sp[k].melt > tmax + T_MARGIN && !up(k)).collect();
+    s.state.fixed = s.state.loose.iter().copied().filter(|&k| s.sp[k].soft > tmax + T_MARGIN && !up(k)).collect();
     s.state.vary = s.state.loose.iter().copied().filter(|k| !s.state.fixed.contains(k)).collect();
     s.state.vary.sort_by(|&a, &b| s.sp[a].melt.total_cmp(&s.sp[b].melt));
     s.state.bedk = (0..ns).filter(|&k| any(w.store.amounts(Class::Bed), n, k)).collect();
@@ -320,7 +323,7 @@ pub(super) fn room(w: &World, s: &mut Scratch) {
 }
 
 /// The numbers of each substance Flow reads often (`Sp`).
-pub(super) fn substances(chem: &Chemistry) -> Vec<Sp> {
+pub(super) fn substances(chem: &Chemistry, phys: &crate::Physics) -> Vec<Sp> {
     let mean = |v: [f32; 3]| v.iter().map(|&x| x as f64).sum::<f64>() / 3.0;
     (chem.subs.iter())
         .map(|b| Sp {
@@ -333,13 +336,14 @@ pub(super) fn substances(chem: &Chemistry) -> Vec<Sp> {
             melt: b.melt,
             boil: b.boil,
             refl: [mean(b.refl[0]), mean(b.refl[1])],
+            soft: phys.soft * b.melt,
         })
         .collect()
 }
 
 /// Tables of the map and the chemistry alone (not saved): substance constants, and the four air nodes each cell reads.
 pub(super) fn tables(w: &World, s: &mut Scratch) {
-    s.sp = substances(&w.chem);
+    s.sp = substances(&w.chem, &w.cfg.phys);
     // A sample of the map (`Square::samples`: a square, or a cell finer than one) reads its air node and the three next
     // to it on its side of the node's centre, bilinearly on the map (round a globe's wrap); along an axis with no node
     // on its side, its own alone, paired with the node on the other side. A cell reads what its samples read, by their

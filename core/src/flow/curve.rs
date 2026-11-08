@@ -7,6 +7,7 @@
 use super::Scratch;
 use crate::space::Leaf;
 use crate::World;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 /// The level at which `vol` m³ fill floors of heights and areas `floors` (m, m²), sorted here: Σ area × (level -
@@ -58,6 +59,11 @@ impl Curve {
     pub(super) fn level(&self, v: f64) -> f64 {
         if v > 0.0 { level_sorted(&self.floors, v) } else { self.low() }
     }
+    /// The first moment of the volume under the level `x` over the cell's mean surface about that surface, m⁴: Σ area ×
+    /// (x - floor) × (x + floor) / 2 over the floors under it, so its centroid lies `moment / volume` over the surface.
+    pub(super) fn moment(&self, x: f64) -> f64 {
+        self.floors.iter().take_while(|f| f.0 < x).map(|&(d, a)| a * (x - d) * (x + d) / 2.0).sum()
+    }
 }
 
 /// The one level at which `v` m³ stand over the cells `parts` together, each its curve and its mean surface, m.
@@ -84,9 +90,12 @@ pub(super) fn at_scale(w: &World, i: usize, scale: f64) -> Curve {
     Curve { floors, scale }
 }
 
-/// The curve of cell `i`: Flow's where it has them, else found (`of`).
-pub(super) fn curve_of(w: &World, i: usize) -> Curve {
-    w.scratch.curves.get(i).filter(|c| w.scratch.curves.len() == w.mesh.cells().n() && c.scale == w.relief_scale[i]).cloned().unwrap_or_else(|| of(w, i))
+/// The curve of cell `i`: that of `s` where it has them, else found (`of`).
+pub(super) fn of_cell<'a>(w: &World, s: &'a Scratch, i: usize) -> Cow<'a, Curve> {
+    match s.curves.get(i).filter(|c| s.curves.len() == w.mesh.cells().n() && c.scale == w.relief_scale[i]) {
+        Some(c) => Cow::Borrowed(c),
+        None => Cow::Owned(of(w, i)),
+    }
 }
 
 /// The curves found so far, by leaf (kept through remaps).

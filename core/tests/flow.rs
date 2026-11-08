@@ -197,28 +197,32 @@ fn a_pool_far_over_its_boiling_point_gives_no_more_than_it_holds() {
 
 /// A melting snowpack on a slope (`SNOW_M` of the liquid's solid, half molten): Flow's phases are those of its heat after
 /// the air's step, which melts more of it, and after the liquid's step, whose meltwater runs off down the slope and leaves
-/// the ice (laws.md 1.2): what the world reads as molten and standing is what the heat holds (within `SHARE`, the heat
-/// the lifts and falls of the matter book after), and none stands there.
+/// the ice (laws.md 1.2): what the world reads as molten and standing is what the heat holds, within the share the heat
+/// of the lifts and falls of the matter booked after moves (its meltwater falls at most from the snow's top to its bed's
+/// top or its lowest ground, the lower: g × molar mass × that fall / fusion enthalpy), and none stands there.
 #[test]
 fn meltwater_runs_off_and_the_snow_keeps_the_share_its_heat_holds() {
     const SNOW_M: f64 = 2.0;
-    const SHARE: f64 = 1e-5;
     let mut w = worldgen::testkit::squares(3, 16, 16);
     let (i, _) = pair(&w);
     let snow = SNOW_M * w.mesh.cells().area()[i] / w.chem.molar_volume(LIQUID, Phase::Liquid);
     set_amount(&mut w, Node::ground(i), LIQUID, snow);
     let e = w.energy_ground(i, w.melt(LIQUID, i)) - 0.5 * snow * w.chem.subs[LIQUID].lf;
     set_heat(&mut w, Node::ground(i), e);
+    let bed = (0..w.chem.ns()).map(|k| w.b(k, i) * w.chem.molar_volume(k, Phase::Solid)).sum::<f64>() / w.mesh.cells().area()[i];
+    let sub = &w.chem.subs[LIQUID];
+    let fall = w.surface_z(i) - (w.base_z + bed).min(pcore::flow::lowest(&w, i));
+    let share = w.cfg.gravity * sub.molar_mass * fall / sub.lf;
     let books = Books::now(&w);
     pcore::flow::state(&mut w, true);
     let molten = |w: &World| (w.thaw_last(i).1.expect("melting").1, w.thaw(i).1.expect("melting").1);
     pcore::flow::air(&mut w, DT);
     let (read, held) = molten(&w);
-    assert!((read - held).abs() < SHARE, "after the air's step: molten share {read} read, {held} held");
+    assert!((read - held).abs() < share, "after the air's step: molten share {read} read, {held} held (within {share})");
     pcore::flow::liquid(&mut w, LIQUID_STEP);
     books.assert_within(&w, 1e-9, 1e-9);
     let ((read, held), stands) = (molten(&w), pcore::flow::means(&w, &[i]).unwrap()[0].stands);
-    assert!((read - held).abs() < SHARE && stands < 1e-9, "molten share {read} read, {held} held; {stands} m stands");
+    assert!((read - held).abs() < share && stands < 1e-9, "molten share {read} read, {held} held (within {share}); {stands} m stands");
 }
 
 /// A warmer air node gives its heat to its neighbours.

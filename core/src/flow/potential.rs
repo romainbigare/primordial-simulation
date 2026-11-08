@@ -4,7 +4,7 @@
 //! energy from the height it leaves, and each node's heat takes what came in less what left less the change of its own,
 //! so `Store::lifted` is the change of that function.
 
-use super::stack::{bed_layer, deep_layer, ground_layers, row_of, stack, Life, Same, HEAD, LAYERS, ROW};
+use super::stack::{bed_layer, deep_layer, ground_layers, layers_of, row_of, solid_layer, stack, Column, Life, Same, HEAD, LAYERS, LEAVES, ROW};
 use super::Scratch;
 use crate::store::{self, fall_heat, Class, LinkFlux, Move};
 use crate::{World, AIR};
@@ -49,23 +49,25 @@ impl Found {
     }
 }
 
-/// The height each node's matter leaves from, m: a ground node's, its bed's and its bodies' node's, the top of its
-/// liquid (its head); an air node's, the mean head of its cells; a store's, its liquid's table.
+/// The height each node's matter leaves from, m: a ground node's and its bed's, the top of its liquid
+/// (`stack::Column::top`); a bodies' node's, its cell's head; an air node's, the mean head of its cells; a
+/// store's, its liquid's table.
 #[derive(Clone, Debug)]
 struct Heights {
     ground: Vec<f64>,
+    bodies: Vec<f64>,
     air: Vec<f64>,
     deep: Vec<f64>,
 }
 
-/// The potential energy of every node (`Potential`). A ground cell is a stack from `World::base_z` up, each layer at
-/// its middle: its bed, its loose solids, and its liquid with what is dissolved in it (the gas above its boiling point
-/// too), as Flow's heads stack them (`land::layers`), each substance of the node in its phase by the node's temperature
-/// and its plateau (`State`); its store lies `bed_depth` under its bed's top, filled from the bottom (`drain`). An air
-/// node's matter lies at the mean head of its cells: the height of its column above that is in its heat (its heat
-/// capacity at constant pressure holds the work its column does as it warms), so lifting matter into it lifts it to
-/// there. A bodies' node's gas, and the matter of the cell's life (its bodies, its cover with its seeds until they land,
-/// and its parts), lie at its cell's head.
+/// The potential energy of every node (`Potential`). A ground cell is a stack from `World::base_z` up: its bed and its
+/// solids each at its middle, and its liquid with what is dissolved in it (the gas above its boiling point too) in the
+/// pores of its loose solids and over its own ground, as Flow stands it (`stack::Column`), each substance of the node
+/// in its phase by the node's temperature and its plateau (`State`); its store lies `bed_depth` under its bed's top,
+/// filled from the bottom (`drain`). An air node's matter lies at the mean head of its cells: the height of its
+/// column above that is in its heat (its heat capacity at constant pressure holds the work its column does as it
+/// warms), so lifting matter into it lifts it to there. A bodies' node's gas, and the matter of the cell's life (its
+/// bodies, its cover with its seeds until they land, and its parts), lie at its cell's head (`stack::Column::head`).
 fn potential(w: &World, s: &Scratch, found: Option<Found>) -> Potential {
     let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
     let (n, na, ns) = (cells.n(), air.n(), w.chem.ns());
@@ -96,7 +98,7 @@ fn potential(w: &World, s: &Scratch, found: Option<Found>) -> Potential {
         }
         for ((x, i), row) in sums.iter_mut().zip(cells_of.clone()).zip(out.chunks_exact_mut(ROW)) {
             x[HEAD] += life[i];
-            row.copy_from_slice(&stack(w, x, i));
+            row.copy_from_slice(&stack(w, s, x, i));
         }
     });
     rows.truncate(n * ROW);
@@ -106,7 +108,8 @@ fn potential(w: &World, s: &Scratch, found: Option<Found>) -> Potential {
     cells.parent().iter().enumerate().for_each(|(i, &j)| za[j as usize] += head[i] * cells.area()[i]);
     za.iter_mut().zip(air.area()).for_each(|(z, a)| *z /= a);
     let e_air = (0..na).map(|j| (0..ns).map(|k| amounts[k * na + j] * s.sp[k].mm).sum::<f64>() * g * za[j]).collect();
-    Potential { ground: at(0), air: e_air, deep: at(1), bodies: at(4), heights: Heights { ground: head, air: za, deep: at(3) }, found }
+    let heights = Heights { ground: at(LEAVES), bodies: head, air: za, deep: at(3) };
+    Potential { ground: at(0), air: e_air, deep: at(1), bodies: at(4), heights, found }
 }
 
 /// `a` mol of substance `k` in ground node `i`, in its phase (`ground_layers`), where its phase is the same in every node
@@ -117,7 +120,7 @@ pub(super) fn ground_of(x: &mut [f64; LAYERS], s: &Scratch, same: Same, (k, i): 
     match same {
         Same::Gas => x[2] += a * sp.mm,
         Same::Liquid => (x[2], x[5]) = (x[2] + a * sp.mm, x[5] + a * sp.v[1]),
-        Same::Solid => (x[1], x[4]) = (x[1] + a * sp.mm, x[4] + a * sp.v[0]),
+        Same::Solid => solid_layer(x, sp, s.state.tg[i], a),
         Same::Varies => ground_layers(x, s, (k, i), a),
     }
 }
@@ -138,7 +141,7 @@ pub(super) fn deep_of(x: &mut [f64; LAYERS], s: &Scratch, same: Same, (k, i): (u
 /// remap or a load dropped the caches.
 pub(super) fn scratch_of(w: &World) -> Cow<'_, Scratch> {
     if w.scratch.sp.is_empty() {
-        Cow::Owned(Scratch { state: w.scratch.state.clone(), sp: super::scratch::substances(&w.chem), ..Default::default() })
+        Cow::Owned(Scratch { state: w.scratch.state.clone(), sp: super::scratch::substances(&w.chem, &w.cfg.phys), ..Default::default() })
     } else {
         Cow::Borrowed(&w.scratch)
     }
@@ -174,11 +177,10 @@ pub fn potential_of(w: &World, cells: &[usize], air: usize) -> f64 {
     cells.iter().map(|&i| row(i)).map(|r| r[0] + r[1] + r[4]).sum::<f64>() + e_air
 }
 
-/// The head of each ground cell now, m, as `potential` stacks it (`row_of`), by Flow's state of the ground: the height
-/// its matter leaves from.
-pub(super) fn heads(w: &World, s: &Scratch) -> Vec<f64> {
+/// The liquid of each ground cell now as `potential` stacks it (`stack::Column`), by Flow's state of the ground.
+pub(super) fn columns(w: &World, s: &Scratch) -> Vec<Column> {
     let same = Same::of(s);
-    crate::par::map_n(w.mesh.cells().n(), crate::par::UNCOUNTED, |i| row_of(w, s, &same, i, (|_, _| 0.0, 0.0))[2])
+    crate::par::map_n(w.mesh.cells().n(), crate::par::UNCOUNTED, |i| Column::of(w, &layers_of(w, s, &same, i, (|_, _| 0.0, 0.0)), i))
 }
 
 /// The mean head of the cells of air node `j`, m, where its matter lies (`potential`), by the phases of `s`.
@@ -243,7 +245,8 @@ impl Potential {
     fn height(&self, (c, index): (u8, u32)) -> f64 {
         let index = index as usize;
         match c {
-            0 | BODIES => self.heights.ground[index],
+            0 => self.heights.ground[index],
+            BODIES => self.heights.bodies[index],
             1 => self.heights.air[index],
             _ => self.heights.deep[index],
         }

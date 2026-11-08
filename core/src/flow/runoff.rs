@@ -216,12 +216,12 @@ impl Pass<'_> {
             _ => bedwork,
         };
         let worn = load(w, s, i, q, (nl..rows, self.sol), bedwork, out);
-        // How far its head rises over the pass, m: the liquid it keeps less what it held at the start, and the loads that
-        // came in less those that leave (all it picked up came from it).
-        let (mass, moved) = (kg(q, 0..rows), sv + loads(q));
-        let rise = (sv * (1.0 - out) - was[vol] + came - out * loads(q)) / area;
+        // What its liquid and its loose solids gain over the pass, m³: the liquid it keeps less what it held at the start,
+        // and the loads that came in less those that leave (all it picked up came from it).
+        let (mass, moved) = (kg(q, 0..rows), [sv, loads(q)]);
+        let gains = [sv * (1.0 - out) - was[vol], came - out * moved[1]];
         let mut falls = falls;
-        q[heat] += falls.as_mut().map_or(0.0, |f| f.visit(i, out * mass, rise));
+        q[heat] += falls.as_mut().map_or(0.0, |f| f.visit((i, &s.curves[i]), out * mass, gains));
         debug_assert!(q[heat] >= 0.0, "cell {i}: a climb the liquid cannot pay, {} J short", -q[heat]);
         // The temperature of the node mixed with what came in, at which what runs out leaves: off a melting plateau its
         // energy over its fusion enthalpy and heat capacity; on one, what it gains or loses on the plateau's temperature
@@ -236,7 +236,7 @@ impl Pass<'_> {
             for (k, &j) in around.iter().enumerate().filter(|p| share[p.0] > 0.0) {
                 let j = j as usize;
                 let lands = if s.basin.body[j] { Lands::Basin } else if self.order.before(i, j) { Lands::Ahead } else { Lands::Passed };
-                f.send((i, j), (share[k] * mass, share[k] * moved, cells.area()[j]), lands);
+                f.send((i, (j, &s.curves[j])), (share[k] * mass, moved.map(|m| share[k] * m)), lands);
             }
         }
         // What leaves a land cell for cells that are not land runs off the land.

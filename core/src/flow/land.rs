@@ -299,7 +299,7 @@ pub(super) fn layers(w: &World, s: &Scratch, i: usize, t: f64, amt: impl Fn(usiz
         }
         let liq = molten(k);
         let vs = a * (1.0 - liq) * p.v[0];
-        let o = if t > w.cfg.phys.soft * p.melt { 0 } else { 4 };
+        let o = if t > p.soft { 0 } else { 4 };
         (l[o], l[o + 1]) = (l[o] + vs, l[o + 1] + vs * p.refl[0]);
         (l[2], l[3]) = (l[2] + a * liq * p.v[1], l[3] + a * liq * p.v[1] * p.refl[1]);
         z += vs / area;

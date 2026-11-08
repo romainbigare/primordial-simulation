@@ -1,19 +1,86 @@
 //! The stack of a ground cell as the potential energy reads it (laws.md 0, "The books"; `potential`): the mass and
-//! volume of each of its layers from what its nodes hold in their phases, the matter of its life at its head, and the
-//! potential energy and heights they make.
+//! volume of each of its layers from what its nodes hold in their phases, its liquid in its pores and over its own
+//! ground (`Column`), the matter of its life at its head, and the potential energy and heights they make.
 
+use super::curve::{of_cell, Curve};
 use super::potential::{deep_of, ground_of};
 use super::{land::NONE, scratch::Sp, Scratch};
 use crate::{store::Class, World, AIR};
+use std::borrow::Cow;
 
-/// Numbers of a ground cell's row in `potential`: the potential energy of its stack and of its bed's store, J; the
-/// heights its liquid and its store's liquid reach, m; and the potential energy of the matter at its head, J.
-pub(super) const ROW: usize = 5;
+/// Numbers of a ground cell's row in `potential`: the potential energy of its stack and of its bed's store, J; its head
+/// (`Column::head`), m; the height its store's liquid reaches, m; the potential energy of the matter at its head, J; and
+/// the height its liquid leaves from (`Column::top`), m.
+pub(super) const ROW: usize = 6;
+/// Where `ROW` holds the height the cell's liquid leaves from.
+pub(super) const LEAVES: usize = 5;
 
-/// What a ground cell's stack is made of: the mass, kg, and the volume, m³, of each layer (bed, loose solids, liquid),
-/// then of its store, then the mass at its head, kg (its bodies' node's gas and its life).
-pub(super) const LAYERS: usize = 9;
+/// What a ground cell's stack is made of: the mass, kg, and the volume, m³, of each layer (bed, solids, liquid), then
+/// of its store, then the mass at its head, kg (its bodies' node's gas and its life), then the volume of its loose
+/// solids, m³ (those not soft, whose pores take liquid, `Sp::soft`).
+pub(super) const LAYERS: usize = 10;
 pub(super) const HEAD: usize = 8;
+pub(super) const PORED: usize = 9;
+
+/// A cell's liquid as its stack holds it (laws.md 0, 1.2): `vol` m³ fill the pores of its loose solids first (`loose`
+/// m³ of them, porosity `por`), a table rising from the bed's top `bed` by the depth they fill over the porosity; the
+/// rest stands over its own ground (`curve::Curve`) from its mean solid surface `z` (m), as Flow's level stands it
+/// (`land::stand`). Its area `area`, m².
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct Column {
+    pub(super) bed: f64,
+    pub(super) z: f64,
+    pub(super) area: f64,
+    pub(super) por: f64,
+    pub(super) loose: f64,
+    pub(super) vol: f64,
+}
+
+impl Column {
+    /// Of ground cell `i` of `w` made of `x` (`LAYERS`).
+    pub(super) fn of(w: &World, x: &[f64; LAYERS], i: usize) -> Column {
+        let area = w.mesh.cells().area()[i];
+        let bed = w.base_z + x[3] / area;
+        Column { bed, z: bed + x[4] / area, area, por: w.cfg.phys.porosity, loose: x[PORED], vol: x[5] }
+    }
+    /// What its pores hold and what stands over them, m³.
+    fn parts(&self) -> [f64; 2] {
+        let pore = self.vol.min(self.por * self.loose);
+        [pore, self.vol - pore]
+    }
+    /// The table of `pore` m³ in its pores, m.
+    fn table(&self, pore: f64) -> f64 {
+        self.bed + if pore > 0.0 { pore / (self.por * self.area) } else { 0.0 }
+    }
+    /// The height its liquid leaves from, its top, m: the level of what stands over its own ground (`curve`, found only
+    /// where some stands), or where none does, the table of its pores.
+    pub(super) fn top<'a>(&self, curve: impl FnOnce() -> Cow<'a, Curve>) -> f64 {
+        match self.parts() {
+            [_, stands] if stands > 0.0 => self.z + curve().level(stands),
+            [pore, _] => self.table(pore),
+        }
+    }
+    /// Its head, m: its solid surface and its liquid as a column of its area, as Flow's state stacks them (`FlowView`),
+    /// the ground the air over it and its life stand on.
+    pub(super) fn head(&self) -> f64 {
+        self.z + self.vol / self.area
+    }
+    /// The potential energy of its liquid of mass `kg`, J, under gravity `g`: what its pores hold at the middle of the
+    /// depth it fills, and what stands at its centroid over its own ground (`Curve::moment`); its mass at its top where
+    /// it fills no volume (a gas).
+    pub(super) fn energy<'a>(&self, kg: f64, g: f64, curve: impl FnOnce() -> Cow<'a, Curve>) -> f64 {
+        if self.vol <= 0.0 {
+            return kg * g * self.top(curve);
+        }
+        let [pore, stands] = self.parts();
+        let mut moment = pore * (self.bed + self.table(pore)) / 2.0;
+        if stands > 0.0 {
+            let c = curve();
+            moment += stands * self.z + c.moment(c.level(stands));
+        }
+        kg * g * moment / self.vol
+    }
+}
 
 /// How a substance stands in every ground node now, where it stands alike in all: a gas (at or over its boiling point),
 /// a liquid or a solid (under it, at or over its melting point or under it, on no node's plateau); else it varies.
@@ -55,7 +122,17 @@ pub(super) fn ground_layers(x: &mut [f64; LAYERS], s: &Scratch, (k, i): (usize, 
     let wet = if t >= sp.boil { 1.0 } else if s.state.pk[i] == k { s.state.phi[i] } else { (t >= sp.melt) as u8 as f64 };
     let (wet_mol, dry_mol) = (a * wet, a - a * wet);
     (x[2], x[5]) = (x[2] + wet_mol * sp.mm, x[5] + if t < sp.boil { wet_mol * sp.v[1] } else { 0.0 });
-    (x[1], x[4]) = (x[1] + dry_mol * sp.mm, x[4] + dry_mol * sp.v[0]);
+    solid_layer(x, sp, t, dry_mol);
+}
+
+/// `a` mol of the solid of substance `sp` in a ground node at `t` K: loose, its pores taking liquid, unless soft.
+#[inline]
+pub(super) fn solid_layer(x: &mut [f64; LAYERS], sp: &Sp, t: f64, a: f64) {
+    let v = a * sp.v[0];
+    (x[1], x[4]) = (x[1] + a * sp.mm, x[4] + v);
+    if t <= sp.soft {
+        x[PORED] += v;
+    }
 }
 
 /// `a` mol of substance `sp` in a store under ground at `t` K.
@@ -64,17 +141,17 @@ pub(super) fn deep_layer(x: &mut [f64; LAYERS], sp: &Sp, t: f64, a: f64) {
     (x[6], x[7]) = (x[6] + a * sp.mm, x[7] + if t < sp.boil { a * sp.v[1] } else { 0.0 });
 }
 
-/// The row of `potential` (`ROW`) of ground cell `i` made of `x` (`LAYERS`).
-pub(super) fn stack(w: &World, x: &[f64; LAYERS], i: usize) -> [f64; ROW] {
+/// The row of `potential` (`ROW`) of ground cell `i` made of `x` (`LAYERS`): its bed and its solids each at its middle,
+/// its liquid in its pores and over its own ground (`Column`, the curve of `s`, `curve::of_cell`), and its life at its
+/// head.
+pub(super) fn stack(w: &World, s: &Scratch, x: &[f64; LAYERS], i: usize) -> [f64; ROW] {
     let (area, g, p) = (w.mesh.cells().area()[i], w.cfg.gravity, w.cfg.phys);
-    // Each layer's bottom, m, and its potential energy at its middle.
-    let (mut z, mut e) = (w.base_z, 0.0);
-    for (m, v) in x[..3].iter().zip(&x[3..6]) {
-        e += m * g * (z + v / area / 2.0);
-        z += v / area;
-    }
+    let c = Column::of(w, x, i);
+    let solids = x[0] * g * (w.base_z + c.bed) / 2.0 + x[1] * g * (c.bed + c.z) / 2.0;
+    let e = solids + c.energy(x[2], g, || of_cell(w, s, i));
+    let (top, head) = (c.top(|| of_cell(w, s, i)), c.head());
     let (floor, fill) = (w.base_z + x[3] / area - p.bed_depth, x[7] / (p.bed_porosity * area));
-    [e, x[6] * g * (floor + fill / 2.0), z, floor + fill, x[HEAD] * g * z]
+    [e, x[6] * g * (floor + fill / 2.0), head, floor + fill, x[HEAD] * g * head, top]
 }
 
 /// The matter of the cells' life, which lies at their heads: the substances of a body and of the cover's parts.
@@ -113,7 +190,12 @@ impl Life {
 /// The row of `potential` (`ROW`) of ground cell `i` alone, its nodes changed by `d(class, k)` mol of substance `k`
 /// (its ground, its bed, its store and its bodies' node) and `life` kg at its head (the mass of its life, `Life::kg`):
 /// its layers as `potential` adds them up, substance by substance, so the same numbers come out.
-pub(super) fn row_of(w: &World, s: &Scratch, same: &[Same], i: usize, (d, life): (impl Fn(Class, usize) -> f64, f64)) -> [f64; ROW] {
+pub(super) fn row_of(w: &World, s: &Scratch, same: &[Same], i: usize, change: (impl Fn(Class, usize) -> f64, f64)) -> [f64; ROW] {
+    stack(w, s, &layers_of(w, s, same, i, change), i)
+}
+
+/// The layers (`LAYERS`) of ground cell `i` alone, changed as `row_of` says.
+pub(super) fn layers_of(w: &World, s: &Scratch, same: &[Same], i: usize, (d, life): (impl Fn(Class, usize) -> f64, f64)) -> [f64; LAYERS] {
     let (n, mut x) = (w.mesh.cells().n(), [0.0; LAYERS]);
     let at = |class: Class, k: usize| w.store.amounts(class)[k * n + i] + d(class, k);
     for (k, sp) in s.sp.iter().enumerate() {
@@ -123,7 +205,7 @@ pub(super) fn row_of(w: &World, s: &Scratch, same: &[Same], i: usize, (d, life):
         x[HEAD] += at(Class::Bodies, k) * sp.mm;
     }
     x[HEAD] += life;
-    stack(w, &x, i)
+    x
 }
 
 /// What the potential energy of the world's matter gains, J, when the nodes of ground cell `i` change by `d(class, k)`
