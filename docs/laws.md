@@ -1315,7 +1315,12 @@ its `COOL_T`, where its coat opens; below that it lies cold, or at its `KEEP_T` 
 its coat and the others' heat warms its air, so bodies that share a closed room reach the warm state sooner. Its time C / g is hours to a
 day, far less than a sub-step, so each sub-step ends at the stable state its heat leads to from where it stood
 (`live::standing`), and as it eats at each sub-step by the take law at the pace it stands at then (5.3), a node that
-turns warm in spring eats at the warm pace from the next week on, in a square as in its cells of 500 m. A node's
+turns warm in spring eats at the warm pace from the next week on, in a square as in its cells of 500 m. **Known limit:** a node holds one heat state for all its members. Where they sit near the turning point (their
+heat over their coat near T² / Ea past their surroundings), what decides it is a few tenths of a kelvin or of a
+percent: a node and the same members split over finer cells, which differ that much (the air read bilinearly across a
+square, the chance of each cell's births and genes), may settle in different states, the finer form holding a mix. A
+young node, which its newborns keep light, sits there for months in a mild season. The general remedy is the split of
+a node whose members differ (spec 7.1), here by heat state as maturity splits by size (4.4); it is not built. A node's
 children are born through its sub-steps and live from their birth inside their young node, in its heat (4.2). Its
 key liquids hold their fusion heat at any temperature (`Body::fused`): a body
 has no melting plateau, so its temperature is its heat over its heat capacity, that heat set aside (2.5).
