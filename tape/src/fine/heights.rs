@@ -55,7 +55,7 @@ impl Samples {
     /// Read the samples, if not yet read.
     fn fill(&mut self, w: &World) {
         if self.drained.is_none() {
-            self.drained = Some(w.terrain.samples(w.seed, &w.map, (w.cfg.lat_south, w.cfg.lat_north)));
+            self.drained = Some(w.drained());
         }
     }
     /// The height and slope of the sample at column `x` and row `y`, the nearest on the map where it lies off it.
