@@ -388,8 +388,8 @@ fn the_liquid_gives_back_the_gas_it_holds_when_the_air_thins() {
     assert!(given > 2.0 * air_loss, "gave {given} for an air loss of {air_loss}");
 }
 
-/// The dissolved mineral in the pores of the land: worldgen puts none on land (the ground has no liquid at the start,
-/// and a cell with no liquid holds none), and a year of rain on loose ground that is a tenth the rock makes it by the
+/// The dissolved mineral in the pores of the land: worldgen puts none on the land that starts dry (no liquid in its
+/// ground; a cell with no liquid holds none), and a year of rain on loose ground that is a tenth the rock makes it by the
 /// same two reactions as under the low ground's liquid: the cells whose pores hold liquid (molten, not frozen in a snow
 /// or ice that melts) hold the mineral, in the
 /// amount at which the two go at equal rates for their liquid and the gas over them (`Reactor::balance`, to a half);
@@ -398,7 +398,7 @@ fn the_liquid_gives_back_the_gas_it_holds_when_the_air_thins() {
 fn the_pores_of_the_land_hold_the_dissolved_mineral_where_rock_and_liquid_meet() {
     let mut w = worldgen::new_world(1, 16, 16);
     let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
-    let land: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) >= 0.0).collect();
+    let land: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) >= 0.0 && w.g(LIQUID, i) == 0.0).collect();
     assert!(land.iter().all(|&i| w.store.amounts(Class::Ground)[DISSOLVED * n + i] == 0.0), "land started with the mineral");
     for _ in 0..12 {
         pcore::step(&mut w);

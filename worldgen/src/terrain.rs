@@ -175,9 +175,6 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
         for &(k, f) in &init.loose {
             ground[k * n + i] += f / ltot * LOOSE_M * area / mv(k);
         }
-        if z < 0.0 {
-            ground[init.low * n + i] += -z * area / chem.molar_volume(init.low, Phase::Liquid);
-        }
     }
 
     // Air: a column per air node, thinner over high ground (its cells' mean height, by area).
@@ -241,13 +238,22 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
         events: Vec::new(),
         scratch: Default::default(),
     };
+    let (amounts, heat) = (|w: &World, c: Class| w.store.amounts(c).to_vec(), |w: &World, c: Class| w.store.heat(c).to_vec());
+    // The low basin's liquid at 0 m: each cell whose own ground dips under it holds the liquid that fills its pores and
+    // stands over its ground up to 0 m (`flow::volume_under`), as Flow's level stands it.
+    let (por, v_low) = (world.cfg.phys.porosity, world.chem.molar_volume(init.low, Phase::Liquid));
+    let low: Vec<f64> = (0..n).map(|i| pcore::flow::volume_under(&world, i, 0.0)).collect();
+    let mut ground = amounts(&world, Class::Ground);
+    for (i, &under) in low.iter().enumerate().filter(|p| *p.1 > 0.0) {
+        ground[init.low * n + i] += (por * LOOSE_M * world.mesh.cells().area()[i] + under) / v_low;
+    }
+    world.store = Store::new(n, (ground, amounts(&world, Class::Bed), vec![0.0; n]), (amounts(&world, Class::Air), vec![0.0; na]));
     // The ground and the air at their starting temperatures. (The world is made: its store is built whole at each stage,
     // never written outside `store::apply` once it runs.)
-    let (amounts, heat) = (|w: &World, c: Class| w.store.amounts(c).to_vec(), |w: &World, c: Class| w.store.heat(c).to_vec());
     let mut e_ground = vec![0.0; n];
     for (i, &z) in hz.iter().enumerate().take(n) {
-        // Low ground starts with its liquid molten.
-        let t = t_start(world.mesh.cells().lat()[i], z).max(if z < 0.0 { world.chem.subs[init.low].melt + MOLTEN_MARGIN } else { 0.0 });
+        // Ground that holds the basin's liquid starts with it molten.
+        let t = t_start(world.mesh.cells().lat()[i], z).max(if low[i] > 0.0 { world.chem.subs[init.low].melt + MOLTEN_MARGIN } else { 0.0 });
         e_ground[i] = world.energy_ground(i, t);
     }
     let e_air = t_air.iter().enumerate().map(|(j, &t)| world.heat_cap_air(j) * t).collect();

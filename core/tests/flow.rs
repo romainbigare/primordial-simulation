@@ -26,10 +26,13 @@ fn pore_mol(w: &World, i: usize) -> f64 {
     w.cfg.phys.porosity * loose(w, i) / w.chem.molar_volume(LIQUID, Phase::Liquid)
 }
 
-/// Two land cells side by side, both warm and dry, their lowest ground above 0 m: the higher first.
+/// Two land cells side by side, both warm, away from the low basin: their own lowest ground and that of the cells round
+/// them above 0 m, so the basin's liquid reaches none of them (liquid that one gains under the ground comes from the
+/// other or from rain): the higher first.
 fn pair(w: &World) -> (usize, usize) {
     let (n, gw) = (w.mesh.cells().n(), w.map.w);
-    let warm_land = |i: usize| pcore::flow::lowest(w, i) > 0.0 && w.surface_z(i) > 50.0 && w.t_ground(i) > 280.0;
+    let high = |i: usize| pcore::flow::lowest(w, i) > 0.0;
+    let warm_land = |i: usize| w.surface_z(i) > 50.0 && w.t_ground(i) > 280.0 && high(i) && w.mesh.cells().around(i).1.iter().all(|&j| high(j as usize));
     let (a, b) = (0..n).filter(|i| i % gw + 1 < gw).map(|i| (i, i + 1)).find(|&(a, b)| warm_land(a) && warm_land(b)).expect("two land cells");
     if w.surface_z(a) >= w.surface_z(b) { (a, b) } else { (b, a) }
 }
