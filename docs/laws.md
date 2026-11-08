@@ -532,7 +532,9 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   The low basin's liquid lies level and takes the flat sun. All the sunlight that passes the clouds is taken as beam:
   a cloud is one reflectance, with no share of the sky it covers, so what passes it cannot be split into beam and
   diffuse; diffuse light would fall on the plan as on flat ground. The cost is a product and a sum per cell a step,
-  with the slope with latitude found beside the daily mean, once per latitude. The surface reflects as its cover is at the step's start (`land::reflectance`);
+  with the slope with latitude found beside the daily mean, once per latitude. The surface reflects as its cover is at the step's start (`land::reflectance`),
+  over the cell's own ground: the share of it under the level of what stands over its pores (`curve::Curve::wet`) as a
+  column with that liquid over the share, the rest as one whose liquid is what its pores hold, by area;
   where a soft cover lies, as it is at the step's end, so a cover that melts away darkens the ground in its step. Snow
   reflects from the step after it falls.
 - **Heat radiation**: surfaces emit σT⁴; the air absorbs 1 − exp(−x), x the optical depth of the gases (each as the
@@ -561,8 +563,9 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
 
 ### 1.5 Evaporation, rain and dissolved gases
 `flow::air::cells`, `daily`, `rain`, `exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against
-the air's): wet ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket), taking the
-heat it held at the node's temperature; a node over a substance's boiling point boils of it what its heat over that
+the air's): wet ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket), over the
+cell's own ground as its reflectance is (the share the standing liquid covers holds what its pores hold and all that
+stands, the rest what its pores hold, each a bucket by its area), taking the heat it held at the node's temperature; a node over a substance's boiling point boils of it what its heat over that
 point pays, cooling to it (`land::boil_off`; gas coming out of the liquid too). **Rain**: what an air node holds of a
 gas over what saturates the air touching each of its cells (colder higher up) rains out in `rain_time`. Each node's air
 lies over the cells that see it (bilinearly), each by its share; the cells' saturation is taken as the step starts, as

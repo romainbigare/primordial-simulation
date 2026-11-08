@@ -4,7 +4,7 @@
 //! reflectance and air, and the sunlight of their mean latitude; and each of its active gases as its evaporation reads
 //! it (`Vapour`).
 
-use super::super::{basin::one_surface, land::{boil_off, NONE}, scratch::Latent, Scratch};
+use super::super::{basin::one_surface, land::{boil_off, wet_share, NONE}, scratch::Latent, Scratch};
 use super::cells::{exchange, put, sunlight, Ctx, Response, Work, FIXED};
 use super::exchange::bucket;
 use super::lerp;
@@ -34,6 +34,8 @@ pub(super) struct Surf {
     pub(super) cover: [f64; 3],
     pub(super) alb: f64,
     pub(super) pd: f64,
+    /// The share of its area the liquid standing over its pores covers (`land::wet_share`)
+    pub(super) wet: f64,
     pub(super) heat: f64,
     pub(super) amt: [f64; MAX_SUBSTANCES],
     pub(super) fusion: f64,
@@ -68,6 +70,7 @@ impl Surf {
             cover: s.cover[i],
             alb: s.alb[i],
             pd: s.pd[i],
+            wet: wet_share(s, i),
             heat: w.store.heat(Class::Ground)[i],
             amt,
             fusion: if pk != NONE { ground[pk * n + i] * s.sp[pk].lf } else { 0.0 },
@@ -114,6 +117,7 @@ impl Surf {
             cover: s.cover[first],
             alb: by_area(&s.alb),
             pd: by_area(&s.pd),
+            wet: sum(&|i| wet_share(s, i) * area_of[i]) / area,
             heat: sum(&|i| w.store.heat(Class::Ground)[i]),
             amt,
             fusion: 0.0,
@@ -184,9 +188,12 @@ pub(super) struct Vapour {
     pub(super) up: bool,
     pub(super) pa: f64,
     pub(super) per: f64,
-    /// What the node holds, mol; what it holds wet (`exchange::bucket`), mol; the air's film, mol K/(Pa s).
+    /// What the node holds, mol; what it holds wet (`exchange::bucket`), mol; what its pores hold full, mol; the share
+    /// of its area the liquid standing over them covers; the air's film, mol K/(Pa s).
     held: f64,
     wet: f64,
+    pores: f64,
+    share: f64,
     film: f64,
     /// Over its boiling point, what the node's heat boils, mol (`land::boil_off`).
     boil: Option<f64>,
@@ -205,10 +212,11 @@ impl Vapour {
         let up = ac.up && held > 0.0;
         let boil = (up && g.tg >= sp.boil).then(|| held.min(boil_off(&sp, g.cap, g.tg)));
         let melted = g.latent.molten >> ac.k & 1 == 1;
-        let (film, wet) = (w.cfg.evap / R_GAS * area, w.cfg.phys.field * g.pd * area / sp.v[melted as usize]);
+        let pores = g.pd * area / sp.v[melted as usize];
+        let (film, wet) = (w.cfg.evap / R_GAS * area, w.cfg.phys.field * pores);
         // The fusion enthalpy a mol of it holds in the ground: none where it is solid or on its plateau.
         let fusion = if g.pk != ac.k && melted { sp.lf } else { 0.0 };
-        Vapour { k: ac.k, up, pa: x * per, per, held, wet, film, boil, lv: sp.lv, lf_lv: sp.lf + sp.lv, fusion }
+        Vapour { k: ac.k, up, pa: x * per, per, held, wet, pores, share: g.wet, film, boil, lv: sp.lv, lf_lv: sp.lf + sp.lv, fusion }
     }
     /// The heat `m` mol take from the node as they leave it, J: their fusion and vaporisation enthalpies, less the fusion
     /// enthalpy the node holds for them.
@@ -217,7 +225,9 @@ impl Vapour {
     }
     /// What evaporates over the step from the node, ending at `t`, mol, and its slopes with `t` and with the partial
     /// pressure: the saturation deficit through the air's film (`evap`), at the open rate while wet
-    /// (`exchange::bucket`); over the boiling point, all of it that the node's heat over that point boils.
+    /// (`exchange::bucket`), over its own ground: the share of it the standing liquid covers holds what its pores hold
+    /// and all that stands, the rest what its pores hold, each by its area; over the boiling point, all of it that the
+    /// node's heat over that point boils.
     pub(super) fn evaporate(&self, s: &Scratch, t: f64, dt: f64) -> [f64; 3] {
         if !self.up {
             return [0.0; 3];
@@ -230,7 +240,14 @@ impl Vapour {
         if e <= 0.0 {
             return [0.0; 3];
         }
-        let (m, dm_de) = bucket(self.held, 0.0, e, self.wet, dt);
+        let one = |held: f64| bucket(held, 0.0, e, self.wet, dt);
+        let (m, dm_de) = if self.share == 0.0 || self.share == 1.0 {
+            one(self.held)
+        } else {
+            let pore = self.held.min(self.pores);
+            let ((dry, d_dry), (wet, d_wet)) = (one(pore), one(pore + (self.held - pore) / self.share));
+            ((1.0 - self.share) * dry + self.share * wet, (1.0 - self.share) * d_dry + self.share * d_wet)
+        };
         // The open rate's slopes with `t` (Clausius-Clapeyron) and with the partial pressure.
         [m, dm_de * self.film * (ps * self.lv / (R_GAS * t * t) - (ps - self.pa) / t) / t, -dm_de * self.film / t]
     }

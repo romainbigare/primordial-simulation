@@ -59,6 +59,14 @@ impl Curve {
     pub(super) fn level(&self, v: f64) -> f64 {
         if v > 0.0 { level_sorted(&self.floors, v) } else { self.low() }
     }
+    /// The share of the cell's area under the level at which `v` m³ stand (the ground they cover), 0..1: none for none.
+    pub(super) fn wet(&self, v: f64) -> f64 {
+        if v <= 0.0 {
+            return 0.0;
+        }
+        let x = self.level(v);
+        self.floors.iter().take_while(|f| f.0 < x).map(|f| f.1).sum::<f64>() / self.area()
+    }
     /// The first moment of the volume under the level `x` over the cell's mean surface about that surface, m⁴: Σ area ×
     /// (x - floor) × (x + floor) / 2 over the floors under it, so its centroid lies `moment / volume` over the surface.
     pub(super) fn moment(&self, x: f64) -> f64 {

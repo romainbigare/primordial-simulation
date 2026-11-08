@@ -311,9 +311,28 @@ pub(super) fn layers(w: &World, s: &Scratch, i: usize, t: f64, amt: impl Fn(usiz
     (l, z, cover)
 }
 
-/// Reflectance of ground node `i` with `layers` `l`: soft solid, liquid and loose solid, top down, each cover depth /
-/// (depth + `hide`) of what lies below, and its bed the rest.
+/// Reflectance of ground node `i` with `layers` `l`, over its own ground: the share of it under the level of what stands
+/// over its pores (`curve::Curve::wet`) a column of its layers with that liquid over the share, the rest one whose liquid
+/// is what its pores hold (`column`), by area.
 pub(super) fn reflectance(w: &World, s: &Scratch, i: usize, l: &[f64; 6]) -> f64 {
+    let pores = w.cfg.phys.porosity * l[4];
+    let (pore, stands) = (l[2].min(pores), (l[2] - pores).max(0.0));
+    let wet = super::curve::of_cell(w, s, i).wet(stands);
+    if wet == 0.0 || wet == 1.0 {
+        return column(w, s, i, l);
+    }
+    // The liquid of each part, m³ over the cell's area, with its reflectance by volume.
+    let with = |liquid: f64| {
+        let mut x = *l;
+        (x[2], x[3]) = (liquid, l[3] / l[2] * liquid);
+        column(w, s, i, &x)
+    };
+    (1.0 - wet) * with(pore) + wet * with(pore + stands / wet)
+}
+
+/// Reflectance of one column of ground node `i` with `layers` `l`: soft solid, liquid and loose solid, top down, each
+/// cover depth / (depth + `hide`) of what lies below, and its bed the rest.
+fn column(w: &World, s: &Scratch, i: usize, l: &[f64; 6]) -> f64 {
     let area = w.mesh.cells().area()[i];
     let (mut a, mut seen) = (0.0, 1.0);
     for c in 0..3 {
@@ -331,8 +350,20 @@ pub(super) fn reflectance(w: &World, s: &Scratch, i: usize, l: &[f64; 6]) -> f64
 /// its lowest ground when none does), m.
 #[inline]
 pub(super) fn stand(s: &Scratch, i: usize) -> f64 {
-    let c = &s.curves[i];
-    s.z[i] + c.level((s.head[i] - s.pd[i] - s.z[i]).max(0.0) * c.area())
+    s.z[i] + s.curves[i].level(standing(s, i))
+}
+
+/// The share of node `i`'s area that the liquid standing over its pores covers, its own ground under its level
+/// (`curve::Curve::wet`), 0..1.
+#[inline]
+pub(super) fn wet_share(s: &Scratch, i: usize) -> f64 {
+    s.curves[i].wet(standing(s, i))
+}
+
+/// The volume of the liquid that stands on node `i` over what its pores hold, m³.
+#[inline]
+fn standing(s: &Scratch, i: usize) -> f64 {
+    (s.head[i] - s.pd[i] - s.z[i]).max(0.0) * s.curves[i].area()
 }
 
 /// Whether the pores of node `i` (porosity `por`) are full: all its other liquid stands on it. Ground with no pores
