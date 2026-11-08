@@ -919,7 +919,7 @@ fn a_pit_over_its_rim_spills_by_its_way_out() {
 }
 
 /// Runoff through a pool of small cells passes on in one liquid step, and the heat of its fall goes on with it
-/// (laws.md 1.2): the island's highest square cut into 16 cells of a quarter of its side, its 12 outer cells raised by
+/// (laws.md 1.2): the island's highest square cut into 16 flat cells of a quarter of its side, its 12 outer cells raised by
 /// `RIM_M` of rock (its way out, one of them, by half that) around a pool of 4, and a month's runoff (`RUNOFF_M` over a
 /// small cell) poured on the pool's cell farthest from the way out. After the step no small cell holds more than `RIM_M`
 /// of it, and none is more than `FALL_K` warmer: the runoff took the heat of its fall along. Matter and energy are kept.
@@ -931,8 +931,8 @@ fn runoff_crosses_a_pool_of_small_cells_and_takes_its_fall_along() {
     let mut w = worldgen::testkit::squares(1, 32, 32);
     (w.cfg.phys.porosity, w.cfg.phys.seep, w.cfg.evap) = (0.0, 0.0, 0.0);
     let square = w.map.leaves()[top(&w)];
-    w.split(square).expect("a split");
-    square.quarters().iter().for_each(|&q| _ = w.split(q).expect("a split"));
+    // (Flat inside: a pool of rims of `RIM_M`, not the summit's own ground.)
+    worldgen::testkit::split_flat(&mut w, &[square], 2);
     // The small cells row by row, (r, c) of 4 x 4.
     let small: Vec<usize> = (0..16).map(|x| (x / 4, x % 4)).map(|(r, c)| w.map.cell(square.quarters()[r / 2 * 2 + c / 2].quarters()[r % 2 * 2 + c % 2]).expect("a small cell")).collect();
     let (area, rock_m3) = (w.mesh.cells().area()[small[0]], 1.0 / w.chem.molar_volume(worldgen::testkit::ROCK, Phase::Solid));

@@ -254,9 +254,10 @@ stacks far higher than at the joined cell's temperature, and the split that give
 cell's relief is its quarters' and that drop, and its record keeps each quarter's relief (not the records of their own
 joins), so its split gives the quarters back with their reliefs: the cell's relief pays what the quarters' stacks hold
 over the cell's and the quarters' reliefs, and what is left over (or short: rounding) goes to the quarters' ground heat
-by their shares (`store::fall_heat`, which books it against `Store::lifted`). Before Flow first built the state of the ground (a world as built, before its first step)
-the stacks' potential energy is not found: a split then makes flat quarters, each with its share of the relief by
-area. So a join moves no energy, a split moves only what `fall_heat` books, and `check::drift`, which reads the stacks
+by their shares (`store::fall_heat`, which books it against `Store::lifted`). A change of the cells first builds Flow's
+state of the ground where it is not yet built (a world as built, before its first step), whose phases the stacks'
+potential energy reads, so the quarters of a split stand the terrain inside them from the first month. So a join
+moves no energy, a split moves only what `fall_heat` books, and `check::drift`, which reads the stacks
 and the reliefs, closes through any sequence of splits and joins; the cover a join's cells cannot hold goes to its
 ground as remains, booked as life's remains are (`store::life_moved`). No law changes the cells.
 **Inside a cell** (`inside/`, handover 5.2): a cell holds means (its cover, the liquid in its soil, what stands on

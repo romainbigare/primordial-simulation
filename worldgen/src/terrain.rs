@@ -38,7 +38,7 @@ const MOLTEN_MARGIN: f64 = 2.0;
 /// `ISLAND_LEVEL`; a globe's leaves the share `LAND_SHARE` of the area of the samples above it.
 fn terrain_of(seed: u64, map: &Square, cells: &Level) -> Terrain {
     if !map.wrap {
-        return Terrain::new(ISLAND_LEVEL);
+        return Terrain::new(seed, ISLAND_LEVEL);
     }
     let rise: Vec<f64> = (0..cells.n()).map(|i| terrain::rise(seed, map, Place::of(cells, i))).collect();
     let mut order: Vec<usize> = (0..cells.n()).collect();
@@ -48,7 +48,7 @@ fn terrain_of(seed: u64, map: &Square, cells: &Level) -> Terrain {
         above += cells.area()[i];
         above >= LAND_SHARE * total
     });
-    Terrain::new(level.map_or(0.0, |&i| rise[i]))
+    Terrain::new(seed, level.map_or(0.0, |&i| rise[i]))
 }
 
 /// Height of each cell of `map` by `terrain` (its rows between the latitudes `lat`), m: the terrain's mean over it
@@ -101,7 +101,7 @@ pub fn new_map(seed: u64, map: Square) -> World {
 /// A new island from a seed, its low ground away from land in coarse cells (`coarse_low`): terrain, chemistry 0, ground,
 /// liquid and air. One terrain, so its drained samples are found once.
 pub fn new_world(seed: u64, w: usize, h: usize) -> World {
-    let (terrain, (chem, init)) = (Terrain::new(ISLAND_LEVEL), chemistry0());
+    let (terrain, (chem, init)) = (Terrain::new(seed, ISLAND_LEVEL), chemistry0());
     let map = coarse_low(seed, island(w, h), &terrain);
     build_on(seed, map, terrain, (chem, &init), Config::default())
 }

@@ -45,14 +45,20 @@ impl Clone for Kept {
 
 impl Terrain {
     /// The drained samples of `map` for `seed` (its rows between latitudes `south` and `north`), found once and kept.
+    /// They are found with no lock held (finding them works in parallel, and a worker that waited on the lock inside
+    /// another parallel section would hold up the workers it needs); where two find them at once, the first kept is
+    /// the one (they are the same).
     pub fn samples(&self, seed: u64, map: &Square, lat: (f64, f64)) -> Arc<Samples> {
-        let mut kept = self.kept.0.lock().expect("the kept samples");
-        if let Some(s) = kept.as_ref().filter(|s| s.seed == seed) {
-            return s.clone();
+        let known = |kept: &Option<Arc<Samples>>| kept.as_ref().filter(|s| s.seed == seed).cloned();
+        if let Some(s) = known(&self.kept.0.lock().expect("the kept samples")) {
+            return s;
         }
-        let s = Arc::new(self.drained(seed, map, lat));
-        *kept = Some(s.clone());
-        s
+        let found = Arc::new(self.drained(seed, map, lat));
+        let mut kept = self.kept.0.lock().expect("the kept samples");
+        known(&kept).unwrap_or_else(|| {
+            *kept = Some(found.clone());
+            found
+        })
     }
 
     /// The mean rise of the ground toward the south over leaf `l` of `map` for `seed` (its rows between latitudes `south`

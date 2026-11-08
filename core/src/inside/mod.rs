@@ -67,6 +67,11 @@ impl World {
         (g, shares)
     }
 
+    /// The terrain's drained samples of this world (`Terrain::samples`), which the ground inside each cell reads.
+    pub fn drained(&self) -> std::sync::Arc<crate::space::samples::Samples> {
+        self.terrain.samples(self.terrain.seed, &self.map, (self.cfg.lat_south, self.cfg.lat_north))
+    }
+
     /// The ground inside leaf `l` (`Ground`): the terrain's mean height over each sample, a leaf `DEPTHS` below `l`
     /// (`Terrain::inside`).
     pub fn ground_in(&self, l: Leaf) -> Ground {
@@ -75,7 +80,7 @@ impl World {
         let side = 1usize << (depth - l.depth);
         let (mut h, mut area) = (Vec::with_capacity(side * side), Vec::with_capacity(side * side));
         for s in l.split(depth) {
-            h.push(self.terrain.inside(self.seed, &self.map, s, lat).0);
+            h.push(self.terrain.inside(self.terrain.seed, &self.map, s, lat).0);
             area.push(self.map.place_of(&s, lat.0, lat.1).0);
         }
         let dy = self.map.length(depth);

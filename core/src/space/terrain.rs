@@ -45,11 +45,13 @@ const REAL_SLOPE: f64 = 0.1;
 const REAL_LENGTH_M: f64 = 30.0;
 const HURST: f64 = 0.8;
 
-/// What the terrain of a world needs beside its seed and its map: the rise its level 0 m lies at (an island's
-/// `ISLAND_LEVEL`; a globe's the one that leaves a share of its area above it, `worldgen`); and its drained samples,
-/// found from those when first read (`Terrain::samples`), not saved.
+/// What the terrain of a world needs beside its map: the seed of its noise (the world's as built: a run that draws
+/// chance anew from another seed, `World::seed`, stands on the same ground); the rise its level 0 m lies at (an
+/// island's `ISLAND_LEVEL`; a globe's the one that leaves a share of its area above it, `worldgen`); and its drained
+/// samples, found from those when first read (`Terrain::samples`), not saved.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Terrain {
+    pub seed: u64,
     pub level: f64,
     #[serde(skip)]
     pub(super) kept: super::samples::Kept,
@@ -224,9 +226,9 @@ fn displace(seed: u64, l: Leaf, area: [f64; 4], var: f64) -> [f64; 4] {
 }
 
 impl Terrain {
-    /// The terrain whose level 0 m lies at the rise `level`.
-    pub fn new(level: f64) -> Terrain {
-        Terrain { level, ..Terrain::default() }
+    /// The terrain of `seed` whose level 0 m lies at the rise `level`.
+    pub fn new(seed: u64, level: f64) -> Terrain {
+        Terrain { seed, level, ..Terrain::default() }
     }
     /// The rise of the ground at `place` of `map` for `seed` over the level; on an island (a flat map) less the fall
     /// from the middle of the map.

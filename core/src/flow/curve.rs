@@ -100,6 +100,8 @@ pub(super) fn stale(w: &World, s: &Scratch) -> bool {
 /// The curve of each cell (`Scratch::curves`), from those kept where the leaf and its scale are the same; the others
 /// found from the ground inside the cell (`at_scale`).
 pub(super) fn build(w: &World, s: &mut Scratch) {
+    // (The terrain's samples found first, before the parallel section that reads them, `Terrain::samples`.)
+    w.drained();
     let leaves = w.map.leaves();
     let mut kept = std::mem::take(&mut s.kept);
     s.curves = crate::par::map_n(leaves.len(), crate::par::UNCOUNTED, |i| match kept.get(&leaves[i]).filter(|c| c.scale == w.relief_scale[i]) {

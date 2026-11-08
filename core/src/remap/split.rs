@@ -23,8 +23,13 @@ pub(crate) struct Change {
 }
 
 impl World {
-    /// A change of the cells, from the cells now.
-    pub(crate) fn change(&self) -> Change {
+    /// A change of the cells, from the cells now, on Flow's state of the ground (built here where it is not yet, as in
+    /// a world as built: a split stands its quarters on the terrain inside it, as far as the stacks' potential energy,
+    /// which the state's phases give, lets the cell's relief pay for it).
+    pub(crate) fn change(&mut self) -> Change {
+        if !crate::flow::stated(self) {
+            crate::flow::state(self, true);
+        }
         Change { links: self.mesh.cells().a().len(), was: None }
     }
 
@@ -99,8 +104,7 @@ impl World {
     /// is left: the potential energy of the pits the drainage filled and what the liquid gave up as it found its level,
     /// which the ground finer than the quarters still holds. Each quarter faces as its ground stands (`World::rise_south`):
     /// as it was joined, or the cell's rise plus the terrain's departure inside it at the split's scale, so their mean by
-    /// area is the cell's. Before Flow first built the state of the ground the stacks' potential energy is not found:
-    /// the quarters are flat, each with its share of the relief by area and the cell's rise.
+    /// area is the cell's.
     fn split_one(&mut self, leaf: Leaf, c: &mut Change) {
         let i = self.map.cell(leaf).expect("a cell");
         let (air, record, serial) = (self.mesh.cells().parent()[i] as usize, self.joined[i].clone(), self.life.cells[i].serial);
@@ -109,7 +113,7 @@ impl World {
         let mesh = self.mesh_for(&map, false);
         let kids = quarters.map(|q| map.cell(q).expect("a quarter"));
         let share = kids.map(|j| mesh.cells().area()[j] / self.mesh.cells().area()[i]);
-        let uneven = (record.is_none() && crate::flow::stated(self)).then(|| self.uneven((i, leaf), (mesh.cells(), kids)));
+        let uneven = record.is_none().then(|| self.uneven((i, leaf), (mesh.cells(), kids)));
         let bed = uneven.as_ref().map_or(share, |u| u.bed);
         // The shares of the cell's own ground, as the split stands it (`inside`).
         let means = crate::flow::means(self, &[i]).map_or(Default::default(), |m| m[0]);
@@ -125,7 +129,7 @@ impl World {
         if uneven.is_some() {
             crate::flow::share_ground(self, &kids, ground.quarters(&inside.soil), uneven.as_ref().map_or(1.0, |u| u.scale));
         }
-        // The terrain each quarter stands: what its join kept, the split's scale, or flat before Flow's state.
+        // The terrain each quarter stands: what its join kept, or the split's scale.
         let scales = record.as_ref().map(|r| r.scales).unwrap_or([uneven.as_ref().map_or(0.0, |u| u.scale); 4]);
         kids.iter().zip(scales).for_each(|(&j, s)| self.relief_scale[j] = s);
         // Each quarter faces as the ground it stands does: as it was joined, or the terrain inside it at the scale the

@@ -28,7 +28,7 @@ impl World {
     }
     /// The terrain inside leaf `l` (`Terrain::inside`): its mean height, m, and the spread of its heights, m⁴.
     fn terrain_in(&self, l: Leaf) -> (f64, f64) {
-        self.terrain.inside(self.seed, &self.map, l, (self.cfg.lat_south, self.cfg.lat_north))
+        self.terrain.inside(self.terrain.seed, &self.map, l, (self.cfg.lat_south, self.cfg.lat_north))
     }
     /// The relief of each cell of a world as built, J: a bed standing at the terrain's heights inside it holds
     /// ρ g ∫ (h − h̄)² / 2 more potential energy than a flat bed of its volume (`Terrain::inside`; each column of area a
@@ -38,7 +38,7 @@ impl World {
     }
     /// The rise toward the south of the terrain inside leaf `l`, m per m (`Terrain::rise_south`).
     pub(super) fn terrain_rise(&self, l: Leaf) -> f64 {
-        self.terrain.rise_south(self.seed, &self.map, l, (self.cfg.lat_south, self.cfg.lat_north))
+        self.terrain.rise_south(self.terrain.seed, &self.map, l, (self.cfg.lat_south, self.cfg.lat_north))
     }
     /// The rise toward the south of each cell of a world as built, m per m: the terrain's inside it (`terrain_rise`).
     pub fn rise_at_build(&self) -> Vec<f64> {
