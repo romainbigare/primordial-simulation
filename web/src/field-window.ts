@@ -7,7 +7,7 @@ import { RGB } from './earth';
 /** The stops a layer's ramp holds at most (earth.wgsl `Earth.ramp`). */
 const RAMP_STOPS = 10;
 /** Of the uniforms of earth.wgsl (`Earth`), four-wide members. */
-const EARTH_VEC4S = 3 + RAMP_STOPS;
+const EARTH_VEC4S = 4 + RAMP_STOPS;
 
 /** What the map draws: the Earth's colours, the true colour, or a layer (its index in the table, and its ramp); and
  * the index of the worn paths' layer where they are drawn (-1: not drawn). */
@@ -40,7 +40,7 @@ export class FieldWindow {
       this.viewKey = key;
     }
     const mode = look.mode === 'earth' ? 0 : look.mode === 'true' ? 1 : 2, u = new Uniforms(EARTH_VEC4S);
-    u.vec4(...f.look).vec4(mode, look.ramp.length, look.paths >= 0 ? 1 : 0).vec4(...this.edge);
+    u.vec4(...f.look).vec4(mode, look.ramp.length, look.paths >= 0 ? 1 : 0).vec4(...this.edge).vec4(...f.place);
     for (let k = 0; k < RAMP_STOPS; k++) u.vec4(...(look.ramp[k] ?? [0, 0, 0]));
     return { ...this.textures, 1: u.buffer, 5: this.view!, 6: 'smooth' };
   }

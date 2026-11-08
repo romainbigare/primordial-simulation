@@ -1,7 +1,7 @@
 // uses: draw.wgsl
 // The marks of the plant cover (web/src/textures.ts) over the draw's rectangle, at every frame. Each kind of mark (a
 // tuft of grass, of tundra or of steppe, a shrub, a tree's crown) lies on its own grid fixed in the world, one mark a
-// grid cell at a place, size, tone and rank hashed from the cell (Worley 1996; the hashes are lowbias32, Wellons 2018,
+// grid cell at a place, size, tone and rank hashed from the cell (Worley 1996; the hashes are lowbias32, draw.wgsl,
 // and pcg3d, Jarzynski and Olano 2020): the marks hold while the camera moves, never repeat and stand in no rows. A
 // mark shows where its rank is below the density of its kind at its centre, read from the field of the cover (blended
 // between the field's texels), so a thinner cover shows fewer marks and two kinds mix mark by mark where one gives way
@@ -68,10 +68,9 @@ fn pcg3d(w: vec3u) -> vec3u {
   return v;
 }
 fn rand3(c: vec2i, k: i32) -> vec3f { return vec3f(pcg3d(vec3u(vec2u(c), u32(k)))) * (1.0 / 4294967296.0); }
-// A cheaper hash for the first look at a cell (lowbias32, Wellons 2018): one word, read as three of 11, 11 and 10 bits.
+// A cheaper hash for the first look at a cell (`lowbias`): one word, read as three of 11, 11 and 10 bits.
 fn place(c: vec2i, k: i32) -> vec3f {
-  var x = (u32(c.x) * 0x9E3779B1u) ^ (u32(c.y) * 0x85EBCA77u) ^ (u32(k) * 0xC2B2AE3Du);
-  x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; x ^= x >> 16u;
+  let x = lowbias(c, k);
   return vec3f(f32(x & 2047u) / 2048.0, f32((x >> 11u) & 2047u) / 2048.0, f32(x >> 22u) / 1024.0);
 }
 // Channel `ch` of the field at m metres from the picture's corner, at mip level lod (the mean of 2^lod texels square);

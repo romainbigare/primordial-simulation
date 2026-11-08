@@ -41,10 +41,17 @@ WebGL2. The shaders are written once in WGSL (`web/shaders/`); the build (`npm r
 as GLSL ES 3.00 for WebGL2 too with naga, the shader translator of the wgpu project (`web/shade`, so the build needs
 cargo), and puts both in the page. The page hands the card fields, not pictures (`web/src/fields.ts`): of each square
 or pixel the ground's height and slope, the liquid's surface over the ground, the ice, the ground's temperature, the
-share that is sea and that is a river, the plant cover's byte, the true colour and every layer. The card turns them
-into colours at each pixel of the screen (`web/shaders/lib/earth.wgsl`: the Earth view, the true colour and the layer
-views, one rule for the map of the squares and for the finer window), with the light on the slopes, and the shore
-where the liquid's surface meets the ground, sharp at any zoom. It also names each square's class (sea, lake, forest...)
+share that is sea and that is a river and the river's depth, how wet the ground is, the plant cover's byte, the true
+colour and every layer. The card turns them into colours at each pixel of the screen (`web/shaders/lib/earth.wgsl`:
+the Earth view, the true colour and the layer views, one rule for the map of the squares and for the finer window),
+with the light on the slopes. Water is water (`web/shaders/lib/water.wgsl`): a flat surface, its bed seen through it
+and fading with depth as water absorbs red light most and blue least (Beer–Lambert), into the dark blue of deep water;
+a little of the sky reflects from it and the sun glints on small ripples fixed in the world, which fade out as they
+shrink below a few pixels. A sea, a lake and a river are the same water, a river as deep as its discharge makes it.
+The ground goes from dry to wet continuously: soaked bare ground is darker (to half as bright), wet by how wet the core
+says it is and by the capillary fringe over the liquid's surface (wet to e^-1 half a metre over it), so a flat shore
+is a wide wet band and a steep one a thin line; near soaked, a film of liquid shines on it as mud, and at the
+waterline it is the bed under no water, so the shore has no drawn line. It also names each square's class (sea, lake, forest...)
 for the inspect panel. Avatars, the lines of latitude, the outlines and the scale bar are drawn on a 2D canvas over it.
 While a frame takes the card longer than 16 ms, the map is drawn at fewer pixels (down to a quarter along each side)
 and stretched onto the screen, the same picture, softer; once the view rests it is drawn again at the screen's own
@@ -54,8 +61,9 @@ colours under the avatars) comes a frame or so later.
 At every zoom the live viewer draws the window in view finer than its cells (`tape::fine`, a pixel of 1 to 2 screen
 pixels and no smaller than 5 cm, smoothed up closer, at most 360,000 of them), and a fifth of the view about it, so a pan
 or a zoom out shows it until the next comes: the ground's height from the terrain below the cells (smooth below a metre)
-set on the cells' heights, with hill shading; the liquid where its surface lies over that ground, so shores follow the
-ground; snow by the ground's own temperature; every value of the cells as one smooth field, built level by level of the
+set on the cells' heights, with hill shading; the liquid each cell holds standing (over the first metre, which may run
+as a river) at the level that fills its own low ground with its volume, drawn where the ground lies below that level, so a shore follows the ground and moves with
+the level; how wet the ground is and the plant cover of each slot inside each cell (`tape/src/fine/inside.rs`); snow by the ground's own temperature; every value of the cells as one smooth field, built level by level of the
 cells' tree, so a cell that holds what its parent held shows no edge and a refined region looks like the cells about it
 (`tape/src/fine/pyramid.rs`); rivers as lines along the way their liquid runs. The worker makes its fields; it is made
 again when the view rests and once a second while the world plays, and each new window fades in over the last in a
@@ -63,7 +71,10 @@ quarter of a second, over the map of the squares, its outer edge faded too, so t
 gives its size, the time the core took to make it and the worker its fields, and which of WebGPU and WebGL2 draws.
 
 The Earth view draws the plant cover as textures at its real size (`web/src/vegetation.ts`, `web/src/textures.ts`),
-over the fine raster where there is one and blended between the cells' centres as the map is: crowns where it is woody
+over the fine raster where there is one and blended between the cells' centres as the map is; in the fine raster each
+slot of a cell is a stand of its own kinds where its own cover lies (so a kind that likes wet ground stands in the wet
+ground and the shallows, and stops where its cover stops), the stands closing the ground together by their summed
+capture area, each by its share of it; a mark under liquid deeper than it is wide is not drawn: crowns where it is woody
 (shrubs, woodland, forest, a jungle where it is also warm and wet), a tree's crown 3 to 15 m across by its walls per
 m², and tufts where it is herbs (grass, steppe, tundra); as many marks as its capture area closes it (1 - e^-area). A
 kind gives way to the next over a range of each threshold, so kinds mix mark by mark, never at an edge. The marks are

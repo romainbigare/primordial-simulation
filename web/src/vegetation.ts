@@ -135,5 +135,5 @@ function signature(f: CoverNumbers): number {
 function fieldOf(w: World, f: number, cls: Uint8Array): CoverNumbers | null {
   if (!['plants', 'wood', 'leaf', 't_ground', 'rain'].every(n => w.index.has(n))) return null;
   const open = Uint8Array.from(cls, c => (VEG_CLASSES.has(c) ? 1 : 0));
-  return { w: w.meta.w, h: w.meta.h, kg: decode(w, f, 'plants'), wood: decode(w, f, 'wood'), leaf: decode(w, f, 'leaf'), t: decode(w, f, 't_ground'), rain: decode(w, f, 'rain'), open };
+  return { w: w.meta.w, h: w.meta.h, stands: 1, kg: decode(w, f, 'plants'), wood: decode(w, f, 'wood'), leaf: decode(w, f, 'leaf'), t: decode(w, f, 't_ground'), rain: decode(w, f, 'rain'), depth: null, open };
 }
