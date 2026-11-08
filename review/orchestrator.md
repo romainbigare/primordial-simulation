@@ -77,20 +77,42 @@ Done in the last session (details in `review/plan.md` and in each commit message
 - Grain fixes: seeds land evenly over the area they reach (`copy::dispersed`); the meal's heat limit (a units bug);
   the liquid reads the phases the air's step left (lakes on ridges blinking each month).
 
-In progress when the session ended (branches kept, see section 8):
-- **The water's level over each cell's own ground** (the owner's report: lakes appear and vanish, lakes on ridges,
-  shores move by hundreds of metres). Findings: Flow treats each cell's ground as flat at its mean, so a 2 km lake can
-  exist only in the cell means and drains in one month when the camera splits it; the sea's edge moves with
-  refinement. The fix being built: a level-volume curve per cell from its own drained samples, V(L) = Σ area·(L−h)+,
-  used everywhere a head is read (runoff, the flood, the sea's level, the liquid's potential energy, drain slopes,
-  split and join). Then the drawing on top of WP17: ground = the drained terrain, wet where below the cell's level.
-- **WP17 water as water** (flat surface, colour by depth, the shore's wetness, plants by slot): built, but NOT merged.
-  Drawn with each cell's flat level, coasts became square steps along 2 km cells. It waits for the level-volume law.
+In progress when the session ended: **the water's level over each cell's own ground**, on the pushed branch
+`claude/water-levels` (section 8). The owner's report: lakes appear and vanish, lakes on ridges, shores move by hundreds
+of metres. What the branch holds (read its commit messages):
+- Flow keeps each cell's liquid at a level over its own drained samples: a level-volume curve per cell,
+  V(L) = Σ area·(L−h)+, in one place (`core/src/flow/curve.rs`), used by the runoff, the flood, the basin, the sea's
+  level, the liquid's potential energy (at its centroid) and the split. `World::relief_scale` is its own field; the
+  terrain keeps its own seed (`World::drained`); the samples are built without a lock held across rayon; a split
+  builds Flow's state first; worldgen starts the sea at 0 m over each cell's own ground (`flow::volume_under`); the
+  surface's reflectance and evaporation read the wet share of the cell's own ground.
+- Measured against main: lake area that appears or vanishes in a month 2.3 → 0.4 km²; the largest month's change of a
+  lake's depth 1.34 → 0.11 m; the coast's wet area as the camera splits and joins within 0.2% (main −10%).
+- The drawing: WP17's look (flat water coloured by depth, sky light, the shore's wetness, plant marks by slot standing
+  in shallow water) on the drawn ground = the drained terrain; a pixel is wet where that ground lies under its cell's
+  level; the drawn volume matches each cell's within 1%. The coast holds still through a year while zooming.
+- Test scenes chosen by what they state (`testkit::inland`, `testkit::mild_land`, `testkit::flat_round`), and the
+  known limit of a node's one heat state written in `docs/laws.md` 6.3 (the owner chose to accept it and restate the
+  two node tests of `core/tests/steps.rs` on scenes away from the heat turning point).
+- **Two slow tests fail on the branch, so it is not merged:** `a_globe_without_life_keeps_an_earth_like_climate`
+  (surface 293.6 K, bound 292) and `the_frost_gene_falls_where_winters_are_cold`. One cause, measured: a coast cell,
+  now part land and part sea, is one heat node, so its heat capacity grows about 17 times (like 34 m of water over the
+  whole cell); its land gets the sea's mild winter and loses its snow and ice (globe reflectance 0.181 → 0.137).
 
 ## 5. What to do next, in order
 
-1. Finish the level-volume law and WP17 on top of it (section 4). Check with the owner's view: a coast and a lake
-   over several months, zooming in and out: no blinking lakes, no shore jumps, no square coasts.
+1. **A mixed cell's two parts, each with its own temperature** (a law change, then merge `claude/water-levels`). The
+   design from the last helper: each cell stores one more number, the heat of its liquid part, J (the node's total heat
+   stays in the store, so the books keep their form; moves by other laws take heat from each part by its share of the
+   heat capacity); the parts' areas from the curve's wet share (`Curve::wet`); a cell with wet share 0 or 1 runs exactly
+   as today (bit for bit); Flow finds a melting state, snow cover and reflectance for each part of a mixed cell; in the
+   air step each part is its own surface, and rain lands on each by its area; the parts trade heat at the shore by one
+   law (conduction through the ground and the liquid's mixing, one anchored number); life, the cover and bodies read
+   the land part, a wading body the liquid part, Change and the tape the area mean; SNAPSHOT_VERSION bump; split and
+   join share the parts' heat. About 1,000 lines in Flow (land state, air step, rain, booking, basin, drain, runoff,
+   inside) plus remap, snapshot, worldgen and readers. Commit in stages; the law commit lands when the globe and frost
+   tests pass as they are, with all slow tests and a 100-year run before and after. Then merge the branch and update
+   the live world.
 2. WP18 rivers as real water: no river vanishes when cells are fine (likely its flux splits over fine cells, each
    under the river limit: measure it); channels of true width and depth (Leopold and Maddock 1953); small channels from
    the flow on the drawn ground.
@@ -116,6 +138,9 @@ a merge:
 4. Check the page in a browser before publishing (serve `web/dist`, Playwright is installed; headless uses WebGL2):
    no console errors, a zoom to the finest cells draws.
 
+A second artifact shows `claude/water-levels` for the owner to look at the new water: publish it the same way to its
+own URL (written in the last session's final message and in the branch's last commit message).
+
 ## 7. Open choices for the owner
 
 - **The shapes of animals:** "From above" (the default) or "Angled". The switch stays until they choose.
@@ -126,6 +151,6 @@ a merge:
 
 ## 8. Branches kept for the next session
 
-Each is pushed under its own name if it was unfinished at the end; check `git branch -r`. Merge only after the gate.
-- The level-volume law (water) and its drawing.
-- WP17 water as water (to rebuild on top of the level-volume law, not to merge as is).
+- `claude/water-levels`: the level-volume law, the water's drawing, the test scenes and the node limit (section 4).
+  The normal gate passes on it; the globe and frost slow tests fail until the two-part law (section 5, item 1) lands.
+  A preview of it for the owner is published as its own artifact (section 6), next to the main one.
