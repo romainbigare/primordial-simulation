@@ -93,12 +93,21 @@ pub fn dry_land(w: &World) -> usize {
     dry_lands(w).first().copied().expect("dry land")
 }
 
+/// Of `cells`, the one of the mildest climate: the least height.
+fn lowest(w: &World, cells: impl Iterator<Item = usize>) -> Option<usize> {
+    cells.min_by(|&a, &b| w.surface_z(a).total_cmp(&w.surface_z(b)))
+}
+
+/// The lowest dry land cell (`dry_lands`): of the dry land, the one of the mildest climate.
+pub fn mild_land(w: &World) -> usize {
+    lowest(w, dry_lands(w).into_iter()).expect("dry land")
+}
+
 /// The lowest dry land cell whose neighbours are all dry land: inland, no standing liquid beside it, and of the inland
-/// cells the one of the mildest climate (the least height), as the tests of bodies want.
+/// cells the one of the mildest climate, as the tests of bodies want.
 pub fn inland(w: &World) -> usize {
     let dry = dry_lands(w);
-    let inland = dry.iter().copied().filter(|&i| w.mesh.cells().around(i).1.iter().all(|&j| dry.contains(&(j as usize))));
-    inland.min_by(|&a, &b| w.surface_z(a).total_cmp(&w.surface_z(b))).expect("an inland cell")
+    lowest(w, dry.iter().copied().filter(|&i| w.mesh.cells().around(i).1.iter().all(|&j| dry.contains(&(j as usize))))).expect("an inland cell")
 }
 
 /// `small_world` and its first dry land cell.

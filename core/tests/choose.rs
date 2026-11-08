@@ -2,7 +2,7 @@
 //! body with no brain; a brain pays and learns per second.
 //!
 //! The learning scene: flat ground, the energy-rich solid lying loose only in a strip on the east side (kept at its
-//! amount each day, as it rots in about a week), one body (of the starting kind that burns that solid and takes it from
+//! amount where the body takes it: set again after each month's Change, as it rots in about a week), one body (of the starting kind that burns that solid and takes it from
 //! the ground) just west of the strip, with a neutral brain. Over its first 200 decisions, with learning on against
 //! off, over many seeds. Its children are taken out at once.
 
@@ -10,7 +10,7 @@ use pcore::body::{self, Layout, HEAT, LEARN};
 use pcore::rng::{Purpose, Rng};
 use pcore::World;
 use pcore::store::{Class, Node};
-use worldgen::testkit::{self, dry_land, founder, scale, set_amount, set_heat, start, Books, Brain, LIQUID, MATTER, MILD_LAT, OFF, RICH};
+use worldgen::testkit::{self, founder, scale, set_amount, set_heat, start, Books, Brain, LIQUID, MATTER, MILD_LAT, OFF, RICH};
 
 /// The scene's grid.
 const W: usize = 12;
@@ -25,14 +25,15 @@ const DECISIONS: usize = 200;
 const LEARN_ON: f32 = 0.0;
 const LEARN_OFF: f32 = -4.0;
 
-/// The scene's world for `seed`: flat and mild (`MILD_LAT`), every cell a copy of one dry land cell, the strip added on top.
+/// The scene's world for `seed`: flat and mild (`MILD_LAT`), every cell a copy of the lowest dry land cell
+/// (`testkit::mild_land`), the strip added on top.
 fn scene(seed: u64) -> World {
     let (chem, init) = worldgen::chemistry0();
     let cfg = pcore::Config { lat_south: MILD_LAT[0], lat_north: MILD_LAT[1], ..Default::default() };
     let mut w = worldgen::terrain::build(seed, worldgen::terrain::island(W, H), chem, &init, cfg);
     pcore::step(&mut w);
     let (n, ns) = (w.mesh.cells().n(), w.chem.ns());
-    let land = dry_land(&w);
+    let land = testkit::mild_land(&w);
     for k in 0..ns {
         let (g, b) = (w.g(k, land), w.b(k, land));
         for i in 0..n {
@@ -92,8 +93,14 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
         let (u, from) = (w.counts.updates, w.life[slot].cell as usize);
         let near: Vec<usize> = w.mesh.cells().around(from).1.iter().map(|&j| j as usize).collect();
         let richer: Vec<usize> = near.iter().copied().filter(|&j| seen(&w, j) > seen(&w, from) + 0.02).collect();
+        // The strip at its amount when the body perceives it (the month's survey) and when it takes from it (after the
+        // month's Change, which rots it).
         strip.iter().for_each(|&(i, a)| set_amount(&mut w, Node::ground(i), RICH, a));
-        pcore::day_with_month_at_start(&mut w);
+        pcore::day_with_month_at_start_marked(&mut w, &mut |w, stage| {
+            if stage == pcore::Stage::Change {
+                strip.iter().for_each(|&(i, a)| set_amount(w, Node::ground(i), RICH, a));
+            }
+        });
         // A body that has children: they die at once, their matter back to the ground where they were born, so the scene
         // stays one body.
         for s in w.life.living().map(|x| x.0).collect::<Vec<_>>() {
