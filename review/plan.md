@@ -124,8 +124,9 @@ The owner's decision: the map must show physical things (spec 10.1, 10.9, 5.2). 
 
 | 22 | **No rule made for one thing** (law changes, one commit each): objects lying alone are covered by the loose ground's own movement (creep, then the law of spec 19), not a burial rate of their own; liquid from upstream enters a cell where the flow crosses its border; groups of objects join only when truly alike, and the cap of groups per cell follows the cost (where nothing looks or uses them), not a fixed 16. The founders' low score for forming parts stays (the owner's decision) | the gate; the books; objects do not pile up in a 300-year run; long runs | medium |
 
-State: 15 and 16 are done (the terrain's samples drain once at the start; every cell stands on them; WebGPU and
-WebGL2 from one WGSL source). 17 and 21 are under way.
+State: 15, 16 and 21 are done. 17 (the water's look) and the water's level over each cell's own ground are on the
+branch `claude/water-levels`; they wait for a mixed cell's two parts to have each its own temperature
+(`review/orchestrator.md` 5).
 
 A share inside a cell comes only from a general law evaluated at the samples, never from a rule made for one thing.
 Open, after these: a law for mud and sand (spec 19).

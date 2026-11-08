@@ -139,7 +139,7 @@ a merge:
    no console errors, a zoom to the finest cells draws.
 
 A second artifact shows `claude/water-levels` for the owner to look at the new water: publish it the same way to its
-own URL (written in the last session's final message and in the branch's last commit message).
+own URL: https://claude.ai/artifact/XPs1YXbaJquG1n61ec6LE5 .
 
 ## 7. Open choices for the owner
 
