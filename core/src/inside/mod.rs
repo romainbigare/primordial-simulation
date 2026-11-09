@@ -103,6 +103,12 @@ impl Grid {
         Grid { across, down, dy, dx }
     }
 
+    /// The pairs of samples beside each other across a side.
+    fn sides(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
+        let (w, n) = (self.across, self.across * self.down);
+        (0..n).flat_map(move |p| [(p % w + 1 < w).then(|| (p, p + 1)), (p + w < n).then(|| (p, p + w))]).flatten()
+    }
+
     /// The samples next to sample `p` (across its sides and corners, on the grid), each with whether it lies across a
     /// corner and its distance, m.
     fn around(&self, p: usize) -> impl Iterator<Item = (usize, bool, f64)> + '_ {
@@ -192,6 +198,11 @@ impl Ground {
         self.through = self.grid.drain(&self.h, entry);
         self.tan = self.grid.slope(&self.h);
         self
+    }
+
+    /// The pairs of samples beside each other across a side, on the grid.
+    pub(crate) fn sides(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
+        self.grid.sides()
     }
 
     /// How much liquid gathers at each sample: the topographic wetness index ln(a / tan β) (Beven and Kirkby 1979), a

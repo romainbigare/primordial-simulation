@@ -156,8 +156,8 @@ a lot part by part at places keyed by its id and each part's index, and is not r
 | `energy` | J | heat and chemical energy in the world |
 | `min<q>_land`, `min<q>_sea` | kg/m² | mineral q in the ground of land and of the sea floor |
 | `min<q>_dead_land`, `min<q>_dead_sea`, `min<q>_bodies`, `min<q>_cover`, `min<q>_parts`, `min<q>_deep` | 10⁹ mol | mineral q in dead matter on land and sea, in bodies, in the cover, in parts (walls and what they hold), in the bed's stores |
-| `t_ground`, `t_air` | K | mean ground and air temperature (by area) |
-| `t_land`, `t_land_summer`, `t_land_winter` | K | the land's ground: the mean of the year's months, the warmest month and the coldest |
+| `t_ground`, `t_air` | K | mean ground and air temperature (by area; of a cell of parts its land's and its liquid's top's mean by area, `World::t_surface_last`) |
+| `t_land`, `t_land_summer`, `t_land_winter` | K | the land's ground as life feels it (of a cell of parts its land, `World::t_ground_last`): the mean of the year's months, the warmest month and the coldest |
 | `absorber` | | mean absorption of the heat-absorbing gases |
 | `air_<k>` | | mole fraction of heat-absorbing gas k in the air |
 | `ice_frac` | | share of the area under ice |

@@ -180,7 +180,7 @@ pub fn potential_of(w: &World, cells: &[usize], air: usize) -> f64 {
 /// The liquid of each ground cell now as `potential` stacks it (`stack::Column`), by Flow's state of the ground.
 pub(super) fn columns(w: &World, s: &Scratch) -> Vec<Column> {
     let same = Same::of(s);
-    crate::par::map_n(w.mesh.cells().n(), crate::par::UNCOUNTED, |i| Column::of(w, &layers_of(w, s, &same, i, (|_, _| 0.0, 0.0)), i))
+    crate::par::map_n(w.mesh.cells().n(), crate::par::UNCOUNTED, |i| Column::of(w, s, &layers_of(w, s, &same, i, (|_, _| 0.0, 0.0)), i))
 }
 
 /// The mean head of the cells of air node `j`, m, where its matter lies (`potential`), by the phases of `s`.

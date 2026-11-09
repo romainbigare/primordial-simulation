@@ -364,7 +364,11 @@ refines at each month's start (`World::refine`) under a budget of 1500 cells and
 street; its bodies step every 2.8 hours), so the world steps slower by itself while fine cells are in view.
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.
-**One ground temperature**: every law and the tape read that of Flow's last step (`World::t_ground_last`).
+**One ground temperature**: every law and the tape read that of Flow's last step: life (bodies, the cover, parts) its
+land's (`World::t_ground_last`, of a cell of parts its land, on which no liquid stands, or its liquid's top where it has
+no land, 1.1), Change and the
+potential energy the node's (its heat over its heat capacity, `FlowView`), the
+tape the surface's mean by area (`World::t_surface_last`).
 **Checks before a run**: `Config::validate`, `Chemistry::validate` (every reaction keeps its elements and mass).
 
 **The books.** Every move takes from one node exactly what it gives another, with its heat; `store::apply` and the
@@ -372,7 +376,7 @@ bookings of the bodies' moves and of Change's rows (`store::book_by_array`, whic
 Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`). **Potential
 energy** is one function of what the nodes hold (`flow::potential`): a ground cell is a stack from its base up, its bed
 and its solids each at its middle, its liquid with what is dissolved in it as Flow holds it (1.2, `stack::Column`): in
-the pores of its loose solids first, a table rising from the bed's top, and the rest standing over the cell's own
+the pores of its loose solids first (of a cell of parts, less the room its land's pores have left, 1.1), a table rising from the bed's top, and the rest standing over the cell's own
 ground (its level-volume curve) at its centroid; its store `bed_depth` under its bed's top, filled from the bottom; an
 air node's matter lies at the mean head of its cells (their solid surface and liquid as a column, as Flow's state
 stacks them), for the height of a column above its ground is in its heat (its heat capacity at constant pressure holds
@@ -427,6 +431,53 @@ when its solid surface is above 0 m (`World::is_land`). The top `skin_m` trades 
 sideways yearly by one explicit `solve::sweep`, a link passing the harmonic mean of conductivity × thickness, times
 width over length (Patankar 1980; `flow::land::conduct`), between land cells (`flow::on_land`): rock spreads a hot spot one cell in about 70,000 years, so a
 year is far below the explicit limit on cells of kilometres; a cell under 17 m sub-steps (1.8).
+**A cell's parts** (`flow::parts`): the ground of a cell with liquid standing over its pores is a short list of parts
+under one air, each with its own heat and matter: its **land**, where its own ground lies above what stands (liquid
+and soft solid, `Curve::wet` of it), the liquid's **top**, down to `h_mix` under the liquid's level, and its **deep**
+below that (`Curve::volume` under that depth), which holds the ground under the liquid. A dry cell is one node; a cell
+partly under a liquid no deeper than `h_mix` has land and top; a cell all under a liquid deeper than that, top and
+deep; a coast cell over a deep liquid all three. The land and the top face the air, each with its own heat, phases,
+soft cover and reflectance: a mosaic of tiles (Avissar and Pielke 1989; Koster and Suarez 1992); the top is the
+liquid's mixed layer, the deep the liquid under its thermocline (a slab ocean with a deep, Hansen et al. 1984). The
+store holds the cell's one ground node; Flow keeps how its matter and heat lie between the parts (`parts::Parts`,
+saved): the share of the area under the liquid, and of each part its heat and its mol of each substance. A part holds
+its share of the bed's skin (the land its area's, the liquid's bottom the rest) and finds its own melting state,
+layers and surface from what it holds (`parts::solve`, at every build of the state), as a node does: so ice forms on
+the top at its melting point, as soft cover. What other laws move (Change, life, heat sideways, the potential energy's
+falls) is shared between the parts: of each substance by the share of it each holds, of the heat by their heat
+capacities, so a heat all share warms them alike (`moves::reconcile`). What Flow moves of one part it books there: the
+air's step the land's and the top's own exchange (1.4), the liquid laws what they bring to the top and what they take
+by each part's share of the liquid (1.2). The land keeps the liquid its pores hold, its own soil's; what lies over its
+pores runs down to the top with its heat (`moves::settle`). The share under the liquid follows what stands on it: a
+land the liquid covers gives the liquid's bottom all it holds there, a ground the liquid leaves gives the land its
+bed's skin, its solids and the liquid its pores hold, so what stands is the same either way (`moves::strip`). The deep
+holds the liquid that stands deeper than `h_mix` and the top the rest, the liquid that moves between them taking its
+heat at the temperature of the part it leaves; a top over a deep it has not had gives it the ground under the liquid
+and its pores' liquid, a deep that holds no liquid gives the top all it holds (`deep::layer`). **The top and the deep
+swap liquid** once a month, before the basin levels and mixes its tops (`deep::mix`, 1.2): equal volumes of their liquid, each with its heat,
+through the thermocline by eddy diffusion (`thermocline`), over the area of the ground under the deep's level and the
+distance between the two parts' middles, as two volumes that even out exactly as they would alone; and all the way
+where the top is the denser, so the column overturns: the top's main liquid lies nearer the temperature at which it is
+densest (`Substance::dense`; a liquid grows lighter both ways from there) than the deep's. So a top that cools toward
+that temperature sinks and mixes the column, and one that cools past it lies on the deep and freezes. The land and the top pass each other heat at the shore by conduction through their active layers across the
+edge of the ground under the liquid (`Curve::shore`, found at the samples), each from its middle, half its area over
+that edge away, in series (two half cells, as heat conducts sideways between cells): over cells of kilometres this is
+far below what the air gives them, so they meet through the air they share; in a cell of ten metres they even out in
+months. The node's state, which every other law reads, is the parts': its heat capacity theirs, its temperature its
+heat over that apart from their fusion enthalpy, each substance molten by the share of it they hold molten (the one
+with the most fusion enthalpy as its plateau), its pores those under the liquid and what the land's hold, so what
+stands over them is what stands over the liquid's. A cell whose land no longer stands apart (nothing stands, or all
+the cell is under its liquid no deeper than `h_mix`) is one node again; a cell where liquid comes to stand over part of
+its ground, or over all of it deeper than `h_mix`, is made parts at its temperature and phases, the liquid holding all
+that stands over the pores and its area's share of the rest (`parts::create`); its next solve makes its deep. A join
+sums its quarters' parts and its split gives them back (`parts::remap`, by what each held at the join); a split of
+another cell stands its liquid over its quarters' own ground (0), so each quarter starts as one node and is made parts
+at its next build. No part holds less heat than its matter at `T_FLOOR`; the first other that can gives what it lacks.
+**Known limit:** the parts hold one mixture of the substances that move with the liquid, shared by what other laws
+move; a part's own salt (a sea's against its land's rain) is kept apart only as the liquid moves it, and the
+liquid's density is its temperature's alone: what it holds dissolved moves neither its density nor where it is densest
+(a real sea's salt brings that below its freezing point, so a real sea overturns down to it). The top's depth is one
+number; a real mixed layer deepens in winter and thins in summer.
 **Melting plateaus** (`ground::melting`): a node holds the fusion enthalpy of what is molten in it, so it stays at a
 melting point (lowered by solutes, 2.5) until that substance has all frozen or melted. A node whose heat melts or
 freezes all of it within a step stays there only for the share of the step that takes, then goes on from that point,
@@ -464,7 +515,8 @@ what the heat holds molten, as every law and the shell then read it.
   wind and rotation is not modelled, and what levels it crosses the sea at once. **The sea of each air
   block mixes its heat in a month** (`basin::mix_heat`): then its cells off their melting plateaus, with no soft cover
   or cover of bodies and the same phases, each take the block's temperature (their heat apart from the fusion enthalpy
-  each holds, over their heat capacity; their floor's top too, which is part of each cell's ground node).
+  each holds, over their heat capacity; their floor's top too, which is part of each cell's ground node); of a cell
+  of parts (1.1), its liquid's top.
 - **Spill levels**: a priority flood over each cell's lowest ground gives each cell its spill level (Barnes, Lehman and Mulla 2014;
   `downhill::Order`), starting from the sea (from the lowest cell where there is none). Liquid stands below it (or in
   the lowest basin where there is no sea); elsewhere it passes on, counting as no higher than its lowest ground, so it crosses
@@ -503,6 +555,9 @@ what the heat holds molten, as every law and the shell then read it.
   the cell's steepest slope over a hillslope of `hill` into the runoff (`flow::drain`). **None of this runs under the
   sea**: its loose ground lies under it with its pores full, and the bed's store under it is not drained, so no liquid
   sinks there, no pore or store flow reaches or leaves a sea cell, and its store feeds no channel.
+- **A cell of parts** (1.1): what the liquid laws bring to it gathers in its liquid's top; what they take leaves each
+  part by its share of the cell's liquid, at the parts' temperature by the liquid each holds (`parts::to_liquid`,
+  `land::t_now`).
 - **What goes with it**: its share of every liquid and of what is dissolved, with heat. Liquid passing through a node
   keeps its fusion heat whatever the node's phase and leaves at the temperature of the node mixed with what came in
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node
@@ -538,7 +593,11 @@ and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving t
 `flow::air::step`, every `AIR_STEP_DAYS` (15). First the gas of the bodies' nodes comes up into their air nodes. Then each cell's exchange over the step with the air it sees is solved once (the sea under one air
 node as one surface, below), in its own implicit surface balance (Newton's steps about its end temperature, with its melting plateaus, 1.1), at the air of the step's
 start: sunlight, heat radiation, sensible heat with the air touching it and what evaporates from it by its saturation
-deficit (`air::cells::exchange`). Its slopes with the air it sees come from that same balance, on the branch it ended
+deficit (`air::cells::exchange`); of a cell of parts (1.1), what faces the air: its land and its liquid's top each
+solve their own balance, the land under the sun of the cell's slope, the top, which lies level, under the flat sun,
+and the cell answers the air as their sum (`cells::parts_respond`), each booked what its own law gives at the step's
+mean air, the rain on the cell landing on each by its area (`book::parts_moved`); a top with no land beside it answers
+as the cell. Its slopes with the air it sees come from that same balance, on the branch it ended
 on (the implicit function theorem: on a melting plateau with the share of the step it lasts, none at a soft cover's
 cap; the reflectance is taken as fixed, though a soft cover's end reflectance moves with the air), so the exchange is
 one law, linear in the air it sees. The slopes are cut so that, however that air moves in the
@@ -614,8 +673,8 @@ liquid step leaves it and under the air of the last air step's start; the gases 
 start and evaporate in no air step of it): a gas that cannot condense dissolves in the ground's liquid toward Henry's share, through the
 air's film (`evap`) and the liquid's (`dissolve`) in series, freeing its vaporisation enthalpy, and comes out when the
 liquid warms, thins or freezes. The sea under one air node (1.4) takes it up as one liquid, each cell by its share of that
-liquid, and gives it up by what each holds of it. **Known limit:** a liquid's whole depth is one mixed layer, so a deep sea takes up gas
-in months and warms over centuries; a real one is the other way round.
+liquid, and gives it up by what each holds of it. **Known limit:** a liquid takes up gas into all its depth, its deep
+as well as its top (1.1), so a deep sea takes up gas in months; a real one takes centuries.
 
 ### 1.6 Wind
 `flow::air::wind`, `daily`. Eddies (`mix`) even out the air within a day over the distance sqrt(`mix` × day), about

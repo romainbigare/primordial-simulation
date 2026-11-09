@@ -86,17 +86,19 @@ fn lying(w: &mut World, i: usize) {
     testkit::put_kg_m2(w, RICH, i, LYING);
 }
 
-/// The small world with its inland square (`testkit::inland`) amid flat land at its height (`testkit::flat_round`)
-/// unsplit, or that square and the squares around it split two depths (`fine`: cells of 500 m, stepping a quarter of a
+/// The small world with its inland square (`testkit::inland`) amid flat land at its height (`testkit::flat_round`), the
+/// cells the split below flattens flat in both (`testkit::flat_as_split`), unsplit, or that square and the squares around
+/// it split two depths (`fine`: cells of 500 m, stepping a quarter of a
 /// month). Returns the world and the cell a body starts in: the square, or a fine cell of its second row and column.
 fn split(fine: bool) -> (World, usize) {
     let mut w = testkit::small_world();
     let i = testkit::inland(&w);
     let square = w.map.leaves()[i];
-    // Flat inside, as the quarters a flat split makes: the same ground at both sizes.
+    // Flat inside, as the quarters a flat split makes, in both: the same ground at both sizes.
     testkit::flat_round(&mut w, i);
     let near: Vec<usize> = std::iter::once(i).chain(w.mesh.cells().around(i).1.iter().map(|&j| j as usize)).collect();
     let around: Vec<Leaf> = near.iter().map(|&j| w.map.leaves()[j]).filter(|l| l.depth == square.depth).collect();
+    testkit::flat_as_split(&mut w, &around, 2);
     if fine {
         testkit::split_flat(&mut w, &around, 2);
     }
@@ -275,8 +277,8 @@ const LEARN_OFF: f32 = -4.0;
 
 /// A node of `MEMBERS` that only takes and keeps its children in its square, its genes as `set` leaves them, settled
 /// `SETTLE` months on `cover` kg per m² in the inland square of `w` (`testkit::inland`), it and its neighbours made flat
-/// land at its height with its liquid and soil (`testkit::flat_round`), then a year there or in that square split two
-/// depths (`fine`): per month, its members at the month's end, the kg it took of what it uses, the members born and the
+/// land at its height with its liquid and soil (`testkit::flat_round`) and the cells its split flattens flat in both
+/// (`testkit::flat_as_split`), then a year there or in that square split two depths (`fine`): per month, its members at the month's end, the kg it took of what it uses, the members born and the
 /// members that starved (died of a store below its minimum, `LACK`, or of upkeep unpaid, `SPENT`), its mean
 /// temperature by members at the month's end, K; and whether no body left the square (a member's move has a chance near
 /// none, not none).
@@ -295,6 +297,7 @@ fn node_months(fine: bool, mut w: World, cover: f64, set: fn(&mut Body)) -> (Vec
     let b = testkit::node_of(&mut w, b, MEMBERS);
     w.add(b);
     (0..SETTLE).for_each(|_| pcore::step(&mut w));
+    testkit::flat_as_split(&mut w, &[square], 2);
     if fine {
         testkit::split_flat(&mut w, &[square], 2);
     }

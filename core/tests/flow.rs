@@ -74,14 +74,14 @@ fn hot_plateau_cools_but_not_to_the_floor() {
 
 /// A pool with a solute in it freezes lower than a pure one (`Chemistry::melt_in`): 1 mol of solute in a kg of the
 /// liquid lowers its melting point by the textbook 1.86 K, and Flow holds each pool, half frozen, at its own melting
-/// point.
+/// point. Each pool is shallower than the liquid's top layer (`h_mix`), so it is one node (laws.md 1.1).
 #[test]
 fn a_pool_with_a_solute_freezes_lower() {
     let mut w = worldgen::testkit::squares(3, 16, 16);
     let (n, ns, k) = (w.mesh.cells().n(), w.chem.ns(), LIQUID);
     let solute = (0..ns).find(|&j| j != k && w.chem.subs[j].melt < w.chem.subs[k].melt && w.chem.subs[j].boil > 1000.0).expect("a solute");
     let (pure, mixed) = (0, n - 1);
-    let pool = 1e4 * w.mesh.cells().area()[0] / w.chem.molar_volume(k, Phase::Liquid);
+    let pool = 0.5 * w.cfg.phys.h_mix * w.mesh.cells().area()[0] / w.chem.molar_volume(k, Phase::Liquid);
     for i in [pure, mixed] {
         (0..ns).for_each(|x| set_amount(&mut w, Node::ground(i), x, 0.0));
         set_amount(&mut w, Node::ground(i), k, pool);
@@ -198,8 +198,9 @@ fn a_pool_far_over_its_boiling_point_gives_no_more_than_it_holds() {
     assert!(lost <= 1e-9 * e, "{lost:e} J of {e:e} J rounded away");
 }
 
-/// A melting snowpack on a slope (`SNOW_M` of the liquid's solid, half molten): Flow's phases are those of its heat after
-/// the air's step, which melts more of it, and after the liquid's step, whose meltwater runs off down the slope and leaves
+/// A melting snowpack on a slope (`SNOW_M` of the liquid's solid, half molten), on a cell flat inside (so its node is
+/// one, its ground all under its meltwater or none of it, laws.md 1.1): Flow's phases are those of its heat after the
+/// air's step, which melts more of it, and after the liquid's step, whose meltwater runs off down the slope and leaves
 /// the ice (laws.md 1.2): what the world reads as molten and standing is what the heat holds, within the share the heat
 /// of the lifts and falls of the matter booked after moves (its meltwater falls at most from the snow's top to its bed's
 /// top or its lowest ground, the lower: g × molar mass × that fall / fusion enthalpy), and none stands there.
@@ -208,6 +209,7 @@ fn meltwater_runs_off_and_the_snow_keeps_the_share_its_heat_holds() {
     const SNOW_M: f64 = 2.0;
     let mut w = worldgen::testkit::squares(3, 16, 16);
     let (i, _) = pair(&w);
+    worldgen::testkit::flatten(&mut w, i);
     let snow = SNOW_M * w.mesh.cells().area()[i] / w.chem.molar_volume(LIQUID, Phase::Liquid);
     set_amount(&mut w, Node::ground(i), LIQUID, snow);
     let e = w.energy_ground(i, w.melt(LIQUID, i)) - 0.5 * snow * w.chem.subs[LIQUID].lf;
@@ -379,7 +381,7 @@ fn gas_dissolves_and_comes_out_when_warmed() {
 }
 
 /// The pore space of a cell is the porosity times the volume of its loose solids; the liquid in it does not stand:
-/// what the bodies feel as liquid depth (`env_of`, as Flow's state of the world now has it) is only the liquid over it.
+/// what stands on the cell (`flow::means`, as Flow's state of the world now has it) is only the liquid over it.
 #[test]
 fn pore_space_is_the_porosity_times_the_loose_solids() {
     let mut w = worldgen::testkit::squares(3, 16, 16);
@@ -389,7 +391,7 @@ fn pore_space_is_the_porosity_times_the_loose_solids() {
     assert!((pores / area / 0.4 - 1.0).abs() < 0.05, "{} m of pore depth under a metre of loose ground", pores / area);
     let depth = |w: &mut World| {
         pcore::flow::state(w, true);
-        pcore::survey::env_of(w, i)[1]
+        pcore::flow::means(w, &[i]).expect("Flow's state")[0].stands
     };
     assert_eq!(depth(&mut w), 0.0);
     pour(&mut w, i, 0.5 * pores);
@@ -1107,8 +1109,9 @@ fn a_connected_liquid_body_stands_at_one_level() {
 }
 
 /// The low basin of each air block mixes its heat in a month (laws.md 1.2): an island's low basin (one block) with
-/// every other cell warmed by 3 K ends a liquid step at one temperature, within a millikelvin, over most of its cells
-/// (those off their plateaus, with no cover, the same phases). Matter and energy are kept.
+/// every other cell warmed by 3 K ends a liquid step with its surface at one temperature (of a cell of parts its
+/// liquid's top, which mixes, 1.1), within a millikelvin, over most of its cells (those off their plateaus, with no
+/// cover, the same phases). Matter and energy are kept.
 #[test]
 fn a_blocks_low_basin_mixes_its_heat_in_a_month() {
     let mut w = worldgen::testkit::small_world();
@@ -1121,7 +1124,7 @@ fn a_blocks_low_basin_mixes_its_heat_in_a_month() {
     let books = Books::now(&w);
     pcore::flow::liquid(&mut w, LIQUID_STEP);
     books.assert_within(&w, 1e-9, 1e-9);
-    let mut t: Vec<f64> = cells.iter().map(|&i| w.t_ground(i)).collect();
+    let mut t: Vec<f64> = cells.iter().map(|&i| w.t_surface_last(i)).collect();
     t.sort_by(f64::total_cmp);
     let mid = t[t.len() / 2];
     let one = t.iter().filter(|&&x| (x - mid).abs() < 1e-3).count();
@@ -1149,11 +1152,11 @@ fn the_low_basin_under_one_air_node_takes_up_gas_as_one_liquid() {
     let books = Books::now(&w);
     pcore::flow::liquid(&mut w, DT);
     books.assert_within(&w, 1e-9, 1e-9);
-    // Each cell's liquid, mol: what is molten in it and below its boiling point.
+    // Each cell's liquid, mol: what is molten in its node and below its boiling point.
     let liquid: Vec<f64> = under
         .iter()
         .map(|&i| {
-            let (t, plateau) = w.thaw_last(i);
+            let (t, plateau) = w.thaw_node_last(i);
             (0..w.chem.ns()).filter(|&q| t < w.chem.subs[q].boil).map(|q| w.g(q, i) * w.molten(q, i, t, plateau)).sum()
         })
         .collect();
@@ -1429,27 +1432,31 @@ fn frozen(w: &World, i: usize) -> f64 {
     w.g(LIQUID, i) * (1.0 - w.molten(LIQUID, i, t, plateau))
 }
 
-/// Latitudes of the south and north edges of an island with snow in its spring, degrees; the months it runs first, to
-/// late winter; the snow put on the cells, kg/m²; how far they rise toward the south or fall, m per m; and the most
+/// Latitudes between which the two cells lie, with snow in their spring, degrees; those of the south and north edges of
+/// their island, which reaches the low latitudes, so its air brings the cells heat from there; the months it runs first,
+/// to late winter; the snow put on the cells, kg/m²; how far they rise toward the south or fall, m per m; and the most
 /// steps of `DT` that the spring is followed for.
 const SNOW_LAT: [f64; 2] = [50.0, 52.3];
+const SNOW_WORLD_LAT: [f64; 2] = [10.0, 72.3];
 const TO_SPRING: usize = 2;
 const SNOW_KG: f64 = 30.0;
 const FACING: f64 = 0.3;
 const MELT_STEPS: usize = 60;
 
-/// Of two cells alike but for the way they face (the lowest two dry land cells side by side, flat amid flat land at one
-/// height, `testkit::flat_round`), at one latitude under snow at the end of winter, the one that faces the equator
-/// takes more sun (`flow::on_slope`): it loses its snow first and is warmer meanwhile, with no other change. Each faces
-/// each way in turn, so nothing else tells them apart.
+/// Of two cells alike but for the way they face (the lowest two dry land cells side by side between `SNOW_LAT`, flat
+/// amid flat land at one height, `testkit::flat_round`), at one latitude under snow at the end of winter, the one that
+/// faces the equator takes more sun (`flow::on_slope`): it loses its snow first and is warmer meanwhile, with no other
+/// change. Each faces each way in turn, so nothing else tells them apart. Their island reaches the low latitudes
+/// (`SNOW_WORLD_LAT`), as a real place at 50° N gets much of its winter heat from lower latitudes through the air.
 #[test]
 fn a_slope_facing_the_sun_loses_its_snow_first() {
     let (chem, init) = worldgen::chemistry0();
-    let cfg = pcore::Config { lat_south: SNOW_LAT[0], lat_north: SNOW_LAT[1], ..Default::default() };
+    let cfg = pcore::Config { lat_south: SNOW_WORLD_LAT[0], lat_north: SNOW_WORLD_LAT[1], ..Default::default() };
     let mut w0 = worldgen::terrain::build(1, worldgen::terrain::island(16, 16), chem, &init, cfg);
     (0..TO_SPRING).for_each(|_| pcore::step(&mut w0));
     let gw = w0.map.w;
-    let dry = worldgen::testkit::dry_lands(&w0);
+    let lat = |i: usize| w0.mesh.cells().lat()[i];
+    let dry: Vec<usize> = worldgen::testkit::dry_lands(&w0).into_iter().filter(|&i| (SNOW_LAT[0]..SNOW_LAT[1]).contains(&lat(i))).collect();
     // The lowest such pair (flat at the height of the first, `flat_round`): its spring comes first.
     let pairs = dry.iter().copied().filter(|&i| i % gw + 1 < gw && dry.contains(&(i + 1)));
     let a = pairs.min_by(|&x, &y| w0.surface_z(x).total_cmp(&w0.surface_z(y))).expect("two dry land cells side by side");
@@ -1502,4 +1509,31 @@ fn the_lifted_energy_is_what_the_matter_gained() {
     let (gained, lifted) = (pcore::flow::potential(&w).expect("Flow's state") - p0, w.store.lifted() - l0);
     assert!(lifted.abs() > 1e-7 * heat, "the matter moved: {lifted:e} J");
     assert!((gained - lifted).abs() < 1e-6 * lifted.abs(), "gained {gained:e} J, lifted {lifted:e} J");
+}
+
+/// A cell whose own ground lies partly under its liquid is two surfaces under one air, each with its own heat (laws.md
+/// 1.1): on the island of most tests, through the second year, the land part of each cell that stays two parts all year
+/// (its land at another temperature than its node every month) swings between its warmest and its coldest month by more
+/// than the node as a whole, whose heat capacity is mostly its liquid's, far more per m² than the land's skin; and the
+/// books keep.
+#[test]
+fn a_coast_cells_land_swings_more_than_the_cell() {
+    let mut w = worldgen::testkit::small_world();
+    for _ in 0..w.cfg.months_per_year {
+        pcore::step(&mut w);
+    }
+    let (books, n) = (Books::now(&w), w.mesh.cells().n());
+    // Per cell its land's and its node's temperature each month, K.
+    let mut year = Vec::new();
+    for _ in 0..w.cfg.months_per_year {
+        pcore::step(&mut w);
+        year.push((0..n).map(|i| [w.t_ground_last(i), w.thaw_node_last(i).0]).collect::<Vec<[f64; 2]>>());
+    }
+    let two: Vec<usize> = (0..n).filter(|&i| year.iter().all(|m| m[i][0] != m[i][1])).collect();
+    assert!(two.len() >= 3, "cells of two parts all year: {two:?}");
+    let swing = |i: usize, p: usize| year.iter().map(|m| m[i][p]).fold(f64::MIN, f64::max) - year.iter().map(|m| m[i][p]).fold(f64::MAX, f64::min);
+    let mean = |p: usize| two.iter().map(|&i| swing(i, p)).sum::<f64>() / two.len() as f64;
+    let (land, node) = (mean(0), mean(1));
+    assert!(land > node, "the land swings {land:.2} K, the node {node:.2} K, over {} cells", two.len());
+    books.assert_kept(&w, 1e-9);
 }

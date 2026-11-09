@@ -260,6 +260,10 @@ pub struct Physics {
     /// Depth of a channel that carries 1 m³/s, m, and the power of the discharge its depth grows as
     pub channel_depth: f64,
     pub channel_depth_exp: f64,
+    /// Depth of a standing liquid's top layer, which the air mixes (its mixed layer), m
+    pub h_mix: f64,
+    /// Eddy diffusivity through the thermocline under it, m²/s
+    pub thermocline: f64,
 }
 
 /// The mass at which `Physics::c_move` is the cost of moving a kg a metre, kg.
@@ -412,6 +416,8 @@ impl Default for Physics {
             channel_width_exp: 0.5,
             channel_depth: 0.3,
             channel_depth_exp: 0.4,
+            h_mix: 50.0,
+            thermocline: 1e-4,
         }
     }
 }
@@ -447,6 +453,7 @@ impl Config {
         // what it stores over this share).
         require(p.dormancy > 1.0, || format!("dormancy ({}) must be above 1", p.dormancy))?;
         // The bed and the skin of its top are layers of matter: a thickness of zero would give a node no heat capacity.
+        require(p.h_mix > 0.0 && p.thermocline >= 0.0, || format!("h_mix ({}) must be above 0 and thermocline ({}) not below", p.h_mix, p.thermocline))?;
         require(self.skin_m > 0.0 && p.bed_depth > 0.0, || format!("skin_m ({}) and bed_depth ({}) must be above 0", self.skin_m, p.bed_depth))?;
         // A body's surface and the still air at it give its bare conductance (`Body::bare`): both above 0; a coat adds
         // insulation, never less than none.

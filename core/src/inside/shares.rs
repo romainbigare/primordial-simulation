@@ -11,7 +11,8 @@ use crate::Physics;
 const HALVINGS: usize = 128;
 
 /// What a cell holds as the shares read it, as depths over the cell, m (`flow::means`): the liquid in its pores, the
-/// liquid its pores hold when full, and the liquid that stands over them.
+/// liquid its pores hold before liquid stands (when full; of a cell of parts less the room its land's pores have left,
+/// laws.md 1.1), and the liquid that stands over them.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Means {
     pub pore: f64,

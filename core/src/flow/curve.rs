@@ -31,17 +31,21 @@ fn level_sorted(floors: &[(f64, f64)], vol: f64) -> f64 {
 }
 
 /// The level-volume curve of a cell's ground: each sample's departure from the cell's mean surface, lowest first, m,
-/// with its area, m² (their mean departure by area is none); and the scale of the terrain it stands.
+/// with its area, m² (their mean departure by area is none); and the scale of the terrain it stands. And where its
+/// samples meet: the departures of each two beside each other across a side, m, and a sample's mean side, m, so the
+/// edge of the ground under a level is found at the samples (`shore`).
 #[derive(Clone, Debug, Default)]
 pub(super) struct Curve {
     floors: Vec<(f64, f64)>,
     scale: f64,
+    sides: Vec<(f32, f32)>,
+    side: f64,
 }
 
 impl Curve {
     /// A flat ground of `area` m², standing no terrain (one floor, so its levels are the flat column's exactly).
     pub(super) fn flat(area: f64) -> Curve {
-        Curve { floors: vec![(0.0, area)], scale: 0.0 }
+        Curve { floors: vec![(0.0, area)], scale: 0.0, sides: Vec::new(), side: area.sqrt() }
     }
     /// The departure of the cell's lowest ground from its mean surface, m: where its liquid leaves it.
     pub(super) fn low(&self) -> f64 {
@@ -66,6 +70,12 @@ impl Curve {
         }
         let x = self.level(v);
         self.floors.iter().take_while(|f| f.0 < x).map(|f| f.1).sum::<f64>() / self.area()
+    }
+    /// The length of the edge of the ground under the level at which `v` m³ stand, m: a sample's side for each two
+    /// samples beside each other of which one lies under it.
+    pub(super) fn shore(&self, v: f64) -> f64 {
+        let x = self.level(v);
+        self.side * self.sides.iter().filter(|&&(a, b)| ((a as f64) < x) != ((b as f64) < x)).count() as f64
     }
     /// The first moment of the volume under the level `x` over the cell's mean surface about that surface, m⁴: Σ area ×
     /// (x - floor) × (x + floor) / 2 over the floors under it, so its centroid lies `moment / volume` over the surface.
@@ -94,8 +104,9 @@ pub(super) fn at_scale(w: &World, i: usize, scale: f64) -> Curve {
     let g = w.ground_in(w.map.leaves()[i]);
     let mean = g.mean(&g.h);
     let mut floors: Vec<(f64, f64)> = g.h.iter().zip(&g.area).map(|(h, a)| (scale * (h - mean), a * area)).collect();
+    let sides = g.sides().map(|(p, q)| ((scale * (g.h[p] - mean)) as f32, (scale * (g.h[q] - mean)) as f32)).collect();
     floors.sort_unstable_by(|p, q| p.0.total_cmp(&q.0));
-    Curve { floors, scale }
+    Curve { side: (area / floors.len() as f64).sqrt(), floors, scale, sides }
 }
 
 /// The curve of cell `i`: that of `s` where it has them, else found (`of`).

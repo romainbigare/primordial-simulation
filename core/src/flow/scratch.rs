@@ -125,6 +125,9 @@ pub(super) struct State {
     pub(super) gas: Vec<usize>,
     /// Bonded ground of each ground node.
     pub(super) bed: Vec<Bed>,
+    /// Of each ground node whose own ground lies partly under its liquid, how its matter and heat lie between its land
+    /// and its liquid (`parts::Parts`); none for a node that is one.
+    pub(super) parts: Vec<Option<super::parts::Parts>>,
 }
 
 /// Working memory of the law: its saved state (`State`) and caches, rebuilt at each liquid step and when missing
@@ -208,6 +211,8 @@ pub struct Scratch {
     /// remaps (`curve::build`).
     pub(super) curves: Vec<super::curve::Curve>,
     pub(super) kept: super::curve::Kept,
+    /// Of each mixed ground node, its parts as its last solve found them (`parts::Mixed`).
+    pub(super) mixed: Vec<Option<Box<super::parts::Mixed>>>,
 }
 
 /// Only the state is saved (`Scratch`).
@@ -320,6 +325,7 @@ pub(super) fn room(w: &World, s: &mut Scratch) {
         *v = vec![0.0; na];
     }
     s.cover = vec![[0.0; 3]; n];
+    s.mixed = vec![None; n];
 }
 
 /// The numbers of each substance Flow reads often (`Sp`).

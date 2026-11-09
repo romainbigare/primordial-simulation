@@ -253,12 +253,13 @@ fn split_cells_stand_on_the_terrain() {
     assert!(most(&start) < UNEVEN_M && most(&kids) < UNEVEN_M, "the cells stand on the terrain");
 }
 
-/// The liquid of cell `i` as a depth over its area, m, and the depth its pores hold, m (the volume of its loose solids
-/// times `porosity`).
+/// The liquid of cell `i` as a depth over its area, m, and the depth its pores hold before its liquid stands, m (the
+/// volume of its loose solids times `porosity`, less what the pores of a mixed cell's land keep dry, laws.md 1.1:
+/// `flow::means`).
 fn liquid_and_pores(w: &World, i: usize) -> (f64, f64) {
     let (t, area) = (w.t_ground(i), w.mesh.cells().area()[i]);
     let liquid: f64 = (0..w.chem.ns()).filter(|&k| w.chem.phase(k, t) == Phase::Liquid).map(|k| w.g(k, i) * w.chem.molar_volume(k, Phase::Liquid)).sum();
-    (liquid / area, w.cfg.phys.porosity * testkit::loose_volume(w, i) / area)
+    (liquid / area, pcore::flow::means(w, &[i]).expect("Flow's state")[0].pores)
 }
 
 /// A split of the cell under 0 m of the most relief puts its liquid where it would stand on its quarters' own ground:
@@ -627,6 +628,9 @@ const STORE_SHARE: f64 = 1e-2;
 /// one that fills turns back what infiltrates, at a time its uneven filling sets, so the ground and what rises would
 /// take on the store's difference.
 const STORE_ROOM: f64 = 0.95;
+/// The share of their room the stores under the plateau hold when the block splits: room for more than a year's
+/// infiltration (0.73 of it under the wettest cell of the block, measured).
+const STORE_START: f64 = 0.1;
 
 /// The dry land cell of `w` that lies lowest: a plateau at its height takes the least rain (the air rises least over
 /// it), so the stores under it keep room through the test.
@@ -637,8 +641,9 @@ fn lowest_dry(w: &World) -> usize {
 /// The climate does not depend on the size of the cells where nothing in them differs (spec 5.2): on the small island
 /// with all its land one even plateau (each land cell holding per m² what the lowest dry land does in its ground, its
 /// bed and the store under it, `testkit::even_land`, with no relief inside it), made even again after a year (its runoff fed some squares'
-/// stores more than others, a difference a finer grid resolves better, so the plateau would not be even below ground), a
-/// block of 2 x 2 squares in its middle split two depths (into cells of 500 m, those beside it into cells of 1 km) keeps,
+/// stores more than others, a difference a finer grid resolves better, so the plateau would not be even below ground),
+/// its stores then at `STORE_START` of their room (the scene's condition that none fills: a wet first year would leave
+/// them fuller, `testkit::fill_store`), a block of 2 x 2 squares in its middle split two depths (into cells of 500 m, those beside it into cells of 1 km) keeps,
 /// after a year, the climate (`climate`) of the block and of the island within `EVEN_SHARE` of each number
 /// (`STORE_SHARE` for the store), while no store under the block fills (`STORE_ROOM`).
 #[test]
@@ -651,6 +656,7 @@ fn an_even_region_split_two_depths_keeps_its_climate() {
     (0..EVEN_MONTHS).for_each(|_| pcore::step(&mut w));
     // A year's runoff across the plateau feeds some squares' stores more than others; made even again, below ground too.
     testkit::even_land(&mut w, like);
+    land.iter().for_each(|&i| testkit::fill_store(&mut w, i, STORE_START));
     w.drain_events();
     // The block of 2 x 2 squares at the middle of the map, aligned to its size.
     let side = 2 * leaf(&w, 0).side();
@@ -691,8 +697,9 @@ const COAST_RAIN: f64 = 2e-3;
 /// its first `COAST_SQUARES` coastal squares (land with a cell under 0 m across a side) in its west half split two
 /// depths after a year into flat quarters (every cell of both runs flat inside, `testkit::flatten`: the laws at two
 /// sizes, not a finer terrain), runs
-/// `COAST_YEARS` years beside the unsplit island; the ground temperature of the land and of the region, and the rain,
-/// stay within `COAST_LAND_K`, `COAST_REGION_K` and `COAST_RAIN`, and the books close.
+/// `COAST_YEARS` years beside the unsplit island; the ground temperature of the land and of the region, the means of the
+/// last year's months (one month is a phase of the season), and the rain, stay within `COAST_LAND_K`, `COAST_REGION_K`
+/// and `COAST_RAIN`, and the books close.
 #[test]
 #[ignore = "slow: two 10-year runs of the 22 x 22 island"]
 fn the_split_coast_keeps_its_climate() {
@@ -707,17 +714,25 @@ fn the_split_coast_keeps_its_climate() {
     (0..w.mesh.cells().n()).for_each(|i| testkit::flatten(&mut w, i));
     let mut fine = split_down(w.clone(), &region, 2);
     let books = Books::now(&fine);
-    for _ in 0..COAST_YEARS * w.cfg.months_per_year as usize {
+    let (land, near): (Pick, Pick) = (&|w, i| w.is_land(i), &|w, i| inside(&region, &leaf(w, i)));
+    let months = w.cfg.months_per_year as usize;
+    // The ground temperature of the land and of the region in each run, the mean of the last year's months, K.
+    let mut year = [0.0; 4];
+    for m in 0..COAST_YEARS * months {
         pcore::step(&mut w);
         pcore::step(&mut fine);
         w.drain_events();
         fine.drain_events();
+        if m >= (COAST_YEARS - 1) * months {
+            let t = [(&w, land), (&fine, land), (&w, near), (&fine, near)].map(|(w, pick)| climate(w, pick)[0] / months as f64);
+            year.iter_mut().zip(t).for_each(|(y, x)| *y += x);
+        }
     }
-    let (land, near): (Pick, Pick) = (&|w, i| w.is_land(i), &|w, i| inside(&region, &leaf(w, i)));
-    let [a, b, ra, rb, all_a, all_b] = [(&w, land), (&fine, land), (&w, near), (&fine, near), (&w, &|_, _| true), (&fine, &|_, _| true)].map(|(w, pick)| climate(w, pick));
-    println!("land {:+.4} K, the region {:+.4} K, rain {:+.3e}, the region's store {:+.3e} and what rises {:+.3e}", b[0] - a[0], rb[0] - ra[0], all_b[3] / all_a[3] - 1.0, rb[STORE] / ra[STORE] - 1.0, rb[4] / ra[4] - 1.0);
-    assert!((b[0] - a[0]).abs() < COAST_LAND_K, "the land's ground {} K against {} K", b[0], a[0]);
-    assert!((rb[0] - ra[0]).abs() < COAST_REGION_K, "the region's ground {} K against {} K", rb[0], ra[0]);
+    let [ra, rb, all_a, all_b] = [(&w, near), (&fine, near), (&w, &|_, _| true), (&fine, &|_, _| true)].map(|(w, pick): (&World, Pick)| climate(w, pick));
+    let [a, b, ya, yb] = year;
+    println!("land {:+.4} K, the region {:+.4} K, rain {:+.3e}, the region's store {:+.3e} and what rises {:+.3e}", b - a, yb - ya, all_b[3] / all_a[3] - 1.0, rb[STORE] / ra[STORE] - 1.0, rb[4] / ra[4] - 1.0);
+    assert!((b - a).abs() < COAST_LAND_K, "the land's ground {b} K against {a} K");
+    assert!((yb - ya).abs() < COAST_REGION_K, "the region's ground {yb} K against {ya} K");
     assert!((all_b[3] / all_a[3] - 1.0).abs() < COAST_RAIN, "rain {} against {}", all_b[3], all_a[3]);
     books.assert_kept(&fine, check::DRIFT);
 }
