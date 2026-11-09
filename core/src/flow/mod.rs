@@ -23,7 +23,7 @@ pub(crate) use air::air_temp;
 pub use air::{column, declination, glow, insolation, on_slope, scale_height, sun_by_latitude};
 pub use potential::total as potential;
 pub use channel::Channel;
-pub use curve::level_of;
+pub(crate) use curve::level_of;
 pub use inside::{levels, lowest, means, volume_under};
 pub(crate) use inside::share_ground;
 pub use potential::potential_of;

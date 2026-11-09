@@ -2,12 +2,12 @@
 //! the level of the liquid its own cell holds standing, the channels its liquid runs in (`channels`), and every layer.
 //! It reads the world only.
 //!
-//! The ground of a pixel is the terrain itself, drained (`heights`): the same samples whose means the cells' heights are
-//! and over whose shape each cell's liquid stands (`flow::curve`), and finer than the samples their midpoint
-//! continuation. So it has no steps at the cells' edges and depends neither on the window nor on the cells. Each cell's
-//! standing liquid fills that ground inside the cell from its lowest point up (`levels`): a pixel is under liquid where
-//! the ground drawn lies below its cell's level, so a shore lies where the ground rises, inside the cells. The layers
-//! are the cells' values, each a smooth field of them (`pyramid`).
+//! The ground of a pixel is the terrain itself, drained (`heights`): the same ground whose means the cells' heights are
+//! and over whose shape each cell's liquid stands (`flow::curve`), finer than the samples too (`space::below`). So it
+//! has no steps at the cells' edges and depends neither on the window nor on the cells. Each cell's standing liquid
+//! stands at the core's own level (`levels`): a pixel is under liquid where the ground drawn lies below its cell's
+//! level, so a shore lies where the ground rises, inside the cells, and a body of liquid at one level is flat. The
+//! layers are the cells' values, each a smooth field of them (`pyramid`).
 
 mod channels;
 mod heights;
@@ -18,7 +18,6 @@ pub use heights::Samples;
 
 use crate::layers::{cover_melt, quantise, Ctx, LAYERS};
 use pcore::inside::Means;
-use pcore::space::tree::DEPTH_MOST;
 use pcore::World;
 use pyramid::{Pixels, Pyramid};
 
@@ -42,25 +41,24 @@ impl Shown {
     }
 }
 
-/// A cell's level is found on its leaves no more than this many depths below it (128 x 128 of them): finer, the ground
-/// drawn departs from them by so little that the liquid drawn still holds the cell's to a few parts in a thousand.
-const LEVEL_DEPTHS_MOST: u8 = 7;
-
-/// The level of the liquid each cell a window of pixels of `depth` shows holds standing over its pores, m, NaN for one
-/// that holds none (`Means::stands`): over the ground drawn inside the cell (`Samples::floors`) at the pixels' grain
-/// (no finer than `LEVEL_DEPTHS_MOST` below the cell), the level that holds that liquid when it fills the lowest ground
-/// first (`flow::level_of`), as the core's level does over the cell's own ground (`flow::levels`). So the liquid drawn
-/// holds the cell's at any zoom, it stands in the lowest ground drawn and not in every small pit finer than the ground
-/// it is found on, and its shore moves with the level, from a puddle in the cell's lowest point on.
-fn levels(w: &World, s: &mut Samples, shown: &Shown, depth: u8) -> Vec<f64> {
-    (shown.cells.iter().zip(&shown.means))
-        .map(|(&i, m)| {
+/// The level of the liquid each cell a window shows holds standing over its pores, m, NaN for one that holds none
+/// (`Means::stands`): the core's own level over the cell's own ground (`flow::levels`), the one its liquid moves by,
+/// laid on the ground drawn: as high over the terrain's mean in the cell as the core's stands over the cell's surface
+/// (its lowest ground less the curve's lowest departure, `Ground` at the cell's `relief_scale`). So the liquid drawn
+/// over the cell's own samples holds its own, a body of liquid at one level draws flat across its cells (to the
+/// centimetres by which wear and settling moved their surfaces off the terrain), and its shore lies where the ground
+/// drawn rises above it.
+fn levels(w: &World, s: &mut Samples, shown: &Shown) -> Vec<f64> {
+    let level = pcore::flow::levels(w, &shown.cells).unwrap_or_else(|| vec![[f64::NAN; 2]; shown.cells.len()]);
+    (shown.cells.iter().zip(&shown.means).zip(level))
+        .map(|((&i, m), [lowest, top])| {
             if m.stands <= 0.0 {
                 return f64::NAN;
             }
-            let leaf = w.map.leaves()[i];
-            let grain = depth.clamp(leaf.depth, leaf.depth + LEVEL_DEPTHS_MOST).min(DEPTH_MOST);
-            pcore::flow::level_of(&mut s.floors(w, leaf, grain), m.stands)
+            let g = s.ground(w, w.map.leaves()[i]);
+            let mean = g.mean(&g.h);
+            let low = g.h.iter().copied().fold(f64::INFINITY, f64::min) - mean;
+            top - (lowest - w.relief_scale[i] * low) + mean
         })
         .collect()
 }
@@ -68,7 +66,7 @@ fn levels(w: &World, s: &mut Samples, shown: &Shown, depth: u8) -> Vec<f64> {
 /// A window of the map finer than its cells: the window from column `x` and row `y`, `wide` x `high` squares, on its
 /// edges' leaves of `depth` (no shallower than a square), a pixel each. Little-endian, in order: the melting point of the
 /// frozen cover, K (f32); of each pixel row by row the height of the ground, the terrain's (`heights`), m (f32), the level
-/// of the liquid its own cell holds standing (f32: `levels`; NaN where it holds none), so the shore drawn is where the
+/// of the liquid its own cell holds standing, the core's (f32: `levels`; NaN where it holds none), so the shore drawn is where the
 /// ground drawn rises above it, the share of the pixel a channel covers, 0..1, and that channel's depth, m (two f32:
 /// `channels`); then every layer in table order, a byte a pixel, the field of the cells' bytes
 /// (`pyramid`), the ground's temperature along the ground's height over its cell's mean at the rate the air cools with
@@ -93,7 +91,7 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
     out.extend((cover_melt(w) as f32).to_le_bytes());
     let (tree, at) = (w.mesh.tree(), |p: usize| (((gx + (p % across) as i64) as f64 + 0.5) / per, ((gy + (p / across) as i64) as f64 + 0.5) / per));
     let shown = Shown::of(w, (0..pixels).map(at).map(|(px, py)| tree.cell_at(w.map.point_at(px, py))).collect());
-    let level = levels(w, samples, &shown, depth);
+    let level = levels(w, samples, &shown);
     let water = shown.number.iter().map(|&k| level[k as usize]);
     let (share, deep) = channels::channels(w, &w.drained(), ([gx, gy], [across, down], depth));
     out.extend(ground.iter().map(|&g| g as f32).chain(water.map(|v| v as f32)).chain(share).chain(deep).flat_map(|v| v.to_le_bytes()));

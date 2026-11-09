@@ -23,16 +23,6 @@ impl Samples {
     pub(super) fn mean_of(&mut self, w: &World, l: Leaf) -> f64 {
         *self.means.entry(l).or_insert_with(|| w.terrain.inside(w.terrain.seed, &w.map, l, (w.cfg.lat_south, w.cfg.lat_north)).0)
     }
-    /// The floors of leaf `l` at `depth` (no shallower): the terrain's height at each of its leaves of that depth, m,
-    /// and its share of the leaf's area.
-    pub(super) fn floors(&mut self, w: &World, l: Leaf, depth: u8) -> Vec<(f64, f64)> {
-        let k = 1i64 << (depth - l.depth);
-        let (x, y) = ((l.x / l.side()) as i64 * k, (l.y / l.side()) as i64 * k);
-        let h = window(w, [x, y, x + k - 1, y + k - 1], depth);
-        let row: Vec<f64> = (y..y + k).map(|r| w.map.place_of(&leaf(depth, x, r), w.cfg.lat_south, w.cfg.lat_north).0).collect();
-        let whole = k as f64 * row.iter().sum::<f64>();
-        h.iter().enumerate().map(|(p, &z)| (z, row[p / k as usize] / whole)).collect()
-    }
     /// The ground inside leaf `l` (`World::ground_in`, kept once found).
     pub(super) fn ground(&mut self, w: &World, l: Leaf) -> &Ground {
         self.grounds.entry(l).or_insert_with(|| w.ground_in(l))
