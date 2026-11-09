@@ -244,12 +244,10 @@ fn apart(w: &World, i: usize, j: usize) -> f64 {
     o[0].hypot(o[1])
 }
 
-/// What a body sees and where its children land reach as far in metres from a cell of 500 m as from a square of 2 km:
-/// the features a body of sight 2 to `SIGHTS` sees of a fine cell are those of the square that holds it, within
-/// `SEEN_OFF`; the children who leave a node there land `spread_m` away (2 km across a side, its √2 times across a
-/// corner), four fine cells or one square on.
+/// What a body sees reaches as far in metres from a cell of 500 m as from a square of 2 km: the features a body of
+/// sight 2 to `SIGHTS` sees of a fine cell are those of the square that holds it, within `SEEN_OFF`.
 #[test]
-fn sight_and_children_reach_as_far_from_a_fine_cell() {
+fn sight_reaches_as_far_from_a_fine_cell() {
     // (Seen just after the split, surveyed, before the liquid of the fine cells finds its own ways.)
     let [(coarse, i), (fine, j)] = [false, true].map(|f| {
         let (mut w, i) = split(f);
@@ -260,22 +258,6 @@ fn sight_and_children_reach_as_far_from_a_fine_cell() {
         let (a, b) = (coarse.life.feat(i, sight), fine.life.feat(j, sight));
         let off = a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0, f32::max);
         assert!(off < SEEN_OFF, "sight {sight}: {b:?} from the fine cell against {a:?} from the square");
-    }
-    for (mut w, i) in [false, true].map(|f| scene(f, lying)) {
-        w.cfg.phys.c_copy = 1e18;
-        let one = testkit::eater(&mut w, i, brain::REST, 1.0);
-        let mut n = testkit::node_of(&mut w, one, 5.0);
-        n.genes[DISPERSE] = 1.0;
-        testkit::brood(&w, &mut n, 4.0);
-        let (s, mut n) = testkit::out(&mut w, n);
-        assert!(w.in_cell(i, |w, d| testkit::copy(w, d, &mut n)), "the node makes children");
-        let id = n.id;
-        w.life[s] = n;
-        pcore::life::land(&mut w);
-        let kids = testkit::children(&w, id);
-        let far = |h: &pcore::life::Handle| apart(&w, i, w.life[*h].cell as usize);
-        let side = w.cfg.phys.spread_m;
-        assert!(!kids.is_empty() && kids.iter().all(|h| [side, side * std::f64::consts::SQRT_2].iter().any(|d| (far(h) - d).abs() < 1.0)), "children land {:?} m away", kids.iter().map(far).collect::<Vec<_>>());
     }
 }
 

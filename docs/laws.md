@@ -935,15 +935,16 @@ eat with it at every sub-step after, whatever the step. A child has a body of
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
 dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member
 (`copy::BROOD_HELD`), so its members' broods lie evenly between none and one child, as individuals' do. A share
-`DISPERSE` of the children starts `spread_m` away in a random compass direction (`copy::dispersed`): what disperses
-starts evenly over its cell and moves `spread_m` east or west and north or south as the direction says, so it lands
-evenly over the area of its cell shifted by that step, each cell that area overlaps holding its share by area
-(`Tree::overlaps`; what lies in its own cell or off the map stays): from a 2 km square the square beside it, alike
-over its 16 cells of 500 m if it is split; from a cell of 500 m the cell four on, or the 2 to 4 it overlaps; out of an
-8 km cell across a side a quarter of it. Whole members go together to one of those cells, drawn by its share
-(`copy::landing`), as seeds land in expectation. So they go as far in metres whatever the cells, and the links of a cell (at most 8, so a cell beside finer ones lacks some directions,
-`Square`) do not turn them back; one way for all of a node's children of an update (for an individual, that chance),
-where they land when the batch ends (0). Less than one member with no node to
+`DISPERSE` of the children disperses by the dispersal kernel (`copy::lot`): a lot starts at a point drawn evenly over
+its cell and moves by an offset drawn from a kernel of two scales, a near and a far one (Clark et al. 1999: most within
+tens of metres, a long tail to km). Each scale is an isotropic Gaussian, `Physics::kernel_near` and `kernel_far` m
+wide; the far one is drawn with the share `kernel_far_share`. The lot lands in the cell that holds the point (none: off
+the map, so it stays), so in expectation what lands in a cell is the kernel integrated over it from the source's area,
+at any size of source and target (a cell and its four quarters give the same totals), and a lot costs the same
+whatever the cells. The draws are keyed by stable data, so threads and chunk order change nothing. Each child is one
+lot (`copy::landing`): a node's children that disperse go together to one cell, and from a square of 2 km nearly all
+stay, the far scale sending a small share across a border. One way for all of a node's children of an update (for an
+individual, that chance), where they land when the batch ends (0). Less than one member with no node to
 join waits in the brood, or, landed in a neighbour cell, goes back into it. Children who start a body in their parent's
 cell run the sub-steps after their birth, eating by the take law, and first decide at the cell's next step; those who
 join a young node share its decisions; a litter lands, joins or starts a body (`copy::land_litter`), and its physics
@@ -1076,13 +1077,14 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   most 10^`FIX` mol per kg of living cover per s at the reaction's pace, paid by the reaction's fuel. The fuel past its reserve that
   it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
-- **Seeds**: the share `SEED` of what it builds leaves `spread_m` away in a random compass direction, as children do
-  (`copy::dispersed`, 4.2), shared out by area over the cells it lands on, each share a packet of its own
-  (`seed::send`; what lies in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
+- **Seeds**: the share `SEED` of what it builds leaves in `seed::LOTS` (8) equal lots, each landing where the dispersal
+  kernel draws it, as children do (`copy::lot`, 4.2); the lots of a cell make a packet each (`seed::send`; what lands
+  in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
   not pay: what a kg more would store with the light at the bottom of its layer (`math::shade`) is less than a kg's
   upkeep, so the slot is **full** (`Cover::full`) and stops thickening where its lowest leaves would not pay for
   themselves (Monsi and Saeki 1953; Hirose 2005). When every cell has had its month the seeds land (`cover::land`),
-  cell by cell in the order made: they join the most alike slot of their starting kind in the cell (every gene
+  cell by cell in the order made (the potential energy of the life that left a cell's head and came to it is booked
+  once for each cell and way, `store::life_sent`): they join the most alike slot of their starting kind in the cell (every gene
   within `APART` (0.5) × `alike` steps, `cover::distance`; the genes the mean by built cover; they die if that slot is
   full), else an empty slot, else the lightest slot if they outweigh its built cover (whose cover dies as remains);
   else they die as remains. So a variant farther than that from its kind founds a slot of its own and competes with

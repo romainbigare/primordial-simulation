@@ -13,7 +13,7 @@ pub mod moves;
 pub mod nodes;
 
 pub use apply::{apply, fall_heat};
-pub(crate) use apply::{life_moved, life_went};
+pub(crate) use apply::{life_moved, life_sent, life_went};
 pub(crate) use apply::ROUNDING;
 pub use links::Links;
 pub use batch::Batch;
