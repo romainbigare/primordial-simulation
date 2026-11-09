@@ -12,10 +12,10 @@
 //!
 //! The variance below a sample is what the lean and the displacement draw below it (`sample_variance`). Each leaf
 //! below it holds what its parent held less the variance its quarters' means take about the parent's (`Patch::v`),
-//! shared among them by what each will need (`share`), and no split takes more than its leaf holds (the departures
-//! shrink to fit, where the ground bends more than its sample's neighbours do), so a leaf's spread of heights is exactly
-//! its quarters' and the spread of their means about its own, at every depth. A leaf's height depends on its own place
-//! only, whatever window it is found for.
+//! shared among them by what each will need (`share`), so a leaf's spread of heights is its quarters' and the spread of
+//! their means about its own, at every depth, but where the ground bends more than its sample's neighbours do and its
+//! departures take more than the leaf holds: they are drawn whole (a ground with no steps comes first), and the leaf
+//! holds none below. A leaf's height depends on its own place only, whatever window it is found for.
 
 use super::square::Square;
 use super::terrain::{displace, slope_at, variance_below, Terrain, SAMPLE_DEPTH};
@@ -192,8 +192,8 @@ impl Terrain {
     }
 
     /// The departures of the quarters of the leaf (`px`, `py`) of `p` from its mean (row by row), with their areas, m²,
-    /// and the variance left below them, m²: the lean, shrunk where it alone would take more than the leaf holds, and
-    /// the draws (none along the lean, `across`) of the displacement's variance, no more than the leaf holds besides.
+    /// and the variance left below them, m² (none where they took more than the leaf held): the lean, and the draws (none
+    /// along the lean, `across`) of the displacement's variance.
     fn split(&self, seed: u64, map: &Square, lat: (f64, f64), p: &Patch, (px, py): (i64, i64)) -> ([f64; 4], [f64; 4], f64) {
         let k = p.near(px, py);
         let (g, v, len) = (p.g[k], p.v[k], map.length(p.depth));
@@ -208,9 +208,7 @@ impl Terrain {
         let mean = (0..4).map(|q| area[q] * lean[q]).sum::<f64>() / whole;
         let var = |d: &[f64; 4]| (0..4).map(|q| area[q] * d[q] * d[q]).sum::<f64>() / whole;
         let smooth = lean.map(|l| l - mean);
-        let bent = var(&smooth);
-        let smooth = if bent > v { smooth.map(|x| x * (v / bent).sqrt()) } else { smooth };
-        let want = (slope_at(g, len) * len / 4.0).powi(2).min(v - var(&smooth));
+        let want = (slope_at(g, len) * len / 4.0).powi(2);
         let noise = if map.length(p.depth + 1) >= DETAIL_LEAST_M && want > 0.0 { across(displace(seed, parent, area, 1.0), &smooth, &area, want) } else { [0.0; 4] };
         let d: [f64; 4] = std::array::from_fn(|q| smooth[q] + noise[q]);
         (area, d, (v - var(&d)).max(0.0))
