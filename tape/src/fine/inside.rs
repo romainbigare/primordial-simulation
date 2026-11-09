@@ -6,7 +6,7 @@
 //! its own across the cells that hold it.
 
 use super::heights::leaf;
-use super::keep::Cells;
+use super::keep::{Cells, Mean};
 use super::pyramid::Pyramid;
 use super::Shown;
 use pcore::cover::{Parts, SLOTS};
@@ -28,28 +28,34 @@ impl Window {
     }
 }
 
-/// The liquid in the soil of each pixel, m (as a depth), held to each cell's (`Means::pore`): within none and the
-/// pores full, it departs from a level smooth across the cells by `soil_m` per unit of the wetness index of the
-/// window's ground `ground` (`Grid::wetness_index`), as in TOPMODEL; the level is the core's way of sharing a cell's
-/// liquid over its samples (`inside::Inside`), here over the window's pixels and across the cells' borders.
-fn soil(w: &World, win: &Window, cells: &Cells, shown: &Shown, pyramid: &Pyramid, ground: &[f64]) -> Vec<f64> {
+/// The wetness index of each pixel of the window `win` of ground `ground` (`Grid::wetness_index`): what drains through
+/// it of the window's own area, across the cells' borders, over its slope.
+pub(super) fn wetness_index(w: &World, win: &Window, ground: &[f64]) -> Vec<f64> {
     let rows = win.rows(w);
     let (across, dy) = (win.size[0], w.map.length(win.depth));
     let grid = Grid::new(across, win.size[1], dy, rows.iter().map(|a| a / dy).collect());
     let own: Vec<f64> = (0..ground.len()).map(|p| rows[p / across]).collect();
-    let twi = Grid::wetness_index(&grid.drain(ground, own.clone()), &own, &grid.slope(ground));
+    Grid::wetness_index(&grid.drain(ground, own.clone()), &own, &grid.slope(ground))
+}
+
+/// The liquid in the soil of each pixel, m (as a depth), held to each cell's (`Means::pore`): within none and the
+/// pores full, it departs from a level smooth across the cells by `soil_m` per unit of the window's wetness index
+/// `twi` (`wetness_index`), as in TOPMODEL; the level is the core's way of sharing a cell's liquid over its samples
+/// (`inside::Inside`), here over the window's pixels and across the cells' borders.
+fn soil(w: &World, cells: &Cells, shown: &Shown, pyramid: &Pyramid, twi: &[f64]) -> Vec<f64> {
     let middle = twi.iter().sum::<f64>() / twi.len() as f64;
     let means = pcore::flow::means(w, &(0..w.mesh.cells().n()).collect::<Vec<usize>>()).unwrap_or_default();
     let pores = pyramid.field(&means.iter().map(|m| m.pores).collect::<Vec<f64>>());
     let m = w.cfg.phys.soil_m;
-    let law = |p: usize, u: f64| (u + m * (twi[p] - middle)).clamp(0.0, pores[p].max(0.0));
-    cells.keep(pyramid, &means.iter().map(|m| m.pore).collect::<Vec<f64>>(), &law, &shown.means.iter().map(|m| m.pore).collect::<Vec<f64>>())
+    let level = pyramid.field(&means.iter().map(|m| m.pore).collect::<Vec<f64>>());
+    let start = (0..twi.len()).map(|p| (level[p] + m * (twi[p] - middle)).clamp(0.0, pores[p].max(0.0))).collect();
+    cells.keep(pyramid, start, &shown.means.iter().map(|m| m.pore).collect::<Vec<f64>>(), Mean::Scaled)
 }
 
-/// Of each pixel, how wet its ground is, 0..1 (`Physics::wetness` of the liquid in its soil, `soil`, and of what stands
-/// over it at its cell's level, `level`).
-pub(super) fn wetness(w: &World, win: &Window, cells: &Cells, shown: &Shown, pyramid: &Pyramid, ground: &[f64], level: &[f64]) -> Vec<f64> {
-    let pore = soil(w, win, cells, shown, pyramid, ground);
+/// Of each pixel, how wet its ground `ground` is, 0..1 (`Physics::wetness` of the liquid in its soil, `soil`, by the
+/// window's wetness index `twi`, and of what stands over it at the level `level`).
+pub(super) fn wetness(w: &World, (cells, shown, pyramid): (&Cells, &Shown, &Pyramid), (ground, twi): (&[f64], &[f64]), level: &[f64]) -> Vec<f64> {
+    let pore = soil(w, cells, shown, pyramid, twi);
     let deep = |p: usize| if level[p].is_nan() { 0.0 } else { (level[p] - ground[p]).max(0.0) };
     (0..pore.len()).map(|p| w.cfg.phys.wetness(pore[p] + deep(p))).collect()
 }
@@ -96,9 +102,10 @@ pub(super) fn cover(w: &World, cells: &Cells, shown: &Shown, pyramid: &Pyramid, 
         let any = genes.iter().flatten().next().copied().expect("a kind shown has genes");
         let act: Vec<f64> = (0..pixels).map(|p| pcore::cover::activity(ph, &genes[cells.of()[p] as usize].unwrap_or(any), wet[p])).collect();
         let idle: Vec<bool> = (0..shown.cells.len()).map(|s| cells.mean(s, |p| act[p]) <= 0.0).collect();
-        let law = |p: usize, u: f64| u.max(0.0) * if idle[cells.of()[p] as usize] { 1.0 } else { act[p] };
+        let smooth = pyramid.field(built);
+        let start = (0..pixels).map(|p| smooth[p].max(0.0) * if idle[cells.of()[p] as usize] { 1.0 } else { act[p] }).collect();
         let target: Vec<f64> = shown.cells.iter().map(|&i| built[i]).collect();
-        let field = cells.keep(pyramid, built, &law, &target);
+        let field = cells.keep(pyramid, start, &target, Mean::Scaled);
         for (s, &i) in shown.cells.iter().enumerate() {
             let c = w.life.cover(i);
             let of: f64 = c.held().filter(|&x| c.root[x] == *root).map(|x| c.built(&mm, x)).sum();

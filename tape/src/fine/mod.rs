@@ -4,9 +4,10 @@
 //!
 //! The ground of a pixel is the terrain itself, drained (`heights`): the same ground whose means the cells' heights are
 //! and over whose shape each cell's liquid stands (`flow::curve`), finer than the samples too (`space::below`). So it
-//! has no steps at the cells' edges and depends neither on the window nor on the cells. Each cell's standing liquid
-//! stands at the core's own level (`levels`): a pixel is under liquid where the ground drawn lies below its cell's
-//! level, so a shore lies where the ground rises, inside the cells, and a body of liquid at one level is flat. The
+//! has no steps at the cells' edges and depends neither on the window nor on the cells. The liquid standing in the
+//! cells that hold some stands at the core's own levels, evened over half a cell (`standing`): a pixel is under liquid
+//! where the ground drawn lies below that level, so a shore lies where the ground rises, inside the cells, a body of
+//! liquid at one level is flat, and the levels of a lake's cells meet without a step. The
 //! layers are the cells' values, each a smooth field of them (`pyramid`); what a cell holds that the ground shares
 //! over it (the liquid in its soil, its cover, its ground's warmth and ice) is a field across the cells that holds each
 //! cell's mean (`keep`), shared inside by the general law the core shares it by (`inside`).
@@ -21,6 +22,7 @@ pub use heights::Samples;
 
 use crate::layers::{cover_melt, quantise, Ctx, LAYERS};
 use pcore::inside::Means;
+use pcore::space::tree::DEPTH_MOST;
 use pcore::World;
 use pyramid::{Pixels, Pyramid};
 
@@ -44,32 +46,50 @@ impl Shown {
     }
 }
 
-/// The level of the liquid each cell a window shows holds standing over its pores, m, NaN for one that holds none
-/// (`Means::stands`): the core's own level over the cell's own ground (`flow::levels`), the one its liquid moves by,
-/// laid on the ground drawn: as high over the terrain's mean in the cell as the core's stands over the cell's surface
-/// (its lowest ground less the curve's lowest departure, `Ground` at the cell's `relief_scale`). So the liquid drawn
-/// over the cell's own samples holds its own, a body of liquid at one level draws flat across its cells (to the
-/// centimetres by which wear and settling moved their surfaces off the terrain), and its shore lies where the ground
-/// drawn rises above it.
-fn levels(w: &World, s: &mut Samples, shown: &Shown) -> Vec<f64> {
-    let level = pcore::flow::levels(w, &shown.cells).unwrap_or_else(|| vec![[f64::NAN; 2]; shown.cells.len()]);
-    (shown.cells.iter().zip(&shown.means).zip(level))
-        .map(|((&i, m), [lowest, top])| {
-            if m.stands <= 0.0 {
-                return f64::NAN;
-            }
-            let g = s.ground(w, w.map.leaves()[i]);
-            let mean = g.mean(&g.h);
-            let low = g.h.iter().copied().fold(f64::INFINITY, f64::min) - mean;
-            top - (lowest - w.relief_scale[i] * low) + mean
-        })
-        .collect()
+/// The level of the liquid standing over each pixel of a window `across` pixels wide, leaves of `depth`, m, NaN where
+/// none stands: in the cells that hold liquid standing, the mean of their levels (the core's, `flow::levels`, the
+/// levels its liquid moves by) over the pixels of such
+/// cells within half the pixel's own cell's side along each way (a box, along one way and then the other), where it
+/// lies over the ground drawn `ground`. The core holds the cells of one lake at levels that differ by centimetres to
+/// decimetres, as its liquid's pass leaves them: the surface drawn goes from one to the next over the width of the
+/// cells, not in a step at each border. A body at one level (the sea's) is drawn flat at it.
+fn standing(w: &World, shown: &Shown, ground: &[f64], (across, depth): (usize, u8)) -> Vec<f64> {
+    let own: Vec<f64> = pcore::flow::levels(w, &shown.cells).map_or_else(|| vec![f64::NAN; shown.cells.len()], |l| l.iter().map(|l| l[1]).collect());
+    let n = ground.len();
+    let wet = |p: usize| shown.means[shown.number[p] as usize].stands > 0.0;
+    let reach: Vec<usize> = shown.cells.iter().map(|&i| ((w.map.leaves()[i].side() >> (DEPTH_MOST - depth)) / 2).max(1) as usize).collect();
+    let mut sum: Vec<f64> = (0..n).map(|p| if wet(p) { own[shown.number[p] as usize] } else { 0.0 }).collect();
+    let mut of: Vec<f64> = (0..n).map(|p| if wet(p) { 1.0 } else { 0.0 }).collect();
+    for (step, len) in [(1, across), (across, n / across)] {
+        (sum, of) = (boxed(&sum, step, len, &reach, shown), boxed(&of, step, len, &reach, shown));
+    }
+    (0..n).map(|p| if wet(p) && of[p] > 0.0 && sum[p] / of[p] > ground[p] { sum[p] / of[p] } else { f64::NAN }).collect()
+}
+
+/// `v` summed over a box along one way: each pixel the sum of the pixels within its own cell's `reach` (pixels) before
+/// and after it along lines of `len` pixels, `step` apart in `v` (1 along a row, the width down a column).
+fn boxed(v: &[f64], step: usize, len: usize, reach: &[usize], shown: &Shown) -> Vec<f64> {
+    let mut out = vec![0.0; v.len()];
+    let lines = v.len() / len;
+    let line_of = |l: usize, k: usize| if step == 1 { l * len + k } else { k * step + l };
+    let mut prefix = vec![0.0; len + 1];
+    for l in 0..lines {
+        for k in 0..len {
+            prefix[k + 1] = prefix[k] + v[line_of(l, k)];
+        }
+        for k in 0..len {
+            let p = line_of(l, k);
+            let r = reach[shown.number[p] as usize];
+            out[p] = prefix[(k + r + 1).min(len)] - prefix[k.saturating_sub(r)];
+        }
+    }
+    out
 }
 
 /// A window of the map finer than its cells: the window from column `x` and row `y`, `wide` x `high` squares, on its
 /// edges' leaves of `depth` (no shallower than a square), a pixel each. Little-endian, in order: the melting point of the
 /// frozen cover, K (f32); of each pixel row by row the height of the ground, the terrain's (`heights`), m (f32), the level
-/// of the liquid its own cell holds standing, the core's (f32: `levels`; NaN where it holds none), so the shore drawn is where the
+/// of the liquid standing over it (f32: `standing`; NaN where none stands), so the shore drawn is where the
 /// ground drawn rises above it, the share of the pixel a channel covers, 0..1, and that channel's depth, m (two f32:
 /// `channels`); then every layer in table order, a byte a pixel, the field of the cells' bytes
 /// (`pyramid`), but the ground's temperature and its ice, fields that hold each cell's mean (`keep`), the temperature
@@ -81,8 +101,10 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
     let per = (1u64 << (depth - w.map.square_depth())) as f64;
     let (gx, gy) = ((x * per).round() as i64, (y * per).round() as i64);
     let (across, down) = (((wide * per).round() as usize).max(1), ((high * per).round() as usize).max(1));
-    let ground = heights::window(w, [gx, gy, gx + across as i64 - 1, gy + down as i64 - 1], depth);
     let n = w.mesh.cells().n();
+    let win = inside::Window { at: [gx, gy], size: [across, down], depth };
+    let (ground, twi) = samples.ground(w, &win);
+    let (ground, twi) = (ground.to_vec(), twi.to_vec());
     let pyramid = Pyramid::new(w, Pixels { x: gx, y: gy, across, down, depth });
     let c = Ctx::new(w);
     let f = &c.f;
@@ -90,31 +112,30 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
     let terrain = pyramid.field(&(0..n).map(|i| samples.mean_of(w, w.map.leaves()[i])).collect::<Vec<f64>>());
     let cools = pyramid.field(&(0..n).map(|i| w.air_drop(i).unwrap_or(0.0)).collect::<Vec<f64>>());
     let pixels = across * down;
-    let win = inside::Window { at: [gx, gy], size: [across, down], depth };
     let mut out = Vec::with_capacity(4 + pixels * (16 + LAYERS.len()));
     out.extend((cover_melt(w) as f32).to_le_bytes());
     let (tree, at) = (w.mesh.tree(), |p: usize| (((gx + (p % across) as i64) as f64 + 0.5) / per, ((gy + (p / across) as i64) as f64 + 0.5) / per));
     let shown = Shown::of(w, (0..pixels).map(at).map(|(px, py)| tree.cell_at(w.map.point_at(px, py))).collect());
     let cells = keep::Cells::new(across, down, (&shown.number, &shown.cells, n), &win.rows(w));
-    let level: Vec<f64> = {
-        let of = levels(w, samples, &shown);
-        shown.number.iter().map(|&k| of[k as usize]).collect()
-    };
+    let level = standing(w, &shown, &ground, (across, depth));
     let water = level.iter().copied();
     let (share, deep) = channels::channels(w, &w.drained(), ([gx, gy], [across, down], depth));
     out.extend(ground.iter().map(|&g| g as f32).chain(water.map(|v| v as f32)).chain(share).chain(deep).flat_map(|v| v.to_le_bytes()));
-    let held = |v: &[f64], law: &dyn Fn(usize, f64) -> f64| cells.keep(&pyramid, v, &law, &shown.cells.iter().map(|&i| v[i]).collect::<Vec<f64>>());
+    let held = |v: &[f64], law: &dyn Fn(usize, f64) -> f64, how: keep::Mean| {
+        let smooth = pyramid.field(v);
+        cells.keep(&pyramid, (0..pixels).map(|p| law(p, smooth[p])).collect(), &shown.cells.iter().map(|&i| v[i]).collect::<Vec<f64>>(), how)
+    };
     for l in LAYERS.iter() {
         let plane: Vec<u8> = if l.name == "t_ground" {
-            held(&f.t, &|p, u| u - cools[p] * (ground[p] - terrain[p])).iter().map(|&t| quantise(l, t)).collect()
+            held(&f.t, &|p, u| u - cools[p] * (ground[p] - terrain[p]), keep::Mean::Shifted).iter().map(|&t| quantise(l, t)).collect()
         } else if l.name == "ice" {
-            held(&f.ice, &|_, u| u.max(0.0)).iter().map(|&v| quantise(l, v)).collect()
+            held(&f.ice, &|_, u| u.max(0.0), keep::Mean::Scaled).iter().map(|&v| quantise(l, v)).collect()
         } else {
             pyramid.field(&(0..n).map(|i| quantise(l, (l.val)(&c, i)) as f64).collect::<Vec<f64>>()).iter().map(|v| v.round().clamp(0.0, 255.0) as u8).collect()
         };
         out.extend(plane);
     }
-    let wet = inside::wetness(w, &win, &cells, &shown, &pyramid, &ground, &level);
+    let wet = inside::wetness(w, (&cells, &shown, &pyramid), (&ground, &twi), &level);
     inside::extend(&mut out, w, (&cells, &shown, &pyramid), &wet);
     out
 }
