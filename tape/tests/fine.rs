@@ -96,8 +96,8 @@ fn the_fine_ground_is_the_terrain_whatever_the_cells_and_the_window() {
     }
 }
 
-/// The liquid drawn stands over the terrain the cells stand on, only in the cells that hold liquid standing, at their
-/// levels evened over half a cell (`standing`): over the window's cells it holds their own together, a body at one
+/// The liquid drawn stands over the terrain the cells stand on, only within half a cell of the cells that hold liquid
+/// standing, at their levels evened over half a cell (`standing`): over the window's cells it holds their own together, a body at one
 /// level is drawn flat, and shores lie inside cells.
 #[test]
 fn the_liquid_drawn_stands_at_the_cells_levels_over_their_own_ground() {
@@ -125,7 +125,13 @@ fn the_liquid_drawn_stands_at_the_cells_levels_over_their_own_ground() {
         let (g, depth, under) = &mut drawn[k];
         let s = (p / across % per) * per + p % across % per;
         assert!((got.ground[p] as f64 - g.h[s]).abs() < 1e-3, "the ground drawn is the terrain the cell's liquid stands on: {} m against {} m", got.ground[p], g.h[s]);
-        assert!(got.water[p].is_nan() || means[k].stands > 0.0, "liquid drawn only in a cell that holds it standing");
+        let near = |dx: i64, dy: i64| {
+            let (x, y) = ((p % across) as i64 + dx * per as i64 / 2, (p / across) as i64 + dy * per as i64 / 2);
+            let q = (y.clamp(0, across as i64 - 1) * across as i64 + x.clamp(0, across as i64 - 1)) as usize;
+            means[shown.binary_search(&cell(q)).expect("a cell shown")].stands > 0.0
+        };
+        let wet_near = (-1..=1).any(|dx| (-1..=1).any(|dy| near(dx, dy)));
+        assert!(got.water[p].is_nan() || wet_near, "liquid drawn only within half a cell of a cell that holds it standing");
         *depth += (got.water[p] - got.ground[p]).max(0.0) as f64 * g.area[s];
         *under += (got.water[p] > got.ground[p]) as usize;
         if (levels[k][1] - sea).abs() < 1e-6 && !got.water[p].is_nan() {

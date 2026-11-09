@@ -46,44 +46,16 @@ impl Shown {
     }
 }
 
-/// The level of the liquid standing over each pixel of a window `across` pixels wide, leaves of `depth`, m, NaN where
-/// none stands: in the cells that hold liquid standing, the mean of their levels (the core's, `flow::levels`, the
-/// levels its liquid moves by) over the pixels of such
-/// cells within half the pixel's own cell's side along each way (a box, along one way and then the other), where it
-/// lies over the ground drawn `ground`. The core holds the cells of one lake at levels that differ by centimetres to
-/// decimetres, as its liquid's pass leaves them: the surface drawn goes from one to the next over the width of the
-/// cells, not in a step at each border. A body at one level (the sea's) is drawn flat at it.
-fn standing(w: &World, shown: &Shown, ground: &[f64], (across, depth): (usize, u8)) -> Vec<f64> {
+/// The level of the liquid standing over each pixel, m, NaN where none stands: the levels of the cells that hold liquid
+/// standing (the core's, `flow::levels`, the levels its liquid moves by) evened over such cells across their borders
+/// (`Cells::even`; so within half a cell of one), where it lies over the ground drawn `ground`. The core holds the cells of one lake at
+/// levels that differ by centimetres to decimetres, as its liquid's pass leaves them: the surface drawn goes from one to
+/// the next over the width of the cells, not in a step at each border. A body at one level (the sea's) is drawn flat.
+fn standing(w: &World, shown: &Shown, cells: &keep::Cells, ground: &[f64]) -> Vec<f64> {
     let own: Vec<f64> = pcore::flow::levels(w, &shown.cells).map_or_else(|| vec![f64::NAN; shown.cells.len()], |l| l.iter().map(|l| l[1]).collect());
-    let n = ground.len();
-    let wet = |p: usize| shown.means[shown.number[p] as usize].stands > 0.0;
-    let reach: Vec<usize> = shown.cells.iter().map(|&i| ((w.map.leaves()[i].side() >> (DEPTH_MOST - depth)) / 2).max(1) as usize).collect();
-    let mut sum: Vec<f64> = (0..n).map(|p| if wet(p) { own[shown.number[p] as usize] } else { 0.0 }).collect();
-    let mut of: Vec<f64> = (0..n).map(|p| if wet(p) { 1.0 } else { 0.0 }).collect();
-    for (step, len) in [(1, across), (across, n / across)] {
-        (sum, of) = (boxed(&sum, step, len, &reach, shown), boxed(&of, step, len, &reach, shown));
-    }
-    (0..n).map(|p| if wet(p) && of[p] > 0.0 && sum[p] / of[p] > ground[p] { sum[p] / of[p] } else { f64::NAN }).collect()
-}
-
-/// `v` summed over a box along one way: each pixel the sum of the pixels within its own cell's `reach` (pixels) before
-/// and after it along lines of `len` pixels, `step` apart in `v` (1 along a row, the width down a column).
-fn boxed(v: &[f64], step: usize, len: usize, reach: &[usize], shown: &Shown) -> Vec<f64> {
-    let mut out = vec![0.0; v.len()];
-    let lines = v.len() / len;
-    let line_of = |l: usize, k: usize| if step == 1 { l * len + k } else { k * step + l };
-    let mut prefix = vec![0.0; len + 1];
-    for l in 0..lines {
-        for k in 0..len {
-            prefix[k + 1] = prefix[k] + v[line_of(l, k)];
-        }
-        for k in 0..len {
-            let p = line_of(l, k);
-            let r = reach[shown.number[p] as usize];
-            out[p] = prefix[(k + r + 1).min(len)] - prefix[k.saturating_sub(r)];
-        }
-    }
-    out
+    let wet = |c: usize| shown.means[c].stands > 0.0;
+    let even = cells.even(&own, wet);
+    (0..ground.len()).map(|p| if even[p] > ground[p] { even[p] } else { f64::NAN }).collect()
 }
 
 /// A window of the map finer than its cells: the window from column `x` and row `y`, `wide` x `high` squares, on its
@@ -116,14 +88,16 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
     out.extend((cover_melt(w) as f32).to_le_bytes());
     let (tree, at) = (w.mesh.tree(), |p: usize| (((gx + (p % across) as i64) as f64 + 0.5) / per, ((gy + (p / across) as i64) as f64 + 0.5) / per));
     let shown = Shown::of(w, (0..pixels).map(at).map(|(px, py)| tree.cell_at(w.map.point_at(px, py))).collect());
-    let cells = keep::Cells::new(across, down, (&shown.number, &shown.cells, n), &win.rows(w));
-    let level = standing(w, &shown, &ground, (across, depth));
+    let side: Vec<f64> = shown.cells.iter().map(|&i| (w.map.leaves()[i].side() >> (DEPTH_MOST - depth)) as f64).collect();
+    let cells = keep::Cells::new(across, down, (&shown.number, &side), &win.rows(w));
+    let level = standing(w, &shown, &cells, &ground);
     let water = level.iter().copied();
     let (share, deep) = channels::channels(w, &w.drained(), ([gx, gy], [across, down], depth));
     out.extend(ground.iter().map(|&g| g as f32).chain(water.map(|v| v as f32)).chain(share).chain(deep).flat_map(|v| v.to_le_bytes()));
     let held = |v: &[f64], law: &dyn Fn(usize, f64) -> f64, how: keep::Mean| {
-        let smooth = pyramid.field(v);
-        cells.keep(&pyramid, (0..pixels).map(|p| law(p, smooth[p])).collect(), &shown.cells.iter().map(|&i| v[i]).collect::<Vec<f64>>(), how)
+        let target: Vec<f64> = shown.cells.iter().map(|&i| v[i]).collect();
+        let smooth = cells.even(&target, |_| true);
+        cells.keep((0..pixels).map(|p| law(p, smooth[p])).collect(), &target, how)
     };
     for l in LAYERS.iter() {
         let plane: Vec<u8> = if l.name == "t_ground" {
@@ -135,7 +109,7 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
         };
         out.extend(plane);
     }
-    let wet = inside::wetness(w, (&cells, &shown, &pyramid), (&ground, &twi), &level);
-    inside::extend(&mut out, w, (&cells, &shown, &pyramid), &wet);
+    let wet = inside::wetness(w, (&cells, &shown), (&ground, &twi), &level);
+    inside::extend(&mut out, w, (&cells, &shown), &wet);
     out
 }

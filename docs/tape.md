@@ -114,12 +114,14 @@ Then the count m of the window's cells (u32) and of each, for each of its 4 slot
 kg of its built cover (kg/kg, m²/kg; two f32, 0 for a slot it does not hold), so a shell knows what each slot builds
 where it stands. So a window of `across` x `down` pixels after `L` layers starts these at `ceil4(4 + 16 n + L n)`
 bytes, n the pixels, and they take `24 n + 4 + 32 m` bytes. Each is a field across the cells that holds each cell's
-mean over its pixels exactly (`tape/src/fine/keep.rs`; pycnophylactic, Tobler 1979): a level smooth across the cells'
-borders, from the cells' smooth field (the pyramid above), evened round after round as heat spreads and lifted in each
-cell so its mean holds, and at each pixel the general law the core shares a cell's means by over its samples (laws.md
-0, "Inside a cell") applied to that level there. The liquid in the soil departs from the level by `soil_m` per unit of
-the wetness index of the window's own ground, found across the cells' borders (`inside::Grid`), within none and the
-pores full; the wetness adds what stands at the cell's level. Each kind of cover (the starting kind its slots descend
+mean over its pixels as far as a field with no steps can (`tape/src/fine/keep.rs`; pycnophylactic, Tobler 1979): the
+cells' values evened over their neighbours' within half a cell's side, the general law the core shares a cell's means
+by over its samples (laws.md 0, "Inside a cell") at each pixel on that, then corrected round after round by what each
+cell still lacks, evened the same way; what the rounds leave is left (a cell's remainder laid on it alone would step at
+its borders): over a window of fine cells on a hill the cover drawn is off its cells' own by a median of 1 to 16%. The
+liquid in the soil departs from the evened level by `soil_m` per unit of the wetness index of the window's own ground,
+found across the cells' borders (`inside::Grid`), as a share of the pores' depth there, compounded so it never falls
+below none; the wetness adds what stands over the ground. Each kind of cover (the starting kind its slots descend
 from) is a field of its own across the cells, each cell's mean its built cover of the kind, at each pixel by the
 activity of the cell's heaviest slot of the kind on ground that wet (even over a cell where none is active); a kind a
 cell does not hold has its mean there none, so its field falls to none at that cell's border. So nothing steps at a
