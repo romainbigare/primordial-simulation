@@ -96,8 +96,11 @@ fn the_fine_ground_is_the_terrain_whatever_the_cells_and_the_window() {
     }
 }
 
+/// The liquid drawn stands over the terrain the cells stand on, only in the cells that hold liquid standing, at their
+/// levels evened over half a cell (`standing`): over the window's cells it holds their own together, a body at one
+/// level is drawn flat, and shores lie inside cells.
 #[test]
-fn each_cells_liquid_fills_the_terrain_drawn_inside_it_from_its_lowest_point() {
+fn the_liquid_drawn_stands_at_the_cells_levels_over_their_own_ground() {
     let w = testkit::small_world();
     // Pixels the leaves of the cells' own samples (`World::ground_in`), the window's cells all whole squares.
     let depth = w.map.square_depth() + pcore::inside::DEPTHS;
@@ -109,26 +112,40 @@ fn each_cells_liquid_fills_the_terrain_drawn_inside_it_from_its_lowest_point() {
     shown.dedup();
     assert!(shown.iter().all(|&i| w.map.leaves()[i].depth == w.map.square_depth()), "the window's cells are squares");
     let means = pcore::flow::means(&w, &shown).expect("Flow's state of the ground");
-    // Of each cell: its ground, its level drawn, the depth drawn over it by area, and its pixels under liquid.
-    let mut drawn: Vec<(pcore::inside::Ground, f32, f64, usize)> = shown.iter().map(|&i| (w.ground_in(w.map.leaves()[i]), f32::NAN, 0.0, 0)).collect();
+    let levels = pcore::flow::levels(&w, &shown).expect("Flow's state of the ground");
+    // Of each cell: its ground, the depth drawn over it by area, and its pixels under liquid.
+    let mut drawn: Vec<(pcore::inside::Ground, f64, usize)> = shown.iter().map(|&i| (w.ground_in(w.map.leaves()[i]), 0.0, 0)).collect();
+    // The sea's level: the one most cells that hold liquid standing hold it at.
+    let wet: Vec<f64> = levels.iter().zip(&means).filter(|(_, m)| m.stands > 0.0).map(|(l, _)| l[1]).collect();
+    let alike = |x: f64| wet.iter().filter(|&&y| (y - x).abs() < 1e-6).count();
+    let sea = wet.iter().copied().max_by_key(|&x| alike(x)).expect("cells that hold liquid standing");
+    let (mut flat, mut of_sea) = (0, 0);
     for p in 0..across * across {
         let k = shown.binary_search(&cell(p)).expect("a cell shown");
-        let (g, level, depth, under) = &mut drawn[k];
+        let (g, depth, under) = &mut drawn[k];
         let s = (p / across % per) * per + p % across % per;
         assert!((got.ground[p] as f64 - g.h[s]).abs() < 1e-3, "the ground drawn is the terrain the cell's liquid stands on: {} m against {} m", got.ground[p], g.h[s]);
-        assert!(level.is_nan() || level.to_bits() == got.water[p].to_bits(), "the liquid of a cell stands at one level");
-        assert!(got.water[p].is_nan() == (means[k].stands <= 0.0), "liquid drawn in a cell that holds it standing, and only there");
-        *level = got.water[p];
+        assert!(got.water[p].is_nan() || means[k].stands > 0.0, "liquid drawn only in a cell that holds it standing");
         *depth += (got.water[p] - got.ground[p]).max(0.0) as f64 * g.area[s];
         *under += (got.water[p] > got.ground[p]) as usize;
+        if (levels[k][1] - sea).abs() < 1e-6 && !got.water[p].is_nan() {
+            (flat, of_sea) = (flat + ((got.water[p] as f64 - sea).abs() < 1e-3) as usize, of_sea + 1);
+        }
     }
-    // The liquid drawn holds the cell's standing liquid (to the f32 the heights are drawn in, a millimetre).
-    for (k, (_, _, depth, _)) in drawn.iter().enumerate() {
-        assert!((depth - means[k].stands).abs() < 1e-3, "the liquid drawn over cell {} holds its own, {depth} m against {} m", shown[k], means[k].stands);
-    }
+    // Together the cells' liquid drawn holds theirs (the levels evened move a little of it across their borders).
+    let area = |k: usize| w.mesh.cells().area()[shown[k]];
+    let (held, own) = drawn.iter().enumerate().fold((0.0, 0.0), |(h, o), (k, d)| (h + d.1 * area(k), o + means[k].stands * area(k)));
+    println!("liquid drawn {held:.4e} m3 against the cells' {own:.4e} m3; {flat} of the sea's {of_sea} pixels at its level {sea:.3} m");
+    assert!((held - own).abs() <= HELD * own, "the liquid drawn holds the cells' own: {held} m3 against {own} m3");
+    // The sea drawn flat at its level, but within half a cell of a cell that holds liquid at another level.
+    assert!(2 * flat > of_sea, "the sea drawn flat at its level: {flat} of {of_sea} pixels");
     let all = per * per;
-    assert!(drawn.iter().any(|d| d.3 == all) && drawn.iter().any(|d| d.3 > 0 && d.3 < all), "cells wholly under liquid, and shores inside cells");
+    assert!(drawn.iter().any(|d| d.2 == all) && drawn.iter().any(|d| d.2 > 0 && d.2 < all), "cells wholly under liquid, and shores inside cells");
 }
+
+/// How near the liquid the cells of a window hold together the liquid drawn over them is, relative: the levels evened
+/// over half a cell move a little of each cell's liquid across its borders, and the window's edge cuts what it holds.
+const HELD: f64 = 0.01;
 
 /// The channels drawn are the terrain's (`space::network`), each sample's way carrying its cell's flux per m² of the
 /// drained area that leaves the cell: a split, which shares its cell's flux out that way (`World::split`), draws the

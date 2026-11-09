@@ -85,14 +85,14 @@ whose shape each cell's liquid stands (`flow::curve`); finer than them, the core
 (`space::below`, `Terrain::heights`), the one the cells' heights and curves read: a quartic continuation of the
 coarser heights that keeps each leaf's mean, smooth with its slope so hill shading shows no creases along the leaves'
 edges, with the midpoint displacement's departures laid on it; below a metre the continuation alone. So the ground drawn depends neither on the
-cells nor on the window, and has no edge where cells meet. The liquid's level is its own cell's, the core's
-(`flow::levels`): the level the liquid standing over its pores reaches over the cell's own ground, by which the
-liquid moves, laid on the ground drawn as high over the terrain's mean in the cell as it stands over the cell's
-surface; none in a cell that holds none. So a pixel is under liquid where the ground drawn lies below its cell's
-level, the shore lies where that ground rises, inside the cells, and moves with the level, a body of liquid at one
-level (the sea's, `flow::basin`) is flat across all its cells (to the centimetres by which wear and settling moved
-their surfaces off the terrain), and over the cell's own samples the liquid drawn holds
-the cell's own. The fields of the cells'
+cells nor on the window, and has no edge where cells meet. The liquid's level is the core's
+(`flow::levels`): the level the liquid standing over a cell's pores reaches over the cell's own ground, by which the
+liquid moves, in the cells that hold liquid standing (none elsewhere), evened over the pixels of such cells within
+half the pixel's own cell's side along each way (`standing`). The core holds the cells of one lake at levels that
+differ by centimetres to decimetres; evened, the surface drawn goes from one to the next without a step at the
+cells' borders. So a pixel is under liquid where the ground drawn lies below that level, the shore lies where that
+ground rises, inside the cells, and moves with the level, a body of liquid at one level (the sea's, `flow::basin`) is
+flat, and the liquid drawn holds the cells' own together (within a per cent over a window). The fields of the cells'
 values (`tape/src/fine/pyramid.rs`) are built level by level of the cells' tree (a Laplacian pyramid, Burt and Adelson
 1983): each level a quadratic B-spline whose mean over each node is that node's value (Unser 1999), the coarsest the
 nodes' means, each finer one the departure of each group of four children from their parent less as much of the
