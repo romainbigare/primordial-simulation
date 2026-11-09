@@ -83,8 +83,8 @@ pub(crate) fn mean_by(x: [f64; 4], wt: [f64; 4]) -> f64 {
 }
 
 /// What a join keeps of its quarters (laws.md 0): each quarter's share of each number the cell holds (`Of`), and the
-/// relief each held (`World::relief`), J, and the rise toward the south of each (`World::rise_south`), m per m, which
-/// its split gives back (`World::split`).
+/// relief each held (`World::relief`), J, the rise toward the south of each (`World::rise_south`), m per m, and the
+/// parts of each where one was mixed (`flow::Parts`), which its split gives back (`World::split`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Joined {
     /// Each quarter's share, row by row, of each number (`Joined::share`)
@@ -93,6 +93,8 @@ pub struct Joined {
     /// Each quarter's relief scale (`World::relief_scale`), which its split gives back
     pub scales: [f64; 4],
     pub rise: [f64; 4],
+    /// Each quarter's parts where one was a cell of parts (`flow::of_join`), whose shares and states its split gives back
+    pub(crate) parts: Option<[crate::flow::Parts; 4]>,
 }
 
 impl Joined {
@@ -115,7 +117,8 @@ impl Joined {
             push(if h.is_empty() { [0.0; 4] } else { kids.map(|i| h[i]) });
         }
         (0..FLOW_HELD).for_each(|x| push(flow.map(|v| v.map_or(0.0, |v| v[x]))));
-        Joined { shares, kept: kids.map(|i| w.relief[i]), scales: kids.map(|i| w.relief_scale[i]), rise: kids.map(|i| w.rise_south[i]) }
+        let parts = crate::flow::of_join(w, kids);
+        Joined { shares, kept: kids.map(|i| w.relief[i]), scales: kids.map(|i| w.relief_scale[i]), rise: kids.map(|i| w.rise_south[i]), parts }
     }
     /// Quarter `q`'s share of `of`.
     pub(crate) fn share(&self, of: Of, q: u8) -> f64 {

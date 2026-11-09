@@ -13,10 +13,10 @@ pub(crate) use draws::release;
 pub use steps::{substeps, Grid};
 
 
-/// Temperature, depth of the standing liquid and surface height of a ground cell, as Flow's last step left them (once
-/// Flow's working memory is built, `flow::ensure`).
+/// Temperature, depth of the standing liquid and surface height of a ground cell as life stands on it (a cell of
+/// parts' land, `flow::parts`), as Flow's last step left them (once Flow's working memory is built, `flow::ensure`).
 pub fn env_of(w: &World, i: usize) -> [f64; 3] {
-    let (d, z) = w.scratch.view().standing(i);
+    let (d, z) = w.scratch.standing_land(i);
     [w.t_ground_last(i), d, z]
 }
 

@@ -3,7 +3,7 @@
 //! by that level once a month, after the runoff has reached it (`share_out`, by which a split's quarters share their
 //! ground too, `inside`).
 
-use super::{air::blocks, curve::{level_over, Curve}, drain::liquid_heat, land::{cells_state, stand, wet, NONE}, liquid::book, potential::apply, Scratch};
+use super::{air::blocks, curve::{level_over, Curve}, drain::liquid_heat, land::{cells_state, stand, wet, NONE}, liquid::book, parts::TOP, potential::apply, Scratch};
 use crate::{store::{Class, LinkFlux}, World, AIR};
 use std::collections::BTreeMap;
 
@@ -131,37 +131,63 @@ pub(super) fn share_out(cells: &[u32], (held, vol): (&[f64], &[f64]), want: &[f6
 }
 
 /// Does cell `i` mix as one with the low basin under its air block (`mix_heat`) and face the air as one surface with
-/// the basin under its air node (`air::surf`)? A cell of the low basin off its melting plateaus, with no soft cover and
-/// no cover of bodies.
+/// the basin under its air node (`air::surf`)? A cell of the low basin all under its liquid (a node that is one, or of
+/// parts with no land, its liquid's top, `parts`), off its melting plateaus, with no soft cover and no cover of bodies.
 pub(super) fn one_surface(w: &World, s: &Scratch, i: usize) -> bool {
-    s.basin.is[i] && s.state.pk[i] == NONE && s.cover[i][2] <= 0.0 && w.canopy[i] <= 0.0
+    let (pk, cover) = match s.mixed(i) {
+        Some(m) if m.two_faces() => return false,
+        Some(m) => (m.piece[TOP].pk, m.piece[TOP].cover[2]),
+        None => (s.state.pk[i], s.cover[i][2]),
+    };
+    s.basin.is[i] && pk == NONE && cover <= 0.0 && w.canopy[i] <= 0.0
 }
 
-/// The low basin under each air block mixes its heat in a month: its cells that mix as one (`one_surface`), with the same
-/// phases, each take the block's temperature, the heat of their sum over their summed heat capacity (apart from the
-/// fusion enthalpy each holds), as one heat flux from the cell of the most heat capacity to each other. Returns the cells
-/// that mixed.
+/// Does the liquid of cell `i` of the low basin mix as one with the basin's (`mix_heat`, `air::dissolve`)? A cell that
+/// faces the air as one surface with it (`one_surface`); of a cell of parts, its liquid's top, off its plateaus, with no
+/// soft cover and no cover of bodies.
+pub(super) fn mixes(w: &World, s: &Scratch, i: usize) -> bool {
+    s.mixed(i).map(|m| &m.piece[TOP]).map_or(one_surface(w, s, i), |p| s.basin.body[i] && p.pk == NONE && p.cover[2] <= 0.0 && w.canopy[i] <= 0.0)
+}
+
+/// What is molten in the liquid of cell `i` that mixes (`mixes`), one bit per substance: of a cell of parts its
+/// liquid's top's.
+pub(super) fn phases(s: &Scratch, i: usize) -> u64 {
+    s.mixed(i).map_or(s.latent[i].molten, |m| m.piece[TOP].latent.molten)
+}
+
+/// The low basin under each air block mixes its heat in a month: the liquid of its cells that mixes as one (`mixes`),
+/// with the same phases, takes the block's temperature, the heat of their sum over their summed heat capacity (apart from the
+/// fusion enthalpy each holds), as one heat flux from the cell of the most heat capacity to each other, a cell of parts'
+/// its liquid's top's (`parts::Parts`). Returns the cells that mixed.
 fn mix_heat(w: &mut World, s: &mut Scratch) -> Vec<u32> {
     let mut block = vec![0; w.mesh.level(AIR).n()];
     blocks(w).iter().enumerate().for_each(|(b, nodes)| nodes.iter().for_each(|&j| block[j as usize] = b));
     let parent = w.mesh.cells().parent();
+    let liquid = |i: usize| s.mixed(i).map(|m| &m.piece[TOP]);
     let mut by: BTreeMap<(usize, u64), Vec<usize>> = BTreeMap::new();
-    for &i in s.basin.cells.iter().filter(|&&i| one_surface(w, s, i as usize)) {
-        by.entry((block[parent[i as usize] as usize], s.latent[i as usize].molten)).or_default().push(i as usize);
+    for &i in s.basin.cells.iter().filter(|&&i| mixes(w, s, i as usize)) {
+        by.entry((block[parent[i as usize] as usize], phases(s, i as usize))).or_default().push(i as usize);
     }
-    let (mut a, mut b, mut heat, mut mixed) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let free = |i: usize| liquid(i).map_or(w.store.heat(Class::Ground)[i] - s.latent[i].held, |p| p.heat - p.latent.held);
+    let cap = |i: usize| liquid(i).map_or(s.cap[i], |p| p.cap);
+    let (mut a, mut b, mut heat, mut mixed, mut parts) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for cells in by.values().filter(|c| c.len() > 1) {
         mixed.extend(cells.iter().map(|&i| i as u32));
-        let free = |i: usize| w.store.heat(Class::Ground)[i] - s.latent[i].held;
-        let t = cells.iter().map(|&i| free(i)).sum::<f64>() / cells.iter().map(|&i| s.cap[i]).sum::<f64>();
-        let hub = cells.iter().copied().max_by(|&p, &q| s.cap[p].total_cmp(&s.cap[q]).then(q.cmp(&p))).unwrap_or(cells[0]);
+        let t = cells.iter().map(|&i| free(i)).sum::<f64>() / cells.iter().map(|&i| cap(i)).sum::<f64>();
+        let hub = cells.iter().copied().max_by(|&p, &q| cap(p).total_cmp(&cap(q)).then(q.cmp(&p))).unwrap_or(cells[0]);
         for &i in cells.iter().filter(|&&i| i != hub) {
             a.push(hub as u32);
             b.push(i as u32);
-            heat.push(s.cap[i] * t - free(i));
+            heat.push(cap(i) * t - free(i));
         }
+        parts.extend(cells.iter().filter(|&&i| liquid(i).is_some()).map(|&i| (i, cap(i) * t - free(i))));
     }
     apply(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[], mol: &[], heat: &heat }], &[]);
+    for (i, q) in parts {
+        if let Some(Some(p)) = s.state.parts.get_mut(i) {
+            p.heat[TOP] += q;
+        }
+    }
     mixed.sort_unstable();
     mixed
 }

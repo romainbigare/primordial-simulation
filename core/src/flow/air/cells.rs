@@ -4,15 +4,14 @@
 //! (`Response::ground`), and the book takes each cell's at the step's mean air (`Response::booked`), so the air and its
 //! cells agree.
 
-use super::super::land::{layers, melts, reflectance, thaw_at};
 use super::super::Scratch;
 use super::daily::Ground;
 use super::rain::Wet;
 use super::radiation::{glow, glow_slope, on_slope, sun_by_latitude, Air, Surface};
 use super::step::Active;
-use super::surf::{Patch, Surf, Vapour};
+use super::surf::{end_reflectance, parts_respond, Patch, Surf, Vapour};
 use super::{at_height, lerp};
-use crate::{math::one_minus_exp, store::Class, units::{MAX_SUBSTANCES, R_GAS, T_FLOOR}, World, AIR};
+use crate::{math::one_minus_exp, units::{R_GAS, T_FLOOR}, World, AIR};
 
 /// A ground node's surface balance is solved again about the temperature it gives, up to this many times, until that
 /// moves by less than `SURFACE_STILL_K`, K.
@@ -59,7 +58,9 @@ pub(super) struct Ctx<'a> {
 
 /// Each cell's response to the air it sees: per cell the fixed outputs, then, of a cell alone, each changing output's
 /// value at the air it sees at the step's start, its slope per K of that air, and per mol of each active gas there; and
-/// that air. The low basin under each air node answers as one (`Patch`): its cells hold only their fixed outputs.
+/// that air. The low basin under each air node answers as one (`Patch`): its cells hold only their fixed outputs. A
+/// cell whose land and liquid's top both face the air (`parts`) answers as those two, its rows their sum; of each such
+/// cell, its top's rows too, its fixed outputs and then its changing ones (`wet`).
 pub(super) struct Response {
     nx: usize,
     rows: Vec<f64>,
@@ -67,6 +68,7 @@ pub(super) struct Response {
     patches: Vec<Patch>,
     /// Per cell: does it answer alone (not in a patch)?
     alone: Vec<bool>,
+    pub(super) wet: Vec<(u32, Vec<f64>)>,
 }
 
 impl Response {
@@ -118,19 +120,28 @@ impl Response {
     /// Each cell's changing outputs at the mean air of the step, as the book takes them (`[i * (UP + nx) + o]`): `t`
     /// per node, K, and `x[y]` per active gas, mol per node. A cell alone at the air it sees (`lerp`); a patch's at the
     /// air its cells see, by their areas, its parts shared to its cells (`Patch::share`).
-    pub(super) fn booked(&self, s: &Scratch, t: &[f64], x: &[&[f64]]) -> Vec<f64> {
+    /// Of each cell of two faces (`wet`), its liquid's top's changing outputs at the same air, `[c * (UP + nx) + o]`.
+    pub(super) fn booked(&self, s: &Scratch, t: &[f64], x: &[&[f64]]) -> (Vec<f64>, Vec<f64>) {
         let (nx, width) = (self.nx, Self::width(self.nx));
+        // Cell `i`'s changing outputs from its rows `rows` (as `rows` lays them out from `FIXED` on) at the mean air.
+        let at = |i: usize, rows: &[f64], out: &mut [f64]| {
+            let seen = &self.seen[i * (1 + nx)..(i + 1) * (1 + nx)];
+            let (t, x) = (lerp(s, t, i) - seen[0], (0..nx).map(|y| lerp(s, x[y], i) - seen[1 + y]).collect::<Vec<f64>>());
+            for (o, v) in out.iter_mut().enumerate() {
+                let r = &rows[o * (2 + nx)..];
+                *v = r[0] + r[1] * t + (0..nx).map(|y| r[2 + y] * x[y]).sum::<f64>();
+            }
+        };
         let mut out = vec![0.0; self.alone.len() * (UP + nx)];
         crate::par::rows(&mut out, UP + nx, crate::par::UNCOUNTED, || (), |_, i, row| {
             if self.alone[i] {
-                let seen = &self.seen[i * (1 + nx)..(i + 1) * (1 + nx)];
-                let (t, x) = (lerp(s, t, i) - seen[0], (0..nx).map(|y| lerp(s, x[y], i) - seen[1 + y]).collect::<Vec<f64>>());
-                for (o, v) in row.iter_mut().enumerate() {
-                    let r = &self.rows[i * width + FIXED + o * (2 + nx)..];
-                    *v = r[0] + r[1] * t + (0..nx).map(|y| r[2 + y] * x[y]).sum::<f64>();
-                }
+                at(i, &self.rows[i * width + FIXED..(i + 1) * width], row);
             }
         });
+        let mut wet = vec![0.0; self.wet.len() * (UP + nx)];
+        for ((i, rows), row) in self.wet.iter().zip(wet.chunks_exact_mut(UP + nx)) {
+            at(*i as usize, &rows[FIXED..], row);
+        }
         let stride = 2 + nx;
         let (mut parts, mut each) = (vec![0.0; (GAS + nx) * stride], vec![0.0; (UP + nx) * stride]);
         for p in &self.patches {
@@ -147,7 +158,11 @@ impl Response {
                 out[i as usize * (UP + nx)..(i as usize + 1) * (UP + nx)].iter_mut().enumerate().for_each(|(o, v)| *v = each[o * stride]);
             }
         }
-        out
+        (out, wet)
+    }
+    /// Fixed output `o` of the liquid's top of the `c`-th cell of two faces (`wet`).
+    pub(super) fn wet_fixed(&self, c: usize, o: usize) -> f64 {
+        self.wet[c].1[o]
     }
 }
 
@@ -168,7 +183,7 @@ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Respons
     rows.resize(n * width, 0.0);
     // Each task keeps the last latitude and its mean sunlight over the step: neighbouring cells often share a latitude.
     crate::par::rows(&mut rows, width, crate::par::UNCOUNTED, || (f64::NAN, [0.0; 2], Work::default()), |(lat, q, work), i, row| {
-        if !alone[i] {
+        if !alone[i] || cx.s.two_faces(i) {
             return;
         }
         let at = cx.w.mesh.cells().lat()[i];
@@ -180,6 +195,16 @@ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Respons
         put(&work.p, &work.carry, &mut row[FIXED..]);
         row[..FIXED].copy_from_slice(&fixed);
     });
+    let mixed: Vec<usize> = (0..n).filter(|&i| alone[i] && cx.s.two_faces(i)).collect();
+    let both = crate::par::map(&mixed, |&i| parts_respond(cx, i, &seen[i * (1 + nx)..(i + 1) * (1 + nx)]));
+    let mut wet = Vec::with_capacity(mixed.len());
+    for (&i, [land, liquid]) in mixed.iter().zip(both) {
+        let row = &mut rows[i * width..(i + 1) * width];
+        row.iter_mut().zip(land.iter().zip(&liquid)).for_each(|(r, (a, b))| *r = a + b);
+        // The light per unit of the cover's capture area is the same on both parts.
+        row[LIGHT] = land[LIGHT];
+        wet.push((i as u32, liquid));
+    }
     let patches = crate::par::map(patches, |cells| Patch::of(cx, cells));
     for p in &patches {
         for (&i, share) in p.cells.iter().zip(p.share.chunks_exact(1 + nx)) {
@@ -187,7 +212,7 @@ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Respons
             rows[i as usize * width..i as usize * width + FIXED].copy_from_slice(&[p.fixed[SUN] * heat, p.fixed[LIGHT], p.fixed[KEPT] * heat]);
         }
     }
-    Response { nx, rows, seen, patches, alone }
+    Response { nx, rows, seen, patches, alone, wet }
 }
 
 /// The mean sunlight at the top of the air at latitude `lat`, degrees, over the days of the step, their sun's
@@ -198,9 +223,9 @@ pub(super) fn sunlight(w: &World, decl: &[f64], lat: f64) -> [f64; 2] {
 }
 
 /// The rise toward the south of the surface of cell `i`, m per m (`World::rise_south`): none where it lies under the
-/// low basin's liquid, which stands level (`basin`).
-fn rise(cx: &Ctx, i: usize) -> f64 {
-    if cx.s.basin.is[i] { 0.0 } else { cx.w.rise_south[i] }
+/// low basin's liquid or all under its own, which stand level (`basin`, `Scratch::top_alone`).
+pub(super) fn rise(cx: &Ctx, i: usize) -> f64 {
+    if cx.s.basin.is[i] || cx.s.top_alone(i).is_some() { 0.0 } else { cx.w.rise_south[i] }
 }
 
 /// Holds the parts of the ground `g` (`p`, `exchange`) so that it gives no more than it holds however the air it sees
@@ -355,7 +380,7 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
         put(p, carry, out);
     }
     for _ in 1..if g.cover[2] > 0.0 { REFLECT_ROUNDS } else { 1 } {
-        let end = end_reflectance(cx, g.cell, (adt * sw(alb), out));
+        let end = end_reflectance(cx, g, (adt * sw(alb), out));
         if (end - alb).abs() < REFLECT_STILL {
             break;
         }
@@ -369,21 +394,3 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
     [adt * sw(alb), sun * per_area * dt, kept * adt]
 }
 
-/// The reflectance of the surface of ground node `i` (a soft cover's: never a patch's, `surf::patches`) at the end of the step whose sunlight and outputs (`exchange`) are
-/// `(sun, out)`: its amounts with what evaporates, its energy with the heat the store books for it, and its phases there.
-fn end_reflectance(cx: &Ctx, i: usize, (sun, out): (f64, &[f64])) -> f64 {
-    let (w, s, stride) = (cx.w, cx.s, 2 + cx.act.len());
-    let n = w.mesh.cells().n();
-    // The node's amounts, read once: the melting points read them many times.
-    let mut amt = [0.0; MAX_SUBSTANCES];
-    amt.iter_mut().zip(w.store.amounts(Class::Ground)[i..].iter().step_by(n)).for_each(|(a, &a0)| *a = a0);
-    let (mut c, e) = (s.cap[i], w.store.heat(Class::Ground)[i] + sun - out[LINK * stride] - out[SPACE * stride]);
-    for (y, ac) in cx.act.iter().enumerate() {
-        let m = out[(UP + y) * stride];
-        (amt[ac.k], c) = (amt[ac.k] - m, c - m * s.sp[ac.k].cp);
-    }
-    // The melting points, found once: the plateaus and the cover read them.
-    let melt = melts(w, s, |k| amt[k]);
-    let th = thaw_at(s, c.max(1.0), e, |k| amt[k], &melt);
-    reflectance(w, s, i, &layers(w, s, i, th.t, |k| amt[k], |k| th.molten(k), |k| melt[k]).0)
-}

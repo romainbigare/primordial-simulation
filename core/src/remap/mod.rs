@@ -118,6 +118,7 @@ impl World {
     /// `remap` of the cells alone (`Renumber`): what the links remember stays as it is, for the links to take their new
     /// numbers once the change of the cells under way has its mesh (`World::split`).
     pub(crate) fn remap_cells(&mut self, c: &Renumber) {
+        let whole = crate::flow::whole(self, c);
         let World { cfg: _, chem, map: _, mesh: _, seed, time, sleep, store, base_z: _, rain, liquid_flux, evap, off_land, counts, life, canopy, light, rained, links: _, joined, relief, relief_scale, terrain: _, rise_south, watch, events, scratch } = self;
         assert!(events.iter().all(|e| matches!(e.kind, EventKind::Split | EventKind::Join)), "a remap runs between steps, once the shell took the events");
         // Per m² of a cell: its parent's in each quarter, the quarters' mean by area in a joined cell.
@@ -141,7 +142,7 @@ impl World {
         store.remap(c, joined);
         sleep.remap(c, *time, joined);
         life.remap(c, *seed, chem);
-        scratch.remap(c, joined);
+        scratch.remap(c, joined, &whole);
         *watch = c.apply_made(std::mem::take(watch), Default::default, |_, m, at| crate::refine::Watch::made(m, at));
         *joined = c.apply(std::mem::take(joined), || None);
         let made: Vec<usize> = c.sources().iter().enumerate().filter(|s| matches!(s.1, Source::Made(_))).map(|s| s.0).collect();

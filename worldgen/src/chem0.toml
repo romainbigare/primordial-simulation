@@ -1,5 +1,6 @@
 # Chemistry 0. Numbers only. element_masses g/mol (a substance's molar mass is the sum over its elements e),
-# cp J/(mol K), melt/boil K, rho kg/m3 [solid, liquid], hard/str 0..1,
+# cp J/(mol K), melt/boil K, rho kg/m3 [solid, liquid], dense K (where the pure liquid is densest; none: at its melting point),
+# dense_drop K per g/kg (how far what is dissolved lowers that; none: 0), hard/str 0..1,
 # refl [[solid rgb], [liquid rgb]], ir m2/mol, sat mol/m2 (column past which the optical depth grows as the square root of
 # the amount; none: always in proportion), sol mole fraction (for a gas that cannot condense on the ground: dissolved under
 # 101 kPa of it at 298 K; for a solid that melts above the ground's warmth: the mole fraction of its solution at saturation,
@@ -13,6 +14,8 @@ cp = 75
 melt = 273
 boil = 373
 rho = [917, 1000]
+dense = 277
+dense_drop = 0.215
 hard = 0.1
 str = 0.05
 refl = [[0.85,0.88,0.92],[0.05,0.07,0.10]]

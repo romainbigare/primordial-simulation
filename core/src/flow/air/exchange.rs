@@ -2,7 +2,8 @@
 //! ground's liquid; and how what dissolves is booked (`Crossing`).
 
 use super::super::{land::{boil_off, wet}, range, Scratch};
-use super::surf::patches;
+use super::super::basin::{mixes, phases};
+use super::surf::groups;
 use super::touching;
 use super::super::potential::apply;
 use crate::{chem::Chemistry, math::one_minus_exp, store::{Class, LinkFlux}, units::R_GAS, AIR, World};
@@ -95,9 +96,13 @@ pub(in crate::flow) fn henry(w: &World, s: &Scratch, tmin: f64) -> Vec<(usize, u
 /// into the node; coming out takes it back. What crosses is booked in one call: a link from each ground node that takes
 /// or gives some to its air node with the mol of each gas (+ up) and the heat that leaves the ground, no air node giving
 /// more than it holds (in the order of the cells), and the lift of the gas, paid by the air (`potential`); each ground
-/// node notes what it took up (`Scratch::hold`). The low basin under one air node takes up gas as one liquid
-/// (`surf::patches`), each of its cells by its share of that liquid, and gives it up by what each holds of it.
+/// node notes what it took up (`Scratch::hold`). The liquid of the low basin under one air node that mixes as one
+/// (`basin::mixes`, a cell of parts with its liquid's top) takes up gas as one liquid (`surf::groups`), at its
+/// temperature by heat capacity (a cell of parts' liquid's, `parts::Mixed::liquid_t`), each of its cells by its share
+/// of that liquid, and gives it up by what each holds of it.
 pub(in crate::flow) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64) {
+    // The temperature of the liquid of ground node `i`: the node's, or its parts' by the liquid each holds.
+    let liquid_t = |s: &Scratch, i: usize| s.mixed(i).map_or(s.state.tg[i], |m| m.liquid_t(&s.sp));
     let (tmin, tmax) = range(&s.state.tg);
     let henry = &std::mem::take(&mut s.henry)[..];
     let (n, na, nh) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), henry.len());
@@ -105,7 +110,7 @@ pub(in crate::flow) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64) {
         s.henry = henry.to_vec();
         return;
     }
-    let patches = &patches(w, s)[..];
+    let patches = &groups(w, |i| mixes(w, s, i), |i| phases(s, i))[..];
     let solv = s.liquids(&w.chem, (tmin, tmax), false);
     // What each ground node would take up of each gas over the step, mol (`[i * nh + x]`; negative: it comes out).
     let mut want = vec![0.0; n * nh];
@@ -116,7 +121,7 @@ pub(in crate::flow) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64) {
     let liquid = |i: usize| solv.iter().fold((0.0, 0.0), |(l, v), &k| (l + ground[k * n + i] * wet(sr, k, i), v + ground[k * n + i] * wet(sr, k, i) * sr.sp[k].v[1]));
     crate::par::rows(&mut want, nh, crate::par::UNCOUNTED, || (), |_, i, row| {
         if alone[i] {
-            let pool = Liquid { area: area[i], t: sr.state.tg[i], tl: touching(sr, &sr.ta, i), j: wr.mesh.cells().parent()[i] as usize, cap: sr.cap[i], lv: liquid(i) };
+            let pool = Liquid { area: area[i], t: liquid_t(sr, i), tl: touching(sr, &sr.ta, i), j: wr.mesh.cells().parent()[i] as usize, cap: sr.cap[i], lv: liquid(i) };
             take_up(wr, sr, &pool, |k| ground[k * n + i], (henry, dt), row);
         }
     });
@@ -126,7 +131,7 @@ pub(in crate::flow) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64) {
         let cap = sum(&|_, i| sr.cap[i]);
         let pool = Liquid {
             area: by_area,
-            t: sum(&|_, i| sr.state.tg[i] * sr.cap[i]) / cap,
+            t: sum(&|_, i| liquid_t(sr, i) * sr.cap[i]) / cap,
             tl: sum(&|_, i| touching(sr, &sr.ta, i) * area[i]) / by_area,
             j: wr.mesh.cells().parent()[cells[0] as usize] as usize,
             cap,
@@ -161,7 +166,7 @@ pub(in crate::flow) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64) {
             let (m, sp) = (want[i * nh + x].min(left[x * na + j]), s.sp[k]);
             // The gas brings its heat (the air's, or the ground's when it comes out) and frees its latent heat in the
             // node; `-m` mol go up from the ground node into its air node, and the ground node's state follows.
-            let tq = if m > 0.0 { s.ta[j] } else { s.state.tg[i] };
+            let tq = if m > 0.0 { s.ta[j] } else { liquid_t(s, i) };
             up[x * links + l] = -m;
             up[nh * links + l] -= m * (sp.cp * tq + sp.lf + sp.lv);
             left[x * na + j] -= m;
