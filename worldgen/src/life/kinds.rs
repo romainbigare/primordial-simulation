@@ -139,3 +139,11 @@ pub const KINDS: [Kind; 10] = [
 /// The roster of `ew run --roster`: the ten rows of `KINDS`, each placed at its `year`.
 pub const ROSTER: [usize; 10] = [2, 0, 3, 4, 5, 6, 1, 7, 8, 9];
 
+/// The kinds `ew run` places without `--roster` (rows of `KINDS`): light-eaters, then eaters.
+pub const TWO: [usize; 2] = [0, 1];
+
+/// The rows of `rows` that are cover (`Place::Field`): the kinds of a run without animals (`ew run --plants`).
+pub fn plants(rows: &[usize]) -> Vec<usize> {
+    rows.iter().copied().filter(|&k| matches!(KINDS[k].place, Place::Field(_))).collect()
+}
+

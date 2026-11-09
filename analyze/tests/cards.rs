@@ -98,7 +98,7 @@ fn a_worn_line_that_stays_is_a_route() {
 
 /// Snapshot of `w` in `dir` as `ew run` writes it.
 fn snapshot(w: &World, dir: &std::path::Path, name: &str) {
-    let plan = (Schedule::new(None, false, Seeding::default()), Recorder::new(w, 0, 0).kept());
+    let plan = (Schedule::new(None, &worldgen::life::TWO, Seeding::default()), Recorder::new(w, 0, 0).kept());
     let mut bytes = vec![];
     tape::snapshot_bytes(w, &plan, &mut bytes).unwrap();
     tape::write_snapshot(&bytes, dir.join(name)).unwrap();

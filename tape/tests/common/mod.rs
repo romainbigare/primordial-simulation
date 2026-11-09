@@ -47,7 +47,7 @@ pub fn run_stepped(mut w: World, years: u64, roster: bool, set: impl Fn(&mut Con
 /// run's start. Checks the books from now to the end.
 #[allow(dead_code)]
 pub fn go_on(mut w: World, rec: &mut Recorder, years: u64, roster: bool, step: impl Fn(&mut World), mut each_year: impl FnMut(u64, &World, &Recorder)) -> World {
-    let plan = Schedule::new(Some(LIFE_YEAR), roster, Seeding::default());
+    let plan = Schedule::new(Some(LIFE_YEAR), if roster { &worldgen::life::ROSTER } else { &worldgen::life::TWO }, Seeding::default());
     let (books, done) = (Books::now(&w), w.cfg.calendar().years(w.time));
     for y in done + 1..=done + years {
         plan.place(&mut w);

@@ -155,7 +155,7 @@ fn a_refined_run_saved_mid_run_goes_on_as_the_unbroken_one() {
         let [x, y, ..] = w.map.bounds(land[k * land.len() / 3]);
         Shot { month, x, y, w: 3.0, h: 3.0, depth, rest: false }
     };
-    let mut plan = Schedule::new(None, false, worldgen::life::Seeding::default());
+    let mut plan = Schedule::new(None, &worldgen::life::TWO, worldgen::life::Seeding::default());
     plan.camera = Camera { shots: vec![shot(0, 0), shot(1, SAVED as u64 / 2), shot(2, SAVED as u64 + 2)] };
     let month = |w: &mut World, plan: &Schedule| {
         w.refine(&plan.camera);
@@ -210,7 +210,7 @@ fn a_resumed_run_places_the_kinds_still_due() {
     use worldgen::schedule::Schedule;
     let dir = tmp("resume_plan");
     // The roster from year 0, its later kinds due at year 1, after the snapshot.
-    let mut plan = Schedule::new(Some(0), true, Seeding::default());
+    let mut plan = Schedule::new(Some(0), &worldgen::life::ROSTER, Seeding::default());
     plan.kinds.iter_mut().for_each(|k| k.1 = k.1.min(1));
     let late: Vec<u32> = ROSTER.iter().filter(|&&k| KINDS[k].year > 0).map(|&k| k as u32).collect();
     let years = |w: &mut World, plan: &Schedule, n: u64| {

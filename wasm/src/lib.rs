@@ -49,8 +49,8 @@ fn give(bytes: Vec<u8>) -> *const u8 {
     })
 }
 
-/// Make an island of `size` x `size` cells from `seed`, with the schedule of `ew run --roster`: the ten starting kinds,
-/// so the page shows the kinds of cover and of animals the laws can tell apart. Returns 0, or 1 if the world is refused.
+/// Make an island of `size` x `size` cells from `seed`, with the schedule of `ew run --roster --plants`: the starting
+/// kinds of cover, no animals, so the page runs fast while the work is on the ground, the liquid and the cover. Returns 0, or 1 if the world is refused.
 #[no_mangle]
 pub extern "C" fn new_world(seed: u32, size: u32) -> u32 {
     let mut world = worldgen::new_world(seed as u64, size as usize, size as usize);
@@ -58,7 +58,7 @@ pub extern "C" fn new_world(seed: u32, size: u32) -> u32 {
     if world.cfg.validate().is_err() {
         return 1;
     }
-    let plan = Schedule::new(Some(LIFE_YEAR), true, Seeding { hand: true, rounds: SPRAY_ROUNDS, fixers: FIXERS });
+    let plan = Schedule::new(Some(LIFE_YEAR), &worldgen::life::plants(&worldgen::life::ROSTER), Seeding { hand: true, rounds: SPRAY_ROUNDS, fixers: FIXERS });
     let samples = tape::Samples::default();
     LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, samples, out: vec![] }));
     0
