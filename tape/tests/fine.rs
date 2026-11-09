@@ -1,18 +1,20 @@
 //! A window finer than its cells (`tape::fine`): its ground is the terrain, whatever the cells and the window, and a
 //! split that shares out its cell by area changes nothing drawn of what it shares so; each cell's liquid fills the
-//! terrain inside it from its lowest point, holding the cell's own, so shores lie inside cells; and rivers run down.
+//! terrain inside it from its lowest point, holding the cell's own, so shores lie inside cells; and the channels are
+//! the terrain's, as wide as their flux makes them, the same whatever the cells.
 
 use pcore::World;
 use tape::{fine, Samples, LAYERS};
 use worldgen::testkit;
 
-/// What `fine` hands out for a window of `n` pixels: the river ways, the ground and the liquid's surface, the bytes of
+/// What `fine` hands out for a window of `n` pixels: the ground, the liquid's surface, the channels' share and depth, the bytes of
 /// the layers, the fields inside the cells (`INSIDE` planes of `n`: wetness, the cover of each slot), the number of
 /// each pixel's cell, and of each cell what its slots build per kg (`MAKE` numbers).
 struct Fine {
-    ways: Vec<[f32; 6]>,
     ground: Vec<f32>,
     water: Vec<f32>,
+    channel: Vec<f32>,
+    deep: Vec<f32>,
     bytes: Vec<u8>,
     inside: Vec<f32>,
     cell: Vec<u32>,
@@ -29,10 +31,8 @@ const MAKE: usize = 2 * pcore::cover::SLOTS;
 /// nothing more.
 fn read(b: &[u8], n: usize) -> Fine {
     let f32s = |from: usize, k: usize| (0..k).map(|i| f32::from_le_bytes(b[from + 4 * i..from + 4 * i + 4].try_into().unwrap())).collect::<Vec<f32>>();
-    let rivers = u32::from_le_bytes(b[4..8].try_into().unwrap()) as usize;
-    let ways = f32s(8, 6 * rivers).chunks(6).map(|c| c.try_into().unwrap()).collect();
-    let at = 8 + 24 * rivers;
-    let (planes, end) = (at + 8 * n, at + 8 * n + LAYERS.len() * n);
+    let at = 4;
+    let (planes, end) = (at + 16 * n, at + 16 * n + LAYERS.len() * n);
     let inside = end.next_multiple_of(4);
     let u32s = |from: usize, k: usize| (0..k).map(|i| u32::from_le_bytes(b[from + 4 * i..from + 4 * i + 4].try_into().unwrap())).collect::<Vec<u32>>();
     let numbers = inside + 4 * INSIDE * n;
@@ -41,7 +41,7 @@ fn read(b: &[u8], n: usize) -> Fine {
     assert!(b[end..inside].iter().all(|&x| x == 0), "zero bytes up to the planes inside the cells");
     let (cell, make) = (u32s(numbers, n), f32s(numbers + 4 * (n + 1), MAKE * cells));
     assert!(cell.iter().all(|&c| (c as usize) < cells), "each pixel in a cell of the window");
-    Fine { ways, ground: f32s(at, n), water: f32s(at + 4 * n, n), bytes: b[planes..end].to_vec(), inside: f32s(inside, INSIDE * n), cell, make }
+    Fine { ground: f32s(at, n), water: f32s(at + 4 * n, n), channel: f32s(at + 8 * n, n), deep: f32s(at + 12 * n, n), bytes: b[planes..end].to_vec(), inside: f32s(inside, INSIDE * n), cell, make }
 }
 
 /// The window from column `at[0]` and row `at[1]`, 8 x 8 squares, of `w` at `depth`, and its pixels along a side.
@@ -128,14 +128,28 @@ fn each_cells_liquid_fills_the_terrain_drawn_inside_it_from_its_lowest_point() {
     }
     let all = per * per;
     assert!(drawn.iter().any(|d| d.3 == all) && drawn.iter().any(|d| d.3 > 0 && d.3 < all), "cells wholly under liquid, and shores inside cells");
-    let f = tape::fields(&w);
-    for r in &got.ways {
-        let head = |x: f32, y: f32| {
-            let i = w.mesh.tree().cell_at(w.map.point_at(x as f64, y as f64));
-            f.z[i] + f.depth[i]
-        };
-        assert!(head(r[0], r[1]) > head(r[2], r[3]), "a river runs down: {r:?}");
+}
+
+/// The channels drawn are the terrain's (`space::network`), each sample's way carrying its cell's flux per m² of the
+/// drained area that leaves the cell: a split, which shares its cell's flux out that way (`World::split`), draws the
+/// same channels (to the f32 the flux is kept in). A channel covers a share of a pixel, all of one narrower than it,
+/// and is as deep as its flux makes it (`World::channel`); where it covers the whole pixel, the share is 1.
+#[test]
+fn the_channels_drawn_are_the_terrains_whatever_the_cells() {
+    let mut w = testkit::small_world();
+    // A month, so its liquid runs off and its cells pass some on.
+    pcore::step(&mut w);
+    let depth = 9;
+    let (before, _) = window(&w, &mut Samples::new(&w), [4.0, 4.0], depth);
+    assert!(before.channel.iter().any(|&s| s > 0.0), "channels drawn");
+    assert!(before.channel.iter().zip(&before.deep).all(|(&s, &d)| (0.0..=1.0).contains(&s) && (s > 0.0) == (d > 0.0)), "a share 0 to 1, and a depth where a channel is");
+    for _ in 0..3 {
+        let i = w.mesh.tree().cell_at(w.map.point_at(8.3, 8.3));
+        w.split(w.map.leaves()[i]).expect("a split");
     }
+    let after = window(&w, &mut Samples::new(&w), [4.0, 4.0], depth).0;
+    let worst = before.channel.iter().zip(&after.channel).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+    assert!(worst < 1e-4, "a split draws the same channels: shares differ by {worst}");
 }
 
 #[test]

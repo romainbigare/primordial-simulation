@@ -56,7 +56,13 @@ the map's edge) by area, its sample's for a cell finer than one (`Terrain::rise_
 mean by area. It is found once, when the cell is made, and kept (`World::rise_south`): the terrain's at the build; at a
 split each quarter's is the cell's plus the terrain's departure inside it at the scale the split stands the terrain (so
 quarters made flat face as their cell does), or what it was where a join made the cell; a join's is its quarters' mean
-by area. Below the samples
+by area. **The terrain's channels** (`space::network`, found with the samples): each sample's liquid runs to the
+neighbour its ground falls to most steeply (D8, O'Callaghan and Mark 1984; every sample of land has one, the samples
+being drained), and the area that drains through a sample is its own and all that runs to it. Between the samples'
+centres the liquid runs along the straight way from one to the next, so what leaves any leaf of the map is found at any
+size, finer than the samples too (`Samples::leaving`): the drained area of every way that leaves it (from a part of the
+way in it, or from its start where the leaf holds that alone), of every sink in it, and, in a leaf finer than a sample
+that does not hold the sample's centre, its own area, which runs to that centre. Below the samples
 the ground goes on as a midpoint displacement
 (Fournier, Fussell and Carpenter 1982) that continues the noise's octaves (`Terrain::inside`): the means of the
 quarters of a leaf of side ℓ depart from its mean by four normal draws keyed by the leaf, made to a variance by area of
@@ -204,7 +210,12 @@ the same temperature in each, but the bed's, which stands as the terrain inside 
 the liquid in the ground's pores, which goes by the shares of the quarter's own ground (**inside a cell**, below),
 unless a join made the cell: a join keeps each quarter's share of each amount of each node, of each heat and of each
 volume, and its relief (`remap::Joined`, saved per cell), and the split of that cell gives the quarters back as they
-were (to the rounding of x · share). A made cell's temperature and plateau in Flow's state are those of its heat
+were (to the rounding of x · share). **The liquid a cell passes on** (`World::liquid_flux`) is a flow, not a stock
+(`remap/through.rs`): what drains through a part of the map goes as its drained area on the terrain's channels, so a
+quarter passes on its drained area that leaves it at its parent's flux per m² of the drained area that leaves the
+parent, and a joined cell what leaves it: each quarter's drained area that leaves the joined cell at that quarter's
+flux per m². So a river through a cell stays a river in the quarter it runs through, a river through two quarters is
+passed on once by their join, and a split joined again gives back its cell's flux. A made cell's temperature and plateau in Flow's state are those of its heat
 (`World::thawed`). **Life across a split and a join** (`life/tree.rs`, one life model at every grain: bodies and parts
 are records that hold their own amounts, so they move with nothing to book). A split shares
 life by area, so a node of at least one member per quarter's share leaves in each other quarter a node of
@@ -462,6 +473,12 @@ what the heat holds molten, as every law and the shell then read it.
   a cell it passes on through): each way's room counts all the cell holds, so where its ways together would take it
   lower, each takes less, in proportion (`to_rims`), and no liquid crosses a rim from below it. So a pool a flood
   crosses ends full to its spill level and no higher. What reaches a sea cell stays there and joins the sea.
+- **The channel** (`flow::channel`): what a cell passes on runs in a channel whose width and depth grow as powers of
+  its discharge Q, m³/s (hydraulic geometry downstream, Leopold and Maddock 1953): width `channel_width` ×
+  Q^`channel_width_exp`, depth `channel_depth` × Q^`channel_depth_exp`, and its liquid runs at Q over width × depth.
+  The discharge is the cell's liquid flux (`World::liquid_flux`, mol/s, a moving average over about a year) at the mol
+  per m³ of the liquid its ground holds (`World::liquid_in`). Its size does not depend on the cell's: the push of moving
+  liquid on structures (3.2) and every shell read it here.
 - **Pore water** flows by Darcy's law (an explicit sweep on the liquid table, the store's too, sub-stepped in a cell
   too small for the month, 1.8): `seep` ×
   saturated thickness × width / distance, at most half of what would level two cells, and no cell giving more than it
@@ -805,7 +822,8 @@ its time of its own.
 ### 3.2 Loads and failure
 Monthly (`bond/month.rs`), from the part a body holds out along the bonds, each bond carries the weight hanging on it,
 less buoyancy, plus the push of moving liquid and of bodies passing (`bump` of their weight); past its strength it
-breaks. A structure no body holds lies on the ground and bears no load.
+breaks. Moving liquid pushes a face with ½ ρ v², v the speed of the cell's channel (1.2, `Physics::channel`) where liquid
+stands at least a centimetre deep in the cell. A structure no body holds lies on the ground and bears no load.
 Structures do not drift; only a body carries one (3.5).
 
 ### 3.3 Holding, floating

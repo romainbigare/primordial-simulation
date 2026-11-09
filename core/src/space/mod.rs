@@ -6,6 +6,7 @@
 //! at any point of the map is one function of the world's seed (`terrain`).
 
 pub mod drain;
+pub mod network;
 pub mod square;
 pub mod samples;
 pub mod terrain;

@@ -173,12 +173,9 @@ fn load_one(w: &World, d: &mut Chunk, i: usize, (rp, of): (usize, &[usize])) {
         return;
     };
     let (depth, rho, molv) = liquid(w, i, d.moves.amounts(w, Node::ground(i)));
+    // The liquid's speed in the cell's channel, m/s (`Physics::channel`), of its flux as a volume.
     let flux = w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
-    // The liquid's speed through the cell, m/s: its flux over the mean width of the borders it crosses times its depth.
-    let cells = w.mesh.cells();
-    let (sum, borders) = cells.around(i).0.iter().map(|&l| cells.width()[l as usize]).filter(|&wd| wd > 0.0).fold((0.0, 0.0), |(s, k), wd| (s + wd, k + 1.0));
-    let width = sum / borders;
-    let v = if depth > STILL_DEPTH { flux / (molv * width * depth) } else { 0.0 };
+    let v = if depth > STILL_DEPTH { w.cfg.phys.channel(flux / molv).speed } else { 0.0 };
     let bump = c.parts[rp].push as f64 / of.len() as f64;
     let (mut wt, mut push) = (vec![0.0; of.len()], vec![0.0; of.len()]);
     for (x, &p) in of.iter().enumerate() {

@@ -3,8 +3,9 @@
 //! that raises each closed basin of the samples to its outlet, so liquid runs off every sample of land it reaches
 //! (Planchon and Darboux 2001; Barnes, Lehman and Mulla 2014): noise has basins that no liquid ever cut. Every cell's
 //! height and relief, at the start and at each split, are means over these samples (`Terrain::inside`), so a cell and
-//! its quarters stand on the same ground at every size; so is the way it faces the sun (`Terrain::rise_south`). They are a function of the seed and the map alone, found when
-//! first read and kept with the terrain, not saved.
+//! its quarters stand on the same ground at every size; so is the way it faces the sun (`Terrain::rise_south`); and
+//! the liquid runs down them (`space::network`). They are a function of the seed and the map alone, found when first
+//! read and kept with the terrain, not saved.
 
 use super::drain::drain;
 use crate::math::central;
@@ -15,7 +16,9 @@ use super::Leaf;
 use std::sync::{Arc, Mutex};
 
 /// The drained samples of a map for one seed: its width and height in samples, and of each sample row by row its
-/// height, m, and the rms slope of the noise below it.
+/// height, m, and the rms slope of the noise below it; and the terrain's channels on them (`space::network`): the
+/// sample its liquid runs to (`network::NONE` for a sink), the area that drains through it, m², and its neighbour
+/// upstream that the most drains through (`NONE` where none runs to it).
 #[derive(Debug)]
 pub struct Samples {
     pub seed: u64,
@@ -23,6 +26,9 @@ pub struct Samples {
     pub down: usize,
     pub h: Vec<f64>,
     pub g: Vec<f32>,
+    pub to: Vec<u32>,
+    pub up: Vec<f64>,
+    pub main: Vec<u32>,
 }
 
 impl Samples {
@@ -116,6 +122,7 @@ impl Terrain {
             }
         }
         drain(&mut h, reached, around);
-        Samples { seed, across, down, h, g }
+        let (to, up, main) = super::network::network(&h, |k| dx[k / across] * dy, around);
+        Samples { seed, across, down, h, g, to, up, main }
     }
 }

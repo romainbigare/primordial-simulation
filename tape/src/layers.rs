@@ -93,10 +93,9 @@ fn cell(w: &World, i: usize) -> Cell {
 /// Liquid deeper than this stands (a basin), m; shallower, it may flow as a river.
 pub const STANDING_M: f64 = 1.0;
 /// A river carries at least this many times the liquid its own area sheds (`World::catchment`): an accumulation threshold, how
-/// drainage networks are drawn (O'Callaghan and Mark 1984). web/src/earth.ts fades a river in about it (keep the two in step).
+/// drainage networks are counted (O'Callaghan and Mark 1984).
 pub const RIVER_CATCH: f64 = 10.0;
-/// A river carries at least this liquid flux, mol/s, so a dry cell with a trickle from upstream is none. web/src/earth.ts
-/// fades a river in about it (keep the two in step).
+/// A river carries at least this liquid flux, mol/s, so a dry cell with a trickle from upstream is none.
 pub const RIVER_FLOOR: f64 = 9.0e3;
 /// Whether cell `i` is a river: its flux is over `RIVER_FLOOR` and its catchment (`World::catchment`) over `RIVER_CATCH`.
 pub fn is_river(w: &World, i: usize) -> bool {
@@ -152,6 +151,10 @@ impl<'a> Ctx<'a> {
     fn air(&self, i: usize) -> usize {
         self.w.mesh.up(i, 0, AIR)
     }
+    /// The channel of cell `i`'s own liquid flux (`World::channel`).
+    pub(crate) fn channel(&self, i: usize) -> pcore::flow::Channel {
+        self.w.channel(i, self.w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64)
+    }
 }
 
 /// Air node `j`: its heat-absorbing column (Σ n·ir_abs / area) and the column of condensable gases, mol/m².
@@ -187,6 +190,8 @@ pub const LAYERS: &[Layer] = &[
     l("ice", "m", "log", 0.001, 100.0, |c, i| c.f.ice[i]),
     l("flux", "mol/s", "log", 1.0, 1e7, |c, i| c.w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64),
     l("catch", "1", "log", 1.0, 1e5, |c, i| c.w.catchment(i)),
+    l("channel_w", "m", "log", 0.1, 1000.0, |c, i| c.channel(i).width),
+    l("channel_d", "m", "log", 0.01, 30.0, |c, i| c.channel(i).depth),
     l("loose", "m", "log", 0.01, 100.0, |c, i| c.f.loose[i]),
     l("t_ground", "K", "lin", 220.0, 330.0, |c, i| c.f.t[i]),
     l("t_air", "K", "lin", 220.0, 330.0, |c, i| c.t_air[c.air(i)]),

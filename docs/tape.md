@@ -60,13 +60,25 @@ map repeating east and west, and a cell's latitude and longitude in the inspect 
 **Map layers** in the frames (`tape/src/layers.rs`, one byte a square of the map, row by row; a square shows the cell
 that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid depth, ice, liquid flux, `catch` (the upstream area a cell drains
 in units of its own: its liquid flux over its rain less evaporation times its area, so a river reads the same at any cell
-size), loose ground, ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the bodies' mass per m², bodies, traffic,
+size), `channel_w` and `channel_d` (the width and the depth of the cell's channel, `World::channel`), loose ground, ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the bodies' mass per m², bodies, traffic,
 worn edges, structures, true colour (r, g, b). The tape holds whole-map frames only. The live viewer also asks for
 the window in view and a fifth of it about it, finer than its cells (`tape::fine`, the layout in `tape/src/fine/mod.rs`), a pixel a leaf of a depth
 2 to 4 below the cells, at any zoom: of each pixel the ground's height, the level of the liquid its own cell holds,
 and every layer as a smooth field of the cells' values (the ground's temperature along the ground's height over its
-cell's mean, at the rate the air cools with height, `World::air_drop`), and the way each cell's liquid runs (to the cell
-the steepest way down its head takes the most of, as the liquid law sends it). The ground of a pixel is the terrain
+cell's mean, at the rate the air cools with height, `World::air_drop`), and the channels its liquid runs in
+(`tape/src/fine/channels.rs`): the share of the pixel a channel covers and that channel's depth. The channels are the
+terrain's (`space::network`): each drained sample's way to the neighbour its ground falls to most steeply carries the
+flux of the cell that holds its start, per m² of the drained area that leaves that cell, times the drained area of the
+sample: the share of the cell's flux a split would give that part of it (`Samples::leaving`), so a split draws the same
+channels. For a cell finer than 4 x 4 samples the flux per m² is that of all the cells of the region of 4 x 4 samples
+that holds the sample together (their fluxes over their drained areas that leave them): the core's liquid between such
+cells runs by their own heights, a sample or two off the samples' channels, and the channel is drawn whichever of them
+it runs through. Each carries it in a channel as wide and deep as `World::channel` makes it, drawn as a curve from the middle
+of the way into its sample (from the neighbour upstream that the most drains through) to the middle of its own, bent
+at the sample's centre (a quadratic Bézier); a way into a sample that more drains into from elsewhere runs on to that
+sample's curve. So a channel follows the drained ground, depends on the seed alone (the same at every zoom and across
+the cells' edges), and is as wide as it is: a pixel narrower than it is all channel, a wider one holds the share of its
+width the channel covers across it (a channel under half a display level of a pixel is not drawn). The ground of a pixel is the terrain
 itself, drained (`space::terrain`): the mean of its samples, the samples whose means the cells' heights are and over
 whose shape each cell's liquid stands (`flow::curve`); finer than them, the midpoint displacement's departures laid on
 a quartic continuation of the coarser heights that keeps each leaf's mean, smooth with its slope so hill shading shows
@@ -96,25 +108,26 @@ pixel (little-endian), the pixels row by row as above, in this order:
 
 Then the count m of the window's cells (u32) and of each, for each of its 4 slots, its walls and its capture area per
 kg of its built cover (kg/kg, m²/kg; two f32, 0 for a slot it does not hold), so a shell knows what each slot builds
-where it stands. So a window of `across` x `down` pixels after `L` layers starts these at `ceil4(8 + 24 r + 8 n + L n)`
-bytes, n the pixels and r the river ways, and they take `24 n + 4 + 32 m` bytes. These are the core's own shares of each cell's means over its
+where it stands. So a window of `across` x `down` pixels after `L` layers starts these at `ceil4(4 + 16 n + L n)`
+bytes, n the pixels, and they take `24 n + 4 + 32 m` bytes. These are the core's own shares of each cell's means over its
 ground (laws.md 0, "Inside a cell"): the ones a split gives its quarters. Each pixel reads the cell that holds its
 centre, not a blend between cells, as the mean over the samples of that cell's 8 x 8 grid the pixel covers (the one
 that holds it, where the pixel is finer): so the pixels of a cell keep its means, and a field may step at a cell's edge.
 The viewer's worker turns it into the fields the graphics
-card draws (`web/src/fields.ts`, four channels a texture, a texel a pixel): the ground's height, the liquid's
+card draws (`web/src/fields.ts`, four channels a texture, a texel a pixel): the ground's height (lower by a channel's
+share times its depth: its volume over the pixel's area), the liquid's
 surface over it (none in its cell: 1000 m below) and the ground's slope east and south; the ice, the ground's
-temperature, the share of the pixel that is the sea's (in a sea square or a dry square beside one) and that is a river
-(the ways drawn as lines as wide as their discharge, Leopold and Maddock 1953, or wider); the plant cover's byte and
-the true colour; how wet the ground is and the river's depth
-(as deep as its discharge makes it, Leopold and Maddock 1953); and every layer's bytes as they came. Each slot's
+temperature, the share of the pixel that is the sea's (in a sea square or a dry square beside one) and that a channel
+covers; the plant cover's byte and the true colour; how wet the ground is and the channel's depth; and every layer's
+bytes as they came. Each slot's
 plane, with what it builds per kg, is a stand of its own in the field of the plant cover's marks. The page makes the same fields of the whole-map frame, a texel a square
 (the liquid's surface in a dry square below its ground by the depth it lacks to be wet and its height over the wet
-squares beside it; a frame does not say how wet the ground is). The card colours them at each screen pixel, over the
+squares beside it; the share a channel covers, its width over the square's, `channel_w`; a frame does not say how wet
+the ground is). The card colours them at each screen pixel, over the
 whole-map frame: hill shading; the ground soaked by its wetness and the capillary fringe over the liquid's surface,
 darker and, near soaked, shining; the liquid as flat water over its bed, the bed fading with depth by Beer–Lambert, a
-little sky and sun on small ripples; snow by the pixel's own temperature near the cover's melting point; the rivers
-as the same water; it is not recorded. Close up it also asks
+little sky and sun on small ripples; snow by the pixel's own temperature near the cover's melting point; the channels
+as the same water over the share they cover; it is not recorded. Close up it also asks
 for the things of the cells in view (`tape::things`, the record layout in `tape/src/things.rs`): each body (members,
 a member's mass, strength, colour, coat, copy mass, the temperatures it keeps, what it takes from where, its kind,
 stage and brain, the part it holds and the structure it is inside), each slot of cover (its kind, built cover and capture area per m²
@@ -140,7 +153,7 @@ a lot part by part at places keyed by its id and each part's index, and is not r
 | `ice_land` | km³ | frozen cover on land |
 | `rain`, `rain_land` | mol/m²/s | mean rain, and on land (a moving average over about a year) |
 | `evap_land`, `runoff_sea` | mol/m²/s | on land, what rises into the air less what condenses on the ground, and what runs over the surface into cells under the sea's level, per m² of land (moving averages over about a year): with `rain_land` the land's water budget |
-| `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) that are rivers (`tape::is_river`): a liquid flux over `tape::RIVER_FLOOR` and over `tape::RIVER_CATCH` times what the cell's own area sheds (`catch`). The viewers and the report count the same way |
+| `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) that are rivers (`tape::is_river`): a liquid flux over `tape::RIVER_FLOOR` and over `tape::RIVER_CATCH` times what the cell's own area sheds (`catch`). The report counts the same way |
 | `cells`, `splits`, `joins` | , 1/yr, 1/yr | the cells of the map at the year's end; cells split into their quarters and cells joined from them in the year (`World::split`, `World::join`, as refinement asks, `World::refine`) |
 | `bodies` | | bodies (nodes and individuals) |
 | `cover_slots`, `cover_kg` | , kg | slots of cover in the world (`cover::SLOTS` a cell at most), and its mass |

@@ -2,7 +2,7 @@
 //! body reads the parts of its own cell (`life::Cell`).
 
 use super::{at, held, root, Enclosure, NO, NOBODY};
-use crate::{body::Body, brain::LN_MASS, chem::Phase, life::{Cell, Chunk}, store::Node, World};
+use crate::{body::Body, brain::LN_MASS, life::{Cell, Chunk}, store::Node, World};
 
 /// A body perceives the ln of a part's length (m) over this (its mass as every mass, `brain::LN_MASS`).
 const LN_SIZE_SCALE: f32 = 3.0;
@@ -46,13 +46,7 @@ pub(crate) fn room_air(d: &Chunk, b: &Body) -> Option<RoomAir> {
 
 /// Standing liquid on cell `i` whose ground holds `g` mol of each substance: depth m, density kg/m³, mol per m³.
 pub(super) fn liquid(w: &World, i: usize, g: impl Fn(usize) -> f64) -> (f64, f64, f64) {
-    let env = w.life.env[i];
-    let (mut m, mut v, mut mol) = (0.0, 0.0, 0.0);
-    for k in (0..w.chem.ns()).filter(|&k| w.chem.phase_in(k, env[0], &g) == Phase::Liquid) {
-        let a = g(k);
-        (m, v, mol) = (m + a * w.chem.subs[k].molar_mass, v + a * w.chem.molar_volume(k, Phase::Liquid), mol + a);
-    }
-    if v > 0.0 { (env[1], m / v, mol / v) } else { (0.0, 0.0, 0.0) }
+    w.liquid_in(i, g).map_or((0.0, 0.0, 0.0), |(rho, per_m3)| (w.life.env[i][1], rho, per_m3))
 }
 
 /// How body `b` stands in the standing liquid of cell `i` (its own, or one it steps into, `choose::go`; laws.md 3.3).
