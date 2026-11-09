@@ -458,7 +458,7 @@ swap liquid** once a month, before the basin levels and mixes its tops (`deep::m
 through the thermocline by eddy diffusion (`thermocline`), over the area of the ground under the deep's level and the
 distance between the two parts' middles, as two volumes that even out exactly as they would alone; and all the way
 where the top is the denser, so the column overturns: the top's main liquid lies nearer the temperature at which it is
-densest (`Substance::dense`; a liquid grows lighter both ways from there) than the deep's. So a top that cools toward
+densest with what the top holds dissolved (`Chemistry::dense_in`, 2.5; a liquid grows lighter both ways from there) than the deep's. So a top that cools toward
 that temperature sinks and mixes the column, and one that cools past it lies on the deep and freezes. The land and the top pass each other heat at the shore by conduction through their active layers across the
 edge of the ground under the liquid (`Curve::shore`, found at the samples), each from its middle, half its area over
 that edge away, in series (two half cells, as heat conducts sideways between cells): over cells of kilometres this is
@@ -475,9 +475,8 @@ another cell stands its liquid over its quarters' own ground (0), so each quarte
 at its next build. No part holds less heat than its matter at `T_FLOOR`; the first other that can gives what it lacks.
 **Known limit:** the parts hold one mixture of the substances that move with the liquid, shared by what other laws
 move; a part's own salt (a sea's against its land's rain) is kept apart only as the liquid moves it, and the
-liquid's density is its temperature's alone: what it holds dissolved moves neither its density nor where it is densest
-(a real sea's salt brings that below its freezing point, so a real sea overturns down to it). The top's depth is one
-number; a real mixed layer deepens in winter and thins in summer.
+top overturns by temperature alone: a saltier top does not sink for its salt. The top's depth is one number; a real
+mixed layer deepens in winter and thins in summer.
 **Melting plateaus** (`ground::melting`): a node holds the fusion enthalpy of what is molten in it, so it stays at a
 melting point (lowered by solutes, 2.5) until that substance has all frozen or melted. A node whose heat melts or
 freezes all of it within a step stays there only for the share of the step that takes, then goes on from that point,
@@ -800,7 +799,11 @@ ground plateaus, ice cover (`World::thaw`), parts and Change; a body's frost goe
 points (6.5). **Latent heat**: a gas in the air holds its melting and boiling heat (`Substance::latent_gas`), paid or
 got as it enters or leaves; a body holds the fusion heat of its key liquids at any temperature (`Body::fused`: it has
 no melting plateau, frost kills a share of its members instead, 6.5), and liquid it takes or gives carries it
-(`Body::heat_with`).
+(`Body::heat_with`). **The densest temperature** of a liquid (`Chemistry::dense_in`, what overturns a liquid's top and
+deep, 1.1) is its pure liquid's (`Substance::dense`) lowered in proportion to the mass of its solutes per mass of it
+(Despretz's law, `Substance::dense_drop`), and no lower than its melting point there: a liquid salty enough is densest
+where it freezes. The sea of chemistry 0 is nearly fresh: about 0.2 g/kg dissolved (a real sea about 35), so it is
+densest at 276.9 K, stops overturning below that and freezes at its top, as a lake does.
 
 ### 2.6 Pairs at balance and the sea's carbon
 `change::reversible` finds each pair of reactions where one undoes the other; `Reactor::balance` finds from the

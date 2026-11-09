@@ -69,6 +69,7 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
                 boil,
                 density: [rho, rho * 0.85],
                 dense: melt,
+                dense_drop: 0.0,
                 hardness: (strength * (0.5 + 0.7 * r.f64())).min(1.0),
                 strength,
                 refl: [band(&mut r, 1.0), band(&mut r, 0.3)],

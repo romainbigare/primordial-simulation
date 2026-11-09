@@ -37,8 +37,10 @@ pub struct Substance {
     pub boil: f64,
     /// kg/m³ as [solid, liquid]
     pub density: [f64; 2],
-    /// The temperature at which its liquid is densest, K (at or below its melting point: densest where it freezes)
+    /// The temperature at which its pure liquid is densest, K (at or below its melting point: densest where it freezes)
     pub dense: f64,
+    /// How far what is dissolved in it lowers that temperature, K per kg dissolved per kg of it (Despretz's law)
+    pub dense_drop: f64,
     /// 0..1
     pub hardness: f64,
     /// Bond strength of the solid, 0..1
@@ -213,7 +215,7 @@ impl Chemistry {
             require(s.elems.len() == self.n_elements, || format!("substance {k}: wrong element count"))?;
             require(s.lv > 0.0, || format!("substance {k}: vaporisation enthalpy must be above 0"))?;
             require(s.density.iter().all(|&d| d > 0.0), || format!("substance {k}: densities must be above 0"))?;
-            require(s.dense > 0.0, || format!("substance {k}: the temperature of its densest liquid must be above 0"))?;
+            require(s.dense > 0.0 && s.dense_drop >= 0.0, || format!("substance {k}: the temperature of its densest liquid must be above 0, its lowering not below"))?;
         }
         // Each reaction, then each conversion: a conversion needs inputs and a product, a reaction no more orders than
         // inputs. Its molar masses must agree with its elements to rounding: it keeps mass.

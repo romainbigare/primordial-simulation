@@ -75,7 +75,8 @@ type Swap = (usize, Vec<(usize, f64)>, f64);
 /// the area of the ground under the deep's level and the distance between the middles of the two, as two volumes that
 /// even out exactly as they would alone, (1 - e^(-K a dt / dz (1/v_top + 1/v_deep))) of the way; and all the way where
 /// the top is the denser, so the column overturns: its main liquid (the most by volume) nearer the temperature at which
-/// that liquid is densest (`Substance::dense`) than the deep's. The cells whose parts moved.
+/// that liquid is densest with what the top holds dissolved (`Chemistry::dense_in`) than the deep's. The cells whose
+/// parts moved.
 pub(in crate::flow) fn mix(w: &World, s: &mut Scratch, dt: f64) -> Vec<u32> {
     let (area, kz) = (w.mesh.cells().area(), w.cfg.phys.thermocline);
     let swaps: Vec<Swap> = (0..s.state.parts.len())
@@ -123,8 +124,12 @@ fn volume(s: &Scratch, piece: &Piece) -> f64 {
 }
 
 /// Is the liquid of the top `top` denser than that of the deep `deep` under it? Its main liquid lies nearer the
-/// temperature at which that liquid is densest (`Substance::dense`): a liquid grows lighter both ways from there.
+/// temperature at which that liquid is densest with what the top holds (`Chemistry::dense_in`): a liquid grows lighter
+/// both ways from there.
 fn denser(w: &World, s: &Scratch, top: &Piece, deep: &Piece) -> bool {
     let main = s.state.vary.iter().copied().max_by(|&a, &b| (top.liquid(a, &s.sp[a]) * s.sp[a].v[1]).total_cmp(&(top.liquid(b, &s.sp[b]) * s.sp[b].v[1])));
-    main.is_some_and(|k| (top.tg - w.chem.subs[k].dense).abs() < (deep.tg - w.chem.subs[k].dense).abs())
+    main.is_some_and(|k| {
+        let dense = w.chem.dense_in(k, |j| top.amt[j]);
+        (top.tg - dense).abs() < (deep.tg - dense).abs()
+    })
 }

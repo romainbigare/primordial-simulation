@@ -70,6 +70,18 @@ impl Chemistry {
         if most > x || x <= 0.0 { self.subs[k].melt } else { self.t_melt(k, x / (x + other).max(LEAST_MOL)) }
     }
 
+    /// The temperature at which the liquid `k` among the amounts `a(j)` of one node or body is densest, K: its own
+    /// (`Substance::dense`), lowered in proportion to the mass dissolved in it per mass of it (Despretz's law,
+    /// `Substance::dense_drop`; what is dissolved as `melt_in` counts it), and no lower than its melting point there
+    /// (`melt_in`): a liquid salty enough is densest where it freezes.
+    pub fn dense_in(&self, k: usize, a: impl Fn(usize) -> f64) -> f64 {
+        let s = &self.subs[k];
+        let solvent = a(k).max(0.0) * s.molar_mass;
+        let dissolved: f64 = self.mixes(k).map_or(0.0, |js| js.iter().filter(|j| j.1).map(|&(j, ..)| a(j).max(0.0) * self.subs[j].molar_mass).sum());
+        let t = if solvent > 0.0 { s.dense - s.dense_drop * dissolved / solvent } else { s.dense };
+        t.max(self.melt_in(k, &a))
+    }
+
     /// What may share the liquid `k` (`melt_in`), each with whether it dissolves in `k` and whether it is a liquid of the
     /// world; none: `k` is no liquid of the world. Found once per chemistry (`find_mixes`).
     pub fn mixes(&self, k: usize) -> Option<&[(usize, bool, bool)]> {
