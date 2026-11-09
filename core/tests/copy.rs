@@ -2,6 +2,8 @@
 //! rebuilds. Two parents and population nodes: `populations.rs`.
 
 use pcore::life::Handle;
+use pcore::space::Leaf;
+use std::collections::BTreeMap;
 use pcore::body::{Layout, ALLOC, BRAIN_SIZES, CHILD, COOL_T, COPY_MASS, DISPERSE, KEEP_T};
 use pcore::body::{MUT, STRENGTH};
 use pcore::rng::{Purpose, Rng};
@@ -261,6 +263,8 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     // children who left got what those who stayed got.
     let (mut w, i) = start();
     w.cfg.phys.c_copy = 1e18;
+    // (A kernel as wide as the squares, so that the children who disperse leave their cell.)
+    (w.cfg.phys.kernel_near, w.cfg.phys.kernel_far) = (SQUARES_M, SQUARES_M);
     let mut n = eater(&mut w, i, brain::REST, 10f32.log10());
     (n.genes[CHILD], n.genes[DISPERSE]) = (-std::f32::consts::LOG10_2, 1.0 / 3.0);
     scale(&mut w, &mut n, 5.0);
@@ -867,4 +871,98 @@ fn a_crowded_cell_keeps_a_young_and_a_mature_node_per_kind() {
     capped(&mut w, i, (5, 12), (-0.4, false), 20.0);
     crowd(&mut w, i);
     assert_eq!(cell_books(&w, i).0.len(), 2, "two starting kinds merged: {:?}", cell_books(&w, i).0);
+}
+
+/// The width of the dispersal kernel of the tests that need children to leave their cell, m: the island's squares.
+const SQUARES_M: f64 = 2000.0;
+
+/// Lots drawn from a cell by the tests of the dispersal kernel.
+const DRAWS: usize = 400_000;
+/// Points along a side of the cells in the numerical integral of the kernel.
+const POINTS: usize = 2000;
+/// Standard errors within which what lands must match what the kernel says: four, as the test makes about thirty
+/// comparisons (three would fail one run in ten by chance).
+const SIGMAS: f64 = 4.0;
+/// Fewest lots expected in a cell for its share to be tested (so the normal law holds for its count).
+const ENOUGH: f64 = 30.0;
+
+/// The lots of `DRAWS` that land in each cell, by its leaf, drawn from the cell `from` (stream `stream`).
+fn landed(w: &World, from: Leaf, draws: usize, stream: u64) -> BTreeMap<Leaf, f64> {
+    let i = w.map.cell(from).expect("a cell");
+    let mut r = Rng::new(w.seed, stream, i as u64, Purpose::Cover);
+    let mut by_leaf = BTreeMap::new();
+    for _ in 0..draws {
+        if let Some(j) = copy::lot(w, i, &mut r) {
+            *by_leaf.entry(w.map.leaves()[j]).or_insert(0.0) += 1.0 / draws as f64;
+        }
+    }
+    by_leaf
+}
+
+/// The share of what starts evenly along a line of `side` m that a Gaussian of `sigma` m puts along a line of the same
+/// length `o` m on, by the midpoint rule over `POINTS` points on each.
+fn along(sigma: f64, side: f64, o: f64) -> f64 {
+    let at = |k: usize| ((k as f64 + 0.5) / POINTS as f64 - 0.5) * side;
+    let density = |d: f64| (-0.5 * d * d / (sigma * sigma)).exp() / (std::f64::consts::TAU.sqrt() * sigma);
+    let sum: f64 = (0..POINTS).flat_map(|a| (0..POINTS).map(move |c| (a, c))).map(|(a, c)| density(o + at(c) - at(a))).sum();
+    sum * side / (POINTS * POINTS) as f64
+}
+
+/// The share of what leaves cell `i` that the kernel puts in cell `j` of the same size: its two Gaussians, each a product
+/// over east and south, integrated over `j` from points spread evenly over `i`.
+fn kernel_share(w: &World, i: usize, j: usize) -> f64 {
+    let (p, o) = (&w.cfg.phys, w.mesh.cells().offset(i, j));
+    let south = w.map.length(w.map.leaves()[i].depth);
+    let side = [w.mesh.cells().area()[i] / south, south];
+    let by = |sigma: f64| along(sigma, side[0], o[0]) * along(sigma, side[1], o[1]);
+    (1.0 - p.kernel_far_share) * by(p.kernel_near) + p.kernel_far_share * by(p.kernel_far)
+}
+
+/// Two shares drawn `DRAWS` times each agree within `SIGMAS` standard errors (the draws are independent).
+fn agree(a: f64, b: f64, what: &str) {
+    let p = (a + b) / 2.0;
+    let se = (p * (1.0 - p) * 2.0 / DRAWS as f64).sqrt();
+    assert!((a - b).abs() <= SIGMAS * se, "{what}: {a} against {b}, {SIGMAS} standard errors are {}", SIGMAS * se);
+}
+
+/// What disperses lands by one kernel at any size of cell (`copy::lot`), in expectation: over many lots, the share that
+/// lands in a cell beside the source is the same from the source and from its four quarters; the share that lands in
+/// a cell is the same as the shares in its four quarters together; and the share in each cell near the source is the
+/// kernel's integral over it, all within `SIGMAS` standard errors.
+#[test]
+fn lots_land_alike_from_a_cell_and_from_its_quarters() {
+    let coarse = testkit::small_world();
+    let source = coarse.map.leaves()[coarse.mesh.tree().cell_at(coarse.map.point_at(8.0, 8.0))];
+    let aside = Leaf { x: source.x + source.side(), ..source };
+    let (mut fine, quarters) = (testkit::small_world(), source.quarters());
+    testkit::split_down(&mut fine, &[source], 1);
+    let whole = landed(&coarse, source, DRAWS, 1);
+    let from_quarters: Vec<_> = quarters.iter().enumerate().map(|(k, &q)| landed(&fine, q, DRAWS / 4, 10 + k as u64)).collect();
+    let mut tested = 0;
+    for (leaf, &share) in whole.iter().filter(|(l, s)| **l != source && **s * DRAWS as f64 > ENOUGH) {
+        let mean = from_quarters.iter().map(|q| q.get(leaf).copied().unwrap_or(0.0)).sum::<f64>() / 4.0;
+        agree(share, mean, &format!("{leaf:?} from the cell and from its quarters"));
+        tested += 1;
+    }
+    assert!(tested >= 8, "the cells beside it are tested: {tested}");
+    // Into a cell and into its quarters, from the cell beside it.
+    let (into_cell, into_quarters) = (landed(&coarse, aside, DRAWS, 2), landed(&fine, aside, DRAWS, 3));
+    let sum: f64 = quarters.iter().map(|q| into_quarters.get(q).copied().unwrap_or(0.0)).sum();
+    agree(into_cell[&source], sum, "into the cell and into its quarters");
+    // And the kernel's integral over each cell near the source, from the cell itself.
+    let i = coarse.map.cell(source).expect("a cell");
+    for (leaf, &share) in whole.iter().filter(|(_, s)| **s * DRAWS as f64 > ENOUGH) {
+        let want = kernel_share(&coarse, i, coarse.map.cell(*leaf).expect("a cell"));
+        let se = (want * (1.0 - want) / DRAWS as f64).sqrt();
+        assert!((share - want).abs() <= SIGMAS * se, "{leaf:?}: {share} lands, the kernel says {want}, {SIGMAS} standard errors are {}", SIGMAS * se);
+    }
+}
+
+/// Seeds keep the books: elements and energy over two years of a living world, which sends seeds every month.
+#[test]
+fn seeds_keep_the_books() {
+    let mut w = testkit::living(8, 0);
+    let books = Books::now(&w);
+    (0..24).for_each(|_| pcore::step(&mut w));
+    books.assert_kept(&w, 1e-9);
 }

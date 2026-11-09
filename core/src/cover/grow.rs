@@ -228,9 +228,8 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
 /// Slot `x` builds what its fuel over its reserve (`STORE`) and the minerals of its ground (`ground`, mol, shared out
 /// as slots build) allow, by the conversions of growth (`Chemistry::build`, `builds`) at its share of walls (`WALLS`),
 /// paying `c_copy` per kg by burning fuel; a fixer (`FIX`) makes the mineral it lacks, at its
-/// capacity, paid by the fixing reaction's fuel. The share `SEED` of what it builds leaves as seeds, `spread_m` away in a
-/// compass direction drawn, over the cells the area of its cell shifted so far overlaps (`copy::dispersed`, `seed::send`),
-/// with a generation's mutation; all of it where one more kg would not pay its upkeep (`pays`
+/// capacity, paid by the fixing reaction's fuel. The share `SEED` of what it builds leaves as seeds, in `seed::LOTS` lots
+/// that land where the dispersal kernel draws (`copy::lot`, `seed::send`), with a generation's mutation; all of it where one more kg would not pay its upkeep (`pays`
 /// false: its light at the bottom of its layer is under its compensation point), so a cover stops thickening where its
 /// lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005).
 #[allow(clippy::too_many_arguments)]
@@ -293,7 +292,13 @@ fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool)
         b.heat -= heat;
         let mut r = Rng::new(w.seed, w.month(), (i * SLOTS + x) as u64, Purpose::Cover);
         let mut lands: Vec<(usize, f64)> = Vec::new();
-        crate::copy::dispersed(w, i, &mut r, |j, share| lands.push((j, share)));
+        for _ in 0..super::seed::LOTS {
+            let Some(j) = crate::copy::lot(w, i, &mut r).filter(|&j| j != i) else { continue };
+            match lands.iter_mut().find(|l| l.0 == j) {
+                Some(l) => l.1 += 1.0 / super::seed::LOTS as f64,
+                None => lands.push((j, 1.0 / super::seed::LOTS as f64)),
+            }
+        }
         let genes = super::mutate(&g, ph.cover_mut, &mut r);
         super::seed::send(c, x, (mol, heat), genes, (i, lands));
     }

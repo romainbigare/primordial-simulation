@@ -12,12 +12,15 @@ mod grow;
 mod litter;
 mod mature;
 mod mix;
+mod spread;
 
 pub use born::Fill;
 pub use grow::{grow, Grew};
 pub use litter::Litter;
 pub(crate) use litter::{back, land_litter};
 pub(crate) use mature::mature;
+pub use spread::lot;
+use spread::landing;
 
 use crate::body::{most, mutation_size, vary, Body, Layout, CHILD, DISPERSE, WET, WET_TISSUE};
 use crate::brain::{self, row_step, shake};
@@ -26,7 +29,6 @@ use crate::event::{Event, EventKind};
 use crate::lineage::{sizes_of, wanted};
 use crate::nodes::{add, Lot, Own, COUNT_SLACK, MAX_NODES};
 use crate::rng::{Purpose, Rng};
-use crate::space::COMPASS;
 use crate::life::Entry;
 use crate::{life::{Chunk, Handle}, World};
 pub use mix::MATE_HIDDEN;
@@ -80,8 +82,8 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body, fill: Fill) -> bool {
     let mut r = Rng::new(w.seed, w.key_ending(b.cell as usize, fill.at), id, Purpose::Mutate);
     let i = b.cell as usize;
     let mate = if mates(w, d, b) { partner(w, d, b, &mut r) } else { None };
-    // Children that start `spread_m` away in a compass direction drawn, in a cell drawn by its share (`landing`; still in
-    // its cell or off the map: none): of a node, the
+    // Children that start in the cell one lot of the dispersal kernel lands in (`landing`; still in its cell or off the
+    // map: none): of a node, the
     // share `DISPERSE` of its births, however few (less than one member with no node to join there waits in the brood,
     // as the stayers do, `emit`), all of one update the same way, as the children of one call cost one `emit`; an
     // individual's go together, by that chance.
@@ -109,39 +111,6 @@ pub fn copy(w: &World, d: &mut Chunk, b: &mut Body, fill: Fill) -> bool {
         made |= emit(w, d, b, &litter, i, births - m, &mut r);
     }
     made
-}
-
-/// The steps east and south of each compass direction (`COMPASS`, clockwise from east).
-const STEPS: [[f64; 2]; COMPASS] = [[1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [-1.0, 1.0], [-1.0, 0.0], [-1.0, -1.0], [0.0, -1.0], [1.0, -1.0]];
-
-/// Where what disperses from cell `i` lands (children, `copy`; seeds, `cover`): it starts evenly over `i` and moves
-/// `spread_m` east or west and `spread_m` north or south as the compass direction drawn says (`STEPS`), whatever the
-/// sizes of the cells it crosses, so it lands evenly over the area of `i` shifted by that step: `land(j, share)` for
-/// each other cell `j` that area overlaps (`Tree::overlaps`), with the share of the area that lies there. From a square
-/// of 2 km that is the 16 cells of 500 m of the square beside it alike; from a cell of 500 m, 1 to 4 cells. What lies in
-/// `i` itself or off the map has no call: it stays in `i`. Only the direction is drawn.
-pub(crate) fn dispersed(w: &World, i: usize, r: &mut Rng, mut land: impl FnMut(usize, f64)) {
-    let (leaf, length) = (w.map.leaves()[i], w.cfg.phys.spread_m);
-    let way = STEPS[r.below(COMPASS)];
-    // The cell's side in leaves of the most depth, and its length east and south, m (on a globe its rows narrow).
-    let (side, south) = (leaf.side() as f64, w.map.length(leaf.depth));
-    let size = [w.mesh.cells().area()[i] / south, south];
-    let corner = leaf.corner();
-    let from: [f64; 2] = std::array::from_fn(|a| corner[a] as f64 + side * way[a] * length / size[a]);
-    w.mesh.tree().overlaps(from, side, |j, area| if j != i { land(j, area / (side * side)) });
-}
-
-/// The cell whole members that disperse from cell `i` land in (`dispersed`): one of the cells the dispersal reaches,
-/// drawn by its share, so they land as seeds do in expectation; none where they stay in `i`.
-fn landing(w: &World, i: usize, r: &mut Rng) -> Option<usize> {
-    let (u, mut at, mut to) = (r.f64(), 0.0, None);
-    dispersed(w, i, r, |j, share| {
-        at += share;
-        if to.is_none() && u < at {
-            to = Some(j);
-        }
-    });
-    to
 }
 
 /// `m` children of `b` start in `cell`: their genes, stores, heat and rows, booked on the young node of their kind and

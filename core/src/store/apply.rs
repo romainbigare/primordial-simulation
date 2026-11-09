@@ -239,6 +239,17 @@ pub(crate) fn life_went(w: &mut World, went: &[(usize, usize, f64)]) {
     fall_heat(w, Class::Ground, q);
 }
 
+/// Life's matter that went between the heads of ground cells, `(cell, [left, came])` the kg each lost from its head
+/// and gained at it in all, in the order given, now booked: it carries its potential energy from the head it left, and
+/// the ground node of the cell takes what the kg that left held over what the kg that came holds (`flow::gain` of each
+/// at the cell's head): a fall heats that ground, a climb is paid by it (`fall_heat`, against `Store::lifted`). Two
+/// calls to Flow at most for each cell, whatever the number of its sources and targets.
+pub(crate) fn life_sent(w: &mut World, sent: impl IntoIterator<Item = (usize, [f64; 2])>) {
+    let at = |w: &World, i: usize, kg: f64| if kg == 0.0 { 0.0 } else { crate::flow::gain(w, i, |_, _| 0.0, kg) };
+    let q: Vec<(usize, f64)> = sent.into_iter().map(|(i, [left, came])| (i, at(w, i, left) - at(w, i, came))).collect();
+    fall_heat(w, Class::Ground, q);
+}
+
 /// The moves of `moves` between a node of life (a body, a part, a cover) and a ground or bed node, per ground cell in
 /// the order of the cells: what its ground (`[k]`) and its bed (`[ns + k]`) gained of each substance `k`, mol
 /// (`life_moved`).

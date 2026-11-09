@@ -156,39 +156,10 @@ impl Tree {
         }
         Some((e & !LEAF) as usize)
     }
-    /// Each leaf a square of `side` × `side` from its north-west corner `from` (in leaves of the most depth, round a
-    /// globe east and west) overlaps, with the area of the overlap, by `f(leaf, area)`: air block by air block, row by
-    /// row, each down its quarters that the square reaches. The part off the map has none.
-    pub(crate) fn overlaps(&self, from: [f64; 2], side: f64, mut f: impl FnMut(usize, f64)) {
-        let (across, down, b) = (self.across as f64, self.down as f64, BLOCK as f64);
-        let shifts: &[f64] = if self.wrap { &[-across, 0.0, across] } else { &[0.0] };
-        for &s in shifts {
-            let x = [(from[0] + s).max(0.0), (from[0] + s + side).min(across)];
-            let y = [from[1].max(0.0), (from[1] + side).min(down)];
-            if x[0] >= x[1] || y[0] >= y[1] {
-                continue;
-            }
-            for by in (y[0] / b) as u64..(y[1] / b).ceil() as u64 {
-                for bx in (x[0] / b) as u64..(x[1] / b).ceil() as u64 {
-                    let root = self.roots[self.block(bx * BLOCK, by * BLOCK)];
-                    self.overlap_in(root, [(bx * BLOCK) as f64, (by * BLOCK) as f64], b, (x, y), &mut f);
-                }
-            }
-        }
-    }
-    /// `overlaps` inside entry `e` of the tree, whose square has its north-west corner at `at` and side `size`.
-    fn overlap_in(&self, e: u32, at: [f64; 2], size: f64, (x, y): ([f64; 2], [f64; 2]), f: &mut impl FnMut(usize, f64)) {
-        let (wide, high) = (x[1].min(at[0] + size) - x[0].max(at[0]), y[1].min(at[1] + size) - y[0].max(at[1]));
-        if wide <= 0.0 || high <= 0.0 {
-            return;
-        }
-        if e & LEAF != 0 {
-            return f((e & !LEAF) as usize, wide * high);
-        }
-        let half = size / 2.0;
-        for (q, &sub) in self.quarters[e as usize].iter().enumerate() {
-            self.overlap_in(sub, [at[0] + (q % 2) as f64 * half, at[1] + (q / 2) as f64 * half], half, (x, y), f);
-        }
+    /// The cell that holds the point (`x`, `y`) in leaves of the most depth, round a globe east and west; none off the
+    /// map.
+    pub(crate) fn holding(&self, x: f64, y: f64) -> Option<usize> {
+        self.at(x.floor() as i64, y.floor() as i64)
     }
     /// The leaves across the side of `leaf` that lies the way `way` (`SIDES`), in order from north to south or west to
     /// east: those at the starts of the side's two halves (of the side, for a leaf of the most depth), each once. Where
