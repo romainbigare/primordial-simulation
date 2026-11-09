@@ -98,6 +98,32 @@ fn a_split_then_its_join_gives_back_the_world() {
     assert!(w.life.serial(j) > first, "the joined cell takes a serial never given before");
 }
 
+/// What a cell passes on is a flow (laws.md 0): a split gives each quarter its drained area that leaves it (the
+/// terrain's channels, `Samples::leaving`) at its cell's flux per m² of that area, and their join gives back what
+/// leaves the cell (to the f32 the flux is kept in), at the samples' size, coarser and finer.
+#[test]
+fn a_split_leads_what_its_cell_passes_on_and_its_join_gives_it_back() {
+    let mut w = world();
+    let (s, lat, flux) = (w.drained(), (w.cfg.lat_south, w.cfg.lat_north), 1e5);
+    let mut l = leaf(&w, testkit::dry_land(&w));
+    while l.depth < SAMPLE_DEPTH + 2 {
+        let i = w.map.cell(l).expect("a cell");
+        w.liquid_flux[i] = flux as f32;
+        w.split(l).expect("a split");
+        let per = flux / s.leaving(&w.map, lat, l, l);
+        let quarters = l.quarters().map(|q| w.liquid_flux[w.map.cell(q).expect("a quarter")] as f64);
+        for (q, f) in l.quarters().iter().zip(quarters) {
+            assert!((f / s.leaving(&w.map, lat, *q, *q) / per - 1.0).abs() < 1e-6, "quarter {q:?} passes on {f} mol/s");
+        }
+        w.join(l).expect("its quarters join");
+        let back = w.liquid_flux[w.map.cell(l).expect("the joined cell")] as f64;
+        assert!((back / flux - 1.0).abs() < 1e-6, "leaf {l:?}: its join passes on {back} mol/s of {flux}");
+        w.split(l).expect("a split");
+        let most = (0..4).max_by(|&a, &b| quarters[a].total_cmp(&quarters[b])).expect("four quarters");
+        l = l.quarters()[most];
+    }
+}
+
 /// Four quarters of different heights joined and split again hold what they held, each amount and heat to the rounding
 /// of x · share (4 ε of it, ε = 2^-53), and the relief the join kept comes back to the stacks: the world's potential
 /// energy less the stacks' and the reliefs (`unflattened`) and the books do not move.

@@ -60,7 +60,7 @@ impl World {
     }
 
     /// Join the quarters of `parent` into it (`Square::joins`), one remap: it holds their sum, and keeps each one's
-    /// shares and relief (`Joined`); its relief is theirs and what the join flattens (the potential energy of their
+    /// shares and relief (`Joined`), and passes on what leaves it of what they pass on (`join_flux`); its relief is theirs and what the join flattens (the potential energy of their
     /// stacks less its own). Their life comes together (`Life::remap`); then the slots of their cover land in its cover
     /// as seeds do (`cover::land`: what finds no slot goes to its ground as remains) and its bodies merge (`merge_in`). A
     /// merge that lets go of a part records that in an event naming the cell by its index, so the shell takes the events
@@ -81,12 +81,13 @@ impl World {
         let mesh = self.mesh_for(&map, false);
         let j = map.cell(parent).expect("the joined cell");
         let area = kids.map(|i| self.mesh.cells().area()[i] / mesh.cells().area()[j]);
-        let record = Joined::of(self, kids, area);
+        let (record, flux) = (Joined::of(self, kids, area), self.join_flux(kids, parent));
         let made = Source::Made(Made::Join { kids: kids.map(|i| i as u32), area });
         let from = map.leaves().iter().map(|&l| if l == parent { made } else { Source::Old(self.map.cell(l).expect("a cell") as u32) }).collect();
         self.renew((map, mesh), from, c);
         self.relief[j] = sum4(record.kept) + before - crate::flow::potential_of(self, &[j], air);
         self.joined[j] = Some(record);
+        self.liquid_flux[j] = flux as f32;
         self.events.push(Event { day: self.day(), kind: EventKind::Join, node: self.life.cells[j].serial, value: parent.depth as f64 });
         crate::cover::land(self);
         self.merge_in(j);
@@ -95,7 +96,8 @@ impl World {
     }
 
     /// Split cell `leaf` into its quarters, one remap: each holds its share of what the cell held (`Made::held`), and
-    /// its share of the cell's life (`Life::remap`); the cell's relief pays what the quarters' stacks hold over the
+    /// its share of the cell's life (`Life::remap`), and passes on what the terrain's channels lead through it of what
+    /// the cell passes on (`split_flux`); the cell's relief pays what the quarters' stacks hold over the
     /// cell's and the quarters' reliefs. Where a join made the cell, by its record (`Joined`), and each quarter takes back
     /// its relief; what is left (or short) goes to the quarters' ground heat by their shares (`store::fall_heat`, which
     /// books it against `Store::lifted`). Else by area but the bed, which stands as the terrain inside the cell does,
@@ -109,6 +111,7 @@ impl World {
         let i = self.map.cell(leaf).expect("a cell");
         let (air, record, serial) = (self.mesh.cells().parent()[i] as usize, self.joined[i].clone(), self.life.cells[i].serial);
         let (relief, before, rise) = (self.relief[i], crate::flow::potential_of(self, &[i], air), self.rise_south[i]);
+        let flux = self.split_flux(i, leaf);
         let (map, quarters) = (self.map.split(leaf), leaf.quarters());
         let mesh = self.mesh_for(&map, false);
         let kids = quarters.map(|q| map.cell(q).expect("a quarter"));
@@ -126,6 +129,7 @@ impl World {
             })
             .collect();
         self.renew((map, mesh), from, c);
+        kids.iter().zip(flux).for_each(|(&j, f)| self.liquid_flux[j] = f as f32);
         if uneven.is_some() {
             crate::flow::share_ground(self, &kids, ground.quarters(&inside.soil), uneven.as_ref().map_or(1.0, |u| u.scale));
         }

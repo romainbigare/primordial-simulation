@@ -5,11 +5,13 @@
 //! their sleep; the life of each cell and the survey's caches of it (`life::Cell`, `Life::sum`); Flow's state of each
 //! ground node; the traffic (`Counters::traffic`). Per link: what the links remember (`store::Links`). A remap only
 //! moves numbers, and shares or sums them for the cells a split or a join made (`made`; the bodies, parts and cover of a
-//! cell as wholes, `Life::remap`): what a new cell holds is its law's to give.
+//! cell as wholes, `Life::remap`; the liquid a cell passes on, led by the terrain's channels, `through`): what a new
+//! cell holds is its law's to give.
 
 mod made;
 mod relief;
 mod split;
+mod through;
 
 pub use made::{Joined, Made};
 pub(crate) use split::Change;
@@ -125,8 +127,10 @@ impl World {
         for v in [light, rained] {
             *v = c.apply_made(std::mem::take(v), || 0.0, |_, m, at| m.mean(at));
         }
+        // The liquid a cell passes on is a flow: a split or a join leads it down the terrain's channels (`through`, `World::split`).
+        *liquid_flux = c.apply(std::mem::take(liquid_flux), || 0.0);
         // Per cell: shared by area, summed in a joined cell.
-        for v in [liquid_flux, off_land, &mut counts.traffic] {
+        for v in [off_land, &mut counts.traffic] {
             *v = c.apply_made(std::mem::take(v), || 0.0, |_, m, at| m.held(joined, None, |i| at(i) as f64) as f32);
         }
         // (A split or a join then gives its cells their relief, `World::split`.)

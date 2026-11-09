@@ -412,3 +412,28 @@ fn a_new_cell_takes_a_serial_never_given_again() {
     assert_eq!((next(&mut a), next(&mut b)), (Some(n as u64), Some(n as u64 + 2)));
     assert_eq!(a, b);
 }
+
+/// The terrain's channels (`space::network`): each sample's liquid runs to a lower neighbour, and the area that drains
+/// through a sample is its own and all that runs to it, so the sinks gather the whole map's. What leaves a leaf is what
+/// leaves it from its quarters (`Samples::leaving`), at the samples' size, coarser and finer.
+#[test]
+fn the_terrains_channels_run_down_and_what_leaves_a_leaf_leaves_its_quarters() {
+    use pcore::space::network::NONE;
+    let w = worldgen::testkit::small_world();
+    let (s, lat) = (w.drained(), (w.cfg.lat_south, w.cfg.lat_north));
+    let mut own = s.up.clone();
+    for (k, &j) in s.to.iter().enumerate().filter(|p| *p.1 != NONE) {
+        assert!(s.h[j as usize] < s.h[k], "sample {k} runs down");
+        own[j as usize] -= s.up[k];
+    }
+    let sinks: f64 = (0..s.up.len()).filter(|&k| s.to[k] == NONE).map(|k| s.up[k]).sum();
+    let all: f64 = own.iter().sum();
+    assert!(own.iter().all(|&a| a > 0.0) && (sinks / all - 1.0).abs() < 1e-12, "the sinks gather {sinks} m² of {all} m²");
+    let mut l = w.map.leaves()[worldgen::testkit::dry_land(&w)];
+    while l.depth < pcore::space::terrain::SAMPLE_DEPTH + 3 {
+        let whole = s.leaving(&w.map, lat, l, l);
+        let parts: f64 = l.quarters().iter().map(|&q| s.leaving(&w.map, lat, q, l)).sum();
+        assert!(whole > 0.0 && (parts / whole - 1.0).abs() < 1e-12, "leaf {l:?}: {parts} m² of {whole} m² leave from its quarters");
+        l = *l.quarters().iter().max_by(|a, b| s.leaving(&w.map, lat, **a, **a).total_cmp(&s.leaving(&w.map, lat, **b, **b))).expect("four quarters");
+    }
+}
