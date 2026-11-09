@@ -60,7 +60,8 @@ map repeating east and west, and a cell's latitude and longitude in the inspect 
 **Map layers** in the frames (`tape/src/layers.rs`, one byte a square of the map, row by row; a square shows the cell
 that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid depth, ice, liquid flux, `catch` (the upstream area a cell drains
 in units of its own: its liquid flux over its rain less evaporation times its area, so a river reads the same at any cell
-size), `channel_w` and `channel_d` (the width and the depth of the cell's channel, `World::channel`), loose ground, ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the bodies' mass per m², bodies, traffic,
+size), `channel_w` and `channel_d` (the width and the depth of the cell's channel, `World::channel`), loose ground,
+`wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them), ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the bodies' mass per m², bodies, traffic,
 worn edges, structures, true colour (r, g, b). The tape holds whole-map frames only. The live viewer also asks for
 the window in view and a fifth of it about it, finer than its cells (`tape::fine`, the layout in `tape/src/fine/mod.rs`), a pixel a leaf of a depth
 2 to 4 below the cells, at any zoom: of each pixel the ground's height, the level of the liquid its own cell holds,
@@ -105,28 +106,36 @@ pixel (little-endian), the pixels row by row as above, in this order:
 
 | plane | unit | what |
 |---|---|---|
-| `wet` | 0..1 | how wet the pixel's ground is, as the cover feels it (`Physics::wetness` of the liquid in its pores and of what stands there at its cell's level) |
-| `cover` 0 to 3 | kg/m² | 4 planes (`cover::SLOTS`): plane k is the built cover per m² of the k-th slot its cell holds, in the order `tape::things` lists its slots (so kind, genes and capture area are there), times that slot's share at the pixel; 0 where its cell holds fewer slots |
+| `wet` | 0..1 | how wet the pixel's ground is, as the cover feels it (`Physics::wetness` of the liquid in its soil and of what stands there at its cell's level) |
+| `cover` 0 to 3 | kg/m² | 4 planes (`cover::SLOTS`): plane k is the built cover per m² of the k-th slot its cell holds, in the order `tape::things` lists its slots (so kind, genes and capture area are there): the field of its kind there times the slot's share of its kind in its cell; 0 where its cell holds fewer slots |
 | `cell` | | of each pixel (u32), the number of its cell among the window's cells |
 
 Then the count m of the window's cells (u32) and of each, for each of its 4 slots, its walls and its capture area per
 kg of its built cover (kg/kg, m²/kg; two f32, 0 for a slot it does not hold), so a shell knows what each slot builds
 where it stands. So a window of `across` x `down` pixels after `L` layers starts these at `ceil4(4 + 16 n + L n)`
-bytes, n the pixels, and they take `24 n + 4 + 32 m` bytes. These are the core's own shares of each cell's means over its
-ground (laws.md 0, "Inside a cell"): the ones a split gives its quarters. Each pixel reads the cell that holds its
-centre, not a blend between cells, as the mean over the samples of that cell's 8 x 8 grid the pixel covers (the one
-that holds it, where the pixel is finer): so the pixels of a cell keep its means, and a field may step at a cell's edge.
+bytes, n the pixels, and they take `24 n + 4 + 32 m` bytes. Each is a field across the cells that holds each cell's
+mean over its pixels exactly (`tape/src/fine/keep.rs`; pycnophylactic, Tobler 1979): a level smooth across the cells'
+borders, from the cells' smooth field (the pyramid above), evened round after round as heat spreads and lifted in each
+cell so its mean holds, and at each pixel the general law the core shares a cell's means by over its samples (laws.md
+0, "Inside a cell") applied to that level there. The liquid in the soil departs from the level by `soil_m` per unit of
+the wetness index of the window's own ground, found across the cells' borders (`inside::Grid`), within none and the
+pores full; the wetness adds what stands at the cell's level. Each kind of cover (the starting kind its slots descend
+from) is a field of its own across the cells, each cell's mean its built cover of the kind, at each pixel by the
+activity of the cell's heaviest slot of the kind on ground that wet (even over a cell where none is active); a kind a
+cell does not hold has its mean there none, so its field falls to none at that cell's border. So nothing steps at a
+cell's edge, and a split that only shares out its cell changes little drawn. The ground's temperature and its ice
+(their layers above) are such fields too, the temperature along the ground's height at the rate the air cools.
 The viewer's worker turns it into the fields the graphics
 card draws (`web/src/fields.ts`, four channels a texture, a texel a pixel): the ground's height (lower by a channel's
 share times its depth: its volume over the pixel's area), the liquid's
 surface over it (none in its cell: 1000 m below) and the ground's slope east and south; the ice, the ground's
-temperature, the share of the pixel that is the sea's (in a sea square or a dry square beside one) and that a channel
+temperature, the share of the pixel that is the sea's (a sea square or a dry square beside one, blended between the squares' centres) and that a channel
 covers; the plant cover's byte and the true colour; how wet the ground is and the channel's depth; and every layer's
 bytes as they came. Each slot's
 plane, with what it builds per kg, is a stand of its own in the field of the plant cover's marks. The page makes the same fields of the whole-map frame, a texel a square
 (the liquid's surface in a dry square below its ground by the depth it lacks to be wet and its height over the wet
-squares beside it; the share a channel covers, its width over the square's, `channel_w`; a frame does not say how wet
-the ground is). The card colours them at each screen pixel, over the
+squares beside it; the share a channel covers, its width over the square's, `channel_w`; how wet the ground is, the
+`wet` layer, so the window and the squares round it soak the ground alike). The card colours them at each screen pixel, over the
 whole-map frame: hill shading; the ground soaked by its wetness and the capillary fringe over the liquid's surface,
 darker and, near soaked, shining; the liquid as flat water over its bed, the bed fading with depth by Beer–Lambert, a
 little sky and sun on small ripples; snow by the pixel's own temperature near the cover's melting point; the channels

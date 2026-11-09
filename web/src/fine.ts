@@ -66,7 +66,8 @@ const OVER_FADE = 64;
 const BEACH_M = 6;
 
 /** The fields of fine raster `f` of the world of `meta` (fields.ts), the map's squares being wet and sea as `wet` says:
- * a pixel is in the sea where its square is (`seaSquares`: a square of the sea or a dry one beside it). Its channels are
+ * a pixel's share of the sea is that of the squares about it (`seaSquares`: a square of the sea or a dry one beside it),
+ * blended between their centres as the squares' own map blends it, so a beach shows no square's edge. Its channels are
  * cut into its ground: a pixel's ground lies lower by the volume a channel takes of it over its area (its share times
  * its depth), so the channel's banks show in the shading, and the water drawing shows the share it covers. */
 export function fineFields(f: Fine, meta: Meta, wet: Wet): Fields {
@@ -77,6 +78,12 @@ export function fineFields(f: Fine, meta: Meta, wet: Wet): Fields {
   const ice = bytesOf('ice'), tg = bytesOf('t_ground'), plants = bytesOf('plants'), tr = bytesOf('true_r'), tgr = bytesOf('true_g'), tb = bytesOf('true_b');
   const iceLut = lut('ice'), tLut = lut('t_ground'), leafLut = lut('leaf'), leaf = bytesOf('leaf');
   const sea = seaSquares(wet, meta);
+  // The sea's share at column x and row y (squares): blended between the centres of the four squares about it.
+  const seaAt = (x: number, y: number) => {
+    const fx = x - 0.5, fy = y - 0.5, x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0;
+    const at = (c: number, r: number) => sea[clamp(r, 0, meta.h - 1) * meta.w + (meta.globe ? (c + meta.w) % meta.w : clamp(c, 0, meta.w - 1))];
+    return (at(x0, y0) * (1 - tx) + at(x0 + 1, y0) * tx) * (1 - ty) + (at(x0, y0 + 1) * (1 - tx) + at(x0 + 1, y0 + 1) * tx) * ty;
+  };
   const height = new Float32Array(4 * n), matter = new Float32Array(4 * n), bytes = new Uint8Array(4 * n), inside = new Float32Array(4 * n);
   for (let y = 0; y < down; y++) {
     const ys = f.at.y + (y + 0.5) / per;
@@ -88,8 +95,7 @@ export function fineFields(f: Fine, meta: Meta, wet: Wet): Fields {
       const gx = (ground[y * across + x1] - ground[y * across + x0]) / (wide * (x1 - x0 || 1));
       const gy = (ground[y1 * across + x] - ground[y0 * across + x]) / (pxM * (y1 - y0 || 1));
       put4(height, i, ground[i], wetHere ? level - ground[i] : -NO_LIQUID_M, gx, gy);
-      const sq = clamp(Math.floor(ys), 0, meta.h - 1) * meta.w + clamp(Math.floor(f.at.x + (x + 0.5) / per), 0, meta.w - 1);
-      put4(matter, i, iceLut[ice[i]], tLut[tg[i]], sea[sq], channel[i]);
+      put4(matter, i, iceLut[ice[i]], tLut[tg[i]], seaAt(f.at.x + (x + 0.5) / per, ys), channel[i]);
       put4(bytes, i, plants[i], tr[i], tgr[i], tb[i]);
       put4(inside, i, f.wet[i], channelDepth[i], Math.exp(-leafLut[leaf[i]]), 0);
     }

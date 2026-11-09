@@ -98,7 +98,7 @@ export function seaSquares(wet: Wet, meta: Meta): Uint8Array {
 export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
   const m = w.meta, { w: W, h: H, cell_m, globe } = m, n = W * H;
   const z = decode(w, f, 'z'), depth = decode(w, f, 'depth'), ice = decode(w, f, 'ice'), tg = decode(w, f, 't_ground');
-  const leaf = decode(w, f, 'leaf'), channelW = decode(w, f, 'channel_w'), channelD = decode(w, f, 'channel_d');
+  const leaf = decode(w, f, 'leaf'), soaked = decode(w, f, 'wet'), channelW = decode(w, f, 'channel_w'), channelD = decode(w, f, 'channel_d');
   const plants = plane(w, f, 'plants'), tr = plane(w, f, 'true_r'), tgr = plane(w, f, 'true_g'), tb = plane(w, f, 'true_b');
   const wet = wetOf(w, f), sea = seaSquares(wet, m);
   const wrapX = (x: number) => (globe ? (x + W) % W : x);
@@ -122,7 +122,7 @@ export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
     put4(height, i, z[i], water, gx, gy);
     put4(matter, i, ice[i], tg[i], sea[i], wet.wet[i] ? 0 : Math.min(channelW[i] / width, 1));
     put4(bytes, i, plants[i], tr[i], tgr[i], tb[i]);
-    put4(inside, i, 0, channelD[i], Math.exp(-leaf[i]), 0);
+    put4(inside, i, soaked[i], channelD[i], Math.exp(-leaf[i]), 0);
   }
   const o = w.base + f * w.frameBytes;
   const fields: Fields = { w: W, h: H, height, matter, bytes, inside, layers: w.data.subarray(o, o + w.frameBytes), look: [1, 0, SQUARE_BEACH_M, 1], place: [0, 0, W * cell_m, H * cell_m] };

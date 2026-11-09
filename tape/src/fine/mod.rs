@@ -7,11 +7,14 @@
 //! has no steps at the cells' edges and depends neither on the window nor on the cells. Each cell's standing liquid
 //! stands at the core's own level (`levels`): a pixel is under liquid where the ground drawn lies below its cell's
 //! level, so a shore lies where the ground rises, inside the cells, and a body of liquid at one level is flat. The
-//! layers are the cells' values, each a smooth field of them (`pyramid`).
+//! layers are the cells' values, each a smooth field of them (`pyramid`); what a cell holds that the ground shares
+//! over it (the liquid in its soil, its cover, its ground's warmth and ice) is a field across the cells that holds each
+//! cell's mean (`keep`), shared inside by the general law the core shares it by (`inside`).
 
 mod channels;
 mod heights;
 mod inside;
+mod keep;
 mod pyramid;
 
 pub use heights::Samples;
@@ -69,10 +72,10 @@ fn levels(w: &World, s: &mut Samples, shown: &Shown) -> Vec<f64> {
 /// of the liquid its own cell holds standing, the core's (f32: `levels`; NaN where it holds none), so the shore drawn is where the
 /// ground drawn rises above it, the share of the pixel a channel covers, 0..1, and that channel's depth, m (two f32:
 /// `channels`); then every layer in table order, a byte a pixel, the field of the cells' bytes
-/// (`pyramid`), the ground's temperature along the ground's height over its cell's mean at the rate the air cools with
-/// height (`World::air_drop`); then, from a multiple of 4 bytes, what lies inside each
-/// pixel's own cell by the shares of its ground (`inside::extend`): its wetness and the built cover of each slot of its
-/// cell, f32 planes.
+/// (`pyramid`), but the ground's temperature and its ice, fields that hold each cell's mean (`keep`), the temperature
+/// along the ground's height over its cell's mean at the rate the air cools with height (`World::air_drop`); then, from
+/// a multiple of 4 bytes, the wetness of each pixel's ground and the built cover of each slot of its cell, f32 planes
+/// (`inside::extend`).
 pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], depth: u8) -> Vec<u8> {
     assert!(depth >= w.map.square_depth(), "a pixel is no coarser than a square");
     let per = (1u64 << (depth - w.map.square_depth())) as f64;
@@ -85,24 +88,33 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
     let f = &c.f;
     // The ground's temperature is its cell's at the cell's mean height, the terrain's mean over the cell.
     let terrain = pyramid.field(&(0..n).map(|i| samples.mean_of(w, w.map.leaves()[i])).collect::<Vec<f64>>());
-    let (t, cools) = (pyramid.field(&f.t), pyramid.field(&(0..n).map(|i| w.air_drop(i).unwrap_or(0.0)).collect::<Vec<f64>>()));
+    let cools = pyramid.field(&(0..n).map(|i| w.air_drop(i).unwrap_or(0.0)).collect::<Vec<f64>>());
     let pixels = across * down;
+    let win = inside::Window { at: [gx, gy], size: [across, down], depth };
     let mut out = Vec::with_capacity(4 + pixels * (16 + LAYERS.len()));
     out.extend((cover_melt(w) as f32).to_le_bytes());
     let (tree, at) = (w.mesh.tree(), |p: usize| (((gx + (p % across) as i64) as f64 + 0.5) / per, ((gy + (p / across) as i64) as f64 + 0.5) / per));
     let shown = Shown::of(w, (0..pixels).map(at).map(|(px, py)| tree.cell_at(w.map.point_at(px, py))).collect());
-    let level = levels(w, samples, &shown);
-    let water = shown.number.iter().map(|&k| level[k as usize]);
+    let cells = keep::Cells::new(across, down, (&shown.number, &shown.cells, n), &win.rows(w));
+    let level: Vec<f64> = {
+        let of = levels(w, samples, &shown);
+        shown.number.iter().map(|&k| of[k as usize]).collect()
+    };
+    let water = level.iter().copied();
     let (share, deep) = channels::channels(w, &w.drained(), ([gx, gy], [across, down], depth));
     out.extend(ground.iter().map(|&g| g as f32).chain(water.map(|v| v as f32)).chain(share).chain(deep).flat_map(|v| v.to_le_bytes()));
+    let held = |v: &[f64], law: &dyn Fn(usize, f64) -> f64| cells.keep(&pyramid, v, &law, &shown.cells.iter().map(|&i| v[i]).collect::<Vec<f64>>());
     for l in LAYERS.iter() {
         let plane: Vec<u8> = if l.name == "t_ground" {
-            (0..pixels).map(|p| quantise(l, t[p] - cools[p] * (ground[p] - terrain[p]))).collect()
+            held(&f.t, &|p, u| u - cools[p] * (ground[p] - terrain[p])).iter().map(|&t| quantise(l, t)).collect()
+        } else if l.name == "ice" {
+            held(&f.ice, &|_, u| u.max(0.0)).iter().map(|&v| quantise(l, v)).collect()
         } else {
             pyramid.field(&(0..n).map(|i| quantise(l, (l.val)(&c, i)) as f64).collect::<Vec<f64>>()).iter().map(|v| v.round().clamp(0.0, 255.0) as u8).collect()
         };
         out.extend(plane);
     }
-    inside::extend(&mut out, w, samples, ([gx, gy], [across, down], depth), &shown);
+    let wet = inside::wetness(w, &win, &cells, &shown, &pyramid, &ground, &level);
+    inside::extend(&mut out, w, (&cells, &shown, &pyramid), &wet);
     out
 }

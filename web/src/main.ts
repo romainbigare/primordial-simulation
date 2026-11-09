@@ -12,7 +12,7 @@ import { Style } from './sprites';
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const LABELS: Record<string, string> = {
   t_ground: 'Ground temperature', t_air: 'Air temperature', rain: 'Rain', vapor: 'Vapor', absorber: 'Absorber',
-  depth: 'Liquid depth', flux: 'River flux', catch: 'Catchment', loose: 'Loose sediment', ice: 'Ice', z: 'Elevation',
+  depth: 'Liquid depth', flux: 'River flux', catch: 'Catchment', loose: 'Loose sediment', wet: 'Ground wetness', ice: 'Ice', z: 'Elevation',
 };
 const ORDER = Object.keys(LABELS);
 const label = (n: string) => LABELS[n] ?? (n[0].toUpperCase() + n.slice(1).replace(/_/g, ' '));

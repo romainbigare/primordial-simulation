@@ -122,6 +122,9 @@ pub(crate) struct Ctx<'a> {
     pub leaf: Vec<f64>,
     pub animals: Vec<f64>,
     pub bodies: Vec<f64>,
+    /// Per ground cell: how wet its ground is, 0..1 (`Physics::wetness` of the liquid in its pores and standing over
+    /// them, `flow::means`; none before Flow first built its state)
+    pub wet: Vec<f64>,
     /// Per ground cell: mass of made objects (parts), kg/m²
     pub parts: Vec<f64>,
     /// Per living body (`Life::alive`): its mass, kg
@@ -135,7 +138,9 @@ impl<'a> Ctx<'a> {
         let bodies: Vec<&Body> = w.life.alive().collect();
         let mass = par::map(&bodies, |b| b.mass(&w.chem));
         let f = fields(w);
-        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], mass };
+        let means = pcore::flow::means(w, &(0..n).collect::<Vec<usize>>()).unwrap_or_else(|| vec![Default::default(); n]);
+        let wet = means.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
+        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), animals: vec![0.0; n], bodies: vec![0.0; n], wet, parts: vec![0.0; n], mass };
         for p in w.life.parts() {
             let i = p.cell as usize;
             c.parts[i] += p.mass(&w.chem) / w.mesh.cells().area()[i];
@@ -193,6 +198,7 @@ pub const LAYERS: &[Layer] = &[
     l("channel_w", "m", "log", 0.1, 1000.0, |c, i| c.channel(i).width),
     l("channel_d", "m", "log", 0.01, 30.0, |c, i| c.channel(i).depth),
     l("loose", "m", "log", 0.01, 100.0, |c, i| c.f.loose[i]),
+    l("wet", "1", "lin", 0.0, 1.0, |c, i| c.wet[i]),
     l("t_ground", "K", "lin", 220.0, 330.0, |c, i| c.f.t[i]),
     l("t_air", "K", "lin", 220.0, 330.0, |c, i| c.t_air[c.air(i)]),
     l("rain", "mol/m2/s", "log", 1e-6, 1e-2, |c, i| c.w.rain.get(i).copied().unwrap_or(0.0) as f64),
