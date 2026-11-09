@@ -33,6 +33,11 @@ struct S {
     melt: f64,
     boil: f64,
     rho: [f64; 2],
+    /// K (`Substance::dense`); optional in the file (none: its melting point)
+    dense: Option<f64>,
+    /// K per g/kg (`Substance::dense_drop`, per kg/kg here); optional in the file (none: 0)
+    #[serde(default)]
+    dense_drop: f64,
     hard: f64,
     str: f64,
     refl: [[f32; 3]; 2],
@@ -103,6 +108,8 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
             melt: s.melt,
             boil: s.boil,
             density: s.rho,
+            dense: s.dense.unwrap_or(s.melt),
+            dense_drop: s.dense_drop * 1000.0,
             hardness: s.hard,
             strength: s.str,
             refl: s.refl,

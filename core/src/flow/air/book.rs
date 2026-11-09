@@ -3,6 +3,7 @@
 //! and the evening of blocks, the lifts and falls, and the light of the cover (`book`).
 
 use super::super::{follow, year_weight, Scratch};
+use super::super::parts::{after_air, LAND, TOP};
 use super::super::potential::apply;
 use super::cells::{Response, KEPT, LIGHT, LINK, SPACE, SUN, UP};
 use super::daily::Mean;
@@ -33,14 +34,14 @@ pub(super) fn up_from_bodies(w: &mut World, s: &mut Scratch) {
 /// (`rain`, per active gas (cell, node, mol)), reaching it at the temperature of the air touching it (`touching`), the
 /// air paying what warms it on the way down, frozen or liquid as the node's days rained it; the sunlight it absorbs and keeps
 /// for its cover, the heat it and its air send to space; and the wind and the evening of blocks, with their lifts and
-/// falls (`potential`). Then the light on the cover, the clouds of what rained (which the next step's sunlight
-/// passes), and the tape's rain and evaporation.
+/// falls (`potential`). Then what each part of a cell of parts gained (`parts_moved`), the light on the cover, the clouds of
+/// what rained (which the next step's sunlight passes), and the tape's rain and evaporation.
 pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Active], &Response, &[Landed]), mean: &Mean, dt: f64) {
     let (n, na, nx, area) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), act.len(), w.mesh.cells().area().to_vec());
     // Each cell's outputs at the mean air it saw.
     let sr = &*s;
     let xs: Vec<&[f64]> = act.iter().map(|ac| &mean.x[ac.gi * na..(ac.gi + 1) * na]).collect();
-    let out = response.booked(sr, &mean.t, &xs);
+    let (out, wet) = response.booked(sr, &mean.t, &xs);
     let at = |i: usize, o: usize| out[i * (UP + nx) + o];
     let (cells, parent): (Vec<u32>, Vec<u32>) = ((0..n as u32).collect(), w.mesh.cells().parent().to_vec());
     let (ks, gases): (Vec<u16>, Vec<u16>) = (act.iter().map(|a| a.k as u16).collect(), s.state.gas.iter().map(|&k| k as u16).collect());
@@ -48,13 +49,14 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     let (link, to_space) = (crate::par::map_n(n, crate::par::UNCOUNTED, |i| at(i, LINK)), crate::par::map_n(n, crate::par::UNCOUNTED, |i| at(i, SPACE)));
     // The rain, at the air touching each cell, with the fusion enthalpy each mol of its node's rain keeps.
     let mut rained = Batch::new([Class::Ground, Class::Air], &ks);
-    let mut fell = vec![0.0; nx * n];
+    let (mut fell, mut warmed) = (vec![0.0; nx * n], vec![0.0; n]);
     for (y, list) in rain.iter().enumerate() {
         for &(i, j, m) in list {
             let (at, sp) = (y * na + j as usize, s.sp[ks[y] as usize]);
             let per = sp.cp * touching(sr, &mean.t, i as usize) + mean.rain_fusion[at] / mean.rain[at];
             rained.add((i as usize, j as usize), ks[y], (-m, -m * per));
             fell[y * n + i as usize] += m;
+            warmed[i as usize] += m * per;
         }
     }
     let (sun, space) = (Boundary::Sun as usize, Boundary::Space as usize);
@@ -74,6 +76,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     let m = &mean.moved;
     let wind = LinkFlux { class: [Class::Air, Class::Air], a: &m.a, b: &m.b, ks: &gases, mol: &m.mol, heat: &m.heat };
     apply(w, s, &[up, rained.flux(), wind, lit.flux(), kept.flux(), cooled.flux(), sky.flux()], &[]);
+    parts_moved(s, (act, response), (&out, &wet), (&fell, &warmed), dt);
     for (y, ac) in act.iter().enumerate() {
         let net = |i: usize| mol[y * n + i] - fell[y * n + i];
         (0..n).any(|i| net(i) < 0.0).then(|| s.add_loose(ac.k, false));
@@ -94,4 +97,29 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
         *sum += got / area[i];
     }
     sums(w, s);
+}
+
+/// What the step of `dt` seconds moved of the parts that face the air of each cell of parts (`parts::after_air`): of a
+/// cell with land, of its liquid's top what its own outputs say (`Response::wet`, at the step's mean air), of its land
+/// the cell's less those, the rain on the cell (`fell`, per active gas and cell, mol) and its heat (`warmed`, J) on
+/// each by its area; of one whose top alone faces the air, all of the cell's.
+fn parts_moved(s: &mut Scratch, (act, response): (&[Active], &Response), (out, wet): (&[f64], &[f64]), (fell, warmed): (&[f64], &[f64]), dt: f64) {
+    let (n, outs) = (warmed.len(), UP + act.len());
+    let heat = |o: &[f64]| o[LINK] + o[SPACE];
+    for (c, (i, _)) in response.wet.iter().enumerate() {
+        let i = *i as usize;
+        let Some(share) = s.mixed(i).map(|m| m.piece[TOP].share) else { continue };
+        let by = [1.0 - share, share];
+        let (all, liquid) = (&out[i * outs..(i + 1) * outs], &wet[c * outs..(c + 1) * outs]);
+        let sun = [response.fixed(i, SUN) - response.wet_fixed(c, SUN), response.wet_fixed(c, SUN)];
+        let heat = [sun[LAND] - (heat(all) - heat(liquid)) + by[LAND] * warmed[i], sun[1] - heat(liquid) + by[1] * warmed[i]];
+        let moved: Vec<(usize, [f64; 2])> = act.iter().enumerate().map(|(y, ac)| (ac.k, [by[LAND] * fell[y * n + i] - (all[UP + y] - liquid[UP + y]), by[1] * fell[y * n + i] - liquid[UP + y]])).collect();
+        after_air(s, i, (heat, &moved), dt);
+    }
+    let alone: Vec<usize> = (0..n).filter(|&i| s.top_alone(i).is_some()).collect();
+    for i in alone {
+        let all = &out[i * outs..(i + 1) * outs];
+        let moved: Vec<(usize, [f64; 2])> = act.iter().enumerate().map(|(y, ac)| (ac.k, [0.0, fell[y * n + i] - all[UP + y]])).collect();
+        after_air(s, i, ([0.0, response.fixed(i, SUN) - heat(all) + warmed[i]], &moved), dt);
+    }
 }

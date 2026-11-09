@@ -294,10 +294,12 @@ pub fn ground_of(w: &World, i: usize) -> (f64, f64, f64) {
     (loose, bed, soft / loose.max(1e-300))
 }
 
-/// The ground of cell `i` brought to `t` K (booked as an edit).
+/// The ground of cell `i` brought to `t` K (booked as an edit), all of it: a mixed cell's land and liquid alike
+/// (`World::even_ground`).
 pub fn hold_ground(w: &mut World, i: usize, t: f64) {
     let e = w.energy_ground(i, t);
     set_heat(w, Node::ground(i), e);
+    w.even_ground(i, t);
 }
 
 /// One day of `pcore::day_with_month_at_start` with the ground of `cells` held at `t` K: before it, and after each pass of a month that
@@ -353,6 +355,17 @@ pub fn even_land(w: &mut World, like: usize) {
     }
 }
 
+/// The store under cell `i` of `w` (`Class::Deep`) made to hold the share `share` of its room (`Physics::bed_porosity`
+/// × `Physics::bed_depth`) of the common liquid, its heat in proportion (booked as edits); it must hold some.
+pub fn fill_store(w: &mut World, i: usize, share: f64) {
+    let n = w.mesh.cells().n();
+    let room = w.cfg.phys.bed_porosity * w.cfg.phys.bed_depth * w.mesh.cells().area()[i] / w.chem.molar_volume(LIQUID, Phase::Liquid);
+    let (was, heat) = (w.store.amounts(Class::Deep)[LIQUID * n + i], w.store.heat(Class::Deep)[i]);
+    assert!(was > 0.0, "the store under cell {i} holds none");
+    set_amount(w, Node::new(Class::Deep, i), LIQUID, share * room);
+    set_heat(w, Node::new(Class::Deep, i), heat * share * room / was);
+}
+
 /// Body `b` brought to `t` K (booked as an edit).
 pub fn warm(w: &mut World, b: &mut Body, t: f64) {
     let e = b.energy_at(&w.chem, t);
@@ -405,11 +418,23 @@ pub fn split_flat(w: &mut World, region: &[Leaf], depths: u8) {
     }
 }
 
+/// The cells of `w` that `split_flat` of `region` by `depths` would flatten (those 2:1 splits too) made flat inside
+/// without splitting them, and the state of the ground found again (so each stands as one node, laws.md 1.1): a world
+/// to compare with the one that split, the same ground at both sizes.
+pub fn flat_as_split(w: &mut World, region: &[Leaf], depths: u8) {
+    let mut split = w.clone();
+    split_flat(&mut split, region, depths);
+    let gone: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| split.map.cell(w.map.leaves()[i]).is_none()).collect();
+    gone.into_iter().for_each(|i| flatten(w, i));
+    pcore::flow::state(w, true);
+}
+
 /// Cell `i` and the cells round it made flat land at its height, with its liquid and soil: all flat inside (`flatten`),
 /// and each round it holding per m² what `i` holds in its loose ground, its bed and the store under it, and their heat
-/// per m² (booked as edits); then Flow's slow ground is rechecked. A scene whose cell and its quarters differ only by
-/// their size: no liquid runs off a slope into or out of it sideways (on real slopes that is a law of the size of the
-/// cells itself, which `tape/tests/scale.rs` checks).
+/// per m² (booked as edits); then Flow's slow ground is rechecked and the state of the ground found again, so each
+/// stands as one node (flat inside, it is all land or all under its liquid, laws.md 1.1). A scene whose cell and its
+/// quarters differ only by their size: no liquid runs off a slope into or out of it sideways (on real slopes that is a
+/// law of the size of the cells itself, which `tape/tests/scale.rs` checks).
 pub fn flat_round(w: &mut World, i: usize) {
     let (cells, ns) = (w.mesh.cells(), w.chem.ns());
     let round: Vec<usize> = cells.around(i).1.iter().map(|&j| j as usize).collect();
@@ -431,6 +456,7 @@ pub fn flat_round(w: &mut World, i: usize) {
         }
     }
     pcore::flow::refresh(w);
+    pcore::flow::state(w, true);
 }
 
 /// The cells of the first air node of `w` whose cells are all land: a region to split.

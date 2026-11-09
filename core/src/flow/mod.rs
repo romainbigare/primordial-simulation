@@ -12,6 +12,7 @@ mod falls;
 mod inside;
 mod land;
 mod liquid;
+mod parts;
 mod potential;
 mod runoff;
 mod scratch;
@@ -26,6 +27,7 @@ pub use channel::Channel;
 pub(crate) use curve::level_of;
 pub use inside::{levels, lowest, means, volume_under};
 pub(crate) use inside::share_ground;
+pub(crate) use parts::{of_join, whole, Parts};
 pub use potential::potential_of;
 pub(crate) use potential::{air_head, stated};
 pub(crate) use stack::gain;
@@ -52,7 +54,7 @@ pub fn state(w: &mut World, full: bool) {
 /// notes the time it was made (`built_now`).
 fn ground_now(w: &World, s: &mut Scratch, full: bool) {
     let full = full || s.lay.len() != w.mesh.level(AIR).n();
-    ground_state(w, s, full);
+    ground_state(w, s, (full, true));
     s.built_at = Some(w.time);
     if full {
         s.full_at = Some(w.time);
@@ -123,7 +125,7 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
         scratch::refresh(w, &mut s);
         // A new world's ground nodes, before its first step: no plateau, no clouds.
         let st = &mut s.state;
-        (st.tg, st.pk, st.phi, st.cloud) = (vec![0.0; n], vec![land::NONE; n], vec![0.0; n], vec![[0.0; 2]; w.mesh.level(AIR).n()]);
+        (st.tg, st.pk, st.phi, st.cloud, st.parts) = (vec![0.0; n], vec![land::NONE; n], vec![0.0; n], vec![[0.0; 2]; w.mesh.level(AIR).n()], vec![None; n]);
     }
     let build = s.cap.len() != n;
     if s.lifts.is_none() && !fresh && (moving || build) {
@@ -132,7 +134,7 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
     }
     if build {
         scratch::room(w, &mut s);
-        ground_state(w, &mut s, true);
+        ground_state(w, &mut s, (true, false));
         air::state(w, &mut s);
     }
     f(w, &mut s);
@@ -147,11 +149,13 @@ impl Scratch {
     /// world's (no plateau, `with`; a made cell's temperature and plateau are then those of its heat, `World::thawed`);
     /// the caches are dropped, as a loaded world's, and rebuilt at the next step. A quarter a split made takes its share
     /// of the volumes of its fixed solids and of its bed (`volumes`, `Made::held`) and its bed's means; a joined cell the
-    /// sum of its quarters' volumes and the means of their beds by volume. The next full build of the state (each
-    /// month's start) finds the temperature and the plateaus from the heat.
-    pub(crate) fn remap(&mut self, r: &crate::remap::Renumber, joined: &[Option<crate::remap::Joined>]) {
+    /// sum of its quarters' volumes and the means of their beds by volume; the parts of a cell of parts follow it
+    /// (`parts::remap`, with `whole`, the parts of the cells a join gathers that are one node). The next full build of the
+    /// state (each month's start) finds the temperature and the plateaus from the heat.
+    pub(crate) fn remap(&mut self, r: &crate::remap::Renumber, joined: &[Option<crate::remap::Joined>], whole: &[Option<parts::Parts>]) {
         use crate::remap::Of;
-        let scratch::State { tg, pk, phi, cloud: _, loose: _, fixed: _, vary: _, fix, bed, bedk: _, gas: _ } = &mut self.state;
+        let scratch::State { tg, pk, phi, cloud: _, loose: _, fixed: _, vary: _, fix, bed, bedk: _, gas: _, parts } = &mut self.state;
+        *parts = parts::remap(std::mem::take(parts), r, joined, whole);
         *tg = r.apply(std::mem::take(tg), || 0.0);
         *pk = r.apply(std::mem::take(pk), || land::NONE);
         *phi = r.apply(std::mem::take(phi), || 0.0);
@@ -167,14 +171,17 @@ impl Scratch {
 
 impl World {
     /// The ground nodes of the cells a remap made (`made`) take the temperature and the plateau of their heat
-    /// (`World::thaw`), not their parent's or their quarters' mean: the phases of their stacks are their heat's, as the
+    /// (`World::thaw`; of a cell of parts, its parts' heats, `parts::thaw`), not their parent's or their quarters' mean: the phases of their stacks are their heat's, as the
     /// potential energy of their matter reads them (`potential`), so a join and the split that gives its quarters back
     /// see the stacks their heat holds. None before Flow first built the state of the ground.
     pub(crate) fn thawed(&mut self, made: &[usize]) {
         if !potential::stated(self) {
             return;
         }
-        let at: Vec<_> = made.iter().map(|&i| (i, self.thaw(i))).collect();
+        let at: Vec<_> = {
+            let s = potential::scratch_of(self);
+            made.iter().map(|&i| (i, parts::thaw(self, &s, i).unwrap_or_else(|| self.thaw(i)))).collect()
+        };
         let st = &mut self.scratch.state;
         for (i, (t, on)) in at {
             (st.tg[i], (st.pk[i], st.phi[i])) = (t, on.unwrap_or((land::NONE, 0.0)));

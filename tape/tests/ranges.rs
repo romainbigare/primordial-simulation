@@ -41,20 +41,20 @@ const PPM: f64 = 1e6;
 const MM: f64 = 1e3;
 
 /// Ground temperature on land, K (series `t_land`), in the reference runs.
-const T_LAND: f64 = 289.03;
+const T_LAND: f64 = 287.88;
 /// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the reference runs.
-const SWING: f64 = 12.59;
+const SWING: f64 = 15.67;
 /// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs.
 const RAIN_LAND: f64 = 3.049e-3;
 /// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs: it keeps the world near itself;
 /// `EARTH_ABSORBER_PPM` holds it near Earth's.
-const ABSORBER_PPM: f64 = 315.0;
+const ABSORBER_PPM: f64 = 236.0;
 /// Dry land cells that are rivers (`rivers`, `tape::is_river`), in the reference runs.
 const RIVERS: f64 = 395.7;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
 const WORN: f64 = 0.3179;
 /// The cover (starting kind 0) at year 30, log10 kg (`root_0_cover_kg`), in the reference runs.
-const COVER_KG: f64 = 9.165;
+const COVER_KG: f64 = 8.61;
 /// Eaters (starting kind 1) over years `EATERS_FROM` to 30, the mean of log10 kg (`root_1_kg`), in the reference runs: a guard that the world stays near
 /// itself, not a target (real herbivores and soil animals weigh far less, a few times 1e4 kg per km²).
 const EATER_KG: f64 = 8.863;
@@ -356,6 +356,8 @@ const STEP_SEEDS: [u64; 3] = [1, 2, 3];
 const STEP_K: f64 = 0.3;
 /// The shorter air steps, days: a day, the air's own step.
 const SHORT_AIR_DAYS: [u32; 1] = [1];
+/// The `CLIMATE` columns that count whole things: their mean over the years moves by no less than one over those years.
+const COUNTS: [&str; 1] = ["rivers"];
 
 /// The `CLIMATE` columns at the end of each year from `STEP_FROM` of seed `seed` with the air's steps `days` long.
 fn climate(seed: u64, days: u32) -> Vec<[f64; CLIMATE.len()]> {
@@ -372,7 +374,8 @@ fn climate(seed: u64, days: u32) -> Vec<[f64; CLIMATE.len()]> {
 /// The long step against shorter ones (the air's step is a speed setting, `pcore::AIR_STEP_DAYS`): on small worlds with life,
 /// the mean over the seeds of what the default air step moves each of the climate's key numbers (the mean of its last
 /// years) from the step of each of `SHORT_AIR_DAYS`, each seed against itself, is less than `STEP_K` for a temperature
-/// and less than its year-to-year spread at the short step for the others.
+/// and less than its year-to-year spread at the short step for the others, or than a count's grain (`COUNTS`: one over
+/// the years averaged) where that is larger.
 #[test]
 #[ignore = "slow: six 20-year runs of a 32 x 32 world with life"]
 fn the_long_step_keeps_the_climate() {
@@ -387,7 +390,8 @@ fn the_long_step_keeps_the_climate() {
         let spread = |run: &[[f64; CLIMATE.len()]]| run.iter().map(|y| y[q]).fold(f64::MIN, f64::max) - run.iter().map(|y| y[q]).fold(f64::MAX, f64::min);
         for (h, &short) in SHORT_AIR_DAYS.iter().enumerate() {
             let off = runs.iter().map(|seed| mean(&seed[0]) - mean(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64;
-            let limit = if name.starts_with("t_") { STEP_K } else { runs.iter().map(|seed| spread(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64 };
+            let grain = if COUNTS.contains(name) { 1.0 / (STEP_YEARS - STEP_FROM + 1) as f64 } else { 0.0 };
+            let limit = if name.starts_with("t_") { STEP_K } else { (runs.iter().map(|seed| spread(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64).max(grain) };
             let ok = off.abs() <= limit;
             println!("{name}: the default step off by {off:.3e} from {short}-day steps, limit {limit:.3e}{}", if ok { "" } else { ": OUT" });
             if !ok {

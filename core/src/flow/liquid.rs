@@ -29,7 +29,8 @@ pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64, on: impl 
     m
 }
 
-/// Book `fluxes` through the store, and bring the ground nodes' state up to date for what changed (`Scratch::note`).
+/// Book `fluxes` through the store, and bring the ground nodes' state up to date for what changed (`Scratch::note`;
+/// a node of parts books it on them, `parts::to_liquid`).
 /// Their potential energy is `carried` where their part books it itself (`potential::apply_carried`), else by the
 /// heights their matter leaves from (`potential::apply`).
 pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], carried: Option<&[f64]>) {
@@ -47,10 +48,12 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], carried:
     cells.dedup();
     let amount = |w: &World, k: usize, i: u32| w.store.amounts(Class::Ground)[k * n + i as usize];
     let before: Vec<f64> = ks.iter().flat_map(|&k| cells.iter().map(move |&i| (k, i))).map(|(k, i)| amount(w, k, i)).collect();
+    let heat: Vec<f64> = cells.iter().map(|&i| w.store.heat(Class::Ground)[i as usize]).collect();
     match carried {
         Some(e) => apply_carried(w, s, fluxes, e),
         None => apply(w, s, fluxes, &[]),
     }
+    super::parts::to_liquid(w, s, &cells, (&ks, &before), &heat);
     for (q, &k) in ks.iter().enumerate() {
         for (&i, &was) in cells.iter().zip(&before[q * cells.len()..(q + 1) * cells.len()]) {
             let now = amount(w, k, i);
@@ -60,12 +63,15 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], carried:
         }
     }
     // A node on a melting plateau finds its molten share again from its heat (`cells_state`): what moved of the
-    // plateau's substance was liquid, so the share of what stays is not the share it had.
-    let on: Vec<u32> = cells.into_iter().filter(|&i| s.state.pk[i as usize] != NONE).collect();
+    // plateau's substance was liquid, so the share of what stays is not the share it had; and a mixed node, from its
+    // parts.
+    let on: Vec<u32> = cells.into_iter().filter(|&i| s.state.pk[i as usize] != NONE || super::parts::has(s, i as usize)).collect();
     cells_state(w, s, &on);
 }
 
-/// One liquid step of `dt` seconds; last, the gases of the air dissolve in the liquid where it lies (`air::dissolve`).
+/// One liquid step of `dt` seconds: before the basin's level, the liquid's top and deep swap liquid through the
+/// thermocline (`parts::mix`), so the basin's tops end the step mixed; last, the gases of the air dissolve in the
+/// liquid where it lies (`air::dissolve`).
 pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
     let (tmin, tmax) = range(&s.state.tg);
     let liq = s.liquids(&w.chem, (tmin, tmax), true);
@@ -73,6 +79,8 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
     let runs = springs(w, s, tmin, &slope, dt);
     surface(w, s, (&liq, tmin), (&slope, &runs), dt);
     under(w, s, &liq, tmin, dt);
+    let mixed = super::parts::mix(w, s, dt);
+    cells_state(w, s, &mixed);
     super::basin::level(w, s, &liq, tmin);
     super::air::dissolve(w, s, dt);
 }

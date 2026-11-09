@@ -29,9 +29,9 @@ fn wet(w: &World, s: &Scratch, cells: &[usize]) -> Wet {
     let (mut z, mut pores) = (Vec::new(), Vec::new());
     for &i in cells {
         let amt = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
-        let (l, top, _) = layers(w, s, i, s.state.tg[i], amt, |k| molten(k, i), |k| w.melt(k, i));
+        let (l, top, _) = layers(w, s, (i, 1.0, 1.0), s.state.tg[i], amt, |k| molten(k, i), |k| w.melt(k, i));
         z.push(top);
-        pores.push(por * l[4]);
+        pores.push((por * l[4] - s.dry(i)).max(0.0));
     }
     Wet { liq, held, vol, z, pores }
 }

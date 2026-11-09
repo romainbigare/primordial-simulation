@@ -1,7 +1,7 @@
 //! Ground nodes: heat capacity and temperature on the melting plateaus (`ground_state`), phases, the surface and
 //! heads, and heat conducted sideways (`conduct`).
 
-use super::{on_land, scratch::{Latent, Scratch, Sp}};
+use super::{on_land, parts, scratch::{Latent, Scratch, Sp}};
 use crate::{chem::Phase, ground::{heat_above_floor, melting, skin_of, Melting}, solve::sweep::{by_size, Net}, store::{apply, Class, LinkFlux}, units::{MAX_SUBSTANCES, T_FLOOR}, World};
 
 /// No substance on a melting plateau (`Scratch::pk`).
@@ -82,19 +82,23 @@ pub(super) fn solid(w: &World, s: &Scratch, k: usize, i: usize) -> f64 {
     w.store.amounts(Class::Ground)[k * w.mesh.cells().n() + i] * (1.0 - molten(s, k, i))
 }
 
-/// Temperature of ground node `i` now, K, no warmer than at the last `ground_state`.
+/// Temperature of the liquid of ground node `i` now, K: the node's, no warmer than at the last `ground_state`; of a
+/// node of parts its parts' by the liquid each holds (`parts`), the liquid that leaves it.
 #[inline]
 pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
-    s.state.tg[i].min((w.store.heat(Class::Ground)[i] - s.latent[i].held) / s.cap[i].max(1.0)).max(T_FLOOR)
+    match s.mixed(i) {
+        Some(m) => m.liquid_t(&s.sp).max(T_FLOOR),
+        None => s.state.tg[i].min((w.store.heat(Class::Ground)[i] - s.latent[i].held) / s.cap[i].max(1.0)).max(T_FLOOR),
+    }
 }
 
 /// Heat capacity, temperature, surface, head and reflectance of every ground node: each takes its heat capacities from
 /// the amounts now (`capacities`; other laws move matter between liquid steps, and a stale capacity would read a node
 /// far too hot or cold) and its temperature by its energy alone (`steady`); a node off its plateaus whose temperature
 /// left the span between them, or that is on one, is found anew, and one whose surface moved (`moved`) gets a new
-/// surface (`node_state`), in parallel with `threads`. A full build finds every node anew, the basin (`basin::find`)
-/// and the gases that dissolve in the month (`air::henry`).
-pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
+/// surface (`parts::solve_nodes`, with `moving` as it says), in parallel with `threads`. A full build finds every node
+/// anew, the basin (`basin::find`) and the gases that dissolve in the month (`air::henry`).
+pub(super) fn ground_state(w: &World, s: &mut Scratch, (full, moving): (bool, bool)) {
     let n = w.mesh.cells().n();
     let caps = capacities(w, s, 0..n);
     let mut anew = Vec::new();
@@ -104,15 +108,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
             anew.push((i as u32, thaw));
         }
     }
-    let mut rows = std::mem::take(&mut s.spare.state);
-    rows.resize(anew.len() * STATE_ROW, 0.0);
-    let sr = &*s;
-    crate::par::rows(&mut rows, STATE_ROW, crate::par::UNCOUNTED, || (), |_, q, row| {
-        let (i, thaw) = (anew[q].0 as usize, anew[q].1);
-        node_state(w, sr, i, (caps[i][1], thaw, full), row)
-    });
-    anew.iter().zip(rows.chunks_exact(STATE_ROW)).for_each(|(&(i, _), r)| take_row(s, i as usize, r));
-    s.spare.state = rows;
+    parts::solve_nodes(w, s, &anew, (full, moving));
     if full {
         s.basin = super::basin::find(w, s);
         s.henry = super::air::henry(w, s, super::range(&s.state.tg).0);
@@ -122,14 +118,14 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
 /// The state of the ground nodes `cells` alone brought up to date, as `ground_state` does it.
 pub(super) fn cells_state(w: &World, s: &mut Scratch, cells: &[u32]) {
     let caps = capacities(w, s, cells.iter().map(|&i| i as usize));
+    let mut anew = Vec::new();
     for (&i, &cap) in cells.iter().zip(&caps) {
         let thaw = !steady(w, s, i as usize, cap);
         if thaw || moved(w, s, i as usize) {
-            let mut row = [0.0; STATE_ROW];
-            node_state(w, s, i as usize, (cap[1], thaw, false), &mut row);
-            take_row(s, i as usize, &row);
+            anew.push((i, thaw));
         }
     }
+    parts::solve_nodes(w, s, &anew, (false, true));
 }
 
 /// A ground node's surface is found again once its solid surface and its head have moved since it was last found
@@ -171,7 +167,7 @@ fn steady(w: &World, s: &mut Scratch, i: usize, [skin, cap]: [f64; 2]) -> bool {
 }
 
 /// Ground node `i` takes its row of `node_state` (`STATE_ROW`).
-fn take_row(s: &mut Scratch, i: usize, r: &[f64]) {
+pub(super) fn take_row(s: &mut Scratch, i: usize, r: &[f64]) {
     (s.state.tg[i], s.state.pk[i], s.state.phi[i]) = (r[0], r[1] as usize, r[2]);
     s.latent[i] = Latent { held: r[3], span: [r[4], r[5]], lat: [r[6], r[7]], molten: r[8].to_bits() };
     if r[9] != 0.0 {
@@ -183,12 +179,12 @@ fn take_row(s: &mut Scratch, i: usize, r: &[f64]) {
 /// The numbers of a node's row in `node_state`: its temperature, K; its plateau's substance (`NONE` as is) and molten
 /// share, and its `Latent` (the bits of what is molten as an f64's bits); whether it has a new surface, then its solid
 /// surface and head, m, its soft cover (`Scratch::cover`), its reflectance and its pore space as a depth, m.
-const STATE_ROW: usize = 17;
+pub(super) const STATE_ROW: usize = 17;
 
 /// The row of ground node `i` of heat capacity `cap`, J/K (`STATE_ROW`): with `thaw`, where it stands on its plateaus
 /// found anew (`thaw_at`), else as it is; with a new surface where its phases changed, its surface moved (`moved`), or
 /// with `full` (`surface_of`).
-fn node_state(w: &World, s: &Scratch, i: usize, (cap, thaw, full): (f64, bool, bool), row: &mut [f64]) {
+pub(super) fn node_state(w: &World, s: &Scratch, i: usize, (cap, thaw, full): (f64, bool, bool), row: &mut [f64]) {
     let n = w.mesh.cells().n();
     let amt = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
     let melt = melts(w, s, amt);
@@ -280,18 +276,19 @@ pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
 fn surface_of(w: &World, s: &Scratch, i: usize, t: f64, molten: impl Fn(usize) -> f64, melt: &[f64; MAX_SUBSTANCES]) -> [f64; 7] {
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[i]);
     let amt = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
-    let (l, z, [rc, tc]) = layers(w, s, i, t, amt, molten, |k| melt[k]);
+    let (l, z, [rc, tc]) = layers(w, s, (i, 1.0, 1.0), t, amt, molten, |k| melt[k]);
     [z, z + l[2] / area, rc, tc, l[0] / area, reflectance(w, s, i, &l), w.cfg.phys.porosity * l[4] / area]
 }
 
-/// The layers of ground node `i` at temperature `t` with amounts `amt(k)`, of which the share `molten(k)` is molten:
-/// the volume and volume × reflectance of each of [soft solid, liquid, loose solid] top down, m³; its solid surface, m;
-/// and of its soft cover the heat resistance, m² K/W, and the melting point, K: its solids' melting points `melt(k)`
-/// (lowered by what is dissolved, `Chemistry::melt_in`), a mean by volume; infinite with no cover.
-pub(super) fn layers(w: &World, s: &Scratch, i: usize, t: f64, amt: impl Fn(usize) -> f64, molten: impl Fn(usize) -> f64, melt: impl Fn(usize) -> f64) -> ([f64; 6], f64, [f64; 2]) {
-    let area = w.mesh.cells().area()[i];
-    let mut l = [0.0, 0.0, 0.0, 0.0, s.state.fix[i][0], s.state.fix[i][1]];
-    let (mut z, mut cover) = (w.base_z + (s.state.bed[i].vol + s.state.fix[i][0]) / area, [0.0; 2]);
+/// The layers of the share `part` of the area of ground node `i` holding the share `ground` of its bed and its fixed
+/// solids (1 and 1: the node; a part of a mixed cell, `parts`) at temperature `t` with amounts `amt(k)`, of which the share `molten(k)`
+/// is molten: the volume and volume × reflectance of each of [soft solid, liquid, loose solid] top down, m³; its solid
+/// surface, m; and of its soft cover the heat resistance, m² K/W, and the melting point, K: its solids' melting points
+/// `melt(k)` (lowered by what is dissolved, `Chemistry::melt_in`), a mean by volume; infinite with no cover.
+pub(super) fn layers(w: &World, s: &Scratch, (i, part, ground): (usize, f64, f64), t: f64, amt: impl Fn(usize) -> f64, molten: impl Fn(usize) -> f64, melt: impl Fn(usize) -> f64) -> ([f64; 6], f64, [f64; 2]) {
+    let (area, fix) = (w.mesh.cells().area()[i] * part, s.state.fix[i].map(|v| v * ground));
+    let mut l = [0.0, 0.0, 0.0, 0.0, fix[0], fix[1]];
+    let (mut z, mut cover) = (w.base_z + (s.state.bed[i].vol * ground + fix[0]) / area, [0.0; 2]);
     for &k in &s.state.vary {
         let (p, a) = (&s.sp[k], amt(k));
         if a <= 0.0 || t >= p.boil {
@@ -319,21 +316,21 @@ pub(super) fn reflectance(w: &World, s: &Scratch, i: usize, l: &[f64; 6]) -> f64
     let (pore, stands) = (l[2].min(pores), (l[2] - pores).max(0.0));
     let wet = super::curve::of_cell(w, s, i).wet(stands);
     if wet == 0.0 || wet == 1.0 {
-        return column(w, s, i, l);
+        return column(w, s, (i, 1.0), l);
     }
     // The liquid of each part, m³ over the cell's area, with its reflectance by volume.
     let with = |liquid: f64| {
         let mut x = *l;
         (x[2], x[3]) = (liquid, l[3] / l[2] * liquid);
-        column(w, s, i, &x)
+        column(w, s, (i, 1.0), &x)
     };
     (1.0 - wet) * with(pore) + wet * with(pore + stands / wet)
 }
 
-/// Reflectance of one column of ground node `i` with `layers` `l`: soft solid, liquid and loose solid, top down, each
-/// cover depth / (depth + `hide`) of what lies below, and its bed the rest.
-fn column(w: &World, s: &Scratch, i: usize, l: &[f64; 6]) -> f64 {
-    let area = w.mesh.cells().area()[i];
+/// Reflectance of one column of the share `part` of the area of ground node `i` with `layers` `l`: soft solid, liquid
+/// and loose solid, top down, each cover depth / (depth + `hide`) of what lies below, and its bed the rest.
+pub(super) fn column(w: &World, s: &Scratch, (i, part): (usize, f64), l: &[f64; 6]) -> f64 {
+    let area = w.mesh.cells().area()[i] * part;
     let (mut a, mut seen) = (0.0, 1.0);
     for c in 0..3 {
         if l[2 * c] > 0.0 {

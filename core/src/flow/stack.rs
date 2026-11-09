@@ -23,9 +23,10 @@ pub(super) const HEAD: usize = 8;
 pub(super) const PORED: usize = 9;
 
 /// A cell's liquid as its stack holds it (laws.md 0, 1.2): `vol` m³ fill the pores of its loose solids first (`loose`
-/// m³ of them, porosity `por`), a table rising from the bed's top `bed` by the depth they fill over the porosity; the
-/// rest stands over its own ground (`curve::Curve`) from its mean solid surface `z` (m), as Flow's level stands it
-/// (`land::stand`). Its area `area`, m².
+/// m³ of them, porosity `por`; of a cell of parts less `dry` m³, the room its land's pores have left, `parts::Parts`),
+/// a table rising from the bed's top `bed` by the depth they fill over the porosity; the rest stands over its own ground
+/// (`curve::Curve`) from its mean solid surface `z` (m), as Flow's level stands it (`land::stand`). Its area `area`,
+/// m².
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct Column {
     pub(super) bed: f64,
@@ -33,19 +34,20 @@ pub(super) struct Column {
     pub(super) area: f64,
     pub(super) por: f64,
     pub(super) loose: f64,
+    pub(super) dry: f64,
     pub(super) vol: f64,
 }
 
 impl Column {
-    /// Of ground cell `i` of `w` made of `x` (`LAYERS`).
-    pub(super) fn of(w: &World, x: &[f64; LAYERS], i: usize) -> Column {
+    /// Of ground cell `i` of `w` made of `x` (`LAYERS`), by Flow's state `s`.
+    pub(super) fn of(w: &World, s: &Scratch, x: &[f64; LAYERS], i: usize) -> Column {
         let area = w.mesh.cells().area()[i];
         let bed = w.base_z + x[3] / area;
-        Column { bed, z: bed + x[4] / area, area, por: w.cfg.phys.porosity, loose: x[PORED], vol: x[5] }
+        Column { bed, z: bed + x[4] / area, area, por: w.cfg.phys.porosity, loose: x[PORED], dry: s.dry(i), vol: x[5] }
     }
     /// What its pores hold and what stands over them, m³.
     fn parts(&self) -> [f64; 2] {
-        let pore = self.vol.min(self.por * self.loose);
+        let pore = self.vol.min((self.por * self.loose - self.dry).max(0.0));
         [pore, self.vol - pore]
     }
     /// The table of `pore` m³ in its pores, m.
@@ -149,7 +151,7 @@ pub(super) fn deep_layer(x: &mut [f64; LAYERS], sp: &Sp, t: f64, a: f64) {
 /// head.
 pub(super) fn stack(w: &World, s: &Scratch, x: &[f64; LAYERS], i: usize) -> [f64; ROW] {
     let (area, g, p) = (w.mesh.cells().area()[i], w.cfg.gravity, w.cfg.phys);
-    let c = Column::of(w, x, i);
+    let c = Column::of(w, s, x, i);
     let solids = x[0] * g * (w.base_z + c.bed) / 2.0 + x[1] * g * (c.bed + c.z) / 2.0;
     let e = solids + c.energy(x[2], g, || of_cell(w, s, i));
     let (top, head) = (c.top(|| of_cell(w, s, i)), c.head());

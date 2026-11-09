@@ -50,6 +50,8 @@ fn window(w: &World, s: &mut Samples, at: [f64; 2], depth: u8) -> (Fine, usize) 
     (read(&fine(w, s, [at[0], at[1], 8.0, 8.0], depth), across * across), across)
 }
 
+/// The ground drawn is the terrain per pixel whatever the cells and the window; a split leaves what it shares by area
+/// drawn as it was, and each cell's continuous fields (ice, the ground's temperature) on the mean its own value.
 #[test]
 fn the_fine_ground_is_the_terrain_whatever_the_cells_and_the_window() {
     let mut w = testkit::small_world();
@@ -88,11 +90,42 @@ fn the_fine_ground_is_the_terrain_whatever_the_cells_and_the_window() {
     let relief = got.ground.iter().fold(f32::MIN, |a, &b| a.max(b)) - got.ground.iter().fold(f32::MAX, |a, &b| a.min(b));
     // The pixels sample a square (the midpoint rule), so their mean is the terrain's to a thousandth of the relief.
     assert!(off < 1e-3 * relief as f64, "a square's pixels hold the terrain's height on the mean, off by {off} m of a relief of {relief} m");
-    // A split shares out its cell's rain by area, and here its ice and look as they were: what is drawn of them does not
-    // change. (The liquid in its pores goes by the ground inside it, laws.md 0, "Inside a cell".)
-    for name in ["ice", "rain", "true_r", "true_g", "true_b"] {
+    // A split shares out its cell's rain by area, and here its look as it was: what is drawn of them does not change.
+    // (The liquid in its pores goes by the ground inside it, laws.md 0, "Inside a cell".)
+    for name in ["rain", "true_r", "true_g", "true_b"] {
         let k = LAYERS.iter().position(|l| l.name == name).expect("a layer");
         assert!(before.bytes[k * n..(k + 1) * n] == got.bytes[k * n..(k + 1) * n], "the {name} drawn does not change where cells split");
+    }
+    // The ice and the ground's temperature are continuous fields across the cells (`fine/keep.rs`), so beside a split
+    // they may move; each cell's pixels hold its own value on the mean, to the byte they are drawn in.
+    let f = tape::fields(&w);
+    for (name, of) in [("ice", &f.ice), ("t_ground", &f.t)] {
+        let (k, l) = LAYERS.iter().enumerate().find(|e| e.1.name == name).expect("a layer");
+        for (&c, &i) in named.iter().map(|e| (e.1 as usize, e.0)).collect::<std::collections::BTreeMap<usize, usize>>().iter() {
+            let scale = (l.scale, l.min, l.max);
+            let px: Vec<f64> = (0..n).filter(|&p| got.cell[p] as usize == c).map(|p| of_byte(scale, got.bytes[k * n + p])).collect();
+            let (mean, v) = (px.iter().sum::<f64>() / px.len() as f64, of[i]);
+            assert!((mean - v).abs() <= byte(scale, v), "cell {i}'s {name} drawn {mean} on the mean, held {v}");
+        }
+    }
+}
+
+/// The value byte `b` stands for in a layer of scale, least and most value `(scale, min, max)` (`tape::quantise`,
+/// inverted).
+fn of_byte((scale, min, max): (&str, f64, f64), b: u8) -> f64 {
+    match scale {
+        "log" if b == 0 => 0.0,
+        "log" => (min.ln() + (b as f64 - 1.0) * (max.ln() - min.ln()) / 254.0).exp(),
+        _ => min + b as f64 * (max - min) / 255.0,
+    }
+}
+
+/// How far a value `v` of such a layer may lie from what its byte stands for: half a byte's step (a log layer's in
+/// proportion to `v`), and below a log layer's least value, that value.
+fn byte((scale, min, max): (&str, f64, f64), v: f64) -> f64 {
+    match scale {
+        "log" => v * ((0.5 * (max.ln() - min.ln()) / 254.0).exp() - 1.0) + min,
+        _ => 0.5 * (max - min) / 255.0,
     }
 }
 

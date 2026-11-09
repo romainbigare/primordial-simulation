@@ -141,8 +141,11 @@ Also open, found on the way:
 - Lakes above the sea keep levels apart across cells: every connected body of standing liquid levels as the sea does.
 - Plant kinds still end at the border of a cell that holds none of them, and the marks and the tone of each slot change
   at cell edges: the drawn cover's form must be continuous like its mass.
-- Frost kills only active cover, so once the cold cells are dormant nothing selects the frost gene: a hardiness law for
-  dormant tissue (the frost gene test stands at a gap of 4.7 K against 5).
+- Frost acts on the month's mean ground temperature, spread by the tuned `frost_k`, while lethal frost is set by the
+  minima within the month: a law for the spread of temperature within a step (the day's cycle from the surface's heat
+  budget) would replace `frost_k`.
+- Flow costs about twice what it did since a cell has parts (the sea's parts are solved about 14 times a month):
+  putting off those solves inside the liquid step is the next saving.
 - The live page is slow: the fine raster takes 0.35 to 1.1 s; refinement costs more with the one ground.
 - For now (the owner's decision) the long runs and the live page run without animals (`ew run --plants`), as the work
   is on the ground, the liquid, the cover and the drawing.

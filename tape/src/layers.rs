@@ -64,7 +64,7 @@ pub fn fields(w: &World) -> Fields {
 
 /// The values of cell `i` (`Cell`).
 fn cell(w: &World, i: usize) -> Cell {
-    let (t, pl) = w.thaw_last(i);
+    let (t, pl) = w.thaw_node_last(i);
     // Kinds of cover in order of priority: frozen, liquid, loose, bonded. Each: volume, volume * colour.
     let mut acc = [[0.0f64; 4]; 4];
     let mut add = |kind: usize, vol: f64, refl: [f32; 3]| {
@@ -87,7 +87,7 @@ fn cell(w: &World, i: usize) -> Cell {
     let top = acc[..3].iter().find(|a| a[0] / area >= COVER_MIN).unwrap_or(&acc[3]);
     let glow = 1.0 + 2.0 * ((t - GLOW_T) / GLOW_T).clamp(0.0, 1.0);
     let rgb = [1, 2, 3].map(|c| if top[0] > 0.0 { (top[c] / top[0] * glow).min(1.0) } else { 0.0 });
-    (w.surface_z(i), acc[1][0] / area, acc[0][0] / area, acc[2][0] / area, t, rgb)
+    (w.surface_z(i), acc[1][0] / area, acc[0][0] / area, acc[2][0] / area, w.t_surface_last(i), rgb)
 }
 
 /// Liquid deeper than this stands (a basin), m; shallower, it may flow as a river.

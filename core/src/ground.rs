@@ -103,14 +103,26 @@ impl World {
         let th = melting(c, self.store.heat(Class::Ground)[i], ks.into_iter().map(|(tm, k)| (tm, k, g(k) * self.chem.subs[k].lf)));
         (th.t, th.on)
     }
-    /// Temperature of ground node `i` as every law and the shell read it, K, with its plateau: Flow's solve at its last
-    /// step; before Flow has run, `thaw`.
+    /// Temperature of the ground of cell `i` as life and the shell read it, K, with its plateau: Flow's solve at its
+    /// last step, of a cell of parts its land's (its liquid's top's where it has no land, `flow::parts`); before Flow
+    /// has run, `thaw`.
     pub fn thaw_last(&self, i: usize) -> (f64, Option<(usize, f64)>) {
-        self.scratch.plateau(i).unwrap_or_else(|| self.thaw(i))
+        self.scratch.land(i).unwrap_or_else(|| self.thaw(i))
     }
-    /// Temperature of ground node `i` as every law and the shell read it, K (`thaw_last`).
+    /// Temperature of the ground of cell `i` as life and the shell read it, K (`thaw_last`).
     pub fn t_ground_last(&self, i: usize) -> f64 {
         self.thaw_last(i).0
+    }
+    /// Temperature of ground node `i` as a whole, K, with its plateau, as Flow's solve at its last step left them (its
+    /// heat over its heat capacity apart from its fusion enthalpy; of a cell of parts, each substance molten by the share of
+    /// it its parts hold molten); before Flow has run, `thaw`. What the tape reads the node's phases by.
+    pub fn thaw_node_last(&self, i: usize) -> (f64, Option<(usize, f64)>) {
+        self.scratch.plateau(i).unwrap_or_else(|| self.thaw(i))
+    }
+    /// Temperature of the surface of cell `i`, K: of a cell of parts its land's and its liquid's top's mean by area,
+    /// else `t_ground_last`. What the tape draws.
+    pub fn t_surface_last(&self, i: usize) -> f64 {
+        self.scratch.surface_t(i).unwrap_or_else(|| self.thaw(i).0)
     }
     /// Temperature of ground node `i` from its amounts and energy now, K (`thaw`), for building a world and for tests.
     pub fn t_ground(&self, i: usize) -> f64 {
