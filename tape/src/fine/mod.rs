@@ -65,8 +65,8 @@ fn levels(w: &World, s: &mut Samples, shown: &Shown, depth: u8) -> Vec<f64> {
 }
 
 /// A segment of a river's way: the centres of a cell and of the cell its liquid runs to (column, row, in squares), its
-/// liquid flux, mol/s, and its catchment (`World::catchment`).
-type Way = [f32; 6];
+/// liquid flux, mol/s, its catchment (`World::catchment`), and the width and depth of its channel, m (`World::channel`).
+type Way = [f32; 8];
 
 /// The way each of `cells` whose liquid runs (some flux, none standing) sends it: to the cell the steepest way down its
 /// head takes the most of (`Level::steepest`, the liquid law's way), if any.
@@ -91,7 +91,8 @@ fn ways(c: &Ctx, cells: &[u32]) -> Vec<Way> {
         if w.map.wrap {
             x1 -= w.map.w as f64 * ((x1 - x0) / w.map.w as f64).round();
         }
-        out.push([x0, y0, x1, y1, flux, w.catchment(i)].map(|v| v as f32));
+        let ch = w.channel(i, flux);
+        out.push([x0, y0, x1, y1, flux, w.catchment(i), ch.width, ch.depth].map(|v| v as f32));
     }
     out
 }
@@ -113,7 +114,7 @@ fn about(w: &World, [x0, y0, x1, y1]: [f64; 4]) -> Vec<u32> {
 
 /// A window of the map finer than its cells: the window from column `x` and row `y`, `wide` x `high` squares, on its
 /// edges' leaves of `depth` (no shallower than a square), a pixel each. Little-endian, in order: the melting point of the
-/// frozen cover, K (f32; `cover_melt`); the count of river ways (u32) and each (`Way`, 6 f32) of the cells within their
+/// frozen cover, K (f32; `cover_melt`); the count of river ways (u32) and each (`Way`, 8 f32) of the cells within their
 /// own side of the window; of each pixel row by row the height of the ground, the terrain's (`heights`), m (f32), and
 /// the level of the liquid its own cell holds standing (f32: `levels`; NaN where it holds none), so the shore drawn is
 /// where the ground drawn rises above it; then every layer in table order, a byte a pixel, the field of the cells' bytes
@@ -136,7 +137,7 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
     let (t, cools) = (pyramid.field(&f.t), pyramid.field(&(0..n).map(|i| w.air_drop(i).unwrap_or(0.0)).collect::<Vec<f64>>()));
     let rivers = ways(&c, &about(w, [x, y, x + wide, y + high]));
     let pixels = across * down;
-    let mut out = Vec::with_capacity(8 + 24 * rivers.len() + pixels * (8 + LAYERS.len()));
+    let mut out = Vec::with_capacity(8 + 32 * rivers.len() + pixels * (8 + LAYERS.len()));
     out.extend((cover_melt(w) as f32).to_le_bytes());
     out.extend((rivers.len() as u32).to_le_bytes());
     out.extend(rivers.iter().flatten().flat_map(|v| v.to_le_bytes()));

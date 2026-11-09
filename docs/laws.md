@@ -462,6 +462,12 @@ what the heat holds molten, as every law and the shell then read it.
   a cell it passes on through): each way's room counts all the cell holds, so where its ways together would take it
   lower, each takes less, in proportion (`to_rims`), and no liquid crosses a rim from below it. So a pool a flood
   crosses ends full to its spill level and no higher. What reaches a sea cell stays there and joins the sea.
+- **The channel** (`flow::channel`): what a cell passes on runs in a channel whose width and depth grow as powers of
+  its discharge Q, m³/s (hydraulic geometry downstream, Leopold and Maddock 1953): width `channel_width` ×
+  Q^`channel_width_exp`, depth `channel_depth` × Q^`channel_depth_exp`, and its liquid runs at Q over width × depth.
+  The discharge is the cell's liquid flux (`World::liquid_flux`, mol/s, a moving average over about a year) at the mol
+  per m³ of the liquid its ground holds (`World::liquid_in`). Its size does not depend on the cell's: the push of moving
+  liquid on structures (3.2) and every shell read it here.
 - **Pore water** flows by Darcy's law (an explicit sweep on the liquid table, the store's too, sub-stepped in a cell
   too small for the month, 1.8): `seep` ×
   saturated thickness × width / distance, at most half of what would level two cells, and no cell giving more than it
@@ -805,7 +811,8 @@ its time of its own.
 ### 3.2 Loads and failure
 Monthly (`bond/month.rs`), from the part a body holds out along the bonds, each bond carries the weight hanging on it,
 less buoyancy, plus the push of moving liquid and of bodies passing (`bump` of their weight); past its strength it
-breaks. A structure no body holds lies on the ground and bears no load.
+breaks. Moving liquid pushes a face with ½ ρ v², v the speed of the cell's channel (1.2, `Physics::channel`) where liquid
+stands at least a centimetre deep in the cell. A structure no body holds lies on the ground and bears no load.
 Structures do not drift; only a body carries one (3.5).
 
 ### 3.3 Holding, floating

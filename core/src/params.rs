@@ -250,6 +250,12 @@ pub struct Physics {
     pub bed_seep: f64,
     /// Half the spacing of the channels inside a cell (the length of a hillslope), m
     pub hill: f64,
+    /// Width of a channel that carries 1 m³/s, m, and the power of the discharge its width grows as
+    pub channel_width: f64,
+    pub channel_width_exp: f64,
+    /// Depth of a channel that carries 1 m³/s, m, and the power of the discharge its depth grows as
+    pub channel_depth: f64,
+    pub channel_depth_exp: f64,
 }
 
 /// The mass at which `Physics::c_move` is the cost of moving a kg a metre, kg.
@@ -396,6 +402,10 @@ impl Default for Physics {
             bed_porosity: 0.02,
             bed_seep: 3e-6,
             hill: 250.0,
+            channel_width: 3.0,
+            channel_width_exp: 0.5,
+            channel_depth: 0.3,
+            channel_depth_exp: 0.4,
         }
     }
 }
@@ -440,6 +450,8 @@ impl Config {
         require(film > 0.0 && (0.0..=1.0).contains(&wet), || format!("r_liquid ({film}) must be above 0, wet_coat ({wet}) from 0 to 1"))?;
         // The soil's shares inside a cell (`inside`) divide by it.
         require(p.soil_m > 0.0, || format!("soil_m ({}) must be above 0", p.soil_m))?;
+        // A channel's speed is its discharge over its width times its depth (`Physics::channel`).
+        require(p.channel_width > 0.0 && p.channel_depth > 0.0, || format!("channel_width ({}) and channel_depth ({}) must be above 0", p.channel_width, p.channel_depth))?;
         let floor = p.node_floor;
         require((0.0..1.0).contains(&floor), || format!("node_floor ({floor}) must be at least 0 and below 1"))?;
         let light = p.light_yield;

@@ -3,7 +3,7 @@
 // fine ground's temperature for its snow, how wet the ground is and the plant cover inside each cell
 // (tape/src/fine/inside.rs), and rivers as lines along the way their liquid runs.
 import { World, Meta, makeWorld, latOf } from './data';
-import { Wet, riverOf, riverWidthOf, riverDepthOf, seaSquares, clamp, POLE_COS } from './earth';
+import { Wet, riverOf, seaSquares, clamp, POLE_COS } from './earth';
 import { Fields, put4 } from './fields';
 
 /** The slots of cover a cell holds at most (core/src/cover `SLOTS`; keep the two in step). */
@@ -20,7 +20,8 @@ export interface Fine {
   per: number; pxM: number;
   /** The melting point of the frozen cover, K (0: the world has none) */
   melt: number;
-  /** The ways rivers run: x0, y0, x1, y1 (squares), flux (mol/s) and catchment, six numbers a way */
+  /** The ways rivers run: x0, y0, x1, y1 (squares), flux (mol/s), catchment, and the width and depth of the channel
+   * (m), eight numbers a way */
   ways: Float32Array;
   /** Of each pixel: the ground's height and the level of the liquid its own cell holds (NaN: none), m */
   ground: Float32Array; water: Float32Array;
@@ -40,13 +41,13 @@ export function readFine(meta: Meta, at: FineAt, data: Uint8Array): Fine {
   const across = Math.max(1, Math.round(at.w * per)), down = Math.max(1, Math.round(at.h * per)), n = across * down;
   const head = new DataView(data.buffer, data.byteOffset, 8), count = head.getUint32(4, true);
   const f32 = (from: number, k: number) => new Float32Array(data.buffer, data.byteOffset + from, k);
-  const start = 8 + 24 * count, layers = start + 8 * n;
+  const start = 8 + 32 * count, layers = start + 8 * n;
   const world = makeWorld({ ...meta, w: across, h: down, cell_m: meta.cell_m / per, frames: [meta.frames[0]] }, data, layers);
   // The fields inside the cells, from the next multiple of 4 bytes after the layers.
   const inside = Math.ceil((layers + meta.layers.length * n) / 4) * 4, numbers = inside + 4 * (1 + SLOTS) * n;
   const cells = new DataView(data.buffer, data.byteOffset + numbers + 4 * n, 4).getUint32(0, true);
   return {
-    at, across, down, per, pxM: meta.cell_m / per, melt: head.getFloat32(0, true), ways: f32(8, 6 * count), ground: f32(start, n), water: f32(start + 4 * n, n), world,
+    at, across, down, per, pxM: meta.cell_m / per, melt: head.getFloat32(0, true), ways: f32(8, 8 * count), ground: f32(start, n), water: f32(start + 4 * n, n), world,
     wet: f32(inside, n), cover: Array.from({ length: SLOTS }, (_, k) => f32(inside + 4 * (1 + k) * n, n)),
     cell: new Uint32Array(data.buffer, data.byteOffset + numbers, n), make: f32(numbers + 4 * (n + 1), 2 * SLOTS * cells),
   };
@@ -107,18 +108,17 @@ export function fineFields(f: Fine, meta: Meta, wet: Wet): Fields {
   return { w: across, h: down, height, matter, bytes, inside, layers: world.data.subarray(world.base), look, place };
 }
 
-/** Of each pixel of `f`, four bytes: its river's depth in steps of RIVER_DEPTH_STEP_M (as deep as its discharge makes
- * it, `riverDepthOf`), two unused, and the share of it that is a river: each way a curve from its cell's centre to the
+/** Of each pixel of `f`, four bytes: its river's depth in steps of RIVER_DEPTH_STEP_M (its channel's, from the core), two unused, and the share of it that is a river: each way a curve from its cell's centre to the
  * next cell's, its middle bent to the lowest ground beside its straight line, smooth through the centres where one way
- * leads into the next, as wide as its discharge makes it or at least RIVER_MIN_PX and more for more flux, as strong as
+ * leads into the next, as wide as its channel (from the core) or at least RIVER_MIN_PX and more for more flux, as strong as
  * its cell is a river. */
 function riverShares(f: Fine): Uint8ClampedArray {
-  const { ways, at, per, across, down, ground, pxM } = f, count = ways.length / 6;
+  const { ways, at, per, across, down, ground, pxM } = f, count = ways.length / 8;
   const cv = new OffscreenCanvas(across, down), ctx = cv.getContext('2d', { willReadFrequently: true })!;
   const key = (x: number, y: number) => `${Math.round(x * 4096)},${Math.round(y * 4096)}`;
   const from = new Map<string, number>(), fed = new Set<string>();
-  for (let k = 0; k < count; k++) { from.set(key(ways[6 * k], ways[6 * k + 1]), k); fed.add(key(ways[6 * k + 2], ways[6 * k + 3])); }
-  const px = (k: number, e: number): [number, number] => [(ways[6 * k + e] - at.x) * per, (ways[6 * k + e + 1] - at.y) * per];
+  for (let k = 0; k < count; k++) { from.set(key(ways[8 * k], ways[8 * k + 1]), k); fed.add(key(ways[8 * k + 2], ways[8 * k + 3])); }
+  const px = (k: number, e: number): [number, number] => [(ways[8 * k + e] - at.x) * per, (ways[8 * k + e + 1] - at.y) * per];
   const groundAt = (x: number, y: number) => ground[clamp(Math.round(y - 0.5), 0, down - 1) * across + clamp(Math.round(x - 0.5), 0, across - 1)];
   // The bent middle of each way.
   const bend: [number, number][] = [];
@@ -135,11 +135,11 @@ function riverShares(f: Fine): Uint8ClampedArray {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   const mid = (a: [number, number], b: [number, number]): [number, number] => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
   for (let k = 0; k < count; k++) {
-    const flux = ways[6 * k + 4], strength = riverOf(flux, ways[6 * k + 5]);
+    const flux = ways[8 * k + 4], strength = riverOf(flux, ways[8 * k + 5]);
     if (strength < RIVER_LEAST) continue;
-    const a = px(k, 0), b = px(k, 2), m = bend[k], next = from.get(key(ways[6 * k + 2], ways[6 * k + 3]));
-    ctx.lineWidth = Math.max(riverWidthOf(flux) / pxM, RIVER_MIN_PX + RIVER_PER_DECADE_PX * Math.max(0, Math.log10(flux / RIVER_FLUX_REF)));
-    ctx.strokeStyle = `rgba(${Math.min(Math.round(riverDepthOf(flux) / RIVER_DEPTH_STEP_M), 255)},0,0,${strength})`;
+    const a = px(k, 0), b = px(k, 2), m = bend[k], next = from.get(key(ways[8 * k + 2], ways[8 * k + 3]));
+    ctx.lineWidth = Math.max(ways[8 * k + 6] / pxM, RIVER_MIN_PX + RIVER_PER_DECADE_PX * Math.max(0, Math.log10(flux / RIVER_FLUX_REF)));
+    ctx.strokeStyle = `rgba(${Math.min(Math.round(ways[8 * k + 7] / RIVER_DEPTH_STEP_M), 255)},0,0,${strength})`;
     ctx.beginPath();
     const start = mid(a, m), end = mid(m, b);
     if (!fed.has(key(ways[6 * k], ways[6 * k + 1]))) { ctx.moveTo(a[0], a[1]); ctx.lineTo(start[0], start[1]); }

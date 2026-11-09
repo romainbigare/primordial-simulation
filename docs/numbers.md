@@ -174,6 +174,10 @@ The three costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`) are per k
 | `bed_seep` | m/s | hydraulic conductivity of that zone: the store flows by Darcy's law at `bed_seep` x the depth it fills x the slope of its table | saprolite aquifers pass 4 to 50 m² a day through their thickness (Western Australia; checked in part); 3e-6 m/s through 30 m is 7.8 m² a day | anchored |
 | `soil_m` | m | the liquid a point of a cell's soil holds over the cell's mean per unit of its wetness index ln(a / tan β) over the cell's level of it, within none and its pores full (`inside`, laws.md 0): the steady state of the soil's liquid flowing downhill by Darcy's law, how strongly it gathers in hollows and at the feet of slopes | TOPMODEL's m, the depth over which the soil's conductivity falls by e, by which a point's storage deficit departs from the catchment's mean per unit of the index (Beven and Kirkby 1979): calibrated values 0.01 to 0.05 m (Beven 1997, from memory): 0.03 | anchored |
 | `hill` | m | half the spacing of the channels inside a cell (a hillslope, L = 1 / (2 x drainage density)): the bed's store and the loose ground over field capacity drain to them down the cell's slope | drainage densities of 1 to 5 km per km² in humid lands (Horton 1945; Strahler 1957; from memory) give 100 to 500 m; 2 km per km²: 250 m | anchored |
+| `channel_width` | m | width of a channel that carries 1 m³/s (`flow::channel`) | hydraulic geometry downstream, w = a Q^b (Leopold and Maddock 1953): a from about 2 to 8 in alluvial rivers (from memory): 3 | anchored |
+| `channel_width_exp` | 1 | the power of the discharge a channel's width grows as | b about 0.5 downstream in many rivers (Leopold and Maddock 1953; from memory) | anchored |
+| `channel_depth` | m | depth of a channel that carries 1 m³/s | d = c Q^f (Leopold and Maddock 1953): with `channel_width` it gives a speed of about 1 m/s at 1 m³/s (a c k = 1; from memory): 0.3 | anchored |
+| `channel_depth_exp` | 1 | the power of the discharge a channel's depth grows as | f about 0.4 downstream (Leopold and Maddock 1953; from memory): with b 0.5 the speed grows as Q^0.1 | anchored |
 
 ## Rules chosen for a run
 
@@ -272,12 +276,12 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 109 rows of `Config` and `Physics` are their 109 fields.
+The 113 rows of `Config` and `Physics` are their 113 fields.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 4, and 1 outside the structs | `sun`, `tilt`, `gravity`, `rho_body`; outside: `TABOR` |
-| anchored | 59, and 15 outside the structs | 59 fields (among them `c_basal`, `meeh`, `r_coat`, `r_air`, `r_liquid`, `wet_coat`, `dormant`, `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `wind`, `light_yield`, `gas_floor`, `gas_ref`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear`, `creep`, `abrade`, `bury` and `soil_m`) and the constants `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `WALK_FROUDE`, `DRAG`, `MUSCLE`, `FIXERS`, `FIX_GENE`, `MAX_KEEP` and the founders' learning rate, and the three decomposers' factors `open` of the chemistry (reactions 1, 7 and 12) |
+| anchored | 63, and 15 outside the structs | 63 fields (among them `c_basal`, `meeh`, `r_coat`, `r_air`, `r_liquid`, `wet_coat`, `dormant`, `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `wind`, `light_yield`, `gas_floor`, `gas_ref`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, the four `channel_` numbers, `carry`, `wear`, `creep`, `abrade`, `bury` and `soil_m`) and the constants `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `WALK_FROUDE`, `DRAG`, `MUSCLE`, `FIXERS`, `FIX_GENE`, `MAX_KEEP` and the founders' learning rate, and the three decomposers' factors `open` of the chemistry (reactions 1, 7 and 12) |
 | tuned (run or reason named) | 6, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`), set for an outcome (`rain_time`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`, the cover's starting genes) |
 | tuned, first guess | 29 | 26 free numbers (`mix`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `rho_pass`, `keep_min`, `shape_noise`, `blend`, `plan_weight`, `learn_most`, the Bond numbers `joint` to `bump`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the three `c_hidden`, `c_memory`, `c_seen`, which are the split of `c_brain` and not three numbers |
 | switch | 1 | `null` |

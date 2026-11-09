@@ -60,7 +60,7 @@ map repeating east and west, and a cell's latitude and longitude in the inspect 
 **Map layers** in the frames (`tape/src/layers.rs`, one byte a square of the map, row by row; a square shows the cell
 that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid depth, ice, liquid flux, `catch` (the upstream area a cell drains
 in units of its own: its liquid flux over its rain less evaporation times its area, so a river reads the same at any cell
-size), loose ground, ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the bodies' mass per m², bodies, traffic,
+size), `channel_d` (the depth of the cell's channel, `World::channel`), loose ground, ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the bodies' mass per m², bodies, traffic,
 worn edges, structures, true colour (r, g, b). The tape holds whole-map frames only. The live viewer also asks for
 the window in view and a fifth of it about it, finer than its cells (`tape::fine`, the layout in `tape/src/fine/mod.rs`), a pixel a leaf of a depth
 2 to 4 below the cells, at any zoom: of each pixel the ground's height, the level of the liquid its own cell holds,
@@ -96,7 +96,7 @@ pixel (little-endian), the pixels row by row as above, in this order:
 
 Then the count m of the window's cells (u32) and of each, for each of its 4 slots, its walls and its capture area per
 kg of its built cover (kg/kg, m²/kg; two f32, 0 for a slot it does not hold), so a shell knows what each slot builds
-where it stands. So a window of `across` x `down` pixels after `L` layers starts these at `ceil4(8 + 24 r + 8 n + L n)`
+where it stands. So a window of `across` x `down` pixels after `L` layers starts these at `ceil4(8 + 32 r + 8 n + L n)`
 bytes, n the pixels and r the river ways, and they take `24 n + 4 + 32 m` bytes. These are the core's own shares of each cell's means over its
 ground (laws.md 0, "Inside a cell"): the ones a split gives its quarters. Each pixel reads the cell that holds its
 centre, not a blend between cells, as the mean over the samples of that cell's 8 x 8 grid the pixel covers (the one
@@ -105,9 +105,9 @@ The viewer's worker turns it into the fields the graphics
 card draws (`web/src/fields.ts`, four channels a texture, a texel a pixel): the ground's height, the liquid's
 surface over it (none in its cell: 1000 m below) and the ground's slope east and south; the ice, the ground's
 temperature, the share of the pixel that is the sea's (in a sea square or a dry square beside one) and that is a river
-(the ways drawn as lines as wide as their discharge, Leopold and Maddock 1953, or wider); the plant cover's byte and
+(the ways drawn as lines as wide as their channel, `World::channel`, or wider); the plant cover's byte and
 the true colour; how wet the ground is and the river's depth
-(as deep as its discharge makes it, Leopold and Maddock 1953); and every layer's bytes as they came. Each slot's
+(its channel's); and every layer's bytes as they came. Each slot's
 plane, with what it builds per kg, is a stand of its own in the field of the plant cover's marks. The page makes the same fields of the whole-map frame, a texel a square
 (the liquid's surface in a dry square below its ground by the depth it lacks to be wet and its height over the wet
 squares beside it; a frame does not say how wet the ground is). The card colours them at each screen pixel, over the

@@ -10,7 +10,7 @@ use worldgen::testkit;
 /// the layers, the fields inside the cells (`INSIDE` planes of `n`: wetness, the cover of each slot), the number of
 /// each pixel's cell, and of each cell what its slots build per kg (`MAKE` numbers).
 struct Fine {
-    ways: Vec<[f32; 6]>,
+    ways: Vec<[f32; 8]>,
     ground: Vec<f32>,
     water: Vec<f32>,
     bytes: Vec<u8>,
@@ -30,8 +30,8 @@ const MAKE: usize = 2 * pcore::cover::SLOTS;
 fn read(b: &[u8], n: usize) -> Fine {
     let f32s = |from: usize, k: usize| (0..k).map(|i| f32::from_le_bytes(b[from + 4 * i..from + 4 * i + 4].try_into().unwrap())).collect::<Vec<f32>>();
     let rivers = u32::from_le_bytes(b[4..8].try_into().unwrap()) as usize;
-    let ways = f32s(8, 6 * rivers).chunks(6).map(|c| c.try_into().unwrap()).collect();
-    let at = 8 + 24 * rivers;
+    let ways = f32s(8, 8 * rivers).chunks(8).map(|c| c.try_into().unwrap()).collect();
+    let at = 8 + 32 * rivers;
     let (planes, end) = (at + 8 * n, at + 8 * n + LAYERS.len() * n);
     let inside = end.next_multiple_of(4);
     let u32s = |from: usize, k: usize| (0..k).map(|i| u32::from_le_bytes(b[from + 4 * i..from + 4 * i + 4].try_into().unwrap())).collect::<Vec<u32>>();

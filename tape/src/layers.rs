@@ -152,6 +152,10 @@ impl<'a> Ctx<'a> {
     fn air(&self, i: usize) -> usize {
         self.w.mesh.up(i, 0, AIR)
     }
+    /// The channel of cell `i`'s own liquid flux (`World::channel`).
+    pub(crate) fn channel(&self, i: usize) -> pcore::flow::Channel {
+        self.w.channel(i, self.w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64)
+    }
 }
 
 /// Air node `j`: its heat-absorbing column (Σ n·ir_abs / area) and the column of condensable gases, mol/m².
@@ -187,6 +191,7 @@ pub const LAYERS: &[Layer] = &[
     l("ice", "m", "log", 0.001, 100.0, |c, i| c.f.ice[i]),
     l("flux", "mol/s", "log", 1.0, 1e7, |c, i| c.w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64),
     l("catch", "1", "log", 1.0, 1e5, |c, i| c.w.catchment(i)),
+    l("channel_d", "m", "log", 0.01, 30.0, |c, i| c.channel(i).depth),
     l("loose", "m", "log", 0.01, 100.0, |c, i| c.f.loose[i]),
     l("t_ground", "K", "lin", 220.0, 330.0, |c, i| c.f.t[i]),
     l("t_air", "K", "lin", 220.0, 330.0, |c, i| c.t_air[c.air(i)]),
