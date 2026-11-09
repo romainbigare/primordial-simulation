@@ -59,7 +59,7 @@ pub extern "C" fn new_world(seed: u32, size: u32) -> u32 {
         return 1;
     }
     let plan = Schedule::new(Some(LIFE_YEAR), true, Seeding { hand: true, rounds: SPRAY_ROUNDS, fixers: FIXERS });
-    let samples = tape::Samples::new(&world);
+    let samples = tape::Samples::default();
     LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, samples, out: vec![] }));
     0
 }

@@ -63,18 +63,29 @@ centres the liquid runs along the straight way from one to the next, so what lea
 size, finer than the samples too (`Samples::leaving`): the drained area of every way that leaves it (from a part of the
 way in it, or from its start where the leaf holds that alone), of every sink in it, and, in a leaf finer than a sample
 that does not hold the sample's centre, its own area, which runs to that centre. Below the samples
-the ground goes on as a midpoint displacement
-(Fournier, Fussell and Carpenter 1982) that continues the noise's octaves (`Terrain::inside`): the means of the
-quarters of a leaf of side ℓ depart from its mean by four normal draws keyed by the leaf, made to a variance by area of
-exactly G² ℓ² / 16 (the quarters of flat ground tilted at slope G). G is the larger of two slopes. One is the noise's: the rms
+the ground goes on as one function of the seed and the map that every cell and every pixel a shell draws read
+(`space::below`, `Terrain::heights`): the means of the quarters of a leaf of side ℓ depart from its mean by two parts
+that each keep it. The first is a smooth continuation of the coarser heights: the quarters lean as the quartic
+through the leaf and two neighbours each way on each axis does (average interpolation, Donoho 1993), so the ground has
+no steps and its slope no kinks at the leaves' edges and a slope across the samples goes on across their quarters.
+The second is a midpoint displacement (Fournier, Fussell and Carpenter 1982) that continues the noise's octaves: four
+normal draws keyed by the leaf, with no part along the lean, made to a variance by area of exactly G² ℓ² / 16 (the
+quarters of flat ground tilted at slope G), none on leaves under a metre a side, where the ground goes on as its
+continuation. G is the larger of two slopes. One is the noise's: the rms
 slope one octave of the base noise adds (octave o weighs 2^−o and is 2^o times as fine, so each adds the same slope, a
 fractal of Hurst exponent 1): the base's weight over the octaves' sum times √(2 (1/5) (26/35)^(D−1)) per unit of the
 noise (the mean square slope of value noise of D dimensions eased by 3t² − 2t³), times the noise's units per m, times how
 fast the height climbs with the rise at the sample (none on the floor). The other is real ground's at the scale ℓ:
 0.1 at 30 m, going as ℓ^(H−1) with H = 0.8 (`real_slope`; numbers.md), so ground the noise leaves smooth (a globe's, whose
 finest octave is tens of km) is as rough as real ground at every scale, under the sea and on ice as on land. So a leaf has
-a mean height at any depth, its ancestors' departures added to its sample's height, and the ground below a leaf holds the
-sum over its depths of G² ℓ² / 16 (`variance_below`). On the 64 x 64 island the noise's G is up to about 0.05 on high
+a mean height at any depth. The ground below a sample holds a variance by area V (`sample_variance`): the lean's at the
+steepest of the sample and its eight neighbours, S² ℓ² / 16 at each depth (a lean's variance ew² + sn² + corners² is
+that of flat ground tilted at S), and the displacement's whole series Σ G² ℓ² / 16 (`variance_below`), each times 4/3,
+as the lean carries the slope each depth draws on to every depth below it (Σ 1/4ⁿ). A leaf below holds its parent's V
+less the variance its quarters' means take about the parent's, shared among the four by what each will need (the
+variance its own lean takes and the displacement's at its size); no split takes more than its leaf holds (the lean and
+the draws shrink to fit, where the ground bends more than its sample's neighbours do: rare), so the account is exact
+at every depth. On the 64 x 64 island the noise's G is up to about 0.05 on high
 land, real ground's 0.09 at 62 m and 0.13 at 8 m; on a globe of 64 rows the noise's is about 1e-4 and real ground's 0.03 at 10 km
 and 0.08 at 76 m, so its streets are rough. What needs the cell at a
 point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
@@ -238,14 +249,14 @@ inside it holds ρ g ∫ (h − h̄)² / 2 more than a flat bed of its volume (e
 ρ g a h² / 2 over its base), ρ the density of the cell's bed (`World::relief_at_build`): over the samples inside a cell
 of `SAMPLE_DEPTH` or coarser, Σ a (h − h̄)² / 2 and each sample's A V / 2 below it, V the variance by area below a leaf (above); a finer cell A V / 2 alone
 (`Terrain::inside`). It is the same account at every size, to rounding: a cell's is its quarters' and that of their
-means about its own, as the departures are made to that variance exactly. **A split of a
+means about its own, as each leaf holds its parent's less what its quarters' means take (above). **A split of a
 cell no join made** gives its quarters the terrain inside it (`World::uneven`): each quarter's bed surface is the cell's
 mean bed surface now plus the terrain's mean height over the quarter less the mean over the four, so the cell's bed
 keeps its volume and its mean (what wear and creep did since the start stays in the mean); the bed's substances go
 to
 the quarters in the cell's proportions; the loose ground, the liquid its pores hold, the store and every other number
 stay per m². The quarters stand on the drained samples (above), so a basin of the noise is no basin whatever cells
-split, in whatever order; the midpoint displacement below the samples may leave small pits. Then the quarters take the shares of their own ground (**inside a cell**,
+split, in whatever order; the ground below the samples may leave small pits. Then the quarters take the shares of their own ground (**inside a cell**,
 below; `flow::share_ground`): the liquid the cell's pores held goes to the quarters' pores by its share (a quarter's
 part of the soil's shares), as far as each one's pores hold; the liquid that stood over the cell's pores and what a
 quarter's pores cannot hold stand where they would on the quarters' floors (a floor is a quarter's solid surface less
@@ -298,8 +309,9 @@ even. The snow is shared evenly: the sun on a cell is that on its mean slope (1.
 the cell's one balance melts its snow as one; a split's quarters then each take the sun of their own slope, so a
 quarter facing the sun melts its part first. Sharing the snow by the sun at the samples would need a melt at each
 sample, which nothing reads. A split gives each quarter its part of each share
-(the sum by area over its samples, `Ground::quarters`), and the shell draws inside a cell with the same shares
-(`tape::fine`), so what is seen before a zoom is what the world goes on with. A join stays a sum.
+(the sum by area over its samples, `Ground::quarters`), and the shell draws inside the cells by the same laws at its
+pixels, across the cells' borders, each cell's means held (`tape::fine`), so what is seen before a zoom is what the
+world goes on with. A join stays a sum.
 **Refinement** (`refine/`, `World::refine`) decides which cells split and join: a setting for speed, not a law (no
 law reads its score). The shell calls it at each month's start, before the survey, once it took the month's events
 and before it places life by the plan. With no budget (`Config::cell_budget` 0, every run's default) it does nothing:

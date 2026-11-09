@@ -2,11 +2,11 @@
 //! its map and its level (`Terrain`), at any size. Value noise summed over octaves (fractal noise), with ridges, its
 //! domain warped so coasts and ridges bend (Perlin 1985; Musgrave 1989), raised to heights; an island falls away from
 //! the middle of its map. It gives the cells their starting heights (`worldgen`), and a split the ground its cell held
-//! finer than the cell (`World::split`). Below `SAMPLE_DEPTH` the ground goes on as a midpoint displacement that
-//! continues the noise's octaves (`Terrain::inside`), so a cell of any depth has a mean height and a relief.
+//! finer than the cell (`World::split`). Below `SAMPLE_DEPTH` the ground goes on smooth with the noise's finer octaves
+//! laid on it (`space::below`), so a cell of any depth has a mean height and a relief, and a shell draws that ground.
 
 use super::square::Square;
-use super::tree::BLOCK;
+use super::tree::DEPTH_MOST;
 use super::{Leaf, Level};
 use crate::rng::{mix, Purpose, Rng};
 use serde::{Deserialize, Serialize};
@@ -193,29 +193,30 @@ pub(crate) fn real_slope(len: f64) -> f64 {
 
 /// The slope G of the ground at a scale `len`, m, where the noise holds slope `noise` there: the larger of the two, so
 /// ground the noise leaves smooth is as rough as real ground at that scale.
-fn slope_at(noise: f64, len: f64) -> f64 {
+pub(super) fn slope_at(noise: f64, len: f64) -> f64 {
     noise.max(real_slope(len))
 }
 
 /// The variance by area, m², of the heights below a leaf of `depth` whose noise slope is `noise`: each depth k down adds
 /// (G_k ℓ_k / 4)² (the departures of the quarters of a leaf of side ℓ_k, `displace`). Where the noise's slope is the
 /// larger the terms are those of a constant slope; from the depth where real ground's is, the terms fall as 4^−`HURST`
-/// each depth, a geometric series summed whole.
-fn variance_below(map: &Square, noise: f64, depth: u8) -> f64 {
+/// each depth, a geometric series summed whole; where the noise's is the larger down to the tree's most depth, the
+/// terms below it fall as 1/4 each depth, summed whole too.
+pub(super) fn variance_below(map: &Square, noise: f64, depth: u8) -> f64 {
     let mut sum = 0.0;
-    for k in depth.. {
+    for k in depth..=DEPTH_MOST {
         let len = map.length(k);
         if real_slope(len) >= noise {
             return sum + (real_slope(len) * len).powi(2) / 16.0 / (1.0 - 0.25f64.powf(HURST));
         }
         sum += (noise * len).powi(2) / 16.0;
     }
-    unreachable!("real ground's slope grows as the length falls")
+    sum + (noise * map.length(DEPTH_MOST)).powi(2) / 16.0 / 3.0
 }
 
 /// The departures of the means of the four quarters (of areas `area`, m², row by row) of leaf `l` from its mean, m:
 /// four normal draws keyed by the leaf, less their mean by area, scaled so their variance by area is exactly `var`, m².
-fn displace(seed: u64, l: Leaf, area: [f64; 4], var: f64) -> [f64; 4] {
+pub(super) fn displace(seed: u64, l: Leaf, area: [f64; 4], var: f64) -> [f64; 4] {
     let mut r = Rng::new(seed, l.depth as u64, mix(l.x ^ mix(l.y)), Purpose::Detail);
     let z: [f64; 4] = std::array::from_fn(|_| r.normal());
     let whole: f64 = area.iter().sum();
@@ -252,40 +253,22 @@ impl Terrain {
     /// m, and the spread of its heights about it, ∫ (h − mean)² / 2 over its area, m⁴ (a bed of density ρ standing at
     /// those heights holds ρ g times that more potential energy than a flat one of its volume).
     ///
-    /// The noise is sampled at the centres of the leaves of `SAMPLE_DEPTH`, drained (`Terrain::samples`). Below them the
-    /// ground goes on as a midpoint
-    /// displacement (Fournier, Fussell and Carpenter 1982) that continues the base noise's octaves: the means of the
-    /// quarters of a leaf of side ℓ (north to south) depart from its mean by draws keyed by the leaf (`displace`), of
-    /// variance by area exactly G² ℓ² / 16 (that of the quarters of flat ground tilted at slope G), G at least the slope of
-    /// real ground at ℓ (`slope_at`) and at least that at its sample (`sample`). So the variance below a leaf is the sum
-    /// of those over its depths (`variance_below`), and its spread A times that over 2. A leaf of `SAMPLE_DEPTH` or coarser: the mean of its samples, and their spread about it
-    /// with that below each; a finer one: its sample's height with its ancestors' departures down to it, and the spread
-    /// below it. Each sum is exact, so a leaf's spread is its quarters' and that of their means about its own.
+    /// The noise is sampled at the centres of the leaves of `SAMPLE_DEPTH`, drained (`Terrain::samples`); below them the
+    /// ground goes on smooth with the noise's finer octaves laid on it (`space::below`). A leaf of `SAMPLE_DEPTH` or
+    /// coarser: the mean of its samples, and their spread about it with the variance below each (`sample_variance`); a
+    /// finer one: its height and the variance below it (`Terrain::below`), its spread A times that over 2. Each sum is
+    /// exact, so a leaf's spread is its quarters' and that of their means about its own.
     pub fn inside(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64)) -> (f64, f64) {
-        let below = |area: f64, g: f64, depth: u8| area * variance_below(map, g, depth) / 2.0;
         let s = self.samples(seed, map, (south, north));
-        let at = |f: &Leaf| (s.h[s.index(f)], s.g[s.index(f)] as f64);
+        let at = |f: &Leaf| (s.h[s.index(f)], s.v[s.index(f)]);
         if l.depth <= SAMPLE_DEPTH {
             let fine: Vec<(f64, (f64, f64))> = l.split(SAMPLE_DEPTH).map(|f| (map.place_of(&f, south, north).0, at(&f))).collect();
             let (area, sum) = fine.iter().fold((0.0, 0.0), |(a, s), &(da, (h, _))| (a + da, s + da * h));
             let mean = sum / area;
             let spread = fine.iter().map(|&(a, (h, _))| a * (h - mean) * (h - mean)).sum::<f64>() / 2.0;
-            return (mean, spread + fine.iter().map(|&(a, (_, g))| below(a, g, SAMPLE_DEPTH)).sum::<f64>());
+            return (mean, spread + fine.iter().map(|&(a, (_, v))| a * v / 2.0).sum::<f64>());
         }
-        let side = BLOCK >> SAMPLE_DEPTH;
-        let mut leaf = Leaf { x: l.x / side * side, y: l.y / side * side, depth: SAMPLE_DEPTH };
-        let (mut h, g) = at(&leaf);
-        while leaf.depth < l.depth {
-            let (quarters, d) = (leaf.quarters(), self.departures(seed, map, leaf, (south, north), g));
-            let k = quarters.iter().position(|q| q.x <= l.x && l.x < q.x + q.side() && q.y <= l.y && l.y < q.y + q.side()).expect("a quarter holds the leaf");
-            (h, leaf) = (h + d[k], quarters[k]);
-        }
-        (h, below(map.place_of(&l, south, north).0, g, l.depth))
-    }
-    /// The departures of the means of the quarters of leaf `l` (finer than `SAMPLE_DEPTH`, row by row) from its mean, m,
-    /// where the sample over it holds the noise slope `g` (`sample`): those of the midpoint displacement of `inside`.
-    pub fn departures(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64), g: f64) -> [f64; 4] {
-        let len = map.length(l.depth);
-        displace(seed, l, l.quarters().map(|q| map.place_of(&q, south, north).0), (slope_at(g, len) * len / 4.0).powi(2))
+        let (mean, var) = self.below(seed, map, l, (south, north));
+        (mean, map.place_of(&l, south, north).0 * var / 2.0)
     }
 }

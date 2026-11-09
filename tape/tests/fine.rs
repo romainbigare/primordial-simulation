@@ -54,10 +54,10 @@ fn window(w: &World, s: &mut Samples, at: [f64; 2], depth: u8) -> (Fine, usize) 
 fn the_fine_ground_is_the_terrain_whatever_the_cells_and_the_window() {
     let mut w = testkit::small_world();
     let depth = 8;
-    let (before, across) = window(&w, &mut Samples::new(&w), [4.0, 4.0], depth);
+    let (before, across) = window(&w, &mut Samples::default(), [4.0, 4.0], depth);
     let n = across * across;
     // The same pixels in a second window: pixel (x, y) of the first is pixel (x - 2 per, y - per) of the second.
-    let (other, _) = window(&w, &mut Samples::new(&w), [6.0, 5.0], depth);
+    let (other, _) = window(&w, &mut Samples::default(), [6.0, 5.0], depth);
     let per = across / 8;
     let moved = (per..across).flat_map(|y| (2 * per..across).map(move |x| (y * across + x, (y - per) * across + x - 2 * per)));
     assert!(moved.into_iter().all(|(p, q)| before.ground[p] == other.ground[q]), "a pixel's ground is the same in two windows");
@@ -66,7 +66,7 @@ fn the_fine_ground_is_the_terrain_whatever_the_cells_and_the_window() {
         let i = w.mesh.tree().cell_at(w.map.point_at(8.3, 8.3));
         w.split(w.map.leaves()[i]).expect("a split");
     }
-    let got = window(&w, &mut Samples::new(&w), [4.0, 4.0], depth).0;
+    let got = window(&w, &mut Samples::default(), [4.0, 4.0], depth).0;
     assert!(got.ground == before.ground, "the ground drawn does not change where cells split");
     assert!(got.inside[..n].iter().all(|w| (0.0..=1.0).contains(w)) && got.inside[n..].iter().all(|&x| x >= 0.0), "a wetness 0 to 1 and cover of none or more");
     assert!(got.make.iter().all(|&x| x >= 0.0), "walls and capture area of none or more");
@@ -101,7 +101,7 @@ fn each_cells_liquid_fills_the_terrain_drawn_inside_it_from_its_lowest_point() {
     let w = testkit::small_world();
     // Pixels the leaves of the cells' own samples (`World::ground_in`), the window's cells all whole squares.
     let depth = w.map.square_depth() + pcore::inside::DEPTHS;
-    let (got, across) = window(&w, &mut Samples::new(&w), [0.0, 0.0], depth);
+    let (got, across) = window(&w, &mut Samples::default(), [0.0, 0.0], depth);
     let per = across / 8;
     let cell = |p: usize| w.mesh.tree().cell_at(w.map.point_at(((p % across) as f64 + 0.5) / per as f64, ((p / across) as f64 + 0.5) / per as f64));
     let mut shown: Vec<usize> = (0..across * across).map(cell).collect();
@@ -140,14 +140,14 @@ fn the_channels_drawn_are_the_terrains_whatever_the_cells() {
     // A month, so its liquid runs off and its cells pass some on.
     pcore::step(&mut w);
     let depth = 9;
-    let (before, _) = window(&w, &mut Samples::new(&w), [4.0, 4.0], depth);
+    let (before, _) = window(&w, &mut Samples::default(), [4.0, 4.0], depth);
     assert!(before.channel.iter().any(|&s| s > 0.0), "channels drawn");
     assert!(before.channel.iter().zip(&before.deep).all(|(&s, &d)| (0.0..=1.0).contains(&s) && (s > 0.0) == (d > 0.0)), "a share 0 to 1, and a depth where a channel is");
     for _ in 0..3 {
         let i = w.mesh.tree().cell_at(w.map.point_at(8.3, 8.3));
         w.split(w.map.leaves()[i]).expect("a split");
     }
-    let after = window(&w, &mut Samples::new(&w), [4.0, 4.0], depth).0;
+    let after = window(&w, &mut Samples::default(), [4.0, 4.0], depth).0;
     let worst = before.channel.iter().zip(&after.channel).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
     assert!(worst < 1e-4, "a split draws the same channels: shares differ by {worst}");
 }
@@ -157,7 +157,7 @@ fn the_fine_grounds_slope_has_no_kinks_at_the_leaves_edges() {
     let w = testkit::small_world();
     // A square at leaves of 1/256 of it, 16 to a sample of the terrain (`SAMPLE_DEPTH`), 4 depths of displacement below.
     let (depth, across) = (10, 256);
-    let ground = read(&fine(&w, &mut Samples::new(&w), [7.0, 7.0, 1.0, 1.0], depth), across * across).ground;
+    let ground = read(&fine(&w, &mut Samples::default(), [7.0, 7.0, 1.0, 1.0], depth), across * across).ground;
     // The kink of the slope at each pixel along each axis, summed by where it lies against the leaves of 8 pixels.
     let (mut edge, mut within) = ((0.0, 0), (0.0, 0));
     for y in 1..across - 1 {

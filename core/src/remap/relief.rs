@@ -54,7 +54,7 @@ impl World {
     pub(super) fn uneven(&self, (i, leaf): (usize, Leaf), (cells, kids): (&Level, [usize; 4])) -> Uneven {
         let area = kids.map(|j| cells.area()[j]);
         let (rho_g, vol, whole) = (self.bed_weight(i), self.bed_of(i).1, sum4(area));
-        let inside = leaf.quarters().map(|q| self.terrain_in(q));
+        let inside = self.terrain.quarters(self.terrain.seed, &self.map, leaf, (self.cfg.lat_south, self.cfg.lat_north));
         let mean = sum4(std::array::from_fn(|q| area[q] * inside[q].0)) / whole;
         let d = inside.map(|x| x.0 - mean);
         let need = rho_g * sum4(std::array::from_fn(|q| area[q] * d[q] * d[q] / 2.0 + inside[q].1));

@@ -5,6 +5,7 @@
 //! cells of the finest level are the leaves of a tree under each cell of the air level (`tree`). The height of the ground
 //! at any point of the map is one function of the world's seed (`terrain`).
 
+pub mod below;
 pub mod drain;
 pub mod network;
 pub mod square;

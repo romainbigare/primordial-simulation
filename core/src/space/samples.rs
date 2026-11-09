@@ -18,7 +18,8 @@ use std::sync::{Arc, Mutex};
 /// The drained samples of a map for one seed: its width and height in samples, and of each sample row by row its
 /// height, m, and the rms slope of the noise below it; and the terrain's channels on them (`space::network`): the
 /// sample its liquid runs to (`network::NONE` for a sink), the area that drains through it, m², and its neighbour
-/// upstream that the most drains through (`NONE` where none runs to it).
+/// upstream that the most drains through (`NONE` where none runs to it); and the variance by area of the heights below
+/// each, m² (`below::sample_variance`).
 #[derive(Debug)]
 pub struct Samples {
     pub seed: u64,
@@ -29,6 +30,7 @@ pub struct Samples {
     pub to: Vec<u32>,
     pub up: Vec<f64>,
     pub main: Vec<u32>,
+    pub v: Vec<f64>,
 }
 
 impl Samples {
@@ -123,6 +125,7 @@ impl Terrain {
         }
         drain(&mut h, reached, around);
         let (to, up, main) = super::network::network(&h, |k| dx[k / across] * dy, around);
-        Samples { seed, across, down, h, g, to, up, main }
+        let v = crate::par::map_n(across * down, crate::par::UNCOUNTED, |k| super::below::sample_variance(map, &h, (across, down), k, g[k] as f64));
+        Samples { seed, across, down, h, g, to, up, main, v }
     }
 }
