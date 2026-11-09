@@ -369,8 +369,9 @@ with the seeds it sends until they land, its parts) at its cell's head. The part
 (state, the air's steps, liquid, creep, refresh) follow each other with nothing between (`flow::chain`) and are
 booked as one at their end; the survey's own
 build of Flow's state, and a part run alone, are booked at their own end. In each booking every move carries its
-potential energy from the height it leaves (a ground node's liquid top, the table of its pores or the level of what
-stands; a bodies' node's head; an air node's mean head; a store's table; each the mean of the booking's start and
+potential energy from the height it leaves (a ground node's liquid top: the table of its pores, or the level of what
+stands where that lies higher, so liquid standing in a pit under its full pores leaves with them and the top never
+rises as liquid leaves, `stack::Column::top`; a bodies' node's head; an air node's mean head; a store's table; each the mean of the booking's start and
 end, so a lake that drains whole takes along what it held), but the moves of the liquid's pass, which carry it from the
 top their cell's liquid is left at, as the pass books them (`potential::apply_carried`,
 1.2); and each node's heat takes what came in less what left less the change of its own (`store::fall_heat`; less what

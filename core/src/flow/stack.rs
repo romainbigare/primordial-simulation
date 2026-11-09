@@ -52,11 +52,14 @@ impl Column {
     fn table(&self, pore: f64) -> f64 {
         self.bed + if pore > 0.0 { pore / (self.por * self.area) } else { 0.0 }
     }
-    /// The height its liquid leaves from, its top, m: the level of what stands over its own ground (`curve`, found only
-    /// where some stands), or where none does, the table of its pores.
+    /// The height its liquid leaves from, its top, m: the table of its pores, or the level of what stands over its own
+    /// ground (`curve`, found only where some stands) where that lies higher. What stands in a pit of its ground under
+    /// the table of its full pores lies under liquid that fills the ground round it, and leaves with it: so the top
+    /// never rises as liquid leaves, and liquid leaves the cell, and sinks into its store, from no lower than its
+    /// pores' table.
     pub(super) fn top<'a>(&self, curve: impl FnOnce() -> Cow<'a, Curve>) -> f64 {
         match self.parts() {
-            [_, stands] if stands > 0.0 => self.z + curve().level(stands),
+            [pore, stands] if stands > 0.0 => (self.z + curve().level(stands)).max(self.table(pore)),
             [pore, _] => self.table(pore),
         }
     }
