@@ -131,5 +131,21 @@ branch `claude/water-levels`; they wait for a mixed cell's two parts to have eac
 A share inside a cell comes only from a general law evaluated at the samples, never from a rule made for one thing.
 Open, after these: a law for mud and sand (spec 19).
 
+What WP18 still owes (the owner's view of the live map): rivers are drawn as thin straight lines of a dull brown, not
+as water carved into the ground along the terrain. Wanted: a channel that winds as the fine ground leads it (not the
+straight runs of the 125 m samples' steepest ways), whose width and depth change along its course with its discharge
+and its slope, cut into the ground by the flow's own erosion (the bed's wear, then the law of spec 19), and coloured
+as water by what it carries (the suspended load, one law for all liquid). Each from a general law, none drawn for show.
+
+Also open, found on the way:
+- Lakes above the sea keep levels apart across cells: every connected body of standing liquid levels as the sea does.
+- Plant kinds still end at the border of a cell that holds none of them, and the marks and the tone of each slot change
+  at cell edges: the drawn cover's form must be continuous like its mass.
+- Frost kills only active cover, so once the cold cells are dormant nothing selects the frost gene: a hardiness law for
+  dormant tissue (the frost gene test stands at a gap of 4.7 K against 5).
+- The live page is slow: the fine raster takes 0.35 to 1.1 s; refinement costs more with the one ground.
+- For now (the owner's decision) the long runs and the live page run without animals (`ew run --plants`), as the work
+  is on the ground, the liquid, the cover and the drawing.
+
 The next decision is the owner's (spec 13.1): a fixed time on Choose (what bodies sense, remember and learn), or
 the planet (WP14).
