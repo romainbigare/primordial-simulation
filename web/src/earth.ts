@@ -35,10 +35,6 @@ export const clamp = (x: number, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
 export const smooth = (a: number, b: number, x: number) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 
 const WET = 2; // metres of liquid that make a square water
-// A river carries at least RIVER_CATCH (10) times what its own area sheds (the `catch` layer) and RIVER_FLOOR (9e3) mol/s:
-// tape/src/layers.rs RIVER_CATCH and RIVER_FLOOR (keep the three in step). It fades in over these log10 spans, half at the value.
-const RIVER_CATCH_LOG = [0.7, 1.3];
-const RIVER_FLOOR_LOG = [3.6, 4.3];
 const SEA_SHARE = 0.01; // a wet region of a globe with this share of the cells is sea, a smaller one a lake
 export const POLE_COS = 0.25; // a globe's east-west cell width, as a share of the equator's, is not taken below this when shading
 /** A shore of a square by the sea is sand up to this height over the liquid, m (a square's height is its mean). */
@@ -71,10 +67,6 @@ function oceanFill(wet: Uint8Array, W: number, H: number, globe: boolean): Uint8
 /** Where movers wore paths (the `worn` layer: the most cleared link of the cell), drawn over the map. */
 export const PATH_LAYER = 'worn';
 
-/** How much a spot of liquid flux `flux`, mol/s, and catchment `catchment` (the `catch` layer) is a river, 0..1. */
-export const riverOf = (flux: number, catchment: number) =>
-  Math.min(smooth(RIVER_CATCH_LOG[0], RIVER_CATCH_LOG[1], Math.log10(catchment + 1)), smooth(RIVER_FLOOR_LOG[0], RIVER_FLOOR_LOG[1], Math.log10(flux + 1)));
-
 /** The squares of the map that hold standing liquid, and those of them that are the sea's (a byte each). */
 export interface Wet { wet: Uint8Array; sea: Uint8Array }
 /** The wet squares and the sea of frame f. */
@@ -106,8 +98,7 @@ export function seaSquares(wet: Wet, meta: Meta): Uint8Array {
 export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
   const m = w.meta, { w: W, h: H, cell_m, globe } = m, n = W * H;
   const z = decode(w, f, 'z'), depth = decode(w, f, 'depth'), ice = decode(w, f, 'ice'), tg = decode(w, f, 't_ground');
-  const flux = decode(w, f, 'flux'), catchment = decode(w, f, 'catch'), leaf = decode(w, f, 'leaf');
-  const channelD = decode(w, f, 'channel_d');
+  const leaf = decode(w, f, 'leaf'), channelW = decode(w, f, 'channel_w'), channelD = decode(w, f, 'channel_d');
   const plants = plane(w, f, 'plants'), tr = plane(w, f, 'true_r'), tgr = plane(w, f, 'true_g'), tb = plane(w, f, 'true_b');
   const wet = wetOf(w, f), sea = seaSquares(wet, m);
   const wrapX = (x: number) => (globe ? (x + W) % W : x);
@@ -129,7 +120,7 @@ export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
       water = depth[i] - WET - (k ? Math.max(z[i] - sum / k, 0) : 0);
     }
     put4(height, i, z[i], water, gx, gy);
-    put4(matter, i, ice[i], tg[i], sea[i], wet.wet[i] ? 0 : riverOf(flux[i], catchment[i]));
+    put4(matter, i, ice[i], tg[i], sea[i], wet.wet[i] ? 0 : Math.min(channelW[i] / width, 1));
     put4(bytes, i, plants[i], tr[i], tgr[i], tb[i]);
     put4(inside, i, 0, channelD[i], Math.exp(-leaf[i]), 0);
   }
