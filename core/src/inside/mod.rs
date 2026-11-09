@@ -73,16 +73,14 @@ impl World {
     }
 
     /// The ground inside leaf `l` (`Ground`): the terrain's mean height over each sample, a leaf `DEPTHS` below `l`
-    /// (`Terrain::inside`).
+    /// (`Terrain::heights`, the ground a shell draws too).
     pub fn ground_in(&self, l: Leaf) -> Ground {
         let lat = (self.cfg.lat_south, self.cfg.lat_north);
         let depth = (l.depth + DEPTHS).min(DEPTH_MOST);
         let side = 1usize << (depth - l.depth);
-        let (mut h, mut area) = (Vec::with_capacity(side * side), Vec::with_capacity(side * side));
-        for s in l.split(depth) {
-            h.push(self.terrain.inside(self.terrain.seed, &self.map, s, lat).0);
-            area.push(self.map.place_of(&s, lat.0, lat.1).0);
-        }
+        let (x, y) = ((l.x / l.side()) as i64 * side as i64, (l.y / l.side()) as i64 * side as i64);
+        let h = self.terrain.heights(self.terrain.seed, &self.map, lat, [x, y, x + side as i64 - 1, y + side as i64 - 1], depth);
+        let mut area: Vec<f64> = l.split(depth).map(|s| self.map.place_of(&s, lat.0, lat.1).0).collect();
         let dy = self.map.length(depth);
         let dx = (0..side).map(|r| area[r * side] / dy).collect();
         let whole: f64 = area.iter().sum();

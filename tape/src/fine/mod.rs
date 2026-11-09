@@ -80,7 +80,7 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
     let per = (1u64 << (depth - w.map.square_depth())) as f64;
     let (gx, gy) = ((x * per).round() as i64, (y * per).round() as i64);
     let (across, down) = (((wide * per).round() as usize).max(1), ((high * per).round() as usize).max(1));
-    let ground = heights::window(w, samples, [gx, gy, gx + across as i64 - 1, gy + down as i64 - 1], depth);
+    let ground = heights::window(w, [gx, gy, gx + across as i64 - 1, gy + down as i64 - 1], depth);
     let n = w.mesh.cells().n();
     let pyramid = Pyramid::new(w, Pixels { x: gx, y: gy, across, down, depth });
     let c = Ctx::new(w);

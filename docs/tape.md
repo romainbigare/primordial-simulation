@@ -80,9 +80,10 @@ sample's curve. So a channel follows the drained ground, depends on the seed alo
 the cells' edges), and is as wide as it is: a pixel narrower than it is all channel, a wider one holds the share of its
 width the channel covers across it (a channel under half a display level of a pixel is not drawn). The ground of a pixel is the terrain
 itself, drained (`space::terrain`): the mean of its samples, the samples whose means the cells' heights are and over
-whose shape each cell's liquid stands (`flow::curve`); finer than them, the midpoint displacement's departures laid on
-a quartic continuation of the coarser heights that keeps each leaf's mean, smooth with its slope so hill shading shows
-no creases along the leaves' edges; below a metre the continuation alone. So the ground drawn depends neither on the
+whose shape each cell's liquid stands (`flow::curve`); finer than them, the core's own ground below the samples
+(`space::below`, `Terrain::heights`), the one the cells' heights and curves read: a quartic continuation of the
+coarser heights that keeps each leaf's mean, smooth with its slope so hill shading shows no creases along the leaves'
+edges, with the midpoint displacement's departures laid on it; below a metre the continuation alone. So the ground drawn depends neither on the
 cells nor on the window, and has no edge where cells meet. The liquid's level is its own cell's: the liquid standing
 over its pores (`flow::means`) fills the ground drawn inside the cell at the pixels' grain (no finer than 128 x 128
 leaves of the cell) from the lowest up (`flow::level_of`), as the core's level does over the cell's own ground
