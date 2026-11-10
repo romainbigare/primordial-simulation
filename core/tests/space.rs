@@ -413,9 +413,11 @@ fn a_new_cell_takes_a_serial_never_given_again() {
     assert_eq!(a, b);
 }
 
-/// The terrain's channels (`space::network`): each sample's liquid runs to a lower neighbour, and the area that drains
-/// through a sample is its own and all that runs to it, so the sinks gather the whole map's. What leaves a leaf is what
-/// leaves it from its quarters (`Samples::leaving`), at the samples' size, coarser and finer.
+/// The terrain's channels (`space::network`): each sample's liquid runs to a neighbour no higher, but in a pond, where
+/// it runs on toward the pass; from every sample of land the way leads to the open low ground under 0 m; a pond's
+/// samples lie under its level, which is its pass's height. The area that drains through a sample is its own and all
+/// that runs to it, so the sinks gather the whole map's. What leaves a leaf is what leaves it from its quarters
+/// (`Samples::leaving`), at the samples' size, coarser and finer.
 #[test]
 fn the_terrains_channels_run_down_and_what_leaves_a_leaf_leaves_its_quarters() {
     use pcore::space::network::NONE;
@@ -423,12 +425,27 @@ fn the_terrains_channels_run_down_and_what_leaves_a_leaf_leaves_its_quarters() {
     let (s, lat) = (w.drained(), (w.cfg.lat_south, w.cfg.lat_north));
     let mut own = s.up.clone();
     for (k, &j) in s.to.iter().enumerate().filter(|p| *p.1 != NONE) {
-        assert!(s.h[j as usize] < s.h[k], "sample {k} runs down");
+        assert!(s.h[j as usize] <= s.h[k] || s.pond[k] != NONE, "sample {k} runs down");
         own[j as usize] -= s.up[k];
     }
     let sinks: f64 = (0..s.up.len()).filter(|&k| s.to[k] == NONE).map(|k| s.up[k]).sum();
     let all: f64 = own.iter().sum();
     assert!(own.iter().all(|&a| a > 0.0) && (sinks / all - 1.0).abs() < 1e-12, "the sinks gather {sinks} m² of {all} m²");
+    let end = |mut k: usize| {
+        for _ in 0..s.h.len() {
+            match s.to[k] {
+                NONE => return Some(k),
+                j => k = j as usize,
+            }
+        }
+        None
+    };
+    assert!((0..s.h.len()).filter(|&k| s.h[k] >= 0.0).all(|k| end(k).is_some_and(|e| s.h[e] < 0.0)), "every sample of land drains to the low ground");
+    for (k, &p) in s.pond.iter().enumerate().filter(|q| *q.1 != NONE) {
+        let pond = s.ponds[p as usize];
+        assert!(s.h[k] < pond.level && s.pond[pond.pass as usize] == NONE && s.h[pond.pass as usize] == pond.level, "sample {k} under its pond's pass");
+    }
+    println!("{} ponds over {} samples", s.ponds.len(), s.pond.iter().filter(|&&p| p != NONE).count());
     let mut l = w.map.leaves()[worldgen::testkit::dry_land(&w)];
     while l.depth < pcore::space::terrain::SAMPLE_DEPTH + 3 {
         let whole = s.leaving(&w.map, lat, l, l);

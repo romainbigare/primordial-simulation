@@ -229,20 +229,12 @@ fn over_terrain(w: &World, i: usize) -> f64 {
     w.surface_z(i) - w.terrain.inside(w.seed, &w.map, leaf(w, i), (w.cfg.lat_south, w.cfg.lat_north)).0
 }
 
-/// The ground stands on the drained terrain at every size (laws.md 0, 8): no sample of land is a closed pit (each has a
-/// lower neighbour), a world starts with each cell at the terrain's mean over it, and the cells two splits make of a
-/// block of land stand at the terrain's mean over each as their cell did, to `UNEVEN_M`: no quarter carries its cell's
-/// height as a step, and none is drained apart from its neighbours.
+/// The ground stands on the terrain at every size (laws.md 0, 8): a world starts with each cell at the terrain's mean
+/// over it, and the cells two splits make of a block of land stand at the terrain's mean over each as their cell did,
+/// to `UNEVEN_M`: no quarter carries its cell's height as a step.
 #[test]
 fn split_cells_stand_on_the_terrain() {
     let mut w = world();
-    let s = w.terrain.samples(w.seed, &w.map, (w.cfg.lat_south, w.cfg.lat_north));
-    let lower = |k: usize| {
-        let (r, c) = ((k / s.across) as i64, (k % s.across) as i64);
-        let near = (-1..=1i64).flat_map(|a| (-1..=1i64).map(move |b| (r + a, c + b)));
-        near.filter(|&(y, x)| (0..s.down as i64).contains(&y) && (0..s.across as i64).contains(&x)).any(|(y, x)| s.h[y as usize * s.across + x as usize] < s.h[k])
-    };
-    assert!((0..s.h.len()).filter(|&k| s.h[k] >= 0.0).all(lower), "every sample of land has a lower neighbour");
     let block = testkit::land_block(&w);
     let start: Vec<f64> = (0..w.mesh.cells().n()).map(|i| over_terrain(&w, i)).collect();
     let was: Vec<f64> = block.iter().map(|&l| over_terrain(&w, w.map.cell(l).expect("a cell"))).collect();
@@ -323,10 +315,11 @@ fn a_split_its_join_and_its_split_give_the_same_quarters() {
     books.assert_kept(&w, TIGHT);
 }
 
-/// The relief is one account at every size (`Terrain::inside`): a leaf's spread of heights is its quarters' and the
-/// spread of the quarters' means about its own, to rounding (`TIGHT`), for a cell, a leaf coarser than the terrain's
-/// samples, one of their depth and one below them, where the ground goes on as a midpoint displacement; a cell's relief
-/// as built is its spread times the weight of a m³ of its bed (ρ g, between `BED_WEIGHT`).
+/// The relief is one account at every size (`Terrain::inside`): a leaf's mean height is its quarters' mean by area, and
+/// its spread of heights their spreads and that of their means about its own, to rounding (`TIGHT`), for a cell, a leaf
+/// coarser than the terrain's samples, one of their depth and one below them, where the ground goes on as its smooth
+/// continuation; a cell's relief as built is its spread times the weight of a m³ of its bed (ρ g, between
+/// `BED_WEIGHT`).
 #[test]
 fn the_relief_of_a_cell_is_its_quarters_and_what_lies_between() {
     let w = world();
@@ -336,8 +329,11 @@ fn the_relief_of_a_cell_is_its_quarters_and_what_lies_between() {
         let cell = leaf(&w, i);
         for l in [cell.depth, SAMPLE_DEPTH - 1, SAMPLE_DEPTH, SAMPLE_DEPTH + 2].map(|d| cell.split(d).last().expect("a leaf")) {
             let (mean, spread) = w.terrain.inside(w.seed, map, l, lat);
-            let between: f64 = l.quarters().iter().map(|q| (map.place_of(q, lat.0, lat.1).0, w.terrain.inside(w.seed, map, *q, lat))).map(|(a, (m, s))| s + a * (m - mean) * (m - mean) / 2.0).sum();
+            let quarters = l.quarters().map(|q| (map.place_of(&q, lat.0, lat.1).0, w.terrain.inside(w.seed, map, q, lat)));
+            let between: f64 = quarters.iter().map(|&(a, (m, s))| s + a * (m - mean) * (m - mean) / 2.0).sum();
+            let of_quarters = quarters.iter().map(|&(a, (m, _))| a * m).sum::<f64>() / quarters.iter().map(|q| q.0).sum::<f64>();
             println!("cell {i}, depth {}: mean {mean:.2} m, spread {spread:.4e} m⁴", l.depth);
+            assert!((of_quarters - mean).abs() <= TIGHT * mean.abs(), "cell {i}, depth {}: the quarters' mean {of_quarters} m against the leaf's {mean} m", l.depth);
             assert!((between - spread).abs() <= TIGHT * spread, "cell {i}, depth {}: the quarters' {between:e} against the leaf's {spread:e}", l.depth);
         }
         let spread = w.terrain.inside(w.seed, map, cell, lat).1;

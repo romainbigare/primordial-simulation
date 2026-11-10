@@ -52,7 +52,7 @@ fn terrain_of(seed: u64, map: &Square, cells: &Level) -> Terrain {
 }
 
 /// Height of each cell of `map` by `terrain` (its rows between the latitudes `lat`), m: the terrain's mean over it
-/// (`Terrain::inside`, on its drained samples), the one height of the ground of a cell, which its relief stands about
+/// (`Terrain::inside`, on its worn samples), the one height of the ground of a cell, which its relief stands about
 /// and its splits continue (laws.md 0).
 fn heights(seed: u64, map: &Square, terrain: &Terrain, lat: (f64, f64)) -> Vec<f64> {
     map.leaves().iter().map(|&l| terrain.inside(seed, map, l, lat).0).collect()
@@ -99,7 +99,7 @@ pub fn new_map(seed: u64, map: Square) -> World {
 }
 
 /// A new island from a seed, its low ground away from land in coarse cells (`coarse_low`): terrain, chemistry 0, ground,
-/// liquid and air. One terrain, so its drained samples are found once.
+/// liquid and air. One terrain, so its worn samples are found once.
 pub fn new_world(seed: u64, w: usize, h: usize) -> World {
     let (terrain, (chem, init)) = (Terrain::new(seed, ISLAND_LEVEL), chemistry0());
     let map = coarse_low(seed, island(w, h), &terrain);

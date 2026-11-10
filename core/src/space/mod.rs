@@ -6,12 +6,15 @@
 //! at any point of the map is one function of the world's seed (`terrain`).
 
 pub mod below;
-pub mod drain;
+mod drain;
+mod grid;
 pub mod network;
+mod ponds;
 pub mod square;
 pub mod samples;
 pub mod terrain;
 pub mod tree;
+mod wear;
 
 pub use tree::{Leaf, Tree};
 

@@ -1,13 +1,18 @@
-//! The terrain's samples, drained (laws.md 0 and 8): the noise at the centre of every leaf of `SAMPLE_DEPTH` of the
-//! map, its height and its slope finer than the samples (`Terrain::sample`), and a priority flood (`space::drain`)
-//! that raises each closed basin of the samples to its outlet, so liquid runs off every sample of land it reaches
-//! (Planchon and Darboux 2001; Barnes, Lehman and Mulla 2014): noise has basins that no liquid ever cut. Every cell's
-//! height and relief, at the start and at each split, are means over these samples (`Terrain::inside`), so a cell and
-//! its quarters stand on the same ground at every size; so is the way it faces the sun (`Terrain::rise_south`); and
-//! the liquid runs down them (`space::network`). They are a function of the seed and the map alone, found when first
-//! read and kept with the terrain, not saved.
+//! The terrain's samples (laws.md 0 and 8): the noise at the centre of every leaf of `SAMPLE_DEPTH` of the map says how
+//! high the ground would stand there (`Terrain::sample`), and the ground is that worn by flowing liquid and creep at the
+//! world's start (`space::wear`), so valleys branch between ridges and the closed basins the cutting left stay. A
+//! flood over the worn heights (`space::drain`) finds where each sample's liquid runs, and the ponds: the samples
+//! under a closed basin's level, each pond with its pass and the level of the pass. Every cell's height and relief, at
+//! the start and at each split, are means over these samples (`Terrain::inside`), so a cell and its quarters stand on
+//! the same ground at every size; so is the way it faces the sun (`Terrain::rise_south`); and the liquid runs down them
+//! (`space::network`). They are a function of the seed and the map alone, found when first read and kept with the
+//! terrain, not saved.
 
-use super::drain::drain;
+use super::drain::{flood, open_low};
+use super::grid::Grid;
+use super::network::accumulate;
+use super::ponds::{basins, grade};
+use super::wear::wear;
 use crate::math::central;
 use super::square::Square;
 use super::terrain::{Terrain, SAMPLE_DEPTH};
@@ -15,22 +20,32 @@ use super::tree::BLOCK;
 use super::Leaf;
 use std::sync::{Arc, Mutex};
 
-/// The drained samples of a map for one seed: its width and height in samples, and of each sample row by row its
-/// height, m, and the rms slope of the noise below it; and the terrain's channels on them (`space::network`): the
-/// sample its liquid runs to (`network::NONE` for a sink), the area that drains through it, m², and its neighbour
-/// upstream that the most drains through (`NONE` where none runs to it); and the variance by area of the heights below
-/// each, m² (`below::sample_variance`).
+/// The samples of a map for one seed: its width and height in samples, and of each sample row by row its height, m;
+/// the terrain's channels on them (`space::network`): the sample its liquid runs to (`network::NONE` for a sink of the
+/// open low ground), the area that drains through it, m², and its neighbour upstream that the most drains through
+/// (`NONE` where none runs to it); the variance by area of the heights below each, m² (`below::sample_variances`);
+/// the pond each lies in (`NONE` on ground that drains), and the ponds.
 #[derive(Debug)]
 pub struct Samples {
     pub seed: u64,
     pub across: usize,
     pub down: usize,
     pub h: Vec<f64>,
-    pub g: Vec<f32>,
     pub to: Vec<u32>,
     pub up: Vec<f64>,
     pub main: Vec<u32>,
     pub v: Vec<f64>,
+    pub pond: Vec<u32>,
+    pub ponds: Vec<Pond>,
+}
+
+/// A pond: the samples of one closed basin that lie under its level, where liquid stands at one level before it runs
+/// over the basin's lowest pass. Its pass is the first sample out of it on the way its liquid leaves by, and the level
+/// is that of the pass, m.
+#[derive(Clone, Copy, Debug)]
+pub struct Pond {
+    pub pass: u32,
+    pub level: f64,
 }
 
 impl Samples {
@@ -52,7 +67,7 @@ impl Clone for Kept {
 }
 
 impl Terrain {
-    /// The drained samples of `map` for `seed` (its rows between latitudes `south` and `north`), found once and kept.
+    /// The worn samples of `map` for `seed` (its rows between latitudes `south` and `north`), found once and kept.
     /// They are found with no lock held (finding them works in parallel, and a worker that waited on the lock inside
     /// another parallel section would hold up the workers it needs); where two find them at once, the first kept is
     /// the one (they are the same).
@@ -70,7 +85,7 @@ impl Terrain {
     }
 
     /// The mean rise of the ground toward the south over leaf `l` of `map` for `seed` (its rows between latitudes `south`
-    /// and `north`), m per m: by area over the drained samples it covers, each its central difference north to south
+    /// and `north`), m per m: by area over the samples it covers, each its central difference north to south
     /// (one-sided at the map's edge); a leaf finer than a sample takes its sample's. So a leaf's is its quarters' mean by
     /// area at every depth. It is what the sun on a cell reads of the way the cell faces (`flow::on_slope`).
     pub fn rise_south(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64)) -> f64 {
@@ -87,45 +102,27 @@ impl Terrain {
         at(&l)
     }
 
-    /// The samples of `map` for `seed`, drained: a priority flood from the low ground (on a globe every sample under
-    /// 0 m; on an island those under 0 m joined to its lowest sample, so ground under 0 m inland is a closed basin too)
-    /// over the samples and their 8 neighbours (east and west round a globe), the lowest first, then the least index.
+    /// The samples of `map` for `seed` (`Samples`): the noise's heights at their centres (`Terrain::sample`), worn
+    /// (`space::wear`) with the open low ground held (`drain::open_low`); then the flood over them from all the open low
+    /// ground, the closed basins too shallow to hold a pond graded (`ponds::grade`), the area that drains through each
+    /// sample, the ponds and the variance below each.
     fn drained(&self, seed: u64, map: &Square, (south, north): (f64, f64)) -> Samples {
         let per = 1usize << (SAMPLE_DEPTH - map.square_depth());
         let (across, down) = (map.w * per, map.h * per);
         let side = BLOCK >> SAMPLE_DEPTH;
         let leaf = |k: usize| Leaf { x: (k % across) as u64 * side, y: (k / across) as u64 * side, depth: SAMPLE_DEPTH };
-        let found = crate::par::map_n(across * down, crate::par::UNCOUNTED, |k| self.sample(seed, map, map.place_of(&leaf(k), south, north).1));
-        let (mut h, g): (Vec<f64>, Vec<f32>) = found.into_iter().map(|(h, g)| (h, g as f32)).unzip();
+        let rise = crate::par::map_n(across * down, crate::par::UNCOUNTED, |k| self.sample(seed, map, map.place_of(&leaf(k), south, north).1));
         let dy = map.length(SAMPLE_DEPTH);
-        let dx: &Vec<f64> = &(0..down).map(|r| map.place_of(&leaf(r * across), south, north).0 / dy).collect();
-        let around = |k: usize| {
-            let (r, c) = ((k / across) as i64, (k % across) as i64);
-            let steps = (-1..=1i64).flat_map(|a| (-1..=1i64).map(move |b| (a, b)));
-            steps.filter(|&s| s != (0, 0)).filter_map(move |(a, b)| {
-                let (r2, c2) = (r + a, if map.wrap { (c + b).rem_euclid(across as i64) } else { c + b });
-                ((0..down as i64).contains(&r2) && (0..across as i64).contains(&c2)).then(|| {
-                    let x = (dx[r as usize] + dx[r2 as usize]) / 2.0;
-                    ((r2 as usize) * across + c2 as usize, (x * b as f64).hypot(dy * a as f64))
-                })
-            })
-        };
-        let mut reached: Vec<bool> = h.iter().map(|&z| z < 0.0 && map.wrap).collect();
-        if let Some(low) = (0..h.len()).min_by(|&a, &b| h[a].total_cmp(&h[b]).then(a.cmp(&b))).filter(|&k| !map.wrap && h[k] < 0.0) {
-            let mut todo = vec![low];
-            reached[low] = true;
-            while let Some(k) = todo.pop() {
-                for (j, _) in around(k) {
-                    if h[j] < 0.0 && !reached[j] {
-                        reached[j] = true;
-                        todo.push(j);
-                    }
-                }
-            }
-        }
-        drain(&mut h, reached, around);
-        let (to, up, main) = super::network::network(&h, |k| dx[k / across] * dy, around);
-        let v = crate::par::map_n(across * down, crate::par::UNCOUNTED, |k| super::below::sample_variance(map, &h, (across, down), k, g[k] as f64));
-        Samples { seed, across, down, h, g, to, up, main, v }
+        let grid = Grid::new(across, down, map.wrap, dy, (0..down).map(|r| map.place_of(&leaf(r * across), south, north).0 / dy).collect());
+        let open = open_low(&grid, &rise);
+        let mut h = wear(seed, &grid, &rise, &open);
+        let f = flood(&grid, &h, &open, false);
+        let (up, main) = accumulate(&f.to, &f.order, |k| grid.area(k));
+        let shallow = basins(&grid, &h, &f).1;
+        grade(&mut h, &f, &shallow);
+        let (pond, members) = basins(&grid, &h, &f);
+        let ponds = members.iter().map(|m| Pond { pass: f.to[m[0] as usize], level: f.level[m[0] as usize] }).collect();
+        let v = super::below::sample_variances(&h, (across, down));
+        Samples { seed, across, down, h, to: f.to, up, main, v, pond, ponds }
     }
 }

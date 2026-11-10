@@ -1,14 +1,15 @@
 //! The terrain (laws.md 0 and 8): the height of the ground at any point of the map, one function of the world's seed,
 //! its map and its level (`Terrain`), at any size. Value noise summed over octaves (fractal noise), with ridges, its
-//! domain warped so coasts and ridges bend (Perlin 1985; Musgrave 1989), raised to heights; an island falls away from
-//! the middle of its map. It gives the cells their starting heights (`worldgen`), and a split the ground its cell held
-//! finer than the cell (`World::split`). Below `SAMPLE_DEPTH` the ground goes on smooth with the noise's finer octaves
-//! laid on it (`space::below`), so a cell of any depth has a mean height and a relief, and a shell draws that ground.
+//! domain warped so coasts and ridges bend (Perlin 1985; Musgrave 1989), raised to heights, says how high the ground
+//! would stand; an island falls away from the middle of its map. The ground at the samples (`SAMPLE_DEPTH`) is that
+//! worn at the world's start (`space::samples`, `space::wear`). It gives the cells their starting heights
+//! (`worldgen`), and a split the ground its cell held finer than the cell (`World::split`). Below `SAMPLE_DEPTH` the
+//! ground goes on smooth (`space::below`), so a cell of any depth has a mean height and a relief, and a shell draws
+//! that ground.
 
 use super::square::Square;
-use super::tree::DEPTH_MOST;
 use super::{Leaf, Level};
-use crate::rng::{mix, Purpose, Rng};
+use crate::rng::{Purpose, Rng};
 use serde::{Deserialize, Serialize};
 use std::f64::consts::TAU;
 
@@ -39,11 +40,6 @@ pub const ISLAND_LEVEL: f64 = 0.3;
 /// The depth below its air block whose leaves' centres sample the terrain inside a coarser cell (`Terrain::inside`):
 /// 1/64 of a block's side, 125 m on the island, finer than the noise's finest octave there.
 pub const SAMPLE_DEPTH: u8 = 6;
-/// The rms slope of real ground (rise over run) measured over `REAL_LENGTH_M`, and the Hurst exponent of its roughness:
-/// the slope over a length ℓ goes as ℓ^(`HURST` − 1) (`real_slope`).
-const REAL_SLOPE: f64 = 0.1;
-const REAL_LENGTH_M: f64 = 30.0;
-const HURST: f64 = 0.8;
 
 /// What the terrain of a world needs beside its map: the seed of its noise (the world's as built: a run that draws
 /// chance anew from another seed, `World::seed`, stands on the same ground); the rise its level 0 m lies at (an
@@ -158,74 +154,6 @@ fn height_of(above: f64) -> f64 {
     if above > 0.0 { above.powf(LAND_POWER) * LAND_M } else { above * LOW_M }.max(FLOOR_M)
 }
 
-/// How fast `height_of` climbs with the rise at `above`, m per unit of rise (none on the floor).
-fn height_slope(above: f64) -> f64 {
-    if height_of(above) <= FLOOR_M {
-        0.0
-    } else if above > 0.0 {
-        LAND_M * LAND_POWER * above.powf(LAND_POWER - 1.0)
-    } else {
-        LOW_M
-    }
-}
-
-/// The mean square slope of smooth value noise of `dims` dimensions along one axis, per unit of its lattice:
-/// (1/5) (26/35)^(dims − 1). Along an axis the noise is (1 − s) a + s b, s = 3t² − 2t³, between corners of variance
-/// 1/12, so its slope s'(t) (b − a) has E[s'²] = 6/5 and E[(b − a)²] = 1/6; each other axis weighs its two corners by
-/// (1 − s)² + s², 26/35 on the mean.
-fn slope_variance(dims: i32) -> f64 {
-    0.2 * (26.0f64 / 35.0).powi(dims - 1)
-}
-
-/// The rms slope of the rise, per m, that each octave of the base noise (`fbm`) adds on `map`: octave o has the weight
-/// 2^−o over the octaves' sum and 2^o lattice units per unit of the noise, so each adds the same slope (a fractal of
-/// Hurst exponent 1), `BASE_WEIGHT` / sum × √(2 · `slope_variance`) per unit along the ground (two ways across it); the noise has
-/// `ACROSS` / (the longer side, in squares) units a square, flat or round.
-fn octave_slope(map: &Square) -> f64 {
-    let (dims, sum) = (if map.wrap { 3 } else { 2 }, 2.0 - 0.5f64.powi(OCTAVES[1] as i32 - 1));
-    BASE_WEIGHT / sum * (2.0 * slope_variance(dims)).sqrt() * ACROSS / map.w.max(map.h) as f64 / map.side
-}
-
-/// The rms slope of real ground over a length `len`, m: self-affine, so it falls slowly as the length grows.
-pub(crate) fn real_slope(len: f64) -> f64 {
-    REAL_SLOPE * (len / REAL_LENGTH_M).powf(HURST - 1.0)
-}
-
-/// The slope G of the ground at a scale `len`, m, where the noise holds slope `noise` there: the larger of the two, so
-/// ground the noise leaves smooth is as rough as real ground at that scale.
-pub(super) fn slope_at(noise: f64, len: f64) -> f64 {
-    noise.max(real_slope(len))
-}
-
-/// The variance by area, m², of the heights below a leaf of `depth` whose noise slope is `noise`: each depth k down adds
-/// (G_k ℓ_k / 4)² (the departures of the quarters of a leaf of side ℓ_k, `displace`). Where the noise's slope is the
-/// larger the terms are those of a constant slope; from the depth where real ground's is, the terms fall as 4^−`HURST`
-/// each depth, a geometric series summed whole; where the noise's is the larger down to the tree's most depth, the
-/// terms below it fall as 1/4 each depth, summed whole too.
-pub(super) fn variance_below(map: &Square, noise: f64, depth: u8) -> f64 {
-    let mut sum = 0.0;
-    for k in depth..=DEPTH_MOST {
-        let len = map.length(k);
-        if real_slope(len) >= noise {
-            return sum + (real_slope(len) * len).powi(2) / 16.0 / (1.0 - 0.25f64.powf(HURST));
-        }
-        sum += (noise * len).powi(2) / 16.0;
-    }
-    sum + (noise * map.length(DEPTH_MOST)).powi(2) / 16.0 / 3.0
-}
-
-/// The departures of the means of the four quarters (of areas `area`, m², row by row) of leaf `l` from its mean, m:
-/// four normal draws keyed by the leaf, less their mean by area, scaled so their variance by area is exactly `var`, m².
-pub(super) fn displace(seed: u64, l: Leaf, area: [f64; 4], var: f64) -> [f64; 4] {
-    let mut r = Rng::new(seed, l.depth as u64, mix(l.x ^ mix(l.y)), Purpose::Detail);
-    let z: [f64; 4] = std::array::from_fn(|_| r.normal());
-    let whole: f64 = area.iter().sum();
-    let mean = (0..4).map(|q| area[q] * z[q]).sum::<f64>() / whole;
-    let d = z.map(|x| x - mean);
-    let spread = (0..4).map(|q| area[q] * d[q] * d[q]).sum::<f64>() / whole;
-    if spread > 0.0 { d.map(|x| x * (var / spread).sqrt()) } else { [0.0; 4] }
-}
-
 impl Terrain {
     /// The terrain of `seed` whose level 0 m lies at the rise `level`.
     pub fn new(seed: u64, level: f64) -> Terrain {
@@ -243,21 +171,19 @@ impl Terrain {
         let (dx, dy) = (middle(place.centre[0], map.w), middle(place.centre[1], map.h));
         r - ((dx * dx + dy * dy).sqrt() * FALL_BY).powf(FALL_POWER) - self.level
     }
-    /// The height of the noise at `place`, m, and the rms slope it holds there finer than `SAMPLE_DEPTH`: the slope an
-    /// octave of the base noise adds (`octave_slope`) times how fast the height climbs with the rise there.
-    pub(super) fn sample(&self, seed: u64, map: &Square, place: Place) -> (f64, f64) {
-        let above = self.above(seed, map, place);
-        (height_of(above), height_slope(above) * octave_slope(map))
+    /// The height of the noise at `place`, m: how high the ground would stand there unworn.
+    pub(super) fn sample(&self, seed: u64, map: &Square, place: Place) -> f64 {
+        height_of(self.above(seed, map, place))
     }
     /// The terrain inside leaf `l` of `map` (its rows between latitudes `south` and `north`): its mean height by area,
     /// m, and the spread of its heights about it, ∫ (h − mean)² / 2 over its area, m⁴ (a bed of density ρ standing at
     /// those heights holds ρ g times that more potential energy than a flat one of its volume).
     ///
-    /// The noise is sampled at the centres of the leaves of `SAMPLE_DEPTH`, drained (`Terrain::samples`); below them the
-    /// ground goes on smooth with the noise's finer octaves laid on it (`space::below`). A leaf of `SAMPLE_DEPTH` or
-    /// coarser: the mean of its samples, and their spread about it with the variance below each (`sample_variance`); a
-    /// finer one: its height and the variance below it (`Terrain::below`), its spread A times that over 2. Each sum is
-    /// exact, so a leaf's spread is its quarters' and that of their means about its own.
+    /// The ground is sampled at the centres of the leaves of `SAMPLE_DEPTH`, worn (`Terrain::samples`); below them it
+    /// goes on smooth (`space::below`). A leaf of `SAMPLE_DEPTH` or coarser: the mean of its samples, and their spread
+    /// about it with the variance below each (`below::sample_variances`); a finer one: its height and the variance below
+    /// it (`Terrain::below`), its spread A times that over 2. Each sum is exact, so a leaf's spread is its quarters' and
+    /// that of their means about its own.
     pub fn inside(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64)) -> (f64, f64) {
         let s = self.samples(seed, map, (south, north));
         let at = |f: &Leaf| (s.h[s.index(f)], s.v[s.index(f)]);

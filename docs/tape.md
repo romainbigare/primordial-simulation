@@ -68,7 +68,7 @@ the window in view and a fifth of it about it, finer than its cells (`tape::fine
 and every layer as a smooth field of the cells' values (the ground's temperature along the ground's height over its
 cell's mean, at the rate the air cools with height, `World::air_drop`), and the channels its liquid runs in
 (`tape/src/fine/channels.rs`): the share of the pixel a channel covers and that channel's depth. The channels are the
-terrain's (`space::network`): each drained sample's way to the neighbour its ground falls to most steeply carries the
+terrain's (`space::network`): each sample's way to the neighbour the flood over the samples sends its liquid to carries the
 flux of the cell that holds its start, per m² of the drained area that leaves that cell, times the drained area of the
 sample: the share of the cell's flux a split would give that part of it (`Samples::leaving`), so a split draws the same
 channels. For a cell finer than 4 x 4 samples the flux per m² is that of all the cells of the region of 4 x 4 samples
@@ -77,14 +77,14 @@ cells runs by their own heights, a sample or two off the samples' channels, and 
 it runs through. Each carries it in a channel as wide and deep as `World::channel` makes it, drawn as a curve from the middle
 of the way into its sample (from the neighbour upstream that the most drains through) to the middle of its own, bent
 at the sample's centre (a quadratic Bézier); a way into a sample that more drains into from elsewhere runs on to that
-sample's curve. So a channel follows the drained ground, depends on the seed alone (the same at every zoom and across
+sample's curve. So a channel follows the worn ground, depends on the seed alone (the same at every zoom and across
 the cells' edges), and is as wide as it is: a pixel narrower than it is all channel, a wider one holds the share of its
 width the channel covers across it (a channel under half a display level of a pixel is not drawn). The ground of a pixel is the terrain
-itself, drained (`space::terrain`): the mean of its samples, the samples whose means the cells' heights are and over
+itself, worn (`space::terrain`): the mean of its samples, the samples whose means the cells' heights are and over
 whose shape each cell's liquid stands (`flow::curve`); finer than them, the core's own ground below the samples
 (`space::below`, `Terrain::heights`), the one the cells' heights and curves read: a quartic continuation of the
 coarser heights that keeps each leaf's mean, smooth with its slope so hill shading shows no creases along the leaves'
-edges, with the midpoint displacement's departures laid on it; below a metre the continuation alone. So the ground drawn depends neither on the
+edges. So the ground drawn depends neither on the
 cells nor on the window, and has no edge where cells meet. The liquid's level is the core's
 (`flow::levels`): the level the liquid standing over a cell's pores reaches over the cell's own ground, by which the
 liquid moves, in the cells that hold liquid standing (none elsewhere), evened over the pixels within half the pixel's

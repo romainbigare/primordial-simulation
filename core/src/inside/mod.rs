@@ -9,8 +9,7 @@ mod shares;
 
 pub use shares::{Inside, Means};
 
-use crate::math::central;
-use crate::space::terrain::real_slope;
+use crate::math::{central, spread_down};
 use crate::space::tree::DEPTH_MOST;
 use crate::space::Leaf;
 use crate::World;
@@ -23,9 +22,17 @@ pub const DEPTHS: u8 = 3;
 /// flux all from upstream).
 const SHED_MIN: f64 = 1e-6;
 
-/// Quinn's contour lengths, in sides of a sample, of the ways to the samples across a side and across a corner: the
-/// share of a sample's liquid that goes each way down weighs its drop by them (Quinn et al. 1991).
-const CONTOUR: [f64; 2] = [0.5, std::f64::consts::SQRT_2 / 4.0];
+/// The rms slope of real ground (rise over run) measured over `REAL_LENGTH_M`, and the Hurst exponent of its roughness:
+/// the slope over a length ℓ goes as ℓ^(`HURST` − 1) (`real_slope`).
+const REAL_SLOPE: f64 = 0.1;
+const REAL_LENGTH_M: f64 = 30.0;
+const HURST: f64 = 0.8;
+
+/// The rms slope of real ground over a length `len`, m: self-affine, so it falls slowly as the length grows. The
+/// ground inside a cell is no smoother than it at the size of its samples.
+fn real_slope(len: f64) -> f64 {
+    REAL_SLOPE * (len / REAL_LENGTH_M).powf(HURST - 1.0)
+}
 
 /// A grid of samples of the ground: `across` x `down` of them, row by row from the north-west, a sample's length north
 /// to south, m, and the width of each row's samples, m. The ground inside a cell stands on one (`Ground`), and so does
@@ -75,7 +82,7 @@ impl World {
         (g, shares)
     }
 
-    /// The terrain's drained samples of this world (`Terrain::samples`), which the ground inside each cell reads.
+    /// The terrain's worn samples of this world (`Terrain::samples`), which the ground inside each cell reads.
     pub fn drained(&self) -> std::sync::Arc<crate::space::samples::Samples> {
         self.terrain.samples(self.terrain.seed, &self.map, (self.cfg.lat_south, self.cfg.lat_north))
     }
@@ -138,22 +145,14 @@ impl Grid {
 
     /// What gathers at each sample of ground `h` when `gathered` falls on the samples and runs down by multiple flow directions
     /// (Quinn et al. 1991): each sample, highest first, passes what it gathered to every lower sample next to it by drop
-    /// over distance times contour length (`CONTOUR`), so it spreads over a convex ridge and gathers in a concave hollow;
+    /// over distance times contour length (`math::spread_down`), so it spreads over a convex ridge and gathers in a concave hollow;
     /// a sample with no lower one keeps it (a hollow, or the edge it leaves by). It is the steady flow of the soil's
     /// liquid downhill by Darcy's law, which follows the ground's slope, spread as slow flow through the soil spreads;
     /// the liquid law's one steepest way (D-infinity) suits channels.
-    pub fn drain(&self, h: &[f64], mut gathered: Vec<f64>) -> Vec<f64> {
+    pub fn drain(&self, h: &[f64], gathered: Vec<f64>) -> Vec<f64> {
         let mut order: Vec<usize> = (0..h.len()).collect();
         order.sort_by(|&p, &q| h[q].total_cmp(&h[p]).then(p.cmp(&q)));
-        for &p in &order {
-            let ways: Vec<(usize, f64)> = self.around(p).filter(|&(q, _, _)| h[q] < h[p]).map(|(q, corner, d)| (q, (h[p] - h[q]) / d * CONTOUR[corner as usize])).collect();
-            let sum: f64 = ways.iter().map(|w| w.1).sum();
-            if sum > 0.0 {
-                let a = gathered[p];
-                ways.iter().for_each(|&(q, w)| gathered[q] += a * w / sum);
-            }
-        }
-        gathered
+        spread_down(h, order.into_iter(), |p| self.around(p), gathered)
     }
 
     /// The slope of ground `h` at each sample, rise over run, no less than real ground's over a sample (`real_slope`).

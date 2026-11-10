@@ -140,6 +140,35 @@ pub(crate) fn add_times(parts: &mut Vec<f64>, n: f64, x: f64) {
     grow(parts, n * (x - hi));
 }
 
+/// Quinn's contour lengths, in sides of a sample, of the ways to the samples across a side and across a corner: the
+/// share of a sample's liquid that goes each way down weighs its drop by them (Quinn et al. 1991).
+const CONTOUR: [f64; 2] = [0.5, std::f64::consts::SQRT_2 / 4.0];
+
+/// What gathers at each sample of a grid of heights `h` when `gathered` falls on the samples and runs down by
+/// multiple flow directions (Quinn et al. 1991): each sample, in `order` (each after every higher one next to it),
+/// passes what it gathered to every lower sample next to it (`around`: each with whether it lies across a corner and
+/// its distance) by drop over distance times contour length (`CONTOUR`), so it spreads over a convex ridge and
+/// gathers in a concave hollow; a sample with no lower one keeps it.
+pub(crate) fn spread_down<I: Iterator<Item = (usize, bool, f64)>>(h: &[f64], order: impl Iterator<Item = usize>, around: impl Fn(usize) -> I, mut gathered: Vec<f64>) -> Vec<f64> {
+    for p in order {
+        let (ways, sum) = ways_down(h, p, &around);
+        if sum > 0.0 {
+            let a = gathered[p];
+            ways.iter().for_each(|&(q, w)| gathered[q] += a * w / sum);
+        }
+    }
+    gathered
+}
+
+/// The ways down from sample `p` of a grid of heights `h` to every lower sample next to it (`around`), each with its
+/// weight, drop over distance times contour length (`CONTOUR`; Quinn et al. 1991), and the sum of the weights.
+pub(crate) fn ways_down<I: Iterator<Item = (usize, bool, f64)>>(h: &[f64], p: usize, around: impl Fn(usize) -> I) -> (Few<(usize, f64), 8>, f64) {
+    let mut ways: Few<(usize, f64), 8> = Few::default();
+    around(p).filter(|&(q, _, _)| h[q] < h[p]).for_each(|(q, corner, d)| ways.push((q, (h[p] - h[q]) / d * CONTOUR[corner as usize])));
+    let sum: f64 = ways.iter().map(|w| w.1).sum();
+    (ways, sum)
+}
+
 /// A list of at most `N` small things held in place (no heap): a body's genes (`body::Genes`) and what it works out
 /// from them (`body::Consts`). Saved as the list it holds.
 #[derive(Clone, Copy, Debug)]

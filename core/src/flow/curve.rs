@@ -1,5 +1,5 @@
 //! Where liquid stands over the ground (laws.md 1.2): one level over floors of heights and areas (`level_of`), and each
-//! cell's level-volume curve over its own ground (`Curve`), the terrain's drained samples inside it (`World::ground_in`)
+//! cell's level-volume curve over its own ground (`Curve`), the terrain's worn samples inside it (`World::ground_in`)
 //! at the scale its ground stands the terrain (`World::relief_scale`) about its mean surface. Liquid fills a cell's ground from
 //! its lowest sample up, so a cell is wet where part of its ground lies under its level, and it passes its liquid on
 //! from its lowest ground, the way the terrain inside it drains.
