@@ -1,7 +1,6 @@
 //! The registry of bodies (laws.md 0): the bodies of each ground cell (`Cell`), with ids each cell gives, found by id;
 //! the caches of the last survey; the lineages and born rows (`registry`). Body code
 //! runs on chunks of cells (`chunk`), and what it does to other cells waits in a queue for the serial pass (`cross`).
-//! The life of a cell follows a split and a join of cells (`tree`).
 
 mod brains;
 mod chunk;
@@ -9,7 +8,6 @@ mod cross;
 mod registry;
 mod saved;
 mod touched;
-mod tree;
 
 pub use brains::{Block, Brains, Mind};
 pub use chunk::Chunk;
@@ -95,7 +93,7 @@ pub struct Life {
     pub absorb: Vec<f32>,
     /// Per cell, from the last survey: the share of that absorbed light set aside for its bodies' light reactions
     pub keep: Vec<f32>,
-    /// Per cell, from the last monthly survey (a split's quarters their parent's, a joined cell its quarters' mean by area):
+    /// Per cell, from the last monthly survey:
     /// ground temperature, liquid depth, surface height
     pub env: Vec<[f64; 3]>,
     /// Per cell, from the last survey: its features as every brain perceives them, then the same smoothed over the
@@ -240,7 +238,7 @@ impl Life {
     pub fn cell_at(&self, i: usize) -> &Cell {
         &self.cells[i]
     }
-    /// The serial of cell `i` (`Cell::serial`), a name that a split or a join of other cells does not change.
+    /// The serial of cell `i` (`Cell::serial`), a name it keeps for the world's life.
     pub fn serial(&self, i: usize) -> u32 {
         self.cells[i].serial
     }

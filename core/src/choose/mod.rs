@@ -19,7 +19,7 @@ pub(crate) use go::land_move;
 pub(crate) use learn::watched;
 pub use minds::Minds;
 pub use features::cells;
-pub(crate) use features::Near;
+
 pub(crate) use spread::land_act;
 
 use features::{HEIGHT, T};
@@ -95,7 +95,7 @@ struct Choice {
 /// its trace and acts, a node spreads its members over them (`spread`). Every body decides at each update, at its cell's
 /// step; `lived` is what its last sub-step left, `days` the time since its last decision, d, which it learns over.
 pub fn act(w: &World, d: &mut Chunk, b: &mut Body, (lived, days): (&Lived, f64), z: &[f32], t: &mut ActTmp) {
-    let mut rng = Rng::new(w.seed, w.key_at(b.cell as usize, w.time), b.id, Purpose::Choose);
+    let mut rng = Rng::new(w.seed, w.key_at(w.time), b.id, Purpose::Choose);
     let temp = b.temp(&w.chem);
     // A brain perceives sizes per member, as the body is when it decides.
     let pm = b.mass(&w.chem) / b.n();
@@ -118,8 +118,7 @@ pub fn act(w: &World, d: &mut Chunk, b: &mut Body, (lived, days): (&Lived, f64),
     pick(d, &mut c, &mut rng);
     let (form, zn) = noise(w, b, s, t, &mut rng);
     b.wb = wb;
-    let i = b.cell as usize;
-    let k = Kit { s, t, z: zn, form, wb: &now, days, ahead: w.step_days(i), meal: w.phys_days(i) };
+    let k = Kit { s, t, z: zn, form, wb: &now, days, ahead: w.step_days(), meal: w.phys_days() };
     if b.n() > 1.0 {
         spread::spread(w, d, b, &c, &k, &mut rng);
     } else {
@@ -208,7 +207,7 @@ fn options(w: &World, ch: &Chunk, b: &Body, (s, sight): (Shape, usize), (pm, vol
 /// rows. The base's weights on a cell's features are worked out once per lineage and cell in a chunk
 /// (`ActTmp::on_at`). Off in a null run.
 fn plan(w: &World, (lineage, base, rows): (u32, &[f32], &[f32]), s: Shape, z: &[f32], i: usize, c: &mut Choice, t: &mut ActTmp) {
-    let (weight, discount) = (w.cfg.phys.plan_weight, w.cfg.span(w.step_days(i)).weight(w.cfg.phys.discount));
+    let (weight, discount) = (w.cfg.phys.plan_weight, w.cfg.span(w.step_days()).weight(w.cfg.phys.discount));
     if w.cfg.null || weight == 0.0 || s.h == 0 {
         return;
     }

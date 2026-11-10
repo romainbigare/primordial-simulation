@@ -108,6 +108,4 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
     // Bond's own spans are months (`bond::step`); every body updates at the month's start (`survey::batch`).
     pass(w, Stage::Parts, "bond", &bond::step);
     pass(w, Stage::Bodies, "body batch", &|w| survey::batch(w));
-    // The bodies of cells finer than a square step again inside the month (`survey::substeps`).
-    pass(w, Stage::Bodies, "body sub-steps", &survey::substeps);
 }

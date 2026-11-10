@@ -14,8 +14,7 @@ mod node;
 mod view;
 
 pub(super) use deep::mix;
-pub(super) use moves::{after_air, remap, to_liquid};
-pub(crate) use moves::{of_join, whole};
+pub(super) use moves::{after_air, to_liquid};
 pub(super) use view::amounts;
 
 use super::land::{column, layers, melts, node_state, take_row, thaw_at, NONE, STATE_ROW};
@@ -141,7 +140,7 @@ pub(super) fn has(s: &Scratch, i: usize) -> bool {
 /// The nodes `anew` (each with whether it thaws, `node_state`) found anew, in parallel with `threads`: a node that is
 /// one by `land::node_state`, one of parts from its parts, and with `moving` a node that `node_state` finds with liquid
 /// over part of its own ground or deeper than `h_mix` made parts first (`create`) and one whose parts no longer stand
-/// apart one again (`solve`). Without it (a build of the caches alone: a loaded world's or a remapped one's, which an
+/// apart one again (`solve`). Without it (a build of the caches alone: a loaded world's, which an
 /// unbroken world does not make) the parts only find their state, so a world goes on as an unbroken one. A node of
 /// parts that nothing moved since its last solve (its parts as that solve left them, and the node's amounts and heat
 /// theirs, `moves::unmoved`) takes that solve's row again, unless the build is `full`.
@@ -353,12 +352,4 @@ fn piece(w: &World, s: &Scratch, i: usize, (p, q): (&Parts, usize), f: &[Found; 
         pd: per(por * x.l[4]),
         below,
     }
-}
-
-/// The temperature and plateau of ground node `i` of parts as they hold them now (`row`), by Flow's state `s`; none
-/// for a node that is one.
-pub(super) fn thaw(w: &World, s: &Scratch, i: usize) -> Option<(f64, Option<(usize, f64)>)> {
-    let p = s.state.parts.get(i)?.as_ref()?;
-    let r = row(w, s, i, p, &found(w, s, i, p));
-    Some((r[0], (r[1] as usize != NONE).then_some((r[1] as usize, r[2]))))
 }

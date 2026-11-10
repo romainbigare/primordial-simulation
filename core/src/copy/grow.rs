@@ -80,7 +80,7 @@ fn convert(w: &World, d: &mut Chunk, b: &mut Body, bl: &Reaction, room: f64, mos
     if room <= 0.0 || most <= 0.0 {
         return 0.0;
     }
-    let (chem, p, ahead) = (&w.chem, &w.cfg.phys, w.phys_days(b.cell as usize));
+    let (chem, p, ahead) = (&w.chem, &w.cfg.phys, w.phys_days());
     let m = bl.outputs[0].0 as usize;
     // (A unit of growth makes `nu0` mol of what it makes; chemistry 0: 1.)
     let (nu0, mm, mass) = (bl.outputs[0].1 as f64, chem.subs[m].molar_mass, b.mass(chem));

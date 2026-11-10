@@ -1,6 +1,6 @@
 //! The bodies seen from their cells: at each month's start what each cell holds and the shade of its bodies
-//! (`survey`), and every body's update, in a parallel and a serial pass (`batch`), at the month's start and again inside
-//! it in the cells finer than a square (`steps`).
+//! (`survey`), and every body's update at the month's start, in a parallel and a serial pass (`batch`; the steps,
+//! `steps`).
 
 use crate::body::{die, live, perish, Layout, Lived, LiveTmp, LACK};
 use crate::life::{self, Chunk, Handle, Of};
@@ -10,7 +10,7 @@ use crate::{choose, World};
 mod draws;
 mod steps;
 pub(crate) use draws::release;
-pub use steps::{substeps, Grid};
+pub use steps::Grid;
 
 
 /// Temperature, depth of the standing liquid and surface height of a ground cell as life stands on it (a cell of
@@ -178,8 +178,7 @@ fn traffic(w: &mut World) {
     }
 }
 
-/// Update every living body at the month's start (laws.md 0; the bodies of finer cells step again inside the month,
-/// `substeps`): `batch_of` every cell.
+/// Update every living body at the month's start (laws.md 0): `batch_of` every cell.
 pub fn batch(w: &mut World) {
     batch_of(w, Of::All);
 }
@@ -197,7 +196,7 @@ pub fn batch(w: &mut World) {
 /// lineage and born rows are counted: those left with none die out or are freed; and the visible traits of the bodies
 /// of the cells the batch held are worked out again, and on some cells (`Of::Only`) those cells' numbers, which it
 /// returns.
-fn batch_of(w: &mut World, of: Of) -> Vec<u32> {
+fn batch_of(w: &mut World, of: Of) {
     w.life.compact();
     w.life.recount();
     let bounds = life::bounds(w);
@@ -205,7 +204,7 @@ fn batch_of(w: &mut World, of: Of) -> Vec<u32> {
     cells_of(w, of).for_each(|i| per[bounds.partition_point(|&b| b <= i) - 1] += w.life.in_cell(i));
     let all: usize = per.iter().sum();
     if all == 0 {
-        return Vec::new();
+        return;
     }
     // The busiest chunk's share of the batch's updates (`Counters::busiest_share`).
     let c = &mut w.counts;
@@ -214,13 +213,11 @@ fn batch_of(w: &mut World, of: Of) -> Vec<u32> {
     life::land(w);
     // The bodies that landed in a cell in the serial pass (movers, litters) run their physics on to its next step, as
     // the bodies there did (`physics`); what that queues lands after. (A body whose physics reached it does nothing.)
-    let every = matches!(of, Of::All);
-    let landed = w.life.touched.take_landed(every);
-    let on = if every { Of::All } else { Of::Only(&landed) };
+    let on = of;
     let load = cells_of(w, on).filter(|&i| !w.life.cells[i].bodies.is_empty()).count();
     life::run(w, on, vec![(); life::chunks(w)], load, scratch, |w, d, _, (tmp, _, _, subs)| {
         for i in d.cells() {
-            physics(w, d, i, (tmp, subs), w.step_grid(i).after(w.time));
+            physics(w, d, i, (tmp, subs), w.step_grid().after(w.time));
         }
     });
     life::land(w);
@@ -236,19 +233,8 @@ fn batch_of(w: &mut World, of: Of) -> Vec<u32> {
     // The bodies' visible traits from what they hold now (`Chunk::see_changed`), so a world saved after the batch,
     // whose bodies load as seen, reads at the next survey as an unbroken one does: in the cells the batch held, where
     // alone they changed.
-    // On some cells, the numbers of those cells too (`Life::sum`), which the survey of the next sub-step reads as they
-    // are now where no pass held the cell since (`substeps`).
-    let Some(held) = w.life.touched.since_compact() else {
-        let stale = cells_where(w, Of::All, |c| c.bodies.iter().any(|b| b.alive && b.stale));
-        life::run(w, Of::Only(&stale), vec![(); life::chunks(w)], stale.len(), |_| (), |w, d, _, _| d.see_changed(w));
-        return Vec::new();
-    };
-    let sums = life::run(w, Of::Only(&held), rows_of(w, Of::Only(&held)), held.len(), |_| (), |w, d, sums, _| {
-        d.see_changed(w);
-        rows(w, d, sums);
-    });
-    held.iter().zip(sums.concat()).for_each(|(&i, r)| w.life.sums[i as usize] = r);
-    held
+    let held = w.life.touched.since_compact().unwrap_or_else(|| cells_where(w, Of::All, |c| c.bodies.iter().any(|b| b.alive && b.stale)));
+    life::run(w, Of::Only(&held), vec![(); life::chunks(w)], held.len(), |_| (), |w, d, _, _| d.see_changed(w));
 }
 
 /// The scratch of a chunk's updates, made once per thread and used for each chunk it runs.
@@ -298,7 +284,7 @@ fn updates(w: &World, d: &mut Chunk, (tmp, minds, act, subs): &mut Scratch) {
                 decide(w, d, h, &lived, minds.of(k, shape.h), act);
             }
         }
-        physics(w, d, i, (tmp, subs), w.step_grid(i).after(w.time));
+        physics(w, d, i, (tmp, subs), w.step_grid().after(w.time));
         for h in d.cell(i).filter(|&h| w.life.brainless(&d[h])).collect::<Vec<_>>() {
             let mut b = std::mem::take(&mut d[h]);
             crate::lineage::resize(w, d, &mut b);
@@ -319,7 +305,7 @@ fn updates(w: &World, d: &mut Chunk, (tmp, minds, act, subs): &mut Scratch) {
 /// sub-step, fed from their birth, join a young node that has eaten for it. One whose physics starts here ate for its
 /// first sub-step when it decided or landed.
 fn physics(w: &World, d: &mut Chunk, i: usize, (tmp, subs): (&mut LiveTmp, &mut Subs), to: u64) {
-    let (grid, day) = (w.phys_grid(i), w.cfg.calendar().day as f64);
+    let (grid, day) = (w.phys_grid(), w.cfg.calendar().day as f64);
     let Subs { fed, order } = subs;
     let end = to as f64 / day;
     let first = d.cell(i).filter(|&h| !d[h].leaving).map(|h| d[h].last).fold(end, f64::min);
@@ -346,9 +332,6 @@ fn physics(w: &World, d: &mut Chunk, i: usize, (tmp, subs): (&mut LiveTmp, &mut 
                 live_one(w, d, h, tmp, at);
             }
         }
-    }
-    if d.cell(i).any(|h| !d[h].leaving && d[h].last < end) {
-        d.behind(i);
     }
 }
 

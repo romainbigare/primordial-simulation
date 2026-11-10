@@ -5,12 +5,11 @@ use pcore::store::Node;
 use pcore::{brain, AIR};
 use worldgen::life::{seed, ROSTER};
 use pcore::body::HIDDEN;
-use worldgen::testkit::{dry_lands, eater, land_block, set_amount, split_down, start, Books, Brain, Line, OX, RICH};
+use worldgen::testkit::{dry_lands, eater, set_amount, start, Books, Brain, Line, OX, RICH};
 
 /// Years the roster's world runs in the test of threads and chunks, so that moves and litters from cells of two chunks
-/// land in one cell, while its bodies live; and the years it runs with a block of its land split two depths.
+/// land in one cell, while its bodies live.
 const YEARS: u64 = 4;
-const SPLIT_YEARS: u64 = 2;
 /// Eaters that move to new brain sizes in the test of chunks, and the months it runs.
 const RESIZERS: usize = 6;
 const RESIZE_MONTHS: usize = 2;
@@ -19,10 +18,8 @@ const RESIZE_MONTHS: usize = 2;
 const OTHER_CHUNKS: [u32; 2] = [1, 7];
 
 /// The 16 x 16 world of the roster, every starting kind placed after its first month, run `YEARS` years on a pool of
-/// `threads` threads with its cells cut into `chunks` chunks; with `split`, a block of its land split two depths then
-/// (so the bodies of its cells step inside the months, `survey::substeps`: batches of updates past one a month) and
-/// `SPLIT_YEARS` years. Its whole saved state.
-fn roster(threads: usize, chunks: u32, split: bool) -> String {
+/// `threads` threads with its cells cut into `chunks` chunks. Its whole saved state.
+fn roster(threads: usize, chunks: u32) -> String {
     let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().expect("a pool");
     pool.install(|| {
         let mut w = worldgen::new_world(1, 16, 16);
@@ -31,16 +28,10 @@ fn roster(threads: usize, chunks: u32, split: bool) -> String {
         for &k in &ROSTER {
             seed(&mut w, k);
         }
-        if split {
-            let block = land_block(&w);
-            split_down(&mut w, &block, 2);
-        }
-        let months = if split { SPLIT_YEARS } else { YEARS } * w.cfg.months_per_year as u64;
-        for _ in 0..months {
+        for _ in 0..YEARS * w.cfg.months_per_year as u64 {
             pcore::step(&mut w);
         }
         assert!(w.life.alive().next().is_some(), "nothing lives");
-        assert!(!split || w.counts.body_batches > months as f64, "no body stepped inside a month in the split block");
         serde_json::to_string(&w).expect("a world serialises")
     })
 }
@@ -66,7 +57,7 @@ fn resizing(chunks: u32) -> (String, usize) {
 }
 
 /// One world on 1 and on 4 threads, and with other counts of chunks (one chunk of all cells among them): in the
-/// roster's world, unsplit and with a block split two depths (sub-steps), and in one where bodies of one lineage in many
+/// roster's world, and in one where bodies of one lineage in many
 /// cells move to the same new brain sizes in one pass
 /// (each makes a lineage of its own, whoever shares its chunk). Every order is fixed by the cells.
 #[test]
@@ -77,12 +68,10 @@ fn the_threads_and_the_chunks_change_nothing() {
         assert!(one == resizing(other).0, "{other} chunks changed the world where brains resize");
     }
     let chunks = pcore::Config::default().chunks;
-    for split in [false, true] {
-        let one = roster(1, chunks, split);
-        assert!(one == roster(4, chunks, split), "4 threads changed the world (split {split})");
-        for other in OTHER_CHUNKS {
-            assert!(one == roster(4, other, split), "{other} chunks changed the world (split {split})");
-        }
+    let one = roster(1, chunks);
+    assert!(one == roster(4, chunks), "4 threads changed the world");
+    for other in OTHER_CHUNKS {
+        assert!(one == roster(4, other), "{other} chunks changed the world");
     }
 }
 

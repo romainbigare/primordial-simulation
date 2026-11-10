@@ -2,7 +2,7 @@
 
 use pcore::check::Totals;
 use pcore::{World, AIR};
-use tape::{Recorder, Spent, REFINE, RIVER_CATCH, RIVER_FLOOR, TAPE};
+use tape::{Recorder, Spent, RIVER_CATCH, RIVER_FLOOR, TAPE};
 use worldgen::life::Seeding;
 use pcore::store::Class;
 use std::time::Duration;
@@ -32,7 +32,7 @@ pub fn balances(w: &World) -> Vec<String> {
     out
 }
 
-/// The time spent so far, by stage (flow, change, bodies, parts), in refinement and in the tape (the recorder each
+/// The time spent so far, by stage (flow, change, bodies, parts) and in the tape (the recorder each
 /// month, the snapshot and the files each time they are written, and the pictures); and the year and body updates
 /// counted at the last yearly line, with the time spent then.
 pub struct Clock {
@@ -86,7 +86,7 @@ pub fn year(w: &World, y: u64, t0: &Totals, clock: &Clock, rec: &Recorder) -> St
     let cover = pcore::cover::sums(w);
     let (kg, slots, kinds) = (cover.iter().map(|s| s.kg).sum::<f64>(), cover.iter().map(|s| s.slots).sum::<f64>(), cover.iter().filter(|s| s.slots > 0.0).count());
     format!(
-        "year {y}: element drift {de:.2e} ({}), energy drift {dq:.2e}, potential energy gained {:.3e} J, heat not given {:.2e} J, rounded to zero {:.1e} mol {:.1e} J, cover {kg:.3e} kg in {slots} slots of {kinds} starting kinds, bodies {all} (at most {most} in a cell, of {most_kinds} kinds; {} single, {} nodes, {:.3e} members), lineages {}, born brains {born}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, refine {:.0}, tape {:.0}; {us} ({:.0} parts in {} records); gifts {}/yr, watches {}/yr",
+        "year {y}: element drift {de:.2e} ({}), energy drift {dq:.2e}, potential energy gained {:.3e} J, heat not given {:.2e} J, rounded to zero {:.1e} mol {:.1e} J, cover {kg:.3e} kg in {slots} slots of {kinds} starting kinds, bodies {all} (at most {most} in a cell, of {most_kinds} kinds; {} single, {} nodes, {:.3e} members), lineages {}, born brains {born}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {us} ({:.0} parts in {} records); gifts {}/yr, watches {}/yr",
         each.join(" "),
         w.store.lifted(),
         w.counts.clamped_heat,
@@ -100,7 +100,6 @@ pub fn year(w: &World, y: u64, t0: &Totals, clock: &Clock, rec: &Recorder) -> St
         ms[1],
         ms[2],
         ms[3],
-        ms[REFINE],
         ms[TAPE],
         w.life.parts().map(|p| p.count).sum::<f64>(),
         w.life.parts().count(),

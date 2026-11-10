@@ -2,7 +2,7 @@
 //! heads, and heat conducted sideways (`conduct`).
 
 use super::{on_land, parts, scratch::{Latent, Scratch, Sp}};
-use crate::{chem::Phase, ground::{heat_above_floor, melting, skin_of, Melting}, solve::sweep::{by_size, Net}, store::{apply, Class, LinkFlux}, units::{MAX_SUBSTANCES, T_FLOOR}, World};
+use crate::{chem::Phase, ground::{heat_above_floor, melting, skin_of, Melting}, solve::sweep::{sweep, Net}, store::{apply, Class, LinkFlux}, units::{MAX_SUBSTANCES, T_FLOOR}, World};
 
 /// No substance on a melting plateau (`Scratch::pk`).
 pub(super) const NONE: usize = usize::MAX;
@@ -230,9 +230,9 @@ pub(super) fn thaw_at(s: &Scratch, c: f64, e: f64, amt: impl Fn(usize) -> f64, m
     melting(c, e, ord[..m].iter().map(|&k| (melt[k as usize], k as usize, amt(k as usize) * s.sp[k as usize].lf)))
 }
 
-/// Heat conducts sideways through the ground's active layer over `dt` seconds: an explicit sweep on the cells' links,
-/// sub-stepped where a cell is too small for the step (`sweep::by_size`; rock passes a 2 km cell's heat to its
-/// neighbours in about 70,000 years, so a year is far below the limit there, laws.md 1.8), booked as heat-only link
+/// Heat conducts sideways through the ground's active layer over `dt` seconds: an explicit sweep on the cells' links
+/// (`sweep::sweep`; rock passes a 2 km cell's heat to its neighbours in about 70,000 years, so a year is far below the
+/// limit there, laws.md 1.8), booked as heat-only link
 /// fluxes. A link passes the harmonic mean of its nodes'
 /// conductivity × thickness (two half cells in series, Patankar 1980, 4.2) times width over length. A node on a plateau
 /// takes its share as if it warmed; the next `ground_state` sets its temperature from its energy.
@@ -262,9 +262,8 @@ pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
         }
     }
     let (cap, held) = (s.cap.iter().map(|&c| c.max(1.0)).collect::<Vec<f64>>(), w.store.heat(Class::Ground));
-    // (In sub-steps a node's temperature follows the heat it gained, as one on a plateau takes its share here.)
-    let again = |now: &[f64], us: &[usize]| ((0..n).map(|i| s.state.tg[i] + (now[i] - held[i]) / cap[i]).collect(), us.iter().map(|&u| g[u]).collect());
-    let heat = by_size(&Net { a: &a, b: &b, g: &g, cap: &cap }, &s.state.tg, dt, (held, &[]), &|i, e| heat_above_floor(e, cap[i]), &again).flux;
+    let free: Vec<f64> = (0..n).map(|i| heat_above_floor(held[i], cap[i])).collect();
+    let heat = sweep(&Net { a: &a, b: &b, g: &g, cap: &cap }, &s.state.tg, dt, &free);
     apply(w, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[], mol: &[], heat: &heat }], &[]);
 }
 

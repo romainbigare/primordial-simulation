@@ -21,8 +21,6 @@ mod math;
 pub mod nodes;
 pub mod par;
 mod params;
-pub mod refine;
-pub mod remap;
 pub mod rng;
 mod schedule;
 pub mod solve;

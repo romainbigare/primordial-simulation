@@ -12,7 +12,6 @@ use crate::layers::{frame, Ctx};
 use pcore::par;
 use months::MonthRow;
 use pcore::event::{Event, EventKind};
-use pcore::refine::Camera;
 use pcore::{Taken, World, AIR};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -28,15 +27,14 @@ use pcore::store::Class;
 /// Death causes in the order of the core's constants (`body::LACK` .. `body::AGE`).
 const CAUSES: [&str; 6] = ["lack", "phase", "spent", "taken", "broken", "age"];
 
-/// The time the shell has spent in the run so far, by process: Flow, Change, bodies, parts, refinement and the tape
+/// The time the shell has spent in the run so far, by process: Flow, Change, bodies, parts and the tape
 /// itself (`TIMED`). The recorder reads no clock; the shell measures and hands the totals in.
 pub type Spent = [Duration; TIMED.len()];
 
 /// The processes timed, in the order of `Spent`; the yearly columns are `ms_<process>`.
-const TIMED: [&str; 6] = ["flow", "change", "bodies", "parts", "refine", "tape"];
+const TIMED: [&str; 5] = ["flow", "change", "bodies", "parts", "tape"];
 
-/// The places in `Spent` of refinement's time (`World::refine`) and of the tape's own.
-pub const REFINE: usize = TIMED.len() - 2;
+/// The place in `Spent` of the tape's own time.
 pub const TAPE: usize = TIMED.len() - 1;
 
 /// One column of the yearly series: its name, unit and a value a year (NaN: none that year).
@@ -86,8 +84,6 @@ pub struct TapeFiles {
     physics: String,
     /// Whether `months.csv` is written (the rows are kept either way: the viewer's file holds them)
     months_csv: bool,
-    /// The run's camera path (`Recorder::with_camera`), so the run can be made again
-    camera: Camera,
 }
 
 pub struct Recorder {
@@ -126,7 +122,7 @@ impl Recorder {
             every,
             monthly,
             seen: vec![false; w.chem.ns()],
-            files: TapeFiles { shape, frames: vec![], bytes: vec![], series: vec![], log: vec![], months: vec![], physics: physics_json(w), months_csv: false, camera: Camera::default() },
+            files: TapeFiles { shape, frames: vec![], bytes: vec![], series: vec![], log: vec![], months: vec![], physics: physics_json(w), months_csv: false },
             year: YearTally::default(),
             month: MonthTally::default(),
             social: Social::default(),
@@ -138,12 +134,6 @@ impl Recorder {
     /// Write `months.csv` with the tape.
     pub fn with_months_csv(mut self) -> Self {
         self.files.months_csv = true;
-        self
-    }
-
-    /// Write the run's camera path into the viewer's file.
-    pub fn with_camera(mut self, camera: &Camera) -> Self {
-        self.files.camera = camera.clone();
         self
     }
 

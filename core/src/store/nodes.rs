@@ -73,6 +73,4 @@ pub const BOUNDARIES: usize = 3;
 impl Class {
     /// Every class, by its index (`class as usize`).
     pub(crate) const ALL: [Class; 9] = [Class::Ground, Class::Air, Class::Deep, Class::Bed, Class::Bodies, Class::Boundary, Class::Part, Class::Body, Class::Cover];
-    /// The classes the store holds one node of per cell of the finest level (`World::remap`).
-    pub(crate) const CELLS: [Class; 4] = [Class::Ground, Class::Deep, Class::Bed, Class::Bodies];
 }

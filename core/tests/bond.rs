@@ -478,7 +478,7 @@ fn act_on(w: &mut World, b: &mut Body, p: u64) {
     let i = b.cell as usize;
     w.in_cell(i, |w, d| {
         let x = bond::at(d.at(i), p).expect("the part");
-        bond::act(w, d, b, 1, (x, w.step_days(i)))
+        bond::act(w, d, b, 1, (x, w.step_days()))
     });
 }
 

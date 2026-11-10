@@ -91,11 +91,6 @@ impl Level {
         assert!(centre.len() == n && lat.len() == n && lon.len() == n, "a level needs a centre, a latitude and a longitude for each cell");
         Level { area, centre, lat, lon, radius, start: vec![0; n + 1], ..Default::default() }
     }
-    /// The ends of `links` alone (`a < b`), the cells not joined by them: what a change of the cells reads between its
-    /// splits and joins (`Square::mesh_over`).
-    pub(crate) fn ends(&mut self, links: Vec<LinkSpec>) {
-        (self.a, self.b) = links.into_iter().map(|(a, b, ..)| (a, b)).unzip();
-    }
     /// Join the cells by `links`, each once (`a < b`).
     pub(crate) fn join(&mut self, links: Vec<LinkSpec>) {
         let n = self.n();

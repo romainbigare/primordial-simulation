@@ -453,7 +453,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     // A life of 38 days at gene 0, 10^0.5 ua / ub times that at 0.5. Each counts its days from where its physics reached.
     let (life, x) = (38.0, 10f64.sqrt() * ua / ub);
     w.cfg.phys.e_life = life * ua;
-    let (books, n0, every) = (Books::now(&w), w.life[sa].count, w.phys_days(cells[1]));
+    let (books, n0, every) = (Books::now(&w), w.life[sa].count, w.phys_days());
     let from: Vec<f64> = [sa, sb].iter().chain(&ones).map(|&s| w.life[s].last).collect();
     let day0 = w.day() as f64;
     let mut deaths = Vec::new();

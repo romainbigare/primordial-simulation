@@ -76,7 +76,7 @@ const MAX_LINEAGES: usize = 8;
 /// began (`Life::lineages_of`), so two bodies that move to new sizes in one pass make two lineages. Moves no matter and
 /// no energy.
 pub fn resize(w: &World, d: &mut Chunk, b: &mut Body) {
-    let (ns, noise, id, key) = (w.chem.ns(), w.cfg.new_noise(), b.id, w.key_at(b.cell as usize, w.time));
+    let (ns, noise, id, key) = (w.chem.ns(), w.cfg.new_noise(), b.id, w.key_at(w.time));
     let mut r = Rng::new(w.seed, key, id, Purpose::Resize);
     let Some(lin) = d.brain(w, b.lineage) else { return };
     let Some(l) = resized(lin, &b.genes, ns, &mut r, noise) else { return };

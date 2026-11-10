@@ -4,9 +4,8 @@ What each law does, its rule, its physical reason and where it lives. How the co
 orderings) is said once, in the code's doc comments; the code is the truth. Numbers, units and anchors are in
 `docs/numbers.md`, what a run records in `docs/tape.md`.
 
-**Where the code is** (`core/src/`): time in `clock/` and `schedule.rs`; the shape of the world in `space/`, and how
-what it keeps per cell follows a change of the cells, a split and a join in `remap/`, and which cells split and join in
-`refine/`; how a cell's means lie over its own ground in `inside/`; shared
+**Where the code is** (`core/src/`): time in `clock/` and `schedule.rs`; the shape of the world in `space/`; how a
+cell's means lie over its own ground in `inside/`; shared
 maths in `solve/` (`sweep`, `downhill`, `line`); nodes and books in `store/`, `world.rs`, `check.rs`; ground heat in
 `ground.rs`; settings in `params.rs`, constants in `units.rs`; bodies in `body/`, `life.rs`, `nodes.rs`, `lineage.rs`,
 `brain.rs`; the cells as bodies see them in `survey.rs`; paths in `lanes.rs`; keyed random numbers in `rng.rs`; the
@@ -23,27 +22,23 @@ are not bodies but the **cover** of each cell, a field (4.5); bodies are **eater
 **The map** (`space/`, `World::mesh`): cells, links with widths and headings, and a coarser air level. The laws step
 only on links. Each link takes one of 8 compass directions (`Level::way`), so the brain's 8 directions hold everywhere.
 An island of 2 km squares, or a globe (`--globe`) of latitude-longitude squares on a sphere of 6,371 km whose rows wrap
-east to west; an air block is 4 x 4 squares. The cells are a sparse tree under each air block (`space/tree.rs`): the
-block is the root, a cell is a leaf at any depth down to 1/2^24 of the block's side (`DEPTH_MOST`: 0.5 mm on the
-island's block of 8 km, 7.5 cm on the 1,250 km block of a globe of 64 rows), and only the leaves are kept
-(`Square::leaves`), numbered by their north-west corners row by row, counted in leaves of the most depth as 64-bit
-numbers (a map is under 2^53 of them a side, so a place is exact as a 64-bit float); a square is depth 2. Today's worlds start
-with cells of 1, 2 or 4 squares on a side (worldgen); between steps a cell may split into its quarters and four quarters
-join into their parent (`World::split`, `World::join`, below), when refinement asks (below). Cells across a border differ by
-one depth at most (2:1): a split first splits each cell across a side that would border the quarters two depths coarser
-(`Square::splits`), and a join that would leave one two depths finer is refused (`Square::joins`). One builder makes
-every cell (`Square::mesh`). Cells link across a border by its width, as far apart as their centres across it, so a
-steady change across a border of two sizes passes exactly; across a corner (width 0) where four cells meet, whatever
-their sizes, the two across it one depth apart at most and neither with 8 links already (the cells in order), so the
-downhill way through a corner stays when a cell beside it splits and no cell has more than 8 links. The air level is built on the map's squares, the same whatever the sizes of the
-cells. The map's samples are its squares and its finer cells (`Square::samples`: a cell coarser than a square cut into
-its squares, a finer one as it is): each reads its air there (1.4). A cell's starting height is the terrain's mean
-over it (`Terrain::inside`, below), the height its relief stands about and its quarters' terrain continues, so a split
-cell's quarters stand on the terrain itself, not on an offset of their parent's. **The terrain**
+east to west; an air block is 4 x 4 squares. The cells are the leaves of a sparse tree under each air block
+(`space/tree.rs`): the block is the root and only the leaves are kept (`Square::leaves`), numbered by their north-west
+corners row by row, counted in leaves of the most depth (`DEPTH_MOST`) as 64-bit numbers (a map is under 2^53 of them a
+side, so a place is exact as a 64-bit float); a square is depth 2. A world's cells are made once and stay for its whole
+life: squares on land and cells of 1, 2 or 4 squares on a side in the open low ground (worldgen; on a globe the squares
+of a window, `--fine`, and an air block a cell elsewhere). Cells across a border differ by one depth at most (2:1). One
+builder makes every cell (`Square::mesh`). Cells link across a border by its width, as far apart as their centres
+across it, so a steady change across a border of two sizes passes exactly; across a corner (width 0) where four cells
+meet, whatever their sizes, the two across it one depth apart at most and neither with 8 links already (the cells in
+order), so no cell has more than 8 links. The air level is built on the map's squares. The map's samples are its
+squares (`Square::samples`: a cell coarser than a square cut into its squares): each reads its air there (1.4). A
+cell's height is the terrain's mean over it (`Terrain::inside`, below), the height its ground inside it stands about.
+**The terrain**
 (`space::terrain`) is one function of the world's seed and a point of the map, at any size: value noise summed over
 octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to heights, an island's falling away from
 the middle of its map, says how high the ground would stand; the world keeps what it needs beside its seed and its map
-(`World::terrain`: the rise its level 0 m lies at), so a split finds the ground finer than its cell (below). The
+(`World::terrain`: the rise its level 0 m lies at). The
 noise's finest octave is 670 m on the 64 x 64 island and 200 km on a globe. The ground is held at **samples**, the
 leaves of `SAMPLE_DEPTH` (1/64 of a block: 125 m on the island, 20 km on a globe of 64 rows), and **the samples are
 worn** (`space::samples`, `space::wear`, found once from the seed when first read, not saved): the ground has a
@@ -77,33 +72,17 @@ raised by 1e-6 per m along the way the flood came (`FLOOD_RISE`), so inside a ba
 (Planchon and Darboux 2001; Cordonnier, Bovy and Braun 2019). A closed basin whose deepest sample lies less than a
 metre under its level (`GRADED_M`) is filled to it, as the floods that spread a plain's load leave it. The samples of
 one basin under its level are **a pond** (`Samples::pond`, `Samples::ponds`): its pass is the first sample out of it
-on the way its liquid leaves by, and its level that pass's height. Every cell's height and relief, at the start and at
-each split, are means over the samples, so a cell and its quarters stand on the same ground. So is the way a cell
-faces the sun (1.4): its mean rise toward the south, each sample's central difference north to south (one-sided at
-the map's edge) by area, its sample's for a cell finer than one (`Terrain::rise_south`), so a cell's is its quarters'
-mean by area. It is found once, when the cell is made, and kept (`World::rise_south`): the terrain's at the build; at a
-split each quarter's is the cell's plus the terrain's departure inside it at the scale the split stands the terrain (so
-quarters made flat face as their cell does), or what it was where a join made the cell; a join's is its quarters' mean
-by area. **The terrain's channels** (`space::network`, found with the samples): each sample's liquid runs where the
+on the way its liquid leaves by, and its level that pass's height. Every cell's height is a mean over the samples. So
+is the way a cell faces the sun (1.4): its mean rise toward the south, each sample's central difference north to south
+(one-sided at the map's edge) by area (`Terrain::rise_south`), found once when the world is built and kept
+(`World::rise_south`). **The terrain's channels** (`space::network`, found with the samples): each sample's liquid runs where the
 flood sends it (from every sample of land a way leads to the open low ground), and the area that drains through a
-sample is its own and all that runs to it. Between the samples' centres the liquid runs along the straight way from
-one to the next, so what leaves any leaf of the map is found at any size, finer than the samples too
-(`Samples::leaving`): the drained area of every way that leaves it (from a part of the way in it, or from its start
-where the leaf holds that alone), of every sink in it, and, in a leaf finer than a sample that does not hold the
-sample's centre, its own area, which runs to that centre. Below the samples the ground goes on as one function of the
+sample is its own and all that runs to it. Below the samples the ground goes on as one function of the
 seed and the map that every cell and every pixel a shell draws read (`space::below`, `Terrain::heights`): the means of
 the quarters of a leaf of side ℓ depart from its mean by a smooth continuation of the coarser heights that keeps it:
 the quarters lean as the quartic through the leaf and two neighbours each way on each axis does (average
 interpolation, Donoho 1993), so the ground has no steps and its slope no kinks at the leaves' edges and a slope across
-the samples goes on across their quarters. Nothing random is laid on it. So a leaf has a mean height at any depth. The
-ground below a sample holds a variance by area V (`sample_variances`): the lean's at the steepest of the sample and its
-eight neighbours, S² ℓ² / 16 at each depth (a lean's variance ew² + sn² + corners² is that of flat ground tilted at S),
-times (4/3)², as the lean carries the slope each depth draws on to every depth below it (Σ 1/4ⁿ) and the ground below
-bends from it. A leaf below holds its parent's V less the variance its quarters' means take about the parent's, shared
-among the four by what each will need (the variance its own lean takes), so the account is exact at every depth but
-where the ground bends more than its sample's neighbours do and a split's departures take more than its leaf holds:
-they are drawn whole, so the ground has no steps, and the leaf holds none below (its relief is then less than its
-ground's). What needs the cell at a
+the samples goes on across their quarters. Nothing random is laid on it. So a leaf has a mean height at any depth. What needs the cell at a
 point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
@@ -114,44 +93,24 @@ state in full for the cells' surroundings, and Flow's own pass leaves it then); 
 `AIR_STEP_DAYS` (15 days, two a month, each at its own time in the month), after each the sink of the liquid over
 field capacity into the bed's store; then the liquid and erosion; heat sideways and creep yearly; the cover's month;
 Change; Bond (each chunk's cell by cell, the chunks on the pool: in a cell the turns of its parts in the order of its
-list, on its view, then the loads of its structures in the order of their roots); then the bodies (`survey::batch`)
-and their sub-steps (`survey::substeps`). **The step follows the size** (`survey/steps.rs`): a body's step lets it
-cross at most one cell, as a move is one link a decision. A square of the map (`Square::square_depth`; 2 km on the
-island) steps a month (the pace the numbers of bodies are anchored at), so a cell 2^k times finer steps a month over 2^k
-(`World::step_grid`: 15 days at 1 km, 7.5 at 500 m, 1.875 at 125 m, 2.8 hours at 7.8 m), a square or a coarser cell
-a month. Time is whole seconds: the j-th step of a month of M s cut into 2^k ends floor(j M / 2^k) s after its start
-(`survey::Grid`), so the steps are equal down to 2.8 hours (M = 2,592,000 s = 2^8 × 10,125) and differ by a second
-below; a step is at least a second, so a cell 21 depths finer than a square or more steps every 1.2 s. The random
-draws of the bodies of a cell that steps a day or longer are keyed by the day (two of its steps never fall on one
-day); those of a cell that steps faster by the time in seconds, above every day's key (`World::key_at`). **Every
-body updates at the month's start**, after the month's Flow, Change and Bond: one batch holds every living body. Then
-at the end of each sub-step of the finest cells' step the cells whose step ends there (listed once a month from the
-depths) are surveyed again and their bodies update in a batch of the same passes, on chunks that hold only those cells;
-the other cells do nothing then; with no body living, the month has no sub-steps. The survey of a sub-step works out what the bodies that decide then read, as a survey
-of every cell would leave it: in each cell that steps what movers broke there; the numbers and features (5.2) of their
-cells, of the cells around them and of the regions the levels of those features read (`choose::Near`), each again only
-where a pass held the cell since it was last worked out (`life::Touched`: only a pass that holds a cell changes its
-life). The batch's serial pass works on the cells its entries go to, the physics of the bodies that landed on the cells
-bodies landed in or were left behind in (a child born late in its sub-step, a node whose new members count less), the
-merge on the cells of two bodies or more. So a sub-step's work follows the cells that step and their bodies, and the
-world is the one a survey and a batch of every cell would make. Flow, Change and Bond keep their steps (1.8).
+list, on its view, then the loads of its structures in the order of their roots); then the bodies (`survey::batch`).
+**The bodies' step** (`survey/steps.rs`): a move is one link a decision, and every cell steps a month (the pace the
+numbers of bodies are anchored at). The random draws of the bodies are keyed by the day (`World::key_at`). **Every
+body updates at the month's start**, after the month's Flow, Change and Bond: one batch holds every living body.
 **An update: a decision, then the physics of the step ahead in sub-steps** (`survey::updates`). A body decides once
-at each of its cell's steps (5.3), and then its own physics runs over the step ahead, to its cell's next step, in
-sub-steps of one **physiological step** (`World::phys_grid`: 7.5 days, a quarter of a month, or the cell's step
-where that is shorter): a square's body runs four, a body of a cell of 500 m one, each by the same laws (`body::live`:
+at each month's start (5.3), and then its own physics runs over the month ahead in sub-steps of one **physiological
+step** (`World::phys_grid`: 7.5 days, a quarter of a month), four a month, each by the same laws (`body::live`:
 drink, upkeep, heat, frost, growth, the brood and births, wear; 6), and before each but the first it eats by the take
 law for the sub-step as far as its act leaves its members to eating (`choose::meal`, `Body::busy`; its decision's
-meal fed the first, 5.3). So a body's physiology does not depend on its cell's step: a month of a square's body is the
-four quarter months of a body in a cell of 500 m, and the thresholds of a body (its warm or cold state, maturity, the
-brood covering a child) are crossed at the same sub-step whatever the step. The physiological step is a body's own
+meal fed the first, 5.3). The physiological step is a body's own
 time: a meal (its stores' room holds what it burns until its next meal), the filling of its brood to a child and its
 turn between its cold and warm state are days to weeks. Each sub-step integrates the time from where the body's
 physics reached (`Body::last`; of a node, the mean by members, `nodes::rejoin`, so members who joined it since count
-less) to its end, at least a day or the physiological step where that is shorter: upkeep and the brain's cost, drink,
+less) to its end, at least a day: upkeep and the brain's cost, drink,
 heat, frost (6.5), growth and wear go by those days; the death draws of an individual are keyed by the sub-step's last
 second (`World::key_ending`) and deaths and births are dated by its day (`Calendar::day_ending`).
-After a batch every body's physics has reached its cell's next step, so bodies of every cell size stand at the same
-time after it, in the surroundings of the month their physics ran in. A body that lands in a cell in the serial pass
+After a batch every body's physics has reached the next month's start, in the surroundings of the month its physics
+ran in. A body that lands in a cell in the serial pass
 (a mover, a litter) runs its physics on from where it reached to that cell's next step in a pass after the landing
 (`survey::batch_of`), as the bodies there did; one with no physics behind it (a founder) first decides by its spare
 now (`body::newborn`). Its learning and its watch go by the time since its last decision (`Body::decided`, 5.4).
@@ -218,160 +177,17 @@ gone does nothing: a move of a body that died (its cost was paid), a watch whose
 a part act no longer possible or that cannot be paid; less than one member of a node's children with no node to join
 goes back into the parent's brood, or to the ground of the parent's cell if it died (`copy::back`).
 
-**The cell table** (`remap/`): what the world keeps per cell of the finest level (the store's nodes of a cell and
-their sleep, its life, Flow's state of its ground, its moving averages) and per link of it follows a change of the
-cells in one place (`World::remap`, between steps): each number moves with its cell or link, an old cell no new one
-names is gone, and a new cell holds nothing and takes the next serial, so every id still finds its body or part.
-**Split and join** (`remap/split.rs`, at a month's start, the events taken; one remap each, an event each, `Split` and
-`Join`, naming the parent by its serial). The cells a split or a join makes are new, with new serials. The splits and
-joins of one change (`remap::Change`: a split with those 2:1 forces, a join, or a month's refinement) read the cells'
-places between them, not their links; the mesh is linked once at the change's end, and a link between two cells the
-change left as they were keeps what it remembers, a link of a cell it made nothing. A quarter holds its share of each number its parent held (the
-amounts and the heat of each of its nodes, the volumes Flow keeps of its ground, what its sleep held, the moving
-averages per cell, `remap::Made::held`) and its parent's numbers that do not add up (the moving averages per m², the
-means of its bed, the sleep's alarm and the time it was brought up to date, and the ground temperature, liquid depth
-and height its bodies read until the next survey, `Life::env`, so a founder placed there at once starts at its
-ground's temperature); a joined cell holds the sum of its quarters' and the mean by area of the others (its bed's means
-by volume, the first alarm and the earliest time brought up to date, so its law skips no time). The share is by area,
-the same temperature in each, but the bed's, which stands as the terrain inside the cell does (**relief**, below), and
-the liquid in the ground's pores, which goes by the shares of the quarter's own ground (**inside a cell**, below),
-unless a join made the cell: a join keeps each quarter's share of each amount of each node, of each heat and of each
-volume, and its relief (`remap::Joined`, saved per cell), and the split of that cell gives the quarters back as they
-were (to the rounding of x · share). **The liquid a cell passes on** (`World::liquid_flux`) is a flow, not a stock
-(`remap/through.rs`): what drains through a part of the map goes as its drained area on the terrain's channels, so a
-quarter passes on its drained area that leaves it at its parent's flux per m² of the drained area that leaves the
-parent, and a joined cell what leaves it: each quarter's drained area that leaves the joined cell at that quarter's
-flux per m². So a river through a cell stays a river in the quarter it runs through, a river through two quarters is
-passed on once by their join, and a split joined again gives back its cell's flux. A made cell's temperature and plateau in Flow's state are those of its heat
-(`World::thawed`). **Life across a split and a join** (`life/tree.rs`, one life model at every grain: bodies and parts
-are records that hold their own amounts, so they move with nothing to book). A split shares
-life by area, so a node of at least one member per quarter's share leaves in each other quarter a node of
-that share of its members, stores, heat and brood (`nodes::part`: its genes, spreads, lineage and born rows, an id of
-that quarter, and a brain block there with the node's rows), and a lot that lies alone (3.1) of at least one part per
-quarter's share leaves in each other quarter a lot of that share of its parts, amounts and heat (`Part::split`, an id
-of that quarter); what is not cut goes whole to one quarter, drawn by area
-by a draw keyed by its id and the split cell's serial (`rng::Purpose::Quarter`; a cell splits once): an individual, a
-node of fewer members, a lot of fewer parts, and a structure with its bonds and the bodies that hold it or are inside it (structures held
-and lived in together go together, drawn by their least root); the cover by the shares of the ground inside the cell,
-each slot by the places its kind likes (**inside a cell**, below; 4.5). A join gathers its quarters'
-bodies (each with its brain block), parts and bonds in the order of the quarters; its cover lands by the cover's rule
-(4.5) and its bodies then merge as the monthly merge does (`nodes::crowd`, 4.4), so it holds no more nodes than a cell
-of its kind. Ids never change (`Life::index` finds each again); a merge that lets go of a part names the cell by its
-index in its event, so the shell takes the events before the next split or join.
-**Relief** (`World::relief`, J, one number per cell in the cell table, `remap/relief.rs`): the potential energy the
-ground of a cell holds inside it over its flat form, a part of the world's potential energy held apart from the
-stacks (the function of "The books" below). Every cell holds it from the start: a bed standing at the terrain's heights
-inside it holds ρ g ∫ (h − h̄)² / 2 more than a flat bed of its volume (each column of area a and height h holds
-ρ g a h² / 2 over its base), ρ the density of the cell's bed (`World::relief_at_build`): over the samples inside a cell
-of `SAMPLE_DEPTH` or coarser, Σ a (h − h̄)² / 2 and each sample's A V / 2 below it, V the variance by area below a leaf (above); a finer cell A V / 2 alone
-(`Terrain::inside`). It is the same account at every size, to rounding: a cell's is its quarters' and that of their
-means about its own, as each leaf holds its parent's less what its quarters' means take (above). **A split of a
-cell no join made** gives its quarters the terrain inside it (`World::uneven`): each quarter's bed surface is the cell's
-mean bed surface now plus the terrain's mean height over the quarter less the mean over the four, so the cell's bed
-keeps its volume and its mean (what wear and creep did since the start stays in the mean); the bed's substances go
-to
-the quarters in the cell's proportions; the loose ground, the liquid its pores hold, the store and every other number
-stay per m². The quarters stand on the worn samples (above), so a basin of the samples is the same basin whatever
-cells split, in whatever order; the ground below the samples makes no pit of its own. Then the quarters take the shares of their own ground (**inside a cell**,
-below; `flow::share_ground`): the liquid the cell's pores held goes to the quarters' pores by its share (a quarter's
-part of the soil's shares), as far as each one's pores hold; the liquid that stood over the cell's pores and what a
-quarter's pores cannot hold stand where they would on the quarters' floors (a floor is a quarter's solid surface less
-the room its pores have left, which the liquid fills first): they fill them from the lowest up to one level, as the
-sea's levelling does (1.2), so a quarter raised above that level holds none standing and none runs off at once. Each
-move takes its share of every liquid with what is dissolved and its heat at the node's temperature, from the quarter
-that holds the most to each other (`store::apply`). The stacks then gain ρ g Σ a d² / 2, d each quarter's departure (what lies on the bed
-rises and falls with it by area, and the air over the cell keeps its mean height), less what the liquid gives up as it
-finds its level and what those moves give up or take; each quarter's relief is the terrain's inside it and its share
-by area of what the cell's relief has left: what the moves gave up, which the ground finer than the quarters still
-holds (a split gives it no heat). Where the cell's relief is less than these need, the departures (and the
-terrain below them) are scaled down until it pays, and so that each quarter keeps a bed. **A join** that makes one flat
-cell of quarters of
-different heights lowers the potential energy of the stacks (`flow::potential_of`, by Flow's state, which a remap gives
-a made cell from its heat, `World::thawed`, not from its parent or as its quarters' mean: a quarter whose liquid boils
-stacks far higher than at the joined cell's temperature, and the split that gives it back must see it so); the joined
-cell's relief is its quarters' and that drop, and its record keeps each quarter's relief (not the records of their own
-joins), so its split gives the quarters back with their reliefs: the cell's relief pays what the quarters' stacks hold
-over the cell's and the quarters' reliefs, and what is left over (or short: rounding) goes to the quarters' ground heat
-by their shares (`store::fall_heat`, which books it against `Store::lifted`). A change of the cells first builds Flow's
-state of the ground where it is not yet built (a world as built, before its first step), whose phases the stacks'
-potential energy reads, so the quarters of a split stand the terrain inside them from the first month. So a join
-moves no energy, a split moves only what `fall_heat` books, and `check::drift`, which reads the stacks
-and the reliefs, closes through any sequence of splits and joins; the cover a join's cells cannot hold goes to its
-ground as remains, booked as life's remains are (`store::life_moved`). No law changes the cells.
 **Inside a cell** (`inside/`, handover 5.2): a cell holds means (its cover, the liquid in its soil, what stands on
-it), and each is shared over the cell's own ground by a general law evaluated at its samples, never by a rule made for
-one thing. The ground is the terrain at a grid of 8 x 8 samples, the leaves `inside::DEPTHS` (3) below the cell (fewer
-near the tree's most depth; `World::ground_in`: the terrain's mean over each), its departures scaled as the split
-scales the quarters' (`Ground::scaled`, 1 where the split stands no terrain); what the terrain alone gives (each
-sample's slope and where the liquid runs from it) is found once, when the ground is made. Each share is a field over
-the samples whose mean by area over the cell is 1 (`Ground::share`), from the terrain, the seed and the cell's own
-numbers: no draw. **The soil**: the steady state of the soil's liquid flowing downhill by Darcy's law. How much liquid
-gathers at a sample is its wetness index ln(a / tan β) (Beven and
-Kirkby 1979), a the area that drains through it per metre of contour and β its slope, no less than real ground's
-over a sample (`inside::real_slope`). The area drains by multiple flow directions (Quinn et al. 1991): each sample,
-highest first, passes what it gathered to every lower sample next to it by its drop over the distance times Quinn's
-contour length, so liquid spreads over a convex ridge and gathers in a concave hollow (the ground's curve acts
-through a); multiple directions suit the soil's slow liquid, where the liquid law's one steepest way (D-infinity,
-1.2) suits channels. The area that drains to the cell from upstream (its catchment less its own area,
-`World::inflow`) enters at the lowest sample of the grid's highest side and runs down the low ground (on flat ground
-it spreads evenly). As in TOPMODEL, the liquid a sample's pores hold departs from the cell's mean by `soil_m` per unit
-of the index over its level, within none and the pores full, the level found (by halving) so the mean is the cell's;
-dry pores or full ones share evenly. **What stands** lies at one level over the samples (`flow::level_of`), each as
-deep as it lies under it. **Each kind of cover** by its own growth law (4.5) at each sample: a sample is as wet as the
-liquid in its pores and standing there makes it (`Physics::wetness`), and a kind's light reaction there runs at its
-capacity times its activity on ground that wet (`cover::activity`); light and capacity are the cell's at every sample,
-so its share goes as that activity, and where every sample is as wet as the kind needs, or none is wet at all, it is
-even. The snow is shared evenly: the sun on a cell is that on its mean slope (1.4), right for the cell as a whole, and
-the cell's one balance melts its snow as one; a split's quarters then each take the sun of their own slope, so a
-quarter facing the sun melts its part first. Sharing the snow by the sun at the samples would need a melt at each
-sample, which nothing reads. A split gives each quarter its part of each share
-(the sum by area over its samples, `Ground::quarters`). A join stays a sum. The shell draws inside the cells by the
-same laws at each pixel of the ground's tiles (`tape::Ground`), blending its cells' values between the squares'
-centres (`tape::Table`, docs/tape.md): the soil's liquid by the wetness index of the terrain's samples about each
-cell's level (`inside::soil_level`, `soil_held`), what stands where the ground lies under the cells' level, each mark
-of cover by the activity of its cell's heaviest kind at the mark's foot; a picture need not keep a cell's mean exactly
-(the core keeps the books).
-**Refinement** (`refine/`, `World::refine`) decides which cells split and join: a setting for speed, not a law (no
-law reads its score). The shell calls it at each month's start, before the survey, once it took the month's events
-and before it places life by the plan. With no budget (`Config::cell_budget` 0, every run's default) it does nothing:
-the cells stay as built. Else each cell has a score, a sum of four terms each about 1 in a cell worth refining
-(`refine/score.rs`): the camera's, inside the window of the camera's shot of the month, 2^(asked depth - depth - 1)
-(1 a depth coarser than asked, twice that for each depth coarser, 1/2 at the asked depth, which keeps the cell; none
-finer than asked or outside the window); brains, the members in the cell of bodies whose brain has hidden units over
-`BRAINS_UNIT`; parts, its parts and bonds over `PARTS_UNIT`; and change, the share by which the cell's animal mass
-moved since the last month (of at least `MASS_FLOOR`, a mass) over `MASS_SHARE`, what it held then kept per cell in
-`World::watch` (per m²), which follows the cells through the remap. The ground's temperature is no term: it moves with
-the season, faster on land than under liquid, so its departures mark the coasts each season, not an event. **The score
-settles**: for the same things in a cell, no quarter scores more than the cell. Brains and parts are counts, which a
-split shares out, so the quarters' terms sum to the cell's (a density would grow four times at each split, and a cell
-of one part would never join); change is a share, the same in quarters that changed alike and less in one that holds
-little against the floor; the camera's halves at each depth. So a cell splits until each holds about one unit, and no
-further. Then, the lowest first (ties by the least serial), each four quarters of one leaf, built no coarser than it
-(`Watch::built`), join (one with a finer cell across a side once that cell joined, 2:1) while the cells are over the budget or the cell they would
-make scores under `JOIN_AT` (its brains and parts the sum of theirs, its change that of their masses summed, its
-camera's term twice their highest; 1/4: a cell joins only once it holds four times less than a split asks, so it does
-not flap); then, those the camera asks for (its term alone is 1 or more) first, then the highest first, each cell of
-`SPLIT_AT` (1) or more coarser than the floor (`Config::finest_depth`) splits if its split, with the splits 2:1 forces,
-keeps the cells within the budget, until none can (the least makes 3 cells more): at a full budget a month tries no
-split, and a split is worked out only where the least it makes (the cell and each coarser one across a side) fits. A
-split the camera asks for may first join the quietest
-quartets the camera does not see, nor a cell beside them (a split there would split their join again, 2:1), to make
-room: what is looked at comes first. As the camera's splits come first, a cell joined to make room for them takes the
-room back only once the camera asks for no more: at a full budget the cells settle with the camera's window at its
-asked depth, and change only as the window moves. The quarters of a split the camera asks for that it asks for in turn
-(their camera term alone 1 or more) split next, before any other cell, so a zoom goes down many depths in a month: from
-the island's 2 km squares to a window of 7.8 m in one month (29 splits), from a globe's air blocks of 1,250 km to
-9.5 m in three (65 splits). The joins go on in the same way (`refine/join.rs`): a quartet the tree refuses for 2:1
-is tried again once a finer cell beside it joined, and the quartet of a cell a join made joins in turn if the cell it
-would make (its score its quarters' merged) scores under `JOIN_AT`, so the cells of a window let go join back in a
-month or a few. A month makes at most `MOST_CHANGES` (32) splits and joins. The events of
-a join's merge name their cell by index, which the next change renumbers: they wait with their cell's leaf and come
-back at the end of the month's changes naming the cell that then holds that place.
-**The camera** (`refine::Camera`) is an input of the run: from given months on, a window of the map in squares and
-the depth it asks for. It is part of the run's plan (`worldgen::schedule`), so a snapshot carries it, and the tape
-holds it (`docs/tape.md`). The score is worked out cell by cell in order and the changes made one at a time, so the
-same seed and the same camera path give the same world on any count of threads. The core never reads a clock. The
-live viewer's world has no budget of cells and never refines: its zoom is a matter of drawing only.
+it). The ground inside it is the terrain at a grid of 8 x 8 samples, the leaves `inside::DEPTHS` (3) below the cell
+(`World::ground_in`: the terrain's mean over each), and what stands lies at one level over them (`flow::curve`, 1.2).
+The shell draws inside the cells by general laws at each pixel of the ground's tiles (`tape::Ground`), blending its
+cells' values between the squares' centres (`tape::Table`, docs/tape.md): the soil's liquid by the wetness index
+ln(a / tan β) of the terrain's samples (Beven and Kirkby 1979; a the area that drains through a sample per metre of
+contour, β its slope): as in TOPMODEL, the liquid a point's pores hold departs from its cell's mean by `soil_m` per unit
+of the index over its level, within none and the pores full, the level found by halving so the mean is the cell's
+(`inside::soil_level`, `soil_held`); what stands where the ground lies under the cells' level; each mark of cover by
+the activity of its cell's heaviest kind at the mark's foot (`cover::activity`). A picture need not keep a cell's mean
+exactly (the core keeps the books).
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.
 **One ground temperature**: every law and the tape read that of Flow's last step: life (bodies, the cover, parts) its
@@ -420,7 +236,7 @@ Life that goes to another cell's head (a body that moves and the structure it ca
 potential energy from the head it left, and the ground it lands on takes the difference (`store::life_went`). An edit
 (`World::cross`) takes the potential energy of what it places from its boundary node. So every element and the energy
 are kept; `check::drift` checks it yearly against `check::DRIFT` (1e-9), with the potential energy as the function of
-what the nodes hold and the cells' reliefs (`check::Totals::potential`), not as `Store::lifted` books it, so a
+what the nodes hold (`check::Totals::potential`), not as `Store::lifted` books it, so a
 move that books no lift or fall shows.
 **No overdraw.** A law never asks a node for more than it holds; where it could, it cuts that node's own outgoing
 links (`solve::sweep::within`), never a whole field. A body takes no more than its cell's view holds, what the
@@ -440,7 +256,7 @@ the heat that reaches the surface (`air::radiation`). A cell is **land**
 when its solid surface is above 0 m (`World::is_land`). The top `skin_m` trades heat with the surface. Heat spreads
 sideways yearly by one explicit `solve::sweep`, a link passing the harmonic mean of conductivity × thickness, times
 width over length (Patankar 1980; `flow::land::conduct`), between land cells (`flow::on_land`): rock spreads a hot spot one cell in about 70,000 years, so a
-year is far below the explicit limit on cells of kilometres; a cell under 17 m sub-steps (1.8).
+year is far below the explicit limit on cells of kilometres (1.8).
 **A cell's parts** (`flow::parts`): the ground of a cell with liquid standing over its pores is a short list of parts
 under one air, each with its own heat and matter: its **land**, where its own ground lies above what stands (liquid
 and soft solid, `Curve::wet` of it), the liquid's **top**, down to `h_mix` under the liquid's level, and its **deep**
@@ -479,10 +295,7 @@ with the most fusion enthalpy as its plateau), its pores those under the liquid 
 stands over them is what stands over the liquid's. A cell whose land no longer stands apart (nothing stands, or all
 the cell is under its liquid no deeper than `h_mix`) is one node again; a cell where liquid comes to stand over part of
 its ground, or over all of it deeper than `h_mix`, is made parts at its temperature and phases, the liquid holding all
-that stands over the pores and its area's share of the rest (`parts::create`); its next solve makes its deep. A join
-sums its quarters' parts and its split gives them back (`parts::remap`, by what each held at the join); a split of
-another cell stands its liquid over its quarters' own ground (0), so each quarter starts as one node and is made parts
-at its next build. No part holds less heat than its matter at `T_FLOOR`; the first other that can gives what it lacks.
+that stands over the pores and its area's share of the rest (`parts::create`); its next solve makes its deep. No part holds less heat than its matter at `T_FLOOR`; the first other that can gives what it lacks.
 **Known limit:** the parts hold one mixture of the substances that move with the liquid, shared by what other laws
 move; a part's own salt (a sea's against its land's rain) is kept apart only as the liquid moves it, and the
 top overturns by temperature alone: a saltier top does not sink for its salt. The top's depth is one number; a real
@@ -507,9 +320,8 @@ what the heat holds molten, as every law and the shell then read it.
   and has a head (`flow::land::stand`), the depth bodies and Change read.
 - **Each cell's own ground** (`flow::curve`): what stands fills the cell's ground from its lowest point up, so its
   head is a level over that ground, and a cell is wet where part of its ground lies under it. The ground is the
-  terrain's drained samples inside the cell (`World::ground_in`, 8 x 8), their departures from their mean laid on the
-  cell's mean surface at the scale its ground stands the terrain (`World::relief_scale`: 1 as built, what a split's relief paid
-  after): the cell's level-volume curve, found once for each leaf and its scale. A cell's liquid leaves it from its
+  terrain's samples inside the cell (`World::ground_in`, 8 x 8), their departures from their mean laid on the
+  cell's mean surface: the cell's level-volume curve, found once. A cell's liquid leaves it from its
   lowest ground, as the terrain inside it drains: a cell whose mean lies under its neighbours' is no basin where its
   ground drains (`flow::levels`, `flow::lowest` read it). The liquid's potential energy is where it lies: in the
   pores, and over the cell's own ground at its centroid (0, "The books").
@@ -519,8 +331,7 @@ what the heat holds molten, as every law and the shell then read it.
   level: once a month, after the runoff has reached it, each cell's pores keep what they hold and all the rest stands
   at one level over the cells' own ground (`curve::level_over`, exact). Each cell that holds more than its pores and
   what stands on its ground under that level gives the share of its liquid over it, with
-  that share of its heat; mixed, it goes to the cells that hold less, by what each lacks (`basin::share_out`; a split
-  stands the liquid over its quarters' pores at one level the same way, 0). **Known limit:** the sea's slope under
+  that share of its heat; mixed, it goes to the cells that hold less, by what each lacks (`basin::share_out`). **Known limit:** the sea's slope under
   wind and rotation is not modelled, and what levels it crosses the sea at once. **The sea of each air
   block mixes its heat in a month** (`basin::mix_heat`): then its cells off their melting plateaus, with no soft cover
   or cover of bodies and the same phases, each take the block's temperature (their heat apart from the fusion enthalpy
@@ -553,8 +364,7 @@ what the heat holds molten, as every law and the shell then read it.
   The discharge is the cell's liquid flux (`World::liquid_flux`, mol/s, a moving average over about a year) at the mol
   per m³ of the liquid its ground holds (`World::liquid_in`). Its size does not depend on the cell's: the push of moving
   liquid on structures (3.2) and every shell read it here.
-- **Pore water** flows by Darcy's law (an explicit sweep on the liquid table, the store's too, sub-stepped in a cell
-  too small for the month, 1.8): `seep` ×
+- **Pore water** flows by Darcy's law (an explicit sweep on the liquid table, the store's too, 1.8): `seep` ×
   saturated thickness × width / distance, at most half of what would level two cells, and no cell giving more than it
   holds over field capacity; pores at or under field capacity (`field`) give nothing. Over cells of kilometres a
   liquid step moves a table a thousandth of the way to its neighbours', far below the explicit limit. Liquid above it sinks to the deep store
@@ -592,8 +402,7 @@ The head lost by moving liquid does work where it is lost on land (`flow::liquid
 settles and it wears nothing): it **carries** up to `carry`
 m³ of loose solids per J (dropping what is over capacity, so load settles where flow slows), and with the work its
 load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears** `wear` m³ of
-bed per J over its strength into loose ground. In a cell too small for the month its work is what sub-steps of its
-carrying give (1.8). **Creep** (`flow::creep`, yearly, out of land cells):
+bed per J over its strength into loose ground. **Creep** (`flow::creep`, yearly, out of land cells):
 loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope,
 across each border by its width (none across a corner). Bodies hold the ground: carrying
 and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 8. **Burial**: the loose ground mixes over what lies on it (bioturbation, Darwin 1881), so a part no body holds and no bond joins sinks `bury` m/s into it, no deeper than the loose ground is, and once buried past its smallest outer size it joins its cell's ground (`bond/month.rs::bury`, 3.1).
@@ -720,14 +529,14 @@ over the cell's breaking energy per m²); a cleared link is cheaper (`lanes::res
 (`lanes::regrow`, `regrow`). This one rule is what can make paths.
 
 ### 1.8 The step by the size
-An explicit step is safe while `dt Σ g / cap` of each node stays within `solve::sweep::LIMIT` (1/2: no pattern changes
-sign in a step). For a diffusion of D m²/s on a cell of side Δ with four borders that is 4 D dt / Δ² ≤ 1/2, so a step
+An explicit step is safe while `dt Σ g / cap` of each node stays within 1/2 (no pattern changes sign in a step,
+`solve::sweep`). For a diffusion of D m²/s on a cell of side Δ with four borders that is 4 D dt / Δ² ≤ 1/2, so a step
 of `dt` is safe down to Δ = √(8 D dt). On the island (month 2.59e6 s, year 3.11e7 s):
 
 | Process | Step | D or rate | Safe down to |
 |---|---|---|---|
 | Pore flow, Darcy (`seep`) | month | `seep` × 1 m of loose ground / `porosity`: 9e-6 m²/s | 14 m |
-| The bed's store, Darcy (`bed_seep`) | month | `bed_seep` × the depth it fills / `bed_porosity`: 4.5e-3 m²/s full (30 m) | 305 m full; 125 m to 5 m filled, 250 m to 20 m |
+| The bed's store, Darcy (`bed_seep`) | month | `bed_seep` × the depth it fills / `bed_porosity`: 4.5e-3 m²/s full (30 m) | 305 m full |
 | Heat sideways (`land::conduct`) | year | k / (ρ c) of the active layer, about 1.1e-6 m²/s | 17 m |
 | Creep (`creep`) | year | `creep` × softness × 1 m: 1.3e-9 m²/s for the softest solid | 0.6 m |
 | Erosion and carrying (`carry`, `wear`) | month | the bed lowers `carry` ρ g Q per m of drop a step; at the largest river of the 64 x 64 island (Q 1.9e8 m³ a month) under half the drop to the next cell | 9 m |
@@ -736,19 +545,8 @@ of `dt` is safe down to Δ = √(8 D dt). On the island (month 2.59e6 s, year 3.
 | The air's exchange with a cell (`air::cells`) | 15 days | implicit in the cell, per m²; the air's days run on the blocks | any size |
 
 The drain to the channels inside a cell (`hill`), the sink into the store and what comes up are exact for any step in
-the cell itself. A cell finer than a limit of the table (the bed's store under 305 m where it is deep, measured at the
-most depth: 3.0 in cells of 125 m with full stores, 0.85 in cells of 250 m; pore flow and heat sideways under about
-15 m; carrying under 9 m at the largest river) sub-steps that law inside its step by one helper (`solve::sweep::by_size`,
-a flux register, Berger and Colella 1989): such a cell and its links take `solve::sweep::steps` sub-steps, each from
-what the sub-steps leave the cells that need them; a cell beside them stays as the step started but for its potential,
-which follows what those links brought it; each link's sum is booked once by both its cells, and the other links step
-once with what each cell's sub-stepped links left it. The store's table and the pores' (`flow::deep`, `drain::pore_flow`)
-follow what they hold, a temperature the heat it gained (`land::conduct`), and the carrying of a cell's load is a sweep
-of its surface toward those of the ways its liquid takes, which stay as the step started: its work is what the sub-steps
-carry over what one step would (`runoff::Pass::worked`), so a small cell under a river is not cut below its ways in a
-month. The coarse cells keep their step (so a default run is as before), and the books close as every move is booked on
-both sides. A mound of pore liquid in a cell of 7.8 m keeps after a month within 9% of what it keeps after 64 short
-steps (34% in one step, `pore_liquid_of_small_cells_spreads_in_a_month_as_in_short_steps`). On a globe a square is hundreds of km and a cell needs depth 15 below its block to come under 40 m.
+the cell itself. The cells as built are squares of kilometres (on a globe hundreds of km) or coarser, far above every
+limit of the table, so each law takes one step.
 
 ## 2. Change: substances react inside nodes, faster when hot
 Files: `core/src/change/` (the reactor), `core/src/chem/` (chemistry and its physics), `worldgen/src/chem0.toml`.
@@ -923,7 +721,7 @@ it has members (one for an individual), as its force bears with the weight of ea
 holds, split out of it where they are fewer (`bond::verbs::can_hold`), and pays to handle each; at least one part (or all
 of a lot of fewer), or none. Holding, carrying (`bond::carry`), riding and the loads (3.2) go by all the parts held,
 their weight, displaced liquid and the drag of moving liquid on each. Monthly, before the lone parts join, a body that
-holds more parts than it has members (members left, died, or went to another quarter of a split cell) lets go of the
+holds more parts than it has members (members left or died) lets go of the
 rest, which lie alone (`lots::hold_by_members`). A member that joins its part to another (verb 3) joins one of the lot. **In liquid** (`bond::wading`): the share of a member's height under its cell's standing liquid is the depth
 over its height, at most 1; its height is its size, the side of a cube of its volume (`Physics::side`, 0.31 m at
 30 kg). Where the liquid is deeper than its height a member swims: it breathes its air (2.4), so it keeps to the
@@ -1099,15 +897,8 @@ chance).
   lineages (`lineage::resize`): past them a body whose sizes change joins the living lineage of its kind nearest in
   sizes, and stays in its own if that is the nearest. The cap of a crowded cell and the cap of lineages make bodies of
   different heritage share a brain; the three caps bound the work, not a law. They count per cell, not per m²: a cell
-  is the unit of the work a run's budget of cells pays for, so a finer cell holds as many nodes, and a region split
-  holds more per m², as its detail asks: a cap per m² would leave a fine cell less than one node of a kind and stage,
-  and what the members of a kind do does not go by how many nodes hold them (a node a year in a square and in its
-  cells split two depths, one node of each stage in each cell, lives alike: `core/tests/steps.rs`). So do the pair that may mate, a watch, a room and a gift: bodies meet who share
-  a cell, and a fine cell's bodies meet each other more often (each step) among fewer; a law of meeting by the area
-  swept, as the bite has (5.3), would make that alike per m², and is not built.
-- **Split and join of cells** (0): a node splits by area into the quarters of its cell (`nodes::part`, one node per
-  quarter, each with a copy of its brain), unless it has fewer members than one per quarter, when it goes whole to one
-  quarter drawn by area, as an individual does; a joined cell's bodies merge at once by the monthly merge and its caps.
+  is the unit of the work. The pair that may mate, a watch, a room and a gift count per cell too: bodies meet who share
+  a cell; a law of meeting by the area swept, as the bite has (5.3), would make that per m², and is not built.
 - **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
 - **Pace**: every node updates and decides at its cell's step, as an individual does (0).
 - **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage. A
@@ -1182,12 +973,6 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
 - **Eaten and broken**: an animal's take from the place takes from its ground and its cover by one search
   (`feed::take_node`, 5.3), paying to break what it takes of the cover (`Cover::breaking`, as a bite pays); movers that
   push through a cell break the cover by its share of the cell's mass, as they break bodies (6.8, `choose::wear`).
-- **Split and join of cells** (`cover/tree.rs`, 0): each quarter of a split takes its part of each slot's amounts, by
-  the slot's growth law over the cell's ground (**inside a cell**, 0: a kind that needs wet ground gathers where liquid
-  gathers; `Cover::parts`), and the heat by its share of the heat capacity, so each stays at
-  the cover's temperature; the genes, kind and `full` copied, the light mark per m² as it was. A joined cell takes its
-  quarters' slots as seeds with their heat, which land by the seeds' rule (`seed::lodge`): alike slots join, and what
-  finds no slot dies as remains on its ground; its light mark is the quarters' mean by area.
 - **What it is to the rest**: its mass, capture area, the light it absorbs and the energy to break it are one more
   body of the cell in the survey's sums (`Life::sum`), so it shades, holds the ground (1.3), hides bodies, slows
   movers and makes lanes (1.7) as bodies do.
@@ -1499,9 +1284,8 @@ to the air. Body matter holds no rock element: the **rock salt (11)** is rock ch
 ## 8. Starting conditions (not laws)
 Placed by `worldgen` (`worldgen::schedule::Schedule`, carried by a snapshot) and printed by every run; the laws never
 read a kind.
-- **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on and which a
-  split reads later: an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
-  `World::terrain`); each cell's relief inside it from it (0, "Relief"); a metre of loose ground; the sea's salt at
+- **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on: an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
+  `World::terrain`); a metre of loose ground; the sea's salt at
   balance (2.6); ground and air temperatures falling with latitude and height. The terrain's samples are worn (0):
   land rises from 0 m to the noise's height over 2 million years while flowing liquid cuts it, its slopes creep and it
   floats back up as it is unloaded; the load settles in the closed basins the cutting leaves, and those it does not fill

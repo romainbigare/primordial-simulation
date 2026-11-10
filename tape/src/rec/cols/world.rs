@@ -52,8 +52,6 @@ impl Recorder {
         row.push("rivers", "1", river_count(w, &c.f) as f64);
         // The cells, and those split and joined in the year.
         row.push("cells", "1", w.mesh.cells().n() as f64);
-        row.push("splits", "1/yr", self.year.splits);
-        row.push("joins", "1/yr", self.year.joins);
         // Bodies (nodes and individuals), their members and their nodes; the slots of cover and its mass.
         let (members, nodes) = life.alive().fold((0.0, 0.0), |(m, n), b| (m + b.n(), n + (b.n() > 1.0) as u8 as f64));
         row.push("bodies", "1", life.alive().count() as f64);

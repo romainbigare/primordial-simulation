@@ -2,10 +2,9 @@
 //! would stand (`Terrain::sample`), and the ground is that worn by flowing liquid and creep at the world's start
 //! (`space::wear`), so valleys branch between ridges and the closed basins the cutting left stay. A
 //! flood over the worn heights (`space::drain`) finds where each sample's liquid runs, and the ponds: the samples
-//! under a closed basin's level, each pond with its pass and the level of the pass. Every cell's height and relief, at
-//! the start and at each split, are means over these samples (`Terrain::inside`), so a cell and its quarters stand on
-//! the same ground at every size; so is the way it faces the sun (`Terrain::rise_south`); and the liquid runs down them
-//! (`space::network`). They are a function of the seed and the map alone, found when first read and kept with the
+//! under a closed basin's level, each pond with its pass and the level of the pass. Every cell's height is a mean over
+//! these samples (`Terrain::inside`); so is the way it faces the sun (`Terrain::rise_south`); and the liquid runs down
+//! them (`space::network`). They are a function of the seed and the map alone, found when first read and kept with the
 //! terrain, not saved.
 
 use super::drain::flood;
@@ -23,9 +22,8 @@ use std::sync::{Arc, Mutex};
 /// The samples of a map for one seed: its width and height in samples, and of each sample row by row its height, m;
 /// the terrain's channels on them (`space::network`): the sample its liquid runs to (`network::NONE` for a sink of the
 /// open low ground), the area that drains through it, m², and its neighbour upstream that the most drains through
-/// (`NONE` where none runs to it); the variance by area of the heights below each, m² (`below::sample_variances`);
-/// the pond each lies in (`NONE` on ground that drains), and the ponds.
-#[derive(Debug)]
+/// (`NONE` where none runs to it); the pond each lies in (`NONE` on ground that drains), and the ponds.
+#[derive(Clone, Debug)]
 pub struct Samples {
     pub seed: u64,
     pub across: usize,
@@ -34,7 +32,6 @@ pub struct Samples {
     pub to: Vec<u32>,
     pub up: Vec<f64>,
     pub main: Vec<u32>,
-    pub v: Vec<f64>,
     pub pond: Vec<u32>,
     pub ponds: Vec<Pond>,
 }
@@ -67,6 +64,18 @@ impl Clone for Kept {
 }
 
 impl Terrain {
+    /// The samples under leaf `l` of `map` (of `SAMPLE_DEPTH` or coarser; for `seed`, its rows between latitudes `lat`)
+    /// set to their mean height by area: the ground inside it level, the ground round it as it was.
+    pub(crate) fn level_under(&self, seed: u64, map: &Square, l: Leaf, lat: (f64, f64)) {
+        let mut s = (*self.samples(seed, map, lat)).clone();
+        let mean = self.inside(seed, map, l, lat);
+        for f in l.split(SAMPLE_DEPTH) {
+            let k = s.index(&f);
+            s.h[k] = mean;
+        }
+        *self.kept.0.lock().expect("the kept samples") = Some(Arc::new(s));
+    }
+
     /// The worn samples of `map` for `seed` (its rows between latitudes `south` and `north`), found once and kept.
     /// They are found with no lock held (finding them works in parallel, and a worker that waited on the lock inside
     /// another parallel section would hold up the workers it needs); where two find them at once, the first kept is
@@ -105,7 +114,7 @@ impl Terrain {
     /// The samples of `map` for `seed` (`Samples`): the noise's heights (`Terrain::sample`) at the centres of the
     /// samples of the grid the wear reads it on (`wear::noise_grid`), worn (`space::wear`) with the open low ground
     /// held; then the flood over them from all the open low ground, the closed basins too shallow to hold a pond graded
-    /// (`ponds::grade`), the area that drains through each sample, the ponds and the variance below each.
+    /// (`ponds::grade`), the area that drains through each sample, and the ponds.
     fn worn(&self, seed: u64, map: &Square, (south, north): (f64, f64)) -> Samples {
         let per = 1usize << (SAMPLE_DEPTH - map.square_depth());
         let (across, down) = (map.w * per, map.h * per);
@@ -125,7 +134,6 @@ impl Terrain {
         grade(&mut h, &f, &shallow);
         let (pond, members) = basins(&grid, &h, &f);
         let ponds = members.iter().map(|m| Pond { pass: f.to[m[0] as usize], level: f.level[m[0] as usize] }).collect();
-        let v = super::below::sample_variances(&h, (across, down));
-        Samples { seed, across, down, h, to: f.to, up, main, v, pond, ponds }
+        Samples { seed, across, down, h, to: f.to, up, main, pond, ponds }
     }
 }

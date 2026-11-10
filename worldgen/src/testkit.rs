@@ -10,7 +10,6 @@ use pcore::event::EventKind;
 use pcore::life::{Chunk, Handle};
 use pcore::lineage::{self, Lineage};
 use pcore::rng::{Purpose, Rng};
-use pcore::space::Leaf;
 use pcore::store::{Boundary, Class, Move, Node};
 use pcore::units::DAY_S;
 use pcore::{Config, World};
@@ -383,58 +382,16 @@ pub fn out(w: &mut World, b: Body) -> (Handle, Body) {
     (s, b)
 }
 
-/// `w` with each of the leaves `region` split `depths` depths down (`World::split`, which first splits the cells beside
-/// them as 2:1 asks), its events taken first, as the shell takes them before a split.
-pub fn split_down(w: &mut World, region: &[Leaf], depths: u8) {
-    w.drain_events();
-    for r in region {
-        for depth in r.depth..r.depth + depths {
-            for l in r.split(depth).collect::<Vec<_>>() {
-                if w.map.cell(l).is_some() {
-                    w.split(l).expect("a split");
-                }
-            }
-        }
-    }
-}
-
-/// Cell `i` flat inside: no relief, and its ground standing none of the terrain's departures.
+/// Cell `i` flat inside: its ground level at its mean (`World::level_inside`).
 pub fn flatten(w: &mut World, i: usize) {
-    (w.relief[i], w.relief_scale[i]) = (0.0, 0.0);
-}
-
-/// `split_down` with no relief in the cells it splits (those 2:1 splits first too), so their quarters are flat: the
-/// same ground at two sizes, for scenes that compare a cell with its quarters.
-pub fn split_flat(w: &mut World, region: &[Leaf], depths: u8) {
-    w.drain_events();
-    for r in region {
-        for depth in r.depth..r.depth + depths {
-            for l in r.split(depth).filter(|&l| w.map.cell(l).is_some()).collect::<Vec<_>>() {
-                let cells: Vec<usize> = w.map.splits(l).expect("a split").into_iter().filter_map(|s| w.map.cell(s)).collect();
-                cells.into_iter().for_each(|i| flatten(w, i));
-                w.split(l).expect("a split");
-            }
-        }
-    }
-}
-
-/// The cells of `w` that `split_flat` of `region` by `depths` would flatten (those 2:1 splits too) made flat inside
-/// without splitting them, and the state of the ground found again (so each stands as one node, laws.md 1.1): a world
-/// to compare with the one that split, the same ground at both sizes.
-pub fn flat_as_split(w: &mut World, region: &[Leaf], depths: u8) {
-    let mut split = w.clone();
-    split_flat(&mut split, region, depths);
-    let gone: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| split.map.cell(w.map.leaves()[i]).is_none()).collect();
-    gone.into_iter().for_each(|i| flatten(w, i));
-    pcore::flow::state(w, true);
+    w.level_inside(i);
 }
 
 /// Cell `i` and the cells round it made flat land at its height, with its liquid and soil: all flat inside (`flatten`),
 /// and each round it holding per m² what `i` holds in its loose ground, its bed and the store under it, and their heat
 /// per m² (booked as edits); then Flow's slow ground is rechecked and the state of the ground found again, so each
-/// stands as one node (flat inside, it is all land or all under its liquid, laws.md 1.1). A scene whose cell and its
-/// quarters differ only by their size: no liquid runs off a slope into or out of it sideways (on real slopes that is a
-/// law of the size of the cells itself, which `tape/tests/scale.rs` checks).
+/// stands as one node (flat inside, it is all land or all under its liquid, laws.md 1.1): no liquid runs off a slope
+/// into or out of it sideways.
 pub fn flat_round(w: &mut World, i: usize) {
     let (cells, ns) = (w.mesh.cells(), w.chem.ns());
     let round: Vec<usize> = cells.around(i).1.iter().map(|&j| j as usize).collect();
@@ -457,13 +414,6 @@ pub fn flat_round(w: &mut World, i: usize) {
     }
     pcore::flow::refresh(w);
     pcore::flow::state(w, true);
-}
-
-/// The cells of the first air node of `w` whose cells are all land: a region to split.
-pub fn land_block(w: &World) -> Vec<Leaf> {
-    let air = w.mesh.level(pcore::AIR);
-    let j = (0..air.n()).find(|&j| air.children(j).iter().all(|&i| w.is_land(i as usize))).expect("an air node over land only");
-    air.children(j).iter().map(|&i| w.map.leaves()[i as usize]).collect()
 }
 
 /// Every part of Flow but creep once, for `dt` seconds, in the clock's order: the state rebuilt in full, the air's step
@@ -530,7 +480,7 @@ pub fn same_totals(a: &(f64, Vec<f64>, f64), b: &(f64, Vec<f64>, f64)) {
 pub fn bite(w: &mut World, a: Handle, v: Handle) {
     let mut b = std::mem::take(&mut w.life[a]);
     let r = &mut Rng::new(1, w.day(), 7, Purpose::Choose);
-    let days = w.step_days(b.cell as usize);
+    let days = w.step_days();
     w.in_cell(b.cell as usize, |w, d| pcore::choose::take_body(w, d, &mut b, (v, days), r));
     w.life[a] = b;
 }
@@ -634,18 +584,6 @@ pub fn scatter(w: &mut World, n: usize, seed: u64) {
         let moves: Vec<Move> = places.iter().zip(&made).map(|(&s, &(a, ..))| Move { from: Node::ground(i), to: Node::new(Class::Part, s), k: k as u16, mol: a, heat: a * cp * t }).collect();
         pcore::store::apply(w, &[], &moves);
     }
-}
-
-/// Nothing is broken, cells across a border differ by one depth at most, and the cells under each air node cover it
-/// (`Mesh::share` sums to 1): the tree of cells after splits and joins (`World::split`, `World::join`).
-pub fn sound(w: &World) {
-    assert_eq!(check::broken(w), None);
-    let (cells, leaves) = (w.mesh.cells(), w.map.leaves());
-    let border = (0..cells.a().len()).filter(|&l| cells.width()[l] > 0.0);
-    assert!(border.clone().all(|l| leaves[cells.a()[l] as usize].depth.abs_diff(leaves[cells.b()[l] as usize].depth) <= 1), "2:1 across every border");
-    let mut cover = vec![0.0; w.mesh.level(pcore::AIR).n()];
-    (0..cells.n()).for_each(|i| cover[w.mesh.up(i, 0, pcore::AIR)] += w.mesh.share(i, pcore::AIR));
-    assert!(cover.iter().all(|s| (s - 1.0).abs() < 1e-12), "the cells under each air node cover it: {cover:?}");
 }
 
 /// The books of a world at a moment: its totals and its boundary nodes' (`check::totals`).

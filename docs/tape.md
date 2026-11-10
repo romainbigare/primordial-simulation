@@ -9,7 +9,7 @@ A mean of nothing is written `NaN` (`null` in the viewer's file, drawn as a gap)
 
 | File | What it holds |
 |---|---|
-| `snap_NNNNN.bin.gz` | at the end of the run, and every `--snapshots-every` years if given: the whole world, the run's plan (what is placed when, and the camera's path), and what the tape keeps across years (gzip of bincode, after the tag `EWSN` and the format version); `ew resume --from` goes on from it (the budget of cells and the floor in the world's `Config`, the rest of the camera's path in the plan), and a resumed tape equals the unbroken one. A snapshot is taken at a month's start, so it holds the state and no cache: what the laws build again before they read it at a month's first step (Flow's caches, `flow::Scratch`; the survey's `env` and `seen`; the survey's sums of the cells, `Life::sum`, and the numbers each body's genes give, `Body::k`, both worked out again at load, as the tape reads the sums first) is not saved |
+| `snap_NNNNN.bin.gz` | at the end of the run, and every `--snapshots-every` years if given: the whole world, the run's plan (what is placed when), and what the tape keeps across years (gzip of bincode, after the tag `EWSN` and the format version); `ew resume --from` goes on from it, and a resumed tape equals the unbroken one. A snapshot is taken at a month's start, so it holds the state and no cache: what the laws build again before they read it at a month's first step (Flow's caches, `flow::Scratch`; the survey's `env` and `seen`; the survey's sums of the cells, `Life::sum`, and the numbers each body's genes give, `Body::k`, both worked out again at load, as the tape reads the sums first) is not saved |
 | `series.csv` | one row a year, the columns below |
 | `months.csv` | one row a month (below); only with `--months` |
 | `physics.json` | the run's `Physics` and `Config`; `ew numbers OLD NEW` compares two runs |
@@ -29,21 +29,13 @@ a run killed during a write leaves its `.part` file, which nothing reads. A stop
 write, and resumes only from a snapshot.
 
 **Raw events** (`core/src/event.rs`): born (with kind, one or two parents), died (with cause, kind,
-the light catalyst of the dead), took, gave, watched, bond made or broken, first time a substance appears, a cell split
-into its quarters or joined from them (named by its serial, with its depth; counted in `splits` and `joins`). Only physical facts; the viewer shows the first appearances.
+the light catalyst of the dead), took, gave, watched, bond made or broken, first time a substance appears. Only physical
+facts; the viewer shows the first appearances.
 Took, gave and watched name bodies by their id (`Body::id`): the serial of the cell the body was placed in (laws.md
 0) times 2^40, plus that cell's count of bodies placed then (1, 2, ...: children,
 split halves, parts of nodes acting apart, founders). An id never
 changes and is never given again, wherever the body goes. What the recorder keeps across months and years of cells
-(where each body was at the last month, the busiest cells and the worn edges a decade ago) names them by serial, so a
-split or a join of other cells leaves it whole; the land is listed again after a split or a join.
-
-**The camera's path** (`ew run --camera FILE`, `refine::Camera`) is an input of the run, as the placements of life
-are: refinement reads it at each month's start (laws.md 0), so the same seed, flags and path give the same world. The
-viewer's file holds it as `camera`, a list of shots in the order of their months, each `{month, x, y, w, h, depth, rest}`:
-from month `month` on (whole months since the start) the window from column `x` and row `y` of the map, `w` x `h`
-squares, asks for cells of `depth` below their air block (a square of an island is depth 2); a window of no area is
-the camera gone, and with `rest` the budget of cells is the cells as built from that month on (laws.md 0). A snapshot carries it in the run's plan.
+(where each body was at the last month, the busiest cells and the worn edges a decade ago) names them by serial.
 
 **A globe in the viewer's file.** The header has `globe` (the rows wrap east to west), `lat_north` and `lat_south` (the
 latitudes of the north and south edges, degrees; 90 and -90 on a globe). The grid is the map: row `y` of `h` lies at
@@ -129,7 +121,7 @@ a lot part by part at places keyed by its id and each part's index, and is not r
 | `rain`, `rain_land` | mol/m²/s | mean rain, and on land (a moving average over about a year) |
 | `evap_land`, `runoff_sea` | mol/m²/s | on land, what rises into the air less what condenses on the ground, and what runs over the surface into cells under the sea's level, per m² of land (moving averages over about a year): with `rain_land` the land's water budget |
 | `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) that are rivers (`tape::is_river`): a liquid flux over `tape::RIVER_FLOOR` and over `tape::RIVER_CATCH` times what the cell's own area sheds (`catch`). The report counts the same way |
-| `cells`, `splits`, `joins` | , 1/yr, 1/yr | the cells of the map at the year's end; cells split into their quarters and cells joined from them in the year (`World::split`, `World::join`, as refinement asks, `World::refine`) |
+| `cells` | | the cells of the map |
 | `bodies` | | bodies (nodes and individuals) |
 | `cover_slots`, `cover_kg` | , kg | slots of cover in the world (`cover::SLOTS` a cell at most), and its mass |
 | `cover_died_<cause>` | kg/yr | cover that died in the year by cause: `spent` (upkeep unpaid), `age`, `phase` (frost), `taken` (eaten), `broken` (by movers) |
@@ -182,7 +174,7 @@ a lot part by part at places keyed by its id and each part's index, and is not r
 
 | Column | Unit | Meaning |
 |---|---|---|
-| `ms_flow`, `ms_change`, `ms_bodies`, `ms_parts`, `ms_refine` | ms/yr | wall time in Flow, in Change, in the bodies (survey and body batches), in the parts and in refinement (`World::refine`, its splits and joins) since the last row |
+| `ms_flow`, `ms_change`, `ms_bodies`, `ms_parts` | ms/yr | wall time in Flow, in Change, in the bodies (survey and body batches) and in the parts since the last row |
 | `ms_tape` | ms/yr | wall time of the main thread in the tape itself since the last row: the months recorded, the snapshot's bytes and the copy of the tape that go to the writer thread, and any wait for it (the writer's own time runs beside the world and is not counted). The row's own month, and the snapshot and copy made after the row (at a write of the tape), land in the next row. The pictures of a year (every `--pictures-every` years) are in it; the yearly check is not timed |
 
 ## `series.csv`: by starting kind

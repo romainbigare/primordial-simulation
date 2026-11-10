@@ -1,12 +1,10 @@
 //! What moves between a cell's parts and into each (laws.md 1.1, `parts`): what other laws moved, shared between them
 //! (`reconcile`); the liquid that settles from the land (`settle`); the ground the liquid gains or gives as the share of
 //! the cell under it follows what stands on it (`strip`); what Flow's liquid laws move of each (`to_liquid`); what the
-//! air's step moves of the land and the top and the heat they pass each other at the shore (`after_air`); and how the
-//! parts follow a split and a join (`remap`, `whole`).
+//! air's step moves of the land and the top and the heat they pass each other at the shore (`after_air`).
 
 use super::{Found, Parts, DEEP, LAND, PARTS, TOP};
-use crate::flow::{land::wet_share, Scratch};
-use crate::remap::{mean_by, sum4, Made, Renumber, Source};
+use crate::flow::Scratch;
 use crate::{math::one_minus_exp, store::Class, units::T_FLOOR, World};
 
 /// A number and the sum of its parts that differ by no more than this share of it differ by the rounding of that sum
@@ -189,95 +187,4 @@ pub(in crate::flow) fn after_air(s: &mut Scratch, i: usize, (heat, moved): ([f64
         gain(p, k, TOP, m[1]);
     }
     (p.heat[LAND], p.heat[TOP]) = (p.heat[LAND] + heat[0] + shore, p.heat[TOP] + heat[1] - shore);
-}
-
-/// Cell `i` of `w`, one node, as parts (`Parts`): all its matter and heat the liquid's top's where what stands over
-/// its pores covers it (`land::wet_share`), else the land's.
-fn whole_of(w: &World, i: usize) -> Parts {
-    // (In a remap the world holds its new mesh already: the old cells are those of Flow's state and of the store.)
-    let (s, n) = (&w.scratch, w.scratch.state.parts.len());
-    let wet = s.curves.len() == n && s.head.len() == n && wet_share(s, i) >= 1.0;
-    let q = if wet { TOP } else { LAND };
-    let mut whole = Parts { wet: wet as u8 as f64, heat: [0.0; PARTS], amt: vec![[0.0; PARTS]; w.chem.ns()], t: [w.t_ground_last(i); PARTS], on: [None; PARTS], dry: 0.0 };
-    whole.heat[q] = w.store.heat(Class::Ground)[i];
-    whole.amt.iter_mut().enumerate().for_each(|(k, a)| a[q] = w.store.amounts(Class::Ground)[k * n + i]);
-    whole
-}
-
-/// The parts of the quarters `kids` of a join where one of them has parts, those that are one node as parts
-/// (`whole_of`); none where all are one. What a join keeps of them (`remap::Joined`), so its split gives them back.
-pub(crate) fn of_join(w: &World, kids: [usize; 4]) -> Option<[Parts; 4]> {
-    let s = &w.scratch;
-    kids.iter().any(|&q| super::has(s, q)).then(|| kids.map(|q| s.state.parts[q].clone().unwrap_or_else(|| whole_of(w, q))))
-}
-
-/// The parts of the quarters of each join of the remap `r` (`of_join`), by cell. Read before the store follows it.
-pub(crate) fn whole(w: &World, r: &Renumber) -> Vec<Option<Parts>> {
-    let mut out = vec![None; w.scratch.state.parts.len()];
-    if out.is_empty() {
-        return out;
-    }
-    for src in r.sources() {
-        let Source::Made(Made::Join { kids, .. }) = src else { continue };
-        if let Some(parts) = of_join(w, kids.map(|q| q as usize)) {
-            kids.iter().zip(parts).for_each(|(&q, p)| out[q as usize] = Some(p));
-        }
-    }
-    out
-}
-
-/// Quarter `q`'s share of a number of its joined parent's parts, by what each quarter held of it at the join (`kept`;
-/// by its `area` share where none held any).
-fn kept_share(kept: &[Parts; 4], (q, area): (usize, f64), of: &dyn Fn(&Parts) -> f64) -> f64 {
-    let all = sum4(kept.each_ref().map(of));
-    if all != 0.0 { of(&kept[q]) / all } else { area }
-}
-
-/// The parts of each cell follow a remap (`Scratch::remap`): an old cell's go with it; a quarter of a joined cell holds
-/// its share of its parent's by the share of each number it held at the join (`Joined::parts`), at its area and
-/// temperatures then, as the store gives it its share of each amount and heat by that record, so the split gives the
-/// quarters back. A quarter of a cell all under its liquid takes its area's share of each of its parts (what the split
-/// moves between the quarters is then shared between their parts, `reconcile`). A quarter of another cell is one node:
-/// the split stands the cell's liquid over the quarters' own ground (`flow::share_ground`), so its land and its liquid
-/// lie in other shares than its parent's; one with liquid over part of its ground or deeper than `h_mix` is made parts
-/// at its next build (`create`). A joined cell holds the sum of its
-/// quarters' (`whole` for those that are one node), the mean of their areas and temperatures by area, its plateaus found
-/// at its next solve. A new cell is one node.
-pub(in crate::flow) fn remap(parts: Vec<Option<Parts>>, r: &Renumber, joined: &[Option<crate::remap::Joined>], whole: &[Option<Parts>]) -> Vec<Option<Parts>> {
-    if parts.is_empty() {
-        return parts;
-    }
-    let made = |m: &Made| -> Option<Parts> {
-        match *m {
-            Made::Quarter { parent, q, area, .. } => {
-                let p = parts[parent as usize].as_ref()?;
-                if let Some(kept) = joined.get(parent as usize).and_then(Option::as_ref).and_then(|r| r.parts.as_ref()) {
-                    let by = |of: &dyn Fn(&Parts) -> f64| kept_share(kept, (q as usize, area), of);
-                    let heat = [LAND, TOP, DEEP].map(|x| p.heat[x] * by(&|k: &Parts| k.heat[x]));
-                    let amt = (0..p.amt.len()).map(|s| [LAND, TOP, DEEP].map(|x| p.amt[s][x] * by(&|k: &Parts| k.amt[s][x]))).collect();
-                    return Some(Parts { heat, amt, dry: p.dry * by(&|k: &Parts| k.dry), ..kept[q as usize].clone() });
-                }
-                // A quarter of a cell all under its liquid takes its area's share of each part, so its top and its deep
-                // keep their heat apart.
-                (!p.land()).then(|| Parts { heat: p.heat.map(|h| h * area), amt: p.amt.iter().map(|a| a.map(|x| x * area)).collect(), dry: 0.0, ..p.clone() })
-            }
-            Made::Join { kids, area } => {
-                let k4 = kids.map(|q| parts[q as usize].as_ref().or_else(|| whole.get(q as usize).and_then(Option::as_ref)));
-                let k4: [&Parts; 4] = [k4[0]?, k4[1]?, k4[2]?, k4[3]?];
-                let ns = k4[0].amt.len();
-                let amt = (0..ns).map(|k| [LAND, TOP, DEEP].map(|q| sum4(k4.map(|p| p.amt[k][q])))).collect();
-                let t = [LAND, TOP, DEEP].map(|q| mean_by(k4.map(|p| p.t[q]), area));
-                let (wet, heat, dry) = (mean_by(k4.map(|p| p.wet), area), [LAND, TOP, DEEP].map(|q| sum4(k4.map(|p| p.heat[q]))), sum4(k4.map(|p| p.dry)));
-                Some(Parts { wet, heat, amt, t, on: [None; PARTS], dry })
-            }
-        }
-    };
-    r.sources()
-        .iter()
-        .map(|src| match src {
-            Source::Old(i) => parts[*i as usize].clone(),
-            Source::New => None,
-            Source::Made(m) => made(m),
-        })
-        .collect()
 }

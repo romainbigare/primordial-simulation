@@ -1,6 +1,5 @@
 //! The features of the cells (laws.md 5.2), the same for every brain: each cell's own (`own`), then smoothed over its
-//! neighbours once to `SIGHTS - 1` times (`Regions`). At a month's start every cell's (`cells`); at a sub-step those the
-//! bodies that decide then read, worked out as `cells` would (`Near`).
+//! neighbours once to `SIGHTS - 1` times (`Regions`), at a month's start (`cells`).
 
 use crate::brain::ln;
 use crate::cover::{Parts, NP, SLOTS};
@@ -59,11 +58,9 @@ pub fn cells(w: &mut World) {
     w.life.feat = feat;
 }
 
-/// What the features of every cell read alike: the cover's parts and their molar masses, and how many months have
-/// passed since the members that moved in were last counted (`Cell::crossings`).
+/// What the features of every cell read alike: the cover's parts and their molar masses.
 struct Look {
     parts: Option<(Parts, [f64; NP])>,
-    monthly: f64,
 }
 
 impl Look {
@@ -72,10 +69,7 @@ impl Look {
             let mm = p.mm(&w.chem);
             (p, mm)
         });
-        // The members that moved in since the last month's survey, per month: they came in the last month at a month's
-        // start, and since the month's start inside it (`survey::substeps`).
-        let month = w.cfg.calendar().month;
-        Look { parts, monthly: match w.time % month { 0 => 1.0, t => month as f64 / t as f64 } }
+        Look { parts }
     }
 }
 
@@ -109,7 +103,7 @@ fn own(w: &World, look: &Look, i: usize) -> Feat {
     f[MEMBERS] = ln(1.0 + (c[0] * per) as f32) / LN_MEMBERS;
     f[STRENGTH] = (c[3] / c[0].max(1.0)) as f32;
     f[RESIST] = ln(1.0 + thickness(w, c[1], area) as f32);
-    (f[PARTS_HERE], f[CROSSED]) = (ln(1.0 + (cell.parts.iter().map(|p| p.count).sum::<f64>() * per) as f32), ln(1.0 + (cell.crossings as f64 * look.monthly * across) as f32));
+    (f[PARTS_HERE], f[CROSSED]) = (ln(1.0 + (cell.parts.iter().map(|p| p.count).sum::<f64>() * per) as f32), ln(1.0 + (cell.crossings as f64 * across) as f32));
     f
 }
 
@@ -198,100 +192,4 @@ fn across_corners(w: &World, i: usize) -> impl Iterator<Item = usize> + '_ {
     let near = l.depth > square || (l.depth == square && w.mesh.cells().around(i).1.iter().any(finer));
     let corners = [(x - 1, y - 1), (x + s, y - 1), (x - 1, y + s), (x + s, y + s)].into_iter().filter(move |_| near);
     corners.filter_map(|(a, b)| w.mesh.tree().at(a, b)).filter(move |&k| w.map.leaves()[k].depth.min(square).abs_diff(square) <= 1)
-}
-
-/// The features inside a month's sub-steps (`survey::substeps`), where only the bodies of the cells that step decide: a
-/// body reads its own cell's own features and those of the cells around it at each level (`choose::options`, `plan`),
-/// and a level of a cell reads the level before of its region and those around it, so a sub-step works out only those,
-/// each as `cells` would. The regions of the month; per cell the pass (`Touched::pass`) its own features were last
-/// worked out at; per region its first level and whether that holds its cells' own features now; per level past the
-/// first the values of the regions it needs; and a mark per region of the levels (`at`), so each is listed once.
-pub(crate) struct Near {
-    regions: Regions,
-    own_at: Vec<u64>,
-    first_ok: Vec<bool>,
-    levels: Vec<Vec<Feat>>,
-    mark: Vec<usize>,
-}
-
-impl Near {
-    /// The features of the month as its survey left them (`cells`), on the regions of its cells.
-    pub(crate) fn new(w: &World) -> Near {
-        let regions = Regions::of(w);
-        let (n, r) = (w.mesh.cells().n(), regions.list.len());
-        Near { regions, own_at: vec![0; n], first_ok: vec![false; r], levels: vec![vec![[0.0; NCELL]; r]; SIGHTS], mark: vec![SIGHTS; r] }
-    }
-    /// The cells whose numbers (`Life::sum`) and own features the bodies that decide in the cells `deciding` read: those
-    /// cells and the cells around them, and every cell of the regions their levels read (`levels`), in order, each once.
-    pub(crate) fn reads(&mut self, w: &World, deciding: &[u32]) -> (Vec<u32>, Vec<Vec<usize>>) {
-        let cells = w.mesh.cells();
-        let mut seen: Vec<u32> = deciding.iter().flat_map(|&i| std::iter::once(i).chain(cells.around(i as usize).1.iter().copied())).collect();
-        seen.sort_unstable();
-        seen.dedup();
-        let levels = self.levels_of(&seen);
-        let mut reads: Vec<u32> = levels[0].iter().flat_map(|&r| self.regions.list[r].iter().map(|&i| i as u32)).chain(seen.iter().copied()).collect();
-        reads.sort_unstable();
-        reads.dedup();
-        (reads, vec![seen.iter().map(|&i| i as usize).collect()].into_iter().chain(levels).collect())
-    }
-    /// The regions each level reads, from the last down to the first: the last those of the cells `seen`, each level
-    /// before them those and the regions around them.
-    fn levels_of(&mut self, seen: &[u32]) -> Vec<Vec<usize>> {
-        let mut at: Vec<usize> = Vec::new();
-        for &i in seen {
-            let r = self.regions.of[i as usize];
-            if self.mark[r] != SIGHTS - 1 {
-                self.mark[r] = SIGHTS - 1;
-                at.push(r);
-            }
-        }
-        let mut levels = vec![at];
-        for s in (0..SIGHTS - 1).rev() {
-            let mut at = levels[0].clone();
-            at.iter().for_each(|&r| self.mark[r] = s);
-            for &r in &levels[0] {
-                for &q in &self.regions.around[r] {
-                    if self.mark[q] != s {
-                        self.mark[q] = s;
-                        at.push(q);
-                    }
-                }
-            }
-            levels.insert(0, at);
-        }
-        levels.iter().flatten().for_each(|&r| self.mark[r] = SIGHTS);
-        levels
-    }
-    /// The features the bodies that decide read (`reads`: the cells, and the regions of each level), as `cells` would
-    /// work them out now: the own features of a cell held since they were last worked out (`Touched::at`), or whose
-    /// members that moved in count per month by the time (`Look::monthly`), worked out again; the first level of a
-    /// region whose cells' own features changed, or that does not hold them, again; the other levels of the regions
-    /// read, from the level before.
-    pub(crate) fn features(&mut self, w: &mut World, (cells, levels): (&[u32], &[Vec<usize>])) {
-        let (look, n, pass) = (Look::of(w), w.mesh.cells().n(), w.life.touched.pass);
-        let mut feat = std::mem::take(&mut w.life.feat);
-        for &i in cells {
-            let i = i as usize;
-            let held = w.life.touched.at.get(i).is_none_or(|&at| at > self.own_at[i]);
-            if held || w.life.cell_at(i).crossings > 0.0 {
-                feat[i] = own(w, &look, i);
-                (self.own_at[i], self.first_ok[self.regions.of[i]]) = (pass, false);
-            }
-        }
-        for &r in &levels[1] {
-            if !self.first_ok[r] {
-                (self.levels[0][r], self.first_ok[r]) = (self.regions.first(w, r, &feat), true);
-            }
-        }
-        for s in 1..SIGHTS {
-            let (done, ahead) = self.levels.split_at_mut(s);
-            for &r in &levels[s + 1] {
-                ahead[0][r] = self.regions.next(r, &done[s - 1]);
-            }
-            for &i in &levels[0] {
-                feat[s * n + i] = ahead[0][self.regions.of[i]];
-            }
-        }
-        w.life.feat = feat;
-    }
 }

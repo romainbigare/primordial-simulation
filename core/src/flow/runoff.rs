@@ -3,13 +3,10 @@
 //! bed (`load`, `wear`).
 
 use super::{bare_share, curve::{level_over, Curve}, falls::{Falls, Lands}, follow, land::{lift, solid, NONE}, liquid::{book, mobile}, potential::apply, year_weight, Scratch};
-use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed, Order}, solve::sweep::{by_size, Net, LIMIT}, space::Level, store::{Class, LinkFlux, Move, Node}, units::T_FLOOR, World};
+use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed, Order}, space::Level, store::{Class, LinkFlux, Move, Node}, units::T_FLOOR, World};
 
 /// Least bond strength wear divides by.
 const STRENGTH_MIN: f64 = 0.05;
-/// The capacity of a way in the sweep of a node's carrying (`Pass::worked`), m²: so large that what it gets leaves its
-/// surface where the step started.
-const HELD_CAP: f64 = 1e30;
 
 /// What a cell's liquid finds toward a neighbour in the pass (`Pass::ways`).
 #[derive(Clone, Copy, Debug)]
@@ -28,7 +25,7 @@ struct Toward {
 /// What the pass reads at each cell (`surface`): the world and Flow's state as the pass found them, the order of the
 /// cells, the rows that move together per node as at the pass's start (`q0`, `q[i * width + r]`: each liquid of the
 /// first `nl` of `ks`, each load of the rest, `sol`, their heat, J, and the liquid's volume, m³), and which cells are
-/// land (`World::is_land`: the solid surface above 0 m, as Flow's state has it), and the step, s.
+/// land (`World::is_land`: the solid surface above 0 m, as Flow's state has it).
 struct Pass<'a> {
     w: &'a World,
     s: &'a Scratch,
@@ -38,7 +35,6 @@ struct Pass<'a> {
     nl: usize,
     q0: &'a [f64],
     land: &'a [bool],
-    dt: f64,
 }
 
 /// What a cell's visit leaves of the pass: the work left to break its bonded ground, J (`load`), the liquid it sent on
@@ -81,7 +77,7 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     let mut falls = s.lifts.as_ref().map(|_| Falls::new(w, s));
     let (mut left, mut crossed, mut outs, mut rest) = (Vec::with_capacity(n), Crossed::default(), Vec::new(), Vec::new());
     left.resize_with(n, || Left { worn: 0.0, sent: 0.0, off_land: 0.0 });
-    let p = Pass { w, s, order: &order, ks: &ks, sol: &sol, nl, q0: &q0, land: &land, dt };
+    let p = Pass { w, s, order: &order, ks: &ks, sol: &sol, nl, q0: &q0, land: &land };
     pass(&order, &adj, &mut q, &mut crossed, |i, q, share| {
         if q[i * width + vol] > 0.0 {
             let (out, drop) = p.ways(i, q, share, (&mut outs, &mut rest));
@@ -201,8 +197,6 @@ impl Pass<'_> {
             let d = q[cell.start + r] - was[r];
             (c, held) = (c + d * s.sp[k].cp, held + if r < nl { d * s.sp[k].lf } else { 0.0 });
         }
-        // The fall of its head down each way, m (`ways`).
-        let fall: Vec<f64> = cells.around(i).1.iter().map(|&j| (self.head(q, i) - self.head(q, j as usize)).max(0.0)).collect();
         let q = &mut q[cell];
         let loads = |q: &[f64]| (nl..rows).map(|r| q[r] * s.sp[ks[r]].v[0]).sum::<f64>();
         let kg = |q: &[f64], rs: std::ops::Range<usize>| rs.map(|r| q[r] * s.sp[ks[r]].mm).sum::<f64>();
@@ -210,11 +204,6 @@ impl Pass<'_> {
         // The work, on the bed below the liquid left standing (which hides it); none below 0 m, where the load settles.
         let kept = sv * (1.0 - out) / area;
         let bedwork = if self.land[i] { w.cfg.gravity * drop * kg(q, 0..nl) * w.cfg.phys.hide[1] / (w.cfg.phys.hide[1] + kept) } else { 0.0 };
-        let per_m = w.cfg.carry * bare_share(w, i) * w.cfg.gravity * kg(q, 0..nl) * w.cfg.phys.hide[1] / (w.cfg.phys.hide[1] + kept);
-        let bedwork = match self.worked(i, (share, &fall), per_m) {
-            Some(f) if bedwork > 0.0 => bedwork * f,
-            _ => bedwork,
-        };
         let worn = load(w, s, i, q, (nl..rows, self.sol), bedwork, out);
         // What its liquid and its loose solids gain over the pass, m³: the liquid it keeps less what it held at the start,
         // and the loads that came in less those that leave (all it picked up came from it).
@@ -242,33 +231,6 @@ impl Pass<'_> {
         // What leaves a land cell for cells that are not land runs off the land.
         let (liquid, off) = (q[..nl].iter().sum::<f64>(), (0..share.len()).filter(|&k| self.land[i] && !self.land[around[k] as usize]).map(|k| share[k]).sum::<f64>());
         Left { worn, sent: out * liquid, off_land: off * liquid }
-    }
-}
-
-impl Pass<'_> {
-    /// The share of the work of one step that the liquid leaving node `i` does in the step, where the node is too small
-    /// for it (laws.md 1.8; none where it is not). Its share `share[k]` going down way `k`, its head falling `falls[k]`
-    /// there, can carry `per_m` m³ of load per metre of fall (`carry` times the work per metre, `load`), which lowers
-    /// the node's surface by that over its area: past `sweep::LIMIT` (half the fall in a step) one step would cut the
-    /// node below its ways. So the carrying sub-steps as a sweep of the node's surface toward those of its ways, which
-    /// stay as the step started (`sweep::by_size`), and the work is what the sub-steps carry over what one step would.
-    fn worked(&self, i: usize, (share, falls): (&[f64], &[f64]), per_m: f64) -> Option<f64> {
-        let ways: Vec<usize> = (0..share.len()).filter(|&k| share[k] > 0.0 && falls[k] > 0.0).collect();
-        let area = self.w.mesh.cells().area()[i];
-        let step: f64 = ways.iter().map(|&k| per_m * share[k] * falls[k]).sum();
-        if step <= 0.0 || per_m * ways.iter().map(|&k| share[k]).sum::<f64>() / area <= LIMIT {
-            return None;
-        }
-        // The node first, then its ways, their surfaces from the node's, m.
-        let m = ways.len();
-        let (a, b): (Vec<u32>, Vec<u32>) = (1..=m as u32).map(|u| (0, u)).unzip();
-        let g: Vec<f64> = ways.iter().map(|&k| per_m * share[k] / self.dt).collect();
-        let cap: Vec<f64> = std::iter::once(area).chain(std::iter::repeat_n(HELD_CAP, m)).collect();
-        let x: Vec<f64> = std::iter::once(0.0).chain(ways.iter().map(|&k| -falls[k])).collect();
-        let held: Vec<f64> = std::iter::once(step).chain(std::iter::repeat_n(0.0, m)).collect();
-        let again = |now: &[f64], us: &[usize]| ((0..=m).map(|p| x[p] + (now[p] - held[p]) / cap[p]).collect(), us.iter().map(|&u| g[u]).collect());
-        let moved = by_size(&Net { a: &a, b: &b, g: &g, cap: &cap }, &x, self.dt, (&held, &[]), &|_, v| v, &again);
-        Some(moved.flux.iter().sum::<f64>() / step)
     }
 }
 
