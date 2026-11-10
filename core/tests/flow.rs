@@ -401,14 +401,15 @@ fn pore_space_is_the_porosity_times_the_loose_solids() {
     assert!((stands / (0.5 * pores) - 1.0).abs() < 1e-6, "{stands} m³ stands, {} over the pores", 0.5 * pores);
 }
 
-/// Liquid soaks in up to the pores and stays (a sheet runs off where the ground has none), and only what is over them
-/// runs off. Matter and energy are kept.
+/// On flat ground liquid soaks in up to the pores and stays (a sheet runs off where the ground has none), and only what
+/// is over them runs off (on uneven ground its hollows fill first, and run off sooner). Matter and energy are kept.
 #[test]
 fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
     let run = |porosity: f64, share: f64| {
         let mut w = worldgen::testkit::squares(3, 16, 16);
         w.cfg.phys.porosity = porosity;
         let (i, _) = pair(&w);
+        worldgen::testkit::flatten(&mut w, i);
         let pores = 0.4 * loose(&w, i);
         pour(&mut w, i, share * pores);
         let books = Books::now(&w);
@@ -882,7 +883,7 @@ fn rain_crosses_the_land_in_one_step() {
 }
 
 /// A pit's liquid over its rim runs out by its way out (laws.md 1.2): on an island with pits in its land (every
-/// `PIT_EVERY`th land cell inland, its neighbours raised by `RIM_M` of rock), liquid poured on each pit to `COLUMN_M`
+/// `PIT_EVERY`th land cell inland, its neighbours raised by rock to `RIM_M` over it at least), liquid poured on each pit to `COLUMN_M`
 /// over its rim leaves the pits and their rims in one liquid step but for `KEPT` of what is over the rims: none is sent
 /// back to a cell whose liquid runs into the pit, where the next step would send it back again. Matter and energy are
 /// kept.
@@ -906,12 +907,11 @@ fn a_pit_over_its_rim_spills_by_its_way_out() {
         }
     }
     let rock_per_m3 = 1.0 / w.chem.molar_volume(worldgen::testkit::ROCK, Phase::Solid);
-    for &j in pits.iter().flat_map(|&i| around(&w, i)).collect::<Vec<usize>>().iter() {
-        let t = w.t_ground(j);
-        put(&mut w, worldgen::testkit::ROCK, j, RIM_M * area * rock_per_m3);
+    for (i, j) in pits.iter().flat_map(|&i| around(&w, i).into_iter().map(move |j| (i, j))).collect::<Vec<(usize, usize)>>() {
+        let (t, rise) = (w.t_ground(j), RIM_M + (w.surface_z(i) - w.surface_z(j)).max(0.0));
+        put(&mut w, worldgen::testkit::ROCK, j, rise * area * rock_per_m3);
         hold_ground(&mut w, j, t);
     }
-    pits.retain(|&i| around(&w, i).iter().all(|&j| w.surface_z(j) > w.surface_z(i)));
     assert!(pits.len() > 2, "{} pits", pits.len());
     let near: Vec<usize> = pits.iter().flat_map(|&i| around(&w, i).into_iter().chain([i])).collect();
     let held = |w: &World| near.iter().map(|&i| liquid_m3(w, i)).sum::<f64>();

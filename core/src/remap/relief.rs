@@ -45,7 +45,7 @@ impl World {
         crate::par::map_n(self.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.terrain_rise(self.map.leaves()[i]))
     }
     /// The quarters `kids` of cell `i` (leaf `leaf`) in the cells `cells` of the change, by the terrain: each one's bed
-    /// surface the cell's mean one plus its departure d, the terrain's mean height over it (on the drained samples,
+    /// surface the cell's mean one plus its departure d, the terrain's mean height over it (on the worn samples,
     /// `Terrain::samples`) less the mean over the four, so the cell's bed keeps its volume and its mean; each quarter's
     /// relief that of the terrain inside it (`relief_at_build`). The stacks then gain ρ g Σ a d² / 2 (the loose ground,
     /// the liquid and the store stay per m², so they rise and fall with the bed by area, and the air over the cell keeps

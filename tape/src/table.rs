@@ -36,7 +36,7 @@ impl Table {
             (z[i], count[i]) = (z[i] + means[s], count[i] + 1.0);
         }
         z.iter_mut().zip(&count).for_each(|(z, c)| *z /= c.max(1.0));
-        let s = w.drained();
+        let s = w.terrain_samples();
         let twi = sample_index(map, &s);
         let per = (1u64 << (SAMPLE_DEPTH - map.square_depth())) as f64;
         let tree = w.mesh.tree();

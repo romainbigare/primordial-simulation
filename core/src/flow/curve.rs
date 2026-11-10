@@ -1,5 +1,5 @@
 //! Where liquid stands over the ground (laws.md 1.2): one level over floors of heights and areas (`level_of`), and each
-//! cell's level-volume curve over its own ground (`Curve`), the terrain's drained samples inside it (`World::ground_in`)
+//! cell's level-volume curve over its own ground (`Curve`), the terrain's worn samples inside it (`World::ground_in`)
 //! at the scale its ground stands the terrain (`World::relief_scale`) about its mean surface. Liquid fills a cell's ground from
 //! its lowest sample up, so a cell is wet where part of its ground lies under its level, and it passes its liquid on
 //! from its lowest ground, the way the terrain inside it drains.
@@ -129,7 +129,7 @@ pub(super) fn stale(w: &World, s: &Scratch) -> bool {
 /// found from the ground inside the cell (`at_scale`).
 pub(super) fn build(w: &World, s: &mut Scratch) {
     // (The terrain's samples found first, before the parallel section that reads them, `Terrain::samples`.)
-    w.drained();
+    w.terrain_samples();
     let leaves = w.map.leaves();
     let mut kept = std::mem::take(&mut s.kept);
     s.curves = crate::par::map_n(leaves.len(), crate::par::UNCOUNTED, |i| match kept.get(&leaves[i]).filter(|c| c.scale == w.relief_scale[i]) {

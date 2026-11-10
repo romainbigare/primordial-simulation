@@ -5,7 +5,6 @@
 //! in the cells of a window (`tape::things`). The other makes
 //! the ground's tiles (`ground`, `tile`: `tape::Ground`), which need no world.
 
-use pcore::space::terrain::{Terrain, ISLAND_LEVEL};
 use pcore::{Config, World};
 use serde_json::json;
 use std::cell::RefCell;
@@ -145,8 +144,8 @@ pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
 #[no_mangle]
 pub extern "C" fn ground(seed: u32, size: u32) {
     let (seed, cfg) = (seed as u64, Config::default());
-    let map = worldgen::terrain::island(size as usize, size as usize);
-    let g = tape::Ground::new(seed, map, Terrain::new(seed, ISLAND_LEVEL), (cfg.lat_south, cfg.lat_north), cfg.phys.channel_width_exp);
+    let (map, terrain) = worldgen::terrain::island_ground(seed, size as usize, size as usize);
+    let g = tape::Ground::new(seed, map, terrain, (cfg.lat_south, cfg.lat_north), cfg.phys.channel_width_exp);
     GROUND.with(|c| *c.borrow_mut() = Some(g));
 }
 
@@ -158,7 +157,22 @@ pub extern "C" fn tile(depth: u32, x: i32, y: i32) -> *const u8 {
     give(texels.iter().flat_map(|v| v.to_le_bytes()).collect())
 }
 
-/// The length in bytes of what `meta`, `frame`, `table`, `things` or `tile` last returned.
+/// The pond each texel of the tile of `depth` at column `x` and row `y` lies in, u32 little-endian, laid out as `tile`'s
+/// texels (`tape::Ground::pond_tile`: an index into `pond_levels`, or `u32::MAX` for none).
+#[no_mangle]
+pub extern "C" fn pond_tile(depth: u32, x: i32, y: i32) -> *const u8 {
+    let ponds = GROUND.with(|c| c.borrow().as_ref().expect("no ground: call ground first").pond_tile(depth.min(u8::MAX as u32) as u8, x as i64, y as i64));
+    give(ponds.iter().flat_map(|v| v.to_le_bytes()).collect())
+}
+
+/// The level of each pond of the ground made by `ground`, m, f32 little-endian (`tape::Ground::ponds`).
+#[no_mangle]
+pub extern "C" fn pond_levels() -> *const u8 {
+    let levels = GROUND.with(|c| c.borrow().as_ref().expect("no ground: call ground first").ponds().iter().map(|p| p.level as f32).collect::<Vec<f32>>());
+    give(levels.iter().flat_map(|v| v.to_le_bytes()).collect())
+}
+
+/// The length in bytes of what `meta`, `frame`, `table`, `things`, `tile`, `pond_tile` or `pond_levels` last returned.
 #[no_mangle]
 pub extern "C" fn out_len() -> usize {
     OUT.with(|o| o.borrow().len())

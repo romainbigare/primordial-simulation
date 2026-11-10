@@ -55,3 +55,25 @@ fn a_place_holds_the_same_numbers_in_every_tile() {
         }
     }
 }
+
+/// A tile names the pond each texel lies in (`Ground::pond_tile`): at the samples' own depth, where a texel is a
+/// sample, every texel of a pond lies under the pond's level, and the island has ponds.
+#[test]
+fn a_texel_names_its_pond_and_lies_under_its_level() {
+    let (g, depths) = ground();
+    let depth = pcore::space::terrain::SAMPLE_DEPTH;
+    assert!(depths.contains(&depth) && !g.ponds().is_empty(), "the island's ponds at the samples' depth");
+    let (tile, ponds) = (g.tile(depth, 0, 0), g.pond_tile(depth, 0, 0));
+    let mut held = 0;
+    for y in 0..TILE {
+        for x in 0..TILE {
+            let p = ponds[(y + GUTTER) * SIDE + x + GUTTER];
+            if p != pcore::space::network::NONE {
+                held += 1;
+                let (h, level) = (at(&tile, x, y, 0) as f64, g.ponds()[p as usize].level);
+                assert!(h < level, "texel ({x}, {y}) at {h} m in a pond of level {level} m");
+            }
+        }
+    }
+    assert!(held > 0, "no texel in a pond");
+}

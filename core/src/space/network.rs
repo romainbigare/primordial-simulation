@@ -1,8 +1,8 @@
-//! The terrain's channels (laws.md 0): on the drained samples (`space::samples`) the liquid of each sample runs to the
-//! neighbour its ground falls to most steeply (D8, O'Callaghan and Mark 1984), and the samples being drained, every
-//! sample of land has one. The area that drains through a sample is its own and all that runs to it. Between the
-//! samples' centres the liquid runs along the straight way from one to the next, so what leaves any part of the map is
-//! found at any size, finer than the samples too (`Samples::leaving`). It is a function of the seed and the map alone.
+//! The terrain's channels (laws.md 0): each sample's liquid runs where the flood over the samples sends it
+//! (`space::drain`): down the steepest fall of the ground where it drains, inside a closed basin toward its pass. The
+//! area that drains through a sample is its own and all that runs to it. Between the samples' centres the liquid runs
+//! along the straight way from one to the next, so what leaves any part of the map is found at any size, finer than the
+//! samples too (`Samples::leaving`). It is a function of the seed and the map alone.
 
 use super::samples::Samples;
 use super::square::Square;
@@ -18,24 +18,16 @@ const TOUCH: f64 = 1e-12;
 /// The ends of two pieces of one way this close, as a share of the way, are one.
 const SAME: f64 = 1e-9;
 
-/// The way each sample's liquid runs (`NONE` for a sink), the area that drains through it, m², and its neighbour
-/// upstream that the most drains through (`NONE` where none runs to it), for samples of heights `h`, m, and areas
-/// `area`, m², drained, each with its neighbours and the distance to each, m (`around`): to the neighbour of the
-/// steepest fall, the first of equal ones; the area accumulated from the highest sample down.
-pub(super) fn network<I: Iterator<Item = (usize, f64)>>(h: &[f64], area: impl Fn(usize) -> f64, around: impl Fn(usize) -> I) -> (Vec<u32>, Vec<f64>, Vec<u32>) {
-    let n = h.len();
-    let to: Vec<u32> = (0..n)
-        .map(|k| {
-            let steepest = around(k).filter(|&(j, _)| h[j] < h[k]).fold((NONE, 0.0), |best, (j, d)| if (h[k] - h[j]) / d > best.1 { (j as u32, (h[k] - h[j]) / d) } else { best });
-            steepest.0
-        })
-        .collect();
-    let mut order: Vec<usize> = (0..n).collect();
-    order.sort_by(|&p, &q| h[q].total_cmp(&h[p]).then(p.cmp(&q)));
+/// The area that drains through each sample, m², and its neighbour upstream that the most drains through (`NONE`
+/// where none runs to it), for samples whose liquid runs `to` (`NONE` for a sink) of areas `area`, m², in an `order`
+/// where each comes after the one its liquid runs to: the area accumulated from the last sample of the order to the
+/// first.
+pub(super) fn accumulate(to: &[u32], order: &[u32], area: impl Fn(usize) -> f64) -> (Vec<f64>, Vec<u32>) {
+    let n = to.len();
     let mut up: Vec<f64> = (0..n).map(area).collect();
     let mut main = vec![NONE; n];
-    for &k in &order {
-        let j = to[k];
+    for &k in order.iter().rev() {
+        let (k, j) = (k as usize, to[k as usize]);
         if j != NONE {
             let j = j as usize;
             up[j] += up[k];
@@ -44,7 +36,7 @@ pub(super) fn network<I: Iterator<Item = (usize, f64)>>(h: &[f64], area: impl Fn
             }
         }
     }
-    (to, up, main)
+    (up, main)
 }
 
 /// A rectangle of the map in leaves of the tree's most depth, west, north, east and south: it holds the points from

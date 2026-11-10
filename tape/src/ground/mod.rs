@@ -2,15 +2,16 @@
 //! `depth` holds `TILE` x `TILE` texels, each a leaf of that depth, and `GUTTER` texels more along each edge, so a
 //! shader reads a texel's neighbours inside the tile. Per texel: the terrain's mean height over it
 //! (`Terrain::heights`, so a texel is the mean of its four children), the wetness index of the place (`wetness`), and
-//! the channel it is nearest by the channel law (`channels`). Each is a function of the seed, the map and the place
-//! alone: the same texel holds the same numbers in every tile that holds it.
+//! the channel it is nearest by the channel law (`channels`); and apart, the pond it lies in (`Ground::pond_tile`).
+//! Each is a function of the seed, the map and the place alone: the same texel holds the same numbers in every tile
+//! that holds it.
 
 mod channels;
 mod wetness;
 
 pub use wetness::sample_index;
 
-use pcore::space::samples::Samples;
+use pcore::space::samples::{Pond, Samples};
 use pcore::space::square::Square;
 use pcore::space::terrain::Terrain;
 use pcore::World;
@@ -86,6 +87,27 @@ impl Ground {
             out.extend([h, wetness::at(&self.samples, &self.twi, depth, (x, y)), ratio, area].map(|v| v as f32));
         }
         out
+    }
+
+    /// The pond each texel of the tile of `depth` at column `tx` and row `ty` lies in, laid out as `tile`'s texels: the
+    /// pond (`Samples::pond`, an index into `ponds`; `network::NONE` for none) of the sample that holds the texel's
+    /// centre. So a shell can draw each pond flat at its own level.
+    pub fn pond_tile(&self, depth: u8, tx: i64, ty: i64) -> Vec<u32> {
+        let side = TILE + 2 * GUTTER;
+        let (x0, y0) = (tx * TILE as i64 - GUTTER as i64, ty * TILE as i64 - GUTTER as i64);
+        let s = &self.samples;
+        let sample = |c: f64, n: usize| (c.floor() as i64).clamp(0, n as i64 - 1) as usize;
+        (0..side * side)
+            .map(|p| {
+                let [x, y] = self.centre(depth, x0 + (p % side) as i64, y0 + (p / side) as i64);
+                s.pond[sample(y, s.down) * s.across + sample(x, s.across)]
+            })
+            .collect()
+    }
+
+    /// The ponds of the ground, each with its pass and its level (`Samples::ponds`).
+    pub fn ponds(&self) -> &[Pond] {
+        &self.samples.ponds
     }
 
     /// The centre of the texel at column `x` and row `y` of leaves of `depth`, in samples from the map's north-west corner.

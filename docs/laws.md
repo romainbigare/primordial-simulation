@@ -42,52 +42,68 @@ over it (`Terrain::inside`, below), the height its relief stands about and its q
 cell's quarters stand on the terrain itself, not on an offset of their parent's. **The terrain**
 (`space::terrain`) is one function of the world's seed and a point of the map, at any size: value noise summed over
 octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to heights, an island's falling away from
-the middle of its map; the world keeps what it needs beside its seed and its map (`World::terrain`: the rise its level
-0 m lies at), so a split finds the ground finer than its cell (below). The noise's finest octave is 670 m on the
-64 x 64 island and 200 km on a globe; it is sampled at the centres of the leaves of `SAMPLE_DEPTH` (1/64 of a block:
-125 m on the island, 20 km on a globe of 64 rows), and **the samples drain** (`space::samples`, found once from the
-seed when first read, not saved): noise has basins that no liquid ever cut, so a priority flood (`space::drain`,
-Planchon and Darboux 2001; Barnes, Lehman and Mulla 2014), from every sample under 0 m on a globe and from those under
-0 m joined to the lowest on an island, the lowest first and then the least index, raises each closed basin of the
-samples to its outlet at 1 m per km (`DRAIN_SLOPE`): every cell's height and relief, at the start and at each split,
-are means over the drained samples, so a cell and its quarters stand on the same drained ground. So is the way a cell
+the middle of its map, says how high the ground would stand; the world keeps what it needs beside its seed and its map
+(`World::terrain`: the rise its level 0 m lies at), so a split finds the ground finer than its cell (below). The
+noise's finest octave is 670 m on the 64 x 64 island and 200 km on a globe. The ground is held at **samples**, the
+leaves of `SAMPLE_DEPTH` (1/64 of a block: 125 m on the island, 20 km on a globe of 64 rows), and **the samples are
+worn** (`space::samples`, `space::wear`, found once from the seed when first read, not saved): the ground has a
+history. The noise is read at the centres of the samples of a grid of 2 x 2 samples to one (`NOISE_BY`,
+`wear::noise_grid`) and carried smooth to finer grids. The open low ground (on a globe every sample under 0 m; on an
+island those under 0 m joined to its lowest, so ground under 0 m inland is a closed basin) stays as the noise has it; land rises from 0 m at a steady rate to the noise's height
+over 2 million years (`WEAR_YEARS`; ground under 0 m does not rise) while flowing liquid cuts it by the stream power
+law (Howard 1994; Whipple and Tucker 1999): it lowers by K √A S, A the area that drains through a sample, spread down
+every lower way by Quinn's weights (Quinn et al. 1991), S the slope to the sample its liquid runs to, m = 1/2 and n = 1,
+K = 3e-7 a year (`CUT`), each step solved exactly from the open low ground up the ways (h = (h₀ + f h_down) / (1 + f),
+f = K dt √A / d; Braun and Willett 2013), so a step of any length is stable, 0 m the height of the low ground's
+liquid. Under a closed basin's level the liquid does not cut. What a step cuts spreads down as the liquid does; a
+closed basin keeps all that comes into it and fills its floor from the lowest up, as one level, toward the height its
+pass has now, and what it cannot hold runs on over the pass (`space::ponds`); what reaches the open low ground leaves
+the land. The slopes creep as a diffusion of 3e-3 m² a year (`CREEP`, the anchor of the core's own creep; Culling
+1960), and the ground floats back up by 2700/3300 of what a step took away, spread over 50 km as a plate bends (Airy
+isostasy, `FLOATS`, `BENDS_M`; Molnar and England 1990). The land first gets a roughness of a metre drawn from the
+seed (`ROUGH_M`), which the first ways find. The time runs on three grids (`STAGES`): 55% of it in 24 steps on a grid
+of 4 x 4 samples to one, then 20% in 6 steps on one of 2 x 2, then 25% in 3 steps on the samples' own, so the
+valleys are cut at the samples' size; each grid takes the noise's mean over each of its samples (or the noise carried
+to it), and each is carried to the next by the smooth lean below (held between
+the lowest and the highest of a sample and its eight neighbours, so it makes no new pit and no new peak); a map whose
+first grid would hold more than 65,536 samples runs every stage on grids twice as coarse until it fits
+(`MOST_SAMPLES`). It runs in a fixed serial order in 64-bit numbers, so a seed gives one ground on every machine.
+**The flood** (`space::drain`) over the worn samples, from all the open low ground, does not raise the ground (Barnes,
+Lehman and Mulla 2014): it reaches the samples by the level their liquid stands to, lowest first (a sample's own
+height where it drains; under a closed basin's level the height of its lowest pass), then the lowest on the flood's
+surface, then the least index. Each sample's liquid runs to the neighbour reached before it that the flood's surface
+falls to most steeply (D8, O'Callaghan and Mark 1984): the ground where it drains, under a basin's level that level
+raised by 1e-6 per m along the way the flood came (`FLOOD_RISE`), so inside a basin the way runs to its pass
+(Planchon and Darboux 2001; Cordonnier, Bovy and Braun 2019). A closed basin whose deepest sample lies less than a
+metre under its level (`GRADED_M`) is filled to it, as the floods that spread a plain's load leave it. The samples of
+one basin under its level are **a pond** (`Samples::pond`, `Samples::ponds`): its pass is the first sample out of it
+on the way its liquid leaves by, and its level that pass's height. Every cell's height and relief, at the start and at
+each split, are means over the samples, so a cell and its quarters stand on the same ground. So is the way a cell
 faces the sun (1.4): its mean rise toward the south, each sample's central difference north to south (one-sided at
 the map's edge) by area, its sample's for a cell finer than one (`Terrain::rise_south`), so a cell's is its quarters'
 mean by area. It is found once, when the cell is made, and kept (`World::rise_south`): the terrain's at the build; at a
 split each quarter's is the cell's plus the terrain's departure inside it at the scale the split stands the terrain (so
 quarters made flat face as their cell does), or what it was where a join made the cell; a join's is its quarters' mean
-by area. **The terrain's channels** (`space::network`, found with the samples): each sample's liquid runs to the
-neighbour its ground falls to most steeply (D8, O'Callaghan and Mark 1984; every sample of land has one, the samples
-being drained), and the area that drains through a sample is its own and all that runs to it. Between the samples'
-centres the liquid runs along the straight way from one to the next, so what leaves any leaf of the map is found at any
-size, finer than the samples too (`Samples::leaving`): the drained area of every way that leaves it (from a part of the
-way in it, or from its start where the leaf holds that alone), of every sink in it, and, in a leaf finer than a sample
-that does not hold the sample's centre, its own area, which runs to that centre. Below the samples
-the ground goes on as one function of the seed and the map that every cell and every pixel a shell draws read
-(`space::below`, `Terrain::heights`): the means of the quarters of a leaf of side ℓ depart from its mean by two parts
-that each keep it. The first is a smooth continuation of the coarser heights: the quarters lean as the quartic
-through the leaf and two neighbours each way on each axis does (average interpolation, Donoho 1993), so the ground has
-no steps and its slope no kinks at the leaves' edges and a slope across the samples goes on across their quarters.
-The second is a midpoint displacement (Fournier, Fussell and Carpenter 1982) that continues the noise's octaves: four
-normal draws keyed by the leaf, with no part along the lean, made to a variance by area of exactly G² ℓ² / 16 (the
-quarters of flat ground tilted at slope G), none on leaves under a metre a side, where the ground goes on as its
-continuation. G is the larger of two slopes. One is the noise's: the rms
-slope one octave of the base noise adds (octave o weighs 2^−o and is 2^o times as fine, so each adds the same slope, a
-fractal of Hurst exponent 1): the base's weight over the octaves' sum times √(2 (1/5) (26/35)^(D−1)) per unit of the
-noise (the mean square slope of value noise of D dimensions eased by 3t² − 2t³), times the noise's units per m, times how
-fast the height climbs with the rise at the sample (none on the floor). The other is real ground's at the scale ℓ:
-0.1 at 30 m, going as ℓ^(H−1) with H = 0.8 (`real_slope`; numbers.md), so ground the noise leaves smooth (a globe's, whose
-finest octave is tens of km) is as rough as real ground at every scale, under the sea and on ice as on land. So a leaf has
-a mean height at any depth. The ground below a sample holds a variance by area V (`sample_variance`): the lean's at the
-steepest of the sample and its eight neighbours, S² ℓ² / 16 at each depth (a lean's variance ew² + sn² + corners² is
-that of flat ground tilted at S), and the displacement's whole series Σ G² ℓ² / 16 (`variance_below`), each times 4/3,
-as the lean carries the slope each depth draws on to every depth below it (Σ 1/4ⁿ). A leaf below holds its parent's V
-less the variance its quarters' means take about the parent's, shared among the four by what each will need (the
-variance its own lean takes and the displacement's at its size), so the account is exact at every depth but where the
-ground bends more than its sample's neighbours do and a split's departures take more than its leaf holds: they are
-drawn whole, so the ground has no steps, and the leaf holds none below (its relief is then less than its ground's). On the 64 x 64 island the noise's G is up to about 0.05 on high
-land, real ground's 0.09 at 62 m and 0.13 at 8 m; on a globe of 64 rows the noise's is about 1e-4 and real ground's 0.03 at 10 km
-and 0.08 at 76 m, so its streets are rough. What needs the cell at a
+by area. **The terrain's channels** (`space::network`, found with the samples): each sample's liquid runs where the
+flood sends it (from every sample of land a way leads to the open low ground), and the area that drains through a
+sample is its own and all that runs to it. Between the samples' centres the liquid runs along the straight way from
+one to the next, so what leaves any leaf of the map is found at any size, finer than the samples too
+(`Samples::leaving`): the drained area of every way that leaves it (from a part of the way in it, or from its start
+where the leaf holds that alone), of every sink in it, and, in a leaf finer than a sample that does not hold the
+sample's centre, its own area, which runs to that centre. Below the samples the ground goes on as one function of the
+seed and the map that every cell and every pixel a shell draws read (`space::below`, `Terrain::heights`): the means of
+the quarters of a leaf of side ℓ depart from its mean by a smooth continuation of the coarser heights that keeps it:
+the quarters lean as the quartic through the leaf and two neighbours each way on each axis does (average
+interpolation, Donoho 1993), so the ground has no steps and its slope no kinks at the leaves' edges and a slope across
+the samples goes on across their quarters. Nothing random is laid on it. So a leaf has a mean height at any depth. The
+ground below a sample holds a variance by area V (`sample_variances`): the lean's at the steepest of the sample and its
+eight neighbours, S² ℓ² / 16 at each depth (a lean's variance ew² + sn² + corners² is that of flat ground tilted at S),
+times (4/3)², as the lean carries the slope each depth draws on to every depth below it (Σ 1/4ⁿ) and the ground below
+bends from it. A leaf below holds its parent's V less the variance its quarters' means take about the parent's, shared
+among the four by what each will need (the variance its own lean takes), so the account is exact at every depth but
+where the ground bends more than its sample's neighbours do and a split's departures take more than its leaf holds:
+they are drawn whole, so the ground has no steps, and the leaf holds none below (its relief is then less than its
+ground's). What needs the cell at a
 point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
@@ -255,8 +271,8 @@ mean bed surface now plus the terrain's mean height over the quarter less the me
 keeps its volume and its mean (what wear and creep did since the start stays in the mean); the bed's substances go
 to
 the quarters in the cell's proportions; the loose ground, the liquid its pores hold, the store and every other number
-stay per m². The quarters stand on the drained samples (above), so a basin of the noise is no basin whatever cells
-split, in whatever order; the ground below the samples may leave small pits. Then the quarters take the shares of their own ground (**inside a cell**,
+stay per m². The quarters stand on the worn samples (above), so a basin of the samples is the same basin whatever
+cells split, in whatever order; the ground below the samples makes no pit of its own. Then the quarters take the shares of their own ground (**inside a cell**,
 below; `flow::share_ground`): the liquid the cell's pores held goes to the quarters' pores by its share (a quarter's
 part of the soil's shares), as far as each one's pores hold; the liquid that stood over the cell's pores and what a
 quarter's pores cannot hold stand where they would on the quarters' floors (a floor is a quarter's solid surface less
@@ -292,7 +308,7 @@ the samples whose mean by area over the cell is 1 (`Ground::share`), from the te
 numbers: no draw. **The soil**: the steady state of the soil's liquid flowing downhill by Darcy's law. How much liquid
 gathers at a sample is its wetness index ln(a / tan β) (Beven and
 Kirkby 1979), a the area that drains through it per metre of contour and β its slope, no less than real ground's
-over a sample (`terrain::real_slope`). The area drains by multiple flow directions (Quinn et al. 1991): each sample,
+over a sample (`inside::real_slope`). The area drains by multiple flow directions (Quinn et al. 1991): each sample,
 highest first, passes what it gathered to every lower sample next to it by its drop over the distance times Quinn's
 contour length, so liquid spreads over a convex ridge and gathers in a concave hollow (the ground's curve acts
 through a); multiple directions suit the soil's slow liquid, where the liquid law's one steepest way (D-infinity,
@@ -1486,13 +1502,14 @@ read a kind.
 - **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on and which a
   split reads later: an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
   `World::terrain`); each cell's relief inside it from it (0, "Relief"); a metre of loose ground; the sea's salt at
-  balance (2.6); ground and air temperatures falling with latitude and height. The terrain's samples drain (0): a
-  priority flood raises closed basins (only) to their outlet at 1 m per km (`DRAIN_SLOPE`; Planchon and Darboux 2001),
-  from every sample below 0 m on a globe, from those joined to the lowest sample on an island. On an island the open water is coarse (`coarse_low`): an air block (8 km) whose squares all lie
+  balance (2.6); ground and air temperatures falling with latitude and height. The terrain's samples are worn (0):
+  land rises from 0 m to the noise's height over 2 million years while flowing liquid cuts it, its slopes creep and it
+  floats back up as it is unloaded; the load settles in the closed basins the cutting leaves, and those it does not fill
+  are ponds, each with its pass and level. On an island the open water is coarse (`coarse_low`): an air block (8 km) whose squares all lie
   below 0 m, none within a square of land (`LAND_RING`), is one cell, split where it borders finer cells until cells
   across a border differ by one size at most; the coasts stay in 2 km squares. A globe is one cell an air block but in a
   rectangle of air blocks in squares (`--fine`), by the same rule. A cell's height is the terrain's mean over it
-  (`Terrain::inside`, on the drained samples, 0), whatever its size.
+  (`Terrain::inside`, on the worn samples, 0), whatever its size.
 - **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS` rows of `Place::Field`: kg per m² and genes,
   on every open land cell by its chance), then eaters 20 years later; `--roster` places ten kinds (`ROSTER`). Founders
   are adults on land under at most half a metre of liquid; mass 30% fuel (60% for the two big slow eater kinds).
