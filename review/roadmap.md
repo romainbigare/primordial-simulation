@@ -429,3 +429,12 @@ Open on the ground:
 
 **The tree of cells: deleted.** The cells of a world are those it is built with. 5,340 lines out, 383 in; runs on
 cells as built are bit for bit. The fast suite holds 199 tests.
+
+**Plants drawn from their numbers (C1, C2): done.** Each square's kinds reach the page with the numbers a look needs;
+a mark picks its kind at its own foot, so kinds mix across a cell's edge; the count and size of a stand's plants come
+from its mass, their height from their wood, their crown from their leaf area (`tape/src/stands.rs`). The seven
+classes and their colours are deleted.
+
+Open on the plants: the ground under them is still a green ramp; a forest reads as dots at the 50 m view; three
+kinds live and look alike, with one wetness need and a low frost gene everywhere (C3: what each trait costs, more
+starting kinds, a cost where a trait is free).
