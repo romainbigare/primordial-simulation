@@ -102,6 +102,14 @@ impl Cells {
                 Mean::Shifted => v.iter_mut().zip(field).for_each(|(v, f)| *v += f),
             }
         }
+        // A shifted field (a temperature) whose rounds leave little takes each cell's own remainder: a step under what
+        // it is drawn in.
+        if how == Mean::Shifted {
+            for c in (0..self.pixels.len()).filter(|&c| shown(c)) {
+                let off = target[c] - self.mean(c, |p| v[p]);
+                self.pixels[c].iter().for_each(|&p| v[p] += off);
+            }
+        }
         v
     }
 
