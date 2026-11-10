@@ -369,7 +369,8 @@ graphics card with its two back ends, the water's colour by depth, the marks fix
 1. **Fixed cells for the natural world: yes.** Three layers, each at its own cost: the slow physics on fixed cells;
    the ground, the rivers and the lakes on the fixed grid of samples; the fine picture per pixel on the graphics card.
    The cells can be made smaller everywhere once the core is faster.
-2. **The tree of cells: off now** in the live page. The core keeps it until stage E.
+2. **The tree of cells is deleted.** The cells of a world stay as built for its whole life. Later, a group of
+   animals splits into single bodies that read the ground at their own place; the ground does not split.
 3. **The ground is state: yes.**
 4. **Plants' variety:** a balance of speed and of an interesting picture. First draw what the model holds (C1, C2);
    change the model (C3) only as far as the picture still needs.
