@@ -404,8 +404,13 @@ liquid, none under snow. The window finer than the cells is deleted. Months a se
 24 and 22 before, 36 and 37 after; while panning at the 50 m view a coarser picture showed 84% of the time before,
 never after.
 
-Open on track A: the tiles' memory on the card (104 MB) and the time a tile takes (a zoomed view is complete about
-5 s after the last wheel step); channels drawn as dark lines; tapes keep the map of squares; seasons blended (A3).
+The tiles are 16-bit floats, at most 56 kept, 38 MB on the card, no copy kept by the page; a tile takes 27 to 36 ms
+in wasm. A channel has a bed of washed sand cut into the ground; snow covers by its depth.
+
+Open on track A: a tile's time (the goal is 15 ms; what is left is `Terrain::heights`, which builds its patch from
+the samples down at each call); channels a metre or two wide and 0.2 m deep show their bed, not water (their colour
+needs what they carry, B3); the fitted view uses texels of 125 m; tapes keep the map of squares; seasons blended
+(A3). How long a zoomed view takes to be sharp is not known: the test browser draws on the CPU.
 
 **B1, the worn ground: done.** The samples' heights come from an erosion law run at the world's start (the stream
 power law, creep, the rebound of what was worn) on grids of 500 m, 250 m and 125 m; basins are kept, each with its
