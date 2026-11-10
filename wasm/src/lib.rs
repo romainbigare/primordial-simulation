@@ -105,7 +105,7 @@ pub extern "C" fn meta() -> *const u8 {
         json!({
             "w": g.w, "h": g.h, "cell_m": g.side, "square_depth": g.square_depth(), "globe": g.wrap, "lat_north": w.cfg.lat_north, "lat_south": w.cfg.lat_south,
             "seed": w.seed, "days_per_year": w.days_per_year(), "layers": layers,
-            "tiles": {"size": tape::TILE, "gutter": tape::GUTTER, "depths": [depths.start(), depths.end()], "runoff": tape::MOST_RUNOFF, "row": tape::ROW},
+            "tiles": {"size": tape::TILE, "gutter": tape::GUTTER, "depths": [depths.start(), depths.end()], "runoff": tape::MOST_RUNOFF, "row": tape::ROW, "kinds": tape::KINDS, "kind_row": tape::KIND_ROW},
             "laws": {"soil_m": ph.soil_m, "wet_depth": ph.wet_depth, "dormancy": ph.dormancy, "channel_width": ph.channel_width, "channel_width_exp": ph.channel_width_exp, "channel_depth": ph.channel_depth, "channel_depth_exp": ph.channel_depth_exp},
             "frames": [], "series": {}, "series_units": {}, "events": [], "months": [],
         })

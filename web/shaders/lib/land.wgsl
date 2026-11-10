@@ -34,7 +34,7 @@ struct Land {
 // The table's planes: the terrain's mean height over the cell, m, its ground's temperature, K, how fast its air cools
 // with height, K/m, and its ice, m; its standing liquid's level, its lowest ground and the depth that stands, m, and the
 // liquid in its pores, m; what its pores hold full, m, the level of the wetness index its soil's liquid departs about,
-// the volume it passes on per m² drained, m/s, and how wet its heaviest cover needs its ground; the byte of its cover's
+// the volume it passes on per m² drained, m/s; the byte of its cover's
 // mass, the share of its ground its cover leaves bare and its share of the sea; its true colour; the bytes of the layer
 // drawn and of the worn paths.
 const GROUND = 0; const LIQUID = 1; const SOIL = 2; const COVER = 3; const TRUTH = 4; const VIEW = 5;
@@ -144,10 +144,9 @@ fn activity(wet: f32, need: f32) -> f32 {
 }
 
 // The state of the ground at a point: the depth of the liquid standing over it and its height over that liquid's
-// surface, m; how wet it is, 0..1; its temperature, K; the snow and ice on it, 0..1; and the share of its cell's
-// heaviest cover that thrives there against its cell as a whole, 0..1 (its activity there over its activity on ground as
-// wet as its cell's mean).
-struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, thrive: f32 }
+// surface, m; how wet it is, 0..1; its temperature, K; the snow and ice on it, 0..1; and how wet its cells are on
+// their mean, 0..1.
+struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, mean: f32 }
 
 // The state at `at`, m from the map's north-west corner, on ground `g`: the cells' values blended between the squares'
 // centres (`cs`), and the laws inside a cell applied at the point.
@@ -163,14 +162,12 @@ fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
   var weight = 0.0;
   var held = 0.0;
   var mean = 0.0;
-  var need = 0.0;
   for (var k = 0; k < 4; k++) {
     let l = cell(LIQUID, cs.at[k]);
     if (l.z > 0.0 && l.y < surface) { level += cs.w[k] * l.x; weight += cs.w[k]; }
     let s = cell(SOIL, cs.at[k]);
     held += cs.w[k] * soil_held(l.w, s.x, s.y, g.twi);
     mean += cs.w[k] * (l.w + l.z);
-    need += cs.w[k] * s.w;
   }
   var p: State;
   if (weight > 0.0) {
@@ -186,7 +183,6 @@ fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
   // The ground's temperature is its cell's at the cell's mean height, less the air's fall with height above it.
   p.t = ground.y - ground.z * (g.h - ground.x);
   p.snow = snow_of(ground.w, p.t, land.time.z);
-  let whole = activity(mean / (mean + half), need);
-  p.thrive = select(1.0, min(activity(p.wet, need) / whole, 1.0), need > 0.0 && whole > 0.0);
+  p.mean = mean / (mean + half);
   return p;
 }

@@ -13,8 +13,6 @@ export interface Sprite { paths: { path: Path2D; fill: string }[]; shadow: Path2
 /** What an animal's look is made of: a member's mass kg, strength 0..1, colour (reflectance 0..1), the temperatures it
  * keeps warm below and cools above (K), what it takes (tape::DIET_* bits), whether adult, and its lineage. */
 export interface AnimalLook { mass: number; strength: number; colour: Rgb; keepT: number; coolT: number; diet: number; adult: boolean; lineage: number }
-/** What a plant's look is made of: the cover's genes (LIGHT, LEAF, WALLS, STORE, FROST, MOIST, SEED, REPAIR, FIX) and its built cover, kg/m². */
-interface PlantLook { light: number; leaf: number; walls: number; store: number; frost: number; moist: number; seed: number; repair: number; fix: number; kg: number }
 /** What an object's look is made of: 3 outer sizes m (longest first), hollowness, walls' colour (reflectance) and
  * hardness, depth buried m, and whether its structure closes a space. */
 export interface PartLook { size: [number, number, number]; hollow: number; colour: Rgb; hardness: number; buried: number; room: boolean }
@@ -28,11 +26,6 @@ const LIT = [1.06, 0.9, 0.76];
 const BODY_DENSITY = 1000, BODY_ASPECT = 1.5;
 /** A young member's length over an adult's. */
 const YOUNG = 0.62;
-/** The cover's frost gene (K) over which a plant goes from tender to frost-hardy (bluer and darker). */
-const TENDER_K = 272, HARDY_K = 258;
-/** The cover's moisture gene (log10 of the wetness it is fully active at) over which a plant goes from drought-hardy
- * (greyer, small leaves) to one that needs wet ground. */
-const DRY_MOIST = -1, WET_MOIST = -0.1;
 /** Diet bits (tape::DIET_*): it takes from the cover, bites bodies, takes remains. */
 export const DIET_COVER = 1, DIET_BODIES = 2, DIET_REMAINS = 4;
 /** The temperatures over which an animal goes from one that keeps warm only in deep cold to one that keeps warm early
@@ -68,7 +61,7 @@ export const seedOf = (id: bigint, k: number) => (Number(id & 0xffffffffn) * 265
 export const display = (c: Rgb): Rgb => c.map(v => 255 * Math.pow(Math.min(Math.max(v, 0), 1), 1 / 2.2)) as Rgb;
 export const tone = (c: Rgb, f: number, a = 1) => `rgba(${c.map(v => Math.round(Math.min(255, Math.max(0, v * f)))).join(',')},${a})`;
 /** A colour from hue (degrees), saturation and lightness (0..1). */
-function hsl(h: number, s: number, l: number): Rgb {
+export function hsl(h: number, s: number, l: number): Rgb {
   const k = (n: number) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
   return [0, 8, 4].map(n => 255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)))) as Rgb;
 }
@@ -177,22 +170,6 @@ function angledAnimal(f: ReturnType<typeof animalForm>, c: Rgb, ppm: number, fli
   if (f.snout > 0) p.box(hu + head, -head * (f.grazes ? 0.36 : 0.2), hz, f.snout, head * (f.grazes ? 0.72 : 0.4), head * 0.4, c.map(v => v * 0.94) as Rgb);
   for (const v of [-head * 0.4, head * 0.15]) p.poly([[hu + head * 0.2, v, hz + head], [hu + head * 0.2, v + head * 0.25, hz + head], [hu + head * 0.1, v + head * 0.12, hz + head + f.ear]], tone(c, 0.9));
   return p.done(shadow, len / 2 + f.snout + legLen + high);
-}
-
-/** The look of a slot of cover from its 9 genes in their order (pcore::cover) and its built cover, kg/m². */
-export const plantLookOf = (g: number[], kg: number): PlantLook => ({ light: g[0], leaf: g[1], walls: g[2], store: g[3], frost: g[4], moist: g[5], seed: g[6], repair: g[7], fix: g[8], kg });
-/** Woodiness 0..1 from the WALLS gene (log10 kg of walls per kg of matter): grass below 0.2, a shrub below 0.5, a tree above. */
-export const woodiness = (walls: number) => Math.min(Math.max((walls + 0.5) / 2, 0), 1);
-/**
- * The foliage colour of a plant from its genes: its hue by how much light it can use per capture area (LIGHT less
- * LEAF: a richer, bluer green the more), bluer and darker the more frost-hardy (FROST), greyer and paler the less wet
- * ground it needs (MOIST, as drought-hardy leaves are small and grey), darker the woodier.
- */
-export function plantColour(g: PlantLook, wood: number): Rgb {
-  const hardy = ramp01(TENDER_K, HARDY_K, g.frost), dry = ramp01(WET_MOIST, DRY_MOIST, g.moist);
-  const use = g.light - g.leaf; // log10 mol per m² of capture area per s
-  const hue = 92 + 14 * Math.tanh((use + 5.4) * 2) + 40 * hardy - 22 * dry;
-  return hsl(hue, 0.42 - 0.2 * dry - 0.1 * hardy, 0.4 - 0.1 * wood - 0.08 * hardy + 0.08 * dry);
 }
 
 /**

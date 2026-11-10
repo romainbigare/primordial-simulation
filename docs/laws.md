@@ -329,7 +329,7 @@ sample, which nothing reads. A split gives each quarter its part of each share
 same laws at each pixel of the ground's tiles (`tape::Ground`), blending its cells' values between the squares'
 centres (`tape::Table`, docs/tape.md): the soil's liquid by the wetness index of the terrain's samples about each
 cell's level (`inside::soil_level`, `soil_held`), what stands where the ground lies under the cells' level, each mark
-of cover by the activity of its cell's heaviest kind at the mark's foot; a picture need not keep a cell's mean exactly
+of cover by the activity of each kind of the squares about it at the mark's foot; a picture need not keep a cell's mean exactly
 (the core keeps the books).
 **Refinement** (`refine/`, `World::refine`) decides which cells split and join: a setting for speed, not a law (no
 law reads its score). The shell calls it at each month's start, before the survey, once it took the month's events
