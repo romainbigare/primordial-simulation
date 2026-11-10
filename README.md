@@ -31,7 +31,8 @@ is an input of the run: the snapshot and the tape keep it, so the same seed and 
 
 The live viewer's world has no budget of cells: its cells stay those as built, whatever the zoom. Zoom is a matter of
 drawing only: the map draws every zoom from the cells (below). The page shows the date, the months per second the world
-reaches and the cells.
+reaches and the cells. While the world plays, the worker posts its state to the page at most four times a second
+(`web/src/worker.ts` `FRAME_MS`): each frame costs the page a repaint of the map.
 
 The map is drawn on the graphics card at the screen's own pixels: with WebGPU where the browser has it, else with
 WebGL2. The shaders are written once in WGSL (`web/shaders/`); the build (`npm run build`) checks them and writes them

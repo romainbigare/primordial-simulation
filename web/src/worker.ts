@@ -30,10 +30,13 @@ type Command =
   | { cmd: 'things'; at: [number, number, number, number] | null }
   | { cmd: 'fine'; at: FineAt | null };
 
-/** Longest time a tick steps before it posts a frame and lets messages in, ms. */
+/** Longest time a tick steps before it lets messages in, ms. */
 const TICK_MS = 50;
 /** Pause between ticks, ms. */
 const GAP_MS = 4;
+/** Real time between two world frames posted to the page while the world plays, at least, ms: each costs the page's
+ * main thread a repaint of the map (its fields and textures, a read back of the classes, the cover's field), tens of ms. */
+const FRAME_MS = 250;
 /** Real time the pace of the world is measured over, ms. */
 const PACE_MS = 1000;
 /** Real time between two fine rasters of the same window while the world plays, at least, ms (a new window gets one at
@@ -61,6 +64,8 @@ let fineAt: FineAt | null = null, fineDue = false, fineLast = 0, fineTook = 0;
 let meta: Meta | null = null;
 /** The months stepped since `since` (ms), and the pace measured over the last whole second, months per second. */
 let stepped = 0, since = 0, pace = 0;
+/** When the last frame was posted (ms), and whether months were stepped since. */
+let posted = 0, owed = false;
 
 /** A copy of `n` bytes of the core's memory from `at`, which the page can take over. */
 function bytes(at: number, n: number): Uint8Array {
@@ -91,6 +96,7 @@ function postFrame(kind: 'world' | 'frame'): void {
   const stats = { cells: c.cells(), pace };
   const moved = [frame.buffer, ...(win ? fineBuffers(win) : []), ...(things ? [things.buffer] : [])];
   host.postMessage({ kind, meta: head, frame, year: c.year(), day: c.day(), stats, fine: win, things }, moved);
+  posted = now; owed = false;
 }
 
 function tick(): void {
@@ -103,7 +109,8 @@ function tick(): void {
       c.step_month(); due -= 1; made++;
     }
     stepped += made;
-    if (made) postFrame('frame');
+    owed ||= made > 0;
+    if (owed && (fineDue || performance.now() - posted >= FRAME_MS)) postFrame('frame');
   } catch (e) {
     playing = false;
     host.postMessage({ kind: 'error', text: `The world stopped: ${String(e)}` }, []);
@@ -114,6 +121,7 @@ function tick(): void {
 
 function start(on: boolean): void {
   clearTimeout(timer);
+  if (!on && owed) postFrame('frame');
   playing = on && core !== null;
   if (playing) { lastTick = since = performance.now(); stepped = pace = 0; timer = setTimeout(tick, 0); }
 }
@@ -125,6 +133,7 @@ host.onmessage = async e => {
       core = (await WebAssembly.instantiate(m.wasm, {})).instance.exports as unknown as Core;
       host.postMessage({ kind: 'ready' }, []);
     } else if (m.cmd === 'new' && core) {
+      owed = false; // (the old world's last months are not shown)
       start(false);
       if (core.new_world(m.seed, m.size) !== 0) throw new Error('The world was refused.');
       due = 0; thingsAt = null; fineAt = null; stepped = pace = 0;
