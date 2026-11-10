@@ -5,7 +5,7 @@
 // as a soft dot, and a little below a pixel its node as a soft blob over its cell (blob.ts); farther out no herd shows.
 // Hovering or clicking one shows its numbers (10.8); the plant cover is a texture (vegetation.ts). A lot of alike parts
 // (laws.md 3.1) is drawn part by part, each at a place seeded by the lot's id and the part's index.
-import { Rgb, Sprite, Style, AnimalLook, PartLook, animal, object, paintSprite, bodyLength, animalColour, woodiness, display, muted, seeded, seedOf, tone, DIET_COVER, DIET_BODIES, DIET_REMAINS } from './sprites';
+import { Rgb, Sprite, Style, AnimalLook, PartLook, animal, object, paintSprite, bodyLength, animalColour, display, muted, seeded, seedOf, tone, DIET_COVER, DIET_BODIES, DIET_REMAINS } from './sprites';
 import { Ground, rimOver, blob } from './blob';
 import type { Under } from './map';
 
@@ -159,8 +159,6 @@ export class Avatars {
 
   /** The list of things the core sent (none: nothing is drawn), for a map whose square is `cellM` metres. */
   set(data: Uint8Array | null, cellM: number): void { this.cells = data ? readThings(data) : []; this.cellM = cellM; this.sprites.clear(); this.version++; }
-  /** The cells of that list. */
-  get list(): CellThings[] { return this.cells; }
 
   /** Show the numbers of what is under the pointer on `cv` (else the cover of the cell under it), and keep what a click
    * picks; `changed` redraws the panel. */
@@ -343,10 +341,9 @@ function bodyText(b: Animal, c: CellThings): string {
   ].join('') + '</table>';
 }
 
-/** A slot of cover in one line: its form by its walls gene, its built cover and capture area, its genes. */
+/** A slot of cover in one line: its built cover and capture area, its genes. */
 function slotLine(sl: Slot): string {
-  const wood = woodiness(sl.genes[2]), form = wood < 0.2 ? 'grass' : wood < 0.5 ? 'shrubs' : 'trees';
-  return `${form}, ${num(sl.kg)} <u>kg/m²</u>, ${num(sl.leaf)} <u>m²/m²</u>${sl.full ? ', full' : ''}<br><small>${COVER_GENES.map(([n, u], k) => `${n} ${num(sl.genes[k])} ${u}`).join('; ')}</small>`;
+  return `${num(sl.kg)} <u>kg/m²</u>, ${num(sl.leaf)} <u>m²/m²</u>${sl.full ? ', full' : ''}<br><small>${COVER_GENES.map(([n, u], k) => `${n} ${num(sl.genes[k])} ${u}`).join('; ')}</small>`;
 }
 
 /** The cover of cell `c`: each slot in a line, the heaviest first. */

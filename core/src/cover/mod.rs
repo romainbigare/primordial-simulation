@@ -326,6 +326,14 @@ pub fn per_m2(w: &crate::World, of: impl Fn(&Cover, &[f64; NP], usize) -> f64) -
     out
 }
 
+/// Of `held` mol of the key liquid in the ground of cell `i`: what is liquid, mol, and how wet that leaves its ground as
+/// its cover feels it (`Physics::wetness`, as bodies feel it): its depth, in the pores and standing.
+pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
+    let (t, plateau) = w.thaw_last(i);
+    let liquid = held * w.molten(p.liquid, i, t, plateau);
+    (liquid, w.cfg.phys.wetness(liquid * w.chem.molar_volume(p.liquid, crate::chem::Phase::Liquid) / w.mesh.cells().area()[i]))
+}
+
 /// The activity of a kind of cover of genes `genes` on ground as wet as `wet` (`Physics::wetness`): full where the
 /// ground is as wet as its moisture gene needs (`MOIST`), less as it dries (`Physics::activity`).
 pub fn activity(ph: &crate::Physics, genes: &[f32; NG], wet: f64) -> f64 {

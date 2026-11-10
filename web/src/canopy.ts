@@ -1,50 +1,139 @@
-// The cover's field (textures.ts, web/shaders/cover.wgsl): of each square the density of each kind of mark, from the
-// cover's own numbers (its mass, walls and capture area per m², tape/src/layers.rs) and its ground temperature and rain.
-// A kind gives way to the next over a range of each of its thresholds, so kinds mix where one gives way to another,
-// never at an edge. The page makes it for the map's squares (vegetation.ts).
+// The cover's kinds as the marks draw them (textures.ts, web/shaders/cover.wgsl): of each square the kinds of cover
+// the core sends with each frame (tape/src/stands.rs: per kind its plants, made from its mass by the self-thinning and
+// buckling laws, its genes and its state this month), set out on the marks' three lattices, with their colours and the
+// field the marks too small to draw make. No kind is a class: a plant's size, shape and colour are functions of its
+// numbers.
 import { clamp, smooth } from './earth';
+import { Rgb, hsl } from './sprites';
 
-/** The numbers a pattern reads, per texel of a grid of `w` x `h` (row-major): the cover's mass, walls and capture area,
- * its ground's temperature and rain, and whether cover is drawn on it (1: open ground). */
-export interface CoverNumbers {
-  w: number; h: number; kg: Float32Array; wood: Float32Array; leaf: Float32Array; t: Float32Array; rain: Float32Array; open: Uint8Array;
+/** The side of a cell of each lattice of marks, m: one mark a cell at most. A mark reaches at most a cell from its
+ * cell, so it is drawn at most `REACH` sides across; a kind is drawn on the lattices whose side is nearest its crown's
+ * width (on a log scale), so the three hold every plant from a herb of 5 cm to a tree of 5 m across. */
+export const LATTICES = [0.1, 0.5, 2.5];
+/** A mark is drawn at most this many cell sides across (cover.wgsl looks one cell about a pixel). */
+const REACH = 2;
+/** The numbers of a kind in the core's row (tape/src/stands.rs `Kind::row`). */
+const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover: 6, crown: 7, wood: 8, leaf: 9, pigment: 10, moist: 11, frost: 12, fuel: 13, act: 14, frozen: 15 } as const;
+/** The planes of the kinds' table (cover.wgsl): of each lattice the chance a cell holds a mark of each kind and the
+ * mark's width, m; how wet each kind needs its ground; then of each kind its form (height and stem's width, m, how
+ * closed its crown is, its capture area per kg, log10 m²/kg) and its colour (display, 0..1, and its walls' share). A
+ * plane holds four numbers: one for each kind of a square, or one kind's four. */
+export const KIND_PLANES = { chance: 0, width: 3, need: 6, form: 7, colour: 11, count: 15 } as const;
+/** Layers of the field (`CoverField`): one a lattice. */
+export const FIELD_LAYERS = LATTICES.length;
+
+/** A field of the cover: `w` x `h` texels over the map, a texel a square, of each lattice the colour of its marks
+ * (display, 0..1) times the share of the ground they cover, and that share, as RGBA bytes layer by layer; and its levels
+ * below (`mipsOf`). */
+export interface CoverField { w: number; h: number; data: Uint8Array; mips: Uint8Array[] }
+/** The cover of a frame: the kinds' table (`KIND_PLANES`, a texel a square, row by row, plane under plane), its field, and
+ * of each lattice whether any square holds its marks and the tallest plant drawn on it, m. */
+export interface Kinds { w: number; h: number; table: Float32Array; field: CoverField; held: boolean[]; tallest: number[] }
+
+// Colour (display, from the numbers; chemistry 0 gives every part of the cover one reflectance, so the hue is the
+// viewer's and only its departures come from the model).
+/** The foliage of a plant of middle numbers: hue (degrees), saturation and lightness. */
+const HUE = 105, SAT = 0.42, LIGHTNESS = 0.34;
+/** Light capacity per m² of capture area, log10 mol/m²/s: at `PIGMENT_MID` the middle lightness; per decade more, this
+ * much darker (more pigment per area absorbs more). */
+const PIGMENT_MID = -5.6, PIGMENT_DARK = 0.12;
+/** Capture area per kg, log10 m²/kg: per decade less (thick small leaves), this much darker. */
+const LEAF_MID = 0.3, LEAF_DARK = 0.06;
+/** The moisture gene (log10 of the wetness a kind is fully active at): per decade less (a plant of dry ground: small,
+ * hairy, waxy leaves), this much less saturated, lighter and turned to yellow, degrees (grey-green). */
+const DRY_SAT = 0.35, DRY_LIGHT = 0.12, DRY_HUE = 30;
+/** The frost gene, K: from `TENDER_K` to `HARDY_K` a plant turns this much to blue, degrees, and darker (the needles and
+ * waxes of hardy foliage). */
+const TENDER_K = 272, HARDY_K = 258, HARDY_HUE = 25, HARDY_DARK = 0.05;
+/** The state this month: a plant short of fuel (its fuel under its reserve) pales towards `PALE`, a dormant one (dry or
+ * cold: activity under 1) fades towards `DORMANT`, a frozen share browns towards `FROZEN` (display colours). */
+const PALE: Rgb = [196, 190, 112], DORMANT: Rgb = [150, 132, 96], FROZEN: Rgb = [120, 86, 52];
+const PALE_MOST = 0.4, DORMANT_MOST = 0.6;
+
+const mix = (a: Rgb, b: Rgb, t: number): Rgb => a.map((v, i) => v + (b[i] - v) * clamp(t)) as Rgb;
+
+/** The foliage of the kind of row `r` (display, 0..255): darker the more light capacity per capture area and the
+ * thicker its leaves; greyer the drier the ground it is made for; bluer the hardier to frost; then as its state this
+ * month says: paler short of fuel, faded dormant, brown where frozen. */
+function foliage(r: Float32Array): Rgb {
+  const dry = clamp(-r[K.moist]), hardy = smooth(TENDER_K, HARDY_K, r[K.frost]);
+  const dark = PIGMENT_DARK * (r[K.pigment] - PIGMENT_MID) + LEAF_DARK * (LEAF_MID - r[K.leaf]) + HARDY_DARK * hardy;
+  let c = hsl(HUE + HARDY_HUE * hardy - DRY_HUE * dry, clamp(SAT - DRY_SAT * dry), clamp(LIGHTNESS - dark + DRY_LIGHT * dry, 0.08, 0.8));
+  c = mix(c, PALE, PALE_MOST * (1 - clamp(r[K.fuel])));
+  c = mix(c, DORMANT, DORMANT_MOST * (1 - r[K.act]));
+  return mix(c, FROZEN, r[K.frozen]);
 }
 
-/** A tree's crown is drawn at these sizes across, m, blended between the two nearest. */
-const CROWN_SIZES = [4, 8, 14];
-/** A kind of mark: its size across, m, and the side of its grid cell over its size. */
-interface Lattice { mark: number; spacing: number }
-/** The kinds of mark in the order they are drawn (the low under the tall): the tufts of grass, tundra and steppe (the
- * first `TUFTS`), a shrub's crown, and the trees' crowns (from `TREES`). The spacings keep a mark within its own cell
- * and the eight about it. */
-export const LATTICES: Lattice[] = [
-  { mark: 0.25, spacing: 0.9 }, { mark: 0.35, spacing: 1.1 }, { mark: 0.5, spacing: 1.6 }, { mark: 1.5, spacing: 1.1 },
-  ...CROWN_SIZES.map(mark => ({ mark, spacing: 0.8 })),
-];
-export const TUFTS = 3, TREES = 4;
-/** The channels of a field's texel, each 0..1: the density of the marks of each lattice (in the order of `LATTICES`:
- * the share of its cells that hold a mark), how much darker the foliage is for the wood it holds, and the shares of the
- * crowns that are woodland and jungle (the rest are forest). */
-export const CH = { grass: 0, tundra: 1, steppe: 2, shrubs: 3, crowns: 4, dark: 7, woodland: 8, jungle: 9 } as const;
-/** Channels a texel holds: three layers of four. */
-export const COVER_LAYERS = 3;
-/** A field of the cover: `w` x `h` texels over a window of the map, its channels (`CH`) as bytes, layer by layer, and
- * its levels below (`mipsOf`). */
-export interface CoverField { w: number; h: number; data: Uint8Array; mips: Uint8Array[] }
-/** Set channel `ch` of texel `i` of field `f` to `v` (0..1). */
-function putChannel(f: CoverField, i: number, ch: number, v: number): void {
-  f.data[((ch >> 2) * f.w * f.h + i) * 4 + (ch & 3)] = Math.round(255 * Math.min(Math.max(v, 0), 1));
+/** The share of a kind of crown width `w`, m, drawn on lattice `l`: between the two lattices whose sides lie either side
+ * of it, by where it lies between them on a log scale; all on the first below it and on the last above it. */
+function shareOn(w: number, l: number): number {
+  const x = Math.log(Math.max(w, 1e-6)), at = LATTICES.map(Math.log);
+  const below = l > 0 ? clamp((x - at[l - 1]) / (at[l] - at[l - 1])) : 1, above = l < at.length - 1 ? clamp((at[l + 1] - x) / (at[l + 1] - at[l])) : 1;
+  return Math.min(below, above);
+}
+
+/** The marks of a kind (row `r`) on lattice `l`: the chance a cell holds one and its width, m. Its plants stand in
+ * patches that cover the share `cover` of the ground, `perM2` a m², each crown as wide as the ground it holds there; a
+ * cell of a patch holds the plants that fall in it as one mark of their crowns' area (a clump where they are many), at
+ * most `REACH` sides across, and the chance a cell holds one keeps the share of the ground the marks cover the stand's. */
+function marksOn(r: Float32Array, l: number): [number, number] {
+  const share = shareOn(r[K.width], l), a = LATTICES[l];
+  if (share <= 0 || r[K.cover] <= 0 || r[K.perM2] <= 0) return [0, 0];
+  const inside = r[K.perM2] / r[K.cover], plants = inside * a * a;
+  const width = Math.min(r[K.width] * Math.sqrt(Math.max(plants, 1)), REACH * a);
+  const chance = Math.min(1, (r[K.cover] * a * a) / ((Math.PI / 4) * width * width));
+  return [share * chance, width];
+}
+
+/** The kinds of the core's table `rows` for a map of `w` x `h` squares: `kinds` kinds a square of `kindRow` numbers,
+ * from `at` on (tape/src/table.rs). */
+export function kindsOf(w: number, h: number, rows: Float32Array, at: number, kinds: number, kindRow: number): Kinds {
+  const n = w * h, table = new Float32Array(4 * KIND_PLANES.count * n), held = LATTICES.map(() => false), tallest = LATTICES.map(() => 0);
+  const field: CoverField = { w, h, data: new Uint8Array(4 * FIELD_LAYERS * n), mips: [] };
+  const put = (plane: number, i: number, c: number, v: number) => { table[4 * (plane * n + i) + c] = v; };
+  for (let i = 0; i < n; i++) {
+    // Of each lattice: its marks' colours summed by the ground each covers, that ground, and the ground they leave.
+    const paint = LATTICES.map(() => ({ rgb: [0, 0, 0], covered: 0, bare: 1 }));
+    for (let k = 0; k < Math.min(kinds, 4); k++) {
+      const r = rows.subarray(at + (i * kinds + k) * kindRow, at + (i * kinds + k + 1) * kindRow);
+      if (r[K.root] < 0 || r[K.kg] <= 0) continue;
+      const c = foliage(r);
+      put(KIND_PLANES.need, i, k, 10 ** r[K.moist]);
+      [r[K.height], r[K.stem], r[K.crown], r[K.leaf]].forEach((v, q) => put(KIND_PLANES.form + k, i, q, v));
+      [...c.map(v => v / 255), r[K.wood]].forEach((v, q) => put(KIND_PLANES.colour + k, i, q, v));
+      LATTICES.forEach((a, l) => {
+        const [chance, width] = marksOn(r, l);
+        if (chance <= 0) return;
+        put(KIND_PLANES.chance + l, i, k, chance);
+        put(KIND_PLANES.width + l, i, k, width);
+        held[l] = true;
+        tallest[l] = Math.max(tallest[l], r[K.height]);
+        // The share of the ground its marks cover, each as closed as its crown.
+        const covers = Math.min(1, (chance * (Math.PI / 4) * width * width) / (a * a)) * r[K.crown];
+        paint[l].rgb = paint[l].rgb.map((v, q) => v + covers * c[q]);
+        paint[l].covered += covers;
+        paint[l].bare *= 1 - covers;
+      });
+    }
+    // Premultiplied: the marks' mean colour (0..1) times the share of the ground they cover, and that share.
+    paint.forEach((p, l) => {
+      const cover = 1 - p.bare, mean = p.rgb.map(v => v / 255 / Math.max(p.covered, 1e-9));
+      field.data.set([...mean, 1].map(v => Math.round(clamp(v * cover) * 255)), 4 * (l * n + i));
+    });
+  }
+  field.mips = mipsOf(field);
+  return { w, h, table, field, held, tallest };
 }
 
 /** The levels of field `f` below its own, each texel the most of the four (or, at an odd edge, six or nine) above it:
- * the shader reads a level about a pixel to skip a kind none of whose marks stands near, so a level holds a kind
+ * cover.wgsl reads a level about a pixel to skip a lattice none of whose marks stands near, so a level holds a lattice
  * wherever any texel under it does. */
 function mipsOf(f: CoverField): Uint8Array[] {
   const out: Uint8Array[] = [];
   let w = f.w, h = f.h, src = f.data;
   while (w > 1 || h > 1) {
-    const nw = Math.max(1, w >> 1), nh = Math.max(1, h >> 1), dst = new Uint8Array(COVER_LAYERS * 4 * nw * nh);
-    for (let l = 0; l < COVER_LAYERS; l++) for (let y = 0; y < nh; y++) for (let x = 0; x < nw; x++) {
+    const nw = Math.max(1, w >> 1), nh = Math.max(1, h >> 1), dst = new Uint8Array(FIELD_LAYERS * 4 * nw * nh);
+    for (let l = 0; l < FIELD_LAYERS; l++) for (let y = 0; y < nh; y++) for (let x = 0; x < nw; x++) {
       const ys = 2 * y, ye = y === nh - 1 ? h : Math.min(2 * y + 2, h), xs = 2 * x, xe = x === nw - 1 ? w : Math.min(2 * x + 2, w);
       for (let c = 0; c < 4; c++) {
         let most = 0;
@@ -55,75 +144,5 @@ function mipsOf(f: CoverField): Uint8Array[] {
     out.push(dst);
     w = nw; h = nh; src = dst;
   }
-  return out;
-}
-
-/** The woody share of built cover (walls over walls and matter) from which a cover is drawn as crowns. */
-const WOODY = 0.6;
-/** Walls per m², kg, from which a woody cover is a woodland of small trees (below, shrubs), and from which a forest; a
- * forest holds about 10 to 50 kg/m² of dry matter (Whittaker and Likens 1975), mostly wood. */
-const SHRUB_WOOD = 1, FOREST_WOOD = 3;
-/** A forest is a jungle where its ground is warmer than this, K, its rain at least this, mol/m²/s (about 1,100 mm a
- * year), and its cover share at least this. */
-const JUNGLE_T = 293, JUNGLE_RAIN = 2e-3, JUNGLE_CLOSED = 0.85;
-/** Herbs are steppe where rain is below this, mol/m²/s (about 400 mm a year), and tundra where the ground is colder
- * than this, K, and the cover thinner than `TUNDRA_KG` kg/m². */
-const STEPPE_RAIN = 7e-4, TUNDRA_T = 271, TUNDRA_KG = 1;
-/** Below this cover share a place is a desert of rare shrubs. */
-const DESERT_CLOSED = 0.12;
-/** A kind gives way to the next from a threshold over (1 + `SOFT`) times or this many K either side of it. */
-const SOFT = 0.3, SOFT_K = 2;
-/** A tree's crown across, m: `CROWN_LOW` plus `CROWN_RISE` × (1 - e^(-walls / `CROWN_WOOD`)), walls in kg/m² (3 m in a
- * young stand to about 13 m in a stand of 30 kg/m²). */
-const CROWN_LOW = 3, CROWN_RISE = 12, CROWN_WOOD = 15;
-/** The foliage darkens by up to `DARK_MOST`, fully at 10^`DARK_DECADES` kg/m² of walls, as a tall canopy's shade
- * deepens (the map's forest is darker too, handover 10.3). */
-const DARK_MOST = 0.4, DARK_DECADES = 2.5;
-/** 0 below `at` less `soft`, 1 above `at` plus `soft`, smooth between. */
-const past = (x: number, at: number, soft: number) => smooth(at - soft, at + soft, x);
-/** The same on a log scale: from `at` / (1 + `SOFT`) to `at` × (1 + `SOFT`). */
-const pastLog = (x: number, at: number) => past(Math.log(Math.max(x, 1e-30)), Math.log(at), Math.log1p(SOFT));
-
-/** The shares of a tree's crowns drawn at each of `CROWN_SIZES` for walls `wood` kg/m²: its size blended between the
- * two nearest (on a log scale). */
-function crownShares(wood: number): number[] {
-  const s = CROWN_SIZES, c = clamp(CROWN_LOW + CROWN_RISE * (1 - Math.exp(-wood / CROWN_WOOD)), s[0], s[s.length - 1]);
-  const i = Math.min(s.findIndex((_, k) => k === s.length - 1 || c < s[k + 1]), s.length - 2), t = Math.log(c / s[i]) / Math.log(s[i + 1] / s[i]);
-  return s.map((_, k) => (k === i ? 1 - t : k === i + 1 ? t : 0));
-}
-
-/** What a stand puts in a texel for each part of its ground it closes: the share of each lattice's marks, and the
- * share that is trees, the part of it that is forest and the part that is jungle. */
-interface Stand { marks: number[]; trees: number; forest: number; jungle: number }
-
-/** The marks of a stand whose cover holds `kg` and `wood` kg/m² and `leaf` capture area per m², whose ground is at `t` K
- * and whose rain is `rain` mol/m²/s: shared between the kinds by how far it is past each of their thresholds. */
-function standOf(kg: number, wood: number, leaf: number, t: number, rain: number): Stand {
-  const closed = 1 - Math.exp(-leaf), cold = 1 - past(t, TUNDRA_T, SOFT_K), desert = 1 - pastLog(closed, DESERT_CLOSED), grown = 1 - desert;
-  const woody = grown * pastLog(wood / kg, WOODY), herbs = grown - woody;
-  const tundra = herbs * cold * (1 - pastLog(kg, TUNDRA_KG)), steppe = (herbs - tundra) * (1 - pastLog(rain, STEPPE_RAIN));
-  const trees = woody * pastLog(wood, SHRUB_WOOD), forest = trees * pastLog(wood, FOREST_WOOD);
-  const jungle = forest * past(t, JUNGLE_T, SOFT_K) * pastLog(rain, JUNGLE_RAIN) * pastLog(closed, JUNGLE_CLOSED);
-  // A desert is rare tundra where it is cold and rare shrubs elsewhere.
-  const herbal = [herbs - tundra - steppe, tundra + desert * cold, steppe, woody - trees + desert * (1 - cold)];
-  return { marks: [...herbal, ...crownShares(wood).map(share => share * trees)], trees, forest, jungle };
-}
-
-/** Write into texel `i` of `out` the marks of the cover of `f` there: as many as its capture area closes the ground
- * (1 - e^-area), of its own kinds (`standOf`). */
-function putStand(out: CoverField, i: number, f: CoverNumbers): void {
-  const kg = f.kg[i], leaf = f.leaf[i];
-  if (kg <= 0 || leaf <= 0) return;
-  const st = standOf(kg, f.wood[i], leaf, f.t[i], f.rain[i]), closed = 1 - Math.exp(-leaf);
-  st.marks.forEach((m, l) => putChannel(out, i, l, m * closed));
-  putChannel(out, i, CH.dark, clamp(Math.log10(1 + f.wood[i]) / DARK_DECADES) * DARK_MOST);
-  if (st.trees > 0) { putChannel(out, i, CH.woodland, (st.trees - st.forest) / st.trees); putChannel(out, i, CH.jungle, st.jungle / st.trees); }
-}
-
-/** The texels of the cover of numbers `f` as the marks read them, with the levels below them. */
-export function coverOf(f: CoverNumbers): CoverField {
-  const out: CoverField = { w: f.w, h: f.h, data: new Uint8Array(COVER_LAYERS * 4 * f.w * f.h), mips: [] };
-  for (let i = 0; i < f.w * f.h; i++) if (f.open[i]) putStand(out, i, f);
-  out.mips = mipsOf(out);
   return out;
 }

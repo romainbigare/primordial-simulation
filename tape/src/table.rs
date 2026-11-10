@@ -5,14 +5,13 @@
 
 use crate::ground::sample_index;
 use crate::layers::{cover_melt, frame, pixels, Ctx};
-use pcore::cover::{dec, Parts, MOIST};
 use pcore::inside::{soil_level, Means};
 use pcore::space::network::NONE;
 use pcore::space::terrain::SAMPLE_DEPTH;
 use pcore::World;
 
 /// Numbers a square's row holds (`Table::frame`).
-pub const ROW: usize = 12;
+pub const ROW: usize = 11;
 
 /// What a shell keeps of a world's cells, which do not change: the cell of each square; of each cell the terrain's mean
 /// height over it, m, the wetness index of the terrain's samples inside it with their shares of its area
@@ -56,7 +55,8 @@ impl Table {
     }
 
     /// The present state of world `w` as one tape frame, as a tape would keep it (`frame`), and its table: the melting point of the frozen
-    /// cover, K (`cover_melt`), then `ROW` f32 numbers for each square, row by row (`row`).
+    /// cover, K (`cover_melt`), then `ROW` f32 numbers for each square, row by row (`row`), then the kinds of cover of
+    /// each square, row by row (`stands::rows`, `KINDS` × `KIND_ROW` f32).
     pub fn frame(&self, w: &World) -> (Vec<u8>, Vec<f32>) {
         let c = Ctx::new(w);
         let mut bytes = Vec::with_capacity(w.map.n() * crate::LAYERS.len());
@@ -68,6 +68,8 @@ impl Table {
         let rows: Vec<[f64; ROW]> = (0..n).map(|i| self.row(&c, i, means.as_ref().map(|m| m[i]), levels.as_ref().map(|l| l[i]))).collect();
         let mut table = vec![cover_melt(w) as f32];
         table.extend(self.square.iter().flat_map(|&i| rows[i].map(|v| v as f32)));
+        let kinds: Vec<_> = (0..n).map(|i| crate::stands::rows(w, i)).collect();
+        table.extend(self.square.iter().flat_map(|&i| kinds[i].map(|v| v as f32)));
         (bytes, table)
     }
 
@@ -78,7 +80,7 @@ impl Table {
     /// ground, m, and the depth that stands, m; the liquid in its pores and what they hold full, m, and the level of the
     /// wetness index its soil's liquid departs about (`inside::soil_level`; 0 where it lies evenly); the volume of
     /// liquid it passes on per m² drained, m/s (its flux over the area that leaves it, at the mol per m³ of its liquid,
-    /// `World::liquid_in`); and how wet its heaviest kind of cover needs its ground (`cover::activity`; 0: none).
+    /// `World::liquid_in`).
     fn row(&self, c: &Ctx, i: usize, m: Option<Means>, level: Option<[f64; 2]>) -> [f64; ROW] {
         let w = c.w;
         let (z, depth) = (c.f.z[i], c.f.depth[i]);
@@ -89,13 +91,7 @@ impl Table {
         let per_m3 = w.liquid_in(i, |k| w.g(k, i)).map_or(0.0, |l| l.1);
         let flux = w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
         let q = if per_m3 > 0.0 && self.leaving[i] > 0.0 { flux / self.leaving[i] / per_m3 } else { 0.0 };
-        let cover = w.life.cover(i);
-        let heaviest = Parts::of(&w.chem).and_then(|p| {
-            let mm = p.mm(&w.chem);
-            cover.held().max_by(|&a, &b| cover.built(&mm, a).total_cmp(&cover.built(&mm, b)))
-        });
-        let need = heaviest.map_or(0.0, |x| dec(cover.genes[x][MOIST]));
         let cools = w.air_drop(i).unwrap_or(0.0);
-        [self.z[i], c.f.t[i], cools, c.f.ice[i], top, low, m.stands, m.pore, m.pores, soil, q, need]
+        [self.z[i], c.f.t[i], cools, c.f.ice[i], top, low, m.stands, m.pore, m.pores, soil, q]
     }
 }

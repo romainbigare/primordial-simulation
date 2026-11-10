@@ -186,7 +186,7 @@ ln(a / tan β) of the terrain's samples (Beven and Kirkby 1979; a the area that 
 contour, β its slope): as in TOPMODEL, the liquid a point's pores hold departs from its cell's mean by `soil_m` per unit
 of the index over its level, within none and the pores full, the level found by halving so the mean is the cell's
 (`inside::soil_level`, `soil_held`); what stands where the ground lies under the cells' level; each mark of cover by
-the activity of its cell's heaviest kind at the mark's foot (`cover::activity`). A picture need not keep a cell's mean
+the activity of each kind of the squares about it at the mark's foot (`cover::activity`). A picture need not keep a cell's mean
 exactly (the core keeps the books).
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.

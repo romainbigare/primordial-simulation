@@ -76,20 +76,23 @@ shape. Nothing depends on the view or a tile, so a
 place has the same colour after any pan or zoom. The stats line gives the tiles kept, their size and how many in view
 are still to come, and which of WebGPU and WebGL2 draws. A tape holds no ground: its map is drawn from its squares.
 
-The Earth view draws the plant cover as textures at its real size (`web/src/vegetation.ts`, `web/src/textures.ts`),
-at every zoom from one field, the squares' cover blended between their centres as the map is: crowns where it is woody
-(shrubs, woodland, forest, a jungle where it is also warm and wet), a tree's crown 3 to 15 m across by its walls per
-m², and tufts where it is herbs (grass, steppe, tundra); as many marks as its capture area closes it (1 - e^-area). A
-kind gives way to the next over a range of each threshold, so kinds mix mark by mark, never at an edge. The marks are
-drawn per pixel on the graphics card at every frame, a pass of the map's renderer: each kind's marks lie on a grid
-fixed in the world, one mark a grid cell at a place, size and tone hashed from the cell, so they hold while the camera
-moves and never repeat or stand in rows. On the live map each mark is masked at its own foot by the laws inside a cell
-there (`web/shaders/cover_live.wgsl`): none where liquid stands over its foot deeper than the roots reach (0.3 m,
-Jackson and others 1996), none under snow, and fewer where the ground is drier than the cell's heaviest cover needs,
-by its activity there against its activity on ground as wet as its cell's (`cover::activity`); so no tree stands in
-the sea. They are coloured by the cover and, close up, by the genes of the cell's heaviest slot (hue by its light and
-leaf genes, darker if frost-hardy). A kind's marks fade in as they grow from 0.7 to 2 pixels. A pan, a zoom or a new
-frame shows the marks at once, never a plain colour in their place.
+On the live map the Earth view draws the plant cover plant by plant from its numbers, with no classes
+(`web/src/vegetation.ts`, `web/src/canopy.ts`, `web/shaders/cover.wgsl`). With each frame the core sends, for each
+square, up to 4 kinds of cover (the slots of one starting kind joined) and of each the plants its mass makes
+(`tape/src/stands.rs`): as many a m² as the self-thinning law gives (Yoda and others 1963), as tall as the buckling
+limit lets their stems stand (McMahon 1973), each crown as wide as the ground it holds, in patches that cover as much
+of the ground as its leaves close; and its genes and state this month. A plant is drawn on one of three lattices fixed
+in the world (cells of 0.1, 0.5 and 2.5 m), where its marks take a few pixels; where they take less, the same plants
+are a field of their colours with the grain their count gives, so the far and the near pictures agree. A mark picks
+its kind at its own foot from the four squares about it (blended as the map is) by the kinds' chances there, fewer
+where the ground is drier than its cell's mean as each kind's activity law says, by its own random rank: kinds mix
+mark by mark across a square's edge, and a kind that needs wet ground gathers in the hollows. None stands where liquid
+stands over its roots (0.3 m, Jackson and others 1996) or under snow. From above a crown is a dome or a cone by its
+height against its width, its edge in lobes as broad as its leaves, open where its leaf area is low, over its stem and
+its shadow; angled, it stands on its stem. Its colour comes from its numbers: darker with more light capacity per
+capture area and thicker leaves, greyer for dry ground, bluer for hardiness to frost; paler short of fuel, faded when
+dormant, brown where frozen. Chemistry 0 gives every part of the cover one reflectance, so the base hue is the
+viewer's. A tape holds only totals per square: its map draws the cover in the ground's colours, without marks.
 
 From 64 pixels a square, the live viewer draws the bodies and parts of each cell one by one at their real size, from
 the numbers the core hands out (`tape::things`): a member is as long as 1.5 times the cube root of its volume (a body

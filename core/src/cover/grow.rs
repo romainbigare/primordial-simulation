@@ -82,13 +82,9 @@ fn per_input(rx: &Reaction, k: usize) -> Option<f64> {
 fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let (c, moves, counts) = d.cover_with(i);
-    let (j, area, mm, (t, plateau)) = (w.mesh.up(i, 0, AIR), w.mesh.cells().area()[i], p.mm(chem), w.thaw_last(i));
+    let (j, area, mm, t) = (w.mesh.up(i, 0, AIR), w.mesh.cells().area()[i], p.mm(chem), w.thaw_last(i).0);
     moves.open(w, i, Node::new(Class::Cover, i));
-    // How wet its ground is (`Physics::wetness`, as bodies feel it): the depth of its key liquid that is liquid, in its
-    // pores and standing.
-    let liquid = moves.amount(w, Node::ground(i), p.liquid) * w.molten(p.liquid, i, t, plateau);
-    let depth = liquid * chem.molar_volume(p.liquid, Phase::Liquid) / area;
-    let moist = ph.wetness(depth);
+    let (liquid, moist) = super::wet(w, p, i, moves.amount(w, Node::ground(i), p.liquid));
     let reach = (-w.life.env.get(i).map_or(0.0, |e| e[1]) / ph.light_depth).exp();
     // The light since the last step: its capture areas share it by height (their walls per m²), tallest first.
     let dl = (w.light[i] - c.mark).max(0.0);

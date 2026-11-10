@@ -45,7 +45,7 @@ export class Land {
     const put = (k: number, i: number, v: number[]) => data.set(v, 4 * (k * n + i));
     this.melt = rows[0];
     for (let i = 0; i < n; i++) {
-      for (let k = 0; k < row / 4; k++) put(k, i, Array.from(rows.subarray(1 + row * i + 4 * k, 1 + row * i + 4 * k + 4)));
+      for (let k = 0; k < Math.ceil(row / 4); k++) put(k, i, Array.from(rows.subarray(1 + row * i + 4 * k, 1 + row * i + Math.min(4 * k + 4, row))));
       put(3, i, [plants[i] / 255, Math.exp(-leaf[i]), sea[i], 0]);
       put(4, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, 0]);
       put(5, i, [shown ? shown[i] / 255 : 0, worn ? worn[i] / 255 : 0, 0, 0]);

@@ -38,7 +38,7 @@ let viewTimer = 0;
 /** The things of the window in view, drawn one by one when the map is close (live world only), and the window asked for. */
 const avatars = new Avatars();
 let thingsKey = '';
-/** The cover drawn as textures (earth view only), under the avatars. */
+/** The cover of the live map (earth view only), under the avatars. */
 const vegetation = new Vegetation();
 /** Where the player keeps the style life is drawn in (one per viewer). */
 const LIFE_KEY = 'ew.life';
@@ -134,11 +134,11 @@ function repaint(): void {
   const w = world, f = frame, squares = mapFields(w, f), look = mapLook(w);
   map.setMap(squares.fields);
   if (land && live) land.set(w, live.table, squares.wet, look);
+  vegetation.set(view === 'earth' && !layer && live ? w : null, live?.table ?? null);
   map.setLook(look);
   map.mapClasses().then(c => {
     if (world !== w) return;
     cls = c;
-    vegetation.set(view === 'earth' && !layer ? w : null, f, cls);
     map.invalidate(); inspect();
   });
   inspect();
@@ -281,8 +281,8 @@ async function startLive(): Promise<void> {
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
     ready: () => newWorld(),
-    world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; avatars.set(null, w.meta.cell_m); vegetation.setThings([]); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
-    things: data => { if (live === l && world) { avatars.set(data, world.meta.cell_m); vegetation.setThings(avatars.list); } },
+    world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; avatars.set(null, w.meta.cell_m); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
+    things: data => { if (live === l && world) avatars.set(data, world.meta.cell_m); },
     frame: stats => {
       if (live !== l) return;
       setFrame(0);
@@ -313,7 +313,7 @@ function thingsOf(v: View): void {
   const key = JSON.stringify(at);
   if (!live || key === thingsKey) return;
   thingsKey = key;
-  if (!at) { avatars.set(null, world?.meta.cell_m ?? 1); vegetation.setThings([]); }
+  if (!at) avatars.set(null, world?.meta.cell_m ?? 1);
   live.things(at);
 }
 /** The date, the pace, the cells and the ground's tiles kept and still to come in view. */
