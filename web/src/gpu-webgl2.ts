@@ -1,7 +1,7 @@
 // The map's renderer on WebGL2 (gpu.ts): the programs' GLSL ES 3.00 as naga wrote it from their WGSL (web/shade),
 // each uniform block bound to its WGSL binding's number, each GLSL sampler on a texture unit of its own. A texture the
 // renderer draws into is drawn upside down (the draw header's `flip`), so its first row is its top, as on WebGPU.
-import { Gpu, Texture, Format, Sampler, Pass, Draw, programs, drawHeader } from './gpu';
+import { Gpu, Texture, Format, TexelData, Sampler, Pass, Draw, programs, drawHeader } from './gpu';
 
 /** A linked program: where each binding of its WGSL lies. */
 interface Linked { prog: WebGLProgram; units: { unit: number; texture: number; sampler: number | null }[] }
@@ -9,9 +9,9 @@ interface Linked { prog: WebGLProgram; units: { unit: number; texture: number; s
 class WebGl2Texture implements Texture {
   tex: WebGLTexture | null = null;
   fb: WebGLFramebuffer | null = null;
-  /** What each mip level, and each layer filled alone, was last filled with, to fill it again after the context is lost. */
-  levels: (Uint8Array | Float32Array)[] = [];
-  layered = new Map<number, Uint8Array | Float32Array>();
+  /** What each mip level was last filled with, to fill it again after the context is lost (a layer filled alone is
+   * not kept). */
+  levels: TexelData[] = [];
   constructor(readonly w: number, readonly h: number, readonly layers: number, readonly mips: number, readonly format: Format, readonly target: boolean) {}
   get array(): boolean { return this.layers > 1; }
 }
@@ -30,7 +30,7 @@ class WebGl2 implements Gpu {
     canvas.addEventListener('webglcontextrestored', () => {
       this.linked.clear(); this.buffers = [];
       this.setUp();
-      for (const t of this.textures) { this.make(t); t.levels.forEach((d, k) => d && this.write(t, d, k)); t.layered.forEach((d, k) => this.write(t, d, 0, k)); }
+      for (const t of this.textures) { this.make(t); t.levels.forEach((d, k) => d && this.write(t, d, k)); }
       restored();
     });
   }
@@ -55,7 +55,7 @@ class WebGl2 implements Gpu {
 
   /** Make the GL objects of texture `t`. */
   private make(t: WebGl2Texture): void {
-    const gl = this.gl, kind = t.array ? gl.TEXTURE_2D_ARRAY : gl.TEXTURE_2D, inner = t.format === 'rgba8unorm' ? gl.RGBA8 : gl.RGBA32F;
+    const gl = this.gl, kind = t.array ? gl.TEXTURE_2D_ARRAY : gl.TEXTURE_2D, inner = this.formats()[t.format][0];
     t.tex = gl.createTexture();
     gl.bindTexture(kind, t.tex);
     if (t.array) gl.texStorage3D(kind, t.mips, inner, t.w, t.h, t.layers);
@@ -68,14 +68,19 @@ class WebGl2 implements Gpu {
     }
   }
 
-  write(t: Texture, data: Uint8Array | Float32Array, level = 0, layer?: number): void {
+  /** Of each format: its internal format, the format of its data and the type of its data's numbers. */
+  private formats(): Record<Format, [number, number, number]> {
+    const gl = this.gl;
+    return { rgba8unorm: [gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE], rgba32float: [gl.RGBA32F, gl.RGBA, gl.FLOAT], rgba16float: [gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT], r16float: [gl.R16F, gl.RED, gl.HALF_FLOAT] };
+  }
+
+  write(t: Texture, data: TexelData, level = 0, layer?: number): void {
     const gl = this.gl, g = t as WebGl2Texture, w = Math.max(1, t.w >> level), h = Math.max(1, t.h >> level);
-    const type = t.format === 'rgba8unorm' ? gl.UNSIGNED_BYTE : gl.FLOAT;
+    const [, format, type] = this.formats()[t.format];
     if (layer === undefined) g.levels[level] = data;
-    else g.layered.set(layer, data);
     if (gl.isContextLost()) return;
-    if (g.array) { gl.bindTexture(gl.TEXTURE_2D_ARRAY, g.tex); gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, level, 0, 0, layer ?? 0, w, h, layer === undefined ? t.layers : 1, gl.RGBA, type, data); }
-    else { gl.bindTexture(gl.TEXTURE_2D, g.tex); gl.texSubImage2D(gl.TEXTURE_2D, level, 0, 0, w, h, gl.RGBA, type, data); }
+    if (g.array) { gl.bindTexture(gl.TEXTURE_2D_ARRAY, g.tex); gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, level, 0, 0, layer ?? 0, w, h, layer === undefined ? t.layers : 1, format, type, data); }
+    else { gl.bindTexture(gl.TEXTURE_2D, g.tex); gl.texSubImage2D(gl.TEXTURE_2D, level, 0, 0, w, h, format, type, data); }
   }
 
   drop(t: Texture): void {

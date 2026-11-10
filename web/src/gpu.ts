@@ -26,8 +26,11 @@ export function bindingsOf(p: Program): { uniforms: number[]; textures: number[]
   return { uniforms: [...u], textures: [...t], samplers: [...s] };
 }
 
-/** What a texel holds: four bytes (read as 0..1) or four 32-bit floats (read whole texels at a time). */
-export type Format = 'rgba8unorm' | 'rgba32float';
+/** What a texel holds: four bytes (read as 0..1), or four 32-bit floats, or four or one 16-bit floats (the floats read
+ * whole texels at a time). */
+export type Format = 'rgba8unorm' | 'rgba32float' | 'rgba16float' | 'r16float';
+/** The data a texture of each format is filled with: bytes, 32-bit floats, or 16-bit floats as their bits. */
+export type TexelData = Uint8Array | Float32Array | Uint16Array;
 /** How a sampler reads a texture: blended between its texels' centres, and also between its mip levels' nearest. */
 export type Sampler = 'smooth' | 'mip';
 /** A texture on the GPU: `w` x `h` texels, `layers` of them (more than one: an array), `mips` levels. */
@@ -49,8 +52,9 @@ export interface Gpu {
   readonly kind: 'WebGPU' | 'WebGL2';
   /** A texture of `w` x `h` texels of `format`, `layers` deep with `mips` levels; `target`: it can be drawn into. */
   texture(w: number, h: number, format: Format, layers?: number, mips?: number, target?: boolean): Texture;
-  /** Fill mip level `level` of texture `t` (all its layers, layer after layer, rows top first; or layer `layer` alone). */
-  write(t: Texture, data: Uint8Array | Float32Array, level?: number, layer?: number): void;
+  /** Fill mip level `level` of texture `t` (all its layers, layer after layer, rows top first; or layer `layer` alone,
+   * which the renderer does not keep: after a lost context it is empty). */
+  write(t: Texture, data: TexelData, level?: number, layer?: number): void;
   drop(t: Texture): void;
   /** Draw into `target` (null: the canvas, sized to its pixels), first filling it with `clear` (r, g, b, a, 0..1) if given,
    * and only inside `clip` (x, y, w, h px from its top-left corner) if given. */

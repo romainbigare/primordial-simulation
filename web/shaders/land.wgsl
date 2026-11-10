@@ -2,6 +2,9 @@
 // The live map in view: at each pixel of the screen the ground from its tiles and the state from the cells' table
 // (land.wgsl), in the view's colours.
 
+// A channel's bed is a parabola across it, whose mean depth is two thirds of its depth at the middle.
+const BED_MIDDLE = 1.5;
+
 // What is at `at`, m from the map's north-west corner, seen at `e` m a pixel: its ground and its state (`state_at`), the
 // cover's byte, bare share and sea blended between the squares' centres, and the channel nearest it.
 fn land_spot(at: vec2f, e: f32) -> Spot {
@@ -24,16 +27,27 @@ fn land_spot(at: vec2f, e: f32) -> Spot {
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
   p.sand = SAND_SHARE * p.sea * (1.0 - ease(0.0, look.z, p.over));
   // A channel where the point lies nearer its centre line than half its width: its discharge is its drained area times
-  // the volume the cells pass on per m² drained (flow/channel.rs), its share of a pixel what the pixel's footprint covers.
-  let q = blended(SOIL, cs).z;
+  // the volume the cells pass on per m² drained (flow/channel.rs; no more than the tiles' cap), its share of a pixel what
+  // the pixel's footprint covers. Its bed is cut into the ground as a parabola as wide as it is, as deep at its middle as
+  // its mean depth makes it (`BED_MIDDLE`): the water is deepest there, and its banks catch the light.
+  let runoff = land.time.w;
+  let q = min(blended(SOIL, cs).z, runoff);
   p.river = 0.0;
   p.river_depth = 0.0;
-  if (q > 0.0 && g.area > 0.0) {
+  if (q > 0.0 && g.ratio < 1.0) {
     let k = pow(g.area, land.channel.y);
     let half = 0.5 * land.channel.x * pow(q, land.channel.y) * k;
-    let d = g.ratio * k;
+    let to_m = 0.5 * land.channel.x * pow(runoff, land.channel.y) * k;
+    let d = g.ratio * to_m;
     p.river = tent((half - d) / e) - tent((-half - d) / e);
-    p.river_depth = land.channel.z * pow(q * g.area, land.channel.w);
+    let x = min(d / half, 1.0);
+    let deepest = BED_MIDDLE * land.channel.z * pow(q * g.area, land.channel.w);
+    p.river_depth = deepest * (1.0 - x * x);
+    // The bed's slope across the channel, d(depth)/d(distance) along the distance's own slope; where the channel is
+    // narrower than a pixel its banks do not show.
+    let bank = 2.0 * deepest * x / half * to_m * g.ratio_slope * select(0.0, 1.0, x < 1.0) * ease(e, 2.0 * e, half);
+    p.slope = length(g.slope + bank) * look.x;
+    p.shade = hill_shade(g.slope + bank, EXAGGERATE * look.x);
   }
   p.at = at;
   p.e = e;
