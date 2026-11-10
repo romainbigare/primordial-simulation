@@ -228,13 +228,6 @@ pub fn quantise(l: &Layer, v: f64) -> u8 {
     b.round().clamp(0.0, 255.0) as u8
 }
 
-/// The frame of a world's present state, as a tape would keep it (`frame`): for a shell that shows the world live.
-pub fn frame_now(w: &World) -> Vec<u8> {
-    let mut out = Vec::with_capacity(w.map.n() * LAYERS.len());
-    frame(&Ctx::new(w), &mut out);
-    out
-}
-
 /// The cell each pixel of an `across` x `down` raster of `window` (column, row, width and height in squares) shows,
 /// row by row: the one that holds its centre.
 pub fn raster(w: &World, [x, y, wide, high]: [f64; 4], across: usize, down: usize) -> Vec<usize> {
