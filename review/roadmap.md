@@ -426,3 +426,6 @@ Open on the ground:
 - The slow test `the_frost_gene_falls_where_winters_are_cold` fails: the cold band still freezes (268.7 K), but the
   warm band's mean gene is 273.4 K against the cold band's 270.0 K, and the test asks for more than 5 K between
   them. Its limit is not moved. It belongs to the plants' work (C3).
+
+**The tree of cells: deleted.** The cells of a world are those it is built with. 5,340 lines out, 383 in; runs on
+cells as built are bit for bit. The fast suite holds 199 tests.
