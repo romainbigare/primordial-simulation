@@ -43,14 +43,15 @@ fn lowbias(c: vec2i, k: i32) -> u32 {
   return x;
 }
 
-// Snow lies by a point's own temperature where that is within these of the cover's melting point, K (fading between),
-// and by the cells' ice elsewhere.
-const SNOW_NEAR_K = vec2f(2.0, 6.0);
+// A frozen cover of this mean depth, m of ice, covers e^-1 less than all of the ground: about 3 cm of snow, the depth at
+// which snow hides the ground's roughness (Yang and others 1997: cover = tanh(depth / 2.5 z0), z0 = 1 cm).
+const COVER_ICE_M = 0.008;
 
-// How much snow and ice lies on ground of `ice_m` m of it at `t` K, 0..1: the ice, and near the melting point of the
-// frozen cover `melt` (0: the ice alone) the ground's own temperature.
+// How much snow and ice lies on ground of `ice_m` m of it on average at `t` K, 0..1: as much as that depth covers
+// (`COVER_ICE_M`), less where the point is warmer than the melting point of the frozen cover `melt` (fading over a
+// kelvin either side; 0: none known, the ice alone): the cover melts there first.
 fn snow_of(ice_m: f32, t: f32, melt: f32) -> f32 {
-  let ice = ease(0.02, 0.5, ice_m);
-  let near = select(0.0, 1.0 - ease(SNOW_NEAR_K.x, SNOW_NEAR_K.y, abs(t - melt)), melt > 0.0);
-  return ice + (ease(melt + 1.0, melt - 1.0, t) - ice) * near;
+  // (tanh of a large number overflows in some shaders: past 10 it is 1 to the last bit of a 32-bit float.)
+  let cover = tanh(clamp(ice_m / COVER_ICE_M, 0.0, 10.0));
+  return select(cover, cover * (1.0 - ease(melt - 1.0, melt + 1.0, t)), melt > 0.0);
 }

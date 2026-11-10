@@ -369,7 +369,8 @@ graphics card with its two back ends, the water's colour by depth, the marks fix
 1. **Fixed cells for the natural world: yes.** Three layers, each at its own cost: the slow physics on fixed cells;
    the ground, the rivers and the lakes on the fixed grid of samples; the fine picture per pixel on the graphics card.
    The cells can be made smaller everywhere once the core is faster.
-2. **The tree of cells: off now** in the live page. The core keeps it until stage E.
+2. **The tree of cells is deleted.** The cells of a world stay as built for its whole life. Later, a group of
+   animals splits into single bodies that read the ground at their own place; the ground does not split.
 3. **The ground is state: yes.**
 4. **Plants' variety:** a balance of speed and of an interesting picture. First draw what the model holds (C1, C2);
    change the model (C3) only as far as the picture still needs.
@@ -403,5 +404,28 @@ liquid, none under snow. The window finer than the cells is deleted. Months a se
 24 and 22 before, 36 and 37 after; while panning at the 50 m view a coarser picture showed 84% of the time before,
 never after.
 
-Open on track A: the tiles' memory on the card (104 MB) and the time a tile takes (a zoomed view is complete about
-5 s after the last wheel step); channels drawn as dark lines; tapes keep the map of squares; seasons blended (A3).
+The tiles are 16-bit floats, at most 56 kept, 38 MB on the card, no copy kept by the page; a tile takes 27 to 36 ms
+in wasm. A channel has a bed of washed sand cut into the ground; snow covers by its depth.
+
+Open on track A: a tile's time (the goal is 15 ms; what is left is `Terrain::heights`, which builds its patch from
+the samples down at each call); channels a metre or two wide and 0.2 m deep show their bed, not water (their colour
+needs what they carry, B3); the fitted view uses texels of 125 m; tapes keep the map of squares; seasons blended
+(A3). How long a zoomed view takes to be sharp is not known: the test browser draws on the CPU.
+
+**B1, the worn ground: done.** The samples' heights come from an erosion law run at the world's start (the stream
+power law, creep, the rebound of what was worn) on grids of 500 m, 250 m and 125 m; basins are kept, each with its
+pass and its level; below a sample the ground is its smooth continuation. Seed 1, a 22 island: 20 bodies of standing
+liquid, 15 of 0.5 km or more. Making the samples of a 32 island: 0.45 to 0.59 s (0.60 to 0.64 s on the noise ground).
+
+Open on the ground:
+- Bodies of standing liquid are drawn dry or per cell until B2.
+- Close views (200 m, 50 m) show a smooth sheet: the ground has no detail below 125 m. It needs roughness by
+  material and slope in the drawing (6.2), and the channel's bed cut into it.
+- One erosion strength for the whole map: the samples cannot read the bed's hardness, which is drawn per cell.
+- Tops are 5 to 13% lower on a 22 island than on the noise ground.
+- The slow test `the_frost_gene_falls_where_winters_are_cold` fails: the cold band still freezes (268.7 K), but the
+  warm band's mean gene is 273.4 K against the cold band's 270.0 K, and the test asks for more than 5 K between
+  them. Its limit is not moved. It belongs to the plants' work (C3).
+
+**The tree of cells: deleted.** The cells of a world are those it is built with. 5,340 lines out, 383 in; runs on
+cells as built are bit for bit. The fast suite holds 199 tests.

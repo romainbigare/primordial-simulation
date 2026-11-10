@@ -1,30 +1,41 @@
-// The ground's tiles on the GPU (tape/src/ground): made once in a second worker (tiles-worker.ts) and kept, so the
-// world never waits for a picture. The view asks for the tiles about it, coarse before fine and nearest its middle
-// first; a request that left the view is dropped; the tiles drawn least lately go first once `MOST_TILES` are kept. A
-// page of the tiles of the depth the view is drawn at (`pages`) names, for each, the finest kept tile that holds it and
-// the one before it, so a tile not made yet is drawn from its nearest ancestor (stretched, softer), and a new one fades
-// in over that one. The coarsest tiles are kept always.
+// The ground's tiles on the GPU (tape/src/ground): made once in workers of their own (tiles-worker.ts) and kept, so the
+// world never waits for a picture. The view asks for the tiles about it at its depth, those of the depth above and the
+// coarsest, coarse before fine and nearest its middle first; a request that left the view is dropped; the tiles drawn
+// least lately go first once `MOST_TILES` are kept. A page of the tiles of the depth the view is drawn at (`pages`)
+// names, for each, the finest kept tile that holds it and the one before it, so a tile not made yet is drawn from its
+// nearest kept ancestor (stretched, softer), and a new one fades in over that one. The coarsest tiles are kept always.
+// The page keeps no copy of a tile: after a lost context the card's are empty, and it asks for them again (`lost`).
 import { Gpu, Texture } from './gpu';
 import type { View } from './map';
 
 /** The tiles of the ground as the core makes them (wasm/src/lib.rs `meta`): texels a side inside the gutter, texels of
- * the gutter along each edge, numbers a texel, the depths from the coarsest to the finest, and numbers of a row of the
- * cells' table. */
-export interface TileMeta { size: number; gutter: number; texel: number; depths: [number, number]; row: number }
+ * the gutter along each edge, the depths from the coarsest to the finest, the most liquid a m² drained passes on, m/s
+ * (their channels' cap), and numbers of a row of the cells' table. */
+export interface TileMeta { size: number; gutter: number; depths: [number, number]; runoff: number; row: number }
 /** The map the tiles are of: squares across and down, metres a square and the depth of a square. */
 export interface MapOf { w: number; h: number; cell_m: number; square_depth: number }
 
-/** Tiles kept on the GPU at most: those of a view at its depth and its ancestors, with room for a pan. */
-const MOST_TILES = 96;
+/** Tiles kept on the GPU at most: a view of 1200 x 900 css pixels touches at most 30 at its depth and 12 at the one
+ * above (a tile spans 256 to 512 css pixels, `TEXEL_CSS_PX`), and the coarsest; the rest is room for a pan. Each takes
+ * 676 kB on the card (10 bytes a texel), so 56 take 38 MB. */
+const MOST_TILES = 56;
+/** Of a tile, 16-bit floats a texel: the first plane four (the height as two, the wetness index, the channel's ratio),
+ * the second one (the logarithm of the channel's area). */
+const PLANE_A = 4, PLANE_B = 1;
 /** A new tile fades in over the one before it over this long, ms. */
 export const TILE_FADE_MS = 250;
 /** The view's tiles are asked for this share of its width and height past each of its edges, so a pan finds them. */
 const AHEAD = 0.25;
 /** The view is drawn at the depth whose texels take no more than this many css pixels: the spline that magnifies them
- * draws a texel of a pixel or two smooth, and each halving of it costs four times the tiles. */
-const TEXEL_CSS_PX = Math.SQRT2;
-/** Tiles asked of the worker at once: it makes the next while the page takes the last. */
+ * draws a texel of one or two pixels smooth, and each halving of it costs four times the tiles. */
+const TEXEL_CSS_PX = 2;
+/** Tiles asked of each worker at once: it makes the next while the page takes the last. */
 const MAKING = 3;
+/** Cores the page, the world's worker, a tiles' worker and the drawing keep busy. */
+const SPARE_CORES = 4;
+/** The tiles' workers: two where the browser has cores to spare beside the world's worker and the page (it says how
+ * many it has), else one. Each holds its own copy of the core and of the terrain's samples. */
+const WORKERS = (navigator.hardwareConcurrency ?? 1) > SPARE_CORES ? 2 : 1;
 /** A tile's key: its depth, row and column, as one number. */
 const KEY_ROW = 1 << 12, KEY_DEPTH = KEY_ROW * KEY_ROW;
 const keyOf = (depth: number, x: number, y: number) => depth * KEY_DEPTH + y * KEY_ROW + x;
@@ -34,9 +45,8 @@ const keyOf = (depth: number, x: number, y: number) => depth * KEY_DEPTH + y * K
 interface Kept { depth: number; x: number; y: number; layer: number; came: number; asked: number }
 
 export class GroundTiles {
-  private worker: Worker;
+  private workers: { worker: Worker; ready: boolean; making: number }[] = [];
   private url: string;
-  private ready = false;
   private kept = new Map<number, Kept>();
   /** The tiles the view asks for and has not, in order; those being made. */
   private queue: { depth: number; x: number; y: number }[] = [];
@@ -48,13 +58,16 @@ export class GroundTiles {
   depth: number;
   private free: number[] = Array.from({ length: MOST_TILES }, (_, k) => MOST_TILES - 1 - k);
   /** Tiles come, not yet on the GPU; the page and the tiles' numbers to send to it. */
-  private come: { layer: number; data: Float32Array }[] = [];
+  private come: { layer: number; data: Uint16Array }[] = [];
   private page = { w: 1, h: 1, data: new Float32Array(4) };
   private numbers = new Float32Array(4 * MOST_TILES);
   private pageDue = true;
   private numbersDue = true;
   private atlas: Texture | null = null;
+  private areas: Texture | null = null;
   private pages: Texture | null = null;
+  /** The last view asked for, to ask again after a lost context. */
+  private last: View | null = null;
   private tilesTex: Texture | null = null;
   private start = performance.now();
   private lastCame = -Infinity;
@@ -62,15 +75,19 @@ export class GroundTiles {
   constructor(source: string, wasm: ArrayBuffer, seed: number, size: number, readonly map: MapOf, readonly meta: TileMeta, private changed: () => void, error: (text: string) => void) {
     this.depth = meta.depths[0];
     this.url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
-    this.worker = new Worker(this.url);
-    this.worker.onerror = e => error(e.message);
-    this.worker.onmessage = e => {
-      const m = e.data as { kind: string; depth: number; x: number; y: number; data: Float32Array; text: string };
-      if (m.kind === 'error') return error(m.text);
-      if (m.kind === 'ready') { this.ready = true; return this.next(); }
-      if (m.kind === 'tile') this.took(m.depth, m.x, m.y, m.data);
-    };
-    this.worker.postMessage({ cmd: 'init', wasm, seed, size }, [wasm]);
+    for (let k = 0; k < WORKERS; k++) {
+      const w = { worker: new Worker(this.url), ready: false, making: 0 };
+      w.worker.onerror = e => error(e.message);
+      w.worker.onmessage = e => {
+        const m = e.data as { kind: string; depth: number; x: number; y: number; data: Uint16Array; text: string };
+        if (m.kind === 'error') return error(m.text);
+        if (m.kind === 'ready') { w.ready = true; return this.next(); }
+        if (m.kind === 'tile') { w.making--; this.took(m.depth, m.x, m.y, m.data); }
+      };
+      const copy = k === WORKERS - 1 ? wasm : wasm.slice(0);
+      w.worker.postMessage({ cmd: 'init', wasm: copy, seed, size }, [copy]);
+      this.workers.push(w);
+    }
   }
 
   /** Squares a tile of `depth` spans. */
@@ -78,13 +95,15 @@ export class GroundTiles {
   /** Tiles of `depth` across and down the map. */
   private across(depth: number): [number, number] { const s = this.squaresOf(depth); return [Math.ceil(this.map.w / s), Math.ceil(this.map.h / s)]; }
 
-  /** The tiles of view `v`: drawn at the depth whose texels take no more than `TEXEL_CSS_PX`, all its ancestors' first. */
+  /** The tiles of view `v`: drawn at the depth whose texels take no more than `TEXEL_CSS_PX`, its tiles there, at the
+   * depth above and at the coarsest, coarse first. */
   view(v: View): void {
+    this.last = v;
     const [d0, d1] = this.meta.depths, sq = this.map.square_depth;
     const depth = Math.min(Math.max(sq + Math.ceil(Math.log2(Math.max(v.s / TEXEL_CSS_PX, 1))), d0), d1);
     const cx = v.x + v.w / 2, cy = v.y + v.h / 2, asked = ++this.views, wanted: { depth: number; x: number; y: number; far: number }[] = [];
     this.inView.clear();
-    for (let d = d0; d <= depth; d++) {
+    for (const d of new Set([d0, Math.max(depth - 1, d0), depth])) {
       const s = this.squaresOf(d), [nx, ny] = this.across(d), ahead = d === depth ? AHEAD : 0;
       const range = (from: number, span: number, n: number) => [Math.max(0, Math.floor((from - ahead * span) / s)), Math.min(n - 1, Math.floor((from + span * (1 + ahead)) / s))];
       const [x0, x1] = range(v.x, v.w, nx), [y0, y1] = range(v.y, v.h, ny);
@@ -108,15 +127,19 @@ export class GroundTiles {
   /** Whether a tile still fades in at `now` (performance.now, ms). */
   fading(now: number): boolean { return now - this.start - this.lastCame < TILE_FADE_MS; }
 
-  /** Ask the worker for the next tiles of the queue, up to `MAKING` at once, while a layer is free or can be freed. */
+  /** Ask the workers for the next tiles of the queue, up to `MAKING` each at once (the least busy first), while a layer
+   * is free or can be freed. */
   private next(): void {
-    while (this.ready && this.making.size < MAKING && (this.free.length > this.making.size || this.oldest() !== null)) {
+    for (;;) {
+      const w = this.workers.filter(v => v.ready && v.making < MAKING).sort((a, b) => a.making - b.making)[0];
+      if (!w || !(this.free.length > this.making.size || this.oldest() !== null)) return;
       let t = this.queue.shift();
       const known = (q: { depth: number; x: number; y: number }) => this.kept.has(keyOf(q.depth, q.x, q.y)) || this.making.has(keyOf(q.depth, q.x, q.y));
       while (t && known(t)) t = this.queue.shift();
       if (!t) return;
       this.making.add(keyOf(t.depth, t.x, t.y));
-      this.worker.postMessage({ cmd: 'tile', depth: t.depth, x: t.x, y: t.y });
+      w.making++;
+      w.worker.postMessage({ cmd: 'tile', depth: t.depth, x: t.x, y: t.y });
     }
   }
 
@@ -127,8 +150,18 @@ export class GroundTiles {
     return best;
   }
 
+  /** After a lost context the card's tiles are empty: forget them and ask for the view's again. */
+  lost(): void {
+    this.kept.clear();
+    this.come = [];
+    this.free = Array.from({ length: MOST_TILES }, (_, k) => MOST_TILES - 1 - k);
+    this.numbers.fill(0);
+    this.numbersDue = this.pageDue = true;
+    if (this.last) this.view(this.last);
+  }
+
   /** Keep the tile that came, on a free layer or on the oldest's. */
-  private took(depth: number, x: number, y: number, data: Float32Array): void {
+  private took(depth: number, x: number, y: number, data: Uint16Array): void {
     this.making.delete(keyOf(depth, x, y));
     let layer = this.free.pop();
     if (layer === undefined) {
@@ -167,12 +200,16 @@ export class GroundTiles {
     this.page = { w: nx, h: ny, data };
   }
 
-  /** The textures the land program reads (land.wgsl): the atlas of the tiles, the page and each layer's tile
-   * (depth, column, row, when it came), sent to `gpu` as they change; and the time since the tiles started, ms. */
-  textures(gpu: Gpu): { atlas: Texture; pages: Texture; tiles: Texture; now: number } {
-    const side = this.meta.size + 2 * this.meta.gutter;
-    this.atlas ??= gpu.texture(side, side, 'rgba32float', MOST_TILES);
-    for (const c of this.come) gpu.write(this.atlas, c.data, 0, c.layer);
+  /** The textures the land program reads (land.wgsl): the tiles' two planes, the page and each layer's tile (depth,
+   * column, row, when it came), sent to `gpu` as they change; and the time since the tiles started, ms. */
+  textures(gpu: Gpu): { atlas: Texture; areas: Texture; pages: Texture; tiles: Texture; now: number } {
+    const side = this.meta.size + 2 * this.meta.gutter, n = side * side;
+    this.atlas ??= gpu.texture(side, side, 'rgba16float', MOST_TILES);
+    this.areas ??= gpu.texture(side, side, 'r16float', MOST_TILES);
+    for (const c of this.come) {
+      gpu.write(this.atlas, c.data.subarray(0, PLANE_A * n), 0, c.layer);
+      gpu.write(this.areas, c.data.subarray(PLANE_A * n, (PLANE_A + PLANE_B) * n), 0, c.layer);
+    }
     this.come = [];
     if (this.pageDue) {
       this.makePage();
@@ -182,12 +219,12 @@ export class GroundTiles {
     }
     this.tilesTex ??= gpu.texture(MOST_TILES, 1, 'rgba32float');
     if (this.numbersDue) { gpu.write(this.tilesTex, this.numbers); this.numbersDue = false; }
-    return { atlas: this.atlas, pages: this.pages!, tiles: this.tilesTex, now: performance.now() - this.start };
+    return { atlas: this.atlas, areas: this.areas, pages: this.pages!, tiles: this.tilesTex, now: performance.now() - this.start };
   }
 
   stop(gpu: Gpu | null): void {
-    this.worker.terminate();
+    this.workers.forEach(w => w.worker.terminate());
     URL.revokeObjectURL(this.url);
-    if (gpu) for (const t of [this.atlas, this.pages, this.tilesTex]) if (t) gpu.drop(t);
+    if (gpu) for (const t of [this.atlas, this.areas, this.pages, this.tilesTex]) if (t) gpu.drop(t);
   }
 }
