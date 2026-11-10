@@ -29,12 +29,9 @@ gives the camera's path, one line a change: `MONTH X Y W H DEPTH` (from month MO
 row Y, W x H squares, asks for cells of DEPTH; a square is depth 2), or `MONTH` alone (the camera goes away). The path
 is an input of the run: the snapshot and the tape keep it, so the same seed and path give the same world.
 
-In the live viewer, zooming in on the map refines the world there: the page sends the window in view and the depth the
-zoom calls for to the core as a shot of the camera's path, and the map shows the fine cells over the whole-map frame (a
-budget of 1500 cells, none finer than depth 10: 7.8 m, a street). The world steps slower by itself while fine cells are
-in view; the page shows the date, the months per second it reaches, the cells and the finest depth. Refinement runs
-while the world plays. After 3 minutes without input the page sends the camera away (a recorded change of the camera),
-so the world joins its fine cells and runs at the coarse pace again; the next zoom, pan or click brings it back.
+The live viewer's world has no budget of cells: its cells stay those as built, whatever the zoom. Zoom is a matter of
+drawing only: the map draws every zoom from the cells (below). The page shows the date, the months per second the world
+reaches and the cells.
 
 The map is drawn on the graphics card at the screen's own pixels: with WebGPU where the browser has it, else with
 WebGL2. The shaders are written once in WGSL (`web/shaders/`); the build (`npm run build`) checks them and writes them

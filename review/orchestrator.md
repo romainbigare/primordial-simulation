@@ -40,7 +40,7 @@ For the next agent who leads the work. Simple English, as the owner asks. Read t
 - **`main` is the base branch (the owner's decision).** Work on the session's own branch, push it freely; push to
   `main` (a fast-forward) only after the gate and all the slow tests pass on the exact commit.
 - **Look at the pictures yourself before publishing**, at the owner's views: a coast and a hill at the 200 m, 50 m,
-  20 m and 10 m scale bars, after the cells refine (the shoot script below). A test or a number is not enough: square
+  20 m and 10 m scale bars, after the world played a while at each zoom (the shoot script below). A test or a number is not enough: square
   edges have come back twice after green gates.
 - For now (the owner's decision) long runs and the live page run without animals (`ew run --roster --plants`): the
   work is on the ground, the liquid, the cover and the drawing.
@@ -105,9 +105,9 @@ a merge:
    `files: {"ew.wasm": {"from": <the copied wasm>, "contentType": "application/wasm"}}`. If it refuses because the
    published `ew.wasm` was not read in this session, read it first (`action: read`, `path: ew.wasm`), then publish.
 4. Check the page in a browser before publishing (serve `web/dist`, Playwright is installed; headless uses WebGL2):
-   no console errors, a zoom to the finest cells draws.
+   no console errors, the fine picture draws at 11 wheel steps.
 
-The shoot script (drives the page, keeps it playing so the cells refine, takes a picture per zoom):
+The shoot script (drives the page, keeps it playing, takes a picture per zoom):
 `node shoot2.js PORT OUTDIR TAG YEARS "x,y;x,y" "7,11,14"`. It lives on the branch `tools/shoot` (study files stay off
 main): `git show origin/tools/shoot:shoot2.js > <a scratch folder>/shoot2.js`.
 

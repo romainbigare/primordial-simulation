@@ -18,10 +18,8 @@ interface Core {
   meta(): number;
   frame(): number;
   fine(x: number, y: number, w: number, h: number, depth: number): number;
-  set_camera(x: number, y: number, w: number, h: number, depth: number, rest: number): void;
   things(x: number, y: number, w: number, h: number): number;
   cells(): number;
-  finest(): number;
   out_len(): number;
 }
 type Command =
@@ -29,12 +27,8 @@ type Command =
   | { cmd: 'new'; seed: number; size: number }
   | { cmd: 'play'; on: boolean }
   | { cmd: 'rate'; rate: number }
-  | { cmd: 'look'; look: Look | null; rest: boolean }
   | { cmd: 'things'; at: [number, number, number, number] | null }
   | { cmd: 'fine'; at: FineAt | null };
-
-/** Where the camera looks: the window in map squares (from column x and row y) and the depth of cells it asks for. */
-interface Look { x: number; y: number; w: number; h: number; depth: number }
 
 /** Longest time a tick steps before it posts a frame and lets messages in, ms. */
 const TICK_MS = 50;
@@ -54,10 +48,6 @@ let rate = 12;
 let due = 0;
 let lastTick = 0;
 let timer = 0;
-/** Whether the camera is on a window. */
-let cameraOn = false;
-/** Whether the camera was sent away to rest (the core's budget of cells is then the cells as built). */
-let resting = false;
 /** The window (x, y, w, h in squares) whose things the page draws one by one (null: none). */
 let thingsAt: [number, number, number, number] | null = null;
 /** The window the page draws finer than its cells (null: none), whether it waits for its raster, and when the last was made (ms). */
@@ -91,7 +81,7 @@ function postFrame(kind: 'world' | 'frame'): void {
     now = fineLast = performance.now(); fineDue = false;
   }
   if (now - since >= PACE_MS) { pace = (stepped * 1000) / (now - since); stepped = 0; since = now; }
-  const stats = { cells: c.cells(), finest: c.finest(), pace };
+  const stats = { cells: c.cells(), pace };
   const moved = [frame.buffer, ...(win ? fineBuffers(win) : []), ...(things ? [things.buffer] : [])];
   host.postMessage({ kind, meta: head, frame, year: c.year(), day: c.day(), stats, fine: win, things }, moved);
 }
@@ -130,18 +120,11 @@ host.onmessage = async e => {
     } else if (m.cmd === 'new' && core) {
       start(false);
       if (core.new_world(m.seed, m.size) !== 0) throw new Error('The world was refused.');
-      due = 0; cameraOn = false; resting = false; thingsAt = null; fineAt = null; stepped = pace = 0;
+      due = 0; thingsAt = null; fineAt = null; stepped = pace = 0;
       postFrame('world');
     } else if (m.cmd === 'play') start(m.on);
     else if (m.cmd === 'rate') rate = m.rate;
-    else if (m.cmd === 'look' && core) {
-      const look = m.look;
-      if (look) core.set_camera(look.x, look.y, look.w, look.h, look.depth, 0);
-      else if (cameraOn || resting || m.rest) core.set_camera(0, 0, 0, 0, 0, m.rest ? 1 : 0);
-      cameraOn = look !== null;
-      resting = m.rest;
-      if (!playing) postFrame('frame');
-    } else if (m.cmd === 'things' && core) {
+    else if (m.cmd === 'things' && core) {
       thingsAt = m.at;
       if (!playing) postFrame('frame');
     } else if (m.cmd === 'fine' && core) {

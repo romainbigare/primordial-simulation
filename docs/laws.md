@@ -351,17 +351,8 @@ back at the end of the month's changes naming the cell that then holds that plac
 **The camera** (`refine::Camera`) is an input of the run: from given months on, a window of the map in squares and
 the depth it asks for. It is part of the run's plan (`worldgen::schedule`), so a snapshot carries it, and the tape
 holds it (`docs/tape.md`). The score is worked out cell by cell in order and the changes made one at a time, so the
-same seed and the same camera path give the same world on any count of threads. **The live viewer's camera**: when the
-player zooms or pans, the page sends the window in view and the depth the zoom calls for (cells of about 6 screen pixels,
-from a zoom of 1.8 times the fit on) to the core (`set_camera`), which adds a shot at the month about to be stepped to the
-run's camera path, as `ew run --camera` reads one; zooming out sends a window of no area, and so does the page after
-`IDLE_MINUTES` (3) of wall-clock time with no input from the player (a zoom, a pan, a click, a key) the camera goes
-away with `rest` at the month about to be stepped, a recorded change of the camera like any other (a shot of no area
-that also sets the budget of cells to the cells as built, each cell counting 4^(built − depth) of a built cell): the
-cells join back, the quietest first, at most `MOST_CHANGES` a month, and no life-driven split takes the room, so the
-world runs at the coarse pace again; the next input sends the view again, with the page's budget. The core never reads a clock. The live world
-refines at each month's start (`World::refine`) under a budget of 1500 cells and no finer than depth 10 (7.8 m, a
-street; its bodies step every 2.8 hours), so the world steps slower by itself while fine cells are in view.
+same seed and the same camera path give the same world on any count of threads. The core never reads a clock. The
+live viewer's world has no budget of cells and never refines: its zoom is a matter of drawing only.
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.
 **One ground temperature**: every law and the tape read that of Flow's last step: life (bodies, the cover, parts) its

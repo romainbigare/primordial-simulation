@@ -3,7 +3,6 @@
 //! form of a tape's header, `frame` is the bytes of one tape frame (`tape::frame_now`), `fine` a window finer than its
 //! cells (`tape::fine`), `things` the list of what lies in the cells of a window (`tape::things`).
 
-use pcore::refine::Shot;
 use pcore::World;
 use serde_json::json;
 use std::cell::RefCell;
@@ -15,13 +14,6 @@ use worldgen::schedule::Schedule;
 const LIFE_YEAR: u64 = 2;
 /// Rounds of mutation given to the founders: the default of `ew run`.
 const SPRAY_ROUNDS: u32 = 20;
-
-/// The most cells the live map holds while refinement splits them: about twice an island of 32 x 32 squares (about
-/// 800 cells), which a worker steps in a browser at a usable pace.
-const CELL_BUDGET: u32 = 1500;
-/// The finest depth below its air block refinement takes a cell to in the live world: 7.8 m on a 2 km island, a
-/// street, whose bodies step every 2.8 hours.
-const FINEST_DEPTH: u8 = 10;
 
 /// The world, what is placed when, the terrain's samples found so far (`tape::Samples`), and the bytes last handed to
 /// the page (it reads them until the next call).
@@ -50,11 +42,11 @@ fn give(bytes: Vec<u8>) -> *const u8 {
 }
 
 /// Make an island of `size` x `size` cells from `seed`, with the schedule of `ew run --roster --plants`: the starting
-/// kinds of cover, no animals, so the page runs fast while the work is on the ground, the liquid and the cover. Returns 0, or 1 if the world is refused.
+/// kinds of cover, no animals, so the page runs fast while the work is on the ground, the liquid and the cover. Its
+/// cells stay those as built: the map draws every zoom from the cells (`fine`). Returns 0, or 1 if the world is refused.
 #[no_mangle]
 pub extern "C" fn new_world(seed: u32, size: u32) -> u32 {
-    let mut world = worldgen::new_world(seed as u64, size as usize, size as usize);
-    (world.cfg.cell_budget, world.cfg.finest_depth) = (CELL_BUDGET, FINEST_DEPTH);
+    let world = worldgen::new_world(seed as u64, size as usize, size as usize);
     if world.cfg.validate().is_err() {
         return 1;
     }
@@ -64,12 +56,10 @@ pub extern "C" fn new_world(seed: u32, size: u32) -> u32 {
     0
 }
 
-/// Step one month: first refine the cells by the plan's camera path (`World::refine`), then at a year's start place
-/// what the schedule says is due.
+/// Step one month: at a year's start, first place what the schedule says is due.
 #[no_mangle]
 pub extern "C" fn step_month() {
     with(|l| {
-        l.world.refine(&l.plan.camera);
         if l.world.month() % l.world.cfg.months_per_year as u64 == 0 {
             l.plan.place(&mut l.world);
         }
@@ -78,29 +68,10 @@ pub extern "C" fn step_month() {
     })
 }
 
-/// Send the camera to the window from column `x` and row `y`, `w` x `h` squares, asking for cells of `depth` below
-/// their air block, from the next month on: a shot of the run's camera path (`ew run --camera`), so the run can be made
-/// again. A window of no area sends the camera away, and with `rest` not 0 the budget of cells back to the cells as built.
-#[no_mangle]
-pub extern "C" fn set_camera(x: f64, y: f64, w: f64, h: f64, depth: u32, rest: u32) {
-    with(|l| {
-        let month = l.world.month();
-        let shots = &mut l.plan.camera.shots;
-        shots.retain(|s| s.month < month);
-        shots.push(Shot { month, x, y, w, h, depth: depth.min(u8::MAX as u32) as u8, rest: rest != 0 });
-    })
-}
-
 /// The cells now.
 #[no_mangle]
 pub extern "C" fn cells() -> u32 {
     with(|l| l.world.mesh.cells().n() as u32)
-}
-
-/// The finest depth below its air block that a cell has now.
-#[no_mangle]
-pub extern "C" fn finest() -> u32 {
-    with(|l| l.world.map.leaves().iter().map(|c| c.depth).max().unwrap_or(0) as u32)
 }
 
 /// Years since the start, with their fraction.
@@ -122,7 +93,7 @@ pub extern "C" fn meta() -> *const u8 {
         let (w, g) = (&l.world, &l.world.map);
         let layers: Vec<_> = LAYERS.iter().map(|l| json!({"name": l.name, "unit": l.unit, "scale": l.scale, "min": l.min, "max": l.max})).collect();
         json!({
-            "w": g.w, "h": g.h, "cell_m": g.side, "square_depth": g.square_depth(), "finest_depth": w.cfg.finest_depth, "globe": g.wrap, "lat_north": w.cfg.lat_north, "lat_south": w.cfg.lat_south,
+            "w": g.w, "h": g.h, "cell_m": g.side, "square_depth": g.square_depth(), "globe": g.wrap, "lat_north": w.cfg.lat_north, "lat_south": w.cfg.lat_south,
             "seed": w.seed, "days_per_year": w.days_per_year(), "layers": layers,
             "frames": [], "series": {}, "series_units": {}, "events": [], "months": [],
         })

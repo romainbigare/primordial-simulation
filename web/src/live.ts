@@ -3,18 +3,16 @@ import { FineAt } from './fine';
 import { CoverField } from './canopy';
 import { Fields } from './fields';
 
-/** Where the camera looks: the window in map squares and the depth of cells it asks for. */
-export interface Look { x: number; y: number; w: number; h: number; depth: number }
 /** The window in view finer than its cells as the worker hands it (fine.ts): its window, its fields (fields.ts), the
  * times the core took to make it and the worker to make its fields, ms, and the cover's field of its pixels (canopy.ts). */
 export interface FineWindow { at: FineAt; fields: Fields; made: number; fieldsMs: number; cover: CoverField | null }
-/** What the core reports with each frame: its cells, the finest depth among them, and the months stepped per second of real time. */
-export interface Stats { cells: number; finest: number; pace: number }
+/** What the core reports with each frame: its cells and the months stepped per second of real time. */
+export interface Stats { cells: number; pace: number }
 
 /** The live world: the core in a Web Worker (worker.ts) that makes a world, steps it and posts a frame as bytes. */
 export class Live {
   world: World | null = null;
-  stats: Stats = { cells: 0, finest: 0, pace: 0 };
+  stats: Stats = { cells: 0, pace: 0 };
   private worker: Worker;
   private url: string;
 
@@ -47,8 +45,6 @@ export class Live {
   play(on: boolean): void { this.worker.postMessage({ cmd: 'play', on }); }
   /** Months of the world per second of real time. */
   rate(monthsPerSecond: number): void { this.worker.postMessage({ cmd: 'rate', rate: monthsPerSecond }); }
-  /** Look at a window (the core refines the cells there), or at the whole map only; `rest`: the camera is away and the cells go back to those as built. */
-  look(look: Look | null, rest = false): void { this.worker.postMessage({ cmd: 'look', look, rest }); }
   /** Ask with every frame for the things of a window (x, y, w, h in squares) to draw one by one, or for none. */
   things(at: [number, number, number, number] | null): void { this.worker.postMessage({ cmd: 'things', at }); }
   /** Ask for the fields of a window finer than its cells, at once and then about once a second while the world plays, or for none. */

@@ -3,7 +3,7 @@ import { CLASSES, PATH_LAYER, mapFields, rampFor, rampCss } from './earth';
 import { MapView, View } from './map';
 import { MapLook } from './field-window';
 import { Charts } from './charts';
-import { Live, Look, Stats, FineWindow } from './live';
+import { Live, Stats, FineWindow } from './live';
 import { FineAt } from './fine';
 import { Avatars, THINGS_PX } from './avatars';
 import { Vegetation } from './vegetation';
@@ -20,12 +20,8 @@ const SPEEDS = [1, 2, 4, 8, 16, 32];
 /** The live world's speeds, months of the world per second of real time. */
 const LIVE_SPEEDS = [3, 12, 36, 120, Infinity];
 const LIVE_SIZE = 22;
-/** The zoom (1: the map fits) from which the page asks the core for finer cells. */
-const FINE_ZOOM = 1.8;
-/** Pixels a cell of the depth asked for takes on screen, about. */
-const FINE_CELL_PX = 6;
-/** Time the view rests before the core is told where it looks, ms. */
-const LOOK_MS = 150;
+/** Time the view rests before the worker is asked for the window's raster and things, ms. */
+const ASK_MS = 150;
 /** The live map is drawn finer than its cells, a pixel a leaf of the depth whose leaves take at least FINE_PX css
  * pixels, no smaller than FINE_LEAST_M metres (closer, the picture is smoothed up: the ground below a metre goes on
  * smooth, tape/src/fine/heights.rs), and no more than FINE_MOST pixels. */
@@ -36,23 +32,17 @@ const FINE_MOST = 360_000;
  * or a zoom out shows it until the next comes; it fades out over the outer half of that, so the squares around it show
  * no hard edge. */
 const FINE_MARGIN = 0.2;
-/** Minutes without input (a zoom, a pan, a click, a key) after which the page sends the camera away, as a camera change
- * the run records: the core then joins the fine cells back to those as built, and the world runs at the coarse pace again.
- * The page's `?idle=MINUTES` sets it for a test. */
-const IDLE_MINUTES = Number(new URLSearchParams(location.search).get('idle')) || 3;
-/** How often the page checks for that, ms. */
-const IDLE_CHECK_MS = 1000;
 
 let world: World | null = null;
 let live: Live | null = null;
 let frame = 0, speed = 4, playing = false, view = 'earth', layer: string | null = null, paths = false;
 let cls: Uint8Array = new Uint8Array(0);
 
-const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspect(), v => lookSoon(v));
+const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspect(), v => viewSoon(v));
 /** The window in view finer than its cells (live world only, its fields made by the worker), and the window asked
  * for. */
 let fine: FineWindow | null = null, fineAsked = '';
-let lookTimer = 0, looking = '';
+let viewTimer = 0;
 /** The things of the window in view, drawn one by one when the map is close (live world only), and the window asked for. */
 const avatars = new Avatars();
 let thingsKey = '';
@@ -70,8 +60,6 @@ map.overlay = (ctx, ox, oy, s) => avatars.draw(ctx, ox, oy, s, px => map.under(p
 let drawnWith = '';
 map.ready.then(g => { drawnWith = g ? g.kind : ''; if (!g) say('This browser has neither WebGPU nor WebGL2, so the map cannot be drawn.'); });
 avatars.listen($<HTMLCanvasElement>('cv'), () => { inspect(); map.redraw(); });
-/** When the player last gave input (performance.now, ms), and whether the camera was sent away for lack of it. */
-let lastInput = performance.now(), idle = false;
 const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
 
 // ---- loading
@@ -298,7 +286,7 @@ async function startLive(): Promise<void> {
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
     ready: () => newWorld(),
-    world: w => { world = w; looking = fineAsked = ''; showFine(null); thingsKey = ''; avatars.set(null, w.meta.cell_m); vegetation.setThings([]); setup(w); showStats(l.stats); },
+    world: w => { world = w; fineAsked = ''; showFine(null); thingsKey = ''; avatars.set(null, w.meta.cell_m); vegetation.setThings([]); setup(w); showStats(l.stats); },
     things: data => { if (live === l && world) { avatars.set(data, world.meta.cell_m); vegetation.setThings(avatars.list); } },
     frame: (stats, win) => {
       if (live !== l) return;
@@ -311,11 +299,11 @@ async function startLive(): Promise<void> {
   setMode(true);
   say('Making the world…');
 }
-/** The camera follows the view once it rests: from `FINE_ZOOM` on, the core is asked for cells of the depth whose cells take about `FINE_CELL_PX` pixels; at any zoom, for a raster of the window finer than its cells. */
-function lookSoon(v: View): void {
+/** Once the view rests, the worker is asked for a raster of the window finer than its cells and for its things. */
+function viewSoon(v: View): void {
   if (!live || !world) return;
-  clearTimeout(lookTimer);
-  lookTimer = window.setTimeout(() => { lookAt(v); fineOf(v); thingsOf(v); }, LOOK_MS);
+  clearTimeout(viewTimer);
+  viewTimer = window.setTimeout(() => { fineOf(v); thingsOf(v); }, ASK_MS);
 }
 /** The window in view and `FINE_MARGIN` about it, on the leaves of the depth whose leaves take `FINE_PX` css pixels or
  * more (no smaller than `FINE_LEAST_M`, no more than `FINE_MOST` pixels): the core draws it a pixel a leaf. */
@@ -345,39 +333,6 @@ function thingsOf(v: View): void {
   if (!at) { avatars.set(null, world?.meta.cell_m ?? 1); vegetation.setThings([]); }
   live.things(at);
 }
-function lookAt(v: View): void {
-  const m = world?.meta;
-  if (!live || !m || m.square_depth === undefined || m.finest_depth === undefined || idle) return;
-  const fineDepth = Math.min(m.finest_depth, m.square_depth + Math.floor(Math.log2(v.s / FINE_CELL_PX)));
-  const grain = 2 ** (fineDepth - m.square_depth); // cells of the depth asked along a square
-  let look: Look | null = null;
-  if (v.zoom >= FINE_ZOOM && fineDepth > m.square_depth && v.w > 0 && v.h > 0) {
-    const x = Math.floor(v.x * grain) / grain, y = Math.floor(v.y * grain) / grain;
-    look = { x, y, w: (Math.ceil((v.x + v.w) * grain) - x * grain) / grain, h: (Math.ceil((v.y + v.h) * grain) - y * grain) / grain, depth: fineDepth };
-  }
-  const key = JSON.stringify(look);
-  if (key === looking) return;
-  looking = key;
-  live.look(look);
-}
-
-/** Input from the player: the camera follows the view again if it was sent away. */
-function touched(): void {
-  lastInput = performance.now();
-  if (!idle) return;
-  idle = false; looking = '';
-  lookAt(map.view());
-  if (live) showStats(live.stats);
-}
-for (const kind of ['pointerdown', 'wheel', 'keydown']) addEventListener(kind, touched, { capture: true, passive: true });
-/** After `IDLE_MINUTES` without input the camera goes away: the core is told to look at nothing and to bring its cells back to those as built. */
-setInterval(() => {
-  if (!live || !world || idle || performance.now() - lastInput < IDLE_MINUTES * 60_000) return;
-  idle = true;
-  looking = JSON.stringify(null); live.look(null, true);
-  showStats(live.stats);
-}, IDLE_CHECK_MS);
-
 /** Draw the window in view finer than its cells over the map, fading in over the last one (none: no window). */
 function showFine(win: FineWindow | null): void {
   fine = win;
@@ -386,18 +341,16 @@ function showFine(win: FineWindow | null): void {
   vegetation.setFine(win?.cover ?? null, at);
 }
 
-/** The date, the pace and the cells: the world steps slower by itself while there are fine cells. */
+/** The date, the pace, the cells and the raster of the window in view. */
 function showStats(s: Stats): void {
   const el = $('stats'), m = world?.meta;
   if (!live || !m) { el.hidden = true; return; }
   const y = m.frames[0].year, day = Math.floor((y - Math.floor(y)) * m.days_per_year) + 1;
-  const finest = m.square_depth === undefined ? '' : s.finest <= m.square_depth ? 'squares' : `${fmt(m.cell_m / 2 ** (s.finest - m.square_depth))} m`;
   el.hidden = false;
   el.innerHTML = [['date', `year ${Math.floor(y)}, day ${day}`], ['pace', `${playing ? fmt(s.pace) : '0'} of ${speed === Infinity ? 'max' : speed} months/s`],
-    ['cells', String(s.cells)], ['finest', `depth ${s.finest} (${finest})`],
+    ['cells', String(s.cells)],
     ...(fine ? [['detail', `${fine.fields.w}×${fine.fields.h} px of ${fmt(m.cell_m / 2 ** (fine.at.depth - (m.square_depth ?? 0)))} m, made in ${fine.made.toFixed(0)} ms, its fields in ${fine.fieldsMs.toFixed(0)} ms`]] : []),
-    ...(drawnWith ? [['map', `drawn with ${drawnWith}`]] : []),
-    ['camera', idle ? `away: no input for ${IDLE_MINUTES} min` : `goes away after ${IDLE_MINUTES} min without input`]].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
+    ...(drawnWith ? [['map', `drawn with ${drawnWith}`]] : [])].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
 }
 
 function newWorld(): void {
