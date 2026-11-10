@@ -78,16 +78,18 @@ through the next sample where a tributary joins; of the channels that reach a te
 least, the one that covers it first as the flux grows (a channel covers a point nearer its line than half its width,
 which goes as (flux per m² drained x area)^b). That least, capped, is continuous across the texels, so a shader blends
 it. Off the map a texel is its edge's. Each number is a function of the seed, the map and the place
-alone: the same in every tile that holds it. Apart, `Ground::pond_tile` lays out over the same texels the pond each lies
-in (`Samples::pond` of the sample that holds its centre; u32, `u32::MAX` for none) and `Ground::ponds` gives each pond's
-level, so a pond can be drawn flat at its own level (the page does not read them yet). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
+alone: the same in every tile that holds it. The second plane holds, beside the channel's area, one more than the pond
+each texel lies in (`Ground::pond_tile`: the pond of the sample that holds its centre, or where that is none, of the
+first of its eight neighbours whose pass the texel lies under, so a pond's shore is where the ground rises over its
+level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
 frame: the melting point of the frozen cover, K, then for each square row by row 11 f32 (`ROW`) of the cell that holds
 its centre: the terrain's mean height over the cell, m; its ground's temperature, K, and how fast its air cools with
 height, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest ground, m
 (`flow::levels`), and the depth that stands, m; the liquid in its pores and what they hold full, m (`flow::means`), and
 the level of the wetness index its soil's liquid departs about (`inside::soil_level` over the samples inside the cell;
-0 where the pores are dry or full); the volume of liquid it passes on per m² drained, m/s (its flux over the drained
-area of its samples whose way leaves it, at the mol per m³ of its liquid). Before Flow built its state the level and
+0 where the pores are dry or full); the volume of liquid that runs through its main channel per m² drained there, m/s
+(the discharge of the sample of the cell through which the most runs, `World::discharge`, over the area that drains
+through that sample, at the mol per m³ of its liquid). Before Flow built its state the level and
 lowest ground are its solid surface and the depth that stands is its liquid's. Then for each square row by row its
 cell's kinds of cover (`tape/src/stands.rs`), `KINDS` (4) of `KIND_ROW` (16) f32 each, the heaviest first: the slots of
 one starting kind joined, their genes the mean by built cover; of each its starting kind (-1: none); its built cover,
@@ -98,7 +100,8 @@ its moisture gene and frost gene, K; its fuel over its reserve; its activity on 
 and the share of it frozen this month (`Physics::frozen`). Its plants come from its mass alone: its crowns cover the
 share 1 - e^(-leaf area / `CLOSE_LAI`) of the ground, in patches where they close; there the stand has thinned to
 (`THIN_KG` / kg per m²)² plants a m² (Yoda and others 1963), each crown the ground it holds; a plant's walls make a stem
-of `STEM_FORM` and `STEM_SOLID` at the walls' density, as tall as `TALL` × its width^(2/3) (McMahon 1973). The page's graphics card blends the table between the
+of `STEM_FORM` and `STEM_SOLID` at the walls' density, as tall as `TALL` × its width^(2/3) (McMahon 1973). Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it),
+at which the page draws the pond's liquid flat over the ground that lies under it, the pond each texel names. The page's graphics card blends the table between the
 squares' centres and applies the laws inside a cell at each pixel of the tiles' ground (laws.md 0, "Inside a cell"). A tape's map is drawn
 from its frames alone: the page makes fields of the squares (`web/src/fields.ts`, a texel a square: the height and its
 slope, the liquid's surface over the ground, below a dry square's ground by the depth it lacks to be wet and its height
@@ -131,7 +134,8 @@ a lot part by part at places keyed by its id and each part's index, and is not r
 | `liquid_land` | km³ | liquid on land |
 | `ice_land` | km³ | frozen cover on land |
 | `rain`, `rain_land` | mol/m²/s | mean rain, and on land (a moving average over about a year) |
-| `evap_land`, `runoff_sea` | mol/m²/s | on land, what rises into the air less what condenses on the ground, and what runs over the surface into cells under the sea's level, per m² of land (moving averages over about a year): with `rain_land` the land's water budget |
+| `evap_land`, `runoff_sea` | mol/m²/s | on land, what rises into the air less what condenses on the ground, and what runs down the terrain's samples from land cells into the open low ground (`World::off_land`), per m² of land (moving averages over about a year): with `rain_land` the land's water budget |
+| `lakes`, `lake_area`, `lake_m3`, `low_level` | , km², km³, m | the bodies of standing liquid above the open low ground that hold liquid over their cells' pores (`World::pools`, laws.md 1.2), the area their liquid covers and its volume; and the level of the open low ground's largest body |
 | `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) that are rivers (`tape::is_river`): a liquid flux over `tape::RIVER_FLOOR` and over `tape::RIVER_CATCH` times what the cell's own area sheds (`catch`). The report counts the same way |
 | `cells` | | the cells of the map |
 | `bodies` | | bodies (nodes and individuals) |

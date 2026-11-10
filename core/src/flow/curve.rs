@@ -40,10 +40,6 @@ pub(super) struct Curve {
 }
 
 impl Curve {
-    /// A flat ground of `area` m², standing no terrain (one floor, so its levels are the flat column's exactly).
-    pub(super) fn flat(area: f64) -> Curve {
-        Curve { floors: vec![(0.0, area)], sides: Vec::new(), side: area.sqrt() }
-    }
     /// The departure of the cell's lowest ground from its mean surface, m: where its liquid leaves it.
     pub(super) fn low(&self) -> f64 {
         self.floors[0].0

@@ -13,14 +13,14 @@ use std::collections::BinaryHeap;
 const TOUCH_WORK: usize = 90;
 
 /// Where each air node's rain falls, as of the step's start (`wet`): per node its entries (`Seen`), each a place: a
-/// cell alone (its index) or a patch of the low basin (`n` + its index in `patches`, `Place`); and per cell its place.
+/// cell alone (its index) or a patch of a body (`n` + its index in `patches`, `Place`); and per cell its place.
 pub(super) struct Wet {
     pub(super) nodes: Vec<Seen>,
     pub(super) patches: Vec<Place>,
     place_of: Vec<u32>,
 }
 
-/// A patch of the low basin as its rain finds it, one surface (`surf::patches`): its cells with the share of its area
+/// A patch of a body of standing liquid as its rain finds it, one surface (`surf::patches`): its cells with the share of its area
 /// each holds, the air nodes its cells see with their weights by area (`Corners::by_area`), and how much colder than that
 /// air the air touching it is, a mean by area, K (`Scratch::cool`).
 pub(super) struct Place {
@@ -262,7 +262,7 @@ impl Pool {
 }
 
 /// Where each node's rain falls, as of the step's start (`Wet`): on each place that sees the node (`lerp`; a patch of
-/// the low basin `patches` as one), by the share `a` of the node's air over it (its weight there times its area over
+/// the bodies' `patches` as one), by the share `a` of the node's air over it (its weight there times its area over
 /// the area it sees), past the node's saturation ratio `e` at which the air touching it saturates (colder on higher
 /// ground). The node rains what its places hold over their saturation, summed (laws.md 1.5).
 pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64], patches: &[Vec<u32>]) -> Wet {

@@ -1,7 +1,7 @@
 //! The working memory of Flow (`Scratch`), its tables, and the recheck of what is present (`refresh`).
 
 use super::{air, land::NONE, range};
-use crate::{chem::Chemistry, solve::downhill::Order, store::Class, AIR, World};
+use crate::{chem::Chemistry, store::Class, AIR, World};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Numbers of one substance Flow reads often (from `chem::Substance`).
@@ -170,9 +170,10 @@ pub struct Scratch {
     pub(super) cover: Vec<[f64; 3]>,
     /// The gases that dissolve in the ground's liquid this month (`air::henry`), each with its index in `State::gas`.
     pub(super) henry: Vec<(usize, usize)>,
-    /// The order of the liquid's pass, by a priority flood over the ground (`liquid`).
-    pub(super) order: Order,
-    /// The basin, as the last full build of the state of ground nodes found it (`basin::find`).
+    /// The bodies of standing liquid of the cells and the ways to them (`bodies::Bodies`).
+    pub(super) bodies: super::bodies::Bodies,
+    /// The bodies as the last full build of the state of ground nodes found them, their levels as the last runoff's pass
+    /// left them (`basin::find`).
     pub(super) basin: super::basin::Basin,
     /// The table of the saturation pressure of each substance, as far up as the exchange last asked (`air::Sat`).
     pub(super) sat: Vec<air::Sat>,

@@ -93,7 +93,10 @@ pub struct World {
     pub base_z: f64,
     /// Liquid falling on each ground cell, mol/(m² s), a moving average over about a year, for the tape
     pub rain: Vec<f32>,
-    /// Liquid moved out of each ground cell, mol/s, a moving average over about a year; it pushes parts (`bond::load`)
+    /// The liquid that runs through each of the terrain's samples down its way, mol/s (`flow::runoff`), and of each
+    /// ground cell the most through one of its samples, its main channel: moving averages over about a year; the
+    /// cell's pushes parts (`bond::load`)
+    pub discharge: Vec<f32>,
     pub liquid_flux: Vec<f32>,
     /// What rises from each ground cell into the air less what condenses on it, mol/(m² s), and what runs over the
     /// surface of each land cell into cells that are not land (`is_land`), mol/s: moving averages over about a year,

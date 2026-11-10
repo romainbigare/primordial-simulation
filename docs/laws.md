@@ -6,7 +6,7 @@ orderings) is said once, in the code's doc comments; the code is the truth. Numb
 
 **Where the code is** (`core/src/`): time in `clock/` and `schedule.rs`; the shape of the world in `space/`; how a
 cell's means lie over its own ground in `inside/`; shared
-maths in `solve/` (`sweep`, `downhill`, `line`); nodes and books in `store/`, `world.rs`, `check.rs`; ground heat in
+maths in `solve/` (`sweep`, `line`); nodes and books in `store/`, `world.rs`, `check.rs`; ground heat in
 `ground.rs`; settings in `params.rs`, constants in `units.rs`; bodies in `body/`, `life.rs`, `nodes.rs`, `lineage.rs`,
 `brain.rs`; the cells as bodies see them in `survey.rs`; paths in `lanes.rs`; keyed random numbers in `rng.rs`; the
 tape's events in `event.rs`; threads in `par.rs` (the same results with and without, on any count of threads).
@@ -77,7 +77,7 @@ is the way a cell faces the sun (1.4): its mean rise toward the south, each samp
 (one-sided at the map's edge) by area (`Terrain::rise_south`), found once when the world is built and kept
 (`World::rise_south`). **The terrain's channels** (`space::network`, found with the samples): each sample's liquid runs where the
 flood sends it (from every sample of land a way leads to the open low ground), and the area that drains through a
-sample is its own and all that runs to it. Below the samples the ground goes on as one function of the
+sample is its own and all that runs to it; the runoff runs down these ways (1.2). Below the samples the ground goes on as one function of the
 seed and the map that every cell and every pixel a shell draws read (`space::below`, `Terrain::heights`): the means of
 the quarters of a leaf of side ℓ depart from its mean by a smooth continuation of the coarser heights that keeps it:
 the quarters lean as the quartic through the leaf and two neighbours each way on each axis does (average
@@ -214,13 +214,10 @@ build of Flow's state, and a part run alone, are booked at their own end. In eac
 potential energy from the height it leaves (a ground node's liquid top: the table of its pores, or the level of what
 stands where that lies higher, so liquid standing in a pit under its full pores leaves with them and the top never
 rises as liquid leaves, `stack::Column::top`; a bodies' node's head; an air node's mean head; a store's table; each the mean of the booking's start and
-end, so a lake that drains whole takes along what it held), but the moves of the liquid's pass, which carry it from the
-top their cell's liquid is left at, as the pass books them (`potential::apply_carried`,
-1.2); and each node's heat takes what came in less what left less the change of its own (`store::fall_heat`; less what
-a part gave it on the way, as the liquid's pass gives the heat of its falls to the liquid that lands, 1.2):
-so a fall heats where the matter lands, a lift is paid by the node it enters (the air, for a gas going up; the ground
-node a store's liquid rises into) and a climb of the liquid in its pass by the heat the liquid carries (1.2), a column
-that rises as it fills pays for it, and the potential energy the world's
+end, so a lake that drains whole takes along what it held); and each node's heat takes what came in less what left
+less the change of its own (`store::fall_heat`): so a fall heats where the matter lands (the runoff's in the body it
+reaches, 1.2), a lift is paid by the node it enters (the air, for a gas going up; the ground node a store's liquid rises
+into), a column that rises as it fills pays for it, and the potential energy the world's
 matter gained is one number of the store (`Store::lifted`), the change of that function. Within a month's Flow the later
 air steps and the liquid read the heat before the month's lifts and falls are paid. The other laws lift a gas into
 the air from its cell's head to its air node's mean ground by the same rule (`World::lift`); a ground node that reacts
@@ -325,44 +322,39 @@ what the heat holds molten, as every law and the shell then read it.
   lowest ground, as the terrain inside it drains: a cell whose mean lies under its neighbours' is no basin where its
   ground drains (`flow::levels`, `flow::lowest` read it). The liquid's potential energy is where it lies: in the
   pores, and over the cell's own ground at its centroid (0, "The books").
-- **The sea** (`flow::basin`, the low basin): the lowest cell and the cells joined to it through cells whose lowest
-  ground lies under the level its liquid stands at hold its body, found at each month's start; those whose mean surface
-  lies under it are the sea (the others its shore, land with the sea in its low ground). A connected liquid body has one
-  level: once a month, after the runoff has reached it, each cell's pores keep what they hold and all the rest stands
-  at one level over the cells' own ground (`curve::level_over`, exact). Each cell that holds more than its pores and
-  what stands on its ground under that level gives the share of its liquid over it, with
-  that share of its heat; mixed, it goes to the cells that hold less, by what each lacks (`basin::share_out`). **Known limit:** the sea's slope under
-  wind and rotation is not modelled, and what levels it crosses the sea at once. **The sea of each air
-  block mixes its heat in a month** (`basin::mix_heat`): then its cells off their melting plateaus, with no soft cover
-  or cover of bodies and the same phases, each take the block's temperature (their heat apart from the fusion enthalpy
-  each holds, over their heat capacity; their floor's top too, which is part of each cell's ground node); of a cell
-  of parts (1.1), its liquid's top.
-- **Spill levels**: a priority flood over each cell's lowest ground gives each cell its spill level (Barnes, Lehman and Mulla 2014;
-  `downhill::Order`), starting from the sea (from the lowest cell where there is none). Liquid stands below it (or in
-  the lowest basin where there is no sea); elsewhere it passes on, counting as no higher than its lowest ground, so it crosses
-  the map in one step while depressions fill and spill. Lakes (closed basins above the sea) fill and spill this way.
-  The pass goes by falling spill level, and at one level the cell the flood reached last first, so each cell comes
-  before its way out whether its liquid stands or passes on: a river crosses a lake in the step it reaches it.
-- **Running off** (`flow::runoff`, `solve::downhill`): each cell but the sea's sends its liquid down its steepest way by
-  D-infinity (Tarboton 1997; `Level::steepest`): two neighbours next in compass order make a triangle with the centre,
-  the plane through their drops gives its slope and way, and the steepest triangle shares the liquid between its two
-  neighbours by angle. To a neighbour already passed whose liquid stands it sends at most what levels the two heads
-  over their own ground (a cell whose liquid passes on: what brings that one up to its lowest ground), and no more
-  than fills it to its spill level; to a neighbour still to come whose liquid
-  stands, what levels the two heads, whatever their areas, and all that stands over that one's spill level, which
-  passes on through it (so the cells of a pool do not empty into one of the pool still to come); to one still to come
-  whose liquid passes on, down to its ground. What the steepest way cannot take runs down the other ways, the steepest
-  first, each as far as it takes, so a month's river through a small cell stands in no column; to one already passed
-  whose liquid passes on (upstream in the flood) it sends none, so a pit over its rim spills by its way out. **A cell
-  does not drain below the rim of a way it used** (the level the liquid sent there comes to stand at, or the ground of
-  a cell it passes on through): each way's room counts all the cell holds, so where its ways together would take it
-  lower, each takes less, in proportion (`to_rims`), and no liquid crosses a rim from below it. So a pool a flood
-  crosses ends full to its spill level and no higher. What reaches a sea cell stays there and joins the sea.
+- **Bodies of standing liquid** (`flow::bodies`, `flow::basin`): a body is a pond of the terrain's samples (0: the
+  samples of a closed basin under its pass, or a part of the open low ground joined through its samples, which has no
+  pass) held by the cells whose lowest sample lies in it, as a cell's own ground fills from its lowest point up. Its
+  liquid stays in the ground nodes of those cells. The bodies, their cells and the ways to them are found once for the
+  world's cells; at each month's start, each body's level from what stands over its cells' pores, and the cells under
+  it (their mean surface under it: the others are its shore). The lowest body, the open low ground, has no code of its
+  own. **Known limit:** a pond whose cells' lowest samples all lie outside it holds no body (its liquid runs through);
+  a cell's ground at the eight by eight samples inside it (above) is coarser than the terrain's samples, so a body's
+  volume by level is its cells' curves', not its samples'.
+- **Running off** (`flow::runoff`), once a month in one pass: each cell in no body sends what may run off (what stands
+  over its pores, what came up from the store, and the pores' drainage to the channels, below) down the samples' ways
+  from each of its samples by its share of the cell's area, to the cell each way lands in: the cell of the first sample
+  of a body on it, or that body's first cell (`bodies::Bodies::ways`). The bodies then come in turn, each before the
+  body its pass leads to: each cell's pores keep what they hold and all the rest stands at one level over its cells'
+  own ground (`curve::level_over`, exact), no higher than its pass; each cell that holds more than its pores and what
+  stands on its ground under that level gives the share of its liquid over it, with that share of its heat; mixed, it
+  goes to the cells that hold less, by what each lacks (`basin::share_out`), and what the body holds over its pass
+  leaves, mixed, to the body its pass's way reaches, in the same month. What a cell sends and what a body lets over its
+  pass go into the samples' ways at each sample and at the pass, and one pass over the samples from the last the flood
+  reached to the first, each before the one its liquid runs to, sums what runs through each (a body's sample keeps what
+  reaches it): the **discharge** of each sample (`World::discharge`, mol/s, a moving average over about a year). A body
+  that receives less than it loses (evaporation, 1.5) falls under its pass and keeps what was dissolved in it.
+  **Known limit:** the sea's slope under wind and rotation is not modelled, and what levels it crosses the sea at once.
+  **Each body mixes its heat in a month** (`basin::mix`) under each air block: then its cells off their melting
+  plateaus, with no soft cover or cover of bodies and the same phases, each take the block's temperature (their heat
+  apart from the fusion enthalpy each holds, over their heat capacity; their floor's top too, which is part of each
+  cell's ground node); of a cell of parts (1.1), its liquid's top.
 - **The channel** (`flow::channel`): what a cell passes on runs in a channel whose width and depth grow as powers of
   its discharge Q, m³/s (hydraulic geometry downstream, Leopold and Maddock 1953): width `channel_width` ×
   Q^`channel_width_exp`, depth `channel_depth` × Q^`channel_depth_exp`, and its liquid runs at Q over width × depth.
-  The discharge is the cell's liquid flux (`World::liquid_flux`, mol/s, a moving average over about a year) at the mol
-  per m³ of the liquid its ground holds (`World::liquid_in`). Its size does not depend on the cell's: the push of moving
+  The discharge of a cell is the most that runs through one of its samples, its main channel (`World::liquid_flux`, mol/s,
+  a moving average over about a year, from the samples' discharge), at the mol per m³ of the liquid its ground holds
+  (`World::liquid_in`). Its size does not depend on the cell's: the push of moving
   liquid on structures (3.2) and every shell read it here.
 - **Pore water** flows by Darcy's law (an explicit sweep on the liquid table, the store's too, 1.8): `seep` ×
   saturated thickness × width / distance, at most half of what would level two cells, and no cell giving more than it
@@ -371,37 +363,29 @@ what the heat holds molten, as every law and the shell then read it.
   (`drain::sink`, at most `seep` a second and the store's room) right after each of the air's steps, which bring the
   rain: held until the month's liquid step, it would cover and darken the ground (`land::reflectance`, 1.4) and
   warm it. The store flows by `bed_seep` (`flow::deep`). Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
-  the cell's steepest slope over a hillslope of `hill` into the runoff (`flow::drain`). **None of this runs under the
-  sea**: its loose ground lies under it with its pores full, and the bed's store under it is not drained, so no liquid
-  sinks there, no pore or store flow reaches or leaves a sea cell, and its store feeds no channel.
-- **A cell of parts** (1.1): what the liquid laws bring to it gathers in its liquid's top; what they take leaves each
-  part by its share of the cell's liquid, at the parts' temperature by the liquid each holds (`parts::to_liquid`,
-  `land::t_now`).
+  the cell's steepest slope over a hillslope of `hill` into the runoff (`flow::drain`). Pore water moves before the
+  runoff's pass, so the bodies end the month at one level. **None of this runs under a body**: the loose ground of a
+  cell under its body's level lies under it with its pores full, and the bed's store under it is not drained, so no
+  liquid sinks there, no pore or store flow reaches or leaves it, and its store feeds no channel.
+- **A cell of parts** (1.1): what the liquid laws bring to it gathers in its liquid's top; what they take leaves its
+  top and its deep by their shares of the liquid they hold (what stands leaves from the liquid), and its land only for
+  what they lack, which keeps its own pores' liquid; at the parts' temperature by the liquid each holds
+  (`parts::to_liquid`, `land::t_now`).
 - **What goes with it**: its share of every liquid and of what is dissolved, with heat. Liquid passing through a node
   keeps its fusion heat whatever the node's phase and leaves at the temperature of the node mixed with what came in
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node
   holds and what stays keeps that temperature. A salt is a liquid that never
-  boils (11, 12): it moves with the liquid and stays when it evaporates. **Its potential energy goes with it**
-  (`flow::falls`; 0, "The books"): each move carries it from the top its cell's liquid is left at, as the pass leaves
-  it (the liquid the booking stacks at the pass's start, `potential::columns`, with what the cell kept and the loads it
-  took and left, its top over its pores and its own ground as the curve gives it), and the booking takes the pass's
-  moves as carrying just that (`potential::apply_carried`). At a cell's visit what came in, the cell's own liquid and
-  what leaves settle: the fall of what came in to the cell's top, and of its own liquid from where it lay (the mean of
-  its top before and after) to where it is left, turns to heat in the liquid that came in before it mixes with the
-  node, so what runs on takes its share along. A cell already passed takes what lands at once, the fall to the middle
-  of the layer it makes on its top; a sea cell, the fall to its top. Where what came in left from lower than the cell is left at (a cell filled after a
-  neighbour sent to it), the settling is a climb, and the liquid pays it from the heat it carries, which holds its
-  falls: no node that does not hold it pays. In the pass the liquid only goes down (to a lower surface, and over no rim
-  from below it), so a climb is no more than the relief between neighbours, and the heat of a liquid would lift it a
-  hundred kilometres (c T / g). The heat of the falls lands in the ground nodes before the crossings book what runs on,
-  and a climb is paid after them, so no node gives more than it holds (0, "No overdraw"). The head it loses on the way
-  out does work (1.3).
+  boils (11, 12): it moves with the liquid and stays when it evaporates. **Its potential energy goes with it** (0,
+  "The books"): each move of the pass goes from the cell it leaves to the cell it lands in, its potential energy from
+  the height it leaves (`potential::apply`), and the fall turns to heat where it lands. The head it loses on the way
+  does work (1.3).
 
 ### 1.3 Erosion and creep
-The head lost by moving liquid does work where it is lost on land (`flow::liquid::load`, `wear`; below 0 m its load
-settles and it wears nothing): it **carries** up to `carry`
-m³ of loose solids per J (dropping what is over capacity, so load settles where flow slows), and with the work its
-load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears** `wear` m³ of
+The head lost by moving liquid does work where it is lost on land (`flow::runoff::erode`, `wear`; in a body and below
+0 m it wears nothing): in each land cell in no body, g times what runs through each of its samples in the month, kg,
+times the fall to the sample it runs to (the samples' heights, which the run's erosion does not change). It
+**carries** up to `carry` m³ of loose solids per J of the cell's work (at most all that lies loose), which go with the
+cell's runoff to the cells its ways land in, where they settle, and with the work its load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears** `wear` m³ of
 bed per J over its strength into loose ground. **Creep** (`flow::creep`, yearly, out of land cells):
 loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope,
 across each border by its width (none across a corner). Bodies hold the ground: carrying
@@ -436,7 +420,7 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   r the cell's mean rise toward the south (section 0), the equivalent latitude of Lee (1962) and Swift (1976) in plan form. An
   hour a face turns away from the sun counts against it, as the shadow it casts on the ground beyond, so the beam is
   kept whatever the slopes; a cell whose day sums below zero takes none (the one place a square and its cells differ).
-  The low basin's liquid lies level and takes the flat sun. All the sunlight that passes the clouds is taken as beam:
+  A cell under a body's level (1.2) lies level and takes the flat sun. All the sunlight that passes the clouds is taken as beam:
   a cloud is one reflectance, with no share of the sky it covers, so what passes it cannot be split into beam and
   diffuse; diffuse light would fall on the plan as on flat ground. The cost is a product and a sum per cell a step,
   with the slope with latitude found beside the daily mean, once per latitude. The surface reflects as its cover is at the step's start (`land::reflectance`),
@@ -457,7 +441,7 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
 - **The bodies' node** (`Class::Bodies`, one per cell): light the cover absorbs warms the ground, except the share its
   light reaction stores (`Cover::keep`), booked from the sun into this node; the cover takes it at its month, and what
   it does not claim goes back to the ground before each air step (`survey::release`).
-- **The sea as one surface** (`air::surf`): under each air node the sea's cells that mix as one (1.2) face the air as
+- **A body as one surface** (`air::surf`): under each air node a body's cells that mix as one (1.2) face the air as
   one surface: one balance with their summed area, heat, heat capacity and gases, at their mean temperature (by heat
   capacity), reflectance, height and air (by area) and the sunlight of their mean latitude. It answers the air as one
   (`surf::Patch`): its law, linear in the air it sees (its cells' weights by area), is summed into its node once, and
@@ -540,8 +524,8 @@ of `dt` is safe down to Δ = √(8 D dt). On the island (month 2.59e6 s, year 3.
 | Heat sideways (`land::conduct`) | year | k / (ρ c) of the active layer, about 1.1e-6 m²/s | 17 m |
 | Creep (`creep`) | year | `creep` × softness × 1 m: 1.3e-9 m²/s for the softest solid | 0.6 m |
 | Erosion and carrying (`carry`, `wear`) | month | the bed lowers `carry` ρ g Q per m of drop a step; at the largest river of the 64 x 64 island (Q 1.9e8 m³ a month) under half the drop to the next cell | 9 m |
-| Runoff (`solve::downhill`) | month | one pass in the flood's order: liquid crosses the map in one step | any size |
-| The sea's levelling (`basin`) | month | one level, found exactly | any size |
+| Runoff (`runoff`) | month | one pass down the samples' ways: liquid crosses the map in one step | any size |
+| The bodies' levelling (`runoff`, `basin`) | month | one level, found exactly | any size |
 | The air's exchange with a cell (`air::cells`) | 15 days | implicit in the cell, per m²; the air's days run on the blocks | any size |
 
 The drain to the channels inside a cell (`hill`), the sink into the store and what comes up are exact for any step in

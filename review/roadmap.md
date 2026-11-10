@@ -429,3 +429,28 @@ Open on the ground:
 
 **The tree of cells: deleted.** The cells of a world are those it is built with. 5,340 lines out, 383 in; runs on
 cells as built are bit for bit. The fast suite holds 199 tests.
+
+**Plants drawn from their numbers (C1, C2): done.** Each square's kinds reach the page with the numbers a look needs;
+a mark picks its kind at its own foot, so kinds mix across a cell's edge; the count and size of a stand's plants come
+from its mass, their height from their wood, their crown from their leaf area (`tape/src/stands.rs`). The seven
+classes and their colours are deleted.
+
+Open on the plants: the ground under them is still a green ramp; a forest reads as dots at the 50 m view; three
+kinds live and look alike, with one wetness need and a low frost gene everywhere (C3: what each trait costs, more
+starting kinds, a cost where a trait is free).
+
+**B2, the water on one network: done.** A body of standing liquid is a pond of the terrain's samples with one level;
+the low basin is the lowest body, with no code of its own. Each month a cell's runoff goes down the samples' ways to
+the body it reaches; the bodies are levelled in the order of their passes and what a body holds over its pass goes
+on; one pass sums the discharge of every sample. The page draws each body flat at its level. The monthly flood over
+the cells, the rims and the ways are deleted. 30 years, plants only, 32 x 32: 9 bodies above the low ground hold
+1.8 km3; drift of energy 8.0e-12; Flow costs 167 -> 196 ms a year.
+
+Open on the water:
+- The page sizes a channel from one flux per cell, not from each sample's discharge; rivers do not show from afar
+  (the rivers' package).
+- A body's volume by level comes from its cells' curves (8 x 8 grounds), not from its own samples: levels read back
+  are off by millimetres in cells of parts, a pond whose cells all have their lowest sample outside it holds no body,
+  and its shore shows steps of a sample on plains level with it.
+- Liquid goes straight from the cell it leaves to the body's cell; what it picks up lands with it.
+- The passes over the samples cost about 20 ms a month on a 64 x 64 island.

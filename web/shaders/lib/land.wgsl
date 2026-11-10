@@ -36,14 +36,14 @@ struct Land {
 // liquid in its pores, m; what its pores hold full, m, the level of the wetness index its soil's liquid departs about,
 // the volume it passes on per m² drained, m/s; the ground's own colour and its
 // share of the sea; its true colour; the bytes of the layer drawn and of the worn paths.
-const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5;
+const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const PLANES = 6;
 // Where no liquid stands near a point, its surface is taken this far below the ground, m.
 const NO_LIQUID_M = 1000.0;
 
 // What a point's ground holds: its height, m, its slope east and south, its wetness index, and its nearest channel's
 // distance over its drained area to the power of its width, over the cap, its slope east and south (per m), and that
-// area, m².
-struct Tiled { h: f32, slope: vec2f, twi: f32, ratio: f32, ratio_slope: vec2f, area: f32 }
+// area, m²; and the pond it lies in (-1: none).
+struct Tiled { h: f32, slope: vec2f, twi: f32, ratio: f32, ratio_slope: vec2f, area: f32, pond: i32 }
 
 // The ground of layer `layer` at `at`, m from the map's north-west corner, blended between the texels' centres; with
 // `spline`, its height and slope through them as a Catmull-Rom spline (so light on a slope drawn over many pixels a
@@ -65,8 +65,10 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   let bottom = mix(c01, c11, f.x);
   let o = mix(top, bottom, f.y);
   let ratio_slope = vec2f(mix(c10.w - c00.w, c11.w - c01.w, f.y), bottom.w - top.w) / texel;
+  // The pond of the texel nearest the point: a pond's edge is a texel's, which a finer tile draws finer.
+  let pond = i32(textureLoad(areas, clamp(i + vec2i(f > vec2f(0.5)), vec2i(0), vec2i(last)), layer, 0).y + 0.5) - 1;
   // Without the spline (a mark's foot) the channel's area is not read: what reads it draws the channel.
-  if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, o.w, ratio_slope, 0.0); }
+  if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, o.w, ratio_slope, 0.0, pond); }
   let area = exp(mix(mix(textureLoad(areas, a, layer, 0).x, textureLoad(areas, vec2i(b.x, a.y), layer, 0).x, f.x), mix(textureLoad(areas, vec2i(a.x, b.y), layer, 0).x, textureLoad(areas, b, layer, 0).x, f.x), f.y));
   let f2 = f * f;
   let f3 = f2 * f;
@@ -81,7 +83,16 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
       h += v * vec3f(w[x].x * w[y].y, dw[x].x * w[y].y, w[x].x * dw[y].y);
     }
   }
-  return Tiled(h.x, h.yz / texel, o.z, o.w, ratio_slope, area);
+  return Tiled(h.x, h.yz / texel, o.z, o.w, ratio_slope, area, pond);
+}
+
+// The level of pond `p` (-1: none), m: from the rows of the table under its planes, four ponds a texel; far below
+// any ground for none (no body holds it).
+fn pond_level(p: i32) -> f32 {
+  if (p < 0) { return -NO_LIQUID_M; }
+  let w = i32(land.map.y);
+  let q = p / 4;
+  return textureLoad(table, vec2i(q % w, PLANES * i32(land.map.z) + q / w), 0)[p % 4];
 }
 
 // Cell value `k` (a plane of the table) of the square at column and row c, the nearest on the map.
@@ -111,14 +122,14 @@ fn ground_at(at: vec2f, spline: bool) -> Tiled {
   let size = vec2i(textureDimensions(pages));
   let page = textureLoad(pages, clamp(vec2i(floor(at / span)), vec2i(0), size - 1), 0);
   if (page.x < 0.0) {
-    return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, 1.0, vec2f(0.0), 0.0);
+    return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, 1.0, vec2f(0.0), 0.0, -1);
   }
   let shown = read_tile(i32(page.x), at, spline);
   let came = textureLoad(tile_of, vec2i(i32(page.x), 0), 0).w;
   let w = clamp((land.time.x - came) / land.time.y, 0.0, 1.0);
   if (w >= 1.0 || page.y < 0.0) { return shown; }
   let under = read_tile(i32(page.y), at, spline);
-  return Tiled(mix(under.h, shown.h, w), mix(under.slope, shown.slope, w), mix(under.twi, shown.twi, w), mix(under.ratio, shown.ratio, w), mix(under.ratio_slope, shown.ratio_slope, w), mix(under.area, shown.area, w));
+  return Tiled(mix(under.h, shown.h, w), mix(under.slope, shown.slope, w), mix(under.twi, shown.twi, w), mix(under.ratio, shown.ratio, w), mix(under.ratio_slope, shown.ratio_slope, w), mix(under.area, shown.area, w), shown.pond);
 }
 
 // The liquid in the soil at a point of wetness index `twi` of a cell whose pores hold `pore` m and `pores` m full, its
@@ -151,28 +162,21 @@ struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, mean: f32 }
 // centres (`cs`), and the laws inside a cell applied at the point.
 fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
   let ground = blended(GROUND, cs);
-  // The level of the liquid standing over the point: of the cells about it whose lowest ground lies under the surface
-  // of its own cell (its level, or its lowest ground where none stands), blended; liquid over ground that lies wholly
-  // above a cell's surface runs down into it and does not stand over it. The soil's liquid of each cell about it at
-  // the point's wetness index, and each one's mean liquid, blended.
-  let own = cell(LIQUID, vec2i(floor(at / land.map.x)));
-  let surface = select(own.y, own.x, own.z > 0.0);
-  var level = 0.0;
-  var weight = 0.0;
+  // The liquid standing over the point: its pond's, flat at the pond's level over the ground under it (laws.md 1.2).
+  // The soil's liquid of each cell about it at the point's wetness index, and each one's mean liquid, blended.
+  let level = pond_level(g.pond);
   var held = 0.0;
   var mean = 0.0;
   for (var k = 0; k < 4; k++) {
     let l = cell(LIQUID, cs.at[k]);
-    if (l.z > 0.0 && l.y < surface) { level += cs.w[k] * l.x; weight += cs.w[k]; }
     let s = cell(SOIL, cs.at[k]);
     held += cs.w[k] * soil_held(l.w, s.x, s.y, g.twi);
     mean += cs.w[k] * (l.w + l.z);
   }
   var p: State;
-  if (weight > 0.0) {
-    level /= weight;
+  if (g.pond >= 0) {
     p.depth = max(level - g.h, 0.0);
-    p.over = max(g.h - level, 0.0);
+    p.over = min(max(g.h - level, 0.0), NO_LIQUID_M);
   } else {
     p.depth = 0.0;
     p.over = NO_LIQUID_M;

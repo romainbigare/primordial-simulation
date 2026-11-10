@@ -15,6 +15,7 @@ pub use channels::MOST_RUNOFF;
 pub use half::{half, unhalf};
 pub use wetness::sample_index;
 
+use pcore::space::network::NONE;
 use pcore::space::samples::{Pond, Samples};
 use pcore::space::square::Square;
 use pcore::space::terrain::{Terrain, SAMPLE_DEPTH};
@@ -25,6 +26,8 @@ use std::sync::Arc;
 pub const TILE: usize = 256;
 /// Texels along each edge of a tile outside its own: a shader's spline reads two texels each way.
 pub const GUTTER: usize = 2;
+/// The ponds a tile names exactly (`Ground::tile`): a 16-bit float holds every whole number up to 2^11.
+pub const PONDS_EXACT: usize = 2048;
 /// The finest tiles' texels are no longer than this, m: finer, a shell magnifies them.
 const FINEST_M: f64 = 1.0;
 
@@ -69,9 +72,10 @@ impl Ground {
     /// north-west corner, as 16-bit floats in two planes. The first, four a texel: the terrain's mean height over the
     /// texel, m, as the sum of two (the nearest 16-bit float to it, and what it lacks); the wetness index of the place
     /// (`wetness::field`); and of the channel nearest it by the channel law, its distance to its centre line over its
-    /// drained area to the power of a channel's width, over the cap (`channels::Field`, at most 1). The second, one a
-    /// texel: the logarithm of that channel's drained area in m² (0 where none comes within reach). Texels off the map
-    /// are those of its edge.
+    /// drained area to the power of a channel's width, over the cap (`channels::Field`, at most 1). The second, two a
+    /// texel: the logarithm of that channel's drained area in m² (0 where none comes within reach), and one more than
+    /// the pond the texel lies in (`pond_tile`; 0 for none), whole numbers a 16-bit float holds exactly up to
+    /// `PONDS_EXACT`. Texels off the map are those of its edge.
     pub fn tile(&self, depth: u8, tx: i64, ty: i64) -> Vec<u16> {
         assert!(depths(&self.map).contains(&depth), "a tile of a depth the ground is drawn at");
         let side = TILE + 2 * GUTTER;
@@ -87,27 +91,39 @@ impl Ground {
         let twi = wetness::field(&self.samples, &self.twi, depth, [win[0], win[1]], [wide, high]);
         let near = channels::Channels::new(&self.map, &self.samples, self.channel[0], self.channel[1]).field([win[0], win[1]], [wide, high], k);
         let at = |p: usize| (clamp(x0 + (p % side) as i64, across) - win[0]) as usize + (clamp(y0 + (p / side) as i64, down) - win[1]) as usize * wide;
-        let mut out = Vec::with_capacity(5 * side * side);
+        let mut out = Vec::with_capacity(6 * side * side);
         for i in (0..side * side).map(at) {
             let hi = half(heights[i] as f32);
             out.extend([hi, half((heights[i] - unhalf(hi) as f64) as f32), half(twi[i] as f32), half(near.ratio[i] as f32)]);
         }
-        out.extend((0..side * side).map(at).map(|i| half(if near.area[i] > 0.0 { near.area[i].ln() as f32 } else { 0.0 })));
+        let ponds = self.pond_tile(depth, tx, ty, |p| heights[at(p)]);
+        for (p, i) in (0..side * side).map(|p| (p, at(p))) {
+            let pond = if ponds[p] == NONE { 0.0 } else { (ponds[p] + 1) as f32 };
+            out.extend([half(if near.area[i] > 0.0 { near.area[i].ln() as f32 } else { 0.0 }), half(pond)]);
+        }
         out
     }
 
-    /// The pond each texel of the tile of `depth` at column `tx` and row `ty` lies in, laid out as `tile`'s texels: the
-    /// pond (`Samples::pond`, an index into `ponds`; `network::NONE` for none) of the sample that holds the texel's
-    /// centre. So a shell can draw each pond flat at its own level.
-    pub fn pond_tile(&self, depth: u8, tx: i64, ty: i64) -> Vec<u32> {
+    /// The pond each texel of the tile of `depth` at column `tx` and row `ty` lies in, laid out as `tile`'s texels, its
+    /// height `h(p)`, m: the pond (`Samples::pond`, an index into `ponds`; `network::NONE` for none) of the sample that
+    /// holds the texel's centre, or where that lies in none, of the first of its eight neighbours that lies in a pond
+    /// whose pass the texel lies under. So a shell draws each pond flat at its own level, its shore where the ground
+    /// rises over that level, not at the edges of the samples.
+    pub fn pond_tile(&self, depth: u8, tx: i64, ty: i64, h: impl Fn(usize) -> f64) -> Vec<u32> {
         let side = TILE + 2 * GUTTER;
         let (x0, y0) = (tx * TILE as i64 - GUTTER as i64, ty * TILE as i64 - GUTTER as i64);
         let s = &self.samples;
-        let sample = |c: f64, n: usize| (c.floor() as i64).clamp(0, n as i64 - 1) as usize;
+        let pond_at = |r: i64, c: i64| s.pond[r.clamp(0, s.down as i64 - 1) as usize * s.across + c.clamp(0, s.across as i64 - 1) as usize];
         (0..side * side)
             .map(|p| {
                 let [x, y] = self.centre(depth, x0 + (p % side) as i64, y0 + (p / side) as i64);
-                s.pond[sample(y, s.down) * s.across + sample(x, s.across)]
+                let (r, c) = (y.floor() as i64, x.floor() as i64);
+                let own = pond_at(r, c);
+                if own != NONE {
+                    return own;
+                }
+                let around = (-1..=1i64).flat_map(|dr| (-1..=1i64).map(move |dc| (r + dr, c + dc)));
+                around.map(|(r, c)| pond_at(r, c)).find(|&q| q != NONE && h(p) < s.ponds[q as usize].level).unwrap_or(NONE)
             })
             .collect()
     }

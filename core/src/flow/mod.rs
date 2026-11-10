@@ -8,7 +8,7 @@ mod creep;
 mod curve;
 mod deep;
 mod drain;
-mod falls;
+mod bodies;
 mod inside;
 mod land;
 mod liquid;
@@ -23,6 +23,7 @@ mod channel;
 pub(crate) use air::air_temp;
 pub use air::{column, declination, glow, insolation, on_slope, scale_height, sun_by_latitude};
 pub use potential::total as potential;
+pub use basin::Pool;
 pub use channel::Channel;
 pub(crate) use curve::level_of;
 pub use inside::{levels, lowest, means, volume_under};
@@ -117,6 +118,9 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
     }
     if curve::stale(w, &s) {
         curve::build(w, &mut s);
+    }
+    if s.bodies.of.len() != n {
+        s.bodies = bodies::Bodies::of(w);
     }
     let fresh = s.state.tg.len() != n;
     if fresh {

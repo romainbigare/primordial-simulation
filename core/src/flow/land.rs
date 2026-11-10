@@ -97,7 +97,7 @@ pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
 /// far too hot or cold) and its temperature by its energy alone (`steady`); a node off its plateaus whose temperature
 /// left the span between them, or that is on one, is found anew, and one whose surface moved (`moved`) gets a new
 /// surface (`parts::solve_nodes`, with `moving` as it says), in parallel with `threads`. A full build finds every node
-/// anew, the basin (`basin::find`) and the gases that dissolve in the month (`air::henry`).
+/// anew, the bodies of standing liquid (`basin::find`) and the gases that dissolve in the month (`air::henry`).
 pub(super) fn ground_state(w: &World, s: &mut Scratch, (full, moving): (bool, bool)) {
     let n = w.mesh.cells().n();
     let caps = capacities(w, s, 0..n);
@@ -342,13 +342,6 @@ pub(super) fn column(w: &World, s: &Scratch, (i, part): (usize, f64), l: &[f64; 
     a + seen * s.state.bed[i].refl
 }
 
-/// The level the liquid that stands on node `i` over what its pores hold reaches over its own ground (`curve::Curve`;
-/// its lowest ground when none does), m.
-#[inline]
-pub(super) fn stand(s: &Scratch, i: usize) -> f64 {
-    s.z[i] + s.curves[i].level(standing(s, i))
-}
-
 /// The share of node `i`'s area that the liquid standing over its pores covers, its own ground under its level
 /// (`curve::Curve::wet`), 0..1.
 #[inline]
@@ -358,7 +351,7 @@ pub(super) fn wet_share(s: &Scratch, i: usize) -> f64 {
 
 /// The volume of the liquid that stands on node `i` over what its pores hold, m³.
 #[inline]
-fn standing(s: &Scratch, i: usize) -> f64 {
+pub(super) fn standing(s: &Scratch, i: usize) -> f64 {
     (s.head[i] - s.pd[i] - s.z[i]).max(0.0) * s.curves[i].area()
 }
 

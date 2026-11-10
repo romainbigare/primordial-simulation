@@ -1,9 +1,9 @@
 //! Liquid on and in the loose ground at each liquid step: the stores of the bed drain to the channels inside the cells
-//! (`drain::springs`); what may run off runs down the cells in one pass in the order of a priority flood
-//! (`runoff::surface`), doing work on its bed; the liquid under the surface moves (`drain::under`); and the basin stands
-//! at one level (`basin::level`).
+//! (`drain::springs`); the liquid under the surface moves (`drain::under`); what may run off runs down the terrain's
+//! network to the bodies of standing liquid, which stand each at one level, in one pass (`runoff::surface`), doing
+//! work on its bed; and each body mixes its heat (`basin::mix`).
 
-use super::{drain::{springs, under}, land::{cells_state, wet, NONE}, potential::{apply, apply_carried}, range, runoff::surface, Scratch};
+use super::{drain::{springs, under}, land::{cells_state, wet, NONE}, potential::apply, range, runoff::surface, Scratch};
 use crate::{store::{Class, LinkFlux}, World};
 
 /// The mobile liquid of every ground node: of each liquid `liq[q]`, `mol[q * n + i]` (its liquid share; all of a
@@ -31,9 +31,8 @@ pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64, on: impl 
 
 /// Book `fluxes` through the store, and bring the ground nodes' state up to date for what changed (`Scratch::note`;
 /// a node of parts books it on them, `parts::to_liquid`).
-/// Their potential energy is `carried` where their part books it itself (`potential::apply_carried`), else by the
-/// heights their matter leaves from (`potential::apply`).
-pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], carried: Option<&[f64]>) {
+/// Their potential energy goes by the heights their matter leaves from (`potential::apply`).
+pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
     let n = w.mesh.cells().n();
     let mut ks: Vec<usize> = fluxes.iter().flat_map(|x| x.ks.iter()).map(|&k| k as usize).collect();
     ks.sort_unstable();
@@ -49,10 +48,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], carried:
     let amount = |w: &World, k: usize, i: u32| w.store.amounts(Class::Ground)[k * n + i as usize];
     let before: Vec<f64> = ks.iter().flat_map(|&k| cells.iter().map(move |&i| (k, i))).map(|(k, i)| amount(w, k, i)).collect();
     let heat: Vec<f64> = cells.iter().map(|&i| w.store.heat(Class::Ground)[i as usize]).collect();
-    match carried {
-        Some(e) => apply_carried(w, s, fluxes, e),
-        None => apply(w, s, fluxes, &[]),
-    }
+    apply(w, s, fluxes, &[]);
     super::parts::to_liquid(w, s, &cells, (&ks, &before), &heat);
     for (q, &k) in ks.iter().enumerate() {
         for (&i, &was) in cells.iter().zip(&before[q * cells.len()..(q + 1) * cells.len()]) {
@@ -69,24 +65,24 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], carried:
     cells_state(w, s, &on);
 }
 
-/// One liquid step of `dt` seconds: before the basin's level, the liquid's top and deep swap liquid through the
-/// thermocline (`parts::mix`), so the basin's tops end the step mixed; last, the gases of the air dissolve in the
-/// liquid where it lies (`air::dissolve`).
+/// One liquid step of `dt` seconds (the module's doc): after the runoff's pass the liquid's top and deep swap liquid
+/// through the thermocline (`parts::mix`) and each body mixes its heat (`basin::mix`), so the bodies' tops end the step
+/// mixed; last, the gases of the air dissolve in the liquid where it lies (`air::dissolve`).
 pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
     let (tmin, tmax) = range(&s.state.tg);
     let liq = s.liquids(&w.chem, (tmin, tmax), true);
     let slope = slopes(w, s);
     let runs = springs(w, s, tmin, &slope, dt);
-    surface(w, s, (&liq, tmin), (&slope, &runs), dt);
     under(w, s, &liq, tmin, dt);
+    surface(w, s, (&liq, tmin), (&slope, &runs), dt);
     let mixed = super::parts::mix(w, s, dt);
     cells_state(w, s, &mixed);
-    super::basin::level(w, s, &liq, tmin);
+    super::basin::mix(w, s);
     super::air::dissolve(w, s, dt);
 }
 
 /// The slope of the surface of each ground node down its steepest way (`Level::steepest`) to the lower neighbours (by
-/// more than `still`), 0 for none; and for the low basin, whose liquid stands at one level and drains to no channel.
+/// more than `still`), 0 for none; and for a cell under a body, whose liquid stands at one level and drains to no channel.
 /// The surface is the cell's mean ground, or the liquid standing over its pores if higher: the slope its hillsides
 /// drain down to the channels inside it.
 fn slopes(w: &World, s: &Scratch) -> Vec<f64> {

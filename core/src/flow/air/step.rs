@@ -32,7 +32,7 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     // The gases that dissolve (at the liquid step) do not leave the ground.
     let henry = s.henry.clone();
     let act = active(w, s, &henry);
-    // The low basin under each air node faces the air as one surface (`surf::patches`).
+    // A body under each air node faces the air as one surface (`surf::patches`).
     let patches = patches(w, s);
     // The sun's declination at the middle of each day of the step.
     let days = (dt / DAY).ceil().max(1.0) as usize;

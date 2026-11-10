@@ -312,7 +312,7 @@ fn the_terrains_channels_run_down() {
         None
     };
     assert!((0..s.h.len()).filter(|&k| s.h[k] >= 0.0).all(|k| end(k).is_some_and(|e| s.h[e] < 0.0)), "every sample of land drains to the low ground");
-    for (k, &p) in s.pond.iter().enumerate().filter(|q| *q.1 != NONE) {
+    for (k, &p) in s.pond.iter().enumerate().filter(|q| *q.1 != NONE && s.ponds[*q.1 as usize].pass != NONE) {
         let pond = s.ponds[p as usize];
         assert!(s.h[k] < pond.level && s.pond[pond.pass as usize] == NONE && s.h[pond.pass as usize] == pond.level, "sample {k} under its pond's pass");
     }
