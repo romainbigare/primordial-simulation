@@ -60,7 +60,7 @@ pixels and no smaller than 5 cm, smoothed up closer, at most 360,000 of them), a
 or a zoom out shows it until the next comes: the ground's height, the terrain itself (the samples the cells' heights
 and their liquid stand on, smooth below a metre), with hill shading; the liquid each cell holds standing at the level
 that fills the terrain drawn inside the cell with its volume from the lowest point up, as the core's level does, drawn where
-the ground lies below that level, so a shore follows the ground inside the cells and moves with the level; how wet the ground is and the plant cover of each slot inside each cell (`tape/src/fine/inside.rs`); snow by the ground's own temperature; every value of the cells as one smooth field, built level by level of the
+the ground lies below that level, so a shore follows the ground inside the cells and moves with the level; how wet the ground is and the plant cover of each slot inside each cell (`tape/src/fine/inside.rs`); snow by the ground's own temperature; each value of the cells the view reads (`web/src/fine.ts` `FINE_LAYERS`, the layer shown, the worn paths) as one smooth field, built level by level of the
 cells' tree, so a cell that holds what its parent held shows no edge and a refined region looks like the cells about it
 (`tape/src/fine/pyramid.rs`); rivers as lines along the way their liquid runs. The worker makes its fields; it is made
 again when the view rests and once a second while the world plays, and each new window fades in over the last in a

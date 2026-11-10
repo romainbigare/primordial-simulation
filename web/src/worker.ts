@@ -17,7 +17,7 @@ interface Core {
   day(): number;
   meta(): number;
   frame(): number;
-  fine(x: number, y: number, w: number, h: number, depth: number): number;
+  fine(x: number, y: number, w: number, h: number, depth: number, layers: number): number;
   things(x: number, y: number, w: number, h: number): number;
   cells(): number;
   out_len(): number;
@@ -74,7 +74,8 @@ function postFrame(kind: 'world' | 'frame'): void {
   const things = thingsAt ? bytes(c.things(...thingsAt), c.out_len()) : null;
   let now = performance.now(), win: FineWindow | null = null;
   if (fineAt && (fineDue || now - fineLast >= FINE_MS)) {
-    const data = bytes(c.fine(fineAt.x, fineAt.y, fineAt.w, fineAt.h, fineAt.depth), c.out_len());
+    const layers = meta!.layers.reduce((bits, l, k) => (fineAt!.layers.includes(l.name) ? bits | (1 << k) : bits), 0) >>> 0;
+    const data = bytes(c.fine(fineAt.x, fineAt.y, fineAt.w, fineAt.h, fineAt.depth, layers), c.out_len());
     const made = performance.now() - now, f = readFine(meta!, fineAt, data);
     const fields = fineFields(f, meta!, wetOf(makeWorld(meta!, frame, 0), 0));
     win = { at: fineAt, fields, made, fieldsMs: performance.now() - now - made, cover: fineCover(f) };

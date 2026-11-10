@@ -51,7 +51,7 @@ export class MapView {
    * before it, which then goes. */
   private map: FieldWindow | null = null;
   private fine: FieldWindow[] = [];
-  private look: MapLook = { mode: 'earth', ramp: [], paths: -1 };
+  private look: MapLook = { mode: 'earth', layer: '', ramp: [], paths: false };
   /** The map's classes asked for: what waits for them, and the texture they are drawn into. */
   private asked: ((cls: Uint8Array) => void)[] = [];
   private classes: Texture | null = null;

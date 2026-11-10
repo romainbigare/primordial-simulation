@@ -47,7 +47,7 @@ fn read(b: &[u8], n: usize) -> Fine {
 /// The window from column `at[0]` and row `at[1]`, 8 x 8 squares, of `w` at `depth`, and its pixels along a side.
 fn window(w: &World, s: &mut Samples, at: [f64; 2], depth: u8) -> (Fine, usize) {
     let across = 8 << (depth - w.map.square_depth());
-    (read(&fine(w, s, [at[0], at[1], 8.0, 8.0], depth), across * across), across)
+    (read(&fine(w, s, [at[0], at[1], 8.0, 8.0], depth, |_| true), across * across), across)
 }
 
 /// The ground drawn is the terrain per pixel whatever the cells and the window; a split leaves what it shares by area
@@ -215,7 +215,7 @@ fn the_fine_grounds_slope_has_no_kinks_at_the_leaves_edges() {
     let w = testkit::small_world();
     // A square at leaves of 1/256 of it, 16 to a sample of the terrain (`SAMPLE_DEPTH`), 4 depths of displacement below.
     let (depth, across) = (10, 256);
-    let ground = read(&fine(&w, &mut Samples::default(), [7.0, 7.0, 1.0, 1.0], depth), across * across).ground;
+    let ground = read(&fine(&w, &mut Samples::default(), [7.0, 7.0, 1.0, 1.0], depth, |_| true), across * across).ground;
     // The kink of the slope at each pixel along each axis, summed by where it lies against the leaves of 8 pixels.
     let (mut edge, mut within) = ((0.0, 0), (0.0, 0));
     for y in 1..across - 1 {

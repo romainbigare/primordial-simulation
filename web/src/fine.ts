@@ -11,8 +11,12 @@ import { Fields, put4 } from './fields';
 export const SLOTS = 4;
 
 /** The window of a fine raster: from column x and row y, w x h squares, a pixel a leaf of `depth`; it fades
- * out over `soft` squares along each of its edges that is not the map's, so the map under it shows no hard edge. */
-export interface FineAt { x: number; y: number; w: number; h: number; depth: number; soft: number }
+ * out over `soft` squares along each of its edges that is not the map's, so the map under it shows no hard edge; the
+ * layers the core makes for it (names, in table order): each costs the core a field. */
+export interface FineAt { x: number; y: number; w: number; h: number; depth: number; soft: number; layers: string[] }
+
+/** The layers a fine raster always holds: those `fineFields` and canopy.ts `fineCover` read. */
+export const FINE_LAYERS = ['ice', 't_ground', 'rain', 'plants', 'leaf', 'true_r', 'true_g', 'true_b'];
 
 /** A fine raster as the core hands it out. */
 export interface Fine {
@@ -24,7 +28,7 @@ export interface Fine {
   /** Of each pixel: the ground's height and the level of the liquid its own cell holds (NaN: none), m; the share of it a
    * channel covers, 0..1, and that channel's depth, m */
   ground: Float32Array; water: Float32Array; channel: Float32Array; channelDepth: Float32Array;
-  /** The layers of the pixels, as a world of `across` x `down` cells with one frame */
+  /** The layers of the pixels the window holds (`FineAt.layers`), as a world of `across` x `down` cells with one frame */
   world: World;
   /** Of each pixel, inside its own cell: how wet its ground is, 0..1; the built cover of each slot of its cell, kg/m²
    * (`SLOTS` planes, plane k of slot k); the number of its cell among the window's cells */
@@ -41,9 +45,10 @@ export function readFine(meta: Meta, at: FineAt, data: Uint8Array): Fine {
   const head = new DataView(data.buffer, data.byteOffset, 4);
   const f32 = (from: number, k: number) => new Float32Array(data.buffer, data.byteOffset + from, k);
   const start = 4, layers = start + 16 * n;
-  const world = makeWorld({ ...meta, w: across, h: down, cell_m: meta.cell_m / per, frames: [meta.frames[0]] }, data, layers);
+  const held = meta.layers.filter(l => at.layers.includes(l.name));
+  const world = makeWorld({ ...meta, w: across, h: down, cell_m: meta.cell_m / per, layers: held, frames: [meta.frames[0]] }, data, layers);
   // The fields inside the cells, from the next multiple of 4 bytes after the layers.
-  const inside = Math.ceil((layers + meta.layers.length * n) / 4) * 4, numbers = inside + 4 * (1 + SLOTS) * n;
+  const inside = Math.ceil((layers + held.length * n) / 4) * 4, numbers = inside + 4 * (1 + SLOTS) * n;
   const cells = new DataView(data.buffer, data.byteOffset + numbers + 4 * n, 4).getUint32(0, true);
   return {
     at, across, down, per, pxM: meta.cell_m / per, melt: head.getFloat32(0, true), ground: f32(start, n), water: f32(start + 4 * n, n),
@@ -102,5 +107,6 @@ export function fineFields(f: Fine, meta: Meta, wet: Wet): Fields {
   }
   const look: Fields['look'] = [Math.max((pxM / meta.cell_m) ** SLOPE_POWER, SLOPE_LEAST), f.melt, BEACH_M, OVER_FADE];
   const m = meta.cell_m, place: Fields['place'] = [f.at.x * m, f.at.y * m, f.at.w * m, f.at.h * m];
-  return { w: across, h: down, height, matter, bytes, inside, layers: world.data.subarray(world.base), look, place };
+  const layers = world.data.subarray(world.base, world.base + world.frameBytes), names = world.meta.layers.map(l => l.name);
+  return { w: across, h: down, height, matter, bytes, inside, layers, names, look, place };
 }

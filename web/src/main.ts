@@ -4,7 +4,7 @@ import { MapView, View } from './map';
 import { MapLook } from './field-window';
 import { Charts } from './charts';
 import { Live, Stats, FineWindow } from './live';
-import { FineAt } from './fine';
+import { FineAt, FINE_LAYERS } from './fine';
 import { Avatars, THINGS_PX } from './avatars';
 import { Vegetation } from './vegetation';
 import { Style } from './sprites';
@@ -153,8 +153,8 @@ function repaint(): void {
 /** What the map draws: the view or the layer shown, and the worn paths if they are. */
 function mapLook(w: World): MapLook {
   return {
-    mode: layer ? w.index.get(layer)! : view === 'true' ? 'true' : 'earth', ramp: layer ? rampFor(layer) : [],
-    paths: paths && w.index.has(PATH_LAYER) ? w.index.get(PATH_LAYER)! : -1,
+    mode: layer ? 'layer' : view === 'true' ? 'true' : 'earth', layer: layer ?? '', ramp: layer ? rampFor(layer) : [],
+    paths: paths && w.index.has(PATH_LAYER),
   };
 }
 
@@ -167,7 +167,7 @@ function setLayer(n: string | null): void {
     [0, 128, 255].forEach((b, k) => ($('ramp').querySelectorAll('.lbl span')[k].textContent = fmt(lut[b])));
     $('rampunit').textContent = `${label(n)}${unitText(l.unit) ? ` (${unitText(l.unit)})` : ''}${l.scale === 'log' ? ', log scale' : ''}`;
   }
-  syncUi(); repaint();
+  syncUi(); repaint(); fineOf(map.view());
 }
 
 function syncUi(): void {
@@ -250,7 +250,7 @@ function togglePlay(): void {
 // ---- wiring
 $('play').onclick = togglePlay;
 $('fit').onclick = () => map.fit();
-$('paths').onclick = () => { paths = !paths; syncUi(); repaint(); };
+$('paths').onclick = () => { paths = !paths; syncUi(); repaint(); fineOf(map.view()); };
 $<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
 document.querySelectorAll<HTMLElement>('#views button').forEach(b => (b.onclick = () => setView(b.dataset.view!)));
 document.querySelectorAll<HTMLElement>('#life button').forEach(b => (b.onclick = () => setLife(b.dataset.life === 'angled' ? 'angled' : 'above')));
@@ -306,16 +306,19 @@ function viewSoon(v: View): void {
   viewTimer = window.setTimeout(() => { fineOf(v); thingsOf(v); }, ASK_MS);
 }
 /** The window in view and `FINE_MARGIN` about it, on the leaves of the depth whose leaves take `FINE_PX` css pixels or
- * more (no smaller than `FINE_LEAST_M`, no more than `FINE_MOST` pixels): the core draws it a pixel a leaf. */
+ * more (no smaller than `FINE_LEAST_M`, no more than `FINE_MOST` pixels): the core draws it a pixel a leaf, with the
+ * layers the view reads (`FINE_LAYERS`, the layer shown, the worn paths where they are drawn). */
 function fineOf(v: View): void {
   const m = world?.meta;
   if (!live || !m || m.square_depth === undefined || v.w <= 0 || v.h <= 0) return;
   const mx = v.w * FINE_MARGIN, my = v.h * FINE_MARGIN;
   const x0 = Math.max(v.x - mx, 0), y0 = Math.max(v.y - my, 0), x1 = Math.min(v.x + v.w + mx, m.w), y1 = Math.min(v.y + v.h + my, m.h);
+  const read = [...FINE_LAYERS, ...(layer ? [layer] : []), ...(paths ? [PATH_LAYER] : [])];
+  const layers = m.layers.map(l => l.name).filter(n => read.includes(n));
   const sq = m.square_depth, edges = (depth: number) => {
     const per = 2 ** (depth - sq), x = Math.floor(x0 * per), y = Math.floor(y0 * per);
     const across = Math.ceil(x1 * per) - x, down = Math.ceil(y1 * per) - y;
-    return { at: { x: x / per, y: y / per, w: across / per, h: down / per, depth, soft: Math.min(mx, my) / 2 }, pixels: across * down };
+    return { at: { x: x / per, y: y / per, w: across / per, h: down / per, depth, soft: Math.min(mx, my) / 2, layers }, pixels: across * down };
   };
   let depth = sq + Math.max(0, Math.min(Math.floor(Math.log2(m.cell_m / FINE_LEAST_M)), Math.floor(Math.log2(v.s / FINE_PX))));
   while (depth > sq && edges(depth).pixels > FINE_MOST) depth--;

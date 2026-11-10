@@ -125,6 +125,6 @@ export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
     put4(inside, i, soaked[i], channelD[i], Math.exp(-leaf[i]), 0);
   }
   const o = w.base + f * w.frameBytes;
-  const fields: Fields = { w: W, h: H, height, matter, bytes, inside, layers: w.data.subarray(o, o + w.frameBytes), look: [1, 0, SQUARE_BEACH_M, 1], place: [0, 0, W * cell_m, H * cell_m] };
+  const fields: Fields = { w: W, h: H, height, matter, bytes, inside, layers: w.data.subarray(o, o + w.frameBytes), names: w.meta.layers.map(l => l.name), look: [1, 0, SQUARE_BEACH_M, 1], place: [0, 0, W * cell_m, H * cell_m] };
   return { fields, wet };
 }

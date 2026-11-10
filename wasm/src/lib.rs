@@ -10,6 +10,9 @@ use tape::LAYERS;
 use worldgen::life::{Seeding, FIXERS};
 use worldgen::schedule::Schedule;
 
+// The page asks for the layers of a fine window by one bit each (`fine`).
+const _: () = assert!(LAYERS.len() <= u32::BITS as usize, "a bit for each layer");
+
 /// The year life starts: the default of `ew run`.
 const LIFE_YEAR: u64 = 2;
 /// Rounds of mutation given to the founders: the default of `ew run`.
@@ -109,10 +112,12 @@ pub extern "C" fn frame() -> *const u8 {
 }
 
 /// The window from column `x` and row `y`, `w` x `h` squares, finer than its cells, a pixel a leaf of `depth`
-/// (`tape::fine`): the ground's height, the liquid's surface and the layers of each pixel, and the ways rivers run.
+/// (`tape::fine`): the ground's height, the liquid's surface and the layers of each pixel that `layers` asks for (bit
+/// `k` for layer `k` of the table), and the ways rivers run.
 #[no_mangle]
-pub extern "C" fn fine(x: f64, y: f64, w: f64, h: f64, depth: u32) -> *const u8 {
-    let bytes = with(|l| tape::fine(&l.world, &mut l.samples, [x, y, w, h], depth.min(u8::MAX as u32) as u8));
+pub extern "C" fn fine(x: f64, y: f64, w: f64, h: f64, depth: u32, layers: u32) -> *const u8 {
+    let wanted = |k: usize| k < u32::BITS as usize && layers >> k & 1 == 1;
+    let bytes = with(|l| tape::fine(&l.world, &mut l.samples, [x, y, w, h], depth.min(u8::MAX as u32) as u8, wanted));
     give(bytes)
 }
 

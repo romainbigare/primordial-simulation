@@ -18,9 +18,9 @@ export interface Fields {
    * depth of the river through it, m; the share of the ground the plant cover leaves bare (e^-area, its capture area
    * per m² the `leaf` layer); one unused. */
   inside: Float32Array;
-  /** Every layer of the table (tape/src/layers.rs), a byte a texel, layer after layer: a layer view and the worn paths
-   * read them. */
-  layers: Uint8Array;
+  /** The layers of the table (tape/src/layers.rs) the window holds, a byte a texel, layer after layer (`names`, in
+   * their order): a layer view and the worn paths read them. */
+  layers: Uint8Array; names: string[];
   /** How the shader reads them (earth.wgsl `Earth.look`): the slope's factor, the melting point by which a texel's own
    * temperature lays snow (0: the ice alone), the height up to which a sea's shore is sand, m, and the bytes of a layer
    * over which an empty texel fades into a full one. */

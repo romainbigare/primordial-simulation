@@ -66,12 +66,12 @@ fn standing(w: &World, shown: &Shown, cells: &keep::Cells, ground: &[f64]) -> Ve
 /// frozen cover, K (f32); of each pixel row by row the height of the ground, the terrain's (`heights`), m (f32), the level
 /// of the liquid standing over it (f32: `standing`; NaN where none stands), so the shore drawn is where the
 /// ground drawn rises above it, the share of the pixel a channel covers, 0..1, and that channel's depth, m (two f32:
-/// `channels`); then every layer in table order, a byte a pixel, the field of the cells' bytes
-/// (`pyramid`), but the ground's temperature and its ice, fields that hold each cell's mean (`keep`), the temperature
-/// along the ground's height over its cell's mean at the rate the air cools with height (`World::air_drop`); then, from
-/// a multiple of 4 bytes, the wetness of each pixel's ground and the built cover of each slot of its cell, f32 planes
-/// (`inside::extend`).
-pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], depth: u8) -> Vec<u8> {
+/// `channels`); then each layer `wanted` (by its place in the table), in table order, a byte a pixel, the field of the
+/// cells' bytes (`pyramid`), but the ground's temperature and its ice, fields that hold each cell's mean (`keep`), the
+/// temperature along the ground's height over its cell's mean at the rate the air cools with height
+/// (`World::air_drop`); then, from a multiple of 4 bytes, the wetness of each pixel's ground and the built cover of each
+/// slot of its cell, f32 planes (`inside::extend`). A shell asks only for the layers it draws: each costs a field.
+pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], depth: u8, wanted: impl Fn(usize) -> bool) -> Vec<u8> {
     assert!(depth >= w.map.square_depth(), "a pixel is no coarser than a square");
     let per = (1u64 << (depth - w.map.square_depth())) as f64;
     let (gx, gy) = ((x * per).round() as i64, (y * per).round() as i64);
@@ -83,11 +83,9 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
     let pyramid = Pyramid::new(w, Pixels { x: gx, y: gy, across, down, depth });
     let c = Ctx::new(w);
     let f = &c.f;
-    // The ground's temperature is its cell's at the cell's mean height, the terrain's mean over the cell.
-    let terrain = pyramid.field(&(0..n).map(|i| samples.mean_of(w, w.map.leaves()[i])).collect::<Vec<f64>>());
-    let cools = pyramid.field(&(0..n).map(|i| w.air_drop(i).unwrap_or(0.0)).collect::<Vec<f64>>());
+    let layers: Vec<usize> = (0..LAYERS.len()).filter(|&k| wanted(k)).collect();
     let pixels = across * down;
-    let mut out = Vec::with_capacity(4 + pixels * (16 + LAYERS.len()));
+    let mut out = Vec::with_capacity(4 + pixels * (16 + layers.len()));
     out.extend((cover_melt(w) as f32).to_le_bytes());
     let (tree, at) = (w.mesh.tree(), |p: usize| (((gx + (p % across) as i64) as f64 + 0.5) / per, ((gy + (p / across) as i64) as f64 + 0.5) / per));
     let shown = Shown::of(w, (0..pixels).map(at).map(|(px, py)| tree.cell_at(w.map.point_at(px, py))).collect());
@@ -102,8 +100,11 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
         let smooth = cells.even(&target, |_, _| true);
         cells.keep((0..pixels).map(|p| law(p, smooth[p])).collect(), &target, how)
     };
-    for l in LAYERS.iter() {
+    for l in layers.iter().map(|&k| &LAYERS[k]) {
         let plane: Vec<u8> = if l.name == "t_ground" {
+            // The ground's temperature is its cell's at the cell's mean height, the terrain's mean over the cell.
+            let terrain = pyramid.field(&(0..n).map(|i| samples.mean_of(w, w.map.leaves()[i])).collect::<Vec<f64>>());
+            let cools = pyramid.field(&(0..n).map(|i| w.air_drop(i).unwrap_or(0.0)).collect::<Vec<f64>>());
             held(&f.t, &|p, u| u - cools[p] * (ground[p] - terrain[p]), keep::Mean::Shifted).iter().map(|&t| quantise(l, t)).collect()
         } else if l.name == "ice" {
             held(&f.ice, &|_, u| u.max(0.0), keep::Mean::Scaled).iter().map(|&v| quantise(l, v)).collect()
