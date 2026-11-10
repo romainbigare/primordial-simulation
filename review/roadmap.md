@@ -465,3 +465,19 @@ Open on the water:
   and its shore shows steps of a sample on plains level with it.
 - Liquid goes straight from the cell it leaves to the body's cell; what it picks up lands with it.
 - The passes over the samples cost about 20 ms a month on a 64 x 64 island.
+
+**The rivers on the page: done.** The discharge of every sample reaches the page; a tile names the sample of the
+channel each texel is nearest and its distance to that channel's line; the shader sizes the channel by the core's
+channel law from that sample's own discharge. A channel is drawn as water at every zoom, as a line from afar once its
+discharge passes a share of the pixel's size; its line bends on slopes under 0.01. Shores run smooth between texels.
+A tile costs 9 to 16 ms in wasm.
+
+Open on the rivers: the network runs in straight lines of 8 directions with a herringbone of tributaries on plains,
+and a ladder of steps shows along some valleys (the ground's second pass); bends are an even sine and their spacing
+uses a typical runoff; a channel starts at a body with a square end; notches where tributaries join.
+
+**The owner's style for the map.** The "Earth" view is the pretty one: vivid, a little cartoony, tricks allowed
+(wide shallow shores and beaches, lighter and more varied trees, leaves that turn in the cold for tender kinds, small
+plants as tufts, flowers and bushes that melt into a field from afar). The "True" view stays the raw colours the
+physics gives. Cliffs, bare rock, scree and boulders come from numbers (slope, the loose ground's depth, a channel's
+power); the drawing places each one.
