@@ -47,13 +47,13 @@ the middle of its map, says how high the ground would stand; the world keeps wha
 noise's finest octave is 670 m on the 64 x 64 island and 200 km on a globe. The ground is held at **samples**, the
 leaves of `SAMPLE_DEPTH` (1/64 of a block: 125 m on the island, 20 km on a globe of 64 rows), and **the samples are
 worn** (`space::samples`, `space::wear`, found once from the seed when first read, not saved): the ground has a
-history. The noise is read at the centres of the samples of the wear's finest grid (2 x 2 samples to one,
-`wear::finest`) and carried smooth to the samples. The open low ground (on a globe every sample under 0 m; on an
+history. The noise is read at the centres of the samples of a grid of 2 x 2 samples to one (`NOISE_BY`,
+`wear::noise_grid`) and carried smooth to finer grids. The open low ground (on a globe every sample under 0 m; on an
 island those under 0 m joined to its lowest, so ground under 0 m inland is a closed basin) stays as the noise has it; land rises from 0 m at a steady rate to the noise's height
 over 2 million years (`WEAR_YEARS`; ground under 0 m does not rise) while flowing liquid cuts it by the stream power
 law (Howard 1994; Whipple and Tucker 1999): it lowers by K √A S, A the area that drains through a sample, spread down
 every lower way by Quinn's weights (Quinn et al. 1991), S the slope to the sample its liquid runs to, m = 1/2 and n = 1,
-K = 2e-7 a year (`CUT`), each step solved exactly from the open low ground up the ways (h = (h₀ + f h_down) / (1 + f),
+K = 3e-7 a year (`CUT`), each step solved exactly from the open low ground up the ways (h = (h₀ + f h_down) / (1 + f),
 f = K dt √A / d; Braun and Willett 2013), so a step of any length is stable, 0 m the height of the low ground's
 liquid. Under a closed basin's level the liquid does not cut. What a step cuts spreads down as the liquid does; a
 closed basin keeps all that comes into it and fills its floor from the lowest up, as one level, toward the height its
@@ -61,9 +61,10 @@ pass has now, and what it cannot hold runs on over the pass (`space::ponds`); wh
 the land. The slopes creep as a diffusion of 3e-3 m² a year (`CREEP`, the anchor of the core's own creep; Culling
 1960), and the ground floats back up by 2700/3300 of what a step took away, spread over 50 km as a plate bends (Airy
 isostasy, `FLOATS`, `BENDS_M`; Molnar and England 1990). The land first gets a roughness of a metre drawn from the
-seed (`ROUGH_M`), which the first ways find. The time runs on grids coarser than the samples (`STAGES`): 80% of it in
-40 steps on a grid of 4 x 4 samples to one, then 20% in 10 steps on one of 2 x 2, each grid taking the noise's mean
-over each of its samples, each carried to the next and the last to the samples by the smooth lean below (held between
+seed (`ROUGH_M`), which the first ways find. The time runs on three grids (`STAGES`): 55% of it in 24 steps on a grid
+of 4 x 4 samples to one, then 20% in 6 steps on one of 2 x 2, then 25% in 3 steps on the samples' own, so the
+valleys are cut at the samples' size; each grid takes the noise's mean over each of its samples (or the noise carried
+to it), and each is carried to the next by the smooth lean below (held between
 the lowest and the highest of a sample and its eight neighbours, so it makes no new pit and no new peak); a map whose
 first grid would hold more than 65,536 samples runs every stage on grids twice as coarse until it fits
 (`MOST_SAMPLES`). It runs in a fixed serial order in 64-bit numbers, so a seed gives one ground on every machine.

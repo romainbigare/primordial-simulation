@@ -5,8 +5,8 @@
 //! Quinn et al. 1991) and S its slope to the sample its liquid runs to (m = 1/2, n = 1), solved each step exactly from
 //! the open low ground up the ways (Braun and Willett 2013), so a step of any length is stable. Under a closed basin's
 //! level (`space::drain`) the liquid does not cut, and what the ways above it cut settles there (`space::ponds`). The
-//! time runs on grids coarser than the samples (`STAGES`), each stage carried smooth to the next and the last to the
-//! samples (`Grid::finer`). All in a fixed serial order in 64-bit numbers, so a seed gives one ground on every machine.
+//! time runs on grids coarser than the samples and last on the samples' own (`STAGES`), each stage carried smooth to
+//! the next (`Grid::finer`). All in a fixed serial order in 64-bit numbers, so a seed gives one ground on every machine.
 
 use super::drain::{flood, open_low, Flood};
 use super::grid::Grid;
@@ -19,12 +19,15 @@ use crate::rng::{Purpose, Rng};
 const WEAR_YEARS: f64 = 2.0e6;
 /// The stream power law's K for m = 1/2 and n = 1, per year: ground under liquid that drains 1 m² lowers by K a year
 /// on a unit slope.
-const CUT: f64 = 2.0e-7;
+const CUT: f64 = 3.0e-7;
 /// The diffusivity of the slopes' creep, m² a year.
 const CREEP: f64 = 3.0e-3;
 /// The grids the time runs on, coarsest first, each half as coarse as the one before: the samples a side to one of
 /// the grid's (on a map no larger than `MOST_SAMPLES` allows), the share of the time on it, and its steps.
-const STAGES: [(usize, f64, usize); 2] = [(4, 0.8, 40), (2, 0.2, 10)];
+const STAGES: [(usize, f64, usize); 3] = [(4, 0.55, 24), (2, 0.2, 6), (1, 0.25, 3)];
+/// The terrain's noise is read on the grid of this many samples a side to one (on a map no larger than `MOST_SAMPLES`
+/// allows), each finer grid taking it carried smooth.
+const NOISE_BY: usize = 2;
 /// The most samples the first stage's grid may hold: a larger map runs every stage on grids twice as coarse, until it
 /// fits (the cost of a large map's start).
 const MOST_SAMPLES: usize = 1 << 16;
@@ -39,30 +42,36 @@ const ROUGH_M: f64 = 1.0;
 /// sides is under a quarter.
 const STABLE: f64 = 0.2;
 
-/// The samples a side to one of the last stage's grid on grid `g` (`STAGES`, `MOST_SAMPLES`): the terrain's noise is
-/// read on that grid.
-pub(super) fn finest(g: &Grid) -> usize {
+/// The scale of the grids on grid `g`: 1, or twice that while the first stage's grid would hold more than
+/// `MOST_SAMPLES`.
+fn scale(g: &Grid) -> usize {
     let first = STAGES[0].0;
     let mut scale = 1;
     while g.n() / (first * scale).pow(2) > MOST_SAMPLES && g.across.is_multiple_of(2 * first * scale) && g.down.is_multiple_of(2 * first * scale) {
         scale *= 2;
     }
-    STAGES[STAGES.len() - 1].0 * scale
+    scale
+}
+
+/// The samples a side to one of the grid on grid `g` the terrain's noise is read on (`NOISE_BY`, at its scale).
+pub(super) fn noise_grid(g: &Grid) -> usize {
+    NOISE_BY * scale(g)
 }
 
 /// The worn heights of the samples of grid `g`, m, and the open low ground among them (`drain::open_low`), where the
-/// terrain's noise stands at `rise`, m, on the grid `by` times coarser (`finest`). Each stage's grid takes the
-/// noise's mean over each of its samples; the first starts from 0 m on land (the noise's heights under 0 m) and a
-/// roughness of `ROUGH_M` drawn from the seed, each later one from the last carried to it; the samples take the last
-/// carried to them, and the noise carried to them too. On every grid the open low ground stands at the noise's heights
+/// terrain's noise stands at `rise`, m, on the grid `by` times coarser (`noise_grid`). Each stage's grid takes the
+/// noise's mean over each of its samples (a grid finer than the noise's, the noise carried to it); the first starts
+/// from 0 m on land (the noise's heights under 0 m) and a roughness of `ROUGH_M` drawn from the seed, each later one
+/// from the last carried to it, down to the samples'. On every grid the open low ground stands at the noise's heights
 /// and land no lower than 0 m.
 pub(super) fn wear(seed: u64, g: &Grid, (by, rise): (usize, &[f64])) -> (Vec<f64>, Vec<bool>) {
     let rough = |k: usize| ROUGH_M * (Rng::new(seed, 0, k as u64, Purpose::Terrain).f64() - 0.5);
-    let (fine, last_by) = (g.coarser(by), STAGES[STAGES.len() - 1].0);
+    let noise = g.coarser(by);
+    let rise_on = |to: usize| if to >= by { noise.mean_over(rise, to / by) } else { carried(g, (by, rise), to) };
     let mut last: Option<(usize, Vec<f64>)> = None;
     for &(stage_by, share, steps) in &STAGES {
-        let to = stage_by / last_by * by;
-        let (stage, rise_s) = (g.coarser(to), fine.mean_over(rise, to / by));
+        let to = stage_by * by / NOISE_BY;
+        let (stage, rise_s) = (g.coarser(to), rise_on(to));
         let open_s = open_low(&stage, &rise_s);
         let mut h = match &last {
             None => (0..stage.n()).map(|k| if open_s[k] { rise_s[k] } else { rise_s[k].min(0.0) + rough(k) }).collect(),
@@ -72,7 +81,7 @@ pub(super) fn wear(seed: u64, g: &Grid, (by, rise): (usize, &[f64])) -> (Vec<f64
         last = Some((to, h));
     }
     let (from, z) = last.expect("a stage");
-    let rise_g = carried(g, (by, rise), 1);
+    let rise_g = rise_on(1);
     let open = open_low(g, &rise_g);
     (held(&carried(g, (from, &z), 1), &rise_g, &open), open)
 }

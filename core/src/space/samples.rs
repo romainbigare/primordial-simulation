@@ -12,7 +12,7 @@ use super::drain::flood;
 use super::grid::Grid;
 use super::network::accumulate;
 use super::ponds::{basins, grade};
-use super::wear::{finest, wear};
+use super::wear::{noise_grid, wear};
 use crate::math::central;
 use super::square::Square;
 use super::terrain::{Terrain, SAMPLE_DEPTH};
@@ -103,9 +103,9 @@ impl Terrain {
     }
 
     /// The samples of `map` for `seed` (`Samples`): the noise's heights (`Terrain::sample`) at the centres of the
-    /// samples of the wear's finest grid (`wear::finest`), worn (`space::wear`) with the open low ground held; then the
-    /// flood over them from all the open low ground, the closed basins too shallow to hold a pond graded (`ponds::grade`), the area that drains through each
-    /// sample, the ponds and the variance below each.
+    /// samples of the grid the wear reads it on (`wear::noise_grid`), worn (`space::wear`) with the open low ground
+    /// held; then the flood over them from all the open low ground, the closed basins too shallow to hold a pond graded
+    /// (`ponds::grade`), the area that drains through each sample, the ponds and the variance below each.
     fn worn(&self, seed: u64, map: &Square, (south, north): (f64, f64)) -> Samples {
         let per = 1usize << (SAMPLE_DEPTH - map.square_depth());
         let (across, down) = (map.w * per, map.h * per);
@@ -113,8 +113,8 @@ impl Terrain {
         let leaf = |k: usize| Leaf { x: (k % across) as u64 * side, y: (k / across) as u64 * side, depth: SAMPLE_DEPTH };
         let dy = map.length(SAMPLE_DEPTH);
         let grid = Grid::new(across, down, map.wrap, dy, (0..down).map(|r| map.place_of(&leaf(r * across), south, north).0 / dy).collect());
-        // The noise at the centres of the samples of the wear's finest grid: leaves `by` samples a side.
-        let by = finest(&grid);
+        // The noise at the centres of the samples of the grid the wear reads it on: leaves `by` samples a side.
+        let by = noise_grid(&grid);
         let (wide, depth) = (across / by, SAMPLE_DEPTH - by.trailing_zeros() as u8);
         let block = |k: usize| Leaf { x: (k % wide) as u64 * side * by as u64, y: (k / wide) as u64 * side * by as u64, depth };
         let rise = crate::par::map_n(wide * (down / by), crate::par::UNCOUNTED, |k| self.sample(seed, map, map.place_of(&block(k), south, north).1));
