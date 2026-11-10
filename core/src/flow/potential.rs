@@ -138,7 +138,7 @@ pub(super) fn deep_of(x: &mut [f64; LAYERS], s: &Scratch, same: Same, (k, i): (u
 }
 
 /// Flow's working memory as `potential` reads it: the world's, or its state with the table of the substances where a
-/// remap or a load dropped the caches.
+/// load dropped the caches.
 pub(super) fn scratch_of(w: &World) -> Cow<'_, Scratch> {
     if w.scratch.sp.is_empty() {
         Cow::Owned(Scratch { state: w.scratch.state.clone(), sp: super::scratch::substances(&w.chem, &w.cfg.phys), ..Default::default() })
@@ -158,23 +158,6 @@ pub(crate) fn stated(w: &World) -> bool {
 pub fn total(w: &World) -> Option<f64> {
     let p = stated(w).then(|| potential(w, &scratch_of(w), None))?;
     Some([&p.ground, &p.air, &p.deep, &p.bodies].iter().flat_map(|v| v.iter()).sum())
-}
-
-/// The potential energy of the matter of ground cells `cells` (their stacks, stores and heads) and of air node `air`,
-/// J (`potential`): what a split or a join of cells under `air` changes (`World::split`). It reads those cells and the
-/// cells under `air` alone (`row_of`), as `potential` reads them, by Flow's state of the ground, which gives a cell a
-/// remap made the phases of its heat (`World::thawed`). None before Flow first built the state (`stated`).
-pub fn potential_of(w: &World, cells: &[usize], air: usize) -> f64 {
-    if !stated(w) {
-        return 0.0;
-    }
-    let s = scratch_of(w);
-    // The rows of `cells` and the mean head of `air` over its cells, as `potential` finds them.
-    let (same, life, (level, g)) = (Same::of(&s), Life::of(w), (w.mesh.level(AIR), w.cfg.gravity));
-    let row = |i: usize| row_of(w, &s, &same, i, (|_, _| 0.0, life.kg(w, &s.sp, i)));
-    let (amounts, na, za) = (w.store.amounts(Class::Air), level.n(), mean_head(w, &s, &same, air));
-    let e_air = (0..w.chem.ns()).map(|k| amounts[k * na + air] * s.sp[k].mm).sum::<f64>() * g * za;
-    cells.iter().map(|&i| row(i)).map(|r| r[0] + r[1] + r[4]).sum::<f64>() + e_air
 }
 
 /// The liquid of each ground cell now as `potential` stacks it (`stack::Column`), by Flow's state of the ground.

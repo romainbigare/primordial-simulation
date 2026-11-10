@@ -62,17 +62,6 @@ impl Store {
     pub fn heat(&self, class: Class) -> &[f64] {
         self.heat.get(class as usize).map_or(&[], |v| v)
     }
-    /// The nodes of each cell (`Class::CELLS`) follow their cells (`World::remap`): a new cell's hold nothing, those of
-    /// a cell a split or a join made their share or their sum, by the records of the joins (`joined`, `Made::held`).
-    pub(crate) fn remap(&mut self, r: &crate::remap::Renumber, joined: &[Option<crate::remap::Joined>]) {
-        use crate::remap::Of;
-        for c in Class::CELLS {
-            let a = &mut self.amounts[c as usize];
-            *a = r.apply_made(std::mem::take(a), || 0.0, |k, m, at| m.held(joined, Some(Of::Amount(c, k)), at));
-            let h = &mut self.heat[c as usize];
-            *h = r.apply_made(std::mem::take(h), || 0.0, |_, m, at| m.held(joined, Some(Of::Heat(c)), at));
-        }
-    }
 }
 
 impl World {

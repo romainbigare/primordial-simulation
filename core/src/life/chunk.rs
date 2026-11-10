@@ -36,10 +36,8 @@ pub struct Written {
     /// The lineages and born rows its bodies made, by provisional id (`registry`)
     pub(super) brains: Vec<Lineage>,
     pub(super) genomes: Vec<Vec<f32>>,
-    /// The bodies that moved into its cells, by id, with their cell; and the cells whose physics left a body behind
-    /// the time it ran to, with repeats (`behind`)
+    /// The bodies that moved into its cells, by id, with their cell
     arrived: Vec<(u64, u32)>,
-    behind: Vec<u32>,
     /// The life that came into its cells from another cell's head, in the order landed: that cell, its own, kg
     /// (`store::life_went`)
     went: Vec<(usize, usize, f64)>,
@@ -148,12 +146,6 @@ impl<'a> Chunk<'a> {
         self.written.arrived.push((b.id, b.cell));
         self.store(b)
     }
-    /// The physics of its cell `i` left a body behind the time it ran to: a child born late in its last sub-step, or a
-    /// node whose members born since count less (`nodes::rejoin`). The next pass of the physics of the bodies that landed
-    /// runs it on (`Touched::landed`).
-    pub(crate) fn behind(&mut self, i: usize) {
-        self.written.behind.push(i as u32);
-    }
     /// `kg` of life came from the head of cell `from` to its cell `to` (`store::life_went`).
     pub(crate) fn went(&mut self, from: usize, to: usize, kg: f64) {
         self.written.went.push((from, to, kg));
@@ -229,7 +221,7 @@ pub(crate) fn run<T: Send, S>(w: &mut World, of: Of, work: Vec<T>, load: usize, 
     assert_eq!(work.len(), b.len() - 1, "one item of work per chunk");
     let ns = w.chem.ns();
     let mut cells = std::mem::take(&mut w.life.cells);
-    w.life.touched.held(cells.len(), of);
+    w.life.touched.held(of);
     let mut work: Vec<Option<T>> = work.into_iter().map(Some).collect();
     // The chunks that hold cells of `of`: each its index, and the place of its first and the end of its cells in the
     // list (all of them: its run).
@@ -302,7 +294,7 @@ impl World {
     /// node, it is put back, and the world takes what it wrote (`take_chunks`).
     pub fn in_cell<R>(&mut self, i: usize, f: impl FnOnce(&World, &mut Chunk) -> R) -> R {
         let mut one = [std::mem::take(&mut self.life.cells[i])];
-        self.life.touched.held(self.life.cells.len(), Of::Only(&[i as u32]));
+        self.life.touched.held(Of::Only(&[i as u32]));
         let mut c = Chunk::new(i, &mut one, Vec::new(), self.chem.ns());
         c.moves.open(self, i, A_BODY);
         let r = f(self, &mut c);
@@ -323,7 +315,6 @@ impl World {
             self.events.append(&mut d.events);
             self.counts.add(&mut d.counts);
             d.arrived.iter().for_each(|&(id, i)| self.life.note_at(id, i));
-            d.behind.iter().for_each(|&i| self.life.touched.landed(i));
             if !d.brains.is_empty() || !d.genomes.is_empty() {
                 let (brains, genomes) = (std::mem::take(&mut d.brains), std::mem::take(&mut d.genomes));
                 self.life.name(d.cells(), (brains, genomes), &mut d.out);

@@ -80,7 +80,7 @@ impl<'a> Look<'a> {
                 if t < 1.0 { g } else { ramp(&[(0.0, [90, 70, 120]), (1.0, [200, 60, 160]), (2.0, [255, 160, 40]), (3.0, [255, 255, 200])], t.log10()) }
             }
             // The depth of the cell at the square's centre against a square's: coarser dark, a square light grey, each
-            // depth finer warmer (refinement, `World::refine`).
+            // depth finer warmer.
             _ => {
                 let finer = w.map.leaves()[i].depth as f64 - w.map.square_depth() as f64;
                 ramp(&[(-2.0, [60, 60, 70]), (0.0, [200, 200, 200]), (1.0, [250, 210, 80]), (2.0, [230, 110, 30]), (3.0, [170, 20, 20])], finer)

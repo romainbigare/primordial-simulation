@@ -47,8 +47,8 @@ pub struct Lived {
 pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp, at: u64) -> Result<Lived, u8> {
     let cal = w.cfg.calendar();
     let now = at as f64 / cal.day as f64;
-    let days = (now - b.last).max(w.phys_days(b.cell as usize).min(1.0));
-    (b.last, tmp.day, tmp.key) = (now, cal.day_ending(at), w.key_ending(b.cell as usize, at));
+    let days = (now - b.last).max(w.phys_days().min(1.0));
+    (b.last, tmp.day, tmp.key) = (now, cal.day_ending(at), w.key_ending(at));
     let (mass, from) = (b.mass(&w.chem), b.member_body(&w.chem));
     // With nothing left of a member there is no heat capacity to hold a temperature: it dies.
     if b.empty_at(mass) {
@@ -77,7 +77,7 @@ pub(crate) fn live(w: &World, d: &mut Chunk, b: &mut Body, tmp: &mut LiveTmp, at
 /// What a body with no physics behind it since it was placed (a founder) leaves for its first decision
 /// (`survey::updates`): its spare against its upkeep to its next meal (`World::phys_days`).
 pub(crate) fn newborn(w: &World, b: &Body) -> Lived {
-    let cost = super::pay::ahead(w, b, b.mass(&w.chem), w.phys_days(b.cell as usize));
+    let cost = super::pay::ahead(w, b, b.mass(&w.chem), w.phys_days());
     let spare = b.fuel(&w.chem, b.temp(&w.chem)).min(MARGIN * cost) / cost.max(1e-300);
     Lived { spare, released: 0.0, lost: 0.0 }
 }
@@ -253,7 +253,7 @@ fn keep_warm(w: &World, d: &mut Chunk, b: &mut Body, heat: f64, (dt, sips): (f64
 /// than the meals of the same time in short steps.
 pub(crate) fn fade_meal_heat(w: &World, d: &mut Chunk, b: &mut Body, stands: f64, released: f64) {
     let (chem, t) = (&w.chem, b.temp(&w.chem));
-    let (cap, dt) = (b.heat_cap(chem).max(1e-300), w.phys_days(b.cell as usize) * DAY);
+    let (cap, dt) = (b.heat_cap(chem).max(1e-300), w.phys_days() * DAY);
     let x = around(w, d, b, b.mass(chem)).coat * dt / cap;
     let to = stands + (t - stands) * (-x).exp();
     settle_heat(w, d, b, if to > t { t + (to - t).min(released.max(0.0) * dt / cap) } else { to });

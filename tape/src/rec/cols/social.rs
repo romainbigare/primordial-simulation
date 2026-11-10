@@ -30,8 +30,7 @@ impl Recorder {
         let all: f64 = order.iter().map(|&i| traffic[i] as f64).sum();
         let on_top: f64 = top.iter().map(|&i| traffic[i] as f64).sum();
         let (s, decade) = (&mut self.social, w.cfg.calendar().years(w.time).is_multiple_of(DECADE));
-        // (Cells by their serials, which a split or a join of cells does not change: a cell that split or joined since is
-        // not among the old.)
+        // (Cells by their serials, `Life::serial`.)
         let serial = |i: usize| life.serial(i);
         if decade && !top.is_empty() {
             let old: BTreeSet<u32> = s.top.iter().copied().collect();

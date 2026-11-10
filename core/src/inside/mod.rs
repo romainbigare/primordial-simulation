@@ -1,15 +1,13 @@
 //! Inside a cell (handover 5.2, laws.md 0): a cell holds means (its cover, the liquid in its soil, the liquid that stands
-//! on it). Each is shared over the cell's own ground by a general law evaluated at a grid of samples inside the cell,
-//! `DEPTHS` below it (`Ground`): the soil's liquid by its steady flow downhill, what stands by its level, each kind of
-//! cover by its own growth law there (`Inside`). Each share keeps its mean: its mean over the cell by area is 1. A split
-//! gives each quarter the share of its own ground (`World::split`), and a shell draws inside a cell with the same
-//! shares. What the terrain alone gives (the slopes, where the liquid runs) is found once, when the ground is made.
+//! on it), and a shell draws them inside the cell by general laws at each point of its ground: the soil's liquid by how
+//! much liquid gathers there (`soil_level`, `soil_held`, on a `Grid` of samples). The ground inside a cell is the
+//! terrain at a grid of samples `DEPTHS` below it (`Ground`), on which its liquid stands (`flow::curve`).
 
 mod shares;
 
-pub use shares::{soil_held, soil_level, Inside, Means};
+pub use shares::{soil_held, soil_level, Means};
 
-use crate::math::{central, spread_down};
+use crate::math::central;
 use crate::space::tree::DEPTH_MOST;
 use crate::space::Leaf;
 use crate::World;
@@ -46,19 +44,12 @@ pub struct Grid {
 }
 
 /// The ground inside a cell as the terrain stands there (`World::ground_in`): per sample, row by row from the north-west,
-/// its height, m, and its share of the cell's area; its grid of samples (as many along a side as down it) and the
-/// cell's area, m². And what the terrain alone gives, found when it is made (`Ground::found`): per sample the area
-/// of the cell that drains through it, m², the share of what comes from upstream that drains through it, and its
-/// slope, rise over run.
+/// its height, m, and its share of the cell's area; and its grid of samples (as many along a side as down it).
 #[derive(Clone, Debug)]
 pub struct Ground {
     pub h: Vec<f64>,
     pub area: Vec<f64>,
     grid: Grid,
-    whole: f64,
-    drains: Vec<f64>,
-    through: Vec<f64>,
-    tan: Vec<f64>,
 }
 
 impl World {
@@ -67,19 +58,6 @@ impl World {
     pub fn catchment(&self, i: usize) -> f64 {
         let shed = (self.rain[i] as f64 - self.evap[i] as f64).max(SHED_MIN) * self.mesh.cells().area()[i];
         self.liquid_flux.get(i).copied().unwrap_or(0.0) as f64 / shed
-    }
-
-    /// The area that drains to cell `i` from upstream, m²: that of its `catchment` less its own.
-    pub fn inflow(&self, i: usize) -> f64 {
-        (self.catchment(i) - 1.0).max(0.0) * self.mesh.cells().area()[i]
-    }
-
-    /// The shares inside cell `i` (`Inside`) of the means `m`, on its ground (`ground_in`) with the departures scaled
-    /// by `s` (`Ground::scaled`), with what drains to it from upstream (`inflow`).
-    pub fn inside(&self, i: usize, s: f64, m: Means) -> (Ground, Inside) {
-        let g = self.ground_in(self.map.leaves()[i]).scaled(s);
-        let shares = Inside::of(&g, &self.cfg.phys, self.inflow(i), m);
-        (g, shares)
     }
 
     /// The terrain's worn samples of this world (`Terrain::samples`), which the ground inside each cell reads.
@@ -100,7 +78,7 @@ impl World {
         let dx = (0..side).map(|r| area[r * side] / dy).collect();
         let whole: f64 = area.iter().sum();
         area.iter_mut().for_each(|a| *a /= whole);
-        Ground { h, area, grid: Grid::new(side, side, dy, dx), whole, drains: Vec::new(), through: Vec::new(), tan: Vec::new() }.found()
+        Ground { h, area, grid: Grid::new(side, side, dy, dx) }
     }
 }
 
@@ -116,20 +94,6 @@ impl Grid {
         (0..n).flat_map(move |p| [(p % w + 1 < w).then(|| (p, p + 1)), (p + w < n).then(|| (p, p + w))]).flatten()
     }
 
-    /// The samples next to sample `p` (across its sides and corners, on the grid), each with whether it lies across a
-    /// corner and its distance, m.
-    fn around(&self, p: usize) -> impl Iterator<Item = (usize, bool, f64)> + '_ {
-        let (w, h) = (self.across as i64, self.down as i64);
-        let (r, c) = (p as i64 / w, p as i64 % w);
-        (-1..=1i64).flat_map(move |dr| (-1..=1i64).map(move |dc| (dr, dc))).filter_map(move |(dr, dc)| {
-            let (r2, c2) = (r + dr, c + dc);
-            ((dr, dc) != (0, 0) && (0..h).contains(&r2) && (0..w).contains(&c2)).then(|| {
-                let dx = (self.dx[r as usize] + self.dx[r2 as usize]) / 2.0;
-                ((r2 * w + c2) as usize, dr != 0 && dc != 0, (dx * dc as f64).hypot(self.dy * dr as f64))
-            })
-        })
-    }
-
     /// The slope of the ground at each sample, rise over run, east and south: central differences, one-sided at the
     /// grid's edges.
     fn gradient(&self, h: &[f64]) -> Vec<[f64; 2]> {
@@ -143,18 +107,6 @@ impl Grid {
             .collect()
     }
 
-    /// What gathers at each sample of ground `h` when `gathered` falls on the samples and runs down by multiple flow directions
-    /// (Quinn et al. 1991): each sample, highest first, passes what it gathered to every lower sample next to it by drop
-    /// over distance times contour length (`math::spread_down`), so it spreads over a convex ridge and gathers in a concave hollow;
-    /// a sample with no lower one keeps it (a hollow, or the edge it leaves by). It is the steady flow of the soil's
-    /// liquid downhill by Darcy's law, which follows the ground's slope, spread as slow flow through the soil spreads;
-    /// the liquid law's one steepest way (D-infinity) suits channels.
-    pub fn drain(&self, h: &[f64], gathered: Vec<f64>) -> Vec<f64> {
-        let mut order: Vec<usize> = (0..h.len()).collect();
-        order.sort_by(|&p, &q| h[q].total_cmp(&h[p]).then(p.cmp(&q)));
-        spread_down(h, order.into_iter(), |p| self.around(p), gathered)
-    }
-
     /// The slope of ground `h` at each sample, rise over run, no less than real ground's over a sample (`real_slope`).
     pub fn slope(&self, h: &[f64]) -> Vec<f64> {
         let floor = real_slope(self.dy);
@@ -162,7 +114,7 @@ impl Grid {
     }
 
     /// How much liquid gathers at each sample, the topographic wetness index ln(a / tan β) (Beven and Kirkby 1979), from
-    /// the area that drains through each, m² (`drain`), over the width of a sample (the root of its area `own`, m²),
+    /// the area that drains through each, m², over the width of a sample (the root of its area `own`, m²),
     /// and its slope (`slope`).
     pub fn wetness_index(drains: &[f64], own: &[f64], tan: &[f64]) -> Vec<f64> {
         (0..drains.len()).map(|p| (drains[p] / own[p].sqrt() / tan[p]).ln()).collect()
@@ -170,90 +122,13 @@ impl Grid {
 }
 
 impl Ground {
-    /// The same ground with its heights' departures from their mean scaled by `s` (a split that cannot pay for the whole
-    /// terrain inside its cell scales it so, `World::uneven`; 0 is flat).
-    pub fn scaled(mut self, s: f64) -> Ground {
-        if s == 1.0 {
-            return self;
-        }
-        let mean: f64 = self.h.iter().zip(&self.area).map(|(h, a)| h * a).sum();
-        self.h.iter_mut().for_each(|h| *h = mean + s * (*h - mean));
-        self.found()
-    }
-
-    /// The ground with what its terrain alone gives found (`Ground`): the area that drains through each sample from the
-    /// cell's own area and the share of what comes from upstream that does (`drain`; from upstream it enters at the
-    /// lowest sample of the grid's highest side, where a channel comes in, and spreads evenly on flat ground), and each
-    /// sample's slope, no less than real ground's over a sample (`real_slope`).
-    fn found(mut self) -> Ground {
-        let flat = self.h.iter().all(|&x| x == self.h[0]);
-        let mut entry = vec![0.0; self.h.len()];
-        if flat {
-            entry.clone_from(&self.area);
-        } else {
-            entry[self.entry()] = 1.0;
-        }
-        self.drains = self.grid.drain(&self.h, self.area.iter().map(|a| a * self.whole).collect());
-        self.through = self.grid.drain(&self.h, entry);
-        self.tan = self.grid.slope(&self.h);
-        self
-    }
-
     /// The pairs of samples beside each other across a side, on the grid.
     pub(crate) fn sides(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
         self.grid.sides()
     }
 
-    /// How much liquid gathers at each sample: the topographic wetness index ln(a / tan β) (Beven and Kirkby 1979), a
-    /// the area that drains through the sample per metre of contour (its own and all upslope of it, and its share of
-    /// the `inflow` m² that drains to the cell from upstream, over the width of a sample) and β its slope (`found`).
-    pub fn wetness_index(&self, inflow: f64) -> Vec<f64> {
-        let drains: Vec<f64> = (0..self.h.len()).map(|p| self.drains[p] + inflow * self.through[p]).collect();
-        let own: Vec<f64> = self.area.iter().map(|a| a * self.whole).collect();
-        Grid::wetness_index(&drains, &own, &self.tan)
-    }
-
-    /// The lowest sample of the highest of the grid's four sides (north, east, south, west; ties the first).
-    fn entry(&self) -> usize {
-        let (n, last) = (self.grid.across, self.grid.across - 1);
-        let sides: [Vec<usize>; 4] = [(0..n).collect(), (0..n).map(|r| r * n + last).collect(), (0..n).map(|c| last * n + c).collect(), (0..n).map(|r| r * n).collect()];
-        let mean = |s: &[usize]| s.iter().map(|&p| self.h[p]).sum::<f64>() / s.len() as f64;
-        let high = sides.iter().fold(&sides[0], |best, s| if mean(s) > mean(best) { s } else { best });
-        high.iter().copied().fold(high[0], |low, p| if self.h[p] < self.h[low] { p } else { low })
-    }
-
-    /// The depth over each sample of liquid that stands `depth` m deep over the cell at one level, m: it fills the
-    /// lowest samples first (`flow::level_of`), each as deep as it lies under the level.
-    pub(crate) fn standing(&self, depth: f64) -> Vec<f64> {
-        if depth <= 0.0 {
-            return vec![0.0; self.h.len()];
-        }
-        let mut floors: Vec<(f64, f64)> = self.h.iter().copied().zip(self.area.iter().copied()).collect();
-        let top = crate::flow::level_of(&mut floors, depth);
-        self.h.iter().map(|h| (top - h).max(0.0)).collect()
-    }
-
     /// The mean of `x` over the cell by area.
     pub fn mean(&self, x: &[f64]) -> f64 {
         x.iter().zip(&self.area).map(|(v, a)| v * a).sum()
-    }
-
-    /// `x` as shares: over its mean by area, so their mean is 1 (all 1 where it is nothing).
-    pub fn share(&self, x: Vec<f64>) -> Vec<f64> {
-        let mean = self.mean(&x);
-        if mean > 0.0 { x.into_iter().map(|v| v / mean).collect() } else { vec![1.0; x.len()] }
-    }
-
-    /// The part of the cell's whole that each of its quarters (row by row) holds where the whole lies by the shares
-    /// `share` (`Inside`: none below 0, and not all 0): the sum by area of the shares of its samples over the sum of all,
-    /// so the four parts sum to 1.
-    pub fn quarters(&self, share: &[f64]) -> [f64; 4] {
-        let (n, half) = (self.grid.across, self.grid.across / 2);
-        let mut q = [0.0; 4];
-        for p in 0..n * n {
-            q[(p / n >= half) as usize * 2 + (p % n >= half) as usize] += self.area[p] * share[p];
-        }
-        let sum = crate::remap::sum4(q);
-        q.map(|x| x / sum)
     }
 }

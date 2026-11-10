@@ -15,7 +15,7 @@ fn act_on(w: &mut World, b: &mut Body, p: u64) {
     let i = b.cell as usize;
     w.in_cell(i, |w, d| {
         let x = bond::at(d.at(i), p).expect("the part");
-        bond::act(w, d, b, 1, (x, w.step_days(i)))
+        bond::act(w, d, b, 1, (x, w.step_days()))
     });
 }
 
@@ -47,20 +47,6 @@ fn alike_lone_parts_are_one_lot() {
     w.life[s] = b;
     let now = records(&w, i);
     assert!(now.len() == 2 && now[0] == (ids[0], 7.0) && now[1].1 == 1.0, "one part is not split out: {now:?}");
-    books.assert_within(&w, 1e-9, 1e-9);
-    // The cell splits: each quarter holds its share of the lot by count; joined, the cell holds them all.
-    let leaf = w.map.leaves()[i];
-    w.split(leaf).expect("the cell splits");
-    let quarters: Vec<usize> = leaf.quarters().iter().map(|&q| w.map.cell(q).expect("a quarter")).collect();
-    let lots: Vec<f64> = quarters.iter().map(|&q| w.life.cell_at(q).parts.iter().filter(|p| p.count > 1.0).map(|p| p.count).sum()).collect();
-    assert!(lots.iter().all(|&n| n >= 1.0) && (lots.iter().sum::<f64>() - 7.0).abs() < 1e-12, "the lot by quarter: {lots:?}");
-    books.assert_within(&w, 1e-9, 1e-9);
-    w.join(leaf).expect("the quarters join");
-    let j = w.map.cell(leaf).expect("the joined cell");
-    bond::step(&mut w);
-    let designs = bond::designs(&w.chem, w.life.cell_at(j)).into_values().collect::<std::collections::BTreeSet<u64>>().len();
-    let all: f64 = w.life.cell_at(j).parts.iter().map(|p| p.count).sum();
-    assert!(w.life.cell_at(j).parts.len() <= designs && (all - 8.0).abs() < 1e-12, "{:?} in {designs} designs", records(&w, j));
     books.assert_within(&w, 1e-9, 1e-9);
 }
 

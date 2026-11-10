@@ -1,8 +1,6 @@
 //! Space: the mesh of a map has its cells (areas, links, the air as a coarser level), cells of many squares among
-//! them; what the world keeps per cell and per link follows a change of the cells (`World::remap`).
+//! them; and the terrain's channels on its samples.
 
-use pcore::remap::{Remap, Renumber};
-use pcore::store::Class;
 use pcore::{World, AIR};
 use pcore::space::square::Square;
 use pcore::space::tree::BLOCK;
@@ -287,142 +285,15 @@ fn the_steepest_way_down_a_tilted_surface_is_its_slope_on_any_cells() {
     }
 }
 
-/// Months a world of bodies and a part lives before its cells are renumbered: long enough that each per-cell array holds
-/// numbers (the nodes' sleep, the traffic, Flow's state).
-const LIVED_MONTHS: usize = 3;
-
-/// The small world with its cover and eaters and a part in a dry cell, after `LIVED_MONTHS` months, its events taken.
-fn lived() -> World {
-    let mut w = worldgen::testkit::small_world();
-    worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed(&mut w, 1);
-    let i = worldgen::testkit::dry_land(&w);
-    worldgen::testkit::plate(&mut w, i, 1.0, true);
-    (0..LIVED_MONTHS).for_each(|_| pcore::step(&mut w));
-    w.drain_events();
-    w
-}
-
-/// The whole saved state of `w`.
-fn saved(w: &World) -> serde_json::Value {
-    serde_json::to_value(w).expect("a world serialises")
-}
-
-/// Months of the lived world at whose start the identity remap runs, one after the other (a year: each month of the
-/// refreshes and of the creep of Flow); and the months each remapped world goes on for.
-const REMAPPED: usize = 12;
-const AFTER_REMAP: usize = 12;
-
-/// A remap that changes nothing drops Flow's caches, as a load does: stepping on from it, at any month of the slow cycles,
-/// gives the world of no remap, bit for bit.
-#[test]
-fn the_identity_remap_changes_no_step() {
-    let mut w = lived();
-    let (n, links) = (w.mesh.cells().n(), w.mesh.cells().a().len());
-    let same = Remap { cells: Renumber::new(n, (0..n as u32).map(Some).collect()), links: Renumber::new(links, (0..links as u32).map(Some).collect()) };
-    let month = |w: &mut World| {
-        pcore::step(w);
-        w.drain_events();
-    };
-    // The worlds remapped and still going on, the first remapped first.
-    let mut remapped = std::collections::VecDeque::new();
-    for m in 0..REMAPPED + AFTER_REMAP - 1 {
-        if m < REMAPPED {
-            let mut v = w.clone();
-            v.remap(&same);
-            remapped.push_back(v);
-        }
-        remapped.iter_mut().for_each(month);
-        month(&mut w);
-        if m + 1 >= AFTER_REMAP {
-            let v = remapped.pop_front().expect("a world remapped a year ago");
-            assert!(saved(&v) == saved(&w), "remapped at month {}, then {AFTER_REMAP} months", w.cfg.calendar().months(v.time) - AFTER_REMAP as u64);
-        }
-    }
-}
-
-/// Cells and links renumbered (`World::remap`): each cell holds at its new number what it held, its bodies and parts
-/// are found there by their ids, and its serial goes with it; renumbered back, the world is what it was, bit for bit.
-#[test]
-fn a_world_renumbered_and_back_is_the_same() {
-    let w = lived();
-    let (n, links) = (w.mesh.cells().n(), w.mesh.cells().a().len());
-    let to: Vec<u32> = (0..n).map(|j| ((7 * j + 3) % n) as u32).collect();
-    let mut back = vec![0; n];
-    to.iter().enumerate().for_each(|(j, &i)| back[i as usize] = j as u32);
-    let reversed: Vec<Option<u32>> = (0..links as u32).rev().map(Some).collect();
-    let remap = |from: &[u32]| Remap { cells: Renumber::new(n, from.iter().copied().map(Some).collect()), links: Renumber::new(links, reversed.clone()) };
-    let before = saved(&w);
-    let mut v = w.clone();
-    v.remap(&remap(&to));
-    let (a, b) = (w.store.amounts(Class::Ground), v.store.amounts(Class::Ground));
-    assert!((0..w.chem.ns() * n).all(|x| b[x] == a[x / n * n + to[x % n] as usize]), "each ground holds what its cell held");
-    assert_eq!(v.life.unsound(), None);
-    assert!(w.life.alive().all(|x| v.life.find(x.id).map(|h| h.cell) == Some(back[x.cell as usize])), "each body is found in its cell");
-    assert!(w.life.parts().count() > 0 && w.life.parts().all(|p| v.life.part_cell(p.id) == Some(back[p.cell as usize] as usize)), "each part is found in its cell");
-    let cells = saved(&v)["life"]["cells"].clone();
-    assert!((0..n).all(|j| cells[j]["serial"] == to[j]), "a cell's serial goes with it");
-    v.remap(&remap(&back));
-    assert_eq!(saved(&v), before);
-}
-
-/// The saved state's arrays (by their path) of one number per cell of `n` cells, or of blocks of them, with the count
-/// of blocks: all but the map's squares and what lies inside the life of a cell.
-fn per_cell(x: &serde_json::Value, n: usize, path: &str, out: &mut Vec<(String, usize)>) {
-    if ["/map", "/life/cells/"].iter().any(|p| path.starts_with(p)) {
-        return;
-    }
-    let inner: Vec<(String, &serde_json::Value)> = match x {
-        serde_json::Value::Array(v) => {
-            if !v.is_empty() && v.len().is_multiple_of(n) {
-                out.push((path.to_string(), v.len() / n));
-            }
-            v.iter().enumerate().map(|(k, y)| (format!("{path}/{k}"), y)).collect()
-        }
-        serde_json::Value::Object(m) => m.iter().map(|(k, y)| (format!("{path}/{k}"), y)).collect(),
-        _ => Vec::new(),
-    };
-    inner.into_iter().for_each(|(p, y)| per_cell(y, n, &p, out));
-}
-
-/// A cell appended holds nothing and takes the next serial, and every array of one number per cell has one more; taken
-/// away again, it leaves the world as it was but for that serial, which no cell takes again.
-#[test]
-fn a_new_cell_takes_a_serial_never_given_again() {
-    let w = lived();
-    let (n, ns, links) = (w.mesh.cells().n(), w.chem.ns(), w.mesh.cells().a().len());
-    let same_links = || Renumber::new(links, (0..links as u32).map(Some).collect());
-    let grown = Remap { cells: Renumber::new(n, (0..n as u32).map(Some).chain([None]).collect()), links: same_links() };
-    let shrunk = Remap { cells: Renumber::new(n + 1, (0..n as u32).map(Some).collect()), links: same_links() };
-    let (mut v, mut old) = (w.clone(), Vec::new());
-    per_cell(&saved(&w), n, "", &mut old);
-    for round in 0..2 {
-        v.remap(&grown);
-        let mut new = Vec::new();
-        per_cell(&saved(&v), n + 1, "", &mut new);
-        assert!(!old.is_empty() && new == old, "the arrays of one number per cell, before {old:?}, after {new:?}");
-        let (a, b) = (w.store.amounts(Class::Ground), v.store.amounts(Class::Ground));
-        assert!((0..ns).all(|k| b[k * (n + 1) + n] == 0.0 && (0..n).all(|i| b[k * (n + 1) + i] == a[k * n + i])), "the old cells keep what they held, the new one holds nothing");
-        let cell = saved(&v)["life"]["cells"][n].clone();
-        assert_eq!((cell["serial"].as_u64(), cell["bodies"].as_array().map(Vec::len)), (Some((n + round) as u64), Some(0)));
-        v.remap(&shrunk);
-    }
-    let (mut a, mut b) = (saved(&w), saved(&v));
-    let next = |x: &mut serde_json::Value| x["life"].as_object_mut().and_then(|l| l.remove("next_serial")).and_then(|s| s.as_u64());
-    assert_eq!((next(&mut a), next(&mut b)), (Some(n as u64), Some(n as u64 + 2)));
-    assert_eq!(a, b);
-}
-
 /// The terrain's channels (`space::network`): each sample's liquid runs to a neighbour no higher, but in a pond, where
 /// it runs on toward the pass; from every sample of land the way leads to the open low ground under 0 m; a pond's
 /// samples lie under its level, which is its pass's height. The area that drains through a sample is its own and all
-/// that runs to it, so the sinks gather the whole map's. What leaves a leaf is what leaves it from its quarters
-/// (`Samples::leaving`), at the samples' size, coarser and finer.
+/// that runs to it, so the sinks gather the whole map's.
 #[test]
-fn the_terrains_channels_run_down_and_what_leaves_a_leaf_leaves_its_quarters() {
+fn the_terrains_channels_run_down() {
     use pcore::space::network::NONE;
     let w = worldgen::testkit::small_world();
-    let (s, lat) = (w.terrain_samples(), (w.cfg.lat_south, w.cfg.lat_north));
+    let s = w.terrain_samples();
     let mut own = s.up.clone();
     for (k, &j) in s.to.iter().enumerate().filter(|p| *p.1 != NONE) {
         assert!(s.h[j as usize] <= s.h[k] || s.pond[k] != NONE, "sample {k} runs down");
@@ -446,11 +317,4 @@ fn the_terrains_channels_run_down_and_what_leaves_a_leaf_leaves_its_quarters() {
         assert!(s.h[k] < pond.level && s.pond[pond.pass as usize] == NONE && s.h[pond.pass as usize] == pond.level, "sample {k} under its pond's pass");
     }
     println!("{} ponds over {} samples", s.ponds.len(), s.pond.iter().filter(|&&p| p != NONE).count());
-    let mut l = w.map.leaves()[worldgen::testkit::dry_land(&w)];
-    while l.depth < pcore::space::terrain::SAMPLE_DEPTH + 3 {
-        let whole = s.leaving(&w.map, lat, l, l);
-        let parts: f64 = l.quarters().iter().map(|&q| s.leaving(&w.map, lat, q, l)).sum();
-        assert!(whole > 0.0 && (parts / whole - 1.0).abs() < 1e-12, "leaf {l:?}: {parts} m² of {whole} m² leave from its quarters");
-        l = *l.quarters().iter().max_by(|a, b| s.leaving(&w.map, lat, **a, **a).total_cmp(&s.leaving(&w.map, lat, **b, **b))).expect("four quarters");
-    }
 }

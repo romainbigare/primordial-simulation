@@ -67,13 +67,13 @@ minutes on a busy machine). Do not pipe a step into `tail` without `pipefail`: a
 
 Done and on main, beyond the tree plan (WP0 to WP16, WP21; details in `review/plan.md` and the commit messages):
 - **The liquid over each cell's own ground** (a level-volume curve per cell, `flow/curve.rs`): no blinking lakes, no
-  lakes on ridges, the coast holds while the camera splits and joins.
+  lakes on ridges.
 - **A cell's parts** (`flow/parts/`): its land, the liquid's top (`h_mix`, 50 m) and its deep, each with its own heat;
   the deep trades with the top through the thermocline and overturns when the top is denser; the densest temperature
   falls with what is dissolved (Despretz). The world's sea is nearly fresh (0.19 g/kg). Flow costs about twice what it
   did.
 - **Rivers (WP18, the physics):** one channel law from the discharge (Leopold and Maddock 1953, `flow/channel.rs`);
-  the flux a cell passes on is a flow through a split and a join (`remap/through.rs`); the terrain's samples hold their
+  the terrain's samples hold their
   channels (`space/network.rs`); the map draws channels on the drawn ground at their true width (`tape/src/ground/channels.rs`).
 - **The map without squares (close views):** one ground below the terrain's samples for the core and the map
   (`space/below.rs`), drawn from tiles made once in a second worker (`tape/src/ground/`, `web/src/ground.ts`) and a

@@ -1,14 +1,12 @@
 //! Where liquid stands over the ground (laws.md 1.2): one level over floors of heights and areas (`level_of`), and each
 //! cell's level-volume curve over its own ground (`Curve`), the terrain's worn samples inside it (`World::ground_in`)
-//! at the scale its ground stands the terrain (`World::relief_scale`) about its mean surface. Liquid fills a cell's ground from
+//! about its mean surface. Liquid fills a cell's ground from
 //! its lowest sample up, so a cell is wet where part of its ground lies under its level, and it passes its liquid on
 //! from its lowest ground, the way the terrain inside it drains.
 
 use super::Scratch;
-use crate::space::Leaf;
 use crate::World;
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 
 /// The level at which `vol` m³ fill floors of heights and areas `floors` (m, m²), sorted here: Σ area × (level -
 /// floor) over the floors under it is `vol`, m.
@@ -31,13 +29,12 @@ fn level_sorted(floors: &[(f64, f64)], vol: f64) -> f64 {
 }
 
 /// The level-volume curve of a cell's ground: each sample's departure from the cell's mean surface, lowest first, m,
-/// with its area, m² (their mean departure by area is none); and the scale of the terrain it stands. And where its
+/// with its area, m² (their mean departure by area is none). And where its
 /// samples meet: the departures of each two beside each other across a side, m, and a sample's mean side, m, so the
 /// edge of the ground under a level is found at the samples (`shore`).
 #[derive(Clone, Debug, Default)]
 pub(super) struct Curve {
     floors: Vec<(f64, f64)>,
-    scale: f64,
     sides: Vec<(f32, f32)>,
     side: f64,
 }
@@ -45,7 +42,7 @@ pub(super) struct Curve {
 impl Curve {
     /// A flat ground of `area` m², standing no terrain (one floor, so its levels are the flat column's exactly).
     pub(super) fn flat(area: f64) -> Curve {
-        Curve { floors: vec![(0.0, area)], scale: 0.0, sides: Vec::new(), side: area.sqrt() }
+        Curve { floors: vec![(0.0, area)], sides: Vec::new(), side: area.sqrt() }
     }
     /// The departure of the cell's lowest ground from its mean surface, m: where its liquid leaves it.
     pub(super) fn low(&self) -> f64 {
@@ -90,53 +87,43 @@ pub(super) fn level_over(parts: &[(&Curve, f64)], v: f64) -> f64 {
     level_of(&mut floors, v)
 }
 
-/// The curve of cell `i` of `w`, at the scale of the terrain its ground stands.
+/// The curve of cell `i` of `w`: the departures of the terrain's samples inside it from their mean.
 fn of(w: &World, i: usize) -> Curve {
-    at_scale(w, i, w.relief_scale[i])
-}
-
-/// The curve of cell `i` of `w` standing the terrain inside it at `scale`.
-pub(super) fn at_scale(w: &World, i: usize, scale: f64) -> Curve {
     let area = w.mesh.cells().area()[i];
-    if scale == 0.0 {
-        return Curve::flat(area);
-    }
     let g = w.ground_in(w.map.leaves()[i]);
     let mean = g.mean(&g.h);
-    let mut floors: Vec<(f64, f64)> = g.h.iter().zip(&g.area).map(|(h, a)| (scale * (h - mean), a * area)).collect();
-    let sides = g.sides().map(|(p, q)| ((scale * (g.h[p] - mean)) as f32, (scale * (g.h[q] - mean)) as f32)).collect();
+    let mut floors: Vec<(f64, f64)> = g.h.iter().zip(&g.area).map(|(h, a)| (h - mean, a * area)).collect();
+    let sides = g.sides().map(|(p, q)| ((g.h[p] - mean) as f32, (g.h[q] - mean) as f32)).collect();
     floors.sort_unstable_by(|p, q| p.0.total_cmp(&q.0));
-    Curve { side: (area / floors.len() as f64).sqrt(), floors, scale, sides }
+    Curve { side: (area / floors.len() as f64).sqrt(), floors, sides }
+}
+
+impl World {
+    /// The ground inside cell `i` (of a square or coarser) made level at its mean (`Terrain::level_under`): its liquid
+    /// stands at one depth over it. Flow finds every cell's curve again at its next part.
+    pub fn level_inside(&mut self, i: usize) {
+        let lat = (self.cfg.lat_south, self.cfg.lat_north);
+        self.terrain.level_under(self.terrain.seed, &self.map, self.map.leaves()[i], lat);
+        self.scratch.curves.clear();
+    }
 }
 
 /// The curve of cell `i`: that of `s` where it has them, else found (`of`).
 pub(super) fn of_cell<'a>(w: &World, s: &'a Scratch, i: usize) -> Cow<'a, Curve> {
-    match s.curves.get(i).filter(|c| s.curves.len() == w.mesh.cells().n() && c.scale == w.relief_scale[i]) {
+    match s.curves.get(i).filter(|_| s.curves.len() == w.mesh.cells().n()) {
         Some(c) => Cow::Borrowed(c),
         None => Cow::Owned(of(w, i)),
     }
 }
 
-/// The curves found so far, by leaf (kept through remaps).
-pub(super) type Kept = BTreeMap<Leaf, Curve>;
-
-/// Are Flow's curves missing, or found for a scale a cell no longer stands?
+/// Are Flow's curves missing?
 pub(super) fn stale(w: &World, s: &Scratch) -> bool {
-    s.curves.len() != w.mesh.cells().n() || s.curves.iter().zip(&w.relief_scale).any(|(c, &r)| c.scale != r)
+    s.curves.len() != w.mesh.cells().n()
 }
 
-/// The curve of each cell (`Scratch::curves`), from those kept where the leaf and its scale are the same; the others
-/// found from the ground inside the cell (`at_scale`).
+/// The curve of each cell (`Scratch::curves`), found from the ground inside it (`of`).
 pub(super) fn build(w: &World, s: &mut Scratch) {
     // (The terrain's samples found first, before the parallel section that reads them, `Terrain::samples`.)
     w.terrain_samples();
-    let leaves = w.map.leaves();
-    let mut kept = std::mem::take(&mut s.kept);
-    s.curves = crate::par::map_n(leaves.len(), crate::par::UNCOUNTED, |i| match kept.get(&leaves[i]).filter(|c| c.scale == w.relief_scale[i]) {
-        Some(c) => c.clone(),
-        None => of(w, i),
-    });
-    kept.clear();
-    leaves.iter().zip(&s.curves).for_each(|(&l, c)| _ = kept.insert(l, c.clone()));
-    s.kept = kept;
+    s.curves = crate::par::map_n(w.map.leaves().len(), crate::par::UNCOUNTED, |i| of(w, i));
 }

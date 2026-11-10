@@ -137,7 +137,7 @@ pub(crate) fn some_of(d: &mut Chunk, i: usize, p: usize, k: f64) -> usize {
 }
 
 /// Monthly, before the lone parts join: a body of cell `i` of chunk `d` that holds more parts than it has members (some
-/// of them left it, died or went to another quarter of a split cell) lets go of the rest, which lie alone.
+/// of them left it or died) lets go of the rest, which lie alone.
 pub(super) fn hold_by_members(d: &mut Chunk, i: usize) {
     for p in 0..d.at(i).parts.len() {
         let c = d.at(i);

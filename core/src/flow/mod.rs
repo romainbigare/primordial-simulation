@@ -26,10 +26,8 @@ pub use potential::total as potential;
 pub use channel::Channel;
 pub(crate) use curve::level_of;
 pub use inside::{levels, lowest, means, volume_under};
-pub(crate) use inside::share_ground;
-pub(crate) use parts::{of_join, whole, Parts};
-pub use potential::potential_of;
-pub(crate) use potential::{air_head, stated};
+
+pub(crate) use potential::air_head;
 pub(crate) use stack::gain;
 pub use scratch::Scratch;
 pub(crate) use scratch::FlowView;
@@ -142,58 +140,6 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
         book(w, &mut s);
     }
     w.scratch = s;
-}
-
-impl Scratch {
-    /// The state of each ground node follows its cell (`World::remap`), a new cell's and a made cell's that of a new
-    /// world's (no plateau, `with`; a made cell's temperature and plateau are then those of its heat, `World::thawed`);
-    /// the caches are dropped, as a loaded world's, and rebuilt at the next step. A quarter a split made takes its share
-    /// of the volumes of its fixed solids and of its bed (`volumes`, `Made::held`) and its bed's means; a joined cell the
-    /// sum of its quarters' volumes and the means of their beds by volume; the parts of a cell of parts follow it
-    /// (`parts::remap`, with `whole`, the parts of the cells a join gathers that are one node). The next full build of the
-    /// state (each month's start) finds the temperature and the plateaus from the heat.
-    pub(crate) fn remap(&mut self, r: &crate::remap::Renumber, joined: &[Option<crate::remap::Joined>], whole: &[Option<parts::Parts>]) {
-        use crate::remap::Of;
-        let scratch::State { tg, pk, phi, cloud: _, loose: _, fixed: _, vary: _, fix, bed, bedk: _, gas: _, parts } = &mut self.state;
-        *parts = parts::remap(std::mem::take(parts), r, joined, whole);
-        *tg = r.apply(std::mem::take(tg), || 0.0);
-        *pk = r.apply(std::mem::take(pk), || land::NONE);
-        *phi = r.apply(std::mem::take(phi), || 0.0);
-        *fix = r.apply_made(std::mem::take(fix), || [0.0; 2], |_, m, at| [0, 1].map(|x| m.held(joined, Some(Of::Flow(x)), |i| at(i)[x])));
-        *bed = r.apply_made(std::mem::take(bed), scratch::Bed::default, |_, m, at| {
-            let vol = m.held(joined, Some(Of::Flow(crate::remap::FLOW_BED)), |i| at(i).vol);
-            let by_vol = |b: [scratch::Bed; 4], of: fn(&scratch::Bed) -> f64| crate::remap::mean_by(b.map(|x| of(&x)), b.map(|x| x.vol));
-            scratch::Bed { vol, ..m.pick(at, |b| scratch::Bed { vol: 0.0, refl: by_vol(b, |x| x.refl), cond: by_vol(b, |x| x.cond) }) }
-        });
-        *self = Scratch { state: std::mem::take(&mut self.state), kept: std::mem::take(&mut self.kept), ..Default::default() };
-    }
-}
-
-impl World {
-    /// The ground nodes of the cells a remap made (`made`) take the temperature and the plateau of their heat
-    /// (`World::thaw`; of a cell of parts, its parts' heats, `parts::thaw`), not their parent's or their quarters' mean: the phases of their stacks are their heat's, as the
-    /// potential energy of their matter reads them (`potential`), so a join and the split that gives its quarters back
-    /// see the stacks their heat holds. None before Flow first built the state of the ground.
-    pub(crate) fn thawed(&mut self, made: &[usize]) {
-        if !potential::stated(self) {
-            return;
-        }
-        let at: Vec<_> = {
-            let s = potential::scratch_of(self);
-            made.iter().map(|&i| (i, parts::thaw(self, &s, i).unwrap_or_else(|| self.thaw(i)))).collect()
-        };
-        let st = &mut self.scratch.state;
-        for (i, (t, on)) in at {
-            (st.tg[i], (st.pk[i], st.phi[i])) = (t, on.unwrap_or((land::NONE, 0.0)));
-        }
-    }
-}
-
-/// The volumes Flow keeps of ground node `i` that its cell holds (`remap::Of::Flow`): of its fixed solids, that times
-/// their reflectance, and of its bed, m³, as its last refresh found them (none before the first).
-pub(crate) fn volumes(w: &World, i: usize) -> Option<[f64; crate::remap::FLOW_HELD]> {
-    let st = &w.scratch.state;
-    (st.fix.len() == w.mesh.cells().n()).then(|| [st.fix[i][0], st.fix[i][1], st.bed[i].vol])
 }
 
 /// Book the lifts and falls of the parts of Flow under way (`potential::Lifts`), if any.

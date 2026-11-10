@@ -11,7 +11,7 @@ mod things;
 
 pub use ground::{depths, Ground, GUTTER, TEXEL, TILE};
 pub use layers::{fields, pixels, raster, quantise, Fields, is_river, river_count, LAYERS, RIVER_CATCH, RIVER_FLOOR, STANDING_M};
-pub use rec::{read_viewer_file, Kept, Recorder, Spent, TapeFiles, Written, ENCLOSED, REFINE, TAPE};
+pub use rec::{read_viewer_file, Kept, Recorder, Spent, TapeFiles, Written, ENCLOSED, TAPE};
 pub use things::{things, DIET_BODIES, DIET_COVER, DIET_REMAINS};
 pub use table::{Table, ROW};
 pub use snapshot::{fingerprint, load_snapshot, read_snapshot, snapshot_bytes, write_snapshot};

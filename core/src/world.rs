@@ -111,23 +111,11 @@ pub struct World {
     pub rained: Vec<f64>,
     /// What the links of the cell level remember (`store::Links`)
     pub links: crate::store::Links,
-    /// Of each cell a join made, what it keeps of its quarters for its split (`remap::Joined`); none for the others
-    pub joined: Vec<Option<crate::remap::Joined>>,
-    /// The potential energy the ground of each cell holds inside it over its flat form, J (`remap::relief`): a part
-    /// of the world's potential energy held apart from the stacks (laws.md 0)
-    pub relief: Vec<f64>,
-    /// The scale of the terrain's departures the ground of each cell stands inside it (1 the whole terrain, 0 flat;
-    /// `remap::relief`), as its liquid stands on it (`flow::curve`)
-    pub relief_scale: Vec<f64>,
-    /// The terrain the world was built on, which a split reads (`space::terrain`)
+    /// The terrain the world was built on (`space::terrain`)
     pub terrain: crate::space::terrain::Terrain,
     /// The mean rise of the ground of each cell toward the south, m per m, which the sun on it reads (`flow::on_slope`):
-    /// the terrain's when the world is built (`World::rise_at_build`), a split's quarters' as it stands the terrain
-    /// inside them (`World::split`), a join's the mean of its quarters' by area
+    /// the terrain's, found when the world is built (`World::rise_at_build`)
     pub rise_south: Vec<f64>,
-    /// What refinement keeps of each cell for its next month (`refine::Watch`); empty until the first refinement, and
-    /// with no budget of cells (`Config::cell_budget`)
-    pub watch: Vec<crate::refine::Watch>,
     /// Raw physical facts since the shell last drained them (not part of the saved state)
     #[serde(skip)]
     pub events: Vec<Event>,
@@ -143,10 +131,11 @@ impl World {
     pub fn mesh_of(map: &Square, cfg: &Config) -> Mesh {
         map.mesh(cfg.lat_south, cfg.lat_north)
     }
-    /// The mesh of `map`, a change of the world's cells, over the world's level of air blocks, which the cells' sizes do
-    /// not change; its cells linked or not yet (`Square::mesh_over`).
-    pub(crate) fn mesh_for(&self, map: &Square, linked: bool) -> Mesh {
-        map.mesh_over(self.mesh.level(AIR).clone(), self.cfg.lat_south, self.cfg.lat_north, linked)
+    /// The rise toward the south of each cell of a world as built, m per m: the terrain's inside it
+    /// (`Terrain::rise_south`).
+    pub fn rise_at_build(&self) -> Vec<f64> {
+        let lat = (self.cfg.lat_south, self.cfg.lat_north);
+        crate::par::map_n(self.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.terrain.rise_south(self.terrain.seed, &self.map, self.map.leaves()[i], lat))
     }
     /// Hand the shell the raw events since it last asked, and start the list again.
     pub fn drain_events(&mut self) -> Vec<Event> {

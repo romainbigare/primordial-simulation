@@ -207,10 +207,8 @@ pub struct Scratch {
     pub(super) split: Vec<f64>,
     /// Room the passes keep from step to step (`spare::Spare`).
     pub(super) spare: super::spare::Spare,
-    /// The level-volume curve of each cell's ground (`curve::Curve`), and those found so far by leaf, kept through
-    /// remaps (`curve::build`).
+    /// The level-volume curve of each cell's ground (`curve::Curve`, `curve::build`).
     pub(super) curves: Vec<super::curve::Curve>,
-    pub(super) kept: super::curve::Kept,
     /// Of each mixed ground node, its parts as its last solve found them (`parts::Mixed`).
     pub(super) mixed: Vec<Option<Box<super::parts::Mixed>>>,
 }

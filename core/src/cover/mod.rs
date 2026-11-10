@@ -8,7 +8,6 @@
 
 mod grow;
 mod seed;
-mod tree;
 
 pub use grow::step;
 pub use seed::land;

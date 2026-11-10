@@ -918,38 +918,13 @@ fn kernel_share(w: &World, i: usize, j: usize) -> f64 {
     (1.0 - p.kernel_far_share) * by(p.kernel_near) + p.kernel_far_share * by(p.kernel_far)
 }
 
-/// Two shares drawn `DRAWS` times each agree within `SIGMAS` standard errors (the draws are independent).
-fn agree(a: f64, b: f64, what: &str) {
-    let p = (a + b) / 2.0;
-    let se = (p * (1.0 - p) * 2.0 / DRAWS as f64).sqrt();
-    assert!((a - b).abs() <= SIGMAS * se, "{what}: {a} against {b}, {SIGMAS} standard errors are {}", SIGMAS * se);
-}
-
-/// What disperses lands by one kernel at any size of cell (`copy::lot`), in expectation: over many lots, the share that
-/// lands in a cell beside the source is the same from the source and from its four quarters; the share that lands in
-/// a cell is the same as the shares in its four quarters together; and the share in each cell near the source is the
-/// kernel's integral over it, all within `SIGMAS` standard errors.
+/// What disperses lands by one kernel (`copy::lot`), in expectation: over many lots, the share in each cell near the
+/// source is the kernel's integral over it, within `SIGMAS` standard errors.
 #[test]
-fn lots_land_alike_from_a_cell_and_from_its_quarters() {
+fn lots_land_by_the_kernel() {
     let coarse = testkit::small_world();
     let source = coarse.map.leaves()[coarse.mesh.tree().cell_at(coarse.map.point_at(8.0, 8.0))];
-    let aside = Leaf { x: source.x + source.side(), ..source };
-    let (mut fine, quarters) = (testkit::small_world(), source.quarters());
-    testkit::split_down(&mut fine, &[source], 1);
     let whole = landed(&coarse, source, DRAWS, 1);
-    let from_quarters: Vec<_> = quarters.iter().enumerate().map(|(k, &q)| landed(&fine, q, DRAWS / 4, 10 + k as u64)).collect();
-    let mut tested = 0;
-    for (leaf, &share) in whole.iter().filter(|(l, s)| **l != source && **s * DRAWS as f64 > ENOUGH) {
-        let mean = from_quarters.iter().map(|q| q.get(leaf).copied().unwrap_or(0.0)).sum::<f64>() / 4.0;
-        agree(share, mean, &format!("{leaf:?} from the cell and from its quarters"));
-        tested += 1;
-    }
-    assert!(tested >= 8, "the cells beside it are tested: {tested}");
-    // Into a cell and into its quarters, from the cell beside it.
-    let (into_cell, into_quarters) = (landed(&coarse, aside, DRAWS, 2), landed(&fine, aside, DRAWS, 3));
-    let sum: f64 = quarters.iter().map(|q| into_quarters.get(q).copied().unwrap_or(0.0)).sum();
-    agree(into_cell[&source], sum, "into the cell and into its quarters");
-    // And the kernel's integral over each cell near the source, from the cell itself.
     let i = coarse.map.cell(source).expect("a cell");
     for (leaf, &share) in whole.iter().filter(|(_, s)| **s * DRAWS as f64 > ENOUGH) {
         let want = kernel_share(&coarse, i, coarse.map.cell(*leaf).expect("a cell"));

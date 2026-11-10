@@ -14,9 +14,4 @@ impl Links {
     pub fn new(links: usize) -> Links {
         Links { cleared: vec![0.0; links] }
     }
-    /// What each link remembers follows it to its new number (`World::remap`): a new link remembers nothing.
-    pub(crate) fn remap(&mut self, r: &crate::remap::Renumber) {
-        let Links { cleared } = self;
-        *cleared = r.apply(std::mem::take(cleared), || 0.0);
-    }
 }

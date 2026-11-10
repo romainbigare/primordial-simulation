@@ -1,7 +1,6 @@
 //! The low basin (laws.md 1.2): the cells joined to the lowest cell through cells whose own low ground lies under the
 //! level its liquid stands at hold one body of liquid with one level, over each one's own ground. `find` names them at each full build of the ground's state; `level` shares the basin's liquid
-//! by that level once a month, after the runoff has reached it (`share_out`, by which a split's quarters share their
-//! ground too, `inside`).
+//! by that level once a month, after the runoff has reached it (`share_out`).
 
 use super::{air::blocks, curve::{level_over, Curve}, drain::liquid_heat, land::{cells_state, stand, wet, NONE}, liquid::book, parts::TOP, potential::apply, Scratch};
 use crate::{store::{Class, LinkFlux}, World, AIR};

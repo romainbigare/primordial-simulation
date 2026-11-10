@@ -46,7 +46,7 @@ pub(super) struct YearTally {
     pub stand: Vec<f64>,
     pub months: f64,
     /// The land's mean ground temperature at each month end, K, and the land cells it is of (listed at the first
-    /// month of the year and again after a split or a join of cells, `World::is_land`; none until then)
+    /// month of the year, `World::is_land`; none until then)
     pub t_land: Vec<f64>,
     pub land: Option<Vec<u32>>,
     /// Watch events, of them within a lineage; watchers per watched body
@@ -66,9 +66,6 @@ pub(super) struct YearTally {
     pub made: [f64; 2],
     pub broken: f64,
     pub failed: f64,
-    /// Cells split into their quarters, and joined from them (`World::split`, `World::join`)
-    pub splits: f64,
-    pub joins: f64,
     /// Body-months of bodies that are not light-eaters, [cold, warm] x [all, inside walls]
     pub inside: [[f64; 2]; 2],
     /// The core's tallies of the year, taken at the yearly row: decisions drawn and those where the action drawn had
@@ -96,7 +93,7 @@ pub(super) struct MonthTally {
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub(super) struct Social {
     /// The cell of each body that is not a light-eater at the last month, by id (for movement by month); cells by their
-    /// serials (`Life::serial`), which a split or a join does not change
+    /// serials (`Life::serial`)
     pub last: BTreeMap<u64, u32>,
     /// The busiest cells at the last decade, and the share of them still busiest then
     pub top: Vec<u32>,
@@ -167,9 +164,6 @@ impl Recorder {
             EventKind::BondMade => y.made[(e.value as usize).min(1)] += 1.0,
             EventKind::BondBroken if e.value >= pcore::bond::LOAD => y.failed += 1.0,
             EventKind::BondBroken => y.broken += 1.0,
-            // (The cells change: the land is listed again.)
-            EventKind::Split => (y.splits, y.land) = (y.splits + 1.0, None),
-            EventKind::Join => (y.joins, y.land) = (y.joins + 1.0, None),
         }
     }
 }

@@ -55,7 +55,7 @@ fn terrain_of(seed: u64, map: &Square, cells: &Level) -> Terrain {
 /// (`Terrain::inside`, on its worn samples), the one height of the ground of a cell, which its relief stands about
 /// and its splits continue (laws.md 0).
 fn heights(seed: u64, map: &Square, terrain: &Terrain, lat: (f64, f64)) -> Vec<f64> {
-    map.leaves().iter().map(|&l| terrain.inside(seed, map, l, lat).0).collect()
+    map.leaves().iter().map(|&l| terrain.inside(seed, map, l, lat)).collect()
 }
 
 /// Air over a m² at 0 m, mol: the reference pressure over the weight of a mol of the starting air (`Init::air`).
@@ -233,12 +233,8 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
 
         canopy: vec![0.0; n],
         links,
-        joined: vec![None; n],
-        relief: vec![0.0; n],
-        relief_scale: vec![1.0; n],
         terrain,
         rise_south: Vec::new(),
-        watch: Vec::new(),
         light: vec![0.0; n],
         rained: vec![0.0; n],
         events: Vec::new(),
@@ -284,8 +280,7 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
     let mut e_ground = heat(&world, Class::Ground);
     balanced.iter().for_each(|&(i, t)| e_ground[i] = world.energy_ground(i, t));
     world.store = rebuild(&world, amounts(&world, Class::Ground), e_ground);
-    // The relief of the terrain inside each cell, and the way it faces (laws.md 0).
-    world.relief = world.relief_at_build();
+    // The way the ground of each cell faces (laws.md 0).
     world.rise_south = world.rise_at_build();
     world
 }

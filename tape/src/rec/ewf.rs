@@ -1,7 +1,6 @@
 //! `world.ewf.gz`, the viewer's file and what a resumed run goes on from: gzip of `EWF2`, the header's length
 //! (`u32`, little-endian), the header (JSON: the world's size, whether it is a globe and the latitudes of its edges, the
-//! layers, the day of each frame, the series and their units, the events, the rows of `months.csv` and the run's camera
-//! path) and the frames
+//! layers, the day of each frame, the series and their units, the events and the rows of `months.csv`) and the frames
 //! (one byte a cell and layer, `layers::frame`).
 
 use super::months::year_month;
@@ -35,7 +34,6 @@ struct Head<'a> {
     series_units: BTreeMap<&'a str, &'a str>,
     events: Vec<Logged<'a>>,
     months: &'a [MonthRow],
-    camera: &'a [pcore::refine::Shot],
 }
 
 /// A day and the year it falls in.
@@ -73,7 +71,6 @@ impl TapeFiles {
             series_units: self.series.iter().map(|c| (c.name.as_str(), c.unit.as_str())).collect(),
             events: self.log.iter().map(|(day, text)| Logged { day: *day, year: stamp(day).year, text }).collect(),
             months: &self.months,
-            camera: &self.camera.shots,
         };
         let head = serde_json::to_vec(&head)?;
         crate::gzfile::write_gzip(&dir.join(FILE), &[MAGIC, &(head.len() as u32).to_le_bytes(), &head, &self.bytes])

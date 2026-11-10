@@ -12,8 +12,8 @@ pub struct Totals {
     pub chemical: f64,
     /// J, the potential energy the world's matter gained since the start as the store books it (`Store::lifted`)
     pub lifted: f64,
-    /// J, the potential energy of the world's matter as its nodes hold it (`flow::potential`) and the relief each cell
-    /// holds inside it (`World::relief`); none before Flow built the state of the ground it reads
+    /// J, the potential energy of the world's matter as its nodes hold it (`flow::potential`); none before Flow built
+    /// the state of the ground it reads
     pub potential: Option<f64>,
     /// J, the energy each boundary node holds (`store::Boundary`): its heat and its amounts' formation enthalpy
     pub boundary_energy: [f64; BOUNDARIES],
@@ -82,7 +82,7 @@ pub fn totals(w: &World) -> Totals {
         chem.add_elems(k, a, &mut boundary_elems);
         boundary_energy[b] += a * chem.subs[k].hf;
     }
-    let potential = crate::flow::potential(w).map(|p| p + w.relief.iter().sum::<f64>());
+    let potential = crate::flow::potential(w);
     Totals { elems, thermal: thermal.get(), chemical: chemical.get(), lifted: w.store.lifted(), potential, boundary_energy, boundary_elems }
 }
 

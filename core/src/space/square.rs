@@ -5,10 +5,10 @@
 //! by row; two cells that share a border differ by one depth at most. Cells link across a border, by its width, as far
 //! apart as their centres across it; and across a corner (width 0) where four cells meet, whatever their sizes, the two
 //! across it one depth apart at most, so heat and pore liquid cross only real borders while the downhill path of surface
-//! liquid may use all 8 ways, and a cell refined beside a corner leaves no pit there. No cell has more than 8 links: a
+//! liquid may use all 8 ways. No cell has more than 8 links: a
 //! corner links its two cells unless one of them has 8 already (the cells in order). On a globe the cells of a row narrow toward the poles, and no link crosses a pole.
 
-use super::tree::{self, Leaf, Refused, Tree, BLOCK, DEPTH_MOST, EXTENT_MOST};
+use super::tree::{self, Leaf, Tree, BLOCK, EXTENT_MOST};
 use super::terrain::Place;
 use super::{Level, LinkSpec, Mesh, COMPASS};
 use serde::{Deserialize, Serialize};
@@ -67,52 +67,6 @@ impl Square {
     /// The cell that is leaf `l`, if one is.
     pub fn cell(&self, l: Leaf) -> Option<usize> {
         self.leaves.binary_search(&l).ok()
-    }
-    /// The splits that split cell `l` into its quarters with cells across a border one depth apart at most after each
-    /// (2:1), in order: first each cell across a side of `l` coarser than it (it would border the quarters two depths
-    /// coarser), by its own splits, then `l`. Refuses a leaf that is no cell, or one of the most depth.
-    pub fn splits(&self, l: Leaf) -> Result<Vec<Leaf>, Refused> {
-        self.cell(l).ok_or(Refused::NoCell)?;
-        if l.depth >= DEPTH_MOST {
-            return Err(Refused::Deepest);
-        }
-        let (mut map, mut done) = (self.clone(), Vec::new());
-        map.split_balanced(l, &mut done);
-        Ok(done)
-    }
-    /// Split cell `l` as `splits` says, each split made noted in `done`.
-    fn split_balanced(&mut self, l: Leaf, done: &mut Vec<Leaf>) {
-        let coarser = |m: &Square| {
-            let tree = m.tree();
-            tree::SIDES.iter().flat_map(|&way| tree.beside(&l, way)).map(|c| m.leaves[c]).find(|o| o.depth < l.depth)
-        };
-        while let Some(o) = coarser(self) {
-            self.split_balanced(o, done);
-        }
-        *self = self.split(l);
-        done.push(l);
-    }
-    /// The map with cell `l` split into its quarters.
-    pub fn split(&self, l: Leaf) -> Square {
-        let leaves = self.leaves.iter().copied().filter(|&c| c != l).chain(l.quarters()).collect();
-        self.clone().with(leaves)
-    }
-    /// The four quarters of leaf `parent`, as cells, if joining them keeps 2:1: no cell across a side of `parent` more
-    /// than one depth finer than it (`Tree::beside` finds one where there is one).
-    pub fn joins(&self, parent: Leaf) -> Result<[usize; 4], Refused> {
-        let kids = (parent.depth < DEPTH_MOST).then(|| parent.quarters().map(|q| self.cell(q))).ok_or(Refused::NoCell)?;
-        let kids = kids.iter().copied().collect::<Option<Vec<usize>>>().ok_or(Refused::NoCell)?;
-        let tree = self.tree();
-        if tree::SIDES.iter().any(|&way| tree.beside(&parent, way).any(|c| self.leaves[c].depth > parent.depth + 1)) {
-            return Err(Refused::Unbalanced);
-        }
-        Ok([kids[0], kids[1], kids[2], kids[3]])
-    }
-    /// The map with the quarters of `parent` joined into it.
-    pub fn join(&self, parent: Leaf) -> Square {
-        let quarters = parent.quarters();
-        let leaves = self.leaves.iter().copied().filter(|c| !quarters.contains(c)).chain([parent]).collect();
-        self.clone().with(leaves)
     }
     /// The depth of a square below its air block.
     pub fn square_depth(&self) -> u8 {
@@ -186,23 +140,16 @@ impl Square {
         assert!(!self.wrap || (self.w >= 3 && self.w.is_multiple_of(self.scale)), "a globe's row has 3 cells or more, in whole blocks");
         let (tree, squares) = (self.tree(), Square::new(self.w, self.h, self.side, self.wrap, self.scale));
         let block = |l: &Leaf| tree.block(l.x, l.y) as u32;
-        let (mut blocks, links) = squares.level(&squares.tree(), south, north, true).coarser(&squares.leaves.iter().map(block).collect::<Vec<u32>>());
+        let (mut blocks, links) = squares.level(&squares.tree(), south, north).coarser(&squares.leaves.iter().map(block).collect::<Vec<u32>>());
         blocks.join(links);
-        let mesh = self.mesh_over(blocks, south, north, true);
+        let tree = self.tree();
+        let parent = self.leaves.iter().map(|l| tree.block(l.x, l.y) as u32).collect();
+        let mesh = Mesh::of(self.level(&tree, south, north), blocks, parent, tree);
         // The wind runs along the lines of the blocks east and west, and north and south (`flow::air::wind::lines`).
         let air = mesh.level(1);
         let along = |i: usize, d: usize| air.way(i, d).is_none_or(|e| air.width()[air.adj_link()[e] as usize] == 0.0);
         assert!((0..air.n()).all(|i| [1, 3, 5, 7].iter().all(|&d| along(i, d))), "a block shares a border only east, south, west and north");
         mesh
-    }
-    /// The mesh of the map over `blocks`, the level of its air blocks with their links, which the sizes of the cells do
-    /// not change (`mesh`): what a change of the cells builds. With `linked` false its cells have their places and the
-    /// ends of their links but are not linked yet (`Level::ends`), as a change of the cells reads them between its
-    /// splits and joins (`World::split`).
-    pub fn mesh_over(&self, blocks: Level, south: f64, north: f64, linked: bool) -> Mesh {
-        let tree = self.tree();
-        let parent = self.leaves.iter().map(|l| tree.block(l.x, l.y) as u32).collect();
-        Mesh::of(self.level(&tree, south, north, linked), blocks, parent, tree)
     }
     /// The area of leaf `t`, m², and its centre (`Place`), its rows between latitudes `south` (row `h`) and `north` (row
     /// 0): longitudes east from 0 by the degrees of latitude per row (a whole turn on a globe).
@@ -220,8 +167,8 @@ impl Square {
     }
     /// The level of the cells (`tree`: their tree), longitudes east from 0 by the degrees of latitude per row (a whole
     /// turn on a globe). Each cell links to the cells across its east side and its south side (north to south, west to
-    /// east), then to those across its south-east and south-west corners; with `linked` false, only their ends.
-    fn level(&self, tree: &Tree, south: f64, north: f64, linked: bool) -> Level {
+    /// east), then to those across its south-east and south-west corners.
+    fn level(&self, tree: &Tree, south: f64, north: f64) -> Level {
         let (leaves, unit, row, wide) = (&self.leaves, self.unit() as f64, (north - south) / self.h as f64, self.extent().0);
         // A length in leaves of the most depth, in squares.
         let sq = |u: u64| u as f64 / unit;
@@ -282,11 +229,7 @@ impl Square {
                 }
             }
         }
-        if linked {
-            cells.join(links);
-        } else {
-            cells.ends(links);
-        }
+        cells.join(links);
         cells
     }
 }

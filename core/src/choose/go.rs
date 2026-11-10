@@ -44,7 +44,7 @@ pub fn go(w: &World, d: &mut Chunk, b: &mut Body, j: usize, kin: bool) -> bool {
     // ground whose cover that energy breaks.
     let (pushed, all) = (push * (1.0 - 1.0 / resist), w.life.sum(j)[7]);
     let lane = if all > 0.0 { pushed * w.mesh.cells().area()[j] / all } else { 0.0 };
-    let eats = (w.days_to_phys(j) - dist / v.max(1e-9) / DAY).max(0.0);
+    let eats = (w.days_to_phys() - dist / v.max(1e-9) / DAY).max(0.0);
     b.leaving = true;
     d.out.push(Entry::Go { id: b.id, from: i as u32, to: j as u32, pushed, lane, carries: carried.is_some(), kin, eats, brain: Vec::new() });
     true

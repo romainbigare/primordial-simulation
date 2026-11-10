@@ -105,76 +105,6 @@ fn snapshot_round_trip_at_every_month() {
     }
 }
 
-/// A world with life whose cells split (a coast with bodies down two depths) and joined (four squares of land, its
-/// record and relief kept), saved at a month's start and loaded, is the saved one and goes on as the unbroken one, month
-/// by month through the slow cycles of Flow, and its joined cell splits back alike.
-#[test]
-fn a_world_split_and_saved_goes_on_as_the_unbroken_one() {
-    let mut w = two_kinds();
-    run(&mut w, 1);
-    w.drain_events();
-    let n = w.mesh.cells().n();
-    let coast = (0..n).find(|&i| w.is_land(i) && w.life.in_cell(i) > 0 && w.mesh.cells().around(i).1.iter().any(|&j| !w.is_land(j as usize))).expect("a coast with bodies");
-    let l = w.map.leaves()[coast];
-    w.split(l).expect("a split");
-    w.split(l.quarters()[0]).expect("a split two depths down");
-    let land: Vec<_> = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).map(|i| w.map.leaves()[i]).collect();
-    let joined = land.iter().find_map(|q| q.parent().filter(|&p| w.join(p).is_ok())).expect("four squares of land join");
-    w.drain_events();
-    let mut bytes = vec![];
-    tape::snapshot_bytes(&w, &(), &mut bytes).unwrap();
-    let (mut b, ()) = tape::read_snapshot(&bytes[..]).unwrap();
-    assert_eq!(fingerprint(&b), fingerprint(&w), "the world loaded");
-    for m in 0..=RESUMED {
-        if m == RESUMED {
-            w.split(joined).expect("the joined cell splits");
-            b.split(joined).expect("the joined cell splits");
-        }
-        step(&mut w);
-        step(&mut b);
-        assert_eq!(fingerprint(&b), fingerprint(&w), "resumed for {} months", m + 1);
-        // (The shell takes the events after each month.)
-        w.drain_events();
-        b.drain_events();
-    }
-}
-
-/// A run whose cells a camera path refines (a window crossing the land under a budget of cells), saved mid-run with
-/// its plan and resumed, goes on as the unbroken run, month by month: the snapshot keeps the budget, the floor and what
-/// refinement keeps of each cell, and the plan the rest of the camera's path.
-#[test]
-fn a_refined_run_saved_mid_run_goes_on_as_the_unbroken_one() {
-    use pcore::refine::{Camera, Shot};
-    use worldgen::schedule::Schedule;
-    let mut w = two_kinds();
-    w.drain_events();
-    let (built, depth) = (w.mesh.cells().n(), w.map.square_depth() + 2);
-    (w.cfg.cell_budget, w.cfg.finest_depth) = (built as u32 * 5 / 4, depth);
-    let land: Vec<usize> = (0..built).filter(|&i| w.is_land(i)).collect();
-    let shot = |k: usize, month: u64| {
-        let [x, y, ..] = w.map.bounds(land[k * land.len() / 3]);
-        Shot { month, x, y, w: 3.0, h: 3.0, depth, rest: false }
-    };
-    let mut plan = Schedule::new(None, &worldgen::life::TWO, worldgen::life::Seeding::default());
-    plan.camera = Camera { shots: vec![shot(0, 0), shot(1, SAVED as u64 / 2), shot(2, SAVED as u64 + 2)] };
-    let month = |w: &mut World, plan: &Schedule| {
-        w.refine(&plan.camera);
-        step(w);
-        w.drain_events();
-    };
-    (0..SAVED).for_each(|_| month(&mut w, &plan));
-    assert!(w.mesh.cells().n() > built, "the camera refined the cells");
-    let mut bytes = vec![];
-    tape::snapshot_bytes(&w, &plan, &mut bytes).unwrap();
-    let (mut b, back): (World, Schedule) = tape::read_snapshot(&bytes[..]).unwrap();
-    assert_eq!(back.camera, plan.camera, "the snapshot carries the camera's path");
-    for m in 0..RESUMED {
-        month(&mut w, &plan);
-        month(&mut b, &back);
-        assert_eq!(fingerprint(&b), fingerprint(&w), "resumed for {} months", m + 1);
-    }
-}
-
 /// Parts lie in the list of their cell, each with an id that never changes (laws.md 3.1): two bonded parts keep their
 /// ids and their bond through a snapshot and when their structure moves to a neighbour cell, and a part made after them
 /// gets an id of its own, so an old id names nothing once its part is gone.
@@ -233,14 +163,12 @@ fn a_resumed_run_places_the_kinds_still_due() {
     assert_eq!(fingerprint(&b), fingerprint(&whole));
 }
 
-/// The viewer file holds its header (the layers, the frames, the events, the run's camera path) and a byte per cell,
-/// layer and frame.
+/// The viewer file holds its header (the layers, the frames, the events) and a byte per cell, layer and frame.
 #[test]
 fn frames_file_round_trip() {
     let dir = tmp("frames");
     let mut w = world();
-    let camera: pcore::refine::Camera = "0 2 3 4 4 3\n12 # away\n".parse().unwrap();
-    let mut rec = tape::Recorder::new(&w, 1, 1).with_camera(&camera);
+    let mut rec = tape::Recorder::new(&w, 1, 1);
     common::record(&mut rec, &mut w);
     run(&mut w, 1);
     common::record(&mut rec, &mut w);
@@ -261,28 +189,17 @@ fn frames_file_round_trip() {
     let first = tape::quantise(z, world().surface_z(100));
     assert_eq!(raw[8 + n + 100], first);
     assert!(meta["events"].as_array().unwrap().iter().any(|e| e["text"].as_str().unwrap().contains("first appears")));
-    assert_eq!(meta["camera"], serde_json::to_value(&camera.shots).unwrap(), "the camera's path");
 }
 
 /// A window of the map is a raster of the cell that holds each pixel's centre (`tape::raster`): over the whole map at
-/// one pixel a square it is the squares of the frames (`tape::pixels`), and over a square whose cell is split it shows
-/// the four quarters, which the whole-map frame shows by the one that holds the square's centre.
+/// one pixel a square it is the squares of the frames (`tape::pixels`).
 #[test]
-fn a_window_shows_the_cells_finer_than_a_square() {
+fn a_window_of_the_whole_map_shows_the_frames_squares() {
     let mut w = world();
     run(&mut w, 1);
     w.drain_events();
     let (across, down) = (w.map.w, w.map.h);
     assert_eq!(tape::raster(&w, [0.0, 0.0, across as f64, down as f64], across, down), tape::pixels(&w), "the whole map is the frames' squares");
-    let leaf = w.map.leaves()[worldgen::testkit::dry_land(&w)];
-    w.split(leaf).expect("a split");
-    let mut quarters = leaf.quarters().map(|q| w.map.cell(q).expect("a quarter"));
-    quarters.sort_unstable();
-    let [x0, y0, x1, _] = w.map.bounds(quarters[0]);
-    let mut seen = tape::raster(&w, [x0, y0, 2.0 * (x1 - x0), 2.0 * (x1 - x0)], 2, 2);
-    seen.sort_unstable();
-    assert_eq!(seen, quarters, "the window shows the four quarters");
-    assert!(quarters.contains(&tape::pixels(&w)[y0.floor() as usize * across + x0.floor() as usize]), "the whole-map frame shows the square by one quarter");
 }
 
 /// The viewer file says whether the world is a globe and the latitudes of its edges, and the world's means of a globe are

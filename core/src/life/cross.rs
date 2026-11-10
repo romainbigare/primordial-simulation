@@ -72,7 +72,7 @@ fn land_all(w: &mut World, landing: Vec<Entry>) {
         let (cell, l) = match e {
             Entry::Go { id, from, to, pushed, lane, carries, kin, eats, brain } => {
                 let Some(h) = w.life.find_in(from as usize, id) else { continue };
-                w.life.touched.held(w.life.cells.len(), life::Of::Only(&[from]));
+                w.life.touched.held(life::Of::Only(&[from]));
                 let b = std::mem::take(&mut w.life[h]);
                 let carried = bond::carry(&w.life.cells[from as usize], w, &b).map(|x| x.0);
                 let c = &mut w.life.cells[from as usize];
@@ -85,7 +85,7 @@ fn land_all(w: &mut World, landing: Vec<Entry>) {
         };
         per[bounds.partition_point(|&b| b <= cell as usize) - 1].push((cell, x, l));
     }
-    let (load, to) = (per.iter().map(Vec::len).sum(), landing_in(w, &mut per));
+    let (load, to) = (per.iter().map(Vec::len).sum(), landing_in(&mut per));
     life::run(w, life::Of::Only(&to), per, load, |_| (), |w, d, list, _| {
         for (_, _, l) in list.drain(..) {
             match l {
@@ -114,7 +114,7 @@ fn act_all(w: &mut World, acts: Vec<Entry>) {
         let Some(cell) = cell else { continue };
         per[bounds.partition_point(|&b| b <= cell) - 1].push((cell as u32, x, e));
     }
-    let (load, to) = (per.iter().map(Vec::len).sum(), landing_in(w, &mut per));
+    let (load, to) = (per.iter().map(Vec::len).sum(), landing_in(&mut per));
     life::run(w, life::Of::Only(&to), per, load, |_| (), |w, d, list, _| {
         for (cell, _, e) in list.drain(..) {
             let (id, on, node, days) = match e {
@@ -138,12 +138,11 @@ fn act_all(w: &mut World, acts: Vec<Entry>) {
 
 /// The entries of each chunk of the serial pass (`per`, each with its cell and its place in the queue) in order, cell by
 /// cell and in a cell in the order queued; returns the cells they go to, in order, each once, which bodies land in or
-/// acts run in (`Touched::landed`).
-fn landing_in<X>(w: &mut World, per: &mut [Vec<(u32, usize, X)>]) -> Vec<u32> {
+/// acts run in.
+fn landing_in<X>(per: &mut [Vec<(u32, usize, X)>]) -> Vec<u32> {
     per.iter_mut().for_each(|v| v.sort_by_key(|x| (x.0, x.1)));
     let mut to: Vec<u32> = per.iter().flat_map(|v| v.iter().map(|x| x.0)).collect();
     to.dedup();
-    to.iter().for_each(|&i| w.life.touched.landed(i));
     to
 }
 
@@ -157,7 +156,7 @@ fn apply(w: &mut World, e: Entry) {
         Entry::Watch { by, .. } => cell(w, *by).into_iter().collect(),
         _ => Vec::new(),
     };
-    w.life.touched.held(w.life.cells.len(), life::Of::Only(&held));
+    w.life.touched.held(life::Of::Only(&held));
     match e {
         Entry::Go { .. } | Entry::Litter(_) | Entry::Act { .. } | Entry::Blunted { .. } => unreachable!("moves, litters and acts land"),
         Entry::Passed { by, from, to, lane, mass, carried } => {

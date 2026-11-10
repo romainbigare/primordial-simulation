@@ -53,17 +53,6 @@ impl Leaf {
     }
 }
 
-/// Why the tree refuses a split or a join of cells (`Square::splits`, `Square::joins`), changing nothing.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Refused {
-    /// The leaf to split is no cell, or the quarters to join are not four cells
-    NoCell,
-    /// The cell to split is of the most depth (`DEPTH_MOST`)
-    Deepest,
-    /// The join would leave a cell across a side of the joined cell more than one depth finer than it (2:1)
-    Unbalanced,
-}
-
 /// The ways across the sides of a leaf: east, south, west and north, (east, south).
 pub(crate) const SIDES: [(i64, i64); 4] = [(1, 0), (0, 1), (-1, 0), (0, -1)];
 

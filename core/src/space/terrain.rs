@@ -3,9 +3,8 @@
 //! domain warped so coasts and ridges bend (Perlin 1985; Musgrave 1989), raised to heights, says how high the ground
 //! would stand; an island falls away from the middle of its map. The ground at the samples (`SAMPLE_DEPTH`) is that
 //! worn at the world's start (`space::samples`, `space::wear`). It gives the cells their starting heights
-//! (`worldgen`), and a split the ground its cell held finer than the cell (`World::split`). Below `SAMPLE_DEPTH` the
-//! ground goes on smooth (`space::below`), so a cell of any depth has a mean height and a relief, and a shell draws
-//! that ground.
+//! (`worldgen`). Below `SAMPLE_DEPTH` the ground goes on smooth (`space::below`), so a leaf of any depth has a mean
+//! height, and a shell draws that ground.
 
 use super::square::Square;
 use super::{Leaf, Level};
@@ -175,26 +174,16 @@ impl Terrain {
     pub(super) fn sample(&self, seed: u64, map: &Square, place: Place) -> f64 {
         height_of(self.above(seed, map, place))
     }
-    /// The terrain inside leaf `l` of `map` (its rows between latitudes `south` and `north`): its mean height by area,
-    /// m, and the spread of its heights about it, ∫ (h − mean)² / 2 over its area, m⁴ (a bed of density ρ standing at
-    /// those heights holds ρ g times that more potential energy than a flat one of its volume).
-    ///
+    /// The terrain's mean height by area over leaf `l` of `map` (its rows between latitudes `south` and `north`), m.
     /// The ground is sampled at the centres of the leaves of `SAMPLE_DEPTH`, worn (`Terrain::samples`); below them it
-    /// goes on smooth (`space::below`). A leaf of `SAMPLE_DEPTH` or coarser: the mean of its samples, and their spread
-    /// about it with the variance below each (`below::sample_variances`); a finer one: its height and the variance below
-    /// it (`Terrain::below`), its spread A times that over 2. Each sum is exact, so a leaf's spread is its quarters' and
-    /// that of their means about its own.
-    pub fn inside(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64)) -> (f64, f64) {
+    /// goes on smooth (`space::below`). A leaf of `SAMPLE_DEPTH` or coarser: the mean of its samples; a finer one: its
+    /// height there (`Terrain::below`).
+    pub fn inside(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64)) -> f64 {
         let s = self.samples(seed, map, (south, north));
-        let at = |f: &Leaf| (s.h[s.index(f)], s.v[s.index(f)]);
         if l.depth <= SAMPLE_DEPTH {
-            let fine: Vec<(f64, (f64, f64))> = l.split(SAMPLE_DEPTH).map(|f| (map.place_of(&f, south, north).0, at(&f))).collect();
-            let (area, sum) = fine.iter().fold((0.0, 0.0), |(a, s), &(da, (h, _))| (a + da, s + da * h));
-            let mean = sum / area;
-            let spread = fine.iter().map(|&(a, (h, _))| a * (h - mean) * (h - mean)).sum::<f64>() / 2.0;
-            return (mean, spread + fine.iter().map(|&(a, (_, v))| a * v / 2.0).sum::<f64>());
+            let (area, sum) = l.split(SAMPLE_DEPTH).map(|f| (map.place_of(&f, south, north).0, s.h[s.index(&f)])).fold((0.0, 0.0), |(a, s), (da, h)| (a + da, s + da * h));
+            return sum / area;
         }
-        let (mean, var) = self.below(seed, map, l, (south, north));
-        (mean, map.place_of(&l, south, north).0 * var / 2.0)
+        self.below(seed, map, l, (south, north))
     }
 }
