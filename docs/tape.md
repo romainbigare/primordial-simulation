@@ -55,7 +55,8 @@ in units of its own: its liquid flux over its rain less evaporation times its ar
 size), `channel_w` and `channel_d` (the width and the depth of the cell's channel, `World::channel`), loose ground,
 `wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them), ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the bodies' mass per m², bodies, traffic,
 worn edges, structures, true colour (r, g, b: the colour of what covers the surface, its frozen cover, liquid or
-ground) and the ground's colour (r, g, b: its loose solids, else its bonded ones, without frozen cover or liquid). The tape holds whole-map frames only. The live viewer draws its map from two
+ground) and the ground's colour (r, g, b: its loose solids, else its bonded ones, without frozen cover or liquid, under
+the litter of the cover's remains in it over the share 1 - e^-(their kg/m² / `LITTER_KG`), 0.3 kg/m²). The tape holds whole-map frames only. The live viewer draws its map from two
 things, neither recorded. **The ground's tiles** (`tape::Ground`, `tape/src/ground/`), which never change, so a page
 makes each once and keeps it: a tile of a depth holds 256 x 256 texels (`TILE`), each a leaf of that depth, and 2 more
 along each edge (`GUTTER`), row by row from its north-west corner, as 16-bit floats (IEEE binary16, little-endian) in two

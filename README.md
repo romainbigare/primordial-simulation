@@ -95,8 +95,8 @@ thicker leaves, greyer for dry ground, bluer for hardiness to frost, its walls (
 showing through an open crown; yellowed short of fuel, faded when dormant, brown where frozen. Far away a tall, open
 canopy is darker by the shadows its plants lay between them. Every colour of the map is worked in linear light (a
 reflectance times the light on the surface) and turned into the screen's bytes once, by the sRGB curve (IEC 61966-2-1).
-Under the plants the ground has its own colour (its loose solids, else its bonded ones: the `ground_r`,
-`ground_g`, `ground_b` layers), darker where wet, under liquid and snow; the green comes only from the plants. A tape
+Under the plants the ground has its own colour (its loose solids, else its bonded ones, under the litter of the
+cover's remains: the `ground_r`, `ground_g`, `ground_b` layers), darker where wet, under liquid and snow; the green comes only from the plants. A tape
 holds only totals per square and no kinds: its map draws the plants as one foliage as closed as their capture area
 closes the ground, without marks.
 

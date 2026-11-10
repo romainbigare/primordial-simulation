@@ -22,7 +22,7 @@ fn land_spot(at: vec2f, e: f32) -> Spot {
   p.t = st.t;
   p.snow = st.snow;
   p.ground = surface.xyz;
-  p.cover = cover_field(at, e) * cover_look.look.y;
+  p.cover = cover_field(at, e);
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);

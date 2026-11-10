@@ -12,7 +12,8 @@ import { Draw, Gpu, Pass } from './gpu';
 import { GpuLayer } from './map';
 import type { Land } from './land';
 
-/** How strongly the cover covers the map, so its hill shading still shows through. */
+/** How strongly the marks cover the map, so its hill shading still shows through them (the field in the ground is lit
+ * by it). */
 const COVER_ALPHA = 0.85;
 
 /** The cover over the live map: what it reads (`set`), drawn by the GPU at every frame. */

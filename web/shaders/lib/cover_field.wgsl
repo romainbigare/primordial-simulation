@@ -7,7 +7,7 @@
 struct CoverLook {
   // Of each lattice: its cell's side, m, and how strongly its marks show (the rest is the field).
   sides: vec4f, shown: vec4f,
-  // 1 where the cover is drawn (0: none); how strongly it covers the map.
+  // 1 where the cover is drawn (0: none); how strongly its marks cover the map.
   look: vec4f,
 }
 @group(0) @binding(14) var<uniform> cover_look: CoverLook;
