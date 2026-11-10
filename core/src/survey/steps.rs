@@ -97,9 +97,12 @@ impl World {
 /// After the month's batch (`batch`), from the month's start: the sub-steps of the finest cells' step, each at the time it
 /// ends. At each, the cells whose step ends then (`stepping`, listed once a month from the depths) are surveyed again
 /// (`survey_near`), and their bodies update (`batch_of`) on the chunks of those cells, a parallel pass and a serial
-/// pass; the other cells do nothing. A sub-step with no living body in a cell that steps is skipped. The world's time is
-/// the month's start after.
+/// pass; the other cells do nothing. A sub-step with no living body in a cell that steps is skipped, and the whole
+/// month's sub-steps where no body lives. The world's time is the month's start after.
 pub fn substeps(w: &mut World) {
+    if w.life.alive().next().is_none() {
+        return;
+    }
     let (t0, month) = (w.time, w.cfg.calendar().month);
     let stepping = stepping(w);
     let most = stepping.len() as u32 - 1;

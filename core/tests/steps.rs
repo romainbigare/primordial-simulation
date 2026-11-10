@@ -250,10 +250,12 @@ fn apart(w: &World, i: usize, j: usize) -> f64 {
 /// sight 2 to `SIGHTS` sees of a fine cell are those of the square that holds it, within `SEEN_OFF`.
 #[test]
 fn sight_reaches_as_far_from_a_fine_cell() {
-    // (Seen just after the split, surveyed, before the liquid of the fine cells finds its own ways.)
+    // (Seen just after the split, surveyed, before the liquid of the fine cells finds its own ways. No body lives, so
+    // the survey makes no features: they are made here as it makes them for a body.)
     let [(coarse, i), (fine, j)] = [false, true].map(|f| {
         let (mut w, i) = split(f);
         pcore::survey::survey(&mut w);
+        pcore::choose::cells(&mut w);
         (w, i)
     });
     for sight in 2..=pcore::choose::SIGHTS {

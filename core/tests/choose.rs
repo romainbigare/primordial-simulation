@@ -54,6 +54,9 @@ fn scene(seed: u64) -> World {
     pcore::flow::state(&mut w, true);
     w.life.env.clear();
     pcore::survey::survey(&mut w);
+    // (No body lives yet, so the survey makes no features; `seen` reads them before the first step: made here as the
+    // survey makes them for a body.)
+    pcore::choose::cells(&mut w);
     w
 }
 
@@ -375,6 +378,8 @@ fn learner(half: bool) -> (World, u64) {
     let fuel = testkit::kg(&w, &b, RICH);
     testkit::add(&mut w, &mut b, RICH, 4.0 * fuel);
     let h = w.add(b);
+    // (The survey of its first month, before it decides, as a body placed between months has.)
+    pcore::survey::survey(&mut w);
     let id = w.life[h].id;
     (w, id)
 }

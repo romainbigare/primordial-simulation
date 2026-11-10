@@ -22,7 +22,10 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
 
 /// At each month's start: what movers broke and what each cell holds (`break_and_sum`). Then the caches of the cells
 /// (`caches`), once a month the traffic and each cell's surroundings, and the cells' features (`choose::cells`); both
-/// read the members that moved in since the last month's survey, and that count starts again.
+/// read the members that moved in since the last month's survey, and that count starts again. Only the decisions of
+/// bodies read the features (`choose`): with no body living they are not made. A body comes only from one living or
+/// from a placement between months (`worldgen::schedule`), so the survey of its first month makes them before it
+/// decides.
 pub fn survey(w: &mut World) {
     let n = w.mesh.cells().n();
     let monthly = monthly(w);
@@ -37,7 +40,11 @@ pub fn survey(w: &mut World) {
         crate::flow::state(w, true);
         w.life.env = (0..n).map(|i| env_of(w, i)).collect();
     }
-    choose::cells(w);
+    if w.life.alive().next().is_some() {
+        choose::cells(w);
+    } else {
+        w.life.feat.clear();
+    }
     // (The members that moved in since the last survey are read by both; the count starts again.)
     w.life.cells.iter_mut().for_each(|c| c.crossings = 0.0);
 }

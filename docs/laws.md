@@ -111,7 +111,7 @@ day); those of a cell that steps faster by the time in seconds, above every day'
 body updates at the month's start**, after the month's Flow, Change and Bond: one batch holds every living body. Then
 at the end of each sub-step of the finest cells' step the cells whose step ends there (listed once a month from the
 depths) are surveyed again and their bodies update in a batch of the same passes, on chunks that hold only those cells;
-the other cells do nothing then. The survey of a sub-step works out what the bodies that decide then read, as a survey
+the other cells do nothing then; with no body living, the month has no sub-steps. The survey of a sub-step works out what the bodies that decide then read, as a survey
 of every cell would leave it: in each cell that steps what movers broke there; the numbers and features (5.2) of their
 cells, of the cells around them and of the regions the levels of those features read (`choose::Near`), each again only
 where a pass held the cell since it was last worked out (`life::Touched`: only a pass that holds a cell changes its
@@ -1189,8 +1189,8 @@ own rows from its hidden layer (`brain::think`) and learns on its own.
 
 ### 5.2 Perception
 Local (`choose/perceive.rs`). **Each cell's features** (`choose::cells`, after each survey, at a month's start and at
-each sub-step (0), the same for
-every brain, 18 numbers each scaled to about one): its ground temperature, the depth of its standing liquid, its
+each sub-step (0), and only while a body lives: nothing else reads them, and a body placed comes between months, before
+the survey of its first month; the same for every brain, 18 numbers each scaled to about one): its ground temperature, the depth of its standing liquid, its
 surface height, the shade of its cover, the mass per m² of each slot of its cover and of the cover's fuel and body
 matter (what most diets eat), the fuel and body matter loose on its ground, the mass per m² of its animals in three
 classes of member mass (below 1 kg, to 100 kg, above), their members and mean strength, how hard it is to push
