@@ -202,10 +202,10 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
     let short = if units > 0.0 { 1.0 - burnt / (units * fuel) } else { 0.0 };
     b.run(chem, p, &mut c.mol[x], burn, burnt / fuel);
     // Members of a field wear out at the rate of living as a body's do, a dormant one at least at `Physics::dormant` of
-    // the active rate (laws.md 6.7); below its frost gene its frozen share dies as far as it is active, within
-    // `frost_k` K (laws.md 6.5).
+    // the active rate (laws.md 6.7); below its frost gene, hardened by its dormancy, its frozen share dies (laws.md
+    // 6.5).
     let worn = active * s.act.max(ph.dormant) / (s.living * ph.e_life * dec(g[REPAIR])).max(1e-300);
-    let frozen = if t < g[FROST] as f64 { ((g[FROST] as f64 - t) / ph.frost_k).min(1.0) * s.act } else { 0.0 };
+    let frozen = ph.frozen(g[FROST] as f64, t, s.act);
     let mut lost = [0.0; 6];
     let mut left = 1.0;
     for (f, cause) in [(short, SPENT), (crate::math::one_minus_exp(worn), AGE), (frozen, PHASE)] {
