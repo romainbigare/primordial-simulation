@@ -406,3 +406,18 @@ never after.
 
 Open on track A: the tiles' memory on the card (104 MB) and the time a tile takes (a zoomed view is complete about
 5 s after the last wheel step); channels drawn as dark lines; tapes keep the map of squares; seasons blended (A3).
+
+**B1, the worn ground: done.** The samples' heights come from an erosion law run at the world's start (the stream
+power law, creep, the rebound of what was worn) on grids of 500 m, 250 m and 125 m; basins are kept, each with its
+pass and its level; below a sample the ground is its smooth continuation. Seed 1, a 22 island: 20 bodies of standing
+liquid, 15 of 0.5 km or more. Making the samples of a 32 island: 0.45 to 0.59 s (0.60 to 0.64 s on the noise ground).
+
+Open on the ground:
+- Bodies of standing liquid are drawn dry or per cell until B2.
+- Close views (200 m, 50 m) show a smooth sheet: the ground has no detail below 125 m. It needs roughness by
+  material and slope in the drawing (6.2), and the channel's bed cut into it.
+- One erosion strength for the whole map: the samples cannot read the bed's hardness, which is drawn per cell.
+- Tops are 5 to 13% lower on a 22 island than on the noise ground.
+- The slow test `the_frost_gene_falls_where_winters_are_cold` fails: the cold band still freezes (268.7 K), but the
+  warm band's mean gene is 273.4 K against the cold band's 270.0 K, and the test asks for more than 5 K between
+  them. Its limit is not moved. It belongs to the plants' work (C3).
