@@ -58,7 +58,7 @@ pub(super) struct Ctx<'a> {
 
 /// Each cell's response to the air it sees: per cell the fixed outputs, then, of a cell alone, each changing output's
 /// value at the air it sees at the step's start, its slope per K of that air, and per mol of each active gas there; and
-/// that air. The low basin under each air node answers as one (`Patch`): its cells hold only their fixed outputs. A
+/// that air. A body of standing liquid under each air node answers as one (`Patch`): its cells hold only their fixed outputs. A
 /// cell whose land and liquid's top both face the air (`parts`) answers as those two, its rows their sum; of each such
 /// cell, its top's rows too, its fixed outputs and then its changing ones (`wet`).
 pub(super) struct Response {
@@ -169,7 +169,7 @@ impl Response {
 /// Each cell's response over the step (`Response`), in parallel with `threads`, its rows in `room` (`spare::Spare`).
 pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Response {
     let (n, nx, na) = (cx.w.mesh.cells().n(), cx.act.len(), cx.w.mesh.level(AIR).n());
-    // The low basin under each air node solves one surface (`surf::patches`); the other cells each their own.
+    // A body under each air node solves one surface (`surf::patches`); the other cells each their own.
     let mut alone = vec![true; n];
     patches.iter().flatten().for_each(|&i| alone[i as usize] = false);
     let mut seen = vec![0.0; n * (1 + nx)];
@@ -223,7 +223,7 @@ pub(super) fn sunlight(w: &World, decl: &[f64], lat: f64) -> [f64; 2] {
 }
 
 /// The rise toward the south of the surface of cell `i`, m per m (`World::rise_south`): none where it lies under the
-/// low basin's liquid or all under its own, which stand level (`basin`, `Scratch::top_alone`).
+/// body's liquid or all under its own, which stand level (`basin`, `Scratch::top_alone`).
 pub(super) fn rise(cx: &Ctx, i: usize) -> f64 {
     if cx.s.basin.is[i] || cx.s.top_alone(i).is_some() { 0.0 } else { cx.w.rise_south[i] }
 }

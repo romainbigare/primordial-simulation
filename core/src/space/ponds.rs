@@ -1,15 +1,38 @@
 //! The closed basins of the terrain's samples (laws.md 0 and 8): the samples under a basin's level (`space::drain`),
 //! where liquid stands at one level before it runs over the basin's lowest pass, and the load the wear at the world's
 //! start (`space::wear`) carries into them, which fills them from the floor up. A basin the load fills is a plain;
-//! one it leaves is a pond (`samples::Pond`).
+//! one it leaves is a pond (`samples::Pond`). The parts of the open low ground are ponds too, of no pass (`open_parts`).
 
 use super::drain::Flood;
 use super::grid::Grid;
 use super::network::NONE;
+use super::samples::Pond;
 use crate::math::ways_down;
 
 /// The least depth under its level of a closed basin's deepest sample that the floods over a plain leave, m.
 const GRADED_M: f64 = 1.0;
+
+/// The parts of the open low ground `open` on grid `g` joined through their samples, as ponds after those in `ponds`
+/// (`samples::Pond`: no pass, an infinite level), each sample's in `pond`.
+pub(super) fn open_parts(g: &Grid, open: &[bool], (pond, ponds): (&mut [u32], &mut Vec<Pond>)) {
+    for k in 0..g.n() {
+        if !open[k] || pond[k] != NONE {
+            continue;
+        }
+        let id = ponds.len() as u32;
+        ponds.push(Pond { pass: NONE, level: f64::INFINITY });
+        let mut todo = vec![k];
+        pond[k] = id;
+        while let Some(i) = todo.pop() {
+            for (j, _) in g.around(i) {
+                if open[j] && pond[j] == NONE {
+                    pond[j] = id;
+                    todo.push(j);
+                }
+            }
+        }
+    }
+}
 
 /// The closed basins of the flood `f` over heights `z` (`Flood::under`): of each sample the basin it lies in
 /// (`NONE` where none), and of each basin its samples, the first the one the flood reached first: samples under a

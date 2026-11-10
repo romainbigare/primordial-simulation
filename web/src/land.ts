@@ -22,6 +22,8 @@ const SLOPE_POWER = 0.5, SLOPE_LEAST = 0.15;
 const BEACH_M = 6;
 /** The bytes of a layer view over which an empty point fades into a full one (colour.wgsl `in_view_of`). */
 const OVER_FADE = 64;
+/** The level a pond no body holds is drawn at, m below 0 (land.wgsl `NO_LIQUID_M`): under any ground. */
+const NO_POND_M = 1000;
 /** Of the uniforms of land.wgsl (`Land`), four-wide members. */
 const LAND_VEC4S = 5;
 
@@ -29,15 +31,22 @@ export class Land {
   private data: Float32Array | null = null;
   private tex: Texture | null = null;
   private due = false;
+  /** The rows of the table's texture: its planes, then the ponds' levels. */
+  private rows = 0;
   /** The melting point of the frozen cover, K (0: none), as the table last said. */
   private melt = 0;
 
   constructor(readonly tiles: GroundTiles, private laws: Laws) {}
 
-  /** The table of frame 0 of world `w`: the core's rows `rows` (the melting point, then a row a square), its wet
-   * squares `wet`, and the layer `look` draws. */
+  /** The table of frame 0 of world `w`: the core's rows `rows` (the melting point, then a row a square, then each
+   * square's kinds of cover, which canopy.ts reads, then the level of each pond), its wet squares `wet`, and the layer `look` draws. The ponds' levels lie in rows under the planes,
+   * four a texel (land.wgsl `pond_level`; one no body holds far below any ground). */
   set(w: World, rows: Float32Array, wet: Wet, look: MapLook): void {
-    const { w: W, h: H } = w.meta, n = W * H, row = this.tiles.meta.row, data = new Float32Array(4 * PLANES * n);
+    const { w: W, h: H } = w.meta, n = W * H, { row, kinds, kind_row } = this.tiles.meta;
+    const levels = rows.subarray(1 + (row + kinds * kind_row) * n);
+    this.rows = PLANES * H + Math.ceil(levels.length / 4 / W);
+    const data = new Float32Array(4 * W * this.rows);
+    data.set(Array.from(levels, l => (Number.isNaN(l) ? -NO_POND_M : l)), 4 * PLANES * n);
     const sea = seaSquares(wet, w.meta), plants = plane(w, 0, 'plants'), leaf = decode(w, 0, 'leaf');
     const truth = ['true_r', 'true_g', 'true_b'].map(name => plane(w, 0, name));
     const shown = look.mode === 'layer' && w.index.has(look.layer) ? plane(w, 0, look.layer) : null;
@@ -68,7 +77,8 @@ export class Land {
   lawBinds(gpu: Gpu): Record<number, ArrayBuffer | Texture> | null {
     if (!this.data) return null;
     const m = this.tiles.map;
-    this.tex ??= gpu.texture(m.w, PLANES * m.h, 'rgba32float');
+    if (this.tex && this.tex.h !== this.rows) { gpu.drop(this.tex); this.tex = null; }
+    this.tex ??= gpu.texture(m.w, this.rows, 'rgba32float');
     if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
     const t = this.tiles.textures(gpu), l = this.laws;
     const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(this.tiles.meta.size, this.tiles.meta.gutter, this.tiles.depth)

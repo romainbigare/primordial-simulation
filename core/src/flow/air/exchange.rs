@@ -91,12 +91,12 @@ pub(in crate::flow) fn henry(w: &World, s: &Scratch, tmin: f64) -> Vec<(usize, u
 /// The gases chosen for the month (`Scratch::henry`) dissolve in each ground node's liquid toward Henry's share and
 /// come out as it warms, thins or freezes, through the air's film and the liquid's in series, solved exactly over the
 /// `dt` seconds of a month, at the end of the liquid step (laws.md 1.5): the air changes its gases over years, and the
-/// low basin takes months to take them up. Each node in parallel with `threads`, at its temperature as the liquid step
+/// body of standing liquid takes months to take them up. Each node in parallel with `threads`, at its temperature as the liquid step
 /// leaves it (`State::tg`) and under the air of the last air step's start. Dissolving frees the vaporisation enthalpy
 /// into the node; coming out takes it back. What crosses is booked in one call: a link from each ground node that takes
 /// or gives some to its air node with the mol of each gas (+ up) and the heat that leaves the ground, no air node giving
 /// more than it holds (in the order of the cells), and the lift of the gas, paid by the air (`potential`); each ground
-/// node notes what it took up (`Scratch::hold`). The liquid of the low basin under one air node that mixes as one
+/// node notes what it took up (`Scratch::hold`). The liquid of a body under one air node that mixes as one
 /// (`basin::mixes`, a cell of parts with its liquid's top) takes up gas as one liquid (`surf::groups`), at its
 /// temperature by heat capacity (a cell of parts' liquid's, `parts::Mixed::liquid_t`), each of its cells by its share
 /// of that liquid, and gives it up by what each holds of it.
@@ -110,7 +110,7 @@ pub(in crate::flow) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64) {
         s.henry = henry.to_vec();
         return;
     }
-    let patches = &groups(w, |i| mixes(w, s, i), |i| phases(s, i))[..];
+    let patches = &groups(w, |i| mixes(w, s, i), |i| (s.basin.of[i], phases(s, i)))[..];
     let solv = s.liquids(&w.chem, (tmin, tmax), false);
     // What each ground node would take up of each gas over the step, mol (`[i * nh + x]`; negative: it comes out).
     let mut want = vec![0.0; n * nh];

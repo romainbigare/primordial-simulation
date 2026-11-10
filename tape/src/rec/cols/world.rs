@@ -1,7 +1,7 @@
 //! The world: elements, minerals, energy, temperatures, liquid and rain, the bodies and their members, births and
 //! deaths, dead matter, the heat-absorbing gases and the catalysts life carries.
 
-use super::{Row, GIGA};
+use super::{Row, GIGA, MEGA};
 use crate::layers::{river_count, Ctx, COVER_MIN};
 use crate::measure::area_mean;
 use crate::rec::{Recorder, CAUSES};
@@ -48,9 +48,18 @@ impl Recorder {
         row.push("evap_land", "mol/m2/s", area_mean(land.iter().map(|&i| (w.evap[i] as f64, area[i]))));
         let land_area = land.iter().map(|&i| area[i]).sum::<f64>().max(f64::MIN_POSITIVE);
         row.push("runoff_sea", "mol/m2/s", land.iter().map(|&i| w.off_land[i] as f64).sum::<f64>() / land_area);
+        // The bodies of standing liquid above the open low ground that hold some (`World::lakes`): how many, the area
+        // their liquid covers and its volume; and the level of the open low ground's largest body.
+        let lakes = w.pools();
+        let up: Vec<_> = lakes.iter().filter(|l| !l.low && l.volume > 0.0).collect();
+        row.push("lakes", "1", up.len() as f64);
+        row.push("lake_area", "km2", up.iter().map(|l| l.area).sum::<f64>() / MEGA);
+        row.push("lake_m3", "km3", up.iter().map(|l| l.volume).sum::<f64>() / GIGA);
+        let low = lakes.iter().filter(|l| l.low).max_by(|a, b| a.area.total_cmp(&b.area));
+        row.push("low_level", "m", low.map_or(f64::NAN, |l| l.level));
         // Rivers as the web viewer draws them.
         row.push("rivers", "1", river_count(w, &c.f) as f64);
-        // The cells, and those split and joined in the year.
+        // The cells.
         row.push("cells", "1", w.mesh.cells().n() as f64);
         // Bodies (nodes and individuals), their members and their nodes; the slots of cover and its mass.
         let (members, nodes) = life.alive().fold((0.0, 0.0), |(m, n), b| (m + b.n(), n + (b.n() > 1.0) as u8 as f64));

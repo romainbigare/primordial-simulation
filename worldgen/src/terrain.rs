@@ -226,6 +226,7 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
         base_z: BASE_Z,
         counts: Counters::default(),
         rain: vec![0.0; n],
+        discharge: Vec::new(),
         liquid_flux: vec![0.0; n],
         evap: vec![0.0; n],
         off_land: vec![0.0; n],
@@ -280,7 +281,8 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
     let mut e_ground = heat(&world, Class::Ground);
     balanced.iter().for_each(|&(i, t)| e_ground[i] = world.energy_ground(i, t));
     world.store = rebuild(&world, amounts(&world, Class::Ground), e_ground);
-    // The way the ground of each cell faces (laws.md 0).
+    // The way the ground of each cell faces (laws.md 0), and no liquid running yet down the terrain's samples.
     world.rise_south = world.rise_at_build();
+    world.discharge = vec![0.0; world.terrain_samples().h.len()];
     world
 }

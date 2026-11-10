@@ -6,7 +6,6 @@
 use crate::ground::sample_index;
 use crate::layers::{cover_melt, frame, pixels, Ctx};
 use pcore::inside::{soil_level, Means};
-use pcore::space::network::NONE;
 use pcore::space::terrain::SAMPLE_DEPTH;
 use pcore::World;
 
@@ -15,13 +14,13 @@ pub const ROW: usize = 11;
 
 /// What a shell keeps of a world's cells, which do not change: the cell of each square; of each cell the terrain's mean
 /// height over it, m, the wetness index of the terrain's samples inside it with their shares of its area
-/// (`ground::sample_index`), and the drained area that leaves it, m² (the areas of the samples in it whose way leaves it,
-/// or that are sinks).
+/// (`ground::sample_index`), and its samples; and the area that drains through each sample, m² (`Samples::up`).
 pub struct Table {
     square: Vec<usize>,
     z: Vec<f64>,
     inside: Vec<(Vec<f64>, Vec<f64>)>,
-    leaving: Vec<f64>,
+    samples: Vec<Vec<u32>>,
+    up: Vec<f64>,
 }
 
 impl Table {
@@ -41,22 +40,22 @@ impl Table {
         let tree = w.mesh.tree();
         let cell = |k: usize| tree.cell_at(map.point_at(((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per));
         let of: Vec<usize> = (0..s.h.len()).map(cell).collect();
-        let (mut inside, mut leaving) = (vec![(Vec::new(), Vec::new()); n], vec![0.0; n]);
+        let (mut inside, mut samples) = (vec![(Vec::new(), Vec::new()); n], vec![Vec::new(); n]);
         for (k, &i) in of.iter().enumerate() {
             inside[i].0.push(twi[k]);
-            if s.to[k] == NONE || of[s.to[k] as usize] != i {
-                leaving[i] += s.up[k];
-            }
+            samples[i].push(k as u32);
         }
         for (t, a) in inside.iter_mut() {
             *a = vec![1.0 / t.len().max(1) as f64; t.len()];
         }
-        Table { square, z, inside, leaving }
+        Table { square, z, inside, samples, up: s.up.clone() }
     }
 
     /// The present state of world `w` as one tape frame, as a tape would keep it (`frame`), and its table: the melting point of the frozen
     /// cover, K (`cover_melt`), then `ROW` f32 numbers for each square, row by row (`row`), then the kinds of cover of
-    /// each square, row by row (`stands::rows`, `KINDS` × `KIND_ROW` f32).
+    /// each square, row by row (`stands::rows`, `KINDS` × `KIND_ROW` f32), then the level of each pond of the terrain's
+    /// samples, m (`World::pond_levels`: NaN where no body holds it), which a shell draws each pond's liquid flat at,
+    /// over the ground that lies under it.
     pub fn frame(&self, w: &World) -> (Vec<u8>, Vec<f32>) {
         let c = Ctx::new(w);
         let mut bytes = Vec::with_capacity(w.map.n() * crate::LAYERS.len());
@@ -70,6 +69,7 @@ impl Table {
         table.extend(self.square.iter().flat_map(|&i| rows[i].map(|v| v as f32)));
         let kinds: Vec<_> = (0..n).map(|i| crate::stands::rows(w, i)).collect();
         table.extend(self.square.iter().flat_map(|&i| kinds[i].map(|v| v as f32)));
+        table.extend(w.pond_levels().iter().map(|&l| l as f32));
         (bytes, table)
     }
 
@@ -79,8 +79,9 @@ impl Table {
     /// cools with height there, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest
     /// ground, m, and the depth that stands, m; the liquid in its pores and what they hold full, m, and the level of the
     /// wetness index its soil's liquid departs about (`inside::soil_level`; 0 where it lies evenly); the volume of
-    /// liquid it passes on per m² drained, m/s (its flux over the area that leaves it, at the mol per m³ of its liquid,
-    /// `World::liquid_in`).
+    /// liquid that runs through its main channel per m² drained there, m/s (the discharge of the sample of it through
+    /// which the most runs, `World::discharge`, over the area that drains through that sample, at the mol per m³ of its
+    /// liquid, `World::liquid_in`), by which a shell sizes each channel by the area that drains through it.
     fn row(&self, c: &Ctx, i: usize, m: Option<Means>, level: Option<[f64; 2]>) -> [f64; ROW] {
         let w = c.w;
         let (z, depth) = (c.f.z[i], c.f.depth[i]);
@@ -89,8 +90,8 @@ impl Table {
         let (twi, area) = &self.inside[i];
         let soil = soil_level(&w.cfg.phys, twi, area, m).unwrap_or(0.0);
         let per_m3 = w.liquid_in(i, |k| w.g(k, i)).map_or(0.0, |l| l.1);
-        let flux = w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
-        let q = if per_m3 > 0.0 && self.leaving[i] > 0.0 { flux / self.leaving[i] / per_m3 } else { 0.0 };
+        let main = self.samples[i].iter().map(|&k| k as usize).max_by(|&a, &b| w.discharge[a].total_cmp(&w.discharge[b]));
+        let q = main.filter(|_| per_m3 > 0.0).map_or(0.0, |k| w.discharge[k] as f64 / self.up[k] / per_m3);
         let cools = w.air_drop(i).unwrap_or(0.0);
         [self.z[i], c.f.t[i], cools, c.f.ice[i], top, low, m.stands, m.pore, m.pores, soil, q]
     }

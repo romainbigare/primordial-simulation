@@ -8,7 +8,7 @@ declare const GPUBufferUsage: { MAP_READ: number; COPY_DST: number; UNIFORM: num
 declare const GPUMapMode: { READ: number };
 
 /** Bytes of a texel of each format. */
-const TEXEL_BYTES: Record<Format, number> = { rgba8unorm: 4, rgba32float: 16, rgba16float: 8, r16float: 2 };
+const TEXEL_BYTES: Record<Format, number> = { rgba8unorm: 4, rgba32float: 16, rgba16float: 8, rg16float: 4, r16float: 2 };
 /** The size of each uniform buffer, bytes: no program's uniforms are larger. */
 const UNIFORM_BYTES = 1024;
 /** Rows copied out of a texture start at multiples of this many bytes (WebGPU's rule). */

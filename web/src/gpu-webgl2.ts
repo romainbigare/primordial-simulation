@@ -71,7 +71,7 @@ class WebGl2 implements Gpu {
   /** Of each format: its internal format, the format of its data and the type of its data's numbers. */
   private formats(): Record<Format, [number, number, number]> {
     const gl = this.gl;
-    return { rgba8unorm: [gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE], rgba32float: [gl.RGBA32F, gl.RGBA, gl.FLOAT], rgba16float: [gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT], r16float: [gl.R16F, gl.RED, gl.HALF_FLOAT] };
+    return { rgba8unorm: [gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE], rgba32float: [gl.RGBA32F, gl.RGBA, gl.FLOAT], rgba16float: [gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT], rg16float: [gl.RG16F, gl.RG, gl.HALF_FLOAT], r16float: [gl.R16F, gl.RED, gl.HALF_FLOAT] };
   }
 
   write(t: Texture, data: TexelData, level = 0, layer?: number): void {

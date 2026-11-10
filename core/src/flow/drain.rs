@@ -2,14 +2,14 @@
 //! of each cell (laws.md 1.2). Liquid over field capacity sinks from the pores into the store under them (`sink`, after
 //! each of the air's steps); Darcy's law moves it between cells in each layer, an explicit `solve::sweep` (the store's
 //! sub-stepped where a cell is too small for the step, `deep`), and a full store gives back what it cannot hold
-//! (`under`, every liquid step). Under the low basin (`basin`) the pores are
+//! (`under`, every liquid step). Under a body of standing liquid (`basin`) the pores are
 //! full and the store is not drained: none of this runs there.
 
 use super::{land::{bottom, filled, t_now, table, wet}, liquid::{book, mobile}, range, Scratch};
 use crate::{math::one_minus_exp, solve::sweep::{sweep, Net}, store::{Class, LinkFlux}, World};
 
 /// Liquid over field capacity sinks into the store, at most `seep` a second (Darcy's law under its own weight) and no
-/// more than its room, with its heat, outside the low basin; its fall heats the store (`potential`). It runs after each of the air's steps, which
+/// more than its room, with its heat, outside the bodies of standing liquid; its fall heats the store (`potential`). It runs after each of the air's steps, which
 /// bring the rain: the rain would otherwise wait in the pores, darkening the ground (`land::reflectance`), until the
 /// month's liquid step.
 pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
@@ -29,7 +29,7 @@ pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
     let down: Vec<u32> = sinks.iter().map(|c| c.0).collect();
     let sunk = carry(&sinks, &liq, |q, i| mob.mol[q * n + i], |i, _, mol| liquid_heat(w, s, &liq, i, mol));
     let liq16: Vec<u16> = liq.iter().map(|&k| k as u16).collect();
-    book(w, s, &[LinkFlux { class: [Class::Ground, Class::Deep], a: &down, b: &down, ks: &liq16, mol: &sunk.0, heat: &sunk.1 }], None);
+    book(w, s, &[LinkFlux { class: [Class::Ground, Class::Deep], a: &down, b: &down, ks: &liq16, mol: &sunk.0, heat: &sunk.1 }]);
 }
 
 /// The heat of `mol` of the liquids `liq` leaving ground node `i`, at the node's temperature now, J (`liquid_heat_at`).
@@ -43,12 +43,12 @@ pub(super) fn liquid_heat_at(s: &Scratch, liq: &[usize], t: f64, mol: &[f64]) ->
     liq.iter().zip(mol).map(|(&k, m)| m * (s.sp[k].cp * t + s.sp[k].lf)).sum()
 }
 
-/// In each layer liquid flows between cells by Darcy's law, across the borders off the low basin (`pore_flow`,
+/// In each layer liquid flows between cells by Darcy's law, across the borders off the bodies of standing liquid (`pore_flow`,
 /// `deep::flow`); what a store holds over its room comes up (`come_up`). A move takes its share of every liquid with
 /// what is dissolved and its heat; its fall heats where it goes (`potential`).
 pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt: f64) {
     let (n, p, cells) = (w.mesh.cells().n(), w.cfg.phys, w.mesh.cells());
-    // The low basin moves no liquid under its surface: its mobile liquid is not needed.
+    // A body moves no liquid under its surface: its mobile liquid is not needed.
     let (mob, held) = (mobile(w, s, liq, tmin, |i| !s.basin.is[i]), stores(w, s, tmin));
     let off_basin = |l: usize| !s.basin.is[cells.a()[l] as usize] && !s.basin.is[cells.b()[l] as usize];
     let border: Vec<usize> = (0..cells.a().len()).filter(|&l| cells.width()[l] > 0.0 && off_basin(l)).collect();
@@ -62,7 +62,7 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
         LinkFlux { class: [Class::Ground; 2], a: &pores.a, b: &pores.b, ks: &liq16, mol: &pores.mol, heat: &pores.heat },
         LinkFlux { class: [Class::Deep; 2], a: &in_stores.a, b: &in_stores.b, ks: &deep16, mol: &in_stores.mol, heat: &in_stores.heat },
     ];
-    book(w, s, &fluxes, None);
+    book(w, s, &fluxes);
     let (held, area) = (stores(w, s, tmin), w.mesh.cells().area());
     let full = |i: usize| p.bed_porosity * p.bed_depth * area[i];
     let over: Vec<f64> = held.iter().enumerate().map(|(i, &v)| if v > full(i) { (v - full(i)) / v } else { 0.0 }).collect();
@@ -161,11 +161,11 @@ fn come_up(w: &mut World, s: &mut Scratch, tmin: f64, share: &[f64]) -> Vec<f64>
             got[i] += if sp.boil > tmin { m * sp.v[1] * wet(s, k, i) } else { 0.0 };
         }
     }
-    book(w, s, &[LinkFlux { class: [Class::Deep, Class::Ground], a: &up, b: &up, ks: &ks16, mol: &mol, heat: &heat }], None);
+    book(w, s, &[LinkFlux { class: [Class::Deep, Class::Ground], a: &up, b: &up, ks: &ks16, mol: &mol, heat: &heat }]);
     got
 }
 
-/// The stores drain to the channels inside each cell outside the low basin, `hill` from the divides, by Darcy's law
+/// The stores drain to the channels inside each cell outside the bodies, `hill` from the divides, by Darcy's law
 /// down its slope: a share 1 - exp(-`bed_seep` × slope × time / (`bed_porosity` × `hill`)) comes up. Returns the
 /// volume each node got, m³.
 pub(super) fn springs(w: &mut World, s: &mut Scratch, tmin: f64, slope: &[f64], dt: f64) -> Vec<f64> {

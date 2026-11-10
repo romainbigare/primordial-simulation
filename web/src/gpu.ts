@@ -28,7 +28,7 @@ export function bindingsOf(p: Program): { uniforms: number[]; textures: number[]
 
 /** What a texel holds: four bytes (read as 0..1), or four 32-bit floats, or four or one 16-bit floats (the floats read
  * whole texels at a time). */
-export type Format = 'rgba8unorm' | 'rgba32float' | 'rgba16float' | 'r16float';
+export type Format = 'rgba8unorm' | 'rgba32float' | 'rgba16float' | 'rg16float' | 'r16float';
 /** The data a texture of each format is filled with: bytes, 32-bit floats, or 16-bit floats as their bits. */
 export type TexelData = Uint8Array | Float32Array | Uint16Array;
 /** How a sampler reads a texture: blended between its texels' centres, and also between its mip levels' nearest. */
