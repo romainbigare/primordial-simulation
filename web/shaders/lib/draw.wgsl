@@ -55,3 +55,9 @@ fn snow_of(ice_m: f32, t: f32, melt: f32) -> f32 {
   let cover = tanh(clamp(ice_m / COVER_ICE_M, 0.0, 10.0));
   return select(cover, cover * (1.0 - ease(melt - 1.0, melt + 1.0, t)), melt > 0.0);
 }
+
+// A land plant's roots need air in the soil: liquid standing over its foot as deep as this, m, drowns them (half of the
+// roots of most kinds of cover lie in the top 0.3 m, Jackson and others 1996).
+const ROOTS_M = 0.3;
+// The share of a plant that stands where liquid stands `depth` m deep and snow covers `snow` of the ground.
+fn stands_in(depth: f32, snow: f32) -> f32 { return (1.0 - ease(0.0, ROOTS_M, depth)) * (1.0 - snow); }

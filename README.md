@@ -92,7 +92,10 @@ height against its width, its edge in lobes as broad as its leaves, open where i
 its shadow; angled, it stands on its stem. Its colour comes from its numbers: darker with more light capacity per
 capture area and thicker leaves, greyer for dry ground, bluer for hardiness to frost; paler short of fuel, faded when
 dormant, brown where frozen. Chemistry 0 gives every part of the cover one reflectance, so the base hue is the
-viewer's. A tape holds only totals per square: its map draws the cover in the ground's colours, without marks.
+viewer's. Under the plants the ground has its own colour (its loose solids, else its bonded ones: the `ground_r`,
+`ground_g`, `ground_b` layers), darker where wet, under liquid and snow; the green comes only from the plants. A tape
+holds only totals per square and no kinds: its map draws the plants as one foliage as closed as their capture area
+closes the ground, without marks.
 
 From 64 pixels a square, the live viewer draws the bodies and parts of each cell one by one at their real size, from
 the numbers the core hands out (`tape::things`): a member is as long as 1.5 times the cube root of its volume (a body

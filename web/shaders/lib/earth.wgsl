@@ -5,14 +5,19 @@
 @group(0) @binding(2) var height_field: texture_2d<f32>;
 // The ice, m; the ground's temperature, K; the share that is the sea's; the share that is a river.
 @group(0) @binding(3) var matter_field: texture_2d<f32>;
-// The byte of the plant cover's mass, and the true colour (red, green, blue), 0..1.
+// The true colour (red, green, blue), 0..1.
 @group(0) @binding(4) var byte_field: texture_2d<f32>;
+// The ground's own colour (red, green, blue), 0..1.
+@group(0) @binding(8) var ground_field: texture_2d<f32>;
 // The byte of the layer a view draws, and of the worn paths, 0..1.
 @group(0) @binding(5) var view_field: texture_2d<f32>;
 @group(0) @binding(6) var smooth_sampler: sampler;
 // How wet the ground is, 0..1; the depth of the river through it, m; the share of the ground the plant cover leaves
 // bare.
 @group(0) @binding(7) var inside_field: texture_2d<f32>;
+// The foliage a tape's plants are drawn in (display, 0..1): the middle of the live map's (web/src/canopy.ts `HUE`, `SAT`,
+// `LIGHTNESS`).
+const TAPE_FOLIAGE = vec3f(0.31, 0.48, 0.20);
 // Field `t` (32-bit floats, which a sampler may not blend) at uv, blended between its texels' centres, its edge texels
 // held beyond them.
 fn blend(t: texture_2d<f32>, uv: vec2f) -> vec4f {
@@ -61,10 +66,11 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.over = max(-water, 0.0);
   s.sea = m.z;
   s.wet = inside.x;
-  s.bare = inside.z;
   s.t = m.y;
   s.snow = snow_of(m.x, s.t, look.y);
-  s.plants = 255.0 * textureSampleLevel(byte_field, smooth_sampler, uv, 0.0).x;
+  s.ground = 255.0 * textureSampleLevel(ground_field, smooth_sampler, uv, 0.0).xyz;
+  // A tape holds no kinds of cover: its plants are one foliage, as closed as their capture area closes the ground.
+  s.cover = vec4f(TAPE_FOLIAGE, 1.0) * (1.0 - inside.z);
   s.z = h.x;
   s.slope = length(h.zw) * look.x;
   s.shade = hill_shade(h.zw, EXAGGERATE * look.x);
@@ -78,5 +84,5 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
 // Shaded colour `c` at uv in the view drawn (`in_view_of`).
 fn in_view(c: Shaded, uv: vec2f) -> vec3f {
   let o = textureSampleLevel(view_field, smooth_sampler, uv, 0.0);
-  return in_view_of(c, o.xy, textureSampleLevel(byte_field, smooth_sampler, uv, 0.0).yzw);
+  return in_view_of(c, o.xy, textureSampleLevel(byte_field, smooth_sampler, uv, 0.0).xyz);
 }

@@ -1,10 +1,10 @@
 // The live map as the GPU draws it (web/shaders/land.wgsl): the ground from its tiles (ground.ts), the state from the
 // cells' table the world's worker sends with each frame (tape/src/table.rs), and the numbers of the laws the core
-// applies inside a cell. The page adds to the table what it decides itself: the sea, the cover's byte and bare share,
-// the true colour, and the layer drawn.
+// applies inside a cell. The page adds to the table what it decides itself: the ground's own colour and the sea, the
+// true colour, and the layer drawn.
 import { Gpu, Texture, Uniforms } from './gpu';
 import { GroundTiles, TILE_FADE_MS } from './ground';
-import { World, plane, decode } from './data';
+import { World, plane } from './data';
 import { MapLook, earthUniforms } from './field-window';
 import { Wet, seaSquares, PATH_LAYER } from './earth';
 
@@ -38,7 +38,7 @@ export class Land {
    * squares `wet`, and the layer `look` draws. */
   set(w: World, rows: Float32Array, wet: Wet, look: MapLook): void {
     const { w: W, h: H } = w.meta, n = W * H, row = this.tiles.meta.row, data = new Float32Array(4 * PLANES * n);
-    const sea = seaSquares(wet, w.meta), plants = plane(w, 0, 'plants'), leaf = decode(w, 0, 'leaf');
+    const sea = seaSquares(wet, w.meta), ground = ['ground_r', 'ground_g', 'ground_b'].map(name => plane(w, 0, name));
     const truth = ['true_r', 'true_g', 'true_b'].map(name => plane(w, 0, name));
     const shown = look.mode === 'layer' && w.index.has(look.layer) ? plane(w, 0, look.layer) : null;
     const worn = look.paths && w.index.has(PATH_LAYER) ? plane(w, 0, PATH_LAYER) : null;
@@ -46,7 +46,7 @@ export class Land {
     this.melt = rows[0];
     for (let i = 0; i < n; i++) {
       for (let k = 0; k < Math.ceil(row / 4); k++) put(k, i, Array.from(rows.subarray(1 + row * i + 4 * k, 1 + row * i + Math.min(4 * k + 4, row))));
-      put(3, i, [plants[i] / 255, Math.exp(-leaf[i]), sea[i], 0]);
+      put(3, i, [ground[0][i] / 255, ground[1][i] / 255, ground[2][i] / 255, sea[i]]);
       put(4, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, 0]);
       put(5, i, [shown ? shown[i] / 255 : 0, worn ? worn[i] / 255 : 0, 0, 0]);
     }
