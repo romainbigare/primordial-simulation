@@ -1,76 +1,95 @@
-//! The low basin (laws.md 1.2): the cells joined to the lowest cell through cells whose own low ground lies under the
-//! level its liquid stands at hold one body of liquid with one level, over each one's own ground. `find` names them at each full build of the ground's state; `level` shares the basin's liquid
-//! by that level once a month, after the runoff has reached it (`share_out`).
+//! The bodies of standing liquid as Flow's state holds them (laws.md 1.2): `find` names, at each full build of the
+//! ground's state, the cells of the bodies (`bodies::Bodies`) and those under their body's level; `share_out` brings
+//! the cells of a body to one level, as the runoff's pass does once a month (`runoff`); and each body mixes its heat
+//! under each air block (`mix`).
 
-use super::{air::blocks, curve::{level_over, Curve}, drain::liquid_heat, land::{cells_state, stand, wet, NONE}, liquid::book, parts::TOP, potential::apply, Scratch};
-use crate::{store::{Class, LinkFlux}, World, AIR};
+use super::{air::blocks, curve::{level_over, Curve}, land::{cells_state, NONE}, parts::TOP, potential::apply, Scratch};
+use crate::{space::network::NONE as NO_BODY, store::{Class, LinkFlux}, World, AIR};
 use std::collections::BTreeMap;
 
-/// The basin: whether each cell holds part of its liquid body, and those cells in order; and whether each lies under its
-/// level (its mean surface under it: a cell under the body, not one of its rim).
+/// The bodies now: whether each cell holds part of a body, those cells in order, whether each lies under its body's
+/// level (its mean surface under it: a cell under the body, not one of its shore), the body of each cell
+/// (`bodies::Bodies::of`), and the level of each body, m (as its liquid stands over its cells' own ground, no higher
+/// than its pass).
 #[derive(Clone, Debug, Default)]
 pub(super) struct Basin {
     pub(super) body: Vec<bool>,
     pub(super) cells: Vec<u32>,
     pub(super) is: Vec<bool>,
+    pub(super) of: Vec<u32>,
+    pub(super) level: Vec<f64>,
 }
 
-/// The basin now: the lowest cell and every cell joined to it through cells whose own low ground (`curve::Curve`) lies
-/// under the level its liquid stands at (`land::stand`), each of them under it where its mean surface is; none where
-/// the lowest cell's liquid does not stand.
+/// The bodies now (`Basin`): the level of each the one level at which what stands over its cells' pores stands over
+/// their own ground together (`curve::level_over`), no higher than its pass.
 pub(super) fn find(w: &World, s: &Scratch) -> Basin {
-    let cells = w.mesh.cells();
-    let n = cells.n();
-    let mut basin = Basin { body: vec![false; n], cells: Vec::new(), is: vec![false; n] };
-    let Some(lowest) = (0..n).min_by(|&a, &b| s.z[a].total_cmp(&s.z[b])) else { return basin };
-    let top = stand(s, lowest);
-    if top <= s.z[lowest] {
-        return basin;
-    }
-    let (mut todo, body) = (vec![lowest], &mut basin.body);
-    body[lowest] = true;
-    while let Some(i) = todo.pop() {
-        for j in cells.around(i).1.iter().map(|&j| j as usize) {
-            if !body[j] && s.z[j] + s.curves[j].low() < top {
-                body[j] = true;
-                todo.push(j);
-            }
-        }
-    }
-    basin.cells = (0..n as u32).filter(|&i| basin.body[i as usize]).collect();
-    basin.is = (0..n).map(|i| basin.body[i] && s.z[i] < top).collect();
-    basin
+    let (n, b) = (w.mesh.cells().n(), &s.bodies);
+    let level: Vec<f64> = b.list.iter().map(|x| level_of(s, &x.cells, x.level)).collect();
+    let is = (0..n).map(|i| b.of[i] != NO_BODY && s.z[i] < level[b.of[i] as usize]).collect();
+    let cells = (0..n as u32).filter(|&i| b.of[i as usize] != NO_BODY).collect();
+    Basin { body: b.of.iter().map(|&x| x != NO_BODY).collect(), cells, is, of: b.of.clone(), level }
 }
 
-/// The basin's liquid of the liquids `liq` (what boils below the coldest node, `tmin`, is a dissolved gas) stands at one
-/// level: each cell's pores keep what they hold, and all the rest stands over the cells' own ground (`curve::level_over`):
-/// that liquid body has one level (its slope under wind and rotation is not modelled). Each cell that holds more than
-/// its pores and what stands on its ground under that level gives the share of its liquid over it, with that share of
-/// its heat as it leaves (`drain::liquid_heat`); mixed, it goes to the cells that hold less, by what each lacks
-/// (`share_out`), with the potential energy of what moves (`potential`).
-pub(super) fn level(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64) {
-    let basin = std::mem::take(&mut s.basin);
-    if basin.cells.is_empty() {
-        s.basin = basin;
-        return;
+impl World {
+    /// The level of the liquid of each pond of the terrain's samples (`Samples::ponds`), m, as Flow's last runoff's pass
+    /// or full build of the ground's state left it; NaN for a pond no cell holds (or before Flow first ran).
+    pub fn pond_levels(&self) -> Vec<f64> {
+        let mut out = vec![f64::NAN; self.terrain_samples().ponds.len()];
+        let s = &self.scratch;
+        s.bodies.list.iter().zip(&s.basin.level).for_each(|(b, &l)| out[b.pond as usize] = l);
+        out
     }
-    let area = w.mesh.cells().area();
-    let (held, vol) = movable(w, s, liq, &basin.cells, tmin, (|k, i| wet(s, k, i), |i, mol| liquid_heat(w, s, liq, i, mol)));
-    let pore: Vec<f64> = basin.cells.iter().zip(&vol).map(|(&i, &v)| v.min(s.pd[i as usize] * area[i as usize])).collect();
-    let parts: Vec<(&Curve, f64)> = basin.cells.iter().map(|&i| (&s.curves[i as usize], s.z[i as usize])).collect();
-    let top = level_over(&parts, vol.iter().zip(&pore).map(|(v, p)| v - p).sum());
-    let want: Vec<f64> = parts.iter().zip(&pore).map(|((c, z), p)| p + c.volume(top - z)).collect();
-    let (a, b, mol, heat) = share_out(&basin.cells, (&held, &vol), &want, liq.len());
-    let ks: Vec<u16> = liq.iter().map(|&k| k as u16).collect();
-    s.basin = basin;
-    book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &ks, mol: &mol, heat: &heat }], None);
-    // The basin's cells, which the runoff and the level moved, find their state again before their heat mixes, and
-    // after it.
-    let cells = std::mem::take(&mut s.basin.cells);
-    cells_state(w, s, &cells);
-    s.basin.cells = cells;
-    let mixed = mix_heat(w, s);
-    cells_state(w, s, &mixed);
+
+    /// Does cell `i` hold part of a body of standing liquid (`bodies::Bodies`), its lowest sample in a pond?
+    pub fn in_body(&self, i: usize) -> bool {
+        let s = &self.scratch;
+        let of = if s.bodies.of.len() == self.mesh.cells().n() { s.bodies.of[i] } else { super::bodies::Bodies::of(self).of[i] };
+        of != NO_BODY
+    }
+
+    /// Each body of standing liquid as Flow's state holds it (`Pool`); none before Flow first built the state.
+    pub fn pools(&self) -> Vec<Pool> {
+        let s = &self.scratch;
+        if s.curves.len() != self.mesh.cells().n() || s.head.len() != s.curves.len() {
+            return Vec::new();
+        }
+        let pool = |(b, &level): (&super::bodies::Body, &f64)| {
+            let stands = |i: &u32| super::land::standing(s, *i as usize);
+            let wet = |i: &u32| s.curves[*i as usize].wet(stands(i)) * self.mesh.cells().area()[*i as usize];
+            let next = (b.next.body != NO_BODY).then_some(b.next.body as usize);
+            let at_level = |i: &u32| s.curves[*i as usize].volume(level - s.z[*i as usize]);
+            let (stand, under) = (b.cells.iter().map(stands).collect(), b.cells.iter().map(at_level).collect());
+            Pool { pond: b.pond as usize, cells: b.cells.clone(), stands: stand, under, next, level, low: b.pass == NO_BODY, area: b.cells.iter().map(wet).sum(), volume: b.cells.iter().map(stands).sum() }
+        };
+        s.bodies.list.iter().zip(&s.basin.level).map(pool).collect()
+    }
+}
+
+/// A body of standing liquid (laws.md 1.2): its pond (`Samples::ponds`), its cells, the volume of liquid that stands
+/// over the pores of each as Flow's state holds it and the volume its own ground holds under the body's level, m³; the
+/// body its pass leads to (an
+/// index of `World::pools`; none for open low ground or where the way ends in no body), its level, m; whether it is
+/// open low ground (no pass); the area its liquid covers over its cells' own ground, m², and the volume that stands
+/// over their pores, m³.
+#[derive(Clone, Debug)]
+pub struct Pool {
+    pub pond: usize,
+    pub cells: Vec<u32>,
+    pub stands: Vec<f64>,
+    pub under: Vec<f64>,
+    pub next: Option<usize>,
+    pub level: f64,
+    pub low: bool,
+    pub area: f64,
+    pub volume: f64,
+}
+
+/// The level of the liquid that stands over the pores of `cells`, over their own ground together, m, no higher than
+/// `pass`.
+fn level_of(s: &Scratch, cells: &[u32], pass: f64) -> f64 {
+    let parts: Vec<(&Curve, f64)> = cells.iter().map(|&i| (&s.curves[i as usize], s.z[i as usize])).collect();
+    let stands: f64 = cells.iter().map(|&i| super::land::standing(s, i as usize)).sum();
+    level_over(&parts, stands).min(pass)
 }
 
 /// What may move of the liquids `liq` in each cell of `cells` (`[c * (liq.len() + 1) + q]`): all of one that boils below
@@ -93,14 +112,16 @@ pub(super) fn movable(w: &World, s: &Scratch, liq: &[usize], cells: &[u32], tmin
     (held, vol)
 }
 
-/// Cells `cells`, of the liquids that may move `held` (`movable`: `nl` liquids, then the heat) and their volumes `vol`,
-/// m³, come to hold `want` m³: each cell that holds more gives the share of its liquid over it, with that share of its
-/// heat; mixed, it goes to the cells that hold less, by what each lacks. As a link flux from the cell that wants the
-/// most to each other one: its ends, the mol of each liquid (`[q * links + l]`) and the heat, J, of each link.
-pub(super) fn share_out(cells: &[u32], (held, vol): (&[f64], &[f64]), want: &[f64], nl: usize) -> (Vec<u32>, Vec<u32>, Vec<f64>, Vec<f64>) {
-    let (m, width) = (cells.len(), nl + 1);
-    // What the cells over the level give, mixed (as a row of `held`), and the volume the cells under it lack, m³.
-    let (mut spare, mut lack) = (vec![0.0; width], 0.0);
+/// Cells `cells`, of the liquids that may move `held` (`movable`: rows of `width - 1` liquids, then the heat) and
+/// their volumes `vol`, m³, come to hold `want` m³: each cell that holds more gives the share of its liquid over it,
+/// with that share of its heat; mixed, it goes to the cells that hold less, by what each lacks. Where they hold more
+/// than they want together (`over`), what the cells that hold less do not take is left over, mixed. Returns the moves
+/// from the cell that wants the most to each other one (each other's change, a row of `held`, `[c * width + q]`, + to
+/// it) with that cell, and what is left over (a row).
+pub(super) fn share_out(cells: &[u32], (held, vol): (&[f64], &[f64]), want: &[f64], (width, over): (usize, bool)) -> (usize, Vec<f64>, Vec<f64>) {
+    let m = cells.len();
+    // What the cells over the level give, mixed (as a row of `held`), its volume, and the volume the cells under it lack, m³.
+    let (mut spare, mut given, mut lack) = (vec![0.0; width], 0.0, 0.0);
     let mut change = vec![0.0; m * width];
     for c in 0..m {
         if vol[c] > want[c] {
@@ -109,29 +130,32 @@ pub(super) fn share_out(cells: &[u32], (held, vol): (&[f64], &[f64]), want: &[f6
                 change[c * width + q] = -held[c * width + q] * gives;
                 *x -= change[c * width + q];
             }
+            given += vol[c] - want[c];
         } else {
             lack += want[c] - vol[c];
         }
     }
-    for c in (0..m).filter(|&c| want[c] > vol[c]) {
-        let gets = (want[c] - vol[c]) / lack;
-        (0..width).for_each(|q| change[c * width + q] = spare[q] * gets);
+    // Shared by what each lacks: all that was given where the cells want what they hold, else as much as each lacks.
+    let whole = if over { given } else { lack };
+    let mut left = spare.clone();
+    for c in (0..m).filter(|&c| want[c] > vol[c] && whole > 0.0) {
+        let gets = (want[c] - vol[c]) / whole;
+        for q in 0..width {
+            change[c * width + q] = spare[q] * gets;
+            left[q] -= change[c * width + q];
+        }
     }
-    // From the cell that holds the most to each other one.
+    if !over {
+        left.fill(0.0);
+    }
     let hub = (0..m).max_by(|&a, &b| want[a].total_cmp(&want[b]).then(b.cmp(&a))).unwrap_or(0);
-    let others: Vec<usize> = (0..m).filter(|&c| c != hub).collect();
-    let links = others.len();
-    let (mut mol, mut heat) = (vec![0.0; nl * links], vec![0.0; links]);
-    for (l, &c) in others.iter().enumerate() {
-        (0..nl).for_each(|q| mol[q * links + l] = change[c * width + q]);
-        heat[l] = change[c * width + nl];
-    }
-    (vec![cells[hub]; links], others.iter().map(|&c| cells[c]).collect(), mol, heat)
+    (hub, change, left)
 }
 
-/// Does cell `i` mix as one with the low basin under its air block (`mix_heat`) and face the air as one surface with
-/// the basin under its air node (`air::surf`)? A cell of the low basin all under its liquid (a node that is one, or of
-/// parts with no land, its liquid's top, `parts`), off its melting plateaus, with no soft cover and no cover of bodies.
+/// Does cell `i` mix as one with its body under its air block (`mix_heat`) and face the air as one surface with the
+/// body under its air node (`air::surf`)? A cell under its body's level all under its liquid (a node that is one, or
+/// of parts with no land, its liquid's top, `parts`), off its melting plateaus, with no soft cover and no cover of
+/// bodies.
 pub(super) fn one_surface(w: &World, s: &Scratch, i: usize) -> bool {
     let (pk, cover) = match s.mixed(i) {
         Some(m) if m.two_faces() => return false,
@@ -141,9 +165,9 @@ pub(super) fn one_surface(w: &World, s: &Scratch, i: usize) -> bool {
     s.basin.is[i] && pk == NONE && cover <= 0.0 && w.canopy[i] <= 0.0
 }
 
-/// Does the liquid of cell `i` of the low basin mix as one with the basin's (`mix_heat`, `air::dissolve`)? A cell that
-/// faces the air as one surface with it (`one_surface`); of a cell of parts, its liquid's top, off its plateaus, with no
-/// soft cover and no cover of bodies.
+/// Does the liquid of cell `i` of a body mix as one with the body's (`mix_heat`, `air::dissolve`)? A cell that faces
+/// the air as one surface with it (`one_surface`); of a cell of parts, its liquid's top, off its plateaus, with no soft
+/// cover and no cover of bodies.
 pub(super) fn mixes(w: &World, s: &Scratch, i: usize) -> bool {
     s.mixed(i).map(|m| &m.piece[TOP]).map_or(one_surface(w, s, i), |p| s.basin.body[i] && p.pk == NONE && p.cover[2] <= 0.0 && w.canopy[i] <= 0.0)
 }
@@ -154,18 +178,29 @@ pub(super) fn phases(s: &Scratch, i: usize) -> u64 {
     s.mixed(i).map_or(s.latent[i].molten, |m| m.piece[TOP].latent.molten)
 }
 
-/// The low basin under each air block mixes its heat in a month: the liquid of its cells that mixes as one (`mixes`),
-/// with the same phases, takes the block's temperature, the heat of their sum over their summed heat capacity (apart from the
-/// fusion enthalpy each holds), as one heat flux from the cell of the most heat capacity to each other, a cell of parts'
-/// its liquid's top's (`parts::Parts`). Returns the cells that mixed.
+/// The cells of the bodies, which the runoff's pass moved, find their state again; then each body mixes its heat under
+/// each air block (`mix_heat`), and the cells that mixed find their state again.
+pub(super) fn mix(w: &mut World, s: &mut Scratch) {
+    let cells = std::mem::take(&mut s.basin.cells);
+    cells_state(w, s, &cells);
+    s.basin.cells = cells;
+    let mixed = mix_heat(w, s);
+    cells_state(w, s, &mixed);
+}
+
+/// Each body under each air block mixes its heat in a month: the liquid of its cells that mixes as one (`mixes`), with
+/// the same phases, takes the block's temperature, the heat of their sum over their summed heat capacity (apart from
+/// the fusion enthalpy each holds), as one heat flux from the cell of the most heat capacity to each other, a cell of
+/// parts' its liquid's top's (`parts::Parts`). Returns the cells that mixed.
 fn mix_heat(w: &mut World, s: &mut Scratch) -> Vec<u32> {
     let mut block = vec![0; w.mesh.level(AIR).n()];
     blocks(w).iter().enumerate().for_each(|(b, nodes)| nodes.iter().for_each(|&j| block[j as usize] = b));
     let parent = w.mesh.cells().parent();
     let liquid = |i: usize| s.mixed(i).map(|m| &m.piece[TOP]);
-    let mut by: BTreeMap<(usize, u64), Vec<usize>> = BTreeMap::new();
+    let mut by: BTreeMap<(u32, usize, u64), Vec<usize>> = BTreeMap::new();
     for &i in s.basin.cells.iter().filter(|&&i| mixes(w, s, i as usize)) {
-        by.entry((block[parent[i as usize] as usize], phases(s, i as usize))).or_default().push(i as usize);
+        let i = i as usize;
+        by.entry((s.basin.of[i], block[parent[i] as usize], phases(s, i))).or_default().push(i);
     }
     let free = |i: usize| liquid(i).map_or(w.store.heat(Class::Ground)[i] - s.latent[i].held, |p| p.heat - p.latent.held);
     let cap = |i: usize| liquid(i).map_or(s.cap[i], |p| p.cap);

@@ -1,5 +1,5 @@
 //! What a cell's exchange with the air reads of the ground it solves (`Surf`): one cell's (of a cell of parts, each
-//! part that faces the air), or the low basin's under one air node as one surface (laws.md 1.4): its cells there that
+//! part that faces the air), or a body's of standing liquid under one air node as one surface (laws.md 1.4): its cells there that
 //! mix as one (`basin::one_surface`) with the same phases (`patches`), solved once with their summed area, heat, heat
 //! capacity and gases, at their mean temperature, reflectance and air, and the sunlight of their mean latitude; and
 //! each of its active gases as its evaporation reads it (`Vapour`).
@@ -173,19 +173,19 @@ impl Surf {
     }
 }
 
-/// The patches of the low basin that each solve one surface balance: under each air node, the cells of the low basin that
-/// mix as one (`basin::one_surface`), by what is molten in them (`basin::phases`); at least two cells each, in the
-/// order of their cells.
+/// The patches of the bodies of standing liquid that each solve one surface balance: under each air node, the cells of
+/// one body that mix as one (`basin::one_surface`), by what is molten in them (`basin::phases`); at least two cells
+/// each, in the order of their cells.
 pub(super) fn patches(w: &World, s: &Scratch) -> Vec<Vec<u32>> {
-    groups(w, |i| one_surface(w, s, i), |i| phases(s, i))
+    groups(w, |i| one_surface(w, s, i), |i| (s.basin.of[i], phases(s, i)))
 }
 
-/// The cells `member` names under each air node, by their phases (`phases`): at least two cells each, in the order of
-/// their cells.
-pub(super) fn groups(w: &World, member: impl Fn(usize) -> bool, phases: impl Fn(usize) -> u64) -> Vec<Vec<u32>> {
+/// The cells `member` names under each air node, by their body and their phases (`key`): at least two cells each, in
+/// the order of their cells.
+pub(super) fn groups(w: &World, member: impl Fn(usize) -> bool, key: impl Fn(usize) -> (u32, u64)) -> Vec<Vec<u32>> {
     let parent = w.mesh.cells().parent();
-    let mut by: std::collections::BTreeMap<(u32, u64), Vec<u32>> = std::collections::BTreeMap::new();
-    (0..w.mesh.cells().n()).filter(|&i| member(i)).for_each(|i| by.entry((parent[i], phases(i))).or_default().push(i as u32));
+    let mut by: std::collections::BTreeMap<(u32, (u32, u64)), Vec<u32>> = std::collections::BTreeMap::new();
+    (0..w.mesh.cells().n()).filter(|&i| member(i)).for_each(|i| by.entry((parent[i], key(i))).or_default().push(i as u32));
     by.into_values().filter(|p| p.len() > 1).collect()
 }
 

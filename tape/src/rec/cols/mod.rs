@@ -15,6 +15,8 @@ use pcore::par;
 
 /// The unit of the mineral columns counted in mol: 10^9 mol.
 const GIGA: f64 = 1e9;
+/// m² in a km².
+const MEGA: f64 = 1e6;
 
 /// One yearly row: (name, unit, value) of each column, in the order they are written.
 #[derive(Default)]

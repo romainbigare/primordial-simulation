@@ -26,11 +26,11 @@ fn pore_mol(w: &World, i: usize) -> f64 {
 
 /// Two land cells side by side, both warm, away from the low basin: their own lowest ground and that of the cells round
 /// them above 0 m, so the basin's liquid reaches none of them (liquid that one gains under the ground comes from the
-/// other or from rain): the higher first.
+/// other or from rain), and neither in a body of standing liquid (what runs off them leaves): the higher first.
 fn pair(w: &World) -> (usize, usize) {
     let (n, gw) = (w.mesh.cells().n(), w.map.w);
     let high = |i: usize| pcore::flow::lowest(w, i) > 0.0;
-    let warm_land = |i: usize| w.surface_z(i) > 50.0 && w.t_ground(i) > 280.0 && high(i) && w.mesh.cells().around(i).1.iter().all(|&j| high(j as usize));
+    let warm_land = |i: usize| w.surface_z(i) > 50.0 && w.t_ground(i) > 280.0 && high(i) && !w.in_body(i) && w.mesh.cells().around(i).1.iter().all(|&j| high(j as usize));
     let (a, b) = (0..n).filter(|i| i % gw + 1 < gw).map(|i| (i, i + 1)).find(|&(a, b)| warm_land(a) && warm_land(b)).expect("two land cells");
     if w.surface_z(a) >= w.surface_z(b) { (a, b) } else { (b, a) }
 }
@@ -837,24 +837,6 @@ fn basin_under(w: &World, top: impl Fn(&World, usize) -> f64) -> (Vec<usize>, us
         }
     }
     ((0..n).filter(|&i| basin[i]).collect(), lowest)
-}
-
-/// A connected liquid body has one level: half a metre of liquid poured on one cell of an island's low basin, with the
-/// month's uneven rain and the runoff that reaches it, ends a liquid step at one level, within a millimetre, over all
-/// the cells joined to the lowest through cells under that level. Matter and energy are kept.
-#[test]
-fn a_connected_liquid_body_stands_at_one_level() {
-    let mut w = worldgen::testkit::small_world();
-    let (cells, lowest) = basin_under(&w, liquid_top);
-    assert!(cells.len() > w.mesh.cells().n() / 4, "a basin of {} cells", cells.len());
-    let area = w.mesh.cells().area()[lowest];
-    pour(&mut w, lowest, 0.5 * area);
-    let books = Books::now(&w);
-    worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
-    books.assert_within(&w, 1e-9, 1e-9);
-    let tops: Vec<f64> = cells.iter().map(|&i| liquid_top(&w, i)).collect();
-    let (lo, hi) = tops.iter().fold((f64::MAX, f64::MIN), |(a, b), &x| (a.min(x), b.max(x)));
-    assert!(hi - lo < 1e-3, "the basin stands between {lo} m and {hi} m");
 }
 
 /// The low basin of each air block mixes its heat in a month (laws.md 1.2): an island's low basin (one block) with

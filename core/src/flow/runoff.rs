@@ -1,306 +1,234 @@
-//! The liquid that may run off moves down the cells in one pass in the order of a priority flood (`solve::downhill`;
-//! laws.md 1.2), with its heat and its potential energy (`Falls`); lost head heats what runs out and does work on the
-//! bed (`load`, `wear`).
+//! The liquid that may run off goes down the terrain's network to the bodies of standing liquid in one pass a month
+//! (laws.md 1.2): each cell in no body sends it down the samples' ways from its samples to the bodies they reach
+//! (`bodies::Bodies::ways`);
+//! the bodies, each before the body its pass leads to, stand at one level, and what one holds over its pass runs on to
+//! the next (`basin::share_out`); what each sample passes on is summed down the samples' ways (`discharge`), and the
+//! head it loses there does work on the bed (`erode`). Every move goes from the cell it leaves to the cell it lands
+//! in, with its heat, and its potential energy is booked from where it leaves (`potential::apply`).
 
-use super::{bare_share, curve::{level_over, Curve}, falls::{Falls, Lands}, follow, land::{lift, solid, NONE}, liquid::{book, mobile}, potential::apply, year_weight, Scratch};
-use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed, Order}, space::Level, store::{Class, LinkFlux, Move, Node}, units::T_FLOOR, World};
+use super::basin::{movable, share_out};
+use super::bodies::Bodies;
+use super::curve::{level_over, Curve};
+use super::{bare_share, drain::liquid_heat, follow, land::{lift, solid}, liquid::book, potential::apply, year_weight, Scratch};
+use crate::{math::one_minus_exp, space::network::NONE, store::{Class, LinkFlux, Move, Node}, World};
 
 /// Least bond strength wear divides by.
 const STRENGTH_MIN: f64 = 0.05;
 
-/// What a cell's liquid finds toward a neighbour in the pass (`Pass::ways`).
-#[derive(Clone, Copy, Debug)]
-struct Toward {
-    /// The drop, m, where it is a way down.
-    drop: Option<f64>,
-    /// The volume that may move there, m³.
-    room: f64,
-    /// The fall of the cell's head, m.
-    fall: f64,
-    /// The rim, m: the level the liquid sent there comes to stand at, or crosses (the ground of a cell it passes on
-    /// through), so the cell it leaves does not drain below it by that way.
-    rim: f64,
+/// The moves of the pass, each from one cell to another: what crosses, a row of `kinds` (mol) then the heat (J).
+struct Crossings {
+    a: Vec<u32>,
+    b: Vec<u32>,
+    rows: Vec<f64>,
+    width: usize,
 }
 
-/// What the pass reads at each cell (`surface`): the world and Flow's state as the pass found them, the order of the
-/// cells, the rows that move together per node as at the pass's start (`q0`, `q[i * width + r]`: each liquid of the
-/// first `nl` of `ks`, each load of the rest, `sol`, their heat, J, and the liquid's volume, m³), and which cells are
-/// land (`World::is_land`: the solid surface above 0 m, as Flow's state has it).
-struct Pass<'a> {
-    w: &'a World,
-    s: &'a Scratch,
-    order: &'a Order,
-    ks: &'a [usize],
-    sol: &'a [usize],
-    nl: usize,
-    q0: &'a [f64],
-    land: &'a [bool],
+impl Crossings {
+    fn push(&mut self, from: u32, to: u32, row: impl Iterator<Item = (usize, f64)>, heat: f64) {
+        let at = self.rows.len();
+        self.rows.resize(at + self.width, 0.0);
+        row.for_each(|(c, m)| self.rows[at + c] += m);
+        self.rows[at + self.width - 1] = heat;
+        self.a.push(from);
+        self.b.push(to);
+    }
+    /// As the columns of a link flux: the mol of each kind over the links (`[c * links + l]`), then the heat.
+    fn columns(&self) -> Vec<f64> {
+        let links = self.a.len();
+        let mut out = vec![0.0; self.width * links];
+        for (l, row) in self.rows.chunks_exact(self.width).enumerate() {
+            row.iter().enumerate().for_each(|(c, &x)| out[c * links + l] = x);
+        }
+        out
+    }
 }
 
-/// What a cell's visit leaves of the pass: the work left to break its bonded ground, J (`load`), the liquid it sent on
-/// and the liquid it sent off the land, mol.
-struct Left {
-    worn: f64,
-    sent: f64,
-    off_land: f64,
+/// What each cell holds that may move as the pass goes (`basin::movable`: rows of the liquids then the heat; and the
+/// volume, m³), and what the pass sends into the samples' ways: mol and kg at each sample.
+struct Held {
+    q: Vec<f64>,
+    vol: Vec<f64>,
+    width: usize,
+    into: Vec<[f64; 2]>,
 }
 
-/// The liquid that may run off (what stands, what came up from the store, and the pores' drainage to the channels, a
-/// share 1 - exp(-`seep` × slope × time / (`porosity` × `hill`))) moves down the cells in one pass (`solve::downhill`;
-/// laws.md 1.2), with its heat and, where Flow's lifts and falls are booked, its potential energy (`Falls`); lost head
-/// heats what runs out and does work on the bed (`load`, `wear`).
+/// One pass a month of `dt` seconds (the module's doc), of the liquids `liq` (what boils below the coldest node, `tmin`,
+/// is a dissolved gas); `slope` and `runs` as the drain to the channels inside each cell found them (`drain::springs`).
 pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope, runs): (&[f64], &[f64]), dt: f64) {
-    let (n, area, ph) = (w.mesh.cells().n(), w.mesh.cells().area(), w.cfg.phys);
-    let mob = mobile(w, s, liq, tmin, |_| true);
+    let n = w.mesh.cells().n();
+    let all: Vec<u32> = (0..n as u32).collect();
+    let (q, vol) = movable(w, s, liq, &all, tmin, (|k, i| super::land::wet(s, k, i), |i, mol| liquid_heat(w, s, liq, i, mol)));
+    let b = std::mem::take(&mut s.bodies);
     let sol = s.solids(tmin);
-    let ks: Vec<usize> = liq.iter().chain(&sol).copied().collect();
-    let (nl, width) = (liq.len(), ks.len() + 2);
-    let vol = width - 1;
-    let mut q = vec![0.0; width * n];
-    for i in 0..n {
-        let (pores, own) = (s.pd[i] * area[i], mob.vol[i] - runs[i]);
+    let kinds: Vec<usize> = liq.iter().chain(sol.iter().filter(|k| !liq.contains(k))).copied().collect();
+    let mut x = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: kinds.len() + 1 };
+    let mut h = Held { q, vol, width: liq.len() + 1, into: vec![[0.0; 2]; b.cell_of.len()] };
+    let mm: Vec<f64> = liq.iter().map(|&k| s.sp[k].mm).collect();
+    send(w, s, &b, &mut h, &mut x, (slope, runs, &mm), dt);
+    s.basin.level = stand(w, s, &b, &mut h, &mut x, &mm);
+    let flux = discharge(w, &b, &h.into);
+    let broke = erode(w, s, &b, &flux, (&sol, &kinds), &mut x);
+    let col = x.columns();
+    let at = (x.width - 1) * x.a.len();
+    let ks: Vec<u16> = kinds.iter().map(|&k| k as u16).collect();
+    book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &x.a, b: &x.b, ks: &ks, mol: &col[..at], heat: &col[at..] }]);
+    apply(w, s, &[], &broke);
+    follow_flux(w, &b, &flux, dt);
+    s.bodies = b;
+}
+
+/// Each cell in no body sends the liquid that may run off (what stands over its pores, what came up from the store,
+/// and the pores' drainage to the channels, a share 1 - exp(-`seep` × slope × time / (`porosity` × `hill`))) down the
+/// samples' ways from each of its samples, by its share of the cell's area, to the cells the ways land in, with that
+/// share of its heat (`Bodies::ways`; what reaches its own ground stays). All leave as the pass starts.
+fn send(w: &World, s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, (slope, runs, mm): (&[f64], &[f64], &[f64]), dt: f64) {
+    let (area, ph, width) = (w.mesh.cells().area(), w.cfg.phys, h.width);
+    let mut off = vec![0.0; area.len()];
+    for i in (0..area.len()).filter(|&i| b.of[i] == NONE && h.vol[i] > 0.0 && !b.ways[i].is_empty()) {
+        let (pores, own) = (s.pd[i] * area[i], h.vol[i] - runs[i]);
         let lp = own.min(pores);
         let free = if s.head[i] > s.z[i] { lp - ph.field * pores } else { 0.0 };
         let hill = if free > 0.0 && slope[i] > 0.0 { free.min(lp * one_minus_exp(ph.seep * slope[i] * dt / (ph.porosity * ph.hill))) } else { 0.0 };
-        let off = if mob.vol[i] > 0.0 { (((own - pores).max(0.0) + runs[i] + hill) / mob.vol[i]).min(1.0) } else { 0.0 };
-        (0..nl).for_each(|r| q[i * width + r] = mob.mol[r * n + i] * off);
-        q[i * width + vol] = mob.vol[i] * off;
+        off[i] = (((own - pores).max(0.0) + runs[i] + hill) / h.vol[i]).min(1.0);
     }
-    let (q0, cells) = (q.clone(), w.mesh.cells());
-    let adj = Adjacency { start: cells.start(), link: cells.adj_link(), other: cells.adj_cell(), a: cells.a() };
-    let mut order = std::mem::take(&mut s.order);
-    // The flood runs over each cell's lowest ground, where its liquid leaves it, and its head is the level its liquid
-    // reaches over its own ground (`curve::Curve`).
-    let low: Vec<f64> = (0..n).map(|i| s.z[i] + s.curves[i].low()).collect();
-    order.update(&adj, &low, |i| s.z[i] + s.curves[i].level(q[i * width + vol]), &s.basin.cells);
-    let land: Vec<bool> = s.z.iter().map(|&z| z > 0.0).collect();
-    let mut falls = s.lifts.as_ref().map(|_| Falls::new(w, s));
-    let (mut left, mut crossed, mut outs, mut rest) = (Vec::with_capacity(n), Crossed::default(), Vec::new(), Vec::new());
-    left.resize_with(n, || Left { worn: 0.0, sent: 0.0, off_land: 0.0 });
-    let p = Pass { w, s, order: &order, ks: &ks, sol: &sol, nl, q0: &q0, land: &land };
-    pass(&order, &adj, &mut q, &mut crossed, |i, q, share| {
-        if q[i * width + vol] > 0.0 {
-            let (out, drop) = p.ways(i, q, share, (&mut outs, &mut rest));
-            left[i] = p.leave(i, q, share, (out, drop), falls.as_mut());
-        }
-    });
-    // The crossings as a link flux: each substance once (liquid and load rows of one substance share it), then the heat.
-    let kinds: Vec<u16> = liq.iter().chain(sol.iter().filter(|k| !liq.contains(k))).map(|&k| k as u16).collect();
-    let col_of: Vec<usize> = ks.iter().map(|&k| kinds.iter().position(|&x| x as usize == k).unwrap_or(0)).chain([kinds.len()]).collect();
-    let (a, b, mol) = by_link(&crossed, width, &col_of, (cells.a(), cells.b()));
-    let at = kinds.len() * a.len();
-    // The heat of the falls lands before the crossings, which carry it on; a climb is paid after them, from the heat the
-    // liquid brought: the node gives no more than it holds at either time.
-    let (fell, climbed): (Vec<f64>, Vec<f64>) = falls.as_ref().map_or_else(Default::default, |f| f.given.iter().map(|&x| (x.max(0.0), x.min(0.0))).unzip());
-    if let Some(l) = s.lifts.as_mut() {
-        l.give(w, &fell);
-    }
-    book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &kinds, mol: &mol[..at], heat: &mol[at..] }], falls.as_ref().map(|f| &f.carried[..]));
-    if let Some(l) = s.lifts.as_mut() {
-        l.give(w, &climbed);
-    }
-    s.order = order;
-    let (ema, mut broke) = (year_weight(w, dt), Vec::new());
-    for (i, x) in left.iter().enumerate() {
-        follow(&mut w.liquid_flux[i], (x.sent / dt) as f32, ema);
-        follow(&mut w.off_land[i], (x.off_land / dt) as f32, ema);
-        if x.worn > 0.0 {
-            wear(w, s, i, x.worn, &mut broke);
+    // What each cell sends, mol and kg, as the pass starts.
+    let sent: Vec<[f64; 2]> = (0..area.len()).map(|i| {
+        let row = &h.q[i * width..(i + 1) * width - 1];
+        [off[i] * row.iter().sum::<f64>(), off[i] * row.iter().zip(mm).map(|(m, k)| m * k).sum::<f64>()]
+    }).collect();
+    for (k, into) in h.into.iter_mut().enumerate() {
+        let i = b.cell_of[k] as usize;
+        if off[i] > 0.0 && b.lands[k] as usize != i {
+            (into[0], into[1]) = (into[0] + sent[i][0] * b.share[k], into[1] + sent[i][1] * b.share[k]);
         }
     }
-    apply(w, s, &[], &broke);
+    for i in (0..area.len()).filter(|&i| off[i] > 0.0) {
+        let row: Vec<f64> = h.q[i * width..(i + 1) * width].iter().map(|m| m * off[i]).collect();
+        for &(to, part) in &b.ways[i] {
+            let to = to as usize;
+            x.push(i as u32, to as u32, row[..width - 1].iter().map(|m| m * part).enumerate(), row[width - 1] * part);
+            (0..width).for_each(|r| (h.q[i * width + r], h.q[to * width + r]) = (h.q[i * width + r] - row[r] * part, h.q[to * width + r] + row[r] * part));
+            let v = h.vol[i] * off[i] * part;
+            (h.vol[i], h.vol[to]) = (h.vol[i] - v, h.vol[to] + v);
+        }
+    }
 }
 
-impl Pass<'_> {
-    /// The width of a node's rows in `q`; its heat row is `width - 2`, its volume row `width - 1`.
-    fn width(&self) -> usize {
-        self.ks.len() + 2
-    }
-
-    /// The head of cell `j` in the pass, m: the level the liquid that may run off reaches over its own ground.
-    fn head(&self, q: &[f64], j: usize) -> f64 {
-        self.s.z[j] + self.s.curves[j].level(q[j * self.width() + self.width() - 1])
-    }
-
-    /// The share of cell `i`'s liquid that leaves down each way (`share`), with `outs` and `rest` as room. The surface
-    /// of a cell whose liquid stands is its head, but no higher than its spill level (what stands over it passes on);
-    /// of one its liquid passes on through, its ground. To a neighbour still to come whose liquid passes on, the liquid
-    /// goes down to that one's ground; to one whose liquid stands, what levels the two heads, whatever their areas, and
-    /// all that stands over that one's spill level, which passes on through it. Liquid never goes back to a neighbour
-    /// already passed whose liquid passes on: that one lies upstream in the flood, and what it got would come back the
-    /// next step; to one whose liquid stands it levels the two heads, but no higher than that one's spill level: what
-    /// stands over it would pass on, and that one has passed. It takes the steepest way down (`Level::steepest`), and on
-    /// level ground the flood's way out; what that way cannot take runs down the others (`run_on`), and no way takes it
-    /// below the rim of another it used (`to_rims`). Returns the share that leaves and the fall of the head, m.
-    fn ways(&self, i: usize, q: &[f64], share: &mut [f64], (outs, rest): (&mut Vec<Toward>, &mut Vec<usize>)) -> (f64, f64) {
-        let (order, cells, still) = (self.order, self.w.mesh.cells(), self.w.cfg.phys.still);
-        let (z, curve) = (&self.s.z, &self.s.curves);
-        let (zi, hd, sv) = (z[i], self.head(q, i), q[i * self.width() + self.width() - 1]);
-        let low = zi + curve[i].low();
-        outs.clear();
-        let (top, mut way) = (if order.stands[i] { hd } else { low }, None);
-        for (k, j) in cells.around(i).1.iter().map(|&j| j as usize).enumerate() {
-            let (hj, passed) = (self.head(q, j), order.before(j, i));
-            let to = match (passed, order.stands[j]) {
-                (true, _) => hj,
-                (false, true) => hj.min(order.spill[j]),
-                (false, false) => z[j] + curve[j].low(),
-            };
-            let from = if passed { top } else { hd };
-            // The level both heads come to over their own ground, the volume of each over its mean surface as it stands.
-            let level = || level_over(&[(&curve[i], zi), (&curve[j], z[j])], sv + curve[j].volume(hj - z[j]));
-            let (room, rim) = if passed {
-                // To one passed whose liquid stands: up to the level of both, no higher than its spill level. Liquid
-                // that passes on counts as a column of the cell's area at its lowest ground (`from`), whatever its
-                // ground: it levels with that one as far as the column falls (a floor of its area under both).
-                let column = || {
-                    let (floor, a) = (to - 1.0, curve[i].area());
-                    level_over(&[(&Curve::flat(a), floor), (&curve[j], z[j])], a * (from - floor) + curve[j].volume(hj - z[j]))
-                };
-                let rim = if order.stands[i] { level() } else { column() }.min(order.spill[j]);
-                (curve[j].volume(rim - z[j]) - curve[j].volume(hj - z[j]), rim)
-            } else {
-                let level = if order.stands[j] { level().min(order.spill[j]) } else { to }.max(low);
-                (sv - curve[i].volume(level - zi), level)
-            };
-            let down = from - to > still && (!passed || order.stands[j]) && room > 0.0;
-            if down && j == order.outlet[i] as usize {
-                way = Some([(k, 1.0), (k, 0.0)]);
-            }
-            outs.push(Toward { drop: down.then_some((top - to).max(0.0)), room, fall: (hd - hj).max(0.0), rim });
-        }
-        let Some(ways) = cells.steepest(i, |k| outs[k].drop).map(|w| w.1).or(way) else { return (0.0, 0.0) };
-        let (mut out, mut drop, mut short) = (0.0, 0.0, false);
-        for (k, f) in ways.into_iter().filter(|p| p.1 > 0.0) {
-            share[k] = (sv * f).min(outs[k].room) / sv;
-            (out, drop, short) = (out + share[k], drop + share[k] * outs[k].fall, short || sv * f > outs[k].room);
-        }
-        if short {
-            (out, drop) = run_on(cells, i, (outs, rest), share, sv, (out, drop));
-        }
-        to_rims(outs, share, (sv, zi, &curve[i], still), (out, drop))
-    }
-
-    /// Cell `i` sends a share `out` of its liquid (`share` down each way, its head falling by `drop` m): its liquid does
-    /// work on its load (`load`), the potential energy of what came in and of its own column turns to heat there
-    /// (`Falls::visit`; none where Flow's lifts and falls are not booked), and what runs out leaves at the temperature of
-    /// the node mixed with what came in, with that heat (`Falls::send`).
-    fn leave(&self, i: usize, q: &mut [f64], share: &[f64], (out, drop): (f64, f64), falls: Option<&mut Falls>) -> Left {
-        let (w, s, (nl, ks)) = (self.w, self.s, (self.nl, self.ks));
-        let (n, cells, width) = (w.mesh.cells().n(), w.mesh.cells(), self.width());
-        let (rows, heat, vol, area) = (ks.len(), width - 2, width - 1, cells.area()[i]);
-        // The node's heat capacity and fusion enthalpy with what came in. Liquid that came in holds its fusion enthalpy
-        // as it passes, whatever the node's own phase (its heat brought it); a load holds none.
-        let (mut c, mut held) = (s.cap[i], s.latent[i].held);
-        let (cell, was) = (i * width..(i + 1) * width, &self.q0[i * width..(i + 1) * width]);
-        for (r, &k) in ks.iter().enumerate().filter(|p| q[cell.start + p.0] != was[p.0]) {
-            let d = q[cell.start + r] - was[r];
-            (c, held) = (c + d * s.sp[k].cp, held + if r < nl { d * s.sp[k].lf } else { 0.0 });
-        }
-        let q = &mut q[cell];
-        let loads = |q: &[f64]| (nl..rows).map(|r| q[r] * s.sp[ks[r]].v[0]).sum::<f64>();
-        let kg = |q: &[f64], rs: std::ops::Range<usize>| rs.map(|r| q[r] * s.sp[ks[r]].mm).sum::<f64>();
-        let (sv, came) = (q[vol], loads(q));
-        // The work, on the bed below the liquid left standing (which hides it); none below 0 m, where the load settles.
-        let kept = sv * (1.0 - out) / area;
-        let bedwork = if self.land[i] { w.cfg.gravity * drop * kg(q, 0..nl) * w.cfg.phys.hide[1] / (w.cfg.phys.hide[1] + kept) } else { 0.0 };
-        let worn = load(w, s, i, q, (nl..rows, self.sol), bedwork, out);
-        // What its liquid and its loose solids gain over the pass, m³: the liquid it keeps less what it held at the start,
-        // and the loads that came in less those that leave (all it picked up came from it).
-        let (mass, moved) = (kg(q, 0..rows), [sv, loads(q)]);
-        let gains = [sv * (1.0 - out) - was[vol], came - out * moved[1]];
-        let mut falls = falls;
-        q[heat] += falls.as_mut().map_or(0.0, |f| f.visit((i, &s.curves[i]), out * mass, gains));
-        debug_assert!(q[heat] >= 0.0, "cell {i}: a climb the liquid cannot pay, {} J short", -q[heat]);
-        // The temperature of the node mixed with what came in, at which what runs out leaves: off a melting plateau its
-        // energy over its fusion enthalpy and heat capacity; on one, what it gains or loses on the plateau's temperature
-        // melts or freezes the plateau's substance first (`FlowView::fused`), and only the rest warms or cools it. So
-        // the liquid passing on leaves at a temperature the node pays for, and what stays keeps it.
-        let lat = match s.state.pk[i] { NONE => 0.0, k => w.store.amounts(Class::Ground)[k * n + i] * s.sp[k].lf };
-        let x = w.store.heat(Class::Ground)[i] + q[heat] - held - c * s.state.tg[i];
-        let t = (s.state.tg[i] + (x.min(0.0) + (x - lat).max(0.0)) / c.max(1.0)).max(T_FLOOR);
-        q[heat] = ks.iter().enumerate().map(|(r, &k)| q[r] * (s.sp[k].cp * t + if r < nl { s.sp[k].lf } else { 0.0 })).sum();
-        let around = cells.around(i).1;
-        if let Some(f) = falls {
-            for (k, &j) in around.iter().enumerate().filter(|p| share[p.0] > 0.0) {
-                let j = j as usize;
-                let lands = if s.basin.body[j] { Lands::Basin } else if self.order.before(i, j) { Lands::Ahead } else { Lands::Passed };
-                f.send((i, (j, &s.curves[j])), (share[k] * mass, moved.map(|m| share[k] * m)), lands);
+/// The bodies in order (`Bodies::list`), each brought to one level: its cells' pores keep what they hold and the rest
+/// stands at one level over their own ground (`curve::level_over`), no higher than its pass; each cell that holds more
+/// gives the share of its liquid over it, mixed, to those that hold less (`share_out`), and what is over the pass
+/// leaves for the cell its pass's way lands in, mixed, and into the samples' ways at the pass. Returns each body's level, m.
+fn stand(w: &World, s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, mm: &[f64]) -> Vec<f64> {
+    let (area, width) = (w.mesh.cells().area(), h.width);
+    let mut levels = Vec::with_capacity(b.list.len());
+    for body in &b.list {
+        let cells = &body.cells;
+        let held: Vec<f64> = cells.iter().flat_map(|&i| h.q[i as usize * width..(i as usize + 1) * width].iter().copied()).collect();
+        let vol: Vec<f64> = cells.iter().map(|&i| h.vol[i as usize]).collect();
+        let pore: Vec<f64> = cells.iter().zip(&vol).map(|(&i, &v)| v.min(s.pd[i as usize] * area[i as usize])).collect();
+        let parts: Vec<(&Curve, f64)> = cells.iter().map(|&i| (&s.curves[i as usize], s.z[i as usize])).collect();
+        let top = level_over(&parts, vol.iter().zip(&pore).map(|(v, p)| v - p).sum());
+        let (over, top) = (top > body.level, top.min(body.level));
+        levels.push(top);
+        let want: Vec<f64> = parts.iter().zip(&pore).map(|((c, z), p)| p + c.volume(top - z)).collect();
+        let (hub, change, left) = share_out(cells, (&held, &vol), &want, (width, over));
+        for (c, &i) in cells.iter().enumerate() {
+            let i = i as usize;
+            (0..width).for_each(|r| h.q[i * width + r] += change[c * width + r]);
+            h.vol[i] = want[c];
+            if c != hub {
+                x.push(cells[hub], i as u32, change[c * width..(c + 1) * width - 1].iter().copied().enumerate(), change[(c + 1) * width - 1]);
             }
         }
-        // What leaves a land cell for cells that are not land runs off the land.
-        let (liquid, off) = (q[..nl].iter().sum::<f64>(), (0..share.len()).filter(|&k| self.land[i] && !self.land[around[k] as usize]).map(|k| share[k]).sum::<f64>());
-        Left { worn, sent: out * liquid, off_land: off * liquid }
+        if over && left.iter().any(|&m| m > 0.0) {
+            // (The hub's change, which `share_out` gives, holds what leaves over the pass.)
+            let to = body.next.cell as usize;
+            x.push(cells[hub], to as u32, left[..width - 1].iter().copied().enumerate(), left[width - 1]);
+            (0..width).for_each(|r| h.q[to * width + r] += left[r]);
+            h.vol[to] += vol.iter().sum::<f64>() - want.iter().sum::<f64>();
+            let into = &mut h.into[body.pass as usize];
+            (into[0], into[1]) = (into[0] + left[..width - 1].iter().sum::<f64>(), into[1] + left[..width - 1].iter().zip(mm).map(|(m, k)| m * k).sum::<f64>());
+        }
     }
+    levels
 }
 
-/// What the steepest way of cell `i` cannot take (`share`, of `out` of its `sv` m³, the head falling by `drop`) runs
-/// down its other ways (`outs`), the steepest first, each as far as it takes. Returns the share that leaves and the
-/// fall of the head, as `out` and `drop`.
-fn run_on(cells: &Level, i: usize, (outs, rest): (&[Toward], &mut Vec<usize>), share: &mut [f64], sv: f64, (mut out, mut drop): (f64, f64)) -> (f64, f64) {
-    let slope = |k: usize| {
-        let u = cells.offset(i, cells.around(i).1[k] as usize);
-        outs[k].drop.unwrap_or(0.0) / u[0].hypot(u[1])
-    };
-    rest.clear();
-    rest.extend((0..outs.len()).filter(|&k| outs[k].drop.is_some() && outs[k].room > share[k] * sv));
-    rest.sort_by(|&a, &b| slope(b).total_cmp(&slope(a)).then(a.cmp(&b)));
-    for &k in rest.iter() {
-        let more = ((1.0 - out) * sv).min(outs[k].room - share[k] * sv) / sv;
-        (share[k], out, drop) = (share[k] + more, out + more, drop + more * outs[k].fall);
+/// What runs through each sample in the pass, mol and kg: what the cells and the bodies sent into the samples' ways
+/// (`into`), summed down them in one pass from the last sample the flood reached to the first, so each sample is summed
+/// before the one its liquid runs to; a sample of a body takes what reaches it.
+fn discharge(w: &World, b: &Bodies, into: &[[f64; 2]]) -> Vec<[f64; 2]> {
+    let s = w.terrain_samples();
+    let mut flux = into.to_vec();
+    for &k in s.order.iter().rev() {
+        let (k, j) = (k as usize, s.to[k as usize]);
+        if b.at[k] == NONE && j != NONE {
+            let f = flux[k];
+            let to = &mut flux[j as usize];
+            (to[0], to[1]) = (to[0] + f[0], to[1] + f[1]);
+        }
     }
-    (out, drop)
+    flux
 }
 
-/// A cell does not drain below the rim of a way it sent along (`Toward::rim`): each way's room counts all the cell
-/// holds, so together they may take it lower, and liquid would cross a rim from below it. Where the cell, which of `sv`
-/// m³ over its mean surface `zi` (on its own ground, `curve`) sends a share `out`, would end more than `still` under
-/// the highest rim of the ways it uses, each takes less (`share`), in proportion, so it ends at that rim. Returns the
-/// share that leaves and the fall of the head, as `out` and `drop`.
-fn to_rims(outs: &[Toward], share: &mut [f64], (sv, zi, curve, still): (f64, f64, &Curve, f64), (out, drop): (f64, f64)) -> (f64, f64) {
-    let rim = outs.iter().zip(share.iter()).filter(|p| *p.1 > 0.0).map(|p| p.0.rim).fold(f64::MIN, f64::max);
-    if zi + curve.level(sv * (1.0 - out)) >= rim - still {
-        return (out, drop);
+/// The head the liquid loses down the samples' ways in each land cell in no body does work there (laws.md 1.3): g times
+/// what runs through each of its samples, kg, times the fall to the sample it runs to. It picks up loose solids up to
+/// `carry` m³ per J (at most all that lies loose), which go with the cell's runoff to where its ways land, with their
+/// heat (what would land on its own ground stays);
+/// the work its load leaves free (the cover effect, Sklar and Dietrich 2004) breaks bonded ground into loose (`wear`).
+/// Returns the moves of the bed into loose ground.
+fn erode(w: &World, s: &mut Scratch, b: &Bodies, flux: &[[f64; 2]], (sol, kinds): (&[usize], &[usize]), x: &mut Crossings) -> Vec<Move> {
+    let samples = w.terrain_samples();
+    let n = w.mesh.cells().n();
+    let mut work = vec![0.0; n];
+    for (k, f) in flux.iter().enumerate().filter(|p| p.1[1] > 0.0) {
+        let (i, j) = (b.cell_of[k] as usize, samples.to[k]);
+        if b.at[k] == NONE && j != NONE && b.of[i] == NONE && s.z[i] > 0.0 {
+            work[i] += w.cfg.gravity * f[1] * (samples.h[k] - samples.h[j as usize]).max(0.0);
+        }
     }
-    let less = ((sv - curve.volume(rim - zi)) / (out * sv)).clamp(0.0, 1.0);
-    share.iter_mut().for_each(|f| *f *= less);
-    (out * less, drop * less)
+    let mut broke = Vec::new();
+    for i in (0..n).filter(|&i| work[i] > 0.0) {
+        let cap = w.cfg.carry * work[i] * bare_share(w, i);
+        let avail: f64 = sol.iter().map(|&k| solid(w, s, k, i) * s.sp[k].v[0]).sum();
+        let f = if avail > 0.0 { (cap / avail).min(1.0) } else { 0.0 };
+        if f > 0.0 {
+            for &(to, part) in &b.ways[i] {
+                let row = sol.iter().map(|&k| (kinds.iter().position(|&c| c == k).expect("a kind"), solid(w, s, k, i) * f * part));
+                let heat = sol.iter().map(|&k| solid(w, s, k, i) * f * part * s.sp[k].cp * s.state.tg[i]).sum();
+                x.push(i as u32, to, row, heat);
+            }
+        }
+        let worn = work[i] * (1.0 - f * avail / cap).max(0.0);
+        if worn > 0.0 {
+            wear(w, s, i, worn, &mut broke);
+        }
+    }
+    broke
 }
 
-/// The crossings of a pass as the columns of a link flux, row `r` in column `col_of[r]`: the links that carried
-/// something, in order, their ends, and what crossed each (`[c * links + u]`).
-fn by_link(crossed: &Crossed, rows: usize, col_of: &[usize], (a, b): (&[u32], &[u32])) -> (Vec<u32>, Vec<u32>, Vec<f64>) {
-    let cols = col_of.iter().max().map_or(0, |c| c + 1);
-    let mut slot = vec![u32::MAX; a.len()];
-    crossed.links.iter().for_each(|&l| slot[l as usize] = 0);
-    let used: Vec<u32> = (0..a.len() as u32).filter(|&l| slot[l as usize] == 0).collect();
-    used.iter().enumerate().for_each(|(u, &l)| slot[l as usize] = u as u32);
-    let (links, mut mol) = (used.len(), vec![0.0; cols * used.len()]);
-    for (&l, m) in crossed.links.iter().zip(crossed.amount.chunks_exact(rows)) {
-        let u = slot[l as usize] as usize;
-        col_of.iter().enumerate().for_each(|(r, &c)| mol[c * links + u] += m[r]);
+/// The moving averages over about a year (`World::discharge`, `World::liquid_flux`, `World::off_land`), from what ran
+/// through each sample in the pass of `dt` seconds: a cell's flux is the most through one of its samples, its main
+/// channel; what leaves a land cell's samples for those of the open low ground runs off the land.
+fn follow_flux(w: &mut World, b: &Bodies, flux: &[[f64; 2]], dt: f64) {
+    let (ema, samples) = (year_weight(w, dt), w.terrain_samples());
+    let n = w.mesh.cells().n();
+    let (mut most, mut off) = (vec![0.0f64; n], vec![0.0f64; n]);
+    for (k, f) in flux.iter().enumerate() {
+        let i = b.cell_of[k] as usize;
+        follow(&mut w.discharge[k], (f[0] / dt) as f32, ema);
+        if b.at[k] == NONE {
+            most[i] = most[i].max(f[0]);
+            let j = samples.to[k];
+            let low = j != NONE && b.at[j as usize] != NONE && b.list[b.at[j as usize] as usize].pass == NONE;
+            if low && w.is_land(i) {
+                off[i] += f[0];
+            }
+        }
     }
-    let ends = |v: &[u32]| used.iter().map(|&l| v[l as usize]).collect();
-    (ends(a), ends(b), mol)
-}
-
-/// The work `bedwork`, J, of the liquid leaving node `i` (a share `out`) on its load: it drops what is over capacity,
-/// else picks up loose solids up to it (at most all that lies loose). Returns the work left to break bonded ground: the
-/// share of the capacity its load leaves free (the cover effect, Sklar and Dietrich 2004).
-fn load(w: &World, s: &Scratch, i: usize, q: &mut [f64], (rows, sol): (std::ops::Range<usize>, &[usize]), bedwork: f64, out: f64) -> f64 {
-    let held: f64 = rows.clone().zip(sol).map(|(r, &k)| q[r] * s.sp[k].v[0]).sum();
-    let capv = w.cfg.carry * bedwork * bare_share(w, i);
-    if out <= 0.0 {
-        return 0.0;
+    for i in 0..n {
+        follow(&mut w.liquid_flux[i], (most[i] / dt) as f32, ema);
+        follow(&mut w.off_land[i], (off[i] / dt) as f32, ema);
     }
-    if held > capv {
-        rows.for_each(|r| q[r] *= capv / held);
-        return 0.0;
-    }
-    let avail: f64 = sol.iter().map(|&k| solid(w, s, k, i) * s.sp[k].v[0]).sum();
-    let f = if avail > 0.0 { ((capv - held) / avail).min(1.0) } else { 0.0 };
-    rows.zip(sol).for_each(|(r, &k)| q[r] += solid(w, s, k, i) * f);
-    if capv > 0.0 { bedwork * (1.0 - (held + f * avail) / capv).max(0.0) } else { 0.0 }
 }
 
 /// Break bonded ground of node `i` into loose by `bedwork` over bond strength (`wear`), each substance by its share of

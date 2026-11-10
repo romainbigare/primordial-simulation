@@ -10,7 +10,7 @@
 use super::drain::flood;
 use super::grid::Grid;
 use super::network::accumulate;
-use super::ponds::{basins, grade};
+use super::ponds::{basins, grade, open_parts};
 use super::wear::{noise_grid, wear};
 use crate::math::central;
 use super::square::Square;
@@ -22,7 +22,8 @@ use std::sync::{Arc, Mutex};
 /// The samples of a map for one seed: its width and height in samples, and of each sample row by row its height, m;
 /// the terrain's channels on them (`space::network`): the sample its liquid runs to (`network::NONE` for a sink of the
 /// open low ground), the area that drains through it, m², and its neighbour upstream that the most drains through
-/// (`NONE` where none runs to it); the pond each lies in (`NONE` on ground that drains), and the ponds.
+/// (`NONE` where none runs to it), and the samples in the order the flood reached them (each after the one its liquid
+/// runs to); the pond each lies in (`NONE` on ground that drains), and the ponds.
 #[derive(Clone, Debug)]
 pub struct Samples {
     pub seed: u64,
@@ -30,6 +31,7 @@ pub struct Samples {
     pub down: usize,
     pub h: Vec<f64>,
     pub to: Vec<u32>,
+    pub order: Vec<u32>,
     pub up: Vec<f64>,
     pub main: Vec<u32>,
     pub pond: Vec<u32>,
@@ -38,7 +40,8 @@ pub struct Samples {
 
 /// A pond: the samples of one closed basin that lie under its level, where liquid stands at one level before it runs
 /// over the basin's lowest pass. Its pass is the first sample out of it on the way its liquid leaves by, and the level
-/// is that of the pass, m.
+/// is that of the pass, m. The open low ground is ponds too, one for each part of it joined through its samples (an
+/// island's one): its liquid leaves by no pass (`network::NONE`) and stands at any level (infinite).
 #[derive(Clone, Copy, Debug)]
 pub struct Pond {
     pub pass: u32,
@@ -132,8 +135,9 @@ impl Terrain {
         let (up, main) = accumulate(&f.to, &f.order, |k| grid.area(k));
         let shallow = basins(&grid, &h, &f).1;
         grade(&mut h, &f, &shallow);
-        let (pond, members) = basins(&grid, &h, &f);
-        let ponds = members.iter().map(|m| Pond { pass: f.to[m[0] as usize], level: f.level[m[0] as usize] }).collect();
-        Samples { seed, across, down, h, to: f.to, up, main, pond, ponds }
+        let (mut pond, members) = basins(&grid, &h, &f);
+        let mut ponds: Vec<Pond> = members.iter().map(|m| Pond { pass: f.to[m[0] as usize], level: f.level[m[0] as usize] }).collect();
+        open_parts(&grid, &open, (&mut pond, &mut ponds));
+        Samples { seed, across, down, h, to: f.to, order: f.order, up, main, pond, ponds }
     }
 }

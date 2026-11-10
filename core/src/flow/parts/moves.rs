@@ -136,7 +136,8 @@ fn gain(p: &mut Parts, k: usize, q: usize, d: f64) {
 }
 
 /// What Flow's liquid laws moved of the cells of parts among `cells` (`liquid::book`): what came in gathers in the
-/// liquid's top; what left, of each part by its share of the cell's liquid (only liquid moves), and the heat that left
+/// liquid's top; what left, of the top and the deep by their shares of their liquid, of the land only what they lack
+/// (only liquid moves), and the heat that left
 /// by the share of the mol each gave. Of each of `ks` what each cell holds now less `before` (`[q * cells.len() + c]`),
 /// mol, and of its heat now less `heat`, J.
 pub(in crate::flow) fn to_liquid(w: &World, s: &mut Scratch, cells: &[u32], (ks, before): (&[usize], &[f64]), heat: &[f64]) {
@@ -153,14 +154,16 @@ pub(in crate::flow) fn to_liquid(w: &World, s: &mut Scratch, cells: &[u32], (ks,
                 gain(p, k, TOP, d);
                 continue;
             }
-            // Each part's share of the cell's liquid of `k`.
-            let by = |x: usize| {
-                liquid.as_ref().map_or(0.0, |l| {
-                    let all = l[LAND][q] + l[TOP][q] + l[DEEP][q];
-                    if all > 0.0 { l[x][q] / all } else { 0.0 }
-                })
-            };
-            let (by_land, by_deep, was) = (by(LAND), by(DEEP), [p.amt[k][LAND], p.amt[k][DEEP]]);
+            // Each part's share of what leaves: the liquid's top and deep give first, by their shares of the liquid
+            // they hold (what stands leaves from the liquid); the land, which keeps its own pores' liquid, gives only
+            // what they lack.
+            let shares = liquid.as_ref().map_or([0.0, 1.0, 0.0], |l| {
+                let wet = l[TOP][q] + l[DEEP][q];
+                let from_land = if wet >= -d { 0.0 } else { ((-d - wet) / -d).min(1.0) };
+                let of_wet = |x: usize| if wet > 0.0 { (1.0 - from_land) * l[x][q] / wet } else { 0.0 };
+                [from_land, 1.0 - from_land - of_wet(DEEP), of_wet(DEEP)]
+            });
+            let (by_land, by_deep, was) = (shares[LAND], shares[DEEP], [p.amt[k][LAND], p.amt[k][DEEP]]);
             gain(p, k, LAND, d * by_land);
             gain(p, k, TOP, d * (1.0 - by_land - by_deep));
             gain(p, k, DEEP, d * by_deep);
