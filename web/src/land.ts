@@ -72,8 +72,8 @@ export class Land {
     if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
     const t = this.tiles.textures(gpu), l = this.laws;
     const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(this.tiles.meta.size, this.tiles.meta.gutter, this.tiles.depth)
-      .vec4(t.now, TILE_FADE_MS, this.melt).vec4(l.soil_m, l.wet_depth, l.dormancy).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp);
-    return { 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex };
+      .vec4(t.now, TILE_FADE_MS, this.melt, this.tiles.meta.runoff).vec4(l.soil_m, l.wet_depth, l.dormancy).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp);
+    return { 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex, 13: t.areas };
   }
 
   stop(gpu: Gpu | null): void {

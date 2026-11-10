@@ -3,7 +3,7 @@
 
 use pcore::space::terrain::{Terrain, ISLAND_LEVEL};
 use pcore::Config;
-use tape::{Ground, GUTTER, TEXEL, TILE};
+use tape::{unhalf, Ground, GUTTER, TILE};
 
 /// Texels along a side of a tile with its gutter.
 const SIDE: usize = TILE + 2 * GUTTER;
@@ -13,12 +13,17 @@ fn ground() -> (Ground, std::ops::RangeInclusive<u8>) {
     let cfg = Config::default();
     let map = worldgen::terrain::island(16, 16);
     let depths = tape::depths(&map);
-    (Ground::new(1, map, Terrain::new(1, ISLAND_LEVEL), (cfg.lat_south, cfg.lat_north), cfg.phys.channel_width_exp), depths)
+    (Ground::new(1, map, Terrain::new(1, ISLAND_LEVEL), (cfg.lat_south, cfg.lat_north), [cfg.phys.channel_width, cfg.phys.channel_width_exp]), depths)
 }
 
-/// Number `k` of the texel at column `x` and row `y` of a tile, counted from its own corner (inside the gutter).
-fn at(t: &[f32], x: usize, y: usize, k: usize) -> f32 {
-    t[((y + GUTTER) * SIDE + x + GUTTER) * TEXEL + k]
+/// The numbers of a texel of a tile's first plane.
+const TEXEL: usize = 4;
+
+/// The texel at column `x` and row `y` of tile `t`, counted from its own corner (inside the gutter): its height, m (the
+/// sum of its first two numbers), and its other numbers.
+fn at(t: &[u16], x: usize, y: usize, k: usize) -> f32 {
+    let i = ((y + GUTTER) * SIDE + x + GUTTER) * TEXEL;
+    if k == 0 { unhalf(t[i]) + unhalf(t[i + 1]) } else { unhalf(t[i + k]) }
 }
 
 /// At a depth coarser than the terrain's samples and at one finer, each texel's height is the mean of its four
@@ -50,8 +55,11 @@ fn a_place_holds_the_same_numbers_in_every_tile() {
         for i in 0..2 * GUTTER {
             for k in 0..TEXEL {
                 let (a, b) = (west[(y * SIDE + TILE + i) * TEXEL + k], east[(y * SIDE + i) * TEXEL + k]);
-                assert!((a - b).abs() <= 1e-6 * a.abs().max(1.0), "row {y}, column {i} past the edge, number {k}: {a} against {b}");
+                assert_eq!(a, b, "row {y}, column {i} past the edge, number {k}");
             }
+            // The second plane: the channel's area.
+            let area = SIDE * SIDE * TEXEL;
+            assert_eq!(west[area + y * SIDE + TILE + i], east[area + y * SIDE + i], "row {y}, column {i} past the edge, the area");
         }
     }
 }

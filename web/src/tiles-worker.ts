@@ -25,7 +25,7 @@ host.onmessage = async e => {
       host.postMessage({ kind: 'ready' }, []);
     } else if (m.cmd === 'tile' && core) {
       const at = core.tile(m.depth, m.x, m.y);
-      const data = new Float32Array(core.memory.buffer.slice(at, at + core.out_len()));
+      const data = new Uint16Array(core.memory.buffer.slice(at, at + core.out_len()));
       host.postMessage({ kind: 'tile', depth: m.depth, x: m.x, y: m.y, data }, [data.buffer]);
     }
   } catch (err) {

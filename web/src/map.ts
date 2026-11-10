@@ -81,7 +81,7 @@ export class MapView {
     this.over.className = 'over';
     cv.after(this.over);
     this.ctx = this.over.getContext('2d')!;
-    this.ready = openGpu(cv, () => this.invalidate()).then(g => { this.gpu = g; this.invalidate(); return g; });
+    this.ready = openGpu(cv, () => { this.land?.tiles.lost(); this.invalidate(); }).then(g => { this.gpu = g; this.invalidate(); return g; });
     new ResizeObserver(() => { this.resize(); this.invalidate(); }).observe(cv);
     const ptrs = new Map<number, { x: number; y: number }>();
     let moved = 0;

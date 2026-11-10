@@ -65,20 +65,26 @@ size), `channel_w` and `channel_d` (the width and the depth of the cell's channe
 worn edges, structures, true colour (r, g, b). The tape holds whole-map frames only. The live viewer draws its map from two
 things, neither recorded. **The ground's tiles** (`tape::Ground`, `tape/src/ground/`), which never change, so a page
 makes each once and keeps it: a tile of a depth holds 256 x 256 texels (`TILE`), each a leaf of that depth, and 2 more
-along each edge (`GUTTER`), f32 little-endian, 4 a texel (`TEXEL`), row by row from its north-west corner. The depths
+along each edge (`GUTTER`), row by row from its north-west corner, as 16-bit floats (IEEE binary16, little-endian) in two
+planes: first four a texel (the height as the sum of two, the nearest 16-bit float and what it lacks, so it holds to a
+millimetre: a shore is the difference of two heights; the wetness index, to 0.01; the channel's ratio), then one (the
+logarithm of the channel's area, to 0.1%: a width to 0.05%), 10 bytes a texel. The depths
 go from the finest at which one tile holds the whole map to the first whose texels are no longer than 1 m
 (`tape::depths`). Per texel: the terrain's mean height over it (`Terrain::heights`, so a texel is the mean of its four
 children); the wetness index of the place, ln(a / tan β) (Beven and Kirkby 1979) of the terrain's samples (a the area
 that drains through a sample, `Samples::up`, over its width, β the slope of the samples' ground, `Grid::slope`),
 blended between the centres of the four samples about a texel finer than them and the mean of those a coarser one
-covers; and of the channel nearest it by the channel law, the distance to its centre line over its drained area to the
-power of a channel's width in its discharge (`Physics::channel`), and that area, m². A channel is drawn as each
+covers; and of the channel nearest it by the channel law, the distance d to its centre line over its drained area a to
+the power b of a channel's width in its discharge (`Physics::channel`), over the cap w0 x `MOST_RUNOFF`^b / 2 (at most
+1: no channel covers the texel at any flux), and that area, m². `MOST_RUNOFF` (3.6e-6 m/s, about the wettest month
+known, 9.3 m of rain at Cherrapunji in July 1861) bounds what a m² drained passes on, so a channel is drawn into the
+texels within its reach only (the cap times a^b; most are far narrower than a texel). A channel is drawn as each
 sample's way (`Samples::to`) as a curve from the middle of the way into it (from its neighbour upstream that the most
 drains through, `Samples::main`) to the middle of its own, bent at its centre (a quadratic Bézier), and on to the curve
-through the next sample where a tributary joins; of the channels of the samples about a texel it keeps the one whose
-distance over area^b is least, the one that covers it first as the flux grows (a channel covers a point nearer its
-line than half its width, which goes as (flux per m² drained x area)^b). That least is continuous across the texels,
-so a shader blends it. Off the map a texel is its edge's. Each number is a function of the seed, the map and the place
+through the next sample where a tributary joins; of the channels that reach a texel it keeps the one whose d / a^b is
+least, the one that covers it first as the flux grows (a channel covers a point nearer its line than half its width,
+which goes as (flux per m² drained x area)^b). That least, capped, is continuous across the texels, so a shader blends
+it. Off the map a texel is its edge's. Each number is a function of the seed, the map and the place
 alone: the same in every tile that holds it. **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
 frame: the melting point of the frozen cover, K, then for each square row by row 12 f32 (`ROW`) of the cell that holds
 its centre: the terrain's mean height over the cell, m; its ground's temperature, K, and how fast its air cools with

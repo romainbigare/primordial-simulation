@@ -9,8 +9,8 @@ struct Land {
   map: vec4f,
   // Texels along a tile's side inside its gutter, texels of the gutter, the depth the view is drawn at.
   tiles: vec4f,
-  // The time since the tiles started, ms, the time a new tile fades in over, ms, and the melting point of the frozen
-  // cover, K (0: none).
+  // The time since the tiles started, ms, the time a new tile fades in over, ms, the melting point of the frozen
+  // cover, K (0: none), and the most liquid a m² drained passes on, m/s (the cap of the tiles' channels).
   time: vec4f,
   // The soil's liquid departs by this per unit of the wetness index, m; ground with this depth of liquid is half wet, m;
   // a living thing that holds the share x of the liquid it needs is x to this power active.
@@ -19,9 +19,11 @@ struct Land {
   channel: vec4f,
 }
 @group(0) @binding(8) var<uniform> land: Land;
-// The tiles kept, a layer each: of each texel the ground's height, m, the wetness index, and of its nearest channel
-// the distance to its centre line over its drained area to the power of its width, and that area, m².
+// The tiles kept, a layer each: of each texel the ground's height, m, as the sum of two 16-bit floats (to a millimetre),
+// the wetness index, and of its nearest channel the distance to its centre line over its drained area to the power of
+// its width, over the cap (tape/src/ground/channels.rs; 1: none near); and the logarithm of that area, m².
 @group(0) @binding(9) var atlas: texture_2d_array<f32>;
+@group(0) @binding(13) var areas: texture_2d_array<f32>;
 // Of each tile at the view's depth: the layer drawn there and the layer it fades in over (-1: none).
 @group(0) @binding(10) var pages: texture_2d<f32>;
 // Of each layer: its tile's depth, column and row, and when it came, ms.
@@ -40,8 +42,9 @@ const GROUND = 0; const LIQUID = 1; const SOIL = 2; const COVER = 3; const TRUTH
 const NO_LIQUID_M = 1000.0;
 
 // What a point's ground holds: its height, m, its slope east and south, its wetness index, and its nearest channel's
-// distance over its drained area to the power of its width and that area, m².
-struct Tiled { h: f32, slope: vec2f, twi: f32, ratio: f32, area: f32 }
+// distance over its drained area to the power of its width, over the cap, its slope east and south (per m), and that
+// area, m².
+struct Tiled { h: f32, slope: vec2f, twi: f32, ratio: f32, ratio_slope: vec2f, area: f32 }
 
 // The ground of layer `layer` at `at`, m from the map's north-west corner, blended between the texels' centres; with
 // `spline`, its height and slope through them as a Catmull-Rom spline (so light on a slope drawn over many pixels a
@@ -55,10 +58,16 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   let last = i32(textureDimensions(atlas).x) - 1;
   let a = clamp(i, vec2i(0), vec2i(last));
   let b = clamp(i + 1, vec2i(0), vec2i(last));
-  let top = mix(textureLoad(atlas, a, layer, 0), textureLoad(atlas, vec2i(b.x, a.y), layer, 0), f.x);
-  let bottom = mix(textureLoad(atlas, vec2i(a.x, b.y), layer, 0), textureLoad(atlas, b, layer, 0), f.x);
+  let c00 = textureLoad(atlas, a, layer, 0);
+  let c10 = textureLoad(atlas, vec2i(b.x, a.y), layer, 0);
+  let c01 = textureLoad(atlas, vec2i(a.x, b.y), layer, 0);
+  let c11 = textureLoad(atlas, b, layer, 0);
+  let top = mix(c00, c10, f.x);
+  let bottom = mix(c01, c11, f.x);
   let o = mix(top, bottom, f.y);
-  if (!spline) { return Tiled(o.x, vec2f(0.0), o.y, o.z, o.w); }
+  let ratio_slope = vec2f(mix(c10.w - c00.w, c11.w - c01.w, f.y), bottom.w - top.w) / texel;
+  let area = exp(mix(mix(textureLoad(areas, a, layer, 0).x, textureLoad(areas, vec2i(b.x, a.y), layer, 0).x, f.x), mix(textureLoad(areas, vec2i(a.x, b.y), layer, 0).x, textureLoad(areas, b, layer, 0).x, f.x), f.y));
+  if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, o.w, ratio_slope, area); }
   let f2 = f * f;
   let f3 = f2 * f;
   // The weights of the texels from i - 1 to i + 2 along each axis, and their slopes.
@@ -67,11 +76,12 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   var h = vec3f(0.0);
   for (var y = 0; y < 4; y++) {
     for (var x = 0; x < 4; x++) {
-      let v = textureLoad(atlas, clamp(i + vec2i(x - 1, y - 1), vec2i(0), vec2i(last)), layer, 0).x;
+      let t = textureLoad(atlas, clamp(i + vec2i(x - 1, y - 1), vec2i(0), vec2i(last)), layer, 0);
+      let v = t.x + t.y;
       h += v * vec3f(w[x].x * w[y].y, dw[x].x * w[y].y, w[x].x * dw[y].y);
     }
   }
-  return Tiled(h.x, h.yz / texel, o.y, o.z, o.w);
+  return Tiled(h.x, h.yz / texel, o.z, o.w, ratio_slope, area);
 }
 
 // Cell value `k` (a plane of the table) of the square at column and row c, the nearest on the map.
@@ -101,14 +111,14 @@ fn ground_at(at: vec2f, spline: bool) -> Tiled {
   let size = vec2i(textureDimensions(pages));
   let page = textureLoad(pages, clamp(vec2i(floor(at / span)), vec2i(0), size - 1), 0);
   if (page.x < 0.0) {
-    return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, 3.0e38, 0.0);
+    return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, 1.0, vec2f(0.0), 0.0);
   }
   let shown = read_tile(i32(page.x), at, spline);
   let came = textureLoad(tile_of, vec2i(i32(page.x), 0), 0).w;
   let w = clamp((land.time.x - came) / land.time.y, 0.0, 1.0);
   if (w >= 1.0 || page.y < 0.0) { return shown; }
   let under = read_tile(i32(page.y), at, spline);
-  return Tiled(mix(under.h, shown.h, w), mix(under.slope, shown.slope, w), mix(under.twi, shown.twi, w), mix(under.ratio, shown.ratio, w), mix(under.area, shown.area, w));
+  return Tiled(mix(under.h, shown.h, w), mix(under.slope, shown.slope, w), mix(under.twi, shown.twi, w), mix(under.ratio, shown.ratio, w), mix(under.ratio_slope, shown.ratio_slope, w), mix(under.area, shown.area, w));
 }
 
 // The liquid in the soil at a point of wetness index `twi` of a cell whose pores hold `pore` m and `pores` m full, its

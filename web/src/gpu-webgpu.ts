@@ -1,6 +1,6 @@
 // The map's renderer on WebGPU (gpu.ts): the programs' WGSL as it is, a pipeline for each program, target format and
 // blend, and a bind group a draw.
-import { Gpu, Texture, Format, Sampler, Pass, Draw, Program, programs, bindingsOf, drawHeader } from './gpu';
+import { Gpu, Texture, Format, TexelData, Sampler, Pass, Draw, Program, programs, bindingsOf, drawHeader } from './gpu';
 
 // WebGPU's flags, as the browser defines them.
 declare const GPUTextureUsage: { COPY_SRC: number; COPY_DST: number; TEXTURE_BINDING: number; RENDER_ATTACHMENT: number };
@@ -8,7 +8,7 @@ declare const GPUBufferUsage: { MAP_READ: number; COPY_DST: number; UNIFORM: num
 declare const GPUMapMode: { READ: number };
 
 /** Bytes of a texel of each format. */
-const TEXEL_BYTES: Record<Format, number> = { rgba8unorm: 4, rgba32float: 16 };
+const TEXEL_BYTES: Record<Format, number> = { rgba8unorm: 4, rgba32float: 16, rgba16float: 8, r16float: 2 };
 /** The size of each uniform buffer, bytes: no program's uniforms are larger. */
 const UNIFORM_BYTES = 1024;
 /** Rows copied out of a texture start at multiples of this many bytes (WebGPU's rule). */
@@ -44,7 +44,7 @@ class WebGpu implements Gpu {
     return new WebGpuTexture(w, h, layers, mips, format, tex, tex.createView({ dimension: layers > 1 ? '2d-array' : '2d' }));
   }
 
-  write(t: Texture, data: Uint8Array | Float32Array, level = 0, layer?: number): void {
+  write(t: Texture, data: TexelData, level = 0, layer?: number): void {
     const w = Math.max(1, t.w >> level), h = Math.max(1, t.h >> level);
     const origin = [0, 0, layer ?? 0], layers = layer === undefined ? t.layers : 1;
     this.device.queue.writeTexture({ texture: (t as WebGpuTexture).tex, mipLevel: level, origin }, data as Uint8Array<ArrayBuffer>, { bytesPerRow: w * TEXEL_BYTES[t.format], rowsPerImage: h }, [w, h, layers]);
