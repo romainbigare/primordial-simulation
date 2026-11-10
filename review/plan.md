@@ -144,6 +144,9 @@ Also open, found on the way:
 - Frost acts on the month's mean ground temperature, spread by the tuned `frost_k`, while lethal frost is set by the
   minima within the month: a law for the spread of temperature within a step (the day's cycle from the surface's heat
   budget) would replace `frost_k`.
+- The drawn fields (wetness, cover, the liquid) are averaged over half a cell so no cell edge shows, and so no longer
+  keep each cell's own mean (cover off by a median of 16% on a steep coast): a smooth field that is never below zero
+  and keeps each cell's mean (Tobler 1979) would give both. The raster takes 0.6 to 0.8 s for a 1 m window.
 - Flow costs about twice what it did since a cell has parts (the sea's parts are solved about 14 times a month):
   putting off those solves inside the liquid step is the next saving.
 - The live page is slow: the fine raster takes 0.35 to 1.1 s; refinement costs more with the one ground.
