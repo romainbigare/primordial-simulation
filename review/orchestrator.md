@@ -85,8 +85,9 @@ Done and on main, beyond the tree plan (WP0 to WP16, WP21; details in `review/pl
 
 ## 5. What to do next, in order
 
-1. The far view still draws lakes as blocks along the 2 km squares (a helper was on it at the handover: one drawing
-   path for every zoom, if the cost allows).
+1. Edges still seen on the map: snow patches with blocky edges in the far view, forest that stops at cell borders,
+   small ponds whose field ends along a cell border. (The live page already draws every zoom from the fine raster; the
+   map of squares stays for tapes, which hold no fine ground.)
 2. The owner's view of rivers (`review/plan.md`, after section 6): a winding channel cut into the ground, its width
    and depth along its course, coloured by what it carries.
 3. Lakes above the sea level as the sea does; the drawn fields keep each cell's mean and stay smooth; plant kinds and
