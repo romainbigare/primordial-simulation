@@ -39,31 +39,42 @@ const ROUGH_M: f64 = 1.0;
 /// sides is under a quarter.
 const STABLE: f64 = 0.2;
 
-/// The worn heights of the samples of grid `g`, m, where the terrain's noise stands at `rise`, m, the open low ground
-/// `open` (`drain::open_low`) staying as the noise has it. Each stage's grid takes the noise's mean over each of its
-/// samples; the first starts from 0 m on land (the noise's heights under 0 m) and a roughness of `ROUGH_M` drawn from
-/// the seed, each later one from the last carried to it; the samples take the last carried to them. On every grid the
-/// open low ground stands at the noise's heights and land no lower than 0 m.
-pub(super) fn wear(seed: u64, g: &Grid, rise: &[f64], open: &[bool]) -> Vec<f64> {
-    let rough = |k: usize| ROUGH_M * (Rng::new(seed, 0, k as u64, Purpose::Terrain).f64() - 0.5);
+/// The samples a side to one of the last stage's grid on grid `g` (`STAGES`, `MOST_SAMPLES`): the terrain's noise is
+/// read on that grid.
+pub(super) fn finest(g: &Grid) -> usize {
+    let first = STAGES[0].0;
     let mut scale = 1;
-    while g.n() / (STAGES[0].0 * scale).pow(2) > MOST_SAMPLES && g.across.is_multiple_of(2 * STAGES[0].0 * scale) && g.down.is_multiple_of(2 * STAGES[0].0 * scale) {
+    while g.n() / (first * scale).pow(2) > MOST_SAMPLES && g.across.is_multiple_of(2 * first * scale) && g.down.is_multiple_of(2 * first * scale) {
         scale *= 2;
     }
+    STAGES[STAGES.len() - 1].0 * scale
+}
+
+/// The worn heights of the samples of grid `g`, m, and the open low ground among them (`drain::open_low`), where the
+/// terrain's noise stands at `rise`, m, on the grid `by` times coarser (`finest`). Each stage's grid takes the
+/// noise's mean over each of its samples; the first starts from 0 m on land (the noise's heights under 0 m) and a
+/// roughness of `ROUGH_M` drawn from the seed, each later one from the last carried to it; the samples take the last
+/// carried to them, and the noise carried to them too. On every grid the open low ground stands at the noise's heights
+/// and land no lower than 0 m.
+pub(super) fn wear(seed: u64, g: &Grid, (by, rise): (usize, &[f64])) -> (Vec<f64>, Vec<bool>) {
+    let rough = |k: usize| ROUGH_M * (Rng::new(seed, 0, k as u64, Purpose::Terrain).f64() - 0.5);
+    let (fine, last_by) = (g.coarser(by), STAGES[STAGES.len() - 1].0);
     let mut last: Option<(usize, Vec<f64>)> = None;
-    for &(by, share, steps) in &STAGES {
-        let by = by * scale;
-        let (stage, rise_s) = (g.coarser(by), g.mean_over(rise, by));
+    for &(stage_by, share, steps) in &STAGES {
+        let to = stage_by / last_by * by;
+        let (stage, rise_s) = (g.coarser(to), fine.mean_over(rise, to / by));
         let open_s = open_low(&stage, &rise_s);
         let mut h = match &last {
             None => (0..stage.n()).map(|k| if open_s[k] { rise_s[k] } else { rise_s[k].min(0.0) + rough(k) }).collect(),
-            Some((from, z)) => held(&carried(g, (*from, z), by), &rise_s, &open_s),
+            Some((from, z)) => held(&carried(g, (*from, z), to), &rise_s, &open_s),
         };
         run(&stage, &mut h, (&rate(&rise_s, &open_s), &open_s), (WEAR_YEARS * share, steps));
-        last = Some((by, h));
+        last = Some((to, h));
     }
     let (from, z) = last.expect("a stage");
-    held(&carried(g, (from, &z), 1), rise, open)
+    let rise_g = carried(g, (by, rise), 1);
+    let open = open_low(g, &rise_g);
+    (held(&carried(g, (from, &z), 1), &rise_g, &open), open)
 }
 
 /// Heights `z` on the grid `from` times coarser than `g` carried smooth to the grid `to` times coarser, a halving at a

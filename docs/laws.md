@@ -44,11 +44,12 @@ cell's quarters stand on the terrain itself, not on an offset of their parent's.
 octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to heights, an island's falling away from
 the middle of its map, says how high the ground would stand; the world keeps what it needs beside its seed and its map
 (`World::terrain`: the rise its level 0 m lies at), so a split finds the ground finer than its cell (below). The
-noise's finest octave is 670 m on the 64 x 64 island and 200 km on a globe; it is sampled at the centres of the leaves
-of `SAMPLE_DEPTH` (1/64 of a block: 125 m on the island, 20 km on a globe of 64 rows), and **the samples are worn**
-(`space::samples`, `space::wear`, found once from the seed when first read, not saved): the ground has a history. The
-open low ground (on a globe every sample under 0 m; on an island those under 0 m joined to its lowest, so ground under
-0 m inland is a closed basin) stays as the noise has it; land rises from 0 m at a steady rate to the noise's height
+noise's finest octave is 670 m on the 64 x 64 island and 200 km on a globe. The ground is held at **samples**, the
+leaves of `SAMPLE_DEPTH` (1/64 of a block: 125 m on the island, 20 km on a globe of 64 rows), and **the samples are
+worn** (`space::samples`, `space::wear`, found once from the seed when first read, not saved): the ground has a
+history. The noise is read at the centres of the samples of the wear's finest grid (2 x 2 samples to one,
+`wear::finest`) and carried smooth to the samples. The open low ground (on a globe every sample under 0 m; on an
+island those under 0 m joined to its lowest, so ground under 0 m inland is a closed basin) stays as the noise has it; land rises from 0 m at a steady rate to the noise's height
 over 2 million years (`WEAR_YEARS`; ground under 0 m does not rise) while flowing liquid cuts it by the stream power
 law (Howard 1994; Whipple and Tucker 1999): it lowers by K √A S, A the area that drains through a sample, spread down
 every lower way by Quinn's weights (Quinn et al. 1991), S the slope to the sample its liquid runs to, m = 1/2 and n = 1,

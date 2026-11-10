@@ -1,6 +1,6 @@
-//! The terrain's samples (laws.md 0 and 8): the noise at the centre of every leaf of `SAMPLE_DEPTH` of the map says how
-//! high the ground would stand there (`Terrain::sample`), and the ground is that worn by flowing liquid and creep at the
-//! world's start (`space::wear`), so valleys branch between ridges and the closed basins the cutting left stay. A
+//! The terrain's samples (laws.md 0 and 8), the leaves of `SAMPLE_DEPTH` of the map: the noise says how high the ground
+//! would stand (`Terrain::sample`), and the ground is that worn by flowing liquid and creep at the world's start
+//! (`space::wear`), so valleys branch between ridges and the closed basins the cutting left stay. A
 //! flood over the worn heights (`space::drain`) finds where each sample's liquid runs, and the ponds: the samples
 //! under a closed basin's level, each pond with its pass and the level of the pass. Every cell's height and relief, at
 //! the start and at each split, are means over these samples (`Terrain::inside`), so a cell and its quarters stand on
@@ -8,11 +8,11 @@
 //! (`space::network`). They are a function of the seed and the map alone, found when first read and kept with the
 //! terrain, not saved.
 
-use super::drain::{flood, open_low};
+use super::drain::flood;
 use super::grid::Grid;
 use super::network::accumulate;
 use super::ponds::{basins, grade};
-use super::wear::wear;
+use super::wear::{finest, wear};
 use crate::math::central;
 use super::square::Square;
 use super::terrain::{Terrain, SAMPLE_DEPTH};
@@ -102,20 +102,23 @@ impl Terrain {
         at(&l)
     }
 
-    /// The samples of `map` for `seed` (`Samples`): the noise's heights at their centres (`Terrain::sample`), worn
-    /// (`space::wear`) with the open low ground held (`drain::open_low`); then the flood over them from all the open low
-    /// ground, the closed basins too shallow to hold a pond graded (`ponds::grade`), the area that drains through each
+    /// The samples of `map` for `seed` (`Samples`): the noise's heights (`Terrain::sample`) at the centres of the
+    /// samples of the wear's finest grid (`wear::finest`), worn (`space::wear`) with the open low ground held; then the
+    /// flood over them from all the open low ground, the closed basins too shallow to hold a pond graded (`ponds::grade`), the area that drains through each
     /// sample, the ponds and the variance below each.
     fn drained(&self, seed: u64, map: &Square, (south, north): (f64, f64)) -> Samples {
         let per = 1usize << (SAMPLE_DEPTH - map.square_depth());
         let (across, down) = (map.w * per, map.h * per);
         let side = BLOCK >> SAMPLE_DEPTH;
         let leaf = |k: usize| Leaf { x: (k % across) as u64 * side, y: (k / across) as u64 * side, depth: SAMPLE_DEPTH };
-        let rise = crate::par::map_n(across * down, crate::par::UNCOUNTED, |k| self.sample(seed, map, map.place_of(&leaf(k), south, north).1));
         let dy = map.length(SAMPLE_DEPTH);
         let grid = Grid::new(across, down, map.wrap, dy, (0..down).map(|r| map.place_of(&leaf(r * across), south, north).0 / dy).collect());
-        let open = open_low(&grid, &rise);
-        let mut h = wear(seed, &grid, &rise, &open);
+        // The noise at the centres of the samples of the wear's finest grid: leaves `by` samples a side.
+        let by = finest(&grid);
+        let (wide, depth) = (across / by, SAMPLE_DEPTH - by.trailing_zeros() as u8);
+        let block = |k: usize| Leaf { x: (k % wide) as u64 * side * by as u64, y: (k / wide) as u64 * side * by as u64, depth };
+        let rise = crate::par::map_n(wide * (down / by), crate::par::UNCOUNTED, |k| self.sample(seed, map, map.place_of(&block(k), south, north).1));
+        let (mut h, open) = wear(seed, &grid, (by, &rise));
         let f = flood(&grid, &h, &open, false);
         let (up, main) = accumulate(&f.to, &f.order, |k| grid.area(k));
         let shallow = basins(&grid, &h, &f).1;
