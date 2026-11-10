@@ -15,9 +15,9 @@
 // How wet the ground is, 0..1; the depth of the river through it, m; the share of the ground the plant cover leaves
 // bare.
 @group(0) @binding(7) var inside_field: texture_2d<f32>;
-// The foliage a tape's plants are drawn in (display, 0..1): the middle of the live map's (web/src/canopy.ts `HUE`, `SAT`,
-// `LIGHTNESS`).
-const TAPE_FOLIAGE = vec3f(0.31, 0.48, 0.20);
+// The reflectance a tape's plants are drawn in: a green leaf's in the visible, about 0.05 red, 0.12 green and 0.04 blue
+// (Gates and others 1965; Knipling 1970).
+const TAPE_FOLIAGE = vec3f(0.05, 0.12, 0.04);
 // Field `t` (32-bit floats, which a sampler may not blend) at uv, blended between its texels' centres, its edge texels
 // held beyond them.
 fn blend(t: texture_2d<f32>, uv: vec2f) -> vec4f {
@@ -68,7 +68,7 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.wet = inside.x;
   s.t = m.y;
   s.snow = snow_of(m.x, s.t, look.y);
-  s.ground = 255.0 * textureSampleLevel(ground_field, smooth_sampler, uv, 0.0).xyz;
+  s.ground = textureSampleLevel(ground_field, smooth_sampler, uv, 0.0).xyz;
   // A tape holds no kinds of cover: its plants are one foliage, as closed as their capture area closes the ground.
   s.cover = vec4f(TAPE_FOLIAGE, 1.0) * (1.0 - inside.z);
   s.z = h.x;

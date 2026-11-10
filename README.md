@@ -89,10 +89,13 @@ where the ground is drier than its cell's mean as each kind's activity law says,
 mark by mark across a square's edge, and a kind that needs wet ground gathers in the hollows. None stands where liquid
 stands over its roots (0.3 m, Jackson and others 1996) or under snow. From above a crown is a dome or a cone by its
 height against its width, its edge in lobes as broad as its leaves, open where its leaf area is low, over its stem and
-its shadow; angled, it stands on its stem. Its colour comes from its numbers: darker with more light capacity per
-capture area and thicker leaves, greyer for dry ground, bluer for hardiness to frost; paler short of fuel, faded when
-dormant, brown where frozen. Chemistry 0 gives every part of the cover one reflectance, so the base hue is the
-viewer's. Under the plants the ground has its own colour (its loose solids, else its bonded ones: the `ground_r`,
+its shadow; angled, it stands on its stem. Its colour is a reflectance: a green leaf's as measured (Gates and others
+1965; Knipling 1970), moved by its numbers: darker with more light capacity per capture area, darker and duller with
+thicker leaves, greyer for dry ground, bluer for hardiness to frost, its walls (their reflectance in the chemistry)
+showing through an open crown; yellowed short of fuel, faded when dormant, brown where frozen. Far away a tall, open
+canopy is darker by the shadows its plants lay between them. Every colour of the map is worked in linear light (a
+reflectance times the light on the surface) and turned into the screen's bytes once, by the sRGB curve (IEC 61966-2-1).
+Under the plants the ground has its own colour (its loose solids, else its bonded ones: the `ground_r`,
 `ground_g`, `ground_b` layers), darker where wet, under liquid and snow; the green comes only from the plants. A tape
 holds only totals per square and no kinds: its map draws the plants as one foliage as closed as their capture area
 closes the ground, without marks.

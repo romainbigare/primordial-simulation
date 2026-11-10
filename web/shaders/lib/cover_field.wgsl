@@ -23,7 +23,7 @@ const UNIFORM_SPREAD = 1.732;
 const SPREAD_SHOWS = 0.004;
 
 // The field of lattice l at `at`, m from the map's north-west corner, at mip level lod: the colour its marks cover the
-// ground with (premultiplied, display 0..1) and the share they cover.
+// ground with (a reflectance, premultiplied) and the share they cover.
 fn field_at(at: vec2f, l: i32, lod: f32) -> vec4f {
   let uv = at / (land.map.x * land.map.yz);
   if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) { return vec4f(0.0); }

@@ -17,6 +17,8 @@ const CHANCE = 0; const WIDTH = 3; const NEED = 6; const FORM = 7; const COLOUR 
 struct Cover {
   // The draw's corner in the world, m from the map's north-west corner; metres a device pixel; 1 when angled.
   corner: vec4f,
+  // The reflectance of the walls the cover builds: its stems (wasm `meta`).
+  walls: vec4f,
   // Of each lattice: its cell at the draw's corner (its fraction; its whole number is `base`), its cell's side, m, and
   // the rows south of a pixel an angled plant on it may stand in.
   grid: array<vec4f, COVER_LATTICES>,
@@ -40,10 +42,9 @@ const LOBES_FINE = 13.0; const LOBES_BROAD = 6.0; const LEAF_THICK = -0.5; const
 // ground's by this share (the sky lights its far side, and light passes through its leaves).
 const POINTED = 2.5; const STEEPEST = 1.5; const LIGHT_SHARE = 0.55;
 const LIGHT_DIR = vec3f(-0.5, -0.5, 0.7071);
-// Shadows darken the ground this much; a mark's tone differs from its kind's by up to this, and its size by this share.
-const SHADOW = 0.22; const TONE = 0.12; const SIZES = 0.3;
-// Its stem is drawn this much darker than its foliage, as the bark its walls make (substance 13 is browner).
-const STEM_DARK = 0.45;
+// A shadow lets through the sky's light and what crowns scatter, about half of the sun's (canopy.ts `CROWN_SHADOW`); a mark's
+// tone differs from its kind's by up to this, and its size by this share.
+const SHADOW = 0.5; const TONE = 0.12; const SIZES = 0.3;
 
 // pcg3d (Jarzynski and Olano 2020): three random words from three.
 fn pcg3d(w: vec3u) -> vec3u {
@@ -139,7 +140,7 @@ fn plant(dst: ptr<function, vec4f>, q: Plant, p: vec2f, e: f32, fade: f32) {
   let sv = (p - q.at - off * vec2f(0.7071)) / vec2f(half, half * mix(1.0, 0.5, angled));
   over(dst, vec3f(0.0), SHADOW * fade * (1.0 - smoothstep(0.7, 1.0, length(sv))));
   // The stem: from above its top through an open crown, angled from its foot to its crown, as wide as it is.
-  let bark = q.rgb * (1.0 - STEM_DARK);
+  let bark = cover.walls.rgb;
   if (angled > 0.5) {
     let top = STAND * q.h * (1.0 - 0.5 * CROWN_SHARE);
     let w = max(0.5 * q.stem, 0.35 * e);
@@ -218,5 +219,7 @@ fn lattice(dst: ptr<function, vec4f>, p: vec2f, l: i32, e: f32) {
   let p = (v.px - draw.rect.xy) * e;
   var dst = vec4f(0.0);
   for (var l = 0; l < COVER_LATTICES; l++) { lattice(&dst, p, l, e); }
-  return dst * cover_look.look.y;
+  // Linear light turned into the screen's share once (draw.wgsl `srgb`), premultiplied.
+  if (dst.a <= 0.0) { return vec4f(0.0); }
+  return vec4f(srgb(dst.rgb / dst.a), 1.0) * dst.a * cover_look.look.y;
 }

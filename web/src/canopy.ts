@@ -4,7 +4,7 @@
 // field the marks too small to draw make. No kind is a class: a plant's size, shape and colour are functions of its
 // numbers.
 import { clamp, smooth } from './earth';
-import { Rgb, hsl } from './sprites';
+import type { Rgb } from './sprites';
 
 /** The side of a cell of each lattice of marks, m: one mark a cell at most. A mark reaches at most a cell from its
  * cell, so it is drawn at most `REACH` sides across; a kind is drawn on the lattices whose side is nearest its crown's
@@ -22,46 +22,66 @@ export const KIND_PLANES = { chance: 0, width: 3, need: 6, form: 7, colour: 11, 
 /** Layers of the field (`CoverField`): one a lattice. */
 export const FIELD_LAYERS = LATTICES.length;
 
-/** A field of the cover: `w` x `h` texels over the map, a texel a square, of each lattice the colour of its marks
- * (display, 0..1) times the share of the ground they cover, and that share, as RGBA bytes layer by layer; and its levels
- * below (`mipsOf`). */
-export interface CoverField { w: number; h: number; data: Uint8Array; mips: Uint8Array[] }
-/** The cover of a frame: the kinds' table (`KIND_PLANES`, a texel a square, row by row, plane under plane), its field, and
- * of each lattice whether any square holds its marks and the tallest plant drawn on it, m. */
-export interface Kinds { w: number; h: number; table: Float32Array; field: CoverField; held: boolean[]; tallest: number[] }
+/** A field of the cover: `w` x `h` texels over the map, a texel a square, of each lattice the reflectance of its marks
+ * times the share of the ground they cover, and that share with the shadow they cast, RGBA layer by layer; and its
+ * levels below (`mipsOf`). */
+export interface CoverField { w: number; h: number; data: Float32Array; mips: Float32Array[] }
+/** The cover of a frame: the kinds' table (`KIND_PLANES`, a texel a square, row by row, plane under plane), its field, of
+ * each lattice whether any square holds its marks and the tallest plant drawn on it, m, and the reflectance of the walls
+ * the cover builds (its stems). */
+export interface Kinds { w: number; h: number; table: Float32Array; field: CoverField; held: boolean[]; tallest: number[]; walls: Rgb }
 
-// Colour (display, from the numbers; chemistry 0 gives every part of the cover one reflectance, so the hue is the
-// viewer's and only its departures come from the model).
-/** The foliage of a plant of middle numbers: hue (degrees), saturation and lightness. */
-const HUE = 105, SAT = 0.42, LIGHTNESS = 0.34;
-/** Light capacity per m² of capture area, log10 mol/m²/s: at `PIGMENT_MID` the middle lightness; per decade more, this
- * much darker (more pigment per area absorbs more). */
-const PIGMENT_MID = -5.6, PIGMENT_DARK = 0.12;
-/** Capture area per kg, log10 m²/kg: per decade less (thick small leaves), this much darker. */
-const LEAF_MID = 0.3, LEAF_DARK = 0.06;
-/** The moisture gene (log10 of the wetness a kind is fully active at): per decade less (a plant of dry ground: small,
- * hairy, waxy leaves), this much less saturated, lighter and turned to yellow, degrees (grey-green). */
-const DRY_SAT = 0.35, DRY_LIGHT = 0.12, DRY_HUE = 30;
-/** The frost gene, K: from `TENDER_K` to `HARDY_K` a plant turns this much to blue, degrees, and darker (the needles and
- * waxes of hardy foliage). */
-const TENDER_K = 272, HARDY_K = 258, HARDY_HUE = 25, HARDY_DARK = 0.05;
-/** The state this month: a plant short of fuel (its fuel under its reserve) pales towards `PALE`, a dormant one (dry or
- * cold: activity under 1) fades towards `DORMANT`, a frozen share browns towards `FROZEN` (display colours). */
-const PALE: Rgb = [196, 190, 112], DORMANT: Rgb = [150, 132, 96], FROZEN: Rgb = [120, 86, 52];
+// Colour: reflectances in linear light, from a leaf's measured reflectance moved by the numbers the model holds; the
+// GPU turns light into the screen's bytes once (draw.wgsl `srgb`). Chemistry 0 gives every part of the cover one
+// reflectance (its walls'), so a leaf's own colour is the measured one and only its departures come from the model.
+/** A green leaf's reflectance in the visible: about 0.05 red, 0.12 green, 0.04 blue (Gates and others 1965; Knipling
+ * 1970). */
+const LEAF_REFL: Rgb = [0.05, 0.12, 0.04];
+/** More light capacity per m² of capture area is more pigment per area, which absorbs more: per decade above
+ * `PIGMENT_MID` (log10 mol/m²/s) the reflectance falls by the factor 10^`PIGMENT_SLOPE` (within `PIGMENT_MOST` either
+ * way). */
+const PIGMENT_MID = -5.6, PIGMENT_SLOPE = 0.3, PIGMENT_MOST = 2;
+/** Thick leaves (capture area per kg below `LEAF_MID`, log10 m²/kg) are darker and duller: per decade thicker, this
+ * share less reflectance, and this share of the way to a grey of their brightness (more mesophyll and cuticle absorb
+ * and scatter the green peak away; Wright and others 2004 for the thickness). */
+const LEAF_MID = 0.3, THICK_DARK = 0.25, THICK_DULL = 0.4;
+/** Leaves of dry ground carry hairs and wax that reflect more and greyer: per decade of moisture gene below `MOIST_MID`
+ * (the starting cover's, fully active at half the ground's saturation), this far towards `DRY_REFL` (Ehleringer and
+ * Björkman 1978, from memory). */
+const MOIST_MID = -0.3;
+const DRY_REFL: Rgb = [0.11, 0.13, 0.09];
+/** Foliage hardy to frost (the frost gene from `TENDER_K` down to `HARDY_K`, K) is darker and bluer: towards
+ * `HARDY_REFL` (the needles and waxes of hardy foliage). */
+const TENDER_K = 272, HARDY_K = 258;
+const HARDY_REFL: Rgb = [0.03, 0.08, 0.06];
+/** The state this month: short of fuel (fuel under its reserve) a leaf yellows towards `PALE_REFL`; dormant (dry or
+ * cold: activity under 1) it fades towards a dry leaf's `DORMANT_REFL`; its frozen share browns towards `FROZEN_REFL`
+ * (Knipling 1970 for the yellowing and drying leaf); at most these shares. */
+const PALE_REFL: Rgb = [0.10, 0.14, 0.04], DORMANT_REFL: Rgb = [0.22, 0.18, 0.11], FROZEN_REFL: Rgb = [0.12, 0.08, 0.05];
 const PALE_MOST = 0.4, DORMANT_MOST = 0.6;
+/** A shadow lets through the sky's light and what crowns scatter, about half of the sun's (cover.wgsl `SHADOW`). */
+const CROWN_SHADOW = 0.5;
+/** The sun at 45° lays a plant's shadow as long as it is tall: m of shadow per m of height. */
+const SHADOW_RUN = 1;
 
 const mix = (a: Rgb, b: Rgb, t: number): Rgb => a.map((v, i) => v + (b[i] - v) * clamp(t)) as Rgb;
 
-/** The foliage of the kind of row `r` (display, 0..255): darker the more light capacity per capture area and the
- * thicker its leaves; greyer the drier the ground it is made for; bluer the hardier to frost; then as its state this
- * month says: paler short of fuel, faded dormant, brown where frozen. */
-function foliage(r: Float32Array): Rgb {
-  const dry = clamp(-r[K.moist]), hardy = smooth(TENDER_K, HARDY_K, r[K.frost]);
-  const dark = PIGMENT_DARK * (r[K.pigment] - PIGMENT_MID) + LEAF_DARK * (LEAF_MID - r[K.leaf]) + HARDY_DARK * hardy;
-  let c = hsl(HUE + HARDY_HUE * hardy - DRY_HUE * dry, clamp(SAT - DRY_SAT * dry), clamp(LIGHTNESS - dark + DRY_LIGHT * dry, 0.08, 0.8));
-  c = mix(c, PALE, PALE_MOST * (1 - clamp(r[K.fuel])));
-  c = mix(c, DORMANT, DORMANT_MOST * (1 - r[K.act]));
-  return mix(c, FROZEN, r[K.frozen]);
+/** The reflectance of the crowns of the kind of row `r` whose walls reflect `walls`: a leaf's, less the more pigment
+ * per area and the thicker its leaves (and duller), greyer the drier the ground it is made for, bluer the hardier to
+ * frost; its walls showing through an open crown as its wall share is high; then as its state this month says:
+ * yellowed short of fuel, faded dormant, brown where frozen. */
+function foliage(r: Float32Array, walls: Rgb): Rgb {
+  const pigment = clamp(10 ** (-PIGMENT_SLOPE * (r[K.pigment] - PIGMENT_MID)), 1 / PIGMENT_MOST, PIGMENT_MOST);
+  const thick = clamp(LEAF_MID - r[K.leaf], 0, 1 / THICK_DARK);
+  let c = LEAF_REFL.map(v => v * pigment * (1 - THICK_DARK * thick)) as Rgb;
+  const grey = (c[0] + c[1] + c[2]) / 3;
+  c = mix(c, [grey, grey, grey], THICK_DULL * thick);
+  c = mix(c, DRY_REFL, MOIST_MID - r[K.moist]);
+  c = mix(c, HARDY_REFL, smooth(TENDER_K, HARDY_K, r[K.frost]));
+  c = mix(c, walls, r[K.wood] * (1 - r[K.crown]));
+  c = mix(c, PALE_REFL, PALE_MOST * (1 - clamp(r[K.fuel])));
+  c = mix(c, DORMANT_REFL, DORMANT_MOST * (1 - r[K.act]));
+  return mix(c, FROZEN_REFL, r[K.frozen]);
 }
 
 /** The share of a kind of crown width `w`, m, drawn on lattice `l`: between the two lattices whose sides lie either side
@@ -87,20 +107,21 @@ function marksOn(r: Float32Array, l: number): [number, number] {
 
 /** The kinds of the core's table `rows` for a map of `w` x `h` squares: `kinds` kinds a square of `kindRow` numbers,
  * from `at` on (tape/src/table.rs). */
-export function kindsOf(w: number, h: number, rows: Float32Array, at: number, kinds: number, kindRow: number): Kinds {
+export function kindsOf(w: number, h: number, rows: Float32Array, at: number, kinds: number, kindRow: number, walls: Rgb): Kinds {
   const n = w * h, table = new Float32Array(4 * KIND_PLANES.count * n), held = LATTICES.map(() => false), tallest = LATTICES.map(() => 0);
-  const field: CoverField = { w, h, data: new Uint8Array(4 * FIELD_LAYERS * n), mips: [] };
+  const field = new Float32Array(4 * FIELD_LAYERS * n);
   const put = (plane: number, i: number, c: number, v: number) => { table[4 * (plane * n + i) + c] = v; };
   for (let i = 0; i < n; i++) {
-    // Of each lattice: its marks' colours summed by the ground each covers, that ground, and the ground they leave.
-    const paint = LATTICES.map(() => ({ rgb: [0, 0, 0], covered: 0, bare: 1 }));
+    // Of each lattice: its marks' colours summed by the ground each covers, that ground, the ground they leave, and the
+    // shadow they cast (the plants a m² times their shadow's area).
+    const paint = LATTICES.map(() => ({ rgb: [0, 0, 0], covered: 0, bare: 1, shadow: 0 }));
     for (let k = 0; k < Math.min(kinds, 4); k++) {
       const r = rows.subarray(at + (i * kinds + k) * kindRow, at + (i * kinds + k + 1) * kindRow);
       if (r[K.root] < 0 || r[K.kg] <= 0) continue;
-      const c = foliage(r);
+      const c = foliage(r, walls);
       put(KIND_PLANES.need, i, k, 10 ** r[K.moist]);
       [r[K.height], r[K.stem], r[K.crown], r[K.leaf]].forEach((v, q) => put(KIND_PLANES.form + k, i, q, v));
-      [...c.map(v => v / 255), r[K.wood]].forEach((v, q) => put(KIND_PLANES.colour + k, i, q, v));
+      [...c, r[K.wood]].forEach((v, q) => put(KIND_PLANES.colour + k, i, q, v));
       LATTICES.forEach((a, l) => {
         const [chance, width] = marksOn(r, l);
         if (chance <= 0) return;
@@ -113,26 +134,29 @@ export function kindsOf(w: number, h: number, rows: Float32Array, at: number, ki
         paint[l].rgb = paint[l].rgb.map((v, q) => v + covers * c[q]);
         paint[l].covered += covers;
         paint[l].bare *= 1 - covers;
+        paint[l].shadow += (chance / (a * a)) * width * SHADOW_RUN * r[K.height];
       });
     }
-    // Premultiplied: the marks' mean colour (0..1) times the share of the ground they cover, and that share.
+    // Premultiplied: the marks' mean reflectance times the share of the ground they cover; and that share with the
+    // shadow they lay on the ground between them (a shadow over the share 1 - e^-(their shadows' area per m²) of it,
+    // Poisson-placed plants), so a tall rough canopy is darker than a low one of the same leaves.
     paint.forEach((p, l) => {
-      const cover = 1 - p.bare, mean = p.rgb.map(v => v / 255 / Math.max(p.covered, 1e-9));
-      field.data.set([...mean, 1].map(v => Math.round(clamp(v * cover) * 255)), 4 * (l * n + i));
+      const cover = 1 - p.bare, shaded = (1 - cover) * -Math.expm1(-p.shadow) * CROWN_SHADOW;
+      p.rgb.forEach((v, q) => { field[4 * (l * n + i) + q] = (v / Math.max(p.covered, 1e-9)) * cover; });
+      field[4 * (l * n + i) + 3] = cover + shaded;
     });
   }
-  field.mips = mipsOf(field);
-  return { w, h, table, field, held, tallest };
+  return { w, h, table, field: { w, h, data: field, mips: mipsOf(field, w, h) }, held, tallest, walls };
 }
 
-/** The levels of field `f` below its own, each texel the most of the four (or, at an odd edge, six or nine) above it:
- * cover.wgsl reads a level about a pixel to skip a lattice none of whose marks stands near, so a level holds a lattice
- * wherever any texel under it does. */
-function mipsOf(f: CoverField): Uint8Array[] {
-  const out: Uint8Array[] = [];
-  let w = f.w, h = f.h, src = f.data;
+/** The levels of field `data` (`w` x `h`) below its own, each texel the most of the four (or, at an odd edge, six or
+ * nine) above it: cover.wgsl reads a level about a pixel to skip a lattice none of whose marks stands near, so a level
+ * holds a lattice wherever any texel under it does. */
+function mipsOf(data: Float32Array, w: number, h: number): Float32Array[] {
+  const out: Float32Array[] = [];
+  let src = data;
   while (w > 1 || h > 1) {
-    const nw = Math.max(1, w >> 1), nh = Math.max(1, h >> 1), dst = new Uint8Array(FIELD_LAYERS * 4 * nw * nh);
+    const nw = Math.max(1, w >> 1), nh = Math.max(1, h >> 1), dst = new Float32Array(FIELD_LAYERS * 4 * nw * nh);
     for (let l = 0; l < FIELD_LAYERS; l++) for (let y = 0; y < nh; y++) for (let x = 0; x < nw; x++) {
       const ys = 2 * y, ye = y === nh - 1 ? h : Math.min(2 * y + 2, h), xs = 2 * x, xe = x === nw - 1 ? w : Math.min(2 * x + 2, w);
       for (let c = 0; c < 4; c++) {
@@ -145,4 +169,16 @@ function mipsOf(f: CoverField): Uint8Array[] {
     w = nw; h = nh; src = dst;
   }
   return out;
+}
+
+/** Scratch of `half`: one float and its bits. */
+const ONE = new Float32Array(1), BITS = new Uint32Array(ONE.buffer);
+/** The bits of `v` as an IEEE binary16 float, rounded to the nearest (the field goes to the GPU as 16-bit floats: a
+ * leaf's reflectance of 0.04 in 8 bits would hold ten steps). */
+export function half(v: number): number {
+  ONE[0] = v;
+  const x = BITS[0], sign = (x >>> 16) & 0x8000, e = ((x >>> 23) & 0xff) - 112, m = x & 0x7fffff;
+  if (e <= 0) return e < -10 ? sign : sign | (((m | 0x800000) >> (1 - e)) + 0x1000) >> 13;
+  if (e >= 31) return sign | 0x7c00;
+  return sign | ((e << 10) + ((m + 0x1000) >> 13));
 }

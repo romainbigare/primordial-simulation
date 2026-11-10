@@ -33,7 +33,7 @@ export class Vegetation implements GpuLayer {
     if (!w || !rows || !t) { this.marks.set(null, this.cellM); return; }
     const m = w.meta, n = m.w * m.h;
     this.cellM = m.cell_m; this.mapW = m.w; this.mapH = m.h;
-    this.marks.set(kindsOf(m.w, m.h, rows, 1 + n * t.row, t.kinds, t.kind_row), m.cell_m);
+    this.marks.set(kindsOf(m.w, m.h, rows, 1 + n * t.row, t.kinds, t.kind_row, t.walls), m.cell_m);
   }
 
   /** The bindings the live map's ground draws the cover's field with (cover_field.wgsl), a square taking `s` css px. */

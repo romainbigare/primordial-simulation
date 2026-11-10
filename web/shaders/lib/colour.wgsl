@@ -1,7 +1,8 @@
 // The map's colours (web/src/fields.ts, web/src/land.ts): what is at a point of the map (`Spot`) turned into the colour
 // of the ground there, lit from the north-west, under the liquid that stands on it (water.wgsl), and into its map class;
 // then into the view drawn. One rule for every way the map is drawn (earth.wgsl, land.wgsl); the viewer, not the core,
-// decides what counts as sea, river, desert.
+// decides what counts as sea, river, desert. Colours are reflectances and light is linear until the view drawn turns
+// them into the screen's bytes, once (`in_view_of`, draw.wgsl `srgb`).
 
 struct Earth {
   // How the fields are read: the slope is read this many times as steep (a texel's slope over a short run is steeper
@@ -23,9 +24,12 @@ struct Earth {
 const DEEP = 0u; const SHALLOW = 1u; const LAKE = 2u; const RIVER = 3u; const ICE = 4u;
 const ROCK = 5u; const BARE = 6u; const PLANTS = 7u;
 
-const SAND = vec3f(226, 211, 164); const TUNDRA = vec3f(185, 191, 168); const UPLAND = vec3f(168, 156, 124);
-const SNOW = vec3f(247, 250, 252); const PATH = vec3f(232, 89, 12);
-const ROCK_LO = vec3f(141, 138, 132); const ROCK_HI = vec3f(205, 202, 196);
+// The reflectances (red, green, blue) of the hand rules' grounds: dry sand (0.3 to 0.5, quartz the most), the pale
+// ground of the cold and of the heights, bare rock (a dark and a pale one, 0.2 to 0.45), and fresh snow (about 0.9);
+// from memory (Bowker and others 1985; Warren 1982). A worn path is drawn in display bytes over the view.
+const SAND = vec3f(0.45, 0.40, 0.30); const TUNDRA = vec3f(0.30, 0.31, 0.26); const UPLAND = vec3f(0.30, 0.27, 0.21);
+const SNOW = vec3f(0.90, 0.92, 0.95); const PATH = vec3f(232, 89, 12);
+const ROCK_LO = vec3f(0.25, 0.24, 0.23); const ROCK_HI = vec3f(0.45, 0.44, 0.42);
 // The light from the north-west.
 const LIGHT = vec3f(-0.588, -0.588, 0.647);
 // How many times steeper than it is the ground is shaded.
@@ -62,8 +66,8 @@ struct Spot {
   // The depth of the liquid standing there, m (0: none); the ground's height over the liquid's surface, m (0 under
   // it); the share of the liquid that is the sea's; how wet the ground is, 0..1.
   depth: f32, over: f32, sea: f32, wet: f32,
-  // Snow and ice on it, 0..1; the ground's temperature, K; the ground's own colour (display, 0..255); the plants on it
-  // as far as they are not drawn one by one: their colour (display, 0..1) times the share of the ground they cover, and
+  // Snow and ice on it, 0..1; the ground's temperature, K; the ground's own reflectance; the plants on it as far as
+  // they are not drawn one by one: their reflectance times the share of the ground they cover, and
   // that share; the ground's height, m; its slope (rise over run); the light on it over the light on flat ground.
   snow: f32, t: f32, ground: vec3f, cover: vec4f, z: f32, slope: f32, shade: f32,
   // Beach sand on it and a river through it, 0..1, and the river's depth, m.
@@ -71,7 +75,7 @@ struct Spot {
   // Where it lies in the world, m, and the metres a pixel takes there (for the ripples of a liquid's surface).
   at: vec2f, e: f32,
 }
-// A spot's shaded colour (display, 0..255), its shade's multiplier and its map class.
+// A spot's shaded colour (linear light), its shade's multiplier and its map class.
 struct Shaded { rgb: vec3f, m: f32, kind: u32 }
 
 // The colour of the ground of spot p, unlit: its own colour, tinted by the hand rules of cold, height, sand and rock;
@@ -90,7 +94,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   if (rock > 0.5) { g.kind = ROCK; }
   let plants = p.cover.a * stands_in(p.depth, snow);
   g.bare = 1.0 - plants;
-  if (plants > 0.0) { g.rgb = mix(g.rgb, 255.0 * p.cover.rgb / p.cover.a, plants); }
+  if (plants > 0.0) { g.rgb = mix(g.rgb, p.cover.rgb / p.cover.a, plants); }
   if (plants >= 0.5) { g.kind = PLANTS; }
   g.rgb = mix(g.rgb, SNOW, snow);
   if (snow > 0.5) { g.kind = ICE; }
@@ -145,13 +149,14 @@ fn colour(p: Spot) -> Shaded {
   if (river > 0.5) { kind = RIVER; }
   return Shaded(rgb, lit, kind);
 }
-// Shaded colour `c` in the view drawn, where the byte of the layer it draws and of the worn paths are `o` (0..1) and the
-// true colour is `truth` (0..1): the Earth's colours; the true colour, shaded; or a layer's ramp over a little of the
-// Earth's colours (where the layer is empty, the Earth's colours faded); and the worn paths over it.
+// Shaded colour `c` in the view drawn, as the screen's bytes (0..255), where the byte of the layer it draws and of the
+// worn paths are `o` (0..1) and the true colour is `truth` (reflectance, 0..1): the Earth's colours; the true colour,
+// shaded; or a layer's ramp over a little of the Earth's colours (where the layer is empty, the Earth's colours faded);
+// and the worn paths over it.
 fn in_view_of(c: Shaded, o: vec2f, truth: vec3f) -> vec3f {
-  var rgb = c.rgb;
+  var rgb = 255.0 * srgb(c.rgb);
   if (earth.view.x == 1.0) {
-    rgb = 255.0 * truth * clamp(1.0 + (c.m - 1.0) * 0.7, 0.55, 1.4);
+    rgb = 255.0 * srgb(truth * clamp(1.0 + (c.m - 1.0) * 0.7, 0.55, 1.4));
   } else if (earth.view.x == 2.0) {
     let full = clamp(255.0 * o.x / earth.look.w, 0.0, 1.0);
     let grey = dot(rgb, vec3f(0.3, 0.59, 0.11));

@@ -61,3 +61,13 @@ fn snow_of(ice_m: f32, t: f32, melt: f32) -> f32 {
 const ROOTS_M = 0.3;
 // The share of a plant that stands where liquid stands `depth` m deep and snow covers `snow` of the ground.
 fn stands_in(depth: f32, snow: f32) -> f32 { return (1.0 - ease(0.0, ROOTS_M, depth)) * (1.0 - snow); }
+
+// Light leaves the map as a screen shows it: every colour is worked in linear light (a reflectance times the light on
+// the surface), then encoded once by the sRGB transfer curve (IEC 61966-2-1), at an exposure that shows sunlit flat
+// ground of reflectance `1 / EXPOSURE` as full white.
+const EXPOSURE = 1.0;
+// Linear light `c` as the screen's share of full scale, 0..1.
+fn srgb(c: vec3f) -> vec3f {
+  let x = clamp(EXPOSURE * c, vec3f(0.0), vec3f(1.0));
+  return select(1.055 * pow(x, vec3f(1.0 / 2.4)) - 0.055, 12.92 * x, x <= vec3f(0.0031308));
+}
