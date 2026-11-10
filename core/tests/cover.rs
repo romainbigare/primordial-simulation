@@ -5,10 +5,16 @@ use pcore::body::{PHASE, TAKEN};
 use pcore::cover::{self, FROST};
 use pcore::event::EventKind;
 use worldgen::life::{Place, KINDS};
-use worldgen::testkit::{dry_lands, eater, small_world, Books, MILD_LAT};
+use worldgen::testkit::{dry_lands, eater, small_world, Books, LIQUID};
 
-/// Latitudes of the south and north edges of a world whose land stays warm the year round, degrees.
-const WARM_LAT: [f64; 2] = [0.0, 2.3];
+/// Latitudes of the south and north edges of the frost test's island, degrees: it reaches from the tropics to the cold,
+/// so its air brings every band the heat of the lower latitudes, as a real place gets.
+const FROST_WORLD_LAT: [f64; 2] = [10.0, 72.3];
+/// The warm band and the cold band of that island, between these latitudes, degrees.
+const WARM_BAND: [f64; 2] = [20.0, 30.0];
+const COLD_BAND: [f64; 2] = [50.0, 60.0];
+/// The fewest land cells a band holds.
+const BAND_CELLS: usize = 5;
 /// The two frost genes of the selection test, K: above the key liquid's melting point (273 K), so the cover is active
 /// (its ground's liquid is liquid) where winters fall below the higher one, and a winter can kill it.
 const FROST_GENES: [f32; 2] = [285.0, 270.0];
@@ -155,41 +161,51 @@ fn seeds_join_their_kind_or_found_a_slot() {
 }
 
 /// The frost gene of the cover moves down where winters kill (laws.md 4.5): two variants of the starting cover, of
-/// frost genes `FROST_GENES` (3 steps, 15 K, apart), sown on every land cell of a world at the equator and of one at
-/// mild latitudes, compete for 60 years. Where the ground's winter falls below the higher gene while its liquid is
-/// still liquid, frost kills the active cover of that gene (4.5, 6.5), and the lower one (dearer to keep: `c_firm`)
+/// frost genes `FROST_GENES` (3 steps, 15 K, apart), sown on every land cell of one island from the tropics to the
+/// cold (`FROST_WORLD_LAT`), compete for 60 years. Where the ground's winter falls below a gene's lethal limit
+/// (lowered by dormancy, 6.5), frost kills the cover of that gene (4.5), and the lower one (dearer to keep: `c_firm`)
 /// wins; where it does not, the higher one wins. The cover's mean frost gene (by built cover) ends more than a step
-/// lower in the world with winters. (Below the liquid's melting point the cover is dormant, its ground's liquid frozen,
-/// and frost does not kill it: a frost gene under 273 K is never selected by frost.)
+/// lower in the cold band (`COLD_BAND`) than in the warm band (`WARM_BAND`). The cold band must have ground below the
+/// liquid's melting point in winter, which the test asserts, so the scene never silently loses its cold.
 #[test]
-#[ignore = "slow: two 60-year runs of a 16 x 16 world"]
+#[ignore = "slow: a 60-year run of a 16 x 16 world"]
 fn the_frost_gene_falls_where_winters_are_cold() {
-    let mean_frost = |lat: [f64; 2]| {
-        let (chem, init) = worldgen::chemistry0();
-        let cfg = pcore::Config { lat_south: lat[0], lat_north: lat[1], ..Default::default() };
-        let mut w = worldgen::terrain::build(1, worldgen::terrain::island(16, 16), chem, &init, cfg);
+    let (chem, init) = worldgen::chemistry0();
+    let cfg = pcore::Config { lat_south: FROST_WORLD_LAT[0], lat_north: FROST_WORLD_LAT[1], ..Default::default() };
+    let mut w = worldgen::terrain::build(1, worldgen::terrain::island(16, 16), chem, &init, cfg);
+    pcore::step(&mut w);
+    worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
+    let (mut g, mut low) = (genes(), genes());
+    (g[FROST], low[FROST]) = (FROST_GENES[0], FROST_GENES[1]);
+    let land: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
+    for &i in &land {
+        cover::place(&mut w, i, g, 0, 0.05);
+        cover::place(&mut w, i, low, 0, 0.05);
+    }
+    let band = |b: [f64; 2]| -> Vec<usize> { land.iter().copied().filter(|&i| (b[0]..b[1]).contains(&w.mesh.cells().lat()[i])).collect() };
+    let (warm, cold) = (band(WARM_BAND), band(COLD_BAND));
+    assert!(warm.len() >= BAND_CELLS && cold.len() >= BAND_CELLS, "land cells in the bands: {} warm, {} cold", warm.len(), cold.len());
+    let coldest = |w: &pcore::World, cells: &[usize]| cells.iter().map(|&i| w.t_ground_last(i)).fold(f64::MAX, f64::min);
+    let (mut warm_winter, mut cold_winter) = (f64::MAX, f64::MAX);
+    for _ in 0..60 * 12 {
         pcore::step(&mut w);
-        worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
-        let (mut g, mut low) = (genes(), genes());
-        (g[FROST], low[FROST]) = (FROST_GENES[0], FROST_GENES[1]);
-        let land: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
-        for i in land {
-            cover::place(&mut w, i, g, 0, 0.05);
-            cover::place(&mut w, i, low, 0, 0.05);
-        }
-        let coldest = |w: &pcore::World| (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).map(|i| w.t_ground_last(i)).fold(f64::MAX, f64::min);
-        let mut winter = f64::MAX;
-        for _ in 0..60 * 12 {
-            pcore::step(&mut w);
-            winter = winter.min(coldest(&w));
-        }
-        let s = cover::sums(&w);
-        let (frost, built) = s.iter().fold((0.0, 0.0), |a, x| (a.0 + x.genes[FROST], a.1 + x.built));
-        (frost / built, winter, g[FROST] as f64, low[FROST] as f64)
+        warm_winter = warm_winter.min(coldest(&w, &warm));
+        cold_winter = cold_winter.min(coldest(&w, &cold));
+    }
+    // The mean frost gene of a band's cells, by built cover.
+    let parts = cover::Parts::of(&w.chem).expect("cover parts");
+    let mm = parts.mm(&w.chem);
+    let mean_frost = |cells: &[usize]| {
+        let (frost, built) = cells.iter().flat_map(|&i| {
+            let c = &w.life.cell_at(i).cover;
+            c.held().map(move |x| (c.built(&mm, x), c.genes[x][FROST] as f64)).collect::<Vec<_>>()
+        }).fold((0.0, 0.0), |a, (b, f)| (a.0 + b * f, a.1 + b));
+        frost / built
     };
-    let ((warm, warm_winter, high, low), (cold, cold_winter, ..)) = (mean_frost(WARM_LAT), mean_frost(MILD_LAT));
-    let step = cover::RANGE[FROST].0 as f64;
-    println!("mean frost gene {warm:.1} K at the equator (coldest land {warm_winter:.1} K), {cold:.1} K at mild latitudes ({cold_winter:.1} K); sown {high} and {low}");
-    assert!(cold_winter < high - 3.0, "no winter below the higher gene: coldest land {cold_winter} K");
-    assert!(warm - cold > step, "no selection: mean frost gene {warm} K (equator) and {cold} K (mild latitudes)");
+    let (warm_mean, cold_mean, step) = (mean_frost(&warm), mean_frost(&cold), cover::RANGE[FROST].0 as f64);
+    println!("mean frost gene {warm_mean:.1} K in the warm band (coldest ground {warm_winter:.1} K), {cold_mean:.1} K in the cold band ({cold_winter:.1} K); sown {} and {}", FROST_GENES[0], FROST_GENES[1]);
+    let melt = w.chem.subs[LIQUID].melt;
+    assert!(cold_winter < melt, "no frost in the cold band: coldest ground {cold_winter} K, the liquid melts at {melt} K");
+    assert!(cold_winter < FROST_GENES[0] as f64 - 3.0, "no winter below the higher gene: coldest land {cold_winter} K");
+    assert!(warm_mean - cold_mean > step, "no selection: mean frost gene {warm_mean} K (warm band) and {cold_mean} K (cold band)");
 }
