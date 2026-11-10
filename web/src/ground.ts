@@ -9,26 +9,31 @@ import { Gpu, Texture } from './gpu';
 import type { View } from './map';
 
 /** The tiles of the ground as the core makes them (wasm/src/lib.rs `meta`): texels a side inside the gutter, texels of
- * the gutter along each edge, the depths from the coarsest to the finest, the most liquid a m² drained passes on, m/s
- * (their channels' cap), and numbers of a row of the cells' table. */
-export interface TileMeta { size: number; gutter: number; depths: [number, number]; runoff: number; row: number; kinds: number; kind_row: number; walls: [number, number, number] }
+ * the gutter along each edge, the depths from the coarsest to the finest, the most steps along each axis by which a
+ * texel names its channel's sample, numbers of a row of the cells' table, and the reflectance of the walls the cover
+ * builds. */
+export interface TileMeta { size: number; gutter: number; depths: [number, number]; step_most: number; row: number; kinds: number; kind_row: number; walls: [number, number, number] }
 /** The map the tiles are of: squares across and down, metres a square and the depth of a square. */
 export interface MapOf { w: number; h: number; cell_m: number; square_depth: number }
 
-/** Tiles kept on the GPU at most: a view of 1200 x 900 css pixels touches at most 30 at its depth and 12 at the one
- * above (a tile spans 256 to 512 css pixels, `TEXEL_CSS_PX`), and the coarsest; the rest is room for a pan. Each takes
- * 676 kB on the card (10 bytes a texel), so 56 take 38 MB. */
+/** Tiles kept on the GPU at most: a view touches at most `VIEW_TILES` at its depth and a quarter as many at the one
+ * above, and the coarsest; the rest is room for a pan. Each takes 676 kB on the card (10 bytes a texel), so 56 take
+ * 38 MB. */
 const MOST_TILES = 56;
-/** Of a tile, 16-bit floats a texel: the first plane four (the height as two, the wetness index, the channel's ratio),
- * the second two (the logarithm of the channel's area, and one more than the pond the texel lies in, 0: none). */
+/** The most tiles the view touches at its depth: past them it is drawn a depth coarser. */
+const VIEW_TILES = 30;
+/** Of a tile, 16-bit floats a texel: the first plane four (the height as two, the wetness index, the signed distance to
+ * its channel's line), the second two (that channel's sample, as its step from the texel's own, and one more than the
+ * pond the texel lies in; 0: none). */
 const PLANE_A = 4, PLANE_B = 2;
 /** A new tile fades in over the one before it over this long, ms. */
 export const TILE_FADE_MS = 250;
 /** The view's tiles are asked for this share of its width and height past each of its edges, so a pan finds them. */
 const AHEAD = 0.25;
-/** The view is drawn at the depth whose texels take no more than this many css pixels: the spline that magnifies them
- * draws a texel of one or two pixels smooth, and each halving of it costs four times the tiles. */
-const TEXEL_CSS_PX = 2;
+/** The view is drawn at the depth whose texels take no more than this many of the screen's pixels, so its ground and
+ * its shores are read between texels no larger than a pixel; where that asks for more than `VIEW_TILES` tiles, a depth
+ * coarser (each halving of a texel costs four times the tiles). */
+const TEXEL_PX = 1;
 /** Tiles asked of each worker at once: it makes the next while the page takes the last. */
 const MAKING = 3;
 /** Cores the page, the world's worker, a tiles' worker and the drawing keep busy. */
@@ -95,12 +100,14 @@ export class GroundTiles {
   /** Tiles of `depth` across and down the map. */
   private across(depth: number): [number, number] { const s = this.squaresOf(depth); return [Math.ceil(this.map.w / s), Math.ceil(this.map.h / s)]; }
 
-  /** The tiles of view `v`: drawn at the depth whose texels take no more than `TEXEL_CSS_PX`, its tiles there, at the
-   * depth above and at the coarsest, coarse first. */
+  /** The tiles of view `v`: drawn at the depth whose texels take no more than `TEXEL_PX` of the screen's pixels (no
+   * more than `VIEW_TILES` of them), its tiles there, at the depth above and at the coarsest, coarse first. */
   view(v: View): void {
     this.last = v;
     const [d0, d1] = this.meta.depths, sq = this.map.square_depth;
-    const depth = Math.min(Math.max(sq + Math.ceil(Math.log2(Math.max(v.s / TEXEL_CSS_PX, 1))), d0), d1);
+    const tiles = (d: number) => { const s = this.squaresOf(d); return (Math.ceil(v.w / s) + 1) * (Math.ceil(v.h / s) + 1); };
+    let depth = Math.min(Math.max(sq + Math.ceil(Math.log2(Math.max((v.s * devicePixelRatio) / TEXEL_PX, 1))), d0), d1);
+    while (depth > d0 && tiles(depth) > VIEW_TILES) depth--;
     const cx = v.x + v.w / 2, cy = v.y + v.h / 2, asked = ++this.views, wanted: { depth: number; x: number; y: number; far: number }[] = [];
     this.inView.clear();
     for (const d of new Set([d0, Math.max(depth - 1, d0), depth])) {

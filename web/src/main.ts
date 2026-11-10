@@ -133,7 +133,7 @@ function repaint(): void {
   if (!world) return;
   const w = world, f = frame, squares = mapFields(w, f), look = mapLook(w);
   map.setMap(squares.fields);
-  if (land && live) land.set(w, live.table, squares.wet, look);
+  if (land && live) land.set(w, live.table, live.takeDischarge(), squares.wet, look);
   vegetation.set(view === 'earth' && !layer && live ? w : null, live?.table ?? null);
   map.setLook(look);
   map.mapClasses().then(c => {
@@ -303,9 +303,9 @@ function viewSoon(v: View): void {
 /** The live map of world `w`: its ground's tiles, made by a worker of their own from the world's seed and size. */
 function landOf(w: World): Land | null {
   const m = w.meta;
-  if (!coreWasm || !m.tiles || !m.laws || m.square_depth === undefined) return null;
+  if (!coreWasm || !m.tiles || !m.laws || !m.samples || m.square_depth === undefined) return null;
   const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), m.seed, m.w, { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, () => { map.invalidate(); if (live) showStats(live.stats); }, say);
-  return new Land(tiles, m.laws);
+  return new Land(tiles, m.laws, m.samples);
 }
 /** From `THINGS_PX` pixels a square on, the core is asked for the things of the window in view, to draw them one by one. */
 function thingsOf(v: View): void {

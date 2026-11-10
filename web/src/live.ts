@@ -4,10 +4,12 @@ import { World, makeWorld, Meta } from './data';
 export interface Stats { cells: number; pace: number }
 
 /** The live world: the core in a Web Worker (worker.ts) that makes a world, steps it and posts a frame as bytes with the
- * cells' table (tape/src/table.rs). */
+ * cells' table (tape/src/table.rs), and the samples' discharge as 16-bit floats when it changed enough to show (held
+ * until the map takes it, `takeDischarge`). */
 export class Live {
   world: World | null = null;
   table: Float32Array<ArrayBufferLike> = new Float32Array(0);
+  private discharge: Uint16Array | null = null;
   stats: Stats = { cells: 0, pace: 0 };
   private worker: Worker;
   private url: string;
@@ -17,9 +19,10 @@ export class Live {
     this.worker = new Worker(this.url);
     this.worker.onerror = e => on.error(e.message);
     this.worker.onmessage = e => {
-      const m = e.data as { kind: string; meta: string; frame: Uint8Array; table: Float32Array; year: number; day: number; text: string; stats: Stats; things: Uint8Array | null };
+      const m = e.data as { kind: string; meta: string; frame: Uint8Array; table: Float32Array; discharge: Uint16Array | null; year: number; day: number; text: string; stats: Stats; things: Uint8Array | null };
       if (m.kind === 'ready') return on.ready();
       if (m.kind === 'error') return on.error(m.text);
+      if (m.discharge) this.discharge = m.discharge;
       if (m.kind === 'world') {
         const meta = JSON.parse(m.meta) as Meta;
         meta.frames = [{ day: m.day, year: m.year }];
@@ -39,6 +42,8 @@ export class Live {
     this.worker.postMessage({ cmd: 'init', wasm }, [wasm]);
   }
 
+  /** The samples' discharge come since it was last taken, or null. */
+  takeDischarge(): Uint16Array | null { const d = this.discharge; this.discharge = null; return d; }
   newWorld(seed: number, size: number): void { this.worker.postMessage({ cmd: 'new', seed, size }); }
   play(on: boolean): void { this.worker.postMessage({ cmd: 'play', on }); }
   /** Months of the world per second of real time. */

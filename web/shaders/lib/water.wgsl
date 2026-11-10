@@ -1,7 +1,8 @@
 // Water seen from above: a flat surface over its bed. Light that reaches the bed and comes back is absorbed on the
 // way down and up (Beer–Lambert), red the most and blue the least, so the bed shows through the shallows and fades with
 // depth into the colour of deep water; the surface reflects a little of the sky by the angle it is seen at (Fresnel,
-// in Schlick's form, Schlick 1994) and the sun where a ripple faces it. A sea, a lake and a river are the same water.
+// in Schlick's form, Schlick 1994) and the sun where a ripple faces it. A sea, a lake and a river are the same water;
+// running water is turbid with what it carries (`RUNNING_ATTENUATION`).
 
 // The diffuse attenuation of clear water for red, green and blue light, 1/m (Jerlov's oceanic water; Pope and Fry 1997
 // for pure water), and the light that comes back from water too deep to show its bed (linear, a reflectance).
@@ -62,11 +63,19 @@ fn surface_light(g: vec2f) -> vec3f {
   return fresnel * SKY + GLINT_MOST * glint * SUN;
 }
 
-// The share of the light that crosses `depth` m of water down to its bed and back, for red, green and blue.
+// The share of the light that crosses `depth` m of standing water down to its bed and back, for red, green and blue.
 fn through(depth: f32) -> vec3f { return exp(-2.0 * ATTENUATION * depth); }
 
-// Bed `bed` (linear, lit) seen through `depth` m of water (0: a wet film) whose surface has slope g.
-fn water_over(bed: vec3f, depth: f32, g: vec2f) -> vec3f {
-  let t = through(depth);
+// Bed `bed` (linear, lit) seen through `depth` m of standing water (0: a wet film) whose surface has slope g.
+fn water_over(bed: vec3f, depth: f32, g: vec2f) -> vec3f { return seen_through(bed, depth, g, ATTENUATION); }
+
+// Running water carries in suspension what it wears from its bed and holds what it washed from the soil, so its light
+// attenuates as in turbid inland water, 1 to 4 per m (Kirk 1994), the most in the blue that the dissolved matter
+// absorbs: a stream a few centimetres deep shows its bed, a river a metre deep hardly.
+const RUNNING_ATTENUATION = vec3f(1.6, 1.2, 1.8);
+
+// Bed `bed` (linear, lit) seen through `depth` m of water of diffuse attenuation `k`, 1/m, whose surface has slope g.
+fn seen_through(bed: vec3f, depth: f32, g: vec2f, k: vec3f) -> vec3f {
+  let t = exp(-2.0 * k * depth);
   return bed * t + DEEP_WATER * (1.0 - t) + surface_light(g);
 }

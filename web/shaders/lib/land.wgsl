@@ -1,27 +1,31 @@
 // The live map at a point (web/src/land.ts): the ground from its tiles (web/src/ground.ts, tape/src/ground), which never
 // change, and the state from the cells' table (tape/src/table.rs), blended between the squares' centres; then the laws
 // inside a cell applied at the point, with the numbers the core sends: the ground's temperature along its height, the
-// liquid that stands under its cells' level, the soil's liquid by the wetness index, a channel as wide as its discharge.
+// liquid that stands under its cells' level, the soil's liquid by the wetness index, a channel as wide as its own
+// sample's discharge makes it (the samples' discharge, sent when it changed enough to show).
 // Nothing depends on the view, a window or a tile: a place has the same colour after any pan or zoom.
 
 struct Land {
   // Metres a square, squares across and down, the depth of a square.
   map: vec4f,
-  // Texels along a tile's side inside its gutter, texels of the gutter, the depth the view is drawn at.
+  // Texels along a tile's side inside its gutter, texels of the gutter, the depth the view is drawn at, and the most
+  // steps along each axis by which a texel names its channel's sample (tape/src/ground/channels.rs `code`).
   tiles: vec4f,
   // The time since the tiles started, ms, the time a new tile fades in over, ms, the melting point of the frozen
-  // cover, K (0: none), and the most liquid a m² drained passes on, m/s (the cap of the tiles' channels).
+  // cover, K (0: none), and the discharge per metre a css pixel takes past which a channel shows as a line, m³/s per m.
   time: vec4f,
   // The soil's liquid departs by this per unit of the wetness index, m; ground with this depth of liquid is half wet, m;
   // a living thing that holds the share x of the liquid it needs is x to this power active.
   soil: vec4f,
   // A channel's width and depth: each a factor, m, times its discharge in m³/s to a power.
   channel: vec4f,
+  // The terrain's samples across and down, their depth, and the screen's pixels a css pixel.
+  samples: vec4f,
 }
 @group(0) @binding(8) var<uniform> land: Land;
 // The tiles kept, a layer each: of each texel the ground's height, m, as the sum of two 16-bit floats (to a millimetre),
-// the wetness index, and of its nearest channel the distance to its centre line over its drained area to the power of
-// its width, over the cap (tape/src/ground/channels.rs; 1: none near); and the logarithm of that area, m².
+// the wetness index, and the distance to its channel's line, m, signed by the side; and that channel's sample, as its
+// step from the sample that holds the texel's centre (0: none), and one more than the pond it lies in (0: none).
 @group(0) @binding(9) var atlas: texture_2d_array<f32>;
 @group(0) @binding(13) var areas: texture_2d_array<f32>;
 // Of each tile at the view's depth: the layer drawn there and the layer it fades in over (-1: none).
@@ -30,24 +34,48 @@ struct Land {
 @group(0) @binding(11) var tile_of: texture_2d<f32>;
 // The cells' table: `PLANES` planes of a texel a square, one under the other.
 @group(0) @binding(12) var table: texture_2d<f32>;
+// What runs through each of the terrain's samples, m³/s (tape/src/table.rs `discharge`), a texel a sample.
+@group(0) @binding(17) var flows: texture_2d<f32>;
 
 // The table's planes: the terrain's mean height over the cell, m, its ground's temperature, K, how fast its air cools
 // with height, K/m, and its ice, m; its standing liquid's level, its lowest ground and the depth that stands, m, and the
-// liquid in its pores, m; what its pores hold full, m, the level of the wetness index its soil's liquid departs about,
-// the volume it passes on per m² drained, m/s; the ground's own colour and its
-// share of the sea; its true colour; the bytes of the layer drawn and of the worn paths.
+// liquid in its pores, m; what its pores hold full, m, and the level of the wetness index its soil's liquid departs
+// about; the ground's own colour and its share of the sea; its true colour; the bytes of the layer drawn and of the
+// worn paths.
 const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const PLANES = 6;
 // Where no liquid stands near a point, its surface is taken this far below the ground, m.
 const NO_LIQUID_M = 1000.0;
+// Between texels of one channel its signed distance changes by at most the distance between them (√2 texels across a
+// diagonal; a little more for the 16-bit floats): four texels whose signed distances differ by more and change sign
+// hold two channels, or the two sides of a line's end, and are blended by their distances alone.
+const SAME_LINE_TEXELS = 1.5;
+// Half a texel's diagonal, in texels.
+const HALF_DIAGONAL = 0.71;
+// A channel's bed is a parabola across it, whose mean depth is two thirds of its depth at the middle.
+const BED_MIDDLE = 1.5;
 
-// What a point's ground holds: its height, m, its slope east and south, its wetness index, and its nearest channel's
-// distance over its drained area to the power of its width, over the cap, its slope east and south (per m), and that
-// area, m²; and the pond it lies in (-1: none).
-struct Tiled { h: f32, slope: vec2f, twi: f32, ratio: f32, ratio_slope: vec2f, area: f32, pond: i32 }
+// What a point's ground holds: its height, m, its slope east and south, its wetness index, and the distance to its
+// channel's line, m, its slope east and south; the samples of the channels of the texel nearest it and of the one
+// across from that (-1: none) and the least distances of those texels to their lines, m (from their nearest
+// points); and the highest level of the ponds of the four texels about it, m (`-NO_LIQUID_M`: none), and the share of
+// the point's weight on those of them in a pond: its liquid stands at that level over the ground drawn, so a shore
+// runs smooth between the texels where the ground crosses the level.
+struct Tiled { h: f32, slope: vec2f, twi: f32, d: f32, d_slope: vec2f, channels: vec4i, ends: vec2f, water: vec2f }
+
+// The sample texel `n` of the tile of depth `depth` at column and row `tile` names by `code` (tape/src/ground/channels.rs
+// `code`): the sample that holds the texel's centre, stepped along each axis; none (-1) for 0.
+fn sample_of(n: vec2i, depth: f32, tile: vec2f, code: i32) -> vec2i {
+  if (code <= 0) { return vec2i(-1); }
+  let most = i32(land.tiles.w);
+  let side = 2 * most + 1;
+  let texel = vec2i(tile) * i32(land.tiles.x) - i32(land.tiles.y) + n;
+  let own = vec2i(floor((vec2f(texel) + 0.5) * exp2(land.samples.z - depth)));
+  return own + vec2i((code - 1) % side, (code - 1) / side) - most;
+}
 
 // The ground of layer `layer` at `at`, m from the map's north-west corner, blended between the texels' centres; with
 // `spline`, its height and slope through them as a Catmull-Rom spline (so light on a slope drawn over many pixels a
-// texel shows no creases) and its channel's area (none without).
+// texel shows no creases).
 fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   let t = textureLoad(tile_of, vec2i(layer, 0), 0);
   let texel = land.map.x / exp2(t.x - land.map.w);
@@ -64,12 +92,33 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   let top = mix(c00, c10, f.x);
   let bottom = mix(c01, c11, f.x);
   let o = mix(top, bottom, f.y);
-  let ratio_slope = vec2f(mix(c10.w - c00.w, c11.w - c01.w, f.y), bottom.w - top.w) / texel;
-  // The pond of the texel nearest the point: a pond's edge is a texel's, which a finer tile draws finer.
-  let pond = i32(textureLoad(areas, clamp(i + vec2i(f > vec2f(0.5)), vec2i(0), vec2i(last)), layer, 0).y + 0.5) - 1;
-  // Without the spline (a mark's foot) the channel's area is not read: what reads it draws the channel.
-  if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, o.w, ratio_slope, 0.0, pond); }
-  let area = exp(mix(mix(textureLoad(areas, a, layer, 0).x, textureLoad(areas, vec2i(b.x, a.y), layer, 0).x, f.x), mix(textureLoad(areas, vec2i(a.x, b.y), layer, 0).x, textureLoad(areas, b, layer, 0).x, f.x), f.y));
+  // The channel's signed distance blended across its line (exact for a straight one), unless the four texels hold more
+  // than one channel; its slope, and the distance itself.
+  let raw = vec4f(c00.w, c10.w, c01.w, c11.w);
+  var sd = raw;
+  let lo = min(min(sd.x, sd.y), min(sd.z, sd.w));
+  let hi = max(max(sd.x, sd.y), max(sd.z, sd.w));
+  if (lo < 0.0 && hi > 0.0 && hi - lo > SAME_LINE_TEXELS * texel) { sd = abs(sd); }
+  let sx = mix(sd.x, sd.y, f.x);
+  let sy = mix(sd.z, sd.w, f.x);
+  let signed = mix(sx, sy, f.y);
+  let d_slope = sign(signed) * vec2f(mix(sd.y - sd.x, sd.w - sd.z, f.y), sy - sx) / texel;
+  // The channels' samples of the texel nearest the point and of the one across the four from it: where a tributary's
+  // line runs into the water of the channel it joins, its texels lie between that channel's (`discharge_at`).
+  let a4 = array<vec4f, 4>(textureLoad(areas, a, layer, 0), textureLoad(areas, vec2i(b.x, a.y), layer, 0), textureLoad(areas, vec2i(a.x, b.y), layer, 0), textureLoad(areas, b, layer, 0));
+  let at4 = array<vec2i, 4>(a, vec2i(b.x, a.y), vec2i(a.x, b.y), b);
+  let corner = select(0, 1, f.x > 0.5) + select(0, 2, f.y > 0.5);
+  let channels = vec4i(sample_of(at4[corner], t.x, t.yz, i32(a4[corner].x + 0.5)), sample_of(at4[3 - corner], t.x, t.yz, i32(a4[3 - corner].x + 0.5)));
+  let ends = max(abs(vec2f(raw[corner], raw[3 - corner])) - HALF_DIAGONAL * texel, vec2f(0.0));
+  // The ponds the four texels lie in: their highest level, and the share of the point's weight on them.
+  let ponds = vec4i(i32(a4[0].y + 0.5), i32(a4[1].y + 0.5), i32(a4[2].y + 0.5), i32(a4[3].y + 0.5)) - 1;
+  var levels = vec4f(-NO_LIQUID_M);
+  if (all(ponds == vec4i(ponds.x))) { levels = vec4f(pond_level(ponds.x)); }
+  else { levels = vec4f(pond_level(ponds.x), pond_level(ponds.y), pond_level(ponds.z), pond_level(ponds.w)); }
+  let bilinear = vec4f((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+  let wet = select(vec4f(0.0), vec4f(1.0), ponds >= vec4i(0));
+  let water = vec2f(max(max(levels.x, levels.y), max(levels.z, levels.w)), dot(bilinear, wet));
+  if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, abs(signed), d_slope, channels, ends, water); }
   let f2 = f * f;
   let f3 = f2 * f;
   // The weights of the texels from i - 1 to i + 2 along each axis, and their slopes.
@@ -83,11 +132,40 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
       h += v * vec3f(w[x].x * w[y].y, dw[x].x * w[y].y, w[x].x * dw[y].y);
     }
   }
-  return Tiled(h.x, h.yz / texel, o.z, o.w, ratio_slope, area, pond);
+  return Tiled(h.x, h.yz / texel, o.z, abs(signed), d_slope, channels, ends, water);
+}
+
+// What runs through sample `s` (-1: none), m³/s.
+fn discharge_of(s: vec2i) -> f32 {
+  if (s.x < 0) { return 0.0; }
+  return textureLoad(flows, clamp(s, vec2i(0), vec2i(land.samples.xy) - 1), 0).x;
+}
+
+// What runs through the channel at a point of ground `g`, m³/s: its nearest texel's channel's, or the channel's of the
+// texel across from that where it carries more and that texel lies in its water, so a pixel in the water of a channel
+// a tributary joins is that channel's.
+fn discharge_at(g: Tiled) -> f32 {
+  let near = discharge_of(g.channels.xy);
+  let across = discharge_of(g.channels.zw);
+  if (across > near && g.ends.y < 0.5 * land.channel.x * pow(across, land.channel.y)) { return across; }
+  return near;
+}
+
+// The channel at a point of ground `g`, by the channel law from its own sample's discharge `q`, m³/s (flow/channel.rs):
+// its half width and mean depth, m, and the depth of its bed under its water's surface there, m: a parabola as wide as
+// the channel and as deep at its middle as its mean depth makes it (`BED_MIDDLE`), so the water is deepest at its
+// middle and its banks catch the light.
+struct Bed { half: f32, mean: f32, depth: f32 }
+fn bed_at(g: Tiled, q: f32) -> Bed {
+  if (q <= 0.0) { return Bed(0.0, 0.0, 0.0); }
+  let half = 0.5 * land.channel.x * pow(q, land.channel.y);
+  let mean = land.channel.z * pow(q, land.channel.w);
+  let x = min(g.d / half, 1.0);
+  return Bed(half, mean, BED_MIDDLE * mean * (1.0 - x * x));
 }
 
 // The level of pond `p` (-1: none), m: from the rows of the table under its planes, four ponds a texel; far below
-// any ground for none (no body holds it).
+// any ground for none (no body holds it, or the texel lies in no pond).
 fn pond_level(p: i32) -> f32 {
   if (p < 0) { return -NO_LIQUID_M; }
   let w = i32(land.map.y);
@@ -122,14 +200,14 @@ fn ground_at(at: vec2f, spline: bool) -> Tiled {
   let size = vec2i(textureDimensions(pages));
   let page = textureLoad(pages, clamp(vec2i(floor(at / span)), vec2i(0), size - 1), 0);
   if (page.x < 0.0) {
-    return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, 1.0, vec2f(0.0), 0.0, -1);
+    return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, NO_LIQUID_M, vec2f(0.0), vec4i(-1), vec2f(NO_LIQUID_M), vec2f(-NO_LIQUID_M, 0.0));
   }
   let shown = read_tile(i32(page.x), at, spline);
   let came = textureLoad(tile_of, vec2i(i32(page.x), 0), 0).w;
   let w = clamp((land.time.x - came) / land.time.y, 0.0, 1.0);
   if (w >= 1.0 || page.y < 0.0) { return shown; }
   let under = read_tile(i32(page.y), at, spline);
-  return Tiled(mix(under.h, shown.h, w), mix(under.slope, shown.slope, w), mix(under.twi, shown.twi, w), mix(under.ratio, shown.ratio, w), mix(under.ratio_slope, shown.ratio_slope, w), mix(under.area, shown.area, w), shown.pond);
+  return Tiled(mix(under.h, shown.h, w), mix(under.slope, shown.slope, w), mix(under.twi, shown.twi, w), mix(under.d, shown.d, w), mix(under.d_slope, shown.d_slope, w), shown.channels, shown.ends, mix(under.water, shown.water, w));
 }
 
 // The liquid in the soil at a point of wetness index `twi` of a cell whose pores hold `pore` m and `pores` m full, its
@@ -158,13 +236,13 @@ fn activity(wet: f32, need: f32) -> f32 {
 // their mean, 0..1.
 struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, mean: f32 }
 
-// The state at `at`, m from the map's north-west corner, on ground `g`: the cells' values blended between the squares'
-// centres (`cs`), and the laws inside a cell applied at the point.
-fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
+// The state at `at`, m from the map's north-west corner, on ground `g` whose bed a channel cuts `cut` m deep there
+// (`bed_at`): the cells' values blended between the squares' centres (`cs`), and the laws inside a cell applied at the
+// point.
+fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
   let ground = blended(GROUND, cs);
-  // The liquid standing over the point: its pond's, flat at the pond's level over the ground under it (laws.md 1.2).
+  // The liquid standing over the point: its ponds', flat at their levels over the ground under it (laws.md 1.2).
   // The soil's liquid of each cell about it at the point's wetness index, and each one's mean liquid, blended.
-  let level = pond_level(g.pond);
   var held = 0.0;
   var mean = 0.0;
   for (var k = 0; k < 4; k++) {
@@ -174,9 +252,11 @@ fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
     mean += cs.w[k] * (l.w + l.z);
   }
   var p: State;
-  if (g.pond >= 0) {
-    p.depth = max(level - g.h, 0.0);
-    p.over = min(max(g.h - level, 0.0), NO_LIQUID_M);
+  if (g.water.x > -NO_LIQUID_M && g.water.y > 0.0) {
+    // Over the ponds' level, the height counts the more the less of the point is theirs, so a shore's fringe fades out
+    // within a texel of the pond's last texel.
+    p.depth = max(g.water.x - (g.h - cut), 0.0);
+    p.over = min(max(g.h - cut - g.water.x, 0.0) / g.water.y, NO_LIQUID_M);
   } else {
     p.depth = 0.0;
     p.over = NO_LIQUID_M;
@@ -187,5 +267,14 @@ fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
   p.t = ground.y - ground.z * (g.h - ground.x);
   p.snow = snow_of(ground.w, p.t, land.time.z);
   p.mean = mean / (mean + half);
+  return p;
+}
+
+// The state at `at` on ground `g` as a plant's foot reads it (cover.wgsl): the water of the point's channel stands over
+// its bed too.
+fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
+  let bed = bed_at(g, discharge_at(g));
+  var p = state_on(at, g, cs, bed.depth);
+  p.depth = max(p.depth, bed.depth);
   return p;
 }

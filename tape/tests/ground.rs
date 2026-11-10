@@ -3,7 +3,7 @@
 
 use pcore::space::terrain::{Terrain, ISLAND_LEVEL};
 use pcore::Config;
-use tape::{unhalf, Ground, GUTTER, TILE};
+use tape::{unhalf, Ground, Law, GUTTER, TILE};
 
 /// Texels along a side of a tile with its gutter.
 const SIDE: usize = TILE + 2 * GUTTER;
@@ -13,7 +13,7 @@ fn ground() -> (Ground, std::ops::RangeInclusive<u8>) {
     let cfg = Config::default();
     let map = worldgen::terrain::island(16, 16);
     let depths = tape::depths(&map);
-    (Ground::new(1, map, Terrain::new(1, ISLAND_LEVEL), (cfg.lat_south, cfg.lat_north), [cfg.phys.channel_width, cfg.phys.channel_width_exp]), depths)
+    (Ground::new(1, map, Terrain::new(1, ISLAND_LEVEL), (cfg.lat_south, cfg.lat_north), Law::of(&cfg.phys)), depths)
 }
 
 /// The numbers of a texel of a tile's first plane.
@@ -57,10 +57,10 @@ fn a_place_holds_the_same_numbers_in_every_tile() {
                 let (a, b) = (west[(y * SIDE + TILE + i) * TEXEL + k], east[(y * SIDE + i) * TEXEL + k]);
                 assert_eq!(a, b, "row {y}, column {i} past the edge, number {k}");
             }
-            // The second plane: the channel's area.
+            // The second plane: the channel's sample and the pond.
             let area = SIDE * SIDE * TEXEL;
             for b in 0..2 {
-                assert_eq!(west[area + 2 * (y * SIDE + TILE + i) + b], east[area + 2 * (y * SIDE + i) + b], "row {y}, column {i} past the edge, the area and the pond");
+                assert_eq!(west[area + 2 * (y * SIDE + TILE + i) + b], east[area + 2 * (y * SIDE + i) + b], "row {y}, column {i} past the edge, the channel's sample and the pond");
             }
         }
     }

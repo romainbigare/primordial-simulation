@@ -1,8 +1,9 @@
 //! The live viewer's shell: a world that the page makes and steps, and the ground it draws, as plain `extern "C"`
 //! exports (no wasm-bindgen). The page calls these from two Web Workers, each with its own instance, and reads the
 //! results from the instance's memory. One steps the world: `meta` is JSON in the form of a tape's header, `frame` is
-//! the bytes of one tape frame and `table` the cells' table made with it (`tape::Table`), `things` the list of what lies
-//! in the cells of a window (`tape::things`). The other makes
+//! the bytes of one tape frame and `table` the cells' table made with it (`tape::Table`), `discharge` what runs through
+//! each of the terrain's samples when it changed enough to show, `things` the list of what lies in the cells of a
+//! window (`tape::things`). The other makes
 //! the ground's tiles (`ground`, `tile`: `tape::Ground`), which need no world.
 
 use pcore::{Config, World};
@@ -17,13 +18,19 @@ const LIFE_YEAR: u64 = 2;
 /// Rounds of mutation given to the founders: the default of `ew run`.
 const SPRAY_ROUNDS: u32 = 20;
 
-/// The world, what is placed when, what the shell keeps of its cells (`tape::Table`) and the table made with the last
-/// frame.
+/// A channel's width goes as its discharge to the power `channel_width_exp` (about 1/2): the page is sent the samples'
+/// discharge again once one has changed by more than this share since it was last sent, a change of its width of
+/// about 5%, a pixel of a river 20 pixels wide.
+const DISCHARGE_SHOWS: f64 = 0.1;
+
+/// The world, what is placed when, what the shell keeps of its cells (`tape::Table`), the table made with the last
+/// frame, and the samples' discharge last sent to the page, m³/s (`tape::Table::discharge`; none before the first).
 struct Live {
     world: World,
     plan: Schedule,
     cells: tape::Table,
     table: Vec<f32>,
+    sent: Vec<f32>,
 }
 
 thread_local! {
@@ -58,7 +65,7 @@ pub extern "C" fn new_world(seed: u32, size: u32) -> u32 {
     }
     let plan = Schedule::new(Some(LIFE_YEAR), &worldgen::life::plants(&worldgen::life::ROSTER), Seeding { hand: true, rounds: SPRAY_ROUNDS, fixers: FIXERS });
     let cells = tape::Table::new(&world);
-    LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, cells, table: Vec::new() }));
+    LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, cells, table: Vec::new(), sent: Vec::new() }));
     0
 }
 
@@ -93,23 +100,26 @@ pub extern "C" fn day() -> f64 {
 }
 
 /// The header of a tape for this world, as JSON (no frames, series or events yet), with what a shell draws the ground
-/// by: the tiles (`tape::Ground`: texels a side, the gutter, the depths from the coarsest to the finest, the most liquid
-/// a m² drained passes on, m/s, by which their channels are capped; the numbers of a row of the table, `tape::Table`; the
-/// reflectance of the walls the cover builds), and the numbers of the laws the shell applies inside a
-/// cell (`Physics`).
+/// by: the tiles (`tape::Ground`: texels a side, the gutter, the depths from the coarsest to the finest, the most steps
+/// by which a texel names its channel's sample; the numbers of a row of the table, `tape::Table`; the reflectance of the
+/// walls the cover builds), the terrain's samples (across, down, their depth), the numbers of the laws the shell applies
+/// inside a cell (`Physics`), and the discharge per metre a pixel takes past which a channel shows as a line, m³/s per
+/// m (`tape::TYPICAL_RUNOFF` × `tape::SHOW_M`).
 #[no_mangle]
 pub extern "C" fn meta() -> *const u8 {
     let head = with(|l| {
         let (w, g, ph) = (&l.world, &l.world.map, &l.world.cfg.phys);
         let layers: Vec<_> = LAYERS.iter().map(|l| json!({"name": l.name, "unit": l.unit, "scale": l.scale, "min": l.min, "max": l.max})).collect();
         let depths = tape::depths(g);
+        let s = w.terrain_samples();
         // The reflectance of the walls the cover builds, by which a shell colours its stems.
         let walls = pcore::cover::Parts::of(&w.chem).map_or([0.0; 3], |p| w.chem.subs[p.sub[pcore::cover::WALL]].refl[0]);
         json!({
             "w": g.w, "h": g.h, "cell_m": g.side, "square_depth": g.square_depth(), "globe": g.wrap, "lat_north": w.cfg.lat_north, "lat_south": w.cfg.lat_south,
             "seed": w.seed, "days_per_year": w.days_per_year(), "layers": layers,
-            "tiles": {"size": tape::TILE, "gutter": tape::GUTTER, "depths": [depths.start(), depths.end()], "runoff": tape::MOST_RUNOFF, "row": tape::ROW, "kinds": tape::KINDS, "kind_row": tape::KIND_ROW, "walls": walls},
-            "laws": {"soil_m": ph.soil_m, "wet_depth": ph.wet_depth, "dormancy": ph.dormancy, "channel_width": ph.channel_width, "channel_width_exp": ph.channel_width_exp, "channel_depth": ph.channel_depth, "channel_depth_exp": ph.channel_depth_exp},
+            "tiles": {"size": tape::TILE, "gutter": tape::GUTTER, "depths": [depths.start(), depths.end()], "step_most": tape::STEP_MOST, "row": tape::ROW, "kinds": tape::KINDS, "kind_row": tape::KIND_ROW, "walls": walls},
+            "samples": {"across": s.across, "down": s.down, "depth": pcore::space::terrain::SAMPLE_DEPTH},
+            "laws": {"soil_m": ph.soil_m, "wet_depth": ph.wet_depth, "dormancy": ph.dormancy, "channel_width": ph.channel_width, "channel_width_exp": ph.channel_width_exp, "channel_depth": ph.channel_depth, "channel_depth_exp": ph.channel_depth_exp, "line": tape::TYPICAL_RUNOFF * tape::SHOW_M},
             "frames": [], "series": {}, "series_units": {}, "events": [], "months": [],
         })
     });
@@ -134,6 +144,24 @@ pub extern "C" fn table() -> *const u8 {
     give(bytes)
 }
 
+/// What runs through each of the terrain's samples, m³/s, row by row, as 16-bit floats little-endian
+/// (`tape::Table::discharge`): when the page has none yet, or one has changed by more than `DISCHARGE_SHOWS` since it
+/// was last sent (a sample that ran dry or began to run counts); else nothing (`out_len` 0).
+#[no_mangle]
+pub extern "C" fn discharge() -> *const u8 {
+    let bytes = with(|l| {
+        let now = l.cells.discharge(&l.world);
+        let moved = |(&a, &b): (&f32, &f32)| (a > 0.0) != (b > 0.0) || (a as f64 - b as f64).abs() > DISCHARGE_SHOWS * b.max(a) as f64;
+        if l.sent.len() == now.len() && !l.sent.iter().zip(&now).any(moved) {
+            return Vec::new();
+        }
+        let bytes = now.iter().flat_map(|&q| tape::half(q).to_le_bytes()).collect();
+        l.sent = now;
+        bytes
+    });
+    give(bytes)
+}
+
 /// What lies in each cell of the window from column `x` and row `y`, `w` x `h` squares: its bodies, cover and parts
 /// (`tape::things`), for the page to draw one by one.
 #[no_mangle]
@@ -148,7 +176,7 @@ pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
 pub extern "C" fn ground(seed: u32, size: u32) {
     let (seed, cfg) = (seed as u64, Config::default());
     let (map, terrain) = worldgen::terrain::island_ground(seed, size as usize, size as usize);
-    let g = tape::Ground::new(seed, map, terrain, (cfg.lat_south, cfg.lat_north), [cfg.phys.channel_width, cfg.phys.channel_width_exp]);
+    let g = tape::Ground::new(seed, map, terrain, (cfg.lat_south, cfg.lat_north), tape::Law::of(&cfg.phys));
     GROUND.with(|c| *c.borrow_mut() = Some(g));
 }
 
@@ -160,7 +188,7 @@ pub extern "C" fn tile(depth: u32, x: i32, y: i32) -> *const u8 {
     give(texels.iter().flat_map(|v| v.to_le_bytes()).collect())
 }
 
-/// The length in bytes of what `meta`, `frame`, `table`, `things` or `tile` last returned.
+/// The length in bytes of what `meta`, `frame`, `table`, `discharge`, `things` or `tile` last returned.
 #[no_mangle]
 pub extern "C" fn out_len() -> usize {
     OUT.with(|o| o.borrow().len())

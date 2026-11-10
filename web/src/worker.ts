@@ -1,6 +1,7 @@
 // The live world: the core as WebAssembly (wasm/src/lib.rs) in a Web Worker, so that the page never freezes. It runs as
 // a separate script, built into the page as text (build.mjs), and started from a Blob. With each frame it posts the
-// cells' table (tape/src/table.rs), from which the page draws the state of the ground; it makes no pictures.
+// cells' table (tape/src/table.rs), from which the page draws the state of the ground, and the samples' discharge when
+// it changed enough to show (wasm/src/lib.rs `discharge`); it makes no pictures.
 
 interface Core {
   memory: WebAssembly.Memory;
@@ -11,6 +12,7 @@ interface Core {
   meta(): number;
   frame(): number;
   table(): number;
+  discharge(): number;
   things(x: number, y: number, w: number, h: number): number;
   cells(): number;
   out_len(): number;
@@ -58,12 +60,13 @@ function postFrame(kind: 'world' | 'frame'): void {
   const head = kind === 'world' ? new TextDecoder().decode(bytes(c.meta(), c.out_len())) : '';
   const frame = bytes(c.frame(), c.out_len());
   const table = new Float32Array(bytes(c.table(), c.out_len()).buffer);
+  const flows = c.discharge(), discharge = c.out_len() > 0 ? new Uint16Array(bytes(flows, c.out_len()).buffer) : null;
   const things = thingsAt ? bytes(c.things(...thingsAt), c.out_len()) : null;
   const now = performance.now();
   if (now - since >= PACE_MS) { pace = (stepped * 1000) / (now - since); stepped = 0; since = now; }
   const stats = { cells: c.cells(), pace };
-  const moved = [frame.buffer, table.buffer, ...(things ? [things.buffer] : [])];
-  host.postMessage({ kind, meta: head, frame, table, year: c.year(), day: c.day(), stats, things }, moved);
+  const moved = [frame.buffer, table.buffer, ...(things ? [things.buffer] : []), ...(discharge ? [discharge.buffer] : [])];
+  host.postMessage({ kind, meta: head, frame, table, discharge, year: c.year(), day: c.day(), stats, things }, moved);
   posted = now; owed = false;
 }
 
