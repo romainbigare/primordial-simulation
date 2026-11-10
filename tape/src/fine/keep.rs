@@ -1,5 +1,5 @@
 //! Fields over a window's pixels from what its cells hold, continuous across the cells' borders. A cell's value is
-//! evened over its neighbours' within half its own side (`Cells::even`: a box, along one way and then the other), so
+//! evened over its neighbours' within half its own side (`Cells::even`: a box about each pixel), so
 //! the field goes from one cell's value to the next over the width of the cells, never past the values it evens, and
 //! a cell no wider than a pixel keeps its own. A field that holds each cell's mean over its pixels (pycnophylactic,
 //! Tobler 1979; `Cells::keep`) starts from the general law that shares a cell's mean over its ground evaluated at each
@@ -48,33 +48,46 @@ impl Cells {
         sum / of
     }
 
-    /// Of each pixel, the mean of `value` of the cells that `counted` names over the pixels within half its own cell's
-    /// side along each way (a box, along one way and then the other), NaN where none is counted within it.
-    pub(super) fn even(&self, value: &[f64], counted: impl Fn(usize) -> bool) -> Vec<f64> {
-        let n = self.of.len();
-        let cell = |p: usize| self.of[p] as usize;
-        let mut sum: Vec<f64> = (0..n).map(|p| if counted(cell(p)) { value[cell(p)] } else { 0.0 }).collect();
-        let mut of: Vec<f64> = (0..n).map(|p| if counted(cell(p)) { 1.0 } else { 0.0 }).collect();
-        for (step, len) in [(1, self.across), (self.across, n / self.across)] {
-            (sum, of) = (self.boxed(&sum, step, len), self.boxed(&of, step, len));
-        }
-        (0..n).map(|p| if of[p] > 0.0 { sum[p] / of[p] } else { f64::NAN }).collect()
-    }
-
-    /// `v` summed over a box along one way: each pixel the sum of the pixels within its own cell's `reach` before and
-    /// after it along lines of `len` pixels, `step` apart in `v` (1 along a row, the width down a column).
-    fn boxed(&self, v: &[f64], step: usize, len: usize) -> Vec<f64> {
-        let mut out = vec![0.0; v.len()];
-        let at = |l: usize, k: usize| if step == 1 { l * len + k } else { k * step + l };
-        let mut prefix = vec![0.0; len + 1];
-        for l in 0..v.len() / len {
-            for k in 0..len {
-                prefix[k + 1] = prefix[k] + v[at(l, k)];
+    /// Of each pixel, the mean of `value` of the cells over the pixels within half its own cell's side along each way (a
+    /// box), each pixel of the box counted where `counts` (the pixel's own cell, the cell of the pixel in the box) says;
+    /// NaN where none is counted within it. Each cell's box sums come from a table of sums over its pixels and its reach
+    /// (a summed-area table, Crow 1984).
+    pub(super) fn even(&self, value: &[f64], counts: impl Fn(usize, usize) -> bool) -> Vec<f64> {
+        let (across, down) = (self.across, self.of.len() / self.across);
+        let mut out = vec![f64::NAN; self.of.len()];
+        let (mut sum, mut of) = (Vec::new(), Vec::new());
+        for (c, px) in self.pixels.iter().enumerate() {
+            let (Some(&first), Some(&last)) = (px.first(), px.last()) else { continue };
+            let r = self.reach[c];
+            let (x0, x1) = px.iter().map(|p| p % across).fold((across, 0), |(a, b), x| (a.min(x), b.max(x)));
+            let (bx, by) = (x0.saturating_sub(r), (first / across).saturating_sub(r));
+            let (ex, ey) = ((x1 + r).min(across - 1), (last / across + r).min(down - 1));
+            // The table has a row and a column of none before the box.
+            let wide = ex - bx + 2;
+            sum.clear();
+            sum.resize(wide * (ey - by + 2), 0.0);
+            of.clear();
+            of.resize(sum.len(), 0.0);
+            for y in by..=ey {
+                let (mut row, mut row_of) = (0.0, 0.0);
+                for x in bx..=ex {
+                    let k = self.of[y * across + x] as usize;
+                    if counts(c, k) {
+                        (row, row_of) = (row + value[k], row_of + 1.0);
+                    }
+                    let t = (y - by + 1) * wide + x - bx + 1;
+                    (sum[t], of[t]) = (sum[t - wide] + row, of[t - wide] + row_of);
+                }
             }
-            for k in 0..len {
-                let p = at(l, k);
-                let r = self.reach[self.of[p] as usize];
-                out[p] = prefix[(k + r + 1).min(len)] - prefix[k.saturating_sub(r)];
+            // The sum over the box from column `a` and row `b` to `e` and `f`, inclusive (the table's own columns and rows).
+            let boxed = |t: &[f64], (a, b, e, f): (usize, usize, usize, usize)| t[(f + 1) * wide + e + 1] - t[b * wide + e + 1] - t[(f + 1) * wide + a] + t[b * wide + a];
+            for &p in px {
+                let (x, y) = (p % across - bx, p / across - by);
+                let at = (x.saturating_sub(r), y.saturating_sub(r), (x + r).min(ex - bx), (y + r).min(ey - by));
+                let n = boxed(&of, at);
+                if n > 0.0 {
+                    out[p] = boxed(&sum, at) / n;
+                }
             }
         }
         out
@@ -96,7 +109,7 @@ impl Cells {
         let shown = |c: usize| !self.pixels[c].is_empty();
         for _ in 0..ROUNDS {
             let lacks: Vec<f64> = (0..self.pixels.len()).map(|c| if shown(c) { self.lacks(c, &v, target[c], how) } else { 0.0 }).collect();
-            let field = self.even(&lacks, shown);
+            let field = self.even(&lacks, |_, k| shown(k));
             match how {
                 Mean::Scaled => v.iter_mut().zip(field).for_each(|(v, f)| *v *= f),
                 Mean::Shifted => v.iter_mut().zip(field).for_each(|(v, f)| *v += f),

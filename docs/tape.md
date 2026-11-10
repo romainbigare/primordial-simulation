@@ -87,10 +87,12 @@ coarser heights that keeps each leaf's mean, smooth with its slope so hill shadi
 edges, with the midpoint displacement's departures laid on it; below a metre the continuation alone. So the ground drawn depends neither on the
 cells nor on the window, and has no edge where cells meet. The liquid's level is the core's
 (`flow::levels`): the level the liquid standing over a cell's pores reaches over the cell's own ground, by which the
-liquid moves, in the cells that hold liquid standing (none elsewhere), evened over the pixels of such cells within
-half the pixel's own cell's side along each way (`standing`). The core holds the cells of one lake at levels that
-differ by centimetres to decimetres; evened, the surface drawn goes from one to the next without a step at the
-cells' borders. So a pixel is under liquid where the ground drawn lies below that level, the shore lies where that
+liquid moves, in the cells that hold liquid standing (none elsewhere), evened over the pixels within half the pixel's
+own cell's side along each way (`standing`). A cell's liquid counts at a pixel only where its own lowest ground lies
+under the surface of the pixel's own cell (its level, or its lowest ground where none stands): liquid over ground that
+lies wholly above a cell runs down into it and does not stand over it, so the thin liquid of a cell on a slope is not
+drawn over the lower ground beside it. The core holds the cells of one lake at levels that differ by centimetres to
+decimetres; evened, the surface drawn goes from one to the next without a step at the cells' borders. So a pixel is under liquid where the ground drawn lies below that level, the shore lies where that
 ground rises, inside the cells, and moves with the level, a body of liquid at one level (the sea's, `flow::basin`) is
 flat, and the liquid drawn holds the cells' own together (within a per cent over a window). The fields of the cells'
 values (`tape/src/fine/pyramid.rs`) are built level by level of the cells' tree (a Laplacian pyramid, Burt and Adelson
