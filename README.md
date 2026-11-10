@@ -37,11 +37,11 @@ reaches and the cells. While the world plays, the worker posts its state to the 
 The map is drawn on the graphics card at the screen's own pixels: with WebGPU where the browser has it, else with
 WebGL2. The shaders are written once in WGSL (`web/shaders/`); the build (`npm run build`) checks them and writes them
 as GLSL ES 3.00 for WebGL2 too with naga, the shader translator of the wgpu project (`web/shade`, so the build needs
-cargo), and puts both in the page. The page hands the card fields, not pictures (`web/src/fields.ts`): of each square
-or pixel the ground's height and slope, the liquid's surface over the ground, the ice, the ground's temperature, the
+cargo), and puts both in the page. The page hands the card fields, not pictures (a tape's `web/src/fields.ts`, the live
+map's tiles and table): of each square or texel the ground's height and slope, the liquid's surface over the ground, the ice, the ground's temperature, the
 share that is sea and that is a river and the river's depth, how wet the ground is, the plant cover's byte, the true
-colour and every layer. The card turns them into colours at each pixel of the screen (`web/shaders/lib/earth.wgsl`:
-the Earth view, the true colour and the layer views, one rule for the map of the squares and for the finer window),
+colour and every layer. The card turns them into colours at each pixel of the screen (`web/shaders/lib/colour.wgsl`:
+the Earth view, the true colour and the layer views, one rule for a tape's map of squares and for the live map),
 with the light on the slopes. Water is water (`web/shaders/lib/water.wgsl`): a flat surface, its bed seen through it
 and fading with depth as water absorbs red light most and blue least (Beer–Lambert), into the dark blue of deep water;
 a little of the sky reflects from it and the sun glints on small ripples fixed in the world, which fade out as they
@@ -56,18 +56,26 @@ and stretched onto the screen, the same picture, softer; once the view rests it 
 pixels, a tile a frame, and shown when whole. The page never waits for the card: what it reads back (the classes, the
 colours under the avatars) comes a frame or so later.
 
-At every zoom the live viewer draws the window in view finer than its cells (`tape::fine`, a pixel of 1 to 2 screen
-pixels and no smaller than 5 cm, smoothed up closer, at most 360,000 of them), and a fifth of the view about it, so a pan
-or a zoom out shows it until the next comes: the ground's height, the terrain itself (the samples the cells' heights
-and their liquid stand on, smooth below a metre), with hill shading; the liquid each cell holds standing at the level
-that fills the terrain drawn inside the cell with its volume from the lowest point up, as the core's level does, drawn where
-the ground lies below that level, so a shore follows the ground inside the cells and moves with the level; how wet the ground is and the plant cover of each slot inside each cell (`tape/src/fine/inside.rs`); snow by the ground's own temperature; each value of the cells the view reads (`web/src/fine.ts` `FINE_LAYERS`, the layer shown, the worn paths) as one smooth field, built level by level of the
-cells' tree, so a cell that holds what its parent held shows no edge and a refined region looks like the cells about it
-(`tape/src/fine/pyramid.rs`); rivers as lines along the way their liquid runs. The worker makes its fields; it is made
-again when the view rests and, while the world plays, no sooner than a second and than nine times the time the last
-one took, so it takes at most about a tenth of the worker's time, and each new window fades in over the last in a
-quarter of a second, over the map of the squares, its outer edge faded too, so the picture never jumps; the stats line
-gives its size, the time the core took to make it and the worker its fields, and which of WebGPU and WebGL2 draws.
+The live viewer draws every zoom from two things (`web/src/land.ts`, `web/shaders/land.wgsl`). **The ground's tiles**
+(`tape::Ground`) never change: each holds 256 x 256 texels of a depth, from the depth at which one tile holds the
+island down to texels of 1 m (closer, the finest is magnified), with the ground's height (the terrain itself, smooth
+below a metre), the wetness index of the place and the channel nearest it. A second worker with its own copy of the
+core makes them (`web/src/tiles-worker.ts`), so the world never waits for a picture; the page keeps at most 96 on the
+graphics card and asks for those about the view, coarse before fine and nearest its middle first, at the depth whose
+texels take no more than a css pixel (`web/src/ground.ts`); a request that left the view is dropped, and the tiles
+drawn least lately go first. A tile not made yet is drawn from its nearest ancestor, stretched: the picture is soft for
+a moment, never the squares; a new tile fades in over it in a quarter of a second. **The cells' table**
+(`tape::Table`) comes with each world frame: a row a square of what the laws inside a cell read. At each pixel the card
+blends the table between the squares' centres and applies the laws inside a cell there: the ground's temperature is
+its cell's less the air's fall with height times the pixel's height over the cell's mean, and snow lies by it and by
+the ice; liquid stands where the ground lies under the level of the cells about it, counting a cell only where its
+lowest ground lies under the surface of the pixel's own cell (so the sea is flat and a cell's liquid is not drawn over
+the lower ground beside it); the soil's liquid departs from its cell's by `soil_m` per unit of the wetness index over
+the cell's level, within none and the pores full, as the core shares it; a channel shows where the pixel lies nearer
+its centre line than half the width the channel law gives its discharge (its drained area times the cells' flux per
+m² drained), its share of the pixel what the pixel's footprint covers. Nothing depends on the view or a tile, so a
+place has the same colour after any pan or zoom. The stats line gives the tiles kept, their size and how many in view
+are still to come, and which of WebGPU and WebGL2 draws. A tape holds no ground: its map is drawn from its squares.
 
 The Earth view draws the plant cover as textures at its real size (`web/src/vegetation.ts`, `web/src/textures.ts`),
 over the fine raster where there is one and blended between the cells' centres as the map is; in the fine raster each

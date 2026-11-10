@@ -9,8 +9,9 @@ interface Linked { prog: WebGLProgram; units: { unit: number; texture: number; s
 class WebGl2Texture implements Texture {
   tex: WebGLTexture | null = null;
   fb: WebGLFramebuffer | null = null;
-  /** What each mip level was last filled with, to fill it again after the context is lost. */
+  /** What each mip level, and each layer filled alone, was last filled with, to fill it again after the context is lost. */
   levels: (Uint8Array | Float32Array)[] = [];
+  layered = new Map<number, Uint8Array | Float32Array>();
   constructor(readonly w: number, readonly h: number, readonly layers: number, readonly mips: number, readonly format: Format, readonly target: boolean) {}
   get array(): boolean { return this.layers > 1; }
 }
@@ -29,7 +30,7 @@ class WebGl2 implements Gpu {
     canvas.addEventListener('webglcontextrestored', () => {
       this.linked.clear(); this.buffers = [];
       this.setUp();
-      for (const t of this.textures) { this.make(t); t.levels.forEach((d, k) => d && this.write(t, d, k)); }
+      for (const t of this.textures) { this.make(t); t.levels.forEach((d, k) => d && this.write(t, d, k)); t.layered.forEach((d, k) => this.write(t, d, 0, k)); }
       restored();
     });
   }
@@ -67,12 +68,13 @@ class WebGl2 implements Gpu {
     }
   }
 
-  write(t: Texture, data: Uint8Array | Float32Array, level = 0): void {
+  write(t: Texture, data: Uint8Array | Float32Array, level = 0, layer?: number): void {
     const gl = this.gl, g = t as WebGl2Texture, w = Math.max(1, t.w >> level), h = Math.max(1, t.h >> level);
     const type = t.format === 'rgba8unorm' ? gl.UNSIGNED_BYTE : gl.FLOAT;
-    g.levels[level] = data;
+    if (layer === undefined) g.levels[level] = data;
+    else g.layered.set(layer, data);
     if (gl.isContextLost()) return;
-    if (g.array) { gl.bindTexture(gl.TEXTURE_2D_ARRAY, g.tex); gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, level, 0, 0, 0, w, h, t.layers, gl.RGBA, type, data); }
+    if (g.array) { gl.bindTexture(gl.TEXTURE_2D_ARRAY, g.tex); gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, level, 0, 0, layer ?? 0, w, h, layer === undefined ? t.layers : 1, gl.RGBA, type, data); }
     else { gl.bindTexture(gl.TEXTURE_2D, g.tex); gl.texSubImage2D(gl.TEXTURE_2D, level, 0, 0, w, h, gl.RGBA, type, data); }
   }
 

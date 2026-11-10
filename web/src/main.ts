@@ -3,8 +3,9 @@ import { CLASSES, PATH_LAYER, mapFields, rampFor, rampCss } from './earth';
 import { MapView, View } from './map';
 import { MapLook } from './field-window';
 import { Charts } from './charts';
-import { Live, Stats, FineWindow } from './live';
-import { FineAt, FINE_LAYERS } from './fine';
+import { Live, Stats } from './live';
+import { GroundTiles } from './ground';
+import { Land } from './land';
 import { Avatars, THINGS_PX } from './avatars';
 import { Vegetation } from './vegetation';
 import { Style } from './sprites';
@@ -20,18 +21,8 @@ const SPEEDS = [1, 2, 4, 8, 16, 32];
 /** The live world's speeds, months of the world per second of real time. */
 const LIVE_SPEEDS = [3, 12, 36, 120, Infinity];
 const LIVE_SIZE = 22;
-/** Time the view rests before the worker is asked for the window's raster and things, ms. */
+/** Time the view rests before the worker is asked for the things of the window in view, ms. */
 const ASK_MS = 150;
-/** The live map is drawn finer than its cells, a pixel a leaf of the depth whose leaves take at least FINE_PX css
- * pixels, no smaller than FINE_LEAST_M metres (closer, the picture is smoothed up: the ground below a metre goes on
- * smooth, tape/src/fine/heights.rs), and no more than FINE_MOST pixels. */
-const FINE_PX = 1;
-const FINE_LEAST_M = 0.05;
-const FINE_MOST = 360_000;
-/** The raster reaches this share of the view's width and height past each edge of the view (inside the map), so a pan
- * or a zoom out shows it until the next comes; it fades out over the outer half of that, so the squares around it show
- * no hard edge. */
-const FINE_MARGIN = 0.2;
 
 let world: World | null = null;
 let live: Live | null = null;
@@ -39,9 +30,10 @@ let frame = 0, speed = 4, playing = false, view = 'earth', layer: string | null 
 let cls: Uint8Array = new Uint8Array(0);
 
 const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspect(), v => viewSoon(v));
-/** The window in view finer than its cells (live world only, its fields made by the worker), and the window asked
- * for. */
-let fine: FineWindow | null = null, fineAsked = '';
+/** The live map: the ground's tiles and the cells' table (live world only). */
+let land: Land | null = null;
+/** The core's WebAssembly, for the worker that makes the ground's tiles of each new world. */
+let coreWasm: ArrayBuffer | null = null;
 let viewTimer = 0;
 /** The things of the window in view, drawn one by one when the map is close (live world only), and the window asked for. */
 const avatars = new Avatars();
@@ -69,6 +61,7 @@ async function load(buf: ArrayBuffer): Promise<void> {
     next = parse(await gunzip(buf));
   } catch (e) { return say(String(e instanceof Error ? e.message : e)); }
   live?.stop(); live = null;
+  land = null; map.setLand(null);
   world = next;
   setMode(false);
   setup(world);
@@ -138,9 +131,10 @@ function setFrame(f: number): void {
 /** Draw frame `frame` in the view shown; the map's classes come back from the GPU, and with them the cover. */
 function repaint(): void {
   if (!world) return;
-  const w = world, f = frame;
-  map.setMap(mapFields(w, f).fields);
-  map.setLook(mapLook(w));
+  const w = world, f = frame, squares = mapFields(w, f), look = mapLook(w);
+  map.setMap(squares.fields);
+  if (land && live) land.set(w, live.table, squares.wet, look);
+  map.setLook(look);
   map.mapClasses().then(c => {
     if (world !== w) return;
     cls = c;
@@ -167,7 +161,7 @@ function setLayer(n: string | null): void {
     [0, 128, 255].forEach((b, k) => ($('ramp').querySelectorAll('.lbl span')[k].textContent = fmt(lut[b])));
     $('rampunit').textContent = `${label(n)}${unitText(l.unit) ? ` (${unitText(l.unit)})` : ''}${l.scale === 'log' ? ', log scale' : ''}`;
   }
-  syncUi(); repaint(); fineOf(map.view());
+  syncUi(); repaint();
 }
 
 function syncUi(): void {
@@ -250,7 +244,7 @@ function togglePlay(): void {
 // ---- wiring
 $('play').onclick = togglePlay;
 $('fit').onclick = () => map.fit();
-$('paths').onclick = () => { paths = !paths; syncUi(); repaint(); fineOf(map.view()); };
+$('paths').onclick = () => { paths = !paths; syncUi(); repaint(); };
 $<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
 document.querySelectorAll<HTMLElement>('#views button').forEach(b => (b.onclick = () => setView(b.dataset.view!)));
 document.querySelectorAll<HTMLElement>('#life button').forEach(b => (b.onclick = () => setLife(b.dataset.life === 'angled' ? 'angled' : 'above')));
@@ -279,6 +273,7 @@ $('classes').innerHTML = CLASSES.map(([n, c]) => `<li><s style="background:${c}"
 /** The live world: the core's WebAssembly (ew.wasm, beside the page) in a worker; the seed and size from the page. */
 async function startLive(): Promise<void> {
   const wasm = await fetch('ew.wasm').then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`ew.wasm: ${r.status}`))));
+  coreWasm = wasm.slice(0);
   const q = new URLSearchParams(location.search);
   $<HTMLInputElement>('seed').value = q.get('seed') ?? '1';
   $<HTMLInputElement>('size').value = q.get('size') ?? String(LIVE_SIZE);
@@ -286,11 +281,10 @@ async function startLive(): Promise<void> {
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
     ready: () => newWorld(),
-    world: w => { world = w; fineAsked = ''; showFine(null); thingsKey = ''; avatars.set(null, w.meta.cell_m); vegetation.setThings([]); setup(w); showStats(l.stats); },
+    world: w => { world = w; land = landOf(w); map.setLand(land); thingsKey = ''; avatars.set(null, w.meta.cell_m); vegetation.setThings([]); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
     things: data => { if (live === l && world) { avatars.set(data, world.meta.cell_m); vegetation.setThings(avatars.list); } },
-    frame: (stats, win) => {
+    frame: stats => {
       if (live !== l) return;
-      if (win) showFine(win);
       setFrame(0);
       showStats(stats);
     },
@@ -299,33 +293,19 @@ async function startLive(): Promise<void> {
   setMode(true);
   say('Making the world…');
 }
-/** Once the view rests, the worker is asked for a raster of the window finer than its cells and for its things. */
+/** The view's tiles of the ground are asked for at once; once the view rests, the worker is asked for its things. */
 function viewSoon(v: View): void {
   if (!live || !world) return;
+  land?.tiles.view(v);
   clearTimeout(viewTimer);
-  viewTimer = window.setTimeout(() => { fineOf(v); thingsOf(v); }, ASK_MS);
+  viewTimer = window.setTimeout(() => thingsOf(v), ASK_MS);
 }
-/** The window in view and `FINE_MARGIN` about it, on the leaves of the depth whose leaves take `FINE_PX` css pixels or
- * more (no smaller than `FINE_LEAST_M`, no more than `FINE_MOST` pixels): the core draws it a pixel a leaf, with the
- * layers the view reads (`FINE_LAYERS`, the layer shown, the worn paths where they are drawn). */
-function fineOf(v: View): void {
-  const m = world?.meta;
-  if (!live || !m || m.square_depth === undefined || v.w <= 0 || v.h <= 0) return;
-  const mx = v.w * FINE_MARGIN, my = v.h * FINE_MARGIN;
-  const x0 = Math.max(v.x - mx, 0), y0 = Math.max(v.y - my, 0), x1 = Math.min(v.x + v.w + mx, m.w), y1 = Math.min(v.y + v.h + my, m.h);
-  const read = [...FINE_LAYERS, ...(layer ? [layer] : []), ...(paths ? [PATH_LAYER] : [])];
-  const layers = m.layers.map(l => l.name).filter(n => read.includes(n));
-  const sq = m.square_depth, edges = (depth: number) => {
-    const per = 2 ** (depth - sq), x = Math.floor(x0 * per), y = Math.floor(y0 * per);
-    const across = Math.ceil(x1 * per) - x, down = Math.ceil(y1 * per) - y;
-    return { at: { x: x / per, y: y / per, w: across / per, h: down / per, depth, soft: Math.min(mx, my) / 2, layers }, pixels: across * down };
-  };
-  let depth = sq + Math.max(0, Math.min(Math.floor(Math.log2(m.cell_m / FINE_LEAST_M)), Math.floor(Math.log2(v.s / FINE_PX))));
-  while (depth > sq && edges(depth).pixels > FINE_MOST) depth--;
-  const at: FineAt = edges(depth).at, key = JSON.stringify(at);
-  if (key === fineAsked) return;
-  fineAsked = key;
-  live.fine(at);
+/** The live map of world `w`: its ground's tiles, made by a worker of their own from the world's seed and size. */
+function landOf(w: World): Land | null {
+  const m = w.meta;
+  if (!coreWasm || !m.tiles || !m.laws || m.square_depth === undefined) return null;
+  const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), m.seed, m.w, { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, () => { map.invalidate(); if (live) showStats(live.stats); }, say);
+  return new Land(tiles, m.laws);
 }
 /** From `THINGS_PX` pixels a square on, the core is asked for the things of the window in view, to draw them one by one. */
 function thingsOf(v: View): void {
@@ -336,15 +316,7 @@ function thingsOf(v: View): void {
   if (!at) { avatars.set(null, world?.meta.cell_m ?? 1); vegetation.setThings([]); }
   live.things(at);
 }
-/** Draw the window in view finer than its cells over the map, fading in over the last one (none: no window). */
-function showFine(win: FineWindow | null): void {
-  fine = win;
-  const at: [number, number, number, number] | null = win ? [win.at.x, win.at.y, win.at.w, win.at.h] : null;
-  map.setFine(win ? win.fields : null, at ?? undefined, win?.at.soft);
-  vegetation.setFine(win?.cover ?? null, at);
-}
-
-/** The date, the pace, the cells and the raster of the window in view. */
+/** The date, the pace, the cells and the ground's tiles kept and still to come in view. */
 function showStats(s: Stats): void {
   const el = $('stats'), m = world?.meta;
   if (!live || !m) { el.hidden = true; return; }
@@ -352,7 +324,7 @@ function showStats(s: Stats): void {
   el.hidden = false;
   el.innerHTML = [['date', `year ${Math.floor(y)}, day ${day}`], ['pace', `${playing ? fmt(s.pace) : '0'} of ${speed === Infinity ? 'max' : speed} months/s`],
     ['cells', String(s.cells)],
-    ...(fine ? [['detail', `${fine.fields.w}×${fine.fields.h} px of ${fmt(m.cell_m / 2 ** (fine.at.depth - (m.square_depth ?? 0)))} m, made in ${fine.made.toFixed(0)} ms, its fields in ${fine.fieldsMs.toFixed(0)} ms`]] : []),
+    ...(land ? [['ground', `${land.tiles.count()} tiles of ${fmt(m.cell_m / 2 ** (land.tiles.depth - (m.square_depth ?? 0)))} m, ${land.tiles.toCome()} to come`]] : []),
     ...(drawnWith ? [['map', `drawn with ${drawnWith}`]] : [])].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
 }
 

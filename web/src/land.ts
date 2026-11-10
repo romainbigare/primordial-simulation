@@ -1,0 +1,74 @@
+// The live map as the GPU draws it (web/shaders/land.wgsl): the ground from its tiles (ground.ts), the state from the
+// cells' table the world's worker sends with each frame (tape/src/table.rs), and the numbers of the laws the core
+// applies inside a cell. The page adds to the table what it decides itself: the sea, the cover's byte and bare share,
+// the true colour, and the layer drawn.
+import { Gpu, Texture, Uniforms } from './gpu';
+import { GroundTiles, TILE_FADE_MS } from './ground';
+import { World, plane, decode } from './data';
+import { MapLook, earthUniforms } from './field-window';
+import { Wet, seaSquares, PATH_LAYER } from './earth';
+
+/** The numbers of the laws inside a cell as the core sends them (wasm/src/lib.rs `meta`, `Physics`). */
+export interface Laws { soil_m: number; wet_depth: number; dormancy: number; channel_width: number; channel_width_exp: number; channel_depth: number; channel_depth_exp: number }
+
+/** Planes of four numbers a square of the table (land.wgsl `GROUND` to `VIEW`): the core's (`TileMeta.row` numbers), then
+ * the page's three. */
+const PLANES = 6;
+/** The ground's slope at the view's depth is read as a square's slope (for its shading and its rock) times its texel's
+ * size over a square's to this power, and no less than `SLOPE_LEAST` times it: the slope over a short run is steeper
+ * than over a long one, and the map shades and colours slopes as they look from afar. */
+const SLOPE_POWER = 0.5, SLOPE_LEAST = 0.15;
+/** A sea shore is sand up to this height over the liquid's surface, m. */
+const BEACH_M = 6;
+/** The bytes of a layer view over which an empty point fades into a full one (colour.wgsl `in_view_of`). */
+const OVER_FADE = 64;
+/** Of the uniforms of land.wgsl (`Land`), four-wide members. */
+const LAND_VEC4S = 5;
+
+export class Land {
+  private data: Float32Array | null = null;
+  private tex: Texture | null = null;
+  private due = false;
+  /** The melting point of the frozen cover, K (0: none), as the table last said. */
+  private melt = 0;
+
+  constructor(readonly tiles: GroundTiles, private laws: Laws) {}
+
+  /** The table of frame 0 of world `w`: the core's rows `rows` (the melting point, then a row a square), its wet
+   * squares `wet`, and the layer `look` draws. */
+  set(w: World, rows: Float32Array, wet: Wet, look: MapLook): void {
+    const { w: W, h: H } = w.meta, n = W * H, row = this.tiles.meta.row, data = new Float32Array(4 * PLANES * n);
+    const sea = seaSquares(wet, w.meta), plants = plane(w, 0, 'plants'), leaf = decode(w, 0, 'leaf');
+    const truth = ['true_r', 'true_g', 'true_b'].map(name => plane(w, 0, name));
+    const shown = look.mode === 'layer' && w.index.has(look.layer) ? plane(w, 0, look.layer) : null;
+    const worn = look.paths && w.index.has(PATH_LAYER) ? plane(w, 0, PATH_LAYER) : null;
+    const put = (k: number, i: number, v: number[]) => data.set(v, 4 * (k * n + i));
+    this.melt = rows[0];
+    for (let i = 0; i < n; i++) {
+      for (let k = 0; k < row / 4; k++) put(k, i, Array.from(rows.subarray(1 + row * i + 4 * k, 1 + row * i + 4 * k + 4)));
+      put(3, i, [plants[i] / 255, Math.exp(-leaf[i]), sea[i], 0]);
+      put(4, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, 0]);
+      put(5, i, [shown ? shown[i] / 255 : 0, worn ? worn[i] / 255 : 0, 0, 0]);
+    }
+    this.data = data;
+    this.due = true;
+  }
+
+  /** The bindings land.wgsl reads on `gpu` in view `look`, or null before the first table. */
+  binds(gpu: Gpu, look: MapLook): Record<number, ArrayBuffer | Texture> | null {
+    if (!this.data) return null;
+    const m = this.tiles.map;
+    this.tex ??= gpu.texture(m.w, PLANES * m.h, 'rgba32float');
+    if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
+    const t = this.tiles.textures(gpu), l = this.laws, texel = 2 ** (m.square_depth - this.tiles.depth);
+    const read = [Math.max(texel ** SLOPE_POWER, SLOPE_LEAST), this.melt, BEACH_M, OVER_FADE];
+    const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(this.tiles.meta.size, this.tiles.meta.gutter, this.tiles.depth)
+      .vec4(t.now, TILE_FADE_MS).vec4(l.soil_m, l.wet_depth).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp);
+    return { 1: earthUniforms(look, read, [0, 0, m.w * m.cell_m, m.h * m.cell_m]), 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex };
+  }
+
+  stop(gpu: Gpu | null): void {
+    this.tiles.stop(gpu);
+    if (gpu && this.tex) gpu.drop(this.tex);
+  }
+}

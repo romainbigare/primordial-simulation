@@ -1,7 +1,6 @@
 // Vegetation: the plant cover drawn as textures at its real size (handover 10.3, 10.4), not plant by plant. Each place
 // holds a mix of kinds of pattern (grass, steppe, tundra, shrubs, woodland, forest, jungle), the cover's field
-// (canopy.ts) of the map's squares, or where the view is finer than the cells of each pixel of the fine raster, over its
-// dry ground. The marks (textures.ts) are as many as the cover is closed, at their real size (a tree's crown from the walls
+// (canopy.ts) of the map's squares. The marks (textures.ts) are as many as the cover is closed, at their real size (a tree's crown from the walls
 // per m², a tuft of grass), coloured by the cover and, close up, by the genes of the heaviest slot of the cells
 // (tape::things), all blended between the texels' centres as the map's colours are. A kind's marks fade in as they grow
 // from under a pixel. The GPU draws them at every frame, so a pan, a zoom or a new frame shows them at once.
@@ -28,22 +27,17 @@ const FOLIAGE: Rgb[] = [[124, 158, 84], [136, 142, 112], [168, 160, 106], [112, 
 /** The map classes on which cover is drawn (the land that is neither water, ice nor rock). */
 const VEG_CLASSES = new Set(['Desert', 'Grassland', 'Forest'].map(n => CLASSES.findIndex(c => c[0] === n)));
 
-/** A grid of texels on screen: its window in squares, and its cover's field. */
-interface Grid { at: [number, number, number, number]; cover: CoverField }
-
-/** The cover pattern over the map: what it reads (`set`, `setFine`, `setThings`), drawn by the GPU at every frame. */
+/** The cover pattern over the map: what it reads (`set`, `setThings`), drawn by the GPU at every frame. */
 export class Vegetation implements GpuLayer {
-  private map: Grid | null = null;
-  private fine: Grid | null = null;
+  /** The cover's field of the map's squares (none: not drawn), and whether the marks hold it. */
+  private field: CoverField | null = null;
+  private held = false;
   private cellM = 1;
   /** The foliage colour of the heaviest slot of the cells close up (avatars' list), by square. */
   private genes = new Map<number, Rgb>();
   private mapW = 0;
   private mapH = 0;
-  /** The marks of the map's squares and of the fine raster, and the grid each reads. */
-  private mapMarks = new CoverMarks({ foliage: FOLIAGE, dark: DARK, tint: TINT });
-  private fineMarks = new CoverMarks({ foliage: FOLIAGE, dark: DARK, tint: TINT });
-  private held = new Map<CoverMarks, Grid>();
+  private marks = new CoverMarks({ foliage: FOLIAGE, dark: DARK, tint: TINT });
   private tinted = false;
   /** A number that changes when the map's cover changes. */
   private mapSum = NaN;
@@ -54,15 +48,11 @@ export class Vegetation implements GpuLayer {
    * without the cover's layers). */
   set(w: World | null, f: number, cls: Uint8Array): void {
     const field = w ? fieldOf(w, f, cls) : null, sum = field ? signature(field) : NaN;
-    if (field && this.map && sum === this.mapSum) return;
+    if (field && this.field && sum === this.mapSum) return;
     if (w) { this.cellM = w.meta.cell_m; this.mapW = w.meta.w; this.mapH = w.meta.h; this.tinted = false; }
-    this.map = field && w ? { at: [0, 0, w.meta.w, w.meta.h], cover: coverOf(field) } : null;
+    this.field = field ? coverOf(field) : null;
+    this.held = false;
     this.mapSum = sum;
-  }
-
-  /** The cover's field of the fine raster's pixels and its window (x, y, w, h in squares), or none. */
-  setFine(cover: CoverField | null, at: [number, number, number, number] | null): void {
-    this.fine = cover && at ? { at, cover } : null;
   }
 
   /** The cover colours of the slots in `cells` (tape::things), each square by its cells' heaviest slot. */
@@ -82,33 +72,23 @@ export class Vegetation implements GpuLayer {
   }
 
   /** Draw the marks on a map whose corner is at (ox, oy) and whose square takes `s` css px, `d` device px a css px, in
-   * a view `W` x `H` css px: in the fine raster's window from its grid (it is made for it), elsewhere from the map's
-   * squares', so a pan past the window shows the squares' marks only where the window does not reach. */
+   * a view `W` x `H` css px, from the cover's field of the map's squares. */
   draw(gpu: Gpu, p: Pass, ox: number, oy: number, s: number, d: number, W: number, H: number): void {
-    if (!this.map) return;
+    if (!this.field) return;
     const mpp = this.cellM / s;
     // Nothing to draw while the largest marks take less than a pixel.
     if (LARGEST_MARK / mpp < FADE_PX[0]) return;
-    if (!this.tinted) { const t = this.tint(); this.mapMarks.setTint(this.mapW, this.mapH, t); this.fineMarks.setTint(this.mapW, this.mapH, t); this.tinted = true; }
-    // A window's part of the view, on whole device pixels: x0, y0, x1, y1.
-    const pixels = (g: Grid) => {
-      const [gx, gy, gw, gh] = rectOf(g.at, ox, oy, s);
-      return [Math.floor(Math.max(gx, 0) * d), Math.floor(Math.max(gy, 0) * d), Math.ceil(Math.min(gx + gw, W) * d), Math.ceil(Math.min(gy + gh, H) * d)];
-    };
-    const [x0, y0, x1, y1] = pixels(this.map), fine = this.fine && pixels(this.fine);
-    const draw = (g: Grid, marks: CoverMarks, [a, b, c, e]: number[]) => {
-      if (c <= a || e <= b) return;
-      if (this.held.get(marks) !== g) { marks.setField(g.cover); this.held.set(marks, g); }
-      const m = this.cellM, [ax, ay, aw, ah] = g.at;
-      marks.draw(gpu, p, {
-        rect: [a, b, c - a, e - b], mpp: mpp / d, cssMpp: mpp, at: [(a / d - ox) * mpp, (b / d - oy) * mpp],
-        field: [ax * m, ay * m, aw * m, ah * m], tint: [0, 0, this.mapW * m, this.mapH * m], fade: FADE_PX, alpha: COVER_ALPHA, style: this.style,
-      });
-    };
-    if (!this.fine || !fine || fine[2] <= fine[0] || fine[3] <= fine[1]) return draw(this.map, this.mapMarks, [x0, y0, x1, y1]);
-    const [fx0, fy0, fx1, fy1] = fine;
-    draw(this.fine, this.fineMarks, fine);
-    for (const band of [[x0, y0, x1, fy0], [x0, fy1, x1, y1], [x0, fy0, fx0, fy1], [fx1, fy0, x1, fy1]]) draw(this.map, this.mapMarks, band);
+    if (!this.tinted) { this.marks.setTint(this.mapW, this.mapH, this.tint()); this.tinted = true; }
+    if (!this.held) { this.marks.setField(this.field); this.held = true; }
+    // The map's part of the view, on whole device pixels.
+    const x0 = Math.floor(Math.max(ox, 0) * d), y0 = Math.floor(Math.max(oy, 0) * d);
+    const x1 = Math.ceil(Math.min(ox + this.mapW * s, W) * d), y1 = Math.ceil(Math.min(oy + this.mapH * s, H) * d);
+    if (x1 <= x0 || y1 <= y0) return;
+    const m = this.cellM, whole = [0, 0, this.mapW * m, this.mapH * m];
+    this.marks.draw(gpu, p, {
+      rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, cssMpp: mpp, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp],
+      field: whole, tint: whole, fade: FADE_PX, alpha: COVER_ALPHA, style: this.style,
+    });
   }
 
   /** The genes' tint of the map's squares: per square its colour times its weight, and its weight (1 where a slot's
@@ -119,9 +99,6 @@ export class Vegetation implements GpuLayer {
     return data;
   }
 }
-
-/** The screen rectangle (x, y, w, h) of a window (x, y, w, h in squares) of a map whose corner is at (ox, oy) and whose square takes `s` pixels. */
-const rectOf = (at: [number, number, number, number], ox: number, oy: number, s: number) => [ox + at[0] * s, oy + at[1] * s, at[2] * s, at[3] * s];
 
 /** A number that changes when the cover of field `f` changes as drawn. */
 function signature(f: CoverNumbers): number {
@@ -135,5 +112,5 @@ function signature(f: CoverNumbers): number {
 function fieldOf(w: World, f: number, cls: Uint8Array): CoverNumbers | null {
   if (!['plants', 'wood', 'leaf', 't_ground', 'rain'].every(n => w.index.has(n))) return null;
   const open = Uint8Array.from(cls, c => (VEG_CLASSES.has(c) ? 1 : 0));
-  return { w: w.meta.w, h: w.meta.h, stands: 1, kg: decode(w, f, 'plants'), wood: decode(w, f, 'wood'), leaf: decode(w, f, 'leaf'), t: decode(w, f, 't_ground'), rain: decode(w, f, 'rain'), depth: null, open };
+  return { w: w.meta.w, h: w.meta.h, kg: decode(w, f, 'plants'), wood: decode(w, f, 'wood'), leaf: decode(w, f, 'leaf'), t: decode(w, f, 't_ground'), rain: decode(w, f, 'rain'), open };
 }

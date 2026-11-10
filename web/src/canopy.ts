@@ -1,19 +1,13 @@
-// The cover's field (textures.ts, web/shaders/cover.wgsl): of each texel the density of each kind of mark, from the
-// cover's own numbers (its mass, walls and capture area per m², tape/src/layers.rs, or inside a cell each slot's own,
-// tape/src/fine/inside.rs) and its ground temperature and rain. A kind gives way to the next over a range of each of its
-// thresholds, so kinds mix where one gives way to another, never at an edge. The page makes it for the map's squares
-// (vegetation.ts), the worker for each pixel of a fine raster (fine.ts), whose cover it hands to the page with its
-// fields.
-import { decode } from './data';
-import { Fine, SLOTS } from './fine';
+// The cover's field (textures.ts, web/shaders/cover.wgsl): of each square the density of each kind of mark, from the
+// cover's own numbers (its mass, walls and capture area per m², tape/src/layers.rs) and its ground temperature and rain.
+// A kind gives way to the next over a range of each of its thresholds, so kinds mix where one gives way to another,
+// never at an edge. The page makes it for the map's squares (vegetation.ts).
 import { clamp, smooth } from './earth';
 
-/** The numbers a pattern reads, per texel of a grid of `w` x `h` (row-major): the cover of each of `stands` stands
- * (`kg`, `wood` and `leaf` hold `stands` planes of a texel each), its ground's temperature and rain, the depth of the
- * liquid over it (none: not known, as on the map's squares) and whether cover is drawn on it (1: open ground). */
+/** The numbers a pattern reads, per texel of a grid of `w` x `h` (row-major): the cover's mass, walls and capture area,
+ * its ground's temperature and rain, and whether cover is drawn on it (1: open ground). */
 export interface CoverNumbers {
-  w: number; h: number; stands: number; kg: Float32Array; wood: Float32Array; leaf: Float32Array; t: Float32Array; rain: Float32Array;
-  depth: Float32Array | null; open: Uint8Array;
+  w: number; h: number; kg: Float32Array; wood: Float32Array; leaf: Float32Array; t: Float32Array; rain: Float32Array; open: Uint8Array;
 }
 
 /** A tree's crown is drawn at these sizes across, m, blended between the two nearest. */
@@ -115,57 +109,21 @@ function standOf(kg: number, wood: number, leaf: number, t: number, rain: number
   return { marks: [...herbal, ...crownShares(wood).map(share => share * trees)], trees, forest, jungle };
 }
 
-/** The share of a mark of `size` m that stands out of liquid `depth` m deep over its foot: a plant about as tall as its
- * mark is wide stands out of shallow liquid and is under the surface in deeper. */
-const emerged = (depth: number, size: number) => 1 - smooth(0.5 * size, size, depth);
-
-/** Write into texel `i` of `out` the marks of the stands of `f` there: as many as their capture areas together close
- * the ground (1 - e^-area, the leaves of one stand shading those of another as their own do), each stand's share of
- * them as its share of the area, of its own kinds (`standOf`), those that stand under the liquid there left out. */
-function putStands(out: CoverField, i: number, f: CoverNumbers): void {
-  const n = f.w * f.h, marks = LATTICES.map(() => 0);
-  let area = 0;
-  for (let s = 0; s < f.stands; s++) if (f.kg[s * n + i] > 0) area += Math.max(f.leaf[s * n + i], 0);
-  if (area <= 0) return;
-  const closed = (1 - Math.exp(-area)) / area;
-  let wood = 0, trees = 0, forest = 0, jungle = 0;
-  for (let s = 0; s < f.stands; s++) {
-    const kg = f.kg[s * n + i], leaf = f.leaf[s * n + i];
-    if (kg <= 0 || leaf <= 0) continue;
-    const st = standOf(kg, f.wood[s * n + i], leaf, f.t[i], f.rain[i]), share = leaf * closed;
-    st.marks.forEach((m, l) => { marks[l] += m * share; });
-    wood += f.wood[s * n + i]; trees += st.trees * share; forest += st.forest * share; jungle += st.jungle * share;
-  }
-  const depth = f.depth ? f.depth[i] : 0;
-  marks.forEach((m, l) => putChannel(out, i, l, m * emerged(depth, LATTICES[l].mark)));
-  putChannel(out, i, CH.dark, clamp(Math.log10(1 + wood) / DARK_DECADES) * DARK_MOST);
-  if (trees > 0) { putChannel(out, i, CH.woodland, (trees - forest) / trees); putChannel(out, i, CH.jungle, jungle / trees); }
+/** Write into texel `i` of `out` the marks of the cover of `f` there: as many as its capture area closes the ground
+ * (1 - e^-area), of its own kinds (`standOf`). */
+function putStand(out: CoverField, i: number, f: CoverNumbers): void {
+  const kg = f.kg[i], leaf = f.leaf[i];
+  if (kg <= 0 || leaf <= 0) return;
+  const st = standOf(kg, f.wood[i], leaf, f.t[i], f.rain[i]), closed = 1 - Math.exp(-leaf);
+  st.marks.forEach((m, l) => putChannel(out, i, l, m * closed));
+  putChannel(out, i, CH.dark, clamp(Math.log10(1 + f.wood[i]) / DARK_DECADES) * DARK_MOST);
+  if (st.trees > 0) { putChannel(out, i, CH.woodland, (st.trees - st.forest) / st.trees); putChannel(out, i, CH.jungle, st.jungle / st.trees); }
 }
 
 /** The texels of the cover of numbers `f` as the marks read them, with the levels below them. */
 export function coverOf(f: CoverNumbers): CoverField {
   const out: CoverField = { w: f.w, h: f.h, data: new Uint8Array(COVER_LAYERS * 4 * f.w * f.h), mips: [] };
-  for (let i = 0; i < f.w * f.h; i++) if (f.open[i]) putStands(out, i, f);
+  for (let i = 0; i < f.w * f.h; i++) if (f.open[i]) putStand(out, i, f);
   out.mips = mipsOf(out);
   return out;
-}
-
-/** Ice thicker than this, m, hides the cover (where the map starts to draw snow, web/shaders/lib/earth.wgsl). */
-const SNOW_M = 0.02;
-
-/** The cover's field of the pixels of `f`; null for a tape without the cover's layers. Each slot of a pixel's cell is a
- * stand of its own: its built cover there (`Fine.cover`), its walls and capture area by what it builds per kg
- * (`Fine.make`); it is drawn wherever it stands and no ice lies over it, in shallow liquid too. */
-export function fineCover(f: Fine): CoverField | null {
-  const w = f.world, n = f.across * f.down;
-  if (!['t_ground', 'rain', 'ice'].every(name => w.index.has(name))) return null;
-  const ice = decode(w, 0, 'ice');
-  const kg = new Float32Array(SLOTS * n), wood = new Float32Array(SLOTS * n), leaf = new Float32Array(SLOTS * n);
-  for (let k = 0; k < SLOTS; k++) for (let i = 0; i < n; i++) {
-    const c = f.cover[k][i], make = 2 * (SLOTS * f.cell[i] + k);
-    kg[k * n + i] = c; wood[k * n + i] = c * f.make[make]; leaf[k * n + i] = c * f.make[make + 1];
-  }
-  const depth = Float32Array.from(f.ground, (g, i) => (Number.isNaN(f.water[i]) ? 0 : Math.max(f.water[i] - g, 0)));
-  const open = Uint8Array.from(ice, v => (v < SNOW_M ? 1 : 0));
-  return coverOf({ w: f.across, h: f.down, stands: SLOTS, kg, wood, leaf, t: decode(w, 0, 't_ground'), rain: decode(w, 0, 'rain'), depth, open });
 }

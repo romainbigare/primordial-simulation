@@ -1,13 +1,6 @@
-// The live world: the core as WebAssembly (wasm/src/lib.rs) in a Web Worker, so that the page never freezes.
-// It runs as a separate script, built into the page as text with data.ts, fields.ts, earth.ts, fine.ts and canopy.ts
-// (build.mjs), and started from a Blob. It also makes the fields of the window in view finer than its cells (fine.ts),
-// which the page hands to the GPU.
-import { Meta, makeWorld } from './data';
-import { wetOf } from './earth';
-import { FineAt, fineFields, readFine } from './fine';
-import { fineCover } from './canopy';
-import { fieldBuffers } from './fields';
-import type { FineWindow } from './live';
+// The live world: the core as WebAssembly (wasm/src/lib.rs) in a Web Worker, so that the page never freezes. It runs as
+// a separate script, built into the page as text (build.mjs), and started from a Blob. With each frame it posts the
+// cells' table (tape/src/table.rs), from which the page draws the state of the ground; it makes no pictures.
 
 interface Core {
   memory: WebAssembly.Memory;
@@ -17,7 +10,7 @@ interface Core {
   day(): number;
   meta(): number;
   frame(): number;
-  fine(x: number, y: number, w: number, h: number, depth: number, layers: number): number;
+  table(): number;
   things(x: number, y: number, w: number, h: number): number;
   cells(): number;
   out_len(): number;
@@ -27,24 +20,17 @@ type Command =
   | { cmd: 'new'; seed: number; size: number }
   | { cmd: 'play'; on: boolean }
   | { cmd: 'rate'; rate: number }
-  | { cmd: 'things'; at: [number, number, number, number] | null }
-  | { cmd: 'fine'; at: FineAt | null };
+  | { cmd: 'things'; at: [number, number, number, number] | null };
 
 /** Longest time a tick steps before it lets messages in, ms. */
 const TICK_MS = 50;
 /** Pause between ticks, ms. */
 const GAP_MS = 4;
 /** Real time between two world frames posted to the page while the world plays, at least, ms: each costs the page's
- * main thread a repaint of the map (its fields and textures, a read back of the classes, the cover's field), tens of ms. */
+ * main thread a repaint of the map (its fields, its table and textures, a read back of the classes, the cover's field). */
 const FRAME_MS = 250;
 /** Real time the pace of the world is measured over, ms. */
 const PACE_MS = 1000;
-/** Real time between two fine rasters of the same window while the world plays, at least, ms (a new window gets one at
- * once). */
-const FINE_MS = 1000;
-/** Of an unchanged window the next raster comes no sooner than this many times the time the last one took after it, so
- * the rasters take at most about a tenth of the worker's time and the world steps the rest. */
-const FINE_REST = 9;
 
 const host = self as unknown as { postMessage(m: unknown, transfer: Transferable[]): void; onmessage: ((e: MessageEvent<Command>) => void) | null };
 let core: Core | null = null;
@@ -57,11 +43,6 @@ let lastTick = 0;
 let timer = 0;
 /** The window (x, y, w, h in squares) whose things the page draws one by one (null: none). */
 let thingsAt: [number, number, number, number] | null = null;
-/** The window the page draws finer than its cells (null: none), whether it waits for its raster, when the last was
- * made and how long it took, ms. */
-let fineAt: FineAt | null = null, fineDue = false, fineLast = 0, fineTook = 0;
-/** The world's header. */
-let meta: Meta | null = null;
 /** The months stepped since `since` (ms), and the pace measured over the last whole second, months per second. */
 let stepped = 0, since = 0, pace = 0;
 /** When the last frame was posted (ms), and whether months were stepped since. */
@@ -72,30 +53,17 @@ function bytes(at: number, n: number): Uint8Array {
   return new Uint8Array(core!.memory.buffer, at, n).slice();
 }
 
-/** The buffers of a fine raster's message, handed over to the page. */
-const fineBuffers = (p: FineWindow): Transferable[] => [...fieldBuffers(p.fields), ...(p.cover ? [p.cover.data, ...p.cover.mips].map(a => a.buffer) : [])];
-
 function postFrame(kind: 'world' | 'frame'): void {
   const c = core!;
   const head = kind === 'world' ? new TextDecoder().decode(bytes(c.meta(), c.out_len())) : '';
-  if (kind === 'world') meta = JSON.parse(head) as Meta;
-  meta!.frames = [{ day: c.day(), year: c.year() }];
   const frame = bytes(c.frame(), c.out_len());
+  const table = new Float32Array(bytes(c.table(), c.out_len()).buffer);
   const things = thingsAt ? bytes(c.things(...thingsAt), c.out_len()) : null;
-  let now = performance.now(), win: FineWindow | null = null;
-  if (fineAt && (fineDue || now - fineLast >= Math.max(FINE_MS, FINE_REST * fineTook))) {
-    const layers = meta!.layers.reduce((bits, l, k) => (fineAt!.layers.includes(l.name) ? bits | (1 << k) : bits), 0) >>> 0;
-    const data = bytes(c.fine(fineAt.x, fineAt.y, fineAt.w, fineAt.h, fineAt.depth, layers), c.out_len());
-    const made = performance.now() - now, f = readFine(meta!, fineAt, data);
-    const fields = fineFields(f, meta!, wetOf(makeWorld(meta!, frame, 0), 0));
-    win = { at: fineAt, fields, made, fieldsMs: performance.now() - now - made, cover: fineCover(f) };
-    fineTook = performance.now() - now;
-    now = fineLast = performance.now(); fineDue = false;
-  }
+  const now = performance.now();
   if (now - since >= PACE_MS) { pace = (stepped * 1000) / (now - since); stepped = 0; since = now; }
   const stats = { cells: c.cells(), pace };
-  const moved = [frame.buffer, ...(win ? fineBuffers(win) : []), ...(things ? [things.buffer] : [])];
-  host.postMessage({ kind, meta: head, frame, year: c.year(), day: c.day(), stats, fine: win, things }, moved);
+  const moved = [frame.buffer, table.buffer, ...(things ? [things.buffer] : [])];
+  host.postMessage({ kind, meta: head, frame, table, year: c.year(), day: c.day(), stats, things }, moved);
   posted = now; owed = false;
 }
 
@@ -110,7 +78,7 @@ function tick(): void {
     }
     stepped += made;
     owed ||= made > 0;
-    if (owed && (fineDue || performance.now() - posted >= FRAME_MS)) postFrame('frame');
+    if (owed && performance.now() - posted >= FRAME_MS) postFrame('frame');
   } catch (e) {
     playing = false;
     host.postMessage({ kind: 'error', text: `The world stopped: ${String(e)}` }, []);
@@ -134,24 +102,23 @@ host.onmessage = async e => {
     } else if (m.cmd === 'new' && core) {
       start(false);
       if (core.new_world(m.seed, m.size) !== 0) throw new Error('The world was refused.');
-      due = 0; thingsAt = null; fineAt = null; stepped = pace = 0;
+      due = 0; thingsAt = null; stepped = pace = 0;
       postFrame('world');
     } else if (m.cmd === 'play') {
-      // A pause shows the state it stopped at: its frame, and a raster of the window made now.
+      // A pause shows the state it stopped at.
       const was = playing;
       start(m.on);
-      if (was && !playing) { fineDue = fineAt !== null; postFrame('frame'); }
+      if (was && !playing) postFrame('frame');
     }
     else if (m.cmd === 'rate') rate = m.rate;
     else if (m.cmd === 'things' && core) {
       thingsAt = m.at;
       if (!playing) postFrame('frame');
-    } else if (m.cmd === 'fine' && core) {
-      fineAt = m.at; fineDue = fineAt !== null;
-      if (!playing && fineDue) postFrame('frame');
     }
   } catch (err) {
     host.postMessage({ kind: 'error', text: String(err) }, []);
   }
 };
 
+
+export {};

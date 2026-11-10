@@ -1,4 +1,6 @@
 // Reader for the EWF2 tape: gzip( "EWF2" | u32 json_len | json | frames of u8 layers ), as tape/src/rec/ewf.rs writes it.
+import type { TileMeta } from './ground';
+import type { Laws } from './land';
 
 export interface Layer { name: string; unit: string; scale: 'lin' | 'log' | 'raw'; min: number; max: number }
 export interface Meta {
@@ -6,8 +8,11 @@ export interface Meta {
   /** A globe: rows run pole to pole, columns wrap east to west; rows are evenly spread from lat_north to lat_south (degrees). */
   globe: boolean; lat_north: number; lat_south: number;
   layers: Layer[];
-  /** The live world only: the depth of a square below its air block. */
+  /** The live world only: the depth of a square below its air block, the ground's tiles and the numbers of the laws inside
+   * a cell (land.ts). */
   square_depth?: number;
+  tiles?: TileMeta;
+  laws?: Laws;
   frames: { day: number; year: number }[];
   /** One value a year per column; null where the tape wrote NaN (none that year). */
   series: Record<string, (number | null)[]>;
