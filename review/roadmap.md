@@ -395,3 +395,13 @@ What stage 0 showed, for the tracks:
 - The fine picture still takes 0.3 to 0.7 s to make and comes 1 to 3 s after a zoom; while the world plays it shows a
   state some years old. Making fewer layers saved a tenth only: the cost is the window itself. Track A removes it.
 - Trees stand in the sea at the 50 m view, as before.
+
+**Track A, the map from tiles (A1, A2): done.** The ground is made in tiles (height, wetness index, channels) by a
+second worker and kept; the world's worker posts the cells' table and makes no picture; the card applies the laws
+inside a cell per pixel. A tile not made yet shows its parent. The cover's marks are masked at their foot: none in
+liquid, none under snow. The window finer than the cells is deleted. Months a second at the 200 m and 50 m views:
+24 and 22 before, 36 and 37 after; while panning at the 50 m view a coarser picture showed 84% of the time before,
+never after.
+
+Open on track A: the tiles' memory on the card (104 MB) and the time a tile takes (a zoomed view is complete about
+5 s after the last wheel step); channels drawn as dark lines; tapes keep the map of squares; seasons blended (A3).

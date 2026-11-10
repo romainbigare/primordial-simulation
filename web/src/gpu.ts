@@ -49,8 +49,8 @@ export interface Gpu {
   readonly kind: 'WebGPU' | 'WebGL2';
   /** A texture of `w` x `h` texels of `format`, `layers` deep with `mips` levels; `target`: it can be drawn into. */
   texture(w: number, h: number, format: Format, layers?: number, mips?: number, target?: boolean): Texture;
-  /** Fill mip level `level` of texture `t` (all its layers, layer after layer, rows top first). */
-  write(t: Texture, data: Uint8Array | Float32Array, level?: number): void;
+  /** Fill mip level `level` of texture `t` (all its layers, layer after layer, rows top first; or layer `layer` alone). */
+  write(t: Texture, data: Uint8Array | Float32Array, level?: number, layer?: number): void;
   drop(t: Texture): void;
   /** Draw into `target` (null: the canvas, sized to its pixels), first filling it with `clear` (r, g, b, a, 0..1) if given,
    * and only inside `clip` (x, y, w, h px from its top-left corner) if given. */

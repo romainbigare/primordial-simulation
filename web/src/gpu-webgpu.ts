@@ -44,9 +44,10 @@ class WebGpu implements Gpu {
     return new WebGpuTexture(w, h, layers, mips, format, tex, tex.createView({ dimension: layers > 1 ? '2d-array' : '2d' }));
   }
 
-  write(t: Texture, data: Uint8Array | Float32Array, level = 0): void {
+  write(t: Texture, data: Uint8Array | Float32Array, level = 0, layer?: number): void {
     const w = Math.max(1, t.w >> level), h = Math.max(1, t.h >> level);
-    this.device.queue.writeTexture({ texture: (t as WebGpuTexture).tex, mipLevel: level }, data as Uint8Array<ArrayBuffer>, { bytesPerRow: w * TEXEL_BYTES[t.format], rowsPerImage: h }, [w, h, t.layers]);
+    const origin = [0, 0, layer ?? 0], layers = layer === undefined ? t.layers : 1;
+    this.device.queue.writeTexture({ texture: (t as WebGpuTexture).tex, mipLevel: level, origin }, data as Uint8Array<ArrayBuffer>, { bytesPerRow: w * TEXEL_BYTES[t.format], rowsPerImage: h }, [w, h, layers]);
   }
 
   drop(t: Texture): void { (t as WebGpuTexture).tex.destroy(); }

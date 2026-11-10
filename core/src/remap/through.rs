@@ -13,7 +13,7 @@ impl World {
     /// The liquid each quarter of cell `i` (its leaf `l`) passes on, mol/s, row by row, as the terrain's channels lead
     /// the cell's own through them.
     pub(super) fn split_flux(&self, i: usize, l: Leaf) -> [f64; 4] {
-        let (s, lat) = (self.drained(), (self.cfg.lat_south, self.cfg.lat_north));
+        let (s, lat) = (self.terrain_samples(), (self.cfg.lat_south, self.cfg.lat_north));
         let per = self.liquid_flux[i] as f64 / s.leaving(&self.map, lat, l, l);
         l.quarters().map(|q| per * s.leaving(&self.map, lat, q, q))
     }
@@ -21,7 +21,7 @@ impl World {
     /// The liquid the join of cells `kids` (the quarters of leaf `l`, row by row) passes on, mol/s: what leaves `l` of
     /// what each passes on, as the terrain's channels lead it.
     pub(super) fn join_flux(&self, kids: [usize; 4], l: Leaf) -> f64 {
-        let (s, lat, q) = (self.drained(), (self.cfg.lat_south, self.cfg.lat_north), l.quarters());
+        let (s, lat, q) = (self.terrain_samples(), (self.cfg.lat_south, self.cfg.lat_north), l.quarters());
         sum4(std::array::from_fn(|k| self.liquid_flux[kids[k]] as f64 / s.leaving(&self.map, lat, q[k], q[k]) * s.leaving(&self.map, lat, q[k], l)))
     }
 }

@@ -76,7 +76,7 @@ impl Terrain {
         if let Some(s) = known(&self.kept.0.lock().expect("the kept samples")) {
             return s;
         }
-        let found = Arc::new(self.drained(seed, map, lat));
+        let found = Arc::new(self.worn(seed, map, lat));
         let mut kept = self.kept.0.lock().expect("the kept samples");
         known(&kept).unwrap_or_else(|| {
             *kept = Some(found.clone());
@@ -106,7 +106,7 @@ impl Terrain {
     /// samples of the wear's finest grid (`wear::finest`), worn (`space::wear`) with the open low ground held; then the
     /// flood over them from all the open low ground, the closed basins too shallow to hold a pond graded (`ponds::grade`), the area that drains through each
     /// sample, the ponds and the variance below each.
-    fn drained(&self, seed: u64, map: &Square, (south, north): (f64, f64)) -> Samples {
+    fn worn(&self, seed: u64, map: &Square, (south, north): (f64, f64)) -> Samples {
         let per = 1usize << (SAMPLE_DEPTH - map.square_depth());
         let (across, down) = (map.w * per, map.h * per);
         let side = BLOCK >> SAMPLE_DEPTH;

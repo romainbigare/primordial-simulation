@@ -7,7 +7,7 @@
 
 mod shares;
 
-pub use shares::{Inside, Means};
+pub use shares::{soil_held, soil_level, Inside, Means};
 
 use crate::math::{central, spread_down};
 use crate::space::tree::DEPTH_MOST;
@@ -83,7 +83,7 @@ impl World {
     }
 
     /// The terrain's worn samples of this world (`Terrain::samples`), which the ground inside each cell reads.
-    pub fn drained(&self) -> std::sync::Arc<crate::space::samples::Samples> {
+    pub fn terrain_samples(&self) -> std::sync::Arc<crate::space::samples::Samples> {
         self.terrain.samples(self.terrain.seed, &self.map, (self.cfg.lat_south, self.cfg.lat_north))
     }
 

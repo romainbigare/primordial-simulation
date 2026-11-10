@@ -422,7 +422,7 @@ fn a_new_cell_takes_a_serial_never_given_again() {
 fn the_terrains_channels_run_down_and_what_leaves_a_leaf_leaves_its_quarters() {
     use pcore::space::network::NONE;
     let w = worldgen::testkit::small_world();
-    let (s, lat) = (w.drained(), (w.cfg.lat_south, w.cfg.lat_north));
+    let (s, lat) = (w.terrain_samples(), (w.cfg.lat_south, w.cfg.lat_north));
     let mut own = s.up.clone();
     for (k, &j) in s.to.iter().enumerate().filter(|p| *p.1 != NONE) {
         assert!(s.h[j as usize] <= s.h[k] || s.pond[k] != NONE, "sample {k} runs down");

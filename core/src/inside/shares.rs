@@ -53,10 +53,26 @@ impl Inside {
 /// index over the index's level, within none and its pores full, the level such that the mean is the cell's (found by
 /// halving). Ground with no liquid in its pores, or with its pores full, shares it evenly.
 fn soil(g: &Ground, ph: &Physics, twi: &[f64], m: Means) -> Vec<f64> {
-    if m.pore <= 0.0 || m.pore >= m.pores {
-        return vec![1.0; twi.len()];
+    match soil_level(ph, twi, &g.area, m) {
+        Some(c) => g.share(twi.iter().map(|&t| soil_held(ph, m, t, c)).collect()),
+        None => vec![1.0; twi.len()],
     }
-    let held = |c: f64| twi.iter().map(|t| (m.pore + ph.soil_m * (t - c)).clamp(0.0, m.pores)).collect::<Vec<f64>>();
+}
+
+/// The liquid a point of wetness index `t` holds in a soil of means `m` whose index's level is `c` (`soil_level`), as a
+/// depth, m: the mean's, departed by `soil_m` per unit of the index over the level, within none and the pores full.
+pub fn soil_held(ph: &Physics, m: Means, t: f64, c: f64) -> f64 {
+    (m.pore + ph.soil_m * (t - c)).clamp(0.0, m.pores)
+}
+
+/// The level of the wetness index about which the liquid in a soil of means `m` departs at points of index `twi` and
+/// shares of the area `area` (summing to 1), such that the mean by area of what they hold (`soil_held`) is the mean's
+/// (found by halving); none where the pores hold no liquid or are full (it lies evenly).
+pub fn soil_level(ph: &Physics, twi: &[f64], area: &[f64], m: Means) -> Option<f64> {
+    if m.pore <= 0.0 || m.pore >= m.pores {
+        return None;
+    }
+    let mean = |c: f64| twi.iter().map(|&t| soil_held(ph, m, t, c)).zip(area).map(|(v, a)| v * a).sum::<f64>();
     let (lo, hi) = twi.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &t| (a.min(t), b.max(t)));
     let (mut lo, mut hi) = (lo - m.pores / ph.soil_m, hi + m.pore / ph.soil_m);
     for _ in 0..HALVINGS {
@@ -64,7 +80,7 @@ fn soil(g: &Ground, ph: &Physics, twi: &[f64], m: Means) -> Vec<f64> {
         if mid <= lo || mid >= hi {
             break;
         }
-        if g.mean(&held(mid)) > m.pore { lo = mid } else { hi = mid }
+        if mean(mid) > m.pore { lo = mid } else { hi = mid }
     }
-    g.share(held(0.5 * (lo + hi)))
+    Some(0.5 * (lo + hi))
 }

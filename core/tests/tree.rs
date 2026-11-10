@@ -104,7 +104,7 @@ fn a_split_then_its_join_gives_back_the_world() {
 #[test]
 fn a_split_leads_what_its_cell_passes_on_and_its_join_gives_it_back() {
     let mut w = world();
-    let (s, lat, flux) = (w.drained(), (w.cfg.lat_south, w.cfg.lat_north), 1e5);
+    let (s, lat, flux) = (w.terrain_samples(), (w.cfg.lat_south, w.cfg.lat_north), 1e5);
     let mut l = leaf(&w, testkit::dry_land(&w));
     while l.depth < SAMPLE_DEPTH + 2 {
         let i = w.map.cell(l).expect("a cell");

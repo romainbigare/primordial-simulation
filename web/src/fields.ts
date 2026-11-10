@@ -1,7 +1,6 @@
-// The fields of a window of the map that the GPU draws from (web/shaders/lib/earth.wgsl): the page makes those of the
-// map's squares from a frame (earth.ts `mapFields`), the worker those of a window finer than its cells (fine.ts
-// `fineFields`). A field is a texture of four channels; a new one is a line of `FIELD_TEXTURES`, its channels filled by
-// both makers, and its binding read in the shader.
+// The fields of the map's squares that the GPU draws a tape's map from (web/shaders/lib/earth.wgsl): the page makes them
+// from a frame (earth.ts `mapFields`). A field is a texture of four channels; a new one is a line of `FIELD_TEXTURES`,
+// its channels filled by `mapFields`, and its binding read in the shader.
 
 /** The fields of a window, `w` x `h` texels row by row from its top-left corner, and how they are read. */
 export interface Fields {
@@ -14,7 +13,7 @@ export interface Fields {
   matter: Float32Array;
   /** Four bytes a texel: the byte of the plant cover's mass (the `plants` layer) and the true colour (r, g, b). */
   bytes: Uint8Array;
-  /** Four floats a texel: how wet the ground is, 0..1 (the `wet` layer, or inside a window tape/src/fine/inside.rs); the
+  /** Four floats a texel: how wet the ground is, 0..1 (the `wet` layer); the
    * depth of the river through it, m; the share of the ground the plant cover leaves bare (e^-area, its capture area
    * per m² the `leaf` layer); one unused. */
   inside: Float32Array;
@@ -41,6 +40,3 @@ export const FIELD_TEXTURES = [
 export function put4(f: Float32Array | Uint8Array, i: number, a: number, b: number, c: number, d: number): void {
   f[4 * i] = a; f[4 * i + 1] = b; f[4 * i + 2] = c; f[4 * i + 3] = d;
 }
-
-/** The buffers of `f`, to hand them from the worker to the page. */
-export const fieldBuffers = (f: Fields): ArrayBuffer[] => [f.height.buffer, f.matter.buffer, f.bytes.buffer, f.inside.buffer, f.layers.buffer] as ArrayBuffer[];

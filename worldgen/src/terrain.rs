@@ -101,9 +101,15 @@ pub fn new_map(seed: u64, map: Square) -> World {
 /// A new island from a seed, its low ground away from land in coarse cells (`coarse_low`): terrain, chemistry 0, ground,
 /// liquid and air. One terrain, so its worn samples are found once.
 pub fn new_world(seed: u64, w: usize, h: usize) -> World {
-    let (terrain, (chem, init)) = (Terrain::new(seed, ISLAND_LEVEL), chemistry0());
-    let map = coarse_low(seed, island(w, h), &terrain);
+    let ((squares, terrain), (chem, init)) = (island_ground(seed, w, h), chemistry0());
+    let map = coarse_low(seed, squares, &terrain);
     build_on(seed, map, terrain, (chem, &init), Config::default())
+}
+
+/// The ground of the island of `w × h` squares `new_world` makes from `seed`: the map of its squares and its terrain
+/// (how its cells are cut does not change the ground).
+pub fn island_ground(seed: u64, w: usize, h: usize) -> (Square, Terrain) {
+    (island(w, h), Terrain::new(seed, ISLAND_LEVEL))
 }
 
 /// `map` (of squares) with its low ground away from land in coarse cells (`coarsen`): an air block whose squares all
