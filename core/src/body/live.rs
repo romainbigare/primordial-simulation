@@ -299,12 +299,11 @@ fn check_stores(w: &World, d: &mut Chunk, b: &mut Body, (stands, days): (f64, f6
     if b.wet_ks().any(|s| t > chem.subs[subs[s]].boil) {
         return Err(PHASE);
     }
-    // Its members' microclimates spread over `frost_k` around the temperature it stands at: below the melting point the
-    // share (melt - T) / `frost_k` of them freezes in a month, as far as they are active (a dormant body holds little
-    // free liquid); over the time a share per month that composes, 1 - (1 - that)^(t / month), so a cold spell kills
-    // alike in one update or in many (`Span::share64`).
+    // Its members' microclimates spread around the temperature it stands at: below the melting point (lowered by its
+    // dormancy) the share of them that freezes in a month (`Physics::frozen`); over the time a share per month that
+    // composes, 1 - (1 - that)^(t / month), so a cold spell kills alike in one update or in many (`Span::share64`).
     let act = b.activity(chem, &w.cfg.phys);
-    let frozen = |s: usize| ((chem.subs[subs[s]].melt - stands) / w.cfg.phys.frost_k).clamp(0.0, 1.0) * act;
+    let frozen = |s: usize| w.cfg.phys.frozen(chem.subs[subs[s]].melt, stands, act);
     let f = w.cfg.span(days).share64(b.wet_ks().map(frozen).fold(0.0, f64::max));
     if f > 0.0 {
         if f >= 1.0 - 1e-9 || !lose_share(w, d, b, f, PHASE, tmp) {

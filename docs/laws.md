@@ -1143,8 +1143,8 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   `FROST`) / `c_firm` for a cover that stands the cold), plus `c_leaf` per m² of capture area; times its repair factor
   (`Physics::repair`), its activity and the burning's pace at T (seasons come from temperature only). The share unpaid
   dies (`SPENT`). **Wear**: the share 1 − e^−wear dies (`AGE`), wear its upkeep at an activity of at least `dormant`
-  over (living cover × `e_life` × 10^`REPAIR`), as bodies wear (6.7). **Frost**: below its `FROST` gene the share min(1, (`FROST` − T) / `frost_k`) × a
-  dies (`PHASE`).
+  over (living cover × `e_life` × 10^`REPAIR`), as bodies wear (6.7). **Frost**: below its `FROST` gene, lowered by its dormancy (`Physics::harden` × (1 − a)), the share
+  min(1, (limit − T) / `frost_k`) dies (`PHASE`), active or not.
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
   out as kinds build, tallest first) build body matter and walls (10^`WALLS` kg per kg of matter) by the conversions of growth (`Chemistry::build`,
   `builds`), paying `c_copy` per kg by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
@@ -1435,10 +1435,13 @@ allowance: a dry body pays almost nothing and can hardly act; it wears at an act
 so a dormant body lives about 50 times its active life, as dry seeds and spores do. **Frost** (`live::check_stores`): its members
 stand in microclimates that spread over `frost_k` (3 K) around the temperature T its heat holds it at over its ground
 (6.3), so below a key liquid's melting point
-the share f = min(1, (melt − T) / `frost_k`) × a freezes and dies (`PHASE`) in a month, a share that composes: over
+the share f = min(1, (limit − T) / `frost_k`) freezes and dies (`PHASE`) in a month, the limit the melting point
+lowered by the body's dormancy, `Physics::harden` × (1 − a) (cold hardening: tissue that stops its chemistry in
+the cold stands a lower lethal temperature, Levitt 1980; Sakai and Larcher 1987); one law for bodies and cover
+(`Physics::frozen`). f is a share that composes: over
 the t its sub-step integrates 1 − (1 − f)^(t / month) (`Span::share64`), so a cold spell kills alike in one sub-step
 or in many; an individual dies with that chance. A dormant body
-(little free liquid) lives through frost, as seeds and spores do; the cover freezes by the same law below its `FROST`
+(little free liquid) lives through frosts down to its hardened limit; the cover freezes by the same law below its `FROST`
 gene (4.5). **Boiling** kills.
 
 ### 6.6 Growth

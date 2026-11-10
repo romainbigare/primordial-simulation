@@ -483,14 +483,16 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// Frost kills in proportion to the cold and to activity, per unit of time (laws.md 6.5): a node of 10,000 resting
-/// eaters with no fuel to keep warm, on ground half `frost_k` below its key liquid's melting point, loses over its
-/// update of a month, in its sub-steps, the share (melt - T) / `frost_k` (each sub-step 1 - (1 - that)^(its days /
-/// month)), T the temperature it stands at (its ground's: it keeps no warmth, in a bare coat), about half; the same
-/// node half dry (its activity a) loses a times that share. Both live, and matter and energy are kept.
+/// Frost kills in proportion to the cold below a limit that dormancy lowers, per unit of time (laws.md 6.5): a node of
+/// 10,000 resting eaters with no fuel to keep warm, on ground half `frost_k` below its key liquid's melting point, loses
+/// over its update of a month, in its sub-steps, the share (limit - T) / `frost_k` (each sub-step 1 - (1 - that)^(its
+/// days / month)), T the temperature it stands at (its ground's: it keeps no warmth, in a bare coat), about half; the
+/// same node half dry (its activity a) has the limit lowered by `harden` × (1 - a): on ground half `frost_k` below
+/// that limit it loses about half, and on the ground that kills the wet node, above that limit, it loses none. All
+/// live, and matter and energy are kept.
 #[test]
-fn frost_kills_in_proportion_to_activity() {
-    let lost = |dry: bool| {
+fn frost_kills_below_the_limit_that_dormancy_lowers() {
+    let lost = |dry: bool, hardened: bool| {
         let (mut w, s) = resting(290.0);
         let mut b = std::mem::take(&mut w.life[s]);
         let fuel = kg(&w, &b, RICH);
@@ -508,8 +510,9 @@ fn frost_kills_in_proportion_to_activity() {
         let mut b = node_of(&mut w, b, 10_000.0);
         b.prepare(&w.chem, &w.cfg);
         let a = b.activity(&w.chem, &w.cfg.phys);
-        // It starts at the ground's temperature.
-        let t = w.chem.subs[LIQUID].melt - 0.5 * w.cfg.phys.frost_k;
+        // It starts at the ground's temperature, half `frost_k` below its limit, or below the melting point.
+        let limit = w.chem.subs[LIQUID].melt - if hardened { w.cfg.phys.harden * (1.0 - a) } else { 0.0 };
+        let t = limit - 0.5 * w.cfg.phys.frost_k;
         warm(&mut w, &mut b, t);
         w.life[s] = b;
         let (books, n0) = (Books::now(&w), w.life[s].count);
@@ -518,9 +521,10 @@ fn frost_kills_in_proportion_to_activity() {
         (1.0 - b.count / n0, a)
     };
     // (Its first update integrates the month ahead.)
-    let ((wet, a_wet), (dry, a_dry)) = (lost(false), lost(true));
-    println!("lost {wet:.4} a month wet (activity {a_wet:.3}), {dry:.4} half dry (activity {a_dry:.3})");
+    let ((wet, a_wet), (dry, a_dry), (safe, _)) = (lost(false, false), lost(true, true), lost(true, false));
+    println!("lost {wet:.4} a month wet (activity {a_wet:.3}), {dry:.4} half dry (activity {a_dry:.3}) below its hardened limit, {safe:.4} above it");
     assert!(a_wet > 0.999 && a_dry < 0.9, "activities {a_wet} and {a_dry}");
-    assert!((0.45..=0.5).contains(&wet), "the wet node lost {wet} a month, against a ramp of 0.5 at the ground's temperature");
-    assert!((dry / wet / a_dry - 1.0).abs() < 0.1, "the dry node lost {dry} against {wet} x {a_dry}");
+    assert!((wet - 0.5).abs() < 1e-9, "the wet node lost {wet} a month, against a ramp of 0.5 at the ground's temperature");
+    assert!((dry - 0.5).abs() < 1e-9, "the dry node lost {dry} a month, against a ramp of 0.5 below its hardened limit");
+    assert!(safe < 1e-6, "the dry node lost {safe} a month above its hardened limit");
 }

@@ -104,6 +104,8 @@ pub struct Physics {
     pub t_cat: f64,
     /// Spread of a cell's microclimate: below a freezing point the frozen share of a body's or the cover's members grows from 0 to 1 over this, K
     pub frost_k: f64,
+    /// Depth to which dormancy lowers the lethal temperature of living tissue (cold hardening), K
+    pub harden: f64,
     /// K of the cover's frost tolerance below its key liquid's melting point that add its light capacity's upkeep again
     pub c_firm: f64,
     /// Upkeep of strength, J per kg of body per day at strength 1
@@ -325,6 +327,12 @@ impl Physics {
     pub fn wetness(&self, depth: f64) -> f64 {
         depth / (depth + self.wet_depth)
     }
+    /// The share of members that freeze in a month at `t` K when their lethal limit is `limit` K at full activity `act`
+    /// = 1: dormancy hardens them, lowering the limit by `harden` × (1 - `act`), and their microclimates spread over
+    /// `frost_k` below it (laws.md 6.5).
+    pub fn frozen(&self, limit: f64, t: f64, act: f64) -> f64 {
+        ((limit - self.harden * (1.0 - act) - t) / self.frost_k).clamp(0.0, 1.0)
+    }
     /// The activity of a living thing that holds the share `x` of the liquid it keeps: x^`dormancy`, 1 at or above it.
     pub fn activity(&self, x: f64) -> f64 {
         if x >= 1.0 { 1.0 } else { x.max(0.0).powf(self.dormancy) }
@@ -342,6 +350,7 @@ impl Default for Physics {
             soil_m: 0.03,
             t_cat: T_SURF,
             frost_k: 3.0,
+            harden: 20.0,
             c_firm: 20.0,
             c_strength: 1.12e4,
             c_basal: 4.22e4,
@@ -455,6 +464,8 @@ impl Config {
         // The bed and the skin of its top are layers of matter: a thickness of zero would give a node no heat capacity.
         require(p.h_mix > 0.0 && p.thermocline >= 0.0, || format!("h_mix ({}) must be above 0 and thermocline ({}) not below", p.h_mix, p.thermocline))?;
         require(self.skin_m > 0.0 && p.bed_depth > 0.0, || format!("skin_m ({}) and bed_depth ({}) must be above 0", self.skin_m, p.bed_depth))?;
+        // Hardening lowers a lethal limit, never raises it.
+        require(p.harden >= 0.0 && p.harden.is_finite(), || format!("harden ({}) must be at least 0", p.harden))?;
         // A body's surface and the still air at it give its bare conductance (`Body::bare`): both above 0; a coat adds
         // insulation, never less than none.
         let (meeh, air, coat, film, wet) = (p.meeh, p.r_air, p.r_coat, p.r_liquid, p.wet_coat);
