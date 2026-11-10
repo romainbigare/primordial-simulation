@@ -38,7 +38,8 @@ the Earth view, the true colour and the layer views, one rule for a tape's map o
 with the light on the slopes. Water is water (`web/shaders/lib/water.wgsl`): a flat surface, its bed seen through it
 and fading with depth as water absorbs red light most and blue least (Beer–Lambert), into the dark blue of deep water;
 a little of the sky reflects from it and the sun glints on small ripples fixed in the world, which fade out as they
-shrink below a few pixels. A sea, a lake and a river are the same water, a river as deep as its discharge makes it.
+shrink below a few pixels. A sea, a lake and a river are the same water, a river as deep as its discharge makes it and turbid with what it
+carries.
 The ground goes from dry to wet continuously: soaked bare ground is darker (to half as bright), wet by how wet the core
 says it is and by the capillary fringe over the liquid's surface (wet to e^-1 half a metre over it), so a flat shore
 is a wide wet band and a steep one a thin line; near soaked, a film of liquid shines on it as mud, and at the
@@ -68,9 +69,18 @@ where the pixel is warmer than its melting point; liquid stands where the ground
 lowest ground lies under the surface of the pixel's own cell (so the sea is flat and a cell's liquid is not drawn over
 the lower ground beside it); the soil's liquid departs from its cell's by `soil_m` per unit of the wetness index over
 the cell's level, within none and the pores full, as the core shares it; a channel shows where the pixel lies nearer
-its centre line than half the width the channel law gives its discharge (its drained area times the cells' flux per
-m² drained), its share of the pixel what the pixel's footprint covers, its bed a parabola cut into the ground (its
-banks catch the light) of washed sand and gravel, the water deepest at its middle. A slope turned away from the sun is
+its line than half the width the channel law gives the discharge of its own sample (the core's `World::discharge`,
+which comes with a frame when it has changed enough to show), its share of the pixel what the pixel's footprint
+covers. Its line winds between the samples' centres by a law: a bend every 11 widths (Leopold and Wolman 1960), where
+the valley's slope is low and within the valley's floor, none where it is steep (Montgomery and Buffington 1997). Its
+bed is a parabola cut into the ground, as deep at its middle as its mean depth makes it (its banks catch the light),
+so where it runs into a lake or the sea their water takes it over at the same depth; over it runs water that carries
+what it wears and washes, turbid as inland water is (1 to 4 per m, Kirk 1994), over a bed of washed sand and gravel
+under a film of algae: a brook shows its stones, a river a metre deep is dark water. The ground beside it is wet by
+the capillary fringe over its water. From afar no channel whose discharge matters at that zoom is thinner than a line
+of about a css pixel: one shows as a line once it passes 6.4e-3 m³/s for each metre a css pixel takes (the drained
+area that shows grows with the zoom, so the whole island shows its main rivers, a closer view their larger branches,
+and none a mesh of rills), wider as its discharge grows. A slope turned away from the sun is
 lit by the sky alone, the less the steeper (an even sky, Liu and Jordan 1963), so shaded ground and snow keep their
 shape. Nothing depends on the view or a tile, so a
 place has the same colour after any pan or zoom. The stats line gives the tiles kept, their size and how many in view

@@ -59,25 +59,37 @@ things, neither recorded. **The ground's tiles** (`tape::Ground`, `tape/src/grou
 makes each once and keeps it: a tile of a depth holds 256 x 256 texels (`TILE`), each a leaf of that depth, and 2 more
 along each edge (`GUTTER`), row by row from its north-west corner, as 16-bit floats (IEEE binary16, little-endian) in two
 planes: first four a texel (the height as the sum of two, the nearest 16-bit float and what it lacks, so it holds to a
-millimetre: a shore is the difference of two heights; the wetness index, to 0.01; the channel's ratio), then one (the
-logarithm of the channel's area, to under 1%: a width to 0.4%), 10 bytes a texel. The depths
+millimetre: a shore is the difference of two heights; the wetness index, to 0.01; the distance to the line of the
+texel's channel, m, signed by its side), then two (that channel's sample, and the pond), 10 bytes a texel. The depths
 go from the finest at which one tile holds the whole map to the first whose texels are no longer than 1 m
 (`tape::depths`). Per texel: the terrain's mean height over it (`Terrain::heights`, so a texel is the mean of its four
 children); the wetness index of the place, ln(a / tan β) (Beven and Kirkby 1979) of the terrain's samples (a the area
 that drains through a sample, `Samples::up`, over its width, β the slope of the samples' ground, `Grid::slope`),
 blended between the centres of the four samples about a texel finer than them and the mean of those a coarser one
-covers; and of the channel nearest it by the channel law, the distance d to its centre line over its drained area a to
-the power b of a channel's width in its discharge (`Physics::channel`), over the cap w0 x `MOST_RUNOFF`^b / 2 (at most
-1: no channel covers the texel at any flux), and that area, m². `MOST_RUNOFF` (3.6e-6 m/s, about the wettest month
-known, 9.3 m of rain at Cherrapunji in July 1861) bounds what a m² drained passes on, so a channel is drawn into the
-texels within its reach only (the cap times a^b; most are far narrower than a texel). A channel is drawn as each
-sample's way (`Samples::to`) as a curve from the middle of the way into it (from its neighbour upstream that the most
-drains through, `Samples::main`) to the middle of its own, bent at its centre (a quadratic Bézier), and on to the curve
-through the next sample where a tributary joins; of the channels that reach a texel it keeps the one whose d / a^b is
-least, the one that covers it first as the flux grows (a channel covers a point nearer its line than half its width,
-which goes as (flux per m² drained x area)^b). That least, capped, is continuous across the texels, so a shader blends
-it. Off the map a texel is its edge's. Each number is a function of the seed, the map and the place
-alone: the same in every tile that holds it. The second plane holds, beside the channel's area, one more than the pond
+covers; and its channel (`tape/src/ground/channels.rs`). A channel is drawn as each sample's way (`Samples::to`) as a
+curve from the middle of the way into it (from its neighbour upstream that the most drains through, `Samples::main`)
+to the middle of its own, bent at its centre (a quadratic Bézier), and on to the middle of the next sample's line where
+a tributary joins; a sink of the open low ground that liquid runs into ends the curve at its centre, under the low
+ground's liquid. The line winds about that curve (`tape/src/ground/bends.rs`): a sine whose wavelength is 11 channel
+widths and whose half amplitude 1.35 widths (Leopold and Wolman 1960), full where the valley's slope to the next sample
+is under 0.01, none over 0.03 (pool-riffle reaches meander, step-pool ones do not: Montgomery and Buffington 1997;
+Schumm 1985), and no wider than the valley's floor: the channel's depth over the rise of the ground across the valley
+(the two samples square to its way). A tile is made once, so the width and the depth that set the bends are stand-ins:
+the channel law's at the drained area times `TYPICAL_RUNOFF` (8.5e-9 m/s, Earth's mean: 0.27 m a year, Dai and
+Trenberth 2002). The phase of the bends runs on along each main way from its head, so the line has no break from
+sample to sample; at a joint both pieces take the smaller amplitude. A tile draws the bends where their wavelength is
+8 texels or more, and none under 4 (between they grow): shorter, they move the line by less than a texel. Each
+channel reaches as far as it could be wide, w0 × (`MOST_RUNOFF` a)^b / 2 (`MOST_RUNOFF` 3.6e-6 m/s, about the wettest
+month known, 9.3 m of rain at Cherrapunji in July 1861; a the drained area, w0 and b the width law of
+`Physics::channel`), and one a shell may draw as a line wider than itself (its drained area at least `SHOW_M` times
+the texel's size over 40) 2.5 texels too. Of the channels within reach, a texel keeps the one whose distance over the
+larger of its reach and the texel's size is least (the one that covers it first as the flux grows, or, where all are
+narrower than a texel, the nearest), but a tributary takes no texel in the water of the channel it joins (within that
+channel's half width at 10 × `TYPICAL_RUNOFF` of its line, near the join). It keeps that channel's distance, signed by
+the side (60,000 where none reaches), and its sample, as the step from the sample that holds the texel's centre
+(1 + (dx + 21) + 43 (dy + 21); 0 for none), whole numbers a 16-bit float holds exactly. A shell finds the sample
+again from the texel's centre, floor((x + 1/2) k) for a texel k samples a side, stepped by it. Off the map a texel is
+its edge's. Each number is a function of the seed, the map and the place alone: the same in every tile that holds it. The second plane holds, beside the channel's sample, one more than the pond
 each texel lies in (`Ground::pond_tile`: the pond of the sample that holds its centre, or where that is none, of the
 first of its eight neighbours whose pass the texel lies under, so a pond's shore is where the ground rises over its
 level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
@@ -86,9 +98,7 @@ its centre: the terrain's mean height over the cell, m; its ground's temperature
 height, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest ground, m
 (`flow::levels`), and the depth that stands, m; the liquid in its pores and what they hold full, m (`flow::means`), and
 the level of the wetness index its soil's liquid departs about (`inside::soil_level` over the samples inside the cell;
-0 where the pores are dry or full); the volume of liquid that runs through its main channel per m² drained there, m/s
-(the discharge of the sample of the cell through which the most runs, `World::discharge`, over the area that drains
-through that sample, at the mol per m³ of its liquid). Before Flow built its state the level and
+0 where the pores are dry or full). Before Flow built its state the level and
 lowest ground are its solid surface and the depth that stands is its liquid's. Then for each square row by row its
 cell's kinds of cover (`tape/src/stands.rs`), `KINDS` (4) of `KIND_ROW` (16) f32 each, the heaviest first: the slots of
 one starting kind joined, their genes the mean by built cover; of each its starting kind (-1: none); its built cover,
@@ -100,7 +110,13 @@ and the share of it frozen this month (`Physics::frozen`). Its plants come from 
 share 1 - e^(-leaf area / `CLOSE_LAI`) of the ground, in patches where they close; there the stand has thinned to
 (`THIN_KG` / kg per m²)² plants a m² (Yoda and others 1963), each crown the ground it holds; a plant's walls make a stem
 of `STEM_FORM` and `STEM_SOLID` at the walls' density, as tall as `TALL` × its width^(2/3) (McMahon 1973). Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it),
-at which the page draws the pond's liquid flat over the ground that lies under it, the pond each texel names. The page's graphics card blends the table between the
+at which the page draws the pond's liquid flat over the ground that lies under it, the pond each texel names. **The
+samples' discharge** (`Table::discharge`): what runs through each of the terrain's samples, m³/s, row by row (its
+`World::discharge` at the mol per m³ of the liquid its cell's ground holds; none where that holds no liquid). The
+live page gets it as 16-bit floats with a frame when one sample's has changed by a tenth since it was last sent
+(`wasm/src/lib.rs` `DISCHARGE_SHOWS`: its width by 5%), 2 bytes a sample (248 kB for a 22 island, 2 MB for a 64 one;
+with most frames, as a month's flow changes that much somewhere), and sizes each channel by the channel law from
+its own sample's discharge. The page's graphics card blends the table between the
 squares' centres and applies the laws inside a cell at each pixel of the tiles' ground (laws.md 0, "Inside a cell"). A tape's map is drawn
 from its frames alone: the page makes fields of the squares (`web/src/fields.ts`, a texel a square: the height and its
 slope, the liquid's surface over the ground, below a dry square's ground by the depth it lacks to be wet and its height

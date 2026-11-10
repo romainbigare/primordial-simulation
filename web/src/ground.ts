@@ -9,9 +9,9 @@ import { Gpu, Texture } from './gpu';
 import type { View } from './map';
 
 /** The tiles of the ground as the core makes them (wasm/src/lib.rs `meta`): texels a side inside the gutter, texels of
- * the gutter along each edge, the depths from the coarsest to the finest, the most liquid a m² drained passes on, m/s
- * (their channels' cap), and numbers of a row of the cells' table. */
-export interface TileMeta { size: number; gutter: number; depths: [number, number]; runoff: number; row: number; kinds: number; kind_row: number }
+ * the gutter along each edge, the depths from the coarsest to the finest, the most steps along each axis by which a
+ * texel names its channel's sample, and numbers of a row of the cells' table. */
+export interface TileMeta { size: number; gutter: number; depths: [number, number]; step_most: number; row: number; kinds: number; kind_row: number }
 /** The map the tiles are of: squares across and down, metres a square and the depth of a square. */
 export interface MapOf { w: number; h: number; cell_m: number; square_depth: number }
 
@@ -19,8 +19,9 @@ export interface MapOf { w: number; h: number; cell_m: number; square_depth: num
  * above (a tile spans 256 to 512 css pixels, `TEXEL_CSS_PX`), and the coarsest; the rest is room for a pan. Each takes
  * 676 kB on the card (10 bytes a texel), so 56 take 38 MB. */
 const MOST_TILES = 56;
-/** Of a tile, 16-bit floats a texel: the first plane four (the height as two, the wetness index, the channel's ratio),
- * the second two (the logarithm of the channel's area, and one more than the pond the texel lies in, 0: none). */
+/** Of a tile, 16-bit floats a texel: the first plane four (the height as two, the wetness index, the signed distance to
+ * its channel's line), the second two (that channel's sample, as its step from the texel's own, and one more than the
+ * pond the texel lies in; 0: none). */
 const PLANE_A = 4, PLANE_B = 2;
 /** A new tile fades in over the one before it over this long, ms. */
 export const TILE_FADE_MS = 250;
