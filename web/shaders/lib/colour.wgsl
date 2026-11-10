@@ -106,8 +106,18 @@ fn soaked(p: Spot) -> f32 { return 1.0 - (1.0 - p.wet) * (1.0 - exp(-p.over / FR
 // Ground g soaked to s, lit by `lit` (its shade's multiplier): its bare part the darker the more soaked.
 fn soil(g: Ground, s: f32, lit: f32) -> vec3f { return g.rgb * (1.0 - WET_DARK * s * g.bare) * lit; }
 
+// The light on ground of slope `slope` (as drawn) that the sun lights `x` times as much as flat ground, over the light
+// on flat ground: no more than `LIT_MOST`, and no less than the sky's light on it, `SKY_LIGHT` of the light on flat
+// ground times the share of the sky the slope sees, (1 + cos slope) / 2 (an even sky, Liu and Jordan 1963). So a slope
+// turned away from the sun is lit by the sky alone, the less the steeper, and still shows its shape.
+const SKY_LIGHT = 0.5; const LIT_MOST = 1.45;
+fn light(x: f32, slope: f32) -> f32 {
+  let steep = EXAGGERATE * slope;
+  return clamp(x, SKY_LIGHT * 0.5 * (1.0 + 1.0 / sqrt(1.0 + steep * steep)), LIT_MOST);
+}
+
 fn colour(p: Spot) -> Shaded {
-  let lit = clamp(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), 0.5, 1.45);
+  let lit = light(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), p.slope);
   // Under the liquid: its bed, soaked and without snow (frozen liquid lies on the surface, calm), seen through it,
   // flat: at no depth it is the soaked ground with its film of liquid.
   if (p.depth > 0.0) {
@@ -131,8 +141,9 @@ fn colour(p: Spot) -> Shaded {
   let ripple = ripples(p.at, p.e);
   rgb += film * surface_light(ripple * film);
   var kind = g.kind;
-  // A river: its water over its own bare bed.
-  if (river > 0.0) { rgb = mix(rgb, water_over(soil(ground_of(p, 0.0, 0.0), 1.0, lit), p.river_depth, ripple), river); }
+  // A river: its water over its own bed. Running water carries the fine soil away: its bed is washed sand and gravel,
+  // soaked.
+  if (river > 0.0) { rgb = mix(rgb, water_over(SAND * (1.0 - WET_DARK) * lit, p.river_depth, ripple), river); }
   if (river > 0.5) { kind = RIVER; }
   return Shaded(rgb, lit, kind);
 }
