@@ -364,12 +364,16 @@ graphics card with its two back ends, the water's colour by depth, the marks fix
 7. The mass of plants means two things in the two cover fields (with and without stored fuel).
 8. Water from upstream enters a split cell at "the lowest sample of the highest side", not where the network says.
 
-## 9. Choices for the owner
+## 9. The owner's decisions
 
-1. **Fixed cells for the natural world: yes or no?** Stage 0 shows the cost of the other way in numbers. I advise yes.
-2. **Delete the tree of cells now, or keep it until animals are back?** I advise: off now, decide at stage E.
-3. **May the ground be state** (a grid kept in the world, changed by erosion), not a function of the seed alone? Track
-   B needs a yes.
-4. **How much of plants' variety should come from the model?** C1 and C2 show what the model holds. C3 changes the
-   model.
-5. **Seasons at high speed:** blend from month to month, or show the year's mean above some speed?
+1. **Fixed cells for the natural world: yes.** Three layers, each at its own cost: the slow physics on fixed cells;
+   the ground, the rivers and the lakes on the fixed grid of samples; the fine picture per pixel on the graphics card.
+   The cells can be made smaller everywhere once the core is faster.
+2. **The tree of cells: off now** in the live page. The core keeps it until stage E.
+3. **The ground is state: yes.**
+4. **Plants' variety:** a balance of speed and of an interesting picture. First draw what the model holds (C1, C2);
+   change the model (C3) only as far as the picture still needs.
+5. **Seasons at high speed:** blend from month to month; above 36 months a second show the year's mean.
+
+How the work runs: at most two work streams side by side; the fewest tests that state a law; every run without
+animals; pictures before and after each fix; `main` moves forward after each stage that passes the gate.
