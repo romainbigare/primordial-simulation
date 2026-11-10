@@ -83,9 +83,9 @@ steepest of the sample and its eight neighbours, S² ℓ² / 16 at each depth (a
 that of flat ground tilted at S), and the displacement's whole series Σ G² ℓ² / 16 (`variance_below`), each times 4/3,
 as the lean carries the slope each depth draws on to every depth below it (Σ 1/4ⁿ). A leaf below holds its parent's V
 less the variance its quarters' means take about the parent's, shared among the four by what each will need (the
-variance its own lean takes and the displacement's at its size); no split takes more than its leaf holds (the lean and
-the draws shrink to fit, where the ground bends more than its sample's neighbours do: rare), so the account is exact
-at every depth. On the 64 x 64 island the noise's G is up to about 0.05 on high
+variance its own lean takes and the displacement's at its size), so the account is exact at every depth but where the
+ground bends more than its sample's neighbours do and a split's departures take more than its leaf holds: they are
+drawn whole, so the ground has no steps, and the leaf holds none below (its relief is then less than its ground's). On the 64 x 64 island the noise's G is up to about 0.05 on high
 land, real ground's 0.09 at 62 m and 0.13 at 8 m; on a globe of 64 rows the noise's is about 1e-4 and real ground's 0.03 at 10 km
 and 0.08 at 76 m, so its streets are rough. What needs the cell at a
 point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
