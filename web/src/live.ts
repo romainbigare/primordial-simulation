@@ -47,7 +47,7 @@ export class Live {
   rate(monthsPerSecond: number): void { this.worker.postMessage({ cmd: 'rate', rate: monthsPerSecond }); }
   /** Ask with every frame for the things of a window (x, y, w, h in squares) to draw one by one, or for none. */
   things(at: [number, number, number, number] | null): void { this.worker.postMessage({ cmd: 'things', at }); }
-  /** Ask for the fields of a window finer than its cells, at once and then about once a second while the world plays, or for none. */
+  /** Ask for the fields of a window finer than its cells, at once and then again while the world plays (worker.ts `FINE_MS`, `FINE_REST`), or for none. */
   fine(at: FineAt | null): void { this.worker.postMessage({ cmd: 'fine', at }); }
   stop(): void { this.worker.terminate(); URL.revokeObjectURL(this.url); }
 }

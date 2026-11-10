@@ -36,8 +36,12 @@ const TICK_MS = 50;
 const GAP_MS = 4;
 /** Real time the pace of the world is measured over, ms. */
 const PACE_MS = 1000;
-/** Real time between two fine rasters of the same window while the world plays, ms (a new window gets one at once). */
+/** Real time between two fine rasters of the same window while the world plays, at least, ms (a new window gets one at
+ * once). */
 const FINE_MS = 1000;
+/** Of an unchanged window the next raster comes no sooner than this many times the time the last one took after it, so
+ * the rasters take at most about a tenth of the worker's time and the world steps the rest. */
+const FINE_REST = 9;
 
 const host = self as unknown as { postMessage(m: unknown, transfer: Transferable[]): void; onmessage: ((e: MessageEvent<Command>) => void) | null };
 let core: Core | null = null;
@@ -50,8 +54,9 @@ let lastTick = 0;
 let timer = 0;
 /** The window (x, y, w, h in squares) whose things the page draws one by one (null: none). */
 let thingsAt: [number, number, number, number] | null = null;
-/** The window the page draws finer than its cells (null: none), whether it waits for its raster, and when the last was made (ms). */
-let fineAt: FineAt | null = null, fineDue = false, fineLast = 0;
+/** The window the page draws finer than its cells (null: none), whether it waits for its raster, when the last was
+ * made and how long it took, ms. */
+let fineAt: FineAt | null = null, fineDue = false, fineLast = 0, fineTook = 0;
 /** The world's header. */
 let meta: Meta | null = null;
 /** The months stepped since `since` (ms), and the pace measured over the last whole second, months per second. */
@@ -73,12 +78,13 @@ function postFrame(kind: 'world' | 'frame'): void {
   const frame = bytes(c.frame(), c.out_len());
   const things = thingsAt ? bytes(c.things(...thingsAt), c.out_len()) : null;
   let now = performance.now(), win: FineWindow | null = null;
-  if (fineAt && (fineDue || now - fineLast >= FINE_MS)) {
+  if (fineAt && (fineDue || now - fineLast >= Math.max(FINE_MS, FINE_REST * fineTook))) {
     const layers = meta!.layers.reduce((bits, l, k) => (fineAt!.layers.includes(l.name) ? bits | (1 << k) : bits), 0) >>> 0;
     const data = bytes(c.fine(fineAt.x, fineAt.y, fineAt.w, fineAt.h, fineAt.depth, layers), c.out_len());
     const made = performance.now() - now, f = readFine(meta!, fineAt, data);
     const fields = fineFields(f, meta!, wetOf(makeWorld(meta!, frame, 0), 0));
     win = { at: fineAt, fields, made, fieldsMs: performance.now() - now - made, cover: fineCover(f) };
+    fineTook = performance.now() - now;
     now = fineLast = performance.now(); fineDue = false;
   }
   if (now - since >= PACE_MS) { pace = (stepped * 1000) / (now - since); stepped = 0; since = now; }
