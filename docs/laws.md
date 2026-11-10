@@ -961,8 +961,9 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   cell by cell in the order made (the potential energy of the life that left a cell's head and came to it is booked
   once for each cell and way, `store::life_sent`): they join the most alike slot of their starting kind in the cell (every gene
   within `APART` (0.5) × `alike` steps, `cover::distance`; the genes the mean by built cover; they die if that slot is
-  full), else an empty slot, else the lightest slot if they outweigh its built cover (whose cover dies as remains);
-  else they die as remains. So a variant farther than that from its kind founds a slot of its own and competes with
+  full), else an empty slot; where none is empty, the two most alike slots of one starting kind join to make one
+  (`seed::room`), so a kind new to a cell can take hold beside another's variants; else the lightest slot if they
+  outweigh its built cover (whose cover dies as remains); else they die as remains. So a variant farther than that from its kind founds a slot of its own and competes with
   the others for light by height. Slots of a cell within the same distance share one (`merge_alike`). Selection is
   between slots and cells: what grows better sends more seeds (the frost gene falls where winters are cold,
   `core/tests/cover.rs`).

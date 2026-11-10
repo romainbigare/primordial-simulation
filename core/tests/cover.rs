@@ -160,6 +160,26 @@ fn seeds_join_their_kind_or_found_a_slot() {
     books.assert_kept(&w, 1e-9);
 }
 
+/// A kind new to a cell takes hold where four variants of another kind hold every slot (`seed::lodge`): the two most
+/// alike of them join to make room, and the cover keeps its mass.
+#[test]
+fn a_new_kind_enters_a_full_cell() {
+    let (mut w, i) = start();
+    let (g, step) = (genes(), cover::RANGE[FROST].0);
+    for k in 0..cover::SLOTS {
+        let mut v = g;
+        v[FROST] -= 3.0 * step * k as f32;
+        assert!(cover::place(&mut w, i, v, 0, 0.1));
+    }
+    let before: f64 = slots_of(&w, i).iter().map(|s| s.1).sum();
+    assert_eq!(slots_of(&w, i).len(), cover::SLOTS, "four variants hold every slot");
+    assert!(cover::place(&mut w, i, g, 1, 0.01), "seeds of a second kind find no room");
+    let c = w.life.cover(i);
+    assert_eq!(c.held().filter(|&x| c.root[x] == 1).count(), 1, "the new kind holds a slot");
+    let after: f64 = slots_of(&w, i).iter().map(|s| s.1).sum();
+    assert!(after > before, "the joined variants lost cover: {before} kg, then {after} kg");
+}
+
 /// The frost gene of the cover moves down where winters kill (laws.md 4.5): two variants of the starting cover, of
 /// frost genes `FROST_GENES` (3 steps, 15 K, apart), sown on every land cell of one island from the tropics to the
 /// cold (`FROST_WORLD_LAT`), compete for 60 years. Where the ground's winter falls below a gene's lethal limit
