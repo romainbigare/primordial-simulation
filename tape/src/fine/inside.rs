@@ -44,7 +44,7 @@ pub(super) fn wetness_index(w: &World, win: &Window, ground: &[f64]) -> Vec<f64>
 /// (`inside::Inside`), here over the window's pixels and across the cells' borders.
 fn soil(w: &World, cells: &Cells, shown: &Shown, twi: &[f64]) -> Vec<f64> {
     let middle = twi.iter().sum::<f64>() / twi.len() as f64;
-    let all = |_| true;
+    let all = |_, _| true;
     let pore: Vec<f64> = shown.means.iter().map(|m| m.pore).collect();
     let (level, pores) = (cells.even(&pore, all), cells.even(&shown.means.iter().map(|m| m.pores).collect::<Vec<f64>>(), all));
     let m = w.cfg.phys.soil_m;
@@ -103,7 +103,7 @@ pub(super) fn cover(w: &World, cells: &Cells, shown: &Shown, wet: &[f64]) -> Vec
         let act: Vec<f64> = (0..pixels).map(|p| pcore::cover::activity(ph, &genes[cells.of()[p] as usize].unwrap_or(any), wet[p])).collect();
         let idle: Vec<bool> = (0..shown.cells.len()).map(|s| cells.mean(s, |p| act[p]) <= 0.0).collect();
         let target: Vec<f64> = shown.cells.iter().map(|&i| built[i]).collect();
-        let smooth = cells.even(&target, |_| true);
+        let smooth = cells.even(&target, |_, _| true);
         let start = (0..pixels).map(|p| smooth[p] * if idle[cells.of()[p] as usize] { 1.0 } else { act[p] }).collect();
         let field = cells.keep(start, &target, Mean::Scaled);
         for (s, &i) in shown.cells.iter().enumerate() {

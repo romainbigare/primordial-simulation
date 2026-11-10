@@ -47,14 +47,17 @@ impl Shown {
 }
 
 /// The level of the liquid standing over each pixel, m, NaN where none stands: the levels of the cells that hold liquid
-/// standing (the core's, `flow::levels`, the levels its liquid moves by) evened over such cells across their borders
-/// (`Cells::even`; so within half a cell of one), where it lies over the ground drawn `ground`. The core holds the cells of one lake at
-/// levels that differ by centimetres to decimetres, as its liquid's pass leaves them: the surface drawn goes from one to
-/// the next over the width of the cells, not in a step at each border. A body at one level (the sea's) is drawn flat.
+/// standing (the core's, `flow::levels`, the levels its liquid moves by) evened across their borders (`Cells::even`; so
+/// within half a cell of one), where it lies over the ground drawn `ground`. The core holds the cells of one lake at
+/// levels that differ by centimetres to decimetres: the surface drawn goes from one to the next over the width of the
+/// cells, not in a step at each border. A body at one level (the sea's) is drawn flat. A cell's liquid is evened over
+/// the pixels of another cell only where its own lowest ground lies under that cell's surface (its level, or its lowest
+/// ground where none stands): liquid over ground that lies wholly above a cell's surface runs down into it and does not
+/// stand over it, so the liquid of a cell on a slope is not drawn over the lower ground beside it.
 fn standing(w: &World, shown: &Shown, cells: &keep::Cells, ground: &[f64]) -> Vec<f64> {
-    let own: Vec<f64> = pcore::flow::levels(w, &shown.cells).map_or_else(|| vec![f64::NAN; shown.cells.len()], |l| l.iter().map(|l| l[1]).collect());
-    let wet = |c: usize| shown.means[c].stands > 0.0;
-    let even = cells.even(&own, wet);
+    let levels = pcore::flow::levels(w, &shown.cells).unwrap_or_else(|| vec![[f64::NAN; 2]; shown.cells.len()]);
+    let own: Vec<f64> = levels.iter().map(|l| l[1]).collect();
+    let even = cells.even(&own, |c, k| shown.means[k].stands > 0.0 && levels[k][0] < own[c]);
     (0..ground.len()).map(|p| if even[p] > ground[p] { even[p] } else { f64::NAN }).collect()
 }
 
@@ -96,7 +99,7 @@ pub fn fine(w: &World, samples: &mut Samples, [x, y, wide, high]: [f64; 4], dept
     out.extend(ground.iter().map(|&g| g as f32).chain(water.map(|v| v as f32)).chain(share).chain(deep).flat_map(|v| v.to_le_bytes()));
     let held = |v: &[f64], law: &dyn Fn(usize, f64) -> f64, how: keep::Mean| {
         let target: Vec<f64> = shown.cells.iter().map(|&i| v[i]).collect();
-        let smooth = cells.even(&target, |_| true);
+        let smooth = cells.even(&target, |_, _| true);
         cells.keep((0..pixels).map(|p| law(p, smooth[p])).collect(), &target, how)
     };
     for l in LAYERS.iter() {
