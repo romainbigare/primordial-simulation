@@ -79,7 +79,9 @@ through the next sample where a tributary joins; of the channels of the samples 
 distance over area^b is least, the one that covers it first as the flux grows (a channel covers a point nearer its
 line than half its width, which goes as (flux per m² drained x area)^b). That least is continuous across the texels,
 so a shader blends it. Off the map a texel is its edge's. Each number is a function of the seed, the map and the place
-alone: the same in every tile that holds it. **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
+alone: the same in every tile that holds it. Apart, `Ground::pond_tile` lays out over the same texels the pond each lies
+in (`Samples::pond` of the sample that holds its centre; u32, `u32::MAX` for none) and `Ground::ponds` gives each pond's
+level, so a pond can be drawn flat at its own level (the page does not read them yet). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
 frame: the melting point of the frozen cover, K, then for each square row by row 12 f32 (`ROW`) of the cell that holds
 its centre: the terrain's mean height over the cell, m; its ground's temperature, K, and how fast its air cools with
 height, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest ground, m
