@@ -48,7 +48,7 @@ struct Tiled { h: f32, slope: vec2f, twi: f32, ratio: f32, ratio_slope: vec2f, a
 
 // The ground of layer `layer` at `at`, m from the map's north-west corner, blended between the texels' centres; with
 // `spline`, its height and slope through them as a Catmull-Rom spline (so light on a slope drawn over many pixels a
-// texel shows no creases).
+// texel shows no creases) and its channel's area (none without).
 fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   let t = textureLoad(tile_of, vec2i(layer, 0), 0);
   let texel = land.map.x / exp2(t.x - land.map.w);
@@ -66,8 +66,9 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   let bottom = mix(c01, c11, f.x);
   let o = mix(top, bottom, f.y);
   let ratio_slope = vec2f(mix(c10.w - c00.w, c11.w - c01.w, f.y), bottom.w - top.w) / texel;
+  // Without the spline (a mark's foot) the channel's area is not read: what reads it draws the channel.
+  if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, o.w, ratio_slope, 0.0); }
   let area = exp(mix(mix(textureLoad(areas, a, layer, 0).x, textureLoad(areas, vec2i(b.x, a.y), layer, 0).x, f.x), mix(textureLoad(areas, vec2i(a.x, b.y), layer, 0).x, textureLoad(areas, b, layer, 0).x, f.x), f.y));
-  if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, o.w, ratio_slope, area); }
   let f2 = f * f;
   let f3 = f2 * f;
   // The weights of the texels from i - 1 to i + 2 along each axis, and their slopes.

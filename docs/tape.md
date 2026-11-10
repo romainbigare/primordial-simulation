@@ -68,7 +68,7 @@ makes each once and keeps it: a tile of a depth holds 256 x 256 texels (`TILE`),
 along each edge (`GUTTER`), row by row from its north-west corner, as 16-bit floats (IEEE binary16, little-endian) in two
 planes: first four a texel (the height as the sum of two, the nearest 16-bit float and what it lacks, so it holds to a
 millimetre: a shore is the difference of two heights; the wetness index, to 0.01; the channel's ratio), then one (the
-logarithm of the channel's area, to 0.1%: a width to 0.05%), 10 bytes a texel. The depths
+logarithm of the channel's area, to under 1%: a width to 0.4%), 10 bytes a texel. The depths
 go from the finest at which one tile holds the whole map to the first whose texels are no longer than 1 m
 (`tape::depths`). Per texel: the terrain's mean height over it (`Terrain::heights`, so a texel is the mean of its four
 children); the wetness index of the place, ln(a / tan β) (Beven and Kirkby 1979) of the terrain's samples (a the area
