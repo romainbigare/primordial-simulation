@@ -45,8 +45,8 @@ pub const SHOW_M: f64 = 7.5e5;
 /// A channel's discharge per m² drained is at most about this many times `TYPICAL_RUNOFF` on a year's mean: the wettest
 /// lands pass on 2 to 3 m a year (the Amazon's basin passes on about 1 m).
 const WET_TIMES: f64 = 10.0;
-/// The most screen pixels a texel takes: two css pixels (`web/src/ground.ts` `TEXEL_CSS_PX`) of a screen of two pixels a
-/// css pixel.
+/// The most screen pixels a texel takes: a page draws a view at the depth whose texels take a pixel (`web/src/ground.ts`
+/// `TEXEL_PX`), or coarser where that asks too many tiles: a texel takes at most about 4.
 const TEXEL_PX_MOST: f64 = 4.0;
 /// A tile holds no channel narrower than this share of a texel at `MOST_RUNOFF` that is not held as a line: it would
 /// cover no more than this share of the texel's pixels.

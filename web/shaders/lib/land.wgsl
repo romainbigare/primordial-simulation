@@ -57,8 +57,10 @@ const BED_MIDDLE = 1.5;
 // What a point's ground holds: its height, m, its slope east and south, its wetness index, and the distance to its
 // channel's line, m, its slope east and south; the samples of the channels of the texel nearest it and of the one
 // across from that (-1: none) and the least distances of those texels to their lines, m (from their nearest
-// points); and the pond it lies in (-1: none).
-struct Tiled { h: f32, slope: vec2f, twi: f32, d: f32, d_slope: vec2f, channels: vec4i, ends: vec2f, pond: i32 }
+// points); and the highest level of the ponds of the four texels about it, m (`-NO_LIQUID_M`: none), and the share of
+// the point's weight on those of them in a pond: its liquid stands at that level over the ground drawn, so a shore
+// runs smooth between the texels where the ground crosses the level.
+struct Tiled { h: f32, slope: vec2f, twi: f32, d: f32, d_slope: vec2f, channels: vec4i, ends: vec2f, water: vec2f }
 
 // The sample texel `n` of the tile of depth `depth` at column and row `tile` names by `code` (tape/src/ground/channels.rs
 // `code`): the sample that holds the texel's centre, stepped along each axis; none (-1) for 0.
@@ -101,17 +103,22 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   let sy = mix(sd.z, sd.w, f.x);
   let signed = mix(sx, sy, f.y);
   let d_slope = sign(signed) * vec2f(mix(sd.y - sd.x, sd.w - sd.z, f.y), sy - sx) / texel;
-  // The pond of the texel nearest the point: a pond's edge is a texel's, which a finer tile draws finer. The channels'
-  // samples of that texel and of the one across the four from it: where a tributary's line runs into the water of the
-  // channel it joins, its texels lie between that channel's (`discharge_at`).
-  let n = clamp(i + vec2i(f > vec2f(0.5)), vec2i(0), vec2i(last));
-  let m = clamp(i + vec2i(f <= vec2f(0.5)), vec2i(0), vec2i(last));
-  let near = textureLoad(areas, n, layer, 0);
-  let channels = vec4i(sample_of(n, t.x, t.yz, i32(near.x + 0.5)), sample_of(m, t.x, t.yz, i32(textureLoad(areas, m, layer, 0).x + 0.5)));
+  // The channels' samples of the texel nearest the point and of the one across the four from it: where a tributary's
+  // line runs into the water of the channel it joins, its texels lie between that channel's (`discharge_at`).
+  let a4 = array<vec4f, 4>(textureLoad(areas, a, layer, 0), textureLoad(areas, vec2i(b.x, a.y), layer, 0), textureLoad(areas, vec2i(a.x, b.y), layer, 0), textureLoad(areas, b, layer, 0));
+  let at4 = array<vec2i, 4>(a, vec2i(b.x, a.y), vec2i(a.x, b.y), b);
   let corner = select(0, 1, f.x > 0.5) + select(0, 2, f.y > 0.5);
+  let channels = vec4i(sample_of(at4[corner], t.x, t.yz, i32(a4[corner].x + 0.5)), sample_of(at4[3 - corner], t.x, t.yz, i32(a4[3 - corner].x + 0.5)));
   let ends = max(abs(vec2f(raw[corner], raw[3 - corner])) - HALF_DIAGONAL * texel, vec2f(0.0));
-  let pond = i32(near.y + 0.5) - 1;
-  if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, abs(signed), d_slope, channels, ends, pond); }
+  // The ponds the four texels lie in: their highest level, and the share of the point's weight on them.
+  let ponds = vec4i(i32(a4[0].y + 0.5), i32(a4[1].y + 0.5), i32(a4[2].y + 0.5), i32(a4[3].y + 0.5)) - 1;
+  var levels = vec4f(-NO_LIQUID_M);
+  if (all(ponds == vec4i(ponds.x))) { levels = vec4f(pond_level(ponds.x)); }
+  else { levels = vec4f(pond_level(ponds.x), pond_level(ponds.y), pond_level(ponds.z), pond_level(ponds.w)); }
+  let bilinear = vec4f((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+  let wet = select(vec4f(0.0), vec4f(1.0), ponds >= vec4i(0));
+  let water = vec2f(max(max(levels.x, levels.y), max(levels.z, levels.w)), dot(bilinear, wet));
+  if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, abs(signed), d_slope, channels, ends, water); }
   let f2 = f * f;
   let f3 = f2 * f;
   // The weights of the texels from i - 1 to i + 2 along each axis, and their slopes.
@@ -125,7 +132,7 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
       h += v * vec3f(w[x].x * w[y].y, dw[x].x * w[y].y, w[x].x * dw[y].y);
     }
   }
-  return Tiled(h.x, h.yz / texel, o.z, abs(signed), d_slope, channels, ends, pond);
+  return Tiled(h.x, h.yz / texel, o.z, abs(signed), d_slope, channels, ends, water);
 }
 
 // What runs through sample `s` (-1: none), m³/s.
@@ -158,7 +165,7 @@ fn bed_at(g: Tiled, q: f32) -> Bed {
 }
 
 // The level of pond `p` (-1: none), m: from the rows of the table under its planes, four ponds a texel; far below
-// any ground for none (no body holds it).
+// any ground for none (no body holds it, or the texel lies in no pond).
 fn pond_level(p: i32) -> f32 {
   if (p < 0) { return -NO_LIQUID_M; }
   let w = i32(land.map.y);
@@ -193,14 +200,14 @@ fn ground_at(at: vec2f, spline: bool) -> Tiled {
   let size = vec2i(textureDimensions(pages));
   let page = textureLoad(pages, clamp(vec2i(floor(at / span)), vec2i(0), size - 1), 0);
   if (page.x < 0.0) {
-    return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, NO_LIQUID_M, vec2f(0.0), vec4i(-1), vec2f(NO_LIQUID_M), -1);
+    return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, NO_LIQUID_M, vec2f(0.0), vec4i(-1), vec2f(NO_LIQUID_M), vec2f(-NO_LIQUID_M, 0.0));
   }
   let shown = read_tile(i32(page.x), at, spline);
   let came = textureLoad(tile_of, vec2i(i32(page.x), 0), 0).w;
   let w = clamp((land.time.x - came) / land.time.y, 0.0, 1.0);
   if (w >= 1.0 || page.y < 0.0) { return shown; }
   let under = read_tile(i32(page.y), at, spline);
-  return Tiled(mix(under.h, shown.h, w), mix(under.slope, shown.slope, w), mix(under.twi, shown.twi, w), mix(under.d, shown.d, w), mix(under.d_slope, shown.d_slope, w), shown.channels, shown.ends, shown.pond);
+  return Tiled(mix(under.h, shown.h, w), mix(under.slope, shown.slope, w), mix(under.twi, shown.twi, w), mix(under.d, shown.d, w), mix(under.d_slope, shown.d_slope, w), shown.channels, shown.ends, mix(under.water, shown.water, w));
 }
 
 // The liquid in the soil at a point of wetness index `twi` of a cell whose pores hold `pore` m and `pores` m full, its
@@ -234,9 +241,8 @@ struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, mean: f32 }
 // point.
 fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
   let ground = blended(GROUND, cs);
-  // The liquid standing over the point: its pond's, flat at the pond's level over the ground under it (laws.md 1.2).
+  // The liquid standing over the point: its ponds', flat at their levels over the ground under it (laws.md 1.2).
   // The soil's liquid of each cell about it at the point's wetness index, and each one's mean liquid, blended.
-  let level = pond_level(g.pond);
   var held = 0.0;
   var mean = 0.0;
   for (var k = 0; k < 4; k++) {
@@ -246,9 +252,11 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
     mean += cs.w[k] * (l.w + l.z);
   }
   var p: State;
-  if (g.pond >= 0) {
-    p.depth = max(level - (g.h - cut), 0.0);
-    p.over = min(max(g.h - cut - level, 0.0), NO_LIQUID_M);
+  if (g.water.x > -NO_LIQUID_M && g.water.y > 0.0) {
+    // Over the ponds' level, the height counts the more the less of the point is theirs, so a shore's fringe fades out
+    // within a texel of the pond's last texel.
+    p.depth = max(g.water.x - (g.h - cut), 0.0);
+    p.over = min(max(g.h - cut - g.water.x, 0.0) / g.water.y, NO_LIQUID_M);
   } else {
     p.depth = 0.0;
     p.over = NO_LIQUID_M;

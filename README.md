@@ -57,17 +57,15 @@ below a metre), the wetness index of the place and the channel nearest it, as 16
 height to a millimetre). Workers of their own, each with its own copy of the core, make them (`web/src/tiles-worker.ts`;
 two where the browser has more than four cores, else one), so the world never waits for a picture; the page keeps at
 most 56 on the graphics card (38 MB) and no copy of its own (after a lost context it asks for them again), and asks for
-those about the view, at the depth whose texels take no more than two css pixels, at the depth above and at the
-coarsest, coarse before fine and nearest its middle first (`web/src/ground.ts`); a request that left the view is
+those about the view, at the depth whose texels take no more than a pixel of the screen (a depth coarser while that
+would touch more than 30 tiles), at the depth above and at the coarsest, coarse before fine and nearest its middle first (`web/src/ground.ts`); a request that left the view is
 dropped, and the tiles drawn least lately go first. A tile not made yet is drawn from its nearest ancestor, stretched: the picture is soft for
 a moment, never the squares; a new tile fades in over it in a quarter of a second. **The cells' table**
 (`tape::Table`) comes with each world frame: a row a square of what the laws inside a cell read. At each pixel the card
 blends the table between the squares' centres and applies the laws inside a cell there: the ground's temperature is
 its cell's less the air's fall with height times the pixel's height over the cell's mean; the frozen cover covers the
 ground as its mean depth does (tanh of the depth over 8 mm of ice, about 3 cm of snow, Yang and others 1997), less
-where the pixel is warmer than its melting point; liquid stands where the ground lies under the level of the cells about it, counting a cell only where its
-lowest ground lies under the surface of the pixel's own cell (so the sea is flat and a cell's liquid is not drawn over
-the lower ground beside it); the soil's liquid departs from its cell's by `soil_m` per unit of the wetness index over
+where the pixel is warmer than its melting point; liquid stands at the level of the ponds of the texels about the pixel where the ground drawn lies under it, so a shore runs smooth between the texels; the soil's liquid departs from its cell's by `soil_m` per unit of the wetness index over
 the cell's level, within none and the pores full, as the core shares it; a channel shows where the pixel lies nearer
 its line than half the width the channel law gives the discharge of its own sample (the core's `World::discharge`,
 which comes with a frame when it has changed enough to show), its share of the pixel what the pixel's footprint
