@@ -1296,7 +1296,10 @@ read a kind.
   rectangle of air blocks in squares (`--fine`), by the same rule. A cell's height is the terrain's mean over it
   (`Terrain::inside`, on the worn samples, 0), whatever its size.
 - **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS` rows of `Place::Field`: kg per m² and genes,
-  on every open land cell by its chance), then eaters 20 years later; `--roster` places ten kinds (`ROSTER`). Founders
+  on every open land cell by its chance), then eaters 20 years later; `--roster` places thirteen kinds (`ROSTER`), six of
+  them cover: a herb, a small fast herb, a big slow cover with walls, the same of wet ground (fully active only near
+  saturation, more capacity), a woody cover of dry ground (active at a tenth of saturation, thick leaves, slow) and a
+  tall fast cover with seeds spread wide. Founders
   are adults on land under at most half a metre of liquid; mass 30% fuel (60% for the two big slow eater kinds).
 - **Brains**: eaters start with hand-set biases (`Seeding::hand`; `--neutral-eaters` without), since neutral founders
   die before they learn: they take from the place, its ground and its cover (1), before they bite a body (0.5), and keep

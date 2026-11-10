@@ -20,7 +20,7 @@ pub const USAGE: &str = "usage:
     --months              also write months.csv, a row a month
     --monthly-years N     a viewer frame every month in the first N years (2)
     --life-year N         the year life starts: soil, then the kinds (2; -1: no life)
-    --roster              the ten kinds of worldgen::life::ROSTER, each at its year after the first life, not the two
+    --roster              the thirteen kinds of worldgen::life::ROSTER, each at its year after the first life, not the two
     --plants              only the cover of those kinds: no animals
     --spray N             rounds of mutation of every founder (20)
     --fixers X            share of the starting light-eaters that carry the fixing gene (0.1)
