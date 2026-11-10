@@ -5,7 +5,7 @@ use pcore::body::{PHASE, TAKEN};
 use pcore::cover::{self, FROST};
 use pcore::event::EventKind;
 use worldgen::life::{Place, KINDS};
-use worldgen::testkit::{dry_lands, eater, small_world, Books, LIQUID};
+use worldgen::testkit::{dry_lands, eater, small_world, Books};
 
 /// Latitudes of the south and north edges of the frost test's island, degrees: it reaches from the tropics to the cold,
 /// so its air brings every band the heat of the lower latitudes, as a real place gets.
@@ -15,9 +15,11 @@ const WARM_BAND: [f64; 2] = [20.0, 30.0];
 const COLD_BAND: [f64; 2] = [50.0, 60.0];
 /// The fewest land cells a band holds.
 const BAND_CELLS: usize = 5;
-/// The two frost genes of the selection test, K: above the key liquid's melting point (273 K), so the cover is active
-/// (its ground's liquid is liquid) where winters fall below the higher one, and a winter can kill it.
-const FROST_GENES: [f32; 2] = [285.0, 270.0];
+/// The two frost genes of the selection test, K, three steps (15 K) apart: the tender one above the key liquid's melting
+/// point (273 K), so its cover is still active (its ground's liquid liquid) when a winter's ground falls below it and
+/// frost can kill it before dormancy hardens it, and below the warm band's coldest ground, so the warm band's winters
+/// spare it (the test asserts both).
+const FROST_GENES: [f32; 2] = [276.0, 261.0];
 
 /// The genes of the starting cover (kind 0).
 fn genes() -> [f32; cover::NG] {
@@ -160,13 +162,34 @@ fn seeds_join_their_kind_or_found_a_slot() {
     books.assert_kept(&w, 1e-9);
 }
 
+/// A kind new to a cell takes hold where four variants of another kind hold every slot (`seed::lodge`): the two most
+/// alike of them join to make room, and the cover keeps its mass.
+#[test]
+fn a_new_kind_enters_a_full_cell() {
+    let (mut w, i) = start();
+    let (g, step) = (genes(), cover::RANGE[FROST].0);
+    for k in 0..cover::SLOTS {
+        let mut v = g;
+        v[FROST] -= 3.0 * step * k as f32;
+        assert!(cover::place(&mut w, i, v, 0, 0.1));
+    }
+    let before: f64 = slots_of(&w, i).iter().map(|s| s.1).sum();
+    assert_eq!(slots_of(&w, i).len(), cover::SLOTS, "four variants hold every slot");
+    assert!(cover::place(&mut w, i, g, 1, 0.01), "seeds of a second kind find no room");
+    let c = w.life.cover(i);
+    assert_eq!(c.held().filter(|&x| c.root[x] == 1).count(), 1, "the new kind holds a slot");
+    let after: f64 = slots_of(&w, i).iter().map(|s| s.1).sum();
+    assert!(after > before, "the joined variants lost cover: {before} kg, then {after} kg");
+}
+
 /// The frost gene of the cover moves down where winters kill (laws.md 4.5): two variants of the starting cover, of
 /// frost genes `FROST_GENES` (3 steps, 15 K, apart), sown on every land cell of one island from the tropics to the
 /// cold (`FROST_WORLD_LAT`), compete for 60 years. Where the ground's winter falls below a gene's lethal limit
 /// (lowered by dormancy, 6.5), frost kills the cover of that gene (4.5), and the lower one (dearer to keep: `c_firm`)
 /// wins; where it does not, the higher one wins. The cover's mean frost gene (by built cover) ends more than a step
-/// lower in the cold band (`COLD_BAND`) than in the warm band (`WARM_BAND`). The cold band must have ground below the
-/// liquid's melting point in winter, which the test asserts, so the scene never silently loses its cold.
+/// lower in the cold band (`COLD_BAND`) than in the warm band (`WARM_BAND`). The scene's premises are asserted, so a
+/// later ground that breaks them says so: the frost law (dormancy's hardening included) kills some of the tender kind in
+/// the cold band's winters and none in the warm band's.
 #[test]
 #[ignore = "slow: a 60-year run of a 16 x 16 world"]
 fn the_frost_gene_falls_where_winters_are_cold() {
@@ -186,14 +209,25 @@ fn the_frost_gene_falls_where_winters_are_cold() {
     let (warm, cold) = (band(WARM_BAND), band(COLD_BAND));
     assert!(warm.len() >= BAND_CELLS && cold.len() >= BAND_CELLS, "land cells in the bands: {} warm, {} cold", warm.len(), cold.len());
     let coldest = |w: &pcore::World, cells: &[usize]| cells.iter().map(|&i| w.t_ground_last(i)).fold(f64::MAX, f64::min);
-    let (mut warm_winter, mut cold_winter) = (f64::MAX, f64::MAX);
+    // The most of the tender kind a month's frost would kill in a band's cells, by the frost law at each cell's ground
+    // and activity (`Physics::frozen`, dormancy's hardening included).
+    let parts = cover::Parts::of(&w.chem).expect("cover parts");
+    let tender = g;
+    let kills = |w: &pcore::World, cells: &[usize]| {
+        let at = |i: usize| {
+            let act = cover::activity(&w.cfg.phys, &tender, cover::wet(w, &parts, i, w.g(parts.liquid, i)).1);
+            w.cfg.phys.frozen(tender[FROST] as f64, w.t_ground_last(i), act)
+        };
+        cells.iter().map(|&i| at(i)).fold(0.0, f64::max)
+    };
+    let (mut warm_winter, mut cold_winter, mut warm_kill, mut cold_kill) = (f64::MAX, f64::MAX, 0.0f64, 0.0f64);
     for _ in 0..60 * 12 {
         pcore::step(&mut w);
         warm_winter = warm_winter.min(coldest(&w, &warm));
         cold_winter = cold_winter.min(coldest(&w, &cold));
+        (warm_kill, cold_kill) = (warm_kill.max(kills(&w, &warm)), cold_kill.max(kills(&w, &cold)));
     }
     // The mean frost gene of a band's cells, by built cover.
-    let parts = cover::Parts::of(&w.chem).expect("cover parts");
     let mm = parts.mm(&w.chem);
     let mean_frost = |cells: &[usize]| {
         let (frost, built) = cells.iter().flat_map(|&i| {
@@ -204,8 +238,9 @@ fn the_frost_gene_falls_where_winters_are_cold() {
     };
     let (warm_mean, cold_mean, step) = (mean_frost(&warm), mean_frost(&cold), cover::RANGE[FROST].0 as f64);
     println!("mean frost gene {warm_mean:.1} K in the warm band (coldest ground {warm_winter:.1} K), {cold_mean:.1} K in the cold band ({cold_winter:.1} K); sown {} and {}", FROST_GENES[0], FROST_GENES[1]);
-    let melt = w.chem.subs[LIQUID].melt;
-    assert!(cold_winter < melt, "no frost in the cold band: coldest ground {cold_winter} K, the liquid melts at {melt} K");
-    assert!(cold_winter < FROST_GENES[0] as f64 - 3.0, "no winter below the higher gene: coldest land {cold_winter} K");
+    // The scene's premises: the cold band's winters kill the tender kind, the warm band's spare it.
+    println!("the most of the tender kind a month's frost kills: {warm_kill:.3} in the warm band, {cold_kill:.3} in the cold band");
+    assert!(cold_kill > 0.0, "the cold band's winters do not kill the tender kind: coldest ground {cold_winter} K");
+    assert!(warm_kill == 0.0, "the warm band's winters kill the tender kind ({warm_kill} a month): coldest ground {warm_winter} K");
     assert!(warm_mean - cold_mean > step, "no selection: mean frost gene {warm_mean} K (warm band) and {cold_mean} K (cold band)");
 }

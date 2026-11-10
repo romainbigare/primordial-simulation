@@ -6,22 +6,23 @@
 const BED_MIDDLE = 1.5;
 
 // What is at `at`, m from the map's north-west corner, seen at `e` m a pixel: its ground and its state (`state_at`), the
-// cover's byte, bare share and sea blended between the squares' centres, and the channel nearest it.
+// ground's own colour and the sea blended between the squares' centres, the plants' field (lib/cover_field.wgsl) and
+// the channel nearest it.
 fn land_spot(at: vec2f, e: f32) -> Spot {
   let look = earth.look;
   let cs = corners(at / land.map.x);
   let g = ground_at(at, true);
   let st = state_at(at, g, cs);
-  let cover = blended(COVER, cs);
+  let surface = blended(SURFACE, cs);
   var p: Spot;
   p.depth = st.depth;
   p.over = st.over;
-  p.sea = cover.z;
+  p.sea = surface.w;
   p.wet = st.wet;
-  p.bare = cover.y;
   p.t = st.t;
   p.snow = st.snow;
-  p.plants = 255.0 * cover.x;
+  p.ground = surface.xyz;
+  p.cover = cover_field(at, e);
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
@@ -54,18 +55,10 @@ fn land_spot(at: vec2f, e: f32) -> Spot {
   return p;
 }
 
-// Shaded ground `c` of spot `p` under the cover's field (in the Earth's colours only), lit as the ground is.
-fn covered(c: Shaded, p: Spot) -> Shaded {
-  if (cover_look.look.x <= 0.0 || earth.view.x != 0.0) { return c; }
-  let f = cover_field(p.at, p.e) * stands_in(p.depth, p.snow) * cover_look.look.y;
-  if (f.a <= 0.0) { return c; }
-  return Shaded(mix(c.rgb, 255.0 * f.rgb / f.a * c.m, f.a), c.m, c.kind);
-}
-
 @fragment fn fs(v: Varying) -> @location(0) vec4f {
   let at = earth.place.xy + v.uv * earth.place.zw;
   let cs = corners(at / land.map.x);
   let spot = land_spot(at, metres_a_pixel(v.uv));
-  let rgb = in_view_of(covered(colour(spot), spot), blended(VIEW, cs).xy, blended(TRUTH, cs).xyz);
+  let rgb = in_view_of(colour(spot), blended(VIEW, cs).xy, blended(TRUTH, cs).xyz);
   return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);
 }

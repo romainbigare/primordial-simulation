@@ -5,11 +5,11 @@
 // shows them at once.
 import { Draw, Gpu, Pass, Texture, Uniforms } from './gpu';
 import { Style } from './sprites';
-import { FIELD_LAYERS, Kinds, LATTICES, KIND_PLANES } from './canopy';
+import { FIELD_LAYERS, Kinds, LATTICES, KIND_PLANES, half } from './canopy';
 import { clamp } from './earth';
 
 /** Of the uniforms of cover.wgsl (`Cover`) and of cover_field.wgsl (`CoverLook`), four-wide members. */
-const COVER_VEC4S = 1 + 3 * LATTICES.length, LOOK_VEC4S = 3;
+const COVER_VEC4S = 2 + 3 * LATTICES.length, LOOK_VEC4S = 3;
 /** A lattice fainter than this is not drawn as marks: they would not show, and they cost as much as marks that do. */
 const FAINTEST = 0.02;
 /** Angled, a plant stands up this share of its height on the map (cover.wgsl `STAND`): the rows south of a pixel looked
@@ -59,12 +59,12 @@ export class CoverMarks {
       if (this.tableTex) gpu.drop(this.tableTex);
       if (this.fieldTex) gpu.drop(this.fieldTex);
       this.tableTex = gpu.texture(w, KIND_PLANES.count * h, 'rgba32float');
-      this.fieldTex = gpu.texture(w, h, 'rgba8unorm', FIELD_LAYERS, (k?.field.mips.length ?? 0) + 1);
+      this.fieldTex = gpu.texture(w, h, 'rgba16float', FIELD_LAYERS, (k?.field.mips.length ?? 0) + 1);
     }
     if (k) {
       gpu.write(this.tableTex!, k.table);
-      gpu.write(this.fieldTex!, k.field.data);
-      k.field.mips.forEach((d, l) => gpu.write(this.fieldTex!, d, l + 1));
+      gpu.write(this.fieldTex!, Uint16Array.from(k.field.data, half));
+      k.field.mips.forEach((d, l) => gpu.write(this.fieldTex!, Uint16Array.from(d, half), l + 1));
     }
     this.due = false;
   }
@@ -81,7 +81,7 @@ export class CoverMarks {
     const k = this.kinds;
     if (!k || this.shown(m.cssMpp).every(s => s <= 0)) return;
     const angled = m.style === 'angled';
-    const u = new Uniforms(COVER_VEC4S).vec4(...m.at, m.mpp, angled ? 1 : 0);
+    const u = new Uniforms(COVER_VEC4S).vec4(...m.at, m.mpp, angled ? 1 : 0).vec4(...k.walls);
     // Each lattice's cell at the draw's corner, split into its whole number and its fraction in double precision, so
     // the GPU's single precision only counts the cells across the view.
     const top = Math.floor(Math.log2(Math.max(k.w, k.h)));

@@ -945,8 +945,9 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   cell by cell in the order made (the potential energy of the life that left a cell's head and came to it is booked
   once for each cell and way, `store::life_sent`): they join the most alike slot of their starting kind in the cell (every gene
   within `APART` (0.5) × `alike` steps, `cover::distance`; the genes the mean by built cover; they die if that slot is
-  full), else an empty slot, else the lightest slot if they outweigh its built cover (whose cover dies as remains);
-  else they die as remains. So a variant farther than that from its kind founds a slot of its own and competes with
+  full), else an empty slot; where none is empty, the two most alike slots of one starting kind join to make one
+  (`seed::room`), so a kind new to a cell can take hold beside another's variants; else the lightest slot if they
+  outweigh its built cover (whose cover dies as remains); else they die as remains. So a variant farther than that from its kind founds a slot of its own and competes with
   the others for light by height. Slots of a cell within the same distance share one (`merge_alike`). Selection is
   between slots and cells: what grows better sends more seeds (the frost gene falls where winters are cold,
   `core/tests/cover.rs`).
@@ -1279,7 +1280,10 @@ read a kind.
   rectangle of air blocks in squares (`--fine`), by the same rule. A cell's height is the terrain's mean over it
   (`Terrain::inside`, on the worn samples, 0), whatever its size.
 - **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS` rows of `Place::Field`: kg per m² and genes,
-  on every open land cell by its chance), then eaters 20 years later; `--roster` places ten kinds (`ROSTER`). Founders
+  on every open land cell by its chance), then eaters 20 years later; `--roster` places thirteen kinds (`ROSTER`), six of
+  them cover: a herb, a small fast herb, a big slow cover with walls, the same of wet ground (fully active only near
+  saturation, more capacity), a woody cover of dry ground (active at a tenth of saturation, thick leaves, slow) and a
+  tall fast cover with seeds spread wide. Founders
   are adults on land under at most half a metre of liquid; mass 30% fuel (60% for the two big slow eater kinds).
 - **Brains**: eaters start with hand-set biases (`Seeding::hand`; `--neutral-eaters` without), since neutral founders
   die before they learn: they take from the place, its ground and its cover (1), before they bite a body (0.5), and keep

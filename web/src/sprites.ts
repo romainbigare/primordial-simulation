@@ -60,11 +60,6 @@ export const seedOf = (id: bigint, k: number) => (Number(id & 0xffffffffn) * 265
 /** A reflectance (linear, 0..1) as a display colour (sRGB, 0..255). */
 export const display = (c: Rgb): Rgb => c.map(v => 255 * Math.pow(Math.min(Math.max(v, 0), 1), 1 / 2.2)) as Rgb;
 export const tone = (c: Rgb, f: number, a = 1) => `rgba(${c.map(v => Math.round(Math.min(255, Math.max(0, v * f)))).join(',')},${a})`;
-/** A colour from hue (degrees), saturation and lightness (0..1). */
-export function hsl(h: number, s: number, l: number): Rgb {
-  const k = (n: number) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
-  return [0, 8, 4].map(n => 255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)))) as Rgb;
-}
 /** 0 at `a`, 1 at `b` (either order), smooth between. */
 const ramp01 = (a: number, b: number, x: number) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
 

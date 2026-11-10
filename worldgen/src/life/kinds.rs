@@ -87,6 +87,25 @@ const LIGHT: Kind = Kind { name: "light-eaters", year: 0, place: Place::Field(Fi
 /// stands turn over in 50 to 100 years (tree deaths of 1 to 2% a year).
 const TREE: [f32; cover::NG] = with(COVER_GENES, &[(cover::LEAF, 0.0), (cover::WALLS, 1.0), (cover::STORE, -0.7), (cover::SEED, 0.05), (cover::REPAIR, 0.0)]);
 
+/// The genes of a big slow cover of wet ground: the tree's, but fully active only on ground nine tenths wet (`MOIST`
+/// -0.05: a light capacity per kg near twice the tree's where the ground is that wet, and dormant sooner where it dries),
+/// thinner leaves (1.4 m² of capture area per kg of living cover), and frozen below 272 K (tender: the cheapest frost
+/// limit below the key liquid's melting point, `c_firm`). Drought-avoiding trees of wet ground hold more capacity per
+/// leaf and close their pores early (Wright and others 2004, from memory).
+const WET_TREE: [f32; cover::NG] = with(TREE, &[(cover::MOIST, -0.05), (cover::LEAF, 0.15), (cover::FROST, 272.0)]);
+
+/// The genes of a woody slow cover of dry ground: walls three times its matter, thick leaves (0.5 m² of capture area per
+/// kg of living cover), fully active at a tenth of the ground's wetness (`MOIST` -1: its capacity per kg the herb's at
+/// that need only with a light gene 0.6 higher, so it is slower where the ground is wet), a fifth of its built cover kept
+/// as fuel, slower repair, and frozen below 266 K. Plants of dry ground have thick, long-lived leaves and slow growth
+/// (the leaf economics spectrum, Wright and others 2004).
+const DRY_WOODY: [f32; cover::NG] = with(COVER_GENES, &[(cover::LIGHT, -4.4), (cover::LEAF, -0.3), (cover::WALLS, 0.5), (cover::STORE, -0.7), (cover::FROST, 266.0), (cover::MOIST, -1.0), (cover::SEED, 0.08), (cover::REPAIR, -0.5)]);
+
+/// The genes of a tall fast cover: walls 2.5 times its matter in thin stems, thin leaves (3.2 m² of capture area per kg
+/// of living cover), a light capacity a quarter above the herb's, fully active at a third of the ground's wetness, a
+/// quarter of what it builds to seeds, and a short life (repair -1).
+const TALL_FAST: [f32; cover::NG] = with(COVER_GENES, &[(cover::LIGHT, -4.9), (cover::LEAF, 0.5), (cover::WALLS, 0.4), (cover::MOIST, -0.5), (cover::SEED, 0.25)]);
+
 /// The temperatures the eaters' founders keep their bodies between, K: the melting point of chemistry 0's key liquid
 /// (273 K) plus, and about where life's enzymes fail (320 K) less, the margin within which a body's well-being falls for
 /// nearness to a limit (5 K, `body::PHASE_MARGIN`): their liquid does not freeze in a winter on the hills, and they
@@ -119,7 +138,7 @@ const fn eaters(name: &'static str, year: u64, b: Bodies) -> Kind {
 /// scale the first two rows; eaters of bodies are stronger than what they eat, eaters of remains have no strength, and
 /// the two big slow eater kinds start with 60% of their mass as fuel, not 30%, as a neutral brain must find what to take
 /// within the few decisions its store lasts.
-pub const KINDS: [Kind; 10] = [
+pub const KINDS: [Kind; 13] = [
     LIGHT,
     EATER,
     // Cover, small and fast, seeds spread wide; big and slow (`TREE`), seeds stay.
@@ -134,10 +153,15 @@ pub const KINDS: [Kind; 10] = [
     // Eaters of eaters, placed once the eaters have spread, with a bigger brain (16 hidden, 8 memory, 4 seen, sight 2).
     eaters("strong fast eaters of eaters", 24, Bodies { scalars: with(EATER_BODIES.scalars, &[(COPY_MASS, 2.145), (LEARN, 0.0), (HIDDEN, 16.0), (MEMORY, 8.0), (SEEN, 4.0), (SIGHT, 2.0), (REPAIR, -0.5)]), per: 1, chance: 0.15, ..EATER_BODIES }),
     eaters("strong big slow eaters of eaters", 24, Bodies { scalars: with(EATER_BODIES.scalars, &[(STRENGTH, 0.5), (COPY_MASS, 2.682), (LEARN, 0.0), (HIDDEN, 16.0), (MEMORY, 8.0), (SEEN, 4.0), (SIGHT, 2.0), (DISPERSE, 0.05), (REPAIR, 0.0)]), per: 1, chance: 0.15, store: 0.6, ..EATER_BODIES }),
+    // Cover at the ends of what the laws weigh against each other: big and slow on wet ground (`WET_TREE`), woody and
+    // slow on dry ground (`DRY_WOODY`), tall and fast with seeds spread wide (`TALL_FAST`).
+    Kind { name: "big light-eaters of wet ground", year: 0, place: Place::Field(Field { genes: WET_TREE, kg: 0.3, chance: 0.4 }) },
+    Kind { name: "woody light-eaters of dry ground", year: 0, place: Place::Field(Field { genes: DRY_WOODY, kg: 0.1, chance: 0.5 }) },
+    Kind { name: "tall fast light-eaters", year: 0, place: Place::Field(Field { genes: TALL_FAST, kg: 0.05, chance: 0.6 }) },
 ];
 
-/// The roster of `ew run --roster`: the ten rows of `KINDS`, each placed at its `year`.
-pub const ROSTER: [usize; 10] = [2, 0, 3, 4, 5, 6, 1, 7, 8, 9];
+/// The roster of `ew run --roster`: the thirteen rows of `KINDS`, each placed at its `year`.
+pub const ROSTER: [usize; 13] = [2, 0, 3, 10, 11, 12, 4, 5, 6, 1, 7, 8, 9];
 
 /// The kinds `ew run` places without `--roster` (rows of `KINDS`): light-eaters, then eaters.
 pub const TWO: [usize; 2] = [0, 1];

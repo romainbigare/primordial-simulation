@@ -94,7 +94,8 @@ pub extern "C" fn day() -> f64 {
 
 /// The header of a tape for this world, as JSON (no frames, series or events yet), with what a shell draws the ground
 /// by: the tiles (`tape::Ground`: texels a side, the gutter, the depths from the coarsest to the finest, the most liquid
-/// a m² drained passes on, m/s, by which their channels are capped), the numbers of a row of the table (`tape::Table`), and the numbers of the laws the shell applies inside a
+/// a m² drained passes on, m/s, by which their channels are capped; the numbers of a row of the table, `tape::Table`; the
+/// reflectance of the walls the cover builds), and the numbers of the laws the shell applies inside a
 /// cell (`Physics`).
 #[no_mangle]
 pub extern "C" fn meta() -> *const u8 {
@@ -102,10 +103,12 @@ pub extern "C" fn meta() -> *const u8 {
         let (w, g, ph) = (&l.world, &l.world.map, &l.world.cfg.phys);
         let layers: Vec<_> = LAYERS.iter().map(|l| json!({"name": l.name, "unit": l.unit, "scale": l.scale, "min": l.min, "max": l.max})).collect();
         let depths = tape::depths(g);
+        // The reflectance of the walls the cover builds, by which a shell colours its stems.
+        let walls = pcore::cover::Parts::of(&w.chem).map_or([0.0; 3], |p| w.chem.subs[p.sub[pcore::cover::WALL]].refl[0]);
         json!({
             "w": g.w, "h": g.h, "cell_m": g.side, "square_depth": g.square_depth(), "globe": g.wrap, "lat_north": w.cfg.lat_north, "lat_south": w.cfg.lat_south,
             "seed": w.seed, "days_per_year": w.days_per_year(), "layers": layers,
-            "tiles": {"size": tape::TILE, "gutter": tape::GUTTER, "depths": [depths.start(), depths.end()], "runoff": tape::MOST_RUNOFF, "row": tape::ROW, "kinds": tape::KINDS, "kind_row": tape::KIND_ROW},
+            "tiles": {"size": tape::TILE, "gutter": tape::GUTTER, "depths": [depths.start(), depths.end()], "runoff": tape::MOST_RUNOFF, "row": tape::ROW, "kinds": tape::KINDS, "kind_row": tape::KIND_ROW, "walls": walls},
             "laws": {"soil_m": ph.soil_m, "wet_depth": ph.wet_depth, "dormancy": ph.dormancy, "channel_width": ph.channel_width, "channel_width_exp": ph.channel_width_exp, "channel_depth": ph.channel_depth, "channel_depth_exp": ph.channel_depth_exp},
             "frames": [], "series": {}, "series_units": {}, "events": [], "months": [],
         })
