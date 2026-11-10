@@ -4,23 +4,31 @@ import { Gpu, Texture, Sampler, Uniforms } from './gpu';
 import { Fields, FIELD_TEXTURES } from './fields';
 import { RGB, PATH_LAYER } from './earth';
 
-/** The stops a layer's ramp holds at most (earth.wgsl `Earth.ramp`). */
+/** The stops a layer's ramp holds at most (colour.wgsl `Earth.ramp`). */
 const RAMP_STOPS = 10;
-/** Of the uniforms of earth.wgsl (`Earth`), four-wide members. */
-const EARTH_VEC4S = 4 + RAMP_STOPS;
+/** Of the uniforms of colour.wgsl (`Earth`), four-wide members. */
+const EARTH_VEC4S = 3 + RAMP_STOPS;
 
 /** What the map draws: the Earth's colours, the true colour, or a layer (its name, and its ramp); and whether the worn
  * paths are drawn. */
 export interface MapLook { mode: 'earth' | 'true' | 'layer'; layer: string; ramp: RGB[]; paths: boolean }
 
-/** A window of the map drawn from its fields: where it lies (x, y, w, h in squares), the share of it along its west,
- * north, east and south edges it fades out over, and when it came (performance.now, ms); its textures, made on the GPU
- * at its first draw, and the texture of the layer the view draws. */
+/** The uniforms of colour.wgsl (`Earth`) for view `look`: how the fields are read (`Fields.look`) and where they lie in
+ * the world (`Fields.place`). */
+export function earthUniforms(look: MapLook, read: number[], place: number[]): ArrayBuffer {
+  const mode = look.mode === 'earth' ? 0 : look.mode === 'true' ? 1 : 2, u = new Uniforms(EARTH_VEC4S);
+  u.vec4(...read).vec4(mode, look.ramp.length, look.paths ? 1 : 0).vec4(...place);
+  for (let k = 0; k < RAMP_STOPS; k++) u.vec4(...(look.ramp[k] ?? [0, 0, 0]));
+  return u.buffer;
+}
+
+/** The map of squares drawn from its fields: its textures, made on the GPU at its first draw, and the texture of the
+ * layer the view draws. */
 export class FieldWindow {
   private textures: Record<number, Texture> | null = null;
   private view: Texture | null = null;
   private viewKey = '';
-  constructor(readonly at: number[], readonly edge: number[], readonly fields: Fields, readonly since: number) {}
+  constructor(readonly fields: Fields) {}
 
   /** The bindings earth.wgsl reads for this window on `gpu` in view `look`. */
   binds(gpu: Gpu, look: MapLook): Record<number, ArrayBuffer | Texture | Sampler> {
@@ -42,10 +50,7 @@ export class FieldWindow {
       gpu.write(this.view, data);
       this.viewKey = key;
     }
-    const mode = look.mode === 'earth' ? 0 : look.mode === 'true' ? 1 : 2, u = new Uniforms(EARTH_VEC4S);
-    u.vec4(...f.look).vec4(mode, look.ramp.length, look.paths ? 1 : 0).vec4(...this.edge).vec4(...f.place);
-    for (let k = 0; k < RAMP_STOPS; k++) u.vec4(...(look.ramp[k] ?? [0, 0, 0]));
-    return { ...this.textures, 1: u.buffer, 5: this.view!, 6: 'smooth' };
+    return { ...this.textures, 1: earthUniforms(look, f.look, f.place), 5: this.view!, 6: 'smooth' };
   }
 
   drop(gpu: Gpu | null): void {

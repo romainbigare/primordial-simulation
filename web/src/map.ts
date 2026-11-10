@@ -1,11 +1,12 @@
-// The map, drawn on the GPU (gpu.ts) from fields (fields.ts) at the screen's own pixels: under it the page's background
-// and the map's shadow, then the map's squares (a texel a square), over them the windows finer than their cells
-// (fine.ts), each new one fading in over the last, then what others draw on the GPU (the plant cover, vegetation.ts).
+// The map, drawn on the GPU (gpu.ts) at the screen's own pixels: under it the page's background and the map's shadow,
+// then the live map from the ground's tiles and the cells' table (land.ts), or a tape's map of squares (fields.ts, a
+// texel a square), then what others draw on the GPU (the plant cover, vegetation.ts).
 // Over it a 2D canvas holds what is drawn by hand: the things (avatars.ts), a globe's lines of latitude, the squares
 // under the pointer and picked, and the scale bar.
 import { Gpu, Pass, Texture, Uniforms, openGpu } from './gpu';
 import { Fields } from './fields';
 import { FieldWindow, MapLook } from './field-window';
+import { Land } from './land';
 
 const LAT_STEP = 30; // degrees between a globe's lines of latitude
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -15,8 +16,6 @@ export interface View { x: number; y: number; w: number; h: number; s: number; z
 /** The most pixels a metre takes on screen: a body of 0.3 m (a member of about 8 kg) at 24 pixels, so one animal shows
  * its shape and can be picked. */
 const MOST_PX_PER_M = 80;
-/** A new window finer than the squares fades in over the last one over this long, ms, so the picture never jumps. */
-const FINE_FADE_MS = 250;
 /** The map's shadow on the page: it falls this far south and is blurred this much (a Gaussian's deviation), css px, and
  * darkens the background this much at most. */
 const SHADOW_DROP = 5, SHADOW_BLUR = 11, SHADOW_DARK = 0.28;
@@ -47,10 +46,9 @@ export class MapView {
   /** Edge latitudes (degrees) of a globe, whose columns wrap east to west; null for an island. */
   private globe: { north: number; south: number } | null = null;
   private raf = 0;
-  /** The map's squares, and the windows finer than them drawn over it, oldest first: the last fades in over the one
-   * before it, which then goes. */
+  /** The map's squares (a tape's map, and the classes of the live map's squares), and the live map. */
   private map: FieldWindow | null = null;
-  private fine: FieldWindow[] = [];
+  private land: Land | null = null;
   private look: MapLook = { mode: 'earth', layer: '', ramp: [], paths: false };
   /** The map's classes asked for: what waits for them, and the texture they are drawn into. */
   private asked: ((cls: Uint8Array) => void)[] = [];
@@ -119,7 +117,7 @@ export class MapView {
   /** Draw the map's squares from `fields`. */
   setMap(fields: Fields): void {
     this.map?.drop(this.gpu);
-    this.map = new FieldWindow([0, 0, this.w, this.h], [0, 0, 0, 0], fields, 0);
+    this.map = new FieldWindow(fields);
     this.invalidate();
   }
 
@@ -133,23 +131,11 @@ export class MapView {
     return done;
   }
 
-  /** Show the window of `fields` (x, y, w, h in squares, fading out over `soft` squares along each edge that is not
-   * the map's) over the map, fading in over the last; or nothing at once. */
-  setFine(fields: Fields | null, at: [number, number, number, number] = [0, 0, 0, 0], soft = 0): void {
-    if (!fields) this.dropFine(this.fine.length);
-    else {
-      // A window that comes while another still fades in takes its place: the one under them stays.
-      if (this.fine.length > 1) this.dropFine(this.fine.length - 1, 1);
-      const [x, y, w, h] = at;
-      const edge = [x > 0 ? soft / w : 0, y > 0 ? soft / h : 0, x + w < this.w ? soft / w : 0, y + h < this.h ? soft / h : 0];
-      this.fine.push(new FieldWindow(at, edge, fields, performance.now()));
-    }
+  /** Draw the live map `land` in place of the map's squares (null: the squares). */
+  setLand(land: Land | null): void {
+    if (this.land !== land) this.land?.stop(this.gpu);
+    this.land = land;
     this.invalidate();
-  }
-
-  /** Forget `n` of the windows from the `from`th. */
-  private dropFine(n: number, from = 0): void {
-    this.fine.splice(from, n).forEach(r => r.drop(this.gpu));
   }
 
   /** The part of the map in view. */
@@ -212,7 +198,7 @@ export class MapView {
       this.sharpening = null;
       this.drawGpu(this.gpu, xs, d);
     } else if (this.gpu && this.underAsked.length) {
-      this.readUnder(this.gpu, xs, 1);
+      this.readUnder(this.gpu, xs);
       this.gpu.submit();
     }
     this.overlay?.(ctx, ox, oy, s);
@@ -227,9 +213,8 @@ export class MapView {
     if (key !== this.seen) { this.seen = key; this.onView(v); }
   }
 
-  /** The map on the GPU: the background and the map's shadow, the map's squares (a copy at each of `xs`, css px; none
-   * where a window finer than them covers the view), the windows finer than them, the layer over them; and the map's
-   * classes if they were asked for. While frames take the GPU longer than `FRAME_BUDGET_MS` the map is drawn at fewer
+  /** The map on the GPU: the background and the map's shadow, the live map or the map's squares (a copy at each of
+   * `xs`, css px), the layer over them; and the map's classes if they were asked for. While frames take the GPU longer than `FRAME_BUDGET_MS` the map is drawn at fewer
    * pixels than the screen's and stretched onto it (the same picture, softer), and once the view rests it is drawn anew
    * at the screen's pixels (`sharpen`). */
   private drawGpu(gpu: Gpu, xs: number[], d: number): void {
@@ -240,10 +225,10 @@ export class MapView {
       this.picture = gpu.texture(tw, th, 'rgba8unorm', 1, 1, true);
     }
     const target = r < 1 ? this.picture : null, p = gpu.pass(target);
-    const fade = this.fine.length ? Math.min((performance.now() - this.fine[this.fine.length - 1].since) / FINE_FADE_MS, 1) : 1;
-    if (fade >= 1) this.dropFine(this.fine.length - 1);
-    if (fade < 1) this.invalidate();
-    this.drawMap(gpu, p, xs, k, [tw, th], fade);
+    // While a tile of the ground fades in, the map is drawn again at each frame.
+    const fading = this.land?.tiles.fading(performance.now()) ?? false;
+    if (fading) this.invalidate();
+    this.drawMap(gpu, p, xs, k, [tw, th]);
     this.layer?.draw(gpu, p, ox, oy, s, k, this.cv.clientWidth, this.cv.clientHeight);
     p.end();
     if (target) {
@@ -252,10 +237,10 @@ export class MapView {
       q.end();
     }
     if (this.asked.length && this.map) this.readClasses(gpu, this.map);
-    if (this.underAsked.length) this.readUnder(gpu, xs, fade);
+    if (this.underAsked.length) this.readUnder(gpu, xs);
     gpu.submit();
     this.time(gpu, r);
-    if (r < 1 && fade >= 1) this.sharpTimer = window.setTimeout(() => this.sharpenSoon(xs, d), REST_MS);
+    if (r < 1 && !fading) this.sharpTimer = window.setTimeout(() => this.sharpenSoon(xs, d), REST_MS);
   }
 
   /** Start drawing the map at the screen's own pixels, in tiles each of about `FRAME_BUDGET_MS` on the GPU. */
@@ -279,7 +264,7 @@ export class MapView {
       this.sharp = gpu.texture(W, H, 'rgba8unorm', 1, 1, true);
     }
     const p = gpu.pass(this.sharp, undefined, tile);
-    this.drawMap(gpu, p, job.xs, job.d, [W, H], 1);
+    this.drawMap(gpu, p, job.xs, job.d, [W, H]);
     this.layer?.draw(gpu, p, ox, oy, s, job.d, this.cv.clientWidth, this.cv.clientHeight);
     p.end();
     if (!job.tiles.length) {
@@ -292,10 +277,9 @@ export class MapView {
     if (job.tiles.length) gpu.done().then(() => requestAnimationFrame(() => this.sharpen(job)));
   }
 
-  /** Draw into pass `p` (a target of `size` px, `k` px a css px) the background and the map's shadow, the map's squares
-   * (a copy at each of `xs`, css px; none where a window finer than them covers the view) and the windows finer than
-   * them, the last `fade` shown. */
-  private drawMap(gpu: Gpu, p: Pass, xs: number[], k: number, size: number[], fade: number): void {
+  /** Draw into pass `p` (a target of `size` px, `k` px a css px) the background and the map's shadow, and the live map
+   * or the map's squares (a copy at each of `xs`, css px). */
+  private drawMap(gpu: Gpu, p: Pass, xs: number[], k: number, size: number[]): void {
     const { cam: { s, ox, oy }, w, h, look } = this;
     this.ctx.fillStyle = css('--map-bg');
     const bg = (this.ctx.fillStyle as string).match(/[0-9a-f]{2}/gi)?.map(c => parseInt(c, 16) / 255) ?? [1, 1, 1];
@@ -303,11 +287,9 @@ export class MapView {
     p.draw('backdrop', { rect: [0, 0, size[0], size[1]], binds: { 1: backdrop.buffer } }, false);
     // Copies meet on whole pixels, so no thin line shows between them.
     const edge = (c: number) => Math.round((xs[0] + c * w * s) * k);
-    if (this.map && !this.covered(xs.length)) xs.forEach((_, c) => p.draw('earth', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: this.map!.binds(gpu, look) }, false));
-    this.fine.forEach((f, c) => {
-      const [fx, fy, fw, fh] = f.at;
-      p.draw('earth', { rect: [(ox + fx * s) * k, (oy + fy * s) * k, fw * s * k, fh * s * k], alpha: c === this.fine.length - 1 ? fade : 1, binds: f.binds(gpu, look) }, true);
-    });
+    const land = this.land?.binds(gpu, look);
+    if (land) xs.forEach((_, c) => p.draw('land', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: land }, false));
+    else if (this.map) xs.forEach((_, c) => p.draw('earth', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: this.map!.binds(gpu, look) }, false));
   }
 
   /** The map's colours under the view (without what is drawn over them), a texel each `cssPx` css px a side, once the
@@ -320,7 +302,7 @@ export class MapView {
   }
 
   /** Draw the map at `underPx` css px a pixel (`drawMap`) and hand it to those that asked. */
-  private readUnder(gpu: Gpu, xs: number[], fade: number): void {
+  private readUnder(gpu: Gpu, xs: number[]): void {
     const asked = this.underAsked, w = Math.max(1, Math.ceil(this.cv.clientWidth / this.underPx)), h = Math.max(1, Math.ceil(this.cv.clientHeight / this.underPx));
     this.underAsked = [];
     if (this.underTex?.w !== w || this.underTex.h !== h) {
@@ -328,19 +310,9 @@ export class MapView {
       this.underTex = gpu.texture(w, h, 'rgba8unorm', 1, 1, true);
     }
     const p = gpu.pass(this.underTex);
-    this.drawMap(gpu, p, xs, 1 / this.underPx, [w, h], fade);
+    this.drawMap(gpu, p, xs, 1 / this.underPx, [w, h]);
     p.end();
     gpu.read(this.underTex).then(rgba => asked.forEach(a => a({ w, h, rgba })));
-  }
-
-  /** Whether the last window finer than the squares, fully shown, holds the part of the map in view (`copies` of it
-   * side by side) inside the bands along its edges over which it fades out. */
-  private covered(copies: number): boolean {
-    const f = this.fine.length === 1 ? this.fine[0] : null;
-    if (!f) return false;
-    const { cam: { s, ox, oy } } = this, [fx, fy, fw, fh] = f.at, [ew, en, ee, es] = f.edge;
-    const x0 = ox + (fx + ew * fw) * s, y0 = oy + (fy + en * fh) * s, x1 = ox + (fx + fw * (1 - ee)) * s, y1 = oy + (fy + fh * (1 - es)) * s;
-    return x0 <= Math.max(ox, 0) && y0 <= Math.max(oy, 0) && x1 >= Math.min(ox + copies * this.w * s, this.cv.clientWidth) && y1 >= Math.min(oy + this.h * s, this.cv.clientHeight);
   }
 
   /** Time the frame just sent at `r` of the screen's pixels along each axis on the GPU (one at a time), and take the
