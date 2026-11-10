@@ -7,7 +7,7 @@
 
 mod shares;
 
-pub use shares::{Inside, Means};
+pub use shares::{soil_held, soil_level, Inside, Means};
 
 use crate::math::central;
 use crate::space::terrain::real_slope;
