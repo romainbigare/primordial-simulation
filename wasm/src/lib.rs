@@ -1,8 +1,8 @@
 //! The live viewer's shell: a world that the page makes and steps, and the ground it draws, as plain `extern "C"`
 //! exports (no wasm-bindgen). The page calls these from two Web Workers, each with its own instance, and reads the
 //! results from the instance's memory. One steps the world: `meta` is JSON in the form of a tape's header, `frame` is
-//! the bytes of one tape frame and `table` the cells' table made with it (`tape::Table`), `fine` a window finer than
-//! its cells (`tape::fine`), `things` the list of what lies in the cells of a window (`tape::things`). The other makes
+//! the bytes of one tape frame and `table` the cells' table made with it (`tape::Table`), `things` the list of what lies
+//! in the cells of a window (`tape::things`). The other makes
 //! the ground's tiles (`ground`, `tile`: `tape::Ground`), which need no world.
 
 use pcore::space::terrain::{Terrain, ISLAND_LEVEL};
@@ -13,20 +13,16 @@ use tape::LAYERS;
 use worldgen::life::{Seeding, FIXERS};
 use worldgen::schedule::Schedule;
 
-// The page asks for the layers of a fine window by one bit each (`fine`).
-const _: () = assert!(LAYERS.len() <= u32::BITS as usize, "a bit for each layer");
-
 /// The year life starts: the default of `ew run`.
 const LIFE_YEAR: u64 = 2;
 /// Rounds of mutation given to the founders: the default of `ew run`.
 const SPRAY_ROUNDS: u32 = 20;
 
-/// The world, what is placed when, the terrain's samples found so far (`tape::Samples`), what the shell keeps of its
-/// cells (`tape::Table`) and the table made with the last frame.
+/// The world, what is placed when, what the shell keeps of its cells (`tape::Table`) and the table made with the last
+/// frame.
 struct Live {
     world: World,
     plan: Schedule,
-    samples: tape::Samples,
     cells: tape::Table,
     table: Vec<f32>,
 }
@@ -62,8 +58,8 @@ pub extern "C" fn new_world(seed: u32, size: u32) -> u32 {
         return 1;
     }
     let plan = Schedule::new(Some(LIFE_YEAR), &worldgen::life::plants(&worldgen::life::ROSTER), Seeding { hand: true, rounds: SPRAY_ROUNDS, fixers: FIXERS });
-    let (samples, cells) = (tape::Samples::default(), tape::Table::new(&world));
-    LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, samples, cells, table: Vec::new() }));
+    let cells = tape::Table::new(&world);
+    LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, cells, table: Vec::new() }));
     0
 }
 
@@ -136,16 +132,6 @@ pub extern "C" fn table() -> *const u8 {
     give(bytes)
 }
 
-/// The window from column `x` and row `y`, `w` x `h` squares, finer than its cells, a pixel a leaf of `depth`
-/// (`tape::fine`): the ground's height, the liquid's surface and the layers of each pixel that `layers` asks for (bit
-/// `k` for layer `k` of the table), and the ways rivers run.
-#[no_mangle]
-pub extern "C" fn fine(x: f64, y: f64, w: f64, h: f64, depth: u32, layers: u32) -> *const u8 {
-    let wanted = |k: usize| k < u32::BITS as usize && layers >> k & 1 == 1;
-    let bytes = with(|l| tape::fine(&l.world, &mut l.samples, [x, y, w, h], depth.min(u8::MAX as u32) as u8, wanted));
-    give(bytes)
-}
-
 /// What lies in each cell of the window from column `x` and row `y`, `w` x `h` squares: its bodies, cover and parts
 /// (`tape::things`), for the page to draw one by one.
 #[no_mangle]
@@ -172,7 +158,7 @@ pub extern "C" fn tile(depth: u32, x: i32, y: i32) -> *const u8 {
     give(texels.iter().flat_map(|v| v.to_le_bytes()).collect())
 }
 
-/// The length in bytes of what `meta`, `frame`, `table`, `fine`, `things` or `tile` last returned.
+/// The length in bytes of what `meta`, `frame`, `table`, `things` or `tile` last returned.
 #[no_mangle]
 pub extern "C" fn out_len() -> usize {
     OUT.with(|o| o.borrow().len())

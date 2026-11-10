@@ -1,6 +1,5 @@
 //! The history tape: snapshots, the yearly series, the monthly rows, raw events and viewer frames.
 
-mod fine;
 mod ground;
 mod gzfile;
 mod layers;
@@ -10,7 +9,6 @@ mod snapshot;
 mod table;
 mod things;
 
-pub use fine::{fine, Samples};
 pub use ground::{depths, Ground, GUTTER, TEXEL, TILE};
 pub use layers::{fields, pixels, raster, quantise, Fields, is_river, river_count, LAYERS, RIVER_CATCH, RIVER_FLOOR, STANDING_M};
 pub use rec::{read_viewer_file, Kept, Recorder, Spent, TapeFiles, Written, ENCLOSED, REFINE, TAPE};

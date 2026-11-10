@@ -309,9 +309,12 @@ even. The snow is shared evenly: the sun on a cell is that on its mean slope (1.
 the cell's one balance melts its snow as one; a split's quarters then each take the sun of their own slope, so a
 quarter facing the sun melts its part first. Sharing the snow by the sun at the samples would need a melt at each
 sample, which nothing reads. A split gives each quarter its part of each share
-(the sum by area over its samples, `Ground::quarters`), and the shell draws inside the cells by the same laws at its
-pixels, across the cells' borders, each cell's means held (`tape::fine`), so what is seen before a zoom is what the
-world goes on with. A join stays a sum.
+(the sum by area over its samples, `Ground::quarters`). A join stays a sum. The shell draws inside the cells by the
+same laws at each pixel of the ground's tiles (`tape::Ground`), blending its cells' values between the squares'
+centres (`tape::Table`, docs/tape.md): the soil's liquid by the wetness index of the terrain's samples about each
+cell's level (`inside::soil_level`, `soil_held`), what stands where the ground lies under the cells' level, each mark
+of cover by the activity of its cell's heaviest kind at the mark's foot; a picture need not keep a cell's mean exactly
+(the core keeps the books).
 **Refinement** (`refine/`, `World::refine`) decides which cells split and join: a setting for speed, not a law (no
 law reads its score). The shell calls it at each month's start, before the survey, once it took the month's events
 and before it places life by the plan. With no budget (`Config::cell_budget` 0, every run's default) it does nothing:

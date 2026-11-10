@@ -74,10 +74,11 @@ Done and on main, beyond the tree plan (WP0 to WP16, WP21; details in `review/pl
   did.
 - **Rivers (WP18, the physics):** one channel law from the discharge (Leopold and Maddock 1953, `flow/channel.rs`);
   the flux a cell passes on is a flow through a split and a join (`remap/through.rs`); the terrain's samples hold their
-  channels (`space/network.rs`); the map draws channels on the drawn ground at their true width (`fine/channels.rs`).
+  channels (`space/network.rs`); the map draws channels on the drawn ground at their true width (`tape/src/ground/channels.rs`).
 - **The map without squares (close views):** one ground below the terrain's samples for the core and the map
-  (`space/below.rs`), its slopes drawn in full at every depth; the liquid at the core's own levels, evened over half a
-  cell; the drawn fields averaged over half a cell (`fine/keep.rs`).
+  (`space/below.rs`), drawn from tiles made once in a second worker (`tape/src/ground/`, `web/src/ground.ts`) and a
+  table of the cells' state sent with each frame (`tape/src/table.rs`); the laws inside a cell run per pixel on the card
+  (`web/shaders/lib/land.wgsl`), the cover's marks masked at their foot (`web/shaders/cover_live.wgsl`).
 - **Seeds and dispersing children land in lots** drawn from a kernel of two scales (40 m and 800 m, `copy/spread.rs`);
   the books by cell (`store::life_sent`). Cover fell by half: a full stand's surplus now falls at home as litter.
 - **Frost:** dormancy lowers the lethal limit by `harden` (20 K), one helper for cover and bodies (`Physics::frozen`).
@@ -86,12 +87,11 @@ Done and on main, beyond the tree plan (WP0 to WP16, WP21; details in `review/pl
 ## 5. What to do next, in order
 
 1. Edges still seen on the map: snow patches with blocky edges in the far view, forest that stops at cell borders,
-   small ponds whose field ends along a cell border. (The live page already draws every zoom from the fine raster; the
-   map of squares stays for tapes, which hold no fine ground.)
+   small ponds whose field ends along a cell border. (The live page draws every zoom from the ground's tiles and the
+   cells' table; the map of squares stays for tapes, which hold no ground.)
 2. The owner's view of rivers (`review/plan.md`, after section 6): a winding channel cut into the ground, its width
    and depth along its course, coloured by what it carries.
-3. Lakes above the sea level as the sea does; the drawn fields keep each cell's mean and stay smooth; plant kinds and
-   their marks continuous across cell borders; the raster's time (0.6 to 0.8 s a 1 m window).
+3. Lakes above the sea level as the sea does; plant kinds and their marks continuous across cell borders.
 4. The open items in `review/plan.md` (frost minima, the parts' solves' cost, WP19, WP20, WP22, the bodies' overdraw).
 
 ## 6. The live world for the owner
@@ -105,7 +105,7 @@ a merge:
    `files: {"ew.wasm": {"from": <the copied wasm>, "contentType": "application/wasm"}}`. If it refuses because the
    published `ew.wasm` was not read in this session, read it first (`action: read`, `path: ew.wasm`), then publish.
 4. Check the page in a browser before publishing (serve `web/dist`, Playwright is installed; headless uses WebGL2):
-   no console errors, the fine picture draws at 11 wheel steps.
+   no console errors, and at 11 wheel steps the stats line says no tile of the ground is still to come.
 
 The shoot script (drives the page, keeps it playing, takes a picture per zoom):
 `node shoot2.js PORT OUTDIR TAG YEARS "x,y;x,y" "7,11,14"`. It lives on the branch `tools/shoot` (study files stay off
