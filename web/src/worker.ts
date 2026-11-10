@@ -121,7 +121,6 @@ function tick(): void {
 
 function start(on: boolean): void {
   clearTimeout(timer);
-  if (!on && owed) postFrame('frame');
   playing = on && core !== null;
   if (playing) { lastTick = since = performance.now(); stepped = pace = 0; timer = setTimeout(tick, 0); }
 }
@@ -133,12 +132,16 @@ host.onmessage = async e => {
       core = (await WebAssembly.instantiate(m.wasm, {})).instance.exports as unknown as Core;
       host.postMessage({ kind: 'ready' }, []);
     } else if (m.cmd === 'new' && core) {
-      owed = false; // (the old world's last months are not shown)
       start(false);
       if (core.new_world(m.seed, m.size) !== 0) throw new Error('The world was refused.');
       due = 0; thingsAt = null; fineAt = null; stepped = pace = 0;
       postFrame('world');
-    } else if (m.cmd === 'play') start(m.on);
+    } else if (m.cmd === 'play') {
+      // A pause shows the state it stopped at: its frame, and a raster of the window made now.
+      const was = playing;
+      start(m.on);
+      if (was && !playing) { fineDue = fineAt !== null; postFrame('frame'); }
+    }
     else if (m.cmd === 'rate') rate = m.rate;
     else if (m.cmd === 'things' && core) {
       thingsAt = m.at;
