@@ -1,5 +1,6 @@
 // A draw of the map's renderer (web/src/gpu/): a rectangle of the target filled by a program's fragment stage. Every
-// program reads it at binding 0 and has this vertex stage: four corners as a triangle strip.
+// program reads it at binding 0 and has this vertex stage: four corners as a triangle strip. With the helpers every
+// program may use.
 
 struct Draw {
   // The target's size, px; the sign of its rows (-1 where the back end keeps a target's rows bottom up, WebGL2 drawing
@@ -40,4 +41,16 @@ fn lowbias(c: vec2i, k: i32) -> u32 {
   var x = (u32(c.x) * 0x9E3779B1u) ^ (u32(c.y) * 0x85EBCA77u) ^ (u32(k) * 0xC2B2AE3Du);
   x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; x ^= x >> 16u;
   return x;
+}
+
+// Snow lies by a point's own temperature where that is within these of the cover's melting point, K (fading between),
+// and by the cells' ice elsewhere.
+const SNOW_NEAR_K = vec2f(2.0, 6.0);
+
+// How much snow and ice lies on ground of `ice_m` m of it at `t` K, 0..1: the ice, and near the melting point of the
+// frozen cover `melt` (0: the ice alone) the ground's own temperature.
+fn snow_of(ice_m: f32, t: f32, melt: f32) -> f32 {
+  let ice = ease(0.02, 0.5, ice_m);
+  let near = select(0.0, 1.0 - ease(SNOW_NEAR_K.x, SNOW_NEAR_K.y, abs(t - melt)), melt > 0.0);
+  return ice + (ease(melt + 1.0, melt - 1.0, t) - ice) * near;
 }

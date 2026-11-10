@@ -61,7 +61,7 @@ async function load(buf: ArrayBuffer): Promise<void> {
     next = parse(await gunzip(buf));
   } catch (e) { return say(String(e instanceof Error ? e.message : e)); }
   live?.stop(); live = null;
-  land = null; map.setLand(null);
+  land = vegetation.land = null; map.setLand(null);
   world = next;
   setMode(false);
   setup(world);
@@ -281,7 +281,7 @@ async function startLive(): Promise<void> {
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
     ready: () => newWorld(),
-    world: w => { world = w; land = landOf(w); map.setLand(land); thingsKey = ''; avatars.set(null, w.meta.cell_m); vegetation.setThings([]); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
+    world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; avatars.set(null, w.meta.cell_m); vegetation.setThings([]); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
     things: data => { if (live === l && world) { avatars.set(data, world.meta.cell_m); vegetation.setThings(avatars.list); } },
     frame: stats => {
       if (live !== l) return;

@@ -12,6 +12,7 @@ import { Rgb, Style, plantColour, plantLookOf, woodiness } from './sprites';
 import { CoverMarks, LARGEST_MARK } from './textures';
 import { Gpu, Pass } from './gpu';
 import { GpuLayer } from './map';
+import type { Land } from './land';
 
 /** The pixels a mark takes from which its kind starts to show, and from which it shows fully. */
 const FADE_PX = [0.7, 2];
@@ -43,11 +44,13 @@ export class Vegetation implements GpuLayer {
   private mapSum = NaN;
   /** The style the marks are drawn in. */
   style: Style = 'above';
+  /** The live map, whose laws mask each mark at its foot (none: a tape's map). */
+  land: Land | null = null;
 
   /** The frame `f` of world `w` and its map classes `cls`; null for none (another view than the earth's, or a tape
    * without the cover's layers). */
   set(w: World | null, f: number, cls: Uint8Array): void {
-    const field = w ? fieldOf(w, f, cls) : null, sum = field ? signature(field) : NaN;
+    const field = w ? fieldOf(w, f, cls, this.land !== null) : null, sum = field ? signature(field) : NaN;
     if (field && this.field && sum === this.mapSum) return;
     if (w) { this.cellM = w.meta.cell_m; this.mapW = w.meta.w; this.mapH = w.meta.h; this.tinted = false; }
     this.field = field ? coverOf(field) : null;
@@ -87,7 +90,7 @@ export class Vegetation implements GpuLayer {
     const m = this.cellM, whole = [0, 0, this.mapW * m, this.mapH * m];
     this.marks.draw(gpu, p, {
       rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, cssMpp: mpp, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp],
-      field: whole, tint: whole, fade: FADE_PX, alpha: COVER_ALPHA, style: this.style,
+      field: whole, tint: whole, fade: FADE_PX, alpha: COVER_ALPHA, style: this.style, land: this.land?.lawBinds(gpu) ?? null,
     });
   }
 
@@ -107,10 +110,11 @@ function signature(f: CoverNumbers): number {
   return h;
 }
 
-/** The frame's cover numbers of world `w` at frame `f`, drawn on the squares whose map class `cls` is land that is
- * neither water, ice nor rock; null for a tape that lacks them. */
-function fieldOf(w: World, f: number, cls: Uint8Array): CoverNumbers | null {
+/** The frame's cover numbers of world `w` at frame `f`, drawn on every square where each mark is `masked` at its foot,
+ * else on the squares whose map class `cls` is land that is neither water, ice nor rock; null for a tape that lacks
+ * them. */
+function fieldOf(w: World, f: number, cls: Uint8Array, masked: boolean): CoverNumbers | null {
   if (!['plants', 'wood', 'leaf', 't_ground', 'rain'].every(n => w.index.has(n))) return null;
-  const open = Uint8Array.from(cls, c => (VEG_CLASSES.has(c) ? 1 : 0));
+  const open = Uint8Array.from(cls, c => (masked || VEG_CLASSES.has(c) ? 1 : 0));
   return { w: w.meta.w, h: w.meta.h, kg: decode(w, f, 'plants'), wood: decode(w, f, 'wood'), leaf: decode(w, f, 'leaf'), t: decode(w, f, 't_ground'), rain: decode(w, f, 'rain'), open };
 }

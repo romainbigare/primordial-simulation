@@ -54,17 +54,26 @@ export class Land {
     this.due = true;
   }
 
-  /** The bindings land.wgsl reads on `gpu` in view `look`, or null before the first table. */
+  /** The bindings land.wgsl reads on `gpu` in view `look` (`lawBinds` and colour.wgsl's), or null before the first
+   * table. */
   binds(gpu: Gpu, look: MapLook): Record<number, ArrayBuffer | Texture> | null {
+    const laws = this.lawBinds(gpu);
+    if (!laws) return null;
+    const m = this.tiles.map, texel = 2 ** (m.square_depth - this.tiles.depth);
+    const read = [Math.max(texel ** SLOPE_POWER, SLOPE_LEAST), this.melt, BEACH_M, OVER_FADE];
+    return { ...laws, 1: earthUniforms(look, read, [0, 0, m.w * m.cell_m, m.h * m.cell_m]) };
+  }
+
+  /** The bindings of lib/land.wgsl on `gpu` (its uniforms, the tiles and the table), or null before the first table. */
+  lawBinds(gpu: Gpu): Record<number, ArrayBuffer | Texture> | null {
     if (!this.data) return null;
     const m = this.tiles.map;
     this.tex ??= gpu.texture(m.w, PLANES * m.h, 'rgba32float');
     if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
-    const t = this.tiles.textures(gpu), l = this.laws, texel = 2 ** (m.square_depth - this.tiles.depth);
-    const read = [Math.max(texel ** SLOPE_POWER, SLOPE_LEAST), this.melt, BEACH_M, OVER_FADE];
+    const t = this.tiles.textures(gpu), l = this.laws;
     const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(this.tiles.meta.size, this.tiles.meta.gutter, this.tiles.depth)
-      .vec4(t.now, TILE_FADE_MS).vec4(l.soil_m, l.wet_depth).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp);
-    return { 1: earthUniforms(look, read, [0, 0, m.w * m.cell_m, m.h * m.cell_m]), 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex };
+      .vec4(t.now, TILE_FADE_MS, this.melt).vec4(l.soil_m, l.wet_depth, l.dormancy).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp);
+    return { 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex };
   }
 
   stop(gpu: Gpu | null): void {

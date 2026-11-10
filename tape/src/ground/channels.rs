@@ -58,6 +58,12 @@ fn bezier([a, b, c]: [[f64; 2]; 3], t: f64) -> [f64; 2] {
     std::array::from_fn(|k| u * u * a[k] + 2.0 * u * t * b[k] + t * t * c[k])
 }
 
+/// The square of the distance from `p` to the box from `lo` to `hi` (none inside it).
+fn box_distance(p: [f64; 2], lo: [f64; 2], hi: [f64; 2]) -> f64 {
+    let (x, y) = ((lo[0] - p[0]).max(p[0] - hi[0]).max(0.0), (lo[1] - p[1]).max(p[1] - hi[1]).max(0.0));
+    x * x + y * y
+}
+
 /// The square of the distance from `p` to the segment from `a` to `b`.
 fn to_segment(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
     let (d, q) = ([b[0] - a[0], b[1] - a[1]], [p[0] - a[0], p[1] - a[1]]);
@@ -115,14 +121,21 @@ impl<'a> Near<'a> {
                 continue;
             }
             let Some(curve) = &self.curves[((r - self.r0) * self.wide + c - self.c0) as usize] else { continue };
-            let scale = curve.scale;
-            let out = [(curve.lo[0] - p[0]).max(p[0] - curve.hi[0]).max(0.0), (curve.lo[1] - p[1]).max(p[1] - curve.hi[1]).max(0.0)];
-            if (out[0] * out[0] + out[1] * out[1]).sqrt() * self.metres / scale >= best.0 {
+            // The square of the distance, in samples, under which this channel's ratio beats the best so far.
+            let mut limit = (best.0 * curve.scale / self.metres).powi(2);
+            if box_distance(p, curve.lo, curve.hi) >= limit {
                 continue;
             }
-            let d = curve.pts.windows(2).map(|w| to_segment(p, w[0], w[1])).fold(f64::MAX, f64::min).sqrt() * self.metres;
-            if d / scale < best.0 {
-                best = (d / scale, curve.area);
+            let mut near = f64::MAX;
+            for w in curve.pts.windows(2) {
+                let (lo, hi) = ([w[0][0].min(w[1][0]), w[0][1].min(w[1][1])], [w[0][0].max(w[1][0]), w[0][1].max(w[1][1])]);
+                if box_distance(p, lo, hi) < limit {
+                    near = near.min(to_segment(p, w[0], w[1]));
+                    limit = limit.min(near);
+                }
+            }
+            if near < f64::MAX && near.sqrt() * self.metres / curve.scale < best.0 {
+                best = (near.sqrt() * self.metres / curve.scale, curve.area);
             }
         }
         best

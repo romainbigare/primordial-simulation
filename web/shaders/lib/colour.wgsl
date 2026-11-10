@@ -32,9 +32,6 @@ const LIGHT = vec3f(-0.588, -0.588, 0.647);
 const EXAGGERATE = 6.0;
 // The most of a shore by the sea that is sand.
 const SAND_SHARE = 0.55;
-// Snow lies by a texel's own temperature where that is within these of the cover's melting point, K (fading between),
-// and by the cells' ice elsewhere.
-const SNOW_NEAR_K = vec2f(2.0, 6.0);
 // Water standing deeper than this, m, is the deep sea's.
 const DEEP_SEA_M = 200.0;
 // Over the liquid's surface the ground draws water up through its pores (the capillary fringe), wet to e^-1 at this
@@ -156,15 +153,6 @@ fn in_view_of(c: Shaded, o: vec2f, truth: vec3f) -> vec3f {
   let worn = 255.0 * o.y;
   if (earth.view.z > 0.5 && worn > 1.0) { rgb = mix(rgb, PATH, 0.4 + 0.5 * ((worn - 1.0) / 254.0)); }
   return rgb;
-}
-
-// How much snow and ice lies on ground of `ice` m of it at `t` K, 0..1: the ice, and near the melting point of the frozen
-// cover (`earth.look.y`; 0: the ice alone) the ground's own temperature.
-fn snow_of(ice_m: f32, t: f32) -> f32 {
-  let look = earth.look;
-  let ice = ease(0.02, 0.5, ice_m);
-  let near = select(0.0, 1.0 - ease(SNOW_NEAR_K.x, SNOW_NEAR_K.y, abs(t - look.y)), look.y > 0.0);
-  return ice + (ease(look.y + 1.0, look.y - 1.0, t) - ice) * near;
 }
 
 // The metres of the world a pixel of the target takes where it shows uv of the window.

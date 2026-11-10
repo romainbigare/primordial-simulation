@@ -78,19 +78,19 @@ place has the same colour after any pan or zoom. The stats line gives the tiles 
 are still to come, and which of WebGPU and WebGL2 draws. A tape holds no ground: its map is drawn from its squares.
 
 The Earth view draws the plant cover as textures at its real size (`web/src/vegetation.ts`, `web/src/textures.ts`),
-over the fine raster where there is one and blended between the cells' centres as the map is; in the fine raster each
-slot of a cell is a stand of its own kinds where its own cover lies (so a kind that likes wet ground stands in the wet
-ground and the shallows, and stops where its cover stops), the stands closing the ground together by their summed
-capture area, each by its share of it; a mark under liquid deeper than it is wide is not drawn: crowns where it is woody
+at every zoom from one field, the squares' cover blended between their centres as the map is: crowns where it is woody
 (shrubs, woodland, forest, a jungle where it is also warm and wet), a tree's crown 3 to 15 m across by its walls per
 m², and tufts where it is herbs (grass, steppe, tundra); as many marks as its capture area closes it (1 - e^-area). A
 kind gives way to the next over a range of each threshold, so kinds mix mark by mark, never at an edge. The marks are
 drawn per pixel on the graphics card at every frame, a pass of the map's renderer: each kind's marks lie on a grid
 fixed in the world, one mark a grid cell at a place, size and tone hashed from the cell, so they hold while the camera
-moves and never repeat or stand in rows. They
-are coloured by the cover and, close up, by the genes of the cell's heaviest slot (hue by its light and leaf genes,
-darker if frost-hardy). A kind's marks fade in as they grow from 0.7 to 2 pixels. A pan, a zoom or a new frame shows
-the marks at once, never a plain colour in their place.
+moves and never repeat or stand in rows. On the live map each mark is masked at its own foot by the laws inside a cell
+there (`web/shaders/cover_live.wgsl`): none where liquid stands over its foot deeper than the roots reach (0.3 m,
+Jackson and others 1996), none under snow, and fewer where the ground is drier than the cell's heaviest cover needs,
+by its activity there against its activity on ground as wet as its cell's (`cover::activity`); so no tree stands in
+the sea. They are coloured by the cover and, close up, by the genes of the cell's heaviest slot (hue by its light and
+leaf genes, darker if frost-hardy). A kind's marks fade in as they grow from 0.7 to 2 pixels. A pan, a zoom or a new
+frame shows the marks at once, never a plain colour in their place.
 
 From 64 pixels a square, the live viewer draws the bodies and parts of each cell one by one at their real size, from
 the numbers the core hands out (`tape::things`): a member is as long as 1.5 times the cube root of its volume (a body

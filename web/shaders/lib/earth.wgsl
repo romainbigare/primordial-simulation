@@ -63,7 +63,7 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.wet = inside.x;
   s.bare = inside.z;
   s.t = m.y;
-  s.snow = snow_of(m.x, s.t);
+  s.snow = snow_of(m.x, s.t, look.y);
   s.plants = 255.0 * textureSampleLevel(byte_field, smooth_sampler, uv, 0.0).x;
   s.z = h.x;
   s.slope = length(h.zw) * look.x;

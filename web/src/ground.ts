@@ -20,6 +20,11 @@ const MOST_TILES = 96;
 export const TILE_FADE_MS = 250;
 /** The view's tiles are asked for this share of its width and height past each of its edges, so a pan finds them. */
 const AHEAD = 0.25;
+/** The view is drawn at the depth whose texels take no more than this many css pixels: the spline that magnifies them
+ * draws a texel of a pixel or two smooth, and each halving of it costs four times the tiles. */
+const TEXEL_CSS_PX = Math.SQRT2;
+/** Tiles asked of the worker at once: it makes the next while the page takes the last. */
+const MAKING = 3;
 /** A tile's key: its depth, row and column, as one number. */
 const KEY_ROW = 1 << 12, KEY_DEPTH = KEY_ROW * KEY_ROW;
 const keyOf = (depth: number, x: number, y: number) => depth * KEY_DEPTH + y * KEY_ROW + x;
@@ -33,9 +38,9 @@ export class GroundTiles {
   private url: string;
   private ready = false;
   private kept = new Map<number, Kept>();
-  /** The tiles the view asks for and has not, in order; the one being made. */
+  /** The tiles the view asks for and has not, in order; those being made. */
   private queue: { depth: number; x: number; y: number }[] = [];
-  private making: number | null = null;
+  private making = new Set<number>();
   /** The views asked so far, and the keys of the last one's tiles in view at its own depth. */
   private views = 0;
   private inView = new Set<number>();
@@ -73,10 +78,10 @@ export class GroundTiles {
   /** Tiles of `depth` across and down the map. */
   private across(depth: number): [number, number] { const s = this.squaresOf(depth); return [Math.ceil(this.map.w / s), Math.ceil(this.map.h / s)]; }
 
-  /** The tiles of view `v`: drawn at the depth whose texels take no more than a css pixel, all its ancestors' first. */
+  /** The tiles of view `v`: drawn at the depth whose texels take no more than `TEXEL_CSS_PX`, all its ancestors' first. */
   view(v: View): void {
     const [d0, d1] = this.meta.depths, sq = this.map.square_depth;
-    const depth = Math.min(Math.max(sq + Math.ceil(Math.log2(Math.max(v.s, 1))), d0), d1);
+    const depth = Math.min(Math.max(sq + Math.ceil(Math.log2(Math.max(v.s / TEXEL_CSS_PX, 1))), d0), d1);
     const cx = v.x + v.w / 2, cy = v.y + v.h / 2, asked = ++this.views, wanted: { depth: number; x: number; y: number; far: number }[] = [];
     this.inView.clear();
     for (let d = d0; d <= depth; d++) {
@@ -103,14 +108,16 @@ export class GroundTiles {
   /** Whether a tile still fades in at `now` (performance.now, ms). */
   fading(now: number): boolean { return now - this.start - this.lastCame < TILE_FADE_MS; }
 
-  /** Ask the worker for the next tile of the queue, if none is being made and a layer is free or can be freed. */
+  /** Ask the worker for the next tiles of the queue, up to `MAKING` at once, while a layer is free or can be freed. */
   private next(): void {
-    if (!this.ready || this.making !== null) return;
-    let t = this.queue.shift();
-    while (t && this.kept.has(keyOf(t.depth, t.x, t.y))) t = this.queue.shift();
-    if (!t || (!this.free.length && this.oldest() === null)) return;
-    this.making = keyOf(t.depth, t.x, t.y);
-    this.worker.postMessage({ cmd: 'tile', depth: t.depth, x: t.x, y: t.y });
+    while (this.ready && this.making.size < MAKING && (this.free.length > this.making.size || this.oldest() !== null)) {
+      let t = this.queue.shift();
+      const known = (q: { depth: number; x: number; y: number }) => this.kept.has(keyOf(q.depth, q.x, q.y)) || this.making.has(keyOf(q.depth, q.x, q.y));
+      while (t && known(t)) t = this.queue.shift();
+      if (!t) return;
+      this.making.add(keyOf(t.depth, t.x, t.y));
+      this.worker.postMessage({ cmd: 'tile', depth: t.depth, x: t.x, y: t.y });
+    }
   }
 
   /** The tile the last views asked for least lately that the last did not ask for (none of the coarsest). */
@@ -122,7 +129,7 @@ export class GroundTiles {
 
   /** Keep the tile that came, on a free layer or on the oldest's. */
   private took(depth: number, x: number, y: number, data: Float32Array): void {
-    this.making = null;
+    this.making.delete(keyOf(depth, x, y));
     let layer = this.free.pop();
     if (layer === undefined) {
       const old = this.oldest();
