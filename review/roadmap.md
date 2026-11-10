@@ -377,3 +377,21 @@ graphics card with its two back ends, the water's colour by depth, the marks fix
 
 How the work runs: at most two work streams side by side; the fewest tests that state a law; every run without
 animals; pictures before and after each fix; `main` moves forward after each stage that passes the gate.
+
+## 10. Where each stage stands
+
+**Stage 0: done.** The live page keeps the cells as built; the fine picture makes only the layers the view reads and
+takes at most a tenth of the worker's time; the page gets a world frame at most four times a second; no work for
+animals while none lives. Seed 1, size 22, speed max, months a second:
+
+| | fitted | 200 m view | 50 m view |
+|---|---|---|---|
+| before | 26 | 0.4 | 0.1 |
+| after | 43 | 41 | 39 |
+
+What stage 0 showed, for the tracks:
+- Without fine cells a 2 km cell spreads its cover evenly over its ridges: bare rock on steep ground is a need of A2
+  (the law inside a cell at each pixel), and of the ground's materials.
+- The fine picture still takes 0.3 to 0.7 s to make and comes 1 to 3 s after a zoom; while the world plays it shows a
+  state some years old. Making fewer layers saved a tenth only: the cost is the window itself. Track A removes it.
+- Trees stand in the sea at the 50 m view, as before.
