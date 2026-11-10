@@ -1,7 +1,8 @@
 //! Seeds (laws.md 4.5): what a slot sends out in its month lands, when every cell has had its month, in the cell it
 //! goes to, cell by cell in the order made. It joins the nearest slot of its kind there within `APART` of `alike`
-//! (the genes the mean by built cover) unless that slot is full (`Cover::full`), or takes an empty slot, or the
-//! lightest if it outweighs it (whose cover then dies as remains); else it dies.
+//! (the genes the mean by built cover) unless that slot is full (`Cover::full`), or takes an empty slot (made, where
+//! none is, by joining the two most alike slots of one kind), or the lightest if it outweighs it (whose cover then dies
+//! as remains); else it dies.
 
 use super::{built_kg, distance, Cover, Parts, APART, EMPTY_KG, NG, NO_ROOT, NP, SLOTS};
 use crate::store::{apply, Class, Move, Node};
@@ -85,7 +86,9 @@ pub(super) enum Landed {
 
 /// Seeds `s` lodge in cover `c`, with their heat: into the most alike slot of their starting kind
 /// within `APART` × `alike` steps (they die if it is full: one more kg there would not pay, `Cover::full`), else an
-/// empty slot, or the lightest slot if they outweigh its built cover, which dies.
+/// empty slot; where none is empty, two slots of one starting kind, the most alike, join (`grow::join`) to make room,
+/// so a kind new to the cell can take hold beside the variants of another; else the lightest slot if they outweigh its
+/// built cover, which dies.
 pub(super) fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, alike: f32) -> Landed {
     let kg = built_kg(mm, &s.mol);
     let kin = (0..SLOTS).filter(|&x| c.root[x] == s.root);
@@ -100,7 +103,10 @@ pub(super) fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, alike: f32) -> Land
             c.e += s.heat;
             return Landed::In;
         }
-        None => (0..SLOTS).min_by(|&a, &b| c.built(mm, a).total_cmp(&c.built(mm, b))).expect("a cell has slots"),
+        None => match (0..SLOTS).find(|&x| c.root[x] == NO_ROOT).or_else(|| room(c, mm)) {
+            Some(x) => x,
+            None => (0..SLOTS).min_by(|&a, &b| c.built(mm, a).total_cmp(&c.built(mm, b))).expect("a cell has slots"),
+        },
     };
     let (was, out) = (c.root[x] != NO_ROOT, c.mol[x]);
     if was && c.built(mm, x) > EMPTY_KG && c.built(mm, x) >= kg {
@@ -109,4 +115,14 @@ pub(super) fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, alike: f32) -> Land
     place(c, x);
     c.e += s.heat;
     if was { Landed::Out(out) } else { Landed::In }
+}
+
+/// Room in full cover `c`: the two slots of one starting kind that are most alike (`distance`) join, the lighter into
+/// the heavier (`grow::join`); the slot it leaves empty, or none if no two slots share a starting kind.
+fn room(c: &mut Cover, mm: &[f64; NP]) -> Option<usize> {
+    let pairs = (0..SLOTS).flat_map(|a| (a + 1..SLOTS).map(move |z| (a, z))).filter(|&(a, z)| c.root[a] == c.root[z]);
+    let (a, z) = pairs.min_by(|p, q| distance(&c.genes[p.0], &c.genes[p.1]).total_cmp(&distance(&c.genes[q.0], &c.genes[q.1])))?;
+    let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };
+    super::grow::join(c, mm, big, small);
+    Some(small)
 }

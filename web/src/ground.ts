@@ -10,8 +10,9 @@ import type { View } from './map';
 
 /** The tiles of the ground as the core makes them (wasm/src/lib.rs `meta`): texels a side inside the gutter, texels of
  * the gutter along each edge, the depths from the coarsest to the finest, the most steps along each axis by which a
- * texel names its channel's sample, and numbers of a row of the cells' table. */
-export interface TileMeta { size: number; gutter: number; depths: [number, number]; step_most: number; row: number; kinds: number; kind_row: number }
+ * texel names its channel's sample, numbers of a row of the cells' table, and the reflectance of the walls the cover
+ * builds. */
+export interface TileMeta { size: number; gutter: number; depths: [number, number]; step_most: number; row: number; kinds: number; kind_row: number; walls: [number, number, number] }
 /** The map the tiles are of: squares across and down, metres a square and the depth of a square. */
 export interface MapOf { w: number; h: number; cell_m: number; square_depth: number }
 

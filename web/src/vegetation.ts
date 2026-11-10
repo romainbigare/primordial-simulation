@@ -12,7 +12,8 @@ import { Draw, Gpu, Pass } from './gpu';
 import { GpuLayer } from './map';
 import type { Land } from './land';
 
-/** How strongly the cover covers the map, so its hill shading still shows through. */
+/** How strongly the marks cover the map, so its hill shading still shows through them (the field in the ground is lit
+ * by it). */
 const COVER_ALPHA = 0.85;
 
 /** The cover over the live map: what it reads (`set`), drawn by the GPU at every frame. */
@@ -33,7 +34,7 @@ export class Vegetation implements GpuLayer {
     if (!w || !rows || !t) { this.marks.set(null, this.cellM); return; }
     const m = w.meta, n = m.w * m.h;
     this.cellM = m.cell_m; this.mapW = m.w; this.mapH = m.h;
-    this.marks.set(kindsOf(m.w, m.h, rows, 1 + n * t.row, t.kinds, t.kind_row), m.cell_m);
+    this.marks.set(kindsOf(m.w, m.h, rows, 1 + n * t.row, t.kinds, t.kind_row, t.walls), m.cell_m);
   }
 
   /** The bindings the live map's ground draws the cover's field with (cover_field.wgsl), a square taking `s` css px. */

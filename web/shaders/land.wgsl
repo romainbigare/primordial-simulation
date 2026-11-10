@@ -15,11 +15,12 @@ const LINE_FADE = 4.0;
 struct Spots { dry: Spot, wet: Spot, share: f32 }
 
 // What is at `at`, m from the map's north-west corner, seen at `e` m a pixel: its ground and its state (`state_on`), the
-// cover's byte, bare share and sea blended between the squares' centres; and its channel (`bed_at`), from its own
-// sample's discharge. The channel's bed is cut into the ground, so where it runs into standing liquid that liquid
-// takes it over at its shore at the same depth. Beside it the ground is wet by the capillary fringe over its water,
-// which rises from the water's edge as the valley's side does, at least as steeply as the channel's own banks. Its
-// water (`river_colour`) is as deep as its bed lies there; a pixel wider than the channel sees its mean depth.
+// ground's own colour and the sea blended between the squares' centres, the plants' field (lib/cover_field.wgsl); and
+// its channel (`bed_at`), from its own sample's discharge. The channel's bed is cut into the ground, so where it runs
+// into standing liquid that liquid takes it over at its shore at the same depth. Beside it the ground is wet by the
+// capillary fringe over its water, which rises from the water's edge as the valley's side does, at least as steeply as
+// the channel's own banks. Its water (`river_colour`) is as deep as its bed lies there; a pixel wider than the channel
+// sees its mean depth.
 fn land_spots(at: vec2f, e: f32) -> Spots {
   let look = earth.look;
   let cs = corners(at / land.map.x);
@@ -27,16 +28,16 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let q = discharge_at(g);
   let bed = bed_at(g, q);
   let st = state_on(at, g, cs, bed.depth);
-  let cover = blended(COVER, cs);
+  let surface = blended(SURFACE, cs);
   var p: Spot;
   p.depth = st.depth;
   p.over = st.over;
-  p.sea = cover.z;
+  p.sea = surface.w;
   p.wet = st.wet;
-  p.bare = cover.y;
   p.t = st.t;
   p.snow = st.snow;
-  p.plants = 255.0 * cover.x;
+  p.ground = surface.xyz;
+  p.cover = cover_field(at, e);
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
@@ -57,6 +58,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let x = min(g.d / bed.half, 1.0);
   out.wet.depth = mix(bed.mean, bed.depth, resolved);
   out.wet.sand = 0.0;
+  out.wet.cover = vec4f(0.0);
   // The bed's slope across the channel, d(depth)/d(distance) along the distance's own slope; where the channel is
   // narrower than a pixel its banks do not show.
   let bank = 2.0 * BED_MIDDLE * bed.mean * x / bed.half * g.d_slope * select(0.0, 1.0, x < 1.0) * resolved;
@@ -70,32 +72,25 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
 // (Legleiter and others 2004; from memory).
 const BED_FILM = 0.3;
 
-// The colour of a channel's water at spot `p` (`land_spots`): its bed, soaked bare ground (washed sand and gravel: the
-// flow takes the plants) under its film (`BED_FILM`), seen through running water as deep as it is there (water.wgsl);
-// snow lies on it as on standing liquid (colour.wgsl `colour`), and the true view shades its bed as far as it shows.
+// The colour of a channel's water at spot `p` (`land_spots`), a reflectance in linear light: its bed, soaked bare
+// ground (washed sand and gravel: the flow takes the plants) under its film (`BED_FILM`), seen through running water as
+// deep as it is there (water.wgsl); snow lies on it as on standing liquid (colour.wgsl `colour`), and the true view
+// shades its bed as far as it shows.
 fn river_colour(p: Spot) -> Shaded {
   let lit = light(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), p.slope);
-  let bed = BED_FILM * soil(ground_of(p, 0.0, 0.0), 1.0, lit);
+  let bed = BED_FILM * soil(ground_of(p, 0.0), 1.0, lit);
   let rgb = mix(seen_through(bed, p.depth, ripples(p.at, p.e) * (1.0 - p.snow), RUNNING_ATTENUATION), SNOW, p.snow * 0.85);
   return Shaded(rgb, 1.0 + (lit - 1.0) * exp(-2.0 * RUNNING_ATTENUATION.g * p.depth), RIVER);
-}
-
-// Shaded ground `c` of spot `p` under the cover's field (in the Earth's colours only), lit as the ground is.
-fn covered(c: Shaded, p: Spot) -> Shaded {
-  if (cover_look.look.x <= 0.0 || earth.view.x != 0.0) { return c; }
-  let f = cover_field(p.at, p.e) * stands_in(p.depth, p.snow) * cover_look.look.y;
-  if (f.a <= 0.0) { return c; }
-  return Shaded(mix(c.rgb, 255.0 * f.rgb / f.a * c.m, f.a), c.m, c.kind);
 }
 
 @fragment fn fs(v: Varying) -> @location(0) vec4f {
   let at = earth.place.xy + v.uv * earth.place.zw;
   let cs = corners(at / land.map.x);
-  let s = land_spots(at, metres_a_pixel(v.uv));
-  var c = covered(colour(s.dry), s.dry);
-  if (s.share > 0.0) {
-    let w = river_colour(s.wet);
-    c = Shaded(mix(c.rgb, w.rgb, s.share), mix(c.m, w.m, s.share), select(c.kind, RIVER, s.share > 0.5));
+  let spots = land_spots(at, metres_a_pixel(v.uv));
+  var c = colour(spots.dry);
+  if (spots.share > 0.0) {
+    let w = river_colour(spots.wet);
+    c = Shaded(mix(c.rgb, w.rgb, spots.share), mix(c.m, w.m, spots.share), select(c.kind, RIVER, spots.share > 0.5));
   }
   let rgb = in_view_of(c, blended(VIEW, cs).xy, blended(TRUTH, cs).xyz);
   return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);

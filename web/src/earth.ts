@@ -10,7 +10,7 @@ const ramps = (...h: string[]) => h.map(rgb);
 
 export const CLASSES = [
   ['Deep sea', '#1f5594'], ['Shallow sea', '#62b6d6'], ['Lake', '#4c92cc'], ['River', '#2f86e6'], ['Snow and ice', '#f3f7fa'],
-  ['Mountain', '#8e8c88'], ['Desert', '#dccb98'], ['Grassland', '#9cc16c'], ['Forest', '#487f4a'],
+  ['Mountain', '#8e8c88'], ['Bare ground', '#a89a80'], ['Plant cover', '#5f8f4a'],
 ] as const;
 const TURBO = ramps('#30123b', '#4662d7', '#36aaf9', '#1ae4b6', '#72fe5e', '#c7ef34', '#fabb2f', '#f66b19', '#cb2a04', '#7a0403');
 const WATER = ramps('#eaf4fb', '#b6dcf0', '#6fb4e0', '#3a82c8', '#1f4f9b', '#12295e');
@@ -99,10 +99,10 @@ export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
   const m = w.meta, { w: W, h: H, cell_m, globe } = m, n = W * H;
   const z = decode(w, f, 'z'), depth = decode(w, f, 'depth'), ice = decode(w, f, 'ice'), tg = decode(w, f, 't_ground');
   const leaf = decode(w, f, 'leaf'), soaked = decode(w, f, 'wet'), channelW = decode(w, f, 'channel_w'), channelD = decode(w, f, 'channel_d');
-  const plants = plane(w, f, 'plants'), tr = plane(w, f, 'true_r'), tgr = plane(w, f, 'true_g'), tb = plane(w, f, 'true_b');
+  const [tr, tgr, tb, gr, gg, gb] = ['true_r', 'true_g', 'true_b', 'ground_r', 'ground_g', 'ground_b'].map(name => plane(w, f, name));
   const wet = wetOf(w, f), sea = seaSquares(wet, m);
   const wrapX = (x: number) => (globe ? (x + W) % W : x);
-  const height = new Float32Array(4 * n), matter = new Float32Array(4 * n), bytes = new Uint8Array(4 * n), inside = new Float32Array(4 * n);
+  const height = new Float32Array(4 * n), matter = new Float32Array(4 * n), bytes = new Uint8Array(4 * n), ground = new Uint8Array(4 * n), inside = new Float32Array(4 * n);
   for (let i = 0; i < n; i++) {
     const x = i % W, y = (i / W) | 0;
     const zAt = (dx: number, dy: number) => z[clamp(y + dy, 0, H - 1) * W + clamp(wrapX(x + dx), 0, W - 1)];
@@ -121,10 +121,11 @@ export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
     }
     put4(height, i, z[i], water, gx, gy);
     put4(matter, i, ice[i], tg[i], sea[i], wet.wet[i] ? 0 : Math.min(channelW[i] / width, 1));
-    put4(bytes, i, plants[i], tr[i], tgr[i], tb[i]);
+    put4(bytes, i, tr[i], tgr[i], tb[i], 0);
+    put4(ground, i, gr[i], gg[i], gb[i], 0);
     put4(inside, i, soaked[i], channelD[i], Math.exp(-leaf[i]), 0);
   }
   const o = w.base + f * w.frameBytes;
-  const fields: Fields = { w: W, h: H, height, matter, bytes, inside, layers: w.data.subarray(o, o + w.frameBytes), names: w.meta.layers.map(l => l.name), look: [1, 0, SQUARE_BEACH_M, 1], place: [0, 0, W * cell_m, H * cell_m] };
+  const fields: Fields = { w: W, h: H, height, matter, bytes, ground, inside, layers: w.data.subarray(o, o + w.frameBytes), names: w.meta.layers.map(l => l.name), look: [1, 0, SQUARE_BEACH_M, 1], place: [0, 0, W * cell_m, H * cell_m] };
   return { fields, wet };
 }

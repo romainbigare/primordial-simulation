@@ -54,7 +54,9 @@ that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid d
 in units of its own: its liquid flux over its rain less evaporation times its area, so a river reads the same at any cell
 size), `channel_w` and `channel_d` (the width and the depth of the cell's channel, `World::channel`), loose ground,
 `wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them), ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the bodies' mass per m², bodies, traffic,
-worn edges, structures, true colour (r, g, b). The tape holds whole-map frames only. The live viewer draws its map from two
+worn edges, structures, true colour (r, g, b: the colour of what covers the surface, its frozen cover, liquid or
+ground) and the ground's colour (r, g, b: its loose solids, else its bonded ones, without frozen cover or liquid, under
+the litter of the cover's remains in it over the share 1 - e^-(their kg/m² / `LITTER_KG`), 0.3 kg/m²). The tape holds whole-map frames only. The live viewer draws its map from two
 things, neither recorded. **The ground's tiles** (`tape::Ground`, `tape/src/ground/`), which never change, so a page
 makes each once and keeps it: a tile of a depth holds 256 x 256 texels (`TILE`), each a leaf of that depth, and 2 more
 along each edge (`GUTTER`), row by row from its north-west corner, as 16-bit floats (IEEE binary16, little-endian) in two
@@ -121,7 +123,9 @@ squares' centres and applies the laws inside a cell at each pixel of the tiles' 
 from its frames alone: the page makes fields of the squares (`web/src/fields.ts`, a texel a square: the height and its
 slope, the liquid's surface over the ground, below a dry square's ground by the depth it lacks to be wet and its height
 over the wet squares beside it, the ice, the ground's temperature, the sea, the share a channel covers, `channel_w`
-over the square's width, how wet the ground is, the cover's byte and the true colour), coloured by the same rules.
+over the square's width, how wet the ground is, the share of the ground the cover leaves bare, the true colour and the
+ground's colour), coloured by the same rules; with no kinds in a tape, its cover is one foliage colour as closed as its
+capture area closes the ground.
 Close up the live viewer also asks
 for the things of the cells in view (`tape::things`, the record layout in `tape/src/things.rs`): each body (members,
 a member's mass, strength, colour, coat, copy mass, the temperatures it keeps, what it takes from where, its kind,

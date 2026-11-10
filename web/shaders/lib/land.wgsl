@@ -40,9 +40,9 @@ struct Land {
 // The table's planes: the terrain's mean height over the cell, m, its ground's temperature, K, how fast its air cools
 // with height, K/m, and its ice, m; its standing liquid's level, its lowest ground and the depth that stands, m, and the
 // liquid in its pores, m; what its pores hold full, m, and the level of the wetness index its soil's liquid departs
-// about; the byte of its cover's mass, the share of its ground its cover leaves bare and its share of the sea; its true
-// colour; the bytes of the layer drawn and of the worn paths.
-const GROUND = 0; const LIQUID = 1; const SOIL = 2; const COVER = 3; const TRUTH = 4; const VIEW = 5; const PLANES = 6;
+// about; the ground's own colour and its share of the sea; its true colour; the bytes of the layer drawn and of the
+// worn paths.
+const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const PLANES = 6;
 // Where no liquid stands near a point, its surface is taken this far below the ground, m.
 const NO_LIQUID_M = 1000.0;
 // Between texels of one channel its signed distance changes by at most the distance between them (√2 texels across a

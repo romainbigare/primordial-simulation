@@ -9,6 +9,10 @@ use pcore::{World, AIR};
 
 /// Thinnest cover (m) that hides what lies below it.
 pub(crate) const COVER_MIN: f64 = 0.01;
+/// The remains of the cover lie on the ground's surface as litter, covering all but e^-1 of it at this much, kg/m² (a
+/// forest floor's litter of a few tenths of a kg/m² hides the mineral soil; forests hold 0.5 to 5 kg/m² of it, from
+/// memory).
+const LITTER_KG: f64 = 0.3;
 /// Melting points of the frozen cover, K: substances that are liquid somewhere on the surface.
 const COVER_MELT: (f64, f64) = (200.0, 320.0);
 /// Boiling point above which a gas of the air counts as vapour (it condenses on the surface), K.
@@ -43,21 +47,26 @@ pub struct Fields {
     pub t: Vec<f64>,
     /// Visible colour of what covers the surface, 0..1
     pub rgb: Vec<[f64; 3]>,
+    /// Colour of the ground itself, 0..1: its loose solids, else its bonded ones (no frozen cover, no liquid), under the
+    /// litter of the cover's remains on it (`LITTER_KG`)
+    pub ground: Vec<[f64; 3]>,
 }
 
-/// One cell's values: elevation, liquid depth, frozen cover depth, loose solid depth, temperature, colour.
-type Cell = (f64, f64, f64, f64, f64, [f64; 3]);
+/// One cell's values: elevation, liquid depth, frozen cover depth, loose solid depth, temperature, colour of the
+/// surface and of the ground.
+type Cell = (f64, f64, f64, f64, f64, [f64; 3], [f64; 3]);
 
 pub fn fields(w: &World) -> Fields {
     let cells = par::map_n(w.mesh.cells().n(), par::UNCOUNTED, |i| cell(w, i));
-    let mut f = Fields { z: vec![], depth: vec![], ice: vec![], loose: vec![], t: vec![], rgb: vec![] };
-    for (z, depth, ice, loose, t, rgb) in cells {
+    let mut f = Fields { z: vec![], depth: vec![], ice: vec![], loose: vec![], t: vec![], rgb: vec![], ground: vec![] };
+    for (z, depth, ice, loose, t, rgb, ground) in cells {
         f.z.push(z);
         f.depth.push(depth);
         f.ice.push(ice);
         f.loose.push(loose);
         f.t.push(t);
         f.rgb.push(rgb);
+        f.ground.push(ground);
     }
     f
 }
@@ -86,8 +95,27 @@ fn cell(w: &World, i: usize) -> Cell {
     let area = w.mesh.cells().area()[i];
     let top = acc[..3].iter().find(|a| a[0] / area >= COVER_MIN).unwrap_or(&acc[3]);
     let glow = 1.0 + 2.0 * ((t - GLOW_T) / GLOW_T).clamp(0.0, 1.0);
-    let rgb = [1, 2, 3].map(|c| if top[0] > 0.0 { (top[c] / top[0] * glow).min(1.0) } else { 0.0 });
-    (w.surface_z(i), acc[1][0] / area, acc[0][0] / area, acc[2][0] / area, w.t_surface_last(i), rgb)
+    let colour = |a: &[f64; 4]| [1, 2, 3].map(|c| if a[0] > 0.0 { (a[c] / a[0] * glow).min(1.0) } else { 0.0 });
+    let ground = colour(acc[2..].iter().find(|a| a[0] > 0.0).unwrap_or(&acc[3]));
+    (w.surface_z(i), acc[1][0] / area, acc[0][0] / area, acc[2][0] / area, w.t_surface_last(i), colour(top), litter(w, i, area, ground))
+}
+
+/// Ground of colour `ground` in cell `i` (`area` m²) under the litter of the cover's remains in it: their colour by
+/// volume, over the share 1 - e^-(their kg/m² / `LITTER_KG`) of it.
+fn litter(w: &World, i: usize, area: f64, ground: [f64; 3]) -> [f64; 3] {
+    let Some(p) = pcore::cover::Parts::of(&w.chem) else { return ground };
+    let (mut kg, mut vol, mut refl) = (0.0, 0.0, [0.0; 3]);
+    for &k in &p.sub {
+        let (s, mol) = (&w.chem.subs[k], w.g(k, i));
+        let v = mol * w.chem.molar_volume(k, Phase::Solid);
+        (kg, vol) = (kg + mol * s.molar_mass, vol + v);
+        (0..3).for_each(|c| refl[c] += v * s.refl[0][c] as f64);
+    }
+    if vol <= 0.0 {
+        return ground;
+    }
+    let covers = -(-kg / area / LITTER_KG).exp_m1();
+    std::array::from_fn(|c| ground[c] + (refl[c] / vol - ground[c]) * covers)
 }
 
 /// Liquid deeper than this stands (a basin), m; shallower, it may flow as a river.
@@ -215,6 +243,9 @@ pub const LAYERS: &[Layer] = &[
     l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
     l("true_g", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][1]),
     l("true_b", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][2]),
+    l("ground_r", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][0]),
+    l("ground_g", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][1]),
+    l("ground_b", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][2]),
 ];
 
 /// Quantise a value to a byte as the frames format defines.

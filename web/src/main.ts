@@ -88,7 +88,7 @@ function setup(w: World): void {
   map.setWorld(m.w, m.h, m.cell_m, m.globe ? { north: m.lat_north, south: m.lat_south } : null);
   $('meta').innerHTML = [['seed', m.seed], ...(m.globe ? [['world', 'globe']] : []), ['size', `${m.w}×${m.h}`], ['cell', m.cell_m >= 1000 ? `${fmt(m.cell_m / 1000)} km` : `${fmt(m.cell_m)} m`]]
     .map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('') + '<span>year <b id="hy"></b></span>';
-  const names = m.layers.map(l => l.name).filter(n => !/^true_[rgb]$/.test(n));
+  const names = m.layers.map(l => l.name).filter(n => !/^(true|ground)_[rgb]$/.test(n));
   const sorted = [...names.filter(n => ORDER.includes(n)).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)), ...names.filter(n => !ORDER.includes(n))];
   $('layers').replaceChildren(...sorted.map(n => button(label(n), () => setLayer(layer === n ? null : n), n)));
   const years = m.frames.map(f => f.year), last = years.length - 1;
@@ -196,7 +196,7 @@ function inspect(): void {
   const { meta } = world, [name, color] = CLASSES[cls[i]];
   let rows = '';
   meta.layers.forEach((l, k) => {
-    if (/^true_[rgb]$/.test(l.name)) return;
+    if (/^(true|ground)_[rgb]$/.test(l.name)) return;
     rows += `<tr><td>${label(l.name)}</td><td>${fmt(world!.lut[k][plane(world!, frame, l.name)[i]])} <u>${unitText(l.unit)}</u></td></tr>`;
   });
   const t = ['true_r', 'true_g', 'true_b'].map(n => plane(world!, frame, n)[i]);
