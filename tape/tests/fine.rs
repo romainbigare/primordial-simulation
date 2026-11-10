@@ -213,7 +213,7 @@ fn the_channels_drawn_are_the_terrains_whatever_the_cells() {
 #[test]
 fn the_fine_grounds_slope_has_no_kinks_at_the_leaves_edges() {
     let w = testkit::small_world();
-    // A square at leaves of 1/256 of it, 16 to a sample of the terrain (`SAMPLE_DEPTH`), 4 depths of displacement below.
+    // A square at leaves of 1/256 of it, 16 to a sample of the terrain (`SAMPLE_DEPTH`), 4 depths of its smooth continuation below.
     let (depth, across) = (10, 256);
     let ground = read(&fine(&w, &mut Samples::default(), [7.0, 7.0, 1.0, 1.0], depth, |_| true), across * across).ground;
     // The kink of the slope at each pixel along each axis, summed by where it lies against the leaves of 8 pixels.
