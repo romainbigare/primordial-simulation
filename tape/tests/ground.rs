@@ -59,27 +59,34 @@ fn a_place_holds_the_same_numbers_in_every_tile() {
             }
             // The second plane: the channel's area.
             let area = SIDE * SIDE * TEXEL;
-            assert_eq!(west[area + y * SIDE + TILE + i], east[area + y * SIDE + i], "row {y}, column {i} past the edge, the area");
+            for b in 0..2 {
+                assert_eq!(west[area + 2 * (y * SIDE + TILE + i) + b], east[area + 2 * (y * SIDE + i) + b], "row {y}, column {i} past the edge, the area and the pond");
+            }
         }
     }
 }
 
+/// How finely a tile holds a height, m: the sum of two 16-bit floats.
+const HEIGHT_M: f64 = 1e-3;
+
 /// A tile names the pond each texel lies in (`Ground::pond_tile`): at the samples' own depth, where a texel is a
-/// sample, every texel of a pond lies under the pond's level, and the island has ponds.
+/// sample, every texel a tile names in a pond lies under the pond's level (to `HEIGHT_M`), in it or beside it, and the
+/// island has ponds that a tile names exactly.
 #[test]
 fn a_texel_names_its_pond_and_lies_under_its_level() {
     let (g, depths) = ground();
     let depth = pcore::space::terrain::SAMPLE_DEPTH;
     assert!(depths.contains(&depth) && !g.ponds().is_empty(), "the island's ponds at the samples' depth");
-    let (tile, ponds) = (g.tile(depth, 0, 0), g.pond_tile(depth, 0, 0));
+    assert!(g.ponds().len() < tape::PONDS_EXACT, "{} ponds, more than a tile names", g.ponds().len());
+    let tile = g.tile(depth, 0, 0);
     let mut held = 0;
     for y in 0..TILE {
         for x in 0..TILE {
-            let p = ponds[(y + GUTTER) * SIDE + x + GUTTER];
-            if p != pcore::space::network::NONE {
+            let named = tape::unhalf(tile[SIDE * SIDE * TEXEL + 2 * ((y + GUTTER) * SIDE + x + GUTTER) + 1]) as usize;
+            if named > 0 {
                 held += 1;
-                let (h, level) = (at(&tile, x, y, 0) as f64, g.ponds()[p as usize].level);
-                assert!(h < level, "texel ({x}, {y}) at {h} m in a pond of level {level} m");
+                let (h, level) = (at(&tile, x, y, 0) as f64, g.ponds()[named - 1].level);
+                assert!(h < level + HEIGHT_M, "texel ({x}, {y}) at {h} m in a pond of level {level} m");
             }
         }
     }

@@ -77,17 +77,20 @@ through the next sample where a tributary joins; of the channels that reach a te
 least, the one that covers it first as the flux grows (a channel covers a point nearer its line than half its width,
 which goes as (flux per m² drained x area)^b). That least, capped, is continuous across the texels, so a shader blends
 it. Off the map a texel is its edge's. Each number is a function of the seed, the map and the place
-alone: the same in every tile that holds it. Apart, `Ground::pond_tile` lays out over the same texels the pond each lies
-in (`Samples::pond` of the sample that holds its centre; u32, `u32::MAX` for none) and `Ground::ponds` gives each pond's
-level, so a pond can be drawn flat at its own level (the page does not read them yet). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
+alone: the same in every tile that holds it. The second plane holds, beside the channel's area, one more than the pond
+each texel lies in (`Ground::pond_tile`: the pond of the sample that holds its centre, or where that is none, of the
+first of its eight neighbours whose pass the texel lies under, so a pond's shore is where the ground rises over its
+level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
 frame: the melting point of the frozen cover, K, then for each square row by row 12 f32 (`ROW`) of the cell that holds
 its centre: the terrain's mean height over the cell, m; its ground's temperature, K, and how fast its air cools with
 height, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest ground, m
 (`flow::levels`), and the depth that stands, m; the liquid in its pores and what they hold full, m (`flow::means`), and
 the level of the wetness index its soil's liquid departs about (`inside::soil_level` over the samples inside the cell;
-0 where the pores are dry or full); the volume of liquid it passes on per m² drained, m/s (its flux over the drained
-area of its samples whose way leaves it, at the mol per m³ of its liquid); and how wet its heaviest kind of cover
-needs its ground (`cover::activity`; 0: no cover). Before Flow built its state the level and lowest ground are its
+0 where the pores are dry or full); the volume of liquid that runs through its main channel per m² drained there, m/s
+(the discharge of the sample of the cell through which the most runs, `World::discharge`, over the area that drains
+through that sample, at the mol per m³ of its liquid); and how wet its heaviest kind of cover needs its ground
+(`cover::activity`; 0: no cover); then the level of each pond, m (`World::pond_levels`, NaN where no body holds it),
+at which the page draws the pond's liquid flat over the ground that lies under it, the pond each texel names. Before Flow built its state the level and lowest ground are its
 solid surface and the depth that stands is its liquid's. The page's graphics card blends the table between the
 squares' centres and applies the laws inside a cell at each pixel of the tiles' ground (laws.md 0, "Inside a cell"). A tape's map is drawn
 from its frames alone: the page makes fields of the squares (`web/src/fields.ts`, a texel a square: the height and its

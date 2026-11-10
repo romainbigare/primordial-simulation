@@ -20,8 +20,8 @@ export interface MapOf { w: number; h: number; cell_m: number; square_depth: num
  * 676 kB on the card (10 bytes a texel), so 56 take 38 MB. */
 const MOST_TILES = 56;
 /** Of a tile, 16-bit floats a texel: the first plane four (the height as two, the wetness index, the channel's ratio),
- * the second one (the logarithm of the channel's area). */
-const PLANE_A = 4, PLANE_B = 1;
+ * the second two (the logarithm of the channel's area, and one more than the pond the texel lies in, 0: none). */
+const PLANE_A = 4, PLANE_B = 2;
 /** A new tile fades in over the one before it over this long, ms. */
 export const TILE_FADE_MS = 250;
 /** The view's tiles are asked for this share of its width and height past each of its edges, so a pan finds them. */
@@ -205,7 +205,7 @@ export class GroundTiles {
   textures(gpu: Gpu): { atlas: Texture; areas: Texture; pages: Texture; tiles: Texture; now: number } {
     const side = this.meta.size + 2 * this.meta.gutter, n = side * side;
     this.atlas ??= gpu.texture(side, side, 'rgba16float', MOST_TILES);
-    this.areas ??= gpu.texture(side, side, 'r16float', MOST_TILES);
+    this.areas ??= gpu.texture(side, side, 'rg16float', MOST_TILES);
     for (const c of this.come) {
       gpu.write(this.atlas, c.data.subarray(0, PLANE_A * n), 0, c.layer);
       gpu.write(this.areas, c.data.subarray(PLANE_A * n, (PLANE_A + PLANE_B) * n), 0, c.layer);
