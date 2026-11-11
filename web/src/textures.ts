@@ -5,17 +5,17 @@
 // shows them at once.
 import { Draw, Gpu, Pass, Texture, Uniforms } from './gpu';
 import { Style } from './sprites';
-import { FIELD_LAYERS, Kinds, LATTICES, KIND_PLANES, half } from './canopy';
+import { FIELD, Kinds, LATTICES, KIND_PLANES, half } from './canopy';
 import { clamp } from './earth';
-import { FLOWERS_COVER } from './style';
+import { ROOT_LEAST, ROOT_PER_HEIGHT } from './roots';
 
 /** Of the uniforms of cover.wgsl (`Cover`) and of cover_field.wgsl (`CoverLook`), four-wide members. */
 const COVER_VEC4S = 2 + 3 * LATTICES.length, LOOK_VEC4S = 3;
 /** A lattice fainter than this is not drawn as marks: they would not show, and they cost as much as marks that do. */
 const FAINTEST = 0.02;
-/** Angled, a plant stands up this share of its height on the map (cover.wgsl `STAND`): the rows south of a pixel looked
- * at reach its tallest plant, but no more than `ROWS_MOST` (each row costs a pixel three looks at marks), and a taller
- * plant is drawn as tall as they reach. */
+/** Angled, a plant stands up this share of its height on the map (lib/crown.wgsl `STAND`): the rows south of a pixel
+ * looked at reach its tallest plant, but no more than `ROWS_MOST` (each row costs a pixel three looks at marks), and a
+ * taller plant is drawn as tall as they reach. */
 const STAND = 0.5, ROWS_MOST = 2;
 /** The css pixels a lattice's cell takes from which its marks start to show, and from which they show fully. */
 const FADE_PX = [2, 5];
@@ -60,7 +60,7 @@ export class CoverMarks {
       if (this.tableTex) gpu.drop(this.tableTex);
       if (this.fieldTex) gpu.drop(this.fieldTex);
       this.tableTex = gpu.texture(w, KIND_PLANES.count * h, 'rgba32float');
-      this.fieldTex = gpu.texture(w, h, 'rgba16float', FIELD_LAYERS, (k?.field.mips.length ?? 0) + 1);
+      this.fieldTex = gpu.texture(w, h, 'rgba16float', FIELD.count, (k?.field.mips.length ?? 0) + 1);
     }
     if (k) {
       gpu.write(this.tableTex!, k.table);
@@ -73,7 +73,7 @@ export class CoverMarks {
   /** The bindings of cover_field.wgsl on `gpu` where a css pixel takes `cssMpp` m: the field and how it shows. */
   fieldBinds(gpu: Gpu, cssMpp: number): Draw['binds'] {
     this.upload(gpu);
-    const u = new Uniforms(LOOK_VEC4S).vec4(...LATTICES).vec4(...this.shown(cssMpp)).vec4(this.kinds ? 1 : 0, this.alpha);
+    const u = new Uniforms(LOOK_VEC4S).vec4(...LATTICES).vec4(...this.shown(cssMpp)).vec4(this.kinds ? 1 : 0, this.alpha, ROOT_PER_HEIGHT, ROOT_LEAST);
     return { 14: u.buffer, 15: this.fieldTex!, 16: 'mip' };
   }
 
@@ -82,7 +82,7 @@ export class CoverMarks {
     const k = this.kinds;
     if (!k || this.shown(m.cssMpp).every(s => s <= 0)) return;
     const angled = m.style === 'angled';
-    const u = new Uniforms(COVER_VEC4S).vec4(...m.at, m.mpp, angled ? 1 : 0).vec4(...k.walls, FLOWERS_COVER);
+    const u = new Uniforms(COVER_VEC4S).vec4(...m.at, m.mpp, angled ? 1 : 0).vec4(...k.walls, 0);
     // Each lattice's cell at the draw's corner, split into its whole number and its fraction in double precision, so
     // the GPU's single precision only counts the cells across the view.
     const top = Math.floor(Math.log2(Math.max(k.w, k.h)));
