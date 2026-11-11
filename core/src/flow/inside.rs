@@ -54,12 +54,6 @@ pub fn lowest(w: &World, i: usize) -> f64 {
     w.surface_z(i) + with_fill(w, &w.scratch, i, |f| f.level(0.0))
 }
 
-/// The volume over the parts of the bodies of cell `i` (`curve::Curve`, on its solid surface; all its ground where it
-/// holds none) under the level `level`, m³: what liquid that stands over its pores at that level holds there.
-pub fn volume_under(w: &World, i: usize, level: f64) -> f64 {
-    with_fill(w, &w.scratch, i, |f| f.volume(level - w.surface_z(i)))
-}
-
 /// Of each of `cells`: its lowest ground and the level the liquid standing over its pores reaches over its own ground
 /// (`curve::Fill::level`; its lowest ground where none stands), m, by Flow's state of the ground. None before Flow first built
 /// the state.

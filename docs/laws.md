@@ -355,7 +355,7 @@ what the heat holds molten, as every law and the shell then read it.
   sample's floor its height laid on its cell's mean surface. It is held by every cell that holds samples of it, each
   by its part, and its liquid stays in the ground nodes of those cells. The bodies, their parts and the ways to them
   are found once for the world's cells; at each month's start, each body's level from what its parts held at the last
-  pass, and the cells under it (their mean surface under it: the others are its shore). The lowest body, the open low
+  pass (at the world's start, its pass: section 8), and the cells under it (their mean surface under it: the others are its shore). The lowest body, the open low
   ground, has no code of its own.
 - **Running off** (`flow::runoff`), once a month in one pass: each cell sends what may run off (what came up from the
   store, the pores' drainage to the channels, below, which what stands over them refills first, and what stands over
@@ -1323,7 +1323,13 @@ read a kind.
   balance (2.6); ground and air temperatures falling with latitude and height. The terrain's samples are worn (0):
   land rises from 0 m to the noise's height over 2 million years while flowing liquid cuts it, its slopes creep and it
   floats back up as it is unloaded; the load settles in the closed basins the cutting leaves, and those it does not fill
-  are ponds, each with its pass and level; what reaches the open low ground lies there as a shelf. On an island the open water is coarse (`coarse_low`): an air block (8 km) whose squares all lie
+  are ponds, each with its pass and level; what reaches the open low ground lies there as a shelf. **The starting
+  liquid** (`World::full_bodies`): the open low ground stands at 0 m and every body of standing liquid with a pass
+  stands full to its pass, each part of it holding what its samples hold under that level, as the runoff's pass leaves
+  a body (1.2); a cell that holds no pond's samples holds what its ground dips under 0 m. Each cell that holds some of
+  it has all its pores full (pores first, 1.2) and starts molten, a body's liquid as the sea's, (2 K over the liquid's melting point, `MOLTEN_MARGIN`) at balance
+  with the air (2.6). So a body starts where a body whose gains beat its losses ends; one that loses more than it gains
+  falls to its own level by the laws (1.2, 1.5). On an island the open water is coarse (`coarse_low`): an air block (8 km) whose squares all lie
   below 0 m, none within a square of land (`LAND_RING`), is one cell, split where it borders finer cells until cells
   across a border differ by one size at most; the coasts stay in 2 km squares. A globe is one cell an air block but in a
   rectangle of air blocks in squares (`--fine`), by the same rule. A cell's height is the terrain's mean over it

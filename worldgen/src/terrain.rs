@@ -30,7 +30,8 @@ const BASE_Z: f64 = -3000.0;
 const T_EQUATOR: f64 = 302.0;
 const POLE_DROP: f64 = 45.0;
 const LAPSE: f64 = 0.0065;
-/// Low ground starts this many K above the melting point of its liquid, so it is molten.
+/// Ground that holds the starting liquid (of the low basin and the bodies) starts this many K above its melting point,
+/// so it is molten.
 const MOLTEN_MARGIN: f64 = 2.0;
 
 /// The terrain of `seed` on `map` whose samples are `cells` (`space::terrain`): an island's level 0 m lies at the rise
@@ -257,10 +258,11 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
         scratch: Default::default(),
     };
     let (amounts, heat) = (|w: &World, c: Class| w.store.amounts(c).to_vec(), |w: &World, c: Class| w.store.heat(c).to_vec());
-    // The low basin's liquid at 0 m: each cell whose own ground dips under it holds the liquid that fills its pores and
-    // stands over its ground up to 0 m (`flow::volume_under`), as Flow's level stands it.
+    // The low basin's liquid at 0 m and each body of standing liquid full to its pass: each cell whose own ground dips
+    // under them holds the liquid that fills its pores and stands over its ground up to them (`World::full_bodies`), as
+    // Flow's pass stands it.
     let (por, v_low) = (world.cfg.phys.porosity, world.chem.molar_volume(init.low, Phase::Liquid));
-    let low: Vec<f64> = (0..n).map(|i| pcore::flow::volume_under(&world, i, 0.0)).collect();
+    let low = world.full_bodies(0.0);
     let mut ground = amounts(&world, Class::Ground);
     for (i, &under) in low.iter().enumerate().filter(|p| *p.1 > 0.0) {
         ground[init.low * n + i] += (por * loose[i] * world.mesh.cells().area()[i] + under) / v_low;
@@ -270,7 +272,7 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
     // never written outside `store::apply` once it runs.)
     let mut e_ground = vec![0.0; n];
     for (i, &z) in hz.iter().enumerate().take(n) {
-        // Ground that holds the basin's liquid starts with it molten.
+        // Ground that holds the starting liquid starts with it molten.
         let t = t_start(world.mesh.cells().lat()[i], z).max(if low[i] > 0.0 { world.chem.subs[init.low].melt + MOLTEN_MARGIN } else { 0.0 });
         e_ground[i] = world.energy_ground(i, t);
     }

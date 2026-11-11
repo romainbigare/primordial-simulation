@@ -523,12 +523,18 @@ most): 0.03 / 1.16 / 2.33 m a year; runoff is 0.65 of the rain on land. The wett
 that lands where it condenses, so fewer cells are rivers: that reference of the key numbers (`RIVERS`) is measured
 with this law.
 
+**The bodies' start: done.** Every body of standing liquid with a pass starts full to its pass, its pores full: in six
+runs of 60 years, 86 of 92 bodies end at their pass, so that is the level their gains and losses hold. A body that
+loses more falls to its own level by the laws.
+
 Open on the ground and the water:
 - Loose ground that settles during a run is not bounded by the `skin_m` rule.
 - The heat capacity of a node's amounts is one helper (`ground::amounts_cap`). Two orders of summing remain:
   `World::heat_cap_of` and `land::capacities` add the amounts onto the skin one by one, the parts and the reactor sum
   the amounts first. The same node can differ in the last bit between them; joining them changes results.
-- Bodies start empty: a deep basin takes years of runoff to fill, and a body that loses more than it gets is a dry
-  flat. The world should start with its bodies at the level their gains and losses hold.
+- A closed basin by the sea that loses more than it gains starts full and falls about 0.1 m a year to its own level
+  (3 of 92 bodies in six runs).
+- A body colder than its liquid's melting point at the start starts molten, as the sea does.
+- On the page the date shown lags the world at high speed: 8 years at 36 months a second.
 - A small square where a channel leaves a pond; a tile costs 7 to 10 ms, most of it the channels' field.
 - Building the samples costs 0.5 to 0.6 s on a 32 island.
