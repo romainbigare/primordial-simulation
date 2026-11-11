@@ -91,13 +91,15 @@ fn the_starting_air_thins_with_height_by_its_own_scale_height() {
 }
 
 /// Each dry cell's bed and loose ground add up to its height, the terrain's mean over it, and its loose ground is the
-/// mean of what the wear left on its samples (`Samples::loose`), the top `skin_m` of each at most.
+/// mean of what the wear left on its samples (`Samples::loose`), the top `skin_m` of each at most. (A cell that holds
+/// the starting liquid, of the low basin or a body, is left out: the liquid at balance with the air dissolves some of
+/// its loose ground, laws.md 2.6; an eighth of the cells or more are dry.)
 #[test]
 fn a_cells_bed_and_loose_ground_add_up_to_its_height() {
     let w = worldgen::new_world(1, 16, 16);
     let (n, lat, seed) = (w.mesh.cells().n(), (w.cfg.lat_south, w.cfg.lat_north), w.terrain.seed);
     let dry: Vec<usize> = (0..n).filter(|&i| w.store.amounts(Class::Ground)[LIQUID * n + i] == 0.0).collect();
-    assert!(dry.len() > n / 4, "{} dry cells of {n}", dry.len());
+    assert!(dry.len() > n / 8, "{} dry cells of {n}", dry.len());
     for i in dry {
         let l = w.map.leaves()[i];
         let (loose, bed, _) = worldgen::testkit::ground_of(&w, i);

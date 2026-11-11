@@ -463,9 +463,9 @@ fn liquid_sinks_into_the_bed_and_runs_off_once_a_month() {
 }
 
 /// Darcy: the pore liquid of a cell flows to a neighbour whose liquid table is lower, at `seep` x the slope x the
-/// thickness it fills x the width, in the time. With `seep` at 0 the neighbour gets none; the flow goes with `seep`,
-/// with the liquid table's slope and with the thickness; pores under their field capacity (`field`, 0.6) give none;
-/// matter and energy are kept.
+/// thickness it fills x the width, in the time: what the neighbour gains against the same world with none poured in the
+/// cell (its other neighbours may hold the starting liquid). The flow goes with `seep`, with the liquid table's slope
+/// and with the thickness; pores under their field capacity (`field`, 0.6) give none; matter and energy are kept.
 #[test]
 fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
     // One liquid step with the liquid of cell `i` filling the share `share` of its pores and `j` dry: what `j` gained,
@@ -494,15 +494,16 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
         let ti = bi + share * depth;
         (liquid_m3(&w, j), ti - bj, ti - bi.max(bj))
     };
-    let (none, ..) = gained(0.0, 0.8);
+    let unpoured = |seep: f64| gained(seep, 0.0).0;
     let (some, dh, b) = gained(1e-6, 0.8);
+    let (none, none10) = (unpoured(1e-6), unpoured(1e-5));
     let want = 1e-6 * b * dh * LIQUID_STEP;
     println!("slope {dh:.2} m over one cell, thickness {b:.3} m: Darcy {want:.3} m³, gained {:.3} m³", some - none);
     assert!(dh > 0.0 && b > 0.0, "the table of the wet cell is higher: {dh} {b}");
     assert!(((some - none) / want - 1.0).abs() < 0.05, "gained {} m³, Darcy says {want}", some - none);
     // Ten times the conductivity, ten times the flow.
     let (more, ..) = gained(1e-5, 0.8);
-    assert!(((more - none) / (some - none) / 10.0 - 1.0).abs() < 0.05, "x10 gave x{}", (more - none) / (some - none));
+    assert!(((more - none10) / (some - none) / 10.0 - 1.0).abs() < 0.05, "x10 gave x{}", (more - none10) / (some - none));
     // More liquid, a thicker flow: the thickness that carries it, and the slope, are bigger.
     let (full, dh2, b2) = gained(1e-6, 0.95);
     let want2 = 1e-6 * b2 * dh2 * LIQUID_STEP;
@@ -680,15 +681,15 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
 const PIT_M: f64 = 10.0;
 
 /// The dissolved mineral stays where it is when its liquid evaporates (it is no gas): a thin film on warm ground in
-/// dry air, in a pit dug in dry land that holds no part of a body of standing liquid (lower than all its neighbours, so
-/// nothing runs off it).
+/// dry air, in a pit dug in dry land that holds no part of a body of standing liquid, among dry land that holds none
+/// either (lower than all its neighbours, so nothing runs off it, and no pore liquid flows into it).
 #[test]
 fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
     let mut w = worldgen::testkit::squares(3, 16, 16);
     let (n, na, ns) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.chem.ns());
     let near = |w: &World, i: usize| Some(w.mesh.cells().around(i).1).filter(|c| c.len() == 8).map(|c| c.iter().map(|&j| w.surface_z(j as usize)).collect::<Vec<f64>>());
     let dry = |w: &World, i: usize| w.store.amounts(Class::Ground)[LIQUID * n + i] == 0.0 && w.surface_z(i) > 20.0 && !w.in_body(i);
-    let i = (0..n).find(|&i| dry(&w, i) && near(&w, i).is_some_and(|z| z.iter().all(|&z| z > 20.0))).expect("dry land among dry land");
+    let i = (0..n).find(|&i| dry(&w, i) && near(&w, i).is_some() && w.mesh.cells().around(i).1.iter().all(|&j| dry(&w, j as usize))).expect("dry land among dry land");
     let (area, lowest) = (w.mesh.cells().area()[i], near(&w, i).unwrap().into_iter().fold(f64::INFINITY, f64::min));
     let bed: f64 = (0..ns).map(|k| w.store.amounts(Class::Bed)[k * n + i] * w.chem.molar_volume(k, Phase::Solid)).sum::<f64>() / area;
     let keep = 1.0 - (w.surface_z(i) - lowest + PIT_M) / bed;

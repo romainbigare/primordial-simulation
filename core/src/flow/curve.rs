@@ -175,10 +175,6 @@ impl Fill<'_> {
     pub(super) fn held(&self) -> f64 {
         self.held.iter().sum()
     }
-    /// The volume under the level `x` over the cell's mean surface on all its parts, m³.
-    pub(super) fn volume(&self, x: f64) -> f64 {
-        self.c.parts.iter().map(|p| p.volume(x)).sum()
-    }
     /// The level of each part over the cell's mean surface where `v` m³ stand (`shares`), m.
     fn levels(&self, v: f64) -> Vec<f64> {
         self.c.parts.iter().zip(self.shares(v)).map(|(p, u)| p.level(u)).collect()

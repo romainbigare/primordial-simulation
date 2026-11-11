@@ -26,7 +26,7 @@ pub use potential::total as potential;
 pub use basin::Pool;
 pub use channel::Channel;
 pub(crate) use curve::level_of;
-pub use inside::{levels, lowest, means, volume_under};
+pub use inside::{levels, lowest, means};
 
 pub(crate) use potential::air_head;
 pub(crate) use stack::gain;

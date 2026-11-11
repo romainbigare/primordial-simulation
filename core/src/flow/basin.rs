@@ -3,7 +3,7 @@
 //! the cells of a body to one level, as the runoff's pass does once a month (`runoff`); and each body mixes its heat
 //! under each air block (`mix`).
 
-use super::{air::blocks, bodies::Body, curve::{first_held, holds_all, level_over}, land::{cells_state, standing, NONE}, parts::TOP, potential::apply, Scratch};
+use super::{air::blocks, bodies::Body, curve::{self, first_held, holds_all, level_over, Part}, land::{cells_state, standing, NONE}, parts::TOP, potential::apply, Scratch};
 use crate::{space::network::NONE as NO_BODY, store::{Class, LinkFlux}, World, AIR};
 use std::collections::BTreeMap;
 
@@ -42,6 +42,26 @@ impl World {
         let s = &self.scratch;
         s.bodies.list.iter().zip(&s.basin.level).for_each(|(b, &l)| out[b.pond as usize] = l);
         out
+    }
+
+    /// What stands over the pores of each cell at the world's start, m³ (laws.md 8): each of its parts of a body of
+    /// standing liquid with a pass full to the pass; a part of the open low ground, and all the ground of a cell that
+    /// holds no pond's samples, up to the level `low`, m. Each part keeps what it holds as the runoff's pass leaves a
+    /// part (`State::held`), so every body stands at that level from the first step.
+    pub fn full_bodies(&mut self, low: f64) -> Vec<f64> {
+        let mut s = Scratch::default();
+        curve::build(self, &mut s);
+        let samples = self.terrain_samples();
+        let level = |p: &Part| samples.ponds.get(p.pond as usize).filter(|d| d.pass != NO_BODY).map_or(low, |d| d.level);
+        let (mut stands, mut held) = (Vec::with_capacity(s.curves.len()), Vec::with_capacity(s.curves.len()));
+        for (i, c) in s.curves.iter().enumerate() {
+            let z = self.surface_z(i);
+            let parts: Vec<f64> = c.parts.iter().map(|p| p.volume(level(p) - z)).collect();
+            stands.push(parts.iter().sum());
+            held.push(if c.ponds().is_empty() { Vec::new() } else { parts });
+        }
+        self.scratch.state.held = held;
+        stands
     }
 
     /// Does cell `i` hold part of a body of standing liquid (`bodies::Bodies`): any sample of a pond?
@@ -89,7 +109,7 @@ pub struct Pool {
 /// The level of body `b`: what its parts held at the last pass (`State::held`) at one level over their samples
 /// (`curve::level_over`), m, no higher than its pass.
 fn body_level(s: &Scratch, b: &Body) -> f64 {
-    let parts: Vec<(&super::curve::Part, f64)> = b.cells.iter().zip(&b.part).map(|(&i, &q)| (&s.curves[i as usize].parts[q], s.z[i as usize])).collect();
+    let parts: Vec<(&Part, f64)> = b.cells.iter().zip(&b.part).map(|(&i, &q)| (&s.curves[i as usize].parts[q], s.z[i as usize])).collect();
     let held: f64 = b.cells.iter().zip(&b.part).map(|(&i, &q)| s.state.held[i as usize][q]).sum();
     level_over(&parts, held).min(b.level)
 }
