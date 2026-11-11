@@ -21,7 +21,8 @@ are not bodies but the **cover** of each cell, a field (4.5); bodies are **eater
 ## 0. The world, one step, the books
 **The map** (`space/`, `World::mesh`): cells, links with widths and headings, and a coarser air level. The laws step
 only on links. Each link takes one of 8 compass directions (`Level::way`), so the brain's 8 directions hold everywhere.
-An island of 2 km squares, or a globe (`--globe`) of latitude-longitude squares on a sphere of 6,371 km whose rows wrap
+An island of 2 km squares whose rows are spread evenly from `Config::lat_south` to `lat_north` whatever its size
+(`--band S,N`), or a globe (`--globe`) of latitude-longitude squares on a sphere of 6,371 km whose rows wrap
 east to west; an air block is 4 x 4 squares. The cells are the leaves of a sparse tree under each air block
 (`space/tree.rs`): the block is the root and only the leaves are kept (`Square::leaves`), numbered by their north-west
 corners row by row, counted in leaves of the most depth (`DEPTH_MOST`) as 64-bit numbers (a map is under 2^53 of them a

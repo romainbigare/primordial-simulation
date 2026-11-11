@@ -29,7 +29,7 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `sun` | W/m² | strength of the star at the top of the air | the solar constant, 1361 | physical |
 | `tilt` | degrees | axial tilt: sets the size of the seasons | the planet's tilt, 23.4 | physical |
 | `lat_south` | degrees | latitude of the map's south edge | where the surface is 287 K, near the global mean: on Earth at about 38° to 40° in both hemispheres (zonal means, from memory); on the model's globe without life at 37.5° N and 44° S | anchored |
-| `lat_north` | degrees | latitude of the map's north edge | `lat_south` + 2.3: the island spans 256 km | anchored |
+| `lat_north` | degrees | latitude of the map's north edge | `lat_south` + 2.3: the island spans 256 km (`ew run --band S,N` sets both) | anchored |
 | `rotation` | none (0 = none) | strength of the turning of moving air by the planet's spin | 1 is the real size of the spin's effect; the wind closure is crude (unchecked) | anchored |
 | `days_per_month` | days | the calendar | 12 x 30 = 360 days for a year of 365 | anchored |
 | `months_per_year` | months | the calendar | the same | anchored |

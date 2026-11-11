@@ -1,6 +1,6 @@
 //! The command line: `ew COMMAND --name value ...`, the usage text, and what the flags set.
 
-use pcore::World;
+use pcore::{Config, World};
 use worldgen::life::{Seeding, FIXERS};
 use worldgen::schedule::Schedule;
 
@@ -9,6 +9,7 @@ pub const USAGE: &str = "usage:
     --seed N              world seed (1)
     --size N              cells along a side (128); of a globe, its rows from pole to pole (even)
     --globe               a globe whose rows wrap east to west, twice as many columns as rows (not an island)
+    --band S,N            an island's rows from latitude S to latitude N, degrees (40,42.3)
     --fine X,Y,W,H        on a globe, the W x H air blocks from column X and row Y in squares, the rest one cell an
                           air block (none)
     --years N             years to run (10)
@@ -77,6 +78,17 @@ impl Args {
     pub fn fine(&self) -> [usize; 4] {
         let v: Option<Vec<usize>> = self.value::<String>("--fine").and_then(|f| f.split(',').map(|x| x.parse().ok()).collect());
         v.and_then(|v| v.try_into().ok()).unwrap_or_default()
+    }
+
+    /// The settings of a new island: its rows between the latitudes of `--band S,N` (the default's if it is not there);
+    /// an error if it does not parse or the band is not one (`Config::validate`).
+    pub fn island(&self) -> Result<Config, String> {
+        let mut cfg = Config::default();
+        if let Some(text) = self.value::<String>("--band") {
+            let v: Result<Vec<f64>, _> = text.split(',').map(str::parse).collect();
+            [cfg.lat_south, cfg.lat_north] = v.ok().and_then(|v| v.try_into().ok()).ok_or(format!("--band {text}: want S,N in degrees"))?;
+        }
+        cfg.validate().map(|_| cfg)
     }
 
     /// The window of `--window X,Y,W,H` in squares, or `whole` if it is not there; an error if it does not parse.

@@ -452,6 +452,8 @@ impl Config {
         let air = crate::schedule::AIR_STEP_DAYS;
         require(m > 0 && m.is_multiple_of(air), || format!("days_per_month ({m}) must be a whole number of the air's steps ({air} days)"))?;
         require(self.chunks > 0, || "chunks must be at least 1".to_string())?;
+        let (south, north) = (self.lat_south, self.lat_north);
+        require(-90.0 <= south && south < north && north <= 90.0, || format!("lat_south ({south}) must lie below lat_north ({north}), both from -90 to 90"))?;
         let wake = self.wake_share;
         require(wake > 0.0 && wake.is_finite(), || format!("wake_share ({wake}) must be above 0"))?;
         // `dormancy` above 1 (`body::exchange::closing` divides by n - 1); `light_yield` in (0, 1] (a light reaction takes
