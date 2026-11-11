@@ -130,7 +130,7 @@ fn river_colour(p: Spot) -> Shaded {
   let ripple = ripples(p.at, p.e) * (1.0 - p.snow);
   // In the style a channel's water is a lake's (style.wgsl `lake_seen`), lighter over its shallow banks.
   var water = seen_through(bed, p.depth, ripple, RUNNING_ATTENUATION, DEEP_WATER);
-  if (styled()) { water = water_painted(bed, lake_seen(p.depth, RIVER_RIM_M), ripple); }
+  if (styled()) { water = water_painted(bed, lake_seen(p.depth, 0.0, p.e, RIVER_RIM_M), ripple); }
   let rgb = mix(water, SNOW, p.snow * 0.85);
   return Shaded(rgb, 1.0 + (lit - 1.0) * exp(-2.0 * RUNNING_ATTENUATION.g * p.depth), RIVER);
 }
