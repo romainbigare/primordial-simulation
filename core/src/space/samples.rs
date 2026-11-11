@@ -7,7 +7,7 @@
 //! them (`space::network`). They are a function of the seed and the map alone, found when first read and kept with the
 //! terrain, not saved.
 
-use super::drain::{draws, flood};
+use super::drain::{draws, flood, starts};
 use super::grid::Grid;
 use super::network::accumulate;
 use super::ponds::{basins, grade, open_parts};
@@ -140,7 +140,7 @@ impl Terrain {
         let worn = wear(seed, &grid, (by, &rise, &cut));
         let (mut h, open, loose, books) = (worn.h, worn.open, worn.loose, worn.books);
         let patch = (0..grid.n()).map(|k| patch[(k / across / by) * wide + (k % across) / by]).collect();
-        let f = flood(&grid, &h, &open, (false, &draws(seed, 1, grid.n())));
+        let f = flood(&grid, &h, &open, (&starts(&grid, &open, false), &draws(seed, 1, grid.n())));
         let (up, main) = accumulate(&f.to, &f.order, |k| grid.area(k));
         let shallow = basins(&grid, &h, &f).1;
         grade(&mut h, &f, &shallow);

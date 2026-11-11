@@ -3,7 +3,7 @@
 //! (`space::drain`) and the law that wears the ground at the world's start (`space::wear`) read it, on the samples'
 //! own grid and on one a few times coarser (`Grid::coarser`).
 
-use super::below::{lean_quarters, Near};
+use super::below::{lean_quarters, limited, Near};
 
 /// The steps to the 8 neighbours of a sample, rows and columns.
 const STEPS: [(i64, i64); 8] = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)];
@@ -131,9 +131,20 @@ impl Grid {
         sum.iter().zip(&area).map(|(s, a)| s / a).collect()
     }
 
+    /// Heights `z` on the grid `from` times coarser than this one carried smooth to the grid `to` times coarser, a halving
+    /// at a time (`finer`).
+    pub(super) fn carried(&self, (mut from, z): (usize, &[f64]), to: usize) -> Vec<f64> {
+        let mut z = z.to_vec();
+        while from > to {
+            z = self.coarser(from).finer(&z, &self.coarser(from / 2).dx);
+            from /= 2;
+        }
+        z
+    }
+
     /// The heights `z` of this grid's samples carried to the grid twice as fine along each side (twice the `across`
     /// and the `down`, its rows `dx`): each sample's quarters take its mean and the smooth lean through it and its
-    /// neighbours (`below::lean_quarters`), so the finer heights have no steps, no new pit and no new peak.
+    /// neighbours (`below::lean_quarters`, `below::limited`), so the finer heights have no steps, no new pit and no new peak.
     pub(super) fn finer(&self, z: &[f64], dx: &[f64]) -> Vec<f64> {
         let (r_max, wide) = (self.down as i64 - 1, self.across as i64);
         let at = |r: i64, c: i64| {
@@ -145,7 +156,7 @@ impl Grid {
             let (r, c) = ((k / self.across) as i64, (k % self.across) as i64);
             let rows = [dx[2 * r as usize], dx[2 * r as usize + 1]];
             let near: Near = std::array::from_fn(|j| std::array::from_fn(|i| at(r + j as i64 - 2, c + i as i64 - 2)));
-            let d = lean_quarters(&near, [rows[0], rows[0], rows[1], rows[1]]);
+            let d = limited(&near, lean_quarters(&near, [rows[0], rows[0], rows[1], rows[1]]));
             for (q, dq) in d.iter().enumerate() {
                 let (y, x) = (2 * r as usize + q / 2, 2 * c as usize + q % 2);
                 out[y * 2 * self.across + x] = zk + dq;

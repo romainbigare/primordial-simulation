@@ -8,6 +8,8 @@ use super::grid::Grid;
 const FLOATS: f64 = 2700.0 / 3300.0;
 /// The width over which the ground bends under a load, m.
 const BENDS_M: f64 = 50e3;
+/// The samples of the grid the rebound is spread on across that width: a plate's bending is smooth at any finer scale.
+const BEND_SAMPLES: f64 = 16.0;
 /// The most a part of an explicit creep may diffuse, in squares of a sample's shorter side: a stable part on four
 /// sides is under a quarter.
 const STABLE: f64 = 0.2;
@@ -15,11 +17,24 @@ const STABLE: f64 = 0.2;
 /// The ground rising back as a step's wear unloads it (Airy isostasy; Molnar and England 1990): each sample of land
 /// rises by `FLOATS` of the ground the step took away (its height `was` and its rise less its height now: less what
 /// settled), as the mean of that over a square `BENDS_M` wide about it (`Grid::spread`), as a plate that bends over
-/// that width carries a load.
+/// that width carries a load (on a grid coarse enough that the width spans `BEND_SAMPLES` of it).
 pub(super) fn rebound(g: &Grid, h: &mut [f64], was: &[f64], (up, open): (&[f64], &[bool]), dt: f64) {
     let taken: Vec<f64> = (0..g.n()).map(|k| if open[k] { 0.0 } else { was[k] + up[k] * dt - h[k] }).collect();
-    let spread = g.spread(&taken, BENDS_M / 2.0);
-    (0..g.n()).filter(|&k| !open[k]).for_each(|k| h[k] += FLOATS * spread[k]);
+    // On a grid coarse enough that the plate's width spans `BEND_SAMPLES` of its samples.
+    let mut by = 1;
+    while (by * 2) as f64 * g.dy * BEND_SAMPLES <= BENDS_M && g.across.is_multiple_of(by * 2) && g.down.is_multiple_of(by * 2) {
+        by *= 2;
+    }
+    let coarse = g.coarser(by);
+    let spread = coarse.spread(&g.mean_over(&taken, by), BENDS_M / 2.0);
+    // Blended between the coarse samples' centres (bilinear), nearest at the map's edge.
+    let at = |r: i64, c: i64| spread[r.clamp(0, coarse.down as i64 - 1) as usize * coarse.across + c.clamp(0, coarse.across as i64 - 1) as usize];
+    let blend = |k: usize| {
+        let (y, x) = (((k / g.across) as f64 + 0.5) / by as f64 - 0.5, ((k % g.across) as f64 + 0.5) / by as f64 - 0.5);
+        let (r, c, fy, fx) = (y.floor() as i64, x.floor() as i64, y - y.floor(), x - x.floor());
+        (at(r, c) * (1.0 - fx) + at(r, c + 1) * fx) * (1.0 - fy) + (at(r + 1, c) * (1.0 - fx) + at(r + 1, c + 1) * fx) * fy
+    };
+    (0..g.n()).filter(|&k| !open[k]).for_each(|k| h[k] += FLOATS * blend(k));
 }
 
 /// Creep of the slopes over a step: each sample of land changes by κ ∇²h across its four sides (`kappa` the
