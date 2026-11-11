@@ -247,8 +247,9 @@ impl Lifts {
     }
     /// Book the part's lifts and falls (or those of the parts that follow each other, `flow::chain`): each mass moved
     /// carries its potential energy from the height it left, the mean of its node's height at the start and at the end
-    /// (so a node's own matter that leaves it, however much, takes what it held of it); each node's heat takes what came in less what left less the
-    /// change of its own potential energy (`store::fall_heat`, which adds their sum to
+    /// (so a node's own matter that leaves it, however much, takes what it held of it), but what only passes through a
+    /// ground node from ground node to ground node carries on what it came with (`relayed`); each node's heat takes
+    /// what came in less what left less the change of its own potential energy (`store::fall_heat`, which adds their sum to
     /// `Store::lifted`). A bodies' node's gas lies at its cell's head, which the part moves with the ground's matter,
     /// not its own: what its lifts and falls give or take is its ground node's (a bodies' node holds little heat of its
     /// own). Returns the potential energy now, and the room of its moves, emptied.
@@ -256,9 +257,11 @@ impl Lifts {
         let (mut start, mut moved) = (self.start, self.moved);
         let (now, g) = (potential(w, s, Some(std::mem::take(&mut start.found))), w.cfg.gravity);
         let olds = start.energies();
+        let own = |at: (u8, u32)| g * (start.height(at) + now.height(at)) / 2.0;
+        let relay = relayed(&moved, now.ground.len(), |i| own((0, i)));
         let mut q: [Vec<f64>; 4] = now.energies().map(|v| vec![0.0; v.len()]);
         for m in &moved {
-            let e = m.kg * g * (start.height(m.from) + now.height(m.from)) / 2.0;
+            let e = m.kg * if m.from.0 == 0 && m.to.0 == 0 { relay[m.from.1 as usize] } else { own(m.from) };
             q[m.from.0 as usize][m.from.1 as usize] -= e;
             if m.to.0 != NOWHERE {
                 q[m.to.0 as usize][m.to.1 as usize] += e;
@@ -275,6 +278,42 @@ impl Lifts {
         }
         (now, moved)
     }
+}
+
+/// The most sweeps `relayed` makes.
+const SWEEPS: usize = 64;
+/// The change of every node's energy per kg under which `relayed` stops, J/kg (a micrometre of height).
+const SETTLED: f64 = 1e-5;
+
+/// The potential energy each kg that a ground node of `moved` gives another ground node carries, J/kg: what passes
+/// through it from ground node to ground node (as much as both came in from them and left to them) carries on the
+/// energy of what came in, mixed, so the fall of liquid that crosses cells in one booking lands where it stays, not on
+/// its way (a body's liquid that its pass gathers in one cell and shares out, a pit's that spills and runs back); the
+/// rest leaves at its own height (`own`, J/kg). The energies of what comes in are those of the nodes it left, found by
+/// sweeps over the moves from their own heights until none changes by `SETTLED`; whatever they end at, each move books
+/// what its node gives as what the other takes.
+fn relayed(moved: &[Moved], n: usize, own: impl Fn(u32) -> f64) -> Vec<f64> {
+    let across: Vec<&Moved> = moved.iter().filter(|m| m.from.0 == 0 && m.to.0 == 0 && m.from != m.to).collect();
+    let mut kg = vec![[0.0; 2]; n];
+    for m in &across {
+        (kg[m.to.1 as usize][0], kg[m.from.1 as usize][1]) = (kg[m.to.1 as usize][0] + m.kg, kg[m.from.1 as usize][1] + m.kg);
+    }
+    let mut e: Vec<f64> = (0..n as u32).map(&own).collect();
+    for _ in 0..SWEEPS {
+        let mut came = vec![0.0; n];
+        across.iter().for_each(|m| came[m.to.1 as usize] += m.kg * e[m.from.1 as usize]);
+        let mut most: f64 = 0.0;
+        for (i, &[i_kg, o_kg]) in kg.iter().enumerate().filter(|(_, k)| k[0] > 0.0 && k[1] > 0.0) {
+            let through = i_kg.min(o_kg);
+            let x = (through * came[i] / i_kg + (o_kg - through) * own(i as u32)) / o_kg;
+            most = most.max((x - e[i]).abs());
+            e[i] = x;
+        }
+        if most <= SETTLED {
+            break;
+        }
+    }
+    e
 }
 
 /// Book `fluxes` and `moves` (`store::apply`), and what they carry for the part of Flow under way (`Lifts`): over each

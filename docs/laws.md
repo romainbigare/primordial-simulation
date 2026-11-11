@@ -252,7 +252,11 @@ build of Flow's state, and a part run alone, are booked at their own end. In eac
 potential energy from the height it leaves (a ground node's liquid top: the table of its pores, or the level of what
 stands where that lies higher, so liquid standing in a pit under its full pores leaves with them and the top never
 rises as liquid leaves, `stack::Column::top`; a bodies' node's head; an air node's mean head; a store's table; each the mean of the booking's start and
-end, so a lake that drains whole takes along what it held); and each node's heat takes what came in less what left
+end, so a lake that drains whole takes along what it held); what only passes through a ground node from ground node
+to ground node in one booking (as much as both came in from them and left to them: a body's liquid that its pass
+gathers in one cell and shares out, a pit's that spills and runs back) carries on the energy of what came in, mixed,
+found by sweeps over the moves (`potential::relayed`), so its fall lands where it stays, never as a lift or a fall of
+a cell it only crosses; and each node's heat takes what came in less what left
 less the change of its own (`store::fall_heat`): so a fall heats where the matter lands (the runoff's in the body it
 reaches, 1.2), a lift is paid by the node it enters (the air, for a gas going up; the ground node a store's liquid rises
 into), a column that rises as it fills pays for it, and the potential energy the world's
@@ -426,7 +430,8 @@ what the heat holds molten, as every law and the shell then read it.
   holds and what stays keeps that temperature. A salt is a liquid that never
   boils (11, 12): it moves with the liquid and stays when it evaporates. **Its potential energy goes with it** (0,
   "The books"): each move of the pass goes from the cell it leaves to the cell it lands in, its potential energy from
-  the height it leaves (`potential::apply`), and the fall turns to heat where it lands. The head it loses on the way
+  the height it leaves (`potential::apply`; what only passes through a cell carries on what it came with), and the
+  fall turns to heat where it lands. The head it loses on the way
   does work (1.3).
 
 ### 1.3 Erosion and creep
