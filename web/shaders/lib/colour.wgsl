@@ -33,9 +33,8 @@ const ROCK_LO = vec3f(0.25, 0.24, 0.23); const ROCK_HI = vec3f(0.45, 0.44, 0.42)
 // How many times steeper than it is the ground is shaded.
 const EXAGGERATE = 6.0;
 // A beach (`beach`) lies on ground whose slope (rise over run) is under `BEACH_SLOPE`, none where it passes
-// `ROCK_SLOPE` (a steep coast is a rock shore: waves carry the sand away); by a lake it rises this share of the
-// sea's beach over the lake's surface (smaller waves).
-const BEACH_SLOPE = 0.06; const ROCK_SLOPE = 0.18; const LAKE_BEACH = 0.25;
+// `ROCK_SLOPE` (a steep coast is a rock shore: waves carry the sand away).
+const BEACH_SLOPE = 0.06; const ROCK_SLOPE = 0.18;
 // Water standing deeper than this, m, is the deep sea's.
 const DEEP_SEA_M = 200.0;
 // Over the liquid's surface the ground draws water up through its pores (the capillary fringe), wet to e^-1 at this
@@ -47,12 +46,11 @@ const WET_DARK = 0.5;
 const FILM_FROM = 0.8;
 // A bed that sends back less than this share of its light (half a display level of 255) does not show.
 const SHOWS = 0.002;
-// The share of beach sand on ground `sea_over` m over the sea's surface and `over` m over the nearest liquid's, `sea` of
-// its shore the sea's, of slope `slope` (rise over run): sand by the sea up to `high` m over it, and under it (the
-// shallows' bed), by a lake up to `LAKE_BEACH` of that, on gentle ground only.
-fn beach(sea: f32, sea_over: f32, over: f32, slope: f32, high: f32) -> f32 {
-  let shore = max(sea * (1.0 - ease(0.0, high, sea_over)), (1.0 - sea) * (1.0 - ease(0.0, LAKE_BEACH * high, over)));
-  return shore * (1.0 - ease(BEACH_SLOPE, ROCK_SLOPE, slope));
+// The share of beach sand on ground `over` m over the sea's surface, `sea` of its shore the sea's, of slope `slope`
+// (rise over run): sand by the sea up to `high` m over it and under it (the shallows' bed), on gentle ground only. A
+// lake's shore has none: its basin is often flat and soaked to its edge.
+fn beach(sea: f32, over: f32, slope: f32, high: f32) -> f32 {
+  return sea * (1.0 - ease(0.0, high, over)) * (1.0 - ease(BEACH_SLOPE, ROCK_SLOPE, slope));
 }
 
 // Whether the view drawn is the Earth's colours, which take the style step (style.wgsl).

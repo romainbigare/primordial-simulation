@@ -110,7 +110,7 @@ layer views keep the physical colours. Every look still means what the model hol
 more contrast; slopes have a clear lit side and a soft cool shade. Water is coloured by its depth through the clear
 water of the clearest coasts, drawn stretched, so the bed shows to tens of metres: sand, pale shallows, turquoise,
 blue, then the deep, with foam at its edge where its band takes a pixel or more; a beach lies on gentle ground a few
-metres over the sea (and lower by a lake), none on a steep coast. Each kind of plant has its own green from its
+metres over the sea, none on a steep coast. Each kind of plant has its own green from its
 numbers (thin leaves yellow-green, thick ones blue-green, the dry ground's kinds grey-green, tender kinds warmer,
 woody kinds darker), pushed far apart and lighter than real leaves; each plant differs a little in hue, tone and
 size by its own fixed random numbers. A kind the cold is shutting down (the ground near its frost gene, or frozen

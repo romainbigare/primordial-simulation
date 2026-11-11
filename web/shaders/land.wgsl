@@ -41,7 +41,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
-  p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), look.z);
+  p.sand = beach(p.sea, g.h - earth.view.w, length(g.slope), look.z);
   p.river = 0.0;
   p.river_depth = 0.0;
   p.at = at;

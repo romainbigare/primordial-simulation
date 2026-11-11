@@ -74,7 +74,7 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.z = h.x;
   s.slope = length(h.zw) * look.x;
   s.shade = hill_shade(h.zw, EXAGGERATE * look.x);
-  s.sand = beach(s.sea, s.over, s.over, length(h.zw), look.z);
+  s.sand = beach(s.sea, s.over, length(h.zw), look.z);
   s.river = m.w;
   s.river_depth = inside.y;
   s.at = earth.place.xy + uv * earth.place.zw;
