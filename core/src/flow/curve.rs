@@ -90,16 +90,56 @@ impl Part {
 
 /// The ground of a cell as liquid stands on it: its parts (`Part`; the ponds' in the order of the ponds), its area, m²,
 /// the area of its samples in no part, m², and its lowest sample's departure from its mean surface, m.
-/// And where its samples meet: the departure and the part of each two beside each other across a side, and a sample's
-/// mean side, m, so the edge of the ground under the liquid is found at the samples (`Fill::shore`).
+/// And where its samples meet (`Sides`), and a sample's mean side, m, so the edge of the ground under the liquid is
+/// found at the samples (`Fill::shore`).
 #[derive(Clone, Debug, Default)]
 pub(super) struct Curve {
     pub(super) parts: Vec<Part>,
     area: f64,
     apart: f64,
     low: f64,
-    sides: Vec<[(f32, u8); 2]>,
+    sides: Sides,
     side: f64,
+}
+
+/// Where a cell's samples meet: each two beside each other across a side, by the parts they lie in, with their
+/// departures from the cell's mean surface, m, each sorted, so a count under a level is a search: of two in one part,
+/// the lower and the higher of the two (`low[p]`, `high[p]`); of two of which one lies in no part, the other's
+/// (`lone[p]`); two in two parts as they are, each with its part (`two`). Two in no part never meet the liquid's edge.
+#[derive(Clone, Debug, Default)]
+struct Sides {
+    low: Vec<Vec<f32>>,
+    high: Vec<Vec<f32>>,
+    lone: Vec<Vec<f32>>,
+    two: Vec<[(f32, u8); 2]>,
+}
+
+impl Sides {
+    /// The sides of the samples `pairs`, each with its departure and its part (`NO_PART`: none), of a cell of `parts`
+    /// parts.
+    fn new(pairs: impl Iterator<Item = [(f32, u8); 2]>, parts: usize) -> Sides {
+        let mut s = Sides { low: vec![Vec::new(); parts], high: vec![Vec::new(); parts], lone: vec![Vec::new(); parts], two: Vec::new() };
+        for [(d, p), (e, q)] in pairs {
+            match (p, q) {
+                (NO_PART, NO_PART) => (),
+                (NO_PART, r) | (r, NO_PART) => s.lone[r as usize].push(if p == NO_PART { e } else { d }),
+                _ if p == q => {
+                    s.low[p as usize].push(d.min(e));
+                    s.high[p as usize].push(d.max(e));
+                }
+                _ => s.two.push([(d, p), (e, q)]),
+            }
+        }
+        s.low.iter_mut().chain(&mut s.high).chain(&mut s.lone).for_each(|v| v.sort_unstable_by(f32::total_cmp));
+        s
+    }
+    /// How many sides have one of their two samples under its part's level `x[p]` and the other not.
+    fn across(&self, x: &[f64]) -> usize {
+        let under = |v: &[f32], x: f64| v.partition_point(|&d| (d as f64) < x);
+        let one: usize = x.iter().enumerate().map(|(p, &x)| under(&self.low[p], x) - under(&self.high[p], x) + under(&self.lone[p], x)).sum();
+        let at = |(d, p): (f32, u8)| (d as f64) < x[p as usize];
+        one + self.two.iter().filter(|s| at(s[0]) != at(s[1])).count()
+    }
 }
 
 impl Curve {
@@ -189,9 +229,7 @@ impl Fill<'_> {
     /// The length of the edge of the ground under the liquid where `v` m³ stand, m: a sample's side for each two samples
     /// beside each other of which one lies under its part's level.
     pub(super) fn shore(&self, v: f64) -> f64 {
-        let x = self.levels(v);
-        let under = |(d, p): (f32, u8)| p != NO_PART && (d as f64) < x[p as usize];
-        self.c.side * self.c.sides.iter().filter(|s| under(s[0]) != under(s[1])).count() as f64
+        self.c.side * self.c.sides.across(&self.levels(v)) as f64
     }
 }
 
@@ -245,7 +283,7 @@ fn of(w: &World, i: usize) -> Curve {
     let side = 1usize << (depth - l.depth);
     let at_grid = |p: usize| ((s.h[ks[p].0] - mean) as f32, part_of(ks[p].0));
     let pairs = (0..ks.len()).flat_map(|p| [(p % side + 1 < side).then(|| (p, p + 1)), (p + side < ks.len()).then(|| (p, p + side))]).flatten();
-    let sides = pairs.map(|(p, q)| [at_grid(p), at_grid(q)]).collect();
+    let sides = Sides::new(pairs.map(|(p, q)| [at_grid(p), at_grid(q)]), parts.len());
     let low = ks.iter().map(|&(k, _)| s.h[k] - mean).fold(f64::INFINITY, f64::min);
     Curve { parts, area, apart, low, sides, side: (area / ks.len() as f64).sqrt() }
 }
