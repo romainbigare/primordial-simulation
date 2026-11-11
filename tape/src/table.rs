@@ -4,13 +4,16 @@
 //! frame's own context (`Ctx`), and holds nothing a picture needs to make.
 
 use crate::ground::sample_index;
-use crate::layers::{cover_melt, frame, pixels, Ctx};
+use crate::layers::{bed_colour, cover_melt, frame, pixels, Ctx};
 use pcore::inside::{soil_level, Means};
 use pcore::space::terrain::SAMPLE_DEPTH;
 use pcore::World;
 
 /// Numbers a square's row holds (`Table::frame`).
-pub const ROW: usize = 10;
+pub const ROW: usize = 13;
+/// A body that holds less liquid than this on its mean over its surface, m, is drawn dry: a film over a flat basin,
+/// soaked ground rather than water.
+const DRY_M: f64 = 0.1;
 
 /// What a shell keeps of a world's cells, which do not change: the cell of each square; of each cell the terrain's mean
 /// height over it, m, and the wetness index of the terrain's samples inside it with their shares of its area
@@ -61,8 +64,8 @@ impl Table {
     /// The present state of world `w` as one tape frame, as a tape would keep it (`frame`), and its table: the melting point of the frozen
     /// cover, K (`cover_melt`), then `ROW` f32 numbers for each square, row by row (`row`), then the kinds of cover of
     /// each square, row by row (`stands::rows`, `KINDS` × `KIND_ROW` f32), then the level of each pond of the terrain's
-    /// samples, m (`World::pond_levels`: NaN where no body holds it), which a shell draws each pond's liquid flat at,
-    /// over the ground that lies under it.
+    /// samples, m (`World::pond_levels`: NaN where no body holds it, or where its body holds less than `DRY_M` of liquid on
+    /// its mean: dry ground), which a shell draws each pond's liquid flat at, over the ground that lies under it.
     pub fn frame(&self, w: &World) -> (Vec<u8>, Vec<f32>) {
         let c = Ctx::new(w);
         let mut bytes = Vec::with_capacity(w.map.n() * crate::LAYERS.len());
@@ -76,7 +79,11 @@ impl Table {
         table.extend(self.square.iter().flat_map(|&i| rows[i].map(|v| v as f32)));
         let kinds: Vec<_> = (0..n).map(|i| crate::stands::rows(w, i)).collect();
         table.extend(self.square.iter().flat_map(|&i| kinds[i].map(|v| v as f32)));
-        table.extend(w.pond_levels().iter().map(|&l| l as f32));
+        let mut ponds = w.pond_levels();
+        for p in w.pools().iter().filter(|p| p.volume <= DRY_M * p.area) {
+            ponds[p.pond] = f64::NAN;
+        }
+        table.extend(ponds.iter().map(|&l| l as f32));
         (bytes, table)
     }
 
@@ -85,7 +92,8 @@ impl Table {
     /// depth of its liquid): the terrain's mean height over it, m; its ground's temperature, K, and how fast the air
     /// cools with height there, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest
     /// ground, m, and the depth that stands, m; the liquid in its pores and what they hold full, m, and the level of the
-    /// wetness index its soil's liquid departs about (`inside::soil_level`; 0 where it lies evenly).
+    /// wetness index its soil's liquid departs about (`inside::soil_level`; 0 where it lies evenly); and its bed's
+    /// reflectance (red, green, blue: `layers::bed_colour`).
     fn row(&self, c: &Ctx, i: usize, m: Option<Means>, level: Option<[f64; 2]>) -> [f64; ROW] {
         let w = c.w;
         let (z, depth) = (c.f.z[i], c.f.depth[i]);
@@ -94,6 +102,7 @@ impl Table {
         let (twi, area) = &self.inside[i];
         let soil = soil_level(&w.cfg.phys, twi, area, m).unwrap_or(0.0);
         let cools = w.air_drop(i).unwrap_or(0.0);
-        [self.z[i], c.f.t[i], cools, c.f.ice[i], top, low, m.stands, m.pore, m.pores, soil]
+        let bed = bed_colour(w, i);
+        [self.z[i], c.f.t[i], cools, c.f.ice[i], top, low, m.stands, m.pore, m.pores, soil, bed[0], bed[1], bed[2]]
     }
 }

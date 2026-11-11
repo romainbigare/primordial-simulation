@@ -90,14 +90,31 @@ fn cell(w: &World, i: usize) -> Cell {
         if t < s.boil {
             add(1, a * melt * w.chem.molar_volume(k, Phase::Liquid), s.refl[1]);
         }
-        add(3, w.b(k, i) * w.chem.molar_volume(k, Phase::Solid), s.refl[0]);
     }
+    acc[3] = bonded(w, i);
     let area = w.mesh.cells().area()[i];
     let top = acc[..3].iter().find(|a| a[0] / area >= COVER_MIN).unwrap_or(&acc[3]);
     let glow = 1.0 + 2.0 * ((t - GLOW_T) / GLOW_T).clamp(0.0, 1.0);
     let colour = |a: &[f64; 4]| [1, 2, 3].map(|c| if a[0] > 0.0 { (a[c] / a[0] * glow).min(1.0) } else { 0.0 });
     let ground = colour(acc[2..].iter().find(|a| a[0] > 0.0).unwrap_or(&acc[3]));
     (w.surface_z(i), acc[1][0] / area, acc[0][0] / area, acc[2][0] / area, w.t_surface_last(i), colour(top), litter(w, i, area, ground))
+}
+
+/// The bonded solids of cell `i` (its bed): their volume, m³, and that times their reflectance (red, green, blue).
+fn bonded(w: &World, i: usize) -> [f64; 4] {
+    let mut acc = [0.0; 4];
+    for k in 0..w.chem.ns() {
+        let (v, refl) = (w.b(k, i) * w.chem.molar_volume(k, Phase::Solid), w.chem.subs[k].refl[0]);
+        acc[0] += v;
+        (0..3).for_each(|c| acc[1 + c] += v * refl[c] as f64);
+    }
+    acc
+}
+
+/// The reflectance of the bed of cell `i`, its bonded solids' (red, green, blue; 0 where it has none).
+pub fn bed_colour(w: &World, i: usize) -> [f64; 3] {
+    let a = bonded(w, i);
+    [1, 2, 3].map(|c| if a[0] > 0.0 { a[c] / a[0] } else { 0.0 })
 }
 
 /// Ground of colour `ground` in cell `i` (`area` m²) under the litter of the cover's remains in it: their colour by

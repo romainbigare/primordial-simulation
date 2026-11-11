@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl style.wgsl colour.wgsl land.wgsl cover_field.wgsl
+// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl colour.wgsl land.wgsl rock.wgsl cover_field.wgsl
 // The live map in view: at each pixel of the screen the ground from its tiles and the state from the cells' table
 // (land.wgsl), in the view's colours.
 
@@ -9,6 +9,8 @@
 const LINE_PX = 1.2;
 const LINE_MOST = 2.5;
 const LINE_FADE = 4.0;
+// A channel's stones lie on its bed and its bars, out to this many of its half widths from its line.
+const STONES_OUT = 2.0;
 
 // What is at a point: the ground without the channel's water (`dry`), the channel's water (`wet`) and the share of the
 // pixel that water covers.
@@ -41,7 +43,16 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
-  p.sand = beach(p.sea, g.h - earth.view.w, length(g.slope), look.z);
+  p.loose = loose_at(at);
+  p.rock = bed_shows(p.loose, at);
+  p.bed = vec3f(0.0);
+  p.canopy = field_at(at, COVER_LATTICES - 1, 0.0).a;
+  if (p.rock > 0.0 || length(g.slope) > CLIFF_FROM) {
+    let soil = blended(SOIL, cs);
+    p.bed = vec3f(soil.zw, blended(BED, cs).x);
+  }
+  p.stone = select(0.0, stone_of(g.channels.xy), bed.half > 0.0 && g.d < STONES_OUT * bed.half);
+  p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), p.loose, look.z);
   p.river = 0.0;
   p.river_depth = 0.0;
   p.at = at;
@@ -92,6 +103,8 @@ fn river_colour(p: Spot) -> Shaded {
     let w = river_colour(spots.wet);
     c = Shaded(mix(c.rgb, w.rgb, spots.share), mix(c.m, w.m, spots.share), select(c.kind, RIVER, spots.share > 0.5));
   }
-  let rgb = in_view_of(c, blended(VIEW, cs).xy, blended(TRUTH, cs).xyz);
+  // The true colour is the cells', and the bed's where it shows.
+  let truth = mix(blended(TRUTH, cs).xyz, spots.dry.bed, spots.dry.rock);
+  let rgb = in_view_of(c, blended(VIEW, cs).xy, truth);
   return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);
 }

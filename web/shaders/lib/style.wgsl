@@ -27,6 +27,13 @@ const OPEN_M: f32 = 30.0; const DEEP_M: f32 = 600.0;
 const FOAM = 0.55; const FOAM_M = 0.4; const FOAM_RGB = vec3f(0.85, 0.92, 0.95);
 // The pixels across the foam's band over which it fades in.
 const FOAM_PX = vec2f(0.5, 1.5);
+// The bed under any water is drawn this far towards pale sand (`BEACH_SAND` times `BED_TONE`), so shallows read light
+// over a dark soaked bed too (a lake's as the sea's).
+const BED_LIGHTEN = 0.55; const BED_TONE = 0.85;
+// Lakes are metres deep where the sea is tens: each reads from its light rim to its blue middle at its own scale.
+// A lake is coloured as if this many times as deep, but no deeper than `LAKE_DEEPEST_M` (its middle open blue, not the
+// ocean's dark).
+const LAKE_SCALE = 6.0; const LAKE_DEEPEST_M = 45.0;
 
 // Beach sand (colour.wgsl `beach`), bright and dry.
 const BEACH_SAND = vec3f(0.62, 0.53, 0.36);
@@ -58,10 +65,10 @@ fn relief_tint(c: vec3f, lit: f32) -> vec3f {
 }
 
 // Bed `bed` (linear, lit) seen through `depth` m of water in the style, whose surface has slope g: through the clear
-// water's stretched attenuation, over the open water darkening with depth.
+// water's stretched attenuation (the bed lightened, `BED_LIGHTEN`), over the open water darkening with depth.
 fn water_painted(bed: vec3f, depth: f32, g: vec2f) -> vec3f {
   let deep = mix(OPEN_WATER, DEEP_WATER_PAINT, ease(log(OPEN_M), log(DEEP_M), log(max(depth, 1.0))));
-  return seen_through(bed, depth, g, CLEAR_ATTENUATION, deep);
+  return seen_through(mix(bed, BEACH_SAND * BED_TONE, BED_LIGHTEN), depth, g, CLEAR_ATTENUATION, deep);
 }
 
 // The foam over water `depth` m deep where the bed rises at `slope` (rise over run), seen at `e` m a pixel: fading out

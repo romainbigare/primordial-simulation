@@ -188,7 +188,15 @@ pub extern "C" fn tile(depth: u32, x: i32, y: i32) -> *const u8 {
     give(texels.iter().flat_map(|v| v.to_le_bytes()).collect())
 }
 
-/// The length in bytes of what `meta`, `frame`, `table`, `discharge`, `things` or `tile` last returned.
+/// The rock of each of the terrain's samples of the ground made by `ground`, 16-bit floats little-endian
+/// (`tape::Ground::rock`).
+#[no_mangle]
+pub extern "C" fn rock() -> *const u8 {
+    let texels = GROUND.with(|c| c.borrow().as_ref().expect("no ground: call ground first").rock());
+    give(texels.iter().flat_map(|v| v.to_le_bytes()).collect())
+}
+
+/// The length in bytes of what `meta`, `frame`, `table`, `discharge`, `things`, `tile` or `rock` last returned.
 #[no_mangle]
 pub extern "C" fn out_len() -> usize {
     OUT.with(|o| o.borrow().len())

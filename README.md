@@ -109,15 +109,24 @@ place (`web/shaders/lib/style.wgsl` for each pixel, `web/src/style.ts` for the p
 layer views keep the physical colours. Every look still means what the model holds. The colours are cleaner, with
 more contrast; slopes have a clear lit side and a soft cool shade. Water is coloured by its depth through the clear
 water of the clearest coasts, drawn stretched, so the bed shows to tens of metres: sand, pale shallows, turquoise,
-blue, then the deep, with foam at its edge where its band takes a pixel or more; a beach lies on gentle ground a few
-metres over the sea, none on a steep coast. Each kind of plant has its own green from its
+blue, then the deep, with foam at its edge where its band takes a pixel or more; a lake reads the same way at its own
+scale (as if six times as deep). Under any water the bed is drawn lighter. A beach lies on gentle loose ground a few
+metres over the sea (lower by a lake), none on a steep coast. Each kind of plant has its own green from its
 numbers (thin leaves yellow-green, thick ones blue-green, the dry ground's kinds grey-green, tender kinds warmer,
 woody kinds darker), pushed far apart and lighter than real leaves; each plant differs a little in hue, tone and
 size by its own fixed random numbers. A kind the cold is shutting down (the ground near its frost gene, or frozen
 under it) turns while the ground cools through yellow and orange towards red, as far as its pigment reaches, plant
 by plant at its own time, then stands brown and thin while dormant, and greens again as the ground warms; a kind shut
 down by drought goes straw, then brown. Far away the plants melt into a field of the same colours (a meadow in
-flower as a tint), with soft patches fixed in the world and no rows. Every colour of the map is worked in linear light (a
+flower as a tint), with soft patches fixed in the world and no rows. The herbs are a soft sward the tufts stand in; the
+bare ground has clods, and under closed crowns litter and moss. Where the drawn ground is steeper than about 0.9 it is a
+cliff in its bed's colour, banded by strata along the contours; scree lies below on steep thin ground, stones on bare
+bed and in a channel as big as its power moves (`web/shaders/lib/crag.wgsl`).
+
+In every view the bed shows where the loose ground thins (`web/shaders/lib/rock.wgsl`): each terrain sample's loose
+depth and the largest stone its channel moves come with the ground (`Ground::rock`), and each cell's bed reflectance
+with the table; the bed shows fully at no loose ground and is hidden under 0.1 m, and plants hold on it only in its
+cracks. A body that holds no liquid is drawn as dry ground. Every colour of the map is worked in linear light (a
 reflectance times the light on the surface) and turned into the screen's bytes once, by the sRGB curve (IEC 61966-2-1).
 Under the plants the ground has its own colour (its loose solids, else its bonded ones, under the litter of the
 cover's remains: the `ground_r`, `ground_g`, `ground_b` layers), darker where wet, under liquid and snow; the green comes only from the plants. A tape

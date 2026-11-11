@@ -23,6 +23,8 @@ export interface KindLook { from: Rgb; to: Rgb; left: number; petal: Rgb; bloom:
 export const DESIGN = { tree: 0, bush: 1, herb: 2 } as const;
 /** A plant this tall or taller, m, is a tree; a lower one whose walls are this share of its cover or more is a bush. */
 const TREE_M = 3, BUSH_WOOD = 0.6;
+/** A herb's mark is a clump of its plants this many times as wide as one, so its tufts read at a 10 m scale bar. */
+const TUFT_GROW = 2.5;
 
 // The palette of the greens: a kind's hue (OKLCH, degrees) from its leaves' thickness (thin leaves yellow-green, thick
 // ones blue-green), its frost gene (tender kinds warmer) and its moisture gene (kinds of wet ground bluer); its
@@ -111,6 +113,9 @@ export function cooling(year: number, lat: number): number {
 export function designOf(height: number, wood: number): number {
   return height >= TREE_M ? DESIGN.tree : wood >= BUSH_WOOD ? DESIGN.bush : DESIGN.herb;
 }
+
+/** How many times as wide as one plant a mark of a kind of design `design` is drawn (`TUFT_GROW`). */
+export function clumped(design: number): number { return design === DESIGN.herb ? TUFT_GROW : 1; }
 
 /** The green of kind `k` (OKLab), its lightness drawn in part from its physical leaf `phys` (linear). */
 function green(k: Leafy, phys: Rgb): Rgb {

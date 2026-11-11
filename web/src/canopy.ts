@@ -5,7 +5,7 @@
 // numbers.
 import { clamp, smooth } from './earth';
 import type { Rgb } from './sprites';
-import { KindLook, designOf, kindLook, seenFar } from './style';
+import { KindLook, clumped, designOf, kindLook, seenFar } from './style';
 
 /** The side of a cell of each lattice of marks, m: one mark a cell at most. A mark reaches at most a cell from its
  * cell, so it is drawn at most `REACH` sides across; a kind is drawn on the lattices whose side is nearest its crown's
@@ -97,15 +97,15 @@ function shareOn(w: number, l: number): number {
   return Math.min(below, above);
 }
 
-/** The marks of a kind (row `r`) on lattice `l`: the chance a cell holds one and its width, m. Its plants stand in
+/** The marks of a kind (row `r`) on lattice `l`, each a clump of `grow` plants across: the chance a cell holds one and its width, m. Its plants stand in
  * patches that cover the share `cover` of the ground, `perM2` a m², each crown as wide as the ground it holds there; a
  * cell of a patch holds the plants that fall in it as one mark of their crowns' area (a clump where they are many), at
  * most `REACH` sides across, and the chance a cell holds one keeps the share of the ground the marks cover the stand's. */
-function marksOn(r: Float32Array, l: number): [number, number] {
-  const share = shareOn(r[K.width], l), a = LATTICES[l];
+function marksOn(r: Float32Array, l: number, grow: number): [number, number] {
+  const share = shareOn(r[K.width] * grow, l), a = LATTICES[l];
   if (share <= 0 || r[K.cover] <= 0 || r[K.perM2] <= 0) return [0, 0];
-  const inside = r[K.perM2] / r[K.cover], plants = inside * a * a;
-  const width = Math.min(r[K.width] * Math.sqrt(Math.max(plants, 1)), REACH * a);
+  const inside = r[K.perM2] / r[K.cover], plants = (inside * a * a) / (grow * grow);
+  const width = Math.min(r[K.width] * grow * Math.sqrt(Math.max(plants, 1)), REACH * a);
   const chance = Math.min(1, (r[K.cover] * a * a) / ((Math.PI / 4) * width * width));
   return [share * chance, width];
 }
@@ -133,7 +133,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       [...look.to, design].forEach((v, q) => put(KIND_PLANES.to + k, i, q, v));
       [...look.petal, look.bloom].forEach((v, q) => put(KIND_PLANES.petal + k, i, q, v));
       LATTICES.forEach((a, l) => {
-        const [chance, width] = marksOn(r, l);
+        const [chance, width] = marksOn(r, l, clumped(design));
         if (chance <= 0) return;
         put(KIND_PLANES.chance + l, i, k, chance);
         put(KIND_PLANES.width + l, i, k, width);

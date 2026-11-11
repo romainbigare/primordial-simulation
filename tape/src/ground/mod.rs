@@ -10,6 +10,7 @@
 mod bends;
 mod channels;
 mod half;
+mod rock;
 mod stems;
 mod wetness;
 
@@ -152,6 +153,12 @@ impl Ground {
                 near[(r - r0) as usize * wide + (c - c0) as usize].iter().copied().find(|&q| h(p) < s.ponds[q as usize].level).unwrap_or(NONE)
             })
             .collect()
+    }
+
+    /// The rock of each of the terrain's samples, row by row, two 16-bit floats a sample: the depth of its loose ground,
+    /// m, and the largest stone its channel moves, m (`rock::rock`).
+    pub fn rock(&self) -> Vec<u16> {
+        rock::rock(&self.samples, self.map.length(SAMPLE_DEPTH))
     }
 
     /// The ponds of the ground, each with its pass and its level (`Samples::ponds`).
