@@ -1310,7 +1310,9 @@ read a kind.
 - **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on: an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
   `World::terrain`); the bed of the chemistry's `bed` and, over the share of it in patches (`terrain::patch`), of its
   `deposits`; the loose ground the wear left (0: the mantle on land, the shelf on the open low ground), each cell the
-  mean over its samples; the sea's salt at
+  mean over its samples of the top `skin_m` of each sample's at most: the ground node is the layer that exchanges with
+  the surface within a year (its heat, and the pores roots and evaporation draw from), and what the wear left deeper lies
+  under it, packed with the bed (the bed's store, `Class::Deep`, its aquifer); the sea's salt at
   balance (2.6); ground and air temperatures falling with latitude and height. The terrain's samples are worn (0):
   land rises from 0 m to the noise's height over 2 million years while flowing liquid cuts it, its slopes creep and it
   floats back up as it is unloaded; the load settles in the closed basins the cutting leaves, and those it does not fill
