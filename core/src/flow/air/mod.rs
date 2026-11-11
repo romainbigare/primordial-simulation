@@ -9,6 +9,7 @@ mod daily;
 mod exchange;
 mod radiation;
 mod rain;
+mod seen;
 mod sky;
 mod step;
 mod surf;
