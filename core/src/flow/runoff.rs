@@ -312,13 +312,15 @@ fn follow_flux(w: &mut World, b: &Bodies, flux: &[[f64; 2]], dt: f64) {
     for (avg, f) in w.discharge.iter_mut().zip(flux).filter(|p| *p.0 != 0.0 || p.1[0] != 0.0) {
         follow(avg, (f[0] / dt) as f32, ema);
     }
+    // Whether each cell is land (`World::is_land`), found once for a cell, at its first sample that needs it.
+    let mut land: Vec<Option<bool>> = vec![None; n];
     for &k in &b.land {
         let (k, f) = (k as usize, flux[k as usize]);
         let i = b.cell_of[k] as usize;
         most[i] = most[i].max(f[0]);
         let j = samples.to[k];
         let low = j != NONE && b.at[j as usize] != NONE && b.list[b.at[j as usize] as usize].pass == NONE;
-        if low && w.is_land(i) {
+        if low && *land[i].get_or_insert_with(|| w.is_land(i)) {
             off[i] += f[0];
         }
     }
