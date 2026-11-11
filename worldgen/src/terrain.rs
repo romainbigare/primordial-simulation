@@ -40,7 +40,7 @@ fn terrain_of(seed: u64, map: &Square, cells: &Level, soft: f64) -> Terrain {
     if !map.wrap {
         return Terrain::new(seed, ISLAND_LEVEL, soft);
     }
-    let rise: Vec<f64> = (0..cells.n()).map(|i| terrain::rise(seed, map, Place::of(cells, i)).0).collect();
+    let rise: Vec<f64> = (0..cells.n()).map(|i| terrain::rise(seed, map, Place::of(cells, i), 0.0).0).collect();
     let mut order: Vec<usize> = (0..cells.n()).collect();
     order.sort_by(|&a, &b| rise[b].total_cmp(&rise[a]));
     let (total, mut above) = (cells.area().iter().sum::<f64>(), 0.0);

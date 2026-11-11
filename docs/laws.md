@@ -41,8 +41,10 @@ the middle of its map, says how high the ground would stand. **An island's land 
 `Range`): along an axis drawn from the seed (any heading, up to a unit of the noise from the middle of the map, bent by
 the warp) lies a range, a band half 0.7 to 1.4 units wide (drawn) where the land's rise over its level is 1.3 times the
 mean on the axis, falling by a bell across it to 0.2 times the mean far from it (`RISES`): a high rough range, its
-foothills, and a wide low plain where the land rises slowly; the coast is where the rise meets the level, so it stays
-where the noise has it. A globe's land rises alike everywhere (its noise is of the scale of its continents, its cells
+foothills, and a wide low plain where the land rises slowly. That scales the noise's large shape; its base's octaves
+from the third on (`FINE_FROM`, a quarter of the coarsest's wavelength and finer) keep their own size where the land
+rises slower than the mean and grow with it where faster, so a plain keeps its own swells, low hills and shallow
+hollows of tens of metres while its large heights stay low. A globe's land rises alike everywhere (its noise is of the scale of its continents, its cells
 wider than a range); the world keeps what it needs beside its seed and its map
 (`World::terrain`: the rise its level 0 m lies at). The
 noise's finest octave is 670 m on the 64 x 64 island and 200 km on a globe. The ground is held at **samples**, the
