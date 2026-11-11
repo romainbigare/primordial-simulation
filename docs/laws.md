@@ -392,7 +392,12 @@ The head lost by moving liquid does work where it is lost on land (`flow::runoff
 times the fall to the sample it runs to (the samples' heights, which the run's erosion does not change). It
 **carries** up to `carry` m³ of loose solids per J of the cell's work (at most all that lies loose), which go with the
 cell's runoff to the cells its ways land in, where they settle, and with the work its load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears** `wear` m³ of
-bed per J over its strength into loose ground. **Creep** (`flow::creep`, yearly, out of land cells):
+bed per J over its strength into loose ground. The load is booked apart from the liquid (`runoff::Crossings`), each
+with its own heat. **Known limit:** the load goes straight from the cell to the cells its ways land in, as the liquid
+does (1.2): it is not checked against what the channel can carry at each sample on its way, so it does not settle
+where the channel slows (where a sample's fall is less than the one before it, on a plain, at a body's shore), and
+the cells it passes neither gain nor lose by it. The heat of the liquid's fall lands with the liquid, not along its
+way. **Creep** (`flow::creep`, yearly, out of land cells):
 loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope,
 across each border by its width (none across a corner). Bodies hold the ground: carrying
 and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 8. **Burial**: the loose ground mixes over what lies on it (bioturbation, Darwin 1881), so a part no body holds and no bond joins sinks `bury` m/s into it, no deeper than the loose ground is, and once buried past its smallest outer size it joins its cell's ground (`bond/month.rs::bury`, 3.1).
