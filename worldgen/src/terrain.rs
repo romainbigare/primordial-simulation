@@ -176,8 +176,10 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
     let (n, na, ns) = (mesh.cells().n(), mesh.level(AIR).n(), chem.ns());
     let lat = (cfg.lat_south, cfg.lat_north);
     let hz = heights(seed, &map, &terrain, lat);
-    let over = |x: fn(&Samples, usize) -> f64| map.leaves().iter().map(|&l| terrain.over(seed, &map, l, lat, x)).collect::<Vec<f64>>();
-    let (patch, loose) = (over(|s, k| s.patch[k]), over(|s, k| s.loose[k]));
+    let over = |x: &dyn Fn(&Samples, usize) -> f64| map.leaves().iter().map(|&l| terrain.over(seed, &map, l, lat, x)).collect::<Vec<f64>>();
+    // A cell's ground node is the layer that exchanges with the surface within a year (`skin_m`): of each sample it takes
+    // the top `skin_m` of its loose ground at most; what the wear left deeper lies under it, packed with the bed.
+    let (patch, loose) = (over(&|s, k| s.patch[k]), over(&|s, k| s.loose[k].min(cfg.skin_m)));
     let mut ground = vec![0.0; ns * n];
     let mut bed = vec![0.0; ns * n];
     let mv = |k: usize| chem.molar_volume(k, Phase::Solid);

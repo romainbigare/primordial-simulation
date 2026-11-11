@@ -385,10 +385,10 @@ fn pore_space_is_the_porosity_times_the_loose_solids() {
     let mut w = worldgen::testkit::squares(3, 16, 16);
     let (i, _) = pair(&w);
     let (pores, area) = (w.cfg.phys.porosity * loose(&w, i), w.mesh.cells().area()[i]);
-    // The loose layer of the generated land is what the wear left (`Samples::loose`), 0.4 of it pores (random packing:
-    // 0.36 to 0.44).
-    let lat = (w.cfg.lat_south, w.cfg.lat_north);
-    let start = w.terrain.over(w.terrain.seed, &w.map, w.map.leaves()[i], lat, |s, k| s.loose[k]);
+    // The loose layer of the generated land is what the wear left (`Samples::loose`), the top `skin_m` of it at most,
+    // 0.4 of it pores (random packing: 0.36 to 0.44).
+    let (lat, skin) = ((w.cfg.lat_south, w.cfg.lat_north), w.cfg.skin_m);
+    let start = w.terrain.over(w.terrain.seed, &w.map, w.map.leaves()[i], lat, |s, k| s.loose[k].min(skin));
     assert!((pores / area / (0.4 * start) - 1.0).abs() < 0.05, "{} m of pore depth under {start} m of loose ground", pores / area);
     let depth = |w: &mut World| {
         pcore::flow::state(w, true);
@@ -580,7 +580,8 @@ fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
     let (hi, lo) = pair(&w);
     let (n, area, p) = (w.mesh.cells().n(), w.mesh.cells().area()[0], w.cfg.phys);
     let (pores, full, mv) = (p.porosity * loose(&w, hi), p.bed_porosity * p.bed_depth * area, w.chem.molar_volume(LIQUID, Phase::Liquid));
-    w.cfg.evap = 0.0;
+    // No rain: what sinks is only the liquid poured.
+    (w.cfg.evap, w.cfg.rain_time) = (0.0, f64::INFINITY);
     pour(&mut w, hi, 0.9 * pores);
     let books = Books::now(&w);
     worldgen::testkit::flow_step(&mut w, LIQUID_STEP);

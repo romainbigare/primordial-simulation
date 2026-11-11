@@ -482,31 +482,20 @@ plants as tufts, flowers and bushes that melt into a field from afar). The "True
 physics gives. Cliffs, bare rock, scree and boulders come from numbers (slope, the loose ground's depth, a channel's
 power); the drawing places each one.
 
-**The water's follow-ups: on the work branch, not on main.** A body of standing liquid is built from its own samples;
-each cell holds its parts of it, and the passes over the samples keep their room. Held back from main: the slow test
-`the_long_step_keeps_the_climate` fails on its count of `rivers` (0.43, limit 0.33).
+**The water's follow-ups: done.** A body of standing liquid is built from its own samples; each cell holds its parts
+of it, and the passes over the samples keep their room. A cell's liquid covers the share of its area that is left
+after the pores of the ground it comes to cover have filled, so every cell of a body ends a month at the body's level.
 
-Found on the rain: the law gives an air node's rain only to the cells whose own air saturates, so on a 22 island 59 of
-189 land cells get under 1 cm of rain a year, beside wet ones. These are the pale dry squares. The rain an air node
-makes should fall over all its cells, by a smooth weight with the wind's drift (Smith and Barstad 2004), its total
-kept.
+**The ground's second pass: done.** The wear's ways no longer follow the grid: coarse rows have their true width, a
+sample picks one of its ways down by a fixed draw in proportion to the fall (Fairfield and Leymarie 1991), a way
+crosses a corner only from draining ground, and a filled basin's surface leans by each sample's draw. The bed has hard
+and soft patches from the chemistry's two makes of ground. The wear leaves a depth of loose ground per sample
+(Heimsath et al. 1997) and builds a shelf under the shore from the load that reaches the low ground; taken = basins +
+shelf is tested. Channel length in straight runs of 4 samples or more: 50% -> 30%.
 
-**The ground's second pass: on the work branch, not on main.** The wear's ways no longer follow the grid: coarse
-rows have their true width, a sample picks one of its ways down by a fixed draw in proportion to the fall (Fairfield
-and Leymarie 1991), a way crosses a corner only from draining ground, and a filled basin's surface leans by each
-sample's draw. The bed has hard and soft patches from the chemistry's two makes of ground. The wear leaves a depth of
-loose ground per sample (Heimsath et al. 1997) and builds a shelf under the shore from the load that reaches the low
-ground; taken = basins + shelf is tested. Channel length in straight runs of 4 samples or more: 50% -> 30%.
-
-Held back from main, for these:
-- The page draws the new ground worse close up: a channel is a zig-zag of arcs along a staircase of samples, the shelf
-  shows square sample edges, a pond's outlet is a square, one deep pond on seed 2 is drawn dry.
-- The loose ground is now 4 m deep on average (it was 1 m everywhere) and the ground node holds all of it at one
-  temperature, so seasons are milder (swing on land 14.1 K, reference 15.7), cover is higher and a globe without life
-  is 5 K warmer. Three tests fail on this: the plateau test (fast), the key numbers and the lifeless globe (slow).
-  The stores by depth need a rule: what the year's heat wave reaches, and what roots reach.
-- Building the samples costs 0.7 s on a 32 island (0.44 s before); the slow choose tests take much longer.
-- A tile still costs 8 to 9 ms; the pond search is cut, the channels field and the packing are what is left.
+A cell's ground node takes the top `skin_m` (2 m) of each sample's loose ground at most: the layer the year's heat and
+the roots reach. What the wear left deeper is counted with the bed. `Samples::loose` keeps the true depth for the
+picture. With it the key numbers and the globe without life are in their ranges on the new ground.
 
 **The Earth view's style: done, on main.** One style step for the Earth view only: water coloured by depth through
 clear coastal water with foam at its edge, beaches by the sea on gentle ground, stronger and warmer light, a colour
@@ -521,3 +510,25 @@ Open on the look:
 - Under trees the ground is a flat bare colour at 10 to 50 m: herbs cover about a fifth and the ground has no grain.
 - Tufts and flowers are tiny at 10 m; reeds and flowers are rare (no starting kind is a wet-ground herb).
 - Autumn is mostly herbs going yellow; red shows only on the heights.
+
+**The ground on the page: done.** A channel is drawn as one smooth line down its stem (the mean of the sample centres
+3 up and 3 down, Chaikin 1974), with the bends laid on it; within 250 m the drawn ground leans to the channel's floor,
+so a valley follows its river. Water against ground is decided per texel by the drawn height; the shelf lies 10 m
+under 0 m with a rounded edge. A scene world builds in 0.06 s.
+
+**The rain: done.** Of what condenses over a cell, the share 1 - e^(-width / 20 km) lands there; the rest drifts with
+the wind and lands over all the cells of its air node (Smith and Barstad 2004), the node's total kept. So no cell
+under raining air gets none, and the pale dry squares are gone. Rain on a 22 island's land cells (least / median /
+most): 0.03 / 1.16 / 2.33 m a year; runoff is 0.65 of the rain on land. The wettest cells get less than under rain
+that lands where it condenses, so fewer cells are rivers: that reference of the key numbers (`RIVERS`) is measured
+with this law.
+
+Open on the ground and the water:
+- Loose ground that settles during a run is not bounded by the `skin_m` rule.
+- The heat capacity of a node's amounts is one helper (`ground::amounts_cap`). Two orders of summing remain:
+  `World::heat_cap_of` and `land::capacities` add the amounts onto the skin one by one, the parts and the reactor sum
+  the amounts first. The same node can differ in the last bit between them; joining them changes results.
+- Bodies start empty: a deep basin takes years of runoff to fill, and a body that loses more than it gets is a dry
+  flat. The world should start with its bodies at the level their gains and losses hold.
+- A small square where a channel leaves a pond; a tile costs 7 to 10 ms, most of it the channels' field.
+- Building the samples costs 0.5 to 0.6 s on a 32 island.

@@ -297,7 +297,7 @@ falls) is shared between the parts: of each substance by the share of it each ho
 capacities, so a heat all share warms them alike (`moves::reconcile`). What Flow moves of one part it books there: the
 air's step the land's and the top's own exchange (1.4), the liquid laws what they bring to the top and what they take
 by each part's share of the liquid (1.2). The land keeps the liquid its pores hold, its own soil's; what lies over its
-pores runs down to the top with its heat (`moves::settle`). The share under the liquid follows what stands on it: a
+pores runs down to the top with its heat (`moves::settle`). The share under the liquid follows what stands on it, the pores of the land it comes to cover filling first from what stands, so it covers what is left after they fill (`parts::covers`): a
 land the liquid covers gives the liquid's bottom all it holds there, a ground the liquid leaves gives the land its
 bed's skin, its solids and the liquid its pores hold, so what stands is the same either way (`moves::strip`). The deep
 holds the liquid that stands deeper than `h_mix` and the top the rest, the liquid that moves between them taking its
@@ -505,13 +505,17 @@ a ratio to the node's, so the day sums them in rising order. In the air's day th
 as the eddies even it, follows what its cells evaporate by their law and what its nodes rain: both are linear in the
 vapour between two of the ratios at which a cell starts or stops raining, so the day goes exactly from one such ratio
 to the next, with no smaller steps (`rain::Pool`); the air outside the block is as at the day's start. What a node
-rained in the step falls on those cells (the sea under one air node as one place, 1.4) by what each would hold over its own saturation at the ratio the node rained
-at. It lands after the step, so a cell does not evaporate it again within that step, and it reaches each cell at the
-temperature of the air touching it (`touching`), the air paying what warms it on the way down. Where the node's air at
-its mean ground is below the gas's melting point it falls as a solid (snow) and the air keeps the fusion enthalpy its
-freezing frees; condensing frees the vaporisation enthalpy in the air. **Lift**: gas going up is lifted from the
-ground's head to its air node's mean ground, paid by the air's heat; rain's fall gives it back (0, "The books"). **Dissolving**
-(`exchange::dissolve`, once a month, at the end of the liquid step, over the month, at the ground's temperature as the
+rained in the step condenses over those cells (the sea under one air node as one place, 1.4) by what each would hold
+over its own saturation at the ratio the node rained at, so it is heaviest over high ground; it lands there by the share
+1 - e^(-d / `rain_drift_m`) of it, d the place's width (the root of its area), and the rest drifts with the wind while
+its drops form and fall and lands over all the node's cells by the share of its air over each (the linear theory of
+orographic rain, Smith and Barstad 2004: a cloud time and a fallout time of about 1000 s each carry rain some 20 km at
+10 m/s), so no cell under raining air gets none (`seen::Seen::landing`). It lands after the step, so a cell does not
+evaporate it again within that step, and it reaches each cell at the temperature of the air touching it (`touching`),
+the air paying what warms it on the way down. Where the node's air at its mean ground is below the gas's melting point
+it falls as a solid (snow) and the air keeps the fusion enthalpy its freezing frees; condensing frees the vaporisation
+enthalpy in the air. **Lift**: gas going up is lifted from the ground's head to its air node's mean ground, paid by the
+air's heat; rain's fall gives it back (0, "The books"). **Dissolving** (`exchange::dissolve`, once a month, at the end of the liquid step, over the month, at the ground's temperature as the
 liquid step leaves it and under the air of the last air step's start; the gases that dissolve are chosen at the month's
 start and evaporate in no air step of it): a gas that cannot condense dissolves in the ground's liquid toward Henry's share, through the
 air's film (`evap`) and the liquid's (`dissolve`) in series, freeing its vaporisation enthalpy, and comes out when the
@@ -1313,7 +1317,9 @@ read a kind.
 - **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on: an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
   `World::terrain`); the bed of the chemistry's `bed` and, over the share of it in patches (`terrain::patch`), of its
   `deposits`; the loose ground the wear left (0: the mantle on land, the shelf on the open low ground), each cell the
-  mean over its samples; the sea's salt at
+  mean over its samples of the top `skin_m` of each sample's at most: the ground node is the layer that exchanges with
+  the surface within a year (its heat, and the pores roots and evaporation draw from), and what the wear left deeper lies
+  under it, packed with the bed (the bed's store, `Class::Deep`, its aquifer); the sea's salt at
   balance (2.6); ground and air temperatures falling with latitude and height. The terrain's samples are worn (0):
   land rises from 0 m to the noise's height over 2 million years while flowing liquid cuts it, its slopes creep and it
   floats back up as it is unloaded; the load settles in the closed basins the cutting leaves, and those it does not fill
