@@ -533,6 +533,20 @@ with this law.
 runs of 60 years, 86 of 92 bodies end at their pass, so that is the level their gains and losses hold. A body that
 loses more falls to its own level by the laws.
 
+**The core's speed, first pass (track D): done.** A month of the flow takes a fifth fewer instructions, results bit
+for bit: the runoff finds once per cell whether it is land, a body's floors are sorted from last month's order, a
+cell's shore is counted by a search of its sorted sides, one search gives a part's volume and area under a level, and
+the rain's landing builds no list. Native, plants only, ms a year (size 22 / 32 / 64): 244 / 505 / 1915 -> 167 / 366 /
+1498. On the page the world waits for the page to draw its frame, so the date and the picture shown are the world's
+own within a quarter of a second, and a pause stops at the date shown.
+
+Open on the speed (each changes the rounding of results, so each is a change with its numbers):
+- The parts of a cell are solved 7 times a month by the liquid's booking and again after each air step: once at the
+  end of the liquid step, and none for a cell at rest, saves 10 to 15% of a month.
+- The ground's full state is built each month at the survey: only what changed saves 7 to 9%.
+- A body's level by a direct search of its sorted floors, not 64 Newton steps: 4 to 5%.
+- The wasm build has no `wasm-opt`; SIMD gives 3 to 5%.
+
 Open on the ground and the water:
 - Loose ground that settles during a run is not bounded by the `skin_m` rule.
 - The heat capacity of a node's amounts is one helper (`ground::amounts_cap`). Two orders of summing remain:
@@ -541,6 +555,5 @@ Open on the ground and the water:
 - A closed basin by the sea that loses more than it gains starts full and falls about 0.1 m a year to its own level
   (3 of 92 bodies in six runs).
 - A body colder than its liquid's melting point at the start starts molten, as the sea does.
-- On the page the date shown lags the world at high speed: 8 years at 36 months a second.
 - A small square where a channel leaves a pond; a tile costs 7 to 10 ms, most of it the channels' field.
 - Building the samples costs 0.5 to 0.6 s on a 32 island.
