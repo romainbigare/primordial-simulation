@@ -11,6 +11,7 @@ mod bends;
 mod channels;
 mod half;
 mod rock;
+mod shore;
 mod stems;
 mod wetness;
 
@@ -31,6 +32,9 @@ pub const TILE: usize = 256;
 pub const GUTTER: usize = 2;
 /// The ponds a tile names exactly (`Ground::tile`): a 16-bit float holds every whole number up to 2^11.
 pub const PONDS_EXACT: usize = 2048;
+/// The samples each way about a texel's own in which a pond may take it (`Ground::pond_tile`): as far as the drawn shore
+/// may lie from the samples' (`shore`).
+const REACH: i64 = 2;
 /// The finest tiles' texels are no longer than this, m: finer, a shell magnifies them.
 const FINEST_M: f64 = 1.0;
 
@@ -56,6 +60,7 @@ pub struct Ground {
     law: Law,
     at: Vec<[f64; 2]>,
     phase: Vec<f32>,
+    shore: shore::Shore,
 }
 
 impl Ground {
@@ -67,7 +72,8 @@ impl Ground {
         let twi = sample_index(&map, &samples);
         let at = stems::points(&samples);
         let phase = bends::phases(&law, &samples, &at, map.length(SAMPLE_DEPTH));
-        Ground { seed, map, terrain, lat, samples, twi, law, at, phase }
+        let shore = shore::Shore::new(&samples);
+        Ground { seed, map, terrain, lat, samples, twi, law, at, phase, shore }
     }
 
     /// The ground of world `w`.
@@ -97,13 +103,26 @@ impl Ground {
         let k = 2f64.powi(SAMPLE_DEPTH as i32 - depth as i32);
         let twi = wetness::field(&self.samples, &self.twi, depth, [win[0], win[1]], [wide, high]);
         let near = channels::Channels::new(&self.map, &self.samples, self.law, (&self.at, &self.phase)).field([win[0], win[1]], [wide, high], k);
-        // The valleys about the channels drawn into the ground out of the ponds (`channels::Field::drawn`).
-        let in_pond = |i: usize| {
-            let [x, y] = self.centre(depth, win[0] + (i % wide) as i64, win[1] + (i / wide) as i64);
-            let (r, c) = ((y.floor() as usize).min(self.samples.down - 1), (x.floor() as usize).min(self.samples.across - 1));
-            self.samples.pond[r * self.samples.across + c] != NONE
-        };
-        let heights: Vec<f64> = heights.iter().enumerate().map(|(i, &h)| if in_pond(i) { h } else { near.drawn(i, h) }).collect();
+        // The valleys about the channels drawn into the ground out of the ponds (`channels::Field::drawn`); near a pond
+        // (`shore::Shore::level`) a valley only lowers the ground, and never under the pond's level where the ground is
+        // not: its mouth meets the level of the pond it runs into. Then the shore drawn smooth (`shore`).
+        let heights: Vec<f64> = heights
+            .iter()
+            .enumerate()
+            .map(|(i, &h)| {
+                let p = self.centre(depth, win[0] + (i % wide) as i64, win[1] + (i / wide) as i64);
+                let (c, r) = ((p[0].floor() as i64).min(self.samples.across as i64 - 1), (p[1].floor() as i64).min(self.samples.down as i64 - 1));
+                let level = self.shore.level(c, r);
+                let carved = if self.samples.pond[r as usize * self.samples.across + c as usize] != NONE {
+                    h
+                } else if level.is_nan() {
+                    near.drawn(i, h)
+                } else {
+                    near.drawn(i, h).min(h).max(h.min(level))
+                };
+                self.shore.drawn(p, carved, level)
+            })
+            .collect();
         let at = |p: usize| (clamp(x0 + (p % side) as i64, across) - win[0]) as usize + (clamp(y0 + (p / side) as i64, down) - win[1]) as usize * wide;
         let mut out = Vec::with_capacity(6 * side * side);
         for i in (0..side * side).map(at) {
@@ -121,7 +140,7 @@ impl Ground {
 
     /// The pond each texel of the tile of `depth` at column `tx` and row `ty` lies in, laid out as `tile`'s texels, its
     /// height `h(p)`, m: the pond (`Samples::pond`, an index into `ponds`; `network::NONE` for none) of the sample that
-    /// holds the texel's centre, or where that lies in none, of the first of its eight neighbours that lies in a pond
+    /// holds the texel's centre, or where that lies in none, of the nearest of the samples within `REACH` that lies in a pond
     /// whose pass the texel lies under, where that sample stands over the pond's level (its rim: not the pass, nor the
     /// ground its liquid runs down below it) or the pond is of the open low ground. So a shell draws each pond flat at
     /// its own level, its shore where the ground rises over that level, not at the edges of the samples.
@@ -131,8 +150,10 @@ impl Ground {
         let s = &self.samples;
         let pond_at = |r: i64, c: i64| s.pond[r.clamp(0, s.down as i64 - 1) as usize * s.across + c.clamp(0, s.across as i64 - 1) as usize];
         let sample = |x: i64, y: i64| self.centre(depth, x, y).map(|v| v.floor() as i64);
-        // The samples that hold the tile's texels' centres: of each, the ponds of it and its eight neighbours, in the
-        // order they are tried.
+        // The samples within `REACH`, nearest first; the samples that hold the tile's texels' centres: of each, the
+        // ponds of those about it, each once, in the order they are tried.
+        let mut by: Vec<(i64, i64)> = (-REACH..=REACH).flat_map(|dr| (-REACH..=REACH).map(move |dc| (dc, dr))).collect();
+        by.sort_by_key(|&(dc, dr)| dc * dc + dr * dr);
         let ([c0, r0], [c1, r1]) = (sample(x0, y0), sample(x0 + side as i64 - 1, y0 + side as i64 - 1));
         let wide = (c1 - c0 + 1) as usize;
         let near: Vec<Vec<u32>> = (r0..=r1)
@@ -140,7 +161,13 @@ impl Ground {
             .map(|(r, c)| {
                 let own = s.h[r.clamp(0, s.down as i64 - 1) as usize * s.across + c.clamp(0, s.across as i64 - 1) as usize];
                 let rim = |q: u32| q != NONE && (s.ponds[q as usize].pass == NONE || own > s.ponds[q as usize].level);
-                (-1..=1i64).flat_map(|dr| (-1..=1i64).map(move |dc| pond_at(r + dr, c + dc))).filter(|&q| rim(q)).collect()
+                let mut ponds: Vec<u32> = Vec::new();
+                for q in by.iter().map(|(dc, dr)| pond_at(r + dr, c + dc)).filter(|&q| rim(q)) {
+                    if !ponds.contains(&q) {
+                        ponds.push(q);
+                    }
+                }
+                ponds
             })
             .collect();
         (0..side * side)

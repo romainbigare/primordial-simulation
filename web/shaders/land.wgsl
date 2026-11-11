@@ -14,10 +14,14 @@ const LINE_FADE = 4.0;
 const FILM_M = 0.05;
 // A channel's stones lie on its bed and its bars, out to this many of its half widths from its line.
 const STONES_OUT = 2.0;
+// The edge of standing liquid is found from how fast its depth changes across the ground, the ground's slope: no slower
+// than this (rise over run), so on flat ground the edge still lies within a pixel's footprint where the depth crosses.
+const SHORE_RISE_LEAST = 1e-3;
 
 // What is at a point: the ground without the channel's water (`dry`), the channel's water (`wet`) and the share of the
-// pixel that water covers.
-struct Spots { dry: Spot, wet: Spot, share: f32 }
+// pixel that water covers; and the share of the pixel standing liquid covers (`pool`): the pixel's footprint across
+// the line where the depth crosses `FILM_M`, so a shore is a smooth line at any zoom, not the pixels' steps.
+struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32 }
 
 // What is at `at`, m from the map's north-west corner, seen at `e` m a pixel: its ground and its state (`state_on`), the
 // ground's own colour and the sea blended between the squares' centres, the plants' field (lib/cover_field.wgsl); and
@@ -61,7 +65,11 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.river_depth = 0.0;
   p.at = at;
   p.e = e;
-  var out = Spots(p, p, 0.0);
+  // The depth less the film, signed (under the ground drawn: minus its height over the level, as the share of the point
+  // that is the ponds' weighs it), over the depth's change across a pixel.
+  let signed = st.depth - min(st.over, NO_LIQUID_M) * g.water.y - FILM_M;
+  let pool = select(0.0, tent(signed / (max(length(g.slope) * g.water.y, SHORE_RISE_LEAST) * e)), g.water.y > 0.0);
+  var out = Spots(p, p, 0.0, pool);
   if (p.depth > 0.0 || bed.half <= 0.0) { return out; }
   out.dry.over = min(p.over, max(g.d - bed.half, 0.0) * max(length(g.slope), bed.mean / bed.half));
   let css = e * land.samples.w;
@@ -107,6 +115,14 @@ fn river_colour(p: Spot) -> Shaded {
   let cs = corners(at / land.map.x);
   let spots = land_spots(at, metres_a_pixel(v.uv));
   var c = colour(spots.dry);
+  // Where the edge of standing liquid crosses the pixel: the ground and the liquid by the share each covers.
+  if (spots.pool > 0.0 && spots.pool < 1.0) {
+    var other = spots.dry;
+    other.depth = select(FILM_M, 0.0, spots.dry.depth > 0.0);
+    let o = colour(other);
+    let k = select(1.0 - spots.pool, spots.pool, spots.dry.depth <= 0.0);
+    c = Shaded(mix(c.rgb, o.rgb, k), mix(c.m, o.m, k), select(c.kind, o.kind, k > 0.5));
+  }
   if (spots.share > 0.0) {
     let w = river_colour(spots.wet);
     c = Shaded(mix(c.rgb, w.rgb, spots.share), mix(c.m, w.m, spots.share), select(c.kind, RIVER, spots.share > 0.5));
