@@ -118,16 +118,23 @@ impl Ground {
         let (x0, y0) = (tx * TILE as i64 - GUTTER as i64, ty * TILE as i64 - GUTTER as i64);
         let s = &self.samples;
         let pond_at = |r: i64, c: i64| s.pond[r.clamp(0, s.down as i64 - 1) as usize * s.across + c.clamp(0, s.across as i64 - 1) as usize];
+        let sample = |x: i64, y: i64| self.centre(depth, x, y).map(|v| v.floor() as i64);
+        // The samples that hold the tile's texels' centres: of each, the ponds of it and its eight neighbours, in the
+        // order they are tried.
+        let ([c0, r0], [c1, r1]) = (sample(x0, y0), sample(x0 + side as i64 - 1, y0 + side as i64 - 1));
+        let wide = (c1 - c0 + 1) as usize;
+        let near: Vec<Vec<u32>> = (r0..=r1)
+            .flat_map(|r| (c0..=c1).map(move |c| (r, c)))
+            .map(|(r, c)| (-1..=1i64).flat_map(|dr| (-1..=1i64).map(move |dc| pond_at(r + dr, c + dc))).filter(|&q| q != NONE).collect())
+            .collect();
         (0..side * side)
             .map(|p| {
-                let [x, y] = self.centre(depth, x0 + (p % side) as i64, y0 + (p / side) as i64);
-                let (r, c) = (y.floor() as i64, x.floor() as i64);
+                let [c, r] = sample(x0 + (p % side) as i64, y0 + (p / side) as i64);
                 let own = pond_at(r, c);
                 if own != NONE {
                     return own;
                 }
-                let around = (-1..=1i64).flat_map(|dr| (-1..=1i64).map(move |dc| (r + dr, c + dc)));
-                around.map(|(r, c)| pond_at(r, c)).find(|&q| q != NONE && h(p) < s.ponds[q as usize].level).unwrap_or(NONE)
+                near[(r - r0) as usize * wide + (c - c0) as usize].iter().copied().find(|&q| h(p) < s.ponds[q as usize].level).unwrap_or(NONE)
             })
             .collect()
     }
