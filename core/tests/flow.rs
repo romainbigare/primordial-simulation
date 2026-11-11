@@ -882,8 +882,10 @@ fn the_low_basin_under_one_air_node_takes_up_gas_as_one_liquid() {
     let j = (0..w.mesh.level(AIR).n()).max_by_key(|&j| cells.iter().filter(|&&i| w.mesh.up(i, 0, AIR) == j).count()).unwrap();
     let under: Vec<usize> = cells.iter().copied().filter(|&i| w.mesh.up(i, 0, AIR) == j).collect();
     assert!(under.len() > 4, "{} cells of the basin under one node", under.len());
-    for &i in &basin {
+    // None dissolved anywhere: the liquid that runs into the basin brings none.
+    for i in 0..n {
         set_amount(&mut w, Node::ground(i), k, 0.0);
+        set_amount(&mut w, Node::new(Class::Deep, i), k, 0.0);
     }
     pcore::flow::state(&mut w, true);
     let books = Books::now(&w);
