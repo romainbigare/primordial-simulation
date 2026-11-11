@@ -39,7 +39,7 @@ const FALL_POWER: f64 = 1.6;
 /// coarsest's wavelength and finer, the ground's own swells and hollows.
 const FINE_FROM: u32 = 2;
 /// The rise an island's level 0 m lies at.
-pub const ISLAND_LEVEL: f64 = 0.3;
+pub const ISLAND_LEVEL: f64 = 0.27;
 /// An island's range (`Range`): the key of its draws; how far its axis lies from the middle of the map at most, and
 /// the least and the most half-width of its band, in units of the noise; and how fast land rises far from it and on
 /// its axis, times the mean.

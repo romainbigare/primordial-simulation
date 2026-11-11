@@ -51,14 +51,21 @@ noise's finest octave is 670 m on the 64 x 64 island and 200 km on a globe. The 
 leaves of `SAMPLE_DEPTH` (1/64 of a block: 125 m on the island, 20 km on a globe of 64 rows), and **the samples are
 worn** (`space::samples`, `space::wear`, found once from the seed when first read, not saved): the ground has a
 history. The noise is read at the centres of the samples of a grid of 2 x 2 samples to one (`NOISE_BY`,
-`wear::noise_grid`) and carried smooth to finer grids. The open low ground (on a globe every sample under 0 m; on an
-island those under 0 m joined to its lowest, so ground under 0 m inland is a closed basin) stays as the noise has it; land rises from 0 m at a steady rate to the noise's height
-over 2 million years (`WEAR_YEARS`; ground under 0 m does not rise) while flowing liquid cuts it by the stream power
+`wear::noise_grid`) and carried smooth to finer grids. **The sea stands low while the land is worn**: its liquid
+stands 100 m under 0 m (`LOW_STAND_M`; the last low stand of the one planet known was about 120 m under today's,
+Fairbanks 1989). The open low ground then (on a globe every sample under the low stand; on an island those under it
+joined to its lowest, so ground under it inland is a closed basin) stays as the noise has it; land rises from the low
+stand at a steady rate to the noise's height over 2 million years (`WEAR_YEARS`; ground under the low stand does not
+rise) while flowing liquid cuts it by the stream power
 law (Howard 1994; Whipple and Tucker 1999): it lowers by K √A S, A the area that drains through a sample, spread down
 every lower way by Quinn's weights (Quinn et al. 1991), S the slope to the sample its liquid runs to, m = 1/2 and n = 1,
 K = 3e-7 a year (`CUT`) on the bed, each step solved exactly from the open low ground up the ways (h = (h₀ + f h_down)
-/ (1 + f), f = K dt √A / d; Braun and Willett 2013), so a step of any length is stable, 0 m the height of the low
-ground's liquid. **The bed has patches** of another make (`terrain::patch`): fractal noise over four scales from about
+/ (1 + f), f = K dt √A / d; Braun and Willett 2013), so a step of any length is stable, the low stand the height of
+the low ground's liquid. At the end the liquid rises to 0 m: the open low ground is what lies under 0 m joined to the
+open low ground of the low stand (on an island, to its lowest sample), so the valleys cut down toward the low stand
+by the shore are drowned: inlets, bays and small islands off the coast. An island's level (`ISLAND_LEVEL`, 0.27) keeps
+its land's share of the map about what it was with no low stand; a globe's is found on the noise as before, and the
+drowning takes about half a percent of its area from its land (28.4% to 27.9% on a globe of 32 rows). **The bed has patches** of another make (`terrain::patch`): fractal noise over four scales from about
 4 km down to 500 m, parted sharply about its middle, says what share of the bed at a place is of the patches; the
 cells' beds are made of it (the chemistry's `bed` and, over that share, its `deposits`, section 8), and flowing liquid
 wears the patches as much faster as Flow's wear breaks them (the sum of each substance's share over its bond strength,
@@ -77,13 +84,15 @@ each of its samples (or the noise carried to it), and each is carried to the nex
 makes no new pit and no new peak); a map whose first grid would hold more than 65,536 samples runs every stage on grids
 twice as coarse until it fits (`MOST_SAMPLES`). **The shelf** (`space::shelf`): the load that reached the open low
 ground is spread along the shore by the waves, each sample of the shore taking the load that reached the shore within
-5 km of it as a share of that stretch (`ALONG_M`); from it the load builds out a platform 10 m under 0 m (`TOPSET_M`, a
+5 km of it as a share of that stretch (`ALONG_M`); from it the load builds out a platform 10 m under the low stand
+(`TOPSET_M`, a
 delta's topset), as wide as that load in proportion, fronted by a slope of 0.3 down to the floor (`FORESET`, the load at
 rest under liquid; Gilbert 1885). So a channel that brings much load builds a fan at its mouth and a coast that gets
 little keeps its steep drop; its edge is rounded over 250 m as a clinoform's top rolls over (`ROUNDED_M`), never over
 the platform's top; the width is found so the shelf holds all the load (where the platform fills the open low ground of
 a small map, the rest leaves the map), and what the wear took off the land is what lies in the basins, on the shelf and
-off the map (`Samples::books`). **The loose ground** the wear leaves (`Samples::loose`):
+off the map (`Samples::books`). Laid at the low stand's shore, the shelf lies 110 m under 0 m once the liquid has
+risen: a drowned shelf, its front where the low stand's coast was; the drowned valleys get no load after the rise. **The loose ground** the wear leaves (`Samples::loose`):
 on land (`space::mantle`) the depth where the bed's breaking into loose ground balances what takes it away, the
 smaller of two balances. The bed breaks at 7.7e-5 m a year under none, e times slower under each 0.4 m (`BREAKS`,
 `BREAKS_UNDER_M`; Heimsath, Dietrich, Nishiizumi and Finkel 1997). Against the lowering of the last step E (cut and
@@ -1336,9 +1345,10 @@ read a kind.
   the surface within a year (its heat, and the pores roots and evaporation draw from), and what the wear left deeper lies
   under it, packed with the bed (the bed's store, `Class::Deep`, its aquifer); the sea's salt at
   balance (2.6); ground and air temperatures falling with latitude and height. The terrain's samples are worn (0):
-  land rises from 0 m to the noise's height over 2 million years while flowing liquid cuts it, its slopes creep and it
-  floats back up as it is unloaded; the load settles in the closed basins the cutting leaves, and those it does not fill
-  are ponds, each with its pass and level; what reaches the open low ground lies there as a shelf. **The starting
+  land rises from a low stand of the sea 100 m under 0 m to the noise's height over 2 million years while flowing
+  liquid cuts it, its slopes creep and it floats back up as it is unloaded; the load settles in the closed basins the
+  cutting leaves, and those it does not fill are ponds, each with its pass and level; what reaches the open low ground
+  lies there as a shelf; then the sea rises to 0 m and drowns what lies under it. **The starting
   liquid** (`World::full_bodies`): the open low ground stands at 0 m and every body of standing liquid with a pass
   stands full to its pass, each part of it holding what its samples hold under that level, as the runoff's pass leaves
   a body (1.2); a cell that holds no pond's samples holds what its ground dips under 0 m. Each cell that holds some of
