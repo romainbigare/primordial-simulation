@@ -15,7 +15,7 @@ mod view;
 
 pub(super) use deep::mix;
 pub(super) use moves::{after_air, to_liquid};
-pub(super) use view::amounts;
+pub(super) use view::{amounts, dry_pores};
 
 use super::land::{column, layers, melts, node_state, take_row, thaw_at, NONE, STATE_ROW};
 use node::{conductance, row};
@@ -266,7 +266,7 @@ pub(super) fn solve(w: &World, s: &Scratch, i: usize, kept: &Parts, moving: bool
     if moving && moves::settle(s, &mut p, &f, por) {
         f = found(w, s, i, &p);
     }
-    let (to, deep) = if moving { (s.curves[i].wet(stands(&f, por)), deep::under(w, &s.curves[i], liquid(&f, por))) } else { (p.wet, None) };
+    let (to, deep) = if moving { (s.fill(i).wet(stands(&f, por)), deep::under(w, s.fill(i), liquid(&f, por))) } else { (p.wet, None) };
     if to <= 0.0 || (to >= 1.0 && deep.is_none() && (moving || !p.deep())) {
         return None;
     }
@@ -289,14 +289,15 @@ pub(super) fn solve(w: &World, s: &Scratch, i: usize, kept: &Parts, moving: bool
 }
 
 /// The parts of cell `i` made from it as one node, its row `row` (`land::node_state`) with a new surface: where what
-/// stands over its pores covers part of its ground (`Curve::wet`), land and liquid at its temperature and phases, the
-/// liquid holding all that stands over the pores and its area's share of the rest; where it covers all of it deeper
-/// than `h_mix`, all of it the liquid's, whose deep its solve makes (`deep::layer`). None elsewhere.
+/// stands over its pores (or, where its pores are not full, what its parts of the bodies held at the last pass,
+/// `State::held`) covers part of its ground (`Fill::wet`), land and liquid at its temperature and phases, the liquid
+/// holding that and its area's share of the rest, its pores full; where it covers all of it deeper than `h_mix`, all of
+/// it the liquid's, whose deep its solve makes (`deep::layer`). None elsewhere.
 pub(super) fn create(w: &World, s: &Scratch, i: usize, row: &[f64]) -> Option<Parts> {
     let (n, area, por) = (w.mesh.cells().n(), w.mesh.cells().area()[i], w.cfg.phys.porosity);
-    let over = (row[11] - row[16] - row[10]).max(0.0) * area;
-    let wet = s.curves[i].wet(over);
-    if wet <= 0.0 || (wet >= 1.0 && deep::under(w, &s.curves[i], over).is_none()) {
+    let over = Some((row[11] - row[16] - row[10]).max(0.0) * area).filter(|&v| v > 0.0).unwrap_or_else(|| s.fill(i).held());
+    let wet = s.fill(i).wet(over);
+    if wet <= 0.0 || (wet >= 1.0 && deep::under(w, s.fill(i), over).is_none()) {
         return None;
     }
     let amt = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
@@ -308,16 +309,18 @@ pub(super) fn create(w: &World, s: &Scratch, i: usize, row: &[f64]) -> Option<Pa
         return Some(Parts { wet: 1.0, heat: [0.0, e, 0.0], amt: amts, t: [th.t; PARTS], on: [th.on; PARTS], dry: 0.0 });
     }
     let (l, ..) = layers(w, s, (i, 1.0, 1.0), th.t, amt, |k| th.molten(k), |k| melt[k]);
-    let stands = l[2] - por * l[4];
-    if stands <= 0.0 {
+    // The liquid's volume: what stands over the pores and its area's share of what they hold; where the pores are not
+    // full, what its parts of the bodies held over the pores under them, full.
+    let (pores, stands) = (por * l[4], l[2] - por * l[4]);
+    let top = if stands > 0.0 { stands + wet * (l[2] - stands) } else { (over + wet * pores).min(l[2]) };
+    if top <= 0.0 || l[2] <= 0.0 {
         return None;
     }
-    // Each liquid's share that stands: the liquid over the pores, mixed.
+    // Each liquid's share in the liquid, mixed, and its area's share of the rest.
     let liquid = |k: usize| if s.state.vary.contains(&k) && th.t < s.sp[k].boil { amt(k) * th.molten(k) } else { 0.0 };
     let amts: Vec<[f64; PARTS]> = (0..w.chem.ns())
         .map(|k| {
-            let up = liquid(k) * stands / l[2];
-            let held = wet * (amt(k) - up) + up;
+            let held = liquid(k) * top / l[2] + wet * (amt(k) - liquid(k));
             [amt(k) - held, held, 0.0]
         })
         .collect();

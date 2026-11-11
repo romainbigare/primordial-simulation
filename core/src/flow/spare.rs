@@ -8,4 +8,6 @@ pub(super) struct Spare {
     pub(super) state: Vec<f64>,
     /// The rows of the cells' response to the air (`air::cells::Response`)
     pub(super) response: Vec<f64>,
+    /// What runs through each of the terrain's samples in the runoff's pass, mol and kg (`runoff::surface`)
+    pub(super) samples: Vec<[f64; 2]>,
 }

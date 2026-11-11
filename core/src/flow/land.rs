@@ -110,7 +110,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, (full, moving): (bool, bo
     }
     parts::solve_nodes(w, s, &anew, (full, moving));
     if full {
-        s.basin = super::basin::find(w, s);
+        super::basin::find(w, s);
         s.henry = super::air::henry(w, s, super::range(&s.state.tg).0);
     }
 }
@@ -313,7 +313,7 @@ pub(super) fn layers(w: &World, s: &Scratch, (i, part, ground): (usize, f64, f64
 pub(super) fn reflectance(w: &World, s: &Scratch, i: usize, l: &[f64; 6]) -> f64 {
     let pores = w.cfg.phys.porosity * l[4];
     let (pore, stands) = (l[2].min(pores), (l[2] - pores).max(0.0));
-    let wet = super::curve::of_cell(w, s, i).wet(stands);
+    let wet = super::curve::with_fill(w, s, i, |f| f.wet(stands));
     if wet == 0.0 || wet == 1.0 {
         return column(w, s, (i, 1.0), l);
     }
@@ -346,7 +346,7 @@ pub(super) fn column(w: &World, s: &Scratch, (i, part): (usize, f64), l: &[f64; 
 /// (`curve::Curve::wet`), 0..1.
 #[inline]
 pub(super) fn wet_share(s: &Scratch, i: usize) -> f64 {
-    s.curves[i].wet(standing(s, i))
+    s.fill(i).wet(standing(s, i))
 }
 
 /// The volume of the liquid that stands on node `i` over what its pores hold, m³.

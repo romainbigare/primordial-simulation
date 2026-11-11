@@ -1,7 +1,7 @@
 //! The ground of a cell as the shares inside it read it (laws.md 0, `inside`): the liquid in its pores and what stands
 //! over them, by Flow's state of the ground (`means`, `levels`).
 
-use super::{basin::movable, curve::of_cell, drain::liquid_heat_at, land::layers, potential::{scratch_of, stated}, range, Scratch};
+use super::{basin::movable, curve::with_fill, drain::liquid_heat_at, land::layers, potential::{scratch_of, stated}, range, Scratch};
 use crate::inside::Means;
 use crate::store::Class;
 use crate::World;
@@ -48,20 +48,20 @@ pub fn means(w: &World, cells: &[usize]) -> Option<Vec<Means>> {
     Some((0..cells.len()).map(one).collect())
 }
 
-/// The height of the lowest ground of cell `i`, m: its solid surface and its own ground's lowest departure from it
+/// The height of the lowest ground of cell `i`, m: its solid surface and its lowest sample's departure from it
 /// (`curve::Curve`), where its liquid leaves it.
 pub fn lowest(w: &World, i: usize) -> f64 {
-    w.surface_z(i) + of_cell(w, &w.scratch, i).low()
+    w.surface_z(i) + with_fill(w, &w.scratch, i, |f| f.level(0.0))
 }
 
-/// The volume over the own ground of cell `i` (`curve::Curve`, on its solid surface) under the level `level`, m³: what
-/// liquid that stands over its pores at that level holds there.
+/// The volume over the parts of the bodies of cell `i` (`curve::Curve`, on its solid surface; all its ground where it
+/// holds none) under the level `level`, m³: what liquid that stands over its pores at that level holds there.
 pub fn volume_under(w: &World, i: usize, level: f64) -> f64 {
-    of_cell(w, &w.scratch, i).volume(level - w.surface_z(i))
+    with_fill(w, &w.scratch, i, |f| f.volume(level - w.surface_z(i)))
 }
 
 /// Of each of `cells`: its lowest ground and the level the liquid standing over its pores reaches over its own ground
-/// (`curve::Curve`; its lowest ground where none stands), m, by Flow's state of the ground. None before Flow first built
+/// (`curve::Fill::level`; its lowest ground where none stands), m, by Flow's state of the ground. None before Flow first built
 /// the state.
 pub fn levels(w: &World, cells: &[usize]) -> Option<Vec<[f64; 2]>> {
     if !stated(w) {
@@ -70,8 +70,8 @@ pub fn levels(w: &World, cells: &[usize]) -> Option<Vec<[f64; 2]>> {
     let s = scratch_of(w);
     let x = wet(w, &s, cells);
     let one = |c: usize| {
-        let (curve, stands) = (of_cell(w, &w.scratch, cells[c]), (x.vol[c] - x.vol[c].min(x.pores[c])).max(0.0));
-        [x.z[c] + curve.low(), x.z[c] + curve.level(stands)]
+        let stands = (x.vol[c] - x.vol[c].min(x.pores[c])).max(0.0);
+        with_fill(w, &w.scratch, cells[c], |f| [x.z[c] + f.level(0.0), x.z[c] + f.level(stands)])
     };
     Some((0..cells.len()).map(one).collect())
 }

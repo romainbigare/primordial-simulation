@@ -120,7 +120,7 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
         curve::build(w, &mut s);
     }
     if s.bodies.of.len() != n {
-        s.bodies = bodies::Bodies::of(w);
+        s.bodies = bodies::Bodies::of(w, &s.curves);
     }
     let fresh = s.state.tg.len() != n;
     if fresh {

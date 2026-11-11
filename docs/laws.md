@@ -178,8 +178,7 @@ a part act no longer possible or that cannot be paid; less than one member of a 
 goes back into the parent's brood, or to the ground of the parent's cell if it died (`copy::back`).
 
 **Inside a cell** (`inside/`, handover 5.2): a cell holds means (its cover, the liquid in its soil, what stands on
-it). The ground inside it is the terrain at a grid of 8 x 8 samples, the leaves `inside::DEPTHS` (3) below the cell
-(`World::ground_in`: the terrain's mean over each), and what stands lies at one level over them (`flow::curve`, 1.2).
+it). The ground inside it is the terrain's worn samples inside it, and what stands lies on them (`flow::curve`, 1.2).
 The shell draws inside the cells by general laws at each pixel of the ground's tiles (`tape::Ground`), blending its
 cells' values between the squares' centres (`tape::Table`, docs/tape.md): the soil's liquid by the wetness index
 ln(a / tan β) of the terrain's samples (Beven and Kirkby 1979; a the area that drains through a sample per metre of
@@ -257,8 +256,8 @@ width over length (Patankar 1980; `flow::land::conduct`), between land cells (`f
 year is far below the explicit limit on cells of kilometres (1.8).
 **A cell's parts** (`flow::parts`): the ground of a cell with liquid standing over its pores is a short list of parts
 under one air, each with its own heat and matter: its **land**, where its own ground lies above what stands (liquid
-and soft solid, `Curve::wet` of it), the liquid's **top**, down to `h_mix` under the liquid's level, and its **deep**
-below that (`Curve::volume` under that depth), which holds the ground under the liquid. A dry cell is one node; a cell
+and soft solid, `Fill::wet` of it), the liquid's **top**, down to `h_mix` under the liquid's level, and its **deep**
+below that (`Fill::deep`), which holds the ground under the liquid. A dry cell is one node; a cell
 partly under a liquid no deeper than `h_mix` has land and top; a cell all under a liquid deeper than that, top and
 deep; a coast cell over a deep liquid all three. The land and the top face the air, each with its own heat, phases,
 soft cover and reflectance: a mosaic of tiles (Avissar and Pielke 1989; Koster and Suarez 1992); the top is the
@@ -284,7 +283,7 @@ distance between the two parts' middles, as two volumes that even out exactly as
 where the top is the denser, so the column overturns: the top's main liquid lies nearer the temperature at which it is
 densest with what the top holds dissolved (`Chemistry::dense_in`, 2.5; a liquid grows lighter both ways from there) than the deep's. So a top that cools toward
 that temperature sinks and mixes the column, and one that cools past it lies on the deep and freezes. The land and the top pass each other heat at the shore by conduction through their active layers across the
-edge of the ground under the liquid (`Curve::shore`, found at the samples), each from its middle, half its area over
+edge of the ground under the liquid (`Fill::shore`, found at the samples), each from its middle, half its area over
 that edge away, in series (two half cells, as heat conducts sideways between cells): over cells of kilometres this is
 far below what the air gives them, so they meet through the air they share; in a cell of ten metres they even out in
 months. The node's state, which every other law reads, is the parts': its heat capacity theirs, its temperature its
@@ -316,35 +315,42 @@ what the heat holds molten, as every law and the shell then read it.
 (`flow::air`).
 - **Pores first**: the loose ground's pores (`porosity`) fill first, under any soft cover; only liquid above them stands
   and has a head (`flow::land::stand`), the depth bodies and Change read.
-- **Each cell's own ground** (`flow::curve`): what stands fills the cell's ground from its lowest point up, so its
-  head is a level over that ground, and a cell is wet where part of its ground lies under it. The ground is the
-  terrain's samples inside the cell (`World::ground_in`, 8 x 8), their departures from their mean laid on the
-  cell's mean surface: the cell's level-volume curve, found once. A cell's liquid leaves it from its
-  lowest ground, as the terrain inside it drains: a cell whose mean lies under its neighbours' is no basin where its
-  ground drains (`flow::levels`, `flow::lowest` read it). The liquid's potential energy is where it lies: in the
-  pores, and over the cell's own ground at its centroid (0, "The books").
+- **Each cell's own ground** (`flow::curve`): the ground inside a cell is the terrain's samples inside it, their
+  departures from their mean laid on the cell's mean surface, found once. The samples of the cell that lie in a pond
+  (0) are its **parts** of the bodies of standing liquid, one part for each pond; what stands over its pores lies on
+  them, each part at its body's level, by what each held at the last runoff's pass (`State::held`, saved), so a cell
+  holds land that drains and parts of one body or more (`curve::Fill`). A cell with no pond's samples holds what stands
+  only until the runoff's pass, from its lowest sample up. A cell is wet where part of its ground lies under the
+  liquid; its lowest ground is its lowest sample (`flow::levels`, `flow::lowest` read them). The liquid's potential
+  energy is where it lies: in the pores, and over each part at its centroid (0, "The books").
 - **Bodies of standing liquid** (`flow::bodies`, `flow::basin`): a body is a pond of the terrain's samples (0: the
   samples of a closed basin under its pass, or a part of the open low ground joined through its samples, which has no
-  pass) held by the cells whose lowest sample lies in it, as a cell's own ground fills from its lowest point up. Its
-  liquid stays in the ground nodes of those cells. The bodies, their cells and the ways to them are found once for the
-  world's cells; at each month's start, each body's level from what stands over its cells' pores, and the cells under
-  it (their mean surface under it: the others are its shore). The lowest body, the open low ground, has no code of its
-  own. **Known limit:** a pond whose cells' lowest samples all lie outside it holds no body (its liquid runs through);
-  a cell's ground at the eight by eight samples inside it (above) is coarser than the terrain's samples, so a body's
-  volume by level is its cells' curves', not its samples'.
-- **Running off** (`flow::runoff`), once a month in one pass: each cell in no body sends what may run off (what stands
-  over its pores, what came up from the store, and the pores' drainage to the channels, below) down the samples' ways
-  from each of its samples by its share of the cell's area, to the cell each way lands in: the cell of the first sample
-  of a body on it, or that body's first cell (`bodies::Bodies::ways`). The bodies then come in turn, each before the
-  body its pass leads to: each cell's pores keep what they hold and all the rest stands at one level over its cells'
-  own ground (`curve::level_over`, exact), no higher than its pass; each cell that holds more than its pores and what
-  stands on its ground under that level gives the share of its liquid over it, with that share of its heat; mixed, it
-  goes to the cells that hold less, by what each lacks (`basin::share_out`), and what the body holds over its pass
-  leaves, mixed, to the body its pass's way reaches, in the same month. What a cell sends and what a body lets over its
-  pass go into the samples' ways at each sample and at the pass, and one pass over the samples from the last the flood
-  reached to the first, each before the one its liquid runs to, sums what runs through each (a body's sample keeps what
-  reaches it): the **discharge** of each sample (`World::discharge`, mol/s, a moving average over about a year). A body
-  that receives less than it loses (evaporation, 1.5) falls under its pass and keeps what was dissolved in it.
+  pass), and every pond is one. Its volume by level is its own samples': Σ area × (level - floor) over them, each
+  sample's floor its height laid on its cell's mean surface. It is held by every cell that holds samples of it, each
+  by its part, and its liquid stays in the ground nodes of those cells. The bodies, their parts and the ways to them
+  are found once for the world's cells; at each month's start, each body's level from what its parts held at the last
+  pass, and the cells under it (their mean surface under it: the others are its shore). The lowest body, the open low
+  ground, has no code of its own.
+- **Running off** (`flow::runoff`), once a month in one pass: each cell sends what may run off (what came up from the
+  store, the pores' drainage to the channels, below, which what stands over them refills first, and what stands over
+  its pores over what its parts held at the last pass; its parts keep the rest, each by what it held) down the
+  samples' ways from each of its samples by its share of the cell's area. A way reaches the body of the first pond's sample on it, in the cell that holds that
+  sample, and what reaches a part is that part's (`bodies::Bodies::ways`); liquid on a cell's ground outside any pond
+  does not stand. The liquid goes straight from the cell it leaves to the cell its way reaches: it does not wet the
+  cells it passes, and the heat of its fall lands where it lands. The bodies then come in turn, each before the body
+  its pass leads to: what its parts hold stands at one level over its own samples (`curve::level_over`, exact), no
+  higher than its pass, the pores of the ground it newly covers filling first, as far as the land's pores lack liquid
+  (`parts::dry_pores`); each cell whose part holds more than its samples hold under that level gives the share of its
+  liquid over it, with that share of its heat; mixed, it goes to the cells whose part holds less, by what each lacks
+  (`basin::share_out`), and what the body holds over its pass leaves, mixed, to the part its pass's way reaches, in
+  the same month. Each part then holds what its samples hold under its body's level; a cell that was one node becomes
+  a cell of parts (1.1) whose liquid holds what its part holds over its pores, the pores under it full, its land
+  keeping the rest of its pores' liquid (`parts::create`). What a cell sends from its
+  samples in no pond and what a body lets over its pass go into the samples' ways at each sample and at the pass, and
+  one pass over the samples from the last the flood reached to the first, each before the one its liquid runs to, sums
+  what runs through each (a pond's sample keeps what reaches it): the **discharge** of each sample (`World::discharge`,
+  mol/s, a moving average over about a year). A body that receives less than it loses (evaporation, 1.5) falls under
+  its pass and keeps what was dissolved in it.
   **Known limit:** the sea's slope under wind and rotation is not modelled, and what levels it crosses the sea at once.
   **Each body mixes its heat in a month** (`basin::mix`) under each air block: then its cells off their melting
   plateaus, with no soft cover or cover of bodies and the same phases, each take the block's temperature (their heat
@@ -383,11 +389,16 @@ what the heat holds molten, as every law and the shell then read it.
 
 ### 1.3 Erosion and creep
 The head lost by moving liquid does work where it is lost on land (`flow::runoff::erode`, `wear`; in a body and below
-0 m it wears nothing): in each land cell in no body, g times what runs through each of its samples in the month, kg,
+0 m it wears nothing): in each land cell, g times what runs through each of its samples in no pond in the month, kg,
 times the fall to the sample it runs to (the samples' heights, which the run's erosion does not change). It
 **carries** up to `carry` m³ of loose solids per J of the cell's work (at most all that lies loose), which go with the
 cell's runoff to the cells its ways land in, where they settle, and with the work its load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears** `wear` m³ of
-bed per J over its strength into loose ground. **Creep** (`flow::creep`, yearly, out of land cells):
+bed per J over its strength into loose ground. The load is booked apart from the liquid (`runoff::Crossings`), each
+with its own heat. **Known limit:** the load goes straight from the cell to the cells its ways land in, as the liquid
+does (1.2): it is not checked against what the channel can carry at each sample on its way, so it does not settle
+where the channel slows (where a sample's fall is less than the one before it, on a plain, at a body's shore), and
+the cells it passes neither gain nor lose by it. The heat of the liquid's fall lands with the liquid, not along its
+way. **Creep** (`flow::creep`, yearly, out of land cells):
 loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope,
 across each border by its width (none across a corner). Bodies hold the ground: carrying
 and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 8. **Burial**: the loose ground mixes over what lies on it (bioturbation, Darwin 1881), so a part no body holds and no bond joins sinks `bury` m/s into it, no deeper than the loose ground is, and once buried past its smallest outer size it joins its cell's ground (`bond/month.rs::bury`, 3.1).
@@ -425,7 +436,7 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   a cloud is one reflectance, with no share of the sky it covers, so what passes it cannot be split into beam and
   diffuse; diffuse light would fall on the plan as on flat ground. The cost is a product and a sum per cell a step,
   with the slope with latitude found beside the daily mean, once per latitude. The surface reflects as its cover is at the step's start (`land::reflectance`),
-  over the cell's own ground: the share of it under the level of what stands over its pores (`curve::Curve::wet`) as a
+  over the cell's own ground: the share of it under the level of what stands over its pores (`curve::Fill::wet`) as a
   column with that liquid over the share, the rest as one whose liquid is what its pores hold, by area;
   where a soft cover lies, as it is at the step's end, so a cover that melts away darkens the ground in its step. Snow
   reflects from the step after it falls.

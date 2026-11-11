@@ -81,3 +81,12 @@ pub(in crate::flow) fn amounts(w: &World, i: usize, piece: Option<&Piece>) -> [f
     }
     amt
 }
+
+/// The liquid the pores of the land of cell `i` lack, as a depth over the land, m: its pore space (`Piece::pd`) less
+/// the liquid they hold, which ground its liquid comes to cover takes from what stands (`moves::strip`, pores first);
+/// none for a cell that is one node.
+pub(in crate::flow) fn dry_pores(s: &Scratch, i: usize) -> f64 {
+    let Some(land) = s.mixed(i).map(|m| &m.piece[LAND]).filter(|l| l.share > 0.0) else { return 0.0 };
+    let held: f64 = (0..land.amt.len()).map(|k| land.liquid(k, &s.sp[k]) * s.sp[k].v[1]).sum();
+    (land.pd - held / (s.curves[i].area() * land.share)).max(0.0)
+}
