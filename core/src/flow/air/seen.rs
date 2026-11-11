@@ -36,16 +36,18 @@ impl Seen {
     /// Where what it rains of active gas `y` at its saturation ratio `r` lands, each entry with its share of it: what
     /// condenses over each place (the share of the node's air over it times what that holds over its saturation) lands
     /// there by the share `kept` of it, and the rest drifts with the wind before it falls, over all its places by the
-    /// share of its air over each (Smith and Barstad 2004). None where nothing condenses.
-    pub(super) fn landing(&self, y: usize, r: f64) -> Vec<(usize, f64)> {
+    /// share of its air over each (Smith and Barstad 2004): `each(entry, share)` for each place that gets any, in order.
+    /// Whether any condenses.
+    pub(super) fn landing(&self, y: usize, r: f64, mut each: impl FnMut(usize, f64)) -> bool {
         let len = self.cell.len();
         let over = |e: usize| self.share[e] * (r - self.ratio[y * len + e]).max(0.0);
         let all: f64 = (0..len).map(over).sum();
         if all <= 0.0 {
-            return Vec::new();
+            return false;
         }
         let drift = (0..len).map(|e| (1.0 - self.kept[e]) * over(e)).sum::<f64>() / all / self.share.iter().sum::<f64>();
-        (0..len).map(|e| (e, self.kept[e] * over(e) / all + drift * self.share[e])).filter(|p| p.1 > 0.0).collect()
+        (0..len).map(|e| (e, self.kept[e] * over(e) / all + drift * self.share[e])).filter(|p| p.1 > 0.0).for_each(|(e, f)| each(e, f));
+        true
     }
 }
 
@@ -61,7 +63,8 @@ mod tests {
         let over = [0.2 * 0.2, 0.3 * 0.1, 0.0];
         for kept in [1.0, 0.0, 0.4] {
             let seen = Seen::new(vec![0, 1, 2], share.clone(), ratio.clone(), &[true], vec![kept; 3]);
-            let land = seen.landing(0, r);
+            let mut land = Vec::new();
+            seen.landing(0, r, |e, f| land.push((e, f)));
             let got = |e: usize| land.iter().find(|p| p.0 == e).map_or(0.0, |p| p.1);
             assert!((land.iter().map(|p| p.1).sum::<f64>() - 1.0).abs() < 1e-12, "kept {kept}: {land:?}");
             for e in 0..3 {

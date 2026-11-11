@@ -8,7 +8,7 @@
 
 use super::basin::{movable, share_out};
 use super::bodies::Bodies;
-use super::curve::{level_over, Part};
+use super::{curve::Part, level::level_over};
 use super::{bare_share, drain::liquid_heat, follow, land::{lift, solid, standing}, liquid::book, parts::{pores_first, under_liquid}, potential::apply, year_weight, Scratch};
 use crate::{math::one_minus_exp, space::network::NONE, store::{Class, LinkFlux, Move, Node}, World};
 
@@ -71,7 +71,9 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     let mut h = Held { q, vol, width: liq.len() + 1, part: s.state.held.iter().map(|v| vec![0.0; v.len()]).collect(), into };
     let mm: Vec<f64> = liq.iter().map(|&k| s.sp[k].mm).collect();
     send(w, s, &b, &mut h, &mut x, (slope, runs, &mm), dt);
-    s.basin.level = stand(s, &b, &mut h, &mut x, &mm);
+    let mut orders = std::mem::take(&mut s.spare.orders);
+    s.basin.level = stand(s, &b, &mut h, &mut x, (&mm, &mut orders));
+    s.spare.orders = orders;
     s.state.held = std::mem::take(&mut h.part);
     discharge(w, &b, &mut h.into);
     let flux = h.into;
@@ -165,17 +167,26 @@ fn covered(s: &Scratch, i: usize, q: usize) -> f64 {
 /// Halvings of the span of levels in which `body_level` finds the level, to 2^-60 of that span: the rounding of the sums.
 const HALVINGS: usize = 60;
 
-/// The level of a body whose parts `parts` hold `vol` m³, m, no higher than `pass`; what the pores of the ground each
+/// The level of a body whose parts `parts` hold `vol` m³, m, no higher than `pass` (its floors' sort starting from
+/// `order`, `level::level_over`); what the pores of the ground each
 /// part newly covers take of it, m³, as they fill first (`parts::pores_first`); and whether it stands over its pass.
 /// What its samples hold under a level and what those pores take both grow with the level: the level is where they
 /// take `vol` (`curve::level_over` where the pores take none; else by halving the span of levels), and what a sample
 /// the level just reaches takes is what is left.
-fn body_level(parts: &[Ground], vol: f64, pass: f64) -> (f64, Vec<f64>, bool) {
+fn body_level(parts: &[Ground], vol: f64, pass: f64, order: &mut Vec<u32>) -> (f64, Vec<f64>, bool) {
     let over: Vec<(&Part, f64)> = parts.iter().map(|g| (g.0, g.1)).collect();
-    let soak = |x: f64| parts.iter().map(|&(p, z, now, [dry, own])| ((p.under(x - z) - now).max(0.0) * dry - own).max(0.0)).collect::<Vec<f64>>();
+    let soaks = |under: f64, (now, [dry, own]): (f64, [f64; 2])| ((under - now).max(0.0) * dry - own).max(0.0);
+    let soak = |x: f64| parts.iter().map(|&(p, z, now, room)| soaks(p.under(x - z), (now, room))).collect::<Vec<f64>>();
     let stands = |x: f64| over.iter().map(|&(p, z)| p.volume(x - z)).sum::<f64>();
-    let takes = |x: f64| stands(x) + soak(x).iter().sum::<f64>();
-    let top = level_over(&over, vol);
+    // What stands and what soaks, each summed over the parts in order, from one search of each part's floors.
+    let takes = |x: f64| {
+        let (v, s) = parts.iter().fold((0.0, 0.0), |(v, s), &(p, z, now, room)| {
+            let (pv, pa) = p.volume_under(x - z);
+            (v + pv, s + soaks(pa, (now, room)))
+        });
+        v + s
+    };
+    let top = level_over(&over, vol, order);
     if top > pass && takes(pass) <= vol {
         return (pass, soak(pass), true);
     }
@@ -205,11 +216,12 @@ fn body_level(parts: &[Ground], vol: f64, pass: f64) -> (f64, Vec<f64>, bool) {
 /// (`body_level`); each cell whose part holds more than its samples hold under that level gives the share of its liquid
 /// over it, mixed, to those that hold less (`share_out`), and what is over the pass leaves for the cell and the part
 /// its pass's way reaches, mixed, and into the samples' ways at the pass. Each part then holds what its samples hold
-/// under its body's level. Returns each body's level, m.
-fn stand(s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, mm: &[f64]) -> Vec<f64> {
+/// under its body's level (the sort of each body's floors starting from its `orders`). Returns each body's level, m.
+fn stand(s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, (mm, orders): (&[f64], &mut Vec<Vec<u32>>)) -> Vec<f64> {
     let width = h.width;
     let mut levels = Vec::with_capacity(b.list.len());
-    for body in &b.list {
+    orders.resize(b.list.len(), Vec::new());
+    for (body, order) in b.list.iter().zip(orders.iter_mut()) {
         let cells = &body.cells;
         let ground = |(&i, &q): (&u32, &usize)| {
             let (i, p) = (i as usize, &s.curves[i as usize].parts[q]);
@@ -218,7 +230,7 @@ fn stand(s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, mm: &[f64]) -
         let parts: Vec<Ground> = cells.iter().zip(&body.part).map(ground).collect();
         let held: Vec<f64> = cells.iter().flat_map(|&i| h.q[i as usize * width..(i as usize + 1) * width].iter().copied()).collect();
         let vol: Vec<f64> = cells.iter().map(|&i| h.vol[i as usize]).collect();
-        let (top, soak, over) = body_level(&parts, cells.iter().zip(&body.part).map(|(&i, &q)| h.part[i as usize][q]).sum(), body.level);
+        let (top, soak, over) = body_level(&parts, cells.iter().zip(&body.part).map(|(&i, &q)| h.part[i as usize][q]).sum(), body.level, order);
         levels.push(top);
         let own: Vec<f64> = parts.iter().map(|&(p, z, ..)| p.volume(top - z)).collect();
         // Each cell wants what it holds apart from its part, what its part holds under the level, and what the pores of
@@ -312,13 +324,15 @@ fn follow_flux(w: &mut World, b: &Bodies, flux: &[[f64; 2]], dt: f64) {
     for (avg, f) in w.discharge.iter_mut().zip(flux).filter(|p| *p.0 != 0.0 || p.1[0] != 0.0) {
         follow(avg, (f[0] / dt) as f32, ema);
     }
+    // Whether each cell is land (`World::is_land`), found once for a cell, at its first sample that needs it.
+    let mut land: Vec<Option<bool>> = vec![None; n];
     for &k in &b.land {
         let (k, f) = (k as usize, flux[k as usize]);
         let i = b.cell_of[k] as usize;
         most[i] = most[i].max(f[0]);
         let j = samples.to[k];
         let low = j != NONE && b.at[j as usize] != NONE && b.list[b.at[j as usize] as usize].pass == NONE;
-        if low && w.is_land(i) {
+        if low && *land[i].get_or_insert_with(|| w.is_land(i)) {
             off[i] += f[0];
         }
     }

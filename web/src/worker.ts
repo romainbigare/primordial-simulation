@@ -1,7 +1,10 @@
 // The live world: the core as WebAssembly (wasm/src/lib.rs) in a Web Worker, so that the page never freezes. It runs as
 // a separate script, built into the page as text (build.mjs), and started from a Blob. With each frame it posts the
 // cells' table (tape/src/table.rs), from which the page draws the state of the ground, and the samples' discharge when
-// it changed enough to show (wasm/src/lib.rs `discharge`); it makes no pictures.
+// it changed enough to show (wasm/src/lib.rs `discharge`); it makes no pictures. The page answers each frame once it has
+// drawn it ('shown'). While the world plays, the next frame waits for that answer, and once it is due the world waits
+// too: the world is never more than a frame's time ahead of the picture, so the date and the picture shown are the
+// world's within about `FRAME_MS`, and a pause stops it there, even where the page draws slowly.
 
 interface Core {
   memory: WebAssembly.Memory;
@@ -22,7 +25,8 @@ type Command =
   | { cmd: 'new'; seed: number; size: number }
   | { cmd: 'play'; on: boolean }
   | { cmd: 'rate'; rate: number }
-  | { cmd: 'things'; at: [number, number, number, number] | null };
+  | { cmd: 'things'; at: [number, number, number, number] | null }
+  | { cmd: 'shown'; frames: number };
 
 /** Longest time a tick steps before it lets messages in, ms. */
 const TICK_MS = 50;
@@ -47,8 +51,9 @@ let timer = 0;
 let thingsAt: [number, number, number, number] | null = null;
 /** The months stepped since `since` (ms), and the pace measured over the last whole second, months per second. */
 let stepped = 0, since = 0, pace = 0;
-/** When the last frame was posted (ms), and whether months were stepped since. */
-let posted = 0, owed = false;
+/** When the last frame was posted (ms), whether months were stepped since, and how many frames posted the page has not
+ * yet drawn. */
+let posted = 0, owed = false, unshown = 0;
 
 /** A copy of `n` bytes of the core's memory from `at`, which the page can take over. */
 function bytes(at: number, n: number): Uint8Array {
@@ -67,7 +72,12 @@ function postFrame(kind: 'world' | 'frame'): void {
   const stats = { cells: c.cells(), pace };
   const moved = [frame.buffer, table.buffer, ...(things ? [things.buffer] : []), ...(discharge ? [discharge.buffer] : [])];
   host.postMessage({ kind, meta: head, frame, table, discharge, year: c.year(), day: c.day(), stats, things }, moved);
-  posted = now; owed = false;
+  posted = now; owed = false; unshown++;
+}
+
+/** Is a frame due that waits for the page to draw the last one? Then the world waits with it. */
+function waiting(): boolean {
+  return unshown > 0 && performance.now() - posted >= FRAME_MS;
 }
 
 function tick(): void {
@@ -76,12 +86,12 @@ function tick(): void {
   lastTick = t0;
   let made = 0;
   try {
-    while (performance.now() - t0 < TICK_MS && (due >= 1 || rate === Infinity)) {
+    while (performance.now() - t0 < TICK_MS && (due >= 1 || rate === Infinity) && !waiting()) {
       c.step_month(); due -= 1; made++;
     }
     stepped += made;
     owed ||= made > 0;
-    if (owed && performance.now() - posted >= FRAME_MS) postFrame('frame');
+    if (owed && unshown === 0 && performance.now() - posted >= FRAME_MS) postFrame('frame');
   } catch (e) {
     playing = false;
     host.postMessage({ kind: 'error', text: `The world stopped: ${String(e)}` }, []);
@@ -93,7 +103,7 @@ function tick(): void {
 function start(on: boolean): void {
   clearTimeout(timer);
   playing = on && core !== null;
-  if (playing) { lastTick = since = performance.now(); stepped = pace = 0; timer = setTimeout(tick, 0); }
+  if (playing) { lastTick = since = performance.now(); stepped = pace = unshown = 0; timer = setTimeout(tick, 0); }
 }
 
 host.onmessage = async e => {
@@ -114,6 +124,7 @@ host.onmessage = async e => {
       if (was && !playing) postFrame('frame');
     }
     else if (m.cmd === 'rate') rate = m.rate;
+    else if (m.cmd === 'shown') unshown = Math.max(0, unshown - m.frames);
     else if (m.cmd === 'things' && core) {
       thingsAt = m.at;
       if (!playing) postFrame('frame');
