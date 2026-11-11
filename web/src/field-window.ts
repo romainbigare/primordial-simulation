@@ -13,11 +13,11 @@ const EARTH_VEC4S = 3 + RAMP_STOPS;
  * paths are drawn. */
 export interface MapLook { mode: 'earth' | 'true' | 'layer'; layer: string; ramp: RGB[]; paths: boolean }
 
-/** The uniforms of colour.wgsl (`Earth`) for view `look`: how the fields are read (`Fields.look`) and where they lie in
- * the world (`Fields.place`). */
-export function earthUniforms(look: MapLook, read: number[], place: number[]): ArrayBuffer {
+/** The uniforms of colour.wgsl (`Earth`) for view `look`: how the fields are read (`Fields.look`), where they lie in
+ * the world (`Fields.place`), and the sea's level, m. */
+export function earthUniforms(look: MapLook, read: number[], place: number[], sea = 0): ArrayBuffer {
   const mode = look.mode === 'earth' ? 0 : look.mode === 'true' ? 1 : 2, u = new Uniforms(EARTH_VEC4S);
-  u.vec4(...read).vec4(mode, look.ramp.length, look.paths ? 1 : 0).vec4(...place);
+  u.vec4(...read).vec4(mode, look.ramp.length, look.paths ? 1 : 0, sea).vec4(...place);
   for (let k = 0; k < RAMP_STOPS; k++) u.vec4(...(look.ramp[k] ?? [0, 0, 0]));
   return u.buffer;
 }

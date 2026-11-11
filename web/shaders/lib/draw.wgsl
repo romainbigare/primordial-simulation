@@ -30,6 +30,10 @@ struct Varying {
   return v;
 }
 
+const PI = 3.14159265;
+// The light from the north-west (a unit vector to the sun: east, south, up).
+const LIGHT = vec3f(-0.588, -0.588, 0.647);
+
 // 0 at a, 1 at b, smooth between (a may be above b).
 fn ease(a: f32, b: f32, x: f32) -> f32 {
   let t = clamp((x - a) / (b - a), 0.0, 1.0);
@@ -41,6 +45,19 @@ fn lowbias(c: vec2i, k: i32) -> u32 {
   var x = (u32(c.x) * 0x9E3779B1u) ^ (u32(c.y) * 0x85EBCA77u) ^ (u32(k) * 0xC2B2AE3Du);
   x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; x ^= x >> 16u;
   return x;
+}
+
+// Value noise at p (in its grid's cells) of stream k, -1..1, and its slope along x and y (Quilez 2017).
+fn noise(p: vec2f, k: i32) -> vec3f {
+  let i = vec2i(floor(p));
+  let f = p - floor(p);
+  let u = f * f * (3.0 - 2.0 * f);
+  let du = 6.0 * f * (1.0 - f);
+  let v = vec4f(f32(lowbias(i, k)), f32(lowbias(i + vec2i(1, 0), k)), f32(lowbias(i + vec2i(0, 1), k)), f32(lowbias(i + vec2i(1, 1), k))) * (2.0 / 4294967296.0) - 1.0;
+  let a = v.y - v.x;
+  let b = v.z - v.x;
+  let c = v.x - v.y - v.z + v.w;
+  return vec3f(v.x + a * u.x + b * u.y + c * u.x * u.y, du * vec2f(a + c * u.y, b + c * u.x));
 }
 
 // A frozen cover of this mean depth, m of ice, covers e^-1 less than all of the ground: about 3 cm of snow, the depth at

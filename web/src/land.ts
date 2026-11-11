@@ -21,8 +21,8 @@ const PLANES = 6;
  * size over a square's to this power, and no less than `SLOPE_LEAST` times it: the slope over a short run is steeper
  * than over a long one, and the map shades and colours slopes as they look from afar. */
 const SLOPE_POWER = 0.5, SLOPE_LEAST = 0.15;
-/** A sea shore is sand up to this height over the liquid's surface, m. */
-const BEACH_M = 6;
+/** A sea shore is sand up to this height over the liquid's surface, m (colour.wgsl `beach`). */
+const BEACH_M = 5;
 /** The bytes of a layer view over which an empty point fades into a full one (colour.wgsl `in_view_of`). */
 const OVER_FADE = 64;
 /** The level a pond no body holds is drawn at, m below 0 (land.wgsl `NO_LIQUID_M`): under any ground. */
@@ -36,8 +36,10 @@ export class Land {
   private due = false;
   /** The rows of the table's texture: its planes, then the ponds' levels. */
   private rows = 0;
-  /** The melting point of the frozen cover, K (0: none), as the table last said. */
+  /** The melting point of the frozen cover, K (0: none), and the sea's level, m (the lowest body's), as the table last
+   * said. */
   private melt = 0;
+  private sea = 0;
   /** What runs through each sample, m³/s, as 16-bit floats, a texel a sample (none before the world's worker sent it),
    * and whether it is still to be sent to the GPU. */
   private flows: Texture | null = null;
@@ -59,6 +61,8 @@ export class Land {
     this.rows = PLANES * H + Math.ceil(levels.length / 4 / W);
     const data = new Float32Array(4 * W * this.rows);
     data.set(Array.from(levels, l => (Number.isNaN(l) ? -NO_POND_M : l)), 4 * PLANES * n);
+    this.sea = levels.reduce((low, l) => (l < low ? l : low), Infinity);
+    if (!Number.isFinite(this.sea)) this.sea = -NO_POND_M;
     const sea = seaSquares(wet, w.meta), ground = ['ground_r', 'ground_g', 'ground_b'].map(name => plane(w, 0, name));
     const truth = ['true_r', 'true_g', 'true_b'].map(name => plane(w, 0, name));
     const shown = look.mode === 'layer' && w.index.has(look.layer) ? plane(w, 0, look.layer) : null;
@@ -82,7 +86,7 @@ export class Land {
     if (!laws) return null;
     const m = this.tiles.map, texel = 2 ** (m.square_depth - this.tiles.depth);
     const read = [Math.max(texel ** SLOPE_POWER, SLOPE_LEAST), this.melt, BEACH_M, OVER_FADE];
-    return { ...laws, 1: earthUniforms(look, read, [0, 0, m.w * m.cell_m, m.h * m.cell_m]) };
+    return { ...laws, 1: earthUniforms(look, read, [0, 0, m.w * m.cell_m, m.h * m.cell_m], this.sea) };
   }
 
   /** The bindings of lib/land.wgsl on `gpu` (its uniforms, the tiles and the table), or null before the first table. */

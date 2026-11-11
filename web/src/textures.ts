@@ -7,6 +7,7 @@ import { Draw, Gpu, Pass, Texture, Uniforms } from './gpu';
 import { Style } from './sprites';
 import { FIELD_LAYERS, Kinds, LATTICES, KIND_PLANES, half } from './canopy';
 import { clamp } from './earth';
+import { FLOWERS_COVER } from './style';
 
 /** Of the uniforms of cover.wgsl (`Cover`) and of cover_field.wgsl (`CoverLook`), four-wide members. */
 const COVER_VEC4S = 2 + 3 * LATTICES.length, LOOK_VEC4S = 3;
@@ -17,7 +18,7 @@ const FAINTEST = 0.02;
  * plant is drawn as tall as they reach. */
 const STAND = 0.5, ROWS_MOST = 2;
 /** The css pixels a lattice's cell takes from which its marks start to show, and from which they show fully. */
-const FADE_PX = [1.5, 4];
+const FADE_PX = [2, 5];
 
 /** A draw of the marks: its rectangle of the canvas, device px; the metres a device pixel and a css pixel; the world's
  * point at its corner, m; the style; and the live map's bindings (land.ts `lawBinds`). */
@@ -81,7 +82,7 @@ export class CoverMarks {
     const k = this.kinds;
     if (!k || this.shown(m.cssMpp).every(s => s <= 0)) return;
     const angled = m.style === 'angled';
-    const u = new Uniforms(COVER_VEC4S).vec4(...m.at, m.mpp, angled ? 1 : 0).vec4(...k.walls);
+    const u = new Uniforms(COVER_VEC4S).vec4(...m.at, m.mpp, angled ? 1 : 0).vec4(...k.walls, FLOWERS_COVER);
     // Each lattice's cell at the draw's corner, split into its whole number and its fraction in double precision, so
     // the GPU's single precision only counts the cells across the view.
     const top = Math.floor(Math.log2(Math.max(k.w, k.h)));
