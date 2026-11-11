@@ -516,12 +516,12 @@ Open on the look:
 so a valley follows its river. Water against ground is decided per texel by the drawn height; the shelf lies 10 m
 under 0 m with a rounded edge. A scene world builds in 0.06 s.
 
-**The rain: being built.** The law gives an air node's rain only to the cells whose own air saturates, so on a 22
-island a third of the land cells get under 1 cm of rain a year, beside wet ones: the pale dry squares. The new law:
-of what condenses over a cell, the share 1 - e^(-width / 20 km) lands there, and the rest drifts with the wind and
-lands over all the node's cells (Smith and Barstad 2004), the node's total kept. Rain on a 22 island's land cells
-(least / median / most): 0.00 / 0.66 / 3.94 -> 0.03 / 1.16 / 2.33 m a year. River cells fall by a third (the wettest
-cells get less), so that reference of the key numbers is measured again with the law.
+**The rain: done.** Of what condenses over a cell, the share 1 - e^(-width / 20 km) lands there; the rest drifts with
+the wind and lands over all the cells of its air node (Smith and Barstad 2004), the node's total kept. So no cell
+under raining air gets none, and the pale dry squares are gone. Rain on a 22 island's land cells (least / median /
+most): 0.03 / 1.16 / 2.33 m a year; runoff is 0.65 of the rain on land. The wettest cells get less than under rain
+that lands where it condenses, so fewer cells are rivers: that reference of the key numbers (`RIVERS`) is measured
+with this law.
 
 Open on the ground and the water:
 - Loose ground that settles during a run is not bounded by the `skin_m` rule.
