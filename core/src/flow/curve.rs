@@ -90,6 +90,14 @@ impl Part {
         let s = self.under_x(x);
         (x * x * s[0] - s[2]) / 2.0
     }
+    /// Its area, m².
+    fn area(&self) -> f64 {
+        self.sums[self.sums.len() - 1][0]
+    }
+    /// Its lowest floor over a cell whose mean surface lies at `z`, m.
+    pub(super) fn lowest(&self, z: f64) -> f64 {
+        z + self.floors[0].0
+    }
     /// Its lowest and highest floors over a cell whose mean surface lies at `z`, m.
     fn span(&self, z: f64) -> [f64; 2] {
         [z + self.floors[0].0, z + self.floors[self.floors.len() - 1].0]
@@ -129,13 +137,14 @@ pub(super) fn level_over(parts: &[(&Part, f64)], vol: f64) -> f64 {
 }
 
 /// The ground of a cell as liquid stands on it: its parts (`Part`; the ponds' in the order of the ponds), its area, m²,
-/// and its lowest sample's departure from its mean surface, m.
+/// the area of its samples in no part, m², and its lowest sample's departure from its mean surface, m.
 /// And where its samples meet: the departure and the part of each two beside each other across a side, and a sample's
 /// mean side, m, so the edge of the ground under the liquid is found at the samples (`Fill::shore`).
 #[derive(Clone, Debug, Default)]
 pub(super) struct Curve {
     pub(super) parts: Vec<Part>,
     area: f64,
+    apart: f64,
     low: f64,
     sides: Vec<[(f32, u8); 2]>,
     side: f64,
@@ -206,11 +215,12 @@ impl Fill<'_> {
         }
     }
     /// The share of the cell's area under the liquid where `v` m³ stand (the ground they cover), 0..1: none for none.
+    /// What is not under it is summed, so ground all under it is all of it (no share left by rounding).
     pub(super) fn wet(&self, v: f64) -> f64 {
         if v <= 0.0 {
             return 0.0;
         }
-        self.sum(v, Part::under) / self.c.area
+        (1.0 - (self.c.apart + self.sum(v, |p, x| p.area() - p.under(x))) / self.c.area).clamp(0.0, 1.0)
     }
     /// What stands deeper than `h` under the liquid's level where `v` m³ stand, m³.
     pub(super) fn deep(&self, v: f64, h: f64) -> f64 {
@@ -271,9 +281,11 @@ fn of(w: &World, i: usize) -> Curve {
     ponds.dedup();
     let part_of = |k: usize| if ponds.is_empty() { 0 } else { ponds.iter().position(|&p| p == s.pond[k]).map_or(NO_PART, |p| p as u8) };
     let mut floors: Vec<Vec<(f64, f64)>> = vec![Vec::new(); ponds.len().max(1)];
+    let mut apart = 0.0;
     for &(k, a) in &ks {
-        if let Some(f) = floors.get_mut(part_of(k) as usize) {
-            f.push((s.h[k] - mean, a * area / all));
+        match floors.get_mut(part_of(k) as usize) {
+            Some(f) => f.push((s.h[k] - mean, a * area / all)),
+            None => apart += a * area / all,
         }
     }
     let pond = |q: usize| ponds.get(q).copied().unwrap_or(NONE);
@@ -283,7 +295,7 @@ fn of(w: &World, i: usize) -> Curve {
     let pairs = (0..ks.len()).flat_map(|p| [(p % side + 1 < side).then(|| (p, p + 1)), (p + side < ks.len()).then(|| (p, p + side))]).flatten();
     let sides = pairs.map(|(p, q)| [at_grid(p), at_grid(q)]).collect();
     let low = ks.iter().map(|&(k, _)| s.h[k] - mean).fold(f64::INFINITY, f64::min);
-    Curve { parts, area, low, sides, side: (area / ks.len() as f64).sqrt() }
+    Curve { parts, area, apart, low, sides, side: (area / ks.len() as f64).sqrt() }
 }
 
 impl World {

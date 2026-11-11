@@ -362,8 +362,11 @@ what the heat holds molten, as every law and the shell then read it.
   does not stand. The liquid goes straight from the cell it leaves to the cell its way reaches: it does not wet the
   cells it passes, and the heat of its fall lands where it lands. The bodies then come in turn, each before the body
   its pass leads to: what its parts hold stands at one level over its own samples (`curve::level_over`, exact), no
-  higher than its pass, the pores of the ground it newly covers filling first, as far as the land's pores lack liquid
-  (`parts::dry_pores`); each cell whose part holds more than its samples hold under that level gives the share of its
+  higher than its pass, the pores of the ground it newly covers filling first (`parts::pores_first`: in a cell of
+  parts what its land's pores lack, from what stands; in a node that is one, its pore space, from the liquid all its
+  pores hold first): a body over deep dry loose ground drains into it until its pores are full. What its samples hold
+  under a level and what those pores take both grow with the level, so the level is found by halving the span of
+  levels, and the pores a level just reaches take what is left; each cell whose part holds more than its samples hold under that level gives the share of its
   liquid over it, with that share of its heat; mixed, it goes to the cells whose part holds less, by what each lacks
   (`basin::share_out`), and what the body holds over its pass leaves, mixed, to the part its pass's way reaches, in
   the same month. Each part then holds what its samples hold under its body's level; a cell that was one node becomes

@@ -59,25 +59,47 @@ fn the_cells_of_a_body_end_a_month_at_one_level() {
     assert!(seen > 0, "no cell of a body of two cells or more holds liquid");
 }
 
+/// The ponds the samples' ways from the ground of cell `i` of `w` reach (`Samples::to`), each once.
+fn reached(w: &World, i: usize) -> Vec<usize> {
+    let s = w.terrain_samples();
+    let mut ponds: Vec<usize> = w.map.leaves()[i].split(SAMPLE_DEPTH).filter_map(|f| {
+        let mut k = s.index(&f);
+        while s.pond[k] == NONE && s.to[k] != NONE {
+            k = s.to[k] as usize;
+        }
+        (s.pond[k] != NONE).then_some(s.pond[k] as usize)
+    }).collect();
+    ponds.sort_unstable();
+    ponds.dedup();
+    ponds
+}
+
 /// What a body holds over its pass leaves over it and arrives in the bodies down its way in the same month: liquid
-/// poured on a body with a pass, far more than it holds under its pass, leaves it at its pass's level, and all the
-/// rest of what was poured is in the bodies down its way (against the same world with none poured), within a thousandth:
-/// the other laws of the month (the poured cell's pores, the flow under the ground) differ a little between the two.
+/// poured on a cell of a body with a pass, far more than the body holds under its pass, leaves it at its pass's level,
+/// and all the rest of what was poured is in the bodies down its way and the bodies the cell's land drains to
+/// (`reached`, and theirs down their ways; against the same world with none poured), within a thousandth: the other
+/// laws of the month (the poured cell's pores, the flow under the ground) differ a little between the two.
 #[test]
 fn what_leaves_a_body_over_its_pass_arrives_in_the_body_below() {
     let w0 = world();
     let pools = w0.pools();
     let (x, pool) = pools.iter().enumerate().find(|(_, l)| l.next.is_some()).expect("a body with a pass");
     let pass = w0.terrain_samples().ponds[pool.pond].level;
-    let mut down = Vec::new();
-    let mut at = pool.next;
-    while let Some(j) = at {
-        down.extend_from_slice(&pools[j].cells);
-        at = pools[j].next;
+    let i = pool.cells[0] as usize;
+    // The bodies down the way of each body the cell's ground drains to, and of this body, apart from this body.
+    let mut downs: Vec<usize> = pool.next.into_iter().collect();
+    downs.extend(reached(&w0, i).into_iter().filter(|&p| p != pool.pond).filter_map(|p| pools.iter().position(|l| l.pond == p)));
+    let mut seen = vec![false; pools.len()];
+    while let Some(j) = downs.pop() {
+        if !std::mem::replace(&mut seen[j], true) {
+            downs.extend(pools[j].next);
+        }
     }
+    let mut down: Vec<u32> = (0..pools.len()).filter(|&j| seen[j]).flat_map(|j| pools[j].cells.iter().copied()).filter(|c| !pool.cells.contains(c)).collect();
+    down.sort_unstable();
+    down.dedup();
     let mut w = w0.clone();
     let mol = POURED_M3 / w.chem.molar_volume(LIQUID, Phase::Liquid);
-    let i = pool.cells[0] as usize;
     put(&mut w, LIQUID, i, mol);
     let warm = w.chem.subs[LIQUID].melt + WARM_K;
     let t = w.t_ground(i).max(warm);
