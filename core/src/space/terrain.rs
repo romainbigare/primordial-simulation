@@ -47,12 +47,6 @@ const RANGE_KEY: u64 = 19;
 const RANGE_OFF: f64 = 1.0;
 const RANGE_WIDE: [f64; 2] = [0.7, 1.4];
 const RISES: [f64; 2] = [0.2, 1.3];
-/// The bed's patches (`patch`): the key of their noise, its units a square, its octaves (each half the size of the
-/// one before), and how sharply the noise parts the two beds about its middle.
-const PATCH_KEY: u64 = 100;
-const PATCH_PER_SQUARE: f64 = 0.5;
-const PATCH_OCTAVES: u32 = 4;
-const PATCH_SHARP: f64 = 6.0;
 /// The depth below its air block whose leaves' centres sample the terrain inside a coarser cell (`Terrain::inside`):
 /// 1/64 of a block's side, 125 m on the island, finer than the noise's finest octave there.
 pub const SAMPLE_DEPTH: u8 = 6;
@@ -60,13 +54,13 @@ pub const SAMPLE_DEPTH: u8 = 6;
 /// What the terrain of a world needs beside its map: the seed of its noise (the world's as built: a run that draws
 /// chance anew from another seed, `World::seed`, stands on the same ground); the rise its level 0 m lies at (an
 /// island's `ISLAND_LEVEL`; a globe's the one that leaves a share of its area above it, `worldgen`); how much faster
-/// flowing liquid wears the bed of its patches than the rest of the bed (`patch`; the chemistry's, `worldgen`); and
-/// its drained samples, found from those when first read (`Terrain::samples`), not saved.
+/// flowing liquid wears each make of its bed than the first (`space::strata`; the chemistry's, `worldgen`); and its
+/// drained samples, found from those when first read (`Terrain::samples`), not saved.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Terrain {
     pub seed: u64,
     pub level: f64,
-    pub soft: f64,
+    pub cut: Vec<f64>,
     #[serde(skip)]
     pub(super) kept: super::samples::Kept,
 }
@@ -187,15 +181,6 @@ pub fn noise(seed: u64, map: &Square, place: Place, per_square: f64, octaves: u3
     }
 }
 
-/// The share of the bed at `place` of `map` for `seed` that is of its patches, 0 to 1 (the bed of another make, which
-/// `worldgen` fills by the chemistry's `deposits`): fractal noise over `PATCH_OCTAVES` scales from a few squares down,
-/// parted sharply about its middle, so the bed lies in patches of either make with narrow margins, large and small, as
-/// bodies of rock of different makes lie side by side. The wear at the world's start reads it (`space::wear`), and the
-/// cells' beds are made of it, so both see one bed.
-pub fn patch(seed: u64, map: &Square, place: Place) -> f64 {
-    ((noise(seed ^ PATCH_KEY, map, place, PATCH_PER_SQUARE, PATCH_OCTAVES) - 0.5) * PATCH_SHARP + 0.5).clamp(0.0, 1.0)
-}
-
 /// Where a place lies in the noise (`noise`).
 enum Spot {
     Flat([f64; 2]),
@@ -247,10 +232,10 @@ fn height_of(above: f64) -> f64 {
 }
 
 impl Terrain {
-    /// The terrain of `seed` whose level 0 m lies at the rise `level`, flowing liquid wearing the bed of its patches
-    /// `soft` times as fast as the rest.
-    pub fn new(seed: u64, level: f64, soft: f64) -> Terrain {
-        Terrain { seed, level, soft, ..Terrain::default() }
+    /// The terrain of `seed` whose level 0 m lies at the rise `level`, flowing liquid wearing each make of its bed
+    /// `cut` times as fast as the first.
+    pub fn new(seed: u64, level: f64, cut: Vec<f64>) -> Terrain {
+        Terrain { seed, level, cut, ..Terrain::default() }
     }
     /// The height of the noise at `place`, m: how high the ground would stand there unworn.
     pub(super) fn sample(&self, seed: u64, map: &Square, place: Place) -> f64 {

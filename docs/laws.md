@@ -65,11 +65,19 @@ the low ground's liquid. At the end the liquid rises to 0 m: the open low ground
 open low ground of the low stand (on an island, to its lowest sample), so the valleys cut down toward the low stand
 by the shore are drowned: inlets, bays and small islands off the coast. An island's level (`ISLAND_LEVEL`, 0.27) keeps
 its land's share of the map about what it was with no low stand; a globe's is found on the noise as before, and the
-drowning takes about half a percent of its area from its land (28.4% to 27.9% on a globe of 32 rows). **The bed has patches** of another make (`terrain::patch`): fractal noise over four scales from about
-4 km down to 500 m, parted sharply about its middle, says what share of the bed at a place is of the patches; the
-cells' beds are made of it (the chemistry's `bed` and, over that share, its `deposits`, section 8), and flowing liquid
-wears the patches as much faster as Flow's wear breaks them (the sum of each substance's share over its bond strength,
-1.3): `Terrain::soft`, 1.36 in chemistry 0. So soft patches open into valleys and the hard bed stands. Under a closed
+drowning takes about half a percent of its area from its land (28.4% to 27.9% on a globe of 32 rows). **The bed is of
+a few makes** (`space::strata`), each a mix of the chemistry's own bed substances (`makes`, section 8; five in
+chemistry 0), and flowing liquid wears each as much faster than the first as Flow's wear breaks it (the sum of each
+substance's share over its bond strength, 1.3; `Terrain::cut`: 1, 0.88, 1.11, 1.18 and 1.36 in chemistry 0). They lie
+in **layers**: a stack of 12 layers, each 60 to 400 m thick and of a make drawn from the seed (never the make of the
+layer over it), repeating under them (`LAYERS`, `THICK_M`), folded up and down by up to 2 km by fractal noise of
+three scales from about 8 km (`FOLD_M`, `FOLD_PER_SQUARE`); and through them stand **bodies** of the hardest make
+where fractal noise over four scales from about 4 km down passes 0.66 (`BODY_ABOVE`), as rock cooled from a melt
+rises through strata. The top of the stack rises with the land and floats back up with it, so how deep the wear has
+cut under it, plus the fold, says which layer a sample's surface is in; at each step the wear cuts each sample at the
+rate of the make it has reached. So a soft layer opens into a wide vale, a hard one stands as a scarp or caps a
+tableland, and folded layers crop out in bands round the heights. A cell's bed is the mean of its samples' makes by
+area, substance by substance (`Samples::make`). Under a closed
 basin's level the liquid does not cut. What a step cuts spreads down as the liquid does; a closed basin keeps all that
 comes into it and fills its floor from the lowest up, as one level, toward the height its pass has now, and what it
 cannot hold runs on over the pass (`space::ponds`); what reaches the open low ground lies there at the end (the shelf,
@@ -1339,8 +1347,8 @@ to the air. Body matter holds no rock element: the **rock salt (11)** is rock ch
 Placed by `worldgen` (`worldgen::schedule::Schedule`, carried by a snapshot) and printed by every run; the laws never
 read a kind.
 - **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on: an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
-  `World::terrain`); the bed of the chemistry's `bed` and, over the share of it in patches (`terrain::patch`), of its
-  `deposits`; the loose ground the wear left (0: the mantle on land, the shelf on the open low ground), each cell the
+  `World::terrain`); the bed of the chemistry's `makes`, each over the share of the cell's samples whose surface the
+  wear left in it (`space::strata`); the loose ground the wear left (0: the mantle on land, the shelf on the open low ground), each cell the
   mean over its samples of the top `skin_m` of each sample's at most: the ground node is the layer that exchanges with
   the surface within a year (its heat, and the pores roots and evaporation draw from), and what the wear left deeper lies
   under it, packed with the bed (the bed's store, `Class::Deep`, its aquifer); the sea's salt at

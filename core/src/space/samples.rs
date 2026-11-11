@@ -14,6 +14,7 @@ use super::ponds::{basins, grade, open_parts};
 use super::wear::{noise_grid, wear, Books};
 use crate::math::central;
 use super::square::Square;
+use super::strata::Strata;
 use super::terrain::{Terrain, SAMPLE_DEPTH};
 use super::tree::BLOCK;
 use super::Leaf;
@@ -23,8 +24,8 @@ use std::sync::{Arc, Mutex};
 /// the terrain's channels on them (`space::network`): the sample its liquid runs to (`network::NONE` for a sink of the
 /// open low ground), the area that drains through it, m², and its neighbour upstream that the most drains through
 /// (`NONE` where none runs to it), and the samples in the order the flood reached them (each after the one its liquid
-/// runs to); the pond each lies in (`NONE` on ground that drains), and the ponds; the share of each sample's bed that
-/// is of the bed's patches (`terrain::patch`, as the wear read it), and the depth of its loose ground the wear left, m;
+/// runs to); the pond each lies in (`NONE` on ground that drains), and the ponds; the make of each sample's bed at its
+/// surface (`space::strata`, as the wear left it), and the depth of its loose ground the wear left, m;
 /// and the volumes the wear moved (`wear::Books`).
 #[derive(Clone, Debug)]
 pub struct Samples {
@@ -38,7 +39,7 @@ pub struct Samples {
     pub main: Vec<u32>,
     pub pond: Vec<u32>,
     pub ponds: Vec<Pond>,
-    pub patch: Vec<f64>,
+    pub make: Vec<u8>,
     pub loose: Vec<f64>,
     pub books: Books,
 }
@@ -122,7 +123,8 @@ impl Terrain {
     /// The samples of `map` for `seed` (`Samples`): the noise's heights (`Terrain::sample`) at the centres of the
     /// samples of the grid the wear reads it on (`wear::noise_grid`), worn (`space::wear`) with the open low ground
     /// held; then the flood over them from all the open low ground, the closed basins too shallow to hold a pond graded
-    /// (`ponds::grade`), the area that drains through each sample, and the ponds.
+    /// (`ponds::grade`), the area that drains through each sample, and the ponds; the folds of the bed's layers and its
+    /// bodies are read on the noise's grid too (`Strata::at`).
     fn worn(&self, seed: u64, map: &Square, (south, north): (f64, f64)) -> Samples {
         let per = 1usize << (SAMPLE_DEPTH - map.square_depth());
         let (across, down) = (map.w * per, map.h * per);
@@ -135,11 +137,10 @@ impl Terrain {
         let (wide, depth) = (across / by, SAMPLE_DEPTH - by.trailing_zeros() as u8);
         let block = |k: usize| Leaf { x: (k % wide) as u64 * side * by as u64, y: (k / wide) as u64 * side * by as u64, depth };
         let place = |k: usize| map.place_of(&block(k), south, north).1;
-        let (rise, patch): (Vec<f64>, Vec<f64>) = crate::par::map_n(wide * (down / by), crate::par::UNCOUNTED, |k| (self.sample(seed, map, place(k)), super::terrain::patch(seed, map, place(k)))).into_iter().unzip();
-        let cut: Vec<f64> = patch.iter().map(|&m| 1.0 + (self.soft - 1.0) * m).collect();
-        let worn = wear(seed, &grid, (by, &rise, &cut));
-        let (mut h, open, loose, books) = (worn.h, worn.open, worn.loose, worn.books);
-        let patch = (0..grid.n()).map(|k| patch[(k / across / by) * wide + (k % across) / by]).collect();
+        let at: Vec<(f64, (f64, f64))> = crate::par::map_n(wide * (down / by), crate::par::UNCOUNTED, |k| (self.sample(seed, map, place(k)), Strata::at(seed, map, place(k))));
+        let (rise, (fold, body)): (Vec<f64>, (Vec<f64>, Vec<f64>)) = at.into_iter().unzip();
+        let worn = wear(seed, &grid, (by, &rise), (&fold, &body, &Strata::of(seed, &self.cut)));
+        let (mut h, open, loose, books, make) = (worn.h, worn.open, worn.loose, worn.books, worn.make);
         let f = flood(&grid, &h, &open, (&starts(&grid, &open, false), &draws(seed, 1, grid.n())));
         let (up, main) = accumulate(&f.to, &f.order, |k| grid.area(k));
         let shallow = basins(&grid, &h, &f).1;
@@ -147,6 +148,6 @@ impl Terrain {
         let (mut pond, members) = basins(&grid, &h, &f);
         let mut ponds: Vec<Pond> = members.iter().map(|m| Pond { pass: f.to[m[0] as usize], level: f.level[m[0] as usize] }).collect();
         open_parts(&grid, &open, (&mut pond, &mut ponds));
-        Samples { seed, across, down, h, to: f.to, order: f.order, up, main, pond, ponds, patch, loose, books }
+        Samples { seed, across, down, h, to: f.to, order: f.order, up, main, pond, ponds, make, loose, books }
     }
 }
