@@ -1,41 +1,48 @@
 //! The bodies of standing liquid (laws.md 1.2) and the terrain's network the runoff takes to them, found once for the
 //! world's cells (`Bodies::of`). A body is a pond of the terrain's samples (`Samples::ponds`: the samples of a closed
-//! basin under its pass, or a part of the open low ground) held by the cells whose lowest sample lies in it: where a
-//! cell's liquid leaves it, as its own ground fills from its lowest point up (`flow::curve`). Its liquid stays in the
-//! ground nodes of those cells. A cell in no body sends what runs off down the samples' ways from each of its samples
-//! by its share of the cell's area; the first sample of a body on a way names the body it reaches, and so does the
-//! way down from a body's pass.
+//! basin under its pass, or a part of the open low ground), held by every cell that holds samples of it, each by its
+//! part (`curve::Part`): a cell may hold land that drains and parts of one body or more. Its liquid stays in the ground
+//! nodes of those cells. A cell sends what runs off down the samples' ways from each of its samples by its share of the
+//! cell's area; a way reaches the body of the first sample of a pond on it, in the cell that holds that sample, and so
+//! does the way down from a body's pass.
 
+use super::curve::Curve;
 use crate::space::network::NONE;
 use crate::space::samples::Samples;
 use crate::space::terrain::SAMPLE_DEPTH;
 use crate::World;
 
-/// A body of standing liquid: its pond (`Samples::ponds`), its cells in order, the sample of its pass (`NONE` for a
-/// part of the open low ground) and the level of the pass, m (infinite for none); and where what leaves over the pass
-/// goes (`Reach`).
+/// A body of standing liquid: its pond (`Samples::ponds`); its cells in order, each with the index of its part in the
+/// cell's curve (`Curve::parts`); the sample of its pass (`NONE` for a part of the open low ground) and the level of
+/// the pass, m (infinite for none); and where what leaves over the pass goes (`Reach`).
 #[derive(Clone, Debug)]
 pub(super) struct Body {
     pub(super) pond: u32,
     pub(super) cells: Vec<u32>,
+    pub(super) part: Vec<usize>,
     pub(super) pass: u32,
     pub(super) level: f64,
     pub(super) next: Reach,
 }
 
 /// Where liquid that runs down the samples' ways from a sample goes: the body it reaches (`NONE` where the way ends in
-/// no body) and the cell it lands in (a cell of that body: the one that holds the sample it reaches if that cell is the
-/// body's, else the body's first; where the way ends in no body, the cell of its last sample).
+/// no body), the cell it lands in: the cell that holds the first sample of a pond on the way (where the way ends in
+/// no body, the cell of its last sample), and that cell's part of the body (`curve::Curve::ponds`; `NONE` for none).
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Reach {
     pub(super) body: u32,
     pub(super) cell: u32,
+    pub(super) part: u32,
 }
 
-/// The bodies of the world's cells and the ways to them: the body of each cell (`NONE` for none); the bodies, each
-/// before the one its pass leads to (`Body::next`); of each sample its cell, its share of the cell's area, its body
-/// (`NONE` where its pond has no cell, or none) and the cell its way lands in (`Reach`); and of each cell in no body,
-/// the other cells its runoff lands in, each with the share of the cell's area whose ways lead there, in order.
+/// Where no way goes.
+const NOWHERE: Reach = Reach { body: NONE, cell: NONE, part: NONE };
+
+/// The bodies of the world's cells and the ways to them: of each cell the body of its largest part (`NONE` for none);
+/// the bodies, each before the one its pass leads to (`Body::next`); of each sample its cell, its share of the cell's
+/// area and its body (`NONE` where it lies in no pond); and of each cell, the cells and bodies its runoff reaches
+/// (`Reach`), each with the share of the cell's area whose ways lead there, in order (its own cell among them, for
+/// the samples of its own parts).
 #[derive(Clone, Debug, Default)]
 pub(super) struct Bodies {
     pub(super) of: Vec<u32>,
@@ -43,79 +50,67 @@ pub(super) struct Bodies {
     pub(super) cell_of: Vec<u32>,
     pub(super) share: Vec<f64>,
     pub(super) at: Vec<u32>,
-    pub(super) lands: Vec<u32>,
-    pub(super) ways: Vec<Vec<(u32, f64)>>,
+    pub(super) ways: Vec<Vec<(Reach, f64)>>,
 }
 
 impl Bodies {
-    /// The bodies of the cells of `w` on its terrain's samples (`Bodies`).
-    pub(super) fn of(w: &World) -> Bodies {
+    /// The bodies of the cells of `w` on its terrain's samples, the cells' parts as `curves` hold them (`Bodies`).
+    pub(super) fn of(w: &World, curves: &[Curve]) -> Bodies {
         let s = w.terrain_samples();
         let (leaves, lat) = (w.map.leaves(), (w.cfg.lat_south, w.cfg.lat_north));
         let n = leaves.len();
-        let (mut cell_of, mut share, mut low) = (vec![NONE; s.h.len()], vec![0.0; s.h.len()], vec![NONE; n]);
+        let (mut cell_of, mut share) = (vec![NONE; s.h.len()], vec![0.0; s.h.len()]);
         for (i, l) in leaves.iter().enumerate() {
             let whole = w.mesh.cells().area()[i];
             for f in l.split(SAMPLE_DEPTH.max(l.depth)) {
                 let k = s.index(&f);
                 (cell_of[k], share[k]) = (i as u32, w.map.place_of(&f, lat.0, lat.1).0 / whole);
-                if low[i] == NONE || s.h[k] < s.h[low[i] as usize] {
-                    low[i] = k as u32;
-                }
             }
         }
-        // The body of each pond that a cell holds: its pond the pond of the cell's lowest sample.
-        let mut by_pond = vec![NONE; s.ponds.len()];
+        let mut list: Vec<Body> = s.ponds.iter().enumerate().map(|(p, pond)| {
+            Body { pond: p as u32, cells: Vec::new(), part: Vec::new(), pass: pond.pass, level: pond.level, next: NOWHERE }
+        }).collect();
         let mut of = vec![NONE; n];
-        let mut list: Vec<Body> = Vec::new();
-        for i in 0..n {
-            let p = s.pond[low[i] as usize];
-            if p == NONE {
-                continue;
+        for (i, c) in curves.iter().enumerate() {
+            for (q, part) in c.ponds().iter().enumerate() {
+                let body = &mut list[part.pond as usize];
+                body.cells.push(i as u32);
+                body.part.push(q);
             }
-            if by_pond[p as usize] == NONE {
-                by_pond[p as usize] = list.len() as u32;
-                let pond = s.ponds[p as usize];
-                list.push(Body { pond: p, cells: Vec::new(), pass: pond.pass, level: pond.level, next: Reach { body: NONE, cell: NONE } });
-            }
-            of[i] = by_pond[p as usize];
-            list[of[i] as usize].cells.push(i as u32);
+            let most = c.ponds().iter().max_by(|a, b| a.under(f64::INFINITY).total_cmp(&b.under(f64::INFINITY)).then(b.pond.cmp(&a.pond)));
+            of[i] = most.map_or(NONE, |p| p.pond);
         }
-        let at: Vec<u32> = s.pond.iter().map(|&p| if p == NONE { NONE } else { by_pond[p as usize] }).collect();
-        let mut b = Bodies { of, list, cell_of, share, at, lands: Vec::new(), ways: Vec::new() };
-        let reach = b.reaches(&s);
+        let mut b = Bodies { of, list, cell_of, share, at: s.pond.clone(), ways: Vec::new() };
+        let reach = b.reaches(&s, curves);
         b.ways = vec![Vec::new(); n];
         for (k, r) in reach.iter().enumerate() {
-            let i = b.cell_of[k] as usize;
-            if b.of[i] == NONE && r.cell as usize != i {
-                match b.ways[i].iter_mut().find(|x| x.0 == r.cell) {
-                    Some(x) => x.1 += b.share[k],
-                    None => b.ways[i].push((r.cell, b.share[k])),
-                }
+            let ways = &mut b.ways[b.cell_of[k] as usize];
+            match ways.iter_mut().find(|x| (x.0.cell, x.0.part) == (r.cell, r.part)) {
+                Some(x) => x.1 += b.share[k],
+                None => ways.push((*r, b.share[k])),
             }
         }
-        b.ways.iter_mut().for_each(|v| v.sort_by_key(|x| x.0));
-        b.lands = reach.iter().map(|r| r.cell).collect();
+        b.ways.iter_mut().for_each(|v| v.sort_by_key(|x| (x.0.cell, x.0.part)));
         for x in 0..b.list.len() {
             let pass = b.list[x].pass;
-            b.list[x].next = if pass == NONE { Reach { body: NONE, cell: NONE } } else { reach[pass as usize] };
+            b.list[x].next = if pass == NONE { NOWHERE } else { reach[pass as usize] };
         }
         b.order();
         b
     }
 
     /// Where liquid goes that runs down the samples' ways from each sample (`Reach`): from the first sample the flood
-    /// reached on, each from the one its liquid runs to, so each is found once. A sample of a body reaches its body.
-    fn reaches(&self, s: &Samples) -> Vec<Reach> {
-        let mut reach = vec![Reach { body: NONE, cell: NONE }; s.h.len()];
+    /// reached on, each from the one its liquid runs to, so each is found once. A sample of a pond reaches its body in
+    /// its own cell.
+    fn reaches(&self, s: &Samples, curves: &[Curve]) -> Vec<Reach> {
+        let mut reach = vec![NOWHERE; s.h.len()];
         for &k in &s.order {
             let k = k as usize;
-            let x = self.at[k];
-            reach[k] = if x != NONE {
-                let c = self.cell_of[k];
-                Reach { body: x, cell: if self.of[c as usize] == x { c } else { self.list[x as usize].cells[0] } }
-            } else if s.to[k] == NONE {
-                Reach { body: NONE, cell: self.cell_of[k] }
+            reach[k] = if self.at[k] != NONE || s.to[k] == NONE {
+                let (body, cell) = (self.at[k], self.cell_of[k]);
+                let c = &curves[cell as usize];
+                let part = c.ponds().iter().position(|p| p.pond == body).map_or(NONE, |q| q as u32);
+                Reach { body, cell, part }
             } else {
                 reach[s.to[k] as usize]
             };
@@ -145,5 +140,6 @@ impl Bodies {
         self.list = list;
         self.of.iter_mut().for_each(|x| *x = renum(*x));
         self.at.iter_mut().for_each(|x| *x = renum(*x));
+        self.ways.iter_mut().flatten().for_each(|x| x.0.body = renum(x.0.body));
     }
 }

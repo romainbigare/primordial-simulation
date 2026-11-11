@@ -2,11 +2,10 @@
 //! volume of each of its layers from what its nodes hold in their phases, its liquid in its pores and over its own
 //! ground (`Column`), the matter of its life at its head, and the potential energy and heights they make.
 
-use super::curve::{of_cell, Curve};
+use super::curve::{with_fill, Fill};
 use super::potential::{deep_of, ground_of};
 use super::{land::NONE, scratch::Sp, Scratch};
 use crate::{store::Class, World, AIR};
-use std::borrow::Cow;
 
 /// Numbers of a ground cell's row in `potential`: the potential energy of its stack and of its bed's store, J; its head
 /// (`Column::head`), m; the height its store's liquid reaches, m; the potential energy of the matter at its head, J; and
@@ -25,7 +24,7 @@ pub(super) const PORED: usize = 9;
 /// A cell's liquid as its stack holds it (laws.md 0, 1.2): `vol` m³ fill the pores of its loose solids first (`loose`
 /// m³ of them, porosity `por`; of a cell of parts less `dry` m³, the room its land's pores have left, `parts::Parts`),
 /// a table rising from the bed's top `bed` by the depth they fill over the porosity; the rest stands over its own ground
-/// (`curve::Curve`) from its mean solid surface `z` (m), as Flow's level stands it (`land::stand`). Its area `area`,
+/// (`curve::Fill`) from its mean solid surface `z` (m), as Flow's level stands it (`land::stand`). Its area `area`,
 /// m².
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct Column {
@@ -55,13 +54,13 @@ impl Column {
         self.bed + if pore > 0.0 { pore / (self.por * self.area) } else { 0.0 }
     }
     /// The height its liquid leaves from, its top, m: the table of its pores, or the level of what stands over its own
-    /// ground (`curve`, found only where some stands) where that lies higher. What stands in a pit of its ground under
+    /// ground (`fill`) where that lies higher. What stands in a pit of its ground under
     /// the table of its full pores lies under liquid that fills the ground round it, and leaves with it: so the top
     /// never rises as liquid leaves, and liquid leaves the cell, and sinks into its store, from no lower than its
     /// pores' table.
-    pub(super) fn top<'a>(&self, curve: impl FnOnce() -> Cow<'a, Curve>) -> f64 {
+    pub(super) fn top(&self, fill: Fill) -> f64 {
         match self.parts() {
-            [pore, stands] if stands > 0.0 => (self.z + curve().level(stands)).max(self.table(pore)),
+            [pore, stands] if stands > 0.0 => (self.z + fill.level(stands)).max(self.table(pore)),
             [pore, _] => self.table(pore),
         }
     }
@@ -71,17 +70,16 @@ impl Column {
         self.z + self.vol / self.area
     }
     /// The potential energy of its liquid of mass `kg`, J, under gravity `g`: what its pores hold at the middle of the
-    /// depth it fills, and what stands at its centroid over its own ground (`Curve::moment`); its mass at its top where
+    /// depth it fills, and what stands at its centroid over its own ground (`Fill::moment`); its mass at its top where
     /// it fills no volume (a gas).
-    pub(super) fn energy<'a>(&self, kg: f64, g: f64, curve: impl FnOnce() -> Cow<'a, Curve>) -> f64 {
+    pub(super) fn energy(&self, kg: f64, g: f64, fill: Fill) -> f64 {
         if self.vol <= 0.0 {
-            return kg * g * self.top(curve);
+            return kg * g * self.top(fill);
         }
         let [pore, stands] = self.parts();
         let mut moment = pore * (self.bed + self.table(pore)) / 2.0;
         if stands > 0.0 {
-            let c = curve();
-            moment += stands * self.z + c.moment(c.level(stands));
+            moment += stands * self.z + fill.moment(stands);
         }
         kg * g * moment / self.vol
     }
@@ -147,14 +145,14 @@ pub(super) fn deep_layer(x: &mut [f64; LAYERS], sp: &Sp, t: f64, a: f64) {
 }
 
 /// The row of `potential` (`ROW`) of ground cell `i` made of `x` (`LAYERS`): its bed and its solids each at its middle,
-/// its liquid in its pores and over its own ground (`Column`, the curve of `s`, `curve::of_cell`), and its life at its
+/// its liquid in its pores and over its own ground (`Column`, the ground of `s`, `curve::with_fill`), and its life at its
 /// head.
 pub(super) fn stack(w: &World, s: &Scratch, x: &[f64; LAYERS], i: usize) -> [f64; ROW] {
     let (area, g, p) = (w.mesh.cells().area()[i], w.cfg.gravity, w.cfg.phys);
     let c = Column::of(w, s, x, i);
     let solids = x[0] * g * (w.base_z + c.bed) / 2.0 + x[1] * g * (c.bed + c.z) / 2.0;
-    let e = solids + c.energy(x[2], g, || of_cell(w, s, i));
-    let (top, head) = (c.top(|| of_cell(w, s, i)), c.head());
+    let (liquid, top) = with_fill(w, s, i, |f| (c.energy(x[2], g, f), c.top(f)));
+    let (e, head) = (solids + liquid, c.head());
     let (floor, fill) = (w.base_z + x[3] / area - p.bed_depth, x[7] / (p.bed_porosity * area));
     [e, x[6] * g * (floor + fill / 2.0), head, floor + fill, x[HEAD] * g * head, top]
 }

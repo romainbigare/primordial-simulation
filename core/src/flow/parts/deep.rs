@@ -4,13 +4,13 @@
 
 use super::moves::ROUNDING;
 use super::{Found, Parts, Piece, DEEP, PARTS, TOP};
-use crate::flow::{curve::Curve, Scratch};
+use crate::flow::{curve::Fill, Scratch};
 use crate::{math::one_minus_exp, World};
 
-/// The liquid of the deep of a cell of ground `curve` where `v` m³ of liquid stand over the pores of its ground under
-/// the liquid: what stands deeper than `h_mix` under its level (`Curve::volume`), m³; none where none does.
-pub(super) fn under(w: &World, curve: &Curve, v: f64) -> Option<f64> {
-    Some(curve.volume(curve.level(v) - w.cfg.phys.h_mix)).filter(|&d| d > 0.0)
+/// The liquid of the deep of a cell of ground `fill` where `v` m³ of liquid stand over the pores of its ground under
+/// the liquid: what stands deeper than `h_mix` under its level (`Fill::deep`), m³; none where none does.
+pub(super) fn under(w: &World, fill: Fill, v: f64) -> Option<f64> {
+    Some(fill.deep(v, w.cfg.phys.h_mix)).filter(|&d| d > 0.0)
 }
 
 /// The deep of `p` in cell `i` (its parts found as `f`, porosity `por`) comes to hold `deep` m³ of standing liquid
@@ -89,7 +89,7 @@ pub(in crate::flow) fn mix(w: &World, s: &mut Scratch, dt: f64) -> Vec<u32> {
             let (vt, vd) = (volume(s, top), volume(s, deep));
             // The deep's standing liquid, over its pores, and the area of the ground under its level.
             let stand = vd - deep.pd * area[i] * p.wet;
-            let under = s.curves[i].wet(stand) * area[i];
+            let under = s.fill(i).wet(stand) * area[i];
             if vt <= 0.0 || stand <= 0.0 || under <= 0.0 {
                 return None;
             }

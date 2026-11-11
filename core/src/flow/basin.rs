@@ -3,14 +3,14 @@
 //! the cells of a body to one level, as the runoff's pass does once a month (`runoff`); and each body mixes its heat
 //! under each air block (`mix`).
 
-use super::{air::blocks, curve::{level_over, Curve}, land::{cells_state, NONE}, parts::TOP, potential::apply, Scratch};
+use super::{air::blocks, bodies::Body, curve::{first_held, holds_all, level_over}, land::{cells_state, standing, NONE}, parts::TOP, potential::apply, Scratch};
 use crate::{space::network::NONE as NO_BODY, store::{Class, LinkFlux}, World, AIR};
 use std::collections::BTreeMap;
 
 /// The bodies now: whether each cell holds part of a body, those cells in order, whether each lies under its body's
-/// level (its mean surface under it: a cell under the body, not one of its shore), the body of each cell
-/// (`bodies::Bodies::of`), and the level of each body, m (as its liquid stands over its cells' own ground, no higher
-/// than its pass).
+/// level (its mean surface under it: a cell under the body, not one of its shore), the body of each cell's largest part
+/// (`bodies::Bodies::of`), and the level of each body, m (as what its parts held at the last pass stands over their
+/// samples, no higher than its pass).
 #[derive(Clone, Debug, Default)]
 pub(super) struct Basin {
     pub(super) body: Vec<bool>,
@@ -20,19 +20,23 @@ pub(super) struct Basin {
     pub(super) level: Vec<f64>,
 }
 
-/// The bodies now (`Basin`): the level of each the one level at which what stands over its cells' pores stands over
-/// their own ground together (`curve::level_over`), no higher than its pass.
-pub(super) fn find(w: &World, s: &Scratch) -> Basin {
+/// The bodies now (`Basin`): the level of each the one level at which what its parts held at the last pass
+/// (`State::held`) stands over their samples together, no higher than its pass. A world whose parts held nothing yet
+/// gives each part its share of what stands over its cell's pores now (`curve::first_held`).
+pub(super) fn find(w: &World, s: &mut Scratch) {
+    if !holds_all(&s.curves, &s.state.held) {
+        s.state.held = first_held(s);
+    }
     let (n, b) = (w.mesh.cells().n(), &s.bodies);
-    let level: Vec<f64> = b.list.iter().map(|x| level_of(s, &x.cells, x.level)).collect();
+    let level: Vec<f64> = b.list.iter().map(|x| body_level(s, x)).collect();
     let is = (0..n).map(|i| b.of[i] != NO_BODY && s.z[i] < level[b.of[i] as usize]).collect();
     let cells = (0..n as u32).filter(|&i| b.of[i as usize] != NO_BODY).collect();
-    Basin { body: b.of.iter().map(|&x| x != NO_BODY).collect(), cells, is, of: b.of.clone(), level }
+    s.basin = Basin { body: b.of.iter().map(|&x| x != NO_BODY).collect(), cells, is, of: b.of.clone(), level };
 }
 
 impl World {
     /// The level of the liquid of each pond of the terrain's samples (`Samples::ponds`), m, as Flow's last runoff's pass
-    /// or full build of the ground's state left it; NaN for a pond no cell holds (or before Flow first ran).
+    /// or full build of the ground's state left it; NaN before Flow first ran.
     pub fn pond_levels(&self) -> Vec<f64> {
         let mut out = vec![f64::NAN; self.terrain_samples().ponds.len()];
         let s = &self.scratch;
@@ -40,37 +44,35 @@ impl World {
         out
     }
 
-    /// Does cell `i` hold part of a body of standing liquid (`bodies::Bodies`), its lowest sample in a pond?
+    /// Does cell `i` hold part of a body of standing liquid (`bodies::Bodies`): any sample of a pond?
     pub fn in_body(&self, i: usize) -> bool {
-        let s = &self.scratch;
-        let of = if s.bodies.of.len() == self.mesh.cells().n() { s.bodies.of[i] } else { super::bodies::Bodies::of(self).of[i] };
-        of != NO_BODY
+        let s = self.terrain_samples();
+        self.map.leaves()[i].split(crate::space::terrain::SAMPLE_DEPTH.max(self.map.leaves()[i].depth)).any(|f| s.pond[s.index(&f)] != NO_BODY)
     }
 
     /// Each body of standing liquid as Flow's state holds it (`Pool`); none before Flow first built the state.
     pub fn pools(&self) -> Vec<Pool> {
         let s = &self.scratch;
-        if s.curves.len() != self.mesh.cells().n() || s.head.len() != s.curves.len() {
+        if s.curves.len() != self.mesh.cells().n() || s.head.len() != s.curves.len() || s.bodies.of.len() != s.curves.len() {
             return Vec::new();
         }
-        let pool = |(b, &level): (&super::bodies::Body, &f64)| {
-            let stands = |i: &u32| super::land::standing(s, *i as usize);
-            let wet = |i: &u32| s.curves[*i as usize].wet(stands(i)) * self.mesh.cells().area()[*i as usize];
+        let pool = |(b, &level): (&Body, &f64)| {
+            let parts = b.cells.iter().zip(&b.part).map(|(&i, &q)| (i as usize, &s.curves[i as usize].parts[q]));
+            let stands: Vec<f64> = b.cells.iter().zip(&b.part).map(|(&i, &q)| s.fill(i as usize).shares(standing(s, i as usize))[q]).collect();
+            let under = parts.clone().map(|(i, p)| p.volume(level - s.z[i])).collect();
+            let area = parts.zip(&stands).map(|((_, p), &v)| p.under(p.level(v))).sum();
             let next = (b.next.body != NO_BODY).then_some(b.next.body as usize);
-            let at_level = |i: &u32| s.curves[*i as usize].volume(level - s.z[*i as usize]);
-            let (stand, under) = (b.cells.iter().map(stands).collect(), b.cells.iter().map(at_level).collect());
-            Pool { pond: b.pond as usize, cells: b.cells.clone(), stands: stand, under, next, level, low: b.pass == NO_BODY, area: b.cells.iter().map(wet).sum(), volume: b.cells.iter().map(stands).sum() }
+            Pool { pond: b.pond as usize, cells: b.cells.clone(), volume: stands.iter().sum(), stands, under, next, level, low: b.pass == NO_BODY, area }
         };
         s.bodies.list.iter().zip(&s.basin.level).map(pool).collect()
     }
 }
 
-/// A body of standing liquid (laws.md 1.2): its pond (`Samples::ponds`), its cells, the volume of liquid that stands
-/// over the pores of each as Flow's state holds it and the volume its own ground holds under the body's level, m³; the
-/// body its pass leads to (an
-/// index of `World::pools`; none for open low ground or where the way ends in no body), its level, m; whether it is
-/// open low ground (no pass); the area its liquid covers over its cells' own ground, m², and the volume that stands
-/// over their pores, m³.
+/// A body of standing liquid (laws.md 1.2): its pond (`Samples::ponds`), its cells, the volume of liquid its part in
+/// each holds over the cell's pores as Flow's state holds it (`curve::Fill::shares`) and the volume its part's samples
+/// hold under the body's level, m³; the body its pass leads to (an index of `World::pools`; none for open low ground or
+/// where the way ends in no body), its level, m; whether it is open low ground (no pass); the area its liquid covers
+/// over its parts' samples, m², and the volume its parts hold, m³.
 #[derive(Clone, Debug)]
 pub struct Pool {
     pub pond: usize,
@@ -84,12 +86,12 @@ pub struct Pool {
     pub volume: f64,
 }
 
-/// The level of the liquid that stands over the pores of `cells`, over their own ground together, m, no higher than
-/// `pass`.
-fn level_of(s: &Scratch, cells: &[u32], pass: f64) -> f64 {
-    let parts: Vec<(&Curve, f64)> = cells.iter().map(|&i| (&s.curves[i as usize], s.z[i as usize])).collect();
-    let stands: f64 = cells.iter().map(|&i| super::land::standing(s, i as usize)).sum();
-    level_over(&parts, stands).min(pass)
+/// The level of body `b`: what its parts held at the last pass (`State::held`) at one level over their samples
+/// (`curve::level_over`), m, no higher than its pass.
+fn body_level(s: &Scratch, b: &Body) -> f64 {
+    let parts: Vec<(&super::curve::Part, f64)> = b.cells.iter().zip(&b.part).map(|(&i, &q)| (&s.curves[i as usize].parts[q], s.z[i as usize])).collect();
+    let held: f64 = b.cells.iter().zip(&b.part).map(|(&i, &q)| s.state.held[i as usize][q]).sum();
+    level_over(&parts, held).min(b.level)
 }
 
 /// What may move of the liquids `liq` in each cell of `cells` (`[c * (liq.len() + 1) + q]`): all of one that boils below

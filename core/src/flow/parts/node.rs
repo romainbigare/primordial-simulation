@@ -14,7 +14,7 @@ pub(super) fn conductance(w: &World, s: &Scratch, i: usize, p: &Parts, f: &[Foun
     if !p.land() {
         return 0.0;
     }
-    let (area, shore) = (w.mesh.cells().area()[i], s.curves[i].shore(stands(f, w.cfg.phys.porosity)));
+    let (area, shore) = (w.mesh.cells().area()[i], s.fill(i).shore(stands(f, w.cfg.phys.porosity)));
     let half = |q: usize| {
         let share = p.share(q);
         let mut kt = s.state.bed[i].cond * w.cfg.skin_m;

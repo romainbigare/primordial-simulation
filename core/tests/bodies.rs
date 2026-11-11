@@ -12,7 +12,8 @@ use worldgen::testkit::{flow_step, hold_ground, put, Books, LIQUID};
 
 /// One liquid step, s.
 const STEP: f64 = 30.0 * DAY;
-/// The volume poured over a body's pass, m³, and how far over its melting point it is held, K.
+/// The volume poured over a body's pass, m³; and how far over its melting point a cell is warm enough that no part of
+/// it holds its liquid frozen, K (the poured liquid is held there).
 const POURED_M3: f64 = 1e9;
 const WARM_K: f64 = 5.0;
 /// How far the cells of a body may stand from its level at the month's end, a share of what it holds: the state of a
@@ -23,10 +24,10 @@ const LEVEL: f64 = 1e-6;
 /// Months of the scene.
 const MONTHS: usize = 6;
 
-/// The scene: the small island after `MONTHS` liquid steps, so its bodies hold the liquid the steps left them, with no
-/// load carried (the ground stays where the pass found it).
+/// The scene: the small island of a mild climate (`testkit::small_world`) after `MONTHS` liquid steps, so its bodies hold
+/// the liquid the steps left them, with no load carried (the ground stays where the pass found it).
 fn world() -> World {
-    let mut w = worldgen::testkit::squares(3, 16, 16);
+    let mut w = worldgen::testkit::small_world();
     w.cfg.carry = 0.0;
     (0..MONTHS).for_each(|_| flow_step(&mut w, STEP));
     w
@@ -39,20 +40,23 @@ fn held(w: &World, cells: &[u32]) -> f64 {
     of(Class::Ground) + of(Class::Deep)
 }
 
-/// Every body of two cells or more that holds liquid over its pores ends a month at one level: each of its cells holds
-/// over its pores what its own ground holds under the body's level (`Pool::stands`, `Pool::under`), within `LEVEL` of
-/// what the body holds, the open low ground too.
+/// Every body of two cells or more that holds liquid over its pores ends a month at one level: each of its cells whose
+/// liquid neither freezes nor melts after the pass (`WARM_K` over the liquid's melting point) holds over its pores what
+/// its part's samples hold under the body's level (`Pool::stands`, `Pool::under`), within `LEVEL` of what the body
+/// holds, the open low ground too.
 #[test]
 fn the_cells_of_a_body_end_a_month_at_one_level() {
     let w = world();
+    let warm = w.chem.subs[LIQUID].melt + WARM_K;
     let mut seen = 0;
     for pool in w.pools().iter().filter(|l| l.cells.len() > 1 && l.volume > 0.0) {
-        let off: f64 = pool.stands.iter().zip(&pool.under).map(|(a, b)| (a - b).abs()).sum();
-        println!("body of pond {}: {:.2e} of its liquid off its level", pool.pond, off / pool.volume);
-        assert!(off <= LEVEL * pool.volume, "body of pond {}: {off} m³ off its level, of {} m³", pool.pond, pool.volume);
-        seen += 1;
+        for (c, (a, b)) in pool.stands.iter().zip(&pool.under).enumerate().filter(|p| w.t_ground(pool.cells[p.0] as usize) > warm) {
+            assert!((a - b).abs() <= LEVEL * pool.volume, "body of pond {}, cell {}: {a} m³ over its pores, {b} m³ under its level, of {} m³", pool.pond, pool.cells[c], pool.volume);
+            seen += 1;
+        }
     }
-    assert!(seen > 0, "no body of two cells or more holds liquid");
+    println!("{seen} cells checked");
+    assert!(seen > 0, "no cell of a body of two cells or more holds liquid");
 }
 
 /// What a body holds over its pass leaves over it and arrives in the bodies down its way in the same month: liquid

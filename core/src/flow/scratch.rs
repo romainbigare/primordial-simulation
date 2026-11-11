@@ -128,6 +128,10 @@ pub(super) struct State {
     /// Of each ground node whose own ground lies partly under its liquid, how its matter and heat lie between its land
     /// and its liquid (`parts::Parts`); none for a node that is one.
     pub(super) parts: Vec<Option<super::parts::Parts>>,
+    /// Of each cell, what its part of each body of standing liquid holds of what stands over its pores, m³, in the
+    /// order of its parts (`curve::Curve::ponds`), as the last runoff's pass left it (`runoff::stand`): the share of a
+    /// cell's liquid each of its bodies has.
+    pub(super) held: Vec<Vec<f64>>,
 }
 
 /// Working memory of the law: its saved state (`State`) and caches, rebuilt at each liquid step and when missing
@@ -208,7 +212,7 @@ pub struct Scratch {
     pub(super) split: Vec<f64>,
     /// Room the passes keep from step to step (`spare::Spare`).
     pub(super) spare: super::spare::Spare,
-    /// The level-volume curve of each cell's ground (`curve::Curve`, `curve::build`).
+    /// The ground of each cell as liquid stands on it, its parts of the bodies (`curve::Curve`, `curve::build`).
     pub(super) curves: Vec<super::curve::Curve>,
     /// Of each mixed ground node, its parts as its last solve found them (`parts::Mixed`).
     pub(super) mixed: Vec<Option<Box<super::parts::Mixed>>>,

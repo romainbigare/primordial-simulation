@@ -676,13 +676,14 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
 const PIT_M: f64 = 10.0;
 
 /// The dissolved mineral stays where it is when its liquid evaporates (it is no gas): a thin film on warm ground in
-/// dry air, in a pit dug in dry land (lower than all its neighbours, so nothing runs off it).
+/// dry air, in a pit dug in dry land that holds no part of a body of standing liquid (lower than all its neighbours, so
+/// nothing runs off it).
 #[test]
 fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
     let mut w = worldgen::testkit::squares(3, 16, 16);
     let (n, na, ns) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.chem.ns());
     let near = |w: &World, i: usize| Some(w.mesh.cells().around(i).1).filter(|c| c.len() == 8).map(|c| c.iter().map(|&j| w.surface_z(j as usize)).collect::<Vec<f64>>());
-    let dry = |w: &World, i: usize| w.store.amounts(Class::Ground)[LIQUID * n + i] == 0.0 && w.surface_z(i) > 20.0;
+    let dry = |w: &World, i: usize| w.store.amounts(Class::Ground)[LIQUID * n + i] == 0.0 && w.surface_z(i) > 20.0 && !w.in_body(i);
     let i = (0..n).find(|&i| dry(&w, i) && near(&w, i).is_some_and(|z| z.iter().all(|&z| z > 20.0))).expect("dry land among dry land");
     let (area, lowest) = (w.mesh.cells().area()[i], near(&w, i).unwrap().into_iter().fold(f64::INFINITY, f64::min));
     let bed: f64 = (0..ns).map(|k| w.store.amounts(Class::Bed)[k * n + i] * w.chem.molar_volume(k, Phase::Solid)).sum::<f64>() / area;
@@ -1174,10 +1175,11 @@ const SNOW_KG: f64 = 30.0;
 const FACING: f64 = 0.3;
 const MELT_STEPS: usize = 60;
 
-/// Of two cells alike but for the way they face (the lowest two dry land cells side by side between `SNOW_LAT`, flat
-/// amid flat land at one height, `testkit::flat_round`), at one latitude under snow at the end of winter, the one that
-/// faces the equator takes more sun (`flow::on_slope`): it loses its snow first and is warmer meanwhile, with no other
-/// change. Each faces each way in turn, so nothing else tells them apart. Their island reaches the low latitudes
+/// Of two cells alike but for the way they face (the lowest two dry land cells side by side between `SNOW_LAT` that hold
+/// no part of a body of standing liquid, flat amid flat land at one height, `testkit::flat_round`), at one latitude
+/// under snow at the end of winter, the one that faces the equator takes more sun (`flow::on_slope`): it loses its snow
+/// first and is warmer meanwhile, with no other change. Each faces each way in turn, so nothing else tells them apart.
+/// Their island reaches the low latitudes
 /// (`SNOW_WORLD_LAT`), as a real place at 50° N gets much of its winter heat from lower latitudes through the air.
 #[test]
 fn a_slope_facing_the_sun_loses_its_snow_first() {
@@ -1187,7 +1189,7 @@ fn a_slope_facing_the_sun_loses_its_snow_first() {
     (0..TO_SPRING).for_each(|_| pcore::step(&mut w0));
     let gw = w0.map.w;
     let lat = |i: usize| w0.mesh.cells().lat()[i];
-    let dry: Vec<usize> = worldgen::testkit::dry_lands(&w0).into_iter().filter(|&i| (SNOW_LAT[0]..SNOW_LAT[1]).contains(&lat(i))).collect();
+    let dry: Vec<usize> = worldgen::testkit::dry_lands(&w0).into_iter().filter(|&i| (SNOW_LAT[0]..SNOW_LAT[1]).contains(&lat(i)) && !w0.in_body(i)).collect();
     // The lowest such pair (flat at the height of the first, `flat_round`): its spring comes first.
     let pairs = dry.iter().copied().filter(|&i| i % gw + 1 < gw && dry.contains(&(i + 1)));
     let a = pairs.min_by(|&x, &y| w0.surface_z(x).total_cmp(&w0.surface_z(y))).expect("two dry land cells side by side");
