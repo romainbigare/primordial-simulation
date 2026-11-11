@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl colour.wgsl land.wgsl rock.wgsl cover_field.wgsl
+// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl cover_field.wgsl
 // The live map in view: at each pixel of the screen the ground from its tiles and the state from the cells' table
 // (land.wgsl), in the view's colours.
 
@@ -43,7 +43,14 @@ struct Spots { dry: Spot, wet: Spot, share: f32, bars: f32, pool: f32 }
 fn land_spots(at: vec2f, e: f32) -> Spots {
   let look = earth.look;
   let cs = corners(at / land.map.x);
-  let g = ground_at(at, true);
+  var g = ground_at(at, true);
+  // The loose ground with its patches, the bed it bares, and the relief finer than the tiles (relief.wgsl), which
+  // moves the ground's height and slope: the shading's normal and the fine line of a shore.
+  let loose = loose_seen(at, e);
+  let bare = bed_shows(loose);
+  let fine = relief(at, e, length(g.slope), bare, loose);
+  g.h += fine.x;
+  g.slope += fine.yz;
   let q = discharge_at(g);
   let bed = bed_at(g, q);
   let st = state_on(at, g, cs, bed.depth);
@@ -61,9 +68,9 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
-  p.loose = loose_at(at);
-  p.cover = cover_field(at, e, Beneath(soaked(p), p.canopy, p.loose, st.snow, st.snow_m));
-  p.rock = bed_shows(p.loose, at);
+  p.loose = loose;
+  p.cover = cover_field(at, e, Beneath(soaked(p), p.canopy, loose_at(at), st.snow, st.snow_m));
+  p.rock = bare;
   p.bed = vec3f(0.0);
   if (p.rock > 0.0) {
     let soil = blended(SOIL, cs);
@@ -123,7 +130,7 @@ fn river_colour(p: Spot) -> Shaded {
   let ripple = ripples(p.at, p.e) * (1.0 - p.snow);
   // In the style a channel's water is a lake's (style.wgsl `lake_seen`), lighter over its shallow banks.
   var water = seen_through(bed, p.depth, ripple, RUNNING_ATTENUATION, DEEP_WATER);
-  if (styled()) { water = water_painted(bed, lake_seen(p.depth, 0.0, p.e, RIVER_RIM_M), ripple); }
+  if (styled()) { water = water_painted(bed, lake_seen(p.depth, RIVER_RIM_M), ripple); }
   let rgb = mix(water, SNOW, p.snow * 0.85);
   return Shaded(rgb, 1.0 + (lit - 1.0) * exp(-2.0 * RUNNING_ATTENUATION.g * p.depth), RIVER);
 }
