@@ -9,6 +9,9 @@
 const LINE_PX = 1.2;
 const LINE_MOST = 2.5;
 const LINE_FADE = 4.0;
+// Liquid standing shallower than this over the drawn ground is drawn as soaked ground, m: the drawn ground follows the
+// samples within a few centimetres, so a body whose level lies that near its flat floor is a soaked basin, not water.
+const FILM_M = 0.05;
 // A channel's stones lie on its bed and its bars, out to this many of its half widths from its line.
 const STONES_OUT = 2.0;
 
@@ -32,7 +35,8 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let st = state_on(at, g, cs, bed.depth);
   let surface = blended(SURFACE, cs);
   var p: Spot;
-  p.depth = st.depth;
+  // A film of liquid over the drawn ground is soaked ground, not water (`FILM_M`).
+  p.depth = select(st.depth, 0.0, st.depth < FILM_M);
   p.over = st.over;
   p.sea = surface.w;
   p.wet = st.wet;
@@ -58,7 +62,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.at = at;
   p.e = e;
   var out = Spots(p, p, 0.0);
-  if (st.depth > 0.0 || bed.half <= 0.0) { return out; }
+  if (p.depth > 0.0 || bed.half <= 0.0) { return out; }
   out.dry.over = min(p.over, max(g.d - bed.half, 0.0) * max(length(g.slope), bed.mean / bed.half));
   let css = e * land.samples.w;
   let shows = land.time.w * css;

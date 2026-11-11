@@ -34,6 +34,8 @@ const BED_LIGHTEN = 0.55; const BED_TONE = 0.85;
 // A lake is coloured as if this many times as deep, but no deeper than `LAKE_DEEPEST_M` (its middle open blue, not the
 // ocean's dark).
 const LAKE_SCALE = 6.0; const LAKE_DEEPEST_M = 45.0;
+// ... and no shallower than `LAKE_SHALLOWEST_M` once it is `LAKE_RIM_M` deep: a shallow pond reads as water, its rim light.
+const LAKE_SHALLOWEST_M = 6.0; const LAKE_RIM_M = 0.3;
 
 // Beach sand (colour.wgsl `beach`), bright and dry.
 const BEACH_SAND = vec3f(0.62, 0.53, 0.36);
