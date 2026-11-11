@@ -15,6 +15,7 @@ pub mod square;
 pub mod samples;
 mod shelf;
 mod slopes;
+mod strata;
 pub mod terrain;
 pub mod tree;
 pub mod wear;

@@ -36,8 +36,6 @@ const EXAGGERATE = 6.0;
 // deep (sand is the load the wear laid at the shore); by a lake up to `LAKE_BEACH` of the sea's height over its level
 // (smaller waves).
 const BEACH_SLOPE = 0.15; const ROCK_SLOPE = 0.35; const BEACH_LOOSE_M = 0.5; const LAKE_BEACH = 0.3;
-// Plants hold on bare bed this share of what they hold on loose ground (only in its cracks).
-const ON_BED = 0.3;
 // Water standing deeper than this, m, is the deep sea's.
 const DEEP_SEA_M = 200.0;
 // Over the liquid's surface the ground draws water up through its pores (the capillary fringe), wet to e^-1 at this
@@ -98,8 +96,9 @@ struct Spot {
 struct Shaded { rgb: vec3f, m: f32, kind: u32 }
 
 // The colour of the ground of spot p, unlit: its own colour, tinted by the hand rules of cold, height and sand, and its bed
-// where it shows; the plants on it, as far as liquid over their roots, snow and bare bed leave them (`stands_in`); and snow `snow`
-// over all. The share of it that is bare, and its map class.
+// where it shows; its stones; snow `snow` over them; and over all the plants that stand out of it (its cover, as far as
+// liquid over their roots leaves them, `above_water`; the cover's field holds how the snow buries them and how the bed
+// holds them). The share of it that is bare, and its map class.
 struct Ground { rgb: vec3f, bare: f32, kind: u32 }
 fn ground_of(p: Spot, snow: f32) -> Ground {
   var g: Ground;
@@ -119,9 +118,8 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   }
   g.rgb = mix(g.rgb, bed, p.rock);
   if (p.rock > 0.5) { g.kind = ROCK; }
-  let plants = p.cover.a * stands_in(p.depth, snow) * (1.0 - (1.0 - ON_BED) * p.rock);
+  let plants = p.cover.a * above_water(p.depth);
   g.bare = 1.0 - plants;
-  if (plants > 0.0) { g.rgb = mix(g.rgb, p.cover.rgb / p.cover.a, plants); }
   // Stones over it: scree, on bare bed, and in a channel; none on a beach.
   if (styled()) {
     let thin = 1.0 - ease(0.0, SCREE_LOOSE_M, p.loose);
@@ -130,9 +128,10 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
     let pebbles = stones(p.at, p.e, select(0.0, IN_CHANNEL, p.stone > 0.0) * (1.0 - p.sand), max(p.stone, PEBBLE_M), p.bed, 62);
     g.rgb = mix(mix(g.rgb, rubble.rgb / max(rubble.a, 1e-4), rubble.a), pebbles.rgb / max(pebbles.a, 1e-4), pebbles.a);
   }
-  if (plants >= 0.5) { g.kind = PLANTS; }
   g.rgb = mix(g.rgb, SNOW, snow);
   if (snow > 0.5) { g.kind = ICE; }
+  if (plants > 0.0) { g.rgb = mix(g.rgb, p.cover.rgb / p.cover.a, plants); }
+  if (plants >= 0.5) { g.kind = PLANTS; }
   return g;
 }
 

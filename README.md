@@ -93,12 +93,26 @@ of the ground as its leaves close; and its genes and state this month. A plant i
 in the world (cells of 0.1, 0.5 and 2.5 m), where its marks take a few pixels; where they take less, the same plants
 are a field of their colours with the grain their count gives, so the far and the near pictures agree. A mark picks
 its kind at its own foot from the four squares about it (blended as the map is) by the kinds' chances there, fewer
-where the ground is drier than its cell's mean as each kind's activity law says, by its own random rank: kinds mix
-mark by mark across a square's edge, and a kind that needs wet ground gathers in the hollows. None stands where liquid
-stands over its roots (0.3 m, Jackson and others 1996) or under snow. From above a crown is a dome or a cone by its
-height against its width, its edge in lobes as broad as its leaves, open where its leaf area is low, over its stem and
-its shadow; angled, it stands on its stem. A low woody kind is drawn as a bush (a dense knot of lobes), a herb as a
-tuft of blades, with flowers in its active season as many as it puts into seeds, and as reeds on soaked ground. Its
+where the ground is drier than its cell's mean as each kind's activity law says: kinds mix mark by mark across a
+square's edge, and a kind that needs wet ground gathers in the hollows. Trees grow in stands of their kinds, patches of
+about 60 m fixed in the world that the far field draws alike. A kind roots about a tenth of its height deep (at
+least 2 cm; Schenk and Jackson 2002 for depth growing with size): where the loose ground at a point is thinner it
+thins, none from a quarter of its need down, so bare bed holds only the smallest kinds in its cracks, thin ground herbs
+and low bushes, and trees stand where it is deep; what a square's thin part does not hold stands on its deep part, so
+the square keeps its cover (`web/src/roots.ts`, near and far alike). None stands where liquid stands over its roots
+(0.3 m, Jackson and others 1996). Snow buries a plant by its depth (three times the depth of the cell's frozen cover,
+settled snow against ice) against the plant's height: a herb is gone under a deep snow, a tree stands in it, its
+crown snowy on top if it keeps its leaves, bare if it sheds them, its stem and shadow kept; from afar a forest in snow
+is dark trees over white ground. A tape's map has no heights of plants: snow hides its foliage as far as it covers the
+ground. A tree's crown takes one of six forms by its
+kind's numbers (`web/src/form.ts`, one rule for near and far): round; a cone (thick long-lived leaves on a kind hardy to
+frost); a slim column (a slender kind that puts much into seeds); a flat umbrella (dry ground, a crown wide for its
+height); tiered (thick leaves of a tender kind); or lobed, in loose knots (thin leaves on wet ground). A form drawn less
+surely lies nearer the round crown, so a kind that evolves never jumps. Its edge is in lobes as broad as its leaves,
+open where its leaf area is low, over its stem and a soft shadow to the south-east; each tree leans a little its own
+way; angled, it stands on its stem in its form's outline (a cone's stepped sides, a tier's layers, an umbrella's flat
+underside). A low woody kind is drawn as a bush, a low knot of lobes with dots of flowers or fruit. Herbs have no
+marks: they are the ground's sward (below). Its
 physical colour is a reflectance: a green leaf's as measured (Gates and others 1965; Knipling 1970), moved by its
 numbers (darker with more light capacity per capture area, darker and duller with thicker leaves, greyer for dry
 ground, bluer for hardiness to frost, its walls showing through an open crown, yellowed short of fuel). Far away a
@@ -115,13 +129,17 @@ none across its last texel, so its outline is soft. Under any water the bed is d
 metres over the sea (lower by a lake), none on a steep coast. Each kind of plant has its own green from its
 numbers (thin leaves yellow-green, thick ones blue-green, the dry ground's kinds grey-green, tender kinds warmer,
 woody kinds darker), pushed far apart and lighter than real leaves; each plant differs a little in hue, tone and
-size by its own fixed random numbers. A kind the cold is shutting down (the ground near its frost gene, or frozen
-under it) turns while the ground cools through yellow and orange towards red, as far as its pigment reaches, plant
-by plant at its own time, then stands brown and thin while dormant, and greens again as the ground warms; a kind shut
-down by drought goes straw, then brown. Far away the plants melt into a field of the same colours (a meadow in
-flower as a tint), with soft patches fixed in the world and no rows. The herbs are a soft sward the tufts stand in,
-tinting the ground more than their share (their leaves lean and shade); the bare ground has clods, and under closed
-crowns litter and moss. Slope alone never bares the ground: where the bed shows (below) it is drawn, grey and mottled,
+size by its own fixed random numbers. A woody kind with thin leaves sheds them (thin leaves are short-lived:
+Kikuzawa 1991): as its ground cools within 25 K of its frost gene it turns through a pale form of its deepest colour
+to it, yellow, orange or red as its pigment per leaf area reaches, plant by plant at its own time and hue, then stands
+brown and thin while dormant, and greens again as the ground warms. An evergreen kind (thick leaves) and the herbs turn
+only where the cold shuts them down (frozen ground, their frozen share); a kind shut down by drought goes straw, then
+brown. Far away the plants melt into a field of the same colours, with soft patches
+fixed in the world and no rows; the trees' canopy in their stands' colours, lighter and darker over groups of crowns.
+The herbs are a sward over the ground at every scale, covering it far more than their share (a fifth of herb cover
+reads as two thirds green: their leaves lean and shade), in patches of their kinds, with tufts, swathes and blades
+where each shows, darker in the trees' shade, as dense reeds on soaked ground, and with their flowers as clusters of
+light dots (a soft tint from afar); the bare ground has clods, and under closed crowns their shade, litter and moss. Slope alone never bares the ground: where the bed shows (below) it is drawn, grey and mottled,
 as slabs with cracks where it is gentle and as a cliff's face where it is steeper than about 0.9, with strata as broken
 dark ledges along the contours, cracks and a strong light and shade; scree lies on steep thin ground, stones on bare
 bed and in a channel as big as its power moves (`web/shaders/lib/crag.wgsl`). About 3% of seed 1's land and 2% of seed

@@ -69,8 +69,9 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.t = m.y;
   s.snow = snow_of(m.x, s.t, look.y);
   s.ground = textureSampleLevel(ground_field, smooth_sampler, uv, 0.0).xyz;
-  // A tape holds no kinds of cover: its plants are one foliage, as closed as their capture area closes the ground.
-  s.cover = vec4f(TAPE_FOLIAGE, 1.0) * (1.0 - inside.z);
+  // A tape holds no kinds of cover: its plants are one foliage, as closed as their capture area closes the ground, of
+  // no known height, so hidden where snow covers the ground.
+  s.cover = vec4f(TAPE_FOLIAGE, 1.0) * (1.0 - inside.z) * (1.0 - s.snow);
   s.z = h.x;
   s.slope = length(h.zw) * look.x;
   s.shade = hill_shade(h.zw, EXAGGERATE * look.x);

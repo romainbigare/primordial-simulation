@@ -7,9 +7,10 @@
 
 // Bare soil's tone varies by up to this share over clods `CLOD_M` across.
 const CLOD = 0.06; const CLOD_M = 0.5;
-// Under a closed canopy the bare ground is litter: its colour times `LITTER_TINT`, up to `LITTER` of it; moss grows on
-// it in patches `MOSS_M` across over this share of it, the more the wetter the ground.
-const LITTER = 0.8; const LITTER_TINT = vec3f(0.95, 0.72, 0.5);
+// Under a closed canopy the bare ground is litter: its colour times `LITTER_TINT`, up to `LITTER` of it, and in the
+// crowns' shade, darker by up to `UNDER_DARK`; moss grows on it in patches `MOSS_M` across over this share of it, the
+// more the wetter the ground.
+const LITTER = 0.8; const LITTER_TINT = vec3f(0.95, 0.72, 0.5); const UNDER_DARK = 0.35;
 const MOSS = 0.45; const MOSS_M = 1.5; const MOSS_TINT = vec3f(0.6, 0.95, 0.45);
 
 // Bare bed: its own colour greyed by `ROCK_GREY` and times `ROCK_TONE`, mottled by up to `MOTTLE` over `MOTTLE_M`
@@ -28,7 +29,7 @@ const CLIFF_FROM = 0.9; const CLIFF_FULL = 1.4;
 const STRATA_M = 8.0; const STRATA_FINE = 0.25; const STRATA_TONES = 0.35; const STRATA_LINE = 0.15; const STRATA_DARK = 0.4;
 const STRATA_WOBBLE = 3.0; const STRATA_WAVE_M = 30.0; const BREAK_M = 20.0; const BREAKS = -0.25; const FACE_CRACK_M = 6.0;
 // Stones: on a slope from `SCREE_FROM` to `CLIFF_FROM` where the loose ground is thinner than `SCREE_LOOSE_M` (the
-// scree below a face), `SCREE_STONE_M` across, at most `SCREE` of the places they could lie; on bare bed, `ON_BED` of
+// scree below a face), `SCREE_STONE_M` across, at most `SCREE` of the places they could lie; on bare bed, `STONES_ON_BED` of
 // them; in a channel, `IN_CHANNEL` of them, as big as it moves (no smaller than `PEBBLE_M`). None on a beach.
 const SCREE_FROM = 0.6; const SCREE_LOOSE_M = 1.0; const SCREE_STONE_M = 0.6; const SCREE = 0.7;
 const STONES_ON_BED = 0.25; const IN_CHANNEL = 0.6; const PEBBLE_M = 0.05;
@@ -37,14 +38,11 @@ const STONES_ON_BED = 0.25; const IN_CHANNEL = 0.6; const PEBBLE_M = 0.05;
 // the tone its stones give the ground.
 const STONE_GAP = 2.5; const STONE_SIZES = 0.4; const STONE_TONE = 1.15; const STONE_PX = 2.0;
 
-// The share of detail `size` m across that shows at `e` m a pixel: none below a pixel.
-fn shows_at(size: f32, e: f32) -> f32 { return 1.0 - ease(0.5 * size, 1.5 * size, 2.0 * e); }
-
 // The bare ground's colour `c` (linear, unlit) at `at`, seen at `e` m a pixel, under `canopy` of closed crowns, `wet`:
-// its clods, and under the crowns its litter and moss.
+// its clods, and under the crowns their shade, litter and moss.
 fn floor_of(c: vec3f, at: vec2f, e: f32, canopy: f32, wet: f32) -> vec3f {
   let litter = LITTER * STYLE * canopy;
-  var out = c * mix(vec3f(1.0), LITTER_TINT, litter);
+  var out = c * mix(vec3f(1.0), LITTER_TINT, litter) * (1.0 - UNDER_DARK * STYLE * canopy);
   // Each grain only where it shows: its noise costs a few reads of the hash.
   let clods = shows_at(CLOD_M, e);
   if (clods > 0.0) { out *= 1.0 + CLOD * STYLE * noise(at / CLOD_M, 51).x * clods; }
