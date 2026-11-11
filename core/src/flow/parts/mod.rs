@@ -20,7 +20,7 @@ pub(super) use view::{amounts, pores_first, under_liquid};
 use super::land::{column, layers, melts, node_state, take_row, thaw_at, NONE, STATE_ROW};
 use node::{conductance, row};
 use super::scratch::{Latent, Scratch};
-use crate::{ground::{skin_cap, Melting}, store::Class, World};
+use crate::{ground::{amounts_cap, skin_cap, Melting}, store::Class, World};
 use serde::{Deserialize, Serialize};
 
 /// The land part, the liquid's top layer and its deep, in `Parts` and `Mixed`, and how many parts there are.
@@ -211,7 +211,7 @@ impl Found {
             return Found::none(w.base_z);
         }
         let amt = |k: usize| p.amt[k][q];
-        let cap = skin * ground + s.state.loose.iter().map(|&k| amt(k) * s.sp[k].cp).sum::<f64>();
+        let cap = skin * ground + amounts_cap(s.state.loose.iter().copied(), amt, |k| s.sp[k].cp);
         let melt = melts(w, s, amt);
         let th = thaw_at(s, cap.max(1.0), p.heat[q], amt, &melt);
         let (l, z, cover) = layers(w, s, (i, share, ground), th.t, amt, |k| th.molten(k), |k| melt[k]);
@@ -324,7 +324,7 @@ pub(super) fn create(w: &World, s: &Scratch, i: usize, row: &[f64]) -> Option<Pa
             [amt(k) - held, held, 0.0]
         })
         .collect();
-    let c = s.skin[i] * wet + s.state.loose.iter().map(|&k| amts[k][TOP] * s.sp[k].cp).sum::<f64>();
+    let c = s.skin[i] * wet + amounts_cap(s.state.loose.iter().copied(), |k| amts[k][TOP], |k| s.sp[k].cp);
     let fused: f64 = s.state.vary.iter().map(|&k| amts[k][TOP] * s.sp[k].lf * th.molten(k)).sum();
     let heat = c * th.t + fused;
     Some(Parts { wet, heat: [e - heat, heat, 0.0], amt: amts, t: [th.t; PARTS], on: [th.on; PARTS], dry: 0.0 })

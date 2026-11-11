@@ -25,6 +25,12 @@ pub(crate) fn skin_of(cfg: &Config, area: f64, c: f64, v: f64) -> f64 {
     if v > 0.0 { c / v * cfg.skin_m * area } else { 0.0 }
 }
 
+/// Heat capacity of amounts `amt` (mol) of the substances `ks`, J/K: each amount times its heat capacity per mol `cp`.
+#[inline]
+pub(crate) fn amounts_cap(ks: impl IntoIterator<Item = usize>, amt: impl Fn(usize) -> f64, cp: impl Fn(usize) -> f64) -> f64 {
+    ks.into_iter().map(|k| amt(k) * cp(k)).sum()
+}
+
 /// Where a ground node of heat capacity `c` (J/K) and energy `e` (J) stands among its melting plateaus.
 pub struct Melting {
     /// Temperature, K

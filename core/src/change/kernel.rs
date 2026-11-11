@@ -1,6 +1,6 @@
 //! The reactor of Law 2: the rate law and its helpers, and `Reactor`, which reacts the amounts of one node, body or part.
 
-use crate::{chem::{Chemistry, Phase, Reaction}, math::{add_times, one_minus_exp}, units::P_REF, Config};
+use crate::{chem::{Chemistry, Phase, Reaction}, math::{add_times, one_minus_exp}, ground::amounts_cap, units::P_REF, Config};
 
 /// A reaction whose fraction over the world's year stays below this is frozen and skipped.
 const NEGLIGIBLE: f64 = 1e-12;
@@ -282,7 +282,7 @@ impl Reactor {
             if left <= 0.0 {
                 break;
             }
-            let c = heat_cap + n.iter().zip(&self.cp).map(|(a, c)| a * c).sum::<f64>();
+            let c = heat_cap + amounts_cap(0..self.cp.len(), |k| n[k], |k| self.cp[k]);
             let t = *energy / c.max(1.0);
             if iter == 0 {
                 self.cap0 = c;
