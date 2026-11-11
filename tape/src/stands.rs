@@ -4,13 +4,13 @@
 //! buckling limit (McMahon 1973), the crown from its share of the ground. One place for these laws; the page only
 //! draws what they give.
 
-use pcore::cover::{self, dec, Cover, Parts, FROST, FUEL, LEAF, LIGHT, MOIST, NG, NO_ROOT, NP, SLOTS, STORE};
+use pcore::cover::{self, dec, Cover, Parts, FROST, FUEL, LEAF, LIGHT, MOIST, NG, NO_ROOT, NP, SEED, SLOTS, STORE};
 use pcore::World;
 
 /// Kinds a square's row holds at most: the slots of a cell joined by their starting kind.
 pub const KINDS: usize = SLOTS;
 /// Numbers a kind holds in a square's row (`Kind::row`).
-pub const KIND_ROW: usize = 16;
+pub const KIND_ROW: usize = 17;
 
 /// The self-thinning law, mean plant mass = `THIN_KG` × (plants per m²)^(-3/2) (Yoda and others 1963; White 1981): a
 /// stand of B kg/m² that has thinned holds (`THIN_KG` / B)² plants a m². kg (per m² to the 1/2). Forests of 10 to 40
@@ -80,8 +80,8 @@ impl Kind {
     /// (`plants`): the stem's width, m, a m², height and crown's width, m, the share of the ground they cover, how closed
     /// a crown is; its walls' share; its capture area per kg of living cover, log10 m²/kg (`LEAF`); its light capacity
     /// per m² of capture area, log10 mol/m²/s (more pigment per area); its moisture gene (`MOIST`) and frost gene, K
-    /// (`FROST`); its fuel over its reserve (`STORE`); its activity there (`cover::activity`); and the share of it
-    /// frozen this month (`Physics::frozen`).
+    /// (`FROST`); its fuel over its reserve (`STORE`); its activity there (`cover::activity`); the share of it
+    /// frozen this month (`Physics::frozen`); and the share of what it builds that goes to seeds (`SEED`).
     pub fn row(&self, ph: &pcore::Physics, wet: f64, t: f64, rho: f64) -> [f64; KIND_ROW] {
         let g = self.genes;
         let p = plants(self.kg, self.leaf, self.walls / self.kg.max(1e-300), rho);
@@ -91,7 +91,7 @@ impl Kind {
         [
             self.root as f64, self.kg, p.stem, p.per_m2, p.height, p.width, p.cover, p.crown,
             self.walls / self.kg.max(1e-300), g[LEAF], g[LIGHT] + g[MOIST] - g[LEAF], g[MOIST], g[FROST],
-            self.fuel / reserve.max(1e-300), act, ph.frozen(g[FROST], t, act),
+            self.fuel / reserve.max(1e-300), act, ph.frozen(g[FROST], t, act), g[SEED],
         ]
     }
 }

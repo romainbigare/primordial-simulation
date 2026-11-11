@@ -22,19 +22,6 @@ const RIPPLE_LONGEST_M = 2.0;
 const RIPPLE_OCTAVES = 4;
 const RIPPLE_SLOPE = 0.09;
 
-// Value noise at p (in its grid's cells) of stream k, -1..1, and its slope along x and y (Quilez 2017).
-fn noise(p: vec2f, k: i32) -> vec3f {
-  let i = vec2i(floor(p));
-  let f = p - floor(p);
-  let u = f * f * (3.0 - 2.0 * f);
-  let du = 6.0 * f * (1.0 - f);
-  let v = vec4f(f32(lowbias(i, k)), f32(lowbias(i + vec2i(1, 0), k)), f32(lowbias(i + vec2i(0, 1), k)), f32(lowbias(i + vec2i(1, 1), k))) * (2.0 / 4294967296.0) - 1.0;
-  let a = v.y - v.x;
-  let b = v.z - v.x;
-  let c = v.x - v.y - v.z + v.w;
-  return vec3f(v.x + a * u.x + b * u.y + c * u.x * u.y, du * vec2f(a + c * u.y, b + c * u.x));
-}
-
 // The slope (east, south) of a liquid's surface at `at`, m in the world, seen at `e` m a pixel: octaves of ripples fixed
 // in the world, each turned from the last so they stand in no grid, each fading out as it shrinks below a few pixels
 // (it would only flicker).
@@ -67,15 +54,16 @@ fn surface_light(g: vec2f) -> vec3f {
 fn through(depth: f32) -> vec3f { return exp(-2.0 * ATTENUATION * depth); }
 
 // Bed `bed` (linear, lit) seen through `depth` m of standing water (0: a wet film) whose surface has slope g.
-fn water_over(bed: vec3f, depth: f32, g: vec2f) -> vec3f { return seen_through(bed, depth, g, ATTENUATION); }
+fn water_over(bed: vec3f, depth: f32, g: vec2f) -> vec3f { return seen_through(bed, depth, g, ATTENUATION, DEEP_WATER); }
 
 // Running water carries in suspension what it wears from its bed and holds what it washed from the soil, so its light
 // attenuates as in turbid inland water, 1 to 4 per m (Kirk 1994), the most in the blue that the dissolved matter
 // absorbs: a stream a few centimetres deep shows its bed, a river a metre deep hardly.
 const RUNNING_ATTENUATION = vec3f(1.6, 1.2, 1.8);
 
-// Bed `bed` (linear, lit) seen through `depth` m of water of diffuse attenuation `k`, 1/m, whose surface has slope g.
-fn seen_through(bed: vec3f, depth: f32, g: vec2f, k: vec3f) -> vec3f {
+// Bed `bed` (linear, lit) seen through `depth` m of water of diffuse attenuation `k`, 1/m, whose surface has slope g,
+// over the light `deep` that comes back from it where it is too deep to show its bed.
+fn seen_through(bed: vec3f, depth: f32, g: vec2f, k: vec3f, deep: vec3f) -> vec3f {
   let t = exp(-2.0 * k * depth);
-  return bed * t + DEEP_WATER * (1.0 - t) + surface_light(g);
+  return bed * t + deep * (1.0 - t) + surface_light(g);
 }

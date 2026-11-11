@@ -5,6 +5,7 @@
 // numbers.
 import { clamp, smooth } from './earth';
 import type { Rgb } from './sprites';
+import { KindLook, designOf, kindLook, seenFar } from './style';
 
 /** The side of a cell of each lattice of marks, m: one mark a cell at most. A mark reaches at most a cell from its
  * cell, so it is drawn at most `REACH` sides across; a kind is drawn on the lattices whose side is nearest its crown's
@@ -13,12 +14,13 @@ export const LATTICES = [0.1, 0.5, 2.5];
 /** A mark is drawn at most this many cell sides across (cover.wgsl looks one cell about a pixel). */
 const REACH = 2;
 /** The numbers of a kind in the core's row (tape/src/stands.rs `Kind::row`). */
-const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover: 6, crown: 7, wood: 8, leaf: 9, pigment: 10, moist: 11, frost: 12, fuel: 13, act: 14, frozen: 15 } as const;
+const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover: 6, crown: 7, wood: 8, leaf: 9, pigment: 10, moist: 11, frost: 12, fuel: 13, act: 14, frozen: 15, seed: 16 } as const;
 /** The planes of the kinds' table (cover.wgsl): of each lattice the chance a cell holds a mark of each kind and the
  * mark's width, m; how wet each kind needs its ground; then of each kind its form (height and stem's width, m, how
- * closed its crown is, its capture area per kg, log10 m²/kg) and its colour (display, 0..1, and its walls' share). A
- * plane holds four numbers: one for each kind of a square, or one kind's four. */
-export const KIND_PLANES = { chance: 0, width: 3, need: 6, form: 7, colour: 11, count: 15 } as const;
+ * closed its crown is, its capture area per kg, log10 m²/kg), the colours its plants span (style.ts `KindLook`: the
+ * first with its walls' share, the second with its design, `designOf`) and its flowers (their colour and the share of
+ * its plants in flower). A plane holds four numbers: one for each kind of a square, or one kind's four. */
+export const KIND_PLANES = { chance: 0, width: 3, need: 6, form: 7, from: 11, to: 15, petal: 19, count: 23 } as const;
 /** Layers of the field (`CoverField`): one a lattice. */
 export const FIELD_LAYERS = LATTICES.length;
 
@@ -54,11 +56,10 @@ const DRY_REFL: Rgb = [0.11, 0.13, 0.09];
  * `HARDY_REFL` (the needles and waxes of hardy foliage). */
 const TENDER_K = 272, HARDY_K = 258;
 const HARDY_REFL: Rgb = [0.03, 0.08, 0.06];
-/** The state this month: short of fuel (fuel under its reserve) a leaf yellows towards `PALE_REFL`; dormant (dry or
- * cold: activity under 1) it fades towards a dry leaf's `DORMANT_REFL`; its frozen share browns towards `FROZEN_REFL`
- * (Knipling 1970 for the yellowing and drying leaf); at most these shares. */
-const PALE_REFL: Rgb = [0.10, 0.14, 0.04], DORMANT_REFL: Rgb = [0.22, 0.18, 0.11], FROZEN_REFL: Rgb = [0.12, 0.08, 0.05];
-const PALE_MOST = 0.4, DORMANT_MOST = 0.6;
+/** Short of fuel (fuel under its reserve) a leaf yellows towards `PALE_REFL` (Knipling 1970), at most this share; how
+ * it turns dormant, from the cold or from drought, is the style's (style.ts). */
+const PALE_REFL: Rgb = [0.10, 0.14, 0.04];
+const PALE_MOST = 0.4;
 /** A shadow lets through the sky's light and what crowns scatter, about half of the sun's (cover.wgsl `SHADOW`). */
 const CROWN_SHADOW = 0.5;
 /** The sun at 45° lays a plant's shadow as long as it is tall: m of shadow per m of height. */
@@ -68,8 +69,7 @@ const mix = (a: Rgb, b: Rgb, t: number): Rgb => a.map((v, i) => v + (b[i] - v) *
 
 /** The reflectance of the crowns of the kind of row `r` whose walls reflect `walls`: a leaf's, less the more pigment
  * per area and the thicker its leaves (and duller), greyer the drier the ground it is made for, bluer the hardier to
- * frost; its walls showing through an open crown as its wall share is high; then as its state this month says:
- * yellowed short of fuel, faded dormant, brown where frozen. */
+ * frost; its walls showing through an open crown as its wall share is high; yellowed short of fuel. */
 function foliage(r: Float32Array, walls: Rgb): Rgb {
   const pigment = clamp(10 ** (-PIGMENT_SLOPE * (r[K.pigment] - PIGMENT_MID)), 1 / PIGMENT_MOST, PIGMENT_MOST);
   const thick = clamp(LEAF_MID - r[K.leaf], 0, 1 / THICK_DARK);
@@ -79,9 +79,14 @@ function foliage(r: Float32Array, walls: Rgb): Rgb {
   c = mix(c, DRY_REFL, MOIST_MID - r[K.moist]);
   c = mix(c, HARDY_REFL, smooth(TENDER_K, HARDY_K, r[K.frost]));
   c = mix(c, walls, r[K.wood] * (1 - r[K.crown]));
-  c = mix(c, PALE_REFL, PALE_MOST * (1 - clamp(r[K.fuel])));
-  c = mix(c, DORMANT_REFL, DORMANT_MOST * (1 - r[K.act]));
-  return mix(c, FROZEN_REFL, r[K.frozen]);
+  return mix(c, PALE_REFL, PALE_MOST * (1 - clamp(r[K.fuel])));
+}
+
+/** The look of the kind of row `r` (style.ts `kindLook`) on ground at `t` K where the frozen cover melts at `melt` K,
+ * while the ground cools by `falling`, its walls reflecting `walls`. */
+function lookOfRow(r: Float32Array, walls: Rgb, t: number, melt: number, falling: number): KindLook {
+  const k = { leaf: r[K.leaf], wood: r[K.wood], moist: r[K.moist], frost: r[K.frost], pigment: r[K.pigment], act: r[K.act], frozen: r[K.frozen], seed: r[K.seed], t, melt };
+  return kindLook(k, foliage(r, walls), falling);
 }
 
 /** The share of a kind of crown width `w`, m, drawn on lattice `l`: between the two lattices whose sides lie either side
@@ -105,9 +110,10 @@ function marksOn(r: Float32Array, l: number): [number, number] {
   return [share * chance, width];
 }
 
-/** The kinds of the core's table `rows` for a map of `w` x `h` squares: `kinds` kinds a square of `kindRow` numbers,
- * from `at` on (tape/src/table.rs). */
-export function kindsOf(w: number, h: number, rows: Float32Array, at: number, kinds: number, kindRow: number, walls: Rgb): Kinds {
+/** The kinds of the core's table `rows` for a map of `w` x `h` squares (`row` numbers a square, tape/src/table.rs):
+ * `kinds` kinds a square of `kindRow` numbers, from `at` on; while the ground cools by `falling` (style.ts
+ * `cooling`). */
+export function kindsOf(w: number, h: number, rows: Float32Array, row: number, at: number, kinds: number, kindRow: number, walls: Rgb, falling: number): Kinds {
   const n = w * h, table = new Float32Array(4 * KIND_PLANES.count * n), held = LATTICES.map(() => false), tallest = LATTICES.map(() => 0);
   const field = new Float32Array(4 * FIELD_LAYERS * n);
   const put = (plane: number, i: number, c: number, v: number) => { table[4 * (plane * n + i) + c] = v; };
@@ -118,10 +124,14 @@ export function kindsOf(w: number, h: number, rows: Float32Array, at: number, ki
     for (let k = 0; k < Math.min(kinds, 4); k++) {
       const r = rows.subarray(at + (i * kinds + k) * kindRow, at + (i * kinds + k + 1) * kindRow);
       if (r[K.root] < 0 || r[K.kg] <= 0) continue;
-      const c = foliage(r, walls);
+      // The square's ground temperature (the table's second number of a row) and the frozen cover's melting point.
+      const look = lookOfRow(r, walls, rows[1 + row * i + 1], rows[0], falling), design = designOf(r[K.height], r[K.wood]);
+      const c = seenFar(look, design), crown = r[K.crown] * look.left;
       put(KIND_PLANES.need, i, k, 10 ** r[K.moist]);
-      [r[K.height], r[K.stem], r[K.crown], r[K.leaf]].forEach((v, q) => put(KIND_PLANES.form + k, i, q, v));
-      [...c, r[K.wood]].forEach((v, q) => put(KIND_PLANES.colour + k, i, q, v));
+      [r[K.height], r[K.stem], crown, r[K.leaf]].forEach((v, q) => put(KIND_PLANES.form + k, i, q, v));
+      [...look.from, r[K.wood]].forEach((v, q) => put(KIND_PLANES.from + k, i, q, v));
+      [...look.to, design].forEach((v, q) => put(KIND_PLANES.to + k, i, q, v));
+      [...look.petal, look.bloom].forEach((v, q) => put(KIND_PLANES.petal + k, i, q, v));
       LATTICES.forEach((a, l) => {
         const [chance, width] = marksOn(r, l);
         if (chance <= 0) return;
@@ -130,7 +140,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, at: number, ki
         held[l] = true;
         tallest[l] = Math.max(tallest[l], r[K.height]);
         // The share of the ground its marks cover, each as closed as its crown.
-        const covers = Math.min(1, (chance * (Math.PI / 4) * width * width) / (a * a)) * r[K.crown];
+        const covers = Math.min(1, (chance * (Math.PI / 4) * width * width) / (a * a)) * crown;
         paint[l].rgb = paint[l].rgb.map((v, q) => v + covers * c[q]);
         paint[l].covered += covers;
         paint[l].bare *= 1 - covers;

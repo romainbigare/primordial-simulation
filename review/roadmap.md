@@ -507,3 +507,17 @@ Held back from main, for these:
   The stores by depth need a rule: what the year's heat wave reaches, and what roots reach.
 - Building the samples costs 0.7 s on a 32 island (0.44 s before); the slow choose tests take much longer.
 - A tile still costs 8 to 9 ms; the pond search is cut, the channels field and the packing are what is left.
+
+**The Earth view's style: done, on main.** One style step for the Earth view only: water coloured by depth through
+clear coastal water with foam at its edge, beaches by the sea on gentle ground, stronger and warmer light, a colour
+per kind from its own numbers, leaves that turn in the cold (each plant at its own time) and go to straw in drought,
+three designs (tree, bush, herb tuft with flowers and reeds), and a far field whose grains sit anywhere in their
+cells, so no grid shows at any zoom. The True view is unchanged.
+
+Open on the look:
+- Lakes are grey: their beds are dark soaked ground seen through clear water.
+- Beaches are rare: most coasts are steeper than the beach rule (the shelf of the ground's second pass should give
+  them room).
+- Under trees the ground is a flat bare colour at 10 to 50 m: herbs cover about a fifth and the ground has no grain.
+- Tufts and flowers are tiny at 10 m; reeds and flowers are rare (no starting kind is a wet-ground herb).
+- Autumn is mostly herbs going yellow; red shows only on the heights.
