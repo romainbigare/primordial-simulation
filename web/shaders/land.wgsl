@@ -94,7 +94,11 @@ const BED_FILM = 0.3;
 fn river_colour(p: Spot) -> Shaded {
   let lit = light(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), p.slope);
   let bed = BED_FILM * soil(ground_of(p, 0.0), 1.0, lit);
-  let rgb = mix(seen_through(bed, p.depth, ripples(p.at, p.e) * (1.0 - p.snow), RUNNING_ATTENUATION, DEEP_WATER), SNOW, p.snow * 0.85);
+  let ripple = ripples(p.at, p.e) * (1.0 - p.snow);
+  // In the style a channel's water is a lake's (style.wgsl `lake_seen`), lighter over its shallow banks.
+  var water = seen_through(bed, p.depth, ripple, RUNNING_ATTENUATION, DEEP_WATER);
+  if (styled()) { water = water_painted(bed, lake_seen(p.depth, 0.0, p.e, RIVER_RIM_M), ripple); }
+  let rgb = mix(water, SNOW, p.snow * 0.85);
   return Shaded(rgb, 1.0 + (lit - 1.0) * exp(-2.0 * RUNNING_ATTENUATION.g * p.depth), RIVER);
 }
 

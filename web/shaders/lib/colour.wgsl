@@ -108,17 +108,18 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
   g.rgb = mix(g.rgb, select(SAND, BEACH_SAND, styled()), p.sand);
-  // Where the loose ground thins its bed shows, and holds plants only in its cracks.
-  g.rgb = mix(g.rgb, p.bed, p.rock);
-  if (p.rock > 0.5) { g.kind = ROCK; }
-  var plants = p.cover.a * stands_in(p.depth, snow) * (1.0 - (1.0 - ON_BED) * p.rock);
-  // In the style: the floor's grain, and the bed's cliffs, which hold no plants (crag.wgsl).
+  // In the style the soil has its grain (crag.wgsl `floor_of`). Where the loose ground thins its bed shows, in the
+  // style as slabs or, where steep, a cliff's face (`rock_face`); it holds plants only in its cracks. Slope alone
+  // never bares the ground.
   let steep = p.slope / earth.look.x;
+  var bed = p.bed;
   if (styled()) {
     g.rgb = floor_of(g.rgb, p.at, p.e, p.canopy, p.wet);
-    let cliff = cliff_of(steep);
-    if (cliff > 0.0) { g.rgb = mix(g.rgb, cliff_face(p.bed, p.z, p.at, steep, p.e), cliff); plants *= 1.0 - (1.0 - LEDGES) * cliff; }
+    if (p.rock > 0.0) { bed = rock_face(p.bed, p.z, p.at, steep, p.e, p.shade); }
   }
+  g.rgb = mix(g.rgb, bed, p.rock);
+  if (p.rock > 0.5) { g.kind = ROCK; }
+  let plants = p.cover.a * stands_in(p.depth, snow) * (1.0 - (1.0 - ON_BED) * p.rock);
   g.bare = 1.0 - plants;
   if (plants > 0.0) { g.rgb = mix(g.rgb, p.cover.rgb / p.cover.a, plants); }
   // Stones over it: scree, on bare bed, and in a channel; none on a beach.
@@ -172,8 +173,7 @@ fn colour(p: Spot) -> Shaded {
     if (styled()) {
       // The style: clear water over a pale bed, deepening to the open water, foam at its edge (style.wgsl).
       if (exp(-2.0 * CLEAR_ATTENUATION.b * p.depth) > SHOWS) { bed = soil(ground_of(p, 0.0), 1.0, lit); }
-      let lake = min(LAKE_SHALLOWEST_M + p.depth * LAKE_SCALE, LAKE_DEEPEST_M) * ease(0.0, LAKE_RIM_M, p.depth);
-      let seen = mix(lake, p.depth, p.sea);
+      let seen = mix(lake_seen(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M), p.depth, p.sea);
       water = mix(water_painted(bed, seen, ripple), FOAM_RGB, foam(p.depth, p.slope / earth.look.x, p.e));
     } else {
       if (through(p.depth).b > SHOWS) { bed = soil(ground_of(p, 0.0), 1.0, lit); }

@@ -254,8 +254,9 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
   var p: State;
   if (g.water.x > -NO_LIQUID_M && g.water.y > 0.0) {
     // Over the ponds' level, the height counts the more the less of the point is theirs, so a shore's fringe fades out
-    // within a texel of the pond's last texel.
-    p.depth = max(g.water.x - (g.h - cut), 0.0);
+    // within a texel of the pond's last texel; under it, the depth shallows to none across that texel, so where the
+    // ground drawn lies under the level past the pond's last texel the shore is a soft edge, not the texels' steps.
+    p.depth = max(g.water.x - (g.h - cut), 0.0) * g.water.y;
     p.over = min(max(g.h - cut - g.water.x, 0.0) / g.water.y, NO_LIQUID_M);
   } else {
     p.depth = 0.0;

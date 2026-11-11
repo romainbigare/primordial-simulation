@@ -27,8 +27,9 @@ const SPREAD_SHOWS = 0.004;
 // mean (fixed noise in the world), alike near (cover.wgsl) and far.
 const PATCH_M = 8.0; const PATCH = 0.45;
 // The finest lattice's plants (the herbs) are drawn as a soft sward the marks stand in: their mean, thicker and thinner
-// by up to `SWARD` of it over tufts of `SWARD_M`, without grains.
-const SWARD = 0.5; const SWARD_M = 0.35;
+// by up to `SWARD` of it over tufts of `SWARD_M`, without grains; seen from above, its leaves leaning and their shade
+// cover more than their share: the ground they leave is (1 - share)^`SWARD_SEEN` (an Earth view's style).
+const SWARD = 0.5; const SWARD_M = 0.35; const SWARD_SEEN = 2.5;
 
 // The field of lattice l at `at`, m from the map's north-west corner, at mip level lod: the colour its marks cover the
 // ground with (a reflectance, premultiplied) and the share they cover.
@@ -92,7 +93,7 @@ fn grain(at: vec2f, l: i32, share: f32, e: f32) -> f32 {
   let s = min(share, 1.0);
   if (l == 0) {
     let shown = 1.0 - ease(0.5 * SWARD_M, 1.5 * SWARD_M, 2.0 * e);
-    return clamp(s * (1.0 + SWARD * shown * noise(at / SWARD_M, 54).x), 0.0, 1.0);
+    return 1.0 - pow(1.0 - clamp(s * (1.0 + SWARD * shown * noise(at / SWARD_M, 54).x), 0.0, 1.0), SWARD_SEEN);
   }
   let w = smoothstep(0.5 * side, side, e);
   var out = 0.0;
@@ -101,13 +102,14 @@ fn grain(at: vec2f, l: i32, share: f32, e: f32) -> f32 {
   return out;
 }
 
-// The cover's field at `at` seen at `e` m a pixel, premultiplied: each lattice as far as its marks do not show, the
-// lower under the taller, thicker and thinner over the patches (`patchy`), with its grain (`grain`).
+// The cover's field at `at` seen at `e` m a pixel, premultiplied: each lattice as far as its marks do not show (the herbs'
+// always), the lower under the taller, thicker and thinner over the patches (`patchy`), with its grain (`grain`).
 fn cover_field(at: vec2f, e: f32) -> vec4f {
   var dst = vec4f(0.0);
   let thick = patchy(at);
   for (var l = 0; l < COVER_LATTICES; l++) {
-    let unshown = 1.0 - cover_look.shown[l];
+    // The herbs' sward stays under their marks, which stand in it as detail.
+    let unshown = select(1.0 - cover_look.shown[l], 1.0, l == 0);
     if (unshown <= 0.0) { continue; }
     let f = field_smooth(at, l);
     if (f.a <= 0.0) { continue; }

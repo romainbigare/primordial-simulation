@@ -1,23 +1,32 @@
 // The Earth view's style of the ground between the plants and of its rock (colour.wgsl `colour`; the rest of the style
-// is style.wgsl). Each look means what the model holds: soil has clods, the forest floor its litter, a face of the bed
-// too steep to hold loose ground is a cliff in the bed's own colour, and stones lie where the loose ground is thin on a
-// steep slope (scree) or bare, and in a channel as big as its power moves (rock.wgsl `stone_of`). Fixed in the world:
-// nothing moves as the view pans or zooms, and what is smaller than a pixel fades into its mean.
+// is style.wgsl). Each look means what the model holds: soil has clods, the forest floor its litter; where the loose
+// ground is thin the bed shows (rock.wgsl), drawn as slabs with cracks where it is gentle and as a cliff's face where
+// it is steep (slope alone never bares the ground); stones lie where the loose ground is thin on a steep slope (scree)
+// or bare, and in a channel as big as its power moves (rock.wgsl `stone_of`). Fixed in the world: nothing moves as the
+// view pans or zooms, and what is smaller than a pixel fades into its mean.
 
 // Bare soil's tone varies by up to this share over clods `CLOD_M` across.
-const CLOD = 0.14; const CLOD_M = 0.5;
+const CLOD = 0.06; const CLOD_M = 0.5;
 // Under a closed canopy the bare ground is litter: its colour times `LITTER_TINT`, up to `LITTER` of it; moss grows on
 // it in patches `MOSS_M` across over this share of it, the more the wetter the ground.
 const LITTER = 0.8; const LITTER_TINT = vec3f(0.95, 0.72, 0.5);
 const MOSS = 0.45; const MOSS_M = 1.5; const MOSS_TINT = vec3f(0.6, 0.95, 0.45);
-// A face of the drawn ground steeper than `CLIFF_FROM` (rise over run) is a cliff by `CLIFF_FULL`: its bed's colour
-// times `CLIFF_TONE`, with its strata along the contours every `STRATA_M` of height, their foot darker (`STRATA_DARK`),
-// wobbling by up to `STRATA_WOBBLE` m over `STRATA_WAVE_M`; plants hold on its ledges, `LEDGES` of what they would.
-const CLIFF_FROM = 0.9; const CLIFF_FULL = 1.4; const CLIFF_TONE = 0.85; const LEDGES = 0.3;
-const STRATA_M = 8.0; const STRATA_DARK = 0.45; const STRATA_WOBBLE = 2.0; const STRATA_WAVE_M = 40.0;
-// The strata come at `STRATA_M` and at `STRATA_FINE` of it; a bed's tone differs from the face's by up to
-// `STRATA_TONES` either way, and the line at its foot is `STRATA_LINE` of its thickness.
-const STRATA_FINE = 0.25; const STRATA_TONES = 0.35; const STRATA_LINE = 0.12;
+
+// Bare bed: its own colour greyed by `ROCK_GREY` and times `ROCK_TONE`, mottled by up to `MOTTLE` over `MOTTLE_M`
+// (so it reads as rock from far, never as a smooth blot), its light's departure from flat ground's `ROCK_RELIEF` times
+// as strong (a face shows how it is turned).
+const ROCK_GREY = 0.55; const ROCK_TONE = 0.95; const MOTTLE = 0.25; const MOTTLE_M = 60.0; const ROCK_RELIEF = 1.8;
+// Gentle bare bed is slabs: a network of cracks `CRACK_W` of their spacing wide, every `SLAB_M`, darker by
+// `CRACK_DARK`; each slab's tone differs by up to `SLAB_TONES`.
+const SLAB_M = 4.0; const CRACK_W = 0.06; const CRACK_DARK = 0.5; const SLAB_TONES = 0.15;
+// Bare bed steeper than `CLIFF_FROM` (rise over run) is a cliff's face by `CLIFF_FULL`: its strata along the contours
+// every `STRATA_M` of height and `STRATA_FINE` of that, each bed of rock its own tone (up to `STRATA_TONES` either way)
+// with a dark ledge at its foot (`STRATA_LINE` of its thickness, `STRATA_DARK`), wobbling by up to `STRATA_WOBBLE` m
+// over `STRATA_WAVE_M` and broken where the noise over `BREAK_M` is under `BREAKS`; cracked down its face every
+// `FACE_CRACK_M`.
+const CLIFF_FROM = 0.9; const CLIFF_FULL = 1.4;
+const STRATA_M = 8.0; const STRATA_FINE = 0.25; const STRATA_TONES = 0.35; const STRATA_LINE = 0.15; const STRATA_DARK = 0.4;
+const STRATA_WOBBLE = 3.0; const STRATA_WAVE_M = 30.0; const BREAK_M = 20.0; const BREAKS = -0.25; const FACE_CRACK_M = 6.0;
 // Stones: on a slope from `SCREE_FROM` to `CLIFF_FROM` where the loose ground is thinner than `SCREE_LOOSE_M` (the
 // scree below a face), `SCREE_STONE_M` across, at most `SCREE` of the places they could lie; on bare bed, `ON_BED` of
 // them; in a channel, `IN_CHANNEL` of them, as big as it moves (no smaller than `PEBBLE_M`). None on a beach.
@@ -41,25 +50,38 @@ fn floor_of(c: vec3f, at: vec2f, e: f32, canopy: f32, wet: f32) -> vec3f {
   return out * mix(vec3f(1.0), MOSS_TINT, moss);
 }
 
-// How much of a point of drawn slope `steep` (rise over run) is a cliff.
+// The ground of a point of drawn slope `steep` (rise over run) that is a cliff.
 fn cliff_of(steep: f32) -> f32 { return ease(CLIFF_FROM, CLIFF_FULL, steep); }
 
-// A cliff's face of bed `bed` (linear, unlit) at height `z`, m, and `at`, of slope `steep`, seen at `e` m a pixel: its
-// strata along the contours, each bed of rock its own tone (`STRATA_TONES`) with a dark line at its foot, at two
-// spacings; each fading where a pixel spans more height than a quarter of its spacing.
-fn cliff_face(bed: vec3f, z: f32, at: vec2f, steep: f32, e: f32) -> vec3f {
-  let h = z + STRATA_WOBBLE * noise(at / STRATA_WAVE_M, 53).x;
-  let span = steep * e;
-  var tone = 1.0;
-  for (var k = 0; k < 2; k++) {
-    let spacing = STRATA_M * select(1.0, STRATA_FINE, k == 1);
-    let layer = h / spacing;
-    let shown = 1.0 - ease(0.15 * spacing, 0.3 * spacing, span);
-    let own = f32(lowbias(vec2i(i32(floor(layer)), k), 56) & 255u) / 255.0 - 0.5;
-    let line = 1.0 - smoothstep(STRATA_LINE * spacing, STRATA_LINE * spacing + span, fract(layer) * spacing);
-    tone *= 1.0 + shown * (STRATA_TONES * own - (1.0 - STRATA_DARK) * line);
+// A dark line where noise `n` (-1..1) crosses 0, `width` of its spacing wide: a network of cracks.
+fn crack(n: f32, width: f32) -> f32 { return 1.0 - smoothstep(0.0, width, abs(n)); }
+
+// Bare bed `bed` (linear, unlit) at height `z`, m, and `at`, of slope `steep`, lit `shade` times flat ground, seen at
+// `e` m a pixel, in the style: slabs where gentle, a cliff's face where steep (the constants above). Each detail fades
+// where a pixel spans more than a quarter of it.
+fn rock_face(bed: vec3f, z: f32, at: vec2f, steep: f32, e: f32, shade: f32) -> vec3f {
+  let grey = mix(bed, vec3f(dot(bed, LUMA)), ROCK_GREY) * ROCK_TONE;
+  var tone = (1.0 + MOTTLE * noise(at / MOTTLE_M, 57).x) * (1.0 + (ROCK_RELIEF - 1.0) * (shade - 1.0));
+  let slab_n = noise(at / SLAB_M, 58).x;
+  let slabs = (1.0 + SLAB_TONES * noise(at / SLAB_M + 17.0, 59).x - CRACK_DARK * crack(slab_n, CRACK_W));
+  let cliff = cliff_of(steep);
+  var face = 1.0;
+  if (cliff > 0.0) {
+    let h = z + STRATA_WOBBLE * noise(at / STRATA_WAVE_M, 53).x;
+    let whole = ease(BREAKS - 0.1, BREAKS + 0.1, noise(at / BREAK_M, 60).x);
+    let span = steep * e;
+    for (var k = 0; k < 2; k++) {
+      let spacing = STRATA_M * select(1.0, STRATA_FINE, k == 1);
+      let layer = h / spacing;
+      let shown = 1.0 - ease(0.15 * spacing, 0.3 * spacing, span);
+      let own = f32(lowbias(vec2i(i32(floor(layer)), k), 56) & 255u) / 255.0 - 0.5;
+      let ledge = (1.0 - smoothstep(STRATA_LINE * spacing, STRATA_LINE * spacing + span, fract(layer) * spacing)) * whole;
+      face *= 1.0 + shown * (STRATA_TONES * own - (1.0 - STRATA_DARK) * ledge);
+    }
+    face *= 1.0 - CRACK_DARK * crack(noise(at / FACE_CRACK_M, 61).x, CRACK_W) * shows_at(FACE_CRACK_M * CRACK_W * 4.0, e);
   }
-  return bed * CLIFF_TONE * tone;
+  tone *= mix(mix(1.0, slabs, shows_at(SLAB_M * CRACK_W * 4.0, e)), face, cliff);
+  return grey * max(tone, 0.0);
 }
 
 // The stones of `density` (the share of cells that hold one) and `size` m at `at`, seen at `e` m a pixel, of bed `bed`

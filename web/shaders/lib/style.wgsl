@@ -30,19 +30,22 @@ const FOAM_PX = vec2f(0.5, 1.5);
 // The bed under any water is drawn this far towards pale sand (`BEACH_SAND` times `BED_TONE`), so shallows read light
 // over a dark soaked bed too (a lake's as the sea's).
 const BED_LIGHTEN = 0.55; const BED_TONE = 0.85;
-// Lakes are metres deep where the sea is tens: each reads from its light rim to its blue middle at its own scale.
-// A lake is coloured as if this many times as deep, but no deeper than `LAKE_DEEPEST_M` (its middle open blue, not the
-// ocean's dark).
-const LAKE_SCALE = 6.0; const LAKE_DEEPEST_M = 45.0;
-// ... and no shallower than `LAKE_SHALLOWEST_M` once it is `LAKE_RIM_M` deep: a shallow pond reads as water, its rim light.
-const LAKE_SHALLOWEST_M = 6.0; const LAKE_RIM_M = 0.3;
+// Lakes and rivers are metres deep where the sea is tens: each is coloured as if `LAKE_SCALE` times as deep plus
+// `LAKE_SHALLOWEST_M`, no deeper than `LAKE_DEEPEST_M` (an open blue, not the ocean's dark), and lighter towards its
+// shore: as if shallower where it is less than a rim's depth deep (a lake's `LAKE_RIM_M`, a channel's `RIVER_RIM_M`:
+// its banks), a band no narrower than `LAKE_RIM_PX` pixels, the shallower the nearer the shore (its square).
+const LAKE_SCALE = 6.0; const LAKE_SHALLOWEST_M = 6.0; const LAKE_DEEPEST_M = 45.0;
+const LAKE_RIM_M = 1.5; const RIVER_RIM_M = 0.1; const LAKE_RIM_PX = 8.0;
 
 // Beach sand (colour.wgsl `beach`), bright and dry.
 const BEACH_SAND = vec3f(0.62, 0.53, 0.36);
 
+// The weights of red, green and blue in a colour's lightness (Rec. 601).
+const LUMA = vec3f(0.299, 0.587, 0.114);
+
 // A display colour (the screen's share, 0..1) in the style: more saturated, more contrast, lifted.
 fn painted(c: vec3f) -> vec3f {
-  let grey = dot(c, vec3f(0.299, 0.587, 0.114));
+  let grey = dot(c, LUMA);
   var out = vec3f(grey) + (c - vec3f(grey)) * (1.0 + SATURATE * STYLE);
   out = vec3f(0.5) + (out - vec3f(0.5)) * (1.0 + CONTRAST * STYLE);
   return mix(out, vec3f(1.0), LIFT * STYLE);
@@ -64,6 +67,13 @@ fn bare_tint(bare: f32) -> vec3f { return mix(vec3f(1.0), SOIL_TINT, bare * STYL
 fn relief_tint(c: vec3f, lit: f32) -> vec3f {
   let tint = select(mix(vec3f(1.0), SHADE_TINT, ease(1.0, AMBIENT, lit)), mix(vec3f(1.0), LIT_TINT, ease(1.0, LIT_TOP, lit)), lit >= 1.0);
   return c * lit * mix(vec3f(1.0), tint, STYLE);
+}
+
+// The depth a lake or a river `depth` m deep is coloured as, where its bed rises at `slope` (rise over run) to a rim
+// `rim_m` deep, seen at `e` m a pixel (`LAKE_SCALE`).
+fn lake_seen(depth: f32, slope: f32, e: f32, rim_m: f32) -> f32 {
+  let rim = ease(0.0, max(rim_m, slope * LAKE_RIM_PX * e), depth);
+  return min(LAKE_SHALLOWEST_M + depth * LAKE_SCALE, LAKE_DEEPEST_M) * rim * rim;
 }
 
 // Bed `bed` (linear, lit) seen through `depth` m of water in the style, whose surface has slope g: through the clear
