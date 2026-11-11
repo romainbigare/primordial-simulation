@@ -89,3 +89,20 @@ fn the_starting_air_thins_with_height_by_its_own_scale_height() {
     }
     assert!(high > 0, "no air node over high ground");
 }
+
+/// Each dry cell's bed and loose ground add up to its height, the terrain's mean over it, and its loose ground is the
+/// mean of what the wear left on its samples (`Samples::loose`).
+#[test]
+fn a_cells_bed_and_loose_ground_add_up_to_its_height() {
+    let w = worldgen::new_world(1, 16, 16);
+    let (n, lat, seed) = (w.mesh.cells().n(), (w.cfg.lat_south, w.cfg.lat_north), w.terrain.seed);
+    let dry: Vec<usize> = (0..n).filter(|&i| w.store.amounts(Class::Ground)[LIQUID * n + i] == 0.0).collect();
+    assert!(dry.len() > n / 4, "{} dry cells of {n}", dry.len());
+    for i in dry {
+        let l = w.map.leaves()[i];
+        let (loose, bed, _) = worldgen::testkit::ground_of(&w, i);
+        let (z, left) = (w.terrain.inside(seed, &w.map, l, lat), w.terrain.over(seed, &w.map, l, lat, |s, k| s.loose[k]));
+        assert!((w.base_z + bed + loose - z).abs() < 1e-6, "cell {i}: bed {bed} m and loose {loose} m over {} m, at {z} m", w.base_z);
+        assert!((loose - left).abs() < 1e-9 * left.max(1.0), "cell {i}: {loose} m of loose ground, the wear left {left} m");
+    }
+}

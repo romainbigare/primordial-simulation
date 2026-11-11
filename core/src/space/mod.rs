@@ -12,9 +12,11 @@ pub mod network;
 mod ponds;
 pub mod square;
 pub mod samples;
+mod shelf;
+mod slopes;
 pub mod terrain;
 pub mod tree;
-mod wear;
+pub mod wear;
 
 pub use tree::{Leaf, Tree};
 

@@ -384,9 +384,12 @@ fn gas_dissolves_and_comes_out_when_warmed() {
 fn pore_space_is_the_porosity_times_the_loose_solids() {
     let mut w = worldgen::testkit::squares(3, 16, 16);
     let (i, _) = pair(&w);
-    let (pores, area) = (w.cfg.phys.porosity * loose(&w, i), w.mesh.cells().area()[0]);
-    // The loose layer of the generated land is 1 m of a mix of loose solids, 0.4 of it pores (random packing: 0.36 to 0.44).
-    assert!((pores / area / 0.4 - 1.0).abs() < 0.05, "{} m of pore depth under a metre of loose ground", pores / area);
+    let (pores, area) = (w.cfg.phys.porosity * loose(&w, i), w.mesh.cells().area()[i]);
+    // The loose layer of the generated land is what the wear left (`Samples::loose`), 0.4 of it pores (random packing:
+    // 0.36 to 0.44).
+    let lat = (w.cfg.lat_south, w.cfg.lat_north);
+    let start = w.terrain.over(w.terrain.seed, &w.map, w.map.leaves()[i], lat, |s, k| s.loose[k]);
+    assert!((pores / area / (0.4 * start) - 1.0).abs() < 0.05, "{} m of pore depth under {start} m of loose ground", pores / area);
     let depth = |w: &mut World| {
         pcore::flow::state(w, true);
         pcore::flow::means(w, &[i]).expect("Flow's state")[0].stands
@@ -707,16 +710,16 @@ fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
     assert_eq!(w.store.amounts(Class::Air)[DISSOLVED * na..(DISSOLVED + 1) * na].iter().sum::<f64>(), 0.0);
 }
 
-/// The diffusivity of the starting loose ground is the measured one: creep x softness x thickness = 3e-3 m²/yr
+/// The diffusivity of a metre of the starting loose ground is the measured one: creep x softness x 1 m = 3e-3 m²/yr
 /// (hillslope soil diffusivities are 1e-3 to 1e-2 m²/yr), within a tenth.
 #[test]
 fn the_starting_ground_creeps_at_a_measured_diffusivity() {
     let w = worldgen::testkit::squares(1, 16, 16);
     let cell = (0..w.mesh.cells().n()).find(|&i| w.surface_z(i) > 0.0).expect("land");
     let (h, _, soft) = ground_of(&w, cell);
-    let d = w.cfg.creep * soft * h * w.days_per_year() as f64 * DAY;
-    println!("loose ground {h:.2} m thick, softness {soft:.2}: diffusivity {d:.2e} m2/yr");
-    assert!(h > 0.5 && h < 1.5, "{h} m of loose ground");
+    let d = w.cfg.creep * soft * w.days_per_year() as f64 * DAY;
+    println!("loose ground {h:.2} m thick, softness {soft:.2}: diffusivity of a metre {d:.2e} m2/yr");
+    assert!(h > 0.0, "{h} m of loose ground");
     assert!(d > 2.7e-3 && d < 3.3e-3, "{d} m2/yr");
 }
 

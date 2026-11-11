@@ -36,7 +36,7 @@ pub(super) fn open_parts(g: &Grid, open: &[bool], (pond, ponds): (&mut [u32], &m
 
 /// The closed basins of the flood `f` over heights `z` (`Flood::under`): of each sample the basin it lies in
 /// (`NONE` where none), and of each basin its samples, the first the one the flood reached first: samples under a
-/// level beside each other are one basin, as they stand at one level.
+/// level beside each other across a side are one basin, as they stand at one level (the flood joins them so).
 pub(super) fn basins(g: &Grid, z: &[f64], f: &Flood) -> (Vec<u32>, Vec<Vec<u32>>) {
     let mut of = vec![NONE; g.n()];
     let mut all: Vec<Vec<u32>> = Vec::new();
@@ -50,7 +50,7 @@ pub(super) fn basins(g: &Grid, z: &[f64], f: &Flood) -> (Vec<u32>, Vec<Vec<u32>>
         let mut next = 0;
         while let Some(&i) = members.get(next) {
             next += 1;
-            for (j, _) in g.around(i as usize) {
+            for (j, _) in g.sides(i as usize) {
                 if of[j] == NONE && f.under(z, j) {
                     of[j] = id;
                     members.push(j as u32);
@@ -79,8 +79,8 @@ pub(super) fn grade(h: &mut [f64], f: &Flood, basins: &[Vec<u32>]) {
 /// the liquid does (`math::ways_down`, on the flood's surface), so it reaches every hollow below what was cut; a closed
 /// basin keeps all that comes into it, and once all is in, at its first sample, fills its floor from the lowest up
 /// toward the height its pass has now (`fill`), and what it cannot hold runs on over the pass. What reaches the open
-/// low ground leaves the land.
-pub(super) fn settle(g: &Grid, h: &mut [f64], f: &Flood, was: &[f64], (up, open): (&[f64], &[bool]), dt: f64) {
+/// low ground is added to `offshore` there, m³ (`space::shelf`).
+pub(super) fn settle(g: &Grid, h: &mut [f64], f: &Flood, was: &[f64], (up, open): (&[f64], &[bool]), (dt, offshore): (f64, &mut [f64])) {
     let (of, basins) = basins(g, was, f);
     let mut load: Vec<f64> = (0..g.n()).map(|k| if open[k] { 0.0 } else { (was[k] + up[k] * dt - h[k]).max(0.0) * g.area(k) }).collect();
     let mut into = vec![0.0; basins.len()];
@@ -95,8 +95,8 @@ pub(super) fn settle(g: &Grid, h: &mut [f64], f: &Flood, was: &[f64], (up, open)
             load[k] = fill(g, h, &basins[b], into[b], f.to[k]);
         }
         let (ways, sum) = ways_down(&f.surface, k, |k| f.earlier(g, k));
-        for &(q, w) in ways.iter().filter(|w| !open[w.0]) {
-            load[q] += load[k] * w / sum;
+        for &(q, w) in &ways {
+            *if open[q] { &mut offshore[q] } else { &mut load[q] } += load[k] * w / sum;
         }
     }
 }

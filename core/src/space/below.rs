@@ -38,15 +38,23 @@ fn leans(at: impl Fn(i64, i64) -> f64) -> [f64; 3] {
 
 /// The departures of the means of the quarters (of areas `area`, m², row by row) of a leaf from its mean, m, from the
 /// heights `at(dx, dy)` of it and its neighbours: their lean (`leans`; across both ways, the product of the two leans)
-/// less the lean's mean by area, so the quarters keep the leaf's mean.
+/// less the lean's mean by area, so the quarters keep the leaf's mean; the whole lean scaled down where a quarter would
+/// lie past the lowest or the highest of the leaf and its eight neighbours (Barth and Jespersen 1989), so the finer
+/// ground makes no new pit and no new peak, and a valley's floor falls along it as its leaves' means do.
 pub(super) fn lean_quarters(at: impl Fn(i64, i64) -> f64, area: [f64; 4]) -> [f64; 4] {
+    let around = (-1..=1).flat_map(|j| (-1..=1).map(move |i| (i, j))).map(|(i, j)| at(i, j));
+    let (lo, hi) = around.fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), z| (lo.min(z), hi.max(z)));
+    let own = at(0, 0);
     let [ew, sn, corners] = leans(at);
     let lean: [f64; 4] = std::array::from_fn(|q| {
         let (sx, sy) = (if q % 2 == 1 { 1.0 } else { -1.0 }, if q >= 2 { 1.0 } else { -1.0 });
         sx * ew + sy * sn + sx * sy * corners
     });
     let mean = (0..4).map(|q| area[q] * lean[q]).sum::<f64>() / area.iter().sum::<f64>();
-    lean.map(|l| l - mean)
+    let lean = lean.map(|l| l - mean);
+    let room = |d: f64| if d > 0.0 { (hi - own) / d } else if d < 0.0 { (lo - own) / d } else { 1.0 };
+    let scale = lean.iter().map(|&d| room(d)).fold(1.0, f64::min);
+    lean.map(|l| l * scale)
 }
 
 /// The leaves of one depth over a rectangle of them (from column `x` and row `y`, in leaves of that depth), row by

@@ -6,6 +6,7 @@
 //! (`worldgen`). Below `SAMPLE_DEPTH` the ground goes on smooth (`space::below`), so a leaf of any depth has a mean
 //! height, and a shell draws that ground.
 
+use super::samples::Samples;
 use super::square::Square;
 use super::{Leaf, Level};
 use crate::rng::{Purpose, Rng};
@@ -37,17 +38,25 @@ const FALL_POWER: f64 = 1.6;
 /// The rise an island's level 0 m lies at.
 pub const ISLAND_LEVEL: f64 = 0.3;
 /// The depth below its air block whose leaves' centres sample the terrain inside a coarser cell (`Terrain::inside`):
+/// The bed's patches (`patch`): the key of their noise, its units a square, its octaves (each half the size of the
+/// one before), and how sharply the noise parts the two beds about its middle.
+const PATCH_KEY: u64 = 100;
+const PATCH_PER_SQUARE: f64 = 0.5;
+const PATCH_OCTAVES: u32 = 4;
+const PATCH_SHARP: f64 = 6.0;
 /// 1/64 of a block's side, 125 m on the island, finer than the noise's finest octave there.
 pub const SAMPLE_DEPTH: u8 = 6;
 
 /// What the terrain of a world needs beside its map: the seed of its noise (the world's as built: a run that draws
 /// chance anew from another seed, `World::seed`, stands on the same ground); the rise its level 0 m lies at (an
-/// island's `ISLAND_LEVEL`; a globe's the one that leaves a share of its area above it, `worldgen`); and its drained
-/// samples, found from those when first read (`Terrain::samples`), not saved.
+/// island's `ISLAND_LEVEL`; a globe's the one that leaves a share of its area above it, `worldgen`); how much faster
+/// flowing liquid wears the bed of its patches than the rest of the bed (`patch`; the chemistry's, `worldgen`); and
+/// its drained samples, found from those when first read (`Terrain::samples`), not saved.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Terrain {
     pub seed: u64,
     pub level: f64,
+    pub soft: f64,
     #[serde(skip)]
     pub(super) kept: super::samples::Kept,
 }
@@ -126,6 +135,15 @@ pub fn noise(seed: u64, map: &Square, place: Place, per_square: f64, octaves: u3
     }
 }
 
+/// The share of the bed at `place` of `map` for `seed` that is of its patches, 0 to 1 (the bed of another make, which
+/// `worldgen` fills by the chemistry's `deposits`): fractal noise over `PATCH_OCTAVES` scales from a few squares down,
+/// parted sharply about its middle, so the bed lies in patches of either make with narrow margins, large and small, as
+/// bodies of rock of different makes lie side by side. The wear at the world's start reads it (`space::wear`), and the
+/// cells' beds are made of it, so both see one bed.
+pub fn patch(seed: u64, map: &Square, place: Place) -> f64 {
+    ((noise(seed ^ PATCH_KEY, map, place, PATCH_PER_SQUARE, PATCH_OCTAVES) - 0.5) * PATCH_SHARP + 0.5).clamp(0.0, 1.0)
+}
+
 /// Where a place lies in the noise (`noise`).
 enum Spot {
     Flat([f64; 2]),
@@ -154,9 +172,10 @@ fn height_of(above: f64) -> f64 {
 }
 
 impl Terrain {
-    /// The terrain of `seed` whose level 0 m lies at the rise `level`.
-    pub fn new(seed: u64, level: f64) -> Terrain {
-        Terrain { seed, level, ..Terrain::default() }
+    /// The terrain of `seed` whose level 0 m lies at the rise `level`, flowing liquid wearing the bed of its patches
+    /// `soft` times as fast as the rest.
+    pub fn new(seed: u64, level: f64, soft: f64) -> Terrain {
+        Terrain { seed, level, soft, ..Terrain::default() }
     }
     /// The rise of the ground at `place` of `map` for `seed` over the level; on an island (a flat map) less the fall
     /// from the middle of the map.
@@ -178,12 +197,17 @@ impl Terrain {
     /// The ground is sampled at the centres of the leaves of `SAMPLE_DEPTH`, worn (`Terrain::samples`); below them it
     /// goes on smooth (`space::below`). A leaf of `SAMPLE_DEPTH` or coarser: the mean of its samples; a finer one: its
     /// height there (`Terrain::below`).
-    pub fn inside(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64)) -> f64 {
-        let s = self.samples(seed, map, (south, north));
+    pub fn inside(&self, seed: u64, map: &Square, l: Leaf, lat: (f64, f64)) -> f64 {
         if l.depth <= SAMPLE_DEPTH {
-            let (area, sum) = l.split(SAMPLE_DEPTH).map(|f| (map.place_of(&f, south, north).0, s.h[s.index(&f)])).fold((0.0, 0.0), |(a, s), (da, h)| (a + da, s + da * h));
-            return sum / area;
+            return self.over(seed, map, l, lat, |s, k| s.h[k]);
         }
-        self.below(seed, map, l, (south, north))
+        self.below(seed, map, l, lat)
+    }
+    /// The mean by area of `x(samples, k)` over the samples `k` of leaf `l` of `map` (of `SAMPLE_DEPTH` or coarser;
+    /// for `seed`, its rows between latitudes `south` and `north`).
+    pub fn over(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64), x: impl Fn(&Samples, usize) -> f64) -> f64 {
+        let s = self.samples(seed, map, (south, north));
+        let (area, sum) = l.split(SAMPLE_DEPTH).map(|f| (map.place_of(&f, south, north).0, x(&s, s.index(&f)))).fold((0.0, 0.0), |(a, sum), (da, v)| (a + da, sum + da * v));
+        sum / area
     }
 }

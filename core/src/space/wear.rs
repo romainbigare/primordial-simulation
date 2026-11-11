@@ -4,14 +4,18 @@
 //! Tucker 1999): the ground lowers by K √A S, A the area that drains through a sample (spread down every lower way,
 //! Quinn et al. 1991) and S its slope to the sample its liquid runs to (m = 1/2, n = 1), solved each step exactly from
 //! the open low ground up the ways (Braun and Willett 2013), so a step of any length is stable. Under a closed basin's
-//! level (`space::drain`) the liquid does not cut, and what the ways above it cut settles there (`space::ponds`). The
-//! time runs on grids coarser than the samples and last on the samples' own (`STAGES`), each stage carried smooth to
-//! the next (`Grid::finer`). All in a fixed serial order in 64-bit numbers, so a seed gives one ground on every machine.
+//! level (`space::drain`) the liquid does not cut, and what the ways above it cut settles there (`space::ponds`); what
+//! reaches the open low ground lies there as a shelf (`space::shelf`), and the loose ground is what the last stage left
+//! (`mantle`). K is the bed's: faster on its soft patches (`terrain::patch`). The time runs on grids coarser than the
+//! samples and last on the samples' own (`STAGES`), each stage carried smooth to the next (`Grid::finer`). All in a
+//! fixed serial order in 64-bit numbers, so a seed gives one ground on every machine.
 
-use super::drain::{flood, open_low, Flood};
+use super::drain::{draws, flood, open_low, Flood};
 use super::grid::Grid;
 use super::network::NONE;
 use super::ponds::settle;
+use super::shelf::lay;
+use super::slopes::{creep, rebound};
 use crate::math::spread_down;
 use crate::rng::{Purpose, Rng};
 
@@ -24,23 +28,25 @@ const CUT: f64 = 3.0e-7;
 const CREEP: f64 = 3.0e-3;
 /// The grids the time runs on, coarsest first, each half as coarse as the one before: the samples a side to one of
 /// the grid's (on a map no larger than `MOST_SAMPLES` allows), the share of the time on it, and its steps.
-const STAGES: [(usize, f64, usize); 3] = [(4, 0.55, 24), (2, 0.2, 6), (1, 0.25, 3)];
+const STAGES: [(usize, f64, usize); 3] = [(4, 0.4, 16), (2, 0.3, 8), (1, 0.3, 4)];
 /// The terrain's noise is read on the grid of this many samples a side to one (on a map no larger than `MOST_SAMPLES`
 /// allows), each finer grid taking it carried smooth.
 const NOISE_BY: usize = 2;
 /// The most samples the first stage's grid may hold: a larger map runs every stage on grids twice as coarse, until it
 /// fits (the cost of a large map's start).
 const MOST_SAMPLES: usize = 1 << 16;
-/// The share of a load taken off the ground that the ground rises back by: the density of the ground over that of the
-/// rock it floats on (Airy isostasy).
-const FLOATS: f64 = 2700.0 / 3300.0;
-/// The width over which the ground bends under a load, m.
-const BENDS_M: f64 = 50e3;
 /// The spread of the land's heights where it starts to rise, m: the roughness the first ways find.
 const ROUGH_M: f64 = 1.0;
-/// The most a part of an explicit creep may diffuse, in squares of a sample's shorter side: a stable part on four
-/// sides is under a quarter.
-const STABLE: f64 = 0.2;
+/// The rate the bed breaks into loose ground under none, m a year, and the depth of loose ground under which it breaks
+/// e times slower, m (`mantle`).
+const BREAKS: f64 = 7.7e-5;
+const BREAKS_UNDER_M: f64 = 0.4;
+/// The loose ground on the floor of the open low ground under the shelf, m: the layer of the fine load that settles
+/// out of the liquid everywhere that mixes with the liquid over it.
+const OOZE_M: f64 = 1.0;
+/// The slowest lowering the mantle's law reads, a share of `BREAKS`: a sample that does not lower keeps the mantle of
+/// this lowering, not an infinite one.
+const SLOWEST: f64 = 1e-6;
 
 /// The scale of the grids on grid `g`: 1, or twice that while the first stage's grid would hold more than
 /// `MOST_SAMPLES`.
@@ -58,32 +64,77 @@ pub(super) fn noise_grid(g: &Grid) -> usize {
     NOISE_BY * scale(g)
 }
 
-/// The worn heights of the samples of grid `g`, m, and the open low ground among them (`drain::open_low`), where the
-/// terrain's noise stands at `rise`, m, on the grid `by` times coarser (`noise_grid`). Each stage's grid takes the
-/// noise's mean over each of its samples (a grid finer than the noise's, the noise carried to it); the first starts
-/// from 0 m on land (the noise's heights under 0 m) and a roughness of `ROUGH_M` drawn from the seed, each later one
-/// from the last carried to it, down to the samples'. On every grid the open low ground stands at the noise's heights
-/// and land no lower than 0 m.
-pub(super) fn wear(seed: u64, g: &Grid, (by, rise): (usize, &[f64])) -> (Vec<f64>, Vec<bool>) {
+/// The ground the wear leaves on grid `g`: of each sample its height, m, whether it is of the open low ground
+/// (`drain::open_low`), and the depth of its loose ground, m (`mantle`); and the wear's books (`Books`).
+pub(super) struct Worn {
+    pub(super) h: Vec<f64>,
+    pub(super) open: Vec<bool>,
+    pub(super) loose: Vec<f64>,
+    pub(super) books: Books,
+}
+
+/// The volumes the wear moves, m³: what it takes off the land (cut, and crept into the open low ground), what settles
+/// in the closed basins, and what lies on the open low ground's shelf (`space::shelf`); the first is the sum of the
+/// others.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Books {
+    pub taken: f64,
+    pub settled: f64,
+    pub shelf: f64,
+}
+
+/// What a stage marks on each sample of its grid: the load it passes to the open low ground, m³ per m² (`offshore`),
+/// what settles on it, m, and how fast its last step lowered it (cut and creep), m a year.
+struct Marks {
+    offshore: Vec<f64>,
+    settled: Vec<f64>,
+    lowers: Vec<f64>,
+}
+
+/// The ground worn on grid `g` (`Worn`), where the terrain's noise stands at `rise`, m, on the grid `by` times coarser
+/// (`noise_grid`), and flowing liquid wears its bed `soft` times as fast as `CUT` (`terrain::patch`), on that grid too.
+/// Each stage's grid takes the noise's mean over each of its samples (a grid finer than the noise's, the noise carried
+/// to it); the first starts from 0 m on land (the noise's heights under 0 m) and a roughness of `ROUGH_M` drawn from
+/// the seed, each later one from the last carried to it, down to the samples'. On every grid the open low ground stands
+/// at the noise's heights and land no lower than 0 m. What reaches the open low ground lies there at the end as a shelf
+/// (`shelf::lay`) over `OOZE_M` of loose ground, and the last stage's marks give the land's loose ground (`mantle`).
+pub(super) fn wear(seed: u64, g: &Grid, (by, rise, soft): (usize, &[f64], &[f64])) -> Worn {
     let rough = |k: usize| ROUGH_M * (Rng::new(seed, 0, k as u64, Purpose::Terrain).f64() - 0.5);
     let noise = g.coarser(by);
-    let rise_on = |to: usize| if to >= by { noise.mean_over(rise, to / by) } else { carried(g, (by, rise), to) };
-    let mut last: Option<(usize, Vec<f64>)> = None;
+    let on = |x: &[f64], to: usize| if to >= by { noise.mean_over(x, to / by) } else { carried(g, (by, x), to) };
+    let mut last: Option<(usize, Vec<f64>, Marks)> = None;
+    let (mut offshore, mut books) = (Vec::new(), Books::default());
     for &(stage_by, share, steps) in &STAGES {
         let to = stage_by * by / NOISE_BY;
-        let (stage, rise_s) = (g.coarser(to), rise_on(to));
+        let (stage, rise_s) = (g.coarser(to), on(rise, to));
         let open_s = open_low(&stage, &rise_s);
         let mut h = match &last {
             None => (0..stage.n()).map(|k| if open_s[k] { rise_s[k] } else { rise_s[k].min(0.0) + rough(k) }).collect(),
-            Some((from, z)) => held(&carried(g, (*from, z), to), &rise_s, &open_s),
+            Some((from, z, _)) => held(&carried(g, (*from, z), to), &rise_s, &open_s),
         };
-        run(&stage, &mut h, (&rate(&rise_s, &open_s), &open_s), (WEAR_YEARS * share, steps));
-        last = Some((to, h));
+        offshore = last.as_ref().map_or(vec![0.0; stage.n()], |(from, _, _)| carried(g, (*from, &offshore), to));
+        let cut_s: Vec<f64> = on(soft, to).iter().map(|s| CUT * s).collect();
+        let marks = run(&stage, &mut h, (&rate(&rise_s, &open_s), &open_s, &draws(seed, to, stage.n())), (&cut_s, WEAR_YEARS * share, steps), &mut books);
+        offshore.iter_mut().zip(&marks.offshore).for_each(|(s, m)| *s += m);
+        last = Some((to, h, marks));
     }
-    let (from, z) = last.expect("a stage");
-    let rise_g = rise_on(1);
+    let (from, z, marks) = last.expect("a stage");
+    let rise_g = on(rise, 1);
     let open = open_low(g, &rise_g);
-    (held(&carried(g, (from, &z), 1), &rise_g, &open), open)
+    let mut h = held(&carried(g, (from, &z), 1), &rise_g, &open);
+    let mut loose: Vec<f64> = carried(g, (from, &mantle(&marks)), 1).iter().zip(&open).map(|(&d, &o)| if o { OOZE_M } else { d.max(0.0) }).collect();
+    books.shelf = lay(g, &mut h, (&open, &carried(g, (from, &offshore), 1)), &mut loose);
+    Worn { h, open, loose, books }
+}
+
+/// The depth of the loose ground of each sample from a stage's marks, m: what settled on it over the stage, and over
+/// that the loose mantle where its bed's breaking into loose ground balances its lowering (Heimsath, Dietrich,
+/// Nishiizumi and Finkel 1997): the bed breaks at `BREAKS` a year under no loose ground, e-fold slower under each
+/// `BREAKS_UNDER_M` of it, so a lowering E keeps a mantle of `BREAKS_UNDER_M` ln(`BREAKS` / E), none where E outruns
+/// `BREAKS`.
+fn mantle(marks: &Marks) -> Vec<f64> {
+    let soil = |e: f64| BREAKS_UNDER_M * (BREAKS / e.max(BREAKS * SLOWEST)).ln().max(0.0);
+    marks.settled.iter().zip(&marks.lowers).map(|(&s, &e)| s + soil(e)).collect()
 }
 
 /// Heights `z` on the grid `from` times coarser than `g` carried smooth to the grid `to` times coarser, a halving at a
@@ -109,25 +160,40 @@ fn rate(rise: &[f64], open: &[bool]) -> Vec<f64> {
     rise.iter().zip(open).map(|(&z, &o)| if o { 0.0 } else { z.max(0.0) / WEAR_YEARS }).collect()
 }
 
-/// `steps` equal steps over `years` of heights `h` on grid `g`, rising at `up` (m a year), the samples `open` held:
-/// each the flood from the shore (`drain::flood`), the cut, the load settling, the creep and the rebound.
-fn run(g: &Grid, h: &mut [f64], (up, open): (&[f64], &[bool]), (years, steps): (f64, usize)) {
+/// `steps` equal steps over `years` of heights `h` on grid `g`, rising at `up` (m a year), the samples `open` held,
+/// flowing liquid cutting by `k` (`CUT` of each sample): each the flood from the shore (`drain::flood`), the cut, the
+/// load settling, the creep and the rebound. It books what is taken and what settles in `books`, and returns the
+/// stage's marks (`Marks`): the load to the open low ground and what settled over all its steps, the lowering of its
+/// last.
+fn run(g: &Grid, h: &mut [f64], (up, open, draw): (&[f64], &[bool], &[f64]), (k, years, steps): (&[f64], f64, usize), books: &mut Books) -> Marks {
     let dt = years / steps as f64;
+    let mut marks = Marks { offshore: vec![0.0; g.n()], settled: vec![0.0; g.n()], lowers: vec![0.0; g.n()] };
+    let volume = |x: &dyn Fn(usize) -> f64| (0..g.n()).filter(|&i| !open[i]).map(|i| x(i) * g.area(i)).sum::<f64>();
     for _ in 0..steps {
-        let f = flood(g, h, open, true);
+        let f = flood(g, h, open, (true, draw));
         let was = h.to_vec();
-        cut(g, h, &f, (up, open), dt);
-        settle(g, h, &f, &was, (up, open), dt);
-        creep(g, h, open, CREEP * dt);
+        cut(g, h, &f, (up, open, k), dt);
+        let cut_to = h.to_vec();
+        settle(g, h, &f, &was, (up, open), (dt, &mut marks.offshore));
+        let settled = h.to_vec();
+        creep(g, h, open, CREEP * dt, &mut marks.offshore);
+        books.taken += volume(&|i| was[i] + up[i] * dt - cut_to[i]) + volume(&|i| settled[i] - h[i]);
+        books.settled += volume(&|i| settled[i] - cut_to[i]);
+        for i in 0..g.n() {
+            marks.settled[i] += settled[i] - cut_to[i] + (h[i] - settled[i]).max(0.0);
+            marks.lowers[i] = (was[i] + up[i] * dt - cut_to[i] + (settled[i] - h[i]).max(0.0)) / dt;
+        }
         rebound(g, h, &was, (up, open), dt);
     }
+    marks.offshore.iter_mut().enumerate().for_each(|(i, s)| *s /= g.area(i));
+    marks
 }
 
 /// One step of `dt` years of the stream power law (n = 1, solved exactly, Braun and Willett 2013): each sample, in the
 /// flood's order (the one its liquid runs to first), rises by its rate and then falls toward the height of that one
 /// (0 m on the open low ground, the level of the liquid there) as h = (h₀ + f h_down) / (1 + f), f = K dt √A / d. A
 /// sample under its basin's level, or whose liquid runs to higher ground, only rises.
-fn cut(g: &Grid, h: &mut [f64], f: &Flood, (up, open): (&[f64], &[bool]), dt: f64) {
+fn cut(g: &Grid, h: &mut [f64], f: &Flood, (up, open, k_cut): (&[f64], &[bool], &[f64]), dt: f64) {
     let own = (0..g.n()).map(|k| g.area(k)).collect();
     let area = spread_down(&f.surface, f.order.iter().rev().map(|&k| k as usize), |k| f.earlier(g, k), own);
     for &k in &f.order {
@@ -140,36 +206,10 @@ fn cut(g: &Grid, h: &mut [f64], f: &Flood, (up, open): (&[f64], &[bool]), dt: f6
             let j = j as usize;
             let down = if open[j] { h[j].max(0.0) } else { h[j] };
             if down < z {
-                let c = CUT * dt * area[k].sqrt() / f.apart[k];
+                let c = k_cut[k] * dt * area[k].sqrt() / f.apart[k];
                 z = (z + c * down) / (1.0 + c);
             }
         }
         h[k] = z;
-    }
-}
-
-/// The ground rising back as a step's wear unloads it (Airy isostasy; Molnar and England 1990): each sample of land
-/// rises by `FLOATS` of the ground the step took away (its height `was` and its rise less its height now: less what
-/// settled), as the mean of that over a square `BENDS_M` wide about it (`Grid::spread`), as a plate that bends over
-/// that width carries a load.
-fn rebound(g: &Grid, h: &mut [f64], was: &[f64], (up, open): (&[f64], &[bool]), dt: f64) {
-    let taken: Vec<f64> = (0..g.n()).map(|k| if open[k] { 0.0 } else { was[k] + up[k] * dt - h[k] }).collect();
-    let spread = g.spread(&taken, BENDS_M / 2.0);
-    (0..g.n()).filter(|&k| !open[k]).for_each(|k| h[k] += FLOATS * spread[k]);
-}
-
-/// Creep of the slopes over a step: each sample of land changes by κ ∇²h across its four sides (`kappa` the
-/// diffusivity times the step, m², Culling 1960), in explicit parts each under `STABLE` of the square of the shorter
-/// side of a sample (Courant, Friedrichs and Lewy 1928); the open low ground stays, and a neighbour there stands at its
-/// height or 0 m, the higher.
-fn creep(g: &Grid, h: &mut [f64], open: &[bool], kappa: f64) {
-    let side = g.dx.iter().fold(g.dy, |a, &b| a.min(b));
-    let parts = (kappa / (STABLE * side * side)).ceil().max(1.0);
-    for _ in 0..parts as usize {
-        let was = h.to_vec();
-        let at = |j: usize| if open[j] { was[j].max(0.0) } else { was[j] };
-        for k in (0..g.n()).filter(|&k| !open[k]) {
-            h[k] += kappa / parts * g.sides(k).iter().map(|&(j, len)| (at(j) - was[k]) / (len * len)).sum::<f64>();
-        }
     }
 }
