@@ -8,7 +8,7 @@
 
 use super::basin::{movable, share_out};
 use super::bodies::Bodies;
-use super::curve::{level_over, Part};
+use super::{curve::Part, level::{level_with, Level}};
 use super::{bare_share, drain::liquid_heat, follow, land::{lift, solid, standing}, liquid::book, parts::{pores_first, under_liquid}, potential::apply, year_weight, Scratch};
 use crate::{math::one_minus_exp, space::network::NONE, store::{Class, LinkFlux, Move, Node}, World};
 
@@ -162,42 +162,29 @@ fn covered(s: &Scratch, i: usize, q: usize) -> f64 {
     }
 }
 
-/// Halvings of the span of levels in which `body_level` finds the level, to 2^-60 of that span: the rounding of the sums.
-const HALVINGS: usize = 60;
-
 /// The level of a body whose parts `parts` hold `vol` m³, m, no higher than `pass`; what the pores of the ground each
 /// part newly covers take of it, m³, as they fill first (`parts::pores_first`); and whether it stands over its pass.
 /// What its samples hold under a level and what those pores take both grow with the level: the level is where they
-/// take `vol` (`curve::level_over` where the pores take none; else by halving the span of levels), and what a sample
-/// the level just reaches takes is what is left.
+/// take `vol` (`level::level_with`); where it stands at a height of samples whose pores take more than is left, what is
+/// left goes to those pores, by what each takes there.
 fn body_level(parts: &[Ground], vol: f64, pass: f64) -> (f64, Vec<f64>, bool) {
     let over: Vec<(&Part, f64)> = parts.iter().map(|g| (g.0, g.1)).collect();
-    let soak = |x: f64| parts.iter().map(|&(p, z, now, [dry, own])| ((p.under(x - z) - now).max(0.0) * dry - own).max(0.0)).collect::<Vec<f64>>();
-    let stands = |x: f64| over.iter().map(|&(p, z)| p.volume(x - z)).sum::<f64>();
-    let takes = |x: f64| stands(x) + soak(x).iter().sum::<f64>();
-    let top = level_over(&over, vol);
-    if top > pass && takes(pass) <= vol {
-        return (pass, soak(pass), true);
-    }
-    let soaks = soak(top.min(pass));
-    if soaks.iter().all(|&x| x == 0.0) {
-        return (top.min(pass), soaks, false);
-    }
-    let (mut lo, mut hi) = (over.iter().map(|&(p, z)| p.lowest(z)).fold(f64::INFINITY, f64::min), top.min(pass));
-    for _ in 0..HALVINGS {
-        let mid = 0.5 * (lo + hi);
-        if takes(mid) <= vol {
-            lo = mid;
-        } else {
-            hi = mid;
+    let soaks = |q: usize, under: f64| {
+        let (_, _, now, [dry, own]) = parts[q];
+        ((under - now).max(0.0) * dry - own).max(0.0)
+    };
+    let soak = |x: f64| over.iter().enumerate().map(|(q, &(p, z))| soaks(q, p.under(x - z))).collect::<Vec<f64>>();
+    match level_with(&over, vol, soaks) {
+        Level::At(x) | Level::Step(x, _) if x > pass => (pass, soak(pass), true),
+        Level::At(x) => (x, soak(x), false),
+        Level::Step(lo, hi) => {
+            let (below, above) = (soak(lo), soak(hi));
+            let stands: f64 = over.iter().map(|&(p, z)| p.volume(lo - z)).sum();
+            let (left, step) = (vol - stands - below.iter().sum::<f64>(), above.iter().zip(&below).map(|(a, b)| a - b).sum::<f64>());
+            let taken = below.iter().zip(&above).map(|(b, a)| b + if step > 0.0 { (a - b) * (left / step).clamp(0.0, 1.0) } else { 0.0 }).collect();
+            (lo, taken, false)
         }
     }
-    // What is left over what the samples hold under `lo` and their pores take there goes to the pores the level just
-    // reaches between `lo` and `hi`, by what each takes there.
-    let (below, above) = (soak(lo), soak(hi));
-    let (left, step) = (vol - stands(lo) - below.iter().sum::<f64>(), above.iter().zip(&below).map(|(a, b)| a - b).sum::<f64>());
-    let taken = below.iter().zip(&above).map(|(b, a)| b + if step > 0.0 { (a - b) * (left / step).clamp(0.0, 1.0) } else { 0.0 }).collect();
-    (lo, taken, false)
 }
 
 /// The bodies in order (`Bodies::list`), each brought to one level: what its parts hold (`Held::part`) stands at one
@@ -312,13 +299,15 @@ fn follow_flux(w: &mut World, b: &Bodies, flux: &[[f64; 2]], dt: f64) {
     for (avg, f) in w.discharge.iter_mut().zip(flux).filter(|p| *p.0 != 0.0 || p.1[0] != 0.0) {
         follow(avg, (f[0] / dt) as f32, ema);
     }
+    // Whether each cell is land (`World::is_land`), found once for a cell, at its first sample that needs it.
+    let mut land: Vec<Option<bool>> = vec![None; n];
     for &k in &b.land {
         let (k, f) = (k as usize, flux[k as usize]);
         let i = b.cell_of[k] as usize;
         most[i] = most[i].max(f[0]);
         let j = samples.to[k];
         let low = j != NONE && b.at[j as usize] != NONE && b.list[b.at[j as usize] as usize].pass == NONE;
-        if low && w.is_land(i) {
+        if low && *land[i].get_or_insert_with(|| w.is_land(i)) {
             off[i] += f[0];
         }
     }

@@ -1,0 +1,74 @@
+//! The loose ground the wear at the world's start leaves on the land (laws.md 0 and 8, `space::wear`): the depth where
+//! the bed's breaking into loose ground balances what takes it away. The bed breaks at `BREAKS` a year under no loose
+//! ground, e times slower under each `BREAKS_UNDER_M` of it (Heimsath, Dietrich, Nishiizumi and Finkel 1997). Two things
+//! take it away, and the depth is the smaller of the two balances (all of the loose ground creeps, what settled too):
+//! - the lowering of the ground E (cut and creep): a depth of `BREAKS_UNDER_M` ln(`BREAKS` / E), none where E outruns
+//!   `BREAKS`;
+//! - the creep of the loose ground down its slope S: all the loose ground made on the area a that drains through a
+//!   sample, per m of its width, passes it, with what settled on it (as fast as it came over the last stage, across the
+//!   sample's width: b), and creeps at `CREEP` S / (1 − (S / `REST`)²) a m of its depth over
+//!   `CREEP_DEPTH_M` (a flux that grows without bound as the slope nears the slope loose ground rests at: Roering,
+//!   Kirchner and Dietrich 1999, each m of depth creeping alike), so a depth H holds where H `CREEP` / `CREEP_DEPTH_M`
+//!   S / (1 − (S / `REST`)²) = a `BREAKS` exp(−H / `BREAKS_UNDER_M`) + b; none at `REST` or steeper.
+//!
+//! What settled on a sample in the wear's last stage lies over the first. So a slope near `REST` holds almost no loose
+//! ground (its bed bare), and the gentle ground at its foot, where a grows and S falls, holds the more.
+
+use super::grid::Grid;
+
+/// The rate the bed breaks into loose ground under none, m a year, and the depth of loose ground under which it breaks
+/// e times slower, m.
+const BREAKS: f64 = 7.7e-5;
+const BREAKS_UNDER_M: f64 = 0.4;
+/// The slowest lowering the mantle's law reads, a share of `BREAKS`: a sample that does not lower keeps the mantle of
+/// this lowering, not an infinite one.
+const SLOWEST: f64 = 1e-6;
+/// The slope loose ground rests at, rise over run: its creep grows without bound as a slope nears it.
+const REST: f64 = 0.8;
+/// The depth of loose ground the creep's diffusivity (`wear::CREEP`) is anchored at, m.
+const CREEP_DEPTH_M: f64 = 1.0;
+/// The search for the depth the creep holds stops after this many Newton's steps, or a step shorter than this, m.
+const NEWTON_STEPS: usize = 30;
+const CLOSE_M: f64 = 1e-6;
+
+/// The depth of the loose ground of each sample of grid `g`, m: what `settled` on it over the last `years`, m, and the
+/// mantle (the module's doc) where the ground lowers at `lowers`, m a year, drains `drained`, m², and stands at heights
+/// `h`, m, its loose ground creeping at `creep`, m² a year at `CREEP_DEPTH_M` of depth.
+pub(super) fn mantle(g: &Grid, (h, drained): (&[f64], &[f64]), (settled, lowers): (&[f64], &[f64]), (creep, years): (f64, f64)) -> Vec<f64> {
+    (0..g.n()).map(|k| depth((settled[k], lowers[k]), (slope(g, h, k), drained[k] / g.dy), (settled[k] / years * g.dy, creep))).collect()
+}
+
+/// The slope of heights `h` at sample `k` of grid `g`, rise over run: from the differences across it east to west and
+/// north to south (one-sided at the map's edge).
+fn slope(g: &Grid, h: &[f64], k: usize) -> f64 {
+    let [(e, dx), (w, _), (n, dy), (s, _)] = g.sides(k);
+    let across = |a: usize, b: usize, len: f64| (h[a] - h[b]) / (len * ((a != k) as u8 + (b != k) as u8).max(1) as f64);
+    across(e, w, dx).hypot(across(s, n, dy))
+}
+
+/// The loose ground's depth, m, where `settled` m settled and the ground lowers at `e`, m a year, on slope `s` with `a`
+/// m² drained per m of width, what settled coming at `brought` m² a year per m of width, its loose ground creeping at
+/// `creep` (the module's doc): what settled and the mantle the lowering leaves, or less where the creep holds less.
+fn depth((settled, e): (f64, f64), (s, a): (f64, f64), (brought, creep): (f64, f64)) -> f64 {
+    let lowered = settled + BREAKS_UNDER_M * (BREAKS / e.max(BREAKS * SLOWEST)).ln().max(0.0);
+    if s >= REST {
+        return 0.0;
+    }
+    // What the creep carries against what the bed breaks into loose ground upslope and what settled: the first grows
+    // with the depth in proportion, the second falls (concave in the depth), so one depth balances them, found from no
+    // depth up by Newton's steps, each short of it.
+    let carries = creep / CREEP_DEPTH_M * s / (1.0 - (s / REST) * (s / REST));
+    let off = |d: f64| d * carries - a * BREAKS * (-d / BREAKS_UNDER_M).exp() - brought;
+    if off(lowered) <= 0.0 {
+        return lowered;
+    }
+    let mut d = 0.0;
+    for _ in 0..NEWTON_STEPS {
+        let step = -off(d) / (carries + a * BREAKS / BREAKS_UNDER_M * (-d / BREAKS_UNDER_M).exp());
+        d += step;
+        if step < CLOSE_M {
+            break;
+        }
+    }
+    d.min(lowered)
+}

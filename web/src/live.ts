@@ -5,7 +5,8 @@ export interface Stats { cells: number; pace: number }
 
 /** The live world: the core in a Web Worker (worker.ts) that makes a world, steps it and posts a frame as bytes with the
  * cells' table (tape/src/table.rs), and the samples' discharge as 16-bit floats when it changed enough to show (held
- * until the map takes it, `takeDischarge`). */
+ * until the map takes it, `takeDischarge`). Each frame is answered once the page has drawn it (`shown`): while the
+ * world plays, the worker posts the next only then. */
 export class Live {
   world: World | null = null;
   table: Float32Array<ArrayBufferLike> = new Float32Array(0);
@@ -13,6 +14,9 @@ export class Live {
   stats: Stats = { cells: 0, pace: 0 };
   private worker: Worker;
   private url: string;
+  /** The frames taken that wait for their answer (`shown`), and the listener that answers them when the page is hidden. */
+  private unanswered = 0;
+  private onHide = () => { if (document.hidden) this.answer(); };
 
   constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void }) {
     this.url = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
@@ -29,19 +33,31 @@ export class Live {
         this.world = makeWorld(meta, m.frame, 0);
         this.table = m.table;
         this.stats = m.stats;
-        return on.world(this.world);
+        on.world(this.world);
+        return this.shown();
       }
-      if (!this.world) return;
+      if (!this.world) return this.shown();
       this.world.data = m.frame;
       this.table = m.table;
       this.world.meta.frames[0] = { day: m.day, year: m.year };
       this.stats = m.stats;
       on.things(m.things);
       on.frame(m.stats);
+      this.shown();
     };
     this.worker.postMessage({ cmd: 'init', wasm }, [wasm]);
+    document.addEventListener('visibilitychange', this.onHide);
   }
 
+  /** Tell the worker the frames taken are drawn, so it may post the next: at the next animation frame, after the map's
+   * own draw (which asked for that frame first); at once in a hidden page, which draws nothing. */
+  private shown(): void {
+    this.unanswered++;
+    if (document.hidden) this.answer(); else requestAnimationFrame(() => this.answer());
+  }
+  private answer(): void {
+    if (this.unanswered > 0) { this.worker.postMessage({ cmd: 'shown', frames: this.unanswered }); this.unanswered = 0; }
+  }
   /** The samples' discharge come since it was last taken, or null. */
   takeDischarge(): Uint16Array | null { const d = this.discharge; this.discharge = null; return d; }
   newWorld(seed: number, size: number): void { this.worker.postMessage({ cmd: 'new', seed, size }); }
@@ -50,5 +66,5 @@ export class Live {
   rate(monthsPerSecond: number): void { this.worker.postMessage({ cmd: 'rate', rate: monthsPerSecond }); }
   /** Ask with every frame for the things of a window (x, y, w, h in squares) to draw one by one, or for none. */
   things(at: [number, number, number, number] | null): void { this.worker.postMessage({ cmd: 'things', at }); }
-  stop(): void { this.worker.terminate(); URL.revokeObjectURL(this.url); }
+  stop(): void { this.worker.terminate(); URL.revokeObjectURL(this.url); document.removeEventListener('visibilitychange', this.onHide); }
 }

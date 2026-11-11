@@ -76,11 +76,17 @@ little keeps its steep drop; its edge is rounded over 250 m as a clinoform's top
 the platform's top; the width is found so the shelf holds all the load (where the platform fills the open low ground of
 a small map, the rest leaves the map), and what the wear took off the land is what lies in the basins, on the shelf and
 off the map (`Samples::books`). **The loose ground** the wear leaves (`Samples::loose`):
-on land, what settled on a sample in the last stage (in the basins, at the foot of the slopes) and over it the mantle
-where the bed's breaking into loose ground balances the lowering of the last step (cut and creep): the bed breaks at
-7.7e-5 m a year under none, e times slower under each 0.4 m (`BREAKS`, `BREAKS_UNDER_M`; Heimsath, Dietrich, Nishiizumi
-and Finkel 1997), so a lowering E keeps 0.4 ln(7.7e-5 / E) m, none where E outruns the breaking, at most what a lowering
-of a millionth of the breaking keeps (`SLOWEST`); on the open low ground the shelf over a metre of the fine load that
+on land (`space::mantle`) the depth where the bed's breaking into loose ground balances what takes it away, the
+smaller of two balances. The bed breaks at 7.7e-5 m a year under none, e times slower under each 0.4 m (`BREAKS`,
+`BREAKS_UNDER_M`; Heimsath, Dietrich, Nishiizumi and Finkel 1997). Against the lowering of the last step E (cut and
+creep), what settled on a sample in the last stage (in the basins, at the foot of the slopes) and over it 0.4 ln(7.7e-5
+/ E) m, none where E outruns the breaking, at most what a lowering of a millionth of the breaking keeps (`SLOWEST`).
+Against the creep of the loose ground down its slope S: all the loose ground made on the area a that drains through a
+sample per m of its width, with what settled there as fast as it came over the stage, passes it and creeps at 3e-3 m²
+a year a m of its depth (`CREEP` at 1 m, `CREEP_DEPTH_M`) times S / (1 − (S / 0.8)²), a flux that grows without bound as
+the slope nears the slope loose ground rests at (`REST`; Roering, Kirchner and Dietrich 1999), so a depth H holds where
+H 3e-3 S / (1 − (S / 0.8)²) = a 7.7e-5 exp(−H / 0.4) + what settled; none at 0.8 or steeper. So a steep slope's bed is
+bare and the gentle ground at its foot holds the loose ground it sheds; on the open low ground the shelf over a metre of the fine load that
 settles everywhere (`OOZE_M`). It runs in a fixed serial order in 64-bit numbers, so a seed gives one ground on every
 machine.
 **The flood** (`space::drain`) over the worn samples, from all the open low ground, does not raise the ground (Barnes,
@@ -364,12 +370,13 @@ what the heat holds molten, as every law and the shell then read it.
   sample, and what reaches a part is that part's (`bodies::Bodies::ways`); liquid on a cell's ground outside any pond
   does not stand. The liquid goes straight from the cell it leaves to the cell its way reaches: it does not wet the
   cells it passes, and the heat of its fall lands where it lands. The bodies then come in turn, each before the body
-  its pass leads to: what its parts hold stands at one level over its own samples (`curve::level_over`, exact), no
+  its pass leads to: what its parts hold stands at one level over its own samples (`level::level_with`), no
   higher than its pass, the pores of the ground it newly covers filling first (`parts::pores_first`: in a cell of
   parts what its land's pores lack, from what stands; in a node that is one, its pore space, from the liquid all its
   pores hold first): a body over deep dry loose ground drains into it until its pores are full. What its samples hold
-  under a level and what those pores take both grow with the level, so the level is found by halving the span of
-  levels, and the pores a level just reaches take what is left; each cell whose part holds more than its samples hold under that level gives the share of its
+  under a level and what those pores take both grow with the level, linearly between two heights of samples: the
+  level is exact, on the line through the samples under a level found by halving toward it; where it stands at a
+  height of samples whose pores take more than is left, those pores take what is left; each cell whose part holds more than its samples hold under that level gives the share of its
   liquid over it, with that share of its heat; mixed, it goes to the cells whose part holds less, by what each lacks
   (`basin::share_out`), and what the body holds over its pass leaves, mixed, to the part its pass's way reaches, in
   the same month. Each part then holds what its samples hold under its body's level; a cell that was one node becomes

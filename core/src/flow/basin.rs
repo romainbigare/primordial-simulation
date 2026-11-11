@@ -3,7 +3,7 @@
 //! the cells of a body to one level, as the runoff's pass does once a month (`runoff`); and each body mixes its heat
 //! under each air block (`mix`).
 
-use super::{air::blocks, bodies::Body, curve::{self, first_held, holds_all, level_over, Part}, land::{cells_state, standing, NONE}, parts::TOP, potential::apply, Scratch};
+use super::{air::blocks, bodies::Body, curve::{self, first_held, holds_all, Part}, level::level_over, land::{cells_state, standing, NONE}, parts::TOP, potential::apply, Scratch};
 use crate::{space::network::NONE as NO_BODY, store::{Class, LinkFlux}, World, AIR};
 use std::collections::BTreeMap;
 
@@ -107,7 +107,7 @@ pub struct Pool {
 }
 
 /// The level of body `b`: what its parts held at the last pass (`State::held`) at one level over their samples
-/// (`curve::level_over`), m, no higher than its pass.
+/// (`level::level_over`), m, no higher than its pass.
 fn body_level(s: &Scratch, b: &Body) -> f64 {
     let parts: Vec<(&Part, f64)> = b.cells.iter().zip(&b.part).map(|(&i, &q)| (&s.curves[i as usize].parts[q], s.z[i as usize])).collect();
     let held: f64 = b.cells.iter().zip(&b.part).map(|(&i, &q)| s.state.held[i as usize][q]).sum();

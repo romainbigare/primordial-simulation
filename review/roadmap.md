@@ -509,13 +509,18 @@ ground; where the loose ground is under 0.1 m the bed's own colour shows (both v
 face; scree between plants on steep thin ground; stones in channels by the power of their flow (`Ground::rock`).
 
 Open on the look:
-- Rock faces are rare (2 to 3% of the land is bare and steeper than 0.9) and read as soft grey patches: their ledges
-  and cracks do not show at 200 to 500 m. More cliffs need a ground whose wear strips steep slopes.
+- Bare bed is drawn in blurred squares of a sample's width (125 m) close up: the drawing reads the loose depth one
+  value a sample. A face's ledges and cracks do not show at 200 to 500 m.
 - Bare ground is shaded in blocks of a sample's width (125 m): the drawn normal is the samples', not smoothed.
 - At 10 m the ground between plants reads brown: herbs cover a fifth; flowers are too small to see.
 - Rivers are pale beside lakes; thin streams are faint at 200 to 500 m.
 - White wedges and small squares where a channel leaves a pond; pale blotches in seed 1's river-mouth bay.
 - Autumn is mostly herbs going yellow; red shows only on the heights.
+
+**Steep ground sheds its loose ground: done.** The loose depth of a sample is the smaller of two balances: against
+the land's lowering (Heimsath 1997), and against creep down its slope, which grows without bound near the slope loose
+grains rest at, 0.8 (Roering, Kirchner and Dietrich 1999; `space/mantle.rs`). Every sample steeper than 0.9 is bare
+bed (a third before); 5 to 15% of the land is bare. Rock bands follow the ridges.
 
 **The ground on the page: done.** A channel is drawn as one smooth line down its stem (the mean of the sample centres
 3 up and 3 down, Chaikin 1974), with the bends laid on it; within 250 m the drawn ground leans to the channel's floor,
@@ -533,6 +538,28 @@ with this law.
 runs of 60 years, 86 of 92 bodies end at their pass, so that is the level their gains and losses hold. A body that
 loses more falls to its own level by the laws.
 
+**The core's speed, first pass (track D): done.** A month of the flow takes a fifth fewer instructions, results bit
+for bit: the runoff finds once per cell whether it is land, a body's floors are sorted from last month's order, a
+cell's shore is counted by a search of its sorted sides, one search gives a part's volume and area under a level, and
+the rain's landing builds no list. Native, plants only, ms a year (size 22 / 32 / 64): 244 / 505 / 1915 -> 167 / 366 /
+1498. On the page the world waits for the page to draw its frame, so the date and the picture shown are the world's
+own within a quarter of a second, and a pause stops at the date shown.
+
+A body's level is one exact search of its floors (`level::level_with`), in place of Newton's steps, a sort and the
+halvings of the pores' share: 4% fewer instructions; the climate's numbers move in their fourth digit at most.
+
+Open on the speed:
+- The parts of a cell are solved after each of the liquid's bookings (7 a month) and after each air step. One solve at
+  the end of the liquid step changes the law's timing, not only its rounding: the runoff reads the solve after the
+  pore flow (the liquid share of a node on a melting plateau, a cell's share under its liquid, its land's pore room),
+  the erosion reads the solve after the runoff (what is solid), and the mix through the thermocline reads the parts
+  after the load. A cell at rest is already taken from its last solve; 1% of the cells the bookings pass are at rest.
+- The ground's full state is built each month at the survey. To build only what changed: a full thaw where the refresh
+  changes the substances present, the fusion enthalpy held found from the amounts (summed by moves its rounding
+  grows), and Flow's state saved with a snapshot, so a resumed run stays the unbroken one. A first try that kept only
+  the bodies and the gases monthly ran out of memory within 6 years at size 22 (not traced).
+- The wasm build has no `wasm-opt`; SIMD gives 3 to 5%.
+
 Open on the ground and the water:
 - Loose ground that settles during a run is not bounded by the `skin_m` rule.
 - The heat capacity of a node's amounts is one helper (`ground::amounts_cap`). Two orders of summing remain:
@@ -541,6 +568,38 @@ Open on the ground and the water:
 - A closed basin by the sea that loses more than it gains starts full and falls about 0.1 m a year to its own level
   (3 of 92 bodies in six runs).
 - A body colder than its liquid's melting point at the start starts molten, as the sea does.
-- On the page the date shown lags the world at high speed: 8 years at 36 months a second.
 - A small square where a channel leaves a pond; a tile costs 7 to 10 ms, most of it the channels' field.
 - Building the samples costs 0.5 to 0.6 s on a 32 island.
+
+## 11. Variety: landscapes and biomes on a small world
+
+The owner: the world is monotone despite rivers, lakes, mountains and colours; a small world should hold forests,
+swamps, alpine ground, plains, hills, drowned valleys, with the math correct.
+
+**Why it is monotone.** A biome is not a thing: it is what plants do where four fields meet: warmth, water, ground and
+time. On a small island each of the four is nearly the same everywhere:
+- Warmth: one air temperature over the whole island (the air evens out over 340 km); only height varies it.
+- Water: rain differs by height only; the ground is drained everywhere (every valley is a V with a channel); no flat
+  wet ground but the lakes.
+- Ground: one recipe of noise worn by one law with the same numbers everywhere, on two makes of bed in random
+  patches. So every square kilometre has the same hills at the same scale; no plain, no range, no plateau.
+- Plants: six starting kinds that all want the same place.
+
+**The strategy: make each field vary strongly, by a real cause, and let the biomes follow.** Nothing is painted; no
+biome has a name in the core.
+
+| Field | The cause to add | What it gives | Cost |
+|---|---|---|---|
+| Warmth | The band's stretch for the air (section 10 of the handover; in work on a branch) | a hot end, a cold end, tree lines at different heights | 1 to 2 packages |
+| Water from the air | A mean wind across the map from the band's own circulation, mountains across it | a wet side and a dry side | after the stretch; uncertain |
+| The ground's large shape | The rise of the land differs over the map: a range, its foothills, a low plain (the rise rate as a field with one or two large features, not the same noise everywhere) | alpine ground, hills, plains on one island | 1 package |
+| The coast | The wear runs with the sea lower, then the sea rises (as after an ice age) | drowned valleys: long inlets, bays, small islands | small, with the above |
+| The ground's make | Four or five makes of bed in layers and bodies, each with its hardness, colour, pores | scarps, tablelands, wide soft vales; colour that changes across the map | 1 package |
+| Steep ground | Loose ground cannot rest on steep slopes (in work) | cliffs, scree, bare peaks | in work |
+| Flat wet ground | Channels lay down their load where the slope falls (the law for mud and sand): valley floors, fans, deltas; ground whose pores stay full | plains by rivers, marsh, deltas | 2 packages, the hardest |
+| Ice | Where snow outlasts the summer it flows and cuts (a term of the wear's law at the world's start) | U-shaped valleys, bowls, deep lakes; with the risen sea, true fjords | 2 packages, after the others |
+| Plants | Starting kinds for the new places (soaked ground, cold thin ground, dry ground), and the law that roots in full pores get no gas | marsh plants, alpine mats, dry scrub: each wins in its own place | 1 package, after the fields exist |
+| The picture | The ground's colour from its make, its wetness and its dead matter | dark wet lowland, pale dry ridge, coloured rock | with each of the above |
+
+**Order.** The stretch (in work). Then the ground's large shape with the drowned coast and the makes of bed, in one
+package: it changes most for the least. Then plants for the new places. Then the law for mud and sand. Ice last.
