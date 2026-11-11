@@ -509,13 +509,18 @@ ground; where the loose ground is under 0.1 m the bed's own colour shows (both v
 face; scree between plants on steep thin ground; stones in channels by the power of their flow (`Ground::rock`).
 
 Open on the look:
-- Rock faces are rare (2 to 3% of the land is bare and steeper than 0.9) and read as soft grey patches: their ledges
-  and cracks do not show at 200 to 500 m. More cliffs need a ground whose wear strips steep slopes.
+- Bare bed is drawn in blurred squares of a sample's width (125 m) close up: the drawing reads the loose depth one
+  value a sample. A face's ledges and cracks do not show at 200 to 500 m.
 - Bare ground is shaded in blocks of a sample's width (125 m): the drawn normal is the samples', not smoothed.
 - At 10 m the ground between plants reads brown: herbs cover a fifth; flowers are too small to see.
 - Rivers are pale beside lakes; thin streams are faint at 200 to 500 m.
 - White wedges and small squares where a channel leaves a pond; pale blotches in seed 1's river-mouth bay.
 - Autumn is mostly herbs going yellow; red shows only on the heights.
+
+**Steep ground sheds its loose ground: done.** The loose depth of a sample is the smaller of two balances: against
+the land's lowering (Heimsath 1997), and against creep down its slope, which grows without bound near the slope loose
+grains rest at, 0.8 (Roering, Kirchner and Dietrich 1999; `space/mantle.rs`). Every sample steeper than 0.9 is bare
+bed (a third before); 5 to 15% of the land is bare. Rock bands follow the ridges.
 
 **The ground on the page: done.** A channel is drawn as one smooth line down its stem (the mean of the sample centres
 3 up and 3 down, Chaikin 1974), with the bends laid on it; within 250 m the drawn ground leans to the channel's floor,
