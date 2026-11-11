@@ -187,7 +187,8 @@ fn pick_kind(at: vec2f, cs: Corners, chance: array<vec4f, 4>, thick: f32, f: Foo
   var needs: array<vec4f, 4>;
   var sum = 0.0;
   var firsts = 0.0;
-  // The loose ground at the foot with its patches (rock.wgsl `loose_seen`, as the bare bed is drawn), read only where a kind's roots may want more than lies there.
+  // The loose ground at the foot with its patches (rock.wgsl `loose_seen`, as the bare bed is drawn), read only where a
+  // kind's roots may want more than lies there.
   var deepest = 0.0;
   for (var s = 0; s < 4; s++) {
     needs[s] = kind(ROOTS, cs.at[s]);
