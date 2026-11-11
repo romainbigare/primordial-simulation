@@ -141,7 +141,9 @@ to it, yellow, orange or red as its pigment per leaf area reaches, plant by plan
 brown and thin while dormant, and greens again as the ground warms. An evergreen kind (thick leaves) and the herbs turn
 only where the cold shuts them down (frozen ground, their frozen share); a kind shut down by drought goes straw, then
 brown. Far away the plants melt into a field of the same colours, with soft patches
-fixed in the world and no rows; the trees' canopy in their stands' colours, lighter and darker over groups of crowns.
+fixed in the world and no rows; the trees' canopy in their stands' colours, lighter and darker over groups of crowns,
+its stands fading into their mean from a 500 m scale bar on; the herbs and low plants as one layer from a metre a
+pixel; thin loose ground is poorer, its herbs sparse over the ground's own colour.
 The herbs are a sward over the ground at every scale, covering it far more than their share (a fifth of herb cover
 reads as two thirds green: their leaves lean and shade), in patches of their kinds, drawn about as light as the trees
 and less saturated so what stands on it reads by shape and shadow, with tufts, swathes and blades where each shows

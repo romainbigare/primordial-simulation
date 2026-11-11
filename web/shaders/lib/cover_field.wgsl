@@ -45,6 +45,13 @@ const PATCH_M = 8.0; const PATCH = 0.45;
 // are patches about as large as the noise's cells (`STAND_M` the trees', `SWARD_STAND_M` the herbs') with mixed edges,
 // and each kind keeps its share (draw.wgsl `noise_turned`, made even over 0..1).
 const STAND_M = 60.0; const SWARD_STAND_M = 5.0; const STAND_MIX = 0.4;
+// Far away a canopy's tone varies gently: the stands fade into their mean where a pixel takes from `STAND_CALM_E` to
+// twice as many m (by a 500 m scale bar), so only real differences (forest and meadow, leafy and bare, turned and
+// green) show there.
+const STAND_CALM_E = 1.5;
+// Thin ground is poor: the herbs cover from `THIN_COVER` of their share where the loose ground is `THIN_FROM_M` m deep
+// or less to all of it from `THIN_TO_M` m, so the ground's own colour shows through toward the bed's.
+const THIN_COVER = 0.25; const THIN_FROM_M = 0.05; const THIN_TO_M = 0.5;
 // Seen from above the trees' crowns with their shade cover more than their share, as the sward's: the ground they leave
 // is (1 - share)^`CANOPY_SEEN`; their canopy is lighter and darker by up to `CANOPY_TONE` over groups of crowns
 // `CANOPY_M` across.
@@ -153,7 +160,7 @@ fn stand_share(u: f32, s: f32) -> f32 {
 // stands' edges) where its stands are, the rest's elsewhere; their mean where a stand takes less than a pixel.
 fn in_stands(at: vec2f, e: f32, f: vec4f, first: i32, m: f32) -> vec3f {
   let mean = f.rgb / f.a;
-  let shows = shows_at(m, e);
+  let shows = shows_at(m, e) * (1.0 - ease(STAND_CALM_E, 2.0 * STAND_CALM_E, e));
   if (shows <= 0.0) { return mean; }
   let one = field_at(at, first, 0.0);
   let s = clamp(one.a / f.a, 0.0, 1.0);
@@ -290,7 +297,8 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   // The patches as far as they show: where they take less than a pixel the field is their mean (and no noise is read).
   let patches = shows_at(PATCH_M, e);
   let thick = select(1.0, 1.0 + (patchy(at) - 1.0) * patches, patches > 0.0);
-  let hold = held_at(at, b);
+  var hold = held_at(at, b);
+  hold.w *= mix(THIN_COVER, 1.0, ease(THIN_FROM_M - 0.5 * b.loose_px, THIN_TO_M + 0.5 * b.loose_px, b.loose));
   // The trees' field, read once: their crowns' share, and their layer below (plainly blended where their marks show in
   // its place: only the shade under them reads it).
   var trees = vec4f(0.0);
