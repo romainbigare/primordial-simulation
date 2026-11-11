@@ -40,6 +40,9 @@ fn ease(a: f32, b: f32, x: f32) -> f32 {
   return t * t * (3.0 - 2.0 * t);
 }
 
+// The share of detail `size` m across that shows at `e` m a pixel: none below a pixel.
+fn shows_at(size: f32, e: f32) -> f32 { return 1.0 - ease(0.5 * size, 1.5 * size, 2.0 * e); }
+
 // A random word of the grid cell c and the stream k, fixed in the world (lowbias32, Wellons 2018).
 fn lowbias(c: vec2i, k: i32) -> u32 {
   var x = (u32(c.x) * 0x9E3779B1u) ^ (u32(c.y) * 0x85EBCA77u) ^ (u32(k) * 0xC2B2AE3Du);
@@ -58,6 +61,22 @@ fn noise(p: vec2f, k: i32) -> vec3f {
   let b = v.z - v.x;
   let c = v.x - v.y - v.z + v.w;
   return vec3f(v.x + a * u.x + b * u.y + c * u.x * u.y, du * vec2f(a + c * u.y, b + c * u.x));
+}
+
+// Value noise at p (in its grid's cells) of stream k turned off the grid's axes by `TURN_A` radians, so a contour of it
+// shows no square cells: -1..1, spread about 0.43 (even over 0..1 through `smoothstep(-EVEN_ONE, EVEN_ONE, n)`).
+const TURN_A = 0.55; const EVEN_ONE = 0.95;
+fn noise_turned(p: vec2f, k: i32) -> f32 {
+  return noise(mat2x2f(cos(TURN_A), sin(TURN_A), -sin(TURN_A), cos(TURN_A)) * p, k).x;
+}
+
+// Two octaves of turned value noise at p (in the first's cells) of stream k, the second `OCTAVE` times as fine, turned
+// by `TURN_B` radians and weighing `SECOND`, so neither's cells show: -1..1, spread about 0.3 (even over 0..1 through
+// `smoothstep(-EVEN_TWO, EVEN_TWO, n)`).
+const OCTAVE = 1.93; const SECOND = 0.8; const TURN_B = 2.1; const EVEN_TWO = 0.655;
+fn noise_two(p: vec2f, k: i32) -> f32 {
+  let b = mat2x2f(cos(TURN_B), sin(TURN_B), -sin(TURN_B), cos(TURN_B)) * p;
+  return (noise_turned(p, k) + SECOND * noise(OCTAVE * b + 17.0, k).x) / (1.0 + SECOND);
 }
 
 // A cubic B-spline through the centres of the texels of a texture `size` texels wide, at `p` (texels from its corner,
