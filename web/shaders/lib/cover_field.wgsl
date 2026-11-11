@@ -23,9 +23,9 @@ const GRAIN_FILL = 0.35;
 const UNIFORM_SPREAD = 1.732;
 // A grain that spreads less than this (a display level of 255) does not show, and is not drawn.
 const SPREAD_SHOWS = 0.004;
-// Soft patches: a lattice's plants stand thicker and thinner over patches `PATCH_CELLS` of its cells across, by up to
-// `PATCH` of their mean (fixed noise in the world), alike near (cover.wgsl) and far.
-const PATCH_CELLS = 12.0; const PATCH = 0.45;
+// Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
+// mean (fixed noise in the world), alike near (cover.wgsl) and far.
+const PATCH_M = 8.0; const PATCH = 0.45;
 
 // The field of lattice l at `at`, m from the map's north-west corner, at mip level lod: the colour its marks cover the
 // ground with (a reflectance, premultiplied) and the share they cover.
@@ -59,8 +59,8 @@ fn field_smooth(at: vec2f, l: i32) -> vec4f {
   return g0.y * top + g1.y * bottom;
 }
 
-// How much thicker than their mean lattice l's plants stand at `at` (`PATCH`).
-fn patchy(at: vec2f, l: i32) -> f32 { return 1.0 + PATCH * noise(at / (PATCH_CELLS * cover_look.sides[l]), 40 + l).x; }
+// How much thicker than their mean the plants stand at `at` (`PATCH`).
+fn patchy(at: vec2f) -> f32 { return 1.0 + PATCH * noise(at / PATCH_M, 40).x; }
 
 // The share of the ground at `at` that lattice l's plants cover, where they cover `s` of it, seen at `e` m a pixel:
 // grains at the plants' own size (`GRAIN_FILL`), as fine as its cells of side `side`. A grain reaches at most half a
@@ -93,12 +93,11 @@ fn scatter(at: vec2f, l: i32, s: f32, e: f32, side: f32) -> f32 {
   return clamp(s + spread * blend, 0.0, 1.0);
 }
 
-// The share of the ground at `at` that lattice l's plants cover, where they cover `share` of it on the mean (thicker
-// and thinner over its patches), seen at `e` m a pixel: grains where a cell takes more than a pixel, their scatter
+// The share of the ground at `at` that lattice l's plants cover, where they cover `share` of it on the mean, seen at `e` m a pixel: grains where a cell takes more than a pixel, their scatter
 // where it takes less, blended over the pixel's size from half a cell to a cell.
 fn grain(at: vec2f, l: i32, share: f32, e: f32) -> f32 {
   let side = cover_look.sides[l];
-  let s = min(share * patchy(at, l), 1.0);
+  let s = min(share, 1.0);
   let w = smoothstep(0.5 * side, side, e);
   var out = 0.0;
   if (w < 1.0) { out += (1.0 - w) * grains(at, l, s, e, side); }
@@ -107,15 +106,16 @@ fn grain(at: vec2f, l: i32, share: f32, e: f32) -> f32 {
 }
 
 // The cover's field at `at` seen at `e` m a pixel, premultiplied: each lattice as far as its marks do not show, the
-// lower under the taller, with its grain (`grain`).
+// lower under the taller, thicker and thinner over the patches (`patchy`), with its grain (`grain`).
 fn cover_field(at: vec2f, e: f32) -> vec4f {
   var dst = vec4f(0.0);
+  let thick = patchy(at);
   for (var l = 0; l < COVER_LATTICES; l++) {
     let unshown = 1.0 - cover_look.shown[l];
     if (unshown <= 0.0) { continue; }
     let f = field_smooth(at, l);
     if (f.a <= 0.0) { continue; }
-    let a = grain(at, l, f.a, e) * unshown;
+    let a = grain(at, l, f.a * thick, e) * unshown;
     dst = vec4f(f.rgb / f.a * a, a) + dst * (1.0 - a);
   }
   return dst;

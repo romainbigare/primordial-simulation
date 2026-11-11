@@ -237,13 +237,15 @@ fn lattice(dst: ptr<function, vec4f>, p: vec2f, l: i32, e: f32) {
       let cs = corners(at / land.map.x);
       var chance: array<vec4f, 4>;
       var all = 0.0;
-      let thick = patchy(at, l);
       for (var s = 0; s < 4; s++) {
-        chance[s] = cs.w[s] * kind(CHANCE + l, cs.at[s]) * thick;
+        chance[s] = cs.w[s] * kind(CHANCE + l, cs.at[s]);
         all += dot(chance[s], vec4f(1.0));
       }
+      // The patches thicken a stand by at most `PATCH`: a rank past that needs no look at them.
       let rank = rand3(id, l);
-      if (rank.x >= all) { continue; }
+      if (rank.x >= all * (1.0 + PATCH)) { continue; }
+      let thick = patchy(at);
+      if (rank.x >= all * thick) { continue; }
       let f = foot(at);
       if (f.stands <= 0.0) { continue; }
       // Each kind of each square by its share at the foot; the rank picks one, and where it falls in that kind's
@@ -254,7 +256,7 @@ fn lattice(dst: ptr<function, vec4f>, p: vec2f, l: i32, e: f32) {
       var need = 0.0;
       for (var s = 0; s < 4; s++) {
         let needs = kind(NEED, cs.at[s]);
-        let w = chance[s] * thrive(f.wet, f.mean, needs) * f.stands;
+        let w = chance[s] * thick * thrive(f.wet, f.mean, needs) * f.stands;
         for (var t = 0; t < 4; t++) {
           sum += w[t];
           if (pick.x < 0 && rank.x < sum) { pick = vec2i(s, t); u = 1.0 - (sum - rank.x) / w[t]; need = needs[t]; }
