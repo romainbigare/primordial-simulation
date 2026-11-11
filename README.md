@@ -65,7 +65,7 @@ a moment, never the squares; a new tile fades in over it in a quarter of a secon
 blends the table between the squares' centres and applies the laws inside a cell there: the ground's temperature is
 its cell's less the air's fall with height times the pixel's height over the cell's mean; the frozen cover covers the
 ground as its mean depth does (tanh of the depth over 8 mm of ice, about 3 cm of snow, Yang and others 1997), less
-where the pixel is warmer than its melting point; liquid stands at the level of the ponds of the texels about the pixel where the ground drawn lies under it, so a shore runs smooth between the texels; the soil's liquid departs from its cell's by `soil_m` per unit of the wetness index over
+where the pixel is warmer than its melting point; liquid stands at the level of the ponds of the texels about the pixel where the ground drawn lies under it, the ground drawn near a shore leaning to a smooth line through the samples (a contour of their blurred heights, `tape/src/ground/shore.rs`), so a coast has no scallops a sample wide and its shallows are one band, and the water's edge covers its share of the pixel's footprint, so a shore is a smooth line at any zoom; the soil's liquid departs from its cell's by `soil_m` per unit of the wetness index over
 the cell's level, within none and the pores full, as the core shares it; a channel shows where the pixel lies nearer
 its line than half the width the channel law gives the discharge of its own sample (the core's `World::discharge`,
 which comes with a frame when it has changed enough to show), its share of the pixel what the pixel's footprint

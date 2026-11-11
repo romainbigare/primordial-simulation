@@ -15,6 +15,10 @@ fn ground() -> (Ground, std::ops::RangeInclusive<u8>) {
     (Ground::new(1, map, terrain, (cfg.lat_south, cfg.lat_north), Law::of(&cfg.phys)), depths)
 }
 
+/// The samples about a pond in which its shore is drawn smooth (`tape/src/ground/shore.rs`: the nearest pond within 2,
+/// and the spline through the samples reaches 2 more).
+const SHORE_SAMPLES: i64 = 4;
+
 /// The numbers of a texel of a tile's first plane.
 const TEXEL: usize = 4;
 
@@ -28,7 +32,8 @@ fn at(t: &[u16], x: usize, y: usize, k: usize) -> f32 {
 /// At a depth coarser than the terrain's samples, each texel's height is the mean of its four children's, so a parent
 /// drawn in a child's place shows the same ground, softer; at one finer, so too where no valley about a channel is
 /// drawn (`tape::VALLEY_FROM`, `tape::VALLEY_M`: within that of a sample that drains as much, and two samples more for
-/// the line's bends and smoothing, the ground is drawn toward the channel's floor).
+/// the line's bends and smoothing, the ground is drawn toward the channel's floor) and no shore (within `SHORE_SAMPLES`
+/// of a pond the shore is drawn smooth, `tape/src/ground/shore.rs`).
 #[test]
 fn a_texel_is_the_mean_of_its_four_children() {
     let (g, depths) = ground();
@@ -37,21 +42,24 @@ fn a_texel_is_the_mean_of_its_four_children() {
     let s = terrain.samples(1, &map, (cfg.lat_south, cfg.lat_north));
     let metres = map.length(pcore::space::terrain::SAMPLE_DEPTH);
     let reach = (tape::VALLEY_M / metres).ceil() as i64 + 2;
-    let near_valley = |p: [f64; 2]| {
+    let near = |p: [f64; 2], reach: i64, hit: &dyn Fn(usize) -> bool| {
         let (r, c) = (p[1].floor() as i64, p[0].floor() as i64);
         (-reach..=reach).any(|dr| (-reach..=reach).any(|dc| {
             let (r, c) = (r + dr, c + dc);
-            (0..s.down as i64).contains(&r) && (0..s.across as i64).contains(&c) && s.up[r as usize * s.across + c as usize] >= tape::VALLEY_FROM
+            (0..s.down as i64).contains(&r) && (0..s.across as i64).contains(&c) && hit(r as usize * s.across + c as usize)
         }))
     };
+    let near_valley = |p: [f64; 2]| near(p, reach, &|k| s.up[k] >= tape::VALLEY_FROM);
+    let near_shore = |p: [f64; 2]| near(p, SHORE_SAMPLES, &|k| s.pond[k] != pcore::space::network::NONE);
     let (mut checked, mut worst) = (0, 0.0f64);
-    for depth in [*depths.start(), depths.start() + 4] {
-        let (parent, child) = (g.tile(depth, 0, 0), g.tile(depth + 1, 0, 0));
+    // The whole island, and a tile of its middle (the parent's north-west quarter, the child's tile).
+    for (depth, t) in [(*depths.start(), 0), (depths.start() + 4, 8)] {
+        let (parent, child) = (g.tile(depth, t, t), g.tile(depth + 1, 2 * t, 2 * t));
         let per = 2f64.powi(depth as i32 - pcore::space::terrain::SAMPLE_DEPTH as i32);
         for y in 0..TILE / 2 {
             for x in 0..TILE / 2 {
-                let centre = [(x as f64 + 0.5) / per, (y as f64 + 0.5) / per];
-                if 2.0 * per > 1.0 && near_valley(centre) {
+                let centre = [((t * TILE as i64) as f64 + x as f64 + 0.5) / per, ((t * TILE as i64) as f64 + y as f64 + 0.5) / per];
+                if (2.0 * per > 1.0 && near_valley(centre)) || near_shore(centre) {
                     continue;
                 }
                 let mean = (0..4).map(|q| at(&child, 2 * x + q % 2, 2 * y + q / 2, 0) as f64).sum::<f64>() / 4.0;
@@ -90,20 +98,24 @@ fn a_place_holds_the_same_numbers_in_every_tile() {
 const HEIGHT_M: f64 = 1e-3;
 
 /// A tile names the pond each texel lies in (`Ground::pond_tile`): at the samples' own depth, where a texel is a
-/// sample, every texel a tile names in a pond lies under the pond's level (to `HEIGHT_M`), in it or beside it, and the
-/// island has ponds that a tile names exactly.
+/// sample, every texel a tile names in a pond beside its own sample lies under the pond's level (to `HEIGHT_M`; one
+/// named in its own sample's pond may lie over it, where the shore drawn smooth lifts it, `tape/src/ground/shore.rs`),
+/// and the island has ponds that a tile names exactly.
 #[test]
 fn a_texel_names_its_pond_and_lies_under_its_level() {
     let (g, depths) = ground();
     let depth = pcore::space::terrain::SAMPLE_DEPTH;
     assert!(depths.contains(&depth) && !g.ponds().is_empty(), "the island's ponds at the samples' depth");
     assert!(g.ponds().len() < tape::PONDS_EXACT, "{} ponds, more than a tile names", g.ponds().len());
+    let cfg = Config::default();
+    let (map, terrain) = worldgen::terrain::island_ground(1, 16, 16);
+    let s = terrain.samples(1, &map, (cfg.lat_south, cfg.lat_north));
     let tile = g.tile(depth, 0, 0);
     let mut held = 0;
     for y in 0..TILE {
         for x in 0..TILE {
             let named = tape::unhalf(tile[SIDE * SIDE * TEXEL + 2 * ((y + GUTTER) * SIDE + x + GUTTER) + 1]) as usize;
-            if named > 0 {
+            if named > 0 && s.pond[y * s.across + x] as usize != named - 1 {
                 held += 1;
                 let (h, level) = (at(&tile, x, y, 0) as f64, g.ponds()[named - 1].level);
                 assert!(h < level + HEIGHT_M, "texel ({x}, {y}) at {h} m in a pond of level {level} m");

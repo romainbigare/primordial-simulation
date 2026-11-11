@@ -603,3 +603,21 @@ biome has a name in the core.
 
 **Order.** The stretch (in work). Then the ground's large shape with the drowned coast and the makes of bed, in one
 package: it changes most for the least. Then plants for the new places. Then the law for mud and sand. Ice last.
+
+**The plants a world starts with: sorted and adapted at its creation** (the owner's question; to explore when a helper
+is free). A world starts with a few hand-made kinds as founders; in 100 years of a banded island they neither split
+by zone nor change their genes. The full world runs 4 to 6 years a second, so it cannot evolve anything in the 4 to 7
+seconds a world's creation may take. A reduced world can:
+1. The climate first: a year or two of the world without life (under a second) gives each cell its year of ground
+   temperature, light, liquid in its pores and snow, month by month.
+2. The cover's own law alone on that frozen year (`core/src/cover/`: the same functions, called with the frozen
+   state, never a copy): no air, no flow. The cover's month is a tenth of a world's month, and cells of like climate
+   and ground can be run as one, so thousands of years fit in a few seconds.
+3. Sorting before mutation: each class of cells starts with a wide draw of genotypes over the genes' whole range, not
+   six kinds; they compete for light, liquid and minerals by the law; the losers die out in decades; mutation and the
+   spread to neighbouring classes refine the winners over centuries.
+4. The world starts with the winners where they won, at the mass they hold there, taken from the ground and the air
+   with the books kept, as today's placement does.
+What it does not know: what plants do to their own ground (they dry it, shade it, feed it), so the full laws still
+shift the result in the first decades; how far is the first thing to measure. The amount of work is fixed (the same
+world from the same seed on every machine), so a phone takes longer than a desktop for the same start.
