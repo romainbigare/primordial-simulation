@@ -4,10 +4,11 @@
 //! basin's lowest pass (the highest ground on the lowest way out). Each sample's liquid runs to one of the neighbours
 //! reached before it that its flood's surface falls to, by a fixed draw of the sample with a chance in proportion to
 //! the fall (Fairfield and Leymarie 1991): across a corner only where both samples beside the corner lie lower too, so
-//! no way passes over the ridge between them; under a closed basin's level to the steepest, on a surface of that level
-//! raised by `FLOOD_RISE` along the way the flood came, so the way runs to the pass (Planchon and Darboux 2001;
-//! Cordonnier, Bovy and Braun 2019); elsewhere the surface is the ground's own height. The samples' ways
-//! (`space::samples`) and the law that wears the ground (`space::wear`) both run on it.
+//! no way passes over the ridge between them. Under a closed basin's level, and on a level plain, the surface is that
+//! level raised along the way the flood came, by `FLOOD_RISE` to twice that a m by each sample's draw, so the ways run
+//! to the pass (Planchon and Darboux 2001; Cordonnier, Bovy and Braun 2019) and not in straight lines along the grid;
+//! elsewhere it is the ground's own height. The samples' ways (`space::samples`) and the law that
+//! wears the ground (`space::wear`) both run on it.
 
 use super::grid::Grid;
 use super::network::NONE;
@@ -100,8 +101,8 @@ pub(super) fn open_low(g: &Grid, z: &[f64]) -> Vec<bool> {
 /// from the samples of it beside land only (the rest it never reaches); the sample of the lowest level first, then the
 /// lowest on the flood's surface, then the least index. A neighbour across a side it reaches stands at its own height
 /// or the level the flood came at, the higher, and on the surface at its own height or `FLOOD_RISE` times their
-/// distance higher than the sample it was reached from, the higher, so each sample of land has a way down; of its ways
-/// down it takes one by its draw `draw` (`pick`).
+/// distance times one and its draw higher than the sample it was reached from, the higher, so each sample of land has a
+/// way down; of its ways down it takes one by its draw `draw` (`pick`).
 pub(super) fn flood(g: &Grid, z: &[f64], open: &[bool], (shore, draw): (bool, &[f64])) -> Flood {
     let n = z.len();
     let (mut surface, mut level, mut seen) = (z.to_vec(), z.to_vec(), open.to_vec());
@@ -124,19 +125,12 @@ pub(super) fn flood(g: &Grid, z: &[f64], open: &[bool], (shore, draw): (bool, &[
                 continue;
             }
             seen[j] = true;
-            (surface[j], level[j]) = (z[j].max(s + FLOOD_RISE * d), z[j].max(l));
+            (surface[j], level[j]) = (z[j].max(s + FLOOD_RISE * d * (1.0 + draw[j])), z[j].max(l));
             heap.push(Low(level[j], surface[j], j));
         }
-        (to[i], apart[i]) = if l > z[i] { steepest(&down) } else { pick(&down, draw[i]) };
+        (to[i], apart[i]) = pick(&down, draw[i]);
     }
     Flood { surface, level, to, apart, rank, order }
-}
-
-/// The steepest way down among `down` (each a neighbour, its fall over its distance and its distance, m): under a
-/// closed basin's level, the way the flood came, toward its pass.
-fn steepest(down: &[(u32, f64, f64)]) -> (u32, f64) {
-    let (j, _, d) = down.iter().fold((NONE, 0.0, 0.0), |a, &w| if w.1 > a.1 { w } else { a });
-    (j, d)
 }
 
 /// The way down a sample's liquid takes among `down` (each a neighbour, its fall over its distance and its distance,

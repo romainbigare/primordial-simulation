@@ -87,9 +87,10 @@ the flood's surface, then the least index. Each sample's liquid runs to one of t
 the surface falls to, by a fixed draw of the sample, with a chance in proportion to the fall (Fairfield and Leymarie
 1991), so on an even slope the ways run on the mean along its fall and not along the grid's 8 directions; across a
 corner only from ground that drains and where both samples beside the corner lie lower too, so no way passes over the
-ridge between them. Under a basin's level the surface is that level raised by 1e-6 per m along the way the flood came
-(`FLOOD_RISE`) and the liquid takes the steepest way, so inside a basin the way runs to its pass (Planchon and Darboux
-2001; Cordonnier, Bovy and Braun 2019). A closed basin whose deepest sample lies less than a
+ridge between them. Under a basin's level, and on a level plain, the surface is that level raised along the way the
+flood came by 1e-6 per m (`FLOOD_RISE`) to twice that by the draw of the sample reached, so inside a basin the ways run
+to its pass (Planchon and Darboux 2001; Cordonnier, Bovy and Braun 2019) and across a plain not in straight lines
+along the grid. A closed basin whose deepest sample lies less than a
 metre under its level (`GRADED_M`) is filled to it, as the floods that spread a plain's load leave it. The samples of
 one basin under its level are **a pond** (`Samples::pond`, `Samples::ponds`): its pass is the first sample out of it
 on the way its liquid leaves by, and its level that pass's height. Every cell's height is a mean over the samples. So
