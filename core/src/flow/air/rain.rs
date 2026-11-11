@@ -288,7 +288,8 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64], patches: &
             act.iter().zip(row).for_each(|(ac, r)| *r = s.sat[ac.k].at(tl) / tl * seen);
         }
     });
-    for (p, row) in places.iter().zip(sat[n * nx..].chunks_exact_mut(nx)) {
+    // (Where no gas is active the rows are empty and there are none.)
+    for (p, row) in places.iter().zip(sat[n * nx..].chunks_exact_mut(nx.max(1))) {
         let (tl, seen) = (p.touching(s, t0), p.cells.iter().zip(&p.area).map(|(&i, a)| s.seen[i as usize] * a).sum::<f64>());
         act.iter().zip(row).for_each(|(ac, r)| *r = s.sat[ac.k].at(tl) / tl * seen);
     }
