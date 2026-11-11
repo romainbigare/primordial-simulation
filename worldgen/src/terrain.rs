@@ -7,6 +7,7 @@ use pcore::chem::{Chemistry, Phase};
 use pcore::flow::scale_height;
 use pcore::life::Life;
 use pcore::space::square::Square;
+use pcore::space::samples::Samples;
 use pcore::space::terrain::{self, Place, Terrain, ISLAND_LEVEL};
 use pcore::space::Level;
 use pcore::store::{Boundary, Class, Links, Node, Store};
@@ -25,8 +26,6 @@ const RADIUS_M: f64 = 6.371e6;
 const LAND_SHARE: f64 = 0.29;
 /// Height of the bottom of the bed, m.
 const BASE_Z: f64 = -3000.0;
-/// Depth of the loose ground every cell starts with, m.
-pub const LOOSE_M: f64 = 1.0;
 /// Starting temperatures, K: at the equator at 0 m, less `POLE_DROP` x sin² latitude, less `LAPSE` K per m of height.
 const T_EQUATOR: f64 = 302.0;
 const POLE_DROP: f64 = 45.0;
@@ -36,9 +35,9 @@ const MOLTEN_MARGIN: f64 = 2.0;
 
 /// The terrain of `seed` on `map` whose samples are `cells` (`space::terrain`): an island's level 0 m lies at the rise
 /// `ISLAND_LEVEL`; a globe's leaves the share `LAND_SHARE` of the area of the samples above it.
-fn terrain_of(seed: u64, map: &Square, cells: &Level) -> Terrain {
+fn terrain_of(seed: u64, map: &Square, cells: &Level, soft: f64) -> Terrain {
     if !map.wrap {
-        return Terrain::new(seed, ISLAND_LEVEL);
+        return Terrain::new(seed, ISLAND_LEVEL, soft);
     }
     let rise: Vec<f64> = (0..cells.n()).map(|i| terrain::rise(seed, map, Place::of(cells, i))).collect();
     let mut order: Vec<usize> = (0..cells.n()).collect();
@@ -48,7 +47,24 @@ fn terrain_of(seed: u64, map: &Square, cells: &Level) -> Terrain {
         above += cells.area()[i];
         above >= LAND_SHARE * total
     });
-    Terrain::new(seed, level.map_or(0.0, |&i| rise[i]))
+    Terrain::new(seed, level.map_or(0.0, |&i| rise[i]), soft)
+}
+
+/// The volume fractions of the bed where the share `patch` of it is of its patches (`terrain::patch`): the chemistry's
+/// `bed` and, over that share, its `deposits`, each by its own fractions.
+fn bed_of(init: &Init, patch: f64) -> Vec<(usize, f64)> {
+    let whole = |fr: &[(usize, f64)], by: f64| fr.iter().map(move |&(k, f)| (k, by * f / fr.iter().map(|p| p.1).sum::<f64>())).collect::<Vec<_>>();
+    if init.deposits.is_empty() {
+        return whole(&init.bed, 1.0);
+    }
+    [whole(&init.bed, 1.0 - patch), whole(&init.deposits, patch)].concat()
+}
+
+/// How much faster flowing liquid wears the bed of the patches than the rest (`Terrain::soft`): as Flow's wear breaks a
+/// bed (laws.md 1.3), by the sum of each substance's volume share over its bond strength.
+pub fn soft_of(chem: &Chemistry, init: &Init) -> f64 {
+    let weak = |fr: Vec<(usize, f64)>| fr.iter().map(|&(k, f)| f / chem.subs[k].strength).sum::<f64>();
+    weak(bed_of(init, 1.0)) / weak(bed_of(init, 0.0))
 }
 
 /// Height of each cell of `map` by `terrain` (its rows between the latitudes `lat`), m: the terrain's mean over it
@@ -109,7 +125,8 @@ pub fn new_world(seed: u64, w: usize, h: usize) -> World {
 /// The ground of the island of `w × h` squares `new_world` makes from `seed`: the map of its squares and its terrain
 /// (how its cells are cut does not change the ground).
 pub fn island_ground(seed: u64, w: usize, h: usize) -> (Square, Terrain) {
-    (island(w, h), Terrain::new(seed, ISLAND_LEVEL))
+    let (chem, init) = chemistry0();
+    (island(w, h), Terrain::new(seed, ISLAND_LEVEL, soft_of(&chem, &init)))
 }
 
 /// `map` (of squares) with its low ground away from land in coarse cells (`coarsen`): an air block whose squares all
@@ -149,7 +166,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
     if map.wrap {
         (cfg.lat_south, cfg.lat_north) = (-90.0, 90.0);
     }
-    let terrain = terrain_of(seed, &map, World::mesh_of(&map.samples(), &cfg).cells());
+    let terrain = terrain_of(seed, &map, World::mesh_of(&map.samples(), &cfg).cells(), soft_of(&chem, init));
     build_on(seed, map, terrain, (chem, init), cfg)
 }
 
@@ -157,29 +174,25 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
 fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, &Init), cfg: Config) -> World {
     let mesh = World::mesh_of(&map, &cfg);
     let (n, na, ns) = (mesh.cells().n(), mesh.level(AIR).n(), chem.ns());
-    let hz = heights(seed, &map, &terrain, (cfg.lat_south, cfg.lat_north));
+    let lat = (cfg.lat_south, cfg.lat_north);
+    let hz = heights(seed, &map, &terrain, lat);
+    let over = |x: fn(&Samples, usize) -> f64| map.leaves().iter().map(|&l| terrain.over(seed, &map, l, lat, x)).collect::<Vec<f64>>();
+    let (patch, loose) = (over(|s, k| s.patch[k]), over(|s, k| s.loose[k]));
     let mut ground = vec![0.0; ns * n];
     let mut bed = vec![0.0; ns * n];
     let mv = |k: usize| chem.molar_volume(k, Phase::Solid);
 
     for i in 0..n {
         let (z, area) = (hz[i], mesh.cells().area()[i]);
-        // Patchy deposits, more common in high ground.
-        let mut fr: Vec<(usize, f64)> = init.bed.clone();
-        for (j, &(k, f)) in init.deposits.iter().enumerate() {
-            let p = terrain::noise(seed ^ (100 + j as u64), &map, Place::of(mesh.cells(), i), 0.15, 3);
-            let lift = (z / 1500.0).clamp(0.0, 1.0);
-            let amt = f * ((p - 0.55) * 12.0).clamp(0.0, 3.0) * (0.3 + lift);
-            fr.push((k, amt));
-        }
+        let fr = bed_of(init, patch[i]);
         let tot: f64 = fr.iter().map(|p| p.1).sum();
-        let bed_v = (z - LOOSE_M - BASE_Z) * area;
+        let bed_v = (z - loose[i] - BASE_Z) * area;
         for &(k, f) in &fr {
             bed[k * n + i] += f / tot * bed_v / mv(k);
         }
         let ltot: f64 = init.loose.iter().map(|p| p.1).sum();
         for &(k, f) in &init.loose {
-            ground[k * n + i] += f / ltot * LOOSE_M * area / mv(k);
+            ground[k * n + i] += f / ltot * loose[i] * area / mv(k);
         }
     }
 
@@ -248,7 +261,7 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
     let low: Vec<f64> = (0..n).map(|i| pcore::flow::volume_under(&world, i, 0.0)).collect();
     let mut ground = amounts(&world, Class::Ground);
     for (i, &under) in low.iter().enumerate().filter(|p| *p.1 > 0.0) {
-        ground[init.low * n + i] += (por * LOOSE_M * world.mesh.cells().area()[i] + under) / v_low;
+        ground[init.low * n + i] += (por * loose[i] * world.mesh.cells().area()[i] + under) / v_low;
     }
     world.store = Store::new(n, (ground, amounts(&world, Class::Bed), vec![0.0; n]), (amounts(&world, Class::Air), vec![0.0; na]));
     // The ground and the air at their starting temperatures. (The world is made: its store is built whole at each stage,

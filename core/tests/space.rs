@@ -285,6 +285,20 @@ fn the_steepest_way_down_a_tilted_surface_is_its_slope_on_any_cells() {
     }
 }
 
+/// The wear at the world's start keeps what it moves (`Samples::books`): what it takes off the land lies in the closed
+/// basins and on the shelf of the open low ground, to a part in 1e9; the shelf lies under 0 m and the loose ground the
+/// wear leaves is nowhere less than none.
+#[test]
+fn the_wear_keeps_what_it_moves() {
+    let w = worldgen::testkit::small_world();
+    let s = w.terrain_samples();
+    let b = s.books;
+    println!("taken {:.4e} m3, in the basins {:.4e}, on the shelf {:.4e}", b.taken, b.settled, b.shelf);
+    assert!(b.taken > 0.0 && b.settled > 0.0 && b.shelf > 0.0, "{b:?}");
+    assert!(((b.settled + b.shelf) / b.taken - 1.0).abs() < 1e-9, "{b:?}");
+    assert!(s.loose.iter().all(|&d| d >= 0.0), "loose ground under none");
+}
+
 /// The terrain's channels (`space::network`): each sample's liquid runs to a neighbour no higher, but in a pond, where
 /// it runs on toward the pass; from every sample of land the way leads to the open low ground under 0 m; a pond's
 /// samples lie under its level, which is its pass's height. The area that drains through a sample is its own and all

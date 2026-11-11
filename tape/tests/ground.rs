@@ -1,7 +1,6 @@
 //! The ground's tiles (`tape::Ground`): a texel holds the mean height of its four children, and a place holds the same
 //! numbers in every tile that holds it.
 
-use pcore::space::terrain::{Terrain, ISLAND_LEVEL};
 use pcore::Config;
 use tape::{unhalf, Ground, Law, GUTTER, TILE};
 
@@ -11,9 +10,9 @@ const SIDE: usize = TILE + 2 * GUTTER;
 /// The ground of the island of seed 1, 16 x 16 squares, with the default laws.
 fn ground() -> (Ground, std::ops::RangeInclusive<u8>) {
     let cfg = Config::default();
-    let map = worldgen::terrain::island(16, 16);
+    let (map, terrain) = worldgen::terrain::island_ground(1, 16, 16);
     let depths = tape::depths(&map);
-    (Ground::new(1, map, Terrain::new(1, ISLAND_LEVEL), (cfg.lat_south, cfg.lat_north), Law::of(&cfg.phys)), depths)
+    (Ground::new(1, map, terrain, (cfg.lat_south, cfg.lat_north), Law::of(&cfg.phys)), depths)
 }
 
 /// The numbers of a texel of a tile's first plane.

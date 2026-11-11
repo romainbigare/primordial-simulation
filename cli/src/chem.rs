@@ -3,7 +3,10 @@
 use crate::args::Args;
 use pcore::chem::{Chemistry, Phase};
 use worldgen::richness::ignition;
-use worldgen::terrain::{air_column, LOOSE_M};
+use worldgen::terrain::air_column;
+
+/// The depth of loose ground the balance is shown for, m: a metre, about the median the wear leaves on land.
+const LOOSE_M: f64 = 1.0;
 
 /// Earth names of chemistry 0 (display only; the core never reads them).
 const LIBRARY: &str = include_str!("../../library/chem0.toml");

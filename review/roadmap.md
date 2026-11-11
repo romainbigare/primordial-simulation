@@ -481,3 +481,29 @@ uses a typical runoff; a channel starts at a body with a square end; notches whe
 plants as tufts, flowers and bushes that melt into a field from afar). The "True" view stays the raw colours the
 physics gives. Cliffs, bare rock, scree and boulders come from numbers (slope, the loose ground's depth, a channel's
 power); the drawing places each one.
+
+**The water's follow-ups: on the work branch, not on main.** A body of standing liquid is built from its own samples;
+each cell holds its parts of it, and the passes over the samples keep their room. Held back from main: the slow test
+`the_long_step_keeps_the_climate` fails on its count of `rivers` (0.43, limit 0.33).
+
+Found on the rain: the law gives an air node's rain only to the cells whose own air saturates, so on a 22 island 59 of
+189 land cells get under 1 cm of rain a year, beside wet ones. These are the pale dry squares. The rain an air node
+makes should fall over all its cells, by a smooth weight with the wind's drift (Smith and Barstad 2004), its total
+kept.
+
+**The ground's second pass: on the work branch, not on main.** The wear's ways no longer follow the grid: coarse
+rows have their true width, a sample picks one of its ways down by a fixed draw in proportion to the fall (Fairfield
+and Leymarie 1991), a way crosses a corner only from draining ground, and a filled basin's surface leans by each
+sample's draw. The bed has hard and soft patches from the chemistry's two makes of ground. The wear leaves a depth of
+loose ground per sample (Heimsath et al. 1997) and builds a shelf under the shore from the load that reaches the low
+ground; taken = basins + shelf is tested. Channel length in straight runs of 4 samples or more: 50% -> 30%.
+
+Held back from main, for these:
+- The page draws the new ground worse close up: a channel is a zig-zag of arcs along a staircase of samples, the shelf
+  shows square sample edges, a pond's outlet is a square, one deep pond on seed 2 is drawn dry.
+- The loose ground is now 4 m deep on average (it was 1 m everywhere) and the ground node holds all of it at one
+  temperature, so seasons are milder (swing on land 14.1 K, reference 15.7), cover is higher and a globe without life
+  is 5 K warmer. Three tests fail on this: the plateau test (fast), the key numbers and the lifeless globe (slow).
+  The stores by depth need a rule: what the year's heat wave reaches, and what roots reach.
+- Building the samples costs 0.7 s on a 32 island (0.44 s before); the slow choose tests take much longer.
+- A tile still costs 8 to 9 ms; the pond search is cut, the channels field and the packing are what is left.

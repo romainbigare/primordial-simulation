@@ -3,7 +3,7 @@
 //! (`space::drain`) and the law that wears the ground at the world's start (`space::wear`) read it, on the samples'
 //! own grid and on one a few times coarser (`Grid::coarser`).
 
-use super::below::lean_quarters;
+use super::below::{lean_quarters, Near};
 
 /// The steps to the 8 neighbours of a sample, rows and columns.
 const STEPS: [(i64, i64); 8] = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)];
@@ -62,6 +62,15 @@ impl Grid {
         })
     }
 
+    /// The two samples beside both sample `k` and its neighbour `j` across a corner, between which the way from one to
+    /// the other passes.
+    pub(super) fn corner_sides(&self, k: usize, j: usize) -> [usize; 2] {
+        let w = self.across as i64;
+        let (r, c, rj, cj) = ((k / self.across) as i64, (k % self.across) as i64, (j / self.across) as i64, (j % self.across) as i64);
+        let wrapped = |c: i64| c.rem_euclid(w) as usize;
+        [r as usize * self.across + wrapped(cj), rj as usize * self.across + wrapped(c)]
+    }
+
     /// The neighbours of sample `k` across its sides and corners, each with its distance, m.
     pub(super) fn around(&self, k: usize) -> impl Iterator<Item = (usize, f64)> + '_ {
         self.ways(k).map(|(j, _, d)| (j, d))
@@ -102,9 +111,10 @@ impl Grid {
         out
     }
 
-    /// The grid of `by` x `by` samples to one (`by` divides both sides).
+    /// The grid of `by` x `by` samples to one (`by` divides both sides): a row of it as wide as `by` samples of the
+    /// rows it spans are on their mean.
     pub(super) fn coarser(&self, by: usize) -> Grid {
-        let dx = self.dx.chunks(by).map(|rows| rows.iter().sum::<f64>() / by as f64).collect();
+        let dx = self.dx.chunks(by).map(|rows| rows.iter().sum::<f64>()).collect();
         Grid::new(self.across / by, self.down / by, self.wrap, self.dy * by as f64, dx)
     }
 
@@ -123,8 +133,7 @@ impl Grid {
 
     /// The heights `z` of this grid's samples carried to the grid twice as fine along each side (twice the `across`
     /// and the `down`, its rows `dx`): each sample's quarters take its mean and the smooth lean through it and its
-    /// neighbours (`below::lean_quarters`), so the finer heights have no steps, held between the lowest and the highest
-    /// of the sample and its eight neighbours, so they make no new pit and no new peak.
+    /// neighbours (`below::lean_quarters`), so the finer heights have no steps, no new pit and no new peak.
     pub(super) fn finer(&self, z: &[f64], dx: &[f64]) -> Vec<f64> {
         let (r_max, wide) = (self.down as i64 - 1, self.across as i64);
         let at = |r: i64, c: i64| {
@@ -135,12 +144,11 @@ impl Grid {
         for (k, zk) in z.iter().enumerate() {
             let (r, c) = ((k / self.across) as i64, (k % self.across) as i64);
             let rows = [dx[2 * r as usize], dx[2 * r as usize + 1]];
-            let d = lean_quarters(|i, j| at(r + j, c + i), [rows[0], rows[0], rows[1], rows[1]]);
-            let near = || (-1..=1).flat_map(|j| (-1..=1).map(move |i| at(r + j, c + i)));
-            let (lo, hi) = (near().fold(f64::INFINITY, f64::min), near().fold(f64::NEG_INFINITY, f64::max));
+            let near: Near = std::array::from_fn(|j| std::array::from_fn(|i| at(r + j as i64 - 2, c + i as i64 - 2)));
+            let d = lean_quarters(&near, [rows[0], rows[0], rows[1], rows[1]]);
             for (q, dq) in d.iter().enumerate() {
                 let (y, x) = (2 * r as usize + q / 2, 2 * c as usize + q % 2);
-                out[y * 2 * self.across + x] = (zk + dq).clamp(lo, hi);
+                out[y * 2 * self.across + x] = zk + dq;
             }
         }
         out

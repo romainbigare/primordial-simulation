@@ -29,24 +29,40 @@ pub fn leaf_at(depth: u8, x: i64, y: i64) -> Leaf {
     Leaf { x: x as u64 * side, y: y as u64 * side, depth }
 }
 
-/// The lean along each axis and across both of the quarters of the leaf at (`x`, `y`), from the heights `at(dx, dy)`
-/// of it and its neighbours (`LEAN`).
-fn leans(at: impl Fn(i64, i64) -> f64) -> [f64; 3] {
-    let along = |f: &dyn Fn(i64) -> f64| (-2..=2).map(|i| LEAN[(i + 2) as usize] * f(i)).sum::<f64>();
-    [along(&|i| at(i, 0)), along(&|j| at(0, j)), along(&|j| along(&|i| at(i, j)))]
+/// The heights of a leaf and of its neighbours two each way, row by row from the north-west: the leaf's at [2][2].
+pub(super) type Near = [[f64; 5]; 5];
+
+/// The lean along each axis and across both of the quarters of a leaf, from the heights `n` of it and its neighbours
+/// (`LEAN`).
+fn leans(n: &Near) -> [f64; 3] {
+    let row = |j: usize| (0..5).map(|i| LEAN[i] * n[j][i]).sum::<f64>();
+    [row(2), (0..5).map(|j| LEAN[j] * n[j][2]).sum::<f64>(), (0..5).map(|j| LEAN[j] * row(j)).sum::<f64>()]
 }
 
 /// The departures of the means of the quarters (of areas `area`, m², row by row) of a leaf from its mean, m, from the
-/// heights `at(dx, dy)` of it and its neighbours: their lean (`leans`; across both ways, the product of the two leans)
-/// less the lean's mean by area, so the quarters keep the leaf's mean.
-pub(super) fn lean_quarters(at: impl Fn(i64, i64) -> f64, area: [f64; 4]) -> [f64; 4] {
-    let [ew, sn, corners] = leans(at);
+/// heights `n` of it and its neighbours: their lean (`leans`; across both ways, the product of the two leans) less the
+/// lean's mean by area, so the quarters keep the leaf's mean; the whole lean scaled down where a quarter would lie past
+/// the lowest or the highest of the leaf and its eight neighbours (Barth and Jespersen 1989), so the finer ground makes
+/// no new pit and no new peak, and a valley's floor falls along it as its leaves' means do.
+pub(super) fn lean_quarters(n: &Near, area: [f64; 4]) -> [f64; 4] {
+    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for z in n[1..4].iter().flat_map(|row| &row[1..4]) {
+        (lo, hi) = (lo.min(*z), hi.max(*z));
+    }
+    let own = n[2][2];
+    let [ew, sn, corners] = leans(n);
     let lean: [f64; 4] = std::array::from_fn(|q| {
         let (sx, sy) = (if q % 2 == 1 { 1.0 } else { -1.0 }, if q >= 2 { 1.0 } else { -1.0 });
         sx * ew + sy * sn + sx * sy * corners
     });
     let mean = (0..4).map(|q| area[q] * lean[q]).sum::<f64>() / area.iter().sum::<f64>();
-    lean.map(|l| l - mean)
+    let lean = lean.map(|l| l - mean);
+    if lean.iter().all(|&d| (lo..=hi).contains(&(own + d))) {
+        return lean;
+    }
+    let room = |d: f64| if d > 0.0 { (hi - own) / d } else if d < 0.0 { (lo - own) / d } else { 1.0 };
+    let scale = lean.iter().map(|&d| room(d)).fold(1.0, f64::min);
+    lean.map(|l| l * scale)
 }
 
 /// The leaves of one depth over a rectangle of them (from column `x` and row `y`, in leaves of that depth), row by
@@ -125,12 +141,13 @@ fn finer(map: &Square, lat: (f64, f64), p: &Patch, [x0, y0, x1, y1]: [i64; 4]) -
     let mut out = Patch { depth: p.depth + 1, x: x0, y: y0, w: cw, h: ch, z: vec![0.0; cw * ch] };
     let at = |cx: i64, cy: i64| (cy - y0) as usize * cw + (cx - x0) as usize;
     for py in y0 >> 1..=y1 >> 1 {
+        // The areas of the quarters: a leaf's area depends on its row alone.
+        let a = leaf_at(p.depth, x0 >> 1, py).quarters().map(|q| map.place_of(&q, lat.0, lat.1).0);
         for px in x0 >> 1..=x1 >> 1 {
-            let k = p.near(px, py);
-            let a = leaf_at(p.depth, px, py).quarters().map(|q| map.place_of(&q, lat.0, lat.1).0);
-            let d = lean_quarters(|dx, dy| p.z[p.near(px + dx, py + dy)], a);
+            let near: Near = std::array::from_fn(|j| std::array::from_fn(|i| p.z[p.near(px + i as i64 - 2, py + j as i64 - 2)]));
+            let d = lean_quarters(&near, a);
             for (q, dq) in d.iter().enumerate() {
-                out.z[at(2 * px + (q % 2) as i64, 2 * py + (q / 2) as i64)] = p.z[k] + dq;
+                out.z[at(2 * px + (q % 2) as i64, 2 * py + (q / 2) as i64)] = near[2][2] + dq;
             }
         }
     }

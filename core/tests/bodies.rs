@@ -22,7 +22,7 @@ const WARM_K: f64 = 5.0;
 const LEVEL: f64 = 1e-6;
 
 /// Months of the scene.
-const MONTHS: usize = 6;
+const MONTHS: usize = 12;
 
 /// The scene: the small island of a mild climate (`testkit::small_world`) after `MONTHS` liquid steps, so its bodies hold
 /// the liquid the steps left them, with no load carried (the ground stays where the pass found it).

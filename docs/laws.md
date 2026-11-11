@@ -48,28 +48,49 @@ island those under 0 m joined to its lowest, so ground under 0 m inland is a clo
 over 2 million years (`WEAR_YEARS`; ground under 0 m does not rise) while flowing liquid cuts it by the stream power
 law (Howard 1994; Whipple and Tucker 1999): it lowers by K √A S, A the area that drains through a sample, spread down
 every lower way by Quinn's weights (Quinn et al. 1991), S the slope to the sample its liquid runs to, m = 1/2 and n = 1,
-K = 3e-7 a year (`CUT`), each step solved exactly from the open low ground up the ways (h = (h₀ + f h_down) / (1 + f),
-f = K dt √A / d; Braun and Willett 2013), so a step of any length is stable, 0 m the height of the low ground's
-liquid. Under a closed basin's level the liquid does not cut. What a step cuts spreads down as the liquid does; a
-closed basin keeps all that comes into it and fills its floor from the lowest up, as one level, toward the height its
-pass has now, and what it cannot hold runs on over the pass (`space::ponds`); what reaches the open low ground leaves
-the land. The slopes creep as a diffusion of 3e-3 m² a year (`CREEP`, the anchor of the core's own creep; Culling
-1960), and the ground floats back up by 2700/3300 of what a step took away, spread over 50 km as a plate bends (Airy
-isostasy, `FLOATS`, `BENDS_M`; Molnar and England 1990). The land first gets a roughness of a metre drawn from the
-seed (`ROUGH_M`), which the first ways find. The time runs on three grids (`STAGES`): 55% of it in 24 steps on a grid
-of 4 x 4 samples to one, then 20% in 6 steps on one of 2 x 2, then 25% in 3 steps on the samples' own, so the
-valleys are cut at the samples' size; each grid takes the noise's mean over each of its samples (or the noise carried
-to it), and each is carried to the next by the smooth lean below (held between
-the lowest and the highest of a sample and its eight neighbours, so it makes no new pit and no new peak); a map whose
-first grid would hold more than 65,536 samples runs every stage on grids twice as coarse until it fits
-(`MOST_SAMPLES`). It runs in a fixed serial order in 64-bit numbers, so a seed gives one ground on every machine.
+K = 3e-7 a year (`CUT`) on the bed, each step solved exactly from the open low ground up the ways (h = (h₀ + f h_down)
+/ (1 + f), f = K dt √A / d; Braun and Willett 2013), so a step of any length is stable, 0 m the height of the low
+ground's liquid. **The bed has patches** of another make (`terrain::patch`): fractal noise over four scales from about
+4 km down to 500 m, parted sharply about its middle, says what share of the bed at a place is of the patches; the
+cells' beds are made of it (the chemistry's `bed` and, over that share, its `deposits`, section 8), and flowing liquid
+wears the patches as much faster as Flow's wear breaks them (the sum of each substance's share over its bond strength,
+1.3): `Terrain::soft`, 1.36 in chemistry 0. So soft patches open into valleys and the hard bed stands. Under a closed
+basin's level the liquid does not cut. What a step cuts spreads down as the liquid does; a closed basin keeps all that
+comes into it and fills its floor from the lowest up, as one level, toward the height its pass has now, and what it
+cannot hold runs on over the pass (`space::ponds`); what reaches the open low ground lies there at the end (the shelf,
+below). The slopes creep as a diffusion of 3e-3 m² a year (`CREEP`, the anchor of the core's own creep; Culling 1960),
+and what creeps into the open low ground goes to the shelf too; the ground floats back up by 2700/3300 of what a step
+took away, spread over 50 km as a plate bends (Airy isostasy, `FLOATS`, `BENDS_M`; Molnar and England 1990). The land
+first gets a roughness of a metre drawn from the seed (`ROUGH_M`), which the first ways find. The time runs on three
+grids (`STAGES`): 40% of it in 16 steps on a grid of 4 x 4 samples to one, then 30% in 8 steps on one of 2 x 2, then
+30% in 4 steps on the samples' own, so the valleys are cut at the samples' size; each grid takes the noise's mean over
+each of its samples (or the noise carried to it), and each is carried to the next by the smooth lean below (which
+makes no new pit and no new peak); a map whose first grid would hold more than 65,536 samples runs every stage on grids
+twice as coarse until it fits (`MOST_SAMPLES`). **The shelf** (`space::shelf`): the load that reached the open low
+ground is spread along the shore by the waves, each sample of the shore taking the load that reached the shore within
+5 km of it as a share of that stretch (`ALONG_M`); from it the load builds out a platform 5 m under 0 m (`TOPSET_M`, a
+delta's topset), as wide as that load in proportion, fronted by a slope of 0.3 down to the floor (`FORESET`, the load at
+rest under liquid; Gilbert 1885). So a channel that brings much load builds a fan at its mouth and a coast that gets
+little keeps its steep drop; the width is found so the shelf holds all the load, and what the wear took off the land is
+what lies in the basins and on the shelf (`Samples::books`). **The loose ground** the wear leaves (`Samples::loose`):
+on land, what settled on a sample in the last stage (in the basins, at the foot of the slopes) and over it the mantle
+where the bed's breaking into loose ground balances the lowering of the last step (cut and creep): the bed breaks at
+7.7e-5 m a year under none, e times slower under each 0.4 m (`BREAKS`, `BREAKS_UNDER_M`; Heimsath, Dietrich, Nishiizumi
+and Finkel 1997), so a lowering E keeps 0.4 ln(7.7e-5 / E) m, none where E outruns the breaking, at most what a lowering
+of a millionth of the breaking keeps (`SLOWEST`); on the open low ground the shelf over a metre of the fine load that
+settles everywhere (`OOZE_M`). It runs in a fixed serial order in 64-bit numbers, so a seed gives one ground on every
+machine.
 **The flood** (`space::drain`) over the worn samples, from all the open low ground, does not raise the ground (Barnes,
-Lehman and Mulla 2014): it reaches the samples by the level their liquid stands to, lowest first (a sample's own
-height where it drains; under a closed basin's level the height of its lowest pass), then the lowest on the flood's
-surface, then the least index. Each sample's liquid runs to the neighbour reached before it that the flood's surface
-falls to most steeply (D8, O'Callaghan and Mark 1984): the ground where it drains, under a basin's level that level
-raised by 1e-6 per m along the way the flood came (`FLOOD_RISE`), so inside a basin the way runs to its pass
-(Planchon and Darboux 2001; Cordonnier, Bovy and Braun 2019). A closed basin whose deepest sample lies less than a
+Lehman and Mulla 2014): it reaches the samples across their sides by the level their liquid stands to, lowest first (a
+sample's own height where it drains; under a closed basin's level the height of its lowest pass), then the lowest on
+the flood's surface, then the least index. Each sample's liquid runs to one of the neighbours reached before it that
+the surface falls to, by a fixed draw of the sample, with a chance in proportion to the fall (Fairfield and Leymarie
+1991), so on an even slope the ways run on the mean along its fall and not along the grid's 8 directions; across a
+corner only from ground that drains and where both samples beside the corner lie lower too, so no way passes over the
+ridge between them. Under a basin's level, and on a level plain, the surface is that level raised along the way the
+flood came by 1e-6 per m (`FLOOD_RISE`) to twice that by the draw of the sample reached, so inside a basin the ways run
+to its pass (Planchon and Darboux 2001; Cordonnier, Bovy and Braun 2019) and across a plain not in straight lines
+along the grid. A closed basin whose deepest sample lies less than a
 metre under its level (`GRADED_M`) is filled to it, as the floods that spread a plain's load leave it. The samples of
 one basin under its level are **a pond** (`Samples::pond`, `Samples::ponds`): its pass is the first sample out of it
 on the way its liquid leaves by, and its level that pass's height. Every cell's height is a mean over the samples. So
@@ -82,7 +103,9 @@ seed and the map that every cell and every pixel a shell draws read (`space::bel
 the quarters of a leaf of side ℓ depart from its mean by a smooth continuation of the coarser heights that keeps it:
 the quarters lean as the quartic through the leaf and two neighbours each way on each axis does (average
 interpolation, Donoho 1993), so the ground has no steps and its slope no kinks at the leaves' edges and a slope across
-the samples goes on across their quarters. Nothing random is laid on it. So a leaf has a mean height at any depth. What needs the cell at a
+the samples goes on across their quarters; the whole lean scaled down where a quarter would pass the lowest or the
+highest of the leaf and its eight neighbours (Barth and Jespersen 1989), so it makes no new pit and no new peak and a
+valley's floor falls along it as its leaves do. Nothing random is laid on it. So a leaf has a mean height at any depth. What needs the cell at a
 point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
@@ -1282,11 +1305,13 @@ to the air. Body matter holds no rock element: the **rock salt (11)** is rock ch
 Placed by `worldgen` (`worldgen::schedule::Schedule`, carried by a snapshot) and printed by every run; the laws never
 read a kind.
 - **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on: an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
-  `World::terrain`); a metre of loose ground; the sea's salt at
+  `World::terrain`); the bed of the chemistry's `bed` and, over the share of it in patches (`terrain::patch`), of its
+  `deposits`; the loose ground the wear left (0: the mantle on land, the shelf on the open low ground), each cell the
+  mean over its samples; the sea's salt at
   balance (2.6); ground and air temperatures falling with latitude and height. The terrain's samples are worn (0):
   land rises from 0 m to the noise's height over 2 million years while flowing liquid cuts it, its slopes creep and it
   floats back up as it is unloaded; the load settles in the closed basins the cutting leaves, and those it does not fill
-  are ponds, each with its pass and level. On an island the open water is coarse (`coarse_low`): an air block (8 km) whose squares all lie
+  are ponds, each with its pass and level; what reaches the open low ground lies there as a shelf. On an island the open water is coarse (`coarse_low`): an air block (8 km) whose squares all lie
   below 0 m, none within a square of land (`LAND_RING`), is one cell, split where it borders finer cells until cells
   across a border differ by one size at most; the coasts stay in 2 km squares. A globe is one cell an air block but in a
   rectangle of air blocks in squares (`--fine`), by the same rule. A cell's height is the terrain's mean over it

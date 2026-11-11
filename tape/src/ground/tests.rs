@@ -6,15 +6,15 @@ use super::{code, to_segment, Channels, Law, STEP_MOST};
 use pcore::space::network::NONE;
 use pcore::space::samples::Samples;
 use pcore::space::square::Square;
-use pcore::space::terrain::{Terrain, ISLAND_LEVEL, SAMPLE_DEPTH};
+use pcore::space::terrain::SAMPLE_DEPTH;
 use std::sync::Arc;
 
 /// The map of the island of seed 1, 16 x 16 squares, its samples, the metres a sample takes, and the default channel
 /// law.
 fn island() -> (Square, Arc<Samples>, f64, Law) {
     let cfg = pcore::Config::default();
-    let map = worldgen::terrain::island(16, 16);
-    let s = Terrain::new(1, ISLAND_LEVEL).samples(1, &map, (cfg.lat_south, cfg.lat_north));
+    let (map, terrain) = worldgen::terrain::island_ground(1, 16, 16);
+    let s = terrain.samples(1, &map, (cfg.lat_south, cfg.lat_north));
     let metres = map.length(SAMPLE_DEPTH);
     (map, s, metres, Law::of(&cfg.phys))
 }
