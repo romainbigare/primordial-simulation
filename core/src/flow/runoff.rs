@@ -66,7 +66,8 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     let mut x = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: liq.len() + 1 };
     // (The room for what runs through each sample is kept from month to month, `spare::Spare`.)
     let mut into = std::mem::take(&mut s.spare.samples);
-    (into.clear(), into.resize(b.cell_of.len(), [0.0; 2]));
+    into.clear();
+    into.resize(b.cell_of.len(), [0.0; 2]);
     let mut h = Held { q, vol, width: liq.len() + 1, part: s.state.held.iter().map(|v| vec![0.0; v.len()]).collect(), into };
     let mm: Vec<f64> = liq.iter().map(|&k| s.sp[k].mm).collect();
     send(w, s, &b, &mut h, &mut x, (slope, runs, &mm), dt);
