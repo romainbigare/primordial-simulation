@@ -5,7 +5,7 @@
 
 use super::{Found, Parts, DEEP, LAND, PARTS, TOP};
 use crate::flow::Scratch;
-use crate::{math::one_minus_exp, store::Class, units::T_FLOOR, World};
+use crate::{ground::amounts_cap, math::one_minus_exp, store::Class, units::T_FLOOR, World};
 
 /// A number and the sum of its parts that differ by no more than this share of it differ by the rounding of that sum
 /// alone: nothing moved.
@@ -46,7 +46,7 @@ pub(super) fn reconcile(w: &World, s: &Scratch, i: usize, p: &mut Parts) {
         }
     }
     let (e, held) = (w.store.heat(Class::Ground)[i], p.heat[LAND] + p.heat[TOP] + p.heat[DEEP]);
-    let cap = [LAND, TOP, DEEP].map(|q| s.skin[i] * p.ground(q) + s.state.loose.iter().map(|&k| p.amt[k][q] * s.sp[k].cp).sum::<f64>());
+    let cap = [LAND, TOP, DEEP].map(|q| s.skin[i] * p.ground(q) + amounts_cap(s.state.loose.iter().copied(), |k| p.amt[k][q], |k| s.sp[k].cp));
     if moved(e, held) {
         let all = (cap[LAND] + cap[TOP] + cap[DEEP]).max(f64::MIN_POSITIVE);
         let (top, deep) = (p.heat[TOP] + (e - held) * cap[TOP] / all, p.heat[DEEP] + (e - held) * cap[DEEP] / all);

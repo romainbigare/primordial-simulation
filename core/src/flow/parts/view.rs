@@ -2,7 +2,7 @@
 
 use super::{has, Mixed, Parts, Piece, DEEP, LAND, TOP};
 use crate::flow::Scratch;
-use crate::{store::Class, units::MAX_SUBSTANCES, World};
+use crate::{ground::amounts_cap, store::Class, units::MAX_SUBSTANCES, World};
 
 impl World {
     /// The ground of cell `i`, which holds its heat now, held at one temperature `t` K: of a cell of parts (`Parts`) the
@@ -14,7 +14,7 @@ impl World {
         let Some(Some(p)) = self.scratch.state.parts.get(i) else { return };
         let held = |q: usize| {
             let amt = |k: usize| p.amt[k][q];
-            let cap = skin * p.ground(q) + (0..self.chem.ns()).map(|k| amt(k) * self.chem.subs[k].cp).sum::<f64>();
+            let cap = skin * p.ground(q) + amounts_cap(0..self.chem.ns(), amt, |k| self.chem.subs[k].cp);
             cap * t + (0..self.chem.ns()).map(|k| amt(k) * self.chem.fused_heat(k, t, amt)).sum::<f64>()
         };
         let (top, deep) = (held(TOP), held(DEEP));
