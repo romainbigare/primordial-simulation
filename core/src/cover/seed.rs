@@ -10,7 +10,7 @@ use crate::World;
 
 /// Seeds of one slot for cell `to`: mol of each part, their genes, their starting kind and their heat, J.
 #[derive(Clone, Debug)]
-pub(crate) struct Seed {
+pub struct Seed {
     pub to: u32,
     pub mol: [f64; NP],
     pub genes: [f32; NG],
@@ -78,7 +78,7 @@ pub fn land(w: &mut World) {
 
 /// Where seeds went (`lodge`): into the cell's cover, nowhere (they die), or into a slot whose cover they outweighed
 /// (its amounts, mol of each part, die).
-pub(super) enum Landed {
+pub enum Landed {
     In,
     Dead,
     Out([f64; NP]),
@@ -89,7 +89,7 @@ pub(super) enum Landed {
 /// empty slot; where none is empty, two slots of one starting kind, the most alike, join (`grow::join`) to make room,
 /// so a kind new to the cell can take hold beside the variants of another; else the lightest slot if they outweigh its
 /// built cover, which dies.
-pub(super) fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, alike: f32) -> Landed {
+pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, alike: f32) -> Landed {
     let kg = built_kg(mm, &s.mol);
     let kin = (0..SLOTS).filter(|&x| c.root[x] == s.root);
     let near = kin.map(|x| (distance(&c.genes[x], &s.genes), x)).filter(|e| e.0 <= APART * alike).min_by(|a, b| a.0.total_cmp(&b.0));
