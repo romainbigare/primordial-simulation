@@ -47,7 +47,8 @@ fn loose_seen(at: vec2f, e: f32) -> f32 {
   var sum = 0.0;
   for (var o = 0; o < PATCHY_OCTAVES; o++) {
     let shown = shows_at(size, e);
-    n += weight * shown * noise_turned(at / size + f32(o) * 7.3, 55 + o);
+    // An octave too small to show reads no noise.
+    if (shown > 0.0) { n += weight * shown * noise_turned(at / size + f32(o) * 7.3, 55 + o); }
     sum += weight;
     size /= PATCHY_STEP;
     weight *= PATCHY_FALL;
