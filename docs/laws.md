@@ -60,7 +60,8 @@ comes into it and fills its floor from the lowest up, as one level, toward the h
 cannot hold runs on over the pass (`space::ponds`); what reaches the open low ground lies there at the end (the shelf,
 below). The slopes creep as a diffusion of 3e-3 m² a year (`CREEP`, the anchor of the core's own creep; Culling 1960),
 and what creeps into the open low ground goes to the shelf too; the ground floats back up by 2700/3300 of what a step
-took away, spread over 50 km as a plate bends (Airy isostasy, `FLOATS`, `BENDS_M`; Molnar and England 1990). The land
+took away, spread over 50 km as a plate bends (Airy isostasy, `FLOATS`, `BENDS_M`; Molnar and England 1990; on a grid
+coarse enough that 50 km spans 16 of its samples, `BEND_SAMPLES`, blended back between their centres). The land
 first gets a roughness of a metre drawn from the seed (`ROUGH_M`), which the first ways find. The time runs on three
 grids (`STAGES`): 40% of it in 16 steps on a grid of 4 x 4 samples to one, then 30% in 8 steps on one of 2 x 2, then
 30% in 4 steps on the samples' own, so the valleys are cut at the samples' size; each grid takes the noise's mean over
@@ -68,11 +69,13 @@ each of its samples (or the noise carried to it), and each is carried to the nex
 makes no new pit and no new peak); a map whose first grid would hold more than 65,536 samples runs every stage on grids
 twice as coarse until it fits (`MOST_SAMPLES`). **The shelf** (`space::shelf`): the load that reached the open low
 ground is spread along the shore by the waves, each sample of the shore taking the load that reached the shore within
-5 km of it as a share of that stretch (`ALONG_M`); from it the load builds out a platform 5 m under 0 m (`TOPSET_M`, a
+5 km of it as a share of that stretch (`ALONG_M`); from it the load builds out a platform 10 m under 0 m (`TOPSET_M`, a
 delta's topset), as wide as that load in proportion, fronted by a slope of 0.3 down to the floor (`FORESET`, the load at
 rest under liquid; Gilbert 1885). So a channel that brings much load builds a fan at its mouth and a coast that gets
-little keeps its steep drop; the width is found so the shelf holds all the load, and what the wear took off the land is
-what lies in the basins and on the shelf (`Samples::books`). **The loose ground** the wear leaves (`Samples::loose`):
+little keeps its steep drop; its edge is rounded over 250 m as a clinoform's top rolls over (`ROUNDED_M`), never over
+the platform's top; the width is found so the shelf holds all the load (where the platform fills the open low ground of
+a small map, the rest leaves the map), and what the wear took off the land is what lies in the basins, on the shelf and
+off the map (`Samples::books`). **The loose ground** the wear leaves (`Samples::loose`):
 on land, what settled on a sample in the last stage (in the basins, at the foot of the slopes) and over it the mantle
 where the bed's breaking into loose ground balances the lowering of the last step (cut and creep): the bed breaks at
 7.7e-5 m a year under none, e times slower under each 0.4 m (`BREAKS`, `BREAKS_UNDER_M`; Heimsath, Dietrich, Nishiizumi
@@ -103,9 +106,9 @@ seed and the map that every cell and every pixel a shell draws read (`space::bel
 the quarters of a leaf of side ℓ depart from its mean by a smooth continuation of the coarser heights that keeps it:
 the quarters lean as the quartic through the leaf and two neighbours each way on each axis does (average
 interpolation, Donoho 1993), so the ground has no steps and its slope no kinks at the leaves' edges and a slope across
-the samples goes on across their quarters; the whole lean scaled down where a quarter would pass the lowest or the
-highest of the leaf and its eight neighbours (Barth and Jespersen 1989), so it makes no new pit and no new peak and a
-valley's floor falls along it as its leaves do. Nothing random is laid on it. So a leaf has a mean height at any depth. What needs the cell at a
+the samples goes on across their quarters. (The wear carries its grids so with the whole lean scaled down where a
+quarter would pass the lowest or the highest of the leaf and its eight neighbours, Barth and Jespersen 1989, so it makes
+no new pit and no new peak.) Nothing random is laid on it. So a leaf has a mean height at any depth. What needs the cell at a
 point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes

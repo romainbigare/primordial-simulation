@@ -12,14 +12,21 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
 /// The depth under 0 m the load fills the open low ground up to, m: a delta's platform, where the waves stir the bed.
-const TOPSET_M: f64 = 5.0;
+const TOPSET_M: f64 = 10.0;
 /// The slope of the front of the load under liquid, rise over run: its angle of rest there.
 const FORESET: f64 = 0.3;
+/// Half the width over which the edge of the shelf is rounded, m: its front's top rolls over as a clinoform's does, not
+/// at a corner (Pirmez, Pratson and Steckler 1998, from memory).
+const ROUNDED_M: f64 = 250.0;
 /// Half the length of shore the waves spread a mouth's load along, m.
 const ALONG_M: f64 = 5e3;
 /// The search for the shelf's width stops within this share of it, or where the shelf holds the load to this share; the
 /// shelf is then thinned to hold it exactly.
 const TOLERANCE: f64 = 1e-2;
+/// The share of its load the rounded shelf holds it to, and the most rounds that thicken it where its top holds samples
+/// back (`lay`).
+const EXACT: f64 = 1e-12;
+const ROUNDS: usize = 50;
 
 /// A sample of the open low ground in the reach of the shelf (`shelf`): by how far it lies inside the platform's edge,
 /// m (less than 0 past it), the farthest first, then the least index.
@@ -93,12 +100,28 @@ pub(super) fn lay(g: &Grid, h: &mut [f64], (open, offshore): (&[bool], &[f64]), 
         }
     }
     let hi = hi.0;
-    let shelf = laid(hi);
-    let scale = (volume / shelf.iter().map(|&(k, t)| t * g.area(k)).sum::<f64>()).min(1.0);
-    shelf.iter().map(|&(k, t)| {
-        h[k] += t * scale;
-        loose[k] += t * scale;
-        t * scale * g.area(k)
+    // The shelf's edge rounded over `ROUNDED_M` (its mean over a square that wide, on the open low ground alone).
+    let mut thick = vec![0.0; n];
+    laid(hi).iter().for_each(|&(k, t)| thick[k] = t);
+    let rounded: Vec<f64> = g.spread(&thick, ROUNDED_M).iter().zip(open).map(|(&t, &o)| if o { t } else { 0.0 }).collect();
+    // Thinned or thickened to hold what the shelf holds, never over the platform's top: where the rounding would raise
+    // a sample over it, the rest thickens the others, a round at a time.
+    let target = volume.min((0..n).map(|k| thick[k] * g.area(k)).sum::<f64>());
+    let top: Vec<f64> = h.iter().map(|&z| (-TOPSET_M - z).max(0.0)).collect();
+    let held = |scale: f64| (0..n).map(|k| (rounded[k] * scale).min(top[k]) * g.area(k)).sum::<f64>();
+    let mut scale = 1.0;
+    for _ in 0..ROUNDS {
+        let now = held(scale);
+        if now <= 0.0 || (now - target).abs() <= EXACT * target {
+            break;
+        }
+        scale *= target / now;
+    }
+    (0..n).filter(|&k| rounded[k] > 0.0).map(|k| {
+        let t = (rounded[k] * scale).min(top[k]);
+        h[k] += t;
+        loose[k] += t;
+        t * g.area(k)
     }).sum()
 }
 
