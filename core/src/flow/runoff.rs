@@ -64,12 +64,16 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     let (q, vol) = movable(w, s, liq, &all, tmin, (|k, i| super::land::wet(s, k, i), |i, mol| liquid_heat(w, s, liq, i, mol)));
     let b = std::mem::take(&mut s.bodies);
     let mut x = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: liq.len() + 1 };
-    let mut h = Held { q, vol, width: liq.len() + 1, part: s.state.held.iter().map(|v| vec![0.0; v.len()]).collect(), into: vec![[0.0; 2]; b.cell_of.len()] };
+    // (The room for what runs through each sample is kept from month to month, `spare::Spare`.)
+    let mut into = std::mem::take(&mut s.spare.samples);
+    (into.clear(), into.resize(b.cell_of.len(), [0.0; 2]));
+    let mut h = Held { q, vol, width: liq.len() + 1, part: s.state.held.iter().map(|v| vec![0.0; v.len()]).collect(), into };
     let mm: Vec<f64> = liq.iter().map(|&k| s.sp[k].mm).collect();
     send(w, s, &b, &mut h, &mut x, (slope, runs, &mm), dt);
     s.basin.level = stand(s, &b, &mut h, &mut x, &mm);
     s.state.held = std::mem::take(&mut h.part);
-    let flux = discharge(w, &b, &h.into);
+    discharge(w, &b, &mut h.into);
+    let flux = h.into;
     x.book(w, s, liq);
     // What the liquid carries is booked apart from the liquid, so the heat of each lands with its own matter in a cell
     // of parts (`parts::to_liquid`).
@@ -79,7 +83,7 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     load.book(w, s, &sol);
     apply(w, s, &[], &broke);
     follow_flux(w, &b, &flux, dt);
-    s.bodies = b;
+    (s.bodies, s.spare.samples) = (b, flux);
 }
 
 /// What runs off each cell, as a share of the liquid that may move in it: what came up from the store; the pores'
@@ -113,9 +117,10 @@ fn send(w: &World, s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, (sl
         let row = &h.q[i * width..(i + 1) * width - 1];
         [off[i] * row.iter().sum::<f64>(), off[i] * row.iter().zip(mm).map(|(m, k)| m * k).sum::<f64>()]
     }).collect();
-    for (k, into) in h.into.iter_mut().enumerate() {
-        let i = b.cell_of[k] as usize;
-        if off[i] > 0.0 && b.at[k] == NONE {
+    for &k in &b.land {
+        let (k, i) = (k as usize, b.cell_of[k as usize] as usize);
+        if off[i] > 0.0 {
+            let into = &mut h.into[k];
             (into[0], into[1]) = (into[0] + sent[i][0] * b.share[k], into[1] + sent[i][1] * b.share[k]);
         }
     }
@@ -214,20 +219,17 @@ fn stand(s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, mm: &[f64]) -
 }
 
 /// What runs through each sample in the pass, mol and kg: what the cells and the bodies sent into the samples' ways
-/// (`into`), summed down them in one pass from the last sample the flood reached to the first, so each sample is summed
-/// before the one its liquid runs to; a sample of a body takes what reaches it.
-fn discharge(w: &World, b: &Bodies, into: &[[f64; 2]]) -> Vec<[f64; 2]> {
+/// (`flux`), summed down them in one pass over the samples in no pond from the last the flood reached to the first
+/// (`Bodies::down`), so each sample is summed before the one its liquid runs to; a sample of a body takes what reaches
+/// it. A sample nothing runs through adds nothing.
+fn discharge(w: &World, b: &Bodies, flux: &mut [[f64; 2]]) {
     let s = w.terrain_samples();
-    let mut flux = into.to_vec();
-    for &k in s.order.iter().rev() {
-        let (k, j) = (k as usize, s.to[k as usize]);
-        if b.at[k] == NONE && j != NONE {
-            let f = flux[k];
-            let to = &mut flux[j as usize];
-            (to[0], to[1]) = (to[0] + f[0], to[1] + f[1]);
+    for &k in &b.down {
+        let (f, j) = (flux[k as usize], s.to[k as usize] as usize);
+        if f != [0.0; 2] {
+            (flux[j][0], flux[j][1]) = (flux[j][0] + f[0], flux[j][1] + f[1]);
         }
     }
-    flux
 }
 
 /// The head the liquid loses down the samples' ways in each land cell does work there (laws.md 1.3): g times what runs
@@ -240,9 +242,10 @@ fn erode(w: &World, s: &mut Scratch, b: &Bodies, flux: &[[f64; 2]], sol: &[usize
     let samples = w.terrain_samples();
     let n = w.mesh.cells().n();
     let mut work = vec![0.0; n];
-    for (k, f) in flux.iter().enumerate().filter(|p| p.1[1] > 0.0) {
+    for &k in b.land.iter().filter(|&&k| flux[k as usize][1] > 0.0) {
+        let (k, f) = (k as usize, flux[k as usize]);
         let (i, j) = (b.cell_of[k] as usize, samples.to[k]);
-        if b.at[k] == NONE && j != NONE && s.z[i] > 0.0 {
+        if j != NONE && s.z[i] > 0.0 {
             work[i] += w.cfg.gravity * f[1] * (samples.h[k] - samples.h[j as usize]).max(0.0);
         }
     }
@@ -268,22 +271,24 @@ fn erode(w: &World, s: &mut Scratch, b: &Bodies, flux: &[[f64; 2]], sol: &[usize
 }
 
 /// The moving averages over about a year (`World::discharge`, `World::liquid_flux`, `World::off_land`), from what ran
-/// through each sample in the pass of `dt` seconds: a cell's flux is the most through one of its samples, its main
-/// channel; what leaves a land cell's samples for those of the open low ground runs off the land.
+/// through each sample in the pass of `dt` seconds (an average that is none stays none where none ran): a cell's flux
+/// is the most through one of its samples in no pond, its main channel; what leaves a land cell's samples for those of
+/// the open low ground runs off the land.
 fn follow_flux(w: &mut World, b: &Bodies, flux: &[[f64; 2]], dt: f64) {
     let (ema, samples) = (year_weight(w, dt), w.terrain_samples());
     let n = w.mesh.cells().n();
     let (mut most, mut off) = (vec![0.0f64; n], vec![0.0f64; n]);
-    for (k, f) in flux.iter().enumerate() {
+    for (avg, f) in w.discharge.iter_mut().zip(flux).filter(|p| *p.0 != 0.0 || p.1[0] != 0.0) {
+        follow(avg, (f[0] / dt) as f32, ema);
+    }
+    for &k in &b.land {
+        let (k, f) = (k as usize, flux[k as usize]);
         let i = b.cell_of[k] as usize;
-        follow(&mut w.discharge[k], (f[0] / dt) as f32, ema);
-        if b.at[k] == NONE {
-            most[i] = most[i].max(f[0]);
-            let j = samples.to[k];
-            let low = j != NONE && b.at[j as usize] != NONE && b.list[b.at[j as usize] as usize].pass == NONE;
-            if low && w.is_land(i) {
-                off[i] += f[0];
-            }
+        most[i] = most[i].max(f[0]);
+        let j = samples.to[k];
+        let low = j != NONE && b.at[j as usize] != NONE && b.list[b.at[j as usize] as usize].pass == NONE;
+        if low && w.is_land(i) {
+            off[i] += f[0];
         }
     }
     for i in 0..n {

@@ -40,9 +40,10 @@ const NOWHERE: Reach = Reach { body: NONE, cell: NONE, part: NONE };
 
 /// The bodies of the world's cells and the ways to them: of each cell the body of its largest part (`NONE` for none);
 /// the bodies, each before the one its pass leads to (`Body::next`); of each sample its cell, its share of the cell's
-/// area and its body (`NONE` where it lies in no pond); and of each cell, the cells and bodies its runoff reaches
-/// (`Reach`), each with the share of the cell's area whose ways lead there, in order (its own cell among them, for
-/// the samples of its own parts).
+/// area and its body (`NONE` where it lies in no pond); of each cell, the cells and bodies its runoff reaches (`Reach`),
+/// each with the share of the cell's area whose ways lead there, in order (its own cell among them, for the samples of
+/// its own parts); the samples in no pond, in order; and of those whose liquid runs on, each before the one it runs to
+/// (the last the flood reached first), the ways the runoff's pass sums down.
 #[derive(Clone, Debug, Default)]
 pub(super) struct Bodies {
     pub(super) of: Vec<u32>,
@@ -51,6 +52,8 @@ pub(super) struct Bodies {
     pub(super) share: Vec<f64>,
     pub(super) at: Vec<u32>,
     pub(super) ways: Vec<Vec<(Reach, f64)>>,
+    pub(super) land: Vec<u32>,
+    pub(super) down: Vec<u32>,
 }
 
 impl Bodies {
@@ -80,7 +83,9 @@ impl Bodies {
             let most = c.ponds().iter().max_by(|a, b| a.under(f64::INFINITY).total_cmp(&b.under(f64::INFINITY)).then(b.pond.cmp(&a.pond)));
             of[i] = most.map_or(NONE, |p| p.pond);
         }
-        let mut b = Bodies { of, list, cell_of, share, at: s.pond.clone(), ways: Vec::new() };
+        let land = (0..s.h.len() as u32).filter(|&k| s.pond[k as usize] == NONE).collect();
+        let down = s.order.iter().rev().copied().filter(|&k| s.pond[k as usize] == NONE && s.to[k as usize] != NONE).collect();
+        let mut b = Bodies { of, list, cell_of, share, at: s.pond.clone(), ways: Vec::new(), land, down };
         let reach = b.reaches(&s, curves);
         b.ways = vec![Vec::new(); n];
         for (k, r) in reach.iter().enumerate() {
