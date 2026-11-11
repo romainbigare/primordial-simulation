@@ -297,7 +297,7 @@ falls) is shared between the parts: of each substance by the share of it each ho
 capacities, so a heat all share warms them alike (`moves::reconcile`). What Flow moves of one part it books there: the
 air's step the land's and the top's own exchange (1.4), the liquid laws what they bring to the top and what they take
 by each part's share of the liquid (1.2). The land keeps the liquid its pores hold, its own soil's; what lies over its
-pores runs down to the top with its heat (`moves::settle`). The share under the liquid follows what stands on it: a
+pores runs down to the top with its heat (`moves::settle`). The share under the liquid follows what stands on it, the pores of the land it comes to cover filling first from what stands, so it covers what is left after they fill (`parts::covers`): a
 land the liquid covers gives the liquid's bottom all it holds there, a ground the liquid leaves gives the land its
 bed's skin, its solids and the liquid its pores hold, so what stands is the same either way (`moves::strip`). The deep
 holds the liquid that stands deeper than `h_mix` and the top the rest, the liquid that moves between them taking its
