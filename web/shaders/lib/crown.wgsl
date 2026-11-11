@@ -50,6 +50,8 @@ const PADS = 5.0; const PAD_DEEP = 0.25; const UNDER = 0.35;
 // A lobed crown and a bush: `KNOTS` to `KNOTS + 2` round knots `KNOT_OUT` of its radius from its middle, each
 // `KNOT_R` of its radius (up to `KNOT_SIZES` more), with shallow lobes of their own.
 const KNOTS = 3.0; const KNOT_OUT = 0.5; const KNOT_R = 0.5; const KNOT_SIZES = 0.15;
+// No knot reaches past its middle's distance and its radius, in radii of its crown.
+const KNOTS_REACH = KNOT_OUT + KNOT_R + KNOT_SIZES;
 // A crown leans by up to its plant's lean (cover.wgsl `LEAN`); from above a lean shows as this share of it.
 const LEAN_SEEN = 0.3;
 // A bush: as deep as `BUSH_DEEP` of its width, angled; its flowers or fruit, `BUSH_DOTS` to twice as many dots, each
@@ -75,8 +77,6 @@ fn side_lit(v: vec2f) -> f32 { return 1.0 - LIGHT_SHARE * (0.35 * v.x + 0.15 * v
 // The knots of a lobed crown or a bush at v, `sure` of the way from one round crown, at `soft` radii a pixel: its
 // coverage, light (`k` radii deep) and rim.
 fn knots(q: Plant, v: vec2f, soft: f32, sure: f32, k: f32) -> Body {
-  // No knot reaches past its middle's distance and its radius.
-  if (length(v) > KNOT_OUT + KNOT_R + KNOT_SIZES + soft) { return Body(0.0, 1.0, 0.0); }
   let n = KNOTS + floor(3.0 * q.r.x);
   var best = Body(0.0, 1.0, 0.0);
   for (var i = 0.0; i < n; i += 1.0) {
@@ -105,6 +105,9 @@ fn crown(q: Plant, p: vec2f, e: f32) -> Body {
   let tall = mix(1.0, max(STAND * depth / max(2.0 * half, 1e-3), 0.3), angled);
   var v = (p - q.at - lean + vec2f(0.0, up)) / vec2f(half, half * tall);
   let soft = e / max(half, 1e-4);
+  // No form reaches past its knots' reach (an angled taper only narrows it): the many pixels a mark does not cover
+  // read nothing more.
+  if (length(v) > KNOTS_REACH + soft) { return Body(0.0, 1.0, 0.0); }
   let k = depth / half;
   if (f == LOBED) {
     var b = knots(q, v, soft, s, k);
@@ -163,7 +166,9 @@ fn bush(q: Plant, p: vec2f, e: f32) -> Body {
   let half = min(0.5 * q.d, q.reach / 1.1);
   let tall = mix(1.0, BUSH_DEEP, angled);
   let v = (p - q.at + vec2f(0.0, angled * tall * half)) / vec2f(half, half * tall);
-  var b = knots(q, v, e / max(half, 1e-4), 1.0, 2.0 * BUSH_DEEP);
+  let soft = e / max(half, 1e-4);
+  if (length(v) > KNOTS_REACH + soft) { return Body(0.0, 1.0, 0.0); }
+  var b = knots(q, v, soft, 1.0, 2.0 * BUSH_DEEP);
   b.lit = mix(b.lit, side_lit(v), angled);
   return b;
 }

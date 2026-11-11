@@ -238,11 +238,17 @@ fn activity(wet: f32, need: f32) -> f32 {
   return select(pow(max(x, 0.0), land.soil.z), 1.0, x >= 1.0);
 }
 
-// The share of a kind whose roots need `need` m of loose ground that holds where `loose` m lies (canopy.ts `rooted`, the
+// The share of a kind whose roots need `need` m of loose ground that holds where `loose` m lies (roots.ts `rooted`, the
 // same rule): none from `ROOTED_FROM` of its need down, all from its need up. Bare bed holds no liquid in pores and
-// nothing to anchor a tall plant; a kind roots about `ROOT_PER_HEIGHT` of its height deep (canopy.ts).
+// nothing to anchor a tall plant; a kind roots about `ROOT_PER_HEIGHT` of its height deep (roots.ts). Where the loose
+// depth changes by `spread` m across a pixel and that is more than the rule's own span, the edge is spread over it, as
+// the share of water at a shore is (no speckle where the loose ground has fine patches).
 const ROOTED_FROM = 0.25;
-fn rooted(loose: f32, need: f32) -> f32 { return ease(ROOTED_FROM * need, need, loose); }
+fn rooted(loose: f32, need: f32, spread: f32) -> f32 {
+  let middle = 0.5 * (1.0 + ROOTED_FROM) * need;
+  let half = 0.5 * max((1.0 - ROOTED_FROM) * need, spread);
+  return ease(middle - half, middle + half, loose);
+}
 
 // The state of the ground at a point: the depth of the liquid standing over it and its height over that liquid's
 // surface, m; how wet it is, 0..1; its temperature, K; the snow and ice on it, 0..1, and the snow's depth, m; and how
