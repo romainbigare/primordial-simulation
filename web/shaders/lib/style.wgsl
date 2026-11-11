@@ -97,7 +97,7 @@ fn foam(depth: f32, slope: f32, e: f32) -> f32 {
 const BAND_LOW = 0.88; const BAND_HIGH = 1.1; const BAND_SOFT = 0.05; const BANDS = 0.7;
 const TONE_SHADE = 0.78; const TONE_LIT = 1.16;
 // A mark's hue turns from its kind's by up to this many radians either way, and its tone by up to this share.
-const HUE_JITTER = 0.18; const TONE_JITTER = 0.12;
+const HUE_JITTER = 0.25; const TONE_JITTER = 0.2;
 // The outline: as dark as this share at the rim, `OUTLINE_PX` pixels wide (no less than `OUTLINE_LEAST` of the radius).
 const OUTLINE = 0.35; const OUTLINE_PX = 1.2; const OUTLINE_LEAST = 0.06;
 

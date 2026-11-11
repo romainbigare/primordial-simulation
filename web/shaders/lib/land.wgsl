@@ -231,10 +231,16 @@ fn activity(wet: f32, need: f32) -> f32 {
   return select(pow(max(x, 0.0), land.soil.z), 1.0, x >= 1.0);
 }
 
+// The share of a kind whose roots need `need` m of loose ground that holds where `loose` m lies (canopy.ts `rooted`, the
+// same rule): none from `ROOTED_FROM` of its need down, all from its need up. Bare bed holds no liquid in pores and
+// nothing to anchor a tall plant; a kind roots about `ROOT_PER_HEIGHT` of its height deep (canopy.ts).
+const ROOTED_FROM = 0.25;
+fn rooted(loose: f32, need: f32) -> f32 { return ease(ROOTED_FROM * need, need, loose); }
+
 // The state of the ground at a point: the depth of the liquid standing over it and its height over that liquid's
-// surface, m; how wet it is, 0..1; its temperature, K; the snow and ice on it, 0..1; and how wet its cells are on
-// their mean, 0..1.
-struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, mean: f32 }
+// surface, m; how wet it is, 0..1; its temperature, K; the snow and ice on it, 0..1, and the snow's depth, m; and how
+// wet its cells are on their mean, 0..1.
+struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, snow_m: f32, mean: f32 }
 
 // The state at `at`, m from the map's north-west corner, on ground `g` whose bed a channel cuts `cut` m deep there
 // (`bed_at`): the cells' values blended between the squares' centres (`cs`), and the laws inside a cell applied at the
@@ -267,6 +273,7 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
   // The ground's temperature is its cell's at the cell's mean height, less the air's fall with height above it.
   p.t = ground.y - ground.z * (g.h - ground.x);
   p.snow = snow_of(ground.w, p.t, land.time.z);
+  p.snow_m = snow_depth(ground.w, p.t, land.time.z);
   p.mean = mean / (mean + half);
   return p;
 }
