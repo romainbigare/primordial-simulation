@@ -845,14 +845,22 @@ fn basin_under(w: &World, top: impl Fn(&World, usize) -> f64) -> (Vec<usize>, us
     ((0..n).filter(|&i| basin[i]).collect(), lowest)
 }
 
+/// The cells of `cells` whose ground lies wholly under the level of their liquid: every sample of the terrain in them
+/// under it, so they hold no land (laws.md 1.2: a cell with land in it faces the air with two surfaces and does not mix
+/// as one with its body).
+fn wholly_under(w: &World, cells: &[usize]) -> Vec<usize> {
+    let (s, leaves) = (w.terrain_samples(), w.map.leaves());
+    cells.iter().copied().filter(|&i| leaves[i].split(pcore::space::terrain::SAMPLE_DEPTH).all(|f| s.h[s.index(&f)] < liquid_top(w, i))).collect()
+}
+
 /// The low basin of each air block mixes its heat in a month (laws.md 1.2): an island's low basin (one block) with
-/// every other cell warmed by 3 K ends a liquid step with its surface at one temperature (of a cell of parts its
-/// liquid's top, which mixes, 1.1), within a millikelvin, over most of its cells (those off their plateaus, with no
-/// cover, the same phases). Matter and energy are kept.
+/// every other cell warmed by 3 K ends a liquid step with its surface at one temperature, within a millikelvin, over
+/// most of its cells that hold no land (those off their plateaus, with no cover, the same phases). Matter and energy
+/// are kept.
 #[test]
 fn a_blocks_low_basin_mixes_its_heat_in_a_month() {
     let mut w = worldgen::testkit::small_world();
-    let (cells, _) = basin_under(&w, liquid_top);
+    let cells = wholly_under(&w, &basin_under(&w, liquid_top).0);
     for &i in cells.iter().step_by(2) {
         let t = w.t_ground(i) + 3.0;
         hold_ground(&mut w, i, t);
@@ -870,7 +878,8 @@ fn a_blocks_low_basin_mixes_its_heat_in_a_month() {
 
 /// The low basin under one air node takes up a gas as one liquid (laws.md 1.5): with none of it dissolved, after a
 /// liquid step its cells under that node that mix as one each hold the same share of their liquid (most of the cells of
-/// the node's basin), so a cell of little liquid does not reach balance before a deep one. Matter and energy are kept.
+/// the node's basin that hold no land), so a cell of little liquid does not reach balance before a deep one. Matter and
+/// energy are kept.
 #[test]
 fn the_low_basin_under_one_air_node_takes_up_gas_as_one_liquid() {
     let (_, init) = worldgen::chemistry0();
@@ -878,11 +887,12 @@ fn the_low_basin_under_one_air_node_takes_up_gas_as_one_liquid() {
     w.cfg.dissolve = 1.0;
     let (n, c) = (w.mesh.cells().n(), &w.chem);
     let k = init.air.iter().map(|p| p.0).filter(|&k| c.subs[k].boil < 250.0).max_by(|&a, &b| c.subs[a].solubility.total_cmp(&c.subs[b].solubility)).unwrap();
-    let (cells, _) = basin_under(&w, liquid_top);
+    let basin = basin_under(&w, liquid_top).0;
+    let cells = wholly_under(&w, &basin);
     let j = (0..w.mesh.level(AIR).n()).max_by_key(|&j| cells.iter().filter(|&&i| w.mesh.up(i, 0, AIR) == j).count()).unwrap();
     let under: Vec<usize> = cells.iter().copied().filter(|&i| w.mesh.up(i, 0, AIR) == j).collect();
     assert!(under.len() > 4, "{} cells of the basin under one node", under.len());
-    for &i in &cells {
+    for &i in &basin {
         set_amount(&mut w, Node::ground(i), k, 0.0);
     }
     pcore::flow::state(&mut w, true);

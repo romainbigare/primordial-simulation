@@ -37,13 +37,20 @@ const FALL_BY: f64 = 2.0;
 const FALL_POWER: f64 = 1.6;
 /// The rise an island's level 0 m lies at.
 pub const ISLAND_LEVEL: f64 = 0.3;
-/// The depth below its air block whose leaves' centres sample the terrain inside a coarser cell (`Terrain::inside`):
+/// An island's range (`Range`): the key of its draws; how far its axis lies from the middle of the map at most, and
+/// the least and the most half-width of its band, in units of the noise; and how fast land rises far from it and on
+/// its axis, times the mean.
+const RANGE_KEY: u64 = 19;
+const RANGE_OFF: f64 = 1.0;
+const RANGE_WIDE: [f64; 2] = [0.7, 1.4];
+const RISES: [f64; 2] = [0.2, 1.3];
 /// The bed's patches (`patch`): the key of their noise, its units a square, its octaves (each half the size of the
 /// one before), and how sharply the noise parts the two beds about its middle.
 const PATCH_KEY: u64 = 100;
 const PATCH_PER_SQUARE: f64 = 0.5;
 const PATCH_OCTAVES: u32 = 4;
 const PATCH_SHARP: f64 = 6.0;
+/// The depth below its air block whose leaves' centres sample the terrain inside a coarser cell (`Terrain::inside`):
 /// 1/64 of a block's side, 125 m on the island, finer than the noise's finest octave there.
 pub const SAMPLE_DEPTH: u8 = 6;
 
@@ -116,13 +123,45 @@ fn fbm<const D: usize>(seed: u64, p: [f64; D], octaves: u32) -> f64 {
     sum / norm
 }
 
-/// The rise of the ground at point `p` of the noise: fractal noise with ridges, its domain warped.
-fn rise_at<const D: usize>(seed: u64, p: [f64; D]) -> f64 {
+/// Point `p` of the noise moved by the noise that warps the terrain, so coasts, ridges and the range bend.
+fn warped<const D: usize>(seed: u64, p: [f64; D]) -> [f64; D] {
     let half = p.map(|v| v * 0.5);
-    let warp: [f64; D] = std::array::from_fn(|d| p[d] + WARP_BY * (fbm(seed ^ WARP[d], half, OCTAVES[0]) - 0.5));
+    std::array::from_fn(|d| p[d] + WARP_BY * (fbm(seed ^ WARP[d], half, OCTAVES[0]) - 0.5))
+}
+
+/// The rise of the ground at the warped point `warp` of the noise: fractal noise with ridges.
+fn rise_at<const D: usize>(seed: u64, warp: [f64; D]) -> f64 {
     let base = fbm(seed, warp, OCTAVES[1]);
     let ridge = 1.0 - (2.0 * fbm(seed ^ RIDGE_KEY, warp.map(|v| v * RIDGE_SCALE), OCTAVES[2]) - 1.0).abs();
     base * BASE_WEIGHT + ridge.powi(3) * RIDGE_WEIGHT
+}
+
+/// The range of an island: a band along an axis where its land rises fast, falling off to the low ground where it
+/// rises slowly, as the crust is raised in blocks (a range, its foothills, a low plain), not alike everywhere. The axis
+/// passes `RANGE_OFF` units of the noise from the middle of the map at most, at any heading, and the band is
+/// `RANGE_WIDE` wide, all drawn from the seed, so the island's share of range, hills and plain, and where they lie,
+/// differ from seed to seed. On the warped noise, so the axis bends as the ridges do.
+struct Range {
+    at: [f64; 2],
+    across: [f64; 2],
+    wide: f64,
+}
+
+impl Range {
+    /// The range of `seed` on the flat map `map`, `per_square` units of the noise a square.
+    fn of(seed: u64, map: &Square, per_square: f64) -> Range {
+        let draw = |k: u64| Rng::new(seed, RANGE_KEY, k, Purpose::Terrain).f64();
+        let (heading, off) = (draw(0) * TAU / 2.0, (2.0 * draw(1) - 1.0) * RANGE_OFF);
+        let across = [heading.sin(), -heading.cos()];
+        let middle = [map.w, map.h].map(|n| (n as f64 / 2.0 - 0.5) * per_square);
+        Range { at: [middle[0] + off * across[0], middle[1] + off * across[1]], across, wide: RANGE_WIDE[0] + (RANGE_WIDE[1] - RANGE_WIDE[0]) * draw(2) }
+    }
+    /// How fast the land rises at the warped point `warp`, against the mean (`RISES`): fastest on the axis, by a bell
+    /// across it, down to the low ground's far from it.
+    fn fast(&self, warp: [f64; 2]) -> f64 {
+        let d = (warp[0] - self.at[0]) * self.across[0] + (warp[1] - self.at[1]) * self.across[1];
+        RISES[0] + (RISES[1] - RISES[0]) * (-(d / self.wide).powi(2)).exp()
+    }
 }
 
 /// Fractal noise of `octaves` (in roughly [0, 1)) at `place` of `map` with key `seed`, `per_square` units of the noise a
@@ -158,11 +197,17 @@ fn spot(map: &Square, place: Place, per_square: f64) -> Spot {
     Spot::Round([r * lat.cos() * lon.cos(), r * lat.cos() * lon.sin(), r * lat.sin()])
 }
 
-/// The rise of the ground at `place` of `map` (`rise_at`), `ACROSS` units of the noise across the map's longer side.
-pub fn rise(seed: u64, map: &Square, place: Place) -> f64 {
-    match spot(map, place, ACROSS / map.w.max(map.h) as f64) {
-        Spot::Flat(p) => rise_at(seed, p),
-        Spot::Round(p) => rise_at(seed, p),
+/// The rise of the ground at `place` of `map` (`rise_at`), `ACROSS` units of the noise across the map's longer side, and
+/// how fast its land rises there against the mean: by the island's range (`Range`); alike everywhere on a globe, whose
+/// noise is of the scale of its continents and whose cells are wider than a range.
+pub fn rise(seed: u64, map: &Square, place: Place) -> (f64, f64) {
+    let per_square = ACROSS / map.w.max(map.h) as f64;
+    match spot(map, place, per_square) {
+        Spot::Flat(p) => {
+            let warp = warped(seed, p);
+            (rise_at(seed, warp), Range::of(seed, map, per_square).fast(warp))
+        }
+        Spot::Round(p) => (rise_at(seed, warped(seed, p)), 1.0),
     }
 }
 
@@ -178,16 +223,18 @@ impl Terrain {
         Terrain { seed, level, soft, ..Terrain::default() }
     }
     /// The rise of the ground at `place` of `map` for `seed` over the level; on an island (a flat map) less the fall
-    /// from the middle of the map.
+    /// from the middle of the map, and over the level as much more or less as its land rises faster or slower there
+    /// (`rise`): the coast stays where it is, the land's heights scale.
     fn above(&self, seed: u64, map: &Square, place: Place) -> f64 {
-        let r = rise(seed, map, place);
+        let (r, fast) = rise(seed, map, place);
         if map.wrap {
             return r - self.level;
         }
         // How far the place lies from the middle of the map along each axis, in sides.
         let middle = |c: f64, len: usize| c / map.side / len as f64 - 0.5;
         let (dx, dy) = (middle(place.centre[0], map.w), middle(place.centre[1], map.h));
-        r - ((dx * dx + dy * dy).sqrt() * FALL_BY).powf(FALL_POWER) - self.level
+        let above = r - ((dx * dx + dy * dy).sqrt() * FALL_BY).powf(FALL_POWER) - self.level;
+        if above > 0.0 { above * fast } else { above }
     }
     /// The height of the noise at `place`, m: how high the ground would stand there unworn.
     pub(super) fn sample(&self, seed: u64, map: &Square, place: Place) -> f64 {
