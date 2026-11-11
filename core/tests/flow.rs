@@ -522,26 +522,18 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
     let (base, (hi, _)) = worldgen::testkit::island_with(3, pair);
     let mut w0 = base.clone();
     pcore::flow::state(&mut w0, true);
-    let (n, gw, area, p) = (w0.mesh.cells().n(), w0.map.w, w0.mesh.cells().area()[0], w0.cfg.phys);
+    let (n, area, p) = (w0.mesh.cells().n(), w0.mesh.cells().area()[0], w0.cfg.phys);
     let year = w0.days_per_year() as f64 * DAY;
     assert!(p.seep * w0.map.side * 1e-3 * year / (p.porosity * area) < 2e-4);
     let mv = w0.chem.molar_volume(LIQUID, Phase::Liquid);
     let full = p.bed_porosity * p.bed_depth * area;
     let stands = |w: &World, i: usize| w.surface_z(i) + pcore::survey::env_of(w, i)[1];
-    // The slope down to the steepest lower neighbour, as the sweep reads it.
+    // The slope of the steepest way down (`Level::steepest`) to the neighbours lower by more than `still`, as the sweep
+    // reads it.
     let slope = |w: &World, i: usize| {
-        let (x, y) = ((i % gw) as i64, (i / gw) as i64);
-        let mut s = 0.0f64;
-        for (dx, dy) in [(-1i64, -1i64), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
-            let (nx, ny) = (x + dx, y + dy);
-            if nx >= 0 && ny >= 0 && nx < gw as i64 && ny < (n / gw) as i64 {
-                let dh = stands(w, i) - stands(w, (ny * gw as i64 + nx) as usize);
-                if dh > p.still {
-                    s = s.max(dh / (w.map.side * if dx != 0 && dy != 0 { 2f64.sqrt() } else { 1.0 }));
-                }
-            }
-        }
-        s
+        let cells = w.mesh.cells();
+        let drop = |k: usize| Some(stands(w, i) - stands(w, cells.around(i).1[k] as usize)).filter(|&d| d > p.still);
+        cells.steepest(i, drop).map_or(0.0, |way| way.0)
     };
     // One liquid step with the store of `i` full and warm, with channels `hill` apart: the store and the ground liquid
     // after. (No pore liquid sinks into the stores, `seep` 0, so the neighbours' stores do not change with `hill`.)
