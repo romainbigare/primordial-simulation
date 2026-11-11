@@ -1079,7 +1079,7 @@ fn a_stretched_island_keeps_its_books_and_the_bands_contrast() {
     assert!(stretched > one + 1.0, "south less north, K: one block {one}, stretched {stretched}");
 }
 
-/// An island that stands in the planet's air (`World::planet`, its north and south edges open) keeps its books with the
+/// An island that stands in the planet's air (`World::planet`, its edges open) keeps its books with the
 /// boundary counted, and the planet carries heat across it as across its band: in at the warm south edge, out at the
 /// cold north one.
 #[test]
@@ -1089,7 +1089,7 @@ fn an_island_in_the_planets_air_keeps_its_books_and_carries_heat_north() {
     let books = Books::now(&w);
     (0..3 * w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));
     books.assert_kept(&w, 1e-9);
-    let [north, south] = w.counts.edges;
+    let [north, south, ..] = w.counts.edges;
     assert!(south > 0.0 && north < 0.0, "heat in at the north {north:e} J, at the south {south:e} J");
 }
 

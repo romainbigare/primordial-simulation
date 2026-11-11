@@ -36,8 +36,9 @@ pub struct Counters {
     /// Cover that died, kg, by the cause a body would die of (`body::LACK` to `AGE`)
     #[serde(skip)]
     pub cover_lost: [f64; 6],
-    /// Heat that crossed into the map at its open north and south edges since the start, J: sensible and latent
-    pub edges: [f64; 2],
+    /// Heat that crossed into the map at its open north, south, east and west edges since the start, J: sensible and
+    /// latent
+    pub edges: [f64; 4],
 }
 
 impl Counters {

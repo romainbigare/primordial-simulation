@@ -571,10 +571,12 @@ these laws when the world is built (`worldgen::planet`): three air blocks round,
 (liquid over all of it), for 20 years from its starting state (its yearly means then move by under 0.6 K in 20 years more);
 its last year's air per row and month (its temperature, warmth, mol per m² and each gas's share, each row the 1-2-1
 mean of it and its neighbours, as the rows of the low latitudes alternate warmer and colder) is saved with the world.
-Beyond each air node of the map's north and south edges lies a column of that air at the latitude one row of nodes on
-and the time of the year (between rows and months, linearly), over low open ground at 0 m, its warmth's gradient the strip's.
-It is linked to the node as two nodes are (`wind::push`, the stretch's lengths): its eddies and its overturning, the
-lower half outward where it is warmer and the upper back, each half of its own air, turned by the rotation; its
+Beyond each air node of the map's edges lies a column of that air, north and south at the latitude one row of nodes
+on, east and west at the node's own, at the time of the year (between rows and months, linearly), over low open ground
+at 0 m, its warmth's gradient the strip's. It is linked to the node as two nodes are (`wind::push`, the stretch's
+lengths): its eddies and its overturning, the lower half outward where it is warmer and the upper back, each half of
+its own air, turned by the rotation; across the east and west edges the turned overturning of the planet's gradient
+is its mean wind along the row, in at one side and out at the other in the lower half and back in the upper; its
 pressure is the planet's, so no evening crosses. Each day, after the wind, each such link is one implicit step with
 the column beyond held. What crosses comes from and goes to the boundary node for outside, with its heat and the
 latent heat its gases hold in the air; mass that enters pays its lift from 0 m, mass that leaves takes its potential

@@ -10,8 +10,10 @@ use super::stretch::Stretch;
 use super::wind::{push, End};
 use crate::{World, AIR};
 
-/// The edges that are open, as the side of the map beyond them [east, south] from a node of that edge.
-const SIDES: [[f64; 2]; 2] = [[0.0, -1.0], [0.0, 1.0]];
+/// The edges that are open, as the side of the map beyond them [east, south] from a node of that edge: north, south,
+/// east and west. Across the east and west edges the planet's mean wind along the row, its overturning turned by the
+/// rotation, carries its air through the map.
+const SIDES: [[f64; 2]; 4] = [[0.0, -1.0], [0.0, 1.0], [1.0, 0.0], [-1.0, 0.0]];
 
 /// The links of the step to the columns beyond the map's open edges (`SIDES`): per link its node, its side, its pushes
 /// (eddies, mol/s each way; overturning, mol/s of the lower half from the node outward; and the heat per mol its upper
