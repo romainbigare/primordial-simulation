@@ -137,9 +137,10 @@ only where the cold shuts them down (frozen ground, their frozen share); a kind 
 brown. Far away the plants melt into a field of the same colours, with soft patches
 fixed in the world and no rows; the trees' canopy in their stands' colours, lighter and darker over groups of crowns.
 The herbs are a sward over the ground at every scale, covering it far more than their share (a fifth of herb cover
-reads as two thirds green: their leaves lean and shade), in patches of their kinds, with tufts, swathes and blades
-where each shows, darker in the trees' shade, as dense reeds on soaked ground, and with their flowers as clusters of
-light dots (a soft tint from afar); the bare ground has clods, and under closed crowns their shade, litter and moss. Slope alone never bares the ground: where the bed shows (below) it is drawn, grey and mottled,
+reads as two thirds green: their leaves lean and shade), in patches of their kinds, drawn about as light as the trees
+and less saturated so what stands on it reads by shape and shadow, with tufts, swathes and blades where each shows
+(none past a metre a pixel), darker in the trees' shade, as a band of dense reeds on soaked ground and within 5 m of
+the edge of standing or running water, and with their flowers as clusters of light dots (a soft tint from afar); the bare ground has clods, and under closed crowns their shade, litter and moss. Slope alone never bares the ground: where the bed shows (below) it is drawn, grey and mottled,
 as slabs with cracks where it is gentle and as a cliff's face where it is steeper than about 0.9, with strata as broken
 dark ledges along the contours, cracks and a strong light and shade; scree lies on steep thin ground, stones on bare
 bed and in a channel as big as its power moves (`web/shaders/lib/crag.wgsl`). About 3% of seed 1's land and 2% of seed

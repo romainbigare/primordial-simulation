@@ -5,7 +5,8 @@
 // the same numbers. Nothing stands where liquid stands over the roots or under snow.
 
 struct CoverLook {
-  // Of each lattice: its cell's side, m, and how strongly its marks show (the rest is the field).
+  // Of each lattice: its cell's side, m (0: no square holds it), and how strongly its marks show (the rest is the field);
+  // and how much more than its share the sward is seen to cover (`sides.w`, canopy.ts `SWARD_SEEN`).
   sides: vec4f, shown: vec4f,
   // 1 where the cover is drawn (0: none); how strongly its marks cover the map; the loose ground a kind's roots need per
   // m of its height, and the least any kind needs, m (roots.ts).
@@ -21,6 +22,10 @@ const COVER_LATTICES = 3;
 const SWARD_LAYER = 3; const FLOWER_LAYER = 4; const SWARD_FIRST = 5; const STANDS_FIRST = 6;
 // Of each lattice and the sward (red, green, blue, alpha): its plants' mean height, m, and mean rooted share in the square.
 const TALL_LAYER = 7; const ROOTED_LAYER = 8;
+// The sward and the low lattices as one layer (canopy.ts `lowOf`), drawn in their place where a pixel takes
+// `LOW_FAR_E` m and more (where their detail no longer shows: no swathes, blades, tufts or flowers past a metre a
+// pixel), fully from `LOW_FAR_FULL_E`; thicker and thinner over the patches as they are.
+const LOW_LAYER = 9; const LOW_FAR_E = 0.75; const LOW_FAR_FULL_E = 1.0;
 const STANDS = 2;
 // A grain of the field (`grain`) where its cell takes more than a pixel: present in a cell as often as covers at most
 // `GRAIN_FILL` of it, as wide as keeps the mean (at most half a cell), anywhere in its cell, so no grains stand in rows
@@ -38,7 +43,7 @@ const PATCH_M = 8.0; const PATCH = 0.45;
 // Kinds grow in stands of their own: a plant is of its square's first kind (canopy.ts `Paint`) where a smooth draw fixed
 // in the world, mixed with `STAND_MIX` of the plant's own draw, falls within the first kind's share; so a kind's stands
 // are patches about as large as the noise's cells (`STAND_M` the trees', `SWARD_STAND_M` the herbs') with mixed edges,
-// and each kind keeps its share (draw.wgsl `noise_two`, made even over 0..1).
+// and each kind keeps its share (draw.wgsl `noise_turned`, made even over 0..1).
 const STAND_M = 60.0; const SWARD_STAND_M = 5.0; const STAND_MIX = 0.4;
 // Seen from above the trees' crowns with their shade cover more than their share, as the sward's: the ground they leave
 // is (1 - share)^`CANOPY_SEEN`; their canopy is lighter and darker by up to `CANOPY_TONE` over groups of crowns
@@ -48,38 +53,55 @@ const CANOPY_SEEN = 2.0; const CANOPY_TONE = 0.2; const CANOPY_M = 35.0;
 // evergreen ones hold it; the bare ones are thin and dark).
 const CANOPY_SNOW = 0.35;
 
-// What lies under and over the cover at a point (land.wgsl `land_spots`): how soaked its ground is, 0..1; the share the
-// trees' crowns close over it; the depth of its loose ground, m; the share snow covers and the snow's depth, m.
-struct Beneath { soaked: f32, canopy: f32, loose: f32, snow: f32, snow_m: f32 }
+// What lies under and over the cover at a point (land.wgsl `land_spots`): how soaked its ground is, 0..1; its height
+// over the nearest water's level, m, and its slope (rise over run); the depth of its loose ground, m; the share snow
+// covers and the snow's depth, m.
+struct Beneath { soaked: f32, over: f32, slope: f32, loose: f32, snow: f32, snow_m: f32 }
+
+// The cover's field at a point, premultiplied, and the share the trees' crowns close over the ground there.
+struct CoverAt { cover: vec4f, canopy: f32 }
+
+// A square whose kinds' roots hold everywhere has its mean rooted share this near 1: no point of it limits them.
+const ROOTED_ALL = 0.999;
 
 // Of each lattice and the sward (red, green, blue, alpha), the share of its plants that stand at a point over `b`:
 // where their roots hold (land.wgsl `rooted`, over their square's mean, so the square keeps its cover) and out of the
-// snow (draw.wgsl `above_snow`).
+// snow (draw.wgsl `above_snow`). Each layer is read only where it may limit them.
 fn held_at(at: vec2f, b: Beneath) -> vec4f {
-  let tall = field_at(at, TALL_LAYER, 0.0);
   let mean = field_at(at, ROOTED_LAYER, 0.0);
+  let roots = any(mean < vec4f(ROOTED_ALL));
+  if (!roots && b.snow_m <= 0.0) { return vec4f(1.0); }
+  let tall = field_at(at, TALL_LAYER, 0.0);
   let need = max(tall * cover_look.look.z, vec4f(cover_look.look.w));
-  var out: vec4f;
-  for (var c = 0; c < 4; c++) { out[c] = rooted(b.loose, need[c]) / max(mean[c], 1e-3) * above_snow(b.snow_m, tall[c]); }
+  var out = vec4f(1.0);
+  for (var c = 0; c < 4; c++) {
+    if (roots) { out[c] = rooted(b.loose, need[c]) / max(mean[c], 1e-3); }
+    out[c] *= above_snow(b.snow_m, tall[c]);
+  }
   return out;
 }
 
 // The herbs' sward: their plants thicker and thinner by up to `SWARD` of their mean over tufts of `SWARD_M`; seen from
 // above, their leaves leaning and their shade cover more than their share: the ground they leave is (1 - share)^
-// `SWARD_SEEN` (an Earth view's style). Its tone varies by up to `TUFT_TONE` over the tufts, by up to `SWATH` over
+// `cover_look.sides.w` (canopy.ts `SWARD_SEEN`, an Earth view's style). Its tone varies by up to `TUFT_TONE` over the tufts, by up to `SWATH` over
 // swathes of `SWATH_M` and by up to `BLADES` over blades `BLADE_W` wide and `BLADE_L` long, turned by tufts.
-const SWARD = 0.45; const SWARD_M = 0.35; const SWARD_SEEN = 5.0;
+const SWARD = 0.45; const SWARD_M = 0.35;
 // Under the trees' crowns the sward is in their shade: darker by up to `SWARD_SHADE` as they close over it.
 const SWARD_SHADE = 0.35;
 const TUFT_TONE = 0.15; const SWATH = 0.18; const SWATH_M = 3.0; const BLADES = 0.3; const BLADE_W = 0.05; const BLADE_L = 0.25;
-// Reeds: herbs on ground soaked from `REED_WET` to fully stand dense (`REED_FILL` of the ground), their colour times
-// `REED_TINT`, in streaks of blades `REED_W` wide, `REED_L` long, `REED_TONE` deep.
-const REED_WET = 0.85; const REED_FILL = 0.9; const REED_TINT = vec3f(0.8, 0.85, 0.55); const REED_W = 0.04; const REED_L = 0.6; const REED_TONE = 0.4;
+// Swathes and blades show as detail this size, m (`shows_at`): none where a pixel takes 1 m or more, where they would
+// read only as noise.
+const SWATH_DETAIL_M = 1.33;
+// Reeds: herbs on soaked ground (from `REED_WET`) and on the shore of standing or running water, out to `REED_BAND_M`
+// m from its edge (its height over the water's level over the slope), stand dense (`REED_FILL` of the ground), their colour times `REED_TINT`, in streaks of tall blades
+// `REED_W` wide, `REED_L` long, `REED_TONE` deep.
+const REED_WET = 0.85; const REED_BAND_M = 5.0; const REED_FILL = 0.95; const REED_TINT = vec3f(0.75, 0.8, 0.45);
+const REED_W = 0.07; const REED_L = 0.9; const REED_TONE = 0.5;
 // Flowers: in clusters as large as the noise's cells, `FLOWER_M`, over as much of the sward as is in flower; in a
 // cluster a dot of radius `DOT_R` lies in each cell of `DOT_GAP` at a place of its own (`DOT_PRESENT` of the cells),
-// lighter at its heart by `DOT_HEART`; where a dot takes less than a pixel, the cluster's mean; where a pixel takes
-// `FLOWERS_GONE_M` or more, none (their faint tint gone from afar).
-const FLOWERS_GONE_M = 5.0; const FLOWER_M = 0.8; const DOT_R = 0.08; const DOT_GAP = 0.36; const DOT_PRESENT = 0.7; const DOT_HEART = 0.25;
+// lighter at its heart by `DOT_HEART`; where a dot takes less than a pixel, the cluster's mean; they show as detail
+// `FLOWERS_GONE_M` across (`shows_at`): none where a pixel takes a metre or more (their faint tint gone from afar).
+const FLOWERS_GONE_M = 1.33; const FLOWER_M = 1.2; const DOT_R = 0.1; const DOT_GAP = 0.38; const DOT_PRESENT = 0.8; const DOT_HEART = 0.25;
 
 // The field of lattice l at `at`, m from the map's north-west corner, at mip level lod: the colour its marks cover the
 // ground with (a reflectance, premultiplied) and the share they cover.
@@ -105,7 +127,7 @@ fn field_smooth(at: vec2f, l: i32) -> vec4f {
 fn patchy(at: vec2f) -> f32 { return 1.0 + PATCH * noise(at / PATCH_M, 40).x; }
 
 // The stands' draw at `at` over patches of `m` m, even over 0..1.
-fn stand_draw(at: vec2f, m: f32) -> f32 { return smoothstep(-EVEN_TWO, EVEN_TWO, noise_two(at / m, 70)); }
+fn stand_draw(at: vec2f, m: f32) -> f32 { return smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / m, 70)); }
 
 // The stands' draw `u` mixed with a plant's own draw `r` (both even over 0..1), made even again: the distribution
 // function of (1 - STAND_MIX) u + STAND_MIX r. A plant is of the first kind where this falls under the kind's share.
@@ -222,12 +244,11 @@ fn flowers_at(at: vec2f, e: f32, bloom: f32, petal: vec3f) -> vec4f {
 
 // The herbs' sward at `at`, seen at `e` m a pixel, over `b`, premultiplied: their colour in stands of their kinds, the
 // share they cover (thicker and thinner by `thick`, `patchy`, as far as they hold there, `hold`) seen from above
-// (`SWARD_SEEN`) with its tufts, swathes and blades where each shows, in the shade of the trees' crowns, reeds on
-// soaked ground and flowers over it.
-fn sward(at: vec2f, e: f32, b: Beneath, thick: f32, hold: f32) -> vec4f {
+// (canopy.ts `SWARD_SEEN`) with its tufts, swathes and blades where each shows, in the shade of `canopy` of the trees' crowns,
+// reeds on soaked ground and at the water's edge, and flowers over it.
+fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> vec4f {
   let f = field_smooth(at, SWARD_LAYER);
   if (f.a <= 0.0 || hold <= 0.0) { return vec4f(0.0); }
-  let soaked = b.soaked;
   var c = in_stands(at, e, f, SWARD_FIRST, SWARD_STAND_M);
   var s = min(f.a * thick * hold, 1.0);
   let tufts = shows_at(SWARD_M, e);
@@ -237,18 +258,18 @@ fn sward(at: vec2f, e: f32, b: Beneath, thick: f32, hold: f32) -> vec4f {
     s = clamp(s * (1.0 + SWARD * n), 0.0, 1.0);
     tone += TUFT_TONE * n;
   }
-  let swaths = shows_at(SWATH_M, e);
-  if (swaths > 0.0) { tone += SWATH * swaths * noise_two(at / SWATH_M, 73); }
-  let blades = shows_at(BLADE_W, e);
+  let swaths = shows_at(SWATH_DETAIL_M, e);
+  if (swaths > 0.0) { tone += SWATH * swaths * noise_turned(at / SWATH_M, 73); }
+  let blades = shows_at(BLADE_W, e) * swaths;
   if (blades > 0.0) { tone += BLADES * blades * streaks(at, BLADE_W, BLADE_L, PI * noise(at / SWARD_M, 74).x, 75); }
-  let reeds = ease(REED_WET, 1.0, soaked);
+  let reeds = max(ease(REED_WET, 1.0, b.soaked), ease(REED_BAND_M, 0.0, b.over / max(b.slope, 1e-3)));
   if (reeds > 0.0) {
     s = mix(s, max(s, REED_FILL), reeds);
     c = mix(c, c * REED_TINT, reeds);
     tone += REED_TONE * reeds * shows_at(REED_W, e) * streaks(at, REED_W, REED_L, 0.3 * noise(at / REED_L, 76).x, 77);
   }
-  let seen = 1.0 - pow(1.0 - s, SWARD_SEEN);
-  c *= max(tone, 0.0) * (1.0 - SWARD_SHADE * min(b.canopy, 1.0));
+  let seen = 1.0 - pow(1.0 - s, cover_look.sides.w);
+  c *= max(tone, 0.0) * (1.0 - SWARD_SHADE * min(canopy, 1.0));
   let near = shows_at(FLOWERS_GONE_M, e);
   if (near > 0.0) {
     let fl = field_at(at, FLOWER_LAYER, 0.0);
@@ -261,31 +282,51 @@ fn sward(at: vec2f, e: f32, b: Beneath, thick: f32, hold: f32) -> vec4f {
   return vec4f(c * seen, seen);
 }
 
-// The cover's field at `at` seen at `e` m a pixel over `b`, premultiplied: the herbs' sward, then each lattice as far as
-// its marks do not show, the lower under the taller, thicker and thinner over the patches (`patchy`), as far as it holds
-// there (`held_at`), with its grain (`grain`); the trees' in their stands, their canopy seen as closer (`CANOPY_SEEN`)
-// and snowy as the ground under it.
-fn cover_field(at: vec2f, e: f32, b: Beneath) -> vec4f {
-  // The patches as far as they show: where they take less than a pixel the field is their mean.
-  let thick = 1.0 + (patchy(at) - 1.0) * shows_at(PATCH_M, e);
+// The cover's field at `at` seen at `e` m a pixel over `b`, premultiplied, and the trees' crowns' share: the herbs'
+// sward, then each lattice (`lattice_field`), the lower under the taller, thicker and thinner over the patches
+// (`patchy`), as far as it holds there (`held_at`); far away, where the sward's and the low lattices' detail no longer
+// shows, those three as their one layer (canopy.ts `FIELD.low`).
+fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
+  // The patches as far as they show: where they take less than a pixel the field is their mean (and no noise is read).
+  let patches = shows_at(PATCH_M, e);
+  let thick = select(1.0, 1.0 + (patchy(at) - 1.0) * patches, patches > 0.0);
   let hold = held_at(at, b);
-  var dst = sward(at, e, b, thick, hold.w);
-  for (var l = 0; l < COVER_LATTICES; l++) {
-    let unshown = 1.0 - cover_look.shown[l];
-    if (unshown <= 0.0) { continue; }
-    let f = field_smooth(at, l);
-    if (f.a <= 0.0) { continue; }
-    var c = f.rgb / f.a;
-    var share = min(f.a * hold[l], 1.0);
-    if (share <= 0.0) { continue; }
-    if (l == STANDS) {
-      c = in_stands(at, e, f, STANDS_FIRST, STAND_M) * (1.0 + CANOPY_TONE * noise_turned(at / CANOPY_M, 79) * shows_at(CANOPY_M, e));
-      c = mix(c, vec3f(1.0), CANOPY_SNOW * b.snow);
-      share = 1.0 - pow(1.0 - share, CANOPY_SEEN);
-    }
-    let g = grain(at, l, share * thick, e);
-    let a = g.x * unshown;
-    dst = vec4f(c * g.y * a, a) + dst * (1.0 - a);
+  // The trees' field, read once: their crowns' share, and their layer below (plainly blended where their marks show in
+  // its place: only the shade under them reads it).
+  var trees = vec4f(0.0);
+  if (cover_look.sides[STANDS] > 0.0) {
+    trees = select(field_smooth(at, STANDS), field_at(at, STANDS, 0.0), cover_look.shown[STANDS] >= 1.0);
   }
-  return dst;
+  // Under the trees: the sward and the low lattices one by one near, as one layer far (`LOW_FAR_E`).
+  let far = ease(LOW_FAR_E, LOW_FAR_FULL_E, e);
+  var dst = vec4f(0.0);
+  if (far < 1.0) {
+    dst = sward(at, e, b, trees.a, thick, hold.w);
+    for (var l = 0; l < STANDS; l++) { dst = lattice_field(at, e, l, field_smooth(at, l), b, thick, hold[l], dst); }
+  }
+  if (far > 0.0) { dst = mix(dst, field_smooth(at, LOW_LAYER) * min(hold.w * thick, 1.0), far); }
+  dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);
+  return CoverAt(dst, trees.a);
+}
+
+// Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show, thicker and thinner by
+// `thick`, holding `hold` of its plants there, with its grain, over `dst` (premultiplied); the trees' in their stands,
+// their canopy seen as closer (`CANOPY_SEEN`) and snowy as the ground under it. A lattice no square holds (its side 0,
+// textures.ts) adds nothing.
+fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, hold: f32, dst: vec4f) -> vec4f {
+  let unshown = 1.0 - cover_look.shown[l];
+  if (unshown <= 0.0 || cover_look.sides[l] <= 0.0 || f.a <= 0.0) { return dst; }
+  var c = f.rgb / f.a;
+  var share = min(f.a * hold, 1.0);
+  if (share <= 0.0) { return dst; }
+  if (l == STANDS) {
+    c = in_stands(at, e, f, STANDS_FIRST, STAND_M);
+    let groups = shows_at(CANOPY_M, e);
+    if (groups > 0.0) { c *= 1.0 + CANOPY_TONE * noise_turned(at / CANOPY_M, 79) * groups; }
+    c = mix(c, vec3f(1.0), CANOPY_SNOW * b.snow);
+    share = 1.0 - pow(1.0 - share, CANOPY_SEEN);
+  }
+  let g = grain(at, l, share * thick, e);
+  let a = g.x * unshown;
+  return vec4f(c * g.y * a, a) + dst * (1.0 - a);
 }

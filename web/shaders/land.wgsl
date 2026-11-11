@@ -43,12 +43,15 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.t = st.t;
   p.snow = st.snow;
   p.ground = surface.xyz;
-  p.canopy = field_at(at, STANDS, 0.0).a;
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
   p.loose = loose_at(at);
-  p.cover = cover_field(at, e, Beneath(soaked(p), p.canopy, p.loose, st.snow, st.snow_m));
+  // The height over the nearest water, standing or running: a channel's banks rise from its edge.
+  let banks = select(p.over, min(p.over, max(g.d - bed.half, 0.0) * max(length(g.slope), bed.mean / max(bed.half, 1e-6))), bed.half > 0.0);
+  let cf = cover_field(at, e, Beneath(soaked(p), banks, length(g.slope), p.loose, st.snow, st.snow_m));
+  p.cover = cf.cover;
+  p.canopy = cf.canopy;
   p.rock = bed_shows(p.loose, at);
   p.bed = vec3f(0.0);
   if (p.rock > 0.0) {
@@ -63,7 +66,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.e = e;
   var out = Spots(p, p, 0.0);
   if (p.depth > 0.0 || bed.half <= 0.0) { return out; }
-  out.dry.over = min(p.over, max(g.d - bed.half, 0.0) * max(length(g.slope), bed.mean / bed.half));
+  out.dry.over = banks;
   let css = e * land.samples.w;
   let shows = land.time.w * css;
   let line = 0.5 * LINE_PX * css * min(pow(q / shows, land.channel.y), LINE_MOST) * ease(shows / LINE_FADE, shows, q);
