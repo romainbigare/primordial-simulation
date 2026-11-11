@@ -68,7 +68,7 @@ each of its samples (or the noise carried to it), and each is carried to the nex
 makes no new pit and no new peak); a map whose first grid would hold more than 65,536 samples runs every stage on grids
 twice as coarse until it fits (`MOST_SAMPLES`). **The shelf** (`space::shelf`): the load that reached the open low
 ground is spread along the shore by the waves, each sample of the shore taking the load that reached the shore within
-5 km of it as a share of that stretch (`ALONG_M`); from it the load builds out a platform 2 m under 0 m (`TOPSET_M`, a
+5 km of it as a share of that stretch (`ALONG_M`); from it the load builds out a platform 5 m under 0 m (`TOPSET_M`, a
 delta's topset), as wide as that load in proportion, fronted by a slope of 0.3 down to the floor (`FORESET`, the load at
 rest under liquid; Gilbert 1885). So a channel that brings much load builds a fan at its mouth and a coast that gets
 little keeps its steep drop; the width is found so the shelf holds all the load, and what the wear took off the land is

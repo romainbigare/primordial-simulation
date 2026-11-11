@@ -11,8 +11,8 @@ use super::grid::Grid;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
-/// The depth under 0 m the load fills the open low ground up to, m: a delta's platform.
-const TOPSET_M: f64 = 2.0;
+/// The depth under 0 m the load fills the open low ground up to, m: a delta's platform, where the waves stir the bed.
+const TOPSET_M: f64 = 5.0;
 /// The slope of the front of the load under liquid, rise over run: its angle of rest there.
 const FORESET: f64 = 0.3;
 /// Half the length of shore the waves spread a mouth's load along, m.
