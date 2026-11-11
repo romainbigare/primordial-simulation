@@ -164,6 +164,13 @@ fn bed_at(g: Tiled, q: f32) -> Bed {
   return Bed(half, mean, BED_MIDDLE * mean * (1.0 - x * x));
 }
 
+// A channel's bed is as wide as the flow that shapes it, its floods: the bankfull discharge, the flood of every year or
+// two, about `FLOOD` times the mean flow in humid lands (Leopold and Maddock 1953; Wolman and Miller 1960; Dunne and
+// Leopold 1978: 2 to 10 times).
+const FLOOD = 5.0;
+// The half width of the bed of a channel that carries `q` m³/s this month, m: the channel law's at `FLOOD` times it.
+fn banks_of(q: f32) -> f32 { return 0.5 * land.channel.x * pow(FLOOD * q, land.channel.y); }
+
 // The level of pond `p` (-1: none), m: from the rows of the table under its planes, four ponds a texel; far below
 // any ground for none (no body holds it, or the texel lies in no pond).
 fn pond_level(p: i32) -> f32 {
@@ -231,11 +238,17 @@ fn activity(wet: f32, need: f32) -> f32 {
   return select(pow(max(x, 0.0), land.soil.z), 1.0, x >= 1.0);
 }
 
-// The share of a kind whose roots need `need` m of loose ground that holds where `loose` m lies (canopy.ts `rooted`, the
+// The share of a kind whose roots need `need` m of loose ground that holds where `loose` m lies (roots.ts `rooted`, the
 // same rule): none from `ROOTED_FROM` of its need down, all from its need up. Bare bed holds no liquid in pores and
-// nothing to anchor a tall plant; a kind roots about `ROOT_PER_HEIGHT` of its height deep (canopy.ts).
+// nothing to anchor a tall plant; a kind roots about `ROOT_PER_HEIGHT` of its height deep (roots.ts). Where the loose
+// depth changes by `spread` m across a pixel and that is more than the rule's own span, the edge is spread over it, as
+// the share of water at a shore is (no speckle where the loose ground has fine patches).
 const ROOTED_FROM = 0.25;
-fn rooted(loose: f32, need: f32) -> f32 { return ease(ROOTED_FROM * need, need, loose); }
+fn rooted(loose: f32, need: f32, spread: f32) -> f32 {
+  let middle = 0.5 * (1.0 + ROOTED_FROM) * need;
+  let half = 0.5 * max((1.0 - ROOTED_FROM) * need, spread);
+  return ease(middle - half, middle + half, loose);
+}
 
 // The state of the ground at a point: the depth of the liquid standing over it and its height over that liquid's
 // surface, m; how wet it is, 0..1; its temperature, K; the snow and ice on it, 0..1, and the snow's depth, m; and how
@@ -279,10 +292,11 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
 }
 
 // The state at `at` on ground `g` as a plant's foot reads it (cover.wgsl): the water of the point's channel stands over
-// its bed too.
+// its bed too, and its floods over its banks (`banks_of`): no plant roots in a channel's bed.
 fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
-  let bed = bed_at(g, discharge_at(g));
+  let q = discharge_at(g);
+  let bed = bed_at(g, q);
   var p = state_on(at, g, cs, bed.depth);
-  p.depth = max(p.depth, bed.depth);
+  p.depth = max(max(p.depth, bed.depth), select(0.0, ROOTS_M, g.d < banks_of(q)));
   return p;
 }

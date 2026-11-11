@@ -54,9 +54,9 @@ const CANOPY_SEEN = 2.0; const CANOPY_TONE = 0.2; const CANOPY_M = 35.0;
 const CANOPY_SNOW = 0.35;
 
 // What lies under and over the cover at a point (land.wgsl `land_spots`): how soaked its ground is, 0..1; its height
-// over the nearest water's level, m, and its slope (rise over run); the depth of its loose ground, m; the share snow
-// covers and the snow's depth, m.
-struct Beneath { soaked: f32, over: f32, slope: f32, loose: f32, snow: f32, snow_m: f32 }
+// over the nearest water's level, m, and its slope (rise over run); the depth of its loose ground with its patches
+// (rock.wgsl `loose_seen`) and that depth's change across a pixel, m; the share snow covers and the snow's depth, m.
+struct Beneath { soaked: f32, over: f32, slope: f32, loose: f32, loose_px: f32, snow: f32, snow_m: f32 }
 
 // The cover's field at a point, premultiplied, and the share the trees' crowns close over the ground there.
 struct CoverAt { cover: vec4f, canopy: f32 }
@@ -75,7 +75,7 @@ fn held_at(at: vec2f, b: Beneath) -> vec4f {
   let need = max(tall * cover_look.look.z, vec4f(cover_look.look.w));
   var out = vec4f(1.0);
   for (var c = 0; c < 4; c++) {
-    if (roots) { out[c] = rooted(b.loose, need[c]) / max(mean[c], 1e-3); }
+    if (roots) { out[c] = rooted(b.loose, need[c], b.loose_px) / max(mean[c], 1e-3); }
     out[c] *= above_snow(b.snow_m, tall[c]);
   }
   return out;

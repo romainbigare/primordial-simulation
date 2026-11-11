@@ -81,7 +81,7 @@ fn foot(at: vec2f) -> Foot {
 // The share of each kind that stands where its roots need `need` m of loose ground (0: its square's ground holds it
 // everywhere, canopy.ts) and `loose` m lies (land.wgsl `rooted`).
 fn holds(loose: f32, need: vec4f) -> vec4f {
-  return select(vec4f(rooted(loose, need.x), rooted(loose, need.y), rooted(loose, need.z), rooted(loose, need.w)), vec4f(1.0), need <= vec4f(0.0));
+  return select(vec4f(rooted(loose, need.x, 0.0), rooted(loose, need.y, 0.0), rooted(loose, need.z, 0.0), rooted(loose, need.w, 0.0)), vec4f(1.0), need <= vec4f(0.0));
 }
 
 // The share of a kind that needs `need` that stands where the ground is `wet` against its cells' mean: its activity
@@ -187,13 +187,13 @@ fn pick_kind(at: vec2f, cs: Corners, chance: array<vec4f, 4>, thick: f32, f: Foo
   var needs: array<vec4f, 4>;
   var sum = 0.0;
   var firsts = 0.0;
-  // The loose ground at the foot (rock.wgsl `loose_at`), read only where a kind's roots may want more than lies there.
+  // The loose ground at the foot with its patches (rock.wgsl `loose_seen`, as the bare bed is drawn), read only where a kind's roots may want more than lies there.
   var deepest = 0.0;
   for (var s = 0; s < 4; s++) {
     needs[s] = kind(ROOTS, cs.at[s]);
     deepest = max(deepest, max(max(needs[s].x, needs[s].y), max(needs[s].z, needs[s].w)));
   }
-  let loose = select(0.0, loose_at(at), deepest > 0.0);
+  let loose = select(0.0, loose_seen(at, 0.0), deepest > 0.0);
   for (var s = 0; s < 4; s++) {
     w[s] = abs(chance[s]) * thick * thrive(f.wet, f.mean, kind(NEED, cs.at[s])) * holds(loose, needs[s]) * f.stands;
     first[s] = select(vec4f(0.0), vec4f(1.0), chance[s] < vec4f(0.0));
