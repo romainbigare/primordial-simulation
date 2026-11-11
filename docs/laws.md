@@ -37,7 +37,13 @@ cell's height is the terrain's mean over it (`Terrain::inside`, below), the heig
 **The terrain**
 (`space::terrain`) is one function of the world's seed and a point of the map, at any size: value noise summed over
 octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to heights, an island's falling away from
-the middle of its map, says how high the ground would stand; the world keeps what it needs beside its seed and its map
+the middle of its map, says how high the ground would stand. **An island's land rises in blocks** (`terrain::rise`,
+`Range`): along an axis drawn from the seed (any heading, up to a unit of the noise from the middle of the map, bent by
+the warp) lies a range, a band half 0.7 to 1.4 units wide (drawn) where the land's rise over its level is 1.3 times the
+mean on the axis, falling by a bell across it to 0.2 times the mean far from it (`RISES`): a high rough range, its
+foothills, and a wide low plain where the land rises slowly; the coast is where the rise meets the level, so it stays
+where the noise has it. A globe's land rises alike everywhere (its noise is of the scale of its continents, its cells
+wider than a range); the world keeps what it needs beside its seed and its map
 (`World::terrain`: the rise its level 0 m lies at). The
 noise's finest octave is 670 m on the 64 x 64 island and 200 km on a globe. The ground is held at **samples**, the
 leaves of `SAMPLE_DEPTH` (1/64 of a block: 125 m on the island, 20 km on a globe of 64 rows), and **the samples are
