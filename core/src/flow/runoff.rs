@@ -9,7 +9,7 @@
 use super::basin::{movable, share_out};
 use super::bodies::Bodies;
 use super::curve::{level_over, Part};
-use super::{bare_share, drain::liquid_heat, follow, land::{lift, solid, standing}, liquid::book, parts::dry_pores, potential::apply, year_weight, Scratch};
+use super::{bare_share, drain::liquid_heat, follow, land::{lift, solid, standing}, liquid::book, parts::{pores_first, under_liquid}, potential::apply, year_weight, Scratch};
 use crate::{math::one_minus_exp, space::network::NONE, store::{Class, LinkFlux, Move, Node}, World};
 
 /// Least bond strength wear divides by.
@@ -144,30 +144,60 @@ fn send(w: &World, s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, (sl
 }
 
 /// A body's part in a cell as its level reads it: the part, its cell's mean surface, m, the area its liquid covers
-/// now, m², and the liquid the pores of its cell's land lack, m (`parts::dry_pores`).
-type Ground<'a> = (&'a Part, f64, f64, f64);
+/// now, m², and what the pores of the ground it comes to cover lack, m, and what the cell's own pores give them first,
+/// m³ (`parts::pores_first`).
+type Ground<'a> = (&'a Part, f64, f64, [f64; 2]);
 
-/// Rounds in which `body_level` finds the ground a body's liquid newly covers again: more than that ground changes in
-/// a month's pass.
-const SOAK_ROUNDS: usize = 4;
+/// The area of cell `i`'s part `q` of a body its liquid covers now, m²: of a cell of parts, the share of the ground
+/// under its liquid as its last solve left it (`parts::Parts::wet`, which `moves::strip` moves from), by what each of its
+/// parts covers at what stands now; of a node that is one, what the part covers at what stands now.
+fn covered(s: &Scratch, i: usize, q: usize) -> f64 {
+    let c = &s.curves[i];
+    let now: Vec<f64> = c.parts.iter().zip(s.fill(i).shares(standing(s, i))).map(|(p, v)| p.under(p.level(v))).collect();
+    let all: f64 = now.iter().sum();
+    match under_liquid(s, i) {
+        Some(wet) if all > 0.0 => wet * c.area() * now[q] / all,
+        Some(wet) => wet * c.area() / now.len() as f64,
+        None => now[q],
+    }
+}
 
-/// The level of a body whose parts `parts` hold `vol` m³ over their samples (`curve::level_over`), m, no
-/// higher than `pass`; what the pores of the ground each part newly covers take of it, m³, as they fill first
-/// (`moves::strip`): the level of what is left, found again until that ground no longer changes; and whether it stands
-/// over its pass.
+/// Halvings of the span of levels in which `body_level` finds the level, to 2^-60 of that span: the rounding of the sums.
+const HALVINGS: usize = 60;
+
+/// The level of a body whose parts `parts` hold `vol` m³, m, no higher than `pass`; what the pores of the ground each
+/// part newly covers take of it, m³, as they fill first (`parts::pores_first`); and whether it stands over its pass.
+/// What its samples hold under a level and what those pores take both grow with the level: the level is where they
+/// take `vol` (`curve::level_over` where the pores take none; else by halving the span of levels), and what a sample
+/// the level just reaches takes is what is left.
 fn body_level(parts: &[Ground], vol: f64, pass: f64) -> (f64, Vec<f64>, bool) {
     let over: Vec<(&Part, f64)> = parts.iter().map(|g| (g.0, g.1)).collect();
-    let soak = |x: f64| parts.iter().map(|&(p, z, now, dry)| (p.under(x - z) - now).max(0.0) * dry).collect::<Vec<f64>>();
-    let (mut top, mut taken) = (level_over(&over, vol), vec![0.0; parts.len()]);
-    for _ in 0..SOAK_ROUNDS {
-        let t = soak(top.min(pass));
-        if t == taken {
-            break;
-        }
-        taken = t;
-        top = level_over(&over, (vol - taken.iter().sum::<f64>()).max(0.0));
+    let soak = |x: f64| parts.iter().map(|&(p, z, now, [dry, own])| ((p.under(x - z) - now).max(0.0) * dry - own).max(0.0)).collect::<Vec<f64>>();
+    let stands = |x: f64| over.iter().map(|&(p, z)| p.volume(x - z)).sum::<f64>();
+    let takes = |x: f64| stands(x) + soak(x).iter().sum::<f64>();
+    let top = level_over(&over, vol);
+    if top > pass && takes(pass) <= vol {
+        return (pass, soak(pass), true);
     }
-    (top.min(pass), taken, top > pass)
+    let soaks = soak(top.min(pass));
+    if soaks.iter().all(|&x| x == 0.0) {
+        return (top.min(pass), soaks, false);
+    }
+    let (mut lo, mut hi) = (over.iter().map(|&(p, z)| p.lowest(z)).fold(f64::INFINITY, f64::min), top.min(pass));
+    for _ in 0..HALVINGS {
+        let mid = 0.5 * (lo + hi);
+        if takes(mid) <= vol {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    // What is left over what the samples hold under `lo` and their pores take there goes to the pores the level just
+    // reaches between `lo` and `hi`, by what each takes there.
+    let (below, above) = (soak(lo), soak(hi));
+    let (left, step) = (vol - stands(lo) - below.iter().sum::<f64>(), above.iter().zip(&below).map(|(a, b)| a - b).sum::<f64>());
+    let taken = below.iter().zip(&above).map(|(b, a)| b + if step > 0.0 { (a - b) * (left / step).clamp(0.0, 1.0) } else { 0.0 }).collect();
+    (lo, taken, false)
 }
 
 /// The bodies in order (`Bodies::list`), each brought to one level: what its parts hold (`Held::part`) stands at one
@@ -183,7 +213,7 @@ fn stand(s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, mm: &[f64]) -
         let cells = &body.cells;
         let ground = |(&i, &q): (&u32, &usize)| {
             let (i, p) = (i as usize, &s.curves[i as usize].parts[q]);
-            (p, s.z[i], p.under(p.level(s.fill(i).shares(standing(s, i))[q])), dry_pores(s, i))
+            (p, s.z[i], covered(s, i, q), pores_first(s, i))
         };
         let parts: Vec<Ground> = cells.iter().zip(&body.part).map(ground).collect();
         let held: Vec<f64> = cells.iter().flat_map(|&i| h.q[i as usize * width..(i as usize + 1) * width].iter().copied()).collect();

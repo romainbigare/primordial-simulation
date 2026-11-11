@@ -82,11 +82,23 @@ pub(in crate::flow) fn amounts(w: &World, i: usize, piece: Option<&Piece>) -> [f
     amt
 }
 
-/// The liquid the pores of the land of cell `i` lack, as a depth over the land, m: its pore space (`Piece::pd`) less
-/// the liquid they hold, which ground its liquid comes to cover takes from what stands (`moves::strip`, pores first);
-/// none for a cell that is one node.
-pub(in crate::flow) fn dry_pores(s: &Scratch, i: usize) -> f64 {
-    let Some(land) = s.mixed(i).map(|m| &m.piece[LAND]).filter(|l| l.share > 0.0) else { return 0.0 };
-    let held: f64 = (0..land.amt.len()).map(|k| land.liquid(k, &s.sp[k]) * s.sp[k].v[1]).sum();
-    (land.pd - held / (s.curves[i].area() * land.share)).max(0.0)
+/// What the ground the liquid of cell `i` comes to cover takes first, as its pores fill (pores first): the liquid its
+/// pores lack, as a depth over that ground, m, and what the cell's own pores give them before what stands does, m³. Of
+/// a cell of parts, what its land's pores lack (`Piece::pd` less what they hold), all paid by what stands
+/// (`moves::strip`); of a node that is one, its pore space, paid first by the liquid all its pores hold
+/// (`parts::create`).
+pub(in crate::flow) fn pores_first(s: &Scratch, i: usize) -> [f64; 2] {
+    match s.mixed(i).map(|m| &m.piece[LAND]) {
+        Some(land) if land.share > 0.0 => {
+            let held: f64 = (0..land.amt.len()).map(|k| land.liquid(k, &s.sp[k]) * s.sp[k].v[1]).sum();
+            [(land.pd - held / (s.curves[i].area() * land.share)).max(0.0), 0.0]
+        }
+        Some(_) => [0.0; 2],
+        None => [s.pd[i], (s.head[i] - s.z[i]).clamp(0.0, s.pd[i]) * s.curves[i].area()],
+    }
+}
+
+/// The share of cell `i`'s area under its liquid as its last solve left it (`Parts::wet`); none for a node that is one.
+pub(in crate::flow) fn under_liquid(s: &Scratch, i: usize) -> Option<f64> {
+    s.state.parts.get(i).and_then(Option::as_ref).map(|p| p.wet)
 }
