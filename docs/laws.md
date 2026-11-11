@@ -364,7 +364,7 @@ what the heat holds molten, as every law and the shell then read it.
   sample, and what reaches a part is that part's (`bodies::Bodies::ways`); liquid on a cell's ground outside any pond
   does not stand. The liquid goes straight from the cell it leaves to the cell its way reaches: it does not wet the
   cells it passes, and the heat of its fall lands where it lands. The bodies then come in turn, each before the body
-  its pass leads to: what its parts hold stands at one level over its own samples (`curve::level_over`, exact), no
+  its pass leads to: what its parts hold stands at one level over its own samples (`level::level_over`, exact), no
   higher than its pass, the pores of the ground it newly covers filling first (`parts::pores_first`: in a cell of
   parts what its land's pores lack, from what stands; in a node that is one, its pore space, from the liquid all its
   pores hold first): a body over deep dry loose ground drains into it until its pores are full. What its samples hold

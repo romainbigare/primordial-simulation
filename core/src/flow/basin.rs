@@ -3,7 +3,7 @@
 //! the cells of a body to one level, as the runoff's pass does once a month (`runoff`); and each body mixes its heat
 //! under each air block (`mix`).
 
-use super::{air::blocks, bodies::Body, curve::{first_held, holds_all, level_over}, land::{cells_state, standing, NONE}, parts::TOP, potential::apply, Scratch};
+use super::{air::blocks, bodies::Body, curve::{first_held, holds_all}, level::level_over, land::{cells_state, standing, NONE}, parts::TOP, potential::apply, Scratch};
 use crate::{space::network::NONE as NO_BODY, store::{Class, LinkFlux}, World, AIR};
 use std::collections::BTreeMap;
 
@@ -27,11 +27,14 @@ pub(super) fn find(w: &World, s: &mut Scratch) {
     if !holds_all(&s.curves, &s.state.held) {
         s.state.held = first_held(s);
     }
+    let mut orders = std::mem::take(&mut s.spare.orders);
     let (n, b) = (w.mesh.cells().n(), &s.bodies);
-    let level: Vec<f64> = b.list.iter().map(|x| body_level(s, x)).collect();
+    orders.resize(b.list.len(), Vec::new());
+    let level: Vec<f64> = b.list.iter().zip(&mut orders).map(|(x, order)| body_level(s, x, order)).collect();
     let is = (0..n).map(|i| b.of[i] != NO_BODY && s.z[i] < level[b.of[i] as usize]).collect();
     let cells = (0..n as u32).filter(|&i| b.of[i as usize] != NO_BODY).collect();
     s.basin = Basin { body: b.of.iter().map(|&x| x != NO_BODY).collect(), cells, is, of: b.of.clone(), level };
+    s.spare.orders = orders;
 }
 
 impl World {
@@ -87,11 +90,11 @@ pub struct Pool {
 }
 
 /// The level of body `b`: what its parts held at the last pass (`State::held`) at one level over their samples
-/// (`curve::level_over`), m, no higher than its pass.
-fn body_level(s: &Scratch, b: &Body) -> f64 {
+/// (`level::level_over`, its floors' sort starting from `order`), m, no higher than its pass.
+fn body_level(s: &Scratch, b: &Body, order: &mut Vec<u32>) -> f64 {
     let parts: Vec<(&super::curve::Part, f64)> = b.cells.iter().zip(&b.part).map(|(&i, &q)| (&s.curves[i as usize].parts[q], s.z[i as usize])).collect();
     let held: f64 = b.cells.iter().zip(&b.part).map(|(&i, &q)| s.state.held[i as usize][q]).sum();
-    level_over(&parts, held).min(b.level)
+    level_over(&parts, held, order).min(b.level)
 }
 
 /// What may move of the liquids `liq` in each cell of `cells` (`[c * (liq.len() + 1) + q]`): all of one that boils below

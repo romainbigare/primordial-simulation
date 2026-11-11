@@ -11,6 +11,7 @@ mod drain;
 mod bodies;
 mod inside;
 mod land;
+mod level;
 mod liquid;
 mod parts;
 mod potential;
@@ -25,7 +26,7 @@ pub use air::{column, declination, glow, insolation, on_slope, scale_height, sun
 pub use potential::total as potential;
 pub use basin::Pool;
 pub use channel::Channel;
-pub(crate) use curve::level_of;
+pub(crate) use level::level_of;
 pub use inside::{levels, lowest, means, volume_under};
 
 pub(crate) use potential::air_head;

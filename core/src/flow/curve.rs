@@ -1,33 +1,13 @@
-//! Where liquid stands over the ground (laws.md 1.2): one level over floors of heights and areas (`level_of`), and each
-//! cell's ground at the terrain's worn samples inside it (`Curve`), about its mean surface. A cell's samples that lie in
+//! Where liquid stands over the ground (laws.md 1.2): each cell's ground at the terrain's worn samples inside it
+//! (`Curve`), about its mean surface. A cell's samples that lie in
 //! a pond of the terrain (`Samples::ponds`) are its parts of the bodies of standing liquid, one part for each pond, and
 //! liquid stands over each part at its body's level; a cell that holds no pond's samples holds liquid only until the
 //! runoff's pass, from its lowest sample up.
 
-use super::Scratch;
+use super::{level::level_of, Scratch};
 use crate::space::{network::NONE, terrain::SAMPLE_DEPTH};
 use crate::World;
 use std::borrow::Cow;
-
-/// The level at which `vol` m³ fill floors of heights and areas `floors` (m, m²), sorted here: Σ area × (level -
-/// floor) over the floors under it is `vol`, m.
-pub fn level_of(floors: &mut [(f64, f64)], vol: f64) -> f64 {
-    floors.sort_unstable_by(|p, q| p.0.total_cmp(&q.0));
-    level_sorted(floors, vol)
-}
-
-/// `level_of` on floors sorted lowest first.
-fn level_sorted(floors: &[(f64, f64)], vol: f64) -> f64 {
-    let (mut area, mut volume_under) = (0.0, 0.0);
-    for (k, &(z, a)) in floors.iter().enumerate() {
-        (area, volume_under) = (area + a, volume_under + a * z);
-        let level = (vol + volume_under) / area;
-        if floors.get(k + 1).is_none_or(|next| level <= next.0) {
-            return level;
-        }
-    }
-    f64::NAN
-}
 
 /// No part: a sample of a cell that lies in no pond (`Curve::sides`).
 const NO_PART: u8 = u8::MAX;
@@ -53,6 +33,10 @@ impl Part {
             sums.push([s[0] + a, s[1] + a * d, s[2] + a * d * d]);
         }
         Part { pond, floors, sums }
+    }
+    /// Its floors, lowest first: each sample's departure from the cell's mean surface, m, with its area, m².
+    pub(super) fn floors(&self) -> &[(f64, f64)] {
+        &self.floors
     }
     /// The sums of the floors under the level `x` over the cell's mean surface (`Part::sums`).
     fn under_x(&self, x: f64) -> [f64; 3] {
@@ -99,41 +83,9 @@ impl Part {
         z + self.floors[0].0
     }
     /// Its lowest and highest floors over a cell whose mean surface lies at `z`, m.
-    fn span(&self, z: f64) -> [f64; 2] {
+    pub(super) fn span(&self, z: f64) -> [f64; 2] {
         [z + self.floors[0].0, z + self.floors[self.floors.len() - 1].0]
     }
-}
-
-/// Steps of `level_over` before it takes the parts' floors in order.
-const STEPS_MOST: usize = 64;
-/// A step of `level_over` this small, a share of the level (of a metre near 0 m), is the rounding of its sums: the
-/// level is found.
-const LEVEL_ROUNDING: f64 = 1e-13;
-
-/// The level at which `vol` m³ stand over the parts `parts` together, each over its cell's mean surface (m), m: Σ of
-/// their volumes under it is `vol`; their lowest floor for none. Newton's steps on that sum, which is convex and
-/// piecewise linear in the level, from over all the floors: each lies over the level, and the step from a point over
-/// the floors' segment that holds it lands on it, so they reach it exactly; where they take more than `STEPS_MOST`,
-/// the floors in order (`level_of`).
-pub(super) fn level_over(parts: &[(&Part, f64)], vol: f64) -> f64 {
-    let spans: Vec<[f64; 2]> = parts.iter().map(|&(p, z)| p.span(z)).collect();
-    let (low, high) = spans.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), s| (l.min(s[0]), h.max(s[1])));
-    if vol <= 0.0 {
-        return low;
-    }
-    let at = |x: f64| parts.iter().fold((0.0, 0.0), |(v, a), &(p, z)| (v + p.volume(x - z), a + p.under(x - z)));
-    let all = at(f64::INFINITY).1;
-    let mut x = high + vol / all;
-    for _ in 0..STEPS_MOST {
-        let (v, a) = at(x);
-        let next = x - (v - vol) / a;
-        if (next - x).abs() <= LEVEL_ROUNDING * x.abs().max(1.0) {
-            return next;
-        }
-        x = next;
-    }
-    let mut floors: Vec<(f64, f64)> = parts.iter().flat_map(|&(p, z)| p.floors.iter().map(move |&(d, a)| (z + d, a))).collect();
-    level_of(&mut floors, vol)
 }
 
 /// The ground of a cell as liquid stands on it: its parts (`Part`; the ponds' in the order of the ponds), its area, m²,
