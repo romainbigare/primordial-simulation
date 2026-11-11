@@ -15,12 +15,17 @@ struct CoverLook {
 @group(0) @binding(16) var cover_field_sampler: sampler;
 
 const COVER_LATTICES = 3;
-// A crown of the field covers at most this share of its cell (a disc in a square, pi / 4) before it grows past it.
-const DISC = 0.785398;
+// A grain of the field (`grain`) where its cell takes more than a pixel: present in a cell as often as covers at most
+// `GRAIN_FILL` of it, as wide as keeps the mean, and placed in it at random where it has room (so no grains stand in
+// rows).
+const GRAIN_FILL = 0.35;
 // A uniform draw on -1..1 spreads sqrt(1/3): a draw times this spreads 1.
 const UNIFORM_SPREAD = 1.732;
 // A grain that spreads less than this (a display level of 255) does not show, and is not drawn.
 const SPREAD_SHOWS = 0.004;
+// Soft patches: a lattice's plants stand thicker and thinner over patches `PATCH_CELLS` of its cells across, by up to
+// `PATCH` of their mean (fixed noise in the world), alike near (cover.wgsl) and far.
+const PATCH_CELLS = 12.0; const PATCH = 0.45;
 
 // The field of lattice l at `at`, m from the map's north-west corner, at mip level lod: the colour its marks cover the
 // ground with (a reflectance, premultiplied) and the share they cover.
@@ -54,25 +59,45 @@ fn field_smooth(at: vec2f, l: i32) -> vec4f {
   return g0.y * top + g1.y * bottom;
 }
 
-// The share of the ground at `at` that lattice l's plants cover, where they cover `share` of it on the mean, seen at
-// `e` m a pixel. Where a cell of the lattice takes more than a pixel, the crowns themselves: each cell holds one disc,
-// as wide as keeps the mean, by its own random draw; where it takes less, the mean with the scatter of the count of
-// crowns over a block of cells about a pixel wide (a power of two of them across), each block its own draw. So the
-// grain is canopy and gaps at the plants' own size.
+// How much thicker than their mean lattice l's plants stand at `at` (`PATCH`).
+fn patchy(at: vec2f, l: i32) -> f32 { return 1.0 + PATCH * noise(at / (PATCH_CELLS * cover_look.sides[l]), 40 + l).x; }
+
+// The share of the ground at `at` that lattice l's plants cover, where they cover `s` of it, seen at `e` m a pixel:
+// grains at the plants' own size (`GRAIN_FILL`), as fine as its cells of side `side`.
+fn grains(at: vec2f, l: i32, s: f32, e: f32, side: f32) -> f32 {
+  let c = floor(at / side);
+  let x = lowbias(vec2i(c), l + 7);
+  let present = min(s / GRAIN_FILL, 1.0);
+  if (f32(x & 1023u) / 1024.0 >= present) { return 0.0; }
+  let r = side * sqrt(s / (present * PI));
+  let jitter = vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0 - 0.5;
+  let centre = (c + 0.5 + jitter * max(1.0 - 2.0 * r / side, 0.0)) * side;
+  return 1.0 - smoothstep(r - 0.5 * e, r + 0.5 * e, length(at - centre));
+}
+
+// The mean share `s` with the scatter of the count of crowns of cells of side `side` over a block of them about `e`
+// m wide (a power of two of them across), as a smooth noise of the block; the two blocks either side of the pixel's
+// size blended by it, so no block shows and nothing jumps as the view zooms.
+fn scatter(at: vec2f, l: i32, s: f32, e: f32, side: f32) -> f32 {
+  let k = log2(max(e / side, 1.0));
+  let fine = side * exp2(floor(k));
+  let spread = sqrt(s * (1.0 - s)) * side / fine * UNIFORM_SPREAD;
+  if (spread <= SPREAD_SHOWS) { return s; }
+  let blend = mix(noise(at / fine, l + 7).x, 0.5 * noise(at / (2.0 * fine), l + 7).x, fract(k));
+  return clamp(s + spread * blend, 0.0, 1.0);
+}
+
+// The share of the ground at `at` that lattice l's plants cover, where they cover `share` of it on the mean (thicker
+// and thinner over its patches), seen at `e` m a pixel: grains where a cell takes more than a pixel, their scatter
+// where it takes less, blended over the pixel's size from half a cell to a cell.
 fn grain(at: vec2f, l: i32, share: f32, e: f32) -> f32 {
   let side = cover_look.sides[l];
-  if (e < side) {
-    let c = floor(at / side);
-    let h = f32(lowbias(vec2i(c), l + 7) & 1023u) / 1023.0;
-    let r = 0.5 * side * sqrt(max(share / DISC, 1.0));
-    if (h >= min(share / DISC, 1.0)) { return 0.0; }
-    return 1.0 - smoothstep(r - 0.5 * e, r + 0.5 * e, length(at - (c + 0.5) * side));
-  }
-  let block = side * exp2(round(log2(e / side)));
-  let spread = sqrt(share * (1.0 - share)) * side / block;
-  if (spread <= SPREAD_SHOWS) { return share; }
-  let h = f32(lowbias(vec2i(floor(at / block)), l + 7) & 1023u) / 1023.0;
-  return clamp(share + spread * UNIFORM_SPREAD * (2.0 * h - 1.0), 0.0, 1.0);
+  let s = min(share * patchy(at, l), 1.0);
+  let w = smoothstep(0.5 * side, side, e);
+  var out = 0.0;
+  if (w < 1.0) { out += (1.0 - w) * grains(at, l, s, e, side); }
+  if (w > 0.0) { out += w * scatter(at, l, s, e, side); }
+  return out;
 }
 
 // The cover's field at `at` seen at `e` m a pixel, premultiplied: each lattice as far as its marks do not show, the

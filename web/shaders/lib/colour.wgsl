@@ -11,7 +11,7 @@ struct Earth {
   // the liquid, m; the bytes of a layer view over which an empty spot fades into a full one.
   look: vec4f,
   // What is drawn: the view (0 the Earth's colours, 1 the true colour, 2 a layer over them); the stops of the layer's
-  // ramp; whether the worn paths are drawn (1).
+  // ramp; whether the worn paths are drawn (1); and the sea's level, m (the live map: the lowest body's).
   view: vec4f,
   // Where the map drawn lies in the world: its top-left corner and its size, m.
   place: vec4f,
@@ -30,12 +30,12 @@ const ROCK = 5u; const BARE = 6u; const PLANTS = 7u;
 const SAND = vec3f(0.45, 0.40, 0.30); const TUNDRA = vec3f(0.30, 0.31, 0.26); const UPLAND = vec3f(0.30, 0.27, 0.21);
 const SNOW = vec3f(0.90, 0.92, 0.95); const PATH = vec3f(232, 89, 12);
 const ROCK_LO = vec3f(0.25, 0.24, 0.23); const ROCK_HI = vec3f(0.45, 0.44, 0.42);
-// The light from the north-west.
-const LIGHT = vec3f(-0.588, -0.588, 0.647);
 // How many times steeper than it is the ground is shaded.
 const EXAGGERATE = 6.0;
-// The most of a shore by the sea that is sand.
-const SAND_SHARE = 0.55;
+// A beach (`beach`) lies on ground whose slope (rise over run) is under `BEACH_SLOPE`, none where it passes
+// `ROCK_SLOPE` (a steep coast is a rock shore: waves carry the sand away); by a lake it rises this share of the
+// sea's beach over the lake's surface (smaller waves).
+const BEACH_SLOPE = 0.06; const ROCK_SLOPE = 0.18; const LAKE_BEACH = 0.25;
 // Water standing deeper than this, m, is the deep sea's.
 const DEEP_SEA_M = 200.0;
 // Over the liquid's surface the ground draws water up through its pores (the capillary fringe), wet to e^-1 at this
@@ -47,6 +47,17 @@ const WET_DARK = 0.5;
 const FILM_FROM = 0.8;
 // A bed that sends back less than this share of its light (half a display level of 255) does not show.
 const SHOWS = 0.002;
+// The share of beach sand on ground `sea_over` m over the sea's surface and `over` m over the nearest liquid's, `sea` of
+// its shore the sea's, of slope `slope` (rise over run): sand by the sea up to `high` m over it, and under it (the
+// shallows' bed), by a lake up to `LAKE_BEACH` of that, on gentle ground only.
+fn beach(sea: f32, sea_over: f32, over: f32, slope: f32, high: f32) -> f32 {
+  let shore = max(sea * (1.0 - ease(0.0, high, sea_over)), (1.0 - sea) * (1.0 - ease(0.0, LAKE_BEACH * high, over)));
+  return shore * (1.0 - ease(BEACH_SLOPE, ROCK_SLOPE, slope));
+}
+
+// Whether the view drawn is the Earth's colours, which take the style step (style.wgsl).
+fn styled() -> bool { return earth.view.x == 0.0; }
+
 // The layer's ramp (`earth.ramp`, `earth.view.y` stops).
 fn ramp_layer(t: f32) -> vec3f {
   let n = u32(earth.view.y);
@@ -88,7 +99,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   g.kind = BARE;
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
-  g.rgb = mix(g.rgb, SAND, p.sand);
+  g.rgb = mix(g.rgb, select(SAND, BEACH_SAND, styled()), p.sand);
   let rock = max(ease(0.14, 0.42, p.slope) * ease(150.0, 700.0, p.z), ease(2000.0, 3200.0, p.z) * 0.85) * (1.0 - 0.5 * p.cover.a);
   g.rgb = mix(g.rgb, mix(ROCK_LO, ROCK_HI, ease(1500.0, 4000.0, p.z)), rock);
   if (rock > 0.5) { g.kind = ROCK; }
@@ -105,8 +116,15 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
 // surface (the capillary fringe); soaked under it.
 fn soaked(p: Spot) -> f32 { return 1.0 - (1.0 - p.wet) * (1.0 - exp(-p.over / FRINGE_M)); }
 
-// Ground g soaked to s, lit by `lit` (its shade's multiplier): its bare part the darker the more soaked.
-fn soil(g: Ground, s: f32, lit: f32) -> vec3f { return g.rgb * (1.0 - WET_DARK * s * g.bare) * lit; }
+// Ground g soaked to s, lit by `lit` (its shade's multiplier): its bare part the darker the more soaked (and in the
+// style warmer, style.wgsl `bare_tint`).
+fn soil(g: Ground, s: f32, lit: f32) -> vec3f {
+  let tint = select(vec3f(1.0), bare_tint(g.bare), styled());
+  return lit_by(g.rgb * (1.0 - WET_DARK * s * g.bare) * tint, lit);
+}
+
+// Colour `c` (linear) lit by `lit`; in the style, with its cool shade and warm light (style.wgsl `relief_tint`).
+fn lit_by(c: vec3f, lit: f32) -> vec3f { return select(c * lit, relief_tint(c, lit), styled()); }
 
 // The light on ground of slope `slope` (as drawn) that the sun lights `x` times as much as flat ground, over the light
 // on flat ground: no more than `LIT_MOST`, and no less than the sky's light on it, `SKY_LIGHT` of the light on flat
@@ -119,14 +137,24 @@ fn light(x: f32, slope: f32) -> f32 {
 }
 
 fn colour(p: Spot) -> Shaded {
-  let lit = light(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), p.slope);
+  let x = 1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow);
+  let lit = select(light(x, p.slope), relief_light(x), styled());
   // Under the liquid: its bed, soaked and without snow (frozen liquid lies on the surface, calm), seen through it,
   // flat: at no depth it is the soaked ground with its film of liquid.
   if (p.depth > 0.0) {
     // No bed shows through water deeper than shows any of it.
     var bed = vec3f(0.0);
-    if (through(p.depth).b > SHOWS) { bed = soil(ground_of(p, 0.0), 1.0, lit); }
-    let rgb = mix(water_over(bed, p.depth, ripples(p.at, p.e) * (1.0 - p.snow)), SNOW, p.snow * 0.85);
+    let ripple = ripples(p.at, p.e) * (1.0 - p.snow);
+    var water: vec3f;
+    if (styled()) {
+      // The style: clear water over a pale bed, deepening to the open water, foam at its edge (style.wgsl).
+      if (exp(-2.0 * CLEAR_ATTENUATION.b * p.depth) > SHOWS) { bed = soil(ground_of(p, 0.0), 1.0, lit); }
+      water = mix(water_painted(bed, p.depth, ripple), FOAM_RGB, foam(p.depth, p.slope / earth.look.x, p.e));
+    } else {
+      if (through(p.depth).b > SHOWS) { bed = soil(ground_of(p, 0.0), 1.0, lit); }
+      water = water_over(bed, p.depth, ripple);
+    }
+    let rgb = mix(water, SNOW, p.snow * 0.85);
     var kind = select(LAKE, select(SHALLOW, DEEP, p.depth > DEEP_SEA_M), p.sea >= 0.5);
     if (p.snow > 0.5) { kind = ICE; }
     // The true view shades the bed's colours as far as the bed shows.
@@ -155,7 +183,9 @@ fn colour(p: Spot) -> Shaded {
 // and the worn paths over it.
 fn in_view_of(c: Shaded, o: vec2f, truth: vec3f) -> vec3f {
   var rgb = 255.0 * srgb(c.rgb);
-  if (earth.view.x == 1.0) {
+  if (styled()) {
+    rgb = 255.0 * painted(srgb(c.rgb));
+  } else if (earth.view.x == 1.0) {
     rgb = 255.0 * srgb(truth * clamp(1.0 + (c.m - 1.0) * 0.7, 0.55, 1.4));
   } else if (earth.view.x == 2.0) {
     let full = clamp(255.0 * o.x / earth.look.w, 0.0, 1.0);

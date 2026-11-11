@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl colour.wgsl land.wgsl cover_field.wgsl
+// uses: draw.wgsl water.wgsl style.wgsl colour.wgsl land.wgsl cover_field.wgsl
 // The live map in view: at each pixel of the screen the ground from its tiles and the state from the cells' table
 // (land.wgsl), in the view's colours.
 
@@ -41,7 +41,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
-  p.sand = SAND_SHARE * p.sea * (1.0 - ease(0.0, look.z, p.over));
+  p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), look.z);
   p.river = 0.0;
   p.river_depth = 0.0;
   p.at = at;
@@ -79,7 +79,7 @@ const BED_FILM = 0.3;
 fn river_colour(p: Spot) -> Shaded {
   let lit = light(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), p.slope);
   let bed = BED_FILM * soil(ground_of(p, 0.0), 1.0, lit);
-  let rgb = mix(seen_through(bed, p.depth, ripples(p.at, p.e) * (1.0 - p.snow), RUNNING_ATTENUATION), SNOW, p.snow * 0.85);
+  let rgb = mix(seen_through(bed, p.depth, ripples(p.at, p.e) * (1.0 - p.snow), RUNNING_ATTENUATION, DEEP_WATER), SNOW, p.snow * 0.85);
   return Shaded(rgb, 1.0 + (lit - 1.0) * exp(-2.0 * RUNNING_ATTENUATION.g * p.depth), RIVER);
 }
 
