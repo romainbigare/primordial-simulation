@@ -580,7 +580,8 @@ fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
     let (hi, lo) = pair(&w);
     let (n, area, p) = (w.mesh.cells().n(), w.mesh.cells().area()[0], w.cfg.phys);
     let (pores, full, mv) = (p.porosity * loose(&w, hi), p.bed_porosity * p.bed_depth * area, w.chem.molar_volume(LIQUID, Phase::Liquid));
-    w.cfg.evap = 0.0;
+    // No rain: what sinks is only the liquid poured.
+    (w.cfg.evap, w.cfg.rain_time) = (0.0, f64::INFINITY);
     pour(&mut w, hi, 0.9 * pores);
     let books = Books::now(&w);
     worldgen::testkit::flow_step(&mut w, LIQUID_STEP);

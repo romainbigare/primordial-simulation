@@ -57,6 +57,8 @@ pub struct Config {
     pub cloud_ir: f64,
     /// Time in which vapour over saturation rains out, s
     pub rain_time: f64,
+    /// Distance the wind carries condensed rain before it lands, m
+    pub rain_drift_m: f64,
     /// Loose solid volume moving liquid carries off per J it dissipates, m³/J
     pub carry: f64,
     /// Bonded volume broken per J dissipated, times 1 / bond strength, m³/J
@@ -458,6 +460,8 @@ impl Config {
         // The bed and the skin of its top are layers of matter: a thickness of zero would give a node no heat capacity.
         require(p.h_mix > 0.0 && p.thermocline >= 0.0, || format!("h_mix ({}) must be above 0 and thermocline ({}) not below", p.h_mix, p.thermocline))?;
         require(self.skin_m > 0.0 && p.bed_depth > 0.0, || format!("skin_m ({}) and bed_depth ({}) must be above 0", self.skin_m, p.bed_depth))?;
+        // Rain lands over a width the drift sets (`seen::Seen::landing` divides by it).
+        require(self.rain_drift_m > 0.0, || format!("rain_drift_m ({}) must be above 0", self.rain_drift_m))?;
         // Hardening lowers a lethal limit, never raises it.
         require(p.harden >= 0.0 && p.harden.is_finite(), || format!("harden ({}) must be at least 0", p.harden))?;
         // A body's surface and the still air at it give its bare conductance (`Body::bare`): both above 0; a coat adds
@@ -512,6 +516,7 @@ impl Default for Config {
             cloud: 1.2e-2,
             cloud_ir: 6.7,
             rain_time: 86400.0,
+            rain_drift_m: 2e4,
             carry: 2e-11,
             wear: 1.4e-11,
             regrow: 1e-9,
