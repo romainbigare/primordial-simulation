@@ -13,6 +13,7 @@
 //! reaches `LINE_REACH` texels too. Each number is a function of the seed, the map and the place alone.
 
 use super::bends::{amplitude, ease, length, stand_in, wavelength, Piece, BEND_MOST};
+use super::stems::SMOOTH_MOST;
 use pcore::space::network::NONE;
 use pcore::space::samples::Samples;
 use pcore::space::square::Square;
@@ -55,7 +56,7 @@ const LEAST_TEXELS: f64 = 0.1;
 const LINE_REACH: f64 = 2.5;
 /// The farthest the middle of a sample's line lies from its centre, samples: its curve's middle lies within a quarter
 /// of a diagonal of it, and its bends move it by at most `bends::BEND_MOST`.
-const NEXT_OFF: f64 = 0.36 + BEND_MOST;
+const NEXT_OFF: f64 = 0.36 + BEND_MOST + SMOOTH_MOST;
 /// The samples a curve lies within of its own sample's centre (it runs from the middle of the way in to the middle of
 /// the way out, and on to the middle of the next sample's curve; its bends move it by at most `bends::BEND_MOST`).
 const SPAN: i64 = 2;
@@ -83,10 +84,59 @@ impl Law {
 }
 
 /// The field of the channels over a window of texels (`Channels::field`): of each texel its channel's sample (`NONE`
-/// for none) and the distance to that channel's line, m, signed by the side (`NO_CHANNEL_M` for none).
+/// for none) and the distance to that channel's line, m, signed by the side (`NO_CHANNEL_M` for none); and the valleys
+/// about the lines (`VALLEY_FROM`): the sum of their weights at the texel and of their floors' heights so weighted, m.
 pub(super) struct Field {
     pub dist: Vec<f64>,
     pub sample: Vec<u32>,
+    pub valley: Vec<f64>,
+    pub weight: Vec<f64>,
+}
+
+impl Field {
+    /// The height `h` of texel `i` drawn with the valleys about it: the ground and the floors of the lines within
+    /// `VALLEY_M`, by weight, the ground's 1 (`valley_weight`).
+    pub(super) fn drawn(&self, i: usize, h: f64) -> f64 {
+        (h + self.valley[i]) / (1.0 + self.weight[i])
+    }
+}
+
+/// A valley drawn about a channel's line: the channels that drain this much or more, m², out of the ponds, draw the
+/// ground within `VALLEY_M` of their line, m, toward the height of their floor there (`floor`), on texels finer than
+/// the samples and out of the ponds (`Ground::tile`): all of it on the line, less and less across to none at
+/// `VALLEY_M`. So the lowest line of the ground drawn is the channel's line, which runs smooth where the samples step
+/// (`stems`), and the samples' steps beside it fade out.
+pub const VALLEY_FROM: f64 = 1.0e6;
+pub const VALLEY_M: f64 = 250.0;
+
+/// The weight of a line's floor at the share `x` of `VALLEY_M` from it, against the ground's 1: a share f of the floor
+/// where f eases from 1 on the line to 0 at `VALLEY_M`, so f / (1 - f), infinite on the line.
+fn valley_weight(x: f64) -> f64 {
+    let f = 1.0 - ease(0.0, 1.0, x);
+    f / (1.0 - f).max(1e-12)
+}
+
+/// The height of a channel's floor along the piece of sample `k` of `s` at `t` (0 to 1, `bends::Piece::at`), m: from
+/// the mean of its height and the one's upstream (its own at a head), through its own at the middle, to the mean of its
+/// own and the one's it runs to, or that one's own where a tributary joins it there (a sample's height in a closed pond
+/// its level, where that lies higher).
+fn floor(s: &Samples, k: usize, t: f64) -> f64 {
+    let own = s.h[k];
+    let height = |j: usize| if s.pond[j] == NONE { s.h[j] } else { Some(s.ponds[s.pond[j] as usize].level).filter(|l| l.is_finite()).unwrap_or(s.h[j]).max(s.h[j]) };
+    let start = if s.main[k] == NONE { own } else { (own + height(s.main[k] as usize)) / 2.0 };
+    let end = match s.to[k] {
+        NONE => own,
+        j if s.main[j as usize] == k as u32 => (own + height(j as usize)) / 2.0,
+        j => height(j as usize),
+    };
+    if t < 0.5 { start + (own - start) * 2.0 * t } else { own + (end - own) * (2.0 * t - 1.0) }
+}
+
+/// How far along the segment from `a` to `b` the point of it nearest `p` lies, 0 to 1.
+fn along(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
+    let (d, q) = ([b[0] - a[0], b[1] - a[1]], [p[0] - a[0], p[1] - a[1]]);
+    let len = d[0] * d[0] + d[1] * d[1];
+    if len > 0.0 { ((q[0] * d[0] + q[1] * d[1]) / len).clamp(0.0, 1.0) } else { 0.0 }
 }
 
 /// Where a tributary's line joins the next sample's (the middle of that one's curve, samples), the direction of that
@@ -110,10 +160,12 @@ impl Join {
     }
 }
 
-/// The channels of the samples `s` of a map, `metres` a sample, sized by `law`; the phase of each sample's bends
-/// (`bends::phases`); the channel's reach per m² drained to the power b, and the largest drained area.
+/// The channels of the samples `s` of a map, their lines through the points `at` (`stems::points`), `metres` a sample,
+/// sized by `law`; the phase of each sample's bends (`bends::phases`); the channel's reach per m² drained to the power
+/// b, and the largest drained area.
 pub(super) struct Channels<'a> {
     s: &'a Samples,
+    at: &'a [[f64; 2]],
     law: Law,
     phase: &'a [f32],
     metres: f64,
@@ -121,25 +173,20 @@ pub(super) struct Channels<'a> {
     most: f64,
 }
 
-/// The centre of sample `k` of `s`, in samples.
-fn centre(s: &Samples, k: usize) -> [f64; 2] {
-    [(k % s.across) as f64 + 0.5, (k / s.across) as f64 + 0.5]
-}
-
 fn mid(a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
     [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]
 }
 
-/// The three points of the curve through sample `k` of `s`, in samples: from the middle of its main way in (its centre
-/// at a head) through its centre to the middle of its way out; a sink that liquid runs into ends at its centre; none
-/// for a sink none runs into.
-pub(super) fn base(s: &Samples, k: usize) -> Option<[[f64; 2]; 3]> {
-    let c = centre(s, k);
-    let start = (s.main[k] != NONE).then(|| mid(centre(s, s.main[k] as usize), c));
+/// The three points of the curve through sample `k` of `s` whose lines run through the points `at` (`stems::points`),
+/// in samples: from the middle of its main way in (its point at a head) through its point to the middle of its way out;
+/// a sink that liquid runs into ends at its point; none for a sink none runs into.
+pub(super) fn base(s: &Samples, at: &[[f64; 2]], k: usize) -> Option<[[f64; 2]; 3]> {
+    let c = at[k];
+    let start = (s.main[k] != NONE).then(|| mid(at[s.main[k] as usize], c));
     match (s.to[k], start) {
         (NONE, None) => None,
         (NONE, Some(a)) => Some([a, mid(a, c), c]),
-        (to, a) => Some([a.unwrap_or(c), c, mid(c, centre(s, to as usize))]),
+        (to, a) => Some([a.unwrap_or(c), c, mid(c, at[to as usize])]),
     }
 }
 
@@ -154,10 +201,10 @@ fn to_segment(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> (f64, f64) {
 }
 
 impl<'a> Channels<'a> {
-    /// The channels of `s` on `map`, sized by `law`, with the phase of their bends `phase` (`bends::phases`).
-    pub(super) fn new(map: &Square, s: &'a Samples, law: Law, phase: &'a [f32]) -> Channels<'a> {
+    /// The channels of `s` on `map`, sized by `law`, through the points `at` with the phase of their bends `phase`.
+    pub(super) fn new(map: &Square, s: &'a Samples, law: Law, (at, phase): (&'a [[f64; 2]], &'a [f32])) -> Channels<'a> {
         let most = s.up.iter().fold(0.0f64, |m, &a| m.max(a));
-        Channels { s, law, phase, metres: map.length(SAMPLE_DEPTH), cap: law.width * MOST_RUNOFF.powf(law.width_exp) / 2.0, most }
+        Channels { s, at, law, phase, metres: map.length(SAMPLE_DEPTH), cap: law.width * MOST_RUNOFF.powf(law.width_exp) / 2.0, most }
     }
 
     /// The piece of sample `k` (none for a sink none runs into) on texels of `texel` m: the half amplitude of its bends
@@ -165,7 +212,7 @@ impl<'a> Channels<'a> {
     /// none at a head and at a sink), so the two pieces of a joint meet.
     fn piece(&self, k: usize, texel: f64) -> Option<Piece> {
         let s = self.s;
-        let b = base(s, k)?;
+        let b = base(s, self.at, k)?;
         let wave = wavelength(&self.law, s, k);
         let (to, main) = (s.to[k], s.main[k]);
         if wave < BEND_FROM * texel || (to == NONE && main == NONE) {
@@ -211,7 +258,11 @@ impl<'a> Channels<'a> {
     pub(super) fn field(&self, [x0, y0]: [i64; 2], [wide, high]: [usize; 2], k: f64) -> Field {
         let s = self.s;
         let texel = k * self.metres;
-        let mut f = Field { dist: vec![NO_CHANNEL_M; wide * high], sample: vec![NONE; wide * high] };
+        let mut f = Field { dist: vec![NO_CHANNEL_M; wide * high], sample: vec![NONE; wide * high], valley: vec![0.0; wide * high], weight: vec![0.0; wide * high] };
+        // Of each texel the nearest point of the line in hand and its floor's height, and the texels it reached.
+        let (mut nearest, mut touched) = (vec![(f64::INFINITY, 0.0); wide * high], Vec::new());
+        // The valley's reach in samples, on texels finer than the samples.
+        let valley = if k < 1.0 { VALLEY_M / self.metres } else { 0.0 };
         let mut best = vec![f64::INFINITY; wide * high];
         // The reach of a line in samples, no farther than a texel may name its sample by its step from its own.
         let most_reach = (STEP_MOST - SPAN - 1) as f64;
@@ -225,7 +276,7 @@ impl<'a> Channels<'a> {
         };
         // A channel that is held by no line and whose widest is under `LEAST_TEXELS` of a texel is not held.
         let least = (LEAST_TEXELS * texel / self.cap).powf(1.0 / self.law.width_exp).min(line_from);
-        let window = SPAN + reach_of(self.most).1.ceil() as i64 + 1;
+        let window = SPAN + reach_of(self.most).1.max(valley).ceil() as i64 + 1;
         let lo = |t0: i64| (t0 as f64 * k).floor() as i64 - window;
         let hi = |t0: i64, n: usize| ((t0 + n as i64) as f64 * k).floor() as i64 + window;
         let texels = |from: f64, to: f64, t0: i64, n: usize| ((from / k - 0.5).ceil() as i64).max(t0)..=((to / k - 0.5).floor() as i64).min(t0 + n as i64 - 1);
@@ -235,12 +286,14 @@ impl<'a> Channels<'a> {
                 if s.up[q] < least {
                     continue;
                 }
-                let Some(b) = base(s, q) else { continue };
-                let (own, reach) = reach_of(s.up[q]);
+                let Some(b) = base(s, self.at, q) else { continue };
+                let (own, line_reach) = reach_of(s.up[q]);
+                let carves = s.up[q] >= VALLEY_FROM && valley > 0.0 && s.pond[q] == NONE;
+                let reach = if carves { line_reach.max(valley) } else { line_reach };
                 // The box the line lies in: its curve's points and, where a tributary joins, the next sample's centre,
                 // widened by its bends, by how far the next sample's line lies from its centre and by its reach: none
                 // of the window's texels in it, and the line is not drawn.
-                let next = if s.to[q] != NONE { centre(s, s.to[q] as usize) } else { b[2] };
+                let next = if s.to[q] != NONE { self.at[s.to[q] as usize] } else { b[2] };
                 let edge = |a: usize, low: bool| {
                     let v = b.iter().map(|p| p[a]).fold(next[a], if low { f64::min } else { f64::max });
                     v + if low { -1.0 } else { 1.0 } * (reach + NEXT_OFF)
@@ -253,18 +306,30 @@ impl<'a> Channels<'a> {
                 let scale = own.max(texel) / self.metres;
                 // Each piece into the texels within its reach: a texel takes the line where it beats what it holds and
                 // lies out of the water of the channel it joins.
-                for w in pts.windows(2) {
+                // The piece's own points run from t = 0 to 1; a tributary's last point, where it joins, at its end.
+                let last = (pts.len() - 1 - join.is_some() as usize).max(1) as f64;
+                for (n, w) in pts.windows(2).enumerate() {
                     let (lo, hi) = ([w[0][0].min(w[1][0]), w[0][1].min(w[1][1])], [w[0][0].max(w[1][0]), w[0][1].max(w[1][1])]);
                     for y in texels(lo[1] - reach, hi[1] + reach, y0, high) {
                         for x in texels(lo[0] - reach, hi[0] + reach, x0, wide) {
                             let at = [(x as f64 + 0.5) * k, (y as f64 + 0.5) * k];
                             let (side, d2) = to_segment(at, w[0], w[1]);
                             let i = (y - y0) as usize * wide + (x - x0) as usize;
-                            if d2 <= reach * reach && d2.sqrt() / scale < best[i] && !join.is_some_and(|j| j.holds(at)) {
+                            if d2 <= line_reach * line_reach && d2.sqrt() / scale < best[i] && !join.is_some_and(|j| j.holds(at)) {
                                 (best[i], f.dist[i], f.sample[i]) = (d2.sqrt() / scale, side * d2.sqrt() * self.metres, q as u32);
+                            }
+                            if carves && d2 <= valley * valley && d2 < nearest[i].0 {
+                                if nearest[i].0 == f64::INFINITY {
+                                    touched.push(i);
+                                }
+                                nearest[i] = (d2, floor(s, q, ((n as f64 + along(at, w[0], w[1])) / last).min(1.0)));
                             }
                         }
                     }
+                }
+                for i in touched.drain(..) {
+                    let (bed, w) = (nearest[i].1, valley_weight(nearest[i].0.sqrt() / valley));
+                    (f.valley[i], f.weight[i], nearest[i]) = (f.valley[i] + w * bed, f.weight[i] + w, (f64::INFINITY, 0.0));
                 }
             }
         }

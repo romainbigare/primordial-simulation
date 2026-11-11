@@ -65,13 +65,24 @@ millimetre: a shore is the difference of two heights; the wetness index, to 0.01
 texel's channel, m, signed by its side), then two (that channel's sample, and the pond), 10 bytes a texel. The depths
 go from the finest at which one tile holds the whole map to the first whose texels are no longer than 1 m
 (`tape::depths`). Per texel: the terrain's mean height over it (`Terrain::heights`, so a texel is the mean of its four
-children); the wetness index of the place, ln(a / tan β) (Beven and Kirkby 1979) of the terrain's samples (a the area
+children), and on texels finer than the samples, out of the ponds, drawn toward the floor of a channel within 250 m
+(`VALLEY_M`) that drains 1 km² or more (`VALLEY_FROM`): all of it on the channel's line, less and less across to none at
+250 m (the floor's share f eased from 1 to 0, its weight f / (1 - f) against the ground's 1, the lines near a texel
+summed), the floor running along each sample's piece from the mean of its height and the one's upstream through its own
+to the mean of its own and the next one's (the next one's own where a tributary joins it; a closed pond's level). So the
+lowest line of the ground drawn is the channel's line, and the samples' steps beside a valley fade out; the mean of a
+sample's texels is not kept there exactly; the wetness index of the place, ln(a / tan β) (Beven and Kirkby 1979) of the terrain's samples (a the area
 that drains through a sample, `Samples::up`, over its width, β the slope of the samples' ground, `Grid::slope`),
 blended between the centres of the four samples about a texel finer than them and the mean of those a coarser one
-covers; and its channel (`tape/src/ground/channels.rs`). A channel is drawn as each sample's way (`Samples::to`) as a
-curve from the middle of the way into it (from its neighbour upstream that the most drains through, `Samples::main`)
-to the middle of its own, bent at its centre (a quadratic Bézier), and on to the middle of the next sample's line where
-a tributary joins; a sink of the open low ground that liquid runs into ends the curve at its centre, under the low
+covers; and its channel (`tape/src/ground/channels.rs`). A channel runs through each sample's point
+(`tape/src/ground/stems.rs`): the mean of the centres of the samples along its stem, 3 up and 3 down, weighted 3, 2, 1
+by nearness and the sample's own 4 (a moving average of the polyline of centres, as corner cutting smooths a polygon:
+Chaikin 1974), as many each way as the stem has, so a head, the end of a stem at a body and the sample a tributary
+joins keep their place (a tributary ends on the joined stem's point), and no more than half a sample from the centre:
+so a channel that steps like a stair down a valley across the grid draws as one smooth line. It is drawn as each
+sample's way (`Samples::to`) as a curve from the middle of the way into it (from its neighbour upstream that the most
+drains through, `Samples::main`) to the middle of its own, between the points, bent at its own point (a quadratic
+Bézier), and on to the middle of the next sample's line where a tributary joins; a sink of the open low ground that liquid runs into ends the curve at its centre, under the low
 ground's liquid. The line winds about that curve (`tape/src/ground/bends.rs`): a sine whose wavelength is 11 channel
 widths and whose half amplitude 1.35 widths (Leopold and Wolman 1960), full where the valley's slope to the next sample
 is under 0.01, none over 0.03 (pool-riffle reaches meander, step-pool ones do not: Montgomery and Buffington 1997;
@@ -93,8 +104,9 @@ the side (60,000 where none reaches), and its sample, as the step from the sampl
 again from the texel's centre, floor((x + 1/2) k) for a texel k samples a side, stepped by it. Off the map a texel is
 its edge's. Each number is a function of the seed, the map and the place alone: the same in every tile that holds it. The second plane holds, beside the channel's sample, one more than the pond
 each texel lies in (`Ground::pond_tile`: the pond of the sample that holds its centre, or where that is none, of the
-first of its eight neighbours whose pass the texel lies under, so a pond's shore is where the ground rises over its
-level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
+first of its eight neighbours whose level the texel lies under, where its sample stands over that level (a rim, not the
+pass nor the ground below it) or the pond is of the open low ground, so a pond's shore is where the ground drawn rises
+over its level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
 frame: the melting point of the frozen cover, K, then for each square row by row 11 f32 (`ROW`) of the cell that holds
 its centre: the terrain's mean height over the cell, m; its ground's temperature, K, and how fast its air cools with
 height, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest ground, m

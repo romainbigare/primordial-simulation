@@ -25,22 +25,43 @@ fn at(t: &[u16], x: usize, y: usize, k: usize) -> f32 {
     if k == 0 { unhalf(t[i]) + unhalf(t[i + 1]) } else { unhalf(t[i + k]) }
 }
 
-/// At a depth coarser than the terrain's samples and at one finer, each texel's height is the mean of its four
-/// children's, so a parent drawn in a child's place shows the same ground, softer.
+/// At a depth coarser than the terrain's samples, each texel's height is the mean of its four children's, so a parent
+/// drawn in a child's place shows the same ground, softer; at one finer, so too where no valley about a channel is
+/// drawn (`tape::VALLEY_FROM`, `tape::VALLEY_M`: within that of a sample that drains as much, and two samples more for
+/// the line's bends and smoothing, the ground is drawn toward the channel's floor).
 #[test]
 fn a_texel_is_the_mean_of_its_four_children() {
     let (g, depths) = ground();
+    let cfg = Config::default();
+    let (map, terrain) = worldgen::terrain::island_ground(1, 16, 16);
+    let s = terrain.samples(1, &map, (cfg.lat_south, cfg.lat_north));
+    let metres = map.length(pcore::space::terrain::SAMPLE_DEPTH);
+    let reach = (tape::VALLEY_M / metres).ceil() as i64 + 2;
+    let near_valley = |p: [f64; 2]| {
+        let (r, c) = (p[1].floor() as i64, p[0].floor() as i64);
+        (-reach..=reach).any(|dr| (-reach..=reach).any(|dc| {
+            let (r, c) = (r + dr, c + dc);
+            (0..s.down as i64).contains(&r) && (0..s.across as i64).contains(&c) && s.up[r as usize * s.across + c as usize] >= tape::VALLEY_FROM
+        }))
+    };
+    let (mut checked, mut worst) = (0, 0.0f64);
     for depth in [*depths.start(), depths.start() + 4] {
         let (parent, child) = (g.tile(depth, 0, 0), g.tile(depth + 1, 0, 0));
-        let mut worst = 0.0f64;
+        let per = 2f64.powi(depth as i32 - pcore::space::terrain::SAMPLE_DEPTH as i32);
         for y in 0..TILE / 2 {
             for x in 0..TILE / 2 {
+                let centre = [(x as f64 + 0.5) / per, (y as f64 + 0.5) / per];
+                if 2.0 * per > 1.0 && near_valley(centre) {
+                    continue;
+                }
                 let mean = (0..4).map(|q| at(&child, 2 * x + q % 2, 2 * y + q / 2, 0) as f64).sum::<f64>() / 4.0;
                 worst = worst.max((at(&parent, x, y, 0) as f64 - mean).abs());
+                checked += 1;
             }
         }
         assert!(worst < 1e-3, "depth {depth}: a texel departs from its children's mean by {worst} m");
     }
+    assert!(checked > TILE * TILE / 8, "{checked} texels checked");
 }
 
 /// The texels two tiles side by side both hold (each one's gutter and the other's edge) hold the same height, wetness

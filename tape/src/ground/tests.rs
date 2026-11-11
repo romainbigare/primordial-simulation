@@ -37,8 +37,9 @@ const TEXEL_SAMPLES: f64 = 1.0 / 32.0;
 #[test]
 fn a_texel_names_the_channel_it_measures() {
     let (map, s, metres, law) = island();
-    let phase = phases(&law, &s, metres);
-    let ch = Channels::new(&map, &s, law, &phase);
+    let at = super::super::stems::points(&s);
+    let phase = phases(&law, &s, &at, metres);
+    let ch = Channels::new(&map, &s, law, (&at, &phase));
     let k = TEXEL_SAMPLES;
     // A window about the sample the most drains through, its outlet's river.
     let most = (0..s.up.len()).filter(|&q| s.to[q] != NONE).max_by(|&a, &b| s.up[a].total_cmp(&s.up[b])).expect("a river");
@@ -64,8 +65,9 @@ fn a_texel_names_the_channel_it_measures() {
 #[test]
 fn a_channels_line_runs_on_from_sample_to_sample() {
     let (map, s, metres, law) = island();
-    let phase = phases(&law, &s, metres);
-    let ch = Channels::new(&map, &s, law, &phase);
+    let at = super::super::stems::points(&s);
+    let phase = phases(&law, &s, &at, metres);
+    let ch = Channels::new(&map, &s, law, (&at, &phase));
     let texel = TEXEL_SAMPLES * metres;
     let end = |k: usize, t: f64| ch.piece(k, texel).expect("a channel").at(t);
     let mut joints = 0;
