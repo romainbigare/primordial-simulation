@@ -146,4 +146,11 @@ browser draws in software, so its frames per second mean nothing; the world's pa
 
 ## 8. Branches kept for the next session
 
-None: everything of this session that passed its gate is on main.
+- `experiment/climate-bands` (the owner's word: push it): an island's rows between two latitudes (`ew run --band S,N`,
+  the page's `?band=S,N`), the air's stretch (`Config::stretch`, a switch with default 1, bit for bit with main), and,
+  in work, the island in the planet's air (a strip of the planet run once as the reference climate, open edges, the
+  mean wind through the box). First numbers: band 30 to 55 keeps a third of a globe's contrast in the year's mean
+  (6 K of 19 K), rain falls five times from south to north, a band past 58° freezes while the box is closed, plants do
+  not yet split by row. Not for main until the owner has seen it work; then the stretch becomes a derived number.
+
+Everything else of this session that passed its gate is on main.
