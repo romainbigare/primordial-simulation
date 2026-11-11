@@ -191,3 +191,32 @@ pub(in crate::flow) fn after_air(s: &mut Scratch, i: usize, (heat, moved): ([f64
     }
     (p.heat[LAND], p.heat[TOP]) = (p.heat[LAND] + heat[0] + shore, p.heat[TOP] + heat[1] - shore);
 }
+
+/// Halvings of the span of shares in which `covers` finds the share of a cell under its liquid.
+const COVER_HALVINGS: usize = 50;
+
+/// The share of cell `i`'s area under its liquid where `v` m³ stand over the pores of the ground under it (`Fill::wet`),
+/// the pores of the land it comes to cover filling first from what stands, as `moves::strip` takes them (pores first):
+/// the share the liquid left after filling the pores of the ground between `p.wet` and it covers, found by halving the
+/// span of shares. So what a body's level gives a cell's part, with what its newly covered pores lack
+/// (`runoff::body_level`), covers the ground that level covers.
+pub(super) fn covers(s: &Scratch, i: usize, p: &Parts, f: &[Found; PARTS], (v, por): (f64, f64)) -> f64 {
+    let (fill, area) = (s.fill(i), s.curves[i].area());
+    let top = fill.wet(v);
+    let land = area * (1.0 - p.wet);
+    let lack = if land > 0.0 { (f[LAND].pores(por) - f[LAND].l[2]).max(0.0) / land } else { 0.0 };
+    if top <= p.wet || lack <= 0.0 {
+        return top;
+    }
+    let left = |x: f64| fill.wet((v - (x - p.wet) * area * lack).max(0.0));
+    let (mut lo, mut hi) = (p.wet, top);
+    for _ in 0..COVER_HALVINGS {
+        let mid = 0.5 * (lo + hi);
+        if left(mid) >= mid {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    left(lo)
+}

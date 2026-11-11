@@ -33,7 +33,7 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `rotation` | none (0 = none) | strength of the turning of moving air by the planet's spin | 1 is the real size of the spin's effect; the wind closure is crude (unchecked) | anchored |
 | `days_per_month` | days | the calendar | 12 x 30 = 360 days for a year of 365 | anchored |
 | `months_per_year` | months | the calendar | the same | anchored |
-| `skin_m` | m | depth of ground that exchanges heat with the surface and conducts it sideways | the yearly swing of temperature reaches 2 to 4 m in soil (my arithmetic, unchecked) | anchored |
+| `skin_m` | m | depth of the layer that exchanges with the surface within a year: its heat (and what it conducts sideways), and the pores roots and evaporation draw from; a cell takes at most this of each sample's loose ground | the yearly swing of temperature reaches 2 to 4 m in soil (my arithmetic, unchecked); 95% of roots lie in the top 2 m in most biomes (Schenk and Jackson 2002, from memory) | anchored |
 | `air_top_m` | m | height of the air column | the lower air of Earth, 8 to 16 km | anchored |
 | `gravity` | m/s² | pull of the planet | 9.81 | physical |
 | `sensible` | W/(m² K) | heat passed between ground and the air touching it (not bodies: they go by `wind_ground`, their size and `forced`) | measured bulk exchange over land in wind, 5 to 30 (unchecked) | anchored |

@@ -37,7 +37,7 @@ pub struct Config {
     pub chunks: u32,
 
     // Ground and air physics
-    /// Depth of ground that exchanges heat with the surface, m
+    /// Depth of the layer that exchanges with the surface within a year (heat, pores), m
     pub skin_m: f64,
     /// Height of the air column, m
     pub air_top_m: f64,

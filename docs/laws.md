@@ -297,7 +297,7 @@ falls) is shared between the parts: of each substance by the share of it each ho
 capacities, so a heat all share warms them alike (`moves::reconcile`). What Flow moves of one part it books there: the
 air's step the land's and the top's own exchange (1.4), the liquid laws what they bring to the top and what they take
 by each part's share of the liquid (1.2). The land keeps the liquid its pores hold, its own soil's; what lies over its
-pores runs down to the top with its heat (`moves::settle`). The share under the liquid follows what stands on it: a
+pores runs down to the top with its heat (`moves::settle`). The share under the liquid follows what stands on it, the pores of the land it comes to cover filling first from what stands, so it covers what is left after they fill (`parts::covers`): a
 land the liquid covers gives the liquid's bottom all it holds there, a ground the liquid leaves gives the land its
 bed's skin, its solids and the liquid its pores hold, so what stands is the same either way (`moves::strip`). The deep
 holds the liquid that stands deeper than `h_mix` and the top the rest, the liquid that moves between them taking its
@@ -1313,7 +1313,9 @@ read a kind.
 - **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on: an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
   `World::terrain`); the bed of the chemistry's `bed` and, over the share of it in patches (`terrain::patch`), of its
   `deposits`; the loose ground the wear left (0: the mantle on land, the shelf on the open low ground), each cell the
-  mean over its samples; the sea's salt at
+  mean over its samples of the top `skin_m` of each sample's at most: the ground node is the layer that exchanges with
+  the surface within a year (its heat, and the pores roots and evaporation draw from), and what the wear left deeper lies
+  under it, packed with the bed (the bed's store, `Class::Deep`, its aquifer); the sea's salt at
   balance (2.6); ground and air temperatures falling with latitude and height. The terrain's samples are worn (0):
   land rises from 0 m to the noise's height over 2 million years while flowing liquid cuts it, its slopes creep and it
   floats back up as it is unloaded; the load settles in the closed basins the cutting leaves, and those it does not fill

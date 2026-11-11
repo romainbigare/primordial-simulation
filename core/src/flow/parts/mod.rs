@@ -266,7 +266,7 @@ pub(super) fn solve(w: &World, s: &Scratch, i: usize, kept: &Parts, moving: bool
     if moving && moves::settle(s, &mut p, &f, por) {
         f = found(w, s, i, &p);
     }
-    let (to, deep) = if moving { (s.fill(i).wet(stands(&f, por)), deep::under(w, s.fill(i), liquid(&f, por))) } else { (p.wet, None) };
+    let (to, deep) = if moving { (moves::covers(s, i, &p, &f, (stands(&f, por), por)), deep::under(w, s.fill(i), liquid(&f, por))) } else { (p.wet, None) };
     if to <= 0.0 || (to >= 1.0 && deep.is_none() && (moving || !p.deep())) {
         return None;
     }
