@@ -26,6 +26,10 @@ const SPREAD_SHOWS = 0.004;
 // Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
 // mean (fixed noise in the world), alike near (cover.wgsl) and far.
 const PATCH_M = 8.0; const PATCH = 0.45;
+// The finest lattice's plants (the herbs) are drawn as a soft sward the marks stand in: their mean, thicker and thinner
+// by up to `SWARD` of it over tufts of `SWARD_M`, without grains; seen from above, its leaves leaning and their shade
+// cover more than their share: the ground they leave is (1 - share)^`SWARD_SEEN` (an Earth view's style).
+const SWARD = 0.5; const SWARD_M = 0.35; const SWARD_SEEN = 2.5;
 
 // The field of lattice l at `at`, m from the map's north-west corner, at mip level lod: the colour its marks cover the
 // ground with (a reflectance, premultiplied) and the share they cover.
@@ -38,25 +42,13 @@ fn field_at(at: vec2f, l: i32, lod: f32) -> vec4f {
 // The field of lattice l at uv, blended between its texels.
 fn field_tap(uv: vec2f, l: i32) -> vec4f { return textureSampleLevel(cover_field_tex, cover_field_sampler, uv, l, 0.0); }
 
-// The field of lattice l at `at` through its texels' centres as a cubic B-spline, from four blended reads (Sigg and
-// Hadwiger 2005): smooth across the squares' edges, so no square shows in it, and never past its texels' values.
+// The field of lattice l at `at` through its texels' centres as a cubic B-spline (draw.wgsl `bspline`): no square
+// shows in it.
 fn field_smooth(at: vec2f, l: i32) -> vec4f {
-  let size = vec2f(textureDimensions(cover_field_tex).xy);
-  let p = at / land.map.x - 0.5;
-  let i = floor(p);
-  let f = p - i;
-  // The weights of the texels from i - 1 to i + 2, paired into two blended reads along each axis.
-  let w0 = (1.0 - f) * (1.0 - f) * (1.0 - f) / 6.0;
-  let w1 = (4.0 - 6.0 * f * f + 3.0 * f * f * f) / 6.0;
-  let w3 = f * f * f / 6.0;
-  let w2 = 1.0 - w0 - w1 - w3;
-  let g0 = w0 + w1;
-  let g1 = w2 + w3;
-  let h0 = (i - 1.0 + w1 / g0 + 0.5) / size;
-  let h1 = (i + 1.0 + w3 / g1 + 0.5) / size;
-  let top = g0.x * field_tap(h0, l) + g1.x * field_tap(vec2f(h1.x, h0.y), l);
-  let bottom = g0.x * field_tap(vec2f(h0.x, h1.y), l) + g1.x * field_tap(h1, l);
-  return g0.y * top + g1.y * bottom;
+  let b = bspline(at / land.map.x - 0.5, vec2f(textureDimensions(cover_field_tex).xy));
+  let top = b.g0.x * field_tap(b.h0, l) + b.g1.x * field_tap(vec2f(b.h1.x, b.h0.y), l);
+  let bottom = b.g0.x * field_tap(vec2f(b.h0.x, b.h1.y), l) + b.g1.x * field_tap(b.h1, l);
+  return b.g0.y * top + b.g1.y * bottom;
 }
 
 // How much thicker than their mean the plants stand at `at` (`PATCH`).
@@ -93,11 +85,18 @@ fn scatter(at: vec2f, l: i32, s: f32, e: f32, side: f32) -> f32 {
   return clamp(s + spread * blend, 0.0, 1.0);
 }
 
-// The share of the ground at `at` that lattice l's plants cover, where they cover `share` of it on the mean, seen at `e` m a pixel: grains where a cell takes more than a pixel, their scatter
-// where it takes less, blended over the pixel's size from half a cell to a cell.
+// The share of the ground at `at` that lattice l's plants cover, where they cover `share` of it on the mean, seen at
+// `e` m a pixel: grains where a cell takes more than a pixel, their scatter where it takes less, blended over the
+// pixel's size from half a cell to a cell; the finest lattice's as a sward (`SWARD`).
 fn grain(at: vec2f, l: i32, share: f32, e: f32) -> f32 {
   let side = cover_look.sides[l];
   let s = min(share, 1.0);
+  if (l == 0) {
+    let shown = 1.0 - ease(0.5 * SWARD_M, 1.5 * SWARD_M, 2.0 * e);
+    var tufts = s;
+    if (shown > 0.0) { tufts = clamp(s * (1.0 + SWARD * shown * noise(at / SWARD_M, 54).x), 0.0, 1.0); }
+    return 1.0 - pow(1.0 - tufts, SWARD_SEEN);
+  }
   let w = smoothstep(0.5 * side, side, e);
   var out = 0.0;
   if (w < 1.0) { out += (1.0 - w) * grains(at, l, s, e, side); }
@@ -105,13 +104,14 @@ fn grain(at: vec2f, l: i32, share: f32, e: f32) -> f32 {
   return out;
 }
 
-// The cover's field at `at` seen at `e` m a pixel, premultiplied: each lattice as far as its marks do not show, the
-// lower under the taller, thicker and thinner over the patches (`patchy`), with its grain (`grain`).
+// The cover's field at `at` seen at `e` m a pixel, premultiplied: each lattice as far as its marks do not show (the herbs'
+// always), the lower under the taller, thicker and thinner over the patches (`patchy`), with its grain (`grain`).
 fn cover_field(at: vec2f, e: f32) -> vec4f {
   var dst = vec4f(0.0);
   let thick = patchy(at);
   for (var l = 0; l < COVER_LATTICES; l++) {
-    let unshown = 1.0 - cover_look.shown[l];
+    // The herbs' sward stays under their marks, which stand in it as detail.
+    let unshown = select(1.0 - cover_look.shown[l], 1.0, l == 0);
     if (unshown <= 0.0) { continue; }
     let f = field_smooth(at, l);
     if (f.a <= 0.0) { continue; }

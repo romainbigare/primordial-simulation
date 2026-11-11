@@ -74,6 +74,9 @@ export class GroundTiles {
   /** The last view asked for, to ask again after a lost context. */
   private last: View | null = null;
   private tilesTex: Texture | null = null;
+  /** The rock of each of the terrain's samples (wasm/src/lib.rs `rock`): the depth of its loose ground and the largest
+   * stone its channel moves, m, as 16-bit floats; none until a worker made the ground. */
+  rock: Uint16Array | null = null;
   private start = performance.now();
   private lastCame = -Infinity;
 
@@ -84,9 +87,9 @@ export class GroundTiles {
       const w = { worker: new Worker(this.url), ready: false, making: 0 };
       w.worker.onerror = e => error(e.message);
       w.worker.onmessage = e => {
-        const m = e.data as { kind: string; depth: number; x: number; y: number; data: Uint16Array; text: string };
+        const m = e.data as { kind: string; depth: number; x: number; y: number; data: Uint16Array; rock: Uint16Array; text: string };
         if (m.kind === 'error') return error(m.text);
-        if (m.kind === 'ready') { w.ready = true; return this.next(); }
+        if (m.kind === 'ready') { w.ready = true; this.rock ??= m.rock; this.changed(); return this.next(); }
         if (m.kind === 'tile') { w.making--; this.took(m.depth, m.x, m.y, m.data); }
       };
       const copy = k === WORKERS - 1 ? wasm : wasm.slice(0);

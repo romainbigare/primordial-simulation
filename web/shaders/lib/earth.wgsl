@@ -13,7 +13,7 @@
 @group(0) @binding(5) var view_field: texture_2d<f32>;
 @group(0) @binding(6) var smooth_sampler: sampler;
 // How wet the ground is, 0..1; the depth of the river through it, m; the share of the ground the plant cover leaves
-// bare.
+// bare; the depth of its loose ground, m.
 @group(0) @binding(7) var inside_field: texture_2d<f32>;
 // The reflectance a tape's plants are drawn in: a green leaf's in the visible, about 0.05 red, 0.12 green and 0.04 blue
 // (Gates and others 1965; Knipling 1970).
@@ -74,7 +74,13 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.z = h.x;
   s.slope = length(h.zw) * look.x;
   s.shade = hill_shade(h.zw, EXAGGERATE * look.x);
-  s.sand = beach(s.sea, s.over, length(h.zw), look.z);
+  // A tape's ground is its squares': their own colour is their bed's where no loose ground lies on it.
+  s.loose = inside.w;
+  s.rock = 0.0;
+  s.bed = s.ground;
+  s.stone = 0.0;
+  s.canopy = 0.0;
+  s.sand = beach(s.sea, s.over, s.over, length(h.zw), s.loose, look.z);
   s.river = m.w;
   s.river_depth = inside.y;
   s.at = earth.place.xy + uv * earth.place.zw;

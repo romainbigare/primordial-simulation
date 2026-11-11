@@ -39,10 +39,10 @@ struct Land {
 
 // The table's planes: the terrain's mean height over the cell, m, its ground's temperature, K, how fast its air cools
 // with height, K/m, and its ice, m; its standing liquid's level, its lowest ground and the depth that stands, m, and the
-// liquid in its pores, m; what its pores hold full, m, and the level of the wetness index its soil's liquid departs
-// about; the ground's own colour and its share of the sea; its true colour; the bytes of the layer drawn and of the
-// worn paths.
-const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const PLANES = 6;
+// liquid in its pores, m; what its pores hold full, m, the level of the wetness index its soil's liquid departs about,
+// and its bed's reflectance, red and green; then blue (`BED`); the ground's own colour and its share of the sea; its
+// true colour; the bytes of the layer drawn and of the worn paths.
+const GROUND = 0; const LIQUID = 1; const SOIL = 2; const BED = 3; const SURFACE = 4; const TRUTH = 5; const VIEW = 6; const PLANES = 7;
 // Where no liquid stands near a point, its surface is taken this far below the ground, m.
 const NO_LIQUID_M = 1000.0;
 // Between texels of one channel its signed distance changes by at most the distance between them (√2 texels across a
@@ -254,8 +254,9 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
   var p: State;
   if (g.water.x > -NO_LIQUID_M && g.water.y > 0.0) {
     // Over the ponds' level, the height counts the more the less of the point is theirs, so a shore's fringe fades out
-    // within a texel of the pond's last texel.
-    p.depth = max(g.water.x - (g.h - cut), 0.0);
+    // within a texel of the pond's last texel; under it, the depth shallows to none across that texel, so where the
+    // ground drawn lies under the level past the pond's last texel the shore is a soft edge, not the texels' steps.
+    p.depth = max(g.water.x - (g.h - cut), 0.0) * g.water.y;
     p.over = min(max(g.h - cut - g.water.x, 0.0) / g.water.y, NO_LIQUID_M);
   } else {
     p.depth = 0.0;

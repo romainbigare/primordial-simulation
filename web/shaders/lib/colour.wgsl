@@ -25,16 +25,19 @@ const DEEP = 0u; const SHALLOW = 1u; const LAKE = 2u; const RIVER = 3u; const IC
 const ROCK = 5u; const BARE = 6u; const PLANTS = 7u;
 
 // The reflectances (red, green, blue) of the hand rules' grounds: dry sand (0.3 to 0.5, quartz the most), the pale
-// ground of the cold and of the heights, bare rock (a dark and a pale one, 0.2 to 0.45), and fresh snow (about 0.9);
-// from memory (Bowker and others 1985; Warren 1982). A worn path is drawn in display bytes over the view.
+// ground of the cold and of the heights, and fresh snow (about 0.9); from memory (Bowker and others 1985; Warren
+// 1982). A worn path is drawn in display bytes over the view.
 const SAND = vec3f(0.45, 0.40, 0.30); const TUNDRA = vec3f(0.30, 0.31, 0.26); const UPLAND = vec3f(0.30, 0.27, 0.21);
 const SNOW = vec3f(0.90, 0.92, 0.95); const PATH = vec3f(232, 89, 12);
-const ROCK_LO = vec3f(0.25, 0.24, 0.23); const ROCK_HI = vec3f(0.45, 0.44, 0.42);
 // How many times steeper than it is the ground is shaded.
 const EXAGGERATE = 6.0;
 // A beach (`beach`) lies on ground whose slope (rise over run) is under `BEACH_SLOPE`, none where it passes
-// `ROCK_SLOPE` (a steep coast is a rock shore: waves carry the sand away).
-const BEACH_SLOPE = 0.06; const ROCK_SLOPE = 0.18;
+// `ROCK_SLOPE` (a steep coast is a rock shore: waves carry the sand away), and on loose ground at least `BEACH_LOOSE_M`
+// deep (sand is the load the wear laid at the shore); by a lake up to `LAKE_BEACH` of the sea's height over its level
+// (smaller waves).
+const BEACH_SLOPE = 0.15; const ROCK_SLOPE = 0.35; const BEACH_LOOSE_M = 0.5; const LAKE_BEACH = 0.3;
+// Plants hold on bare bed this share of what they hold on loose ground (only in its cracks).
+const ON_BED = 0.3;
 // Water standing deeper than this, m, is the deep sea's.
 const DEEP_SEA_M = 200.0;
 // Over the liquid's surface the ground draws water up through its pores (the capillary fringe), wet to e^-1 at this
@@ -46,11 +49,13 @@ const WET_DARK = 0.5;
 const FILM_FROM = 0.8;
 // A bed that sends back less than this share of its light (half a display level of 255) does not show.
 const SHOWS = 0.002;
-// The share of beach sand on ground `over` m over the sea's surface, `sea` of its shore the sea's, of slope `slope`
-// (rise over run): sand by the sea up to `high` m over it and under it (the shallows' bed), on gentle ground only. A
-// lake's shore has none: its basin is often flat and soaked to its edge.
-fn beach(sea: f32, over: f32, slope: f32, high: f32) -> f32 {
-  return sea * (1.0 - ease(0.0, high, over)) * (1.0 - ease(BEACH_SLOPE, ROCK_SLOPE, slope));
+// The share of beach sand on ground `sea_over` m over the sea's surface and `over` m over the nearest liquid's, `sea` of
+// its shore the sea's, of slope `slope` (rise over run) on `loose` m of loose ground: sand by the sea up to `high` m
+// over it and under it (the shallows' bed), by a lake up to `LAKE_BEACH` of that over its level, on gentle loose
+// ground only. A body that holds no liquid has no level (tape/src/table.rs), so no dry basin is drawn as sand.
+fn beach(sea: f32, sea_over: f32, over: f32, slope: f32, loose: f32, high: f32) -> f32 {
+  let shore = max(sea * (1.0 - ease(0.0, high, sea_over)), (1.0 - sea) * (1.0 - ease(0.0, LAKE_BEACH * high, over)));
+  return shore * (1.0 - ease(BEACH_SLOPE, ROCK_SLOPE, slope)) * ease(0.0, BEACH_LOOSE_M, loose);
 }
 
 // Whether the view drawn is the Earth's colours, which take the style step (style.wgsl).
@@ -81,15 +86,20 @@ struct Spot {
   snow: f32, t: f32, ground: vec3f, cover: vec4f, z: f32, slope: f32, shade: f32,
   // Beach sand on it and a river through it, 0..1, and the river's depth, m.
   sand: f32, river: f32, river_depth: f32,
+  // The reflectance of its bed; the share of the bed that shows (rock.wgsl `bed_shows`); the depth of its loose
+  // ground, m; and the largest stone its channel moves there, m (0: none).
+  bed: vec3f, rock: f32, loose: f32, stone: f32,
+  // The share of the ground the tallest plants' crowns close over it (their litter lies under them).
+  canopy: f32,
   // Where it lies in the world, m, and the metres a pixel takes there (for the ripples of a liquid's surface).
   at: vec2f, e: f32,
 }
 // A spot's shaded colour (linear light), its shade's multiplier and its map class.
 struct Shaded { rgb: vec3f, m: f32, kind: u32 }
 
-// The colour of the ground of spot p, unlit: its own colour, tinted by the hand rules of cold, height, sand and rock;
-// the plants on it, as far as liquid over their roots and snow leave them (`stands_in`); and snow `snow` over all. The
-// share of it that is bare, and its map class.
+// The colour of the ground of spot p, unlit: its own colour, tinted by the hand rules of cold, height and sand, and its bed
+// where it shows; the plants on it, as far as liquid over their roots, snow and bare bed leave them (`stands_in`); and snow `snow`
+// over all. The share of it that is bare, and its map class.
 struct Ground { rgb: vec3f, bare: f32, kind: u32 }
 fn ground_of(p: Spot, snow: f32) -> Ground {
   var g: Ground;
@@ -98,12 +108,28 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
   g.rgb = mix(g.rgb, select(SAND, BEACH_SAND, styled()), p.sand);
-  let rock = max(ease(0.14, 0.42, p.slope) * ease(150.0, 700.0, p.z), ease(2000.0, 3200.0, p.z) * 0.85) * (1.0 - 0.5 * p.cover.a);
-  g.rgb = mix(g.rgb, mix(ROCK_LO, ROCK_HI, ease(1500.0, 4000.0, p.z)), rock);
-  if (rock > 0.5) { g.kind = ROCK; }
-  let plants = p.cover.a * stands_in(p.depth, snow);
+  // In the style the soil has its grain (crag.wgsl `floor_of`). Where the loose ground thins its bed shows, in the
+  // style as slabs or, where steep, a cliff's face (`rock_face`); it holds plants only in its cracks. Slope alone
+  // never bares the ground.
+  let steep = p.slope / earth.look.x;
+  var bed = p.bed;
+  if (styled()) {
+    g.rgb = floor_of(g.rgb, p.at, p.e, p.canopy, p.wet);
+    if (p.rock > 0.0) { bed = rock_face(p.bed, p.z, p.at, steep, p.e, p.shade); }
+  }
+  g.rgb = mix(g.rgb, bed, p.rock);
+  if (p.rock > 0.5) { g.kind = ROCK; }
+  let plants = p.cover.a * stands_in(p.depth, snow) * (1.0 - (1.0 - ON_BED) * p.rock);
   g.bare = 1.0 - plants;
   if (plants > 0.0) { g.rgb = mix(g.rgb, p.cover.rgb / p.cover.a, plants); }
+  // Stones over it: scree, on bare bed, and in a channel; none on a beach.
+  if (styled()) {
+    let thin = 1.0 - ease(0.0, SCREE_LOOSE_M, p.loose);
+    let scree = max(SCREE * ease(SCREE_FROM, CLIFF_FROM, steep) * thin, STONES_ON_BED * p.rock) * (1.0 - p.sand);
+    let rubble = stones(p.at, p.e, scree * (1.0 - plants), SCREE_STONE_M, p.bed, 61);
+    let pebbles = stones(p.at, p.e, select(0.0, IN_CHANNEL, p.stone > 0.0) * (1.0 - p.sand), max(p.stone, PEBBLE_M), p.bed, 62);
+    g.rgb = mix(mix(g.rgb, rubble.rgb / max(rubble.a, 1e-4), rubble.a), pebbles.rgb / max(pebbles.a, 1e-4), pebbles.a);
+  }
   if (plants >= 0.5) { g.kind = PLANTS; }
   g.rgb = mix(g.rgb, SNOW, snow);
   if (snow > 0.5) { g.kind = ICE; }
@@ -147,7 +173,8 @@ fn colour(p: Spot) -> Shaded {
     if (styled()) {
       // The style: clear water over a pale bed, deepening to the open water, foam at its edge (style.wgsl).
       if (exp(-2.0 * CLEAR_ATTENUATION.b * p.depth) > SHOWS) { bed = soil(ground_of(p, 0.0), 1.0, lit); }
-      water = mix(water_painted(bed, p.depth, ripple), FOAM_RGB, foam(p.depth, p.slope / earth.look.x, p.e));
+      let seen = mix(lake_seen(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M), p.depth, p.sea);
+      water = mix(water_painted(bed, seen, ripple), FOAM_RGB, foam(p.depth, p.slope / earth.look.x, p.e));
     } else {
       if (through(p.depth).b > SHOWS) { bed = soil(ground_of(p, 0.0), 1.0, lit); }
       water = water_over(bed, p.depth, ripple);

@@ -107,12 +107,13 @@ each texel lies in (`Ground::pond_tile`: the pond of the sample that holds its c
 first of its eight neighbours whose level the texel lies under, where its sample stands over that level (a rim, not the
 pass nor the ground below it) or the pond is of the open low ground, so a pond's shore is where the ground drawn rises
 over its level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
-frame: the melting point of the frozen cover, K, then for each square row by row 11 f32 (`ROW`) of the cell that holds
+frame: the melting point of the frozen cover, K, then for each square row by row 13 f32 (`ROW`) of the cell that holds
 its centre: the terrain's mean height over the cell, m; its ground's temperature, K, and how fast its air cools with
 height, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest ground, m
 (`flow::levels`), and the depth that stands, m; the liquid in its pores and what they hold full, m (`flow::means`), and
 the level of the wetness index its soil's liquid departs about (`inside::soil_level` over the samples inside the cell;
-0 where the pores are dry or full). Before Flow built its state the level and
+0 where the pores are dry or full); and its bed's reflectance, red, green and blue (its bonded solids', by volume:
+`layers::bed_colour`). Before Flow built its state the level and
 lowest ground are its solid surface and the depth that stands is its liquid's. Then for each square row by row its
 cell's kinds of cover (`tape/src/stands.rs`), `KINDS` (4) of `KIND_ROW` (17) f32 each, the heaviest first: the slots of
 one starting kind joined, their genes the mean by built cover; of each its starting kind (-1: none); its built cover,
@@ -123,8 +124,12 @@ its moisture gene and frost gene, K; its fuel over its reserve; its activity on 
 the share of it frozen this month (`Physics::frozen`); and the share of what it builds that goes to seeds (`SEED`). Its plants come from its mass alone: its crowns cover the
 share 1 - e^(-leaf area / `CLOSE_LAI`) of the ground, in patches where they close; there the stand has thinned to
 (`THIN_KG` / kg per m²)² plants a m² (Yoda and others 1963), each crown the ground it holds; a plant's walls make a stem
-of `STEM_FORM` and `STEM_SOLID` at the walls' density, as tall as `TALL` × its width^(2/3) (McMahon 1973). Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it),
-at which the page draws the pond's liquid flat over the ground that lies under it, the pond each texel names. **The
+of `STEM_FORM` and `STEM_SOLID` at the walls' density, as tall as `TALL` × its width^(2/3) (McMahon 1973). Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it, or where its body holds
+less than `DRY_M` (0.1 m) of liquid on its mean over its surface: a basin soaked, drawn as ground), at which the page draws the pond's liquid flat over the ground that lies under it, the pond each texel names. **The samples' rock** (`Ground::rock`,
+`tape/src/ground/rock.rs`), made once with the ground: of each of the terrain's samples, row by row, two 16-bit floats:
+the depth of its loose ground, m (`Samples::loose`), and the largest stone its channel moves, m: `STONE_M` (0.001) ×
+√(the area it drains, m²) × its slope to the sample it runs to (the stream power the wear reads, K √A S; Bagnold 1966),
+at most 2 m; 0 for a sink or a sample under a pond. **The
 samples' discharge** (`Table::discharge`): what runs through each of the terrain's samples, m³/s, row by row (its
 `World::discharge` at the mol per m³ of the liquid its cell's ground holds; none where that holds no liquid). The
 live page gets it as 16-bit floats with a frame when one sample's has changed by a tenth since it was last sent

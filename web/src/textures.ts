@@ -22,7 +22,7 @@ const FADE_PX = [2, 5];
 
 /** A draw of the marks: its rectangle of the canvas, device px; the metres a device pixel and a css pixel; the world's
  * point at its corner, m; the style; and the live map's bindings (land.ts `lawBinds`). */
-export interface Marks { rect: number[]; mpp: number; cssMpp: number; at: [number, number]; style: Style; land: Record<number, ArrayBuffer | Texture> }
+export interface Marks { rect: number[]; mpp: number; cssMpp: number; at: [number, number]; style: Style; land: Draw['binds'] }
 
 /** The cover on the GPU: the kinds' table and the field, sent once a frame of the world. */
 export class CoverMarks {

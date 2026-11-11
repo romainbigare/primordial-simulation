@@ -60,6 +60,21 @@ fn noise(p: vec2f, k: i32) -> vec3f {
   return vec3f(v.x + a * u.x + b * u.y + c * u.x * u.y, du * vec2f(a + c * u.y, b + c * u.x));
 }
 
+// A cubic B-spline through the centres of the texels of a texture `size` texels wide, at `p` (texels from its corner,
+// less half a texel), from four blended reads (Sigg and Hadwiger 2005): the places of the reads along each axis (uv) and
+// their weights. Smooth across the texels' edges, so no texel's square shows, and never past their values.
+struct Bspline { h0: vec2f, h1: vec2f, g0: vec2f, g1: vec2f }
+fn bspline(p: vec2f, size: vec2f) -> Bspline {
+  let i = floor(p);
+  let f = p - i;
+  let w0 = (1.0 - f) * (1.0 - f) * (1.0 - f) / 6.0;
+  let w1 = (4.0 - 6.0 * f * f + 3.0 * f * f * f) / 6.0;
+  let w3 = f * f * f / 6.0;
+  let g0 = w0 + w1;
+  let g1 = 1.0 - g0;
+  return Bspline((i - 1.0 + w1 / g0 + 0.5) / size, (i + 1.0 + w3 / g1 + 0.5) / size, g0, g1);
+}
+
 // A frozen cover of this mean depth, m of ice, covers e^-1 less than all of the ground: about 3 cm of snow, the depth at
 // which snow hides the ground's roughness (Yang and others 1997: cover = tanh(depth / 2.5 z0), z0 = 1 cm).
 const COVER_ICE_M = 0.008;

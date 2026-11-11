@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl style.wgsl colour.wgsl land.wgsl cover_field.wgsl
+// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl colour.wgsl land.wgsl rock.wgsl cover_field.wgsl
 // The live map in view: at each pixel of the screen the ground from its tiles and the state from the cells' table
 // (land.wgsl), in the view's colours.
 
@@ -9,6 +9,11 @@
 const LINE_PX = 1.2;
 const LINE_MOST = 2.5;
 const LINE_FADE = 4.0;
+// Liquid standing shallower than this over the drawn ground is drawn as soaked ground, m: the drawn ground follows the
+// samples within a few centimetres, so a body whose level lies that near its flat floor is a soaked basin, not water.
+const FILM_M = 0.05;
+// A channel's stones lie on its bed and its bars, out to this many of its half widths from its line.
+const STONES_OUT = 2.0;
 
 // What is at a point: the ground without the channel's water (`dry`), the channel's water (`wet`) and the share of the
 // pixel that water covers.
@@ -30,7 +35,8 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let st = state_on(at, g, cs, bed.depth);
   let surface = blended(SURFACE, cs);
   var p: Spot;
-  p.depth = st.depth;
+  // A film of liquid over the drawn ground is soaked ground, not water (`FILM_M`).
+  p.depth = select(st.depth, 0.0, st.depth < FILM_M);
   p.over = st.over;
   p.sea = surface.w;
   p.wet = st.wet;
@@ -41,13 +47,22 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
-  p.sand = beach(p.sea, g.h - earth.view.w, length(g.slope), look.z);
+  p.loose = loose_at(at);
+  p.rock = bed_shows(p.loose, at);
+  p.bed = vec3f(0.0);
+  p.canopy = field_at(at, COVER_LATTICES - 1, 0.0).a;
+  if (p.rock > 0.0) {
+    let soil = blended(SOIL, cs);
+    p.bed = vec3f(soil.zw, blended(BED, cs).x);
+  }
+  p.stone = select(0.0, stone_of(g.channels.xy), bed.half > 0.0 && g.d < STONES_OUT * bed.half);
+  p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), p.loose, look.z);
   p.river = 0.0;
   p.river_depth = 0.0;
   p.at = at;
   p.e = e;
   var out = Spots(p, p, 0.0);
-  if (st.depth > 0.0 || bed.half <= 0.0) { return out; }
+  if (p.depth > 0.0 || bed.half <= 0.0) { return out; }
   out.dry.over = min(p.over, max(g.d - bed.half, 0.0) * max(length(g.slope), bed.mean / bed.half));
   let css = e * land.samples.w;
   let shows = land.time.w * css;
@@ -79,7 +94,11 @@ const BED_FILM = 0.3;
 fn river_colour(p: Spot) -> Shaded {
   let lit = light(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), p.slope);
   let bed = BED_FILM * soil(ground_of(p, 0.0), 1.0, lit);
-  let rgb = mix(seen_through(bed, p.depth, ripples(p.at, p.e) * (1.0 - p.snow), RUNNING_ATTENUATION, DEEP_WATER), SNOW, p.snow * 0.85);
+  let ripple = ripples(p.at, p.e) * (1.0 - p.snow);
+  // In the style a channel's water is a lake's (style.wgsl `lake_seen`), lighter over its shallow banks.
+  var water = seen_through(bed, p.depth, ripple, RUNNING_ATTENUATION, DEEP_WATER);
+  if (styled()) { water = water_painted(bed, lake_seen(p.depth, 0.0, p.e, RIVER_RIM_M), ripple); }
+  let rgb = mix(water, SNOW, p.snow * 0.85);
   return Shaded(rgb, 1.0 + (lit - 1.0) * exp(-2.0 * RUNNING_ATTENUATION.g * p.depth), RIVER);
 }
 
@@ -92,6 +111,8 @@ fn river_colour(p: Spot) -> Shaded {
     let w = river_colour(spots.wet);
     c = Shaded(mix(c.rgb, w.rgb, spots.share), mix(c.m, w.m, spots.share), select(c.kind, RIVER, spots.share > 0.5));
   }
-  let rgb = in_view_of(c, blended(VIEW, cs).xy, blended(TRUTH, cs).xyz);
+  // The true colour is the cells', and the bed's where it shows.
+  let truth = mix(blended(TRUTH, cs).xyz, spots.dry.bed, spots.dry.rock);
+  let rgb = in_view_of(c, blended(VIEW, cs).xy, truth);
   return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);
 }
