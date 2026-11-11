@@ -78,7 +78,13 @@ under a film of algae: a brook shows its stones, a river a metre deep is dark wa
 the capillary fringe over its water. From afar no channel whose discharge matters at that zoom is thinner than a line
 of about a css pixel: one shows as a line once it passes 6.4e-3 m³/s for each metre a css pixel takes (the drained
 area that shows grows with the zoom, so the whole island shows its main rivers, a closer view their larger branches,
-and none a mesh of rills), wider as its discharge grows. A slope turned away from the sun is
+and none a mesh of rills), wider as its discharge grows, to the power 0.75 up to 8 times, so the network's order reads.
+Close up a channel's bed is as wide as the channel law makes five times this month's discharge (the bankfull flood,
+Leopold and Maddock 1953; Dunne and Leopold 1978), bare of plants; this month's water winds in it between bars of
+washed gravel, its thread wandering across the bed over a few bed widths and splitting about a bar where it wanders
+farthest. The ground has relief finer than its tiles (`web/shaders/lib/relief.wgsl`): octaves of gradient noise from
+48 m down to the pixel, fixed in the world, each fading in as it grows past a few pixels, smooth swells on deep loose
+ground and ridged crags on bare bed, the rougher the steeper; it moves the shading and the line of every shore. A slope turned away from the sun is
 lit by the sky alone, the less the steeper (an even sky, Liu and Jordan 1963), so shaded ground and snow keep their
 shape. Nothing depends on the view or a tile, so a
 place has the same colour after any pan or zoom. The stats line gives the tiles kept, their size and how many in view
@@ -147,7 +153,7 @@ bed and in a channel as big as its power moves (`web/shaders/lib/crag.wgsl`). Ab
 
 In every view the bed shows where the loose ground thins (`web/shaders/lib/rock.wgsl`): each terrain sample's loose
 depth and the largest stone its channel moves come with the ground (`Ground::rock`), and each cell's bed reflectance
-with the table; the bed shows fully at no loose ground and is hidden under 0.1 m, and plants hold on it only in its
+with the table; the loose depth departs from the samples' in patches from 40 m down to the pixel (`loose_seen`), so outcrops have ragged edges; the bed shows fully at no loose ground and is hidden under 0.1 m, and plants hold on it only in its
 cracks. A body that holds no liquid is drawn as dry ground. Every colour of the map is worked in linear light (a
 reflectance times the light on the surface) and turned into the screen's bytes once, by the sRGB curve (IEC 61966-2-1).
 Under the plants the ground has its own colour (its loose solids, else its bonded ones, under the litter of the
