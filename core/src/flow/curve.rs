@@ -40,7 +40,7 @@ impl Part {
     }
     /// The sums of the floors under the level `x` over the cell's mean surface (`Part::sums`).
     fn under_x(&self, x: f64) -> [f64; 3] {
-        self.sums[self.floors.partition_point(|f| f.0 < x)]
+        self.below(x).1
     }
     /// The volume that stands on it under the level `x` over the cell's mean surface, m³.
     pub(super) fn volume(&self, x: f64) -> f64 {
@@ -68,10 +68,10 @@ impl Part {
     pub(super) fn under(&self, x: f64) -> f64 {
         self.under_x(x)[0]
     }
-    /// `volume` and `under` at the level `x`, from one search of its floors.
-    pub(super) fn volume_under(&self, x: f64) -> (f64, f64) {
-        let s = self.under_x(x);
-        (x * s[0] - s[1], s[0])
+    /// How many of its floors lie under the level `x` over the cell's mean surface, and their sums (`Part::sums`).
+    pub(super) fn below(&self, x: f64) -> (usize, [f64; 3]) {
+        let k = self.floors.partition_point(|f| f.0 < x);
+        (k, self.sums[k])
     }
     /// The first moment about the cell's mean surface of what stands on it under the level `x`, m⁴: Σ area × (x² -
     /// departure²) / 2 over the floors under it.
@@ -82,10 +82,6 @@ impl Part {
     /// Its area, m².
     fn area(&self) -> f64 {
         self.sums[self.sums.len() - 1][0]
-    }
-    /// Its lowest floor over a cell whose mean surface lies at `z`, m.
-    pub(super) fn lowest(&self, z: f64) -> f64 {
-        z + self.floors[0].0
     }
     /// Its lowest and highest floors over a cell whose mean surface lies at `z`, m.
     pub(super) fn span(&self, z: f64) -> [f64; 2] {

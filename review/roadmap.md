@@ -540,11 +540,19 @@ the rain's landing builds no list. Native, plants only, ms a year (size 22 / 32 
 1498. On the page the world waits for the page to draw its frame, so the date and the picture shown are the world's
 own within a quarter of a second, and a pause stops at the date shown.
 
-Open on the speed (each changes the rounding of results, so each is a change with its numbers):
-- The parts of a cell are solved 7 times a month by the liquid's booking and again after each air step: once at the
-  end of the liquid step, and none for a cell at rest, saves 10 to 15% of a month.
-- The ground's full state is built each month at the survey: only what changed saves 7 to 9%.
-- A body's level by a direct search of its sorted floors, not 64 Newton steps: 4 to 5%.
+A body's level is one exact search of its floors (`level::level_with`), in place of Newton's steps, a sort and the
+halvings of the pores' share: 4% fewer instructions; the climate's numbers move in their fourth digit at most.
+
+Open on the speed:
+- The parts of a cell are solved after each of the liquid's bookings (7 a month) and after each air step. One solve at
+  the end of the liquid step changes the law's timing, not only its rounding: the runoff reads the solve after the
+  pore flow (the liquid share of a node on a melting plateau, a cell's share under its liquid, its land's pore room),
+  the erosion reads the solve after the runoff (what is solid), and the mix through the thermocline reads the parts
+  after the load. A cell at rest is already taken from its last solve; 1% of the cells the bookings pass are at rest.
+- The ground's full state is built each month at the survey. To build only what changed: a full thaw where the refresh
+  changes the substances present, the fusion enthalpy held found from the amounts (summed by moves its rounding
+  grows), and Flow's state saved with a snapshot, so a resumed run stays the unbroken one. A first try that kept only
+  the bodies and the gases monthly ran out of memory within 6 years at size 22 (not traced).
 - The wasm build has no `wasm-opt`; SIMD gives 3 to 5%.
 
 Open on the ground and the water:
