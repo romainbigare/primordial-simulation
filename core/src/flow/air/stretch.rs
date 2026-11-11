@@ -1,9 +1,9 @@
 //! The map's stretch (laws.md 1.6): the air over a small map behaves as the air over the band of latitudes its rows
 //! stand for, while the ground keeps its true metres. Only the air's sideways laws read it: the wind's pushes on each
-//! link (`wind::pushes`) and the side of the blocks the eddies even within a day (`daily::blocks`), and with the blocks
-//! the mixing of a body's liquid under each (`basin::mix`). The exchanges up and down (ground and air, sunlight, heat
-//! radiation, rain out) are per m² and do not read it, nor does the rain's drift (`Config::rain_drift_m`) or anything
-//! on the ground.
+//! link (`wind::pushes`) and across the map's open edges (`edge`), and the side of the blocks the eddies even within a
+//! day (`daily::blocks`), and with the blocks the mixing of a body's liquid under each (`basin::mix`). The exchanges up
+//! and down (ground and air, sunlight, heat radiation, rain out) are per m² and do not read it, nor does the rain's
+//! drift (`Config::rain_drift_m`) or anything on the ground.
 
 use crate::Config;
 
@@ -24,6 +24,11 @@ impl Stretch {
     #[inline]
     pub(super) fn length(self, m: f64) -> f64 {
         m * self.0
+    }
+    /// A gradient per m of the planet, as the stretched air takes it per m of the map (`length`).
+    #[inline]
+    pub(super) fn per_map_m(self, per_m: f64) -> f64 {
+        per_m * self.0
     }
     /// A rate between two stretched columns, mol/s, as a rate between the columns of the map, mol/s: over the stretch
     /// squared, the share of the stretched column's air the map's holds.

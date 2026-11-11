@@ -197,6 +197,9 @@ pub(super) struct Moved {
 const NOWHERE: u8 = u8::MAX;
 /// The array of the bodies' nodes (`slot`).
 const BODIES: u8 = 3;
+/// The boundary nodes (`slot`): matter that comes from outside comes from 0 m, and what leaves takes its potential
+/// energy to the boundary node it goes to (`Lifts::book`).
+const BOUNDARY: u8 = 4;
 
 /// The array of `Potential` and the index of node `index` of `class`, for a class that holds matter here (the bed's
 /// matter lies in its cell's stack).
@@ -206,6 +209,7 @@ fn slot(class: Class, index: u32) -> (u8, u32) {
         Class::Air => (1, index),
         Class::Deep => (2, index),
         Class::Bodies => (BODIES, index),
+        Class::Boundary => (BOUNDARY, index),
         _ => (NOWHERE, index),
     }
 }
@@ -241,7 +245,7 @@ impl Lifts {
     #[inline]
     fn carry_slots(&mut self, (a, b): ((u8, u32), (u8, u32)), kg: f64) {
         let (from, to) = if kg > 0.0 { (a, b) } else { (b, a) };
-        if from.0 != NOWHERE && kg != 0.0 {
+        if from.0 != NOWHERE && from.0 != BOUNDARY && kg != 0.0 {
             self.moved.push(Moved { from, to, kg: kg.abs() });
         }
     }
@@ -257,13 +261,17 @@ impl Lifts {
         let (now, g) = (potential(w, s, Some(std::mem::take(&mut start.found))), w.cfg.gravity);
         let olds = start.energies();
         let mut q: [Vec<f64>; 4] = now.energies().map(|v| vec![0.0; v.len()]);
+        let mut outside = [0.0; store::BOUNDARIES];
         for m in &moved {
             let e = m.kg * g * (start.height(m.from) + now.height(m.from)) / 2.0;
             q[m.from.0 as usize][m.from.1 as usize] -= e;
-            if m.to.0 != NOWHERE {
-                q[m.to.0 as usize][m.to.1 as usize] += e;
+            match m.to.0 {
+                NOWHERE => {}
+                BOUNDARY => outside[m.to.1 as usize] += e,
+                to => q[to as usize][m.to.1 as usize] += e,
             }
         }
+        fall_heat(w, Class::Boundary, outside.into_iter().enumerate());
         moved.clear();
         for ((q, old), new) in q.iter_mut().zip(olds).zip(now.energies()) {
             q.iter_mut().zip(old.iter().zip(new)).for_each(|(q, (o, n))| *q -= n - o);

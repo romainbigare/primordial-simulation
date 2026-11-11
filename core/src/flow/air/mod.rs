@@ -6,8 +6,10 @@ mod book;
 mod cells;
 mod corners;
 mod daily;
+mod edge;
 mod exchange;
 mod radiation;
+mod planet;
 mod rain;
 mod seen;
 mod sky;
@@ -17,6 +19,7 @@ mod surf;
 mod wind;
 
 pub(super) use corners::Corners;
+pub use planet::Planet;
 pub(super) use daily::blocks;
 pub(super) use exchange::{dissolve, henry, Sat};
 pub(crate) use radiation::LAYERS;

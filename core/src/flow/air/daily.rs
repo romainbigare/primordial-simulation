@@ -5,7 +5,8 @@
 use super::super::Scratch;
 use super::rain::{rain_air, Pool, Room, Wet};
 use super::stretch::Stretch;
-use super::wind::{even, lines, pushes, wind, Implicit, Links};
+use super::edge::Edges;
+use super::wind::{ends, even, lines, pushes, wind, Implicit, Links};
 use super::{air_temp, at_height, radiation::{glow, glow_slope}, step::Active};
 use crate::{math::mean_passed, store::Class, units::{DAY, R_GAS}, World, AIR};
 use std::collections::BTreeMap;
@@ -114,8 +115,8 @@ impl Ground {
 
 /// What the air level does over a step: per node its mean temperature, K, and the heat it sends to space, J; per gas
 /// of the air and node (`[gi * na + j]`) its mean amount, mol; per active gas and node what rains, mol, the fusion
-/// enthalpy it keeps as it falls liquid, J, and the saturation ratio it rains at, a mean by rain; and what moves between
-/// nodes (`Moved`).
+/// enthalpy it keeps as it falls liquid, J, and the saturation ratio it rains at, a mean by rain; what moves between
+/// nodes (`Moved`); and what crosses the map's open edges (`Edges`).
 pub(super) struct Mean {
     pub(super) t: Vec<f64>,
     pub(super) space: Vec<f64>,
@@ -124,6 +125,7 @@ pub(super) struct Mean {
     pub(super) rain_fusion: Vec<f64>,
     pub(super) ratio: Vec<f64>,
     pub(super) moved: Moved,
+    pub(super) edges: Edges,
 }
 
 /// What moves between pairs of air nodes over a step (the links between blocks, then each block's other nodes from its
@@ -159,7 +161,8 @@ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f
     let days = (dt / DAY).ceil().max(1.0);
     let dd = dt / days;
     let (links, blocks) = (Links::of(air), blocks(w));
-    let push = pushes(&w.cfg, s, air, &links);
+    let ends = ends(&w.cfg, s, air);
+    let push = pushes(&w.cfg, &ends, air, &links);
     let mut block = vec![0; na];
     blocks.iter().enumerate().for_each(|(b, nodes)| nodes.iter().for_each(|&j| block[j as usize] = b));
     let one = Together::of(s, ground, (&blocks, &block), nx);
@@ -173,7 +176,8 @@ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f
     let lines = lines(air, (&links, &border), (&a, &b));
     let moved = Moved { a, b, mol: vec![0.0; ng * pairs], heat: vec![0.0; pairs] };
     let v = |len: usize| vec![0.0; len];
-    let mut out = Mean { t: v(na), space: v(na), x: v(ng * na), rain: v(nx * na), rain_fusion: v(nx * na), ratio: v(nx * na), moved };
+    let edges = Edges::of(w, s, &ends);
+    let mut out = Mean { t: v(na), space: v(na), x: v(ng * na), rain: v(nx * na), rain_fusion: v(nx * na), ratio: v(nx * na), moved, edges };
     let mut x: Vec<f64> = s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
     let mut e = w.store.heat(Class::Air).to_vec();
     let imp = Implicit::of(s, (&push, &border, &lines), (&out.moved.a, &out.moved.b), &x, dd);
@@ -183,6 +187,7 @@ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f
         exchange(w, s, (act, ground), (&blocks, &one), (&mut x, &mut e), (dd, dt), (&mut out, &mut rooms));
         even(w, s, &blocks, (&mut x, &mut e), border.len(), &mut out.moved);
         wind(w, s, (&push, &border, &lines, &imp), (&mut x, &mut e), dd, &mut out.moved);
+        out.edges.day(s, (&mut x, &mut e), dd, w.cfg.gravity);
     }
     out.ratio.iter_mut().zip(&out.rain).filter(|e| *e.1 > 0.0).for_each(|(r, m)| *r /= m);
     out

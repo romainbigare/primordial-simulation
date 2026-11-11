@@ -11,7 +11,7 @@ use super::rain::Landed;
 use super::exchange::cloud;
 use super::step::Active;
 use super::{sums, touching};
-use crate::store::{Batch, Boundary, Class, LinkFlux};
+use crate::store::{held_more, Batch, Boundary, Class, LinkFlux};
 use crate::{World, AIR};
 
 /// The gas the bodies' nodes hold comes up whole into their cells' air nodes, holding its latent heat as the air does;
@@ -75,7 +75,13 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     let up = LinkFlux { class: [Class::Ground, Class::Air], a: &cells, b: &parent, ks: &ks, mol: &mol, heat: &link };
     let m = &mean.moved;
     let wind = LinkFlux { class: [Class::Air, Class::Air], a: &m.a, b: &m.b, ks: &gases, mol: &m.mol, heat: &m.heat };
-    apply(w, s, &[up, rained.flux(), wind, lit.flux(), kept.flux(), cooled.flux(), sky.flux()], &[]);
+    let mut fluxes = vec![up, rained.flux(), wind, lit.flux(), kept.flux(), cooled.flux(), sky.flux()];
+    let edges = edges(w, &mean.edges, &gases);
+    if let Some((outside, heat)) = &edges {
+        let e = &mean.edges;
+        fluxes.push(LinkFlux { class: [Class::Boundary, Class::Air], a: outside, b: &e.node, ks: &gases, mol: &e.mol, heat });
+    }
+    apply(w, s, &fluxes, &[]);
     parts_moved(s, (act, response), (&out, &wet), (&fell, &warmed), dt);
     for (y, ac) in act.iter().enumerate() {
         let net = |i: usize| mol[y * n + i] - fell[y * n + i];
@@ -97,6 +103,23 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
         *sum += got / area[i];
     }
     sums(w, s);
+}
+
+/// What crossed the map's open edges in the step (`edge::Edges`), as the boundary node for outside gives it: per link
+/// the boundary's end, and the heat, J, sensible and the latent heat its gases hold in the air (`store::held_more`).
+/// The mass that enters pays its lift from 0 m and what leaves takes its potential energy to the boundary
+/// (`potential::Lifts`). The heat that came in is counted at each edge (`Counters::edges`). None where no edge is open.
+fn edges(w: &mut World, e: &super::edge::Edges, gases: &[u16]) -> Option<(Vec<u32>, Vec<f64>)> {
+    let links = e.node.len();
+    if links == 0 {
+        return None;
+    }
+    let mut heat = e.heat.clone();
+    for (l, h) in heat.iter_mut().enumerate() {
+        *h += gases.iter().enumerate().map(|(q, &k)| e.mol[q * links + l] * held_more(&w.chem, Class::Boundary, Class::Air, k as usize)).sum::<f64>();
+        w.counts.edges[e.side[l]] += *h;
+    }
+    Some((vec![Boundary::Outside as u32; links], heat))
 }
 
 /// What the step of `dt` seconds moved of the parts that face the air of each cell of parts (`parts::after_air`): of a

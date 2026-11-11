@@ -17,12 +17,12 @@ use std::f64::consts::PI;
 
 /// Cell size of an island, m, and ground cells per air node along a side.
 const CELL_M: f64 = 2000.0;
-const AIR_SCALE: usize = 4;
+pub(crate) const AIR_SCALE: usize = 4;
 /// The squares below 0 m round the land that stay squares on an island (`coarse_low`), so its edges stay sharp.
 const LAND_RING: i32 = 1;
 /// A globe's radius, m, and the share of its area above the level 0 m: those of the one planet known (Earth: mean
 /// radius 6,371 km, land 29% of the surface).
-const RADIUS_M: f64 = 6.371e6;
+pub(crate) const RADIUS_M: f64 = 6.371e6;
 const LAND_SHARE: f64 = 0.29;
 /// Height of the bottom of the bed, m.
 const BASE_Z: f64 = -3000.0;
@@ -162,7 +162,7 @@ fn block(w: usize, x: usize, y: usize, k: usize) -> impl Iterator<Item = usize> 
 /// `map` (of squares) with each whole air block that `fine(column, row)` (of the block) does not keep in squares one
 /// cell, split into smaller cells where it borders finer ones until cells across a border differ by one depth at most
 /// (`Square::balanced`).
-fn coarsen(map: Square, fine: impl Fn(usize, usize) -> bool) -> Square {
+pub(crate) fn coarsen(map: Square, fine: impl Fn(usize, usize) -> bool) -> Square {
     let (whole, square) = ((map.w / map.scale, map.h / map.scale), map.square_depth());
     map.by_blocks(|bx, by| if bx < whole.0 && by < whole.1 && !fine(bx, by) { 0 } else { square }).balanced()
 }
@@ -185,7 +185,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
 }
 
 /// `build` on `terrain` (its level found on the map's squares, `terrain_of`), each cell at its height (`heights`).
-fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, &Init), cfg: Config) -> World {
+pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, &Init), cfg: Config) -> World {
     let mesh = World::mesh_of(&map, &cfg);
     let (n, na, ns) = (mesh.cells().n(), mesh.level(AIR).n(), chem.ns());
     let lat = (cfg.lat_south, cfg.lat_north);
@@ -265,6 +265,7 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
         links,
         terrain,
         rise_south: Vec::new(),
+        planet: None,
         light: vec![0.0; n],
         rained: vec![0.0; n],
         events: Vec::new(),

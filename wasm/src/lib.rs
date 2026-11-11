@@ -60,13 +60,17 @@ fn island(size: u32, (south, north): (f64, f64)) -> Config {
     if south < north { worldgen::terrain::banded(size as usize, (south, north)) } else { Config::default() }
 }
 
-/// Make an island of `size` x `size` cells from `seed` between the latitudes `south` and `north` (`island`), with the
-/// schedule of `ew run --roster --plants`: the starting kinds of cover, no animals, so the page runs fast while the work
-/// is on the ground, the liquid and the cover. Its cells stay those as built: the map draws every zoom from the
+/// Make an island of `size` x `size` cells from `seed` between the latitudes `south` and `north` (`island`), standing in
+/// the planet's air where they are given (`worldgen::planet::stand`), with the schedule of `ew run --roster --plants`:
+/// the starting kinds of cover, no animals, so the page runs fast while the work is on the ground, the liquid and the
+/// cover. Its cells stay those as built: the map draws every zoom from the
 /// ground's tiles and the cells' table. Returns 0, or 1 if the world is refused.
 #[no_mangle]
 pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64) -> u32 {
-    let world = worldgen::terrain::new_island(seed as u64, size as usize, size as usize, island(size, (south, north)));
+    let mut world = worldgen::terrain::new_island(seed as u64, size as usize, size as usize, island(size, (south, north)));
+    if south < north {
+        worldgen::planet::stand(&mut world);
+    }
     if world.cfg.validate().is_err() {
         return 1;
     }

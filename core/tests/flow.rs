@@ -1079,6 +1079,20 @@ fn a_stretched_island_keeps_its_books_and_the_bands_contrast() {
     assert!(stretched > one + 1.0, "south less north, K: one block {one}, stretched {stretched}");
 }
 
+/// An island that stands in the planet's air (`World::planet`, its north and south edges open) keeps its books with the
+/// boundary counted, and the planet carries heat across it as across its band: in at the warm south edge, out at the
+/// cold north one.
+#[test]
+fn an_island_in_the_planets_air_keeps_its_books_and_carries_heat_north() {
+    let mut w = worldgen::terrain::new_island(1, 16, 16, worldgen::terrain::banded(16, (30.0, 55.0)));
+    worldgen::planet::stand(&mut w);
+    let books = Books::now(&w);
+    (0..3 * w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));
+    books.assert_kept(&w, 1e-9);
+    let [north, south] = w.counts.edges;
+    assert!(south > 0.0 && north < 0.0, "heat in at the north {north:e} J, at the south {south:e} J");
+}
+
 /// A globe of 32 rows without life keeps its books to rounding over 100 years, through its ice and its soft covers: its
 /// air nodes and cells take no more than they hold (the air's days and the cells' exchange are one law), so nothing is
 /// set to zero.

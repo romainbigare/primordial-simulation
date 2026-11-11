@@ -9,8 +9,8 @@ pub const USAGE: &str = "usage:
     --seed N              world seed (1)
     --size N              cells along a side (128); of a globe, its rows from pole to pole (even)
     --globe               a globe whose rows wrap east to west, twice as many columns as rows (not an island)
-    --band S,N            an island's rows from latitude S to latitude N, degrees (40,42.3), and the air's stretch the
-                          band's length on the globe over the island's
+    --band S,N            an island's rows from latitude S to latitude N, degrees (40,42.3), the air's stretch the
+                          band's length on the globe over the island's, its edges open on the planet's air
     --stretch X           the air's stretch alone (laws.md 1.6; 1, or the band's with --band)
     --fine X,Y,W,H        on a globe, the W x H air blocks from column X and row Y in squares, the rest one cell an
                           air block (none)
