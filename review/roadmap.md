@@ -565,3 +565,36 @@ Open on the ground and the water:
 - A body colder than its liquid's melting point at the start starts molten, as the sea does.
 - A small square where a channel leaves a pond; a tile costs 7 to 10 ms, most of it the channels' field.
 - Building the samples costs 0.5 to 0.6 s on a 32 island.
+
+## 11. Variety: landscapes and biomes on a small world
+
+The owner: the world is monotone despite rivers, lakes, mountains and colours; a small world should hold forests,
+swamps, alpine ground, plains, hills, drowned valleys, with the math correct.
+
+**Why it is monotone.** A biome is not a thing: it is what plants do where four fields meet: warmth, water, ground and
+time. On a small island each of the four is nearly the same everywhere:
+- Warmth: one air temperature over the whole island (the air evens out over 340 km); only height varies it.
+- Water: rain differs by height only; the ground is drained everywhere (every valley is a V with a channel); no flat
+  wet ground but the lakes.
+- Ground: one recipe of noise worn by one law with the same numbers everywhere, on two makes of bed in random
+  patches. So every square kilometre has the same hills at the same scale; no plain, no range, no plateau.
+- Plants: six starting kinds that all want the same place.
+
+**The strategy: make each field vary strongly, by a real cause, and let the biomes follow.** Nothing is painted; no
+biome has a name in the core.
+
+| Field | The cause to add | What it gives | Cost |
+|---|---|---|---|
+| Warmth | The band's stretch for the air (section 10 of the handover; in work on a branch) | a hot end, a cold end, tree lines at different heights | 1 to 2 packages |
+| Water from the air | A mean wind across the map from the band's own circulation, mountains across it | a wet side and a dry side | after the stretch; uncertain |
+| The ground's large shape | The rise of the land differs over the map: a range, its foothills, a low plain (the rise rate as a field with one or two large features, not the same noise everywhere) | alpine ground, hills, plains on one island | 1 package |
+| The coast | The wear runs with the sea lower, then the sea rises (as after an ice age) | drowned valleys: long inlets, bays, small islands | small, with the above |
+| The ground's make | Four or five makes of bed in layers and bodies, each with its hardness, colour, pores | scarps, tablelands, wide soft vales; colour that changes across the map | 1 package |
+| Steep ground | Loose ground cannot rest on steep slopes (in work) | cliffs, scree, bare peaks | in work |
+| Flat wet ground | Channels lay down their load where the slope falls (the law for mud and sand): valley floors, fans, deltas; ground whose pores stay full | plains by rivers, marsh, deltas | 2 packages, the hardest |
+| Ice | Where snow outlasts the summer it flows and cuts (a term of the wear's law at the world's start) | U-shaped valleys, bowls, deep lakes; with the risen sea, true fjords | 2 packages, after the others |
+| Plants | Starting kinds for the new places (soaked ground, cold thin ground, dry ground), and the law that roots in full pores get no gas | marsh plants, alpine mats, dry scrub: each wins in its own place | 1 package, after the fields exist |
+| The picture | The ground's colour from its make, its wetness and its dead matter | dark wet lowland, pale dry ridge, coloured rock | with each of the above |
+
+**Order.** The stretch (in work). Then the ground's large shape with the drowned coast and the makes of bed, in one
+package: it changes most for the least. Then plants for the new places. Then the law for mud and sand. Ice last.
