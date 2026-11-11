@@ -53,7 +53,7 @@ export class Land {
   private rock: Texture | null = null;
   private rockSent = false;
 
-  constructor(readonly tiles: GroundTiles, private laws: Laws, private samples: SamplesOf) {
+  constructor(readonly tiles: GroundTiles, private laws: Laws, readonly samples: SamplesOf) {
     this.discharge = new Uint16Array(samples.across * samples.down);
   }
 

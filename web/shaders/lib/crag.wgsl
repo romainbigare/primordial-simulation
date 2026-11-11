@@ -29,7 +29,7 @@ const CLIFF_FROM = 0.9; const CLIFF_FULL = 1.4;
 const STRATA_M = 8.0; const STRATA_FINE = 0.25; const STRATA_TONES = 0.35; const STRATA_LINE = 0.15; const STRATA_DARK = 0.4;
 const STRATA_WOBBLE = 3.0; const STRATA_WAVE_M = 30.0; const BREAK_M = 20.0; const BREAKS = -0.25; const FACE_CRACK_M = 6.0;
 // Stones: on a slope from `SCREE_FROM` to `CLIFF_FROM` where the loose ground is thinner than `SCREE_LOOSE_M` (the
-// scree below a face), `SCREE_STONE_M` across, at most `SCREE` of the places they could lie; on bare bed, `ON_BED` of
+// scree below a face), `SCREE_STONE_M` across, at most `SCREE` of the places they could lie; on bare bed, `STONES_ON_BED` of
 // them; in a channel, `IN_CHANNEL` of them, as big as it moves (no smaller than `PEBBLE_M`). None on a beach.
 const SCREE_FROM = 0.6; const SCREE_LOOSE_M = 1.0; const SCREE_STONE_M = 0.6; const SCREE = 0.7;
 const STONES_ON_BED = 0.25; const IN_CHANNEL = 0.6; const PEBBLE_M = 0.05;

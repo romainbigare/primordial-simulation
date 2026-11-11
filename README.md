@@ -95,8 +95,16 @@ are a field of their colours with the grain their count gives, so the far and th
 its kind at its own foot from the four squares about it (blended as the map is) by the kinds' chances there, fewer
 where the ground is drier than its cell's mean as each kind's activity law says: kinds mix mark by mark across a
 square's edge, and a kind that needs wet ground gathers in the hollows. Trees grow in stands of their kinds, patches of
-about 60 m fixed in the world that the far field draws alike. None stands where liquid
-stands over its roots (0.3 m, Jackson and others 1996) or under snow. A tree's crown takes one of six forms by its
+about 60 m fixed in the world that the far field draws alike. A kind roots about a tenth of its height deep (at
+least 2 cm; Schenk and Jackson 2002 for depth growing with size): where the loose ground at a point is thinner it
+thins, none from a quarter of its need down, so bare bed holds only the smallest kinds in its cracks, thin ground herbs
+and low bushes, and trees stand where it is deep; what a square's thin part does not hold stands on its deep part, so
+the square keeps its cover (`web/src/roots.ts`, near and far alike). None stands where liquid stands over its roots
+(0.3 m, Jackson and others 1996). Snow buries a plant by its depth (three times the depth of the cell's frozen cover,
+settled snow against ice) against the plant's height: a herb is gone under a deep snow, a tree stands in it, its
+crown snowy on top if it keeps its leaves, bare if it sheds them, its stem and shadow kept; from afar a forest in snow
+is dark trees over white ground. A tape's map has no heights of plants: snow hides its foliage as far as it covers the
+ground. A tree's crown takes one of six forms by its
 kind's numbers (`web/src/form.ts`, one rule for near and far): round; a cone (thick long-lived leaves on a kind hardy to
 frost); a slim column (a slender kind that puts much into seeds); a flat umbrella (dry ground, a crown wide for its
 height); tiered (thick leaves of a tender kind); or lobed, in loose knots (thin leaves on wet ground). A form drawn less

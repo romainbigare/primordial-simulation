@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl style.wgsl land.wgsl cover_field.wgsl crown.wgsl
+// uses: draw.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl crown.wgsl
 // The trees and bushes over the live map (web/src/textures.ts), at every frame, plant by plant where a plant takes a
 // few pixels; where it takes less, the ground draws it as a field of the same colours (lib/cover_field.wgsl), and the
 // herbs always so, as its sward. Each lattice of marks (web/src/canopy.ts `LATTICES`) lies fixed in the world, one mark
@@ -6,7 +6,10 @@
 // so the marks hold while the camera moves and stand in no rows. A mark picks its kind at its own foot: of the four
 // squares about it, blended as the map's other fields (land.wgsl `corners`), each kind's chance that a cell holds one of
 // its plants (thicker and thinner over the field's patches, cover_field.wgsl `patchy`), less where the ground at the foot
-// is drier than its cell's mean as the kind's activity law says; on the trees' lattice in stands of their kinds as the
+// is drier than its cell's mean as the kind's activity law says and where its loose ground is thinner than its roots
+// need (land.wgsl `rooted`, its chance raised where its square's ground is thin, so the square keeps its cover); a plant
+// buried by the snow's depth against its height does not show, one standing in snow carries it on its crown; on the
+// trees' lattice in stands of their kinds as the
 // field far away has them (cover_field.wgsl `stand_pick`), elsewhere by the mark's own rank. So kinds mix mark by mark
 // across a square's edge and a kind that needs wet ground gathers in the hollows. None stands where liquid stands over
 // its roots or under snow. Its size, shape and colour are its kind's numbers (canopy.ts, web/src/style.ts,
@@ -15,7 +18,7 @@
 // foot. Points are in metres from the draw's top-left corner.
 
 // The kinds' table's planes (canopy.ts `KIND_PLANES`), and the designs (style.ts `DESIGN`).
-const CHANCE = 0; const WIDTH = 3; const NEED = 6; const FORM = 7; const FROM = 11; const TO = 15; const PETAL = 19; const SHAPE = 23;
+const CHANCE = 0; const WIDTH = 3; const NEED = 6; const ROOTS = 7; const FORM = 8; const FROM = 12; const TO = 16; const PETAL = 20; const SHAPE = 24;
 const TREE = 0.0; const BUSH = 1.0;
 
 struct Cover {
@@ -38,6 +41,10 @@ const SHADOW_RUN = 0.5; const SHADOW_OFF = 0.45; const SHADOW_SOFT = 0.35;
 // A shadow lets through the sky's light and what crowns scatter, about half of the sun's (canopy.ts `CROWN_SHADOW`); a
 // plant's size differs from its kind's by up to this share; a tree leans by up to `LEAN` of its height.
 const SHADOW = 0.42; const SIZES = 0.3; const LEAN = 0.08;
+// Snow lies on a crown's upper, lit side (its light from `SNOW_LIT.x` to `SNOW_LIT.y` times flat ground's) up to this
+// share of its colour, as closed as the crown is (a bare one holds little), in the colour of fresh snow (colour.wgsl
+// `SNOW`).
+const CROWN_SNOW = 0.8; const SNOW_LIT = vec2f(0.9, 1.15); const CROWN_SNOW_RGB = vec3f(0.90, 0.92, 0.95);
 
 // pcg3d (Jarzynski and Olano 2020): three random words from three.
 fn pcg3d(w: vec3u) -> vec3u {
@@ -63,12 +70,19 @@ fn kind(k: i32, c: vec2i) -> vec4f {
   return textureLoad(kinds, vec2i(q.x, k * n.y + q.y), 0);
 }
 
-// What the ground at `at` leaves a plant: the share free of liquid over its roots and of snow, how wet it is and how
-// wet its cells are on their mean (land.wgsl `state_at`).
-struct Foot { stands: f32, wet: f32, mean: f32 }
+// What the ground at `at` leaves a plant: the share free of liquid over its roots, how wet it is and how wet its cells
+// are on their mean (land.wgsl `state_at`), the depth of its loose ground, m, the share snow covers and the snow's
+// depth, m.
+struct Foot { stands: f32, wet: f32, mean: f32, loose: f32, snow: f32, snow_m: f32 }
 fn foot(at: vec2f) -> Foot {
   let st = state_at(at, ground_at(at, false), corners(at / land.map.x));
-  return Foot(stands_in(st.depth, st.snow), st.wet, st.mean);
+  return Foot(above_water(st.depth), st.wet, st.mean, loose_at(at), st.snow, st.snow_m);
+}
+
+// The share of each kind that stands where its roots need `need` m of loose ground and `loose` m lies (land.wgsl
+// `rooted`).
+fn holds(loose: f32, need: vec4f) -> vec4f {
+  return vec4f(rooted(loose, need.x), rooted(loose, need.y), rooted(loose, need.z), rooted(loose, need.w));
 }
 
 // The share of a kind that needs `need` that stands where the ground is `wet` against its cells' mean: its activity
@@ -83,9 +97,10 @@ fn thrive(wet: f32, mean: f32, need: vec4f) -> vec4f {
   return out;
 }
 
-// Plant q over dst at p, e m a pixel, as strongly as `fade`: its shadow, its stem (a tree), its body by its design, and
-// a bush's flowers or fruit.
-fn plant(dst: ptr<function, vec4f>, q: Plant, p: vec2f, e: f32, fade: f32) {
+// Plant q over dst at p, e m a pixel, as strongly as `fade`, where snow covers `snow` of the ground: its shadow, its stem
+// (a tree), its body by its design (a closed crown lit from above carries the snow, `CROWN_SNOW`), and a bush's flowers
+// or fruit.
+fn plant(dst: ptr<function, vec4f>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32) {
   let angled = cover.corner.w;
   let half = min(0.5 * q.d, q.reach / 1.1);
   // The shadow: from above to the south-east of its foot by its height (`SHADOW_OFF`); angled, flat on the ground at its
@@ -111,7 +126,10 @@ fn plant(dst: ptr<function, vec4f>, q: Plant, p: vec2f, e: f32, fade: f32) {
   } else {
     body = bush(q, p, e);
   }
-  if (body.a > 0.0) { over(dst, mark_colour(q.rgb, body.lit, body.rim), body.a * fade); }
+  if (body.a > 0.0) {
+    let snowy = CROWN_SNOW * snow * q.closed * smoothstep(SNOW_LIT.x, SNOW_LIT.y, body.lit);
+    over(dst, mark_colour(mix(q.rgb, CROWN_SNOW_RGB, snowy), body.lit, body.rim), body.a * fade);
+  }
   if (q.blooms > 0.0) { bush_dots(dst, q, p, e, fade); }
 }
 
@@ -152,7 +170,9 @@ fn lattice(dst: ptr<function, vec4f>, p: vec2f, l: i32, e: f32) {
       if (f.stands <= 0.0) { continue; }
       let pick = pick_kind(at, cs, chance, thick, f, rank.x);
       if (pick.x < 0) { continue; }
-      plant(dst, plant_of(l, cs.at[pick.x], pick.y, c, h.z, rand3(id, l + COVER_LATTICES), rise + side), p, e, fade);
+      let q = plant_of(l, cs.at[pick.x], pick.y, c, h.z, rand3(id, l + COVER_LATTICES), rise + side);
+      let shows = above_snow(f.snow_m, q.h);
+      if (shows > 0.0) { plant(dst, q, p, e, fade * shows, f.snow); }
     }
   }
 }
@@ -168,7 +188,7 @@ fn pick_kind(at: vec2f, cs: Corners, chance: array<vec4f, 4>, thick: f32, f: Foo
   var sum = 0.0;
   var firsts = 0.0;
   for (var s = 0; s < 4; s++) {
-    w[s] = abs(chance[s]) * thick * thrive(f.wet, f.mean, kind(NEED, cs.at[s])) * f.stands;
+    w[s] = abs(chance[s]) * thick * thrive(f.wet, f.mean, kind(NEED, cs.at[s])) * holds(f.loose, kind(ROOTS, cs.at[s])) * f.stands;
     first[s] = select(vec4f(0.0), vec4f(1.0), chance[s] < vec4f(0.0));
     sum += dot(w[s], vec4f(1.0));
     firsts += dot(w[s], first[s]);

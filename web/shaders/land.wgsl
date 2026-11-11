@@ -44,11 +44,11 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.snow = st.snow;
   p.ground = surface.xyz;
   p.canopy = field_at(at, STANDS, 0.0).a;
-  p.cover = cover_field(at, e, soaked(p), p.canopy);
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
   p.loose = loose_at(at);
+  p.cover = cover_field(at, e, Beneath(soaked(p), p.canopy, p.loose, st.snow, st.snow_m));
   p.rock = bed_shows(p.loose, at);
   p.bed = vec3f(0.0);
   if (p.rock > 0.0) {

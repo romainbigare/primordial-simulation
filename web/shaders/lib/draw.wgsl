@@ -103,15 +103,28 @@ const COVER_ICE_M = 0.008;
 // kelvin either side; 0: none known, the ice alone): the cover melts there first.
 fn snow_of(ice_m: f32, t: f32, melt: f32) -> f32 {
   // (tanh of a large number overflows in some shaders: past 10 it is 1 to the last bit of a 32-bit float.)
-  let cover = tanh(clamp(ice_m / COVER_ICE_M, 0.0, 10.0));
-  return select(cover, cover * (1.0 - ease(melt - 1.0, melt + 1.0, t)), melt > 0.0);
+  return tanh(clamp(ice_m / COVER_ICE_M, 0.0, 10.0)) * unmelted(t, melt);
 }
+
+// The share of the frozen cover left at a point at `t` K where it melts at `melt` K (0: not known, all of it).
+fn unmelted(t: f32, melt: f32) -> f32 { return select(1.0, 1.0 - ease(melt - 1.0, melt + 1.0, t), melt > 0.0); }
+
+// Lying snow holds this many times the depth of the ice it is made of: settled seasonal snow of about 300 kg/m³ against
+// ice of 917 (Paterson 1994, from memory).
+const SNOW_PER_ICE = 3.0;
+// The depth of the snow on ground of `ice_m` m of frozen cover on average at `t` K (`snow_of`), m.
+fn snow_depth(ice_m: f32, t: f32, melt: f32) -> f32 { return SNOW_PER_ICE * ice_m * unmelted(t, melt); }
 
 // A land plant's roots need air in the soil: liquid standing over its foot as deep as this, m, drowns them (half of the
 // roots of most kinds of cover lie in the top 0.3 m, Jackson and others 1996).
 const ROOTS_M = 0.3;
-// The share of a plant that stands where liquid stands `depth` m deep and snow covers `snow` of the ground.
-fn stands_in(depth: f32, snow: f32) -> f32 { return (1.0 - ease(0.0, ROOTS_M, depth)) * (1.0 - snow); }
+// The share of a plant that stands where liquid stands `depth` m deep.
+fn above_water(depth: f32) -> f32 { return 1.0 - ease(0.0, ROOTS_M, depth); }
+// Snow buries a plant `height` m tall as it reaches from `BURIED_FROM` of its height to all of it: a herb is gone under
+// a deep snow, a tree stands in it.
+const BURIED_FROM = 0.6;
+// The share of a plant `height` m tall that shows over snow `snow_m` m deep.
+fn above_snow(snow_m: f32, height: f32) -> f32 { return 1.0 - ease(BURIED_FROM * height, height, snow_m); }
 
 // Light leaves the map as a screen shows it: every colour is worked in linear light (a reflectance times the light on
 // the surface), then encoded once by the sRGB transfer curve (IEC 61966-2-1), at an exposure that shows sunlit flat
