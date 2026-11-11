@@ -5,7 +5,7 @@
 //! under 0 m (`TOPSET_M`, a delta's topset), its width in proportion to that load, and a front that falls from the
 //! platform's edge at the slope of the load at rest under liquid (`FORESET`, a delta's foreset; Gilbert 1885). So a
 //! channel that brings much load builds a fan at its mouth, a coast that gets little keeps its steep drop, and the
-//! width that makes the shelf hold all the load is found by halving (`TOLERANCE`).
+//! width that makes the shelf hold all the load is found by false position (`TOLERANCE`).
 
 use super::grid::Grid;
 use std::cmp::Ordering;
@@ -17,7 +17,8 @@ const TOPSET_M: f64 = 5.0;
 const FORESET: f64 = 0.3;
 /// Half the length of shore the waves spread a mouth's load along, m.
 const ALONG_M: f64 = 5e3;
-/// The search for the shelf's width stops within this share of it; the shelf is then thinned to hold the load exactly.
+/// The search for the shelf's width stops within this share of it, or where the shelf holds the load to this share; the
+/// shelf is then thinned to hold it exactly.
 const TOLERANCE: f64 = 1e-2;
 
 /// A sample of the open low ground in the reach of the shelf (`shelf`): by how far it lies inside the platform's edge,
@@ -43,7 +44,7 @@ impl Eq for Inside {}
 
 /// Lay the load `offshore` (m³ per m² of each sample of grid `g`, by the shore, where it was carried from coarser grids
 /// smooth) on the open low ground `open` of heights `h` as a shelf, adding it to the loose ground `loose`, m; returns
-/// the volume laid, m³.
+/// the volume laid, m³: all the load, or on a map whose open low ground the platform fills, what it holds.
 pub(super) fn lay(g: &Grid, h: &mut [f64], (open, offshore): (&[bool], &[f64]), loose: &mut [f64]) -> f64 {
     let n = g.n();
     let brought: Vec<f64> = (0..n).map(|k| offshore[k] * g.area(k)).collect();
@@ -58,18 +59,42 @@ pub(super) fn lay(g: &Grid, h: &mut [f64], (open, offshore): (&[bool], &[f64]), 
     let laid = |wide: f64| shelf(g, h, open, (&load, wide), floor);
     let held = |wide: f64| laid(wide).iter().map(|&(k, t)| t * g.area(k)).sum::<f64>();
     // The width a m³ of load builds, m per m³: first as if the shelf stood `TOPSET_M` thick along a shore of the
-    // samples' side, doubled until the shelf holds the load, then halved toward it.
+    // samples' side, doubled until the shelf holds the load (where the open low ground is full to the platform before,
+    // the rest leaves the map), then by false position between the two last (Illinois: Dowell and Jarratt 1971).
     let along_shore: f64 = load.iter().sum::<f64>() * g.dy * TOPSET_M;
-    let (mut lo, mut hi) = (0.0, volume / along_shore / g.dy);
-    while held(hi) < volume && hi < f64::MAX / 4.0 {
-        (lo, hi) = (hi, 2.0 * hi);
+    let (mut lo, mut hi) = ((0.0, f64::NAN), (volume / along_shore / g.dy, 0.0));
+    hi.1 = held(hi.0) - volume;
+    while hi.1 < 0.0 {
+        let next = (2.0 * hi.0, held(2.0 * hi.0) - volume);
+        if next.1 <= hi.1 {
+            break;
+        }
+        (lo, hi) = (hi, next);
     }
-    while hi - lo > TOLERANCE * hi {
-        let mid = (lo + hi) / 2.0;
-        if held(mid) < volume { lo = mid } else { hi = mid }
+    if lo.1.is_nan() && hi.1 > 0.0 {
+        lo.1 = held(0.0) - volume;
     }
+    // Where the fronts alone, with no platform, hold more than the load, they are thinned to it.
+    if lo.1 >= 0.0 {
+        hi = lo;
+    }
+    let mut side = 0;
+    while hi.1 > TOLERANCE * volume && lo.1 < 0.0 && hi.0 - lo.0 > TOLERANCE * hi.0 {
+        let w = (lo.0 * hi.1 - hi.0 * lo.1) / (hi.1 - lo.1);
+        let f = held(w) - volume;
+        if f < 0.0 {
+            lo = (w, f);
+            hi.1 /= if side == -1 { 2.0 } else { 1.0 };
+            side = -1;
+        } else {
+            hi = (w, f);
+            lo.1 /= if side == 1 { 2.0 } else { 1.0 };
+            side = 1;
+        }
+    }
+    let hi = hi.0;
     let shelf = laid(hi);
-    let scale = volume / shelf.iter().map(|&(k, t)| t * g.area(k)).sum::<f64>();
+    let scale = (volume / shelf.iter().map(|&(k, t)| t * g.area(k)).sum::<f64>()).min(1.0);
     shelf.iter().map(|&(k, t)| {
         h[k] += t * scale;
         loose[k] += t * scale;
@@ -102,6 +127,5 @@ fn shelf(g: &Grid, h: &[f64], open: &[bool], (load, wide): (&[f64], f64), floor:
             }
         }
     }
-    out.sort_unstable_by_key(|p| p.0);
     out
 }

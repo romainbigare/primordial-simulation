@@ -131,6 +131,17 @@ impl Grid {
         sum.iter().zip(&area).map(|(s, a)| s / a).collect()
     }
 
+    /// Heights `z` on the grid `from` times coarser than this one carried smooth to the grid `to` times coarser, a halving
+    /// at a time (`finer`).
+    pub(super) fn carried(&self, (mut from, z): (usize, &[f64]), to: usize) -> Vec<f64> {
+        let mut z = z.to_vec();
+        while from > to {
+            z = self.coarser(from).finer(&z, &self.coarser(from / 2).dx);
+            from /= 2;
+        }
+        z
+    }
+
     /// The heights `z` of this grid's samples carried to the grid twice as fine along each side (twice the `across`
     /// and the `down`, its rows `dx`): each sample's quarters take its mean and the smooth lean through it and its
     /// neighbours (`below::lean_quarters`), so the finer heights have no steps, no new pit and no new peak.

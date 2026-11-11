@@ -10,7 +10,7 @@
 //! samples and last on the samples' own (`STAGES`), each stage carried smooth to the next (`Grid::finer`). All in a
 //! fixed serial order in 64-bit numbers, so a seed gives one ground on every machine.
 
-use super::drain::{draws, flood, open_low, Flood};
+use super::drain::{draws, flood, open_low, starts, Flood};
 use super::grid::Grid;
 use super::network::NONE;
 use super::ponds::settle;
@@ -74,13 +74,14 @@ pub(super) struct Worn {
 }
 
 /// The volumes the wear moves, m³: what it takes off the land (cut, and crept into the open low ground), what settles
-/// in the closed basins, and what lies on the open low ground's shelf (`space::shelf`); the first is the sum of the
-/// others.
+/// in the closed basins, what lies on the open low ground's shelf (`space::shelf`), and what leaves the map where the
+/// shelf fills the open low ground; the first is the sum of the others.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Books {
     pub taken: f64,
     pub settled: f64,
     pub shelf: f64,
+    pub beyond: f64,
 }
 
 /// What a stage marks on each sample of its grid: the load it passes to the open low ground, m³ per m² (`offshore`),
@@ -101,7 +102,7 @@ struct Marks {
 pub(super) fn wear(seed: u64, g: &Grid, (by, rise, soft): (usize, &[f64], &[f64])) -> Worn {
     let rough = |k: usize| ROUGH_M * (Rng::new(seed, 0, k as u64, Purpose::Terrain).f64() - 0.5);
     let noise = g.coarser(by);
-    let on = |x: &[f64], to: usize| if to >= by { noise.mean_over(x, to / by) } else { carried(g, (by, x), to) };
+    let on = |x: &[f64], to: usize| if to >= by { noise.mean_over(x, to / by) } else { g.carried((by, x), to) };
     let mut last: Option<(usize, Vec<f64>, Marks)> = None;
     let (mut offshore, mut books) = (Vec::new(), Books::default());
     for &(stage_by, share, steps) in &STAGES {
@@ -110,9 +111,9 @@ pub(super) fn wear(seed: u64, g: &Grid, (by, rise, soft): (usize, &[f64], &[f64]
         let open_s = open_low(&stage, &rise_s);
         let mut h = match &last {
             None => (0..stage.n()).map(|k| if open_s[k] { rise_s[k] } else { rise_s[k].min(0.0) + rough(k) }).collect(),
-            Some((from, z, _)) => held(&carried(g, (*from, z), to), &rise_s, &open_s),
+            Some((from, z, _)) => held(&g.carried((*from, z), to), &rise_s, &open_s),
         };
-        offshore = last.as_ref().map_or(vec![0.0; stage.n()], |(from, _, _)| carried(g, (*from, &offshore), to));
+        offshore = last.as_ref().map_or(vec![0.0; stage.n()], |(from, _, _)| g.carried((*from, &offshore), to));
         let cut_s: Vec<f64> = on(soft, to).iter().map(|s| CUT * s).collect();
         let marks = run(&stage, &mut h, (&rate(&rise_s, &open_s), &open_s, &draws(seed, to, stage.n())), (&cut_s, WEAR_YEARS * share, steps), &mut books);
         offshore.iter_mut().zip(&marks.offshore).for_each(|(s, m)| *s += m);
@@ -121,9 +122,11 @@ pub(super) fn wear(seed: u64, g: &Grid, (by, rise, soft): (usize, &[f64], &[f64]
     let (from, z, marks) = last.expect("a stage");
     let rise_g = on(rise, 1);
     let open = open_low(g, &rise_g);
-    let mut h = held(&carried(g, (from, &z), 1), &rise_g, &open);
-    let mut loose: Vec<f64> = carried(g, (from, &mantle(&marks)), 1).iter().zip(&open).map(|(&d, &o)| if o { OOZE_M } else { d.max(0.0) }).collect();
-    books.shelf = lay(g, &mut h, (&open, &carried(g, (from, &offshore), 1)), &mut loose);
+    let mut h = held(&g.carried((from, &z), 1), &rise_g, &open);
+    let mut loose: Vec<f64> = g.carried((from, &mantle(&marks)), 1).iter().zip(&open).map(|(&d, &o)| if o { OOZE_M } else { d.max(0.0) }).collect();
+    let offshore = g.carried((from, &offshore), 1);
+    books.shelf = lay(g, &mut h, (&open, &offshore), &mut loose);
+    books.beyond = (0..g.n()).map(|k| offshore[k] * g.area(k)).sum::<f64>() - books.shelf;
     Worn { h, open, loose, books }
 }
 
@@ -135,17 +138,6 @@ pub(super) fn wear(seed: u64, g: &Grid, (by, rise, soft): (usize, &[f64], &[f64]
 fn mantle(marks: &Marks) -> Vec<f64> {
     let soil = |e: f64| BREAKS_UNDER_M * (BREAKS / e.max(BREAKS * SLOWEST)).ln().max(0.0);
     marks.settled.iter().zip(&marks.lowers).map(|(&s, &e)| s + soil(e)).collect()
-}
-
-/// Heights `z` on the grid `from` times coarser than `g` carried smooth to the grid `to` times coarser, a halving at a
-/// time (`Grid::finer`).
-fn carried(g: &Grid, (mut from, z): (usize, &[f64]), to: usize) -> Vec<f64> {
-    let mut z = z.to_vec();
-    while from > to {
-        z = g.coarser(from).finer(&z, &g.coarser(from / 2).dx);
-        from /= 2;
-    }
-    z
 }
 
 /// Heights `h` with the open low ground `open` at the noise's heights `rise` and land (where the noise lies at 0 m or
@@ -169,8 +161,9 @@ fn run(g: &Grid, h: &mut [f64], (up, open, draw): (&[f64], &[bool], &[f64]), (k,
     let dt = years / steps as f64;
     let mut marks = Marks { offshore: vec![0.0; g.n()], settled: vec![0.0; g.n()], lowers: vec![0.0; g.n()] };
     let volume = |x: &dyn Fn(usize) -> f64| (0..g.n()).filter(|&i| !open[i]).map(|i| x(i) * g.area(i)).sum::<f64>();
+    let start = starts(g, open, true);
     for _ in 0..steps {
-        let f = flood(g, h, open, (true, draw));
+        let f = flood(g, h, open, (&start, draw));
         let was = h.to_vec();
         cut(g, h, &f, (up, open, k), dt);
         let cut_to = h.to_vec();
