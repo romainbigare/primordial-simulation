@@ -76,11 +76,17 @@ little keeps its steep drop; its edge is rounded over 250 m as a clinoform's top
 the platform's top; the width is found so the shelf holds all the load (where the platform fills the open low ground of
 a small map, the rest leaves the map), and what the wear took off the land is what lies in the basins, on the shelf and
 off the map (`Samples::books`). **The loose ground** the wear leaves (`Samples::loose`):
-on land, what settled on a sample in the last stage (in the basins, at the foot of the slopes) and over it the mantle
-where the bed's breaking into loose ground balances the lowering of the last step (cut and creep): the bed breaks at
-7.7e-5 m a year under none, e times slower under each 0.4 m (`BREAKS`, `BREAKS_UNDER_M`; Heimsath, Dietrich, Nishiizumi
-and Finkel 1997), so a lowering E keeps 0.4 ln(7.7e-5 / E) m, none where E outruns the breaking, at most what a lowering
-of a millionth of the breaking keeps (`SLOWEST`); on the open low ground the shelf over a metre of the fine load that
+on land (`space::mantle`) the depth where the bed's breaking into loose ground balances what takes it away, the
+smaller of two balances. The bed breaks at 7.7e-5 m a year under none, e times slower under each 0.4 m (`BREAKS`,
+`BREAKS_UNDER_M`; Heimsath, Dietrich, Nishiizumi and Finkel 1997). Against the lowering of the last step E (cut and
+creep), what settled on a sample in the last stage (in the basins, at the foot of the slopes) and over it 0.4 ln(7.7e-5
+/ E) m, none where E outruns the breaking, at most what a lowering of a millionth of the breaking keeps (`SLOWEST`).
+Against the creep of the loose ground down its slope S: all the loose ground made on the area a that drains through a
+sample per m of its width, with what settled there as fast as it came over the stage, passes it and creeps at 3e-3 m²
+a year a m of its depth (`CREEP` at 1 m, `CREEP_DEPTH_M`) times S / (1 − (S / 0.8)²), a flux that grows without bound as
+the slope nears the slope loose ground rests at (`REST`; Roering, Kirchner and Dietrich 1999), so a depth H holds where
+H 3e-3 S / (1 − (S / 0.8)²) = a 7.7e-5 exp(−H / 0.4) + what settled; none at 0.8 or steeper. So a steep slope's bed is
+bare and the gentle ground at its foot holds the loose ground it sheds; on the open low ground the shelf over a metre of the fine load that
 settles everywhere (`OOZE_M`). It runs in a fixed serial order in 64-bit numbers, so a seed gives one ground on every
 machine.
 **The flood** (`space::drain`) over the worn samples, from all the open low ground, does not raise the ground (Barnes,
