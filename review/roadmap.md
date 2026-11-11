@@ -503,12 +503,18 @@ per kind from its own numbers, leaves that turn in the cold (each plant at its o
 three designs (tree, bush, herb tuft with flowers and reeds), and a far field whose grains sit anywhere in their
 cells, so no grid shows at any zoom. The True view is unchanged.
 
+Rock, shores and the ground's grain, in the same style: beaches by the sea and by lakes on gentle loose ground;
+lakes and rivers in one water colour with a lighter band at the shore; a body that holds under 0.1 m is drawn as
+ground; where the loose ground is under 0.1 m the bed's own colour shows (both views), as slabs or, where steep, a
+face; scree between plants on steep thin ground; stones in channels by the power of their flow (`Ground::rock`).
+
 Open on the look:
-- Lakes are grey: their beds are dark soaked ground seen through clear water.
-- Beaches are rare: most coasts are steeper than the beach rule (the shelf of the ground's second pass should give
-  them room).
-- Under trees the ground is a flat bare colour at 10 to 50 m: herbs cover about a fifth and the ground has no grain.
-- Tufts and flowers are tiny at 10 m; reeds and flowers are rare (no starting kind is a wet-ground herb).
+- Rock faces are rare (2 to 3% of the land is bare and steeper than 0.9) and read as soft grey patches: their ledges
+  and cracks do not show at 200 to 500 m. More cliffs need a ground whose wear strips steep slopes.
+- Bare ground is shaded in blocks of a sample's width (125 m): the drawn normal is the samples', not smoothed.
+- At 10 m the ground between plants reads brown: herbs cover a fifth; flowers are too small to see.
+- Rivers are pale beside lakes; thin streams are faint at 200 to 500 m.
+- White wedges and small squares where a channel leaves a pond; pale blotches in seed 1's river-mouth bay.
 - Autumn is mostly herbs going yellow; red shows only on the heights.
 
 **The ground on the page: done.** A channel is drawn as one smooth line down its stem (the mean of the sample centres
