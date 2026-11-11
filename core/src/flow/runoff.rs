@@ -175,9 +175,17 @@ const HALVINGS: usize = 60;
 /// the level just reaches takes is what is left.
 fn body_level(parts: &[Ground], vol: f64, pass: f64, order: &mut Vec<u32>) -> (f64, Vec<f64>, bool) {
     let over: Vec<(&Part, f64)> = parts.iter().map(|g| (g.0, g.1)).collect();
-    let soak = |x: f64| parts.iter().map(|&(p, z, now, [dry, own])| ((p.under(x - z) - now).max(0.0) * dry - own).max(0.0)).collect::<Vec<f64>>();
+    let soaks = |under: f64, (now, [dry, own]): (f64, [f64; 2])| ((under - now).max(0.0) * dry - own).max(0.0);
+    let soak = |x: f64| parts.iter().map(|&(p, z, now, room)| soaks(p.under(x - z), (now, room))).collect::<Vec<f64>>();
     let stands = |x: f64| over.iter().map(|&(p, z)| p.volume(x - z)).sum::<f64>();
-    let takes = |x: f64| stands(x) + soak(x).iter().sum::<f64>();
+    // What stands and what soaks, each summed over the parts in order, from one search of each part's floors.
+    let takes = |x: f64| {
+        let (v, s) = parts.iter().fold((0.0, 0.0), |(v, s), &(p, z, now, room)| {
+            let (pv, pa) = p.volume_under(x - z);
+            (v + pv, s + soaks(pa, (now, room)))
+        });
+        v + s
+    };
     let top = level_over(&over, vol, order);
     if top > pass && takes(pass) <= vol {
         return (pass, soak(pass), true);

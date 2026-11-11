@@ -68,6 +68,11 @@ impl Part {
     pub(super) fn under(&self, x: f64) -> f64 {
         self.under_x(x)[0]
     }
+    /// `volume` and `under` at the level `x`, from one search of its floors.
+    pub(super) fn volume_under(&self, x: f64) -> (f64, f64) {
+        let s = self.under_x(x);
+        (x * s[0] - s[1], s[0])
+    }
     /// The first moment about the cell's mean surface of what stands on it under the level `x`, m⁴: Σ area × (x² -
     /// departure²) / 2 over the floors under it.
     fn moment(&self, x: f64) -> f64 {

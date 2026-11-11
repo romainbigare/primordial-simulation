@@ -41,7 +41,12 @@ pub(super) fn level_over(parts: &[(&Part, f64)], vol: f64, order: &mut Vec<u32>)
     if vol <= 0.0 {
         return low;
     }
-    let at = |x: f64| parts.iter().fold((0.0, 0.0), |(v, a), &(p, z)| (v + p.volume(x - z), a + p.under(x - z)));
+    let at = |x: f64| {
+        parts.iter().fold((0.0, 0.0), |(v, a), &(p, z)| {
+            let (pv, pa) = p.volume_under(x - z);
+            (v + pv, a + pa)
+        })
+    };
     let all = at(f64::INFINITY).1;
     let mut x = high + vol / all;
     for _ in 0..STEPS_MOST {
