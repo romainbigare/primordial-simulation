@@ -1056,6 +1056,29 @@ fn a_globe_keeps_its_books_round_the_wrap() {
     books.assert_kept(&w, 1e-9);
 }
 
+/// The air of an island stretched over a wide band of latitudes (`Config::stretch`) keeps its books, and its rows
+/// differ as the band's: its southern air is warmer than its northern by more than that of the same island whose air
+/// is one block (stretch 1), as eddies no longer even it out within a day.
+#[test]
+fn a_stretched_island_keeps_its_books_and_the_bands_contrast() {
+    const BAND: (f64, f64) = (30.0, 55.0);
+    let banded = worldgen::terrain::banded(16, BAND);
+    let contrast = |stretch: f64| {
+        let mut w = worldgen::terrain::new_island(1, 16, 16, pcore::Config { stretch, ..banded.clone() });
+        let books = Books::now(&w);
+        (0..3 * w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));
+        books.assert_kept(&w, 1e-9);
+        let air = w.mesh.level(AIR);
+        let mean = |south: bool| {
+            let rows: Vec<usize> = (0..air.n()).filter(|&j| (air.lat()[j] < (BAND.0 + BAND.1) / 2.0) == south).collect();
+            rows.iter().map(|&j| w.t_air(j)).sum::<f64>() / rows.len() as f64
+        };
+        mean(true) - mean(false)
+    };
+    let (one, stretched) = (contrast(1.0), contrast(banded.stretch));
+    assert!(stretched > one + 1.0, "south less north, K: one block {one}, stretched {stretched}");
+}
+
 /// A globe of 32 rows without life keeps its books to rounding over 100 years, through its ice and its soft covers: its
 /// air nodes and cells take no more than they hold (the air's days and the cells' exchange are one law), so nothing is
 /// set to zero.

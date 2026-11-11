@@ -552,6 +552,19 @@ of the air step's start (15 days), so a node whose air grows or shrinks within t
 of it than its rates say. Mass that crosses is
 lifted between the nodes' mean grounds by the heat of the node it enters. A cell sees its air node and three
 neighbours bilinearly (`flow/scratch.rs`). Air moves as whole columns, so bodies use the anchored `wind_ground` (6.3).
+**The map's stretch** (`Config::stretch`, `air::stretch`): the air over a small map can behave as the air over the band
+of latitudes its rows stand for, while the ground keeps its true metres. The air's sideways laws take every horizontal
+length `stretch` times longer: a column stands for one `stretch` times longer and wider, so it holds `stretch`² times
+its gas and its faces are `stretch` times wider, and a rate between two stretched columns moves the map's column the
+share of it the map's column holds (`Stretch::per_column`). So the eddies' rate between two columns falls as
+1 / `stretch`² (`mix` × width / length, over `stretch`²), the overturning's as 1 / `stretch`² too (its mass flux
+does not depend on the length, as above, and the column holds `stretch`² times more; its speed, `wind` times the
+gradient, falls as 1 / `stretch`), the turning is the same (the warmth's difference across a link is its gradient
+times its offset), the share of the pressure's difference evened in a day falls as 1 / `stretch` (sound takes that much
+longer to cross), and the blocks' side in nodes divides by `stretch`, and with it the sea's mixing under each block
+(1.2). The exchanges up and down (the ground and the air, the sun, heat radiation, rain out) are per m² and do not read
+it, nor the rain's drift, nor anything on the ground. 1 by default; `ew run --band S,N` sets it to the band's length on
+a globe over the island's.
 
 ### 1.7 Paths
 `lanes.rs`. A body moving through a cell spends energy pushing through the bodies there (`choose::go`, `choose::wear`),

@@ -99,6 +99,14 @@ pub fn scale_absorbers(w: &mut World, factor: f64) {
     }
 }
 
+/// The settings of an island of `rows` rows between the latitudes `south` and `north`, degrees, the default's but for
+/// them and the air's stretch (`Config::stretch`): the band's length from south to north on a globe of `RADIUS_M` over
+/// the island's.
+pub fn banded(rows: usize, (south, north): (f64, f64)) -> Config {
+    let stretch = RADIUS_M * (north - south).to_radians() / (rows as f64 * CELL_M);
+    Config { lat_south: south, lat_north: north, stretch, ..Config::default() }
+}
+
 /// The map of an island of `w × h` cells.
 pub fn island(w: usize, h: usize) -> Square {
     Square::new(w, h, CELL_M, false, AIR_SCALE)

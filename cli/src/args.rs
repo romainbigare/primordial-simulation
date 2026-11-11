@@ -9,7 +9,9 @@ pub const USAGE: &str = "usage:
     --seed N              world seed (1)
     --size N              cells along a side (128); of a globe, its rows from pole to pole (even)
     --globe               a globe whose rows wrap east to west, twice as many columns as rows (not an island)
-    --band S,N            an island's rows from latitude S to latitude N, degrees (40,42.3)
+    --band S,N            an island's rows from latitude S to latitude N, degrees (40,42.3), and the air's stretch the
+                          band's length on the globe over the island's
+    --stretch X           the air's stretch alone (laws.md 1.6; 1, or the band's with --band)
     --fine X,Y,W,H        on a globe, the W x H air blocks from column X and row Y in squares, the rest one cell an
                           air block (none)
     --years N             years to run (10)
@@ -80,14 +82,17 @@ impl Args {
         v.and_then(|v| v.try_into().ok()).unwrap_or_default()
     }
 
-    /// The settings of a new island: its rows between the latitudes of `--band S,N` (the default's if it is not there);
-    /// an error if it does not parse or the band is not one (`Config::validate`).
-    pub fn island(&self) -> Result<Config, String> {
+    /// The settings of a new island of `rows` rows: those of the band of `--band S,N` with its stretch
+    /// (`worldgen::terrain::banded`; the default's if it is not there), the stretch of `--stretch` if it is there; an
+    /// error if one does not parse or the band is not one (`Config::validate`).
+    pub fn island(&self, rows: usize) -> Result<Config, String> {
         let mut cfg = Config::default();
         if let Some(text) = self.value::<String>("--band") {
             let v: Result<Vec<f64>, _> = text.split(',').map(str::parse).collect();
-            [cfg.lat_south, cfg.lat_north] = v.ok().and_then(|v| v.try_into().ok()).ok_or(format!("--band {text}: want S,N in degrees"))?;
+            let [south, north] = v.ok().and_then(|v| v.try_into().ok()).ok_or(format!("--band {text}: want S,N in degrees"))?;
+            cfg = worldgen::terrain::banded(rows, (south, north));
         }
+        cfg.stretch = self.get("--stretch", cfg.stretch);
         cfg.validate().map(|_| cfg)
     }
 

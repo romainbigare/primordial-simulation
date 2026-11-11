@@ -12,6 +12,7 @@ mod rain;
 mod seen;
 mod sky;
 mod step;
+mod stretch;
 mod surf;
 mod wind;
 

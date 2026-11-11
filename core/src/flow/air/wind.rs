@@ -4,6 +4,7 @@
 
 use super::super::Scratch;
 use super::daily::{temps, Moved};
+use super::stretch::Stretch;
 use crate::{solve::line::{self, Lines}, solve::sweep::HALF_WAY, space::Level, units::R_GAS, Config, World};
 
 /// A fit of a gradient whose neighbours nearly line up (the determinant below this share of the product of its
@@ -37,9 +38,11 @@ pub(super) struct Pushes {
 
 /// Three pushes on each link: the column's pressure, evened in the time sound takes to cross it (Lamb waves, Lindzen
 /// 1990, 9.2); overturning by the warmth gradient, turned by the rotation at the link's latitude, its lower half toward
-/// the warmer node at `wind` per K/m; and eddy mixing (`mix` × width / length). From the air of each node as the last
-/// state left it (`Scratch::nt`, `capa`, `mass`, `ta`, `gam`).
+/// the warmer node at `wind` per K/m; and eddy mixing (`mix` × width / length). Each over the link's length and width
+/// as the stretched air takes them, and a rate between the stretched columns (`Stretch`). From the air of each node as
+/// the last state left it (`Scratch::nt`, `capa`, `mass`, `ta`, `gam`).
 pub(super) fn pushes(cfg: &Config, s: &Scratch, air: &Level, links: &Links) -> Pushes {
+    let st = Stretch::of(cfg);
     let na = air.n();
     let warmth: Vec<f64> = (0..na).map(|j| s.ta[j] + s.gam[j] * s.zair[j]).collect();
     let grad = gradient(air, &warmth);
@@ -49,17 +52,21 @@ pub(super) fn pushes(cfg: &Config, s: &Scratch, air: &Level, links: &Links) -> P
     // middles of a column's halves lie half its depth apart.
     let rise = |j: usize| (cfg.gravity * s.mass[j] - s.capa[j] * s.gam[j]) / s.nt[j].max(f64::MIN_POSITIVE);
     for &l in &links.id {
-        let (a, b, wd, d) = (air.a()[l] as usize, air.b()[l] as usize, air.width()[l], air.dist()[l]);
+        let (a, b, wd, d) = (air.a()[l] as usize, air.b()[l] as usize, st.length(air.width()[l]), st.length(air.dist()[l]));
         let (rho, depth) = ((s.nt[a] / s.vol[a] + s.nt[b] / s.vol[b]) / 2.0, cfg.air_top_m - (s.za[a] + s.za[b]) / 2.0);
         let turn = cfg.rotation * ((air.lat()[a] + air.lat()[b]) / 2.0).to_radians().sin();
+        // The warmth's difference across the link, as its gradient times its offset: on the map's metres, as the
+        // stretch lengthens both alike.
         let (ab, ga, gb) = (air.offset(a, b), grad[a], grad[b]);
         let across = ((ga[0] + gb[0]) * ab[1] - (ga[1] + gb[1]) * ab[0]) / 2.0;
-        p.mix.push(cfg.mix * rho * depth * wd / d);
+        p.mix.push(st.per_column(cfg.mix * rho * depth * wd / d));
         // A mass flux by the gradient, the link's difference over its length `d`, through its half cross-section, so
         // it does not depend on `d`.
-        p.over.push(cfg.wind * (warmth[b] - warmth[a] + turn * across) / d * rho * wd * depth / 2.0);
+        p.over.push(st.per_column(cfg.wind * (warmth[b] - warmth[a] + turn * across) / d * rho * wd * depth / 2.0));
         p.rise.push((rise(a) + rise(b)) / 2.0 * depth / 2.0);
-        // p = c n with c = RT/V; sound crosses the link in d / sqrt(gamma R T / M), gamma = cp / (cp - R) per mol.
+        // p = c n with c = RT/V; sound crosses the link in d / sqrt(gamma R T / M), gamma = cp / (cp - R) per mol. The
+        // stretched column holds the stretch squared times the mol at the same pressure, so its c is that much less,
+        // and its rate per column of the map (`Stretch::per_column`) is this, with the map's c, over the stretched `d`.
         let c = |j: usize| R_GAS * s.ta[j] / s.vol[j];
         let sound = |j: usize| {
             let cp = s.capa[j] / s.nt[j];

@@ -4,6 +4,7 @@
 
 use super::super::Scratch;
 use super::rain::{rain_air, Pool, Room, Wet};
+use super::stretch::Stretch;
 use super::wind::{even, lines, pushes, wind, Implicit, Links};
 use super::{air_temp, at_height, radiation::{glow, glow_slope}, step::Active};
 use crate::{math::mean_passed, store::Class, units::{DAY, R_GAS}, World, AIR};
@@ -135,11 +136,11 @@ pub(super) struct Moved {
 }
 
 /// The air nodes in blocks that eddies even out within a day: squares on the map of side
-/// sqrt(`mix` × `BLOCK_DAY`), in whole nodes, at least one. Each block's nodes, its hub first, in the order of their
-/// squares. An island smaller than a block is one block.
+/// sqrt(`mix` × `BLOCK_DAY`) over the nodes' spacing as the stretched air takes it (`Stretch`), in whole nodes, at least
+/// one. Each block's nodes, its hub first, in the order of their squares. An island smaller than a block is one block.
 pub(in crate::flow) fn blocks(w: &World) -> Vec<Vec<u32>> {
     let air = w.mesh.level(AIR);
-    let spacing = (air.area().iter().sum::<f64>() / air.n() as f64).sqrt();
+    let spacing = Stretch::of(&w.cfg).length((air.area().iter().sum::<f64>() / air.n() as f64).sqrt());
     let side = ((w.cfg.mix * BLOCK_DAY).sqrt() / spacing).max(1.0) as usize;
     let mut of: BTreeMap<(usize, usize), Vec<u32>> = BTreeMap::new();
     for j in 0..air.n() {
