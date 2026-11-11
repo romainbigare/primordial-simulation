@@ -102,12 +102,12 @@ pub(super) fn amplitude(law: &Law, s: &Samples, metres: f64, k: usize) -> f64 {
 /// sample is the main one upstream of the next, `Samples::main`) the next piece starts where the last one ends, its
 /// length (`length`, m) over its wavelength on. In the flood's order from the last sample reached, so a sample comes
 /// before the one its liquid runs to.
-pub(super) fn phases(law: &Law, s: &Samples, metres: f64) -> Vec<f32> {
+pub(super) fn phases(law: &Law, s: &Samples, at: &[[f64; 2]], metres: f64) -> Vec<f32> {
     let mut phase = vec![0.0f64; s.h.len()];
     for &k in s.order.iter().rev() {
         let (k, to) = (k as usize, s.to[k as usize]);
         if to != NONE && s.main[to as usize] == k as u32 {
-            let cycles = base(s, k).map_or(0.0, |b| length(b) * metres / wavelength(law, s, k));
+            let cycles = base(s, at, k).map_or(0.0, |b| length(b) * metres / wavelength(law, s, k));
             phase[to as usize] = (phase[k] + cycles).fract();
         }
     }

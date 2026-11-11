@@ -521,3 +521,23 @@ Open on the look:
 - Under trees the ground is a flat bare colour at 10 to 50 m: herbs cover about a fifth and the ground has no grain.
 - Tufts and flowers are tiny at 10 m; reeds and flowers are rare (no starting kind is a wet-ground herb).
 - Autumn is mostly herbs going yellow; red shows only on the heights.
+
+**The ground on the page: on the work branch.** A channel is drawn as one smooth line down its stem (the mean of the
+sample centres 3 up and 3 down, Chaikin 1974), with the bends laid on it; within 250 m the drawn ground leans to the
+channel's floor, so a valley follows its river and the ladder is gone. Water against ground is decided per texel by
+the drawn height; the shelf lies 10 m under 0 m with a rounded edge. A scene world builds in 0.06 s again.
+
+What holds the work branch back from main:
+- The key numbers and the lifeless globe (slow tests) are out of range on the new ground. Decided: a cell's ground
+  node takes the top `skin_m` of each sample's loose ground at most, the layer the year's heat and the roots reach;
+  what the wear left deeper is counted with the bed. Being built and measured.
+- One fast test of the bodies fails on the newest ground (a cell 1.2% under its body's level).
+
+Open on the ground and the water, after that:
+- Loose ground that settles during a run is not bounded by the `skin_m` rule.
+- The node's heat capacity is written in about 8 places (`ground.rs`, `flow/land.rs`, `flow/parts/{mod,moves,view}.rs`,
+  `change/{rows,kernel}.rs`): one helper, results kept bit for bit.
+- Bodies start empty: a deep basin takes years of runoff to fill, and a body that loses more than it gets is a dry
+  flat. The world should start with its bodies at the level their gains and losses hold.
+- A small square where a channel leaves a pond; a tile costs 7 to 10 ms, most of it the channels' field.
+- The rain law (an air node's rain over all its cells).

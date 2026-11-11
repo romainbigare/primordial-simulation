@@ -41,22 +41,26 @@ fn leans(n: &Near) -> [f64; 3] {
 
 /// The departures of the means of the quarters (of areas `area`, m², row by row) of a leaf from its mean, m, from the
 /// heights `n` of it and its neighbours: their lean (`leans`; across both ways, the product of the two leans) less the
-/// lean's mean by area, so the quarters keep the leaf's mean; the whole lean scaled down where a quarter would lie past
-/// the lowest or the highest of the leaf and its eight neighbours (Barth and Jespersen 1989), so the finer ground makes
-/// no new pit and no new peak, and a valley's floor falls along it as its leaves' means do.
+/// lean's mean by area, so the quarters keep the leaf's mean.
 pub(super) fn lean_quarters(n: &Near, area: [f64; 4]) -> [f64; 4] {
-    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
-    for z in n[1..4].iter().flat_map(|row| &row[1..4]) {
-        (lo, hi) = (lo.min(*z), hi.max(*z));
-    }
-    let own = n[2][2];
     let [ew, sn, corners] = leans(n);
     let lean: [f64; 4] = std::array::from_fn(|q| {
         let (sx, sy) = (if q % 2 == 1 { 1.0 } else { -1.0 }, if q >= 2 { 1.0 } else { -1.0 });
         sx * ew + sy * sn + sx * sy * corners
     });
     let mean = (0..4).map(|q| area[q] * lean[q]).sum::<f64>() / area.iter().sum::<f64>();
-    let lean = lean.map(|l| l - mean);
+    lean.map(|l| l - mean)
+}
+
+/// The lean `lean` of a leaf's quarters (`lean_quarters`) scaled down where a quarter would lie past the lowest or the
+/// highest of the leaf and its eight neighbours, of heights `n` (Barth and Jespersen 1989), so the finer heights make no
+/// new pit and no new peak: the wear carries its grids so (`Grid::finer`), as a pit made there would hold liquid.
+pub(super) fn limited(n: &Near, lean: [f64; 4]) -> [f64; 4] {
+    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for z in n[1..4].iter().flat_map(|row| &row[1..4]) {
+        (lo, hi) = (lo.min(*z), hi.max(*z));
+    }
+    let own = n[2][2];
     if lean.iter().all(|&d| (lo..=hi).contains(&(own + d))) {
         return lean;
     }

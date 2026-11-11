@@ -10,9 +10,10 @@
 mod bends;
 mod channels;
 mod half;
+mod stems;
 mod wetness;
 
-pub use channels::{Law, SHOW_M, STEP_MOST, TYPICAL_RUNOFF};
+pub use channels::{Law, SHOW_M, STEP_MOST, TYPICAL_RUNOFF, VALLEY_FROM, VALLEY_M};
 pub use half::{half, unhalf};
 pub use wetness::sample_index;
 
@@ -43,7 +44,7 @@ pub fn depths(map: &Square) -> std::ops::RangeInclusive<u8> {
 
 /// The ground of an island: its seed, map and terrain, the latitudes of its rows, the terrain's samples and the wetness
 /// index of each (`sample_index`), the channel law (`Physics::channel`), by which the channel nearest a texel is found,
-/// and the phase of each sample's bends (`bends::phases`).
+/// the point each sample's line runs through (`stems::points`) and the phase of each sample's bends (`bends::phases`).
 pub struct Ground {
     seed: u64,
     map: Square,
@@ -52,6 +53,7 @@ pub struct Ground {
     samples: Arc<Samples>,
     twi: Vec<f64>,
     law: Law,
+    at: Vec<[f64; 2]>,
     phase: Vec<f32>,
 }
 
@@ -62,8 +64,9 @@ impl Ground {
         assert!(!map.wrap, "tiles of the ground are made for an island");
         let samples = terrain.samples(seed, &map, lat);
         let twi = sample_index(&map, &samples);
-        let phase = bends::phases(&law, &samples, map.length(SAMPLE_DEPTH));
-        Ground { seed, map, terrain, lat, samples, twi, law, phase }
+        let at = stems::points(&samples);
+        let phase = bends::phases(&law, &samples, &at, map.length(SAMPLE_DEPTH));
+        Ground { seed, map, terrain, lat, samples, twi, law, at, phase }
     }
 
     /// The ground of world `w`.
@@ -92,7 +95,14 @@ impl Ground {
         let heights = self.terrain.heights(self.seed, &self.map, self.lat, win, depth);
         let k = 2f64.powi(SAMPLE_DEPTH as i32 - depth as i32);
         let twi = wetness::field(&self.samples, &self.twi, depth, [win[0], win[1]], [wide, high]);
-        let near = channels::Channels::new(&self.map, &self.samples, self.law, &self.phase).field([win[0], win[1]], [wide, high], k);
+        let near = channels::Channels::new(&self.map, &self.samples, self.law, (&self.at, &self.phase)).field([win[0], win[1]], [wide, high], k);
+        // The valleys about the channels drawn into the ground out of the ponds (`channels::Field::drawn`).
+        let in_pond = |i: usize| {
+            let [x, y] = self.centre(depth, win[0] + (i % wide) as i64, win[1] + (i / wide) as i64);
+            let (r, c) = ((y.floor() as usize).min(self.samples.down - 1), (x.floor() as usize).min(self.samples.across - 1));
+            self.samples.pond[r * self.samples.across + c] != NONE
+        };
+        let heights: Vec<f64> = heights.iter().enumerate().map(|(i, &h)| if in_pond(i) { h } else { near.drawn(i, h) }).collect();
         let at = |p: usize| (clamp(x0 + (p % side) as i64, across) - win[0]) as usize + (clamp(y0 + (p / side) as i64, down) - win[1]) as usize * wide;
         let mut out = Vec::with_capacity(6 * side * side);
         for i in (0..side * side).map(at) {
@@ -111,8 +121,9 @@ impl Ground {
     /// The pond each texel of the tile of `depth` at column `tx` and row `ty` lies in, laid out as `tile`'s texels, its
     /// height `h(p)`, m: the pond (`Samples::pond`, an index into `ponds`; `network::NONE` for none) of the sample that
     /// holds the texel's centre, or where that lies in none, of the first of its eight neighbours that lies in a pond
-    /// whose pass the texel lies under. So a shell draws each pond flat at its own level, its shore where the ground
-    /// rises over that level, not at the edges of the samples.
+    /// whose pass the texel lies under, where that sample stands over the pond's level (its rim: not the pass, nor the
+    /// ground its liquid runs down below it) or the pond is of the open low ground. So a shell draws each pond flat at
+    /// its own level, its shore where the ground rises over that level, not at the edges of the samples.
     pub fn pond_tile(&self, depth: u8, tx: i64, ty: i64, h: impl Fn(usize) -> f64) -> Vec<u32> {
         let side = TILE + 2 * GUTTER;
         let (x0, y0) = (tx * TILE as i64 - GUTTER as i64, ty * TILE as i64 - GUTTER as i64);
@@ -125,7 +136,11 @@ impl Ground {
         let wide = (c1 - c0 + 1) as usize;
         let near: Vec<Vec<u32>> = (r0..=r1)
             .flat_map(|r| (c0..=c1).map(move |c| (r, c)))
-            .map(|(r, c)| (-1..=1i64).flat_map(|dr| (-1..=1i64).map(move |dc| pond_at(r + dr, c + dc))).filter(|&q| q != NONE).collect())
+            .map(|(r, c)| {
+                let own = s.h[r.clamp(0, s.down as i64 - 1) as usize * s.across + c.clamp(0, s.across as i64 - 1) as usize];
+                let rim = |q: u32| q != NONE && (s.ponds[q as usize].pass == NONE || own > s.ponds[q as usize].level);
+                (-1..=1i64).flat_map(|dr| (-1..=1i64).map(move |dc| pond_at(r + dr, c + dc))).filter(|&q| rim(q)).collect()
+            })
             .collect();
         (0..side * side)
             .map(|p| {

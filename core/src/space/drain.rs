@@ -97,18 +97,22 @@ pub(super) fn open_low(g: &Grid, z: &[f64]) -> Vec<bool> {
     open
 }
 
-/// The flood of heights `z` on grid `g` from the open low ground `open` (`Flood`): from all of it, or with `shore`
-/// from the samples of it beside land only (the rest it never reaches); the sample of the lowest level first, then the
+/// The samples of the open low ground `open` of grid `g` where a flood starts (`flood`): all of them, or with `shore`
+/// those beside land only (the rest it never reaches).
+pub(super) fn starts(g: &Grid, open: &[bool], shore: bool) -> Vec<usize> {
+    (0..g.n()).filter(|&i| open[i] && (!shore || g.around(i).any(|(j, _)| !open[j]))).collect()
+}
+
+/// The flood of heights `z` on grid `g` from the samples `start` of the open low ground `open` (`Flood`, `starts`): the sample of the lowest level first, then the
 /// lowest on the flood's surface, then the least index. A neighbour across a side it reaches stands at its own height
 /// or the level the flood came at, the higher, and on the surface at its own height or `FLOOD_RISE` times their
 /// distance times one and its draw higher than the sample it was reached from, the higher, so each sample of land has a
 /// way down; of its ways down it takes one by its draw `draw` (`pick`).
-pub(super) fn flood(g: &Grid, z: &[f64], open: &[bool], (shore, draw): (bool, &[f64])) -> Flood {
+pub(super) fn flood(g: &Grid, z: &[f64], open: &[bool], (start, draw): (&[usize], &[f64])) -> Flood {
     let n = z.len();
     let (mut surface, mut level, mut seen) = (z.to_vec(), z.to_vec(), open.to_vec());
     let (mut to, mut apart, mut rank, mut order) = (vec![NONE; n], vec![0.0; n], vec![NONE; n], Vec::with_capacity(n));
-    let start = |i: usize| open[i] && (!shore || g.around(i).any(|(j, _)| !open[j]));
-    let mut heap: BinaryHeap<Low> = (0..n).filter(|&i| start(i)).map(|i| Low(z[i], z[i], i)).collect();
+    let mut heap: BinaryHeap<Low> = start.iter().map(|&i| Low(z[i], z[i], i)).collect();
     let mut down: Vec<(u32, f64, f64)> = Vec::with_capacity(8);
     while let Some(Low(l, s, i)) = heap.pop() {
         rank[i] = order.len() as u32;
