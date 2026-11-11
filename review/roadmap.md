@@ -525,8 +525,9 @@ with this law.
 
 Open on the ground and the water:
 - Loose ground that settles during a run is not bounded by the `skin_m` rule.
-- The node's heat capacity is written in about 8 places (`ground.rs`, `flow/land.rs`, `flow/parts/{mod,moves,view}.rs`,
-  `change/{rows,kernel}.rs`): one helper, results kept bit for bit.
+- The heat capacity of a node's amounts is one helper (`ground::amounts_cap`). Two orders of summing remain:
+  `World::heat_cap_of` and `land::capacities` add the amounts onto the skin one by one, the parts and the reactor sum
+  the amounts first. The same node can differ in the last bit between them; joining them changes results.
 - Bodies start empty: a deep basin takes years of runoff to fill, and a body that loses more than it gets is a dry
   flat. The world should start with its bodies at the level their gains and losses hold.
 - A small square where a channel leaves a pond; a tile costs 7 to 10 ms, most of it the channels' field.
