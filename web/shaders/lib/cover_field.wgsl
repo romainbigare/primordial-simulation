@@ -16,8 +16,8 @@ struct CoverLook {
 
 const COVER_LATTICES = 3;
 // A grain of the field (`grain`) where its cell takes more than a pixel: present in a cell as often as covers at most
-// `GRAIN_FILL` of it, as wide as keeps the mean, and placed in it at random where it has room (so no grains stand in
-// rows).
+// `GRAIN_FILL` of it, as wide as keeps the mean (at most half a cell), anywhere in its cell, so no grains stand in rows
+// and none is cut at its cell's edge.
 const GRAIN_FILL = 0.35;
 // A uniform draw on -1..1 spreads sqrt(1/3): a draw times this spreads 1.
 const UNIFORM_SPREAD = 1.732;
@@ -63,16 +63,22 @@ fn field_smooth(at: vec2f, l: i32) -> vec4f {
 fn patchy(at: vec2f, l: i32) -> f32 { return 1.0 + PATCH * noise(at / (PATCH_CELLS * cover_look.sides[l]), 40 + l).x; }
 
 // The share of the ground at `at` that lattice l's plants cover, where they cover `s` of it, seen at `e` m a pixel:
-// grains at the plants' own size (`GRAIN_FILL`), as fine as its cells of side `side`.
+// grains at the plants' own size (`GRAIN_FILL`), as fine as its cells of side `side`. A grain reaches at most half a
+// cell from its cell, so only the point's cell and the three beside it towards the point can cover it.
 fn grains(at: vec2f, l: i32, s: f32, e: f32, side: f32) -> f32 {
-  let c = floor(at / side);
-  let x = lowbias(vec2i(c), l + 7);
+  let q = at / side;
+  let toward = select(vec2f(-1.0), vec2f(1.0), fract(q) > vec2f(0.5));
   let present = min(s / GRAIN_FILL, 1.0);
-  if (f32(x & 1023u) / 1024.0 >= present) { return 0.0; }
-  let r = side * sqrt(s / (present * PI));
-  let jitter = vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0 - 0.5;
-  let centre = (c + 0.5 + jitter * max(1.0 - 2.0 * r / side, 0.0)) * side;
-  return 1.0 - smoothstep(r - 0.5 * e, r + 0.5 * e, length(at - centre));
+  let r = min(side * sqrt(s / (present * PI)), 0.5 * side);
+  var out = 0.0;
+  for (var k = 0; k < 4; k++) {
+    let c = floor(q) + vec2f(f32(k & 1), f32(k >> 1u)) * toward;
+    let x = lowbias(vec2i(c), l + 7);
+    if (f32(x & 1023u) / 1024.0 >= present) { continue; }
+    let centre = (c + vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0) * side;
+    out = max(out, 1.0 - smoothstep(r - 0.5 * e, r + 0.5 * e, length(at - centre)));
+  }
+  return out;
 }
 
 // The mean share `s` with the scatter of the count of crowns of cells of side `side` over a block of them about `e`
