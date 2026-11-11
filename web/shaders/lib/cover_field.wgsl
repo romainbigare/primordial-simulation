@@ -93,7 +93,9 @@ fn grain(at: vec2f, l: i32, share: f32, e: f32) -> f32 {
   let s = min(share, 1.0);
   if (l == 0) {
     let shown = 1.0 - ease(0.5 * SWARD_M, 1.5 * SWARD_M, 2.0 * e);
-    return 1.0 - pow(1.0 - clamp(s * (1.0 + SWARD * shown * noise(at / SWARD_M, 54).x), 0.0, 1.0), SWARD_SEEN);
+    var tufts = s;
+    if (shown > 0.0) { tufts = clamp(s * (1.0 + SWARD * shown * noise(at / SWARD_M, 54).x), 0.0, 1.0); }
+    return 1.0 - pow(1.0 - tufts, SWARD_SEEN);
   }
   let w = smoothstep(0.5 * side, side, e);
   var out = 0.0;

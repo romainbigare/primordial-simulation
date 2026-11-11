@@ -31,5 +31,7 @@ fn stone_of(s: vec2i) -> f32 {
 
 // The share of the bed that shows at `at` through `loose` m of loose ground on the mean (`PATCHY`).
 fn bed_shows(loose: f32, at: vec2f) -> f32 {
+  // Deeper than the thinnest a patch makes it reach the bed, none shows (and the noise need not be read).
+  if (loose * (1.0 - PATCHY) >= HIDES_BED_M) { return 0.0; }
   return 1.0 - ease(0.0, HIDES_BED_M, loose * (1.0 + PATCHY * noise(at / PATCHY_M, 55).x));
 }

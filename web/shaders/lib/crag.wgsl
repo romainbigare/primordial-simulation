@@ -43,11 +43,14 @@ fn shows_at(size: f32, e: f32) -> f32 { return 1.0 - ease(0.5 * size, 1.5 * size
 // The bare ground's colour `c` (linear, unlit) at `at`, seen at `e` m a pixel, under `canopy` of closed crowns, `wet`:
 // its clods, and under the crowns its litter and moss.
 fn floor_of(c: vec3f, at: vec2f, e: f32, canopy: f32, wet: f32) -> vec3f {
-  var out = c * (1.0 + CLOD * STYLE * noise(at / CLOD_M, 51).x * shows_at(CLOD_M, e));
   let litter = LITTER * STYLE * canopy;
-  out *= mix(vec3f(1.0), LITTER_TINT, litter);
-  let moss = MOSS * litter * wet * ease(0.0, 0.4, noise(at / MOSS_M, 52).x) * shows_at(MOSS_M, e);
-  return out * mix(vec3f(1.0), MOSS_TINT, moss);
+  var out = c * mix(vec3f(1.0), LITTER_TINT, litter);
+  // Each grain only where it shows: its noise costs a few reads of the hash.
+  let clods = shows_at(CLOD_M, e);
+  if (clods > 0.0) { out *= 1.0 + CLOD * STYLE * noise(at / CLOD_M, 51).x * clods; }
+  let moss = MOSS * litter * wet * shows_at(MOSS_M, e);
+  if (moss > 0.0) { out *= mix(vec3f(1.0), MOSS_TINT, moss * ease(0.0, 0.4, noise(at / MOSS_M, 52).x)); }
+  return out;
 }
 
 // The ground of a point of drawn slope `steep` (rise over run) that is a cliff.

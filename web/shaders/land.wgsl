@@ -51,7 +51,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.rock = bed_shows(p.loose, at);
   p.bed = vec3f(0.0);
   p.canopy = field_at(at, COVER_LATTICES - 1, 0.0).a;
-  if (p.rock > 0.0 || length(g.slope) > CLIFF_FROM) {
+  if (p.rock > 0.0) {
     let soil = blended(SOIL, cs);
     p.bed = vec3f(soil.zw, blended(BED, cs).x);
   }

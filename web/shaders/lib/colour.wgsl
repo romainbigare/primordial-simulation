@@ -126,7 +126,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   if (styled()) {
     let thin = 1.0 - ease(0.0, SCREE_LOOSE_M, p.loose);
     let scree = max(SCREE * ease(SCREE_FROM, CLIFF_FROM, steep) * thin, STONES_ON_BED * p.rock) * (1.0 - p.sand);
-    let rubble = stones(p.at, p.e, scree, SCREE_STONE_M, p.bed, 61);
+    let rubble = stones(p.at, p.e, scree * (1.0 - plants), SCREE_STONE_M, p.bed, 61);
     let pebbles = stones(p.at, p.e, select(0.0, IN_CHANNEL, p.stone > 0.0) * (1.0 - p.sand), max(p.stone, PEBBLE_M), p.bed, 62);
     g.rgb = mix(mix(g.rgb, rubble.rgb / max(rubble.a, 1e-4), rubble.a), pebbles.rgb / max(pebbles.a, 1e-4), pebbles.a);
   }
