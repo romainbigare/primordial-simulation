@@ -164,6 +164,13 @@ fn bed_at(g: Tiled, q: f32) -> Bed {
   return Bed(half, mean, BED_MIDDLE * mean * (1.0 - x * x));
 }
 
+// A channel's bed is as wide as the flow that shapes it, its floods: the bankfull discharge, the flood of every year or
+// two, about `FLOOD` times the mean flow in humid lands (Leopold and Maddock 1953; Wolman and Miller 1960; Dunne and
+// Leopold 1978: 2 to 10 times).
+const FLOOD = 5.0;
+// The half width of the bed of a channel that carries `q` m³/s this month, m: the channel law's at `FLOOD` times it.
+fn banks_of(q: f32) -> f32 { return 0.5 * land.channel.x * pow(FLOOD * q, land.channel.y); }
+
 // The level of pond `p` (-1: none), m: from the rows of the table under its planes, four ponds a texel; far below
 // any ground for none (no body holds it, or the texel lies in no pond).
 fn pond_level(p: i32) -> f32 {
@@ -279,10 +286,11 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
 }
 
 // The state at `at` on ground `g` as a plant's foot reads it (cover.wgsl): the water of the point's channel stands over
-// its bed too.
+// its bed too, and its floods over its banks (`banks_of`): no plant roots in a channel's bed.
 fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
-  let bed = bed_at(g, discharge_at(g));
+  let q = discharge_at(g);
+  let bed = bed_at(g, q);
   var p = state_on(at, g, cs, bed.depth);
-  p.depth = max(p.depth, bed.depth);
+  p.depth = max(max(p.depth, bed.depth), select(0.0, ROOTS_M, g.d < banks_of(q)));
   return p;
 }
