@@ -86,7 +86,7 @@ function setup(w: World): void {
   say('');
   cls = new Uint8Array(m.w * m.h);
   map.setWorld(m.w, m.h, m.cell_m, m.globe ? { north: m.lat_north, south: m.lat_south } : null);
-  $('meta').innerHTML = [['seed', m.seed], ...(m.globe ? [['world', 'globe']] : []), ['size', `${m.w}×${m.h}`], ['cell', m.cell_m >= 1000 ? `${fmt(m.cell_m / 1000)} km` : `${fmt(m.cell_m)} m`]]
+  $('meta').innerHTML = [['seed', m.seed], ...(m.globe ? [['world', 'globe']] : []), ['size', `${m.w}×${m.h}`], ...(m.globe ? [] : [['band', `${fmt(m.lat_south)}° to ${fmt(m.lat_north)}°`]]), ['cell', m.cell_m >= 1000 ? `${fmt(m.cell_m / 1000)} km` : `${fmt(m.cell_m)} m`]]
     .map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('') + '<span>year <b id="hy"></b></span>';
   const names = m.layers.map(l => l.name).filter(n => !/^(true|ground)_[rgb]$/.test(n));
   const sorted = [...names.filter(n => ORDER.includes(n)).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)), ...names.filter(n => !ORDER.includes(n))];
@@ -304,7 +304,7 @@ function viewSoon(v: View): void {
 function landOf(w: World): Land | null {
   const m = w.meta;
   if (!coreWasm || !m.tiles || !m.laws || !m.samples || m.square_depth === undefined) return null;
-  const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), m.seed, m.w, { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, () => { map.invalidate(); if (live) showStats(live.stats); }, say);
+  const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), m.seed, m.w, [m.lat_south, m.lat_north], { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, () => { map.invalidate(); if (live) showStats(live.stats); }, say);
   return new Land(tiles, m.laws, m.samples);
 }
 /** From `THINGS_PX` pixels a square on, the core is asked for the things of the window in view, to draw them one by one. */
@@ -328,12 +328,18 @@ function showStats(s: Stats): void {
     ...(drawnWith ? [['map', `drawn with ${drawnWith}`]] : [])].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
 }
 
+/** The band of latitudes of the URL's `band=S,N`, degrees, south first; [NaN, NaN] (the core's default band) without
+ * one, or where S is not below N. */
+function bandOf(text: string | null): [number, number] {
+  const v = (text ?? '').split(',').map(Number);
+  return v.length === 2 && v[0] < v[1] ? [v[0], v[1]] : [NaN, NaN];
+}
 function newWorld(): void {
   const seed = Math.max(0, Math.floor(+$<HTMLInputElement>('seed').value) || 0);
   const size = Math.min(64, Math.max(8, Math.floor(+$<HTMLInputElement>('size').value) || LIVE_SIZE));
   playing = false;
   say('Making the world…');
-  live?.newWorld(seed, size);
+  live?.newWorld(seed, size, bandOf(new URLSearchParams(location.search).get('band')));
 }
 $('live').onsubmit = e => { e.preventDefault(); newWorld(); };
 

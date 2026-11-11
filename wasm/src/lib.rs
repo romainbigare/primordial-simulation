@@ -53,13 +53,20 @@ fn give(bytes: Vec<u8>) -> *const u8 {
     })
 }
 
-/// Make an island of `size` x `size` cells from `seed`, with the schedule of `ew run --roster --plants`: the starting
-/// kinds of cover, no animals, so the page runs fast while the work is on the ground, the liquid and the cover. Its
-/// cells stay those as built: the map draws every zoom from the ground's tiles and the cells' table. Returns 0, or 1 if
-/// the world is refused.
+/// The settings of an island of `size` rows between the latitudes `south` and `north`, degrees, with the air's stretch
+/// of that band (`worldgen::terrain::banded`); the default's where `south` is not below `north` (the page asks for no
+/// band).
+fn island(size: u32, (south, north): (f64, f64)) -> Config {
+    if south < north { worldgen::terrain::banded(size as usize, (south, north)) } else { Config::default() }
+}
+
+/// Make an island of `size` x `size` cells from `seed` between the latitudes `south` and `north` (`island`), with the
+/// schedule of `ew run --roster --plants`: the starting kinds of cover, no animals, so the page runs fast while the work
+/// is on the ground, the liquid and the cover. Its cells stay those as built: the map draws every zoom from the
+/// ground's tiles and the cells' table. Returns 0, or 1 if the world is refused.
 #[no_mangle]
-pub extern "C" fn new_world(seed: u32, size: u32) -> u32 {
-    let world = worldgen::new_world(seed as u64, size as usize, size as usize);
+pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64) -> u32 {
+    let world = worldgen::terrain::new_island(seed as u64, size as usize, size as usize, island(size, (south, north)));
     if world.cfg.validate().is_err() {
         return 1;
     }
@@ -170,11 +177,12 @@ pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
     give(bytes)
 }
 
-/// Make the ground of the island `new_world` makes from `seed` and `size` (`tape::Ground`): its terrain and its map's
-/// squares (`worldgen::new_world`; how its cells are cut does not change the ground), with the default laws.
+/// Make the ground of the island `new_world` makes from `seed`, `size` and the latitudes `south` and `north`
+/// (`tape::Ground`): its terrain and its map's squares (`worldgen::new_world`; how its cells are cut does not change the
+/// ground), with the default laws.
 #[no_mangle]
-pub extern "C" fn ground(seed: u32, size: u32) {
-    let (seed, cfg) = (seed as u64, Config::default());
+pub extern "C" fn ground(seed: u32, size: u32, south: f64, north: f64) {
+    let (seed, cfg) = (seed as u64, island(size, (south, north)));
     let (map, terrain) = worldgen::terrain::island_ground(seed, size as usize, size as usize);
     let g = tape::Ground::new(seed, map, terrain, (cfg.lat_south, cfg.lat_north), tape::Law::of(&cfg.phys));
     GROUND.with(|c| *c.borrow_mut() = Some(g));

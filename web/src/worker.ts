@@ -8,7 +8,7 @@
 
 interface Core {
   memory: WebAssembly.Memory;
-  new_world(seed: number, size: number): number;
+  new_world(seed: number, size: number, south: number, north: number): number;
   step_month(): void;
   year(): number;
   day(): number;
@@ -22,7 +22,7 @@ interface Core {
 }
 type Command =
   | { cmd: 'init'; wasm: ArrayBuffer }
-  | { cmd: 'new'; seed: number; size: number }
+  | { cmd: 'new'; seed: number; size: number; band: [number, number] }
   | { cmd: 'play'; on: boolean }
   | { cmd: 'rate'; rate: number }
   | { cmd: 'things'; at: [number, number, number, number] | null }
@@ -114,7 +114,7 @@ host.onmessage = async e => {
       host.postMessage({ kind: 'ready' }, []);
     } else if (m.cmd === 'new' && core) {
       start(false);
-      if (core.new_world(m.seed, m.size) !== 0) throw new Error('The world was refused.');
+      if (core.new_world(m.seed, m.size, m.band[0], m.band[1]) !== 0) throw new Error('The world was refused.');
       due = 0; thingsAt = null; stepped = pace = 0;
       postFrame('world');
     } else if (m.cmd === 'play') {
