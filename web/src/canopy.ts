@@ -117,25 +117,18 @@ function shareOn(w: number, l: number): number {
   return Math.min(below, above);
 }
 
-/** A stand's crowns stand side by side; the marks' places are random, so their crowns overlap: marks whose crowns sum
- * to x of the ground cover 1 - e^-x of it. A stand that closes its ground is drawn as closed as this at most. */
-const CLOSED_MOST = 0.98;
-
-/** The marks of a kind (row `r`) on lattice `l`, each a clump `grow` plants across, on the share `rooted` of the square
- * that holds it: the chance a cell of that ground holds one, its width, m, and the share of the square the kind's
- * plants on this lattice cover. Its plants stand in patches that cover the share `cover` of the square, `perM2` a m²,
- * each crown as wide as the ground it holds there; a cell of a patch holds the plants that fall in it as one mark of
- * their crowns' area (a clump where they are many), at most `REACH` sides across, and the chance a cell holds one makes
- * the ground the marks cover, their overlaps counted once, the stand's (`CLOSED_MOST`): a stand the law holds closed
- * reads closed. */
-function marksOn(r: Float32Array, l: number, grow: number, rooted: number): [number, number, number] {
+/** The marks of a kind (row `r`) on lattice `l`, each a clump `grow` plants across: the chance a cell holds one and its
+ * width, m. Its plants stand in patches that cover the share `cover` of the ground, `perM2` a m², each crown as wide as
+ * the ground it holds there; a cell of a patch holds the plants that fall in it as one mark of their crowns' area (a
+ * clump where they are many), at most `REACH` sides across, and the chance a cell holds one keeps the share of the
+ * ground the marks cover the stand's. */
+function marksOn(r: Float32Array, l: number, grow: number): [number, number] {
   const share = shareOn(r[K.width] * grow, l), a = LATTICES[l];
-  if (share <= 0 || r[K.cover] <= 0 || r[K.perM2] <= 0) return [0, 0, 0];
+  if (share <= 0 || r[K.cover] <= 0 || r[K.perM2] <= 0) return [0, 0];
   const inside = r[K.perM2] / r[K.cover], plants = (inside * a * a) / (grow * grow);
   const width = Math.min(r[K.width] * grow * Math.sqrt(Math.max(plants, 1)), REACH * a);
-  const closed = Math.min(r[K.cover] / rooted, CLOSED_MOST);
-  const chance = Math.min(1, (-Math.log(1 - closed) * a * a) / ((Math.PI / 4) * width * width));
-  return [share * chance, width, share * r[K.cover]];
+  const chance = Math.min(1, (r[K.cover] * a * a) / ((Math.PI / 4) * width * width));
+  return [share * chance, width];
 }
 
 /** What a layer of the field (`FIELD`) gathers in a square: its kinds' colours summed by the ground each covers, that
@@ -227,15 +220,15 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
         continue;
       }
       LATTICES.forEach((a, l) => {
-        const [chance, width, covered] = marksOn(r, l, design === DESIGN.bush ? BUSH_GROW : 1, mean);
+        const [chance, width] = marksOn(r, l, design === DESIGN.bush ? BUSH_GROW : 1);
         if (chance <= 0) return;
-        put(KIND_PLANES.chance + l, i, k, chance);
+        put(KIND_PLANES.chance + l, i, k, chance / mean);
         put(KIND_PLANES.width + l, i, k, width);
         held[l] = true;
         tallest[l] = Math.max(tallest[l], r[K.height]);
-        // The share of the ground its plants cover, each as closed as its crown; its marks a m² of the square cast
-        // their shadows.
-        paint[l].add(k, r[K.root], c, covered * crown, ((chance * mean) / (a * a)) * width * SHADOW_RUN * r[K.height], stand, width);
+        // The share of the ground its marks cover, each as closed as its crown.
+        const covers = Math.min(1, (chance * (Math.PI / 4) * width * width) / (a * a)) * crown;
+        paint[l].add(k, r[K.root], c, covers, (chance / (a * a)) * width * SHADOW_RUN * r[K.height], stand, width);
       });
     }
     paint.forEach((p, l) => p.put(field, layer(l, i), l === STANDS ? layer(FIELD.standsFirst, i) : undefined));
