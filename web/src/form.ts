@@ -15,8 +15,11 @@ export interface Form { form: number; sure: number }
 /** The middle and the span of each number a form reads: thin leaves (capture area per kg, log10 m²/kg); tender (frost
  * gene, K); wet ground (moisture gene over the middle); dry ground (moisture gene under the middle); slender (height
  * over crown's width); seedy (seeds' share). Middles near those of the starting trees (worldgen life kinds), spans their
- * spread after 50 years on the 22 islands of seeds 1 and 2. */
-const BY_LEAF = [0.1, 0.1], BY_FROST = [269, 2], BY_WET = [-0.2, 0.15], BY_DRY = [-0.3, 0.2], BY_SLENDER = [4.1, 0.2], BY_SEED = [0.05, 0.012];
+ * spread after 50 years on the 22 islands of seeds 1 and 2; a stand's slenderness is its plants' count and mass at
+ * work (the cover's law, laws.md 4.5: a young dense stand is poles, an old thinned one broad crowns), its middle and
+ * span the median and half of the 16% to 84% range, by built cover, of the stands 3 m and taller after 50 years on the
+ * page's island of seed 1. */
+const BY_LEAF = [0.1, 0.1], BY_FROST = [269, 2], BY_WET = [-0.2, 0.15], BY_DRY = [-0.3, 0.2], BY_SLENDER = [4.4, 1], BY_SEED = [0.05, 0.012];
 /** The weights of each form's score (in the order of `Form`): a constant, then thin, tender, wet, dry, slender, seedy. */
 const FORM_SCORES: number[][] = [
   // Round: a broad crown is what a tree grows without a stronger cause.
