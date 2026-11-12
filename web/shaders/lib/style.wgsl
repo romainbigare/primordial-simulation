@@ -35,7 +35,7 @@ const BED_LIGHTEN = 0.55; const BED_TONE = 0.85;
 // shore: as if shallower where it is less than a rim's depth deep (a lake's `LAKE_RIM_M`, a channel's `RIVER_RIM_M`:
 // its banks), the shallower the nearer the shore (its square): a band as wide as the bed's slope makes it, wide where
 // the bed is gentle and no narrower than `LAKE_RIM_PX` pixels where it is steep, so every shore has its light shallows.
-const LAKE_SCALE = 2.5; const LAKE_SHALLOWEST_M = 6.0; const LAKE_DEEPEST_M = 45.0;
+const LAKE_SCALE = 1.5; const LAKE_SHALLOWEST_M = 2.0; const LAKE_DEEPEST_M = 45.0;
 const LAKE_RIM_M = 3.0; const RIVER_RIM_M = 0.1; const LAKE_RIM_PX = 2.5;
 
 // Beach sand (colour.wgsl `beach`), bright and dry; a beach takes this share of its colour from its loose ground's
