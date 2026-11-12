@@ -29,12 +29,16 @@ const STONES_OUT = 2.0;
 // The edge of standing liquid is found from how fast its depth changes across the ground, the ground's slope: no slower
 // than this (rise over run), so on flat ground the edge still lies within a pixel's footprint where the depth crosses.
 const SHORE_RISE_LEAST = 1e-3;
+// The relief moves the ground's height fully on ground drawn this steep (rise over run), less on gentler.
+const RELIEF_EDGE_SLOPE = 0.1;
+// Cells nearly all under snow keep their true colour as it is: the ground under it is not found from so little.
+const SNOW_CELLS_ALL = 0.95;
 
 // What is at a point: the ground without the channel's water (`dry`), the channel's water (`wet`) and the share of the
 // pixel that water covers; the share the bars of its bed cover (`bars`, the dry spot as washed gravel); and the share
 // of the pixel standing liquid covers (`pool`): the pixel's footprint across the line where the depth crosses `FILM_M`,
 // so a shore is a smooth line at any zoom, not the pixels' steps.
-struct Spots { dry: Spot, wet: Spot, share: f32, bars: f32, pool: f32 }
+struct Spots { dry: Spot, wet: Spot, share: f32, bars: f32, pool: f32, snow_cells: f32 }
 
 // What is at `at`, m from the map's north-west corner, seen at `e` m a pixel: its ground and its state (`state_on`), the
 // ground's own colour and the sea blended between the squares' centres, the plants' field (lib/cover_field.wgsl); and
@@ -52,7 +56,9 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let loose = loose_seen(at, e);
   let bare = bed_shows(loose);
   let fine = relief(at, e, length(g.slope), bare, loose);
-  g.h += fine.x;
+  // The relief moves the ground's height as much as the ground drawn is steep (`RELIEF_EDGE_SLOPE`): on a flat shore a
+  // bump of a few decimetres would move the water's edge by tens of metres into a fringe of puddles.
+  g.h += fine.x * ease(0.0, RELIEF_EDGE_SLOPE, length(g.slope));
   g.slope += fine.yz;
   let q = discharge_at(g);
   let bed = bed_at(g, q);
@@ -65,7 +71,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.sea = surface.w;
   p.wet = st.wet;
   p.t = st.t;
-  p.snow = st.snow;
+  // The cells' snow placed where the ground holds it (`snow_at`); on standing liquid, the cells' share.
+  let bares = snow_bares(g.slope, st.rise, fine.x);
+  let snow_w = fwidth(bares);
+  p.snow = select(snow_at(st.snow, bares, snow_w), st.snow, st.depth > 0.0);
   p.ground = surface.xyz;
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
@@ -73,7 +82,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.loose = loose;
   // The height over the nearest water, standing or running: a channel's banks rise from its edge.
   let shore_over = select(p.over, min(p.over, max(g.d - bed.half, 0.0) * max(length(g.slope), bed.mean / max(bed.half, 1e-6))), bed.half > 0.0);
-  let cf = cover_field(at, e, Beneath(soaked(p), shore_over, length(g.slope), loose, fwidth(loose), st.snow, st.snow_m));
+  let cf = cover_field(at, e, Beneath(soaked(p), shore_over, length(g.slope), loose, fwidth(loose), p.snow, st.snow_m));
   p.cover = cf.cover;
   p.canopy = cf.canopy;
   p.rock = bare;
@@ -92,7 +101,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // that is the ponds' weighs it), over the depth's change across a pixel.
   let signed = st.depth - min(st.over, NO_LIQUID_M) * g.water.y - FILM_M;
   let pool = select(0.0, tent(signed / (max(length(g.slope) * g.water.y, SHORE_RISE_LEAST) * e)), g.water.y > 0.0);
-  var out = Spots(p, p, 0.0, 0.0, pool);
+  var out = Spots(p, p, 0.0, 0.0, pool, st.snow);
   if (p.depth > 0.0 || bed.half <= 0.0) { return out; }
   out.dry.over = shore_over;
   let css = e * land.samples.w;
@@ -176,8 +185,15 @@ const LAYER_GROUND = 0; const LAYER_BARS = 1; const LAYER_EDGE = 2; const LAYER_
     if (running) { o = river_on(p, g); } else { o = colour_on(p, g); }
     c = Shaded(mix(c.rgb, o.rgb, share), mix(c.m, o.m, share), select(c.kind, o.kind, k != LAYER_BARS && share > 0.5));
   }
-  // The true colour is the cells', and the bed's where it shows.
-  let truth = mix(blended(TRUTH, cs).xyz, spots.dry.bed, spots.dry.rock);
+  // The true colour is the cells', and the bed's where it shows; their snow placed as the Earth view places it: the
+  // cells' colour is taken as their ground's under their share of snow, and that ground drawn under the point's snow.
+  var truth = blended(TRUTH, cs).xyz;
+  let s = spots.snow_cells;
+  if (s > 0.0 && s < SNOW_CELLS_ALL) {
+    let under = clamp((truth - s * SNOW) / (1.0 - s), vec3f(0.0), vec3f(1.0));
+    truth = mix(under, SNOW, spots.dry.snow);
+  }
+  truth = mix(truth, spots.dry.bed, spots.dry.rock);
   let rgb = in_view_of(c, blended(VIEW, cs).xy, truth);
   return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);
 }
