@@ -544,7 +544,10 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
 `flow::air::cells`, `daily`, `rain`, `exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against
 the air's): wet ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket), over the
 cell's own ground as its reflectance is (the share the standing liquid covers holds what its pores hold and all that
-stands, the rest what its pores hold, each a bucket by its area), taking the heat it held at the node's temperature; a node over a substance's boiling point boils of it what its heat over that
+stands, the rest what its pores hold, each a bucket by its area); and through a second film beside the air's where
+one stands over its land (`World::second_film`: the cover's open pores, 4.5), in series with the air's film, at its
+open rate while the share of the ground's liquid behind it lasts (no wet threshold: its roots reach that liquid),
+from what the first leaves; both inside the surface's balance, taking the heat it held at the node's temperature; a node over a substance's boiling point boils of it what its heat over that
 point pays, cooling to it (`land::boil_off`; gas coming out of the liquid too). **Rain**: what an air node holds of a
 gas over what saturates the air touching each of its cells (colder higher up) rains out in `rain_time`. Each node's air
 lies over the cells that see it (bilinearly), each by its share; the cells' saturation is taken as the step starts, as
@@ -1071,10 +1074,12 @@ seeds fill it:
   liquid's saturation at the leaf (`Chemistry::p_sat` at its ground's temperature), p_v and p_g the partial pressures
   of the vapour and the gas in the air near its ground, as the ground's own evaporation reads them
   (`World::near_ground`, 1.5), D_v / D_g the ratio of their diffusivities, the root of the ratio of their molar
-  masses (Graham's law). Each slot draws the liquid from
+  masses (Graham's law). The cover does not move that vapour itself: it opens its pores as wide as the liquid its roots
+  reach pays for at that rate, and leaves the film they make, D_v / D_g × T / (`drawdown` p_g) per mol a s of gas
+  taken in (`cover::pores`), with the share of the ground's liquid its roots reach (`Cover::film`, `Cover::reach`), for
+  the ground's evaporation to pass the liquid through day by day, inside the surface's energy balance (1.5). Each slot draws the liquid from
   the pores its roots reach (its rooted share of the ground's liquid); where the ground cannot give it the pores close
-  and all slots store less together. The vapour goes to the cell's bodies' node with its heat and latent heat, as a
-  body's sweat does; the cover's heat then comes back to the ground's temperature, so its ground pays the latent heat. All kinds of a cell are cut
+  and all slots store less together. All kinds of a cell are cut
   together to the liquid share of its ground's key liquid and the carbon gas of its share of its air node; its
   burnings and fixing take their gas from what that share still offers, so the cover never takes more of the air's
   gas than its cell's share holds (`grow::Books::room`). A cover that works on drier ground works more slowly: its capacity goes with its

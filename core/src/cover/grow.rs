@@ -22,7 +22,7 @@ pub fn step(w: &World, d: &mut Chunk) {
             cell(w, d, &p, i, dt);
         } else {
             let c = d.cover(i);
-            (c.mark, c.keep) = (w.light[i], 0.0);
+            (c.mark, c.keep, c.film, c.reach) = (w.light[i], 0.0, 0.0, 0.0);
         }
     }
 }
@@ -45,14 +45,12 @@ pub(super) struct Slot {
 
 /// What a cell's cover changes outside itself in a month: per substance the mol it takes in (+) or gives out (-), the
 /// heat its reactions release, J, and per substance its remains, mol; and per gas what the cell's share of its air node
-/// offers, mol (infinite for what is not a gas: the ground's inputs are limited where they are read); and the key liquid
-/// its leaves lost as vapour, mol (taken from its ground with the rest of `ext`, given to the air).
+/// offers, mol (infinite for what is not a gas: the ground's inputs are limited where they are read).
 pub struct Books {
     pub ext: [f64; MAX_SUBSTANCES],
     pub heat: f64,
     pub dead: [f64; MAX_SUBSTANCES],
     air: [f64; MAX_SUBSTANCES],
-    pub vapour: f64,
 }
 
 impl Books {
@@ -124,8 +122,8 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     crate::math::shade(&mut layers, |q, f, bottom| (s[q].shade, s[q].bottom) = (f, bottom));
     let (a_abs, lit): (f64, f64) = (s.iter().map(|x| x.abs).sum(), s.iter().map(|x| x.abs * x.shade).sum());
     let caught = dl * a_abs;
-    let mut b = Books { ext: [0.0; MAX_SUBSTANCES], heat: 0.0, dead: [0.0; MAX_SUBSTANCES], air: a.air, vapour: 0.0 };
-    let stored = light(chem, ph, c, p, &mut s, (caught * a.reach / lit.max(1e-300), caught * a.reach, a, dt), &mut b);
+    let mut b = Books { ext: [0.0; MAX_SUBSTANCES], heat: 0.0, dead: [0.0; MAX_SUBSTANCES], air: a.air };
+    let stored = light(chem, ph, c, p, &mut s, (caught * a.reach / lit.max(1e-300), area, a, dt), &mut b);
     let all: f64 = stored.iter().sum();
     c.keep = if caught > 0.0 { (all / caught) as f32 } else { 0.0 };
     let year = w.cfg.months_per_year as f32;
@@ -174,7 +172,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
 /// share of its air node holds.
 /// Each slot's `Slot::gain` is set: what one more kg would store, its light that of the bottom of its layer. Returns the
 /// energy each slot stored, J.
-fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mut [Slot; SLOTS], (per, caught, a, dt): (f64, f64, &Around, f64), b: &mut Books) -> [f64; SLOTS] {
+fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mut [Slot; SLOTS], (per, area, a, dt): (f64, f64, &Around, f64), b: &mut Books) -> [f64; SLOTS] {
     let (t, liquid, gas) = (a.t, a.liquid, a.gas);
     let rx = &chem.reactions[p.light];
     let (dh, pace) = (chem.dh(p.light), rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat));
@@ -186,8 +184,8 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
         x[q] = lit(s[q].shade).min(cap * s[q].living).max(0.0) * gas;
         s[q].gain = if s[q].built > 0.0 { (lit(s[q].bottom).min(cap * s[q].living) / s[q].built).max(0.0) * gas * dh } else { 0.0 };
     }
-    // Per unit of the reaction its leaves lose the key liquid as vapour, `thirst` per mol of gas taken in; each slot
-    // draws it from the pores its roots reach (`Cover::rooted`).
+    // Per unit of the reaction its leaves would lose the key liquid as vapour, `thirst` per mol of gas taken in; each
+    // slot draws it from the pores its roots reach (`Cover::rooted`), and opens its pores no wider than that pays for.
     let gas_in: f64 = rx.inputs.iter().filter(|q| chem.phase(q.0 as usize, t) == Phase::Gas).map(|q| q.1 as f64).sum();
     let lost = a.thirst * gas_in;
     let drink = per_input(rx, p.liquid).unwrap_or(0.0) + lost;
@@ -195,26 +193,29 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
         *xq = xq.min(liquid * c.rooted[q] as f64 / drink.max(1e-300));
     }
     let all: f64 = x.iter().sum();
+    (c.film, c.reach) = (0.0, 0.0);
     if all <= 0.0 {
         return [0.0; SLOTS];
     }
     // What the cell offers of each input that is not a part: the gas of its share of its air node, the rest from its
-    // ground (of the key liquid, what is liquid, of which its leaves also lose `lost` a unit as vapour: where the
-    // ground cannot give that, or the light its leaves absorbed cannot raise it, `caught` J, the pores close and all
-    // slots store less together: a canopy evaporates no more than the radiation it takes in).
+    // ground (of the key liquid, what is liquid, of which its leaves would also lose `lost` a unit as vapour: where the
+    // ground cannot give that, the pores close and all slots store less together).
     let offer = |kk: usize| match kk {
         _ if chem.phase(kk, t) == Phase::Gas => b.air[kk],
         _ if kk == p.liquid => liquid,
         _ => a.ground[kk],
     };
     let take = |kk: usize, n: f64| n + if kk == p.liquid { lost } else { 0.0 };
-    let raise = lost * chem.subs[p.liquid].lv;
-    let f = rx.inputs.iter().filter(|q| !p.sub.contains(&(q.0 as usize))).map(|&(kk, n)| offer(kk as usize) / (take(kk as usize, n as f64) * all)).fold(caught / (raise * all).max(1e-300), f64::min).min(1.0);
+    let f = rx.inputs.iter().filter(|q| !p.sub.contains(&(q.0 as usize))).map(|&(kk, n)| offer(kk as usize) / (take(kk as usize, n as f64) * all)).fold(1.0, f64::min);
     for (m, xq) in c.mol.iter_mut().zip(x) {
         b.run(chem, p, m, rx, xq * f);
     }
-    b.vapour += all * f * lost;
-    b.ext[p.liquid] += all * f * lost;
+    // Its pores as open as that leaves them: the film the key liquid's vapour leaves its leaves through over the month,
+    // per m² of the cell, which the ground's evaporation passes it through day by day (`World::second_film`), from the
+    // share of the ground's liquid its roots reach, by each slot's gas taken in.
+    let taken = all * f * gas_in / dt;
+    c.film = (a.pores * taken / area) as f32;
+    c.reach = (x.iter().zip(&c.rooted).map(|(xq, &r)| xq * r as f64).sum::<f64>() / all) as f32;
     x.map(|xq| xq * f * dh)
 }
 
@@ -296,16 +297,6 @@ fn book(w: &World, moves: &mut Moves, c: &mut Cover, p: &Parts, (i, j, t): (usiz
             moves.give(w, ground, kk, -m, held(kk, -m));
             e -= held(kk, -m);
         }
-    }
-    // The vapour its leaves lost goes to its bodies' node with its heat and latent heat, as a body's sweat does
-    // (`Moves::gas`); the liquid it came from was taken from its ground above, and its ground pays the heat that
-    // raises it.
-    if b.vapour > 0.0 {
-        let s = &chem.subs[p.liquid];
-        e += moves.take_from_ground(w, i, (0, 0.0, 0.0), b.vapour * s.lv, cap).1;
-        moves.gas(w, p.liquid, b.vapour, lift);
-        moves.give(w, Node::bodies(i), 0, 0.0, b.vapour * s.cp * t);
-        e -= b.vapour * (s.cp * t + s.latent_gas());
     }
     let target = c.cap(chem, p) * t;
     if target > e {

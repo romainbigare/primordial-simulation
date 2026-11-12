@@ -12,7 +12,7 @@ mod grow;
 mod seed;
 mod stand;
 
-pub use around::{thirst, Around};
+pub use around::{pores, thirst, Around};
 pub use grow::{live, step, Books};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
 pub use stand::{height, loose_bins, stem, BINS};
@@ -111,6 +111,10 @@ pub struct Cover {
     /// its roots needed when that was found, m (`stand::need`; 0: not found yet)
     pub rooted: [f32; SLOTS],
     pub need: [f32; SLOTS],
+    /// The film its leaves' pores were open to the key liquid's vapour over its last month, mol K/(Pa s) per m² of the
+    /// cell (`around::pores`), and the share of its ground's liquid their roots reach
+    pub film: f32,
+    pub reach: f32,
     /// The heat of its cover, J; the cell's light (`World::light`) at its last step, J/m²; the share of the light its
     /// cover absorbs that its bodies' node sets aside for its light reaction
     pub e: f64,
@@ -124,7 +128,7 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [0.0; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], e: 0.0, mark: 0.0, keep: 0.0, seeds: Vec::new() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [0.0; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], film: 0.0, reach: 0.0, e: 0.0, mark: 0.0, keep: 0.0, seeds: Vec::new() }
     }
 }
 
@@ -349,6 +353,16 @@ pub fn activity(ph: &crate::Physics, genes: &[f32; NG], wet: f64) -> f64 {
 pub fn frozen(ph: &crate::Physics, melt: f64, frost: f64, (t, act): (f64, f64)) -> f64 {
     let grown = frost.max(melt);
     ph.frozen((grown, grown - frost), t, act)
+}
+
+impl crate::World {
+    /// The second film over ground cell `i` beside the air's, through which its ground's liquid `k` evaporates by the
+    /// ground's own law (1.5): its cover's pores (`Cover::film`, mol K/(Pa s) per m²) and the share of the ground's
+    /// liquid behind them (`Cover::reach`). None where nothing stands open.
+    pub fn second_film(&self, i: usize) -> Option<(usize, f64, f64)> {
+        let c = self.life.cover(i);
+        (c.film > 0.0).then(|| Parts::of(&self.chem).map(|p| (p.liquid, c.film as f64, c.reach as f64))).flatten()
+    }
 }
 
 /// 10 to the power of a gene.
