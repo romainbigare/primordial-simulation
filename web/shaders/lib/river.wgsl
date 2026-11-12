@@ -81,7 +81,11 @@ fn reach_at(at: vec2f, e: f32, g: Tiled, bed: Bed, q: f32, line: f32, open: f32,
     water = max(water, second);
   }
   let reach = max(banks, line);
-  let in_bed = tent((reach - g.d) / e) - tent((-reach - g.d) / e);
+  // Past a line's end its texels' signed distances change sign across its extension and blend to a false 0 there: the
+  // nearest texel lies far from the line itself (`Tiled.ends`), and nothing is drawn (it drew small square brackets).
+  let real = 1.0 - ease(reach + e, reach + 2.0 * e, g.ends.x);
+  let in_bed = (tent((reach - g.d) / e) - tent((-reach - g.d) / e)) * real;
+  water *= real;
   r.share = mix(in_bed, water, open);
   r.bars = max(in_bed - r.share, 0.0);
   return r;
