@@ -98,11 +98,13 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // The bed (`FLOOD`) and the thread of this month's water in it, `off` m from the line.
   let banks = banks_of(q);
   let free = max(banks - bed.half, 0.0);
-  let off = free * ease(-0.1, 0.5, noise_turned(at / (2.0 * WANDER * banks), 63));
+  let open = ease(BED_PX * e, 2.0 * BED_PX * e, banks) * (1.0 - ease(banks, 2.0 * banks, line));
+  // Where the bed is drawn as all water (from afar), the thread's wander is not read.
+  var off = 0.0;
+  if (open > 0.0) { off = free * ease(-0.1, 0.5, noise_turned(at / (2.0 * WANDER * banks), 63)); }
   let thread = abs(g.d - off);
   let in_bed = tent((max(banks, line) - g.d) / e) - tent((-max(banks, line) - g.d) / e);
   let water = tent((bed.half - thread) / e) - tent((-bed.half - thread) / e);
-  let open = ease(BED_PX * e, 2.0 * BED_PX * e, banks) * (1.0 - ease(banks, 2.0 * banks, line));
   out.share = mix(in_bed, water, open);
   out.bars = max(in_bed - out.share, 0.0);
   let resolved = ease(e, 2.0 * e, bed.half);
