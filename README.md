@@ -74,7 +74,10 @@ its cell's less the air's fall with height times the pixel's height over the cel
 ground as its mean depth does (tanh of the depth over 8 mm of ice, about 3 cm of snow, Yang and others 1997), less
 where the pixel is warmer than its melting point, and that share of its cells' ground is placed where the ground holds
 snow longest (high ground, slopes turned from the sun, hollows: `snow_bares`, `snow_at` in `web/shaders/lib/land.wgsl`),
-so a snow line is a sharp line of the ground, not a blur between the cells; liquid stands at the level of the ponds of the texels about the pixel where the ground drawn lies under it, the ground drawn near a shore leaning to a smooth line through the samples (a contour of their blurred heights, `tape/src/ground/shore.rs`), so a coast has no scallops a sample wide and its shallows are one band, and the water's edge covers its share of the pixel's footprint, so a shore is a smooth line at any zoom; the soil's liquid departs from its cell's by `soil_m` per unit of the wetness index over
+so a snow line is a sharp line of the ground, not a blur between the cells; ice on standing liquid lies first over
+shallow liquid, its edge broken at every scale and its margin a field of floes with dark leads (`ice_cover`, `ice_on`
+in `web/shaders/lib/water.wgsl`), the open sea's ice and temperature blurred over its 8 km cells first, so no edge
+follows a cell's border; liquid stands at the level of the ponds of the texels about the pixel where the ground drawn lies under it, the ground drawn near a shore leaning to a smooth line through the samples (a contour of their blurred heights, `tape/src/ground/shore.rs`), so a coast has no scallops a sample wide and its shallows are one band, and the water's edge covers its share of the pixel's footprint, so a shore is a smooth line at any zoom; the soil's liquid departs from its cell's by `soil_m` per unit of the wetness index over
 the cell's level, within none and the pores full, as the core shares it; a channel shows where the pixel lies nearer
 its line than half the width the channel law gives the discharge of its own sample (the core's `World::discharge`,
 which comes with a frame when it has changed enough to show), its share of the pixel what the pixel's footprint

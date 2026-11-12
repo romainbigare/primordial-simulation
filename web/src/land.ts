@@ -32,6 +32,12 @@ const NO_POND_M = 1000;
 const NO_ROCK_YET_M = 1;
 /** Of the uniforms of land.wgsl (`Land`), four-wide members. */
 const LAND_VEC4S = 6;
+/** The open low ground freezes cell by cell, and its cells are blocks of squares (8 km: the core's coarse low ground), so
+ * an open sea square's ice and temperature are drawn blurred over the open sea squares about it, by a Gaussian of
+ * `SEA_BLUR` squares out to `SEA_REACH`: the ice's edge follows a smooth field through the blocks' values, and the same
+ * ice is drawn on the mean. A square is open sea where it is the sea's and its ground lies `OPEN_SEA_M` under its
+ * surface on the mean: a coast's squares hold land, whose ice is its snow. */
+const SEA_BLUR = 1.5, SEA_REACH = 4, OPEN_SEA_M = 20;
 
 export class Land {
   private data: Float32Array | null = null;
@@ -82,6 +88,7 @@ export class Land {
       put(4, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, 0]);
       put(5, i, [shown ? shown[i] / 255 : 0, worn ? worn[i] / 255 : 0, 0, 0]);
     }
+    blurSea(data, Array.from(sea, (s, i) => (s > 0 && data[4 * i] < this.sea - OPEN_SEA_M ? 1 : 0)), W, H);
     this.data = data;
     this.due = true;
   }
@@ -122,5 +129,25 @@ export class Land {
   stop(gpu: Gpu | null): void {
     this.tiles.stop(gpu);
     if (gpu) for (const t of [this.tex, this.flows, this.rock]) if (t) gpu.drop(t);
+  }
+}
+
+/** The open sea squares' ground temperature and ice (the first plane's second and fourth numbers) of the table `data`, `w`
+ * x `h` squares, `open` 1 where open sea, blurred over the open sea squares about each (`SEA_BLUR`). */
+function blurSea(data: Float32Array, open: ArrayLike<number>, w: number, h: number): void {
+  const k = Array.from({ length: 2 * SEA_REACH + 1 }, (_, d) => Math.exp(-0.5 * ((d - SEA_REACH) / SEA_BLUR) ** 2));
+  const was = data.slice(0, 4 * w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    if (open[i] <= 0) continue;
+    let t = 0, ice = 0, sum = 0;
+    for (let dy = -SEA_REACH; dy <= SEA_REACH; dy++) for (let dx = -SEA_REACH; dx <= SEA_REACH; dx++) {
+      const yy = y + dy, xx = x + dx;
+      if (yy < 0 || yy >= h || xx < 0 || xx >= w) continue;
+      const j = yy * w + xx, wt = k[dx + SEA_REACH] * k[dy + SEA_REACH] * open[j];
+      if (wt <= 0) continue;
+      t += wt * was[4 * j + 1]; ice += wt * was[4 * j + 3]; sum += wt;
+    }
+    data[4 * i + 1] = t / sum; data[4 * i + 3] = ice / sum;
   }
 }
