@@ -124,13 +124,17 @@ height, K/m (`World::air_drop`); its ice, m; the level its standing liquid reach
 the level of the wetness index its soil's liquid departs about (`inside::soil_level` over the samples inside the cell;
 0 where the pores are dry or full). Before Flow built its state the level and
 lowest ground are its solid surface and the depth that stands is its liquid's. Then for each square row by row its
-cell's kinds of cover (`tape/src/stands.rs`), `KINDS` (4) of `KIND_ROW` (17) f32 each, the heaviest first: the slots of
-one starting kind joined, their genes the mean by built cover; of each its starting kind (-1: none); its built cover,
-kg/m²; its plants (`stands::plants`): the stem's width, m, plants a m² (the slots' counts, `Cover::plants`), height and crown's width, m, the share of the
+cell's kinds of cover (`tape/src/stands.rs`), `KINDS` (4) of `KIND_ROW` (19) f32 each, the heaviest first: the slots of
+its cover, each as the law holds it; of each its starting kind (-1: none); its built cover,
+kg/m²; its plants (`stands::plants`): the stem's width, m, plants a m² (the slot's count, `Cover::plants`), height and crown's width, m, the share of the
 ground their crowns cover and how closed a crown is (1 - e^-its leaf area); its walls' share of its built cover; its
 capture area per kg of living cover, log10 m²/kg (`LEAF`); its light capacity per m² of capture area, log10 mol/m²/s;
 its moisture gene and frost gene, K; its fuel over its reserve; its activity on its cell's ground (`cover::activity`);
-the share of it frozen this month (`Physics::frozen`); and the share of what it builds that goes to seeds (`SEED`). Its crowns cover the
+the share of it frozen this month (`cover::frozen`); the share of what it builds that goes to seeds (`SEED`); and the
+share of the cell whose loose ground holds its plants (`Cover::rooted`) with the loose ground their roots need, m
+(`Cover::need`; all of the cell and 0 while the need of a slot of newly landed seeds is not found). The page thins a
+kind at each point by the cover's own rule (`cover::stand::rooted`) with these and `rooted_from`, which the live
+world's header gives with the laws' numbers (wasm `meta`). Its crowns cover the
 share 1 - e^(-leaf area / `CLOSE_LAI`) of the ground, in patches where they close, each crown the ground it holds
 there; a plant's stem and height are the cover's own (`cover::stem`, `cover::height`, laws.md 4.5). Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it, or where its body holds
 less than `DRY_M` (0.1 m) of liquid on its mean over its surface: a basin soaked, drawn as ground), at which the page draws the pond's liquid flat over the ground that lies under it, the pond each texel names. **The samples' rock** (`Ground::rock`,

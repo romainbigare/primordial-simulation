@@ -11,7 +11,7 @@ import { half } from './canopy';
 
 /** The numbers of the laws inside a cell as the core sends them (wasm/src/lib.rs `meta`, `Physics`), and the discharge
  * per metre a css pixel takes past which a channel shows as a line, m³/s per m. */
-export interface Laws { soil_m: number; wet_depth: number; dormancy: number; channel_width: number; channel_width_exp: number; channel_depth: number; channel_depth_exp: number; line: number }
+export interface Laws { soil_m: number; wet_depth: number; dormancy: number; rooted_from: number; channel_width: number; channel_width_exp: number; channel_depth: number; channel_depth_exp: number; line: number }
 /** The terrain's samples: across, down, and their depth. */
 export interface SamplesOf { across: number; down: number; depth: number }
 
@@ -59,7 +59,7 @@ export class Land {
   private rock: Texture | null = null;
   private rockSent = false;
 
-  constructor(readonly tiles: GroundTiles, private laws: Laws, readonly samples: SamplesOf) {
+  constructor(readonly tiles: GroundTiles, private laws: Laws, private samples: SamplesOf) {
     this.discharge = new Uint16Array(samples.across * samples.down);
   }
 
@@ -127,7 +127,7 @@ export class Land {
     }
     const t = this.tiles.textures(gpu), l = this.laws, tm = this.tiles.meta;
     const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(tm.size, tm.gutter, this.tiles.depth, tm.step_most)
-      .vec4(t.now, TILE_FADE_MS, this.melt, l.line).vec4(l.soil_m, l.wet_depth, l.dormancy).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp)
+      .vec4(t.now, TILE_FADE_MS, this.melt, l.line).vec4(l.soil_m, l.wet_depth, l.dormancy, l.rooted_from).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp)
       .vec4(s.across, s.down, s.depth, devicePixelRatio);
     return { 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex, 13: t.areas, 17: this.flows, 18: this.rock, 19: 'smooth' };
   }

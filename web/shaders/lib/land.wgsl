@@ -15,7 +15,8 @@ struct Land {
   // cover, K (0: none), and the discharge per metre a css pixel takes past which a channel shows as a line, m³/s per m.
   time: vec4f,
   // The soil's liquid departs by this per unit of the wetness index, m; ground with this depth of liquid is half wet, m;
-  // a living thing that holds the share x of the liquid it needs is x to this power active.
+  // a living thing that holds the share x of the liquid it needs is x to this power active; a point whose loose ground
+  // is under this share of the depth a kind's roots need holds none of it (`Physics::rooted_from`).
   soil: vec4f,
   // A channel's width and depth: each a factor, m, times its discharge in m³/s to a power.
   channel: vec4f,
@@ -239,15 +240,16 @@ fn activity(wet: f32, need: f32) -> f32 {
   return select(pow(max(x, 0.0), land.soil.z), 1.0, x >= 1.0);
 }
 
-// The share of a kind whose roots need `need` m of loose ground that holds where `loose` m lies (roots.ts `rooted`, the
-// same rule): none from `ROOTED_FROM` of its need down, all from its need up. Bare bed holds no liquid in pores and
-// nothing to anchor a tall plant; a kind roots about `ROOT_PER_HEIGHT` of its height deep (roots.ts). Where the loose
-// depth changes by `spread` m across a pixel and that is more than the rule's own span, the edge is spread over it, as
-// the share of water at a shore is (no speckle where the loose ground has fine patches).
-const ROOTED_FROM = 0.25;
+// The share of a kind whose roots need `need` m of loose ground that holds where `loose` m lies (the cover's own rule,
+// `cover::stand::rooted`, with its number `land.soil.w`): none from that share of its need down, all from its need up.
+// Bare bed holds no liquid in pores and nothing to anchor a tall plant; the need of each kind is its slot's
+// (`Cover::need`, tape/src/stands.rs). Where the loose depth changes by `spread` m across a pixel and that is more than
+// the rule's own span, the edge is spread over it, as the share of water at a shore is (no speckle where the loose
+// ground has fine patches).
 fn rooted(loose: f32, need: f32, spread: f32) -> f32 {
-  let middle = 0.5 * (1.0 + ROOTED_FROM) * need;
-  let half = 0.5 * max((1.0 - ROOTED_FROM) * need, spread);
+  let none = land.soil.w;
+  let middle = 0.5 * (1.0 + none) * need;
+  let half = 0.5 * max((1.0 - none) * need, spread);
   return ease(middle - half, middle + half, loose);
 }
 

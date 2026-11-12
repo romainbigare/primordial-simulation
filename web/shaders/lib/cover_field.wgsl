@@ -8,8 +8,7 @@ struct CoverLook {
   // Of each lattice: its cell's side, m (0: no square holds it), and how strongly its marks show (the rest is the field);
   // and how much more than its share the sward is seen to cover (`sides.w`, canopy.ts `SWARD_SEEN`).
   sides: vec4f, shown: vec4f,
-  // 1 where the cover is drawn (0: none); how strongly its marks cover the map; the loose ground a kind's roots need per
-  // m of its height, and the least any kind needs, m (roots.ts).
+  // 1 where the cover is drawn (0: none); how strongly its marks cover the map.
   look: vec4f,
 }
 @group(0) @binding(14) var<uniform> cover_look: CoverLook;
@@ -20,12 +19,13 @@ const COVER_LATTICES = 3;
 // The layers of the field after the lattices' (canopy.ts `FIELD`): the herbs' sward and their flowers, and the part of
 // the sward and of the lattice of stands (`STANDS`, the trees') that is its first kind.
 const SWARD_LAYER = 3; const FLOWER_LAYER = 4; const SWARD_FIRST = 5; const STANDS_FIRST = 6;
-// Of each lattice and the sward (red, green, blue, alpha): its plants' mean height, m, and mean rooted share in the square.
-const TALL_LAYER = 7; const ROOTED_LAYER = 8;
+// Of each lattice and the sward (red, green, blue, alpha): its plants' mean height, m, the mean share of the square that
+// holds them and the mean depth of loose ground their roots need, m (the core's: `Cover::rooted`, `Cover::need`).
+const TALL_LAYER = 7; const ROOTED_LAYER = 8; const NEED_LAYER = 9;
 // The sward and the low lattices as one layer (canopy.ts `lowOf`), drawn in their place where a pixel takes
 // `LOW_FAR_E` m and more (where their detail no longer shows: no swathes, blades, tufts or flowers past a metre a
 // pixel), fully from `LOW_FAR_FULL_E`; thicker and thinner over the patches as they are.
-const LOW_LAYER = 9; const LOW_FAR_E = 0.75; const LOW_FAR_FULL_E = 1.0;
+const LOW_LAYER = 10; const LOW_FAR_E = 0.75; const LOW_FAR_FULL_E = 1.0;
 const STANDS = 2;
 // A grain of the field (`grain`) where its cell takes more than a pixel: present in a cell as often as covers at most
 // `GRAIN_FILL` of it, as wide as keeps the mean (at most half a cell), anywhere in its cell, so no grains stand in rows
@@ -72,18 +72,20 @@ struct CoverAt { cover: vec4f, canopy: f32 }
 const ROOTED_ALL = 0.999;
 
 // Of each lattice and the sward (red, green, blue, alpha), the share of its plants that stand at a point over `b`:
-// where their roots hold (land.wgsl `rooted`, over their square's mean, so the square keeps its cover) and out of the
-// snow (draw.wgsl `above_snow`). Each layer is read only where it may limit them.
+// where their roots hold (land.wgsl `rooted`, over the share of their square that holds them, so the square keeps its
+// cover) and out of the snow (draw.wgsl `above_snow`). Each layer is read only where it may limit them.
 fn held_at(at: vec2f, b: Beneath) -> vec4f {
   let mean = field_at(at, ROOTED_LAYER, 0.0);
   let roots = any(mean < vec4f(ROOTED_ALL));
   if (!roots && b.snow_m <= 0.0) { return vec4f(1.0); }
-  let tall = field_at(at, TALL_LAYER, 0.0);
-  let need = max(tall * cover_look.look.z, vec4f(cover_look.look.w));
   var out = vec4f(1.0);
-  for (var c = 0; c < 4; c++) {
-    if (roots) { out[c] = rooted(b.loose, need[c], b.loose_px) / max(mean[c], 1e-3); }
-    out[c] *= above_snow(b.snow_m, tall[c]);
+  if (roots) {
+    let need = field_at(at, NEED_LAYER, 0.0);
+    for (var c = 0; c < 4; c++) { out[c] = rooted(b.loose, need[c], b.loose_px) / max(mean[c], 1e-3); }
+  }
+  if (b.snow_m > 0.0) {
+    let tall = field_at(at, TALL_LAYER, 0.0);
+    for (var c = 0; c < 4; c++) { out[c] *= above_snow(b.snow_m, tall[c]); }
   }
   return out;
 }

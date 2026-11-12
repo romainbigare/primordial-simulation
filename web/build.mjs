@@ -2,7 +2,7 @@
 // style.css into one self-contained dist/index.html.
 import { readFileSync, writeFileSync, rmSync } from 'node:fs';
 
-const order = ['data', 'fields', 'earth', 'style', 'form', 'roots', 'canopy', 'gpu', 'gpu-webgpu', 'gpu-webgl2', 'field-window', 'ground', 'land', 'map', 'charts', 'live', 'sprites', 'blob', 'textures', 'vegetation', 'avatars', 'main'];
+const order = ['data', 'fields', 'earth', 'style', 'form', 'canopy', 'gpu', 'gpu-webgpu', 'gpu-webgl2', 'field-window', 'ground', 'land', 'map', 'charts', 'live', 'sprites', 'blob', 'textures', 'vegetation', 'avatars', 'main'];
 // A module as plain script: its imports and exports taken out (the modules share one scope).
 const plain = n => readFileSync(`dist/.js/${n}.js`, 'utf8').replace(/^import .*$/gm, '').replace(/^export \{\};$/gm, '').replace(/^export /gm, '');
 // The live world's two workers (the world's and the ground's tiles') run on their own: the page holds their scripts as
