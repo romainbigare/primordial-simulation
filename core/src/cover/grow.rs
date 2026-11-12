@@ -150,7 +150,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let (a_abs, lit): (f64, f64) = (s.iter().map(|x| x.abs).sum(), s.iter().map(|x| x.abs * x.shade).sum());
     let caught = dl * a_abs;
     let mut b = Books { ext: [0.0; MAX_SUBSTANCES], heat: 0.0, dead: [0.0; MAX_SUBSTANCES], air: a.air };
-    let stored = light(chem, ph, c, p, &mut s, caught * a.reach / lit.max(1e-300), (a, dt), &mut b);
+    let stored = light((chem, ph), c, p, &mut s, caught * a.reach / lit.max(1e-300), (a, dt), &mut b);
     c.keep = if caught > 0.0 { (stored / caught) as f32 } else { 0.0 };
     // Its minerals in the ground, shared out slot by slot (the tallest first) as each builds.
     let mut ground = a.ground;
@@ -190,7 +190,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
 /// share of its air node holds.
 /// Each slot's `Slot::gain` is set: what one more kg would store, its light that of the bottom of its layer. Returns the
 /// energy stored, J.
-fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mut [Slot; SLOTS], per: f64, (a, dt): (&Around, f64), b: &mut Books) -> f64 {
+fn light((chem, ph): (&Chemistry, &crate::Physics), c: &mut Cover, p: &Parts, s: &mut [Slot; SLOTS], per: f64, (a, dt): (&Around, f64), b: &mut Books) -> f64 {
     let (t, liquid, gas) = (a.t, a.liquid, a.gas);
     let rx = &chem.reactions[p.light];
     let (dh, pace) = (chem.dh(p.light), rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat));
