@@ -81,12 +81,13 @@ fn lake_seen(depth: f32, slope: f32, e: f32, rim_m: f32) -> f32 {
 
 // A channel is a thin line of water decimetres deep: coloured by that depth it shows its bed and reads as a grey line
 // of gravel from afar. A map draws a river as water, so it is coloured as a lake of its depth and `RIVER_DEEPER_M` more,
-// lighter over its banks (`RIVER_RIM_M`).
-const RIVER_DEEPER_M = 5.0;
+// lighter over its banks (`RIVER_RIM_M`). Close, where a pixel takes under `RIVER_TRUE_E` m (the stones of its bed show),
+// it is coloured by its own depth, so its bed shows through its shallows and its deep thread is darker.
+const RIVER_DEEPER_M = 5.0; const RIVER_TRUE_E = vec2f(0.05, 0.4);
 // The depth a channel's water `depth` m deep is coloured as, seen at `e` m a pixel.
 fn river_seen(depth: f32, e: f32) -> f32 {
   let rim = ease(0.0, RIVER_RIM_M, depth);
-  return lake_seen(depth, 0.0, e, RIVER_RIM_M) + RIVER_DEEPER_M * rim * rim;
+  return lake_seen(depth, 0.0, e, RIVER_RIM_M) + RIVER_DEEPER_M * rim * rim * ease(RIVER_TRUE_E.x, RIVER_TRUE_E.y, e);
 }
 
 // Bed `bed` (linear, lit) seen through `depth` m of water in the style, whose surface has slope g: through the clear

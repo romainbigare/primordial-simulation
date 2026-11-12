@@ -167,7 +167,7 @@ pub(super) struct Channels<'a> {
     s: &'a Samples,
     at: &'a [[f64; 2]],
     law: Law,
-    phase: &'a [f32],
+    phase: &'a [f64],
     metres: f64,
     cap: f64,
     most: f64,
@@ -202,7 +202,7 @@ fn to_segment(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> (f64, f64) {
 
 impl<'a> Channels<'a> {
     /// The channels of `s` on `map`, sized by `law`, through the points `at` with the phase of their bends `phase`.
-    pub(super) fn new(map: &Square, s: &'a Samples, law: Law, (at, phase): (&'a [[f64; 2]], &'a [f32])) -> Channels<'a> {
+    pub(super) fn new(map: &Square, s: &'a Samples, law: Law, (at, phase): (&'a [[f64; 2]], &'a [f64])) -> Channels<'a> {
         let most = s.up.iter().fold(0.0f64, |m, &a| m.max(a));
         Channels { s, at, law, phase, metres: map.length(SAMPLE_DEPTH), cap: law.width * MOST_RUNOFF.powf(law.width_exp) / 2.0, most }
     }
@@ -228,7 +228,7 @@ impl<'a> Channels<'a> {
             if drawn == 0.0 { 0.0 } else { own.min(amp(j as usize)) * drawn }
         };
         let ends = [joint(main), joint(to)];
-        Some(Piece { base: b, amp: ends, phase: self.phase[k] as f64, cycles: length(b) * self.metres / wave })
+        Some(Piece { base: b, amp: ends, phase: self.phase[k], cycles: length(b) * self.metres / wave })
     }
 
     /// The points of the line of sample `k` whose piece is `p`, on texels of `texel` m: the piece in straight pieces

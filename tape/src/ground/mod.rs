@@ -59,7 +59,7 @@ pub struct Ground {
     twi: Vec<f64>,
     law: Law,
     at: Vec<[f64; 2]>,
-    phase: Vec<f32>,
+    phase: Vec<f64>,
     shore: shore::Shore,
 }
 

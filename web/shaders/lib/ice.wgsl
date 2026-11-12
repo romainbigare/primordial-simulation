@@ -23,13 +23,23 @@ const FLOE_PX = vec2f(4.0, 10.0);
 const LEAD_REFROZEN = vec2f(0.6, 0.95);
 // From this cover of ice to that one the floes' outlines fade into the closed pack.
 const PACK_WHOLE = vec2f(0.9, 0.99);
-// The pack from above: refrozen leads, long cracks `PACK_CRACK_M` apart, `PACK_CRACK_W` of that wide, greyer; pressure
-// ridges `PACK_RIDGE_M` apart as fine light lines; and the snow's drift over `PACK_DRIFT_M`, `PACK_DRIFT` of its tone.
-const PACK_CRACK_M = 900.0; const PACK_CRACK_W = 0.04; const PACK_RIDGE_M = 260.0; const PACK_RIDGE_W = 0.03;
-const PACK_DRIFT_M = 180.0; const PACK_DRIFT = 0.05;
-// The drift's tone is read from `PACK_PX` pixels a patch, a crack or a ridge from `LINE_PX_LEAST` pixels of its width:
-// finer, they change the pack's tone by less than a step of the screen's.
-const PACK_PX = 8.0; const LINE_PX_LEAST = 1.5;
+// The pack from above (Weeks 2010, from memory): pressure ridges, short straight lines where floes were pressed
+// together, one in `RIDGE_OF` of the cells `PACK_RIDGE_M` across, each up to `RIDGE_LONG` of a cell long and
+// `RIDGE_W_M` wide, its face toward the sun lit (`ICE_RIDGE`) and the other shaded (`RIDGE_SHADE` of the ice);
+// refrozen leads, dark cracks that end, one in `CRACK_OF` of the cells `PACK_CRACK_M` across, up to `CRACK_LONG` of a
+// cell long and `CRACK_W_M` wide, tapering to nothing at their ends; and the snow's drift over `PACK_DRIFT_M`,
+// `PACK_DRIFT` of its tone. Ridges and cracks lie in fields `LINE_FIELD_M` across where they run one way (the floes
+// were pressed or pulled apart one way there), each turned from it by up to `LINE_TURN` radians either way, and come
+// in bands as dense as a noise over that field. Each is fixed in the world.
+const PACK_RIDGE_M = 140.0; const RIDGE_OF = 0.7; const RIDGE_LONG = 0.9; const RIDGE_W_M = 11.0; const RIDGE_SHADE = 0.68;
+const PACK_CRACK_M = 700.0; const CRACK_OF = 0.7; const CRACK_LONG = 1.3; const CRACK_W_M = 9.0;
+const PACK_DRIFT_M = 180.0; const PACK_DRIFT = 0.05; const LINE_FIELD_M = 2500.0; const LINE_TURN = 0.45;
+// Close, a line's width varies by up to `LINE_JAG` of itself over pieces `LINE_PIECE` of its widths long, and it breaks
+// where a noise four times slower along it is under `LINE_BREAKS`.
+const LINE_JAG = 0.6; const LINE_PIECE = 1.5; const LINE_BREAKS = -0.45;
+// The drift's tone is read from `PACK_PX` pixels a patch: finer, it changes the pack's tone by less than a step of the
+// screen's. A crack or a ridge fades in as its width grows from the first of `PACK_LINE_PX` pixels to the second.
+const PACK_PX = 8.0; const PACK_LINE_PX = vec2f(1.5, 3.0);
 // Sea ice's colours (reflectances): old ice under snow, cooler and greyer than the land's snow and lit flat (it lies
 // level); grey new ice; refrozen leads; a ridge's lit face. Along the shore a tide crack: ice over liquid shallower than
 // `ICE_TIDE_M` is dark new ice, so a coast stays readable under the ice.
@@ -98,11 +108,62 @@ fn pack(ice: vec3f, at: vec2f, e: f32) -> vec3f {
   var c = ice;
   let drift = select(shows_at(PACK_DRIFT_M, e), 0.0, PACK_DRIFT_M < PACK_PX * max(e, least_e()));
   if (drift > 0.0) { c *= 1.0 + PACK_DRIFT * noise_turned(at / PACK_DRIFT_M, 98) * drift; }
-  let cracks = select(shows_at(PACK_CRACK_M * PACK_CRACK_W * 4.0, e), 0.0, PACK_CRACK_M * PACK_CRACK_W < LINE_PX_LEAST * max(e, least_e()));
-  if (cracks > 0.0) { c = mix(c, ICE_REFROZEN, crack(noise_turned(at / PACK_CRACK_M, 99), PACK_CRACK_W) * cracks); }
-  let ridges = select(shows_at(PACK_RIDGE_M * PACK_RIDGE_W * 4.0, e), 0.0, PACK_RIDGE_M * PACK_RIDGE_W < LINE_PX_LEAST * max(e, least_e()));
-  if (ridges > 0.0) { c = mix(c, ICE_RIDGE, crack(noise_turned(at / PACK_RIDGE_M, 100), PACK_RIDGE_W) * ridges); }
+  // Each kind of line fades in as its width grows from `PACK_LINE_PX` pixels (a hatch of lines under that only speckles).
+  let cracks = ease(PACK_LINE_PX.x, PACK_LINE_PX.y, CRACK_W_M / max(e, least_e()));
+  if (cracks > 0.0) {
+    let k = segments(at, e, PACK_CRACK_M, CRACK_OF, CRACK_LONG, CRACK_W_M, 99);
+    c = mix(c, ICE_REFROZEN * RIDGE_SHADE, k.x * cracks);
+  }
+  let ridges = ease(PACK_LINE_PX.x, PACK_LINE_PX.y, RIDGE_W_M / max(e, least_e()));
+  if (ridges > 0.0) {
+    let r = segments(at, e, PACK_RIDGE_M, RIDGE_OF, RIDGE_LONG, RIDGE_W_M, 100);
+    c = mix(c, mix(c * RIDGE_SHADE, ICE_RIDGE, r.y), r.x * ridges);
+  }
   return c;
+}
+
+// Short straight lines fixed in the world at `at`, seen at `e` m a pixel: one in `held` of the cells `cell` m across
+// holds one, through a point anywhere in it, turned any way, up to `longest` of a cell long and `width` m wide, tapering to its
+// ends. Of the nearest: how much of the pixel it covers (a line under a pixel wide drawn a pixel wide, as faint as it is
+// narrow), and how lit its face there is, 0..1 (its side toward the sun, `LIGHT`).
+fn segments(at: vec2f, e: f32, cell: f32, held: f32, longest: f32, width: f32, k: i32) -> vec2f {
+  let q = at / cell;
+  let c = floor(q);
+  var best = 0.0;
+  var lit = 0.5;
+  for (var j = -1; j <= 1; j++) {
+    for (var i = -1; i <= 1; i++) {
+      let id = c + vec2f(f32(i), f32(j));
+      let x = lowbias(vec2i(id), k);
+      let centre = (id + vec2f(f32((x >> 10u) & 255u), f32((x >> 18u) & 255u)) / 256.0) * cell;
+      // The field's way and density at the line's centre (`LINE_FIELD_M`).
+      let field = vec2f(noise_turned(centre / LINE_FIELD_M, k + 7), noise_turned(centre / LINE_FIELD_M + 9.0, k + 8));
+      if (f32(x & 1023u) / 1024.0 >= held * 2.0 * ease(-0.35, 0.35, field.y)) { continue; }
+      let turn = field.x * PI + LINE_TURN * (f32((x >> 26u) & 63u) / 31.5 - 1.0);
+      let along = vec2f(cos(turn), sin(turn));
+      let reach = 0.5 * longest * cell * (0.4 + 0.6 * f32((x >> 4u) & 63u) / 63.0);
+      let v = at - centre;
+      let t = dot(v, along);
+      let across = dot(v, vec2f(-along.y, along.x));
+      // Tapering to its ends: as wide as `width` in its middle, nothing at them; and near, as rough as rubble along it
+      // (`LINE_JAG` of its width over pieces `LINE_PIECE` widths long) and broken where a slower noise along it is low.
+      var w = 0.5 * width * sqrt(max(1.0 - (t / reach) * (t / reach), 0.0));
+      if (w > 0.0 && abs(across) < 2.0 * w + e) {
+        let seed = f32(x & 255u);
+        w *= 1.0 + LINE_JAG * noise(vec2f(t / (LINE_PIECE * width), seed), k + 20).x * shows_at(LINE_PIECE * width, e);
+        w *= ease(LINE_BREAKS, LINE_BREAKS + 0.2, noise(vec2f(t / (4.0 * LINE_PIECE * width), seed), k + 21).x);
+      }
+      let drawn = max(w, 0.5 * e);
+      let cover = (1.0 - smoothstep(drawn - 0.5 * e, drawn + 0.5 * e, abs(across))) * min(w / drawn, 1.0);
+      if (cover > best) {
+        best = cover;
+        // The side of the ridge turned toward the sun (its normal across, signed by the side the point lies on).
+        let n = sign(across) * vec2f(-along.y, along.x);
+        lit = smoothstep(-0.2, 0.2, -dot(n, LIGHT.xy) / length(LIGHT.xy));
+      }
+    }
+  }
+  return vec2f(best, lit);
 }
 
 // Water of colour `water`, `depth` m deep, at `at`, seen at `e` m a pixel, under ice that covers `cover` of it

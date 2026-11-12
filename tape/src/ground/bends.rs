@@ -6,7 +6,10 @@
 //! valley rises from the channel by more than the channel's depth, the valley's side holds it. A tile is made once,
 //! so the width and the depth are stand-ins: the channel law's (`Physics::channel`) at the drained area times
 //! `TYPICAL_RUNOFF`. The phase of the bends runs on along each main way from its head (`phases`), so the line is
-//! continuous from sample to sample; it is a function of the seed, the map and the place alone.
+//! continuous from sample to sample; it is a function of the seed, the map and the place alone. No two bends are alike
+//! (`wiggle`): the sine's phase and its amplitude are themselves modulated along the way by slower waves of
+//! incommensurate lengths, so the bends' lengths differ by about a fifth either way, some stretches run nearly straight
+//! and here and there a bend swings to the full amplitude (Leopold and Wolman 1960 give 7 to 15 widths a bend).
 
 use super::channels::{base, Law, TYPICAL_RUNOFF};
 use pcore::space::network::NONE;
@@ -19,6 +22,14 @@ const BEND_WIDTHS: f64 = 11.0;
 /// The half amplitude of the bends, in channel widths: their amplitude, from one side to the other, is about 2.7 widths
 /// (Leopold and Wolman 1960).
 const BEND_HALF: f64 = 1.35;
+/// The bends' modulation (`wiggle`): the phase moves by up to `PHASE_SWING` radians over `PHASE_WAVE` bends, and the
+/// amplitude is `STRAIGHT_SHARE` of the full at its least, rising to all of it over `SWING_WAVE` bends. Both waves are
+/// a whole number of cycles in `WIGGLE_PERIOD` bends, over which the phase is kept, so the line runs on unbroken.
+const PHASE_SWING: f64 = 0.9;
+const PHASE_WAVE: f64 = 100.0 / 37.0;
+const STRAIGHT_SHARE: f64 = 0.2;
+const SWING_WAVE: f64 = 100.0 / 23.0;
+const WIGGLE_PERIOD: f64 = 100.0;
 /// Below this slope of the valley a channel bends fully, above `STRAIGHT_ABOVE` not at all: pool-riffle channels lie
 /// below about 0.015, step-pool and cascade ones above about 0.03 (Montgomery and Buffington 1997).
 const BENDS_BELOW: f64 = 0.01;
@@ -61,9 +72,17 @@ impl Piece {
         if a == 0.0 || len == 0.0 {
             return p;
         }
-        let off = a * (TAU * (self.phase + self.cycles * t)).sin() / len;
+        let off = a * wiggle(self.phase + self.cycles * t) / len;
         [p[0] - d[1] * off, p[1] + d[0] * off]
     }
+}
+
+/// The bend at phase `p` (cycles, kept modulo `WIGGLE_PERIOD`), -1 to 1: a sine whose phase and amplitude are
+/// modulated by slower waves (the module's doc).
+fn wiggle(p: f64) -> f64 {
+    let phase = TAU * p + PHASE_SWING * (TAU * p / PHASE_WAVE).sin();
+    let swing = 0.5 + 0.5 * (TAU * p / SWING_WAVE + 1.0).sin();
+    phase.sin() * (STRAIGHT_SHARE + (1.0 - STRAIGHT_SHARE) * swing * swing)
 }
 
 /// What a shell takes of the channel of sample `k` of `s`: the width and the depth the law gives its drained area at
@@ -98,20 +117,20 @@ pub(super) fn amplitude(law: &Law, s: &Samples, metres: f64, k: usize) -> f64 {
     (BEND_HALF * width * (1.0 - ease(BENDS_BELOW, STRAIGHT_ABOVE, slope))).min(floor).min(BEND_MOST * metres) / metres
 }
 
-/// The phase of the bends at the start of each sample's piece, cycles (0 to 1): 0 at a head; along a main way (where a
+/// The phase of the bends at the start of each sample's piece, cycles (0 to `WIGGLE_PERIOD`): 0 at a head; along a main way (where a
 /// sample is the main one upstream of the next, `Samples::main`) the next piece starts where the last one ends, its
 /// length (`length`, m) over its wavelength on. In the flood's order from the last sample reached, so a sample comes
 /// before the one its liquid runs to.
-pub(super) fn phases(law: &Law, s: &Samples, at: &[[f64; 2]], metres: f64) -> Vec<f32> {
+pub(super) fn phases(law: &Law, s: &Samples, at: &[[f64; 2]], metres: f64) -> Vec<f64> {
     let mut phase = vec![0.0f64; s.h.len()];
     for &k in s.order.iter().rev() {
         let (k, to) = (k as usize, s.to[k as usize]);
         if to != NONE && s.main[to as usize] == k as u32 {
             let cycles = base(s, at, k).map_or(0.0, |b| length(b) * metres / wavelength(law, s, k));
-            phase[to as usize] = (phase[k] + cycles).fract();
+            phase[to as usize] = (phase[k] + cycles) % WIGGLE_PERIOD;
         }
     }
-    phase.into_iter().map(|p| p as f32).collect()
+    phase
 }
 
 /// The pieces the length of a curve is summed over.
