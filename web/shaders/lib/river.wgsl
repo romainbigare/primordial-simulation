@@ -97,30 +97,3 @@ fn bank_light(e: f32, g: Tiled, c: Channel, r: Reach) -> f32 {
   let cut = mix(0.6, select(1.0, BANK_LOW, inside), c.bend);
   return 1.0 + BANK_SHADE * cut * shown * facing * (1.0 - ease(0.0, wide, abs(r.bank)));
 }
-
-// The streaks of the flow: lines along the channel `STREAK_W_M` apart, broken into dashes `STREAK_M` long, as strong as
-// `STREAK`; white water over a steep reach's stones, in patches `WHITE_M` long, as much as `FOAM_STEEP` where the
-// reach is steepest.
-const STREAK_W_M = 1.2; const STREAK_M = 8.0; const STREAK = 0.6; const WHITE_M = 4.0; const FOAM_STEEP = 0.55;
-
-// The signs of the flow on a channel's water seen at `e` m a pixel, `along` m along its line and `sd` m across it, on
-// a reach of steepness `steep` (`Reach`), `across` its water from its middle: streaks along the flow (lines along the
-// channel's line, broken into dashes by a noise fixed in the world) and white water where the reach is steep, as a
-// share of the surface's light to add, and the share of white water. Each repeats over the length the place along a
-// channel is kept modulo (rock.wgsl `noise_reach`).
-fn flow_signs(e: f32, along: f32, sd: f32, steep: f32, across: f32) -> vec2f {
-  var streak = 0.0;
-  let shown = shows_at(STREAK_W_M, e);
-  if (shown > 0.0) {
-    let dashes = ease(0.35, 0.75, noise_reach(along, STREAK_M, sd / STREAK_W_M, 74));
-    streak = STREAK * shown * dashes * (1.0 - across * across);
-  }
-  var foam = 0.0;
-  if (steep > 0.0) {
-    // In patches along the flow, more of them the steeper; none from afar, where a pixel's mean of them would only
-    // grey the water.
-    let w = noise_reach(along, WHITE_M, sd / (0.35 * WHITE_M), 75) + 0.5 * noise_reach(along, 0.5 * WHITE_M, sd / (0.15 * WHITE_M), 78);
-    foam = FOAM_STEEP * steep * ease(0.45 - 0.2 * steep, 0.7 - 0.2 * steep, w) * shows_at(WHITE_M, e);
-  }
-  return vec2f(streak, foam);
-}

@@ -7,7 +7,7 @@ import { GroundTiles, TILE_FADE_MS } from './ground';
 import { World, plane } from './data';
 import { MapLook, earthUniforms } from './field-window';
 import { Wet, seaSquares, PATH_LAYER } from './earth';
-import { half } from './canopy';
+import { half, unhalf } from './canopy';
 
 /** The numbers of the laws inside a cell as the core sends them (wasm/src/lib.rs `meta`, `Physics`), and the discharge
  * per metre a css pixel takes past which a channel shows as a line, m³/s per m. */
@@ -38,6 +38,11 @@ const LAND_VEC4S = 7;
  * ice is drawn on the mean. A square is open sea where it is the sea's and its ground lies `OPEN_SEA_M` under its
  * surface on the mean: a coast's squares hold land, whose ice is its snow. */
 const SEA_BLUR = 1.5, SEA_REACH = 4, OPEN_SEA_M = 20;
+/** The signs of the flow on a channel's water slide along it (lib/flow.wgsl): they step this many times a second, the
+ * slowest water's by this many metres a second; they show where a pixel takes no more than `FLOW_SHOWS_E` m (the
+ * shader's streaks fade out there) on water at least `FLOW_PX` pixels wide. */
+export const FLOW_FPS = 6;
+const FLOW_M_S = 0.35, FLOW_SHOWS_E = 0.6, FLOW_PX = 4;
 
 export class Land {
   private data: Float32Array | null = null;
@@ -109,6 +114,27 @@ export class Land {
     return { ...laws, 1: earthUniforms(look, read, [0, 0, m.w * m.cell_m, m.h * m.cell_m], this.sea) };
   }
 
+  /** How far the flow's signs have slid along the slowest water at `now` (performance.now, ms), m: in steps of
+   * 1 / `FLOW_FPS` s, modulo the length a place along a channel is kept modulo (the signs come again after it, so the
+   * slide has no jump). */
+  private slid(now: number): number {
+    return ((Math.floor((now * FLOW_FPS) / 1000) / FLOW_FPS) * FLOW_M_S) % this.tiles.meta.along_wrap;
+  }
+
+  /** Whether a channel in the window of squares from (`x`, `y`), `w` x `h` of them, shows the signs of its flow where a
+   * pixel takes `e` m: one of the samples there carries water at least `FLOW_PX` pixels wide (the bed's width by the
+   * channel law at the flood's discharge; the water fills most of it). */
+  flowing(x: number, y: number, w: number, h: number, e: number): boolean {
+    if (e > FLOW_SHOWS_E) return false;
+    const s = this.samples, per = s.across / this.tiles.map.w, l = this.laws;
+    // The discharge whose bed is `FLOW_PX` pixels wide.
+    const least = (FLOW_PX * e / l.channel_width) ** (1 / l.channel_width_exp) / l.flood;
+    const x0 = Math.max(0, Math.floor(x * per)), x1 = Math.min(s.across - 1, Math.ceil((x + w) * per));
+    const y0 = Math.max(0, Math.floor(y * per)), y1 = Math.min(s.down - 1, Math.ceil((y + h) * per));
+    for (let r = y0; r <= y1; r++) for (let c = x0; c <= x1; c++) if (unhalf(this.discharge[r * s.across + c]) >= least) return true;
+    return false;
+  }
+
   /** The bindings of lib/land.wgsl on `gpu` (its uniforms, the tiles and the table), or null before the first table. */
   lawBinds(gpu: Gpu): Draw['binds'] | null {
     if (!this.data) return null;
@@ -128,7 +154,7 @@ export class Land {
     const t = this.tiles.textures(gpu), l = this.laws, tm = this.tiles.meta;
     const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(tm.size, tm.gutter, this.tiles.depth, tm.step_most)
       .vec4(t.now, TILE_FADE_MS, this.melt, l.line).vec4(l.soil_m, l.wet_depth, l.dormancy).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp)
-      .vec4(s.across, s.down, s.depth, devicePixelRatio).vec4(tm.along_wrap, l.flood);
+      .vec4(s.across, s.down, s.depth, devicePixelRatio).vec4(tm.along_wrap, l.flood, this.slid(performance.now()));
     return { 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex, 13: t.areas, 17: this.flows, 18: this.rock, 19: 'smooth' };
   }
 

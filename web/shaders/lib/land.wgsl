@@ -21,8 +21,9 @@ struct Land {
   channel: vec4f,
   // The terrain's samples across and down, their depth, and the screen's pixels a css pixel.
   samples: vec4f,
-  // The length a texel's place along its channel is kept modulo, m (tape/src/ground/channels.rs `ALONG_WRAP_M`), and
-  // how many times the mean flow the flood that shapes a channel's bed passes (tape/src/ground/bends.rs `FLOOD`).
+  // The length a texel's place along its channel is kept modulo, m (tape/src/ground/channels.rs `ALONG_WRAP_M`), how
+  // many times the mean flow the flood that shapes a channel's bed passes (tape/src/ground/bends.rs `FLOOD`), and how
+  // far the signs of the flow have slid down the slowest water, m (web/src/land.ts `slid`).
   reach: vec4f,
 }
 @group(0) @binding(8) var<uniform> land: Land;

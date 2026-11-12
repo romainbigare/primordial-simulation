@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl stone.wgsl ice.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl river.wgsl cover_field.wgsl
+// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl stone.wgsl ice.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl river.wgsl flow.wgsl cover_field.wgsl
 // least metres a pixel: 0.5 1 3 30
 // The live map in view: at each pixel of the screen the ground from its tiles and the state from the cells' table
 // (land.wgsl), in the view's colours. Made once more for draws whose pixels take at least 0.5 m, 1 m, 3 m and 30 m
@@ -48,9 +48,9 @@ const SNOW_CELLS_ALL = 0.95;
 // pixel that water covers; the share the bars of its bed cover (`bars`, the dry spot as washed gravel); and the share
 // of the pixel standing liquid covers (`pool`): the pixel's footprint across the line where the depth crosses `FILM_M`,
 // so a shore is a smooth line at any zoom, not the pixels' steps; the bars' colour and their height over the water, m;
-// and of the channel's water (`water`): the signs of its flow (lib/river.wgsl `flow_signs`), its depth over the depth
-// the channel law gives its middle, and how near its edge the point lies, 0..1.
-struct Spots { dry: Spot, wet: Spot, share: f32, bars: f32, pool: f32, snow_cells: f32, bar: vec3f, bar_over: f32, water: vec4f }
+// and of the channel's water: the signs of its flow (lib/flow.wgsl `flow_signs`), and (`water`) its depth over the
+// depth the channel law gives its middle and how near its edge the point lies, 0..1.
+struct Spots { dry: Spot, wet: Spot, share: f32, bars: f32, pool: f32, snow_cells: f32, bar: vec3f, bar_over: f32, flow: vec3f, water: vec2f }
 
 // Inside a cell its snow lies first where the ground holds it (`snow_bares`): high ground before low (colder: the air's
 // fall with height; over `SNOW_RISE_M` a unit), slopes turned from the sun before those facing it (they melt first;
@@ -174,7 +174,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // that is the ponds' weighs it), over the depth's change across a pixel.
   let signed = st.depth - min(st.over, NO_LIQUID_M) * g.water.y - FILM_M;
   let pool = select(0.0, tent(signed / (max(length(g.slope) * g.water.y, SHORE_RISE_LEAST) * e)), g.water.y > 0.0);
-  let out = Spots(p, p, 0.0, 0.0, pool, st.snow, vec3f(0.0), 0.0, vec4f(0.0));
+  let out = Spots(p, p, 0.0, 0.0, pool, st.snow, vec3f(0.0), 0.0, vec3f(0.0), vec2f(0.0));
   if (p.depth > 0.0 || ch.water <= 0.0) { return out; }
   return river_spots(out, shore_over, g, ch, q);
 }
@@ -211,7 +211,8 @@ fn river_spots(s: Spots, shore_over: f32, g: Tiled, ch: Channel, q: f32) -> Spot
   let resolved = ease(e, 2.0 * e, ch.water) * open;
   let x = r.across;
   out.wet.depth = mix(ch.mean, depth_across(ch, x), resolved);
-  out.water = vec4f(flow_signs(e, g.along, g.sd, r.steep, x), out.wet.depth / (BED_MIDDLE * ch.mean), resolved * (1.0 - ease(0.0, EDGE_M, (1.0 - abs(x)) * ch.water)));
+  out.flow = resolved * flow_signs(e, g.along, x, ch, r.steep);
+  out.water = vec2f(out.wet.depth / (BED_MIDDLE * ch.mean), resolved * (1.0 - ease(0.0, EDGE_M, (1.0 - abs(x)) * ch.water)));
   out.wet.sand = 0.0;
   out.wet.cover = vec4f(0.0);
   // The bed's slope across the water, d(depth)/d(distance from its middle) along that distance's own slope; where the
@@ -228,8 +229,9 @@ fn river_spots(s: Spots, shore_over: f32, g: Tiled, ch: Channel, q: f32) -> Spot
 // (Legleiter and others 2004; from memory).
 const BED_FILM = 0.3;
 // A streak of the flow reflects this share of the sky's light more than the water about it (a line of small ripples
-// where the current shears).
-const REFLECT_STREAK = 0.25;
+// where the current shears). Fast shallow water is `FAST` of the way to `FAST_WATER`, the green-blue of water full of
+// air over a pale bed.
+const REFLECT_STREAK = 0.25; const FAST = 0.25; const FAST_WATER = vec3f(0.06, 0.34, 0.36);
 // In the style the bed under running water shows this share of its light: its cobbles read through the shallows.
 const BED_SHOWN = 0.8;
 
@@ -237,16 +239,17 @@ const BED_SHOWN = 0.8;
 // in linear light: its bed, soaked bare ground (washed sand and gravel: the flow takes the plants) under its film
 // (`BED_FILM`), seen through running water as deep as it is there (water.wgsl); snow lies on it as on standing liquid
 // (colour.wgsl `colour_on`), and the true view shades its bed as far as it shows.
-fn river_on(p: Spot, g: Ground, w: vec4f) -> Shaded {
+fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f) -> Shaded {
   let lit = light(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), p.slope);
   let soaked_bed = soil(g, 1.0, lit);
   let ripple = ripples(p.at, p.e) * (1.0 - p.snow);
   var water = seen_through(BED_FILM * soaked_bed, p.depth, ripple, RUNNING_ATTENUATION, DEEP_WATER);
   // In the style a channel's water is coloured by its bed's shape (style.wgsl `river_seen`): light shallows over the
   // bed's stones, a dark deep thread, a light wash at its edge.
-  if (styled()) { water = water_painted(BED_SHOWN * soaked_bed, river_seen(p.depth, w.z), ripple) * (1.0 + EDGE_LIGHT * w.w); }
-  // The signs of its flow (lib/river.wgsl `flow_signs`): streaks catch the sky's light, white water over its stones.
-  water = mix(water + w.x * REFLECT_STREAK * SKY, FOAM_RGB, w.y);
+  if (styled()) { water = mix(water_painted(BED_SHOWN * soaked_bed, river_seen(p.depth, w.x), ripple) * (1.0 + EDGE_LIGHT * w.y), FAST_WATER, FAST * flow.z); }
+  // The signs of its flow (lib/flow.wgsl `flow_signs`): streaks catch the sky's light, white water breaks over its
+  // steps.
+  water = mix(water + flow.x * REFLECT_STREAK * SKY, FOAM_RGB, flow.y);
   let rgb = mix(water, SNOW, p.snow * 0.85);
   return Shaded(rgb, 1.0 + (lit - 1.0) * exp(-2.0 * RUNNING_ATTENUATION.g * p.depth), RIVER);
 }
@@ -284,7 +287,7 @@ const LAYER_GROUND = 0; const LAYER_BARS = 1; const LAYER_EDGE = 2; const LAYER_
     let running = k == LAYER_RIVER;
     let g = ground_for(p, running);
     var o: Shaded;
-    if (running) { o = river_on(p, g, spots.water); } else { o = colour_on(p, g); }
+    if (running) { o = river_on(p, g, spots.flow, spots.water); } else { o = colour_on(p, g); }
     c = Shaded(mix(c.rgb, o.rgb, share), mix(c.m, o.m, share), select(c.kind, o.kind, k != LAYER_BARS && share > 0.5));
   }
   // The true colour is the cells', and the bed's where it shows; their snow placed as the Earth view places it: the

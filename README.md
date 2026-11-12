@@ -100,7 +100,11 @@ water fills most of it (at one place the water's width grows as its discharge to
 bends; what runs through it grows evenly from sample to sample, so it widens downstream and below each tributary
 without a step. In the Earth view the water is coloured by its bed's shape, light shallows over the bed's stones and a
 dark thread where it is deepest; a bar is pale gravel, wet at the water's edge, with the drift lines the falling
-water leaves and tufts of plants on its top; a bank is a low scarp the sun lights or shades. The ground has relief finer than its tiles (`web/shaders/lib/relief.wgsl`): octaves of gradient noise from
+water leaves and tufts of plants on its top; a bank is a low scarp the sun lights or shades. The water shows which
+way it runs (`web/shaders/lib/flow.wgsl`): streaks along the flow, many over a riffle and few on a pool, and on a
+steep reach white water that starts at a step and fades down the flow. These signs slide down the channel in six
+steps a second, faster where the reach is steeper, and come round with no jump; the page draws those frames only
+while a channel in view shows them and it keeps up at the screen's own pixels, else none until something changes. The ground has relief finer than its tiles (`web/shaders/lib/relief.wgsl`): octaves of gradient noise from
 48 m down to the pixel, fixed in the world, each fading in as it grows past a few pixels, smooth swells on deep loose
 ground and ridged crags on bare bed, the rougher the steeper; it moves the shading and the line of every shore. A slope turned away from the sun is
 lit by the sky alone, the less the steeper (an even sky, Liu and Jordan 1963), so shaded ground and snow keep their
