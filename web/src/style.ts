@@ -37,9 +37,9 @@ const HUE_MID = 140, HUE_PER_LEAF = -55, HUE_PER_FROST = -4, HUE_PER_MOIST = 25;
  * bluest green of the palette, not a teal. */
 const HUE_GREENS = [105, 150];
 /** Lightness at the starting cover's numbers, and its change per decade of capture area and per share of walls. */
-const L_MID = 0.75, L_PER_LEAF = 0.14, L_PER_WOOD = -0.3;
+const L_MID = 0.75, L_PER_LEAF = 0.14, L_PER_WOOD = -0.15;
 /** Chroma at the starting cover's numbers, and its share lost per decade of moisture gene below theirs. */
-const C_MID = 0.11, C_DRY = 0.5;
+const C_MID = 0.13, C_DRY = 0.3;
 /** The starting cover's numbers (worldgen/src/life/kinds.rs `COVER_GENES`): capture area, log10 m²/kg; walls' share;
  * moisture gene; frost gene, K; seeds' share. */
 const LEAF_0 = 0.4, WOOD_0 = 0.5, MOIST_0 = -0.3, FROST_0 = 268, SEED_0 = 0.1;
