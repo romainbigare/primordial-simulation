@@ -7,13 +7,15 @@ use pcore::World;
 
 /// What one cell's cover reads in one month of the year kept: what it would read (`Around`; its light is that since
 /// the month before), the light above any cover since the month before, J/m², the key liquid its ground holds, mol (of
-/// which `Around::liquid` is liquid), and the rain fallen on it, mol.
+/// which `Around::liquid` is liquid), the rain fallen on it, mol, and the share of what its ground held before the month
+/// and that rain that it still holds at the month's end (the rest ran off, sank or rose into the air).
 #[derive(Clone, Debug)]
 pub(super) struct Month {
     pub around: Around,
     pub sun: f64,
     pub held: f64,
     pub rain: f64,
+    pub keep: f64,
 }
 
 /// A year of each of `cells` (open land, by index), month by month.
@@ -28,6 +30,7 @@ impl Year {
         let mut c = w.clone();
         let mut out: Vec<Vec<Month>> = vec![Vec::with_capacity(months as usize); cells.len()];
         let (mut light, mut rained): (Vec<f64>, Vec<f64>) = (cells.iter().map(|&i| c.light[i]).collect(), cells.iter().map(|&i| c.rained[i]).collect());
+        let mut before: Vec<f64> = cells.iter().map(|&i| c.g(p.liquid, i)).collect();
         for _ in 0..months {
             pcore::step(&mut c);
             c.drain_events();
@@ -36,11 +39,21 @@ impl Year {
                 // The light per m² of capture area under the cover the copy holds (`World::canopy`), back to that above it.
                 let sun = (around.light - light[k]) / cover::per_capture_area(c.canopy[i] as f64);
                 let rain = (c.rained[i] - rained[k]) * c.mesh.cells().area()[i];
-                (light[k], rained[k]) = (around.light, c.rained[i]);
-                out[k].push(Month { around, sun, held: c.g(p.liquid, i), rain });
+                let held = c.g(p.liquid, i);
+                let keep = if before[k] + rain > 0.0 { (held / (before[k] + rain)).clamp(0.0, 1.0) } else { 1.0 };
+                (light[k], rained[k], before[k]) = (around.light, c.rained[i], held);
+                out[k].push(Month { around, sun, held, rain, keep });
             }
         }
         Year { cells: cells.to_vec(), months: out }
+    }
+
+    /// The key liquid a ground holds at the start of a cell's year `months` such that, under the year's own keeping
+    /// (`Month::keep`) and rain, it holds as much at the year's end, mol: a store whose year closes. Each month it
+    /// holds (what it held + the rain) × its keep, so the year's end is A × start + B, and the start is B / (1 − A).
+    pub fn closed(months: &[Month]) -> f64 {
+        let (a, b) = months.iter().fold((1.0, 0.0), |(a, b), m| (a * m.keep, (b + m.rain) * m.keep));
+        if a < 1.0 { b / (1.0 - a) } else { months.first().map_or(0.0, |m| m.held) }
     }
 
     /// What each cell's year is like, to class it by: its coldest month's ground and its mean ground, K, its mean

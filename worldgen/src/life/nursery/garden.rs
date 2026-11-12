@@ -1,7 +1,8 @@
 //! A garden: the cover of one real cell, its month by the cover's own law (`cover::live`) on a year kept (`Year`), with
-//! no air and no flow. Its ground is a store of its own: the key liquid the year's ground holds less what its cover took
-//! and the rain has not given back yet; and the minerals of its ground, washed out at the year's own rate, taken by its
-//! cover and given back by the rot of its remains' body matter.
+//! no air and no flow. Its ground is a store of its own: the key liquid, which the year's rain fills and which keeps
+//! the share of it the year's bare ground kept each month (`Month::keep`), less what its cover takes, from a start at
+//! which the bare year closes (`Year::closed`); and the minerals of its ground, washed out at the year's own rate, taken
+//! by its cover and given back by the rot of its remains' body matter.
 
 use super::year::Month;
 use pcore::cover::{self, Cover, Landed, Parts, MATTER, NG, NO_ROOT, SLOTS};
@@ -9,7 +10,7 @@ use pcore::units::MAX_SUBSTANCES;
 use pcore::{Counters, World};
 
 /// A garden in cell `cell`: its cover; the light it has caught per m² of capture area since it began, J/m² (as
-/// `World::light`); the key liquid its cover took that the rain has not given back, mol; the minerals in its ground,
+/// `World::light`); the key liquid its ground holds, mol; the minerals in its ground,
 /// mol (`Chemistry::minerals`, the rest of its ground is the year's), and the body matter of its remains, mol; the
 /// months it has run (they key its seeds' draws); and what its cover lost and rounded (`Counters`, not read).
 #[derive(Clone)]
@@ -17,7 +18,7 @@ pub(super) struct Garden {
     pub cell: usize,
     pub cover: Cover,
     light: f64,
-    owed: f64,
+    liquid: f64,
     minerals: [f64; MAX_SUBSTANCES],
     remains: f64,
     months: u64,
@@ -28,11 +29,13 @@ pub(super) struct Garden {
 const TICK: u64 = 1 << 60;
 
 impl Garden {
-    /// Bare ground in cell `cell`, its minerals as `first` (the first month of its year) holds them.
-    pub fn bare(chem: &pcore::chem::Chemistry, cell: usize, first: &Month) -> Garden {
+    /// Bare ground in cell `cell` at the start of its year `months`: its liquid where the bare year closes
+    /// (`Year::closed`), its minerals as the first month holds them.
+    pub fn bare(chem: &pcore::chem::Chemistry, cell: usize, months: &[Month]) -> Garden {
         let mut minerals = [0.0; MAX_SUBSTANCES];
-        chem.minerals().iter().for_each(|&(k, _)| minerals[k] = first.around.ground[k]);
-        Garden { cell, cover: Cover::default(), light: 0.0, owed: 0.0, minerals, remains: 0.0, months: 0, counts: Counters::default() }
+        chem.minerals().iter().for_each(|&(k, _)| minerals[k] = months[0].around.ground[k]);
+        let liquid = super::year::Year::closed(months);
+        Garden { cell, cover: Cover::default(), light: 0.0, liquid, minerals, remains: 0.0, months: 0, counts: Counters::default() }
     }
 
     /// `kg` per m² of cover of genes `genes` and starting kind `root` put here, at the year's temperature `t` K, as seeds
@@ -59,19 +62,21 @@ impl Garden {
         // The light past the clouds over the month, per m² of capture area under the garden's own cover.
         let canopy = (0..SLOTS).map(|x| self.cover.leaf(&mm, x)).sum::<f64>() / area;
         self.light += m.sun * cover::per_capture_area(canopy);
-        let held = (m.held - self.owed).max(0.0);
-        let liquid = if m.held > 0.0 { held * m.around.liquid / m.held } else { 0.0 };
+        // The month of its bare ground: the rain comes in and the share `keep` stays; of that the share the year's
+        // ground held liquid is liquid.
+        let held = (self.liquid + m.rain) * m.keep;
+        let liquid = if m.held > 0.0 { held * (m.around.liquid / m.held).min(1.0) } else { 0.0 };
         let mut a = m.around.clone();
         (a.liquid, a.moist, a.light, a.tick) = (liquid, cover::wetness(w, p, area, liquid), self.light, TICK + self.months);
         a.ground[p.liquid] = held;
         chem.minerals().iter().for_each(|&(k, _)| a.ground[k] = self.minerals[k]);
         let (b, _) = cover::live(w, &mut self.cover, p, &a, (self.cell, dt), &mut self.counts);
         // What its leaves lose through their pores' film (`Cover::film`), which the full world's ground evaporates day
-        // by day, at the month's air, from the liquid its roots reach; with what it took of the liquid, owed to the
-        // ground until the rain gives it back.
+        // by day, at the month's air, from the liquid its roots reach; with what it took of the liquid, the ground's
+        // store gives it. (The vapour does not come back as rain here: the garden has no air.)
         let film = if a.pores > 0.0 { self.cover.film as f64 * area * dt * a.thirst / a.pores } else { 0.0 };
         let vapour = film.min(held * self.cover.reach as f64);
-        self.owed = (self.owed + b.ext[p.liquid] + vapour - m.rain).max(0.0);
+        self.liquid = (held - b.ext[p.liquid] - vapour).max(0.0);
         self.cover.e = self.cover.cap(chem, p) * a.t;
         self.months += 1;
         self.remains += b.dead[p.sub[MATTER]];
