@@ -82,7 +82,7 @@ impl Class {
                 (None, 1) if !guests.is_empty() => guests[(r / 3) as usize % guests.len()],
                 _ => self.drawn(w, true),
             };
-            let mut g = Garden::bare(&w.chem, self.cell, &lived.0[0]);
+            let mut g = Garden::bare(&w.chem, self.cell, lived.0);
             g.put(w, p, (e.genes, e.root), START_KG, t);
             run(&mut g, w, p, lived, RACE_YEARS);
             let Some((root, genes, kg)) = g.stand(w, p).into_iter().next() else { continue };
@@ -96,7 +96,7 @@ impl Class {
     /// The race's best grown alone from `START_KG` for `GROW_YEARS` into the stand: the others come as seeds
     /// (`invade`).
     pub fn grow(&mut self, w: &World, p: &Parts, lived: Lived) {
-        let mut g = Garden::bare(&w.chem, self.cell, &lived.0[0]);
+        let mut g = Garden::bare(&w.chem, self.cell, lived.0);
         if let Some(e) = self.entrants.first() {
             g.put(w, p, (e.genes, e.root), START_KG, lived.0[0].around.t);
         }

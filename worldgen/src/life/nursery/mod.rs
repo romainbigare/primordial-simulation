@@ -125,7 +125,13 @@ pub fn start(w: &mut World) -> String {
     place(&mut covered, &p, (&classes, &first.cells, &features), &gardens);
     let second = Year::of(&covered, &p, &land, months);
     drop(covered);
-    let two = lived(&second);
+    // Its liquid stays the year's without life (`Month::keep`, the rain), which the gardens' own covers draw on: the
+    // copy's covered ground already lost what its cover took. Of it the share liquid is the covered year's.
+    let mut two = lived(&second);
+    for (t, o) in two.iter_mut().flatten().zip(one.iter().flatten()) {
+        let share = if t.held > 0.0 { t.around.liquid / t.held } else { 0.0 };
+        (t.held, t.rain, t.keep, t.around.liquid) = (o.held, o.rain, o.keep, o.held * share);
+    }
     let on: Vec<Lived> = two.iter().zip(&washes).map(|(m, x)| (m.as_slice(), x.as_slice())).collect();
     let w0: &World = w;
     each(w0, &p, &mut gardens, (&near, &on), |g, l, guests| g.invade(w0, &p, l, guests, (INVADE_ROUNDS, INVADE_ROUNDS)));
