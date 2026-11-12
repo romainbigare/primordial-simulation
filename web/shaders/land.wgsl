@@ -5,6 +5,9 @@
 // (web/shade, draw.wgsl `LEAST_E`): seen from afar, the detail of the ground and the plants that cannot show is
 // compiled out (from 30 m, the whole island on a phone, the sea ice's floes and the pack's texture: ice.wgsl).
 
+// What grows along a channel is read within this many of its bed's half widths of its line: its bed, its banks and the
+// stones beside a steep reach lie within them.
+const CHANNEL_NEAR = 3.0;
 // Liquid standing shallower than this over the drawn ground is drawn as soaked ground, m: the drawn ground follows the
 // samples within a few centimetres, so a body whose level lies that near its flat floor is a soaked basin, not water.
 const FILM_M = 0.05;
@@ -128,8 +131,15 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // `next_along`).
   let grows = vec2f(dpdx(g.along), dpdy(g.along));
   let reach = sample_at(g);
-  let next = next_along(reach, at);
-  let q = mix(discharge_of(reach), discharge_of(next.s), next.share);
+  var next = Next(reach, 0.0);
+  var q = discharge_of(reach);
+  // (Most points that hold a channel lie far from its line, in its reach alone: there its own sample's discharge says
+  // enough, and what grows along it, its stones and its neighbour's are read within `CHANNEL_NEAR` of its line.)
+  let near = g.d < CHANNEL_NEAR * banks_of(q) + 2.0 * e || abs(g.calm) < line_of(q, e).x + 2.0 * e;
+  if (near) {
+    next = next_along(reach, at);
+    q = mix(q, discharge_of(next.s), next.share);
+  }
   var ch = channel_at(g, q);
   let st = state_on(at, g, cs, depth_in(g, ch));
   let flare = 1.0 + MOUTH_FLARE * (1.0 - ease(0.0, MOUTH_OVER_M, st.over));
@@ -171,16 +181,21 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.bed = vec3f(0.0);
   // Its channel's stones (`stony`), and the scree's place below the bed that sheds it: where the loose ground deepens
   // down the slope.
-  let moved = select(0.0, mix(stone_of(reach), stone_of(next.s), next.share), ch.bed > 0.0);
+  var moved = 0.0;
+  var cobble = COBBLE_M;
+  if (near && ch.bed > 0.0) {
+    moved = mix(stone_of(reach), stone_of(next.s), next.share);
+    cobble = max(STONE_SEEN * stone_of(reach), COBBLE_M);
+  }
   let deepens = vec2f(dpdx(loose), dpdy(loose));
-  p = stony(p, g, ch, q, moved, max(STONE_SEEN * stone_of(reach), COBBLE_M));
+  p = stony(p, g, ch, q, moved, cobble);
   p.below = mix(BELOW_LEAST, 1.0, 0.5 - 0.5 * dot(deepens, g.slope) / max(length(deepens) * length(g.slope), 1e-9));
   p.snow_m = st.snow_m;
   // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
   if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
   p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), p.loose, look.z);
   // A river's fan under the liquid it runs into.
-  if (ch.bed > 0.0 && p.depth > 0.0) { p.sand = max(p.sand, ease(0.0, BAR_SAND_STONE, moved) * (1.0 - ease(ch.bed, FAN_WIDTHS * ch.bed, g.d)) * (1.0 - ease(0.0, FAN_DEPTH_M, p.depth))); }
+  if (ch.bed > 0.0 && p.depth > 0.0) { p.sand = max(p.sand, ease(0.0, BAR_SAND_STONE, stone_of(reach)) * (1.0 - ease(ch.bed, FAN_WIDTHS * ch.bed, g.d)) * (1.0 - ease(0.0, FAN_DEPTH_M, p.depth))); }
   p.river = 0.0;
   p.river_depth = 0.0;
   p.at = at;
