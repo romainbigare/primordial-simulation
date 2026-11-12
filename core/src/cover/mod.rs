@@ -7,12 +7,14 @@
 //! (`choose::feed`) and movers break it (`choose::wear`).
 
 mod around;
+mod budget;
 mod build;
 mod grow;
 mod seed;
 mod stand;
 
 pub use around::{pores, thirst, Around};
+pub use budget::{content, BODIES, BUDGET};
 pub use grow::{live, step, Books};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
 pub use stand::{height, loose_bins, stem, BINS};
