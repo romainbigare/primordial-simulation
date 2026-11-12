@@ -78,11 +78,15 @@ fn floes(at: vec2f, e: f32, cover: f32, size: f32, k: i32) -> f32 {
 
 // The pack's tone at `at`, seen at `e` m a pixel, over ice of colour `ice`: refrozen leads, ridges, drift.
 fn pack(ice: vec3f, at: vec2f, e: f32) -> vec3f {
-  var c = ice * (1.0 + PACK_DRIFT * noise_turned(at / PACK_DRIFT_M, 98) * shows_at(PACK_DRIFT_M, e));
-  let cracks = crack(noise_turned(at / PACK_CRACK_M, 99), PACK_CRACK_W) * shows_at(PACK_CRACK_M * PACK_CRACK_W * 4.0, e);
-  c = mix(c, ICE_REFROZEN, cracks);
-  let ridges = crack(noise_turned(at / PACK_RIDGE_M, 100), PACK_RIDGE_W) * shows_at(PACK_RIDGE_M * PACK_RIDGE_W * 4.0, e);
-  return mix(c, ICE_RIDGE, ridges);
+  // Each detail's noise is read only where it shows.
+  var c = ice;
+  let drift = shows_at(PACK_DRIFT_M, e);
+  if (drift > 0.0) { c *= 1.0 + PACK_DRIFT * noise_turned(at / PACK_DRIFT_M, 98) * drift; }
+  let cracks = shows_at(PACK_CRACK_M * PACK_CRACK_W * 4.0, e);
+  if (cracks > 0.0) { c = mix(c, ICE_REFROZEN, crack(noise_turned(at / PACK_CRACK_M, 99), PACK_CRACK_W) * cracks); }
+  let ridges = shows_at(PACK_RIDGE_M * PACK_RIDGE_W * 4.0, e);
+  if (ridges > 0.0) { c = mix(c, ICE_RIDGE, crack(noise_turned(at / PACK_RIDGE_M, 100), PACK_RIDGE_W) * ridges); }
+  return c;
 }
 
 // Water of colour `water`, `depth` m deep, at `at`, seen at `e` m a pixel, under ice that covers `cover` of it
