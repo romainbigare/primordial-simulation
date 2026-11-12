@@ -130,7 +130,7 @@ layer views keep the physical colours. Every look still means what the model hol
 more contrast; slopes have a clear lit side and a soft cool shade. Water is coloured by its depth through the clear
 water of the clearest coasts, drawn stretched, so the bed shows to tens of metres: sand, pale shallows, turquoise,
 blue, then the deep, with foam at its edge where its band takes a pixel or more; a lake and a river read the same way at their own
-scale (as if six times as deep and 6 m more, lighter over their shallow rim and banks), and a lake's shore shallows to
+scale (as if one and a half times as deep and 2 m more, so the first tens of metres of depth read light, lighter over their shallow rim and banks), and a lake's shore shallows to
 none across its last texel, so its outline is soft. Under any water the bed is drawn lighter. A beach lies on gentle loose ground a few
 metres over the sea (lower by a lake), none on a steep coast. Each kind of plant has its own green from its
 numbers (thin leaves yellow-green, thick ones blue-green, the dry ground's kinds grey-green, tender kinds warmer,

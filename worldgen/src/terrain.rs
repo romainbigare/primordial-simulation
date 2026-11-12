@@ -34,11 +34,11 @@ const MOLTEN_MARGIN: f64 = 2.0;
 
 /// The terrain of `seed` on `map` whose samples are `cells` (`space::terrain`): an island's level 0 m lies at the rise
 /// `ISLAND_LEVEL`; a globe's leaves the share `LAND_SHARE` of the area of the samples above it.
-fn terrain_of(seed: u64, map: &Square, cells: &Level, soft: f64) -> Terrain {
+fn terrain_of(seed: u64, map: &Square, cells: &Level, cut: Vec<f64>) -> Terrain {
     if !map.wrap {
-        return Terrain::new(seed, ISLAND_LEVEL, soft);
+        return Terrain::new(seed, ISLAND_LEVEL, cut);
     }
-    let rise: Vec<f64> = (0..cells.n()).map(|i| terrain::rise(seed, map, Place::of(cells, i))).collect();
+    let rise: Vec<f64> = (0..cells.n()).map(|i| terrain::rise(seed, map, Place::of(cells, i), 0.0).0).collect();
     let mut order: Vec<usize> = (0..cells.n()).collect();
     order.sort_by(|&a, &b| rise[b].total_cmp(&rise[a]));
     let (total, mut above) = (cells.area().iter().sum::<f64>(), 0.0);
@@ -46,24 +46,21 @@ fn terrain_of(seed: u64, map: &Square, cells: &Level, soft: f64) -> Terrain {
         above += cells.area()[i];
         above >= LAND_SHARE * total
     });
-    Terrain::new(seed, level.map_or(0.0, |&i| rise[i]), soft)
+    Terrain::new(seed, level.map_or(0.0, |&i| rise[i]), cut)
 }
 
-/// The volume fractions of the bed where the share `patch` of it is of its patches (`terrain::patch`): the chemistry's
-/// `bed` and, over that share, its `deposits`, each by its own fractions.
-fn bed_of(init: &Init, patch: f64) -> Vec<(usize, f64)> {
+/// The volume fractions of a bed that holds the share `shares[m]` of each make `m` of the chemistry's (`Init::makes`),
+/// each by its own fractions.
+fn bed_of(init: &Init, shares: &[f64]) -> Vec<(usize, f64)> {
     let whole = |fr: &[(usize, f64)], by: f64| fr.iter().map(move |&(k, f)| (k, by * f / fr.iter().map(|p| p.1).sum::<f64>())).collect::<Vec<_>>();
-    if init.deposits.is_empty() {
-        return whole(&init.bed, 1.0);
-    }
-    [whole(&init.bed, 1.0 - patch), whole(&init.deposits, patch)].concat()
+    init.makes.iter().zip(shares).flat_map(|(fr, &by)| whole(fr, by)).collect()
 }
 
-/// How much faster flowing liquid wears the bed of the patches than the rest (`Terrain::soft`): as Flow's wear breaks a
+/// How much faster flowing liquid wears each make of the bed than the first (`Terrain::cut`): as Flow's wear breaks a
 /// bed (laws.md 1.3), by the sum of each substance's volume share over its bond strength.
-pub fn soft_of(chem: &Chemistry, init: &Init) -> f64 {
-    let weak = |fr: Vec<(usize, f64)>| fr.iter().map(|&(k, f)| f / chem.subs[k].strength).sum::<f64>();
-    weak(bed_of(init, 1.0)) / weak(bed_of(init, 0.0))
+pub fn cuts_of(chem: &Chemistry, init: &Init) -> Vec<f64> {
+    let weak = |fr: &[(usize, f64)]| fr.iter().map(|&(k, f)| f / chem.subs[k].strength).sum::<f64>() / fr.iter().map(|p| p.1).sum::<f64>();
+    init.makes.iter().map(|m| weak(m) / weak(&init.makes[0])).collect()
 }
 
 /// Height of each cell of `map` by `terrain` (its rows between the latitudes `lat`), m: the terrain's mean over it
@@ -135,7 +132,7 @@ pub fn new_island(seed: u64, w: usize, h: usize, cfg: Config) -> World {
 /// (how its cells are cut does not change the ground).
 pub fn island_ground(seed: u64, w: usize, h: usize) -> (Square, Terrain) {
     let (chem, init) = chemistry0();
-    (island(w, h), Terrain::new(seed, ISLAND_LEVEL, soft_of(&chem, &init)))
+    (island(w, h), Terrain::new(seed, ISLAND_LEVEL, cuts_of(&chem, &init)))
 }
 
 /// `map` (of squares) with its low ground away from land in coarse cells (`coarsen`): an air block whose squares all
@@ -175,7 +172,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
     if map.wrap {
         (cfg.lat_south, cfg.lat_north) = (-90.0, 90.0);
     }
-    let terrain = terrain_of(seed, &map, World::mesh_of(&map.samples(), &cfg).cells(), soft_of(&chem, init));
+    let terrain = terrain_of(seed, &map, World::mesh_of(&map.samples(), &cfg).cells(), cuts_of(&chem, init));
     build_on(seed, map, terrain, (chem, init), cfg)
 }
 
@@ -188,14 +185,16 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
     let over = |x: &dyn Fn(&Samples, usize) -> f64| map.leaves().iter().map(|&l| terrain.over(seed, &map, l, lat, x)).collect::<Vec<f64>>();
     // A cell's ground node is the layer that exchanges with the surface within a year (`skin_m`): of each sample it takes
     // the top `skin_m` of its loose ground at most; what the wear left deeper lies under it, packed with the bed.
-    let (patch, loose) = (over(&|s, k| s.patch[k]), over(&|s, k| s.loose[k].min(cfg.skin_m)));
+    // A cell's bed is the mean of its samples' makes: the share of its area each make holds.
+    let shares: Vec<Vec<f64>> = (0..init.makes.len()).map(|m| over(&|s, k| if s.make[k] as usize == m { 1.0 } else { 0.0 })).collect();
+    let loose = over(&|s, k| s.loose[k].min(cfg.skin_m));
     let mut ground = vec![0.0; ns * n];
     let mut bed = vec![0.0; ns * n];
     let mv = |k: usize| chem.molar_volume(k, Phase::Solid);
 
     for i in 0..n {
         let (z, area) = (hz[i], mesh.cells().area()[i]);
-        let fr = bed_of(init, patch[i]);
+        let fr = bed_of(init, &shares.iter().map(|x| x[i]).collect::<Vec<f64>>());
         let tot: f64 = fr.iter().map(|p| p.1).sum();
         let bed_v = (z - loose[i] - BASE_Z) * area;
         for &(k, f) in &fr {

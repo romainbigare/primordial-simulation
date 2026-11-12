@@ -112,15 +112,11 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
         let v = fr.iter().map(|&f| (solids[r.below(solids.len())], f)).collect();
         v
     };
-    let init = Init {
-        air,
-        low,
-        bed: pick(&[0.7, 0.2, 0.1]),
-        loose: pick(&[0.5, 0.4, 0.08, 0.02]),
-        deposits: pick(&[0.03, 0.01, 0.005, 0.02]),
-        soil: Vec::new(),
-    };
-    let abundant: Vec<usize> = [&init.bed, &init.loose, &init.deposits, &init.air].iter().flat_map(|v| v.iter().map(|p| p.0)).chain([low]).collect();
+    // The makes of the bed: a bed of three solids and each of its rotations (each solid most of one), and one more mix.
+    let (bed, loose, more) = (pick(&[0.7, 0.2, 0.1]), pick(&[0.5, 0.4, 0.08, 0.02]), pick(&[0.03, 0.01, 0.005, 0.02]));
+    let turned = |by: usize| (0..bed.len()).map(|q| (bed[(q + by) % bed.len()].0, bed[q].1)).collect::<Vec<_>>();
+    let init = Init { air, low, makes: vec![bed.clone(), turned(1), turned(2), more], loose, soil: Vec::new() };
+    let abundant: Vec<usize> = init.makes.iter().chain([&init.loose, &init.air]).flat_map(|v| v.iter().map(|p| p.0)).chain([low]).collect();
 
     // Every one- or two-substance side, keyed by its element totals: equal keys balance.
     let mut sides: BTreeMap<Vec<u32>, Vec<Side>> = BTreeMap::new();

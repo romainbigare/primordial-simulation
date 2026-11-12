@@ -98,11 +98,13 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // The bed (`FLOOD`) and the thread of this month's water in it, `off` m from the line.
   let banks = banks_of(q);
   let free = max(banks - bed.half, 0.0);
-  let off = free * ease(-0.1, 0.5, noise_turned(at / (2.0 * WANDER * banks), 63));
+  let open = ease(BED_PX * e, 2.0 * BED_PX * e, banks) * (1.0 - ease(banks, 2.0 * banks, line));
+  // Where the bed is drawn as all water (from afar), the thread's wander is not read.
+  var off = 0.0;
+  if (open > 0.0) { off = free * ease(-0.1, 0.5, noise_turned(at / (2.0 * WANDER * banks), 63)); }
   let thread = abs(g.d - off);
   let in_bed = tent((max(banks, line) - g.d) / e) - tent((-max(banks, line) - g.d) / e);
   let water = tent((bed.half - thread) / e) - tent((-bed.half - thread) / e);
-  let open = ease(BED_PX * e, 2.0 * BED_PX * e, banks) * (1.0 - ease(banks, 2.0 * banks, line));
   out.share = mix(in_bed, water, open);
   out.bars = max(in_bed - out.share, 0.0);
   let resolved = ease(e, 2.0 * e, bed.half);
@@ -133,7 +135,7 @@ fn river_colour(p: Spot) -> Shaded {
   let ripple = ripples(p.at, p.e) * (1.0 - p.snow);
   // In the style a channel's water is a lake's (style.wgsl `lake_seen`), lighter over its shallow banks.
   var water = seen_through(bed, p.depth, ripple, RUNNING_ATTENUATION, DEEP_WATER);
-  if (styled()) { water = water_painted(bed, lake_seen(p.depth, RIVER_RIM_M), ripple); }
+  if (styled()) { water = water_painted(bed, lake_seen(p.depth, 0.0, p.e, RIVER_RIM_M), ripple); }
   let rgb = mix(water, SNOW, p.snow * 0.85);
   return Shaded(rgb, 1.0 + (lit - 1.0) * exp(-2.0 * RUNNING_ATTENUATION.g * p.depth), RIVER);
 }

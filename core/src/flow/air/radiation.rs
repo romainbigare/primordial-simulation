@@ -174,3 +174,56 @@ impl Surface<'_> {
         Balance { ts, give, to_air: adt * (f * up + hs - down), to_space: adt * (1.0 - f) * up }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::super::scratch::Latent;
+    use super::{Air, Surf, Surface, NONE};
+    use crate::units::{DAY, MAX_SUBSTANCES, SIGMA};
+
+    /// A ground node of 1 m² at the melting point `tm` that holds `fusion` J of the plateau's substance, `phi` of it
+    /// molten, under a soft cover `cover` ([resistance, melting point, depth]).
+    fn node(tm: f64, (fusion, phi): (f64, f64), cover: [f64; 3]) -> Surf {
+        let pk = if fusion > 0.0 { 0 } else { NONE };
+        let latent = Latent { held: phi * fusion, span: [f64::MIN, f64::MAX], lat: [0.0; 2], molten: 1 };
+        Surf {
+            area: 1.0, j: 0, seen_area: 1.0, sun: 0.0, gam: 0.0, zair: 0.0, head: 0.0, tg: tm, pk, phi, cap: CAP,
+            latent, cover, alb: 0.0, pd: 0.0, wet: 0.0, heat: 0.0, amt: [0.0; MAX_SUBSTANCES], fusion, canopy: 0.0,
+            absorb: 0.0, keep: 0.0, cell: 0, part: None, share: 1.0,
+        }
+    }
+
+    /// Heat capacity of the node, J/K per m², and its melting point, K.
+    const CAP: f64 = 5e6;
+    const TM: f64 = 273.15;
+
+    /// A node on its melting plateau whose step melts all of it (in the sun, under the cover of its own ice, whose
+    /// melting point caps the surface) or freezes all of it (in the dark) stays on it for the share of the step its
+    /// fusion enthalpy is of the heat the step brings at the melting point (what a node with no end to its plateau
+    /// takes), then goes on from the melting point as the same balance with no plateau and no cover that melted, over
+    /// the rest of the step: it ends with the heat of both, and its surface is their mean by time, to rounding.
+    #[test]
+    fn a_plateau_used_up_in_a_step_holds_the_node_for_its_share_then_lets_it_go() {
+        let dt = 3.0 * DAY;
+        for (sun, tl, phi, cover) in [(250.0, 285.0, 0.1, [1e-2, TM, 0.02]), (0.0, 250.0, 0.9, [1e-3, TM, 0.002])] {
+            let air = Air { tl, f: 0.8, down: 0.8 * SIGMA * (tl - 20.0).powi(4), slope: 4.0 * 0.8 * SIGMA * (tl - 20.0).powi(3) };
+            let surface = Surface { sw: sun, air: &air, t0: TM, gain: 0.0, slope: 0.0 };
+            // The heat a balance gives its node over `dt` s, J.
+            let heat = |g: &Surf, dt: f64| {
+                let b = surface.balance(g, dt, 10.0);
+                (b.ts, sun * dt - b.to_air - b.to_space)
+            };
+            let fusion = 0.02 * 1000.0 * 3.34e5;
+            let used = if sun > 0.0 { (1.0 - phi) * fusion } else { phi * fusion };
+            let (held, q) = heat(&node(TM, (1e6 * fusion, phi), cover), dt);
+            let share = used / q.abs();
+            assert!(share > 0.05 && share < 0.95, "the plateau takes {share} of the step");
+            let rest = if sun > 0.0 { [0.0, f64::INFINITY, 0.0] } else { cover };
+            let (after, q_rest) = heat(&node(TM, (0.0, 0.0), rest), (1.0 - share) * dt);
+            let (ts, q_all) = heat(&node(TM, (fusion, phi), cover), dt);
+            let want_ts = share * held + (1.0 - share) * after;
+            assert!((ts - want_ts).abs() < 1e-9 * TM, "sun {sun}: the surface {ts} K, the plateau then the rest {want_ts} K");
+            assert!((q_all - (q.signum() * used + q_rest)).abs() < 1e-9 * q.abs(), "sun {sun}: {q_all} J, the plateau's {used} J and the rest's {q_rest} J");
+        }
+    }
+}

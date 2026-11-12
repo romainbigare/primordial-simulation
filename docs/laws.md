@@ -38,24 +38,47 @@ cell's height is the terrain's mean over it (`Terrain::inside`, below), the heig
 **The terrain**
 (`space::terrain`) is one function of the world's seed and a point of the map, at any size: value noise summed over
 octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to heights, an island's falling away from
-the middle of its map, says how high the ground would stand; the world keeps what it needs beside its seed and its map
+the middle of its map, says how high the ground would stand. **An island's land rises in blocks** (`terrain::rise`,
+`Range`): along an axis drawn from the seed (any heading, up to a unit of the noise from the middle of the map, bent by
+the warp) lies a range, a band half 0.7 to 1.4 units wide (drawn) where the land's rise over its level is 1.3 times the
+mean on the axis, falling by a bell across it to 0.2 times the mean far from it (`RISES`): a high rough range, its
+foothills, and a wide low plain where the land rises slowly. That scales the noise's large shape; its base's octaves
+from the third on (`FINE_FROM`, a quarter of the coarsest's wavelength and finer) keep their own size where the land
+rises slower than the mean and grow with it where faster, so a plain keeps its own swells, low hills and shallow
+hollows of tens of metres while its large heights stay low. A globe's land rises alike everywhere (its noise is of the scale of its continents, its cells
+wider than a range); the world keeps what it needs beside its seed and its map
 (`World::terrain`: the rise its level 0 m lies at). The
 noise's finest octave is 670 m on the 64 x 64 island and 200 km on a globe. The ground is held at **samples**, the
 leaves of `SAMPLE_DEPTH` (1/64 of a block: 125 m on the island, 20 km on a globe of 64 rows), and **the samples are
 worn** (`space::samples`, `space::wear`, found once from the seed when first read, not saved): the ground has a
 history. The noise is read at the centres of the samples of a grid of 2 x 2 samples to one (`NOISE_BY`,
-`wear::noise_grid`) and carried smooth to finer grids. The open low ground (on a globe every sample under 0 m; on an
-island those under 0 m joined to its lowest, so ground under 0 m inland is a closed basin) stays as the noise has it; land rises from 0 m at a steady rate to the noise's height
-over 2 million years (`WEAR_YEARS`; ground under 0 m does not rise) while flowing liquid cuts it by the stream power
+`wear::noise_grid`) and carried smooth to finer grids. **The sea stands low while the land is worn**: its liquid
+stands 100 m under 0 m (`LOW_STAND_M`; the last low stand of the one planet known was about 120 m under today's,
+Fairbanks 1989). The open low ground then (on a globe every sample under the low stand; on an island those under it
+joined to its lowest, so ground under it inland is a closed basin) stays as the noise has it; land rises from the low
+stand at a steady rate to the noise's height over 2 million years (`WEAR_YEARS`; ground under the low stand does not
+rise) while flowing liquid cuts it by the stream power
 law (Howard 1994; Whipple and Tucker 1999): it lowers by K √A S, A the area that drains through a sample, spread down
 every lower way by Quinn's weights (Quinn et al. 1991), S the slope to the sample its liquid runs to, m = 1/2 and n = 1,
 K = 3e-7 a year (`CUT`) on the bed, each step solved exactly from the open low ground up the ways (h = (h₀ + f h_down)
-/ (1 + f), f = K dt √A / d; Braun and Willett 2013), so a step of any length is stable, 0 m the height of the low
-ground's liquid. **The bed has patches** of another make (`terrain::patch`): fractal noise over four scales from about
-4 km down to 500 m, parted sharply about its middle, says what share of the bed at a place is of the patches; the
-cells' beds are made of it (the chemistry's `bed` and, over that share, its `deposits`, section 8), and flowing liquid
-wears the patches as much faster as Flow's wear breaks them (the sum of each substance's share over its bond strength,
-1.3): `Terrain::soft`, 1.36 in chemistry 0. So soft patches open into valleys and the hard bed stands. Under a closed
+/ (1 + f), f = K dt √A / d; Braun and Willett 2013), so a step of any length is stable, the low stand the height of
+the low ground's liquid. At the end the liquid rises to 0 m: the open low ground is what lies under 0 m joined to the
+open low ground of the low stand (on an island, to its lowest sample), so the valleys cut down toward the low stand
+by the shore are drowned: inlets, bays and small islands off the coast. An island's level (`ISLAND_LEVEL`, 0.27) keeps
+its land's share of the map about what it was with no low stand; a globe's is found on the noise as before, and the
+drowning takes about half a percent of its area from its land (28.4% to 27.9% on a globe of 32 rows). **The bed is of
+a few makes** (`space::strata`), each a mix of the chemistry's own bed substances (`makes`, section 8; five in
+chemistry 0), and flowing liquid wears each as much faster than the first as Flow's wear breaks it (the sum of each
+substance's share over its bond strength, 1.3; `Terrain::cut`: 1, 0.88, 1.11, 1.18 and 1.36 in chemistry 0). They lie
+in **layers**: a stack of 12 layers, each 60 to 400 m thick and of a make drawn from the seed (never the make of the
+layer over it), repeating under them (`LAYERS`, `THICK_M`), folded up and down by up to 2 km by fractal noise of
+three scales from about 8 km (`FOLD_M`, `FOLD_PER_SQUARE`); and through them stand **bodies** of the hardest make
+where fractal noise over four scales from about 4 km down passes 0.66 (`BODY_ABOVE`), as rock cooled from a melt
+rises through strata. The top of the stack rises with the land and floats back up with it, so how deep the wear has
+cut under it, plus the fold, says which layer a sample's surface is in; at each step the wear cuts each sample at the
+rate of the make it has reached. So a soft layer opens into a wide vale, a hard one stands as a scarp or caps a
+tableland, and folded layers crop out in bands round the heights. A cell's bed is the mean of its samples' makes by
+area, substance by substance (`Samples::make`). Under a closed
 basin's level the liquid does not cut. What a step cuts spreads down as the liquid does; a closed basin keeps all that
 comes into it and fills its floor from the lowest up, as one level, toward the height its pass has now, and what it
 cannot hold runs on over the pass (`space::ponds`); what reaches the open low ground lies there at the end (the shelf,
@@ -70,13 +93,15 @@ each of its samples (or the noise carried to it), and each is carried to the nex
 makes no new pit and no new peak); a map whose first grid would hold more than 65,536 samples runs every stage on grids
 twice as coarse until it fits (`MOST_SAMPLES`). **The shelf** (`space::shelf`): the load that reached the open low
 ground is spread along the shore by the waves, each sample of the shore taking the load that reached the shore within
-5 km of it as a share of that stretch (`ALONG_M`); from it the load builds out a platform 10 m under 0 m (`TOPSET_M`, a
+5 km of it as a share of that stretch (`ALONG_M`); from it the load builds out a platform 10 m under the low stand
+(`TOPSET_M`, a
 delta's topset), as wide as that load in proportion, fronted by a slope of 0.3 down to the floor (`FORESET`, the load at
 rest under liquid; Gilbert 1885). So a channel that brings much load builds a fan at its mouth and a coast that gets
 little keeps its steep drop; its edge is rounded over 250 m as a clinoform's top rolls over (`ROUNDED_M`), never over
 the platform's top; the width is found so the shelf holds all the load (where the platform fills the open low ground of
 a small map, the rest leaves the map), and what the wear took off the land is what lies in the basins, on the shelf and
-off the map (`Samples::books`). **The loose ground** the wear leaves (`Samples::loose`):
+off the map (`Samples::books`). Laid at the low stand's shore, the shelf lies 110 m under 0 m once the liquid has
+risen: a drowned shelf, its front where the low stand's coast was; the drowned valleys get no load after the rise. **The loose ground** the wear leaves (`Samples::loose`):
 on land (`space::mantle`) the depth where the bed's breaking into loose ground balances what takes it away, the
 smaller of two balances. The bed breaks at 7.7e-5 m a year under none, e times slower under each 0.4 m (`BREAKS`,
 `BREAKS_UNDER_M`; Heimsath, Dietrich, Nishiizumi and Finkel 1997). Against the lowering of the last step E (cut and
@@ -247,7 +272,11 @@ build of Flow's state, and a part run alone, are booked at their own end. In eac
 potential energy from the height it leaves (a ground node's liquid top: the table of its pores, or the level of what
 stands where that lies higher, so liquid standing in a pit under its full pores leaves with them and the top never
 rises as liquid leaves, `stack::Column::top`; a bodies' node's head; an air node's mean head; a store's table; each the mean of the booking's start and
-end, so a lake that drains whole takes along what it held); and each node's heat takes what came in less what left
+end, so a lake that drains whole takes along what it held); what only passes through a ground node from ground node
+to ground node in one booking (as much as both came in from them and left to them: a body's liquid that its pass
+gathers in one cell and shares out, a pit's that spills and runs back) carries on the energy of what came in, mixed,
+found by sweeps over the moves (`potential::relayed`), so its fall lands where it stays, never as a lift or a fall of
+a cell it only crosses; and each node's heat takes what came in less what left
 less the change of its own (`store::fall_heat`): so a fall heats where the matter lands (the runoff's in the body it
 reaches, 1.2), a lift is paid by the node it enters (the air, for a gas going up; the ground node a store's liquid rises
 into), a column that rises as it fills pays for it, and the potential energy the world's
@@ -333,8 +362,15 @@ mixed layer deepens in winter and thins in summer.
 **Melting plateaus** (`ground::melting`): a node holds the fusion enthalpy of what is molten in it, so it stays at a
 melting point (lowered by solutes, 2.5) until that substance has all frozen or melted. A node whose heat melts or
 freezes all of it within a step stays there only for the share of the step that takes, then goes on from that point,
-and a soft cover that melts away holds its surface at the melting point only until it is gone (`air::radiation`), so a
-long step ends where short ones do. The state of a node is found in full at each month's start; between, it is solved again only on a
+and a soft cover that melts away holds its surface at the melting point only until it is gone (`air::radiation`): the
+share of the step it stays is the share its fusion enthalpy is of the heat the step brings at the melting point, and
+the rest of the step is the same balance from the melting point. **Known limit:** each surface solve is backward
+Euler, so a step of length h against a node's time constant τ (its heat capacity over what its balance changes per K)
+answers 1/(1 + h/τ) of its distance from balance where the exact answer is e^(-h/τ). A 3-day step on the dry land
+of the small world has h/τ of 0.5 to 0.9 (cell 55: 0.665, 0.540 for the rest after its plateau): it ends 0.03 to 1.7 K
+from 48 short steps in the sun and 1.2 to 5.4 K in the dark (where the air is also taken at its start), and it
+answers to the length of the rest after a plateau too weakly (cell 55: the plateau delays the end by 0.41 K in one
+step, 0.58 K by the exact relaxation, 0.71 K in short steps). The state of a node is found in full at each month's start; between, it is solved again only on a
 plateau or when its temperature leaves the span between the melting points its last solve found, and its surface
 (soft cover, reflectance, pores) is found again once it moved by 1% of the depth that hides half of a soft cover with
 the liquid standing on it (`land::ground_state`). As matter moves, its heat capacity and fusion enthalpy follow
@@ -421,7 +457,8 @@ what the heat holds molten, as every law and the shell then read it.
   holds and what stays keeps that temperature. A salt is a liquid that never
   boils (11, 12): it moves with the liquid and stays when it evaporates. **Its potential energy goes with it** (0,
   "The books"): each move of the pass goes from the cell it leaves to the cell it lands in, its potential energy from
-  the height it leaves (`potential::apply`), and the fall turns to heat where it lands. The head it loses on the way
+  the height it leaves (`potential::apply`; what only passes through a cell carries on what it came with), and the
+  fall turns to heat where it lands. The head it loses on the way
   does work (1.3).
 
 ### 1.3 Erosion and creep
@@ -1357,15 +1394,16 @@ to the air. Body matter holds no rock element: the **rock salt (11)** is rock ch
 Placed by `worldgen` (`worldgen::schedule::Schedule`, carried by a snapshot) and printed by every run; the laws never
 read a kind.
 - **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on: an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
-  `World::terrain`); the bed of the chemistry's `bed` and, over the share of it in patches (`terrain::patch`), of its
-  `deposits`; the loose ground the wear left (0: the mantle on land, the shelf on the open low ground), each cell the
+  `World::terrain`); the bed of the chemistry's `makes`, each over the share of the cell's samples whose surface the
+  wear left in it (`space::strata`); the loose ground the wear left (0: the mantle on land, the shelf on the open low ground), each cell the
   mean over its samples of the top `skin_m` of each sample's at most: the ground node is the layer that exchanges with
   the surface within a year (its heat, and the pores roots and evaporation draw from), and what the wear left deeper lies
   under it, packed with the bed (the bed's store, `Class::Deep`, its aquifer); the sea's salt at
   balance (2.6); ground and air temperatures falling with latitude and height. The terrain's samples are worn (0):
-  land rises from 0 m to the noise's height over 2 million years while flowing liquid cuts it, its slopes creep and it
-  floats back up as it is unloaded; the load settles in the closed basins the cutting leaves, and those it does not fill
-  are ponds, each with its pass and level; what reaches the open low ground lies there as a shelf. **The starting
+  land rises from a low stand of the sea 100 m under 0 m to the noise's height over 2 million years while flowing
+  liquid cuts it, its slopes creep and it floats back up as it is unloaded; the load settles in the closed basins the
+  cutting leaves, and those it does not fill are ponds, each with its pass and level; what reaches the open low ground
+  lies there as a shelf; then the sea rises to 0 m and drowns what lies under it. **The starting
   liquid** (`World::full_bodies`): the open low ground stands at 0 m and every body of standing liquid with a pass
   stands full to its pass, each part of it holding what its samples hold under that level, as the runoff's pass leaves
   a body (1.2); a cell that holds no pond's samples holds what its ground dips under 0 m. Each cell that holds some of

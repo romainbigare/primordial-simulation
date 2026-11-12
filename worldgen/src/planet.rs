@@ -3,7 +3,7 @@
 //! `YEARS` years, the air of its last year by row and month.
 
 use crate::chemistry::chemistry0;
-use crate::terrain::{build_on, coarsen, soft_of, AIR_SCALE};
+use crate::terrain::{build_on, coarsen, cuts_of, AIR_SCALE};
 use pcore::flow::Planet;
 use pcore::space::square::Square;
 use pcore::space::terrain::Terrain;
@@ -34,8 +34,8 @@ pub fn planet() -> Planet {
     let ((chem, init), seed) = (chemistry0(), SEED);
     let cfg = Config { lat_south: -90.0, lat_north: 90.0, ..Config::default() };
     let map = coarsen(Square::new(COLUMNS * AIR_SCALE, ROWS, PI * cfg.radius_m / ROWS as f64, true, AIR_SCALE), |_, _| false);
-    let soft = soft_of(&chem, &init);
-    let mut w = build_on(seed, map, Terrain::new(seed, ALL_LOW, soft), (chem, &init), cfg);
+    let cut = cuts_of(&chem, &init);
+    let mut w = build_on(seed, map, Terrain::new(seed, ALL_LOW, cut), (chem, &init), cfg);
     pcore::flow::state(&mut w, true);
     let months = w.cfg.months_per_year as usize;
     for _ in 0..(YEARS - 1) * months as u64 {

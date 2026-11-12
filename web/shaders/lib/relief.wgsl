@@ -15,6 +15,13 @@ const RELIEF_LONGEST_M = 48.0; const RELIEF_STEP = 3.0; const RELIEF_OCTAVES = 6
 // per unit of its slope (a face is rougher than a slab).
 const SWELL = 0.025; const CRAG = 0.09; const CRAG_STEEP = 0.12;
 
+// The gradient at lattice point c of stream k: two 16-bit halves of its random word, each -1..1 (no trigonometry: the
+// gradients need not be of one length for the noise to show no grid).
+fn relief_gradient(c: vec2i, k: i32) -> vec2f {
+  let x = lowbias(c, k);
+  return vec2f(f32(x & 0xffffu), f32(x >> 16u)) * (2.0 / 65535.0) - 1.0;
+}
+
 // Gradient noise at p (in its cells) of stream k: -0.7..0.7, and its slope along x and y, smooth with its slope
 // (quintic easing, Perlin 2002; derivatives as Quilez 2017).
 fn relief_noise(p: vec2f, k: i32) -> vec3f {
@@ -22,11 +29,10 @@ fn relief_noise(p: vec2f, k: i32) -> vec3f {
   let f = p - floor(p);
   let u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
   let du = 30.0 * f * f * (f * (f - 2.0) + 1.0);
-  let turn = 2.0 * PI / 4294967296.0;
-  let ga = vec2f(cos(f32(lowbias(i, k)) * turn), sin(f32(lowbias(i, k)) * turn));
-  let gb = vec2f(cos(f32(lowbias(i + vec2i(1, 0), k)) * turn), sin(f32(lowbias(i + vec2i(1, 0), k)) * turn));
-  let gc = vec2f(cos(f32(lowbias(i + vec2i(0, 1), k)) * turn), sin(f32(lowbias(i + vec2i(0, 1), k)) * turn));
-  let gd = vec2f(cos(f32(lowbias(i + vec2i(1, 1), k)) * turn), sin(f32(lowbias(i + vec2i(1, 1), k)) * turn));
+  let ga = relief_gradient(i, k);
+  let gb = relief_gradient(i + vec2i(1, 0), k);
+  let gc = relief_gradient(i + vec2i(0, 1), k);
+  let gd = relief_gradient(i + vec2i(1, 1), k);
   let va = dot(ga, f);
   let vb = dot(gb, f - vec2f(1.0, 0.0));
   let vc = dot(gc, f - vec2f(0.0, 1.0));
