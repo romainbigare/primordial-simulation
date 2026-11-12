@@ -71,7 +71,16 @@ children), and on texels finer than the samples, out of the ponds, drawn toward 
 summed), the floor running along each sample's piece from the mean of its height and the one's upstream through its own
 to the mean of its own and the next one's (the next one's own where a tributary joins it; a closed pond's level). So the
 lowest line of the ground drawn is the channel's line, and the samples' steps beside a valley fade out; the mean of a
-sample's texels is not kept there exactly; the wetness index of the place, ln(a / tan β) (Beven and Kirkby 1979) of the terrain's samples (a the area
+sample's texels is not kept there exactly; near a pond (within 2 samples) a valley only lowers the ground and not under
+the pond's level, so a channel's mouth meets its level. Then the shore is drawn smooth (`tape/src/ground/shore.rs`): of
+each sample, its height over the level of the nearest pond (the sea's 0 m), held within 4 m either side, blurred over
+the samples by a Gaussian of 0.9 samples; the zero line of that offset (a cubic B-spline through the samples' centres)
+is the shore, and the ground drawn keeps its own height where it lies on the offset's side of the level and is moved to
+that side by half the offset where not (none from 4 m on); a closed pond's samples deeper than 3 m keep their liquid.
+Under the level the bed leans to the offset at the shore and farther out to the samples' depth held within 40 m and
+blurred alike, all of it in the shallows. So a coast is a smooth line with capes and bays of a few samples and the
+shallows one band, none of a sample's scallops; the shore moves by about a quarter of a sample on the mean (a blur
+shrinks what bulges: an island and its capes). Then the wetness index of the place, ln(a / tan β) (Beven and Kirkby 1979) of the terrain's samples (a the area
 that drains through a sample, `Samples::up`, over its width, β the slope of the samples' ground, `Grid::slope`),
 blended between the centres of the four samples about a texel finer than them and the mean of those a coarser one
 covers; and its channel (`tape/src/ground/channels.rs`). A channel runs through each sample's point
@@ -104,7 +113,7 @@ the side (60,000 where none reaches), and its sample, as the step from the sampl
 again from the texel's centre, floor((x + 1/2) k) for a texel k samples a side, stepped by it. Off the map a texel is
 its edge's. Each number is a function of the seed, the map and the place alone: the same in every tile that holds it. The second plane holds, beside the channel's sample, one more than the pond
 each texel lies in (`Ground::pond_tile`: the pond of the sample that holds its centre, or where that is none, of the
-first of its eight neighbours whose level the texel lies under, where its sample stands over that level (a rim, not the
+nearest of the samples within 2 each way whose level the texel lies under, where its sample stands over that level (a rim, not the
 pass nor the ground below it) or the pond is of the open low ground, so a pond's shore is where the ground drawn rises
 over its level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
 frame: the melting point of the frozen cover, K, then for each square row by row 13 f32 (`ROW`) of the cell that holds

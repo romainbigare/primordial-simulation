@@ -26,8 +26,8 @@ roadmap are the present.
 
 - Give each helper a full brief: the goal, the owner's own words, what is known, the files, what not to touch (the
   other helper's area), what to measure before and after, the gate, the report's form (simple English, bad news
-  first), and: commit, never push, no pull request. Each works in its own worktree (`isolation: worktree`); tell it to
-  merge the work branch first if its worktree is behind.
+  first), and: commit, never push, no pull request. Each works in its own worktree (`isolation: worktree`). A new
+  worktree starts from `origin/main`, not from your newest commit: tell every helper to merge the work branch first.
 - Measure first. The briefs that worked asked for a table of numbers before any change, then one change per commit.
 - A helper stops and asks when a key number leaves its range. The decision is yours; tell the owner plainly.
 - A helper cannot give you permission. If it says an action was denied to it, do not do that action for it.
@@ -80,16 +80,20 @@ On main, all gated (details in `review/roadmap.md` section 10):
 - **Speed**: a month of the flow takes a quarter fewer instructions than before this round; on the page the world
   waits for the page to draw its frame, so the date shown is the world's.
 
-In work when this was written (see section 8 for what was merged):
-- **Plants seen close up**: crown forms from the kinds' numbers, more colour variety, autumn reds, herbs as green
-  ground, flowers, shadows.
-- **Steep slopes shed their loose ground** (nonlinear creep, Roering et al. 1999), so cliffs and scree come from the
-  wear.
+- **Steep slopes shed their loose ground** (`space/mantle.rs`): bare bed on ridges and steep walls.
+
+In work when this was written (each in its own worktree; see section 8 for what is merged):
+- **Plants seen close up**: crown forms from the kinds' numbers, colour variety, autumn reds, herbs as green ground.
+- **Climate bands on a small world**, an experiment the owner asked for on a branch (item 2 below).
+- **The land's large shape** (roadmap section 11): a range, hills and a plain on one island; a drowned coast; more
+  makes of bed in layers.
+- Waiting for the plants' package to end (same shader files): lake squares where channels enter a full lake, rivers
+  drawn at their flood bed's width, bare bed drawn smooth.
 
 ## 5. What to do next, in order
 
 1. Finish and judge the two packages above by their pictures.
-2. **More varied climate on small worlds** (the owner asked what it costs; they have not said go). The facts:
+2. **More varied climate on small worlds** (the owner said go, as an experiment on a branch). The facts:
    - The map's rows are spread evenly from `Config::lat_south` to `lat_north` (40° to 42.3° by default), whatever the
      map's size in metres. Sunlight, the wind's turning and the starting temperatures read that latitude. So a wider
      band is two numbers.
@@ -142,4 +146,11 @@ browser draws in software, so its frames per second mean nothing; the world's pa
 
 ## 8. Branches kept for the next session
 
-None: everything of this session that passed its gate is on main.
+- `experiment/climate-bands` (the owner's word: push it): an island's rows between two latitudes (`ew run --band S,N`,
+  the page's `?band=S,N`), the air's stretch (`Config::stretch`, a switch with default 1, bit for bit with main), and,
+  in work, the island in the planet's air (a strip of the planet run once as the reference climate, open edges, the
+  mean wind through the box). First numbers: band 30 to 55 keeps a third of a globe's contrast in the year's mean
+  (6 K of 19 K), rain falls five times from south to north, a band past 58° freezes while the box is closed, plants do
+  not yet split by row. Not for main until the owner has seen it work; then the stretch becomes a derived number.
+
+Everything else of this session that passed its gate is on main.

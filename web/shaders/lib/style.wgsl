@@ -33,12 +33,15 @@ const BED_LIGHTEN = 0.55; const BED_TONE = 0.85;
 // Lakes and rivers are metres deep where the sea is tens: each is coloured as if `LAKE_SCALE` times as deep plus
 // `LAKE_SHALLOWEST_M`, no deeper than `LAKE_DEEPEST_M` (an open blue, not the ocean's dark), and lighter towards its
 // shore: as if shallower where it is less than a rim's depth deep (a lake's `LAKE_RIM_M`, a channel's `RIVER_RIM_M`:
-// its banks), a band no narrower than `LAKE_RIM_PX` pixels, the shallower the nearer the shore (its square).
+// its banks), the shallower the nearer the shore (its square): a band as wide as the ground's slope makes it, fixed in
+// the world.
 const LAKE_SCALE = 6.0; const LAKE_SHALLOWEST_M = 6.0; const LAKE_DEEPEST_M = 45.0;
-const LAKE_RIM_M = 1.5; const RIVER_RIM_M = 0.1; const LAKE_RIM_PX = 8.0;
+const LAKE_RIM_M = 1.5; const RIVER_RIM_M = 0.1;
 
-// Beach sand (colour.wgsl `beach`), bright and dry.
+// Beach sand (colour.wgsl `beach`), bright and dry; a beach takes this share of its colour from its loose ground's
+// own, lifted this many times (washed and dry, a ground is lighter).
 const BEACH_SAND = vec3f(0.62, 0.53, 0.36);
+const BEACH_OWN = 0.5; const BEACH_LIFT = 1.8;
 
 // The weights of red, green and blue in a colour's lightness (Rec. 601).
 const LUMA = vec3f(0.299, 0.587, 0.114);
@@ -69,10 +72,10 @@ fn relief_tint(c: vec3f, lit: f32) -> vec3f {
   return c * lit * mix(vec3f(1.0), tint, STYLE);
 }
 
-// The depth a lake or a river `depth` m deep is coloured as, where its bed rises at `slope` (rise over run) to a rim
-// `rim_m` deep, seen at `e` m a pixel (`LAKE_SCALE`).
-fn lake_seen(depth: f32, slope: f32, e: f32, rim_m: f32) -> f32 {
-  let rim = ease(0.0, max(rim_m, slope * LAKE_RIM_PX * e), depth);
+// The depth a lake or a river `depth` m deep is coloured as, lighter where it is shallower than a rim `rim_m` deep
+// (`LAKE_SCALE`).
+fn lake_seen(depth: f32, rim_m: f32) -> f32 {
+  let rim = ease(0.0, rim_m, depth);
   return min(LAKE_SHALLOWEST_M + depth * LAKE_SCALE, LAKE_DEEPEST_M) * rim * rim;
 }
 
@@ -97,7 +100,7 @@ fn foam(depth: f32, slope: f32, e: f32) -> f32 {
 const BAND_LOW = 0.88; const BAND_HIGH = 1.1; const BAND_SOFT = 0.05; const BANDS = 0.7;
 const TONE_SHADE = 0.78; const TONE_LIT = 1.16;
 // A mark's hue turns from its kind's by up to this many radians either way, and its tone by up to this share.
-const HUE_JITTER = 0.18; const TONE_JITTER = 0.12;
+const HUE_JITTER = 0.25; const TONE_JITTER = 0.2;
 // The outline: as dark as this share at the rim, `OUTLINE_PX` pixels wide (no less than `OUTLINE_LEAST` of the radius).
 const OUTLINE = 0.35; const OUTLINE_PX = 1.2; const OUTLINE_LEAST = 0.06;
 

@@ -5,28 +5,47 @@
 // numbers.
 import { clamp, smooth } from './earth';
 import type { Rgb } from './sprites';
-import { KindLook, clumped, designOf, kindLook, seenFar } from './style';
+import { DESIGN, KindLook, designOf, kindLook, seenFar } from './style';
+import { formOf } from './form';
+import { Loose, needOf, rootedMean } from './roots';
 
 /** The side of a cell of each lattice of marks, m: one mark a cell at most. A mark reaches at most a cell from its
  * cell, so it is drawn at most `REACH` sides across; a kind is drawn on the lattices whose side is nearest its crown's
- * width (on a log scale), so the three hold every plant from a herb of 5 cm to a tree of 5 m across. */
+ * width (on a log scale), so the three hold every bush and tree from 5 cm to 5 m across. Herbs have no marks: they are
+ * the ground's sward (cover_field.wgsl `sward`). */
 export const LATTICES = [0.1, 0.5, 2.5];
 /** A mark is drawn at most this many cell sides across (cover.wgsl looks one cell about a pixel). */
 const REACH = 2;
+/** A kind whose mean rooted share in its square is this near 1 is held at every point of it: its root need is sent as 0
+ * (cover.wgsl `holds`), so the marks read no loose ground there. */
+const ROOTED_ALL = 0.999;
+/** A bush's mark is a clump of its plants this many times as wide as one, so its lobes read at a 10 m scale bar. */
+const BUSH_GROW = 2.5;
 /** The numbers of a kind in the core's row (tape/src/stands.rs `Kind::row`). */
 const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover: 6, crown: 7, wood: 8, leaf: 9, pigment: 10, moist: 11, frost: 12, fuel: 13, act: 14, frozen: 15, seed: 16 } as const;
-/** The planes of the kinds' table (cover.wgsl): of each lattice the chance a cell holds a mark of each kind and the
- * mark's width, m; how wet each kind needs its ground; then of each kind its form (height and stem's width, m, how
- * closed its crown is, its capture area per kg, log10 m²/kg), the colours its plants span (style.ts `KindLook`: the
- * first with its walls' share, the second with its design, `designOf`) and its flowers (their colour and the share of
- * its plants in flower). A plane holds four numbers: one for each kind of a square, or one kind's four. */
-export const KIND_PLANES = { chance: 0, width: 3, need: 6, form: 7, from: 11, to: 15, petal: 19, count: 23 } as const;
-/** Layers of the field (`CoverField`): one a lattice. */
-export const FIELD_LAYERS = LATTICES.length;
+/** The planes of the kinds' table (cover.wgsl): of each lattice the chance a cell holds a mark of each kind where its
+ * roots hold (over its square's mean, roots.ts; on the lattice of stands, `STANDS`, negated for its square's first kind,
+ * `Paint`) and the mark's width, m; how wet each kind needs its ground and how deep its loose ground, m (0: its square
+ * holds it everywhere, `ROOTED_ALL`); then of each kind its form (height and stem's width, m, how closed its crown is,
+ * its capture area per kg, log10 m²/kg), the colours its plants span (style.ts `KindLook`: the first with its walls'
+ * share, the second with its design, `designOf`), its flowers (their colour and the share of its plants in flower) and
+ * its shape (its crown's form and how surely, form.ts `formOf`). A plane holds four numbers: one for each kind of a
+ * square, or one kind's four. */
+export const KIND_PLANES = { chance: 0, width: 3, need: 6, roots: 7, form: 8, from: 12, to: 16, petal: 20, shape: 24, count: 28 } as const;
+/** The layers of the field (`CoverField`): one a lattice (its marks' plants), then the herbs' sward, the herbs' flowers,
+ * of the sward and of the lattice of stands the part its first kind makes (`Paint`), of each lattice and the sward
+ * (red, green, blue, alpha) its plants' mean height, m, and their mean rooted share in the square (roots.ts), and the
+ * sward and the lattices under the trees' as one layer, as the field draws them far away (`lowOf`). */
+export const FIELD = { sward: LATTICES.length, flowers: LATTICES.length + 1, swardFirst: LATTICES.length + 2, standsFirst: LATTICES.length + 3, tall: LATTICES.length + 4, rooted: LATTICES.length + 5, low: LATTICES.length + 6, count: LATTICES.length + 7 } as const;
+/** Seen from above the herbs' leaves leaning and their shade cover more than their share: the ground they leave is
+ * (1 - share) to this power (cover_field.wgsl `sward`, `lowOf`; an Earth view's style). */
+export const SWARD_SEEN = 5;
+/** The lattice whose kinds grow in stands of their own, near and far alike (cover_field.wgsl `stand_pick`): the trees'. */
+export const STANDS = 2;
 
-/** A field of the cover: `w` x `h` texels over the map, a texel a square, of each lattice the reflectance of its marks
- * times the share of the ground they cover, and that share with the shadow they cast, RGBA layer by layer; and its
- * levels below (`mipsOf`). */
+/** A field of the cover: `w` x `h` texels over the map, a texel a square, of each layer (`FIELD`) a reflectance times the
+ * share of the ground it covers, and that share (with the shadow its plants cast), RGBA layer by layer; and its levels
+ * below (`mipsOf`). */
 export interface CoverField { w: number; h: number; data: Float32Array; mips: Float32Array[] }
 /** The cover of a frame: the kinds' table (`KIND_PLANES`, a texel a square, row by row, plane under plane), its field, of
  * each lattice whether any square holds its marks and the tallest plant drawn on it, m, and the reflectance of the walls
@@ -82,10 +101,10 @@ function foliage(r: Float32Array, walls: Rgb): Rgb {
   return mix(c, PALE_REFL, PALE_MOST * (1 - clamp(r[K.fuel])));
 }
 
-/** The look of the kind of row `r` (style.ts `kindLook`) on ground at `t` K where the frozen cover melts at `melt` K,
- * while the ground cools by `falling`, its walls reflecting `walls`. */
-function lookOfRow(r: Float32Array, walls: Rgb, t: number, melt: number, falling: number): KindLook {
-  const k = { leaf: r[K.leaf], wood: r[K.wood], moist: r[K.moist], frost: r[K.frost], pigment: r[K.pigment], act: r[K.act], frozen: r[K.frozen], seed: r[K.seed], t, melt };
+/** The look of the kind of row `r` (style.ts `kindLook`), drawn with design `design`, on ground at `t` K where the
+ * frozen cover melts at `melt` K, while the ground cools by `falling`, its walls reflecting `walls`. */
+function lookOfRow(r: Float32Array, design: number, walls: Rgb, t: number, melt: number, falling: number): KindLook {
+  const k = { leaf: r[K.leaf], wood: r[K.wood], moist: r[K.moist], frost: r[K.frost], pigment: r[K.pigment], act: r[K.act], frozen: r[K.frozen], seed: r[K.seed], design, t, melt };
   return kindLook(k, foliage(r, walls), falling);
 }
 
@@ -97,10 +116,11 @@ function shareOn(w: number, l: number): number {
   return Math.min(below, above);
 }
 
-/** The marks of a kind (row `r`) on lattice `l`, each a clump of `grow` plants across: the chance a cell holds one and its width, m. Its plants stand in
- * patches that cover the share `cover` of the ground, `perM2` a m², each crown as wide as the ground it holds there; a
- * cell of a patch holds the plants that fall in it as one mark of their crowns' area (a clump where they are many), at
- * most `REACH` sides across, and the chance a cell holds one keeps the share of the ground the marks cover the stand's. */
+/** The marks of a kind (row `r`) on lattice `l`, each a clump `grow` plants across: the chance a cell holds one and its
+ * width, m. Its plants stand in patches that cover the share `cover` of the ground, `perM2` a m², each crown as wide as
+ * the ground it holds there; a cell of a patch holds the plants that fall in it as one mark of their crowns' area (a
+ * clump where they are many), at most `REACH` sides across, and the chance a cell holds one keeps the share of the
+ * ground the marks cover the stand's. */
 function marksOn(r: Float32Array, l: number, grow: number): [number, number] {
   const share = shareOn(r[K.width] * grow, l), a = LATTICES[l];
   if (share <= 0 || r[K.cover] <= 0 || r[K.perM2] <= 0) return [0, 0];
@@ -110,64 +130,140 @@ function marksOn(r: Float32Array, l: number, grow: number): [number, number] {
   return [share * chance, width];
 }
 
+/** What a layer of the field (`FIELD`) gathers in a square: its kinds' colours summed by the ground each covers, that
+ * ground, the ground they leave, the shadow they cast (the plants a m² times their shadow's area), their heights and
+ * rooted shares summed by the ground each covers, and its first kind:
+ * the one of the lowest starting kind (a label fixed in the world, so neighbouring squares agree), with its colour and
+ * the ground it covers. */
+class Paint {
+  rgb: Rgb = [0, 0, 0];
+  covered = 0;
+  bare = 1;
+  shadow = 0;
+  tall = 0;
+  held = 0;
+  first = { root: Infinity, rgb: [0, 0, 0] as Rgb, covers: 0, k: -1 };
+
+  /** Add kind `k` of starting kind `root` and colour `c`, covering `covers` of the ground and casting `shadow`, its plants
+   * `height` m tall and their roots holding `rooted` of the square on the mean. */
+  add(k: number, root: number, c: Rgb, covers: number, shadow: number, height: number, rooted: number): void {
+    if (covers <= 0) return;
+    this.rgb = this.rgb.map((v, q) => v + covers * c[q]) as Rgb;
+    this.covered += covers;
+    this.tall += covers * height;
+    this.held += covers * rooted;
+    this.bare *= 1 - covers;
+    this.shadow += shadow;
+    if (root < this.first.root) this.first = { root, rgb: c, covers, k };
+  }
+
+  /** Into `out` at `at`: premultiplied, the layer's mean reflectance times the share of the ground it covers, and that
+   * share with the shadow it lays on the ground between (a shadow over the share 1 - e^-(the shadows' area per m²) of
+   * it, Poisson-placed plants), so a tall rough canopy is darker than a low one of the same leaves; of its first kind
+   * (`firstAt`, if any), its part of that. */
+  put(out: Float32Array, at: number, firstAt?: number): void {
+    const cover = 1 - this.bare, shaded = (1 - cover) * -Math.expm1(-this.shadow) * CROWN_SHADOW, n = Math.max(this.covered, 1e-9);
+    this.rgb.forEach((v, q) => { out[at + q] = (v / n) * cover; });
+    out[at + 3] = cover + shaded;
+    if (firstAt === undefined) return;
+    const share = this.first.covers / n;
+    this.first.rgb.forEach((v, q) => { out[firstAt + q] = v * share * cover; });
+    out[firstAt + 3] = share * (cover + shaded);
+  }
+
+  /** Into `out` at `tallAt` and `heldAt`: its plants' mean height and rooted share (1 where it holds none). */
+  putRoots(out: Float32Array, tallAt: number, heldAt: number): void {
+    out[tallAt] = this.tall / Math.max(this.covered, 1e-9);
+    out[heldAt] = this.covered > 0 ? this.held / this.covered : 1;
+  }
+}
+
 /** The kinds of the core's table `rows` for a map of `w` x `h` squares (`row` numbers a square, tape/src/table.rs):
  * `kinds` kinds a square of `kindRow` numbers, from `at` on; while the ground cools by `falling` (style.ts
- * `cooling`). */
-export function kindsOf(w: number, h: number, rows: Float32Array, row: number, at: number, kinds: number, kindRow: number, walls: Rgb, falling: number): Kinds {
+ * `cooling`); on the squares' loose ground `loose` (none: not known yet). */
+export function kindsOf(w: number, h: number, rows: Float32Array, row: number, at: number, kinds: number, kindRow: number, walls: Rgb, falling: number, loose: Loose | null): Kinds {
   const n = w * h, table = new Float32Array(4 * KIND_PLANES.count * n), held = LATTICES.map(() => false), tallest = LATTICES.map(() => 0);
-  const field = new Float32Array(4 * FIELD_LAYERS * n);
+  const field = new Float32Array(4 * FIELD.count * n);
   const put = (plane: number, i: number, c: number, v: number) => { table[4 * (plane * n + i) + c] = v; };
+  const layer = (l: number, i: number) => 4 * (l * n + i);
   for (let i = 0; i < n; i++) {
-    // Of each lattice: its marks' colours summed by the ground each covers, that ground, the ground they leave, and the
-    // shadow they cast (the plants a m² times their shadow's area).
-    const paint = LATTICES.map(() => ({ rgb: [0, 0, 0], covered: 0, bare: 1, shadow: 0 }));
+    const paint = LATTICES.map(() => new Paint()), sward = new Paint(), flowers = new Paint();
     for (let k = 0; k < Math.min(kinds, 4); k++) {
       const r = rows.subarray(at + (i * kinds + k) * kindRow, at + (i * kinds + k + 1) * kindRow);
       if (r[K.root] < 0 || r[K.kg] <= 0) continue;
       // The square's ground temperature (the table's second number of a row) and the frozen cover's melting point.
-      const look = lookOfRow(r, walls, rows[1 + row * i + 1], rows[0], falling), design = designOf(r[K.height], r[K.wood]);
-      const c = seenFar(look, design), crown = r[K.crown] * look.left;
+      const design = designOf(r[K.height], r[K.wood]), look = lookOfRow(r, design, walls, rows[1 + row * i + 1], rows[0], falling);
+      const c = seenFar(look), crown = r[K.crown] * look.left;
+      const shape = formOf({ leaf: r[K.leaf], frost: r[K.frost], moist: r[K.moist], height: r[K.height], width: r[K.width], seed: r[K.seed] });
+      const need = needOf(r[K.height]), mean = rootedMean(loose, i, need);
       put(KIND_PLANES.need, i, k, 10 ** r[K.moist]);
+      put(KIND_PLANES.roots, i, k, mean >= ROOTED_ALL ? 0 : need);
       [r[K.height], r[K.stem], crown, r[K.leaf]].forEach((v, q) => put(KIND_PLANES.form + k, i, q, v));
       [...look.from, r[K.wood]].forEach((v, q) => put(KIND_PLANES.from + k, i, q, v));
       [...look.to, design].forEach((v, q) => put(KIND_PLANES.to + k, i, q, v));
       [...look.petal, look.bloom].forEach((v, q) => put(KIND_PLANES.petal + k, i, q, v));
+      [shape.form, shape.sure].forEach((v, q) => put(KIND_PLANES.shape + k, i, q, v));
+      if (design === DESIGN.herb) {
+        // A herb is the sward: its plants cover their share of the ground, each as closed as its crown.
+        const covers = r[K.cover] * crown;
+        sward.add(k, r[K.root], c, covers, 0, r[K.height], mean);
+        flowers.add(k, 0, look.petal, covers * look.bloom, 0, r[K.height], mean);
+        continue;
+      }
       LATTICES.forEach((a, l) => {
-        const [chance, width] = marksOn(r, l, clumped(design));
+        const [chance, width] = marksOn(r, l, design === DESIGN.bush ? BUSH_GROW : 1);
         if (chance <= 0) return;
-        put(KIND_PLANES.chance + l, i, k, chance);
+        put(KIND_PLANES.chance + l, i, k, chance / mean);
         put(KIND_PLANES.width + l, i, k, width);
         held[l] = true;
         tallest[l] = Math.max(tallest[l], r[K.height]);
         // The share of the ground its marks cover, each as closed as its crown.
         const covers = Math.min(1, (chance * (Math.PI / 4) * width * width) / (a * a)) * crown;
-        paint[l].rgb = paint[l].rgb.map((v, q) => v + covers * c[q]);
-        paint[l].covered += covers;
-        paint[l].bare *= 1 - covers;
-        paint[l].shadow += (chance / (a * a)) * width * SHADOW_RUN * r[K.height];
+        paint[l].add(k, r[K.root], c, covers, (chance / (a * a)) * width * SHADOW_RUN * r[K.height], r[K.height], mean);
       });
     }
-    // Premultiplied: the marks' mean reflectance times the share of the ground they cover; and that share with the
-    // shadow they lay on the ground between them (a shadow over the share 1 - e^-(their shadows' area per m²) of it,
-    // Poisson-placed plants), so a tall rough canopy is darker than a low one of the same leaves.
-    paint.forEach((p, l) => {
-      const cover = 1 - p.bare, shaded = (1 - cover) * -Math.expm1(-p.shadow) * CROWN_SHADOW;
-      p.rgb.forEach((v, q) => { field[4 * (l * n + i) + q] = (v / Math.max(p.covered, 1e-9)) * cover; });
-      field[4 * (l * n + i) + 3] = cover + shaded;
-    });
+    paint.forEach((p, l) => p.put(field, layer(l, i), l === STANDS ? layer(FIELD.standsFirst, i) : undefined));
+    const first = paint[STANDS].first.k, chanceAt = 4 * ((KIND_PLANES.chance + STANDS) * n + i) + first;
+    if (first >= 0) table[chanceAt] = -table[chanceAt];
+    sward.put(field, layer(FIELD.sward, i), layer(FIELD.swardFirst, i));
+    [...paint, sward].forEach((p, q) => p.putRoots(field, layer(FIELD.tall, i) + q, layer(FIELD.rooted, i) + q));
+    lowOf(field, i, layer);
+    // The flowers: their mean colour times the share of the herbs in flower times the sward's cover, and that share.
+    const bloom = flowers.covered / Math.max(sward.covered, 1e-9), cover = 1 - sward.bare;
+    flowers.rgb.forEach((v, q) => { field[layer(FIELD.flowers, i) + q] = (v / Math.max(flowers.covered, 1e-9)) * bloom * cover; });
+    field[layer(FIELD.flowers, i) + 3] = bloom * cover;
   }
   return { w, h, table, field: { w, h, data: field, mips: mipsOf(field, w, h) }, held, tallest, walls };
 }
 
+/** Into the far layer of `field` at square `i` (`FIELD.low`, `layer` its place): the sward as it is seen
+ * (`SWARD_SEEN`), the lattices under the trees' over it, each over the one below as cover_field.wgsl lays them, at their
+ * mean (no patches, no grain: far away neither shows). */
+function lowOf(field: Float32Array, i: number, layer: (l: number, i: number) => number): void {
+  const s = layer(FIELD.sward, i), sward = field[s + 3], seen = sward > 0 ? 1 - (1 - Math.min(sward, 1)) ** SWARD_SEEN : 0;
+  const dst = [0, 1, 2].map(q => (sward > 0 ? (field[s + q] / sward) * seen : 0));
+  let a = seen;
+  for (let l = 0; l < STANDS; l++) {
+    const at = layer(l, i), share = Math.min(field[at + 3], 1);
+    if (share <= 0) continue;
+    for (let q = 0; q < 3; q++) dst[q] = (field[at + q] / field[at + 3]) * share + dst[q] * (1 - share);
+    a = share + a * (1 - share);
+  }
+  const out = layer(FIELD.low, i);
+  dst.forEach((v, q) => { field[out + q] = v; });
+  field[out + 3] = a;
+}
+
 /** The levels of field `data` (`w` x `h`) below its own, each texel the most of the four (or, at an odd edge, six or
  * nine) above it: cover.wgsl reads a level about a pixel to skip a lattice none of whose marks stands near, so a level
- * holds a lattice wherever any texel under it does. */
+ * holds a lattice wherever any texel under it does. Only the lattices' layers are made (no other layer is read below
+ * its own level); the others' levels stay 0. */
 function mipsOf(data: Float32Array, w: number, h: number): Float32Array[] {
   const out: Float32Array[] = [];
   let src = data;
   while (w > 1 || h > 1) {
-    const nw = Math.max(1, w >> 1), nh = Math.max(1, h >> 1), dst = new Float32Array(FIELD_LAYERS * 4 * nw * nh);
-    for (let l = 0; l < FIELD_LAYERS; l++) for (let y = 0; y < nh; y++) for (let x = 0; x < nw; x++) {
+    const nw = Math.max(1, w >> 1), nh = Math.max(1, h >> 1), dst = new Float32Array(FIELD.count * 4 * nw * nh);
+    for (let l = 0; l < LATTICES.length; l++) for (let y = 0; y < nh; y++) for (let x = 0; x < nw; x++) {
       const ys = 2 * y, ye = y === nh - 1 ? h : Math.min(2 * y + 2, h), xs = 2 * x, xe = x === nw - 1 ? w : Math.min(2 * x + 2, w);
       for (let c = 0; c < 4; c++) {
         let most = 0;
@@ -191,4 +287,12 @@ export function half(v: number): number {
   if (e <= 0) return e < -10 ? sign : sign | (((m | 0x800000) >> (1 - e)) + 0x1000) >> 13;
   if (e >= 31) return sign | 0x7c00;
   return sign | ((e << 10) + ((m + 0x1000) >> 13));
+}
+
+/** The number whose IEEE binary16 bits are `bits` (`half`'s inverse). */
+export function unhalf(bits: number): number {
+  const e = (bits >> 10) & 0x1f, m = bits & 0x3ff, sign = bits & 0x8000 ? -1 : 1;
+  if (e === 0) return sign * m * 2 ** -24;
+  if (e === 31) return m ? NaN : sign * Infinity;
+  return sign * (1 + m / 1024) * 2 ** (e - 15);
 }

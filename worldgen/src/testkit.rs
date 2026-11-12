@@ -519,11 +519,11 @@ pub fn loose_volume(w: &World, i: usize) -> f64 {
     (0..w.chem.ns()).filter(|&k| w.chem.phase(k, t) == Phase::Solid).map(|k| w.g(k, i) * w.chem.molar_volume(k, Phase::Solid)).sum()
 }
 
-/// A part of `kg` of the cell's most plentiful loose substance, taken from the ground at its temperature: flat, or a
-/// block if `thick`.
+/// A part of `kg` of the cell's most plentiful loose substance (of those solid at its ground's temperature: walls are
+/// solid), taken from the ground at that temperature: flat, or a block if `thick`.
 pub fn plate(w: &mut World, i: usize, kg: f64, thick: bool) -> u64 {
-    let n = w.mesh.cells().n();
-    let k = (0..w.chem.ns()).max_by(|&a, &b| w.store.amounts(Class::Ground)[a * n + i].total_cmp(&w.store.amounts(Class::Ground)[b * n + i])).unwrap();
+    let t = w.t_ground_last(i);
+    let k = (0..w.chem.ns()).filter(|&k| w.chem.phase(k, t) == Phase::Solid).max_by(|&a, &b| w.g(a, i).total_cmp(&w.g(b, i))).expect("a solid in the ground");
     let mut wall = vec![0.0; w.chem.ns()];
     wall[k] = kg / w.chem.subs[k].molar_mass;
     part_of(w, i, wall, vec![0.0; w.chem.ns()], if thick { 0.0 } else { -1.0 }, 0.0)
