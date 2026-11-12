@@ -94,11 +94,9 @@ tests of `tape/tests/ranges` pass):
 **Known faults on the page:**
 - The frame's cost against before the drawing packages (software only; a real phone is not measured): far views 92 to
   97%, 50 m and 10 m 60 to 71%, the 200 m bar on a phone 176% (the near plant field at 0.69 m a pixel, snow and lakes).
-- Snow and ice cost 25 to 45% of a far frame in the headless browser, also on an island with no ice. Turning off parts
-  of the ice saves little, turning off all of it saves all: the software drawing seems to pay for the program's size,
-  not for the work a pixel runs. Not proven on a real device. Three cuts wait for the owner's word on their phone: the
-  ice's placing noise in a texture made once a world, a sea program and a land program, no snow and ice code in the
-  programs of a world with none.
+- Snow and ice cost 25 to 45% of a far frame in the headless browser, also on an island with no ice (the software
+  drawing seems to pay for the program's size, not for the work a pixel runs). The owner's word: the speed on phones
+  is perfectly fine. So no more cuts for now; the headless numbers only guard against a change that makes them worse.
 - The True view on water: a 2 km haze, no floes. The pack's ridges read as wiggly lines.
 - The coast's squares in a Wide island's far north hold no plants (their cells are low ground): bare land there.
 - A square notch where a channel joins two lakes (mended, not seen on a picture); steps on lake shores at the 2 km
@@ -117,14 +115,13 @@ The key numbers' references will move with this law (plants give the air its vap
 
 ## 5. What to do next, in order
 
-1. Ask the owner how the page runs on their phone (the 200 m bar above all).
-2. **The cover's law** to main when its liquid goes through Flow, the slow tests pass or their references are measured
+1. **The cover's law** to main when its liquid goes through Flow, the slow tests pass or their references are measured
    again on purpose, and a Wide island still shows zones with stands of a true height.
-3. **The sorted start** (`experiment/sorted-start`) follows the new law (`cover::lodge`, `sown`, the new fields of
+2. **The sorted start** (`experiment/sorted-start`) follows the new law (`cover::lodge`, `sown`, the new fields of
    `Cover`), then is measured on a Wide island.
-4. Wet and dry sides: a law for the mean wind's momentum. The strip of the planet with land and life (it is an
+3. Wet and dry sides: a law for the mean wind's momentum. The strip of the planet with land and life (it is an
    all-liquid, lifeless planet: its air is warmer and its heat-absorbing gas higher than a globe's with life).
-5. Channels that lay down their load (plains, marsh, deltas); ice that cuts valleys; the exact solve of the surface's
+4. Channels that lay down their load (plains, marsh, deltas); ice that cuts valleys; the exact solve of the surface's
    step by pieces; the True view's water.
 
 ## 6. The live world for the owner
