@@ -1475,6 +1475,26 @@ read a kind.
   saturation, more capacity), a woody cover of dry ground (active at a tenth of saturation, thick leaves, slow) and a
   tall fast cover with seeds spread wide. Founders
   are adults on land under at most half a metre of liquid; mass 30% fuel (60% for the two big slow eater kinds).
+- **The sorted cover** (`worldgen::life::nursery`; `ew run --sorted`, in place of the hand-made kinds of cover): when
+  life starts, the cover is sorted by its own law before it is placed. A copy of the world runs a year without life,
+  and each open land cell's month is kept: what its cover would read (`cover::around_now`), the light above any cover,
+  the key liquid its ground holds and the rain. The cells fall in `CLASSES` classes of like climate (k-means on the
+  coldest month, the mean ground temperature, the wetness and the light). Each class's representative cell is a
+  garden: the cover's own month (`cover::live`) on that year, no air and no flow; its liquid is the year's less what
+  its cover took, and what its leaves lose through their film (`Cover::film`) at the month's air from the liquid their
+  roots reach, that the rain has not given back; its minerals are washed at the year's own rate, taken by its cover
+  and freed again by the open world's rot of its remains (`change::share_over` of reaction 7); and its light is the
+  year's above any cover times the share its own canopy lets through (`cover::per_capture_area`). **The race**: each
+  kind tried alone on bare ground (the hand-made kinds of cover and their fixing variants, then mutants of the best,
+  draws over the genes' whole range, then other classes' best), and the `CHAMPIONS` that hold the most cover after
+  `RACE_YEARS` kept. **The invasion**: the best is grown alone into a stand; newcomers (mutants of the stand,
+  runners-up and other classes' best, draws) arrive as seeds by the law's own way in (`cover::lodge`); what the stand
+  holds after the rounds is the class's set. A second year is kept under the cover the first sorting grew (the cover
+  shades and dries its own ground and its leaves feed the air) and the invasion goes on there. Each class's cells get
+  its set at the mass per m² it holds, each kind with a generation's scatter of its genes (`cover::mutate`, keyed by the
+  cell), from outside as the hand-made kinds are placed; a cell whose climate lies near another class gets that class's
+  best as rare seeds. Kinds alike within `APART` × `alike` share a starting kind. A fixed count of work, keyed by the
+  seed.
 - **Brains**: eaters start with hand-set biases (`Seeding::hand`; `--neutral-eaters` without), since neutral founders
   die before they learn: they take from the place, its ground and its cover (1), before they bite a body (0.5), and keep
   out of deep liquid (a move's odds fall as 1 / (1 + depth / m)). They score making a part at -10, so they make one only

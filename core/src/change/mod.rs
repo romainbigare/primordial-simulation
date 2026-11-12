@@ -9,7 +9,7 @@ mod kernel;
 mod rows;
 
 pub use balance::reversible;
-pub use kernel::Reactor;
+pub use kernel::{share_over, Reactor};
 pub(crate) use kernel::{frac, rate, scarce, terms};
 
 use crate::{store::Class, AIR, World};

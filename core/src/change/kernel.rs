@@ -150,6 +150,17 @@ pub(crate) fn rate(rx: &Reaction, lim: f64, (t, moist): (f64, f64), a: impl Fn(u
     open_catalyst(rx.open, moist) * rx.arrhenius(t) * pace(rx, lim, a, whole)
 }
 
+/// The share of its scarcest input that reaction `rx` takes over `dt` s at `t` K in a node as moist as `moist`, of the
+/// amounts `a` in their phases `whole` (`rate`), its rate held over the step: what the open world's rot takes of a
+/// pool of remains where nothing else feeds it.
+pub fn share_over(rx: &Reaction, (t, moist): (f64, f64), dt: f64, a: impl Fn(usize) -> f64, whole: impl Fn(usize) -> f64) -> f64 {
+    let (lim, _) = scarce(&rx.inputs, &a);
+    if lim <= 0.0 {
+        return 0.0;
+    }
+    frac(rate(rx, lim, (t, moist), &a, whole) * dt)
+}
+
 /// 1 - exp(-z), cheap when small.
 #[inline]
 pub(crate) fn frac(z: f64) -> f64 {

@@ -12,7 +12,7 @@ mod grow;
 mod seed;
 mod stand;
 
-pub use around::{pores, thirst, Around};
+pub use around::{around_now, pores, thirst, Around};
 pub use grow::{live, step, Books};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
 pub use stand::{height, loose_bins, stem, BINS};
@@ -363,6 +363,12 @@ impl crate::World {
         let c = self.life.cover(i);
         (c.film > 0.0).then(|| Parts::of(&self.chem).map(|p| (p.liquid, c.film as f64, c.reach as f64))).flatten()
     }
+}
+
+/// The light per m² of capture area under a cover of `canopy` m² of it per m² of ground, over the light above it: the
+/// share it intercepts over its area, all of it where it is thin (the air's step, laws.md 1.4).
+pub fn per_capture_area(canopy: f64) -> f64 {
+    crate::math::mean_decay(canopy)
 }
 
 /// 10 to the power of a gene.
