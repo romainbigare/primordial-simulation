@@ -6,12 +6,14 @@
 //! cover of a cell is a node of the store (`Class::Cover`) whose law books its own side; animals graze it
 //! (`choose::feed`) and movers break it (`choose::wear`).
 
+mod around;
 mod build;
 mod grow;
 mod seed;
 mod stand;
 
-pub use grow::{live, step, thirst, Around, Books};
+pub use around::{thirst, Around};
+pub use grow::{live, step, Books};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
 pub use stand::{height, loose_bins, stem, BINS};
 

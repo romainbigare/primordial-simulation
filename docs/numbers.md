@@ -169,6 +169,8 @@ The three costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`) are per k
 | `root_least` | m | the least loose ground any plant's roots need (`cover::stand::need`) | a low mat's centimetres | tuned, first guess |
 | `rooted_from` | share | a point whose loose ground is under this share of a kind's need holds none of it; from it to the need, smoothly more (`cover::stand::rooted`) | none: lithic soils under 0.1 m hold herbs and mats only | tuned, first guess |
 | `drawdown` | share | how far a leaf draws the air's gas down inside, where the light reaction takes it: the gas's gradient through its pores, against which the vapour's is lost (`cover::thirst`) | C3 leaves hold about 0.7 of the air's gas inside (Wong, Cowan and Farquhar 1979, from memory) | anchored |
+| `huber` | m² per m² | the conducting cross-section of a plant's stems per m² of the capture area they feed: its living walls (`cover::stand::sapwood`) | the Huber value of trees, 1e-4 to 5e-4 (Tyree and Ewers 1991, from memory); the pipe model (Shinozaki and others 1964) | anchored |
+| `c_sapwood` | J per kg per day | upkeep of conducting walls at `t_cat`, paid in every month at the burning's pace whatever the season | sapwood breathes about 10 µmol of the gas per m³ a s at 15 °C (Ryan 1990, from memory): 2e-8 mol per kg of 450 kg/m³, at about 4.8e5 J a mol burnt, 900 J per kg a day | anchored |
 | `seed_kg` | kg | the built cover of one plant a seed founds: seeds that found a slot are one plant per this (`seed::lodge`) | seeds of most plants weigh 0.1 to 100 mg, a few mg in the middle (Moles and others 2005, from memory); a seedling once it stands is some times its seed: 10 mg | anchored, first guess |
 
 ### Flow, as ground cover and moving liquid feel it

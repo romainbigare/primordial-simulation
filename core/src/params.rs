@@ -236,6 +236,10 @@ pub struct Physics {
     pub seed_kg: f64,
     /// Share of the air's gas a leaf draws it down by inside, where the light reaction takes it
     pub drawdown: f64,
+    /// Conducting cross-section of stems per m² of the capture area they feed, m² per m²
+    pub huber: f64,
+    /// Upkeep of conducting walls, J per kg per day at `t_cat`
+    pub c_sapwood: f64,
     /// Built cover of a plant that builds half the walls its `WALLS` gene sets, kg
     pub wall_kg: f64,
     /// The self-thinning law: mean plant mass = this × (plants per m²)^(-3/2), kg (per m² to the 1/2)
@@ -430,6 +434,8 @@ impl Default for Physics {
             cover_mut: 0.063,
             seed_kg: 1e-5,
             drawdown: 0.3,
+            huber: 2e-4,
+            c_sapwood: 900.0,
             wall_kg: 0.05,
             thin_kg: 5.0,
             tall: 35.0,
