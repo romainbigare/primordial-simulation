@@ -38,6 +38,8 @@ pub enum Purpose {
     Cover,
     /// The quarter a body or a structure goes to whole when its cell splits (`life::tree`)
     Quarter,
+    /// The genotypes a nursery draws and where its champions go (`worldgen::life::nursery`)
+    Nursery,
 }
 
 pub struct Rng(u64);

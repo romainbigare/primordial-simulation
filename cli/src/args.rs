@@ -21,7 +21,9 @@ pub const USAGE: &str = "usage:
     --monthly-years N     a viewer frame every month in the first N years (2)
     --life-year N         the year life starts: soil, then the kinds (2; -1: no life)
     --roster              the thirteen kinds of worldgen::life::ROSTER, each at its year after the first life, not the two
-    --plants              only the cover of those kinds: no animals
+    --plants              only the cover of those kinds: no animals; with --roster the cover is sorted in the nursery
+                          when life starts (worldgen::life::nursery), not the hand-made kinds of cover
+    --kinds               with --roster --plants, the hand-made kinds of cover: the start the nursery is checked against
     --spray N             rounds of mutation of every founder (20)
     --fixers X            share of the starting light-eaters that carry the fixing gene (0.1)
     --neutral-eaters      animals start with neutral brains, not hand-set biases
@@ -133,11 +135,15 @@ impl Args {
         Seeding { hand, rounds: self.get("--spray", 20), fixers: self.get("--fixers", FIXERS) }
     }
 
-    /// The run's plan: what is placed when (`--life-year`, `--roster`, `--plants`, and the seeding flags).
+    /// The run's plan: what is placed when (`--life-year`, `--roster`, `--plants`, `--kinds`, and the seeding flags).
     pub fn schedule(&self) -> Schedule {
-        let year = |name: &str, default: i64| u64::try_from(self.get(name, default)).ok();
-        let rows: &[usize] = if self.has("--roster") { &worldgen::life::ROSTER } else { &worldgen::life::TWO };
-        let rows = if self.has("--plants") { worldgen::life::plants(rows) } else { rows.to_vec() };
-        Schedule::new(year("--life-year", 2), &rows, self.seeding())
+        let (life, roster, plants) = (u64::try_from(self.get("--life-year", 2i64)).ok(), self.has("--roster"), self.has("--plants"));
+        let rows: &[usize] = if roster { &worldgen::life::ROSTER } else { &worldgen::life::TWO };
+        let rows = if plants { worldgen::life::plants(rows) } else { rows.to_vec() };
+        if roster && plants && !self.has("--kinds") {
+            Schedule::sorted(life, &rows, self.seeding())
+        } else {
+            Schedule::new(life, &rows, self.seeding())
+        }
     }
 }

@@ -112,6 +112,13 @@ fn per_input(rx: &Reaction, k: usize) -> Option<f64> {
     rx.inputs.iter().find(|q| q.0 as usize == k).map(|q| q.1 as f64)
 }
 
+/// What the cover of cell `i` reads of the world as the store holds it between months (`around`).
+pub fn around_now(w: &World, p: &Parts, i: usize) -> Around {
+    let mut moves = Moves::default();
+    moves.open(w, i, Node::new(Class::Cover, i));
+    around(w, &moves, p, i)
+}
+
 /// The month of the cover of cell `i` of `d`: what it reads of the world (`around`), its month (`live`), and its
 /// books (`book`).
 fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
@@ -190,6 +197,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
 /// share of its air node holds.
 /// Each slot's `Slot::gain` is set: what one more kg would store, its light that of the bottom of its layer. Returns the
 /// energy stored, J.
+#[allow(clippy::too_many_arguments)]
 fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mut [Slot; SLOTS], per: f64, (a, dt): (&Around, f64), b: &mut Books) -> f64 {
     let (t, liquid, gas) = (a.t, a.liquid, a.gas);
     let rx = &chem.reactions[p.light];

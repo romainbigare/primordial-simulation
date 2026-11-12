@@ -9,7 +9,7 @@
 mod grow;
 mod seed;
 
-pub use grow::{live, step, Around, Books};
+pub use grow::{around_now, live, step, Around, Books};
 pub use seed::{land, lodge, Landed, Seed};
 
 use crate::body::WET_TISSUE;
@@ -357,6 +357,12 @@ pub fn wetness(w: &crate::World, p: &Parts, area: f64, liquid: f64) -> f64 {
 /// ground is as wet as its moisture gene needs (`MOIST`), less as it dries (`Physics::activity`).
 pub fn activity(ph: &crate::Physics, genes: &[f32; NG], wet: f64) -> f64 {
     ph.activity(wet / dec(genes[MOIST]))
+}
+
+/// The light per m² of capture area under a cover of `canopy` m² of it per m² of ground, over the light above it: the
+/// share it intercepts over its area, all of it where it is thin (the air's step, laws.md 1.4).
+pub fn per_capture_area(canopy: f64) -> f64 {
+    crate::math::mean_decay(canopy)
 }
 
 /// 10 to the power of a gene.
