@@ -629,3 +629,25 @@ seconds a world's creation may take. A reduced world can:
 What it does not know: what plants do to their own ground (they dry it, shade it, feed it), so the full laws still
 shift the result in the first decades; how far is the first thing to measure. The amount of work is fixed (the same
 world from the same seed on every machine), so a phone takes longer than a desktop for the same start.
+
+**The sorted start: built on a branch, not merged** (`worktree-agent-a13df44719d5d1f2e`: the cover's month reading one
+view, bit for bit; `worldgen/src/life/nursery/`). It works as a mechanism: a year without life kept per cell, 24
+classes of like climate, each class's cell a garden that runs the cover's own month on the frozen year (liquid,
+minerals and light closed by the law's own rates), 36 tries alone per class and invasions by seed, a second year kept
+under the first winners' cover; 0.5 to 1 s native at size 22 to 32, the same world from the same seed. The world then
+starts grown and keeps what it was given (100% of the cover at year 60 is the start's genotypes; 7 to 19% less cover
+than at the start).
+
+Why it is not merged: on an island alone it does not adapt anything to anything. One kind (a tall tree that fixes its
+own mineral) wins every class; only 1 to 3 genotypes hold over 1% of the cover (5 or 6 with the hand-made start); the
+frost and moisture genes do not follow the cells' climate, because frost never bites and the island is wet nearly
+everywhere; the cover's law does not read the loose depth. It needs places that differ (the band's Wide and Mild
+worlds: to measure next) and two changes of the cover's law that it showed:
+- A slot once taken blocks newcomers for good (`seed::lodge`: a newcomer takes the lightest slot only if its seeds
+  outweigh that slot's whole cover), so there is no replacement and mutation moves nothing in 80 years. The smallest
+  physical statement: a slot that does not pay its upkeep gives way to arriving seed, and a seedling lives on the
+  light that reaches the bottom of the layers.
+- No succession: from equal mass herbs kill tree seedlings; trees win today only where placed several times heavier.
+- The loose depth a kind's roots need (the share of a cell's area whose loose ground reaches it) is not in the law.
+Also found: `flow::air` computes the light per capture area itself where `cover::per_capture_area` now states it:
+one of the two should call the other.
