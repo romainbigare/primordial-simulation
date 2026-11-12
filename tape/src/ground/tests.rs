@@ -31,7 +31,7 @@ const TEXEL_SAMPLES: f64 = 1.0 / 128.0;
 #[test]
 fn a_texel_names_the_channel_it_measures() {
     let (s, metres, law) = island();
-    let at = points(&s);
+    let at = points(&s, &super::super::shore::Shore::new(&s));
     let r = reaches(&s, &at, metres, law);
     let bends = Bends::new(&r);
     let ch = Channels::new(r, &bends);
@@ -62,7 +62,7 @@ fn a_texel_names_the_channel_it_measures() {
 #[test]
 fn a_channels_line_runs_on_from_sample_to_sample() {
     let (s, metres, law) = island();
-    let at = points(&s);
+    let at = points(&s, &super::super::shore::Shore::new(&s));
     let r = reaches(&s, &at, metres, law);
     let bends = Bends::new(&r);
     let ch = Channels::new(r, &bends);

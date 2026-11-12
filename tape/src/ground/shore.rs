@@ -39,6 +39,13 @@ const SIDE_FROM: f64 = 0.5;
 /// at `SHORE_M` (its own weight there is 4/9), and no lake is blurred away (a sea's islet of a sample may be).
 const KEEP_M: f64 = 3.0;
 const KEPT: f64 = 3.0;
+/// A channel's line that ends in standing liquid ends where the shore drawn puts that liquid: the samples' shore and
+/// the smooth one lie up to a sample or two apart, so from the point where the samples end the line it runs on down
+/// the offset's slope, in steps of `MOUTH_STEP` samples, to where the offset lies `MOUTH_UNDER_M` under the level, no
+/// farther than `MOUTH_MOST` samples.
+const MOUTH_UNDER_M: f64 = 0.5;
+const MOUTH_MOST: f64 = 4.5;
+const MOUTH_STEP: f64 = 0.1;
 
 /// Of each sample of the terrain: the level of the pond it lies in or of the nearest within `NEAR_SAMPLES` (NaN: none),
 /// m, and its offset and its depth under that level, blurred (the module's doc), m.
@@ -129,6 +136,24 @@ impl Shore {
             }
         }
         (offset, depth)
+    }
+
+    /// Where a channel's line that the samples end at `from` (samples from the map's corner) ends as drawn (`MOUTH_MOST`):
+    /// in the liquid of the shore drawn; `from` itself where it lies in it, or where none lies near.
+    pub(super) fn mouth(&self, from: [f64; 2]) -> [f64; 2] {
+        let mut p = from;
+        for _ in 0..(MOUTH_MOST / MOUTH_STEP) as usize {
+            if self.at(p).0 <= -MOUTH_UNDER_M {
+                return p;
+            }
+            let slope = [self.at([p[0] + MOUTH_STEP, p[1]]).0 - self.at([p[0] - MOUTH_STEP, p[1]]).0, self.at([p[0], p[1] + MOUTH_STEP]).0 - self.at([p[0], p[1] - MOUTH_STEP]).0];
+            let steep = slope[0].hypot(slope[1]);
+            if steep < 1e-9 {
+                break;
+            }
+            p = [p[0] - MOUTH_STEP * slope[0] / steep, p[1] - MOUTH_STEP * slope[1] / steep];
+        }
+        from
     }
 
     /// The height drawn at `p` (samples from the map's corner) whose own height is `h`, m, beside liquid at `level` (the

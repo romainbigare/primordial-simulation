@@ -93,8 +93,10 @@ joins keep their place (a tributary ends on the joined stem's point), and no mor
 so a channel that steps like a stair down a valley across the grid draws as one smooth line from afar. It is drawn as each
 sample's way (`Samples::to`) as a curve from the middle of the way into it (from its neighbour upstream that the most
 drains through, `Samples::main`) to the middle of its own, between the points, bent at its own point (a quadratic
-Bézier), and on to the middle of the next sample's line where a tributary joins; a sink of the open low ground that liquid runs into ends the curve at its centre, under the low
-ground's liquid. The line wanders about that curve (`tape/src/ground/wander.rs`) and swings about its wander in the bends of a
+Bézier), and on to the middle of the next sample's line where a tributary joins; a sample that liquid runs into and none out of (a sink of the open low ground, a pond's
+lowest) ends the curve at its point, which lies where the shore drawn puts the liquid (`shore::Shore::mouth`: from the
+sample's centre down the smooth shore's offset to where it lies 0.5 m under the level, no farther than 4.5 samples),
+so a river reaches its lake or its sea. The line wanders about that curve (`tape/src/ground/wander.rs`) and swings about its wander in the bends of a
 meander belt (`bends.rs`, `belt.rs`). The samples place a valley's line no closer than a share of a sample, so the
 line wanders up to 0.4 of a sample to each side (half of that on a hard bed), in long swings of no fixed length: a
 smooth noise along the way down the valley, a corner of its lattice every 1.6 samples and a finer one 2.7 times as
@@ -183,7 +185,9 @@ and 17 times the step to its main neighbour upstream, by which a shell lets what
 from one sample's centre to the next, so its width has no step where two samples meet. Then of each sample again the
 reflectance of its bed's make and a zero. **The
 samples' discharge** (`Table::discharge`): what runs through each of the terrain's samples, m³/s, row by row (its
-`World::discharge` at the mol per m³ of the liquid its cell's ground holds; none where that holds no liquid). The
+`World::discharge` at the mol per m³ of the liquid its cell's ground holds; none where that holds no liquid; a
+sample of a pond carries no less than its main way upstream brings, so a river's line runs on along a body's floor and
+a shell draws it where the body is drawn dry or its shore lies farther than the samples'). The
 live page gets it as 16-bit floats with a frame when one sample's has changed by a tenth since it was last sent
 (`wasm/src/lib.rs` `DISCHARGE_SHOWS`: its width by 5%), 2 bytes a sample (248 kB for a 22 island, 2 MB for a 64 one;
 with most frames, as a month's flow changes that much somewhere), and sizes each channel by the channel law from

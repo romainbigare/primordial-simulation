@@ -7,7 +7,8 @@
 // cobble a channel has rolled (`STONE_SOFT`, `STONE_FACE`: angular to rounded). The sun lights each face by how it is
 // turned (draw.wgsl `LIGHT`), the stone throws a shadow on the ground away from the sun (`STONE_SHADOW`), and loose
 // ground about it buries its foot (`sunk`). It is its bed's colour (`STONE_TONE`, each stone a little its own,
-// `STONE_TONES`) with the bands of the layers it broke from (`STONE_BANDS`). Stones lie one to a cell of two lattices
+// `STONE_TONES`) with the bands of the layers it broke from (`STONE_BANDS`, every `STONE_BAND_M`, no closer than
+// `STONE_BAND_LEAST` of its radius: a large block shows a few beds, not a hatching). Stones lie one to a cell of two lattices
 // turned from one another, in `STONE_OCTAVES` sizes each `STONE_STEP` times smaller than the last, the smaller the
 // more of them (debris has many small pieces and few large: the second largest cells hold `STONE_FEW` as often, the
 // largest as often as the place says, `Stony.rare`, on a scree `STONE_RARE`): fixed in the world, and each size drawn
@@ -18,7 +19,7 @@
 const STONE_CUTS = vec2i(5, 8); const STONE_CUT = 0.38; const STONE_LONG = 0.7; const STONE_TOP = 0.75; const STONE_TILT = 0.3;
 const STONE_SOFT = vec2f(0.04, 0.45); const STONE_FACE = vec2f(1.7, 1.2); const STONE_RISE = 1.1;
 const STONE_SHADOW = 0.45; const STONE_SHADOW_REACH = 0.4; const STONE_REACH = 1.6;
-const STONE_TONE = 1.15; const STONE_TONES = 0.18; const STONE_BANDS = 0.12; const STONE_BAND_M = 0.35;
+const STONE_TONE = 1.15; const STONE_TONES = 0.18; const STONE_BANDS = 0.12; const STONE_BAND_M = 0.35; const STONE_BAND_LEAST = 0.6;
 const STONE_OCTAVES = 4; const STONE_STEP = 2.2; const STONE_FEW = 0.5; const STONE_RARE = 0.2;
 const STONE_GAP = 3.0; const STONE_SIZES = vec2f(0.55, 1.45); const STONE_PX = 2.0;
 // Snow buries a stone as it buries a plant, by its depth against the stone's height (draw.wgsl `above_snow`); on one
@@ -137,7 +138,7 @@ fn stones(at: vec2f, e: f32, s: Stony, least: f32, bed: vec3f, k: i32) -> vec4f 
         // Its own tone, and the bands of its rock across it.
         let own = 1.0 + STONE_TONES * (f32((w >> 8u) & 255u) / 127.5 - 1.0);
         let dir = vec2f(cos(f32(w >> 24u)), sin(f32(w >> 24u)));
-        let bands = 1.0 + STONE_BANDS * sin(dot(v, dir) * r / STONE_BAND_M * 2.0 * PI + f32((w >> 16u) & 255u));
+        let bands = 1.0 + STONE_BANDS * sin(dot(v, dir) * r / max(STONE_BAND_M, STONE_BAND_LEAST * r) * 2.0 * PI + f32((w >> 16u) & 255u));
         let cap = ease(0.0, SNOW_CAP_M, snow_m) * smoothstep(SNOW_TOP.x, SNOW_TOP.y, st.flat);
         let rgb = mix(lit_by(tone * own * bands, 0.35 + 0.65 * st.lit), SNOW, cap);
         out = mix(out, vec4f(rgb, 1.0), st.a * shows);

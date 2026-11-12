@@ -62,8 +62,9 @@ const LINE_MARGIN: f64 = 1.5;
 /// of a diagonal of it, and its bends move it by at most `bends::BEND_MOST`.
 const NEXT_OFF: f64 = 0.36 + BEND_MOST + SMOOTH_MOST;
 /// The samples a line lies within of its own sample's centre: it runs from the middle of the way in to the middle of
-/// the way out, and on to the line of the next sample (a diagonal away, itself up to `NEXT_OFF` from its centre).
-const SPAN: i64 = 4;
+/// the way out, and on to the line of the next sample (a diagonal away, itself up to `NEXT_OFF` from its centre); a
+/// line's end in standing liquid lies up to `shore::MOUTH_MOST` from its sample's centre.
+const SPAN: i64 = 6;
 /// The farthest a texel's channel's sample lies from the sample that holds the texel's centre, samples along each
 /// axis: a tile names it by that step (`code`), which a 16-bit float holds exactly.
 pub const STEP_MOST: i64 = 21;

@@ -80,9 +80,9 @@ impl Ground {
         assert!(!map.wrap, "tiles of the ground are made for an island");
         let samples = terrain.samples(seed, &map, lat);
         let twi = sample_index(&map, &samples);
-        let at = stems::points(&samples);
-        let bends = bends::Bends::new(&bends::Reaches { seed, s: &samples, at: &at, law, metres: map.length(SAMPLE_DEPTH) });
         let shore = shore::Shore::new(&samples);
+        let at = stems::points(&samples, &shore);
+        let bends = bends::Bends::new(&bends::Reaches { seed, s: &samples, at: &at, law, metres: map.length(SAMPLE_DEPTH) });
         Ground { seed, map, terrain, lat, samples, twi, law, at, bends, shore }
     }
 

@@ -40,7 +40,7 @@ const STRATA_WOBBLE = 3.0; const STRATA_WAVE_M = 30.0; const BREAK_M = 20.0; con
 // `SUNK_MOST` of its height where the loose ground about it is `SUNK_LOOSE_M` deep or more. In a channel's bed (where
 // the spot holds its stones, `Spot.stony`), the largest are `STONE_SEEN` times the largest it moves (a map draws its
 // gravel a size up), no smaller than `COBBLE_M`, sunk `BED_SUNK` in the bed's gravel.
-const SCREE_FROM = 0.25; const SCREE_FULL = 0.7; const SCREE_LOOSE_M = 1.0; const SCREE_STONE_M = 3.6; const SCREE = 0.8;
+const SCREE_FROM = 0.25; const SCREE_FULL = 0.7; const SCREE_LOOSE_M = 1.0; const SCREE_STONE_M = 3.0; const SCREE = 0.8;
 const BELOW_LEAST = 0.2;
 const STONES_ON_BED = 0.25; const SUNK_MOST = 0.55; const SUNK_LOOSE_M = 0.5;
 const STONE_SEEN = 2.5; const COBBLE_M = 0.65; const BED_SUNK = 0.3;

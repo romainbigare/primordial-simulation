@@ -171,27 +171,6 @@ fn noise_reach(along: f32, cell: f32, across: f32, k: i32) -> f32 {
   return mix(mix(v.x, v.y, u.x), mix(v.z, v.w, u.x), u.y);
 }
 
-// The ground `g` with its channel's line drawn `far` of the way (0..1) from the line itself to the line without its
-// bends (`Tiled.calm`): the two signed distances blended, over their blend's slope (the line so drawn runs between the
-// two through each point where they cross, the same width all along), and the bend's swing that much less. A line
-// the texels do not hold lies far away (tape/src/ground/channels.rs `NO_CHANNEL_M`), and so does a blend with it.
-fn unbent(g: Tiled, far: f32) -> Tiled {
-  var out = g;
-  if (far <= 0.0) { return out; }
-  var slope = sign(g.calm) * g.calm_slope;
-  if (far < 1.0) { slope = mix(sign(g.sd) * g.d_slope, slope, far); }
-  let steep = clamp(length(slope), UNBENT_SLOPE.x, UNBENT_SLOPE.y);
-  out.sd = select(mix(g.sd, g.calm, far), g.calm, far >= 1.0) / steep;
-  out.d = abs(out.sd);
-  out.d_slope = sign(out.sd) * slope / max(length(slope), 1e-6);
-  out.ends.x = max(abs(select(mix(g.own.x, g.own.y, far), g.own.y, far >= 1.0)) - g.own.z, 0.0);
-  out.lean = g.lean * (1.0 - far);
-  return out;
-}
-// (Where the two lines run against one another their blend's slope is near none, and between the texels of two
-// channels it is steep: taken within these.)
-const UNBENT_SLOPE = vec2f(0.3, 1.2);
-
 // A channel at a point of ground `g`, of this month's discharge `q`, m³/s: the half width of its bed on the point's
 // side of its line, m (`banks_of`, varied along it); the half width of this month's
 // water, m, and where its middle lies across the line (as `Tiled.sd`), m: against the outer bank in a bend; its mean

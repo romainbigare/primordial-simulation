@@ -79,11 +79,11 @@ const BED_MIDDLE = 1.5;
 // runs smooth between the texels where the ground crosses the level; the distance to the channel's line signed by
 // the side the point lies on, m; of the line's nearest point, how far along the channel it lies, m (modulo
 // `land.reach.x`, blended across the texels of its stretch); of the channel's line without its bends (its valley's
-// line with its wander, tape/src/ground/bends.rs) the distance signed by the side, m, and its slope (`calm`,
-// `calm_slope`); the nearest texel's own signed distances to the two lines and half its diagonal, m (`own`); and how
+// line with its wander, tape/src/ground/bends.rs) the distance signed by the side, m (`calm`), and the nearest
+// texel's least distance to it, m (`calm_end`); and how
 // far the line has swung from the line without bends in its bend there, m, signed as the side its outer bank lies on
 // (`lean`; none where the texels do not hold both lines).
-struct Tiled { h: f32, slope: vec2f, twi: f32, d: f32, d_slope: vec2f, channels: vec4i, ends: vec2f, water: vec2f, sd: f32, along: f32, calm: f32, calm_slope: vec2f, own: vec3f, lean: f32 }
+struct Tiled { h: f32, slope: vec2f, twi: f32, d: f32, d_slope: vec2f, channels: vec4i, ends: vec2f, water: vec2f, sd: f32, along: f32, calm: f32, calm_end: f32, lean: f32 }
 
 // The sample texel `n` of the tile of depth `depth` at column and row `tile` names by `code` (tape/src/ground/channels.rs
 // `code`): the sample that holds the texel's centre, stepped along each axis; none (-1) for 0.
@@ -159,10 +159,9 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   let cx = mix(cd.x, cd.y, f.x);
   let cy = mix(cd.z, cd.w, f.x);
   let calm = mix(cx, cy, f.y);
-  let calm_slope = sign(calm) * vec2f(mix(cd.y - cd.x, cd.w - cd.z, f.y), cy - cx) / texel;
-  let nearest = vec3f(raw[corner], a4[corner].w, HALF_DIAGONAL * texel);
+  let calm_end = max(abs(a4[corner].w) - HALF_DIAGONAL * texel, 0.0);
   let lean = select(0.0, calm - signed, c_hi < NO_LINE_M && hi < NO_LINE_M);
-  if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, abs(signed), d_slope, channels, ends, water, signed, along, calm, calm_slope, nearest, lean); }
+  if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, abs(signed), d_slope, channels, ends, water, signed, along, calm, calm_end, lean); }
   let f2 = f * f;
   let f3 = f2 * f;
   // The weights of the texels from i - 1 to i + 2 along each axis, and their slopes.
@@ -176,7 +175,7 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
       h += v * vec3f(w[x].x * w[y].y, dw[x].x * w[y].y, w[x].x * dw[y].y);
     }
   }
-  return Tiled(h.x, h.yz / texel, o.z, abs(signed), d_slope, channels, ends, water, signed, along, calm, calm_slope, nearest, lean);
+  return Tiled(h.x, h.yz / texel, o.z, abs(signed), d_slope, channels, ends, water, signed, along, calm, calm_end, lean);
 }
 
 // The level of pond `p` (-1: none), m: from the rows of the table under its planes, four ponds a texel; far below
@@ -215,14 +214,14 @@ fn ground_at(at: vec2f, spline: bool) -> Tiled {
   let size = vec2i(textureDimensions(pages));
   let page = textureLoad(pages, clamp(vec2i(floor(at / span)), vec2i(0), size - 1), 0);
   if (page.x < 0.0) {
-    return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, NO_LIQUID_M, vec2f(0.0), vec4i(-1), vec2f(NO_LIQUID_M), vec2f(-NO_LIQUID_M, 0.0), NO_LIQUID_M, 0.0, NO_LIQUID_M, vec2f(0.0), vec3f(NO_LIQUID_M, NO_LIQUID_M, 0.0), 0.0);
+    return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, NO_LIQUID_M, vec2f(0.0), vec4i(-1), vec2f(NO_LIQUID_M), vec2f(-NO_LIQUID_M, 0.0), NO_LIQUID_M, 0.0, NO_LIQUID_M, NO_LIQUID_M, 0.0);
   }
   let shown = read_tile(i32(page.x), at, spline);
   let came = textureLoad(tile_of, vec2i(i32(page.x), 0), 0).w;
   let w = clamp((land.time.x - came) / land.time.y, 0.0, 1.0);
   if (w >= 1.0 || page.y < 0.0) { return shown; }
   let under = read_tile(i32(page.y), at, spline);
-  return Tiled(mix(under.h, shown.h, w), mix(under.slope, shown.slope, w), mix(under.twi, shown.twi, w), mix(under.d, shown.d, w), mix(under.d_slope, shown.d_slope, w), shown.channels, shown.ends, mix(under.water, shown.water, w), mix(under.sd, shown.sd, w), shown.along, mix(under.calm, shown.calm, w), mix(under.calm_slope, shown.calm_slope, w), shown.own, shown.lean);
+  return Tiled(mix(under.h, shown.h, w), mix(under.slope, shown.slope, w), mix(under.twi, shown.twi, w), mix(under.d, shown.d, w), mix(under.d_slope, shown.d_slope, w), shown.channels, shown.ends, mix(under.water, shown.water, w), mix(under.sd, shown.sd, w), shown.along, mix(under.calm, shown.calm, w), shown.calm_end, shown.lean);
 }
 
 // The liquid in the soil at a point of wetness index `twi` of a cell whose pores hold `pore` m and `pores` m full, its
