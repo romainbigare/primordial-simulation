@@ -61,9 +61,10 @@ pub(crate) struct FlowView<'a> {
     pub tg: &'a [f64],
     pub skin: &'a [f64],
     pub head: &'a [f64],
-    /// Per air node: its temperature, K; the mean height of its ground, m
+    /// Per ground node and per air node: the heads the lifts go between (`Scratch::lift_at`), m
+    pub lift_at: [&'a [f64]; 2],
+    /// Per air node: its temperature, K
     pub ta: &'a [f64],
-    pub za: &'a [f64],
     /// Per ground node: the fusion enthalpy held off a plateau, and the substance on its plateau (or `NONE`)
     latent: &'a [Latent],
     pk: &'a [usize],
@@ -84,11 +85,11 @@ impl FlowView<'_> {
     pub(crate) fn moist(&self, i: usize, p: &crate::Physics) -> f64 {
         p.wetness((self.head[i] - self.z[i]).max(0.0))
     }
-    /// Energy to lift a kg from the head of ground node `i` into its air node `j`, J/kg: to the air node's mean ground
-    /// (`potential`).
+    /// Energy to lift a kg from the head of ground node `i` into its air node `j`, J/kg: to the air node's mean ground,
+    /// both as the potential energy found them at Flow's last booking (`lift_at`).
     #[inline]
     pub(crate) fn lift(&self, i: usize, j: usize, g: f64) -> f64 {
-        g * (self.za[j] - self.head[i])
+        g * (self.lift_at[1][j] - self.lift_at[0][i])
     }
     /// Fusion enthalpy ground node `i` holds at energy `e`, J, by Flow's last solve of its plateaus: off a plateau what is
     /// molten; on one, also what the energy above the plateau at heat capacity `c` melts of `lat(k)`.
@@ -144,6 +145,9 @@ pub struct Scratch {
     /// energy as the last booking left them.
     pub(super) lifts: Option<super::potential::Lifts>,
     pub(super) chained: bool,
+    /// The head of each ground cell and the mean head of each air node by the potential energy at Flow's last booking
+    /// (`potential`), m: where the gas the laws after Flow lift between a cell and its air node lies (empty before it).
+    pub(super) lift_at: [Vec<f64>; 2],
     pub(super) known: Option<(u64, super::potential::Potential)>,
     /// Room for the moves of a part of Flow (`potential::Lifts`), kept from part to part.
     pub(super) moved: Vec<super::potential::Moved>,
@@ -240,7 +244,7 @@ impl Scratch {
     }
     /// For Law 2, from the last flow step (`flow::ensure` builds it where Flow has not run).
     pub(crate) fn view(&self) -> FlowView<'_> {
-        FlowView { tg: &self.state.tg, skin: &self.skin, head: &self.head, ta: &self.ta, za: &self.za, latent: &self.latent, pk: &self.state.pk, z: &self.z, pd: &self.pd }
+        FlowView { tg: &self.state.tg, skin: &self.skin, head: &self.head, lift_at: [&self.lift_at[0], &self.lift_at[1]], ta: &self.ta, latent: &self.latent, pk: &self.state.pk, z: &self.z, pd: &self.pd }
     }
     /// Loose substances that may be liquid between `tmin` and `tmax`, K, or (with `dissolved`) gases dissolved in it.
     pub(super) fn liquids(&self, chem: &Chemistry, (tmin, tmax): (f64, f64), dissolved: bool) -> Vec<usize> {

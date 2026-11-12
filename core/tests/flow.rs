@@ -1246,7 +1246,7 @@ fn a_slope_facing_the_sun_loses_its_snow_first() {
 /// The potential energy the store books (`Store::lifted`) is the change of the matter's potential energy: over five
 /// years of a 16 x 16 island with the roster's life its rain, runoff, stores, creep, the air's columns, Change and the
 /// matter its life takes and gives and carries from cell to cell move it, and the two stay within 1e-6 of what it
-/// gained (what is left: gas lifted between the heads Flow's state last found).
+/// gained (what is left: gas lifted after the month's later laws moved the heads Flow's booking found).
 #[test]
 fn the_lifted_energy_is_what_the_matter_gained() {
     let mut w = worldgen::testkit::squares(1, 16, 16);
@@ -1290,4 +1290,3 @@ fn a_coast_cells_land_swings_more_than_the_cell() {
     assert!(land > node, "the land swings {land:.2} K, the node {node:.2} K, over {} cells", two.len());
     books.assert_kept(&w, 1e-9);
 }
-

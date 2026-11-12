@@ -55,7 +55,7 @@ impl Rows {
         if self.class != Class::Ground {
             return Vec::new();
         }
-        let (ns, g, head) = (w.chem.ns(), w.cfg.gravity, w.scratch.view().head);
+        let (ns, g, head) = (w.chem.ns(), w.cfg.gravity, w.scratch.view().lift_at[0]);
         let rows: Vec<(usize, &[f64])> = self.each().collect();
         crate::par::map(&rows, |&(i, row)| {
             let up: f64 = (0..ns).map(|k| row[ns + k] * w.chem.subs[k].molar_mass).sum();

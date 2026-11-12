@@ -160,6 +160,13 @@ pub fn total(w: &World) -> Option<f64> {
     Some([&p.ground, &p.air, &p.deep, &p.bodies].iter().flat_map(|v| v.iter()).sum())
 }
 
+/// The head of each ground cell and the mean head of each air node by the potential energy now, m (`Scratch::lift_at`).
+pub(super) fn heads(w: &World, s: &Scratch) -> [Vec<f64>; 2] {
+    let p = potential(w, s, None);
+    let (head, za) = p.heads();
+    [head.to_vec(), za.to_vec()]
+}
+
 /// The mean head of the cells of air node `j`, m, where its matter lies (`potential`), by the phases of `s`.
 fn mean_head(w: &World, s: &Scratch, same: &[Same], j: usize) -> f64 {
     let (level, area) = (w.mesh.level(AIR), w.mesh.cells().area());
@@ -215,6 +222,10 @@ fn slot(class: Class, index: u32) -> (u8, u32) {
 }
 
 impl Potential {
+    /// The head of each ground cell and the mean head of each air node, m.
+    pub(super) fn heads(&self) -> (&[f64], &[f64]) {
+        (&self.heights.bodies, &self.heights.air)
+    }
     /// The potential energy of each node of each array (`slot`), J.
     fn energies(&self) -> [&Vec<f64>; 4] {
         [&self.ground, &self.air, &self.deep, &self.bodies]
