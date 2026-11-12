@@ -91,8 +91,9 @@ tests of `tape/tests/ranges` pass):
 - Close views cost more than before the drawing packages (the 200 m, 50 m and 10 m bars on a phone: 140 to 165%,
   measured in software only). A real phone has not been measured: the owner's is the only one.
 
-**Helpers stopped:** the helpers' model reached its weekly limit; it resets on 16 November, 14:00 UTC. A helper that
-stopped keeps its work in its worktree and goes on when sent a message after that.
+**In work** (each helper in its own worktree): the climate branch's gate and report; snow on land, lakes' depth and
+rims, the bed's colour per sample, then the frozen low ground (the drawing); the close views' cost (the plant marks);
+the cover's law (replacement by light, growing up, roots and the ground's depth).
 
 ## 5. What to do next, in order
 
@@ -145,8 +146,10 @@ browser draws in software, so its frames per second mean nothing; the world's pa
 
 ## 8. Branches kept for the next session
 
-- `experiment/climate-bands` (pushed, tip 24cf4107): the band (`ew run --band S,N`), the page's three climates, the
-  stretch derived, the strip of the planet made once, open edges. Merged with the work branch at 51ee725c. Not gated
-  at its tip.
-- `worktree-agent-a13df44719d5d1f2e` (local, tip 6461f84f): the sorted start (`worldgen/src/life/nursery/`) and the
-  cover's month reading one view (`cover::Around`, bit for bit). Gated at its tip (210 passed).
+The owner's word: no work lives only on one machine. Push a helper's branch as soon as it holds something.
+- `experiment/climate-bands`: the band (`ew run --band S,N`), the page's three climates (Wide, Mild, None), the
+  stretch derived, the strip of the planet made once, open edges. Being readied for main.
+- `experiment/sorted-start`: the sorted start (`worldgen/src/life/nursery/`). Its first commit, the cover's month
+  reading one view (`cover::Around`), is on the work branch.
+- `tools/checks`: the check scripts and probes of this work (`tools/check/paused.js`, `phone.js`, `inspect.js`; the
+  frame's bench in `tools/frame/`; the climate's and the ground's probes). Study files: never on main.
