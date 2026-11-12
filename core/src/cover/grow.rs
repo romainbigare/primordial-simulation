@@ -3,10 +3,10 @@
 //! ground (fixing what it lacks if it can), and sends seeds out. Everything it takes and gives is booked through the
 //! chunk's moves, with its heat; its own side it books itself.
 
-use super::{dec, distance, Cover, Parts, APART, EMPTY_KG, FIX, FIX_OFF, FROST, FUEL, LIGHT, MATTER, NG, NO_ROOT, NP, REPAIR, SEED, SLOTS, STORE, WALL, WALLS, MOIST};
+use super::build::per_input;
+use super::{dec, Cover, Parts, EMPTY_KG, FROST, FUEL, LIGHT, MOIST, NO_ROOT, NP, REPAIR, SLOTS, STORE, WALL};
 use crate::body::{AGE, PHASE, SPENT};
 use crate::chem::{Chemistry, Phase, Reaction};
-use crate::rng::{Purpose, Rng};
 use crate::store::{Class, Moves, Node};
 use crate::units::{DAY, MAX_SUBSTANCES};
 use crate::{life::Chunk, Counters, World, AIR};
@@ -30,14 +30,14 @@ pub fn step(w: &World, d: &mut Chunk) {
 /// it absorbs, m²; its light per unit of absorbing area over the cover's mean, and at the bottom of its layer
 /// (`math::shade`); its activity; what one more kg of it would store in the month at the bottom of its layer, J (`light`).
 #[derive(Clone, Copy, Default)]
-struct Slot {
-    built: f64,
-    living: f64,
+pub(super) struct Slot {
+    pub(super) built: f64,
+    pub(super) living: f64,
     leaf: f64,
     abs: f64,
     shade: f64,
     bottom: f64,
-    act: f64,
+    pub(super) act: f64,
     gain: f64,
 }
 
@@ -88,12 +88,12 @@ pub(crate) fn around(w: &World, moves: &Moves, p: &Parts, i: usize) -> Around {
 impl Books {
     /// The most units of `rx` the gas the cell's share of its air node still offers allows (what the cover took of it
     /// this month counted), as the light reaction is cut (`light`).
-    fn room(&self, p: &Parts, rx: &Reaction) -> f64 {
+    pub(super) fn room(&self, p: &Parts, rx: &Reaction) -> f64 {
         let outside = rx.inputs.iter().filter(|q| !p.sub.contains(&(q.0 as usize)));
         outside.map(|&(k, n)| (self.air[k as usize] - self.ext[k as usize]).max(0.0) / n as f64).fold(f64::INFINITY, f64::min)
     }
     /// `x` units of `rx` run in slot `m` (its parts by `p`); what is not a part is the cell's to take or give.
-    fn run(&mut self, chem: &Chemistry, p: &Parts, m: &mut [f64; NP], rx: &Reaction, x: f64) {
+    pub(super) fn run(&mut self, chem: &Chemistry, p: &Parts, m: &mut [f64; NP], rx: &Reaction, x: f64) {
         if x <= 0.0 {
             return;
         }
@@ -105,11 +105,6 @@ impl Books {
         rx.outputs.iter().for_each(|&(k, n)| one(k, n as f64 * x));
         self.heat -= chem.dh_of(rx) * x;
     }
-}
-
-/// The units of `rx` per unit of substance `k` among its inputs (none if it takes none).
-fn per_input(rx: &Reaction, k: usize) -> Option<f64> {
-    rx.inputs.iter().find(|q| q.0 as usize == k).map(|q| q.1 as f64)
 }
 
 /// The month of the cover of cell `i` of `d`: what it reads of the world (`around`), its month (`live`), and its
@@ -131,8 +126,8 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
 /// (`Books`) and the light it caught, J; what it lost and rounded is counted in `counts`.
 pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f64), counts: &mut Counters) -> (Books, f64) {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
-    let (area, mm, t) = (w.mesh.cells().area()[i], p.mm(chem), a.t);
-    // The light since the last step: its capture areas share it by height (their walls per m²), tallest first.
+    let (area, mm, t, rho) = (w.mesh.cells().area()[i], p.mm(chem), a.t, chem.subs[p.sub[WALL]].density[0]);
+    // The light since the last step: its capture areas share it by the height of their plants, tallest first.
     let dl = (a.light - c.mark).max(0.0);
     c.mark = a.light;
     let mut s = [Slot::default(); SLOTS];
@@ -144,7 +139,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         }
         let act = super::activity(ph, &c.genes[q], a.moist);
         *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, ..Default::default() };
-        layers.push(((c.walls(&mm, q) / area) as f32, leaf / area, q));
+        layers.push((c.height(ph, &mm, rho, q) as f32, leaf / area, q));
     }
     crate::math::shade(&mut layers, |q, f, bottom| (s[q].shade, s[q].bottom) = (f, bottom));
     let (a_abs, lit): (f64, f64) = (s.iter().map(|x| x.abs).sum(), s.iter().map(|x| x.abs * x.shade).sum());
@@ -165,7 +160,12 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         c.full[x] = !pays;
         // Its balance over about a year: what it stored less its upkeep, per kg.
         c.net[x] += (((stored[x] - cost) / s[x].built) as f32 - c.net[x]) / year;
-        build(w, c, p, x, (&s[x], pays), (i, a.tick, t, dt), &mut ground, &mut b);
+        // Where one more kg would not pay it builds living cover no more, but walls alone while its plants lack them.
+        if pays || super::build::frame_short(w, c, p, x) <= 0.0 {
+            super::build::build(w, c, p, x, (&s[x], pays), (i, a.tick, t, dt), &mut ground, &mut b);
+        }
+        super::build::frame(w, c, p, x, &mut b);
+        super::stand::thin(c, &mm, ph, area, x);
         // The fuel it holds past its reserve when it has built what it could goes to its ground, as roots exude the
         // fuel a plant cannot use (Jones, Hodge and Kuzyakov 2004), where the open world's rot takes it.
         let over = (c.mol[x][FUEL] - dec(c.genes[x][STORE]) * c.built(&mm, x) / mm[FUEL]).max(0.0);
@@ -177,11 +177,11 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
             counts.rounded[0] -= std::mem::take(m);
         }
     }
-    merge_alike(c, &mm, ph);
+    super::stand::merge_alike(c, &mm, ph, area);
     for x in 0..SLOTS {
         if c.root[x] != NO_ROOT && c.built(&mm, x) <= EMPTY_KG {
             (0..NP).for_each(|q| b.dead[p.sub[q]] += c.mol[x][q]);
-            (c.mol[x], c.root[x], c.full[x], c.net[x]) = ([0.0; NP], NO_ROOT, false, 0.0);
+            (c.mol[x], c.root[x], c.full[x], c.net[x], c.plants[x]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0);
         }
     }
     (b, caught)
@@ -259,123 +259,14 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
         let mm = p.mm(chem);
         let all = c.kg(&mm, x);
         lost.iter_mut().for_each(|l| *l *= all);
+        // What dies are whole plants: each one left keeps its mass.
+        c.plants[x] *= left;
         for q in 0..NP {
             let m = c.mol[x][q].max(0.0) * dies;
             (c.mol[x][q], b.dead[p.sub[q]]) = (c.mol[x][q] - m, b.dead[p.sub[q]] + m);
         }
     }
     (lost, cost)
-}
-
-/// Slot `x` builds what its fuel over its reserve (`STORE`) and the minerals of its ground (`ground`, mol, shared out
-/// as slots build) allow, by the conversions of growth (`Chemistry::build`, `builds`) at its share of walls (`WALLS`),
-/// paying `c_copy` per kg by burning fuel; a fixer (`FIX`) makes the mineral it lacks, at its
-/// capacity, paid by the fixing reaction's fuel. The share `SEED` of what it builds leaves as seeds, in `seed::LOTS` lots
-/// that land where the dispersal kernel draws (`copy::lot`, `seed::send`), with a generation's mutation; all of it where one more kg would not pay its upkeep (`pays`
-/// false: its light at the bottom of its layer is under its compensation point), so a cover stops thickening where its
-/// lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005).
-#[allow(clippy::too_many_arguments)]
-fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool), (i, tick, t, dt): (usize, u64, f64, f64), ground: &mut [f64; MAX_SUBSTANCES], b: &mut Books) {
-    let (chem, ph, g) = (&w.chem, &w.cfg.phys, c.genes[x]);
-    let (Some(bl), mm) = (chem.build.as_ref(), p.mm(chem)) else { return };
-    let Some(wall) = chem.builds.iter().find(|r| r.outputs[0].0 as usize == p.sub[WALL]) else { return };
-    // Per kg built: the units of each conversion, and what they take.
-    let fm = 1.0 / (1.0 + dec(g[WALLS]));
-    let units = [(bl, fm / mm[MATTER] / bl.outputs[0].1 as f64), (wall, dec(g[WALLS]) * fm / mm[WALL] / wall.outputs[0].1 as f64)];
-    let mut need = [0.0; MAX_SUBSTANCES];
-    units.iter().for_each(|(rx, u)| rx.inputs.iter().for_each(|&(k, n)| need[k as usize] += n as f64 * u));
-    let burn = &chem.reactions[p.burn];
-    let (fuel_burn, burn_e) = (per_input(burn, p.sub[FUEL]).unwrap_or(1.0), -chem.dh(p.burn));
-    let fpk = need[p.sub[FUEL]] + ph.c_copy / burn_e * fuel_burn;
-    let surplus = (c.mol[x][FUEL] - dec(g[STORE]) * s.built / mm[FUEL]).max(0.0);
-    // The most each limit allows, kg: the fuel, and each mineral from the ground; a fixer then makes what the mineral it
-    // fixes lacks, its fuel counted.
-    let minerals = || (0..chem.ns()).filter(|&k| need[k] > 0.0 && k != p.sub[FUEL]);
-    let by = |k: usize| ground[k] / need[k];
-    // (Fixing takes its gas from the cell's share of the air node, as far as that still offers it.)
-    let fixed = p.fix.filter(|_| g[FIX] > FIX_OFF).and_then(|r| {
-        let rx = &chem.reactions[r];
-        let &(m, out) = rx.outputs.iter().find(|o| need[o.0 as usize] > 0.0)?;
-        let most = (dec(g[FIX]) * s.living * rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat) * s.act * dt).min(b.room(p, rx));
-        Some((rx, m as usize, out as f64, per_input(rx, p.sub[FUEL])?, most))
-    });
-    let others = minerals().filter(|&k| fixed.is_none_or(|f| f.1 != k)).map(by).fold(surplus / fpk, f64::min);
-    let mut kg = minerals().map(by).fold(others, f64::min);
-    let mut y = 0.0;
-    if let Some((rx, m, out, fuel, most)) = fixed {
-        let r = fuel / out;
-        let with = others.min((surplus + r * ground[m]) / (fpk + r * need[m])).min((ground[m] + out * most) / need[m]);
-        if with > kg {
-            (kg, y) = (with, (with * need[m] - ground[m]).max(0.0) / out);
-        }
-        b.run(chem, p, &mut c.mol[x], rx, y);
-    }
-    // Building's work burns fuel with the gas the cell's share of its air node still offers.
-    kg = kg.min(b.room(p, burn) * burn_e / ph.c_copy.max(1e-300));
-    if kg <= 0.0 {
-        return;
-    }
-    minerals().for_each(|k| ground[k] = (ground[k] - kg * need[k]).max(0.0));
-    if let Some((_, m, out, ..)) = fixed {
-        ground[m] += y * out - (y * out).min(kg * need[m]);
-    }
-    b.run(chem, p, &mut c.mol[x], burn, kg * ph.c_copy / burn_e);
-    // What it builds goes into the slot; the share `SEED` of it leaves as seeds.
-    let before = c.mol[x];
-    units.iter().for_each(|(rx, u)| b.run(chem, p, &mut c.mol[x], rx, kg * u));
-    // Each seed carries its store of fuel at its `STORE` gene, from the slot's fuel: a slot short of it makes fewer seeds.
-    let new = super::built_kg(&mm, &std::array::from_fn(|q| if q == FUEL { 0.0 } else { (c.mol[x][q] - before[q]).max(0.0) }));
-    let store = dec(g[STORE]) / mm[FUEL];
-    let seed = (if pays { g[SEED].clamp(0.0, 1.0) as f64 } else { 1.0 }).min(c.mol[x][FUEL].max(0.0) / (store * new).max(1e-300));
-    if seed > 0.0 {
-        let mut mol = [0.0; NP];
-        for q in [MATTER, WALL] {
-            mol[q] = (c.mol[x][q] - before[q]).max(0.0) * seed;
-            c.mol[x][q] -= mol[q];
-        }
-        mol[FUEL] = (store * super::built_kg(&mm, &mol)).min(c.mol[x][FUEL]);
-        c.mol[x][FUEL] -= mol[FUEL];
-        let heat = (0..NP).map(|q| mol[q] * chem.subs[p.sub[q]].cp * t).sum::<f64>();
-        b.heat -= heat;
-        let mut r = Rng::new(w.seed, tick, (i * SLOTS + x) as u64, Purpose::Cover);
-        let mut lands: Vec<(usize, f64)> = Vec::new();
-        for _ in 0..super::seed::LOTS {
-            let Some(j) = crate::copy::lot(w, i, &mut r).filter(|&j| j != i) else { continue };
-            match lands.iter_mut().find(|l| l.0 == j) {
-                Some(l) => l.1 += 1.0 / super::seed::LOTS as f64,
-                None => lands.push((j, 1.0 / super::seed::LOTS as f64)),
-            }
-        }
-        let genes = super::mutate(&g, ph.cover_mut, &mut r);
-        super::seed::send(c, x, (mol, heat), genes, (i, lands));
-    }
-}
-
-
-/// Alike kinds of a cell (`APART` × `Physics::alike` steps in every gene, `distance`) share a slot: the lighter joins
-/// the heavier, the genes the mean by built cover, its starting kind the heavier's.
-pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], ph: &crate::Physics) {
-    for a in 0..SLOTS {
-        for z in a + 1..SLOTS {
-            if c.root[a] == NO_ROOT || c.root[z] == NO_ROOT || distance(&c.genes[a], &c.genes[z]) > APART * ph.alike {
-                continue;
-            }
-            let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };
-            join(c, mm, big, small);
-        }
-    }
-}
-
-/// Slot `small` joins slot `big` of the same cell: amounts added, genes and balance the mean by built cover; `small` is
-/// empty after.
-pub(super) fn join(c: &mut Cover, mm: &[f64; NP], big: usize, small: usize) {
-    let (wb, ws) = (c.built(mm, big), c.built(mm, small));
-    let f = (ws / (wb + ws).max(1e-300)) as f32;
-    let (gs, ms) = (c.genes[small], c.mol[small]);
-    (0..NG).for_each(|g| c.genes[big][g] += f * (gs[g] - c.genes[big][g]));
-    c.net[big] += f * (c.net[small] - c.net[big]);
-    (0..NP).for_each(|q| c.mol[big][q] += ms[q]);
-    (c.mol[small], c.root[small], c.full[small], c.net[small]) = ([0.0; NP], NO_ROOT, false, 0.0);
 }
 
 /// Book what the cover of cell `i` (air node `j`, ground at `t` K) took and gave in its month (`Books`): the

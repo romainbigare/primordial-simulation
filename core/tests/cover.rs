@@ -182,23 +182,51 @@ fn a_new_kind_enters_a_full_cell() {
     assert!(after > before, "the joined variants lost cover: {before} kg, then {after} kg");
 }
 
+/// A stand of the tree kind sown on bare ground as seedlings (0.001 kg per m²) grows over two years of light: it never
+/// holds more plants than the self-thinning law allows for its mass (`thin_kg`), its plants grow taller (`cover::height`),
+/// and the books are kept.
+#[test]
+fn a_stand_never_passes_the_thinning_law_as_it_grows_tall() {
+    let (mut w, i) = start();
+    let books = Books::now(&w);
+    let Place::Field(f) = &KINDS[3].place else { unreachable!("kind 3 is cover") };
+    assert!(cover::place(&mut w, i, f.genes, 3, 0.001));
+    let p = cover::Parts::of(&w.chem).expect("cover parts");
+    let (mm, area, rho) = (p.mm(&w.chem), w.mesh.cells().area()[i], w.chem.subs[p.sub[cover::WALL]].density[0]);
+    let stand = |w: &pcore::World| {
+        let c = w.life.cover(i);
+        let x = c.held().next().expect("the stand lives");
+        (c.built(&mm, x) / area, c.plants[x] / area, c.height(&w.cfg.phys, &mm, rho, x))
+    };
+    let first = stand(&w);
+    for _ in 0..24 {
+        pcore::step(&mut w);
+        let (kg, plants, _) = stand(&w);
+        assert!(plants <= (w.cfg.phys.thin_kg / kg).powi(2) * (1.0 + 1e-9), "{plants} plants a m² on {kg} kg/m²");
+    }
+    let last = stand(&w);
+    println!("kg/m², plants a m², height m: {first:?} then {last:?}");
+    assert!(last.2 > 2.0 * first.2, "the plants did not grow tall: {first:?} then {last:?}");
+    books.assert_kept(&w, 1e-9);
+}
+
 /// Seeds of a new kind arriving in a cell whose slots are all held take the slot in deficit (`Cover::net` below zero,
 /// the worst), whose cover dies (`seed::lodge` returns it), and no other: the slots that pay their way keep their cover.
 #[test]
 fn seeds_take_the_slot_in_deficit() {
     let (chem, _) = worldgen::chemistry0();
-    let p = cover::Parts::of(&chem).expect("chemistry 0 has cover");
+    let (p, ph) = (cover::Parts::of(&chem).expect("chemistry 0 has cover"), pcore::Physics::default());
     let (mm, g, step) = (p.mm(&chem), genes(), cover::RANGE[FROST].0);
+    let seeds = |v, root, kg| cover::sown(&chem, &ph, &p, (0, 1.0, 280.0), v, root, kg);
     let mut c = cover::Cover::default();
     for k in 0..cover::SLOTS {
         let mut v = g;
         v[FROST] -= 3.0 * step * k as f32;
-        assert!(matches!(cover::lodge(&mut c, &mm, &cover::sown(&chem, &p, (0, 1.0, 280.0), v, k as u32, 0.5), pcore::Physics::default().alike), cover::Landed::In));
+        assert!(matches!(cover::lodge(&mut c, &mm, &seeds(v, k as u32, 0.5), &ph, 1.0), cover::Landed::In));
     }
     (c.net[1], c.net[2]) = (-1.0, -3.0);
     let (held, worst) = (c.clone(), c.mol[2]);
-    let alike = pcore::Physics::default().alike;
-    let cover::Landed::Out(died) = cover::lodge(&mut c, &mm, &cover::sown(&chem, &p, (0, 1.0, 280.0), g, 9, 0.01), alike) else { panic!("the seeds took no slot in deficit") };
+    let cover::Landed::Out(died) = cover::lodge(&mut c, &mm, &seeds(g, 9, 0.01), &ph, 1.0) else { panic!("the seeds took no slot in deficit") };
     assert_eq!(died, worst, "the worst in deficit gave way");
     assert_eq!(c.root[2], 9, "the new kind holds the slot");
     for x in [0, 1, 3] {

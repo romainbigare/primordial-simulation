@@ -126,14 +126,13 @@ the level of the wetness index its soil's liquid departs about (`inside::soil_le
 lowest ground are its solid surface and the depth that stands is its liquid's. Then for each square row by row its
 cell's kinds of cover (`tape/src/stands.rs`), `KINDS` (4) of `KIND_ROW` (17) f32 each, the heaviest first: the slots of
 one starting kind joined, their genes the mean by built cover; of each its starting kind (-1: none); its built cover,
-kg/m²; its plants (`stands::plants`): the stem's width, m, plants a m², height and crown's width, m, the share of the
+kg/m²; its plants (`stands::plants`): the stem's width, m, plants a m² (the slots' counts, `Cover::plants`), height and crown's width, m, the share of the
 ground their crowns cover and how closed a crown is (1 - e^-its leaf area); its walls' share of its built cover; its
 capture area per kg of living cover, log10 m²/kg (`LEAF`); its light capacity per m² of capture area, log10 mol/m²/s;
 its moisture gene and frost gene, K; its fuel over its reserve; its activity on its cell's ground (`cover::activity`);
-the share of it frozen this month (`Physics::frozen`); and the share of what it builds that goes to seeds (`SEED`). Its plants come from its mass alone: its crowns cover the
-share 1 - e^(-leaf area / `CLOSE_LAI`) of the ground, in patches where they close; there the stand has thinned to
-(`THIN_KG` / kg per m²)² plants a m² (Yoda and others 1963), each crown the ground it holds; a plant's walls make a stem
-of `STEM_FORM` and `STEM_SOLID` at the walls' density, as tall as `TALL` × its width^(2/3) (McMahon 1973). Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it, or where its body holds
+the share of it frozen this month (`Physics::frozen`); and the share of what it builds that goes to seeds (`SEED`). Its crowns cover the
+share 1 - e^(-leaf area / `CLOSE_LAI`) of the ground, in patches where they close, each crown the ground it holds
+there; a plant's stem and height are the cover's own (`cover::stem`, `cover::height`, laws.md 4.5). Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it, or where its body holds
 less than `DRY_M` (0.1 m) of liquid on its mean over its surface: a basin soaked, drawn as ground), at which the page draws the pond's liquid flat over the ground that lies under it, the pond each texel names. **The samples' rock** (`Ground::rock`,
 `tape/src/ground/rock.rs`), made once with the ground: of each of the terrain's samples, row by row, two 16-bit floats:
 the depth of its loose ground, m (`Samples::loose`), and the largest stone its channel moves, m: `STONE_M` (0.001) ×

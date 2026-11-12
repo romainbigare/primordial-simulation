@@ -6,11 +6,14 @@
 //! cover of a cell is a node of the store (`Class::Cover`) whose law books its own side; animals graze it
 //! (`choose::feed`) and movers break it (`choose::wear`).
 
+mod build;
 mod grow;
 mod seed;
+mod stand;
 
 pub use grow::{live, step, Around, Books};
-pub use seed::{land, lodge, Landed, Seed};
+pub use seed::{land, lodge, place, sown, Landed, Seed};
+pub use stand::{height, stem};
 
 use crate::body::WET_TISSUE;
 use crate::chem::Chemistry;
@@ -100,6 +103,8 @@ pub struct Cover {
     /// less its upkeep, a running mean over a year's months (`grow::live`); below zero it is in deficit and gives way to
     /// arriving seeds (`seed::lodge`)
     pub net: [f32; SLOTS],
+    /// Per slot: its plants in the cell, a real count (`stand`): its built cover over them is a plant's mass
+    pub plants: [f64; SLOTS],
     /// The heat of its cover, J; the cell's light (`World::light`) at its last step, J/m²; the share of the light its
     /// cover absorbs that its bodies' node sets aside for its light reaction
     pub e: f64,
@@ -113,7 +118,7 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], e: 0.0, mark: 0.0, keep: 0.0, seeds: Vec::new() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [0.0; SLOTS], e: 0.0, mark: 0.0, keep: 0.0, seeds: Vec::new() }
     }
 }
 
@@ -134,6 +139,14 @@ impl Cover {
     /// The built cover of slot `x` (body matter and solids), kg.
     pub fn built(&self, mm: &[f64; NP], x: usize) -> f64 {
         built_kg(mm, &self.mol[x])
+    }
+    /// The built cover of one plant of slot `x`, kg.
+    pub fn plant(&self, mm: &[f64; NP], x: usize) -> f64 {
+        self.built(mm, x) / self.plants[x].max(1e-300)
+    }
+    /// The height of the plants of slot `x`, m (`stand::height`), its walls of density `rho` kg/m³.
+    pub fn height(&self, ph: &crate::Physics, mm: &[f64; NP], rho: f64, x: usize) -> f64 {
+        stand::height(ph, self.plant(mm, x), self.walls(mm, x) / self.built(mm, x).max(1e-300), rho)
     }
     /// All the cover of slot `x`, kg.
     pub fn kg(&self, mm: &[f64; NP], x: usize) -> f64 {
@@ -232,47 +245,6 @@ pub(crate) fn lose(w: &crate::World, d: &mut crate::life::Chunk, p: &Parts, i: u
     let ground = crate::store::Node::ground(i);
     (0..NP).for_each(|q| d.moves.give(w, ground, p.sub[q], dead[q], 0.0));
     d.moves.give(w, ground, 0, 0.0, heat);
-}
-
-/// Place `kg` per m² of cover of genes `genes` and starting kind `root` in cell `i`, an edit booked from the outside
-/// node (`World::cross`): its built cover at the shares of its genes, its fuel at its `STORE` gene, at the cell's
-/// ground temperature; it lodges as seeds do (`seed::lodge`). False if the chemistry has no cover (nothing is placed
-/// then).
-pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
-    let Some(p) = Parts::of(&w.chem) else { return false };
-    let (mm, alike) = (p.mm(&w.chem), w.cfg.phys.alike);
-    let s = sown(&w.chem, &p, (i, w.mesh.cells().area()[i], w.t_ground_last(i)), genes, root, kg);
-    let mol = s.mol;
-    let heat = s.heat;
-    let c = &mut w.life.cells[i].cover;
-    let was = c.temp(&w.chem, &p);
-    match seed::lodge(c, &mm, &s, alike) {
-        seed::Landed::In => {}
-        // The slot in deficit it took goes to the ground as remains, with its heat.
-        seed::Landed::Out(m) => {
-            let q = ((0..NP).map(|q| m[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * was).min(c.e);
-            c.e -= q;
-            let (from, to) = (crate::store::Node::new(crate::store::Class::Cover, i), crate::store::Node::ground(i));
-            let mut moves: Vec<_> = (0..NP).map(|x| crate::store::Move { from, to, k: p.sub[x] as u16, mol: m[x], heat: 0.0 }).collect();
-            moves.push(crate::store::Move { from, to, k: 0, mol: 0.0, heat: q });
-            crate::store::apply(w, &[], &moves);
-        }
-    }
-    // (The cover's side is its own: the store books the outside node's.)
-    w.cross((crate::store::Boundary::Outside, crate::store::Node::new(crate::store::Class::Cover, i)), (0..NP).map(|q| (p.sub[q], mol[q])), heat);
-    w.life.cells[i].cover.mark = w.light[i];
-    true
-}
-
-/// `kg` per m² of cover of genes `genes` and starting kind `root` as seeds for cell `i` of `area` m² at `t` K: its
-/// built cover at the shares of its genes, its fuel at its `STORE` gene, with its heat.
-pub fn sown(chem: &Chemistry, p: &Parts, (i, area, t): (usize, f64, f64), genes: [f32; NG], root: u32, kg: f64) -> Seed {
-    let mm = p.mm(chem);
-    let fm = 1.0 / (1.0 + dec(genes[WALLS]));
-    let built = kg * area / (1.0 + dec(genes[STORE]));
-    let mol = [built * dec(genes[STORE]) / mm[FUEL], built * fm / mm[MATTER], built * fm * dec(genes[WALLS]) / mm[WALL]];
-    let heat = (0..NP).map(|q| mol[q] * chem.subs[p.sub[q]].cp).sum::<f64>() * t;
-    Seed { to: i as u32, mol, genes, root, heat }
 }
 
 /// The built cover of amounts `m` (mol of each part): body matter and walls, kg.

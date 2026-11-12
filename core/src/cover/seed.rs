@@ -2,7 +2,8 @@
 //! goes to, cell by cell in the order made, and always takes hold there (`lodge`): in the nearest slot of its kind, or
 //! as seedlings in a slot of its own; what lives after is the light's to decide.
 
-use super::{built_kg, distance, Cover, Parts, APART, NG, NO_ROOT, NP, SLOTS};
+use super::{built_kg, dec, distance, Cover, Parts, APART, FUEL, MATTER, NG, NO_ROOT, NP, SLOTS, STORE, WALL, WALLS};
+use crate::chem::Chemistry;
 use crate::store::{apply, Class, Move, Node};
 use crate::World;
 
@@ -47,7 +48,7 @@ pub(super) fn send(c: &mut Cover, x: usize, (mol, heat): ([f64; NP], f64), genes
 /// life that left a cell's head and came to it is booked once for each cell and way (`store::life_sent`).
 pub fn land(w: &mut World) {
     let Some(p) = Parts::of(&w.chem) else { return };
-    let (mm, alike) = (p.mm(&w.chem), w.cfg.phys.alike);
+    let mm = p.mm(&w.chem);
     let (mut moves, mut sent) = (Vec::new(), vec![[0.0; 2]; w.life.cells.len()]);
     for from in 0..w.life.cells.len() {
         for s in std::mem::take(&mut w.life.cells[from].cover.seeds) {
@@ -56,7 +57,7 @@ pub fn land(w: &mut World) {
             (sent[from][0], sent[i][1]) = (sent[from][0] + kg, sent[i][1] + kg);
             let c = &mut w.life.cells[i].cover;
             let t = c.temp(&w.chem, &p);
-            let (mol, heat) = match lodge(c, &mm, &s, alike) {
+            let (mol, heat) = match lodge(c, &mm, &s, &w.cfg.phys, w.mesh.cells().area()[i]) {
                 Landed::In => continue,
                 Landed::Out(m) => {
                     let heat = ((0..NP).map(|q| m[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * t).min(c.e);
@@ -79,16 +80,19 @@ pub enum Landed {
     Out([f64; NP]),
 }
 
-/// Seeds `s` lodge in cover `c`, with their heat and their store: into the most alike slot of their starting kind within
-/// `APART` × `alike` steps (`distance`), the genes the mean by built cover; else they found a slot of their own: an
-/// empty one; else the one in deficit (`Cover::net` below zero, the worst first), whose cover dies; else the two slots
+/// Seeds `s` lodge in cover `c` of a cell of `area` m², with their heat and their store: into the most alike slot of
+/// their starting kind within `APART` × `alike` steps (`distance`), the genes the mean by built cover; else they found
+/// a slot of their own: an empty one; else the one in deficit (`Cover::net` below zero, the worst first), whose cover dies; else the two slots
 /// nearest each other by their genes join (`room`) and they found the slot it frees. So a cell is never closed to seeds
 /// and a holder that pays its way is never pushed out: what lives after is the light's to decide, as seedlings live on
 /// the light that reaches the bottom of the layers above them and what does not pay dies (the gap models, Shugart 1984).
-pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, alike: f32) -> Landed {
+pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, ph: &crate::Physics, area: f64) -> Landed {
     let kg = built_kg(mm, &s.mol);
+    let plants = super::stand::founded(ph, kg, area);
     let kin = (0..SLOTS).filter(|&x| c.root[x] == s.root);
-    if let Some((_, x)) = kin.map(|x| (distance(&c.genes[x], &s.genes), x)).filter(|e| e.0 <= APART * alike).min_by(|a, b| a.0.total_cmp(&b.0)) {
+    if let Some((_, x)) = kin.map(|x| (distance(&c.genes[x], &s.genes), x)).filter(|e| e.0 <= APART * ph.alike).min_by(|a, b| a.0.total_cmp(&b.0)) {
+        c.plants[x] += plants;
+        super::stand::thin(c, mm, ph, area, x);
         // The seeds join as a slot of their own would, the genes the mean by built cover.
         (0..NG).for_each(|g| c.genes[x][g] += (kg / (kg + c.built(mm, x)).max(1e-300)) as f32 * (s.genes[g] - c.genes[x][g]));
         (0..NP).for_each(|q| c.mol[x][q] += s.mol[q]);
@@ -99,20 +103,63 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, alike: f32) -> Landed {
     let (x, out) = match ((0..SLOTS).find(|&x| c.root[x] == NO_ROOT), poorest) {
         (Some(x), _) => (x, None),
         (None, Some(x)) => (x, Some(c.mol[x])),
-        (None, None) => (room(c, mm), None),
+        (None, None) => (room(c, mm, ph, area), None),
     };
-    (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x]) = (s.mol, s.genes, s.root, false, 0.0);
+    (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.plants[x]) = (s.mol, s.genes, s.root, false, 0.0, plants);
     c.e += s.heat;
     out.map_or(Landed::In, Landed::Out)
 }
 
 /// Room in cover `c` whose slots all hold cover that pays its way: the two nearest each other by their genes
-/// (`distance`), of any starting kind, join, the lighter into the heavier (`grow::join`): the slots are a limit of the
+/// (`distance`), of any starting kind, join, the lighter into the heavier (`stand::join`): the slots are a limit of the
 /// bookkeeping, and the two hold the same niche to within what it resolves. Returns the slot it leaves empty.
-fn room(c: &mut Cover, mm: &[f64; NP]) -> usize {
+fn room(c: &mut Cover, mm: &[f64; NP], ph: &crate::Physics, area: f64) -> usize {
     let pairs = (0..SLOTS).flat_map(|a| (a + 1..SLOTS).map(move |z| (a, z)));
     let (a, z) = pairs.min_by(|p, q| distance(&c.genes[p.0], &c.genes[p.1]).total_cmp(&distance(&c.genes[q.0], &c.genes[q.1]))).expect("a cell holds two slots");
     let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };
-    super::grow::join(c, mm, big, small);
+    super::stand::join(c, (mm, ph, area), big, small);
     small
+}
+
+/// Place `kg` per m² of cover of genes `genes` and starting kind `root` in cell `i`, an edit booked from the outside
+/// node (`World::cross`): its built cover at the shares of its genes, its fuel at its `STORE` gene, at the cell's
+/// ground temperature; it lodges as seeds do (`seed::lodge`). False if the chemistry has no cover (nothing is placed
+/// then).
+pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
+    let Some(p) = Parts::of(&w.chem) else { return false };
+    let (mm, area) = (p.mm(&w.chem), w.mesh.cells().area()[i]);
+    let s = sown(&w.chem, &w.cfg.phys, &p, (i, area, w.t_ground_last(i)), genes, root, kg);
+    let mol = s.mol;
+    let heat = s.heat;
+    let c = &mut w.life.cells[i].cover;
+    let was = c.temp(&w.chem, &p);
+    match lodge(c, &mm, &s, &w.cfg.phys, area) {
+        Landed::In => {}
+        // The slot in deficit it took goes to the ground as remains, with its heat.
+        Landed::Out(m) => {
+            let q = ((0..NP).map(|q| m[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * was).min(c.e);
+            c.e -= q;
+            let (from, to) = (crate::store::Node::new(crate::store::Class::Cover, i), crate::store::Node::ground(i));
+            let mut moves: Vec<_> = (0..NP).map(|x| crate::store::Move { from, to, k: p.sub[x] as u16, mol: m[x], heat: 0.0 }).collect();
+            moves.push(crate::store::Move { from, to, k: 0, mol: 0.0, heat: q });
+            crate::store::apply(w, &[], &moves);
+        }
+    }
+    // (The cover's side is its own: the store books the outside node's.)
+    w.cross((crate::store::Boundary::Outside, crate::store::Node::new(crate::store::Class::Cover, i)), (0..NP).map(|q| (p.sub[q], mol[q])), heat);
+    w.life.cells[i].cover.mark = w.light[i];
+    true
+}
+
+/// `kg` per m² of cover of genes `genes` and starting kind `root` as seeds for cell `i` of `area` m² at `t` K: its
+/// built cover at the share of walls a plant of its mass builds (the plants it founds, `super::stand::founded` and
+/// `super::stand::walled`), its fuel at its `STORE` gene, with its heat.
+pub fn sown(chem: &Chemistry, ph: &crate::Physics, p: &Parts, (i, area, t): (usize, f64, f64), genes: [f32; NG], root: u32, kg: f64) -> Seed {
+    let mm = p.mm(chem);
+    let built = kg * area / (1.0 + dec(genes[STORE]));
+    let walls = dec(genes[WALLS]) * super::stand::walled(ph, built / super::stand::founded(ph, built, area));
+    let fm = 1.0 / (1.0 + walls);
+    let mol = [built * dec(genes[STORE]) / mm[FUEL], built * fm / mm[MATTER], built * fm * walls / mm[WALL]];
+    let heat = (0..NP).map(|q| mol[q] * chem.subs[p.sub[q]].cp).sum::<f64>() * t;
+    Seed { to: i as u32, mol, genes, root, heat }
 }

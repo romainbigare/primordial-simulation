@@ -230,6 +230,17 @@ pub struct Physics {
     pub c_light: f64,
     /// Mutation size of the cover's genes per generation, times each gene's step
     pub cover_mut: f32,
+    /// Built cover of one plant a seed founds, kg
+    pub seed_kg: f64,
+    /// Built cover of a plant that builds half the walls its `WALLS` gene sets, kg
+    pub wall_kg: f64,
+    /// The self-thinning law: mean plant mass = this × (plants per m²)^(-3/2), kg (per m² to the 1/2)
+    pub thin_kg: f64,
+    /// A plant's height over its stem's width to the 2/3 (the buckling limit), m^(1/3)
+    pub tall: f64,
+    /// A stem's volume over its cylinder's, and the share of a stem that is its walls' solid
+    pub stem_form: f64,
+    pub stem_solid: f64,
 
     // Flow, as ground cover and moving liquid feel it
     /// Thickness of a layer that hides half of what lies below it: [soft solid, liquid, loose], m
@@ -408,6 +419,12 @@ impl Default for Physics {
             node_floor: 0.01,
             c_light: 0.1,
             cover_mut: 0.063,
+            seed_kg: 1e-5,
+            wall_kg: 0.05,
+            thin_kg: 5.0,
+            tall: 35.0,
+            stem_form: 0.5,
+            stem_solid: 0.4,
             hide: [0.2, 0.5, 0.02],
             soft: 0.75,
             still: 0.01,

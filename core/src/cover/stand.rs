@@ -1,0 +1,73 @@
+//! The plants of a slot of cover (laws.md 4.5): the model holds a slot's mass and its count of plants, so each plant's
+//! mass is known, and from it the plant's height by the buckling limit (McMahon 1973) and how many plants a stand of
+//! that mass holds at most (the self-thinning law, Yoda and others 1963). One place for these laws: the light's layers
+//! (`grow`), the seeds (`seed`) and the page's drawing (`tape::stands`) read them.
+
+use super::{distance, Cover, APART, NG, NO_ROOT, NP, SLOTS};
+use crate::Physics;
+use std::f64::consts::FRAC_PI_4;
+
+/// The width of the stem of a plant of `mass` kg of built cover, the share `walls` of it walls of density `rho` kg/m³,
+/// m: the cylinder of `stem_form` and `stem_solid` that holds its walls, as tall as the buckling limit lets it stand
+/// (walls = form × solid × rho × π/4 × D² × `tall` × D^(2/3)).
+pub fn stem(ph: &Physics, mass: f64, walls: f64, rho: f64) -> f64 {
+    (mass * walls / (ph.stem_form * ph.stem_solid * rho * FRAC_PI_4 * ph.tall)).max(0.0).powf(3.0 / 8.0)
+}
+
+/// The height of that plant, m: `tall` × its stem's width^(2/3), the elastic buckling limit (McMahon 1973).
+pub fn height(ph: &Physics, mass: f64, walls: f64, rho: f64) -> f64 {
+    ph.tall * stem(ph, mass, walls, rho).powf(2.0 / 3.0)
+}
+
+/// The share of the walls its `WALLS` gene sets that a plant of `mass` kg of built cover builds: mass / (mass +
+/// `wall_kg`). A seedling is mostly leaf and the share of stem grows with a plant's size (Poorter and others 2012), so a
+/// small plant of a kind of many walls catches light as a leafy one does, and its walls come as it grows tall.
+pub(super) fn walled(ph: &Physics, mass: f64) -> f64 {
+    mass / (mass + ph.wall_kg)
+}
+
+/// The most plants a m² a stand of `kg` per m² holds: (`thin_kg` / kg)², the self-thinning law, mean plant mass =
+/// `thin_kg` × (plants per m²)^(-3/2) (Yoda and others 1963; White 1981).
+pub(super) fn most_plants(ph: &Physics, kg: f64) -> f64 {
+    (ph.thin_kg / kg.max(1e-300)).powi(2)
+}
+
+/// Slot `x` of cover `c` of a cell of `area` m² thins out: a stand denser than the self-thinning law allows for its mass
+/// loses plants, not mass, and the survivors take what the dead freed (Yoda and others 1963).
+pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], ph: &Physics, area: f64, x: usize) {
+    c.plants[x] = c.plants[x].min(area * most_plants(ph, c.built(mm, x) / area));
+}
+
+/// The plants that `kg` of seeds found in a cell of `area` m²: one for each `seed_kg`, as many as the self-thinning
+/// law lets stand (`most_plants`).
+pub(super) fn founded(ph: &Physics, kg: f64, area: f64) -> f64 {
+    (kg / ph.seed_kg).min(area * most_plants(ph, kg / area))
+}
+
+/// Alike kinds of a cell (`APART` × `Physics::alike` steps in every gene, `distance`) share a slot: the lighter joins
+/// the heavier (`join`).
+pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], ph: &Physics, area: f64) {
+    for a in 0..SLOTS {
+        for z in a + 1..SLOTS {
+            if c.root[a] == NO_ROOT || c.root[z] == NO_ROOT || distance(&c.genes[a], &c.genes[z]) > APART * ph.alike {
+                continue;
+            }
+            let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };
+            join(c, (mm, ph, area), big, small);
+        }
+    }
+}
+
+/// Slot `small` joins slot `big` of the same cell of `area` m²: amounts and plants added (then thinned, `thin`), genes and
+/// balance the mean by built cover, its starting kind the heavier's; `small` is empty after.
+pub(super) fn join(c: &mut Cover, (mm, ph, area): (&[f64; NP], &Physics, f64), big: usize, small: usize) {
+    let (wb, ws) = (c.built(mm, big), c.built(mm, small));
+    let f = (ws / (wb + ws).max(1e-300)) as f32;
+    let (gs, ms) = (c.genes[small], c.mol[small]);
+    (0..NG).for_each(|g| c.genes[big][g] += f * (gs[g] - c.genes[big][g]));
+    c.net[big] += f * (c.net[small] - c.net[big]);
+    c.plants[big] += c.plants[small];
+    (0..NP).for_each(|q| c.mol[big][q] += ms[q]);
+    thin(c, mm, ph, area, big);
+    (c.mol[small], c.root[small], c.full[small], c.net[small], c.plants[small]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0);
+}

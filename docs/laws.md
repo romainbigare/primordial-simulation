@@ -996,10 +996,21 @@ upkeep, wear and fixing go by its living cover, as the maintenance breathing of 
 store (`Class::Cover`) whose law books its own side; it is kept with the cell's bodies (`life::Cell::cover`), so the
 chunk of the cell is its one writer. Its temperature is its ground's: at the end of each month it trades heat with its
 ground to that temperature. **One month** (`cover::step`, its own process after the air's step at a month's start, one
-task per chunk), slot by slot, the tallest (most walls per m²) first:
+task per chunk), slot by slot, the tallest first. **Plants**: a slot holds a real count of plants (`Cover::plants`,
+`cover/stand.rs`), so a plant's mass is its built cover over them, and its height is that of a plant of that mass whose
+walls (its walls' share of its built cover) make a stem of `stem_form` and `stem_solid` at the walls' density, as tall
+as `tall` × its width^(2/3), the elastic buckling limit (McMahon 1973). Seeds that found a slot are one plant per
+`seed_kg`; a stand holds at most (`thin_kg` / kg per m²)² plants a m², the self-thinning law (Yoda and others 1963): a
+denser stand loses plants, not mass, after it builds; what dies of unpaid upkeep, wear or frost is whole plants (the
+count falls with the mass); seeds that join a stand of their kind, and slots that join, add their plants (each seed
+lot one plant per `seed_kg`, as many as the thinning law lets stand). So a stand that recruits sits on the thinning
+line, its plants' mass (kg per m²)³ / `thin_kg`², and its height grows with its mass: a kind that holds much mass
+without leaf (walls, which pay no upkeep) stands tall, and a stand of few seeds is of few large plants until its own
+seeds fill it:
 - **Light**: the light the cell caught since its last month per m² of capture area (`World::light`), on its capture
   area (10^`LEAF` m² per kg of living cover) less what it reflects (its parts' colours by volume), shared among its
-  kinds by height (Beer's law, `math::shade`); under standing liquid times e^(−depth / `light_depth`).
+  kinds by the height of their plants (Beer's law, `math::shade`): the tallest take it first, and a seedling lives on
+  what reaches the bottom of the layers above it; under standing liquid times e^(−depth / `light_depth`).
 - **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
   10^`LIGHT` × 10^`MOIST` mol per kg of living cover per s, times the reaction's pace k e^(−Ea/T) over its value at
   `t_cat`, times its activity a = min(1, wet / 10^`MOIST`)^`dormancy` (wet: how wet its ground is as bodies feel it,
@@ -1020,15 +1031,20 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   over (living cover × `e_life` × 10^`REPAIR`), as bodies wear (6.7). **Frost**: below its `FROST` gene, lowered by its dormancy (`Physics::harden` × (1 − a)), the share
   min(1, (limit − T) / `frost_k`) dies (`PHASE`), active or not.
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
-  out as kinds build, tallest first) build body matter and walls (10^`WALLS` kg per kg of matter) by the conversions of growth (`Chemistry::build`,
+  out as kinds build, tallest first) build body matter and walls (10^`WALLS` kg per kg of matter, times m / (m +
+  `wall_kg`) for a plant of m kg: a seedling is mostly leaf and the share of stem grows with a plant's size, Poorter
+  and others 2012) by the conversions of growth (`Chemistry::build`,
   `builds`), paying `c_copy` per kg by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
-  most 10^`FIX` mol per kg of living cover per s at the reaction's pace, paid by the reaction's fuel. The fuel past its reserve that
-  it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
+  most 10^`FIX` mol per kg of living cover per s at the reaction's pace, paid by the reaction's fuel. Then it builds
+  walls alone of the fuel past its reserve, up to the walls its plants hold for their mass (`grow::frame`): walls are
+  built of the fuel alone and pay no upkeep, so a plant short of minerals, or whose leaves are all its light pays for
+  (it is **full** and builds no living cover then), still grows its frame and with it its height, and its stand thins
+  out. The fuel past its reserve that it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
 - **Seeds**: the share `SEED` of what it builds leaves in `seed::LOTS` (8) equal lots, each landing where the dispersal
   kernel draws it, as children do (`copy::lot`, 4.2); the lots of a cell make a packet each (`seed::send`; what lands
   in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step ×
-  `cover_mut`); all of it where one more kg would not pay: what a kg more would store with the light at the bottom of
+  `cover_mut`), of body matter first and then walls (an embryo and its store); all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
   its layer (`math::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
   where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005). Each seed carries its own
   store, fuel at its `STORE` gene per kg of it, from the slot's fuel: a slot short of fuel makes fewer seeds, not
