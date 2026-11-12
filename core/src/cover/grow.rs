@@ -9,7 +9,7 @@ use crate::chem::{Chemistry, Phase, Reaction};
 use crate::rng::{Purpose, Rng};
 use crate::store::{Class, Moves, Node};
 use crate::units::{DAY, MAX_SUBSTANCES};
-use crate::{life::Chunk, World, AIR};
+use crate::{life::Chunk, Counters, World, AIR};
 
 /// The month of the cover of every cell of chunk `d`, in the order of its cells; its seeds wait in `Cover::seeds` until
 /// all chunks ran (`land`).
@@ -44,11 +44,45 @@ struct Slot {
 /// What a cell's cover changes outside itself in a month: per substance the mol it takes in (+) or gives out (-), the
 /// heat its reactions release, J, and per substance its remains, mol; and per gas what the cell's share of its air node
 /// offers, mol (infinite for what is not a gas: the ground's inputs are limited where they are read).
-struct Books {
-    ext: [f64; MAX_SUBSTANCES],
-    heat: f64,
-    dead: [f64; MAX_SUBSTANCES],
+pub struct Books {
+    pub ext: [f64; MAX_SUBSTANCES],
+    pub heat: f64,
+    pub dead: [f64; MAX_SUBSTANCES],
     air: [f64; MAX_SUBSTANCES],
+}
+
+/// What the cover of a cell reads of its world in a month: the full world's (`around`) or a year a nursery keeps
+/// (`worldgen::life::nursery`). Its ground's temperature, K; of the key liquid in its ground, what is liquid, mol, and
+/// how wet that leaves its ground (`wet`); the share of the light that reaches it under standing liquid; the cell's light
+/// (`World::light`), J/m²; the air's factor for the light reaction (`Physics::gas_factor`, the least over its gas
+/// inputs); per substance what the cell's share of its air node offers as a gas, mol (infinite for what is not a gas),
+/// and what its ground holds, mol; and the tick that keys its seeds' draws (`World::month`).
+#[derive(Clone, Debug)]
+pub struct Around {
+    pub t: f64,
+    pub liquid: f64,
+    pub moist: f64,
+    pub reach: f64,
+    pub light: f64,
+    pub gas: f64,
+    pub air: [f64; MAX_SUBSTANCES],
+    pub ground: [f64; MAX_SUBSTANCES],
+    pub tick: u64,
+}
+
+/// What the cover of cell `i` reads of the world now, through the moves `moves` opened on it.
+pub(crate) fn around(w: &World, moves: &Moves, p: &Parts, i: usize) -> Around {
+    let (chem, ph) = (&w.chem, &w.cfg.phys);
+    let (j, t) = (w.mesh.up(i, 0, AIR), w.thaw_last(i).0);
+    let (liquid, moist) = super::wet(w, p, i, moves.amount(w, Node::ground(i), p.liquid));
+    let reach = (-w.life.env.get(i).map_or(0.0, |e| e[1]) / ph.light_depth).exp();
+    let seen = moves.seen(w, j);
+    let all: f64 = (0..chem.ns()).map(&seen).sum();
+    let rx = &chem.reactions[p.light];
+    let gas = rx.inputs.iter().filter(|q| chem.phase(q.0 as usize, t) == Phase::Gas).map(|q| ph.gas_factor(seen(q.0 as usize) / all.max(1e-300))).fold(1.0, f64::min);
+    let air = std::array::from_fn(|kk| if kk < chem.ns() && chem.phase(kk, t) == Phase::Gas { seen(kk) } else { f64::INFINITY });
+    let ground = std::array::from_fn(|x| if x < chem.ns() { moves.amount(w, Node::ground(i), x) } else { 0.0 });
+    Around { t, liquid, moist, reach, light: w.light[i], gas, air, ground, tick: w.month() }
 }
 
 impl Books {
@@ -78,17 +112,29 @@ fn per_input(rx: &Reaction, k: usize) -> Option<f64> {
     rx.inputs.iter().find(|q| q.0 as usize == k).map(|q| q.1 as f64)
 }
 
-/// The month of the cover of cell `i` of `d`.
+/// The month of the cover of cell `i` of `d`: what it reads of the world (`around`), its month (`live`), and its
+/// books (`book`).
 fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
-    let (chem, ph) = (&w.chem, &w.cfg.phys);
     let (c, moves, counts) = d.cover_with(i);
-    let (j, area, mm, t) = (w.mesh.up(i, 0, AIR), w.mesh.cells().area()[i], p.mm(chem), w.thaw_last(i).0);
     moves.open(w, i, Node::new(Class::Cover, i));
-    let (liquid, moist) = super::wet(w, p, i, moves.amount(w, Node::ground(i), p.liquid));
-    let reach = (-w.life.env.get(i).map_or(0.0, |e| e[1]) / ph.light_depth).exp();
+    let a = around(w, moves, p, i);
+    let keep = c.keep;
+    let (b, caught) = live(w, c, p, &a, (i, dt), counts);
+    // The light its bodies' node set aside for it (`Cover::keep`), as far as the node holds it.
+    let set_aside = (keep as f64 * caught).min(moves.heat(w, Node::bodies(i))).max(0.0);
+    book(w, moves, c, p, (i, w.mesh.up(i, 0, AIR), a.t), set_aside, &b);
+}
+
+/// The month over `dt` s of the cover `c` of cell `i` (its place on the map, where its seeds go from) that reads `a`:
+/// it catches light, runs its light reaction, pays its upkeep, builds and sends seeds (into `Cover::seeds`); alike
+/// slots merge, and slots left with no built cover empty into its remains. Returns what it changed outside itself
+/// (`Books`) and the light it caught, J; what it lost and rounded is counted in `counts`.
+pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f64), counts: &mut Counters) -> (Books, f64) {
+    let (chem, ph) = (&w.chem, &w.cfg.phys);
+    let (area, mm, t) = (w.mesh.cells().area()[i], p.mm(chem), a.t);
     // The light since the last step: its capture areas share it by height (their walls per m²), tallest first.
-    let dl = (w.light[i] - c.mark).max(0.0);
-    c.mark = w.light[i];
+    let dl = (a.light - c.mark).max(0.0);
+    c.mark = a.light;
     let mut s = [Slot::default(); SLOTS];
     let mut layers = Vec::with_capacity(SLOTS);
     for (q, sq) in s.iter_mut().enumerate() {
@@ -96,24 +142,18 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
         if c.root[q] == NO_ROOT || built <= EMPTY_KG {
             continue;
         }
-        let act = super::activity(ph, &c.genes[q], moist);
+        let act = super::activity(ph, &c.genes[q], a.moist);
         *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, ..Default::default() };
         layers.push(((c.walls(&mm, q) / area) as f32, leaf / area, q));
     }
     crate::math::shade(&mut layers, |q, f, bottom| (s[q].shade, s[q].bottom) = (f, bottom));
     let (a_abs, lit): (f64, f64) = (s.iter().map(|x| x.abs).sum(), s.iter().map(|x| x.abs * x.shade).sum());
     let caught = dl * a_abs;
-    // The light its bodies' node set aside for it (`Cover::keep`), as far as the node holds it.
-    let set_aside = (c.keep as f64 * caught).min(moves.heat(w, Node::bodies(i))).max(0.0);
-    let air = {
-        let seen = moves.seen(w, j);
-        std::array::from_fn(|kk| if kk < chem.ns() && chem.phase(kk, t) == Phase::Gas { seen(kk) } else { f64::INFINITY })
-    };
-    let mut b = Books { ext: [0.0; MAX_SUBSTANCES], heat: 0.0, dead: [0.0; MAX_SUBSTANCES], air };
-    let stored = light(w, (moves, c), p, (i, j), &mut s, caught * reach / lit.max(1e-300), (t, dt, liquid), &mut b);
+    let mut b = Books { ext: [0.0; MAX_SUBSTANCES], heat: 0.0, dead: [0.0; MAX_SUBSTANCES], air: a.air };
+    let stored = light(chem, ph, c, p, &mut s, caught * a.reach / lit.max(1e-300), (a, dt), &mut b);
     c.keep = if caught > 0.0 { (stored / caught) as f32 } else { 0.0 };
     // Its minerals in the ground, shared out slot by slot (the tallest first) as each builds.
-    let mut ground: [f64; MAX_SUBSTANCES] = std::array::from_fn(|x| if x < chem.ns() { moves.amount(w, Node::ground(i), x) } else { 0.0 });
+    let mut ground = a.ground;
     let mut order: Vec<usize> = (0..SLOTS).filter(|&q| s[q].built > 0.0).collect();
     order.sort_by(|&a, &b| s[b].shade.total_cmp(&s[a].shade));
     for x in order {
@@ -121,7 +161,7 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
         counts.cover_lost.iter_mut().zip(lost).for_each(|(a, l)| *a += l);
         let pays = s[x].gain * s[x].built > cost;
         c.full[x] = !pays;
-        build(w, c, p, x, (&s[x], pays), (i, t, dt), &mut ground, &mut b);
+        build(w, c, p, x, (&s[x], pays), (i, a.tick, t, dt), &mut ground, &mut b);
         // The fuel it holds past its reserve when it has built what it could goes to its ground, as roots exude the
         // fuel a plant cannot use (Jones, Hodge and Kuzyakov 2004), where the open world's rot takes it.
         let over = (c.mol[x][FUEL] - dec(c.genes[x][STORE]) * c.built(&mm, x) / mm[FUEL]).max(0.0);
@@ -133,25 +173,27 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
             counts.rounded[0] -= std::mem::take(m);
         }
     }
-    merge_alike(c, &mm, &w.cfg.phys);
-    book(w, moves, c, p, (i, j, t), set_aside, &b);
+    merge_alike(c, &mm, ph);
+    for x in 0..SLOTS {
+        if c.root[x] != NO_ROOT && c.built(&mm, x) <= EMPTY_KG {
+            (0..NP).for_each(|q| b.dead[p.sub[q]] += c.mol[x][q]);
+            (c.mol[x], c.root[x], c.full[x]) = ([0.0; NP], NO_ROOT, false);
+        }
+    }
+    (b, caught)
 }
 
-/// The light reaction of each slot over `dt` at `t` K: what its share of the light caught (`per` of it per unit of
-/// absorbing area times shade) stores at `light_yield`, at most its capacity times its activity and the reaction's
-/// pace, both times what the air's share of the reaction's gas allows (`Physics::gas_factor`, the least over its gas
-/// inputs); all slots cut together to the key liquid in the ground that is liquid (`liquid`, mol) and the gas the cell's
+/// The light reaction of each slot over `dt` at the ground's temperature of `a`: what its share of the light caught
+/// (`per` of it per unit of absorbing area times shade) stores at `light_yield`, at most its capacity times its
+/// activity and the reaction's pace, both times what the air's share of the reaction's gas allows (`Around::gas`); all
+/// slots cut together to the key liquid in the ground that is liquid (`Around::liquid`, mol) and the gas the cell's
 /// share of its air node holds.
 /// Each slot's `Slot::gain` is set: what one more kg would store, its light that of the bottom of its layer. Returns the
 /// energy stored, J.
-#[allow(clippy::too_many_arguments)]
-fn light(w: &World, (moves, c): (&Moves, &mut Cover), p: &Parts, (i, j): (usize, usize), s: &mut [Slot; SLOTS], per: f64, (t, dt, liquid): (f64, f64, f64), b: &mut Books) -> f64 {
-    let (chem, ph) = (&w.chem, &w.cfg.phys);
+fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mut [Slot; SLOTS], per: f64, (a, dt): (&Around, f64), b: &mut Books) -> f64 {
+    let (t, liquid, gas) = (a.t, a.liquid, a.gas);
     let rx = &chem.reactions[p.light];
     let (dh, pace) = (chem.dh(p.light), rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat));
-    let seen = moves.seen(w, j);
-    let air: f64 = (0..chem.ns()).map(&seen).sum();
-    let gas = rx.inputs.iter().filter(|q| chem.phase(q.0 as usize, t) == Phase::Gas).map(|q| ph.gas_factor(seen(q.0 as usize) / air.max(1e-300))).fold(1.0, f64::min);
     let mut x = [0.0; SLOTS];
     for q in 0..SLOTS {
         let need = dec(c.genes[q][MOIST]);
@@ -169,7 +211,7 @@ fn light(w: &World, (moves, c): (&Moves, &mut Cover), p: &Parts, (i, j): (usize,
     let offer = |kk: usize| match kk {
         _ if chem.phase(kk, t) == Phase::Gas => b.air[kk],
         _ if kk == p.liquid => liquid,
-        _ => moves.amount(w, Node::ground(i), kk),
+        _ => a.ground[kk],
     };
     let f = rx.inputs.iter().filter(|q| !p.sub.contains(&(q.0 as usize))).map(|&(kk, n)| offer(kk as usize) / (n as f64 * all)).fold(1.0, f64::min);
     for (m, xq) in c.mol.iter_mut().zip(x) {
@@ -229,7 +271,7 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
 /// false: its light at the bottom of its layer is under its compensation point), so a cover stops thickening where its
 /// lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005).
 #[allow(clippy::too_many_arguments)]
-fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool), (i, t, dt): (usize, f64, f64), ground: &mut [f64; MAX_SUBSTANCES], b: &mut Books) {
+fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool), (i, tick, t, dt): (usize, u64, f64, f64), ground: &mut [f64; MAX_SUBSTANCES], b: &mut Books) {
     let (chem, ph, g) = (&w.chem, &w.cfg.phys, c.genes[x]);
     let (Some(bl), mm) = (chem.build.as_ref(), p.mm(chem)) else { return };
     let Some(wall) = chem.builds.iter().find(|r| r.outputs[0].0 as usize == p.sub[WALL]) else { return };
@@ -286,7 +328,7 @@ fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool)
         }
         let heat = (0..NP).map(|q| mol[q] * chem.subs[p.sub[q]].cp * t).sum::<f64>();
         b.heat -= heat;
-        let mut r = Rng::new(w.seed, w.month(), (i * SLOTS + x) as u64, Purpose::Cover);
+        let mut r = Rng::new(w.seed, tick, (i * SLOTS + x) as u64, Purpose::Cover);
         let mut lands: Vec<(usize, f64)> = Vec::new();
         for _ in 0..super::seed::LOTS {
             let Some(j) = crate::copy::lot(w, i, &mut r).filter(|&j| j != i) else { continue };
@@ -328,23 +370,15 @@ pub(super) fn join(c: &mut Cover, mm: &[f64; NP], big: usize, small: usize) {
 /// Book what the cover of cell `i` (air node `j`, ground at `t` K) took and gave in its month (`Books`): the
 /// light set aside for it from its bodies' node; gases from and to the air (taken from the air node with their heat at
 /// its temperature and their latent heat, given into the bodies' node with theirs, as bodies breathe); liquids and
-/// minerals from and to its ground, with their heat; its remains to its ground. Its slots left with no built cover go
-/// to the ground too. Last its heat comes to the ground's temperature with its ground.
+/// minerals from and to its ground, with their heat; its remains to its ground. Last its heat comes to the ground's
+/// temperature with its ground.
 fn book(w: &World, moves: &mut Moves, c: &mut Cover, p: &Parts, (i, j, t): (usize, usize, f64), set_aside: f64, b: &Books) {
     let chem = &w.chem;
-    let mm = p.mm(chem);
     let (mut e, lift, ta, ground) = (c.e + set_aside + b.heat, w.lift(i), moves.t_air(w, j), Node::ground(i));
     moves.take(w, Node::bodies(i), 0, 0.0, set_aside);
-    let mut dead = b.dead;
-    for x in 0..SLOTS {
-        if c.root[x] != NO_ROOT && c.built(&mm, x) <= EMPTY_KG {
-            (0..NP).for_each(|q| dead[p.sub[q]] += c.mol[x][q]);
-            (c.mol[x], c.root[x], c.full[x]) = ([0.0; NP], NO_ROOT, false);
-        }
-    }
     let cap = moves.heat_cap_ground(w, i);
     let held = |kk: usize, m: f64| m * (chem.subs[kk].cp * t + if chem.phase(kk, t) == Phase::Solid { 0.0 } else { chem.subs[kk].lf });
-    for (kk, (&ext, &died)) in b.ext.iter().zip(&dead).enumerate().take(chem.ns()) {
+    for (kk, (&ext, &died)) in b.ext.iter().zip(&b.dead).enumerate().take(chem.ns()) {
         let (m, s) = (ext - died, &chem.subs[kk]);
         if m == 0.0 {
             continue;
