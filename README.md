@@ -111,7 +111,8 @@ stand (McMahon 1973), each crown as wide as the ground it holds, in patches that
 leaves close; the loose ground their roots need and the share of the square that holds them; and its genes and state
 this month. A plant is drawn on one of three lattices fixed
 in the world (cells of 0.1, 0.5 and 2.5 m), where its marks take a few pixels; where they take less, the same plants
-are a field of their colours with the grain their count gives, so the far and the near pictures agree. A mark picks
+are a field of their colours, drawn as crowns no smaller than the eye reads (each then a clump of plants) and far away
+as their mean, so the far and the near pictures agree. A mark picks
 its kind at its own foot from the four squares about it (blended as the map is) by the kinds' chances there, fewer
 where the ground is drier than its cell's mean as each kind's activity law says: kinds mix mark by mark across a
 square's edge, and a kind that needs wet ground gathers in the hollows. What a mark is depends on its cell alone, so
