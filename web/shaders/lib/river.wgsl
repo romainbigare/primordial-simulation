@@ -137,6 +137,9 @@ fn line_of(q: f32, e: f32) -> vec2f {
   let line = 0.5 * land.line.x * css * min(pow(q / shows, land.line.y), land.line.z) * ease(shows / LINE_FADE, shows, q);
   return vec2f(line, ease(LINE_BENDS.x * banks_of(q), LINE_BENDS.y * banks_of(q), line));
 }
+// A channel's bed, its ragged edge and its banks lie within `BED_OUT.x` of its bed's half widths and `BED_OUT.y` m of
+// its line.
+const BED_OUT = vec2f(2.0, 1.0);
 // A channel's bed is as wide as its floods make it (lib/rock.wgsl `banks_of`). This month's water runs in it between
 // bars of washed gravel (lib/river.wgsl `reach_at`). Where the bed takes under `BED_PX` pixels it is all water.
 const BED_PX = 3.0;
@@ -159,6 +162,8 @@ fn river_spots(s: Spots, shore_over: f32, g: Tiled, ch: Channel, q: f32, stone: 
   let e = s.dry.e;
   out.dry.over = shore_over;
   let line = line_of(q, e);
+  // Outside its bed, its banks and its line from afar a channel draws nothing more.
+  if (g.d > BED_OUT.x * ch.bed + BED_OUT.y + 2.0 * e && abs(g.calm) > line.x + 2.0 * e) { return out; }
   var open = 0.0;
   // (No bed takes `BED_PX` pixels in a program made for draws from this far: rock.wgsl `BED_MOST_M`.)
   if (BED_PX * least_e() < BED_MOST_M) { open = ease(BED_PX * e, 2.0 * BED_PX * e, banks_of(q)) * (1.0 - line.y); }

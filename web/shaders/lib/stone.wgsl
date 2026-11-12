@@ -74,9 +74,12 @@ fn stone_at(v: vec2f, px: f32, x: u32, worn: f32, sunk: f32) -> StoneAt {
 // where it lies, m; and the share of the cells of the largest size that hold a block.
 struct Stony { density: f32, size: f32, small: f32, worn: f32, sunk: f32, snow: f32, snow_m: f32, rare: f32 }
 
-// The share of the cells of octave `o` (0: the largest) that hold a stone of `s`.
+// The share of the cells of octave `o` (0: the largest) that hold a stone of `s`: none where fewer than
+// `STONES_LEAST` of the places hold one (a stone in a hundred places is no scree, and the ground under closed plants
+// reads none of it), all of them from twice that.
+const STONES_LEAST = 0.04;
 fn stones_held(s: Stony, o: i32) -> f32 {
-  return s.density * select(select(1.0, STONE_FEW, o == 1), s.rare, o == 0);
+  return s.density * ease(STONES_LEAST, 2.0 * STONES_LEAST, s.density) * select(select(1.0, STONE_FEW, o == 1), s.rare, o == 0);
 }
 
 // A stone of a lattice: whether its cell holds one, its random word, its radius, m, and the point from its centre, m.
@@ -104,7 +107,7 @@ fn placed(at: vec2f, size: f32, density: f32, o: i32, l: i32, k: i32) -> Placed 
 // coverage.
 fn stones(at: vec2f, e: f32, s: Stony, least: f32, bed: vec3f, k: i32) -> vec4f {
   var out = vec4f(0.0);
-  if (s.density <= 0.0 || s.size <= 0.0) { return out; }
+  if (s.density <= STONES_LEAST || s.size <= 0.0) { return out; }
   let tone = bed * STONE_TONE;
   let snow_m = s.snow * s.snow_m;
   var size = s.size / pow(STONE_STEP, f32(STONE_OCTAVES - 1));

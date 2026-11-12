@@ -140,8 +140,10 @@ fn banks_of(q: f32) -> f32 { return 0.5 * land.channel.x * pow(land.reach.y * q,
 // most of the bed its floods cut.
 const STATION_EXP = 0.26;
 // A bed's width varies along it by up to `BED_VARY` either way, over lengths of `BED_VARY_M` (the second half as
-// strong), each a whole share of the length the place along a channel is kept modulo.
-const BED_VARY = 0.22; const BED_VARY_M = vec2f(32.0, 8.0);
+// strong), each a whole share of the length the place along a channel is kept modulo. (Farther from the line than
+// `BED_NEAR` of the bed's half widths the width is the law's: nothing drawn there tells the two apart, and no noise is
+// read.)
+const BED_VARY = 0.22; const BED_VARY_M = vec2f(32.0, 8.0); const BED_NEAR = 4.0;
 // Where a program is made for draws seen from afar (draw.wgsl `LEAST_E`), a bed's half width is taken as no more than
 // this, m (the bed of a river of some 300 m³/s): what of a bed that wide cannot show at the program's pixels is
 // compiled out of it.
@@ -182,7 +184,7 @@ fn channel_at(g: Tiled, q: f32) -> Channel {
   if (q <= 0.0) { return Channel(0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0); }
   let law = banks_of(q);
   var vary = 1.0;
-  if (!unseen(BED_VARY * BED_MOST_M)) { vary += BED_VARY * (noise_reach(g.along, BED_VARY_M.x, 0.0, 68) + 0.5 * noise_reach(g.along, BED_VARY_M.y, 0.0, 69)) / 1.5; }
+  if (!unseen(BED_VARY * BED_MOST_M) && g.d < BED_NEAR * law) { vary += BED_VARY * (noise_reach(g.along, BED_VARY_M.x, 0.0, 68) + 0.5 * noise_reach(g.along, BED_VARY_M.y, 0.0, 69)) / 1.5; }
   let bend = ease(BEND_OFF.x * law, BEND_OFF.y * law, abs(g.lean));
   let outer = select(1.0, -1.0, g.lean < 0.0);
   let bed = law * vary;
