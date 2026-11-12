@@ -3,7 +3,7 @@
 
 use pcore::store::Node;
 use pcore::{brain, AIR};
-use worldgen::life::{seed, ROSTER};
+use worldgen::life::ROSTER;
 use pcore::body::HIDDEN;
 use worldgen::testkit::{dry_lands, eater, set_amount, start, Books, Brain, Line, OX, RICH};
 
@@ -17,7 +17,7 @@ const RESIZE_MONTHS: usize = 2;
 /// other places.
 const OTHER_CHUNKS: [u32; 2] = [1, 7];
 
-/// The 16 x 16 world of the roster, every starting kind placed after its first month, run `YEARS` years on a pool of
+/// The 16 x 16 world of the roster, its life started after its first month (`testkit::life`), run `YEARS` years on a pool of
 /// `threads` threads with its cells cut into `chunks` chunks. Its whole saved state.
 fn roster(threads: usize, chunks: u32) -> String {
     let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().expect("a pool");
@@ -25,9 +25,7 @@ fn roster(threads: usize, chunks: u32) -> String {
         let mut w = worldgen::new_world(1, 16, 16);
         w.cfg.chunks = chunks;
         pcore::step(&mut w);
-        for &k in &ROSTER {
-            seed(&mut w, k);
-        }
+        worldgen::testkit::life(&mut w, &ROSTER);
         for _ in 0..YEARS * w.cfg.months_per_year as u64 {
             pcore::step(&mut w);
         }

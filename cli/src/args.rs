@@ -1,7 +1,7 @@
 //! The command line: `ew COMMAND --name value ...`, the usage text, and what the flags set.
 
 use pcore::{Config, World};
-use worldgen::life::{Seeding, FIXERS};
+use worldgen::life::Seeding;
 use worldgen::schedule::Schedule;
 
 pub const USAGE: &str = "usage:
@@ -21,13 +21,11 @@ pub const USAGE: &str = "usage:
     --pictures-every N    a PNG picture every N years, and at the start and the end (0: none)
     --months              also write months.csv, a row a month
     --monthly-years N     a viewer frame every month in the first N years (2)
-    --life-year N         the year life starts: soil, then the kinds (2; -1: no life)
-    --roster              the thirteen kinds of worldgen::life::ROSTER, each at its year after the first life, not the two
-    --plants              only the cover of those kinds: no animals
-    --sorted              the cover sorted by its own law on the world's own year when life starts (worldgen::life::nursery),
-                          not the hand-made kinds of cover
+    --life-year N         the year life starts: the soil and the cover sorted by its own law on the world's own year
+                          (worldgen::life::nursery), then the animals (2; -1: no life)
+    --roster              the animals of worldgen::life::ROSTER, each at its year after the first life, not the one kind
+    --plants              the cover only: no animals
     --spray N             rounds of mutation of every founder (20)
-    --fixers X            share of the starting light-eaters that carry the fixing gene (0.1)
     --neutral-eaters      animals start with neutral brains, not hand-set biases
 
     --null                learning and imitation off, brain rows frozen: the run to compare a seed with
@@ -146,15 +144,17 @@ impl Args {
     /// have no brain).
     pub fn seeding(&self) -> Seeding {
         let hand = !self.has("--neutral-eaters");
-        Seeding { hand, rounds: self.get("--spray", 20), fixers: self.get("--fixers", FIXERS) }
+        Seeding { hand, rounds: self.get("--spray", 20) }
     }
 
-    /// The run's plan: what is placed when (`--life-year`, `--roster`, `--plants`, `--sorted`, and the seeding flags).
+    /// The run's plan: what is placed when (`--life-year`, `--roster`, `--plants`, and the seeding flags).
     pub fn schedule(&self) -> Schedule {
         let year = |name: &str, default: i64| u64::try_from(self.get(name, default)).ok();
-        let rows: &[usize] = if self.has("--roster") { &worldgen::life::ROSTER } else { &worldgen::life::TWO };
-        let rows = if self.has("--plants") { worldgen::life::plants(rows) } else { rows.to_vec() };
-        let plan = if self.has("--sorted") { Schedule::sorted } else { Schedule::new };
-        plan(year("--life-year", 2), &rows, self.seeding())
+        let rows: &[usize] = match (self.has("--plants"), self.has("--roster")) {
+            (true, _) => &[],
+            (false, true) => &worldgen::life::ROSTER,
+            (false, false) => &worldgen::life::TWO,
+        };
+        Schedule::new(year("--life-year", 2), rows, self.seeding())
     }
 }

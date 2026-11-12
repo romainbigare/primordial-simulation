@@ -32,8 +32,6 @@ pub enum Purpose {
     /// The mutation rounds of a founder's born rows and of its genes (`worldgen`)
     Spray,
     Make,
-    /// Which founders carry the fixing reaction's gene (`worldgen`)
-    Fixer,
     /// Where a slot of cover sends its seeds, and their mutation (`cover::grow`)
     Cover,
     /// The quarter a body or a structure goes to whole when its cell splits (`life::tree`)

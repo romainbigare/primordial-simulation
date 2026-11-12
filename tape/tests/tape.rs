@@ -28,19 +28,18 @@ fn run(w: &mut World, months: u32) {
 /// breed, their numbers flat or growing, not kept by the luck of a few founders.
 const FOOD_KG: f64 = 2.0;
 
-/// `w` with two kinds of life that live on: the light-eaters (none of them fixing) with `FOOD_KG` more of their cover
-/// on the dry land, and the eaters with the hand-set brains of `ew run`.
+/// `w` with two kinds of life that live on: the light-eaters of a scene (`testkit::light_eaters`) with `FOOD_KG` more
+/// of their cover on the dry land, and the eaters with the hand-set brains of `ew run`.
 fn fed(w: &mut World) {
-    let how = worldgen::life::Seeding { fixers: 0.0, ..Default::default() };
-    worldgen::life::seed_with(w, 0, &how);
+    worldgen::testkit::light_eaters(w);
     worldgen::testkit::cover_lands(w, FOOD_KG);
-    worldgen::life::seed_with(w, 1, &how);
+    worldgen::life::seed(w, 1);
 }
 
 /// The world with two kinds of life: light-eaters and eaters with neutral brains.
 fn two_kinds() -> World {
     let mut w = world();
-    worldgen::life::seed(&mut w, 0);
+    worldgen::testkit::light_eaters(&mut w);
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
     w
 }
@@ -386,7 +385,7 @@ fn resume_into_the_same_folder_continues_the_tape() {
     let mut rec = tape::Recorder::new(&w, 1, 0).with_months_csv();
     common::record(&mut rec, &mut w);
     // The third kind comes at the end of year 2, after the snapshot of year 1, in both runs.
-    let late = |w: &mut World| worldgen::life::seed_with(w, 2, &worldgen::life::Seeding::neutral());
+    let late = |w: &mut World| worldgen::life::seed_with(w, 4, &worldgen::life::Seeding::neutral());
     for m in 1..=4 * mpy {
         run(&mut w, 1);
         common::record(&mut rec, &mut w);
@@ -469,7 +468,7 @@ fn csv_files_grown_year_by_year_are_those_written_at_once() {
                 rec.tape().write(dir, &mut written).unwrap();
             }
             if m == mpy {
-                worldgen::life::seed_with(&mut w, 2, &worldgen::life::Seeding::neutral());
+                worldgen::life::seed_with(&mut w, 4, &worldgen::life::Seeding::neutral());
             }
         }
         if each_year {

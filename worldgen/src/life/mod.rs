@@ -8,9 +8,9 @@ pub mod nursery;
 mod seeding;
 mod soil;
 
-pub use kinds::{plants, Bodies, Field, Kind, Place, KINDS, ROSTER, TWO};
+pub use kinds::{Bodies, Field, Kind, Place, KINDS, ROSTER, TWO};
 pub use make::{make, LITTER_X};
-pub use seeding::{seed, seed_with, Seeding, FIXERS, FIX_GENE};
+pub use seeding::{seed, seed_with, Seeding};
 pub use soil::soil;
 
 use pcore::body::Body;

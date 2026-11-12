@@ -64,17 +64,22 @@ fn wash(chem: &pcore::chem::Chemistry, before: &[f64; pcore::units::MAX_SUBSTANC
         .collect()
 }
 
-/// The kinds known before (the hand-made kinds of cover of the roster, `plants(&ROSTER)`), each as it is and with the
-/// fixing gene on (`FIX_GENE`), labelled by its row: the first newcomers of every class's race, beside the draws.
+/// The fixing gene the nursery tries each known kind with (`cover::FIX`), log10 mol per kg of living cover per s:
+/// 10^-8.3, about 10 g of the fixed element per m² a year for a kg of cover per m² (2 kg living), what real fixing stands
+/// fix (Cleveland et al. 1999).
+pub const FIX_GENE: f32 = -8.3;
+
+/// The kinds known before (the hand-made kinds of cover, `Place::Field`), each as it is and with the fixing gene on
+/// (`FIX_GENE`), labelled by its row: the first newcomers of every class's race, beside the draws.
 fn known() -> Vec<Entrant> {
-    let cover = super::plants(&super::ROSTER).into_iter().filter_map(|k| match &super::KINDS[k].place {
+    let cover = super::KINDS.iter().enumerate().filter_map(|(k, kind)| match &kind.place {
         super::Place::Field(f) => Some((f.genes, k as u32)),
         super::Place::Bodies(_) => None,
     });
     cover
         .flat_map(|(genes, root)| {
             let mut fixer = genes;
-            fixer[cover::FIX] = super::FIX_GENE;
+            fixer[cover::FIX] = FIX_GENE;
             [Entrant { genes, root, raced: true }, Entrant { genes: fixer, root, raced: true }]
         })
         .collect()

@@ -126,7 +126,7 @@ fn animal_kinds() -> Vec<(usize, u64)> {
 
 /// A `LIVE_SIDE` island with the roster (seed 1), run `LIVE_AFTER` years past the last kind's placement, keeps every
 /// element and the energy (`common::run` checks the books to 1e-9), leaves no number that is not finite
-/// (`check::broken`), and ends with the base kinds alive (the starting cover, 0, and the starting eaters, 1) and at least
+/// (`check::broken`), and ends with the cover alive (the nursery's) and the starting eaters (1), and at least
 /// `LIVE_KINDS` animal kinds. The others may die by their physics, so a small change of climate or law does not fail
 /// it: the eaters of remains (4, 5) live on what dies and the small fast eaters of the cover (6) on a short life
 /// (`REPAIR` -1.06) beside two other eaters of the same cover (1, 7), each placed as a few dozen to a few hundred
@@ -136,11 +136,11 @@ fn animal_kinds() -> Vec<(usize, u64)> {
 fn the_world_lives_and_keeps_its_books() {
     let years = animal_kinds().iter().map(|k| k.1).max().expect("animal kinds") + LIVE_AFTER;
     let (w, _) = run(1, LIVE_SIDE, years, true, |_| {}, |_, w, _| assert_eq!(pcore::check::broken(w), None));
-    let cover = pcore::cover::sums(&w).first().map_or(0.0, |s| s.kg);
+    let cover: f64 = pcore::cover::sums(&w).iter().map(|s| s.kg).sum();
     let root_alive = |k: usize| w.life.alive().any(|b| w.life.brains[b.lineage as usize].as_ref().is_some_and(|l| l.root as usize == k));
     let alive: Vec<usize> = animal_kinds().into_iter().map(|k| k.0).filter(|&k| root_alive(k)).collect();
-    println!("year {years}: starting cover {cover:.3e} kg, animal kinds alive {alive:?}");
-    assert!(cover > 0.0, "the starting cover (kind 0) died out");
+    println!("year {years}: cover {cover:.3e} kg, animal kinds alive {alive:?}");
+    assert!(cover > 0.0, "the cover died out");
     assert!(alive.contains(&1), "the starting eaters (kind 1) died out: alive {alive:?}");
     assert!(alive.len() >= LIVE_KINDS, "fewer than {LIVE_KINDS} animal kinds alive: {alive:?}");
 }

@@ -10,7 +10,7 @@ use pcore::{Config, World};
 use serde_json::json;
 use std::cell::RefCell;
 use tape::LAYERS;
-use worldgen::life::{Seeding, FIXERS};
+use worldgen::life::Seeding;
 use worldgen::schedule::Schedule;
 
 /// The year life starts: the default of `ew run`.
@@ -65,8 +65,8 @@ fn island((south, north): (f64, f64)) -> Config {
 
 /// Make an island of `size` x `size` cells from `seed` between the latitudes `south` and `north` (`island`), standing in
 /// the planet's air where they are given (`worldgen::planet::planet`, made once, `PLANET`), with the schedule of
-/// `ew run --roster --plants`: the starting kinds of cover, no animals, so the page runs fast while the work is on the
-/// ground, the liquid and the cover. Its cells stay those as built: the map draws every zoom from the ground's tiles and
+/// `ew run --plants`: the cover the nursery sorts (`worldgen::life::nursery`), no animals, so the page runs fast while
+/// the work is on the ground, the liquid and the cover. Its cells stay those as built: the map draws every zoom from the ground's tiles and
 /// the cells' table. Returns 0, or 1 if the world is refused.
 #[no_mangle]
 pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64) -> u32 {
@@ -77,7 +77,7 @@ pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64) -> u32
     if world.cfg.validate().is_err() {
         return 1;
     }
-    let plan = Schedule::new(Some(LIFE_YEAR), &worldgen::life::plants(&worldgen::life::ROSTER), Seeding { hand: true, rounds: SPRAY_ROUNDS, fixers: FIXERS });
+    let plan = Schedule::new(Some(LIFE_YEAR), &[], Seeding { hand: true, rounds: SPRAY_ROUNDS });
     let cells = tape::Table::new(&world);
     LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, cells, table: Vec::new(), sent: Vec::new() }));
     0

@@ -194,4 +194,5 @@ angled (a block on legs, as a small axonometric sprite). Hover or click one to s
 gives a herd's count. The map zooms to 80 pixels a metre, so one animal shows its shape and can be picked.
 
 By default the animals start with hand-set brain biases (`--neutral-eaters` for neutral brains) and the
-light-eaters with no brain.
+light-eaters with no brain. When life starts (year 2) the cover is sorted by its own law on the world's own year before
+it is placed (the nursery, `docs/laws.md` 8): that month takes a few seconds, more in the browser.

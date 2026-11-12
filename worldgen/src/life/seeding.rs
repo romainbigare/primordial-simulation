@@ -1,23 +1,16 @@
-//! Placing the bodies of a starting kind: their lineage and brain, a spray of variants, the fixers among the
-//! light-eaters, and the line that reports it.
+//! Placing the bodies of a starting kind: their lineage and brain, a spray of variants, and the line that reports it.
+//! (The cover is the nursery's: `life::nursery`.)
 
-use super::kinds::{Bodies, Field, Hand, Kind, Place, KINDS};
+use super::kinds::{Bodies, Hand, Kind, Place, KINDS};
 use super::open_land;
 use super::make::{make_with, split, KEEP_LIQUID};
 use pcore::body::{self, Body, Layout};
 use pcore::lineage::Lineage;
 use pcore::brain::{self, Shape};
 use pcore::rng::{Purpose, Rng};
-use pcore::{cover, lineage, World};
+use pcore::{lineage, World};
 use serde::{Deserialize, Serialize};
 
-/// The share of the cells of the starting cover that carry the gene of the fixing reaction: one in ten, as fixing plants
-/// are near a tenth of flowering species (docs/numbers.md). The gene then evolves as any other.
-pub const FIXERS: f64 = 0.1;
-/// The fixing gene of that cover (`cover::FIX`), log10 mol per kg of living cover per s: 10^-8.3, about 10 g of the
-/// fixed element per m² a year for a kg of the starting cover per m² (2 kg living), what real fixing stands fix
-/// (Cleveland et al. 1999).
-pub const FIX_GENE: f32 = -8.3;
 /// Size of the random weights of a founder lineage's brain.
 const BRAIN_NOISE: f32 = 0.1;
 /// Step of one round of the spray on the bias of every row of a neutral start.
@@ -45,15 +38,13 @@ pub struct Seeding {
     pub hand: bool,
     /// Rounds of mutation given to every body placed (0: all bodies of a kind are the same)
     pub rounds: u32,
-    /// The share of the cells of cover placed that carry the gene of the fixing reaction (`FIXERS`)
-    pub fixers: f64,
 }
 
 impl Seeding {
-    /// Every body of a kind alike: hand-set brain biases, no mutation and no fixers (for tests of the laws that need
-    /// the same body every time).
+    /// Every body of a kind alike: hand-set brain biases and no mutation (for tests of the laws that need the same body
+    /// every time).
     pub fn alike() -> Self {
-        Seeding { hand: true, rounds: 0, fixers: 0.0 }
+        Seeding { hand: true, rounds: 0 }
     }
 
     /// Neutral brains for the animals too (for tests that start every kind from no behaviour).
@@ -64,7 +55,7 @@ impl Seeding {
 
 impl Default for Seeding {
     fn default() -> Self {
-        Seeding { hand: true, rounds: 20, fixers: FIXERS }
+        Seeding { hand: true, rounds: 20 }
     }
 }
 
@@ -96,44 +87,12 @@ impl Placed {
     }
 }
 
-/// `seed` with the choices of `how`. Returns what was placed, in one line.
+/// `seed` with the choices of `how`. Returns what was placed, in one line. A kind of cover is not placed: a world's
+/// cover is the nursery's (`life::nursery`).
 pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     let Some(kind) = KINDS.get(which) else { return String::new() };
-    match &kind.place {
-        Place::Field(f) => field(w, which, kind, f, how),
-        Place::Bodies(b) => bodies(w, which, kind, b, how),
-    }
-}
-
-/// Place the cover of field row `f` of kind `which` on the open land, each cell by its chance: its genes after `rounds`
-/// rounds of mutation (a random walk keyed by the cell), the fixing gene on in the share `fixers` of the cells.
-fn field(w: &mut World, which: usize, kind: &Kind, f: &Field, how: &Seeding) -> String {
-    pcore::survey::survey(w);
-    let mut r = Rng::new(w.seed, w.day(), which as u64, Purpose::Brain);
-    let (mut cells, mut fixers, mut kg) = (0, 0, 0.0);
-    for i in 0..w.mesh.cells().n() {
-        if !open_land(w, i) || r.f64() >= f.chance {
-            continue;
-        }
-        let id = founder_id(which, i, 0);
-        let mut genes = f.genes;
-        let mut rg = Rng::new(w.seed, w.day(), id, Purpose::Make);
-        for _ in 0..how.rounds {
-            genes = cover::mutate(&genes, w.cfg.phys.cover_mut, &mut rg);
-        }
-        let fixes = Rng::new(w.seed, w.day(), id, Purpose::Fixer).f64() < how.fixers;
-        if fixes {
-            genes[cover::FIX] = FIX_GENE;
-        }
-        if cover::place(w, i, genes, which as u32, f.kg) {
-            (cells, fixers, kg) = (cells + 1, fixers + fixes as usize, kg + f.kg * w.mesh.cells().area()[i]);
-        }
-    }
-    let g = &f.genes;
-    format!(
-        "year {:.1}: placed the cover of {} on {cells} cells ({kg:.3e} kg, {:.2} kg per m2; light capacity 10^{} mol per kg living per s, capture area 10^{} m2 per kg living, walls 10^{} of its matter, fuel kept 10^{}, frost at {} K, active at moisture 10^{}, {:.0}% to seeds, repair {}), {} rounds of mutation each; {fixers} cells ({:.1}%) carry the fixing gene 10^{FIX_GENE} (share {} chosen before any run)",
-        w.year(), kind.name, f.kg, g[cover::LIGHT], g[cover::LEAF], g[cover::WALLS], g[cover::STORE], g[cover::FROST], g[cover::MOIST], 100.0 * g[cover::SEED], g[cover::REPAIR], how.rounds, 100.0 * fixers as f64 / cells.max(1) as f64, how.fixers
-    )
+    let Place::Bodies(b) = &kind.place else { panic!("kind {which} is cover: the nursery places the cover (life::nursery)") };
+    bodies(w, which, kind, b, how)
 }
 
 /// Place the bodies of row `b` of kind `which`.

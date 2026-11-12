@@ -18,11 +18,10 @@ pub enum Place {
     Bodies(Bodies),
 }
 
-/// Cover placed on land cells: its genes (`pcore::cover::NG`), kg per m², and the chance per land cell.
+/// A kind of cover: its genes (`pcore::cover::NG`). The nursery knows it and races it with its own draws
+/// (`life::nursery`); a world's cover is what the nursery keeps.
 pub struct Field {
     pub genes: [f32; cover::NG],
-    pub kg: f64,
-    pub chance: f64,
 }
 
 /// Bodies placed: the genes they start with and where and how many.
@@ -73,10 +72,9 @@ const BASE: [f32; NSCALAR] = [0.9, 0.0, -0.523, 0.0, -1.2, 0.0, 12.0, 6.0, 3.0, 
 /// 2.5 m² per kg of living cover (a herb's 20 m² per kg of leaf, a quarter of its dry mass leaf, and a kg of it dry is 2
 /// kg living: half of it matter, at a quarter dry), walls as much as its matter (cell walls are about half a herb's dry
 /// mass), a tenth of its built cover kept as fuel, frozen below 268 K, fully active at half the ground's field capacity,
-/// a tenth of what it builds to seeds, the fixing reaction off (`FIXERS` of the cells turn it on); 0.1 kg per m² on
-/// every land cell.
+/// a tenth of what it builds to seeds, the fixing reaction off (the nursery also tries it with the reaction on).
 const COVER_GENES: [f32; cover::NG] = [-5.0, 0.4, 0.0, -1.0, 268.0, -0.3, 0.1, -1.0, -11.0];
-const LIGHT: Kind = Kind { name: "light-eaters", year: 0, place: Place::Field(Field { genes: COVER_GENES, kg: 0.1, chance: 1.0 }) };
+const LIGHT: Kind = Kind { name: "light-eaters", year: 0, place: Place::Field(Field { genes: COVER_GENES }) };
 
 /// The genes of the big slow cover, a tree: walls ten times its matter (its matter holds 2.5% of the fixed element, so
 /// the whole about 0.23%, as a forest stand's mean of 0.2 to 0.4%; Cole and Rapp 1981, from memory), the herb's light
@@ -133,7 +131,8 @@ const fn eaters(name: &'static str, year: u64, b: Bodies) -> Kind {
 }
 
 /// Starting kinds; the row is the root label of the lineages a kind starts (the tape's `root_<k>_*` columns). Rows 0
-/// and 1 are the two kinds of `ew run`, rows 2 to 9 with them the roster. A row sets only what the laws read (genes,
+/// and 1 are the two kinds of `ew run`, rows 2 to 9 with them the roster. The rows of cover are not placed: the nursery
+/// knows them and races them with its own draws (`life::nursery`). A row sets only what the laws read (genes,
 /// catalysts, uptake, and where, when and how many): kinds are initial conditions, never rules. The roster's rungs
 /// scale the first two rows; eaters of bodies are stronger than what they eat, eaters of remains have no strength, and
 /// the two big slow eater kinds start with 60% of their mass as fuel, not 30%, as a neutral brain must find what to take
@@ -142,8 +141,8 @@ pub const KINDS: [Kind; 13] = [
     LIGHT,
     EATER,
     // Cover, small and fast, seeds spread wide; big and slow (`TREE`), seeds stay.
-    Kind { name: "small fast light-eaters", year: 0, place: Place::Field(Field { genes: with(COVER_GENES, &[(cover::LIGHT, -4.83), (cover::LEAF, 0.57), (cover::WALLS, -0.3), (cover::SEED, 0.3), (cover::REPAIR, -1.2)]), kg: 0.05, chance: 0.6 }) },
-    Kind { name: "big slow light-eaters", year: 0, place: Place::Field(Field { genes: TREE, kg: 0.3, chance: 0.4 }) },
+    Kind { name: "small fast light-eaters", year: 0, place: Place::Field(Field { genes: with(COVER_GENES, &[(cover::LIGHT, -4.83), (cover::LEAF, 0.57), (cover::WALLS, -0.3), (cover::SEED, 0.3), (cover::REPAIR, -1.2)]) }) },
+    Kind { name: "big slow light-eaters", year: 0, place: Place::Field(Field { genes: TREE }) },
     // Eaters of remains on the ground, small and big: no strength, the solid first.
     eaters("small eaters of remains", 10, Bodies { scalars: with(EATER_BODIES.scalars, &[(STRENGTH, 0.0), (COPY_MASS, 0.245), (LEARN, -0.5), (DISPERSE, 0.3), (REPAIR, -1.48)]), upt: [0.2, 1.0], ..EATER_BODIES }),
     eaters("big eaters of remains", 10, Bodies { scalars: with(EATER_BODIES.scalars, &[(STRENGTH, 0.0), (COPY_MASS, 1.325), (LEARN, -0.5), (DISPERSE, 0.2), (REPAIR, -0.89)]), per: 1, chance: 0.2, ..EATER_BODIES }),
@@ -155,19 +154,14 @@ pub const KINDS: [Kind; 13] = [
     eaters("strong big slow eaters of eaters", 24, Bodies { scalars: with(EATER_BODIES.scalars, &[(STRENGTH, 0.5), (COPY_MASS, 2.682), (LEARN, 0.0), (HIDDEN, 16.0), (MEMORY, 8.0), (SEEN, 4.0), (SIGHT, 2.0), (DISPERSE, 0.05), (REPAIR, 0.0)]), per: 1, chance: 0.15, store: 0.6, ..EATER_BODIES }),
     // Cover at the ends of what the laws weigh against each other: big and slow on wet ground (`WET_TREE`), woody and
     // slow on dry ground (`DRY_WOODY`), tall and fast with seeds spread wide (`TALL_FAST`).
-    Kind { name: "big light-eaters of wet ground", year: 0, place: Place::Field(Field { genes: WET_TREE, kg: 0.3, chance: 0.4 }) },
-    Kind { name: "woody light-eaters of dry ground", year: 0, place: Place::Field(Field { genes: DRY_WOODY, kg: 0.1, chance: 0.5 }) },
-    Kind { name: "tall fast light-eaters", year: 0, place: Place::Field(Field { genes: TALL_FAST, kg: 0.05, chance: 0.6 }) },
+    Kind { name: "big light-eaters of wet ground", year: 0, place: Place::Field(Field { genes: WET_TREE }) },
+    Kind { name: "woody light-eaters of dry ground", year: 0, place: Place::Field(Field { genes: DRY_WOODY }) },
+    Kind { name: "tall fast light-eaters", year: 0, place: Place::Field(Field { genes: TALL_FAST }) },
 ];
 
-/// The roster of `ew run --roster`: the thirteen rows of `KINDS`, each placed at its `year`.
+/// The roster of `ew run --roster`: the thirteen rows of `KINDS`, the bodies each placed at its `year`.
 pub const ROSTER: [usize; 13] = [2, 0, 3, 10, 11, 12, 4, 5, 6, 1, 7, 8, 9];
 
-/// The kinds `ew run` places without `--roster` (rows of `KINDS`): light-eaters, then eaters.
+/// The kinds `ew run` places without `--roster` (rows of `KINDS`): light-eaters (the nursery's), then eaters.
 pub const TWO: [usize; 2] = [0, 1];
-
-/// The rows of `rows` that are cover (`Place::Field`): the kinds of a run without animals (`ew run --plants`).
-pub fn plants(rows: &[usize]) -> Vec<usize> {
-    rows.iter().copied().filter(|&k| matches!(KINDS[k].place, Place::Field(_))).collect()
-}
 

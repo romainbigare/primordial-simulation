@@ -680,7 +680,7 @@ fn growth_stops_without_a_mineral_and_goes_on_with_them() {
 #[test]
 fn child_has_parent_genes_plus_noise() {
     let mut w = worldgen::new_world(1, 16, 16);
-    worldgen::life::seed(&mut w, 0);
+    worldgen::testkit::light_eaters(&mut w);
     worldgen::life::seed(&mut w, 1);
     let parent = w.life.alive().next().expect("a body").genes;
     let lay = Layout::of(&w.chem);
@@ -708,7 +708,7 @@ fn crowded_individuals_merge_into_a_node() {
     let mut w = worldgen::new_world(1, 16, 16);
     let books = Books::now(&w);
     pcore::step(&mut w);
-    worldgen::life::seed(&mut w, 0);
+    worldgen::testkit::light_eaters(&mut w);
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
     let a = w.life.alive().find(|b| b.count == 1.0).expect("an individual");
     let (i, lineage, genome) = (a.cell as usize, a.lineage, a.genome);
@@ -733,7 +733,7 @@ fn a_cell_holds_one_node_per_kind_and_stage() {
     let mut w = worldgen::new_world(1, 16, 16);
     let books = Books::now(&w);
     pcore::step(&mut w);
-    worldgen::life::seed(&mut w, 0);
+    worldgen::testkit::light_eaters(&mut w);
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
     let a = w.life.alive().find(|b| b.count == 1.0).expect("an individual");
     let (i, lineage, genome, id) = (a.cell as usize, a.lineage, a.genome, a.id);

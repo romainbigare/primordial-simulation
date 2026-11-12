@@ -1482,14 +1482,14 @@ read a kind.
   across a border differ by one size at most; the coasts stay in 2 km squares. A globe is one cell an air block but in a
   rectangle of air blocks in squares (`--fine`), by the same rule. A cell's height is the terrain's mean over it
   (`Terrain::inside`, on the worn samples, 0), whatever its size.
-- **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS` rows of `Place::Field`: kg per m² and genes,
-  on every open land cell by its chance), then eaters 20 years later; `--roster` places thirteen kinds (`ROSTER`), six of
-  them cover: a herb, a small fast herb, a big slow cover with walls, the same of wet ground (fully active only near
-  saturation, more capacity), a woody cover of dry ground (active at a tenth of saturation, thick leaves, slow) and a
-  tall fast cover with seeds spread wide. Founders
+- **Life** at year 2 (`--life-year`): the soil, the cover the nursery sorts (below), then eaters 20 years later;
+  `--roster` places the eaters of the thirteen kinds (`ROSTER`), `--plants` none. Six of the kinds are cover, which the
+  nursery knows and races (`worldgen::life::KINDS` rows of `Place::Field`: their genes): a herb, a small fast herb, a big
+  slow cover with walls, the same of wet ground (fully active only near saturation, more capacity), a woody cover of dry
+  ground (active at a tenth of saturation, thick leaves, slow) and a tall fast cover with seeds spread wide. Founders
   are adults on land under at most half a metre of liquid; mass 30% fuel (60% for the two big slow eater kinds).
-- **The sorted cover** (`worldgen::life::nursery`; `ew run --sorted`, in place of the hand-made kinds of cover): when
-  life starts, the cover is sorted by its own law before it is placed. A copy of the world runs a year without life,
+- **The cover** (`worldgen::life::nursery`): when life starts, the cover is sorted by its own law before it is
+  placed. A copy of the world runs a year without life,
   and each open land cell's month is kept: what its cover would read (`cover::around_now`), the light above any cover,
   the key liquid its ground holds and the rain. The cells fall in `CLASSES` classes of like climate (k-means on the
   coldest month, the mean ground temperature, the wetness and the light). Each class's representative cell is a
@@ -1501,7 +1501,8 @@ read a kind.
   not come back as rain in the garden, which has no air (the cover's own drying of the air is left out). Its minerals are washed at the year's own rate, taken by its cover
   and freed again by the open world's rot of its remains (`change::share_over` of reaction 7); and its light is the
   year's above any cover times the share its own canopy lets through (`cover::per_capture_area`). **The race**: each
-  kind tried alone on bare ground (the hand-made kinds of cover and their fixing variants, then mutants of the best,
+  kind tried alone on bare ground (the hand-made kinds of cover and their fixing variants, the fixing gene at
+  `FIX_GENE`, then mutants of the best,
   draws over the genes' whole range, then other classes' best), and the `CHAMPIONS` that hold the most cover after
   `RACE_YEARS` kept. **The invasion**: the best is grown alone into a stand; newcomers (mutants of the stand,
   runners-up and other classes' best, draws) arrive as seeds by the law's own way in (`cover::lodge`); what the stand
@@ -1517,7 +1518,6 @@ read a kind.
   out of deep liquid (a move's odds fall as 1 / (1 + depth / m)). They score making a part at -10, so they make one only
   by rare chance (a draw in about 1e6 decisions); learning and selection may raise it (the tape's `form_*` columns count
   who draws it). Genes and rows get a spray (`--spray`).
-- **Fixers**: a tenth of the cells of the starting cover carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).
 - **Founder genes**: some measured from the laws (`LITTER_X`); bodies build solids at a small share (`BUILT_SHARE`);
   `HEAT`, `CHILD`, `ALLOC` the same for all; `KEEP_T` and `COOL_T` 5 K above their liquid's melting point and 5 K below where life's enzymes fail (320 K) (`EATER_KEEP_T`, `EATER_COOL_T`).
 
