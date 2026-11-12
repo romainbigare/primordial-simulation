@@ -234,6 +234,8 @@ pub struct Physics {
     pub cover_mut: f32,
     /// Built cover of one plant a seed founds, kg
     pub seed_kg: f64,
+    /// Share of the air's gas a leaf draws it down by inside, where the light reaction takes it
+    pub drawdown: f64,
     /// Built cover of a plant that builds half the walls its `WALLS` gene sets, kg
     pub wall_kg: f64,
     /// The self-thinning law: mean plant mass = this × (plants per m²)^(-3/2), kg (per m² to the 1/2)
@@ -427,6 +429,7 @@ impl Default for Physics {
             c_light: 0.1,
             cover_mut: 0.063,
             seed_kg: 1e-5,
+            drawdown: 0.3,
             wall_kg: 0.05,
             thin_kg: 5.0,
             tall: 35.0,

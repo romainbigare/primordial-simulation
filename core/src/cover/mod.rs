@@ -11,7 +11,7 @@ mod grow;
 mod seed;
 mod stand;
 
-pub use grow::{live, step, Around, Books};
+pub use grow::{live, step, thirst, Around, Books};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
 pub use stand::{height, loose_bins, stem, BINS};
 

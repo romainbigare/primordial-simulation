@@ -168,6 +168,7 @@ The three costs of keeping tissue (`c_basal`, `c_strength`, `c_learn`) are per k
 | `root_per_height` | m per m | the loose ground a plant's roots need per m of its height (`cover::stand::need`) | rooting depth grows with a plant's size: grasses tens of cm, shrubs about a metre, trees a few metres (Schenk and Jackson 2002, from memory) | tuned, first guess |
 | `root_least` | m | the least loose ground any plant's roots need (`cover::stand::need`) | a low mat's centimetres | tuned, first guess |
 | `rooted_from` | share | a point whose loose ground is under this share of a kind's need holds none of it; from it to the need, smoothly more (`cover::stand::rooted`) | none: lithic soils under 0.1 m hold herbs and mats only | tuned, first guess |
+| `drawdown` | share | how far a leaf draws the air's gas down inside, where the light reaction takes it: the gas's gradient through its pores, against which the vapour's is lost (`cover::thirst`) | C3 leaves hold about 0.7 of the air's gas inside (Wong, Cowan and Farquhar 1979, from memory) | anchored |
 | `seed_kg` | kg | the built cover of one plant a seed founds: seeds that found a slot are one plant per this (`seed::lodge`) | seeds of most plants weigh 0.1 to 100 mg, a few mg in the middle (Moles and others 2005, from memory); a seedling once it stands is some times its seed: 10 mg | anchored, first guess |
 
 ### Flow, as ground cover and moving liquid feel it

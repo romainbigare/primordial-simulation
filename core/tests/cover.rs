@@ -88,6 +88,23 @@ fn the_light_reaction_goes_with_its_gas() {
     assert!(half > 0.0 && half < 1.0 && p.gas_factor(2.0 * p.gas_ref) > 1.0, "{half}");
 }
 
+/// A leaf loses the key liquid for the gas it takes in (`cover::thirst`): nothing in air saturated at its temperature,
+/// more the drier the air and the warmer the leaf, and at a mild leaf in half-saturated air some hundred mol a mol, the
+/// transpiration ratio of real leaves (a few hundred g of liquid a g of dry matter; Farquhar and Sharkey 1982).
+#[test]
+fn leaves_lose_liquid_for_gas() {
+    let (chem, _) = worldgen::chemistry0();
+    let (p, ph) = (cover::Parts::of(&chem).expect("cover parts"), pcore::Physics::default());
+    let gas = chem.reactions[p.light].inputs.iter().map(|q| q.0 as usize).find(|&k| chem.phase(k, 290.0) == pcore::chem::Phase::Gas).expect("a gas input");
+    let at = |t: f64, rh: f64| {
+        let sat = chem.p_sat(p.liquid, t) / pcore::units::P_REF;
+        cover::thirst(&chem, &ph, (p.liquid, gas), (t, pcore::units::P_REF), [rh * sat, ph.gas_ref])
+    };
+    let (wet, half, warm) = (at(290.0, 1.0), at(290.0, 0.5), at(300.0, 0.5));
+    println!("mol of liquid a mol of gas: saturated {wet:.1}, half-saturated {half:.1}, warmer {warm:.1}");
+    assert!(wet == 0.0 && half > 50.0 && half < 500.0 && warm > half, "{wet} {half} {warm}");
+}
+
 /// Cover whose frost gene lies above its ground's temperature dies of frost in its month (`PHASE`), and what dies goes
 /// to the ground: the books are kept.
 #[test]
