@@ -76,7 +76,10 @@ export class Land {
     data.set(Array.from(levels, l => (Number.isNaN(l) ? -NO_POND_M : l)), 4 * PLANES * n);
     this.sea = levels.reduce((low, l) => (l < low ? l : low), Infinity);
     if (!Number.isFinite(this.sea)) this.sea = -NO_POND_M;
-    const sea = seaSquares(wet, w.meta), ground = ['ground_r', 'ground_g', 'ground_b'].map(name => plane(w, 0, name));
+    const sea = seaSquares(wet, w.meta), ground = fromLand(['ground_r', 'ground_g', 'ground_b'].map(name => plane(w, 0, name)), wet.sea, W, H);
+    // The land's mean height, ground temperature and ice of each square (the sea's squares' from the land nearest): the land a
+    // coastal square of the open low ground holds is the land's, not its 8 km cell's.
+    const [landZ, landT, landIce] = fromLand([0, 1, 3].map(k => Float32Array.from({ length: n }, (_, i) => rows[1 + row * i + k])), wet.sea, W, H);
     const truth = ['true_r', 'true_g', 'true_b'].map(name => plane(w, 0, name));
     const shown = look.mode === 'layer' && w.index.has(look.layer) ? plane(w, 0, look.layer) : null;
     const worn = look.paths && w.index.has(PATH_LAYER) ? plane(w, 0, PATH_LAYER) : null;
@@ -85,8 +88,8 @@ export class Land {
     for (let i = 0; i < n; i++) {
       for (let k = 0; k < Math.ceil(row / 4); k++) put(k, i, Array.from(rows.subarray(1 + row * i + 4 * k, 1 + row * i + Math.min(4 * k + 4, row))));
       put(3, i, [ground[0][i] / 255, ground[1][i] / 255, ground[2][i] / 255, sea[i]]);
-      put(4, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, 0]);
-      put(5, i, [shown ? shown[i] / 255 : 0, worn ? worn[i] / 255 : 0, 0, 0]);
+      put(4, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, landIce[i]]);
+      put(5, i, [shown ? shown[i] / 255 : 0, worn ? worn[i] / 255 : 0, landT[i], landZ[i]]);
     }
     blurSea(data, Array.from(sea, (s, i) => (s > 0 && data[4 * i] < this.sea - OPEN_SEA_M ? 1 : 0)), W, H);
     this.data = data;
@@ -150,4 +153,32 @@ function blurSea(data: Float32Array, open: ArrayLike<number>, w: number, h: numb
     }
     data[4 * i + 1] = t / sum; data[4 * i + 3] = ice / sum;
   }
+}
+
+/** Planes `planes` (a number a square) of the map's `w` x `h` squares with the sea's squares (`sea`, 1 where the sea's)
+ * taken from the nearest squares not the sea's, ring by ring (each the mean of its neighbours already found). The open
+ * low ground is cells of 8 km, whose numbers are their liquid surface's: the land a coastal square of one holds is the
+ * land's, so no 8 km square of the sea's numbers shows on a coast. */
+function fromLand(planes: ArrayLike<number>[], sea: ArrayLike<number>, w: number, h: number): Float32Array[] {
+  const out = planes.map(p => Float32Array.from(p)), known = Uint8Array.from(sea, v => (v ? 0 : 1));
+  for (let left = true; left;) {
+    left = false;
+    const now = known.slice();
+    for (let i = 0; i < w * h; i++) {
+      if (known[i]) continue;
+      const x = i % w, y = (i / w) | 0;
+      let n = 0;
+      const sum = [0, 0, 0];
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy, j = yy * w + xx;
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h || !known[j]) continue;
+        out.forEach((p, c) => (sum[c] += p[j]));
+        n++;
+      }
+      if (n) { out.forEach((p, c) => (p[i] = sum[c] / n)); now[i] = 1; } else left = true;
+    }
+    if (now.every((v, i) => v === known[i])) break;
+    known.set(now);
+  }
+  return out;
 }
