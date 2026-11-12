@@ -6,12 +6,14 @@
 // dark. A riffle's water breaks in small white flecks `FLECK_M` long. A steep reach falls in steps every `STEP_M` or
 // so (step-pool reaches: Montgomery and Buffington 1997): white water starts at a step, on a line that wavers across
 // the channel, and fades down the flow over `STEP_FADE` of the way to the next, in streaks; a step is white over part
-// of the channel's width only, in patches `STEP_PATCH` steps long; the water between runs fast and shallow. The signs slide down the channel (`land.reach.z` m for the slowest water): a pool's at that pace,
+// of the channel's width only, in patches `STEP_PATCH` steps long; past the white water it lies in a small pool
+// (`STEP_POOL` deeper, `POOL_CALM` slower) up to the lip of the next step, where it runs fast and shallow. The signs slide down the channel (`land.reach.z` m for the slowest water): a pool's at that pace,
 // a riffle's twice, a steep reach's up to four times as fast (each a whole number of times, blended, so the slide has
 // no jump where it comes round); the steps stay where they are.
 const LANE_M = 0.45; const LANES = vec2f(3.0, 12.0); const STREAK_M = 8.0; const STREAK = 0.55;
 const FLECK_M = 2.0; const FLECK = 0.3;
 const STEP_M = 8.0; const STEP_WAVE = 0.7; const STEP_FADE = 0.3; const STEP_PATCH = 2.0; const FOAM_STEEP = 0.9;
+const STEP_POOL = 0.6; const POOL_CALM = 0.8;
 // The streams of the world's random numbers of the streaks, the flecks, the steps' lines, their strengths and the
 // white water's streaks.
 const FLOW_STREAK = 74; const FLOW_FLECK = 75; const FLOW_STEP = 76; const FLOW_STRENGTH = 77; const FLOW_WHITE = 78;
@@ -50,6 +52,7 @@ fn flow_signs(e: f32, along: f32, x: f32, c: Channel, steep: f32) -> vec3f {
     let fall = exp(-fract(p) / STEP_FADE) * smoothstep(0.0, 2.0 * e / STEP_M, fract(p));
     let torn = 0.3 + 0.7 * ease(-0.4, 0.5, slid(along, pace, FLECK_M, 2.0 * x * lanes, FLOW_WHITE));
     f.y = max(f.y, FOAM_STEEP * shown * steep * broken * fall * torn * sqrt(mid));
+    f.z = steep * (1.0 - POOL_CALM * smoothstep(STEP_FADE, 2.0 * STEP_FADE, fract(p)) * (1.0 - smoothstep(0.75, 0.95, fract(p))));
   }
   return f;
 }

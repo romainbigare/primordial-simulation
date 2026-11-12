@@ -89,8 +89,10 @@ struct Spot {
   sand: f32, river: f32, river_depth: f32,
   // The reflectance of its bed; the share of the bed that shows (rock.wgsl `bed_shows`); the depth of its loose
   // ground, m; and of its channel's stones there (stone.wgsl `Stony`): the largest's size as drawn, m, what each is
-  // of that size, the share of the places that hold one (0: none), and how round the channel has worn them, 0..1.
-  bed: vec3f, rock: f32, loose: f32, stone: f32, small: f32, stony: f32, worn: f32,
+  // of that size, the share of the places that hold one (0: none), how round the channel has worn them, 0..1, and
+  // the share of a scree's places that hold a block fallen into a steep reach; the depth of the snow where it lies, m;
+  // and how far the point lies below the bed that sheds its scree, `BELOW_LEAST`..1 (crag.wgsl).
+  bed: vec3f, rock: f32, loose: f32, stone: f32, small: f32, stony: f32, worn: f32, blocks: f32, snow_m: f32, below: f32,
   // The share of the ground the tallest plants' crowns close over it (their litter lies under them).
   canopy: f32,
   // Where it lies in the world, m, and the metres a pixel takes there (for the ripples of a liquid's surface).
@@ -133,12 +135,12 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   // Stones over it (stone.wgsl): scree, on bare bed, and in a channel; none on a beach.
   if (styled()) {
     let thin = 1.0 - ease(0.0, SCREE_LOOSE_M, p.loose);
-    let scree = max(SCREE * ease(SCREE_FROM, CLIFF_FROM, steep) * thin, STONES_ON_BED * p.rock) * (1.0 - p.sand);
+    let scree = max(SCREE * ease(SCREE_FROM, SCREE_FULL, steep) * thin * thin * p.below, max(STONES_ON_BED * p.rock, p.blocks)) * (1.0 - p.sand);
     let sunk = SUNK_MOST * ease(0.0, SUNK_LOOSE_M, p.loose);
     // The scree's angular blocks, then the channel's worn stones, from one place in the code.
     for (var k = 0; k < 2; k++) {
-      var s = Stony(scree * (1.0 - plants), SCREE_STONE_M, 1.0, 0.0, sunk, snow);
-      if (k == 1) { s = Stony(p.stony * (1.0 - p.sand), p.stone, p.small, p.worn, BED_SUNK, snow); }
+      var s = Stony(scree * (1.0 - plants), SCREE_STONE_M, 1.0, 0.0, sunk, snow, p.snow_m, STONE_RARE);
+      if (k == 1) { s = Stony(p.stony * (1.0 - p.sand), p.stone, p.small, p.worn, BED_SUNK, snow, p.snow_m, 0.0); }
       let st = stones(p.at, p.e, s, 0.0, p.bed, 61 + 8 * k);
       g.rgb = mix(g.rgb, st.rgb / max(st.a, 1e-4), st.a);
     }

@@ -41,11 +41,13 @@ const EDGE_M = 0.35; const EDGE_LIGHT = 0.25;
 const FILM_M = 0.05;
 // A channel's stones lie on its bed and its bars, in `IN_CHANNEL` of the places they could, fewer where it moves
 // only sand (`BAR_SAND_STONE`); beside a steep reach they lie out to `STONES_OUT` of its bed's half widths from its
-// line, thinning. A channel wears its stones round as it carries them: angular where it carries `WORN_Q.x` m³/s (a
+// line, thinning, and there the bed is bare (`WALL` of it: a steep reach runs between walls of its bed), and blocks
+// fallen from those walls lie in and beside it, angular, in `BLOCKS` of the places a scree's could (`Spot.blocks`),
+// its own stones `STEEP_SHARP` less worn. A channel wears its stones round as it carries them: angular where it carries `WORN_Q.x` m³/s (a
 // head's rill), round from `WORN_Q.y` (the travel grows with the area drained, and so does the discharge). Up a bar
 // they are finer: `BAR_FINES` smaller at its top. Between two samples a stone is drawn from `STONE_SMALL.x` to
 // `STONE_SMALL.y` of its sample's size.
-const IN_CHANNEL = 0.6; const STONES_OUT = 1.8; const WORN_Q = vec2f(0.005, 0.3); const BAR_FINES = 0.5;
+const IN_CHANNEL = 0.6; const STONES_OUT = 1.8; const WORN_Q = vec2f(0.005, 0.3); const BAR_FINES = 0.5; const WALL = 0.85; const BLOCKS = 0.5; const STEEP_SHARP = 0.5;
 const STONE_SMALL = vec2f(0.3, 1.25);
 // The edge of standing liquid is found from how fast its depth changes across the ground, the ground's slope: no slower
 // than this (rise over run), so on flat ground the edge still lies within a pixel's footprint where the depth crosses.
@@ -180,11 +182,20 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // (The largest drawn takes its size from the point's own sample, in a step where two samples meet: the size sets
   // where the stones lie. What each is of it follows the size the channel moves there, which grows evenly along it.)
   let moved = select(0.0, mix(stone_of(reach), stone_of(next.s), next.share), ch.bed > 0.0);
-  p.stone = max(STONE_SEEN * stone_of(reach), COBBLE_M);
-  p.small = clamp(max(STONE_SEEN * moved, COBBLE_M) / p.stone, STONE_SMALL.x, STONE_SMALL.y);
-  let beside = ease(STEEP_STONE.x, STEEP_STONE.y, moved) * (1.0 - ease(ch.bed, STONES_OUT * ch.bed, g.d));
+  let cobble = max(STONE_SEEN * stone_of(reach), COBBLE_M);
+  p.stone = STONE_STEP * cobble;
+  p.small = clamp(max(STONE_SEEN * moved, COBBLE_M) / cobble, STONE_SMALL.x, STONE_SMALL.y);
+  let steep_reach = ease(STEEP_STONE.x, STEEP_STONE.y, moved);
+  let beside = steep_reach * (1.0 - ease(ch.bed, STONES_OUT * ch.bed, g.d));
   p.stony = IN_CHANNEL * ease(0.0, BAR_SAND_STONE, moved) * select(beside, 1.0, g.d < ch.bed);
-  p.worn = ease(log(WORN_Q.x), log(WORN_Q.y), log(max(q, 1e-9)));
+  p.blocks = BLOCKS * steep_reach * select(beside, 1.0, g.d < ch.bed);
+  p.rock = max(p.rock, WALL * beside);
+  p.cover *= 1.0 - WALL * beside;
+  // The scree lies below the bed that sheds it: where the loose ground deepens down the slope.
+  let deepens = vec2f(dpdx(loose), dpdy(loose));
+  p.below = mix(BELOW_LEAST, 1.0, 0.5 - 0.5 * dot(deepens, g.slope) / max(length(deepens) * length(g.slope), 1e-9));
+  p.snow_m = st.snow_m;
+  p.worn = ease(log(WORN_Q.x), log(WORN_Q.y), log(max(q, 1e-9))) * (1.0 - STEEP_SHARP * steep_reach);
   // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
   if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
   p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), p.loose, look.z);
@@ -233,7 +244,12 @@ fn river_spots(s: Spots, shore_over: f32, g: Tiled, ch: Channel, q: f32, stone: 
   let resolved = ease(e, 2.0 * e, ch.water) * open;
   let x = r.across;
   out.wet.depth = mix(ch.mean, depth_across(ch, x), resolved);
-  if (resolved > 0.0) { out.flow = resolved * flow_signs(e, g.along, x, ch, r.steep); }
+  if (resolved > 0.0) {
+    // (Below a step's white water a steep reach's water lies in a pool: slower, and `STEP_POOL` deeper.)
+    let signs = flow_signs(e, g.along, x, ch, r.steep);
+    out.wet.depth *= 1.0 + STEP_POOL * resolved * (r.steep - signs.z);
+    out.flow = resolved * signs;
+  }
   // Down the flow: square to the distance's slope, the way the place along the channel grows.
   let square = vec2f(-g.d_slope.y, g.d_slope.x);
   out.down = square * sign(dot(square, grows));
@@ -281,11 +297,18 @@ fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f) -> Shaded {
   water = mix(water + flow.x * REFLECT_STREAK * SKY, FOAM_RGB, flow.y);
   // The stones that stand out of it, with their wakes.
   if (styled() && p.stony > 0.0 && !unseen(STONE_MOST_M / STONE_PX)) {
-    let s = Stony(p.stony, p.stone, p.small, p.worn, BED_SUNK, 0.0);
+    let s = Stony(p.stony, p.stone, p.small, p.worn, BED_SUNK, 0.0, 0.0, 0.0);
     let least = p.depth / STONE_STANDS;
     if (flow.z > 0.0) { water = mix(water, FOAM_RGB, WAKE * flow.z * wake(p.at, p.e, s, least, down, 61 + 8)); }
     let st = stones(p.at, p.e, s, least, p.bed, 61 + 8);
     water = mix(water, st.rgb / max(st.a, 1e-4), st.a);
+    // The blocks of a steep reach: the scree's own (colour.wgsl `ground_of`), where they stand out of the water.
+    if (p.blocks > 0.0) {
+      let fallen = Stony(p.blocks, SCREE_STONE_M, 1.0, 0.0, BED_SUNK, 0.0, 0.0, STONE_RARE);
+      water = mix(water, FOAM_RGB, WAKE * flow.z * wake(p.at, p.e, fallen, least, down, 61));
+      let block = stones(p.at, p.e, fallen, least, p.bed, 61);
+      water = mix(water, block.rgb / max(block.a, 1e-4), block.a);
+    }
   }
   let rgb = mix(water, SNOW, p.snow * 0.85);
   return Shaded(rgb, 1.0 + (lit - 1.0) * exp(-2.0 * RUNNING_ATTENUATION.g * p.depth), RIVER);
