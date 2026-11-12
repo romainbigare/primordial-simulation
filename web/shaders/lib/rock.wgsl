@@ -142,6 +142,10 @@ const STATION_EXP = 0.26;
 // A bed's width varies along it by up to `BED_VARY` either way, over lengths of `BED_VARY_M` (the second half as
 // strong), each a whole share of the length the place along a channel is kept modulo.
 const BED_VARY = 0.22; const BED_VARY_M = vec2f(32.0, 8.0);
+// Where a program is made for draws seen from afar (draw.wgsl `LEAST_E`), a bed's half width is taken as no more than
+// this, m (the bed of a river of some 300 m³/s): what of a bed that wide cannot show at the program's pixels is
+// compiled out of it.
+const BED_MOST_M = 60.0;
 // On the inside of a bend a bed reaches no farther from its line than this share of the radius the line turns on (its
 // banks would meet past the bend's centre).
 const INNER_MOST = 0.8;
@@ -179,7 +183,8 @@ struct Channel { bed: f32, water: f32, middle: f32, mean: f32, deep: f32, bend: 
 fn channel_at(g: Tiled, q: f32) -> Channel {
   if (q <= 0.0) { return Channel(0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0); }
   let law = banks_of(q);
-  let vary = 1.0 + BED_VARY * (noise_reach(g.along, BED_VARY_M.x, 0.0, 68) + 0.5 * noise_reach(g.along, BED_VARY_M.y, 0.0, 69)) / 1.5;
+  var vary = 1.0;
+  if (!unseen(BED_VARY * BED_MOST_M)) { vary += BED_VARY * (noise_reach(g.along, BED_VARY_M.x, 0.0, 68) + 0.5 * noise_reach(g.along, BED_VARY_M.y, 0.0, 69)) / 1.5; }
   let turn = abs(g.curve);
   let bend = min(turn * 2.0 * law / BEND_FULL, 1.0);
   let outer = select(1.0, -1.0, g.curve > 0.0);

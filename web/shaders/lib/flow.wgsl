@@ -31,6 +31,8 @@ fn slid(along: f32, pace: f32, cell: f32, across: f32, k: i32) -> f32 {
 // fast and shallow the water runs there, 0..1.
 fn flow_signs(e: f32, along: f32, x: f32, c: Channel, steep: f32) -> vec3f {
   var f = vec3f(0.0, 0.0, steep);
+  // (The widest lanes of the widest bed do not show in a program made for draws from far: rock.wgsl `BED_MOST_M`.)
+  if (unseen(2.0 * BED_MOST_M / LANES.x)) { return f; }
   let lanes = clamp(c.water / LANE_M, LANES.x, LANES.y);
   let shown = shows_at(2.0 * c.water / lanes, e);
   if (shown <= 0.0) { return f; }

@@ -89,6 +89,7 @@ fn bar_tone(at: vec2f, e: f32, along: f32, r: Reach) -> f32 {
 // m a pixel on ground `g`: over 1 where the bank's face is turned to the sun, under where from it.
 fn bank_light(e: f32, g: Tiled, c: Channel, r: Reach) -> f32 {
   let wide = BANK_M + BANK_SHARE * c.bed;
+  if (unseen(2.0 * (BANK_M + BANK_SHARE * BED_MOST_M))) { return 1.0; }
   let shown = shows_at(2.0 * wide, e);
   if (shown <= 0.0) { return 1.0; }
   // The bank's face looks at the channel's line, down the distance's slope.

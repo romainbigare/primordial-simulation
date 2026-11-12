@@ -203,7 +203,9 @@ fn river_spots(s: Spots, shore_over: f32, g: Tiled, ch: Channel, q: f32, stone: 
   let css = e * land.samples.w;
   let shows = land.time.w * css;
   let line = 0.5 * LINE_PX * css * min(pow(q / shows, LINE_GROW), LINE_MOST) * ease(shows / LINE_FADE, shows, q);
-  let open = ease(BED_PX * e, 2.0 * BED_PX * e, banks_of(q)) * (1.0 - ease(banks_of(q), 2.0 * banks_of(q), line));
+  var open = 0.0;
+  // (No bed takes `BED_PX` pixels in a program made for draws from this far: rock.wgsl `BED_MOST_M`.)
+  if (BED_PX * least_e() < BED_MOST_M) { open = ease(BED_PX * e, 2.0 * BED_PX * e, banks_of(q)) * (1.0 - ease(banks_of(q), 2.0 * banks_of(q), line)); }
   let r = reach_at(at, e, g, ch, line, open, stone);
   out.share = r.share;
   out.bars = r.bars;
@@ -215,14 +217,15 @@ fn river_spots(s: Spots, shore_over: f32, g: Tiled, ch: Channel, q: f32, stone: 
   out.dry.small *= 1.0 - BAR_FINES * r.up;
   out.wet.ground = gravel;
   // The banks' light falls on the ground beside the bed, on its bars and on the water under the bank.
-  let banks = mix(1.0, bank_light(e, g, ch, r), open);
+  var banks = 1.0;
+  if (open > 0.0) { banks = mix(1.0, bank_light(e, g, ch, r), open); }
   out.dry.shade *= banks;
   // Where the bed is drawn apart from the water and the water takes a few pixels, its depth shows: its pools and
   // riffles and its bed's shape across it; else its mean depth.
   let resolved = ease(e, 2.0 * e, ch.water) * open;
   let x = r.across;
   out.wet.depth = mix(ch.mean, depth_across(ch, x), resolved);
-  out.flow = resolved * flow_signs(e, g.along, x, ch, r.steep);
+  if (resolved > 0.0) { out.flow = resolved * flow_signs(e, g.along, x, ch, r.steep); }
   // Down the flow: square to the distance's slope, the way the place along the channel grows.
   let square = vec2f(-g.d_slope.y, g.d_slope.x);
   out.down = square * sign(dot(square, grows));
