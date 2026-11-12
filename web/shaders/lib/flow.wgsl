@@ -14,6 +14,9 @@ const LANE_M = 0.45; const LANES = vec2f(3.0, 12.0); const STREAK_M = 8.0; const
 const FLECK_M = 2.0; const FLECK = 0.3;
 const STEP_M = 8.0; const STEP_WAVE = 0.7; const STEP_FADE = 0.3; const STEP_PATCH = 2.0; const FOAM_STEEP = 0.9;
 const STEP_POOL = 0.6; const POOL_CALM = 0.8;
+// The white water begins over this length below a step's line, m: the place along a channel is known to a few
+// centimetres (the tiles keep it as a 16-bit float), and an edge sharper than that would draw the texels' lattice.
+const STEP_EDGE_M = 0.4;
 // The streams of the world's random numbers of the streaks, the flecks, the steps' lines, their strengths and the
 // white water's streaks.
 const FLOW_STREAK = 74; const FLOW_FLECK = 75; const FLOW_STEP = 76; const FLOW_STRENGTH = 77; const FLOW_WHITE = 78;
@@ -49,7 +52,7 @@ fn flow_signs(e: f32, along: f32, x: f32, c: Channel, steep: f32) -> vec3f {
     let cells = i32(round(land.reach.x / STEP_M));
     let own = f32(lowbias(vec2i(((i32(floor(p)) % cells) + cells) % cells, 0), FLOW_STRENGTH) & 1023u) / 1023.0;
     let broken = ease(-0.3, 0.2, noise_reach(along, STEP_PATCH * STEP_M, 1.3 * x + 7.0 * own, FLOW_STRENGTH) + steep - 0.7 + 0.4 * own);
-    let fall = exp(-fract(p) / STEP_FADE) * smoothstep(0.0, 2.0 * e / STEP_M, fract(p));
+    let fall = exp(-fract(p) / STEP_FADE) * smoothstep(0.0, max(2.0 * e, STEP_EDGE_M) / STEP_M, fract(p));
     let torn = 0.3 + 0.7 * ease(-0.4, 0.5, slid(along, pace, FLECK_M, 2.0 * x * lanes, FLOW_WHITE));
     f.y = max(f.y, FOAM_STEEP * shown * steep * broken * fall * torn * sqrt(mid));
     f.z = steep * (1.0 - POOL_CALM * smoothstep(STEP_FADE, 2.0 * STEP_FADE, fract(p)) * (1.0 - smoothstep(0.75, 0.95, fract(p))));
