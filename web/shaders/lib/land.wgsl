@@ -41,7 +41,8 @@ struct Land {
 // with height, K/m, and its ice, m; its standing liquid's level, its lowest ground and the depth that stands, m, and the
 // liquid in its pores, m; what its pores hold full, m, and the level of the wetness index its soil's liquid departs
 // about; the ground's own colour and its share of the sea; its true colour; the bytes of the layer drawn and of the worn
-// paths. (The bed's colour comes with the ground: rock.wgsl `bed_make_at`.)
+// paths; and in the last numbers of the true colour's and the layer's planes, the land's ice, m, its ground
+// temperature, K, and its mean height, m. (The bed's colour comes with the ground: rock.wgsl `bed_make_at`.)
 const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const PLANES = 6;
 // Where no liquid stands near a point, its surface is taken this far below the ground, m.
 const NO_LIQUID_M = 1000.0;
@@ -253,8 +254,8 @@ fn rooted(loose: f32, need: f32, spread: f32) -> f32 {
 // The state of the ground at a point: the depth of the liquid standing over it and its height over that liquid's
 // surface, m; how wet it is, 0..1; its temperature, K; the snow and ice on it, 0..1, as its cells' share (`snow_at`
 // places it), and the snow's depth, m; how wet its cells are on their mean, 0..1; and its height over its cells' mean,
-// m, and its cells' ice, m.
-struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, snow_m: f32, mean: f32, rise: f32, ice: f32 }
+// m, and the share of its cells' ground their frozen cover covers before it melts, 0..1.
+struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, snow_m: f32, mean: f32, rise: f32, covered: f32 }
 
 // Inside a cell its snow lies first where the ground holds it (`snow_bares`): high ground before low (colder: the air's
 // fall with height; over `SNOW_RISE_M` a unit), slopes turned from the sun before those facing it (they melt first;
@@ -287,7 +288,20 @@ fn snow_at(share: f32, bares: f32, width: f32) -> f32 {
 // (`bed_at`): the cells' values blended between the squares' centres (`cs`), and the laws inside a cell applied at the
 // point.
 fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
-  let ground = blended(GROUND, cs);
+  // The cells' ground, and the share of it each one's frozen cover covers, blended: the shares, not the depths, so a
+  // snowy cell beside a bare one draws its share falling across the space between their centres, not at once along a
+  // line where the blended depth reaches what covers all (tanh saturates within a few centimetres).
+  // Over land, the land's mean height, temperature and ice (the table's `TRUTH` and `VIEW` planes carry them, the open low ground's
+  // coastal squares taking the land's nearest: web/src/land.ts `fromLand`); over standing liquid, the cells'.
+  let dry = g.water.y <= 0.0 || g.h - cut > g.water.x;
+  var ground = vec4f(0.0);
+  var covered = 0.0;
+  for (var k = 0; k < 4; k++) {
+    var c = cell(GROUND, cs.at[k]);
+    if (dry) { let v = cell(VIEW, cs.at[k]); c = vec4f(v.w, v.z, c.z, cell(TRUTH, cs.at[k]).w); }
+    ground += cs.w[k] * c;
+    covered += cs.w[k] * snow_of(c.w, 0.0, 0.0);
+  }
   // The liquid standing over the point: its ponds', flat at their levels over the ground under it (laws.md 1.2).
   // The soil's liquid of each cell about it at the point's wetness index, and each one's mean liquid, blended.
   var held = 0.0;
@@ -313,11 +327,11 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
   p.wet = (held + p.depth) / (held + p.depth + half);
   // The ground's temperature is its cell's at the cell's mean height, less the air's fall with height above it.
   p.t = ground.y - ground.z * (g.h - ground.x);
-  p.snow = snow_of(ground.w, p.t, land.time.z);
+  p.snow = covered * unmelted(p.t, land.time.z);
   p.snow_m = snow_depth(ground.w, p.t, land.time.z);
   p.mean = mean / (mean + half);
   p.rise = g.h - ground.x;
-  p.ice = ground.w;
+  p.covered = covered;
   return p;
 }
 
