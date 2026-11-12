@@ -39,7 +39,14 @@ fn main() {
     match args.command() {
         "run" => {
             let (size, seed) = (args.get("--size", 128usize), args.get("--seed", 1u64));
-            let mut w = if args.has("--globe") { worldgen::terrain::new_globe(seed, size, args.fine()) } else { worldgen::new_world(seed, size, size) };
+            let island = args.island().unwrap_or_else(|e| {
+                eprintln!("ew: {e}");
+                std::process::exit(2);
+            });
+            let mut w = if args.has("--globe") { worldgen::terrain::new_globe(seed, size, args.fine()) } else { worldgen::terrain::new_island(seed, size, size, island) };
+            if args.has("--band") {
+                worldgen::planet::stand(&mut w);
+            }
             args.apply(&mut w);
             drive(w, &args, args.schedule(), None);
         }
@@ -147,6 +154,9 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
         }
         if y % every == 0 || last {
             println!("{}", report::year(&w, y, &t0, &clock, &rec));
+            if let Some(line) = report::edges(&w) {
+                println!("{line}");
+            }
             clock.print_at(y, w.counts.updates);
         }
         if pictures > 0 && (y % pictures == 0 || last) {

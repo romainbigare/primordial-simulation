@@ -22,7 +22,7 @@ mod stack;
 mod basin;
 mod channel;
 pub(crate) use air::air_temp;
-pub use air::{column, declination, glow, insolation, on_slope, scale_height, sun_by_latitude};
+pub use air::{column, declination, glow, insolation, on_slope, scale_height, sun_by_latitude, Planet};
 pub use potential::total as potential;
 pub use basin::Pool;
 pub use channel::Channel;
