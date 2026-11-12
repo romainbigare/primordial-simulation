@@ -20,6 +20,19 @@ pub fn squares(seed: u64, w: usize, h: usize) -> World {
     crate::terrain::new_map(seed, crate::terrain::island(w, h))
 }
 
+/// The sides, in cells, of the islands `island_with` tries, smallest first.
+const ISLAND_SIDES: [usize; 4] = [16, 24, 32, 48];
+
+/// The smallest island of seed `seed` (`squares`, of `ISLAND_SIDES` cells a side) whose ground has what a scene needs,
+/// with what `has` found there: a scene states the ground it needs as a condition, and the island grows until its
+/// ground holds it.
+pub fn island_with<T>(seed: u64, has: impl Fn(&World) -> Option<T>) -> (World, T) {
+    ISLAND_SIDES.iter().find_map(|&side| {
+        let w = squares(seed, side, side);
+        has(&w).map(|found| (w, found))
+    }).expect("an island whose ground has what the scene needs")
+}
+
 /// Body `b` as the node an edit changes, named by its cell (its own end of the moves of an edit, which it books itself;
 /// `World::cross`).
 fn edited(b: &Body) -> Node {
@@ -65,11 +78,25 @@ pub const MILD_LAT: [f64; 2] = [31.0, 33.3];
 /// The world most tests stand in: seed 1, 16 x 16 cells at `MILD_LAT`, after one month (so its cells have their
 /// surroundings).
 pub fn small_world() -> World {
+    mild_world(ISLAND_SIDES[0])
+}
+
+/// The world of `small_world` with `side` x `side` cells.
+fn mild_world(side: usize) -> World {
     let (chem, init) = crate::chemistry0();
     let cfg = Config { lat_south: MILD_LAT[0], lat_north: MILD_LAT[1], ..Default::default() };
-    let mut w = crate::terrain::build(1, crate::terrain::island(16, 16), chem, &init, cfg);
+    let mut w = crate::terrain::build(1, crate::terrain::island(side, side), chem, &init, cfg);
     pcore::step(&mut w);
     w
+}
+
+/// The smallest world of `small_world`'s kind (of `ISLAND_SIDES` cells a side) whose ground has what a scene needs, with
+/// what `has` found there (`island_with`).
+pub fn mild_with<T>(has: impl Fn(&World) -> Option<T>) -> (World, T) {
+    ISLAND_SIDES.iter().find_map(|&side| {
+        let w = mild_world(side);
+        has(&w).map(|found| (w, found))
+    }).expect("a world whose ground has what the scene needs")
 }
 
 /// An island of `side` x `side` cells of seed 1 with the two kinds of `ew run` placed at its start as `ew run` places

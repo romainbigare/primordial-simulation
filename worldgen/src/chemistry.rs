@@ -79,12 +79,11 @@ pub struct Init {
     pub air: Vec<(usize, f64)>,
     /// Substance that fills low ground as liquid
     pub low: usize,
-    /// Volume fractions of bonded ground
-    pub bed: Vec<(usize, f64)>,
+    /// Volume fractions of each make of bonded ground (`space::strata`), the first the one the wear's `CUT` is
+    /// anchored at
+    pub makes: Vec<Vec<(usize, f64)>>,
     /// Volume fractions of loose ground
     pub loose: Vec<(usize, f64)>,
-    /// Volume fractions of the bed in its patches (`terrain::patch`)
-    pub deposits: Vec<(usize, f64)>,
     /// Amounts in the loose ground of every land cell when life starts, mol per m² (`life::soil`; empty: none)
     pub soil: Vec<(usize, f64)>,
 }
