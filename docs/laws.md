@@ -1491,8 +1491,9 @@ read a kind.
 - **The cover** (`worldgen::life::nursery`): when life starts, the cover is sorted by its own law before it is
   placed. A copy of the world runs a year without life,
   and each open land cell's month is kept: what its cover would read (`cover::around_now`), the light above any cover,
-  the key liquid its ground holds and the rain. The cells fall in `CLASSES` classes of like climate (k-means on the
-  coldest month, the mean ground temperature, the wetness and the light). Each class's representative cell is a
+  the key liquid its ground holds and the rain. The cells fall in `CLASSES` classes of like climate, by what a garden
+  reads (k-means on the coldest month, the mean ground temperature, the mean wetness of the store whose year closes,
+  below, the light and the log of the loose ground's depth, `cover::loose_log`). Each class's representative cell is a
   garden: the cover's own month (`cover::live`) on that year, no air and no flow. Its liquid is a store of its own
   whose year closes: each month the rain comes in and the share the year's bare ground kept stays (`Month::keep`; the
   rest ran off, sank or rose), less what its cover takes and what its leaves lose through their film (`Cover::film`) at

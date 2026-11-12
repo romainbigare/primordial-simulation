@@ -62,10 +62,8 @@ impl Garden {
         // The light past the clouds over the month, per m² of capture area under the garden's own cover.
         let canopy = (0..SLOTS).map(|x| self.cover.leaf(&mm, x)).sum::<f64>() / area;
         self.light += m.sun * cover::per_capture_area(canopy);
-        // The month of its bare ground: the rain comes in and the share `keep` stays; of that the share the year's
-        // ground held liquid is liquid.
-        let held = (self.liquid + m.rain) * m.keep;
-        let liquid = if m.held > 0.0 { held * (m.around.liquid / m.held).min(1.0) } else { 0.0 };
+        // The month of its bare ground (`Month::kept`), on which its cover lives.
+        let (held, liquid) = m.kept(self.liquid);
         let mut a = m.around.clone();
         (a.liquid, a.moist, a.light, a.tick) = (liquid, cover::wetness(w, p, area, liquid), self.light, TICK + self.months);
         a.ground[p.liquid] = held;

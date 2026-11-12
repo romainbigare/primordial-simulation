@@ -17,7 +17,7 @@ pub use around::{around_now, pores, thirst, Around};
 pub use budget::{content, BODIES, BUDGET};
 pub use grow::{live, step, Books};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
-pub use stand::{height, loose_bins, stem, BINS};
+pub use stand::{height, loose_bins, loose_log, stem, BINS};
 
 use crate::body::WET_TISSUE;
 use crate::chem::Chemistry;

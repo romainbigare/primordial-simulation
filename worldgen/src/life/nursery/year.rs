@@ -5,6 +5,10 @@
 use pcore::cover::{self, Around, Parts};
 use pcore::World;
 
+/// What a cell's year is like to class it by (`Year::features`), and how many numbers that is.
+pub(super) const NF: usize = 5;
+pub(super) type Features = [f64; NF];
+
 /// What one cell's cover reads in one month of the year kept: what it would read (`Around`; its light is that since
 /// the month before), the light above any cover since the month before, J/m², the key liquid its ground holds, mol (of
 /// which `Around::liquid` is liquid), the rain fallen on it, mol, and the share of what its ground held before the month
@@ -16,6 +20,15 @@ pub(super) struct Month {
     pub held: f64,
     pub rain: f64,
     pub keep: f64,
+}
+
+impl Month {
+    /// A month of bare ground on a store of `store` mol of the key liquid: the rain comes in and the share `keep` stays.
+    /// Returns what it then holds, mol, and of that the liquid, at the share the year's ground held liquid.
+    pub fn kept(&self, store: f64) -> (f64, f64) {
+        let held = (store + self.rain) * self.keep;
+        (held, if self.held > 0.0 { held * (self.around.liquid / self.held).min(1.0) } else { 0.0 })
+    }
 }
 
 /// A year of each of `cells` (open land, by index), month by month.
@@ -56,18 +69,32 @@ impl Year {
         if a < 1.0 { b / (1.0 - a) } else { months.first().map_or(0.0, |m| m.held) }
     }
 
-    /// What each cell's year is like, to class it by: its coldest month's ground and its mean ground, K, its mean
-    /// wetness (`Physics::wetness`), and the light above it over the year, J/m² (log10).
-    pub fn features(&self) -> Vec<[f64; 4]> {
+    /// What each cell's year is like, to class it by, as its garden reads it: its coldest month's ground and its mean
+    /// ground, K; the mean wetness of its ground (`Physics::wetness`) where its liquid is the store whose year closes
+    /// (`closed`, kept and filled by the rain month by month, as a garden's bare ground); the light above it over the
+    /// year, J/m² (log10); and its loose ground's depth (`cover::loose_log`), which its plants root in.
+    pub fn features(&self, w: &World, p: &Parts) -> Vec<Features> {
+        let area = w.mesh.cells().area();
         self.months
             .iter()
-            .map(|m| {
+            .zip(&self.cells)
+            .map(|(m, &i)| {
                 let n = m.len().max(1) as f64;
                 let coldest = m.iter().map(|x| x.around.t).fold(f64::MAX, f64::min);
                 let mean = m.iter().map(|x| x.around.t).sum::<f64>() / n;
-                let wet = m.iter().map(|x| x.around.moist).sum::<f64>() / n;
+                let mut store = Year::closed(m);
+                let wet = m
+                    .iter()
+                    .map(|x| {
+                        let (held, liquid) = x.kept(store);
+                        store = held;
+                        cover::wetness(w, p, area[i], liquid)
+                    })
+                    .sum::<f64>()
+                    / n;
                 let sun = m.iter().map(|x| x.sun).sum::<f64>().max(1.0).log10();
-                [coldest, mean, wet, sun]
+                let loose = w.loose_bins.get(i).map_or(0.0, cover::loose_log);
+                [coldest, mean, wet, sun, loose]
             })
             .collect()
     }
@@ -80,24 +107,24 @@ const ROUNDS: usize = 16;
 /// The cells of `x` (feature vectors) in at most `k` classes of like features, each feature over its spread across the
 /// cells (k-means from `k` cells evenly spaced in the order of the first feature). Returns per class its cells (by place
 /// in `x`), the first its representative: the cell nearest the class's mean. Classes left empty are dropped.
-pub(super) fn classes(x: &[[f64; 4]], k: usize) -> Vec<Vec<usize>> {
+pub(super) fn classes(x: &[Features], k: usize) -> Vec<Vec<usize>> {
     let n = x.len();
     if n == 0 {
         return Vec::new();
     }
     let spread = spread(x);
-    let z: Vec<[f64; 4]> = x.iter().map(|v| std::array::from_fn(|f| v[f] / spread[f])).collect();
-    let d = |a: &[f64; 4], b: &[f64; 4]| (0..4).map(|f| (a[f] - b[f]).powi(2)).sum::<f64>();
+    let z: Vec<Features> = x.iter().map(|v| std::array::from_fn(|f| v[f] / spread[f])).collect();
+    let d = |a: &Features, b: &Features| (0..NF).map(|f| (a[f] - b[f]).powi(2)).sum::<f64>();
     let mut order: Vec<usize> = (0..n).collect();
     order.sort_by(|&a, &b| z[a][0].total_cmp(&z[b][0]).then(a.cmp(&b)));
     let k = k.min(n);
-    let mut centre: Vec<[f64; 4]> = (0..k).map(|c| z[order[(2 * c + 1) * n / (2 * k)]]).collect();
-    let nearest = |v: &[f64; 4], centre: &[[f64; 4]]| (0..centre.len()).min_by(|&a, &b| d(v, &centre[a]).total_cmp(&d(v, &centre[b]))).unwrap_or(0);
+    let mut centre: Vec<Features> = (0..k).map(|c| z[order[(2 * c + 1) * n / (2 * k)]]).collect();
+    let nearest = |v: &Features, centre: &[Features]| (0..centre.len()).min_by(|&a, &b| d(v, &centre[a]).total_cmp(&d(v, &centre[b]))).unwrap_or(0);
     let mut of = vec![0; n];
     for _ in 0..ROUNDS {
         of.iter_mut().zip(&z).for_each(|(o, v)| *o = nearest(v, &centre));
         for (c, m) in centre.iter_mut().enumerate() {
-            let members: Vec<&[f64; 4]> = z.iter().zip(&of).filter(|e| *e.1 == c).map(|e| e.0).collect();
+            let members: Vec<&Features> = z.iter().zip(&of).filter(|e| *e.1 == c).map(|e| e.0).collect();
             if !members.is_empty() {
                 *m = std::array::from_fn(|f| members.iter().map(|v| v[f]).sum::<f64>() / members.len() as f64);
             }
@@ -116,7 +143,7 @@ pub(super) fn classes(x: &[[f64; 4]], k: usize) -> Vec<Vec<usize>> {
 }
 
 /// The spread of each feature over the cells of `x` (its standard deviation).
-pub(super) fn spread(x: &[[f64; 4]]) -> [f64; 4] {
+pub(super) fn spread(x: &[Features]) -> Features {
     let n = x.len().max(1) as f64;
     std::array::from_fn(|f| {
         let mean = x.iter().map(|v| v[f]).sum::<f64>() / n;
@@ -125,12 +152,12 @@ pub(super) fn spread(x: &[[f64; 4]]) -> [f64; 4] {
 }
 
 /// How far apart two cells' features are, each over its spread: the square of the distance.
-pub(super) fn distance(a: &[f64; 4], b: &[f64; 4], spread: &[f64; 4]) -> f64 {
-    (0..4).map(|f| ((a[f] - b[f]) / spread[f]).powi(2)).sum()
+pub(super) fn distance(a: &Features, b: &Features, spread: &Features) -> f64 {
+    (0..NF).map(|f| ((a[f] - b[f]) / spread[f]).powi(2)).sum()
 }
 
 /// The classes of each class's climate nearest to it in `x`, nearest first (`distance` of their representatives).
-pub(super) fn neighbours(x: &[[f64; 4]], classes: &[Vec<usize>]) -> Vec<Vec<usize>> {
+pub(super) fn neighbours(x: &[Features], classes: &[Vec<usize>]) -> Vec<Vec<usize>> {
     let spread = spread(x);
     let d = |a: usize, b: usize| distance(&x[classes[a][0]], &x[classes[b][0]], &spread);
     (0..classes.len())

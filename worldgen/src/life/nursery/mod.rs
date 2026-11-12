@@ -109,7 +109,7 @@ pub fn start(w: &mut World) -> String {
     // The first year: without life.
     let before: Vec<_> = land.iter().map(|&i| cover::around_now(w, &p, i).ground).collect();
     let first = Year::of(w, &p, &land, months);
-    let features = first.features();
+    let features = first.features(w, &p);
     let classes = year::classes(&features, CLASSES);
     let near = year::neighbours(&features, &classes);
     let washes: Vec<Wash> = classes.iter().map(|c| wash(&w.chem, &before[c[0]], &first.months[c[0]])).collect();
@@ -159,7 +159,7 @@ const FIRST_ROOT: u32 = super::KINDS.len() as u32;
 /// each cell whose climate (`features`) lies `BETWEEN` it and another class, that class's heaviest kind as `RARE_KG`
 /// of seeds. Kinds within `APART` × `alike` of each other (`cover::distance`) share a starting kind, numbered from
 /// `FIRST_ROOT` in the order of the classes and their kinds.
-fn place(w: &mut World, p: &Parts, (classes, cells, features): (&[Vec<usize>], &[usize], &[[f64; 4]]), gardens: &[Class]) -> Placed {
+fn place(w: &mut World, p: &Parts, (classes, cells, features): (&[Vec<usize>], &[usize], &[year::Features]), gardens: &[Class]) -> Placed {
     let alike = APART * w.cfg.phys.alike;
     let sets: Vec<Vec<(Entrant, f64)>> = gardens.iter().map(|g| g.set(w, p)).collect();
     let mut roots: Vec<[f32; NG]> = Vec::new();

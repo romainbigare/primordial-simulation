@@ -20,6 +20,12 @@ fn bin_m(b: usize) -> f64 {
     LEAST_M * (MOST_M / LEAST_M).powf((b as f64 + 0.5) / BINS as f64)
 }
 
+/// The mean over a cell of the log of its loose ground's depth, ln m, from the share of its area in each bin of depth
+/// (`loose_bins`).
+pub fn loose_log(bins: &[f32; BINS]) -> f64 {
+    bins.iter().enumerate().map(|(b, &s)| s as f64 * bin_m(b).ln()).sum()
+}
+
 /// The width of a bin in the log of the depth.
 fn bin_width() -> f64 {
     (MOST_M / LEAST_M).ln() / BINS as f64
