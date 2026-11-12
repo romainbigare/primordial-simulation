@@ -29,7 +29,8 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `sun` | W/m² | strength of the star at the top of the air | the solar constant, 1361 | physical |
 | `tilt` | degrees | axial tilt: sets the size of the seasons | the planet's tilt, 23.4 | physical |
 | `lat_south` | degrees | latitude of the map's south edge | where the surface is 287 K, near the global mean: on Earth at about 38° to 40° in both hemispheres (zonal means, from memory); on the model's globe without life at 37.5° N and 44° S | anchored |
-| `lat_north` | degrees | latitude of the map's north edge | `lat_south` + 2.3: the island spans 256 km | anchored |
+| `lat_north` | degrees | latitude of the map's north edge | `lat_south` + 2.3: the island spans 256 km (`ew run --band S,N` sets both) | anchored |
+| `radius_m` | m | the radius of the planet: a globe's squares (`ew run --globe`: with `--size` rows, a cell is pi x radius / rows from north to south), and the length of an island's band of latitudes, which its air stands for (`Stretch`, laws.md 1.6) | the mean radius of Earth, 6,371 km | physical |
 | `rotation` | none (0 = none) | strength of the turning of moving air by the planet's spin | 1 is the real size of the spin's effect; the wind closure is crude (unchecked) | anchored |
 | `days_per_month` | days | the calendar | 12 x 30 = 360 days for a year of 365 | anchored |
 | `months_per_year` | months | the calendar | the same | anchored |
@@ -217,7 +218,6 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
 | `Seeding::default` (20 rounds), `ROW_SPRAY` (0.2, the row-bias step) and `GENE_SPRAY` (genes x3), `worldgen/src/life/seeding.rs` | none | how much a start is sprayed with mutation | run: one generation's step is too small for selection to pick from in the time a start has | tuned |
 | `worldgen::life::FIXERS` (0.1) | share | the share of the starting light-eaters that carry the fixing gene (an initial condition; `--fixers` sets it) | the legumes are about 19,000 species, 7% of flowering plants (checked in part: Judd et al. 2002; Christenhusz and Byng 2016), not all of them fix, so about 5%; 10% is within 2 times | anchored |
 | `worldgen::life::FIX_GENE` (-8.3) | log10 mol per kg of living cover per s | the fixing capacity of those founders (`cover::FIX`) | about 10 g of the fixed element per m² a year for a kg of the starting cover per m² (2 kg living), what real fixing stands fix (Cleveland et al. 1999) | anchored |
-| `RADIUS_M` (6.371e6, `worldgen/src/terrain.rs`) | m | the radius of a globe (`ew run --globe`): with `--size` rows, a cell is pi x radius / rows from north to south | the mean radius of Earth | anchored |
 | `LAND_SHARE` (0.29, `worldgen/src/terrain.rs`) | share | the share of a globe's area its starting level leaves above 0 m (an initial condition) | Earth's land is 29% of its surface | anchored |
 | `LAND_RING` (1, `worldgen/src/terrain.rs`) | squares | the squares below 0 m round the land that stay squares when an island's open water is made coarse (`coarse_low`; an initial condition of the mesh) | the coasts keep the squares' detail; the open water farther out, where nothing but the liquid and its heat move, is in cells of up to an air block | speed |
 | `REAL_SLOPE` (0.1) at `REAL_LENGTH_M` (30 m) and `HURST` (0.8), `core/src/inside/mod.rs` | rise over run; m; none | the rms slope of real ground over 30 m, and the Hurst exponent by which it changes with the length ℓ it is measured over, ℓ^(H − 1): the least slope of the ground inside a cell in its wetness index (`inside::real_slope`, laws.md 0) | the slope of land at 10 to 100 m is a few per cent to ten per cent (rms about 0.1 on the 30 m grids of the world's land), and topography is self-affine with H about 0.7 to 0.9 (Mark and Aronson 1984; Turcotte 1997), from memory | anchored |
@@ -338,11 +338,11 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 116 rows of `Config` and `Physics` are their 116 fields.
+The 117 rows of `Config` and `Physics` are their 117 fields.
 
 | mark | rows | which |
 |---|---|---|
-| physical | 4, and 1 outside the structs | `sun`, `tilt`, `gravity`, `rho_body`; outside: `TABOR` |
+| physical | 5, and 1 outside the structs | `sun`, `tilt`, `radius_m`, `gravity`, `rho_body`; outside: `TABOR` |
 | anchored | 66, and 19 outside the structs | 66 fields (among them `c_basal`, `meeh`, `r_coat`, `r_air`, `r_liquid`, `wet_coat`, `dormant`, `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `wind`, `light_yield`, `gas_floor`, `gas_ref`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, the four `channel_` numbers, `h_mix`, `thermocline`, `carry`, `wear`, `creep`, `abrade`, `bury` and `soil_m`) and the constants `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `WALK_FROUDE`, `DRAG`, `MUSCLE`, `FIXERS`, `FIX_GENE`, `MAX_KEEP`, the wear's `CREEP`, `FLOATS`, `BENDS_M` and `LOW_STAND_M` and the founders' learning rate, and the three decomposers' factors `open` of the chemistry (reactions 1, 7 and 12) |
 | tuned (run or reason named) | 6, and 8 outside the structs | the thresholds of who is alike and who is grouped (`alike`), set for an outcome (`rain_time`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`, the cover's starting genes, the wear's `WEAR_YEARS` and `CUT`) |
 | tuned, first guess | 29 | 26 free numbers (`mix`, `cloud`, `hard_min`, `c_firm`, `c_learn`, `rho_pass`, `keep_min`, `shape_noise`, `blend`, `plan_weight`, `learn_most`, the Bond numbers `joint` to `bump`, the mutation numbers `row_chance` to `new_noise`, and the Flow numbers `hide` to `hold`) and the three `c_hidden`, `c_memory`, `c_seen`, which are the split of `c_brain` and not three numbers |

@@ -9,9 +9,8 @@
 mod grow;
 mod seed;
 
-pub use grow::step;
-pub use seed::land;
-pub(crate) use seed::Seed;
+pub use grow::{live, step, Around, Books};
+pub use seed::{land, lodge, Landed, Seed};
 
 use crate::body::WET_TISSUE;
 use crate::chem::Chemistry;
@@ -115,6 +114,11 @@ impl Default for Cover {
 }
 
 impl Cover {
+    /// The seeds made in its last month (`live`), taken from it: where the full world lands them (`land`) or a
+    /// nursery does.
+    pub fn sent(&mut self) -> Vec<Seed> {
+        std::mem::take(&mut self.seeds)
+    }
     /// Whether it holds any cover.
     pub fn any(&self) -> bool {
         self.root.iter().any(|&r| r != NO_ROOT)
@@ -231,12 +235,10 @@ pub(crate) fn lose(w: &crate::World, d: &mut crate::life::Chunk, p: &Parts, i: u
 /// ground temperature; it lodges as seeds do (`seed::lodge`). False if it found no slot (nothing is placed then).
 pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
     let Some(p) = Parts::of(&w.chem) else { return false };
-    let (mm, t, alike) = (p.mm(&w.chem), w.t_ground_last(i), w.cfg.phys.alike);
-    let fm = 1.0 / (1.0 + dec(genes[WALLS]));
-    let built = kg * w.mesh.cells().area()[i] / (1.0 + dec(genes[STORE]));
-    let mol = [built * dec(genes[STORE]) / mm[FUEL], built * fm / mm[MATTER], built * fm * dec(genes[WALLS]) / mm[WALL]];
-    let heat = (0..NP).map(|q| mol[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * t;
-    let s = Seed { to: i as u32, mol, genes, root, heat };
+    let (mm, alike) = (p.mm(&w.chem), w.cfg.phys.alike);
+    let s = sown(&w.chem, &p, (i, w.mesh.cells().area()[i], w.t_ground_last(i)), genes, root, kg);
+    let mol = s.mol;
+    let heat = s.heat;
     let c = &mut w.life.cells[i].cover;
     let was = c.temp(&w.chem, &p);
     match seed::lodge(c, &mm, &s, alike) {
@@ -256,6 +258,17 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     w.cross((crate::store::Boundary::Outside, crate::store::Node::new(crate::store::Class::Cover, i)), (0..NP).map(|q| (p.sub[q], mol[q])), heat);
     w.life.cells[i].cover.mark = w.light[i];
     true
+}
+
+/// `kg` per m² of cover of genes `genes` and starting kind `root` as seeds for cell `i` of `area` m² at `t` K: its
+/// built cover at the shares of its genes, its fuel at its `STORE` gene, with its heat.
+pub fn sown(chem: &Chemistry, p: &Parts, (i, area, t): (usize, f64, f64), genes: [f32; NG], root: u32, kg: f64) -> Seed {
+    let mm = p.mm(chem);
+    let fm = 1.0 / (1.0 + dec(genes[WALLS]));
+    let built = kg * area / (1.0 + dec(genes[STORE]));
+    let mol = [built * dec(genes[STORE]) / mm[FUEL], built * fm / mm[MATTER], built * fm * dec(genes[WALLS]) / mm[WALL]];
+    let heat = (0..NP).map(|q| mol[q] * chem.subs[p.sub[q]].cp).sum::<f64>() * t;
+    Seed { to: i as u32, mol, genes, root, heat }
 }
 
 /// The built cover of amounts `m` (mol of each part): body matter and walls, kg.
@@ -331,7 +344,13 @@ pub fn per_m2(w: &crate::World, of: impl Fn(&Cover, &[f64; NP], usize) -> f64) -
 pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
     let (t, plateau) = w.thaw_last(i);
     let liquid = held * w.molten(p.liquid, i, t, plateau);
-    (liquid, w.cfg.phys.wetness(liquid * w.chem.molar_volume(p.liquid, crate::chem::Phase::Liquid) / w.mesh.cells().area()[i]))
+    (liquid, wetness(w, p, w.mesh.cells().area()[i], liquid))
+}
+
+/// How wet `liquid` mol of the key liquid that is liquid leave ground of `area` m² as its cover feels it
+/// (`Physics::wetness` of its depth).
+pub fn wetness(w: &crate::World, p: &Parts, area: f64, liquid: f64) -> f64 {
+    w.cfg.phys.wetness(liquid * w.chem.molar_volume(p.liquid, crate::chem::Phase::Liquid) / area)
 }
 
 /// The activity of a kind of cover of genes `genes` on ground as wet as `wet` (`Physics::wetness`): full where the
