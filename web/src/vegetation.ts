@@ -5,8 +5,7 @@
 // or a new frame shows them at once. A tape's map holds only totals per square and draws the cover in its ground's
 // colours (colour.wgsl).
 import { World } from './data';
-import { kindsOf, unhalf } from './canopy';
-import { Loose, looseOf } from './roots';
+import { kindsOf } from './canopy';
 import { cooling } from './style';
 import { Style } from './sprites';
 import { CoverMarks, Marks } from './textures';
@@ -28,9 +27,6 @@ export class Vegetation implements GpuLayer {
   style: Style = 'above';
   /** The live map, whose laws mask each mark at its foot (none: a tape's map, no cover drawn over it). */
   land: Land | null = null;
-  /** The squares' loose ground (roots.ts), once the samples' rock of the live map `looseFrom` has come. */
-  private loose: Loose | null = null;
-  private looseFrom: Land | null = null;
   /** The draw of the marks `prepare` decided last (none: no cover drawn). */
   private drawn: Marks | null = null;
 
@@ -41,14 +37,8 @@ export class Vegetation implements GpuLayer {
     if (!w || !rows || !t) { this.marks.set(null, this.cellM); return; }
     const m = w.meta, n = m.w * m.h;
     this.cellM = m.cell_m; this.mapW = m.w; this.mapH = m.h;
-    const falling = cooling(w.meta.frames[0].year, (m.lat_north + m.lat_south) / 2), rock = this.land?.tiles.rock;
-    if (this.looseFrom !== this.land) this.loose = null;
-    if (!this.loose && rock && this.land) {
-      const s = this.land.samples;
-      this.loose = looseOf(k => unhalf(rock[2 * k]), s.across, s.down, m.w, m.h);
-      this.looseFrom = this.land;
-    }
-    this.marks.set(kindsOf(m.w, m.h, rows, t.row, 1 + n * t.row, t.kinds, t.kind_row, t.walls, falling, this.loose), m.cell_m);
+    const falling = cooling(w.meta.frames[0].year, (m.lat_north + m.lat_south) / 2);
+    this.marks.set(kindsOf(m.w, m.h, rows, t.row, 1 + n * t.row, t.kinds, t.kind_row, t.walls, falling), m.cell_m);
   }
 
   /** The bindings the live map's ground draws the cover's field with (cover_field.wgsl), a square taking `s` css px. */
