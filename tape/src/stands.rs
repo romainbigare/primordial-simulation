@@ -60,13 +60,13 @@ pub struct Kind {
 
 impl Kind {
     /// The numbers a viewer draws it from, `KIND_ROW` of them, for a cell whose ground is as wet as `wet`
-    /// (`cover::wet`) and at `t` K, its walls of density `rho`: its starting kind; its built cover, kg/m²; its plants
+    /// (`cover::wet`) and at `t` K, its key liquid melting at `melt` K, its walls of density `rho`: its starting kind; its built cover, kg/m²; its plants
     /// (`plants`): the stem's width, m, a m², height and crown's width, m, the share of the ground they cover, how closed
     /// a crown is; its walls' share; its capture area per kg of living cover, log10 m²/kg (`LEAF`); its light capacity
     /// per m² of capture area, log10 mol/m²/s (more pigment per area); its moisture gene (`MOIST`) and frost gene, K
     /// (`FROST`); its fuel over its reserve (`STORE`); its activity there (`cover::activity`); the share of it
     /// frozen this month (`Physics::frozen`); and the share of what it builds that goes to seeds (`SEED`).
-    pub fn row(&self, ph: &pcore::Physics, wet: f64, t: f64, rho: f64) -> [f64; KIND_ROW] {
+    pub fn row(&self, ph: &pcore::Physics, wet: f64, (t, melt): (f64, f64), rho: f64) -> [f64; KIND_ROW] {
         let g = self.genes;
         let p = plants(ph, (self.kg, self.leaf, self.plants), self.walls / self.kg.max(1e-300), rho);
         let genes: [f32; NG] = g.map(|x| x as f32);
@@ -75,7 +75,7 @@ impl Kind {
         [
             self.root as f64, self.kg, p.stem, p.per_m2, p.height, p.width, p.cover, p.crown,
             self.walls / self.kg.max(1e-300), g[LEAF], g[LIGHT] + g[MOIST] - g[LEAF], g[MOIST], g[FROST],
-            self.fuel / reserve.max(1e-300), act, ph.frozen(g[FROST], t, act), g[SEED],
+            self.fuel / reserve.max(1e-300), act, cover::frozen(ph, melt, g[FROST], (t, act)), g[SEED],
         ]
     }
 }
@@ -115,7 +115,7 @@ pub fn rows(w: &World, i: usize) -> [f64; KINDS * KIND_ROW] {
     let wet = cover::wet(w, &p, i, w.g(p.liquid, i)).1;
     let (t, rho) = (w.t_ground_last(i), w.chem.subs[p.sub[cover::WALL]].density[0]);
     for (k, kind) in kinds(w.life.cover(i), &mm, area).iter().take(KINDS).enumerate() {
-        out[k * KIND_ROW..(k + 1) * KIND_ROW].copy_from_slice(&kind.row(&w.cfg.phys, wet, t, rho));
+        out[k * KIND_ROW..(k + 1) * KIND_ROW].copy_from_slice(&kind.row(&w.cfg.phys, wet, (t, w.chem.subs[p.liquid].melt), rho));
     }
     out
 }

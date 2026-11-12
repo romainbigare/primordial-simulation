@@ -242,7 +242,7 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
     // the active rate (laws.md 6.7); below its frost gene, hardened by its dormancy, its frozen share dies (laws.md
     // 6.5).
     let worn = active * s.act.max(ph.dormant) / (s.living * ph.e_life * dec(g[REPAIR])).max(1e-300);
-    let frozen = ph.frozen(g[FROST] as f64, t, s.act);
+    let frozen = super::frozen(ph, chem.subs[p.liquid].melt, g[FROST] as f64, (t, s.act));
     let mut lost = [0.0; 6];
     let mut left = 1.0;
     for (f, cause) in [(short, SPENT), (crate::math::one_minus_exp(worn), AGE), (frozen, PHASE)] {

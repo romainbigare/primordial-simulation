@@ -1087,8 +1087,11 @@ seeds fill it:
   cross-section goes with the capture area they feed, `huber` m² a m², as tall as its plants (Shinozaki and others
   1964), at most its walls (`stand::sapwood`), so a tall plant pays for its height every month. The share unpaid
   dies (`SPENT`). **Wear**: the share 1 − e^−wear dies (`AGE`), wear its upkeep at an activity of at least `dormant`
-  over (living cover × `e_life` × 10^`REPAIR`), as bodies wear (6.7). **Frost**: below its `FROST` gene, lowered by its dormancy (`Physics::harden` × (1 − a)), the share
-  min(1, (limit − T) / `frost_k`) dies (`PHASE`), active or not.
+  over (living cover × `e_life` × 10^`REPAIR`), as bodies wear (6.7). **Frost**: its `FROST` gene is the limit it
+  reaches hardened, when dormant; growing tissue loses that hardiness and freezes at its key liquid's melting point,
+  the limit at activity a the melting point less (melting point − `FROST`) × (1 − a) (`cover::frozen`); below it the
+  share min(1, (limit − T) / `frost_k`) dies (`PHASE`). Hardiness is the kind's own and paid for in every month
+  (`c_firm`, above), not given by dormancy (Levitt 1980; Sakai and Larcher 1987).
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
   out as kinds build, tallest first) build body matter and walls (10^`WALLS` kg per kg of matter, times m / (m +
   `wall_kg`) for a plant of m kg: a seedling is mostly leaf and the share of stem grows with a plant's size, Poorter
@@ -1388,7 +1391,7 @@ stand in microclimates that spread over `frost_k` (3 K) around the temperature T
 the share f = min(1, (limit − T) / `frost_k`) freezes and dies (`PHASE`) in a month, the limit the melting point
 lowered by the body's dormancy, `Physics::harden` × (1 − a) (cold hardening: tissue that stops its chemistry in
 the cold stands a lower lethal temperature, Levitt 1980; Sakai and Larcher 1987); one law for bodies and cover
-(`Physics::frozen`). f is a share that composes: over
+(`Physics::frozen`), the cover's depth of hardening its own frost gene's (4.5). f is a share that composes: over
 the t its sub-step integrates 1 − (1 − f)^(t / month) (`Span::share64`), so a cold spell kills alike in one sub-step
 or in many; an individual dies with that chance. A dormant body
 (little free liquid) lives through frosts down to its hardened limit; the cover freezes by the same law below its `FROST`

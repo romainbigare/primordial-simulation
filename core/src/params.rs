@@ -350,10 +350,10 @@ impl Physics {
         depth / (depth + self.wet_depth)
     }
     /// The share of members that freeze in a month at `t` K when their lethal limit is `limit` K at full activity `act`
-    /// = 1: dormancy hardens them, lowering the limit by `harden` × (1 - `act`), and their microclimates spread over
-    /// `frost_k` below it (laws.md 6.5).
-    pub fn frozen(&self, limit: f64, t: f64, act: f64) -> f64 {
-        ((limit - self.harden * (1.0 - act) - t) / self.frost_k).clamp(0.0, 1.0)
+    /// = 1: dormancy hardens them, lowering the limit by `depth` K × (1 - `act`) (a body's `harden`, the cover's own
+    /// gene, `cover::frozen`), and their microclimates spread over `frost_k` below it (laws.md 6.5).
+    pub fn frozen(&self, (limit, depth): (f64, f64), t: f64, act: f64) -> f64 {
+        ((limit - depth * (1.0 - act) - t) / self.frost_k).clamp(0.0, 1.0)
     }
     /// The activity of a living thing that holds the share `x` of the liquid it keeps: x^`dormancy`, 1 at or above it.
     pub fn activity(&self, x: f64) -> f64 {

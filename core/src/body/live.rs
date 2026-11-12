@@ -303,7 +303,7 @@ fn check_stores(w: &World, d: &mut Chunk, b: &mut Body, (stands, days): (f64, f6
     // dormancy) the share of them that freezes in a month (`Physics::frozen`); over the time a share per month that
     // composes, 1 - (1 - that)^(t / month), so a cold spell kills alike in one update or in many (`Span::share64`).
     let act = b.activity(chem, &w.cfg.phys);
-    let frozen = |s: usize| w.cfg.phys.frozen(chem.subs[subs[s]].melt, stands, act);
+    let frozen = |s: usize| w.cfg.phys.frozen((chem.subs[subs[s]].melt, w.cfg.phys.harden), stands, act);
     let f = w.cfg.span(days).share64(b.wet_ks().map(frozen).fold(0.0, f64::max));
     if f > 0.0 {
         if f >= 1.0 - 1e-9 || !lose_share(w, d, b, f, PHASE, tmp) {

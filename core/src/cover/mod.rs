@@ -341,6 +341,16 @@ pub fn activity(ph: &crate::Physics, genes: &[f32; NG], wet: f64) -> f64 {
     ph.activity(wet / dec(genes[MOIST]))
 }
 
+/// The share of a kind of cover of frost gene `frost` K that freezes in a month at `t` K at activity `act`, where its key
+/// liquid melts at `melt` K: its frost gene is the limit it reaches hardened, when dormant; growing tissue loses that
+/// hardiness and freezes at the liquid's melting point (`Physics::frozen`, the depth between the two lost as it wakes).
+/// So hardiness is the kind's own, paid for in every month (`Physics::c_firm`), not given by dormancy (Levitt 1980;
+/// Sakai and Larcher 1987).
+pub fn frozen(ph: &crate::Physics, melt: f64, frost: f64, (t, act): (f64, f64)) -> f64 {
+    let grown = frost.max(melt);
+    ph.frozen((grown, grown - frost), t, act)
+}
+
 /// 10 to the power of a gene.
 #[inline]
 pub fn dec(g: f32) -> f64 {

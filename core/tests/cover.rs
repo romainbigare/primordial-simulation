@@ -303,7 +303,7 @@ fn the_frost_gene_falls_where_winters_are_cold() {
     let kills = |w: &pcore::World, cells: &[usize]| {
         let at = |i: usize| {
             let act = cover::activity(&w.cfg.phys, &tender, cover::wet(w, &parts, i, w.g(parts.liquid, i)).1);
-            w.cfg.phys.frozen(tender[FROST] as f64, w.t_ground_last(i), act)
+            cover::frozen(&w.cfg.phys, w.chem.subs[parts.liquid].melt, tender[FROST] as f64, (w.t_ground_last(i), act))
         };
         cells.iter().map(|&i| at(i)).fold(0.0, f64::max)
     };
