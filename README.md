@@ -172,7 +172,11 @@ and less saturated so what stands on it reads by shape and shadow, with tufts, s
 the edge of standing or running water, and with their flowers as clusters of light dots (a soft tint from afar); the bare ground has clods, and under closed crowns their shade, litter and moss. Slope alone never bares the ground: where the bed shows (below) it is drawn, grey and mottled,
 as slabs with cracks where it is gentle and as a cliff's face where it is steeper than about 0.9, with strata as broken
 dark ledges along the contours, cracks and a strong light and shade; scree lies on steep thin ground, stones on bare
-bed and in a channel as big as its power moves (`web/shaders/lib/crag.wgsl`). About 3% of seed 1's land and 2% of seed
+bed and in a channel as big as its power moves (`web/shaders/lib/crag.wgsl`). One maker draws every stone
+(`web/shaders/lib/stone.wgsl`): a block cut by five planes, so no stone is a disc, longer one way than the other, each
+face lit as it is turned to the sun, with a shadow on the ground, in its bed's colour with the bands of its layers;
+angular on scree and bare bed, the rounder the more a channel carries (the travel wears it), in three sizes with more
+of the smaller, its foot sunk in loose ground, under the snow unless it is large, then with snow on its top. About 3% of seed 1's land and 2% of seed
 2's is bare and that steep.
 
 In every view the bed shows where the loose ground thins (`web/shaders/lib/rock.wgsl`): each terrain sample's loose

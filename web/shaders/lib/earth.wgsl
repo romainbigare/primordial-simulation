@@ -80,6 +80,8 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.rock = 0.0;
   s.bed = s.ground;
   s.stone = 0.0;
+  s.stony = 0.0;
+  s.worn = 0.0;
   s.canopy = 0.0;
   s.sand = beach(s.sea, s.over, s.over, length(h.zw), s.loose, look.z);
   s.river = m.w;

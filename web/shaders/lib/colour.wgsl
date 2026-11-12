@@ -88,8 +88,9 @@ struct Spot {
   // Beach sand on it and a river through it, 0..1, and the river's depth, m.
   sand: f32, river: f32, river_depth: f32,
   // The reflectance of its bed; the share of the bed that shows (rock.wgsl `bed_shows`); the depth of its loose
-  // ground, m; and the largest stone its channel moves there, m (0: none).
-  bed: vec3f, rock: f32, loose: f32, stone: f32,
+  // ground, m; and of its channel there: the largest stone it moves, m, the share of the places that hold one of its
+  // stones (0: none), and how round it has worn them, 0..1.
+  bed: vec3f, rock: f32, loose: f32, stone: f32, stony: f32, worn: f32,
   // The share of the ground the tallest plants' crowns close over it (their litter lies under them).
   canopy: f32,
   // Where it lies in the world, m, and the metres a pixel takes there (for the ripples of a liquid's surface).
@@ -99,7 +100,8 @@ struct Spot {
 struct Shaded { rgb: vec3f, m: f32, kind: u32 }
 
 // The colour of the ground of spot p, unlit: its own colour, tinted by the hand rules of cold, height and sand, and its bed
-// where it shows; its stones; snow `snow` over them; and over all the plants that stand out of it (its cover, as far as
+// where it shows; snow `snow` over it; its stones, as far as they stand out of the snow; and over all the plants that
+// stand out of it (its cover, as far as
 // liquid over their roots leaves them, `above_water`; the cover's field holds how the snow buries them and how the bed
 // holds them). The share of it that is bare, and its map class.
 struct Ground { rgb: vec3f, bare: f32, kind: u32 }
@@ -124,22 +126,23 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   if (p.rock > 0.5) { g.kind = ROCK; }
   let plants = p.cover.a * above_water(p.depth);
   g.bare = 1.0 - plants;
-  // Stones over it: scree, on bare bed, and in a channel; none on a beach.
-  if (styled()) {
-    let thin = 1.0 - ease(0.0, SCREE_LOOSE_M, p.loose);
-    let scree = max(SCREE * ease(SCREE_FROM, CLIFF_FROM, steep) * thin, STONES_ON_BED * p.rock) * (1.0 - p.sand);
-    let channel = select(0.0, IN_CHANNEL, p.stone > 0.0) * (1.0 - p.sand);
-    // The scree's stones, then the channel's, from one place in the code.
-    for (var k = 0; k < 2; k++) {
-      let on = k == 1;
-      let st = stones(p.at, p.e, select(scree * (1.0 - plants), channel, on), select(SCREE_STONE_M, max(p.stone, PEBBLE_M), on), p.bed, 61 + k);
-      g.rgb = mix(g.rgb, st.rgb / max(st.a, 1e-4), st.a);
-    }
-  }
   g.rgb = mix(g.rgb, SNOW, snow);
   // Snow is not bare soil: it takes neither the soil's warmth nor its darkening when wet (`soil`).
   g.bare *= 1.0 - snow;
   if (snow > 0.5) { g.kind = ICE; }
+  // Stones over it (stone.wgsl): scree, on bare bed, and in a channel; none on a beach.
+  if (styled()) {
+    let thin = 1.0 - ease(0.0, SCREE_LOOSE_M, p.loose);
+    let scree = max(SCREE * ease(SCREE_FROM, CLIFF_FROM, steep) * thin, STONES_ON_BED * p.rock) * (1.0 - p.sand);
+    let sunk = SUNK_MOST * ease(0.0, SUNK_LOOSE_M, p.loose);
+    // The scree's angular blocks, then the channel's worn stones, from one place in the code.
+    for (var k = 0; k < 2; k++) {
+      var s = Stony(scree * (1.0 - plants), SCREE_STONE_M, 0.0, sunk, snow);
+      if (k == 1) { s = Stony(p.stony * (1.0 - p.sand), max(STONE_SEEN * p.stone, COBBLE_M), p.worn, BED_SUNK, snow); }
+      let st = stones(p.at, p.e, s, p.bed, 61 + 8 * k);
+      g.rgb = mix(g.rgb, st.rgb / max(st.a, 1e-4), st.a);
+    }
+  }
   if (plants > 0.0) { g.rgb = mix(g.rgb, p.cover.rgb / p.cover.a, plants); }
   if (plants >= 0.5) { g.kind = PLANTS; }
   return g;

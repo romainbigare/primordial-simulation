@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl ice.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl river.wgsl cover_field.wgsl
+// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl stone.wgsl ice.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl river.wgsl cover_field.wgsl
 // least metres a pixel: 0.5 1 3 30
 // The live map in view: at each pixel of the screen the ground from its tiles and the state from the cells' table
 // (land.wgsl), in the view's colours. Made once more for draws whose pixels take at least 0.5 m, 1 m, 3 m and 30 m
@@ -30,8 +30,12 @@ const EDGE_M = 0.35; const EDGE_LIGHT = 0.25;
 // Liquid standing shallower than this over the drawn ground is drawn as soaked ground, m: the drawn ground follows the
 // samples within a few centimetres, so a body whose level lies that near its flat floor is a soaked basin, not water.
 const FILM_M = 0.05;
-// A channel's stones lie on its bed and its bars, out to this many of its bed's half widths from its line.
-const STONES_OUT = 1.2;
+// A channel's stones lie on its bed and its bars, in `IN_CHANNEL` of the places they could, fewer where it moves
+// only sand (`BAR_SAND_STONE`); beside a steep reach they lie out to `STONES_OUT` of its bed's half widths from its
+// line, thinning. A channel wears its stones round as it carries them: angular where it carries `WORN_Q.x` m³/s (a
+// head's rill), round from `WORN_Q.y` (the travel grows with the area drained, and so does the discharge). Up a bar
+// they are finer: `BAR_FINES` smaller at its top.
+const IN_CHANNEL = 0.6; const STONES_OUT = 1.8; const WORN_Q = vec2f(0.005, 0.3); const BAR_FINES = 0.5;
 // The edge of standing liquid is found from how fast its depth changes across the ground, the ground's slope: no slower
 // than this (rise over run), so on flat ground the edge still lies within a pixel's footprint where the depth crosses.
 const SHORE_RISE_LEAST = 1e-3;
@@ -154,9 +158,13 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.canopy = cf.canopy;
   p.rock = bare;
   p.bed = vec3f(0.0);
-  p.stone = select(0.0, stone_of(g.channels.xy), ch.bed > 0.0 && g.d < STONES_OUT * ch.bed);
-  // The bed's colour where it shows or its stones lie.
-  if (p.rock > 0.0 || p.stone > 0.0) { p.bed = bed_make_at(at); }
+  // Its channel's stones: on its bed, and beside it where the reach is steep.
+  p.stone = select(0.0, stone_of(g.channels.xy), ch.bed > 0.0);
+  let beside = ease(STEEP_STONE.x, STEEP_STONE.y, p.stone) * (1.0 - ease(ch.bed, STONES_OUT * ch.bed, g.d));
+  p.stony = IN_CHANNEL * ease(0.0, BAR_SAND_STONE, p.stone) * select(beside, 1.0, g.d < ch.bed);
+  p.worn = ease(log(WORN_Q.x), log(WORN_Q.y), log(max(q, 1e-9)));
+  // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
+  if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
   p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), p.loose, look.z);
   p.river = 0.0;
   p.river_depth = 0.0;
@@ -193,6 +201,7 @@ fn river_spots(s: Spots, shore_over: f32, g: Tiled, ch: Channel, q: f32) -> Spot
   let gravel = mix(BEACH_SAND, washed, ease(0.0, BAR_SAND_STONE, stone));
   out.bar = gravel * bar_tone(at, e, g.along, r);
   out.bar_over = BAR_RISE * r.edge;
+  out.dry.stone *= 1.0 - BAR_FINES * r.up;
   out.wet.ground = gravel;
   // The banks' light falls on the ground beside the bed, on its bars and on the water under the bank.
   let banks = mix(1.0, bank_light(e, g, ch, r), open);
