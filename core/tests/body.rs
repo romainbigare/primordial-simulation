@@ -6,7 +6,7 @@ use pcore::body::{self, Body, Layout, COOL_T, HEAT, KEEP_T, PHASE, STRENGTH};
 use pcore::life::Handle;
 use pcore::event::EventKind;
 use pcore::{brain, World, AIR};
-use worldgen::testkit::{add, cover, died, dry_lands, eater, held_day, hold_ground, kg, node_of, out, put_kg_m2, scale, small_world, start, stores, took_from_ground, warm, Books, Brain, Line, LIQUID, MATTER, RICH};
+use worldgen::testkit::{add, cover, died, dry_lands, eater, held_day, hold_ground, kg, node_of, out, put_kg_m2, scale, start, stores, took_from_ground, warm, Books, Brain, Line, LIQUID, MATTER, RICH};
 
 /// Days the takes from the ground run for (`matter_taken_from_outside_is_digested_into_the_solid`).
 const TAKE_DAYS: usize = 50;
@@ -389,19 +389,20 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     use pcore::body::{AGE, COPY_MASS, DISPERSE, LEARN, REPAIR, STRENGTH};
     use pcore::brain;
     const ONES: usize = 60;
-    let mut w = small_world();
+    // A cell of dry land for each individual and two for the nodes.
+    let (mut w, _) = worldgen::testkit::mild_with(|w| (dry_lands(w).len() >= ONES + 2).then_some(()));
     // Bodies that do not grow (their mass, which the wear goes by, stays): no building work. Their copy mass is half their body: the matter that rots is not starving. No one
     // ages until they have settled, and each individual stands alone in its cell, so none merges into a node.
     (w.cfg.phys.c_build, w.cfg.phys.e_life) = (0.0, 1e30);
     // Upkeep goes with the temperature: the bodies stand on ground held at the temperature the costs are anchored to
-    // (`Physics::t_cat`, booked as an edit), so that they pay what the costs say, in two cells of high ground (rain
-    // does not flood it) with other air nodes.
+    // (`Physics::t_cat`, booked as an edit), so that they pay what the costs say, in two cells of the mildest dry land
+    // (no liquid stands on it, under air near that temperature) with other air nodes.
     let mut land = dry_lands(&w);
-    land.sort_by(|&a, &b| w.life.env[b][2].total_cmp(&w.life.env[a][2]));
+    land.sort_by(|&a, &b| w.life.env[a][2].total_cmp(&w.life.env[b][2]));
     let air = w.mesh.up(land[0], 0, AIR);
     let cells = [land[0], *land.iter().find(|&&i| w.mesh.up(i, 0, AIR) != air).expect("another air node")];
     let lone: Vec<usize> = land.iter().copied().filter(|i| !cells.contains(i)).take(ONES).collect();
-    assert_eq!(lone.len(), ONES, "a cell of high ground for each individual");
+    assert_eq!(lone.len(), ONES, "a cell of dry land for each individual");
     let held: Vec<usize> = cells.iter().chain(&lone).copied().collect();
     // Starting eaters whose brain only rests, weak so their stores last.
     let line = Line::new(&mut w, &Brain::only(brain::REST), 1);

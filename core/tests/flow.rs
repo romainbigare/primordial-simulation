@@ -26,13 +26,14 @@ fn pore_mol(w: &World, i: usize) -> f64 {
 
 /// Two land cells side by side, both warm, away from the low basin: their own lowest ground and that of the cells round
 /// them above 0 m, so the basin's liquid reaches none of them (liquid that one gains under the ground comes from the
-/// other or from rain), and neither in a body of standing liquid (what runs off them leaves): the higher first.
-fn pair(w: &World) -> (usize, usize) {
+/// other or from rain), and neither in a body of standing liquid (what runs off them leaves): the higher first. None
+/// where the ground has no such two (`testkit::island_with`).
+fn pair(w: &World) -> Option<(usize, usize)> {
     let (n, gw) = (w.mesh.cells().n(), w.map.w);
     let high = |i: usize| pcore::flow::lowest(w, i) > 0.0;
     let warm_land = |i: usize| w.surface_z(i) > 50.0 && w.t_ground(i) > 280.0 && high(i) && !w.in_body(i) && w.mesh.cells().around(i).1.iter().all(|&j| high(j as usize));
-    let (a, b) = (0..n).filter(|i| i % gw + 1 < gw).map(|i| (i, i + 1)).find(|&(a, b)| warm_land(a) && warm_land(b)).expect("two land cells");
-    if w.surface_z(a) >= w.surface_z(b) { (a, b) } else { (b, a) }
+    let (a, b) = (0..n).filter(|i| i % gw + 1 < gw).map(|i| (i, i + 1)).find(|&(a, b)| warm_land(a) && warm_land(b))?;
+    Some(if w.surface_z(a) >= w.surface_z(b) { (a, b) } else { (b, a) })
 }
 
 /// `vol` m³ of the liquid poured on cell `i`, warm enough to be liquid.
@@ -114,18 +115,18 @@ fn a_pool_with_a_solute_freezes_lower() {
 const MELT_HELD: f64 = 1e-3;
 
 /// A ground node on its melting plateau that one long air step melts all of (under the sun, its ice a cover whose
-/// melting point caps the surface) or freezes all of (in the dark under air 10% colder) ends no further from where
-/// short steps end than the same node with no plateau: it stays on the plateau only for the share of the step its heat
-/// takes, then goes on from the melting point, and the cover's cap stops with the cover.
+/// melting point caps the surface) or freezes all of (in the dark under air 10% colder) leaves it within the step, on
+/// each of the first `PLATEAU_CELLS` cells of dry land: no plateau is left and the books are kept. (How long it stays
+/// on it and where it goes on from is the balance's own law, `air::radiation`'s test.)
 #[test]
-fn a_plateau_used_up_in_one_long_step_ends_where_short_steps_end() {
-    let (mut w0, i) = worldgen::testkit::start();
-    // (On flat ground, under the sun of its latitude.)
-    w0.rise_south[i] = 0.0;
-    let pool = PLATEAU_M * w0.mesh.cells().area()[i] / w0.chem.molar_volume(LIQUID, Phase::Liquid);
-    for (sun, air, frozen) in [(1.0, 1.0, 0.9), (0.0, 0.9, 0.1)] {
-        // From the melting point, a long step and short ones: the end temperature of each, and whether it ends on a plateau.
-        let off = |mol: f64| {
+fn a_plateau_used_up_in_one_long_step_is_left_with_the_books_kept() {
+    let base = worldgen::testkit::small_world();
+    for &i in worldgen::testkit::dry_lands(&base).iter().take(PLATEAU_CELLS) {
+        let mut w0 = base.clone();
+        // (On flat ground, under the sun of its latitude.)
+        w0.rise_south[i] = 0.0;
+        let pool = PLATEAU_M * w0.mesh.cells().area()[i] / w0.chem.molar_volume(LIQUID, Phase::Liquid);
+        for (sun, air, frozen) in [(1.0, 1.0, 0.9), (0.0, 0.9, 0.1)] {
             let mut w = w0.clone();
             // (No rain: what falls in a step is snow or rain by the mean air of the step.)
             (w.cfg.sun, w.cfg.rain_time) = (w.cfg.sun * sun, f64::INFINITY);
@@ -133,30 +134,22 @@ fn a_plateau_used_up_in_one_long_step_ends_where_short_steps_end() {
                 let e = air * w.store.heat(Class::Air)[j];
                 set_heat(&mut w, Node::air(j), e);
             }
-            set_amount(&mut w, Node::ground(i), LIQUID, mol);
-            let e = w.energy_ground(i, w.melt(LIQUID, i)) - frozen * mol * w.chem.subs[LIQUID].lf;
+            set_amount(&mut w, Node::ground(i), LIQUID, pool);
+            let e = w.energy_ground(i, w.melt(LIQUID, i)) - frozen * pool * w.chem.subs[LIQUID].lf;
             set_heat(&mut w, Node::ground(i), e);
+            assert!(w.thaw(i).1.is_some(), "cell {i}, sun x{sun}: on the plateau");
             let books = Books::now(&w);
-            let [long, short] = [1, SHORT_STEPS].map(|steps| {
-                let mut w = w.clone();
-                for _ in 0..steps {
-                    pcore::flow::state(&mut w, true);
-                    pcore::flow::air(&mut w, DT / steps as f64);
-                }
-                books.assert_within(&w, 1e-9, 1e-9);
-                (w.t_ground(i), w.thaw(i).1.is_some())
-            });
-            assert!(!long.1 && !short.1, "sun x{sun}: a plateau left");
-            (long.0 - short.0).abs()
-        };
-        let (plateau, none) = (off(pool), off(0.0));
-        assert!(plateau <= none, "sun x{sun}: {plateau} K off with the plateau, {none} K with none");
+            pcore::flow::state(&mut w, true);
+            pcore::flow::air(&mut w, DT);
+            books.assert_within(&w, 1e-9, 1e-9);
+            assert!(w.thaw(i).1.is_none(), "cell {i}, sun x{sun}: a plateau left at {} K", w.t_ground(i));
+        }
     }
 }
 
-/// The depth of the liquid on the plateau, m, and the short steps a long one is checked against.
+/// The depth of the liquid on the plateau, m, and the cells of dry land it is tried on.
 const PLATEAU_M: f64 = 0.02;
-const SHORT_STEPS: usize = 48;
+const PLATEAU_CELLS: usize = 11;
 
 /// A ground node over a liquid's boiling point boils of it only what its heat over that point pays: a deep pool 2 K
 /// over boils a small share in an air step, keeps its books, and stays near the boiling point.
@@ -205,8 +198,7 @@ fn a_pool_far_over_its_boiling_point_gives_no_more_than_it_holds() {
 #[test]
 fn meltwater_runs_off_and_the_snow_keeps_the_share_its_heat_holds() {
     const SNOW_M: f64 = 2.0;
-    let mut w = worldgen::testkit::squares(3, 16, 16);
-    let (i, _) = pair(&w);
+    let (mut w, (i, _)) = worldgen::testkit::island_with(3, pair);
     worldgen::testkit::flatten(&mut w, i);
     let snow = SNOW_M * w.mesh.cells().area()[i] / w.chem.molar_volume(LIQUID, Phase::Liquid);
     set_amount(&mut w, Node::ground(i), LIQUID, snow);
@@ -382,8 +374,7 @@ fn gas_dissolves_and_comes_out_when_warmed() {
 /// what stands on the cell (`flow::means`, as Flow's state of the world now has it) is only the liquid over it.
 #[test]
 fn pore_space_is_the_porosity_times_the_loose_solids() {
-    let mut w = worldgen::testkit::squares(3, 16, 16);
-    let (i, _) = pair(&w);
+    let (mut w, (i, _)) = worldgen::testkit::island_with(3, pair);
     let (pores, area) = (w.cfg.phys.porosity * loose(&w, i), w.mesh.cells().area()[i]);
     // The loose layer of the generated land is what the wear left (`Samples::loose`), the top `skin_m` of it at most,
     // 0.4 of it pores (random packing: 0.36 to 0.44).
@@ -406,10 +397,10 @@ fn pore_space_is_the_porosity_times_the_loose_solids() {
 /// is over them runs off (on uneven ground its hollows fill first, and run off sooner). Matter and energy are kept.
 #[test]
 fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
+    let (base, (i, _)) = worldgen::testkit::island_with(3, pair);
     let run = |porosity: f64, share: f64| {
-        let mut w = worldgen::testkit::squares(3, 16, 16);
+        let mut w = base.clone();
         w.cfg.phys.porosity = porosity;
-        let (i, _) = pair(&w);
         worldgen::testkit::flatten(&mut w, i);
         let pores = 0.4 * loose(&w, i);
         pour(&mut w, i, share * pores);
@@ -447,7 +438,7 @@ fn liquid_sinks_into_the_bed_and_runs_off_once_a_month() {
     // Into the summer, so the poured liquid stays liquid.
     (0..SUMMER_MONTHS).for_each(|_| pcore::step(&mut w));
     pcore::day_with_month_at_start(&mut w);
-    let (i, _) = pair(&w);
+    let (i, _) = pair(&w).expect("two warm land cells in the summer");
     let p = w.cfg.phys;
     let (pores, full) = (p.porosity * loose(&w, i), p.bed_porosity * p.bed_depth * w.mesh.cells().area()[i]);
     pour(&mut w, i, 4.0 * pores);
@@ -470,9 +461,9 @@ fn liquid_sinks_into_the_bed_and_runs_off_once_a_month() {
 fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
     // One liquid step with the liquid of cell `i` filling the share `share` of its pores and `j` dry: what `j` gained,
     // m³, the drop of the liquid table and the thickness that carries the flow.
+    let (base, (i, j)) = worldgen::testkit::island_with(3, pair);
     let gained = |seep: f64, share: f64| {
-        let mut w = worldgen::testkit::squares(3, 16, 16);
-        let (i, j) = pair(&w);
+        let mut w = base.clone();
         w.cfg.phys.seep = seep;
         // (No evaporation, which would lower the liquid table before the liquid flows, no rain, which would fill the dry
         // cell's pores, no channels inside the cell, and a full store under `i`, so none of its liquid sinks before it
@@ -520,33 +511,26 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
 /// off (it does not stay in the cell); under deep standing liquid (no slope) it loses none that way.
 #[test]
 fn liquid_drains_inside_a_cell_to_its_channels() {
-    let mut w0 = worldgen::testkit::squares(3, 16, 16);
+    let (base, (hi, _)) = worldgen::testkit::island_with(3, pair);
+    let mut w0 = base.clone();
     pcore::flow::state(&mut w0, true);
-    let (n, gw, area, p) = (w0.mesh.cells().n(), w0.map.w, w0.mesh.cells().area()[0], w0.cfg.phys);
+    let (n, area, p) = (w0.mesh.cells().n(), w0.mesh.cells().area()[0], w0.cfg.phys);
     let year = w0.days_per_year() as f64 * DAY;
     assert!(p.seep * w0.map.side * 1e-3 * year / (p.porosity * area) < 2e-4);
     let mv = w0.chem.molar_volume(LIQUID, Phase::Liquid);
     let full = p.bed_porosity * p.bed_depth * area;
     let stands = |w: &World, i: usize| w.surface_z(i) + pcore::survey::env_of(w, i)[1];
-    // The slope down to the steepest lower neighbour, as the sweep reads it.
+    // The slope of the steepest way down (`Level::steepest`) to the neighbours lower by more than `still`, as the sweep
+    // reads it.
     let slope = |w: &World, i: usize| {
-        let (x, y) = ((i % gw) as i64, (i / gw) as i64);
-        let mut s = 0.0f64;
-        for (dx, dy) in [(-1i64, -1i64), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
-            let (nx, ny) = (x + dx, y + dy);
-            if nx >= 0 && ny >= 0 && nx < gw as i64 && ny < (n / gw) as i64 {
-                let dh = stands(w, i) - stands(w, (ny * gw as i64 + nx) as usize);
-                if dh > p.still {
-                    s = s.max(dh / (w.map.side * if dx != 0 && dy != 0 { 2f64.sqrt() } else { 1.0 }));
-                }
-            }
-        }
-        s
+        let cells = w.mesh.cells();
+        let drop = |k: usize| Some(stands(w, i) - stands(w, cells.around(i).1[k] as usize)).filter(|&d| d > p.still);
+        cells.steepest(i, drop).map_or(0.0, |way| way.0)
     };
     // One liquid step with the store of `i` full and warm, with channels `hill` apart: the store and the ground liquid
     // after. (No pore liquid sinks into the stores, `seep` 0, so the neighbours' stores do not change with `hill`.)
     let run = |i: usize, hill: f64| {
-        let mut w = worldgen::testkit::squares(3, 16, 16);
+        let mut w = base.clone();
         (w.cfg.evap, w.cfg.phys.hill, w.cfg.phys.seep) = (0.0, hill, 0.0);
         let e = full / mv * (w.chem.subs[LIQUID].cp * 290.0 + w.chem.subs[LIQUID].lf);
         set_amount(&mut w, Node::new(Class::Deep, i), LIQUID, full / mv);
@@ -556,7 +540,6 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
         books.assert_kept(&w, 1e-9);
         (w.store.amounts(Class::Deep)[LIQUID * n + i] * mv, liquid_m3(&w, i))
     };
-    let (hi, _) = pair(&w0);
     let s = slope(&w0, hi);
     let want = full * -(-p.bed_seep * s * LIQUID_STEP / (p.bed_porosity * p.hill)).exp_m1();
     // The control: channels so far apart that none drain. What it loses is Darcy's flow across the cell, which goes
@@ -577,8 +560,7 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
 /// slope, and none overfills. Matter and energy are kept.
 #[test]
 fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
-    let mut w = worldgen::testkit::squares(3, 16, 16);
-    let (hi, lo) = pair(&w);
+    let (mut w, (hi, lo)) = worldgen::testkit::island_with(3, pair);
     let (n, area, p) = (w.mesh.cells().n(), w.mesh.cells().area()[0], w.cfg.phys);
     let (pores, full, mv) = (p.porosity * loose(&w, hi), p.bed_porosity * p.bed_depth * area, w.chem.molar_volume(LIQUID, Phase::Liquid));
     // No rain: what sinks is only the liquid poured.
@@ -685,11 +667,11 @@ const PIT_M: f64 = 10.0;
 /// either (lower than all its neighbours, so nothing runs off it, and no pore liquid flows into it).
 #[test]
 fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
-    let mut w = worldgen::testkit::squares(3, 16, 16);
-    let (n, na, ns) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.chem.ns());
     let near = |w: &World, i: usize| Some(w.mesh.cells().around(i).1).filter(|c| c.len() == 8).map(|c| c.iter().map(|&j| w.surface_z(j as usize)).collect::<Vec<f64>>());
-    let dry = |w: &World, i: usize| w.store.amounts(Class::Ground)[LIQUID * n + i] == 0.0 && w.surface_z(i) > 20.0 && !w.in_body(i);
-    let i = (0..n).find(|&i| dry(&w, i) && near(&w, i).is_some() && w.mesh.cells().around(i).1.iter().all(|&j| dry(&w, j as usize))).expect("dry land among dry land");
+    let dry = |w: &World, i: usize| w.store.amounts(Class::Ground)[LIQUID * w.mesh.cells().n() + i] == 0.0 && w.surface_z(i) > 20.0 && !w.in_body(i);
+    let among = |w: &World| (0..w.mesh.cells().n()).find(|&i| dry(w, i) && near(w, i).is_some() && w.mesh.cells().around(i).1.iter().all(|&j| dry(w, j as usize)));
+    let (mut w, i) = worldgen::testkit::island_with(3, among);
+    let (n, na, ns) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.chem.ns());
     let (area, lowest) = (w.mesh.cells().area()[i], near(&w, i).unwrap().into_iter().fold(f64::INFINITY, f64::min));
     let bed: f64 = (0..ns).map(|k| w.store.amounts(Class::Bed)[k * n + i] * w.chem.molar_volume(k, Phase::Solid)).sum::<f64>() / area;
     let keep = 1.0 - (w.surface_z(i) - lowest + PIT_M) / bed;
@@ -845,14 +827,22 @@ fn basin_under(w: &World, top: impl Fn(&World, usize) -> f64) -> (Vec<usize>, us
     ((0..n).filter(|&i| basin[i]).collect(), lowest)
 }
 
+/// The cells of `cells` whose ground lies wholly under the level of their liquid: every sample of the terrain in them
+/// under it, so they hold no land (laws.md 1.2: a cell with land in it faces the air with two surfaces and does not mix
+/// as one with its body).
+fn wholly_under(w: &World, cells: &[usize]) -> Vec<usize> {
+    let (s, leaves) = (w.terrain_samples(), w.map.leaves());
+    cells.iter().copied().filter(|&i| leaves[i].split(pcore::space::terrain::SAMPLE_DEPTH).all(|f| s.h[s.index(&f)] < liquid_top(w, i))).collect()
+}
+
 /// The low basin of each air block mixes its heat in a month (laws.md 1.2): an island's low basin (one block) with
-/// every other cell warmed by 3 K ends a liquid step with its surface at one temperature (of a cell of parts its
-/// liquid's top, which mixes, 1.1), within a millikelvin, over most of its cells (those off their plateaus, with no
-/// cover, the same phases). Matter and energy are kept.
+/// every other cell warmed by 3 K ends a liquid step with its surface at one temperature, within a millikelvin, over
+/// most of its cells that hold no land (those off their plateaus, with no cover, the same phases). Matter and energy
+/// are kept.
 #[test]
 fn a_blocks_low_basin_mixes_its_heat_in_a_month() {
     let mut w = worldgen::testkit::small_world();
-    let (cells, _) = basin_under(&w, liquid_top);
+    let cells = wholly_under(&w, &basin_under(&w, liquid_top).0);
     for &i in cells.iter().step_by(2) {
         let t = w.t_ground(i) + 3.0;
         hold_ground(&mut w, i, t);
@@ -870,7 +860,8 @@ fn a_blocks_low_basin_mixes_its_heat_in_a_month() {
 
 /// The low basin under one air node takes up a gas as one liquid (laws.md 1.5): with none of it dissolved, after a
 /// liquid step its cells under that node that mix as one each hold the same share of their liquid (most of the cells of
-/// the node's basin), so a cell of little liquid does not reach balance before a deep one. Matter and energy are kept.
+/// the node's basin that hold no land), so a cell of little liquid does not reach balance before a deep one. Matter and
+/// energy are kept.
 #[test]
 fn the_low_basin_under_one_air_node_takes_up_gas_as_one_liquid() {
     let (_, init) = worldgen::chemistry0();
@@ -878,12 +869,15 @@ fn the_low_basin_under_one_air_node_takes_up_gas_as_one_liquid() {
     w.cfg.dissolve = 1.0;
     let (n, c) = (w.mesh.cells().n(), &w.chem);
     let k = init.air.iter().map(|p| p.0).filter(|&k| c.subs[k].boil < 250.0).max_by(|&a, &b| c.subs[a].solubility.total_cmp(&c.subs[b].solubility)).unwrap();
-    let (cells, _) = basin_under(&w, liquid_top);
+    let basin = basin_under(&w, liquid_top).0;
+    let cells = wholly_under(&w, &basin);
     let j = (0..w.mesh.level(AIR).n()).max_by_key(|&j| cells.iter().filter(|&&i| w.mesh.up(i, 0, AIR) == j).count()).unwrap();
     let under: Vec<usize> = cells.iter().copied().filter(|&i| w.mesh.up(i, 0, AIR) == j).collect();
     assert!(under.len() > 4, "{} cells of the basin under one node", under.len());
-    for &i in &cells {
+    // None dissolved anywhere: the liquid that runs into the basin brings none.
+    for i in 0..n {
         set_amount(&mut w, Node::ground(i), k, 0.0);
+        set_amount(&mut w, Node::new(Class::Deep, i), k, 0.0);
     }
     pcore::flow::state(&mut w, true);
     let books = Books::now(&w);
@@ -1275,3 +1269,4 @@ fn a_coast_cells_land_swings_more_than_the_cell() {
     assert!(land > node, "the land swings {land:.2} K, the node {node:.2} K, over {} cells", two.len());
     books.assert_kept(&w, 1e-9);
 }
+

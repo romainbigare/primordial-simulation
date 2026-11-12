@@ -570,6 +570,14 @@ Open on the ground and the water:
 - A body colder than its liquid's melting point at the start starts molten, as the sea does.
 - A small square where a channel leaves a pond; a tile costs 7 to 10 ms, most of it the channels' field.
 - Building the samples costs 0.5 to 0.6 s on a 32 island.
+- The surface solve is backward Euler (laws.md 1.1, known limit). The design: solve the linear balance exactly by
+  pieces, T_e + (T_0 - T_e) e^(-h/τ), the fluxes from its mean over each piece, the end from its end; a plateau is a
+  piece where the temperature stands while its fusion enthalpy is paid. It touches `Air::moves`' slopes, the cover's
+  cap, `end_reflectance` and evaporation (taken at the end temperature as backward Euler takes it).
+- Liquid over a small pond's part of a cell stands over that part only, as a pillar (`curve::Part`, `Fill`): poured
+  over a one-sample pond it stood 30 km high in a test. It should spread over the cell's other samples.
+- A node of 1000 members on a summit (2,529 m, ground at 272.7 K) dies of lack on its first day; which store runs short
+  is not known.
 
 ## 11. Variety: landscapes and biomes on a small world
 

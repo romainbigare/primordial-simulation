@@ -33,12 +33,15 @@ const BED_LIGHTEN = 0.55; const BED_TONE = 0.85;
 // Lakes and rivers are metres deep where the sea is tens: each is coloured as if `LAKE_SCALE` times as deep plus
 // `LAKE_SHALLOWEST_M`, no deeper than `LAKE_DEEPEST_M` (an open blue, not the ocean's dark), and lighter towards its
 // shore: as if shallower where it is less than a rim's depth deep (a lake's `LAKE_RIM_M`, a channel's `RIVER_RIM_M`:
-// its banks), a band no narrower than `LAKE_RIM_PX` pixels, the shallower the nearer the shore (its square).
-const LAKE_SCALE = 6.0; const LAKE_SHALLOWEST_M = 6.0; const LAKE_DEEPEST_M = 45.0;
-const LAKE_RIM_M = 1.5; const RIVER_RIM_M = 0.1; const LAKE_RIM_PX = 8.0;
+// its banks), the shallower the nearer the shore (its square): a band as wide as the bed's slope makes it, wide where
+// the bed is gentle and no narrower than `LAKE_RIM_PX` pixels where it is steep, so every shore has its light shallows.
+const LAKE_SCALE = 1.5; const LAKE_SHALLOWEST_M = 2.0; const LAKE_DEEPEST_M = 45.0;
+const LAKE_RIM_M = 3.0; const RIVER_RIM_M = 0.1; const LAKE_RIM_PX = 2.5;
 
-// Beach sand (colour.wgsl `beach`), bright and dry.
+// Beach sand (colour.wgsl `beach`), bright and dry; a beach takes this share of its colour from its loose ground's
+// own, lifted this many times (washed and dry, a ground is lighter).
 const BEACH_SAND = vec3f(0.62, 0.53, 0.36);
+const BEACH_OWN = 0.5; const BEACH_LIFT = 1.8;
 
 // The weights of red, green and blue in a colour's lightness (Rec. 601).
 const LUMA = vec3f(0.299, 0.587, 0.114);
@@ -70,7 +73,7 @@ fn relief_tint(c: vec3f, lit: f32) -> vec3f {
 }
 
 // The depth a lake or a river `depth` m deep is coloured as, where its bed rises at `slope` (rise over run) to a rim
-// `rim_m` deep, seen at `e` m a pixel (`LAKE_SCALE`).
+// `rim_m` deep, seen at `e` m a pixel (`LAKE_SCALE`, `LAKE_RIM_PX`).
 fn lake_seen(depth: f32, slope: f32, e: f32, rim_m: f32) -> f32 {
   let rim = ease(0.0, max(rim_m, slope * LAKE_RIM_PX * e), depth);
   return min(LAKE_SHALLOWEST_M + depth * LAKE_SCALE, LAKE_DEEPEST_M) * rim * rim;

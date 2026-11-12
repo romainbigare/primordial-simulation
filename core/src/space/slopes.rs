@@ -40,13 +40,13 @@ pub(super) fn rebound(g: &Grid, h: &mut [f64], was: &[f64], (up, open): (&[f64],
 /// Creep of the slopes over a step: each sample of land changes by κ ∇²h across its four sides (`kappa` the
 /// diffusivity times the step, m², Culling 1960), in explicit parts each under `STABLE` of the square of the shorter
 /// side of a sample (Courant, Friedrichs and Lewy 1928); the open low ground stays, and a neighbour there stands at its
-/// height or 0 m, the higher, and takes what creeps into it (`offshore`, m³).
-pub(super) fn creep(g: &Grid, h: &mut [f64], open: &[bool], kappa: f64, offshore: &mut [f64]) {
+/// height or the level of its liquid `stand`, m, the higher, and takes what creeps into it (`offshore`, m³).
+pub(super) fn creep(g: &Grid, h: &mut [f64], (open, stand): (&[bool], f64), kappa: f64, offshore: &mut [f64]) {
     let side = g.dx.iter().fold(g.dy, |a, &b| a.min(b));
     let parts = (kappa / (STABLE * side * side)).ceil().max(1.0);
     for _ in 0..parts as usize {
         let was = h.to_vec();
-        let at = |j: usize| if open[j] { was[j].max(0.0) } else { was[j] };
+        let at = |j: usize| if open[j] { was[j].max(stand) } else { was[j] };
         for k in (0..g.n()).filter(|&k| !open[k]) {
             for (j, len) in g.sides(k) {
                 let gain = kappa / parts * (at(j) - was[k]) / (len * len);

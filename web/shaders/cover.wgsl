@@ -71,18 +71,17 @@ fn kind(k: i32, c: vec2i) -> vec4f {
 }
 
 // What the ground at `at` leaves a plant: the share free of liquid over its roots, how wet it is and how wet its cells
-// are on their mean (land.wgsl `state_at`), the depth of its loose ground, m, the share snow covers and the snow's
-// depth, m.
-struct Foot { stands: f32, wet: f32, mean: f32, loose: f32, snow: f32, snow_m: f32 }
+// are on their mean (land.wgsl `state_at`), the share snow covers and the snow's depth, m.
+struct Foot { stands: f32, wet: f32, mean: f32, snow: f32, snow_m: f32 }
 fn foot(at: vec2f) -> Foot {
   let st = state_at(at, ground_at(at, false), corners(at / land.map.x));
-  return Foot(above_water(st.depth), st.wet, st.mean, loose_at(at), st.snow, st.snow_m);
+  return Foot(above_water(st.depth), st.wet, st.mean, st.snow, st.snow_m);
 }
 
-// The share of each kind that stands where its roots need `need` m of loose ground and `loose` m lies (land.wgsl
-// `rooted`).
+// The share of each kind that stands where its roots need `need` m of loose ground (0: its square's ground holds it
+// everywhere, canopy.ts) and `loose` m lies (land.wgsl `rooted`).
 fn holds(loose: f32, need: vec4f) -> vec4f {
-  return vec4f(rooted(loose, need.x), rooted(loose, need.y), rooted(loose, need.z), rooted(loose, need.w));
+  return select(vec4f(rooted(loose, need.x, 0.0), rooted(loose, need.y, 0.0), rooted(loose, need.z, 0.0), rooted(loose, need.w, 0.0)), vec4f(1.0), need <= vec4f(0.0));
 }
 
 // The share of a kind that needs `need` that stands where the ground is `wet` against its cells' mean: its activity
@@ -185,10 +184,19 @@ fn lattice(dst: ptr<function, vec4f>, p: vec2f, l: i32, e: f32) {
 fn pick_kind(at: vec2f, cs: Corners, chance: array<vec4f, 4>, thick: f32, f: Foot, x: f32) -> vec2i {
   var w: array<vec4f, 4>;
   var first: array<vec4f, 4>;
+  var needs: array<vec4f, 4>;
   var sum = 0.0;
   var firsts = 0.0;
+  // The loose ground at the foot with its patches (rock.wgsl `loose_seen`, as the bare bed is drawn), read only where a
+  // kind's roots may want more than lies there.
+  var deepest = 0.0;
   for (var s = 0; s < 4; s++) {
-    w[s] = abs(chance[s]) * thick * thrive(f.wet, f.mean, kind(NEED, cs.at[s])) * holds(f.loose, kind(ROOTS, cs.at[s])) * f.stands;
+    needs[s] = kind(ROOTS, cs.at[s]);
+    deepest = max(deepest, max(max(needs[s].x, needs[s].y), max(needs[s].z, needs[s].w)));
+  }
+  let loose = select(0.0, loose_seen(at, 0.0), deepest > 0.0);
+  for (var s = 0; s < 4; s++) {
+    w[s] = abs(chance[s]) * thick * thrive(f.wet, f.mean, kind(NEED, cs.at[s])) * holds(loose, needs[s]) * f.stands;
     first[s] = select(vec4f(0.0), vec4f(1.0), chance[s] < vec4f(0.0));
     sum += dot(w[s], vec4f(1.0));
     firsts += dot(w[s], first[s]);

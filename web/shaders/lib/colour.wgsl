@@ -35,7 +35,9 @@ const EXAGGERATE = 6.0;
 // `ROCK_SLOPE` (a steep coast is a rock shore: waves carry the sand away), and on loose ground at least `BEACH_LOOSE_M`
 // deep (sand is the load the wear laid at the shore); by a lake up to `LAKE_BEACH` of the sea's height over its level
 // (smaller waves).
-const BEACH_SLOPE = 0.15; const ROCK_SLOPE = 0.35; const BEACH_LOOSE_M = 0.5; const LAKE_BEACH = 0.3;
+// It reaches up the shore as far as its height times the share of `BEACH_DEEP_M` the loose ground is deep, so it is
+// wide where the shore's load lies deep and thin where little lies.
+const BEACH_SLOPE = 0.15; const ROCK_SLOPE = 0.35; const BEACH_LOOSE_M = 0.5; const LAKE_BEACH = 0.3; const BEACH_DEEP_M = 4.0;
 // Water standing deeper than this, m, is the deep sea's.
 const DEEP_SEA_M = 200.0;
 // Over the liquid's surface the ground draws water up through its pores (the capillary fringe), wet to e^-1 at this
@@ -52,7 +54,8 @@ const SHOWS = 0.002;
 // over it and under it (the shallows' bed), by a lake up to `LAKE_BEACH` of that over its level, on gentle loose
 // ground only. A body that holds no liquid has no level (tape/src/table.rs), so no dry basin is drawn as sand.
 fn beach(sea: f32, sea_over: f32, over: f32, slope: f32, loose: f32, high: f32) -> f32 {
-  let shore = max(sea * (1.0 - ease(0.0, high, sea_over)), (1.0 - sea) * (1.0 - ease(0.0, LAKE_BEACH * high, over)));
+  let reach = high * max(ease(0.0, BEACH_DEEP_M, loose), 1e-3);
+  let shore = max(sea * (1.0 - ease(0.0, reach, sea_over)), (1.0 - sea) * (1.0 - ease(0.0, LAKE_BEACH * reach, over)));
   return shore * (1.0 - ease(BEACH_SLOPE, ROCK_SLOPE, slope)) * ease(0.0, BEACH_LOOSE_M, loose);
 }
 
@@ -106,7 +109,8 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   g.kind = BARE;
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
-  g.rgb = mix(g.rgb, select(SAND, BEACH_SAND, styled()), p.sand);
+  // In the style a beach is the loose ground's own colour lightened toward washed sand (`BEACH_OWN`).
+  g.rgb = mix(g.rgb, select(SAND, mix(BEACH_SAND, min(p.ground * BEACH_LIFT, vec3f(1.0)), BEACH_OWN), styled()), p.sand);
   // In the style the soil has its grain (crag.wgsl `floor_of`). Where the loose ground thins its bed shows, in the
   // style as slabs or, where steep, a cliff's face (`rock_face`); it holds plants only in its cracks. Slope alone
   // never bares the ground.

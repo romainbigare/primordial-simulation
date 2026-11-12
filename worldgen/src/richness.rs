@@ -34,7 +34,7 @@ pub(crate) fn liquid_temps(s: &Substance) -> usize {
 pub fn richness(chem: &Chemistry, init: &Init) -> Vec<(&'static str, bool)> {
     let at = |k: usize| chem.phase(k, T_SURF);
     let hard = |k: u16| chem.subs[k as usize].hardness;
-    let ground: Vec<usize> = [&init.bed, &init.loose, &init.deposits].iter().flat_map(|v| v.iter().map(|p| p.0)).collect();
+    let ground: Vec<usize> = init.makes.iter().chain([&init.loose]).flat_map(|v| v.iter().map(|p| p.0)).collect();
     let air: Vec<usize> = init.air.iter().filter(|p| p.1 >= ABUNDANT && at(p.0) == Phase::Gas).map(|p| p.0).collect();
     let mut all: Vec<usize> = ground.clone();
     all.extend(init.air.iter().map(|p| p.0));
