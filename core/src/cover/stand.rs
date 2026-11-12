@@ -10,7 +10,7 @@ use std::f64::consts::FRAC_PI_4;
 
 /// A cell's loose ground is kept as the share of its area in each of `BINS` bins of depth, spaced evenly in the log of
 /// the depth from `LEAST_M` to `MOST_M` m (all under the first in the first, all over the last in the last): the
-/// resolution at which a kind's rooted share is known (web/src/roots.ts draws with the same bins).
+/// resolution at which a kind's rooted share is known (the page draws with that share, `tape::stands`).
 pub const BINS: usize = 24;
 pub const LEAST_M: f64 = 0.005;
 pub const MOST_M: f64 = 20.0;
