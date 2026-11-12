@@ -176,7 +176,7 @@ fn colour(p: Spot) -> Shaded {
     if (styled()) {
       // The style: clear water over a pale bed, deepening to the open water, foam at its edge (style.wgsl).
       if (exp(-2.0 * CLEAR_ATTENUATION.b * p.depth) > SHOWS) { bed = soil(ground_of(p, 0.0), 1.0, lit); }
-      let seen = mix(lake_seen(p.depth, LAKE_RIM_M), p.depth, p.sea);
+      let seen = mix(lake_seen(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M), p.depth, p.sea);
       water = mix(water_painted(bed, seen, ripple), FOAM_RGB, foam(p.depth, p.slope / earth.look.x, p.e));
     } else {
       if (through(p.depth).b > SHOWS) { bed = soil(ground_of(p, 0.0), 1.0, lit); }
