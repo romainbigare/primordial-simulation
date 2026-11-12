@@ -132,15 +132,24 @@ white straight line on a ridge's snow; ticks where a small stream meets a far li
 to 35% more than before the rivers (software, one quiet pair; the guard asked of the helper: +10% there, +5% at the
 other bars, measured by CPU time). Small plants' marks show as little grids of yellow dots on bare ground close up.
 
-**In work:** the rivers' faults above (branch `wip/rivers`). The sorted start as the start of every world (the cover's
-helper, package H, on `wip/cover-nursery-g2`'s work: 2.5 to 4.5 s in the browser; a world from it is steady, heavier,
-and keeps a covered north that the random start never reaches).
+**In work:** the rivers' faults above (branch `wip/rivers`). The air and sunlight (the cover's helper, branch
+`air-light`: first a measure of today's budget against Earth's and a proposal, then the law in steps).
+
+**The sorted start is parked** (`wip/nursery-start`, built on 32e9cb4c: every world's cover placed by the nursery, the
+random placing deleted, `SNAPSHOT_VERSION` 128, a fast test of the garden, a status line on the page, 1 to 1.9 s in
+the browser). It is not on main because: the page loses its look (one blue-green, a bare floor with dots where main
+has a sward, a mosaic of 2 km squares where classes meet); some warm wet rows start bare at year 3 (the garden reads
+the bare year's dry air); the eaters collapse in the key world (cover 11.49 against 9.505, eaters 5.38 against 8.417
+log10 kg); `the_sleep_of_change_keeps_the_chemistry` and `the_long_step_keeps_the_climate` fail because each run sorts
+its own start (they must start from one placed world); stands of 24 to 41 kg/m² building 4 to 7.8 kg a year in the
+south and 0.3 m of liquid a year through leaves in a rainless far north. Take it up again on the mended light.
 
 ## 5. What to do next, in order
 
 1. **The rivers' faults** (round four) to main when the pictures pass and the cost guard holds.
-2. **The sorted start** as the start of every world (the owner's word: yes; in work: it replaces the random start, no
-   switch stays on main; the key numbers' references move with it).
+2. **The air and sunlight** (item 4 below) comes first now; then **the sorted start** again (parked, see section 4:
+   classes that blend, a garden whose air feels its film, tests that start from one placed world, kinds that draw
+   with variety and a sward).
    Not run since the cover's law, by the owner's word "skip these slow tests just this once": the two slow learning
    tests of `core/tests/choose.rs`, the slow test of `lots.rs` and of `tape/tests/scale.rs`. Run them on a quiet
    machine before the next change of the laws for bodies.
@@ -192,7 +201,7 @@ The owner's word: no work lives only on one machine. Push a helper's branch as s
 - `experiment/climate-bands`: merged to main; kept as it was pushed.
 - `experiment/sorted-start`: the sorted start (`worldgen/src/life/nursery/`). Its first commit, the cover's month
   reading one view (`cover::Around`), is on the work branch.
-- `wip/drawing`, `wip/cover-law`, `wip/cover-costs`, `wip/page-cover`, `wip/rivers` (all merged), `wip/cover-nursery-g2` (the
-  sorted start, not merged): the helpers' work, pushed as it grows.
+- `wip/drawing`, `wip/cover-law`, `wip/cover-costs`, `wip/page-cover`, `wip/rivers` (all merged), `wip/cover-nursery-g2` and
+  `wip/nursery-start` (the sorted start, parked, not merged): the helpers' work, pushed as it grows.
 - `tools/checks`: the check scripts and probes of this work (`tools/check/paused.js`, `phone.js`, `inspect.js`; the
   frame's bench in `tools/frame/`; the climate's and the ground's probes). Study files: never on main.
