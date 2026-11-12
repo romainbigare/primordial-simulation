@@ -11,11 +11,6 @@ pub const KINDS: usize = SLOTS;
 /// Numbers a kind holds in a square's row (`row`).
 pub const KIND_ROW: usize = 19;
 
-/// The leaf area per m² of ground at which a stand's crowns close the ground to e^-1 of it: a stand whose crowns stand
-/// in patches is that closed inside them (canopies close at a leaf area index of 3 to 4; Jarvis and Leverenz 1983, from
-/// memory). m² per m².
-pub const CLOSE_LAI: f64 = 3.0;
-
 /// The plants of a stand: how many a m², each one's mass, kg, height, stem's width and crown's width, m, the share of
 /// the ground the crowns cover, and how closed one crown is (the light it stops, as the cover's light law: 1 - e^-leaf
 /// area, `math::shade`).
@@ -33,14 +28,15 @@ pub struct Plants {
 /// The plants of a stand of `kg` built cover, `leaf` capture area and `per_m2` plants per m² of its cell, standing on
 /// the share `rooted` of it, of which `walls` is the share its walls make, of walls of density `rho` kg/m³. A kind
 /// stands on the share of its cell that holds its roots alone, its capture area a layer of leaf / rooted there (laws.md
-/// 4.5): its crowns cover the share 1 - e^(-(leaf / rooted) / `CLOSE_LAI`) of that ground, in patches where they close,
-/// each plant's crown the ground it holds there; its stem and height are the cover's law for a plant of its mass
-/// (`cover::stem`, `cover::height`).
+/// 4.5): its crowns cover of that ground the share whose light the layer stops, 1 - e^-(leaf / rooted), the cover's
+/// own light law (`math::shade`), so a stand the law holds closed to the light is drawn closed; they stand in patches
+/// where they close, each plant's crown the ground it holds there; its stem and height are the cover's law for a plant
+/// of its mass (`cover::stem`, `cover::height`).
 pub fn plants(ph: &Physics, (kg, leaf, per_m2): (f64, f64, f64), rooted: f64, walls: f64, rho: f64) -> Plants {
     if kg <= 0.0 || leaf <= 0.0 || per_m2 <= 0.0 || rooted <= 0.0 {
         return Plants::default();
     }
-    let cover = -rooted * (-leaf / (rooted * CLOSE_LAI)).exp_m1();
+    let cover = -rooted * (-leaf / rooted).exp_m1();
     let (mass, inside) = (kg / per_m2, per_m2 / cover);
     let width = (1.0 / (std::f64::consts::FRAC_PI_4 * inside)).sqrt();
     let (stem, height) = (cover::stem(ph, mass, walls, rho), cover::height(ph, mass, walls, rho));
