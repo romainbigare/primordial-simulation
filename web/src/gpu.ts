@@ -9,11 +9,41 @@ import { openWebGl2 } from './gpu-webgl2';
 /** Where WebGL2 finds a binding of a program: a uniform block's binding, or a sampler's texture and sampler bindings
  * (null: the texture is read whole texels at a time, with no sampler). */
 type Bind = { uniform: [number, number] } | { texture: [number, number]; sampler: [number, number] | null };
-/** A program as web/shade writes it: its WGSL, its GLSL stages and the GLSL names of its bindings. */
-export interface Program { wgsl: string; vertex: string; fragment: string; binds: Record<string, Bind> }
+/** A program as web/shade writes it: its WGSL, its GLSL stages, the GLSL names of its bindings, and the least metres a
+ * pixel takes for which it is made once more (as its declaration of `LEAST_E` writes them). */
+export interface Program { wgsl: string; vertex: string; fragment: string; binds: Record<string, Bind>; least: string[] }
 declare const SHADERS: Record<string, Program>;
-/** The page's programs (web/shaders/<name>.wgsl). */
-export const programs = (): Record<string, Program> => SHADERS;
+/** The declaration of `LEAST_E` in a program made for no least size of a pixel (WGSL and GLSL; web/shaders/lib/draw.wgsl),
+ * and its value. */
+const LEAST_DECLARED = /(LEAST_E(?:: f32)? = )0\.0;/;
+let all: Record<string, Program> | null = null;
+/** The page's programs (web/shaders/<name>.wgsl), and each one made for draws whose pixels take at least `m` metres,
+ * named `<name>:<m>`: the same text with `LEAST_E` set to `m` (web/shade checks that this is what it makes). */
+export function programs(): Record<string, Program> {
+  if (all) return all;
+  const out: Record<string, Program> = { ...SHADERS };
+  for (const [name, p] of Object.entries(SHADERS)) {
+    for (const m of p.least) {
+      const set = (text: string) => text.replace(LEAST_DECLARED, `$1${m};`);
+      out[`${name}:${m}`] = { ...p, wgsl: set(p.wgsl), vertex: set(p.vertex), fragment: set(p.fragment), least: [] };
+    }
+  }
+  return (all = out);
+}
+
+/** The share of the metres a pixel takes that a program made for draws seen from at least so many metres (web/shade)
+ * is chosen within, so that every pixel of the draw takes at least that many (they differ by a pixel's rounding). */
+const LEAST_SPARE = 0.99;
+/** Of program `name`, the one made for draws whose pixels take at least the most metres no more than `e`, the metres a
+ * pixel of the draw takes (`name` itself where none is). */
+export function seenFrom(name: string, e: number): string {
+  let best = name, most = 0;
+  for (const key of Object.keys(programs())) {
+    const [base, m] = key.split(':');
+    if (base === name && m !== undefined && +m <= e * LEAST_SPARE && +m > most) { best = key; most = +m; }
+  }
+  return best;
+}
 
 /** The bindings a program reads, by name of its GLSL global: the numbers of those that are uniform blocks, textures
  * and samplers. */

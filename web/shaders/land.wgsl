@@ -1,6 +1,9 @@
 // uses: draw.wgsl water.wgsl style.wgsl crag.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl cover_field.wgsl
+// least metres a pixel: 0.5 1 3
 // The live map in view: at each pixel of the screen the ground from its tiles and the state from the cells' table
-// (land.wgsl), in the view's colours.
+// (land.wgsl), in the view's colours. Made once more for draws whose pixels take at least 0.5 m, 1 m and 3 m
+// (web/shade, draw.wgsl `LEAST_E`): seen from afar, the detail of the ground and the plants that cannot show is
+// compiled out.
 
 // A channel shows as a line of at least `LINE_PX` css pixels once its discharge passes the discharge that shows in the
 // view (`land.time.w` times the metres a css pixel takes: tape/src/ground/channels.rs `SHOW_M`), as a map draws its
@@ -125,46 +128,53 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
 // (Legleiter and others 2004; from memory).
 const BED_FILM = 0.3;
 
-// The colour of a channel's water at spot `p` (`land_spots`), a reflectance in linear light: its bed, soaked bare
-// ground (washed sand and gravel: the flow takes the plants) under its film (`BED_FILM`), seen through running water as
-// deep as it is there (water.wgsl); snow lies on it as on standing liquid (colour.wgsl `colour`), and the true view
-// shades its bed as far as it shows.
-fn river_colour(p: Spot) -> Shaded {
+// The colour of a channel's water at spot `p` (`land_spots`) over its bed `g` (colour.wgsl `ground_for`), a reflectance
+// in linear light: its bed, soaked bare ground (washed sand and gravel: the flow takes the plants) under its film
+// (`BED_FILM`), seen through running water as deep as it is there (water.wgsl); snow lies on it as on standing liquid
+// (colour.wgsl `colour_on`), and the true view shades its bed as far as it shows.
+fn river_on(p: Spot, g: Ground) -> Shaded {
   let lit = light(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), p.slope);
-  let bed = BED_FILM * soil(ground_of(p, 0.0), 1.0, lit);
+  let bed = BED_FILM * soil(g, 1.0, lit);
   let ripple = ripples(p.at, p.e) * (1.0 - p.snow);
-  // In the style a channel's water is a lake's (style.wgsl `lake_seen`), lighter over its shallow banks.
+  // In the style a channel's water is coloured as deeper than it is (style.wgsl `river_seen`), lighter over its banks.
   var water = seen_through(bed, p.depth, ripple, RUNNING_ATTENUATION, DEEP_WATER);
-  if (styled()) { water = water_painted(bed, lake_seen(p.depth, 0.0, p.e, RIVER_RIM_M), ripple); }
+  if (styled()) { water = water_painted(bed, river_seen(p.depth, p.e), ripple); }
   let rgb = mix(water, SNOW, p.snow * 0.85);
   return Shaded(rgb, 1.0 + (lit - 1.0) * exp(-2.0 * RUNNING_ATTENUATION.g * p.depth), RIVER);
 }
+
+// The colours a pixel mixes, each over the last by the share of the pixel it covers: its ground (`LAYER_GROUND`); the
+// bars of a channel's bed, washed gravel, bare, as high over the water as it is deep (`LAYER_BARS`); where the edge of
+// standing liquid crosses the pixel, the other side of it (`LAYER_EDGE`); a channel's water (`LAYER_RIVER`). One loop
+// draws them all, so the colour's code (its ground, rock and stones) is compiled once.
+const LAYER_GROUND = 0; const LAYER_BARS = 1; const LAYER_EDGE = 2; const LAYER_RIVER = 3; const LAYERS = 4;
 
 @fragment fn fs(v: Varying) -> @location(0) vec4f {
   let at = earth.place.xy + v.uv * earth.place.zw;
   let cs = corners(at / land.map.x);
   let spots = land_spots(at, metres_a_pixel(v.uv));
-  var c = colour(spots.dry);
-  // The bars of a channel's bed: washed gravel, bare, as high over the water as it is deep.
-  if (spots.bars > 0.0) {
-    var bar = spots.dry;
-    bar.sand = 1.0;
-    bar.cover = vec4f(0.0);
-    bar.over = spots.wet.depth;
-    let b = colour(bar);
-    c = Shaded(mix(c.rgb, b.rgb, spots.bars), mix(c.m, b.m, spots.bars), c.kind);
-  }
-  // Where the edge of standing liquid crosses the pixel: the ground and the liquid by the share each covers.
-  if (spots.pool > 0.0 && spots.pool < 1.0) {
-    var other = spots.dry;
-    other.depth = select(FILM_M, 0.0, spots.dry.depth > 0.0);
-    let o = colour(other);
-    let k = select(1.0 - spots.pool, spots.pool, spots.dry.depth <= 0.0);
-    c = Shaded(mix(c.rgb, o.rgb, k), mix(c.m, o.m, k), select(c.kind, o.kind, k > 0.5));
-  }
-  if (spots.share > 0.0) {
-    let w = river_colour(spots.wet);
-    c = Shaded(mix(c.rgb, w.rgb, spots.share), mix(c.m, w.m, spots.share), select(c.kind, RIVER, spots.share > 0.5));
+  var c = Shaded(vec3f(0.0), 1.0, BARE);
+  for (var k = LAYER_GROUND; k < LAYERS; k++) {
+    var p = spots.dry;
+    var share = 1.0;
+    if (k == LAYER_BARS) {
+      share = spots.bars;
+      p.sand = 1.0;
+      p.cover = vec4f(0.0);
+      p.over = spots.wet.depth;
+    } else if (k == LAYER_EDGE) {
+      share = select(0.0, select(1.0 - spots.pool, spots.pool, spots.dry.depth <= 0.0), spots.pool > 0.0 && spots.pool < 1.0);
+      p.depth = select(FILM_M, 0.0, spots.dry.depth > 0.0);
+    } else if (k == LAYER_RIVER) {
+      share = spots.share;
+      p = spots.wet;
+    }
+    if (share <= 0.0) { continue; }
+    let running = k == LAYER_RIVER;
+    let g = ground_for(p, running);
+    var o: Shaded;
+    if (running) { o = river_on(p, g); } else { o = colour_on(p, g); }
+    c = Shaded(mix(c.rgb, o.rgb, share), mix(c.m, o.m, share), select(c.kind, o.kind, k != LAYER_BARS && share > 0.5));
   }
   // The true colour is the cells', and the bed's where it shows.
   let truth = mix(blended(TRUTH, cs).xyz, spots.dry.bed, spots.dry.rock);

@@ -65,55 +65,52 @@ laws that moves the world on purpose, in a commit of its own, and tell the owner
 
 ## 4. Where things stand
 
-On main, all gated (details in `review/roadmap.md` section 10):
-- **Fixed cells** of 2 km; the tree of cells is deleted. The fine picture is drawn per pixel from ground tiles and a
-  table of the cells' state.
-- **A worn ground** (`core/src/space/`): stream power erosion at the world's start, ways free of the grid, hard and
-  soft bed, loose ground per sample, a shelf under the shore. A cell's ground node takes the top `skin_m` (2 m) of
-  each sample's loose ground at most.
-- **Water on one network**: bodies of standing liquid are ponds of the terrain's samples, each at one level, full to
-  their pass at the world's start; channels drawn as smooth lines in their valleys.
-- **Rain that drifts** with the wind before it lands (`flow/air/seen.rs`), so every cell under raining air gets some.
-- **Plants from their numbers**: six starting kinds, a colour and a design per kind, leaves that turn.
-- **The Earth view's style**: water by depth, beaches, lakes and rivers as water with soft shores, bare bed as rock
-  where the loose ground is thin, the ground's grain.
-- **Speed**: a month of the flow takes a quarter fewer instructions than before this round; on the page the world
-  waits for the page to draw its frame, so the date shown is the world's.
+**Main** (and the live page) holds, all gated: fixed cells; the worn ground with bare bed on steep ground
+(`space/mantle.rs`); water on one network, bodies full at the start; rain that drifts; plants from their numbers; the
+Earth view's first style; the core's first speed pass; the page's world waiting for its frame.
 
-- **Steep slopes shed their loose ground** (`space/mantle.rs`): bare bed on ridges and steep walls.
+**Also on main since** (the work branch and main are the same commit; fast suite 209 passed, clippy clean, the slow
+tests of `tape/tests/ranges` pass):
+- **The new ground** (roadmap section 11): a range, hills and a plain on one island (`terrain::rise`), a coast drowned
+  after a low stand of 100 m, five makes of bed in folded layers (`space/strata.rs`); `SNAPSHOT_VERSION` 122. With it:
+  Flow's books for liquid that only passes through a node (`potential::relayed`), and test scenes that ask the kit
+  for their ground by a condition (`testkit::island_with`, `mild_with`).
+- **Plants close up**: six crown forms from the kinds' numbers (`web/src/form.ts`, `lib/crown.wgsl`), stands, autumn by
+  leaf life, herbs as a sward, snow buries a plant by its depth against its height, roots need loose ground.
+- **A crisp map**: shores as smooth lines (`tape/src/ground/shore.rs`), no water ending at a sample's edge, fine
+  relief fixed in the world (`lib/relief.wgsl`), bare bed with ragged edges (`loose_seen`), rivers' beds at their
+  flood's width with bars, lakes with shallows.
+- **The frame's cost**: one place for a pixel's colours, the land program made three times with the detail that cannot
+  show compiled out (`LEAST_E`), no frame when nothing changed. Far views cost about 90% of what they did before both
+  drawing packages; the 200 m, 50 m and 10 m bars on a phone still 140 to 165% (measured in software only).
 
-In work when this was written (each in its own worktree; see section 8 for what is merged):
-- **Plants seen close up**: crown forms from the kinds' numbers, colour variety, autumn reds, herbs as green ground.
-- **Climate bands on a small world**, an experiment the owner asked for on a branch (item 2 below).
-- **The land's large shape** (roadmap section 11): a range, hills and a plain on one island; a drowned coast; more
-  makes of bed in layers.
-- Waiting for the plants' package to end (same shader files): lake squares where channels enter a full lake, rivers
-  drawn at their flood bed's width, bare bed drawn smooth.
+**Known faults on the page** (seed 1, size 22):
+- Snow is a white smear with a grey border (its share is blended between the cells' centres); white specks along
+  some lake rims; a square notch where a channel joins two lakes; steps on lake shores at the 2 km bar on a phone
+  (texels of 31 m there: `VIEW_TILES` bites); shallow lakes are a pale grey-blue.
+- Close views cost more than before the drawing packages (the 200 m, 50 m and 10 m bars on a phone: 140 to 165%,
+  measured in software only). A real phone has not been measured: the owner's is the only one.
+
+**Helpers stopped:** the helpers' model reached its weekly limit; it resets on 16 November, 14:00 UTC. A helper that
+stopped keeps its work in its worktree and goes on when sent a message after that.
 
 ## 5. What to do next, in order
 
-1. Finish and judge the two packages above by their pictures.
-2. **More varied climate on small worlds** (the owner said go, as an experiment on a branch). The facts:
-   - The map's rows are spread evenly from `Config::lat_south` to `lat_north` (40° to 42.3° by default), whatever the
-     map's size in metres. Sunlight, the wind's turning and the starting temperatures read that latitude. So a wider
-     band is two numbers.
-   - But the air undoes it: the eddies even out a block of sqrt(`mix` × day) = 340 km each day (`daily::blocks`), the
-     mixing and the overturning on each link go by the true distance between air nodes (8 km on an island), so a
-     44 km island has one air temperature whatever the sun does at its two ends.
-   - The plan: (a) one run with a wide band and nothing else changed, to measure how much contrast survives (ground
-     temperature, rain and the kinds alive by row); (b) one number, the map's stretch = the band's true length over
-     the map's length, by which the air's sideways laws (the links' lengths in `wind::pushes`, the blocks' side) take
-     their distances, so the air behaves as over the band while the ground keeps its true metres; the rain's drift
-     stays in true metres; (c) the default band for small worlds chosen with the owner, the starting kinds checked
-     to live somewhere in it, the key numbers' references measured again; (d) wet and dry belts, if (b) does not
-     give them: the hard part, a design of its own (what the air beyond the map's edge is).
-   - Effort: (a) an hour; (a) to (c) one or two helper packages; (d) two or three more, uncertain.
-3. Open on the look (roadmap section 10): rivers pale beside lakes, marks where a channel leaves a pond, snow in
-   blocks close up, bare ground shaded in blocks of a sample's width.
-4. Open on the ground and the water: loose ground that settles during a run is not bounded by the `skin_m` rule; a
-   closed basin by the sea starts full and falls for decades; a tile costs 7 to 10 ms.
-5. Open on the speed: the parts' solves and the monthly full state (both need a design, see the roadmap).
-6. Later: seasons blended on the page, tapes through the tile path, a law for mud and sand, animals back in view.
+1. Ask the owner how the close views run on their phone; cut their cost (the plant marks in `cover.wgsl`, the near
+   plant field and the rock face at 200 m) and mend the page's known faults above.
+2. **Climate bands** (branch `experiment/climate-bands`, section 8): the owner wants it on main with three modes
+   (Wide, Mild, None). Its helper stopped before the gate and the slow tests of its last three commits: run them,
+   merge the branch into the work branch, look at a Wide island on the page.
+3. **Ice, snow and the open sea** (the owner: "the straight ice line (very ugly !!)"; "no blur, no noise, no
+   pixellisation, like the shore work"): the frozen low ground follows the air nodes (8 km); make its edge a smooth
+   field's line, floes at the margin, snow by the ground's fine relief; the shelf now lies 110 m under 0 m where the
+   page assumes 10 m; the makes of bed vary per sample (125 m) where the page draws the bed's colour per cell.
+4. **The sorted start** (branch `worktree-agent-a13df44719d5d1f2e`, local only unless the owner says push): measure
+   it on a Wide island; it needs places that differ.
+5. **The cover's law** (roadmap, last entry): a slot that gives way, seedlings under a canopy, the loose depth roots
+   need. Probably the largest gain in plant variety.
+6. Then: the exact solve of the surface's step by pieces; a law for the mean wind's momentum (wet and dry sides);
+   channels that lay down their load (plains, marsh, deltas); ice that cuts valleys.
 
 ## 6. The live world for the owner
 
@@ -136,21 +133,20 @@ browser draws in software, so its frames per second mean nothing; the world's pa
 
 ## 7. Choices the owner should know of
 
-- **Two references were moved this round**, both told to the owner, neither answered yet: river cells with the
-  rain's drift (309 -> 214), then all nine with the bodies' start. Each is one commit and can be reverted alone.
-- **The page's world waits for its frame.** In a browser without a graphics card the 50 m view runs at half the pace;
-  on a real card it should not. If the owner finds close views slow, let the world run up to a second ahead
-  (`waiting()` in `web/src/worker.ts`).
-- **The shapes of animals** ("From above" or "Angled") and **a law for mud and sand** are still open from before.
+- **References moved this round**, told to the owner: river cells with the rain's drift, then all nine with the
+  bodies' start. Each is one commit.
+- **A world is alone or in the planet's air.** "None" is today's closed island and keeps every reference. Wide and
+  Mild open the island to a strip of the planet run once: drier (0.5 m of rain in the middle of a Wide island, none in
+  its far north) and its air's gases pulled to the lifeless strip's.
+- **The plateau test** states the melting rule on the balance itself; the long step is backward Euler and is off
+  against short steps (laws.md 1.1 says by how much).
+- **The page's world waits for its frame**, so the frame's cost is the world's pace.
 - Animals are out of every run and test for now, by the owner's word.
 
 ## 8. Branches kept for the next session
 
-- `experiment/climate-bands` (the owner's word: push it): an island's rows between two latitudes (`ew run --band S,N`,
-  the page's `?band=S,N`), the air's stretch (`Config::stretch`, a switch with default 1, bit for bit with main), and,
-  in work, the island in the planet's air (a strip of the planet run once as the reference climate, open edges, the
-  mean wind through the box). First numbers: band 30 to 55 keeps a third of a globe's contrast in the year's mean
-  (6 K of 19 K), rain falls five times from south to north, a band past 58° freezes while the box is closed, plants do
-  not yet split by row. Not for main until the owner has seen it work; then the stretch becomes a derived number.
-
-Everything else of this session that passed its gate is on main.
+- `experiment/climate-bands` (pushed, tip 24cf4107): the band (`ew run --band S,N`), the page's three climates, the
+  stretch derived, the strip of the planet made once, open edges. Merged with the work branch at 51ee725c. Not gated
+  at its tip.
+- `worktree-agent-a13df44719d5d1f2e` (local, tip 6461f84f): the sorted start (`worldgen/src/life/nursery/`) and the
+  cover's month reading one view (`cover::Around`, bit for bit). Gated at its tip (210 passed).

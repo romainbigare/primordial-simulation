@@ -160,6 +160,7 @@ fn stand_share(u: f32, s: f32) -> f32 {
 // stands' edges) where its stands are, the rest's elsewhere; their mean where a stand takes less than a pixel.
 fn in_stands(at: vec2f, e: f32, f: vec4f, first: i32, m: f32) -> vec3f {
   let mean = f.rgb / f.a;
+  if (least_e() >= 2.0 * STAND_CALM_E) { return mean; }
   let shows = shows_at(m, e) * (1.0 - ease(STAND_CALM_E, 2.0 * STAND_CALM_E, e));
   if (shows <= 0.0) { return mean; }
   let one = field_at(at, first, 0.0);
@@ -308,9 +309,12 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   // Under the trees: the sward and the low lattices one by one near, as one layer far (`LOW_FAR_E`).
   let far = ease(LOW_FAR_E, LOW_FAR_FULL_E, e);
   var dst = vec4f(0.0);
-  if (far < 1.0) {
+  if (least_e() < LOW_FAR_FULL_E && far < 1.0) {
     dst = sward(at, e, b, trees.a, thick, hold.w);
-    for (var l = 0; l < STANDS; l++) { dst = lattice_field(at, e, l, field_smooth(at, l), b, thick, hold[l], dst); }
+    // A lattice no square holds, or whose marks show in full, adds nothing: its field is not read.
+    for (var l = 0; l < STANDS; l++) {
+      if (cover_look.sides[l] > 0.0 && cover_look.shown[l] < 1.0) { dst = lattice_field(at, e, l, field_smooth(at, l), b, thick, hold[l], dst); }
+    }
   }
   if (far > 0.0) { dst = mix(dst, field_smooth(at, LOW_LAYER) * min(hold.w * thick, 1.0), far); }
   dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);

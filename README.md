@@ -25,7 +25,10 @@ Speed: `ew run --size 128 --years 1000` on 4 cores: 2.1 s per year, measured ove
 A world's cells stay those as built for its whole life, whatever the zoom. Zoom is a matter of
 drawing only: the map draws every zoom from the cells (below). The page shows the date, the months per second the world
 reaches and the cells. While the world plays, the worker posts its state to the page at most four times a second
-(`web/src/worker.ts` `FRAME_MS`): each frame costs the page a repaint of the map.
+(`web/src/worker.ts` `FRAME_MS`): each frame costs the page a repaint of the map. The map is drawn anew only when what
+it shows changes: the camera, the view drawn, a new date of the world (a frame of the date shown, as after a pause or
+with the things of another window, brings its things and no repaint), a tile of the ground that shows in the view (one
+ahead of the view, or under finer tiles kept, waits for a pan).
 
 The map is drawn on the graphics card at the screen's own pixels: with WebGPU where the browser has it, else with
 WebGL2. The shaders are written once in WGSL (`web/shaders/`); the build (`npm run build`) checks them and writes them
@@ -48,7 +51,11 @@ for the inspect panel. Avatars, the lines of latitude, the outlines and the scal
 While a frame takes the card longer than 16 ms, the map is drawn at fewer pixels (down to a quarter along each side)
 and stretched onto the screen, the same picture, softer; once the view rests it is drawn again at the screen's own
 pixels, a tile a frame, and shown when whole. The page never waits for the card: what it reads back (the classes, the
-colours under the avatars) comes a frame or so later.
+colours under the avatars) comes a frame or so later. Seen from afar, most of the drawing's detail is smaller than a
+pixel and shows nothing: the build makes the live map's program once more for draws whose pixels take at least 0.5 m,
+1 m and 3 m, with that detail compiled out (`web/shade`, `LEAST_E` in `web/shaders/lib/draw.wgsl`), and the page draws
+with the one made for the largest no more than its pixels take (`web/src/gpu.ts` `seenFrom`). The picture is the same
+to the bit; the card runs and holds less code.
 
 The live viewer draws every zoom from two things (`web/src/land.ts`, `web/shaders/land.wgsl`). **The ground's tiles**
 (`tape::Ground`) never change: each holds 256 x 256 texels of a depth, from the depth at which one tile holds the

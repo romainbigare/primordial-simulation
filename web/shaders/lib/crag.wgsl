@@ -63,11 +63,15 @@ fn crack(n: f32, width: f32) -> f32 { return 1.0 - smoothstep(0.0, width, abs(n)
 fn rock_face(bed: vec3f, z: f32, at: vec2f, steep: f32, e: f32, shade: f32) -> vec3f {
   let grey = mix(bed, vec3f(dot(bed, LUMA)), ROCK_GREY) * ROCK_TONE;
   var tone = (1.0 + MOTTLE * noise(at / MOTTLE_M, 57).x) * (1.0 + (ROCK_RELIEF - 1.0) * (shade - 1.0));
-  let slab_n = noise(at / SLAB_M, 58).x;
-  let slabs = (1.0 + SLAB_TONES * noise(at / SLAB_M + 17.0, 59).x - CRACK_DARK * crack(slab_n, CRACK_W));
+  // The slabs and their cracks, read only where they show.
+  let slab_shows = shows_at(SLAB_M * CRACK_W * 4.0, e);
+  var slabs = 1.0;
+  if (slab_shows > 0.0) { slabs = 1.0 + SLAB_TONES * noise(at / SLAB_M + 17.0, 59).x - CRACK_DARK * crack(noise(at / SLAB_M, 58).x, CRACK_W); }
   let cliff = cliff_of(steep);
   var face = 1.0;
-  if (cliff > 0.0) {
+  // A face is no less steep than `CLIFF_FROM`, so its pixels span at least that much height: its strata are gone where
+  // that is 0.3 of their spacing, and its cracks where they are under a pixel (draw.wgsl `LEAST_E`).
+  if (cliff > 0.0 && CLIFF_FROM * least_e() < 0.3 * STRATA_M) {
     let h = z + STRATA_WOBBLE * noise(at / STRATA_WAVE_M, 53).x;
     let whole = ease(BREAKS - 0.1, BREAKS + 0.1, noise(at / BREAK_M, 60).x);
     let span = steep * e;
@@ -81,7 +85,7 @@ fn rock_face(bed: vec3f, z: f32, at: vec2f, steep: f32, e: f32, shade: f32) -> v
     }
     face *= 1.0 - CRACK_DARK * crack(noise(at / FACE_CRACK_M, 61).x, CRACK_W) * shows_at(FACE_CRACK_M * CRACK_W * 4.0, e);
   }
-  tone *= mix(mix(1.0, slabs, shows_at(SLAB_M * CRACK_W * 4.0, e)), face, cliff);
+  tone *= mix(mix(1.0, slabs, slab_shows), face, cliff);
   return grey * max(tone, 0.0);
 }
 

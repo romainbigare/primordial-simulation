@@ -40,8 +40,22 @@ fn ease(a: f32, b: f32, x: f32) -> f32 {
   return t * t * (3.0 - 2.0 * t);
 }
 
+// Every program starts with `const LEAST_E`, the least metres a pixel takes in its draws (web/shade): 0, or for a
+// program made once more for draws seen from farther, the metres it is made for (land.wgsl). Detail that cannot show
+// at that size of a pixel is compiled out of it: the picture is the same, and the GPU runs and holds less code. It is
+// read through `least_e`, so the translation to GLSL keeps it by name and the programs made for each size differ in
+// that line alone (web/shade, web/src/gpu.ts `programs`).
+fn least_e() -> f32 { return LEAST_E; }
+
+// Whether detail `size` m across shows at no pixel of the draws of this program (`shows_at` is 0 from 0.75 of its size
+// a pixel on).
+fn unseen(size: f32) -> bool { return 0.75 * size <= least_e(); }
+
 // The share of detail `size` m across that shows at `e` m a pixel: none below a pixel.
-fn shows_at(size: f32, e: f32) -> f32 { return 1.0 - ease(0.5 * size, 1.5 * size, 2.0 * e); }
+fn shows_at(size: f32, e: f32) -> f32 {
+  if (unseen(size)) { return 0.0; }
+  return 1.0 - ease(0.5 * size, 1.5 * size, 2.0 * e);
+}
 
 // A random word of the grid cell c and the stream k, fixed in the world (lowbias32, Wellons 2018).
 fn lowbias(c: vec2i, k: i32) -> u32 {

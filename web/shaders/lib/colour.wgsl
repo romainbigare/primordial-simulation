@@ -128,9 +128,13 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   if (styled()) {
     let thin = 1.0 - ease(0.0, SCREE_LOOSE_M, p.loose);
     let scree = max(SCREE * ease(SCREE_FROM, CLIFF_FROM, steep) * thin, STONES_ON_BED * p.rock) * (1.0 - p.sand);
-    let rubble = stones(p.at, p.e, scree * (1.0 - plants), SCREE_STONE_M, p.bed, 61);
-    let pebbles = stones(p.at, p.e, select(0.0, IN_CHANNEL, p.stone > 0.0) * (1.0 - p.sand), max(p.stone, PEBBLE_M), p.bed, 62);
-    g.rgb = mix(mix(g.rgb, rubble.rgb / max(rubble.a, 1e-4), rubble.a), pebbles.rgb / max(pebbles.a, 1e-4), pebbles.a);
+    let channel = select(0.0, IN_CHANNEL, p.stone > 0.0) * (1.0 - p.sand);
+    // The scree's stones, then the channel's, from one place in the code.
+    for (var k = 0; k < 2; k++) {
+      let on = k == 1;
+      let st = stones(p.at, p.e, select(scree * (1.0 - plants), channel, on), select(SCREE_STONE_M, max(p.stone, PEBBLE_M), on), p.bed, 61 + k);
+      g.rgb = mix(g.rgb, st.rgb / max(st.a, 1e-4), st.a);
+    }
   }
   g.rgb = mix(g.rgb, SNOW, snow);
   if (snow > 0.5) { g.kind = ICE; }
@@ -163,23 +167,44 @@ fn light(x: f32, slope: f32) -> f32 {
   return clamp(x, SKY_LIGHT * 0.5 * (1.0 + 1.0 / sqrt(1.0 + steep * steep)), LIT_MOST);
 }
 
-fn colour(p: Spot) -> Shaded {
+// Whether the colour of spot p reads its ground: always over the liquid; under it, where any of its bed shows through
+// (no bed shows through water deeper than shows any of it).
+fn reads_ground(p: Spot) -> bool {
+  if (p.depth <= 0.0) { return true; }
+  if (styled()) { return exp(-2.0 * CLEAR_ATTENUATION.b * p.depth) > SHOWS; }
+  return through(p.depth).b > SHOWS;
+}
+
+// The ground spot p's colour reads (`ground_of`), the bed of running water where `running` (always read): with its
+// snow over the liquid, without it under the liquid (frozen liquid lies on the surface); black where it is not read.
+// Each pixel's colours read it at one place in the code (land.wgsl `fs`), so its rock and stones are compiled once.
+fn ground_for(p: Spot, running: bool) -> Ground {
+  if (!running && !reads_ground(p)) { return Ground(vec3f(0.0), 1.0, BARE); }
+  return ground_of(p, select(p.snow, 0.0, p.depth > 0.0 || running));
+}
+
+// The light on spot p over the light on flat ground, in the view drawn (`light`, in the style `relief_light`).
+fn lit_at(p: Spot) -> f32 {
   let x = 1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow);
-  let lit = select(light(x, p.slope), relief_light(x), styled());
-  // Under the liquid: its bed, soaked and without snow (frozen liquid lies on the surface, calm), seen through it,
-  // flat: at no depth it is the soaked ground with its film of liquid.
+  return select(light(x, p.slope), relief_light(x), styled());
+}
+
+fn colour(p: Spot) -> Shaded { return colour_on(p, ground_for(p, false)); }
+
+// The colour of spot p over its ground g (`ground_for`), lit.
+fn colour_on(p: Spot, g: Ground) -> Shaded {
+  let lit = lit_at(p);
+  // Under the liquid: its bed, soaked, seen through it, flat: at no depth it is the soaked ground with its film of
+  // liquid.
   if (p.depth > 0.0) {
-    // No bed shows through water deeper than shows any of it.
-    var bed = vec3f(0.0);
+    let bed = soil(g, 1.0, lit);
     let ripple = ripples(p.at, p.e) * (1.0 - p.snow);
     var water: vec3f;
     if (styled()) {
       // The style: clear water over a pale bed, deepening to the open water, foam at its edge (style.wgsl).
-      if (exp(-2.0 * CLEAR_ATTENUATION.b * p.depth) > SHOWS) { bed = soil(ground_of(p, 0.0), 1.0, lit); }
       let seen = mix(lake_seen(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M), p.depth, p.sea);
       water = mix(water_painted(bed, seen, ripple), FOAM_RGB, foam(p.depth, p.slope / earth.look.x, p.e));
     } else {
-      if (through(p.depth).b > SHOWS) { bed = soil(ground_of(p, 0.0), 1.0, lit); }
       water = water_over(bed, p.depth, ripple);
     }
     let rgb = mix(water, SNOW, p.snow * 0.85);
@@ -190,7 +215,6 @@ fn colour(p: Spot) -> Shaded {
   }
   // Over it: the ground, wet by how soaked it is, a film of liquid shining on its bare part once it is near soaked
   // (mud).
-  let g = ground_of(p, p.snow);
   let s = soaked(p);
   let film = ease(FILM_FROM, 1.0, s) * g.bare;
   var rgb = soil(g, s, lit);

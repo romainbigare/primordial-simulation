@@ -131,7 +131,7 @@ function setFrame(f: number): void {
   repaint();
 }
 
-/** Draw frame `frame` in the view shown; the map's classes come back from the GPU, and with them the cover. */
+/** Draw frame `frame` in the view shown; the map's classes come back from the GPU for the inspector. */
 function repaint(): void {
   if (!world) return;
   const w = world, f = frame, squares = mapFields(w, f), look = mapLook(w);
@@ -142,7 +142,7 @@ function repaint(): void {
   map.mapClasses().then(c => {
     if (world !== w) return;
     cls = c;
-    map.invalidate(); inspect();
+    inspect();
   });
   inspect();
 }
@@ -291,9 +291,9 @@ async function startLive(): Promise<void> {
     ready: () => newWorld(),
     world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; avatars.set(null, w.meta.cell_m); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
     things: data => { if (live === l && world) avatars.set(data, world.meta.cell_m); },
-    frame: stats => {
+    frame: (stats, changed) => {
       if (live !== l) return;
-      setFrame(0);
+      if (changed) setFrame(0);
       showStats(stats);
     },
     error: text => { playing = false; syncUi(); say(text); },
@@ -312,7 +312,7 @@ function viewSoon(v: View): void {
 function landOf(w: World): Land | null {
   const m = w.meta;
   if (!coreWasm || !m.tiles || !m.laws || !m.samples || m.square_depth === undefined) return null;
-  const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), m.seed, m.w, [m.lat_south, m.lat_north], { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, () => { map.invalidate(); if (live) showStats(live.stats); }, say);
+  const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), m.seed, m.w, [m.lat_south, m.lat_north], { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, shown => { if (shown) map.invalidate(); if (live) showStats(live.stats); }, say);
   return new Land(tiles, m.laws, m.samples);
 }
 /** From `THINGS_PX` pixels a square on, the core is asked for the things of the window in view, to draw them one by one. */
