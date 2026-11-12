@@ -282,7 +282,9 @@ reaches, 1.2), a lift is paid by the node it enters (the air, for a gas going up
 into), a column that rises as it fills pays for it, and the potential energy the world's
 matter gained is one number of the store (`Store::lifted`), the change of that function. Within a month's Flow the later
 air steps and the liquid read the heat before the month's lifts and falls are paid. The other laws lift a gas into
-the air from its cell's head to its air node's mean ground by the same rule (`World::lift`); a ground node that reacts
+the air from its cell's head to its air node's mean ground by the same rule (`World::lift`), between the heads the
+potential energy found at Flow's last booking (`Scratch::lift_at`: the matter's heights after Flow moved it, by the
+stack the potential energy reads, not Flow's own surface, whose slow ground is found again only at its refresh); a ground node that reacts
 (Change) pays what its stack and the air over it gain (`flow::gain`: a head that rises lifts its air node's matter by
 the cell's share of the node's area), and its gas leaves from its head (`change::booking`). **Life and its ground**:
 life's matter counts with its ground node, as Flow books it. What life gives its ground or takes from it (remains, shed
