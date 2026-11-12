@@ -99,11 +99,14 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
         d.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: x });
     }
     if let Some(p) = parts.as_ref().filter(|_| kg > 0.0) {
+        let e = p.content(chem);
+        let held = d.cover(i).content(&e);
         for (s, g) in grazed.iter().zip(&bulk).map(|(g, x)| g + x).enumerate().filter(|e| e.1 > 0.0) {
             b.e += d.cover(i).take(chem, p, bc.subs()[s], g);
             b.store[s] += g;
         }
         d.counts.cover_lost[TAKEN as usize] += kg;
+        d.counts.cover_budget[crate::cover::BODIES] += d.cover(i).content(&e) - held;
         if bulk.iter().any(|&x| x > 0.0) {
             body::to_ground(w, d, b, &bulk);
         }

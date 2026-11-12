@@ -4,6 +4,7 @@
 
 use super::grow::{Books, Slot};
 use super::{dec, Cover, Parts, FIX, FIX_OFF, FUEL, MATTER, NP, SEED, SLOTS, STORE, WALL, WALLS};
+use crate::body::WET_TISSUE;
 use crate::chem::Reaction;
 use crate::rng::{Purpose, Rng};
 use crate::units::MAX_SUBSTANCES;
@@ -12,6 +13,15 @@ use crate::World;
 /// The units of `rx` per unit of substance `k` among its inputs (none if it takes none).
 pub(super) fn per_input(rx: &Reaction, k: usize) -> Option<f64> {
     rx.inputs.iter().find(|q| q.0 as usize == k).map(|q| q.1 as f64)
+}
+
+/// The energy one kg of living cover costs to build, J: per kg of its body matter (`Cover::living`) the fuel its
+/// conversion (`Chemistry::build`) takes, as burning it would free it, and the work of building, `c_copy`.
+pub(super) fn living_cost(chem: &crate::chem::Chemistry, ph: &crate::Physics, p: &Parts) -> f64 {
+    let Some(bl) = chem.build.as_ref() else { return ph.c_copy * (1.0 - WET_TISSUE) };
+    let burn = &chem.reactions[p.burn];
+    let fuel = per_input(bl, p.sub[FUEL]).unwrap_or(0.0) / p.mm(chem)[MATTER] / bl.outputs[0].1 as f64;
+    (fuel * -chem.dh(p.burn) / per_input(burn, p.sub[FUEL]).unwrap_or(1.0) + ph.c_copy) * (1.0 - WET_TISSUE)
 }
 
 /// Slot `x` builds what its fuel over its reserve (`STORE`) and the minerals of its ground (`ground`, mol, shared out
@@ -99,6 +109,7 @@ pub(super) fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&
             }
         }
         let genes = super::mutate(&g, ph.cover_mut, &mut r);
+        b.budget[super::budget::SEEDS] -= super::budget::held(&p.content(chem), &mol);
         super::seed::send(c, x, (mol, heat), genes, (i, lands));
     }
 }

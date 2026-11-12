@@ -36,6 +36,9 @@ pub struct Counters {
     /// Cover that died, kg, by the cause a body would die of (`body::LACK` to `AGE`)
     #[serde(skip)]
     pub cover_lost: [f64; 6],
+    /// The flows of the cover's budget, J, + into the cover (`cover::BUDGET`)
+    #[serde(skip)]
+    pub cover_budget: [f64; crate::cover::BUDGET.len()],
     /// Heat that crossed into the map at its open north, south, east and west edges since the start, J: sensible and
     /// latent
     pub edges: [f64; 4],
@@ -46,13 +49,14 @@ impl Counters {
     /// cannot be left out. A chunk counts per cell in its cells (`Cell::crossings`, `Cell::pushed`), so its `traffic`
     /// stays empty (checked in debug builds).
     pub(crate) fn add(&mut self, c: &mut Counters) {
-        let Counters { traffic, decisions, greedy, body_batches, busiest_share, updates, clamped_heat, parts, rounded, forms, cover_lost, edges } = std::mem::take(c);
+        let Counters { traffic, decisions, greedy, body_batches, busiest_share, updates, clamped_heat, parts, rounded, forms, cover_lost, cover_budget, edges } = std::mem::take(c);
         debug_assert!(traffic.is_empty(), "a chunk counted per cell");
         (self.updates, self.decisions, self.greedy) = (self.updates + updates, self.decisions + decisions, self.greedy + greedy);
         (self.body_batches, self.busiest_share, self.clamped_heat) = (self.body_batches + body_batches, self.busiest_share + busiest_share, self.clamped_heat + clamped_heat);
         self.add_rounded(rounded);
         self.forms.absorb(forms);
         self.cover_lost.iter_mut().zip(cover_lost).for_each(|(a, b)| *a += b);
+        self.cover_budget.iter_mut().zip(cover_budget).for_each(|(a, b)| *a += b);
         self.edges.iter_mut().zip(edges).for_each(|(a, b)| *a += b);
         let p = &mut self.parts;
         (p.formed, p.to_parts, p.from_parts, p.edged) = (p.formed + parts.formed, p.to_parts + parts.to_parts, p.from_parts + parts.from_parts, p.edged + parts.edged);
@@ -73,6 +77,7 @@ pub struct Taken {
     pub parts: bond::Tally,
     pub forms: crate::choose::Forms,
     pub cover_lost: [f64; 6],
+    pub cover_budget: [f64; crate::cover::BUDGET.len()],
 }
 
 /// The whole state of a world: what `step` advances, and what a snapshot saves.
@@ -153,12 +158,12 @@ impl World {
     pub fn drain_events(&mut self) -> Vec<Event> {
         std::mem::take(&mut self.events)
     }
-    /// Hand the shell the yearly counts (`Counters::decisions`, `greedy`, `body_batches`, `busiest_share`, `parts`, `cover_lost`),
+    /// Hand the shell the yearly counts (`Counters::decisions`, `greedy`, `body_batches`, `busiest_share`, `parts`, `cover_lost`, `cover_budget`),
     /// and start them again.
     pub fn take_counters(&mut self) -> Taken {
         let c = &mut self.counts;
         let (decisions, greedy, body_batches, busiest_share) = (std::mem::take(&mut c.decisions), std::mem::take(&mut c.greedy), std::mem::take(&mut c.body_batches), std::mem::take(&mut c.busiest_share));
-        Taken { decisions, greedy, body_batches, busiest_share, parts: std::mem::take(&mut c.parts), forms: std::mem::take(&mut c.forms), cover_lost: std::mem::take(&mut c.cover_lost) }
+        Taken { decisions, greedy, body_batches, busiest_share, parts: std::mem::take(&mut c.parts), forms: std::mem::take(&mut c.forms), cover_lost: std::mem::take(&mut c.cover_lost), cover_budget: std::mem::take(&mut c.cover_budget) }
     }
     pub fn days_per_year(&self) -> u64 {
         self.cfg.calendar().days(self.cfg.calendar().year)

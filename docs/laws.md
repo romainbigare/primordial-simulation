@@ -1091,13 +1091,22 @@ seeds fill it:
   (`Physics::repair`), its activity and the burning's pace at T (seasons come from temperature only); and its
   conducting walls, alive in every season, `c_sapwood` per kg a day at the burning's pace: by the pipe model their
   cross-section goes with the capture area they feed, `huber` m² a m², as tall as its plants (Shinozaki and others
-  1964), at most its walls (`stand::sapwood`), so a tall plant pays for its height every month. The share unpaid
+  1964), at most its walls (`stand::sapwood`), so a tall plant pays for its height every month; and its fine roots,
+  as many kg of living cover as the key liquid it drew in the month needs at `root_uptake` mol a kg a s (the minerals
+  come in that liquid by mass flow; Barber 1995), which breathe `c_basal` a kg a day at the burning's pace and are
+  built anew `root_turnover` times a year at what a kg of living cover costs to build (`build::living_cost`; Gill and
+  Jackson 2000). The share unpaid
   dies (`SPENT`). **Wear**: the share 1 − e^−wear dies (`AGE`), wear its upkeep at an activity of at least `dormant`
   over (living cover × `e_life` × 10^`REPAIR`), as bodies wear (6.7). **Frost**: its `FROST` gene is the limit it
   reaches hardened, when dormant; growing tissue loses that hardiness and freezes at its key liquid's melting point,
   the limit at activity a the melting point less (melting point − `FROST`) × (1 − a) (`cover::frozen`); below it the
   share min(1, (limit − T) / `frost_k`) dies (`PHASE`). Hardiness is the kind's own and paid for in every month
   (`c_firm`, above), not given by dormancy (Levitt 1980; Sakai and Larcher 1987).
+- **Budget**: what the cover's parts hold as fuel (`Parts::content`: the fuel what its burning frees, matter and walls
+  the fuel their conversions take) changes only by the flows its law books where it moves them
+  (`Counters::cover_budget`, `cover::BUDGET`): the light reaction's fuel, each part of the upkeep, the work of
+  building, what it sheds, what dies, the fuel its roots give its ground, seeds out and in, what bodies take or break,
+  what is placed, and rounding. The tape records them each year.
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
   out as kinds build, tallest first) build body matter and walls (10^`WALLS` kg per kg of matter, times m / (m +
   `wall_kg`) for a plant of m kg: a seedling is mostly leaf and the share of stem grows with a plant's size, Poorter
@@ -1114,7 +1123,11 @@ seeds fill it:
   in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step ×
   `cover_mut`), of body matter first and then walls (an embryo and its store); all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
   its layer (`math::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
-  where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005). Each seed carries its own
+  where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005). By the same marginal rule
+  run backwards a full slot also sheds the layers of its canopy that do not pay (`grow::shed`): in its patch its light
+  falls as e^-z with the capture area z above a leaf, so what a kg more would store at depth z is its bottom's times
+  e^(y − z), y its whole depth; its living cover below the depth where that falls to its upkeep a kg goes to its
+  remains, its walls and plants stay. Each seed carries its own
   store, fuel at its `STORE` gene per kg of it, from the slot's fuel: a slot short of fuel makes fewer seeds, not
   lighter ones. When every cell has had its month the seeds land (`cover::land`), cell by cell in the order made (the
   potential energy of the life that left a cell's head and came to it is booked once for each cell and way,

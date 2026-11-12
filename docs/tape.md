@@ -187,6 +187,7 @@ a lot part by part at places keyed by its id and each part's index, and is not r
 | `bodies` | | bodies (nodes and individuals) |
 | `cover_slots`, `cover_kg` | , kg | slots of cover in the world (`cover::SLOTS` a cell at most), and its mass |
 | `cover_died_<cause>` | kg/yr | cover that died in the year by cause: `spent` (upkeep unpaid), `age`, `phase` (frost), `taken` (eaten), `broken` (by movers) |
+| `cover_budget_<flow>` | J/yr | the flows of the cover's budget in the year, + into the cover (`cover::BUDGET`): what its parts hold as fuel changes by their sum. `stored` (light reaction); the upkeep's parts `basal`, `capacity`, `firmness`, `leaves`, `sapwood`, `root_breath`, `root_renew`; `building` (its work and fixing); `shed`, `died`, `exuded` (fuel its roots give the ground), `seeds` (out and in), `bodies` (eaten or broken), `placed`, `rounded` |
 | `animal_members`, `animal_nodes` | | members of the bodies; nodes |
 | `cover_median`, `cover_max` | kg/m² | the cover's mass on a land cell: median and largest |
 | `body_mass` | t | mass of all bodies |
