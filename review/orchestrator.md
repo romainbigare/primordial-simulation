@@ -118,16 +118,27 @@ where a real one slows its light reaction (to mend with item 4); small dark-red 
 bar; blocky dark patches at the 2 km bar; a lake of the far north drawn with straight edges on the fitted view; old
 stands whose crowns are wider than a mark reaches are filled by the field's canopy.
 
-**In work:** rivers and stones (branch `wip/drawing`, then the rivers' helper's worktree: a meander belt built with the
-tiles, water by its depth, bars, one maker of a stone, signs of flow with a cheap pre-made animation; mouths and the
-change between the far line and the near bed still to do). The sorted start (`wip/cover-nursery-g2`): built on the
-law, 2.5 to 4.5 s in the browser; a world from it is steady too but heavier and keeps a covered north that the random
-start never reaches (its hardy genes are out of mutation's reach in 300 years): the owner decides whether it becomes
-the start of every world.
+**Rivers and stones are on main** (`tape/src/ground/{belt,bends,wander,frame,lines,mend,channels,shore,stems}.rs`,
+`web/shaders/lib/{river,stone,flow}.wgsl`): a meander belt built with the tiles, a line that wanders and grows with
+its discharge, water by its depth, bars, one maker of a stone (corners and sides, four sizes, buried by snow), signs
+of flow that slide six steps a second and ask for a frame only while a river is in view, a far line that fades into
+the true bed, mouths that reach their lake or sea with a fan. The tiles' second texture holds four numbers a texel
+(56 layers: 61 MB).
+
+**Known faults of the rivers (in work, the rivers' helper, round four):** a lattice of thin white lines in fast water
+close up; small side streams and one last reach before a mouth run dead straight; crowns stand on a mouth's fan and
+shallow water; thin dark straight strokes and faint straight outlines on land near rivers at the 200 m bar; a thin
+white straight line on a ridge's snow; ticks where a small stream meets a far line; the 200 m bar on a phone cost 31
+to 35% more than before the rivers (software, one quiet pair; the guard asked of the helper: +10% there, +5% at the
+other bars, measured by CPU time). Small plants' marks show as little grids of yellow dots on bare ground close up.
+
+**In work:** the rivers' faults above (branch `wip/rivers`). The sorted start as the start of every world (the cover's
+helper, package H, on `wip/cover-nursery-g2`'s work: 2.5 to 4.5 s in the browser; a world from it is steady, heavier,
+and keeps a covered north that the random start never reaches).
 
 ## 5. What to do next, in order
 
-1. **Rivers and stones** to main when the pictures pass (merge with the page's plants).
+1. **The rivers' faults** (round four) to main when the pictures pass and the cost guard holds.
 2. **The sorted start** as the start of every world (the owner's word: yes; in work: it replaces the random start, no
    switch stays on main; the key numbers' references move with it).
    Not run since the cover's law, by the owner's word "skip these slow tests just this once": the two slow learning
@@ -181,7 +192,7 @@ The owner's word: no work lives only on one machine. Push a helper's branch as s
 - `experiment/climate-bands`: merged to main; kept as it was pushed.
 - `experiment/sorted-start`: the sorted start (`worldgen/src/life/nursery/`). Its first commit, the cover's month
   reading one view (`cover::Around`), is on the work branch.
-- `wip/drawing`, `wip/cover-law`, `wip/cover-costs`, `wip/page-cover` (all merged), `wip/cover-nursery-g2` (the
+- `wip/drawing`, `wip/cover-law`, `wip/cover-costs`, `wip/page-cover`, `wip/rivers` (all merged), `wip/cover-nursery-g2` (the
   sorted start, not merged): the helpers' work, pushed as it grows.
 - `tools/checks`: the check scripts and probes of this work (`tools/check/paused.js`, `phone.js`, `inspect.js`; the
   frame's bench in `tools/frame/`; the climate's and the ground's probes). Study files: never on main.
