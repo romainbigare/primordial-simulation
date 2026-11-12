@@ -41,29 +41,29 @@ const PPM: f64 = 1e6;
 const MM: f64 = 1e3;
 
 /// Ground temperature on land, K (series `t_land`), in the reference runs.
-const T_LAND: f64 = 287.91;
+const T_LAND: f64 = 288.12;
 /// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the reference runs.
-const SWING: f64 = 14.44;
+const SWING: f64 = 13.97;
 /// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs.
-const RAIN_LAND: f64 = 2.827e-3;
+const RAIN_LAND: f64 = 2.887e-3;
 /// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs: it keeps the world near itself;
 /// `EARTH_ABSORBER_PPM` holds it near Earth's.
-const ABSORBER_PPM: f64 = 245.0;
+const ABSORBER_PPM: f64 = 291.5;
 /// Dry land cells that are rivers (`rivers`, `tape::is_river`), in the reference runs.
-const RIVERS: f64 = 214.3;
+const RIVERS: f64 = 232.9;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
-const WORN: f64 = 0.3135;
+const WORN: f64 = 0.2484;
 /// The cover (starting kind 0) at year 30, log10 kg (`root_0_cover_kg`), in the reference runs.
-const COVER_KG: f64 = 8.93;
+const COVER_KG: f64 = 8.763;
 /// Eaters (starting kind 1) over years `EATERS_FROM` to 30, the mean of log10 kg (`root_1_kg`), in the reference runs: a guard that the world stays near
 /// itself, not a target (real herbivores and soil animals weigh far less, a few times 1e4 kg per km²).
-const EATER_KG: f64 = 8.758;
+const EATER_KG: f64 = 8.912;
 /// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the cover's 0.3, as a boom or bust of the eaters
 /// moves a mean of three seeds far.
 const EATER_KG_RANGE: f64 = 0.5;
 /// The life eaters live over years `EATERS_FROM` to 30, the mean of the yearly values, yr (`root_1_life_real`), in the
 /// reference runs.
-const EATER_LIFE: f64 = 0.614;
+const EATER_LIFE: f64 = 0.578;
 
 /// Earth's rain on land, m/yr (Trenberth et al. 2007), and the factor either way a run's may lie from it: the island
 /// lies at 40°, where land gets 0.5 to 1 m (from memory), and a globe's land spans every belt.
