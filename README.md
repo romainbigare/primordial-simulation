@@ -60,10 +60,10 @@ to the bit; the card runs and holds less code.
 The live viewer draws every zoom from two things (`web/src/land.ts`, `web/shaders/land.wgsl`). **The ground's tiles**
 (`tape::Ground`) never change: each holds 256 x 256 texels of a depth, from the depth at which one tile holds the
 island down to texels of 1 m (closer, the finest is magnified), with the ground's height (the terrain itself, smooth
-below a metre), the wetness index of the place and the channel nearest it, as 16-bit floats (10 bytes a texel, the
+below a metre), the wetness index of the place and the channel nearest it, as 16-bit floats (16 bytes a texel, the
 height to a millimetre). Workers of their own, each with its own copy of the core, make them (`web/src/tiles-worker.ts`;
 two where the browser has more than four cores, else one), so the world never waits for a picture; the page keeps at
-most 56 on the graphics card (38 MB) and no copy of its own (after a lost context it asks for them again), and asks for
+most 56 on the graphics card (61 MB) and no copy of its own (after a lost context it asks for them again), and asks for
 those about the view, at the depth whose texels take no more than a pixel of the screen (a depth coarser while that
 would touch more than 30 tiles), at the depth above and at the coarsest, coarse before fine and nearest its middle first (`web/src/ground.ts`); a request that left the view is
 dropped, and the tiles drawn least lately go first. A tile not made yet is drawn from its nearest ancestor, stretched: the picture is soft for
@@ -91,11 +91,14 @@ under a film of algae: a brook shows its stones, a river a metre deep is dark wa
 the capillary fringe over its water. From afar no channel whose discharge matters at that zoom is thinner than a line
 of about a css pixel: one shows as a line once it passes 6.4e-3 m³/s for each metre a css pixel takes (the drained
 area that shows grows with the zoom, so the whole island shows its main rivers, a closer view their larger branches,
-and none a mesh of rills), wider as its discharge grows, to the power 0.75 up to 8 times, so the network's order reads.
+and none a mesh of rills), wider as its discharge grows, to the power 0.75 up to 4 times, so the network's order reads.
 Close up a channel's bed is as wide as the channel law makes five times this month's discharge (the bankfull flood,
-Leopold and Maddock 1953; Dunne and Leopold 1978), bare of plants; this month's water winds in it between bars of
-washed gravel, its thread wandering across the bed over a few bed widths and splitting about a bar where it wanders
-farthest. The ground has relief finer than its tiles (`web/shaders/lib/relief.wgsl`): octaves of gradient noise from
+Leopold and Maddock 1953; Dunne and Leopold 1978), bare of plants, and on gentle ground it swings in a meander belt
+(bends of many sizes, some reaches nearly straight, here and there a loop: `tape/src/ground/belt.rs`). This month's
+water fills most of it (at one place the water's width grows as its discharge to the power 0.26: Leopold and Maddock
+1953): a pool against the outer bank of a bend over a bar of washed gravel on its inside, a wider riffle between
+bends; what runs through it grows evenly from sample to sample, so it widens downstream and below each tributary
+without a step. The ground has relief finer than its tiles (`web/shaders/lib/relief.wgsl`): octaves of gradient noise from
 48 m down to the pixel, fixed in the world, each fading in as it grows past a few pixels, smooth swells on deep loose
 ground and ridged crags on bare bed, the rougher the steeper; it moves the shading and the line of every shore. A slope turned away from the sun is
 lit by the sky alone, the less the steeper (an even sky, Liu and Jordan 1963), so shaded ground and snow keep their

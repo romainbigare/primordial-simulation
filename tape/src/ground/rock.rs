@@ -2,7 +2,8 @@
 //! the bed is bare) and the stones its channel moves. The largest stone a stream moves grows with the power it spends on
 //! its bed, which goes as its discharge times its slope (Bagnold 1966); the wear's stream power law takes the discharge
 //! as the square root of the area drained (`space::wear`, K √A S), so a stone's size is here `STONE_M` per unit of √A S.
-//! A function of the samples alone.
+//! And the links of its channel (`links`), by which a shell finds the samples up and down it: what runs through a
+//! channel grows from one sample's centre to the next, not in a step at their edge. A function of the samples alone.
 
 use super::half;
 use pcore::space::network::NONE;
@@ -15,10 +16,30 @@ const STONE_M: f64 = 0.001;
 /// The largest stone drawn, m.
 const STONE_MOST_M: f64 = 2.0;
 
+/// The step from sample `k` of `s` to its neighbour `j`, 1 to 8: 1 + (dx + 1) + 3 (dy + 1), less one past the middle.
+fn step(s: &Samples, k: usize, j: usize) -> u32 {
+    let (dx, dy) = ((j % s.across) as i64 - (k % s.across) as i64, (j / s.across) as i64 - (k / s.across) as i64);
+    debug_assert!(dx.abs() <= 1 && dy.abs() <= 1 && (dx, dy) != (0, 0), "a neighbour");
+    let n = (dx + 1) + 3 * (dy + 1);
+    (if n > 4 { n } else { n + 1 }) as u32
+}
+
+/// The links of sample `k`'s channel in `s`, as one whole number a 16-bit float holds: the step to the sample it runs
+/// to (`step`; 0: none), 8 more where it joins that one's channel as a tributary (that one's main way comes from
+/// elsewhere), and 17 times the step to its main neighbour upstream (0: none).
+fn links(s: &Samples, k: usize) -> u32 {
+    let down = match s.to[k] {
+        NONE => 0,
+        j => step(s, k, j as usize) + if s.main[j as usize] == k as u32 { 0 } else { 8 },
+    };
+    let up = if s.main[k] == NONE { 0 } else { step(s, k, s.main[k] as usize) };
+    down + 17 * up
+}
+
 /// Of each sample of `s`, `apart` m between neighbours' centres, row by row, four 16-bit floats: the depth of its loose
-/// ground, m, the largest stone its channel moves, m (`STONE_M`; 0 where it runs nowhere: a sink, or under a pond), and
-/// two zeros; then of each sample again the reflectance of the make of its bed (red, green, blue: `colours`, one a make,
-/// `Samples::make`) and a zero: two planes of a texture, one under the other.
+/// ground, m, the largest stone its channel moves, m (`STONE_M`; 0 where it runs nowhere: a sink, or under a pond), a
+/// zero and its channel's links (`links`); then of each sample again the reflectance of the make of its bed (red,
+/// green, blue: `colours`, one a make, `Samples::make`) and a zero: two planes of a texture, one under the other.
 pub fn rock(s: &Samples, apart: f64, colours: &[[f64; 3]]) -> Vec<u16> {
     let mut out = Vec::with_capacity(8 * s.h.len());
     for k in 0..s.h.len() {
@@ -31,7 +52,7 @@ pub fn rock(s: &Samples, apart: f64, colours: &[[f64; 3]]) -> Vec<u16> {
             let slope = ((s.h[k] - s.h[j]) / run).max(0.0);
             (STONE_M * s.up[k].sqrt() * slope).min(STONE_MOST_M)
         };
-        out.extend([half(s.loose[k] as f32), half(stone as f32), 0, 0]);
+        out.extend([half(s.loose[k] as f32), half(stone as f32), 0, half(links(s, k) as f32)]);
     }
     for &m in &s.make {
         let c = colours.get(m as usize).copied().unwrap_or([0.0; 3]);

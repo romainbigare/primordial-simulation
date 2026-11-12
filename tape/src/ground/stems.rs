@@ -10,9 +10,9 @@ use pcore::space::network::NONE;
 use pcore::space::samples::Samples;
 
 /// The samples up and down a stem a point is the mean of.
-const SMOOTH_SAMPLES: usize = 3;
+const SMOOTH_SAMPLES: usize = 6;
 /// The farthest a point moves from its sample's centre, samples.
-pub(super) const SMOOTH_MOST: f64 = 0.5;
+pub(super) const SMOOTH_MOST: f64 = 1.0;
 
 /// The centre of sample `k` of `s`, in samples.
 fn centre(s: &Samples, k: usize) -> [f64; 2] {

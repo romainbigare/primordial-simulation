@@ -9,13 +9,14 @@
 // view (`land.time.w` times the metres a css pixel takes: tape/src/ground/channels.rs `SHOW_M`), as a map draws its
 // rivers; wider as its discharge grows past that, as its discharge over that to the power `LINE_GROW` (more steeply
 // than the channel law widens a channel: a map's choice, so the network's order reads), up to `LINE_MOST` times, so a
-// stream is a hair and the main river many times wider; it fades in from `LINE_FADE` times less, so no channel springs
-// up as the view zooms.
+// stream is a hair and the main river a few times wider: no wider than its bends are drawn from as near (a tile draws
+// them once the bed takes a texel or two, tape/src/ground/channels.rs `BEND_FROM`); it fades in from `LINE_FADE` times
+// less, so no channel springs up as the view zooms.
 const LINE_PX = 1.2;
-const LINE_MOST = 8.0;
+const LINE_MOST = 4.0;
 const LINE_GROW = 0.75;
 const LINE_FADE = 4.0;
-// A channel's bed is as wide as its floods make it (lib/land.wgsl `banks_of`). This month's water runs in it between
+// A channel's bed is as wide as its floods make it (lib/rock.wgsl `banks_of`). This month's water runs in it between
 // bars of washed gravel (lib/river.wgsl `reach_at`). Where the bed takes under `BED_PX` pixels it is all water.
 const BED_PX = 3.0;
 // A channel's bars are its bed's make washed (`BAR_LIFT` times as light), and sand where its flow moves no stones
@@ -24,8 +25,8 @@ const BAR_LIFT = 1.5; const BAR_SAND_STONE = 0.03;
 // Liquid standing shallower than this over the drawn ground is drawn as soaked ground, m: the drawn ground follows the
 // samples within a few centimetres, so a body whose level lies that near its flat floor is a soaked basin, not water.
 const FILM_M = 0.05;
-// A channel's stones lie on its bed and its bars, out to this many of its half widths from its line.
-const STONES_OUT = 2.0;
+// A channel's stones lie on its bed and its bars, out to this many of its bed's half widths from its line.
+const STONES_OUT = 1.2;
 // The edge of standing liquid is found from how fast its depth changes across the ground, the ground's slope: no slower
 // than this (rise over run), so on flat ground the edge still lies within a pixel's footprint where the depth crosses.
 const SHORE_RISE_LEAST = 1e-3;
@@ -39,6 +40,33 @@ const SNOW_CELLS_ALL = 0.95;
 // of the pixel standing liquid covers (`pool`): the pixel's footprint across the line where the depth crosses `FILM_M`,
 // so a shore is a smooth line at any zoom, not the pixels' steps.
 struct Spots { dry: Spot, wet: Spot, share: f32, bars: f32, pool: f32, snow_cells: f32, bar: vec3f, flow: vec2f }
+
+// Inside a cell its snow lies first where the ground holds it (`snow_bares`): high ground before low (colder: the air's
+// fall with height; over `SNOW_RISE_M` a unit), slopes turned from the sun before those facing it (they melt first;
+// `SNOW_SUNNY` a unit of slope toward the light), hollows before knobs (drift fills them; `SNOW_HOLLOW_M` of the
+// relief's height a unit). The cell's share `s` covers where this index lies under `SNOW_SPREAD` ln(s / (1 - s)): of
+// an index spread about 1 either way (a logistic one), the share s, so as much snow is drawn as the cell holds. Its
+// edge is a line of that field, no narrower than `SNOW_EDGE` of the index.
+// The index is held softly within `SNOW_BARES_MOST` either way, so a cell's last few hundredths of snow lie nowhere,
+// and no snow ends on the straight line where the blended share reaches none (a line through the squares' centres).
+const SNOW_RISE_M = 40.0; const SNOW_SUNNY = 2.0; const SNOW_HOLLOW_M = 0.25; const SNOW_SPREAD = 1.0; const SNOW_EDGE = 0.05;
+const SNOW_BARES_MOST = 3.0;
+
+// How readily the ground of slope `slope` (east, south), `rise` m over its cells' mean and `knob` m over its relief's
+// mean (relief.wgsl), sheds its snow: the lower, the longer it keeps it.
+fn snow_bares(slope: vec2f, rise: f32, knob: f32) -> f32 {
+  let sunward = clamp(dot(-slope, LIGHT.xy) / length(LIGHT.xy), -1.0, 1.0);
+  return SNOW_BARES_MOST * tanh((SNOW_SUNNY * sunward + knob / SNOW_HOLLOW_M - rise / SNOW_RISE_M) / SNOW_BARES_MOST);
+}
+
+// The snow at a point whose cells hold `share` of their ground under snow and whose ground sheds it as `bares`
+// (`snow_bares`), that index changing by `width` across a pixel: 1 where it lies, 0 where not, the pixel's share at
+// its edge.
+fn snow_at(share: f32, bares: f32, width: f32) -> f32 {
+  if (share <= 0.0 || share >= 1.0) { return share; }
+  let line = SNOW_SPREAD * log(share / (1.0 - share));
+  return 1.0 - smoothstep(-1.0, 1.0, (bares - line) / max(width, SNOW_EDGE));
+}
 
 // A snow line is ragged: at its margin the snow breaks into patches (drifts in hollows behind knobs, bare knobs first)
 // at every scale from `SNOW_PATCH_M` down to the pixel, octaves each `SNOW_PATCH_STEP` times finer weighing
@@ -66,11 +94,11 @@ fn snow_patches(at: vec2f, e: f32) -> f32 {
 
 // What is at `at`, m from the map's north-west corner, seen at `e` m a pixel: its ground and its state (`state_on`), the
 // ground's own colour and the sea blended between the squares' centres, the plants' field (lib/cover_field.wgsl); and
-// its channel (`bed_at`), from its own sample's discharge. The channel's bed is cut into the ground, so where it runs
-// into standing liquid that liquid takes it over at its shore at the same depth. Beside it the ground is wet by the
-// capillary fringe over its water, which rises from the water's edge as the valley's side does, at least as steeply as
-// the channel's own banks. Its water (`river_colour`) is as deep as its bed lies there; a pixel wider than the channel
-// sees its mean depth.
+// its channel (rock.wgsl `channel_at`), from its own sample's discharge. The channel's bed is cut into the ground, so
+// where it runs into standing liquid that liquid takes it over at its shore at the same depth. Beside it the ground is
+// wet by the capillary fringe over its water, which rises from the water's edge as the valley's side does, at least as
+// steeply as the channel's own banks. Its water (`river_on`) is as deep as its bed lies there; a pixel wider than the
+// channel sees its mean depth.
 fn land_spots(at: vec2f, e: f32) -> Spots {
   let look = earth.look;
   let cs = corners(at / land.map.x);
@@ -84,9 +112,9 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // bump of a few decimetres would move the water's edge by tens of metres into a fringe of puddles.
   g.h += fine.x * ease(0.0, RELIEF_EDGE_SLOPE, length(g.slope));
   g.slope += fine.yz;
-  let q = discharge_at(g);
-  let bed = bed_at(g, q);
-  let st = state_on(at, g, cs, bed.depth);
+  let q = discharge_at(g, at);
+  let ch = channel_at(g, q);
+  let st = state_on(at, g, cs, depth_in(g, ch));
   let surface = blended(SURFACE, cs);
   var p: Spot;
   // A film of liquid over the drawn ground is soaked ground, not water (`FILM_M`).
@@ -113,13 +141,13 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
   p.loose = loose;
   // The height over the nearest water, standing or running: a channel's banks rise from its edge.
-  let shore_over = select(p.over, min(p.over, max(g.d - bed.half, 0.0) * max(length(g.slope), bed.mean / max(bed.half, 1e-6))), bed.half > 0.0);
+  let shore_over = select(p.over, min(p.over, max(abs(g.sd - ch.middle) - ch.water, 0.0) * max(length(g.slope), ch.mean / max(ch.water, 1e-6))), ch.water > 0.0);
   let cf = cover_field(at, e, Beneath(soaked(p), shore_over, length(g.slope), loose, fwidth(loose), p.snow, st.snow_m));
   p.cover = cf.cover;
   p.canopy = cf.canopy;
   p.rock = bare;
   p.bed = vec3f(0.0);
-  p.stone = select(0.0, stone_of(g.channels.xy), bed.half > 0.0 && g.d < STONES_OUT * bed.half);
+  p.stone = select(0.0, stone_of(g.channels.xy), ch.bed > 0.0 && g.d < STONES_OUT * ch.bed);
   // The bed's colour where it shows or its stones lie.
   if (p.rock > 0.0 || p.stone > 0.0) { p.bed = bed_make_at(at); }
   p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), p.loose, look.z);
@@ -132,30 +160,34 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let signed = st.depth - min(st.over, NO_LIQUID_M) * g.water.y - FILM_M;
   let pool = select(0.0, tent(signed / (max(length(g.slope) * g.water.y, SHORE_RISE_LEAST) * e)), g.water.y > 0.0);
   var out = Spots(p, p, 0.0, 0.0, pool, st.snow, vec3f(0.0), vec2f(0.0));
-  if (p.depth > 0.0 || bed.half <= 0.0) { return out; }
+  if (p.depth > 0.0 || ch.water <= 0.0) { return out; }
   out.dry.over = shore_over;
   let css = e * land.samples.w;
   let shows = land.time.w * css;
   let line = 0.5 * LINE_PX * css * min(pow(q / shows, LINE_GROW), LINE_MOST) * ease(shows / LINE_FADE, shows, q);
-  // The bed (`FLOOD`) and this month's water in it, varied along the reach (lib/river.wgsl).
+  // The bed and this month's water in it (lib/river.wgsl), apart where the bed takes a few pixels and is wider than the
+  // line.
   let open = ease(BED_PX * e, 2.0 * BED_PX * e, banks_of(q)) * (1.0 - ease(banks_of(q), 2.0 * banks_of(q), line));
   let stone = stone_of(g.channels.xy);
-  let r = reach_at(at, e, g, bed, q, line, open, stone);
+  let r = reach_at(at, e, g, ch, line, open, stone);
   out.share = r.share;
   out.bars = r.bars;
   // The bars' colour: the bed's make washed, sand on the gentlest reaches; the bed seen through the water is the same.
   let washed = min(bed_make_at(at) * BAR_LIFT, vec3f(1.0));
   out.bar = mix(BEACH_SAND, washed, ease(0.0, BAR_SAND_STONE, stone)) * bar_tone(at, e);
   out.wet.ground = out.bar;
-  out.flow = flow_signs(at, e, g.sd, g.d_slope, r.steep, r.across);
-  let resolved = ease(e, 2.0 * e, bed.half);
+  out.flow = flow_signs(e, g.along, g.sd, r.steep, r.across);
+  // Where the bed is drawn apart from the water and the water takes a few pixels, its depth shows: its pools and
+  // riffles and its bed's shape across it; else its mean depth.
+  let resolved = ease(e, 2.0 * e, ch.water) * open;
   let x = r.across;
-  out.wet.depth = r.depth * mix(bed.mean, BED_MIDDLE * bed.mean * (1.0 - x * x), resolved);
+  out.wet.depth = mix(ch.mean, ch.deep * BED_MIDDLE * ch.mean * (1.0 - x * x), resolved);
   out.wet.sand = 0.0;
   out.wet.cover = vec4f(0.0);
-  // The bed's slope across the channel, d(depth)/d(distance) along the distance's own slope; where the channel is
-  // narrower than a pixel its banks do not show.
-  let bank = 2.0 * BED_MIDDLE * bed.mean * x / bed.half * g.d_slope * select(0.0, 1.0, x < 1.0) * resolved;
+  // The bed's slope across the water, d(depth)/d(distance from its middle) along that distance's own slope; where the
+  // water is narrower than a pixel its banks do not show.
+  let from_middle = g.d_slope * sign(g.sd) * sign(g.sd - ch.middle);
+  let bank = 2.0 * BED_MIDDLE * ch.mean * ch.deep * x / ch.water * from_middle * select(0.0, 1.0, x < 1.0) * resolved;
   out.wet.slope = length(g.slope + bank) * look.x;
   out.wet.shade = hill_shade(g.slope + bank, EXAGGERATE * look.x);
   return out;
