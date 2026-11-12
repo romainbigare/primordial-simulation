@@ -14,7 +14,7 @@ const STONE_CUTS = 5; const STONE_CUT = 0.38; const STONE_LONG = 0.7; const STON
 const STONE_SOFT = vec2f(0.04, 0.45); const STONE_FACE = vec2f(1.7, 1.2); const STONE_RISE = 1.1;
 const STONE_SHADOW = 0.3; const STONE_SHADOW_REACH = 0.4;
 const STONE_TONE = 1.15; const STONE_TONES = 0.18; const STONE_BANDS = 0.12; const STONE_BAND_M = 0.35;
-const STONE_OCTAVES = 3; const STONE_STEP = 2.2; const STONE_FEW = 0.35;
+const STONE_OCTAVES = 3; const STONE_STEP = 2.2; const STONE_FEW = 0.5;
 const STONE_GAP = 3.0; const STONE_SIZES = 0.4; const STONE_PX = 2.0;
 // Snow lies on a stone's flat top (where its face is flatter than `SNOW_TOP`); a stone smaller than `SNOW_BURIES_M`
 // is under the snow that covers its ground, one larger than twice that stands out of it.
@@ -57,13 +57,35 @@ fn stone_at(v: vec2f, px: f32, x: u32, worn: f32, sunk: f32) -> StoneAt {
   return StoneAt(clamp(over / max(length(grad) * px, 1e-4) + 0.5, 0.0, 1.0), max(dot(n, LIGHT), 0.0) / LIGHT.z, n.z);
 }
 
-// What makes the stones of a place: the share of the cells that hold one, the largest's size, m, how worn they are
-// (0 angular .. 1 rounded), how deep their feet are sunk (0..1 of their height), and the snow on their ground, 0..1.
-struct Stony { density: f32, size: f32, worn: f32, sunk: f32, snow: f32 }
+// What makes the stones of a place: the share of the cells that hold one; the largest's size, m, which sets where
+// they lie (so it changes only in steps from place to place: a size that changed smoothly would move every stone);
+// what each stone is of that size there, 0..1 (this may change smoothly: finer up a bar); how worn they are (0 angular
+// .. 1 rounded), how deep their feet are sunk (0..1 of their height), and the snow on their ground, 0..1.
+struct Stony { density: f32, size: f32, small: f32, worn: f32, sunk: f32, snow: f32 }
 
-// The stones `s` at `at`, seen at `e` m a pixel, of bed `bed` (linear, unlit), stream `k` of the world's random numbers:
-// their colour times their coverage (with the shadow they throw as black), and that coverage.
-fn stones(at: vec2f, e: f32, s: Stony, bed: vec3f, k: i32) -> vec4f {
+// A stone of a lattice: whether its cell holds one, its random word, its radius, m, and the point from its centre, m.
+struct Placed { held: bool, x: u32, r: f32, v: vec2f }
+
+// The stone of size `size` m (those of its octave `o`: `density` of the cells hold one) of lattice `l` whose cell
+// holds the point `at`, stream `k` of the world's random numbers. The second lattice lies turned and half a cell off
+// the first, so no rows of stones show; a stone lies anywhere its cell holds it whole, with its shadow.
+fn placed(at: vec2f, size: f32, density: f32, o: i32, l: i32, k: i32) -> Placed {
+  let side = STONE_GAP * size;
+  let q = select(at, vec2f(0.8 * at.x + 0.6 * at.y, 0.8 * at.y - 0.6 * at.x), l == 1) / side + f32(l) * 0.5;
+  let c = floor(q);
+  let x = lowbias(vec2i(c), k + 2 * o + l);
+  let r = 0.5 * size * (1.0 + STONE_SIZES * (f32((x >> 20u) & 1023u) / 512.0 - 1.0));
+  let room = 0.5 - (1.0 + STONE_SHADOW_REACH) * r / side;
+  let centre = c + 0.5 + room * (vec2f(f32((x >> 10u) & 31u), f32((x >> 15u) & 31u)) / 15.5 - 1.0);
+  let v = (q - centre) * side;
+  // The point from the centre back in the map's axes.
+  return Placed(f32(x & 1023u) / 1024.0 < density, x, r, select(v, vec2f(0.8 * v.x - 0.6 * v.y, 0.6 * v.x + 0.8 * v.y), l == 1));
+}
+
+// The stones `s` at least `least` m large at `at`, seen at `e` m a pixel, of bed `bed` (linear, unlit), stream `k` of
+// the world's random numbers: their colour times their coverage (with the shadow they throw as black), and that
+// coverage.
+fn stones(at: vec2f, e: f32, s: Stony, least: f32, bed: vec3f, k: i32) -> vec4f {
   var out = vec4f(0.0);
   if (s.density <= 0.0 || s.size <= 0.0) { return out; }
   let tone = bed * STONE_TONE;
@@ -72,26 +94,20 @@ fn stones(at: vec2f, e: f32, s: Stony, bed: vec3f, k: i32) -> vec4f {
   for (var o = STONE_OCTAVES - 1; o >= 0; o--) {
     let density = s.density * select(1.0, STONE_FEW, o == 0);
     // Under the snow that covers its ground, a small stone does not show.
-    let stands = 1.0 - s.snow * (1.0 - ease(SNOW_BURIES_M, 2.0 * SNOW_BURIES_M, size));
+    var stands = 1.0 - s.snow * (1.0 - ease(SNOW_BURIES_M, 2.0 * SNOW_BURIES_M, size));
+    if (least > 0.0) { stands *= ease(least, 1.5 * least, s.small * size); }
     // Smaller than a few pixels: the share of the ground they cover, as a tone.
     var near = 0.0;
-    if (!unseen(STONE_MOST_M / STONE_PX)) { near = ease(STONE_PX * e, 2.0 * STONE_PX * e, size); }
-    let mean = 2.0 * density * stands * PI * 0.25 * 0.7 / (STONE_GAP * STONE_GAP) * (1.0 - near);
+    if (!unseen(STONE_MOST_M / STONE_PX)) { near = ease(STONE_PX * e, 2.0 * STONE_PX * e, s.small * size); }
+    let mean = 2.0 * density * stands * PI * 0.25 * 0.7 * s.small * s.small / (STONE_GAP * STONE_GAP) * (1.0 - near);
     out = mix(out, vec4f(tone, 1.0), mean);
-    if (near > 0.0) {
-      let side = STONE_GAP * size;
+    if (near > 0.0 && stands > 0.0) {
       for (var l = 0; l < 2; l++) {
-        // The second lattice lies turned and half a cell off the first, so no rows of stones show.
-        let q = select(at, vec2f(0.8 * at.x + 0.6 * at.y, 0.8 * at.y - 0.6 * at.x), l == 1) / side + f32(l) * 0.5;
-        let c = floor(q);
-        let x = lowbias(vec2i(c), k + 2 * o + l);
-        if (f32(x & 1023u) / 1024.0 >= density) { continue; }
-        let r = 0.5 * size * (1.0 + STONE_SIZES * (f32((x >> 20u) & 1023u) / 512.0 - 1.0));
-        // It lies anywhere its cell holds it whole (with its shadow).
-        let room = 0.5 - (1.0 + STONE_SHADOW_REACH) * r / side;
-        let centre = c + 0.5 + room * (vec2f(f32((x >> 10u) & 31u), f32((x >> 15u) & 31u)) / 15.5 - 1.0);
-        let v = (q - centre) * side / r;
-        let w = x * 2654435761u;
+        let p = placed(at, size, density, o, l, k);
+        if (!p.held) { continue; }
+        let r = s.small * p.r;
+        let v = p.v / r;
+        let w = p.x * 2654435761u;
         let st = stone_at(v, e / r, w, s.worn, s.sunk);
         // Its shadow on the ground, away from the sun.
         let shade = STONE_SHADOW * (1.0 - smoothstep(0.6, 1.1, length(v + STONE_SHADOW_REACH * LIGHT.xy / length(LIGHT.xy))));
@@ -109,4 +125,42 @@ fn stones(at: vec2f, e: f32, s: Stony, bed: vec3f, k: i32) -> vec4f {
     size *= STONE_STEP;
   }
   return out;
+}
+
+// A stone that stands in a flow breaks it: white water piles against its face up the flow and trails down the flow
+// behind it, `WAKE_LONG` of its size long, spreading by `WAKE_SPREAD` of the way, with calm water right behind it
+// (its eddy, `WAKE_EDDY` of its radius).
+const WAKE_LONG = 2.2; const WAKE_SPREAD = 0.35; const WAKE_EDDY = 0.8;
+
+// The white water at `at`, seen at `e` m a pixel, about the stones `s` at least `least` m large (`stones`, stream `k`)
+// in a flow that runs `down` (a unit vector), 0..1: each stone's the same stone `stones` draws, found from a point up
+// the flow.
+fn wake(at: vec2f, e: f32, s: Stony, least: f32, down: vec2f, k: i32) -> f32 {
+  var white = 0.0;
+  if (least <= 0.0) { return white; }
+  var size = s.size;
+  for (var o = 0; o < STONE_OCTAVES; o++) {
+    let stands = ease(least, 1.5 * least, s.small * size) * ease(STONE_PX * e, 2.0 * STONE_PX * e, s.small * size);
+    if (stands > 0.0) {
+      let density = s.density * select(1.0, STONE_FEW, o == 0);
+      for (var l = 0; l < 2; l++) {
+        // The stone whose cell holds the point half a wake up the flow.
+        let back = 0.5 * WAKE_LONG * size * down;
+        let p = placed(at - back, size, density, o, l, k);
+        if (!p.held) { continue; }
+        let r = s.small * p.r;
+        let v = p.v + back;
+        let along = dot(v, down) / r;
+        let across = abs(dot(v, vec2f(-down.y, down.x))) / r;
+        // Behind it: two trails at its sides that spread and fade, calm between them at first; before it: a rim.
+        let reach = 2.0 * WAKE_LONG;
+        let wide = 1.0 + WAKE_SPREAD * max(along, 0.0);
+        let trail = (1.0 - smoothstep(0.5 * wide, wide, across)) * smoothstep(WAKE_EDDY * (1.0 - along / reach), wide, across + 0.6 * along) * (1.0 - smoothstep(0.0, reach, along)) * step(0.0, along);
+        let rim = (1.0 - smoothstep(1.0, 1.35, length(v) / r)) * smoothstep(-0.2, -0.9, along);
+        white = max(white, stands * max(trail, rim));
+      }
+    }
+    size /= STONE_STEP;
+  }
+  return white;
 }

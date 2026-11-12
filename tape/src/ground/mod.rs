@@ -110,8 +110,7 @@ impl Ground {
         let heights = self.terrain.heights(self.seed, &self.map, self.lat, win, depth);
         let k = 2f64.powi(SAMPLE_DEPTH as i32 - depth as i32);
         let twi = wetness::field(&self.samples, &self.twi, depth, [win[0], win[1]], [wide, high]);
-        let reaches = bends::Reaches { seed: self.seed, s: &self.samples, at: &self.at, law: self.law, metres: self.map.length(SAMPLE_DEPTH) };
-        let near = channels::Channels::new(reaches, &self.bends).field(channels::Window { x0: win[0], y0: win[1], wide, high, k });
+        let near = channels::Channels::new(self.reaches(), &self.bends).field(channels::Window { x0: win[0], y0: win[1], wide, high, k });
         // The valleys about the channels drawn into the ground out of the ponds (`channels::Field::drawn`); near a pond
         // (`shore::Shore::level`) a valley only lowers the ground, and never under the pond's level where the ground is
         // not: its mouth meets the level of the pond it runs into. Then the shore drawn smooth (`shore`).
@@ -196,12 +195,17 @@ impl Ground {
     /// its loose ground, m, the largest stone its channel moves, m, and its channel's links; and the reflectance of
     /// its bed's make, of `colours` one a make (`rock::rock`).
     pub fn rock(&self, colours: &[[f64; 3]]) -> Vec<u16> {
-        rock::rock(&self.samples, self.map.length(SAMPLE_DEPTH), colours)
+        rock::rock(&self.reaches(), colours)
     }
 
     /// The ponds of the ground, each with its pass and its level (`Samples::ponds`).
     pub fn ponds(&self) -> &[Pond] {
         &self.samples.ponds
+    }
+
+    /// The reaches of the ground's channels (`bends::Reaches`).
+    fn reaches(&self) -> bends::Reaches<'_> {
+        bends::Reaches { seed: self.seed, s: &self.samples, at: &self.at, law: self.law, metres: self.map.length(SAMPLE_DEPTH) }
     }
 
     /// The centre of the texel at column `x` and row `y` of leaves of `depth`, in samples from the map's north-west corner.

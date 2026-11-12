@@ -193,8 +193,18 @@ impl Reaches<'_> {
         if to == NONE || s.pond[k] != NONE || width < BENDS_FROM_M {
             return Room { width, belt: 0.0 };
         }
-        // The reach: up the main way and down the channel's own, out of the ponds.
-        let (mut top, mut bottom, mut run, mut across, mut n) = (k, k, 0.0, self.rise_across(k, to as usize), 1.0);
+        let [slope, across] = self.fall(k);
+        let floor = if across > 0.0 { WALL_DEPTHS * depth / across } else { f64::INFINITY };
+        let free = BELT_WIDTHS * width * (1.0 - ease(BENDS_BELOW, STRAIGHT_ABOVE, slope));
+        Room { width, belt: free.min(floor).min(TURN_SHARE * frame.radius()).min(BEND_MOST * self.metres) }
+    }
+
+    /// The fall of the reach about sample `k`, which runs on (`REACH_SAMPLES` up its main way and down its own, out
+    /// of the ponds): its slope along the channel, and how fast the ground rises across the valley on its mean, each
+    /// rise over run.
+    pub(super) fn fall(&self, k: usize) -> [f64; 2] {
+        let s = self.s;
+        let (mut top, mut bottom, mut run, mut across, mut n) = (k, k, 0.0, self.rise_across(k, s.to[k] as usize), 1.0);
         for _ in 0..REACH_SAMPLES {
             if s.main[top] != NONE {
                 (run, top) = (run + self.apart(top, s.main[top] as usize), s.main[top] as usize);
@@ -208,10 +218,11 @@ impl Reaches<'_> {
                 }
             }
         }
-        let slope = if run > 0.0 { (s.h[top] - s.h[bottom]).max(0.0) / run } else { f64::INFINITY };
-        let floor = if across > 0.0 { WALL_DEPTHS * depth * n / across } else { f64::INFINITY };
-        let free = BELT_WIDTHS * width * (1.0 - ease(BENDS_BELOW, STRAIGHT_ABOVE, slope));
-        Room { width, belt: free.min(floor).min(TURN_SHARE * frame.radius()).min(BEND_MOST * self.metres) }
+        // A reach of its own sample alone (a head that runs into a pond): its fall to the sample it runs to.
+        if run == 0.0 {
+            (run, bottom) = (self.apart(k, s.to[k] as usize), s.to[k] as usize);
+        }
+        [(s.h[top] - s.h[bottom]).max(0.0) / run, across / n]
     }
 
     /// The distance between the centres of the neighbours `a` and `b`, m.

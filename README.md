@@ -180,7 +180,9 @@ bed and in a channel as big as its power moves (`web/shaders/lib/crag.wgsl`). On
 (`web/shaders/lib/stone.wgsl`): a block cut by five planes, so no stone is a disc, longer one way than the other, each
 face lit as it is turned to the sun, with a shadow on the ground, in its bed's colour with the bands of its layers;
 angular on scree and bare bed, the rounder the more a channel carries (the travel wears it), in three sizes with more
-of the smaller, its foot sunk in loose ground, under the snow unless it is large, then with snow on its top. About 3% of seed 1's land and 2% of seed
+of the smaller, its foot sunk in loose ground, under the snow unless it is large, then with snow on its top. In a
+channel a stone taller than the water is deep stands out of it, and fast water breaks white on it and trails behind
+it down the flow. About 3% of seed 1's land and 2% of seed
 2's is bare and that steep.
 
 In every view the bed shows where the loose ground thins (`web/shaders/lib/rock.wgsl`): each terrain sample's loose

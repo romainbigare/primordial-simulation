@@ -37,7 +37,7 @@ const STRATA_WOBBLE = 3.0; const STRATA_WAVE_M = 30.0; const BREAK_M = 20.0; con
 // gravel a size up), no smaller than `COBBLE_M`, sunk `BED_SUNK` in the bed's gravel.
 const SCREE_FROM = 0.6; const SCREE_LOOSE_M = 1.0; const SCREE_STONE_M = 1.2; const SCREE = 0.7;
 const STONES_ON_BED = 0.25; const SUNK_MOST = 0.55; const SUNK_LOOSE_M = 0.5;
-const STONE_SEEN = 2.5; const COBBLE_M = 0.45; const BED_SUNK = 0.3;
+const STONE_SEEN = 2.5; const COBBLE_M = 0.65; const BED_SUNK = 0.3;
 
 // The bare ground's colour `c` (linear, unlit) at `at`, seen at `e` m a pixel, under `canopy` of closed crowns, `wet`:
 // its clods, and under the crowns their shade, litter and moss.

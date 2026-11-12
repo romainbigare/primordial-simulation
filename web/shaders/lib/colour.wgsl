@@ -88,9 +88,9 @@ struct Spot {
   // Beach sand on it and a river through it, 0..1, and the river's depth, m.
   sand: f32, river: f32, river_depth: f32,
   // The reflectance of its bed; the share of the bed that shows (rock.wgsl `bed_shows`); the depth of its loose
-  // ground, m; and of its channel there: the largest stone it moves, m, the share of the places that hold one of its
-  // stones (0: none), and how round it has worn them, 0..1.
-  bed: vec3f, rock: f32, loose: f32, stone: f32, stony: f32, worn: f32,
+  // ground, m; and of its channel's stones there (stone.wgsl `Stony`): the largest's size as drawn, m, what each is
+  // of that size, the share of the places that hold one (0: none), and how round the channel has worn them, 0..1.
+  bed: vec3f, rock: f32, loose: f32, stone: f32, small: f32, stony: f32, worn: f32,
   // The share of the ground the tallest plants' crowns close over it (their litter lies under them).
   canopy: f32,
   // Where it lies in the world, m, and the metres a pixel takes there (for the ripples of a liquid's surface).
@@ -137,9 +137,9 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
     let sunk = SUNK_MOST * ease(0.0, SUNK_LOOSE_M, p.loose);
     // The scree's angular blocks, then the channel's worn stones, from one place in the code.
     for (var k = 0; k < 2; k++) {
-      var s = Stony(scree * (1.0 - plants), SCREE_STONE_M, 0.0, sunk, snow);
-      if (k == 1) { s = Stony(p.stony * (1.0 - p.sand), max(STONE_SEEN * p.stone, COBBLE_M), p.worn, BED_SUNK, snow); }
-      let st = stones(p.at, p.e, s, p.bed, 61 + 8 * k);
+      var s = Stony(scree * (1.0 - plants), SCREE_STONE_M, 1.0, 0.0, sunk, snow);
+      if (k == 1) { s = Stony(p.stony * (1.0 - p.sand), p.stone, p.small, p.worn, BED_SUNK, snow); }
+      let st = stones(p.at, p.e, s, 0.0, p.bed, 61 + 8 * k);
       g.rgb = mix(g.rgb, st.rgb / max(st.a, 1e-4), st.a);
     }
   }

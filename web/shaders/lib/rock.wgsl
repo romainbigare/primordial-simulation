@@ -92,36 +92,42 @@ fn discharge_of(s: vec2i) -> f32 {
   return textureLoad(flows, clamp(s, vec2i(0), vec2i(land.samples.xy) - 1), 0).x;
 }
 
-// What runs through the channel of sample `s` beside the point `at` (m from the map's north-west corner), m³/s: a
-// channel's discharge grows evenly from one sample's centre to the next one's along it (rock.wgsl `links_of`), so its
-// width has no step where two samples meet; a tributary keeps its own to its join.
-fn discharge_along(s: vec2i, at: vec2f) -> f32 {
-  let own = discharge_of(s);
-  if (s.x < 0) { return own; }
+// The sample next along the channel of sample `s` from the point `at` (m from the map's north-west corner), and the
+// share of the way from `s`'s centre to that one's the point lies (0: none): a channel's numbers grow evenly from one
+// sample's centre to the next one's along it (`links_of`), so its width has no step where two samples meet; a
+// tributary keeps its own to its join.
+struct Next { s: vec2i, share: f32 }
+fn next_along(s: vec2i, at: vec2f) -> Next {
+  var next = Next(s, 0.0);
+  if (s.x < 0) { return next; }
   let links = links_of(s);
   let p = at / (land.map.x * exp2(land.map.w - land.samples.z)) - (vec2f(s) + 0.5);
-  var q = own;
-  var best = 0.0;
   for (var k = 0; k < 2; k++) {
     // Down the channel (not into the channel a tributary joins), then up its main way.
     let code = select(links / LINK_UP, links % LINK_UP, k == 0);
     if (code <= 0 || code > 8) { continue; }
     let n = select(code, code - 1, code <= 4);
     let step = vec2i(n % 3, n / 3) - 1;
-    let a = dot(p, vec2f(step)) / f32(dot(step, step));
-    if (a > best) { best = a; q = mix(own, discharge_of(s + step), min(a, 1.0)); }
+    let a = min(dot(p, vec2f(step)) / f32(dot(step, step)), 1.0);
+    if (a > next.share) { next = Next(s + step, a); }
   }
-  return q;
+  return next;
 }
 
-// What runs through the channel at a point `at` of ground `g`, m³/s: its nearest texel's channel's, or the channel's
-// of the texel across from that where it carries more and that texel lies in its water, so a pixel in the water of a
-// channel a tributary joins is that channel's.
-fn discharge_at(g: Tiled, at: vec2f) -> f32 {
-  let near = discharge_of(g.channels.xy);
+// The sample of the channel at a point of ground `g`: its nearest texel's channel's, or the channel's of the texel
+// across from that where it carries more and that texel lies in its water, so a pixel in the water of a channel a
+// tributary joins is that channel's.
+fn sample_at(g: Tiled) -> vec2i {
   let across = discharge_of(g.channels.zw);
-  if (across > near && g.ends.y < 0.5 * land.channel.x * pow(across, land.channel.y)) { return discharge_along(g.channels.zw, at); }
-  return discharge_along(g.channels.xy, at);
+  if (across > discharge_of(g.channels.xy) && g.ends.y < 0.5 * land.channel.x * pow(across, land.channel.y)) { return g.channels.zw; }
+  return g.channels.xy;
+}
+
+// What runs through the channel at a point `at` of ground `g`, m³/s (`sample_at`, `next_along`).
+fn discharge_at(g: Tiled, at: vec2f) -> f32 {
+  let s = sample_at(g);
+  let n = next_along(s, at);
+  return mix(discharge_of(s), discharge_of(n.s), n.share);
 }
 
 // A channel's bed is as wide as the flow that shapes it, its floods: the bankfull discharge, the flood of every year or

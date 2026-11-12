@@ -158,7 +158,7 @@ there; a plant's stem and height are the cover's own (`cover::stem`, `cover::hei
 less than `DRY_M` (0.1 m) of liquid on its mean over its surface: a basin soaked, drawn as ground), at which the page draws the pond's liquid flat over the ground that lies under it, the pond each texel names. **The samples' rock** (`Ground::rock`,
 `tape/src/ground/rock.rs`), made once with the ground: of each of the terrain's samples, row by row, four 16-bit floats:
 the depth of its loose ground, m (`Samples::loose`), the largest stone its channel moves, m: `STONE_M` (0.001) ×
-√(the area it drains, m²) × its slope to the sample it runs to (the stream power the wear reads, K √A S; Bagnold 1966),
+√(the area it drains, m²) × the slope of its reach, 2 samples up and down it (the stream power the wear reads, K √A S; Bagnold 1966),
 at most 2 m; 0 for a sink or a sample under a pond; a zero; and its channel's links as one whole number: the step to
 the sample it runs to (1 to 8, its neighbours row by row; 8 more where it joins that one as a tributary; 0 for none)
 and 17 times the step to its main neighbour upstream, by which a shell lets what runs through a channel grow evenly
