@@ -1,30 +1,16 @@
 //! The kinds of cover of a cell as a viewer draws them (laws.md 4.5, docs/tape.md): the slots of one starting kind
-//! joined, and of each kind the plants its mass makes. The model holds kg per m², not plants: how many plants and how big
-//! follow from the stand's mass by the self-thinning law (Yoda and others 1963), the height from a plant's walls by the
-//! buckling limit (McMahon 1973), the crown from its share of the ground. One place for these laws; the page only
-//! draws what they give.
+//! joined, and of each kind its plants. The model holds each slot's mass and its count of plants; a plant's height and
+//! its stem come from the cover's own law (`cover::height`, `cover::stem`: the buckling limit, McMahon 1973), and the
+//! crown from its share of the ground. The page only draws what they give.
 
 use pcore::cover::{self, dec, Cover, Parts, FROST, FUEL, LEAF, LIGHT, MOIST, NG, NO_ROOT, NP, SEED, SLOTS, STORE};
-use pcore::World;
+use pcore::{Physics, World};
 
 /// Kinds a square's row holds at most: the slots of a cell joined by their starting kind.
 pub const KINDS: usize = SLOTS;
 /// Numbers a kind holds in a square's row (`Kind::row`).
 pub const KIND_ROW: usize = 17;
 
-/// The self-thinning law, mean plant mass = `THIN_KG` × (plants per m²)^(-3/2) (Yoda and others 1963; White 1981): a
-/// stand of B kg/m² that has thinned holds (`THIN_KG` / B)² plants a m². kg (per m² to the 1/2). Forests of 10 to 40
-/// kg/m² hold 0.2 to 0.03 stems a m² (Whittaker and Likens 1975 for the mass; the counts from memory): 3 to 8 kg.
-pub const THIN_KG: f64 = 5.0;
-/// A plant's height, m, is `TALL` × (its stem's width, m)^(2/3): the elastic buckling limit (McMahon 1973), trees standing
-/// at about a quarter of the height at which they would buckle; McMahon's trees, about 35 (from memory).
-pub const TALL: f64 = 35.0;
-/// A stem's volume over that of a cylinder as wide and tall: about a half (a cone is a third; stem form factors 0.4 to
-/// 0.5, from memory).
-pub const STEM_FORM: f64 = 0.5;
-/// The share of a stem's volume that is its walls' solid: wood of 300 to 900 kg/m³ is cell walls of about 1,500 kg/m³
-/// with their hollows (Gibson and Ashby 1997, from memory).
-pub const STEM_SOLID: f64 = 0.4;
 /// The leaf area per m² of ground at which a stand's crowns close the ground to e^-1 of it: a stand whose crowns stand
 /// in patches is that closed inside them (canopies close at a leaf area index of 3 to 4; Jarvis and Leverenz 1983, from
 /// memory). m² per m².
@@ -44,54 +30,52 @@ pub struct Plants {
     pub crown: f64,
 }
 
-/// The plants of a stand of `kg` built cover and `leaf` capture area per m², of which `walls` is the share its walls
-/// make, of walls of density `rho` kg/m³. Its crowns cover the share 1 - e^(-leaf / `CLOSE_LAI`) of the ground, in
-/// patches where they close; there it has thinned (`THIN_KG`), each plant's crown the ground it holds; its stem is the
-/// cylinder of `STEM_FORM` and `STEM_SOLID` that holds its walls, as tall as the buckling limit lets it (`TALL`).
-pub fn plants(kg: f64, leaf: f64, walls: f64, rho: f64) -> Plants {
-    if kg <= 0.0 || leaf <= 0.0 {
+/// The plants of a stand of `kg` built cover, `leaf` capture area and `per_m2` plants per m², of which `walls` is the
+/// share its walls make, of walls of density `rho` kg/m³. Its crowns cover the share 1 - e^(-leaf / `CLOSE_LAI`) of the
+/// ground, in patches where they close, each plant's crown the ground it holds there; its stem and height are the
+/// cover's law for a plant of its mass (`cover::stem`, `cover::height`).
+pub fn plants(ph: &Physics, (kg, leaf, per_m2): (f64, f64, f64), walls: f64, rho: f64) -> Plants {
+    if kg <= 0.0 || leaf <= 0.0 || per_m2 <= 0.0 {
         return Plants::default();
     }
     let cover = -(-leaf / CLOSE_LAI).exp_m1();
-    let (dense, lai) = (kg / cover, leaf / cover);
-    let inside = (THIN_KG / dense).powi(2);
-    let mass = dense / inside;
-    // walls = form × solid × rho × π/4 × D² × TALL × D^(2/3)
-    let stem = (mass * walls / (STEM_FORM * STEM_SOLID * rho * std::f64::consts::FRAC_PI_4 * TALL)).powf(3.0 / 8.0);
+    let (mass, inside) = (kg / per_m2, per_m2 / cover);
     let width = (1.0 / (std::f64::consts::FRAC_PI_4 * inside)).sqrt();
-    Plants { per_m2: inside * cover, mass, height: TALL * stem.powf(2.0 / 3.0), stem, width, cover, crown: -(-lai).exp_m1() }
+    let (stem, height) = (cover::stem(ph, mass, walls, rho), cover::height(ph, mass, walls, rho));
+    Plants { per_m2, mass, height, stem, width, cover, crown: -(-leaf / cover).exp_m1() }
 }
 
 /// A kind of cover in a cell: its slots of one starting kind joined, their genes the mean by built cover.
 #[derive(Clone, Copy, Debug)]
 pub struct Kind {
     pub root: u32,
-    /// Built cover, fuel, walls and capture area per m², kg and m²
+    /// Built cover, fuel, walls and capture area per m², kg and m², and its plants a m²
     pub kg: f64,
     pub fuel: f64,
     pub walls: f64,
     pub leaf: f64,
+    pub plants: f64,
     pub genes: [f64; NG],
 }
 
 impl Kind {
     /// The numbers a viewer draws it from, `KIND_ROW` of them, for a cell whose ground is as wet as `wet`
-    /// (`cover::wet`) and at `t` K, its walls of density `rho`: its starting kind; its built cover, kg/m²; its plants
+    /// (`cover::wet`) and at `t` K, its key liquid melting at `melt` K, its walls of density `rho`: its starting kind; its built cover, kg/m²; its plants
     /// (`plants`): the stem's width, m, a m², height and crown's width, m, the share of the ground they cover, how closed
     /// a crown is; its walls' share; its capture area per kg of living cover, log10 m²/kg (`LEAF`); its light capacity
     /// per m² of capture area, log10 mol/m²/s (more pigment per area); its moisture gene (`MOIST`) and frost gene, K
     /// (`FROST`); its fuel over its reserve (`STORE`); its activity there (`cover::activity`); the share of it
     /// frozen this month (`Physics::frozen`); and the share of what it builds that goes to seeds (`SEED`).
-    pub fn row(&self, ph: &pcore::Physics, wet: f64, t: f64, rho: f64) -> [f64; KIND_ROW] {
+    pub fn row(&self, ph: &pcore::Physics, wet: f64, (t, melt): (f64, f64), rho: f64) -> [f64; KIND_ROW] {
         let g = self.genes;
-        let p = plants(self.kg, self.leaf, self.walls / self.kg.max(1e-300), rho);
+        let p = plants(ph, (self.kg, self.leaf, self.plants), self.walls / self.kg.max(1e-300), rho);
         let genes: [f32; NG] = g.map(|x| x as f32);
         let act = cover::activity(ph, &genes, wet);
         let reserve = dec(genes[STORE]) * self.kg;
         [
             self.root as f64, self.kg, p.stem, p.per_m2, p.height, p.width, p.cover, p.crown,
             self.walls / self.kg.max(1e-300), g[LEAF], g[LIGHT] + g[MOIST] - g[LEAF], g[MOIST], g[FROST],
-            self.fuel / reserve.max(1e-300), act, ph.frozen(g[FROST], t, act), g[SEED],
+            self.fuel / reserve.max(1e-300), act, cover::frozen(ph, melt, g[FROST], (t, act)), g[SEED],
         ]
     }
 }
@@ -104,7 +88,7 @@ pub fn kinds(c: &Cover, mm: &[f64; NP], area: f64) -> Vec<Kind> {
         let k = match out.iter_mut().position(|k| k.root == c.root[x]) {
             Some(at) => &mut out[at],
             None => {
-                out.push(Kind { root: c.root[x], kg: 0.0, fuel: 0.0, walls: 0.0, leaf: 0.0, genes: [0.0; NG] });
+                out.push(Kind { root: c.root[x], kg: 0.0, fuel: 0.0, walls: 0.0, leaf: 0.0, plants: 0.0, genes: [0.0; NG] });
                 out.last_mut().expect("just pushed")
             }
         };
@@ -115,6 +99,7 @@ pub fn kinds(c: &Cover, mm: &[f64; NP], area: f64) -> Vec<Kind> {
         k.fuel += c.mol[x][FUEL] * mm[FUEL] / area;
         k.walls += c.walls(mm, x) / area;
         k.leaf += c.leaf(mm, x) / area;
+        k.plants += c.plants[x] / area;
     }
     out.sort_by(|a, b| b.kg.total_cmp(&a.kg));
     out
@@ -130,7 +115,7 @@ pub fn rows(w: &World, i: usize) -> [f64; KINDS * KIND_ROW] {
     let wet = cover::wet(w, &p, i, w.g(p.liquid, i)).1;
     let (t, rho) = (w.t_ground_last(i), w.chem.subs[p.sub[cover::WALL]].density[0]);
     for (k, kind) in kinds(w.life.cover(i), &mm, area).iter().take(KINDS).enumerate() {
-        out[k * KIND_ROW..(k + 1) * KIND_ROW].copy_from_slice(&kind.row(&w.cfg.phys, wet, t, rho));
+        out[k * KIND_ROW..(k + 1) * KIND_ROW].copy_from_slice(&kind.row(&w.cfg.phys, wet, (t, w.chem.subs[p.liquid].melt), rho));
     }
     out
 }
@@ -138,15 +123,6 @@ pub fn rows(w: &World, i: usize) -> [f64; KINDS * KIND_ROW] {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A stand's plants a m² times the mean plant's mass is its mass, at any closure.
-    #[test]
-    fn plants_times_their_mass_is_the_stand() {
-        for (kg, leaf, walls) in [(0.05, 0.1, 0.3), (0.5, 2.0, 0.5), (14.0, 5.0, 0.9), (40.0, 8.0, 0.95)] {
-            let p = plants(kg, leaf, walls, 1500.0);
-            assert!((p.per_m2 * p.mass / kg - 1.0).abs() < 1e-12, "{kg} kg/m²: {p:?}");
-        }
-    }
 
     /// Joined kinds hold the cell's cover: two slots of one starting kind, far apart in their genes, make one kind of
     /// their summed mass.

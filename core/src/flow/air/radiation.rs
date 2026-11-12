@@ -189,7 +189,7 @@ mod tests {
         Surf {
             area: 1.0, j: 0, seen_area: 1.0, sun: 0.0, gam: 0.0, zair: 0.0, head: 0.0, tg: tm, pk, phi, cap: CAP,
             latent, cover, alb: 0.0, pd: 0.0, wet: 0.0, heat: 0.0, amt: [0.0; MAX_SUBSTANCES], fusion, canopy: 0.0,
-            absorb: 0.0, keep: 0.0, cell: 0, part: None, share: 1.0,
+            absorb: 0.0, keep: 0.0, second: None, cell: 0, part: None, share: 1.0,
         }
     }
 

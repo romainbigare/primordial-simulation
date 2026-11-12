@@ -232,6 +232,28 @@ pub struct Physics {
     pub c_light: f64,
     /// Mutation size of the cover's genes per generation, times each gene's step
     pub cover_mut: f32,
+    /// Built cover of one plant a seed founds, kg
+    pub seed_kg: f64,
+    /// Share of the air's gas a leaf draws it down by inside, where the light reaction takes it
+    pub drawdown: f64,
+    /// Conducting cross-section of stems per m² of the capture area they feed, m² per m²
+    pub huber: f64,
+    /// Upkeep of conducting walls, J per kg per day at `t_cat`
+    pub c_sapwood: f64,
+    /// Built cover of a plant that builds half the walls its `WALLS` gene sets, kg
+    pub wall_kg: f64,
+    /// The self-thinning law: mean plant mass = this × (plants per m²)^(-3/2), kg (per m² to the 1/2)
+    pub thin_kg: f64,
+    /// A plant's height over its stem's width to the 2/3 (the buckling limit), m^(1/3)
+    pub tall: f64,
+    /// A stem's volume over its cylinder's, and the share of a stem that is its walls' solid
+    pub stem_form: f64,
+    pub stem_solid: f64,
+    /// Loose ground a plant roots in per m of its height, m per m, and at least, m
+    pub root_per_height: f64,
+    pub root_least: f64,
+    /// Share of its roots' need of loose ground below which a point holds none of a kind
+    pub rooted_from: f64,
 
     // Flow, as ground cover and moving liquid feel it
     /// Thickness of a layer that hides half of what lies below it: [soft solid, liquid, loose], m
@@ -328,10 +350,10 @@ impl Physics {
         depth / (depth + self.wet_depth)
     }
     /// The share of members that freeze in a month at `t` K when their lethal limit is `limit` K at full activity `act`
-    /// = 1: dormancy hardens them, lowering the limit by `harden` × (1 - `act`), and their microclimates spread over
-    /// `frost_k` below it (laws.md 6.5).
-    pub fn frozen(&self, limit: f64, t: f64, act: f64) -> f64 {
-        ((limit - self.harden * (1.0 - act) - t) / self.frost_k).clamp(0.0, 1.0)
+    /// = 1: dormancy hardens them, lowering the limit by `depth` K × (1 - `act`) (a body's `harden`, the cover's own
+    /// gene, `cover::frozen`), and their microclimates spread over `frost_k` below it (laws.md 6.5).
+    pub fn frozen(&self, (limit, depth): (f64, f64), t: f64, act: f64) -> f64 {
+        ((limit - depth * (1.0 - act) - t) / self.frost_k).clamp(0.0, 1.0)
     }
     /// The activity of a living thing that holds the share `x` of the liquid it keeps: x^`dormancy`, 1 at or above it.
     pub fn activity(&self, x: f64) -> f64 {
@@ -410,6 +432,18 @@ impl Default for Physics {
             node_floor: 0.01,
             c_light: 0.1,
             cover_mut: 0.063,
+            seed_kg: 1e-5,
+            drawdown: 0.3,
+            huber: 2e-4,
+            c_sapwood: 900.0,
+            wall_kg: 0.05,
+            thin_kg: 5.0,
+            tall: 35.0,
+            stem_form: 0.5,
+            stem_solid: 0.4,
+            root_per_height: 0.1,
+            root_least: 0.02,
+            rooted_from: 0.25,
             hide: [0.2, 0.5, 0.02],
             soft: 0.75,
             still: 0.01,

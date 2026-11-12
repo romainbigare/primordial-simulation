@@ -69,6 +69,31 @@ impl World {
     }
 }
 
+/// Pa per mol of a gas over a ground of `area` m² that sees the share `over` of its air, at `tl` K near the ground, where
+/// the gas's amount fills `hk` m near the ground (`Scratch::hk`): the ideal gas in that layer, as the ground's
+/// evaporation reads its partial pressure (`surf::Vapour`).
+#[inline]
+pub(super) fn per_mol(over: f64, tl: f64, area: f64, hk: f64) -> f64 {
+    over * R_GAS * tl / (area * hk)
+}
+
+impl World {
+    /// The partial pressure of gas `k` in the air near the ground of cell `i`, Pa, as the ground's evaporation reads it
+    /// (`surf::Vapour`, `per_mol`): the amount the air it sees holds (`lerp`) at that air's temperature at the ground's
+    /// head (`at_height`). None before the air has stepped, or where `k` is not a gas of the air.
+    pub fn near_ground(&self, i: usize, k: usize) -> Option<f64> {
+        let (s, na) = (&self.scratch, self.mesh.level(AIR).n());
+        let gi = s.state.gas.iter().position(|&g| g == k)?;
+        if s.hk.len() < (gi + 1) * na || s.near.len() != self.mesh.cells().n() || s.head.len() != self.mesh.cells().n() {
+            return None;
+        }
+        let x = lerp(s, &self.store.amounts(Class::Air)[k * na..(k + 1) * na], i);
+        let tl = at_height(lerp(s, &s.ta, i), lerp(s, &s.gam, i), s.head[i], lerp(s, &s.zair, i));
+        let j = self.mesh.cells().parent()[i] as usize;
+        Some(x * per_mol(over_cell(self, s, i), tl, self.mesh.cells().area()[i], s.hk[gi * na + j]))
+    }
+}
+
 /// Temperature of air at height `z`, m, that is at `t` K at its column's mean height `zair`, m, and cools by `gam` K/m.
 #[inline]
 pub(super) fn at_height(t: f64, gam: f64, z: f64, zair: f64) -> f64 {

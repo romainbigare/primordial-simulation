@@ -544,7 +544,10 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
 `flow::air::cells`, `daily`, `rain`, `exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against
 the air's): wet ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket), over the
 cell's own ground as its reflectance is (the share the standing liquid covers holds what its pores hold and all that
-stands, the rest what its pores hold, each a bucket by its area), taking the heat it held at the node's temperature; a node over a substance's boiling point boils of it what its heat over that
+stands, the rest what its pores hold, each a bucket by its area); and through a second film beside the air's where
+one stands over its land (`World::second_film`: the cover's open pores, 4.5), in series with the air's film, at its
+open rate while the share of the ground's liquid behind it lasts (no wet threshold: its roots reach that liquid),
+from what the first leaves; both inside the surface's balance, taking the heat it held at the node's temperature; a node over a substance's boiling point boils of it what its heat over that
 point pays, cooling to it (`land::boil_off`; gas coming out of the liquid too). **Rain**: what an air node holds of a
 gas over what saturates the air touching each of its cells (colder higher up) rains out in `rain_time`. Each node's air
 lies over the cells that see it (bilinearly), each by its share; the cells' saturation is taken as the step starts, as
@@ -1035,17 +1038,48 @@ upkeep, wear and fixing go by its living cover, as the maintenance breathing of 
 store (`Class::Cover`) whose law books its own side; it is kept with the cell's bodies (`life::Cell::cover`), so the
 chunk of the cell is its one writer. Its temperature is its ground's: at the end of each month it trades heat with its
 ground to that temperature. **One month** (`cover::step`, its own process after the air's step at a month's start, one
-task per chunk), slot by slot, the tallest (most walls per m²) first:
+task per chunk), slot by slot, the tallest first. **Plants**: a slot holds a real count of plants (`Cover::plants`,
+`cover/stand.rs`), so a plant's mass is its built cover over them, and its height is that of a plant of that mass whose
+walls (its walls' share of its built cover) make a stem of `stem_form` and `stem_solid` at the walls' density, as tall
+as `tall` × its width^(2/3), the elastic buckling limit (McMahon 1973). Seeds that found a slot are one plant per
+`seed_kg`; a stand holds at most (`thin_kg` / kg per m²)² plants a m², the self-thinning law (Yoda and others 1963): a
+denser stand loses plants, not mass, after it builds; what dies of unpaid upkeep, wear or frost is whole plants (the
+count falls with the mass); seeds that join a stand of their kind, and slots that join, add their plants (each seed
+lot one plant per `seed_kg`, as many as the thinning law lets stand). So a stand that recruits sits on the thinning
+line, its plants' mass (kg per m²)³ / `thin_kg`², and its height grows with its mass: a kind that holds much mass
+without leaf (walls, which pay no upkeep) stands tall, and a stand of few seeds is of few large plants until its own
+seeds fill it:
 - **Light**: the light the cell caught since its last month per m² of capture area (`World::light`), on its capture
   area (10^`LEAF` m² per kg of living cover) less what it reflects (its parts' colours by volume), shared among its
-  kinds by height (Beer's law, `math::shade`); under standing liquid times e^(−depth / `light_depth`).
+  kinds by the height of their plants (Beer's law, `math::shade`): the tallest take it first, and a seedling lives on
+  what reaches the bottom of the layers above it; under standing liquid times e^(−depth / `light_depth`). **Roots**: a
+  kind's plants root in `root_per_height` of their height of loose ground, at least `root_least` (rooting depth grows
+  with a plant's size; Schenk and Jackson 2002), and hold a point of the cell where its loose ground reaches that need
+  (none below `rooted_from` of it, all from it, smoothly between: bare bed anchors nothing and holds no liquid in
+  pores). Each cell keeps the share of its area in each of 24 bins of loose depth, from its terrain's samples, found
+  when the world is built (`World::loose_bins`, `cover::loose_bins`), and a kind holds the share s of the cell their
+  mean gives (`Cover::rooted`, found again only when its need has moved by more than a bin). It stands on that share
+  alone: its capture area is a layer of x / s there, and those below it get 1 − s + s e^(−x / s) of its light (`math::shade`;
+  with s = 1 everywhere, Beer's law). So tall kinds compete on a cell's deep ground only, low kinds on its thin ground too,
+  and on bare bed nothing but the smallest stands.
 - **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
   10^`LIGHT` × 10^`MOIST` mol per kg of living cover per s, times the reaction's pace k e^(−Ea/T) over its value at
   `t_cat`, times its activity a = min(1, wet / 10^`MOIST`)^`dormancy` (wet: how wet its ground is as bodies feel it,
   d / (d + `wet_depth`), d the depth of its key liquid that is liquid, in its pores and standing, `Physics::wetness`); both the light
   and the capacity limit go with the air's share x of the reaction's gas as (x − `gas_floor`) / (x + 2 `gas_floor`)
   over its value at `gas_ref` (`Physics::gas_factor`; the light-limited rate of Farquhar, von Caemmerer and Berry
-  1980): nothing at or below the floor, so the cover cannot strip the air of that gas. All kinds of a cell are cut
+  1980): nothing at or below the floor, so the cover cannot strip the air of that gas. **Liquid for gas**: its pores that
+  let the gas in let the key liquid's vapour out; per mol of gas taken in it loses r mol of the liquid, r = (D_v / D_g)
+  (p_sat − p_v) / (`drawdown` p_g) (Cowan and Farquhar 1977; Farquhar and Sharkey 1982; `cover::thirst`): p_sat the
+  liquid's saturation at the leaf (`Chemistry::p_sat` at its ground's temperature), p_v and p_g the partial pressures
+  of the vapour and the gas in the air near its ground, as the ground's own evaporation reads them
+  (`World::near_ground`, 1.5), D_v / D_g the ratio of their diffusivities, the root of the ratio of their molar
+  masses (Graham's law). The cover does not move that vapour itself: it opens its pores as wide as the liquid its roots
+  reach pays for at that rate, and leaves the film they make, D_v / D_g × T / (`drawdown` p_g) per mol a s of gas
+  taken in (`cover::pores`), with the share of the ground's liquid its roots reach (`Cover::film`, `Cover::reach`), for
+  the ground's evaporation to pass the liquid through day by day, inside the surface's energy balance (1.5). Each slot draws the liquid from
+  the pores its roots reach (its rooted share of the ground's liquid); where the ground cannot give it the pores close
+  and all slots store less together. All kinds of a cell are cut
   together to the liquid share of its ground's key liquid and the carbon gas of its share of its air node; its
   burnings and fixing take their gas from what that share still offers, so the cover never takes more of the air's
   gas than its cell's share holds (`grow::Books::room`). A cover that works on drier ground works more slowly: its capacity goes with its
@@ -1054,31 +1088,48 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
 - **Upkeep**, paid by burning its fuel (reaction 1) with the air's oxidising gas: per kg of living cover and day
   `c_basal` plus `c_light` × what its capacity could store in a day (dearer by 1 + (melting point of the key liquid −
   `FROST`) / `c_firm` for a cover that stands the cold), plus `c_leaf` per m² of capture area; times its repair factor
-  (`Physics::repair`), its activity and the burning's pace at T (seasons come from temperature only). The share unpaid
+  (`Physics::repair`), its activity and the burning's pace at T (seasons come from temperature only); and its
+  conducting walls, alive in every season, `c_sapwood` per kg a day at the burning's pace: by the pipe model their
+  cross-section goes with the capture area they feed, `huber` m² a m², as tall as its plants (Shinozaki and others
+  1964), at most its walls (`stand::sapwood`), so a tall plant pays for its height every month. The share unpaid
   dies (`SPENT`). **Wear**: the share 1 − e^−wear dies (`AGE`), wear its upkeep at an activity of at least `dormant`
-  over (living cover × `e_life` × 10^`REPAIR`), as bodies wear (6.7). **Frost**: below its `FROST` gene, lowered by its dormancy (`Physics::harden` × (1 − a)), the share
-  min(1, (limit − T) / `frost_k`) dies (`PHASE`), active or not.
+  over (living cover × `e_life` × 10^`REPAIR`), as bodies wear (6.7). **Frost**: its `FROST` gene is the limit it
+  reaches hardened, when dormant; growing tissue loses that hardiness and freezes at its key liquid's melting point,
+  the limit at activity a the melting point less (melting point − `FROST`) × (1 − a) (`cover::frozen`); below it the
+  share min(1, (limit − T) / `frost_k`) dies (`PHASE`). Hardiness is the kind's own and paid for in every month
+  (`c_firm`, above), not given by dormancy (Levitt 1980; Sakai and Larcher 1987).
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
-  out as kinds build, tallest first) build body matter and walls (10^`WALLS` kg per kg of matter) by the conversions of growth (`Chemistry::build`,
+  out as kinds build, tallest first) build body matter and walls (10^`WALLS` kg per kg of matter, times m / (m +
+  `wall_kg`) for a plant of m kg: a seedling is mostly leaf and the share of stem grows with a plant's size, Poorter
+  and others 2012) by the conversions of growth (`Chemistry::build`,
   `builds`), paying `c_copy` per kg by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
-  most 10^`FIX` mol per kg of living cover per s at the reaction's pace, paid by the reaction's fuel. The fuel past its reserve that
-  it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
+  most 10^`FIX` mol per kg of living cover per s at the reaction's pace, paid by the reaction's fuel. Then it builds
+  walls alone of the fuel past its reserve, up to the walls its plants hold for their mass (`grow::frame`): walls are
+  built of the fuel alone and pay no upkeep, so a plant short of minerals, or whose leaves are all its light pays for
+  (it is **full** and builds no living cover then), still grows its frame and with it its height, and its stand thins
+  out. The fuel past its reserve that it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
 - **Seeds**: the share `SEED` of what it builds leaves in `seed::LOTS` (8) equal lots, each landing where the dispersal
   kernel draws it, as children do (`copy::lot`, 4.2); the lots of a cell make a packet each (`seed::send`; what lands
-  in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
-  not pay: what a kg more would store with the light at the bottom of its layer (`math::shade`) is less than a kg's
-  upkeep, so the slot is **full** (`Cover::full`) and stops thickening where its lowest leaves would not pay for
-  themselves (Monsi and Saeki 1953; Hirose 2005). When every cell has had its month the seeds land (`cover::land`),
-  cell by cell in the order made (the potential energy of the life that left a cell's head and came to it is booked
-  once for each cell and way, `store::life_sent`): they join the most alike slot of their starting kind in the cell (every gene
-  within `APART` (0.5) × `alike` steps, `cover::distance`; the genes the mean by built cover; they die if that slot is
-  full), else an empty slot; where none is empty, the two most alike slots of one starting kind join to make one
-  (`seed::room`), so a kind new to a cell can take hold beside another's variants; else the lightest slot if they
-  outweigh its built cover (whose cover dies as remains); else they die as remains. So a variant farther than that from its kind founds a slot of its own and competes with
-  the others for light by height. Slots of a cell within the same distance share one (`merge_alike`). Selection is
-  between slots and cells: what grows better sends more seeds (the frost gene falls where winters are cold,
-  `core/tests/cover.rs`).
+  in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step ×
+  `cover_mut`), of body matter first and then walls (an embryo and its store); all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
+  its layer (`math::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
+  where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005). Each seed carries its own
+  store, fuel at its `STORE` gene per kg of it, from the slot's fuel: a slot short of fuel makes fewer seeds, not
+  lighter ones. When every cell has had its month the seeds land (`cover::land`), cell by cell in the order made (the
+  potential energy of the life that left a cell's head and came to it is booked once for each cell and way,
+  `store::life_sent`), and always take hold (`seed::lodge`): they join the most alike slot of their starting kind in
+  the cell (every gene within `APART` (0.5) × `alike` steps, `cover::distance`; the genes the mean by built cover);
+  else they found a slot of their own: an empty one; else the slot **in deficit**, whose balance over about its last
+  year (`Cover::net`: what its light reaction stored less its upkeep, per kg, a running mean over a year's months) is
+  below zero, the worst first (its cover dies as remains); else the two slots nearest each other by their genes,
+  of any starting kind, join (`seed::room`: the slots are a limit of the bookkeeping, and the two hold the same niche
+  to within what it resolves) and they found the slot it frees. So a cell is never closed to seeds and a holder that pays its
+  way is never pushed out by weight: what lives after is the light's to decide, as seedlings live on their store and on
+  the light that reaches the bottom of the layers above them, and what does not pay dies (the gap models, Shugart
+  1984). A variant farther than `APART` × `alike` from its kind founds a slot of its own and competes with the others
+  for light by height. Slots of a cell within the same distance share one (`merge_alike`). Selection is between slots
+  and cells: what grows better sends more seeds (the frost gene falls where winters are cold, `core/tests/cover.rs`).
 - **What it takes and gives**: liquids and minerals from and to its ground with their heat; gases from the air (with
   their heat at the air's temperature and their latent heat) and to its cell's bodies' node (with theirs), as bodies
   breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 7,
@@ -1346,7 +1397,7 @@ stand in microclimates that spread over `frost_k` (3 K) around the temperature T
 the share f = min(1, (limit − T) / `frost_k`) freezes and dies (`PHASE`) in a month, the limit the melting point
 lowered by the body's dormancy, `Physics::harden` × (1 − a) (cold hardening: tissue that stops its chemistry in
 the cold stands a lower lethal temperature, Levitt 1980; Sakai and Larcher 1987); one law for bodies and cover
-(`Physics::frozen`). f is a share that composes: over
+(`Physics::frozen`), the cover's depth of hardening its own frost gene's (4.5). f is a share that composes: over
 the t its sub-step integrates 1 − (1 − f)^(t / month) (`Span::share64`), so a cold spell kills alike in one sub-step
 or in many; an individual dies with that chance. A dormant body
 (little free liquid) lives through frosts down to its hardened limit; the cover freezes by the same law below its `FROST`

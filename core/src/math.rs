@@ -88,21 +88,24 @@ pub(crate) fn mean_passed(x: f64) -> f64 {
     if x.abs() < SERIES_BELOW { 0.5 - x / 6.0 + x * x / 24.0 } else { (1.0 - mean_decay(x)) / x }
 }
 
-/// Light passing layers from the tallest down (Beer's law): `l` holds per layer member its height, its capture area per
-/// ground area `x` and a tag, and is sorted here, tallest first; members of one height share a layer, and a layer of
-/// capture area x absorbs 1 - exp(-x) of what reaches it. `set(tag, f, bottom)` gets each member's light per unit of capture
-/// area over the mean of all (weighted by capture area, the factors have mean 1), and the light at the bottom of its
-/// layer per unit of capture area over the same mean.
-pub(crate) fn shade<T: Copy>(l: &mut [(f32, f64, T)], mut set: impl FnMut(T, f64, f64)) {
+/// Light passing layers from the tallest down (Beer's law): `l` holds per member its height, its capture area per ground
+/// area x, the share s of the ground it stands on, and a tag, and is sorted here, tallest first (in their order where
+/// heights are equal). On its share a member is a layer of capture area x / s that absorbs 1 - exp(-x / s) of what
+/// reaches it; members stand at random over the ground, so a member passes on 1 - s + s exp(-x / s) of the light to those
+/// below it (with every s 1, Beer's law over the layers). `set(tag, f, bottom)` gets each member's light per unit of
+/// capture area over the mean of all (weighted by capture area, the factors have mean 1), and the light at the bottom of
+/// its layer per unit of capture area over the same mean.
+pub(crate) fn shade<T: Copy>(l: &mut [(f32, f64, f64, T)], mut set: impl FnMut(T, f64, f64)) {
     l.sort_by(|a, b| b.0.total_cmp(&a.0));
-    let (all, mut above, mut k) = (mean_decay(l.iter().map(|x| x.1).sum()), 0f64, 0);
-    while k < l.len() {
-        let e = k + l[k..].iter().take_while(|x| x.0 == l[k].0).count();
-        let x: f64 = l[k..e].iter().map(|x| x.1).sum();
-        let (f, bottom) = ((-above).exp() * mean_decay(x) / all, (-above - x).exp() / all);
-        l[k..e].iter().for_each(|y| set(y.2, f, bottom));
-        (above, k) = (above + x, e);
+    let (mut reach, mut got) = (1.0, Vec::with_capacity(l.len()));
+    for &(_, x, s, tag) in l.iter() {
+        let y = x / s.max(1e-300);
+        got.push((tag, x, reach * mean_decay(y), reach * (-y).exp()));
+        reach *= 1.0 - s + s * (-y).exp();
     }
+    let (sum_x, sum_a) = got.iter().fold((0.0, 0.0), |(sx, sa), g| (sx + g.1, sa + g.1 * g.2));
+    let all = if sum_x > 0.0 { sum_a / sum_x } else { 1.0 };
+    got.iter().for_each(|&(tag, _, f, bottom)| set(tag, f / all.max(1e-300), bottom / all.max(1e-300)));
 }
 
 /// Veltkamp's constant, 2^27 + 1: it splits a number into two halves of 26 bits (`add_times`).

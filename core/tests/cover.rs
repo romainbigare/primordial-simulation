@@ -88,6 +88,23 @@ fn the_light_reaction_goes_with_its_gas() {
     assert!(half > 0.0 && half < 1.0 && p.gas_factor(2.0 * p.gas_ref) > 1.0, "{half}");
 }
 
+/// A leaf loses the key liquid for the gas it takes in (`cover::thirst`): nothing in air saturated at its temperature,
+/// more the drier the air and the warmer the leaf, and at a mild leaf in half-saturated air some hundred mol a mol, the
+/// transpiration ratio of real leaves (a few hundred g of liquid a g of dry matter; Farquhar and Sharkey 1982).
+#[test]
+fn leaves_lose_liquid_for_gas() {
+    let (chem, _) = worldgen::chemistry0();
+    let (p, ph) = (cover::Parts::of(&chem).expect("cover parts"), pcore::Physics::default());
+    let gas = chem.reactions[p.light].inputs.iter().map(|q| q.0 as usize).find(|&k| chem.phase(k, 290.0) == pcore::chem::Phase::Gas).expect("a gas input");
+    let at = |t: f64, rh: f64| {
+        let p_air = pcore::units::P_REF;
+        cover::thirst(&chem, &ph, (p.liquid, gas), t, [rh * chem.p_sat(p.liquid, t), ph.gas_ref * p_air])
+    };
+    let (wet, half, warm) = (at(290.0, 1.0), at(290.0, 0.5), at(300.0, 0.5));
+    println!("mol of liquid a mol of gas: saturated {wet:.1}, half-saturated {half:.1}, warmer {warm:.1}");
+    assert!(wet == 0.0 && half > 50.0 && half < 500.0 && warm > half, "{wet} {half} {warm}");
+}
+
 /// Cover whose frost gene lies above its ground's temperature dies of frost in its month (`PHASE`), and what dies goes
 /// to the ground: the books are kept.
 #[test]
@@ -162,8 +179,8 @@ fn seeds_join_their_kind_or_found_a_slot() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// A kind new to a cell takes hold where four variants of another kind hold every slot (`seed::lodge`): the two most
-/// alike of them join to make room, and the cover keeps its mass.
+/// A kind new to a cell takes hold where four variants of another kind hold every slot and all pay their way
+/// (`seed::lodge`): the two nearest each other by their genes join to make room, and the cover keeps its mass.
 #[test]
 fn a_new_kind_enters_a_full_cell() {
     let (mut w, i) = start();
@@ -180,6 +197,76 @@ fn a_new_kind_enters_a_full_cell() {
     assert_eq!(c.held().filter(|&x| c.root[x] == 1).count(), 1, "the new kind holds a slot");
     let after: f64 = slots_of(&w, i).iter().map(|s| s.1).sum();
     assert!(after > before, "the joined variants lost cover: {before} kg, then {after} kg");
+}
+
+/// A stand of the tree kind sown on bare ground as seedlings (0.001 kg per m²) grows over two years of light: it never
+/// holds more plants than the self-thinning law allows for its mass (`thin_kg`), its plants grow taller (`cover::height`),
+/// and the books are kept.
+#[test]
+fn a_stand_never_passes_the_thinning_law_as_it_grows_tall() {
+    let (mut w, i) = start();
+    let books = Books::now(&w);
+    let Place::Field(f) = &KINDS[3].place else { unreachable!("kind 3 is cover") };
+    assert!(cover::place(&mut w, i, f.genes, 3, 0.001));
+    let p = cover::Parts::of(&w.chem).expect("cover parts");
+    let (mm, area, rho) = (p.mm(&w.chem), w.mesh.cells().area()[i], w.chem.subs[p.sub[cover::WALL]].density[0]);
+    let stand = |w: &pcore::World| {
+        let c = w.life.cover(i);
+        let x = c.held().next().expect("the stand lives");
+        (c.built(&mm, x) / area, c.plants[x] / area, c.height(&w.cfg.phys, &mm, rho, x))
+    };
+    let first = stand(&w);
+    for _ in 0..24 {
+        pcore::step(&mut w);
+        let (kg, plants, _) = stand(&w);
+        assert!(plants <= (w.cfg.phys.thin_kg / kg).powi(2) * (1.0 + 1e-9), "{plants} plants a m² on {kg} kg/m²");
+    }
+    let last = stand(&w);
+    println!("kg/m², plants a m², height m: {first:?} then {last:?}");
+    assert!(last.2 > 2.0 * first.2, "the plants did not grow tall: {first:?} then {last:?}");
+    books.assert_kept(&w, 1e-9);
+}
+
+/// A kind's plants hold the share of their cell whose loose ground reaches their roots' need (`Cover::rooted`): on the
+/// land cell of the thinnest loose ground, tall plants (the tree kind placed as a stand of 10 kg per m²) hold less of
+/// it than low ones (the starting cover at 0.1 kg per m²), and less than all of it.
+#[test]
+fn tall_plants_hold_less_of_thin_ground() {
+    let (mut w, _) = start();
+    let mean = |b: &[f32; cover::BINS]| b.iter().enumerate().map(|(k, &s)| s as f64 * k as f64).sum::<f64>();
+    let i = dry_lands(&w).into_iter().min_by(|&a, &b| mean(&w.loose_bins[a]).total_cmp(&mean(&w.loose_bins[b]))).expect("dry land");
+    let Place::Field(f) = &KINDS[3].place else { unreachable!("kind 3 is cover") };
+    assert!(cover::place(&mut w, i, genes(), 0, 0.1) && cover::place(&mut w, i, f.genes, 3, 10.0));
+    pcore::step(&mut w);
+    let c = w.life.cover(i);
+    let held = |root: u32| c.held().find(|&x| c.root[x] == root).map(|x| c.rooted[x]).expect("the kind lives");
+    let (low, tall) = (held(0), held(3));
+    println!("rooted share of the low kind {low:.3}, of the tall kind {tall:.3}");
+    assert!(tall < low && tall < 1.0, "the tall kind holds {tall} of the cell, the low kind {low}");
+}
+
+/// Seeds of a new kind arriving in a cell whose slots are all held take the slot in deficit (`Cover::net` below zero,
+/// the worst), whose cover dies (`seed::lodge` returns it), and no other: the slots that pay their way keep their cover.
+#[test]
+fn seeds_take_the_slot_in_deficit() {
+    let (chem, _) = worldgen::chemistry0();
+    let (p, ph) = (cover::Parts::of(&chem).expect("chemistry 0 has cover"), pcore::Physics::default());
+    let (mm, g, step) = (p.mm(&chem), genes(), cover::RANGE[FROST].0);
+    let seeds = |v, root, kg| cover::sown(&chem, &ph, &p, (0, 1.0, 280.0), v, root, kg);
+    let mut c = cover::Cover::default();
+    for k in 0..cover::SLOTS {
+        let mut v = g;
+        v[FROST] -= 3.0 * step * k as f32;
+        assert!(matches!(cover::lodge(&mut c, &mm, &seeds(v, k as u32, 0.5), &ph, 1.0), cover::Landed::In));
+    }
+    (c.net[1], c.net[2]) = (-1.0, -3.0);
+    let (held, worst) = (c.clone(), c.mol[2]);
+    let cover::Landed::Out(died) = cover::lodge(&mut c, &mm, &seeds(g, 9, 0.01), &ph, 1.0) else { panic!("the seeds took no slot in deficit") };
+    assert_eq!(died, worst, "the worst in deficit gave way");
+    assert_eq!(c.root[2], 9, "the new kind holds the slot");
+    for x in [0, 1, 3] {
+        assert_eq!((c.root[x], c.mol[x]), (held.root[x], held.mol[x]), "slot {x} lost its cover");
+    }
 }
 
 /// The frost gene of the cover moves down where winters kill (laws.md 4.5): two variants of the starting cover, of
@@ -216,7 +303,7 @@ fn the_frost_gene_falls_where_winters_are_cold() {
     let kills = |w: &pcore::World, cells: &[usize]| {
         let at = |i: usize| {
             let act = cover::activity(&w.cfg.phys, &tender, cover::wet(w, &parts, i, w.g(parts.liquid, i)).1);
-            w.cfg.phys.frozen(tender[FROST] as f64, w.t_ground_last(i), act)
+            cover::frozen(&w.cfg.phys, w.chem.subs[parts.liquid].melt, tender[FROST] as f64, (w.t_ground_last(i), act))
         };
         cells.iter().map(|&i| at(i)).fold(0.0, f64::max)
     };

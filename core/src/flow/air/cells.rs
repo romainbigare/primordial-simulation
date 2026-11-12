@@ -11,7 +11,7 @@ use super::radiation::{glow, glow_slope, on_slope, sun_by_latitude, Air, Surface
 use super::step::Active;
 use super::surf::{end_reflectance, parts_respond, Patch, Surf, Vapour};
 use super::{at_height, lerp};
-use crate::{math::one_minus_exp, units::{R_GAS, T_FLOOR}, World, AIR};
+use crate::{math::one_minus_exp, units::T_FLOOR, World, AIR};
 
 /// A ground node's surface balance is solved again about the temperature it gives, up to this many times, until that
 /// moves by less than `SURFACE_STILL_K`, K.
@@ -323,7 +323,7 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
     let over = area / g.seen_area;
     let Work { gas, ev, p, carry, out, loss } = work;
     gas.clear();
-    gas.extend(act.iter().enumerate().map(|(y, &ac)| Vapour::of(cx, g, ac, air[1 + y], over * R_GAS * tl / (area * s.hk[ac.gi * na + j]))));
+    gas.extend(act.iter().enumerate().map(|(y, &ac)| Vapour::of(cx, g, ac, air[1 + y], super::per_mol(over, tl, area, s.hk[ac.gi * na + j]))));
     let gas = &*gas;
     // The balance with what evaporates linearised about `t0`.
     let balance = |t0: f64, sw: f64| {

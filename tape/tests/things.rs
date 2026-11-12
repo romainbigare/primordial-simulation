@@ -81,14 +81,17 @@ fn a_window_lists_what_lies_in_its_cells() {
         assert_eq!(seen.mass, (x.mass(&w.chem) / x.n()) as f32, "the mass of one member");
     }
 
-    // The slot of cover: its kind, its built cover and capture area per m² and its genes. Its walls are as much as its
-    // matter, so its living cover is twice its built cover (`Cover::living`).
+    // The slot of cover: its kind, its built cover and capture area per m² (10^`LEAF` per kg of its living cover,
+    // `Cover::living`) and its genes.
     let Place::Field(f) = &KINDS[0].place else { unreachable!("kind 0 is cover") };
     assert_eq!(r.u32(), 0);
     let built = r.f32() as f64;
     assert!((built - 0.5 / (1.0 + 10f64.powf(f.genes[STORE] as f64))).abs() < 1e-6, "built cover {built} kg/m²");
     let leaf = r.f32() as f64;
-    assert!((leaf / (2.0 * built * 10f64.powf(f.genes[LEAF] as f64)) - 1.0).abs() < 1e-5, "capture area {leaf} m²/m²");
+    let p = pcore::cover::Parts::of(&w.chem).expect("cover parts");
+    let (c, area) = (w.life.cover(i), w.mesh.cells().area()[i]);
+    let living = c.living(&p.mm(&w.chem), c.held().next().expect("a slot")) / area;
+    assert!((leaf / (living * 10f64.powf(f.genes[LEAF] as f64)) - 1.0).abs() < 1e-5, "capture area {leaf} m²/m²");
     let genes = r.f32s::<{ pcore::cover::NG }>();
     assert_eq!(genes[WALLS], f.genes[WALLS]);
     assert_eq!(r.take::<4>(), [0; 4]);
