@@ -651,3 +651,16 @@ worlds: to measure next) and two changes of the cover's law that it showed:
 - The loose depth a kind's roots need (the share of a cell's area whose loose ground reaches it) is not in the law.
 Also found: `flow::air` computes the light per capture area itself where `cover::per_capture_area` now states it:
 one of the two should call the other.
+
+**The cover's law, first three changes: built on `wip/cover-law`, not merged.** Seeds always take hold and a slot in
+deficit gives way (A); each slot has a real count of plants, a plant's own height sorts the light, small plants build
+few walls (B); a kind stands only on the share of a cell whose loose ground reaches its roots (C). As mechanisms they
+hold (a seedling alone grows to 2.4 m in 4 years; the books keep). What they show: **the cover has no costs, so nothing
+sorts.** On a Wide island the two tall kinds lead in every row, from a coldest month of 284 K to 256 K and from wet
+ground to almost no rain, at 19 to 22 kg/m2. The causes, measured:
+- A stand takes almost no liquid for the gas it fixes: rain does not limit it.
+- Walls pay no upkeep, and a dormant stand pays nothing: a tall kind waits out any season at full mass.
+- Young stands store 17 kg/m2 a year (3 at 15 years, 0.5 to 0.8 when old), against 0.5 to 1.5 for forests.
+- Every dormant tissue hardens by the same 20 K for nothing: no winter of the island kills.
+In work: liquid for gas (transpiration by the air's dryness), upkeep of living walls, what light gives, hardening as a
+kind's own trait. The test is the Wide island's rows: forest only where rain and warmth pay for it.
