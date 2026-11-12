@@ -79,3 +79,40 @@ fn a_channels_line_runs_on_from_sample_to_sample() {
     }
     assert!(joints > 1000, "{joints} joints");
 }
+
+/// The shore drawn smooth (`shore`) moves the line where the samples' ground crosses its level, not the area under it:
+/// over the island the area under the level moves by under 0.3 of a sample times the shore's length (a blur shrinks what
+/// bulges: an island and its capes).
+#[test]
+fn the_smooth_shore_keeps_the_area_under_the_level() {
+    let (_, s, _, _) = island();
+    let shore = super::super::shore::Shore::new(&s);
+    // Points a quarter of a sample apart; the samples' ground blended between their centres.
+    const PER: usize = 4;
+    let at = |c: i64, r: i64| s.h[r.clamp(0, s.down as i64 - 1) as usize * s.across + c.clamp(0, s.across as i64 - 1) as usize];
+    let h = |p: [f64; 2]| {
+        let (u, v) = (p[0] - 0.5, p[1] - 0.5);
+        let (c, r, fu, fv) = (u.floor() as i64, v.floor() as i64, u - u.floor(), v - v.floor());
+        (at(c, r) * (1.0 - fu) + at(c + 1, r) * fu) * (1.0 - fv) + (at(c, r + 1) * (1.0 - fu) + at(c + 1, r + 1) * fu) * fv
+    };
+    let (mut moved, mut crossings) = (0i64, 0i64);
+    for y in 0..s.down * PER {
+        let mut last = None;
+        for x in 0..s.across * PER {
+            let p = [(x as f64 + 0.5) / PER as f64, (y as f64 + 0.5) / PER as f64];
+            let level = shore.level(p[0] as i64, p[1] as i64);
+            if level.is_nan() {
+                last = None;
+                continue;
+            }
+            let under = h(p) < level;
+            moved += (shore.drawn(p, h(p), level) < level) as i64 - under as i64;
+            crossings += (last.is_some_and(|l| l != under)) as i64;
+            last = Some(under);
+        }
+    }
+    // The shore's length, samples: at least its crossings of the rows over the rows a sample.
+    let (length, area) = (crossings as f64 / PER as f64, moved as f64 / (PER * PER) as f64);
+    assert!(length > 100.0, "a shore of {length} samples");
+    assert!(area.abs() < 0.3 * length, "the area under the level moves by {area} samples² along a shore of {length} samples");
+}

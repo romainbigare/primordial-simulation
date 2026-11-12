@@ -40,6 +40,10 @@ const C_MID = 0.11, C_DRY = 0.5;
 /** The starting cover's numbers (worldgen/src/life/kinds.rs `COVER_GENES`): capture area, log10 m²/kg; walls' share;
  * moisture gene; frost gene, K; seeds' share. */
 const LEAF_0 = 0.4, WOOD_0 = 0.5, MOIST_0 = -0.3, FROST_0 = 268, SEED_0 = 0.1;
+/** A herb is the ground's sward under the trees and bushes: its lightness is drawn toward `SWARD_L` (keeping this share
+ * of its departure from it) and its chroma is this share of a plant's, so the ground does not outshine what stands on it
+ * and the plants stand out on it by shape and shadow. */
+const SWARD_L = 0.64, SWARD_L_KEEP = 0.5, SWARD_CHROMA = 0.7;
 /** The physical leaf's lightness (canopy.ts `foliage`) counts this much over that of a green leaf (`LEAF_PHYS`), so a
  * kind short of fuel still shows paler. */
 const PHYSICAL_L = 0.3;
@@ -118,12 +122,14 @@ export function designOf(height: number, wood: number): number {
   return height >= TREE_M ? DESIGN.tree : wood >= BUSH_WOOD ? DESIGN.bush : DESIGN.herb;
 }
 
-/** The green of kind `k` (OKLab), its lightness drawn in part from its physical leaf `phys` (linear). */
+/** The green of kind `k` (OKLab), its lightness drawn in part from its physical leaf `phys` (linear); a herb's as the
+ * sward's (`SWARD_L`). */
 function green(k: Leafy, phys: Rgb): Rgb {
   const hue = HUE_MID + HUE_PER_LEAF * (k.leaf - LEAF_0) + HUE_PER_FROST * (k.frost - FROST_0) + HUE_PER_MOIST * (k.moist - MOIST_0);
   const lightness = L_MID + L_PER_LEAF * (k.leaf - LEAF_0) + L_PER_WOOD * (k.wood - WOOD_0) + PHYSICAL_L * (oklab(phys)[0] - oklab(LEAF_PHYS)[0]);
   const chroma = C_MID * clamp(1 - C_DRY * Math.max(MOIST_0 - k.moist, 0));
-  return fromLch([lightness, chroma, hue]);
+  const sward = k.design === DESIGN.herb;
+  return fromLch([sward ? SWARD_L + SWARD_L_KEEP * (lightness - SWARD_L) : lightness, sward ? SWARD_CHROMA * chroma : chroma, hue]);
 }
 
 /** The deepest colour of the turn (OKLCH) of a kind reaching `reach` of the way from yellow through orange to red. */
