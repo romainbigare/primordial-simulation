@@ -34,5 +34,16 @@ for w in what:
         edit('lib/water.wgsl', '    let shown = 1.0 - ease(wave / 8.0, wave / 2.0, e);', '    var shown = 1.0 - ease(wave / 8.0, wave / 2.0, e);\n    if (LEAST_E >= 0.5 * RIPPLE_LONGEST_M) { shown = 0.0; }')
         edit('lib/crag.wgsl', '  if (cliff > 0.0) {', '  if (cliff > 0.0 && CLIFF_FROM * LEAST_E < 0.3 * STRATA_M) {')
         edit('lib/crag.wgsl', '  let slab_n = noise(at / SLAB_M, 58).x;\n  let slabs = (1.0 + SLAB_TONES * noise(at / SLAB_M + 17.0, 59).x - CRACK_DARK * crack(slab_n, CRACK_W));', '  let slab_shows = shows_at(SLAB_M * CRACK_W * 4.0, e);\n  var slabs = 1.0;\n  if (slab_shows > 0.0) { slabs = (1.0 + SLAB_TONES * noise(at / SLAB_M + 17.0, 59).x - CRACK_DARK * crack(noise(at / SLAB_M, 58).x, CRACK_W)); }')
+    elif w == 'sward':
+        edit('lib/cover_field.wgsl', '    dst = sward(at, e, b, trees.a, thick, hold.w);', '    dst = vec4f(0.0);')
+    elif w == 'lowl':
+        edit('lib/cover_field.wgsl', '      if (cover_look.sides[l] > 0.0 && cover_look.shown[l] < 1.0) {', '      if (false) {')
+    elif w == 'treesf':
+        edit('lib/cover_field.wgsl', '  dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);', '')
+    elif w == 'held':
+        edit('lib/cover_field.wgsl', '  var hold = held_at(at, b);', '  var hold = vec4f(1.0);')
+    elif w == 'farline':
+        edit('lib/cover_field.wgsl', 'const LOW_LAYER = 9; const LOW_FAR_E = 0.75; const LOW_FAR_FULL_E = 1.0;', 'const LOW_LAYER = 9; const LOW_FAR_E = 0.45; const LOW_FAR_FULL_E = 0.6;')
+        edit('land.wgsl', '// least metres a pixel: 0.5 1 3', '// least metres a pixel: 0.5 0.6 1 3')
     else:
         raise SystemExit('unknown ' + w)

@@ -12,5 +12,5 @@ cp -r $W/web/src $W/web/build.mjs $W/web/index.html $W/web/style.css $W/web/tsco
 (cd $TMP && mkdir -p dist && $T/debug/ew-shade shaders dist/.shaders.json && tsc -p . && node build.mjs > /dev/null)
 python3 $F/hook.py $TMP/dist/index.html $OUT/index.html
 python3 $F/hook.py $TMP/dist/index.html $OUT/full.html --full
-cp $F/dist-tip/ew.wasm $OUT/
+cp ${KWASM:-$F/dist-tip/ew.wasm} $OUT/
 echo built $OUT

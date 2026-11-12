@@ -54,6 +54,7 @@ const FRAMES = +(process.env.FRAMES || 3), PAGE = process.env.PAGE || 'index.htm
     const [name, metres, x, y, look] = v.split(':');
     if (look) {
       if (look === 'earth' || look === 'true') await p.click(`#views button[data-view="${look}"]`);
+      else if (look === 'angled' || look === 'above') await p.click(`#life button[data-life="${look}"]`);
       else await p.evaluate(l => { const b = [...document.querySelectorAll('#layers button')].find(b => b.textContent.trim().toLowerCase() === l.toLowerCase()); b.click(); }, look.replace(/_/g, ' '));
     }
     await p.evaluate(() => { if (window.__view) window.__map.land.tiles.view = window.__view; });
