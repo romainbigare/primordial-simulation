@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl ice.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl cover_field.wgsl
+// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl ice.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl river.wgsl cover_field.wgsl
 // least metres a pixel: 0.5 1 3 30
 // The live map in view: at each pixel of the screen the ground from its tiles and the state from the cells' table
 // (land.wgsl), in the view's colours. Made once more for draws whose pixels take at least 0.5 m, 1 m, 3 m and 30 m
@@ -16,11 +16,11 @@ const LINE_MOST = 8.0;
 const LINE_GROW = 0.75;
 const LINE_FADE = 4.0;
 // A channel's bed is as wide as its floods make it (lib/land.wgsl `banks_of`). This month's water runs in it between
-// bars of washed gravel, its thread wandering
-// across the bed's free width over `WANDER` bed widths along it, splitting about a bar where it wanders farthest (bars
-// alternate every few widths: Leopold and Wolman 1957). Where the bed takes under `BED_PX` pixels it is all water.
-const WANDER = 5.0;
+// bars of washed gravel (lib/river.wgsl `reach_at`). Where the bed takes under `BED_PX` pixels it is all water.
 const BED_PX = 3.0;
+// A channel's bars are its bed's make washed (`BAR_LIFT` times as light), and sand where its flow moves no stones
+// bigger than `BAR_SAND_STONE` m: gravel on most reaches, sand and silt on the gentlest.
+const BAR_LIFT = 1.5; const BAR_SAND_STONE = 0.03;
 // Liquid standing shallower than this over the drawn ground is drawn as soaked ground, m: the drawn ground follows the
 // samples within a few centimetres, so a body whose level lies that near its flat floor is a soaked basin, not water.
 const FILM_M = 0.05;
@@ -38,7 +38,7 @@ const SNOW_CELLS_ALL = 0.95;
 // pixel that water covers; the share the bars of its bed cover (`bars`, the dry spot as washed gravel); and the share
 // of the pixel standing liquid covers (`pool`): the pixel's footprint across the line where the depth crosses `FILM_M`,
 // so a shore is a smooth line at any zoom, not the pixels' steps.
-struct Spots { dry: Spot, wet: Spot, share: f32, bars: f32, pool: f32, snow_cells: f32 }
+struct Spots { dry: Spot, wet: Spot, share: f32, bars: f32, pool: f32, snow_cells: f32, bar: vec3f, flow: vec2f }
 
 // A snow line is ragged: at its margin the snow breaks into patches (drifts in hollows behind knobs, bare knobs first)
 // at every scale from `SNOW_PATCH_M` down to the pixel, octaves each `SNOW_PATCH_STEP` times finer weighing
@@ -119,8 +119,9 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.canopy = cf.canopy;
   p.rock = bare;
   p.bed = vec3f(0.0);
-  if (p.rock > 0.0) { p.bed = bed_make_at(at); }
   p.stone = select(0.0, stone_of(g.channels.xy), bed.half > 0.0 && g.d < STONES_OUT * bed.half);
+  // The bed's colour where it shows or its stones lie.
+  if (p.rock > 0.0 || p.stone > 0.0) { p.bed = bed_make_at(at); }
   p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), p.loose, look.z);
   p.river = 0.0;
   p.river_depth = 0.0;
@@ -130,27 +131,26 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // that is the ponds' weighs it), over the depth's change across a pixel.
   let signed = st.depth - min(st.over, NO_LIQUID_M) * g.water.y - FILM_M;
   let pool = select(0.0, tent(signed / (max(length(g.slope) * g.water.y, SHORE_RISE_LEAST) * e)), g.water.y > 0.0);
-  var out = Spots(p, p, 0.0, 0.0, pool, st.snow);
+  var out = Spots(p, p, 0.0, 0.0, pool, st.snow, vec3f(0.0), vec2f(0.0));
   if (p.depth > 0.0 || bed.half <= 0.0) { return out; }
   out.dry.over = shore_over;
   let css = e * land.samples.w;
   let shows = land.time.w * css;
   let line = 0.5 * LINE_PX * css * min(pow(q / shows, LINE_GROW), LINE_MOST) * ease(shows / LINE_FADE, shows, q);
-  // The bed (`FLOOD`) and the thread of this month's water in it, `off` m from the line.
-  let banks = banks_of(q);
-  let free = max(banks - bed.half, 0.0);
-  let open = ease(BED_PX * e, 2.0 * BED_PX * e, banks) * (1.0 - ease(banks, 2.0 * banks, line));
-  // Where the bed is drawn as all water (from afar), the thread's wander is not read.
-  var off = 0.0;
-  if (open > 0.0) { off = free * ease(-0.1, 0.5, noise_turned(at / (2.0 * WANDER * banks), 63)); }
-  let thread = abs(g.d - off);
-  let in_bed = tent((max(banks, line) - g.d) / e) - tent((-max(banks, line) - g.d) / e);
-  let water = tent((bed.half - thread) / e) - tent((-bed.half - thread) / e);
-  out.share = mix(in_bed, water, open);
-  out.bars = max(in_bed - out.share, 0.0);
+  // The bed (`FLOOD`) and this month's water in it, varied along the reach (lib/river.wgsl).
+  let open = ease(BED_PX * e, 2.0 * BED_PX * e, banks_of(q)) * (1.0 - ease(banks_of(q), 2.0 * banks_of(q), line));
+  let stone = stone_of(g.channels.xy);
+  let r = reach_at(at, e, g, bed, q, line, open, stone);
+  out.share = r.share;
+  out.bars = r.bars;
+  // The bars' colour: the bed's make washed, sand on the gentlest reaches; the bed seen through the water is the same.
+  let washed = min(bed_make_at(at) * BAR_LIFT, vec3f(1.0));
+  out.bar = mix(BEACH_SAND, washed, ease(0.0, BAR_SAND_STONE, stone)) * bar_tone(at, e);
+  out.wet.ground = out.bar;
+  out.flow = flow_signs(at, e, g.sd, g.d_slope, r.steep, r.across);
   let resolved = ease(e, 2.0 * e, bed.half);
-  let x = min(thread / bed.half, 1.0);
-  out.wet.depth = mix(bed.mean, bed.depth, resolved);
+  let x = r.across;
+  out.wet.depth = r.depth * mix(bed.mean, BED_MIDDLE * bed.mean * (1.0 - x * x), resolved);
   out.wet.sand = 0.0;
   out.wet.cover = vec4f(0.0);
   // The bed's slope across the channel, d(depth)/d(distance) along the distance's own slope; where the channel is
@@ -165,18 +165,23 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
 // coats the stones under running water, and a bed sends back about 5% of the light against about 20% for soaked sand
 // (Legleiter and others 2004; from memory).
 const BED_FILM = 0.3;
+// A streak of the flow reflects this share of the sky's light more than the water about it (a line of small ripples
+// where the current shears).
+const REFLECT_STREAK = 0.25;
 
 // The colour of a channel's water at spot `p` (`land_spots`) over its bed `g` (colour.wgsl `ground_for`), a reflectance
 // in linear light: its bed, soaked bare ground (washed sand and gravel: the flow takes the plants) under its film
 // (`BED_FILM`), seen through running water as deep as it is there (water.wgsl); snow lies on it as on standing liquid
 // (colour.wgsl `colour_on`), and the true view shades its bed as far as it shows.
-fn river_on(p: Spot, g: Ground) -> Shaded {
+fn river_on(p: Spot, g: Ground, flow: vec2f) -> Shaded {
   let lit = light(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), p.slope);
   let bed = BED_FILM * soil(g, 1.0, lit);
   let ripple = ripples(p.at, p.e) * (1.0 - p.snow);
   // In the style a channel's water is coloured as deeper than it is (style.wgsl `river_seen`), lighter over its banks.
   var water = seen_through(bed, p.depth, ripple, RUNNING_ATTENUATION, DEEP_WATER);
   if (styled()) { water = water_painted(bed, river_seen(p.depth, p.e), ripple); }
+  // The signs of its flow (lib/river.wgsl `flow_signs`): streaks catch the sky's light, white water over its stones.
+  water = mix(water + flow.x * REFLECT_STREAK * SKY, FOAM_RGB, flow.y);
   let rgb = mix(water, SNOW, p.snow * 0.85);
   return Shaded(rgb, 1.0 + (lit - 1.0) * exp(-2.0 * RUNNING_ATTENUATION.g * p.depth), RIVER);
 }
@@ -197,7 +202,9 @@ const LAYER_GROUND = 0; const LAYER_BARS = 1; const LAYER_EDGE = 2; const LAYER_
     var share = 1.0;
     if (k == LAYER_BARS) {
       share = spots.bars;
-      p.sand = 1.0;
+      p.sand = 0.0;
+      p.ground = spots.bar;
+      p.rock = 0.0;
       p.cover = vec4f(0.0);
       p.over = spots.wet.depth;
     } else if (k == LAYER_EDGE) {
@@ -211,7 +218,7 @@ const LAYER_GROUND = 0; const LAYER_BARS = 1; const LAYER_EDGE = 2; const LAYER_
     let running = k == LAYER_RIVER;
     let g = ground_for(p, running);
     var o: Shaded;
-    if (running) { o = river_on(p, g); } else { o = colour_on(p, g); }
+    if (running) { o = river_on(p, g, spots.flow); } else { o = colour_on(p, g); }
     c = Shaded(mix(c.rgb, o.rgb, share), mix(c.m, o.m, share), select(c.kind, o.kind, k != LAYER_BARS && share > 0.5));
   }
   // The true colour is the cells', and the bed's where it shows; their snow placed as the Earth view places it: the
