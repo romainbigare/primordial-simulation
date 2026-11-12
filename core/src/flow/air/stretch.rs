@@ -5,9 +5,9 @@
 //! and down (ground and air, sunlight, heat radiation, rain out) are per m² and do not read it, nor does the rain's
 //! drift (`Config::rain_drift_m`) or anything on the ground.
 
-use crate::Config;
+use crate::World;
 
-/// A column of the air stands for one `Config::stretch` times longer and wider: its horizontal lengths count that many
+/// A column of the air stands for one `stretch` times longer and wider (`Stretch::of`): its horizontal lengths count that many
 /// times, so a face between two columns counts that many times and a column's area, and with it all it holds, the
 /// square of it. A rate between two columns as the stretched air has it, mol/s, moves the column of the map the
 /// share of it its own column holds (`per_column`), so its warmth and shares change as those of the column it stands
@@ -16,8 +16,18 @@ use crate::Config;
 pub(super) struct Stretch(f64);
 
 impl Stretch {
-    pub(super) fn of(cfg: &Config) -> Stretch {
-        Stretch(cfg.stretch)
+    /// The stretch of the map of `w`: the length of its band of latitudes on the planet (`Config::radius_m`) over the
+    /// map's own from south to north. A globe is its own band: 1.
+    pub(super) fn of(w: &World) -> Stretch {
+        if w.map.wrap {
+            return Stretch(1.0);
+        }
+        Stretch(w.cfg.radius_m * (w.cfg.lat_north - w.cfg.lat_south).to_radians() / (w.map.h as f64 * w.map.side))
+    }
+    /// Whether the map stands for a band longer than itself: its air is then the planet's air over that band, open at
+    /// its edges (`edge`).
+    pub(super) fn compressed(self) -> bool {
+        self.0 > 1.0
     }
     /// A horizontal length on the map, m, as the air's sideways laws take it, m: a link's length, a face's width, a
     /// spacing of the nodes.
@@ -35,5 +45,12 @@ impl Stretch {
     #[inline]
     pub(super) fn per_column(self, rate: f64) -> f64 {
         rate / (self.0 * self.0)
+    }
+}
+
+impl World {
+    /// The stretch of its map: how many times longer its air takes the map's horizontal lengths (`Stretch::of`).
+    pub fn stretch(&self) -> f64 {
+        Stretch::of(self).0
     }
 }

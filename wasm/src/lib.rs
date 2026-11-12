@@ -36,6 +36,9 @@ struct Live {
 thread_local! {
     static LIVE: RefCell<Option<Live>> = const { RefCell::new(None) };
     static GROUND: RefCell<Option<tape::Ground>> = const { RefCell::new(None) };
+    /// The planet's air of the first banded world of the session (`worldgen::planet::planet`): the same for every island
+    /// of the one chemistry, so it is made once.
+    static PLANET: RefCell<Option<pcore::flow::Planet>> = const { RefCell::new(None) };
     /// The bytes last handed to the page (it reads them until the next call that returns bytes).
     static OUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
@@ -53,23 +56,23 @@ fn give(bytes: Vec<u8>) -> *const u8 {
     })
 }
 
-/// The settings of an island of `size` rows between the latitudes `south` and `north`, degrees, with the air's stretch
-/// of that band (`worldgen::terrain::banded`); the default's where `south` is not below `north` (the page asks for no
+/// The settings of an island between the latitudes `south` and `north`, degrees
+/// (`worldgen::terrain::banded`); the default's where `south` is not below `north` (the page asks for no
 /// band).
-fn island(size: u32, (south, north): (f64, f64)) -> Config {
-    if south < north { worldgen::terrain::banded(size as usize, (south, north)) } else { Config::default() }
+fn island((south, north): (f64, f64)) -> Config {
+    if south < north { worldgen::terrain::banded((south, north)) } else { Config::default() }
 }
 
 /// Make an island of `size` x `size` cells from `seed` between the latitudes `south` and `north` (`island`), standing in
-/// the planet's air where they are given (`worldgen::planet::stand`), with the schedule of `ew run --roster --plants`:
-/// the starting kinds of cover, no animals, so the page runs fast while the work is on the ground, the liquid and the
-/// cover. Its cells stay those as built: the map draws every zoom from the
-/// ground's tiles and the cells' table. Returns 0, or 1 if the world is refused.
+/// the planet's air where they are given (`worldgen::planet::planet`, made once, `PLANET`), with the schedule of
+/// `ew run --roster --plants`: the starting kinds of cover, no animals, so the page runs fast while the work is on the
+/// ground, the liquid and the cover. Its cells stay those as built: the map draws every zoom from the ground's tiles and
+/// the cells' table. Returns 0, or 1 if the world is refused.
 #[no_mangle]
 pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64) -> u32 {
-    let mut world = worldgen::terrain::new_island(seed as u64, size as usize, size as usize, island(size, (south, north)));
+    let mut world = worldgen::terrain::new_island(seed as u64, size as usize, size as usize, island((south, north)));
     if south < north {
-        worldgen::planet::stand(&mut world);
+        world.planet = Some(PLANET.with(|p| p.borrow_mut().get_or_insert_with(worldgen::planet::planet).clone()));
     }
     if world.cfg.validate().is_err() {
         return 1;
@@ -186,7 +189,7 @@ pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
 /// ground), with the default laws.
 #[no_mangle]
 pub extern "C" fn ground(seed: u32, size: u32, south: f64, north: f64) {
-    let (seed, cfg) = (seed as u64, island(size, (south, north)));
+    let (seed, cfg) = (seed as u64, island((south, north)));
     let (map, terrain) = worldgen::terrain::island_ground(seed, size as usize, size as usize);
     let g = tape::Ground::new(seed, map, terrain, (cfg.lat_south, cfg.lat_north), tape::Law::of(&cfg.phys));
     GROUND.with(|c| *c.borrow_mut() = Some(g));

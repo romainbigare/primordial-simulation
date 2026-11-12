@@ -92,8 +92,7 @@ pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab):
 /// toward the warmer node at `wind` per K/m; and eddy mixing (`mix` × width / length). Each over the link's length and
 /// width as the stretched air takes them, and a rate between the stretched columns (`Stretch`). From the air of each
 /// node as the last state left it (`ends`).
-pub(super) fn pushes(cfg: &Config, ends: &[End], air: &Level, links: &Links) -> Pushes {
-    let st = Stretch::of(cfg);
+pub(super) fn pushes(cfg: &Config, st: Stretch, ends: &[End], air: &Level, links: &Links) -> Pushes {
     let v = || Vec::with_capacity(links.id.len());
     let mut p = Pushes { mix: v(), over: v(), rise: v(), even: v() };
     for &l in &links.id {

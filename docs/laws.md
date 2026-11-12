@@ -552,7 +552,7 @@ of the air step's start (15 days), so a node whose air grows or shrinks within t
 of it than its rates say. Mass that crosses is
 lifted between the nodes' mean grounds by the heat of the node it enters. A cell sees its air node and three
 neighbours bilinearly (`flow/scratch.rs`). Air moves as whole columns, so bodies use the anchored `wind_ground` (6.3).
-**The map's stretch** (`Config::stretch`, `air::stretch`): the air over a small map can behave as the air over the band
+**The map's stretch** (`air::stretch`): the air over a small map behaves as the air over the band
 of latitudes its rows stand for, while the ground keeps its true metres. The air's sideways laws take every horizontal
 length `stretch` times longer: a column stands for one `stretch` times longer and wider, so it holds `stretch`² times
 its gas and its faces are `stretch` times wider, and a rate between two stretched columns moves the map's column the
@@ -563,12 +563,13 @@ gradient, falls as 1 / `stretch`), the turning is the same (the warmth's differe
 times its offset), the share of the pressure's difference evened in a day falls as 1 / `stretch` (sound takes that much
 longer to cross), and the blocks' side in nodes divides by `stretch`, and with it the sea's mixing under each block
 (1.2). The exchanges up and down (the ground and the air, the sun, heat radiation, rain out) are per m² and do not read
-it, nor the rain's drift, nor anything on the ground. 1 by default; `ew run --band S,N` sets it to the band's length on
-a globe over the island's.
+it, nor the rain's drift, nor anything on the ground. `stretch` is the band's length on the planet (`Config::radius_m`
+times the band in radians) over the map's from south to north; a globe is its own band, 1.
 **Open edges: the island stands in the planet's air** (`air::edge`, `air::planet`, `World::planet`; on only with a band,
-`ew run --band S,N`, the page's `band=`). The planet's air comes from a strip of the planet from pole to pole, run by
+`ew run --band S,N`, the page's climate or `band=`). The planet's air comes from a strip of the planet from pole to pole, run by
 these laws when the world is built (`worldgen::planet`): three air blocks round, rows of 5°, all of it low open ground
-(liquid over all of it), for 20 years from its starting state (its yearly means then move by under 0.6 K in 20 years more);
+(liquid over all of it), for 10 years from its starting state (an island of 32 x 32 on the band 20° to 65° feels a run of
+20 years within 0.2 K in every row), the same strip for every island (the page makes it once a session);
 its last year's air per row and month (its temperature, warmth, mol per m² and each gas's share, each row the 1-2-1
 mean of it and its neighbours, as the rows of the low latitudes alternate warmer and colder) is saved with the world.
 Beyond each air node of the map's edges lies a column of that air, north and south at the latitude one row of nodes

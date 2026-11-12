@@ -39,7 +39,7 @@ fn main() {
     match args.command() {
         "run" => {
             let (size, seed) = (args.get("--size", 128usize), args.get("--seed", 1u64));
-            let island = args.island(size).unwrap_or_else(|e| {
+            let island = args.island().unwrap_or_else(|e| {
                 eprintln!("ew: {e}");
                 std::process::exit(2);
             });

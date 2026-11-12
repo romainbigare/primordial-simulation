@@ -142,7 +142,7 @@ pub(super) struct Moved {
 /// one. Each block's nodes, its hub first, in the order of their squares. An island smaller than a block is one block.
 pub(in crate::flow) fn blocks(w: &World) -> Vec<Vec<u32>> {
     let air = w.mesh.level(AIR);
-    let spacing = Stretch::of(&w.cfg).length((air.area().iter().sum::<f64>() / air.n() as f64).sqrt());
+    let spacing = Stretch::of(w).length((air.area().iter().sum::<f64>() / air.n() as f64).sqrt());
     let side = ((w.cfg.mix * BLOCK_DAY).sqrt() / spacing).max(1.0) as usize;
     let mut of: BTreeMap<(usize, usize), Vec<u32>> = BTreeMap::new();
     for j in 0..air.n() {
@@ -162,7 +162,7 @@ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f
     let dd = dt / days;
     let (links, blocks) = (Links::of(air), blocks(w));
     let ends = ends(&w.cfg, s, air);
-    let push = pushes(&w.cfg, &ends, air, &links);
+    let push = pushes(&w.cfg, Stretch::of(w), &ends, air, &links);
     let mut block = vec![0; na];
     blocks.iter().enumerate().for_each(|(b, nodes)| nodes.iter().for_each(|&j| block[j as usize] = b));
     let one = Together::of(s, ground, (&blocks, &block), nx);

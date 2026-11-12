@@ -35,8 +35,8 @@ impl Edges {
     /// the step's start; none where `w` holds no planet's air.
     pub(super) fn of(w: &World, s: &Scratch, ends: &[End]) -> Edges {
         let mut x = Edges { node: Vec::new(), side: Vec::new(), push: Vec::new(), share: Vec::new(), heat_of: Vec::new(), mol: Vec::new(), heat: Vec::new() };
-        let Some(planet) = &w.planet else { return x };
-        let (air, st, tree) = (w.mesh.level(AIR), Stretch::of(&w.cfg), w.mesh.tree());
+        let (air, st, tree) = (w.mesh.level(AIR), Stretch::of(w), w.mesh.tree());
+        let Some(planet) = w.planet.as_ref().filter(|_| st.compressed()) else { return x };
         let corner = (0..air.n()).map(|j| tree.block_xy(j)).fold((0, 0), |m, (a, b)| (m.0.max(a), m.1.max(b)));
         // Degrees of latitude from one row of air nodes to the next.
         let row = (w.cfg.lat_north - w.cfg.lat_south) / (corner.1 + 1) as f64;

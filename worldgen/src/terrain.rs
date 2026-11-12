@@ -20,9 +20,7 @@ const CELL_M: f64 = 2000.0;
 pub(crate) const AIR_SCALE: usize = 4;
 /// The squares below 0 m round the land that stay squares on an island (`coarse_low`), so its edges stay sharp.
 const LAND_RING: i32 = 1;
-/// A globe's radius, m, and the share of its area above the level 0 m: those of the one planet known (Earth: mean
-/// radius 6,371 km, land 29% of the surface).
-pub(crate) const RADIUS_M: f64 = 6.371e6;
+/// A globe's share of its area above the level 0 m: that of the one planet known (Earth: land 29% of the surface).
 const LAND_SHARE: f64 = 0.29;
 /// Height of the bottom of the bed, m.
 const BASE_Z: f64 = -3000.0;
@@ -99,12 +97,9 @@ pub fn scale_absorbers(w: &mut World, factor: f64) {
     }
 }
 
-/// The settings of an island of `rows` rows between the latitudes `south` and `north`, degrees, the default's but for
-/// them and the air's stretch (`Config::stretch`): the band's length from south to north on a globe of `RADIUS_M` over
-/// the island's.
-pub fn banded(rows: usize, (south, north): (f64, f64)) -> Config {
-    let stretch = RADIUS_M * (north - south).to_radians() / (rows as f64 * CELL_M);
-    Config { lat_south: south, lat_north: north, stretch, ..Config::default() }
+/// The settings of an island between the latitudes `south` and `north`, degrees: the default's but for them.
+pub fn banded((south, north): (f64, f64)) -> Config {
+    Config { lat_south: south, lat_north: north, ..Config::default() }
 }
 
 /// The map of an island of `w × h` cells.
@@ -114,7 +109,7 @@ pub fn island(w: usize, h: usize) -> Square {
 
 /// The map of a globe of `rows` rows from pole to pole, with twice as many columns, so a cell is square at the equator.
 pub fn globe(rows: usize) -> Square {
-    Square::new(2 * rows, rows, PI * RADIUS_M / rows as f64, true, AIR_SCALE)
+    Square::new(2 * rows, rows, PI * Config::default().radius_m / rows as f64, true, AIR_SCALE)
 }
 
 /// A new world on `map` from a seed: terrain, chemistry 0, ground, liquid and air.

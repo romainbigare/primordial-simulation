@@ -21,6 +21,9 @@ const SPEEDS = [1, 2, 4, 8, 16, 32];
 /** The live world's speeds, months of the world per second of real time. */
 const LIVE_SPEEDS = [3, 12, 36, 120, Infinity];
 const LIVE_SIZE = 22;
+/** The climates a live island may have: a name, and the band of latitudes it stands for (south, north; none: the core's
+ * default band). The first is the page's. */
+const BANDS: string[][] = [['Wide: 20° to 65°', '20,65'], ['Mild: 30° to 55°', '30,55'], ['None: 40° to 42.3°', '']];
 /** Time the view rests before the worker is asked for the things of the window in view, ms. */
 const ASK_MS = 150;
 
@@ -277,6 +280,11 @@ async function startLive(): Promise<void> {
   const q = new URLSearchParams(location.search);
   $<HTMLInputElement>('seed').value = q.get('seed') ?? '1';
   $<HTMLInputElement>('size').value = q.get('size') ?? String(LIVE_SIZE);
+  // The climate: a band of latitudes the island stands for, from the URL's `band=S,N` or the first preset (`BANDS`).
+  const bands = $<HTMLSelectElement>('band'), asked = q.get('band');
+  const presets = asked && !BANDS.some(b => b[1] === asked) ? [...BANDS, [`${asked.replace(',', '° to ')}°`, asked]] : BANDS;
+  bands.innerHTML = presets.map(([name, v]) => `<option value="${v}">${name}</option>`).join('');
+  bands.value = asked ?? BANDS[0][1];
   live?.stop();
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
@@ -328,20 +336,25 @@ function showStats(s: Stats): void {
     ...(drawnWith ? [['map', `drawn with ${drawnWith}`]] : [])].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
 }
 
-/** The band of latitudes of the URL's `band=S,N`, degrees, south first; [NaN, NaN] (the core's default band) without
- * one, or where S is not below N. */
+/** The band of latitudes `S,N`, degrees, south first; [NaN, NaN] (the core's default band, its edges closed) for none,
+ * or where S is not below N. */
 function bandOf(text: string | null): [number, number] {
   const v = (text ?? '').split(',').map(Number);
   return v.length === 2 && v[0] < v[1] ? [v[0], v[1]] : [NaN, NaN];
 }
+/** Whether a banded world was made in this session: the first one makes the planet's air too, which takes a while. */
+let banded = false;
 function newWorld(): void {
   const seed = Math.max(0, Math.floor(+$<HTMLInputElement>('seed').value) || 0);
   const size = Math.min(64, Math.max(8, Math.floor(+$<HTMLInputElement>('size').value) || LIVE_SIZE));
+  const band = bandOf($<HTMLSelectElement>('band').value);
   playing = false;
-  say('Making the world…');
-  live?.newWorld(seed, size, bandOf(new URLSearchParams(location.search).get('band')));
+  say(band[0] < band[1] && !banded ? 'Making the world, and once the air of the planet around it (a few seconds)…' : 'Making the world…');
+  banded ||= band[0] < band[1];
+  live?.newWorld(seed, size, band);
 }
 $('live').onsubmit = e => { e.preventDefault(); newWorld(); };
+$('band').onchange = () => newWorld();
 
 requestAnimationFrame(loop);
 const embedded = document.getElementById('world-data')?.textContent?.trim();

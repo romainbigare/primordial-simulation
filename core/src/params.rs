@@ -17,6 +17,8 @@ pub struct Config {
     pub lat_south: f64,
     /// Latitude of the map's north edge, degrees
     pub lat_north: f64,
+    /// Radius of the planet, m
+    pub radius_m: f64,
     /// Strength of the deflection of moving air by the planet's rotation (0 = none)
     pub rotation: f64,
     /// Gravity, m/s²
@@ -51,8 +53,6 @@ pub struct Config {
     pub wind: f64,
     /// Mixing of neighbouring air columns by eddies, m²/s
     pub mix: f64,
-    /// Times the air's sideways laws take the map's horizontal lengths (1: its true metres; laws.md 1.6)
-    pub stretch: f64,
     /// Condensation in the air at which its cloud reflects half of what its droplets can, mol/(m² s)
     pub cloud: f64,
     /// Optical depth to heat radiation of a cloud at the condensation `cloud`
@@ -456,8 +456,8 @@ impl Config {
         require(self.chunks > 0, || "chunks must be at least 1".to_string())?;
         let (south, north) = (self.lat_south, self.lat_north);
         require(-90.0 <= south && south < north && north <= 90.0, || format!("lat_south ({south}) must lie below lat_north ({north}), both from -90 to 90"))?;
-        // The air's sideways laws divide by the stretched lengths (`flow::air::Stretch`).
-        require(self.stretch > 0.0 && self.stretch.is_finite(), || format!("stretch ({}) must be above 0", self.stretch))?;
+        // The air's sideways laws divide by the stretched lengths (`flow::air::Stretch`), a globe's squares by it.
+        require(self.radius_m > 0.0 && self.radius_m.is_finite(), || format!("radius_m ({}) must be above 0", self.radius_m))?;
         let wake = self.wake_share;
         require(wake > 0.0 && wake.is_finite(), || format!("wake_share ({wake}) must be above 0"))?;
         // `dormancy` above 1 (`body::exchange::closing` divides by n - 1); `light_yield` in (0, 1] (a light reaction takes
@@ -505,6 +505,7 @@ impl Default for Config {
             tilt: 23.4,
             lat_south: 40.0,
             lat_north: 42.3,
+            radius_m: 6.371e6,
             rotation: 1.0,
             gravity: 9.81,
             days_per_month: 30,
@@ -519,7 +520,6 @@ impl Default for Config {
             dissolve: 5e-5,
             wind: 4e5,
             mix: 1.3e6,
-            stretch: 1.0,
             cloud: 1.2e-2,
             cloud_ir: 6.7,
             rain_time: 86400.0,
