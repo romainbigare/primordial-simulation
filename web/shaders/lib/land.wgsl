@@ -298,7 +298,11 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
   var covered = 0.0;
   for (var k = 0; k < 4; k++) {
     var c = cell(GROUND, cs.at[k]);
-    if (dry) { let v = cell(VIEW, cs.at[k]); c = vec4f(v.w, v.z, c.z, cell(TRUTH, cs.at[k]).w); }
+    // A sea's square (its air's fall marked as -(it + 1), web/src/land.ts) gives a dry point the land's numbers.
+    if (c.z < 0.0) {
+      c.z = -c.z - 1.0;
+      if (dry) { let v = cell(VIEW, cs.at[k]); c = vec4f(v.w, v.z, c.z, cell(TRUTH, cs.at[k]).w); }
+    }
     ground += cs.w[k] * c;
     covered += cs.w[k] * snow_of(c.w, 0.0, 0.0);
   }

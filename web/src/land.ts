@@ -92,6 +92,9 @@ export class Land {
       put(5, i, [shown ? shown[i] / 255 : 0, worn ? worn[i] / 255 : 0, landT[i], landZ[i]]);
     }
     blurSea(data, Array.from(sea, (s, i) => (s > 0 && data[4 * i] < this.sea - OPEN_SEA_M ? 1 : 0)), W, H);
+    // The sea's squares are marked by their air's fall with height as -(it + 1) (land.wgsl `state_on`): only a point
+    // with one of them about it reads the land's own numbers.
+    for (let i = 0; i < n; i++) if (wet.sea[i]) data[4 * i + 2] = -(data[4 * i + 2] + 1);
     this.data = data;
     this.due = true;
   }
