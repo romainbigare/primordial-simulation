@@ -16,10 +16,11 @@ use crate::World;
 pub(super) struct Stretch(f64);
 
 impl Stretch {
-    /// The stretch of the map of `w`: the length of its band of latitudes on the planet (`Config::radius_m`) over the
-    /// map's own from south to north. A globe is its own band: 1.
+    /// The stretch of the map of `w`: in the planet's air (`World::planet`), the length of its band of latitudes on the
+    /// planet (`Config::radius_m`) over the map's own from south to north; alone, its air is its own, over its own
+    /// metres: 1. A globe is its own band: 1.
     pub(super) fn of(w: &World) -> Stretch {
-        if w.map.wrap {
+        if w.map.wrap || w.planet.is_none() {
             return Stretch(1.0);
         }
         Stretch(w.cfg.radius_m * (w.cfg.lat_north - w.cfg.lat_south).to_radians() / (w.map.h as f64 * w.map.side))

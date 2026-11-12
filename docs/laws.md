@@ -607,12 +607,14 @@ times its offset), the share of the pressure's difference evened in a day falls 
 longer to cross), and the blocks' side in nodes divides by `stretch`, and with it the sea's mixing under each block
 (1.2). The exchanges up and down (the ground and the air, the sun, heat radiation, rain out) are per m² and do not read
 it, nor the rain's drift, nor anything on the ground. `stretch` is the band's length on the planet (`Config::radius_m`
-times the band in radians) over the map's from south to north; a globe is its own band, 1.
+times the band in radians) over the map's from south to north, for a world in the planet's air (below); alone, and
+on a globe (its own band), 1.
 **Alone or in the planet's air** (`air::edge`, `air::planet`, `World::planet`). A world is made either alone: its air
 closed at the map's edges, it makes its own climate from its own sun, sea and life (the page's climate None, and every
 world made without a band); or in the planet's air: made with a band (`ew run --band S,N`, the page's Wide or Mild, or
 `band=`), it holds the planet's table (`flow::Planet`) and, its band longer than its own span (`stretch` above 1), its
-edges open to the air of its latitudes. The table's presence is the state; the stretch is derived for both. The planet's air comes from a strip of the planet from pole to pole, run by
+edges open to the air of its latitudes, and its air's sideways laws take the band's stretch (alone, the map's own
+metres: a closed box stretched over a wide band freezes over). The table's presence is the state. The planet's air comes from a strip of the planet from pole to pole, run by
 these laws when the world is built (`worldgen::planet`): three air blocks round, rows of 5°, all of it low open ground
 (liquid over all of it), for 10 years from its starting state (an island of 32 x 32 on the band 20° to 65° feels a run of
 20 years within 0.2 K in every row), the same strip for every island (the page makes it once a session);
