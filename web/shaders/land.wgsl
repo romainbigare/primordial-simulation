@@ -119,10 +119,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.canopy = cf.canopy;
   p.rock = bare;
   p.bed = vec3f(0.0);
-  if (p.rock > 0.0) {
-    let soil = blended(SOIL, cs);
-    p.bed = vec3f(soil.zw, blended(BED, cs).x);
-  }
+  if (p.rock > 0.0) { p.bed = bed_make_at(at); }
   p.stone = select(0.0, stone_of(g.channels.xy), bed.half > 0.0 && g.d < STONES_OUT * bed.half);
   p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), p.loose, look.z);
   p.river = 0.0;

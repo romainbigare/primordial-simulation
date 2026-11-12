@@ -15,10 +15,12 @@ const STONE_M: f64 = 0.001;
 /// The largest stone drawn, m.
 const STONE_MOST_M: f64 = 2.0;
 
-/// Of each sample of `s`, `apart` m between neighbours' centres, row by row, two 16-bit floats: the depth of its loose
-/// ground, m, and the largest stone its channel moves, m (`STONE_M`; 0 where it runs nowhere: a sink, or under a pond).
-pub fn rock(s: &Samples, apart: f64) -> Vec<u16> {
-    let mut out = Vec::with_capacity(2 * s.h.len());
+/// Of each sample of `s`, `apart` m between neighbours' centres, row by row, four 16-bit floats: the depth of its loose
+/// ground, m, the largest stone its channel moves, m (`STONE_M`; 0 where it runs nowhere: a sink, or under a pond), and
+/// two zeros; then of each sample again the reflectance of the make of its bed (red, green, blue: `colours`, one a make,
+/// `Samples::make`) and a zero: two planes of a texture, one under the other.
+pub fn rock(s: &Samples, apart: f64, colours: &[[f64; 3]]) -> Vec<u16> {
+    let mut out = Vec::with_capacity(8 * s.h.len());
     for k in 0..s.h.len() {
         let j = s.to[k];
         let stone = if j == NONE || s.pond[k] != NONE {
@@ -29,7 +31,11 @@ pub fn rock(s: &Samples, apart: f64) -> Vec<u16> {
             let slope = ((s.h[k] - s.h[j]) / run).max(0.0);
             (STONE_M * s.up[k].sqrt() * slope).min(STONE_MOST_M)
         };
-        out.extend([half(s.loose[k] as f32), half(stone as f32)]);
+        out.extend([half(s.loose[k] as f32), half(stone as f32), 0, 0]);
+    }
+    for &m in &s.make {
+        let c = colours.get(m as usize).copied().unwrap_or([0.0; 3]);
+        out.extend([half(c[0] as f32), half(c[1] as f32), half(c[2] as f32), 0]);
     }
     out
 }
