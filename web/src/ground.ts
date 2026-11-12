@@ -64,7 +64,7 @@ export class GroundTiles {
   private free: number[] = Array.from({ length: MOST_TILES }, (_, k) => MOST_TILES - 1 - k);
   /** Tiles come, not yet on the GPU; the page and the tiles' numbers to send to it. */
   private come: { layer: number; data: Uint16Array }[] = [];
-  private page = { w: 1, h: 1, data: new Float32Array(4) };
+  private page = { w: 1, h: 1, data: new Float32Array(0) };
   private numbers = new Float32Array(4 * MOST_TILES);
   private pageDue = true;
   private numbersDue = true;
@@ -80,8 +80,9 @@ export class GroundTiles {
   private start = performance.now();
   private lastCame = -Infinity;
 
-  constructor(source: string, wasm: ArrayBuffer, seed: number, size: number, readonly map: MapOf, readonly meta: TileMeta, private changed: () => void, error: (text: string) => void) {
+  constructor(source: string, wasm: ArrayBuffer, seed: number, size: number, readonly map: MapOf, readonly meta: TileMeta, private changed: (shown: boolean) => void, error: (text: string) => void) {
     this.depth = meta.depths[0];
+    this.makePage();
     this.url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
     for (let k = 0; k < WORKERS; k++) {
       const w = { worker: new Worker(this.url), ready: false, making: 0 };
@@ -89,7 +90,7 @@ export class GroundTiles {
       w.worker.onmessage = e => {
         const m = e.data as { kind: string; depth: number; x: number; y: number; data: Uint16Array; rock: Uint16Array; text: string };
         if (m.kind === 'error') return error(m.text);
-        if (m.kind === 'ready') { w.ready = true; this.rock ??= m.rock; this.changed(); return this.next(); }
+        if (m.kind === 'ready') { w.ready = true; this.rock ??= m.rock; this.changed(true); return this.next(); }
         if (m.kind === 'tile') { w.making--; this.took(m.depth, m.x, m.y, m.data); }
       };
       const copy = k === WORKERS - 1 ? wasm : wasm.slice(0);
@@ -126,7 +127,7 @@ export class GroundTiles {
       }
     }
     this.queue = wanted.sort((a, b) => a.depth - b.depth || a.far - b.far);
-    if (depth !== this.depth) { this.depth = depth; this.pageDue = true; }
+    if (depth !== this.depth) { this.depth = depth; this.makePage(); }
     this.next();
   }
 
@@ -166,11 +167,13 @@ export class GroundTiles {
     this.come = [];
     this.free = Array.from({ length: MOST_TILES }, (_, k) => MOST_TILES - 1 - k);
     this.numbers.fill(0);
-    this.numbersDue = this.pageDue = true;
+    this.numbersDue = true;
+    this.makePage();
     if (this.last) this.view(this.last);
   }
 
-  /** Keep the tile that came, on a free layer or on the oldest's. */
+  /** Keep the tile that came, on a free layer or on the oldest's. Only a tile that changes what the view shows draws
+   * the map anew and fades in: one ahead of the view, or under finer tiles kept, is kept for later. */
   private took(depth: number, x: number, y: number, data: Uint16Array): void {
     this.making.delete(keyOf(depth, x, y));
     let layer = this.free.pop();
@@ -183,15 +186,30 @@ export class GroundTiles {
       this.kept.set(keyOf(depth, x, y), { depth, x, y, layer, came, asked: this.views });
       this.come.push({ layer, data });
       this.numbers.set([depth, x, y, came], 4 * layer);
-      this.lastCame = came;
-      this.numbersDue = this.pageDue = true;
-      this.changed();
+      this.numbersDue = true;
+      const before = this.page;
+      this.makePage();
+      const shown = this.showsOtherThan(before);
+      if (shown) this.lastCame = came;
+      this.changed(shown);
     }
     this.next();
   }
 
-  /** The page at the view's depth: for each of its tiles, the layer of the finest kept tile that holds it and of the
-   * one kept before that (its nearest kept ancestor), -1 for none; found depth by depth from the coarsest. */
+  /** Whether the page shows another layer than page `before` anywhere in the last view. */
+  private showsOtherThan(before: { w: number; h: number; data: Float32Array }): boolean {
+    const v = this.last, { w, h, data } = this.page;
+    if (!v || before.w !== w || before.h !== h) return true;
+    const s = this.squaresOf(this.depth), clip = (c: number, n: number) => Math.min(Math.max(Math.floor(c / s), 0), n - 1);
+    for (let y = clip(v.y, h); y <= clip(v.y + v.h, h); y++) {
+      for (let x = clip(v.x, w); x <= clip(v.x + v.w, w); x++) if (data[4 * (y * w + x)] !== before.data[4 * (y * w + x)]) return true;
+    }
+    return false;
+  }
+
+  /** The page at the view's depth, made anew as the tiles kept or that depth change (sent to the GPU at the next
+   * draw): for each of its tiles, the layer of the finest kept tile that holds it and of the one kept before that (its
+   * nearest kept ancestor), -1 for none; found depth by depth from the coarsest. */
   private makePage(): void {
     const [d0] = this.meta.depths;
     let shown = new Float32Array(1).fill(-1), under = new Float32Array(1).fill(-1), w = 1;
@@ -208,6 +226,7 @@ export class GroundTiles {
     const [nx, ny] = this.across(this.depth), data = new Float32Array(4 * nx * ny);
     for (let i = 0; i < nx * ny; i++) { data[4 * i] = shown[i]; data[4 * i + 1] = under[i]; }
     this.page = { w: nx, h: ny, data };
+    this.pageDue = true;
   }
 
   /** The textures the land program reads (land.wgsl): the tiles' two planes, the page and each layer's tile (depth,
@@ -222,7 +241,6 @@ export class GroundTiles {
     }
     this.come = [];
     if (this.pageDue) {
-      this.makePage();
       if (this.pages?.w !== this.page.w || this.pages.h !== this.page.h) { if (this.pages) gpu.drop(this.pages); this.pages = gpu.texture(this.page.w, this.page.h, 'rgba32float'); }
       gpu.write(this.pages, this.page.data);
       this.pageDue = false;

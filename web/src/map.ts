@@ -3,7 +3,7 @@
 // texel a square), then what others draw on the GPU (the plant cover, vegetation.ts).
 // Over it a 2D canvas holds what is drawn by hand: the things (avatars.ts), a globe's lines of latitude, the squares
 // under the pointer and picked, and the scale bar.
-import { Draw, Gpu, Pass, Texture, Uniforms, openGpu } from './gpu';
+import { Draw, Gpu, Pass, Texture, Uniforms, openGpu, seenFrom } from './gpu';
 import { Fields } from './fields';
 import { FieldWindow, MapLook } from './field-window';
 import { Land } from './land';
@@ -292,7 +292,9 @@ export class MapView {
     // Copies meet on whole pixels, so no thin line shows between them.
     const edge = (c: number) => Math.round((xs[0] + c * w * s) * k);
     const binds = this.land?.binds(gpu, look), land = binds && this.layer ? { ...binds, ...this.layer.under(gpu, s) } : null;
-    if (land) xs.forEach((_, c) => p.draw('land', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: land }, false));
+    // The live map's program made for pixels as large as these (gpu.ts `seenFrom`).
+    const program = seenFrom('land', this.cellM / (s * k));
+    if (land) xs.forEach((_, c) => p.draw(program, { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: land }, false));
     else if (this.map) xs.forEach((_, c) => p.draw('earth', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: this.map!.binds(gpu, look) }, false));
   }
 

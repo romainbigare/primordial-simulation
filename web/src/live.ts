@@ -18,7 +18,7 @@ export class Live {
   private unanswered = 0;
   private onHide = () => { if (document.hidden) this.answer(); };
 
-  constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void }) {
+  constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats, changed: boolean) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void }) {
     this.url = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
     this.worker = new Worker(this.url);
     this.worker.onerror = e => on.error(e.message);
@@ -37,12 +37,15 @@ export class Live {
         return this.shown();
       }
       if (!this.world) return this.shown();
+      // The world changes only as it steps: a frame of the date shown (a pause, or the things of another window)
+      // brings its things and its stats, and the map is not drawn anew (`changed` false).
+      const date = this.world.meta.frames[0], same = date.day === m.day && date.year === m.year;
       this.world.data = m.frame;
       this.table = m.table;
       this.world.meta.frames[0] = { day: m.day, year: m.year };
       this.stats = m.stats;
       on.things(m.things);
-      on.frame(m.stats);
+      on.frame(m.stats, !same);
       this.shown();
     };
     this.worker.postMessage({ cmd: 'init', wasm }, [wasm]);

@@ -32,6 +32,9 @@ fn ripples(at: vec2f, e: f32) -> vec2f {
   var rot = mat2x2f(1.0, 0.0, 0.0, 1.0);
   let turn = mat2x2f(0.8, 0.6, -0.6, 0.8);
   for (var k = 0; k < RIPPLE_OCTAVES; k++) {
+    // An octave fades out by half its wavelength a pixel: none shows in a draw of pixels that large (draw.wgsl
+    // `LEAST_E`).
+    if (least_e() >= 0.5 * wave) { break; }
     let shown = 1.0 - ease(wave / 8.0, wave / 2.0, e);
     if (shown > 0.0) { g += shown * RIPPLE_SLOPE * (transpose(rot) * noise(rot * at / wave, k).yz); }
     wave *= 0.5;
