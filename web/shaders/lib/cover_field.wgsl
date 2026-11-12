@@ -61,6 +61,9 @@ const THIN_COVER = 0.25; const THIN_FROM_M = 0.05; const THIN_TO_M = 0.5;
 // is (1 - share)^`CANOPY_SEEN`; their canopy is lighter and darker by up to `CANOPY_TONE` over groups of crowns
 // `CANOPY_M` across.
 const CANOPY_SEEN = 2.0; const CANOPY_TONE = 0.2; const CANOPY_M = 35.0;
+// The light the trees leave the kinds below on the mean of a square is counted no less than this, so a square its
+// trees close does not heap its low kinds on its last open ground.
+const LIT_LEAST = 0.05;
 // Snow lies on the trees' crowns as on the ground under them, up to this share of their colour seen from afar (the
 // evergreen ones hold it; the bare ones are thin and dark).
 const CANOPY_SNOW = 0.35;
@@ -322,6 +325,13 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   if (cover_look.sides[STANDS] > 0.0) {
     trees = select(field_smooth(at, STANDS), field_at(at, STANDS, 0.0), cover_look.shown[STANDS] >= 1.0);
   }
+  // The low kinds take the light the trees leave (the cover's light law, laws.md 4.5: a kind below gets the light of
+  // the ground the taller does not hold and what passes its layer): they thin under the crowns that stand at the point
+  // and stand as much thicker on the ground that holds no tree, their square keeping its cover. So ground too thin for
+  // the trees shows the sward and the bushes of its cell before it shows bare.
+  let closed = min(trees.a, 1.0);
+  let lit = (1.0 - min(closed * hold[STANDS], 1.0)) / max(1.0 - closed, LIT_LEAST);
+  hold = vec4f(hold.xy * lit, hold.z, hold.w * lit);
   // Under the trees: the sward and the low lattices one by one near, as one layer far (`LOW_FAR_E`).
   let far = ease(LOW_FAR_E, LOW_FAR_FULL_E, e);
   var dst = vec4f(0.0);
