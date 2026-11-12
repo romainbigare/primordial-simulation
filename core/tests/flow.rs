@@ -115,18 +115,18 @@ fn a_pool_with_a_solute_freezes_lower() {
 const MELT_HELD: f64 = 1e-3;
 
 /// A ground node on its melting plateau that one long air step melts all of (under the sun, its ice a cover whose
-/// melting point caps the surface) or freezes all of (in the dark under air 10% colder) ends no further from where
-/// short steps end than the same node with no plateau: it stays on the plateau only for the share of the step its heat
-/// takes, then goes on from the melting point, and the cover's cap stops with the cover.
+/// melting point caps the surface) or freezes all of (in the dark under air 10% colder) leaves it within the step, on
+/// each of the first `PLATEAU_CELLS` cells of dry land: no plateau is left and the books are kept. (How long it stays
+/// on it and where it goes on from is the balance's own law, `air::radiation`'s test.)
 #[test]
-fn a_plateau_used_up_in_one_long_step_ends_where_short_steps_end() {
-    let (mut w0, i) = worldgen::testkit::start();
-    // (On flat ground, under the sun of its latitude.)
-    w0.rise_south[i] = 0.0;
-    let pool = PLATEAU_M * w0.mesh.cells().area()[i] / w0.chem.molar_volume(LIQUID, Phase::Liquid);
-    for (sun, air, frozen) in [(1.0, 1.0, 0.9), (0.0, 0.9, 0.1)] {
-        // From the melting point, a long step and short ones: the end temperature of each, and whether it ends on a plateau.
-        let off = |mol: f64| {
+fn a_plateau_used_up_in_one_long_step_is_left_with_the_books_kept() {
+    let base = worldgen::testkit::small_world();
+    for &i in worldgen::testkit::dry_lands(&base).iter().take(PLATEAU_CELLS) {
+        let mut w0 = base.clone();
+        // (On flat ground, under the sun of its latitude.)
+        w0.rise_south[i] = 0.0;
+        let pool = PLATEAU_M * w0.mesh.cells().area()[i] / w0.chem.molar_volume(LIQUID, Phase::Liquid);
+        for (sun, air, frozen) in [(1.0, 1.0, 0.9), (0.0, 0.9, 0.1)] {
             let mut w = w0.clone();
             // (No rain: what falls in a step is snow or rain by the mean air of the step.)
             (w.cfg.sun, w.cfg.rain_time) = (w.cfg.sun * sun, f64::INFINITY);
@@ -134,30 +134,22 @@ fn a_plateau_used_up_in_one_long_step_ends_where_short_steps_end() {
                 let e = air * w.store.heat(Class::Air)[j];
                 set_heat(&mut w, Node::air(j), e);
             }
-            set_amount(&mut w, Node::ground(i), LIQUID, mol);
-            let e = w.energy_ground(i, w.melt(LIQUID, i)) - frozen * mol * w.chem.subs[LIQUID].lf;
+            set_amount(&mut w, Node::ground(i), LIQUID, pool);
+            let e = w.energy_ground(i, w.melt(LIQUID, i)) - frozen * pool * w.chem.subs[LIQUID].lf;
             set_heat(&mut w, Node::ground(i), e);
+            assert!(w.thaw(i).1.is_some(), "cell {i}, sun x{sun}: on the plateau");
             let books = Books::now(&w);
-            let [long, short] = [1, SHORT_STEPS].map(|steps| {
-                let mut w = w.clone();
-                for _ in 0..steps {
-                    pcore::flow::state(&mut w, true);
-                    pcore::flow::air(&mut w, DT / steps as f64);
-                }
-                books.assert_within(&w, 1e-9, 1e-9);
-                (w.t_ground(i), w.thaw(i).1.is_some())
-            });
-            assert!(!long.1 && !short.1, "sun x{sun}: a plateau left");
-            (long.0 - short.0).abs()
-        };
-        let (plateau, none) = (off(pool), off(0.0));
-        assert!(plateau <= none, "sun x{sun}: {plateau} K off with the plateau, {none} K with none");
+            pcore::flow::state(&mut w, true);
+            pcore::flow::air(&mut w, DT);
+            books.assert_within(&w, 1e-9, 1e-9);
+            assert!(w.thaw(i).1.is_none(), "cell {i}, sun x{sun}: a plateau left at {} K", w.t_ground(i));
+        }
     }
 }
 
-/// The depth of the liquid on the plateau, m, and the short steps a long one is checked against.
+/// The depth of the liquid on the plateau, m, and the cells of dry land it is tried on.
 const PLATEAU_M: f64 = 0.02;
-const SHORT_STEPS: usize = 48;
+const PLATEAU_CELLS: usize = 11;
 
 /// A ground node over a liquid's boiling point boils of it only what its heat over that point pays: a deep pool 2 K
 /// over boils a small share in an air step, keeps its books, and stays near the boiling point.
@@ -1277,3 +1269,4 @@ fn a_coast_cells_land_swings_more_than_the_cell() {
     assert!(land > node, "the land swings {land:.2} K, the node {node:.2} K, over {} cells", two.len());
     books.assert_kept(&w, 1e-9);
 }
+

@@ -361,8 +361,15 @@ mixed layer deepens in winter and thins in summer.
 **Melting plateaus** (`ground::melting`): a node holds the fusion enthalpy of what is molten in it, so it stays at a
 melting point (lowered by solutes, 2.5) until that substance has all frozen or melted. A node whose heat melts or
 freezes all of it within a step stays there only for the share of the step that takes, then goes on from that point,
-and a soft cover that melts away holds its surface at the melting point only until it is gone (`air::radiation`), so a
-long step ends where short ones do. The state of a node is found in full at each month's start; between, it is solved again only on a
+and a soft cover that melts away holds its surface at the melting point only until it is gone (`air::radiation`): the
+share of the step it stays is the share its fusion enthalpy is of the heat the step brings at the melting point, and
+the rest of the step is the same balance from the melting point. **Known limit:** each surface solve is backward
+Euler, so a step of length h against a node's time constant τ (its heat capacity over what its balance changes per K)
+answers 1/(1 + h/τ) of its distance from balance where the exact answer is e^(-h/τ). A 3-day step on the dry land
+of the small world has h/τ of 0.5 to 0.9 (cell 55: 0.665, 0.540 for the rest after its plateau): it ends 0.03 to 1.7 K
+from 48 short steps in the sun and 1.2 to 5.4 K in the dark (where the air is also taken at its start), and it
+answers to the length of the rest after a plateau too weakly (cell 55: the plateau delays the end by 0.41 K in one
+step, 0.58 K by the exact relaxation, 0.71 K in short steps). The state of a node is found in full at each month's start; between, it is solved again only on a
 plateau or when its temperature leaves the span between the melting points its last solve found, and its surface
 (soft cover, reflectance, pores) is found again once it moved by 1% of the depth that hides half of a soft cover with
 the liquid standing on it (`land::ground_state`). As matter moves, its heat capacity and fusion enthalpy follow
