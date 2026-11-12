@@ -144,13 +144,21 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
     if !s.chained {
         book(w, &mut s);
     }
+    // (Where no booking found them yet: a new or loaded world.)
+    if s.lift_at[0].len() != n && s.state.tg.len() == n {
+        s.lift_at = potential::heads(w, &s);
+    }
     w.scratch = s;
 }
 
-/// Book the lifts and falls of the parts of Flow under way (`potential::Lifts`), if any.
+/// Book the lifts and falls of the parts of Flow under way (`potential::Lifts`), if any, and keep the heads of the
+/// ground cells and the mean heads of the air nodes the potential energy now has (`Scratch::lift_at`).
 fn book(w: &mut World, s: &mut Scratch) {
     if let Some(lifts) = s.lifts.take() {
         let (now, room) = lifts.book(w, s);
+        // Where the matter now lies, so the lifts the laws after Flow pay go from there.
+        let (head, za) = now.heads();
+        s.lift_at.iter_mut().zip([head, za]).for_each(|(v, h)| (v.clear(), v.extend_from_slice(h)).1);
         (s.known, s.moved) = (Some((w.time, now)), room);
     }
 }
