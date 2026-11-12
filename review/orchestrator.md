@@ -125,7 +125,11 @@ of flow that slide six steps a second and ask for a frame only while a river is 
 the true bed, mouths that reach their lake or sea with a fan. The tiles' second texture holds four numbers a texel
 (56 layers: 61 MB).
 
-**Known faults of the rivers (in work, the rivers' helper, round four):** a lattice of thin white lines in fast water
+**Known faults of the rivers (in work, the rivers' helper, round four):** two from the owner's phone, first to mend:
+a river's width is not one thing (the far line is far wider than the true bed and flicks in and out while tiles load:
+"panning shouldn't change the size of the river"), and a river meeting a lake or the sea (two water colours with no
+gradient, a pale shallow lake, channel lines as streaks on the lake's floor: the owner likes the rivers' water and
+asks that lakes be drawn the same way). Then: a lattice of thin white lines in fast water
 close up; small side streams and one last reach before a mouth run dead straight; crowns stand on a mouth's fan and
 shallow water; thin dark straight strokes and faint straight outlines on land near rivers at the 200 m bar; a thin
 white straight line on a ridge's snow; ticks where a small stream meets a far line; the 200 m bar on a phone cost 31
