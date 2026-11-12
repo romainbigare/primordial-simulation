@@ -40,6 +40,30 @@ const SNOW_CELLS_ALL = 0.95;
 // so a shore is a smooth line at any zoom, not the pixels' steps.
 struct Spots { dry: Spot, wet: Spot, share: f32, bars: f32, pool: f32, snow_cells: f32 }
 
+// A snow line is ragged: at its margin the snow breaks into patches (drifts in hollows behind knobs, bare knobs first)
+// at every scale from `SNOW_PATCH_M` down to the pixel, octaves each `SNOW_PATCH_STEP` times finer weighing
+// `SNOW_PATCH_FALL` of the last, `SNOW_PATCHY` of the index (lib/land.wgsl `snow_bares`) at most.
+const SNOW_PATCH_M = 320.0; const SNOW_PATCH_STEP = 2.9; const SNOW_PATCH_FALL = 0.65; const SNOW_PATCH_OCTAVES = 6;
+const SNOW_PATCHY = 2.5;
+// The patches warm or cool the ground by this many kelvin a unit of the index, where its snow melts.
+const SNOW_PATCH_K = 0.6;
+
+// The snow's patches at `at`, seen at `e` m a pixel: index units, each octave fading in as it grows past a few pixels.
+fn snow_patches(at: vec2f, e: f32) -> f32 {
+  var n = 0.0;
+  var size = SNOW_PATCH_M;
+  var weight = 1.0;
+  var sum = 0.0;
+  for (var o = 0; o < SNOW_PATCH_OCTAVES; o++) {
+    let shown = shows_at(size, e);
+    if (shown > 0.0) { n += weight * shown * noise_turned(at / size + f32(o) * 5.1, 80 + o); }
+    sum += weight;
+    size /= SNOW_PATCH_STEP;
+    weight *= SNOW_PATCH_FALL;
+  }
+  return SNOW_PATCHY * clamp(2.0 * n / sum, -1.0, 1.0);
+}
+
 // What is at `at`, m from the map's north-west corner, seen at `e` m a pixel: its ground and its state (`state_on`), the
 // ground's own colour and the sea blended between the squares' centres, the plants' field (lib/cover_field.wgsl); and
 // its channel (`bed_at`), from its own sample's discharge. The channel's bed is cut into the ground, so where it runs
@@ -72,9 +96,17 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.wet = st.wet;
   p.t = st.t;
   // The cells' snow placed where the ground holds it (`snow_at`); on standing liquid, the cells' share.
-  let bares = snow_bares(g.slope, st.rise, fine.x);
+  // Its patches move both where the share lies and where the ground is warm enough to melt it (`SNOW_PATCH_K`), so
+  // the line where the snow melts with height is as ragged as the rest.
+  var bares = snow_bares(g.slope, st.rise, fine.x);
+  var share = st.snow;
+  if (st.ice > 0.0) {
+    let patches = snow_patches(at, e);
+    bares += patches;
+    share = snow_of(st.ice, st.t + SNOW_PATCH_K * patches, land.time.z);
+  }
   let snow_w = fwidth(bares);
-  p.snow = select(snow_at(st.snow, bares, snow_w), st.snow, st.depth > 0.0);
+  p.snow = select(snow_at(share, bares, snow_w), st.snow, st.depth > 0.0);
   p.ground = surface.xyz;
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
