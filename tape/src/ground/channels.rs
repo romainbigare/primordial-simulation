@@ -17,8 +17,9 @@
 
 use super::bends::{Bends, Reaches, BEND_MOST};
 use super::lines::{Drawn, Join};
+use super::mend::STRIP;
 use super::stems::SMOOTH_MOST;
-use super::valley::{Carve, VALLEY_FROM, VALLEY_M};
+use super::valley::{carve, VALLEY_FROM, VALLEY_M};
 use pcore::space::network::NONE;
 use pcore::space::samples::Samples;
 
@@ -265,15 +266,15 @@ impl<'a> Channels<'a> {
     }
 
     /// The field over the window `win`: the lines laid into its texels (`laid`) and its strips mended (`mend`), over
-    /// a window a texel larger all round, so each texel has its neighbours.
+    /// a window `mend::STRIP` texels larger all round, so each texel has the neighbours its mending reads.
     pub(super) fn field(&self, win: Window) -> Field {
-        let wide = win.wide + 2;
-        let all = Window { x0: win.x0 - 1, y0: win.y0 - 1, wide, high: win.high + 2, k: win.k };
+        let (m, wide) = (STRIP, win.wide + 2 * STRIP);
+        let all = Window { x0: win.x0 - m as i64, y0: win.y0 - m as i64, wide, high: win.high + 2 * m, k: win.k };
         let (near, reach_valley) = self.near(&all, all.k * self.r.metres);
         let mut f = self.laid(&all, &near, reach_valley);
         self.mend(&mut f, &all, &near);
-        let cut = |v: &[f64]| (0..win.high).flat_map(|y| v[(y + 1) * wide + 1..(y + 2) * wide - 1].iter().copied()).collect::<Vec<f64>>();
-        let sample = (0..win.high).flat_map(|y| f.sample[(y + 1) * wide + 1..(y + 2) * wide - 1].iter().copied()).collect();
+        let cut = |v: &[f64]| (0..win.high).flat_map(|y| v[(y + m) * wide + m..(y + m + 1) * wide - m].iter().copied()).collect::<Vec<f64>>();
+        let sample = (0..win.high).flat_map(|y| f.sample[(y + m) * wide + m..(y + m + 1) * wide - m].iter().copied()).collect();
         Field { dist: cut(&f.dist), sample, along: cut(&f.along), calm: cut(&f.calm), valley: cut(&f.valley), weight: cut(&f.weight) }
     }
 
@@ -283,7 +284,6 @@ impl<'a> Channels<'a> {
     fn laid(&self, win: &Window, near: &[Near], reach_valley: f64) -> Field {
         let n = win.wide * win.high;
         let mut f = Field { dist: vec![NO_CHANNEL_M; n], sample: vec![NONE; n], along: vec![0.0; n], calm: vec![NO_CHANNEL_M; n], valley: vec![0.0; n], weight: vec![0.0; n] };
-        let mut carve = Carve::new(n);
         // Of each texel, how near the line it holds lies, over the line's scale.
         let mut best = vec![f64::INFINITY; n];
         for l in near {
@@ -291,7 +291,7 @@ impl<'a> Channels<'a> {
                 self.lay(win, l, [w[0].p, w[1].p], &mut best, &|_| true, &mut |i, d, t| (f.dist[i], f.sample[i], f.along[i]) = (d, l.q as u32, w[0].s + (w[1].s - w[0].s) * t));
             }
             if l.carves {
-                carve.line(&mut f, win, self.r.s, l.q, &l.drawn.line, reach_valley);
+                carve(&mut f, win, self.r.s, l.q, &l.drawn.line, reach_valley);
             }
         }
         let (held, head) = (f.sample.clone(), |q: u32| self.bends.head(q as usize));

@@ -18,6 +18,10 @@ pub const VALLEY_M: f64 = 250.0;
 /// A valley follows its line in straight pieces no shorter than this share of `VALLEY_M`: within that of the line the
 /// ground is drawn at the floor's height all the same.
 const CHORD_SHARE: f64 = 1.0 / 32.0;
+/// A straight piece of a line this share of `VALLEY_M` long weighs as one whole line did at a point: the pieces of a
+/// line about a point add up, so a valley is as wide as one line's weight makes it about `VALLEY_M` / 12 from the
+/// line, a little narrower nearer and wider farther.
+const PIECE_SHARE: f64 = 0.25;
 
 /// The weight of a line's floor at the share `x` of `VALLEY_M` from it, against the ground's 1: a share f of the floor
 /// where f eases from 1 on the line to 0 at `VALLEY_M`, so f / (1 - f), infinite on the line.
@@ -42,44 +46,29 @@ fn floor(s: &Samples, k: usize, t: f64) -> f64 {
     if t < 0.5 { start + (own - start) * 2.0 * t } else { own + (end - own) * (2.0 * t - 1.0) }
 }
 
-/// The valleys' work over a window's texels: of each the square of its distance to the line in hand and that line's
-/// floor at its nearest point, and the texels the line reached.
-pub(super) struct Carve {
-    nearest: Vec<(f64, f64)>,
-    touched: Vec<usize>,
-}
-
-impl Carve {
-    pub(super) fn new(n: usize) -> Carve {
-        Carve { nearest: vec![(f64::INFINITY, 0.0); n], touched: Vec::new() }
-    }
-
-    /// Add to `f` over `win` the valley of the line `pts` of sample `q` of `s`, which reaches `reach` samples: the
-    /// weight of its floor at each texel within reach, and its floor's height so weighted.
-    pub(super) fn line(&mut self, f: &mut Field, win: &Window, s: &Samples, q: usize, pts: &[Vertex], reach: f64) {
-        let mut a = pts[0];
-        for (n, &b) in pts.iter().enumerate().skip(1) {
-            // Short pieces are passed over, up to the line's last point.
-            if n + 1 < pts.len() && (b.p[0] - a.p[0]).hypot(b.p[1] - a.p[1]) < CHORD_SHARE * reach {
-                continue;
-            }
-            for y in win.texels(a.p[1].min(b.p[1]) - reach, a.p[1].max(b.p[1]) + reach, 1) {
-                for x in win.texels(a.p[0].min(b.p[0]) - reach, a.p[0].max(b.p[0]) + reach, 0) {
-                    let (at, i) = win.texel(x, y);
-                    let (_, d2, t) = to_segment(at, a.p, b.p);
-                    if d2 <= reach * reach && d2 < self.nearest[i].0 {
-                        if self.nearest[i].0 == f64::INFINITY {
-                            self.touched.push(i);
-                        }
-                        self.nearest[i] = (d2, floor(s, q, a.t + (b.t - a.t) * t));
-                    }
+/// Add to `f` over `win` the valley of the line `pts` of sample `q` of `s`, which reaches `reach` samples: each of
+/// its straight pieces gives each texel within reach the weight of its floor at the texel's nearest point of it, as
+/// much as it is long (over `PIECE_SHARE` of the reach), and that floor's height so weighted. A texel's floor is so
+/// the mean of the line's floors about it, the nearer the heavier: smooth across the ground, with no step where the
+/// nearest point of a line that bends leaps from one limb to the other.
+pub(super) fn carve(f: &mut Field, win: &Window, s: &Samples, q: usize, pts: &[Vertex], reach: f64) {
+    let mut a = pts[0];
+    for (n, &b) in pts.iter().enumerate().skip(1) {
+        let long = (b.p[0] - a.p[0]).hypot(b.p[1] - a.p[1]);
+        // Short pieces are passed over, up to the line's last point.
+        if n + 1 < pts.len() && long < CHORD_SHARE * reach {
+            continue;
+        }
+        for y in win.texels(a.p[1].min(b.p[1]) - reach, a.p[1].max(b.p[1]) + reach, 1) {
+            for x in win.texels(a.p[0].min(b.p[0]) - reach, a.p[0].max(b.p[0]) + reach, 0) {
+                let (at, i) = win.texel(x, y);
+                let (_, d2, t) = to_segment(at, a.p, b.p);
+                if d2 < reach * reach {
+                    let w = weight(d2.sqrt() / reach) * long / (PIECE_SHARE * reach);
+                    (f.valley[i], f.weight[i]) = (f.valley[i] + w * floor(s, q, a.t + (b.t - a.t) * t), f.weight[i] + w);
                 }
             }
-            a = b;
         }
-        for i in self.touched.drain(..) {
-            let (bed, w) = (self.nearest[i].1, weight(self.nearest[i].0.sqrt() / reach));
-            (f.valley[i], f.weight[i], self.nearest[i]) = (f.valley[i] + w * bed, f.weight[i] + w, (f64::INFINITY, 0.0));
-        }
+        a = b;
     }
 }
