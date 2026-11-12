@@ -10,7 +10,9 @@ const CLOD = 0.06; const CLOD_M = 0.5;
 // Under a closed canopy the bare ground is litter: its colour times `LITTER_TINT`, up to `LITTER` of it, and in the
 // crowns' shade, darker by up to `UNDER_DARK`; moss grows on it in patches `MOSS_M` across over this share of it, the
 // more the wetter the ground.
-const LITTER = 0.8; const LITTER_TINT = vec3f(0.95, 0.72, 0.5); const UNDER_DARK = 0.35;
+const LITTER = 0.8; const LITTER_TINT = vec3f(0.7, 0.78, 0.5); const UNDER_DARK = 0.6;
+// In the crowns' shade the floor's own colour is this far towards its grey: no bright soil under a canopy.
+const FLOOR_GREY = 0.8;
 const MOSS = 0.45; const MOSS_M = 1.5; const MOSS_TINT = vec3f(0.6, 0.95, 0.45);
 
 // Bare bed: its own colour greyed by `ROCK_GREY` and times `ROCK_TONE`, mottled by up to `MOTTLE` over `MOTTLE_M`
@@ -42,7 +44,8 @@ const STONE_GAP = 2.5; const STONE_SIZES = 0.4; const STONE_TONE = 1.15; const S
 // its clods, and under the crowns their shade, litter and moss.
 fn floor_of(c: vec3f, at: vec2f, e: f32, canopy: f32, wet: f32) -> vec3f {
   let litter = LITTER * STYLE * canopy;
-  var out = c * mix(vec3f(1.0), LITTER_TINT, litter) * (1.0 - UNDER_DARK * STYLE * canopy);
+  let soft = mix(c, vec3f(dot(c, vec3f(1.0 / 3.0))), FLOOR_GREY * STYLE * canopy);
+  var out = soft * mix(vec3f(1.0), LITTER_TINT, litter) * (1.0 - UNDER_DARK * STYLE * canopy);
   // Each grain only where it shows: its noise costs a few reads of the hash.
   let clods = shows_at(CLOD_M, e);
   if (clods > 0.0) { out *= 1.0 + CLOD * STYLE * noise(at / CLOD_M, 51).x * clods; }

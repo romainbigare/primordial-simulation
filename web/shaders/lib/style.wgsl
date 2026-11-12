@@ -138,7 +138,13 @@ fn rim(rho: f32, edge: f32, radius: f32, e: f32) -> f32 {
   return smoothstep(edge - band, edge, rho);
 }
 
+// A mark in the sun is fuller in colour and one in the shade greyer: its colour departs from its grey by this share
+// more or less per unit of its light over or under flat ground's.
+const LIT_CHROMA = 0.8;
+
 // A mark's colour (linear) from its own `c`, lit by `lit`, at `rim_at` of its outline.
 fn mark_colour(c: vec3f, lit: f32, rim_at: f32) -> vec3f {
-  return relief_tint(c, banded(lit)) * (1.0 - OUTLINE * STYLE * rim_at);
+  let grey = vec3f(dot(c, vec3f(0.2126, 0.7152, 0.0722)));
+  let full = max(mix(grey, c, 1.0 + LIT_CHROMA * STYLE * clamp(lit - 1.0, -1.0, 1.0)), vec3f(0.0));
+  return relief_tint(full, banded(lit)) * (1.0 - OUTLINE * STYLE * rim_at);
 }

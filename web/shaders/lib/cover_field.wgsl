@@ -33,7 +33,7 @@ const STANDS = 2;
 // in a cell as often as covers at most `GRAIN_FILL` of it, as wide as keeps the mean (at most half a cell), anywhere in
 // its cell, so no crowns stand in rows and none is cut at its cell's edge. Each is lit from the north-west, its light
 // departing from the flat ground's by up to `GRAIN_LIGHT`, and its tone its own, up to `GRAIN_TONE` either way.
-const GRAIN_FILL = 0.35; const GRAIN_LIGHT = 0.2; const GRAIN_TONE = 0.1;
+const GRAIN_FILL = 0.35; const GRAIN_LIGHT = 0.3; const GRAIN_TONE = 0.1;
 // A crown of the field is as wide as its plants' marks, and no less than `CLUMP_PX` css pixels: where a plant takes
 // less, a crown stands for the clump of plants about it, so the eye sees crowns and never a grain finer than it can
 // read. Its cells are a lattice's cells doubled as often as that takes; between two doublings a wide cell holds one
@@ -43,7 +43,7 @@ const GRAIN_FILL = 0.35; const GRAIN_LIGHT = 0.2; const GRAIN_TONE = 0.1;
 const CLUMP_PX = 1.5; const CLUMP_MOST_M = 10.0; const WIDE_FROM = 0.25; const WIDE_TO = 0.75;
 // Discs at random places leave gaps however closed their stand: as a layer's plants cover from `CLOSES.x` to `CLOSES.y`
 // of the ground, the gaps between its crowns fill with its canopy, `GAP_TONE` as light as a crown (their shade).
-const CLOSES = vec2f(0.6, 0.9); const GAP_TONE = 0.8;
+const CLOSES = vec2f(0.6, 0.9); const GAP_TONE = 0.65;
 // Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
 // mean (fixed noise in the world), alike near (cover.wgsl) and far.
 const PATCH_M = 8.0; const PATCH = 0.45;
@@ -338,7 +338,8 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   // the trees shows the sward and the bushes of its cell before it shows bare.
   let closed = min(trees.a, 1.0);
   let lit = (1.0 - min(closed * hold[STANDS], 1.0)) / max(1.0 - closed, LIT_LEAST);
-  hold = vec4f(hold.xy * lit, hold.z, hold.w * lit);
+  // The bushes thin in the shade but do not heap in the gaps: only the sward, which fills ground, thickens there.
+  hold = vec4f(hold.xy * min(lit, 1.0), hold.z, hold.w * lit);
   // Under the trees: the sward and the low lattices one by one near, as one layer far (`LOW_FAR_E`).
   let far = ease(LOW_FAR_E, LOW_FAR_FULL_E, e);
   var dst = vec4f(0.0);
@@ -355,7 +356,8 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
     dst = mix(dst, low * (min(low.a * hold.w * thick, 1.0) / max(low.a, 1e-6)), far);
   }
   dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);
-  return CoverAt(dst, trees.a);
+  // The crowns that stand over the point shade its floor (crag.wgsl `floor_of`).
+  return CoverAt(dst, min(closed * hold[STANDS], 1.0));
 }
 
 // Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show, thicker and thinner by
@@ -364,7 +366,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
 // textures.ts) adds nothing.
 fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, hold: f32, dst: vec4f) -> vec4f {
   let unshown = 1.0 - cover_look.shown[l];
-  if (unshown <= 0.0 || cover_look.sides[l] <= 0.0 || f.a <= 0.0) { return dst; }
+  if ((unshown <= 0.0 && l != STANDS) || cover_look.sides[l] <= 0.0 || f.a <= 0.0) { return dst; }
   var c = f.rgb / f.a;
   var share = min(f.a * hold, 1.0);
   if (share <= 0.0) { return dst; }
@@ -375,7 +377,14 @@ fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, ho
     c = mix(c, vec3f(1.0), CANOPY_SNOW * b.snow);
     share = 1.0 - pow(1.0 - share, CANOPY_SEEN);
   }
-  let g = grain(at, l, share * thick, e);
-  let a = g.x * unshown;
-  return vec4f(c * g.y * a, a) + dst * (1.0 - a);
+  var g = vec2f(0.0, 1.0);
+  if (unshown > 0.0) { g = grain(at, l, share * thick, e); }
+  // Under their marks too a stand of trees that closes its ground leaves none between its crowns: its canopy fills
+  // what the marks leave, in their shade (`CLOSES`, `GAP_TONE`), as between the field's own crowns.
+  var under = 0.0;
+  if (l == STANDS) { under = ease(CLOSES.x, CLOSES.y, min(share * thick, 1.0)) * (1.0 - unshown); }
+  let drawn = g.x * unshown;
+  let a = drawn + under;
+  if (a <= 0.0) { return dst; }
+  return vec4f(c * (g.y * drawn + GAP_TONE * under), a) + dst * (1.0 - a);
 }
