@@ -117,13 +117,12 @@ each texel lies in (`Ground::pond_tile`: the pond of the sample that holds its c
 nearest of the samples within 2 each way whose level the texel lies under, where its sample stands over that level (a rim, not the
 pass nor the ground below it) or the pond is of the open low ground, so a pond's shore is where the ground drawn rises
 over its level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
-frame: the melting point of the frozen cover, K, then for each square row by row 13 f32 (`ROW`) of the cell that holds
+frame: the melting point of the frozen cover, K, then for each square row by row 10 f32 (`ROW`) of the cell that holds
 its centre: the terrain's mean height over the cell, m; its ground's temperature, K, and how fast its air cools with
 height, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest ground, m
 (`flow::levels`), and the depth that stands, m; the liquid in its pores and what they hold full, m (`flow::means`), and
 the level of the wetness index its soil's liquid departs about (`inside::soil_level` over the samples inside the cell;
-0 where the pores are dry or full); and its bed's reflectance, red, green and blue (its bonded solids', by volume:
-`layers::bed_colour`). Before Flow built its state the level and
+0 where the pores are dry or full). Before Flow built its state the level and
 lowest ground are its solid surface and the depth that stands is its liquid's. Then for each square row by row its
 cell's kinds of cover (`tape/src/stands.rs`), `KINDS` (4) of `KIND_ROW` (17) f32 each, the heaviest first: the slots of
 one starting kind joined, their genes the mean by built cover; of each its starting kind (-1: none); its built cover,

@@ -111,12 +111,6 @@ fn bonded(w: &World, i: usize) -> [f64; 4] {
     acc
 }
 
-/// The reflectance of the bed of cell `i`, its bonded solids' (red, green, blue; 0 where it has none).
-pub fn bed_colour(w: &World, i: usize) -> [f64; 3] {
-    let a = bonded(w, i);
-    [1, 2, 3].map(|c| if a[0] > 0.0 { a[c] / a[0] } else { 0.0 })
-}
-
 /// Ground of colour `ground` in cell `i` (`area` m²) under the litter of the cover's remains in it: their colour by
 /// volume, over the share 1 - e^-(their kg/m² / `LITTER_KG`) of it.
 fn litter(w: &World, i: usize, area: f64, ground: [f64; 3]) -> [f64; 3] {
