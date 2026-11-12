@@ -210,9 +210,9 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     } else {
       water = water_over(bed, p.depth, ripple);
     }
-    // Ice where the cells' share of it lies (water.wgsl `ice_cover`), as floes at its margin.
+    // Ice where the cells' share of it lies (ice.wgsl `ice_cover`), as floes at its margin.
     let ice = ice_cover(p.snow, p.depth, p.at, p.e);
-    let rgb = ice_on(water, ice, p.at, p.e);
+    let rgb = ice_on(water, ice, p.depth, p.at, p.e);
     var kind = select(LAKE, select(SHALLOW, DEEP, p.depth > DEEP_SEA_M), p.sea >= 0.5);
     if (ice > 0.5) { kind = ICE; }
     // The true view shades the bed's colours as far as the bed shows.
