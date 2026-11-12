@@ -9,6 +9,8 @@
 
 mod garden;
 mod rounds;
+#[cfg(test)]
+mod tests;
 mod year;
 
 use super::open_land;

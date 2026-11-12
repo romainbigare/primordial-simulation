@@ -1,10 +1,10 @@
-//! The sorted start (`worldgen::life::nursery`): when life starts, the cover its gardens keep is placed on the open
-//! land with the books kept, and the same seed gives the same start.
+//! The start of the cover (`worldgen::life::nursery`): when life starts, the cover its gardens keep is placed on the
+//! open land with the books kept, and the same seed gives the same start, bit for bit.
 
 use pcore::cover;
 
 #[test]
-fn the_sorted_cover_is_placed_with_the_books_kept_and_the_same_every_time() {
+fn the_cover_is_placed_with_the_books_kept_and_the_same_for_a_seed() {
     let mut w = worldgen::new_world(1, 22, 22);
     pcore::flow::state(&mut w, true);
     worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);

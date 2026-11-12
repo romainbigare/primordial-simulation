@@ -39,7 +39,7 @@ pub(super) struct Class {
 const PER_CLASS: u32 = 1 << 16;
 
 /// Run `years` of the year `lived` (its months in turn).
-fn run(g: &mut Garden, w: &World, p: &Parts, (year, wash): Lived, years: u32) {
+pub(super) fn run(g: &mut Garden, w: &World, p: &Parts, (year, wash): Lived, years: u32) {
     for k in 0..years as usize * year.len() {
         g.month(w, p, &year[k % year.len()], &wash[k % year.len()]);
     }

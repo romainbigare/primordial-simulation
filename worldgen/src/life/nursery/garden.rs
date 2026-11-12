@@ -18,7 +18,7 @@ pub(super) struct Garden {
     pub cell: usize,
     pub cover: Cover,
     light: f64,
-    liquid: f64,
+    pub liquid: f64,
     minerals: [f64; MAX_SUBSTANCES],
     remains: f64,
     months: u64,
