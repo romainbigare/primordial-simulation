@@ -72,7 +72,9 @@ a moment, never the squares; a new tile fades in over it in a quarter of a secon
 blends the table between the squares' centres and applies the laws inside a cell there: the ground's temperature is
 its cell's less the air's fall with height times the pixel's height over the cell's mean; the frozen cover covers the
 ground as its mean depth does (tanh of the depth over 8 mm of ice, about 3 cm of snow, Yang and others 1997), less
-where the pixel is warmer than its melting point; liquid stands at the level of the ponds of the texels about the pixel where the ground drawn lies under it, the ground drawn near a shore leaning to a smooth line through the samples (a contour of their blurred heights, `tape/src/ground/shore.rs`), so a coast has no scallops a sample wide and its shallows are one band, and the water's edge covers its share of the pixel's footprint, so a shore is a smooth line at any zoom; the soil's liquid departs from its cell's by `soil_m` per unit of the wetness index over
+where the pixel is warmer than its melting point, and that share of its cells' ground is placed where the ground holds
+snow longest (high ground, slopes turned from the sun, hollows: `snow_bares`, `snow_at` in `web/shaders/lib/land.wgsl`),
+so a snow line is a sharp line of the ground, not a blur between the cells; liquid stands at the level of the ponds of the texels about the pixel where the ground drawn lies under it, the ground drawn near a shore leaning to a smooth line through the samples (a contour of their blurred heights, `tape/src/ground/shore.rs`), so a coast has no scallops a sample wide and its shallows are one band, and the water's edge covers its share of the pixel's footprint, so a shore is a smooth line at any zoom; the soil's liquid departs from its cell's by `soil_m` per unit of the wetness index over
 the cell's level, within none and the pores full, as the core shares it; a channel shows where the pixel lies nearer
 its line than half the width the channel law gives the discharge of its own sample (the core's `World::discharge`,
 which comes with a frame when it has changed enough to show), its share of the pixel what the pixel's footprint
@@ -164,8 +166,8 @@ bed and in a channel as big as its power moves (`web/shaders/lib/crag.wgsl`). Ab
 2's is bare and that steep.
 
 In every view the bed shows where the loose ground thins (`web/shaders/lib/rock.wgsl`): each terrain sample's loose
-depth and the largest stone its channel moves come with the ground (`Ground::rock`), and each cell's bed reflectance
-with the table; the loose depth departs from the samples' in patches from 40 m down to the pixel (`loose_seen`), so outcrops have ragged edges; the bed shows fully at no loose ground and is hidden under 0.1 m, and plants hold on it only in its
+depth, the largest stone its channel moves and the reflectance of its bed's make (its substances' by volume) come with
+the ground (`Ground::rock`), so bare rock shows the bands of the folded layers at the samples' own place; the loose depth departs from the samples' in patches from 40 m down to the pixel (`loose_seen`), so outcrops have ragged edges; the bed shows fully at no loose ground and is hidden under 0.1 m, and plants hold on it only in its
 cracks. A body that holds no liquid is drawn as dry ground. Every colour of the map is worked in linear light (a
 reflectance times the light on the surface) and turned into the screen's bytes once, by the sRGB curve (IEC 61966-2-1).
 Under the plants the ground has its own colour (its loose solids, else its bonded ones, under the litter of the

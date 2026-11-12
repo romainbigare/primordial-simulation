@@ -137,6 +137,8 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
     }
   }
   g.rgb = mix(g.rgb, SNOW, snow);
+  // Snow is not bare soil: it takes neither the soil's warmth nor its darkening when wet (`soil`).
+  g.bare *= 1.0 - snow;
   if (snow > 0.5) { g.kind = ICE; }
   if (plants > 0.0) { g.rgb = mix(g.rgb, p.cover.rgb / p.cover.a, plants); }
   if (plants >= 0.5) { g.kind = PLANTS; }
@@ -201,9 +203,10 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     let ripple = ripples(p.at, p.e) * (1.0 - p.snow);
     var water: vec3f;
     if (styled()) {
-      // The style: clear water over a pale bed, deepening to the open water, foam at its edge (style.wgsl).
+      // The style: clear water over a pale bed, deepening to the open water, the sea's foam at its edge (style.wgsl;
+      // a lake's small waves make none, and on its fine shore it would only fleck).
       let seen = mix(lake_seen(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M), p.depth, p.sea);
-      water = mix(water_painted(bed, seen, ripple), FOAM_RGB, foam(p.depth, p.slope / earth.look.x, p.e));
+      water = mix(water_painted(bed, seen, ripple), FOAM_RGB, p.sea * foam(p.depth, p.slope / earth.look.x, p.e));
     } else {
       water = water_over(bed, p.depth, ripple);
     }

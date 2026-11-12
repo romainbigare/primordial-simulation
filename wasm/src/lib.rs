@@ -36,6 +36,9 @@ struct Live {
 thread_local! {
     static LIVE: RefCell<Option<Live>> = const { RefCell::new(None) };
     static GROUND: RefCell<Option<tape::Ground>> = const { RefCell::new(None) };
+    /// The planet's air of the first banded world of the session (`worldgen::planet::planet`): the same for every island
+    /// of the one chemistry, so it is made once.
+    static PLANET: RefCell<Option<pcore::flow::Planet>> = const { RefCell::new(None) };
     /// The bytes last handed to the page (it reads them until the next call that returns bytes).
     static OUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
@@ -53,13 +56,24 @@ fn give(bytes: Vec<u8>) -> *const u8 {
     })
 }
 
-/// Make an island of `size` x `size` cells from `seed`, with the schedule of `ew run --roster --plants`: the starting
-/// kinds of cover, no animals, so the page runs fast while the work is on the ground, the liquid and the cover. Its
-/// cells stay those as built: the map draws every zoom from the ground's tiles and the cells' table. Returns 0, or 1 if
-/// the world is refused.
+/// The settings of an island between the latitudes `south` and `north`, degrees
+/// (`worldgen::terrain::banded`); the default's where `south` is not below `north` (the page asks for no
+/// band).
+fn island((south, north): (f64, f64)) -> Config {
+    if south < north { worldgen::terrain::banded((south, north)) } else { Config::default() }
+}
+
+/// Make an island of `size` x `size` cells from `seed` between the latitudes `south` and `north` (`island`), standing in
+/// the planet's air where they are given (`worldgen::planet::planet`, made once, `PLANET`), with the schedule of
+/// `ew run --roster --plants`: the starting kinds of cover, no animals, so the page runs fast while the work is on the
+/// ground, the liquid and the cover. Its cells stay those as built: the map draws every zoom from the ground's tiles and
+/// the cells' table. Returns 0, or 1 if the world is refused.
 #[no_mangle]
-pub extern "C" fn new_world(seed: u32, size: u32) -> u32 {
-    let world = worldgen::new_world(seed as u64, size as usize, size as usize);
+pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64) -> u32 {
+    let mut world = worldgen::terrain::new_island(seed as u64, size as usize, size as usize, island((south, north)));
+    if south < north {
+        world.planet = Some(PLANET.with(|p| p.borrow_mut().get_or_insert_with(worldgen::planet::planet).clone()));
+    }
     if world.cfg.validate().is_err() {
         return 1;
     }
@@ -170,11 +184,12 @@ pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
     give(bytes)
 }
 
-/// Make the ground of the island `new_world` makes from `seed` and `size` (`tape::Ground`): its terrain and its map's
-/// squares (`worldgen::new_world`; how its cells are cut does not change the ground), with the default laws.
+/// Make the ground of the island `new_world` makes from `seed`, `size` and the latitudes `south` and `north`
+/// (`tape::Ground`): its terrain and its map's squares (`worldgen::new_world`; how its cells are cut does not change the
+/// ground), with the default laws.
 #[no_mangle]
-pub extern "C" fn ground(seed: u32, size: u32) {
-    let (seed, cfg) = (seed as u64, Config::default());
+pub extern "C" fn ground(seed: u32, size: u32, south: f64, north: f64) {
+    let (seed, cfg) = (seed as u64, island((south, north)));
     let (map, terrain) = worldgen::terrain::island_ground(seed, size as usize, size as usize);
     let g = tape::Ground::new(seed, map, terrain, (cfg.lat_south, cfg.lat_north), tape::Law::of(&cfg.phys));
     GROUND.with(|c| *c.borrow_mut() = Some(g));
@@ -192,7 +207,17 @@ pub extern "C" fn tile(depth: u32, x: i32, y: i32) -> *const u8 {
 /// (`tape::Ground::rock`).
 #[no_mangle]
 pub extern "C" fn rock() -> *const u8 {
-    let texels = GROUND.with(|c| c.borrow().as_ref().expect("no ground: call ground first").rock());
+    // The reflectance of each make of the bed, its substances' by volume (as `tape::layers::bed_colour` reads a cell's).
+    let (chem, init) = worldgen::chemistry::chemistry0();
+    let colours: Vec<[f64; 3]> = init
+        .makes
+        .iter()
+        .map(|make| {
+            let v: f64 = make.iter().map(|p| p.1).sum();
+            std::array::from_fn(|c| make.iter().map(|&(k, f)| f * chem.subs[k].refl[0][c] as f64).sum::<f64>() / v.max(1e-12))
+        })
+        .collect();
+    let texels = GROUND.with(|c| c.borrow().as_ref().expect("no ground: call ground first").rock(&colours));
     give(texels.iter().flat_map(|v| v.to_le_bytes()).collect())
 }
 
