@@ -54,7 +54,7 @@ cargo build -p pcore --target wasm32-unknown-unknown
 cd web && npm run build && npm run wasm
 ```
 
-The fast suite has 207 tests. Then open the page (section 6) and look. For a change of the laws, also the slow tests
+The fast suite has 210 tests. Then open the page (section 6) and look. For a change of the laws, also the slow tests
 (`-- --ignored`): `the_key_numbers_stay_in_their_ranges`, `a_globe_without_life_keeps_an_earth_like_climate`,
 `the_long_step_keeps_the_climate`.
 
@@ -94,20 +94,32 @@ tests of `tape/tests/ranges` pass):
 **Known faults on the page:**
 - The frame's cost against before the drawing packages (software only; a real phone is not measured): far views 92 to
   97%, 50 m and 10 m 60 to 71%, the 200 m bar on a phone 176% (the near plant field at 0.69 m a pixel, snow and lakes).
-  The ice adds about a fifth to the fitted view of a Wide island in winter: being cut.
+- Snow and ice cost 25 to 45% of a far frame in the headless browser, also on an island with no ice. Turning off parts
+  of the ice saves little, turning off all of it saves all: the software drawing seems to pay for the program's size,
+  not for the work a pixel runs. Not proven on a real device. Three cuts wait for the owner's word on their phone: the
+  ice's placing noise in a texture made once a world, a sea program and a land program, no snow and ice code in the
+  programs of a world with none.
 - The True view on water: a 2 km haze, no floes. The pack's ridges read as wiggly lines.
 - The coast's squares in a Wide island's far north hold no plants (their cells are low ground): bare land there.
 - A square notch where a channel joins two lakes (mended, not seen on a picture); steps on lake shores at the 2 km
   bar on a phone (texels of 31 m: `VIEW_TILES` bites); shallow lakes are a pale grey-blue (their true depth).
 
-**In work:** the ice's cost from afar (branch `wip/drawing`); the cover's law (branch `wip/cover-law`: replacement by
-light and growing up are built, roots and the ground's depth in work; one flow test fails there and its young stands
-grow fast: both being looked at; then a Wide island with the old and the new law).
+**In work:** the cover's law (branch `wip/cover-law`, not on main). Built there: replacement by light, growing up,
+roots and the ground's depth, then what a plant pays: liquid for the gas its leaves take in, living walls that breathe,
+hardiness as the kind's own frost gene. A Wide island now sorts into zones (bare far north, a dry woody belt, low
+cover, taller stands in the warm south; the frost gene follows the coldest month, r 0.56 to 0.69). Its faults: the
+leaves lose about three times too much liquid per kg made, in one pulse a month against the mean of the whole air
+column, so the closed island is 3 K warmer and half again wetter, five key numbers leave their ranges,
+`the_long_step_keeps_the_climate` and `the_frost_gene_falls_where_winters_are_cold` fail, and stands stay under 2 m.
+The mend in work: the cover only sets its canopy's conductance; Flow's daily surface step evaporates through it
+against the air near the ground, as it does for bare ground (one place for evaporation). Then all is measured again.
+The key numbers' references will move with this law (plants give the air its vapour): one commit, told to the owner.
 
 ## 5. What to do next, in order
 
 1. Ask the owner how the page runs on their phone (the 200 m bar above all).
-2. **The cover's law** to main when its test is understood and a Wide island shows zones (or says why not).
+2. **The cover's law** to main when its liquid goes through Flow, the slow tests pass or their references are measured
+   again on purpose, and a Wide island still shows zones with stands of a true height.
 3. **The sorted start** (`experiment/sorted-start`) follows the new law (`cover::lodge`, `sown`, the new fields of
    `Cover`), then is measured on a Wide island.
 4. Wet and dry sides: a law for the mean wind's momentum. The strip of the planet with land and life (it is an
