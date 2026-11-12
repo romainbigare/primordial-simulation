@@ -30,6 +30,14 @@ pub struct Around {
     pub tick: u64,
 }
 
+/// What the cover of cell `i` reads of the world as the store holds it between months (`around`): what a nursery keeps
+/// of a world's year (`worldgen::life::nursery`).
+pub fn around_now(w: &World, p: &Parts, i: usize) -> Around {
+    let mut moves = Moves::default();
+    moves.open(w, i, Node::new(crate::store::Class::Cover, i));
+    around(w, &moves, p, i)
+}
+
 /// What the cover of cell `i` reads of the world now, through the moves `moves` opened on it.
 pub(crate) fn around(w: &World, moves: &Moves, p: &Parts, i: usize) -> Around {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
