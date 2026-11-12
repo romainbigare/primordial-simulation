@@ -32,11 +32,11 @@ const FOAM_PX = vec2f(0.5, 1.5);
 const BED_LIGHTEN = 0.55; const BED_TONE = 0.85;
 // Lakes and rivers are metres deep where the sea is tens: each is coloured as if `LAKE_SCALE` times as deep plus
 // `LAKE_SHALLOWEST_M`, no deeper than `LAKE_DEEPEST_M` (an open blue, not the ocean's dark), and lighter towards its
-// shore: as if shallower where it is less than a rim's depth deep (a lake's `LAKE_RIM_M`, a channel's `RIVER_RIM_M`:
-// its banks), the shallower the nearer the shore (its square): a band as wide as the bed's slope makes it, wide where
-// the bed is gentle and no narrower than `LAKE_RIM_PX` pixels where it is steep, so every shore has its light shallows.
+// shore: as if shallower where it is less than a rim's depth deep (`LAKE_RIM_M`), the shallower the nearer the shore
+// (its square): a band as wide as the bed's slope makes it, wide where the bed is gentle and no narrower than
+// `LAKE_RIM_PX` pixels where it is steep, so every shore has its light shallows.
 const LAKE_SCALE = 1.5; const LAKE_SHALLOWEST_M = 5.0; const LAKE_DEEPEST_M = 45.0;
-const LAKE_RIM_M = 0.3; const RIVER_RIM_M = 0.1; const LAKE_RIM_PX = 2.5;
+const LAKE_RIM_M = 0.3; const LAKE_RIM_PX = 2.5;
 
 // Beach sand (colour.wgsl `beach`), bright and dry; a beach takes this share of its colour from its loose ground's
 // own, lifted this many times (washed and dry, a ground is lighter).
@@ -79,16 +79,13 @@ fn lake_seen(depth: f32, slope: f32, e: f32, rim_m: f32) -> f32 {
   return min(LAKE_SHALLOWEST_M + depth * LAKE_SCALE, LAKE_DEEPEST_M) * rim * rim;
 }
 
-// A channel is a thin line of water decimetres deep: coloured by that depth it shows its bed and reads as a grey line
-// of gravel from afar. A map draws a river as water, so it is coloured as a lake of its depth and `RIVER_DEEPER_M` more,
-// lighter over its banks (`RIVER_RIM_M`). Close, where a pixel takes under `RIVER_TRUE_E` m (the stones of its bed show),
-// it is coloured by its own depth, so its bed shows through its shallows and its deep thread is darker.
-const RIVER_DEEPER_M = 5.0; const RIVER_TRUE_E = vec2f(0.05, 0.4);
-// The depth a channel's water `depth` m deep is coloured as, seen at `e` m a pixel.
-fn river_seen(depth: f32, e: f32) -> f32 {
-  let rim = ease(0.0, RIVER_RIM_M, depth);
-  return lake_seen(depth, 0.0, e, RIVER_RIM_M) + RIVER_DEEPER_M * rim * rim * ease(RIVER_TRUE_E.x, RIVER_TRUE_E.y, e);
-}
+// A channel is a thin line of water decimetres deep: coloured by that depth alone it shows only its bed, a grey line
+// of gravel. A map draws a river as water, and its bed's shape is what reads: it is coloured as its own depth as a
+// lake's (`LAKE_SCALE`) and `RIVER_SEEN_M` more where it is as deep as the channel law makes its middle, that share
+// (`rel`) to the power `RIVER_SEEN_POW`: the shallows stay light over their bed, the deep thread is dark.
+const RIVER_SEEN_M = 14.0; const RIVER_SEEN_POW = 1.6;
+// The depth a channel's water `depth` m deep is coloured as, `rel` of the depth of its middle by the channel law.
+fn river_seen(depth: f32, rel: f32) -> f32 { return LAKE_SCALE * depth + RIVER_SEEN_M * pow(max(rel, 0.0), RIVER_SEEN_POW); }
 
 // Bed `bed` (linear, lit) seen through `depth` m of water in the style, whose surface has slope g: through the clear
 // water's stretched attenuation (the bed lightened, `BED_LIGHTEN`), over the open water darkening with depth.

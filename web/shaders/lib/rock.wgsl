@@ -143,6 +143,11 @@ const INNER_MOST = 0.8;
 // of its widths). There the water is a pool against the outer bank, `POOL_NARROW` narrower, over a bar on the inside
 // (Leopold and Wolman 1960); between bends it is a riffle, `RIFFLE_WIDE` wider and shallower, across the whole bed.
 const BEND_FULL = 0.4; const POOL_NARROW = 0.2; const RIFFLE_WIDE = 0.3;
+// The water lies against the outer bank from this much of a full bend on.
+const POOL_AT_BANK = 0.6;
+// In a full bend the pool's deepest lies toward the outer bank: across the water the bed's parabola leans by this much
+// (its depth times 1 + `POOL_SKEW` × the share of the way to the outer edge).
+const POOL_SKEW = 0.8;
 
 // Value noise over a channel's reach, of stream `k`, -1..1: at `along` m along its line, in cells `cell` m long (a whole
 // number of them in the length the place along is kept modulo, after which it comes again), and `across` cells
@@ -162,30 +167,33 @@ fn noise_reach(along: f32, cell: f32, across: f32, k: i32) -> f32 {
 // side of its line, m (`banks_of`, varied along it, held on the inside of a bend); the half width of this month's
 // water, m, and where its middle lies across the line (as `Tiled.sd`), m: against the outer bank in a bend; its mean
 // depth by the channel law, m, and what the depth there is of the law's (a pool is deeper, a riffle shallower: the same
-// flow through a narrower or a wider water); and how much of a bend the place is, 0..1.
-struct Channel { bed: f32, water: f32, middle: f32, mean: f32, deep: f32, bend: f32 }
+// flow through a narrower or a wider water); how much of a bend the place is, 0..1; and the side its outer bank lies
+// on (the sign of `Tiled.sd` there; 1 where the line is straight).
+struct Channel { bed: f32, water: f32, middle: f32, mean: f32, deep: f32, bend: f32, outer: f32 }
 fn channel_at(g: Tiled, q: f32) -> Channel {
-  if (q <= 0.0) { return Channel(0.0, 0.0, 0.0, 0.0, 1.0, 0.0); }
+  if (q <= 0.0) { return Channel(0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0); }
   let law = banks_of(q);
   let vary = 1.0 + BED_VARY * (noise_reach(g.along, BED_VARY_M.x, 0.0, 68) + 0.5 * noise_reach(g.along, BED_VARY_M.y, 0.0, 69)) / 1.5;
   let turn = abs(g.curve);
   let bend = min(turn * 2.0 * law / BEND_FULL, 1.0);
-  let outer = -sign(g.curve);
+  let outer = select(1.0, -1.0, g.curve > 0.0);
   var bed = law * vary;
   if (g.sd * g.curve > 0.0) { bed = min(bed, INNER_MOST / max(turn, 1e-6)); }
   let wide = mix(1.0 + RIFFLE_WIDE, 1.0 - POOL_NARROW, bend);
   let water = min(law * vary * pow(land.reach.y, -STATION_EXP) * wide, law * vary);
-  let middle = outer * bend * (law * vary - water);
-  return Channel(bed, water, middle, land.channel.z * pow(q, land.channel.w), 1.0 / wide, bend);
+  let middle = outer * ease(0.0, POOL_AT_BANK, bend) * (law * vary - water);
+  return Channel(bed, water, middle, land.channel.z * pow(q, land.channel.w), 1.0 / wide, bend, outer);
 }
 
-// How far the point of ground `g` lies across the water of its channel `c`: 0 at its middle, 1 at its edge and past.
-fn across_water(g: Tiled, c: Channel) -> f32 { return min(abs(g.sd - c.middle) / max(c.water, 1e-6), 1.0); }
+// The depth of the bed of channel `c` under its water's surface, m, the share `x` of the way across the water from its
+// middle to its outer edge (-1 at its inner edge): a parabola across the water, as deep at its middle as its mean
+// depth makes it (`BED_MIDDLE`), leaning to the outer bank in a bend (`POOL_SKEW`), so the water is deepest in its
+// thread and its banks catch the light.
+fn depth_across(c: Channel, x: f32) -> f32 {
+  return BED_MIDDLE * c.mean * c.deep * (1.0 - x * x) * (1.0 + POOL_SKEW * c.bend * x);
+}
 
-// The depth of the bed of channel `c` under its water's surface at the point of ground `g`, m: a parabola across the
-// water, as deep at its middle as its mean depth makes it (`BED_MIDDLE`), so the water is deepest at its middle and
-// its banks catch the light.
+// The depth of the bed of channel `c` under its water's surface at the point of ground `g`, m (`depth_across`).
 fn depth_in(g: Tiled, c: Channel) -> f32 {
-  let x = across_water(g, c);
-  return BED_MIDDLE * c.mean * c.deep * (1.0 - x * x);
+  return depth_across(c, clamp((g.sd - c.middle) * c.outer / max(c.water, 1e-6), -1.0, 1.0));
 }

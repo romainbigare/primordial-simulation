@@ -98,7 +98,9 @@ Leopold and Maddock 1953; Dunne and Leopold 1978), bare of plants, and on gentle
 water fills most of it (at one place the water's width grows as its discharge to the power 0.26: Leopold and Maddock
 1953): a pool against the outer bank of a bend over a bar of washed gravel on its inside, a wider riffle between
 bends; what runs through it grows evenly from sample to sample, so it widens downstream and below each tributary
-without a step. The ground has relief finer than its tiles (`web/shaders/lib/relief.wgsl`): octaves of gradient noise from
+without a step. In the Earth view the water is coloured by its bed's shape, light shallows over the bed's stones and a
+dark thread where it is deepest; a bar is pale gravel, wet at the water's edge, with the drift lines the falling
+water leaves and tufts of plants on its top; a bank is a low scarp the sun lights or shades. The ground has relief finer than its tiles (`web/shaders/lib/relief.wgsl`): octaves of gradient noise from
 48 m down to the pixel, fixed in the world, each fading in as it grows past a few pixels, smooth swells on deep loose
 ground and ridged crags on bare bed, the rougher the steeper; it moves the shading and the line of every shore. A slope turned away from the sun is
 lit by the sky alone, the less the steeper (an even sky, Liu and Jordan 1963), so shaded ground and snow keep their
