@@ -28,11 +28,13 @@ const REST_MS = 300, TILE_LEAST = 64;
 /** The map's colours under the view, `w` x `h` texels of four bytes, rows top first. */
 export interface Under { w: number; h: number; rgba: Uint8Array }
 
-/** Drawn on the GPU over the map by another module, in the map's pass, at every frame: the map's corner is at (ox, oy)
- * css px, a square takes `s` css px, a css px `d` device px, and the view is `w` x `h` css px; and what the live map's
- * ground draws of it, with a square taking `s` css px (`under`, its bindings). */
+/** Drawn on the GPU over the map by another module, in the map's pass, at every frame: what it works out before the
+ * pass, where the map's corner is at (ox, oy) css px, a square takes `s` css px, a css px `d` device px, and the view is
+ * `w` x `h` css px (`prepare`); its draw in the pass; and what the live map's ground draws of it, with a square taking
+ * `s` css px (`under`, its bindings). */
 export interface GpuLayer {
-  draw(gpu: Gpu, p: Pass, ox: number, oy: number, s: number, d: number, w: number, h: number): void;
+  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, w: number, h: number): void;
+  draw(p: Pass): void;
   under(gpu: Gpu, s: number): Draw['binds'];
 }
 
@@ -228,12 +230,13 @@ export class MapView {
       if (this.picture) gpu.drop(this.picture);
       this.picture = gpu.texture(tw, th, 'rgba8unorm', 1, 1, true);
     }
+    this.layer?.prepare(gpu, ox, oy, s, k, this.cv.clientWidth, this.cv.clientHeight);
     const target = r < 1 ? this.picture : null, p = gpu.pass(target);
     // While a tile of the ground fades in, the map is drawn again at each frame.
     const fading = this.land?.tiles.fading(performance.now()) ?? false;
     if (fading) this.invalidate();
     this.drawMap(gpu, p, xs, k, [tw, th]);
-    this.layer?.draw(gpu, p, ox, oy, s, k, this.cv.clientWidth, this.cv.clientHeight);
+    this.layer?.draw(p);
     p.end();
     if (target) {
       const q = gpu.pass(null);
@@ -267,9 +270,10 @@ export class MapView {
       if (this.sharp) gpu.drop(this.sharp);
       this.sharp = gpu.texture(W, H, 'rgba8unorm', 1, 1, true);
     }
+    this.layer?.prepare(gpu, ox, oy, s, job.d, this.cv.clientWidth, this.cv.clientHeight);
     const p = gpu.pass(this.sharp, undefined, tile);
     this.drawMap(gpu, p, job.xs, job.d, [W, H]);
-    this.layer?.draw(gpu, p, ox, oy, s, job.d, this.cv.clientWidth, this.cv.clientHeight);
+    this.layer?.draw(p);
     p.end();
     if (!job.tiles.length) {
       const q = gpu.pass(null);
