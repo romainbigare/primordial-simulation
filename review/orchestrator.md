@@ -54,7 +54,7 @@ cargo build -p pcore --target wasm32-unknown-unknown
 cd web && npm run build && npm run wasm
 ```
 
-The fast suite has 210 tests. Then open the page (section 6) and look. For a change of the laws, also the slow tests
+The fast suite has 213 tests. Then open the page (section 6) and look. For a change of the laws, also the slow tests
 (`-- --ignored`): `the_key_numbers_stay_in_their_ranges`, `a_globe_without_life_keeps_an_earth_like_climate`,
 `the_long_step_keeps_the_climate`.
 
@@ -102,23 +102,34 @@ tests of `tape/tests/ranges` pass):
 - A square notch where a channel joins two lakes (mended, not seen on a picture); steps on lake shores at the 2 km
   bar on a phone (texels of 31 m: `VIEW_TILES` bites); shallow lakes are a pale grey-blue (their true depth).
 
-**In work:** the cover's law (branch `wip/cover-law`, not on main). Built there: replacement by light, growing up,
-roots and the ground's depth, then what a plant pays: liquid for the gas its leaves take in, living walls that breathe,
-hardiness as the kind's own frost gene. A Wide island now sorts into zones (bare far north, a dry woody belt, low
-cover, taller stands in the warm south; the frost gene follows the coldest month, r 0.56 to 0.69). Its faults: the
-leaves lose about three times too much liquid per kg made, in one pulse a month against the mean of the whole air
-column, so the closed island is 3 K warmer and half again wetter, five key numbers leave their ranges,
-`the_long_step_keeps_the_climate` and `the_frost_gene_falls_where_winters_are_cold` fail, and stands stay under 2 m.
-The mend in work: the cover only sets its canopy's conductance; Flow's daily surface step evaporates through it
-against the air near the ground, as it does for bare ground (one place for evaporation). Then all is measured again.
-The key numbers' references will move with this law (plants give the air its vapour): one commit, told to the owner.
+**The cover's law is on main** (`core/src/cover/`, `docs/laws.md`; `SNAPSHOT_VERSION` 127): seeds lodge where a slot
+runs a deficit of light, a slot holds a count of plants that thins as they grow up (`cover/stand.rs`), roots need loose
+ground, the leaves pass the key liquid to the air through Flow's daily surface step (the cover only sets its film),
+conducting walls and fine roots pay, a full slot sheds the leaf layers that do not pay, hardiness is the kind's own
+gene, and the cover keeps a yearly budget the tape records (`cover_budget_<flow>`). A Wide island sorts into zones and
+is steady from about year 100 (run to year 300): bare far north, a low woody and herb belt, a tree line, old stands of
+13 to 32 kg/m² in the warm south; the frost gene follows the coldest month (r 0.7). The lifts after Flow go between
+the heads the potential energy found (`Scratch::lift_at`). The page draws a row a slot from the law's own numbers
+(`tape/src/stands.rs`; no number of the law is copied into `web/`), crowns that share the canopy, a shaded floor.
+
+**Known faults of the cover and its page:** a warm wet stand builds 2 to 4 kg of dry matter a year (the sun at the
+ground is 1.6 times Earth's: item 4 below); a plant short of a mineral leaks half of what it stores to the ground
+where a real one slows its light reaction (to mend with item 4); small dark-red specks in the forest at the 200 m
+bar; blocky dark patches at the 2 km bar; a lake of the far north drawn with straight edges on the fitted view; old
+stands whose crowns are wider than a mark reaches are filled by the field's canopy.
+
+**In work:** rivers and stones (branch `wip/drawing`, then the rivers' helper's worktree: a meander belt built with the
+tiles, water by its depth, bars, one maker of a stone, signs of flow with a cheap pre-made animation; mouths and the
+change between the far line and the near bed still to do). The sorted start (`wip/cover-nursery-g2`): built on the
+law, 2.5 to 4.5 s in the browser; a world from it is steady too but heavier and keeps a covered north that the random
+start never reaches (its hardy genes are out of mutation's reach in 300 years): the owner decides whether it becomes
+the start of every world.
 
 ## 5. What to do next, in order
 
-1. **The cover's law** to main when its liquid goes through Flow, the slow tests pass or their references are measured
-   again on purpose, and a Wide island still shows zones with stands of a true height.
-2. **The sorted start** (`experiment/sorted-start`) follows the new law (`cover::lodge`, `sown`, the new fields of
-   `Cover`), then is measured on a Wide island.
+1. **Rivers and stones** to main when the pictures pass (merge with the page's plants).
+2. **The sorted start** as the start of every world if the owner says yes (it then replaces the random start; no
+   switch stays on main).
 3. Wet and dry sides: a law for the mean wind's momentum. The strip of the planet with land and life (it is an
    all-liquid, lifeless planet: its air is warmer and its heat-absorbing gas higher than a globe's with life).
 4. **The air and sunlight** (the owner's word: build it, after the cover's law, the page's plants and the rivers are
@@ -167,6 +178,7 @@ The owner's word: no work lives only on one machine. Push a helper's branch as s
 - `experiment/climate-bands`: merged to main; kept as it was pushed.
 - `experiment/sorted-start`: the sorted start (`worldgen/src/life/nursery/`). Its first commit, the cover's month
   reading one view (`cover::Around`), is on the work branch.
-- `wip/drawing`, `wip/cover-law`: the running helpers' work, pushed as it grows.
+- `wip/drawing`, `wip/cover-law`, `wip/cover-costs`, `wip/page-cover` (all merged), `wip/cover-nursery-g2` (the
+  sorted start, not merged): the helpers' work, pushed as it grows.
 - `tools/checks`: the check scripts and probes of this work (`tools/check/paused.js`, `phone.js`, `inspect.js`; the
   frame's bench in `tools/frame/`; the climate's and the ground's probes). Study files: never on main.
