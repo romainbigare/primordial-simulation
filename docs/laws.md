@@ -1027,19 +1027,25 @@ task per chunk), slot by slot, the tallest (most walls per m²) first:
   2004), where the open world's rot takes it.
 - **Seeds**: the share `SEED` of what it builds leaves in `seed::LOTS` (8) equal lots, each landing where the dispersal
   kernel draws it, as children do (`copy::lot`, 4.2); the lots of a cell make a packet each (`seed::send`; what lands
-  in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step × `cover_mut`); all of it where one more kg would
-  not pay: what a kg more would store with the light at the bottom of its layer (`math::shade`) is less than a kg's
-  upkeep, so the slot is **full** (`Cover::full`) and stops thickening where its lowest leaves would not pay for
-  themselves (Monsi and Saeki 1953; Hirose 2005). When every cell has had its month the seeds land (`cover::land`),
-  cell by cell in the order made (the potential energy of the life that left a cell's head and came to it is booked
-  once for each cell and way, `store::life_sent`): they join the most alike slot of their starting kind in the cell (every gene
-  within `APART` (0.5) × `alike` steps, `cover::distance`; the genes the mean by built cover; they die if that slot is
-  full), else an empty slot; where none is empty, the two most alike slots of one starting kind join to make one
-  (`seed::room`), so a kind new to a cell can take hold beside another's variants; else the lightest slot if they
-  outweigh its built cover (whose cover dies as remains); else they die as remains. So a variant farther than that from its kind founds a slot of its own and competes with
-  the others for light by height. Slots of a cell within the same distance share one (`merge_alike`). Selection is
-  between slots and cells: what grows better sends more seeds (the frost gene falls where winters are cold,
-  `core/tests/cover.rs`).
+  in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step ×
+  `cover_mut`); all of it where one more kg would not pay: what a kg more would store with the light at the bottom of
+  its layer (`math::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
+  where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005). Each seed carries its own
+  store, fuel at its `STORE` gene per kg of it, from the slot's fuel: a slot short of fuel makes fewer seeds, not
+  lighter ones. When every cell has had its month the seeds land (`cover::land`), cell by cell in the order made (the
+  potential energy of the life that left a cell's head and came to it is booked once for each cell and way,
+  `store::life_sent`), and always take hold (`seed::lodge`): they join the most alike slot of their starting kind in
+  the cell (every gene within `APART` (0.5) × `alike` steps, `cover::distance`; the genes the mean by built cover);
+  else they found a slot of their own: an empty one; else the slot **in deficit**, whose balance over about its last
+  year (`Cover::net`: what its light reaction stored less its upkeep, per kg, a running mean over a year's months) is
+  below zero, the worst first (its cover dies as remains); else the two slots nearest each other by their genes,
+  of any starting kind, join (`seed::room`: the slots are a limit of the bookkeeping, and the two hold the same niche
+  to within what it resolves) and they found the slot it frees. So a cell is never closed to seeds and a holder that pays its
+  way is never pushed out by weight: what lives after is the light's to decide, as seedlings live on their store and on
+  the light that reaches the bottom of the layers above them, and what does not pay dies (the gap models, Shugart
+  1984). A variant farther than `APART` × `alike` from its kind founds a slot of its own and competes with the others
+  for light by height. Slots of a cell within the same distance share one (`merge_alike`). Selection is between slots
+  and cells: what grows better sends more seeds (the frost gene falls where winters are cold, `core/tests/cover.rs`).
 - **What it takes and gives**: liquids and minerals from and to its ground with their heat; gases from the air (with
   their heat at the air's temperature and their latent heat) and to its cell's bodies' node (with theirs), as bodies
   breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 7,

@@ -162,8 +162,8 @@ fn seeds_join_their_kind_or_found_a_slot() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// A kind new to a cell takes hold where four variants of another kind hold every slot (`seed::lodge`): the two most
-/// alike of them join to make room, and the cover keeps its mass.
+/// A kind new to a cell takes hold where four variants of another kind hold every slot and all pay their way
+/// (`seed::lodge`): the two nearest each other by their genes join to make room, and the cover keeps its mass.
 #[test]
 fn a_new_kind_enters_a_full_cell() {
     let (mut w, i) = start();
@@ -180,6 +180,30 @@ fn a_new_kind_enters_a_full_cell() {
     assert_eq!(c.held().filter(|&x| c.root[x] == 1).count(), 1, "the new kind holds a slot");
     let after: f64 = slots_of(&w, i).iter().map(|s| s.1).sum();
     assert!(after > before, "the joined variants lost cover: {before} kg, then {after} kg");
+}
+
+/// Seeds of a new kind arriving in a cell whose slots are all held take the slot in deficit (`Cover::net` below zero,
+/// the worst), whose cover dies (`seed::lodge` returns it), and no other: the slots that pay their way keep their cover.
+#[test]
+fn seeds_take_the_slot_in_deficit() {
+    let (chem, _) = worldgen::chemistry0();
+    let p = cover::Parts::of(&chem).expect("chemistry 0 has cover");
+    let (mm, g, step) = (p.mm(&chem), genes(), cover::RANGE[FROST].0);
+    let mut c = cover::Cover::default();
+    for k in 0..cover::SLOTS {
+        let mut v = g;
+        v[FROST] -= 3.0 * step * k as f32;
+        assert!(matches!(cover::lodge(&mut c, &mm, &cover::sown(&chem, &p, (0, 1.0, 280.0), v, k as u32, 0.5), pcore::Physics::default().alike), cover::Landed::In));
+    }
+    (c.net[1], c.net[2]) = (-1.0, -3.0);
+    let (held, worst) = (c.clone(), c.mol[2]);
+    let alike = pcore::Physics::default().alike;
+    let cover::Landed::Out(died) = cover::lodge(&mut c, &mm, &cover::sown(&chem, &p, (0, 1.0, 280.0), g, 9, 0.01), alike) else { panic!("the seeds took no slot in deficit") };
+    assert_eq!(died, worst, "the worst in deficit gave way");
+    assert_eq!(c.root[2], 9, "the new kind holds the slot");
+    for x in [0, 1, 3] {
+        assert_eq!((c.root[x], c.mol[x]), (held.root[x], held.mol[x]), "slot {x} lost its cover");
+    }
 }
 
 /// The frost gene of the cover moves down where winters kill (laws.md 4.5): two variants of the starting cover, of

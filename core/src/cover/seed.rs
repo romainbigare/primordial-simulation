@@ -1,10 +1,8 @@
 //! Seeds (laws.md 4.5): what a slot sends out in its month lands, when every cell has had its month, in the cell it
-//! goes to, cell by cell in the order made. It joins the nearest slot of its kind there within `APART` of `alike`
-//! (the genes the mean by built cover) unless that slot is full (`Cover::full`), or takes an empty slot (made, where
-//! none is, by joining the two most alike slots of one kind), or the lightest if it outweighs it (whose cover then dies
-//! as remains); else it dies.
+//! goes to, cell by cell in the order made, and always takes hold there (`lodge`): in the nearest slot of its kind, or
+//! as seedlings in a slot of its own; what lives after is the light's to decide.
 
-use super::{built_kg, distance, Cover, Parts, APART, EMPTY_KG, NG, NO_ROOT, NP, SLOTS};
+use super::{built_kg, distance, Cover, Parts, APART, NG, NO_ROOT, NP, SLOTS};
 use crate::store::{apply, Class, Move, Node};
 use crate::World;
 
@@ -44,8 +42,8 @@ pub(super) fn send(c: &mut Cover, x: usize, (mol, heat): ([f64; NP], f64), genes
     }
 }
 
-/// Land the seeds of every cell's last month (`Cover::seeds`), cell by cell in the order made; those that find no slot,
-/// and the cover they outweigh, go to the ground of their cell as remains, booked at once. The potential energy of the
+/// Land the seeds of every cell's last month (`Cover::seeds`), cell by cell in the order made; the cover of a slot in
+/// deficit they take goes to the ground of their cell as remains, booked at once. The potential energy of the
 /// life that left a cell's head and came to it is booked once for each cell and way (`store::life_sent`).
 pub fn land(w: &mut World) {
     let Some(p) = Parts::of(&w.chem) else { return };
@@ -60,7 +58,6 @@ pub fn land(w: &mut World) {
             let t = c.temp(&w.chem, &p);
             let (mol, heat) = match lodge(c, &mm, &s, alike) {
                 Landed::In => continue,
-                Landed::Dead => (s.mol, s.heat),
                 Landed::Out(m) => {
                     let heat = ((0..NP).map(|q| m[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * t).min(c.e);
                     c.e -= heat;
@@ -76,53 +73,46 @@ pub fn land(w: &mut World) {
     apply(w, &[], &moves);
 }
 
-/// Where seeds went (`lodge`): into the cell's cover, nowhere (they die), or into a slot whose cover they outweighed
-/// (its amounts, mol of each part, die).
+/// Where seeds went (`lodge`): into the cell's cover, or into a slot in deficit, whose amounts (mol of each part) die.
 pub enum Landed {
     In,
-    Dead,
     Out([f64; NP]),
 }
 
-/// Seeds `s` lodge in cover `c`, with their heat: into the most alike slot of their starting kind
-/// within `APART` × `alike` steps (they die if it is full: one more kg there would not pay, `Cover::full`), else an
-/// empty slot; where none is empty, two slots of one starting kind, the most alike, join (`grow::join`) to make room,
-/// so a kind new to the cell can take hold beside the variants of another; else the lightest slot if they outweigh its
-/// built cover, which dies.
+/// Seeds `s` lodge in cover `c`, with their heat and their store: into the most alike slot of their starting kind within
+/// `APART` × `alike` steps (`distance`), the genes the mean by built cover; else they found a slot of their own: an
+/// empty one; else the one in deficit (`Cover::net` below zero, the worst first), whose cover dies; else the two slots
+/// nearest each other by their genes join (`room`) and they found the slot it frees. So a cell is never closed to seeds
+/// and a holder that pays its way is never pushed out: what lives after is the light's to decide, as seedlings live on
+/// the light that reaches the bottom of the layers above them and what does not pay dies (the gap models, Shugart 1984).
 pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, alike: f32) -> Landed {
     let kg = built_kg(mm, &s.mol);
     let kin = (0..SLOTS).filter(|&x| c.root[x] == s.root);
-    let near = kin.map(|x| (distance(&c.genes[x], &s.genes), x)).filter(|e| e.0 <= APART * alike).min_by(|a, b| a.0.total_cmp(&b.0));
-    let place = |c: &mut Cover, x: usize| (c.mol[x], c.genes[x], c.root[x], c.full[x]) = (s.mol, s.genes, s.root, false);
-    let x = match near {
-        Some((_, x)) if c.full[x] => return Landed::Dead,
-        Some((_, x)) => {
-            // The seeds join as a slot of their own would, the genes the mean by built cover.
-            (0..NG).for_each(|g| c.genes[x][g] += (kg / (kg + c.built(mm, x)).max(1e-300)) as f32 * (s.genes[g] - c.genes[x][g]));
-            (0..NP).for_each(|q| c.mol[x][q] += s.mol[q]);
-            c.e += s.heat;
-            return Landed::In;
-        }
-        None => match (0..SLOTS).find(|&x| c.root[x] == NO_ROOT).or_else(|| room(c, mm)) {
-            Some(x) => x,
-            None => (0..SLOTS).min_by(|&a, &b| c.built(mm, a).total_cmp(&c.built(mm, b))).expect("a cell has slots"),
-        },
-    };
-    let (was, out) = (c.root[x] != NO_ROOT, c.mol[x]);
-    if was && c.built(mm, x) > EMPTY_KG && c.built(mm, x) >= kg {
-        return Landed::Dead;
+    if let Some((_, x)) = kin.map(|x| (distance(&c.genes[x], &s.genes), x)).filter(|e| e.0 <= APART * alike).min_by(|a, b| a.0.total_cmp(&b.0)) {
+        // The seeds join as a slot of their own would, the genes the mean by built cover.
+        (0..NG).for_each(|g| c.genes[x][g] += (kg / (kg + c.built(mm, x)).max(1e-300)) as f32 * (s.genes[g] - c.genes[x][g]));
+        (0..NP).for_each(|q| c.mol[x][q] += s.mol[q]);
+        c.e += s.heat;
+        return Landed::In;
     }
-    place(c, x);
+    let poorest = (0..SLOTS).filter(|&x| c.net[x] < 0.0).min_by(|&a, &b| c.net[a].total_cmp(&c.net[b]).then(c.built(mm, a).total_cmp(&c.built(mm, b))));
+    let (x, out) = match ((0..SLOTS).find(|&x| c.root[x] == NO_ROOT), poorest) {
+        (Some(x), _) => (x, None),
+        (None, Some(x)) => (x, Some(c.mol[x])),
+        (None, None) => (room(c, mm), None),
+    };
+    (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x]) = (s.mol, s.genes, s.root, false, 0.0);
     c.e += s.heat;
-    if was { Landed::Out(out) } else { Landed::In }
+    out.map_or(Landed::In, Landed::Out)
 }
 
-/// Room in full cover `c`: the two slots of one starting kind that are most alike (`distance`) join, the lighter into
-/// the heavier (`grow::join`); the slot it leaves empty, or none if no two slots share a starting kind.
-fn room(c: &mut Cover, mm: &[f64; NP]) -> Option<usize> {
-    let pairs = (0..SLOTS).flat_map(|a| (a + 1..SLOTS).map(move |z| (a, z))).filter(|&(a, z)| c.root[a] == c.root[z]);
-    let (a, z) = pairs.min_by(|p, q| distance(&c.genes[p.0], &c.genes[p.1]).total_cmp(&distance(&c.genes[q.0], &c.genes[q.1])))?;
+/// Room in cover `c` whose slots all hold cover that pays its way: the two nearest each other by their genes
+/// (`distance`), of any starting kind, join, the lighter into the heavier (`grow::join`): the slots are a limit of the
+/// bookkeeping, and the two hold the same niche to within what it resolves. Returns the slot it leaves empty.
+fn room(c: &mut Cover, mm: &[f64; NP]) -> usize {
+    let pairs = (0..SLOTS).flat_map(|a| (a + 1..SLOTS).map(move |z| (a, z)));
+    let (a, z) = pairs.min_by(|p, q| distance(&c.genes[p.0], &c.genes[p.1]).total_cmp(&distance(&c.genes[q.0], &c.genes[q.1]))).expect("a cell holds two slots");
     let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };
     super::grow::join(c, mm, big, small);
-    Some(small)
+    small
 }

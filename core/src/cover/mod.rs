@@ -93,9 +93,13 @@ pub struct Cover {
     /// Per slot: its genes, and the starting kind it descends from (a label for the tape; `NO_ROOT` when empty)
     pub genes: [[f32; NG]; SLOTS],
     pub root: [u32; SLOTS],
-    /// Per slot: whether one more kg of it did not pay its upkeep in its last month (`grow::build`): seeds of its kind
-    /// do not take hold there
+    /// Per slot: whether one more kg of it did not pay its upkeep in its last month (`grow::build`): all it builds then
+    /// leaves as seeds
     pub full: [bool; SLOTS],
+    /// Per slot: its balance over about its last year, J per kg of built cover a month: what its light reaction stored
+    /// less its upkeep, a running mean over a year's months (`grow::live`); below zero it is in deficit and gives way to
+    /// arriving seeds (`seed::lodge`)
+    pub net: [f32; SLOTS],
     /// The heat of its cover, J; the cell's light (`World::light`) at its last step, J/m²; the share of the light its
     /// cover absorbs that its bodies' node sets aside for its light reaction
     pub e: f64,
@@ -109,7 +113,7 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], e: 0.0, mark: 0.0, keep: 0.0, seeds: Vec::new() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], e: 0.0, mark: 0.0, keep: 0.0, seeds: Vec::new() }
     }
 }
 
@@ -232,7 +236,8 @@ pub(crate) fn lose(w: &crate::World, d: &mut crate::life::Chunk, p: &Parts, i: u
 
 /// Place `kg` per m² of cover of genes `genes` and starting kind `root` in cell `i`, an edit booked from the outside
 /// node (`World::cross`): its built cover at the shares of its genes, its fuel at its `STORE` gene, at the cell's
-/// ground temperature; it lodges as seeds do (`seed::lodge`). False if it found no slot (nothing is placed then).
+/// ground temperature; it lodges as seeds do (`seed::lodge`). False if the chemistry has no cover (nothing is placed
+/// then).
 pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
     let Some(p) = Parts::of(&w.chem) else { return false };
     let (mm, alike) = (p.mm(&w.chem), w.cfg.phys.alike);
@@ -242,9 +247,8 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     let c = &mut w.life.cells[i].cover;
     let was = c.temp(&w.chem, &p);
     match seed::lodge(c, &mm, &s, alike) {
-        seed::Landed::Dead => return false,
         seed::Landed::In => {}
-        // What it outweighed goes to the ground as remains, with its heat.
+        // The slot in deficit it took goes to the ground as remains, with its heat.
         seed::Landed::Out(m) => {
             let q = ((0..NP).map(|q| m[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * was).min(c.e);
             c.e -= q;
