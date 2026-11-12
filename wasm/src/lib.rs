@@ -95,6 +95,13 @@ pub extern "C" fn step_month() {
     })
 }
 
+/// 1 if the next month places the cover the nursery sorts (the first month of the year life starts,
+/// `worldgen::life::nursery`): a month of a few seconds, which the page announces before it runs; else 0.
+#[no_mangle]
+pub extern "C" fn sorts_next() -> u32 {
+    with(|l| (l.world.month() % l.world.cfg.months_per_year as u64 == 0 && l.plan.life == Some(l.world.cfg.calendar().years(l.world.time))) as u32)
+}
+
 /// The cells now.
 #[no_mangle]
 pub extern "C" fn cells() -> u32 {

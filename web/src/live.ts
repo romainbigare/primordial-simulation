@@ -18,7 +18,7 @@ export class Live {
   private unanswered = 0;
   private onHide = () => { if (document.hidden) this.answer(); };
 
-  constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats, changed: boolean) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void }) {
+  constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats, changed: boolean) => void; error: (text: string) => void; busy: (text: string) => void; things: (data: Uint8Array | null) => void }) {
     this.url = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
     this.worker = new Worker(this.url);
     this.worker.onerror = e => on.error(e.message);
@@ -26,6 +26,7 @@ export class Live {
       const m = e.data as { kind: string; meta: string; frame: Uint8Array; table: Float32Array; discharge: Uint16Array | null; year: number; day: number; text: string; stats: Stats; things: Uint8Array | null };
       if (m.kind === 'ready') return on.ready();
       if (m.kind === 'error') return on.error(m.text);
+      if (m.kind === 'busy') return on.busy(m.text);
       if (m.discharge) this.discharge = m.discharge;
       if (m.kind === 'world') {
         const meta = JSON.parse(m.meta) as Meta;
