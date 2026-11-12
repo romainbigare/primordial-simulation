@@ -23,8 +23,9 @@ struct Land {
   // The terrain's samples across and down, their depth, and the screen's pixels a css pixel.
   samples: vec4f,
   // The length a texel's place along its channel is kept modulo, m (tape/src/ground/channels.rs `ALONG_WRAP_M`), how
-  // many times the mean flow the flood that shapes a channel's bed passes (tape/src/ground/bends.rs `FLOOD`), and how
-  // far the signs of the flow have slid down the slowest water, m (web/src/land.ts `slid`).
+  // many times the mean flow the flood that shapes a channel's bed passes (tape/src/ground/bends.rs `FLOOD`), how
+  // far the signs of the flow have slid down the slowest water, m (web/src/land.ts `slid`), and the share of its bed's
+  // width a channel's water takes at its mean flow (`FLOOD` to the power minus `STATION_EXP`).
   reach: vec4f,
   // The line a channel is drawn as from afar (tape/src/ground/channels.rs `LINE_PX`): its css pixels where its
   // discharge is the one that shows, the power of its discharge over that it widens by, and the most times.
@@ -264,6 +265,13 @@ fn rooted(loose: f32, need: f32, spread: f32) -> f32 {
 // m, and the share of its cells' ground their frozen cover covers before it melts, 0..1.
 struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, snow_m: f32, mean: f32, rise: f32, covered: f32 }
 
+// The height of ground `g`, cut `cut` m deep, over the level of the ponds about it, m (`NO_LIQUID_M`: none about it):
+// it counts the more the less of the point is theirs.
+fn over_ponds(g: Tiled, cut: f32) -> f32 {
+  if (g.water.x <= -NO_LIQUID_M || g.water.y <= 0.0) { return NO_LIQUID_M; }
+  return min(max(g.h - cut - g.water.x, 0.0) / g.water.y, NO_LIQUID_M);
+}
+
 // The state at `at`, m from the map's north-west corner, on ground `g` whose bed a channel cuts `cut` m deep there
 // (`depth_in`): the cells' values blended between the squares' centres (`cs`), and the laws inside a cell applied at the
 // point.
@@ -302,11 +310,10 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
     // within a texel of the pond's last texel; under it, the depth shallows to none across that texel, so where the
     // ground drawn lies under the level past the pond's last texel the shore is a soft edge, not the texels' steps.
     p.depth = max(g.water.x - (g.h - cut), 0.0) * g.water.y;
-    p.over = min(max(g.h - cut - g.water.x, 0.0) / g.water.y, NO_LIQUID_M);
   } else {
     p.depth = 0.0;
-    p.over = NO_LIQUID_M;
   }
+  p.over = over_ponds(g, cut);
   let half = land.soil.y;
   p.wet = (held + p.depth) / (held + p.depth + half);
   // The ground's temperature is its cell's at the cell's mean height, less the air's fall with height above it.
@@ -320,11 +327,12 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
 }
 
 // The state at `at` on ground `g` as a plant's foot reads it (cover.wgsl): the water of the point's channel stands over
-// its bed too, and its floods over the whole of it (`channel_at`): no plant roots in a channel's bed.
+// its bed too, and its floods over the whole of it (`channel_at`): no plant roots in a channel's bed, widened at its
+// mouth, nor on the fan it lays under standing liquid (rock.wgsl `fan_at`).
 fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
   let c = channel_at(g, discharge_at(g, at));
   let cut = depth_in(g, c);
   var p = state_on(at, g, cs, cut);
-  p.depth = max(max(p.depth, cut), select(0.0, ROOTS_M, g.d < c.bed));
+  p.depth = max(max(p.depth, cut), ROOTS_M * max(select(0.0, 1.0, g.d < c.bed), ease(0.0, FAN_BARE, fan_at(g, c, p.depth))));
   return p;
 }

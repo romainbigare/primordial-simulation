@@ -22,7 +22,7 @@ mod valley;
 mod wander;
 mod wetness;
 
-pub use bends::FLOOD;
+pub use bends::{FLOOD, STATION_EXP};
 pub use channels::{Law, ALONG_WRAP_M, LINE_GROW, LINE_MOST, LINE_PX, SHOW_M, STEP_MOST, TYPICAL_RUNOFF};
 pub use valley::{VALLEY_FROM, VALLEY_M};
 pub use half::{half, unhalf};

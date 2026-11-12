@@ -68,8 +68,10 @@ go from the finest at which one tile holds the whole map to the first whose texe
 (`tape::depths`). Per texel: the terrain's mean height over it (`Terrain::heights`, so a texel is the mean of its four
 children), and on texels finer than the samples, out of the ponds, drawn toward the floor of a channel within 250 m
 (`VALLEY_M`) that drains 1 km² or more (`VALLEY_FROM`): all of it on the channel's line, less and less across to none at
-250 m (the floor's share f eased from 1 to 0, its weight f / (1 - f) against the ground's 1, the lines near a texel
-summed), the floor running along each sample's piece from the mean of its height and the one's upstream through its own
+250 m (the floor's share f eased from 1 to 0, its weight f / (1 - f) against the ground's 1; each straight piece of
+a line gives a texel its floor at the texel's nearest point of it with that weight, as much as it is long over a
+quarter of 250 m, and the pieces near a texel are summed, so the floor is smooth across the ground and has no step
+where a line bends), the floor running along each sample's piece from the mean of its height and the one's upstream through its own
 to the mean of its own and the next one's (the next one's own where a tributary joins it; a closed pond's level). So the
 lowest line of the ground drawn is the channel's line, and the samples' steps beside a valley fade out; the mean of a
 sample's texels is not kept there exactly; near a pond (within 2 samples) a valley only lowers the ground and not under
@@ -88,8 +90,8 @@ blended between the centres of the four samples about a texel finer than them an
 covers; and its channel (`tape/src/ground/channels.rs`). A channel runs through each sample's point
 (`tape/src/ground/stems.rs`): the mean of the centres of the samples along its stem, 6 up and 6 down, weighted 6 to 1
 by nearness and the sample's own 7 (a moving average of the polyline of centres, as corner cutting smooths a polygon:
-Chaikin 1974), as many each way as the stem has, so a head, the end of a stem at a body and the sample a tributary
-joins keep their place (a tributary ends on the joined stem's point), and no more than a sample from the centre:
+Chaikin 1974), as many each way as the stem has (a stem runs on through a body's samples, along its floor), so a
+head, a stem's end and the sample a tributary joins keep their place (a tributary ends on the joined stem's point), and no more than a sample from the centre:
 so a channel that steps like a stair down a valley across the grid draws as one smooth line from afar. It is drawn as each
 sample's way (`Samples::to`) as a curve from the middle of the way into it (from its neighbour upstream that the most
 drains through, `Samples::main`) to the middle of its own, between the points, bent at its own point (a quadratic
@@ -99,9 +101,11 @@ sample's centre down the smooth shore's offset to where it lies 0.5 m under the 
 so a river reaches its lake or its sea. The line wanders about that curve (`tape/src/ground/wander.rs`) and swings about its wander in the bends of a
 meander belt (`bends.rs`, `belt.rs`). The samples place a valley's line no closer than a share of a sample, so the
 line wanders up to 0.4 of a sample to each side (half of that on a hard bed), in long swings of no fixed length: a
-smooth noise along the way down the valley, a corner of its lattice every 1.6 samples and a finer one 2.7 times as
-often, 0.4 as strong, whose slope runs on across the corners (gradient noise, Perlin 2002), none at a head, a join and
-a sink. A bed is shaped by its floods, so the bends are sized by the bed's width; a tile is made once, so that width
+smooth noise along the way down the valley, a corner of its lattice every 1.6 samples and four finer octaves, each
+2.7 times as often as the last and 0.4 as strong (a channel takes those whose corners lie 8 of its bed's widths apart
+or more, fully from 16: a wide bed's finer turns are its bends', and a rill turns every few metres), the sum taken
+twice and held smoothly within the most, whose slope runs on across the corners (gradient noise, Perlin 2002), none at
+a head, a join and a sink. Every channel wanders, a rill and a body's floor too: none runs straight. A bed is shaped by its floods, so the bends are sized by the bed's width; a tile is made once, so that width
 and the bed's depth are stand-ins: the channel law's at the drained area times `BED_RUNOFF`, 5 times (`FLOOD`: the
 bankfull flood, Leopold and Maddock 1953; Dunne and Leopold 1978) `TYPICAL_RUNOFF` (8.5e-9 m/s, Earth's mean: 0.27 m a
 year, Dai and Trenberth 2002). The bends swing 3.5 bed widths to each side of the wander where nothing holds them
@@ -110,8 +114,8 @@ channel) is under 0.01; over 0.03 the bed is hard and 0.35 of it is left (pool-r
 do not: Montgomery and Buffington 1997; Schumm 1985), and between the two the change is gradual. They swing no wider
 than the valley's floor (4 bed depths over the rise of the ground across the valley, the samples square to the
 channel's way over the same reach) and than the channel's reach less its bed; the whole sway no wider than 0.4 of the
-radius the valley's own line turns on and than 0.8 of a sample; none for a bed under 1 m, under standing liquid or at
-a sink. The bends are walked down each main way from its head, from one apex to the next (a half bend, 24 steps):
+radius the valley's own line turns on and than 0.8 of a sample; no sway at a sink, and no bends (the wander alone)
+for a bed under 1 m and under standing liquid. The bends are walked down each main way from its head, from one apex to the next (a half bend, 24 steps):
 along a half bend the curvature runs smoothly from the first apex's to the next one's turned the other way (a cubic of
 the heading, 0 at both apexes: a curvature that falls evenly along the line where both are alike, as measured bends
 do: Langbein and Leopold 1966), so the line has no kink and its curvature no jump. Each apex takes its place and its
@@ -142,9 +146,10 @@ the side (60,000 where none reaches), and its sample, as the step from the sampl
 (1 + (dx + 21) + 43 (dy + 21); 0 for none), whole numbers a 16-bit float holds exactly; and of the nearest point of
 that channel's line, how far along the channel from its head it lies, m, modulo 128 m (`ALONG_WRAP_M`: a 16-bit float
 holds it to a few centimetres, and a shell lays along it only signs that come again after that length). A texel
-between two texels (left and right, or above and below) that both hold one other channel, which drains more, is given
-to that channel (`mend.rs`: a small channel that crosses the reach of a larger one lies nearer over its scale in a
-strip a texel wide, which would notch the line a shell draws the larger one as). Each texel also keeps the distance,
+within 2 texels, to its left and to its right or above and below, of texels that both hold one other channel, which
+drains more (with none but its own channel's between), is given to that channel (`mend.rs`: a small channel that
+crosses the reach of a larger one lies nearer over its scale in a strip a texel or two wide, which would notch the line
+a shell draws the larger one as). Each texel also keeps the distance,
 signed by the side, to its own channel's line without its bends (its curve and its wander alone; the line from the same
 head; 60,000 where none reaches), and a texel that holds no line takes its sample from that one: from afar a shell
 draws a channel as a line wider than its bends, about the line without them, and close up the difference of the two

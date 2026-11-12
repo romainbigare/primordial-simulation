@@ -103,7 +103,7 @@ fn stony(s: Spot, g: Tiled, ch: Channel, q: f32, moved: f32, cobble: f32) -> Spo
   p.blocks = BLOCKS * steep_reach * select(beside, 1.0, g.d < ch.bed);
   p.rock = max(p.rock, WALL * beside);
   p.cover *= 1.0 - WALL * beside;
-  p.worn = ease(log(WORN_Q.x), log(WORN_Q.y), log(max(q, 1e-9))) * (1.0 - STEEP_SHARP * steep_reach);
+  if (p.stony > 0.0) { p.worn = ease(log(WORN_Q.x), log(WORN_Q.y), log(max(q, 1e-9))) * (1.0 - STEEP_SHARP * steep_reach); }
   return p;
 }
 
@@ -135,17 +135,15 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   var q = discharge_of(reach);
   // (Most points that hold a channel lie far from its line, in its reach alone: there its own sample's discharge says
   // enough, and what grows along it, its stones and its neighbour's are read within `CHANNEL_NEAR` of its line.)
-  let near = g.d < CHANNEL_NEAR * banks_of(q) + 2.0 * e || abs(g.calm) < line_of(q, e).x + 2.0 * e;
+  var banks = banks_of(q);
+  let near = g.d < CHANNEL_NEAR * banks + 2.0 * e || abs(g.calm) < line_most(e) + 2.0 * e;
   if (near) {
     next = next_along(reach, at);
     q = mix(q, discharge_of(next.s), next.share);
+    banks = banks_of(q);
   }
-  var ch = channel_at(g, q);
+  let ch = channel_of(g, q, banks);
   let st = state_on(at, g, cs, depth_in(g, ch));
-  let flare = 1.0 + MOUTH_FLARE * (1.0 - ease(0.0, MOUTH_OVER_M, st.over));
-  ch.bed *= flare;
-  ch.water *= flare;
-  ch.mean /= flare;
   let surface = blended(SURFACE, cs);
   var p: Spot;
   // A film of liquid over the drawn ground is soaked ground, not water (`FILM_M`).
@@ -181,21 +179,24 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.bed = vec3f(0.0);
   // Its channel's stones (`stony`), and the scree's place below the bed that sheds it: where the loose ground deepens
   // down the slope.
+  // (No bed takes `BED_PX` pixels and no stone shows in a program made for draws from far: neither is read there.)
   var moved = 0.0;
   var cobble = COBBLE_M;
-  if (near && ch.bed > 0.0) {
+  if (near && ch.bed > 0.0 && BED_PX * least_e() < BED_MOST_M) {
     moved = mix(stone_of(reach), stone_of(next.s), next.share);
     cobble = max(STONE_SEEN * stone_of(reach), COBBLE_M);
   }
   let deepens = vec2f(dpdx(loose), dpdy(loose));
-  p = stony(p, g, ch, q, moved, cobble);
-  p.below = mix(BELOW_LEAST, 1.0, 0.5 - 0.5 * dot(deepens, g.slope) / max(length(deepens) * length(g.slope), 1e-9));
+  if (!unseen(STONE_MOST_M / STONE_PX)) {
+    p = stony(p, g, ch, q, moved, cobble);
+    p.below = mix(BELOW_LEAST, 1.0, 0.5 - 0.5 * dot(deepens, g.slope) / max(length(deepens) * length(g.slope), 1e-9));
+  }
   p.snow_m = st.snow_m;
   // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
   if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
   p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), p.loose, look.z);
   // A river's fan under the liquid it runs into.
-  if (ch.bed > 0.0 && p.depth > 0.0) { p.sand = max(p.sand, ease(0.0, BAR_SAND_STONE, stone_of(reach)) * (1.0 - ease(ch.bed, FAN_WIDTHS * ch.bed, g.d)) * (1.0 - ease(0.0, FAN_DEPTH_M, p.depth))); }
+  p.sand = max(p.sand, fan_at(g, ch, p.depth));
   p.river = 0.0;
   p.river_depth = 0.0;
   p.at = at;
@@ -204,9 +205,11 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // that is the ponds' weighs it), over the depth's change across a pixel.
   let signed = st.depth - min(st.over, NO_LIQUID_M) * g.water.y - FILM_M;
   let pool = select(0.0, tent(signed / (max(length(g.slope) * g.water.y, SHORE_RISE_LEAST) * e)), g.water.y > 0.0);
-  let out = Spots(p, p, 0.0, 0.0, pool, st.snow, vec3f(0.0), 0.0, vec3f(0.0), vec2f(0.0), vec2f(0.0));
+  var out = Spots(p, p, 0.0, 0.0, pool, st.snow, vec3f(0.0), 0.0, vec3f(0.0), vec2f(0.0), vec2f(0.0));
   if (p.depth > 0.0 || ch.water <= 0.0) { return out; }
-  return river_spots(out, shore_over, g, ch, q, moved, grows);
+  out.dry.over = shore_over;
+  if (!near) { return out; }
+  return river_spots(out, g, ch, q, moved, grows, line_of(q, e, banks));
 }
 
 // The colours a pixel mixes, each over the last by the share of the pixel it covers: its ground (`LAYER_GROUND`); the
