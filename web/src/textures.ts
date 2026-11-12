@@ -1,7 +1,7 @@
 // The plant cover on the GPU (vegetation.ts): the kinds' table and the field (canopy.ts `Kinds`), and how strongly each
 // lattice of marks shows at a scale. The live map's ground draws the field where the marks take too few pixels
 // (web/shaders/lib/cover_field.wgsl, `fieldBinds`); before the map, each mark in view is decided once, a texel a cell
-// (web/shaders/marks.wgsl, `prepare`), and a draw of web/shaders/cover.wgsl draws the marks over the map (`draw`).
+// in textures of four bytes a texel (web/shaders/marks.wgsl, `prepare`), and a draw of web/shaders/cover.wgsl draws the marks over the map (`draw`).
 // Each lattice lies fixed in the world, one mark a cell, so the marks hold while the camera moves, and a pan or a zoom
 // shows them at once.
 import { Draw, Gpu, Pass, Texture, Uniforms } from './gpu';
@@ -15,6 +15,8 @@ const COVER_VEC4S = 3 + 3 * LATTICES.length, LOOK_VEC4S = 3;
 /** The cells a pixel looks at about its own along each axis (lib/mark.wgsl `MARK_MARGIN`, one each way), and one more
  * for a pixel at the draw's far edge. */
 const MARK_MARGIN = 1, MARK_SPARE = 1;
+/** The words a mark is kept in, a texture each (lib/mark.wgsl `MARK_WORDS`), and their bindings. */
+const MARK_BINDINGS = [5, 6, 7];
 /** A lattice fainter than this is not drawn as marks: they would not show, and they cost as much as marks that do. */
 const FAINTEST = 0.02;
 /** Angled, a plant stands up this share of its height on the map (lib/crown.wgsl `STAND`): the rows south of a pixel
@@ -36,9 +38,10 @@ export class CoverMarks {
   private due = false;
   /** Metres a square of the map. */
   private cellM = 1;
-  /** The marks decided this frame (`prepare`): the bindings the cover draws with; and the texture they are in. */
+  /** The marks decided this frame (`prepare`): the bindings the cover draws with; and the textures they are in, one
+   * for each of their words. */
   private decided: Draw['binds'] | null = null;
-  private marksTex: Texture | null = null;
+  private marksTex: Texture[] = [];
 
   /** `alpha`: how strongly the cover covers the map. */
   constructor(private alpha: number) {}
@@ -108,19 +111,22 @@ export class CoverMarks {
       row += cells.rows;
       return { a, base: g.map(Math.floor), frac, near, rows, cells };
     });
-    const cols = Math.max(...grids.map(g => g.cells.cols));
-    if (!this.marksTex || this.marksTex.w < cols || this.marksTex.h < row) {
-      if (this.marksTex) gpu.drop(this.marksTex);
-      this.marksTex = gpu.texture(Math.max(cols, this.marksTex?.w ?? 0), Math.max(row, this.marksTex?.h ?? 0), 'rgba32float', 1, 1, true);
+    const cols = Math.max(...grids.map(g => g.cells.cols)), was = this.marksTex[0];
+    if (!was || was.w < cols || was.h < row) {
+      this.marksTex.forEach(t => gpu.drop(t));
+      this.marksTex = MARK_BINDINGS.map(() => gpu.texture(Math.max(cols, was?.w ?? 0), Math.max(row, was?.h ?? 0), 'rgba8unorm', 1, 1, true));
     }
     const u = new Uniforms(COVER_VEC4S).vec4(...m.at, m.mpp, angled ? 1 : 0).vec4(...k.walls, 0).vec4(...grids.map(g => g.cells.row));
     grids.forEach(g => u.vec4(...g.frac, g.a, g.rows));
     grids.forEach(g => u.vec4(g.near));
     grids.forEach(g => u.ivec4(...g.base));
-    this.decided = { ...m.land, ...this.fieldBinds(gpu, m.cssMpp), 1: u.buffer, 4: this.tableTex!, 5: this.marksTex };
-    const p = gpu.pass(this.marksTex);
-    for (const g of grids) if (g.cells.rows > 0) p.draw('marks', { rect: [0, g.cells.row, g.cells.cols, g.cells.rows], binds: this.decided }, false);
-    p.end();
+    const binds: Draw['binds'] = { ...m.land, ...this.fieldBinds(gpu, m.cssMpp), 1: u.buffer, 4: this.tableTex! };
+    this.marksTex.forEach((t, word) => {
+      const p = gpu.pass(t), drawn = { ...binds, 2: new Uniforms(1).ivec4(word).buffer };
+      for (const g of grids) if (g.cells.rows > 0) p.draw('marks', { rect: [0, g.cells.row, g.cells.cols, g.cells.rows], binds: drawn }, false);
+      p.end();
+    });
+    this.decided = { ...binds, ...Object.fromEntries(MARK_BINDINGS.map((b, word) => [b, this.marksTex[word]])) };
   }
 
   /** Draw marks `m` in pass `p` on `gpu`, as decided before the pass (`prepare`). */

@@ -53,7 +53,7 @@ map.layer = vegetation;
 map.overlay = (ctx, ox, oy, s) => avatars.draw(ctx, ox, oy, s, px => map.under(px));
 /** Which GPU draws the map (none: the page cannot draw it). */
 let drawnWith = '';
-map.ready.then(g => { drawnWith = g ? g.kind : ''; if (!g) say('This browser has neither WebGPU nor WebGL2 that draws into textures of floats, so the map cannot be drawn.'); });
+map.ready.then(g => { drawnWith = g ? g.kind : ''; if (!g) say('This browser has neither WebGPU nor WebGL2, so the map cannot be drawn.'); });
 avatars.listen($<HTMLCanvasElement>('cv'), () => { inspect(); map.redraw(); });
 const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
 

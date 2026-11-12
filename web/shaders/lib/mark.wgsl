@@ -24,8 +24,13 @@ struct Cover {
 @group(0) @binding(1) var<uniform> cover: Cover;
 @group(0) @binding(4) var kinds: texture_2d<f32>;
 // The marks of the cells in view (marks.wgsl): a texel a cell, a lattice's from row `cover.rows` on and from
-// `MARK_MARGIN` cells before its base on, each what `decide` decided of the mark in it.
-@group(0) @binding(5) var marks: texture_2d<f32>;
+// `MARK_MARGIN` cells before its base on, each what `decide` decided of the mark in it as three 32-bit words, a texture
+// of four bytes a texel for each (`MARK_WORDS`; bytes, which every GPU draws into): one more than its square and kind
+// (0: none), and the bits of the share that shows and of the snow, so each comes back to the bit.
+@group(0) @binding(5) var marks_kind: texture_2d<f32>;
+@group(0) @binding(6) var marks_shows: texture_2d<f32>;
+@group(0) @binding(7) var marks_snow: texture_2d<f32>;
+const MARK_WORDS = 3;
 // The cells a pixel looks at reach this many before the cell that holds the draw's corner.
 const MARK_MARGIN = 1;
 // A plant's size differs from its kind's by up to this share; a tree leans by up to `LEAN` of its height.
@@ -194,7 +199,28 @@ fn mark_plant(l: i32, k: vec2f, sq: vec2i, t: i32) -> Plant {
   return plant_of(l, sq, t, (k - g.xy) * side + h.xy * side, h.z, rand3(id, l + COVER_LATTICES), g.w * side + side);
 }
 
-// The mark lattice l decided for its cell k (`decide`), from the marks' texture.
+// A byte is drawn this far past its own level, in levels, so it is stored as itself whether the GPU rounds a colour to
+// the nearest level or down.
+const BYTE_LIFT = 0.25;
+
+// Word `w` of mark `m` (`decide`) as its four bytes, each a level of 255 (marks.wgsl).
+fn mark_word(m: vec4f, w: i32) -> vec4f {
+  var x = u32(m.x + 1.0);
+  if (w == 1) { x = bitcast<u32>(m.y); } else if (w == 2) { x = bitcast<u32>(m.z); }
+  return (vec4f(f32(x & 255u), f32((x >> 8u) & 255u), f32((x >> 16u) & 255u), f32(x >> 24u)) + BYTE_LIFT) / 255.0;
+}
+
+// The word of four bytes, each a level of 255, read from a texel (`mark_word`).
+fn word_of(b: vec4f) -> u32 {
+  let v = vec4u(round(b * 255.0));
+  return v.x | (v.y << 8u) | (v.z << 16u) | (v.w << 24u);
+}
+
+// The mark lattice l decided for its cell k (`decide`), from the marks' textures: its share and snow read only where a
+// plant stands.
 fn decided(l: i32, k: vec2f) -> vec4f {
-  return textureLoad(marks, vec2i(k) + vec2i(MARK_MARGIN, MARK_MARGIN + i32(cover.rows[l])), 0);
+  let t = vec2i(k) + vec2i(MARK_MARGIN, MARK_MARGIN + i32(cover.rows[l]));
+  let code = word_of(textureLoad(marks_kind, t, 0));
+  if (code == 0u) { return vec4f(-1.0, 0.0, 0.0, 0.0); }
+  return vec4f(f32(code - 1u), bitcast<f32>(word_of(textureLoad(marks_shows, t, 0))), bitcast<f32>(word_of(textureLoad(marks_snow, t, 0))), 0.0);
 }
