@@ -10,7 +10,7 @@ mod stands;
 mod table;
 mod things;
 
-pub use ground::{depths, half, unhalf, Ground, Law, ALONG_WRAP_M, FLOOD, GUTTER, PONDS_EXACT, SHOW_M, STEP_MOST, TILE, TYPICAL_RUNOFF, VALLEY_FROM, VALLEY_M};
+pub use ground::{depths, half, unhalf, Ground, Law, ALONG_WRAP_M, FLOOD, GUTTER, LINE_GROW, LINE_MOST, LINE_PX, PONDS_EXACT, SHOW_M, STEP_MOST, TILE, TYPICAL_RUNOFF, VALLEY_FROM, VALLEY_M};
 pub use layers::{fields, pixels, raster, quantise, Fields, is_river, river_count, LAYERS, RIVER_CATCH, RIVER_FLOOR, STANDING_M};
 pub use rec::{read_viewer_file, Kept, Recorder, Spent, TapeFiles, Written, ENCLOSED, TAPE};
 pub use things::{things, DIET_BODIES, DIET_COVER, DIET_REMAINS};

@@ -94,45 +94,59 @@ so a channel that steps like a stair down a valley across the grid draws as one 
 sample's way (`Samples::to`) as a curve from the middle of the way into it (from its neighbour upstream that the most
 drains through, `Samples::main`) to the middle of its own, between the points, bent at its own point (a quadratic
 Bézier), and on to the middle of the next sample's line where a tributary joins; a sink of the open low ground that liquid runs into ends the curve at its centre, under the low
-ground's liquid. On gentle ground the line swings about that curve in a meander belt (`tape/src/ground/bends.rs`,
-`belt.rs`). A bed is shaped by its floods, so the bends are sized by the bed's width; a tile is made once, so that
-width and the bed's depth are stand-ins: the channel law's at the drained area times `BED_RUNOFF`, 5 times (`FLOOD`: the
+ground's liquid. The line wanders about that curve (`tape/src/ground/wander.rs`) and swings about its wander in the bends of a
+meander belt (`bends.rs`, `belt.rs`). The samples place a valley's line no closer than a share of a sample, so the
+line wanders up to 0.4 of a sample to each side (half of that on a hard bed), in long swings of no fixed length: a
+smooth noise along the way down the valley, a corner of its lattice every 1.6 samples and a finer one 2.7 times as
+often, 0.4 as strong, whose slope runs on across the corners (gradient noise, Perlin 2002), none at a head, a join and
+a sink. A bed is shaped by its floods, so the bends are sized by the bed's width; a tile is made once, so that width
+and the bed's depth are stand-ins: the channel law's at the drained area times `BED_RUNOFF`, 5 times (`FLOOD`: the
 bankfull flood, Leopold and Maddock 1953; Dunne and Leopold 1978) `TYPICAL_RUNOFF` (8.5e-9 m/s, Earth's mean: 0.27 m a
-year, Dai and Trenberth 2002). The belt reaches 8 bed widths to each side where nothing holds it (belts are 4 to 20
-widths across, Williams 1986): all of it where the reach's slope (over 2 samples up and 2 down the channel) is under
-0.01, none over 0.03 (pool-riffle reaches meander, step-pool ones do not: Montgomery and Buffington 1997; Schumm 1985);
-no wider than the valley's floor (4 bed depths over the rise of the ground across the valley, the samples square to
-the channel's way over the same reach), than 0.4 of the radius the valley's own line turns on, and than 0.8 of a sample;
-none for a bed under 1 m, under standing liquid or at a sink. The line is walked down each main way from its head, from
-one apex to the next (a half bend, 24 steps): along a half bend the curvature runs smoothly from the first apex's to the
-next one's turned the other way (a cubic of the heading, 0 at both apexes: a curvature that falls evenly along the line
-where both are alike, as measured bends do: Langbein and Leopold 1966), so the line has no kink and its curvature no
-jump. Each apex takes its place and its radius from the place's draws (a function of the seed, the sample the bends
-began at and the half bends since): the belt's middle wanders from the valley's line by up to half the belt's half
-width over 7 half bends; an apex reaches 0.5 to 1 of the rest from it, times a swell that falls to 0.1 over 5 half
+year, Dai and Trenberth 2002). The bends swing 3.5 bed widths to each side of the wander where nothing holds them
+(belts are 4 to 20 widths across, Williams 1986): all of it where the reach's slope (over 2 samples up and 2 down the
+channel) is under 0.01; over 0.03 the bed is hard and 0.35 of it is left (pool-riffle reaches meander, step-pool ones
+do not: Montgomery and Buffington 1997; Schumm 1985), and between the two the change is gradual. They swing no wider
+than the valley's floor (4 bed depths over the rise of the ground across the valley, the samples square to the
+channel's way over the same reach) and than the channel's reach less its bed; the whole sway no wider than 0.4 of the
+radius the valley's own line turns on and than 0.8 of a sample; none for a bed under 1 m, under standing liquid or at
+a sink. The bends are walked down each main way from its head, from one apex to the next (a half bend, 24 steps):
+along a half bend the curvature runs smoothly from the first apex's to the next one's turned the other way (a cubic of
+the heading, 0 at both apexes: a curvature that falls evenly along the line where both are alike, as measured bends
+do: Langbein and Leopold 1966), so the line has no kink and its curvature no jump. Each apex takes its place and its
+radius from the place's draws (a function of the seed, the sample the bends began at and the half bends since): it
+reaches 0.2 to 1 of the belt's half width (the smaller the more often), times a swell that falls to 0.08 over 4 half
 bends (most reaches bend fully, some run nearly straight), on the other side from the last; it turns on a radius of
-1.5 to 3.5 bed widths, the tighter the more often (2 to 3 in most grown bends: Hickin and Nanson 1975), gentler where
+1.4 to 5 bed widths, the tighter the more often (2 to 3 in most grown bends: Hickin and Nanson 1975), gentler where
 the swell is low. A half bend is as long as carries the line from its apex to the next (found by halving, 3 to 24
-widths), no longer than keeps its heading within 1.85 rad of the valley's line and carries it 2.5 widths down the
-valley: past a right angle a bend turns back on itself in a loop, and two limbs of a loop come no nearer than about a
-bed's width. A piece's walk starts as the last one's ended, so the line has no break from sample to sample, and along
-it runs the line's own length from its head; a tributary's and a sink's last piece draw back to their curve at their
-end. A tile draws the bends where their wavelength (11 bed widths, Leopold and Wolman 1960) is 24 texels or more, and
-none under 12 (between they grow): the bed is then a texel or two wide, and from farther a shell draws it as a line
-wider than its bends. Each
+widths, its least up to 3 times longer by its own draw), no longer than keeps its heading within 1.85 rad of the
+valley's line and carries it 2.5 widths down the valley: past a right angle a bend turns back on itself in a loop. So
+no two bends are alike in length or swing. On a hard bed an apex turns on 0.4 to 12 widths (most turns gentle, one in
+ten sharp), the heading keeps within 0.8 rad, and a half bend's least length is up to 12 times longer by its draw: the
+line runs in nearly straight stretches from one short sharp turn to the next. A piece's walk starts as the last one's
+ended, so the line has no break from sample to sample, and along it runs the line's own length from its head; a
+tributary's and a sink's last piece draw back to their wander at their end. A tile draws a sway (the bends, the
+wander) where its length (a bend's 11 bed widths, Leopold and Wolman 1960; a wander's 3.2 samples) is 8 texels or
+more, and none under 4 (between it grows): shorter, it moves the line by less than a texel. Each
 channel reaches as far as it could be wide, w0 × (`MOST_RUNOFF` a)^b / 2 (`MOST_RUNOFF` 3.6e-6 m/s, about the wettest
 month known, 9.3 m of rain at Cherrapunji in July 1861; a the drained area, w0 and b the width law of
 `Physics::channel`), and one a shell may draw as a line wider than itself (its drained area at least `SHOW_M` times
-the texel's size over 40) 2.5 texels too. Of the channels within reach, a texel keeps the one whose distance over the
+the texel's size over 40) as far as half the widest line the shell draws it as on these texels (the line law, `LINE_PX`
+1.8 css pixels times its discharge over the one that shows to the power 0.5, up to 7 times, where a css pixel takes 3
+texels and the discharge is 10 times `TYPICAL_RUNOFF`'s, and 1.5 texels more). Of the channels within reach, a texel keeps the one whose distance over the
 larger of its reach and the texel's size is least (the one that covers it first as the flux grows, or, where all are
 narrower than a texel, the nearest), but a tributary takes no texel in the bed of the channel it joins (within half
 that bed's width of its line, near the join). It keeps that channel's distance, signed by
 the side (60,000 where none reaches), and its sample, as the step from the sample that holds the texel's centre
 (1 + (dx + 21) + 43 (dy + 21); 0 for none), whole numbers a 16-bit float holds exactly; and of the nearest point of
 that channel's line, how far along the channel from its head it lies, m, modulo 128 m (`ALONG_WRAP_M`: a 16-bit float
-holds it to a few centimetres, and a shell lays along it only signs that come again after that length), and the line's
-curvature, 1/m, positive where it turns toward the side the distance is positive on: by these a shell draws the pool
-at the outer bank of a bend, the bar inside it and the signs of the flow. A shell finds the sample
+holds it to a few centimetres, and a shell lays along it only signs that come again after that length). A texel
+between two texels (left and right, or above and below) that both hold one other channel, which drains more, is given
+to that channel (`mend.rs`: a small channel that crosses the reach of a larger one lies nearer over its scale in a
+strip a texel wide, which would notch the line a shell draws the larger one as). Each texel also keeps the distance,
+signed by the side, to its own channel's line without its bends (its curve and its wander alone; the line from the same
+head; 60,000 where none reaches), and a texel that holds no line takes its sample from that one: from afar a shell
+draws a channel as a line wider than its bends, about the line without them, and close up the difference of the two
+distances is the bend's swing, by which it draws the pool at the outer bank of a bend and the bar inside it. A shell finds the sample
 again from the texel's centre, floor((x + 1/2) k) for a texel k samples a side, stepped by it. Off the map a texel is
 its edge's. Each number is a function of the seed, the map and the place alone: the same in every tile that holds it. The second plane holds, beside the channel's sample, one more than the pond
 each texel lies in (`Ground::pond_tile`: the pond of the sample that holds its centre, or where that is none, of the

@@ -3,7 +3,7 @@
 
 use super::super::bends::{Bends, Reaches, BEND_MOST};
 use super::super::stems::points;
-use super::{code, to_segment, Channels, Law, Window, STEP_MOST};
+use super::{code, to_segment, Channels, Law, Window, NO_CHANNEL_M, STEP_MOST};
 use pcore::space::network::NONE;
 use pcore::space::samples::Samples;
 use pcore::space::terrain::SAMPLE_DEPTH;
@@ -25,9 +25,9 @@ fn reaches<'a>(s: &'a Samples, at: &'a [[f64; 2]], metres: f64, law: Law) -> Rea
 /// Texels this many samples a side: fine enough to draw the bends of the larger channels.
 const TEXEL_SAMPLES: f64 = 1.0 / 128.0;
 
-/// Each texel a tile holds a channel in names the sample whose line it holds the distance to: the distance from the
-/// texel's centre to that sample's own line is the texel's (so the discharge a shell reads there is the channel's own),
-/// and the sample comes back from the texel's step as a shell finds it.
+/// Each texel a tile holds a channel's line in names the sample whose line it holds the distance to: the distance
+/// from the texel's centre to that sample's own line is the texel's (so the discharge a shell reads there is the
+/// channel's own), and the sample comes back from the texel's step as a shell finds it.
 #[test]
 fn a_texel_names_the_channel_it_measures() {
     let (s, metres, law) = island();
@@ -41,10 +41,10 @@ fn a_texel_names_the_channel_it_measures() {
     let [x0, y0] = [((most % s.across) as f64 / k) as i64 - 64, ((most / s.across) as f64 / k) as i64 - 64];
     let f = ch.field(Window { x0, y0, wide: 128, high: 128, k });
     let mut named = 0;
-    for (i, &q) in f.sample.iter().enumerate().filter(|p| *p.1 != NONE) {
+    for (i, &q) in f.sample.iter().enumerate().filter(|p| *p.1 != NONE && f.dist[p.0].abs() < NO_CHANNEL_M) {
         let texel = [x0 + (i % 128) as i64, y0 + (i / 128) as i64];
         let at = [(texel[0] as f64 + 0.5) * k, (texel[1] as f64 + 0.5) * k];
-        let pts = ch.line(q as usize, k * metres).expect("a channel").0;
+        let pts = ch.line(q as usize, k * metres).expect("a channel").0.line;
         let own = pts.windows(2).map(|w| to_segment(at, w[0].p, w[1].p).1.sqrt()).fold(f64::INFINITY, f64::min) * metres;
         assert!((f.dist[i].abs() - own).abs() < 1e-9, "texel {texel:?}: {} m against {own} m to its own sample's line", f.dist[i]);
         let c = code(&s, texel, k, q) as i64 - 1;
@@ -57,8 +57,8 @@ fn a_texel_names_the_channel_it_measures() {
 }
 
 /// Where a sample is the main one upstream of the next, its line ends where the next one's begins, its bends and all,
-/// and the length along the channel runs on: a river's line has no break. Some of the island's channels bend, and no
-/// bend leaves its belt (`BEND_MOST`).
+/// and the length along the channel runs on: a river's line has no break. Some of the island's channels sway, and none
+/// farther from its curve than `BEND_MOST`.
 #[test]
 fn a_channels_line_runs_on_from_sample_to_sample() {
     let (s, metres, law) = island();
@@ -69,7 +69,7 @@ fn a_channels_line_runs_on_from_sample_to_sample() {
     let texel = TEXEL_SAMPLES * metres;
     let (mut joints, mut bent) = (0, 0);
     for k in (0..s.up.len()).filter(|&k| s.to[k] != NONE && s.main[s.to[k] as usize] == k as u32) {
-        let (own, next) = (ch.piece(k, texel).expect("a channel"), ch.piece(s.to[k] as usize, texel).expect("a channel"));
+        let (own, next) = (ch.piece(k, texel).expect("a channel").line, ch.piece(s.to[k] as usize, texel).expect("a channel").line);
         let (a, b) = (own[own.len() - 1], next[0]);
         let gap = (a.p[0] - b.p[0]).hypot(a.p[1] - b.p[1]) * metres;
         assert!(gap < 1e-6, "sample {k}: a gap of {gap} m to the next");

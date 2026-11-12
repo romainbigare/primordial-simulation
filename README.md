@@ -91,10 +91,13 @@ under a film of algae: a brook shows its stones, a river a metre deep is dark wa
 the capillary fringe over its water. From afar no channel whose discharge matters at that zoom is thinner than a line
 of about a css pixel: one shows as a line once it passes 6.4e-3 m³/s for each metre a css pixel takes (the drained
 area that shows grows with the zoom, so the whole island shows its main rivers, a closer view their larger branches,
-and none a mesh of rills), wider as its discharge grows, to the power 0.75 up to 4 times, so the network's order reads.
+and none a mesh of rills), wider as its discharge grows, to the power 0.5 up to 7 times, so the network's order reads
+and a river widens down its way; a line wider than its bed runs along the channel's line without its bends, which
+come in as the view nears.
 Close up a channel's bed is as wide as the channel law makes five times this month's discharge (the bankfull flood,
-Leopold and Maddock 1953; Dunne and Leopold 1978), bare of plants, and on gentle ground it swings in a meander belt
-(bends of many sizes, some reaches nearly straight, here and there a loop: `tape/src/ground/belt.rs`). This month's
+Leopold and Maddock 1953; Dunne and Leopold 1978), bare of plants; its line wanders about its valley's and on gentle ground swings in a meander belt
+(bends of many sizes, some reaches nearly straight, here and there a loop; on a steep reach nearly straight stretches
+between short sharp turns: `tape/src/ground/belt.rs`). This month's
 water fills most of it (at one place the water's width grows as its discharge to the power 0.26: Leopold and Maddock
 1953): a pool against the outer bank of a bend over a bar of washed gravel on its inside, a wider riffle between
 bends; what runs through it grows evenly from sample to sample, so it widens downstream and below each tributary

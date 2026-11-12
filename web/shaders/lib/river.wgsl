@@ -94,7 +94,7 @@ fn bank_light(e: f32, g: Tiled, c: Channel, r: Reach) -> f32 {
   if (shown <= 0.0) { return 1.0; }
   // The bank's face looks at the channel's line, down the distance's slope.
   let facing = dot(-g.d_slope, LIGHT.xy) / length(LIGHT.xy);
-  let inside = g.sd * g.curve > 0.0;
+  let inside = g.sd * g.lean < 0.0;
   let cut = mix(0.6, select(1.0, BANK_LOW, inside), c.bend);
   return 1.0 + BANK_SHADE * cut * shown * facing * (1.0 - ease(0.0, wide, abs(r.bank)));
 }

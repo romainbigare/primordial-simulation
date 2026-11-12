@@ -6,7 +6,8 @@
 //! samples and the lines alone.
 
 use super::bends::ease;
-use super::channels::{to_segment, Field, Vertex, Window};
+use super::channels::{to_segment, Field, Window};
+use super::lines::Vertex;
 use pcore::space::network::NONE;
 use pcore::space::samples::Samples;
 

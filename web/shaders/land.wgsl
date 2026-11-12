@@ -5,17 +5,26 @@
 // (web/shade, draw.wgsl `LEAST_E`): seen from afar, the detail of the ground and the plants that cannot show is
 // compiled out (from 30 m, the whole island on a phone, the sea ice's floes and the pack's texture: ice.wgsl).
 
-// A channel shows as a line of at least `LINE_PX` css pixels once its discharge passes the discharge that shows in the
+// A channel shows as a line of at least `land.line.x` css pixels once its discharge passes the discharge that shows in the
 // view (`land.time.w` times the metres a css pixel takes: tape/src/ground/channels.rs `SHOW_M`), as a map draws its
-// rivers; wider as its discharge grows past that, as its discharge over that to the power `LINE_GROW` (more steeply
-// than the channel law widens a channel: a map's choice, so the network's order reads), up to `LINE_MOST` times, so a
-// stream is a hair and the main river a few times wider: no wider than its bends are drawn from as near (a tile draws
-// them once the bed takes a texel or two, tape/src/ground/channels.rs `BEND_FROM`); it fades in from `LINE_FADE` times
-// less, so no channel springs up as the view zooms.
-const LINE_PX = 1.2;
-const LINE_MOST = 4.0;
-const LINE_GROW = 0.75;
+// rivers; wider as its discharge grows past that, as its discharge over that to the power `land.line.y` (more steeply
+// than the channel law widens a channel: a map's choice, so the network's order reads), up to `land.line.z` times
+// (tape/src/ground/channels.rs `LINE_PX`); it fades in from `LINE_FADE` times less, so no channel springs up as the view
+// zooms. A line wider than its bed is drawn toward the channel's line without its bends (rock.wgsl `unbent`), all the
+// way from `LINE_BENDS` times the bed's width: there the line is wider than about a sixth of a bend's length and would
+// swallow its bends, and they come in as the view nears and the line narrows to the bed.
 const LINE_FADE = 4.0;
+const LINE_BENDS = 2.0;
+
+// The line a channel of discharge `q` is drawn no thinner than where a pixel takes `e` m: its half width, m, and how
+// far it is drawn toward the line without its bends, 0..1.
+fn line_of(q: f32, e: f32) -> vec2f {
+  if (q <= 0.0) { return vec2f(0.0); }
+  let css = e * land.samples.w;
+  let shows = land.time.w * css;
+  let line = 0.5 * land.line.x * css * min(pow(q / shows, land.line.y), land.line.z) * ease(shows / LINE_FADE, shows, q);
+  return vec2f(line, ease(banks_of(q), LINE_BENDS * banks_of(q), line));
+}
 // A channel's bed is as wide as its floods make it (lib/rock.wgsl `banks_of`). This month's water runs in it between
 // bars of washed gravel (lib/river.wgsl `reach_at`). Where the bed takes under `BED_PX` pixels it is all water.
 const BED_PX = 3.0;
@@ -132,6 +141,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let reach = sample_at(g);
   let next = next_along(reach, at);
   let q = mix(discharge_of(reach), discharge_of(next.s), next.share);
+  g = unbent(g, line_of(q, e).y);
   let ch = channel_at(g, q);
   let st = state_on(at, g, cs, depth_in(g, ch));
   let surface = blended(SURFACE, cs);
@@ -200,13 +210,11 @@ fn river_spots(s: Spots, shore_over: f32, g: Tiled, ch: Channel, q: f32, stone: 
   let at = s.dry.at;
   let e = s.dry.e;
   out.dry.over = shore_over;
-  let css = e * land.samples.w;
-  let shows = land.time.w * css;
-  let line = 0.5 * LINE_PX * css * min(pow(q / shows, LINE_GROW), LINE_MOST) * ease(shows / LINE_FADE, shows, q);
+  let line = line_of(q, e);
   var open = 0.0;
   // (No bed takes `BED_PX` pixels in a program made for draws from this far: rock.wgsl `BED_MOST_M`.)
-  if (BED_PX * least_e() < BED_MOST_M) { open = ease(BED_PX * e, 2.0 * BED_PX * e, banks_of(q)) * (1.0 - ease(banks_of(q), 2.0 * banks_of(q), line)); }
-  let r = reach_at(at, e, g, ch, line, open, stone);
+  if (BED_PX * least_e() < BED_MOST_M) { open = ease(BED_PX * e, 2.0 * BED_PX * e, banks_of(q)) * (1.0 - line.y); }
+  let r = reach_at(at, e, g, ch, line.x, open, stone);
   out.share = r.share;
   out.bars = r.bars;
   // The bars' colour: the bed's make washed, sand on the gentlest reaches; the bed seen through the water is the same.
@@ -229,7 +237,8 @@ fn river_spots(s: Spots, shore_over: f32, g: Tiled, ch: Channel, q: f32, stone: 
   // Down the flow: square to the distance's slope, the way the place along the channel grows.
   let square = vec2f(-g.d_slope.y, g.d_slope.x);
   out.down = square * sign(dot(square, grows));
-  out.water = vec2f(out.wet.depth / (BED_MIDDLE * ch.mean), resolved * (1.0 - ease(0.0, EDGE_M, (1.0 - abs(x)) * ch.water)));
+  // (A line from afar is coloured as the river's deep water.)
+  out.water = vec2f(mix(1.0, out.wet.depth / (BED_MIDDLE * ch.mean), resolved), resolved * (1.0 - ease(0.0, EDGE_M, (1.0 - abs(x)) * ch.water)));
   out.wet.sand = 0.0;
   out.wet.cover = vec4f(0.0);
   // The bed's slope across the water, d(depth)/d(distance from its middle) along that distance's own slope; where the

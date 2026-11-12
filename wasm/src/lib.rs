@@ -118,8 +118,9 @@ pub extern "C" fn day() -> f64 {
 /// by which a texel names its channel's sample, and the length its place along its channel is kept modulo; the numbers
 /// of a row of the table, `tape::Table`; the reflectance of the walls the cover builds), the terrain's samples (across,
 /// down, their depth), the numbers of the laws the shell applies inside a cell (`Physics`), the discharge per metre a
-/// pixel takes past which a channel shows as a line, m³/s per m (`tape::TYPICAL_RUNOFF` × `tape::SHOW_M`), and how many
-/// times the mean flow the flood that shapes a channel's bed passes (`tape::FLOOD`).
+/// pixel takes past which a channel shows as a line, m³/s per m (`tape::TYPICAL_RUNOFF` × `tape::SHOW_M`), that line's
+/// law (`tape::LINE_PX`, `LINE_GROW`, `LINE_MOST`), and how many times the mean flow the flood that shapes a channel's
+/// bed passes (`tape::FLOOD`).
 #[no_mangle]
 pub extern "C" fn meta() -> *const u8 {
     let head = with(|l| {
@@ -134,7 +135,7 @@ pub extern "C" fn meta() -> *const u8 {
             "seed": w.seed, "days_per_year": w.days_per_year(), "layers": layers,
             "tiles": {"size": tape::TILE, "gutter": tape::GUTTER, "depths": [depths.start(), depths.end()], "step_most": tape::STEP_MOST, "along_wrap": tape::ALONG_WRAP_M, "row": tape::ROW, "kinds": tape::KINDS, "kind_row": tape::KIND_ROW, "walls": walls},
             "samples": {"across": s.across, "down": s.down, "depth": pcore::space::terrain::SAMPLE_DEPTH},
-            "laws": {"soil_m": ph.soil_m, "wet_depth": ph.wet_depth, "dormancy": ph.dormancy, "channel_width": ph.channel_width, "channel_width_exp": ph.channel_width_exp, "channel_depth": ph.channel_depth, "channel_depth_exp": ph.channel_depth_exp, "line": tape::TYPICAL_RUNOFF * tape::SHOW_M, "flood": tape::FLOOD},
+            "laws": {"soil_m": ph.soil_m, "wet_depth": ph.wet_depth, "dormancy": ph.dormancy, "channel_width": ph.channel_width, "channel_width_exp": ph.channel_width_exp, "channel_depth": ph.channel_depth, "channel_depth_exp": ph.channel_depth_exp, "line": tape::TYPICAL_RUNOFF * tape::SHOW_M, "line_law": [tape::LINE_PX, tape::LINE_GROW, tape::LINE_MOST], "flood": tape::FLOOD},
             "frames": [], "series": {}, "series_units": {}, "events": [], "months": [],
         })
     });

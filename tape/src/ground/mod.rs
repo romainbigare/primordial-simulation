@@ -3,7 +3,7 @@
 //! shader reads a texel's neighbours inside the tile. Per texel: the terrain's mean height over it
 //! (`Terrain::heights`, so a texel is the mean of its four children), the wetness index of the place (`wetness`), and
 //! the channel it is nearest by the channel law (`channels`), with how far along that channel's line it lies and how
-//! the line curves there; and apart, the pond it lies in (`Ground::pond_tile`).
+//! far from that line without its bends; and apart, the pond it lies in (`Ground::pond_tile`).
 //! Each is a function of the seed, the map and the place alone: the same texel holds the same numbers in every tile
 //! that holds it. A tile is 16-bit floats (`half`), so a graphics card keeps many: the height as the sum of two of
 //! them, to a millimetre (a shore is the difference of two heights).
@@ -11,15 +11,19 @@
 mod belt;
 mod bends;
 mod channels;
+mod frame;
+mod lines;
+mod mend;
 mod half;
 mod rock;
 mod shore;
 mod stems;
 mod valley;
+mod wander;
 mod wetness;
 
 pub use bends::FLOOD;
-pub use channels::{Law, ALONG_WRAP_M, SHOW_M, STEP_MOST, TYPICAL_RUNOFF};
+pub use channels::{Law, ALONG_WRAP_M, LINE_GROW, LINE_MOST, LINE_PX, SHOW_M, STEP_MOST, TYPICAL_RUNOFF};
 pub use valley::{VALLEY_FROM, VALLEY_M};
 pub use half::{half, unhalf};
 pub use wetness::sample_index;
@@ -95,7 +99,7 @@ impl Ground {
     /// step from the sample that holds the texel's centre (`channels::code`; 0 for none), and one more than the pond the
     /// texel lies in (`pond_tile`; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT`; and of
     /// the nearest point of that channel's line, how far along the channel it lies, m, modulo `ALONG_WRAP_M`, and the
-    /// line's curvature there, 1/m, positive where it turns toward the side the distance is positive on (0 for none).
+    /// distance to the nearest channel's line without its bends, m, signed by the side (60,000 where none reaches it).
     /// Texels off the map are those of its edge.
     pub fn tile(&self, depth: u8, tx: i64, ty: i64) -> Vec<u16> {
         assert!(depths(&self.map).contains(&depth), "a tile of a depth the ground is drawn at");
@@ -142,7 +146,7 @@ impl Ground {
             let pond = if ponds[p] == NONE { 0.0 } else { (ponds[p] + 1) as f32 };
             let texel = [win[0] + (i % wide) as i64, win[1] + (i / wide) as i64];
             let along = near.along[i].rem_euclid(ALONG_WRAP_M);
-            out.extend([half(channels::code(&self.samples, texel, k, near.sample[i]) as f32), half(pond), half(along as f32), half(near.curve[i] as f32)]);
+            out.extend([half(channels::code(&self.samples, texel, k, near.sample[i]) as f32), half(pond), half(along as f32), half(near.calm[i] as f32)]);
         }
         out
     }

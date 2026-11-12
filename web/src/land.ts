@@ -9,9 +9,10 @@ import { MapLook, earthUniforms } from './field-window';
 import { Wet, seaSquares, PATH_LAYER } from './earth';
 import { half, unhalf } from './canopy';
 
-/** The numbers of the laws inside a cell as the core sends them (wasm/src/lib.rs `meta`, `Physics`), and the discharge
- * per metre a css pixel takes past which a channel shows as a line, m³/s per m. */
-export interface Laws { soil_m: number; wet_depth: number; dormancy: number; channel_width: number; channel_width_exp: number; channel_depth: number; channel_depth_exp: number; line: number; flood: number }
+/** The numbers of the laws inside a cell as the core sends them (wasm/src/lib.rs `meta`, `Physics`), the discharge
+ * per metre a css pixel takes past which a channel shows as a line, m³/s per m, and that line's law (its css pixels,
+ * the power it widens by, the most times: tape/src/ground/channels.rs `LINE_PX`). */
+export interface Laws { soil_m: number; wet_depth: number; dormancy: number; channel_width: number; channel_width_exp: number; channel_depth: number; channel_depth_exp: number; line: number; line_law: [number, number, number]; flood: number }
 /** The terrain's samples: across, down, and their depth. */
 export interface SamplesOf { across: number; down: number; depth: number }
 
@@ -31,7 +32,7 @@ const NO_POND_M = 1000;
 /** Before the rock of the samples came, the ground is drawn as if its loose ground were this deep, m: no bed shows. */
 const NO_ROCK_YET_M = 1;
 /** Of the uniforms of land.wgsl (`Land`), four-wide members. */
-const LAND_VEC4S = 7;
+const LAND_VEC4S = 8;
 /** The open low ground freezes cell by cell, and its cells are blocks of squares (8 km: the core's coarse low ground), so
  * an open sea square's ice and temperature are drawn blurred over the open sea squares about it, by a Gaussian of
  * `SEA_BLUR` squares out to `SEA_REACH`: the ice's edge follows a smooth field through the blocks' values, and the same
@@ -154,7 +155,7 @@ export class Land {
     const t = this.tiles.textures(gpu), l = this.laws, tm = this.tiles.meta;
     const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(tm.size, tm.gutter, this.tiles.depth, tm.step_most)
       .vec4(t.now, TILE_FADE_MS, this.melt, l.line).vec4(l.soil_m, l.wet_depth, l.dormancy).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp)
-      .vec4(s.across, s.down, s.depth, devicePixelRatio).vec4(tm.along_wrap, l.flood, this.slid(performance.now()));
+      .vec4(s.across, s.down, s.depth, devicePixelRatio).vec4(tm.along_wrap, l.flood, this.slid(performance.now())).vec4(...l.line_law);
     return { 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex, 13: t.areas, 17: this.flows, 18: this.rock, 19: 'smooth' };
   }
 

@@ -24,7 +24,7 @@ const MOST_TILES = 56;
 const VIEW_TILES = 30;
 /** Of a tile, 16-bit floats a texel: the first plane four (the height as two, the wetness index, the signed distance to
  * its channel's line), the second four (that channel's sample, as its step from the texel's own, and one more than the
- * pond the texel lies in; 0: none; how far along its channel's line the texel lies, and the line's curvature there). */
+ * pond the texel lies in; 0: none; how far along its channel's line the texel lies, and its distance to that channel's line without its bends). */
 const PLANE_A = 4, PLANE_B = 4;
 /** A new tile fades in over the one before it over this long, ms. */
 export const TILE_FADE_MS = 250;
