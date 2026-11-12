@@ -7,7 +7,7 @@
 // 0.31, 0.7 draws 0.69, 0.9 draws 0.90), and no edge follows a cell's border.
 const ICE_SHALLOW = 1.0; const ICE_SHALLOW_M = 10.0;
 const ICE_PATCH_M = 6000.0; const ICE_PATCH_STEP = 2.9; const ICE_PATCH_FALL = 0.62; const ICE_PATCH_OCTAVES = 5;
-const ICE_PATCHY = 3.5; const ICE_BAND = 1.2;
+const ICE_PATCHY = 3.5; const ICE_BAND = 1.2; const ICE_OCTAVE_PX = 4.0;
 
 // Over its margin the sheet breaks into floes (a Voronoi diagram, Worley 1996, its cells' edges bent by noise
 // `FLOE_BEND` of a cell, so none is a straight polygon): wide floes `FLOE_WIDE_M` across where a slow noise over
@@ -27,6 +27,9 @@ const PACK_WHOLE = vec2f(0.9, 0.99);
 // ridges `PACK_RIDGE_M` apart as fine light lines; and the snow's drift over `PACK_DRIFT_M`, `PACK_DRIFT` of its tone.
 const PACK_CRACK_M = 900.0; const PACK_CRACK_W = 0.04; const PACK_RIDGE_M = 260.0; const PACK_RIDGE_W = 0.03;
 const PACK_DRIFT_M = 180.0; const PACK_DRIFT = 0.05;
+// The drift's tone is read from `PACK_PX` pixels a patch, a crack or a ridge from `LINE_PX_LEAST` pixels of its width:
+// finer, they change the pack's tone by less than a step of the screen's.
+const PACK_PX = 8.0; const LINE_PX_LEAST = 1.5;
 // Sea ice's colours (reflectances): old ice under snow, cooler and greyer than the land's snow and lit flat (it lies
 // level); grey new ice; refrozen leads; a ridge's lit face. Along the shore a tide crack: ice over liquid shallower than
 // `ICE_TIDE_M` is dark new ice, so a coast stays readable under the ice.
@@ -37,19 +40,32 @@ const ICE_RIDGE = vec3f(0.90, 0.93, 0.96); const ICE_TIDE_M = 1.5;
 // under ice: 0..1, smooth across the margin (the floes' cover there).
 fn ice_cover(share: f32, depth: f32, at: vec2f, e: f32) -> f32 {
   if (share <= 0.0 || share >= 1.0) { return share; }
+  let line = log(share / (1.0 - share));
+  let shallow = -ICE_SHALLOW * (1.0 - ease(0.0, ICE_SHALLOW_M, depth));
+  // The octaves' weights summed, whether they show or not, so the index's spread is the same at every zoom; and the
+  // index's change a unit of the summed noise.
+  let sum = (1.0 - pow(ICE_PATCH_FALL, f32(ICE_PATCH_OCTAVES))) / (1.0 - ICE_PATCH_FALL);
+  let k = 2.0 * ICE_PATCHY / sum;
   var n = 0.0;
   var size = ICE_PATCH_M;
   var weight = 1.0;
-  var sum = 0.0;
+  // What the octaves not yet read can still move the index by at most: once the index lies past the margin by more,
+  // the point is all ice or all water whatever they hold, and they are not read (the picture is the same).
+  var rest = k * sum;
   for (var o = 0; o < ICE_PATCH_OCTAVES; o++) {
-    let shown = shows_at(size, e);
-    if (shown > 0.0) { n += weight * shown * noise_turned(at / size + f32(o) * 3.7, 90 + o); }
-    sum += weight;
+    let past = shallow + clamp(k * n, -ICE_PATCHY, ICE_PATCHY) - line;
+    if (past - rest >= ICE_BAND) { return 0.0; }
+    if (past + rest <= -ICE_BAND) { return 1.0; }
+    // An octave under `ICE_OCTAVE_PX` pixels only frets the edge's last pixels: its noise is not read (and in a draw
+    // of pixels that large, not compiled: draw.wgsl `LEAST_E`).
+    if (size < ICE_OCTAVE_PX * max(e, least_e())) { break; }
+    n += weight * shows_at(size, e) * noise_turned(at / size + f32(o) * 3.7, 90 + o);
+    rest -= k * weight;
     size /= ICE_PATCH_STEP;
     weight *= ICE_PATCH_FALL;
   }
-  let index = -ICE_SHALLOW * (1.0 - ease(0.0, ICE_SHALLOW_M, depth)) + ICE_PATCHY * clamp(2.0 * n / sum, -1.0, 1.0);
-  return 1.0 - smoothstep(-ICE_BAND, ICE_BAND, index - log(share / (1.0 - share)));
+  let index = shallow + clamp(k * n, -ICE_PATCHY, ICE_PATCHY);
+  return 1.0 - smoothstep(-ICE_BAND, ICE_BAND, index - line);
 }
 
 // The floes of one lattice of cells `size` m across at `at`, seen at `e` m a pixel, under `cover` of ice, stream `k`:
@@ -80,11 +96,11 @@ fn floes(at: vec2f, e: f32, cover: f32, size: f32, k: i32) -> f32 {
 fn pack(ice: vec3f, at: vec2f, e: f32) -> vec3f {
   // Each detail's noise is read only where it shows.
   var c = ice;
-  let drift = shows_at(PACK_DRIFT_M, e);
+  let drift = select(shows_at(PACK_DRIFT_M, e), 0.0, PACK_DRIFT_M < PACK_PX * max(e, least_e()));
   if (drift > 0.0) { c *= 1.0 + PACK_DRIFT * noise_turned(at / PACK_DRIFT_M, 98) * drift; }
-  let cracks = shows_at(PACK_CRACK_M * PACK_CRACK_W * 4.0, e);
+  let cracks = select(shows_at(PACK_CRACK_M * PACK_CRACK_W * 4.0, e), 0.0, PACK_CRACK_M * PACK_CRACK_W < LINE_PX_LEAST * max(e, least_e()));
   if (cracks > 0.0) { c = mix(c, ICE_REFROZEN, crack(noise_turned(at / PACK_CRACK_M, 99), PACK_CRACK_W) * cracks); }
-  let ridges = shows_at(PACK_RIDGE_M * PACK_RIDGE_W * 4.0, e);
+  let ridges = select(shows_at(PACK_RIDGE_M * PACK_RIDGE_W * 4.0, e), 0.0, PACK_RIDGE_M * PACK_RIDGE_W < LINE_PX_LEAST * max(e, least_e()));
   if (ridges > 0.0) { c = mix(c, ICE_RIDGE, crack(noise_turned(at / PACK_RIDGE_M, 100), PACK_RIDGE_W) * ridges); }
   return c;
 }
@@ -96,17 +112,21 @@ fn ice_on(water: vec3f, cover: f32, depth: f32, at: vec2f, e: f32) -> vec3f {
   if (cover <= 0.0) { return water; }
   var ice = mix(ICE_NEW, ICE_OLD, ease(0.2, 0.9, cover));
   ice = mix(ICE_NEW, ice, ease(0.0, ICE_TIDE_M, depth));
-  let wide = ease(-0.2, 0.2, noise_turned(at / FLOE_REGION_M, 101));
   let near = ease(FLOE_PX.x * e, FLOE_PX.y * e, FLOE_M);
   var on = cover;
-  if (near > 0.0) {
-    var f = mix(floes(at, e, cover, FLOE_M, 97), floes(at, e, cover, FLOE_WIDE_M, 103), wide);
+  // Floes show from `FLOE_PX` pixels a floe (in a draw of larger pixels they are not compiled: draw.wgsl `LEAST_E`),
+  // and not in the closed pack; each lattice is read only where it shows.
+  if (near > 0.0 && cover < PACK_WHOLE.y && FLOE_PX.x * least_e() < FLOE_M) {
+    let wide = ease(-0.2, 0.2, noise_turned(at / FLOE_REGION_M, 101));
+    var f = 0.0;
+    if (wide < 1.0) { f += (1.0 - wide) * floes(at, e, cover, FLOE_M, 97); }
+    if (wide > 0.0) { f += wide * floes(at, e, cover, FLOE_WIDE_M, 103); }
     // Brash in the leads, where its pieces take a few pixels.
     let brash = ease(FLOE_PX.x * e, FLOE_PX.y * e, BRASH_M);
     if (brash > 0.0 && f < 1.0) { f = max(f, brash * floes(at, e, BRASH * cover, BRASH_M, 107)); }
     // In the closed pack the floes have frozen together: only its own texture shows (`PACK_WHOLE`).
     on = mix(mix(cover, f, near), 1.0, ease(PACK_WHOLE.x, PACK_WHOLE.y, cover));
-  }
+  } else if (cover >= PACK_WHOLE.y) { on = 1.0; }
   // Between the floes open water where the ice is loose; in the pack the leads have refrozen (`LEAD_REFROZEN`).
   let between = mix(water, ICE_REFROZEN, ease(LEAD_REFROZEN.x, LEAD_REFROZEN.y, cover));
   return mix(between, pack(ice, at, e), on);

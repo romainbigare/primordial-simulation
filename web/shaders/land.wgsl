@@ -1,9 +1,9 @@
 // uses: draw.wgsl water.wgsl style.wgsl crag.wgsl ice.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl cover_field.wgsl
-// least metres a pixel: 0.5 1 3
+// least metres a pixel: 0.5 1 3 30
 // The live map in view: at each pixel of the screen the ground from its tiles and the state from the cells' table
-// (land.wgsl), in the view's colours. Made once more for draws whose pixels take at least 0.5 m, 1 m and 3 m
+// (land.wgsl), in the view's colours. Made once more for draws whose pixels take at least 0.5 m, 1 m, 3 m and 30 m
 // (web/shade, draw.wgsl `LEAST_E`): seen from afar, the detail of the ground and the plants that cannot show is
-// compiled out.
+// compiled out (from 30 m, the whole island on a phone, the sea ice's floes and the pack's texture: ice.wgsl).
 
 // A channel shows as a line of at least `LINE_PX` css pixels once its discharge passes the discharge that shows in the
 // view (`land.time.w` times the metres a css pixel takes: tape/src/ground/channels.rs `SHOW_M`), as a map draws its
@@ -53,11 +53,11 @@ fn snow_patches(at: vec2f, e: f32) -> f32 {
   var n = 0.0;
   var size = SNOW_PATCH_M;
   var weight = 1.0;
-  var sum = 0.0;
+  let sum = (1.0 - pow(SNOW_PATCH_FALL, f32(SNOW_PATCH_OCTAVES))) / (1.0 - SNOW_PATCH_FALL);
   for (var o = 0; o < SNOW_PATCH_OCTAVES; o++) {
-    let shown = shows_at(size, e);
-    if (shown > 0.0) { n += weight * shown * noise_turned(at / size + f32(o) * 5.1, 80 + o); }
-    sum += weight;
+    // Each octave finer than the last: none shows once one does not (nor in a draw of pixels that large).
+    if (unseen(size) || shows_at(size, e) <= 0.0) { break; }
+    n += weight * shows_at(size, e) * noise_turned(at / size + f32(o) * 5.1, 80 + o);
     size /= SNOW_PATCH_STEP;
     weight *= SNOW_PATCH_FALL;
   }
