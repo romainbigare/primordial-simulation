@@ -74,13 +74,14 @@ export class GroundTiles {
   /** The last view asked for, to ask again after a lost context. */
   private last: View | null = null;
   private tilesTex: Texture | null = null;
-  /** The rock of each of the terrain's samples (wasm/src/lib.rs `rock`): the depth of its loose ground and the largest
-   * stone its channel moves, m, as 16-bit floats; none until a worker made the ground. */
+  /** The rock of each of the terrain's samples (wasm/src/lib.rs `rock`), four 16-bit floats a sample in two planes: the
+   * depth of its loose ground and the largest stone its channel moves, m; and the reflectance of its bed's make; none
+   * until a worker made the ground. */
   rock: Uint16Array | null = null;
   private start = performance.now();
   private lastCame = -Infinity;
 
-  constructor(source: string, wasm: ArrayBuffer, seed: number, size: number, readonly map: MapOf, readonly meta: TileMeta, private changed: (shown: boolean) => void, error: (text: string) => void) {
+  constructor(source: string, wasm: ArrayBuffer, seed: number, size: number, band: [number, number], readonly map: MapOf, readonly meta: TileMeta, private changed: (shown: boolean) => void, error: (text: string) => void) {
     this.depth = meta.depths[0];
     this.makePage();
     this.url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
@@ -94,7 +95,7 @@ export class GroundTiles {
         if (m.kind === 'tile') { w.making--; this.took(m.depth, m.x, m.y, m.data); }
       };
       const copy = k === WORKERS - 1 ? wasm : wasm.slice(0);
-      w.worker.postMessage({ cmd: 'init', wasm: copy, seed, size }, [copy]);
+      w.worker.postMessage({ cmd: 'init', wasm: copy, seed, size, band }, [copy]);
       this.workers.push(w);
     }
   }

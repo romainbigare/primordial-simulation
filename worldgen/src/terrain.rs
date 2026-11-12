@@ -17,12 +17,10 @@ use std::f64::consts::PI;
 
 /// Cell size of an island, m, and ground cells per air node along a side.
 const CELL_M: f64 = 2000.0;
-const AIR_SCALE: usize = 4;
+pub(crate) const AIR_SCALE: usize = 4;
 /// The squares below 0 m round the land that stay squares on an island (`coarse_low`), so its edges stay sharp.
 const LAND_RING: i32 = 1;
-/// A globe's radius, m, and the share of its area above the level 0 m: those of the one planet known (Earth: mean
-/// radius 6,371 km, land 29% of the surface).
-const RADIUS_M: f64 = 6.371e6;
+/// A globe's share of its area above the level 0 m: that of the one planet known (Earth: land 29% of the surface).
 const LAND_SHARE: f64 = 0.29;
 /// Height of the bottom of the bed, m.
 const BASE_Z: f64 = -3000.0;
@@ -96,6 +94,11 @@ pub fn scale_absorbers(w: &mut World, factor: f64) {
     }
 }
 
+/// The settings of an island between the latitudes `south` and `north`, degrees: the default's but for them.
+pub fn banded((south, north): (f64, f64)) -> Config {
+    Config { lat_south: south, lat_north: north, ..Config::default() }
+}
+
 /// The map of an island of `w × h` cells.
 pub fn island(w: usize, h: usize) -> Square {
     Square::new(w, h, CELL_M, false, AIR_SCALE)
@@ -103,7 +106,7 @@ pub fn island(w: usize, h: usize) -> Square {
 
 /// The map of a globe of `rows` rows from pole to pole, with twice as many columns, so a cell is square at the equator.
 pub fn globe(rows: usize) -> Square {
-    Square::new(2 * rows, rows, PI * RADIUS_M / rows as f64, true, AIR_SCALE)
+    Square::new(2 * rows, rows, PI * Config::default().radius_m / rows as f64, true, AIR_SCALE)
 }
 
 /// A new world on `map` from a seed: terrain, chemistry 0, ground, liquid and air.
@@ -115,9 +118,14 @@ pub fn new_map(seed: u64, map: Square) -> World {
 /// A new island from a seed, its low ground away from land in coarse cells (`coarse_low`): terrain, chemistry 0, ground,
 /// liquid and air. One terrain, so its worn samples are found once.
 pub fn new_world(seed: u64, w: usize, h: usize) -> World {
+    new_island(seed, w, h, Config::default())
+}
+
+/// `new_world` with the settings `cfg`: its rows between the latitudes `Config::lat_south` and `lat_north`.
+pub fn new_island(seed: u64, w: usize, h: usize, cfg: Config) -> World {
     let ((squares, terrain), (chem, init)) = (island_ground(seed, w, h), chemistry0());
-    let map = coarse_low(seed, squares, &terrain);
-    build_on(seed, map, terrain, (chem, &init), Config::default())
+    let map = coarse_low(seed, squares, &terrain, &cfg);
+    build_on(seed, map, terrain, (chem, &init), cfg)
 }
 
 /// The ground of the island of `w × h` squares `new_world` makes from `seed`: the map of its squares and its terrain
@@ -128,9 +136,9 @@ pub fn island_ground(seed: u64, w: usize, h: usize) -> (Square, Terrain) {
 }
 
 /// `map` (of squares) with its low ground away from land in coarse cells (`coarsen`): an air block whose squares all
-/// lie below 0 m on `terrain` of `seed`, none within `LAND_RING` squares of one that does not, is coarse.
-fn coarse_low(seed: u64, map: Square, terrain: &Terrain) -> Square {
-    let cfg = Config::default();
+/// lie below 0 m on `terrain` of `seed` (its rows between the latitudes of `cfg`), none within `LAND_RING` squares of
+/// one that does not, is coarse.
+fn coarse_low(seed: u64, map: Square, terrain: &Terrain, cfg: &Config) -> Square {
     let z = heights(seed, &map, terrain, (cfg.lat_south, cfg.lat_north));
     let ring = -LAND_RING..=LAND_RING;
     let open: Vec<bool> = (0..map.n()).map(|s| ring.clone().all(|dy| ring.clone().all(|dx| map.step(s, (dx, dy)).is_none_or(|t| z[t] < 0.0)))).collect();
@@ -146,7 +154,7 @@ fn block(w: usize, x: usize, y: usize, k: usize) -> impl Iterator<Item = usize> 
 /// `map` (of squares) with each whole air block that `fine(column, row)` (of the block) does not keep in squares one
 /// cell, split into smaller cells where it borders finer ones until cells across a border differ by one depth at most
 /// (`Square::balanced`).
-fn coarsen(map: Square, fine: impl Fn(usize, usize) -> bool) -> Square {
+pub(crate) fn coarsen(map: Square, fine: impl Fn(usize, usize) -> bool) -> Square {
     let (whole, square) = ((map.w / map.scale, map.h / map.scale), map.square_depth());
     map.by_blocks(|bx, by| if bx < whole.0 && by < whole.1 && !fine(bx, by) { 0 } else { square }).balanced()
 }
@@ -169,7 +177,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
 }
 
 /// `build` on `terrain` (its level found on the map's squares, `terrain_of`), each cell at its height (`heights`).
-fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, &Init), cfg: Config) -> World {
+pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, &Init), cfg: Config) -> World {
     let mesh = World::mesh_of(&map, &cfg);
     let (n, na, ns) = (mesh.cells().n(), mesh.level(AIR).n(), chem.ns());
     let lat = (cfg.lat_south, cfg.lat_north);
@@ -252,6 +260,7 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
         terrain,
         rise_south: Vec::new(),
         loose_bins: Vec::new(),
+        planet: None,
         light: vec![0.0; n],
         rained: vec![0.0; n],
         events: Vec::new(),

@@ -69,7 +69,10 @@ impl Shore {
                     .flat_map(|dr| (-NEAR_SAMPLES..=NEAR_SAMPLES).map(move |dc| (dc, dr)))
                     .filter(|&(dc, dr)| s.pond[at(c + dc, r + dr)] != NONE)
                     .min_by_key(|&(dc, dr)| dc * dc + dr * dr);
-                near.map_or(f64::NAN, |(dc, dr)| level_of(s, s.pond[at(c + dc, r + dr)]))
+                let level = near.map_or(f64::NAN, |(dc, dr)| level_of(s, s.pond[at(c + dc, r + dr)]));
+                // Out of a pond and under its level is the ground its liquid spills down below its pass: it holds none
+                // and is drawn as it is (a lake's water ends at its own samples there, `Ground::pond_tile`).
+                if s.pond[k] == NONE && s.h[k] < level { f64::NAN } else { level }
             })
             .collect();
         // Each sample's height over its level, held; a sample with no pond near stands over any.

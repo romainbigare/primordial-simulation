@@ -3,6 +3,7 @@
 pub mod chemistry;
 pub mod generate;
 pub mod life;
+pub mod planet;
 pub mod richness;
 pub mod schedule;
 pub mod terrain;

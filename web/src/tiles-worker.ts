@@ -5,13 +5,13 @@
 
 interface Core {
   memory: WebAssembly.Memory;
-  ground(seed: number, size: number): void;
+  ground(seed: number, size: number, south: number, north: number): void;
   tile(depth: number, x: number, y: number): number;
   rock(): number;
   out_len(): number;
 }
 type Command =
-  | { cmd: 'init'; wasm: ArrayBuffer; seed: number; size: number }
+  | { cmd: 'init'; wasm: ArrayBuffer; seed: number; size: number; band: [number, number] }
   | { cmd: 'tile'; depth: number; x: number; y: number };
 
 const host = self as unknown as { postMessage(m: unknown, transfer: Transferable[]): void; onmessage: ((e: MessageEvent<Command>) => void) | null };
@@ -22,7 +22,7 @@ host.onmessage = async e => {
   try {
     if (m.cmd === 'init') {
       core = (await WebAssembly.instantiate(m.wasm, {})).instance.exports as unknown as Core;
-      core.ground(m.seed, m.size);
+      core.ground(m.seed, m.size, m.band[0], m.band[1]);
       // The rock of each of the terrain's samples, which never changes, with the first word that the worker is ready.
       const at = core.rock();
       const rock = new Uint16Array(core.memory.buffer.slice(at, at + core.out_len()));

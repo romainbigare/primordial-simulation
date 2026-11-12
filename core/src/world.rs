@@ -36,6 +36,9 @@ pub struct Counters {
     /// Cover that died, kg, by the cause a body would die of (`body::LACK` to `AGE`)
     #[serde(skip)]
     pub cover_lost: [f64; 6],
+    /// Heat that crossed into the map at its open north, south, east and west edges since the start, J: sensible and
+    /// latent
+    pub edges: [f64; 4],
 }
 
 impl Counters {
@@ -43,13 +46,14 @@ impl Counters {
     /// cannot be left out. A chunk counts per cell in its cells (`Cell::crossings`, `Cell::pushed`), so its `traffic`
     /// stays empty (checked in debug builds).
     pub(crate) fn add(&mut self, c: &mut Counters) {
-        let Counters { traffic, decisions, greedy, body_batches, busiest_share, updates, clamped_heat, parts, rounded, forms, cover_lost } = std::mem::take(c);
+        let Counters { traffic, decisions, greedy, body_batches, busiest_share, updates, clamped_heat, parts, rounded, forms, cover_lost, edges } = std::mem::take(c);
         debug_assert!(traffic.is_empty(), "a chunk counted per cell");
         (self.updates, self.decisions, self.greedy) = (self.updates + updates, self.decisions + decisions, self.greedy + greedy);
         (self.body_batches, self.busiest_share, self.clamped_heat) = (self.body_batches + body_batches, self.busiest_share + busiest_share, self.clamped_heat + clamped_heat);
         self.add_rounded(rounded);
         self.forms.absorb(forms);
         self.cover_lost.iter_mut().zip(cover_lost).for_each(|(a, b)| *a += b);
+        self.edges.iter_mut().zip(edges).for_each(|(a, b)| *a += b);
         let p = &mut self.parts;
         (p.formed, p.to_parts, p.from_parts, p.edged) = (p.formed + parts.formed, p.to_parts + parts.to_parts, p.from_parts + parts.from_parts, p.edged + parts.edged);
     }
@@ -122,6 +126,8 @@ pub struct World {
     /// The loose ground of each cell, the share of its area in each bin of depth, which its cover's roots read
     /// (`cover::loose_bins`): the terrain's samples', found when the world is built
     pub loose_bins: Vec<[f32; crate::cover::BINS]>,
+    /// The planet's air beyond the map's edges by row of latitude and month (`flow::Planet`), where they are open
+    pub planet: Option<crate::flow::Planet>,
     /// Raw physical facts since the shell last drained them (not part of the saved state)
     #[serde(skip)]
     pub events: Vec<Event>,

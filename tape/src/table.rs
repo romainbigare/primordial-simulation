@@ -4,13 +4,13 @@
 //! frame's own context (`Ctx`), and holds nothing a picture needs to make.
 
 use crate::ground::sample_index;
-use crate::layers::{bed_colour, cover_melt, frame, pixels, Ctx};
+use crate::layers::{cover_melt, frame, pixels, Ctx};
 use pcore::inside::{soil_level, Means};
 use pcore::space::terrain::SAMPLE_DEPTH;
 use pcore::World;
 
 /// Numbers a square's row holds (`Table::frame`).
-pub const ROW: usize = 13;
+pub const ROW: usize = 10;
 /// A body that holds less liquid than this on its mean over its surface, m, is drawn dry: a film over a flat basin,
 /// soaked ground rather than water.
 const DRY_M: f64 = 0.1;
@@ -92,8 +92,7 @@ impl Table {
     /// depth of its liquid): the terrain's mean height over it, m; its ground's temperature, K, and how fast the air
     /// cools with height there, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest
     /// ground, m, and the depth that stands, m; the liquid in its pores and what they hold full, m, and the level of the
-    /// wetness index its soil's liquid departs about (`inside::soil_level`; 0 where it lies evenly); and its bed's
-    /// reflectance (red, green, blue: `layers::bed_colour`).
+    /// wetness index its soil's liquid departs about (`inside::soil_level`; 0 where it lies evenly).
     fn row(&self, c: &Ctx, i: usize, m: Option<Means>, level: Option<[f64; 2]>) -> [f64; ROW] {
         let w = c.w;
         let (z, depth) = (c.f.z[i], c.f.depth[i]);
@@ -102,7 +101,6 @@ impl Table {
         let (twi, area) = &self.inside[i];
         let soil = soil_level(&w.cfg.phys, twi, area, m).unwrap_or(0.0);
         let cools = w.air_drop(i).unwrap_or(0.0);
-        let bed = bed_colour(w, i);
-        [self.z[i], c.f.t[i], cools, c.f.ice[i], top, low, m.stands, m.pore, m.pores, soil, bed[0], bed[1], bed[2]]
+        [self.z[i], c.f.t[i], cools, c.f.ice[i], top, low, m.stands, m.pore, m.pores, soil]
     }
 }
