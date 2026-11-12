@@ -76,7 +76,8 @@ the pond's level, so a channel's mouth meets its level. Then the shore is drawn 
 each sample, its height over the level of the nearest pond (the sea's 0 m), held within 4 m either side, blurred over
 the samples by a Gaussian of 0.9 samples; the zero line of that offset (a cubic B-spline through the samples' centres)
 is the shore, and the ground drawn keeps its own height where it lies on the offset's side of the level and is moved to
-that side by half the offset where not (none from 4 m on); a closed pond's samples deeper than 3 m keep their liquid.
+that side by half the offset where not (none from 4 m on); a closed pond's samples deeper than 3 m keep their liquid;
+ground out of a pond and under its level (where its liquid spills below its pass) is drawn as it is.
 Under the level the bed leans to the offset at the shore and farther out to the samples' depth held within 40 m and
 blurred alike, all of it in the shallows. So a coast is a smooth line with capes and bays of a few samples and the
 shallows one band, none of a sample's scallops; the shore moves by about a quarter of a sample on the mean (a blur

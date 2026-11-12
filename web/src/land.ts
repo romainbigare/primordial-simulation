@@ -106,10 +106,10 @@ export class Land {
     const s = this.samples;
     this.flows ??= gpu.texture(s.across, s.down, 'r16float');
     if (this.flowsDue) { gpu.write(this.flows, this.discharge); this.flowsDue = false; }
-    this.rock ??= gpu.texture(s.across, s.down, 'rg16float');
+    this.rock ??= gpu.texture(s.across, 2 * s.down, 'rgba16float');
     if (!this.rockSent) {
       const r = this.tiles.rock;
-      gpu.write(this.rock, r ?? Uint16Array.from({ length: 2 * s.across * s.down }, (_, i) => (i % 2 ? 0 : half(NO_ROCK_YET_M))));
+      gpu.write(this.rock, r ?? Uint16Array.from({ length: 8 * s.across * s.down }, (_, i) => (i % 4 || i >= 4 * s.across * s.down ? 0 : half(NO_ROCK_YET_M))));
       this.rockSent = r !== null;
     }
     const t = this.tiles.textures(gpu), l = this.laws, tm = this.tiles.meta;

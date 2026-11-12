@@ -207,7 +207,17 @@ pub extern "C" fn tile(depth: u32, x: i32, y: i32) -> *const u8 {
 /// (`tape::Ground::rock`).
 #[no_mangle]
 pub extern "C" fn rock() -> *const u8 {
-    let texels = GROUND.with(|c| c.borrow().as_ref().expect("no ground: call ground first").rock());
+    // The reflectance of each make of the bed, its substances' by volume (as `tape::layers::bed_colour` reads a cell's).
+    let (chem, init) = worldgen::chemistry::chemistry0();
+    let colours: Vec<[f64; 3]> = init
+        .makes
+        .iter()
+        .map(|make| {
+            let v: f64 = make.iter().map(|p| p.1).sum();
+            std::array::from_fn(|c| make.iter().map(|&(k, f)| f * chem.subs[k].refl[0][c] as f64).sum::<f64>() / v.max(1e-12))
+        })
+        .collect();
+    let texels = GROUND.with(|c| c.borrow().as_ref().expect("no ground: call ground first").rock(&colours));
     give(texels.iter().flat_map(|v| v.to_le_bytes()).collect())
 }
 
