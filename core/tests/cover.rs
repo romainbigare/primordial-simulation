@@ -60,20 +60,22 @@ fn the_cover_grows_in_light_and_keeps_the_books() {
 }
 
 /// A cover far thicker than its light can keep (20 kg per m², a capture area 100 times its ground) does not thicken:
-/// one more kg would not pay its upkeep at the bottom of its layer, so all it builds leaves as seeds, and over a
-/// summer its cell holds less than it started with; the books are kept.
+/// one more kg would not pay its upkeep at the bottom of its layer, so all it builds leaves as seeds, and it sheds the
+/// layers that do not pay (`grow::shed`), so over a summer its cell holds less than it started with and its capture area
+/// falls to under half; the books are kept.
 #[test]
 fn a_thick_cover_does_not_thicken() {
     let (mut w, i) = start();
     let books = Books::now(&w);
     assert!(cover::place(&mut w, i, genes(), 0, 20.0));
-    let kg0 = cover::per_m2(&w, cover::Cover::kg)[i];
+    let (kg0, leaf0) = (cover::per_m2(&w, cover::Cover::kg)[i], cover::per_m2(&w, cover::Cover::leaf)[i]);
     for _ in 0..6 {
         pcore::step(&mut w);
     }
-    let kg = cover::per_m2(&w, cover::Cover::kg)[i];
-    println!("cover on its cell {kg0:.2} kg/m2, six months later {kg:.2} kg/m2");
+    let (kg, leaf) = (cover::per_m2(&w, cover::Cover::kg)[i], cover::per_m2(&w, cover::Cover::leaf)[i]);
+    println!("cover on its cell {kg0:.2} kg/m2 (capture area {leaf0:.1}), six months later {kg:.2} kg/m2 ({leaf:.1})");
     assert!(kg < kg0, "the thick cover thickened: {kg0} then {kg}");
+    assert!(leaf < 0.5 * leaf0, "the thick cover kept its layers that do not pay: {leaf0} then {leaf}");
     books.assert_kept(&w, 1e-9);
 }
 

@@ -1114,7 +1114,11 @@ seeds fill it:
   in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step ×
   `cover_mut`), of body matter first and then walls (an embryo and its store); all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
   its layer (`math::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
-  where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005). Each seed carries its own
+  where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005). By the same marginal rule
+  run backwards a full slot also sheds the layers of its canopy that do not pay (`grow::shed`): in its patch its light
+  falls as e^-z with the capture area z above a leaf, so what a kg more would store at depth z is its bottom's times
+  e^(y − z), y its whole depth; its living cover below the depth where that falls to its upkeep a kg goes to its
+  remains, its walls and plants stay. Each seed carries its own
   store, fuel at its `STORE` gene per kg of it, from the slot's fuel: a slot short of fuel makes fewer seeds, not
   lighter ones. When every cell has had its month the seeds land (`cover::land`), cell by cell in the order made (the
   potential energy of the life that left a cell's head and came to it is booked once for each cell and way,

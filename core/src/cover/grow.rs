@@ -5,7 +5,7 @@
 
 use super::around::{around, Around};
 use super::build::per_input;
-use super::{dec, Cover, Parts, EMPTY_KG, FROST, FUEL, LIGHT, MOIST, NO_ROOT, NP, REPAIR, SLOTS, STORE, WALL};
+use super::{dec, Cover, Parts, EMPTY_KG, FROST, FUEL, LIGHT, MATTER, MOIST, NO_ROOT, NP, REPAIR, SLOTS, STORE, WALL};
 use crate::body::{AGE, PHASE, SPENT};
 use crate::chem::{Chemistry, Phase, Reaction};
 use crate::store::{Class, Moves, Node};
@@ -136,6 +136,11 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         counts.cover_lost.iter_mut().zip(lost).for_each(|(a, l)| *a += l);
         let pays = s[x].gain * s[x].built > cost;
         c.full[x] = !pays;
+        if !pays {
+            let shed = shed(c, x, (&s[x], cost), area * c.rooted[x].max(f32::MIN_POSITIVE) as f64);
+            counts.cover_lost[SPENT as usize] += shed * mm[MATTER];
+            b.dead[p.sub[MATTER]] += shed;
+        }
         // Its balance over about a year: what it stored less its upkeep, per kg.
         c.net[x] += (((stored[x] - cost) / s[x].built) as f32 - c.net[x]) / year;
         // Where one more kg would not pay it builds living cover no more, but walls alone while its plants lack them.
@@ -217,6 +222,23 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
     c.film = (a.pores * taken / area) as f32;
     c.reach = (x.iter().zip(&c.rooted).map(|(xq, &r)| xq * r as f64).sum::<f64>() / all) as f32;
     x.map(|xq| xq * f * dh)
+}
+
+/// Slot `x` of cover `c`, whose lowest leaves do not pay for themselves (`Cover::full`), sheds the living cover of the
+/// layers of its canopy that do not, as a canopy drops its leaves below its compensation point (Monsi and Saeki 1953;
+/// Hirose 2005): its light falls as e^-z with the capture area z above a leaf in its patch of `patch` m², so what one
+/// more kg would store at depth z is its gain at its bottom (`Slot::gain`) times e^(y - z), y its whole depth, and the
+/// layers deeper than where that falls to its upkeep a kg, `cost` J over its built cover, pay nothing. Returns the mol of
+/// body matter shed (to its remains); its walls and its plants stay.
+fn shed(c: &mut Cover, x: usize, (s, cost): (&Slot, f64), patch: f64) -> f64 {
+    let (y, per_kg) = (s.leaf / patch, cost / s.built.max(1e-300));
+    if s.gain <= 0.0 || y <= 0.0 || per_kg <= 0.0 {
+        return 0.0;
+    }
+    let keep = ((y + (s.gain / per_kg).ln()) / y).clamp(0.0, 1.0);
+    let m = c.mol[x][MATTER].max(0.0) * (1.0 - keep);
+    c.mol[x][MATTER] -= m;
+    m
 }
 
 /// Slot `x` pays its upkeep over `dt` at `t` K by burning its fuel, then loses the share unpaid (`SPENT`), the share
