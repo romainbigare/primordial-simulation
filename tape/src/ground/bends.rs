@@ -1,47 +1,64 @@
-//! The bends of a channel as a shell draws it: between the centres of the terrain's samples its line winds about the
-//! curve through them (`channels::base`) as a sine whose wavelength is `BEND_WIDTHS` channel widths and whose half
-//! amplitude is `BEND_HALF` widths (Leopold and Wolman 1960). It bends fully where the valley's slope is below
-//! `BENDS_BELOW` and not at all above `STRAIGHT_ABOVE` (pool-riffle reaches meander, step-pool and cascade reaches do
-//! not: Schumm 1985, Montgomery and Buffington 1997), and no wider than the valley's floor: where the ground across the
-//! valley rises from the channel by more than the channel's depth, the valley's side holds it. A tile is made once,
-//! so the width and the depth are stand-ins: the channel law's (`Physics::channel`) at the drained area times
-//! `TYPICAL_RUNOFF`. The phase of the bends runs on along each main way from its head (`phases`), so the line is
-//! continuous from sample to sample; it is a function of the seed, the map and the place alone.
+//! A channel's line as a shell draws it, piece by piece: between the centres of the terrain's samples it follows the
+//! curve through them (`channels::base`, the valley's line, `frame`), wanders about that curve in long swings
+//! (`wander`), and swings about its wander in the bends of a meander belt (`belt`). It wanders `WANDER_SAMPLES` to
+//! each side. A channel's bed is shaped by its floods, so its bends are sized by the bed's width (`bed_of`): a tile is
+//! made once, and the width is a stand-in, the channel law's (`Physics::channel`) at the drained area times
+//! `BED_RUNOFF`. The bends swing `BELT_WIDTHS` bed widths to each side of the wander where the reach's slope is below
+//! `BENDS_BELOW`; above `STRAIGHT_ABOVE` the bed is hard, and `HARD_SHARE` of the bends and `WANDER_HARD` of the wander
+//! are left (pool-riffle reaches meander, step-pool and cascade reaches do not: Schumm 1985, Montgomery and Buffington
+//! 1997; between the two the change is gradual, and the slope is the reach's, not one sample's). The bends swing no
+//! wider than the valley's floor (where the ground across the valley rises from the channel by more than `WALL_DEPTHS`
+//! bed depths, the valley's side holds them) and than the channel's reach less its bed (a tile holds a line within
+//! its reach, `channels`, and a shell that draws the line without its bends reads both lines between them); the whole
+//! sway no wider than `TURN_SHARE` of the radius the valley's own line turns on and than `BEND_MOST`. The walk of the
+//! bends runs on from piece to piece down each main way (`Bends`), so the line has no break from sample to sample, and
+//! along it runs the line's own length from its head, which a shell lays its signs of flow along. Each number is a
+//! function of the seed, the map and the place alone.
 
-use super::channels::{base, Law, TYPICAL_RUNOFF};
+use super::belt::{Room, Walk, STEPS};
+use super::channels::{base, Law, MOST_RUNOFF, TYPICAL_RUNOFF};
+use super::frame::{Frame, CURVE_STEPS};
+use super::wander::{wander, WANDER_EVERY};
 use pcore::space::network::NONE;
 use pcore::space::samples::Samples;
-use std::f64::consts::TAU;
+use std::collections::HashMap;
 
-/// A bend's wavelength, in channel widths: 7 to 15 in rivers of every size, about 11 on their mean (Leopold and Wolman
-/// 1960).
+/// The flood that shapes a channel's bed passes this many times the year's mean flow: the bankfull discharge, the
+/// flood of every year or two (Leopold and Maddock 1953; Wolman and Miller 1960; Dunne and Leopold 1978: 2 to 10 times
+/// in humid lands).
+pub const FLOOD: f64 = 5.0;
+/// What a m² drained passes on in the flood that shapes a channel's bed, as a depth, m/s: the stand-in for a bed's
+/// width where a number that never changes needs one.
+pub const BED_RUNOFF: f64 = FLOOD * TYPICAL_RUNOFF;
+/// A bend's wavelength, in bed widths: 7 to 15 in rivers of every size, about 11 on their mean (Leopold and Wolman
+/// 1960). A tile draws the bends whose wavelength its texels show (`lines::BEND_FROM`).
 const BEND_WIDTHS: f64 = 11.0;
-/// The half amplitude of the bends, in channel widths: their amplitude, from one side to the other, is about 2.7 widths
-/// (Leopold and Wolman 1960).
-const BEND_HALF: f64 = 1.35;
-/// Below this slope of the valley a channel bends fully, above `STRAIGHT_ABOVE` not at all: pool-riffle channels lie
-/// below about 0.015, step-pool and cascade ones above about 0.03 (Montgomery and Buffington 1997).
+/// How far a line's bends swing to each side of its wander, in bed widths, where nothing holds them (belts are 4 to
+/// 20 widths across, Williams 1986), and the share of that left on a hard bed.
+const BELT_WIDTHS: f64 = 3.5;
+const HARD_SHARE: f64 = 0.35;
+/// How far a line wanders to each side of its valley's line, samples (the samples place the valley's line no closer),
+/// and the share of that left on a hard bed, whose walls hold the channel.
+const WANDER_SAMPLES: f64 = 0.4;
+const WANDER_HARD: f64 = 0.5;
+/// A bed narrower than this, m, is drawn on its valley's line: a rill, which a tile holds for a texel or two.
+const BENDS_FROM_M: f64 = 1.0;
+/// Below this slope of the reach a channel sways fully, above `STRAIGHT_ABOVE` its bed is hard: pool-riffle channels
+/// lie below about 0.015, step-pool and cascade ones above about 0.03 (Montgomery and Buffington 1997).
 const BENDS_BELOW: f64 = 0.01;
 const STRAIGHT_ABOVE: f64 = 0.03;
-/// The most a line bends from the curve through the samples, in samples: it stays inside the window of samples whose
+/// The sway is no wider to each side than this share of the radius the valley's line turns on: past it the bends
+/// would fold over one another on the inside of the valley's turn.
+const TURN_SHARE: f64 = 0.4;
+/// A reach's slope and its valley's floor are read over this many samples up and down the channel from its own: the
+/// ground from one sample to the next steps, a reach's bends follow the valley over a few of them.
+const REACH_SAMPLES: usize = 2;
+/// The valley's side holds the sway where the ground stands this many bed depths over the channel: a bank a few times
+/// as high as the bed is deep is cut back by the bends, a higher one is the valley's wall.
+const WALL_DEPTHS: f64 = 4.0;
+/// The most a line sways from the curve through the samples, in samples: it stays inside the window of samples whose
 /// curves a tile reads (`channels::SPAN`).
-pub(super) const BEND_MOST: f64 = 0.25;
-
-/// One sample's piece of the channel: the curve through it (`channels::base`), in samples; the half amplitude of its
-/// bends at its two ends, samples; their phase at its start and the bends along it, cycles.
-#[derive(Clone, Copy)]
-pub(super) struct Piece {
-    pub base: [[f64; 2]; 3],
-    pub amp: [f64; 2],
-    pub phase: f64,
-    pub cycles: f64,
-}
-
-/// The point at `t` along the quadratic Bézier from `a` to `c` bent toward `b`.
-fn bezier([a, b, c]: [[f64; 2]; 3], t: f64) -> [f64; 2] {
-    let u = 1.0 - t;
-    std::array::from_fn(|k| u * u * a[k] + 2.0 * u * t * b[k] + t * t * c[k])
-}
+pub(super) const BEND_MOST: f64 = 0.8;
 
 /// The smooth step from 0 at `a` to 1 at `b`.
 pub(super) fn ease(a: f64, b: f64, x: f64) -> f64 {
@@ -49,80 +66,250 @@ pub(super) fn ease(a: f64, b: f64, x: f64) -> f64 {
     t * t * (3.0 - 2.0 * t)
 }
 
-impl Piece {
-    /// The point at `t` along the piece, samples: the curve's, moved across it by the bend there.
-    pub(super) fn at(&self, t: f64) -> [f64; 2] {
-        let p = bezier(self.base, t);
-        let a = self.amp[0] * (1.0 - t) + self.amp[1] * t;
-        let [a0, b0, c0] = self.base;
-        // The curve's direction at t (its derivative over 2), and the bend's offset along its normal.
-        let d: [f64; 2] = std::array::from_fn(|k| (1.0 - t) * (b0[k] - a0[k]) + t * (c0[k] - b0[k]));
-        let len = d[0].hypot(d[1]);
-        if a == 0.0 || len == 0.0 {
-            return p;
-        }
-        let off = a * (TAU * (self.phase + self.cycles * t)).sin() / len;
-        [p[0] - d[1] * off, p[1] + d[0] * off]
-    }
+/// A point of a walked piece: how far along its curve, m, and across it from its wander, m; how far along the
+/// channel's own line from its head, m; and the step of its half bend it ends (`belt::STEPS` at an apex, 0 at the
+/// piece's ends and on a straight stretch) with the step's length, m.
+#[derive(Clone, Copy)]
+pub(super) struct Mark {
+    pub u: f64,
+    pub v: f64,
+    pub s: f64,
+    pub step: u32,
+    pub stride: f64,
 }
 
-/// What a shell takes of the channel of sample `k` of `s`: the width and the depth the law gives its drained area at
-/// `TYPICAL_RUNOFF`, m.
-pub(super) fn stand_in(law: &Law, s: &Samples, k: usize) -> (f64, f64) {
-    let q = s.up[k] * TYPICAL_RUNOFF;
-    (law.width * q.powf(law.width_exp), law.depth * q.powf(law.depth_exp))
+/// Where a walk of bends enters a piece: its place across the curve and along the line at the piece's start; and the
+/// walk after the step that crossed into the piece, which ended `u` m along the piece's curve.
+#[derive(Clone, Copy)]
+pub(super) struct Entry {
+    edge: [f64; 2],
+    walk: Walk,
+    u: f64,
 }
 
-/// The wavelength of the bends of sample `k`'s channel, m.
-pub(super) fn wavelength(law: &Law, s: &Samples, k: usize) -> f64 {
-    BEND_WIDTHS * law.width * (s.up[k] * TYPICAL_RUNOFF).powf(law.width_exp)
+/// How a piece starts: with no bend in hand, so far along the channel's line, m; or in a walk.
+#[derive(Clone, Copy)]
+pub(super) enum Start {
+    Straight(f64),
+    Bent(Entry),
 }
 
-/// The half amplitude of the bends of sample `k`'s channel, samples of `metres`: `BEND_HALF` widths, less as the
-/// valley's slope to the sample it runs to rises from `BENDS_BELOW` to `STRAIGHT_ABOVE`, and no more than the floor's
-/// half width (the channel's depth over the rise of the ground across the valley, the mean of the two neighbours
-/// square to its way); none under standing liquid and at a sink.
-pub(super) fn amplitude(law: &Law, s: &Samples, metres: f64, k: usize) -> f64 {
-    let to = s.to[k];
-    if to == NONE || s.pond[k] != NONE {
-        return 0.0;
-    }
-    let (c, r) = ((k % s.across) as i64, (k / s.across) as i64);
-    let (dx, dy) = ((to as usize % s.across) as i64 - c, (to as usize / s.across) as i64 - r);
-    let run = metres * ((dx * dx + dy * dy) as f64).sqrt();
-    let slope = (s.h[k] - s.h[to as usize]).max(0.0) / run;
-    let at = |c: i64, r: i64| s.h[r.clamp(0, s.down as i64 - 1) as usize * s.across + c.clamp(0, s.across as i64 - 1) as usize];
-    let across = ((at(c - dy, r + dx) - s.h[k]).max(0.0) + (at(c + dy, r - dx) - s.h[k]).max(0.0)) / (2.0 * run);
-    let (width, depth) = stand_in(law, s, k);
-    let floor = if across > 0.0 { depth / across } else { f64::INFINITY };
-    (BEND_HALF * width * (1.0 - ease(BENDS_BELOW, STRAIGHT_ABOVE, slope))).min(floor).min(BEND_MOST * metres) / metres
-}
-
-/// The phase of the bends at the start of each sample's piece, cycles (0 to 1): 0 at a head; along a main way (where a
-/// sample is the main one upstream of the next, `Samples::main`) the next piece starts where the last one ends, its
-/// length (`length`, m) over its wavelength on. In the flood's order from the last sample reached, so a sample comes
-/// before the one its liquid runs to.
-pub(super) fn phases(law: &Law, s: &Samples, at: &[[f64; 2]], metres: f64) -> Vec<f32> {
-    let mut phase = vec![0.0f64; s.h.len()];
-    for &k in s.order.iter().rev() {
-        let (k, to) = (k as usize, s.to[k as usize]);
-        if to != NONE && s.main[to as usize] == k as u32 {
-            let cycles = base(s, at, k).map_or(0.0, |b| length(b) * metres / wavelength(law, s, k));
-            phase[to as usize] = (phase[k] + cycles).fract();
+impl Start {
+    /// How far along the channel's line the piece starts, m.
+    pub(super) fn along(&self) -> f64 {
+        match self {
+            Start::Straight(s) => *s,
+            Start::Bent(e) => e.edge[1],
         }
     }
-    phase.into_iter().map(|p| p as f32).collect()
 }
 
-/// The pieces the length of a curve is summed over.
-const LENGTH_STEPS: usize = 8;
+/// The channels of the samples `s` whose lines run through the points `at` (`stems::points`), `metres` a sample,
+/// sized by `law`, for the seed of the place's draws.
+#[derive(Clone, Copy)]
+pub(super) struct Reaches<'a> {
+    pub seed: u64,
+    pub s: &'a Samples,
+    pub at: &'a [[f64; 2]],
+    pub law: Law,
+    pub metres: f64,
+}
 
-/// The length of the curve `b`, in its units: over `LENGTH_STEPS` straight pieces.
-pub(super) fn length(b: [[f64; 2]; 3]) -> f64 {
-    (0..LENGTH_STEPS)
-        .map(|i| {
-            let (p, q) = (bezier(b, i as f64 / LENGTH_STEPS as f64), bezier(b, (i + 1) as f64 / LENGTH_STEPS as f64));
-            (q[0] - p[0]).hypot(q[1] - p[1])
-        })
-        .sum()
+impl Reaches<'_> {
+    /// The width and the depth of the bed of sample `k`'s channel, m: the channel law's at its drained area times
+    /// `BED_RUNOFF`.
+    pub(super) fn bed_of(&self, k: usize) -> (f64, f64) {
+        let q = self.s.up[k] * BED_RUNOFF;
+        (self.law.width * q.powf(self.law.width_exp), self.law.depth * q.powf(self.law.depth_exp))
+    }
+
+    /// The wavelength of the bends of sample `k`'s channel, m.
+    pub(super) fn wavelength(&self, k: usize) -> f64 {
+        BEND_WIDTHS * self.bed_of(k).0
+    }
+
+    /// The length of a swing of a wander to one side and back, m.
+    pub(super) fn wander_length(&self) -> f64 {
+        2.0 * WANDER_EVERY * self.metres
+    }
+
+    /// Half the width of the widest a channel that drains `area` m² gets, m: its reach (`channels`).
+    pub(super) fn widest(&self, area: f64) -> f64 {
+        self.law.width * (MOST_RUNOFF * area).powf(self.law.width_exp) / 2.0
+    }
+
+    /// How far sample `k`'s line wanders to each side of its curve `frame`, m, how far its bends swing to each side
+    /// of that, m (the module's doc), and how hard its bed is, 0 to 1; no sway under standing liquid, at a sink and
+    /// for a bed under `BENDS_FROM_M`.
+    fn sway(&self, k: usize, frame: &Frame) -> [f64; 3] {
+        let s = self.s;
+        let (width, depth) = self.bed_of(k);
+        if s.to[k] == NONE || s.pond[k] != NONE || width < BENDS_FROM_M {
+            return [0.0; 3];
+        }
+        let [slope, across] = self.fall(k);
+        let hard = ease(BENDS_BELOW, STRAIGHT_ABOVE, slope);
+        let most = (TURN_SHARE * frame.radius()).min(BEND_MOST * self.metres);
+        let wander = (WANDER_SAMPLES * self.metres * (1.0 + (WANDER_HARD - 1.0) * hard)).min(most);
+        let floor = if across > 0.0 { WALL_DEPTHS * depth / across } else { f64::INFINITY };
+        let belt = BELT_WIDTHS * width * (1.0 + (HARD_SHARE - 1.0) * hard);
+        [wander, belt.min(floor).min(self.widest(s.up[k]) - width).min(most - wander).max(0.0), hard]
+    }
+
+    /// What sample `k`'s reach gives its bends.
+    pub(super) fn room(&self, k: usize, frame: &Frame) -> Room {
+        let [_, belt, hard] = self.sway(k, frame);
+        Room { width: self.bed_of(k).0, belt, hard }
+    }
+
+    /// The fall of the reach about sample `k`, which runs on (`REACH_SAMPLES` up its main way and down its own, out
+    /// of the ponds): its slope along the channel, and how fast the ground rises across the valley on its mean, each
+    /// rise over run.
+    pub(super) fn fall(&self, k: usize) -> [f64; 2] {
+        let s = self.s;
+        let (mut top, mut bottom, mut run, mut across, mut n) = (k, k, 0.0, self.rise_across(k, s.to[k] as usize), 1.0);
+        for _ in 0..REACH_SAMPLES {
+            if s.main[top] != NONE {
+                (run, top) = (run + self.apart(top, s.main[top] as usize), s.main[top] as usize);
+                (across, n) = (across + self.rise_across(top, s.to[top] as usize), n + 1.0);
+            }
+            let j = s.to[bottom];
+            if j != NONE && s.pond[j as usize] == NONE {
+                (run, bottom) = (run + self.apart(bottom, j as usize), j as usize);
+                if s.to[bottom] != NONE {
+                    (across, n) = (across + self.rise_across(bottom, s.to[bottom] as usize), n + 1.0);
+                }
+            }
+        }
+        // A reach of its own sample alone (a head that runs into a pond): its fall to the sample it runs to.
+        if run == 0.0 {
+            (run, bottom) = (self.apart(k, s.to[k] as usize), s.to[k] as usize);
+        }
+        [(s.h[top] - s.h[bottom]).max(0.0) / run, across / n]
+    }
+
+    /// The distance between the centres of the neighbours `a` and `b`, m.
+    fn apart(&self, a: usize, b: usize) -> f64 {
+        let n = self.s.across;
+        self.metres * ((a % n) as f64 - (b % n) as f64).hypot((a / n) as f64 - (b / n) as f64)
+    }
+
+    /// How fast the ground rises across the valley at sample `k`, which runs to `to`, rise over run: the mean of its
+    /// two neighbours square to its way, as far as they stand over it.
+    fn rise_across(&self, k: usize, to: usize) -> f64 {
+        let s = self.s;
+        let (c, r) = ((k % s.across) as i64, (k / s.across) as i64);
+        let (dx, dy) = ((to % s.across) as i64 - c, (to / s.across) as i64 - r);
+        let at = |c: i64, r: i64| s.h[r.clamp(0, s.down as i64 - 1) as usize * s.across + c.clamp(0, s.across as i64 - 1) as usize];
+        ((at(c - dy, r + dx) - s.h[k]).max(0.0) + (at(c + dy, r - dx) - s.h[k]).max(0.0)) / (2.0 * self.apart(k, to))
+    }
+
+    /// Walk the piece of sample `k` along `frame` from `start`, giving each point walked to `emit` (from the piece's
+    /// start to its end); how the next piece starts. A piece that starts straight on a reach with no belt is not
+    /// walked.
+    pub(super) fn walk(&self, k: usize, frame: &Frame, start: Start, emit: &mut dyn FnMut(Mark)) -> Start {
+        let (len, room) = (frame.len(), self.room(k, frame));
+        let (mut w, mut u) = match start {
+            Start::Straight(s) if room.belt == 0.0 => return Start::Straight(s + len),
+            Start::Straight(s) => {
+                emit(Mark { u: 0.0, v: 0.0, s, step: 0, stride: 0.0 });
+                (Walk::at(k as u32, s), 0.0)
+            }
+            Start::Bent(e) => {
+                emit(Mark { u: 0.0, v: e.edge[0], s: e.edge[1], step: 0, stride: 0.0 });
+                emit(Mark { u: e.u, v: e.walk.v, s: e.walk.s, step: e.walk.step, stride: e.walk.stride() });
+                (e.walk, e.u)
+            }
+        };
+        loop {
+            if w.straight() && room.belt == 0.0 {
+                // Back on its wander with no room to bend: the rest of the piece runs straight along it.
+                let rest = len - u;
+                for i in 1..=CURVE_STEPS {
+                    let d = rest * i as f64 / CURVE_STEPS as f64;
+                    emit(Mark { u: u + d, v: 0.0, s: w.s + d, step: 0, stride: 0.0 });
+                }
+                return Start::Straight(w.s + rest);
+            }
+            if w.step == STEPS {
+                w.begin(self.seed, room);
+            }
+            let before = [u, w.v, w.s];
+            let du = w.step();
+            u += du;
+            if u >= len {
+                // The step that crosses the piece's end is cut there: the next piece starts on the same point.
+                let f = (len - before[0]) / du;
+                let edge = [before[1] + (w.v - before[1]) * f, before[2] + (w.s - before[2]) * f];
+                emit(Mark { u: len, v: edge[0], s: edge[1], step: 0, stride: 0.0 });
+                return Start::Bent(Entry { edge, walk: w, u: u - len });
+            }
+            emit(Mark { u, v: w.v, s: w.s, step: w.step, stride: w.stride() });
+        }
+    }
+
+    /// The frame of sample `k`'s piece; none for a sink none runs into.
+    pub(super) fn frame(&self, k: usize) -> Option<Frame> {
+        base(self.s, self.at, k).map(|b| Frame::new(b, self.metres))
+    }
+}
+
+/// How each sample's piece starts (`Start`): the lengths along the lines of those that start straight, m, and the
+/// walks of the others; and of each sample's wander: the most it leans from its curve, m, the sample its line began
+/// at, and how far down the valley its piece starts, in the wander's lattice.
+pub(super) struct Bends {
+    straight: Vec<f64>,
+    bent: HashMap<u32, Entry>,
+    lean: Vec<f64>,
+    head: Vec<u32>,
+    down: Vec<f64>,
+}
+
+impl Bends {
+    /// The starts of the pieces of `r`'s channels: a head's line starts straight at 0; down a main way (where a sample
+    /// is the main one upstream of the next, `Samples::main`) the next piece starts as the last one ends. In the
+    /// flood's order from the last sample reached, so a sample comes before the one its liquid runs to.
+    pub(super) fn new(r: &Reaches) -> Bends {
+        let s = r.s;
+        let n = s.h.len();
+        let mut b = Bends { straight: vec![0.0; n], bent: HashMap::new(), lean: vec![0.0; n], head: (0..n as u32).collect(), down: vec![0.0; n] };
+        for &k in s.order.iter().rev() {
+            let (k, to) = (k as usize, s.to[k as usize]);
+            let Some(frame) = r.frame(k) else { continue };
+            b.lean[k] = r.sway(k, &frame)[0];
+            if to == NONE || s.main[to as usize] != k as u32 {
+                continue;
+            }
+            (b.head[to as usize], b.down[to as usize]) = (b.head[k], b.down[k] + frame.len() / (WANDER_EVERY * r.metres));
+            match r.walk(k, &frame, b.start(k), &mut |_| {}) {
+                Start::Straight(s) => b.straight[to as usize] = s,
+                Start::Bent(e) => {
+                    b.bent.insert(to, e);
+                }
+            }
+        }
+        b
+    }
+
+    /// The sample the line of sample `k` began at: the same down a main way, so it names the channel.
+    pub(super) fn head(&self, k: usize) -> u32 {
+        self.head[k]
+    }
+
+    /// How the piece of sample `k` starts.
+    pub(super) fn start(&self, k: usize) -> Start {
+        self.bent.get(&(k as u32)).map_or(Start::Straight(self.straight[k]), |e| Start::Bent(*e))
+    }
+
+    /// How far the line of sample `k` of `r` leans from its curve `frame` by its wander, `u` m along the curve, m: the
+    /// wander there (`wander::wander`) times the most it leans, which runs smoothly from the mean of its own and its
+    /// main neighbour's upstream at the piece's start to the mean of its own and the next one's at its end, and is
+    /// none where the line starts or ends (a head; a join, a sink).
+    pub(super) fn leans(&self, r: &Reaches, k: usize, frame: &Frame, u: f64) -> f64 {
+        let s = r.s;
+        let joint = |j: u32, runs: bool| if runs { 0.5 * (self.lean[k] + self.lean[j as usize]) } else { 0.0 };
+        let (from, to) = (joint(s.main[k], s.main[k] != NONE), joint(s.to[k], s.to[k] != NONE && s.main[s.to[k] as usize] == k as u32));
+        let most = from + (to - from) * ease(0.0, 1.0, u / frame.len());
+        most * wander(r.seed, self.head[k], self.down[k] + u / (WANDER_EVERY * r.metres))
+    }
 }

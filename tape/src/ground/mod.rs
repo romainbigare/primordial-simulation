@@ -2,20 +2,29 @@
 //! `depth` holds `TILE` x `TILE` texels, each a leaf of that depth, and `GUTTER` texels more along each edge, so a
 //! shader reads a texel's neighbours inside the tile. Per texel: the terrain's mean height over it
 //! (`Terrain::heights`, so a texel is the mean of its four children), the wetness index of the place (`wetness`), and
-//! the channel it is nearest by the channel law (`channels`); and apart, the pond it lies in (`Ground::pond_tile`).
+//! the channel it is nearest by the channel law (`channels`), with how far along that channel's line it lies and how
+//! far from that line without its bends; and apart, the pond it lies in (`Ground::pond_tile`).
 //! Each is a function of the seed, the map and the place alone: the same texel holds the same numbers in every tile
 //! that holds it. A tile is 16-bit floats (`half`), so a graphics card keeps many: the height as the sum of two of
 //! them, to a millimetre (a shore is the difference of two heights).
 
+mod belt;
 mod bends;
 mod channels;
+mod frame;
+mod lines;
+mod mend;
 mod half;
 mod rock;
 mod shore;
 mod stems;
+mod valley;
+mod wander;
 mod wetness;
 
-pub use channels::{Law, SHOW_M, STEP_MOST, TYPICAL_RUNOFF, VALLEY_FROM, VALLEY_M};
+pub use bends::FLOOD;
+pub use channels::{Law, ALONG_WRAP_M, LINE_GROW, LINE_MOST, LINE_PX, SHOW_M, STEP_MOST, TYPICAL_RUNOFF};
+pub use valley::{VALLEY_FROM, VALLEY_M};
 pub use half::{half, unhalf};
 pub use wetness::sample_index;
 
@@ -49,7 +58,8 @@ pub fn depths(map: &Square) -> std::ops::RangeInclusive<u8> {
 
 /// The ground of an island: its seed, map and terrain, the latitudes of its rows, the terrain's samples and the wetness
 /// index of each (`sample_index`), the channel law (`Physics::channel`), by which the channel nearest a texel is found,
-/// the point each sample's line runs through (`stems::points`) and the phase of each sample's bends (`bends::phases`).
+/// the point each sample's line runs through (`stems::points`) and how each sample's piece of its line starts
+/// (`bends::Bends`).
 pub struct Ground {
     seed: u64,
     map: Square,
@@ -59,7 +69,7 @@ pub struct Ground {
     twi: Vec<f64>,
     law: Law,
     at: Vec<[f64; 2]>,
-    phase: Vec<f32>,
+    bends: bends::Bends,
     shore: shore::Shore,
 }
 
@@ -70,10 +80,10 @@ impl Ground {
         assert!(!map.wrap, "tiles of the ground are made for an island");
         let samples = terrain.samples(seed, &map, lat);
         let twi = sample_index(&map, &samples);
-        let at = stems::points(&samples);
-        let phase = bends::phases(&law, &samples, &at, map.length(SAMPLE_DEPTH));
         let shore = shore::Shore::new(&samples);
-        Ground { seed, map, terrain, lat, samples, twi, law, at, phase, shore }
+        let at = stems::points(&samples, &shore);
+        let bends = bends::Bends::new(&bends::Reaches { seed, s: &samples, at: &at, law, metres: map.length(SAMPLE_DEPTH) });
+        Ground { seed, map, terrain, lat, samples, twi, law, at, bends, shore }
     }
 
     /// The ground of world `w`.
@@ -85,10 +95,12 @@ impl Ground {
     /// north-west corner, as 16-bit floats in two planes. The first, four a texel: the terrain's mean height over the
     /// texel, m, as the sum of two (the nearest 16-bit float to it, and what it lacks); the wetness index of the place
     /// (`wetness::field`); and the distance to the line of the channel it keeps, m, signed by the side
-    /// (`channels::Field`; 60,000 where none reaches it). The second, two a texel: that channel's sample, as its
+    /// (`channels::Field`; 60,000 where none reaches it). The second, four a texel: that channel's sample, as its
     /// step from the sample that holds the texel's centre (`channels::code`; 0 for none), and one more than the pond the
-    /// texel lies in (`pond_tile`; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT`. Texels
-    /// off the map are those of its edge.
+    /// texel lies in (`pond_tile`; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT`; and of
+    /// the nearest point of that channel's line, how far along the channel it lies, m, modulo `ALONG_WRAP_M`, and the
+    /// distance to the nearest channel's line without its bends, m, signed by the side (60,000 where none reaches it).
+    /// Texels off the map are those of its edge.
     pub fn tile(&self, depth: u8, tx: i64, ty: i64) -> Vec<u16> {
         assert!(depths(&self.map).contains(&depth), "a tile of a depth the ground is drawn at");
         let side = TILE + 2 * GUTTER;
@@ -102,7 +114,7 @@ impl Ground {
         let heights = self.terrain.heights(self.seed, &self.map, self.lat, win, depth);
         let k = 2f64.powi(SAMPLE_DEPTH as i32 - depth as i32);
         let twi = wetness::field(&self.samples, &self.twi, depth, [win[0], win[1]], [wide, high]);
-        let near = channels::Channels::new(&self.map, &self.samples, self.law, (&self.at, &self.phase)).field([win[0], win[1]], [wide, high], k);
+        let near = channels::Channels::new(self.reaches(), &self.bends).field(channels::Window { x0: win[0], y0: win[1], wide, high, k });
         // The valleys about the channels drawn into the ground out of the ponds (`channels::Field::drawn`); near a pond
         // (`shore::Shore::level`) a valley only lowers the ground, and never under the pond's level where the ground is
         // not: its mouth meets the level of the pond it runs into. Then the shore drawn smooth (`shore`).
@@ -124,7 +136,7 @@ impl Ground {
             })
             .collect();
         let at = |p: usize| (clamp(x0 + (p % side) as i64, across) - win[0]) as usize + (clamp(y0 + (p / side) as i64, down) - win[1]) as usize * wide;
-        let mut out = Vec::with_capacity(6 * side * side);
+        let mut out = Vec::with_capacity(8 * side * side);
         for i in (0..side * side).map(at) {
             let hi = half(heights[i] as f32);
             out.extend([hi, half((heights[i] - unhalf(hi) as f64) as f32), half(twi[i] as f32), half(near.dist[i] as f32)]);
@@ -133,7 +145,8 @@ impl Ground {
         for (p, i) in (0..side * side).map(|p| (p, at(p))) {
             let pond = if ponds[p] == NONE { 0.0 } else { (ponds[p] + 1) as f32 };
             let texel = [win[0] + (i % wide) as i64, win[1] + (i / wide) as i64];
-            out.extend([half(channels::code(&self.samples, texel, k, near.sample[i]) as f32), half(pond)]);
+            let along = near.along[i].rem_euclid(ALONG_WRAP_M);
+            out.extend([half(channels::code(&self.samples, texel, k, near.sample[i]) as f32), half(pond), half(along as f32), half(near.calm[i] as f32)]);
         }
         out
     }
@@ -183,15 +196,20 @@ impl Ground {
     }
 
     /// The rock of each of the terrain's samples, row by row in two planes of four 16-bit floats a sample: the depth of
-    /// its loose ground, m, and the largest stone its channel moves, m; and the reflectance of its bed's make, of
-    /// `colours` one a make (`rock::rock`).
+    /// its loose ground, m, the largest stone its channel moves, m, and its channel's links; and the reflectance of
+    /// its bed's make, of `colours` one a make (`rock::rock`).
     pub fn rock(&self, colours: &[[f64; 3]]) -> Vec<u16> {
-        rock::rock(&self.samples, self.map.length(SAMPLE_DEPTH), colours)
+        rock::rock(&self.reaches(), colours)
     }
 
     /// The ponds of the ground, each with its pass and its level (`Samples::ponds`).
     pub fn ponds(&self) -> &[Pond] {
         &self.samples.ponds
+    }
+
+    /// The reaches of the ground's channels (`bends::Reaches`).
+    fn reaches(&self) -> bends::Reaches<'_> {
+        bends::Reaches { seed: self.seed, s: &self.samples, at: &self.at, law: self.law, metres: self.map.length(SAMPLE_DEPTH) }
     }
 
     /// The centre of the texel at column `x` and row `y` of leaves of `depth`, in samples from the map's north-west corner.

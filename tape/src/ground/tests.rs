@@ -1,55 +1,51 @@
-//! The channels as a shell draws them (`channels`, `bends`): a texel names the channel whose line it measures, and a
-//! channel's line runs on unbroken from sample to sample.
+//! The channels as a shell draws them (`channels`, `bends`, `belt`): a texel names the channel whose line it measures,
+//! a channel's line runs on unbroken from sample to sample, and its bends stay in their belt.
 
-use super::super::bends::phases;
-use super::{code, to_segment, Channels, Law, STEP_MOST};
+use super::super::bends::{Bends, Reaches, BEND_MOST};
+use super::super::stems::points;
+use super::{code, to_segment, Channels, Law, Window, NO_CHANNEL_M, STEP_MOST};
 use pcore::space::network::NONE;
 use pcore::space::samples::Samples;
-use pcore::space::square::Square;
 use pcore::space::terrain::SAMPLE_DEPTH;
 use std::sync::Arc;
 
-/// The map of the island of seed 1, 16 x 16 squares, its samples, the metres a sample takes, and the default channel
-/// law.
-fn island() -> (Square, Arc<Samples>, f64, Law) {
+/// The samples of the island of seed 1, 16 x 16 squares, the metres a sample takes, and the default channel law.
+fn island() -> (Arc<Samples>, f64, Law) {
     let cfg = pcore::Config::default();
     let (map, terrain) = worldgen::terrain::island_ground(1, 16, 16);
     let s = terrain.samples(1, &map, (cfg.lat_south, cfg.lat_north));
-    let metres = map.length(SAMPLE_DEPTH);
-    (map, s, metres, Law::of(&cfg.phys))
+    (s, map.length(SAMPLE_DEPTH), Law::of(&cfg.phys))
 }
 
-impl Channels<'_> {
-    /// The distance from `at` (samples) to the line of sample `q` drawn on texels of `texel` m, m.
-    fn distance(&self, q: usize, at: [f64; 2], texel: f64) -> f64 {
-        let p = self.piece(q, texel).expect("a channel");
-        let pts = self.line(q, &p, texel).0;
-        pts.windows(2).map(|w| to_segment(at, w[0], w[1]).1.sqrt()).fold(f64::INFINITY, f64::min) * self.metres
-    }
+/// The reaches of the island's channels through the points `at`.
+fn reaches<'a>(s: &'a Samples, at: &'a [[f64; 2]], metres: f64, law: Law) -> Reaches<'a> {
+    Reaches { seed: 1, s, at, law, metres }
 }
 
 /// Texels this many samples a side: fine enough to draw the bends of the larger channels.
-const TEXEL_SAMPLES: f64 = 1.0 / 32.0;
+const TEXEL_SAMPLES: f64 = 1.0 / 128.0;
 
-/// Each texel a tile holds a channel in names the sample whose line it holds the distance to: the distance from the
-/// texel's centre to that sample's own line is the texel's (so the discharge a shell reads there is the channel's own),
-/// and the sample comes back from the texel's step as a shell finds it.
+/// Each texel a tile holds a channel's line in names the sample whose line it holds the distance to: the distance
+/// from the texel's centre to that sample's own line is the texel's (so the discharge a shell reads there is the
+/// channel's own), and the sample comes back from the texel's step as a shell finds it.
 #[test]
 fn a_texel_names_the_channel_it_measures() {
-    let (map, s, metres, law) = island();
-    let at = super::super::stems::points(&s);
-    let phase = phases(&law, &s, &at, metres);
-    let ch = Channels::new(&map, &s, law, (&at, &phase));
+    let (s, metres, law) = island();
+    let at = points(&s, &super::super::shore::Shore::new(&s));
+    let r = reaches(&s, &at, metres, law);
+    let bends = Bends::new(&r);
+    let ch = Channels::new(r, &bends);
     let k = TEXEL_SAMPLES;
     // A window about the sample the most drains through, its outlet's river.
     let most = (0..s.up.len()).filter(|&q| s.to[q] != NONE).max_by(|&a, &b| s.up[a].total_cmp(&s.up[b])).expect("a river");
     let [x0, y0] = [((most % s.across) as f64 / k) as i64 - 64, ((most / s.across) as f64 / k) as i64 - 64];
-    let f = ch.field([x0, y0], [128, 128], k);
+    let f = ch.field(Window { x0, y0, wide: 128, high: 128, k });
     let mut named = 0;
-    for (i, &q) in f.sample.iter().enumerate().filter(|p| *p.1 != NONE) {
+    for (i, &q) in f.sample.iter().enumerate().filter(|p| *p.1 != NONE && f.dist[p.0].abs() < NO_CHANNEL_M) {
         let texel = [x0 + (i % 128) as i64, y0 + (i / 128) as i64];
         let at = [(texel[0] as f64 + 0.5) * k, (texel[1] as f64 + 0.5) * k];
-        let own = ch.distance(q as usize, at, k * metres);
+        let pts = ch.line(q as usize, k * metres).expect("a channel").0.line;
+        let own = pts.windows(2).map(|w| to_segment(at, w[0].p, w[1].p).1.sqrt()).fold(f64::INFINITY, f64::min) * metres;
         assert!((f.dist[i].abs() - own).abs() < 1e-9, "texel {texel:?}: {} m against {own} m to its own sample's line", f.dist[i]);
         let c = code(&s, texel, k, q) as i64 - 1;
         let side = 2 * STEP_MOST + 1;
@@ -60,24 +56,32 @@ fn a_texel_names_the_channel_it_measures() {
     assert!(named > 100, "{named} texels hold a channel");
 }
 
-/// Where a sample is the main one upstream of the next, its line ends where the next one's begins, its bends and all:
-/// a river's line has no break.
+/// Where a sample is the main one upstream of the next, its line ends where the next one's begins, its bends and all,
+/// and the length along the channel runs on: a river's line has no break. Some of the island's channels sway, and none
+/// farther from its curve than `BEND_MOST`.
 #[test]
 fn a_channels_line_runs_on_from_sample_to_sample() {
-    let (map, s, metres, law) = island();
-    let at = super::super::stems::points(&s);
-    let phase = phases(&law, &s, &at, metres);
-    let ch = Channels::new(&map, &s, law, (&at, &phase));
+    let (s, metres, law) = island();
+    let at = points(&s, &super::super::shore::Shore::new(&s));
+    let r = reaches(&s, &at, metres, law);
+    let bends = Bends::new(&r);
+    let ch = Channels::new(r, &bends);
     let texel = TEXEL_SAMPLES * metres;
-    let end = |k: usize, t: f64| ch.piece(k, texel).expect("a channel").at(t);
-    let mut joints = 0;
+    let (mut joints, mut bent) = (0, 0);
     for k in (0..s.up.len()).filter(|&k| s.to[k] != NONE && s.main[s.to[k] as usize] == k as u32) {
-        let (a, b) = (end(k, 1.0), end(s.to[k] as usize, 0.0));
-        let gap = (a[0] - b[0]).hypot(a[1] - b[1]) * metres;
+        let (own, next) = (ch.piece(k, texel).expect("a channel").line, ch.piece(s.to[k] as usize, texel).expect("a channel").line);
+        let (a, b) = (own[own.len() - 1], next[0]);
+        let gap = (a.p[0] - b.p[0]).hypot(a.p[1] - b.p[1]) * metres;
         assert!(gap < 1e-6, "sample {k}: a gap of {gap} m to the next");
+        assert!((a.s - b.s).abs() < 1e-3, "sample {k}: its line ends {} m along, the next starts {} m along", a.s, b.s);
+        let frame = r.frame(k).expect("a channel");
+        let off = own.iter().map(|v| (0..=64).map(|i| { let q = frame.at(frame.len() * i as f64 / 64.0, 0.0); (v.p[0] - q[0]).hypot(v.p[1] - q[1]) }).fold(f64::INFINITY, f64::min)).fold(0.0, f64::max);
+        assert!(off <= BEND_MOST + 0.05, "sample {k}: its line lies {off} samples from its curve");
+        bent += (off > 0.01) as usize;
         joints += 1;
     }
     assert!(joints > 1000, "{joints} joints");
+    assert!(bent > 20, "{bent} pieces bend");
 }
 
 /// The shore drawn smooth (`shore`) moves the line where the samples' ground crosses its level, not the area under it:
@@ -85,7 +89,7 @@ fn a_channels_line_runs_on_from_sample_to_sample() {
 /// bulges: an island and its capes).
 #[test]
 fn the_smooth_shore_keeps_the_area_under_the_level() {
-    let (_, s, _, _) = island();
+    let (s, _, _) = island();
     let shore = super::super::shore::Shore::new(&s);
     // Points a quarter of a sample apart; the samples' ground blended between their centres.
     const PER: usize = 4;

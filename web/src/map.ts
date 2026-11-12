@@ -6,7 +6,7 @@
 import { Draw, Gpu, Pass, Texture, Uniforms, openGpu, seenFrom } from './gpu';
 import { Fields } from './fields';
 import { FieldWindow, MapLook } from './field-window';
-import { Land } from './land';
+import { FLOW_FPS, Land } from './land';
 
 const LAT_STEP = 30; // degrees between a globe's lines of latitude
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -71,6 +71,8 @@ export class MapView {
   private sharpTimer = 0;
   /** Whether the GPU's picture is to be drawn anew at the next frame. */
   private gpuDue = false;
+  /** The timer of the next frame of the flow's signs (`flowSoon`). */
+  private flowTimer = 0;
   private sharpening: { tiles: number[][]; xs: number[]; d: number } | null = null;
   private sharp: Texture | null = null;
   /** The map's colours under the view asked for (`under`): what waits for them, the css px a texel and the texture they
@@ -248,6 +250,18 @@ export class MapView {
     gpu.submit();
     this.time(gpu, r);
     if (r < 1 && !fading) this.sharpTimer = window.setTimeout(() => this.sharpenSoon(xs, d), REST_MS);
+    this.flowSoon();
+  }
+
+  /** Draw the map again when the signs of the flow next step along the channels (land.ts `FLOW_FPS`), while a channel
+   * in view shows them, the page is seen, and the map is drawn at the screen's own pixels (a card that cannot keep up
+   * shows them still: the sharp picture is not drawn over and over). Else no frame is drawn until something changes. */
+  private flowSoon(): void {
+    clearTimeout(this.flowTimer);
+    const v = this.view();
+    if (document.hidden || this.scale < 1 || !this.land?.flowing(v.x, v.y, v.w, v.h, this.cellM / (v.s * this.dpr()))) return;
+    const step = 1000 / FLOW_FPS;
+    this.flowTimer = window.setTimeout(() => this.invalidate(), step - (performance.now() % step) + 1);
   }
 
   /** Start drawing the map at the screen's own pixels, in tiles each of about `FRAME_BUDGET_MS` on the GPU. */

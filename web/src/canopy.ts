@@ -309,3 +309,11 @@ export function half(v: number): number {
   if (e >= 31) return sign | 0x7c00;
   return sign | ((e << 10) + ((m + 0x1000) >> 13));
 }
+
+/** The number whose IEEE binary16 bits are `bits` (`half`'s inverse). */
+export function unhalf(bits: number): number {
+  const e = (bits >> 10) & 0x1f, m = bits & 0x3ff, sign = bits & 0x8000 ? -1 : 1;
+  if (e === 0) return sign * m * 2 ** -24;
+  if (e === 31) return m ? NaN : sign * Infinity;
+  return sign * (1 + m / 1024) * 2 ** (e - 15);
+}

@@ -10,22 +10,22 @@ import type { View } from './map';
 
 /** The tiles of the ground as the core makes them (wasm/src/lib.rs `meta`): texels a side inside the gutter, texels of
  * the gutter along each edge, the depths from the coarsest to the finest, the most steps along each axis by which a
- * texel names its channel's sample, numbers of a row of the cells' table, and the reflectance of the walls the cover
- * builds. */
-export interface TileMeta { size: number; gutter: number; depths: [number, number]; step_most: number; row: number; kinds: number; kind_row: number; walls: [number, number, number] }
+ * texel names its channel's sample, the length its place along its channel is kept modulo, m, numbers of a row of the
+ * cells' table, and the reflectance of the walls the cover builds. */
+export interface TileMeta { size: number; gutter: number; depths: [number, number]; step_most: number; along_wrap: number; row: number; kinds: number; kind_row: number; walls: [number, number, number] }
 /** The map the tiles are of: squares across and down, metres a square and the depth of a square. */
 export interface MapOf { w: number; h: number; cell_m: number; square_depth: number }
 
 /** Tiles kept on the GPU at most: a view touches at most `VIEW_TILES` at its depth and a quarter as many at the one
- * above, and the coarsest; the rest is room for a pan. Each takes 676 kB on the card (10 bytes a texel), so 56 take
- * 38 MB. */
+ * above, and the coarsest; the rest is room for a pan. Each takes 1.1 MB on the card (16 bytes a texel), so 56 take
+ * 61 MB. */
 const MOST_TILES = 56;
 /** The most tiles the view touches at its depth: past them it is drawn a depth coarser. */
 const VIEW_TILES = 30;
 /** Of a tile, 16-bit floats a texel: the first plane four (the height as two, the wetness index, the signed distance to
- * its channel's line), the second two (that channel's sample, as its step from the texel's own, and one more than the
- * pond the texel lies in; 0: none). */
-const PLANE_A = 4, PLANE_B = 2;
+ * its channel's line), the second four (that channel's sample, as its step from the texel's own, and one more than the
+ * pond the texel lies in; 0: none; how far along its channel's line the texel lies, and its distance to that channel's line without its bends). */
+const PLANE_A = 4, PLANE_B = 4;
 /** A new tile fades in over the one before it over this long, ms. */
 export const TILE_FADE_MS = 250;
 /** The view's tiles are asked for this share of its width and height past each of its edges, so a pan finds them. */
@@ -235,7 +235,7 @@ export class GroundTiles {
   textures(gpu: Gpu): { atlas: Texture; areas: Texture; pages: Texture; tiles: Texture; now: number } {
     const side = this.meta.size + 2 * this.meta.gutter, n = side * side;
     this.atlas ??= gpu.texture(side, side, 'rgba16float', MOST_TILES);
-    this.areas ??= gpu.texture(side, side, 'rg16float', MOST_TILES);
+    this.areas ??= gpu.texture(side, side, 'rgba16float', MOST_TILES);
     for (const c of this.come) {
       gpu.write(this.atlas, c.data.subarray(0, PLANE_A * n), 0, c.layer);
       gpu.write(this.areas, c.data.subarray(PLANE_A * n, (PLANE_A + PLANE_B) * n), 0, c.layer);

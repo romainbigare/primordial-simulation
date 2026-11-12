@@ -19,8 +19,9 @@ fn ground() -> (Ground, std::ops::RangeInclusive<u8>) {
 /// and the spline through the samples reaches 2 more).
 const SHORE_SAMPLES: i64 = 4;
 
-/// The numbers of a texel of a tile's first plane.
+/// The numbers of a texel of a tile's first plane, and of its second.
 const TEXEL: usize = 4;
+const SECOND: usize = 4;
 
 /// The texel at column `x` and row `y` of tile `t`, counted from its own corner (inside the gutter): its height, m (the
 /// sum of its first two numbers), and its other numbers.
@@ -73,7 +74,7 @@ fn a_texel_is_the_mean_of_its_four_children() {
 }
 
 /// The texels two tiles side by side both hold (each one's gutter and the other's edge) hold the same height, wetness
-/// index and channel: no number depends on the tile it is made in.
+/// index and channel, with the place along it and its curvature: no number depends on the tile it is made in.
 #[test]
 fn a_place_holds_the_same_numbers_in_every_tile() {
     let (g, depths) = ground();
@@ -85,10 +86,10 @@ fn a_place_holds_the_same_numbers_in_every_tile() {
                 let (a, b) = (west[(y * SIDE + TILE + i) * TEXEL + k], east[(y * SIDE + i) * TEXEL + k]);
                 assert_eq!(a, b, "row {y}, column {i} past the edge, number {k}");
             }
-            // The second plane: the channel's sample and the pond.
+            // The second plane: the channel's sample, the pond, the place along the channel and its curvature.
             let area = SIDE * SIDE * TEXEL;
-            for b in 0..2 {
-                assert_eq!(west[area + 2 * (y * SIDE + TILE + i) + b], east[area + 2 * (y * SIDE + i) + b], "row {y}, column {i} past the edge, the channel's sample and the pond");
+            for b in 0..SECOND {
+                assert_eq!(west[area + SECOND * (y * SIDE + TILE + i) + b], east[area + SECOND * (y * SIDE + i) + b], "row {y}, column {i} past the edge, number {b} of the second plane");
             }
         }
     }
@@ -114,7 +115,7 @@ fn a_texel_names_its_pond_and_lies_under_its_level() {
     let mut held = 0;
     for y in 0..TILE {
         for x in 0..TILE {
-            let named = tape::unhalf(tile[SIDE * SIDE * TEXEL + 2 * ((y + GUTTER) * SIDE + x + GUTTER) + 1]) as usize;
+            let named = tape::unhalf(tile[SIDE * SIDE * TEXEL + SECOND * ((y + GUTTER) * SIDE + x + GUTTER) + 1]) as usize;
             if named > 0 && s.pond[y * s.across + x] as usize != named - 1 {
                 held += 1;
                 let (h, level) = (at(&tile, x, y, 0) as f64, g.ponds()[named - 1].level);

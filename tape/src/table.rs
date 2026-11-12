@@ -6,6 +6,7 @@
 use crate::ground::sample_index;
 use crate::layers::{cover_melt, frame, pixels, Ctx};
 use pcore::inside::{soil_level, Means};
+use pcore::space::network::NONE;
 use pcore::space::terrain::SAMPLE_DEPTH;
 use pcore::World;
 
@@ -54,11 +55,23 @@ impl Table {
 
     /// The volume of liquid that runs through each of the terrain's samples, m³/s, row by row: its discharge
     /// (`World::discharge`) at the mol per m³ of the liquid its cell's ground holds (`World::liquid_in`); none where that
-    /// cell holds no liquid. A shell sizes the channel of each sample by it (`Physics::channel`).
+    /// cell holds no liquid. A shell sizes the channel of each sample by it (`Physics::channel`). A sample of a pond
+    /// carries no less than its main way upstream brings: a river runs on along a body's floor to its
+    /// lowest sample, and a shell draws that run where the body is drawn dry or its shore lies farther than the
+    /// samples' (under the body's liquid it does not show).
     pub fn discharge(&self, w: &World) -> Vec<f32> {
         let per_m3: Vec<f64> = (0..w.mesh.cells().n()).map(|i| w.liquid_in(i, |k| w.g(k, i)).map_or(0.0, |l| l.1)).collect();
         let per = |k: usize| per_m3[self.cell[k] as usize];
-        w.discharge.iter().enumerate().map(|(k, &q)| if per(k) > 0.0 { (q as f64 / per(k)) as f32 } else { 0.0 }).collect()
+        let mut out: Vec<f32> = w.discharge.iter().enumerate().map(|(k, &q)| if per(k) > 0.0 { (q as f64 / per(k)) as f32 } else { 0.0 }).collect();
+        let s = w.terrain_samples();
+        // In the flood's order from the last sample reached: a sample comes before the one its liquid runs to.
+        for &k in s.order.iter().rev() {
+            let k = k as usize;
+            if s.pond[k] != NONE && s.main[k] != NONE {
+                out[k] = out[k].max(out[s.main[k] as usize]);
+            }
+        }
+        out
     }
 
     /// The present state of world `w` as one tape frame, as a tape would keep it (`frame`), and its table: the melting point of the frozen
