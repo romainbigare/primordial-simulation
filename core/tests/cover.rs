@@ -97,8 +97,8 @@ fn leaves_lose_liquid_for_gas() {
     let (p, ph) = (cover::Parts::of(&chem).expect("cover parts"), pcore::Physics::default());
     let gas = chem.reactions[p.light].inputs.iter().map(|q| q.0 as usize).find(|&k| chem.phase(k, 290.0) == pcore::chem::Phase::Gas).expect("a gas input");
     let at = |t: f64, rh: f64| {
-        let sat = chem.p_sat(p.liquid, t) / pcore::units::P_REF;
-        cover::thirst(&chem, &ph, (p.liquid, gas), (t, pcore::units::P_REF), [rh * sat, ph.gas_ref])
+        let p_air = pcore::units::P_REF;
+        cover::thirst(&chem, &ph, (p.liquid, gas), t, [rh * chem.p_sat(p.liquid, t), ph.gas_ref * p_air])
     };
     let (wet, half, warm) = (at(290.0, 1.0), at(290.0, 0.5), at(300.0, 0.5));
     println!("mol of liquid a mol of gas: saturated {wet:.1}, half-saturated {half:.1}, warmer {warm:.1}");

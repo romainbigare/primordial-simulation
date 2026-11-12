@@ -1067,10 +1067,11 @@ seeds fill it:
   over its value at `gas_ref` (`Physics::gas_factor`; the light-limited rate of Farquhar, von Caemmerer and Berry
   1980): nothing at or below the floor, so the cover cannot strip the air of that gas. **Liquid for gas**: its pores that
   let the gas in let the key liquid's vapour out; per mol of gas taken in it loses r mol of the liquid, r = (D_v / D_g)
-  (x_sat − x_v) / (`drawdown` x_g) (Cowan and Farquhar 1977; Farquhar and Sharkey 1982; `cover::thirst`): x_sat the
-  liquid's saturation at the leaf (`Chemistry::p_sat` at its ground's temperature, over the surface pressure, the
-  weight of the cell's air column), x_v and x_g the air's mole fractions of the vapour and the gas, D_v / D_g the ratio
-  of their diffusivities, the root of the ratio of their molar masses (Graham's law). Each slot draws the liquid from
+  (p_sat − p_v) / (`drawdown` p_g) (Cowan and Farquhar 1977; Farquhar and Sharkey 1982; `cover::thirst`): p_sat the
+  liquid's saturation at the leaf (`Chemistry::p_sat` at its ground's temperature), p_v and p_g the partial pressures
+  of the vapour and the gas in the air near its ground, as the ground's own evaporation reads them
+  (`World::near_ground`, 1.5), D_v / D_g the ratio of their diffusivities, the root of the ratio of their molar
+  masses (Graham's law). Each slot draws the liquid from
   the pores its roots reach (its rooted share of the ground's liquid); where the ground cannot give it the pores close
   and all slots store less together. The vapour goes to the cell's bodies' node with its heat and latent heat, as a
   body's sweat does; the cover's heat then comes back to the ground's temperature, so its ground pays the latent heat. All kinds of a cell are cut
