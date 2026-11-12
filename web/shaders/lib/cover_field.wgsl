@@ -41,6 +41,9 @@ const GRAIN_FILL = 0.35; const GRAIN_LIGHT = 0.2; const GRAIN_TONE = 0.1;
 // cells hold theirs: crowns join one by one as the view draws back, and no line runs between two sizes. A clump wider
 // than `CLUMP_MOST_M` m is no crown: from there the field fades into its plants' mean, a calm tone, by twice as wide.
 const CLUMP_PX = 1.5; const CLUMP_MOST_M = 10.0; const WIDE_FROM = 0.25; const WIDE_TO = 0.75;
+// Discs at random places leave gaps however closed their stand: as a layer's plants cover from `CLOSES.x` to `CLOSES.y`
+// of the ground, the gaps between its crowns fill with its canopy, `GAP_TONE` as light as a crown (their shade).
+const CLOSES = vec2f(0.6, 0.9); const GAP_TONE = 0.8;
 // Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
 // mean (fixed noise in the world), alike near (cover.wgsl) and far.
 const PATCH_M = 8.0; const PATCH = 0.45;
@@ -236,7 +239,11 @@ fn grain(at: vec2f, l: i32, share: f32, e: f32) -> vec2f {
   var wide = vec2f(0.0, 1.0);
   if (f < WIDE_TO) { fine = crowns(at, l, mean.x, e, cell, i32(level), false, f); }
   if (f >= WIDE_FROM) { wide = crowns(at, l, mean.x, e, 2.0 * cell, i32(level) + 1, true, f); }
-  return mix(mean, vec2f(wide.x + fine.x * (1.0 - wide.x), mix(fine.y, wide.y, wide.x)), shows);
+  let drawn = vec2f(wide.x + fine.x * (1.0 - wide.x), mix(fine.y, wide.y, wide.x));
+  // A stand that closes its ground leaves none between its crowns: the canopy fills the gaps of the field's crowns, in
+  // their shade (`CLOSES`).
+  let a = max(drawn.x, ease(CLOSES.x, CLOSES.y, mean.x));
+  return mix(mean, vec2f(a, mix(GAP_TONE, drawn.y, drawn.x / max(a, 1e-4))), shows);
 }
 
 // Streaks of blades `w` m wide and `len` m long at `at`, turned by `turn` radians: -1..1 (value noise stretched).
@@ -342,7 +349,11 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
       if (cover_look.sides[l] > 0.0 && cover_look.shown[l] < 1.0) { dst = lattice_field(at, e, l, field_smooth(at, l), b, thick, hold[l], dst); }
     }
   }
-  if (far > 0.0) { dst = mix(dst, field_smooth(at, LOW_LAYER) * min(hold.w * thick, 1.0), far); }
+  if (far > 0.0) {
+    // As thick as they stand at the point (`hold`, `thick`), up to all of the ground.
+    let low = field_smooth(at, LOW_LAYER);
+    dst = mix(dst, low * (min(low.a * hold.w * thick, 1.0) / max(low.a, 1e-6)), far);
+  }
   dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);
   return CoverAt(dst, trees.a);
 }
