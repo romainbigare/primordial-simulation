@@ -227,8 +227,12 @@ fn grain(at: vec2f, l: i32, share: f32, e: f32) -> vec2f {
   let k = log2(across / side);
   let level = floor(k);
   let cell = side * exp2(level);
-  let fine = crowns(at, l, mean.x, e, cell, i32(level), false, k - level);
-  let wide = crowns(at, l, mean.x, e, 2.0 * cell, i32(level) + 1, true, k - level);
+  // Under `WIDE_FROM` no wide cell holds a crown, from `WIDE_TO` every one does: the other size is not read.
+  let f = k - level;
+  var fine = vec2f(0.0, 1.0);
+  var wide = vec2f(0.0, 1.0);
+  if (f < WIDE_TO) { fine = crowns(at, l, mean.x, e, cell, i32(level), false, f); }
+  if (f >= WIDE_FROM) { wide = crowns(at, l, mean.x, e, 2.0 * cell, i32(level) + 1, true, f); }
   return mix(mean, vec2f(wide.x + fine.x * (1.0 - wide.x), mix(fine.y, wide.y, wide.x)), shows);
 }
 
