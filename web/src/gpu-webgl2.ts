@@ -44,6 +44,8 @@ class WebGl2 implements Gpu {
     };
     this.samplers = { smooth: sampler(gl.LINEAR, gl.LINEAR), mip: sampler(gl.LINEAR_MIPMAP_NEAREST, gl.LINEAR), texel: sampler(gl.NEAREST, gl.NEAREST) };
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    // Textures of 32-bit floats can be drawn into (`openWebGl2`), again after a lost context.
+    gl.getExtension('EXT_color_buffer_float');
   }
 
   texture(w: number, h: number, format: Format, layers = 1, mips = 1, target = false): Texture {
@@ -194,8 +196,9 @@ class WebGl2 implements Gpu {
 /** How often a wait for the GPU looks whether it has finished, ms. */
 const FENCE_POLL_MS = 4;
 
-/** WebGL2 on `canvas`, or null where the browser has none; `restored` redraws after a lost context comes back. */
+/** WebGL2 on `canvas`, or null where the browser has none or cannot draw into textures of 32-bit floats (the plant
+ * marks decided a frame, textures.ts `prepare`); `restored` redraws after a lost context comes back. */
 export function openWebGl2(canvas: HTMLCanvasElement, restored: () => void): Gpu | null {
   const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, depth: false, premultipliedAlpha: true });
-  return gl ? new WebGl2(gl, canvas, restored) : null;
+  return gl && gl.getExtension('EXT_color_buffer_float') ? new WebGl2(gl, canvas, restored) : null;
 }

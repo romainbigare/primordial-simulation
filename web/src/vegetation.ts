@@ -9,7 +9,7 @@ import { kindsOf, unhalf } from './canopy';
 import { Loose, looseOf } from './roots';
 import { cooling } from './style';
 import { Style } from './sprites';
-import { CoverMarks } from './textures';
+import { CoverMarks, Marks } from './textures';
 import { Draw, Gpu, Pass } from './gpu';
 import { GpuLayer } from './map';
 import type { Land } from './land';
@@ -31,6 +31,8 @@ export class Vegetation implements GpuLayer {
   /** The squares' loose ground (roots.ts), once the samples' rock of the live map `looseFrom` has come. */
   private loose: Loose | null = null;
   private looseFrom: Land | null = null;
+  /** The draw of the marks `prepare` decided last (none: no cover drawn). */
+  private drawn: Marks | null = null;
 
   /** The kinds of world `w` from its table `rows` (tape/src/table.rs), or none (another view than the earth's, or a
    * tape). */
@@ -54,9 +56,10 @@ export class Vegetation implements GpuLayer {
     return this.marks.fieldBinds(gpu, this.cellM / s);
   }
 
-  /** Draw the cover on a map whose corner is at (ox, oy) and whose square takes `s` css px, `d` device px a css px, in
-   * a view `W` x `H` css px. */
-  draw(gpu: Gpu, p: Pass, ox: number, oy: number, s: number, d: number, W: number, H: number): void {
+  /** Decide the marks of the cover on a map whose corner is at (ox, oy) and whose square takes `s` css px, `d` device px
+   * a css px, in a view `W` x `H` css px, before the map's pass (textures.ts `prepare`). */
+  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, W: number, H: number): void {
+    this.drawn = null;
     const land = this.land?.lawBinds(gpu);
     if (!land) return;
     const mpp = this.cellM / s;
@@ -64,9 +67,12 @@ export class Vegetation implements GpuLayer {
     const x0 = Math.floor(Math.max(ox, 0) * d), y0 = Math.floor(Math.max(oy, 0) * d);
     const x1 = Math.ceil(Math.min(ox + this.mapW * s, W) * d), y1 = Math.ceil(Math.min(oy + this.mapH * s, H) * d);
     if (x1 <= x0 || y1 <= y0) return;
-    this.marks.draw(gpu, p, {
-      rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, cssMpp: mpp, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp],
-      style: this.style, land,
-    });
+    this.drawn = { rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, cssMpp: mpp, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp], style: this.style, land };
+    this.marks.prepare(gpu, this.drawn);
+  }
+
+  /** Draw the cover in pass `p`, as `prepare` decided it. */
+  draw(p: Pass): void {
+    if (this.drawn) this.marks.draw(p, this.drawn);
   }
 }

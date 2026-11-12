@@ -107,7 +107,9 @@ in the world (cells of 0.1, 0.5 and 2.5 m), where its marks take a few pixels; w
 are a field of their colours with the grain their count gives, so the far and the near pictures agree. A mark picks
 its kind at its own foot from the four squares about it (blended as the map is) by the kinds' chances there, fewer
 where the ground is drier than its cell's mean as each kind's activity law says: kinds mix mark by mark across a
-square's edge, and a kind that needs wet ground gathers in the hollows. Trees grow in stands of their kinds, patches of
+square's edge, and a kind that needs wet ground gathers in the hollows. What a mark is depends on its cell alone, so
+before the map is drawn each mark in view is decided once, a texel a cell (`web/shaders/marks.wgsl`,
+`web/shaders/lib/mark.wgsl`), and each pixel reads the marks of the cells about it. Trees grow in stands of their kinds, patches of
 about 60 m fixed in the world that the far field draws alike. A kind roots about a tenth of its height deep (at
 least 2 cm; Schenk and Jackson 2002 for depth growing with size): where the loose ground at a point is thinner it
 thins, none from a quarter of its need down, so bare bed holds only the smallest kinds in its cracks, thin ground herbs
