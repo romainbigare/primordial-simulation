@@ -241,6 +241,11 @@ pub struct Physics {
     /// A stem's volume over its cylinder's, and the share of a stem that is its walls' solid
     pub stem_form: f64,
     pub stem_solid: f64,
+    /// Loose ground a plant roots in per m of its height, m per m, and at least, m
+    pub root_per_height: f64,
+    pub root_least: f64,
+    /// Share of its roots' need of loose ground below which a point holds none of a kind
+    pub rooted_from: f64,
 
     // Flow, as ground cover and moving liquid feel it
     /// Thickness of a layer that hides half of what lies below it: [soft solid, liquid, loose], m
@@ -425,6 +430,9 @@ impl Default for Physics {
             tall: 35.0,
             stem_form: 0.5,
             stem_solid: 0.4,
+            root_per_height: 0.1,
+            root_least: 0.02,
+            rooted_from: 0.25,
             hide: [0.2, 0.5, 0.02],
             soft: 0.75,
             still: 0.01,

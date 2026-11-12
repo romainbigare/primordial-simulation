@@ -119,6 +119,9 @@ pub struct World {
     /// The mean rise of the ground of each cell toward the south, m per m, which the sun on it reads (`flow::on_slope`):
     /// the terrain's, found when the world is built (`World::rise_at_build`)
     pub rise_south: Vec<f64>,
+    /// The loose ground of each cell, the share of its area in each bin of depth, which its cover's roots read
+    /// (`cover::loose_bins`): the terrain's samples', found when the world is built
+    pub loose_bins: Vec<[f32; crate::cover::BINS]>,
     /// Raw physical facts since the shell last drained them (not part of the saved state)
     #[serde(skip)]
     pub events: Vec<Event>,

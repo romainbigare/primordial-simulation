@@ -1,11 +1,29 @@
 //! The plants of a slot of cover (laws.md 4.5): the model holds a slot's mass and its count of plants, so each plant's
-//! mass is known, and from it the plant's height by the buckling limit (McMahon 1973) and how many plants a stand of
-//! that mass holds at most (the self-thinning law, Yoda and others 1963). One place for these laws: the light's layers
+//! mass is known, and from it the plant's height by the buckling limit (McMahon 1973), how many plants a stand of that
+//! mass holds at most (the self-thinning law, Yoda and others 1963), how deep its roots reach (Schenk and Jackson
+//! 2002), and the share of its cell whose loose ground holds them. One place for these laws: the light's layers
 //! (`grow`), the seeds (`seed`) and the page's drawing (`tape::stands`) read them.
 
 use super::{distance, Cover, APART, NG, NO_ROOT, NP, SLOTS};
 use crate::Physics;
 use std::f64::consts::FRAC_PI_4;
+
+/// A cell's loose ground is kept as the share of its area in each of `BINS` bins of depth, spaced evenly in the log of
+/// the depth from `LEAST_M` to `MOST_M` m (all under the first in the first, all over the last in the last): the
+/// resolution at which a kind's rooted share is known (web/src/roots.ts draws with the same bins).
+pub const BINS: usize = 24;
+pub const LEAST_M: f64 = 0.005;
+pub const MOST_M: f64 = 20.0;
+
+/// The loose depth bin `b` stands for, m: its middle on the log scale.
+fn bin_m(b: usize) -> f64 {
+    LEAST_M * (MOST_M / LEAST_M).powf((b as f64 + 0.5) / BINS as f64)
+}
+
+/// The width of a bin in the log of the depth.
+fn bin_width() -> f64 {
+    (MOST_M / LEAST_M).ln() / BINS as f64
+}
 
 /// The width of the stem of a plant of `mass` kg of built cover, the share `walls` of it walls of density `rho` kg/m³,
 /// m: the cylinder of `stem_form` and `stem_solid` that holds its walls, as tall as the buckling limit lets it stand
@@ -38,6 +56,40 @@ pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], ph: &Physics, area: f64, x: us
     c.plants[x] = c.plants[x].min(area * most_plants(ph, c.built(mm, x) / area));
 }
 
+/// The loose ground a plant `height` m tall roots in, m: `root_per_height` of its height, no less than `root_least`
+/// (rooting depth grows with a plant's size; Schenk and Jackson 2002).
+pub(super) fn need(ph: &Physics, height: f64) -> f64 {
+    (ph.root_per_height * height).max(ph.root_least)
+}
+
+/// The share of a point that holds a kind whose roots need `need` m where `loose` m of loose ground lies: none up to
+/// `rooted_from` of its need, all from its need, smoothly between (bare bed anchors nothing and holds no liquid).
+fn rooted(ph: &Physics, loose: f64, need: f64) -> f64 {
+    let t = ((loose - ph.rooted_from * need) / ((1.0 - ph.rooted_from) * need).max(1e-300)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// The share of a cell that holds a kind whose roots need `need` m, of loose ground `bins` (the share of its area in
+/// each bin, `loose_bins`): the cell's rooted mean.
+pub(super) fn rooted_share(ph: &Physics, bins: &[f32; BINS], need: f64) -> f64 {
+    bins.iter().enumerate().map(|(b, &s)| s as f64 * rooted(ph, bin_m(b), need)).sum()
+}
+
+/// Whether a kind whose roots needed `was` m when its rooted share was last found needs a new one at `now` m: when the
+/// need has moved by more than a bin.
+pub(super) fn moved(was: f32, now: f64) -> bool {
+    !(was > 0.0 && (now / was as f64).ln().abs() <= bin_width())
+}
+
+/// The loose ground of each cell of a world as built: the share of its area in each bin of depth (`BINS`), from its
+/// terrain's samples (`Samples::loose`; laws.md 1.1).
+pub fn loose_bins(w: &crate::World) -> Vec<[f32; BINS]> {
+    let lat = (w.cfg.lat_south, w.cfg.lat_north);
+    let bin = |m: f64| (((m.max(LEAST_M) / LEAST_M).ln() / bin_width()) as usize).min(BINS - 1);
+    crate::par::map_n(w.mesh.cells().n(), crate::par::UNCOUNTED, |i| {
+        std::array::from_fn(|b| w.terrain.over(w.terrain.seed, &w.map, w.map.leaves()[i], lat, |s, k| if bin(s.loose[k]) == b { 1.0 } else { 0.0 }) as f32)
+    })
+}
 /// The plants that `kg` of seeds found in a cell of `area` m²: one for each `seed_kg`, as many as the self-thinning
 /// law lets stand (`most_plants`).
 pub(super) fn founded(ph: &Physics, kg: f64, area: f64) -> f64 {
@@ -69,5 +121,5 @@ pub(super) fn join(c: &mut Cover, (mm, ph, area): (&[f64; NP], &Physics, f64), b
     c.plants[big] += c.plants[small];
     (0..NP).for_each(|q| c.mol[big][q] += ms[q]);
     thin(c, mm, ph, area, big);
-    (c.mol[small], c.root[small], c.full[small], c.net[small], c.plants[small]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0);
+    (c.mol[small], c.root[small], c.full[small], c.net[small], c.plants[small], c.need[small]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0, 0.0);
 }

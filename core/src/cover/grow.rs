@@ -127,7 +127,8 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
 pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f64), counts: &mut Counters) -> (Books, f64) {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let (area, mm, t, rho) = (w.mesh.cells().area()[i], p.mm(chem), a.t, chem.subs[p.sub[WALL]].density[0]);
-    // The light since the last step: its capture areas share it by the height of their plants, tallest first.
+    // The light since the last step: its capture areas share it by the height of their plants, tallest first, each on
+    // the share of the cell its roots hold.
     let dl = (a.light - c.mark).max(0.0);
     c.mark = a.light;
     let mut s = [Slot::default(); SLOTS];
@@ -139,7 +140,15 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         }
         let act = super::activity(ph, &c.genes[q], a.moist);
         *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, ..Default::default() };
-        layers.push((c.height(ph, &mm, rho, q) as f32, leaf / area, q));
+        // The share of the cell its plants hold: where its loose ground is as deep as their roots need (found again
+        // only when their need has moved by more than a bin of depth).
+        let h = c.height(ph, &mm, rho, q);
+        let need = super::stand::need(ph, h);
+        if super::stand::moved(c.need[q], need) {
+            c.rooted[q] = w.loose_bins.get(i).map_or(1.0, |b| super::stand::rooted_share(ph, b, need)) as f32;
+            c.need[q] = need as f32;
+        }
+        layers.push((h as f32, leaf / area, c.rooted[q] as f64, q));
     }
     crate::math::shade(&mut layers, |q, f, bottom| (s[q].shade, s[q].bottom) = (f, bottom));
     let (a_abs, lit): (f64, f64) = (s.iter().map(|x| x.abs).sum(), s.iter().map(|x| x.abs * x.shade).sum());
@@ -181,7 +190,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     for x in 0..SLOTS {
         if c.root[x] != NO_ROOT && c.built(&mm, x) <= EMPTY_KG {
             (0..NP).for_each(|q| b.dead[p.sub[q]] += c.mol[x][q]);
-            (c.mol[x], c.root[x], c.full[x], c.net[x], c.plants[x]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0);
+            (c.mol[x], c.root[x], c.full[x], c.net[x], c.plants[x], c.need[x]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0, 0.0);
         }
     }
     (b, caught)

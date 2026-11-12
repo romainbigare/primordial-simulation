@@ -210,6 +210,24 @@ fn a_stand_never_passes_the_thinning_law_as_it_grows_tall() {
     books.assert_kept(&w, 1e-9);
 }
 
+/// A kind's plants hold the share of their cell whose loose ground reaches their roots' need (`Cover::rooted`): on the
+/// land cell of the thinnest loose ground, tall plants (the tree kind placed as a stand of 10 kg per m²) hold less of
+/// it than low ones (the starting cover at 0.1 kg per m²), and less than all of it.
+#[test]
+fn tall_plants_hold_less_of_thin_ground() {
+    let (mut w, _) = start();
+    let mean = |b: &[f32; cover::BINS]| b.iter().enumerate().map(|(k, &s)| s as f64 * k as f64).sum::<f64>();
+    let i = dry_lands(&w).into_iter().min_by(|&a, &b| mean(&w.loose_bins[a]).total_cmp(&mean(&w.loose_bins[b]))).expect("dry land");
+    let Place::Field(f) = &KINDS[3].place else { unreachable!("kind 3 is cover") };
+    assert!(cover::place(&mut w, i, genes(), 0, 0.1) && cover::place(&mut w, i, f.genes, 3, 10.0));
+    pcore::step(&mut w);
+    let c = w.life.cover(i);
+    let held = |root: u32| c.held().find(|&x| c.root[x] == root).map(|x| c.rooted[x]).expect("the kind lives");
+    let (low, tall) = (held(0), held(3));
+    println!("rooted share of the low kind {low:.3}, of the tall kind {tall:.3}");
+    assert!(tall < low && tall < 1.0, "the tall kind holds {tall} of the cell, the low kind {low}");
+}
+
 /// Seeds of a new kind arriving in a cell whose slots are all held take the slot in deficit (`Cover::net` below zero,
 /// the worst), whose cover dies (`seed::lodge` returns it), and no other: the slots that pay their way keep their cover.
 #[test]

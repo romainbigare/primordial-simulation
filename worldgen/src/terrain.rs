@@ -251,6 +251,7 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
         links,
         terrain,
         rise_south: Vec::new(),
+        loose_bins: Vec::new(),
         light: vec![0.0; n],
         rained: vec![0.0; n],
         events: Vec::new(),
@@ -299,6 +300,7 @@ fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (Chemistry, 
     world.store = rebuild(&world, amounts(&world, Class::Ground), e_ground);
     // The way the ground of each cell faces (laws.md 0), and no liquid running yet down the terrain's samples.
     world.rise_south = world.rise_at_build();
+    world.loose_bins = pcore::cover::loose_bins(&world);
     world.discharge = vec![0.0; world.terrain_samples().h.len()];
     world
 }

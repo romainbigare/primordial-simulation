@@ -105,7 +105,7 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, ph: &crate::Physics, area:
         (None, Some(x)) => (x, Some(c.mol[x])),
         (None, None) => (room(c, mm, ph, area), None),
     };
-    (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.plants[x]) = (s.mol, s.genes, s.root, false, 0.0, plants);
+    (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.plants[x], c.need[x]) = (s.mol, s.genes, s.root, false, 0.0, plants, 0.0);
     c.e += s.heat;
     out.map_or(Landed::In, Landed::Out)
 }

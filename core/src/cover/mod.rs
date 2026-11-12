@@ -13,7 +13,7 @@ mod stand;
 
 pub use grow::{live, step, Around, Books};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
-pub use stand::{height, stem};
+pub use stand::{height, loose_bins, stem, BINS};
 
 use crate::body::WET_TISSUE;
 use crate::chem::Chemistry;
@@ -105,6 +105,10 @@ pub struct Cover {
     pub net: [f32; SLOTS],
     /// Per slot: its plants in the cell, a real count (`stand`): its built cover over them is a plant's mass
     pub plants: [f64; SLOTS],
+    /// Per slot: the share of the cell whose loose ground holds its plants (`stand::rooted_share`), and the loose ground
+    /// its roots needed when that was found, m (`stand::need`; 0: not found yet)
+    pub rooted: [f32; SLOTS],
+    pub need: [f32; SLOTS],
     /// The heat of its cover, J; the cell's light (`World::light`) at its last step, J/m²; the share of the light its
     /// cover absorbs that its bodies' node sets aside for its light reaction
     pub e: f64,
@@ -118,7 +122,7 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [0.0; SLOTS], e: 0.0, mark: 0.0, keep: 0.0, seeds: Vec::new() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [0.0; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], e: 0.0, mark: 0.0, keep: 0.0, seeds: Vec::new() }
     }
 }
 

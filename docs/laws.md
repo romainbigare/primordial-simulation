@@ -1010,7 +1010,16 @@ seeds fill it:
 - **Light**: the light the cell caught since its last month per m² of capture area (`World::light`), on its capture
   area (10^`LEAF` m² per kg of living cover) less what it reflects (its parts' colours by volume), shared among its
   kinds by the height of their plants (Beer's law, `math::shade`): the tallest take it first, and a seedling lives on
-  what reaches the bottom of the layers above it; under standing liquid times e^(−depth / `light_depth`).
+  what reaches the bottom of the layers above it; under standing liquid times e^(−depth / `light_depth`). **Roots**: a
+  kind's plants root in `root_per_height` of their height of loose ground, at least `root_least` (rooting depth grows
+  with a plant's size; Schenk and Jackson 2002), and hold a point of the cell where its loose ground reaches that need
+  (none below `rooted_from` of it, all from it, smoothly between: bare bed anchors nothing and holds no liquid in
+  pores). Each cell keeps the share of its area in each of 24 bins of loose depth, from its terrain's samples, found
+  when the world is built (`World::loose_bins`, `cover::loose_bins`), and a kind holds the share s of the cell their
+  mean gives (`Cover::rooted`, found again only when its need has moved by more than a bin). It stands on that share
+  alone: its capture area is a layer of x / s there, and those below it get 1 − s + s e^(−x / s) of its light (`math::shade`;
+  with s = 1 everywhere, Beer's law). So tall kinds compete on a cell's deep ground only, low kinds on its thin ground too,
+  and on bare bed nothing but the smallest stands.
 - **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
   10^`LIGHT` × 10^`MOIST` mol per kg of living cover per s, times the reaction's pace k e^(−Ea/T) over its value at
   `t_cat`, times its activity a = min(1, wet / 10^`MOIST`)^`dormancy` (wet: how wet its ground is as bodies feel it,
