@@ -77,6 +77,8 @@ pub(super) struct YearTally {
     pub forms: pcore::choose::Forms,
     /// Cover that died, kg, by cause (`Counters::cover_lost`)
     pub cover_lost: [f64; 6],
+    /// The flows of the cover's budget, J (`Counters::cover_budget`)
+    pub cover_budget: [f64; pcore::cover::BUDGET.len()],
 }
 
 /// The sums of the month to come (a row of `months.csv`).

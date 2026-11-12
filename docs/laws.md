@@ -1091,13 +1091,22 @@ seeds fill it:
   (`Physics::repair`), its activity and the burning's pace at T (seasons come from temperature only); and its
   conducting walls, alive in every season, `c_sapwood` per kg a day at the burning's pace: by the pipe model their
   cross-section goes with the capture area they feed, `huber` m² a m², as tall as its plants (Shinozaki and others
-  1964), at most its walls (`stand::sapwood`), so a tall plant pays for its height every month. The share unpaid
+  1964), at most its walls (`stand::sapwood`), so a tall plant pays for its height every month; and its fine roots,
+  as many kg of living cover as the key liquid it drew in the month needs at `root_uptake` mol a kg a s (the minerals
+  come in that liquid by mass flow; Barber 1995), which breathe `c_basal` a kg a day at the burning's pace and are
+  built anew `root_turnover` times a year at what a kg of living cover costs to build (`build::living_cost`; Gill and
+  Jackson 2000). The share unpaid
   dies (`SPENT`). **Wear**: the share 1 − e^−wear dies (`AGE`), wear its upkeep at an activity of at least `dormant`
   over (living cover × `e_life` × 10^`REPAIR`), as bodies wear (6.7). **Frost**: its `FROST` gene is the limit it
   reaches hardened, when dormant; growing tissue loses that hardiness and freezes at its key liquid's melting point,
   the limit at activity a the melting point less (melting point − `FROST`) × (1 − a) (`cover::frozen`); below it the
   share min(1, (limit − T) / `frost_k`) dies (`PHASE`). Hardiness is the kind's own and paid for in every month
   (`c_firm`, above), not given by dormancy (Levitt 1980; Sakai and Larcher 1987).
+- **Budget**: what the cover's parts hold as fuel (`Parts::content`: the fuel what its burning frees, matter and walls
+  the fuel their conversions take) changes only by the flows its law books where it moves them
+  (`Counters::cover_budget`, `cover::BUDGET`): the light reaction's fuel, each part of the upkeep, the work of
+  building, what it sheds, what dies, the fuel its roots give its ground, seeds out and in, what bodies take or break,
+  what is placed, and rounding. The tape records them each year.
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
   out as kinds build, tallest first) build body matter and walls (10^`WALLS` kg per kg of matter, times m / (m +
   `wall_kg`) for a plant of m kg: a seedling is mostly leaf and the share of stem grows with a plant's size, Poorter

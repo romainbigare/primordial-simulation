@@ -115,7 +115,10 @@ pub fn wear(w: &World, d: &mut Chunk, j: usize, energy: f64) {
     if let Some(p) = parts.as_ref().filter(|_| cover > 0.0) {
         let f = (energy * cover / total / d.at(j).cover.breaking(&w.chem, &w.cfg, p, 1.0).max(1e-30)).min(1.0);
         d.counts.cover_lost[BROKEN as usize] += f * cover;
+        let e = p.content(&w.chem);
+        let held = d.cover(j).content(&e);
         crate::cover::lose(w, d, p, j, f);
+        d.counts.cover_budget[crate::cover::BODIES] += d.cover(j).content(&e) - held;
     }
     for s in here {
         let o = std::mem::take(&mut d[s]);
