@@ -69,8 +69,8 @@ laws that moves the world on purpose, in a commit of its own, and tell the owner
 (`space/mantle.rs`); water on one network, bodies full at the start; rain that drifts; plants from their numbers; the
 Earth view's first style; the core's first speed pass; the page's world waiting for its frame.
 
-**The work branch** (`claude/zealous-edison-rafc2q`, pushed; fast suite 209 passed, clippy clean, the slow tests of
-`tape/tests/ranges` pass) holds on top of main, not yet on main:
+**Also on main since** (the work branch and main are the same commit; fast suite 209 passed, clippy clean, the slow
+tests of `tape/tests/ranges` pass):
 - **The new ground** (roadmap section 11): a range, hills and a plain on one island (`terrain::rise`), a coast drowned
   after a low stand of 100 m, five makes of bed in folded layers (`space/strata.rs`); `SNAPSHOT_VERSION` 122. With it:
   Flow's books for liquid that only passes through a node (`potential::relayed`), and test scenes that ask the kit
@@ -84,22 +84,20 @@ Earth view's first style; the core's first speed pass; the page's world waiting 
   show compiled out (`LEAST_E`), no frame when nothing changed. Far views cost about 90% of what they did before both
   drawing packages; the 200 m, 50 m and 10 m bars on a phone still 140 to 165% (measured in software only).
 
-**What keeps the work branch off main** (seen on the page at seed 1, size 22, year 51):
-- Rivers read as grey lines from afar: the bed's gravel shows where the water's winding is under a pixel.
-- A body that lost its liquid is drawn as one pale sand flat in the lake's shape, with channels running into it.
-  Find first whether it is truly dry (and why, with channels entering) or drawn wrong.
-- Snow is a white smear with a grey border (its share is blended between the cells' centres); small white specks by
-  some ponds; a square notch where a channel joins two lakes; steps on lake shores at the 2 km bar on a phone (texels
-  of 31 m there: `VIEW_TILES` bites).
-- Close views' cost, above. A real phone has not been measured: the owner's is the only one.
+**Known faults on the page** (seed 1, size 22):
+- Snow is a white smear with a grey border (its share is blended between the cells' centres); white specks along
+  some lake rims; a square notch where a channel joins two lakes; steps on lake shores at the 2 km bar on a phone
+  (texels of 31 m there: `VIEW_TILES` bites); shallow lakes are a pale grey-blue.
+- Close views cost more than before the drawing packages (the 200 m, 50 m and 10 m bars on a phone: 140 to 165%,
+  measured in software only). A real phone has not been measured: the owner's is the only one.
 
 **Helpers stopped:** the helpers' model reached its weekly limit; it resets on 16 November, 14:00 UTC. A helper that
 stopped keeps its work in its worktree and goes on when sent a message after that.
 
 ## 5. What to do next, in order
 
-1. Mend the faults above on the work branch, look at the page (the fitted island, the 2 km and 1 km bars, on a phone
-   profile), then push to main and publish.
+1. Ask the owner how the close views run on their phone; cut their cost (the plant marks in `cover.wgsl`, the near
+   plant field and the rock face at 200 m) and mend the page's known faults above.
 2. **Climate bands** (branch `experiment/climate-bands`, section 8): the owner wants it on main with three modes
    (Wide, Mild, None). Its helper stopped before the gate and the slow tests of its last three commits: run them,
    merge the branch into the work branch, look at a Wide island on the page.
