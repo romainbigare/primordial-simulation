@@ -53,7 +53,7 @@ const ABSORBER_PPM: f64 = 325.8;
 const RIVERS: f64 = 233.6;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
 const WORN: f64 = 0.2389;
-/// The cover (starting kind 0) at year 30, log10 kg (`root_0_cover_kg`), in the reference runs.
+/// The cover at year 30, log10 kg (`cover_kg`), in the reference runs.
 const COVER_KG: f64 = 9.505;
 /// Eaters (starting kind 1) over years `EATERS_FROM` to 30, the mean of log10 kg (`root_1_kg`), in the reference runs: a guard that the world stays near
 /// itself, not a target (real herbivores and soil animals weigh far less, a few times 1e4 kg per km²).
@@ -185,7 +185,7 @@ fn key_numbers(seed: u64) -> ([f64; KEYS.len()], [f64; 2]) {
     });
     let worn = (rock_from - rock(&w, &land)) / span * MM;
     let [t, summer, winter, rain, air, rivers] = mean;
-    let cover = rec.last("root_0_cover_kg").log10();
+    let cover = rec.last("cover_kg").log10();
     let keys = [t, summer - winter, rain, air * PPM, rivers, worn, cover, eaters[0], eaters[1]];
     (keys, [rain_m_yr(&w, rain), stored_share(&w)])
 }
