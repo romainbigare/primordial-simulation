@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl cover_field.wgsl
+// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl ice.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl cover_field.wgsl
 // least metres a pixel: 0.5 1 3
 // The live map in view: at each pixel of the screen the ground from its tiles and the state from the cells' table
 // (land.wgsl), in the view's colours. Made once more for draws whose pixels take at least 0.5 m, 1 m and 3 m
@@ -100,10 +100,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // the line where the snow melts with height is as ragged as the rest.
   var bares = snow_bares(g.slope, st.rise, fine.x);
   var share = st.snow;
-  if (st.ice > 0.0) {
+  if (st.covered > 0.0) {
     let patches = snow_patches(at, e);
     bares += patches;
-    share = snow_of(st.ice, st.t + SNOW_PATCH_K * patches, land.time.z);
+    share = st.covered * unmelted(st.t + SNOW_PATCH_K * patches, land.time.z);
   }
   let snow_w = fwidth(bares);
   p.snow = select(snow_at(share, bares, snow_w), st.snow, st.depth > 0.0);
@@ -216,11 +216,14 @@ const LAYER_GROUND = 0; const LAYER_BARS = 1; const LAYER_EDGE = 2; const LAYER_
   }
   // The true colour is the cells', and the bed's where it shows; their snow placed as the Earth view places it: the
   // cells' colour is taken as their ground's under their share of snow, and that ground drawn under the point's snow.
+  // On standing liquid its ice is placed so too (ice.wgsl `ice_cover`), in the true view only.
   var truth = blended(TRUTH, cs).xyz;
   let s = spots.snow_cells;
   if (s > 0.0 && s < SNOW_CELLS_ALL) {
     let under = clamp((truth - s * SNOW) / (1.0 - s), vec3f(0.0), vec3f(1.0));
-    truth = mix(under, SNOW, spots.dry.snow);
+    var placed = spots.dry.snow;
+    if (earth.view.x == 1.0 && spots.dry.depth > 0.0) { placed = ice_cover(s, spots.dry.depth, at, spots.dry.e); }
+    truth = mix(under, SNOW, placed);
   }
   truth = mix(truth, spots.dry.bed, spots.dry.rock);
   let rgb = in_view_of(c, blended(VIEW, cs).xy, truth);

@@ -84,34 +84,36 @@ tests of `tape/tests/ranges` pass):
   show compiled out (`LEAST_E`), no frame when nothing changed. Far views cost about 90% of what they did before both
   drawing packages; the 200 m, 50 m and 10 m bars on a phone still 140 to 165% (measured in software only).
 
-**Known faults on the page** (seed 1, size 22):
-- Snow is a white smear with a grey border (its share is blended between the cells' centres); white specks along
-  some lake rims; a square notch where a channel joins two lakes; steps on lake shores at the 2 km bar on a phone
-  (texels of 31 m there: `VIEW_TILES` bites); shallow lakes are a pale grey-blue.
-- Close views cost more than before the drawing packages (the 200 m, 50 m and 10 m bars on a phone: 140 to 165%,
-  measured in software only). A real phone has not been measured: the owner's is the only one.
+- **An island in the planet's air** (`flow::Planet`, `worldgen/src/planet.rs`, `flow/air/{edge,stretch,planet}.rs`): the
+  page's three climates (Wide 20° to 65°, the default; Mild 30° to 55°; None), `ew run --band S,N`; a world made
+  without a band is bit for bit what it was. `SNAPSHOT_VERSION` 124.
+- **Snow, ice and rock on the page**: snow placed where the ground keeps it, its line in patches; the frozen low ground
+  off its 8 km grid, floes at its margin, a textured pack (`lib/ice.wgsl`); bare bed in its sample's make colour.
+- **The plants' marks decided once a frame per cell** (`marks.wgsl`, `lib/mark.wgsl`), kept in rgba8 textures.
 
-**In work** (each helper in its own worktree): the climate branch's gate and report; snow on land, lakes' depth and
-rims, the bed's colour per sample, then the frozen low ground (the drawing); the close views' cost (the plant marks);
-the cover's law (replacement by light, growing up, roots and the ground's depth).
+**Known faults on the page:**
+- The frame's cost against before the drawing packages (software only; a real phone is not measured): far views 92 to
+  97%, 50 m and 10 m 60 to 71%, the 200 m bar on a phone 176% (the near plant field at 0.69 m a pixel, snow and lakes).
+  The ice adds about a fifth to the fitted view of a Wide island in winter: being cut.
+- The True view on water: a 2 km haze, no floes. The pack's ridges read as wiggly lines.
+- The coast's squares in a Wide island's far north hold no plants (their cells are low ground): bare land there.
+- A square notch where a channel joins two lakes (mended, not seen on a picture); steps on lake shores at the 2 km
+  bar on a phone (texels of 31 m: `VIEW_TILES` bites); shallow lakes are a pale grey-blue (their true depth).
+
+**In work:** the ice's cost from afar (branch `wip/drawing`); the cover's law (branch `wip/cover-law`: replacement by
+light and growing up are built, roots and the ground's depth in work; one flow test fails there and its young stands
+grow fast: both being looked at; then a Wide island with the old and the new law).
 
 ## 5. What to do next, in order
 
-1. Ask the owner how the close views run on their phone; cut their cost (the plant marks in `cover.wgsl`, the near
-   plant field and the rock face at 200 m) and mend the page's known faults above.
-2. **Climate bands** (branch `experiment/climate-bands`, section 8): the owner wants it on main with three modes
-   (Wide, Mild, None). Its helper stopped before the gate and the slow tests of its last three commits: run them,
-   merge the branch into the work branch, look at a Wide island on the page.
-3. **Ice, snow and the open sea** (the owner: "the straight ice line (very ugly !!)"; "no blur, no noise, no
-   pixellisation, like the shore work"): the frozen low ground follows the air nodes (8 km); make its edge a smooth
-   field's line, floes at the margin, snow by the ground's fine relief; the shelf now lies 110 m under 0 m where the
-   page assumes 10 m; the makes of bed vary per sample (125 m) where the page draws the bed's colour per cell.
-4. **The sorted start** (branch `worktree-agent-a13df44719d5d1f2e`, local only unless the owner says push): measure
-   it on a Wide island; it needs places that differ.
-5. **The cover's law** (roadmap, last entry): a slot that gives way, seedlings under a canopy, the loose depth roots
-   need. Probably the largest gain in plant variety.
-6. Then: the exact solve of the surface's step by pieces; a law for the mean wind's momentum (wet and dry sides);
-   channels that lay down their load (plains, marsh, deltas); ice that cuts valleys.
+1. Ask the owner how the page runs on their phone (the 200 m bar above all).
+2. **The cover's law** to main when its test is understood and a Wide island shows zones (or says why not).
+3. **The sorted start** (`experiment/sorted-start`) follows the new law (`cover::lodge`, `sown`, the new fields of
+   `Cover`), then is measured on a Wide island.
+4. Wet and dry sides: a law for the mean wind's momentum. The strip of the planet with land and life (it is an
+   all-liquid, lifeless planet: its air is warmer and its heat-absorbing gas higher than a globe's with life).
+5. Channels that lay down their load (plains, marsh, deltas); ice that cuts valleys; the exact solve of the surface's
+   step by pieces; the True view's water.
 
 ## 6. The live world for the owner
 
@@ -147,9 +149,9 @@ browser draws in software, so its frames per second mean nothing; the world's pa
 ## 8. Branches kept for the next session
 
 The owner's word: no work lives only on one machine. Push a helper's branch as soon as it holds something.
-- `experiment/climate-bands`: the band (`ew run --band S,N`), the page's three climates (Wide, Mild, None), the
-  stretch derived, the strip of the planet made once, open edges. Being readied for main.
+- `experiment/climate-bands`: merged to main; kept as it was pushed.
 - `experiment/sorted-start`: the sorted start (`worldgen/src/life/nursery/`). Its first commit, the cover's month
   reading one view (`cover::Around`), is on the work branch.
+- `wip/drawing`, `wip/cover-law`: the running helpers' work, pushed as it grows.
 - `tools/checks`: the check scripts and probes of this work (`tools/check/paused.js`, `phone.js`, `inspect.js`; the
   frame's bench in `tools/frame/`; the climate's and the ground's probes). Study files: never on main.
