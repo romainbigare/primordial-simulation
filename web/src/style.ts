@@ -33,10 +33,13 @@ const TREE_M = 3, BUSH_WOOD = 0.6;
 /** Hue at the starting cover's numbers, degrees, and its change per decade of capture area, per K of frost gene, per
  * decade of moisture gene. */
 const HUE_MID = 140, HUE_PER_LEAF = -55, HUE_PER_FROST = -4, HUE_PER_MOIST = 25;
+/** The greens' hues stay living greens, from yellow-green to blue-green, degrees: a kind of thick hardy leaves is the
+ * bluest green of the palette, not a teal. */
+const HUE_GREENS = [105, 150];
 /** Lightness at the starting cover's numbers, and its change per decade of capture area and per share of walls. */
-const L_MID = 0.75, L_PER_LEAF = 0.14, L_PER_WOOD = -0.3;
+const L_MID = 0.75, L_PER_LEAF = 0.14, L_PER_WOOD = -0.15;
 /** Chroma at the starting cover's numbers, and its share lost per decade of moisture gene below theirs. */
-const C_MID = 0.11, C_DRY = 0.5;
+const C_MID = 0.13, C_DRY = 0.3;
 /** The starting cover's numbers (worldgen/src/life/kinds.rs `COVER_GENES`): capture area, log10 m²/kg; walls' share;
  * moisture gene; frost gene, K; seeds' share. */
 const LEAF_0 = 0.4, WOOD_0 = 0.5, MOIST_0 = -0.3, FROST_0 = 268, SEED_0 = 0.1;
@@ -125,7 +128,7 @@ export function designOf(height: number, wood: number): number {
 /** The green of kind `k` (OKLab), its lightness drawn in part from its physical leaf `phys` (linear); a herb's as the
  * sward's (`SWARD_L`). */
 function green(k: Leafy, phys: Rgb): Rgb {
-  const hue = HUE_MID + HUE_PER_LEAF * (k.leaf - LEAF_0) + HUE_PER_FROST * (k.frost - FROST_0) + HUE_PER_MOIST * (k.moist - MOIST_0);
+  const hue = Math.min(Math.max(HUE_MID + HUE_PER_LEAF * (k.leaf - LEAF_0) + HUE_PER_FROST * (k.frost - FROST_0) + HUE_PER_MOIST * (k.moist - MOIST_0), HUE_GREENS[0]), HUE_GREENS[1]);
   const lightness = L_MID + L_PER_LEAF * (k.leaf - LEAF_0) + L_PER_WOOD * (k.wood - WOOD_0) + PHYSICAL_L * (oklab(phys)[0] - oklab(LEAF_PHYS)[0]);
   const chroma = C_MID * clamp(1 - C_DRY * Math.max(MOIST_0 - k.moist, 0));
   const sward = k.design === DESIGN.herb;

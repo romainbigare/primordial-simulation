@@ -4,8 +4,9 @@
 //! chunk's moves, with its heat; its own side it books itself.
 
 use super::around::{around, Around};
+use super::budget::{self, BUDGET, BUILDING, DIED, EXUDED, ROUNDED, SEEDS, SHED, STORED, UPKEEP, UPKEEP_PARTS};
 use super::build::per_input;
-use super::{dec, Cover, Parts, EMPTY_KG, FROST, FUEL, LIGHT, MOIST, NO_ROOT, NP, REPAIR, SLOTS, STORE, WALL};
+use super::{dec, Cover, Parts, EMPTY_KG, FROST, FUEL, LIGHT, MATTER, MOIST, NO_ROOT, NP, REPAIR, SLOTS, STORE, WALL};
 use crate::body::{AGE, PHASE, SPENT};
 use crate::chem::{Chemistry, Phase, Reaction};
 use crate::store::{Class, Moves, Node};
@@ -41,16 +42,19 @@ pub(super) struct Slot {
     pub(super) act: f64,
     gain: f64,
     sapwood: f64,
+    drunk: f64,
 }
 
 /// What a cell's cover changes outside itself in a month: per substance the mol it takes in (+) or gives out (-), the
-/// heat its reactions release, J, and per substance its remains, mol; and per gas what the cell's share of its air node
-/// offers, mol (infinite for what is not a gas: the ground's inputs are limited where they are read).
+/// heat its reactions release, J, and per substance its remains, mol; per gas what the cell's share of its air node
+/// offers, mol (infinite for what is not a gas: the ground's inputs are limited where they are read); and its budget's
+/// flows, J (`budget::BUDGET`).
 pub struct Books {
     pub ext: [f64; MAX_SUBSTANCES],
     pub heat: f64,
     pub dead: [f64; MAX_SUBSTANCES],
     air: [f64; MAX_SUBSTANCES],
+    pub(super) budget: [f64; BUDGET.len()],
 }
 
 impl Books {
@@ -122,8 +126,11 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     crate::math::shade(&mut layers, |q, f, bottom| (s[q].shade, s[q].bottom) = (f, bottom));
     let (a_abs, lit): (f64, f64) = (s.iter().map(|x| x.abs).sum(), s.iter().map(|x| x.abs * x.shade).sum());
     let caught = dl * a_abs;
-    let mut b = Books { ext: [0.0; MAX_SUBSTANCES], heat: 0.0, dead: [0.0; MAX_SUBSTANCES], air: a.air };
+    let mut b = Books { ext: [0.0; MAX_SUBSTANCES], heat: 0.0, dead: [0.0; MAX_SUBSTANCES], air: a.air, budget: [0.0; BUDGET.len()] };
+    let e = p.content(chem);
+    let before = c.content(&e);
     let stored = light(chem, ph, c, p, &mut s, (caught * a.reach / lit.max(1e-300), area, a, dt), &mut b);
+    b.budget[STORED] += c.content(&e) - before;
     let all: f64 = stored.iter().sum();
     c.keep = if caught > 0.0 { (all / caught) as f32 } else { 0.0 };
     let year = w.cfg.months_per_year as f32;
@@ -136,22 +143,32 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         counts.cover_lost.iter_mut().zip(lost).for_each(|(a, l)| *a += l);
         let pays = s[x].gain * s[x].built > cost;
         c.full[x] = !pays;
+        if !pays {
+            let shed = shed(c, x, (&s[x], cost), area * c.rooted[x].max(f32::MIN_POSITIVE) as f64);
+            counts.cover_lost[SPENT as usize] += shed * mm[MATTER];
+            b.dead[p.sub[MATTER]] += shed;
+            b.budget[SHED] -= shed * e[MATTER];
+        }
         // Its balance over about a year: what it stored less its upkeep, per kg.
         c.net[x] += (((stored[x] - cost) / s[x].built) as f32 - c.net[x]) / year;
         // Where one more kg would not pay it builds living cover no more, but walls alone while its plants lack them.
+        let (held, sent) = (budget::held(&e, &c.mol[x]), b.budget[SEEDS]);
         if pays || super::build::frame_short(w, c, p, x) <= 0.0 {
             super::build::build(w, c, p, x, (&s[x], pays), (i, a.tick, t, dt), &mut ground, &mut b);
         }
         super::build::frame(w, c, p, x, &mut b);
+        b.budget[BUILDING] += budget::held(&e, &c.mol[x]) - held - (b.budget[SEEDS] - sent);
         super::stand::thin(c, &mm, ph, area, x);
         // The fuel it holds past its reserve when it has built what it could goes to its ground, as roots exude the
         // fuel a plant cannot use (Jones, Hodge and Kuzyakov 2004), where the open world's rot takes it.
         let over = (c.mol[x][FUEL] - dec(c.genes[x][STORE]) * c.built(&mm, x) / mm[FUEL]).max(0.0);
         (c.mol[x][FUEL], b.dead[p.sub[FUEL]]) = (c.mol[x][FUEL] - over, b.dead[p.sub[FUEL]] + over);
+        b.budget[EXUDED] -= over * e[FUEL];
         // What rounding left below zero is set to zero and counted (a larger overdraw is this law's fault).
         let (size, all) = (c.mol[x].iter().map(|m| m.abs()).sum::<f64>(), c.mol[x]);
-        for m in c.mol[x].iter_mut().filter(|m| **m < 0.0) {
+        for (q, m) in c.mol[x].iter_mut().enumerate().filter(|(_, m)| **m < 0.0) {
             debug_assert!(-*m <= crate::store::ROUNDING * size, "the cover overdrew a part by {m}: {all:?}");
+            b.budget[ROUNDED] -= *m * e[q];
             counts.rounded[0] -= std::mem::take(m);
         }
     }
@@ -159,9 +176,11 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     for x in 0..SLOTS {
         if c.root[x] != NO_ROOT && c.built(&mm, x) <= EMPTY_KG {
             (0..NP).for_each(|q| b.dead[p.sub[q]] += c.mol[x][q]);
+            b.budget[DIED] -= budget::held(&e, &c.mol[x]);
             (c.mol[x], c.root[x], c.full[x], c.net[x], c.plants[x], c.need[x]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0, 0.0);
         }
     }
+    counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, f)| *a += f);
     (b, caught)
 }
 
@@ -207,8 +226,9 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
     };
     let take = |kk: usize, n: f64| n + if kk == p.liquid { lost } else { 0.0 };
     let f = rx.inputs.iter().filter(|q| !p.sub.contains(&(q.0 as usize))).map(|&(kk, n)| offer(kk as usize) / (take(kk as usize, n as f64) * all)).fold(1.0, f64::min);
-    for (m, xq) in c.mol.iter_mut().zip(x) {
+    for ((m, sq), xq) in c.mol.iter_mut().zip(s.iter_mut()).zip(x) {
         b.run(chem, p, m, rx, xq * f);
+        sq.drunk = xq * f * drink;
     }
     // Its pores as open as that leaves them: the film the key liquid's vapour leaves its leaves through over the month,
     // per m² of the cell, which the ground's evaporation passes it through day by day (`World::second_film`), from the
@@ -217,6 +237,23 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
     c.film = (a.pores * taken / area) as f32;
     c.reach = (x.iter().zip(&c.rooted).map(|(xq, &r)| xq * r as f64).sum::<f64>() / all) as f32;
     x.map(|xq| xq * f * dh)
+}
+
+/// Slot `x` of cover `c`, whose lowest leaves do not pay for themselves (`Cover::full`), sheds the living cover of the
+/// layers of its canopy that do not, as a canopy drops its leaves below its compensation point (Monsi and Saeki 1953;
+/// Hirose 2005): its light falls as e^-z with the capture area z above a leaf in its patch of `patch` m², so what one
+/// more kg would store at depth z is its gain at its bottom (`Slot::gain`) times e^(y - z), y its whole depth, and the
+/// layers deeper than where that falls to its upkeep a kg, `cost` J over its built cover, pay nothing. Returns the mol of
+/// body matter shed (to its remains); its walls and its plants stay.
+fn shed(c: &mut Cover, x: usize, (s, cost): (&Slot, f64), patch: f64) -> f64 {
+    let (y, per_kg) = (s.leaf / patch, cost / s.built.max(1e-300));
+    if s.gain <= 0.0 || y <= 0.0 || per_kg <= 0.0 {
+        return 0.0;
+    }
+    let keep = ((y + (s.gain / per_kg).ln()) / y).clamp(0.0, 1.0);
+    let m = c.mol[x][MATTER].max(0.0) * (1.0 - keep);
+    c.mol[x][MATTER] -= m;
+    m
 }
 
 /// Slot `x` pays its upkeep over `dt` at `t` K by burning its fuel, then loses the share unpaid (`SPENT`), the share
@@ -230,15 +267,27 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
     // a firmer catalyst costs more).
     let cap = dec(g[LIGHT]) * dec(g[MOIST]) * chem.dh(p.light) * DAY;
     let firm = 1.0 + (chem.subs[p.liquid].melt - g[FROST] as f64).max(0.0) / ph.c_firm;
-    let active = (s.living * days * (ph.c_basal + ph.c_light * cap * firm) + ph.c_leaf * s.leaf * days) * ph.repair(g[REPAIR] as f64) * pace;
-    // Its conducting walls breathe whatever the season gives (`stand::sapwood`), at the burning's pace.
-    let cost = active * s.act + ph.c_sapwood * s.sapwood * days * pace;
+    let k = ph.repair(g[REPAIR] as f64) * pace;
+    let living = [ph.c_basal, ph.c_light * cap, ph.c_light * cap * (firm - 1.0)].map(|x| s.living * days * x * k);
+    let active = living.iter().sum::<f64>() + ph.c_leaf * s.leaf * days * k;
+    // Its conducting walls breathe whatever the season gives (`stand::sapwood`), at the burning's pace. Its fine roots,
+    // as many as the liquid it drew this month needs (`root_uptake`; the minerals come in that liquid by mass flow,
+    // Barber 1995), breathe as living cover and are built anew `root_turnover` times a year (Gill and Jackson 2000).
+    let roots = s.drunk / dt / ph.root_uptake;
+    let renew = roots * ph.root_turnover * super::build::living_cost(chem, ph, p) / w.cfg.months_per_year as f64;
+    let parts: [f64; UPKEEP_PARTS] = [living[0] * s.act, living[1] * s.act, living[2] * s.act, ph.c_leaf * s.leaf * days * k * s.act, ph.c_sapwood * s.sapwood * days * pace, ph.c_basal * roots * days * pace, renew];
+    let cost: f64 = parts.iter().sum();
     let (units, fuel) = (cost / -chem.dh(p.burn), per_input(burn, p.sub[FUEL]).unwrap_or(1.0));
     // (What it burns is worked out first: one less a share near one would lose a small fuel to rounding.) It burns no
     // more than its fuel and the gas the cell's share of its air node still offers.
     let burnt = (units * fuel).min(c.mol[x][FUEL].max(0.0)).min(b.room(p, burn) * fuel);
     let short = if units > 0.0 { 1.0 - burnt / (units * fuel) } else { 0.0 };
+    let e = p.content(chem);
+    let unburnt = budget::held(&e, &c.mol[x]);
     b.run(chem, p, &mut c.mol[x], burn, burnt / fuel);
+    // What the burning took of its content, shared out over the parts of the upkeep as they asked for it.
+    let paid = budget::held(&e, &c.mol[x]) - unburnt;
+    (0..UPKEEP_PARTS).for_each(|q| b.budget[UPKEEP + q] += if cost > 0.0 { paid * parts[q] / cost } else { 0.0 });
     // Members of a field wear out at the rate of living as a body's do, a dormant one at least at `Physics::dormant` of
     // the active rate (laws.md 6.7); below its frost gene, hardened by its dormancy, its frozen share dies (laws.md
     // 6.5).
@@ -257,10 +306,12 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
         lost.iter_mut().for_each(|l| *l *= all);
         // What dies are whole plants: each one left keeps its mass.
         c.plants[x] *= left;
+        let alive = budget::held(&e, &c.mol[x]);
         for q in 0..NP {
             let m = c.mol[x][q].max(0.0) * dies;
             (c.mol[x][q], b.dead[p.sub[q]]) = (c.mol[x][q] - m, b.dead[p.sub[q]] + m);
         }
+        b.budget[DIED] += budget::held(&e, &c.mol[x]) - alive;
     }
     (lost, cost)
 }

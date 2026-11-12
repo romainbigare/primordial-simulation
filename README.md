@@ -117,23 +117,25 @@ are still to come, and which of WebGPU and WebGL2 draws. A tape holds no ground:
 
 On the live map the Earth view draws the plant cover plant by plant from its numbers, with no classes
 (`web/src/vegetation.ts`, `web/src/canopy.ts`, `web/shaders/cover.wgsl`). With each frame the core sends, for each
-square, up to 4 kinds of cover (the slots of one starting kind joined) and of each the plants its mass makes
-(`tape/src/stands.rs`): as many a m² as the self-thinning law gives (Yoda and others 1963), as tall as the buckling
-limit lets their stems stand (McMahon 1973), each crown as wide as the ground it holds, in patches that cover as much
-of the ground as its leaves close; and its genes and state this month. A plant is drawn on one of three lattices fixed
+square, up to 4 kinds of cover (the slots of its cell) and of each its plants as the cover's law holds them
+(`tape/src/stands.rs`, laws.md 4.5): as many a m² as the slot counts, as tall as the buckling limit lets their stems
+stand (McMahon 1973), each crown as wide as the ground it holds, in patches that cover as much of the ground as its
+leaves close; the loose ground their roots need and the share of the square that holds them; and its genes and state
+this month. A plant is drawn on one of three lattices fixed
 in the world (cells of 0.1, 0.5 and 2.5 m), where its marks take a few pixels; where they take less, the same plants
-are a field of their colours with the grain their count gives, so the far and the near pictures agree. A mark picks
+are a field of their colours, drawn as crowns no smaller than the eye reads (each then a clump of plants) and far away
+as their mean, so the far and the near pictures agree. A mark picks
 its kind at its own foot from the four squares about it (blended as the map is) by the kinds' chances there, fewer
 where the ground is drier than its cell's mean as each kind's activity law says: kinds mix mark by mark across a
 square's edge, and a kind that needs wet ground gathers in the hollows. What a mark is depends on its cell alone, so
 before the map is drawn each mark in view is decided once, a texel a cell in textures of four bytes a texel, every
 number kept to the bit (`web/shaders/marks.wgsl`, `web/shaders/lib/mark.wgsl`), and each pixel reads the marks of the
 cells about it. Trees grow in stands of their kinds, patches of
-about 60 m fixed in the world that the far field draws alike. A kind roots about a tenth of its height deep (at
-least 2 cm; Schenk and Jackson 2002 for depth growing with size): where the loose ground at a point is thinner it
-thins, none from a quarter of its need down, so bare bed holds only the smallest kinds in its cracks, thin ground herbs
-and low bushes, and trees stand where it is deep; what a square's thin part does not hold stands on its deep part, so
-the square keeps its cover (`web/src/roots.ts`, near and far alike). None stands where liquid stands over its roots
+about 60 m fixed in the world that the far field draws alike. A kind's roots need the loose ground its slot says
+(`Cover::need`): where the loose ground at a point is thinner it thins, by the cover's own rule and number
+(`rooted_from`, sent with the laws' numbers), so bare bed holds only the smallest kinds in its cracks, thin ground herbs
+and low bushes, and trees stand where it is deep; what a square's thin part does not hold stands on the share that holds
+it (`Cover::rooted`), so the square keeps its cover (near and far alike). None stands where liquid stands over its roots
 (0.3 m, Jackson and others 1996). Snow buries a plant by its depth (three times the depth of the cell's frozen cover,
 settled snow against ice) against the plant's height: a herb is gone under a deep snow, a tree stands in it, its
 crown snowy on top if it keeps its leaves, bare if it sheds them, its stem and shadow kept; from afar a forest in snow

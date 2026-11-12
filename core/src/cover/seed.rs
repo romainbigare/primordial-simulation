@@ -2,6 +2,7 @@
 //! goes to, cell by cell in the order made, and always takes hold there (`lodge`): in the nearest slot of its kind, or
 //! as seedlings in a slot of its own; what lives after is the light's to decide.
 
+use super::budget::{held, DIED, PLACED, SEEDS};
 use super::{built_kg, dec, distance, Cover, Parts, APART, FUEL, MATTER, NG, NO_ROOT, NP, SLOTS, STORE, WALL, WALLS};
 use crate::chem::Chemistry;
 use crate::store::{apply, Class, Move, Node};
@@ -50,6 +51,7 @@ pub fn land(w: &mut World) {
     let Some(p) = Parts::of(&w.chem) else { return };
     let mm = p.mm(&w.chem);
     let (mut moves, mut sent) = (Vec::new(), vec![[0.0; 2]; w.life.cells.len()]);
+    let e = p.content(&w.chem);
     for from in 0..w.life.cells.len() {
         for s in std::mem::take(&mut w.life.cells[from].cover.seeds) {
             let i = s.to as usize;
@@ -57,9 +59,11 @@ pub fn land(w: &mut World) {
             (sent[from][0], sent[i][1]) = (sent[from][0] + kg, sent[i][1] + kg);
             let c = &mut w.life.cells[i].cover;
             let t = c.temp(&w.chem, &p);
+            w.counts.cover_budget[SEEDS] += held(&e, &s.mol);
             let (mol, heat) = match lodge(c, &mm, &s, &w.cfg.phys, w.mesh.cells().area()[i]) {
                 Landed::In => continue,
                 Landed::Out(m) => {
+                    w.counts.cover_budget[DIED] -= held(&e, &m);
                     let heat = ((0..NP).map(|q| m[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * t).min(c.e);
                     c.e -= heat;
                     (m, heat)
@@ -137,6 +141,7 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
         Landed::In => {}
         // The slot in deficit it took goes to the ground as remains, with its heat.
         Landed::Out(m) => {
+            w.counts.cover_budget[DIED] -= held(&p.content(&w.chem), &m);
             let q = ((0..NP).map(|q| m[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * was).min(c.e);
             c.e -= q;
             let (from, to) = (crate::store::Node::new(crate::store::Class::Cover, i), crate::store::Node::ground(i));
@@ -145,6 +150,7 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
             crate::store::apply(w, &[], &moves);
         }
     }
+    w.counts.cover_budget[PLACED] += held(&p.content(&w.chem), &mol);
     // (The cover's side is its own: the store books the outside node's.)
     w.cross((crate::store::Boundary::Outside, crate::store::Node::new(crate::store::Class::Cover, i)), (0..NP).map(|q| (p.sub[q], mol[q])), heat);
     w.life.cells[i].cover.mark = w.light[i];

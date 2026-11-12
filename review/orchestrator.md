@@ -121,7 +121,13 @@ The key numbers' references will move with this law (plants give the air its vap
    `Cover`), then is measured on a Wide island.
 3. Wet and dry sides: a law for the mean wind's momentum. The strip of the planet with land and life (it is an
    all-liquid, lifeless planet: its air is warmer and its heat-absorbing gas higher than a globe's with life).
-4. Channels that lay down their load (plains, marsh, deltas); ice that cuts valleys; the exact solve of the surface's
+4. **The air and sunlight** (the owner's word: build it, after the cover's law, the page's plants and the rivers are
+   on main). The clear air takes nothing from sunlight and the clouds reflect about 5% of it
+   (`flow/air/cells.rs`, `exchange::cloud`): the ground at 38° gets about 1.6 times Earth's (284 against about 180
+   W/m²), so a warm wet stand builds 2 to 4 kg of dry matter a year where real ones build 0.5 to 2.5. A law for what
+   clear air scatters and absorbs and for the cloud's share, with the globe's climate test as its guard; the air's
+   heat-absorbing side then has to hold the same temperature with less sun.
+5. Channels that lay down their load (plains, marsh, deltas); ice that cuts valleys; the exact solve of the surface's
    step by pieces; the True view's water.
 
 ## 6. The live world for the owner

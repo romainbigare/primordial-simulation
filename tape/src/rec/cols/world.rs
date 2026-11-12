@@ -73,6 +73,10 @@ impl Recorder {
         for (cause, &x) in CAUSES.iter().zip(&self.year.cover_lost) {
             row.push(format!("cover_died_{cause}"), "kg/yr", x);
         }
+        // The flows of the cover's budget in the year, + into the cover (`cover::BUDGET`).
+        for (flow, &x) in pcore::cover::BUDGET.iter().zip(&self.year.cover_budget) {
+            row.push(format!("cover_budget_{flow}"), "J/yr", x);
+        }
         // The cover's mass per m² on land: median and largest.
         let mut cover: Vec<f64> = land.iter().map(|&i| c.plants[i]).collect();
         cover.sort_by(|a, b| a.total_cmp(b));

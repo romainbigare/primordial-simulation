@@ -41,39 +41,52 @@ fn start() -> (pcore::World, usize) {
     (w, i)
 }
 
-/// 0.1 kg per m² of the starting cover on one cell grows over a year of light (it builds from its light reaction and
-/// the soil's minerals, and spreads seeds), and every element and the energy are kept.
+/// 0.1 kg per m² of the starting cover on one cell grows over a year of light: it builds from its light reaction and
+/// the soil's minerals, and spreads seeds. What the cover's parts hold as fuel (`cover::content`) changes by exactly the
+/// flows its budget books (`cover::BUDGET`): what its light reaction stored, less each part of its upkeep, the work of
+/// building, the layers it shed, what died and what its roots gave its ground; and every element and the energy of
+/// the world are kept.
 #[test]
-fn the_cover_grows_in_light_and_keeps_the_books() {
+fn the_cover_grows_by_what_its_budget_books() {
     let (mut w, i) = start();
     let books = Books::now(&w);
     assert!(cover::place(&mut w, i, genes(), 0, 0.1));
-    let kg0 = cover_kg(&w);
+    w.take_counters();
+    let (kg0, e0) = (cover_kg(&w), cover::content(&w));
     for _ in 0..12 {
         pcore::step(&mut w);
     }
-    let kg = cover_kg(&w);
-    println!("cover {kg0:.3e} kg, a year later {kg:.3e} kg in {} slots", cover::sums(&w)[0].slots);
-    assert!(kg > 2.0 * kg0, "the cover did not grow: {kg0} then {kg}");
+    let (kg, e) = (cover_kg(&w), cover::content(&w));
+    let flows = w.take_counters().cover_budget;
+    for (name, f) in cover::BUDGET.iter().zip(&flows) {
+        println!("{name:12} {f:+.4e} J");
+    }
+    let booked: f64 = flows.iter().sum();
+    println!("cover {kg0:.3e} kg, a year later {kg:.3e} kg; content {e0:.6e} J, a year later {e:.6e} J, booked {booked:+.6e} J");
+    assert!(kg > kg0, "the cover did not grow: {kg0} then {kg}");
+    let scale = flows.iter().map(|f| f.abs()).sum::<f64>().max(e0);
+    assert!((e - e0 - booked).abs() <= 1e-9 * scale, "the cover's content moved by {} J, its budget booked {booked} J", e - e0);
     assert_eq!(pcore::check::broken(&w), None);
     books.assert_kept(&w, 1e-9);
 }
 
 /// A cover far thicker than its light can keep (20 kg per m², a capture area 100 times its ground) does not thicken:
-/// one more kg would not pay its upkeep at the bottom of its layer, so all it builds leaves as seeds, and over a
-/// summer its cell holds less than it started with; the books are kept.
+/// one more kg would not pay its upkeep at the bottom of its layer, so all it builds leaves as seeds, and it sheds the
+/// layers that do not pay (`grow::shed`), so over a summer its cell holds less than it started with and its capture area
+/// falls to under half; the books are kept.
 #[test]
 fn a_thick_cover_does_not_thicken() {
     let (mut w, i) = start();
     let books = Books::now(&w);
     assert!(cover::place(&mut w, i, genes(), 0, 20.0));
-    let kg0 = cover::per_m2(&w, cover::Cover::kg)[i];
+    let (kg0, leaf0) = (cover::per_m2(&w, cover::Cover::kg)[i], cover::per_m2(&w, cover::Cover::leaf)[i]);
     for _ in 0..6 {
         pcore::step(&mut w);
     }
-    let kg = cover::per_m2(&w, cover::Cover::kg)[i];
-    println!("cover on its cell {kg0:.2} kg/m2, six months later {kg:.2} kg/m2");
+    let (kg, leaf) = (cover::per_m2(&w, cover::Cover::kg)[i], cover::per_m2(&w, cover::Cover::leaf)[i]);
+    println!("cover on its cell {kg0:.2} kg/m2 (capture area {leaf0:.1}), six months later {kg:.2} kg/m2 ({leaf:.1})");
     assert!(kg < kg0, "the thick cover thickened: {kg0} then {kg}");
+    assert!(leaf < 0.5 * leaf0, "the thick cover kept its layers that do not pay: {leaf0} then {leaf}");
     books.assert_kept(&w, 1e-9);
 }
 
