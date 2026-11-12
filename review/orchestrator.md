@@ -128,8 +128,11 @@ the start of every world.
 ## 5. What to do next, in order
 
 1. **Rivers and stones** to main when the pictures pass (merge with the page's plants).
-2. **The sorted start** as the start of every world if the owner says yes (it then replaces the random start; no
-   switch stays on main).
+2. **The sorted start** as the start of every world (the owner's word: yes; in work: it replaces the random start, no
+   switch stays on main; the key numbers' references move with it).
+   Not run since the cover's law, by the owner's word "skip these slow tests just this once": the two slow learning
+   tests of `core/tests/choose.rs`, the slow test of `lots.rs` and of `tape/tests/scale.rs`. Run them on a quiet
+   machine before the next change of the laws for bodies.
 3. Wet and dry sides: a law for the mean wind's momentum. The strip of the planet with land and life (it is an
    all-liquid, lifeless planet: its air is warmer and its heat-absorbing gas higher than a globe's with life).
 4. **The air and sunlight** (the owner's word: build it, after the cover's law, the page's plants and the rivers are
