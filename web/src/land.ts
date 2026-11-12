@@ -17,7 +17,7 @@ export interface SamplesOf { across: number; down: number; depth: number }
 
 /** Planes of four numbers a square of the table (land.wgsl `GROUND` to `VIEW`): the core's (`TileMeta.row` numbers), then
  * the page's three. */
-const PLANES = 7;
+const PLANES = 6;
 /** The ground's slope at the view's depth is read as a square's slope (for its shading and its rock) times its texel's
  * size over a square's to this power, and no less than `SLOPE_LEAST` times it: the slope over a short run is steeper
  * than over a long one, and the map shades and colours slopes as they look from afar. */
@@ -78,9 +78,9 @@ export class Land {
     this.melt = rows[0];
     for (let i = 0; i < n; i++) {
       for (let k = 0; k < Math.ceil(row / 4); k++) put(k, i, Array.from(rows.subarray(1 + row * i + 4 * k, 1 + row * i + Math.min(4 * k + 4, row))));
-      put(4, i, [ground[0][i] / 255, ground[1][i] / 255, ground[2][i] / 255, sea[i]]);
-      put(5, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, 0]);
-      put(6, i, [shown ? shown[i] / 255 : 0, worn ? worn[i] / 255 : 0, 0, 0]);
+      put(3, i, [ground[0][i] / 255, ground[1][i] / 255, ground[2][i] / 255, sea[i]]);
+      put(4, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, 0]);
+      put(5, i, [shown ? shown[i] / 255 : 0, worn ? worn[i] / 255 : 0, 0, 0]);
     }
     this.data = data;
     this.due = true;
