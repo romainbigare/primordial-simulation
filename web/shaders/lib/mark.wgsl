@@ -138,7 +138,14 @@ fn plant_of(l: i32, sq: vec2i, t: i32, c: vec2f, size: f32, r: vec3f, reach: f32
   // A tree's form, a bush's flowers.
   var shape = vec4f(0.0);
   var petal = vec4f(0.0);
-  if (to.w == TREE) { shape = kind(SHAPE + t, sq); }
+  if (to.w == TREE) {
+    shape = kind(SHAPE + t, sq);
+    // A mark of the trees' lattice that stands for several plants is their cluster, a crown of knots, each a plant's
+    // crown (crown.wgsl `knots`): its kind's form fades into the round crown as the plants pass one, and the cluster
+    // is drawn surely from two.
+    let cluster = select(0.0, clamp(shape.z - 1.0, 0.0, 1.0), l == STANDS);
+    if (cluster > 0.5) { shape = vec4f(f32(LOBED), 2.0 * cluster - 1.0, 0.0, 0.0); } else { shape.y *= 1.0 - 2.0 * cluster; }
+  }
   if (to.w == BUSH) { petal = kind(PETAL + t, sq); }
   // Its own size: the plants of a stand differ, by up to `SIZES` either way of its kind's.
   let grow = 1.0 + SIZES * (2.0 * size - 1.0);
