@@ -30,15 +30,17 @@ pub struct Plants {
     pub crown: f64,
 }
 
-/// The plants of a stand of `kg` built cover, `leaf` capture area and `per_m2` plants per m², of which `walls` is the
-/// share its walls make, of walls of density `rho` kg/m³. Its crowns cover the share 1 - e^(-leaf / `CLOSE_LAI`) of the
-/// ground, in patches where they close, each plant's crown the ground it holds there; its stem and height are the
-/// cover's law for a plant of its mass (`cover::stem`, `cover::height`).
-pub fn plants(ph: &Physics, (kg, leaf, per_m2): (f64, f64, f64), walls: f64, rho: f64) -> Plants {
-    if kg <= 0.0 || leaf <= 0.0 || per_m2 <= 0.0 {
+/// The plants of a stand of `kg` built cover, `leaf` capture area and `per_m2` plants per m² of its cell, standing on
+/// the share `rooted` of it, of which `walls` is the share its walls make, of walls of density `rho` kg/m³. A kind
+/// stands on the share of its cell that holds its roots alone, its capture area a layer of leaf / rooted there (laws.md
+/// 4.5): its crowns cover the share 1 - e^(-(leaf / rooted) / `CLOSE_LAI`) of that ground, in patches where they close,
+/// each plant's crown the ground it holds there; its stem and height are the cover's law for a plant of its mass
+/// (`cover::stem`, `cover::height`).
+pub fn plants(ph: &Physics, (kg, leaf, per_m2): (f64, f64, f64), rooted: f64, walls: f64, rho: f64) -> Plants {
+    if kg <= 0.0 || leaf <= 0.0 || per_m2 <= 0.0 || rooted <= 0.0 {
         return Plants::default();
     }
-    let cover = -(-leaf / CLOSE_LAI).exp_m1();
+    let cover = -rooted * (-leaf / (rooted * CLOSE_LAI)).exp_m1();
     let (mass, inside) = (kg / per_m2, per_m2 / cover);
     let width = (1.0 / (std::f64::consts::FRAC_PI_4 * inside)).sqrt();
     let (stem, height) = (cover::stem(ph, mass, walls, rho), cover::height(ph, mass, walls, rho));
@@ -67,10 +69,10 @@ struct Ground {
 fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND_ROW] {
     let (built, genes) = (c.built(mm, x), c.genes[x]);
     let walls = c.walls(mm, x) / built.max(1e-300);
-    let p = plants(ph, (built / g.area, c.leaf(mm, x) / g.area, c.plants[x] / g.area), walls, g.rho);
+    let (rooted, need) = if c.need[x] > 0.0 { (c.rooted[x], c.need[x]) } else { (1.0, 0.0) };
+    let p = plants(ph, (built / g.area, c.leaf(mm, x) / g.area, c.plants[x] / g.area), rooted as f64, walls, g.rho);
     let act = cover::activity(ph, &genes, g.wet);
     let reserve = dec(genes[STORE]) * built;
-    let (rooted, need) = if c.need[x] > 0.0 { (c.rooted[x], c.need[x]) } else { (1.0, 0.0) };
     let gene = |k: usize| genes[k] as f64;
     [
         c.root[x] as f64,
