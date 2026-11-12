@@ -1,6 +1,9 @@
 // uses: draw.wgsl water.wgsl style.wgsl crag.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl cover_field.wgsl
+// least metres a pixel: 0.5 1 3
 // The live map in view: at each pixel of the screen the ground from its tiles and the state from the cells' table
-// (land.wgsl), in the view's colours.
+// (land.wgsl), in the view's colours. Made once more for draws whose pixels take at least 0.5 m, 1 m and 3 m
+// (web/shade, draw.wgsl `LEAST_E`): seen from afar, the detail of the ground and the plants that cannot show is
+// compiled out.
 
 // A channel shows as a line of at least `LINE_PX` css pixels once its discharge passes the discharge that shows in the
 // view (`land.time.w` times the metres a css pixel takes: tape/src/ground/channels.rs `SHOW_M`), as a map draws its

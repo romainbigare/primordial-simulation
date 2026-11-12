@@ -48,7 +48,11 @@ for the inspect panel. Avatars, the lines of latitude, the outlines and the scal
 While a frame takes the card longer than 16 ms, the map is drawn at fewer pixels (down to a quarter along each side)
 and stretched onto the screen, the same picture, softer; once the view rests it is drawn again at the screen's own
 pixels, a tile a frame, and shown when whole. The page never waits for the card: what it reads back (the classes, the
-colours under the avatars) comes a frame or so later.
+colours under the avatars) comes a frame or so later. Seen from afar, most of the drawing's detail is smaller than a
+pixel and shows nothing: the build makes the live map's program once more for draws whose pixels take at least 0.5 m,
+1 m and 3 m, with that detail compiled out (`web/shade`, `LEAST_E` in `web/shaders/lib/draw.wgsl`), and the page draws
+with the one made for the largest no more than its pixels take (`web/src/gpu.ts` `seenFrom`). The picture is the same
+to the bit; the card runs and holds less code.
 
 The live viewer draws every zoom from two things (`web/src/land.ts`, `web/shaders/land.wgsl`). **The ground's tiles**
 (`tape::Ground`) never change: each holds 256 x 256 texels of a depth, from the depth at which one tile holds the
