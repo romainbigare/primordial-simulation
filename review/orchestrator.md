@@ -294,10 +294,21 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     9.428), told to the owner. `the_long_step_keeps_the_climate` holds the river cells' summed flux now, not their
     count (told to the owner), and **fails on it by its own rule: +1.32% against 0.76%** (the 15-day step
     evaporates about 0.7% less on land): this alone holds the package off main.
-  - In work: the surface's step mended at its cause (the planned form: the balance solved exactly by pieces), on a
-    branch `surface-step` from `wip/air-heat`, by a new helper; scratch `scratchpad/air2/`. Its gate: the long
-    step's test passes with nothing widened; then the 30-day step measured (one air step a month would halve the
-    air's work: the orchestrator decides), the references set once more, and the package goes to main whole.
+  - The cause, measured (`scratchpad/air2/numbers/`): the rain of a 15-day step lands as one pulse at its end, so the
+    ground dries for the whole step and the pulse pushes more past field capacity (land runoff +0.90%, evaporation
+    -0.67%). With the step's rain spread in the bucket the runoff is off by +0.16%. The river cells' flux adds a
+    threshold on top: one cell of seed 3 at the floor adds about +1.2% alone.
+  - Decided: no second pass of the air and no cloud of the step itself (the air's cost may not double);
+    `AIR_STEP_DAYS` stays 15 (one step a month moves the warmest month by +0.90 K); the balance solved exactly by
+    pieces stays parked on the local branch `surface-exact` (31eb1d1: right for the temperature, but it raises the
+    long step's water cycle by 0.3 to 0.4%).
+  - In work, on the branch `surface-step` (ec2f531, main merged in, `SNAPSHOT_VERSION` 137), by the same helper;
+    scratch `scratchpad/air2/`: (1) `snapshot_round_trip_at_every_month` fails after the merge (a cell fully under
+    liquid keeps about 1e-10 J in its empty land part, and a loaded world steps it differently): its cause mended;
+    (2) the step's rain lands in the bucket through the step, in one pass; (3) `daily.rs` gives `rain_air` the
+    ratio, not rain times ratio; (4) the long step's test may hold the land's runoff (`runoff_sea`) in place of the
+    river cells' flux, only if the law before the mend still fails it. Then the globe, the cost, the references
+    set once more, pictures, and the package goes to main whole.
   - Open, for a later package: on an island in the planet's air the low liquid falls 6.4 mm a year (vapour out
     through the open edges 0.162 m a year against 0.158 in): the low liquid should be open to the planet's at the
     map's edges, its level held. No cloud law and no law of the liquid's reflectance without the orchestrator's
