@@ -43,8 +43,11 @@ roadmap are the present.
   `series.csv` but the `ms_*` columns.
 - Work on the session's branch and push it freely. Push to `main` only as a fast-forward of a commit whose gate
   passed: `git fetch -q origin main && git merge-base --is-ancestor origin/main HEAD && git push origin HEAD:main`.
-- Worktrees and scratch files die with the container. Anything worth keeping is merged or pushed before the session
-  ends.
+- Worktrees and scratch files die with the container, and the container restarts without warning (three times in
+  one day): tell every helper to commit its work in progress early, and push its branch to a `wip/` name as soon as
+  it holds something. Anything worth keeping is merged or pushed before the session ends.
+- When the helpers of the session's own model meet their usage limit, start them with `model: "opus"`.
+- Never delete scratch folders a running helper may read (its scripts live there).
 
 ## 3. The gate
 
@@ -74,7 +77,7 @@ laws that moves the world on purpose, in a commit of its own, and tell the owner
 (`space/mantle.rs`); water on one network, bodies full at the start; rain that drifts; plants from their numbers; the
 Earth view's first style; the core's first speed pass; the page's world waiting for its frame.
 
-**Also on main since** (the work branch and main are the same commit; fast suite 209 passed, clippy clean, the slow
+**Also on main since** (the work branch and main are the same commit; fast suite 213 passed, clippy clean, the slow
 tests of `tape/tests/ranges` pass):
 - **The new ground** (roadmap section 11): a range, hills and a plain on one island (`terrain::rise`), a coast drowned
   after a low stand of 100 m, five makes of bed in folded layers (`space/strata.rs`); `SNAPSHOT_VERSION` 122. With it:
@@ -169,56 +172,26 @@ of the made ground 2 to 4 km long (the cause is in how the terrain is made, not 
 shore runs straight for 200 m (cause not found; look at the samples' heights along it first); the band's turn up a
 mouth is slight, hardly seen at the sea; the foam's broken lines are short soft dashes, and sheltered coves get foam
 (no number for shelter); thin tributaries seen from afar run nearly straight; bends come in between the 500 m and
-200 m bars; the pan frame draws a river a little wide. In work (a new drawing helper, same worktree): dark-red specks
-in closed forest at the 200 m bar, blocky dark patches at the 2 km bar, small plants and flowers drawn as dots.
+200 m bars; the pan frame draws a river a little wide. Not mended: dark-red specks in closed forest at the 200 m
+bar, blocky dark patches at the 2 km bar (two of the commits on `wip/lakes` are about them).
 
 **The frame's cost in software says how much code a program holds, not what a pixel runs** (a branch never taken
 costs the same as one that runs; code removed at build time is what saves). The largest share is the sea ice
 (`lib/ice.wgsl`): without it a frame costs 28 to 45% less. The next cut: a program without ice when no cell holds
 ice on water. A real phone is not measured.
 
-**In work:** the air and sunlight (the cover's helper, branch
-`wip/air-light`, not on main): S1 gases absorb sunlight (`sw_abs`, `sw_sat`, `radiation::Column`, one pass down and
-one up), S2 the clear air scatters (`scatter`), both committed with their tests; the lifeless globe then absorbs 189
-W/m² at the surface (243 before, Earth 160) and 66 in the air, at 288.3 K. Alone they make winters too cold (the key
-world's land 284.6 K, swing 16.3 K, rain 0.98 m a year; the frost test's scene and the long step's rivers fail)
-because the air's back radiation is too low (276 against Earth's 342). A grey column cannot hold both the back
-radiation (Prata 1996) and the forcing of doubling the absorber (3.7 W/m²; today's is 9.4): so S5 (committed) is
-heat light in three bands with each absorber at its own height (`radiation::Heat`, `chem/planck.rs`; back radiation
-0.828 of the ground's light at 2.5 cm of vapour against Prata's 0.817, doubling forces 3.36 W/m², about +1% of a
-step). With the honest heat law the globe goes to 296.6 K with 70 kg/m² of vapour and no ice: the old weak
-greenhouse hid that the planet absorbs 256 W/m² of sunlight (Earth 239: clouds reflect too little) and that the
-air's nodes sit near saturation (38 kg/m² at 288 K, Earth 25). So S3, in work, comes before the merge: humidity
-inside a node (the saturated share is the cloud's share of the sky, Sundqvist 1989; condensation in that share
-only) and the cloud's light from its liquid's path. S1 + S2 + S5 + S3 merge together, the references move once.
-The air's work lives in the worktree `.claude/worktrees/agent-ab92bfed03ac3c12c` (branch `air-light`); its first
-helper was lost in a restart of the machine with S3a half written and not committed (kept, and copied to the scratch
-folder `S3a-wip/`); a new helper has taken it on with the probes in the scratchpad (`rad_toggle.py`, `radprobe.rs`,
-`coverlaw/S5brun/`). Helpers commit work in progress early: the machine restarts without warning. A proposal for the plants'
-package: two bands of sunlight (a usable one, a near-infrared one) with `light_yield` on the usable light. Dry matter
-in the warm south stays 2 to 4 kg a year with Earth-like light: the excess is in the cover's law.
+**On main the air is still grey**: the clear air takes nothing from sunlight and the clouds reflect about 5% of it
+(`flow/air/cells.rs`, `exchange::cloud`), so the ground at 38° gets about 1.6 times Earth's sunlight (284 against
+about 180 W/m²) and a warm wet stand builds 2 to 4 kg of dry matter a year where real ones build 0.5 to 2.5.
 
-**The sorted start is parked** (`wip/nursery-start`, built on 32e9cb4c: every world's cover placed by the nursery, the
-random placing deleted, `SNAPSHOT_VERSION` 128, a fast test of the garden, a status line on the page, 1 to 1.9 s in
-the browser). It is not on main because: the page loses its look (one blue-green, a bare floor with dots where main
-has a sward, a mosaic of 2 km squares where classes meet); some warm wet rows start bare at year 3 (the garden reads
-the bare year's dry air); the eaters collapse in the key world (cover 11.49 against 9.505, eaters 5.38 against 8.417
-log10 kg); `the_sleep_of_change_keeps_the_chemistry` and `the_long_step_keeps_the_climate` fail because each run sorts
-its own start (they must start from one placed world); stands of 24 to 41 kg/m² building 4 to 7.8 kg a year in the
-south and 0.3 m of liquid a year through leaves in a rainless far north. Take it up again on the mended light.
-
-## 5. What to do next, in order
-
-The owner's word for the end of this working session: mend the lakes' two faults (blocks of water beside the outlet
-of a small summit lake of seed 1 at the 200 m bar, since the blend of the pond's choice between samples; a shore in
-steps at the 5 m bar); the air and sunlight was to follow with its ice mended, which this session did not reach (below); take up the sorted start,
-mend what kept it off main and bring it to main ("push everything to main when ready"); then finalise this file and
-stop.
-
-**The air and sunlight stays on `wip/air-light`, not merged** (S1, S2, S5, S3a, S3b; the work branch merged in; the
-full gate passes; the lifeless globe: the surface absorbs 162.5 W/m², the planet reflects 108, back light 355, ground
-290.8 K, vapour 38.5 kg/m², cloud share 0.37). **What holds it off main is the ice:** the globe holds none at its
-poles and the page's default island no sea ice and no summer snow, where the owner wants an ice line.
+**The air and sunlight is parked on `wip/air-light`** (9ac418e3, not on main; main is merged in, the full gate
+passes, `SNAPSHOT_VERSION` 131 there). It holds: gases absorb sunlight (`sw_abs`, `sw_sat`, `radiation::Column`), the
+clear air scatters (`scatter`), heat light in three bands with each absorber at its own height (`radiation::Heat`,
+`chem/planck.rs`), humidity inside a node (the saturated share is the cloud's share of the sky, Sundqvist 1989), the
+cloud's light from its liquid's path. The lifeless globe: the surface absorbs 162.5 W/m² (Earth 160), the planet
+reflects 108, back light 355, ground 290.8 K, vapour 38.5 kg/m², cloud share 0.37. **What holds it off main is the
+ice:** the globe holds none at its poles and the page's default island no sea ice and no summer snow, where the owner
+wants an ice line.
 - The cause, measured: the pole absorbs 142 W/m² of sunlight (Earth about 80), the planet's albedo is 0.23 at the
   pole and 0.34 at the equator (Earth: 0.55 to 0.6 and 0.25), equator to pole is 11 K (Earth 40, main 26). Too few
   clouds at the pole (0.21 of the sky, 0.10 to 0.16 in summer; Earth 0.7, the summer the cloudiest) and they hold
@@ -229,38 +202,70 @@ poles and the page's default island no sea ice and no summer snow, where the own
 - Tried on paper and failed: the node's column read as layers with Quaas's critical humidity by height and overlap by
   a decorrelation depth: the cover goes to 1.00 everywhere (the upper air passes the critical humidity unless the
   vapour's profile is capped aloft) and the pole's sunlight falls by 2 W/m² only.
-- **The missing law** (next session, with a paper check first): a cloud's liquid made by cooling from below, in the
-  near-ground air over a cold surface (low cloud and fog that hold their liquid without rain), where S3b's cloud has
-  only the liquid its node's rain leaves in a cloud's life. A warm sea, no low cloud, much sun and a warm sea hold
-  each other up. Small and anchored, not built: the liquid's reflectance by the sun's height (Fresnel; Taylor et
-  al. 1996), 5 to 10 W/m² at the pole; it needs a reflectance for the direct beam and one for diffuse light
-  through `radiation.rs`, `land.rs` (`column`, `reflectance`) and `surf.rs`.
+- **The missing law**: a cloud's liquid made by cooling from below, in the near-ground air over a cold surface (low
+  cloud and fog that hold their liquid without rain), where the package's cloud has only the liquid its node's rain
+  leaves in a cloud's life. A warm sea, no low cloud and much sun hold each other up. Small and anchored, not built:
+  the liquid's reflectance by the sun's height (Fresnel; Taylor et al. 1996), 5 to 10 W/m² at the pole; it needs a
+  reflectance for the direct beam and one for diffuse light through `radiation.rs`, `land.rs` (`column`,
+  `reflectance`) and `surf.rs`.
 - Other facts for the merge: the long step's extra runoff of about 1% against 1-day steps is older than the package
   (main: +0.5 to +0.8% through rain) and moved to evaporation, so `the_long_step_keeps_the_climate` fails on its
   count of rivers (cells within 3% of the floor); the references move (land 288.18 K, absorber 366 ppm; the cover on
-  the key island 7.86 log10 kg with eaters, 9.43 without: the eaters strip a cover that grows 3% a year where it
-  grew 9%, and the eaters do not count for now); plants answer Earth-like light by growing about 2.3 times slower:
-  forests thinner at year 30, as heavy by year 100; a step costs +6% (globe) to +15% (Wide island).
+  the key island 9.43 log10 kg without eaters); plants answer Earth-like light by growing about 2.3 times slower:
+  forests thinner at year 30, as heavy by year 100; a step costs +6% (globe) to +15% (Wide island). A proposal for
+  the plants' package: two bands of sunlight (a usable one, a near-infrared one) with `light_yield` on the usable
+  light.
 - Scripts and tables: branch `tools/checks`, folder `tools/air/` (the radiation budget's probe `rad_toggle5.py` with
   `radprobe4.rs`, the globe by latitude `globeprobe.rs` with `polar_toggle.py`, the paper check `paper_clouds.py`,
   the bands' fit `cw4.py`; the globe's states in `globe/`, the tables in `numbers/`).
 
-1. **The air and sunlight** to main (S1 + S2 + S5 together, see section 4); the rivers' small faults above after it.
-2. **The air and sunlight** (item 4 below) comes first now; then **the sorted start** again (parked, see section 4:
-   classes that blend, a garden whose air feels its film, tests that start from one placed world, kinds that draw
-   with variety and a sward).
-   Not run since the cover's law, by the owner's word "skip these slow tests just this once": the two slow learning
+**The sorted start is parked on `wip/sorted-start`** (33c1e353, not on main; main is merged in, the fast gate
+passes, `SNAPSHOT_VERSION` 128 there). It holds: every world's cover placed by the nursery
+(`worldgen/src/life/nursery/`), the random placing deleted; a garden grows the race's champions and the hand-made
+kinds sown together (`Class::grow`); a cell takes every class's stand weighted by 1/d² of its distance in climate
+(Shepard 1968), so no 2 km squares; a status line on the page, 1.5 to 1.7 s of sorting; the two slow tests compare
+runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the page a hardy kind's hue is spread
+(`HUE_PER_FROST`) and flowers cover a share of a crown (`PETAL_SHARE`). **What holds it off main:**
+- **The look** (the owner judges by pictures; pairs in `tools/sorted/shots/` on `tools/checks`): an open woodland of
+  pale khaki and olive on a straw or grey-blue floor with flower dots, a mottled fitted view with a yellow north,
+  where main shows a vivid green forest on a green sward.
+- **The world moves**: the cover is 11.26 log10 kg (reference 9.505), it draws the heat-absorbing gas down to 223 ppm
+  (326) and cools the land to 287.5 K (289.19); the far north is forest (15 to 24 kg/m² at year 100, bare on main)
+  and the page's northern ice at year 30 is gone; southern stands hold 37 to 70 kg/m² at year 30 (main 7 to 32).
+  `the_key_numbers_stay_in_their_ranges` fails on temperature, gas and cover; `the_long_step_keeps_the_climate`
+  fails on `air_3` (-1.21e-5 against 9.18e-6: the gas falls fast and the long and short air steps differ more).
+- **The kinds are extreme**: the races draw from the genes' whole range and their winners are kinds like a shrub
+  hardy to 245 K, made for dry ground, with 89% of what it builds to seeds and walls 20 times its matter, on a fifth
+  of the island. The gardens grow stands of about 200 years. The garden still reads the bare year's dry air.
+- The orchestrator's reading, not measured: main's random start is steady from year 100 at 13 to 32 kg/m² in the
+  south, the nursery places 37 to 70, so a garden is not the world (no neighbours' air, a class's mean ground). The
+  first step is a run of main to year 300 beside a sorted one: if they do not meet, the garden is at fault, not the
+  page's colours. Do not turn the page's palette to hide it.
+- Probes and tables: `tools/sorted/` on `tools/checks` (`probe.rs` gives rows by latitude; `rows_seed1.txt`,
+  `rows_seed2.txt`, `slow_ranges.txt`).
+
+## 5. What to do next, in order
+
+The session that wrote this ended by the owner's word. On main: the lakes' mend. Not reached: the air and sunlight
+with its ice, and the sorted start with its look (both parked with their notes in section 4, both asked for by the
+owner: "push everything to main when ready").
+
+1. **The air's low cloud, then the air and sunlight to main.** A paper check first (does a low cloud made by cooling
+   from below give the pole Earth's cloud share and liquid, and an ice line, without turning a number?), then the
+   law on `wip/air-light`, then the whole package in one merge: the references move once, tell the owner each value.
+2. **The sorted start**, after the air (the light changes how fast every kind grows, so the gardens change): first
+   the run to year 300 of section 4, then the nursery's kinds and stands, then the look. It goes to main only when
+   its pictures are at least as good as main's.
+3. **The four commits on small plants** (`wip/lakes`): review each with pairs; take what looks better. With them or
+   after: the dark-red specks at the 200 m bar and the blocky dark patches at the 2 km bar.
+4. **Small faults of the shores** (section 4): the straight shores of the made ground; the pale band round a summit
+   pond if the owner minds it. The page's cut: a program without ice when no cell holds ice on water.
+5. Not run since the cover's law, by the owner's word "skip these slow tests just this once": the two slow learning
    tests of `core/tests/choose.rs`, the slow test of `lots.rs` and of `tape/tests/scale.rs`. Run them on a quiet
    machine before the next change of the laws for bodies.
-3. Wet and dry sides: a law for the mean wind's momentum. The strip of the planet with land and life (it is an
+6. Wet and dry sides: a law for the mean wind's momentum. The strip of the planet with land and life (it is an
    all-liquid, lifeless planet: its air is warmer and its heat-absorbing gas higher than a globe's with life).
-4. **The air and sunlight** (the owner's word: build it, after the cover's law, the page's plants and the rivers are
-   on main). The clear air takes nothing from sunlight and the clouds reflect about 5% of it
-   (`flow/air/cells.rs`, `exchange::cloud`): the ground at 38° gets about 1.6 times Earth's (284 against about 180
-   W/m²), so a warm wet stand builds 2 to 4 kg of dry matter a year where real ones build 0.5 to 2.5. A law for what
-   clear air scatters and absorbs and for the cloud's share, with the globe's climate test as its guard; the air's
-   heat-absorbing side then has to hold the same temperature with less sun.
-5. Channels that lay down their load (plains, marsh, deltas). The owner asked for wide deltas at some mouths, and
+7. Channels that lay down their load (plains, marsh, deltas). The owner asked for wide deltas at some mouths, and
    agreed to wait if it is a big change: it is. A true delta's size is the load that reached the mouth over the depth
    of the water there (Gilbert 1885; Galloway 1975), so it shows where a river of much load meets shallow calm water
    and not elsewhere. Today the made ground holds a fan under water at a mouth (`space::shelf`), the running world's
@@ -271,8 +276,8 @@ poles and the page's default island no sea ice and no summer snow, where the own
 
 ## 6. The live world for the owner
 
-The owner tests an artifact: https://claude.ai/artifact/GKxSQCDfgBAwwL2B8RvEuC (private to them). To update it after
-a push to main:
+The owner tests an artifact: https://claude.ai/artifact/GKxSQCDfgBAwwL2B8RvEuC (private to them). It shows main
+(its Version 43, "Lakes without blocks"). To update it after a push to main:
 1. `cd web && npm run build && npm run wasm` (makes `web/dist/index.html` and `web/dist/ew.wasm`).
 2. Copy `ew.wasm` to a scratch folder, and the page with these removed (regexes, case-insensitive, with `\b` after
    the tag names): the doctype, the `html`, `head` and `body` tags, the `meta charset` and `meta viewport` tags, the
@@ -281,8 +286,9 @@ a push to main:
    `files: {"ew.wasm": {"from": <the copied wasm>, "contentType": "application/wasm"}}`. If it refuses because the
    published version was not read in this session, read it first (`action: read`), then publish.
 
-To look at the page before publishing: serve `web/dist` (`python3 -m http.server PORT`) and drive it with Playwright
-(`require('/opt/node22/lib/node_modules/playwright')`, `chromium.launch()` with no options): open
+To look at the page before publishing: serve it (`python3 -m http.server PORT --directory <the full path of
+web/dist>`) and drive it with Playwright (`require('/opt/node22/lib/node_modules/playwright')`, `chromium.launch()`
+with no options): open
 `index.html?seed=1&size=22`, wait 6 s, click the last button of `#speeds`, wait, click `#play` to pause, wait 6 s,
 screenshot `#map`; to zoom, move the mouse over `#cv` and send wheel steps of -600, then wait 12 s for the tiles. Count
 console errors (0 expected; ignore "GPU stall" lines) and read `.stats`. Pause before every picture. The headless
@@ -299,14 +305,21 @@ browser draws in software, so its frames per second mean nothing; the world's pa
   against short steps (laws.md 1.1 says by how much).
 - **The page's world waits for its frame**, so the frame's cost is the world's pace.
 - Animals are out of every run and test for now, by the owner's word.
+- **Asked of the owner, no answer yet:** do the summit lake of seed 1 at the 200 m bar and a lake's shore at the 5 m
+  bar look right on the live page; does the pale rounded band round a summit lake bother them; does zooming and
+  panning feel slower on their phone.
 
 ## 8. Branches kept for the next session
 
-The owner's word: no work lives only on one machine. Push a helper's branch as soon as it holds something.
-- `experiment/climate-bands`: merged to main; kept as it was pushed.
-- `experiment/sorted-start`: the sorted start (`worldgen/src/life/nursery/`). Its first commit, the cover's month
-  reading one view (`cover::Around`), is on the work branch.
-- `wip/drawing`, `wip/cover-law`, `wip/cover-costs`, `wip/page-cover`, `wip/rivers` (all merged), `wip/cover-nursery-g2` and
-  `wip/nursery-start` (the sorted start, parked, not merged): the helpers' work, pushed as it grows.
+The owner's word: no work lives only on one machine. Push a helper's branch as soon as it holds something. A forced
+push is refused here: push to a new branch name instead.
+- `main` and the session's work branch are the same commit.
+- `wip/air-light`: the air and sunlight, parked (section 4).
+- `wip/sorted-start`: the sorted start, parked (section 4). `wip/nursery-start`, `wip/cover-nursery-g2` and
+  `experiment/sorted-start` are its older states.
+- `wip/lakes`: four commits on small plants, not reviewed, under the lakes' mend that is on main.
+- `wip/drawing`, `wip/cover-law`, `wip/cover-costs`, `wip/page-cover`, `wip/rivers`, `experiment/climate-bands`:
+  merged; kept as they were pushed.
 - `tools/checks`: the check scripts and probes of this work (`tools/check/paused.js`, `phone.js`, `inspect.js`; the
-  frame's bench in `tools/frame/`; the climate's and the ground's probes). Study files: never on main.
+  frame's bench in `tools/frame/`; `tools/rivers/` with the page's cost by CPU time (`cpucost.sh`); `tools/air/`;
+  `tools/sorted/`; the climate's and the ground's probes). Study files: never on main.
