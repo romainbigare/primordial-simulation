@@ -27,8 +27,8 @@ pub enum Purpose {
     Partner,
     /// The new weights of a resized brain (`lineage::resize`)
     Resize = 15,
-    /// The random base of a founder lineage's brain and where its founders go (`worldgen`)
-    Brain,
+    /// Where the founders of a starting kind go (`worldgen::life::seed`)
+    Place,
     /// The mutation rounds of a founder's born rows and of its genes (`worldgen`)
     Spray,
     Make,

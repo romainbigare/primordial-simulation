@@ -199,7 +199,7 @@ impl Line {
     /// A new lineage of `brain`, labelled with starting kind `root`.
     pub fn new(w: &mut World, brain: &Brain, root: u32) -> Line {
         let shape = lineage::shape(w.chem.ns(), brain.hidden, MEMORY);
-        let mut base = brain::random(shape, &mut Rng::new(brain.seed, 0, 0, Purpose::Brain), brain.weights, brain.fixed, brain.dir, brain.verbs);
+        let mut base = brain::random(shape, &mut Rng::new(brain.seed, 0, 0, Purpose::Place), brain.weights, brain.fixed, brain.dir, brain.verbs);
         let rows = base.split_off(shape.base());
         let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root });
         Line { lineage, rows }

@@ -100,22 +100,22 @@ impl Placed {
 pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     let Some(kind) = KINDS.get(which) else { return String::new() };
     match &kind.place {
-        Place::Field(f) => field(w, which, kind, f, how),
+        Place::Field(f) => field(w, kind, f, how),
         Place::Bodies(b) => bodies(w, which, kind, b, how),
     }
 }
 
-/// Place the cover of field row `f` of kind `which` on the open land, each cell by its chance: its genes after `rounds`
+/// Place the cover of field row `f` of `kind` on the open land, each cell by its chance: its genes after `rounds`
 /// rounds of mutation (a random walk keyed by the cell), the fixing gene on in the share `fixers` of the cells.
-fn field(w: &mut World, which: usize, kind: &Kind, f: &Field, how: &Seeding) -> String {
+fn field(w: &mut World, kind: &Kind, f: &Field, how: &Seeding) -> String {
     pcore::month_start(w);
-    let mut r = Rng::new(w.seed, w.day(), which as u64, Purpose::Brain);
+    let mut r = Rng::new(w.seed, w.day(), f.key as u64, Purpose::Place);
     let (mut cells, mut fixers, mut kg) = (0, 0, 0.0);
     for i in 0..w.mesh.cells().n() {
         if !open_land(w, i) || r.f64() >= f.chance {
             continue;
         }
-        let id = founder_id(which, i, 0);
+        let id = founder_id(f.key as usize, i, 0);
         let mut genes = f.genes;
         let mut rg = Rng::new(w.seed, w.day(), id, Purpose::Make);
         for _ in 0..how.rounds {
@@ -125,7 +125,7 @@ fn field(w: &mut World, which: usize, kind: &Kind, f: &Field, how: &Seeding) -> 
         if fixes {
             genes[cover::FIX] = FIX_GENE;
         }
-        if cover::place(w, i, genes, which as u32, f.kg) {
+        if cover::place(w, i, genes, f.key, f.kg) {
             (cells, fixers, kg) = (cells + 1, fixers + fixes as usize, kg + f.kg * w.mesh.cells().area()[i]);
         }
     }
@@ -140,7 +140,7 @@ fn field(w: &mut World, which: usize, kind: &Kind, f: &Field, how: &Seeding) -> 
 fn bodies(w: &mut World, which: usize, kind: &Kind, b: &Bodies, how: &Seeding) -> String {
     let Some((_, _, _, burn)) = w.chem.life_roles() else { return String::new() };
     pcore::month_start(w);
-    let mut r = Rng::new(w.seed, w.day(), which as u64, Purpose::Brain);
+    let mut r = Rng::new(w.seed, w.day(), which as u64, Purpose::Place);
     let hand = b.hand.filter(|_| how.hand);
     let (shape, lineage, rows) = founder_lineage(w, which, b, hand, &mut r);
     let hand = hand.is_some();
