@@ -156,9 +156,14 @@ one up), S2 the clear air scatters (`scatter`), both committed with their tests;
 W/m² at the surface (243 before, Earth 160) and 66 in the air, at 288.3 K. Alone they make winters too cold (the key
 world's land 284.6 K, swing 16.3 K, rain 0.98 m a year; the frost test's scene and the long step's rivers fail)
 because the air's back radiation is too low (276 against Earth's 342). A grey column cannot hold both the back
-radiation (Prata 1996) and the forcing of doubling the absorber (3.7 W/m²; today's is 9.4): so S5, in work, is heat
-light in three bands with each absorber at its own height. S1 + S2 + S5 merge together, the references move once.
-Then the clouds from a liquid path with a fraction of the sky, as their own package. A proposal for the plants'
+radiation (Prata 1996) and the forcing of doubling the absorber (3.7 W/m²; today's is 9.4): so S5 (committed) is
+heat light in three bands with each absorber at its own height (`radiation::Heat`, `chem/planck.rs`; back radiation
+0.828 of the ground's light at 2.5 cm of vapour against Prata's 0.817, doubling forces 3.36 W/m², about +1% of a
+step). With the honest heat law the globe goes to 296.6 K with 70 kg/m² of vapour and no ice: the old weak
+greenhouse hid that the planet absorbs 256 W/m² of sunlight (Earth 239: clouds reflect too little) and that the
+air's nodes sit near saturation (38 kg/m² at 288 K, Earth 25). So S3, in work, comes before the merge: humidity
+inside a node (the saturated share is the cloud's share of the sky, Sundqvist 1989; condensation in that share
+only) and the cloud's light from its liquid's path. S1 + S2 + S5 + S3 merge together, the references move once. A proposal for the plants'
 package: two bands of sunlight (a usable one, a near-infrared one) with `light_yield` on the usable light. Dry matter
 in the warm south stays 2 to 4 kg a year with Earth-like light: the excess is in the cover's law.
 
