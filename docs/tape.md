@@ -13,7 +13,7 @@ A mean of nothing is written `NaN` (`null` in the viewer's file, drawn as a gap)
 | `series.csv` | one row a year, the columns below |
 | `months.csv` | one row a month (below); only with `--months` |
 | `physics.json` | the run's `Physics` and `Config`; `ew numbers OLD NEW` compares two runs |
-| `world.ewf.gz` | the viewer's file: `EWF2`, the header's length, the header (JSON: size, whether the world is a globe and its edge latitudes, layers, frames, series and units, events, the months rows, the camera's path), then the frames: one every `--frames-every` years (10), and one a month in the first `--monthly-years` years (2) |
+| `world.ewf.gz` | the viewer's file: `EWF2`, the header's length, the header (JSON: size, whether the world is a globe and its edge latitudes, layers, frames, series and units, events, the months rows), then the frames: one every `--frames-every` years (10), and one a month in the first `--monthly-years` years (2) |
 | `yearNNNN.png` | map, temperature, rain, life, traffic and the depth of the cells (each square by the cell at its centre: a square light grey, coarser dark, finer warmer) every `--pictures-every` years, at the start and at the end; none by default |
 
 **How the files are written.** Every 10 years (`TAPE_EVERY` in `cli/src/main.rs`), at every snapshot and at the run's
