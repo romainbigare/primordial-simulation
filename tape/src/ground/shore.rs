@@ -46,6 +46,21 @@ const KEPT: f64 = 3.0;
 const MOUTH_UNDER_M: f64 = 0.5;
 const MOUTH_MOST: f64 = 4.5;
 const MOUTH_STEP: f64 = 0.1;
+/// Standing liquid drowns the mouth of a channel that runs into it: a channel's bed lies under its banks, so at the
+/// shore the offset along a channel's line lies lower by `MOUTH_DROWN` bed depths (its bars and its banks' feet go
+/// under: shallows, not a deep cut), all of it within the bed and none from `MOUTH_WIDE` of its half widths from the
+/// line, and less with the way from the shore, none from `MOUTH_LONG` bed widths up the channel or out into the
+/// liquid. The shore so turns a little up the channel in a short funnel, and its band of shallows with it.
+const MOUTH_DROWN: f64 = 0.25;
+const MOUTH_WIDE: f64 = 5.0;
+const MOUTH_LONG: f64 = 4.0;
+
+/// A channel's mouth at a point `off` m from the line of a channel whose bed is `width` m wide and `depth` m deep:
+/// how far the offset lies lower at the shore, m, and the way from the shore over which that fades out, m
+/// (`MOUTH_DROWN`).
+pub(super) fn drowned(width: f64, depth: f64, off: f64) -> [f64; 2] {
+    [MOUTH_DROWN * depth * (1.0 - ease(0.5 * width, MOUTH_WIDE * 0.5 * width, off)), MOUTH_LONG * width]
+}
 
 /// Of each sample of the terrain: the level of the pond it lies in or of the nearest within `NEAR_SAMPLES` (NaN: none),
 /// m, and its offset and its depth under that level, blurred (the module's doc), m.
@@ -115,9 +130,30 @@ impl Shore {
         Shore { across: s.across, down: s.down, level, offset, depth, far }
     }
 
-    /// The level of the pond nearest the sample at column `c` and row `r` (`NEAR_SAMPLES`), m; NaN for none.
-    pub(super) fn level(&self, c: i64, r: i64) -> f64 {
-        self.level[r.clamp(0, self.down as i64 - 1) as usize * self.across + c.clamp(0, self.across as i64 - 1) as usize]
+    /// The four samples between whose centres the point `p` (samples from the map's corner) lies, each with its weight
+    /// there (bilinear; off the map, the edge's).
+    fn about(&self, p: [f64; 2]) -> [(usize, f64); 4] {
+        let (u, w) = (p[0] - 0.5, p[1] - 0.5);
+        let (fx, fy) = (u - u.floor(), w - w.floor());
+        let at = |dc: i64, dr: i64| (w.floor() as i64 + dr).clamp(0, self.down as i64 - 1) as usize * self.across + (u.floor() as i64 + dc).clamp(0, self.across as i64 - 1) as usize;
+        [(at(0, 0), (1.0 - fx) * (1.0 - fy)), (at(1, 0), fx * (1.0 - fy)), (at(0, 1), (1.0 - fx) * fy), (at(1, 1), fx * fy)]
+    }
+
+    /// The share of the weight of the point `p` (samples from the map's corner) that lies on the samples about it
+    /// that `on` holds for: 1 at such a sample's centre, 0 at another's, even between.
+    pub(super) fn share(&self, p: [f64; 2], on: impl Fn(usize) -> bool) -> f64 {
+        self.about(p).iter().filter(|(k, _)| on(*k)).map(|(_, w)| w).sum()
+    }
+
+    /// The level of the pond beside the point `p` (samples from the map's corner), m: its own sample's (the nearest
+    /// pond's within `NEAR_SAMPLES`), or where that has none, the level of the heaviest of the samples about it that
+    /// has one (NaN: none has); and the share of the point's weight on the samples that have one (`share`).
+    pub(super) fn beside(&self, p: [f64; 2]) -> (f64, f64) {
+        let own = (p[1] as usize).min(self.down - 1) * self.across + (p[0] as usize).min(self.across - 1);
+        let about = self.about(p);
+        let heaviest = about.iter().filter(|(k, _)| !self.level[*k].is_nan()).max_by(|a, b| a.1.total_cmp(&b.1));
+        let level = if self.level[own].is_nan() { heaviest.map_or(f64::NAN, |(k, _)| self.level[*k]) } else { self.level[own] };
+        (level, self.share(p, |k| !self.level[k].is_nan()))
     }
 
     /// The offset and the depth at `p` (samples from the map's corner) as cubic B-splines through the samples' centres:
@@ -162,26 +198,34 @@ impl Shore {
         from
     }
 
-    /// The height drawn at `p` (samples from the map's corner) whose own height is `h`, m, beside liquid at `level` (the
-    /// nearest pond's of its sample, `level`; NaN: none): the module's doc.
-    pub(super) fn drawn(&self, p: [f64; 2], h: f64, level: f64) -> f64 {
+    /// The height drawn at `p` (samples from the map's corner) whose own height is `h`, m, beside liquid at `level`
+    /// (`beside`; NaN: none), `share` of the point's weight on samples beside it: the module's doc, as far as that
+    /// share, so the ground has no step where a sample beside a pond meets one beside none; its offset lower by its
+    /// channel's mouth (`drowned`: `mouth[0]` m at the shore, none `mouth[1]` samples from it, the way from the shore
+    /// taken as the offset over its slope).
+    pub(super) fn drawn(&self, p: [f64; 2], h: f64, level: f64, share: f64, mouth: [f64; 2]) -> f64 {
         let own = (p[1] as usize).min(self.down - 1) * self.across + (p[0] as usize).min(self.across - 1);
         if level.is_nan() || self.far[own] {
             return h;
         }
-        let (d, depth) = self.at(p);
+        let (mut d, depth) = self.at(p);
+        if mouth[0] > 0.0 {
+            let slope = [self.at([p[0] + MOUTH_STEP, p[1]]).0 - self.at([p[0] - MOUTH_STEP, p[1]]).0, self.at([p[0], p[1] + MOUTH_STEP]).0 - self.at([p[0], p[1] - MOUTH_STEP]).0];
+            let from_shore = d.abs() * 2.0 * MOUTH_STEP / slope[0].hypot(slope[1]).max(1e-9);
+            d -= mouth[0] * (1.0 - ease(0.0, mouth[1], from_shore));
+        }
         let side = if d < 0.0 { -1.0 } else { 1.0 };
         let push = SIDE * d.abs() * (1.0 - ease(SIDE_FROM * SHORE_M, SHORE_M, d.abs()));
         let sided = level + side * (side * (h - level)).max(push);
         if d >= 0.0 {
-            return sided;
+            return h + (sided - h) * share;
         }
         // Under the level: the bed leans to a smooth depth, the offset's at the shore and the blurred depth's farther
         // out, the more the shallower (all of it at the shore, so the shallows have no bumps a sample wide).
         let deep = d + (depth.min(d) - d) * ease(0.0, SHORE_M, -d);
         let f = 1.0 - ease(0.0, WATER_M, -deep);
         let w = f / (1.0 - f).max(1e-12);
-        (sided + w * (level + deep)) / (1.0 + w)
+        h + ((sided + w * (level + deep)) / (1.0 + w) - h) * share
     }
 }
 

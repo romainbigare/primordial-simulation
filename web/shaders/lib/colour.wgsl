@@ -85,8 +85,9 @@ struct Spot {
   // they are not drawn one by one: their reflectance times the share of the ground they cover, and
   // that share; the ground's height, m; its slope (rise over run); the light on it over the light on flat ground.
   snow: f32, t: f32, ground: vec3f, cover: vec4f, z: f32, slope: f32, shade: f32,
-  // Beach sand on it and a river through it, 0..1, and the river's depth, m.
-  sand: f32, river: f32, river_depth: f32,
+  // Beach sand on it and a river through it, 0..1, and the river's depth, m; how much of a river's mouth it is, 0..1
+  // (river.wgsl `MOUTH_CALM`).
+  sand: f32, river: f32, river_depth: f32, mouth: f32,
   // The reflectance of its bed; the share of the bed that shows (rock.wgsl `bed_shows`); the depth of its loose
   // ground, m; and of its channel's stones there (stone.wgsl `Stony`): the largest's size as drawn, m, what each is
   // of that size, the share of the places that hold one (0: none), how round the channel has worn them, 0..1, and
@@ -214,7 +215,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
       // channel's shallows and its open water the channel's deep thread, so a river runs into a lake or the sea with
       // no step of colour; the sea by its own depth, a lake as `LAKE_SCALE` times as deep.
       let seen = river_seen(p.depth * mix(1.0, 1.0 / LAKE_SCALE, p.sea), shore_rim(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M));
-      water = mix(water_painted(BED_SHOWN * bed, seen, ripple), FOAM_RGB, p.sea * foam(p.depth, p.slope / earth.look.x, p.e));
+      water = mix(water_painted(BED_SHOWN * bed, seen, ripple), FOAM_RGB, p.sea * (1.0 - p.mouth) * foam(p.depth, p.slope / earth.look.x, p.e, p.at));
     } else {
       water = water_over(bed, p.depth, ripple);
     }

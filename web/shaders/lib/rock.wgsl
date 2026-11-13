@@ -171,10 +171,10 @@ fn noise_reach(along: f32, cell: f32, across: f32, k: i32) -> f32 {
   return mix(mix(v.x, v.y, u.x), mix(v.z, v.w, u.x), u.y);
 }
 
-// A channel widens into the standing liquid it runs into: its bed and its water `MOUTH_FLARE` wider (and its water
-// that much shallower) where the ground lies at that liquid's level, none of it from `MOUTH_OVER_M` over the level
-// (land.wgsl `over_ponds`). A channel that moves no stones of `BAR_SAND_STONE` m carries sand and silt alone.
-const MOUTH_FLARE = 1.5; const MOUTH_OVER_M = 1.5;
+// A channel widens into the standing liquid it runs into: its bed and its water grow evenly to `MOUTH_FLARE` wider (and
+// its water that much shallower) across that liquid's band of shallows (land.wgsl `through_band`), none of it on the
+// land. A channel that moves no stones of `BAR_SAND_STONE` m carries sand and silt alone.
+const MOUTH_FLARE = 1.5;
 const BAR_SAND_STONE = 0.03;
 
 // A channel at a point of ground `g`, of this month's discharge `q`, m³/s: the half width of its bed on the point's
@@ -184,11 +184,12 @@ const BAR_SAND_STONE = 0.03;
 // flow through a narrower or a wider water); how much of a bend the place is, 0..1; and the side its outer bank lies
 // on (the sign of `Tiled.sd` there); and the half width the channel law gives its bed, m (`banks_of`).
 struct Channel { bed: f32, water: f32, middle: f32, mean: f32, deep: f32, bend: f32, outer: f32, law: f32 }
-fn channel_at(g: Tiled, q: f32) -> Channel { return channel_of(g, q, banks_of(q)); }
-// (The same, of a channel whose bed the law makes `banks` m half wide.)
-fn channel_of(g: Tiled, q: f32, banks: f32) -> Channel {
+fn channel_at(g: Tiled, q: f32) -> Channel { return channel_of(g, q, banks_of(q), through_band(g, 0.0)); }
+// (The same, of a channel whose bed the law makes `banks` m half wide, `mouth` of the way through the band of shallows
+// of the liquid it runs into.)
+fn channel_of(g: Tiled, q: f32, banks: f32, mouth: f32) -> Channel {
   if (q <= 0.0) { return Channel(0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0); }
-  let flare = 1.0 + MOUTH_FLARE * (1.0 - ease(0.0, MOUTH_OVER_M, over_ponds(g, 0.0)));
+  let flare = 1.0 + MOUTH_FLARE * mouth;
   let law = banks * flare;
   var vary = 1.0;
   if (!unseen(BED_VARY * BED_MOST_M) && g.d < BED_NEAR * law) { vary += BED_VARY * (noise_reach(g.along, BED_VARY_M.x, 0.0, 68) + 0.5 * noise_reach(g.along, BED_VARY_M.y, 0.0, 69)) / 1.5; }

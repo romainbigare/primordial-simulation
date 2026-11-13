@@ -121,23 +121,23 @@ impl Ground {
         let twi = wetness::field(&self.samples, &self.twi, depth, [win[0], win[1]], [wide, high]);
         let near = channels::Channels::new(self.reaches(), &self.bends).field(channels::Window { x0: win[0], y0: win[1], wide, high, k });
         // The valleys about the channels drawn into the ground out of the ponds (`channels::Field::drawn`); near a pond
-        // (`shore::Shore::level`) a valley only lowers the ground, and never under the pond's level where the ground is
-        // not: its mouth meets the level of the pond it runs into. Then the shore drawn smooth (`shore`).
+        // (`shore::Shore::beside`) a valley only lowers the ground, and never under the pond's level where the ground is
+        // not: its mouth meets the level of the pond it runs into. Then the shore drawn smooth (`shore`). Which of
+        // these a texel takes is blended between the samples' centres (the share of its weight on the samples in a
+        // pond, and on those beside one), so the ground has no step along a sample's edge.
         let heights: Vec<f64> = heights
             .iter()
             .enumerate()
             .map(|(i, &h)| {
                 let p = self.centre(depth, win[0] + (i % wide) as i64, win[1] + (i / wide) as i64);
-                let (c, r) = ((p[0].floor() as i64).min(self.samples.across as i64 - 1), (p[1].floor() as i64).min(self.samples.down as i64 - 1));
-                let level = self.shore.level(c, r);
-                let carved = if self.samples.pond[r as usize * self.samples.across + c as usize] != NONE {
-                    h
-                } else if level.is_nan() {
-                    near.drawn(i, h)
-                } else {
-                    near.drawn(i, h).min(h).max(h.min(level))
-                };
-                self.shore.drawn(p, carved, level)
+                let (level, beside) = self.shore.beside(p);
+                let in_pond = self.shore.share(p, |k| self.samples.pond[k] != NONE);
+                let valley = near.drawn(i, h);
+                let met = if level.is_nan() { valley } else { valley + (valley.min(h).max(h.min(level)) - valley) * beside };
+                let bed = (near.sample[i] != NONE).then(|| self.reaches().bed_of(near.sample[i] as usize));
+                let mouth = bed.map_or([0.0; 2], |(width, depth)| shore::drowned(width, depth, near.dist[i].abs()));
+                let mouth = [mouth[0], mouth[1] / self.map.length(SAMPLE_DEPTH)];
+                self.shore.drawn(p, met + (h - met) * in_pond, level, beside, mouth)
             })
             .collect();
         let at = |p: usize| (clamp(x0 + (p % side) as i64, across) - win[0]) as usize + (clamp(y0 + (p / side) as i64, down) - win[1]) as usize * wide;

@@ -81,6 +81,12 @@ the samples by a Gaussian of 0.9 samples; the zero line of that offset (a cubic 
 is the shore, and the ground drawn keeps its own height where it lies on the offset's side of the level and is moved to
 that side by half the offset where not (none from 4 m on); a closed pond's samples deeper than 3 m keep their liquid;
 ground out of a pond and under its level (where its liquid spills below its pass) is drawn as it is.
+Beside a pond the offset lies a little lower along a channel's line (a quarter of its bed's depth at the shore, none
+from 5 of the bed's half widths across and from 4 bed widths from the shore): the liquid drowns a channel's mouth, so
+the shore and its shallows turn a little up the channel.
+Which of these a texel takes (in a pond: no valley; beside one: the valley held at its level and the shore drawn; else
+the valley alone) is blended between the samples' centres, by the share of the texel's weight on the samples of each
+kind, so the ground has no step along a sample's edge.
 Under the level the bed leans to the offset at the shore and farther out to the samples' depth held within 40 m and
 blurred alike, all of it in the shallows. So a coast is a smooth line with capes and bays of a few samples and the
 shallows one band, none of a sample's scallops; the shore moves by about a quarter of a sample on the mean (a blur
@@ -102,10 +108,12 @@ so a river reaches its lake or its sea. The line wanders about that curve (`tape
 meander belt (`bends.rs`, `belt.rs`). The samples place a valley's line no closer than a share of a sample, so the
 line wanders up to 0.4 of a sample to each side (half of that on a hard bed), in long swings of no fixed length: a
 smooth noise along the way down the valley, a corner of its lattice every 1.6 samples and four finer octaves, each
-2.7 times as often as the last and 0.4 as strong (a channel takes those whose corners lie 8 of its bed's widths apart
+2.7 times as often as the last and 0.33 as strong, so each leans the line less steeply than the last and its turns
+are round and of uneven size (a channel takes those whose corners lie 8 of its bed's widths apart
 or more, fully from 16: a wide bed's finer turns are its bends', and a rill turns every few metres), the sum taken
-twice and held smoothly within the most, whose slope runs on across the corners (gradient noise, Perlin 2002), none at
-a head, a join and a sink. Every channel wanders, a rill and a body's floor too: none runs straight. A bed is shaped by its floods, so the bends are sized by the bed's width; a tile is made once, so that width
+1.75 times and held smoothly within the most, whose slope runs on across the corners (gradient noise, Perlin 2002), none at
+a head, a join and a sink. Every channel wanders, a rill and a body's floor too, and a tributary's way on from its own piece to the line it
+joins (by 0.15 of that way's length, none at its ends): none runs straight. A bed is shaped by its floods, so the bends are sized by the bed's width; a tile is made once, so that width
 and the bed's depth are stand-ins: the channel law's at the drained area times `BED_RUNOFF`, 5 times (`FLOOD`: the
 bankfull flood, Leopold and Maddock 1953; Dunne and Leopold 1978) `TYPICAL_RUNOFF` (8.5e-9 m/s, Earth's mean: 0.27 m a
 year, Dai and Trenberth 2002). The bends swing 3.5 bed widths to each side of the wander where nothing holds them
@@ -122,17 +130,18 @@ do: Langbein and Leopold 1966), so the line has no kink and its curvature no jum
 radius from the place's draws (a function of the seed, the sample the bends began at and the half bends since): it
 reaches 0.2 to 1 of the belt's half width (the smaller the more often), times a swell that falls to 0.08 over 4 half
 bends (most reaches bend fully, some run nearly straight), on the other side from the last; it turns on a radius of
-1.4 to 5 bed widths, the tighter the more often (2 to 3 in most grown bends: Hickin and Nanson 1975), gentler where
+2 to 5 bed widths, the tighter the more often (2 to 3 in most grown bends: Hickin and Nanson 1975), gentler where
 the swell is low. A half bend is as long as carries the line from its apex to the next (found by halving, 3 to 24
 widths, its least up to 3 times longer by its own draw), no longer than keeps its heading within 1.85 rad of the
 valley's line and carries it 2.5 widths down the valley: past a right angle a bend turns back on itself in a loop. So
-no two bends are alike in length or swing. On a hard bed an apex turns on 0.4 to 12 widths (most turns gentle, one in
-ten sharp), the heading keeps within 0.8 rad, and a half bend's least length is up to 12 times longer by its draw: the
-line runs in nearly straight stretches from one short sharp turn to the next. A piece's walk starts as the last one's
+no two bends are alike in length or swing. On a hard bed an apex turns on 1.5 to 12 widths (most turns gentle),
+the heading keeps within 0.8 rad, and a half bend's least length is up to 12 times longer by its draw: the
+line runs in nearly straight stretches from one short turn to the next. A piece's walk starts as the last one's
 ended, so the line has no break from sample to sample, and along it runs the line's own length from its head; a
 tributary's and a sink's last piece draw back to their wander at their end. A tile draws a sway (the bends, the
-wander) where its length (a bend's 11 bed widths, Leopold and Wolman 1960; a wander's 3.2 samples) is 8 texels or
-more, and none under 4 (between it grows): shorter, it moves the line by less than a texel. Each
+wander) where its length (a bend's 11 bed widths, Leopold and Wolman 1960; a wander's 3.2 samples) is 72 texels or
+more, and none under 24 (between it grows, its turns the wider the less it is drawn): a shell draws a channel from afar
+as a line several texels wide, and a sway whose turns are tighter than that line is wide reads as a saw's teeth. Each
 channel reaches as far as it could be wide, w0 × (`MOST_RUNOFF` a)^b / 2 (`MOST_RUNOFF` 3.6e-6 m/s, about the wettest
 month known, 9.3 m of rain at Cherrapunji in July 1861; a the drained area, w0 and b the width law of
 `Physics::channel`), and one a shell may draw as a line wider than itself (its drained area at least `SHOW_M` times

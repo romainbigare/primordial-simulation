@@ -23,8 +23,14 @@ const SOIL_TINT = vec3f(1.25, 1.08, 0.82);
 const CLEAR_ATTENUATION = vec3f(0.09, 0.04, 0.026);
 const OPEN_WATER = vec3f(0.006, 0.07, 0.20); const DEEP_WATER_PAINT = vec3f(0.004, 0.022, 0.10);
 const OPEN_M: f32 = 30.0; const DEEP_M: f32 = 600.0;
-// Foam at the water's edge: white, at most this share, over the water shallower than `FOAM_M`.
+// Foam at the sea's edge: white, at most this share, over the water shallower than `FOAM_M`. Close up it is the swash's
+// lines, which follow the shore (lines of the bed's depth): one at the water's edge and `FOAM_LINES` more, each
+// `FOAM_LINE_M` of depth farther out and `FOAM_LINE_FALL` as strong as the last, `FOAM_LINE_W` of that spacing wide to
+// each side, soft, and past the first broken along the shore over `FOAM_BREAK_M`. Where the lines lie under
+// `FOAM_LINE_PX` pixels apart they are one rim, `FOAM_RIM` of the foam.
 const FOAM = 0.55; const FOAM_M = 0.4; const FOAM_RGB = vec3f(0.85, 0.92, 0.95);
+const FOAM_LINES = 2.0; const FOAM_LINE_M = 0.05; const FOAM_LINE_FALL = 0.55; const FOAM_LINE_W = 0.25;
+const FOAM_BREAK_M = 6.0; const FOAM_LINE_PX = vec2f(1.5, 4.0); const FOAM_RIM = 0.6;
 // The pixels across the foam's band over which it fades in.
 const FOAM_PX = vec2f(0.5, 1.5);
 // The bed under any water is drawn this far towards pale sand (`BEACH_SAND` times `BED_TONE`), so shallows read light
@@ -77,8 +83,10 @@ fn relief_tint(c: vec3f, lit: f32) -> vec3f {
 // bed rises at `slope` (rise over run) to a rim `rim_m` deep, seen at `e` m a pixel (`LAKE_RIM_PX`). The share of
 // the deep water's colour it takes (`river_seen`'s `rel`: a lake's shallows are a river's).
 fn shore_rim(depth: f32, slope: f32, e: f32, rim_m: f32) -> f32 {
-  return ease(0.0, max(rim_m, slope * LAKE_RIM_PX * e), depth);
+  return ease(0.0, rim_depth(slope, e, rim_m), depth);
 }
+// The depth from which standing liquid is past its shore's band, m (`shore_rim`).
+fn rim_depth(slope: f32, e: f32, rim_m: f32) -> f32 { return max(rim_m, slope * LAKE_RIM_PX * e); }
 
 // A channel is a thin line of water decimetres deep: coloured by that depth alone it shows only its bed, a grey line
 // of gravel. A map draws a river as water, and its bed's shape is what reads: it is coloured as its own depth as a
@@ -95,11 +103,23 @@ fn water_painted(bed: vec3f, depth: f32, g: vec2f) -> vec3f {
   return seen_through(mix(bed, BEACH_SAND * BED_TONE, BED_LIGHTEN), depth, g, CLEAR_ATTENUATION, deep);
 }
 
-// The foam over water `depth` m deep where the bed rises at `slope` (rise over run), seen at `e` m a pixel: fading out
-// as its band grows narrower than a pixel (`FOAM_PX`), where it would only show the pixels.
-fn foam(depth: f32, slope: f32, e: f32) -> f32 {
-  let band = FOAM_M / max(slope, 1e-3);
-  return FOAM * (1.0 - ease(0.0, FOAM_M, depth)) * ease(FOAM_PX.x, FOAM_PX.y, band / max(e, 1e-3));
+// The foam over water `depth` m deep at `at` where the bed rises at `slope` (rise over run), seen at `e` m a pixel: its
+// lines (`FOAM_LINES`) where they show, else its rim; fading out as its band grows narrower than a pixel (`FOAM_PX`),
+// where it would only show the pixels.
+fn foam(depth: f32, slope: f32, e: f32, at: vec2f) -> f32 {
+  let rise = max(slope, 1e-3);
+  var white = FOAM_RIM * (1.0 - ease(0.0, FOAM_M, depth));
+  // (The lines' breaks cannot show in a program made for draws from far, draw.wgsl `LEAST_E`: there the foam is its
+  // rim, and the lines are not compiled.)
+  if (!unseen(FOAM_BREAK_M)) {
+    // The lines, counted from the edge of the water drawn (`FILM_M`): the nearest one's share at this depth.
+    let x = max(depth - FILM_M, 0.0) / FOAM_LINE_M;
+    let k = min(floor(x + 0.5), FOAM_LINES);
+    var line = (1.0 - smoothstep(0.0, FOAM_LINE_W, abs(x - k))) * pow(FOAM_LINE_FALL, k);
+    if (k > 0.0) { line *= ease(-0.2, 0.3, noise_turned(at / FOAM_BREAK_M + 7.3 * k, 110)); }
+    white = mix(white, line, ease(FOAM_LINE_PX.x, FOAM_LINE_PX.y, FOAM_LINE_M / rise / max(e, 1e-3)));
+  }
+  return FOAM * white * ease(FOAM_PX.x, FOAM_PX.y, FOAM_M / rise / max(e, 1e-3));
 }
 
 // The marks (cover.wgsl): a plant's light falls in soft bands (two or three tones, as a painter lays them), each mark
