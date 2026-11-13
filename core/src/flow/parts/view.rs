@@ -42,6 +42,11 @@ impl Scratch {
         let (d, z) = self.view().standing(i);
         (if self.state.parts.get(i).and_then(Option::as_ref).is_some_and(Parts::land) { 0.0 } else { d }, z)
     }
+    /// The depth of the soft solid lying on the land of cell `i`, m, at its solid's density: of a cell of parts its
+    /// land's, else the node's (`Scratch::cover`).
+    pub(crate) fn soft_land(&self, i: usize) -> f64 {
+        self.mixed(i).map_or_else(|| self.cover.get(i).map_or(0.0, |c| c[2]), |m| m.piece[LAND].cover[2])
+    }
     /// The temperature of the surface of cell `i`, K: of a cell of parts its land's and its liquid's top's mean by
     /// area, else the node's.
     pub(crate) fn surface_t(&self, i: usize) -> Option<f64> {

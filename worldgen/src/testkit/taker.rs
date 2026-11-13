@@ -27,7 +27,7 @@ impl Taker {
         let (i, layer, share) = (self.cell, self.layer, self.share);
         let (took, heat) = w.in_cell(i, |w, d| {
             let (mut took, mut heat) = ([0.0; MAX_SUBSTANCES], 0.0);
-            let Some(shown) = contract::shown(w, d.at(i), layer) else { return (took, heat) };
+            let Some(shown) = contract::shown(w, i, d.at(i), layer) else { return (took, heat) };
             for (k, &held) in shown.mol.iter().enumerate().filter(|e| *e.1 > 0.0) {
                 let (got, q) = contract::take(w, d, i, layer, (k, share * held));
                 (took[k], heat) = (got, heat + q);

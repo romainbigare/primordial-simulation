@@ -189,10 +189,14 @@ and of chunks. A serial step on one cell runs the same way on a chunk of its own
 from it: its taker today is the plain taker of the tests (`worldgen::testkit::Taker`). The natural world names no
 module of a taker (`cli/tests/sides.rs`). It is plain data and functions over the one source, with no copy. **What a
 cell shows** a taker: its cover as a whole, each slot by the height its plants stand at, and the seeds lying on its
-ground (`contract::shown`, `contract::slots`, `Layer::Seeds`): the mass and the amount of each substance; its place as the month's start left it
-(`contract::place`: the ground's temperature, the depth of the liquid standing on it, its height). **Take**
+ground (`contract::shown`, `contract::slots`, `Layer::Seeds`): the mass and the amount of each substance a taker can reach; its place as the month's start left it
+(`contract::place`: the ground's temperature, the depth of the liquid standing on it, its height, and the depth of the
+soft solid lying on its land, `Scratch::soft_land`, at the solid's density). **Snow hides** what lies under it
+(`contract::above`): a plant's matter is spread evenly over its height (the stand's law draws it as a stem of its
+height), so of a slot whose plants stand h high under snow d deep a taker reaches the share 1 − d / h (none at d ≥ h),
+and of the seeds lying, on the ground, nothing where any snow lies. **Take**
 (`contract::take`): a taker asks the whole cover, one slot or the seeds lying for an amount of a substance and gets what is granted,
-never more than is there, with its heat; the cover books its side (`Cover::take`), the taker its own. **Give**
+never more than it can reach, with its heat; the cover books its side (`Cover::take`), the taker its own. **Give**
 (`contract::give`): matter and heat back to the ground, through the cell's view of the store. **Press**
 (`contract::press`): work spent on a cell breaks its cover by the share it pays for (`Cover::breaking`), and what breaks
 goes to the ground as remains with its heat. **What stands on a cell** (`contract::Stand`): the cover's mass, capture
