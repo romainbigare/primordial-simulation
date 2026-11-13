@@ -1,5 +1,9 @@
 //! What the tests of the laws share (the `testkit` feature, for dev-dependencies only): a small world, founders of a
-//! chosen brain, edits booked from outside, the books, and the substances of chemistry 0 by number.
+//! chosen brain, edits booked from outside, the books, the substances of chemistry 0 by number, and a plain taker on
+//! the contract (`taker`).
+
+mod taker;
+pub use taker::Taker;
 
 use pcore::body::{Body, Layout, BRAIN_SIZES, CHILD, COPY_MASS, DISPERSE, STRENGTH};
 use pcore::life::WET_TISSUE;
