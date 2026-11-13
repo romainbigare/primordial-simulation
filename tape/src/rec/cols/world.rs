@@ -2,7 +2,7 @@
 //! gases.
 
 use super::{Row, GIGA, MEGA};
-use crate::layers::{river_count, Ctx, COVER_MIN};
+use crate::layers::{river_count, river_flux, Ctx, COVER_MIN};
 use crate::measure::area_mean;
 use crate::rec::{Recorder, CAUSES};
 use pcore::{World, AIR};
@@ -58,6 +58,7 @@ impl Recorder {
         row.push("low_level", "m", low.map_or(f64::NAN, |l| l.level));
         // Rivers as the web viewer draws them.
         row.push("rivers", "1", river_count(w, &c.f) as f64);
+        row.push("river_flux", "mol/s", river_flux(w, &c.f));
         // The cells.
         row.push("cells", "1", w.mesh.cells().n() as f64);
         // The slots of cover and its mass.

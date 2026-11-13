@@ -141,8 +141,18 @@ pub fn is_river(w: &World, i: usize) -> bool {
 }
 
 /// The dry land cells (land under no more than `STANDING_M` of liquid) that are rivers (`is_river`).
+fn river_cells<'a>(w: &'a World, f: &'a Fields) -> impl Iterator<Item = usize> + 'a {
+    (0..w.mesh.cells().n()).filter(move |&i| w.is_land(i) && f.depth[i] <= STANDING_M && is_river(w, i))
+}
+
+/// How many dry land cells are rivers (`river_cells`).
 pub fn river_count(w: &World, f: &Fields) -> usize {
-    (0..w.mesh.cells().n()).filter(|&i| w.is_land(i) && f.depth[i] <= STANDING_M && is_river(w, i)).count()
+    river_cells(w, f).count()
+}
+
+/// The liquid flux of the dry land cells that are rivers (`river_cells`, `World::liquid_flux`), summed, mol/s.
+pub fn river_flux(w: &World, f: &Fields) -> f64 {
+    river_cells(w, f).map(|i| w.liquid_flux[i] as f64).sum()
 }
 
 /// Everything a layer, and a row of the series, may read.

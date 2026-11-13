@@ -267,8 +267,8 @@ fn the_sleep_of_change_keeps_the_chemistry() {
 }
 
 /// The climate's key numbers (series columns): the ground temperature on land, the warmest and the coldest month's,
-/// the rain on land, the heat-absorbing gas and the river cells.
-const CLIMATE: [&str; 6] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "rivers"];
+/// the rain on land, the heat-absorbing gas and the liquid flux of the river cells.
+const CLIMATE: [&str; 6] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "river_flux"];
 
 /// The long-step test's world: its side, its years, the years from which its numbers are averaged, its seeds, and how
 /// far the default step may move each temperature of the climate from a shorter one's, each seed against itself, K.
@@ -279,8 +279,6 @@ const STEP_SEEDS: [u64; 3] = [1, 2, 3];
 const STEP_K: f64 = 0.3;
 /// The shorter air steps, days: a day, the air's own step.
 const SHORT_AIR_DAYS: [u32; 1] = [1];
-/// The `CLIMATE` columns that count whole things: their mean over the years moves by no less than one over those years.
-const COUNTS: [&str; 1] = ["rivers"];
 
 /// The `CLIMATE` columns at the end of each year from `STEP_FROM` of seed `seed` with the air's steps `days` long.
 fn climate(seed: u64, days: u32) -> Vec<[f64; CLIMATE.len()]> {
@@ -297,8 +295,8 @@ fn climate(seed: u64, days: u32) -> Vec<[f64; CLIMATE.len()]> {
 /// The long step against shorter ones (the air's step is a speed setting, `pcore::AIR_STEP_DAYS`): on small worlds with life,
 /// the mean over the seeds of what the default air step moves each of the climate's key numbers (the mean of its last
 /// years) from the step of each of `SHORT_AIR_DAYS`, each seed against itself, is less than `STEP_K` for a temperature
-/// and less than its year-to-year spread at the short step for the others, or than a count's grain (`COUNTS`: one over
-/// the years averaged) where that is larger.
+/// and less than its year-to-year spread at the short step for the others (the rivers by the liquid flux of their cells,
+/// the water a count of cells over a floor stands for).
 #[test]
 #[ignore = "slow: six 20-year runs of a 32 x 32 world with life"]
 fn the_long_step_keeps_the_climate() {
@@ -313,10 +311,12 @@ fn the_long_step_keeps_the_climate() {
         let spread = |run: &[[f64; CLIMATE.len()]]| run.iter().map(|y| y[q]).fold(f64::MIN, f64::max) - run.iter().map(|y| y[q]).fold(f64::MAX, f64::min);
         for (h, &short) in SHORT_AIR_DAYS.iter().enumerate() {
             let off = runs.iter().map(|seed| mean(&seed[0]) - mean(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64;
-            let grain = if COUNTS.contains(name) { 1.0 / (STEP_YEARS - STEP_FROM + 1) as f64 } else { 0.0 };
-            let limit = if name.starts_with("t_") { STEP_K } else { (runs.iter().map(|seed| spread(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64).max(grain) };
+            let limit = if name.starts_with("t_") { STEP_K } else { runs.iter().map(|seed| spread(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64 };
             let ok = off.abs() <= limit;
-            println!("{name}: the default step off by {off:.3e} from {short}-day steps, limit {limit:.3e}{}", if ok { "" } else { ": OUT" });
+            // As a share of the short step's mean too, for the numbers that are not temperatures.
+            let short_mean = runs.iter().map(|seed| mean(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64;
+            let share = if name.starts_with("t_") { String::new() } else { format!(" ({:+.2}% against {:.2}%)", 100.0 * off / short_mean, 100.0 * limit / short_mean) };
+            println!("{name}: the default step off by {off:.3e} from {short}-day steps, limit {limit:.3e}{share}{}", if ok { "" } else { ": OUT" });
             if !ok {
                 out.push(format!("{name} at {short} days"));
             }
