@@ -33,13 +33,18 @@ impl Cover {
     pub fn stands_at(&self, chem: &Chemistry, ph: &crate::Physics, p: &Parts, x: usize) -> f64 {
         self.height(ph, &p.mm(chem), chem.subs[p.sub[WALL]].density[0], x)
     }
-    /// The energy to break all of it, J: its soft tissue (with its liquid) and its solids by their breaking stresses
-    /// (`life::solids_of`).
+    /// The energy to break all of it, J: each part's volume times its breaking stress, its living cover (soft tissue
+    /// with its liquid) at `rho_body` as body matter (`Chemistry::matter`), and the solids it builds
+    /// (`Chemistry::materials`).
     pub fn breaking(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts) -> f64 {
+        let Some(m) = chem.matter() else { return 0.0 };
         let sum = |q: usize| self.mol.iter().map(|m| m[q]).sum::<f64>();
         let mm = p.mm(chem);
-        let living = (0..SLOTS).map(|x| self.living(&mm, x)).sum();
-        crate::life::solids_of(chem, cfg, living, |s| p.sub.iter().position(|&q| q == s).map_or(0.0, sum), |_| 1.0)[1]
+        let living: f64 = (0..SLOTS).map(|x| self.living(&mm, x)).sum();
+        let mol = |k: usize| p.sub.iter().position(|&q| q == k).map_or(0.0, sum);
+        let stress = |v: f64, k: usize| v * chem.subs[k].rupture;
+        let soft = stress(living.max(0.0) / cfg.phys.rho_body, m);
+        chem.materials().map(|k| stress(mol(k).max(0.0) * chem.subs[k].molar_mass / chem.subs[k].density[0], k)).fold(soft, |a, x| a + x)
     }
     /// `mol` of substance `k` taken from its slots `of`, from each in proportion to what it holds of it: returns what is
     /// taken, mol (no more than they hold), and the heat that goes with it, J (at its temperature).

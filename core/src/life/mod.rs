@@ -9,7 +9,7 @@ mod shared;
 pub use chunk::Chunk;
 pub(crate) use chunk::run;
 pub use disperse::lot;
-pub use shared::{solids_of, AGE, BROKEN, LACK, PHASE, SPENT, TAKEN, WET_TISSUE};
+pub use shared::{AGE, BROKEN, LACK, PHASE, SPENT, TAKEN, WET_TISSUE};
 
 use crate::cover::Cover;
 use crate::space::Mesh;
