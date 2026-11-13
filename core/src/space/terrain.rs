@@ -38,10 +38,12 @@ const FLOOR_M: f64 = -800.0;
 const FINE_FROM: u32 = 2;
 /// The rise an island's level 0 m lies at.
 pub const ISLAND_LEVEL: f64 = 0.27;
-/// The least and the most scale of a drawn island's rises against the one rise's reach, and the halvings between them
-/// that find the scale that gives its share of land (`Terrain::lift`): the share to about a hundredth.
+/// The least and the most scale of a drawn island's rises against the one rise's reach, the steps between them and the
+/// halvings inside one that find the scale that gives its share of land (`Terrain::lift`): the share to about a
+/// hundredth.
 const SCALES: [f64; 2] = [0.2, 3.0];
-const SCALE_HALVINGS: usize = 10;
+const SCALE_STEPS: usize = 14;
+const SCALE_HALVINGS: usize = 6;
 /// The depth below its air block whose leaves' centres sample the terrain inside a coarser cell (`Terrain::inside`):
 /// 1/64 of a block's side, 125 m on the island, finer than the noise's finest octave there.
 pub const SAMPLE_DEPTH: u8 = 6;
@@ -210,12 +212,21 @@ impl Terrain {
     }
     /// The rises of this terrain's island on the flat map `map` for `seed` (`Lift`): one in the middle, or those drawn
     /// from the seed, scaled so the share of the centres of its squares above the level (`land`) is their drawn share
-    /// (`rises::drawn_share`), found by halving `SCALE_HALVINGS` times between `SCALES`.
+    /// (`rises::drawn_share`): the least of `SCALE_STEPS` scales evenly between `SCALES` that holds it (the one that
+    /// holds the most land where none does; more land is not always the larger scale's, as rises that grow into each
+    /// other sag between them), then halved `SCALE_HALVINGS` times between it and the step below.
     pub fn lift(&self, seed: u64, map: &Square) -> Lift {
         if self.shape == Shape::One {
             return Lift::one(seed, map);
         }
-        let (share, mut range) = (super::rises::drawn_share(seed), SCALES);
+        let share = super::rises::drawn_share(seed);
+        let at = |k: usize| SCALES[0] + (SCALES[1] - SCALES[0]) * k as f64 / SCALE_STEPS as f64;
+        let land: Vec<f64> = (1..=SCALE_STEPS).map(|k| self.land(seed, map, &Lift::drawn(seed, map, at(k)))).collect();
+        let Some(k) = land.iter().position(|&l| l >= share) else {
+            let most = (0..SCALE_STEPS).max_by(|&a, &b| land[a].total_cmp(&land[b])).expect("a step");
+            return Lift::drawn(seed, map, at(most + 1));
+        };
+        let mut range = [at(k), at(k + 1)];
         for _ in 0..SCALE_HALVINGS {
             let mid = (range[0] + range[1]) / 2.0;
             if self.land(seed, map, &Lift::drawn(seed, map, mid)) < share {
@@ -224,7 +235,7 @@ impl Terrain {
                 range[1] = mid;
             }
         }
-        Lift::drawn(seed, map, (range[0] + range[1]) / 2.0)
+        Lift::drawn(seed, map, range[1])
     }
     /// The share of the centres of the squares of the flat map `map` whose noise stands above the level for `seed`, its
     /// island raised by `lift` (`rise`).

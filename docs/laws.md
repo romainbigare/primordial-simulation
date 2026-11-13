@@ -39,24 +39,30 @@ cell's height is the terrain's mean over it (`Terrain::inside`, below), the heig
 octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to heights, an island's falling away from
 its rises, says how high the ground would stand. **An island's crust is raised by rises** (`space::rises`, `Lift`):
 the noise's large shape falls by (the distance from the nearest rise, in its reaches)^p, so land stands round each rise
-and low ground that the liquid fills lies between them. An island of **one rise** (`Shape::One`, the default) has one
-in the middle of its map, reaching half its side, p = 1.6. An island of **drawn rises** (`Shape::Drawn`, `ew run --shape
-drawn`) has one to several, all drawn from its seed: their count from one to the most its map holds, the count of lands
-of at least 600 km² that the number-area rule gives for all its land in one, √(land / 600 km²) (Korčák 1938; Mandelbrot
-1975: N(>A) ~ A^-B with B about 1/2), so it grows with the map's side (1 or 2 on 32 squares, 2 or 3 on 64, 5 to 7 on 128, by the drawn share); the area
-each raises as k^(-1/B) for the k-th largest, B drawn from 0.5 (a main land and outliers) to 1.5 (lands of like size);
-each a dome or, one in 33, a ring round a sunken block (a caldera's rim), up to four times as long as wide at any
-heading, its flanks falling with p drawn from 1.6 (a broad dome) to 2.6 (a block with a flat top and steep flanks),
-tilted toward a drawn side (a tilted block) and lifted by up to ±0.1. A dome is tilted by up to 0.8 units of the noise;
-85 rings in 100 by 0.5 to 0.8, more than the noise's large shape rises over the level on the mean (0.5), so their rim
-lies under 0 m on their low side and their inner basin opens to the open low ground (a breached rim, as most calderas
-at the level of the sea are); the rest by less, closed.
-The largest are placed first, each where its land (the reach where its fall is 0.75, the large shape's highest over the
-level) stays 2 squares from the map's edge, shortened and then shrunk where it does not fit, and as far from the others
-as 24 draws find, so straits of open low ground lie between them. Their reaches are scaled together so the share of the
-map's squares whose unworn noise stands above the level is the share drawn from the seed, 20 to 40% (the wear and the
-drowning take some: 21 to 35% of the map is land on drawn islands of 64 squares, seeds 1 to 6, against 27 to 37% on
-islands of one rise). **Each rise has its range** (`Range`): along an axis drawn from the seed (any heading, up to a
+and low ground that the liquid fills lies between them. An island of **drawn rises** (`Shape::Drawn`, `ew run --shape
+drawn`) has one to several, all drawn from its seed: their count the most its map holds or one
+fewer, the most the count of lands of at least 600 km² that the number-area rule gives for all its land in one,
+√(land / 600 km²) (Korčák 1938; Mandelbrot 1975: N(>A) ~ A^-B with B about 1/2), so it grows with the map's side (1
+or 2 on 32 squares, 2 to 4 on 64, 5 to 7 on 128, by the drawn share); the area each raises as k^(-1/B) for the k-th
+largest, B drawn from 0.5 (a main land and outliers) to 0.9 (lands nearer in size), the exponents of the archipelagos
+of the one planet known; each a dome or, one in 33, a ring round a sunken block (a caldera's rim), up to four times as
+long as wide at any heading (a raised block), its flanks falling with p drawn from 1.8 (a broad dome) to 3 (a block
+with a flat top and steep flanks), tilted toward a drawn side (a tilted block) and lifted by up to ±0.1. A dome is
+tilted by up to 0.8 units of the noise; 85 rings in 100 by 0.5 to 0.8, more than the noise's large shape mostly rises
+over the level (its mean, 0.5), so their rim lies under 0 m on their low side and their inner basin opens to the
+open low ground (a breached rim, as most marine calderas are); the rest by less, closed. Where two rises raise the
+land nearly alike, the land is lower by 0.5 units of the noise, falling off by e every 0.2 that one rise lowers it
+more than the other (`DIVIDE`): the crust sags between two raised blocks, so a strait runs between their lands. The
+largest are placed first, each where its land (the reach where its fall is 0.75, the large shape's rise over the
+level in nine places of ten) stays 2 squares from the map's edge, shortened and then shrunk where it does not fit, and
+as far from the others as 24 draws find, their middles at least as far apart as their mean extents (where the fall
+is 0.5) summed. Their reaches are scaled together so the share of the map's squares whose unworn noise stands above
+the level is the share drawn from the seed, 30 to 45%: the least of 14 scales from 0.2 to 3 times the one rise's
+reach that holds it, refined by 6 halvings (rises that grow into each other sag between them, so more land is not
+always the larger scale's). The wear and the drowning take some: 22 to 43% of the map is land on drawn islands of 64
+squares, seeds 1 to 12, 33% on average, against 24 to 37% (31%) on islands of one rise. An island of **one rise**
+(`Shape::One`, the default) has one in the middle of its map, reaching half its side, p = 1.6.
+**Each rise has its range** (`Range`): along an axis drawn from the seed (any heading, up to a
 unit of the noise from the middle of the map, bent by the warp; on a drawn rise along its length, up to a unit for a
 rise of the one rise's reach from its middle and fading past its ends) lies a range, a band half 0.7 to 1.4 units wide
 (drawn; on a drawn rise as much narrower as its reach is) where the land's rise over its level is 1.3 times the mean on
