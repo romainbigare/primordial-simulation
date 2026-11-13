@@ -20,6 +20,11 @@ roadmap are the present.
 - The "Earth" view is the pretty one: vivid, a little cartoony, tricks allowed if they follow the world's numbers. The
   "True" view stays physically true.
 - Tests: few, and always without animals for now (`ew run --roster --plants`). Never loosen a tolerance.
+- **Run tests sparingly** (their word: "it feels like we're running and re-running slow tests every few minutes"):
+  one full gate for a merge; the slow tests once, and only when a law changed (a change of the page or of the tiles
+  needs none); a helper builds and checks only what it changed while it works.
+- **The animals do not count for now** (their word: their code will be reworked later): an eaters' number that
+  moves, or eaters that fare badly, holds nothing back; do not study it.
 - They said: push to main often.
 
 ## 2. How to run helpers
