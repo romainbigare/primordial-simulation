@@ -268,8 +268,8 @@ fn the_sleep_of_change_keeps_the_chemistry() {
 }
 
 /// The climate's key numbers (series columns): the ground temperature on land, the warmest and the coldest month's,
-/// the rain on land, the heat-absorbing gas and the liquid flux of the river cells.
-const CLIMATE: [&str; 6] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "river_flux"];
+/// the rain on land, the heat-absorbing gas and the liquid that runs off the land into the sea.
+const CLIMATE: [&str; 6] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "runoff_sea"];
 
 /// The long-step test's world: its side, its years, the years from which its numbers are averaged, its seeds, and how
 /// far the default step may move each temperature of the climate from a shorter one's, each seed against itself, K.
@@ -296,8 +296,8 @@ fn climate(seed: u64, days: u32) -> Vec<[f64; CLIMATE.len()]> {
 /// The long step against shorter ones (the air's step is a speed setting, `pcore::AIR_STEP_DAYS`): on small worlds with life,
 /// the mean over the seeds of what the default air step moves each of the climate's key numbers (the mean of its last
 /// years) from the step of each of `SHORT_AIR_DAYS`, each seed against itself, is less than `STEP_K` for a temperature
-/// and less than its year-to-year spread at the short step for the others (the rivers by the liquid flux of their cells,
-/// the water a count of cells over a floor stands for).
+/// and less than its year-to-year spread at the short step for the others (the land's water by what runs off it into
+/// the sea: the rain it keeps less what rises from it).
 #[test]
 #[ignore = "slow: six 20-year runs of a 32 x 32 world with life"]
 fn the_long_step_keeps_the_climate() {
