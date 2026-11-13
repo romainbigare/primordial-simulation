@@ -309,7 +309,7 @@ fn a_drawn_islands_low_ground_is_one_and_rings_the_map() {
     let s = terrain.samples(2, &map, (cfg.lat_south, cfg.lat_north));
     let open: Vec<usize> = (0..s.ponds.len()).filter(|&p| s.ponds[p].pass == NONE).collect();
     assert_eq!(open.len(), 1, "one open low ground");
-    let edge = |k: usize| k % s.across == 0 || k % s.across == s.across - 1 || k / s.across == 0 || k / s.across == s.down - 1;
+    let edge = |k: usize| k.is_multiple_of(s.across) || k % s.across == s.across - 1 || k / s.across == 0 || k / s.across == s.down - 1;
     assert!((0..s.h.len()).filter(|&k| edge(k)).all(|k| s.pond[k] == open[0] as u32), "the open low ground along every edge");
     let land = (0..s.h.len()).filter(|&k| s.pond[k] == NONE).count() as f64 / s.h.len() as f64;
     let b = s.books;
