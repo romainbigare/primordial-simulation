@@ -165,7 +165,13 @@ south and 0.3 m of liquid a year through leaves in a rainless far north. Take it
    W/m²), so a warm wet stand builds 2 to 4 kg of dry matter a year where real ones build 0.5 to 2.5. A law for what
    clear air scatters and absorbs and for the cloud's share, with the globe's climate test as its guard; the air's
    heat-absorbing side then has to hold the same temperature with less sun.
-5. Channels that lay down their load (plains, marsh, deltas); ice that cuts valleys; the exact solve of the surface's
+5. Channels that lay down their load (plains, marsh, deltas). The owner asked for wide deltas at some mouths, and
+   agreed to wait if it is a big change: it is. A true delta's size is the load that reached the mouth over the depth
+   of the water there (Gilbert 1885; Galloway 1975), so it shows where a river of much load meets shallow calm water
+   and not elsewhere. Today the made ground holds a fan under water at a mouth (`space::shelf`), the running world's
+   load lands on a whole cell, and the tiles draw one channel to the shore. The package: the load settles at the
+   mouth below the cell's size, the fan's top reaches the water's level, the tiles split the channel over it
+   (Edmonds and Slingerland 2007), plants take it. Also: ice that cuts valleys; the exact solve of the surface's
    step by pieces; the True view's water.
 
 ## 6. The live world for the owner
