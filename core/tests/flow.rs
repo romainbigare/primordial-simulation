@@ -1122,23 +1122,26 @@ const FACING: f64 = 0.3;
 const MELT_STEPS: usize = 60;
 
 /// Of two cells alike but for the way they face (the lowest two dry land cells side by side between `SNOW_LAT` that hold
-/// no part of a body of standing liquid, flat amid flat land at one height, `testkit::flat_round`), at one latitude
+/// no part of a body of standing liquid, on the smallest island that has them, `testkit::island_in_with`, flat amid flat
+/// land at one height, `testkit::flat_round`), at one latitude
 /// under snow at the end of winter, the one that faces the equator takes more sun (`flow::on_slope`): it loses its snow
 /// first and is warmer meanwhile, with no other change. Each faces each way in turn, so nothing else tells them apart.
 /// Their island reaches the low latitudes
 /// (`SNOW_WORLD_LAT`), as a real place at 50° N gets much of its winter heat from lower latitudes through the air.
 #[test]
 fn a_slope_facing_the_sun_loses_its_snow_first() {
-    let (chem, init) = worldgen::chemistry0();
     let cfg = pcore::Config { lat_south: SNOW_WORLD_LAT[0], lat_north: SNOW_WORLD_LAT[1], ..Default::default() };
-    let mut w0 = worldgen::terrain::build(1, worldgen::terrain::island(16, 16), chem, &init, cfg);
+    // The lowest such pair at the end of winter (flat at the height of the first, `flat_round`): its spring comes first.
+    let pair = |w: &pcore::World| {
+        let mut w = w.clone();
+        (0..TO_SPRING).for_each(|_| pcore::step(&mut w));
+        let (gw, lat) = (w.map.w, |i: usize| w.mesh.cells().lat()[i]);
+        let dry: Vec<usize> = worldgen::testkit::dry_lands(&w).into_iter().filter(|&i| (SNOW_LAT[0]..SNOW_LAT[1]).contains(&lat(i)) && !w.in_body(i)).collect();
+        let pairs = dry.iter().copied().filter(|&i| i % gw + 1 < gw && dry.contains(&(i + 1)));
+        pairs.min_by(|&x, &y| w.surface_z(x).total_cmp(&w.surface_z(y)))
+    };
+    let (mut w0, a) = worldgen::testkit::island_in_with(1, cfg, pair);
     (0..TO_SPRING).for_each(|_| pcore::step(&mut w0));
-    let gw = w0.map.w;
-    let lat = |i: usize| w0.mesh.cells().lat()[i];
-    let dry: Vec<usize> = worldgen::testkit::dry_lands(&w0).into_iter().filter(|&i| (SNOW_LAT[0]..SNOW_LAT[1]).contains(&lat(i)) && !w0.in_body(i)).collect();
-    // The lowest such pair (flat at the height of the first, `flat_round`): its spring comes first.
-    let pairs = dry.iter().copied().filter(|&i| i % gw + 1 < gw && dry.contains(&(i + 1)));
-    let a = pairs.min_by(|&x, &y| w0.surface_z(x).total_cmp(&w0.surface_z(y))).expect("two dry land cells side by side");
     let b = a + 1;
     worldgen::testkit::flat_round(&mut w0, a);
     for &i in &[a, b] {
