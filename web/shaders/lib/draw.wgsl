@@ -134,8 +134,9 @@ fn snow_depth(ice_m: f32, t: f32, melt: f32) -> f32 { return SNOW_PER_ICE * ice_
 // From this depth on it is water, and no land plant stands in it (its roots need air in the soil): one rule for the
 // water drawn and for the plants.
 const FILM_M = 0.05;
-// The share of a plant that stands where liquid stands `depth` m deep.
-fn above_water(depth: f32) -> f32 { return 1.0 - ease(0.0, FILM_M, depth); }
+// The share of a plant that stands where liquid stands `depth` m deep: all of it on soaked ground under a film, none
+// in water.
+fn above_water(depth: f32) -> f32 { return select(1.0, 0.0, depth >= FILM_M); }
 // Snow buries a plant `height` m tall as it reaches from `BURIED_FROM` of its height to all of it: a herb is gone under
 // a deep snow, a tree stands in it.
 const BURIED_FROM = 0.6;

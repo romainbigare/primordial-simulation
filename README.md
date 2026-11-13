@@ -135,8 +135,8 @@ about 60 m fixed in the world that the far field draws alike. A kind's roots nee
 (`Cover::need`): where the loose ground at a point is thinner it thins, by the cover's own rule and number
 (`rooted_from`, sent with the laws' numbers), so bare bed holds only the smallest kinds in its cracks, thin ground herbs
 and low bushes, and trees stand where it is deep; what a square's thin part does not hold stands on the share that holds
-it (`Cover::rooted`), so the square keeps its cover (near and far alike). None stands where liquid stands over its roots
-(0.3 m, Jackson and others 1996). Snow buries a plant by its depth (three times the depth of the cell's frozen cover,
+it (`Cover::rooted`), so the square keeps its cover (near and far alike). None stands in water (liquid deeper than a film of
+5 cm over the ground drawn; under that film the ground is soaked and keeps its plants). Snow buries a plant by its depth (three times the depth of the cell's frozen cover,
 settled snow against ice) against the plant's height: a herb is gone under a deep snow, a tree stands in it, its
 crown snowy on top if it keeps its leaves, bare if it sheds them, its stem and shadow kept; from afar a forest in snow
 is dark trees over white ground. A tape's map has no heights of plants: snow hides its foliage as far as it covers the
