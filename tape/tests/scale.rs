@@ -28,7 +28,7 @@ fn keys(seed: u64, fine: bool) -> Vec<[f64; KEYS.len()]> {
     let map = map.by_blocks(|_, _| if fine { square } else { square - 1 });
     let km = map.side * if fine { 1.0 } else { 2.0 } / 1e3;
     let mut years = vec![];
-    run_on(worldgen::terrain::new_map(seed, map), YEARS, false, |_| {}, |y, _, rec| {
+    run_on(worldgen::terrain::new_map(seed, map), YEARS, &worldgen::life::TWO, |_| {}, |y, _, rec| {
         if y >= FROM {
             years.push(KEYS.map(|c| if c == "river_km" { rec.last("rivers") * km } else { rec.last(c) }));
         }

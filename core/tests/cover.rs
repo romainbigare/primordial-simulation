@@ -1,11 +1,13 @@
 //! The cover (laws.md 4.5): a field of light-eaters per cell grows in light and dies in frost, keeping the books, and
-//! animals graze it by their take from the place.
+//! what takes from it through the contract takes what it loses: a plain taker, and animals by their take from the
+//! place.
 
-use pcore::body::{PHASE, TAKEN};
+use pcore::life::{PHASE, TAKEN};
 use pcore::cover::{self, FROST};
 use pcore::event::EventKind;
 use worldgen::life::{Place, KINDS};
-use worldgen::testkit::{dry_lands, eater, small_world, Books};
+use pcore::contract::{self, Layer};
+use worldgen::testkit::{dry_lands, eater, small_world, Books, Taker};
 
 /// Latitudes of the south and north edges of the frost test's island, degrees: it reaches from the warm latitudes to
 /// the cold, so its air brings every band the heat of the lower latitudes, as a real place gets.
@@ -136,6 +138,42 @@ fn the_cover_dies_in_frost() {
     println!("cover {kg0:.3e} kg, a month later {:.3e} kg; lost to frost {:.3e} kg", cover_kg(&w), lost[PHASE as usize]);
     assert!(lost[PHASE as usize] > 0.1 * kg0 && cover_kg(&w) < kg0, "no frost: lost {lost:?}");
     books.assert_kept(&w, 1e-9);
+}
+
+/// What `layer` of the cover of cell `i` shows (`contract::shown`).
+fn shown(w: &pcore::World, i: usize, layer: Layer) -> contract::Shown {
+    contract::shown(w, w.life.cell_at(i), layer).expect("the cover's parts")
+}
+
+/// A taker on the contract (`testkit::Taker`) takes each month a share of the lowest slot of a cell's cover
+/// (`contract::slots`) and passes it to the ground: what it takes is what that slot loses, to rounding, every element
+/// and the energy are kept, and the cell grazed harder holds less cover after a year.
+#[test]
+fn what_a_taker_takes_its_slot_loses() {
+    let (mut w, i) = start();
+    assert!(cover::place(&mut w, i, genes(), 0, 1.0));
+    let mut left = vec![];
+    for share in [0.05, 0.25] {
+        let mut w = w.clone();
+        let (books, mut taker) = (Books::now(&w), Taker::new(i, Layer::Cover, share));
+        for _ in 0..12 {
+            pcore::step(&mut w);
+            let Some(&(lowest, _)) = contract::slots(&w, w.life.cell_at(i)).first() else { break };
+            taker.layer = lowest;
+            let before = shown(&w, i, taker.layer);
+            let took = taker.month(&mut w);
+            let after = shown(&w, i, taker.layer);
+            for (k, &t) in took.iter().enumerate() {
+                let lost = before.mol[k] - after.mol[k];
+                assert!((lost - t).abs() <= 1e-12 * before.mol[k], "substance {k}: took {t:e} mol, the slot lost {lost:e}");
+            }
+        }
+        books.assert_kept(&w, 1e-9);
+        left.push(shown(&w, i, Layer::Cover).kg);
+        println!("a share {share} taken a month: took {:.3e} mol, {:.3e} J; the cell keeps {:.3e} kg", taker.took.iter().sum::<f64>(), taker.heat, left[left.len() - 1]);
+        assert!(taker.took.iter().sum::<f64>() > 0.0, "the taker took nothing");
+    }
+    assert!(left[1] < left[0], "the cell grazed harder holds more: {left:?}");
 }
 
 /// An animal whose brain only takes from the place, in a cell of thick cover, takes from the cover (grazing): its

@@ -12,7 +12,7 @@ use std::sync::Arc;
 /// The samples of the island of seed 1, 16 x 16 squares, the metres a sample takes, and the default channel law.
 fn island() -> (Arc<Samples>, f64, Law) {
     let cfg = pcore::Config::default();
-    let (map, terrain) = worldgen::terrain::island_ground(1, 16, 16);
+    let (map, terrain) = worldgen::terrain::island_ground(1, (16, 16), pcore::space::terrain::Shape::One);
     let s = terrain.samples(1, &map, (cfg.lat_south, cfg.lat_north));
     (s, map.length(SAMPLE_DEPTH), Law::of(&cfg.phys))
 }
@@ -104,13 +104,13 @@ fn the_smooth_shore_keeps_the_area_under_the_level() {
         let mut last = None;
         for x in 0..s.across * PER {
             let p = [(x as f64 + 0.5) / PER as f64, (y as f64 + 0.5) / PER as f64];
-            let (level, share) = shore.beside(p);
-            if level.is_nan() {
+            let by = shore.beside(p);
+            if by.level.is_nan() {
                 last = None;
                 continue;
             }
-            let under = h(p) < level;
-            moved += (shore.drawn(p, h(p), level, share, [0.0; 2]) < level) as i64 - under as i64;
+            let under = h(p) < by.level;
+            moved += (shore.drawn(p, h(p), &by, [0.0; 2]).0 < by.level) as i64 - under as i64;
             crossings += (last.is_some_and(|l| l != under)) as i64;
             last = Some(under);
         }

@@ -4,7 +4,8 @@
 use super::pay::{burn, settle_heat, upkeep};
 use super::drink::{drink, evaporate};
 use super::exchange::around;
-use super::{thin, to_ground, Body, Layout, AGE, COOL_T, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
+use super::{thin, to_ground, Body, Layout, COOL_T, KEEP_T, MARGIN, REPAIR};
+use crate::life::{AGE, LACK, PHASE, SPENT};
 use crate::chem::{Phase, Stores};
 use crate::math::one_minus_exp;
 use crate::rng::{Purpose, Rng};

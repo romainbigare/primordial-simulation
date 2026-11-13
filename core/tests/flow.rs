@@ -521,7 +521,7 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
     assert!(p.seep * w0.map.side * 1e-3 * year / (p.porosity * area) < 2e-4);
     let mv = w0.chem.molar_volume(LIQUID, Phase::Liquid);
     let full = p.bed_porosity * p.bed_depth * area;
-    let stands = |w: &World, i: usize| w.surface_z(i) + pcore::survey::env_of(w, i)[1];
+    let stands = |w: &World, i: usize| w.surface_z(i) + pcore::contract::env_of(w, i)[1];
     // The slope of the steepest way down (`Level::steepest`) to the neighbours lower by more than `still`, as the sweep
     // reads it.
     let slope = |w: &World, i: usize| {
@@ -552,7 +552,7 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
     assert!(s > 1e-3 && (drained / want - 1.0).abs() < 0.02, "drained {drained} m³, want {want}");
     assert!(g1 - g0 < 0.05 * want, "{} m³ stayed in the cell", g1 - g0);
     // Under the deep liquid, level with its neighbours: nothing drains to channels.
-    let under = (0..n).find(|&i| pcore::survey::env_of(&w0, i)[1] > 20.0 && slope(&w0, i) == 0.0).expect("a cell under deep liquid");
+    let under = (0..n).find(|&i| pcore::contract::env_of(&w0, i)[1] > 20.0 && slope(&w0, i) == 0.0).expect("a cell under deep liquid");
     let ((d1, _), (d0, _)) = (run(under, p.hill), run(under, 1e15));
     assert!((d1 - d0).abs() <= 1e-9 * d0, "{d1} against {d0}");
 }
@@ -999,7 +999,7 @@ fn lane_scene() -> (World, usize, usize, Handle) {
 fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
     let (mut w, a, b, mut slot) = lane_scene();
     let link = w.mesh.cells().link(a, b).expect("the cells are neighbours");
-    pcore::survey::survey(&mut w);
+    pcore::month_start(&mut w);
     assert!((lanes::eased(&w, link) - 1.0).abs() < 1e-9);
     let mut crossed = 0;
     // Moving needs force: with the strength of the starting light-eaters (0.05: a force of 0.025 of its weight) the
@@ -1021,7 +1021,7 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
         pcore::life::land(&mut w);
         slot = w.life.find(id).expect("the body lives");
         crossed += (w.life[slot].cell as usize == to) as u32;
-        pcore::survey::survey(&mut w);
+        pcore::month_start(&mut w);
         if lanes::eased(&w, link) > 3.0 {
             break;
         }
@@ -1058,7 +1058,7 @@ fn a_globe_keeps_its_books_round_the_wrap() {
 #[test]
 fn an_island_in_the_planets_air_keeps_its_books_and_carries_heat_north() {
     const BAND: (f64, f64) = (30.0, 55.0);
-    let mut w = worldgen::terrain::new_island(1, 16, 16, worldgen::terrain::banded(BAND));
+    let mut w = worldgen::terrain::new_island(1, (16, 16), pcore::space::terrain::Shape::One, worldgen::terrain::banded(BAND));
     worldgen::planet::stand(&mut w);
     let books = Books::now(&w);
     (0..3 * w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));

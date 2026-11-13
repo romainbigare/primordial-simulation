@@ -7,7 +7,7 @@ orderings) is said once, in the code's doc comments; the code is the truth. Numb
 **Where the code is** (`core/src/`): time in `clock/` and `schedule.rs`; the shape of the world in `space/`; how a
 cell's means lie over its own ground in `inside/`; shared
 maths in `solve/` (`sweep`, `line`); nodes and books in `store/`, `world.rs`, `check.rs`; ground heat in
-`ground.rs`; settings in `params.rs`, constants in `units.rs`; bodies in `body/`, `life.rs`, `nodes.rs`, `lineage.rs`,
+`ground.rs`; settings in `params.rs`, constants in `units.rs`; bodies in `body/`, `life/`, `nodes.rs`, `lineage.rs`,
 `brain.rs`; the cells as bodies see them in `survey.rs`; paths in `lanes.rs`; keyed random numbers in `rng.rs`; the
 tape's events in `event.rs`; threads in `par.rs` (the same results with and without, on any count of threads).
 
@@ -38,16 +38,33 @@ cell's height is the terrain's mean over it (`Terrain::inside`, below), the heig
 **The terrain**
 (`space::terrain`) is one function of the world's seed and a point of the map, at any size: value noise summed over
 octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to heights, an island's falling away from
-the middle of its map, says how high the ground would stand. **An island's land rises in blocks** (`terrain::rise`,
-`Range`): along an axis drawn from the seed (any heading, up to a unit of the noise from the middle of the map, bent by
-the warp) lies a range, a band half 0.7 to 1.4 units wide (drawn) where the land's rise over its level is 1.3 times the
-mean on the axis, falling by a bell across it to 0.2 times the mean far from it (`RISES`): a high rough range, its
+its rises, says how high the ground would stand. **An island's crust is raised by rises** (`space::rises`, `Lift`):
+the noise's large shape falls by (the distance from the nearest rise, in its reaches)^p, so land stands round each rise
+and low ground that the liquid fills lies between them. An island of **one rise** (`Shape::One`, the default) has one
+in the middle of its map, reaching half its side, p = 1.6. An island of **drawn rises** (`Shape::Drawn`, `ew run --shape
+drawn`) has one to several, all drawn from its seed: their count from one to the most its map holds, the count of lands
+of at least 600 km² that the number-area rule gives for all its land in one, √(land / 600 km²) (Korčák 1938; Mandelbrot
+1975: N(>A) ~ A^-B with B about 1/2), so it grows with the map's side (1 or 2 on 32 squares, 2 or 3 on 64, 5 to 7 on 128, by the drawn share); the area
+each raises as k^(-1/B) for the k-th largest, B drawn from 0.5 (a main land and outliers) to 1.5 (lands of like size);
+each a dome or a ring (one in seven: a ring round an inner basin), up to four times as long as wide at any heading, its
+flanks falling with p drawn from 1.6 (a broad dome) to 2.6 (a block with a flat top and steep flanks), tilted toward a
+drawn side by up to 0.8 units of the noise (a tilted block, a ring open on one side: a bay) and lifted by up to ±0.1.
+The largest are placed first, each where its land (the reach where its fall is 0.75, the large shape's highest over the
+level) stays 2 squares from the map's edge, shortened and then shrunk where it does not fit, and as far from the others
+as 24 draws find, so straits of open low ground lie between them. Their reaches are scaled together so the share of the
+map's squares whose unworn noise stands above the level is the share drawn from the seed, 20 to 40% (the wear and the
+drowning take some: 21 to 35% of the map is land on drawn islands of 64 squares, seeds 1 to 6, against 27 to 37% on
+islands of one rise). **Each rise has its range** (`Range`): along an axis drawn from the seed (any heading, up to a
+unit of the noise from the middle of the map, bent by the warp; on a drawn rise along its length, up to a unit for a
+rise of the one rise's reach from its middle and fading past its ends) lies a range, a band half 0.7 to 1.4 units wide
+(drawn; on a drawn rise as much narrower as its reach is) where the land's rise over its level is 1.3 times the mean on
+the axis, falling by a bell across it to 0.2 times the mean far from every range (`RISES`): a high rough range, its
 foothills, and a wide low plain where the land rises slowly. That scales the noise's large shape; its base's octaves
 from the third on (`FINE_FROM`, a quarter of the coarsest's wavelength and finer) keep their own size where the land
 rises slower than the mean and grow with it where faster, so a plain keeps its own swells, low hills and shallow
 hollows of tens of metres while its large heights stay low. A globe's land rises alike everywhere (its noise is of the scale of its continents, its cells
 wider than a range); the world keeps what it needs beside its seed and its map
-(`World::terrain`: the rise its level 0 m lies at). The
+(`World::terrain`: the rise its level 0 m lies at, and an island's shape). The
 noise's finest octave is 670 m on the 64 x 64 island and 200 km on a globe. The ground is held at **samples**, the
 leaves of `SAMPLE_DEPTH` (1/64 of a block: 125 m on the island, 20 km on a globe of 64 rows), and **the samples are
 worn** (`space::samples`, `space::wear`, found once from the seed when first read, not saved): the ground has a
@@ -144,14 +161,19 @@ no new pit and no new peak.) Nothing random is laid on it. So a leaf has a mean 
 point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
-(`schedule::month`), each for the whole month: the survey (`survey::survey`: one task per chunk on the pool with the
-feature `threads`, in each of its cells the wear of movers, the shade and the sums; a death that lets go of a part
-queues that for the serial pass, as in a batch; it rebuilds Flow's
-state in full for the cells' surroundings, and Flow's own pass leaves it then); Flow: the air in steps of
+(`schedule::month`), each for the whole month. The natural world's passes run with no body; the bodies' passes stand
+between them where one side reads what the other left, and with no body they do nothing. First the month's start
+(`schedule::START`, alone `month_start`): the bodies' press (`survey::press`: one task per chunk on the pool with the
+feature `threads`, in each of its cells what movers pushed breaks its bodies and its cover, `contract::press`; a death
+that lets go of a part queues that for the serial pass, as in a batch); what stands on each cell, the cover's part and
+the shade it casts (`contract::stand_up`); the bodies' part of it, and the queue of the press lands
+(`survey::stand`); the surroundings (`contract::surroundings`: Flow's state rebuilt in full and each cell's place from
+it, which Flow's own pass then leaves); what the bodies see (`survey::features`). Then Flow: the air in steps of
 `AIR_STEP_DAYS` (15 days, two a month, each at its own time in the month), after each the sink of the liquid over
-field capacity into the bed's store; then the liquid and erosion; heat sideways and creep yearly; the cover's month;
-Change; Bond (each chunk's cell by cell, the chunks on the pool: in a cell the turns of its parts in the order of its
-list, on its view, then the loads of its structures in the order of their roots); then the bodies (`survey::batch`).
+field capacity into the bed's store; then the liquid and erosion; heat sideways and creep yearly. Then the cover's
+month (`cover::month`) and Change. Then the bodies: Bond (each chunk's cell by cell, the chunks on the pool: in a cell
+the turns of its parts in the order of its list, on its view, then the loads of its structures in the order of their
+roots); the lanes' regrowth yearly (1.7); the bodies' update (`survey::batch`).
 **The bodies' step** (`survey/steps.rs`): a move is one link a decision, and every cell steps a month (the pace the
 numbers of bodies are anchored at). The random draws of the bodies are keyed by the day (`World::key_at`). **Every
 body updates at the month's start**, after the month's Flow, Change and Bond: one batch holds every living body.
@@ -224,7 +246,7 @@ one, in the order queued, each a serial step (`World::in_cell`); what they queue
 holders of each lineage and born rows are counted from the bodies (`Life::recount`): a lineage left
 with none dies out, born rows left with none are freed. Each entry is applied by its law on the bodies and parts as
 they are then. A move lands (`choose::land_move`): the body enters the cell, carries what it holds if it paid to (else
-it lets go of it), counts in the cell's crossings, and its push breaks the bodies there at the next survey; members of
+it lets go of it), counts in the cell's crossings, and its push breaks the bodies there at the next month's start; members of
 a node who moved join their kind there (`copy::kin`) as an amount with their genes and rows, not as a body; then its push reaches the structures there, the structure it
 carries comes along (any other body that held a part of it, left behind, lets go of it), and it clears the lane
 (`Entry::Passed`). A litter joins its kind there or starts a body, and its
@@ -234,6 +256,23 @@ holds nothing, is inside nothing, and the node is in its cell and not leaving it
 gone does nothing: a move of a body that died (its cost was paid), a watch whose watcher is no longer of its lineage,
 a part act no longer possible or that cannot be paid; less than one member of a node's children with no node to join
 goes back into the parent's brood, or to the ground of the parent's cell if it died (`copy::back`).
+
+**The contract** (`contract`): what lies between the natural world (the ground, the air, the cover) and what takes
+from it (bodies today). Neither side names the other's modules (`cli/tests/sides.rs`). It is plain data and functions
+over the one source, with no copy. **What a cell shows** a taker: its cover as a whole and each slot by the height its
+plants stand at (`contract::shown`, `contract::slots`): the mass, the amount of each substance, the heat and the
+energy to break all of it loose; its place as the month's start left it (`contract::place`: the ground's temperature,
+the depth of the liquid standing on it, its height), how much it hides (`contract::hides`) and how thick what stands
+there is to pass (`contract::thickness`). The loose ground and the remains a taker reads through its cell's view of the
+store. **Take** (`contract::take`): a taker asks a layer (the ground, the whole cover, one slot) for an amount of a
+substance and gets what is granted, never more than is there, with its heat; the ground's side is booked in the view,
+the cover's by the cover (`Cover::take`), the taker books its own. **Give** (`contract::give`): matter and heat back to
+the ground, through the view. **Press** (`contract::press`): work spent on a cell breaks its cover by the share it pays
+for (`Cover::breaking`), and what breaks goes to the ground as remains with its heat. **What stands on a cell**
+(`contract::Stand`): its mass, capture area, the light it absorbs and keeps and the energy to break it, the cover's
+part at each month's start (`Cover::stand`) and each taker's added (`Stand::add`); Flow reads it (1.3, 1.4). A cell
+shows itself as the month's start left its place and what stands, and its cover as it is; takes land in the takers'
+month, and the cover feels them in its own next month.
 
 **Inside a cell** (`inside/`, handover 5.2): a cell holds means (its cover, the liquid in its soil, what stands on
 it). The ground inside it is the terrain's worn samples inside it, and what stands lies on them (`flow::curve`, 1.2).
@@ -265,10 +304,10 @@ ground (its level-volume curve) at its centroid; its store `bed_depth` under its
 air node's matter lies at the mean head of its cells (their solid surface and liquid as a column, as Flow's state
 stacks them), for the height of a column above its ground is in its heat (its heat capacity at constant pressure holds
 the work the column does as it rises); a bodies' node's gas and the matter of a cell's life (its bodies, its cover
-with the seeds it sends until they land, its parts) at its cell's head. The parts of a month's Flow after the survey
+with the seeds it sends until they land, its parts) at its cell's head. The parts of a month's Flow after its start
 (state, the air's steps, liquid, creep, refresh) follow each other with nothing between (`flow::chain`) and are
-booked as one at their end; the survey's own
-build of Flow's state, and a part run alone, are booked at their own end. In each booking every move carries its
+booked as one at their end; the build of Flow's state at the month's start (`contract::surroundings`), and a part run
+alone, are booked at their own end. In each booking every move carries its
 potential energy from the height it leaves (a ground node's liquid top: the table of its pores, or the level of what
 stands where that lies higher, so liquid standing in a pit under its full pores leaves with them and the top never
 rises as liquid leaves, `stack::Column::top`; a bodies' node's head; an air node's mean head; a store's table; each the mean of the booking's start and
@@ -561,7 +600,7 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   sensible heat with the air (`sensible`).
 - **The bodies' node** (`Class::Bodies`, one per cell): light the cover absorbs warms the ground, except the share its
   light reaction stores (`Cover::keep`), booked from the sun into this node; the cover takes it at its month, and what
-  it does not claim goes back to the ground before each air step (`survey::release`).
+  it does not claim goes back to the ground before each air step (`cover::release`).
 - **A body as one surface** (`air::surf`): under each air node a body's cells that mix as one (1.2) face the air as
   one surface: one balance with their summed area, heat, heat capacity and gases, at their mean temperature (by heat
   capacity), reflectance, height and air (by area) and the sunlight of their mean latitude. It answers the air as one
@@ -685,7 +724,7 @@ which breaks them (6.8) and clears the link (`lanes::clear`) of the ground whose
 over the cell's breaking energy per m²); a cleared link is cheaper (`lanes::resist`) and grows back yearly
 (`lanes::regrow`, `regrow`). This one rule is what can make paths.
 
-### 1.8 The step by the size
+### 1.8 Each law takes one step
 An explicit step is safe while `dt Σ g / cap` of each node stays within 1/2 (no pattern changes sign in a step,
 `solve::sweep`). For a diffusion of D m²/s on a cell of side Δ with four borders that is 4 D dt / Δ² ≤ 1/2, so a step
 of `dt` is safe down to Δ = √(8 D dt). On the island (month 2.59e6 s, year 3.11e7 s):
@@ -893,7 +932,7 @@ each material k of what is broken, the energy and the force fall to the share c_
 the part's walls (their volume over half its outer surface, `Part::thickness`), l the width of what is broken (a member
 of a body, `Body::width`; the cover, its volume per m²; a joint, the root of its contact area), where the edge is
 harder than that material (scratch hardness, `Substance::hardness`: an indenter marks only what is softer, Tabor 1951),
-else c_k = 1. Over a thing, c̄ = Σ V σ c_k / Σ V σ (`Body::cut_by`, `Cover::cut_by`). A node's parts are one in each
+else c_k = 1. Over a thing, c̄ = Σ V σ c_k / Σ V σ (`Body::cut_by`, `contract::cut_share`). A node's parts are one in each
 of m of its n members' hands (a lot of m held, at most n), so the edges leave the node 1 − (1 − c̄) m / n
 (`Edge::leaves`), as m of its members cutting and the others breaking bluntly: a node of 100 holding 100 edges bites
 as 100 individuals each with one do (`core/tests/lots.rs`). The edges wear together, by the work done through all of
@@ -974,7 +1013,7 @@ eat with it at every sub-step after, whatever the step. A child has a body of
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
 dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member
 (`copy::BROOD_HELD`), so its members' broods lie evenly between none and one child, as individuals' do. A share
-`DISPERSE` of the children disperses by the dispersal kernel (`copy::lot`): a lot starts at a point drawn evenly over
+`DISPERSE` of the children disperses by the dispersal kernel (`life::lot`): a lot starts at a point drawn evenly over
 its cell and moves by an offset drawn from a kernel of two scales, a near and a far one (Clark et al. 1999: most within
 tens of metres, a long tail to km). Each scale is an isotropic Gaussian, `Physics::kernel_near` and `kernel_far` m
 wide; the far one is drawn with the share `kernel_far_share`. The lot lands in the cell that holds the point (none: off
@@ -1161,7 +1200,7 @@ seeds fill it:
   out. The fuel past its reserve that it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
 - **Seeds**: the share `SEED` of what it builds leaves in `seed::LOTS` (8) equal lots, each landing where the dispersal
-  kernel draws it, as children do (`copy::lot`, 4.2); the lots of a cell make a packet each (`seed::send`; what lands
+  kernel draws it, as children do (`life::lot`, 4.2); the lots of a cell make a packet each (`seed::send`; what lands
   in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step ×
   `cover_mut`), of body matter first and then walls (an embryo and its store); all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
   its layer (`math::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
@@ -1189,12 +1228,14 @@ seeds fill it:
   their heat at the air's temperature and their latent heat) and to its cell's bodies' node (with theirs), as bodies
   breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 7,
   12). Every move is booked through the cell's view (`store::Moves`), its gas within the cell's share of the air.
-- **Eaten and broken**: an animal's take from the place takes from its ground and its cover by one search
-  (`feed::take_node`, 5.3), paying to break what it takes of the cover (`Cover::breaking`, as a bite pays); movers that
-  push through a cell break the cover by its share of the cell's mass, as they break bodies (6.8, `choose::wear`).
-- **What it is to the rest**: its mass, capture area, the light it absorbs and the energy to break it are one more
-  body of the cell in the survey's sums (`Life::sum`), so it shades, holds the ground (1.3), hides bodies, slows
-  movers and makes lanes (1.7) as bodies do.
+- **Eaten and broken**: only through the contract (section 0): a taker takes from the whole cover or from one slot
+  (`contract::take`), each slot giving in proportion to what it holds, and pays to break what it takes
+  (`contract::Shown::breaking`); work pressed on a cell breaks the cover by its share (`contract::press`). An
+  animal's take takes from its ground and the whole cover by one search (`feed::take_node`, 5.3); movers that push
+  through a cell press on it by the cover's share of the cell's mass, as they break bodies (6.8, `choose::wear`).
+- **What it is to the rest**: its mass, capture area, the light it absorbs and keeps and the energy to break it are
+  its part of what stands on its cell (`Cover::stand`, `contract::Stand`), with the bodies' part added, so it shades,
+  holds the ground (1.3), hides bodies, slows movers and makes lanes (1.7) as bodies do.
 
 ## 5. Choose: a small brain sees a little, acts, learns and copies others
 Files: `core/src/choose/` (`mod`, `perceive`, `learn`, `feed`, `go`, `spread`), `core/src/brain.rs`.
@@ -1503,7 +1544,8 @@ to the air. Body matter holds no rock element: the **rock salt (11)** is rock ch
 ## 8. Starting conditions (not laws)
 Placed by `worldgen` (`worldgen::schedule::Schedule`, carried by a snapshot) and printed by every run; the laws never
 read a kind.
-- **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on: an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
+- **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on: an island of one
+  rise or of drawn rises (`--shape`, 0), or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
   `World::terrain`); the bed of the chemistry's `makes`, each over the share of the cell's samples whose surface the
   wear left in it (`space::strata`); the loose ground the wear left (0: the mantle on land, the shelf on the open low ground), each cell the
   mean over its samples of the top `skin_m` of each sample's at most: the ground node is the layer that exchanges with

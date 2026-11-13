@@ -1,4 +1,4 @@
-//! Where what disperses lands (children, `copy`; seeds, `cover`): a lot starts at a point drawn evenly over its source
+//! The dispersal kernel: where what disperses lands (children, `copy`; seeds, `cover`): a lot starts at a point drawn evenly over its source
 //! cell and moves by an offset drawn from a kernel of two scales, a near one and a far one: most lands within tens of
 //! metres, a long tail reaches km (Clark et al. 1999). Each scale is an isotropic Gaussian. The lot lands in the cell
 //! that holds the point, so in expectation what lands in a cell is the kernel integrated over it from the source's
@@ -21,7 +21,3 @@ pub fn lot(w: &World, i: usize, r: &mut Rng) -> Option<usize> {
     w.mesh.tree().holding(at[0], at[1])
 }
 
-/// The cell whole members that disperse from cell `i` land in: that of one lot (`lot`); none where they stay in `i`.
-pub(super) fn landing(w: &World, i: usize, r: &mut Rng) -> Option<usize> {
-    lot(w, i, r).filter(|&j| j != i)
-}

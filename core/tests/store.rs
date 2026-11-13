@@ -221,7 +221,7 @@ fn remains_carry_their_potential_energy_into_the_ground() {
     let h = w.add(b);
     let (books, p0, l0) = (Books::now(&w), pcore::flow::potential(&w).expect("Flow's state"), w.store.lifted());
     let b = std::mem::take(&mut w.life[h]);
-    w.in_cell(i, |w, d| pcore::body::die(w, d, h, b, pcore::body::LACK));
+    w.in_cell(i, |w, d| pcore::body::die(w, d, h, b, pcore::life::LACK));
     let (gained, lifted) = (pcore::flow::potential(&w).expect("Flow's state") - p0, w.store.lifted() - l0);
     assert!(gained.abs() > 1e9, "the remains moved the matter: {gained:e} J");
     assert!((gained - lifted).abs() < 1e-6 * gained.abs(), "gained {gained:e} J, booked {lifted:e} J");

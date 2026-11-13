@@ -42,7 +42,7 @@ pub(super) fn perceive(w: &World, d: &Chunk, b: &Body, nseen: usize, rng: &mut R
     let cell = d.at(i);
     let room = bond::room(cell, b);
     let mine = room.map(|(r, e)| (r, e.closed));
-    let show = (-(w.canopy[i] as f64)).exp();
+    let show = (-(crate::contract::hides(w, i) as f64)).exp();
     let n = cell.bodies.len();
     let off = if n == 0 { 0 } else { rng.below(n) };
     for slot in (0..n).map(|q| (off + q) % n) {
@@ -96,7 +96,7 @@ pub(super) fn inputs(w: &World, cell: &Cell, b: &Body, (temp, mem): (f64, usize)
     let (none, min, bc) = (SHARE_SENSE * ln(STORE_FLOOR), Layout::of(chem).min, chem.body());
     let (held, least) = (|k: usize| b.amount(bc, k), |k: usize| bc.place(k).map_or(0.0, |s| b.genes[min + s].max(0.0)));
     x.extend((0..ns).map(|k| if held(k) > 0.0 { SHARE_SENSE * ln((held(k) * chem.subs[k].molar_mass / mass) as f32 + STORE_FLOOR) } else { none } - SHARE_SENSE * ln(least(k) + MIN_FLOOR)));
-    let (dt, sun) = ((temp - w.life.env[i][0]) as f32, w.season() as f32 * std::f32::consts::TAU);
+    let (dt, sun) = ((temp - crate::contract::place(w, i).t) as f32, w.season() as f32 * std::f32::consts::TAU);
     let lost = (ln(b.lived.lost.max(0.0) as f32) - ln(b.lived.released.max(0.0) as f32)).clamp(-LOST_SPAN, LOST_SPAN);
     x.extend([dt / WARM_SCALE, lost, ln(pm as f32) / LN_MASS - 1.0, sun.sin(), sun.cos()]);
     x.extend_from_slice(w.life.feat(i, 1));

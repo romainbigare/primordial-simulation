@@ -1,7 +1,12 @@
 //! What the tests of the laws share (the `testkit` feature, for dev-dependencies only): a small world, founders of a
-//! chosen brain, edits booked from outside, the books, and the substances of chemistry 0 by number.
+//! chosen brain, edits booked from outside, the books, the substances of chemistry 0 by number, and a plain taker on
+//! the contract (`taker`).
 
-use pcore::body::{Body, Layout, BRAIN_SIZES, CHILD, COPY_MASS, DISPERSE, STRENGTH, WET_TISSUE};
+mod taker;
+pub use taker::Taker;
+
+use pcore::body::{Body, Layout, BRAIN_SIZES, CHILD, COPY_MASS, DISPERSE, STRENGTH};
+use pcore::life::WET_TISSUE;
 use pcore::bond;
 use pcore::brain::{self, FIXED, OVERBS, VERBS};
 use pcore::check::{self, Totals};
@@ -402,7 +407,7 @@ pub fn warm(w: &mut World, b: &mut Body, t: f64) {
 /// Body `b` placed and taken out again, prepared, to call the laws on directly: where it is stored, and the body.
 pub fn out(w: &mut World, b: Body) -> (Handle, Body) {
     let s = w.add(b);
-    pcore::survey::survey(w);
+    pcore::month_start(w);
     w.time += DAY_S;
     let mut b = std::mem::take(&mut w.life[s]);
     b.prepare(&w.chem, &w.cfg);

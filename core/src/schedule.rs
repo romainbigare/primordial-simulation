@@ -1,6 +1,9 @@
-//! The order of the laws: one world step is one month, a fixed list of passes, written once here (laws.md 0).
+//! The order of the laws: one world step is one month, a fixed list of passes, written once here (laws.md 0). The
+//! natural world's passes (Flow, the cover, Change, and what stands on each cell and its surroundings through the
+//! contract) run with no body; the bodies' passes (`survey`, `bond`, `lanes`) stand between them where one side reads
+//! what the other left, and with no body they do nothing.
 
-use crate::{bond, change, check, flow, survey, world::World};
+use crate::{bond, change, check, contract, cover, flow, lanes, survey, world::World};
 
 /// The air runs in steps of this many days, a whole number of them in a month: each cell's exchange over a step is
 /// solved once and taken as linear in its air (`flow::air`), so a longer step smooths the seasons. The long-step test
@@ -15,14 +18,37 @@ const REFRESH_MONTHS: u64 = 3;
 /// A stage of the month, as `step_marked` reports it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stage {
-    /// the parts of Flow (`flow`)
+    /// the parts of Flow (`flow`), and the surroundings it gives life (`contract::surroundings`)
     Flow,
     /// `change::step`
     Change,
-    /// `survey::survey`, `survey::cover` and `survey::batch`
+    /// life: what stands on each cell and the cover's month (`contract::stand_up`, `cover::month`), and the bodies'
+    /// passes (`survey`, `lanes::regrow`)
     Bodies,
     /// `bond::step`
     Parts,
+}
+
+/// A pass of a month: its stage, its name and what it runs.
+type Pass = (Stage, &'static str, fn(&mut World));
+
+/// The passes of a month's start, in order. The natural world's: what stands on each cell, the cover's part
+/// (`contract::stand_up`), and the surroundings, Flow's state built in full (`contract::surroundings`). The bodies'
+/// stand between where one reads what the other left: what movers pressed breaks the cover before its part is summed
+/// (`survey::press`); the bodies add theirs, and what the press queued lands, before Flow's state is built from the
+/// store (`survey::stand`); they see the surroundings last (`survey::features`).
+const START: [Pass; 5] = [
+    (Stage::Bodies, "press", survey::press),
+    (Stage::Bodies, "stands", contract::stand_up),
+    (Stage::Bodies, "body stands", survey::stand),
+    (Stage::Flow, "surroundings", contract::surroundings),
+    (Stage::Bodies, "features", survey::features),
+];
+
+/// The passes of a month's start alone (`START`): for a world placed or edited between months, which the laws read
+/// as they would at a month's start.
+pub fn month_start(w: &mut World) {
+    START.iter().for_each(|&(_, _, run)| run(w));
 }
 
 /// Advance the world by one month. This is the whole step: `next_state = step(state)`.
@@ -76,8 +102,10 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
             panic!("broken after {what} (day {}): {e}", w.day());
         }
     };
-    // The survey of the cells builds Flow's state in full for their surroundings; Flow's own pass leaves it then.
-    pass(w, Stage::Bodies, "survey", &|w| survey::survey(w));
+    // The month's start builds Flow's state in full for the cells' surroundings; Flow's own pass leaves it then.
+    for (stage, what, run) in START {
+        pass(w, stage, what, &run);
+    }
     // Flow's parts follow each other with nothing between, from here to its refresh: their lifts and falls are booked
     // once (`flow::chain`).
     flow::chain(w, true);
@@ -102,10 +130,14 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
         pass(w, Stage::Flow, "refresh", &flow::refresh);
     }
     flow::chain(w, false);
-    // The cover's month reads Flow's state and the air as its last step left it.
-    pass(w, Stage::Bodies, "cover", &survey::cover);
+    // The natural world: the cover's month reads Flow's state and the air as its last step left it; then Change.
+    pass(w, Stage::Bodies, "cover", &cover::month);
     pass(w, Stage::Change, "change", &|w| change::step(w, len as f64));
-    // Bond's own spans are months (`bond::step`); every body updates at the month's start (`survey::batch`).
+    // The bodies: Bond's own spans are months (`bond::step`); the lanes regrow at creep's months, for all that time;
+    // every body updates at the month's start (`survey::batch`).
     pass(w, Stage::Parts, "bond", &bond::step);
+    if months.is_multiple_of(CREEP_MONTHS) {
+        pass(w, Stage::Bodies, "lanes", &|w| lanes::regrow(w, (CREEP_MONTHS * len) as f64));
+    }
     pass(w, Stage::Bodies, "body batch", &|w| survey::batch(w));
 }

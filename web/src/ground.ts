@@ -81,7 +81,7 @@ export class GroundTiles {
   private start = performance.now();
   private lastCame = -Infinity;
 
-  constructor(source: string, wasm: ArrayBuffer, seed: number, size: number, band: [number, number], readonly map: MapOf, readonly meta: TileMeta, private changed: (shown: boolean) => void, error: (text: string) => void) {
+  constructor(source: string, wasm: ArrayBuffer, seed: number, size: number, band: [number, number], drawn: boolean, readonly map: MapOf, readonly meta: TileMeta, private changed: (shown: boolean) => void, error: (text: string) => void) {
     this.depth = meta.depths[0];
     this.makePage();
     this.url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
@@ -95,7 +95,7 @@ export class GroundTiles {
         if (m.kind === 'tile') { w.making--; this.took(m.depth, m.x, m.y, m.data); }
       };
       const copy = k === WORKERS - 1 ? wasm : wasm.slice(0);
-      w.worker.postMessage({ cmd: 'init', wasm: copy, seed, size, band }, [copy]);
+      w.worker.postMessage({ cmd: 'init', wasm: copy, seed, size, band, drawn }, [copy]);
       this.workers.push(w);
     }
   }

@@ -1,7 +1,7 @@
 //! Damage to a body: bites, trampling and heat break its body matter, and what it leaves.
 
 use pcore::life::Handle;
-use pcore::body::{self, Body, COPY_MASS, STRENGTH};
+use pcore::body::{Body, COPY_MASS, STRENGTH};
 use pcore::store::Class;
 use pcore::units::DAY_S;
 use pcore::{bond, brain, choose, World};
@@ -81,7 +81,7 @@ fn a_bite_of_more_than_half_the_body_kills() {
     let books = Books::now(&w);
     w.events.clear();
     bite(&mut w, a, v);
-    assert!(!w.life[v].alive && died(&w, body::TAKEN) > 0.0, "a victim bitten by a body 20 times its size lived");
+    assert!(!w.life[v].alive && died(&w, pcore::life::TAKEN) > 0.0, "a victim bitten by a body 20 times its size lived");
     books.assert_kept(&w, 1e-9);
 }
 

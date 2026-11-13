@@ -136,8 +136,8 @@ impl Terrain {
         let by = noise_grid(&grid);
         let (wide, depth) = (across / by, SAMPLE_DEPTH - by.trailing_zeros() as u8);
         let block = |k: usize| Leaf { x: (k % wide) as u64 * side * by as u64, y: (k / wide) as u64 * side * by as u64, depth };
-        let place = |k: usize| map.place_of(&block(k), south, north).1;
-        let at: Vec<(f64, (f64, f64))> = crate::par::map_n(wide * (down / by), crate::par::UNCOUNTED, |k| (self.sample(seed, map, place(k)), Strata::at(seed, map, place(k))));
+        let (place, lift) = (|k: usize| map.place_of(&block(k), south, north).1, self.lift(seed, map));
+        let at: Vec<(f64, (f64, f64))> = crate::par::map_n(wide * (down / by), crate::par::UNCOUNTED, |k| (self.sample(seed, map, &lift, place(k)), Strata::at(seed, map, place(k))));
         let (rise, (fold, body)): (Vec<f64>, (Vec<f64>, Vec<f64>)) = at.into_iter().unzip();
         let worn = wear(seed, &grid, (by, &rise), (&fold, &body, &Strata::of(seed, &self.cut)));
         let (mut h, open, loose, books, make) = (worn.h, worn.open, worn.loose, worn.books, worn.make);

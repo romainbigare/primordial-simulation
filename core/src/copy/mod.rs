@@ -12,17 +12,15 @@ mod grow;
 mod litter;
 mod mature;
 mod mix;
-mod spread;
 
 pub use born::Fill;
 pub use grow::{grow, Grew};
 pub use litter::Litter;
 pub(crate) use litter::{back, land_litter};
 pub(crate) use mature::mature;
-pub use spread::lot;
-use spread::landing;
 
-use crate::body::{most, mutation_size, vary, Body, Layout, CHILD, DISPERSE, WET, WET_TISSUE};
+use crate::body::{most, mutation_size, vary, Body, Layout, CHILD, DISPERSE, WET};
+use crate::life::WET_TISSUE;
 use crate::brain::{self, row_step, shake};
 use crate::chem::{Chemistry, Stores};
 use crate::event::{Event, EventKind};
@@ -290,6 +288,12 @@ fn child_lineage(w: &World, d: &Chunk, b: &Body, l: &Births, genes: &[f32], rows
         }
         None => b.lineage,
     }
+}
+
+/// The cell whole members that disperse from cell `i` land in: that of one lot (`life::lot`); none where they stay in
+/// `i`.
+fn landing(w: &World, i: usize, r: &mut Rng) -> Option<usize> {
+    crate::life::lot(w, i, r).filter(|&j| j != i)
 }
 
 /// The generation's change of the born rows of `m` children of a body whose rows spread `spread`, at mutation size

@@ -35,7 +35,7 @@ pub(crate) fn around(w: &World, moves: &Moves, p: &Parts, i: usize) -> Around {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let (j, t) = (w.mesh.up(i, 0, AIR), w.thaw_last(i).0);
     let (liquid, moist) = super::wet(w, p, i, moves.amount(w, Node::ground(i), p.liquid));
-    let reach = (-w.life.env.get(i).map_or(0.0, |e| e[1]) / ph.light_depth).exp();
+    let reach = (-crate::contract::place(w, i).liquid / ph.light_depth).exp();
     let seen = moves.seen(w, j);
     let all: f64 = (0..chem.ns()).map(&seen).sum();
     let rx = &chem.reactions[p.light];

@@ -6,6 +6,7 @@
 //! window (`tape::things`). The other makes
 //! the ground's tiles (`ground`, `tile`: `tape::Ground`), which need no world.
 
+use pcore::space::terrain::Shape;
 use pcore::{Config, World};
 use serde_json::json;
 use std::cell::RefCell;
@@ -63,14 +64,20 @@ fn island((south, north): (f64, f64)) -> Config {
     if south < north { worldgen::terrain::banded((south, north)) } else { Config::default() }
 }
 
-/// Make an island of `size` x `size` cells from `seed` between the latitudes `south` and `north` (`island`), standing in
-/// the planet's air where they are given (`worldgen::planet::planet`, made once, `PLANET`), with the schedule of
+/// The large shape of an island (`pcore::space::terrain::Shape`): drawn from the seed where `drawn` is not 0, else one
+/// rise in the middle.
+fn shape_of(drawn: u32) -> Shape {
+    if drawn != 0 { Shape::Drawn } else { Shape::One }
+}
+
+/// Make an island of `size` x `size` cells and the large shape of `drawn` (`shape_of`) from `seed` between the latitudes
+/// `south` and `north` (`island`), standing in the planet's air where they are given (`worldgen::planet::planet`, made once, `PLANET`), with the schedule of
 /// `ew run --roster --plants`: the starting kinds of cover, no animals, so the page runs fast while the work is on the
 /// ground, the liquid and the cover. Its cells stay those as built: the map draws every zoom from the ground's tiles and
 /// the cells' table. Returns 0, or 1 if the world is refused.
 #[no_mangle]
-pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64) -> u32 {
-    let mut world = worldgen::terrain::new_island(seed as u64, size as usize, size as usize, island((south, north)));
+pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn: u32) -> u32 {
+    let mut world = worldgen::terrain::new_island(seed as u64, (size as usize, size as usize), shape_of(drawn), island((south, north)));
     if south < north {
         world.planet = Some(PLANET.with(|p| p.borrow_mut().get_or_insert_with(worldgen::planet::planet).clone()));
     }
@@ -132,7 +139,7 @@ pub extern "C" fn meta() -> *const u8 {
         let walls = pcore::cover::Parts::of(&w.chem).map_or([0.0; 3], |p| w.chem.subs[p.sub[pcore::cover::WALL]].refl[0]);
         json!({
             "w": g.w, "h": g.h, "cell_m": g.side, "square_depth": g.square_depth(), "globe": g.wrap, "lat_north": w.cfg.lat_north, "lat_south": w.cfg.lat_south,
-            "seed": w.seed, "days_per_year": w.days_per_year(), "layers": layers,
+            "seed": w.seed, "shape": w.terrain.shape, "days_per_year": w.days_per_year(), "layers": layers,
             "tiles": {"size": tape::TILE, "gutter": tape::GUTTER, "depths": [depths.start(), depths.end()], "step_most": tape::STEP_MOST, "along_wrap": tape::ALONG_WRAP_M, "row": tape::ROW, "kinds": tape::KINDS, "kind_row": tape::KIND_ROW, "walls": walls},
             "samples": {"across": s.across, "down": s.down, "depth": pcore::space::terrain::SAMPLE_DEPTH},
             "laws": {"soil_m": ph.soil_m, "wet_depth": ph.wet_depth, "dormancy": ph.dormancy, "rooted_from": ph.rooted_from, "channel_width": ph.channel_width, "channel_width_exp": ph.channel_width_exp, "channel_depth": ph.channel_depth, "channel_depth_exp": ph.channel_depth_exp, "line": tape::TYPICAL_RUNOFF * tape::SHOW_M, "line_law": [tape::LINE_PX, tape::LINE_GROW, tape::LINE_MOST], "flood": tape::FLOOD, "station": tape::STATION_EXP},
@@ -186,13 +193,13 @@ pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
     give(bytes)
 }
 
-/// Make the ground of the island `new_world` makes from `seed`, `size` and the latitudes `south` and `north`
+/// Make the ground of the island `new_world` makes from `seed`, `size`, the latitudes `south` and `north` and `drawn`
 /// (`tape::Ground`): its terrain and its map's squares (`worldgen::new_world`; how its cells are cut does not change the
 /// ground), with the default laws.
 #[no_mangle]
-pub extern "C" fn ground(seed: u32, size: u32, south: f64, north: f64) {
+pub extern "C" fn ground(seed: u32, size: u32, south: f64, north: f64, drawn: u32) {
     let (seed, cfg) = (seed as u64, island((south, north)));
-    let (map, terrain) = worldgen::terrain::island_ground(seed, size as usize, size as usize);
+    let (map, terrain) = worldgen::terrain::island_ground(seed, (size as usize, size as usize), shape_of(drawn));
     let g = tape::Ground::new(seed, map, terrain, (cfg.lat_south, cfg.lat_north), tape::Law::of(&cfg.phys));
     GROUND.with(|c| *c.borrow_mut() = Some(g));
 }

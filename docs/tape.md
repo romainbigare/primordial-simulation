@@ -9,11 +9,11 @@ A mean of nothing is written `NaN` (`null` in the viewer's file, drawn as a gap)
 
 | File | What it holds |
 |---|---|
-| `snap_NNNNN.bin.gz` | at the end of the run, and every `--snapshots-every` years if given: the whole world, the run's plan (what is placed when), and what the tape keeps across years (gzip of bincode, after the tag `EWSN` and the format version); `ew resume --from` goes on from it, and a resumed tape equals the unbroken one. A snapshot is taken at a month's start, so it holds the state and no cache: what the laws build again before they read it at a month's first step (Flow's caches, `flow::Scratch`; the survey's `env` and `seen`; the survey's sums of the cells, `Life::sum`, and the numbers each body's genes give, `Body::k`, both worked out again at load, as the tape reads the sums first) is not saved |
+| `snap_NNNNN.bin.gz` | at the end of the run, and every `--snapshots-every` years if given: the whole world, the run's plan (what is placed when), and what the tape keeps across years (gzip of bincode, after the tag `EWSN` and the format version); `ew resume --from` goes on from it, and a resumed tape equals the unbroken one. A snapshot is taken at a month's start, so it holds the state and no cache: what the laws build again before they read it at a month's first step (Flow's caches, `flow::Scratch`; the survey's `env` and `seen`; the survey's sums of the cells, `Life::sum`, what stands on each cell, `contract::Stand`, and the numbers each body's genes give, `Body::k`, both worked out again at load, as the tape reads the sums first) is not saved |
 | `series.csv` | one row a year, the columns below |
 | `months.csv` | one row a month (below); only with `--months` |
 | `physics.json` | the run's `Physics` and `Config`; `ew numbers OLD NEW` compares two runs |
-| `world.ewf.gz` | the viewer's file: `EWF2`, the header's length, the header (JSON: size, whether the world is a globe and its edge latitudes, layers, frames, series and units, events, the months rows, the camera's path), then the frames: one every `--frames-every` years (10), and one a month in the first `--monthly-years` years (2) |
+| `world.ewf.gz` | the viewer's file: `EWF2`, the header's length, the header (JSON: size, whether the world is a globe and its edge latitudes, layers, frames, series and units, events, the months rows), then the frames: one every `--frames-every` years (10), and one a month in the first `--monthly-years` years (2) |
 | `yearNNNN.png` | map, temperature, rain, life, traffic and the depth of the cells (each square by the cell at its centre: a square light grey, coarser dark, finer warmer) every `--pictures-every` years, at the start and at the end; none by default |
 
 **How the files are written.** Every 10 years (`TAPE_EVERY` in `cli/src/main.rs`), at every snapshot and at the run's
@@ -164,10 +164,12 @@ head; 60,000 where none reaches), and a texel that holds no line takes its sampl
 distances is the bend's swing, by which it draws the pool at the outer bank of a bend and the bar inside it. A shell finds the sample
 again from the texel's centre, floor((x + 1/2) k) for a texel k samples a side, stepped by it. Off the map a texel is
 its edge's. Each number is a function of the seed, the map and the place alone: the same in every tile that holds it. The second plane holds, beside the channel's sample, one more than the pond
-each texel lies in (`Ground::pond_tile`: the pond of the sample that holds its centre, or where that is none, of the
-nearest of the samples within 2 each way whose level the texel lies under, where its sample stands over that level (a rim, not the
-pass nor the ground below it) or the pond is of the open low ground, so a pond's shore is where the ground drawn rises
-over its level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
+whose liquid may stand on each texel (`tape/src/ground/shore.rs`: the pond of the sample that holds its centre or the
+nearest within 2 samples each way, else of the heaviest sample about it that has one, where the smooth shore's offset
+lies under `EDGE_M`, 2 m; the ground drawn lies over the level up to there, by as much as the offset where a sample
+about it has no pond near, so the edge of where liquid may stand is dry ground: a smooth line of the place, the same in
+every tile at every depth, never the texels' or the samples' edges; a shell draws the liquid where the ground drawn
+lies under the pond's level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
 frame: the melting point of the frozen cover, K, then for each square row by row 10 f32 (`ROW`) of the cell that holds
 its centre: the terrain's mean height over the cell, m; its ground's temperature, K, and how fast its air cools with
 height, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest ground, m

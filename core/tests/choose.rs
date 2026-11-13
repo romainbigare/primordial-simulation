@@ -53,7 +53,7 @@ fn scene(seed: u64) -> World {
     pcore::flow::refresh(&mut w);
     pcore::flow::state(&mut w, true);
     w.life.env.clear();
-    pcore::survey::survey(&mut w);
+    pcore::month_start(&mut w);
     // (No body lives yet, so the survey makes no features; `seen` reads them before the first step: made here as the
     // survey makes them for a body.)
     pcore::choose::cells(&mut w);
@@ -109,7 +109,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
         for s in w.life.living().map(|x| x.0).collect::<Vec<_>>() {
             if w.life[s].id != id {
                 let c = std::mem::take(&mut w.life[s]);
-                w.in_cell(c.cell as usize, |w, d| body::die(w, d, s, c, body::LACK));
+                w.in_cell(c.cell as usize, |w, d| body::die(w, d, s, c, pcore::life::LACK));
             }
         }
         if let Some(slot) = w.life.find(id).filter(|_| w.counts.updates > u) {
@@ -325,7 +325,7 @@ fn toward_cover(weight: f32) -> (f64, usize) {
     b.prepare(&w.chem, &w.cfg);
     let id = b.id;
     w.add(b);
-    pcore::survey::survey(&mut w);
+    pcore::month_start(&mut w);
     let id = w.life.alive().find(|b| b.lineage == line.lineage).map_or(id, |b| b.id);
     let (mut moved, mut there) = (0.0, 0.0);
     for seed in 0..TRIALS {

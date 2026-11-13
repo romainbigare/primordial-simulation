@@ -68,12 +68,12 @@ pub(crate) fn built_now(w: &World) -> bool {
 
 /// The air's step for `dt` seconds (`air::step`), booked whole, from the state of ground and air nodes (brought up to
 /// date unless the `state` process just did; the heat of the bodies' nodes that the cover does not claim, which goes
-/// back to the ground first, `survey::release`, then warms it from the next state); then, from the state the step's
+/// back to the ground first, `cover::release`, then warms it from the next state); then, from the state the step's
 /// heat leaves (what it melted and froze), the liquid over field capacity sinks into the bed's store (`drain::sink`),
 /// as the rain the step brought would otherwise wait in the pores.
 pub fn air(w: &mut World, dt: f64) {
     with(w, true, |w, s| {
-        crate::survey::release(w);
+        crate::cover::release(w);
         if s.built_at != Some(w.time) {
             ground_now(w, s, false);
         }
@@ -190,7 +190,7 @@ fn on_land(s: &Scratch, i: usize) -> bool {
 
 /// Share of carrying and creep the bodies on cell `i` leave there (1 when bare).
 fn bare_share(w: &World, i: usize) -> f64 {
-    1.0 / (1.0 + w.life.sum(i)[1] / w.mesh.cells().area()[i] / w.cfg.phys.hold)
+    1.0 / (1.0 + crate::contract::stand(w, i).mass / w.mesh.cells().area()[i] / w.cfg.phys.hold)
 }
 
 /// Weight of a step of `dt` seconds in a moving average over about a year.

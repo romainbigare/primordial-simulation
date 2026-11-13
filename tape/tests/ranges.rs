@@ -1,15 +1,14 @@
-//! The world lives and keeps its books: a small island with the roster keeps every element and the energy for 26
-//! years, holds no number that is not finite, and has cover and two kinds of animals alive at the end.
+//! The world lives and keeps its books: a small island with the roster's cover and no animal (`ew run --roster
+//! --plants`) keeps every element and the energy for 12 years, holds no number that is not finite, and has each of its
+//! cover kinds alive at the end.
 //!
-//! The key numbers of a normal run: `ew run --seed N --size 64` for seeds 1, 2 and 3, 30 years each, on threads. The
-//! mean of each number over the three seeds must lie in its range around its reference, the mean of the same three
-//! seeds in the reference runs: for the climate, the land worn down and the rivers, the runs of the world before the
-//! cover and the short body model; for the cover and the eaters, the runs of the bodies' laws alike at every step (a
-//! body pays its upkeep at the temperature it stands at, laws.md 6.3; children who start a body decide at birth, 0). The
-//! climate and the land worn down are means over years 21 to 30; the eaters' mass and life are means over years 26 to
-//! 30, as the eaters, placed at year 22, still boom then (their mass grows two to three times a year). Each run also keeps its books. Three numbers are also held to wide bounds around Earth's, as the references only
-//! keep a world near itself: the rain on land, the heat-absorbing gas of the air, and the share of the cover's dry mass
-//! it holds as its stored solid.
+//! The key numbers of a run with no animal: `ew run --seed N --size 64 --plants` for seeds 1, 2 and 3, 30 years each,
+//! on threads. The mean of each number over the three seeds must lie in its range around its reference, the mean of the
+//! same three seeds in the reference runs: for the climate, the land worn down and the rivers, the runs of the world
+//! before the cover and the short body model; for the cover, these runs of plants themselves. The climate and the land
+//! worn down are means over years 21 to 30. Each run also keeps its books. Three numbers are also held to wide bounds around Earth's, as the references only keep a world near itself:
+//! the rain on land, the heat-absorbing gas of the air, and the share of the cover's dry mass it holds as its stored
+//! solid.
 //!
 //! The sleep of Change's nodes is a speed tool: a small world with life keeps the chemistry's key numbers
 //! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2.
@@ -27,6 +26,7 @@ use common::{run, run_stepped, LIFE_YEAR};
 use pcore::chem::Phase;
 use pcore::{Config, World};
 use std::fmt;
+use worldgen::life::{plants, KINDS, ROSTER, TWO};
 use worldgen::testkit::{ground_of, ABSORBER, LIQUID};
 
 const SEEDS: [u64; 3] = [1, 2, 3];
@@ -34,8 +34,6 @@ const SIDE: usize = 64;
 const YEARS: u64 = 30;
 /// The climate is the mean of the years from this one to `YEARS`; the land worn down is over the same years.
 const FROM: u64 = 21;
-/// The eaters' mass and life are the means of their yearly values from this year to `YEARS`.
-const EATERS_FROM: u64 = 26;
 /// Parts per million in one; millimetres in a metre.
 const PPM: f64 = 1e6;
 const MM: f64 = 1e3;
@@ -54,16 +52,7 @@ const RIVERS: f64 = 233.6;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
 const WORN: f64 = 0.2389;
 /// The cover (starting kind 0) at year 30, log10 kg (`root_0_cover_kg`), in the reference runs.
-const COVER_KG: f64 = 9.505;
-/// Eaters (starting kind 1) over years `EATERS_FROM` to 30, the mean of log10 kg (`root_1_kg`), in the reference runs: a guard that the world stays near
-/// itself, not a target (real herbivores and soil animals weigh far less, a few times 1e4 kg per km²).
-const EATER_KG: f64 = 8.417;
-/// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the cover's 0.3, as a boom or bust of the eaters
-/// moves a mean of three seeds far.
-const EATER_KG_RANGE: f64 = 0.5;
-/// The life eaters live over years `EATERS_FROM` to 30, the mean of the yearly values, yr (`root_1_life_real`), in the
-/// reference runs.
-const EATER_LIFE: f64 = 0.701;
+const COVER_KG: f64 = 9.881;
 
 /// Earth's rain on land, m/yr (Trenberth et al. 2007), and the factor either way a run's may lie from it: the island
 /// lies at 40°, where land gets 0.5 to 1 m (from memory), and a globe's land spans every belt.
@@ -113,40 +102,35 @@ impl fmt::Display for Range {
     }
 }
 
-/// The liveness check's island: its side, the years it runs past the roster's last placement, and the animal kinds
-/// that must be alive at its end.
+/// The liveness check's island: its side, and the years it runs past the roster's last placement.
 const LIVE_SIDE: usize = 32;
 const LIVE_AFTER: u64 = 10;
-const LIVE_KINDS: usize = 4;
-/// The starting kinds that are animals (bodies) in the roster, each with the year it is placed.
-fn animal_kinds() -> Vec<(usize, u64)> {
-    let kinds = worldgen::life::KINDS.iter().enumerate();
-    kinds.filter(|k| matches!(k.1.place, worldgen::life::Place::Bodies(_))).map(|k| (k.0, LIFE_YEAR + k.1.year)).collect()
-}
+/// The fewest plants a starting kind of cover holds on the island to be alive: one whole plant (`Cover::plants`, a
+/// real count).
+const ALIVE_PLANTS: f64 = 1.0;
 
-/// A `LIVE_SIDE` island with the roster (seed 1), run `LIVE_AFTER` years past the last kind's placement, keeps every
-/// element and the energy (`common::run` checks the books to 1e-9), leaves no number that is not finite
-/// (`check::broken`), and ends with the base kinds alive (the starting cover, 0, and the starting eaters, 1) and at least
-/// `LIVE_KINDS` animal kinds. The others may die by their physics, so a small change of climate or law does not fail
-/// it: the eaters of remains (4, 5) live on what dies and the small fast eaters of the cover (6) on a short life
-/// (`REPAIR` -1.06) beside two other eaters of the same cover (1, 7), each placed as a few dozen to a few hundred
-/// founders whose first years decide whether they take hold; the eaters of eaters (8, 9) are placed last, few, on
-/// prey that may still be thin.
+/// A `LIVE_SIDE` island with the roster's cover and no animal (seed 1, `--roster --plants`), run `LIVE_AFTER` years past
+/// the last kind's placement, keeps every element and the energy (`common::run` checks the books to 1e-9), leaves no
+/// number that is not finite (`check::broken`), and ends with each of its cover kinds alive: at least `ALIVE_PLANTS`
+/// of the plants that descend from it (`Cover::root`) on the island.
 #[test]
 fn the_world_lives_and_keeps_its_books() {
-    let years = animal_kinds().iter().map(|k| k.1).max().expect("animal kinds") + LIVE_AFTER;
-    let (w, _) = run(1, LIVE_SIDE, years, true, |_| {}, |_, w, _| assert_eq!(pcore::check::broken(w), None));
-    let cover = pcore::cover::sums(&w).first().map_or(0.0, |s| s.kg);
-    let root_alive = |k: usize| w.life.alive().any(|b| w.life.brains[b.lineage as usize].as_ref().is_some_and(|l| l.root as usize == k));
-    let alive: Vec<usize> = animal_kinds().into_iter().map(|k| k.0).filter(|&k| root_alive(k)).collect();
-    println!("year {years}: starting cover {cover:.3e} kg, animal kinds alive {alive:?}");
-    assert!(cover > 0.0, "the starting cover (kind 0) died out");
-    assert!(alive.contains(&1), "the starting eaters (kind 1) died out: alive {alive:?}");
-    assert!(alive.len() >= LIVE_KINDS, "fewer than {LIVE_KINDS} animal kinds alive: {alive:?}");
+    let rows = plants(&ROSTER);
+    let years = rows.iter().map(|&k| LIFE_YEAR + KINDS[k].year).max().expect("cover kinds") + LIVE_AFTER;
+    let (w, _) = run(1, LIVE_SIDE, years, &rows, |_| {}, |_, w, _| assert_eq!(pcore::check::broken(w), None));
+    assert!(w.life.alive().next().is_none(), "a body in a world of plants");
+    let mut held = vec![0.0; KINDS.len()];
+    for i in 0..w.mesh.cells().n() {
+        let c = w.life.cover(i);
+        c.held().for_each(|x| held[c.root[x] as usize] += c.plants[x]);
+    }
+    let dead: Vec<usize> = rows.iter().copied().filter(|&k| held[k] < ALIVE_PLANTS).collect();
+    println!("year {years}: plants of each cover kind {:?}", rows.iter().map(|&k| (k, held[k])).collect::<Vec<_>>());
+    assert!(dead.is_empty(), "cover kinds with fewer than {ALIVE_PLANTS} plants: {dead:?}");
 }
 
 /// The key numbers in the order `key_numbers` gives them: name, unit, reference and range.
-const KEYS: [(&str, &str, f64, Range); 9] = [
+const KEYS: [(&str, &str, f64, Range); 7] = [
     ("ground temperature on land", "K", T_LAND, Range::Plus(1.0)),
     ("seasonal swing on land", "K", SWING, Range::Plus(1.5)),
     ("rain on land", "mol/m2/s", RAIN_LAND, Range::Times(1.3)),
@@ -154,8 +138,6 @@ const KEYS: [(&str, &str, f64, Range); 9] = [
     ("river cells", "", RIVERS, Range::Times(1.5)),
     ("land worn down", "mm/yr", WORN, Range::Times(2.0)),
     ("cover", "log10 kg", COVER_KG, Range::Plus(0.3)),
-    ("eaters", "log10 kg", EATER_KG, Range::Plus(EATER_KG_RANGE)),
-    ("life of eaters", "yr", EATER_LIFE, Range::Times(2.0)),
 ];
 
 /// The mean thickness of rock on the cells `land`, m.
@@ -163,14 +145,14 @@ fn rock(w: &World, land: &[usize]) -> f64 {
     land.iter().map(|&i| ground_of(w, i)).map(|g| g.0 + g.1).sum::<f64>() / land.len() as f64
 }
 
-/// `YEARS` years of `ew run --seed <seed> --size 64`: the key numbers in the order of `KEYS`, then the rain on land in
-/// m/yr and the cover's stored share (`stored_share`) at the end.
+/// `YEARS` years of `ew run --seed <seed> --size 64 --plants`: the key numbers in the order of `KEYS`, then the rain on
+/// land in m/yr and the cover's stored share (`stored_share`) at the end.
 fn key_numbers(seed: u64) -> ([f64; KEYS.len()], [f64; 2]) {
     let gas = format!("air_{ABSORBER}");
     let climate = ["t_land", "t_land_summer", "t_land_winter", "rain_land", gas.as_str(), "rivers"];
-    let (mut mean, mut land, mut rock_from, mut eaters) = ([0.0; 6], vec![], 0.0, [0.0; 2]);
-    let (span, late) = ((YEARS - FROM + 1) as f64, (YEARS - EATERS_FROM + 1) as f64);
-    let (w, rec) = run(seed, SIDE, YEARS, false, |_| {}, |y, w, rec| {
+    let (mut mean, mut land, mut rock_from) = ([0.0; 6], vec![], 0.0);
+    let span = (YEARS - FROM + 1) as f64;
+    let (w, rec) = run(seed, SIDE, YEARS, &plants(&TWO), |_| {}, |y, w, rec| {
         if y == FROM - 1 {
             land = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
             rock_from = rock(w, &land);
@@ -178,15 +160,11 @@ fn key_numbers(seed: u64) -> ([f64; KEYS.len()], [f64; 2]) {
         if y >= FROM {
             mean.iter_mut().zip(climate).for_each(|(m, c)| *m += rec.last(c) / span);
         }
-        if y >= EATERS_FROM {
-            eaters[0] += rec.last("root_1_kg").log10() / late;
-            eaters[1] += rec.last("root_1_life_real") / late;
-        }
     });
     let worn = (rock_from - rock(&w, &land)) / span * MM;
     let [t, summer, winter, rain, air, rivers] = mean;
     let cover = rec.last("root_0_cover_kg").log10();
-    let keys = [t, summer - winter, rain, air * PPM, rivers, worn, cover, eaters[0], eaters[1]];
+    let keys = [t, summer - winter, rain, air * PPM, rivers, worn, cover];
     (keys, [rain_m_yr(&w, rain), stored_share(&w)])
 }
 
@@ -194,7 +172,7 @@ fn key_numbers(seed: u64) -> ([f64; KEYS.len()], [f64; 2]) {
 /// `EARTH_RAIN_RANGE` of Earth's, the heat-absorbing gas within `EARTH_ABSORBER_PPM`, and the cover's stored share
 /// under `STORED_MOST`.
 #[test]
-#[ignore = "slow: three 30-year runs of a 64 x 64 world"]
+#[ignore = "slow: three 30-year runs of a 64 x 64 world of plants"]
 fn the_key_numbers_stay_in_their_ranges() {
     let runs: Vec<([f64; KEYS.len()], [f64; 2])> = std::thread::scope(|s| {
         let runs: Vec<_> = SEEDS.iter().map(|&seed| s.spawn(move || key_numbers(seed))).collect();
@@ -238,7 +216,7 @@ const CHEMISTRY: [&str; 5] = ["air_3", "min0_land", "min0_sea", "dead_10", "dead
 /// makes.
 fn yearly(seed: u64, columns: &[&str], set: impl Fn(&mut Config)) -> Vec<Vec<f64>> {
     let mut years = vec![];
-    run(seed, SLEEP_SIDE, SLEEP_YEARS, false, set, |y, _, rec| {
+    run(seed, SLEEP_SIDE, SLEEP_YEARS, &TWO, set, |y, _, rec| {
         if y >= SLEEP_FROM {
             years.push(columns.iter().map(|c| rec.last(c)).collect());
         }
@@ -315,7 +293,7 @@ const CAUSES: [&str; 6] = ["lack", "phase", "spent", "taken", "broken", "age"];
 /// their births and deaths in the years from `EATER_FROM`.
 fn eaters_at_end(seed: u64) -> [f64; 4] {
     let (mut born, mut died) = (0.0, 0.0);
-    let (w, rec) = run(seed, EATER_SIDE, EATER_YEARS, false, |_| {}, |y, _, rec| {
+    let (w, rec) = run(seed, EATER_SIDE, EATER_YEARS, &TWO, |_| {}, |y, _, rec| {
         if y >= EATER_FROM {
             born += rec.last("root_1_births");
             died += CAUSES.iter().map(|c| rec.last(&format!("root_1_died_{c}"))).sum::<f64>();
@@ -363,7 +341,7 @@ const COUNTS: [&str; 1] = ["rivers"];
 fn climate(seed: u64, days: u32) -> Vec<[f64; CLIMATE.len()]> {
     let mut years = vec![];
     let w = worldgen::new_world(seed, STEP_SIDE, STEP_SIDE);
-    run_stepped(w, STEP_YEARS, false, |_| {}, |w| pcore::step_with_air(w, days), |y, _, rec| {
+    run_stepped(w, STEP_YEARS, &TWO, |_| {}, |w| pcore::step_with_air(w, days), |y, _, rec| {
         if y >= STEP_FROM {
             years.push(CLIMATE.map(|c| rec.last(c)));
         }

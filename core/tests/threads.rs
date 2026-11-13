@@ -132,7 +132,7 @@ fn a_cell_takes_no_more_than_its_ground_and_its_share_of_the_air() {
         set_amount(&mut w, Node::ground(c), RICH, 1e-3);
     }
     set_amount(&mut w, Node::air(j), OX, 1.0);
-    pcore::survey::survey(&mut w);
+    pcore::month_start(&mut w);
     let (books, rounded) = (Books::now(&w), w.counts.rounded[0]);
     pcore::survey::batch(&mut w);
     let lost = w.counts.rounded[0] - rounded;

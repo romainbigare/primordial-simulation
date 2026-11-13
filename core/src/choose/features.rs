@@ -3,7 +3,7 @@
 
 use crate::brain::ln;
 use crate::cover::{Parts, NP, SLOTS};
-use crate::lanes::thickness;
+use crate::contract::{self, Layer};
 use crate::store::Class;
 use crate::World;
 
@@ -78,15 +78,17 @@ fn own(w: &World, look: &Look, i: usize) -> Feat {
     let (n, life) = (w.mesh.cells().n(), &w.life);
     let ln_kg = |kg: f64, area: f64| ln(1.0 + (kg / area) as f32);
     let ground = w.store.amounts(Class::Ground);
-    let (c, e, area, cell) = (life.sum(i), &life.env[i], w.mesh.cells().area()[i], life.cell_at(i));
+    let (c, e, area, cell) = (life.sum(i), contract::place(w, i), w.mesh.cells().area()[i], life.cell_at(i));
     let mut f = [0f32; NCELL];
-    (f[T], f[WET], f[HEIGHT]) = ((e[0] as f32 - T_MID) / T_SPAN, ln(1.0 + e[1] as f32), e[2] as f32 / DZ_SCALE);
-    f[SHADE] = ln(1.0 + w.canopy[i]) / LN_CANOPY;
+    (f[T], f[WET], f[HEIGHT]) = ((e.t as f32 - T_MID) / T_SPAN, ln(1.0 + e.liquid as f32), e.z as f32 / DZ_SCALE);
+    f[SHADE] = ln(1.0 + contract::hides(w, i)) / LN_CANOPY;
     if let Some((p, mm)) = &look.parts {
+        let mut soft = 0.0;
         for x in 0..SLOTS {
-            f[COVER + x] = ln_kg(cell.cover.kg(mm, x), area);
+            let s = contract::shown(w, cell, Layer::Slot(x)).expect("the cover's parts");
+            f[COVER + x] = ln_kg(s.kg, area);
+            soft += s.mol[p.sub[0]] * mm[0] + s.mol[p.sub[1]] * mm[1];
         }
-        let soft: f64 = (0..SLOTS).map(|x| cell.cover.mol[x][0] * mm[0] + cell.cover.mol[x][1] * mm[1]).sum();
         f[EDIBLE] = ln_kg(soft, area);
         f[DEAD] = ln_kg(p.sub[..2].iter().zip(mm).map(|(&k, m)| ground[k * n + i] * m).sum(), area);
     }
@@ -101,8 +103,8 @@ fn own(w: &World, look: &Look, i: usize) -> Feat {
     // crosses a border goes with its length.)
     let (per, across) = (1.0 / w.map.squares(i), 1.0 / w.map.squares(i).sqrt());
     f[MEMBERS] = ln(1.0 + (c[0] * per) as f32) / LN_MEMBERS;
-    f[STRENGTH] = (c[3] / c[0].max(1.0)) as f32;
-    f[RESIST] = ln(1.0 + thickness(w, c[1], area) as f32);
+    f[STRENGTH] = (c[1] / c[0].max(1.0)) as f32;
+    f[RESIST] = ln(1.0 + contract::thickness(w, contract::stand(w, i).mass, area) as f32);
     (f[PARTS_HERE], f[CROSSED]) = (ln(1.0 + (cell.parts.iter().map(|p| p.count).sum::<f64>() * per) as f32), ln(1.0 + (cell.crossings as f64 * across) as f32));
     f
 }
