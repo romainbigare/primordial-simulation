@@ -45,9 +45,12 @@ drawn`) has one to several, all drawn from its seed: their count from one to the
 of at least 600 km² that the number-area rule gives for all its land in one, √(land / 600 km²) (Korčák 1938; Mandelbrot
 1975: N(>A) ~ A^-B with B about 1/2), so it grows with the map's side (1 or 2 on 32 squares, 2 or 3 on 64, 5 to 7 on 128, by the drawn share); the area
 each raises as k^(-1/B) for the k-th largest, B drawn from 0.5 (a main land and outliers) to 1.5 (lands of like size);
-each a dome or a ring (one in seven: a ring round an inner basin), up to four times as long as wide at any heading, its
-flanks falling with p drawn from 1.6 (a broad dome) to 2.6 (a block with a flat top and steep flanks), tilted toward a
-drawn side by up to 0.8 units of the noise (a tilted block, a ring open on one side: a bay) and lifted by up to ±0.1.
+each a dome or, one in 33, a ring round a sunken block (a caldera's rim), up to four times as long as wide at any
+heading, its flanks falling with p drawn from 1.6 (a broad dome) to 2.6 (a block with a flat top and steep flanks),
+tilted toward a drawn side (a tilted block) and lifted by up to ±0.1. A dome is tilted by up to 0.8 units of the noise;
+85 rings in 100 by 0.5 to 0.8, more than the noise's large shape rises over the level on the mean (0.5), so their rim
+lies under 0 m on their low side and their inner basin opens to the open low ground (a breached rim, as most calderas
+at the level of the sea are); the rest by less, closed.
 The largest are placed first, each where its land (the reach where its fall is 0.75, the large shape's highest over the
 level) stays 2 squares from the map's edge, shortened and then shrunk where it does not fit, and as far from the others
 as 24 draws find, so straits of open low ground lie between them. Their reaches are scaled together so the share of the

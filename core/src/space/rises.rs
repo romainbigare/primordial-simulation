@@ -3,7 +3,7 @@
 //! the land rises fastest (`Range`). An island of one rise (`Shape::One`) has one rise in the middle of its map; an
 //! island of drawn rises (`Shape::Drawn`) has one to several, their count, places, sizes, shapes and strengths drawn
 //! from its seed, with low ground between them that the liquid fills: one land, two or three, a main land with
-//! outliers, a ring round an inner basin, a long land with a bay.
+//! outliers, a long land, now and then a breached ring round an inner basin.
 
 use super::square::Square;
 use crate::rng::{Purpose, Rng};
@@ -37,18 +37,22 @@ const LEAST_KM2: f64 = 600.0;
 const NUMBER_AREA: [f64; 2] = [0.5, 1.5];
 /// A drawn rise's most length over its width (a long land, as a raised block is).
 const LONG_MOST: f64 = 4.0;
-/// The share of drawn rises that are rings, and their ring's radius in their band's half-widths, the least and the
-/// most (a ring's band is as narrow as leaves it the area of a dome of its reach).
-const RING_SHARE: f64 = 0.15;
+/// The share of drawn rises that are rings, the rim of a sunken block (a caldera's), and their ring's radius in their
+/// band's half-widths, the least and the most (a ring's band is as narrow as leaves it the area of a dome of its reach).
+const RING_SHARE: f64 = 0.03;
 const RING: [f64; 2] = [1.5, 2.5];
-/// How much less a drawn rise rises on its lowered side at most, in units of the noise: a tilted block, a ring open
-/// on one side (a bay).
+/// How much less a drawn rise rises on its lowered side at most, in units of the noise: a tilted block, a ring
+/// breached on one side.
 const TILT_MOST: f64 = 0.8;
+/// The share of rings whose rim is breached, as a caldera at the level of the open low ground mostly is: tilted past
+/// `MEAN_TOP`, so its low side lies under the level where the large shape rises as it does on the mean.
+const BREACHED: f64 = 0.85;
 /// How much more or less a drawn rise rises than the mean at most, in units of the noise.
 const LIFT_MOST: f64 = 0.1;
 /// The large shape's highest rise over an island's level, in units of the noise: a rise's land reaches as far as its
-/// fall is that (`Rise::extent`).
+/// fall is that (`Rise::extent`); and its mean rise over it (as the noise has it).
 const TOP: f64 = 0.75;
+const MEAN_TOP: f64 = 0.5;
 /// How far apart drawn rises' middles lie at least, in their extents summed, and the tries to place each.
 const APART: f64 = 0.9;
 const TRIES: u64 = 24;
@@ -168,9 +172,10 @@ impl Lift {
     /// Rises drawn from the seed `seed` on the flat map `map`: their count from one to the most the map holds
     /// (`most_rises`); the area each raises by the number-area rule with its exponent drawn in `NUMBER_AREA`, its reach
     /// `scale` times the one rise's by the square root of its share of their areas; each a dome or a ring
-    /// (`RING_SHARE`), up to `LONG_MOST` times as long as wide at any heading, falling by a power in `POWER`, tilted
-    /// up to `TILT_MOST`, lifted up to `LIFT_MOST`, its range along its length. The largest are placed first, each
-    /// where its land stays `EDGE_SQUARES` from the map's edge (`place`). The draws do not depend on `scale`.
+    /// (`RING_SHARE`, most breached: `BREACHED`), up to `LONG_MOST` times as long as wide at any heading, falling by a
+    /// power in `POWER`, tilted up to `TILT_MOST`, lifted up to `LIFT_MOST`, its range along its length. The largest
+    /// are placed first, each where its land stays `EDGE_SQUARES` from the map's edge (`place`). The draws do not
+    /// depend on `scale`.
     pub(super) fn drawn(seed: u64, map: &Square, scale: f64) -> Lift {
         let per_square = super::terrain::per_square(map);
         let mut key = 0;
@@ -188,10 +193,16 @@ impl Lift {
             let reach = ONE_REACH * scale * (area / total).sqrt();
             let (long, heading) = (between([1.0, LONG_MOST], draw()).sqrt(), draw() * PI);
             let along = [heading.cos(), heading.sin()];
-            let (tilt, side, lift) = (TILT_MOST * draw() * draw(), draw() * TAU, LIFT_MOST * (2.0 * draw() - 1.0));
-            let power = between(POWER, draw());
-            // A ring's band is as narrow as leaves it a dome's area: 4 pi ring reach_of band² = pi reach_of².
+            let (side, lift, power) = (draw() * TAU, LIFT_MOST * (2.0 * draw() - 1.0), between(POWER, draw()));
             let ring = if draw() < RING_SHARE { between(RING, draw()) } else { 0.0 };
+            // A ring's rim is breached where its low side lies lower than the large shape rises over the level there:
+            // most rings are tilted past its mean rise (`BREACHED`).
+            let tilt = match ring > 0.0 {
+                true if draw() < BREACHED => between([MEAN_TOP, TILT_MOST], draw()),
+                true => MEAN_TOP * draw(),
+                false => TILT_MOST * draw() * draw(),
+            };
+            // A ring's band is as narrow as leaves it a dome's area: 4 pi ring reach_of band² = pi reach_of².
             let band = if ring > 0.0 { (reach_of(lift, power) / (4.0 * ring)).sqrt() } else { 1.0 };
             let none = Range { at: [0.0; 2], across: [0.0; 2], wide: 0.0, long: 0.0 };
             let low_side = [side.cos(), side.sin()];
