@@ -125,16 +125,18 @@ of flow that slide six steps a second and ask for a frame only while a river is 
 the true bed, mouths that reach their lake or sea with a fan. The tiles' second texture holds four numbers a texel
 (56 layers: 61 MB).
 
-**Known faults of the rivers (in work, the rivers' helper, round four):** two from the owner's phone, first to mend:
-a river's width is not one thing (the far line is far wider than the true bed and flicks in and out while tiles load:
-"panning shouldn't change the size of the river"), and a river meeting a lake or the sea (two water colours with no
-gradient, a pale shallow lake, channel lines as streaks on the lake's floor: the owner likes the rivers' water and
-asks that lakes be drawn the same way). Then: a lattice of thin white lines in fast water
-close up; small side streams and one last reach before a mouth run dead straight; crowns stand on a mouth's fan and
-shallow water; thin dark straight strokes and faint straight outlines on land near rivers at the 200 m bar; a thin
-white straight line on a ridge's snow; ticks where a small stream meets a far line; the 200 m bar on a phone cost 31
-to 35% more than before the rivers (software, one quiet pair; the guard asked of the helper: +10% there, +5% at the
-other bars, measured by CPU time). Small plants' marks show as little grids of yellow dots on bare ground close up.
+**One width, one water (on main):** a river's width on screen is the larger of its true bed and a least line of 1 to
+2.5 css px by discharge, at every zoom and whatever tile is loaded (`web/src/land.ts` `drawn`); every channel wanders;
+lakes, ponds and the sea take the rivers' water (`river_seen` in `lib/style.wgsl`); nothing of a channel is drawn
+under standing water. The owner: "amazing, much better".
+
+**Known faults of the rivers (in work, the rivers' helper, round five):** the owner's wish first: the shore's pale
+band must break where a river crosses it, the river's water running through into the lake or sea (and the sea's foam
+rim too). Then: crowns in standing water 5 to 30 cm deep; thin straight-edged outlines in the forest near ponds (a
+step in the drawn ground along a sample's edge); the wander reads as a saw from afar; pale straight-edged patches in
+fast water; the pan frame draws a river about 1.5 times wider (the small stretched picture); the cost in software by
+CPU time against before the rivers: fitted view +15%, 2 km bar +26%, 200 m bar +45% (cause not found; the guard asked
+is +5% and +10%). Small plants' marks show as little grids of yellow dots on bare ground close up.
 
 **In work:** the rivers' faults above (branch `wip/rivers`). The air and sunlight (the cover's helper, branch
 `air-light`: first a measure of today's budget against Earth's and a proposal, then the law in steps).
