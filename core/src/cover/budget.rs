@@ -9,9 +9,10 @@ use crate::chem::Chemistry;
 /// The flows of the budget, J, + into the cover: the light reaction's fuel; its upkeep, each part of it (basal,
 /// capacity, firmness, capture area, conducting walls, the breathing of its fine roots, their turnover); the work of
 /// building and fixing (its conversions keep the content); the leaf layers it sheds, what dies (unpaid, worn, frozen,
-/// pushed out, emptied), the fuel its roots give its ground, its seeds out and in, what takers take or break of it (`contract`), what
-/// is placed from outside, and what rounding set from below zero to zero.
-pub const BUDGET: [&str; 16] = ["stored", "basal", "capacity", "firmness", "leaves", "sapwood", "root_breath", "root_renew", "building", "shed", "died", "exuded", "seeds", "takers", "placed", "rounded"];
+/// pushed out, emptied), the fuel its roots give its ground, its seeds out and in (they land on a ground, `lying`, part
+/// of the cover's node), the seeds lying that die, what takers take or break of it (`contract`), what is placed from
+/// outside, and what rounding set from below zero to zero.
+pub const BUDGET: [&str; 17] = ["stored", "basal", "capacity", "firmness", "leaves", "sapwood", "root_breath", "root_renew", "building", "shed", "died", "exuded", "seeds", "seeds_died", "takers", "placed", "rounded"];
 pub const STORED: usize = 0;
 /// The first of the parts of the upkeep, in the order of `BUDGET`.
 pub const UPKEEP: usize = 1;
@@ -22,9 +23,10 @@ pub const SHED: usize = 9;
 pub const DIED: usize = 10;
 pub const EXUDED: usize = 11;
 pub const SEEDS: usize = 12;
-pub const TAKERS: usize = 13;
-pub const PLACED: usize = 14;
-pub const ROUNDED: usize = 15;
+pub const SEEDS_DIED: usize = 13;
+pub const TAKERS: usize = 14;
+pub const PLACED: usize = 15;
+pub const ROUNDED: usize = 16;
 
 impl Parts {
     /// What a mol of each part holds, J: the fuel what its burning (reaction 1) frees, body matter and walls the fuel
@@ -48,9 +50,9 @@ pub fn held(e: &[f64; NP], m: &[f64; NP]) -> f64 {
 }
 
 impl Cover {
-    /// What all its slots hold, J, at `e` per mol (`Parts::content`).
+    /// What all its slots and its seeds lying hold, J, at `e` per mol (`Parts::content`).
     pub fn content(&self, e: &[f64; NP]) -> f64 {
-        self.mol.iter().map(|m| held(e, m)).sum()
+        self.all_mol().map(|m| held(e, m)).sum()
     }
 }
 

@@ -4,14 +4,14 @@
 //! from its cover when a taker asks. Its taker today is the plain taker of the tests (`worldgen::testkit::Taker`).
 //!
 //! - **What a cell shows**: its cover as a whole and slot by slot by the height its plants stand at (`shown`,
-//!   `slots`), and its place (`place`).
+//!   `slots`), the seeds lying on its ground, and its place (`place`).
 //! - **Take** (`take`), **give** (`give`) and **press** (`press`): each booked on both sides, never more than is there.
 //! - **What stands on a cell** (`Stand`, `stand`): what life there weighs and catches of the light; Flow reads it.
 //!
 //! When: the place is as the month's start left it (`surroundings`), and so is what stands; the cover is as it is now.
 //! Takes land during the takers' month, and the cover feels them in its own next month.
 
-use crate::cover::{Parts, SLOTS, TAKERS};
+use crate::cover::{Parts, SLOTS, TAKEN_LYING, TAKERS};
 use crate::life::{Cell, Chunk, BROKEN, TAKEN};
 use crate::store::Node;
 use crate::units::MAX_SUBSTANCES;
@@ -60,26 +60,29 @@ pub fn stands(w: &mut World) {
     };
 }
 
-/// Where a taker stands: the ground's temperature, K, the depth of the liquid standing on it, m, and its surface's
-/// height, m, as the month's start left them (`surroundings`).
+/// Where a taker stands: the ground's temperature, K, the depth of the liquid standing on it, m, its surface's height,
+/// m, and the depth of the soft solid lying on its land, m (at the solid's density), as the month's start left them
+/// (`surroundings`).
 #[derive(Clone, Copy, Debug)]
 pub struct Place {
     pub t: f64,
     pub liquid: f64,
     pub z: f64,
+    pub snow: f64,
 }
 
 /// The place of cell `i` (`Place`).
 pub fn place(w: &World, i: usize) -> Place {
-    let [t, liquid, z] = w.life.env.get(i).copied().unwrap_or([0.0; 3]);
-    Place { t, liquid, z }
+    let [t, liquid, z, snow] = w.life.env.get(i).copied().unwrap_or([0.0; 4]);
+    Place { t, liquid, z, snow }
 }
 
-/// The ground's temperature, the depth of the liquid standing on it and its surface's height (a cell of parts' land,
-/// `flow::parts`) of cell `i`, as Flow's last step left them (once Flow's working memory is built, `flow::ensure`).
-pub fn env_of(w: &World, i: usize) -> [f64; 3] {
+/// The ground's temperature, the depth of the liquid standing on it, its surface's height and the depth of the soft
+/// solid lying on it (a cell of parts' land, `flow::parts`) of cell `i`, as Flow's last step left them (once Flow's
+/// working memory is built, `flow::ensure`).
+pub fn env_of(w: &World, i: usize) -> [f64; 4] {
     let (d, z) = w.scratch.standing_land(i);
-    [w.t_ground_last(i), d, z]
+    [w.t_ground_last(i), d, z, w.scratch.soft_land(i)]
 }
 
 /// At a month's start (and when the places were never found): Flow's state rebuilt in full, so a resumed run reads what
@@ -99,6 +102,8 @@ pub enum Layer {
     Cover,
     /// The plants of one slot of the cover
     Slot(usize),
+    /// The seeds lying on the ground, each lot giving in proportion to what it holds
+    Seeds,
 }
 
 impl Layer {
@@ -107,7 +112,25 @@ impl Layer {
         match self {
             Layer::Cover => true,
             Layer::Slot(y) => x == y,
+            Layer::Seeds => false,
         }
+    }
+}
+
+/// The share of a plant `height` m tall that stands above `snow` m of soft solid: its matter is spread evenly over its
+/// height (the stand's law draws a plant as a stem of its height, `cover::stem`), so the share above is 1 − snow /
+/// height. What lies on the ground (height 0) shows only where no snow lies.
+pub fn above(snow: f64, height: f64) -> f64 {
+    if snow <= 0.0 { 1.0 } else if height <= 0.0 { 0.0 } else { (1.0 - snow / height).max(0.0) }
+}
+
+/// The share of each part of `layer` of cell `i` a taker can reach (`above`): of each slot of its cover the share of its
+/// plants above the snow, of the seeds lying all where no snow lies, none where it lies.
+fn reach<'a>(w: &'a World, cell: &'a Cell, p: &'a Parts, layer: Layer, snow: f64) -> impl Fn(usize) -> f64 + 'a {
+    move |x| match layer {
+        Layer::Seeds => above(snow, 0.0),
+        _ if layer.holds(x) => above(snow, cell.cover.stands_at(&w.chem, &w.cfg.phys, p, x)),
+        _ => 0.0,
     }
 }
 
@@ -118,10 +141,15 @@ pub struct Shown {
     pub mol: [f64; MAX_SUBSTANCES],
 }
 
-/// What `layer` of the cover of `cell` shows (`Cover::shown`); none with no cover in the chemistry.
-pub fn shown(w: &World, cell: &Cell, layer: Layer) -> Option<Shown> {
+/// What `layer` of the cover of cell `i` shows a taker (`Cover::shown`, `Cover::shown_lying`): what it can reach above
+/// the snow of its place (`reach`); none with no cover in the chemistry.
+pub fn shown(w: &World, i: usize, cell: &Cell, layer: Layer) -> Option<Shown> {
     let p = Parts::of(&w.chem)?;
-    Some(cell.cover.shown(&w.chem, &p, |x| layer.holds(x)))
+    let of = reach(w, cell, &p, layer, place(w, i).snow);
+    Some(match layer {
+        Layer::Seeds => cell.cover.shown_lying(&w.chem, &p, of(0)),
+        _ => cell.cover.shown(&w.chem, &p, of),
+    })
 }
 
 /// The slots of the cover of `cell` that hold plants, each with the height they stand at, m, from the lowest.
@@ -133,14 +161,26 @@ pub fn slots(w: &World, cell: &Cell) -> Vec<(Layer, f64)> {
 }
 
 /// A taker asks `layer` of the cover of cell `i` of chunk `d` for `mol` of substance `k`: it gets what is granted, mol
-/// (no more than the layer holds), and the heat that goes with it, J. The cover books its side (`Cover::take`), what it
-/// loses counted as taken (`Counters::cover_lost`, `cover::TAKERS` of its budget); the taker books its own.
+/// (no more than the layer holds within its reach above the snow, `reach`), and the heat that goes with it, J. The cover books its side (`Cover::take`,
+/// `Cover::take_lying`), what it loses counted as taken (`Counters::cover_lost` or `Counters::seeds`, `cover::TAKERS` of
+/// its budget); the taker books its own.
 pub fn take(w: &World, d: &mut Chunk, i: usize, layer: Layer, (k, mol): (usize, f64)) -> (f64, f64) {
     let Some(p) = Parts::of(&w.chem) else { return (0.0, 0.0) };
     let e = p.content(&w.chem);
     let held = d.cover(i).content(&e);
-    let (got, heat) = d.cover(i).take(&w.chem, &p, (k, mol), |x| layer.holds(x));
-    d.counts.cover_lost[TAKEN as usize] += got * w.chem.subs[k].molar_mass;
+    let of: Vec<f64> = {
+        let f = reach(w, d.at(i), &p, layer, place(w, i).snow);
+        (0..SLOTS).map(f).collect()
+    };
+    let (got, heat) = match layer {
+        Layer::Seeds => d.cover(i).take_lying(&w.chem, &p, (k, mol), of[0]),
+        _ => d.cover(i).take(&w.chem, &p, (k, mol), |x| of[x]),
+    };
+    let kg = got * w.chem.subs[k].molar_mass;
+    match layer {
+        Layer::Seeds => d.counts.seeds[TAKEN_LYING] += kg,
+        _ => d.counts.cover_lost[TAKEN as usize] += kg,
+    }
     d.counts.cover_budget[TAKERS] += d.cover(i).content(&e) - held;
     (got, heat)
 }

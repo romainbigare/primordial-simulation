@@ -30,7 +30,7 @@ pub struct Life {
     pub(crate) stands: Vec<crate::contract::Stand>,
     /// Per cell, from the month's start (`contract::surroundings`): ground temperature, liquid depth, surface height
     /// (`contract::place`)
-    pub env: Vec<[f64; 3]>,
+    pub env: Vec<[f64; 4]>,
     /// While a parallel pass runs (`life::run`): what the cells see in each air node as the store held it at the
     /// pass's start (`World::a_seen`, of each substance), the same for every cell under it, worked out where first read;
     /// else empty

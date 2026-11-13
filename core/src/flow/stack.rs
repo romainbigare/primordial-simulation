@@ -170,12 +170,13 @@ impl Life {
     pub(super) fn every(&self, w: &World, sp: &[Sp]) -> Vec<f64> {
         crate::par::map_n(w.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.kg(w, sp, i))
     }
-    /// The mass of the life of cell `i`, kg: its cover with the seeds it sends out until they land (`cover::land`).
+    /// The mass of the life of cell `i`, kg: its cover, the seeds lying on its ground, and the seeds it sends out until
+    /// they land (`cover::land`).
     pub(super) fn kg(&self, w: &World, sp: &[Sp], i: usize) -> f64 {
         let c = w.life.cover(i);
         let mut kg = 0.0;
         if let Some(sub) = self.cover {
-            kg += c.mol.iter().chain(c.seeds.iter().map(|s| &s.mol)).flat_map(|m| m.iter().zip(sub)).map(|(&a, k)| a * sp[k].mm).sum::<f64>();
+            kg += c.all_mol().chain(c.seeds.iter().map(|s| &s.mol)).flat_map(|m| m.iter().zip(sub)).map(|(&a, k)| a * sp[k].mm).sum::<f64>();
         }
         kg
     }

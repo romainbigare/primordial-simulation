@@ -188,11 +188,15 @@ and of chunks. A serial step on one cell runs the same way on a chunk of its own
 **The contract** (`contract`): what lies between the natural world (the ground, the air, the cover) and what takes
 from it: its taker today is the plain taker of the tests (`worldgen::testkit::Taker`). The natural world names no
 module of a taker (`cli/tests/sides.rs`). It is plain data and functions over the one source, with no copy. **What a
-cell shows** a taker: its cover as a whole and each slot by the height its plants stand at (`contract::shown`,
-`contract::slots`): the mass and the amount of each substance; its place as the month's start left it
-(`contract::place`: the ground's temperature, the depth of the liquid standing on it, its height). **Take**
-(`contract::take`): a taker asks the whole cover or one slot for an amount of a substance and gets what is granted,
-never more than is there, with its heat; the cover books its side (`Cover::take`), the taker its own. **Give**
+cell shows** a taker: its cover as a whole, each slot by the height its plants stand at, and the seeds lying on its
+ground (`contract::shown`, `contract::slots`, `Layer::Seeds`): the mass and the amount of each substance a taker can reach; its place as the month's start left it
+(`contract::place`: the ground's temperature, the depth of the liquid standing on it, its height, and the depth of the
+soft solid lying on its land, `Scratch::soft_land`, at the solid's density). **Snow hides** what lies under it
+(`contract::above`): a plant's matter is spread evenly over its height (the stand's law draws it as a stem of its
+height), so of a slot whose plants stand h high under snow d deep a taker reaches the share 1 − d / h (none at d ≥ h),
+and of the seeds lying, on the ground, nothing where any snow lies. **Take**
+(`contract::take`): a taker asks the whole cover, one slot or the seeds lying for an amount of a substance and gets what is granted,
+never more than it can reach, with its heat; the cover books its side (`Cover::take`), the taker its own. **Give**
 (`contract::give`): matter and heat back to the ground, through the cell's view of the store. **Press**
 (`contract::press`): work spent on a cell breaks its cover by the share it pays for (`Cover::breaking`), and what breaks
 goes to the ground as remains with its heat. **What stands on a cell** (`contract::Stand`): the cover's mass, capture
@@ -853,11 +857,13 @@ seeds fill it:
   the limit at activity a the melting point less (melting point − `FROST`) × (1 − a) (`cover::frozen`); below it the
   share min(1, (limit − T) / `frost_k`) dies (`PHASE`). Hardiness is the kind's own and paid for in every month
   (`c_firm`, above), not given by dormancy (Levitt 1980; Sakai and Larcher 1987).
-- **Budget**: what the cover's parts hold as fuel (`Parts::content`: the fuel what its burning frees, matter and walls
+- **Budget**: what the cover's parts and its seeds lying hold as fuel (`Parts::content`: the fuel what its burning frees, matter and walls
   the fuel their conversions take) changes only by the flows its law books where it moves them
   (`Counters::cover_budget`, `cover::BUDGET`): the light reaction's fuel, each part of the upkeep, the work of
-  building, what it sheds, what dies, the fuel its roots give its ground, seeds out and in, what bodies take or break,
-  what is placed, and rounding. The tape records them each year.
+  building, what it sheds, what dies, the fuel its roots give its ground, seeds out and landed, the seeds lying that
+  die, what takers take or break, what is placed, and rounding. The seeds' flows in kg (landed, sprouted, worn, frozen,
+  taken: `Counters::seeds`) and what each cell's cover built in the last whole year (`Counters::grown_last`) are counted
+  for the tape. The tape records them each year.
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
   out as kinds build, tallest first) build body matter and walls (10^`WALLS` kg per kg of matter, times m / (m +
   `wall_kg`) for a plant of m kg: a seedling is mostly leaf and the share of stem grows with a plant's size, Poorter
@@ -884,7 +890,18 @@ seeds fill it:
   store, fuel at its `STORE` gene per kg of it, from the slot's fuel: a slot short of fuel makes fewer seeds, not
   lighter ones. When every cell has had its month the seeds land (`cover::land`), cell by cell in the order made (the
   potential energy of the life that left a cell's head and came to it is booked once for each cell and way,
-  `store::life_sent`), and always take hold (`seed::lodge`): they join the most alike slot of their starting kind in
+  `store::life_sent`) and **lie on its ground** (`cover::Lying`, `lying.rs`) in up to `LOTS_LYING` (4) lots, each its
+  amounts of the three parts, its genes and its starting kind, at the cover's temperature (their heat is the cover's,
+  and they are matter of the cover's node: in its books, its budget and its potential energy). Seeds that land join the
+  most alike lot of their kind within `APART` × `alike` steps (the genes the mean by built matter), else an empty lot,
+  else the two nearest lots join and they take the lot freed: the rule of the slots (`kin`). A seed is a small dormant
+  plant, so the cover's laws hold for it: each month, before its cover's own, of each lot the share its wear gives dies
+  (the wear of dormant cover: its upkeep at full activity a kg, `upkeep_rates`, at the floor `dormant`, over `e_life` ×
+  10^`REPAIR`) and the share frozen below its hardened limit (`cover::frozen` at activity 0), to the ground as remains
+  (`seeds_died` of the budget); of the rest the share min(1, a × pace) **wakes**, a its kind's activity on that ground
+  and pace its burning's pace at the ground's temperature over that at `t_cat`: at `t_cat` all that is active wakes in a
+  month (seeds of temperate plants sprout in days to weeks once warm and wet; Bewley 1997, from memory), on frozen or dry
+  ground none. What wakes takes hold (`seed::lodge`): it joins the most alike slot of its starting kind in
   the cell (every gene within `APART` (0.5) × `alike` steps, `cover::distance`; the genes the mean by built cover);
   else they found a slot of their own: an empty one; else the slot **in deficit**, whose balance over about its last
   year (`Cover::net`: what its light reaction stored less its upkeep, per kg, a running mean over a year's months) is
@@ -900,9 +917,9 @@ seeds fill it:
   their heat at the air's temperature and their latent heat) and to its cell's aside node (with theirs), as living things
   breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 7,
   12). Every move is booked through the cell's view (`store::Moves`), its gas within the cell's share of the air.
-- **Taken and broken**: only through the contract (section 0): a taker takes from the whole cover or from one slot
-  (`contract::take`), each slot giving in proportion to what it holds; work pressed on a cell breaks the cover by its
-  share (`contract::press`).
+- **Taken and broken**: only through the contract (section 0): a taker takes from the whole cover, from one slot or
+  from the seeds lying (`contract::take`, `Layer::Seeds`), each slot or lot giving in proportion to what it holds; work
+  pressed on a cell breaks the cover by its share (`contract::press`).
 - **What it is to the rest**: its mass, capture area and the light it absorbs and keeps are what stands on its cell
   (`Cover::stand`, `contract::Stand`), so it shades (1.4) and holds the ground (1.3).
 

@@ -2,7 +2,7 @@
 //! To add a layer, add one line to `LAYERS` (and the data it needs to `Ctx`).
 
 use pcore::par;
-use pcore::cover::{per_m2, Cover};
+use pcore::cover::{lying, per_m2, Cover};
 use pcore::chem::{Phase, Substance};
 use pcore::{World, AIR};
 
@@ -169,6 +169,10 @@ pub(crate) struct Ctx<'a> {
     pub plants: Vec<f64>,
     pub wood: Vec<f64>,
     pub leaf: Vec<f64>,
+    /// Per ground cell: the seeds lying on its ground, kg/m² (`cover::lying`), and what its cover built in the last whole
+    /// year, kg of dry matter per m² a year (`Counters::grown_last`; none before a year has passed)
+    pub seeds: Vec<f64>,
+    pub grown: Vec<f64>,
     /// Per ground cell: how wet its ground is, 0..1 (`Physics::wetness` of the liquid in its pores and standing over
     /// them, `flow::means`; none before Flow first built its state)
     pub wet: Vec<f64>,
@@ -181,7 +185,9 @@ impl<'a> Ctx<'a> {
         let f = fields(w);
         let means = pcore::flow::means(w, &(0..n).collect::<Vec<usize>>()).unwrap_or_else(|| vec![Default::default(); n]);
         let wet = means.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
-        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), wet };
+        let area = w.mesh.cells().area();
+        let grown = (0..n).map(|i| w.counts.grown_last.get(i).map_or(0.0, |kg| kg / area[i])).collect();
+        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, wet };
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c
     }
@@ -240,6 +246,8 @@ pub const LAYERS: &[Layer] = &[
     l("plants", "kg/m2", "log", 0.03, 300.0, |c, i| c.plants[i]),
     l("wood", "kg/m2", "log", 0.01, 300.0, |c, i| c.wood[i]),
     l("leaf", "m2/m2", "log", 0.01, 30.0, |c, i| c.leaf[i]),
+    l("seeds", "kg/m2", "log", 1e-5, 0.1, |c, i| c.seeds[i]),
+    l("grown", "kg/m2/yr", "log", 0.01, 10.0, |c, i| c.grown[i]),
     l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
     l("true_g", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][1]),
     l("true_b", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][2]),
