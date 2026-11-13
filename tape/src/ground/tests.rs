@@ -110,7 +110,7 @@ fn the_smooth_shore_keeps_the_area_under_the_level() {
                 continue;
             }
             let under = h(p) < level;
-            moved += (shore.drawn(p, h(p), level, share) < level) as i64 - under as i64;
+            moved += (shore.drawn(p, h(p), level, share, [0.0; 2]) < level) as i64 - under as i64;
             crossings += (last.is_some_and(|l| l != under)) as i64;
             last = Some(under);
         }

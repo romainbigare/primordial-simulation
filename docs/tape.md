@@ -81,6 +81,9 @@ the samples by a Gaussian of 0.9 samples; the zero line of that offset (a cubic 
 is the shore, and the ground drawn keeps its own height where it lies on the offset's side of the level and is moved to
 that side by half the offset where not (none from 4 m on); a closed pond's samples deeper than 3 m keep their liquid;
 ground out of a pond and under its level (where its liquid spills below its pass) is drawn as it is.
+Beside a pond the offset lies a little lower along a channel's line (a quarter of its bed's depth at the shore, none
+from 5 of the bed's half widths across and from 4 bed widths from the shore): the liquid drowns a channel's mouth, so
+the shore and its shallows turn a little up the channel.
 Which of these a texel takes (in a pond: no valley; beside one: the valley held at its level and the shore drawn; else
 the valley alone) is blended between the samples' centres, by the share of the texel's weight on the samples of each
 kind, so the ground has no step along a sample's edge.

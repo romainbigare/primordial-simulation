@@ -118,10 +118,12 @@ const SWATH_DETAIL_M = 1.33;
 const REED_WET = 0.85; const REED_BAND_M = 5.0; const REED_FILL = 0.95; const REED_TINT = vec3f(0.75, 0.8, 0.45);
 const REED_W = 0.07; const REED_L = 0.9; const REED_TONE = 0.5;
 // Flowers: in clusters as large as the noise's cells, `FLOWER_M`, over as much of the sward as is in flower; in a
-// cluster a dot of radius `DOT_R` lies in each cell of `DOT_GAP` at a place of its own (`DOT_PRESENT` of the cells),
-// lighter at its heart by `DOT_HEART`; where a dot takes less than a pixel, the cluster's mean; they show as detail
+// cluster the dots, of radius `DOT_R`, lie on two lattices of cells `DOT_GAP` across, each turned its own way off the
+// map's axes (`DOT_TURN`, radians) and holding a dot at a place of its own in half of `DOT_PRESENT` of its cells, so
+// the dots stand in no rows and no square grid; a dot is lighter at its heart by `DOT_HEART`; where a dot takes less than a pixel, the cluster's mean; they show as detail
 // `FLOWERS_GONE_M` across (`shows_at`): none where a pixel takes a metre or more (their faint tint gone from afar).
 const FLOWERS_GONE_M = 1.33; const FLOWER_M = 1.2; const DOT_R = 0.1; const DOT_GAP = 0.38; const DOT_PRESENT = 0.8; const DOT_HEART = 0.25;
+const DOT_TURN = vec2f(0.55, 2.1);
 
 // The field of lattice l at `at`, m from the map's north-west corner, at mip level lod: the colour its marks cover the
 // ground with (a reflectance, premultiplied) and the share they cover.
@@ -264,13 +266,16 @@ fn flowers_at(at: vec2f, e: f32, bloom: f32, petal: vec3f) -> vec4f {
   var cover = mean;
   var c = petal;
   if (dots > 0.0 && cluster > 0.0) {
-    let q = at / DOT_GAP;
-    let x = lowbias(vec2i(floor(q)), 72);
     let margin = DOT_R / DOT_GAP;
-    let centre = (floor(q) + margin + (1.0 - 2.0 * margin) * vec2f(f32(x & 1023u), f32((x >> 10u) & 1023u)) / 1024.0) * DOT_GAP;
-    let d = length(at - centre) / DOT_R;
-    let present = select(0.0, 1.0, f32(x >> 22u) / 1024.0 < DOT_PRESENT);
-    cover = mix(mean, present * (1.0 - smoothstep(1.0 - e / DOT_R, 1.0, d)), dots);
+    // The nearest dot of the two lattices: how far from its centre the point lies, in its radii (past it: none).
+    var d = 1.0;
+    for (var l = 0; l < 2; l++) {
+      let q = mat2x2f(cos(DOT_TURN[l]), sin(DOT_TURN[l]), -sin(DOT_TURN[l]), cos(DOT_TURN[l])) * at / DOT_GAP + 13.0 * f32(l);
+      let x = lowbias(vec2i(floor(q)), 72 + l);
+      let centre = floor(q) + margin + (1.0 - 2.0 * margin) * vec2f(f32(x & 1023u), f32((x >> 10u) & 1023u)) / 1024.0;
+      if (f32(x >> 22u) / 1024.0 < 0.5 * DOT_PRESENT) { d = min(d, length(q - centre) * DOT_GAP / DOT_R); }
+    }
+    cover = mix(mean, 1.0 - smoothstep(1.0 - e / DOT_R, 1.0, d), dots);
     c = petal * (1.0 + DOT_HEART * (1.0 - d) * dots);
   }
   return vec4f(c, cover * cluster);

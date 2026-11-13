@@ -46,6 +46,21 @@ const KEPT: f64 = 3.0;
 const MOUTH_UNDER_M: f64 = 0.5;
 const MOUTH_MOST: f64 = 4.5;
 const MOUTH_STEP: f64 = 0.1;
+/// Standing liquid drowns the mouth of a channel that runs into it: a channel's bed lies under its banks, so at the
+/// shore the offset along a channel's line lies lower by `MOUTH_DROWN` bed depths (its bars and its banks' feet go
+/// under: shallows, not a deep cut), all of it within the bed and none from `MOUTH_WIDE` of its half widths from the
+/// line, and less with the way from the shore, none from `MOUTH_LONG` bed widths up the channel or out into the
+/// liquid. The shore so turns a little up the channel in a short funnel, and its band of shallows with it.
+const MOUTH_DROWN: f64 = 0.25;
+const MOUTH_WIDE: f64 = 5.0;
+const MOUTH_LONG: f64 = 4.0;
+
+/// A channel's mouth at a point `off` m from the line of a channel whose bed is `width` m wide and `depth` m deep:
+/// how far the offset lies lower at the shore, m, and the way from the shore over which that fades out, m
+/// (`MOUTH_DROWN`).
+pub(super) fn drowned(width: f64, depth: f64, off: f64) -> [f64; 2] {
+    [MOUTH_DROWN * depth * (1.0 - ease(0.5 * width, MOUTH_WIDE * 0.5 * width, off)), MOUTH_LONG * width]
+}
 
 /// Of each sample of the terrain: the level of the pond it lies in or of the nearest within `NEAR_SAMPLES` (NaN: none),
 /// m, and its offset and its depth under that level, blurred (the module's doc), m.
@@ -185,13 +200,20 @@ impl Shore {
 
     /// The height drawn at `p` (samples from the map's corner) whose own height is `h`, m, beside liquid at `level`
     /// (`beside`; NaN: none), `share` of the point's weight on samples beside it: the module's doc, as far as that
-    /// share, so the ground has no step where a sample beside a pond meets one beside none.
-    pub(super) fn drawn(&self, p: [f64; 2], h: f64, level: f64, share: f64) -> f64 {
+    /// share, so the ground has no step where a sample beside a pond meets one beside none; its offset lower by its
+    /// channel's mouth (`drowned`: `mouth[0]` m at the shore, none `mouth[1]` samples from it, the way from the shore
+    /// taken as the offset over its slope).
+    pub(super) fn drawn(&self, p: [f64; 2], h: f64, level: f64, share: f64, mouth: [f64; 2]) -> f64 {
         let own = (p[1] as usize).min(self.down - 1) * self.across + (p[0] as usize).min(self.across - 1);
         if level.is_nan() || self.far[own] {
             return h;
         }
-        let (d, depth) = self.at(p);
+        let (mut d, depth) = self.at(p);
+        if mouth[0] > 0.0 {
+            let slope = [self.at([p[0] + MOUTH_STEP, p[1]]).0 - self.at([p[0] - MOUTH_STEP, p[1]]).0, self.at([p[0], p[1] + MOUTH_STEP]).0 - self.at([p[0], p[1] - MOUTH_STEP]).0];
+            let from_shore = d.abs() * 2.0 * MOUTH_STEP / slope[0].hypot(slope[1]).max(1e-9);
+            d -= mouth[0] * (1.0 - ease(0.0, mouth[1], from_shore));
+        }
         let side = if d < 0.0 { -1.0 } else { 1.0 };
         let push = SIDE * d.abs() * (1.0 - ease(SIDE_FROM * SHORE_M, SHORE_M, d.abs()));
         let sided = level + side * (side * (h - level)).max(push);
