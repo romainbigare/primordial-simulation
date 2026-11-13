@@ -164,10 +164,12 @@ head; 60,000 where none reaches), and a texel that holds no line takes its sampl
 distances is the bend's swing, by which it draws the pool at the outer bank of a bend and the bar inside it. A shell finds the sample
 again from the texel's centre, floor((x + 1/2) k) for a texel k samples a side, stepped by it. Off the map a texel is
 its edge's. Each number is a function of the seed, the map and the place alone: the same in every tile that holds it. The second plane holds, beside the channel's sample, one more than the pond
-each texel lies in (`Ground::pond_tile`: the pond of the sample that holds its centre, or where that is none, of the
-nearest of the samples within 2 each way whose level the texel lies under, where its sample stands over that level (a rim, not the
-pass nor the ground below it) or the pond is of the open low ground, so a pond's shore is where the ground drawn rises
-over its level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
+whose liquid may stand on each texel (`tape/src/ground/shore.rs`: the pond of the sample that holds its centre or the
+nearest within 2 samples each way, else of the heaviest sample about it that has one, where the smooth shore's offset
+lies under `EDGE_M`, 2 m; the ground drawn lies over the level up to there, by as much as the offset where a sample
+about it has no pond near, so the edge of where liquid may stand is dry ground: a smooth line of the place, the same in
+every tile at every depth, never the texels' or the samples' edges; a shell draws the liquid where the ground drawn
+lies under the pond's level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
 frame: the melting point of the frozen cover, K, then for each square row by row 10 f32 (`ROW`) of the cell that holds
 its centre: the terrain's mean height over the cell, m; its ground's temperature, K, and how fast its air cools with
 height, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest ground, m

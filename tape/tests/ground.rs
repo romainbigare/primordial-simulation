@@ -98,30 +98,53 @@ fn a_place_holds_the_same_numbers_in_every_tile() {
 /// How finely a tile holds a height, m: the sum of two 16-bit floats.
 const HEIGHT_M: f64 = 1e-3;
 
-/// A tile names the pond each texel lies in (`Ground::pond_tile`): at the samples' own depth, where a texel is a
-/// sample, every texel a tile names in a pond beside its own sample lies under the pond's level (to `HEIGHT_M`; one
-/// named in its own sample's pond may lie over it, where the shore drawn smooth lifts it, `tape/src/ground/shore.rs`),
-/// and the island has ponds that a tile names exactly.
+/// The level the open low ground's liquid is drawn at, m (`tape/src/ground/shore.rs` `SEA_M`).
+const SEA_M: f64 = 0.0;
+
+/// The pond a texel is named in (whose liquid may stand on it), one more than it (0: none), and its height, m: of the
+/// texel at column `x` and row `y` of tile `t`, counted from its own corner.
+fn named(t: &[u16], x: usize, y: usize) -> (usize, f64) {
+    (unhalf(t[SIDE * SIDE * TEXEL + SECOND * ((y + GUTTER) * SIDE + x + GUTTER) + 1]) as usize, at(t, x, y, 0) as f64)
+}
+
+/// A texel is named in a pond by the place alone (`tape/src/ground/shore.rs`), so every tile agrees on where a lake
+/// is: where a texel finer than the samples named in a pond meets one named in none, that one lies over its level (to
+/// `HEIGHT_M`), so no tile cuts liquid off along its texels; and the finer tile names each place that lies under a
+/// pond's level at the samples' depth in that pond. The island has ponds a tile names exactly.
 #[test]
-fn a_texel_names_its_pond_and_lies_under_its_level() {
+fn every_tile_agrees_on_where_a_pond_is() {
     let (g, depths) = ground();
     let depth = pcore::space::terrain::SAMPLE_DEPTH;
-    assert!(depths.contains(&depth) && !g.ponds().is_empty(), "the island's ponds at the samples' depth");
+    assert!(depths.contains(&(depth + 1)) && !g.ponds().is_empty(), "the island's ponds at the samples' depth and one finer");
     assert!(g.ponds().len() < tape::PONDS_EXACT, "{} ponds, more than a tile names", g.ponds().len());
-    let cfg = Config::default();
-    let (map, terrain) = worldgen::terrain::island_ground(1, 16, 16);
-    let s = terrain.samples(1, &map, (cfg.lat_south, cfg.lat_north));
-    let tile = g.tile(depth, 0, 0);
-    let mut held = 0;
-    for y in 0..TILE {
-        for x in 0..TILE {
-            let named = tape::unhalf(tile[SIDE * SIDE * TEXEL + SECOND * ((y + GUTTER) * SIDE + x + GUTTER) + 1]) as usize;
-            if named > 0 && s.pond[y * s.across + x] as usize != named - 1 {
-                held += 1;
-                let (h, level) = (at(&tile, x, y, 0) as f64, g.ponds()[named - 1].level);
-                assert!(h < level + HEIGHT_M, "texel ({x}, {y}) at {h} m in a pond of level {level} m");
+    let level = |q: usize| { let p = &g.ponds()[q - 1]; if p.pass == pcore::space::network::NONE { SEA_M } else { p.level } };
+    let (coarse, fine) = (g.tile(depth, 0, 0), [[0, 0], [1, 0], [0, 1], [1, 1]].map(|[x, y]| g.tile(depth + 1, x, y)));
+    let fine_at = |x: usize, y: usize| named(&fine[(y / TILE) * 2 + x / TILE], x % TILE, y % TILE);
+    let (mut edges, mut under) = (0, 0);
+    let n = 2 * TILE;
+    for y in 0..n {
+        for x in 0..n {
+            let (q, h) = fine_at(x, y);
+            for (q2, h2) in [(x + 1 < n).then(|| fine_at(x + 1, y)), (y + 1 < n).then(|| fine_at(x, y + 1))].into_iter().flatten() {
+                for (named_in, beyond) in [(q, h2), (q2, h)].into_iter().filter(|_| q != q2 && q * q2 == 0) {
+                    if named_in > 0 {
+                        assert!(beyond > level(named_in) - HEIGHT_M, "past an edge of pond {named_in} texel ({x}, {y}) at {beyond} m, under its level {} m", level(named_in));
+                        edges += 1;
+                    }
+                }
             }
         }
     }
-    assert!(held > 0, "no texel in a pond");
+    for y in 0..TILE {
+        for x in 0..TILE {
+            let (q, h) = named(&coarse, x, y);
+            if q > 0 && h < level(q) - HEIGHT_M {
+                under += 1;
+                for (fx, fy) in [(2 * x, 2 * y), (2 * x + 1, 2 * y), (2 * x, 2 * y + 1), (2 * x + 1, 2 * y + 1)] {
+                    assert_eq!(fine_at(fx, fy).0, q, "the place of texel ({x}, {y}) under pond {q} in the coarser tile");
+                }
+            }
+        }
+    }
+    assert!(edges > 100 && under > 100, "{edges} edges of named texels, {under} texels under a pond");
 }
