@@ -12,7 +12,7 @@ use std::sync::Arc;
 /// The samples of the island of seed 1, 16 x 16 squares, the metres a sample takes, and the default channel law.
 fn island() -> (Arc<Samples>, f64, Law) {
     let cfg = pcore::Config::default();
-    let (map, terrain) = worldgen::terrain::island_ground(1, 16, 16);
+    let (map, terrain) = worldgen::terrain::island_ground(1, (16, 16), pcore::space::terrain::Shape::One);
     let s = terrain.samples(1, &map, (cfg.lat_south, cfg.lat_north));
     (s, map.length(SAMPLE_DEPTH), Law::of(&cfg.phys))
 }

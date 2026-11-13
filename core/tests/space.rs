@@ -299,6 +299,25 @@ fn the_wear_keeps_what_it_moves() {
     assert!(s.loose.iter().all(|&d| d >= 0.0), "loose ground under none");
 }
 
+/// An island of drawn rises (`space::rises`): its land stays off the map's edges, so the open low ground runs along every
+/// edge as one part and joins the low ground between its lands; and its wear keeps what it moves.
+#[test]
+fn a_drawn_islands_low_ground_is_one_and_rings_the_map() {
+    use pcore::space::network::NONE;
+    let cfg = pcore::Config::default();
+    let (map, terrain) = worldgen::terrain::island_ground(2, (32, 32), pcore::space::terrain::Shape::Drawn);
+    let s = terrain.samples(2, &map, (cfg.lat_south, cfg.lat_north));
+    let open: Vec<usize> = (0..s.ponds.len()).filter(|&p| s.ponds[p].pass == NONE).collect();
+    assert_eq!(open.len(), 1, "one open low ground");
+    let edge = |k: usize| k % s.across == 0 || k % s.across == s.across - 1 || k / s.across == 0 || k / s.across == s.down - 1;
+    assert!((0..s.h.len()).filter(|&k| edge(k)).all(|k| s.pond[k] == open[0] as u32), "the open low ground along every edge");
+    let land = (0..s.h.len()).filter(|&k| s.pond[k] == NONE).count() as f64 / s.h.len() as f64;
+    let b = s.books;
+    println!("land {:.1}%, taken {:.4e} m3, in the basins {:.4e}, on the shelf {:.4e}", 100.0 * land, b.taken, b.settled, b.shelf);
+    assert!(land > 0.1, "land {land}");
+    assert!(((b.settled + b.shelf + b.beyond) / b.taken - 1.0).abs() < 1e-9, "{b:?}");
+}
+
 /// The terrain's channels (`space::network`): each sample's liquid runs to a neighbour no higher, but in a pond, where
 /// it runs on toward the pass; from every sample of land the way leads to the open low ground under 0 m; a pond's
 /// samples lie under its level, which is its pass's height. The area that drains through a sample is its own and all
