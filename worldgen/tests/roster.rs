@@ -1,4 +1,4 @@
-//! The roster of starting kinds (`worldgen::life::ROSTER`): every kind can be placed, its cover labelled by its key,
+//! The roster of starting kinds (`worldgen::life::ROSTER`): every kind can be placed, its cover labelled by its row,
 //! and the world stays whole (elements and energy booked, nothing negative).
 
 use worldgen::life::{seed, KINDS, ROSTER};
@@ -10,9 +10,9 @@ fn every_roster_kind_is_placed_and_the_world_holds() {
     pcore::step(&mut w);
     for &k in &ROSTER {
         let line = seed(&mut w, k);
-        let (name, key) = (KINDS[k].name, KINDS[k].key as usize);
+        let name = KINDS[k].name;
         assert!(line.contains(name), "no seeding line for kind {k}: {line:?}");
-        assert!(pcore::cover::sums(&w).get(key).is_some_and(|s| s.slots > 0.0), "kind {name} placed no cover");
+        assert!(pcore::cover::sums(&w).get(k).is_some_and(|s| s.slots > 0.0), "kind {name} placed no cover");
         pcore::step(&mut w);
     }
     assert_eq!(pcore::check::broken(&w), None);

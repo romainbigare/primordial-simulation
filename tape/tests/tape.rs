@@ -42,7 +42,7 @@ fn two_kinds() -> World {
 /// Seed the third kind of cover (row 2), late in a run, and the label of its columns (`root_<k>_*`).
 fn late(w: &mut World) -> String {
     worldgen::life::seed(w, 2);
-    format!("root_{}_", worldgen::life::KINDS[2].key)
+    String::from("root_2_")
 }
 
 /// Save the world and the shell's state `plan` to `path`.
@@ -106,13 +106,13 @@ fn snapshot_round_trip_at_every_month() {
 /// the snapshot carries the schedule, and both runs end with the same world.
 #[test]
 fn a_resumed_run_places_the_kinds_still_due() {
-    use worldgen::life::{Seeding, KINDS, ROSTER};
+    use worldgen::life::{Seeding, ROSTER};
     use worldgen::schedule::Schedule;
     let dir = tmp("resume_plan");
     // The roster from year 0, its second half due at year 1, after the snapshot.
     let mut plan = Schedule::new(Some(0), &ROSTER, Seeding::default());
     plan.kinds.iter_mut().enumerate().for_each(|(n, k)| k.1 = (2 * n >= ROSTER.len()) as u64);
-    let late: Vec<usize> = plan.kinds.iter().filter(|k| k.1 > 0).map(|k| KINDS[k.0].key as usize).collect();
+    let late: Vec<usize> = plan.kinds.iter().filter(|k| k.1 > 0).map(|k| k.0).collect();
     let placed = |w: &World, k: usize| pcore::cover::sums(w).get(k).is_some_and(|s| s.slots > 0.0);
     let years = |w: &mut World, plan: &Schedule, n: u64| {
         for _ in 0..n {

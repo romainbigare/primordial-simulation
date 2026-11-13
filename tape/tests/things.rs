@@ -2,7 +2,7 @@
 //! world.
 
 use pcore::cover::{LEAF, STORE, WALLS};
-use worldgen::life::KINDS;
+use worldgen::life::{KINDS, LIGHT_ROW};
 use worldgen::testkit;
 
 /// Reads the list in order.
@@ -43,8 +43,8 @@ fn a_window_lists_what_lies_in_its_cells() {
 
     // The slot of cover: its kind, its built cover and capture area per m² (10^`LEAF` per kg of its living cover,
     // `Cover::living`) and its genes.
-    let genes = KINDS[0].genes;
-    assert_eq!(r.u32(), 0);
+    let genes = KINDS[LIGHT_ROW].genes;
+    assert_eq!(r.u32(), LIGHT_ROW as u32);
     let built = r.f32() as f64;
     assert!((built - 0.5 / (1.0 + 10f64.powf(genes[STORE] as f64))).abs() < 1e-6, "built cover {built} kg/m²");
     let leaf = r.f32() as f64;

@@ -842,8 +842,8 @@ read a kind.
   rectangle of air blocks in squares (`--fine`), by the same rule. A cell's height is the terrain's mean over it
   (`Terrain::inside`, on the worn samples, 0), whatever its size.
 - **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS`: kg per m² and genes, on every open land cell
-  by its chance, each kind's draws keyed by its own key); `--roster` places six kinds (`ROSTER`): a herb, a small fast
-  herb, a big slow cover with walls, the same of wet ground (fully active only near saturation, more capacity), a woody
+  by its chance, each kind's draws keyed by its own key, its label its row, `Cover::root`); without `--roster` the herb
+  (`ONE`), with it the six kinds in their order (`ROSTER`): a small fast herb, a herb, a big slow cover with walls, the same of wet ground (fully active only near saturation, more capacity), a woody
   cover of dry ground (active at a tenth of saturation, thick leaves, slow) and a tall fast cover with seeds spread
   wide. Its genes get a spray of mutation (`--spray`).
 - **Fixers**: a tenth of the cells of the starting cover carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).

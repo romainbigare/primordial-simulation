@@ -6,7 +6,7 @@ mod kinds;
 mod seeding;
 mod soil;
 
-pub use kinds::{Kind, KINDS, ONE, ROSTER};
+pub use kinds::{Kind, KINDS, LIGHT_ROW, ONE, ROSTER};
 pub use seeding::{seed, seed_with, Seeding, FIXERS, FIX_GENE};
 pub use soil::soil;
 

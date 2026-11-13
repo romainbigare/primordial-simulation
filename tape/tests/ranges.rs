@@ -46,7 +46,7 @@ const ABSORBER_PPM: f64 = 325.8;
 const RIVERS: f64 = 233.6;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
 const WORN: f64 = 0.2389;
-/// The cover (starting kind 0) at year 30, log10 kg (`root_0_cover_kg`), in the reference runs.
+/// The cover (the light-eaters, `LIGHT_ROW`) at year 30, log10 kg (`root_1_cover_kg`), in the reference runs.
 const COVER_KG: f64 = 9.881;
 
 /// Earth's rain on land, m/yr (Trenberth et al. 2007), and the factor either way a run's may lie from it: the island
@@ -117,7 +117,7 @@ fn the_world_lives_and_keeps_its_books() {
         let c = w.life.cover(i);
         c.held().for_each(|x| *held.entry(c.root[x]).or_insert(0.0) += c.plants[x]);
     }
-    let plants = |k: usize| held.get(&KINDS[k].key).copied().unwrap_or(0.0);
+    let plants = |k: usize| held.get(&(k as u32)).copied().unwrap_or(0.0);
     let dead: Vec<usize> = ROSTER.iter().copied().filter(|&k| plants(k) < ALIVE_PLANTS).collect();
     println!("year {years}: plants of each cover kind {:?}", ROSTER.iter().map(|&k| (k, plants(k))).collect::<Vec<_>>());
     assert!(dead.is_empty(), "cover kinds with fewer than {ALIVE_PLANTS} plants: {dead:?}");
@@ -157,7 +157,7 @@ fn key_numbers(seed: u64) -> ([f64; KEYS.len()], [f64; 2]) {
     });
     let worn = (rock_from - rock(&w, &land)) / span * MM;
     let [t, summer, winter, rain, air, rivers] = mean;
-    let cover = rec.last("root_0_cover_kg").log10();
+    let cover = rec.last("root_1_cover_kg").log10();
     let keys = [t, summer - winter, rain, air * PPM, rivers, worn, cover];
     (keys, [rain_m_yr(&w, rain), stored_share(&w)])
 }

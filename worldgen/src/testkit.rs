@@ -123,9 +123,9 @@ pub fn start() -> (World, usize) {
     (w, i)
 }
 
-/// `kg` per m² of the cover of starting kind 0 (its genes, `life::KINDS`) placed in cell `i` (`cover::place`).
+/// `kg` per m² of the cover of the light-eaters (their genes and label, `life::LIGHT_ROW`) placed in cell `i` (`cover::place`).
 pub fn cover(w: &mut World, i: usize, kg: f64) {
-    assert!(pcore::cover::place(w, i, crate::life::KINDS[0].genes, 0, kg), "no room for cover in cell {i}");
+    assert!(pcore::cover::place(w, i, crate::life::KINDS[crate::life::LIGHT_ROW].genes, crate::life::LIGHT_ROW as u32, kg), "no room for cover in cell {i}");
 }
 
 /// `mol` of substance `k` put on the ground of cell `i` at its temperature (booked as an edit).

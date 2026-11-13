@@ -26,12 +26,14 @@ const BAND_CELLS: usize = 5;
 /// spare it (the test asserts both).
 const FROST_GENES: [f32; 2] = [276.0, 261.0];
 
-/// The big slow kind of cover (a tree, row 2).
-const TREE: &worldgen::life::Kind = &KINDS[2];
+/// The row of the big slow kind of cover (a tree), its label.
+const TREE_ROW: usize = 2;
+/// The big slow kind of cover.
+const TREE: &worldgen::life::Kind = &KINDS[TREE_ROW];
 
-/// The genes of the starting cover (kind 0).
+/// The genes of the light-eaters.
 fn genes() -> [f32; cover::NG] {
-    KINDS[0].genes
+    KINDS[worldgen::life::LIGHT_ROW].genes
 }
 
 /// The world's cover, kg.
@@ -270,7 +272,7 @@ fn a_new_kind_enters_a_full_cell() {
 fn a_stand_never_passes_the_thinning_law_as_it_grows_tall() {
     let (mut w, i) = start();
     let books = Books::now(&w);
-    assert!(cover::place(&mut w, i, TREE.genes, TREE.key, 0.001));
+    assert!(cover::place(&mut w, i, TREE.genes, TREE_ROW as u32, 0.001));
     let p = cover::Parts::of(&w.chem).expect("cover parts");
     let (mm, area, rho) = (p.mm(&w.chem), w.mesh.cells().area()[i], w.chem.subs[p.sub[cover::WALL]].density[0]);
     let stand = |w: &pcore::World| {
@@ -298,11 +300,11 @@ fn tall_plants_hold_less_of_thin_ground() {
     let (mut w, _) = start();
     let mean = |b: &[f32; cover::BINS]| b.iter().enumerate().map(|(k, &s)| s as f64 * k as f64).sum::<f64>();
     let i = dry_lands(&w).into_iter().min_by(|&a, &b| mean(&w.loose_bins[a]).total_cmp(&mean(&w.loose_bins[b]))).expect("dry land");
-    assert!(cover::place(&mut w, i, genes(), 0, 0.1) && cover::place(&mut w, i, TREE.genes, TREE.key, 10.0));
+    assert!(cover::place(&mut w, i, genes(), 0, 0.1) && cover::place(&mut w, i, TREE.genes, TREE_ROW as u32, 10.0));
     pcore::step(&mut w);
     let c = w.life.cover(i);
     let held = |root: u32| c.held().find(|&x| c.root[x] == root).map(|x| c.rooted[x]).expect("the kind lives");
-    let (low, tall) = (held(0), held(3));
+    let (low, tall) = (held(0), held(TREE_ROW as u32));
     println!("rooted share of the low kind {low:.3}, of the tall kind {tall:.3}");
     assert!(tall < low && tall < 1.0, "the tall kind holds {tall} of the cell, the low kind {low}");
 }

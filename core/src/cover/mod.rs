@@ -101,7 +101,8 @@ impl Parts {
 pub struct Cover {
     /// Per slot: mol of each part
     pub mol: [[f64; NP]; SLOTS],
-    /// Per slot: its genes, and the starting kind it descends from (a label for the tape; `NO_ROOT` when empty)
+    /// Per slot: its genes, and the starting kind it descends from (its row of the starting kinds, a label for the tape;
+    /// `NO_ROOT` when empty)
     pub genes: [[f32; NG]; SLOTS],
     pub root: [u32; SLOTS],
     /// Per slot: whether one more kg of it did not pay its upkeep in its last month (`grow::build`): all it builds then

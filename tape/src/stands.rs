@@ -126,9 +126,9 @@ mod tests {
         let mut w = worldgen::testkit::small_world();
         let i = worldgen::testkit::mild_land(&w);
         worldgen::testkit::cover(&mut w, i, 0.4);
-        let mut far = worldgen::life::KINDS[0].genes;
+        let mut far = worldgen::life::KINDS[worldgen::life::LIGHT_ROW].genes;
         far[FROST] -= 30.0;
-        assert!(cover::place(&mut w, i, far, 0, 0.2), "no room for the second slot");
+        assert!(cover::place(&mut w, i, far, worldgen::life::LIGHT_ROW as u32, 0.2), "no room for the second slot");
         let p = Parts::of(&w.chem).expect("chemistry 0 has cover");
         let (mm, area, c) = (p.mm(&w.chem), w.mesh.cells().area()[i], w.life.cover(i));
         let all: f64 = c.held().map(|x| c.built(&mm, x)).sum::<f64>() / area;
