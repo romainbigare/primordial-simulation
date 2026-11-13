@@ -39,7 +39,7 @@ fn bond_breaks_under_too_much_load() {
 #[test]
 fn walls_keep_a_body_warm() {
     let (mut w, _) = world();
-    worldgen::life::seed(&mut w, 0);
+    worldgen::testkit::light_eaters(&mut w);
     worldgen::life::seed(&mut w, 1);
     // The same body outside and inside: one that does not capture light (its upkeep warms it), the warmest of those
     // placed, in its cell `i`.
@@ -93,7 +93,7 @@ fn walls_keep_a_body_warm() {
 #[test]
 fn a_small_body_can_make_parts_and_a_cell_holds_many() {
     let (mut w, i) = world();
-    worldgen::life::seed(&mut w, 0);
+    worldgen::testkit::light_eaters(&mut w);
     worldgen::life::seed(&mut w, 1);
     let slot = w.life.living().map(|x| x.0).find(|&s| w.life[s].n() == 1.0).expect("an eater");
     let mut b = std::mem::take(&mut w.life[slot]);
@@ -119,7 +119,7 @@ fn a_small_body_can_make_parts_and_a_cell_holds_many() {
 #[test]
 fn forming_never_takes_more_than_is_left() {
     let (mut w, _) = world();
-    worldgen::life::seed(&mut w, 0);
+    worldgen::testkit::light_eaters(&mut w);
     worldgen::life::seed(&mut w, 1);
     let slot = w.life.living().map(|x| x.0).find(|&s| w.life[s].n() == 1.0).expect("an eater");
     let (chem, b) = (&w.chem, &mut w.life[slot]);
@@ -322,7 +322,7 @@ fn a_part_that_falls_apart_gives_all_it_holds_to_its_ground() {
     // out of its slot), its cell and a part in it.
     let take_scene = || {
         let (mut w, _) = world();
-        worldgen::life::seed(&mut w, 0);
+        worldgen::testkit::light_eaters(&mut w);
         worldgen::life::seed(&mut w, 1);
         let h = w.life.living().map(|x| x.0).find(|&s| w.life[s].n() == 1.0).expect("a body");
         let i = w.life[h].cell as usize;

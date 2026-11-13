@@ -1,15 +1,16 @@
 //! First life: bodies placed on land at the start, initial conditions only (laws.md 8); their reactions are found from
 //! the chemistry's numbers (`Chemistry::life_roles`). `kinds`: the table; `make`: one founder; `seeding`: placing a
-//! kind; `soil`: the mineral of the land when life starts.
+//! kind; `soil`: the mineral of the land when life starts; `nursery`: the cover sorted by its law before it is placed.
 
 mod kinds;
 mod make;
+pub mod nursery;
 mod seeding;
 mod soil;
 
-pub use kinds::{plants, Bodies, Field, Kind, Place, KINDS, ROSTER, TWO};
+pub use kinds::{Bodies, Field, Kind, Place, KINDS, ROSTER, TWO};
 pub use make::{make, LITTER_X};
-pub use seeding::{seed, seed_with, Seeding, FIXERS, FIX_GENE};
+pub use seeding::{seed, seed_with, Seeding};
 pub use soil::soil;
 
 use pcore::body::Body;

@@ -10,6 +10,7 @@ interface Core {
   memory: WebAssembly.Memory;
   new_world(seed: number, size: number, south: number, north: number): number;
   step_month(): void;
+  sorts_next(): number;
   year(): number;
   day(): number;
   meta(): number;
@@ -87,6 +88,8 @@ function tick(): void {
   let made = 0;
   try {
     while (performance.now() - t0 < TICK_MS && (due >= 1 || rate === Infinity) && !waiting()) {
+      // The month the cover is sorted takes seconds: the page says so first (its main thread is free meanwhile).
+      if (c.sorts_next()) host.postMessage({ kind: 'busy', text: 'Sorting the plants by their own law on this world’s year (a few seconds)…' }, []);
       c.step_month(); due -= 1; made++;
     }
     stepped += made;

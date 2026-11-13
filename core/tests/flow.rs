@@ -1251,9 +1251,7 @@ fn a_slope_facing_the_sun_loses_its_snow_first() {
 fn the_lifted_energy_is_what_the_matter_gained() {
     let mut w = worldgen::testkit::squares(1, 16, 16);
     pcore::step(&mut w);
-    for &k in &worldgen::life::ROSTER {
-        worldgen::life::seed(&mut w, k);
-    }
+    worldgen::testkit::life(&mut w, &worldgen::life::ROSTER);
     let (p0, l0, heat) = (pcore::flow::potential(&w).expect("Flow's state"), w.store.lifted(), pcore::check::totals(&w).thermal);
     for _ in 0..5 * w.cfg.months_per_year {
         pcore::step(&mut w);

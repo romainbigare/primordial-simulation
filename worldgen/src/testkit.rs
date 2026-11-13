@@ -99,14 +99,35 @@ pub fn mild_with<T>(has: impl Fn(&World) -> Option<T>) -> (World, T) {
     }).expect("a world whose ground has what the scene needs")
 }
 
-/// An island of `side` x `side` cells of seed 1 with the two kinds of `ew run` placed at its start as `ew run` places
-/// them (the soil, the light-eaters, the eaters: `life::seed`), after `months` months.
+/// An island of `side` x `side` cells of seed 1 with the life of `ew run` placed at its start (`life`), after `months`
+/// months.
 pub fn living(side: usize, months: u32) -> World {
     let mut w = crate::new_world(1, side, side);
-    crate::life::soil(&mut w, &crate::chemistry0().1.soil);
-    [0, 1].iter().for_each(|&k| _ = crate::life::seed(&mut w, k));
+    life(&mut w, &crate::life::TWO);
     (0..months).for_each(|_| pcore::step(&mut w));
     w
+}
+
+/// The start of life of a world, every kind at once: the soil, the cover the nursery sorts (`life::nursery`), then the
+/// bodies of the starting kinds `rows` (`life::seed`), as `Schedule` places them when life starts, the later kinds
+/// without their years.
+pub fn life(w: &mut World, rows: &[usize]) {
+    crate::life::soil(w, &crate::chemistry0().1.soil);
+    crate::life::nursery::start(w);
+    for &k in rows.iter().filter(|&&k| matches!(crate::life::KINDS[k].place, crate::life::Place::Bodies(_))) {
+        crate::life::seed(w, k);
+    }
+}
+
+/// The light-eaters of a scene that tests other laws, kg per m² (`light_eaters`).
+pub const SCENE_COVER_KG: f64 = 0.1;
+
+/// The light-eaters of a scene that tests other laws: a plain, explicit placing of the genes of starting kind 0,
+/// `SCENE_COVER_KG` per m² on every dry land cell (`cover_lands`), the cells surveyed first. A world's own cover is the
+/// nursery's (`life`).
+pub fn light_eaters(w: &mut World) {
+    pcore::survey::survey(w);
+    cover_lands(w, SCENE_COVER_KG);
 }
 
 /// The land cells with no liquid standing on them, their lowest ground above 0 m (no low ground the low basin fills).

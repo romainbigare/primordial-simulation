@@ -31,6 +31,8 @@ let world: World | null = null;
 let live: Live | null = null;
 let frame = 0, speed = 4, playing = false, view = 'earth', layer: string | null = null, paths = false;
 let cls: Uint8Array = new Uint8Array(0);
+/** Whether the message shown says the world is in a long month (`Live` busy), to clear with the next frame. */
+let busy = false;
 
 const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspect(), v => viewSoon(v));
 /** The live map: the ground's tiles and the cells' table (live world only). */
@@ -293,10 +295,12 @@ async function startLive(): Promise<void> {
     things: data => { if (live === l && world) avatars.set(data, world.meta.cell_m); },
     frame: (stats, changed) => {
       if (live !== l) return;
+      if (busy) { busy = false; say(''); }
       if (changed) setFrame(0);
       showStats(stats);
     },
     error: text => { playing = false; syncUi(); say(text); },
+    busy: text => { busy = true; say(text); },
   });
   setMode(true);
   say('Making the world…');
