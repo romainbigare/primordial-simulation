@@ -466,9 +466,10 @@ explicitly, on plain arrays of its nodes (`air::daily`): each node's exchange wi
 its cells, its heat radiation to space and its rain (1.5). Each block's heat, then its vapour with its rain, are linear
 in them through the day, so the day follows them exactly, the block warming and moistening as one as the eddies even
 it, the air outside it as at the day's start; days of an hour give the same climate within 0.03 K. Then the evening of
-its block and the wind (1.6). The book takes each cell's law at the mean air of the step (`air::book`), which is what
-the days summed, so the air ends just where its days left it and no node gives more than it holds. A 15-day step
-gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_the_climate`, `tape/tests/ranges.rs`).
+its block and the wind (1.6). The book takes each cell's law at the mean air of the step (`air::book`), with what the
+step's rain added to what it evaporates (1.5), which is what the days summed, so the air ends just where its days left it and no node gives more than it holds. A 15-day step
+gives the climate of 1-day ones within 0.3 K on the land and the land's runoff within its spread from year to year
+(`the_long_step_keeps_the_climate`, `tape/tests/ranges.rs`).
 - **Sun** (`radiation`): the daily mean by latitude, season and day length (Berger 1978), declination sin δ = sin ε sin
   λ, the mean over the step's days. **On a slope** (`on_slope`), per m² of the cell's plan: by Lambert's cosine law the
   beam on ground of upward normal N = (−∂z/∂x, −∂z/∂y, 1) is S (s · N), s the unit vector to the sun, linear in the
@@ -545,7 +546,7 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
 - **Shade**: the cover's kinds share its light by height (3).
 
 ### 1.5 Evaporation, rain and dissolved gases
-`flow::air::cells`, `daily`, `rain`, `exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against
+`flow::air::cells`, `daily`, `rain`, `soak`, `exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against
 the air's): wet ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket), over the
 cell's own ground as its reflectance is (the share the standing liquid covers holds what its pores hold and all that
 stands, the rest what its pores hold, each a bucket by its area); and through a second film beside the air's where
@@ -568,8 +569,8 @@ a ratio to the node's, so the day sums the parts in rising order. In the air's d
 as the eddies even it, follows what its cells evaporate by their law and what its nodes rain: both are linear in the
 vapour between two of the ratios at which a cell starts or stops raining, so the day goes exactly from one such ratio
 to the next, with no smaller steps (`rain::Pool`); the air outside the block is as at the day's start. What a node
-rained in the step condenses over those cells (the sea under one air node as one place, 1.4) by what the parts over
-each would hold over their own saturation at the ratio the node rained at, so it is heaviest over high ground; it lands there by the share
+rains in a day condenses over those cells (the sea under one air node as one place, 1.4) by what the parts over
+each would hold over their own saturation at the ratio the node rains at that day, so it is heaviest over high ground; it lands there by the share
 1 - e^(-d / `rain_drift_m`) of it, d the place's width (the root of its area), and the rest drifts with the wind while
 its drops form and fall and lands over all the node's cells by the share of its air over each (the linear theory of
 orographic rain, Smith and Barstad 2004: a cloud time and a fallout time of about 1000 s each carry rain some 20 km at
@@ -577,8 +578,14 @@ orographic rain, Smith and Barstad 2004: a cloud time and a fallout time of abou
 as wide as an air node (the globe), the cells that see a node reach half a node into the next rows, so part of a
 node's rain lands a row away, toward the wetter node's neighbours; and no frozen cover moves. So the polar band of the
 lifeless globe gains snow it does not lose: its ice grows, about 40 m in 40 years (an island's cells are far smaller
-than its air's nodes, and its ice holds steady). It lands after the step, so a cell does not
-evaporate it again within that step, and it reaches each cell at the temperature of the air touching it (`touching`),
+than its air's nodes, and its ice holds steady). **The rain in the bucket** (`soak`): a cell's exchange over the step
+is solved without the rain that falls in it; the rain lands day by day as the air's days make it, and each day's rain
+wets the bucket it falls on (the share of the ground the standing liquid leaves, or all of it), followed exactly
+through the day under the open rate of the step's balance, what rises over the wet bucket sinking as it falls (the
+bed's store takes it after the step, `drain::sink`). What the bucket then evaporates over what it would have without
+the rain goes into the cell's air node that day, the cell's other outputs moving with it by the slopes of its
+balance (its latent heat cools the surface), and the book takes the same; the rain itself is booked once, as it
+landed. The second film and a body's surface, which evaporate at their open rate, take no more for it. The rain reaches each cell at the temperature of the air touching it (`touching`),
 the air paying what warms it on the way down. Where the node's air at its mean ground is below the gas's melting point
 it falls as a solid (snow) and the air keeps the fusion enthalpy its freezing frees; condensing frees the vaporisation
 enthalpy in the air. **Lift**: gas going up is lifted from the ground's head to its air node's mean ground, paid by the

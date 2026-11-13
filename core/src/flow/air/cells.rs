@@ -9,7 +9,8 @@ use super::daily::Ground;
 use super::rain::Wet;
 use super::radiation::{on_slope, sun_by_latitude, Air, Surface, DOWN};
 use super::step::Active;
-use super::outs::{carried, hold, put};
+use super::outs::{carried, column, hold, put};
+use super::soak::{cols, Soak, SOAK};
 use super::surf::{end_reflectance, parts_respond, Patch, Surf, Vapour};
 use super::{at_height, lerp};
 use crate::{math::one_minus_exp, World, AIR};
@@ -76,7 +77,7 @@ pub(super) struct Response {
 
 impl Response {
     pub(super) fn width(nx: usize) -> usize {
-        FIXED + (UP + nx) * (2 + nx)
+        FIXED + changing(nx) + nx * cols(nx)
     }
     /// Its rows, for the next step's room (`spare::Spare`).
     pub(super) fn rows(self) -> Vec<f64> {
@@ -122,13 +123,23 @@ impl Response {
         for j in 0..air.n() {
             g.base[j * outs] += air.children(j).iter().map(|&i| self.rows[i as usize * width + AIR_SUN]).sum::<f64>();
         }
+        g.soaks = self.soaks(w);
         g
+    }
+    /// The buckets the step's rain wets as it falls (`Soak`), of the cells alone in their order, each's active gases in
+    /// theirs.
+    pub(super) fn soaks(&self, w: &World) -> Vec<Soak> {
+        let (nx, width, parent) = (self.nx, Self::width(self.nx), w.mesh.cells().parent());
+        let at = |i: usize, y: usize| i * width + FIXED + changing(nx) + y * cols(nx);
+        let each = |i: usize| (0..nx).filter_map(move |y| Soak::of(i, parent[i], y, &self.rows[at(i, y)..at(i, y) + cols(nx)]));
+        (0..self.alone.len()).filter(|&i| self.alone[i]).flat_map(each).collect()
     }
     /// Each cell's changing outputs at the mean air of the step, as the book takes them (`[i * (UP + nx) + o]`): `t`
     /// per node, K, and `x[y]` per active gas, mol per node. A cell alone at the air it sees (`lerp`); a patch's at the
     /// air its cells see, by their areas, its parts shared to its cells (`Patch::share`).
     /// Of each cell of two faces (`wet`), its liquid's top's changing outputs at the same air, `[c * (UP + nx) + o]`.
-    pub(super) fn booked(&self, s: &Scratch, t: &[f64], x: &[&[f64]]) -> (Vec<f64>, Vec<f64>) {
+    /// A cell's outputs move with what the rain added to what its buckets (`soaks`) evaporate, `soaked`, mol.
+    pub(super) fn booked(&self, s: &Scratch, (t, x): (&[f64], &[&[f64]]), (soaks, soaked): (&[Soak], &[f64])) -> (Vec<f64>, Vec<f64>) {
         let (nx, width) = (self.nx, Self::width(self.nx));
         // Cell `i`'s changing outputs from its rows `rows` (as `rows` lays them out from `FIXED` on) at the mean air.
         let at = |i: usize, rows: &[f64], out: &mut [f64]| {
@@ -165,6 +176,10 @@ impl Response {
                 out[i as usize * (UP + nx)..(i as usize + 1) * (UP + nx)].iter_mut().enumerate().for_each(|(o, v)| *v = each[o * stride]);
             }
         }
+        for (soak, &m) in soaks.iter().zip(soaked) {
+            let i = soak.cell as usize;
+            out[i * (UP + nx)..(i + 1) * (UP + nx)].iter_mut().zip(&soak.per).for_each(|(v, per)| *v += m * per);
+        }
         (out, wet)
     }
     /// Fixed output `o` of the liquid's top of the `c`-th cell of two faces (`wet`).
@@ -200,6 +215,7 @@ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Respons
         let ground = Surf::of_cell(cx, i, on_slope(*q, rise(cx, i)));
         let fixed = exchange(cx, &ground, &seen[i * (1 + nx)..(i + 1) * (1 + nx)], work);
         put(&work.p, &work.carry, &mut row[FIXED..]);
+        row[FIXED + changing(nx)..].copy_from_slice(&work.soak);
         row[..FIXED].copy_from_slice(&fixed);
     });
     let mixed: Vec<usize> = (0..n).filter(|&i| alone[i] && cx.s.two_faces(i)).collect();
@@ -237,8 +253,8 @@ pub(super) fn rise(cx: &Ctx, i: usize) -> f64 {
 
 /// The buffers of one task's exchanges (`exchange`), kept from cell to cell: its active gases as their evaporation reads
 /// them (`Vapour`), what each evaporates (`Vapour::evaporate`), its parts (`put`), what each mol of each gas carries
-/// (`carried`), its changing outputs as a soft cover's end reflectance reads them (`end_reflectance`), and the heat it
-/// may lose (`hold`).
+/// (`carried`), its changing outputs as a soft cover's end reflectance reads them (`end_reflectance`), the heat it
+/// may lose (`hold`), and its buckets the step's rain wets as it falls (`soak::cols`, per active gas).
 #[derive(Default)]
 pub(super) struct Work {
     gas: Vec<Vapour>,
@@ -247,6 +263,12 @@ pub(super) struct Work {
     pub(super) carry: Vec<[f64; 2]>,
     out: Vec<f64>,
     loss: Vec<f64>,
+    pub(super) soak: Vec<f64>,
+}
+
+/// The numbers of a cell's changing outputs in its row: per output its value and its slopes (`put`).
+fn changing(nx: usize) -> usize {
+    (UP + nx) * (2 + nx)
 }
 
 /// The exchange of the ground `g` over the step under the air it sees, `air` (its temperature, K, then each active gas,
@@ -281,7 +303,7 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
     let rad = Air { tl, f: s.heat[j].absorbs(&w.chem, g.tg), down, slope };
     // The share of the air it sees that lies over it (`over_cell`).
     let over = area / g.seen_area;
-    let Work { gas, ev, p, carry, out, loss } = work;
+    let Work { gas, ev, p, carry, out, loss, soak } = work;
     gas.clear();
     gas.extend(act.iter().enumerate().map(|(y, &ac)| Vapour::of(cx, g, ac, air[1 + y], super::per_mol(over, tl, area, s.hk[ac.gi * na + j]))));
     let gas = &*gas;
@@ -331,12 +353,13 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
             (p[TO_AIR * stride + 1 + v], p[TO_SPACE * stride + 1 + v]) = (d_air, d_space);
             ev.iter().enumerate().for_each(|(y, e)| p[(GAS + y) * stride + 1 + v] = e[1] * dts + e[2] * dpa(y));
         }
+        bal
     };
     carry.clear();
     carry.extend(act.iter().map(|ac| carried(cx, g, ac.k)));
     let (mut alb, mut lo, mut hi) = (g.alb, f64::NAN, f64::NAN);
     let mut light = lit(alb);
-    parts(light[1], p, ev);
+    let mut bal = parts(light[1], p, ev);
     if g.cover[2] > 0.0 {
         out.resize(Response::width(nx) - FIXED, 0.0);
         put(p, carry, out);
@@ -349,11 +372,26 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
         (lo, hi) = if end > alb { (alb, hi) } else { (lo, alb) };
         alb = if lo.is_nan() || hi.is_nan() { end } else { 0.5 * (lo + hi) };
         light = lit(alb);
-        parts(light[1], p, ev);
+        bal = parts(light[1], p, ev);
         put(p, carry, out);
     }
     let [sun, sw, kept, in_air] = light;
     hold(cx, g, (air, adt * sw), carry, (p, loss));
+    // Each bucket the step's rain wets as it falls (`Vapour::soak`), and per mol the rain adds to what it evaporates its
+    // outputs: its latent heat moves the surface's balance (`Air::moves`) and so what the others evaporate.
+    soak.clear();
+    soak.resize(nx * cols(nx), 0.0);
+    for (y, block) in soak.chunks_exact_mut(cols(nx)).enumerate().filter(|e| act[e.0].cond) {
+        let Some([share, held, e]) = gas[y].soak(s, bal.ts, dt) else { continue };
+        let [dts, d_air, d_space] = rad.moves(g, dt, w.cfg.sensible, &bal, (0.0, -gas[y].lat(1.0) / adt));
+        block[..SOAK].copy_from_slice(&[g.share, share, held, gas[y].wet(), e]);
+        let part = |r: usize| match r {
+            TO_AIR => d_air,
+            TO_SPACE => d_space,
+            _ => ev[r - GAS][1] * dts + if r - GAS == y { 1.0 } else { 0.0 },
+        };
+        column(part, carry, |o, v| block[SOAK + o] = v);
+    }
     let per_area = if cover > 0.0 { cover / a } else { 1.0 };
     [adt * sw, sun * per_area * dt, kept * adt, adt * top * in_air]
 }

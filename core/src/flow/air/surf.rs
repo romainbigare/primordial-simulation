@@ -323,6 +323,22 @@ impl Vapour {
         let films = dm_de * self.film + dm2_de2 * self.second;
         [m + m2, films * (ps * self.lv / (R_GAS * t * t) - (ps - self.pa) / t) / t, -films / t]
     }
+    /// The bucket that rain landing in the step can wet (`soak::Soak`), its surface at `t` over the step: its share of
+    /// the node, what it holds, mol, as its whole area would, and its open rate, mol/s (the share the standing liquid
+    /// leaves, or all of it). None where nothing evaporates, it boils, or it stays at its open rate through the step
+    /// without rain, so rain adds nothing to what it evaporates.
+    pub(super) fn soak(&self, s: &Scratch, t: f64, dt: f64) -> Option<[f64; 3]> {
+        if !self.up || self.boil.is_some() || self.wet <= 0.0 {
+            return None;
+        }
+        let e = self.film * (s.sat[self.k].at(t) - self.pa) / t;
+        let (share, held) = if self.share == 0.0 || self.share == 1.0 { (1.0, self.held) } else { (1.0 - self.share, self.held.min(self.pores)) };
+        (e > 0.0 && held - e * dt < self.wet).then_some([share, held, e])
+    }
+    /// What it holds wet, mol (`exchange::bucket`).
+    pub(super) fn wet(&self) -> f64 {
+        self.wet
+    }
 }
 
 /// The rows of the parts of cell `i` that face the air (`parts::Mixed::two_faces`), [land, top], as `respond` lays a
@@ -337,6 +353,7 @@ pub(super) fn parts_respond(cx: &Ctx, i: usize, air: &[f64]) -> [Vec<f64>; 2] {
         let mut row = vec![0.0; Response::width(cx.act.len())];
         let fixed = exchange(cx, &ground, air, &mut work);
         put(&work.p, &work.carry, &mut row[FIXED..]);
+        row[Response::width(cx.act.len()) - work.soak.len()..].copy_from_slice(&work.soak);
         row[..FIXED].copy_from_slice(&fixed);
         row
     })

@@ -49,7 +49,7 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     let ground = response.ground(&cx, wet(w, s, &act, &t0, &patches));
     let mean = run(w, s, &act, &ground, dt);
     let rain = landed(&act, ground.wet(), &mean);
-    book(w, s, (&act, &response, &rain), &mean, dt);
+    book(w, s, (&act, &response, &rain, &ground.soaks), &mean, dt);
     s.spare.response = response.rows();
 }
 

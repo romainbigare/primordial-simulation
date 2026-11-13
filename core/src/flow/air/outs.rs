@@ -56,11 +56,16 @@ pub(super) fn carried(cx: &Ctx, g: &Surf, k: usize) -> [f64; 2] {
 pub(super) fn put(p: &[f64], carry: &[[f64; 2]], out: &mut [f64]) {
     let stride = 2 + carry.len();
     for v in 0..stride {
-        let part = |r: usize| p[r * stride + v];
-        let gas = |c: usize| carry.iter().enumerate().map(|(y, h)| part(GAS + y) * h[c]).sum::<f64>();
-        out[GAINS * stride + v] = part(TO_AIR) + gas(1);
-        out[LINK * stride + v] = part(TO_AIR) + gas(0);
-        out[SPACE * stride + v] = part(TO_SPACE);
-        (0..carry.len()).for_each(|y| out[(UP + y) * stride + v] = part(GAS + y));
+        column(|r| p[r * stride + v], carry, |o, x| out[o * stride + v] = x);
     }
+}
+
+/// One column of a cell's outputs from that column of its parts, `part(r)`, with what each mol of each gas carries
+/// (`carry`): `set(output, value)`.
+pub(super) fn column(part: impl Fn(usize) -> f64, carry: &[[f64; 2]], mut set: impl FnMut(usize, f64)) {
+    let gas = |c: usize| carry.iter().enumerate().map(|(y, h)| part(GAS + y) * h[c]).sum::<f64>();
+    set(GAINS, part(TO_AIR) + gas(1));
+    set(LINK, part(TO_AIR) + gas(0));
+    set(SPACE, part(TO_SPACE));
+    (0..carry.len()).for_each(|y| set(UP + y, part(GAS + y)));
 }

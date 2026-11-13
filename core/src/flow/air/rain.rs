@@ -52,6 +52,10 @@ impl Wet {
     fn steps(&self, x: usize, j: usize) -> &[[f64; 3]] {
         self.nodes[j].steps(x)
     }
+    /// The number of cells, whose places come before the patches' (`Place`).
+    pub(super) fn cells(&self) -> usize {
+        self.place_of.len()
+    }
     /// The air touching each place a node that rains falls on (`rain`, per active gas and node, `[y * na + j]`, mol)
     /// under air nodes at `t`, K (`touching`; 0 elsewhere and for a cell of a patch), by place: `rain_air` reads no other.
     pub(super) fn touched(&self, s: &Scratch, t: &[f64], rain: &[f64]) -> Vec<f64> {
@@ -292,31 +296,34 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64], patches: &
 /// What rains of one gas on each cell from each node it sees over the step: (cell, node, mol), in the order of the nodes.
 pub(super) type Landed = Vec<(u32, u32, f64)>;
 
-/// The air the rain of active gas `y` of node `j` meets on a day it rains at its saturation ratio `ratio`: the air
-/// touching the places it falls on (`touched`, per place, `Wet::touched` under the day's air), each by its share of the
-/// rain as it lands (`landed`), K; none where it falls on no place.
-pub(super) fn rain_air(wet: &Wet, (y, j, ratio): (usize, usize, f64), touched: &[f64]) -> Option<f64> {
+/// The air the rain of active gas `y` of node `j` meets on a day it rains at its saturation ratio `ratio`, and where it
+/// lands: the share of it each entry of the node gets (`Seen::landing`, into `shares`), and the air touching the places
+/// it falls on (`touched`, per place, `Wet::touched` under the day's air), each by its share, K; none where it falls on
+/// no place.
+pub(super) fn rain_air(wet: &Wet, (y, j, ratio): (usize, usize, f64), touched: &[f64], shares: &mut [f64]) -> Option<f64> {
     let node = &wet.nodes[j];
     let mut sum = -0.0;
-    node.landing(y, ratio, |e, f| sum += f * touched[node.cell[e] as usize]).then_some(sum)
+    let falls = node.landing(y, ratio, |e, f| {
+        sum += f * touched[node.cell[e] as usize];
+        shares[e] = f;
+    });
+    falls.then_some(sum)
 }
 
-/// What rains on each cell from each node it sees over the step (`Landed`), per active gas: each node's rain shared
-/// among the places that see it by what each would hold over its own saturation at the ratio the node rained at
-/// (`Wet`), a patch's among its cells by their areas.
+/// What rains on each cell from each node it sees over the step (`Landed`), per active gas: what the days landed on each
+/// place that sees the node (`Mean::landed`, `soak::land`), a patch's shared among its cells by their areas.
 pub(super) fn landed(act: &[Active], wet: &Wet, mean: &Mean) -> Vec<Landed> {
     let (na, n) = (wet.nodes.len(), wet.place_of.len());
     (0..act.len())
         .map(|x| {
             let mut out = Vec::new();
-            for (j, node) in wet.nodes.iter().enumerate().filter(|(j, _)| mean.rain[x * na + j] > 0.0) {
-                node.landing(x, mean.ratio[x * na + j], |e, f| {
-                    let (p, m) = (node.cell[e] as usize, mean.rain[x * na + j] * f);
-                    match p.checked_sub(n).map(|p| &wet.patches[p]) {
-                        None => out.push((p as u32, j as u32, m)),
+            for (j, node) in wet.nodes.iter().enumerate() {
+                for (&p, &m) in node.cell.iter().zip(&mean.landed[x * na + j]).filter(|e| *e.1 > 0.0) {
+                    match (p as usize).checked_sub(n).map(|p| &wet.patches[p]) {
+                        None => out.push((p, j as u32, m)),
                         Some(patch) => out.extend(patch.cells.iter().zip(&patch.area).map(|(&i, a)| (i, j as u32, m * a))),
                     }
-                });
+                }
             }
             out
         })
