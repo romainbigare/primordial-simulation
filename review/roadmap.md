@@ -786,3 +786,36 @@ section 4, with its known faults; the lines here are the rest.
   slot that does not pay its upkeep gives way to arriving seed, and succession (from equal mass, herbs now kill tree
   seedlings). Its first step is in `review/orchestrator.md` section 4.
 - Worlds that differ in shape (several islands, a ring, a long coast) are item 8 of section 7.1.
+
+## 13. Anchored laws kept for the animal field
+
+The old animal world's laws whose numbers have an anchor, as `docs/numbers.md` and `docs/laws.md` held them before
+the deletion (the code is in the tag `animals-v2`). The new animals reuse them; nothing here is new. `M` is a
+member's living body, kg; `T` its temperature, K; `pace(T)` the bare rate law of its main burning,
+k e^(−Ea/T) over its value at `t_cat` (290 K; chemistry 0's reaction 1, Ea 7,760 K, gives 5.62 at 310 K).
+
+| Law or number | Formula, one line | Value | Unit | Source |
+|---|---|---|---|---|
+| Upkeep by body mass | upkeep = days × M × (M_copy / `m_ref`)^(`intake_exp` − 1) × (`c_basal` + `c_strength` × STRENGTH) × repair × activity × pace(T) | `c_basal` 4.22e4, `c_strength` 1.12e4, `intake_exp` 0.75, `m_ref` 1 | J/(kg day) at `t_cat`; kg | Kleiber 1932, 1947 (3e5 J a day per kg^0.75 at 310 K, less resting muscle); Elia 1992 (muscle 13 kcal/kg a day); Ernest et al. 2003 (0.755) |
+| Pace by temperature | pace(T) = e^(−Ea/T) / e^(−Ea/`t_cat`); force and walk × min(1, pace) | `t_cat` 290 | K | Gillooly et al. 2001 (E about 0.6 eV); Bennett 1990 (Q10 2 to 3 of muscle) |
+| Take law | intake a day = `take` × found / (`take` + found) × supply, found = `sweep` × what lies / area | `take` 0.0089, `sweep` 1, `c_handle` 1e3 | share a day per kg at `m_ref`; m² per kg a day; J per kg handled | Holling 1959; van der Merwe and van Niekerk 1980 (sheep 42 to 80 g per kg^0.75 a day); `sweep`, `c_handle` tuned |
+| Heat balance through a coat | C dT/dt = P − g (T − tg), surface `meeh` × m^(2/3), insulation `r_air` + HEAT × `r_coat` (in liquid `r_liquid` and `wet_coat` of the coat) | `meeh` 0.1, `r_coat` 0.9, `r_air` 0.12, `r_liquid` 0.005, `wet_coat` 0.2 | m² per kg^(2/3); m² K/W; share | Meeh 1879; Herreid and Kessel 1967; Campbell and Norman 1998; Incropera and DeWitt 2002; Scholander et al. 1950; Porter and Gates 1969 |
+| Two heat states | a body whose own heat warms it past its surroundings by more than T² / Ea runs on to a warm state (its `COOL_T`), else lies cold (or at `KEEP_T` by burning) | T² / Ea about 12 K in chemistry 0 | K | the rate law's slope Ea / T² per K against the coat's loss |
+| The walk | speed v = √(`WALK_FROUDE` g L), L the side of a cube of a member's volume; cost `c_move` × (m / `MOVE_REF`)^`MOVE_EXP` J per kg per m | `WALK_FROUDE` 0.25, `c_move` 3 at `MOVE_REF` 30 kg, `MOVE_EXP` −0.32 | none; J/(kg m); kg | Alexander and Jayes 1983; Alexander 1989; Taylor et al. 1982 (10.7 m^−0.32) |
+| Drag in liquid | J per kg per m = ½ ρ `DRAG` (wet L²) v² / (m `MUSCLE`) | `DRAG` 1.05, `MUSCLE` 0.25 | none; share | Hoerner 1965 (a cube face on); Smith, Barclay and Loiselle 2005 (muscle's efficiency) |
+| Wear by the rate of living | wear += energy turned over per kg / (`e_life` × 10^REPAIR); 1 − e^−wear dies (AGE); upkeep × (1 − `c_repair` + `c_repair` 2^REPAIR) | `e_life` 1e9, `c_repair` 0.25 | J/kg; share | Rubner 1908 (about 1,000 kJ per g in a life, reviewed by Speakman 2005); repair 20 to 30% of resting upkeep |
+| The brood and the child | mature at `COPY_MASS`; growth puts the share `ALLOC` into a brood; a child is 10^`CHILD` × the copy mass; a node keeps `BROOD_HELD` of a child per member | `ALLOC` gene 0 to 1, `CHILD` gene −6 to log10 ½, `BROOD_HELD` 0.5 | share; log10 share | the brood as a share of a surplus (laws 4.2 at the tag) |
+| Frost, one law with the cover | frozen share a month = clamp((limit − `harden` (1 − activity) − T) / `frost_k`, 0, 1); over t: 1 − (1 − f)^(t / month) | `frost_k` 3, `harden` 20 | K | Levitt 1980; Sakai and Larcher 1987 (kept in `Physics::frozen`, the cover uses it) |
+| Breaking | energy to break a share f = f × Σ V × `rupture` over soft tissue and each built solid | `rupture` 1 MPa (matter), 120 MPa (the frame) | Pa | soft tissue 0.1 to 10 MPa; cell walls about 120 MPa (from memory) |
+| A held edge | each material's energy × min(1, e / l) where the edge is harder (scratch hardness); the edge loses `abrade` × W / (`TABOR` × σ) | `abrade` 1e-5, `TABOR` 3 | none | Atkins 2009; Tabor 1951; Archard 1953; Archard and Hirst 1956; Rabinowicz 1995 |
+| Growth's cost | building matter costs `c_copy` per kg, at most `c_build` × supply / `m_ref` × days × activity | `c_copy` 1e7, `c_build` 1e4 | J/kg; J/(day kg^0.75) | growth keeps 10 to 20% of what it eats; P/B of herbs once or twice a year; Ernest et al. 2003 |
+| Exact split and join of members | see below | | | McKendrick 1926; von Foerster 1959 (maturity as a flux across a size) |
+
+The exact split and join of the members of a group (`nodes::Lot`, `nodes::rejoin` at the tag):
+- A split takes the share f of the members and the share fa of the stores, heat and brood (fa > f where those who
+  leave hold more); the rest stays as the remainder, so the two add up to what was held to rounding.
+- A join adds members, stores, heat and brood as sums.
+- Genes, sizes and own brain rows become means by members; the last day of physics and the busy share too.
+- The spread of a gene pools each one's spread plus its gap to the new mean (by members); the spread of body size and
+  of brain rows pools the same way.
+- Members who come back from acting apart rejoin by amounts and sizes alone: their genes and spreads are the node's.
