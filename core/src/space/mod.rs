@@ -11,6 +11,7 @@ mod grid;
 pub mod network;
 mod mantle;
 mod ponds;
+mod rises;
 pub mod square;
 pub mod samples;
 mod shelf;

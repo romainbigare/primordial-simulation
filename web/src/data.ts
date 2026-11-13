@@ -8,8 +8,9 @@ export interface Meta {
   /** A globe: rows run pole to pole, columns wrap east to west; rows are evenly spread from lat_north to lat_south (degrees). */
   globe: boolean; lat_north: number; lat_south: number;
   layers: Layer[];
-  /** The live world only: the depth of a square below its air block, the ground's tiles, the terrain's samples and the
-   * numbers of the laws inside a cell (land.ts). */
+  /** The live world only: its large shape ('One' rise in the middle, or 'Drawn' from the seed), the depth of a square
+   * below its air block, the ground's tiles, the terrain's samples and the numbers of the laws inside a cell (land.ts). */
+  shape?: 'One' | 'Drawn';
   square_depth?: number;
   tiles?: TileMeta;
   samples?: SamplesOf;

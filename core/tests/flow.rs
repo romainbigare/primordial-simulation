@@ -982,7 +982,7 @@ fn a_globe_keeps_its_books_round_the_wrap() {
 #[test]
 fn an_island_in_the_planets_air_keeps_its_books_and_carries_heat_north() {
     const BAND: (f64, f64) = (30.0, 55.0);
-    let mut w = worldgen::terrain::new_island(1, 16, 16, worldgen::terrain::banded(BAND));
+    let mut w = worldgen::terrain::new_island(1, (16, 16), pcore::space::terrain::Shape::One, worldgen::terrain::banded(BAND));
     worldgen::planet::stand(&mut w);
     let books = Books::now(&w);
     (0..3 * w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));

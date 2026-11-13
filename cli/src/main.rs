@@ -39,11 +39,11 @@ fn main() {
     match args.command() {
         "run" => {
             let (size, seed) = (args.get("--size", 128usize), args.get("--seed", 1u64));
-            let island = args.island().unwrap_or_else(|e| {
+            let (island, shape) = args.island().and_then(|cfg| Ok((cfg, args.shape()?))).unwrap_or_else(|e| {
                 eprintln!("ew: {e}");
                 std::process::exit(2);
             });
-            let mut w = if args.has("--globe") { worldgen::terrain::new_globe(seed, size, args.fine()) } else { worldgen::terrain::new_island(seed, size, size, island) };
+            let mut w = if args.has("--globe") { worldgen::terrain::new_globe(seed, size, args.fine()) } else { worldgen::terrain::new_island(seed, (size, size), shape, island) };
             if args.has("--band") {
                 worldgen::planet::stand(&mut w);
             }
