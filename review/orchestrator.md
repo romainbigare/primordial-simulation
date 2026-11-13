@@ -1,12 +1,10 @@
 # Handover to the next orchestrator
 
 For the next agent who leads the work. Simple English, as the owner asks. Read this first, then `CLAUDE.md`, then
-`review/next-phase.md` (the owner's decisions in its section 9, the one list of priorities in 7.1, the contract in
-4.9, the clean-up in 8), then
-`review/roadmap.md` (why the work has this shape, and section 10: where each stage stands), then `docs/laws.md`. The
-spec is `docs/handover.md`; where it and the code differ, the code and `docs/laws.md` are the truth. The other files
-in `review/` (`handover.md`, `plan.md`, `top-30.md`, `objects.md`, `big-look.md`) are older looks; this file and the
-roadmap are the present.
+`review/roadmap.md` (the owner's decisions in its section 9, the one list of priorities in 7.1, the contract in
+4.9, the clean-up in 8, the open items of the natural world in 12), then `docs/laws.md`. The
+spec is `docs/handover.md`; where it and the code differ, the code and `docs/laws.md` are the truth. `review/` holds
+two files: this one and the roadmap.
 
 ## 1. The owner and how they work
 
@@ -81,7 +79,7 @@ Earth view's first style; the core's first speed pass; the page's world waiting 
 
 **Also on main since** (the work branch and main are the same commit; fast suite 213 passed, clippy clean, the slow
 tests of `tape/tests/ranges` pass):
-- **The new ground** (roadmap section 11): a range, hills and a plain on one island (`terrain::rise`), a coast drowned
+- **The new ground** (landscapes on a small world; what is open is in `review/roadmap.md` section 12): a range, hills and a plain on one island (`terrain::rise`), a coast drowned
   after a low stand of 100 m, five makes of bed in folded layers (`space/strata.rs`); `SNAPSHOT_VERSION` 122. With it:
   Flow's books for liquid that only passes through a node (`potential::relayed`), and test scenes that ask the kit
   for their ground by a condition (`testkit::island_with`, `mild_with`).
@@ -248,13 +246,13 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
 
 ## 5. What to do next, in order
 
-The owner's order (`review/next-phase.md` section 9): free the plants from the animals, delete the animals, build
+The owner's order (`review/roadmap.md` section 9): free the plants from the animals, delete the animals, build
 them again as a field; beside it nature goes on. No globe as a world; a world is 128 x 128 squares, 256 or 512 at
 the very most, and worlds should differ in shape (several islands). No speed target now. People after the animal
-layer. The full list with its reasons is `review/next-phase.md` 7.1; two tracks side by side, one helper each.
+layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks side by side, one helper each.
 
 **Life track**
-1. **Free the plants** (`next-phase.md` 4.9 and 8, steps C1a and C1b): a thin contract between the land and the
+1. **Free the plants** (`roadmap.md` 4.9 and 8, steps C1a and C1b): a thin contract between the land and the
    bodies (what a cell shows; take, give, press; what stands on a cell), the natural world's month stated on its own
    in today's order, the main guard and the key numbers without animals, a test taker. A plants-only world stays the
    same to the last digit. To `main` before the air's package, so that the references move once on a gate that no
@@ -263,7 +261,7 @@ layer. The full list with its reasons is `review/next-phase.md` 7.1; two tracks 
 3. **What the land offers, first part**: seeds that lie on the ground; snow that hides food; the contract's table in
    the tape as the count of resources.
 4. **Grazers** (F1), then movement (F2), eaters and the web (F3), animals on the page (F4); gates in
-   `next-phase.md` 7.2. Then the small game (god tools, fire).
+   `roadmap.md` 7.2. Then the small game (god tools, fire).
 
 **Nature track**
 1. **The air's low cloud, then the air and sunlight to main.** A paper check first (does a low cloud made by cooling
@@ -291,7 +289,7 @@ layer. The full list with its reasons is `review/next-phase.md` 7.1; two tracks 
    (Edmonds and Slingerland 2007), plants take it. Also: ice that cuts valleys; the exact solve of the surface's
    step by pieces; the True view's water.
 
-**The orchestrator, between packages**: the spec and the docs say what is true (`next-phase.md` 8, steps C4 and C5).
+**The orchestrator, between packages**: the spec and the docs say what is true (`roadmap.md` 8, step C4).
 
 The slow tests of bodies that were skipped once (`core/tests/choose.rs`, `lots.rs`) leave with the old animals;
 `tape/tests/scale.rs` stays and is run with the deletion.
