@@ -137,7 +137,7 @@ channel reaches as far as it could be wide, w0 × (`MOST_RUNOFF` a)^b / 2 (`MOST
 month known, 9.3 m of rain at Cherrapunji in July 1861; a the drained area, w0 and b the width law of
 `Physics::channel`), and one a shell may draw as a line wider than itself (its drained area at least `SHOW_M` times
 the texel's size over 40) as far as half the widest line the shell draws it as on these texels (the line law, `LINE_PX`
-1.8 css pixels times its discharge over the one that shows to the power 0.5, up to 7 times, where a css pixel takes 3
+1 css pixel times its discharge over the one that shows to the power 0.5, up to 2.5 times, where a css pixel takes 3
 texels and the discharge is 10 times `TYPICAL_RUNOFF`'s, and 1.5 texels more). Of the channels within reach, a texel keeps the one whose distance over the
 larger of its reach and the texel's size is least (the one that covers it first as the flux grows, or, where all are
 narrower than a texel, the nearest), but a tributary takes no texel in the bed of the channel it joins (within half
@@ -151,8 +151,7 @@ drains more (with none but its own channel's between), is given to that channel 
 crosses the reach of a larger one lies nearer over its scale in a strip a texel or two wide, which would notch the line
 a shell draws the larger one as). Each texel also keeps the distance,
 signed by the side, to its own channel's line without its bends (its curve and its wander alone; the line from the same
-head; 60,000 where none reaches), and a texel that holds no line takes its sample from that one: from afar a shell
-draws a channel as a line wider than its bends, about the line without them, and close up the difference of the two
+head; 60,000 where none reaches), and a texel that holds no line takes its sample from that one: the difference of the two
 distances is the bend's swing, by which it draws the pool at the outer bank of a bend and the bar inside it. A shell finds the sample
 again from the texel's centre, floor((x + 1/2) k) for a texel k samples a side, stepped by it. Off the map a texel is
 its edge's. Each number is a function of the seed, the map and the place alone: the same in every tile that holds it. The second plane holds, beside the channel's sample, one more than the pond
@@ -191,8 +190,9 @@ from one sample's centre to the next, so its width has no step where two samples
 reflectance of its bed's make and a zero. **The
 samples' discharge** (`Table::discharge`): what runs through each of the terrain's samples, m³/s, row by row (its
 `World::discharge` at the mol per m³ of the liquid its cell's ground holds; none where that holds no liquid; a
-sample of a pond carries no less than its main way upstream brings, so a river's line runs on along a body's floor and
-a shell draws it where the body is drawn dry or its shore lies farther than the samples'). The
+sample of a pond that holds no liquid, or that the shore drawn leaves out of the liquid (`ground::shore_dry`), carries
+no less than its main way upstream brings, so a river's line runs on along a dry body's floor and to the shore a shell
+draws; under a body's liquid no channel runs). The
 live page gets it as 16-bit floats with a frame when one sample's has changed by a tenth since it was last sent
 (`wasm/src/lib.rs` `DISCHARGE_SHOWS`: its width by 5%), 2 bytes a sample (248 kB for a 22 island, 2 MB for a 64 one;
 with most frames, as a month's flow changes that much somewhere), and sizes each channel by the channel law from

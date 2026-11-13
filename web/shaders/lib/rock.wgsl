@@ -173,11 +173,8 @@ fn noise_reach(along: f32, cell: f32, across: f32, k: i32) -> f32 {
 
 // A channel widens into the standing liquid it runs into: its bed and its water `MOUTH_FLARE` wider (and its water
 // that much shallower) where the ground lies at that liquid's level, none of it from `MOUTH_OVER_M` over the level
-// (land.wgsl `over_ponds`). Where it moves stones of `BAR_SAND_STONE` m or more (a channel that moves less carries
-// sand and silt alone) it lays a fan under the liquid: sand within `FAN_WIDTHS` of its bed's half widths of its line,
-// under liquid shallower than `FAN_DEPTH_M` (`fan_at`).
-// No plant roots where `FAN_BARE` of a fan or more lies (land.wgsl `state_at`).
-const MOUTH_FLARE = 1.5; const MOUTH_OVER_M = 1.5; const FAN_WIDTHS = 5.0; const FAN_DEPTH_M = 1.5; const FAN_BARE = 0.2;
+// (land.wgsl `over_ponds`). A channel that moves no stones of `BAR_SAND_STONE` m carries sand and silt alone.
+const MOUTH_FLARE = 1.5; const MOUTH_OVER_M = 1.5;
 const BAR_SAND_STONE = 0.03;
 
 // A channel at a point of ground `g`, of this month's discharge `q`, m³/s: the half width of its bed on the point's
@@ -204,13 +201,6 @@ fn channel_of(g: Tiled, q: f32, banks: f32) -> Channel {
   return Channel(bed, water, middle, land.channel.z * pow(q, land.channel.w) / flare, 1.0 / wide, bend, outer, banks);
 }
 
-// The share of a channel's fan at a point of ground `g` under standing liquid `depth` m deep, 0..1 (`FAN_WIDTHS`): the
-// channel is `c`.
-fn fan_at(g: Tiled, c: Channel, depth: f32) -> f32 {
-  if (c.bed <= 0.0 || depth <= 0.0 || depth >= FAN_DEPTH_M || g.d >= FAN_WIDTHS * c.bed) { return 0.0; }
-  return ease(0.0, BAR_SAND_STONE, stone_of(sample_at(g))) * (1.0 - ease(c.bed, FAN_WIDTHS * c.bed, g.d)) * (1.0 - ease(0.0, FAN_DEPTH_M, depth));
-}
-
 // The depth of the bed of channel `c` under its water's surface, m, the share `x` of the way across the water from its
 // middle to its outer edge (-1 at its inner edge): a parabola across the water, as deep at its middle as its mean
 // depth makes it (`BED_MIDDLE`), leaning to the outer bank in a bend (`POOL_SKEW`), so the water is deepest in its
@@ -219,7 +209,9 @@ fn depth_across(c: Channel, x: f32) -> f32 {
   return BED_MIDDLE * c.mean * c.deep * (1.0 - x * x) * (1.0 + POOL_SKEW * c.bend * x);
 }
 
-// The depth of the bed of channel `c` under its water's surface at the point of ground `g`, m (`depth_across`).
+// The depth of the bed of channel `c` under its water's surface at the point of ground `g`, m (`depth_across`): none
+// where the point is standing liquid's (the share of it that is: a body's floor is its own, and no channel is cut
+// into it).
 fn depth_in(g: Tiled, c: Channel) -> f32 {
-  return depth_across(c, clamp((g.sd - c.middle) * c.outer / max(c.water, 1e-6), -1.0, 1.0));
+  return depth_across(c, clamp((g.sd - c.middle) * c.outer / max(c.water, 1e-6), -1.0, 1.0)) * (1.0 - g.water.y);
 }

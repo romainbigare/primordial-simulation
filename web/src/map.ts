@@ -309,6 +309,7 @@ export class MapView {
     p.draw('backdrop', { rect: [0, 0, size[0], size[1]], binds: { 1: backdrop.buffer } }, false);
     // Copies meet on whole pixels, so no thin line shows between them.
     const edge = (c: number) => Math.round((xs[0] + c * w * s) * k);
+    if (this.land) this.land.drawn = k;
     const binds = this.land?.binds(gpu, look), land = binds && this.layer ? { ...binds, ...this.layer.under(gpu, s) } : null;
     // The live map's program made for pixels as large as these (gpu.ts `seenFrom`).
     const program = seenFrom('land', this.cellM / (s * k));

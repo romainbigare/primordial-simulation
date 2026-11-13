@@ -136,7 +136,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // (Most points that hold a channel lie far from its line, in its reach alone: there its own sample's discharge says
   // enough, and what grows along it, its stones and its neighbour's are read within `CHANNEL_NEAR` of its line.)
   var banks = banks_of(q);
-  let near = g.d < CHANNEL_NEAR * banks + 2.0 * e || abs(g.calm) < line_most(e) + 2.0 * e;
+  let near = g.d < max(CHANNEL_NEAR * banks, line_most(e)) + 2.0 * e;
   if (near) {
     next = next_along(reach, at);
     q = mix(q, discharge_of(next.s), next.share);
@@ -195,8 +195,6 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
   if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
   p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), p.loose, look.z);
-  // A river's fan under the liquid it runs into.
-  p.sand = max(p.sand, fan_at(g, ch, p.depth));
   p.river = 0.0;
   p.river_depth = 0.0;
   p.at = at;
@@ -209,7 +207,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   if (p.depth > 0.0 || ch.water <= 0.0) { return out; }
   out.dry.over = shore_over;
   if (!near) { return out; }
-  return river_spots(out, g, ch, q, moved, grows, line_of(q, e, banks));
+  return river_spots(out, g, ch, q, moved, grows, line_of(q, e));
 }
 
 // The colours a pixel mixes, each over the last by the share of the pixel it covers: its ground (`LAYER_GROUND`); the

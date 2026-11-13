@@ -47,6 +47,11 @@ const REACH: i64 = 2;
 /// The finest tiles' texels are no longer than this, m: finer, a shell magnifies them.
 const FINEST_M: f64 = 1.0;
 
+/// Whether the shore a shell draws leaves each of the samples `s` out of its pond's liquid (`shore::Shore::dry`).
+pub fn shore_dry(s: &Samples) -> Vec<bool> {
+    shore::Shore::new(s).dry()
+}
+
 /// The depths of the tiles of `map`, coarsest first: from the finest at which one tile holds the whole map to the first
 /// whose texels are no longer than `FINEST_M`.
 pub fn depths(map: &Square) -> std::ops::RangeInclusive<u8> {

@@ -45,14 +45,13 @@ const TEXEL_PX_MOST: f64 = 4.0;
 /// A tile holds no channel narrower than this share of a texel at `MOST_RUNOFF` that is not held as a line: it would
 /// cover no more than this share of the texel's pixels.
 const LEAST_TEXELS: f64 = 0.1;
-/// The line a shell draws a channel as from afar: `LINE_PX` css pixels wide where its discharge is the one that shows
-/// (`SHOW_M`), wider as its discharge over that to the power `LINE_GROW` (more steeply than the channel law widens a
-/// channel), up to `LINE_MOST` times. A map's choice, set by eye: a stream is a hair and the main river many times
-/// wider, a river widens down its way and below each tributary, and the line is as wide as a bed of a few metres
-/// where a view with a scale bar of 50 m draws that bed itself.
-pub const LINE_PX: f64 = 1.8;
+/// The least width a shell draws a channel at: `LINE_PX` css pixels where its discharge is the one that shows
+/// (`SHOW_M`), wider as its discharge over that to the power `LINE_GROW`, up to `LINE_MOST` times. A map's choice: a
+/// channel narrower than this on screen stays in sight as a thin line, a stream a hair and a river a little more,
+/// and no line is much wider than the bed it stands for (a channel is drawn as wide as it is wherever that is wider).
+pub const LINE_PX: f64 = 1.0;
 pub const LINE_GROW: f64 = 0.5;
-pub const LINE_MOST: f64 = 7.0;
+pub const LINE_MOST: f64 = 2.5;
 /// A css pixel takes at most this many texels: a texel takes a screen's pixel or more (`TEXEL_PX_MOST`), and a
 /// phone's screen has three pixels to a css pixel.
 const CSS_TEXELS_MOST: f64 = 3.0;

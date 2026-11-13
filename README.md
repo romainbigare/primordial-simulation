@@ -91,9 +91,8 @@ under a film of algae: a brook shows its stones, a river a metre deep is dark wa
 the capillary fringe over its water. From afar no channel whose discharge matters at that zoom is thinner than a line
 of about a css pixel: one shows as a line once it passes 6.4e-3 m³/s for each metre a css pixel takes (the drained
 area that shows grows with the zoom, so the whole island shows its main rivers, a closer view their larger branches,
-and none a mesh of rills), wider as its discharge grows, to the power 0.5 up to 7 times, so the network's order reads
-and a river widens down its way; a line wider than its bed runs along the channel's line without its bends, which
-come in as the view nears.
+and none a mesh of rills), a little wider as its discharge grows (to the power 0.5, up to 2.5 times); a channel is drawn as wide as its bed
+wherever that is wider than its line, so its width changes evenly with the zoom.
 Close up a channel's bed is as wide as the channel law makes five times this month's discharge (the bankfull flood,
 Leopold and Maddock 1953; Dunne and Leopold 1978), bare of plants; its line wanders about its valley's and on gentle ground swings in a meander belt
 (bends of many sizes, some reaches nearly straight, here and there a loop; on a steep reach nearly straight stretches
