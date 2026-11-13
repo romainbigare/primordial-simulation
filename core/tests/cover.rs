@@ -15,9 +15,9 @@ use worldgen::testkit::{self, dry_lands, small_world, Books, Taker};
 /// Latitudes of the south and north edges of the frost test's island, degrees: it reaches from the warm latitudes to
 /// the cold, so its air brings every band the heat of the lower latitudes, as a real place gets.
 const FROST_WORLD_LAT: [f64; 2] = [20.0, 82.3];
-/// The warm band (the island's southmost row of cells) and the cold band of that island, between these latitudes,
+/// The warm band (the island's two southmost rows of cells) and the cold band of that island, between these latitudes,
 /// degrees.
-const WARM_BAND: [f64; 2] = [30.0, 36.0];
+const WARM_BAND: [f64; 2] = [30.0, 40.0];
 const COLD_BAND: [f64; 2] = [50.0, 60.0];
 /// The fewest land cells a band holds.
 const BAND_CELLS: usize = 5;
