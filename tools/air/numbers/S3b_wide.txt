@@ -1,0 +1,17 @@
+wide year 30: per m2 of the map, W/m2 (mean over the year)
+  sun at the top                       312.3
+  reflected by the clear air            22.2
+  reflected by clouds                   50.8  (all sky less clear sky; 16.3% of the sun)
+  reflected by the surface              30.9  (what escapes under a clear sky; it reflects 16.2% of what reaches it)
+  reflected in all                     103.9  (33.3%)
+  absorbed in the air                   55.0  (under a clear sky 58.9)
+  absorbed at the surface              153.4
+  heat light up (surface)              387.8
+  heat light back from the air         325.8
+  heat light out to space              222.3  (from the surface 47.9, from the air 174.4)
+  clear sky: out to space              254.6  (surface 69.9, air 184.7); the clouds hold back 32.3
+  the window: surface light to space through it, clear sky 65.6
+  closure: in 312.267 = air + surface + space 312.267
+  ice (frozen cover over 1 cm) on 0.6% of the map, 1.5% of the land, at the year's end
+  ground 284.00 K, land 280.31 K, vapour column 21.60 kg/m2
+  the clouds' share of the sky 0.378, their depth to sunlight 13.0; rain m/yr: land 0.950, sea 1.114; evaporation m/yr: land 0.694, sea 1.345; land 39.9% of the map

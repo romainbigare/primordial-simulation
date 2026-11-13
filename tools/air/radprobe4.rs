@@ -1,0 +1,83 @@
+//! PROBE (never committed): the radiation budget of a world over its last year, per m² of the map.
+//! radprobe globe YEARS | wide SEED SIZE YEARS
+use pcore::store::Class;
+use pcore::World;
+
+fn budget(w: &World, label: &str) {
+    let r = *pcore::flow::PROBE_R.lock().unwrap();
+    let at = r[7];
+    let wm = |x: f64| x / at;
+    let n = w.mesh.cells().n();
+    let area = w.mesh.cells().area();
+    let all: f64 = area.iter().sum();
+    let t: f64 = (0..n).map(|i| w.t_ground_last(i) * area[i]).sum::<f64>() / all;
+    let land: Vec<usize> = (0..n).filter(|&i| w.is_land(i)).collect();
+    let la: f64 = land.iter().map(|&i| area[i]).sum();
+    let tl: f64 = land.iter().map(|&i| w.t_ground_last(i) * area[i]).sum::<f64>() / la.max(1.0);
+    let na = w.mesh.level(pcore::AIR).n();
+    let vap: f64 = w.store.amounts(Class::Air)[0..na].iter().sum::<f64>() * w.chem.subs[0].molar_mass / all;
+    println!("{label}: per m2 of the map, W/m2 (mean over the year)");
+    println!("  sun at the top                    {:8.1}", wm(r[0]));
+    println!("  reflected by the clear air        {:8.1}", wm(r[10]));
+    println!("  reflected by clouds               {:8.1}  (all sky less clear sky; {:.1}% of the sun)", wm(r[1]), 100.0 * r[1] / r[0]);
+    println!("  reflected by the surface          {:8.1}  (what escapes under a clear sky; it reflects {:.1}% of what reaches it)", wm(r[11] - r[1] - r[10]), 100.0 * r[8] / (r[2] + r[8]));
+    println!("  reflected in all                  {:8.1}  ({:.1}%)", wm(r[11]), 100.0 * r[11] / r[0]);
+    println!("  absorbed in the air               {:8.1}  (under a clear sky {:.1})", wm(r[9]), wm(r[17]));
+    println!("  absorbed at the surface           {:8.1}", wm(r[2]));
+    println!("  heat light up (surface)           {:8.1}", wm(r[4]));
+    println!("  heat light back from the air      {:8.1}", wm(r[5]));
+    println!("  heat light out to space           {:8.1}  (from the surface {:.1}, from the air {:.1})", wm(r[3] + r[6]), wm(r[3]), wm(r[6]));
+    println!("  clear sky: out to space           {:8.1}  (surface {:.1}, air {:.1}); the clouds hold back {:.1}", wm(r[12] + r[14]), wm(r[12]), wm(r[14]), wm(r[12] + r[14] - r[3] - r[6]));
+    println!("  the window: surface light to space through it, clear sky {:.1}", wm(r[13]));
+    println!("  closure: in {:.3} = air + surface + space {:.3}", wm(r[0]), wm(r[9] + r[2] + r[11]));
+    let frozen = |i: usize| { let (tt, pl) = w.thaw_node_last(i); w.g(0, i) * (1.0 - w.molten(0, i, tt, pl)) * w.chem.molar_volume(0, pcore::chem::Phase::Solid) / area[i] >= 0.01 };
+    let ice: f64 = (0..n).filter(|&i| frozen(i)).map(|i| area[i]).sum::<f64>() / all;
+    let land_ice: f64 = land.iter().filter(|&&i| frozen(i)).map(|&i| area[i]).sum::<f64>() / la.max(1.0);
+    println!("  ice (frozen cover over 1 cm) on {:.1}% of the map, {:.1}% of the land, at the year's end", 100.0 * ice, 100.0 * land_ice);
+    println!("  ground {t:.2} K, land {tl:.2} K, vapour column {vap:.2} kg/m2");
+    let year = w.cfg.calendar().year as f64;
+    let m_yr = |cells: &[usize]| { let a: f64 = cells.iter().map(|&i| area[i]).sum(); let (r, e) = cells.iter().fold((0.0, 0.0), |s, &i| (s.0 + w.rain[i] as f64 * area[i], s.1 + w.evap[i] as f64 * area[i])); let k = w.chem.molar_volume(0, pcore::chem::Phase::Liquid) * year / a.max(1.0); (r * k, e * k) };
+    let sea: Vec<usize> = (0..n).filter(|&i| !w.is_land(i)).collect();
+    let ((rl, el), (rs, es)) = (m_yr(&land), m_yr(&sea));
+    println!("  the clouds' share of the sky {:.3}, their depth to sunlight {:.1}; rain m/yr: land {rl:.3}, sea {rs:.3}; evaporation m/yr: land {el:.3}, sea {es:.3}; land {:.1}% of the map", r[15] / at, r[16] / r[15].max(1e-300), 100.0 * la / all);
+}
+
+fn main() {
+    let a: Vec<String> = std::env::args().collect();
+    let mut w = match a[1].as_str() {
+        "globe" => {
+            let mut w = worldgen::terrain::new_globe(1, 32, [0; 4]);
+            worldgen::terrain::scale_absorbers(&mut w, 1.0);
+            w
+        }
+        _ => {
+            let seed: u64 = a[2].parse().unwrap();
+            let size: usize = a[3].parse().unwrap();
+            let mut w = worldgen::terrain::new_island(seed, size, size, worldgen::terrain::banded((20.0, 65.0)));
+            worldgen::planet::stand(&mut w);
+            w
+        }
+    };
+    let years: u64 = a[if a[1] == "globe" { 2 } else { 4 }].parse().unwrap();
+    // Settings from the environment, for a look at what a number does (never a commit).
+    if let Ok(v) = std::env::var("MOIST") { w.cfg.moist_min = v.parse().unwrap(); }
+    if let Ok(v) = std::env::var("RAINT") { w.cfg.rain_time = v.parse().unwrap(); }
+    if let Ok(v) = std::env::var("CLIFE") { w.cfg.cloud_life = v.parse().unwrap(); }
+    if let Ok(v) = std::env::var("DROP") { w.cfg.drop_m = v.parse().unwrap(); }
+    let plan = (a[1] != "globe").then(|| worldgen::schedule::Schedule::new(Some(2), &worldgen::life::plants(&worldgen::life::ROSTER), worldgen::life::Seeding::default()));
+    pcore::flow::state(&mut w, true);
+    let mpy = w.cfg.months_per_year;
+    for y in 0..years {
+        if let Some(p) = &plan {
+            p.place(&mut w);
+        }
+        if y + 1 == years {
+            *pcore::flow::PROBE_R.lock().unwrap() = [0.0; 20];
+        }
+        for _ in 0..mpy {
+            pcore::step(&mut w);
+            w.drain_events();
+        }
+    }
+    budget(&w, &format!("{} year {years}", a[1]));
+}

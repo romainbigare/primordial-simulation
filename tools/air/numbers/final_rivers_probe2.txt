@@ -1,0 +1,26 @@
+
+running 1 test
+test rivers_probe has been running for over 60 seconds
+seed 1: rivers long [54.0, 54.0, 54.0, 54.0, 54.0, 54.0, 54.0, 54.0, 54.0, 54.0] mean 54.00; 1-day [54.0, 54.0, 54.0, 54.0, 54.0, 54.0, 54.0, 54.0, 54.0, 54.0] mean 54.00; off 0.00
+  rain_land 2.416232e-3 / 2.415236e-3 (+0.041%), evap_land 1.165642e-3 / 1.173049e-3 (-0.631%), runoff_sea 1.314999e-3 / 1.305310e-3 (+0.742%)
+  cells that differ in some year: 2 (long only cell-years 5, 1-day only 5)
+  cell 236: years river only long 0, only 1-day 5; at year 20 flux 10360 / 10073 mol/s (+2.9%, floor 9000); catchment 9.4 / 9.9; land true / true
+  cell 398: years river only long 5, only 1-day 0; at year 20 flux 41970 / 41478 mol/s (+1.2%, floor 9000); catchment 10.1 / 10.0; land true / true
+  land cells within 5% of the floor at year 20 (long): 4; flux long/1-day over 203 cells above half the floor: mean 1.0095, spread 0.0100
+seed 2: rivers long [44.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0] mean 44.90; 1-day [43.0, 43.0, 43.0, 43.0, 43.0, 43.0, 44.0, 44.0, 44.0, 44.0] mean 43.40; off 1.50
+  rain_land 2.348636e-3 / 2.347474e-3 (+0.049%), evap_land 1.242987e-3 / 1.251239e-3 (-0.660%), runoff_sea 1.040005e-3 / 1.029209e-3 (+1.049%)
+  cells that differ in some year: 2 (long only cell-years 15, 1-day only 0)
+  cell 120: years river only long 6, only 1-day 0; at year 20 flux 9400 / 9098 mol/s (+3.3%, floor 9000); catchment 30.8 / 32.4; land true / true
+  cell 144: years river only long 9, only 1-day 0; at year 20 flux 9249 / 8953 mol/s (+3.3%, floor 9000); catchment 10.5 / 12.0; land true / true
+  land cells within 5% of the floor at year 20 (long): 7; flux long/1-day over 173 cells above half the floor: mean 1.0154, spread 0.0145
+seed 3: rivers long [58.0, 58.0, 59.0, 59.0, 59.0, 59.0, 60.0, 60.0, 60.0, 60.0] mean 59.20; 1-day [57.0, 57.0, 57.0, 57.0, 57.0, 57.0, 57.0, 57.0, 57.0, 57.0] mean 57.00; off 2.20
+  rain_land 2.401471e-3 / 2.400971e-3 (+0.021%), evap_land 1.229934e-3 / 1.238876e-3 (-0.722%), runoff_sea 1.199138e-3 / 1.188109e-3 (+0.928%)
+  cells that differ in some year: 3 (long only cell-years 22, 1-day only 0)
+  cell 452: years river only long 8, only 1-day 0; at year 20 flux 9175 / 8891 mol/s (+3.2%, floor 9000); catchment 42.6 / 46.4; land true / true
+  cell 484: years river only long 4, only 1-day 0; at year 20 flux 9031 / 8746 mol/s (+3.3%, floor 9000); catchment 21.8 / 19.9; land true / true
+  cell 728: years river only long 10, only 1-day 0; at year 20 flux 84401 / 83228 mol/s (+1.4%, floor 9000); catchment 11.4 / 8.9; land true / true
+  land cells within 5% of the floor at year 20 (long): 8; flux long/1-day over 177 cells above half the floor: mean 1.0114, spread 0.0133
+test rivers_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 224.58s
+
