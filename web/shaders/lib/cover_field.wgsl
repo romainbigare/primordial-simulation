@@ -337,7 +337,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   if (cover_look.sides[STANDS] > 0.0) {
     trees = select(field_smooth(at, STANDS), field_at(at, STANDS, 0.0), cover_look.shown[STANDS] >= 1.0);
   }
-  // The low kinds take the light the trees leave (the cover's light law, laws.md 4.5: a kind below gets the light of
+  // The low kinds take the light the trees leave (the cover's light law, laws.md 3: a kind below gets the light of
   // the ground the taller does not hold and what passes its layer): they thin under the crowns that stand at the point
   // and stand as much thicker on the ground that holds no tree, their square keeping its cover. So ground too thin for
   // the trees shows the sward and the bushes of its cell before it shows bare.

@@ -1,6 +1,6 @@
-//! The recorder, driven once per simulated month by the shell. It counts the world's events (`tally`), writes a row
-//! of `months.csv` every month (`months`) and a row of the yearly series every year (`cols`), keeps viewer frames,
-//! and writes it all to a folder; the viewer's file (`ewf`) holds what a resumed run needs to go on.
+//! The recorder, driven once per simulated month by the shell. It counts the world's events (`tally`), keeps a row
+//! every month (`months`) and writes a row of the yearly series every year (`cols`), keeps viewer frames, and writes it
+//! all to a folder; the viewer's file (`ewf`) holds what a resumed run needs to go on.
 
 mod cols;
 mod csv;
@@ -20,19 +20,17 @@ use std::path::Path;
 use std::time::Duration;
 pub use csv::Written;
 pub use ewf::read_viewer_file;
-pub use cols::ENCLOSED;
-use tally::{MonthTally, Social, YearTally};
+use tally::YearTally;
 use pcore::store::Class;
 
-/// Death causes in the order of the core's constants (`body::LACK` .. `body::AGE`).
+/// Causes of death in the order of the core's constants (`life::LACK` .. `life::AGE`).
 const CAUSES: [&str; 6] = ["lack", "phase", "spent", "taken", "broken", "age"];
 
-/// The time the shell has spent in the run so far, by process: Flow, Change, bodies, parts and the tape
-/// itself (`TIMED`). The recorder reads no clock; the shell measures and hands the totals in.
+/// The time the shell has spent in the run so far, by process: Flow, Change, the cover and the tape itself (`TIMED`). The recorder reads no clock; the shell measures and hands the totals in.
 pub type Spent = [Duration; TIMED.len()];
 
 /// The processes timed, in the order of `Spent`; the yearly columns are `ms_<process>`.
-const TIMED: [&str; 5] = ["flow", "change", "bodies", "parts", "tape"];
+const TIMED: [&str; 4] = ["flow", "change", "cover", "tape"];
 
 /// The place in `Spent` of the tape's own time.
 pub const TAPE: usize = TIMED.len() - 1;
@@ -60,15 +58,14 @@ struct Shape {
 }
 
 /// What the recorder keeps across years and a snapshot carries (`Recorder::kept`), so that a resumed run's series
-/// go on as the unbroken run's: the substances seen so far and `Social`.
+/// go on as the unbroken run's: the substances seen so far.
 #[derive(Serialize, Deserialize)]
 pub struct Kept {
     seen: Vec<bool>,
-    social: Social,
 }
 
-/// What a tape's files hold: the viewer's file (frames, events, the series and the months), `physics.json`,
-/// `series.csv` and `months.csv`. The recorder keeps it as it goes (`Recorder::tape` copies it for another thread to
+/// What a tape's files hold: the viewer's file (frames, events, the series and the months), `physics.json` and
+/// `series.csv`. The recorder keeps it as it goes (`Recorder::tape` copies it for another thread to
 /// write).
 #[derive(Clone)]
 pub struct TapeFiles {
@@ -82,8 +79,6 @@ pub struct TapeFiles {
     months: Vec<MonthRow>,
     /// The run's `Physics` and `Config` as JSON text, written next to the series (`physics.json`)
     physics: String,
-    /// Whether `months.csv` is written (the rows are kept either way: the viewer's file holds them)
-    months_csv: bool,
 }
 
 pub struct Recorder {
@@ -93,12 +88,8 @@ pub struct Recorder {
     /// The substances found anywhere so far (`detect`)
     seen: Vec<bool>,
     files: TapeFiles,
-    /// The sums of the year so far and of the month to come, and what is kept across years
+    /// The sums of the year so far
     year: YearTally,
-    month: MonthTally,
-    social: Social,
-    /// Body updates counted at the last yearly row
-    updates: u64,
     /// The time spent by process at the last yearly row (`Spent`)
     spent: Spent,
 }
@@ -122,31 +113,21 @@ impl Recorder {
             every,
             monthly,
             seen: vec![false; w.chem.ns()],
-            files: TapeFiles { shape, frames: vec![], bytes: vec![], series: vec![], log: vec![], months: vec![], physics: physics_json(w), months_csv: false },
+            files: TapeFiles { shape, frames: vec![], bytes: vec![], series: vec![], log: vec![], months: vec![], physics: physics_json(w) },
             year: YearTally::default(),
-            month: MonthTally::default(),
-            social: Social::default(),
-            updates: 0,
             spent: Spent::default(),
         }
     }
 
-    /// Write `months.csv` with the tape.
-    pub fn with_months_csv(mut self) -> Self {
-        self.files.months_csv = true;
-        self
-    }
-
     /// What the recorder keeps across years, for a snapshot (taken at a year's end, after its row).
     pub fn kept(&self) -> Kept {
-        Kept { seen: self.seen.clone(), social: self.social.clone() }
+        Kept { seen: self.seen.clone() }
     }
 
     /// Start a run resumed from a snapshot: take back what the recorder kept, and load what an earlier run wrote to `dir`
     /// up to the snapshot's day, so the files go on from there (a `dir` without a tape starts it empty).
     pub fn resume(&mut self, w: &World, kept: Kept, dir: impl AsRef<Path>) -> io::Result<()> {
-        (self.seen, self.social) = (kept.seen, kept.social);
-        self.updates = w.counts.updates;
+        self.seen = kept.seen;
         self.read_ewf(dir.as_ref(), w)
     }
 
@@ -162,7 +143,7 @@ impl Recorder {
                 .find_map(|&(v, len, off)| v[k * len..(k + 1) * len].iter().position(|&x| x > 0.0).map(|p| (off + p, v[k * len + p])));
             if let Some((node, value)) = hit {
                 self.seen[k] = true;
-                self.count(&Event { day: w.day(), kind: EventKind::FirstSubstance(k as u16), node: node as u32, value }, w);
+                self.count(&Event { day: w.day(), kind: EventKind::FirstSubstance(k as u16), node: node as u32, value });
             }
         }
     }
@@ -181,26 +162,20 @@ impl Recorder {
             return;
         }
         let framed = year < self.monthly || (yearly && self.every > 0 && year % self.every == 0);
-        // The recorder counts the events while it looks at the bodies, and both while the world's fields are worked out.
+        // The recorder counts the events and the month while the world's fields are worked out.
         let (_, ctx) = par::join(
             || {
-                let last = std::mem::take(&mut self.social.last);
-                let (_, seen) = par::join(
-                    || {
-                        for e in &events {
-                            self.count(e, w);
-                        }
-                        self.detect(w);
-                    },
-                    || months::look(w, &last),
-                );
-                self.month(w, seen);
+                for e in &events {
+                    self.count(e);
+                }
+                self.detect(w);
+                self.month(w);
             },
             || (yearly || framed).then(|| Ctx::new(w)),
         );
         let Some(c) = ctx else { return };
         if let Some(t) = taken.filter(|_| yearly) {
-            (self.year.decisions, self.year.busiest, self.year.parts, self.year.forms, self.year.cover_lost, self.year.cover_budget) = ([t.decisions, t.greedy], [t.body_batches, t.busiest_share], t.parts, t.forms, t.cover_lost, t.cover_budget);
+            (self.year.cover_lost, self.year.cover_budget) = (t.cover_lost, t.cover_budget);
         }
         if yearly {
             self.push_series(&c, spent);
@@ -228,10 +203,9 @@ impl Recorder {
 }
 
 impl TapeFiles {
-    /// Write `world.ewf.gz` (viewer frames and what a resumed run reads), `physics.json`, `series.csv` and, if asked for
-    /// (`Recorder::with_months_csv`), `months.csv` into `dir`. The viewer's file is written whole each time; the CSV files
-    /// get only their new rows (`csv`), when
-    /// `written` says what this caller wrote to them before.
+    /// Write `world.ewf.gz` (viewer frames and what a resumed run reads), `physics.json` and `series.csv` into `dir`. The
+    /// viewer's file is written whole each time; the CSV file gets only its new rows (`csv`), when `written` says what this
+    /// caller wrote to it before.
     pub fn write(&self, dir: &Path, written: &mut Written) -> io::Result<()> {
         std::fs::create_dir_all(dir)?;
         self.write_ewf(dir)?;

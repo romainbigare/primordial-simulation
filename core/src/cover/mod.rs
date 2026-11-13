@@ -16,7 +16,7 @@ mod show;
 mod stand;
 
 pub use around::{pores, thirst, Around};
-pub use budget::{content, BODIES, BUDGET};
+pub use budget::{content, BUDGET, TAKERS};
 pub use grow::{live, step, Books};
 pub use month::{month, release};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
@@ -37,7 +37,7 @@ pub const FUEL: usize = 0;
 pub const MATTER: usize = 1;
 pub const WALL: usize = 2;
 
-// The genes of a kind of cover (laws.md 4.5).
+// The genes of a kind of cover (laws.md 3).
 /// Capacity of the light reaction, log10 mol per kg of living cover per s at `t_cat` (at a moisture need of 1)
 pub const LIGHT: usize = 0;
 /// Capture area, log10 m² per kg of living cover
@@ -52,7 +52,7 @@ pub const FROST: usize = 4;
 pub const MOIST: usize = 5;
 /// Share of what it builds that goes to seeds
 pub const SEED: usize = 6;
-/// Repair, log10, as a body's `REPAIR`
+/// Repair, log10: its wear life is 10^REPAIR times the rate of living's (laws.md 3)
 pub const REPAIR: usize = 7;
 /// Capacity of the fixing reaction, log10 mol per kg of living cover per s at `t_cat`; off at or below `FIX_OFF`
 pub const FIX: usize = 8;
@@ -101,7 +101,8 @@ impl Parts {
 pub struct Cover {
     /// Per slot: mol of each part
     pub mol: [[f64; NP]; SLOTS],
-    /// Per slot: its genes, and the starting kind it descends from (a label for the tape; `NO_ROOT` when empty)
+    /// Per slot: its genes, and the starting kind it descends from (its row of the starting kinds, a label for the tape;
+    /// `NO_ROOT` when empty)
     pub genes: [[f32; NG]; SLOTS],
     pub root: [u32; SLOTS],
     /// Per slot: whether one more kg of it did not pay its upkeep in its last month (`grow::build`): all it builds then
@@ -122,7 +123,7 @@ pub struct Cover {
     pub film: f32,
     pub reach: f32,
     /// The heat of its cover, J; the cell's light (`World::light`) at its last step, J/m²; the share of the light its
-    /// cover absorbs that its bodies' node sets aside for its light reaction
+    /// cover absorbs that its aside node sets aside for its light reaction
     pub e: f64,
     pub mark: f64,
     pub keep: f32,
@@ -168,8 +169,8 @@ impl Cover {
     pub fn kg(&self, mm: &[f64; NP], x: usize) -> f64 {
         self.built(mm, x) + self.mol[x][FUEL] * mm[FUEL]
     }
-    /// The living cover of slot `x`, kg: its body matter with the liquid of living tissue, as a body's living body
-    /// (`Body::built`); its walls are a frame, which neither works nor wears (laws.md 4.5).
+    /// The living cover of slot `x`, kg: its body matter with the liquid of living tissue (`life::WET_TISSUE`); its walls
+    /// are a frame, which neither works nor wears (laws.md 3).
     pub fn living(&self, mm: &[f64; NP], x: usize) -> f64 {
         self.mol[x][MATTER] * mm[MATTER] / (1.0 - WET_TISSUE)
     }

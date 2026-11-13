@@ -1,23 +1,16 @@
 //! The starting state worldgen makes: coarse cells only under the low liquid, the dissolved mineral in the low ground's
 //! liquid, and the soil given when life starts.
 
-use pcore::{World, AIR};
+use pcore::AIR;
 use pcore::store::Class;
-use worldgen::testkit::{DISSOLVED, LIQUID};
-
-/// All of substance `k` in the world's ground and bodies, mol.
-fn total(w: &World, k: usize) -> f64 {
-    let n = w.mesh.cells().n();
-    // (With the store of the bed under the ground, where drained liquid takes what is dissolved in it.)
-    w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().sum::<f64>() + w.store.amounts(Class::Deep).get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) + w.life.alive().map(|b| b.store[k]).sum::<f64>()
-}
+use worldgen::testkit::{in_all, DISSOLVED, LIQUID};
 
 /// An island's coarse cells (more than one square) all lie below 0 m, in its low basin's liquid, on islands of five
 /// seeds.
 #[test]
 fn coarse_cells_lie_under_the_low_liquid() {
     for seed in 1..=5 {
-        let w = worldgen::new_world(seed, 128, 128);
+        let w = worldgen::new_world(seed, 32, 32);
         let cells = w.mesh.cells();
         let coarse: Vec<usize> = (0..cells.n()).filter(|&i| cells.area()[i] > 1.5 * w.map.side * w.map.side).collect();
         assert!(!coarse.is_empty(), "seed {seed}: coarse cells");
@@ -55,10 +48,10 @@ fn the_soil_is_given_to_the_land_and_booked() {
     let (mineral, _) = w.chem.minerals()[0];
     let soil = worldgen::chemistry0().1.soil;
     let t0 = pcore::check::totals(&w);
-    let before = total(&w, mineral);
+    let before = in_all(&w, mineral);
     println!("{}", worldgen::life::soil(&mut w, &soil));
     let (k, per_m2) = soil[0];
-    let cells = (total(&w, mineral) - before) / (per_m2 * w.mesh.cells().area()[0]);
+    let cells = (in_all(&w, mineral) - before) / (per_m2 * w.mesh.cells().area()[0]);
     assert!(k == mineral && (cells - cells.round()).abs() < 1e-9 && cells >= 10.0 && cells <= w.mesh.cells().n() as f64, "{cells} cells' worth");
     let grams = per_m2 * w.chem.subs[k].elems[2] as f64 * 14.0;
     assert!((grams - 10.0).abs() < 0.05, "{grams} g of the gas's element to the m²");
@@ -93,7 +86,7 @@ fn the_starting_air_thins_with_height_by_its_own_scale_height() {
 /// Each dry cell's bed and loose ground add up to its height, the terrain's mean over it, and its loose ground is the
 /// mean of what the wear left on its samples (`Samples::loose`), the top `skin_m` of each at most. (A cell that holds
 /// the starting liquid, of the low basin or a body, is left out: the liquid at balance with the air dissolves some of
-/// its loose ground, laws.md 2.6; an eighth of the cells or more are dry.)
+/// its loose ground, laws.md 2.5; an eighth of the cells or more are dry.)
 #[test]
 fn a_cells_bed_and_loose_ground_add_up_to_its_height() {
     let w = worldgen::new_world(1, 16, 16);

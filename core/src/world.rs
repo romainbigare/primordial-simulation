@@ -1,39 +1,19 @@
-//! The world's state: the store's nodes (ground, air, bed, deep stores, bodies' nodes, the nodes beyond its boundary
-//! that book what crossed it), the bodies and parts, and the counters the shell reads.
+//! The world's state: the store's nodes (ground, air, bed, deep stores, what life sets aside, the nodes beyond its
+//! boundary that book what crossed it), the cover, and the counters the shell reads.
 
-use crate::{bond, chem::Chemistry, event::Event, flow, params::Config, space::{square::Square, Mesh}, store::{Class, Node, Store}};
+use crate::{chem::Chemistry, event::Event, flow, params::Config, space::{square::Square, Mesh}, store::{Class, Node, Store}};
 use serde::{Deserialize, Serialize};
 
 /// Counts and slow averages for the shell; the laws never read them. The fields not saved count since the shell last read them.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Counters {
-    /// Members moving into each ground cell, per year (moving average over about a year)
-    pub traffic: Vec<f32>,
-    /// Decisions drawn, and of them those where the action drawn had the highest score
-    #[serde(skip)]
-    pub decisions: f64,
-    #[serde(skip)]
-    pub greedy: f64,
-    /// Batches of bodies' updates, and the busiest chunk's share of each one's updates summed (`survey::batch`)
-    #[serde(skip)]
-    pub body_batches: f64,
-    #[serde(skip)]
-    pub busiest_share: f64,
-    /// Body updates since the start
-    pub updates: u64,
     /// Heat a ground node could not give (below `T_FLOOR`), J: whoever asked got that much less, so no energy is lost
     pub clamped_heat: f64,
-    /// What bodies did with parts
-    #[serde(skip)]
-    pub parts: bond::Tally,
     /// What `store::apply` and the booking by array (`book_by_array`, `add_rounded`) set from just below zero (rounding)
     /// to zero: mol, and J
     #[serde(skip)]
     pub rounded: [f64; 2],
-    /// Members that drew "form", by who they are (`choose::Forms`)
-    #[serde(skip)]
-    pub forms: crate::choose::Forms,
-    /// Cover that died, kg, by the cause a body would die of (`life::LACK` to `AGE`)
+    /// Cover that died, kg, by cause (`life::LACK` to `AGE`)
     #[serde(skip)]
     pub cover_lost: [f64; 6],
     /// The flows of the cover's budget, J, + into the cover (`cover::BUDGET`)
@@ -46,20 +26,14 @@ pub struct Counters {
 
 impl Counters {
     /// The counts `c` of a chunk are added (`World::take_chunks`), and start again. Every field is named, so a new one
-    /// cannot be left out. A chunk counts per cell in its cells (`Cell::crossings`, `Cell::pushed`), so its `traffic`
-    /// stays empty (checked in debug builds).
+    /// cannot be left out.
     pub(crate) fn add(&mut self, c: &mut Counters) {
-        let Counters { traffic, decisions, greedy, body_batches, busiest_share, updates, clamped_heat, parts, rounded, forms, cover_lost, cover_budget, edges } = std::mem::take(c);
-        debug_assert!(traffic.is_empty(), "a chunk counted per cell");
-        (self.updates, self.decisions, self.greedy) = (self.updates + updates, self.decisions + decisions, self.greedy + greedy);
-        (self.body_batches, self.busiest_share, self.clamped_heat) = (self.body_batches + body_batches, self.busiest_share + busiest_share, self.clamped_heat + clamped_heat);
+        let Counters { clamped_heat, rounded, cover_lost, cover_budget, edges } = std::mem::take(c);
+        self.clamped_heat += clamped_heat;
         self.add_rounded(rounded);
-        self.forms.absorb(forms);
         self.cover_lost.iter_mut().zip(cover_lost).for_each(|(a, b)| *a += b);
         self.cover_budget.iter_mut().zip(cover_budget).for_each(|(a, b)| *a += b);
         self.edges.iter_mut().zip(edges).for_each(|(a, b)| *a += b);
-        let p = &mut self.parts;
-        (p.formed, p.to_parts, p.from_parts, p.edged) = (p.formed + parts.formed, p.to_parts + parts.to_parts, p.from_parts + parts.from_parts, p.edged + parts.edged);
     }
     /// What a booking set from just below zero to zero is added (`Counters::rounded`): mol, and J.
     pub(crate) fn add_rounded(&mut self, [mol, heat]: [f64; 2]) {
@@ -70,12 +44,6 @@ impl Counters {
 /// The counts the shell takes once a year (`World::take_counters`).
 #[derive(Debug, Default)]
 pub struct Taken {
-    pub decisions: f64,
-    pub greedy: f64,
-    pub body_batches: f64,
-    pub busiest_share: f64,
-    pub parts: bond::Tally,
-    pub forms: crate::choose::Forms,
     pub cover_lost: [f64; 6],
     pub cover_budget: [f64; crate::cover::BUDGET.len()],
 }
@@ -103,8 +71,7 @@ pub struct World {
     /// Liquid falling on each ground cell, mol/(m² s), a moving average over about a year, for the tape
     pub rain: Vec<f32>,
     /// The liquid that runs through each of the terrain's samples down its way, mol/s (`flow::runoff`), and of each
-    /// ground cell the most through one of its samples, its main channel: moving averages over about a year; the
-    /// cell's pushes parts (`bond::load`)
+    /// ground cell the most through one of its samples, its main channel: moving averages over about a year
     pub discharge: Vec<f32>,
     pub liquid_flux: Vec<f32>,
     /// What rises from each ground cell into the air less what condenses on it, mol/(m² s), and what runs over the
@@ -113,16 +80,10 @@ pub struct World {
     pub evap: Vec<f32>,
     pub off_land: Vec<f32>,
     pub counts: Counters,
-    /// Bodies, and the parts they made: the sparse graph
+    /// The life of each cell: its cover (`life`)
     pub life: crate::life::Life,
-    /// Light-capture area of the bodies of each cell per ground area (they intercept 1 - exp(-a))
-    pub canopy: Vec<f32>,
-    /// Light intercepted in each cell per m² of light-capture area since the start (its bodies' mean), J/m²
+    /// Light intercepted in each cell per m² of light-capture area since the start (its cover's mean), J/m²
     pub light: Vec<f64>,
-    /// Rain fallen on each cell since the start, mol/m² (its bodies catch what fell since their last update)
-    pub rained: Vec<f64>,
-    /// What the links of the cell level remember (`store::Links`)
-    pub links: crate::store::Links,
     /// The terrain the world was built on (`space::terrain`)
     pub terrain: crate::space::terrain::Terrain,
     /// The mean rise of the ground of each cell toward the south, m per m, which the sun on it reads (`flow::on_slope`):
@@ -158,12 +119,10 @@ impl World {
     pub fn drain_events(&mut self) -> Vec<Event> {
         std::mem::take(&mut self.events)
     }
-    /// Hand the shell the yearly counts (`Counters::decisions`, `greedy`, `body_batches`, `busiest_share`, `parts`, `cover_lost`, `cover_budget`),
-    /// and start them again.
+    /// Hand the shell the yearly counts (`Counters::cover_lost`, `cover_budget`), and start them again.
     pub fn take_counters(&mut self) -> Taken {
         let c = &mut self.counts;
-        let (decisions, greedy, body_batches, busiest_share) = (std::mem::take(&mut c.decisions), std::mem::take(&mut c.greedy), std::mem::take(&mut c.body_batches), std::mem::take(&mut c.busiest_share));
-        Taken { decisions, greedy, body_batches, busiest_share, parts: std::mem::take(&mut c.parts), forms: std::mem::take(&mut c.forms), cover_lost: std::mem::take(&mut c.cover_lost), cover_budget: std::mem::take(&mut c.cover_budget) }
+        Taken { cover_lost: std::mem::take(&mut c.cover_lost), cover_budget: std::mem::take(&mut c.cover_budget) }
     }
     pub fn days_per_year(&self) -> u64 {
         self.cfg.calendar().days(self.cfg.calendar().year)
@@ -171,10 +130,6 @@ impl World {
     /// Whole days since the start: the day it is
     pub fn day(&self) -> u64 {
         self.cfg.calendar().days(self.time)
-    }
-    /// Days since the start, with their fraction: the time a body's update integrates from (`Body::last`)
-    pub fn days_now(&self) -> f64 {
-        self.time as f64 / self.cfg.calendar().day as f64
     }
     /// Whole months since the start
     pub fn month(&self) -> u64 {
@@ -213,10 +168,10 @@ impl World {
     pub fn a(&self, k: usize, j: usize) -> f64 {
         self.stock(Node::air(j))(k)
     }
-    /// Amount of substance `k` that bodies and parts see in air node `j`, mol: what it holds (`a`) and what the bodies'
-    /// nodes under it hold until the air's step takes it up.
+    /// Amount of substance `k` that the cover sees in air node `j`, mol: what it holds (`a`) and what the aside nodes
+    /// under it hold until the air's step takes it up.
     pub fn a_seen(&self, k: usize, j: usize) -> f64 {
         let kids = self.mesh.level(AIR).children(j);
-        self.a(k, j) + kids.iter().map(|&i| self.stock(Node::bodies(i as usize))(k)).sum::<f64>()
+        self.a(k, j) + kids.iter().map(|&i| self.stock(Node::aside(i as usize))(k)).sum::<f64>()
     }
 }

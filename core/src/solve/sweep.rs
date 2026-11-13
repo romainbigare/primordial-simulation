@@ -3,7 +3,7 @@
 //! the step's start (explicit Euler), at most `HALF_WAY` of what would level its two nodes (so two nodes linked alone
 //! never cross), and no node gives more than it holds (`within`). It is safe where `dt Σ g / cap` of each node is within
 //! 1/2: half of where its own weight in its next value, 1 - dt Σ g / cap, reaches 0 (Patankar 1980, 4.3), so no pattern
-//! of the values changes sign in a step and a hump spreads without turning into a pit (laws.md 1.8).
+//! of the values changes sign in a step and a hump spreads without turning into a pit (laws.md 1.7).
 
 use crate::ground::share;
 

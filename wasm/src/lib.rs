@@ -71,10 +71,9 @@ fn shape_of(drawn: u32) -> Shape {
 }
 
 /// Make an island of `size` x `size` cells and the large shape of `drawn` (`shape_of`) from `seed` between the latitudes
-/// `south` and `north` (`island`), standing in the planet's air where they are given (`worldgen::planet::planet`, made once, `PLANET`), with the schedule of
-/// `ew run --roster --plants`: the starting kinds of cover, no animals, so the page runs fast while the work is on the
-/// ground, the liquid and the cover. Its cells stay those as built: the map draws every zoom from the ground's tiles and
-/// the cells' table. Returns 0, or 1 if the world is refused.
+/// `south` and `north` (`island`), standing in the planet's air where they are given (`worldgen::planet::planet`, made
+/// once, `PLANET`), with the schedule of `ew run --roster`: the starting kinds of cover. Its cells stay those as built:
+/// the map draws every zoom from the ground's tiles and the cells' table. Returns 0, or 1 if the world is refused.
 #[no_mangle]
 pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn: u32) -> u32 {
     let mut world = worldgen::terrain::new_island(seed as u64, (size as usize, size as usize), shape_of(drawn), island((south, north)));
@@ -84,7 +83,7 @@ pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn:
     if world.cfg.validate().is_err() {
         return 1;
     }
-    let plan = Schedule::new(Some(LIFE_YEAR), &worldgen::life::plants(&worldgen::life::ROSTER), Seeding { hand: true, rounds: SPRAY_ROUNDS, fixers: FIXERS });
+    let plan = Schedule::new(Some(LIFE_YEAR), &worldgen::life::ROSTER, Seeding { rounds: SPRAY_ROUNDS, fixers: FIXERS });
     let cells = tape::Table::new(&world);
     LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, cells, table: Vec::new(), sent: Vec::new() }));
     0
@@ -185,8 +184,8 @@ pub extern "C" fn discharge() -> *const u8 {
     give(bytes)
 }
 
-/// What lies in each cell of the window from column `x` and row `y`, `w` x `h` squares: its bodies, cover and parts
-/// (`tape::things`), for the page to draw one by one.
+/// What lies in each cell of the window from column `x` and row `y`, `w` x `h` squares: its slots of cover
+/// (`tape::things`), for the page to show.
 #[no_mangle]
 pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
     let bytes = with(|l| tape::things(&l.world, [x, y, w, h]));

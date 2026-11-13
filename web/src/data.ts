@@ -20,8 +20,6 @@ export interface Meta {
   series: Record<string, (number | null)[]>;
   series_units: Record<string, string>;
   events: { day: number; year: number; text: string }[];
-  /** The rows of months.csv (a resumed run reads them; the viewer does not show them). */
-  months: { year: number; month: number; values: number[]; births: number[]; deaths: number[] }[];
 }
 export interface World { meta: Meta; data: Uint8Array; base: number; frameBytes: number; lut: Float32Array[]; index: Map<string, number> }
 

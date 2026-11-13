@@ -67,7 +67,7 @@ pub(crate) fn built_now(w: &World) -> bool {
 }
 
 /// The air's step for `dt` seconds (`air::step`), booked whole, from the state of ground and air nodes (brought up to
-/// date unless the `state` process just did; the heat of the bodies' nodes that the cover does not claim, which goes
+/// date unless the `state` process just did; the heat of the aside nodes that the cover does not claim, which goes
 /// back to the ground first, `cover::release`, then warms it from the next state); then, from the state the step's
 /// heat leaves (what it melted and froze), the liquid over field capacity sinks into the bed's store (`drain::sink`),
 /// as the rain the step brought would otherwise wait in the pores.

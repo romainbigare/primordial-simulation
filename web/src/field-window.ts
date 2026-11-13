@@ -2,22 +2,21 @@
 // uniforms of the view it is drawn in.
 import { Gpu, Texture, Sampler, Uniforms } from './gpu';
 import { Fields, FIELD_TEXTURES } from './fields';
-import { RGB, PATH_LAYER } from './earth';
+import { RGB } from './earth';
 
 /** The stops a layer's ramp holds at most (colour.wgsl `Earth.ramp`). */
 const RAMP_STOPS = 10;
 /** Of the uniforms of colour.wgsl (`Earth`), four-wide members. */
 const EARTH_VEC4S = 3 + RAMP_STOPS;
 
-/** What the map draws: the Earth's colours, the true colour, or a layer (its name, and its ramp); and whether the worn
- * paths are drawn. */
-export interface MapLook { mode: 'earth' | 'true' | 'layer'; layer: string; ramp: RGB[]; paths: boolean }
+/** What the map draws: the Earth's colours, the true colour, or a layer (its name, and its ramp). */
+export interface MapLook { mode: 'earth' | 'true' | 'layer'; layer: string; ramp: RGB[] }
 
 /** The uniforms of colour.wgsl (`Earth`) for view `look`: how the fields are read (`Fields.look`), where they lie in
  * the world (`Fields.place`), and the sea's level, m. */
 export function earthUniforms(look: MapLook, read: number[], place: number[], sea = 0): ArrayBuffer {
   const mode = look.mode === 'earth' ? 0 : look.mode === 'true' ? 1 : 2, u = new Uniforms(EARTH_VEC4S);
-  u.vec4(...read).vec4(mode, look.ramp.length, look.paths ? 1 : 0, sea).vec4(...place);
+  u.vec4(...read).vec4(mode, look.ramp.length, sea, 0).vec4(...place);
   for (let k = 0; k < RAMP_STOPS; k++) u.vec4(...(look.ramp[k] ?? [0, 0, 0]));
   return u.buffer;
 }
@@ -37,15 +36,14 @@ export class FieldWindow {
       this.textures = {};
       for (const t of FIELD_TEXTURES) { const tex = gpu.texture(f.w, f.h, t.format); gpu.write(tex, f[t.field]); this.textures[t.binding] = tex; }
     }
-    // The layer drawn and the worn paths, a byte each of the texel's four (none where the window does not hold it).
-    const key = `${look.mode} ${look.layer} ${look.paths}`;
+    // The layer drawn, the first byte of the texel's four (none where the window does not hold it).
+    const key = `${look.mode} ${look.layer}`;
     if (key !== this.viewKey) {
       const data = new Uint8Array(4 * n), plane = (name: string, ch: number) => {
         const k = f.names.indexOf(name);
         if (k >= 0) for (let i = 0; i < n; i++) data[4 * i + ch] = f.layers[k * n + i];
       };
       if (look.mode === 'layer') plane(look.layer, 0);
-      if (look.paths) plane(PATH_LAYER, 1);
       this.view ??= gpu.texture(f.w, f.h, 'rgba8unorm');
       gpu.write(this.view, data);
       this.viewKey = key;

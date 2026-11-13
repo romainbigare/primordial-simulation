@@ -252,10 +252,34 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   reference is 9.881, the world of plants' own mean); worlds that differ (`core/src/space/rises.rs`, `ew run --shape
   drawn`, the page's choice of shape; one island stays the default until the owner has seen the drawn worlds). The
   live page is its Version 44.
-- In work, life track: the deletion of the old animals (step 2 below), by the helper that freed the plants, in its
-  worktree `.claude/worktrees/agent-abcfb0efca1cd5295`. The tag `animals-v2` goes on the last commit that holds them.
-- In work, nature track: the air's low cloud, part 1, a check on paper (step 1 of the nature track); its helper
-  stops and reports before any law is built. Scratch: `scratchpad/air/`.
+- On main, life track: the old animal world is deleted (bodies, brains, parts, nodes, lanes, their tests, tape
+  columns, start and drawing; the random chemistry with them). The last commit that holds it is `16a774d` (a tag
+  cannot be pushed from this machine: the name `animals-v2` exists only locally). A world of plants gives the same
+  series to the last digit and the page the same picture. `core/src` is 11,300 lines of code (16,900 before),
+  `series.csv` 141 columns (323), `docs/laws.md` 16,600 words (28,700). The contract stays (`core/src/contract.rs`):
+  Flow and the cover read `Stand` and `Place`; `take`, `give`, `press`, `shown`, `slots` are used by the plain taker
+  of the test kit alone until the animal field comes. Every world is a world of plants: `--plants` and `--null` are
+  gone, `--roster` is six kinds of cover against one.
+- In work, nature track: the air's heat toward the poles, on the branch `air-low-cloud` (made from
+  `wip/air-light` with main merged in; worktree `.claude/worktrees/agent-acdb88dbd7f62d7f6`; scratch
+  `scratchpad/air/`, its tables in `numbers/`). What its helper measured, with books that close to 2%:
+  - **The low cloud made by cooling from below is not built.** At the pole the surface is warmer than its air in
+    every month, so nothing starts it; in a state with ice it takes as much sunlight as it gives back in heat light.
+    Earth's own polar clouds forced in as a probe cool the pole by 1 to 4 K and leave no ice.
+  - **The cause is the air's own carrying, not the liquid's.** The overturning (`flow/air/wind.rs` `push`) moves the
+    same mass per K/m at every latitude: it carries 1.7 PW across 45° and 0.67 PW across 67.5°, where Earth's mean
+    cell runs the other way or stands still. The eddies carry about twice Earth's per K of ground difference (`mix`
+    is tuned and was raised to stand for the sea's share; whole columns are exchanged, and their mean difference is
+    1.8 times the ground's). Per K the globe carries 1.7 to 5 times Earth's, worst at the polar circle. The liquid
+    under the air carries nothing sideways. Main has the same fault, hidden by its weak grey air.
+  - A probe with the overturning weakened by r / (r² + f²), the eddies halved and Earth's clouds held low keeps 1.6 m
+    of ice through the summer; no one of the three does alone.
+  - In work now: the overturning's law with the rotation (the near-ground layer's balance, down and across the
+    gradient) and `mix` anchored to Earth's eddies, each its own commit on the branch; then the globe, a Wide island
+    and the key numbers measured, with pictures. No cloud law without the orchestrator's word.
+  - Found on the way: on the globe the polar band's ground gains 0.65 m of liquid a year (rain that lands in a
+    neighbour's row and is not levelled back); and the fixed liquid reflectance (0.079) is above Fresnel's for a
+    high sun: the tropics would absorb 7 to 8 W/m² more with the true one, the pole 1 to 7 less.
 - Open on the drawn worlds, asked of the owner: rings and closed inner bodies of liquid are frequent (3 or 4 worlds
   in 12 at size 64; about 2 in 12 close into a body 2,000 km² wide and 800 m deep standing above 0 m): the
   orchestrator leans to rings that are rare and mostly open to the low ground. Drawn worlds hold less land (27%
@@ -275,7 +299,9 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
    in today's order, the main guard and the key numbers without animals, a test taker. A plants-only world stays the
    same to the last digit. To `main` before the air's package, so that the references move once on a gate that no
    animal can fail.
-2. **Delete the old animals** (C1c: tag `animals-v2` first), then the tree's tools and the small dead things (C2).
+2. Done: the old animals are deleted. Left of the clean-up: the tree's tools in `core/src/space/` (the most
+   depth of 24, `Terrain::below`, a mesh of any number of levels), the cell serials in `life/` if nothing needs them,
+   one helper per idea (roadmap 8, C3), and the spec's sections on the old animals (C4).
 3. **What the land offers, first part**: seeds that lie on the ground; snow that hides food; the contract's table in
    the tape as the count of resources.
 4. **Grazers** (F1), then movement (F2), eaters and the web (F3), animals on the page (F4); gates in

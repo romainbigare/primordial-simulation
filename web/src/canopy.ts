@@ -3,8 +3,8 @@
 // law holds them, how many, how tall, how deep their roots and the share of the square that holds them, its genes and
 // its state this month), set out on the marks' three lattices, with their colours and the field the marks too small to
 // draw make. No kind is a class: a plant's size, shape and colour are functions of its numbers.
+import type { Rgb } from './style';
 import { clamp, smooth } from './earth';
-import type { Rgb } from './sprites';
 import { DESIGN, KindLook, designOf, kindLook, seenFar } from './style';
 import { formOf } from './form';
 

@@ -124,61 +124,19 @@ needed**.
 Rule 2.4 of `CLAUDE.md` says: no dead code, git keeps it. Rule 2.12 says: replace, do not patch. By those rules
 the list below is overdue. The details and line numbers are in the appendix (section 11).
 
-### 2.1 The old animal world (the largest leftover)
+### 2.1 The old animal world: deleted
 
-| Part | Where | Lines of code (no comments) |
-|---|---|---|
-| Bodies: the organism model | `core/src/body/` | 1,040 |
-| Choose: brains, perception, actions, learning | `core/src/choose/`, `brain.rs`, `lineage.rs` | 1,355 |
-| Copy for bodies, population nodes | `core/src/copy/`, `nodes.rs` | 675 |
-| Bond: parts, lots, bonds, rooms, edges | `core/src/bond/` | 1,090 |
-| The registry of bodies, the queue, the serial pass (not the chunks: the cover runs on them) | `core/src/life/` (most of it) | about 800 of 1,030 |
-| The bodies' half of the survey, the step grid, lanes | `survey.rs`, `survey/steps.rs`, `lanes.rs` | about 300 |
-| **Sum in `core`** | | **about 5,300 to 5,500 of 16,800** |
-| Their tests | `core/tests/{body,bodies,bond,choose,copy,populations,damage,lots}.rs`, one test of `threads.rs` | about 2,500 of 5,070 |
-| Their tape columns | `tape/src/rec/cols/{brains,kinds,parts,social}.rs`, `things.rs` | about 450 |
-| Their start | `worldgen/src/life/{make,seeding}.rs` (the bodies' half), seven rows of `KINDS` | about 250 |
-| Their drawing | `web/src/{avatars,sprites,blob}.ts` | about 680 |
-| The pattern finder's three detectors (groups, routes, structures) | `analyze/src/` | 320 |
+The old animal world is gone from the code (the commit `16a774d` on main's history is the last that holds it): bodies, brains, Copy for bodies,
+population nodes, Bond's parts and structures, lanes, the registry and queue of `life/`, the bodies' half of the
+survey, their tests, tape columns, start rows and drawing, and the pattern finder with its three detectors. What the
+cover's month runs on stays: the cells with their cover, the chunks and the parallel pass, the seeds' landing. The
+contract (4.9) stays, with the plain taker of the tests (`worldgen::testkit::Taker`) as its user: what a cell shows,
+take, give and press. The gate runs on worlds of plants.
 
-Why it is a leftover and not "the animal world to improve":
-
-- It is the "every thing is a body" design that the plants left. It has all its weight: a record per body, an id per
-  body, a brain per node, a queue for what crosses a cell, a serial pass to land it, three caps to bound the nodes.
-- The owner's word is that it will be reworked. The live page and every long run go without it (`--plants`). Code
-  that nobody looks after rots. It already has: only 5 of 7 kinds with real numbers at year 70 (section 10), the slow
-  learning tests not run since the cover's law, the eaters that collapse under the sorted start.
-- Yet the gate of the natural world still hangs on it. The main guard of the fast suite
-  (`the_world_lives_and_keeps_its_books`, `tape/tests/ranges.rs`) fails with fewer than four animal kinds alive, and
-  two of the nine key numbers are the eaters' mass and life. So a change of the air or of the cover can fail the
-  gate through animals that nobody means to keep. This is the first thing the clean-up mends.
-- Its two watch reports say what it could not do: no shelter in the cold, no building, tools at 0.04% of food,
-  nothing that grain helps, and most "yes" verdicts equal to the null run.
-- The laws of the natural world need little from it: three death-cause numbers, `WET_TISSUE`, `body::noise`,
-  `body::solids_of`, the dispersal kernel `copy::lot`, `bond::Edge` in one function of the cover, `lanes::regrow`.
-- **But the plants' month runs on its machinery, and that is the real work of the cut.** Each month, also with no
-  animal, `survey::survey` runs first: it breaks what movers pushed, sums each cell (`Life::sum`, which the air reads
-  for the canopy), lands the queue and builds Flow's state. The cover's own month is `survey::cover`, on the chunks
-  and the queue of `life/`. Flow calls `survey::release` before each air step. And the plants' start draws are keyed
-  by each kind's row in the table of kinds, where animal rows stand between plant rows (`worldgen/src/life/`
-  `seeding.rs`, `kinds.rs`). So the month of the natural world must first be stated on its own, in the same order,
-  and the plant kinds must keep their numbers. Then the animals can go without moving one digit.
-
-What is lost with it, said plainly:
-
-- The only user of the cover's grazing door (`Cover::take`, `Cover::breaking`, the budget's row "taken or broken by
-  bodies"). Until the animal field uses it, it is unused code, which rule 2.4 forbids. Either the field's first
-  step comes soon after, or that door goes too and comes back with the field.
-- The only code for single agents that cross cells with exact books: the queue, the landing in an order fixed by the
-  data, and the exact split and join of members (`nodes::Lot`, `nodes::rejoin`). People will need this idea again
-  (section 4.8). Keep its description; a tag alone is soon forgotten.
-- Rooms and held things with real physics (`bond/`). The same.
-
-What must be **kept from it, as knowledge**: its anchored laws and numbers. They are good and the new animals reuse
-them: Kleiber's upkeep, Holling's take law, the heat balance through a coat, the walk at one Froude number, the cost
-of transport, the drag in liquid, one frost law for bodies and cover, wear by the rate of living, the brood, the
-dispersal kernel, breaking and the edge. They live in `docs/laws.md` sections 3 to 6 and `docs/numbers.md`. Keep those
-rows (in a file of "laws kept for the animal field") when the code goes.
+What is lost with it, said plainly: the only code for single agents that cross cells with exact books (the queue,
+the landing in an order fixed by the data, the exact split and join of members: section 13 keeps the last as
+knowledge; people will need the idea again, 4.8), and rooms and held things with real physics (`bond/`, in the tag).
+The anchored laws and numbers the new animals reuse are in section 13.
 
 ### 2.2 The tree of cells: deleted as a design, its tools remain
 
@@ -187,57 +145,33 @@ samples are its leaves of depth 6. What remains of the tree **that moved** is th
 
 - `core/src/space/tree.rs`: the most depth is 24 ("a leaf of 0.5 mm, finer than any body"). Cells need depth 2,
   samples 6, the tiles about 13.
-- Ids by "cell serial" with a table from serial to index, "none once it split or joined" (`core/src/life/mod.rs`):
-  no code adds or removes a cell, so the serial is always the index. About 45 lines, and it is saved.
-- `Purpose::Quarter` in `rng.rs` ("the quarter a body goes to when its cell splits (`life::tree`)"): never used, and
-  no such module.
-- `choose/features.rs` (`Regions`, `across_corners`, about 75 lines), `Leaf::parent`: so that a cell finer than a
-  square sees as far as a square. No world has such a cell.
+- `Leaf::parent`: so that a cell finer than a square sees as far as a square. No world has such a cell.
 - `Terrain::below` and the branches `SAMPLE_DEPTH.max(l.depth)` in `flow/`: the case of a cell finer than a sample.
-- `survey/steps.rs`: a general grid of "2^halvings steps a month" that is only ever made with 0 and 2.
 - `Mesh` of any number of levels (`space/mod.rs`): it always builds two.
-- Comments that still tell of splits: the module doc of `cover/mod.rs` ("a split of a cell shares its cover out,
-  `tree`"), `nodes.rs`, `worldgen/src/terrain.rs`, `flow/drain.rs` ("sub-stepped where a cell is too small").
+- Comments that still tell of splits: `flow/drain.rs` ("sub-stepped where a cell is too small").
 - In the spec: 5.2, 7.2, 7.3 and 7.4 still describe cells that split and join, the camera as a recorded input, the
   step that follows the size, and zoom that slows time. `docs/laws.md` 1.8 is still titled "The step by the size".
 
-### 2.3 Plants-as-bodies, still in the body code
-
-- `Bodies::cat` in `worldgen/src/life/kinds.rs` still holds "the speed-up of the light reaction" for a body. It is
-  off for every kind.
-- The survey still keeps "the share of light set aside for the bodies' light reactions" (`Life::absorb`,
-  `Life::keep`, rows 2, 8 and 9 of `Life::sum`). Only the cover fills them and only the air reads them; they belong
-  in the cover. The store's node for it is still called `Class::Bodies`.
-- `World::rained` ("its bodies catch what fell"): written, saved, and read by no law. `Chemistry::light_reactions`:
-  no caller at all.
-- The gene `WET` (dry, dormant children, as seeds and spores) and the wear floor "as dry seeds and spores do" are
-  plant ideas on animal bodies.
-
-Most of this leaves with 2.1.
+### 2.3 Plants-as-bodies: gone with the animals
 
 ### 2.4 Tools and plans of older rounds
 
 - `core/src/inside/` (the law inside a cell): no law of the core reads it now. Only the tape and the page do. It
   is the right idea in the wrong crate until the animals need it (section 4.2); say so in its doc, or move it.
-- `worldgen/src/generate.rs` and `richness.rs` (about 300 lines): the generator of random chemistries and its
-  checks, for "M7". A random chemistry cannot grow life today (the spec says so). It is a plan, not a part.
 - `ew view` (a window of a snapshot as a PNG, with a "depth" layer): made to look at fine cells.
 - `--fine`, and the globe: see the owner's decision 3 in section 9.
-- The 631 columns of `series.csv`: most are per-kind columns of bodies and counters of acts.
-- Small dead things: `units::HOUR_S`; five classes in the sleep clock where two are used; test-only doors in the
-  core (`Life::part_mut`, `rows_mut`, `Body::store_of`, `World::even_ground`).
-- Names that mean two things (`CLAUDE.md` 2.8): "bodies" is animals, ponds (`flow/bodies.rs`), a store class and a
-  worldgen struct; `Grid` is three types; `Books` is three.
+- Small dead things: five classes in the sleep clock where two are used.
+- Names that mean two things (`CLAUDE.md` 2.8): "bodies" is the bodies of standing liquid (`flow/bodies.rs`) and
+  the plants' bodies (`body matter`); `Grid` is three types; `Books` is three.
 
 ### 2.5 The docs
 
 - The documents are `CLAUDE.md` (the rules), `docs/handover.md` (the spec), `docs/laws.md`, `docs/numbers.md`,
-  `docs/tape.md`, `docs/analyze.md`, this roadmap and `review/orchestrator.md` (the handover). The spec says which
-  one wins (its section 0).
+  `docs/tape.md`, this roadmap and `review/orchestrator.md` (the handover). The spec says which one wins (its
+  section 0). `CLAUDE.md` still names `docs/analyze.md`, which is gone with the pattern finder.
 - The spec's sections about the old animals (the laws of bodies in 6.1 to 6.6, the pattern finder and the library in
-  9, god mode in 11) describe code that leaves with C1c. They are rewritten or cut in the same merge.
-- `docs/laws.md` is true to the code. Its sections 3, 5, 6 and the body half of 4 describe the old animals and leave
-  with C1c; "a finer cell" wording stays in 5.2, 5.3 and 6.3 until then.
+  9, god mode in 11) describe code that is gone (the commit `16a774d` on main's history is the last that holds it). They are rewritten or cut (C4).
+- `docs/laws.md` is true to the code and describes no animal.
 
 ## 3. The animal world today, measured
 
@@ -336,7 +270,7 @@ of it say it learned nothing that beats chance beyond its hand-set start. I prop
 - **Step one: habits as inherited numbers.** This is still Law 5, with the smallest brain: what a kind senses (its
   hunger, the warmth, the food, the crowd and the eaters, here and next door) times a few weights gives the shares
   of its time over the same general acts as today (take, move, rest). The weights are genes and evolve as every gene
-  does. It is "choices as a spread of actions" (`laws.md` 4.4), which nodes already are, with no hidden layer, no
+  does. It is "choices as a spread of actions" (`laws.md` 4.4 at the commit `16a774d`), which nodes already are, with no hidden layer, no
   learning, no trace and no memory. The list of what can be sensed and the list of acts are the only things written
   by hand, as they are today; no weight is set to get a wanted habit, and a run with all weights at zero is the
   null run to compare with.
@@ -608,21 +542,13 @@ Before the new animals, and before the spec misleads one more agent. Each step i
 
 | Step | What | Check |
 |---|---|---|
-| C1a | **The contract and the natural world's month on its own** (4.9). The eight places where bodies reach into the cover become the contract's four verbs and its table. State what a plants-only month runs, in today's order, without the bodies' modules: the cell sums the air reads, the cover's month and its seeds' landing, the release of the light set aside. Move the shared helpers to a neutral place. Plant kinds keep the numbers their draws are keyed by. A test guards that no file of the natural world names a module of bodies | a plants-only world (`--roster --plants`) at sizes 22 and 32 gives the same `series.csv` to the last digit, before and after |
-| C1b | **The gate without animals.** The main guard and the key numbers plants-only (seven of the nine numbers stay as they are). The three thread tests of the natural world in `core/tests/threads.rs` stay. A test taker on the contract | the fast suite passes with plants-only worlds |
-| C1c | **Tag `animals-v2`, then delete the old animal world** (section 2.1): code, tests, tape columns, start rows, drawing, the pattern finder's three detectors. A short file keeps the anchored laws and what is worth building again (4.8) | as C1a, on every column that stays. `SNAPSHOT_VERSION` up |
-| C2 | **The tree's tools** (section 2.2): ids without serials; the most depth; the cases of cells finer than a square or a sample; the stale comments. And the small dead things of 2.3 and 2.4. The chemistry generator and its checks move to a branch | the same to the last digit |
+| C2 | **The tree's tools** (section 2.2): the most depth; the cases of cells finer than a square or a sample; the stale comments. And the sleep clock's classes (2.4) | the same to the last digit |
 | C3 | **One helper per idea**, one solid surface of a cell (three formulas today); one heat capacity of a ground node (two); the light the cover catches (the air and the cover each have a law); one meaning of "sea"; seeds mixed by a real hash, not XOR; one name for one thing | the same to the last digit where no law changes; else its own law commit |
-| C4 | **The docs of the old animals leave**: the spec's sections about bodies (2.5) and `docs/laws.md` sections 3, 5, 6 and the body half of 4 (kept in the tag, and their anchored rows in a short file) | the list of section 11.2 is empty |
+| C4 | **The spec's sections about the old animals leave** (2.5; their anchored laws are in section 13) | the list of section 11.2 is empty |
 | C6 | **Measures** before C3, so that it has a base to compare with: one plants-only world of 3,000 years (item 11 of section 6); the cost per layer at sizes 32, 64, 128 | two tables in the handover |
 
 The two branches that are parked (`wip/air-light`, `wip/sorted-start`) touch `flow/air/`, `chem/`, `cover/` and
-`worldgen/life/`. C1a touches `survey.rs`, `life/`, the cover's doors and the tests. They meet in the cover and in
-`tape/tests/ranges.rs`: C1a and C1b go to `main` first, and the parked branches merge `main` in.
-
-Two to three weeks with two helpers (est.). C1a is where a surprise can hide: it touches the order of the plants'
-month. If it cannot be made the same to the last digit, it becomes a change of its own, judged by the key numbers,
-and the owner is told.
+`worldgen/life/`: they merge `main` in.
 
 What I would **not** clean now: the chunks of `life/` that the cover runs on (the animal field will use them), the
 parts of a cell in Flow, the sleep of Change (it is used), the thread tests of the natural world, and the round
@@ -678,18 +604,11 @@ hand. (a) is dead: nothing reaches it. (b) is reached but does nothing under the
 
 | What | Where | Class | Lines (about) |
 |---|---|---|---|
-| `Purpose::Quarter` | `core/src/rng.rs:39` | a | 2 |
-| `units::HOUR_S` | `core/src/units.rs:7` | a | 1 |
-| `Chemistry::light_reactions`, `Derived::light` | `core/src/chem/roles.rs:60`, `chem/mod.rs:143` | a | 8 |
-| `World::rained` (written and saved, read by no law) | `core/src/world.rs:122`, `flow/air/book.rs:99` | a | 6, a snapshot bump |
 | `Terrain::below` and its branch in `Terrain::inside` | `core/src/space/below.rs:112`, `terrain.rs:249` | a | 8 |
-| Cell serials (`at_serial`, `GONE`, `next_serial`, `Life::at`) | `core/src/life/mod.rs:28-265`, `life/saved.rs` | b | 45, a snapshot bump |
-| `Regions`, `across_corners`, `Leaf::parent` | `core/src/choose/features.rs:110-195`, `space/tree.rs:44` | b | 75 |
+| `Leaf::parent` | `core/src/space/tree.rs:45` | b | 10 |
 | A cell finer than a sample | `flow/bodies.rs:68`, `flow/basin.rs:70`, `flow/curve.rs:262`, `space/samples.rs:116` | b | 15 |
 | `Mesh` of any number of levels | `core/src/space/mod.rs:207-259` | b | 15 |
 | `DEPTH_MOST` 24 | `core/src/space/tree.rs:8` | c | a number |
-| `Bodies::anywhere` (always false), `Bodies::cat[0]` (always off) | `worldgen/src/life/kinds.rs:31-34` | b | 6 |
-| `Life::absorb`, `Life::keep`, rows 2, 8, 9 of the sums | `core/src/life/mod.rs:86-95`, `survey.rs:122-158` | c, in the wrong place | 20 |
 | The test of a tree of three depths | `core/tests/space.rs:227` | tests what no world has | 30 |
 | Five `#[serde(default)]` on the chemistry file's fields | `worldgen/src/chemistry.rs:39-71` | c, against the letter of rule 2.5 | 5 |
 | The solid surface of a cell, three formulas | `ground.rs:162`, `flow/land.rs:287`, `flow/stack.rs:42` | c | one helper |
@@ -699,18 +618,12 @@ hand. (a) is dead: nothing reaches it. (b) is reached but does nothing under the
 Checked and clean: no flag of the dropped designs is left in `cli/src/args.rs`; every export of `wasm/` is called;
 every file and shader of `web/` is used; no `#[serde(default)]` reads an old save; no TODO.
 
-The parts of the old animal world, to size the deletion of C1 (raw lines, comments counted): `body` 1,510, `bond`
-1,500, `choose` 1,440, `life` 1,400 (most of it), `copy` 750, `brain.rs` 310, `nodes.rs` 250, `lineage.rs` 120,
-`lanes.rs` 60. Inside them, parked for longer still: two parents (`copy/mix.rs`), watching (`choose/learn.rs`),
-lots (`bond/lots.rs`), rooms and wading (`bond/sense.rs`). About 45 of the 130 fields of `Physics` and `Config` are
-read by animal code only.
-
 ### 11.2 Docs
 
 | Document | State | What to do |
 |---|---|---|
-| `docs/handover.md` | true to the owner's decisions, except the sections about the old animals (6.1 to 6.6, 9, 11 and the lines of 10 and 12 that name them) | rewrite or cut with C1c (C4) |
-| `docs/laws.md` | true; sections 3, 5, 6 and the body half of 4 describe the old animals; "a finer cell" wording in 5.2, 5.3, 6.3 | leave with C1c (C4) |
+| `docs/handover.md` | true to the owner's decisions, except the sections about the old animals (6.1 to 6.6, 9, 11 and the lines of 10 that name them), whose code is gone | rewrite or cut (C4) |
+| `CLAUDE.md` | names `docs/analyze.md`, which is gone | the owner mends it |
 | `review/orchestrator.md` | current; items 1, 2 and 4 of its section 5 are the same item | the orchestrator mends it |
 
 ## 12. Open items of the natural world and its page
@@ -786,3 +699,36 @@ section 4, with its known faults; the lines here are the rest.
   slot that does not pay its upkeep gives way to arriving seed, and succession (from equal mass, herbs now kill tree
   seedlings). Its first step is in `review/orchestrator.md` section 4.
 - Worlds that differ in shape (several islands, a ring, a long coast) are item 8 of section 7.1.
+
+## 13. Anchored laws kept for the animal field
+
+The old animal world's laws whose numbers have an anchor, as `docs/numbers.md` and `docs/laws.md` held them before
+the deletion (the code is at the commit `16a774d`). The new animals reuse them; nothing here is new. `M` is a
+member's living body, kg; `T` its temperature, K; `pace(T)` the bare rate law of its main burning,
+k e^(−Ea/T) over its value at `t_cat` (290 K; chemistry 0's reaction 1, Ea 7,760 K, gives 5.62 at 310 K).
+
+| Law or number | Formula, one line | Value | Unit | Source |
+|---|---|---|---|---|
+| Upkeep by body mass | upkeep = days × M × (M_copy / `m_ref`)^(`intake_exp` − 1) × (`c_basal` + `c_strength` × STRENGTH) × repair × activity × pace(T) | `c_basal` 4.22e4, `c_strength` 1.12e4, `intake_exp` 0.75, `m_ref` 1 | J/(kg day) at `t_cat`; kg | Kleiber 1932, 1947 (3e5 J a day per kg^0.75 at 310 K, less resting muscle); Elia 1992 (muscle 13 kcal/kg a day); Ernest et al. 2003 (0.755) |
+| Pace by temperature | pace(T) = e^(−Ea/T) / e^(−Ea/`t_cat`); force and walk × min(1, pace) | `t_cat` 290 | K | Gillooly et al. 2001 (E about 0.6 eV); Bennett 1990 (Q10 2 to 3 of muscle) |
+| Take law | intake a day = `take` × found / (`take` + found) × supply, found = `sweep` × what lies / area | `take` 0.0089, `sweep` 1, `c_handle` 1e3 | share a day per kg at `m_ref`; m² per kg a day; J per kg handled | Holling 1959; van der Merwe and van Niekerk 1980 (sheep 42 to 80 g per kg^0.75 a day); `sweep`, `c_handle` tuned |
+| Heat balance through a coat | C dT/dt = P − g (T − tg), surface `meeh` × m^(2/3), insulation `r_air` + HEAT × `r_coat` (in liquid `r_liquid` and `wet_coat` of the coat) | `meeh` 0.1, `r_coat` 0.9, `r_air` 0.12, `r_liquid` 0.005, `wet_coat` 0.2 | m² per kg^(2/3); m² K/W; share | Meeh 1879; Herreid and Kessel 1967; Campbell and Norman 1998; Incropera and DeWitt 2002; Scholander et al. 1950; Porter and Gates 1969 |
+| Two heat states | a body whose own heat warms it past its surroundings by more than T² / Ea runs on to a warm state (its `COOL_T`), else lies cold (or at `KEEP_T` by burning) | T² / Ea about 12 K in chemistry 0 | K | the rate law's slope Ea / T² per K against the coat's loss |
+| The walk | speed v = √(`WALK_FROUDE` g L), L the side of a cube of a member's volume; cost `c_move` × (m / `MOVE_REF`)^`MOVE_EXP` J per kg per m | `WALK_FROUDE` 0.25, `c_move` 3 at `MOVE_REF` 30 kg, `MOVE_EXP` −0.32 | none; J/(kg m); kg | Alexander and Jayes 1983; Alexander 1989; Taylor et al. 1982 (10.7 m^−0.32) |
+| Drag in liquid | J per kg per m = ½ ρ `DRAG` (wet L²) v² / (m `MUSCLE`) | `DRAG` 1.05, `MUSCLE` 0.25 | none; share | Hoerner 1965 (a cube face on); Smith, Barclay and Loiselle 2005 (muscle's efficiency) |
+| Wear by the rate of living | wear += energy turned over per kg / (`e_life` × 10^REPAIR); 1 − e^−wear dies (AGE); upkeep × (1 − `c_repair` + `c_repair` 2^REPAIR) | `e_life` 1e9, `c_repair` 0.25 | J/kg; share | Rubner 1908 (about 1,000 kJ per g in a life, reviewed by Speakman 2005); repair 20 to 30% of resting upkeep |
+| The brood and the child | mature at `COPY_MASS`; growth puts the share `ALLOC` into a brood; a child is 10^`CHILD` × the copy mass; a node keeps `BROOD_HELD` of a child per member | `ALLOC` gene 0 to 1, `CHILD` gene −6 to log10 ½, `BROOD_HELD` 0.5 | share; log10 share | the brood as a share of a surplus (laws 4.2 at the tag) |
+| Frost, one law with the cover | frozen share a month = clamp((limit − `harden` (1 − activity) − T) / `frost_k`, 0, 1); over t: 1 − (1 − f)^(t / month) | `frost_k` 3, `harden` 20 | K | Levitt 1980; Sakai and Larcher 1987 (kept in `Physics::frozen`, the cover uses it) |
+| Breaking | energy to break a share f = f × Σ V × `rupture` over soft tissue and each built solid | `rupture` 1 MPa (matter), 120 MPa (the frame) | Pa | soft tissue 0.1 to 10 MPa; cell walls about 120 MPa (from memory) |
+| A held edge | each material's energy × min(1, e / l) where the edge is harder (scratch hardness); the edge loses `abrade` × W / (`TABOR` × σ) | `abrade` 1e-5, `TABOR` 3 | none | Atkins 2009; Tabor 1951; Archard 1953; Archard and Hirst 1956; Rabinowicz 1995 |
+| Growth's cost | building matter costs `c_copy` per kg, at most `c_build` × supply / `m_ref` × days × activity | `c_copy` 1e7, `c_build` 1e4 | J/kg; J/(day kg^0.75) | growth keeps 10 to 20% of what it eats; P/B of herbs once or twice a year; Ernest et al. 2003 |
+| Exact split and join of members | see below | | | McKendrick 1926; von Foerster 1959 (maturity as a flux across a size) |
+
+The exact split and join of the members of a group (`nodes::Lot`, `nodes::rejoin` at the tag):
+- A split takes the share f of the members and the share fa of the stores, heat and brood (fa > f where those who
+  leave hold more); the rest stays as the remainder, so the two add up to what was held to rounding.
+- A join adds members, stores, heat and brood as sums.
+- Genes, sizes and own brain rows become means by members; the last day of physics and the busy share too.
+- The spread of a gene pools each one's spread plus its gap to the new mean (by members); the spread of body size and
+  of brain rows pools the same way.
+- Members who come back from acting apart rejoin by amounts and sizes alone: their genes and spreads are the node's.

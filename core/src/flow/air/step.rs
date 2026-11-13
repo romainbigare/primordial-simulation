@@ -1,4 +1,4 @@
-//! One step of the air (laws.md 1.4): the gas of the bodies' nodes comes up; each cell's response to
+//! One step of the air (laws.md 1.4): the gas of the aside nodes comes up; each cell's response to
 //! the air it sees is found (`cells::respond`); the air level runs day by day under its cells' law summed per node
 //! (`daily::run`); and all of it is booked whole, each cell's exchange at the step's mean air (`book`).
 

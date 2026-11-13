@@ -11,7 +11,7 @@ struct Earth {
   // the liquid, m; the bytes of a layer view over which an empty spot fades into a full one.
   look: vec4f,
   // What is drawn: the view (0 the Earth's colours, 1 the true colour, 2 a layer over them); the stops of the layer's
-  // ramp; whether the worn paths are drawn (1); and the sea's level, m (the live map: the lowest body's).
+  // ramp; and the sea's level, m (the live map: the lowest body's); w is not read.
   view: vec4f,
   // Where the map drawn lies in the world: its top-left corner and its size, m.
   place: vec4f,
@@ -26,9 +26,9 @@ const ROCK = 5u; const BARE = 6u; const PLANTS = 7u;
 
 // The reflectances (red, green, blue) of the hand rules' grounds: dry sand (0.3 to 0.5, quartz the most), the pale
 // ground of the cold and of the heights, and fresh snow (about 0.9); from memory (Bowker and others 1985; Warren
-// 1982). A worn path is drawn in display bytes over the view.
+// 1982).
 const SAND = vec3f(0.45, 0.40, 0.30); const TUNDRA = vec3f(0.30, 0.31, 0.26); const UPLAND = vec3f(0.30, 0.27, 0.21);
-const SNOW = vec3f(0.90, 0.92, 0.95); const PATH = vec3f(232, 89, 12);
+const SNOW = vec3f(0.90, 0.92, 0.95);
 // How many times steeper than it is the ground is shaded.
 const EXAGGERATE = 6.0;
 // A beach (`beach`) lies on ground whose slope (rise over run) is under `BEACH_SLOPE`, none where it passes
@@ -243,25 +243,21 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
   if (river > 0.5) { kind = RIVER; }
   return Shaded(rgb, lit, kind);
 }
-// Shaded colour `c` in the view drawn, as the screen's bytes (0..255), where the byte of the layer it draws and of the
-// worn paths are `o` (0..1) and the true colour is `truth` (reflectance, 0..1): the Earth's colours; the true colour,
-// shaded; or a layer's ramp over a little of the Earth's colours (where the layer is empty, the Earth's colours faded);
-// and the worn paths over it.
-fn in_view_of(c: Shaded, o: vec2f, truth: vec3f) -> vec3f {
+// Shaded colour `c` in the view drawn, as the screen's bytes (0..255), where the byte of the layer it draws is `o`
+// (0..1) and the true colour is `truth` (reflectance, 0..1): the Earth's colours; the true colour, shaded; or a layer's
+// ramp over a little of the Earth's colours (where the layer is empty, the Earth's colours faded).
+fn in_view_of(c: Shaded, o: f32, truth: vec3f) -> vec3f {
   var rgb = 255.0 * srgb(c.rgb);
   if (styled()) {
     rgb = 255.0 * painted(srgb(c.rgb));
   } else if (earth.view.x == 1.0) {
     rgb = 255.0 * srgb(truth * clamp(1.0 + (c.m - 1.0) * 0.7, 0.55, 1.4));
   } else if (earth.view.x == 2.0) {
-    let full = clamp(255.0 * o.x / earth.look.w, 0.0, 1.0);
+    let full = clamp(255.0 * o / earth.look.w, 0.0, 1.0);
     let grey = dot(rgb, vec3f(0.3, 0.59, 0.11));
     let mo = 0.72 * (0.75 + 0.25 * c.m);
-    rgb += ((rgb * 0.5 + grey * 0.5) * 0.6 + 100.0 - rgb) * (1.0 - full) + (ramp_layer(o.x) * mo - rgb * 0.72) * full;
+    rgb += ((rgb * 0.5 + grey * 0.5) * 0.6 + 100.0 - rgb) * (1.0 - full) + (ramp_layer(o) * mo - rgb * 0.72) * full;
   }
-  // A path (byte 1 is the uncleared ground): stronger the more cleared.
-  let worn = 255.0 * o.y;
-  if (earth.view.z > 0.5 && worn > 1.0) { rgb = mix(rgb, PATH, 0.4 + 0.5 * ((worn - 1.0) / 254.0)); }
   return rgb;
 }
 

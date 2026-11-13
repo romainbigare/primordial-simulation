@@ -11,7 +11,6 @@ ask the owner.
 | How each law works now | `docs/laws.md` |
 | Every free number: unit, anchor, mark (physical, anchored, tuned) | `docs/numbers.md` |
 | What the tape records | `docs/tape.md` |
-| The fact cards made from a tape | `docs/analyze.md` |
 | The plan, the priorities, the owner's decisions | `review/roadmap.md` |
 | How to lead the work (for the orchestrator) | `review/orchestrator.md` |
 | The laws | `core/src/<law>/` (`flow`, `change`, `bond`, `copy`, `choose`), bodies in `core/src/body/`, plants in `core/src/cover/`, the ground in `core/src/space/` |
@@ -34,7 +33,7 @@ ask the owner.
 5. **No compatibility code.** No `#[serde(default)]`, no readers of old files. When the saved `World` changes, bump
    `SNAPSHOT_VERSION` in `tape`. Old snapshots and tapes are not supported.
 6. **No experiment switches on main.** Try an idea on a branch. A switch stays only if it is a control run that a law is
-   checked against (today: `--null`).
+   checked against (today: none).
 7. **Counters are not state.** `World::counts` holds numbers for the tape only; no law may read them.
 8. **Clear names.** No two different things with the same name in different modules. No reused variable names for
    different quantities inside one function.

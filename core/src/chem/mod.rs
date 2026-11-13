@@ -1,12 +1,9 @@
 //! The world's chemistry: data the laws read; substances are numbers only. `thermo`: phases, melting, vapour pressure,
-//! solubility, heat capacity; `roles`: what the reactions do for bodies.
+//! solubility, heat capacity; `roles`: what the reactions do for life.
 
-mod body;
 mod planck;
 mod roles;
 mod thermo;
-
-pub use body::{BodyChem, Stores};
 
 use crate::{params::require, units::{MAX_REACTIONS, MAX_SUBSTANCES}};
 use serde::{Deserialize, Serialize};
@@ -122,10 +119,10 @@ pub struct Chemistry {
     /// that changes one builds the chemistry again, as a saved one is read back)
     pub subs: Vec<Substance>,
     pub reactions: Vec<Reaction>,
-    /// How bodies grow: a conversion of stores into body matter (its first output), with no rate, paid by work
-    /// (`copy::grow`). None: bodies have no matter apart from their stores and do not grow.
+    /// How life grows: a conversion of fuel and minerals into body matter (its first output), with no rate, paid by work
+    /// (`cover::build`). None: life has no matter apart from its fuel and does not grow.
     pub build: Option<Reaction>,
-    /// The other solids bodies can build, each a conversion like `build` whose first output is the solid (`Body::share`).
+    /// The other solids life can build, each a conversion like `build` whose first output is the solid (the cover's walls).
     pub builds: Vec<Reaction>,
     /// Mole fractions of the starting air, per substance (empty: none known), for its heat capacity (`Chemistry::air_cp`).
     pub air: Vec<f64>,
@@ -144,8 +141,6 @@ struct Derived {
     minerals: Vec<(usize, f64)>,
     /// `Chemistry::air_cp`
     air_cp: f64,
-    /// `Chemistry::burners`
-    burners: Vec<(usize, f64)>,
     /// `Chemistry::life_roles` and `Chemistry::fixing`
     roles: Option<(usize, usize, usize, usize)>,
     fixing: Option<usize>,
@@ -153,12 +148,6 @@ struct Derived {
     mixes: Vec<Option<Vec<(usize, bool, bool)>>>,
     /// The substances others dissolve in (`Chemistry::mixes` is some), a bit per substance
     solvents: u64,
-    /// The solids bodies build besides their matter (`Chemistry::materials`), a bit per substance
-    materials: u64,
-    /// The light reactions, by number
-    light: Vec<usize>,
-    /// `Chemistry::body`
-    body: BodyChem,
     /// `Chemistry::heat_shares` by whole K from 0 to `planck::TABLE_K`
     heat_shares: Vec<[f64; HEAT_BANDS]>,
 }
@@ -173,12 +162,6 @@ impl Chemistry {
 
     pub fn ns(&self) -> usize {
         self.subs.len()
-    }
-
-    /// What bodies hold and run (`BodyChem`).
-    #[inline]
-    pub fn body(&self) -> &BodyChem {
-        &self.derived().body
     }
 
     /// The share of a body's heat radiation at `t` K in each band (`heat_spans`, Planck's law): they sum to 1.
@@ -218,16 +201,12 @@ impl Chemistry {
             // The inputs of growth no reaction burns, per mol of matter; the starting air's heat capacity per mol.
             let minerals = self.build.as_ref().map_or(Vec::new(), |bl| bl.inputs.iter().filter(|p| self.burner(p.0 as usize).is_none()).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect());
             let air_cp: f64 = self.air.iter().zip(&self.subs).map(|(x, s)| x * s.cp).sum();
-            let burners = (0..self.reactions.len()).filter(|&r| self.dh(r) < 0.0 && !self.keeps(r)).map(|r| (r, -self.dh(r))).collect();
             let air_cp = if air_cp > 0.0 { air_cp } else { thermo::DIATOMIC_CP };
             let mixes: Vec<_> = (0..self.ns()).map(|k| self.find_mixes(k)).collect();
             let solvents = (0..self.ns()).filter(|&k| mixes[k].is_some()).fold(0, |m, k| m | 1 << k);
-            let materials = self.materials().fold(0, |m, k| m | 1 << k);
-            let light = (0..self.reactions.len()).filter(|&r| self.reactions[r].light).collect();
             let (roles, fixing) = (self.find_life_roles(), self.find_fixing(&minerals));
-            let body = BodyChem::of(self);
             let heat_shares = planck::table(&self.heat_spans);
-            Derived { minerals, air_cp, burners, roles, fixing, mixes, solvents, materials, light, body, heat_shares }
+            Derived { minerals, air_cp, roles, fixing, mixes, solvents, heat_shares }
         })
     }
 
@@ -243,8 +222,7 @@ impl Chemistry {
 
     /// Is the chemistry one the laws can run? At most `MAX_SUBSTANCES` substances with element counts, a vapour pressure
     /// curve and densities, and at most `MAX_REACTIONS` reactions; every reaction and conversion names substances that
-    /// exist and keeps its elements and mass; bodies hold at most `BODY_STORES` substances and may run at most
-    /// `BODY_REACTIONS` reactions (`BodyChem`).
+    /// exist and keeps its elements and mass.
     pub fn validate(&self) -> Result<(), String> {
         let ns = self.ns();
         require(ns <= MAX_SUBSTANCES, || format!("{ns} substances: at most {MAX_SUBSTANCES}"))?;
@@ -273,16 +251,12 @@ impl Chemistry {
             require(known, || format!("{name}: a substance beyond the {ns}"))?;
             require(rx.ord.len() <= rx.inputs.len(), || format!("{name}: more orders than inputs"))?;
             require(rx.open > 0.0, || format!("{name}: its speed in the open world must be above 0"))?;
-            // A part's walls hold only what bodies hold, and their rot is first order in the one input of the walls,
-            // the others taken from the air (`bond/month.rs::rot`).
-            let held = rx.inputs.iter().filter(|x| self.body().place(x.0 as usize).is_some()).count();
-            require(rx.open <= 1.0 || held <= 1, || format!("{name}: sped in the open world, it takes {held} substances bodies hold (a part's walls may hold them), at most 1"))?;
             let balanced = self.side_elems(&rx.inputs) == self.side_elems(&rx.outputs);
             require(balanced, || format!("{name} does not balance"))?;
             let (m_in, m_out) = (mass(&rx.inputs), mass(&rx.outputs));
             require((m_in - m_out).abs() <= MASS_ROUNDING * m_in.max(m_out), || format!("{name} does not keep mass"))?;
         }
-        self.body().fits(self)
+        Ok(())
     }
 
     /// Add element totals of `amount` moles of substance `k` into `out` (of the elements it holds).

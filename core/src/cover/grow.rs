@@ -1,4 +1,4 @@
-//! A month of the cover of each cell of a chunk (laws.md 4.5): it catches light and runs its light reaction, pays its
+//! A month of the cover of each cell of a chunk (laws.md 3): it catches light and runs its light reaction, pays its
 //! upkeep by burning its fuel, loses what is unpaid, worn out or frozen, builds from its fuel and the minerals of the
 //! ground (fixing what it lacks if it can), and sends seeds out. Everything it takes and gives is booked through the
 //! chunk's moves, with its heat; its own side it books itself.
@@ -87,8 +87,8 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
     let a = around(w, moves, p, i);
     let keep = c.keep;
     let (b, caught) = live(w, c, p, &a, (i, dt), counts);
-    // The light its bodies' node set aside for it (`Cover::keep`), as far as the node holds it.
-    let set_aside = (keep as f64 * caught).min(moves.heat(w, Node::bodies(i))).max(0.0);
+    // The light its aside node set aside for it (`Cover::keep`), as far as the node holds it.
+    let set_aside = (keep as f64 * caught).min(moves.heat(w, Node::aside(i))).max(0.0);
     book(w, moves, c, p, (i, w.mesh.up(i, 0, AIR), a.t), set_aside, &b);
 }
 
@@ -288,9 +288,8 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
     // What the burning took of its content, shared out over the parts of the upkeep as they asked for it.
     let paid = budget::held(&e, &c.mol[x]) - unburnt;
     (0..UPKEEP_PARTS).for_each(|q| b.budget[UPKEEP + q] += if cost > 0.0 { paid * parts[q] / cost } else { 0.0 });
-    // Members of a field wear out at the rate of living as a body's do, a dormant one at least at `Physics::dormant` of
-    // the active rate (laws.md 6.7); below its frost gene, hardened by its dormancy, its frozen share dies (laws.md
-    // 6.5).
+    // Members of a field wear out at the rate of living (Rubner 1908), a dormant one at least at `Physics::dormant` of
+    // the active rate; below its frost gene, hardened by its dormancy, its frozen share dies (laws.md 3).
     let worn = active * s.act.max(ph.dormant) / (s.living * ph.e_life * dec(g[REPAIR])).max(1e-300);
     let frozen = super::frozen(ph, chem.subs[p.liquid].melt, g[FROST] as f64, (t, s.act));
     let mut lost = [0.0; 6];
@@ -317,14 +316,14 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
 }
 
 /// Book what the cover of cell `i` (air node `j`, ground at `t` K) took and gave in its month (`Books`): the
-/// light set aside for it from its bodies' node; gases from and to the air (taken from the air node with their heat at
-/// its temperature and their latent heat, given into the bodies' node with theirs, as bodies breathe); liquids and
+/// light set aside for it from its aside node; gases from and to the air (taken from the air node with their heat at
+/// its temperature and their latent heat, given into the aside node with theirs, as bodies breathe); liquids and
 /// minerals from and to its ground, with their heat; its remains to its ground. Last its heat comes to the ground's
 /// temperature with its ground.
 fn book(w: &World, moves: &mut Moves, c: &mut Cover, p: &Parts, (i, j, t): (usize, usize, f64), set_aside: f64, b: &Books) {
     let chem = &w.chem;
     let (mut e, lift, ta, ground) = (c.e + set_aside + b.heat, w.lift(i), moves.t_air(w, j), Node::ground(i));
-    moves.take(w, Node::bodies(i), 0, 0.0, set_aside);
+    moves.take(w, Node::aside(i), 0, 0.0, set_aside);
     let cap = moves.heat_cap_ground(w, i);
     let held = |kk: usize, m: f64| m * (chem.subs[kk].cp * t + if chem.phase(kk, t) == Phase::Solid { 0.0 } else { chem.subs[kk].lf });
     for (kk, (&ext, &died)) in b.ext.iter().zip(&b.dead).enumerate().take(chem.ns()) {
@@ -338,7 +337,7 @@ fn book(w: &World, moves: &mut Moves, c: &mut Cover, p: &Parts, (i, j, t): (usiz
                 moves.take(w, Node::air(j), 0, 0.0, m * s.cp * ta);
                 e += m * (s.cp * ta + s.latent_gas());
             } else {
-                moves.give(w, Node::bodies(i), 0, 0.0, -m * s.cp * t);
+                moves.give(w, Node::aside(i), 0, 0.0, -m * s.cp * t);
                 e += m * (s.cp * t + s.latent_gas());
             }
         } else if m > 0.0 {

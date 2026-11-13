@@ -1,11 +1,7 @@
-//! The yearly row of the series, by subject: the world (`world`), each starting kind (`kinds`), brains (`brains`),
-//! what bodies do with and to each other (`social`), and made objects (`parts`). Units are SI unless named.
+//! The yearly row of the series, by subject: the world (`world`) and each starting kind of cover (`kinds`), and the
+//! time spent (`time`). Units are SI unless named.
 
-mod brains;
 mod kinds;
-mod parts;
-pub use parts::ENCLOSED;
-mod social;
 mod time;
 mod world;
 
@@ -48,17 +44,11 @@ impl Recorder {
     /// Write the yearly row, then start the sums of the year again.
     pub(super) fn push_series(&mut self, c: &Ctx, spent: &Spent) {
         let land: Vec<usize> = (0..c.f.z.len()).filter(|&i| c.w.is_land(i)).collect();
-        // The parts of the row that only read the recorder are made side by side; the rest follow, in the row's order.
-        let ((world, kinds), (brains, parts)) = par::join(
-            || par::join(|| made(|r| self.world_cols(c, &land, r)), || made(|r| self.kind_cols(c, r))),
-            || par::join(|| made(|r| self.brain_cols(c, r)), || made(|r| self.parts_cols(c.w, r))),
-        );
-        let mut row = Row([world.0, kinds.0, brains.0].concat());
-        self.social_cols(c, &land, &mut row);
-        row.0.extend(parts.0);
+        // The parts of the row are made side by side, then joined in the row's order.
+        let (world, kinds) = par::join(|| made(|r| self.world_cols(c, &land, r)), || made(|r| self.kind_cols(c, r)));
+        let mut row = Row([world.0, kinds.0].concat());
         self.time_cols(spent, &mut row);
         self.year = Default::default();
-        self.updates = c.w.counts.updates;
         self.append(row);
     }
 

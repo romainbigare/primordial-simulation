@@ -12,13 +12,7 @@ const SECTIONS: [string, RegExp][] = [
   ['Air gases', /^air_/],
   ['Minerals', /^min\d/],
   ['Dead matter', /^dead_/],
-  ['Population', /^(bodies|plants|plant_members|animal_|cover_|body_mass|lineages|updates|mass_(min|median|max)|trophic_|eat_animals)/],
-  ['Births and deaths', /^(births|died_)/],
-  ['Brains', /^(learned|greedy|hidden|memory|seen|sight|mi_)/],
-  ['Movement and paths', /^(crossings|traffic_|worn_|mass_top2|mass_land)/],
-  ['Imitation and giving', /^(watched|spread_max|gave|ate_)/],
-  ['Parts and structures', /^(parts|put_to_parts|taken_from_parts|edge_kg|bonds_|structures|enclosed|made_|inside_|cold_months|holding_liquid|liquid_held)/],
-  ['Catalysts', /^cat_/],
+  ['Plant cover', /^cover_/],
   ['Time per process', /^ms_/],
 ];
 const KIND = /^root_(\d+)_/;

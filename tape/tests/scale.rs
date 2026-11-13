@@ -16,7 +16,7 @@ const FROM: u64 = 6;
 /// The key numbers: the land's ground temperature, its warmest and coldest month, rain on land, the heat-absorbing gas,
 /// the cover's mass and the starting cover's capture area, m² (the first `HELD`, held to the noise), and the length of
 /// the rivers, km (river cells times the cells' side).
-const KEYS: [&str; 8] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "cover_kg", "root_0_cover_area", "river_km"];
+const KEYS: [&str; 8] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "cover_kg", "root_1_cover_area", "river_km"];
 const HELD: usize = 7;
 
 /// The `KEYS` at the end of each year from `FROM` of the island of `seed`, in cells of 2 x 2 squares or on its
@@ -28,7 +28,7 @@ fn keys(seed: u64, fine: bool) -> Vec<[f64; KEYS.len()]> {
     let map = map.by_blocks(|_, _| if fine { square } else { square - 1 });
     let km = map.side * if fine { 1.0 } else { 2.0 } / 1e3;
     let mut years = vec![];
-    run_on(worldgen::terrain::new_map(seed, map), YEARS, &worldgen::life::TWO, |_| {}, |y, _, rec| {
+    run_on(worldgen::terrain::new_map(seed, map), YEARS, &worldgen::life::ONE, |_| {}, |y, _, rec| {
         if y >= FROM {
             years.push(KEYS.map(|c| if c == "river_km" { rec.last("rivers") * km } else { rec.last(c) }));
         }

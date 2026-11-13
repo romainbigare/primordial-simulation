@@ -11,8 +11,8 @@ A world that runs on five physical laws; everything else must emerge.
 - `review/orchestrator.md`: the handover of the work, with where things stand
 
 ```
-cargo run --release -p cli --bin ew -- run --roster --plants --years 300 --frames-every 5 --out out/run       # simulate the plant world: the tape (series.csv, viewer frames) and a snapshot at the end
-cargo run --release -p cli --bin ew -- run --years 300 --snapshots-every 100 --pictures-every 50 --months --out out/run   # also snapshots, PNG pictures and months.csv
+cargo run --release -p cli --bin ew -- run --roster --years 300 --frames-every 5 --out out/run                # simulate the plant world: the tape (series.csv, viewer frames) and a snapshot at the end
+cargo run --release -p cli --bin ew -- run --years 300 --snapshots-every 100 --pictures-every 50 --out out/run   # also snapshots and PNG pictures
 cargo run --release -p cli --bin ew -- resume --from out/run/snap_00300.bin.gz --years 100 --out out/run   # go on from a snapshot
 cargo run --release -p cli --bin ew -- view --from out/run/snap_00300.bin.gz --window 40,10,8,8 --px 800 --layer map --edges --out look.png   # a window of a snapshot's map as a PNG (fractions of a square allowed; cells finer than a pixel are seen)
 cargo run --release -p cli --bin ew -- chem                                                   # chemistry 0 as a table
@@ -50,11 +50,10 @@ The ground goes from dry to wet continuously: soaked bare ground is darker (to h
 says it is and by the capillary fringe over the liquid's surface (wet to e^-1 half a metre over it), so a flat shore
 is a wide wet band and a steep one a thin line; near soaked, a film of liquid shines on it as mud, and at the
 waterline it is the bed under no water, so the shore has no drawn line. It also names each square's class (sea, lake, forest...)
-for the inspect panel. Avatars, the lines of latitude, the outlines and the scale bar are drawn on a 2D canvas over it.
+for the inspect panel. The lines of latitude, the outlines and the scale bar are drawn on a 2D canvas over it.
 While a frame takes the card longer than 16 ms, the map is drawn at fewer pixels (down to a quarter along each side)
 and stretched onto the screen, the same picture, softer; once the view rests it is drawn again at the screen's own
-pixels, a tile a frame, and shown when whole. The page never waits for the card: what it reads back (the classes, the
-colours under the avatars) comes a frame or so later. Seen from afar, most of the drawing's detail is smaller than a
+pixels, a tile a frame, and shown when whole. The page never waits for the card: what it reads back (the classes) comes a frame or so later. Seen from afar, most of the drawing's detail is smaller than a
 pixel and shows nothing: the build makes the live map's program once more for draws whose pixels take at least 0.5 m,
 1 m and 3 m, with that detail compiled out (`web/shade`, `LEAST_E` in `web/shaders/lib/draw.wgsl`), and the page draws
 with the one made for the largest no more than its pixels take (`web/src/gpu.ts` `seenFrom`). The picture is the same
@@ -121,7 +120,7 @@ are still to come, and which of WebGPU and WebGL2 draws. A tape holds no ground:
 On the live map the Earth view draws the plant cover plant by plant from its numbers, with no classes
 (`web/src/vegetation.ts`, `web/src/canopy.ts`, `web/shaders/cover.wgsl`). With each frame the core sends, for each
 square, up to 4 kinds of cover (the slots of its cell) and of each its plants as the cover's law holds them
-(`tape/src/stands.rs`, laws.md 4.5): as many a m² as the slot counts, as tall as the buckling limit lets their stems
+(`tape/src/stands.rs`, laws.md 3): as many a m² as the slot counts, as tall as the buckling limit lets their stems
 stand (McMahon 1973), each crown as wide as the ground it holds, in patches that cover as much of the ground as its
 leaves close; the loose ground their roots need and the share of the square that holds them; and its genes and state
 this month. A plant is drawn on one of three lattices fixed
@@ -204,16 +203,5 @@ cover's remains: the `ground_r`, `ground_g`, `ground_b` layers), darker where we
 holds only totals per square and no kinds: its map draws the plants as one foliage as closed as their capture area
 closes the ground, without marks.
 
-From 64 pixels a square, the live viewer draws the bodies and parts of each cell one by one at their real size, from
-the numbers the core hands out (`tape::things`): a member is as long as 1.5 times the cube root of its volume (a body
-as dense as water), each member at its own seeded place across its cell's real area, so it holds while the camera
-moves. A member of 3 pixels or more is drawn as its shape (from 8 pixels with a rim that stands out from the ground),
-smaller as a soft dot. One or two doublings of the zoom before a member takes a pixel, its node shows as a light, soft
-blob over its cell, a little stronger the more members a m² holds, lighter than dark ground and darker than light
-ground; it fades in as the zoom comes near. Farther out no herd is drawn. Parts are drawn at their own sizes, hidden below a pixel. Two
-styles draw the shapes (the "Life" buttons, kept per browser): from above (a body with its head, wider the stronger) or
-angled (a block on legs, as a small axonometric sprite). Hover or click one to see its numbers; the inspect panel
-gives a herd's count. The map zooms to 80 pixels a metre, so one animal shows its shape and can be picked.
-
-By default the animals start with hand-set brain biases (`--neutral-eaters` for neutral brains) and the
-light-eaters with no brain.
+From 64 pixels a square, the live viewer asks the core for the slots of cover of the cells in view (`tape::things`):
+hovering a cell shows each slot's built cover, capture area and genes. The map zooms to 80 pixels a metre.

@@ -130,15 +130,15 @@ pub(super) fn state(w: &World, s: &mut Scratch) {
 }
 
 /// Amount, mol, heat capacity, J/K, and mass, kg, of the gases of each air node, from its amounts now and the gas the
-/// bodies' nodes under it hold: bodies give the air the warmth of their gas at once (laws.md 1.4), so its temperature
+/// aside nodes under it hold: bodies give the air the warmth of their gas at once (laws.md 1.4), so its temperature
 /// counts that gas too.
 pub(super) fn sums(w: &World, s: &mut Scratch) {
     let (na, n, parent) = (w.mesh.level(AIR).n(), w.mesh.cells().n(), w.mesh.cells().parent());
     (s.nt, s.capa, s.mass) = (vec![0.0; na], vec![0.0; na], vec![0.0; na]);
     for &k in &s.state.gas {
         let sp = s.sp[k];
-        // The bodies' nodes hold gas only between the air's steps (`book::up_from_bodies`): skip the array when it is empty.
-        let held = &w.store.amounts(Class::Bodies)[k * n..(k + 1) * n];
+        // The aside nodes hold gas only between the air's steps (`book::up_from_bodies`): skip the array when it is empty.
+        let held = &w.store.amounts(Class::Aside)[k * n..(k + 1) * n];
         let held = if held.iter().any(|&a| a != 0.0) { held } else { &[] };
         let bodies = held.iter().zip(parent).map(|(&a, &j)| (j as usize, a));
         for (j, a) in w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied().enumerate().chain(bodies) {

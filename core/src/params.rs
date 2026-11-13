@@ -1,7 +1,7 @@
 //! The settings of a world (`Config`) and the free numbers of its laws (`Physics`). What each
 //! number is anchored to is in `docs/numbers.md`, one row per field.
 
-use crate::{clock::Calendar, math::Span, units::{DAY, DAY_S, T_SURF}};
+use crate::{clock::Calendar, units::{DAY_S, T_SURF}};
 use serde::{Deserialize, Serialize};
 
 /// The settings of a world: the planet, the calendar and time steps, the physics of its ground
@@ -73,8 +73,6 @@ pub struct Config {
     pub carry: f64,
     /// Bonded volume broken per J dissipated, times 1 / bond strength, m³/J
     pub wear: f64,
-    /// Speed at which dense cover spreads back into ground cleared along an edge, from each side, m/s
-    pub regrow: f64,
     /// Speed of loose solids creeping down a unit slope, times 1 / hardness, m/s
     pub creep: f64,
     /// Added to a solid's hardness before its softness, 1 / (hardness + this), is taken
@@ -82,21 +80,17 @@ pub struct Config {
     /// Speed at which the mixing of the loose ground buries what lies on it alone, m/s
     pub bury: f64,
 
-    // Run switches (control runs to compare with)
-
-    /// A null run: no learning, no imitation, born rows and brain bases never change at a copy or a merge
-    pub null: bool,
 
     /// The free numbers of the laws
     pub phys: Physics,
 }
 
-/// Free numbers of the laws of bodies and of the ground's cover and hydrology, grouped by the law that reads them:
+/// Free numbers of the laws of the cover and of the ground's hydrology, grouped by the law that reads them:
 /// sizes of costs, strengths, spreads and flows, never rules.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Physics {
-    // Change and Flow, as bodies feel them
-    /// Liquid thickness over a body that holds back 63% of the light reaching it, m
+    // Change and Flow, as life feels them
+    /// Liquid thickness over the cover that holds back 63% of the light reaching it, m
     pub light_depth: f64,
     /// Share of the light a light-driven reaction takes that it stores; the rest becomes heat
     pub light_yield: f64,
@@ -110,130 +104,40 @@ pub struct Physics {
     pub soil_m: f64,
     /// Temperature at which upkeep measures catalyst capacity and the costs are anchored, K
     pub t_cat: f64,
-    /// Spread of a cell's microclimate: below a freezing point the frozen share of a body's or the cover's members grows from 0 to 1 over this, K
+    /// Spread of a cell's microclimate: below a freezing point the frozen share of the cover grows from 0 to 1 over this, K
     pub frost_k: f64,
     /// Depth to which dormancy lowers the lethal temperature of living tissue (cold hardening), K
     pub harden: f64,
     /// K of the cover's frost tolerance below its key liquid's melting point that add its light capacity's upkeep again
     pub c_firm: f64,
-    /// Upkeep of strength, J per kg of body per day at strength 1
-    pub c_strength: f64,
-    /// Upkeep every body pays whatever its genes, J per kg of body per day
+    /// Basal upkeep of living tissue, J per kg per day
     pub c_basal: f64,
     /// Upkeep of light-capture area, J per m² per day
     pub c_leaf: f64,
-    /// Cost of a month of thinking of the starting brain, J per kg of a member of `m_ref` kg (`Physics::think`)
-    pub c_brain: f64,
-    /// The one reference mass at which a per-kg number is per kg, kg
-    pub m_ref: f64,
-    /// Cost of a month of thinking per hidden unit, J per kg of a member of `m_ref` kg
-    pub c_hidden: f64,
-    /// Cost of a month of thinking per memory number, J per kg of a member of `m_ref` kg
-    pub c_memory: f64,
-    /// Cost of a month of thinking per body perceived, J per kg of a member of `m_ref` kg
-    pub c_seen: f64,
-    /// Upkeep of learning, J per kg of body per day at learning rate 1
-    pub c_learn: f64,
-    /// Energy a kg of body turns over in its upkeep before it is worn out, at a `REPAIR` gene of 0, J/kg
+    /// Energy a kg of living tissue turns over in its upkeep before it is worn out, at a `REPAIR` gene of 0, J/kg
     pub e_life: f64,
     /// Share of upkeep that is repair at a `REPAIR` gene of 0
     pub c_repair: f64,
-    /// Exponent of a body's activity in its key liquid over the level it keeps (`Body::activity`)
+    /// Exponent of the activity of living tissue in its key liquid over the level it keeps (`Physics::activity`)
     pub dormancy: f64,
-    /// Least activity a dormant body or slot of cover wears out at, a share of the active rate (`body::live`, `cover::grow`)
+    /// Least activity a dormant slot of cover wears out at, a share of the active rate (`cover::grow`)
     pub dormant: f64,
-    /// Share of its body whose loss kills a member: a hit that tears it kills; starving to it, even chances
-    pub lethal: f64,
 
-    // Choose
-    /// Energy to move one kg one metre on the flat for a member of `MOVE_REF` kg, J (`Physics::walk`)
-    pub c_move: f64,
-    /// Body mass per area that doubles the cost of entering a cell and of handling what is taken there, kg/m²
-    pub rho_pass: f64,
-    /// Width of the passage a mover clears through bodies, m
-    pub lane: f64,
+    // Dispersal
     /// Standard deviation of the near scale of the dispersal kernel, m (`life::lot`)
     pub kernel_near: f64,
     /// Standard deviation of the far scale of the dispersal kernel, m
     pub kernel_far: f64,
     /// Share of what disperses that lands by the far scale
     pub kernel_far_share: f64,
-    /// The bodies of a cell must fit in a layer this thick over it, m
-    pub layer: f64,
-    /// Density of bodies, kg/m³
+
+    // Growth and likeness
+    /// Density of living tissue, kg/m³
     pub rho_body: f64,
-    /// Surface of a body per kg^(2/3) of a member (Meeh), m²/kg^(2/3)
-    pub meeh: f64,
-    /// Most heat insulation of a body's coat (fur and the tissue under it), over the still air at its surface, m² K/W
-    pub r_coat: f64,
-    /// Heat insulation of the still air at a surface, m² K/W
-    pub r_air: f64,
-    /// Heat insulation of the still liquid at a surface (its convective film), m² K/W
-    pub r_liquid: f64,
-    /// Share of a coat's insulation it keeps in liquid, its still air displaced
-    pub wet_coat: f64,
-    /// Most a body takes per day, as a share of the mass it takes by (`Body::supply`)
-    pub take: f64,
-    /// Exponent of a member's body mass that its supply (intake, building, leaf) goes with (`Body::equiv`)
-    pub intake_exp: f64,
-    /// Area a body works per day per kg of its working mass, m²/(kg day)
-    pub sweep: f64,
-    /// Energy to handle one kg taken or put, J
-    pub c_handle: f64,
-    /// A body keeps this many times the safe minimum of each store it gives away or puts out
-    pub keep_min: f64,
-    /// Spread of the shape of a part made around its mean
-    pub shape_noise: f32,
-    /// Weight of well-being one month ahead against well-being now, per month
-    pub discount: f32,
-    /// Weight in a move's score of the critic's gain from stepping into a cell (`choose::plan`), per unit of well-being
-    pub plan_weight: f32,
-    /// Share of the way a watcher's rows move toward the watched one's, per month of watching
-    pub blend: f32,
-    /// Weight per month of the newest value in a learner's running mean squares (of a row's steps, of its errors)
-    pub learn_beta: f32,
-    /// Most a row moves in one step, in units of the learning rate
-    pub learn_most: f32,
-
-    // Bond
-    /// Tensile strength of a solid of bond strength 1, Pa
-    pub tensile: f64,
-    /// Share of the contact area a joint pressed by a body holds
-    pub joint: f64,
-    /// Energy to shape one kg into a part, J
-    pub c_form: f64,
-    /// Energy to make a joint, J per m² of contact
-    pub c_join: f64,
-    /// Heat passed through an opening, W/(m² K)
-    pub leak: f64,
-    /// Most of its mass a body puts into one part
-    pub form: f64,
-    /// Walls lighter than this fall apart (so a part is made of at least this), kg
-    pub min_kg: f64,
-    /// Work to take hold of a part, as a share of the work of handling its mass (`c_handle`)
-    pub grab: f64,
-    /// Force of a body of strength 1, as a share of its weight
-    pub grip: f64,
-    /// Push of a mover on each structure of a cell, and the push its own force must give to move, share of its weight
-    pub bump: f64,
-    /// Archard's wear coefficient of an edge: volume worn times hardness over the work it does
-    pub abrade: f64,
-
-    // Copy
-    /// Work to make one kg of body matter, J (`copy::grow`)
+    /// Work to make one kg of body matter, J (`cover::build`)
     pub c_copy: f64,
-    /// Most work a member of `m_ref` kg puts into building body matter per day, J (`Body::supply`)
-    pub c_build: f64,
-    /// Chance that a child's born brain rows change
-    pub row_chance: f64,
-    /// Step of that change per generation, times the body's mutation size
-    pub row_noise: f32,
-    /// Spread of the weights a bigger brain adds
-    pub new_noise: f32,
-    /// Nodes of a cell whose genes differ by at most this many mutation steps merge (`body::alike`)
+    /// Genes that differ by at most this many mutation steps are alike (`cover::APART`)
     pub alike: f32,
-    /// A body under this share of the members of the largest of its lineage, stage and room in its cell joins it (`cap`)
-    pub node_floor: f64,
 
     // The cover (`cover`)
     /// Upkeep of the cover's light capacity, as a share of what that capacity could store in the time
@@ -274,7 +178,7 @@ pub struct Physics {
     pub soft: f64,
     /// Liquid does not move for a smaller head difference, m
     pub still: f64,
-    /// Body mass per area that halves what moving liquid carries off a cell and how fast its loose solids creep, kg/m²
+    /// Mass standing per area that halves what moving liquid carries off a cell and how fast its loose solids creep, kg/m²
     pub hold: f64,
     /// Share of the volume of the loose ground that is pore space (`flow::liquid`)
     pub porosity: f64,
@@ -302,50 +206,7 @@ pub struct Physics {
     pub thermocline: f64,
 }
 
-/// The mass at which `Physics::c_move` is the cost of moving a kg a metre, kg.
-const MOVE_REF: f64 = 30.0;
-/// Exponent of the cost of transport per kg and m in the mover's mass (Taylor et al. 1982).
-const MOVE_EXP: f64 = -0.32;
-/// The Froude number v² / (g L) a body walks at (Alexander 1989: mammals of any size walk near 0.25, run past 0.5).
-const WALK_FROUDE: f64 = 0.25;
-/// The drag coefficient of a body pushed through liquid on its face: a cube face on, 1.05 (Hoerner 1965).
-const DRAG: f64 = 1.05;
-/// The share of the energy its muscles burn that a body's work through liquid gets (muscle's efficiency about 0.25:
-/// Smith, Barclay and Loiselle 2005).
-const MUSCLE: f64 = 0.25;
-
 impl Physics {
-    /// Energy of a month of thinking of a brain of cost `c` (`Lineage::cost`) for a member of `m` kg, J: weakly more for
-    /// a bigger body; paid by the time (`body::upkeep`), whatever the pace of its decisions.
-    pub(crate) fn think(&self, c: f64, m: f64) -> f64 {
-        c * self.m_ref * (m / self.m_ref).sqrt().sqrt()
-    }
-    /// Energy to move one kg one metre on the flat for a member of `m1` kg, J: the real cost of transport, 10.7
-    /// m1^-0.32 J per kg per m (Taylor et al. 1982), scaled to `c_move` at `MOVE_REF`. Climbing is the weight lifted.
-    pub fn walk(&self, m1: f64) -> f64 {
-        self.c_move * (m1 / MOVE_REF).powf(MOVE_EXP)
-    }
-    /// The speed a member of `m1` kg walks at under `gravity` m/s², m/s: bodies of every size move alike at one Froude
-    /// number v² / (g L), `WALK_FROUDE` (the dynamic similarity of Alexander and Jayes 1983), its length L the side of
-    /// a cube of its volume (`rho_body`): 0.9 m/s for 30 kg, 1.6 m/s for a tonne.
-    pub fn speed(&self, m1: f64, gravity: f64) -> f64 {
-        (WALK_FROUDE * gravity * self.side(m1)).sqrt()
-    }
-    /// Energy to move one kg one metre through liquid of density `rho` kg/m³ at `v` m/s for a member of `m1` kg, the
-    /// share `wet` of its height under it, J: the drag on the face it pushes, ½ `rho` `DRAG` (`wet` L²) v², L its size
-    /// (`side`), over the share `MUSCLE` of its burning that its muscles turn into that work. At its walking speed
-    /// (`speed`), one Froude number, the same for every size: 5.2 J at `wet` 1 in a liquid as dense as bodies, against
-    /// the walk's 3.0 at 30 kg and 1.0 at a tonne; a body not built to swim pays several times on land's cost to cross
-    /// liquid (Williams 1999).
-    pub fn drag(&self, m1: f64, wet: f64, rho: f64, v: f64) -> f64 {
-        let side = self.side(m1);
-        0.5 * rho * DRAG * wet * side * side * v * v / (m1.max(1e-9) * MUSCLE)
-    }
-    /// The size of a member of `m1` kg, m: the side of a cube of its volume (`rho_body`). It is how high it stands, how
-    /// far it reaches, and the length it walks by (`speed`).
-    pub fn side(&self, m1: f64) -> f64 {
-        (m1.max(0.0) / self.rho_body).cbrt()
-    }
     /// The factor on upkeep of a repair gene (log10): its repair share `c_repair` doubles for each unit.
     pub fn repair(&self, gene: f64) -> f64 {
         1.0 - self.c_repair + self.c_repair * 2f64.powf(gene)
@@ -362,8 +223,8 @@ impl Physics {
         depth / (depth + self.wet_depth)
     }
     /// The share of members that freeze in a month at `t` K when their lethal limit is `limit` K at full activity `act`
-    /// = 1: dormancy hardens them, lowering the limit by `depth` K × (1 - `act`) (a body's `harden`, the cover's own
-    /// gene, `cover::frozen`), and their microclimates spread over `frost_k` below it (laws.md 6.5).
+    /// = 1: dormancy hardens them, lowering the limit by `depth` K × (1 - `act`) (the cover's own gene, `cover::frozen`),
+    /// and their microclimates spread over `frost_k` below it (laws.md 3).
     pub fn frozen(&self, (limit, depth): (f64, f64), t: f64, act: f64) -> f64 {
         ((limit - depth * (1.0 - act) - t) / self.frost_k).clamp(0.0, 1.0)
     }
@@ -386,62 +247,18 @@ impl Default for Physics {
             frost_k: 3.0,
             harden: 20.0,
             c_firm: 20.0,
-            c_strength: 1.12e4,
             c_basal: 4.22e4,
             c_leaf: 2e3,
-            c_brain: 8.5e4,
-            m_ref: 1.0,
-            c_hidden: 5e3,
-            c_memory: 5e3 / 3.0,
-            c_seen: 5e3,
-            c_learn: 1.1049e4,
             e_life: 1e9,
             c_repair: 0.25,
             dormancy: 5.7,
             dormant: 0.02,
-            lethal: 0.5,
-            c_move: 3.0,
-            rho_pass: 5.0,
-            lane: 1.0,
             kernel_near: 40.0,
             kernel_far: 800.0,
             kernel_far_share: 0.1,
-            layer: 10.0,
             rho_body: 1e3,
-            meeh: 0.1,
-            r_coat: 0.9,
-            r_air: 0.12,
-            r_liquid: 0.005,
-            wet_coat: 0.2,
-            take: 0.0089,
-            sweep: 1.0,
-            intake_exp: 0.75,
-            c_handle: 1e3,
-            keep_min: 2.0,
-            shape_noise: 0.5,
-            discount: 0.9,
-            plan_weight: 1.0,
-            blend: 0.3,
-            learn_beta: 0.1,
-            learn_most: 0.5,
-            tensile: 1e7,
-            joint: 0.05,
-            c_form: 1e5,
-            c_join: 1e7,
-            leak: 25.0,
-            form: 0.1,
-            min_kg: 1.0,
-            grab: 0.1,
-            grip: 0.5,
-            bump: 0.05,
-            abrade: 1e-5,
             c_copy: 1e7,
-            c_build: 1e4,
-            row_chance: 0.3,
-            row_noise: 0.3,
-            new_noise: 0.1,
             alike: 4.0,
-            node_floor: 0.01,
             c_light: 0.1,
             cover_mut: 0.063,
             seed_kg: 1e-5,
@@ -490,11 +307,6 @@ impl Config {
         let month = self.days_per_month as u64 * DAY_S;
         Calendar { day: DAY_S, month, year: month * self.months_per_year as u64 }
     }
-    /// `days` d in the world's months (`calendar`): the time the rates of a body's brain are anchored at, a month
-    /// (laws.md 5.4), over which a rate goes as a share, a weight or an amount (`Span`).
-    pub(crate) fn span(&self, days: f64) -> Span {
-        Span(days * DAY / self.calendar().month as f64)
-    }
     /// Check a run's settings before it starts: the time steps, and the numbers of the physics the laws need in range.
     pub fn validate(&self) -> Result<(), String> {
         let (m, p) = (self.days_per_month, &self.phys);
@@ -510,8 +322,8 @@ impl Config {
         require(wake > 0.0 && wake.is_finite(), || format!("wake_share ({wake}) must be above 0"))?;
         // A band's core holds at least its mean depth (`flow::air::Heat`).
         require(self.line_spread >= 1.0 && self.line_spread.is_finite(), || format!("line_spread ({}) must be at least 1", self.line_spread))?;
-        // `dormancy` above 1 (`body::exchange::closing` divides by n - 1); `light_yield` in (0, 1] (a light reaction takes
-        // what it stores over this share).
+        // `dormancy` above 1 (the activity falls as a power of the liquid held, `Physics::activity`); `light_yield` in
+        // (0, 1] (a light reaction takes what it stores over this share).
         require(p.dormancy > 1.0, || format!("dormancy ({}) must be above 1", p.dormancy))?;
         // The bed and the skin of its top are layers of matter: a thickness of zero would give a node no heat capacity.
         require(p.h_mix > 0.0 && p.thermocline >= 0.0, || format!("h_mix ({}) must be above 0 and thermocline ({}) not below", p.h_mix, p.thermocline))?;
@@ -527,26 +339,14 @@ impl Config {
         require(self.rain_drift_m > 0.0, || format!("rain_drift_m ({}) must be above 0", self.rain_drift_m))?;
         // Hardening lowers a lethal limit, never raises it.
         require(p.harden >= 0.0 && p.harden.is_finite(), || format!("harden ({}) must be at least 0", p.harden))?;
-        // A body's surface and the still air at it give its bare conductance (`Body::bare`): both above 0; a coat adds
-        // insulation, never less than none.
-        let (meeh, air, coat, film, wet) = (p.meeh, p.r_air, p.r_coat, p.r_liquid, p.wet_coat);
-        require(meeh > 0.0 && air > 0.0 && coat >= 0.0 && coat.is_finite(), || format!("meeh ({meeh}) and r_air ({air}) must be above 0, r_coat ({coat}) at least 0"))?;
-        // In liquid the same (`Body::conductance`): the still liquid's film above 0, a wet coat a share of a dry one.
-        require(film > 0.0 && (0.0..=1.0).contains(&wet), || format!("r_liquid ({film}) must be above 0, wet_coat ({wet}) from 0 to 1"))?;
         // The soil's shares inside a cell (`inside`) divide by it.
         require(p.soil_m > 0.0, || format!("soil_m ({}) must be above 0", p.soil_m))?;
         // A channel's speed is its discharge over its width times its depth (`Physics::channel`).
         require(p.channel_width > 0.0 && p.channel_depth > 0.0, || format!("channel_width ({}) and channel_depth ({}) must be above 0", p.channel_width, p.channel_depth))?;
-        let floor = p.node_floor;
-        require((0.0..1.0).contains(&floor), || format!("node_floor ({floor}) must be at least 0 and below 1"))?;
         // The dispersal kernel's scales are lengths and its far share a share (`life::lot`).
         require(p.kernel_near > 0.0 && p.kernel_far > 0.0 && (0.0..=1.0).contains(&p.kernel_far_share), || format!("kernel_near ({}) and kernel_far ({}) must be above 0, kernel_far_share ({}) from 0 to 1", p.kernel_near, p.kernel_far, p.kernel_far_share))?;
         let light = p.light_yield;
         require(light > 0.0 && light <= 1.0, || format!("light_yield ({light}) must be above 0 and at most 1"))
-    }
-    /// Spread of the new weights of a brain carried over to other sizes (none in a null run).
-    pub(crate) fn new_noise(&self) -> f32 {
-        if self.null { 0.0 } else { self.phys.new_noise }
     }
 }
 
@@ -587,12 +387,10 @@ impl Default for Config {
             rain_drift_m: 2e4,
             carry: 2e-11,
             wear: 1.4e-11,
-            regrow: 1e-9,
             creep: 6.3e-11,
             hard_min: 0.05,
             bury: 1.6e-10,
 
-            null: false,
             phys: Physics::default(),
         }
     }

@@ -6,7 +6,7 @@ import { Draw, Gpu, Texture, Uniforms } from './gpu';
 import { GroundTiles, TILE_FADE_MS } from './ground';
 import { World, plane } from './data';
 import { MapLook, earthUniforms } from './field-window';
-import { Wet, seaSquares, PATH_LAYER } from './earth';
+import { Wet, seaSquares } from './earth';
 import { half, unhalf } from './canopy';
 
 /** The numbers of the laws inside a cell as the core sends them (wasm/src/lib.rs `meta`, `Physics`), the discharge
@@ -91,14 +91,13 @@ export class Land {
     const [landZ, landT, landIce] = fromLand([0, 1, 3].map(k => Float32Array.from({ length: n }, (_, i) => rows[1 + row * i + k])), wet.sea, W, H);
     const truth = ['true_r', 'true_g', 'true_b'].map(name => plane(w, 0, name));
     const shown = look.mode === 'layer' && w.index.has(look.layer) ? plane(w, 0, look.layer) : null;
-    const worn = look.paths && w.index.has(PATH_LAYER) ? plane(w, 0, PATH_LAYER) : null;
     const put = (k: number, i: number, v: number[]) => data.set(v, 4 * (k * n + i));
     this.melt = rows[0];
     for (let i = 0; i < n; i++) {
       for (let k = 0; k < Math.ceil(row / 4); k++) put(k, i, Array.from(rows.subarray(1 + row * i + 4 * k, 1 + row * i + Math.min(4 * k + 4, row))));
       put(3, i, [ground[0][i] / 255, ground[1][i] / 255, ground[2][i] / 255, sea[i]]);
       put(4, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, landIce[i]]);
-      put(5, i, [shown ? shown[i] / 255 : 0, worn ? worn[i] / 255 : 0, landT[i], landZ[i]]);
+      put(5, i, [shown ? shown[i] / 255 : 0, 0, landT[i], landZ[i]]);
     }
     blurSea(data, Array.from(sea, (s, i) => (s > 0 && data[4 * i] < this.sea - OPEN_SEA_M ? 1 : 0)), W, H);
     // The sea's squares are marked by their air's fall with height as -(it + 1) (land.wgsl `state_on`): only a point

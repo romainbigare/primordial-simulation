@@ -8,14 +8,12 @@ mod apply;
 mod batch;
 mod book;
 mod gather;
-pub mod links;
 pub mod moves;
 pub mod nodes;
 
 pub use apply::{apply, fall_heat};
-pub(crate) use apply::{life_moved, life_sent, life_went};
+pub(crate) use apply::{life_moved, life_sent};
 pub(crate) use apply::ROUNDING;
-pub use links::Links;
 pub use batch::Batch;
 pub(crate) use book::{book_by_array, Booker};
 pub use gather::Moves;
@@ -83,8 +81,8 @@ impl World {
         let kg: f64 = moves.iter().map(|m| m.mol * self.chem.subs[m.k as usize].molar_mass).sum();
         let d = |c: Class, k: usize| if c == to.class { moves.iter().filter(|m| m.k as usize == k).map(|m| m.mol).sum() } else { 0.0 };
         match to.class {
-            Class::Ground | Class::Bed | Class::Deep | Class::Bodies => crate::flow::gain(self, to.index, d, 0.0),
-            Class::Body | Class::Part | Class::Cover => crate::flow::gain(self, to.index, |_, _| 0.0, kg),
+            Class::Ground | Class::Bed | Class::Deep | Class::Aside => crate::flow::gain(self, to.index, d, 0.0),
+            Class::Cover => crate::flow::gain(self, to.index, |_, _| 0.0, kg),
             Class::Air => kg * self.cfg.gravity * crate::flow::air_head(self, to.index),
             Class::Boundary => 0.0,
         }

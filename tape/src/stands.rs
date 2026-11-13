@@ -1,4 +1,4 @@
-//! The cover of a cell as a viewer draws it (laws.md 4.5, docs/tape.md): each of its slots, and of each its plants. The
+//! The cover of a cell as a viewer draws it (laws.md 3, docs/tape.md): each of its slots, and of each its plants. The
 //! model holds each slot's mass, its count of plants, the loose ground their roots need and the share of the cell that
 //! holds them; a plant's height and its stem come from the cover's own law (`cover::height`, `cover::stem`: the buckling
 //! limit, McMahon 1973), and the crown from its share of the ground. The page only draws what they give.
@@ -28,7 +28,7 @@ pub struct Plants {
 /// The plants of a stand of `kg` built cover, `leaf` capture area and `per_m2` plants per m² of its cell, standing on
 /// the share `rooted` of it, of which `walls` is the share its walls make, of walls of density `rho` kg/m³. A kind
 /// stands on the share of its cell that holds its roots alone, its capture area a layer of leaf / rooted there (laws.md
-/// 4.5): its crowns cover of that ground the share whose light the layer stops, 1 - e^-(leaf / rooted), the cover's
+/// 3): its crowns cover of that ground the share whose light the layer stops, 1 - e^-(leaf / rooted), the cover's
 /// own light law (`math::shade`), so a stand the law holds closed to the light is drawn closed; they stand in patches
 /// where they close, each plant's crown the ground it holds there; its stem and height are the cover's law for a plant
 /// of its mass (`cover::stem`, `cover::height`).
@@ -126,10 +126,9 @@ mod tests {
         let mut w = worldgen::testkit::small_world();
         let i = worldgen::testkit::mild_land(&w);
         worldgen::testkit::cover(&mut w, i, 0.4);
-        let worldgen::life::Place::Field(f) = &worldgen::life::KINDS[0].place else { unreachable!("kind 0 is cover") };
-        let mut far = f.genes;
+        let mut far = worldgen::life::KINDS[worldgen::life::LIGHT_ROW].genes;
         far[FROST] -= 30.0;
-        assert!(cover::place(&mut w, i, far, 0, 0.2), "no room for the second slot");
+        assert!(cover::place(&mut w, i, far, worldgen::life::LIGHT_ROW as u32, 0.2), "no room for the second slot");
         let p = Parts::of(&w.chem).expect("chemistry 0 has cover");
         let (mm, area, c) = (p.mm(&w.chem), w.mesh.cells().area()[i], w.life.cover(i));
         let all: f64 = c.held().map(|x| c.built(&mm, x)).sum::<f64>() / area;
