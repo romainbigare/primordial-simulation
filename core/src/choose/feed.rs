@@ -2,13 +2,12 @@
 //! another body (`give`), each by the intake law of bodies (`Body::wanted`).
 
 use crate::body::{self, Body, STRENGTH};
-use crate::life::TAKEN;
 use crate::contract::{self, Layer};
 use crate::chem::{Chemistry, Phase, Stores};
 use crate::event::{Event, EventKind};
 use crate::rng::Rng;
 use crate::units::{BODY_STORES, DAY, MAX_SUBSTANCES};
-use crate::{bond, life::{Chunk, Handle}, store::Node, World};
+use crate::{bond, life::{Chunk, Handle, TAKEN}, store::Node, World};
 
 /// Mass of the amounts `m` (mol of each store) that the body at `t` K uses (`Body::uses`), kg.
 fn used_kg(w: &World, b: &Body, t: f64, m: &Stores) -> f64 {

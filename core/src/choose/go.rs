@@ -2,12 +2,11 @@
 //! what it pushes through wears (`wear`).
 
 use crate::body::{self, Body};
-use crate::life::BROKEN;
 use crate::chem::Phase;
 use crate::store::{Class, Node};
 use crate::units::DAY;
 use crate::contract::{self, Layer};
-use crate::{bond, copy, lanes, nodes, life::{Chunk, Entry}, World};
+use crate::{bond, copy, lanes, nodes, life::{Chunk, Entry, BROKEN}, World};
 
 /// Move to a neighbour, if its force gives the push a mover makes (`bump`; laws.md 3.5): cost by its whole mass at the
 /// real cost of transport (`Physics::walk`), the distance, the climb and the bodies in the way (`lanes::resist`), and
