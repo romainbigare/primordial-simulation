@@ -133,8 +133,6 @@ struct Derived {
     mixes: Vec<Option<Vec<(usize, bool, bool)>>>,
     /// The substances others dissolve in (`Chemistry::mixes` is some), a bit per substance
     solvents: u64,
-    /// The light reactions, by number
-    light: Vec<usize>,
 }
 
 impl Chemistry {
@@ -168,9 +166,8 @@ impl Chemistry {
             let air_cp = if air_cp > 0.0 { air_cp } else { thermo::DIATOMIC_CP };
             let mixes: Vec<_> = (0..self.ns()).map(|k| self.find_mixes(k)).collect();
             let solvents = (0..self.ns()).filter(|&k| mixes[k].is_some()).fold(0, |m, k| m | 1 << k);
-            let light = (0..self.reactions.len()).filter(|&r| self.reactions[r].light).collect();
             let (roles, fixing) = (self.find_life_roles(), self.find_fixing(&minerals));
-            Derived { minerals, air_cp, roles, fixing, mixes, solvents, light }
+            Derived { minerals, air_cp, roles, fixing, mixes, solvents }
         })
     }
 

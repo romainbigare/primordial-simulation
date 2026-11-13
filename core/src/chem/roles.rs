@@ -52,11 +52,6 @@ impl Chemistry {
         self.builds.iter().filter_map(|b| b.outputs.first()).map(|p| p.0 as usize)
     }
 
-    /// The light reactions (`Reaction::light`), by number.
-    pub fn light_reactions(&self) -> &[usize] {
-        &self.derived().light
-    }
-
     /// The body matter: the first output of growth (`build`), if bodies grow.
     pub fn matter(&self) -> Option<usize> {
         self.build.as_ref().and_then(|b| b.outputs.first()).map(|p| p.0 as usize)
