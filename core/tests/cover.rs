@@ -7,11 +7,12 @@ use pcore::event::EventKind;
 use worldgen::life::{Place, KINDS};
 use worldgen::testkit::{dry_lands, eater, small_world, Books};
 
-/// Latitudes of the south and north edges of the frost test's island, degrees: it reaches from the tropics to the cold,
-/// so its air brings every band the heat of the lower latitudes, as a real place gets.
-const FROST_WORLD_LAT: [f64; 2] = [10.0, 72.3];
-/// The warm band and the cold band of that island, between these latitudes, degrees.
-const WARM_BAND: [f64; 2] = [20.0, 30.0];
+/// Latitudes of the south and north edges of the frost test's island, degrees: it reaches from the warm latitudes to
+/// the cold, so its air brings every band the heat of the lower latitudes, as a real place gets.
+const FROST_WORLD_LAT: [f64; 2] = [20.0, 82.3];
+/// The warm band (the island's southmost row of cells) and the cold band of that island, between these latitudes,
+/// degrees.
+const WARM_BAND: [f64; 2] = [30.0, 36.0];
 const COLD_BAND: [f64; 2] = [50.0, 60.0];
 /// The fewest land cells a band holds.
 const BAND_CELLS: usize = 5;
@@ -283,8 +284,8 @@ fn seeds_take_the_slot_in_deficit() {
 }
 
 /// The frost gene of the cover moves down where winters kill (laws.md 4.5): two variants of the starting cover, of
-/// frost genes `FROST_GENES` (3 steps, 15 K, apart), sown on every land cell of one island from the tropics to the
-/// cold (`FROST_WORLD_LAT`), compete for 60 years. Where the ground's winter falls below a gene's lethal limit
+/// frost genes `FROST_GENES` (3 steps, 15 K, apart), sown on every land cell of one island from the warm latitudes to
+/// the cold (`FROST_WORLD_LAT`), compete for 60 years. Where the ground's winter falls below a gene's lethal limit
 /// (lowered by dormancy, 6.5), frost kills the cover of that gene (4.5), and the lower one (dearer to keep: `c_firm`)
 /// wins; where it does not, the higher one wins. The cover's mean frost gene (by built cover) ends more than a step
 /// lower in the cold band (`COLD_BAND`) than in the warm band (`WARM_BAND`). The scene's premises are asserted, so a
