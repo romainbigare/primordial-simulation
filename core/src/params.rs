@@ -576,7 +576,7 @@ impl Default for Config {
             evap: 0.006,
             dissolve: 5e-5,
             wind: 4e5,
-            mix: 1.3e6,
+            mix: 1.06e6,
             cloud_life: 1000.0,
             drop_m: 1e-5,
             drop_forward: 0.85,

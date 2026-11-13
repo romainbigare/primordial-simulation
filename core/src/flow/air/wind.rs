@@ -26,11 +26,13 @@ impl Links {
     }
 }
 
-/// The pushes on each link (`Links`): mixing by eddies, mol/s each way; overturning, mol/s of the lower half from its
+/// The pushes on each link (`Links`): mixing by eddies, mol/s each way, and the heat they carry from its `a` to its
+/// `b` over what the two columns' mean heat per mol carries, W (`stir`); overturning, mol/s of the lower half from its
 /// `a` to its `b` (the upper half comes back), and the heat per mol its upper half holds over its lower, J/mol; and the
 /// conductance of the evening of pressure, mol/(Pa s).
 pub(super) struct Pushes {
     pub(super) mix: Vec<f64>,
+    pub(super) stir: Vec<f64>,
     pub(super) over: Vec<f64>,
     pub(super) rise: Vec<f64>,
     pub(super) even: Vec<f64>,
@@ -38,9 +40,11 @@ pub(super) struct Pushes {
 
 /// One end of a link as its pushes read it (`push`): its air's mol per m³, the mean height of its ground, m, its
 /// latitude, degrees, its warmth, K, and that's gradient [east, south], K per m of the map; the rise of a mol's static
-/// energy over its column's height, J/(mol m); the speed of sound in it, m/s; and its pressure per mol, Pa/mol.
+/// energy over its column's height, J/(mol m); the energy a mol of its near-ground air holds over its column's mean heat
+/// per mol, J/mol (`aloft`); the speed of sound in it, m/s; and its pressure per mol, Pa/mol.
 pub(super) struct End {
     pub(super) rho: f64,
+    pub(super) aloft: f64,
     pub(super) za: f64,
     pub(super) lat: f64,
     pub(super) warmth: f64,
@@ -59,15 +63,26 @@ impl End {
         // gamma = cp / (cp - R) per mol; p = c n with c = RT/V.
         let cp = s.capa[j] / s.nt[j];
         let sound = (cp / (cp - R_GAS) * R_GAS * s.ta[j] * s.nt[j] / s.mass[j]).sqrt();
-        End { rho: s.nt[j] / s.vol[j], za: s.za[j], lat: air.lat()[j], warmth, grad, rise, sound, c: R_GAS * s.ta[j] / s.vol[j] }
+        let aloft = aloft(cp, s.mass[j] / s.nt[j] * cfg.gravity, s.gam[j], (s.zair[j], s.za[j]));
+        End { rho: s.nt[j] / s.vol[j], aloft, za: s.za[j], lat: air.lat()[j], warmth, grad, rise, sound, c: R_GAS * s.ta[j] / s.vol[j] }
     }
+}
+
+/// What a mol of a column's near-ground air holds over the column's mean heat per mol, J/mol, the column of `cp`
+/// J/(mol K) cooling by `gam` K/m with height, its mean at `zair` m, its ground at `za` m, a mol weighing `mg` N: the
+/// near-ground air's static energy cp T + M g z (its temperature at the ground, `at_height`) less the mean's cp T. So
+/// a column's near-ground energy per mol is its heat per mol plus this.
+pub(super) fn aloft(cp: f64, mg: f64, gam: f64, (zair, za): (f64, f64)) -> f64 {
+    cp * gam * (zair - za) + mg * za
 }
 
 /// The pushes on a link from end `a` to end `b`, of width `wd` and length `d` as the stretched air takes them
 /// (`Stretch::length`), `ab` apart on the map, m [east, south]: its eddies, mol/s each way; its overturning, mol/s of the
-/// lower half from `a` to `b`; the heat per mol its upper half holds over its lower, J/mol; and the conductance of its
-/// evening of pressure, mol/(Pa s) (`Pushes`).
-pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab): (f64, f64, [f64; 2])) -> [f64; 4] {
+/// lower half from `a` to `b`; the heat per mol its upper half holds over its lower, J/mol; the conductance of its
+/// evening of pressure, mol/(Pa s) (`Pushes`); and the heat its eddies carry from `a` to `b` over what the columns'
+/// mean heat per mol carries, W: each mol they exchange holds its column's near-ground energy (`aloft`), as eddies stir
+/// the lower air, where the contrast is the ground's.
+pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab): (f64, f64, [f64; 2])) -> [f64; 5] {
     let (rho, depth) = ((a.rho + b.rho) / 2.0, cfg.air_top_m - (a.za + b.za) / 2.0);
     let turn = cfg.rotation * ((a.lat + b.lat) / 2.0).to_radians().sin();
     // The warmth's difference across the link, as its gradient times its offset: on the map's metres, as the stretch
@@ -84,7 +99,7 @@ pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab):
     // pressure, so its c is that much less, and its rate per column of the map (`Stretch::per_column`) is this, with
     // the map's c, over the stretched `d`.
     let even = (a.sound + b.sound) / 2.0 / (d * (a.c + b.c));
-    [mix, over, rise, even]
+    [mix, over, rise, even, mix * (a.aloft - b.aloft)]
 }
 
 /// Three pushes on each link (`push`): the column's pressure, evened in the time sound takes to cross it (Lamb waves,
@@ -94,11 +109,12 @@ pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab):
 /// node as the last state left it (`ends`).
 pub(super) fn pushes(cfg: &Config, st: Stretch, ends: &[End], air: &Level, links: &Links) -> Pushes {
     let v = || Vec::with_capacity(links.id.len());
-    let mut p = Pushes { mix: v(), over: v(), rise: v(), even: v() };
+    let mut p = Pushes { mix: v(), stir: v(), over: v(), rise: v(), even: v() };
     for &l in &links.id {
         let (a, b, wd, d) = (air.a()[l] as usize, air.b()[l] as usize, st.length(air.width()[l]), st.length(air.dist()[l]));
-        let [mix, over, rise, even] = push(cfg, st, (&ends[a], &ends[b]), (wd, d, air.offset(a, b)));
+        let [mix, over, rise, even, stir] = push(cfg, st, (&ends[a], &ends[b]), (wd, d, air.offset(a, b)));
         p.mix.push(mix);
+        p.stir.push(stir);
         p.over.push(over);
         p.rise.push(rise);
         p.even.push(even);
@@ -227,7 +243,7 @@ impl Implicit {
                 };
                 ca[p] = mix / nt[ia] + o.abs() * half(ia, o < 0.0);
                 cb[p] = mix / nt[ib] + o.abs() * half(ib, o > 0.0);
-                k[p] = if q < ng { 0.0 } else { -o * push.rise[l] };
+                k[p] = if q < ng { 0.0 } else { push.stir[l] - o * push.rise[l] };
             }
             let step = line::factor(class, a, (&ca, &cb), dd);
             Flows { ca, cb, k, step }
@@ -245,8 +261,8 @@ type Job<'a> = (usize, [&'a Flows; 2], [Vec<f64>; 2]);
 /// One day of `dd` seconds of the wind over the links between blocks (`border`, their `lines`). First the evening of
 /// pressure (`pressure`); then the eddies and the overturning, each implicit along the lines east and west, then along
 /// those north and south (`Implicit`, `solve::line`), so the day is stable and keeps its rates on any grid; each gas
-/// and the heat on its own task of the pool. What crosses is the sender's air, each mol with its node's heat per mol;
-/// for the overturning by halves, the lower half to the warmer node and the upper half back, as many mol each way, the
+/// and the heat on its own task of the pool. What crosses is the sender's air, each mol with its node's heat per mol,
+/// a mol of the eddies with its node's near-ground energy (`Pushes::stir`); for the overturning by halves, the lower half to the warmer node and the upper half back, as many mol each way, the
 /// upper half holding `Pushes::rise` more heat per mol than the lower. The node the mass enters pays its lift.
 pub(super) fn wind(w: &World, s: &Scratch, (push, border, lines, imp): (&Pushes, &[usize], &[Lines; 2], &Implicit), (x, e): (&mut [f64], &mut [f64]), dd: f64, moved: &mut Moved) {
     if border.is_empty() {
@@ -333,5 +349,26 @@ fn cross((q, flows): (usize, impl Iterator<Item = (usize, f64)>), (x, e): (&mut 
         v[ib] += d;
         count[p] += d;
         kg[p] += mm[q] * d;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::aloft;
+
+    /// Two columns with the same air at the ground but different heat aloft (one cooling faster with height, so a lower
+    /// mean heat per mol) hold the same near-ground energy per mol, and their eddies carry no heat; a contrast of the
+    /// air at the ground carries cp per K of it per mol exchanged.
+    #[test]
+    fn the_eddies_carry_the_near_ground_airs_energy() {
+        let (cp, mg, (zair, za), ground) = (29.1, 0.285, (4000.0, 200.0), 288.0);
+        // A mol's heat at the column's mean, cp T there, and its near-ground energy.
+        let near = |gam: f64, ground: f64| {
+            let mean = cp * (ground - gam * (zair - za));
+            mean + aloft(cp, mg, gam, (zair, za))
+        };
+        assert!((near(0.0045, ground) - near(0.0080, ground)).abs() < 1e-9, "heat aloft moved heat");
+        assert!((near(0.0065, ground + 2.0) - near(0.0065, ground) - 2.0 * cp).abs() < 1e-9);
+        assert!((near(0.0065, ground) - cp * ground - mg * za).abs() < 1e-9);
     }
 }

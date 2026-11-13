@@ -16,14 +16,14 @@ use crate::{World, AIR};
 const SIDES: [[f64; 2]; 4] = [[0.0, -1.0], [0.0, 1.0], [1.0, 0.0], [-1.0, 0.0]];
 
 /// The links of the step to the columns beyond the map's open edges (`SIDES`): per link its node, its side, its pushes
-/// (eddies, mol/s each way; overturning, mol/s of the lower half from the node outward; and the heat per mol its upper
-/// half holds over its lower, J/mol), the share of each gas of the air (`Scratch::state`) of the column beyond and its
+/// (eddies, mol/s each way; overturning, mol/s of the lower half from the node outward; the heat per mol its upper
+/// half holds over its lower, J/mol; and the heat the eddies carry outward over the columns' mean heat per mol, W), the share of each gas of the air (`Scratch::state`) of the column beyond and its
 /// heat per mol, J; and what crossed into the node over the step: per gas and link (`[q * links + l]`) mol, and per
 /// link the heat, J (its sensible heat as the air's days move it, `store::Class::Air`).
 pub(super) struct Edges {
     pub(super) node: Vec<u32>,
     pub(super) side: Vec<usize>,
-    push: Vec<[f64; 3]>,
+    push: Vec<[f64; 4]>,
     share: Vec<Vec<f64>>,
     heat_of: Vec<f64>,
     pub(super) mol: Vec<f64>,
@@ -47,16 +47,17 @@ impl Edges {
                 let spacing = air.area()[j].sqrt();
                 let lat = node.lat - dir[1] * row;
                 let beyond = planet.at(lat, w.season());
-                let end = beyond_end(w, (node, lat, &beyond), st);
-                let ab = [dir[0] * spacing, dir[1] * spacing];
-                let [mix, over, rise, _] = push(&w.cfg, st, (node, &end), (st.length(spacing), st.length(spacing), ab));
                 let share: Vec<f64> = s.state.gas.iter().map(|&k| beyond.share[k]).collect();
                 let all = share.iter().sum::<f64>().max(f64::MIN_POSITIVE);
                 let share: Vec<f64> = share.iter().map(|v| v / all).collect();
-                x.heat_of.push(beyond.t * s.state.gas.iter().zip(&share).map(|(&k, v)| v * s.sp[k].cp).sum::<f64>());
+                let cp = s.state.gas.iter().zip(&share).map(|(&k, v)| v * s.sp[k].cp).sum::<f64>();
+                let end = beyond_end(w, (node, lat, &beyond, cp), st);
+                let ab = [dir[0] * spacing, dir[1] * spacing];
+                let [mix, over, rise, _, stir] = push(&w.cfg, st, (node, &end), (st.length(spacing), st.length(spacing), ab));
+                x.heat_of.push(beyond.t * cp);
                 x.node.push(j as u32);
                 x.side.push(side);
-                x.push.push([mix, over, rise]);
+                x.push.push([mix, over, rise, stir]);
                 x.share.push(share);
             }
         }
@@ -67,12 +68,13 @@ impl Edges {
     /// One day of `dd` seconds of the exchange across the open edges, after the wind, from the air `x` (`[gi * na + j]`)
     /// and its heat `e`, each link implicit (backward Euler) with the column beyond held: the eddies' mol each way and the
     /// overturning's halves, the lower half outward where the column beyond is warmer and the upper back, each half of
-    /// its own air (vapour crowding low, `Scratch::split`), heat by mol, the upper half holding `rise` more per mol. The
+    /// its own air (vapour crowding low, `Scratch::split`), heat by mol, the upper half holding `rise` more per mol, the
+    /// eddies' mol each its column's near-ground energy (`wind::push`, `stir`). The
     /// column beyond lies over low open ground at 0 m: the node pays the lift of the mass that enters it (`wind::lift`).
     pub(super) fn day(&mut self, s: &Scratch, (x, e): (&mut [f64], &mut [f64]), dd: f64, g: f64) {
         let (na, ng, links) = (e.len(), s.state.gas.len(), self.node.len());
         for l in 0..links {
-            let (j, [mix, o, rise]) = (self.node[l] as usize, self.push[l]);
+            let (j, [mix, o, rise, stir]) = (self.node[l] as usize, self.push[l]);
             let split = |q: usize| s.split[q * na + j];
             let nt: f64 = (0..ng).map(|q| x[q * na + j]).sum::<f64>().max(f64::MIN_POSITIVE);
             let upper: f64 = (0..ng).map(|q| x[q * na + j] * split(q)).sum();
@@ -95,16 +97,19 @@ impl Edges {
                 *v = now;
             }
             let both = mix + o.abs();
-            let now = (e[j] + dd * (both * self.heat_of[l] + o * rise)) / (1.0 + dd * both / nt);
+            let now = (e[j] + dd * (both * self.heat_of[l] + o * rise - stir)) / (1.0 + dd * both / nt);
             self.heat[l] += now - e[j];
             e[j] = now - if kg > 0.0 { g * kg * s.za[j] } else { 0.0 };
         }
     }
 }
 
-/// The column of the planet's air `beyond` an edge node `node`, at latitude `lat`, as an end of its link
-/// (`wind::End`): over low open ground at 0 m, its warmth's gradient toward the south on the map's metres as the
-/// stretched air takes them, the node's rise and sound (its pressure is the planet's: no evening across the edge).
-fn beyond_end(w: &World, (node, lat, beyond): (&End, f64, &Beyond), st: Stretch) -> End {
-    End { rho: beyond.mol / w.cfg.air_top_m, za: 0.0, lat, warmth: beyond.warmth, grad: [0.0, st.per_map_m(beyond.south)], rise: node.rise, sound: node.sound, c: node.c }
+/// The column of the planet's air `beyond` an edge node `node`, at latitude `lat`, a mol of it holding `cp` J/K, as an
+/// end of its link (`wind::End`): over low open ground at 0 m, where its air is at its warmth (its near-ground energy
+/// per mol over its mean heat, `wind::aloft`, is cp times its warmth less its temperature), its warmth's gradient
+/// toward the south on the map's metres as the stretched air takes them, the node's rise and sound (its pressure is
+/// the planet's: no evening across the edge).
+fn beyond_end(w: &World, (node, lat, beyond, cp): (&End, f64, &Beyond, f64), st: Stretch) -> End {
+    let aloft = cp * (beyond.warmth - beyond.t);
+    End { rho: beyond.mol / w.cfg.air_top_m, aloft, za: 0.0, lat, warmth: beyond.warmth, grad: [0.0, st.per_map_m(beyond.south)], rise: node.rise, sound: node.sound, c: node.c }
 }

@@ -656,15 +656,23 @@ as well as its top (1.1), so a deep sea takes up gas in months; a real one takes
 
 ### 1.6 Wind
 `flow::air::wind`, `daily`. Eddies (`mix`) even out the air within a day over the distance sqrt(`mix` × day), about
-340 km (Taylor 1922, `daily::BLOCK_DAY`): the air nodes lie in blocks of that side on the map, and each day every gas of
+300 km (Taylor 1922, `daily::BLOCK_DAY`): the air nodes lie in blocks of that side on the map, and each day every gas of
 a block is shared among its nodes by their volumes and its heat so that each has the block's warmth (its temperature
 raised to a common height by the block's drop with height), so its pressure, shares and warmth are the block's. An
 island smaller than a block (the islands of 64 and 128 cells) is one block, and has no wind: only the evening. Across the links between blocks gas moves by three pushes, each day from the air at
 its start. **Pressure** (p = nRT/V), evened in the time sound takes to cross the link (Lamb waves, Lindzen 1990),
 explicitly: the sender's air, each link at most half of what evens it over the count of links of the busier of its
 nodes, so no node gives more than half of each gas it holds. **Known limit:** sound is faster than that, so a pressure
-difference across many links of blocks takes days to even out. **Eddies** mix the columns (`mix`, width over length),
-each mol with its node's heat. **Overturning**: the lower half flows to the warmer column and the upper half back, a
+difference across many links of blocks takes days to even out. **Eddies** mix the columns: as many mol each way, at
+`mix` × the column's mol × width over length a second, so every gas, the vapour with its latent heat, mixes by its
+share of the column. The heat a mol of them carries is its node's near-ground air's static energy, cp T + M g z at the
+column's ground (`wind::aloft`), not the column's mean heat per mol: eddies stir the lower air, where the contrast is
+the ground's, and a column's heat aloft (how fast it cools with height) is not theirs to even out. Both sides book the
+one number, so the books stay exact; the energy a mol carries over the column's mean heat goes as a fixed flux of
+the day, from the air at the step's start. So their heat goes as -(p_s / g) `mix` ∇h, h the near-ground air's energy
+per kg, the diffusion the eddies of the measured climate follow (Hwang and Frierson 2010). **Known limit:** the vapour
+goes by its share of the whole column, not the near-ground air's, so its latent heat carried is about a third of what
+that diffusion of the near-ground air's moisture would carry. **Overturning**: the lower half flows to the warmer column and the upper half back, a
 mass flux of `wind` per K/m of the warmth gradient along the link (its difference over its length), turned by the
 planet's rotation (`rotation`), through half the link's cross-section, so it does not depend on the size of the nodes.
 Each half carries the air of the node it leaves, vapour crowding low, each mol with its node's heat per mol, and the
