@@ -5,7 +5,7 @@
 use crate::chem::{Chemistry, Phase, Reaction};
 use crate::store::{Moves, Node};
 use crate::units::MAX_SUBSTANCES;
-use crate::World;
+use crate::{World, AIR};
 
 /// What a life of a cell changes outside itself in a month: per substance the mol it takes in (+) or gives out (-), the
 /// heat its reactions release, J, and per substance its remains, mol; per gas what the cell's share of its air node
@@ -47,14 +47,14 @@ impl<const N: usize> Books<N> {
     }
 }
 
-/// Book what a life of cell `i` (air node `j`, ground at `t` K), which held `e` J and was given `set_aside` J from its
+/// Book what a life of cell `i` (ground at `t` K), which held `e` J and was given `set_aside` J from its
 /// aside node, took and gave in its month (`Books`): the light set aside for it from its aside node; gases from and to
-/// the air (taken from the air node with their heat at its temperature and their latent heat, given into the aside
+/// the air (taken from its air node with their heat at its temperature and their latent heat, given into the aside
 /// node with theirs, as bodies breathe); liquids and minerals from and to its ground, with their heat; its remains to its
 /// ground. Last its heat comes to `target` J (its heat capacity at the temperature it ends at) with its ground. Returns
 /// the heat it holds then, J.
-pub fn book<const N: usize>(w: &World, moves: &mut Moves, (i, j, t): (usize, usize, f64), (e, set_aside): (f64, f64), target: f64, b: &Books<N>) -> f64 {
-    let chem = &w.chem;
+pub fn book<const N: usize>(w: &World, moves: &mut Moves, (i, t): (usize, f64), (e, set_aside): (f64, f64), target: f64, b: &Books<N>) -> f64 {
+    let (chem, j) = (&w.chem, w.mesh.up(i, 0, AIR));
     let (mut e, lift, ta, ground) = (e + set_aside + b.heat, w.lift(i), moves.t_air(w, j), Node::ground(i));
     moves.take(w, Node::aside(i), 0, 0.0, set_aside);
     let cap = moves.heat_cap_ground(w, i);

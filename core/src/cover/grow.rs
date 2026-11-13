@@ -11,7 +11,7 @@ use super::{dec, Cover, Parts, EMPTY_KG, FUEL, LIGHT, MATTER, MOIST, NO_ROOT, NP
 use crate::life::SPENT;
 use crate::chem::{Chemistry, Phase};
 use crate::store::{Class, Node};
-use crate::{life::Chunk, Counters, World, AIR};
+use crate::{life::Chunk, Counters, World};
 
 /// The month of the cover of every cell of chunk `d`, in the order of its cells; its seeds wait in `Cover::seeds` until
 /// all chunks ran (`land`).
@@ -58,7 +58,7 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
     let (b, caught) = live(w, c, p, &a, (i, dt), counts);
     // The light its aside node set aside for it (`Cover::keep`), as far as the node holds it.
     let set_aside = (keep as f64 * caught).min(moves.heat(w, Node::aside(i))).max(0.0);
-    c.e = crate::life::book(w, moves, (i, w.mesh.up(i, 0, AIR), a.t), (c.e, set_aside), c.cap(&w.chem, p) * a.t, &b);
+    c.e = crate::life::book(w, moves, (i, a.t), (c.e, set_aside), c.cap(&w.chem, p) * a.t, &b);
 }
 
 /// The month over `dt` s of the cover `c` of cell `i` (its place on the map, where its seeds go from) that reads `a`:

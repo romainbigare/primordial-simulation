@@ -819,7 +819,7 @@ seeds fill it:
   kernel of two scales, a near and a far one, each an isotropic Gaussian, `kernel_near` and `kernel_far`: most within
   tens of metres, a long tail to km, Clark et al. 1999); the lots of a cell make a packet each (`seed::send`; what lands
   in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step ×
-  `cover_mut`), of body matter first and then walls (an embryo and its store); all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
+  `mut_size`), of body matter first and then walls (an embryo and its store); all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
   its layer (`math::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
   where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005). By the same marginal rule
   run backwards a full slot also sheds the layers of its canopy that do not pay (`grow::shed`): in its patch its light
