@@ -334,11 +334,25 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   as seeds; by `dormant` and `e_life` a lying seed would last about 700 years (the row says years to decades); seeds
   lie on low-ground cells near the shore and the two layers bleed over the liquid there; nothing hides a buried
   plant from the light (the air's step lets the canopy catch light over any snow). To measure again on the new air.
-- In work, life track, on paper only: the design of the first takers of the cover (F1), by a designer with no
-  worktree: `scratchpad/life/f1-design.md`. The orchestrator reviews it before anything is built.
-- In work, the drawn worlds' third round (the noise's unit in km so a hill is a hill's size on every map, lands
-  that look grown on maps of 128, straits that bend, the straight-edged shelves): its own helper and worktree;
-  worlds of 64 squares must stay the same to the last digit; scratch `scratchpad/islands/round3/`.
+- Designed, not built: the first takers of the cover (F1), `review/f1-design.md`, with the orchestrator's
+  decisions at its top (thirst is a law of F1: a body drinks open liquid only and pays the way to it). Its builder
+  starts when a heavy helper's place is free; commits 1 and 2 of its plan do not wait for the air.
+- On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
+  lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
+  a world of 22 squares is one plain dome, so the page's first world is 32 squares, and its size field goes to 128
+  (made in 38 s, 1.6 months a second in a headless browser). Pictures: `scratchpad/islands/round3/`. Open:
+  - **A world hangs**: `ew run --seed 9 --size 128 --band 20,65 --roster` stops in year 12: two land cells in the
+    middle of the map (4942, 5213) get a NaN ground heat, then `change/kernel.rs` `sub_step` never ends. The NaN
+    comes from a law before Change, likely Flow's planet air. The page's climates use the band. To find first:
+    the source of the NaN, and whether it is there on `surface-step`; a NaN must stop a run loudly, never hang it.
+  - Land in the map's edge row in 14 of 60 worlds of 128 (2 of 60 at 64): the low ground does not ring the map
+    there. To mend: the ground falls to the low ground within a margin in km of the edge.
+  - The shelf's platforms with straight edges: mended on the local branch `round3-shelf-lobes` (4b488e0, straight
+    distance in place of steps along the grid). It moves the worlds of 64 squares, so it lands with the air
+    package's setting of the key numbers' references.
+  - Each land sits in an even shallow ring (the low ground follows the rise's smooth fall); some small rises have
+    flat tops. Taking the rises' fall at the warped point bends the straits but pushes land onto the edge: dropped
+    (`scratchpad/islands/round3/B1_warp.diff`).
 - Timed in turn on a quiet machine, a 32 island of plants, 30 years: 261 ms a year before the contract, 262 to 266
   after.
 
@@ -395,7 +409,7 @@ The slow tests of bodies that were skipped once (`core/tests/choose.rs`, `lots.r
 ## 6. The live world for the owner
 
 The owner tests an artifact: https://claude.ai/artifact/GKxSQCDfgBAwwL2B8RvEuC (private to them). It shows main
-(its Version 43, "Lakes without blocks"). To update it after a push to main:
+(the version label says what it shows). To update it after a push to main:
 1. `cd web && npm run build && npm run wasm` (makes `web/dist/index.html` and `web/dist/ew.wasm`).
 2. Copy `ew.wasm` to a scratch folder, and the page with these removed (regexes, case-insensitive, with `\b` after
    the tag names): the doctype, the `html`, `head` and `body` tags, the `meta charset` and `meta viewport` tags, the
