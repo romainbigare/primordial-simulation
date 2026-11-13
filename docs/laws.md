@@ -481,7 +481,9 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   over the cell's own ground: the share of it under the level of what stands over its pores (`curve::Fill::wet`) as a
   column with that liquid over the share, the rest as one whose liquid is what its pores hold, by area;
   where a soft cover lies, as it is at the step's end, so a cover that melts away darkens the ground in its step. Snow
-  reflects from the step after it falls.
+  reflects from the step after it falls. **Known limit:** a substance reflects the same share of the sun at every
+  height of the sun and in every state (its `refl`), where a smooth liquid reflects more of a low sun (Fresnel) and
+  old or wet snow less than fresh.
 - **Heat radiation** (`radiation::band_depths`, `radiation::Heat`): surfaces emit σT⁴, split in three bands of wavelength
   (`Chemistry::heat_spans`), each body sending in a band its share at its own temperature (Planck's law,
   `Chemistry::heat_shares`; the shares sum to 1). In each band a gas's lines have the optical depth
@@ -558,7 +560,11 @@ each would hold over their own saturation at the ratio the node rained at, so it
 1 - e^(-d / `rain_drift_m`) of it, d the place's width (the root of its area), and the rest drifts with the wind while
 its drops form and fall and lands over all the node's cells by the share of its air over each (the linear theory of
 orographic rain, Smith and Barstad 2004: a cloud time and a fallout time of about 1000 s each carry rain some 20 km at
-10 m/s), so no cell under raining air gets none (`seen::Seen::landing`). It lands after the step, so a cell does not
+10 m/s), so no cell under raining air gets none (`seen::Seen::landing`). **Known limit:** on a map whose cells are
+as wide as an air node (the globe), the cells that see a node reach half a node into the next rows, so part of a
+node's rain lands a row away, toward the wetter node's neighbours; and no frozen cover moves. So the polar band of the
+lifeless globe gains snow it does not lose: its ice grows, about 40 m in 40 years (an island's cells are far smaller
+than its air's nodes, and its ice holds steady). It lands after the step, so a cell does not
 evaporate it again within that step, and it reaches each cell at the temperature of the air touching it (`touching`),
 the air paying what warms it on the way down. Where the node's air at its mean ground is below the gas's melting point
 it falls as a solid (snow) and the air keeps the fusion enthalpy its freezing frees; condensing frees the vaporisation
@@ -600,9 +606,12 @@ from the planet's own yearly sunlight by latitude, 1 - (pole's / equator's)^¼: 
 Δ = 0.198 and φ = 22.2°. The share of the flux down the gradient falls as 1 - (latitude / φ)² from the equator to
 none at φ, where the theory's cell ends, and is none beyond; the part turned across the link stays. With `rotation` 0
 the cell spans the planet. The same at a link inside the map and at an island's open edge, by the link's latitude; an
-island alone is at its own rows' latitudes (`lat_south`, `lat_north`). **Known limit:** the cell of the middle
+island alone is at its own rows' latitudes (`lat_south`, `lat_north`). **Known limits:** the cell of the middle
 latitudes that turns the other way (Ferrel's), which the eddies drive, is not made; past the cell the eddies alone
-carry heat poleward.
+carry heat poleward. The cell is narrower than the measured one (22° against about 30°), as its edge is taken from
+the yearly sun's contrast (0.198), where the measured contrast of the air in radiative balance is nearer a third
+(Held and Hou 1980 take 1/3); and it is weaker: at half its edge its lower half carries about a fifth of the measured
+cell's 1e11 kg/s (`wind`).
 Each half carries the air of the node it leaves, vapour crowding low, each mol with its node's heat per mol, and the
 upper half holds more heat per mol than the lower by the rise of the static energy cp T + M g z over half the column's
 depth, (M g - cp gam) × depth / 2, gam the column's drop with height (none where the air cools with height as fast as
