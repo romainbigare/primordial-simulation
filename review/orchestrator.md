@@ -130,7 +130,12 @@ the true bed, mouths that reach their lake or sea with a fan. The tiles' second 
 lakes, ponds and the sea take the rivers' water (`river_seen` in `lib/style.wgsl`); nothing of a channel is drawn
 under standing water. The owner: "amazing, much better".
 
-**Known faults of the rivers (in work, the rivers' helper, round five):** the owner's wish first: the shore's pale
+**Round five of the rivers is on `wip/rivers` (5ea498ce), not on main:** the river cuts a dark wedge through the
+shore's band and ends at the shore line with a jump of width and tone; tiny rills cut needles through the band; with
+no crown in drawn water (`FILM_M`, good) the band lies bare, wide and nearly white. A new helper works in the same
+worktree (`.claude/worktrees/agent-ab76b80ac68603520`; its scripts in the scratch folder `rv/`).
+
+**Known faults of the rivers (in work):** the owner's wish first: the shore's pale
 band must break where a river crosses it, the river's water running through into the lake or sea (and the sea's foam
 rim too). Then: crowns in standing water 5 to 30 cm deep; thin straight-edged outlines in the forest near ponds (a
 step in the drawn ground along a sample's edge); the wander reads as a saw from afar; pale straight-edged patches in
