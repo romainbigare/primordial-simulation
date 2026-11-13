@@ -69,7 +69,7 @@ fn hot_energy_rich_node_keeps_burning() {
 /// nothing reacts (the air holds none of the gas that burns in it alone), sleeps `sleep_days` after its first step.
 #[test]
 fn a_node_sleeps_by_its_own_rates() {
-    let mut w = worldgen::new_world(1, 16, 16);
+    let mut w = worldgen::testkit::one_rise(1, 16, 16);
     let (na, hot, cold) = (w.mesh.level(AIR).n(), 17, 40);
     for i in [hot, cold] {
         empty_cell(&mut w, i);
@@ -396,7 +396,7 @@ fn the_liquid_gives_back_the_gas_it_holds_when_the_air_thins() {
 /// a cell whose pores are dry holds none.
 #[test]
 fn the_pores_of_the_land_hold_the_dissolved_mineral_where_rock_and_liquid_meet() {
-    let mut w = worldgen::new_world(1, 16, 16);
+    let mut w = worldgen::testkit::one_rise(1, 16, 16);
     let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
     let land: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) >= 0.0 && w.g(LIQUID, i) == 0.0).collect();
     assert!(land.iter().all(|&i| w.store.amounts(Class::Ground)[DISSOLVED * n + i] == 0.0), "land started with the mineral");
@@ -499,7 +499,7 @@ fn dead_matter_on_the_ground_returns_the_minerals_to_the_ground() {
 #[test]
 fn dead_frame_rots_on_moist_land_in_a_year() {
     let lost = |wet: bool| {
-        let mut w = worldgen::new_world(1, 16, 16);
+        let mut w = worldgen::testkit::one_rise(1, 16, 16);
         let i = (0..w.mesh.cells().n()).find(|&i| w.is_land(i)).expect("land");
         assert!(pcore::cover::sums(&w).is_empty(), "a world with no life");
         let liquid = if wet { w.cfg.phys.field * w.cfg.phys.porosity * loose_volume(&w, i) / w.chem.molar_volume(LIQUID, Phase::Liquid) } else { 0.0 };

@@ -9,4 +9,3 @@ pub mod terrain;
 pub mod testkit;
 
 pub use chemistry::{chemistry0, Init};
-pub use terrain::new_world;

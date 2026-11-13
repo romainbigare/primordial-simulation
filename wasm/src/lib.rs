@@ -193,8 +193,8 @@ pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
 }
 
 /// Make the ground of the island `new_world` makes from `seed`, `size`, the latitudes `south` and `north` and `drawn`
-/// (`tape::Ground`): its terrain and its map's squares (`worldgen::new_world`; how its cells are cut does not change the
-/// ground), with the default laws.
+/// (`tape::Ground`): its terrain and its map's squares (`worldgen::terrain::island_ground`; how its cells are cut does
+/// not change the ground), with the default laws.
 #[no_mangle]
 pub extern "C" fn ground(seed: u32, size: u32, south: f64, north: f64, drawn: u32) {
     let (seed, cfg) = (seed as u64, island((south, north)));
