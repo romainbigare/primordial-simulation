@@ -3,7 +3,7 @@
 # dense_drop K per g/kg (how far what is dissolved lowers that; none: 0), hard/str 0..1,
 # refl [[solid rgb], [liquid rgb]], ir m2/mol, sat mol/m2 (column past which the optical depth grows as the square root of
 # the amount; none: always in proportion), sw m2/mol and swsat mol/m2 (the same for sunlight; none: 0),
-# sol mole fraction (for a gas that cannot condense on the ground: dissolved under
+# ray m2/mol (the sunlight its molecules scatter; none: 0), sol mole fraction (for a gas that cannot condense on the ground: dissolved under
 # 101 kPa of it at 298 K; for a solid that melts above the ground's warmth: the mole fraction of its solution at saturation,
 # which moves with the liquid), cond W/(m K), hf kJ/mol of the solid (of a substance that is liquid at 290 K: its measured value less lf; gas:
 # less lf and lv), lv/lf kJ/mol (none: Trouton's and Richards's rules), rupture MPa. Where a number is derived, the derivation is in docs/numbers.md.
@@ -40,6 +40,7 @@ hard = 0.0
 str = 0.0
 refl = [[0.9,0.9,0.9],[0.9,0.9,0.9]]
 ir = 0.0
+ray = 2.62e-7
 sol = 1.2e-5
 cond = 0.03
 hf = -7.3745
@@ -54,6 +55,7 @@ hard = 0.0
 str = 0.0
 refl = [[0.8,0.85,0.95],[0.7,0.8,0.95]]
 ir = 0.0
+ray = 2.25e-7
 sol = 2.3e-5
 cond = 0.03
 hf = -8.433

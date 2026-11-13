@@ -53,16 +53,17 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     s.spare.response = response.rows();
 }
 
-/// What the air of each node does to sunlight over the step (`Column`): its gases that absorb it, per m² of the node
-/// (`Chemistry::sun_depth`), under the sun's mean height at its latitude (`sun_height`).
+/// What the air of each node does to sunlight over the step (`Column`): its gases that absorb it (`Chemistry::sun_depth`)
+/// or scatter it (`Substance::scatter`), per m² of the node, under the sun's mean height at its latitude (`sun_height`).
 fn columns(w: &World, s: &Scratch, decl: &[f64]) -> Vec<Column> {
     let (air, chem) = (w.mesh.level(AIR), &w.chem);
     let na = air.n();
-    let lit: Vec<usize> = s.state.gas.iter().copied().filter(|&k| chem.subs[k].sw_abs > 0.0).collect();
+    let lit: Vec<usize> = s.state.gas.iter().copied().filter(|&k| chem.subs[k].sw_abs > 0.0 || chem.subs[k].scatter > 0.0).collect();
     (0..na)
         .map(|j| {
             let cols: Vec<(usize, f64)> = lit.iter().map(|&k| (k, w.store.amounts(Class::Air)[k * na + j] / air.area()[j])).collect();
-            Column::of(|slant| cols.iter().map(|&(k, c)| chem.sun_depth(k, c * slant)).sum(), sun_height(w.cfg.sun, air.lat()[j].to_radians(), decl))
+            let depths = |slant: f64| cols.iter().fold([0.0; 2], |[a, b], &(k, c)| [a + chem.sun_depth(k, c * slant), b + chem.subs[k].scatter * c * slant]);
+            Column::of(depths, sun_height(w.cfg.sun, air.lat()[j].to_radians(), decl))
         })
         .collect()
 }

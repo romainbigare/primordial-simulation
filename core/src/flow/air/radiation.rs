@@ -59,30 +59,35 @@ const DIFFUSE: f64 = 1.66;
 
 /// What a column of air does to sunlight (laws.md 1.4), per unit of the light that enters it: on the way down along the
 /// sun's slant, then on the way up as diffuse light of what the surface reflects (`DIFFUSE`), each pass [absorbed by its
-/// gases, passed].
+/// gases, scattered by its molecules, passed]. Of what a pass scatters, half goes on up and half down (single scattering
+/// with a phase function that sends as much forward as back, as Rayleigh's does).
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Column {
-    down: [f64; 2],
-    up: [f64; 2],
+    down: [f64; 3],
+    up: [f64; 3],
 }
 
 impl Column {
-    /// The column whose gases absorb with the optical depth `absorbs(slant)` on a path `slant` times its height
-    /// (`Chemistry::sun_depth` of the amount on the path), under the sun's mean height `mu` (`sun_height`).
-    pub(crate) fn of(absorbs: impl Fn(f64) -> f64, mu: f64) -> Column {
+    /// The column whose gases absorb and scatter with the optical depths `depths(slant)` = [absorbed, scattered] on a
+    /// path `slant` times its height (`Chemistry::sun_depth` of the amount on the path, and `Substance::scatter` times
+    /// it), under the sun's mean height `mu` (`sun_height`).
+    pub(crate) fn of(depths: impl Fn(f64) -> [f64; 2], mu: f64) -> Column {
         let pass = |slant: f64| {
-            let gone = one_minus_exp(absorbs(slant));
-            [gone, 1.0 - gone]
+            let [absorbs, scatters] = depths(slant);
+            let (all, gone) = (absorbs + scatters, one_minus_exp(absorbs + scatters));
+            if all > 0.0 { [gone * absorbs / all, gone * scatters / all, 1.0 - gone] } else { [0.0, 0.0, 1.0] }
         };
         Column { down: pass(1.0 / mu), up: pass(DIFFUSE) }
     }
 
     /// Per unit of the sunlight that enters it at the top, over a surface that reflects the share `alb`: [what reaches
-    /// the surface; what the air absorbs, on the way down and of what the surface reflects; what goes back to space].
-    /// What the surface absorbs, (1 − `alb`) of the first, and the other two add up to 1.
+    /// the surface, in all its passes; what the air absorbs; what goes back to space]. The surface gets what comes down,
+    /// D, and again the share b scattered back down of what it sends up, so in all D / (1 − `alb` b); what it absorbs,
+    /// (1 − `alb`) of that, and the other two add up to 1.
     pub(crate) fn shares(&self, alb: f64) -> [f64; 3] {
-        let ([a1, t1], [a2, t2]) = (self.down, self.up);
-        [t1, a1 + a2 * alb * t1, t2 * alb * t1]
+        let ([a1, s1, t1], [a2, s2, t2]) = (self.down, self.up);
+        let ground = (t1 + 0.5 * s1) / (1.0 - alb * 0.5 * s2);
+        [ground, a1 + a2 * alb * ground, 0.5 * s1 + (t2 + 0.5 * s2) * alb * ground]
     }
 }
 
@@ -280,7 +285,7 @@ mod tests {
     #[test]
     fn a_columns_sunlight_closes() {
         for (depth, mu) in [(0.0, 0.5), (0.05, 0.3), (0.2, 0.7), (3.0, 1.0)] {
-            let c = Column::of(|slant| depth * slant.sqrt(), mu);
+            let c = Column::of(|slant| [depth * slant.sqrt(), 0.5 * depth * slant], mu);
             let mut was = f64::NEG_INFINITY;
             for alb in [0.0, 0.1, 0.5, 0.9] {
                 let [ground, air, space] = c.shares(alb);
@@ -289,6 +294,20 @@ mod tests {
                 assert!(air >= was, "the air absorbed less over a brighter surface: {air} after {was}");
                 was = air;
             }
+        }
+    }
+
+    /// Clear air scatters more of the sunlight back to space the more of it there is and the lower the sun stands; with
+    /// nothing in it, all the light reaches the ground.
+    #[test]
+    fn the_clear_air_scatters_more_with_its_column() {
+        assert_eq!(Column::of(|_| [0.0; 2], 0.5).shares(0.0), [1.0, 0.0, 0.0]);
+        let back = |depth: f64, mu: f64| Column::of(|slant| [0.0, depth * slant], mu).shares(0.0)[2];
+        let mut was = 0.0;
+        for depth in [0.02, 0.05, 0.1, 0.2] {
+            let b = back(depth, 0.5);
+            assert!(b > was && back(depth, 0.3) > b && b < 0.5, "depth {depth}: {b} back to space after {was}");
+            was = b;
         }
     }
 }

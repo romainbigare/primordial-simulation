@@ -77,6 +77,7 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
                 ir_sat: 0.0,
                 sw_abs: 0.0,
                 sw_sat: 0.0,
+                scatter: 0.0,
                 solubility: r.f64().powi(3),
                 conductivity: if melt > T_SURF { 0.5 + 60.0 * coh * coh } else { 0.03 },
                 hf: -120e3 * n * spread * (0.4 + 0.7 * r.f64()),
