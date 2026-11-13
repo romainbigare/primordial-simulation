@@ -572,7 +572,7 @@ impl Default for Config {
             cloud_ir: 6.7,
             line_spread: 4.0,
             rain_time: 86400.0,
-            moist_min: 0.7,
+            moist_min: 0.5,
             rain_drift_m: 2e4,
             carry: 2e-11,
             wear: 1.4e-11,

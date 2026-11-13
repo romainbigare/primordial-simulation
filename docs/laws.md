@@ -538,10 +538,11 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   mean ground; the air touching a cell is the air it sees (bilinearly, its four nearest nodes), colder by the drop with
   height from that air's mean height.
 - **Clouds** (`exchange::cloud`): each air node's cloud covers the share b of its sky that is saturated
-  (`seen::saturated`, 1.5), a mean over the step before; under it the scattering depth x = condensation rate in the
-  cloud / `cloud`, from what the node rained; it reflects b x / (1 + x) of the sunlight (two-stream, Lacis and Hansen
-  1974) and absorbs heat radiation at depth `cloud_ir` × the node's rate / `cloud` (Stephens 1978). **Known limit:** their depth is spread like the air's mass, not set where they condense. The ground also
-  trades sensible heat with the air (`sensible`).
+  (`Seen::clouded`, 1.5), a mean over the step before. Under it the scattering depth is x = the node's condensation
+  rate / b / `cloud`, from what the node rained; the node reflects b x / (1 + x) of the sunlight (two-stream, Lacis and
+  Hansen 1974) and absorbs heat radiation at depth `cloud_ir` × the node's rate / `cloud` (Stephens 1978). **Known
+  limit:** their depth to heat radiation is spread over the node's whole sky and like the air's mass, not set where
+  they condense. The ground also trades sensible heat with the air (`sensible`).
 - **The bodies' node** (`Class::Bodies`, one per cell): light the cover absorbs warms the ground, except the share its
   light reaction stores (`Cover::keep`), booked from the sun into this node; the cover takes it at its month, and what
   it does not claim goes back to the ground before each air step (`survey::release`).
@@ -565,13 +566,16 @@ one stands over its land (`World::second_film`: the cover's open pores, 4.5), in
 open rate while the share of the ground's liquid behind it lasts (no wet threshold: its roots reach that liquid),
 from what the first leaves; both inside the surface's balance, taking the heat it held at the node's temperature; a node over a substance's boiling point boils of it what its heat over that
 point pays, cooling to it (`land::boil_off`; gas coming out of the liquid too). **Rain**: a node's air is not evenly
-moist. Over each cell it is `seen::MOIST_PARTS` equal parts that saturate one after another as the node moistens: the
-moistest when the node holds `moist_min` of what saturates the air touching the cell (colder higher up), the last at
-saturation, so the share saturated is 1 − √((1 − r) / (1 − `moist_min`)) at the node's ratio r to that (Sundqvist et
-al. 1989; it is a uniform spread of moisture whose saturated part holds no more than saturates it, Tompkins 2005).
-Each saturated part rains out in `rain_time` what the node holds over the ratio it saturates at, so the node's mean
-stays under saturation; the saturated share is the cloud's share of the sky (1.4). The surface's evaporation reads
-the node's mean vapour. Each node's air
+moist (`seen`). Its moisture is spread evenly from wetter to drier, over a width of 1 − `moist_min` of what saturates
+it either side of its middle, and its saturated part holds no more than saturates it. So its moistest air saturates
+when the node holds `moist_min` of what saturates it, all of it at saturation, and between them the share
+b = 1 − √((1 − r) / (1 − `moist_min`)) at the node's ratio r to that (`seen::saturated`; Sundqvist et al. 1989, whose
+critical humidity is measured from cloud cover against humidity, Quaas 2012). The air over each cell is
+`seen::MOIST_PARTS` equal parts that saturate one after another by that law (`seen::parts`), against what saturates
+the air touching the cell (colder higher up). Each saturated part rains out in `rain_time` what the node holds over
+the ratio the part saturates at: only the saturated share condenses, and the node's mean stays under saturation. That
+share is the cloud's share of the sky (`Seen::clouded`, 1.4). Evaporation reads the node's mean vapour: it is linear
+in the vapour, so the mean over the parts is what the mean vapour gives. Each node's air
 lies over the cells that see it (bilinearly), each by its share; the cells' saturation is taken as the step starts, as
 a ratio to the node's, so the day sums the parts in rising order. In the air's day the vapour of each block (1.6), evened
 as the eddies even it, follows what its cells evaporate by their law and what its nodes rain: both are linear in the

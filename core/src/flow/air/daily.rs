@@ -294,7 +294,10 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     (0..s.state.gas.len() * na).for_each(|at| out.x[at] += mean[at] * share);
     // The share of each node's sky its clouds cover at the day's mean vapour (`Seen::clouded`), the most of its gases'.
     for (j, c) in out.cloud.iter_mut().enumerate() {
-        let of = |(y, ac): (usize, &Active)| ground.wet().nodes[j].clouded(y, mean[ac.gi * na + j] / saturating(w, s, ac, j, ts[j]), w.cfg.moist_min);
+        let of = |(y, ac): (usize, &Active)| {
+            let full = saturating(w, s, ac, j, ts[j]);
+            if full > 0.0 { ground.wet().nodes[j].clouded(y, mean[ac.gi * na + j] / full, w.cfg.moist_min) } else { 0.0 }
+        };
         *c += act.iter().enumerate().filter(|p| p.1.cond).map(of).fold(0.0, f64::max) * share;
     }
     // The air each node's rain meets (`rain_air`), per active gas and node (`[y * na + j]`), on the pool, from the air
