@@ -464,31 +464,28 @@ This is a speed tool, not a law: the history is the same with and without thread
 ### 8.1 Workspace layout
 
 ```
-core/       the five laws, world state, random numbers. No IO, no Earth words.
-  src/flow/ src/change/ src/bond/ src/copy/ src/choose/
+core/       the laws of the natural world, world state, random numbers. No IO, no Earth words.
+  src/flow/ src/change/ src/cover/
               one folder per law (core/src/<law>/; the air in flow/air/)
-  src/body/   bodies: genes, tissue, metabolism, exchange, the update, its physics, paying, death, intake
   src/chem/   the chemistry: its data, its physics (phases, melting), the roles of reactions
   src/space/  the shape of the world: the mesh (cells, links, levels), the square map (an island, or a globe whose rows
               wrap east to west), the tree of cells under each air block, the terrain and its worn samples (wear,
               ponds, the network of channels, the makes of bed in strata, the shelf), stacks of layers
   src/inside/ the law inside a cell: how a cell's means lie over its own ground (read by the tape and the page)
-  src/store/  the names of the nodes (a fixed node by class and index, among them the bed and the bodies' node of
+  src/store/  the names of the nodes (a fixed node by class and index, among them the bed and the aside node of
               each cell; a part by slot and generation), what the fixed ones hold (`Store`: private arrays, read
               through methods), the boundary nodes sun, space and outside, the one way to change them (`apply`:
-              moves and link fluxes; and `book_by_array` for the bodies' moves, the air's step and Change's rows,
+              moves and link fluxes; and `book_by_array` for the chunks' moves, the air's step and Change's rows,
               which adds as `apply` adds),
-              and the moves of a body's or a part's update (`Moves`)
+              and the moves of a chunk (`Moves`)
   src/clock/  time in whole seconds, the calendar, processes with periods, sleep and wake of nodes
   src/solve/  the shared maths: sweep (explicit step on links), line (implicit step along lines of links)
-  src/life/   the bodies by cell and the chunks of cells that body code runs on (the parallel pass, the serial pass)
+  src/life/   the cells' cover and the chunks of cells the cover's month runs on (the parallel pass), the seeds' landing
   src/cover/  the plant field: the starting cover of a cell, its growth, seeding and yearly budget
-  src/survey/ the cells as bodies see them: the draws and the steps of the bodies' batch
   src/*.rs    schedule (the month), world, params (Config, Physics), ground (heat and plateaus), check (the books),
-              lineage, nodes (population nodes), lanes (paths), survey, brain, rng, event, math, units, par
-  tests/      one file per law (flow, change, bond, copy, choose, body, bodies), one per base part (space, store,
-              clock, solve, inside), cover, populations, lots, damage, threads (threads and chunks change nothing),
-              chemistry0, numbers
+              contract (what a taker may read and do to a cell), rng, event, math, units, par
+  tests/      one file per law (flow, change, cover; bodies for the bodies of standing liquid), one per base part
+              (space, store, clock, solve, inside), threads (threads and chunks change nothing), chemistry0, numbers
 worldgen/   terrain, chemistry 0 (chem0.toml), first life (life/), what is
               placed when (schedule.rs), the planet's strip for an island's air (planet.rs); the test kit
               (worldgen::testkit, behind the `testkit` feature)
@@ -498,7 +495,7 @@ tape/       the recorder (rec/, its yearly columns in rec/cols/, the viewer file
               fingerprint of a world; tests: tape.rs, ranges.rs, scale.rs, ground.rs, things.rs
 library/    the recognition library (data files); today the Earth names of chemistry 0
 cli/        headless runs (`ew run`, `ew resume`, `ew chem`, `ew numbers`, `ew view`; flags in args.rs), pictures; tests:
-              the word ban, writer, view
+              the word ban, sides, writer, view
 wasm/       the core as WebAssembly for the live viewer: a small shell of `extern "C"` exports (`ew-wasm`)
 web/        the 2D map viewer (TypeScript): plays a tape, or runs a live world in a worker; its shaders draw the map
 ```
