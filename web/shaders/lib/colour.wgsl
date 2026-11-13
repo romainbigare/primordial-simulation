@@ -215,7 +215,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
       // channel's shallows and its open water the channel's deep thread, so a river runs into a lake or the sea with
       // no step of colour; the sea by its own depth, a lake as `LAKE_SCALE` times as deep.
       let seen = river_seen(p.depth * mix(1.0, 1.0 / LAKE_SCALE, p.sea), shore_rim(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M));
-      water = mix(water_painted(BED_SHOWN * bed, seen, ripple), FOAM_RGB, p.sea * (1.0 - p.mouth) * foam(p.depth, p.slope / earth.look.x, p.e));
+      water = mix(water_painted(BED_SHOWN * bed, seen, ripple), FOAM_RGB, p.sea * (1.0 - p.mouth) * foam(p.depth, p.slope / earth.look.x, p.e, p.at));
     } else {
       water = water_over(bed, p.depth, ripple);
     }

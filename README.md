@@ -159,7 +159,8 @@ place (`web/shaders/lib/style.wgsl` for each pixel, `web/src/style.ts` for the p
 layer views keep the physical colours. Every look still means what the model holds. The colours are cleaner, with
 more contrast; slopes have a clear lit side and a soft cool shade. Water is coloured by its depth through the clear
 water of the clearest coasts, drawn stretched, so the bed shows to tens of metres: sand, pale shallows, turquoise,
-blue, then the deep, with the sea's foam along its edge, a few metres wide, which stops at a river's mouth; a lake and a river read the same way at their own
+blue, then the deep, with the sea's foam along its edge (close up a line at the water's edge and a few soft broken lines that follow
+the shore), which stops at a river's mouth; a lake and a river read the same way at their own
 scale (as if one and a half times as deep and 2 m more, so the first tens of metres of depth read light, lighter over their shallow rim and banks), and a lake's shore shallows to
 none across its last texel, so its outline is soft. Under any water the bed is drawn lighter. A beach lies on gentle loose ground a few
 metres over the sea (lower by a lake), none on a steep coast. Each kind of plant has its own green from its
