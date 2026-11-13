@@ -232,15 +232,18 @@ poles and the page's default island no sea ice and no summer snow, where the own
 - **The missing law** (next session, with a paper check first): a cloud's liquid made by cooling from below, in the
   near-ground air over a cold surface (low cloud and fog that hold their liquid without rain), where S3b's cloud has
   only the liquid its node's rain leaves in a cloud's life. A warm sea, no low cloud, much sun and a warm sea hold
-  each other up. Small and anchored, built or to build: the liquid's reflectance by the sun's height (Fresnel;
-  Taylor et al. 1996), 5 to 10 W/m² at the pole.
+  each other up. Small and anchored, not built: the liquid's reflectance by the sun's height (Fresnel; Taylor et
+  al. 1996), 5 to 10 W/m² at the pole; it needs a reflectance for the direct beam and one for diffuse light
+  through `radiation.rs`, `land.rs` (`column`, `reflectance`) and `surf.rs`.
 - Other facts for the merge: the long step's extra runoff of about 1% against 1-day steps is older than the package
   (main: +0.5 to +0.8% through rain) and moved to evaporation, so `the_long_step_keeps_the_climate` fails on its
   count of rivers (cells within 3% of the floor); the references move (land 288.18 K, absorber 366 ppm; the cover on
   the key island 7.86 log10 kg with eaters, 9.43 without: the eaters strip a cover that grows 3% a year where it
   grew 9%, and the eaters do not count for now); plants answer Earth-like light by growing about 2.3 times slower:
   forests thinner at year 30, as heavy by year 100; a step costs +6% (globe) to +15% (Wide island).
-- Scripts and tables: the scratchpad's `s3/` (`S3b/`, `final/globe/`, `final/tools/`, `final/key/`).
+- Scripts and tables: branch `tools/checks`, folder `tools/air/` (the radiation budget's probe `rad_toggle5.py` with
+  `radprobe4.rs`, the globe by latitude `globeprobe.rs` with `polar_toggle.py`, the paper check `paper_clouds.py`,
+  the bands' fit `cw4.py`; the globe's states in `globe/`, the tables in `numbers/`).
 
 1. **The air and sunlight** to main (S1 + S2 + S5 together, see section 4); the rivers' small faults above after it.
 2. **The air and sunlight** (item 4 below) comes first now; then **the sorted start** again (parked, see section 4:
